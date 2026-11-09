@@ -22,17 +22,22 @@ const input = fc.record({
 	descendant: fc.boolean(),
 });
 type Input = {name: string; value: string; space: boolean; depth: number; descendant: boolean};
-const fixture = (v: Input, body: (f: ReturnType<typeof setup>) => void, clone = false) => {
-	const f = setup(v, clone);
+type Remote = {branches: string[]; local: number};
+const fixture = (
+	v: Input,
+	body: (f: ReturnType<typeof setup>) => void,
+	clone = false,
+	remote?: Remote,
+) => {
+	const dir = mkdtempSync(join(tmpdir(), "box-law-"));
 	try {
-		body(f);
+		body(setup(v, clone, dir, remote));
 	} finally {
-		rmSync(f.dir, {recursive: true, force: true});
+		rmSync(dir, {recursive: true, force: true});
 	}
 };
-const setup = (v: Input, clone: boolean) => {
-	const dir = mkdtempSync(join(tmpdir(), "box-law-")),
-		main = join(dir, "main"),
+const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
+	const main = join(dir, "main"),
 		boxes = join(dir, "boxes");
 	const name = `${v.name}${v.space ? " with space" : ""}`;
 	const work = join(boxes, name),
@@ -69,8 +74,24 @@ const setup = (v: Input, clone: boolean) => {
 	writeFileSync(join(main, ".gitignore"), "node_modules/\n");
 	git(main, "add", ".");
 	git(main, "commit", "-qm", "base");
+	if (remote) {
+		const base = git(main, "rev-parse", "HEAD"),
+			tree = git(main, "rev-parse", "HEAD^{tree}");
+		for (const branch of remote.branches) {
+			const tip = git(main, "commit-tree", tree, "-p", base, "-m", `${v.value} ${branch}`);
+			git(main, "update-ref", `refs/heads/${branch}`, tip);
+		}
+	}
 	const origin = join(dir, "origin.git");
 	git(main, "clone", "-q", "--bare", "--no-hardlinks", main, origin);
+	if (remote) {
+		rmSync(main, {recursive: true});
+		git(dir, "clone", "-q", "--no-hardlinks", origin, main);
+		git(main, "config", "user.name", "Fixture");
+		git(main, "config", "user.email", "fixture@example.test");
+		for (const branch of remote.branches.slice(0, remote.local))
+			git(main, "branch", branch, `origin/${branch}`);
+	}
 	if (clone) {
 		git(main, "clone", "-q", "--reference", main, `--separate-git-dir=${data}`, origin, work);
 	} else {
@@ -84,7 +105,7 @@ const setup = (v: Input, clone: boolean) => {
 	}
 	git(work, "config", "user.name", "Fixture");
 	git(work, "config", "user.email", "fixture@example.test");
-	expect(git(main, "remote")).toBe("");
+	expect(git(main, "remote")).toBe(remote ? "origin" : "");
 	expect(git(work, "remote")).toBe("origin");
 	const run = (chosen = name, extra: Record<string, string> = {}) => {
 		const ran = spawnSync("sh", [script, "rm", chosen], {
@@ -114,6 +135,151 @@ const kept = (f: ReturnType<typeof setup>, code = 1) => {
 };
 
 describe("box rm, today's tooling", () => {
+	// Plants: count fetched refs, remote reflogs or FETCH_HEAD as saved work; reject ORIG_HEAD
+	// or config.worktree after a completed merge. All are normal in boxes made by box.sh new.
+	it.each([false, true])(
+		"T318 a fetched box branch removes with remote copies and config.worktree %s",
+		(worktreeConfig) => {
+			const branches = fc.uniqueArray(fc.stringMatching(/^[a-z]{2,8}$/), {
+				minLength: 2,
+				maxLength: 4,
+			});
+			fc.assert(
+				fc.property(input, branches, fc.nat(), (v, names, choice) => {
+					const remote = {
+						branches: names.map((name) => `topic-${name}`),
+						local: choice % names.length,
+					};
+					fixture(
+						v,
+						(f) => {
+							const origin = join(f.dir, "origin.git"),
+								branch = `step-${v.name}`,
+								base = f.git(f.work, "rev-parse", "HEAD"),
+								tree = f.git(f.main, "rev-parse", "HEAD^{tree}"),
+								changed = remote.branches[remote.branches.length - 1]!;
+							const packed = readFileSync(join(f.data, "packed-refs"), "utf8");
+							for (const name of remote.branches)
+								expect(packed).toContain(` refs/remotes/origin/${name}\n`);
+							expect(f.git(f.main, "for-each-ref", "--format=%(refname)", "refs/heads")).toBe(
+								["main", ...remote.branches.slice(0, remote.local)]
+									.sort()
+									.map((name) => `refs/heads/${name}`)
+									.join("\n"),
+							);
+							f.git(f.work, "checkout", "-qb", branch);
+							for (let i = 0; i < v.depth; i++) {
+								writeFileSync(join(f.work, "tracked"), `${v.value} step ${i}`);
+								f.commit();
+							}
+							const step = f.git(f.work, "rev-parse", "HEAD");
+							// Move origin/main and one topic after both clones. The topic's older packed
+							// tip, loose tip and remote reflog are all fetched copies, absent from MAIN's
+							// retained history. FETCH_HEAD records every remote branch, too.
+							for (const name of ["main", changed]) {
+								const parent = f.git(f.main, "rev-parse", `origin/${name}`),
+									tip = f.git(f.main, "commit-tree", tree, "-p", parent, "-m", `advance ${name}`);
+								f.git(origin, "fetch", "-q", f.main, `${tip}:refs/heads/${name}`);
+							}
+							f.git(f.main, "fetch", "-q", "origin");
+							f.git(f.work, "fetch", "-q", "origin");
+							f.git(f.work, "merge", "-qm", `${v.value} merge`, "origin/main");
+							expect(f.git(f.work, "rev-parse", "ORIG_HEAD")).toBe(step);
+							expect(f.git(f.work, "rev-parse", "HEAD^2")).not.toBe(base);
+							const fetched = f.git(f.work, "rev-parse", `origin/${changed}`);
+							expect(
+								readFileSync(join(f.data, "refs/remotes/origin", changed), "utf8").trim(),
+							).toBe(fetched);
+							expect(
+								readFileSync(join(f.data, "logs/refs/remotes/origin", changed), "utf8"),
+							).toContain(fetched);
+							const fetchHead = readFileSync(join(f.data, "FETCH_HEAD"), "utf8");
+							expect(fetchHead.trim().split("\n")).toHaveLength(remote.branches.length + 1);
+							expect(fetchHead).toContain(fetched);
+							if (worktreeConfig) {
+								f.git(f.work, "config", "extensions.worktreeConfig", "true");
+								f.git(f.work, "config", "--worktree", "user.name", "Fixture");
+								expect(existsSync(join(f.data, "config.worktree"))).toBe(true);
+							}
+							f.retained(`refs/heads/${branch}`);
+							expect(
+								f
+									.git(f.main, "rev-list", "--branches", "--tags", `refs/keep/${v.name}`)
+									.split("\n"),
+							).not.toContain(fetched);
+							expect(f.run()).toEqual({code: 0, text: `removed box ${f.name}`});
+							expect(existsSync(f.work)).toBe(false);
+							expect(existsSync(f.data)).toBe(false);
+						},
+						true,
+						remote,
+					);
+				}),
+				{seed: 31828, numRuns: 4, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: allow ORIG_HEAD as ordinary metadata but never read its saved commit.
+	it("T318 a local commit saved only by ORIG_HEAD keeps the pair", () => {
+		fc.assert(
+			fc.property(input, (v) =>
+				fixture(v, (f) => {
+					const base = f.git(f.work, "rev-parse", "HEAD");
+					for (let i = 0; i < v.depth; i++) {
+						writeFileSync(join(f.work, "tracked"), `${v.value} saved ${i}`);
+						f.commit();
+					}
+					const saved = f.git(f.work, "rev-parse", "HEAD");
+					f.git(f.work, "checkout", "-q", "--detach", base);
+					f.git(f.work, "branch", "-f", "main", base);
+					rmSync(join(f.data, "logs"), {recursive: true});
+					f.git(f.work, "update-ref", "ORIG_HEAD", saved);
+					expect(f.git(f.work, "rev-list", "HEAD", "--all").split("\n")).not.toContain(saved);
+					expect(existsSync(join(f.data, "logs"))).toBe(false);
+					expect(f.git(f.work, "rev-parse", "ORIG_HEAD")).toBe(saved);
+					kept(f);
+				}),
+			),
+			{seed: 31829, numRuns: 4, endOnFailure: true},
+		);
+	});
+
+	// Plant: skip every reflog, or skip names that merely start with refs/remotes.
+	it.each([
+		"HEAD",
+		"refs/heads/saved",
+		"refs/notes/saved",
+		"refs/custom/saved",
+		"refs/remotes-copy/saved",
+	])("T318 a local commit saved only by the %s reflog keeps the pair", (ref) => {
+		fc.assert(
+			fc.property(input, (v) =>
+				fixture(v, (f) => {
+					const base = f.git(f.work, "rev-parse", "HEAD");
+					for (let i = 0; i < v.depth; i++) {
+						writeFileSync(join(f.work, "tracked"), `${v.value} saved ${i}`);
+						f.commit();
+					}
+					const saved = f.git(f.work, "rev-parse", "HEAD");
+					f.git(f.work, "checkout", "-q", "--detach", base);
+					f.git(f.work, "branch", "-f", "main", base);
+					rmSync(join(f.data, "logs"), {recursive: true});
+					const name = ref === "HEAD" ? ref : `${ref}/${v.name}`,
+						path = join(f.data, "logs", name);
+					f.git(f.work, "update-ref", "--create-reflog", name, saved);
+					f.git(f.work, "update-ref", "--create-reflog", name, base);
+					if (name !== "HEAD") rmSync(join(f.data, name));
+					expect(f.git(f.work, "rev-list", "HEAD", "--all").split("\n")).not.toContain(saved);
+					expect(existsSync(join(f.data, "ORIG_HEAD"))).toBe(false);
+					expect(readFileSync(path, "utf8")).toContain(saved);
+					kept(f);
+				}),
+			),
+			{seed: 31830, numRuns: 4, endOnFailure: true},
+		);
+	});
+
 	// Plant: refuse the symbolic origin/HEAD that box.sh new creates.
 	it("T318 a normal separate-gitdir clone keeps origin and removes cleanly", () => {
 		fc.assert(
