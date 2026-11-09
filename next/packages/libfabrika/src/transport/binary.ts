@@ -50,7 +50,18 @@ export const armor = (blob: Uint8Array): string => {
 };
 
 class WebCryptoError extends Schema.TaggedError<WebCryptoError>()("WebCryptoError", {}) {}
-export const subtle = Effect.fn("transport.crypto")(<A>(call: () => Promise<A>) =>
+type CryptoMethod = "digest" | "importKey" | "verify";
+type CryptoArgs = {[M in CryptoMethod]: Parameters<SubtleCrypto[M]>};
+type CryptoResult = {[M in CryptoMethod]: Awaited<ReturnType<SubtleCrypto[M]>>};
+type CryptoApi = {
+	[M in CryptoMethod]: (...args: CryptoArgs[M]) => Promise<CryptoResult[M]>;
+};
+export const subtle = Effect.fn("transport.crypto")(function* <M extends CryptoMethod>(
+	method: M,
+	...args: CryptoArgs[M]
+): Effect.fn.Return<CryptoResult[M], WebCryptoError> {
+	const api: CryptoApi = crypto.subtle;
+	const fail = () => new WebCryptoError({});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
-	Effect.tryPromise({try: call, catch: () => new WebCryptoError({})}),
-);
+	return yield* Effect.tryPromise({try: () => api[method](...args), catch: fail});
+});

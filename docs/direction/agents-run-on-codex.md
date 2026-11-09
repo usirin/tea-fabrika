@@ -1,7 +1,7 @@
 # Stage agents run on GPT sol through Codex
 
 Decided 2026-10-27 by the owner. It replaces
-[agents run on opus, for now](./agents-run-on-opus-for-now.md) for every
+agents run on opus, for now for every
 stage but triage, which waits on experiment 159.
 
 *Changed 2026-11-01, about today's version: the default model is now `gpt-6-astra`,
@@ -67,8 +67,16 @@ const DEFAULTS = {
   - A Claude agent runs any step that needs Electron or a socket: laws or shots that start the
     app, or that bind a socket. A Codex box can start neither, so a Codex step there comes back
     half checked. Still one agent per step.
-  - One Claude driver per ticket carries it from start to finish. It starts one agent per step on
-    the runner above, and never writes a step's code or tests itself.
+  - One active Claude driver per ticket carries it until a wait. It starts one agent per step on
+    the runner above, and never writes a step's code or tests itself. At a Codex box, parent build,
+    CI, plan approval or owner-read wait, it saves completed field work and atomically replaces
+    `$BOXES/state/<name>.md`, then ends its session. Background commands may keep running.
+    Lead checks the saved clearing fact and starts a fresh driver with that file and brief.
+    The fresh driver reads the current branch, SHA, reports and checks. It does not rerun completed
+    steps or duplicate listed field rows. Missing or unclear state sends it back to those facts.
+    A driver is not the lead session: every plan and amendment returns unsigned after the draft
+    check, then waits for the lead session's own read and signature. See
+    [hand-run review and cleanup](./hand-run-review-and-cleanup.md).
   - The driver merges its own pull request only after plan, tests, build, mutation and one review
     all ran, each by its own agent, with the review saying `merge-ready`, CI green and a clean leak
     grep. No step is skipped. A new design call or an exam read goes back to the lead.

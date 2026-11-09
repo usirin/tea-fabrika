@@ -1,6 +1,7 @@
 // The repo's custom lint rules, one per file, loaded by `.oxlintrc.json`. README.md says where each
 // came from and what it was measured against.
 import type {Plugin} from "@oxlint/plugins";
+import {doorIsLibrary} from "./door-is-library.ts";
 import {edgeComment} from "./edge-comment.ts";
 import {effectFunctions} from "./effect-functions.ts";
 import {noBareDisable} from "./no-bare-disable.ts";
@@ -13,6 +14,9 @@ import {noEffectRunOutsideEdge} from "./no-effect-run-outside-edge.ts";
 import {noExpectInIf} from "./no-expect-in-if.ts";
 import {noHandTag} from "./no-hand-tag.ts";
 import {noImplicitEffectConcurrency} from "./no-implicit-effect-concurrency.ts";
+import {noLedgerSql} from "./no-ledger-sql.ts";
+import {noNodeFilesystem} from "./no-node-filesystem.ts";
+import {noNodeImports} from "./no-node-imports.ts";
 import {noNumericDuration} from "./no-numeric-duration.ts";
 import {noOf} from "./no-of.ts";
 import {noProjectSettings} from "./no-project-settings.ts";
@@ -22,13 +26,17 @@ import {noRedactedValue} from "./no-redacted-value.ts";
 import {noSecretEnv} from "./no-secret-env.ts";
 import {noThrowInEffectGen} from "./no-throw-in-effect-gen.ts";
 import {noTypeAssertions} from "./no-type-assertions.ts";
+import {oneIdModule} from "./one-id-module.ts";
 import {oneStoreHook} from "./one-store-hook.ts";
+import {outsideInputConstructor} from "./outside-input-constructor.ts";
+import {preferSchemaArbitrary} from "./prefer-schema-arbitrary.ts";
 import {programPackageLayout} from "./program-package-layout.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
 	meta: {name: "fabrika"},
 	rules: {
+		"door-is-library": doorIsLibrary,
 		"edge-comment": edgeComment,
 		"effect-functions": effectFunctions,
 		"no-bare-disable": noBareDisable,
@@ -41,6 +49,9 @@ const plugin: Plugin = {
 		"no-expect-in-if": noExpectInIf,
 		"no-hand-tag": noHandTag,
 		"no-implicit-effect-concurrency": noImplicitEffectConcurrency,
+		"no-ledger-sql": noLedgerSql,
+		"no-node-filesystem": noNodeFilesystem,
+		"no-node-imports": noNodeImports,
 		"no-numeric-duration": noNumericDuration,
 		"no-of": noOf,
 		"no-project-settings": noProjectSettings,
@@ -52,6 +63,9 @@ const plugin: Plugin = {
 		"no-type-assertions": noTypeAssertions,
 		"one-store-hook": oneStoreHook,
 		"program-package-layout": programPackageLayout,
+		"one-id-module": oneIdModule,
+		"outside-input-constructor": outsideInputConstructor,
+		"prefer-schema-arbitrary": preferSchemaArbitrary,
 		"use-import-extensions": useImportExtensions,
 	},
 };

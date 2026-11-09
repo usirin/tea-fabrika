@@ -1,29 +1,112 @@
 #!/bin/sh
-# stepcommit.sh <step> <ticket> <subject> <path>...: stage these paths, refuse a build that holds an
-# exam path, commit as the bot, and sign as the step, in one go. mutation signs as tests for now.
-# Run it from the repo root (a box or a worktree). The person rides as Co-authored-by: set
-# FABRIKA_COAUTHOR="Name <email>", or it reads your global git config (never the box's own config).
-set -e
-step=$1; ticket=$2; subject=$3; shift 3
-[ "$step" = mutation ] && step=tests
-case $step in tests|build|lead) ;; *) echo "stepcommit: unknown step $step" >&2; exit 2;; esac
-[ $# -gt 0 ] || { echo "stepcommit: name the paths to stage" >&2; exit 2; }
-here=$(dirname "$0")
-coauthor=${FABRIKA_COAUTHOR:-"$(git config --global user.name) <$(git config --global user.email)>"}
-# Refuse a tree with anything staged already: it could be another step's work, and it would ride in.
-if ! git diff --cached --quiet; then
-	echo "stepcommit: the index already holds staged changes; commit only your own paths" >&2
-	git diff --cached --name-only >&2; exit 4
-fi
-git add -- "$@"
-if [ "$step" = build ]; then
-	staged=$(git diff --cached --name-only)
-	if python3 "$here/exam.py" exam-paths.json $staged; then :; else
-		echo "stepcommit: a build may not commit the exam paths above; answer send to tests" >&2
-		git restore --staged -- $staged; exit 3
-	fi
-fi
-git -c user.name="fabrikalfa[bot]" -c user.email="353269643+fabrikalfa[bot]@users.noreply.github.com" \
-	commit -q -m "$subject" -m "Co-authored-by: $coauthor"
-pnpm commits sign --step "$step" --ticket "$ticket" --key "$HOME/.fabrika/step-keys/$step"
-git log --oneline -1
+# stepcommit.sh [--commit-only] <step> <ticket> <subject> <file>...
+# The unsigned route is for boxes; MAIN signs the saved run at fetch.
+set -eu
+here=$(cd "$(dirname "$0")" && pwd -P)
+exec python3 - "$here" "$@" <<'PY'
+import hashlib, json, os, pathlib, re, subprocess, sys, tempfile
+here = pathlib.Path(sys.argv[1])
+args = sys.argv[2:]
+only = bool(args and args[0] == "--commit-only")
+if only: args.pop(0)
+def refuse(why, code=1):
+    print("stepcommit: " + why, file=sys.stderr); sys.exit(code)
+if len(args) < 4: refuse("name step, ticket, subject and named paths", 2)
+step, ticket, subject, *paths = args
+if step not in ("tests", "build", "mutation", "lead"): refuse("unknown step " + step, 2)
+role = "tests" if step == "mutation" else step
+def git(*args, **kw):
+    return subprocess.run(["git", *args], capture_output=True, **kw)
+if git("diff", "--cached", "--quiet").returncode:
+    refuse("the index already holds staged changes; commit only your own paths", 4)
+root = pathlib.Path(git("rev-parse", "--show-toplevel").stdout.decode().strip())
+named = []
+for p in paths:
+    n = os.path.normpath(p)
+    if p.startswith("-") or n in (".", "..") or n.startswith("../") or os.path.isabs(p) or (root / n).is_dir() or p.endswith("/"):
+        refuse("named file paths required, no folders: " + p)
+    # A folder whose files were all deleted is gone from disk; git still knows it as a folder.
+    if git("ls-files", "--cached", "--", n + "/").stdout or git("ls-tree", "-r", "--name-only", "HEAD", "--", n + "/").stdout:
+        refuse("named file paths required, no folders: " + p)
+    named.append(n)
+branch = git("branch", "--show-current").stdout.decode().strip()
+boxes = pathlib.Path(os.environ.get("BOXES", str(root.parent)))
+def facts(path):
+    return dict(l.split(": ", 1) for l in path.read_text().splitlines() if ": " in l)
+# The box this runs in: STEPCOMMIT_BOX (drive's detached sign worktree), else the checkout's own
+# folder. Only outside a box, a live box on the branch (its folder still there); never a stale file.
+named_box = os.environ.get("STEPCOMMIT_BOX")
+own = boxes / "state" / ((named_box or root.name) + ".box")
+state = None
+if named_box and not own.exists(): refuse("not_owner: no facts for box " + named_box)
+if own.exists():
+    state = facts(own)
+    if not named_box and state.get("branch") != branch: refuse("not_owner: branch differs from box")
+else:
+    for path in sorted((boxes / "state").glob("*.box")):
+        found = facts(path)
+        if found.get("branch") == branch and (boxes / path.stem).is_dir(): state = found; break
+owners = None
+if state:
+    if state.get("ticket") != ticket: refuse("not_owner: ticket differs from box")
+    data = pathlib.Path(state["plan"]).read_bytes().split(b"\n", 2)
+    if len(data) < 3 or hashlib.sha256(data[2]).hexdigest() != state.get("plan-sha256"):
+        refuse("plan approval body hash mismatch")
+    if not re.fullmatch(rb"Approved by the lead agent, builds \S(?:.*\S)?; body " + state["plan-sha256"][:12].encode(), data[0]):
+        refuse("plan approval line mismatch")
+    read = subprocess.run(["sh", str(here / "../../plan/scripts/plancheck.sh"), "--owners-json", state["plan"]], capture_output=True, text=True)
+    if read.returncode: refuse("not_owner: cannot read plan")
+    owners = json.loads(read.stdout)
+def check(paths):
+    if role == "build":
+        exam = subprocess.run([sys.executable, str(here / "exam.py"), "exam-paths.json", *paths], capture_output=True)
+        if exam.returncode: refuse("a build may not commit exam paths; answer send to tests", 3)
+    if owners is not None:
+        for p in paths:
+            if owners.get(p) != step and not (step == "mutation" and owners.get(p) == "tests"):
+                refuse("not_owner: " + p)
+check(named)
+added = git("--literal-pathspecs", "add", "--", *named)
+if added.returncode: refuse("named path could not be staged")
+# --no-renames lists both sides as add/delete, including a removed exam path.
+staged = [p for p in git("diff", "--cached", "--name-only", "--no-renames", "-z").stdout.decode().split("\0") if p]
+try:
+    check(staged)
+    # Check the index's bytes, not the working tree: a clean filter can change them.
+    with tempfile.TemporaryDirectory(prefix="stepfmt-") as tmp:
+        tmp = str(pathlib.Path(tmp).resolve())
+        config = root / ".oxfmtrc.json"
+        config_args = []
+        if config.exists():
+            pinned = pathlib.Path(tmp) / ".stepfmt-config.json"
+            pinned.write_bytes(config.read_bytes())
+            config_args = ["--config", str(pinned)]
+        files = []
+        for p in staged:
+            blob = git("show", ":" + p)
+            if blob.returncode: continue
+            target = pathlib.Path(tmp) / p
+            target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(blob.stdout)
+            files.append(str(target))
+        # Keep the pinned config beside the staged copy, so exclusions have the same relative
+        # paths as the checkout. Nested config is still disabled.
+        env = dict(os.environ, PATH=str(root / "node_modules/.bin") + os.pathsep + os.environ["PATH"])
+        if files and subprocess.run(["pnpm", "exec", "oxfmt", "--check", "--disable-nested-config", "--no-error-on-unmatched-pattern", *config_args, *files], cwd=tmp, env=env, capture_output=True).returncode:
+            refuse("not_formatted: staged files need formatting")
+except SystemExit:
+    git("--literal-pathspecs", "restore", "--staged", "--", *staged)
+    raise
+coauthor = os.environ.get("FABRIKA_COAUTHOR")
+if not coauthor:
+    name = git("config", "--global", "user.name").stdout.decode().strip()
+    email = git("config", "--global", "user.email").stdout.decode().strip()
+    coauthor = f"{name} <{email}>"
+commit = subprocess.run(["git", "-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com", "commit", "-q", "-m", subject, "-m", "Co-authored-by: " + coauthor])
+if commit.returncode: sys.exit(commit.returncode)
+if not only:
+    # STEPCOMMIT_SIGNER: drive.ts names main's own signer when the tree holds an agent's edits.
+    signer = os.environ.get("STEPCOMMIT_SIGNER", "pnpm commits").split()
+    signed = subprocess.run([*signer, "sign", "--step", role, "--ticket", ticket, "--key", str(pathlib.Path.home() / ".fabrika/step-keys" / role)])
+    if signed.returncode: sys.exit(signed.returncode)
+subprocess.run(["git", "log", "--oneline", "-1"])
+PY

@@ -9,6 +9,7 @@
 		".": "./src/index.ts",
 		"./coordination": "./src/coordination/index.ts",
 		"./data": "./src/data/index.ts",
+		"./door": "./src/door/index.ts",
 		"./sqlite": "./src/data/sqlite.ts",
 		"./box": "./src/workers/box.ts",
 		"./build": "./src/build.ts",
@@ -24,7 +25,7 @@
 		"./node/stage": "./src/node/stage.ts",
 		"./node/stage-recording": "./src/node/stage-recording.ts",
 		"./brain-life": "./src/app/brain-life.ts",
-		"./brain-fact": "./src/app/brain-fact.ts",
+		"./brain-event": "./src/app/brain-event.ts",
 		"./testing": "./src/testing.ts",
 		"./transport": "./src/transport/index.ts",
 		"./transport/gateway": "./src/transport/gateway.ts"
@@ -44,6 +45,7 @@
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "5.20261027.1",
+		"@effect/platform-node": "catalog:",
 		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
 		"fast-check": "catalog:",

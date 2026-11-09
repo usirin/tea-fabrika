@@ -254,7 +254,7 @@ const FORBIDDEN: ReadonlyArray<{readonly name: string; readonly test: (spec: str
  *  and which a tab holds a read copy of later (Tier 1, P6), and its `/coordination`, whose names
  *  the menu bar and the door share (Tier 1, P9). Every program's `/window` comes on top. */
 const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
-	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination"],
+	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination", "./door"],
 	"@kampus/tuval": ["."],
 	"@kampus/notes": ["."],
 };
@@ -309,6 +309,13 @@ const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
 };
 
 describe("the real next/", () => {
+	it("P17a: the public door exists and bundles for a browser", async () => {
+		const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+		expect(library).toBeDefined();
+		const entry = exportMap(library!).get("./door");
+		expect(entry, "P17a exports the library door").toBeDefined();
+		expect(await reach(NEXT, "@kampus/libfabrika/door", entry!)).toEqual([]);
+	});
 	it("P11: libfabrika exports its required browser entry instead of silently skipping it", async () => {
 		const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
 		expect(library).toBeDefined();
@@ -359,6 +366,19 @@ describe("reading imports", () => {
 });
 
 describe("planted breaks", () => {
+	it("P17a: the door browser check catches a Node import", async () => {
+		const tree = plant({
+			"packages/libfabrika/package.json": manifest("@kampus/libfabrika", {
+				exports: {"./door": "./src/door/index.ts"},
+			}),
+			"packages/libfabrika/src/door/index.ts": lines('export {readFileSync} from "node:fs";'),
+		});
+		expect(
+			(await bundleFaults(tree)).some(
+				(fault) => fault.includes("@kampus/libfabrika/door") && fault.includes("node:fs"),
+			),
+		).toBe(true);
+	});
 	const library = manifest("@kampus/libfabrika", {
 		exports: {".": "./src/index.ts", "./transport": "./src/transport/index.ts"},
 		dependencies: {effect: "catalog:"},

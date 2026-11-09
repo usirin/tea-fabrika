@@ -4,6 +4,7 @@ import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node
 import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
+import {NodeServices} from "@effect/platform-node";
 import {describe, expect, it, afterEach} from "@effect/vitest";
 import {Effect} from "effect";
 
@@ -130,12 +131,16 @@ const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0)
 	const details = () =>
 		`excluding=${excluding}, observed=${JSON.stringify(stage.observed)}\nstage output:\n${stage.output()}`;
 	const {brainOutbox} = await import("@kampus/libfabrika/node/local-stage");
-	const outbox = await Effect.runPromise(brainOutbox(stage.folder));
+	const outbox = await Effect.runPromise(
+		brainOutbox(stage.folder).pipe(Effect.provide(NodeServices.layer)),
+	);
 	for (;;) {
-		const pending = await Effect.runPromise(outbox.pending);
-		const stopped = pending.find((fact) => fact._tag === "braked");
+		const pending = await Effect.runPromise(
+			outbox.pending.pipe(Effect.provide(NodeServices.layer)),
+		);
+		const stopped = pending.find((event) => event._tag === "braked");
 		if (stopped !== undefined)
-			throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.why})\n${details()}`);
+			throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.reason})\n${details()}`);
 		if (stage.child.exitCode !== null || stage.child.signalCode !== null)
 			throw new Error(
 				`P12 dev.ts exited while waiting for workerd: exitCode=${stage.child.exitCode}, signal=${stage.child.signalCode}\n${details()}`,
@@ -233,7 +238,9 @@ describe("P12 local brain life", () => {
 			).toEqual([]);
 			const {brainOutbox} = await import("@kampus/libfabrika/node/local-stage");
 			const pending = await Effect.runPromise(
-				Effect.flatMap(brainOutbox(s.folder), (o: any) => o.pending),
+				Effect.flatMap(brainOutbox(s.folder), (o) => o.pending).pipe(
+					Effect.provide(NodeServices.layer),
+				),
 			);
 			expect(pending, details()).toEqual(
 				expect.arrayContaining([expect.objectContaining({_tag: "braked"})]),

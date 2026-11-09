@@ -1,3 +1,5 @@
 # LF on every checkout, Windows included: byte-for-byte fixtures (fixtures/next/sshsig) break on CRLF.
 # docs/direction/windows-in-next.md
 * text=auto eol=lf
+field/runs.jsonl merge=union
+field/notes.jsonl merge=union

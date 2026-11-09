@@ -18,15 +18,16 @@ import {ProgramRunner} from "../app/runner.ts";
 import {Mailbox, ProcessStore, Writer} from "../coordination/index.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import * as Id from "../id.ts";
 import {programBox} from "./box.ts";
 
 const SEED = 119120;
 // Only the platform base class is fake. Every RPC method runs the real programBox.
 vi.mock("cloudflare:workers", () => ({WorkerEntrypoint: class {}}));
-const PID = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
 const NAME = "reply:1";
 const owner = Writer.cases.person.make({key: "SHA256:fixture", for: "person-test"});
-const Model = Schema.Struct({replies: Schema.Int, why: Schema.NullOr(Schema.String)});
+const Model = Schema.Struct({replies: Schema.Int, reason: Schema.NullOr(Schema.String)});
 const Msg = Schema.Struct({type: Schema.Literal("work"), n: Schema.Int});
 const work = Cmd.make("work", {
 	input: Schema.Struct({n: Schema.Int}),
@@ -39,11 +40,11 @@ const program = {
 		model: Model,
 		msg: Msg,
 		cmds: [work],
-		init: (saved) => [saved ?? {replies: 0, why: null}, []],
+		init: (saved) => [saved ?? {replies: 0, reason: null}, []],
 		update: {
 			work: (s, m) => [s, [work({n: m.n})]],
 			work_ok: (s) => [{...s, replies: s.replies + 1}, []],
-			work_err: (s, m) => [{replies: s.replies + 1, why: m.error._tag}, []],
+			work_err: (s, m) => [{replies: s.replies + 1, reason: m.error._tag}, []],
 		},
 	}),
 	state: {v: 1, schema: Model, upgrades: []},
@@ -66,6 +67,9 @@ const replyCase = (
 	adapter: "node" | "worker" = "worker",
 ) =>
 	Effect.gen(function* () {
+		const inputId = yield* Id.Generator.use((ids) => ids.next(Id.Input)).pipe(
+			Effect.provide(Id.Generator.layer),
+		);
 		const db = new DatabaseSync(":memory:");
 		try {
 			const sql = nodeSql(db);
@@ -160,7 +164,7 @@ const replyCase = (
 				const incoming = Schema.decodeUnknownSync(Incoming)({
 					id: letter,
 					envelope: {
-						id: `in-${PID}-1`,
+						id: inputId,
 						by: owner,
 						arrivedAt: 1794099600000,
 						input: {type: "work", n},
@@ -185,26 +189,26 @@ const replyCase = (
 							source: mode,
 						});
 					expect(yield* store.load).toMatchObject({
-						saved: {model: {replies: 0, why: null}},
+						saved: {model: {replies: 0, reason: null}},
 						cmds: [{id: `${PID}/1/0`, state: "dispatched", cmd: work({n})}],
 					});
 					// Resending the accepted input must not repeat its uncertain outside action.
 					expect(yield* runner.msg(incoming)).toMatchObject({_tag: "accepted", pos: 1});
 					expect(yield* runner.open("audit")).toMatchObject({
 						rev: 1,
-						view: {replies: 0, why: null},
+						view: {replies: 0, reason: null},
 					});
 					expect(checkpoint()).toBe(before);
 				} else {
-					const why = mode === "checked" ? "bad_cmd" : "disk";
+					const reason = mode === "checked" ? "bad_cmd" : "disk";
 					expect(result).toMatchObject({_tag: "Success", value: {_tag: "accepted", pos: 1}});
 					expect(rows).toHaveLength(2);
 					expect(rows[1]).toMatchObject({
 						id: `${PID}/1/0/answer`,
-						body: {m: {type: "work_err", cmd: work({n}), why, error: {_tag: why}}},
+						body: {m: {type: "work_err", cmd: work({n}), why: reason, error: {_tag: reason}}},
 					});
 					expect(yield* store.load).toMatchObject({
-						saved: {after: rows[1]!.rev, model: {replies: 1, why}},
+						saved: {after: rows[1]!.rev, model: {replies: 1, reason}},
 						cmds: [],
 					});
 					expect(yield* runner.msg(incoming)).toMatchObject({_tag: "accepted", pos: 1});

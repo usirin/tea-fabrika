@@ -8,10 +8,11 @@ import {
 	Result,
 	Schema,
 	Semaphore,
+	Stream,
 	Tracer,
 } from "effect";
 import {Base64, Base64Url} from "effect/encoding";
-import type {BrainFact} from "../app/brain-fact.ts";
+import type {BrainEvent} from "../app/brain-event.ts";
 import {Alarm, CheckedWriter, Recording, WatcherManager, type Incoming} from "../app/entry.ts";
 import type {Descriptor, Sent} from "../app/runner.ts";
 import {ProgramRunner} from "../app/runner.ts";
@@ -49,6 +50,7 @@ import {
 	type Sql,
 } from "../data/index.ts";
 import {workerSql} from "../data/worker-sql.ts";
+import * as Id from "../id.ts";
 import {
 	CommitReply,
 	SigningReply,
@@ -60,7 +62,14 @@ import {
 	type RecordBinding,
 } from "./bindings.ts";
 import {workerLoader, type ProgramSource} from "./index.ts";
-const Fact = Schema.declare<Parameters<typeof lineFor>[1]>(
+import {
+	BucketClient,
+	GatewayClient,
+	ProcessClient,
+	ProjectClient,
+	StorageClient,
+} from "./platform.ts";
+const Event = Schema.declare<Parameters<typeof lineFor>[1]>(
 	(value): value is Parameters<typeof lineFor>[1] =>
 		Schema.is(Schema.JsonObject)(value) && typeof value._tag === "string",
 );
@@ -96,12 +105,12 @@ export interface ProjectDoorOptions {
 	readonly write: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
 	readonly policy: (
 		process: string,
-	) => Effect.Effect<{inputs: Array<string>; facts: Array<string>}, LedgerError>;
+	) => Effect.Effect<{inputs: Array<string>; events: Array<string>}, LedgerError>;
 	readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
 	readonly nextProcess: () => Effect.Effect<string>;
 	readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
 	readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
-	readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, unknown>;
+	readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError>;
 	readonly wait: (
 		stream: string,
 		after: number,
@@ -117,7 +126,7 @@ export interface ProjectOptions {
 	) => Effect.Effect<
 		DoorCalls,
 		unknown,
-		Ledger | ClientManager | SpanSink | RecordManager | Archive
+		Ledger | LedgerTransaction | Id.Generator | ClientManager | SpanSink | RecordManager | Archive
 	>;
 }
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
@@ -126,13 +135,9 @@ export const processStub = (env: Env, project: string, pid: string) =>
 export const recordStub = (env: Env, project: string, name: string) =>
 	env.RECORD.getByName(JSON.stringify([project, name]));
 
-// Only binding calls are Promises. All decisions stay inside Effects.
-export const recordCall = Effect.fn(function* <A>(send: () => Promise<A>) {
-	// oxlint-disable-next-line fabrika/no-promises -- edge: one Durable Object call enters Effect
-	return yield* Effect.tryPromise({try: send, catch: () => new LedgerError({why: "unreachable"})});
-});
-export const rpc = Effect.fn("runtime.rpc")(function* <A>(send: () => Promise<A>) {
-	return yield* recordCall(send);
+// Bindings have already entered Effect before the caller adds its RPC span.
+export const rpc = Effect.fn("runtime.rpc")(function* <A, E>(work: Effect.Effect<A, E>) {
+	return yield* work;
 });
 
 // Only checked refusals become RPC data. Storage and transport failures still fail the call.
@@ -177,40 +182,40 @@ export const configureProcess = Effect.fn("process.configure")(function* (
 	ctx: DurableObjectState,
 	descriptor: Descriptor,
 ) {
-	yield* rpc(() => ctx.storage.put("descriptor", descriptor));
+	yield* rpc(StorageClient.make(ctx.storage).put("descriptor", descriptor));
 });
 export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: DurableObjectState) {
-	return yield* rpc(() => ctx.storage.get<number>("wake"));
+	return yield* rpc(StorageClient.make(ctx.storage).get<number>("wake"));
 });
 export const processDescriptor = Effect.fn("process.descriptor")(function* (
 	ctx: DurableObjectState,
 ) {
-	const descriptor = yield* rpc(() => ctx.storage.get<Descriptor>("descriptor"));
-	if (descriptor === undefined) return yield* new LedgerError({why: "bad_row"});
-	return descriptor;
+	const descriptor = yield* rpc(StorageClient.make(ctx.storage).get("descriptor"));
+	return yield* Schema.decodeUnknownEffect(SavedDescriptor)(descriptor).pipe(
+		Effect.mapError(() => new LedgerError({why: "bad_row"})),
+	);
 });
 
 const hex = (bytes: ArrayBuffer) =>
 	Array.from(new Uint8Array(bytes), (n) => n.toString(16).padStart(2, "0")).join("");
 // R2 refuses a body whose SHA-256 differs from the one sent. The local bucket does not check,
 // so the adapter checks first and both places fail the same way.
-const checkedPut = Effect.fnUntraced(function* (
+export const checkedPut = Effect.fnUntraced(function* (
 	bucket: R2Bucket,
 	key: string,
 	body: Uint8Array,
 	sha256: string,
 ) {
 	const copy = new Uint8Array(body);
+	const fail = () => new LedgerError({why: "crypto"});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
-	const digest = yield* Effect.tryPromise({
-		try: () => crypto.subtle.digest("SHA-256", copy),
-		catch: () => new LedgerError({why: "bad_row"}),
-	});
+	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", copy), catch: fail});
+	const digest = yield* work;
 	if (hex(digest) !== sha256.toLowerCase()) return yield* new LedgerError({why: "bad_row"});
-	yield* recordCall(() => bucket.put(key, copy, {sha256}));
+	yield* BucketClient.make(bucket).put(key, copy, sha256);
 });
-const bucketHead = Effect.fn(function* (bucket: R2Bucket, key: string) {
-	const row = yield* recordCall(() => bucket.head(key));
+export const bucketHead = Effect.fn(function* (bucket: R2Bucket, key: string) {
+	const row = yield* BucketClient.make(bucket).head(key);
 	return row?.checksums.sha256 === undefined ? null : {sha256: hex(row.checksums.sha256)};
 });
 
@@ -244,15 +249,15 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
 	const ssh = value.startsWith("ssh-");
 	const blob = ssh ? Base64.decode(value.trim().split(/\s+/)[1] ?? "") : Base64Url.decode(value);
 	if (Result.isFailure(blob)) return yield* new LedgerError({why: "bad_row"});
+	const bytes = blob.success.slice(-32);
+	const fail = () => new LedgerError({why: "crypto"});
 	// SSH Ed25519 blobs end with the 32 public bytes. P10 uses this same key fingerprint.
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
-	const hash = yield* Effect.tryPromise({
-		try: () => crypto.subtle.digest("SHA-256", blob.success.slice(-32)),
-		catch: () => new LedgerError({why: "bad_row"}),
-	});
+	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail});
+	const hash = yield* work;
 	return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
 });
-const projectLogic = Effect.fnUntraced(function* (
+const projectLogic = Effect.fn("project.init")(function* (
 	ctx: DurableObjectState,
 	env: Env,
 	options: ProjectOptions,
@@ -289,7 +294,7 @@ const projectLogic = Effect.fnUntraced(function* (
 		build: config.build,
 	};
 	const ring = Effect.fn("project.ring")(function* (to: string, stream: string, rev: number) {
-		yield* rpc(() => env.GATEWAY.getByName(to).ring(stream, rev));
+		yield* rpc(GatewayClient.make(env.GATEWAY.getByName(to)).ring(stream, rev));
 	});
 	const bell = Layer.succeed(Doorbell, {
 		ring: Effect.fnUntraced(function* (to, stream, rev) {
@@ -338,16 +343,16 @@ const projectLogic = Effect.fnUntraced(function* (
 		const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
 			saved.value,
 		).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
-		yield* rpc(() => processStub(env, name, pid).configure(descriptor));
+		yield* rpc(ProcessClient.make(processStub(env, name, pid)).configure(descriptor));
 		sql.exec("UPDATE stage_descriptors SET pending=0 WHERE process=?", pid);
 	});
-	const policies = new Map<string, {inputs: Array<string>; facts: Array<string>}>();
+	const policies = new Map<string, {inputs: Array<string>; events: Array<string>}>();
 	const remember = (pid: string, declaration: typeof loaded.declaration) =>
 		policies.set(pid, {
 			inputs: Object.entries(declaration.inputs)
 				.filter(([, p]) => p.personOnly)
 				.map(([name]) => name),
-			facts: Object.entries(declaration.writes)
+			events: Object.entries(declaration.writes)
 				.filter(([, p]) => p.personOnly)
 				.map(([name]) => name),
 		});
@@ -358,7 +363,9 @@ const projectLogic = Effect.fnUntraced(function* (
 			sql.exec("SELECT process FROM stage_descriptors WHERE process=?", process.process).length ===
 			0
 		) {
-			const descriptor = yield* rpc(() => processStub(env, name, process.process).descriptor());
+			const descriptor = yield* rpc(
+				ProcessClient.make(processStub(env, name, process.process)).descriptor(),
+			);
 			sql.exec(
 				"INSERT INTO stage_descriptors (process,value) VALUES (?,?)",
 				process.process,
@@ -377,7 +384,9 @@ const projectLogic = Effect.fnUntraced(function* (
 	const notify = Effect.fnUntraced(function* (client: string, news: unknown) {
 		const [row] = sql.exec("SELECT gateway FROM stage_clients WHERE client=?", client);
 		if (row !== undefined)
-			yield* rpc(() => env.GATEWAY.getByName(String(row.gateway)).notify(client, news));
+			yield* rpc(
+				GatewayClient.make(env.GATEWAY.getByName(String(row.gateway))).notify(client, news),
+			);
 	});
 	sql.exec(
 		"CREATE TABLE IF NOT EXISTS stage_clients (client TEXT PRIMARY KEY, gateway TEXT NOT NULL, session TEXT NOT NULL)",
@@ -392,10 +401,15 @@ const projectLogic = Effect.fnUntraced(function* (
 			isLive: processes.isLive,
 			nextProcess: () => ids.next,
 			notify,
-			deliver: (pid, incoming) => rpc<Sent>(() => processStub(env, name, pid).msg(incoming)),
+			deliver: (pid, incoming) =>
+				rpc(ProcessClient.make(processStub(env, name, pid)).msg(incoming)),
 			open: (pid, client) =>
-				rpc(() => processStub(env, name, pid).open(client)).pipe(
-					Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
+				rpc(ProcessClient.make(processStub(env, name, pid)).open(client)).pipe(
+					Effect.flatMap((value) =>
+						Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
+							Effect.mapError(() => new LedgerError({why: "bad_row"})),
+						),
+					),
 				),
 			wait: referee.wait,
 		})
@@ -403,7 +417,8 @@ const projectLogic = Effect.fnUntraced(function* (
 	const gateways = yield* GatewayManager.pipe(
 		Effect.provide(
 			GatewayManager.layer(sql, {
-				probe: (gateway, session) => rpc(() => env.GATEWAY.getByName(gateway).probe(session)),
+				probe: (gateway, session) =>
+					rpc(GatewayClient.make(env.GATEWAY.getByName(gateway)).probe(session)),
 				admitted: (key) =>
 					members.members.pipe(
 						Effect.flatMap((m) =>
@@ -423,14 +438,10 @@ const projectLogic = Effect.fnUntraced(function* (
 		),
 		Effect.provideContext(services),
 	);
-	const from = (parent: string | null = null): From => ({
-		by,
-		for: config.person,
-		sentAt: new Date().toISOString(),
-		seen: 0,
-		parent,
-		traceId: "00000000000000000000000000000001",
-		build: config.build,
+	const from = Effect.fn(function* (parent: string | null = null) {
+		return yield* fromHere({by, for: config.person, seen: 0, parent, build: config.build}).pipe(
+			Effect.orDie,
+		);
 	});
 	const start = Effect.fnUntraced(function* (request: Start, origin: From) {
 		if (!Object.hasOwn(programs, request.code.program))
@@ -458,42 +469,47 @@ const projectLogic = Effect.fnUntraced(function* (
 		yield* configure(result.process);
 		return result;
 	});
-	const registered = (yield* processes.info).find((row) => row.name === bootstrap.name);
-	const [original] = sql.exec(
-		"SELECT body,rev FROM entries WHERE stream=? AND id=?",
-		`processes/${bootstrap.name}`,
-		bootstrap.id,
+	const original = yield* ledger.read(`processes/${bootstrap.name}`, 0).pipe(
+		Stream.filter((entry) => entry.id === bootstrap.id),
+		Stream.runHead,
+		Effect.map(Option.getOrUndefined),
 	);
+	const Bootstrap = Schema.Struct({process: Schema.String});
 	const boot =
-		registered !== undefined
-			? {process: registered.process, rev: Number(original?.rev)}
-			: original !== undefined
-				? {process: String(JSON.parse(String(original.body)).process), rev: Number(original.rev)}
-				: yield* start(
-						Start.cases.first.make({
-							id: bootstrap.id,
-							name: bootstrap.name,
-							code: {program: bootstrap.program, hash: loaded.hash},
-						}),
-						from(),
-					);
+		original !== undefined
+			? {
+					process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
+						Effect.mapError(() => new LedgerError({why: "bad_row"})),
+					)).process,
+					rev: original.rev,
+				}
+			: yield* start(
+					Start.cases.first.make({
+						id: bootstrap.id,
+						name: bootstrap.name,
+						code: {program: bootstrap.program, hash: loaded.hash},
+					}),
+					yield* from(),
+				);
 	const wrapped = <A, E>(effect: Effect.Effect<A, E>) =>
 		complete(effect).pipe(Effect.provideContext(services));
 	const own = Effect.fn("project.own")(function* (
 		pid: string,
 		id: string,
 		stream: string,
-		fact: unknown,
+		event: unknown,
 	) {
 		if (!(yield* processes.isLive(pid))) return yield* new LedgerError({why: "refused"});
 		if (stream.startsWith("door/") || stream.startsWith("processes"))
 			return yield* new LedgerError({why: "refused"});
-		const body = Schema.decodeUnknownSync(Fact)(fact);
+		const body = yield* Schema.decodeUnknownEffect(Event)(event).pipe(
+			Effect.mapError(() => new LedgerError({why: "bad_row"})),
+		);
 		const [saved] = sql.exec("SELECT value FROM stage_descriptors WHERE process=?", pid);
 		if (saved === undefined) return yield* new LedgerError({why: "bad_row"});
-		const descriptor = Schema.decodeUnknownSync(
+		const descriptor = yield* Schema.decodeUnknownEffect(
 			Schema.fromJsonString(Schema.Struct({owner: Writer, build: Schema.String})),
-		)(saved.value);
+		)(saved.value).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
 		const origin = yield* fromHere({
 			by: descriptor.owner.key,
 			for: descriptor.owner.for,
@@ -503,8 +519,8 @@ const projectLogic = Effect.fnUntraced(function* (
 		});
 		return yield* ledger.append(stream, id, lineFor(origin, body));
 	});
-	const brain = Effect.fn("project.brain")(function* (fact: typeof BrainFact.Type) {
-		return yield* ledger.append("door/brain", fact.id, lineFor(from(), fact));
+	const brain = Effect.fn("project.brain")(function* (event: typeof BrainEvent.Type) {
+		return yield* ledger.append("door/brain", event.id, lineFor(yield* from(), event));
 	});
 	yield* flushed.pipe(Effect.provideContext(services));
 	return {
@@ -553,10 +569,10 @@ const projectLogic = Effect.fnUntraced(function* (
 		online: (key: string) => wrapped(gateways.online(key)),
 		info: wrapped(processes.info),
 		start: (request: Start, origin: From) => wrapped(start(request, origin)),
-		exit: (pid: string, why: string, origin: From) =>
+		exit: (pid: string, reason: string, origin: From) =>
 			wrapped(
 				Effect.gen(function* () {
-					yield* processes.exit(pid, why, origin);
+					yield* processes.exit(pid, reason, origin);
 					yield* door.retire(pid);
 				}).pipe(write),
 			),
@@ -588,7 +604,9 @@ const projectLogic = Effect.fnUntraced(function* (
 								build: config.build,
 							},
 							Schema.TaggedStruct("send", {m: Schema.Json}).make({
-								m: Schema.decodeUnknownSync(Schema.Json)(input.envelope.input),
+								m: yield* Schema.decodeUnknownEffect(Schema.Json)(input.envelope.input).pipe(
+									Effect.mapError(() => new LedgerError({why: "bad_row"})),
+								),
 							}),
 						),
 					);
@@ -598,17 +616,17 @@ const projectLogic = Effect.fnUntraced(function* (
 			pid: string,
 			id: string,
 			stream: string,
-			fact: unknown,
+			event: unknown,
 			trace?: {traceId: string; spanId: string},
 		) => {
-			const work = own(pid, id, stream, fact);
+			const work = own(pid, id, stream, event);
 			return wrapped(
 				write(
 					trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))),
 				),
 			);
 		},
-		brain: (fact: typeof BrainFact.Type) => wrapped(brain(fact)),
+		brain: (event: typeof BrainEvent.Type) => wrapped(brain(event)),
 		boot,
 	};
 });
@@ -617,12 +635,12 @@ export class ProjectService extends Context.Service<
 	ProjectService,
 	Effect.Success<ReturnType<typeof projectLogic>>
 >()("fabrika/Project") {}
-export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
-	ManagedRuntime.make(
-		Layer.effect(ProjectService, projectLogic(ctx, env, options)).pipe(
-			Layer.provide(ProcessIdGenerator.layer),
-		),
+export const projectLayer = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
+	Layer.effect(ProjectService, projectLogic(ctx, env, options)).pipe(
+		Layer.provide(Layer.merge(ProcessIdGenerator.layer, Id.Generator.layer)),
 	);
+export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
+	ManagedRuntime.make(projectLayer(ctx, env, options));
 
 // The trace a delivered letter carries from the door, as P11's Incoming names it.
 const Delivered = Schema.Struct({
@@ -633,50 +651,47 @@ const processLogic = Effect.fnUntraced(function* (
 	env: Env,
 	programs: Readonly<Record<string, ProgramSource>>,
 ) {
-	const [project, pid] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.String]))(
-		JSON.parse(Schema.decodeUnknownSync(Schema.String)(ctx.id.name)),
-	);
-	const p = projectStub(env, project),
+	const [project, pid] = yield* Schema.decodeUnknownEffect(
+		Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
+	)(ctx.id.name).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+	const stub = projectStub(env, project),
+		p = ProjectClient.make(stub),
+		storage = StorageClient.make(ctx.storage),
 		sql = workerSql(ctx.storage),
 		loader = workerLoader(env.LOADER, programs);
-	const ledger = Ledger.remote(p, {reader: pid});
+	const ledger = Ledger.remote(stub, {reader: pid});
 	const base = Layer.mergeAll(ledger, recordingLayer(sql, env, project, pid));
-	const storage = {
-		put: (key: string, value: unknown) => rpc(() => ctx.storage.put(key, value)),
-		sync: () => rpc(() => ctx.storage.sync()),
-	};
 	const all = Layer.mergeAll(ProcessStore.layer(sql, {process: pid, storage}), Mailbox.layer).pipe(
 		Layer.provideMerge(base),
 	);
 	const services = yield* Layer.build(all);
 	const store = Context.get(services, ProcessStore),
 		sink = Context.get(services, SpanSink);
-	const saved = yield* rpc(() => ctx.storage.get<Descriptor>("descriptor"));
-	if (saved === undefined) return yield* new LedgerError({why: "bad_row"});
+	const saved = yield* processDescriptor(ctx);
 	const publish = Effect.fn("process.publish")(function* (client: string, update: unknown) {
-		yield* rpc(() => p.publish(client, update));
+		yield* rpc(p.publish(client, update));
 	});
 	const dependencies = Layer.mergeAll(
 		Layer.succeed(CheckedWriter, {
 			sign: (id, parent, kind) =>
-				rpc<unknown>(() => p.sign(pid, id, parent, kind)).pipe(
+				rpc(p.sign(pid, id, parent, kind)).pipe(
 					Effect.flatMap(Schema.decodeUnknownEffect(SigningReply)),
 					Effect.mapError(() => new LedgerError({why: "unreachable"})),
 					Effect.flatMap(checkedValue),
 				),
-			append: (input) => rpc<Appended>(() => p.inbox(pid, input)),
-			commit: (id, session, stream, fact) =>
-				rpc<unknown>(() =>
-					p.commit(pid, {id, parent: session.parent, kind: fact._tag, stream, fact}),
+			append: (input) => rpc(p.inbox(pid, input)),
+			commit: (id, session, stream, event) =>
+				rpc(
+					p.commit(pid, {id, parent: session.parent, kind: event._tag, stream, fact: event}),
 				).pipe(
 					Effect.flatMap(Schema.decodeUnknownEffect(CommitReply)),
 					Effect.mapError(() => new LedgerError({why: "unreachable"})),
 					Effect.flatMap(checkedValue),
 				),
-			own: Effect.fn("process.own")(function* (id: string, stream: string, fact: unknown) {
+			own: Effect.fn("process.own")(function* (id: string, stream: string, event: unknown) {
 				const span = yield* Effect.currentSpan.pipe(Effect.orDie);
-				return yield* rpc<Appended>(() =>
-					p.own(pid, id, stream, fact, {traceId: span.traceId, spanId: span.spanId}),
+				return yield* rpc(
+					p.own(pid, id, stream, event, {traceId: span.traceId, spanId: span.spanId}),
 				);
 			}),
 		}),
@@ -687,12 +702,8 @@ const processLogic = Effect.fnUntraced(function* (
 			// The program's wake is saved as it set it; the platform alarm moves a past time to now.
 			set: (at) =>
 				(at === null
-					? rpc(() => ctx.storage.delete("wake")).pipe(
-							Effect.andThen(rpc(() => ctx.storage.deleteAlarm())),
-						)
-					: rpc(() => ctx.storage.put("wake", at)).pipe(
-							Effect.andThen(rpc(() => ctx.storage.setAlarm(at))),
-						)
+					? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm())))
+					: rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(at))))
 				).pipe(Effect.orDie),
 		}),
 		// Recording captures its sink's services itself (main's P11); the runner no longer provides them.
@@ -724,7 +735,7 @@ const processLogic = Effect.fnUntraced(function* (
 				.pipe(Effect.annotateSpans({"fab.process": pid}), Effect.provideContext(services)),
 		// A platform alarm delivers the saved due time, so a repeated alarm is the same letter.
 		alarm: () =>
-			rpc(() => ctx.storage.get<number>("wake")).pipe(
+			rpc(storage.get<number>("wake")).pipe(
 				Effect.flatMap((at) =>
 					at === undefined
 						? Effect.void
@@ -735,7 +746,7 @@ const processLogic = Effect.fnUntraced(function* (
 			),
 		activity: store.activity,
 		recover: () =>
-			rpc(() => ctx.storage.get("activity")).pipe(
+			rpc(storage.get("activity")).pipe(
 				Effect.flatMap((value) => Effect.fromResult(recoverActivity(value))),
 			),
 	};

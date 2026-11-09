@@ -122,7 +122,7 @@ tickets would show it.
   stops the build to "no effective false positives". Then code sends its
   findings back by itself, and the user rates a sample.
 - **This is how the mutation rule would be reopened.**
-  [Promises in the pipeline](./promises-in-the-pipeline.md) decided that every
+  Promises in the pipeline decided that every
   live mutant blocks. These counts would show whether that holds, rule by
   rule. Until they exist, that decision stands.
 

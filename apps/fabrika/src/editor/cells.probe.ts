@@ -116,7 +116,7 @@ const classOf = (cp: number, a: Answers): Class => {
 };
 
 /** A code point's facts, from its answers. */
-export const factsFrom = (cp: number, a: Answers): Facts => {
+const factsFrom = (cp: number, a: Answers): Facts => {
 	if (isControl(cp)) return {width: 1, class: "other", vs: false};
 	return {width: a.width, class: classOf(cp, a), vs: a.width > 0 && a.vs !== a.width};
 };

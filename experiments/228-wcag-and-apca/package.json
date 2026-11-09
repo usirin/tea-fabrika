@@ -1,9 +1,0 @@
-{
-	"name": "exp-228-wcag-and-apca",
-	"private": true,
-	"type": "module",
-	"description": "Experiment 228: today's color pairs against WCAG 2.2 and APCA. Not in the workspace: install it alone with `pnpm install --ignore-workspace`.",
-	"dependencies": {
-		"apca-w3": "0.1.9"
-	}
-}

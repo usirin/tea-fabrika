@@ -82,7 +82,7 @@ has no single place that can say who was first.
   Miniflare, Cloudflare's local runtime, its data kept on disk. A team that
   wants no Cloudflare runs the same bundle on a self-hosted runtime
   (workerd, celld). Which one a host uses is config; see
-  [tea-host](./tea-host.md).
+  tea-host.
 - **Experiment 93 backs it** ([write-up](../../experiments/93-ledger-miniflare.md)).
   All 10 laws hold in Miniflare. A 30-minute soak at about 100 times a
   team's load, killed every 5 minutes, lost no acknowledged write and made
@@ -432,8 +432,10 @@ after about 10 s and drops what waits in memory.*
   overwritten rows, and each becomes an entry: process wiring (monitors,
   links, trap exit), logins after the first (who and when; the credential
   hash stays out), and a job's state slots. Stream names stay as experiments
-  97 to 99 set them: a name owns `build:7`, `build:7/inbox` and
-  `build:7/dead`; only its lease writes them; the inbox is the one open door.
+  97 to 99 set them, with the dead-letter change below: a name owns `build:7`
+  and `build:7/inbox`; only its lease writes the name's stream, and the inbox
+  is the one open door. Each process start has `<pid>/dead`, written only by
+  the brain.
 
 ### Layer 3: coordination (decided 2026-10-31)
 
@@ -449,7 +451,12 @@ written, so it needs no table.
 yield* ProcessManager.exit("build:7", {why: "limit", charge}); // C1
 //   -> the charge, build:7's exit, and mail in its parent's inbox: one write, or none
 // A message that crashes its reader 3 times moves aside (C2):
-{stream: "build:7/dead", _tag: "dead", body: {tries: 3, limit: 3, m: "m-17"}}
+const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
+{stream: `${pid}/dead`, _tag: "dead", body: {
+	process: pid, program: "build", name: "build:7",
+	tries: 3, limit: 3, m: "m-17", build: "build-a",
+	errors: ["TypeError", "TypeError", "RangeError"],
+}}
 ```
 
 - **C1, stopping a job together with a note:** when the app sees an agent
@@ -457,10 +464,12 @@ yield* ProcessManager.exit("build:7", {why: "limit", charge}); // C1
   and mail to its parent. The app decides, then makes one call. Coordination
   never knows what money is; to it, an agent is one more running job.
 - **C2, mail delivery:** at least once. After N crashes on one message, it
-  moves to `<name>/dead`, recording its tries and the limit. A message can
+  moves to `<pid>/dead`, recording its process, program, registered name,
+  tries, limit, letter id, build and each throw's error class. A message can
   arrive twice, so a job must handle a repeat. N comes from
   `[coordination] max_deliveries = 3`, which a program can change for its own
   inbox.
+  Owner decided 2026-11-08: one stream per process start, `<pid>/dead`; each entry carries `process`, `program` and `name`.
 - **C3, leases (2026-10-25; renew logging 2026-10-31):** a claim lasts 30 s
   and is renewed every 10 s, a third, as etcd's keepalive. An old holder stays
   valid until a newer claim exists (Kafka's epoch rule), so a wrong clock

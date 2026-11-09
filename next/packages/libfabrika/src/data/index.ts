@@ -2,13 +2,14 @@
 // span sink with its records and archive. Tier 1, P6 and P37. node:sqlite's `Sql` is on its own
 // subpath, `./sqlite`, so this one names no platform.
 export {Archive, type BucketCalls} from "./archive.ts";
+export * as Id from "../id.ts";
+export {IdError, InputId, type IdSchema, type IdValue} from "../id.ts";
 export {Doorbell, Ledger, type LedgerCalls, LedgerError} from "./ledger.ts";
 export {LedgerTransaction, type LedgerTurn} from "./ledger-transaction.ts";
 export {
 	Appended,
 	Entry,
 	fromHere,
-	type InputId,
 	Line,
 	lineFor,
 	PAGE,

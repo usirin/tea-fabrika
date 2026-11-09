@@ -3,22 +3,26 @@
 // knows no cases, so a line's `_tag` is an open string, the case as the writer's own schema wrote it.
 // `lineFor` and `valueFor` turn a schema's value into a line and an entry back, so no other file
 // writes the key.
-import {type Brand, DateTime, Effect, Schema} from "effect";
+import {DateTime, Effect, Schema} from "effect";
+import {InputId} from "../id.ts";
+
+export {InputId} from "../id.ts";
 
 /** A place in the log or in a stream. Both count from 1; 0 means before the first. */
 export const Rev = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 export type Rev = typeof Rev.Type;
 
-/** An input id's text form, as the door writes it (p68). Kept as text: nothing here makes an `InputId`. */
-export const ParentText = Schema.String.check(
+/** Old saved parents keep their original identity. New checked inputs use InputId. */
+const LegacyParentText = Schema.String.check(
 	Schema.isPattern(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/),
 );
+export const ParentText = Schema.Union([InputId, LegacyParentText]);
 
 /** A W3C trace id: 32 lowercase hex characters, never all zeros. */
-export const TraceId = Schema.String.check(Schema.isPattern(/^(?!0{32})[0-9a-f]{32}$/));
-
-/** The door's input id. A type only: P10's door makes one, and nothing in `./data` does. */
-export type InputId = Brand.Branded<string, "InputId">;
+export const TraceId = Schema.String.check(
+	Schema.isPattern(/^[0-9a-f]{32}$/),
+	Schema.makeFilter((traceId) => traceId !== "0".repeat(32), {expected: "a nonzero W3C trace id"}),
+);
 
 const Text = Schema.NonEmptyString;
 

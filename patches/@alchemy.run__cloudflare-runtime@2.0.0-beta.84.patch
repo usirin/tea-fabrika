@@ -1,5 +1,5 @@
 diff --git a/dist/core/node/Runtime.d.mts b/dist/core/node/Runtime.d.mts
-index 896acf1a337db848a4c5972f932d6db7bec67902..641b9014a1370bca02258e3147e8b23a63e34be2 100644
+index 896acf1a337db848a4c5972f932d6db7bec67902..6fa6acaacea14368e8b4982231560cf5aa526586 100644
 --- a/dist/core/node/Runtime.d.mts
 +++ b/dist/core/node/Runtime.d.mts
 @@ -1,6 +1,6 @@
@@ -18,7 +18,7 @@ index 896acf1a337db848a4c5972f932d6db7bec67902..641b9014a1370bca02258e3147e8b23a
 +  | { readonly type: "start"; readonly pid: number }
 +  | { readonly type: "exit"; readonly exit: WorkerdExit }
 +  | { readonly type: "restart"; readonly exit: WorkerdExit; readonly delay: number }
-+  | { readonly type: "stop"; readonly exit: WorkerdExit; readonly why: "intensity" | "restart_failed" }
++  | { readonly type: "stop"; readonly exit: WorkerdExit; readonly reason: "intensity" | "restart_failed" }
 +);
 +declare const RuntimeLifecycle: Context.Reference<(event: RuntimeEvent) => void>;
  declare const Runtime_base: Context.ServiceClass<Runtime, "cloudflare-runtime/Runtime", {
@@ -33,7 +33,7 @@ index 896acf1a337db848a4c5972f932d6db7bec67902..641b9014a1370bca02258e3147e8b23a
  //# sourceMappingURL=Runtime.d.mts.map
 \ No newline at end of file
 diff --git a/dist/core/node/Runtime.mjs b/dist/core/node/Runtime.mjs
-index 4b40c8edb5c3efc8938080e6008e9ce24fe10eae..697dc91041aac5e2180540040b02c4d911020fdf 100644
+index 4b40c8edb5c3efc8938080e6008e9ce24fe10eae..51e51e4ee0cda61e8b4eff13f08bb9c7074dac26 100644
 --- a/dist/core/node/Runtime.mjs
 +++ b/dist/core/node/Runtime.mjs
 @@ -15,11 +15,13 @@ import * as Queue from "effect/Queue";
@@ -67,7 +67,7 @@ index 4b40c8edb5c3efc8938080e6008e9ce24fe10eae..697dc91041aac5e2180540040b02c4d9
  				const now = yield* Clock.currentTimeMillis;
  				restartTimes = restartTimes.filter((time) => now - time < 6e4);
  				if (restartTimes.length >= 3) {
-+					lifecycle({ type: "stop", worker: worker.name, exit, why: "intensity" });
++					lifecycle({ type: "stop", worker: worker.name, exit, reason: "intensity" });
  					yield* Effect.logError(`The Workers runtime for "${worker.name}" stopped after 3 restarts within 60 seconds. Fix the crash and restart the dev session.`);
  					return;
  				}
@@ -80,7 +80,7 @@ index 4b40c8edb5c3efc8938080e6008e9ce24fe10eae..697dc91041aac5e2180540040b02c4d9
  				processScope = yield* Scope.fork(parentScope);
  				const restarted = yield* startProcess(ports).pipe(Effect.result);
  				if (Result.isFailure(restarted)) {
-+					lifecycle({ type: "stop", worker: worker.name, exit, why: "restart_failed" });
++					lifecycle({ type: "stop", worker: worker.name, exit, reason: "restart_failed" });
  					yield* Effect.logError(`The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`);
  					return;
  				}
@@ -184,7 +184,7 @@ index 60b6efff0012140f1eccead5c8c0ffd685535472..89217e29c5eda275cb09f7654da3df03
  			const onError = (cause, message = "Failed to write to the workerd process stdin.") => {
  				resume(SystemError.make({
 diff --git a/src/core/Runtime.ts b/src/core/Runtime.ts
-index 25ebd7c80cb7fd7a61999a8280b189600258ab0d..eb6f38ec4b26f278482249753fb3d7eeaea4926b 100644
+index 25ebd7c80cb7fd7a61999a8280b189600258ab0d..3838c18f6dfa80ef568fe039dd3e6516cd774255 100644
 --- a/src/core/Runtime.ts
 +++ b/src/core/Runtime.ts
 @@ -24,6 +24,19 @@ import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
@@ -195,7 +195,7 @@ index 25ebd7c80cb7fd7a61999a8280b189600258ab0d..eb6f38ec4b26f278482249753fb3d7ee
 +  | { readonly type: "start"; readonly pid: number }
 +  | { readonly type: "exit"; readonly exit: Workerd.WorkerdExit }
 +  | { readonly type: "restart"; readonly exit: Workerd.WorkerdExit; readonly delay: number }
-+  | { readonly type: "stop"; readonly exit: Workerd.WorkerdExit; readonly why: "intensity" | "restart_failed" }
++  | { readonly type: "stop"; readonly exit: Workerd.WorkerdExit; readonly reason: "intensity" | "restart_failed" }
 +);
 +
 +/** Observe local workers without taking ownership of their restart loop. */
@@ -235,7 +235,7 @@ index 25ebd7c80cb7fd7a61999a8280b189600258ab0d..eb6f38ec4b26f278482249753fb3d7ee
              const now = yield* Clock.currentTimeMillis;
              restartTimes = restartTimes.filter((time) => now - time < 60_000);
              if (restartTimes.length >= 3) {
-+              lifecycle({ type: "stop", worker: worker.name, exit, why: "intensity" });
++              lifecycle({ type: "stop", worker: worker.name, exit, reason: "intensity" });
                yield* Effect.logError(
                  `The Workers runtime for "${worker.name}" stopped after 3 restarts within 60 seconds. Fix the crash and restart the dev session.`,
                );
@@ -252,7 +252,7 @@ index 25ebd7c80cb7fd7a61999a8280b189600258ab0d..eb6f38ec4b26f278482249753fb3d7ee
              processScope = yield* Scope.fork(parentScope);
              const restarted = yield* startProcess(ports).pipe(Effect.result);
              if (Result.isFailure(restarted)) {
-+              lifecycle({ type: "stop", worker: worker.name, exit, why: "restart_failed" });
++              lifecycle({ type: "stop", worker: worker.name, exit, reason: "restart_failed" });
                yield* Effect.logError(
                  `The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`,
                );

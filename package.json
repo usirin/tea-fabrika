@@ -5,24 +5,22 @@
 	"description": "Fabrika as a tea machine: a minimal repro",
 	"scripts": {
 		"prepare": "effect-tsgo patch --typescript",
-		"typecheck": "effect-tsgo patch --typescript && pnpm -r typecheck",
+		"typecheck": "sh scripts/typecheck.sh",
 		"build": "pnpm --filter @kampus/fabrika-old --filter @kampus/pipeline build",
 		"test": "vitest run",
-		"lint": "node oxlint-plugins/lint.ts && node oxlint-plugins/format.ts --check && pnpm -s lint:versions && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser && pnpm -s lint:dead && pnpm -s lint:compiler && node packages/fabrika-design/src/build/tokens.ts --check && node oxlint-plugins/stylelint.ts",
+		"lint": "sh .agents/skills/lead/scripts/skillscheck.sh && node .github/ci/workflow-lint.ts && node oxlint-plugins/lint.ts && node oxlint-plugins/format.ts --check && pnpm -s lint:versions && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser && pnpm -s lint:dead && pnpm -s lint:compiler && pnpm -s lint:twin && pnpm -s lint:promise-types && node packages/fabrika-design/src/build/tokens.ts --check && node oxlint-plugins/stylelint.ts",
 		"lint:versions": "node oxlint-plugins/exact-versions.ts",
 		"lint:layers": "code-graph . --layers --layer-rules layer-rules.json",
 		"lint:boundaries": "code-graph . --boundaries --ci --boundary-rules boundary-rules.json",
 		"lint:browser": "node packages/fabrika/browser-check.ts",
-		"lint:dead": "code-graph . --unreachable --ci",
+		"lint:dead": "code-graph . --unreachable --ci --node-kinds node-kinds.json",
 		"lint:compiler": "node next/apps/fabrika/src/exam/compiler.ts",
+		"lint:twin": "node next/apps/fabrika/src/exam/twin.ts",
+		"lint:promise-types": "node next/apps/fabrika/src/exam/promise-types.ts",
 		"tokens": "node packages/fabrika-design/src/build/tokens.ts",
 		"promises": "node packages/promises/src/main.ts",
 		"commits": "node next/apps/fabrika/src/exam/commits.ts",
 		"format": "node oxlint-plugins/format.ts && node oxlint-plugins/lint.ts --fix && node oxlint-plugins/format.ts",
-		"demo": "node legacy/src/demo.ts",
-		"demo:claude": "AGENT=claude node legacy/src/demo.ts",
-		"demo:hard": "TOY=duration AGENT=claude node legacy/src/demo.ts",
-		"real": "node legacy/src/real.ts",
 		"tsh": "node packages/pipeline/src/tsh/fabrika-main.ts",
 		"fabrika": "pnpm --filter @kampus/fabrika-app-old start",
 		"trace:up": "docker run -d --rm --name tsh-jaeger --user 0 -p 16686:16686 -p 4318:4318 -v tsh-jaeger-data:/badger -v \"$PWD/jaeger:/etc/jaeger:ro\" -e OTEL_TRACES_SAMPLER=always_off jaegertracing/jaeger:2.21.0 --config /etc/jaeger/config.yaml && echo 'Jaeger: http://localhost:16686'",
@@ -43,18 +41,15 @@
 		"@opentelemetry/exporter-trace-otlp-http": "catalog:",
 		"@opentelemetry/resources": "catalog:",
 		"@opentelemetry/sdk-trace-base": "catalog:",
-		"@tea-fabrika/ask-log": "workspace:*",
 		"@tea-fabrika/compare": "workspace:*",
 		"@tea-fabrika/counter": "workspace:*",
 		"@tea-fabrika/experiment": "workspace:*",
 		"@tea-fabrika/experiments": "workspace:*",
 		"@tea-fabrika/map": "workspace:*",
 		"@tea-fabrika/markdown": "workspace:*",
-		"@tea-fabrika/owner-desk": "workspace:*",
 		"@tea-fabrika/ticket": "workspace:*",
 		"@tea-fabrika/trace": "workspace:*",
 		"@tea-fabrika/tracker": "workspace:*",
-		"@tea-fabrika/ui-verification": "workspace:*",
 		"effect": "catalog:",
 		"smol-toml": "catalog:",
 		"zod": "catalog:"
@@ -73,6 +68,16 @@
 		"vitest": "catalog:"
 	},
 	"packageManager": "pnpm@12.16.1",
+	"engines": {
+		"node": "26.13.0"
+	},
+	"devEngines": {
+		"runtime": {
+			"name": "node",
+			"version": "26.13.0",
+			"onFail": "warn"
+		}
+	},
 	"volta": {
 		"node": "26.13.0"
 	}

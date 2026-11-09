@@ -35,8 +35,8 @@ const passes = [
 	"export const thereof = 1;",
 ].join("\n");
 
-describe("no-of", () => {
-	const all = plant({
+describe("no-of", async () => {
+	const all = await plant({
 		[FIRES]: fires,
 		[PASSES]: passes,
 		[TEST]: "export const helperOf = 1;",

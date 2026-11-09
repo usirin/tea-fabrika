@@ -1,29 +1,15 @@
 # packages: what other code may build on. programs: one runnable tea program each.
-# wip: everything not yet pulled out. legacy: the first-generation factory.
-# packs: add-on packs, wired to the core by one config line; the core names none.
 # docs/tutorials: a tutorial's finished files, type-checked so it cannot drift.
 # apps: what a person opens, on top of everything else. Nothing imports an app.
-# experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
-# experiments/171-alchemy-local-twin: one experiment's harness, so it imports the ledger server's stack by name.
-# experiments/173-worker-loader: one experiment's harness, so it bundles a program with esbuild for Worker Loader.
-# experiments/174-effect-on-cloudflare: one experiment's harness, so Effect's plumbing can be bundled into a Durable Object.
-# experiments/195-oxc-toolchain: one experiment's harness, so the React Compiler's Rust port, Rolldown and Vite stay out of the app.
 # oxlint-plugins: this repo's own lint rules, type-checked and tested like the rest.
 # next/apps: the new version's app (AGENTS.md, "Two versions, side by side"). So far its exam folder.
 packages:
   - apps/*
   - packages/*
   - programs/*
-  - packs/*
   - docs/tutorials/*
   - oxlint-plugins
-  - wip
-  - legacy
-  - experiments/142-web-terminals
-  - experiments/171-alchemy-local-twin
-  - experiments/173-worker-loader
-  - experiments/174-effect-on-cloudflare
-  - experiments/195-oxc-toolchain
+  - .github/ci
   # next/: the new version (docs/plan/tier-1.md). Real packages, one lockfile, this catalog.
   - next/packages/*
   - next/programs/*
@@ -37,13 +23,13 @@ catalog:
   '@anthropic-ai/claude-agent-sdk': 0.3.316
   # The os sandbox (packages/fabrika/src/sandbox/os.ts), held exact: 0.0.x, as experiments 127, 128 and 137 ran it.
   '@anthropic-ai/sandbox-runtime': 0.0.81
-  '@demlik/code-graph': 0.12.0
+  '@demlik/code-graph': 0.15.0
   '@demlik/structure-sweep': 0.3.9
   '@demlik/tea': 0.25.0
-  '@effect/opentelemetry': 4.1.1
-  '@effect/platform-node': 4.1.1
+  '@effect/opentelemetry': 4.1.2
+  '@effect/platform-node': 4.1.2
   '@effect/tsgo': 0.63.0
-  '@effect/vitest': 4.1.1
+  '@effect/vitest': 4.1.2
   # MCP's official TypeScript SDK, v2's split packages: the host serves programs as tools (@kampus/fabrika-old/mcp).
   '@modelcontextprotocol/client': 2.4.0
   '@modelcontextprotocol/server': 2.4.0
@@ -67,7 +53,7 @@ catalog:
   rolldown: 1.2.13
   # P16 bundles window CSS with its imports. Reuse the version already in the lockfile.
   lightningcss: 1.33.0
-  # Held on the SDK's 2.x line: OpenTelemetry 3 needs api 1.10, and @effect/opentelemetry 4.1.1 asks for
+  # Held on the SDK's 2.x line: OpenTelemetry 3 needs api 1.10, and @effect/opentelemetry 4.1.2 asks for
   # resources below 3. On that line sdk-trace-base 2.12.0 asks for api below 1.10, so api stays 1.9.1.
   '@opentelemetry/api': 1.9.1
   '@opentelemetry/exporter-trace-otlp-http': 0.223.0
@@ -89,7 +75,6 @@ catalog:
   '@types/node': 26.6.6
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
-  # Experiment 142's other terminals (experiments/142-web-terminals), held exact like ghostty-web.
   # wterm, Apache-2.0, a Vercel Labs experiment: rows in the DOM, libghostty's core opt-in.
   '@wterm/dom': 0.5.7
   '@wterm/ghostty': 0.5.7
@@ -99,7 +84,7 @@ catalog:
   '@xterm/xterm': 6.0.0
   # React Flow, MIT: the map program's window (programs/map).
   '@xyflow/react': 12.12.0
-  effect: 4.1.1
+  effect: 4.1.2
   electron: 45.2.1
   esbuild: 0.28.2
   fast-check: 4.10.2
@@ -133,7 +118,7 @@ allowBuilds:
 
 # The platform layer's shared part, held at effect's own version: its newer releases ask for a newer effect.
 overrides:
-  '@effect/platform-node-shared': 4.1.1
+  '@effect/platform-node-shared': 4.1.2
 
 patchedDependencies:
   # P12 observes workerd PIDs, exits, replacement delays and recovery stopping.
@@ -155,6 +140,10 @@ patchedDependencies:
   '@manti-ui/react@0.13.0': patches/@manti-ui__react@0.13.0.patch
   # Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch
+  # demlik#905: a non-exported const beside an exported type of its name is not an unused export;
+  # drop at the release that has the fix.
+  '@demlik/code-graph@0.15.0': patches/@demlik__code-graph@0.15.0.patch
 
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.24.0 || 0.25.0'
+  - '@demlik/code-graph@0.15.0'

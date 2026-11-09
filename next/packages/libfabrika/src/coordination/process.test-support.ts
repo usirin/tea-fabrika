@@ -16,10 +16,22 @@ import {type From, Mailbox} from "./mailbox.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {Owner, Recipient, Start} from "./process.ts";
 
-export const A = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
-export const B = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
-export const W = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
-export const X = "process_01jc9q4w7z3m8n5r2t6v0xkb4g";
+// Independently encoded and decoded UUIDv7s: 00000000-0000-7000-8000-000000000000 through ...003.
+export const A = "process_0000000000e008000000000000";
+export const B = "process_0000000000e008000000000001";
+export const W = "process_0000000000e008000000000002";
+export const X = "process_0000000000e008000000000003";
+/** A, B, W, X, then 36 more: enough for a world that restarts past the brake or a 32-try limit. */
+export const PIDS: ReadonlyArray<string> = [
+	A,
+	B,
+	W,
+	X,
+	...Array.from(
+		{length: 36},
+		(_, n) => `process_0000000000e00800${String(n + 4).padStart(10, "0")}`,
+	),
+];
 export const CODE = {program: "counter", hash: "build-a"};
 /** The brain's own writer key: the `by` on every process fact, and the only one the fold trusts. */
 export const BRAIN = "SHA256:brain";
@@ -108,7 +120,7 @@ export const storage = () => {
 	};
 };
 export type Storage = ReturnType<typeof storage>;
-export const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
 export const data = (sql: Sql, bell = quiet) =>
 	Layer.mergeAll(Ledger.sql(sql, {reader: "gateway:test"}), LedgerTransaction.layer(sql)).pipe(
 		Layer.provide(bell),

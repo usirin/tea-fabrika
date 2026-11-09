@@ -1,11 +1,10 @@
-import {join} from "node:path";
 import {startStage as start} from "@kampus/libfabrika/node/stage";
 import {AlchemyContext} from "alchemy/AlchemyContext";
 import {ArtifactStore, createArtifactStore} from "alchemy/Artifacts";
 import {deploy} from "alchemy/Deploy";
 import * as Interaction from "alchemy/Interaction";
 import {localState} from "alchemy/State/LocalState";
-import {Effect, Layer} from "effect";
+import {Effect, Layer, Path} from "effect";
 import {stack} from "../alchemy.run.ts";
 import type {Built} from "./build.ts";
 import {Settings} from "./settings.ts";
@@ -14,11 +13,12 @@ export const startStage = Effect.fn("stage.startStage")(function* (
 	built: Omit<Built, "assets">,
 	options: Omit<Settings, "build"> & {readonly home: string},
 ) {
+	const path = yield* Path.Path;
 	const config = Settings.make({...options, build: built.build});
 	return yield* start({...config, home: options.home}, (local, scope) => {
 		const engine = Layer.mergeAll(
 			Layer.succeed(AlchemyContext, {
-				dotAlchemy: join(options.home, ".alchemy"),
+				dotAlchemy: path.join(options.home, ".alchemy"),
 				dev: true,
 				adopt: false,
 			}),

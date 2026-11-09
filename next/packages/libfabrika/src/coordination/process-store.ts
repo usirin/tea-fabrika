@@ -29,6 +29,7 @@ export type Placed = typeof Placed.Type;
 /** The only facts the runtime writes to a process's stream: a step it installed, and an upgrade it
  *  ran on saved state. A program never writes either. */
 export const RuntimeRecord = Schema.TaggedUnion({
+	"cmd.answered": {m: Schema.Json, cmd: Schema.NonEmptyString, build: Schema.NonEmptyString},
 	stepped: {input: Schema.NonEmptyString, pos: Rev, build: Schema.NonEmptyString},
 	"state.upgraded": {
 		program: Schema.NonEmptyString,
@@ -43,6 +44,7 @@ export type RuntimeRecord = typeof RuntimeRecord.Type;
 const TABLES = [
 	"CREATE TABLE IF NOT EXISTS process_state (process TEXT PRIMARY KEY, checkpoint TEXT NOT NULL)",
 	"CREATE TABLE IF NOT EXISTS process_letters (process TEXT NOT NULL, id TEXT NOT NULL, rev INTEGER NOT NULL, pos INTEGER NOT NULL, PRIMARY KEY (process, id))",
+	"CREATE INDEX IF NOT EXISTS process_letters_id ON process_letters (id, rev)",
 	"CREATE TABLE IF NOT EXISTS process_activity (process TEXT PRIMARY KEY, activity TEXT NOT NULL)",
 ];
 const encodeActivity = Schema.encodeSync(Schema.fromJsonString(Activity));
@@ -52,28 +54,36 @@ const decodePlaced = Schema.decodeUnknownSync(Placed);
 const decodeRecord = Schema.decodeUnknownResult(RuntimeRecord);
 const encodeRecord = Schema.encodeSync(RuntimeRecord);
 
-export class ProcessStore extends Context.Service<
-	ProcessStore,
-	{
-		/** Makes the activity marker durable before the runner starts or finishes a step. */
-		readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
-		/** The saved checkpoint, or null before the first save. */
-		readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
-		/** Replaces the checkpoint and adds `placed` to the letter index, in one transaction. */
-		readonly save: (
-			value: {
-				readonly saved: unknown;
-				readonly turn: unknown;
-				readonly cmds: ReadonlyArray<unknown>;
-			},
-			placed?: ReadonlyArray<Placed>,
-		) => Effect.Effect<void, LedgerError>;
-		/** An accepted letter's first placing, or null when this process never accepted it. */
-		readonly placed: (id: string) => Effect.Effect<Placed | null, LedgerError>;
-		/** Appends one RuntimeRecord to the process's stream. A retry answers its first placing. */
-		readonly record: (id: string, fact: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
-	}
->()("@kampus/libfabrika/ProcessStore") {
+type ProcessStorage = {
+	readonly select: (process: string) => Effect.Effect<ProcessStorage>;
+	readonly readActivity: Effect.Effect<typeof Activity.Type | undefined, LedgerError>;
+	/** Makes the activity marker durable before the runner starts or finishes a step. */
+	readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
+	/** The saved checkpoint, or null before the first save. */
+	readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
+	/** Replaces the checkpoint and adds `placed` to the letter index, in one transaction. */
+	readonly save: (
+		value: {
+			readonly saved: unknown;
+			readonly turn: unknown;
+			readonly cmds: ReadonlyArray<unknown>;
+		},
+		placed?: ReadonlyArray<Placed>,
+	) => Effect.Effect<void, LedgerError>;
+	/** An accepted letter's first placing, or null when this process never accepted it. */
+	readonly placed: (id: string) => Effect.Effect<Placed | null, LedgerError>;
+	/**
+	 * A letter's first placing by any life in this store, or null. One object's store holds one
+	 * registered name, so this is every life of that name: a successor keeps its predecessors'
+	 * accepted history without copying their rows (P34).
+	 */
+	readonly placedByAny: (id: string) => Effect.Effect<Placed | null, LedgerError>;
+	/** Appends one RuntimeRecord to the process's stream. A retry answers its first placing. */
+	readonly record: (id: string, fact: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
+};
+export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(
+	"@kampus/libfabrika/ProcessStore",
+) {
 	static readonly layer = (
 		sql: Sql,
 		who: {
@@ -83,6 +93,7 @@ export class ProcessStore extends Context.Service<
 				| {
 						readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError>;
 						readonly sync: () => Effect.Effect<void, LedgerError>;
+						readonly get?: (key: string) => Effect.Effect<unknown, LedgerError>;
 				  }
 				| undefined;
 		},
@@ -107,6 +118,33 @@ export class ProcessStore extends Context.Service<
 					});
 				});
 				return {
+					select: Effect.fn("process.select")(function* (process: string) {
+						return yield* ProcessStore.pipe(
+							Effect.provide(ProcessStore.layer(sql, {...who, process})),
+							Effect.provideService(Ledger, ledger),
+						);
+					}),
+					readActivity:
+						who.storage?.get !== undefined
+							? who.storage.get("activity").pipe(
+									Effect.flatMap((raw) =>
+										raw === undefined
+											? Effect.succeed(undefined)
+											: Effect.try({
+													try: () => Schema.decodeUnknownSync(Activity)(raw),
+													catch: () => new LedgerError({why: "bad_row"}),
+												}),
+									),
+								)
+							: stored(() => {
+									const [row] = sql.exec(
+										"SELECT activity FROM process_activity WHERE process=?",
+										who.process,
+									);
+									return row === undefined
+										? undefined
+										: Schema.decodeUnknownSync(Schema.fromJsonString(Activity))(row.activity);
+								}),
 					activity: Effect.fn("process.activity")(function* (value: typeof Activity.Type) {
 						if (who.storage !== undefined) {
 							yield* who.storage.put("activity", value);
@@ -153,6 +191,14 @@ export class ProcessStore extends Context.Service<
 							const [row] = sql.exec(
 								"SELECT id, rev, pos FROM process_letters WHERE process=? AND id=?",
 								who.process,
+								id,
+							);
+							return row === undefined ? null : decodePlaced(row);
+						}),
+					placedByAny: (id) =>
+						stored(() => {
+							const [row] = sql.exec(
+								"SELECT id, rev, pos FROM process_letters WHERE id=? ORDER BY rev LIMIT 1",
 								id,
 							);
 							return row === undefined ? null : decodePlaced(row);

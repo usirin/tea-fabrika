@@ -88,7 +88,7 @@ runs TypeScript as it is.
 - **Look up one part:** the part's own README, listed under [The parts](#the-parts).
 - **Know why a part is shaped as it is:** [`docs/direction/`](../../docs/direction/README.md),
   for example [tea-program](../../docs/direction/tea-program.md) and
-  [tea-host](../../docs/direction/tea-host.md).
+  tea-host.
 
 ## Reference
 

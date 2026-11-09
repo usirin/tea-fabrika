@@ -6,19 +6,25 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import type {Descriptor, Incoming, Sent} from "@kampus/libfabrika";
+import {BrainEvent} from "@kampus/libfabrika/brain-event";
 import {revokeText, SigningRefused, Start, type From} from "@kampus/libfabrika/coordination";
 import type {SpanRow} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {Attached} from "@kampus/libfabrika/transport";
 import {GatewayService, gatewayRuntime} from "@kampus/libfabrika/workers/gateway";
-import {ProjectService} from "@kampus/libfabrika/workers/runtime";
-import {Deferred, Effect, Exit, Option, Tracer} from "effect";
+import {ProjectService, bucketCalls} from "@kampus/libfabrika/workers/runtime";
+import {Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schema, Tracer} from "effect";
 import * as fc from "fast-check";
 import {afterEach, describe, expect, it, vi} from "vitest";
 import {projectRuntime, settings, type Env} from "./runtime.ts";
+import {Settings} from "./settings.ts";
 
 const table = vi.hoisted(() => ({programs: {} as Record<string, {hash: string; source: string}>}));
 vi.mock("./table.ts", () => table);
+vi.mock("effect", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("effect")>();
+	return {...actual, ManagedRuntime: {...actual.ManagedRuntime}};
+});
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SENT = "2026-11-08T04:00:00.000Z";
@@ -194,14 +200,28 @@ const world = async (trace = TRACE, build = "counter-b") => {
 			}),
 		},
 	} as unknown as Env;
-	let runtime = projectRuntime(ctx, env);
+	const span = Tracer.externalSpan({traceId: trace, spanId: "00f067aa0ba902b7"});
+	const make = ManagedRuntime.make;
+	// ManagedRuntime builds its layer before the requested Effect runs, in a separate fiber.
+	// Put the caller's span on that real layer so it is current during bootstrap.
+	const startup = vi
+		.spyOn(ManagedRuntime, "make")
+		.mockImplementationOnce((layer, options) =>
+			make(layer.pipe(Layer.withParentSpan(span)), options),
+		);
+	let runtime: ReturnType<typeof projectRuntime>;
+	try {
+		runtime = projectRuntime(ctx, env);
+	} finally {
+		startup.mockRestore();
+	}
 	const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
-	const p = await run(ProjectService);
 	closers.push(async () => {
 		await runtime.dispose();
 		db.close();
 		rmSync(home, {recursive: true, force: true});
 	});
+	const p = await run(ProjectService);
 	const from: From = {
 		by: key.fingerprint,
 		for: PERSON,
@@ -236,8 +256,10 @@ const world = async (trace = TRACE, build = "counter-b") => {
 	return {
 		p,
 		run,
+		span,
 		key,
 		env,
+		ctx,
 		db,
 		from,
 		descriptors,
@@ -282,12 +304,52 @@ const world = async (trace = TRACE, build = "counter-b") => {
 			runtime = projectRuntime(ctx, env);
 			return run(ProjectService);
 		},
+		reopenExit: async () => {
+			await runtime.dispose();
+			runtime = projectRuntime(ctx, env);
+			return runtime.runPromiseExit(ProjectService);
+		},
 	};
 };
 
 describe("P12 Project authority", () => {
+	law("the bootstrap entry keeps the caller's span trace", async ({trace}) => {
+		const w = await world(trace);
+		const [row] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
+		expect(row).toMatchObject({traceId: w.span.traceId, rev: w.p.boot.rev});
+	});
+	law("a brain lifecycle entry keeps the caller's span trace", async ({trace, write}) => {
+		const w = await world();
+		const event = BrainEvent.cases.stopped.make({id: write, start: write, at: 1, reason: "stop"});
+		await w.run(
+			w.p
+				.brain(event)
+				.pipe(
+					Effect.withParentSpan(Tracer.externalSpan({traceId: trace, spanId: "00f067aa0ba902b7"})),
+				),
+		);
+		const [row] = await w.run(w.p.read("door/brain", 0, "audit"));
+		const {_tag, ...body} = event;
+		expect(row).toMatchObject({traceId: trace, id: write, _tag, body});
+	});
 	law(
-		"a program's person-only facts require its own person-only input",
+		"reopening an exited bootstrap reads its first placing without starting it again",
+		async ({trace, build}) => {
+			const w = await world(trace, build);
+			const first = w.p.boot;
+			const before = await w.run(w.p.read("processes/counter:1", 0, "audit"));
+			await w.run(w.p.exit(first.process, "normal", w.from));
+			const configured = w.configured.length;
+			const reopened = await w.reopen();
+			expect(reopened.boot).toEqual(first);
+			expect(w.configured).toHaveLength(configured);
+			const entries = await w.run(reopened.read("processes/counter:1", 0, "audit"));
+			expect(entries[0]).toEqual(before[0]);
+			expect(entries).toHaveLength(2);
+		},
+	);
+	law(
+		"a program's person-only events require its own person-only input",
 		async ({letter, write}) => {
 			const w = await world(),
 				pid = await w.start();
@@ -301,7 +363,7 @@ describe("P12 Project authority", () => {
 		},
 	);
 	law(
-		"a program's declared person-only input authorizes its person-only fact",
+		"a program's declared person-only input authorizes its person-only event",
 		async ({letter, write}) => {
 			const w = await world(),
 				pid = await w.start();
@@ -354,7 +416,7 @@ describe("P12 Project authority", () => {
 					pid = w.p.boot.process;
 				const stream =
 					operation === "own"
-						? "facts"
+						? "events"
 						: operation === "inbox"
 							? "counter:1/inbox"
 							: operation === "start"
@@ -381,7 +443,7 @@ describe("P12 Project authority", () => {
 					);
 					reentered = Option.isSome(answer);
 				});
-				if (operation === "own") await w.run(w.p.own(pid, write, "facts", {_tag: "noted"}));
+				if (operation === "own") await w.run(w.p.own(pid, write, "events", {_tag: "noted"}));
 				else if (operation === "start") await w.start();
 				else if (operation === "exit") await w.run(w.p.exit(pid, "normal", w.from));
 				else {
@@ -417,18 +479,144 @@ describe("P12 Project authority", () => {
 				pid = w.p.boot.process;
 			await w.run(
 				w.p
-					.own(pid, write, "facts", {_tag: "noted"})
+					.own(pid, write, "events", {_tag: "noted"})
 					.pipe(
 						Effect.withParentSpan(
 							Tracer.externalSpan({traceId: trace, spanId: "00f067aa0ba902b7"}),
 						),
 					),
 			);
-			const [row] = await w.run(w.p.read("facts", 0, "audit"));
+			const [row] = await w.run(w.p.read("events", 0, "audit"));
 			expect(row).toMatchObject(
 				field === "writer"
 					? {by: w.descriptors.get(pid)!.owner.key, for: PERSON, parent: null}
 					: {traceId: trace},
+			);
+		});
+});
+
+describe("P12 Project saved and wire readers", () => {
+	const malformed = fc.jsonValue().filter((value) => typeof value !== "string");
+	const typed = (exit: Exit.Exit<unknown, unknown>) => {
+		expect(Exit.isFailure(exit)).toBe(true);
+		const cause = Exit.isFailure(exit) ? exit.cause : Cause.die("unexpected success");
+		expect(Cause.hasDies(cause)).toBe(false);
+		expect(Cause.hasFails(cause)).toBe(true);
+		expect(Cause.findErrorOption(cause)).toMatchObject({
+			_tag: "Some",
+			value: {_tag: "LedgerError", why: "bad_row"},
+		});
+	};
+	it("saved stage settings fail through the Project runtime's typed error channel", async () => {
+		const encoded = Schema.fromJsonString(Settings);
+		const invalid = fc
+			.oneof(
+				fc.string(),
+				fc.jsonValue().map((value) => JSON.stringify(value)),
+			)
+			.filter((value) => !Schema.is(encoded)(value));
+		await fc.assert(
+			fc.asyncProperty(invalid, async (raw) => {
+				let runtime: ReturnType<typeof projectRuntime> | undefined;
+				try {
+					const w = await world();
+					typed(
+						await Effect.runPromiseExit(
+							Effect.suspend(() => {
+								runtime = projectRuntime(w.ctx, {...w.env, STAGE: raw});
+								return runtime.contextEffect;
+							}),
+						),
+					);
+				} finally {
+					await runtime?.dispose();
+					for (const close of closers.splice(0).reverse()) await close();
+				}
+			}),
+			{seed: 119120, numRuns: 20, examples: [["{"], ["{}"], ["null"]]},
+		);
+	});
+	for (const reader of ["bootstrap", "own descriptor", "pending descriptor", "own event"] as const)
+		it(`${reader} rejects malformed saved or wire values with LedgerError, never a defect`, async () => {
+			const event = Schema.Struct({_tag: Schema.String});
+			const values =
+				reader === "own event"
+					? fc.jsonValue().filter((value) => !Schema.is(event)(value))
+					: malformed;
+			await fc.assert(
+				fc.asyncProperty(values, async (raw) => {
+					try {
+						const w = await world(),
+							pid = w.p.boot.process;
+						if (reader === "bootstrap") {
+							// An unrelated event at the stable bootstrap ID passes the generic ledger schema.
+							// ProcessTable ignores its unknown tag; the bootstrap reader must check its body.
+							w.db
+								.prepare('UPDATE entries SET "_tag"=?, body=? WHERE stream=? AND id=?')
+								.run("noted", JSON.stringify({process: raw}), "processes/counter:1", "counter:1");
+							typed(await w.reopenExit());
+						} else if (reader === "own event") {
+							typed(await w.run(Effect.exit(w.p.own(pid, "invalid-event", "events", raw))));
+						} else {
+							w.db
+								.prepare("UPDATE stage_descriptors SET value=?, pending=? WHERE process=?")
+								.run(JSON.stringify(raw), reader === "pending descriptor" ? 1 : 0, pid);
+							const exit =
+								reader === "pending descriptor"
+									? await w.reopenExit()
+									: await w.run(
+											Effect.exit(w.p.own(pid, "invalid-descriptor", "events", {_tag: "noted"})),
+										);
+							typed(exit);
+						}
+					} finally {
+						for (const close of closers.splice(0).reverse()) await close();
+					}
+				}),
+				{seed: 119120, numRuns: 20, examples: [[null], [{}], [17]]},
+			);
+		});
+});
+
+describe("P12 WebCrypto failures", () => {
+	const failure = fc.oneof(
+		fc.anything(),
+		fc.string().map((message) => new Error(message)),
+		fc.constant(new DOMException("digest refused", "OperationError")),
+	);
+	for (const edge of ["fingerprint", "archive checksum"] as const)
+		it(`${edge} refuses every thrown or rejected failure with reason crypto`, async () => {
+			await fc.assert(
+				fc.asyncProperty(failure, fc.boolean(), fc.uint8Array(), async (value, throws, body) => {
+					const w = edge === "fingerprint" ? await world() : null;
+					const digest = vi.spyOn(crypto.subtle, "digest").mockImplementation(() => {
+						if (throws) throw value;
+						return Promise.reject(value);
+					});
+					const put = vi.fn(async () => null);
+					try {
+						if (w !== null) {
+							const result = await w.run(Effect.exit(w.p.online(w.key.fingerprint)));
+							expect(result).toMatchObject({_tag: "Failure"});
+							expect(Option.getOrThrow(Exit.findErrorOption(result))).toMatchObject({
+								_tag: "LedgerError",
+								why: "crypto",
+							});
+						} else {
+							// oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
+							const bucket = {put} as unknown as R2Bucket;
+							await expect(
+								bucketCalls(bucket).put("health", body, "0".repeat(64)),
+							).rejects.toMatchObject({_tag: "LedgerError", why: "crypto"});
+							expect(put).not.toHaveBeenCalled();
+						}
+						expect(digest).toHaveBeenCalled();
+					} finally {
+						digest.mockRestore();
+						for (const close of closers.splice(0).reverse()) await close();
+					}
+				}),
+				{seed: 119120, numRuns: 20},
 			);
 		});
 });
@@ -472,13 +660,14 @@ describe("P12 Gateway recording", () => {
 				} as unknown as Env["PROJECT"];
 				// oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
 				const socket = ws as unknown as WebSocket;
-				const runtime = gatewayRuntime(ctx, {...w.env, PROJECT: project}, settings(w.env));
+				const config = await Effect.runPromise(settings(w.env));
+				const runtime = gatewayRuntime(ctx, {...w.env, PROJECT: project}, config);
 				try {
 					const gateway = await runtime.runPromise(GatewayService),
 						before = w.recorded.length;
 					const action: Effect.Effect<unknown, unknown> =
 						operation === "ring"
-							? gateway.ring("facts", rev)
+							? gateway.ring("events", rev)
 							: operation === "probe"
 								? gateway.probe("session-test")
 								: operation === "close"

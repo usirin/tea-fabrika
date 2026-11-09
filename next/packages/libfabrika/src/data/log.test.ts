@@ -10,7 +10,7 @@
 //   key, a wrong type, an empty `by`, `for`, `build` or `_tag`, or a key `Line` does not have is
 //   `{_tag: "refused", why: "bad_line"}`; a bad `parent` is `bad_parent`, a bad trace is `bad_trace`.
 //   Either way nothing is written.
-// - `InputId` is a type only: nothing `./data` exports gives one.
+// - P17a exports the checked `InputId` schema; saved parents still accept legacy text.
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -18,6 +18,7 @@ import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, expectTypeOf, it} from "@effect/vitest";
 import {Effect, Layer, Schema, Stream} from "effect";
 import * as fc from "fast-check";
+import {inputParents, processId} from "../id.test-support.ts";
 import * as data from "./index.ts";
 import {Doorbell, Ledger} from "./ledger.ts";
 import type {Entry, InputId, Line} from "./log.ts";
@@ -29,7 +30,7 @@ const READER = "gateway:t1";
 
 // T246's approved addendum: a parent names the door's process, then its input counter.
 const PARENT = /^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/;
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PROCESS = Effect.runSync(processId);
 const parents = (count: number): ReadonlyArray<string> =>
 	fc.sample(fc.stringMatching(PARENT), {seed: SEED, numRuns: count});
 const [goodParent = "", otherParent = ""] = parents(2);
@@ -156,13 +157,13 @@ describe("p92, every entry has every field: the type", () => {
 		expect([a, b, c].length).toBe(3);
 	});
 
-	it("type law, ParentText is string, never InputId, and no data export makes an InputId", () => {
+	it("type law, ParentText keeps legacy text, and only input and parent schemas expose InputId", () => {
 		// A missing schema fails this assertion while the tests precede the build, not the import.
 		expect(data.ParentText, "the parent text schema is public").toBeDefined();
-		expectTypeOf<(typeof Entry.Type)["parent"]>().toEqualTypeOf<string | null>();
-		expectTypeOf<Line["parent"]>().toEqualTypeOf<string | null>();
-		expectTypeOf<typeof data.ParentText.Type>().toEqualTypeOf<string>();
-		// Each export, as a function's answer or a schema's decoded type: none of them is an InputId.
+		expectTypeOf<(typeof Entry.Type)["parent"]>().toEqualTypeOf<string | InputId | null>();
+		expectTypeOf<Line["parent"]>().toEqualTypeOf<string | InputId | null>();
+		expectTypeOf<typeof data.ParentText.Type>().toEqualTypeOf<string | InputId>();
+		// P17a's input schema and parent reader expose the brand. No other data export does.
 		type Gives<T> = T extends (...args: never) => infer R
 			? R
 			: T extends {readonly Type: infer A}
@@ -173,7 +174,7 @@ describe("p92, every entry has every field: the type", () => {
 				? never
 				: K;
 		}[keyof typeof data];
-		expectTypeOf<MakesInputId>().toEqualTypeOf<never>();
+		expectTypeOf<MakesInputId>().toEqualTypeOf<"InputId" | "ParentText">();
 		expect(Object.keys(data).length).toBeGreaterThan(0);
 	});
 });
@@ -317,15 +318,16 @@ describe("p68, an entry keeps its parent", () => {
 		expect(badParents(goodParent).filter(is)).toEqual([]);
 	});
 
-	it.effect.each([
-		["first character 0, counter 1", `in-process_${"0".repeat(26)}-1`],
-		["first character 7, counter 41", `in-process_7${"z".repeat(25)}-41`],
-	] as const)("p68b, a parent with %s is placed and kept as sent", ([, parent]) =>
-		Effect.gen(function* () {
-			const {answers, entries} = yield* handIn([{...json(), parent}]);
-			expect(answers).toEqual([{_tag: "placed", rev: 1, pos: 1}]);
-			expect(entries.map((entry) => entry.parent)).toEqual([parent]);
-		}).pipe(Effect.provide(onReferee(fresh()))),
+	it.effect.prop(
+		"p68b, a generated process parent and positive counter are placed and kept as sent",
+		{parent: inputParents},
+		({parent}) =>
+			Effect.gen(function* () {
+				const {answers, entries} = yield* handIn([{...json(), parent}]);
+				expect(answers).toEqual([{_tag: "placed", rev: 1, pos: 1}]);
+				expect(entries.map((entry) => entry.parent)).toEqual([parent]);
+			}).pipe(Effect.provide(onReferee(fresh()))),
+		{arbitrary: {seed: SEED, runs: 40}},
 	);
 
 	it.effect("a parent, or null for an own write, is read back the same", () =>

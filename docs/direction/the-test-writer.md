@@ -1,7 +1,7 @@
 # The test writer
 
 Decided 2026-10-24. It was called the verify writer in
-[promises in the pipeline](./promises-in-the-pipeline.md); where the two
+promises in the pipeline; where the two
 disagree, this note holds.
 
 ```ts
@@ -56,7 +56,7 @@ const onBase = checkRun("tests_on_base", {input: TestFiles, verdict: Results});
 
   - `test`: it writes a test that kills the mutant.
   - `cannot`: the mutant changes nothing a test can see. A disable comment
-    asks the owner, as [promises in the pipeline](./promises-in-the-pipeline.md)
+    asks the owner, as promises in the pipeline
     says.
   - `noise`: a test could tell the mutant apart, but the test would only
     lock a detail. It becomes a finding the owner rates

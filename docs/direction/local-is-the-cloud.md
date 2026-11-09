@@ -17,7 +17,7 @@ feature and back-fill local. Never `Alchemy.remote()`.
 //   fabrika up --local    alchemy dev: workerd and Docker on the laptop, no Cloudflare account
 //   fabrika up --cloud    alchemy deploy: the same resources on Cloudflare
 const ledger = Cloudflare.Worker("ledger", {main: "./server.ts", env: {PROJECT, PERSON, INDEX}});
-const host = Cloudflare.DurableObject("Host"); // sleeps when idle (tea-host.md, changed 2026-10-25)
+const host = Cloudflare.DurableObject("Host"); // sleeps when idle (the archived tea-host note, changed 2026-10-25)
 const job = Cloudflare.Container("job", {schedulingPolicy: "durable_object", dockerfile: "./job/Dockerfile"}); // one per job, Docker on the laptop
 // Never `.pipe(Alchemy.remote())`: a resource with no local twin fails `pnpm lint`.
 ```

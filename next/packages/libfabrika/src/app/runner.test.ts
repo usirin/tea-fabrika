@@ -13,7 +13,6 @@ import {Outcome} from "@demlik/tea";
 import {Cmd, Machine} from "@demlik/tea/effect";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {
-	Brand,
 	Cause,
 	Context,
 	Deferred,
@@ -27,25 +26,32 @@ import {
 	Stream,
 } from "effect";
 import * as fc from "fast-check";
-import {type Envelope, SessionManager, SignRequest, Writer} from "../coordination/index.ts";
+import {
+	type Envelope,
+	type NotGranted,
+	SessionManager,
+	SignRequest,
+	Writer,
+} from "../coordination/index.ts";
 import {Mailbox, type From} from "../coordination/mailbox.ts";
 import {ProcessStore} from "../coordination/process-store.ts";
 import {Activity, Down, Recipient, recoverActivity, signalId} from "../coordination/process.ts";
 import {Archive} from "../data/archive.ts";
 import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
-import {type Entry, type InputId, lineFor} from "../data/log.ts";
+import {type Entry, InputId, lineFor} from "../data/log.ts";
 import {RecordManager} from "../data/records.ts";
 import {type Sql} from "../data/referee.ts";
 import {SpanSink} from "../data/sink.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import {type SpanRow} from "../data/trace.ts";
+import {processId} from "../id.test-support.ts";
 import {type Update as WatcherUpdate} from "./entry.ts";
 import {Input, Program} from "./program.ts";
 
 const SEED = 119120;
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
-const REPLACEMENT = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
-const DOOR = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
+const PROCESS = Effect.runSync(processId);
+const REPLACEMENT = Effect.runSync(processId);
+const DOOR = Effect.runSync(processId);
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const OTHER_TRACE = "0bf92f3577b34da6a3ce929d0e0e4736";
@@ -55,7 +61,9 @@ const NAME = "queue:1";
 const writer = (as: "person" | "agent" = "person") =>
 	Writer.cases[as].make({key: `SHA256:${as}`, for: PERSON});
 const owner = Writer.cases.agent.make({key: "SHA256:owner", for: PERSON});
-const inputId = Brand.nominal<InputId>(); // Test is the trusted door, not a public decoder.
+// Trusted, repeatable UUIDv7 fixtures. The schema checks the same brand as the real door.
+const inputId = (n: number) =>
+	Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
 const from = (over: Partial<From> = {}): From => ({
 	by: "SHA256:person",
 	for: PERSON,
@@ -221,7 +229,7 @@ type Incoming = {
 	readonly seen: number;
 	readonly span: {readonly traceId: string; readonly spanId: string};
 };
-type Failure = {readonly _tag: string; readonly why: string};
+type Failure = {readonly _tag: string; readonly why: string} | NotGranted;
 type Sent =
 	| {readonly _tag: "accepted"; readonly rev: number; readonly pos: number}
 	| {readonly _tag: "refused"; readonly why: string; readonly now?: number; readonly most?: number};
@@ -524,7 +532,7 @@ const world = async (
 	const input = (n: number, m: unknown, as: "person" | "agent" = "person"): Incoming => ({
 		id: `letter-${n}`,
 		envelope: {
-			id: inputId(`in-${DOOR}-${n}`),
+			id: inputId(n),
 			by: writer(as),
 			arrivedAt: 1794099600000 + n,
 			input: m,
@@ -1266,7 +1274,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 			}).pipe(Effect.provide(w.layer())),
 		);
 	});
-	for (const parent of [null, `in-${DOOR}-1`, `in-${DOOR}-99`])
+	for (const parent of [null, inputId(1), inputId(99), `in-${DOOR}-1`, `in-${DOOR}-99`])
 		it(`p69 plant, silently strip client parent ${parent}: refuse it before stepping or appending`, async () => {
 			const w = await world();
 			await Effect.runPromise(
@@ -1737,7 +1745,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
 													? {_tag: "own", fact: {_tag: "polled", token: "forbidden"}}
 													: {
 															_tag: "caused",
-															parent: `in-${DOOR}-1`,
+															parent: inputId(1),
 															fact: {_tag: "saved", token: "forbidden"},
 														},
 										}),
@@ -1775,7 +1783,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
 							...machine.update,
 							work: (s: Model) => [
 								s,
-								[command({token: "refused-commit", parent: `in-${DOOR}-1`, tag: "saved"})],
+								[command({token: "refused-commit", parent: inputId(1), tag: "saved"})],
 							],
 						},
 					},

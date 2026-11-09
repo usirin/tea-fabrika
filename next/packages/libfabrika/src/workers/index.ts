@@ -1,5 +1,4 @@
 import {Effect, Option, Schema} from "effect";
-import type {Asset} from "../app/built.ts";
 import {
 	Declaration,
 	workerExecution,
@@ -9,6 +8,7 @@ import {
 import {ProgramDown} from "../app/program.ts";
 export type {ProgramSource} from "../app/execution.ts";
 export {workerSql} from "../data/worker-sql.ts";
+export {fetch, serveAsset} from "./fetch.ts";
 
 type Calls = Rpc.WorkerEntrypointBranded &
 	Required<ExecutionCalls> & {
@@ -31,11 +31,10 @@ export const workerLoader = (
 			globalOutbound: null,
 		}));
 		const rpc = worker.getEntrypoint<Calls>();
+		const fail = () => new ProgramDown({why: "load"});
 		// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader describes its checked declaration through RPC
-		const raw = yield* Effect.tryPromise({
-			try: () => rpc.describe(),
-			catch: () => new ProgramDown({why: "load"}),
-		});
+		const work = Effect.tryPromise({try: () => rpc.describe(), catch: fail});
+		const raw = yield* work;
 		const declaration = yield* Schema.decodeUnknownEffect(Declaration)(raw).pipe(
 			Effect.mapError(() => new ProgramDown({why: "load"})),
 		);
@@ -46,23 +45,4 @@ export const workerLoader = (
 			handler: () => Option.none(),
 		};
 	}),
-});
-
-/** Answer a request from the brain's embedded window files. Nothing else is read: an unknown route is 404. */
-export const serveAsset = Effect.fn("brain.asset")(function* (
-	assets: Readonly<Record<string, Asset>>,
-	request: Request,
-) {
-	const route = new URL(request.url).pathname;
-	const asset = Object.hasOwn(assets, route) ? assets[route] : undefined;
-	yield* Effect.annotateCurrentSpan({
-		"asset.found": asset !== undefined,
-		"http.method": request.method,
-	});
-	if (asset === undefined) return new Response("Not found", {status: 404});
-	if (request.method !== "GET" && request.method !== "HEAD")
-		return new Response("Method not allowed", {status: 405, headers: {allow: "GET, HEAD"}});
-	return new Response(request.method === "HEAD" ? null : asset.body, {
-		headers: {"content-type": asset.type, etag: `"${asset.hash}"`},
-	});
 });

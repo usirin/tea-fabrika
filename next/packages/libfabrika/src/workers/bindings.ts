@@ -1,5 +1,5 @@
 import {type Brand, type Effect, Schema} from "effect";
-import type {BrainFact} from "../app/brain-fact.ts";
+import type {BrainEvent} from "../app/brain-event.ts";
 import type {Incoming} from "../app/entry.ts";
 import type {Descriptor, ProgramRunner} from "../app/runner.ts";
 import type {Activity, From, GatewayManager, ProcessManager, Start} from "../coordination/index.ts";
@@ -115,12 +115,12 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 				pid: string,
 				id: string,
 				stream: string,
-				fact: unknown,
+				event: unknown,
 				trace?: {traceId: string; spanId: string},
 			) => Effect.Effect<Appended>
 		>;
 		publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<void>>;
-		brain: RemoteCall<(fact: typeof BrainFact.Type) => Effect.Effect<Appended>>;
+		brain: RemoteCall<(event: typeof BrainEvent.Type) => Effect.Effect<Appended>>;
 	};
 export type ProcessBinding = Rpc.DurableObjectBranded &
 	Remote<Pick<Runner, "msg" | "open" | "due">> & {

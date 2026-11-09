@@ -26,6 +26,7 @@ import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Cause, Effect, Exit, Layer, Option, Redacted, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
+import {processId, processIds} from "../id.test-support.ts";
 import {Archive, type BucketCalls} from "./archive.ts";
 import {RecordManager} from "./records.ts";
 import type {Sql} from "./referee.ts";
@@ -71,9 +72,9 @@ const home = () => {
 	return {dir, db, sql: nodeSql(db), open, part, parts, bytes};
 };
 
-const OBJECT = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const OBJECT = Effect.runSync(processId);
 const P1 = OBJECT;
-const P2 = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
+const P2 = Effect.runSync(processId);
 const job = (process: string): ChainValue => ({_tag: "job", process});
 const spans: ChainValue = {_tag: "spans"};
 const BIG = 1024 * 1024 * 1024;
@@ -170,18 +171,20 @@ const bucket = () => {
 const ids = (rows: ReadonlyArray<Row>) => rows.map((r) => r.spanId);
 
 describe("T246, P37 decodes TypeID process ids", () => {
-	it.effect.each([
-		["starting with 0", `process_${"0".repeat(26)}`],
-		["starting with 7", `process_7${"z".repeat(25)}`],
-	] as const)("a valid process %s reaches its JobRecord", ([, process]) => {
-		const {db, sql} = home();
-		return Effect.gen(function* () {
-			yield* step("runner.step", {"fab.process": process});
-			expect(yield* flush).toEqual({sent: 1});
-			expect(count(db, "unsent")).toBe(0);
-			expect((yield* recorded(job(process))).map((row) => row.name)).toEqual(["runner.step"]);
-		}).pipe(Effect.provide(world(sql)));
-	});
+	it.effect.prop(
+		"a generated valid process reaches its JobRecord",
+		{process: processIds},
+		({process}) => {
+			const {db, sql} = home();
+			return Effect.gen(function* () {
+				yield* step("runner.step", {"fab.process": process});
+				expect(yield* flush).toEqual({sent: 1});
+				expect(count(db, "unsent")).toBe(0);
+				expect((yield* recorded(job(process))).map((row) => row.name)).toEqual(["runner.step"]);
+			}).pipe(Effect.provide(world(sql)));
+		},
+		{arbitrary: {seed: SEED, runs: 40}},
+	);
 
 	// Plant: keep ProcessId as NonEmptyString. P37 must refuse a stored chain with a bad id.
 	it.effect.each([

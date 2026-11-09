@@ -3,6 +3,7 @@
 // what runs. `no-secret-env` and `no-redacted-value` are planted in
 // packages/fabrika/src/redacted-lint.test.ts, `no-project-settings` in
 // packages/fabrika/src/agents/claude/rules.test.ts.
+// `no-node-filesystem` and `no-node-imports` plant next/ paths in their own test files.
 import {spawnSync} from "node:child_process";
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {join, relative} from "node:path";
@@ -254,10 +255,16 @@ describe("each rule refuses what it is there to refuse", () => {
 		const planted = new Set(PLANTS.map((p) => p.code));
 		// `no-bare-disable` reports at the top of the file, so it has its own test below.
 		const elsewhere = [
+			"prefer-schema-arbitrary", // generated syntax laws in prefer-schema-arbitrary.test.ts
 			"no-secret-env",
 			"no-redacted-value",
 			"no-project-settings",
 			"no-bare-disable",
+			// P17a's path-scoped rules have plants in their own oxlint-plugins/*.test.ts files.
+			"door-is-library",
+			"outside-input-constructor",
+			// T518's retired module is planted in one-id-module.test.ts.
+			"one-id-module",
 			// next/'s exam rules, planted at next/ paths in next/apps/fabrika/src/exam/.
 			"no-promises",
 			"no-effect-run-outside-edge",
@@ -267,6 +274,10 @@ describe("each rule refuses what it is there to refuse", () => {
 			"no-hand-tag",
 			"one-store-hook",
 			"no-clock-in-view",
+			// Generated ledger-sql.test.ts plants run at next/ paths with the real lint config.
+			"no-ledger-sql",
+			"no-node-filesystem",
+			"no-node-imports",
 		];
 		const missing = Object.keys(plugin.rules).filter(
 			(rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),

@@ -1,6 +1,0 @@
-{
-	// Experiment 204 alone: `tsc -p experiments/204-typed-lines`. The root typecheck skips experiments.
-	"extends": "../../tsconfig.base.json",
-	"compilerOptions": { "types": ["node"] },
-	"include": ["*.ts", "programs/*.ts"]
-}

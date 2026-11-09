@@ -12,11 +12,11 @@ const Read = Schema.Struct({
 	stream: Schema.String,
 	after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
-type Options<E> = {
+type Options<E, ReadError> = {
 	readonly reader: string;
 	readonly session: string;
 	readonly ping: () => number | null;
-	readonly read: () => typeof Attached.Type;
+	readonly read: () => typeof Attached.Type | Effect.Effect<typeof Attached.Type, ReadError>;
 	readonly save: (a: typeof Attached.Type) => void;
 	readonly send: (text: string) => void;
 	readonly close: (code: number) => void;
@@ -28,8 +28,12 @@ type Options<E> = {
 	readonly call: (method: string, params: unknown) => Effect.Effect<typeof Answer.Type, E>;
 };
 
-export const connection = <E>(options: Options<E>) => {
+export const connection = <E, ReadError = never>(options: Options<E, ReadError>) => {
 	const turn = Semaphore.makeUnsafe(1);
+	const read = Effect.suspend(() => {
+		const state = options.read();
+		return Effect.isEffect(state) ? state : Effect.succeed(state);
+	});
 	const respond = (id: string | number, answer: typeof Answer.Type) => {
 		if (answer._tag === "parked") return;
 		options.send(
@@ -44,8 +48,8 @@ export const connection = <E>(options: Options<E>) => {
 			),
 		);
 	};
-	const remove = (wait: typeof Wait.Type, answer: typeof Answer.Type) => {
-		const now = options.read();
+	const remove = Effect.fnUntraced(function* (wait: typeof Wait.Type, answer: typeof Answer.Type) {
+		const now = yield* read;
 		if (
 			now._tag !== "online" ||
 			!now.waits.some((w) => w.id === wait.id && w.stream === wait.stream && w.after === wait.after)
@@ -53,25 +57,25 @@ export const connection = <E>(options: Options<E>) => {
 			return;
 		options.save({...now, waits: now.waits.filter((w) => w.id !== wait.id)});
 		respond(wait.id, answer);
-	};
+	});
 	const register = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
 		const answer = yield* Effect.result(options.wait(wait.stream, wait.after, options.reader));
 		if (Result.isFailure(answer)) {
 			const error = answer.failure;
-			const why =
+			const reason =
 				typeof error === "object" &&
 				error !== null &&
 				"why" in error &&
 				typeof error.why === "string"
 					? error.why
 					: "unreachable";
-			remove(wait, Answer.cases.refused.make({why}));
+			yield* remove(wait, Answer.cases.refused.make({why: reason}));
 		} else if (answer.success._tag === "ready")
-			remove(wait, Answer.cases.ok.make({result: {rev: answer.success.rev}}));
+			yield* remove(wait, Answer.cases.ok.make({result: {rev: answer.success.rev}}));
 		return Result.isSuccess(answer) && answer.success._tag === "parked";
 	});
 	const parked = Effect.fnUntraced(function* (id: string | number, params: unknown) {
-		const now = options.read();
+		const now = yield* read;
 		if (now._tag !== "online") return respond(id, Answer.cases.refused.make({why: "no_hello"}));
 		const decoded = Schema.decodeUnknownResult(Read)(params);
 		if (Result.isFailure(decoded))
@@ -88,13 +92,13 @@ export const connection = <E>(options: Options<E>) => {
 		yield* register(wait);
 	});
 	const ordinary = Effect.fnUntraced(function* (request: typeof Request.Type) {
-		const now = options.read();
+		const now = yield* read;
 		if (now._tag !== "online" && !["initialize", "door.knock"].includes(request.method))
 			return respond(request.id, Answer.cases.refused.make({why: "no_hello"}));
 		if (now._tag === "online") options.save({...now, busy: true});
 		const answer = yield* options.call(request.method, request.params);
 		respond(request.id, answer);
-		const latest = options.read();
+		const latest = yield* read;
 		if (latest._tag === "online") options.save({...latest, busy: false});
 	});
 	return {
@@ -108,13 +112,13 @@ export const connection = <E>(options: Options<E>) => {
 			yield* ordinary(request).pipe(turn.withPermit);
 		}),
 		ring: Effect.fn("gateway.ring")(function* (stream: string, rev: number) {
-			const now = options.read();
+			const now = yield* read;
 			if (now._tag === "online")
 				for (const wait of now.waits)
 					if (wait.stream === stream && rev > wait.after)
-						remove(wait, Answer.cases.ok.make({result: {rev}}));
+						yield* remove(wait, Answer.cases.ok.make({result: {rev}}));
 			while (true) {
-				const latest = options.read();
+				const latest = yield* read;
 				if (latest._tag !== "online") return;
 				const next = latest.waits
 					.filter((wait) => wait.stream === stream)
@@ -125,18 +129,12 @@ export const connection = <E>(options: Options<E>) => {
 				if (next === undefined || (yield* register(next))) return;
 			}
 		}),
-		wake: Effect.fn("gateway.wake")(() =>
-			Effect.sync(() => {
-				const now = options.read();
-				if (now._tag === "online" && now.busy) options.close(1012);
-			}),
-		),
-		probe: Effect.fn("gateway.probe")((session: string) =>
-			Effect.sync(() => {
-				return session === options.session && options.read()._tag === "online"
-					? options.ping()
-					: null;
-			}),
-		),
+		wake: Effect.fn("gateway.wake")(function* () {
+			const now = yield* read;
+			if (now._tag === "online" && now.busy) options.close(1012);
+		}),
+		probe: Effect.fn("gateway.probe")(function* (session: string) {
+			return session === options.session && (yield* read)._tag === "online" ? options.ping() : null;
+		}),
 	};
 };

@@ -2,6 +2,7 @@
 // Plants: widen initialize, rename a span, lose its parent/link/tags, or recover inside it.
 import {createHash, createPrivateKey, createPublicKey, sign} from "node:crypto";
 import {DatabaseSync} from "node:sqlite";
+import {Id} from "@kampus/libfabrika";
 import {ClientManager, grantText, Saw} from "@kampus/libfabrika/coordination";
 import {
 	Archive,
@@ -9,6 +10,8 @@ import {
 	Doorbell,
 	Ledger,
 	LedgerError,
+	LedgerTransaction,
+	type LedgerTurn,
 	RecordManager,
 	SpanSink,
 } from "@kampus/libfabrika/data";
@@ -125,6 +128,28 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 				? Effect.fail(new LedgerError({why: "storage"}))
 				: actual.append(stream, id, line),
 	});
+	const transaction = Layer.effect(
+		LedgerTransaction,
+		LedgerTransaction.pipe(
+			Effect.map((actual) => ({
+				transact: <A>(step: (turn: LedgerTurn) => A) =>
+					actual.transact((turn) =>
+						step({
+							...turn,
+							append: (stream, id, line) => {
+								if (controls.fail === stream) {
+									throw new LedgerError({why: "storage"});
+								}
+								return turn.append(stream, id, line);
+							},
+						}),
+					),
+			})),
+		),
+	).pipe(
+		Layer.provide(LedgerTransaction.layer(sql)),
+		Layer.provide(Layer.succeed(Doorbell, {ring: () => Effect.void})),
+	);
 	const founder = {
 		name: "project",
 		person: PERSON,
@@ -164,7 +189,14 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 		facts: {personOnly: []},
 	}).pipe(
 		Layer.provideMerge(
-			Layer.mergeAll(clients, records, Archive.memory, SpanSink.layer(sql, {object: PROCESS})),
+			Layer.mergeAll(
+				clients,
+				transaction,
+				Id.Generator.layer,
+				records,
+				Archive.memory,
+				SpanSink.layer(sql, {object: PROCESS}),
+			),
 		),
 	);
 	return {layer, window, stranger, root, controls};
@@ -299,9 +331,21 @@ describe("door partial spans, next/ tracing keep-laws", () => {
 								const spans = c.spans.filter((s) => s.name.startsWith("door."));
 								expect(spans.map((s) => s.name)).toEqual(["door.initialize"]);
 								checkSpan(spans[0]!, a, !fail);
+								const appends = c.spans.filter((s) => s.name === "authorization.appendAdmitted");
+								const transactions = c.spans.filter((s) => s.name === "ledger.transaction");
+								expect(appends).toHaveLength(1);
+								expect(transactions).toHaveLength(1);
+								for (const [span, parent] of [
+									[appends[0]!, spans[0]!],
+									[transactions[0]!, appends[0]!],
+								] as const) {
+									expect(span.traceId).toBe(a.traceId);
+									expect(Option.getOrThrow(span.parent).spanId).toBe(parent.spanId);
+									expect(span.status._tag).toBe("Ended");
+									if (span.status._tag === "Ended")
+										expect(Exit.isSuccess(span.status.exit)).toBe(!fail);
+								}
 								if (!fail) {
-									const append = c.spans.find((s) => s.name === "ledger.append")!;
-									expect(Option.getOrThrow(append.parent).spanId).toBe(spans[0]!.spanId);
 									const rows = yield* Stream.runCollect((yield* Ledger).read("door/hellos", 0));
 									expect(rows).toHaveLength(1);
 									expect(rows[0]!.traceId).toBe(a.traceId);

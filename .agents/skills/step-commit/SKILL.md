@@ -10,6 +10,7 @@ the bot with the person as co-author, and signs the link as your step. Run it fr
 
 ```sh
 sh .agents/skills/step-commit/scripts/stepcommit.sh <step> <ticket> "T<ticket> <step>: <subject>" <path>...
+sh .agents/skills/step-commit/scripts/stepcommit.sh --commit-only <step> <ticket> "T<ticket> <step>: <subject>" <path>...
 sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one refusal per request" next/apps/fabrika/src/door.ts
 ```
 
@@ -23,7 +24,6 @@ field note 2026-11-08-20).
 
 - **`<step>` is `tests`, `build`, `mutation` or `lead`.** `mutation` signs as `tests` for now, a
   stopgap until it has a role of its own (field note 2026-11-08-19).
-- **Name every path.** Never `git add -A` or `.`. Another step's edits may sit in the same tree.
 - **Start with nothing staged.** If the index already holds changes, the script refuses (exit 4)
   before it stages anything, and lists them. Do not unstage another step's work: tell the lead.
 - **A build that names an exam path is refused** (exit 3) and nothing is committed. The paths are in
@@ -38,9 +38,11 @@ field note 2026-11-08-20).
 
 ## When it fails
 
-- `stuck unsigned_commit` from `pnpm commits check`: a commit has no note. Sign it with its own
-  step's key, never another's.
-- `stale_link`: sign again on the current head. The signer picks the next version.
+stepcommit.sh checks named paths, owners, exam paths and staged formatting.
+fetch --sign checks owners and signs missing notes in MAIN.
+In boxes, prefer `--commit-only`; it runs the same checks and leaves signing to fetch.
+Owner checks read the box's saved plan. Older worktrees without `.box` keep the legacy route.
+Existing notes stay unchanged, including invalid or stale links. Send their check result to the lead.
 - The full table of answers is in [sign a step's commit](../../../docs/how-to/sign-a-step-commit.md).
 
 `scripts/exam.py <exam-paths.json> <path>...` prints each path that is an exam path, with its glob,

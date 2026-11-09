@@ -22,6 +22,7 @@ import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Duration, Effect, Layer, ManagedRuntime, References, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
+import {processId} from "../id.test-support.ts";
 import {Doorbell, Ledger, LedgerError, type LedgerCalls} from "./ledger.ts";
 import type {Line} from "./log.ts";
 import type {Sql} from "./referee.ts";
@@ -29,7 +30,7 @@ import {nodeSql} from "./sqlite.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
-const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
+const PARENT = `in-${Effect.runSync(processId)}-41`;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
 

@@ -100,7 +100,7 @@ type Criterion = {
 ### 2. A Property's shape
 
 Against the `Promise` of
-[Promises in the pipeline](./promises-in-the-pipeline.md), and today's plan
+Promises in the pipeline, and today's plan
 criterion for `serves`:
 
 | Was | Now | What it means |
@@ -119,7 +119,7 @@ criterion for `serves`:
   code already does, a characterization test
   ([Wikipedia](https://en.wikipedia.org/wiki/Characterization_test)). Its
   `code` is what the mutation step tests, as
-  [Promises in the pipeline](./promises-in-the-pipeline.md) describes.
+  Promises in the pipeline describes.
 - **No `"proof"` until something runs proofs.** A tool word with nothing behind
   it is a choice the planner cannot keep
   ([Make the mistake impossible](./make-the-mistake-impossible.md)).
@@ -201,7 +201,7 @@ type Task = {id: TaskId; title: string; ends: "pr" | "answer"; scenario: Scenari
   `packages/pipeline/src/asks/rules.ts` gives it ids and makes the `Plan`.
 - **Held for a later glossary pass:** `pointers`, `goal`, `Claim`, and
   calling a revision's number `version`. Each has a weak lean in
-  [the naming sweep](../naming-sweep/pipeline.md); none is picked or dropped.
+  the naming sweep; none is picked or dropped.
   A pointer's `at` was held too; it became `path` on 2026-11-03.
 
 ### 7. Plan has no ask of its own

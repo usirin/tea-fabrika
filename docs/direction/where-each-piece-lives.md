@@ -62,7 +62,7 @@ The test for any file in next/apps/fabrika:
     its code is evidence of what a GUI needs, not something to port.
     *Changed 2026-10-22: Tuval is the gui's codename again. The old code is
     still evidence only. How the gui works is in
-    [the GUI note](./the-gui-is-a-local-web-page-first.md);*
+    the GUI note;*
   - `fabrika/agents`: the agent suite, running a harness as a program (ACP
     adapters, the ask-a-helper tool), today in `wip/src/agents`;
   - ~~today's fabrika, the work pipeline (sort, plan, build, review, ship, the
@@ -157,7 +157,7 @@ The test for any file in next/apps/fabrika:
   kept in Tuval's own list, like `.desktop` files, not on `defineProgram`.~~
   Replaced 2026-10-22: a program declares its own `view`, and its window ships
   in the same package, on `<package>/window`
-  ([the GUI note](./the-gui-is-a-local-web-page-first.md)).
+  (the GUI note).
 
 ## Changed the same day
 

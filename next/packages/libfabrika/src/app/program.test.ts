@@ -508,3 +508,74 @@ describe("P11 program contract and p22 refusal", () => {
 		expect(() => decode({_tag: "caused", parent: "forged", fact: {_tag: "saved"}})).toThrow();
 	});
 });
+
+describe("P34 a program sets its own maxDeliveries, next/", () => {
+	// The declaration takes an optional limit, an integer 1 to 32. The default (3) is the wiring's.
+	const withLimit = (fields: object, maxDeliveries: unknown): unknown => ({
+		...fields,
+		maxDeliveries,
+	});
+	const refused = (raw: unknown) => {
+		const make = Reflect.get(Program, "make");
+		const makeEffect = Reflect.get(Program, "makeEffect");
+		expect(() => Reflect.apply(make, Program, [raw])).toThrow();
+		const exit = Effect.runSyncExit(Effect.result(Reflect.apply(makeEffect, Program, [raw])));
+		expect(Exit.isSuccess(exit) && Result.isFailure(exit.value)).toBe(true);
+	};
+
+	it("p80 plant, drop or invent the program's limit: a generated limit 1 to 32 survives make, decode and load, and none stays none", () => {
+		fc.assert(
+			fc.property(
+				declarations,
+				fc.option(fc.integer({min: 1, max: 32}), {nil: undefined}),
+				({fields}, limit) => {
+					const raw = limit === undefined ? fields : withLimit(fields, limit);
+					const own = (u: unknown) =>
+						typeof u === "object" && u !== null && Object.hasOwn(u, "maxDeliveries")
+							? Reflect.get(u, "maxDeliveries")
+							: undefined;
+					const p: unknown = Reflect.apply(Reflect.get(Program, "make"), Program, [raw]);
+					expect(own(p)).toBe(limit);
+					const decoded = Schema.decodeUnknownResult(Program.schema)(p);
+					expect(Result.isSuccess(decoded)).toBe(true);
+					if (Result.isSuccess(decoded)) expect(own(decoded.success)).toBe(limit);
+					expect(own(load(p).program)).toBe(limit);
+					const effect: unknown = Effect.runSync(
+						Reflect.apply(Reflect.get(Program, "makeEffect"), Program, [raw]),
+					);
+					expect(own(effect)).toBe(limit);
+				},
+			),
+			{...parameters, examples: [[fc.sample(declarations, {seed: SEED, numRuns: 1})[0]!, 7]]},
+		);
+	});
+
+	it("p80 plant, accept any limit: 0, 33, 1.5 and every generated value outside 1 to 32 fail to decode", () => {
+		fc.assert(
+			fc.property(
+				declarations,
+				fc.oneof(
+					fc.integer({max: 0}),
+					fc.integer({min: 33}),
+					fc.double({min: 1, max: 32, noNaN: true}).filter((n) => !Number.isInteger(n)),
+					fc.constantFrom(Number.NaN, Number.POSITIVE_INFINITY, "3", null),
+				),
+				({fields}, limit) => {
+					refused(withLimit(fields, limit));
+					const checked = withLimit(Program.make(fields), limit);
+					expect(Result.isFailure(Schema.decodeUnknownResult(Program.schema)(checked))).toBe(true);
+					expect(Result.isFailure(stepper(checked))).toBe(true);
+				},
+			),
+			{
+				...parameters,
+				// The amendment's three named values.
+				examples: [
+					[fc.sample(declarations, {seed: SEED, numRuns: 1})[0]!, 0],
+					[fc.sample(declarations, {seed: SEED, numRuns: 1})[0]!, 33],
+					[fc.sample(declarations, {seed: SEED, numRuns: 1})[0]!, 1.5],
+				],
+			},
+		);
+	});
+});

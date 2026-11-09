@@ -20,12 +20,12 @@
 	"devDependencies": {
 		"@cloudflare/workers-types": "5.20261027.1",
 		"@alchemy.run/cloudflare-runtime": "2.0.0-beta.84",
+		"@demlik/tea": "catalog:",
 		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
 		"rolldown": "catalog:",
 		"fast-check": "catalog:",
 		"playwright": "catalog:",
-		"@demlik/tea": "catalog:",
 		"@kampus/counter": "workspace:*",
 		"@alchemy.run/cloudflare": "catalog:",
 		"alchemy": "catalog:",

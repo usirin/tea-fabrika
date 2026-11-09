@@ -1,11 +1,13 @@
-import {Effect, Result, Schema} from "effect";
+import {Effect, Equal, Redacted, Result, Schema} from "effect";
+import {LedgerError} from "../data/index.ts";
 import {workerLoader, type ProgramSource} from "./index.ts";
+import {ProcessClient, ProjectClient, RecordClient} from "./platform.ts";
 import {
-	bucketCalls,
+	checkedPut,
+	bucketHead,
 	processStub,
 	projectStub,
 	recordStub,
-	recordCall,
 	rpc,
 	type Env,
 } from "./runtime.ts";
@@ -45,27 +47,28 @@ const dispatch = Effect.fnUntraced(function* (
 	request: typeof Request.Type,
 ) {
 	const {target, project, name, method, args} = request;
-	const call = target === "record" || target === "bucket" ? recordCall : rpc;
 	if (target === "loader") {
 		const loaded = yield* workerLoader(env.LOADER, programs).load(name, project);
 		if (method === "init") return yield* loaded.execution.init(args[0]);
 		if (method === "step") return yield* loaded.execution.step(args[0], args[1]);
-		return yield* Effect.fail({why: "unknown_method"});
+		return yield* Effect.fail({reason: "unknown_method"});
 	}
 	if (target === "bucket") {
-		const calls = bucketCalls(env.HEALTH);
-		if (method === "put")
-			return yield* call(() =>
-				calls.put(
-					String(args[0]),
-					Uint8Array.from(Schema.decodeUnknownSync(Schema.Array(Schema.Number))(args[1])),
-					String(args[2]),
-				),
+		if (method === "put") {
+			const [key, bytes, checksum] = yield* Schema.decodeUnknownEffect(
+				Schema.Tuple([Schema.String, Schema.Array(Schema.Number), Schema.String]),
+			)(args).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+			return yield* checkedPut(env.HEALTH, key, Uint8Array.from(bytes), checksum);
+		}
+		if (method === "head") {
+			const [key] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String]))(args).pipe(
+				Effect.mapError(() => new LedgerError({why: "bad_row"})),
 			);
-		if (method === "head") return yield* call(() => calls.head(String(args[0])));
-		return yield* Effect.fail({why: "unknown_method"});
+			return yield* bucketHead(env.HEALTH, key);
+		}
+		return yield* Effect.fail({reason: "unknown_method"});
 	}
-	if (!methods[target].has(method)) return yield* Effect.fail({why: "unknown_method"});
+	if (!methods[target].has(method)) return yield* Effect.fail({reason: "unknown_method"});
 	if (
 		target === "project" &&
 		method === "commit" &&
@@ -73,43 +76,52 @@ const dispatch = Effect.fnUntraced(function* (
 		args[1] !== null &&
 		"process" in args[1]
 	)
-		return yield* Effect.fail({why: "reserved"});
-	const stub =
+		return yield* Effect.fail({reason: "reserved"});
+	const client =
 		target === "project"
-			? projectStub(env, project)
+			? ProjectClient.make(projectStub(env, project))
 			: target === "process"
-				? processStub(env, project, name)
-				: recordStub(env, project, name);
+				? ProcessClient.make(processStub(env, project, name))
+				: RecordClient.make(recordStub(env, project, name));
 	// Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
-	// oxlint-disable-next-line fabrika/no-promises -- edge: dynamic platform RPC can return void or a Promise
-	const answer = call(() => Promise.resolve(Reflect.apply(Reflect.get(stub, method), stub, args)));
-	return yield* target === "process" && method === "abort" ? answer.pipe(Effect.ignore) : answer;
+	const answer: Effect.Effect<unknown, unknown> = Reflect.apply(
+		Reflect.get(client, method),
+		client,
+		args,
+	);
+	return yield* target === "process" && method === "abort"
+		? answer.pipe(Effect.ignore)
+		: rpc(answer);
 });
 
 export const control = Effect.fn("runtime.control")(function* (
 	request: globalThis.Request,
 	env: Env,
-	token: string,
+	token: Redacted.Redacted<string>,
 	programs: Readonly<Record<string, ProgramSource>>,
 ) {
-	if (typeof token !== "string" || request.headers.get("authorization") !== `Bearer ${token}`)
-		return new Response(null, {status: 403});
+	const bearer = Redacted.make(request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1]);
+	if (!Equal.equals(token, bearer)) return new Response(null, {status: 403});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: a Request body returns a Promise
 	const raw = yield* Effect.tryPromise({try: () => request.json(), catch: () => null});
 	const input = Schema.decodeUnknownResult(Request)(raw);
-	if (Result.isFailure(input)) return Response.json({error: {why: "bad_input"}}, {status: 400});
+	if (Result.isFailure(input)) return Response.json({error: {reason: "bad_input"}}, {status: 400});
 	const answer = yield* Effect.result(dispatch(env, programs, input.success));
 	return Result.isSuccess(answer)
 		? Response.json({value: answer.success ?? null})
 		: Response.json(
 				{
 					error: {
-						why:
+						reason:
 							typeof answer.failure === "object" &&
 							answer.failure !== null &&
-							"why" in answer.failure
-								? answer.failure.why
-								: "unreachable",
+							"reason" in answer.failure
+								? answer.failure.reason
+								: typeof answer.failure === "object" &&
+									  answer.failure !== null &&
+									  "why" in answer.failure
+									? answer.failure.why
+									: "unreachable",
 					},
 				},
 				{status: 500},

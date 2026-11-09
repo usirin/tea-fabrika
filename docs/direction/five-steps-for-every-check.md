@@ -79,6 +79,36 @@ it("pinned: duplicate ids sort once (the duplicate-id bug)", () => {/* ... */});
 it("scenario: the app opens a real window on a fresh home", () => {/* ... */});
 ```
 
+[Claessen and Hughes's QuickCheck](https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf)
+checks general rules with generated inputs.
+[Hypothesis's `@example`](https://hypothesis.readthedocs.io/en/latest/tutorial/replaying-failures.html#using-example-to-run-a-specific-input)
+keeps explicit inputs alongside generated cases, as fast-check's `examples` does for `pinned:`.
+The four labels name why a fixed case exists; they do not claim that one example checks a general
+rule.
+
+The plan names the generator, or a label with its reason, for each law. The test writer keeps that
+reason beside the check. The reviewer checks that the property or label is present and fits, and
+does not reopen each test's merits.
+
+## Effect test data, K20, 2026-11-08
+
+Decided for new properties in both versions, including today's hand-run tooling.
+
+For a new property, use `@effect/vitest`'s `it.prop` or `it.effect.prop` with an existing Schema,
+or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has
+nothing or to push edge cases. Keep `@demlik/tea/pbt` for machine laws.
+
+```ts
+// A sketch: the property's inputs come from its existing domain Schema.
+it.prop("keeps valid values", {value: ExistingSchema}, ({value}) => {
+	expect(accepts(value)).toBe(true);
+});
+```
+
+Effect and `@effect/vitest` 4.1.1 accept Schemas and Effect Arbitraries here. `effect/testing`
+exports TestSchema helpers, not another generator. Some refinements exhaust discards, so keep
+an unsupported generator with a nearby reason. This rule cannot prove generator coverage.
+
 ## Why
 
 - **Experiment 115:** a check on a hand-written copy of the lane found the

@@ -83,7 +83,7 @@ const write = Cmd.make("write", {
 	err: ["person_only", "not_granted"],
 });
 const caused = (parent: string) =>
-	write({stream: "facts", write: {_tag: "caused", parent, fact: {_tag: "answered"}}});
+	write({stream: "events", write: {_tag: "caused", parent, fact: {_tag: "answered"}}});
 const approvals = {
 	name: "approvals",
 	machine: Machine.make({
@@ -262,7 +262,8 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 						upgrade: (saved: unknown) => Effect.runPromise(execution.upgrade(saved)),
 						reply: (cmd: unknown, outcome: unknown) =>
 							Effect.runPromise(execution.reply(cmd, outcome)),
-						check: (kind: string, fact: unknown) => Effect.runPromise(execution.check(kind, fact)),
+						check: (kind: string, event: unknown) =>
+							Effect.runPromise(execution.check(kind, event)),
 						admit: (msg: unknown) => Effect.runPromise(execution.admit(msg)),
 					};
 				},
@@ -403,18 +404,18 @@ describe("P12 Project configure recovery", () => {
 });
 
 describe("P12 Process RPC refusal answers", () => {
-	for (const why of ["person_only", "not_granted"] as const)
-		it(`pinned: ${why} refusal survives the Process RPC adapter as a saved typed answer`, async () => {
+	for (const reason of ["person_only", "not_granted"] as const)
+		it(`pinned: ${reason} refusal survives the Process RPC adapter as a saved typed answer`, async () => {
 			const w = world();
 			await w.project.info();
 			const {process: pid} = await w.start(),
 				client = await w.admit();
-			if (why === "not_granted") w.revokeBeforeCommit();
+			if (reason === "not_granted") w.revokeBeforeCommit();
 			const result = await w.project
 				.route(client, "process.send", {
 					pid,
 					letter: "request",
-					m: {type: why === "person_only" ? "prepare" : "approve"},
+					m: {type: reason === "person_only" ? "prepare" : "approve"},
 					sentAt: SENT,
 					seen: 0,
 				})
@@ -424,29 +425,29 @@ describe("P12 Process RPC refusal answers", () => {
 				);
 			// A policy refusal completes the input. An infrastructure error must not replace it.
 			expect.soft(result).toMatchObject({answer: {_tag: "ok", result: {_tag: "accepted"}}});
-			expect(w.calls()).toEqual({signs: 1, commits: why === "not_granted" ? 1 : 0});
-			expect(await w.project.read("facts", 0, "audit")).toEqual([]);
+			expect(w.calls()).toEqual({signs: 1, commits: reason === "not_granted" ? 1 : 0});
+			expect(await w.project.read("events", 0, "audit")).toEqual([]);
 			const inbox = await w.project.read("approvals:1/inbox", 0, "audit");
 			const isReply = Schema.is(
 				Schema.Struct({m: Schema.Struct({type: Schema.Literal("write_err")})}),
 			);
 			expect(inbox.filter((row) => isReply(row.body))).toMatchObject([
-				{body: {m: {type: "write_err", why, error: {_tag: why}}}},
+				{body: {m: {type: "write_err", why: reason, error: {_tag: reason}}}},
 			]);
 			const checkpoint = w
 				.process(pid)
 				.db.prepare("SELECT checkpoint FROM process_state WHERE process=?")
 				.get(pid);
 			expect(JSON.parse(String(checkpoint!.checkpoint))).toMatchObject({
-				saved: {model: {replies: 1, failures: [why]}},
+				saved: {model: {replies: 1, failures: [reason]}},
 				cmds: [],
 			});
 			expect(await w.process(pid).object.open("audit")).toMatchObject({
-				view: {replies: 1, failures: [why]},
+				view: {replies: 1, failures: [reason]},
 			});
 			expect(
 				(await w.project.read("approvals:1/inbox", 0, "audit")).filter((row) => isReply(row.body)),
 			).toHaveLength(1);
-			expect(w.calls()).toEqual({signs: 1, commits: why === "not_granted" ? 1 : 0});
+			expect(w.calls()).toEqual({signs: 1, commits: reason === "not_granted" ? 1 : 0});
 		});
 });

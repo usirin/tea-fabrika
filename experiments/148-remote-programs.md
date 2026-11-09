@@ -2,7 +2,7 @@
 
 The question: can fabrika programs run as jobs on a project's host on Cloudflare, each job on the
 Claude Code key of the person who started it, with that key never inside a box? The direction
-changed while this ran ([tea-host.md](../docs/direction/tea-host.md), 2026-10-25): the host is
+changed while this ran (tea-host.md, 2026-10-25): the host is
 not a long-lived container. It is a Durable Object that wakes on a message or an alarm, steps its
 programs, writes the ledger and sleeps. A container is only for a job that needs a real machine,
 one per job.

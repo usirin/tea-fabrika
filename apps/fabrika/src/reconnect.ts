@@ -115,7 +115,7 @@ export type ReconnectCmd =
 	| ReturnType<typeof jitter>;
 
 /** Watch the link while it is up: its end comes back as `ended`. */
-export type LinkSub = Sub<"link", {readonly up: true}>;
+type LinkSub = Sub<"link", {readonly up: true}>;
 
 type Step = readonly [Reconnect, readonly ReconnectCmd[]];
 

@@ -1,0 +1,21 @@
+diff --git a/dist/index.js b/dist/index.js
+index b81bf353943b40291ef6810324da31fb49234092..d11162d1aea43436e6121c1638962522c02eebc4 100755
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -6501,7 +6501,15 @@ function discoverInFile2(unit) {
+   const { syntax, file } = unit;
+   const found = syntax.program.body.flatMap((statement) => declaredIn(syntax, statement));
+   if (found.length === 0) return [];
+-  const exported = exportedLocalNames(syntax);
++  // Patched (kamp-us/demlik#905): only `export { x }`, `export default x` and `export = x`
++  // export a declaration from elsewhere. `export type X` must not mark an unrelated `const X`.
++  const exported = new Set(
++    syntax.program.body.flatMap((statement) =>
++      statement.type === "ExportNamedDeclaration" && nodeField(statement, "declaration") !== null
++        ? []
++        : exportNamesOf(statement)
++    )
++  );
+   const locals = localExportNames(syntax);
+   const isTest = isTestFile(file);
+   return withOrdinals(file, found).map(({ found: f, id, joinKey: joinKey2 }) => ({

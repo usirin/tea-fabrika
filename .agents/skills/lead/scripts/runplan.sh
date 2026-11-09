@@ -6,6 +6,6 @@ set -eu
 . "$(dirname "$0")/env.sh"
 name=$1; brief=$2
 mkdir -p "$BOXES"
-cd "$MAIN"
-exec nice -n 15 codex exec --ignore-user-config -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" \
-	-s read-only -C . --json -o "$BOXES/$name-plan.md" - < "$brief" > "$BOXES/$name-plan.jsonl" 2>&1
+exec sh "$(dirname "$0")/redact.sh" --run "$MAIN" "$brief" "$BOXES/$name-plan.md" "$BOXES/$name-plan.jsonl" \
+	nice -n 15 codex exec --ignore-user-config -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" \
+	-s read-only -C "$MAIN" --json -o "$BOXES/$name-plan.md" -

@@ -5,10 +5,30 @@
 // FABRIKA_APP_ID names the GitHub App; GH_REPO (owner/name) defaults to the worktree's origin.
 import {execFileSync} from "node:child_process";
 import {createSign} from "node:crypto";
+import {fileURLToPath} from "node:url";
 
 const [dir, branch, src = "HEAD"] = process.argv.slice(2);
 if (!dir || !(branch === "-" || branch?.startsWith("fabrikalfa/")))
 	throw new Error("usage: botpush.mjs <worktree> fabrikalfa/<name>");
+// Check only committed additions, before reading credentials or making any network request.
+try {
+	const diff = execFileSync("git", [
+		"-C",
+		dir,
+		"diff",
+		"--no-ext-diff",
+		"--no-textconv",
+		"--unified=0",
+		`origin/main...${src}`,
+	]);
+	execFileSync("sh", [fileURLToPath(new URL("./leakgrep.sh", import.meta.url))], {
+		cwd: dir,
+		input: diff,
+		stdio: ["pipe", "inherit", "inherit"],
+	});
+} catch {
+	process.exit(1);
+}
 const APP = process.env.FABRIKA_APP_ID ?? "5640348";
 const REPO =
 	process.env.GH_REPO ??

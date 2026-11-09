@@ -5,10 +5,12 @@
 // rewrite. A tag holds a name, an id, a number or a boolean; a failed span's message is never a
 // tag, only its record part's `content`, the one part a person may delete.
 import {Schema} from "effect";
+import * as Id from "../id.ts";
 
 /** A process's id: `process_` and a TypeID suffix. A restart is a new process (P33). */
+// Keep the existing string type until the wider ID conversion in T518 PR 2.
 export const ProcessId = Schema.String.check(
-	Schema.isPattern(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/),
+	Schema.makeFilter(Schema.is(Id.Process), {expected: "a process UUIDv7 TypeID"}),
 );
 
 /** Where a span's record lives: its process's JobRecord, or `spans` for every span outside one. */

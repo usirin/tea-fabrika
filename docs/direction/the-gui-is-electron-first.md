@@ -1,6 +1,6 @@
 # The GUI is an Electron app first
 
-Decided 2026-10-24. Replaces [The GUI is a local web page first](./the-gui-is-a-local-web-page-first.md)
+Decided 2026-10-24. Replaces The GUI is a local web page first
 of 2026-10-22.
 
 *2026-11-01: this note is about today's version. For `next/`, see
@@ -515,7 +515,7 @@ Where they clash, the owner picks.
   Tuval. The hold has no timer: the page waits for the answer, or for the
   link to drop.
 - **Everything the app keeps is on the host's one ledger:** the layout and
-  every tile's jobs, as [tea-host](./tea-host.md) says, one ledger a host.
+  every tile's jobs, as tea-host says, one ledger a host.
   `desk.json` and the folder a tile go.
 - **When the host starts again, every program comes back running,** Tuval's
   way (`packages/tuval/src/durability/restore.ts`). tmux brings nothing back. A program

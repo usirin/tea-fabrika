@@ -5,13 +5,16 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
+import {Id} from "@kampus/libfabrika";
 import {Mailbox, Writer} from "@kampus/libfabrika/coordination";
 import {Doorbell, Ledger} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {Effect, Layer, Result, Schema, Stream} from "effect";
 import * as fc from "fast-check";
 
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PROCESS: string = Effect.runSync(
+	Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer)),
+);
 const NAME = "counter:1";
 const LIBRARY = "@kampus/libfabrika"; // Missing P11 exports must not prevent collecting the laws.
 const SEED = 119120;
@@ -181,7 +184,7 @@ describe("p22 real counter in the runner", () => {
 					yield* r.msg({
 						id: `counter-${n}`,
 						envelope: {
-							id: `in-${PROCESS}-${n}`,
+							id: `input_0000000000e0080000000000${n.toString(16).padStart(2, "0")}`,
 							by: Writer.cases.person.make({key: "SHA256:person", for: "person"}),
 							arrivedAt: n,
 							input: {type: "inc"},

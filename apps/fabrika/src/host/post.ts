@@ -22,7 +22,7 @@ export type Post = Extract<
 >;
 
 /** A post the tracker refused, with why in words. */
-export class PostFailed extends Schema.TaggedError<PostFailed>()("PostFailed", {
+class PostFailed extends Schema.TaggedError<PostFailed>()("PostFailed", {
 	why: Schema.String,
 }) {}
 

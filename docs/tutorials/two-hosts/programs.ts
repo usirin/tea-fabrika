@@ -5,7 +5,7 @@ import {Effect, Schema} from "effect";
 
 // ------------------------------------------------------------------ the kettle
 
-export const Order = Schema.Struct({id: Schema.String, guest: Schema.String});
+const Order = Schema.Struct({id: Schema.String, guest: Schema.String});
 
 export const Kettle = Schema.Struct({
 	brewed: Schema.Number,
@@ -61,7 +61,7 @@ export const kettleProgram = defineProgram({
 
 // ------------------------------------------------------------------ the glass
 
-export const Pour = Schema.Struct({guest: Schema.String});
+const Pour = Schema.Struct({guest: Schema.String});
 
 export const Glass = Schema.Struct({
 	poured: Schema.Number,

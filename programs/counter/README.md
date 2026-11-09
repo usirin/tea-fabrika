@@ -33,7 +33,7 @@ yield* call(counter, {}, {told: {press: ["plus", "plus", "done"]}, keeping: {id:
 
 ## Why a counter, not the owner's desk
 
-The owner's desk ([`packs/owner-desk`](../../packs/owner-desk/README.md)) was the first choice
+The owner's desk (the `owner-desk` pack, since deleted) was the first choice
 for the app's first window. It was not used, for three reasons:
 
 - Its view changes only when the pipeline's core settles an ask, so with no core running a click

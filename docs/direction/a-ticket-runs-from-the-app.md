@@ -83,7 +83,7 @@ const lane = (ticket: TicketNumber) =>
   [a project is a parent plan](./a-project-is-a-parent-plan.md),
   [the plan stage](./the-plan-stage.md),
   [the test writer](./the-test-writer.md),
-  [promises in the pipeline](./promises-in-the-pipeline.md),
+  promises in the pipeline,
   [every finding is rated](./every-finding-is-rated.md),
   [new combos](./new-combos.md),
   [property tests](./property-tests-not-our-own-search.md),
@@ -94,12 +94,12 @@ const lane = (ticket: TicketNumber) =>
   [tickets start in our tracker](./tickets-start-in-our-tracker.md),
   [scheduled jobs on the host](./scheduled-jobs-on-the-host.md),
   [programs run in a box](./programs-run-in-a-box.md),
-  [agents run on opus](./agents-run-on-opus-for-now.md),
+  agents run on opus,
   [agents run on Codex](./agents-run-on-codex.md),
   [agents behind one service](./agents-behind-one-service.md),
   [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md),
   [the cloud is one more host](./the-cloud-is-one-more-host.md),
-  [one review a plan, and the cloud host in v1](./one-review-a-plan-and-the-cloud-in-v1.md)
+  one review a plan, and the cloud host in v1
   ([PR 145](https://github.com/usirin/tea-fabrika/pull/145)).
 - Older than experiment 107, so tested here and not taken on trust: the slot
   idea of 2026-10-11, the "ship, review, build, triage" order, read fresh, and
@@ -268,7 +268,7 @@ const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
     `pr` fact.
   - **any `stuck`**: a box with "try again" and "stop".
 - **Do survivors block? What the notes say:**
-  - [Promises in the pipeline](./promises-in-the-pipeline.md), decided
+  - Promises in the pipeline, decided
     2026-10-24: every mutant that lives blocks the pull request and goes back
     to the writer.
   - [The test writer](./the-test-writer.md), decided 2026-10-24: the writer
@@ -391,7 +391,7 @@ yield* Tickets.write(3, {type: "asked", ask: "a-1", what: "approve plan v1", pic
 small `lanes` program from boot. It hears every new ticket and keeps only its
 own person's. **Elm's answer:** a filed ticket is a fact on the ledger, and
 `lanes` hears it on a Sub. On the host side it is OTP's: an application
-starts its supervisor's children at boot ([tea-host](./tea-host.md)).
+starts its supervisor's children at boot (tea-host).
 
 ```ts
 // A sketch. The assignee is part of the ticket from the start: a ticket with nobody on it cannot exist.
@@ -538,7 +538,7 @@ interface Turn<A> { /* ...provider, session, folder, prompt, answer, model, effo
   ([agents run on Codex](./agents-run-on-codex.md), the owner's call of
   2026-10-27). Opus is only for the main session a person talks to. This
   replaces opus for plan, the test writer, build and review in
-  [agents run on opus](./agents-run-on-opus-for-now.md).
+  agents run on opus.
 - **Triage stays on opus** until experiment 159 (tracker ticket 42) says
   otherwise. It is the front door, and a wrong answer there sends the whole
   run the wrong way. It joins `AGENT_STEPS` with its rename.
@@ -689,7 +689,7 @@ and 4c, put lanes on the cloud host inside v1. Agent money starts at slice 8.
    lines the build changed and the lines each kept Property covers, the
    repo's own tests first, typecheck-refused mutants not counted, the skip
    list, and `send:test_writer:mutant_survived` or `ask:owner:check_change`
-   ([promises in the pipeline](./promises-in-the-pipeline.md)). The test
+   (promises in the pipeline). The test
    writer's mutants job gets its Draft, on a fake. Done when a planted weak
    test lets a mutant live, the mutant goes back to the writer, and a disable
    comment asks the owner. $0, only CPU time.
@@ -773,7 +773,7 @@ evaluation ([Canarying Releases](https://sre.google/workbook/canarying-releases/
   together. One review over the whole diff, after the mutation step, sees the
   change the way a person would. Each task still runs typecheck, lint and its
   own tests, so a broken task stops early. Written up in
-  [one review a plan](./one-review-a-plan-and-the-cloud-in-v1.md)
+  one review a plan
   ([PR 145](https://github.com/usirin/tea-fabrika/pull/145)), as proposed.
 - **Cost:** one review agent per ticket instead of one per task, so it's
   cheaper. The catch is size, since a big plan makes a big diff. Past about

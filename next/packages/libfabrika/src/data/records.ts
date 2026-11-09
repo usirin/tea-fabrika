@@ -417,30 +417,33 @@ export class RecordManager extends Context.Service<
 	/** Each part is its own object, reached by `stub(name)`. A rejected call is `unreachable`; an
 	 *  answer that does not decode, `bad_row`. */
 	static readonly remote = (stub: (name: string) => RecordCalls): Layer.Layer<RecordManager> => {
-		const ask = <A>(
+		const ask = Effect.fnUntraced(function* <A, M extends keyof RecordCalls>(
 			answer: Schema.Decoder<A>,
-			send: () => Promise<unknown>,
-		): Effect.Effect<A, SinkError> =>
+			name: string,
+			method: M,
+			...args: Parameters<RecordCalls[M]>
+		): Effect.fn.Return<A, SinkError> {
+			const fail = () => new SinkError({why: "unreachable", held: 0});
+			const rpc = yield* Effect.try({try: () => stub(name), catch: fail});
 			// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
-			Effect.tryPromise({
-				try: send,
-				catch: () => new SinkError({why: "unreachable", held: 0}),
-			}).pipe(
+			const io = Effect.tryPromise({try: () => Reflect.apply(rpc[method], rpc, args), catch: fail});
+			return yield* io.pipe(
 				Effect.flatMap((raw) =>
 					Schema.decodeUnknownEffect(answer)(raw).pipe(
 						Effect.mapError(() => new SinkError({why: "bad_row", held: 0})),
 					),
 				),
 			);
+		});
 		return Layer.succeed(
 			RecordManager,
 			manager((chain, at) => {
-				const object = () => stub(partName(chain, at));
+				const name = partName(chain, at);
 				return {
-					write: (rows) => ask(Written, () => object().write(chain, at, rows)),
-					page: (after) => ask(Page, () => object().read(chain, at, after)),
-					lookup: (spanId) => ask(Lookup, () => object().content(chain, at, spanId)),
-					erase: (spanId, by) => ask(Lookup, () => object().deleteContent(chain, at, spanId, by)),
+					write: (rows) => ask(Written, name, "write", chain, at, rows),
+					page: (after) => ask(Page, name, "read", chain, at, after),
+					lookup: (spanId) => ask(Lookup, name, "content", chain, at, spanId),
+					erase: (spanId, by) => ask(Lookup, name, "deleteContent", chain, at, spanId, by),
 				};
 			}),
 		);

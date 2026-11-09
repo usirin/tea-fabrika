@@ -48,7 +48,7 @@ const attributes = fc.record({
 	build: text,
 	value: fc.integer(),
 });
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PROCESS = "process_01jc9q4w7zfm8s5r2t6v0xkb4d";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const DAY = 86_400_000;
 const BIG = 1_000_000_000;
@@ -434,7 +434,7 @@ describe("T285, coordination tracing keep-laws", () => {
 		);
 	});
 
-	it("process.info and process.next keep one span per execution, including failed info reads", async () => {
+	it("process.info and process.next keep their spans, including nested id.next and failed calls", async () => {
 		await fc.assert(
 			fc.asyncProperty(
 				context,
@@ -487,6 +487,13 @@ describe("T285, coordination tracing keep-laws", () => {
 									child(selected[0]!, spans[0]!);
 									expect(tags(selected[0]!)).toEqual({});
 									if (call.op === "next" && Exit.isSuccess(exit)) {
+										expect(spans.map((s) => s.name)).toEqual([
+											"test.request",
+											"process.next",
+											"id.next",
+										]);
+										ended(spans[2]!, true);
+										child(spans[2]!, selected[0]!);
 										const id = String(exit.value);
 										expect(id).toMatch(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
 										expect(seen.has(id)).toBe(false);
@@ -504,9 +511,15 @@ describe("T285, coordination tracing keep-laws", () => {
 								);
 								expect(Exit.isFailure(exit)).toBe(true);
 								const spans = c.spans.slice(before);
-								expect(spans.map((s) => s.name)).toEqual(["test.request", "process.next"]);
+								expect(spans.map((s) => s.name)).toEqual([
+									"test.request",
+									"process.next",
+									"id.next",
+								]);
 								ended(spans[1]!, false);
 								child(spans[1]!, spans[0]!);
+								ended(spans[2]!, false);
+								child(spans[2]!, spans[1]!);
 							}).pipe(
 								Effect.withParentSpan(Tracer.externalSpan(ctx)),
 								Effect.withTracer(c.tracer),
@@ -900,7 +913,12 @@ const runnerWorld = (
 	const input = (n: number, m: unknown) =>
 		decodeIncoming({
 			id: `letter-${n}`,
-			envelope: {id: `in-${PROCESS}-${n}`, by: owner, arrivedAt: n, input: m},
+			envelope: {
+				id: `input_0000000000e008${n.toString(16).padStart(12, "0")}`,
+				by: owner,
+				arrivedAt: n,
+				input: m,
+			},
 			sentAt: "2026-11-08T00:00:00.000Z",
 			seen: 0,
 			span: signer,

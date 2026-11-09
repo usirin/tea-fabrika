@@ -1,12 +1,10 @@
-import {mkdirSync} from "node:fs";
-import {join} from "node:path";
-import {DatabaseSync} from "node:sqlite";
-import {Effect, Layer, Schema} from "effect";
+import {DatabaseSync} from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for P37's durable span queue
+import {Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {Archive, RecordManager, SpanSink} from "../data/index.ts";
 import {nodeSql} from "../data/sqlite.ts";
 
 // This is P37's durable span queue, never a second ledger. Delivery makes no spans.
-export const stageRecording = Effect.fn(function* <E>(
+export const stageRecording = Effect.fn("brain.stageRecording")(function* <E>(
 	home: string,
 	object: string,
 	call: (
@@ -16,10 +14,13 @@ export const stageRecording = Effect.fn(function* <E>(
 		args: ReadonlyArray<unknown>,
 	) => Effect.Effect<unknown, E>,
 ) {
+	const fs = yield* FileSystem.FileSystem,
+		path = yield* Path.Path;
+	yield* fs.makeDirectory(home, {recursive: true});
 	const db = yield* Effect.acquireRelease(
 		Effect.sync(() => {
-			mkdirSync(home, {recursive: true});
-			const db = new DatabaseSync(join(home, "brain.records.sqlite"));
+			// FileSystem has no SQLite handle; Node owns this durable span queue's database.
+			const db = new DatabaseSync(path.join(home, "brain.records.sqlite"));
 			db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
 			return db;
 		}),

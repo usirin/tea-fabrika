@@ -4,7 +4,7 @@ The question: stage agents are to run on GPT sol through Codex, with opus kept
 for the main session. Triage is the one place with hard evidence that the model
 matters: in experiment 135, opus closed 32 of 58 answers on phoenix's missed
 "no"s where sonnet closed 6, and that is why triage stayed on opus
-([agents-run-on-opus-for-now.md](../docs/direction/agents-run-on-opus-for-now.md)).
+(the archived note agents-run-on-opus-for-now).
 So: on 135's saved cases, does GPT sol answer as well as opus did?
 
 **Answer: yes on the "no" answers, better than opus. But it is a stricter

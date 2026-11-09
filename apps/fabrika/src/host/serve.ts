@@ -130,7 +130,7 @@ import type {Setting} from "./settings.ts";
 //   did does=tezgah.split via={"_tag":"palette"}
 
 /** Where the desk is kept between starts of the host: desk.json in the app's home, for now. */
-export interface DeskHome {
+interface DeskHome {
 	/** The desk kept from before, as written, or `null`. */
 	readonly kept: unknown;
 	readonly save: (saved: Saved) => Effect.Effect<void>;
@@ -139,7 +139,7 @@ export interface DeskHome {
 }
 
 /** Where the person's marks on the asks are kept between starts of the host: asks.json, beside the desk. */
-export interface AsksHome {
+interface AsksHome {
 	/** The file's text, as written, or `null`: there is none. */
 	readonly kept: string | null;
 	readonly save: (marks: Marks) => Effect.Effect<void>;
@@ -153,7 +153,7 @@ type Carried = DeskCmd | {readonly type: "fence"; readonly done: Deferred.Deferr
  * if any, and how an agent's restart leaves one for the next. A host handed none has no `restart`
  * tool.
  */
-export interface Restarts {
+interface Restarts {
 	readonly before: RestartNote | null;
 	readonly leave: (note: RestartNote) => Effect.Effect<void, RestartRefused>;
 }

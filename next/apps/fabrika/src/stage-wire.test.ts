@@ -10,6 +10,7 @@ import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {DatabaseSync} from "node:sqlite";
+import {Id} from "@kampus/libfabrika";
 import {Entry, PAGE} from "@kampus/libfabrika/data";
 import {Effect, Schema} from "effect";
 import {afterEach, describe, expect, it} from "vitest";
@@ -138,7 +139,10 @@ const stage = async (saved?: {key: ReturnType<typeof identity>; home: string; po
 	for (;;) {
 		if (child.exitCode !== null) throw new Error(`P12 dev.ts did not start: ${output}`);
 		try {
-			if ((await fetch(url)).ok) break;
+			// The page is served while startup is still flushing the lifecycle outbox.
+			// dev.ts emits ready only after that flush. Read history after its ready message.
+			if (output.includes(`{"ready":${JSON.stringify(url)},"build":`) && (await fetch(url)).ok)
+				break;
 		} catch {
 			/* Listener is not ready. */
 		}
@@ -301,7 +305,7 @@ const view = async (c: Client, pid: string) => {
 };
 
 describe("P12 real dev.ts wire", () => {
-	it("scenario: a new dev command links its lifecycle fact to the previous runtime", async () => {
+	it("scenario: a new dev command links its lifecycle event to the previous runtime", async () => {
 		const first = await stage(),
 			c = await connected(first);
 		const starts = (await read(c, "door/brain")).filter((row) => row._tag === "started");
@@ -377,7 +381,7 @@ describe("P12 real dev.ts wire", () => {
 		);
 		expect(accepted.map((a) => a.pos)).toEqual(Array.from({length: PAGE + 3}, (_, n) => n + 1));
 		expect(accepted.every((a, n) => n === 0 || a.rev > accepted[n - 1]!.rev)).toBe(true);
-		// Door input facts occupy the intervening global revisions.
+		// Door input events occupy the intervening global revisions.
 		expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
 	});
 	it("scenario: a parked wire wait receives the next append and a ready wait answers now", async () => {
@@ -482,12 +486,13 @@ describe("P12 real dev.ts wire", () => {
 		);
 		expect(original).toBeDefined();
 		const binding = JSON.parse(String(original!.value));
+		// P17a saves the completed answer before replying; a retry reuses this settled binding.
 		expect(binding).toMatchObject({
 			by: {key: s.key.fingerprint},
 			process: pid,
 			seen,
 			sentAt: SENT,
-			state: {_tag: "delivered"},
+			state: {_tag: "settled", result: accepted},
 		});
 		await send(c, pid, "later", {type: "dec"});
 		expect(placing(await send(c, pid, "metadata", {type: "inc"}, seen))).toEqual(accepted);
@@ -515,7 +520,10 @@ describe("P12 real dev.ts wire", () => {
 		const s = await stage(),
 			c = await connected(s);
 		// The trusted process API is exercised by stage-records, including an outbound probe program.
-		const missing = await c.call("view.open", {pid: "process_01jc9q4w7z3m8n5r2t6v0xkb4e"});
+		const pid = Effect.runSync(
+			Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer)),
+		);
+		const missing = await c.call("view.open", {pid});
 		expect(missing.error).toBeDefined();
 		for (const method of ["project.sign", "project.append", "process.start", "signer.sign"]) {
 			const response = await c.call(method, {
@@ -620,7 +628,7 @@ describe("P12 real dev.ts wire", () => {
 		expect((await view(resumed, pid)).view.count).toBe(20);
 		expect(await counter(resumed)).toBe(pid);
 		let starts: Entry[] = [];
-		// Replacement facts arrive on the outbox's periodic flush, after traffic can recover.
+		// Replacement events arrive on the outbox's periodic flush, after traffic can recover.
 		// The enclosing test's existing timeout bounds this wait.
 		for (;;) {
 			signal.throwIfAborted();
@@ -632,7 +640,7 @@ describe("P12 real dev.ts wire", () => {
 		expect(starts[1]!.body).toMatchObject({
 			after: firstStart,
 			build: expect.any(String),
-			why: "crash",
+			reason: "crash",
 		});
 	});
 });

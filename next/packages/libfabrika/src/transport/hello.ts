@@ -82,7 +82,7 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
 		hello.nonce !== a.nonce
 	)
 		return no("bad_signature");
-	const hash = yield* subtle(() => crypto.subtle.digest("SHA-256", new Uint8Array(raw.success)));
+	const hash = yield* subtle("digest", "SHA-256", new Uint8Array(raw.success));
 	const fingerprint = `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
 	if (fingerprint !== a.name) return no("bad_signature");
 	const field = new Uint8Array(51);

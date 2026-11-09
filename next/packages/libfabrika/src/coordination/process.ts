@@ -65,6 +65,8 @@ export const brainOnly = (write: {
 }): boolean =>
 	write.stream === PROCESSES ||
 	write.stream.startsWith(`${PROCESSES}/`) ||
+	write.stream.endsWith("/dead") ||
+	write.tag === "dead" ||
 	Object.hasOwn(ProcessFact.cases, write.tag) ||
 	inSignalSpace(write.id) ||
 	inRunnerSpace(write.id);
@@ -78,15 +80,24 @@ export const Down = Schema.TaggedStruct("DOWN", {
 	why: Text,
 	to: Recipient,
 });
-export const Dead = Schema.TaggedStruct("dead", {
+const deadFields = {
 	tries: Count,
 	limit: Count,
 	m: Text,
 	build: Text,
 	errors: Schema.Array(Text).check(Schema.isMaxLength(32)),
-}).check(
-	Schema.makeFilter((value) => value.errors.length === value.tries || "one error class per try"),
+};
+const oneErrorPerTry = Schema.makeFilter(
+	(value: Schema.Struct.Type<typeof deadFields>) =>
+		value.errors.length === value.tries || "one error class per try",
 );
+export const DeadInput = Schema.Struct(deadFields).check(oneErrorPerTry);
+export const Dead = Schema.TaggedStruct("dead", {
+	...deadFields,
+	process: ProcessId,
+	program: Code.fields.program,
+	name: ProcessName,
+}).check(oneErrorPerTry);
 export const Activity = Schema.TaggedUnion({
 	idle: {process: ProcessId},
 	stepping: {process: ProcessId, letter: Text, build: Text},
@@ -191,7 +202,7 @@ export class ProcessTable {
 	readonly #lives = new Map<string, Life>();
 	readonly #watches = new Map<string, Watch>();
 	readonly #current = new Map<string, string>();
-	readonly #restarts = new Map<string, number>();
+	readonly #restarts = new Map<string, Array<number>>();
 
 	constructor(entries: Iterable<Entry>, by: string) {
 		this.#by = by;
@@ -226,7 +237,10 @@ export class ProcessTable {
 							why: fact.why,
 						}),
 					});
-					this.#restarts.set(fact.name, (this.#restarts.get(fact.name) ?? 0) + 1);
+					this.#restarts.set(fact.name, [
+						...(this.#restarts.get(fact.name) ?? []),
+						entry.arrivedAt,
+					]);
 					break;
 				}
 				case "exited": {
@@ -320,6 +334,24 @@ export class ProcessTable {
 	isLive(process: string): boolean {
 		return this.#lives.get(process)?.state._tag === "live";
 	}
+	status(
+		name: string,
+		owner: typeof Owner.Type,
+	): Result.Result<
+		{
+			readonly name: string;
+			readonly state: typeof State.Type;
+			readonly restarts: ReadonlyArray<number>;
+		},
+		ProcessError
+	> {
+		const process = this.#current.get(name);
+		if (process === undefined) return denied("ended");
+		const life = this.parent(process, owner);
+		return Result.isFailure(life)
+			? Result.fail(life.failure)
+			: Result.succeed({name, state: life.success.state, restarts: this.#restarts.get(name) ?? []});
+	}
 	life(process: string): Option.Option<Life> {
 		return Option.fromUndefinedOr(this.#lives.get(process));
 	}
@@ -404,7 +436,7 @@ export class ProcessTable {
 				name: life.name,
 				program: life.state.code.program,
 				build: life.state.code.hash,
-				restarts: this.#restarts.get(life.name) ?? 0,
+				restarts: this.#restarts.get(life.name)?.length ?? 0,
 			}));
 	}
 }

@@ -13,6 +13,7 @@
 		"why": "next/'s type checks, including Node's erasable syntax"
 	},
 	{ "glob": "next/packages/libfabrika/src/compiler.ts", "why": "the shared Compiler check" },
+	{ "glob": "next/packages/libfabrika/src/id.test-support.ts", "why": "the generated ID fixtures" },
 	{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
 	{ "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
 	{ "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },
@@ -27,6 +28,20 @@
 	{ "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
 	{ "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
 	{ "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
+	{
+		"glob": ".agents/skills/*/scripts/*.test.ts",
+		"why": "the step scripts' laws and planted breaks"
+	},
+	{
+		"glob": ".agents/skills/lead/scripts/skillscheck.sh",
+		"why": "the shared skills' source-and-link lint check"
+	},
+	{ "glob": ".agents/skills/lead/scripts/leakgrep.sh", "why": "the added-text check before push" },
+	{ "glob": "scripts/*.test.ts", "why": "today's tooling limits and script laws" },
+	{
+		"glob": ".agents/skills/lead/scripts/loosening.sh",
+		"why": "the check for removed, muted or narrowed laws"
+	},
 	{ "glob": "layer-rules.json", "why": "which way imports may point" },
 	{ "glob": "boundary-rules.json", "why": "which package may import which" },
 	{ "glob": "pnpm-workspace.yaml", "why": "the packages and the catalog's versions" },

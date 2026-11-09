@@ -58,11 +58,8 @@ import {
 // it explains what keyboard focus is on, from the moment it comes on, as well as what the pointer
 // is over; and Escape leaves it, once what lies over the desk has closed.
 
-/** The room macOS's three window buttons take at the top bar's left, in px. */
-export const LIGHTS = 84;
-
 /** What each program takes and sends, by its inputs' and outputs' names (host/serve.ts). */
-export interface Shape {
+interface Shape {
 	readonly takes: readonly string[];
 	readonly sends: readonly string[];
 }
@@ -105,8 +102,7 @@ export const keyWord = (key: string): string => {
 };
 
 /** A binding's whole key, as pressed: the prefix, then its own key. */
-export const bindingWord = (prefix: string, key: string): string =>
-	`${keyWord(prefix)} ${keyWord(key)}`;
+const bindingWord = (prefix: string, key: string): string => `${keyWord(prefix)} ${keyWord(key)}`;
 
 /**
  * The commands the bottom line shows after the prefix, the ones used most and then `?` for all of
@@ -236,7 +232,7 @@ export const workspaceName = (ws: Workspace, tickets: TicketsShown): string => {
 };
 
 /** One program of a line, with the tile it is shown in. */
-export interface Segment {
+interface Segment {
 	readonly program: string;
 	readonly tile: TileId;
 	readonly focused: boolean;
@@ -268,7 +264,7 @@ export const asksWord = (n: number): string | null =>
 	n === 0 ? null : `${n} ask${n === 1 ? "s" : ""} you`;
 
 /** A part of the frame that says how a part of the app is, and whether that part is broken. */
-export interface Said {
+interface Said {
 	readonly word: string;
 	readonly broken: boolean;
 }
@@ -317,14 +313,14 @@ export const syncWord = (now: AsksNow, ledger: LedgerLink): Said | null => {
  * alone: waiting (a dashed ring), needs a look (`!`), down (`x`). None is the up state's ring and
  * check, so a host that is not up never looks up.
  */
-export type HostShape = Extract<Icon, "later" | "stuck" | "failed">;
+type HostShape = Extract<Icon, "later" | "stuck" | "failed">;
 
 /**
  * The host's item. Up, it is a quiet icon and no word: a host that works is not news. Else it is
  * a word, with a shape that says the kind of wrong, red only where it is broken. There is no value
  * for an up host with a word, or a word with the up icon.
  */
-export type HostItem =
+type HostItem =
 	| {readonly kind: "up"}
 	| {
 			readonly kind: "word";
@@ -408,7 +404,7 @@ const trackerOn = (desk: Open): TileNode | undefined => {
  * ticket's page (its window's own `query`), which the line then carries on; else nowhere, and the
  * bottom line says so. Never a dead key.
  */
-export type Opens =
+type Opens =
 	| {readonly kind: "tile"; readonly tile: TileId}
 	| {readonly kind: "tracker"; readonly tile: TileId; readonly run: string}
 	| {readonly kind: "none"};
@@ -525,13 +521,13 @@ export const ENDED_SHOWN_MS = 5000;
  * printed how in the tile, so the bottom line says nothing of it. Ghostty's and kitty's "command
  * finished" notices wait for the same 5 seconds.
  */
-export const QUICK_MS = 5000;
+const QUICK_MS = 5000;
 
 /**
  * How a job's end reads: `done in 14s`, `failed after 2m`, `stopped after 1h 5m`, and
  * `failed at once` for one that ended within its first second, where `after 0s` reads oddly.
  */
-export const endWord = (ended: JobEnded): string => {
+const endWord = (ended: JobEnded): string => {
 	const ms = ended.at - ended.since;
 	if (ms < 1000) return `${ended.how} at once`;
 	const took = tookWord(ms);
@@ -599,7 +595,7 @@ const runningRow = (tile: TileId, job: TileJobs["running"][number], now: number)
 });
 
 /** The jobs list: its sections, the tile each row's Enter focuses, and the count at its head. */
-export interface JobsList {
+interface JobsList {
 	readonly sections: readonly Section[];
 	readonly tiles: ReadonlyMap<string, TileId>;
 	/**
@@ -730,7 +726,7 @@ export const INFO = infoFor(defaults);
  * What lies over the desk: the asks list, the jobs list, the palette, or one item's few lines.
  * One value, so two can never be open at once (Apple's HIG: one popover at a time).
  */
-export type Over =
+type Over =
 	| {readonly kind: "none"}
 	| {readonly kind: "asks"}
 	| {readonly kind: "jobs"}
@@ -746,7 +742,7 @@ export type Over =
 export type Part = "agents" | "sync" | "host";
 
 /** Where something sits along the top bar. */
-export interface Span {
+interface Span {
 	readonly left: number;
 	readonly right: number;
 }
