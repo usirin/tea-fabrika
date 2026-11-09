@@ -54,7 +54,14 @@ const vitests = () => {
 };
 const saved = (): {runs: Array<unknown>; compiler: Array<unknown>} =>
 	existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : {runs: [], compiler: []};
-const save = (data: object) => writeFileSync(OUT, `${JSON.stringify(data, null, "\t")}\n`);
+// Still one JSON document, but one run per line: every sample kept, and a diff shows whole runs.
+const save = (data: Record<string, Array<unknown>>) => {
+	const parts = Object.entries(data).map(
+		([key, rows]) =>
+			`${JSON.stringify(key)}:[\n${rows.map((row) => JSON.stringify(row)).join(",\n")}\n]`,
+	);
+	writeFileSync(OUT, `{${parts.join(",")}}\n`);
+};
 
 // --- The wire client (copied from stage-wire.test.ts) ---
 const field = (a: string | Buffer) => {
