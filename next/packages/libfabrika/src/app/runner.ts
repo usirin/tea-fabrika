@@ -551,7 +551,10 @@ export class ProgramRunner extends Context.Service<
 								? {...m, why: tag}
 								: m;
 						}),
-						Effect.catch(() => err(job, "bad_cmd")),
+						Effect.catchIf(
+							(error) => error.why === "step" && error.source === undefined,
+							() => err(job, "bad_cmd"),
+						),
 					);
 				});
 
