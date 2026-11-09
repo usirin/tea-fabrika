@@ -37,6 +37,7 @@ const fires = (path: string, code: string): readonly number[] => {
 
 interface Plant {
 	readonly code: string;
+	readonly label?: string;
 	/** The file's name, for a rule that looks at it. */
 	readonly file?: string;
 	readonly prelude: readonly string[];
@@ -48,6 +49,7 @@ const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect"
 const PLANTS: readonly Plant[] = [
 	{
 		code: "fabrika(no-layer-style)",
+		label: "pinned: review 2 static layer spelling bypasses",
 		file: "layer-plant.tsx",
 		prelude: ["declare const el: HTMLElement;"],
 		lines: [
@@ -65,6 +67,44 @@ const PLANTS: readonly Plant[] = [
 			['const name = "zIndex";', false],
 			["const read = el.style.zIndex;", false],
 			['el.style.setProperty("--tile-wash", "transparent");', false],
+			// pinned: review 2 found equivalent static spellings escaping the real layer rule.
+			["const templateStyle = {[`zIndex`]: 99};", true],
+			['const joinedStyle = {["z" + "Index"]: 99};', true],
+			['el.style[`zIndex`] = "99";', true],
+			['el.style["z" + "Index"] = "99";', true],
+			['el.style.setProperty(`z-index`, "99");', true],
+			['el.style.setProperty(`--layer-palette`, "99");', true],
+			['el.style.setProperty(`--manti-dialog-z-index`, "99");', true],
+			['el.style.setProperty(`--manti-popover-z-index`, "99");', true],
+			['el.style.setProperty(`--manti-tooltip-z-index`, "99");', true],
+			["el.style.cssText = `z-index:99`;", true],
+			['el.setAttribute("style", `z-index:99`);', true],
+			['el.style[`setProperty`]("z-index", "99");', true],
+			['el[`setAttribute`]("style", "z-index:99");', true],
+			['el.style.setProperty("Z-INDEX", "99");', true],
+			['el.setAttribute("STYLE", "Z-INDEX:99");', true],
+			["el.style[`cssText`] = `--layer-palette:99`;", true],
+			[`el.style.setProperty(\`z-\${"index"}\`, "99");`, true],
+			['el["set" + "Attribute"]("style", "z-" + "index:99");', true],
+			['el.style.setProperty(`--tile-wash`, "transparent");', false],
+			["el.setAttribute(`STYLE`, `opacity:1`);", false],
+			["const templateRead = el.style[`zIndex`];", false],
+			['const namedProperty = (zIndex: string) => el.style.setProperty(zIndex, "99");', true],
+			['const namedAttribute = (style: string) => el.setAttribute(style, "z-index:99");', true],
+			['const namedCssText = (cssText: string) => { el.style[cssText] = "z-index:99"; };', true],
+			[`const dynamicCss = (rank: number) => { el.style.cssText = \`z-index:\${rank}\`; };`, true],
+			[
+				`const dynamicAttribute = (rank: number) => el.setAttribute(\`STYLE\`, \`z-index:\${rank}\`);`,
+				true,
+			],
+			[
+				`const dynamicLayer = (rank: number) => { el.style.cssText = \`--layer-palette:\${rank}\`; };`,
+				true,
+			],
+			[
+				`const dynamicManti = (rank: number) => el.setAttribute("style", \`--manti-tooltip-z-index:\${rank}\`);`,
+				true,
+			],
 		],
 	},
 	{
@@ -257,7 +297,7 @@ const PLANTS: readonly Plant[] = [
 ];
 
 describe("each rule refuses what it is there to refuse", () => {
-	it.each(PLANTS.map((p, i) => [p.code, p, i] as const))("%s", (_code, p, i) => {
+	it.each(PLANTS.map((p, i) => [p.label ?? p.code, p, i] as const))("%s", (_label, p, i) => {
 		const file = join(plant, `${i}-${p.file ?? "planted.ts"}`);
 		writeFileSync(file, `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`);
 		const want = p.lines.flatMap(([, refused], at) => (refused ? [p.prelude.length + at + 1] : []));

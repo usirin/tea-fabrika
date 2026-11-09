@@ -87,6 +87,7 @@ if (process.argv.includes("--audit"))
 	for (const row of rows)
 		for (const fire of row.fires)
 			console.log(JSON.stringify({set: row.set, path: row.path, ...fire}));
-if (summary.base?.fires !== 3 || summary.good?.fires !== 0 || summary.bad?.fires !== 6)
+// The base has three raw ranks and no required frame table, so all four fires are real.
+if (summary.base?.fires !== 4 || summary.good?.fires !== 0 || summary.bad?.fires !== 6)
 	process.exitCode = 1;
 if (process.argv.includes("--assert-clean") && summary.tree?.fires !== 0) process.exitCode = 1;

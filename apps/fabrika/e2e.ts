@@ -3160,6 +3160,9 @@ const layersStage = async () => {
 			await page.keyboard.press("Escape");
 			await gone(page, "pop-asks");
 			await prefixed(page, "B");
+			// scenario: wait for the bars command to finish. Cmd-K uses a direct host run;
+			// without this wait it can overtake the held B, whose later reply closes the palette.
+			await page.locator(".desk:not(.bare) .topbar").waitFor();
 			await page.keyboard.press("Meta+k");
 			await palette.waitFor();
 			await page.keyboard.press("Control+g");

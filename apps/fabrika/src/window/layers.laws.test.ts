@@ -1,9 +1,97 @@
+import {mkdtempSync, rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {titleOf} from "@kampus/pipeline/tickets/ticket";
 // Today's app, T204 PR 1. The new step returns data; clocks, IDs and writes stay in adapters.
 import * as fc from "fast-check";
-import {assert, describe, expect, it} from "vitest";
-import {readFromPage} from "../messages.ts";
+import {afterAll, assert, describe, expect, it, vi} from "vitest";
+import type {Down} from "../link.ts";
+import {readFromPage, type ToPage} from "../messages.ts";
 import * as frameModule from "./frame.ts";
 import {FRAME, type Frame, type FrameMsg, frameUpdate} from "./frame.ts";
+
+// Only Electron, the socket and the OS theme are replaced. The notification's real click
+// callback in main.ts must produce the message that stepFrame records.
+const notifications = vi.hoisted(() => ({
+	home: "",
+	deliver: null as ((message: Down) => void) | null,
+	hello: () => {},
+	quit: () => {},
+	clicks: [] as (() => void)[],
+	posted: [] as ToPage[],
+}));
+vi.mock("electron", async () => {
+	const {EventEmitter} = await import("node:events");
+	const app = Object.assign(new EventEmitter(), {
+		getPath: () => notifications.home,
+		setPath: () => {},
+		setBadgeCount: () => {},
+		whenReady: async () => {},
+		requestSingleInstanceLock: () => true,
+		quit: () => {},
+		exit: () => {},
+	});
+	const ipcMain = new EventEmitter();
+	class BrowserWindow extends EventEmitter {
+		webContents = {getURL: () => "fabrika://app/desk.html", postMessage: () => {}};
+		loadURL = async () => {};
+		isFocused = () => false;
+		isDestroyed = () => false;
+		isMinimized = () => false;
+		focus = () => {};
+		constructor() {
+			super();
+			notifications.hello = () =>
+				ipcMain.emit("fabrika:port", {
+					sender: this.webContents,
+					senderFrame: {parent: null, url: "fabrika://app/desk.html"},
+				});
+		}
+	}
+	class Notification extends EventEmitter {
+		static isSupported = () => true;
+		show = () => notifications.clicks.push(() => this.emit("click"));
+	}
+	class Port extends EventEmitter {
+		start = () => {};
+		close = () => {};
+		postMessage = (message: ToPage) => notifications.posted.push(message);
+	}
+	notifications.quit = () => app.emit("before-quit", {preventDefault: () => {}});
+	return {
+		app,
+		ipcMain,
+		BrowserWindow,
+		Notification,
+		MessageChannelMain: class {
+			port1 = new Port();
+			port2 = new Port();
+		},
+		protocol: {registerSchemesAsPrivileged: () => {}, handle: () => {}},
+		session: {
+			defaultSession: {setPermissionRequestHandler: () => {}, setPermissionCheckHandler: () => {}},
+		},
+		nativeTheme: {},
+		shell: {},
+	};
+});
+vi.mock("../launch.ts", () => ({launchOf: () => ({kind: "owner"}), QUIET_SWITCHES: []}));
+vi.mock("@kampus/fabrika-design", () => ({frameColor: () => "#000000", followLook: () => {}}));
+vi.mock("../attach.ts", async (original) => {
+	const {Effect} = await import("effect");
+	return {
+		...(await original<typeof import("../attach.ts")>()),
+		attach: ({deliver}: {deliver: (message: Down) => void}) =>
+			Effect.sync(() => {
+				notifications.deliver = deliver;
+				return {found: {kind: "up"}, wire: {send: () => {}, ended: Effect.never}};
+			}),
+	};
+});
+afterAll(() => {
+	notifications.quit();
+	if (notifications.home) rmSync(notifications.home, {recursive: true, force: true});
+});
 
 type Layer = {_tag: "palette"} | {_tag: "popover"; item: string} | {_tag: "tooltip"; for: string};
 type Via = {_tag: "key"; keys: string} | {_tag: "click"} | {_tag: "word"} | {_tag: "palette"};
@@ -118,6 +206,67 @@ const checkTransitions = (run: typeof step, moves: readonly Message[]) => {
 };
 
 describe("today's layer lifecycle", () => {
+	// Plant: omit via in main.ts's actual Notification click callback, as review 2 found.
+	it("a real system-notification click records its known opening source", async () => {
+		notifications.home = mkdtempSync(join(tmpdir(), "fh."));
+		await import("../main.ts");
+		await vi.waitFor(() => expect(notifications.deliver).not.toBeNull());
+		notifications.hello();
+		fc.assert(
+			fc.property(
+				fc.integer({min: 1, max: 100000}),
+				fc.string({maxLength: 50}).map(titleOf),
+				(ticket, title) => {
+					const deliver = notifications.deliver;
+					assert(deliver !== null);
+					const now = {asks: [], later: [], reach: "ok", why: null} as const;
+					deliver({type: "to", port: "desk", m: {type: "asks", now}});
+					notifications.clicks.length = notifications.posted.length = 0;
+					deliver({
+						type: "to",
+						port: "desk",
+						m: {
+							type: "asks",
+							now: {
+								...now,
+								asks: [
+									{
+										key: `${ticket}/fixture`,
+										ticket,
+										title,
+										what: "approve plan",
+										kind: "ask",
+										at: 0,
+										seen: false,
+									},
+								],
+							},
+						},
+					});
+					expect(notifications.clicks).toHaveLength(1);
+					notifications.clicks[0]!();
+					const shown = notifications.posted.findLast((message) => message.type === "show");
+					assert(
+						shown?.type === "show" && shown.what === "asks",
+						"notification click must reach the page",
+					);
+					const [, changes] = step(FRAME, {
+						type: "show",
+						what: shown.what,
+						...(shown.via === undefined ? {} : {via: shown.via}),
+					});
+					expect(changes).toContainEqual(
+						expect.objectContaining({
+							_tag: "open",
+							layer: {_tag: "popover", item: "asks"},
+							via: {_tag: "click"},
+						}),
+					);
+				},
+			),
+			options,
+		);
+	});
 	it("records replacement close before open, toggle once, and no record for unchanged state", () => {
 		fc.assert(
 			fc.property(fc.array(message, {minLength: 1, maxLength: 70}), (moves) => {

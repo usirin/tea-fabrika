@@ -227,6 +227,37 @@ describe("T204 PR 1 frame layer policy through the real root config", () => {
 		return lint(file, path);
 	};
 	const allowed = () => readFileSync(fixture("good", "frame-layers"), "utf8");
+	// pinned: review 2 found CSS escapes and @property could change the frame's ranks.
+	it.each([
+		String.raw`.a { z\2d index: 99; }`,
+		String.raw`.a { z\00002dindex: 99; }`,
+		String.raw`.a { \7a-index: 99; }`,
+		String.raw`.a { --layer-\70 alette: 99; }`,
+		String.raw`.a { --manti-dialog-z\2d index: 99; }`,
+		'@property --layer-palette { syntax: "<integer>"; inherits: false; initial-value: 99; }',
+		'@property --manti-dialog-z-index { syntax: "<integer>"; inherits: false; initial-value: 99; }',
+		'@property --manti-popover-z-index { syntax: "<integer>"; inherits: false; initial-value: 99; }',
+		'@property --manti-tooltip-z-index { syntax: "<integer>"; inherits: false; initial-value: 99; }',
+		String.raw`@property --layer-\70 alette { syntax: "<integer>"; inherits: false; initial-value: 99; }`,
+	])("pinned: review 2 layer spelling bypass is refused: %s", async (plant) => {
+		for (const path of [WINDOW, "programs/ticket/window.css"]) {
+			const warnings = await check(`${allowed()}\n${plant}`, path);
+			expect(warnings.filter((warning) => warning.rule === "fabrika/frame-layers")).toContainEqual(
+				expect.objectContaining({line: allowed().split("\n").length + 1}),
+			);
+		}
+	});
+	// format: equivalent spellings of a valid frame declaration and unrelated registrations
+	// keep their meaning; decoding a name grants no new permission outside the frame.
+	it("format: CSS escapes keep valid named frame values and unrelated @property registrations", async () => {
+		expect(await check(allowed().replace("z-index:", String.raw`z\2d index:`))).toEqual([]);
+		expect(
+			await check(
+				'@property --tile-size { syntax: "<integer>"; inherits: false; initial-value: 1; }',
+				"programs/ticket/window.css",
+			),
+		).toEqual([]);
+	});
 	// format: L1 requires this exact table even if no declaration currently uses a layer token.
 	it("format: window.css must contain a complete frame rank table even without layer choices", async () => {
 		for (const css of [

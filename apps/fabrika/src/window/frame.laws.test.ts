@@ -22,6 +22,24 @@ import {BottomArea, BottomLine, type FrameProps, Over, TopBar} from "./frame.tsx
 import type {PaletteProps} from "./pop.tsx";
 
 const palette = vi.hoisted(() => ({props: null as PaletteProps | null}));
+const drawing = vi.hoisted(() => ({root: null as ReactNode, reading: false}));
+// Run App itself to read its live binding. Browser layout hooks are the only hooks omitted.
+vi.mock("react", async (original) => {
+	const real = await original<typeof import("react")>();
+	return {
+		...real,
+		useSyncExternalStore: (subscribe: () => () => void, snapshot: () => number) =>
+			drawing.reading ? snapshot() : real.useSyncExternalStore(subscribe, snapshot),
+		useLayoutEffect: (...args: Parameters<typeof real.useLayoutEffect>) => {
+			if (!drawing.reading) real.useLayoutEffect(...args);
+		},
+		useEffectEvent: (callback: () => void) =>
+			drawing.reading ? callback : real.useEffectEvent(callback),
+	};
+});
+vi.mock("react-dom/client", () => ({
+	createRoot: () => ({render: (node: ReactNode) => (drawing.root = node)}),
+}));
 vi.mock("./pop.tsx", async (original) => {
 	const real = await original<typeof import("./pop.tsx")>();
 	return {
@@ -275,6 +293,7 @@ describe("today's layers: generated key ownership and Escape", () => {
 	it("held letters go through the real page replay handoff before any terminal receives them", async () => {
 		const page = replayPage();
 		try {
+			vi.resetModules();
 			await import("./desk.tsx");
 			expect(page.ready()).toBe(true);
 			fc.assert(
@@ -322,6 +341,196 @@ describe("today's layers: generated key ownership and Escape", () => {
 						}
 					},
 				),
+				options,
+			);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+	// Plant: the current App passes only open.prefix.armed, losing hold.waiting.
+	it.each(["asks", "jobs", "agents", "sync", "host", "palette", "keys", "none"] as const)(
+		"status at the real page binding names a prefix awaiting its host answer beneath %s",
+		async (what) => {
+			const page = replayPage();
+			try {
+				vi.resetModules();
+				await import("./desk.tsx");
+				fc.assert(
+					fc.property(prefix, fc.boolean(), (pref, bare) => {
+						page.reset(pref);
+						if (bare) page.send({type: "show", what: "bars"});
+						if (what !== "none") page.send({type: "show", what});
+						page.press(pref[3]!, true);
+						expect(page.sent.some((msg) => msg.type === "press")).toBe(true);
+						const bound = page.frameProps();
+						expect(
+							text(renderToStaticMarkup(createElement(BottomArea, {...bound, instead: false}))),
+						).toContain("PREFIX");
+						page.clear();
+						page.press("j");
+						expect(page.typed).toEqual([]);
+					}),
+					options,
+				);
+			} finally {
+				vi.unstubAllGlobals();
+			}
+		},
+	);
+	// Plant: a parked host prefix currently paints PREFIX while editor capture takes the keys.
+	it.each(["waiting", "candidate", "saving"] as const)(
+		"status at the real page binding names Keys during editor %s with a parked desk prefix",
+		async (state) => {
+			const page = replayPage();
+			try {
+				vi.resetModules();
+				await import("./desk.tsx");
+				fc.assert(
+					fc.property(
+						prefix,
+						fc.constantFrom("j", "k", "x", "y", "n", " ", "Enter", "ArrowDown", "ArrowUp"),
+						fc.boolean(),
+						(pref, key, bare) => {
+							page.reset(pref);
+							page.send({
+								type: "desk",
+								desk: fold({type: "key", key: defaults.prefix, at: 0}),
+								takes: {all: true, keys: [pref]},
+							});
+							if (bare) page.send({type: "show", what: "bars"});
+							page.send({type: "show", what: "keys"});
+							const edit = page.frameProps().editKeys;
+							if (edit === undefined) throw new Error("App did not bind the Keys editor");
+							edit({type: "select", does: "prefix"});
+							edit({type: "change"});
+							if (state !== "waiting")
+								edit({
+									type: "press",
+									press: {
+										key: "g",
+										code: "KeyG",
+										ctrl: true,
+										alt: false,
+										meta: false,
+										shift: false,
+									},
+								});
+							if (state === "saving") edit({type: "save"});
+							const bound = page.frameProps();
+							expect(bound.keysEditor?.recording._tag).toBe(state);
+							const words = text(
+								renderToStaticMarkup(createElement(BottomArea, {...bound, instead: false})),
+							);
+							expect(words).toContain("KEYS");
+							expect(words).not.toContain("PREFIX");
+							page.clear();
+							page.press(key);
+							expect(page.sent.filter((msg) => msg.type === "press")).toEqual([]);
+						},
+					),
+					options,
+				);
+			} finally {
+				vi.unstubAllGlobals();
+			}
+		},
+	);
+	it("every opening button in both real bars records its known click source", async () => {
+		const page = replayPage();
+		try {
+			vi.resetModules();
+			await import("./desk.tsx");
+			fc.assert(
+				fc.property(fc.nat({max: 1000}), (since) => {
+					page.reset(defaults.prefix);
+					page.send({
+						type: "host",
+						now: {...host, since, agents: [{name: "helper", since, tile: null}]},
+					});
+					page.send({
+						type: "asks",
+						now: {
+							...asks,
+							reach: "failed",
+							why: "fixture",
+							asks: [
+								{
+									key: "7/ask-1",
+									ticket: 7,
+									title: "Fixture",
+									what: "approve plan",
+									kind: "ask",
+									at: since,
+									seen: false,
+								},
+							],
+						},
+					});
+					page.send({
+						type: "desk",
+						desk: {
+							...fold(),
+							jobs: {
+								t1: {running: [{n: 1, text: "counter", since, foreground: true}], ended: null},
+							},
+						},
+						takes: {all: false, keys: [defaults.prefix]},
+					});
+					const buttons: {name: string; onClick: () => void}[] = [];
+					function ReadBars(): ReactNode {
+						const bound = page.frameProps();
+						const walk = (node: ReactNode): void => {
+							if (Array.isArray(node)) {
+								for (const child of node) walk(child);
+								return;
+							}
+							if (
+								!isValidElement<{
+									name?: string;
+									opens?: unknown;
+									onClick?: () => void;
+									children?: ReactNode;
+									job?: unknown;
+									frame?: Frame;
+								}>(node)
+							)
+								return;
+							if (
+								node.props.opens !== undefined &&
+								node.props.name !== undefined &&
+								node.props.onClick !== undefined
+							)
+								buttons.push({name: node.props.name, onClick: node.props.onClick});
+							// The jobs button is drawn by a child component.
+							if (typeof node.type === "function" && node.type.name === "JobWord")
+								walk((node.type as (props: unknown) => ReactNode)(node.props));
+							walk(node.props.children);
+						};
+						walk(TopBar(bound));
+						walk(BottomLine(bound));
+						return null;
+					}
+					renderToStaticMarkup(createElement(ReadBars));
+					expect(buttons.map((button) => button.name).sort()).toEqual([
+						"agents",
+						"asks",
+						"host",
+						"jobs",
+						"keys",
+						"sync",
+					]);
+					for (const button of buttons) {
+						page.send({type: "navigation"});
+						page.clear();
+						button.onClick();
+						const changes = page.sent
+							.filter((msg) => msg.type === "layer")
+							.map((msg) => msg.change);
+						expect(changes, button.name).toContainEqual(
+							expect.objectContaining({_tag: "open", via: {_tag: "click"}}),
+						);
+					}
+				}),
 				options,
 			);
 		} finally {
@@ -394,7 +603,7 @@ const replayPage = () => {
 		activeElement: terminal,
 		body: new PageElement(),
 		querySelector: () => (covered ? box : null),
-		getElementById: () => null,
+		getElementById: (id: string) => (id === "root" ? {} : null),
 		execCommand: (_command: string, _ui: boolean, value: string) => inserted.push(value),
 	};
 	terminal.addEventListener("keydown", (event) => {
@@ -439,7 +648,43 @@ const replayPage = () => {
 			page.activeElement.dispatchEvent(
 				new PageKey("keydown", {key, code: `Key${key.toUpperCase()}`, ctrlKey, cancelable: true}),
 			),
+		reset: (pref: string) => {
+			if (hear === undefined) throw new Error("page did not hear the host");
+			hear({type: "link", now: {kind: "stopped", why: "test reset"}});
+			hear({type: "navigation"});
+			hear({type: "link", now: {kind: "up"}});
+			hear({type: "keys", ...defaults, prefix: pref});
+			hear({type: "desk", desk: fold(), takes: {all: false, keys: [pref]}});
+			// Reset hidden bars through their real frame command.
+			if (binding().frame.bare) hear({type: "show", what: "bars"});
+			covered = false;
+			terminal.focus();
+			sent.length = typed.length = inserted.length = 0;
+		},
+		frameProps: () => binding(),
 	};
+};
+
+const binding = (): FrameProps => {
+	if (!isValidElement<{children: ReactNode}>(drawing.root)) throw new Error("page did not mount");
+	const app = drawing.root.props.children;
+	if (!isValidElement(app) || typeof app.type !== "function")
+		throw new Error("page did not mount App");
+	drawing.reading = true;
+	try {
+		const tree = (app.type as (props: unknown) => ReactNode)(app.props);
+		if (!isValidElement<{children: ReactNode[]}>(tree)) throw new Error("App did not draw");
+		const bottom = tree.props.children.find(
+			(child) =>
+				isValidElement(child) &&
+				typeof child.type === "function" &&
+				child.type.name === "BottomArea",
+		);
+		if (!isValidElement<FrameProps>(bottom)) throw new Error("App did not bind BottomArea");
+		return bottom.props;
+	} finally {
+		drawing.reading = false;
+	}
 };
 
 const fold = (...msgs: DeskMsg[]): Open => {
