@@ -90,14 +90,16 @@ sync API resolves every `next/` project. Calls, returns and function parameters 
 not carry a Promise or a function returning one outside a marked edge line. Type
 declarations, tests, test support files and today's code are left alone. The scanner does not emit code
 or run type diagnostics. `no-promises.test.ts` plants imported aliases, inferred
-returns, generic thunks, object methods and line-local edge comments. The initial
-P12 head scan at `4577f6b0` found 103 lines. Some were false alarms inside wrapped
-statements whose first line had an edge marker. The marker now covers exactly the
-next statement. After that fix, 60 real findings were in P12's files and 27 in
-unchanged files from main. P12's new files reached zero; the 27 inherited findings
-remain. See `field/notes.jsonl`, note `2026-11-08-275`. The check stays out of
-`pnpm lint` until its false alarms are measured on main. Unknown types still need
-the regular typecheck.
+returns, generic thunks, object methods and line-local edge comments. An edge comment
+covers only the next physical line. History: the initial P12 head scan at `4577f6b0`
+found 103 lines. It recorded false alarms inside wrapped statements whose first line
+had an edge marker. A statement-wide exception left 60 real findings in P12's files
+and 27 in unchanged files from main. P12's new files then reached zero. See
+`field/notes.jsonl`, note `2026-11-08-275`. The statement-wide exception was dropped
+because it walked back [no-promises.md](../docs/direction/no-promises.md). The build
+restructured the code to keep each Promise on its marked line. `pnpm lint:promise-types`
+now reports 0 findings on the P12 tree. The check runs in `pnpm lint`. Unknown types
+still need the regular typecheck.
 
 `no-ledger-sql` refuses SQL strings naming the ledger's `entries` or `rings` outside
 its three service files in `next/`. Tests, test support files and today's code are left alone. Its
