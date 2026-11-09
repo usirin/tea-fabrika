@@ -1008,3 +1008,90 @@ describe("T518 Id order and generation", () => {
 		effectOptions,
 	);
 });
+
+describe("T518 shared Id generator", () => {
+	type Schedule = {
+		readonly type: string;
+		readonly entropy: number;
+		readonly batches: ReadonlyArray<{
+			readonly at: number;
+			readonly work: ReadonlyArray<number>;
+		}>;
+	};
+	const checkSchedule = async (schedule: Schedule) => {
+		const Specific = Id.make(schedule.type);
+		const allocated: Array<string> = [];
+		const check = Specific.ast.checks?.find((check) => check._tag === "Filter");
+		if (check === undefined) throw new Error("The Id schema needs its real format check");
+		const validate = check.run;
+		// The real format check runs synchronously after the state write and encoding.
+		// Observe there: a fiber can yield between allocation and returning to its caller.
+		const decoding = vi.spyOn(check, "run").mockImplementation((input, self, options) => {
+			if (typeof input === "string") allocated.push(input);
+			return validate(input, self, options);
+		});
+		const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+			if (array instanceof Uint8Array) array.fill(schedule.entropy);
+			return array;
+		});
+		try {
+			const returned = await Effect.runPromise(
+				Effect.gen(function* () {
+					const generator = yield* Id.Generator;
+					const ids: Array<string> = [];
+					for (const batch of schedule.batches) {
+						yield* TestClock.setTime(batch.at);
+						ids.push(
+							...(yield* Effect.forEach(
+								batch.work,
+								(work) =>
+									Effect.gen(function* () {
+										for (let i = 0; i < work; i++) yield* Effect.sync(() => {});
+										return yield* generator.next(Specific);
+									}),
+								{concurrency: batch.work.length},
+							)),
+						);
+						// A later call must continue the state saved by the concurrent burst.
+						ids.push(yield* generator.next(Specific));
+					}
+					return ids;
+				}).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer())),
+			);
+			expect(allocated).toHaveLength(returned.length);
+			expect([...allocated].sort()).toEqual([...returned].sort());
+			increasing(allocated);
+		} finally {
+			random.mockRestore();
+			decoding.mockRestore();
+		}
+	};
+	it("shared fibers allocate unique, strictly increasing ids over generated schedules", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.record({
+					type: prefix,
+					entropy: fc.oneof(fc.constant(0), fc.integer({min: 0, max: 255})),
+					batches: fc.array(
+						fc.record({
+							// Leave room for logical-clock increments after all-ones entropy.
+							at: fc.integer({min: 0, max: maxClock - 1000}),
+							// Effect 4.1.1's normal scheduler budget is crossed near this range.
+							work: fc.array(fc.integer({min: 2000, max: 2070}), {minLength: 2, maxLength: 8}),
+						}),
+						{minLength: 2, maxLength: 6},
+					),
+				}),
+				checkSchedule,
+			),
+			{...options, numRuns: 40},
+		);
+	});
+	it("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", async () => {
+		await checkSchedule({
+			type: "process",
+			entropy: 0,
+			batches: [{at: 1000, work: [2035, 2035, 2035, 2035]}],
+		});
+	});
+});
