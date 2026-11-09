@@ -3,6 +3,7 @@
 // what runs. `no-secret-env` and `no-redacted-value` are planted in
 // packages/fabrika/src/redacted-lint.test.ts, `no-project-settings` in
 // packages/fabrika/src/agents/claude/rules.test.ts.
+// `no-node-filesystem` and `no-node-imports` plant next/ paths in their own test files.
 import {spawnSync} from "node:child_process";
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {join, relative} from "node:path";
@@ -275,6 +276,7 @@ describe("each rule refuses what it is there to refuse", () => {
 			// Generated ledger-sql.test.ts plants run at next/ paths with the real lint config.
 			"no-ledger-sql",
 			"no-node-filesystem",
+			"no-node-imports",
 		];
 		const missing = Object.keys(plugin.rules).filter(
 			(rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
