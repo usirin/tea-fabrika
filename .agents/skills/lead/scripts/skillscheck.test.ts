@@ -133,9 +133,35 @@ const clauses = [
 		"plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments.",
 	],
 ] as const;
+const slice1bClauses = [
+	["lead", "Scripts", "K6", "leakgrep.sh checks added text; private words stay outside the repo."],
+	["plan", "Scripts", "K6", "leakgrep.sh checks added text; private words stay outside the repo."],
+	[
+		"guidelines",
+		"10. Open a docs-only pull request",
+		"K6",
+		"leakgrep.sh checks added text; private words stay outside the repo.",
+	],
+	...["tests", "build", "mutation"].map(
+		(skill) =>
+			[
+				skill,
+				"Go easy on the machine",
+				"K9",
+				"The test config and typecheck.sh hold worker, home and typecheck limits.",
+			] as const,
+	),
+	[
+		"tests",
+		"Steps",
+		"K20",
+		"For a new property, use `@effect/vitest`'s `it.prop` or `it.effect.prop` with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases.",
+	],
+] as const;
+const allClauses = [...clauses, ...slice1bClauses];
 const skillText = (skill: string, omit = -1, wrap = " ") => {
 	const sections = new Map<string, string[]>();
-	for (const [i, [source, section, , text]] of clauses.entries()) {
+	for (const [i, [source, section, , text]] of allClauses.entries()) {
 		if (source !== skill || i === omit) continue;
 		sections.set(section, [...(sections.get(section) ?? []), text.split(" ").join(wrap)]);
 	}
@@ -144,7 +170,8 @@ const skillText = (skill: string, omit = -1, wrap = " ") => {
 const clauseTree = (f: (dir: string) => void, program = script) => {
 	const dir = mkdtempSync(join(tmpdir(), "clauses-"));
 	try {
-		for (const n of ["lead", "plan", "step-commit"]) {
+		// Every clause source exists, so one table covers both slices (1b review round 2, finding 5).
+		for (const n of new Set(allClauses.map(([skill]) => skill))) {
 			mkdirSync(join(dir, ".agents/skills", n), {recursive: true});
 			mkdirSync(join(dir, ".claude/skills"), {recursive: true});
 			writeFileSync(join(dir, ".agents/skills", n, "SKILL.md"), skillText(n));
@@ -239,5 +266,66 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
 		} finally {
 			rmSync(dir, {recursive: true, force: true});
 		}
+	});
+});
+
+describe("T325 slice 1b required clauses, today's tooling", () => {
+	// No domain Schema for Markdown wrapping. Plants: search the whole file, or demand retired prose.
+	it("accepts wrapping and the named cuts, but refuses each absent or misplaced clause alone", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					width: fc.integer({min: 2, max: 9}),
+					indent: fc.constantFrom("", "  ", "\t"),
+					fenced: fc.boolean(),
+				}),
+				({width, indent, fenced}) => {
+					const dir = mkdtempSync(join(tmpdir(), "clauses-"));
+					try {
+						const sources = join(dir, ".agents/skills"),
+							aliases = join(dir, ".claude/skills");
+						mkdirSync(aliases, {recursive: true});
+						const wrap = (text: string) =>
+							text
+								.split(" ")
+								.map((w, i) => `${i && i % width === 0 ? `\n${indent}` : i ? " " : ""}${w}`)
+								.join("");
+						for (const skill of new Set(allClauses.map(([s]) => s))) {
+							const source = join(sources, skill);
+							mkdirSync(source, {recursive: true});
+							symlinkSync(relative(aliases, source), join(aliases, skill));
+							const sections = new Map<string, string[]>();
+							for (const [s, heading, , clause] of allClauses) {
+								if (s !== skill) continue;
+								sections.set(heading, [...(sections.get(heading) ?? []), wrap(clause)]);
+							}
+							const text = `# ${skill}\n${[...sections].map(([heading, texts]) => `${heading ? `## ${heading}\n` : ""}${texts.join("\n\n")}`).join("\n\n")}\n`;
+							writeFileSync(join(source, "SKILL.md"), text);
+						}
+						const run = () => spawnSync("sh", [script, dir], {encoding: "utf8", timeout: 5_000});
+						expect(run().status).toBe(0);
+						for (const [skill, heading, , clause] of slice1bClauses) {
+							const file = join(sources, skill, "SKILL.md"),
+								text = readFileSync(file, "utf8");
+							writeFileSync(file, text.replace(wrap(clause), ""));
+							const absent = run();
+							expect(absent.status).toBe(1);
+							expect(absent.stderr).toContain(`${skill}/SKILL.md:`);
+							expect(absent.stderr).toContain(heading);
+							writeFileSync(
+								file,
+								`${text.replace(wrap(clause), "")}\n## Other\n${fenced ? `\`\`\`md\n${wrap(clause)}\n\`\`\`` : wrap(clause)}\n`,
+							);
+							expect(run().status).toBe(1);
+							writeFileSync(file, text);
+							expect(run().status).toBe(0);
+						}
+					} finally {
+						rmSync(dir, {recursive: true, force: true});
+					}
+				},
+			),
+			{seed: 325, numRuns: 4},
+		);
 	});
 });

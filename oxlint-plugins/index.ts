@@ -26,6 +26,7 @@ import {noTypeAssertions} from "./no-type-assertions.ts";
 import {oneIdModule} from "./one-id-module.ts";
 import {oneStoreHook} from "./one-store-hook.ts";
 import {outsideInputConstructor} from "./outside-input-constructor.ts";
+import {preferSchemaArbitrary} from "./prefer-schema-arbitrary.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
@@ -56,6 +57,7 @@ const plugin: Plugin = {
 		"one-store-hook": oneStoreHook,
 		"one-id-module": oneIdModule,
 		"outside-input-constructor": outsideInputConstructor,
+		"prefer-schema-arbitrary": preferSchemaArbitrary,
 		"use-import-extensions": useImportExtensions,
 	},
 };

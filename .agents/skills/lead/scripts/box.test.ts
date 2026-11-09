@@ -84,11 +84,12 @@ if (cmd === "codex") {
   for (const [name,value] of Object.entries(process.env)) {
     if (/TOKEN|SECRET|KEY|PASSWORD|_AUTH|^NPM_CONFIG_/i.test(name) && !/^NPM_CONFIG_(USERCONFIG|GLOBALCONFIG)$/i.test(name) && value) envLeaks++;
   }
-  // Ask the real local npm about all config layers, capturing its output without printing it.
-  const config = run("npm",["config","list","--json"]);
-  if(config.status!==0) { console.error("fixture could not read its fake npm config"); process.exit(96); }
-  const settings=JSON.parse(config.stdout);
-  const authLeaks=Object.entries(settings).filter(([key,value])=>/_auth|password|token/i.test(key)&&value!=null&&value!=="").length;
+  // Read only the fixture's user, global and project layers; no npm binary is needed.
+  const userConfig=process.env.NPM_CONFIG_USERCONFIG;
+  if(!userConfig || !fs.existsSync(userConfig) || fs.readFileSync(userConfig,"utf8")!=="") { console.error("fixture requires an empty user config"); process.exit(96); }
+  const layers=[userConfig,process.env.NPM_CONFIG_GLOBALCONFIG || path.join(dir,"global.npmrc"),path.join(process.cwd(),".npmrc")];
+  const settings=layers.filter(file=>fs.existsSync(file)).flatMap(file=>fs.readFileSync(file,"utf8").split(/\r?\n/)).map(line=>line.match(/^\s*([^#;\s][^=]*)=(.*)$/)).filter(Boolean);
+  const authLeaks=settings.filter(([,key,value])=>/_auth|password|token/i.test(key)&&value.trim()!=="").length;
   const observation = {envLeaks,authLeaks,home:process.env.HOME,path:process.env.PATH};
   fs.writeFileSync(path.join(dir,"observed.json"),JSON.stringify(observation));
   for (const batch of setup.batches || (setup.operations || []).map(op=>[op])) {

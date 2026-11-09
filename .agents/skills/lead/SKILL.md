@@ -20,8 +20,6 @@ A step's brief is short. It names the skill and the ticket's facts, and nothing 
 ```text
 Use the build skill for ticket 277, door fixes, next/. Plan at ../door-PLAN.md.
 Laws d1 to d3 are red. This round: make them green in door.ts, answer.ts and hello.ts.
-Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
-and starts no build.
 ```
 
 A brief never prints npm, pnpm or environment settings (owner, 2026-11-08), not even to show a
@@ -37,8 +35,6 @@ Children: <ticket, branch and signed parent head for each child>, or none. Recor
 Start a child at its parent's signed build head. Keep the child's tests through catch-up.
 Land the stack with `gh stack merge <pr> --squash`, then `gh stack sync --prune`.
 Return plans unsigned, including reviews and revisions. Only the lead session approves them.
-Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
-and starts no build.
 ```
 
 ## Who runs which step
@@ -88,16 +84,10 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
 
-`box.sh run` names the box's `.agents/` as its own writable root because Codex otherwise keeps
-that folder read-only inside the writable checkout.
-
 box.sh run and runplan.sh strip secret settings and redact saved output.
 fetch --sign checks owners and signs missing notes in MAIN.
 Review and mutation briefs say never to print npm, pnpm or env settings.
-
-Catch-up retries read-only `gh` failures three times, waiting 1 and 2 seconds. A successful red or
-untrusted answer stops immediately. Logs are captured before parsing, so a failed read cannot
-look green. Pushes and merges are never retried by that helper.
+leakgrep.sh checks added text; private words stay outside the repo.
 
 ## Use drive.ts for any step
 
@@ -187,24 +177,14 @@ visible, and never weaken the rules to hide this message.
    steps, what ran each one, and the dollars.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
    `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep. An exam
-   change that is all proper property tests merges without the owner's read (owner, 2026-11-08):
-   every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or
-   `scenario:` with its reason; mutation shows no law got narrower; and nothing loosens. You check
-   that and say so in the PR. A change that loosens or removes a law still stays
-   `ask owner exam_read`; never write "owner read" unless the owner did, and give each such merge
-   a field note. Then run `catchup.sh` in the background: it brings the PR up to
+   change that is all proper property tests merges without the owner's read (owner, 2026-11-08); one
+   that loosens or removes a law stays `ask owner exam_read`. Never write "owner read" unless the
+   owner did, and give each such merge a field note. Then run `catchup.sh` in the background: it brings the PR up to
    date, signs only the new merge as `lead`, waits for every check on that exact head (e2e and
-   commits included) and squash-lands it pinned to that head; a PR in a gh stack lands with
-   `gh stack merge <pr> --squash --yes` once its head reads unchanged. Every PR squash-merges, a stacked
-   parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
-   GitHub stack ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)):
-   `gh stack init <bottom> ... <top>` adopts the branches, `gh stack submit` opens the PRs,
-   `gh stack merge <pr> --squash` lands bottom-up, and `gh stack sync --prune` rebases the rest
-   onto main and pushes. Rebase by hand only locally (`gh stack rebase`, then `gh stack push`),
-   never with the web "Rebase stack" button: it makes unsigned commits. The child's trees stay the
-   same, so its links hold; if a tree changed, that child's steps sign again. A child keeps its own
-   tests. It never signs a step's commit: an
-   unsigned one goes back to its own step.
+   commits included) and squash-lands it pinned to that head. Every PR squash-merges, a stacked
+   parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)): a stacked PR
+   lands with `gh stack merge <pr> --squash --yes`, and `gh stack sync --prune` moves the rest onto
+   main. Never the web "Rebase stack" button: it makes unsigned commits. A child keeps its own tests.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
     `MergeRow`, then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the
     main checkout, plus any build the app needs to start. The owner runs the app from there and
@@ -258,28 +238,17 @@ The lead owns the count of decisions still missing from the repo. Its status giv
 the open docs PRs carrying them. The owner does not keep the list. Code cannot count decisions
 nobody recorded.
 
-## The leak grep
-
-Before every push and every merge, grep the added lines (`git diff origin/main | grep '^+'`) for
-personal and account names, machine paths (a home folder, a temp folder), key prefixes and em
-dashes. Keep the list of names out of the repo: it is the lead's own. Only the repo's own name in a
-GitHub URL may match. The leak check script fails closed (owner, 2026-11-08): any hit stops the
-push or merge, and the lead checks it by hand. A hit is never waved through by the script.
+The leak check fails closed (owner, 2026-11-08): any hit stops the push or merge for the lead's
+hand check.
 
 ## Go easy on the machine
 
-- One `pnpm typecheck` at a time across all agents: wait while
-  `pgrep -x tsgo` finds one.
 - One Electron test app and one Docker box at a time. Every wait or poll loop runs in the background.
-- Every brief carries the caps the step's skill names. A Codex box blocks `nice` and `pgrep`, so
-  `box.sh` runs Codex itself under `nice -n 15`.
 
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase, force-push or `gh pr update-branch`. Catch up by merging `main` in. The one exception is
-  a stacked child, moved with the `gh stack` commands (0004).
-- Merge a live run by hand, approve a pull request, or answer a question the machine put to a person.
+- Rebase, force-push or `gh pr update-branch`, except a stacked child moved with `gh stack` (0004).
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 
 ## When a run teaches something

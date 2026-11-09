@@ -1,6 +1,6 @@
 // `pnpm lint`'s first step: oxlint, with one difference. Oxlint has two levels, warn and error, and
 // this repo needs a third: printed, and never failing. So oxlint reports everything as JSON here,
-// and this prints all of it and fails on all of it but the two advice rules.
+// and this prints all of it and fails on all of it but the advice rules.
 //
 // Why one run and not two: an `oxlint-disable` that names a rule turned off counts as unused. A
 // second run for the advice rules would turn their own disable comments into failures of the first.
@@ -8,7 +8,11 @@ import {spawnSync} from "node:child_process";
 import {join} from "node:path";
 import {checkTracked} from "./gitignore.mjs";
 
-const ADVICE = new Set(["fabrika(no-effect-promise)", "fabrika(no-raw-try-catch)"]);
+const ADVICE = new Set([
+	"fabrika(no-effect-promise)",
+	"fabrika(no-raw-try-catch)",
+	"fabrika(prefer-schema-arbitrary)",
+]);
 
 interface Diagnostic {
 	readonly code?: string;
