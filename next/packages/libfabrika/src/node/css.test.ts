@@ -2,10 +2,10 @@
 import {mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {dirname, join, resolve} from "node:path";
 import {NodeServices} from "@effect/platform-node";
-import {Effect} from "effect";
+import {Effect, Tracer} from "effect";
 import * as fc from "fast-check";
 import {bundle, bundleAsync, type Rule, transform} from "lightningcss";
-import {afterEach, describe, expect, it} from "vitest";
+import {afterEach, describe, expect, it, vi} from "vitest";
 import {build} from "../build.ts";
 import {inlineStylesheet} from "./css.ts";
 
@@ -152,6 +152,49 @@ afterEach(() => {
 });
 
 describe("P16 CSS tokens", () => {
+	it("CSS refusals keep their exact reason and named span in root and imported files", async () => {
+		vi.resetModules();
+		const {inlineStylesheet: read} = await import("./css.ts");
+		await fc.assert(
+			fc.asyncProperty(
+				ids,
+				fc.boolean(),
+				fc.constantFrom("file", "layer", "supports", "missing"),
+				async (id, nested, kind) => {
+					const f = fixture(id),
+						spans: Tracer.Span[] = [],
+						tracer = Tracer.make({
+							span(options) {
+								const span = new Tracer.NativeSpan(options);
+								spans.push(span);
+								return span;
+							},
+						}),
+						css =
+							kind === "file"
+								? `.root${id} { background: url(./image${id}.png); }`
+								: kind === "missing"
+									? `@import "./stylesheet ${id}:missing.css";`
+									: `@import "child${id}.css" ${kind === "layer" ? "layer(theme)" : "supports(display: grid)"};`,
+						reason =
+							kind === "file"
+								? "stylesheet references a file"
+								: kind === "missing"
+									? expect.stringMatching(/^stylesheet has a broken @import:/)
+									: "unsupported @import condition";
+					if (nested) writeFileSync(join(f.home, `child${id}.css`), css);
+					const file = join(f.home, "root.css");
+					writeFileSync(file, nested ? `@import "child${id}.css";` : css);
+					expect(await failure(read(file).pipe(Effect.withTracer(tracer)))).toMatchObject({
+						message: reason,
+					});
+					expect(spans.map((span) => span.name)).toContain("build.css");
+					expect(spans.find((span) => span.name === "build.css")?.status._tag).toBe("Ended");
+				},
+			),
+			runs,
+		);
+	});
 	// First layer appearance and source order decide the cascade, including imported sheets.
 	// https://www.w3.org/TR/css-cascade-5/#layer-order
 	// https://www.w3.org/TR/css-cascade-5/#at-import
