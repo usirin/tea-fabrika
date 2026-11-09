@@ -22,6 +22,10 @@ describe("P23 native-only links and app wiring", () => {
 			'import {BrowserLink} from "./index.ts";',
 		"next/packages/libfabrika/src/server/pages.ts":
 			'export const route = (path) => path === "/" ? "browser" : null;',
+		"next/packages/libfabrika/src/electron/main.ts":
+			'import {BrowserLink} from "../desktop/browser-link.ts"; export const layer = BrowserLink.layer(origin);',
+		"next/packages/libfabrika/src/desktop/menu-cmds.ts":
+			'import {BrowserLink} from "./browser-link.ts"; export const opened = (link, id) => link.open(id);',
 	};
 	const result = plant(files);
 	it("plants renderer minting, routing, Schema, reducers and folds", () => {

@@ -9,6 +9,11 @@ export const wiringOnly: CreateRule = {
 		if (!path.startsWith("next/") || /\.(?:test|test-support)\.tsx?$/.test(path)) return {};
 		const app = path.startsWith("next/apps/fabrika/src/") && !path.includes("/exam/");
 		const native = path === "next/packages/libfabrika/src/electron/menu.ts";
+		const linkService = [
+			"next/packages/libfabrika/src/desktop/browser-link.ts",
+			"next/packages/libfabrika/src/desktop/menu-cmds.ts",
+			"next/packages/libfabrika/src/electron/main.ts",
+		].includes(path);
 		const report = (node: Node) =>
 			context.report({
 				node,
@@ -21,9 +26,10 @@ export const wiringOnly: CreateRule = {
 					const name =
 						spec.imported.type === "Identifier" ? spec.imported.name : spec.imported.value;
 					if (
-						(name === "openBrowserLink" || name === "BrowserLink") &&
 						!native &&
-						path !== "next/packages/libfabrika/src/desktop/browser-link.ts"
+						((name === "openBrowserLink" &&
+							path !== "next/packages/libfabrika/src/desktop/browser-link.ts") ||
+							(name === "BrowserLink" && !linkService))
 					)
 						context.report({
 							node: spec,
