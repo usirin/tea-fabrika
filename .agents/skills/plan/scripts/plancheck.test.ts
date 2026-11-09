@@ -171,7 +171,8 @@ describe("plancheck, today's tooling", () => {
 		);
 	});
 
-	// Plant: classify every basename as root, or ignore a root files row.
+	// Plant: classify every basename as root, or ignore a root files row. Amendment A8: a sentence in a
+	// path cell that names a root exam file counts; the same words in prose or another column do not.
 	it("root exam paths retain owners without treating mentions as files", () => {
 		fc.assert(
 			fc.property(
@@ -195,6 +196,7 @@ describe("plancheck, today's tooling", () => {
 						"./package.json",
 						"vitest.config.ts",
 						"./exam-paths.json",
+						"edit package.json after install",
 					].includes(path);
 					const body = `A bare \`${mention}\` mention is prose.\n\n${table(["File", "Why", "Owner step"], [[`\`${path}\``, `mentions ${mention}`, owner]])}`;
 					const got = check(body);
@@ -207,14 +209,19 @@ describe("plancheck, today's tooling", () => {
 				// pinned: ticket 520's bare package.json mention is not a root files row.
 				examples: [
 					[{path: "packages/pipeline/package.json", owner: "build", mention: "package.json"}],
+					// pinned: ticket 520 amendment A8, a sentence in a path cell that names a root exam file
+					// counts. ebb2cca5 read it as prose and passed this build-owned row.
+					[{path: "edit package.json after install", owner: "build", mention: "package.json"}],
 				],
 			},
 		);
 	});
 
-	// Plant: split a path cell on commas only, as the build did after bfd35fb0; or read a several-word
-	// item as paths only when every word has a "." or "/", as the build did at 7010d22a.
-	it("every exam path in a multi-path cell keeps its owner check", () => {
+	// Plant: split a path cell on commas only, as the build did after bfd35fb0; drop a several-word item
+	// with a bare non-exam name as a sentence, as ebb2cca5 does; or ignore the possessive qualifier.
+	// Amendment A8: every exam path in a path cell counts, whatever words surround it, unless the cell
+	// names another package with a possessive (`<name>'s`); then only qualified paths (with a "/") count.
+	it("every exam path in a path cell counts unless a possessive names another package", () => {
 		// Extensionless exam paths come from the exam list itself: every glob with no "." and no "/".
 		const globs = (
 			JSON.parse(
@@ -236,53 +243,57 @@ describe("plancheck, today's tooling", () => {
 		const plainPaths = [
 			"src/plain.ts",
 			"README.md",
+			"tsconfig.json",
 			"packages/pipeline/package.json",
 			"Makefile",
 			"LICENSE",
 		];
+		// Generated plain words cannot be an exam path: no ".", "/", "_" or "'".
+		const term = fc.oneof(fc.constantFrom(...exam, ...plainPaths), word);
 		fc.assert(
 			fc.property(
 				fc.record({
-					picked: fc.uniqueArray(
-						fc.record({path: fc.constantFrom(...exam, ...plainPaths), tick: fc.boolean()}),
-						{minLength: 1, maxLength: 4, selector: (entry) => entry.path},
-					),
-					separators: fc.array(fc.constantFrom(", ", ",", "; ", ";", " and ", " ", ", and "), {
-						minLength: 3,
-						maxLength: 3,
+					picked: fc.uniqueArray(fc.record({path: term, tick: fc.boolean()}), {
+						minLength: 1,
+						maxLength: 5,
+						selector: (entry) => entry.path,
 					}),
+					separators: fc.array(
+						fc.constantFrom(", ", ",", "; ", ";", " and ", " ", ", and ", "<br>", " for the "),
+						{minLength: 4, maxLength: 4},
+					),
 					owner: fc.constantFrom("tests", "build", "lead", "mutation"),
+					// Another package's possessive, put before one of the words, as in "Counter's package.json".
+					possessive: fc.option(
+						fc.record({name: word, capital: fc.boolean(), at: fc.nat({max: 4})}),
+						{nil: undefined},
+					),
+					why: fc.constantFrom(
+						"the fix",
+						"edit package.json",
+						"`vitest.config.ts` and allowed_signers",
+					),
 				}),
-				({picked, separators, owner}) => {
-					const cell = picked
-						.map(({path, tick}) => (tick ? `\`${path}\`` : path))
-						.reduce((joined, p, i) => `${joined}${separators[i - 1]}${p}`);
-					// Items are split by commas and semicolons. An item of several words that holds a bare,
-					// unticked name with no "." or "/" that is not an exam path may be read as a sentence, so
-					// its exam paths may go either way. Every other exam path must be checked.
-					const items: (typeof picked)[] = [];
-					picked.forEach((entry, i) => {
-						if (i === 0 || /[,;]/.test(separators[i - 1]!)) items.push([entry]);
-						else items.at(-1)!.push(entry);
-					});
-					const loose = (item: typeof picked) =>
-						item.length > 1 &&
-						item.some((e) => !e.tick && !/[./]/.test(e.path) && !exam.includes(e.path));
-					const sure = items.filter((item) => !loose(item)).flat();
-					const maybe = items.filter(loose).flat();
+				({picked, separators, owner, possessive, why}) => {
+					const words = picked.map(({path, tick}) => (tick ? `\`${path}\`` : path));
+					if (possessive) {
+						const name = possessive.capital
+							? possessive.name[0]!.toUpperCase() + possessive.name.slice(1)
+							: possessive.name;
+						const at = possessive.at % words.length;
+						words[at] = `${name}'s ${words[at]}`;
+					}
+					const cell = words.reduce((joined, p, i) => `${joined}${separators[i - 1]}${p}`);
+					const counted = picked
+						.map((e) => e.path)
+						.filter((p) => exam.includes(p) && (!possessive || p.includes("/")));
 					const wrong = owner !== "tests";
-					const owned = sure.filter((e) => exam.includes(e.path)).map((e) => e.path);
-					const open = maybe.filter((e) => exam.includes(e.path)).map((e) => e.path);
 					const line = (p: string) => `${p} is an exam path owned by ${owner}, not tests`;
-					const ran = check(table(["File", "Why", "Owner step"], [[cell, "the fix", owner]]));
-					// The answers the rule allows: a sure exam path decides, an open one may go either way.
-					const codes = wrong && owned.length > 0 ? [1] : wrong && open.length > 0 ? [0, 1] : [0];
-					expect(codes, `${cell}\n${ran.text}`).toContain(ran.code);
+					const ran = check(table(["File", "Why", "Owner step"], [[cell, why, owner]]));
+					expect(ran.code, `${cell}\n${ran.text}`).toBe(wrong && counted.length > 0 ? 1 : 0);
 					for (const {path} of picked) {
-						const named =
-							wrong && open.includes(path) ? [true, false] : [wrong && owned.includes(path)];
-						expect(named, `${path} in ${cell}\n${ran.text}`).toContain(
-							ran.text.includes(line(path)),
+						expect(ran.text.includes(line(path)), `${path} in ${cell}\n${ran.text}`).toBe(
+							wrong && counted.includes(path),
 						);
 					}
 				},
@@ -298,8 +309,10 @@ describe("plancheck, today's tooling", () => {
 								{path: "package.json", tick: true},
 								{path: "vitest.config.ts", tick: true},
 							],
-							separators: ["; ", "; ", "; "],
+							separators: ["; ", "; ", "; ", "; "],
 							owner: "build",
+							possessive: undefined,
+							why: "the fix",
 						},
 					],
 					// pinned: ticket 520 review round 2 of the build, an extensionless exam path in an "and"
@@ -310,13 +323,49 @@ describe("plancheck, today's tooling", () => {
 								{path: "allowed_signers", tick: true},
 								{path: "package.json", tick: true},
 							],
-							separators: [" and ", " and ", " and "],
+							separators: [" and ", " and ", " and ", " and "],
 							owner: "build",
+							possessive: undefined,
+							why: "the fix",
+						},
+					],
+					// pinned: ticket 520 review round 3, `Makefile and package.json` owned by build passed
+					// at ebb2cca5 because the bare Makefile made the item read as a sentence.
+					[
+						{
+							picked: [
+								{path: "Makefile", tick: false},
+								{path: "package.json", tick: false},
+							],
+							separators: [" and ", " and ", " and ", " and "],
+							owner: "build",
+							possessive: undefined,
+							why: "build",
 						},
 					],
 				],
 			},
 		);
+	});
+
+	// pinned: ticket 520. Review round 3's cell must fail; the original false alarm, two rows from an
+	// old plan whose package.json is another package's own, must pass (amendment A8).
+	it("pinned: ticket 520's real path cells", () => {
+		const head = "| File | Why | Lines | Owner step |\n| --- | --- | --- | --- |";
+		const makefile = check(
+			"| File | Lines | Owner step |\n| --- | --- | --- |\n| Makefile and package.json | 20 | build |",
+		);
+		expect(makefile.code, makefile.text).toBe(1);
+		expect(makefile.text).toContain("package.json is an exam path owned by build, not tests");
+		const old = check(
+			[
+				head,
+				"| Counter's `src/program.ts`, `tsconfig.json`, `package.json` | Complete pure counter package | 100 | build |",
+				"| Libfabrika's `package.json`, `pnpm-lock.yaml` | `.` and `./testing`, tea dependency | 20 | build |",
+			].join("\n"),
+		);
+		expect(old.code, old.text).toBe(0);
+		expect(old.text).not.toContain("is an exam path owned by");
 	});
 
 	// Plant: return early for legacy plans, skipping the owner check too.
