@@ -395,6 +395,12 @@ const main = Effect.gen(function* () {
 		[...windows.values()].find((w) => w.key === key);
 	/** The window that asked for each project still opening: welcome becomes it. */
 	const askedFrom = new Map<string, string>();
+	/**
+	 * Projects whose opening the old desk's move refused. The machine learns of it by a message
+	 * that lands after this opening's `open_window` already reads the model, so the window must
+	 * not depend on the model for that: a refused opening makes no window.
+	 */
+	const refusedOpening = new Set<string>();
 	/** The opening a refused move waits on, for Try Again. */
 	let retryable: {readonly project: Project; readonly source: Source} | null = null;
 	/** The projects machine's model, as it last changed. */
@@ -775,7 +781,8 @@ const main = Effect.gen(function* () {
 		interpret: {
 			// The old desk moves first; the window's link reaches or starts the host itself.
 			start_host: (c) =>
-				moveOldDesk(c.project).pipe(
+				Effect.sync(() => refusedOpening.delete(c.project.key)).pipe(
+					Effect.andThen(moveOldDesk(c.project)),
 					Effect.as(null),
 					Effect.catch((e) =>
 						Effect.sync(() => {
@@ -783,6 +790,7 @@ const main = Effect.gen(function* () {
 							const from = windows.get(askedFrom.get(c.project.key) ?? "");
 							askedFrom.delete(c.project.key);
 							retryable = {project: c.project, source: "welcome"};
+							refusedOpening.add(c.project.key);
 							dispatch({type: "open_failed", key: c.project.key, why});
 							if (from !== undefined) refuse(from, {_tag: "migration", why});
 							return null;
@@ -793,7 +801,7 @@ const main = Effect.gen(function* () {
 			open_window: (c) =>
 				Effect.sync(() => {
 					// A refused move already failed this opening: nothing to show.
-					if (model?.projects[c.key]?.opening == null) return null;
+					if (refusedOpening.delete(c.key) || model?.projects[c.key]?.opening == null) return null;
 					const from = windows.get(askedFrom.get(c.key) ?? "");
 					askedFrom.delete(c.key);
 					const win = from !== undefined && from.key === null ? from : newWindow();
