@@ -504,9 +504,15 @@ describe("T285, coordination tracing keep-laws", () => {
 								);
 								expect(Exit.isFailure(exit)).toBe(true);
 								const spans = c.spans.slice(before);
-								expect(spans.map((s) => s.name)).toEqual(["test.request", "process.next"]);
+								expect(spans.map((s) => s.name)).toEqual([
+									"test.request",
+									"process.next",
+									"id.next",
+								]);
 								ended(spans[1]!, false);
 								child(spans[1]!, spans[0]!);
+								ended(spans[2]!, false);
+								child(spans[2]!, spans[1]!);
 							}).pipe(
 								Effect.withParentSpan(Tracer.externalSpan(ctx)),
 								Effect.withTracer(c.tracer),
@@ -900,7 +906,12 @@ const runnerWorld = (
 	const input = (n: number, m: unknown) =>
 		decodeIncoming({
 			id: `letter-${n}`,
-			envelope: {id: `in-${PROCESS}-${n}`, by: owner, arrivedAt: n, input: m},
+			envelope: {
+				id: `input_0000000000e008${n.toString(16).padStart(12, "0")}`,
+				by: owner,
+				arrivedAt: n,
+				input: m,
+			},
 			sentAt: "2026-11-08T00:00:00.000Z",
 			seen: 0,
 			span: signer,
