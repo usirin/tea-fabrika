@@ -2843,6 +2843,7 @@ main.program:has(> .view) {
    the whole width of the bar (WCAG 2.4.7). A 1px gray line was too faint to find. Still a line under
    the bar, never a box around it; each control inside draws its own ring (`.view :focus-visible`). */
 .ask-view:focus-visible {
+	border-radius: var(--r-lg);
 	outline: none;
 }
 .ask-view:focus-visible::after {
@@ -2855,17 +2856,17 @@ main.program:has(> .view) {
 	overflow-wrap: anywhere;
 }
 
-/* Line one: whose turn and the question, then the four actions; they wrap under it when narrow. */
+/* Line one: whose turn and the question. The actions sit on the line under it, at the content's
+   left edge, on every layout: never pushed to the far right of a wide tile, as a ticket column
+   reads top to bottom. */
 .ask-line {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	justify-content: space-between;
-	gap: var(--s-2) var(--s-4);
+	display: grid;
+	justify-items: start;
+	gap: var(--s-2);
+	min-inline-size: 0;
 }
 .ask-question {
 	display: flex;
-	flex: 1 1 240px;
 	flex-wrap: wrap;
 	align-items: baseline;
 	gap: 0 var(--s-2);
@@ -2898,17 +2899,19 @@ main.program:has(> .view) {
 .ask-quiet {
 	color: var(--text-faint);
 }
-/* Line three: the rec's reason, and the evidence's one quiet button at its end. */
+/* Line three: the rec's reason, then the evidence's one quiet button right after it. A reason that
+   wraps fills the line, so the button drops under it at the reason's left edge, never to the right
+   of a wrapped reason. */
 .ask-why {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	justify-content: space-between;
 	gap: var(--s-1) var(--s-3);
 	font-size: var(--fs-small);
 }
 .ask-why > p {
-	flex: 1 1 200px;
+	flex: 0 1 auto;
+	min-inline-size: 0;
 }
 .ask-toolbar,
 .ask-marks,
@@ -2918,11 +2921,28 @@ main.program:has(> .view) {
 	align-items: center;
 	gap: var(--s-1);
 }
-/* Narrow, the marks drop under the rec's words as one unit, at the start: their question and both
-   buttons stay on one line, never one button to a line. */
-.ask-marks {
-	flex: none;
+/* The actions keep one line: no button ever sits alone on a line. Narrow, their key chips go first
+   (below), then a long label wraps inside its own button. */
+.ask-toolbar {
 	flex-wrap: nowrap;
+	max-inline-size: 100%;
+}
+@container main (max-width: 480px) {
+	.ask-toolbar [data-scope="kbd"] {
+		display: none;
+	}
+}
+/* Narrow, the marks drop under the rec's words, at the start. Narrower still, the pair drops under
+   its question, both buttons together: never one button to a line. */
+.ask-marks {
+	min-inline-size: 0;
+	gap: var(--s-1) var(--s-2);
+}
+.ask-mark-pair {
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: var(--s-3);
 	white-space: nowrap;
 }
 .ask-view button {
@@ -2935,12 +2955,20 @@ main.program:has(> .view) {
 	color: inherit;
 }
 
+/* The bar's quiet buttons (the marks, Evidence) read as words: no side padding, so a line that
+   starts with one starts at the same edge as the words above it. */
+.ask-why [data-variant="tertiary"],
+.ask-marks [data-variant="tertiary"] {
+	padding-inline: 0;
+}
 /* The marks are quiet: small words, and a pressed one takes the selected fill and its check. */
 .ask-marks [data-scope="button"] {
 	color: var(--text-faint);
 }
 .ask-marks [aria-pressed="true"] {
 	background: var(--surface-selected);
+	/* The fill reaches past the words as padding would, and the words keep their edge. */
+	box-shadow: 0 0 0 var(--s-1) var(--surface-selected);
 	color: var(--text-primary);
 }
 /* A pressed mark says so with a check beside its words, not only with its fill. */

@@ -817,22 +817,25 @@ export function AskView({
 					<span className="ask-quiet" aria-hidden="true">
 						Did this need you?
 					</span>
-					{MARKS.map(([needed, label]) => {
-						const pressed = view.needed === needed;
-						return (
-							<Button
-								key={String(needed)}
-								size="sm"
-								variant="tertiary"
-								aria-pressed={pressed}
-								disabled={view.busy}
-								onClick={() => send({type: "mark", needed})}
-							>
-								{pressed && ON}
-								{label}
-							</Button>
-						);
-					})}
+					{/* The two marks stay together: narrow, they drop under their question as one pair. */}
+					<span className="ask-mark-pair">
+						{MARKS.map(([needed, label]) => {
+							const pressed = view.needed === needed;
+							return (
+								<Button
+									key={String(needed)}
+									size="sm"
+									variant="tertiary"
+									aria-pressed={pressed}
+									disabled={view.busy}
+									onClick={() => send({type: "mark", needed})}
+								>
+									{pressed && ON}
+									{label}
+								</Button>
+							);
+						})}
+					</span>
 				</div>
 			</div>
 			<div className="ask-why">
