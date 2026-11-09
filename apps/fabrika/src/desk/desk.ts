@@ -346,7 +346,7 @@ export const takenNow = (s: Desk, now: number): Takes => {
 	if (s.ask !== null || armed) return {all: true, keys: []};
 	const keys = inUse(s);
 	const alone = keys.rows.flatMap((row) =>
-		row.does === "palette.open" ? [] : row.keys.flatMap((k) => (k._tag === "alone" ? [k.key] : [])),
+		PAGE_OWN.has(row.does) ? [] : row.keys.flatMap((k) => (k._tag === "alone" ? [k.key] : [])),
 	);
 	const asked = [...new Set([keys.prefix, "<c-c>", ...alone])];
 	return {all: false, keys: asked.filter((key) => claims(s, key, now))};
@@ -354,6 +354,9 @@ export const takenNow = (s: Desk, now: number): Takes => {
 
 /** The table in use: the keys file's, or the defaults. */
 const inUse = (s: Open): Keys => s.keys ?? defaults;
+
+/** The commands the page runs itself, never the desk: the palette and the projects box. */
+const PAGE_OWN: ReadonlySet<Command> = new Set(["palette.open", "projects.open"]);
 
 /**
  * The desk as a page draws it (`DeskSchema`): without its table, which the page is sent on its
@@ -520,9 +523,11 @@ const folded = (s: Open, ws: Workspace, tile: TileId): Step => {
 /** Open a folded tile, or every tile of a folded container, and focus its first tile. */
 const unfolded = (s: Open, node: NodeId): Step => {
 	const ws = activeOf(s);
-	const layout = unfold(ws.layout, node);
-	const first = findChildTile(layout, node, "start");
-	if (layout === ws.layout || first === null) return [s, []];
+	const opened = unfold(ws.layout, node);
+	const first = findChildTile(opened, node, "start");
+	if (opened === ws.layout || first === null) return [s, []];
+	// Focus moves to the opened tile: a zoom on another tile goes, as when focus moves out of one.
+	const layout = opened.zoomed === null || opened.zoomed === first.id ? opened : unzoom(opened);
 	const next = {...withWorkspace(s, {...ws, layout, focused: first.id}), ask: null};
 	return [next, keep(next)];
 };
@@ -781,11 +786,17 @@ const byteOf = (prefix: string): string | null => {
  */
 const boundOn = (keys: Keys, key: Key) => {
 	const does = commandOn(keys, key);
-	if (does === "palette.open" && key._tag === "after_prefix")
+	if ((does === "palette.open" || does === "projects.open") && key._tag === "after_prefix")
 		return {
 			does,
 			key,
-			binding: {does: {kind: "show" as const, what: "palette" as const}, repeats: false},
+			binding: {
+				does: {
+					kind: "show" as const,
+					what: does === "palette.open" ? ("palette" as const) : ("projects" as const),
+				},
+				repeats: false,
+			},
 		};
 	const binding = does === undefined ? undefined : bindingFor(does);
 	return does === undefined || binding === undefined ? null : {does, key, binding};

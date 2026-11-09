@@ -8,6 +8,7 @@ import {bindingFor, defaults, type Does, type File, type Key, type Keys} from ".
 import {type Group, groupOf, type Show, wordOf} from "../desk/keys.ts";
 import type {TileId, TileNode} from "../desk/layout/index.ts";
 import type {HostNow, LedgerLink, LinkNow, ToWindow} from "../messages.ts";
+import type {ProjectRow} from "../projects.ts";
 import type {JobEnded, TileJobs} from "../tile-jobs.ts";
 import {
 	type Cap,
@@ -700,6 +701,8 @@ const SAID = {
 	host: "host: the process that runs every tile and job. Down, nothing new runs, and the tiles keep their last state. A click says more, and what to do.",
 	again:
 		"try again: the app stopped reaching for the host after five minutes. A click starts it reaching again.",
+	project:
+		"the project this window shows. A click opens the projects box, to switch to another project or open a folder.",
 	drag: "an empty stretch to move the window by. A double-click zooms the window, as macOS does.",
 	here: "the tile you are in: what it takes in, what it sends out, and its neighbors in its line.",
 	job: "a job in this tile: its number, its line, and how long it has run. +2 is two more. A job that ended says how, for a few seconds. A click lists them, as tsh's jobs does.",
@@ -734,13 +737,60 @@ export type Over =
 	| {readonly kind: "none"}
 	| {readonly kind: "asks"}
 	| {readonly kind: "jobs"}
-	| {
-			readonly kind: "palette";
-			readonly title: "commands" | "keys";
-			readonly query: string;
-			readonly at: number;
-	  }
+	| Palette
 	| {readonly kind: "item"; readonly what: Part};
+
+/**
+ * What the one palette lists: the commands (Cmd-K), every key (C-b ?), or the projects (Cmd-O,
+ * the top bar's project button). Each replaces the last in the same palette, so two never stack.
+ */
+export type PaletteSource =
+	| {readonly _tag: "commands"}
+	| {readonly _tag: "keys"}
+	| {readonly _tag: "projects"};
+
+/**
+ * The palette: its source, what is typed, and what is picked. Commands are picked by place
+ * (`at`); projects by id (`selected`), so a query or a late list never moves the pick to another
+ * project. `rows` are the projects the app last sent, all of them; the query narrows what shows.
+ */
+export interface Palette {
+	readonly kind: "palette";
+	readonly source: PaletteSource;
+	readonly query: string;
+	readonly at: number;
+	readonly selected: string;
+	readonly rows: readonly ProjectRow[];
+}
+
+/** The palette on one source, empty and at its top. */
+const paletteOf = (source: PaletteSource, rows: readonly ProjectRow[] = []): Palette => ({
+	kind: "palette",
+	source,
+	query: "",
+	at: 0,
+	selected: rows[0]?.id ?? "",
+	rows,
+});
+
+/** The project rows a query shows: a recent project by its name or place, and Open Folder… always. */
+export const projectRowsFor = (
+	rows: readonly ProjectRow[],
+	query: string,
+): readonly ProjectRow[] => {
+	const q = query.trim().toLowerCase();
+	return rows.filter(
+		(r) =>
+			r._tag === "folder" ||
+			q === "" ||
+			r.name.toLowerCase().includes(q) ||
+			r.path.toLowerCase().includes(q),
+	);
+};
+
+/** The pick kept where it is when it still shows, else the first row that does. */
+const keptPick = (selected: string, shown: readonly ProjectRow[]): string =>
+	shown.some((r) => r.id === selected) ? selected : (shown[0]?.id ?? "");
 
 /** A part of the app the top bar names, whose few lines open under it: a click, its key or its tsh word. */
 export type Part = "agents" | "sync" | "host";
@@ -772,6 +822,13 @@ export type InfoMode =
 
 export interface Frame {
 	readonly over: Over;
+	/**
+	 * Where focus goes back when the palette closes: the tile, the field or the button it was
+	 * opened from (`tile:t1`, `button:project`), kept while one source replaces another.
+	 */
+	readonly returnTo: string | null;
+	/** The project the box opened last, by its key, or `folder`: the app is opening it. */
+	readonly opening: string | null;
 	readonly info: InfoMode;
 	/** Both bars hidden; a thin band stays for the window's buttons. */
 	readonly bare: boolean;
@@ -781,6 +838,8 @@ export interface Frame {
 
 export const FRAME: Frame = {
 	over: {kind: "none"},
+	returnTo: null,
+	opening: null,
 	info: {kind: "never"},
 	bare: false,
 	note: null,
@@ -827,6 +886,18 @@ export type FrameMsg =
 	 */
 	| {readonly type: "info"; readonly focus: string | null}
 	| {readonly type: "palette"}
+	/** The projects box opens, on these rows, from `focus`: Cmd-O, the menu or the project button. */
+	| {readonly type: "projects"; readonly rows: readonly ProjectRow[]; readonly focus: string}
+	/** The palette shows another source in its place, opened from `focus` if it was closed. */
+	| {
+			readonly type: "palette_source";
+			readonly source: PaletteSource["_tag"];
+			readonly focus: string;
+	  }
+	/** The app sent the project rows again: a window opened or closed. The pick stays by id. */
+	| {readonly type: "project_rows"; readonly rows: readonly ProjectRow[]}
+	/** Enter in the projects box, or a click on a row (`id`): that row opens, and the box closes. */
+	| {readonly type: "project_enter"; readonly id?: string}
 	| {readonly type: "item"; readonly what: Part}
 	| {readonly type: "query"; readonly query: string}
 	| {readonly type: "move"; readonly by: number; readonly of: number}
@@ -838,6 +909,16 @@ export type FrameMsg =
 	| {readonly type: "close"}
 	/** Escape, as the page hands it on (desk.tsx, `onKey`), with the desk mid-key or not: see `escaped`. */
 	| {readonly type: "escape"; readonly desk: MidKey};
+
+/**
+ * The palette opens on a source, or shows it in place of the last: one palette, never two. Focus
+ * goes back, when it closes, to where the first one was opened from.
+ */
+const opened = (f: Frame, palette: Palette, focus: string): Frame => ({
+	...f,
+	over: palette,
+	returnTo: f.over.kind === "palette" ? (f.returnTo ?? focus) : focus,
+});
 
 /** A thing over the desk opens, or closes when it is open already, as a menu does. */
 const toggle = (f: Frame, over: Over): Frame =>
@@ -889,9 +970,14 @@ const shown = (f: Frame, what: Exclude<Show, "info">): Frame => {
 		case "jobs":
 			return toggle(f, {kind: "jobs"});
 		case "keys":
-			return {...f, over: {kind: "palette", title: "keys", query: "", at: 0}};
+			return {...f, over: paletteOf({_tag: "keys"})};
 		case "palette":
-			return {...f, over: {kind: "palette", title: "commands", query: "", at: 0}};
+			return {...f, over: paletteOf({_tag: "commands"})};
+		case "projects":
+			return {
+				...f,
+				over: paletteOf({_tag: "projects"}, f.over.kind === "palette" ? f.over.rows : []),
+			};
 		case "bars":
 			return {...f, bare: !f.bare, over: {kind: "none"}};
 	}
@@ -920,15 +1006,48 @@ export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
 		case "show":
 			return shown(f, m.what);
 		case "palette":
-			return toggle(f, {kind: "palette", title: "commands", query: "", at: 0});
+			return toggle(f, paletteOf({_tag: "commands"}));
+		case "projects":
+			return opened(f, paletteOf({_tag: "projects"}, m.rows), m.focus);
+		case "palette_source":
+			return opened(
+				f,
+				paletteOf({_tag: m.source}, f.over.kind === "palette" ? f.over.rows : []),
+				m.focus,
+			);
+		case "project_rows": {
+			if (f.over.kind !== "palette" || f.over.source._tag !== "projects") return f;
+			const shown = projectRowsFor(m.rows, f.over.query);
+			return {...f, over: {...f.over, rows: m.rows, selected: keptPick(f.over.selected, shown)}};
+		}
+		case "project_enter": {
+			if (f.over.kind !== "palette" || f.over.source._tag !== "projects") return f;
+			const shown = projectRowsFor(f.over.rows, f.over.query);
+			const id = m.id !== undefined && shown.some((r) => r.id === m.id) ? m.id : f.over.selected;
+			return {...f, over: {kind: "none"}, opening: id};
+		}
 		case "item":
 			return itemLines(f, m.what);
-		case "query":
-			return f.over.kind === "palette" ? {...f, over: {...f.over, query: m.query, at: 0}} : f;
+		case "query": {
+			if (f.over.kind !== "palette") return f;
+			const shown = projectRowsFor(f.over.rows, m.query);
+			return {
+				...f,
+				over: {...f.over, query: m.query, at: 0, selected: keptPick(f.over.selected, shown)},
+			};
+		}
 		case "move": {
-			if (f.over.kind !== "palette" || m.of === 0) return f;
-			const at = (f.over.at + m.by + m.of) % m.of;
-			return {...f, over: {...f.over, at}};
+			if (f.over.kind !== "palette") return f;
+			const over = f.over;
+			if (over.source._tag === "projects") {
+				const shown = projectRowsFor(over.rows, over.query);
+				const here = shown.findIndex((r) => r.id === over.selected);
+				const next = shown[(Math.max(0, here) + m.by + shown.length) % Math.max(1, shown.length)];
+				return next === undefined ? f : {...f, over: {...over, selected: next.id}};
+			}
+			if (m.of === 0) return f;
+			const at = (over.at + m.by + m.of) % m.of;
+			return {...f, over: {...over, at}};
 		}
 		case "ran":
 			return {...f, over: {kind: "none"}, note: `next time: ${m.key}`};

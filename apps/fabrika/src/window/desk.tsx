@@ -47,7 +47,9 @@ import {
 	readToWindow,
 	type ToApp,
 	type ToWindow,
+	type WindowLook,
 } from "../messages.ts";
+import type {ProjectRow} from "../projects.ts";
 import {
 	EXPLAIN_ON,
 	focusFollows,
@@ -61,6 +63,7 @@ import {
 	ticketsShown,
 } from "./frame.ts";
 import {Band, BottomArea, type FrameProps, Over, TopBar} from "./frame.tsx";
+import {Welcome} from "./projects.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {Strip, Tile} from "./tile.tsx";
 import {WINDOWS} from "./windows.tsx";
@@ -130,6 +133,13 @@ const store: {
 	frame: Frame;
 	/** What the window shows of the link, as the app said last. */
 	link: LinkNow;
+	/** Welcome or one project, as the app said last (ticket 276); `null` until it says. */
+	look: WindowLook | null;
+	/** The projects box's rows, as the app sent them last. */
+	projectRows: readonly ProjectRow[];
+	/** Welcome's selected row, and a count of Cmd-O presses that move focus to it. */
+	welcomeSelected: string;
+	welcomeFocus: number;
 	readonly views: Map<string, ToWindow>;
 	readonly listeners: Set<() => void>;
 	version: number;
@@ -145,6 +155,10 @@ const store: {
 	host: null,
 	frame: FRAME,
 	link: {kind: "up"},
+	look: null,
+	projectRows: [],
+	welcomeSelected: "folder",
+	welcomeFocus: 0,
 	views: new Map(),
 	listeners: new Set(),
 	version: 0,
@@ -353,8 +367,8 @@ let noteTimer: ReturnType<typeof setTimeout> | undefined;
 const frameStep = (m: FrameMsg): boolean => {
 	const next = frameUpdate(store.frame, m);
 	if (next === store.frame) return false;
-	const wasKeys = store.frame.over.kind === "palette" && store.frame.over.title === "keys";
-	const isKeys = next.over.kind === "palette" && next.over.title === "keys";
+	const wasKeys = store.frame.over.kind === "palette" && store.frame.over.source._tag === "keys";
+	const isKeys = next.over.kind === "palette" && next.over.source._tag === "keys";
 	if (wasKeys && !isKeys) {
 		toHost({type: "keys.close"});
 		store.keysEditor = null;
@@ -441,6 +455,33 @@ const focusBack = () => {
 	[...items].find((el) => el.dataset.item === from.item)?.focus();
 };
 
+/** Where focus is now, by name, for the palette to give it back to: `tile:t1`, `button:project`. */
+const focusName = (at: Element | null): string => {
+	const tile = at?.closest<HTMLElement>("[data-tile]")?.dataset.tile;
+	if (tile !== undefined) return `tile:${tile}`;
+	const item = at?.closest<HTMLElement>("[data-item]")?.dataset.item;
+	if (item !== undefined) return `button:${item}`;
+	if (at instanceof HTMLInputElement) return `input:${at.name || at.id || "text"}`;
+	return "page";
+};
+
+/**
+ * Cmd-O, File > Open Project…, `show projects`: on welcome, focus goes to its first row, with no
+ * second box over it (P27); over a project's desk, the projects box opens in the palette's place.
+ */
+const openProjects = () => {
+	if (store.look === null) return;
+	if (store.look._tag === "welcome") {
+		store.welcomeSelected = store.look.recent[0]?.project.key ?? "folder";
+		store.welcomeFocus += 1;
+		return changed();
+	}
+	frameStep({type: "projects", rows: store.projectRows, focus: focusName(document.activeElement)});
+};
+
+/** The window's title: the project's full name, so two windows of equal folders differ (P15). */
+const titleOf = (look: WindowLook): string => (look._tag === "project" ? look.name : "fabrika");
+
 /** What the host, or the app when the host is not there, tells the page on the desk's port. */
 const heard = (raw: unknown) => {
 	const read = readToPage(raw);
@@ -486,6 +527,7 @@ const heard = (raw: unknown) => {
 		case "show":
 			if (m.what === "focus-next" || m.what === "focus-previous")
 				return cycleFocus(m.what === "focus-next" ? "next" : "previous");
+			if (m.what === "projects") return openProjects();
 			return m.what === "info"
 				? frameStep({type: "info", focus: focusWords()})
 				: frameStep({type: "show", what: m.what});
@@ -510,6 +552,20 @@ const heard = (raw: unknown) => {
 			// On one, it may be a host that never heard the workspace's size.
 			else tellArea(true);
 			return changed();
+		case "window":
+			store.look = m.look;
+			document.title = titleOf(m.look);
+			if (m.look._tag === "welcome") {
+				const keys = m.look.recent.map((r) => r.project.key);
+				if (!keys.includes(store.welcomeSelected)) store.welcomeSelected = keys[0] ?? "folder";
+			}
+			return changed();
+		case "project_rows":
+			store.projectRows = m.rows;
+			frameStep({type: "project_rows", rows: m.rows});
+			return changed();
+		case "projects":
+			return openProjects();
 	}
 };
 
@@ -618,6 +674,14 @@ const onKey = (e: KeyboardEvent) => {
 	const name = matchPress(pressed, applicable, MAC)?.key ?? rawName;
 	const alone =
 		name === null ? undefined : commandOn(store.keys, KeyCase.cases.alone.make({key: name}));
+	// The projects box is the page's own, before any tile, prefix or popover hears the key (P18).
+	if (alone === "projects.open") {
+		swallow(e);
+		openProjects();
+		return;
+	}
+	// Welcome has no desk and no host: its own rows take the keys.
+	if (store.look?._tag === "welcome") return;
 	if (alone === "palette.open") {
 		swallow(e);
 		toHost({type: "run", does: "palette.open", via: {keys: spell(name ?? "")}});
@@ -872,6 +936,7 @@ const linkView = (now: LinkNow): Shown => {
 
 function App(): ReactNode {
 	useSyncExternalStore(subscribe, () => store.version);
+	const look = store.look;
 	const desk = store.desk;
 	const view = linkView(store.link);
 	/** The desk is out of reach: the link is down, or there is no desk to reach. */
@@ -920,7 +985,30 @@ function App(): ReactNode {
 		toApp,
 		toRun,
 		step: frameStep,
+		project: look?._tag === "project" ? look.project : undefined,
+		name: look?._tag === "project" ? look.name : undefined,
+		projectRows: store.projectRows,
 	};
+	if (look?._tag === "welcome")
+		return (
+			<div className={`desk welcome-desk${MAC ? " mac" : ""}`}>
+				<Band />
+				<Welcome
+					recent={look.recent}
+					selected={store.welcomeSelected}
+					now={Date.now()}
+					refusal={look.refusal}
+					focusTick={store.welcomeFocus}
+					onSelect={(id) => {
+						store.welcomeSelected = id;
+						changed();
+					}}
+					onOpen={(key) => toApp({type: "open", key, source: "welcome"})}
+					onFolder={() => toApp({type: "folder", source: "welcome"})}
+					onRetry={() => toApp({type: "retry"})}
+				/>
+			</div>
+		);
 	const bare = store.frame.bare;
 	const zoomed = ws?.layout.zoomed ?? null;
 	return (
@@ -941,7 +1029,8 @@ function App(): ReactNode {
 					ref={measure}
 					data-workspace={ws.id}
 					data-zoomed={zoomed ?? undefined}
-					inert={view.dim}
+					// The palette is a modal dialog: the tiles under it take no key and no press (P24).
+					inert={view.dim || over === "palette"}
 				>
 					{zoomed !== null ? (
 						<ZoomedTile ws={ws} id={zoomed} desk={open} />

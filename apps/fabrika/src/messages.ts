@@ -4,6 +4,7 @@ import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
 import {Does, KeyName, Keys} from "./desk/keymap.ts";
 import {SHOWS} from "./desk/keys.ts";
 import {Change, Edit} from "./keys/program.ts";
+import {ProjectRow, ProjectSchema, Recent} from "./projects.ts";
 
 // What the app's one window and the host say to each other. The window draws the desk
 // (desk/desk.ts, run in the host), a terminal per tile, and a view per run of a program with one;
@@ -197,6 +198,25 @@ export const HostNow = Schema.Struct({
 export type HostNow = typeof HostNow.Type;
 
 /**
+ * What a window shows (ticket 276): welcome, with the recent projects and why the last folder or
+ * move was refused, if it was; or one project, with its name as the top bar and title say it.
+ *
+ *   {_tag: "welcome", recent: [...], refusal: {_tag: "folder", why: "Choose a folder in a git repository"}}
+ *   {_tag: "project", project: {root: "~/code/demlik", key: "3f9a…"}, name: "demlik"}
+ */
+export const WindowLook = Schema.Union([
+	Schema.Struct({
+		_tag: Schema.Literal("welcome"),
+		recent: Schema.Array(Recent),
+		refusal: Schema.NullOr(
+			Schema.Struct({_tag: Schema.Literals(["folder", "migration"]), why: Schema.String}),
+		),
+	}),
+	Schema.Struct({_tag: Schema.Literal("project"), project: ProjectSchema, name: Schema.String}),
+]);
+export type WindowLook = typeof WindowLook.Type;
+
+/**
  * What the host tells the page, on the desk's port. The desk runs in the host (host/serve.ts);
  * the page draws what it is sent and nothing else. `keys` is the keys file's table (desk/keymap.ts):
  * the prefix, one row per command, the keys eaten and what came of the file, sent as the page
@@ -266,6 +286,12 @@ export const ToPage = Schema.Union([
 	}),
 	Schema.Struct({type: Schema.Literal("answer"), id: PressId, took: Schema.Boolean}),
 	Schema.Struct({type: Schema.Literal("link"), now: LinkNow}),
+	// The app's own, from main (ticket 276): what this window shows, welcome or one project.
+	Schema.Struct({type: Schema.Literal("window"), look: WindowLook}),
+	/** The projects box's rows, sent again as windows open and close. */
+	Schema.Struct({type: Schema.Literal("project_rows"), rows: Schema.Array(ProjectRow)}),
+	/** Cmd-O, File > Open Project…: the box opens, or welcome selects its first row. */
+	Schema.Struct({type: Schema.Literal("projects")}),
 ]);
 export type ToPage = typeof ToPage.Type;
 
@@ -280,6 +306,16 @@ export type ToPage = typeof ToPage.Type;
 export const ToApp = Schema.Union([
 	Schema.Struct({type: Schema.Literal("again")}),
 	Schema.Struct({type: Schema.Literal("restart")}),
+	/** A recent project picked, in welcome or the box, by its key, and where it was picked. */
+	Schema.Struct({
+		type: Schema.Literal("open"),
+		key: Schema.String,
+		source: Schema.Literals(["welcome", "box"]),
+	}),
+	/** Open Folder…: the system's folder sheet, over this window. */
+	Schema.Struct({type: Schema.Literal("folder"), source: Schema.Literals(["welcome", "box"])}),
+	/** Try Again, after the old desk did not move. */
+	Schema.Struct({type: Schema.Literal("retry")}),
 ]);
 export type ToApp = typeof ToApp.Type;
 

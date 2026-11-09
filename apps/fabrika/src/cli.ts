@@ -36,7 +36,8 @@ import {Argument, Command, Flag} from "effect/cli";
 import {addressOf, connectAndRestart, invite, members} from "./host/connection.ts";
 import {dryRun, MoveStopped, move, reportOf} from "./host/move.ts";
 import {type Post, post} from "./host/post.ts";
-import {pathsOf, reach} from "./host/socket.ts";
+import {reach} from "./host/socket.ts";
+import {Project} from "./project.ts";
 import {POLICY} from "./reconnect.ts";
 
 const home = Flag.String("home").pipe(
@@ -56,7 +57,7 @@ const connectCmd = Command.make(
 	},
 	(a) =>
 		Effect.gen(function* () {
-			const {who, host} = yield* connectAndRestart(a.home, {
+			const {who, host} = yield* connectAndRestart(yield* Project.select(a.home), {
 				address: a.address,
 				login: a.login,
 				key: a.key,
@@ -79,14 +80,14 @@ const inviteCmd = Command.make(
 	{home, login: Argument.String("login").pipe(Argument.withDescription("their GitHub login"))},
 	(a) =>
 		Effect.gen(function* () {
-			const m = yield* invite(a.home, a.login);
+			const m = yield* invite(yield* Project.select(a.home), a.login);
 			yield* Effect.logInfo(`invited ${m.name} (${m.id}): they get in at their first login`);
 		}),
 );
 
 const membersCmd = Command.make("members", {home}, (a) =>
 	Effect.gen(function* () {
-		const m = yield* members(a.home);
+		const m = yield* members(yield* Project.select(a.home));
 		for (const p of m.members) yield* Effect.logInfo(`member   ${p.name} (${p.id})`);
 		for (const p of m.invited) yield* Effect.logInfo(`invited  ${p.name} (${p.id})`);
 	}),
@@ -121,7 +122,11 @@ const moveCmd = Command.make(
 					return yield* new MoveStopped({
 						why: "a dry run names your id, --founder github:<n>, so its hash is the move's",
 					});
-				const r = yield* dryRun({home: a.home, from: a.from, founder: a.founder.value});
+				const r = yield* dryRun({
+					home: yield* Project.select(a.home),
+					from: a.from,
+					founder: a.founder.value,
+				});
 				for (const line of reportOf(r.plan, r.hash)) yield* Effect.logInfo(line);
 				if (Option.isSome(r.running))
 					yield* Effect.logInfo(`${r.running.value}: stop it before the move`);
@@ -130,7 +135,7 @@ const moveCmd = Command.make(
 			if (Option.isNone(a.login) || Option.isNone(a.key))
 				return yield* new MoveStopped({why: "a move logs in: --login and --key"});
 			const done = yield* move({
-				home: a.home,
+				home: yield* Project.select(a.home),
 				from: a.from,
 				to: a.to,
 				login: a.login.value,
@@ -160,7 +165,8 @@ const from = Flag.optional(
 /** One post, then the tickets after it. */
 const posting = (a: {readonly home: string; readonly as: string}, writes: ReadonlyArray<Post>) =>
 	Effect.gen(function* () {
-		for (const line of yield* post(a.home, a.as, writes)) yield* Effect.logInfo(line);
+		for (const line of yield* post(yield* Project.select(a.home), a.as, writes))
+			yield* Effect.logInfo(line);
 	});
 
 const postCmd = Command.make("post").pipe(
@@ -205,7 +211,7 @@ const postCmd = Command.make("post").pipe(
  */
 const mcpCmd = Command.make("mcp", {home, as}, (a) =>
 	Effect.gen(function* () {
-		const {mcp} = yield* pathsOf(a.home);
+		const {mcp} = yield* Project.hostPaths(yield* Project.select(a.home));
 		if ((yield* reach(mcp)) !== "live")
 			return yield* new BridgeStopped({
 				why: `no fabrika host serves agents on ${a.home}: open the app on it`,

@@ -73,6 +73,8 @@ export const settingsFolder = (launch: Launch, userHome: string): string =>
 /** How long a burst of events from one save is waited out, in ms: an editor's write and rename are one save. */
 const SETTLE_MS = 50;
 
+type Decode<A> = (text: string) => Result.Result<A, {readonly line: number; readonly why: string}>;
+
 /**
  * Every answer for the file `name` in `folder`: one as the watch starts, then one each time a save
  * changes its text. The folder is made if it is missing, so a file put there later is heard; when it
@@ -81,7 +83,27 @@ const SETTLE_MS = 50;
 export const settingsFile = <A>(
 	folder: string,
 	name: string,
-	decode: (text: string) => Result.Result<A, {readonly line: number; readonly why: string}>,
+	decode: Decode<A>,
+): Stream.Stream<Setting<A>, never, FileSystem.FileSystem | Path.Path> =>
+	reads(folder, name, decode, true);
+
+/**
+ * An answer for each burst of saves to the file, even when its text is what the last answer said.
+ * For a reader that also writes the file: its own save moves what it holds, so a later save by
+ * another process that puts the text back is news to it, though not to the watch (host/keybindings.ts).
+ */
+export const settingsSaves = <A>(
+	folder: string,
+	name: string,
+	decode: Decode<A>,
+): Stream.Stream<Setting<A>, never, FileSystem.FileSystem | Path.Path> =>
+	reads(folder, name, decode, false);
+
+const reads = <A>(
+	folder: string,
+	name: string,
+	decode: Decode<A>,
+	once: boolean,
 ): Stream.Stream<Setting<A>, never, FileSystem.FileSystem | Path.Path> =>
 	Stream.unwrap(
 		Effect.gen(function* () {
@@ -133,9 +155,10 @@ export const settingsFile = <A>(
 					).pipe(Stream.drain),
 				),
 			);
-			return Stream.merge(Stream.fromEffect(Deferred.await(ready)), saves).pipe(
+			const texts = Stream.merge(Stream.fromEffect(Deferred.await(ready)), saves).pipe(
 				Stream.mapEffect(() => text),
-				Stream.changesWith((a, b) => a === b),
+			);
+			return (once ? texts.pipe(Stream.changesWith((a, b) => a === b)) : texts).pipe(
 				Stream.map(answer),
 			);
 		}),

@@ -238,6 +238,11 @@ export const serve = (options: {
 		| (Extract<LedgerLink, {kind: "server"}> & {readonly sessionFor: AgentSessions});
 	/** The restart before this host, and where the next is left; none, no `restart` tool. */
 	readonly restarts?: Restarts | undefined;
+	/**
+	 * The project this host serves, by its key (project.ts): its hello names it, and an app's
+	 * hello for another project is refused. None: a test's host, or a home from before projects.
+	 */
+	readonly project?: string | undefined;
 }) =>
 	Effect.gen(function* () {
 		const {
@@ -905,8 +910,12 @@ export const serve = (options: {
 				}
 				case "run":
 					did(m.does, m.via === undefined ? Via.palette() : Via.key(m.via));
-					if (m.does === "palette.open") {
-						toPage(client, {type: "show", what: "palette"});
+					// The palette's and the projects box's are the page's own: it is told to show them.
+					if (m.does === "palette.open" || m.does === "projects.open") {
+						toPage(client, {
+							type: "show",
+							what: m.does === "palette.open" ? "palette" : "projects",
+						});
 						return;
 					}
 					if (step({type: "run", does: m.does}, client)) shout();
@@ -981,7 +990,13 @@ export const serve = (options: {
 					page: false,
 					shown: new Map(),
 				};
-				const wire = yield* hostWire(socket, (m) => fromApp(client, m), ours, build);
+				const wire = yield* hostWire(
+					socket,
+					(m) => fromApp(client, m),
+					ours,
+					build,
+					options.project ?? null,
+				);
 				client.send = wire.send;
 				client.up = () => wire.state().at === "up";
 				clients.add(client);

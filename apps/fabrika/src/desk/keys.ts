@@ -47,6 +47,7 @@ export const SHOWS = [
 	"sync",
 	"host",
 	"palette",
+	"projects",
 ] as const;
 export type Show = (typeof SHOWS)[number];
 

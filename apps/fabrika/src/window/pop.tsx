@@ -124,7 +124,7 @@ export function IconOf(props: {readonly icon: Icon}): ReactNode {
  * else. A press on the item that opened it (`aria-controls` its id) is left to that item, which
  * closes it as a menu button does.
  */
-const useOverlay = (
+export const useOverlay = (
 	box: RefObject<HTMLElement | null>,
 	id: string,
 	into: () => void,
@@ -154,7 +154,10 @@ const useOverlay = (
 };
 
 /** A footer of key hints: `↑ ↓ Move   ↵ Open   H Later   Esc Close`. */
-function Foot(props: {readonly hints: readonly Hint[]; readonly children?: ReactNode}): ReactNode {
+export function Foot(props: {
+	readonly hints: readonly Hint[];
+	readonly children?: ReactNode;
+}): ReactNode {
 	return (
 		<div className="pop-foot" aria-hidden="true">
 			{props.children}
@@ -476,7 +479,7 @@ export interface Option {
 }
 
 /** A name or a word in runs, the matched ones bold: `<mark>`. */
-function Marked(props: {readonly text: string; readonly query: string}): ReactNode {
+export function Marked(props: {readonly text: string; readonly query: string}): ReactNode {
 	// A text's runs never move: their place is their key.
 	return marked(props.text, props.query).map((r, k) =>
 		r.mark ? <mark key={k}>{r.text}</mark> : <span key={k}>{r.text}</span>,

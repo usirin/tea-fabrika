@@ -182,6 +182,21 @@ export class SummonedNow extends Context.Service<
 	}
 >()("@kampus/fabrika-old/SummonedNow") {}
 
+/** One summon or ended turn, as a record keeps it. What the harness did not say is `null`. */
+export interface SummonRecord {
+	readonly name: string;
+	readonly agent: string;
+	readonly folder: string;
+	readonly run: string;
+	readonly model: string | null;
+	readonly effort: string | null;
+	readonly by: string;
+	readonly input: number | null;
+	readonly output: number | null;
+	readonly cost: number | null;
+	readonly at: number;
+}
+
 /**
  * The host's summoned agents, kept in `storage`, working in the repository `folder`: the
  * `SummonManager`, and `SummonedNow` beside it.
@@ -189,10 +204,18 @@ export class SummonedNow extends Context.Service<
 export const summonManager = (options: {
 	readonly storage: Storage;
 	readonly folder: string;
+	/**
+	 * Keep a record of each summon and each ended turn, as the host's records keep them (the app's
+	 * host/records.ts): what a name meant at that time, and what the turn cost as the harness said.
+	 */
+	readonly record?:
+		| ((kind: "summon" | "turn", row: SummonRecord) => Effect.Effect<void>)
+		| undefined;
 }): Layer.Layer<SummonManager | SummonedNow> =>
 	Layer.effectContext(
 		Effect.gen(function* () {
 			const {storage, folder} = options;
+			const record = options.record ?? (() => Effect.void);
 			const scope = yield* Effect.scope;
 			const kept = yield* openNames(storage);
 			const live = new Map<string, Live>();
@@ -418,10 +441,9 @@ export const summonManager = (options: {
 					Deferred.doneUnsafe(l.ready, done);
 				});
 
-			// A host started again: each kept name opens again, in the background, with its settings.
-			for (const name of kept.now().names) {
-				const l = yield* open(name).pipe(Effect.result);
-				if (l._tag === "Failure") {
+			/** A kept name that does not open: listed down with why, its saved folder as it was. */
+			const downOf = (name: Name, failure: SummonRefused) =>
+				Effect.gen(function* () {
 					const down: Live = {
 						name,
 						scope: yield* Scope.fork(scope),
@@ -434,11 +456,29 @@ export const summonManager = (options: {
 						state: "down",
 						turn: null,
 						cost: null,
-						why: l.failure.why,
+						why: failure.why,
 					};
-					Deferred.doneUnsafe(down.opened, Exit.fail(l.failure));
-					Deferred.doneUnsafe(down.ready, Exit.fail(l.failure));
+					Deferred.doneUnsafe(down.opened, Exit.fail(failure));
+					Deferred.doneUnsafe(down.ready, Exit.fail(failure));
 					put(name.name, down);
+				});
+
+			// A host started again: each kept name opens again, in the background, with its settings.
+			// One summoned in another folder stays down: it is never reopened here, and its folder is
+			// never rewritten, so the project it was for still finds it.
+			for (const name of kept.now().names) {
+				if (name.folder !== folder) {
+					yield* downOf(
+						name,
+						new SummonRefused({
+							why: `${name.name} was summoned in another project: open that project to use it`,
+						}),
+					);
+					continue;
+				}
+				const l = yield* open(name).pipe(Effect.result);
+				if (l._tag === "Failure") {
+					yield* downOf(name, l.failure);
 					continue;
 				}
 				const agent = l.success;
@@ -508,6 +548,19 @@ export const summonManager = (options: {
 								effort: set.effort ?? "",
 								folder,
 								run: l.name.run,
+							});
+							yield* record("summon", {
+								name,
+								agent,
+								folder,
+								run: l.name.run,
+								model: set.model ?? null,
+								effort: set.effort ?? null,
+								by,
+								input: null,
+								output: null,
+								cost: null,
+								at: since,
 							});
 							return summonedOf(l);
 						}).pipe(Effect.ensuring(Effect.sync(() => pending.delete(name))));
@@ -626,6 +679,22 @@ export const summonManager = (options: {
 														output: ended?.output ?? null,
 														cost: n.cost,
 													}),
+												).pipe(
+													Effect.andThen(
+														record("turn", {
+															name,
+															agent: l.name.agent,
+															folder: l.name.folder,
+															run: l.name.run,
+															model: l.name.model.resolved,
+															effort: l.name.effort.set,
+															by: l.name.by,
+															input: ended?.input ?? null,
+															output: ended?.output ?? null,
+															cost: n.cost ?? null,
+															at: began,
+														}),
+													),
 												)
 											: Effect.void,
 								),
