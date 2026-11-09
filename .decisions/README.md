@@ -7,7 +7,8 @@ Every decision the owner makes lands here, one file per decision, the turn it is
 ## When to write one
 
 Whenever the owner settles something: a rule, a name, a shape, a yes or no on a plan's question.
-Write it the same turn, in its own docs pull request. Never batch two decisions, and never wait for
+Write it the same turn, in its own docs pull request, with the
+[adr skill](../.agents/skills/adr/SKILL.md). Never batch two decisions, and never wait for
 a code pull request. A docs-only decision PR merges on green CI with a clean leak grep.
 
 ## The file
@@ -43,6 +44,8 @@ What changes, what it costs, what is not decided here.
 - `status` is `accepted`, `superseded` or `amended`. A later decision that replaces one sets the
   old file's status to `superseded by NNNN`; nobody deletes a decision.
 - Keep it short. The long reasoning goes in a `docs/direction/` note.
+- A decision moved in from elsewhere leaves only a one-line link behind
+  ([0002](./0002-moving-a-decision-removes-it-from-its-source.md)).
 - Never quote what a person typed. Record the decision.
 
 ## Search before you ask

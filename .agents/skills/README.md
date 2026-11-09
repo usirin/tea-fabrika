@@ -15,6 +15,7 @@ both tools.
 | [lead](./lead/SKILL.md) | start the boxes, approve plans, run e2e, push and land |
 | [step-commit](./step-commit/SKILL.md) | commit and sign a step's work in one command |
 | [guidelines](./guidelines/SKILL.md) | study one design area, show the choices and plan the build |
+| [adr](./adr/SKILL.md) | write one owner decision to `.decisions/`, the turn it is made |
 
 ## How a brief uses them
 

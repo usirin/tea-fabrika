@@ -5,22 +5,27 @@
 set -eu
 base="${1:-origin/main}"
 root="$(git rev-parse --show-toplevel)"
-git -C "$root" diff --unified=0 "$base...HEAD" | python3 - "$root/.decisions" <<'PY'
+python3 - "$root" "$base" <<'PY'
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 STOP = {
     "the", "and", "for", "not", "never", "every", "each", "one", "two", "its", "with", "from",
     "into", "when", "that", "this", "than", "only", "stays", "goes", "lands", "made", "make",
-    "turn", "file", "files", "live", "lives", "decision", "decisions", "owner", "repo", "the",
+    "turn", "file", "files", "live", "lives", "decision", "decisions", "owner", "repo",
 }
 WORD = re.compile(r"[a-z][a-z0-9]+")
 
 def words(text):
     return {w for w in WORD.findall(text.lower()) if len(w) >= 4 and w not in STOP}
 
-diff = sys.stdin.read()
+root, base = Path(sys.argv[1]), sys.argv[2]
+diff = subprocess.run(
+    ["git", "-C", str(root), "diff", "--unified=0", f"{base}...HEAD"],
+    check=True, capture_output=True, text=True,
+).stdout
 touched = set()
 changed = []
 for line in diff.splitlines():
@@ -33,7 +38,7 @@ for line in diff.splitlines():
         changed.append(line[1:])
 seen = words("\n".join(changed))
 
-folder = Path(sys.argv[1])
+folder = root / ".decisions"
 hits = []
 for record in sorted(folder.glob("[0-9][0-9][0-9][0-9]-*.md")):
     text = record.read_text()
