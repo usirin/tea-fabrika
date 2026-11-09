@@ -193,3 +193,97 @@ Test-side indexing and decoder-result inference errors were corrected afterward;
 the full typecheck was not repeated. An earlier command attempt stopped in an
 automatic install before reaching the compiler. No Electron or provider run
 started. Provider fees remain $0.
+
+## Build5 return, today's app, ticket 343
+
+The decoder inputs and their type law now use all 21 global names from the generated
+contract. The repair properties use those names too. This exposes six real fallback
+failures: `themes.ts` still gives the shared checker the earlier 15 names. The builder
+must update `themes.ts` and `theme-colors.ts` together with the generated full values.
+No compatibility names were added to the file decoder or its inputs.
+
+The expected dark steps now show each change: turn text indigo 11 to 12, done grass
+11 to a11, stuck red 11 to 12, and hovered turn fill indigo 10 to 9. The last change
+uses the nearest passing solid step and gives up a separate dark hover shade.
+The old 4.28 exemption is removed from the pending token inputs and its law now
+rejects the original pair. App text, white button labels, focus, default terminal
+text and cursor are checked under both floors. ANSI palette bytes stay pinned;
+T18 corrects drawn terminal text without altering those bytes. Token plants start
+from freshly generated copies; a separate law still checks the real committed
+outputs for drift. The five changed token inputs generate successfully in a
+temporary copy. Generated files in this checkout remain the builder's work.
+
+The final 12-file narrow run used seed 119120, one worker and the complete Ghostty
+patch applied offline to a pristine 0.4.0 copy. It had **384 green, 15 red, four
+native-watch checks excluded as blocked, and one older case-sensitive-filesystem
+skip**. These counts include the five pending token-input edits below. The red
+laws are six built-in color/pair checks, six repair properties blocked by old
+built-in names, one generated-output drift check, host T25 and unmeasured T13.
+The first 14 are build work; T13 also needs the missing mapping decision below.
+The same T18 law fails on the currently installed bundle, whose patch hash has
+not been refreshed. It passes with the new patch. Four isolated plants were
+caught: omit the callback, pass the default background, correct before faint,
+and correct emoji. The new patch applies with pnpm offline, including declarations
+whose original file has CRLF endings. The lead must refresh the lockfile hash;
+this step did not change `pnpm-lock.yaml` or the installed Ghostty bundle.
+
+Ghostty 0.4.0 has no hook for correcting the colors of a drawn cell.
+The patch adds optional `correctForeground(foreground, background)` on Terminal
+and CanvasRenderer options, plus the renderer field and its declarations.
+It passes composited 8-bit colors after inverse, selection and faint handling.
+Emoji, palette entries, backgrounds, cell data and terminal bytes stay intact.
+
+Host T25 is a product failure in `apps/fabrika/src/host/settings.ts`: both folder
+creation failure and watch failure log the full folder, and watch failure also
+logs the cause with source content. The existing generated law stays unchanged.
+For T14, the native scenarios are still required. Earlier retries emitted sandbox
+`EMFILE`; this run's isolated native T14 timed out at 60 seconds without that error.
+Neither result proves a product bug. The added generated property supplies files,
+read refusals and watch events to the real reader. It passes writes, replacement
+notifications, decode refusal, deletion, permission refusal and key independence.
+A planted mix-up of the key and theme file paths fails it immediately. The three
+older native-save laws and the native T14 law need a run outside the box; they
+have not been weakened, removed or counted green.
+
+Experiment 239 was run. The pair list now exists, but the mapped inputs still use
+15 old names. Renaming alone leaves six globals with no mapping rule in the
+approved plan: surface-selected, border, border-strong, wire, scrim and
+turn-fill-hover. `calibration.json` and `repair.toml` record the current failure
+and remain unmeasured. No cap, repair version or repair count was invented.
+No screenshot, visual cap review, VoiceOver or Electron run was performed.
+Provider fees remain $0.
+
+`pnpm format` ran first. Full lint passed its code and formatting checks, then
+stopped at the three build-owned unused decoders. Targeted lint passed after the
+last test edits. The remaining generated token drift is also build work. One
+final typecheck is recorded below. Dependency auto-install tried to refresh the
+changed patch and failed on network access. Dependency links were restored from
+an installation with the identical lockfile, then auto-install was disabled for
+local validation. No lockfile, dependency manifest or dead-export allowance changed.
+
+The commit owner checker reads exact paths and does not expand the approved
+`tokens/color/*.toml` row. It does not list these five test-owned inputs by name:
+
+- `packages/fabrika-design/tokens/color/done.toml`
+- `packages/fabrika-design/tokens/color/stuck.toml`
+- `packages/fabrika-design/tokens/color/turn-fg.toml`
+- `packages/fabrika-design/tokens/color/turn-fill-hover.toml`
+- `packages/fabrika-design/tokens/color/turn-text.toml`
+
+Their diff is preserved in the ignored `runs/themes-tests7-token-inputs.patch`.
+These changes remain visible in the working tree for the lead to accept after
+listing the five paths in the approved plan. All other changes are exact `tests`
+entries. The source and mapped fixture bytes and their hash pins are unchanged.
+
+The final compiler run passed across the workspace, including the renamed theme
+type law and the controlled-watch property. An earlier command stopped before
+any compiler started because a restored task-cache link pointed at itself. That
+ignored local cache was removed before running the compiler. No code changed
+between those attempts.
+
+The requested full step-commit command refused before staging anything:
+`not_owner: packages/fabrika-design/tokens/color/done.toml`. The owner check in
+`.agents/skills/step-commit/scripts/stepcommit.sh` requires exact file entries.
+The remaining exact-owned files are committed separately; the five token input
+edits and their saved diff are left for the lead to resolve. No ownership check
+was bypassed.

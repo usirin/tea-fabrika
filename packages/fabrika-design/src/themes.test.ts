@@ -1,6 +1,7 @@
 import {createHash} from "node:crypto";
 import {existsSync, readFileSync} from "node:fs";
 import {join} from "node:path";
+import {apca, wcag} from "@kampus/themes-fixture/laws";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
@@ -54,10 +55,10 @@ const DARK = {
 	faint: "#f1f7feb5", // slate a11
 	"turn-fill": "#3e63dd", // indigo 9
 	"on-turn": "#ffffff", // Radix's rule for text on step 9
-	"turn-text": "#9eb1ff", // indigo 11
-	done: "#71d083", // grass 11
+	"turn-text": "#d6e1ff", // T343: indigo 11 -> 12, Lc 60 on every row
+	done: "#89ff9fcd", // T343: grass 11 -> a11, Lc 60 on every row
 	running: "#ffca16", // amber 11
-	stuck: "#ff9592", // red 11
+	stuck: "#ffd1d9", // T343: red 11 -> 12, Lc 60 on every row
 	closed: "#f1f7feb5", // slate a11: no hue, the word says closed
 };
 
@@ -147,7 +148,8 @@ const SELECTED = {dark: "#d9edfe25", light: "#0009321f"}; // slate a5: selected
 const BORDER = {dark: "#d6ebfd30", light: "#00002f26"}; // slate a6: a part that is not interactive
 const BORDER_STRONG = {dark: "#d9edff40", light: "#00062e32"}; // slate a7: an interactive part
 const WIRE = {dark: "#d9edff5d", light: "#00083046"}; // slate a8: a strong line
-const TURN_HOVER = {dark: "#5472e4", light: "#3358d4"}; // indigo 10: the solid fill's hover
+// T343: dark indigo 10 -> 9. White on 10 was 4.28; 9 is the nearest passing solid step.
+const TURN_HOVER = {dark: "#3e63dd", light: "#3358d4"};
 const WASH = {dark: "#d8f4f609", light: "#00005506"}; // slate a2: a tile's title bar at rest
 
 /** Both looks of one of the note's colors. */
@@ -390,7 +392,11 @@ const ratio = (fg: string, bg: string) => {
 const under = (pairs: readonly (readonly [string, string, string, number])[]) =>
 	pairs.flatMap(([name, fg, bg, bar]) => {
 		const r = ratio(fg, bg);
-		return r < bar ? [`${name} ${r.toFixed(2)} < ${bar}`] : [];
+		const lc = apca(fg, bg),
+			floor = bar >= 4.5 ? 60 : 15;
+		return r < bar || Math.abs(lc) < floor
+			? [`${name} WCAG ${r.toFixed(2)} / ${bar}; APCA ${lc.toFixed(2)} / ${floor}`]
+			: [];
 	});
 
 /** A row token drawn over a page token, in a look. */
@@ -412,14 +418,14 @@ const backgroundsIn = (look: Look): readonly (readonly [string, string])[] => [
 // ---- law 1: the themes are the note's ----------------------------------------------------------
 
 describe("law 1: the themes module holds the note's values", () => {
-	it("fabrika is the note's dark pick", async () => {
+	it("pinned: fabrika keeps the dark pick with the Nov 7 two-floor step changes", async () => {
 		const {fabrika} = await import("./themes.ts");
 		expect({name: fabrika.name, look: fabrika.look}).toEqual({name: "fabrika", look: "dark"});
 		expect(fabrika.colors).toEqual(DARK);
 		expect(fabrika.terminal).toEqual(TERMINALS.dark);
 	});
 
-	it("fabrika-light is the same pick, look light", async () => {
+	it("pinned: fabrika-light keeps the approved light pick", async () => {
 		const {fabrikaLight} = await import("./themes.ts");
 		expect({name: fabrikaLight.name, look: fabrikaLight.look}).toEqual({
 			name: "fabrika-light",
@@ -433,7 +439,7 @@ describe("law 1: the themes module holds the note's values", () => {
 // ---- laws 2 and 3: each token is its value, and the page follows the look ----------------------
 
 describe("law 2: each token in tokens.css is its value, in both looks", () => {
-	it.each(LOOKS)("every listed token takes its Radix value, %s", (look) => {
+	it.each(LOOKS)("pinned: every listed token takes its approved Radix value, %s", (look) => {
 		const got = Object.fromEntries(Object.keys(TOKENS).map((name) => [name, tokenIn(name, look)]));
 		const want = Object.fromEntries(Object.entries(TOKENS).map(([name, v]) => [name, v[look]]));
 		expect(got).toEqual(want);
@@ -545,7 +551,7 @@ describe("law 5: text and state words read 4.5:1 where they sit (WCAG 1.4.3)", (
 	];
 
 	it.each(LOOKS)(
-		"on the desk, the ground, raised, and hovered and selected rows over the ground and raised, %s",
+		"pinned: Nov 7's APCA failures stay fixed on every resting, hovered and selected row, %s",
 		(look) => {
 			const pairs = TEXT.flatMap((fg) =>
 				backgroundsIn(look).map(
@@ -558,34 +564,31 @@ describe("law 5: text and state words read 4.5:1 where they sit (WCAG 1.4.3)", (
 });
 
 describe("law 6: white reads on the turn fill", () => {
-	it("on-turn reads 4.5:1 on the turn fill, at rest in both looks and hovered in light", () => {
+	it("pinned: ticket 153's white label meets both floors on every turn fill", () => {
 		expect(
 			under([
-				...LOOKS.map(
-					(look) =>
-						[
-							`--turn-fg on --turn-fill, ${look}`,
-							tokenIn("--turn-fg", look),
-							tokenIn("--turn-fill", look),
-							4.5,
-						] as const,
+				...LOOKS.flatMap((look) =>
+					["--turn-fill", "--turn-fill-hover"].map(
+						(fill) =>
+							[
+								`--turn-fg on ${fill}, ${look}`,
+								tokenIn("--turn-fg", look),
+								tokenIn(fill, look),
+								4.5,
+							] as const,
+					),
 				),
-				[
-					"--turn-fg on --turn-fill-hover, light",
-					tokenIn("--turn-fg", "light"),
-					tokenIn("--turn-fill-hover", "light"),
-					4.5,
-				],
 			]),
 		).toEqual([]);
 	});
 
-	// Known exception, decided 2026-11-01: the hovered fill keeps Radix's indigo 10, and white on
-	// it reads 4.28 in dark, under 4.5:1 (tracker ticket 153). Any change to the pair shows here.
-	it("on-turn on the hovered turn fill, dark, is indigo 10 at exactly 4.28:1", () => {
+	// pinned: ticket 153's historical 4.28 pair is refused under the Nov 7 two-floor decision.
+	// The replacement step remains visible in TOKENS above and must pass the live check here.
+	it("pinned: the dark hovered fill no longer uses ticket 153's failing indigo 10", () => {
 		const fill = tokenIn("--turn-fill-hover", "dark");
-		expect(fill).toBe("#5472e4");
-		expect(ratio(tokenIn("--turn-fg", "dark"), fill).toFixed(2)).toBe("4.28");
+		expect(wcag("#ffffff", "#5472e4").toFixed(2)).toBe("4.28");
+		expect(fill).not.toBe("#5472e4");
+		expect(under([["dark hovered turn", tokenIn("--turn-fg", "dark"), fill, 4.5]])).toEqual([]);
 	});
 });
 
@@ -828,19 +831,26 @@ describe("law 13: the top level imports nothing and runs anywhere", () => {
 // ---- laws 14 and 16: the terminal --------------------------------------------------------------
 
 describe("law 14: the terminal reads", () => {
-	it.each(LOOKS)("text 4.5:1, cursor 3:1, fills aside, %s", async (look) => {
-		const {fabrika, fabrikaLight} = await import("./themes.ts");
-		const t = (look === "dark" ? fabrika : fabrikaLight).terminal;
-		expect(
-			under([
-				["foreground", t.foreground, t.background, 4.5],
-				["cursor", t.cursor, t.background, 3],
-				...t.palette.flatMap((c, i) =>
-					FILLS[look].has(i) ? [] : [[`palette ${i}`, c, t.background, 4.5] as const],
+	it.each(LOOKS)(
+		"pinned: Nov 7's terminal floors, with ANSI palette bytes kept, %s",
+		async (look) => {
+			const {fabrika, fabrikaLight} = await import("./themes.ts");
+			const t = (look === "dark" ? fabrika : fabrikaLight).terminal;
+			expect(
+				under([
+					["foreground", t.foreground, t.background, 4.5],
+					["cursor", t.cursor, t.background, 3],
+				]),
+			).toEqual([]);
+			// Palette bytes remain pinned above. T18 corrects each drawn cell under both floors.
+			// Keep the earlier WCAG palette guarantee too; it is no APCA exemption for drawn text.
+			expect(
+				t.palette.flatMap((c, i) =>
+					FILLS[look].has(i) || wcag(c, t.background) >= 4.5 ? [] : [i],
 				),
-			]),
-		).toEqual([]);
-	});
+			).toEqual([]);
+		},
+	);
 });
 
 /** ghostty-web's `ITheme` names for the palette, in ANSI order. */

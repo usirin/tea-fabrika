@@ -8,6 +8,7 @@ import {
 	Logger,
 	type Path,
 	PlatformError,
+	Queue,
 	Result,
 	type Scope,
 	Stream,
@@ -277,6 +278,94 @@ describe("a settings file, saved with the same text", () => {
 // Today's app, T343 PR 1. Plant: watch a replaced inode; skip a save; cross-wire keys.
 // Real file operations exercise the installed platform watcher, not a second implementation.
 describe("T14 generated settings saves stay independent", () => {
+	it("routes controlled watch events through the real reader and keeps keys independent", async () => {
+		// The OS scenarios below stay in place. This property checks the reader even where
+		// a sandbox cannot deliver native file events. The real reader gets controlled files and events.
+		await fc.assert(
+			fc.asyncProperty(
+				fc.array(fc.constantFrom("write", "rename", "bad", "delete", "denied"), {
+					minLength: 1,
+					maxLength: 7,
+				}),
+				async (ops) => {
+					const files = new Map([["keybindings.toml", "ctrl+a"]]);
+					const events: ((event: FileSystem.WatchEvent) => void)[] = [];
+					let denied = false;
+					const fs = FileSystem.makeNoop({
+						makeDirectory: () => Effect.void,
+						readFileString: (path) =>
+							Effect.suspend(() => {
+								const name = path.split("/").at(-1) ?? "";
+								const value = files.get(name);
+								return (denied && name === "fabrika.toml") || value === undefined
+									? Effect.fail(
+											PlatformError.systemError({
+												_tag: denied && name === "fabrika.toml" ? "PermissionDenied" : "NotFound",
+												module: "FileSystem",
+												method: "readFileString",
+											}),
+										)
+									: Effect.succeed(value);
+							}),
+						watch: (_path, options) =>
+							Stream.callback((queue) =>
+								Effect.sync(() => {
+									events.push((event) => {
+										Queue.offerUnsafe(queue, event);
+									});
+									options?.onReady?.();
+								}),
+							),
+					});
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const keys = yield* watching("/invented-settings", "keybindings.toml");
+							const themes = yield* watching("/invented-settings", "fabrika.toml");
+							yield* until("initial controlled reads", () => keys.length > 0 && themes.length > 0);
+							expect(keys).toEqual([{_tag: "read", value: "ctrl+a"}]);
+							for (const [i, op] of ops.entries()) {
+								const value = `${op === "bad" ? "bad " : ""}saved-${i}`;
+								denied = op === "denied";
+								if (op === "delete") files.delete("fabrika.toml");
+								else files.set("fabrika.toml", value);
+								yield* Effect.sync(() => {
+									for (const send of events)
+										send({
+											_tag: op === "delete" ? "Remove" : op === "rename" ? "Create" : "Update",
+											path: "fabrika.toml",
+										});
+								});
+								const expected =
+									op === "delete"
+										? {_tag: "none"}
+										: op === "denied"
+											? {_tag: "refused", line: 1, why: "it could not be read: permission denied"}
+											: op === "bad"
+												? {_tag: "refused", line: 1, why: value}
+												: {_tag: "read", value};
+								yield* until("latest controlled result", () => {
+									const got = last(themes);
+									return (
+										got?._tag === expected._tag &&
+										got.value === ("value" in expected ? expected.value : undefined) &&
+										got.why === ("why" in expected ? expected.why : undefined)
+									);
+								});
+								expect(last(themes)).toEqual(expected);
+								expect(keys).toEqual([{_tag: "read", value: "ctrl+a"}]);
+							}
+						}).pipe(
+							Effect.scoped,
+							Effect.provideService(FileSystem.FileSystem, fs),
+							Effect.provide(NodePath.layer),
+						),
+					);
+				},
+			),
+			{seed: 119120, numRuns: 15},
+		);
+	});
+
 	it("hears writes, atomic replacements, refusal and deletion in any order", async () => {
 		await fc.assert(
 			fc.asyncProperty(

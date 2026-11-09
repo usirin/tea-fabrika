@@ -1,6 +1,6 @@
 {
 	"status": "unmeasured",
-	"reason": "The generated theme-contract.ts pair list is missing. T13 cannot measure a cap until the builder supplies the final global names, aliases, backdrop pairs and floors. No cap, repair version or repair counts have been guessed. Fixture screenshots have not been reviewed.",
+	"reason": "Experiment 239 was run against build5. The generated 21-global pair list exists, but the kept mapped themes and the script still use the old 15 names; the checker stops at 'no color: surface-sunken'. Renaming those fields leaves six globals without mapping rules in the approved plan: surface-selected, border, border-strong, wire, scrim and turn-fill-hover. The built-in fallback in themes.ts also still exports the old 15 names. A complete uncapped pass cannot run without inventing fixture colors or filling them from a built-in. No cap, repair version or repair counts have been guessed. Fixture screenshots have not been reviewed.",
 	"policy": {"fix": "nudge", "contrast": 4.5},
 	"providerFees": 0
 }

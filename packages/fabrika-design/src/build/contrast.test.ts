@@ -251,7 +251,7 @@ describe("T6 both floors, with unrounded readings", () => {
 // Plants: alter a background/chroma/alpha; move only lighter; clip channels; replace the theme;
 // claim a failing built-in replacement passed; repair despite off.
 describe("T9-T12 bounded, lightness-only repair", () => {
-	const pair = (token = "text", on = "ground", floor = {wcag: 4.5, apca: 60}) => ({
+	const pair = (token = "text-primary", on = "surface", floor = {wcag: 4.5, apca: 60}) => ({
 		token,
 		on,
 		floor,
@@ -271,16 +271,22 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 				const before = structuredClone(theme);
 				const pairs = [
 					// The base of each drawn stack is solid; ground itself may carry alpha.
-					pair("text", "ground/terminal.background"),
-					pair("faint", "ground/terminal.background"),
-					pair("focus", "ground/terminal.background", {wcag: 3, apca: 15}),
+					pair("text-primary", "surface/terminal.background"),
+					pair("text-faint", "surface/terminal.background"),
+					pair("focus", "surface/terminal.background", {wcag: 3, apca: 15}),
 					pair("cursor", "terminal.background", {wcag: 3, apca: 15}),
 				];
 				const got = check(theme, pairs, {fix: "nudge", contrast: 4.5}, version);
 				expect(check(theme, pairs, {fix: "nudge", contrast: 4.5}, version)).toEqual(got);
 				expect(theme).toEqual(before);
 				expect(got.written).toEqual(before);
-				for (const name of ["desk", "ground", "raised", "hover", "edge"] as const)
+				for (const name of [
+					"surface-sunken",
+					"surface",
+					"surface-raised",
+					"surface-hover",
+					"border-faint",
+				] as const)
 					expect(got.shown.colors[name]).toBe(theme.colors[name]);
 				expect(got.shown.terminal.background).toBe(theme.terminal.background);
 				expect(got.shown.terminal.palette).toEqual(theme.terminal.palette);
@@ -308,9 +314,12 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 			fc.property(complete, fc.integer({min: 0, max: 255}), fc.boolean(), (theme, n, light) => {
 				const background = light ? "#ffffff" : "#000000";
 				const fg = gray(n);
-				const input = {...theme, colors: {...theme.colors, text: fg, ground: background}};
+				const input = {
+					...theme,
+					colors: {...theme.colors, "text-primary": fg, surface: background},
+				};
 				const got = check(input, [pair()], {fix: "nudge", contrast: 4.5}, version);
-				const now = got.shown.colors.text;
+				const now = got.shown.colors["text-primary"];
 				expect(meets(now, background)).toBe(true);
 				const move = Math.abs(lab(now)[0] - lab(fg)[0]);
 				const smaller = Array.from({length: 256}, (_, i) => gray(i)).filter(
@@ -329,21 +338,33 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 			fc.property(complete, solid, alpha, (theme, base, overlay) => {
 				const input = {
 					...theme,
-					colors: {...theme.colors, ground: base, hover: overlay, faint: "text"},
+					colors: {
+						...theme.colors,
+						surface: base,
+						"surface-hover": overlay,
+						"text-faint": "text-primary",
+					},
 				};
-				const requirements = [pair("faint", "hover/ground")];
+				const requirements = [pair("text-faint", "surface-hover/surface")];
 				const got = check(input, requirements, {fix: "nudge", contrast: 4.5}, version);
-				expect(got.shown.colors.faint).toBe("text");
-				expect(got.shown.colors.ground).toBe(base);
-				expect(got.shown.colors.hover).toBe(overlay);
+				expect(got.shown.colors["text-faint"]).toBe("text-primary");
+				expect(got.shown.colors["surface"]).toBe(base);
+				expect(got.shown.colors["surface-hover"]).toBe(overlay);
 				expect(got.failures.length === 0).toBe(
-					meets(got.shown.colors.text!, composite(overlay, base)),
+					meets(got.shown.colors["text-primary"]!, composite(overlay, base)),
 				);
-				const flattened = {...input, colors: {...input.colors, raised: composite(overlay, base)}};
+				const flattened = {
+					...input,
+					colors: {...input.colors, "surface-raised": composite(overlay, base)},
+				};
 				expect(
-					check(flattened, [pair("text", "raised")], {fix: "nudge", contrast: 4.5}, version).shown
-						.colors.text,
-				).toBe(got.shown.colors.text);
+					check(
+						flattened,
+						[pair("text-primary", "surface-raised")],
+						{fix: "nudge", contrast: 4.5},
+						version,
+					).shown.colors["text-primary"],
+				).toBe(got.shown.colors["text-primary"]);
 			}),
 			RUNS,
 		);
@@ -355,19 +376,24 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 			fc.property(complete, fc.integer({min: 0, max: 255}), (theme, n) => {
 				const input = {
 					...theme,
-					colors: {...theme.colors, text: gray(n), ground: "#000000", raised: "#ffffff"},
+					colors: {
+						...theme.colors,
+						"text-primary": gray(n),
+						surface: "#000000",
+						"surface-raised": "#ffffff",
+					},
 				};
-				const pairs = [pair(), pair("text", "raised")];
+				const pairs = [pair(), pair("text-primary", "surface-raised")];
 				const got = check(input, pairs, {fix: "nudge", contrast: 21}, version);
-				expect(got.shown.colors.ground).toBe("#000000");
-				expect(got.shown.colors.raised).toBe("#ffffff");
+				expect(got.shown.colors["surface"]).toBe("#000000");
+				expect(got.shown.colors["surface-raised"]).toBe("#ffffff");
 				expect(got.failures.length).toBeGreaterThan(0);
 				const expectedFailures = [
-					["ground", "#000000"],
-					["raised", "#ffffff"],
+					["surface", "#000000"],
+					["surface-raised", "#ffffff"],
 				]
-					.filter(([, bg]) => !meets(got.shown.colors.text, bg!, {wcag: 21, apca: 60}))
-					.map(([on]) => `text:${on}`)
+					.filter(([, bg]) => !meets(got.shown.colors["text-primary"], bg!, {wcag: 21, apca: 60}))
+					.map(([on]) => `text-primary:${on}`)
 					.sort();
 				expect(
 					got.failures
@@ -390,10 +416,16 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 				const input = {
 					...theme,
 					look: light ? "light" : "dark",
-					colors: {...theme.colors, text: gray(light ? 255 : 0), ground: gray(light ? 255 : 0)},
+					colors: {
+						...theme.colors,
+						"text-primary": gray(light ? 255 : 0),
+						surface: gray(light ? 255 : 0),
+					},
 				};
 				const unrestricted = check(input, [pair()], {fix: "nudge", contrast: 4.5}, version);
-				const move = Math.abs(lab(unrestricted.shown.colors.text)[0] - lab(input.colors.text)[0]);
+				const move = Math.abs(
+					lab(unrestricted.shown.colors["text-primary"])[0] - lab(input.colors["text-primary"])[0],
+				);
 				expect(move).toBeGreaterThan(0);
 				for (const cap of [move - 1e-8, move, move + 1e-8]) {
 					const got = check(input, [pair()], {fix: "nudge", contrast: 4.5}, {...version, cap});
@@ -401,11 +433,15 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 						(c: {readonly _tag: string}) => c._tag === "builtin",
 					);
 					expect(replacement.length).toBe(cap < move ? 1 : 0);
-					expect({...got.shown.colors, text: input.colors.text}).toEqual(input.colors);
-					expect(got.shown.terminal).toEqual(input.terminal);
-					expect(cap < move ? got.shown.colors.text : unrestricted.shown.colors.text).toBe(
-						cap < move ? builtin.colors.text : got.shown.colors.text,
+					expect({...got.shown.colors, "text-primary": input.colors["text-primary"]}).toEqual(
+						input.colors,
 					);
+					expect(got.shown.terminal).toEqual(input.terminal);
+					expect(
+						cap < move
+							? got.shown.colors["text-primary"]
+							: unrestricted.shown.colors["text-primary"],
+					).toBe(cap < move ? builtin.terminal.foreground : got.shown.colors["text-primary"]);
 				}
 			}),
 			RUNS,
@@ -420,11 +456,17 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 				const input = {
 					...theme,
 					look: light ? "light" : "dark",
-					colors: {...theme.colors, ground: builtin.colors.text, text: builtin.colors.text},
+					colors: {
+						...theme.colors,
+						surface: builtin.terminal.foreground,
+						"text-primary": builtin.terminal.foreground,
+					},
 				};
 				const got = check(input, [pair()], {fix: "nudge", contrast: 21}, {...version, cap: 0});
-				expect(got.shown.colors.text).toBe(builtin.colors.text);
-				expect(meets(got.shown.colors.text, input.colors.ground, {wcag: 21, apca: 60})).toBe(false);
+				expect(got.shown.colors["text-primary"]).toBe(builtin.terminal.foreground);
+				expect(
+					meets(got.shown.colors["text-primary"], input.colors["surface"], {wcag: 21, apca: 60}),
+				).toBe(false);
 				expect(got.failures.length).toBeGreaterThan(0);
 			}),
 			RUNS,
@@ -439,12 +481,12 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 					...theme,
 					colors: {
 						...theme.colors,
-						text: composite(theme.colors.ground!, theme.terminal.background),
+						"text-primary": composite(theme.colors["surface"]!, theme.terminal.background),
 					},
 				};
 				const got = check(
 					input,
-					[pair("text", "ground/terminal.background")],
+					[pair("text-primary", "surface/terminal.background")],
 					{fix: "off", contrast},
 					version,
 				);

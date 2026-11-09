@@ -1,6 +1,9 @@
 # Today's app, T343/T13. This is not a measured or accepted repair policy.
-# The generated theme-contract.ts pair list is missing. T13 cannot measure a cap
-# until the builder supplies the final global names, aliases, backdrop pairs and
-# floors. No cap, repair version or repair counts have been guessed.
+# Experiment 239 ran against build5. The 21-global pair list exists, but the
+# mapped themes still use 15 old names; the checker stops at surface-sunken.
+# The plan supplies no mapping for surface-selected, border, border-strong,
+# wire, scrim or turn-fill-hover. Filling these from a built-in would hide the gap.
+# themes.ts also still supplies fallback colors under the 15 old names.
+# No complete uncapped pass ran. No cap, version or repair counts were guessed.
 # Fixture screenshots have not been reviewed.
 status = "unmeasured"

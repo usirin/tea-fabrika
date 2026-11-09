@@ -12,16 +12,21 @@ bright roles, and uses the themes note's stated OKLCH ladder fractions. A mappin
 outside sRGB stops rather than clipping channels. The current fifteen file keys
 follow the note; the plan's token rename is still a gate before shipping format 1.
 
-`node experiments/239-theme-repair.ts` cannot measure yet. Today's checker now
-exports `measure`, `passes` and `check`, including signed APCA and repair over all
-listed backgrounds. The generated `theme-contract.ts` is still missing. The
-builder owns that file, the final global names, and their pairs and floors. The
-script was run again and stopped at that missing import, before any measurement.
-`fixtures/themes/calibration.json` and `tokens/repair.toml` explicitly record
-`unmeasured`. No cap, expected repair count or repair version has been filled in.
-Historical WCAG-only counts are not expected results.
+`node experiments/239-theme-repair.ts` was run against build5. The generated
+`theme-contract.ts` now exists, with 21 global colors and both floors. The script
+stops at `no color: surface-sunken`: the kept mapped inputs still use the earlier
+15 names. Renaming those fields is insufficient. The approved plan gives no
+mapping for `surface-selected`, `border`, `border-strong`, `wire`, `scrim` or
+`turn-fill-hover`. Those six colors cannot be invented or silently filled from
+the built-in. The built-in fallback in `themes.ts` still uses the old names too.
 
-Once those exports exist, the script first runs with the full lightness interval
+`fixtures/themes/calibration.json` and `tokens/repair.toml` therefore remain
+`unmeasured`, with these current reasons in their own words. No cap, expected
+repair count or repair version has been filled in. Historical WCAG-only counts
+are not expected results. The lead must settle the six mappings before the
+fixture inputs and their byte pins can change together.
+
+Once complete mapped inputs and built-in fallback values exist, the script first runs with the full lightness interval
 available, sorts every required move, selects the maximum from the five real
 schemes, then checks the same inputs with that cap. It writes raw reports under
 `runs/` or the path given by `--output`. The test writer must review the report,

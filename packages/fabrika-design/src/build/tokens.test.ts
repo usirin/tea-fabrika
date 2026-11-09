@@ -130,6 +130,10 @@ const copy = () => {
 	for (const file of ["tokens.css", "theme-colors.ts", "token-names.json"]) {
 		cpSync(join(PACKAGE, "src", file), join(dir, "src", file));
 	}
+	// Plants start from the current inputs' generated output. The separate real-package
+	// drift law still checks the committed files, so a pending rebuild cannot hide there.
+	const baseline = run("--root", dir);
+	if (baseline.code !== 0) throw new Error(`token plant baseline failed: ${baseline.said}`);
 	return dir;
 };
 
@@ -254,11 +258,10 @@ describe("each file says the owner's decided keys", () => {
 		});
 	});
 
-	it("keeps the 4.28 exception on white over the hovered turn fill, with its ticket", async () => {
+	// pinned: ticket 153's old WCAG exception was superseded by both floors on Nov 7.
+	it("pinned: ticket 153 no longer exempts the hovered turn label", async () => {
 		const except = (await readToken(PACKAGE, "turn-fg"))["except"];
-		expect(except).toEqual([
-			expect.objectContaining({on: "turn-fill-hover", look: "dark", ratio: 4.28, ticket: 153}),
-		]);
+		expect(except ?? []).toEqual([]);
 	});
 });
 
@@ -435,7 +438,7 @@ describe("the build checks the package as it stands", () => {
 		expect(run("--check")).toEqual({code: 0, said: expect.any(String)});
 	});
 
-	it("passes --check on an untouched copy, so a planted bug below fails for its own reason", () => {
+	it("format: freshly generated output checks clean before a bug is planted", () => {
 		expect(check(copy()).code).toBe(0);
 	});
 });
@@ -489,7 +492,7 @@ const BAD: readonly (readonly [string, string, (t: Table) => void, RegExp])[] = 
 		"an exception at a ratio it does not have",
 		"turn-fg",
 		with_("except", [{on: "turn-fill-hover", look: "dark", ratio: 4.27, ticket: 153, why: "kept"}]),
-		/ratio/,
+		/except/,
 	],
 	[
 		"an exception with no ticket",
@@ -497,7 +500,6 @@ const BAD: readonly (readonly [string, string, (t: Table) => void, RegExp])[] = 
 		with_("except", [{on: "turn-fill-hover", look: "dark", ratio: 4.28, why: "kept"}]),
 		/ticket/,
 	],
-	["the 4.28 pair with no exception", "turn-fg", without("except"), /floor/],
 	[
 		"a background that says it carries nothing",
 		"turn-fill",
@@ -514,6 +516,17 @@ describe("a bad token file fails the build, naming its file and field", () => {
 		await edit(dir, token, change);
 		const {code, said} = run("--root", dir);
 		expect({code, file: said.includes(`${token}.toml`), field: field.test(said)}).toEqual({
+			code: 1,
+			file: true,
+			field: true,
+		});
+	});
+	// pinned: restore ticket 153's original indigo 10 pair, with no exemption to hide it.
+	it("pinned: ticket 153's 4.28 hover pair fails the build", async () => {
+		const dir = copy();
+		await edit(dir, "turn-fill-hover", look("dark", "indigo.10"));
+		const {code, said} = run("--root", dir);
+		expect({code, file: said.includes("turn-fg.toml"), field: /floor/.test(said)}).toEqual({
 			code: 1,
 			file: true,
 			field: true,
@@ -692,6 +705,7 @@ describe("the generated files equal what the TOML gives", () => {
 	it("writes back a hand edit, leaving the hand-written part as it was", () => {
 		const dir = copy();
 		const path = join(dir, "src", "tokens.css");
+		const generated = readFileSync(path, "utf8");
 		editCss(dir);
 		writeByHand(dir, "--extra-room: 2px;");
 		const handBefore = readFileSync(path, "utf8").includes("--extra-room: 2px;");
@@ -702,7 +716,7 @@ describe("the generated files equal what the TOML gives", () => {
 			written,
 			kept: after.includes("--extra-room: 2px;"),
 			same: after.replace("\t--extra-room: 2px;\n", ""),
-		}).toEqual({handBefore: true, written: 0, kept: true, same: TOKENS_CSS()});
+		}).toEqual({handBefore: true, written: 0, kept: true, same: generated});
 	});
 });
 

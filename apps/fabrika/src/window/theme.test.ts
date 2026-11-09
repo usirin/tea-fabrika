@@ -25,7 +25,7 @@ interface Renderer {
 	fontSize: number;
 	fontFamily: string;
 	isInSelection: () => boolean;
-	correctForeground: (fg: string, bg: string) => string;
+	correctForeground?: (fg: string, bg: string) => string;
 	renderCellText: (cell: Cell, x: number, y: number) => void;
 }
 
@@ -43,6 +43,7 @@ describe("T18 per-cell correction", () => {
 					inverse: fc.boolean(),
 					faint: fc.boolean(),
 					corrected: solid,
+					emoji: fc.constantFrom(0x1f600, 0x1f1f9, 0x2764),
 				}),
 				(v) => {
 					const before: [string, string][] = [],
@@ -104,6 +105,19 @@ describe("T18 per-cell correction", () => {
 						selectionBackground: v.selection,
 						selectionForeground: v.selectedInk,
 					});
+					// Native emoji and an absent callback retain ghostty-web 0.4.0's drawing.
+					const native = v.selected
+						? v.selectedInk
+						: `rgb(${channels(v.inverse ? v.background : v.foreground).join(", ")})`;
+					before.length = 0;
+					drawn.length = 0;
+					renderer.renderCellText({...cell, codepoint: v.emoji}, 0, 0);
+					expect(before).toEqual([]);
+					expect(drawn).toEqual([{color: native, alpha: v.faint ? 0.5 : 1}]);
+					delete renderer.correctForeground;
+					drawn.length = 0;
+					renderer.renderCellText(cell, 0, 0);
+					expect(drawn).toEqual([{color: native, alpha: v.faint ? 0.5 : 1}]);
 				},
 			),
 			RUNS,

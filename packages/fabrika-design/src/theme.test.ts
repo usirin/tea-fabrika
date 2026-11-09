@@ -1,6 +1,6 @@
 import {complete, globalNames, hex, name, RUNS} from "@kampus/themes-fixture/laws";
 // Today's app, T343 PR 1. Plant: merge partial input with fabrika; accept two sources;
-// compare repaired.cursor with colors.text instead of terminal.cursor.
+// compare repaired.cursor with colors["text-primary"] instead of terminal.cursor.
 import {Result} from "effect";
 import fc from "fast-check";
 import {stringify} from "smol-toml";
@@ -190,7 +190,18 @@ describe("T2 source and repair records", () => {
 			fc.property(
 				complete,
 				hex,
-				fc.constantFrom("text", "faint", "focus", "cursor"),
+				fc.constantFrom(
+					"text-primary",
+					"text-faint",
+					"focus",
+					"done",
+					"running",
+					"stuck",
+					"closed",
+					"turn-fg",
+					"turn-text",
+					"cursor",
+				),
 				(input, was, token) => {
 					const now = token === "cursor" ? input.terminal.cursor : input.colors[token]!;
 					const repaired = {[token]: {was, now, why: "under floor"}};
@@ -211,11 +222,18 @@ describe("T2 source and repair records", () => {
 			fc.property(
 				complete,
 				fc.constantFrom(
-					"desk",
-					"ground",
-					"raised",
-					"hover",
-					"edge",
+					"surface-sunken",
+					"surface",
+					"surface-raised",
+					"surface-hover",
+					"surface-selected",
+					"border-faint",
+					"border",
+					"border-strong",
+					"wire",
+					"scrim",
+					"turn-fill",
+					"turn-fill-hover",
 					"palette",
 					"tile-edge",
 					"other",
@@ -254,7 +272,7 @@ describe("T25 [secrets] decode refusals", () => {
 					for (const operation of operations) {
 						const altered =
 							operation === "color"
-								? {...input, colors: {...input.colors, text: secret}}
+								? {...input, colors: {...input.colors, "text-primary": secret}}
 								: operation === "extra"
 									? {...input, [secret]: path}
 									: {...input, from: {base16: {file: path, sha256: secret}}};
