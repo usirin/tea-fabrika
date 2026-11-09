@@ -78,3 +78,35 @@ it("reports exactly undeclared direct and transitive script reads", () => {
 		{seed: 119120, numRuns: 100},
 	);
 });
+
+// T375 mutation: survivors on import spelling and on test files counted as scripts.
+it("reads every import spelling as a declaration and never treats a test as a script", () => {
+	const dir = ".agents/skills/s/scripts";
+	const tree = new Map<string, string>([
+		[`${dir}/a.sh`, ""],
+		[`${dir}/b.sh`, ""],
+		[`${dir}/c.sh`, ""],
+		[`${dir}/d.sh`, ""],
+		[`${dir}/e.sh`, ""],
+		[
+			`${dir}/x.test.ts`,
+			[
+				'import foo from "./a.sh?raw";',
+				'import {one,\n two} from "./b.sh?raw";',
+				'import  bar  from"./c.sh";',
+				'import  "./d.sh?raw";',
+				"import baz from './e.sh';",
+			].join("\n"),
+		],
+	]);
+	expect(scriptReads(tree)).toEqual([]);
+	// Another test file's name is not a script read.
+	expect(
+		scriptReads(
+			new Map([
+				[`${dir}/x.test.ts`, "y.test.ts"],
+				[`${dir}/y.test.ts`, ""],
+			]),
+		),
+	).toEqual([]);
+});
