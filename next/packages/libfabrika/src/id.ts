@@ -1,5 +1,14 @@
 // next/: TypeIDs with UUIDv7 suffixes. No platform or other libfabrika layer is needed.
-import {type Brand, Clock, Context, Effect, Layer, Order as Ordering, Schema as S} from "effect";
+import {
+	type Brand,
+	Clock,
+	Context,
+	Effect,
+	Layer,
+	Order as Ordering,
+	Result,
+	Schema as S,
+} from "effect";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 const low62 = (1n << 62n) - 1n;
@@ -141,32 +150,37 @@ export class Generator extends Context.Service<
 		Effect.sync(() => {
 			let at = -1,
 				random = 0n;
+			// Keep allocation and validation synchronous so fibers observe IDs in allocation order.
+			const allocate = <P extends string>(schema: IdSchema<P>, prefix: string, now: number) => {
+				if (!Number.isSafeInteger(now) || now < 0 || now > maxTime)
+					throw new IdError({why: "clock"});
+				let nextAt = at,
+					nextRandom = random;
+				if (now > at) {
+					nextAt = now;
+					nextRandom = entropy();
+				} else if (random === maxRandom) {
+					if (at === maxTime) throw new IdError({why: "exhausted"});
+					nextAt++;
+					nextRandom = 0n;
+				} else nextRandom++;
+				at = nextAt;
+				random = nextRandom;
+				return Result.getOrThrowWith(
+					S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`),
+					() => new IdError({why: "prefix"}),
+				);
+			};
 			return {
 				next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
 					const prefix = prefixes.get(schema);
 					if (prefix === undefined) return yield* new IdError({why: "prefix"});
 					yield* Effect.annotateCurrentSpan({type: prefix});
 					const now = yield* Clock.currentTimeMillis;
-					if (!Number.isSafeInteger(now) || now < 0 || now > maxTime)
-						return yield* new IdError({why: "clock"});
-					let nextAt = at,
-						nextRandom = random;
-					if (now > at) {
-						nextAt = now;
-						nextRandom = yield* Effect.try({
-							try: entropy,
-							catch: () => new IdError({why: "entropy"}),
-						});
-					} else if (random === maxRandom) {
-						if (at === maxTime) return yield* new IdError({why: "exhausted"});
-						nextAt++;
-						nextRandom = 0n;
-					} else nextRandom++;
-					at = nextAt;
-					random = nextRandom;
-					return yield* S.decodeUnknownEffect(schema)(`${prefix}_${encode(at, random)}`).pipe(
-						Effect.mapError(() => new IdError({why: "prefix"})),
-					);
+					return yield* Effect.try({
+						try: () => allocate(schema, prefix, now),
+						catch: (error) => (error instanceof IdError ? error : new IdError({why: "entropy"})),
+					});
 				}),
 			};
 		}),
