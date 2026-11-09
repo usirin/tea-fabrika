@@ -64,7 +64,6 @@ import {
 } from "./entry.ts";
 import {diff} from "./patch.ts";
 import {ProgramDown, Refusal, Step, Write} from "./program.ts";
-import {Saved} from "./state.ts";
 import {defaultPolicy, supervisor, type SupervisorMsg} from "./supervisor.ts";
 
 /** What `msg` answers: the input's placing in the inbox, or why it was not taken. */
@@ -137,7 +136,7 @@ const tag = (word: string): string => `fab.runner.${word}`;
 
 /** What a process holds between turns. */
 type Live = {
-	readonly loaded: Loaded;
+	readonly loaded: Omit<Loaded, "stepper">;
 	readonly model: unknown;
 	readonly view: unknown;
 	readonly wake: number | null;
@@ -150,6 +149,13 @@ type Live = {
 
 /** A failed Cmd's settled Msg error: its case is its why. */
 const failure = (why: string) => Schema.TaggedStruct(why, {}).make({});
+
+type RunnerOptions = {
+	/** The trusted wiring's policy. Without `maxDeliveries`, a letter is tried 3 times. */
+	readonly policy?: Omit<Policy, "maxDeliveries"> & {readonly maxDeliveries?: number};
+	readonly recovery: {readonly sql: Sql; readonly name: string; readonly capacity: number};
+	readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
+};
 
 export class ProgramRunner extends Context.Service<
 	ProgramRunner,
@@ -166,23 +172,37 @@ export class ProgramRunner extends Context.Service<
 		}) => Effect.Effect<void, RunnerFailure>;
 	}
 >()("@kampus/libfabrika/ProgramRunner") {
+	/** Load in process, keeping the pure stepper available to callers of ProgramLoader. */
 	static readonly layer = (
 		initial: Descriptor,
-		options?: {
-			/** The trusted wiring's policy. Without `maxDeliveries`, a letter is tried 3 times. */
-			readonly policy?: Omit<Policy, "maxDeliveries"> & {readonly maxDeliveries?: number};
-			readonly recovery: {readonly sql: Sql; readonly name: string; readonly capacity: number};
-			readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
-		},
+		options?: RunnerOptions,
 	): Layer.Layer<
 		ProgramRunner,
 		never,
 		ProgramLoader | ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording
 	> =>
+		Layer.unwrap(
+			Effect.map(ProgramLoader, (loader) => ProgramRunner.withLoader(initial, loader, options)),
+		);
+
+	/** Worker programs keep their pure stepper inside the box; the runner needs only execution. */
+	static readonly withLoader = (
+		initial: Descriptor,
+		loader: {
+			readonly load: (
+				name: string,
+				build?: string,
+			) => Effect.Effect<Omit<Loaded, "stepper">, ProgramDown>;
+		},
+		options?: RunnerOptions,
+	): Layer.Layer<
+		ProgramRunner,
+		never,
+		ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording
+	> =>
 		Layer.effect(
 			ProgramRunner,
 			Effect.gen(function* () {
-				const loader = yield* ProgramLoader;
 				const rootStore = yield* ProcessStore;
 				let store = rootStore;
 				let process = initial;
@@ -467,7 +487,7 @@ export class ProgramRunner extends Context.Service<
 				const observed = Effect.fnUntraced(function* (
 					failure: Failure,
 					at: number,
-					original?: unknown,
+					content?: unknown,
 				) {
 					if (supervision === null) return;
 					const s = supervision;
@@ -513,7 +533,8 @@ export class ProgramRunner extends Context.Service<
 					yield* saveRecovery(next);
 					if (failure._tag !== "interrupted")
 						yield* Effect.exit(
-							Effect.fail(original).pipe(
+							// The original failure text belongs only in P37's deletable content.
+							Effect.fail(content).pipe(
 								Effect.withSpan("runner.throw", {
 									attributes: {
 										[PROCESS]: failure.process,
@@ -624,19 +645,10 @@ export class ProgramRunner extends Context.Service<
 					yield* setAlarm();
 				});
 
-				/** A pure call: a ProgramDown it throws stays itself; any other throw is `why`. */
-				const pure = Effect.fnUntraced(function* <A>(why: ProgramDown["why"], f: () => A) {
-					return yield* Effect.try({
-						try: f,
-						catch: (error) =>
-							error instanceof ProgramDown ? error : new ProgramDown({why, cause: error}),
-					});
-				});
-
 				const step = Effect.fnUntraced(function* (
 					why: ProgramDown["why"],
 					letter: string,
-					f: () => Step,
+					f: () => Effect.Effect<Step, ProgramDown>,
 				) {
 					if (supervision !== null) {
 						const status = yield* (yield* coordinator).status(process.name);
@@ -654,7 +666,7 @@ export class ProgramRunner extends Context.Service<
 					yield* store.activity(
 						Activity.cases.stepping.make({process: process.id, letter, build: process.build}),
 					);
-					const result = yield* pure(why, f).pipe(Effect.exit);
+					const result = yield* Effect.suspend(f).pipe(Effect.exit);
 					if (supervision !== null && result._tag === "Failure") {
 						const attempt = supervision.attempt;
 						if (attempt === null) return yield* new LedgerError({why: "bad_row"});
@@ -663,16 +675,25 @@ export class ProgramRunner extends Context.Service<
 							return yield* Effect.failCause(result.cause);
 						}
 						const wrapped = Cause.squash(result.cause);
+						if (wrapped instanceof ProgramDown && wrapped.source !== undefined) {
+							yield* saveRecovery({...supervision, attempt: null});
+							yield* store
+								.activity(Activity.cases.idle.make({process: process.id}))
+								.pipe(Effect.ignore);
+							return yield* wrapped;
+						}
 						const original =
 							wrapped instanceof ProgramDown && Object.hasOwn(wrapped, "cause")
 								? wrapped.cause
 								: wrapped;
 						const error =
-							original instanceof Error
-								? original.constructor.name
-								: original === null
-									? "null"
-									: typeof original;
+							wrapped instanceof ProgramDown
+								? wrapped.errorClass
+								: original instanceof Error
+									? original.constructor.name
+									: original === null
+										? "null"
+										: typeof original;
 						yield* observed(
 							(why === "step" ? Failure.cases.fresh : Failure.cases.saved).make({
 								...attempt,
@@ -681,7 +702,9 @@ export class ProgramRunner extends Context.Service<
 							attempt.at,
 							original,
 						);
-						return yield* new ProgramDown({why, cause: original});
+						return yield* wrapped instanceof ProgramDown
+							? wrapped
+							: new ProgramDown({why, cause: original});
 					}
 					if (supervision !== null) yield* saveRecovery({...supervision, attempt: null});
 					return yield* result.pipe(
@@ -705,8 +728,8 @@ export class ProgramRunner extends Context.Service<
 
 				/** Loads the program and its checkpoint, climbing saved state through its upgrades. */
 				const load = Effect.fnUntraced(function* () {
-					const loaded = yield* loader.load(process.program);
-					const program = loaded.stepper.program;
+					const loaded = yield* loader.load(process.program, process.build);
+					const program = loaded.declaration;
 					if (supervision !== null && supervision.maxDeliveries !== program.maxDeliveries) {
 						const {maxDeliveries: _old, ...rest} = supervision;
 						yield* saveRecovery(
@@ -717,16 +740,13 @@ export class ProgramRunner extends Context.Service<
 					}
 					const saved = yield* store.load;
 					if (saved === null) {
-						const boot = yield* stepped(
-							yield* pure("load", () => loaded.stepper.init(null)),
-							"load",
-						);
+						const boot = yield* stepped(yield* loaded.execution.init(null), "load");
 						const fresh: Live = {
 							loaded,
 							model: boot.model,
 							view: boot.view,
 							wake: boot.wake,
-							v: program.state.v,
+							v: program.v,
 							after: 0,
 							pos: 0,
 							cmds: [],
@@ -736,13 +756,8 @@ export class ProgramRunner extends Context.Service<
 					const decoded = decodeDispatched(saved.cmds);
 					if (Result.isFailure(decoded)) return yield* new ProgramDown({why: "saved_state"});
 					const cmds = decoded.success;
-					const {saved: next, ran} = yield* pure("saved_state", () =>
-						Saved.upgrade(saved.saved, program.state, process.build),
-					);
-					const boot = yield* stepped(
-						yield* pure("saved_state", () => loaded.stepper.init(next.model)),
-						"saved_state",
-					);
+					const {saved: next, ran} = yield* loaded.execution.upgrade(saved.saved);
+					const boot = yield* stepped(yield* loaded.execution.init(next.model), "saved_state");
 					const upgraded = saved.saved.v !== next.v || ran.length > 0;
 					if (upgraded)
 						yield* store.record(
@@ -809,15 +824,16 @@ export class ProgramRunner extends Context.Service<
 					options: {readonly mine?: string; readonly dirty?: boolean} = {},
 				) {
 					const letters = yield* Stream.runCollect(mailbox.read(process.name, state.after));
+					const saved = yield* store.load;
 					if (letters.length === 0 && options.dirty !== true)
 						return {state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>()};
+					if (saved === null) yield* store.save(checkpoint(state, null));
 					let model = state.model;
 					let view = state.view;
 					let wake = state.wake;
 					const fresh: Array<Dispatched> = [];
 					let cmds = state.cmds;
 					const placed: Array<Placed> = [];
-					const saved = yield* store.load;
 					const prepared = Schema.decodeUnknownOption(Turn)(saved?.turn);
 					// The raw inbox keeps canceled signals; the manager filters them for this process.
 					const signals = new Set(
@@ -851,7 +867,9 @@ export class ProgramRunner extends Context.Service<
 							accepted && !own && letter.parent !== null ? stamp(input, letter.parent) : input;
 						const folded = accepted
 							? yield* stepped(
-									yield* step("saved_letter", letter.id, () => state.loaded.stepper.fold(model, m)),
+									yield* step("saved_letter", letter.id, () =>
+										state.loaded.execution.fold(model, m),
+									),
 									"saved_letter",
 								)
 							: yield* receive(state, model, letter.m);
@@ -903,16 +921,17 @@ export class ProgramRunner extends Context.Service<
 
 				const receive = Effect.fnUntraced(function* (state: Live, model: unknown, m: unknown) {
 					const port = inputPort(state, m);
-					if (
-						port === undefined ||
-						port._tag !== "write" ||
-						port.personOnly ||
-						hasParent(m) ||
-						Result.isFailure(Schema.decodeUnknownResult(port.schema)(m))
-					)
+					if (port === undefined || !port.write || port.personOnly || hasParent(m))
 						return Step.cases.refused.make({why: "bad_msg"});
-					return yield* pure("step", () => state.loaded.stepper.step(model, m)).pipe(
-						Effect.catch(() => Effect.succeed(Step.cases.refused.make({why: "bad_msg"}))),
+					const refused = Step.cases.refused.make({why: "bad_msg"});
+					return yield* state.loaded.execution.admit(m).pipe(
+						Effect.flatMap((admitted) =>
+							admitted ? state.loaded.execution.step(model, m) : Effect.succeed(refused),
+						),
+						Effect.catchIf(
+							(error) => error.why === "step" && error.source === undefined,
+							() => Effect.succeed(refused),
+						),
 					);
 				});
 
@@ -984,7 +1003,7 @@ export class ProgramRunner extends Context.Service<
 					const {stream, write: asked} = input.success;
 					const fact = asked.fact;
 					const kind = typeof fact._tag === "string" ? fact._tag : null;
-					const writes = state.loaded.stepper.program.writes;
+					const writes = state.loaded.declaration.writes;
 					const policy = kind !== null && Object.hasOwn(writes, kind) ? writes[kind] : undefined;
 					if (kind === null || RESERVED.has(kind) || policy === undefined || !isFact(fact))
 						return yield* err(job, "bad_cmd");
@@ -995,8 +1014,7 @@ export class ProgramRunner extends Context.Service<
 						(stream.endsWith("/inbox") && stream !== `${process.name}/inbox`)
 					)
 						return yield* err(job, "forbidden");
-					if (Result.isFailure(Schema.decodeUnknownResult(policy.schema)(fact)))
-						return yield* err(job, "bad_cmd");
+					if (!(yield* state.loaded.execution.check(kind, fact))) return yield* err(job, "bad_cmd");
 					const commit = (links: ReadonlyArray<Tracer.SpanLink>) =>
 						Effect.fn("runner.write", {
 							attributes: {
@@ -1014,11 +1032,13 @@ export class ProgramRunner extends Context.Service<
 								if (policy.personOnly) return yield* new SigningRefused({why: "person_only"});
 								return yield* commit([])(checked.own(job.id, stream, fact));
 							}
-							if (Option.isNone(sessions))
+							if (checked.sign === undefined && Option.isNone(sessions))
 								return yield* Effect.die(new Error("a caused write needs a SessionManager"));
-							const session = yield* sessions.value
-								.signer(asked.parent, process.id, kind)
-								.pipe(Effect.provideService(SignRequest, {id: job.id}));
+							const session = yield* checked.sign !== undefined
+								? checked.sign(job.id, asked.parent, kind)
+								: Option.getOrThrow(sessions)
+										.signer(asked.parent, process.id, kind)
+										.pipe(Effect.provideService(SignRequest, {id: job.id}));
 							return yield* commit([{span: Tracer.externalSpan(session.span), attributes: {}}])(
 								checked.commit(job.id, session, stream, fact),
 							);
@@ -1043,11 +1063,9 @@ export class ProgramRunner extends Context.Service<
 				/** A handler's Cmd. Only a declared Cmd with a handler runs; its answer is checked. */
 				const handle = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
 					const type = cmdType(job);
-					const def = (state.loaded.stepper.program.machine.cmds ?? []).find(
-						(d) => d.cmdType === type,
-					);
+					const declared = state.loaded.declaration.cmds.includes(type);
 					const run = state.loaded.handler(type);
-					if (def === undefined || Option.isNone(run)) return yield* err(job, "bad_cmd");
+					if (!declared || Option.isNone(run)) return yield* err(job, "bad_cmd");
 					// The handler's own failure ends its span failed, with the message as deletable content.
 					const exit = yield* cmdSpan(job, run.value(job.cmd)).pipe(Effect.exit);
 					if (exit._tag === "Failure") {
@@ -1056,22 +1074,20 @@ export class ProgramRunner extends Context.Service<
 						return yield* err(job, "handler_failed");
 					}
 					const outcome: Outcome<unknown, unknown> = exit.value;
-					if (outcome._tag === "Ok") {
-						const encoded = encodeAnswer(def.schema.ok, outcome.value);
-						return yield* Option.isSome(encoded) ? ok(job, encoded.value) : err(job, "bad_cmd");
-					}
-					const declared = def.errTags.find(
-						(t) =>
-							typeof outcome.error === "object" &&
-							outcome.error !== null &&
-							"_tag" in outcome.error &&
-							outcome.error._tag === t,
+					// The box checks the declared tag and encodes the answer (main's P11 encoding); an Err
+					// also carries its tag as `why`, as the runner's own errors do.
+					return yield* state.loaded.execution.reply(job.cmd, {...outcome, at: yield* at}).pipe(
+						Effect.map((m) => {
+							const tag = outcome._tag === "Err" ? errTag(outcome.error) : undefined;
+							return tag !== undefined && typeof m === "object" && m !== null && !Array.isArray(m)
+								? {...m, why: tag}
+								: m;
+						}),
+						Effect.catchIf(
+							(error) => error.why === "step" && error.source === undefined,
+							() => err(job, "bad_cmd"),
+						),
 					);
-					if (declared === undefined) return yield* err(job, "bad_cmd");
-					const encoded = encodeAnswer(Schema.TaggedStruct(declared, {}), outcome.error);
-					return yield* Option.isSome(encoded)
-						? err(job, declared, encoded.value)
-						: err(job, "bad_cmd");
 				});
 
 				/** Runs one saved Cmd, saves its answer as a letter, and folds it. Answers the Cmds that
@@ -1328,12 +1344,13 @@ export class ProgramRunner extends Context.Service<
 						const port = inputPort(state, input.envelope.input);
 						if (
 							port === undefined ||
-							port._tag !== "write" ||
+							!port.write ||
 							(port.personOnly && input.envelope.by._tag !== "person")
 						)
 							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
 						const m = stamp(input.envelope.input, input.envelope.id);
-						if (Result.isFailure(Schema.decodeUnknownResult(port.schema)(m)))
+						// The port's schema runs inside the box; Schemas do not cross its RPC (P12).
+						if (!(yield* state.loaded.execution.admit(m)))
 							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
 						if (supervision !== null && !supervision.receipts.some((r) => r.letter === input.id))
 							yield* saveRecovery({
@@ -1354,12 +1371,13 @@ export class ProgramRunner extends Context.Service<
 								],
 							});
 						const preparation = yield* Effect.result(
-							step("step", input.id, () => state.loaded.stepper.step(state.model, m)),
+							step("step", input.id, () => state.loaded.execution.step(state.model, m)),
 						);
 						if (Result.isFailure(preparation)) {
 							const terminal = supervision?.receipts.find((r) => r.letter === input.id)?.result;
 							if (
 								preparation.failure instanceof ProgramDown &&
+								preparation.failure.source === undefined &&
 								terminal !== null &&
 								terminal !== undefined &&
 								supervision !== null &&
@@ -1430,19 +1448,15 @@ const inputPort = (state: Live, m: unknown) =>
 	Option.match(decodeTyped(m), {
 		onNone: () => undefined,
 		onSome: ({type}) => {
-			const inputs = state.loaded.stepper.program.inputs;
+			const inputs = state.loaded.declaration.inputs;
 			return Object.hasOwn(inputs, type) ? inputs[type] : undefined;
 		},
 	});
 
 const isFact = (u: Readonly<Record<string, Schema.Json>>): u is Fact => typeof u._tag === "string";
 
-const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> =>
-	Schema.isSchema(schema);
-
-const encodeAnswer = (schema: unknown, value: unknown): Option.Option<Schema.Json> => {
-	if (!isCodec(schema)) return Option.none();
-	return Option.liftThrowable(() =>
-		Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value)),
-	)();
-};
+/** An Err outcome's tag, when its error is tagged. */
+const errTag = (error: unknown): string | undefined =>
+	typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string"
+		? error._tag
+		: undefined;

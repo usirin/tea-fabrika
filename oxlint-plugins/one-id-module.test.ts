@@ -2,9 +2,9 @@ import * as fc from "fast-check";
 import {expect, it} from "vitest";
 import {plant} from "../next/apps/fabrika/src/exam/plant.ts";
 
-it("refuses the retired Id module for generated contents and permits other module paths", () => {
-	fc.assert(
-		fc.property(fc.string(), fc.integer(), (text, count) => {
+it("refuses the retired Id module for generated contents and permits other module paths", async () => {
+	await fc.assert(
+		fc.asyncProperty(fc.string(), fc.integer(), async (text, count) => {
 			for (const body of [
 				"",
 				`export const value = ${JSON.stringify(text)};`,
@@ -18,7 +18,9 @@ it("refuses the retired Id module for generated contents and permits other modul
 					"next/packages/libfabrika/src/transport/id.ts",
 					"packages/fabrika/src/data/id.ts",
 				];
-				const linted = plant(Object.fromEntries([retired, ...allowed].map((path) => [path, body])));
+				const linted = await plant(
+					Object.fromEntries([retired, ...allowed].map((path) => [path, body])),
+				);
 				expect(linted("fabrika(one-id-module)", retired)).toEqual([1]);
 				for (const path of allowed) expect(linted("fabrika(one-id-module)", path)).toEqual([]);
 			}

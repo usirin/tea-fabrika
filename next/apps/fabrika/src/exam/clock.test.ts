@@ -35,8 +35,8 @@ const clean = [
 	'export const Press = () => <button type="button" onClick={() => send({type: "press"})} />;',
 ].join("\n");
 
-describe("the clock in a view", () => {
-	const all = plant({
+describe("the clock in a view", async () => {
+	const all = await plant({
 		[VIEW]: view,
 		[CLEAN]: clean,
 		[PLAIN]: "export const now = () => Date.now();",
