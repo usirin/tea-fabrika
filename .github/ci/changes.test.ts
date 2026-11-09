@@ -351,12 +351,25 @@ it("shared tracked-file check agrees with Git, including command errors", () => 
 
 // T375 mutation: unanchored skill paths. A skill-shaped path below another folder is no skill.
 it("skill script and prose rules apply only at the repo root", () => {
-	expect(ci.classify(["next/.agents/skills/lead/scripts/a.sh"], "pull_request")).toEqual({
-		...heavy,
-		test: false,
-		e2e: false,
-		field: false,
-	});
-	expect(ci.classify(["next/.claude/skills/x"], "pull_request")).toMatchObject({check: true});
-	expect(ci.classify(["docs/.claude/skills/x"], "pull_request")).toMatchObject({check: true});
+	fc.assert(
+		fc.property(fc.array(skillName, {maxLength: 2}), script, skillName, (dirs, script, skill) => {
+			const prefix = ["next", ...dirs].join("/");
+			expect(ci.classify([`${prefix}/${script}`], "pull_request")).toEqual({
+				...heavy,
+				test: false,
+				e2e: false,
+				field: false,
+			});
+			for (const root of ["next", "docs"])
+				expect(
+					ci.classify([[root, ...dirs, ".claude/skills", skill].join("/")], "pull_request"),
+				).toEqual({
+					...heavy,
+					test: root !== "next",
+					e2e: root !== "next",
+					field: false,
+				});
+		}),
+		options,
+	);
 });

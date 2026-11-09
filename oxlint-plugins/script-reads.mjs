@@ -1,4 +1,5 @@
 import {posix} from "node:path";
+import {buildSync} from "esbuild";
 
 /**
  * Today's tooling. Match script basenames even in comments and shell strings.
@@ -16,10 +17,22 @@ export const scriptReads = (tree) => {
 	const missing = [];
 	for (const [test, text] of tree) {
 		if (!test.endsWith(".test.ts")) continue;
+		// Parse imports so comments and fixture strings cannot declare a dependency.
+		const parsed = buildSync({
+			stdin: {contents: text, sourcefile: test, loader: "ts"},
+			format: "esm",
+			metafile: true,
+			write: false,
+			// Keep unused value imports: these declarations exist for the affected walk.
+			tsconfigRaw: {compilerOptions: {verbatimModuleSyntax: true}},
+		});
 		const declared = new Set(
-			[...text.matchAll(/\bimport\s+(?:[^;]*?\sfrom\s*)?["']([^"']+)["']/g)].map((m) =>
-				posix.normalize(posix.join(posix.dirname(test), (m[1] ?? "").replace(/\?raw$/, ""))),
-			),
+			Object.values(parsed.metafile.outputs)
+				.flatMap((output) => output.imports)
+				.filter((entry) => entry.kind === "import-statement")
+				.map(({path}) =>
+					posix.normalize(posix.join(posix.dirname(test), path.replace(/\?raw$/, ""))),
+				),
 		);
 		const seen = new Set([test]);
 		const queue = [test];

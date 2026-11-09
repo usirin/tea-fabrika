@@ -4,9 +4,11 @@ import {expect, it} from "vitest";
 import {scriptReads} from "./script-reads.mjs";
 
 // Today's tooling. No schemas describe source text. Graphs include cycles, unreferenced scripts,
-// partial declarations and all four naming forms. The oracle uses edges, never source matching.
+// partial declarations and all naming/import forms. The oracle uses edges, never source matching.
 // T375 source plants caught: direct reads only, ignoring dirname shell paths, reporting declared
 // files. Deleting stepcommit.test.ts's own declaration also failed the real lint runner.
+// Mutation kills retained: import spacing/quotes/newlines and tests counted as scripts.
+// Review plant: an import inside a comment or a fixture string counts as declared.
 const refs = fc.array(fc.nat({max: 19}), {maxLength: 3});
 const model = fc.record({
 	skills: fc.array(fc.array(refs, {minLength: 1, maxLength: 5}), {minLength: 1, maxLength: 4}),
@@ -14,6 +16,8 @@ const model = fc.record({
 		maxLength: 3,
 	}),
 	form: fc.integer({min: 0, max: 3}),
+	importForm: fc.integer({min: 0, max: 4}),
+	fixtureForm: fc.integer({min: 0, max: 4}),
 });
 const forms = (path: string, form: number) => {
 	const name = posix.basename(path);
@@ -24,89 +28,92 @@ const forms = (path: string, form: number) => {
 		`../../${path.split("/").slice(2).join("/")}`,
 	][form]!;
 };
+const imports = (path: string, form: number, n: number) =>
+	[
+		`import value${n} from "${path}?raw";`,
+		`import {one as one${n},\n two as two${n}} from "${path}?raw";`,
+		`import  value${n}  from"${path}";`,
+		`import  "${path}?raw";`,
+		`import value${n} from '${path}';`,
+	][form]!;
+const fixtures = (statement: string, form: number) =>
+	[
+		`// ${statement.replaceAll("\n", "\n// ")}`,
+		`/* ${statement} */`,
+		`${JSON.stringify(statement)};`,
+		`'${statement.replaceAll("'", "\\'").replaceAll("\n", "\\n")}';`,
+		`\`${statement}\`;`,
+	][form]!;
 
 it("reports exactly undeclared direct and transitive script reads", () => {
-	fc.assert(
-		fc.property(model, ({skills, tests, form}) => {
-			const files = skills.flatMap((scripts, s) =>
-				scripts.map((edges, i) => ({path: `.agents/skills/s${s}/scripts/s${s}file${i}.sh`, edges})),
-			);
-			const tree = new Map<string, string>();
-			const edges = files.map((f) => [...new Set(f.edges.map((n) => n % files.length))]);
-			files.forEach((file, i) => {
-				tree.set(file.path, edges[i]!.map((n) => forms(files[n]!.path, form)).join("\n"));
-			});
-			const expected: {test: string; path: string}[] = [];
-			const reachable = new Map<string, Set<number>>();
-			tests.forEach((test, i) => {
-				const path = `.agents/skills/s0/scripts/check${i}.test.ts`;
-				const roots = [...new Set(test.refs.map((n) => n % files.length))];
-				// Declarations name a subset of those same roots: at most three names per file.
-				const declared = new Set(roots.filter((_, n) => test.declared[n]));
-				tree.set(
-					path,
-					[
-						...test.refs.map((n) => forms(files[n % files.length]!.path, form)),
-						...[...declared].map(
-							(n) =>
-								`import "${posix.relative(posix.dirname(path), files[n]!.path).replace(/^(?!\.)/, "./")}?raw";`,
-						),
-						// A basename inside a longer word is not a script read.
-						...files.map((f) => `prefix${posix.basename(f.path)}suffix`),
-					].join("\n"),
+	for (const addFixtures of [false, true])
+		fc.assert(
+			fc.property(model, ({skills, tests, form, importForm, fixtureForm}) => {
+				const files = skills.flatMap((scripts, s) =>
+					scripts.map((edges, i) => ({
+						path: `.agents/skills/s${s}/scripts/s${s}file${i}.sh`,
+						edges,
+					})),
 				);
-				const reached = new Set(roots);
-				for (const n of reached) for (const edge of edges[n]!) reached.add(edge);
-				reachable.set(path, reached);
-				for (const n of reached)
-					if (!declared.has(n)) expected.push({test: path, path: files[n]!.path});
-			});
-			const got = scriptReads(tree);
-			const sort = (rows: {test: string; path: string}[]) =>
-				rows.map(({test, path}) => `${test}:${path}`).sort();
-			expect(sort(got)).toEqual(sort(expected));
-			for (const row of got) {
-				const via = files.findIndex((f) => f.path === row.via);
-				const target = files.findIndex((f) => f.path === row.path);
-				if (via < 0) expect(row.via).toBe(row.test);
-				else {
-					expect(reachable.get(row.test)!.has(via)).toBe(true);
-					expect(edges[via]).toContain(target);
+				const tree = new Map<string, string>();
+				const edges = files.map((f) => [...new Set(f.edges.map((n) => n % files.length))]);
+				files.forEach((file, i) => {
+					tree.set(file.path, edges[i]!.map((n) => forms(files[n]!.path, form)).join("\n"));
+				});
+				const expected: {test: string; path: string}[] = [];
+				const reachable = new Map<string, Set<number>>();
+				const withFixtures = new Map(tree);
+				tests.forEach((test, i) => {
+					const path = `.agents/skills/s0/scripts/check${i}.test.ts`;
+					const roots = [...new Set(test.refs.map((n) => n % files.length))];
+					// Declarations name a subset of those same roots: at most three names per file.
+					const declared = new Set(roots.filter((_, n) => test.declared[n]));
+					const statement = (n: number) =>
+						imports(
+							posix.relative(posix.dirname(path), files[n]!.path).replace(/^(?!\.)/, "./"),
+							importForm,
+							n,
+						);
+					tree.set(
+						path,
+						[
+							...test.refs.map((n) => `// ${forms(files[n % files.length]!.path, form)}`),
+							...[...declared].map(statement),
+							// A basename inside a longer word is not a script read.
+							...files.map((f) => `// prefix${posix.basename(f.path)}suffix`),
+							// Another test file's name is not a script read.
+							`// check${(i + 1) % tests.length}.test.ts`,
+						].join("\n"),
+					);
+					withFixtures.set(
+						path,
+						[
+							tree.get(path),
+							...roots
+								.filter((n) => !declared.has(n))
+								.map((n) => fixtures(statement(n), fixtureForm)),
+						].join("\n"),
+					);
+					const reached = new Set(roots);
+					for (const n of reached) for (const edge of edges[n]!) reached.add(edge);
+					reachable.set(path, reached);
+					for (const n of reached)
+						if (!declared.has(n)) expected.push({test: path, path: files[n]!.path});
+				});
+				const got = scriptReads(addFixtures ? withFixtures : tree);
+				const sort = (rows: {test: string; path: string}[]) =>
+					rows.map(({test, path}) => `${test}:${path}`).sort();
+				expect(sort(got)).toEqual(sort(expected));
+				for (const row of got) {
+					const via = files.findIndex((f) => f.path === row.via);
+					const target = files.findIndex((f) => f.path === row.path);
+					if (via < 0) expect(row.via).toBe(row.test);
+					else {
+						expect(reachable.get(row.test)!.has(via)).toBe(true);
+						expect(edges[via]).toContain(target);
+					}
 				}
-			}
-		}),
-		{seed: 119120, numRuns: 100},
-	);
-});
-
-// T375 mutation: survivors on import spelling and on test files counted as scripts.
-it("reads every import spelling as a declaration and never treats a test as a script", () => {
-	const dir = ".agents/skills/s/scripts";
-	const tree = new Map<string, string>([
-		[`${dir}/a.sh`, ""],
-		[`${dir}/b.sh`, ""],
-		[`${dir}/c.sh`, ""],
-		[`${dir}/d.sh`, ""],
-		[`${dir}/e.sh`, ""],
-		[
-			`${dir}/x.test.ts`,
-			[
-				'import foo from "./a.sh?raw";',
-				'import {one,\n two} from "./b.sh?raw";',
-				'import  bar  from"./c.sh";',
-				'import  "./d.sh?raw";',
-				"import baz from './e.sh';",
-			].join("\n"),
-		],
-	]);
-	expect(scriptReads(tree)).toEqual([]);
-	// Another test file's name is not a script read.
-	expect(
-		scriptReads(
-			new Map([
-				[`${dir}/x.test.ts`, "y.test.ts"],
-				[`${dir}/y.test.ts`, ""],
-			]),
-		),
-	).toEqual([]);
+			}),
+			{seed: 119120, numRuns: 100},
+		);
 });
