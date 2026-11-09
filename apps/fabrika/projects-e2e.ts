@@ -157,6 +157,27 @@ const prefix = async (page: Page, key: string) => {
 	await page.keyboard.press(key);
 };
 
+/** What the projects box looks like now, for a failure message: its options and the option's box. */
+const boxState = async (page: Page, optionBox?: string) => {
+	const dialog = box(page);
+	const options = await dialog
+		.getByRole("option")
+		.allTextContents()
+		.catch(() => []);
+	const animations = await dialog
+		.evaluate((el) => el.getAnimations({subtree: true}).map((a) => `${a.playState}`))
+		.catch(() => null);
+	return `dialogs=${await page.getByRole("dialog").count()} box=${await dialog.count()} options=${JSON.stringify(options)} animations=${JSON.stringify(animations)} optionBox=${
+		optionBox ??
+		JSON.stringify(
+			await dialog
+				.getByRole("option", {name: /Open Folder…/})
+				.boundingBox()
+				.catch(() => null),
+		)
+	}`;
+};
+
 export const openFixtureProject = async (
 	app: ElectronApplication,
 	from: Page,
@@ -170,6 +191,33 @@ export const openFixtureProject = async (
 		(n) => n > 0,
 	);
 	const wasWelcome = (await button(from).count()) === 0;
+	// In a project window the option sits in the projects box, whose pop-in animation moves and
+	// resizes it for a moment; a click then lands where the option no longer is and does nothing.
+	// Ready is the box with its option, every animation under the box finished, and the option's
+	// box the same on two reads in a row. In the welcome the option itself is the signal.
+	const option = (wasWelcome ? from : box(from)).getByRole("option", {name: /Open Folder…/});
+	if (!wasWelcome) {
+		let lastBox: string | undefined;
+		await until(
+			async () => {
+				if ((await box(from).count()) === 0 || (await option.count()) === 0) return false;
+				const settled = await box(from)
+					.evaluate((el) =>
+						el.getAnimations({subtree: true}).every((a) => a.playState === "finished"),
+					)
+					.catch(() => false);
+				const now = JSON.stringify(await option.boundingBox().catch(() => null));
+				const same = now === lastBox && now !== "null";
+				lastBox = now;
+				return settled && same;
+			},
+			(ready) => ready,
+		).catch(async (error: unknown) => {
+			throw new Error(`the projects box never became ready: ${await boxState(from, lastBox)}`, {
+				cause: error,
+			});
+		});
+	}
 	let known = openedPages.get(app);
 	if (!known) {
 		known = new Map();
@@ -198,11 +246,31 @@ export const openFixtureProject = async (
 			if (dialogs !== 0) return refuse("P28: sheet stacked over projects box");
 			return {canceled: folder === null, filePaths: folder === null ? [] : [folder]};
 		};
+		// Not asked yet: the wait after the click reads this slot.
+		Reflect.set(globalThis, "projectSheetRefusal", undefined);
 	}, root);
 	const before = new Set(app.windows());
 	const folder = from.getByRole("option", {name: /Open Folder…/});
 	if (await folder.count()) await folder.click();
 	else await from.getByRole("button", {name: "Open Folder…", exact: true}).click();
+	// The click must have asked for the sheet (the handler sets the slot to null or a reason;
+	// undefined is never asked). A box still open with no ask is a click that did not act.
+	if (!wasWelcome)
+		await until(
+			async () => ({
+				asked: await app.evaluate(
+					() => Reflect.get(globalThis, "projectSheetRefusal") !== undefined,
+				),
+				open: await box(from).count(),
+			}),
+			(seen) => seen.asked || seen.open === 0,
+			5_000,
+		).catch(async (error: unknown) => {
+			throw new Error(
+				`the click on Open Folder… did not ask for the folder sheet; ${await boxState(from)}`,
+				{cause: error},
+			);
+		});
 	if (root === null) {
 		await until(
 			() => box(from).count(),
