@@ -33,6 +33,8 @@
 		// All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
 		"fabrika/door-is-library": "error",
 		"fabrika/outside-input-constructor": "error",
+		// P27a plants cover every new restriction. Current P27 wiring files do not exist yet.
+		"fabrika/wiring-only": "error",
 
 		// Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
 		// out below (experiment 155). So are tests: they write the options' shape to check it, and

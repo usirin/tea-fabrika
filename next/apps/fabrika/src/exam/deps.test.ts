@@ -254,7 +254,7 @@ const FORBIDDEN: ReadonlyArray<{readonly name: string; readonly test: (spec: str
  *  and which a tab holds a read copy of later (Tier 1, P6), and its `/coordination`, whose names
  *  the menu bar and the door share (Tier 1, P9). Every program's `/window` comes on top. */
 const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
-	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination", "./door"],
+	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination", "./door", "./chaos"],
 	"@kampus/tuval": ["."],
 	"@kampus/notes": ["."],
 };

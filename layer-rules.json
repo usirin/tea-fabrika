@@ -36,6 +36,7 @@
 			"name": "next-door",
 			"paths": ["next/packages/libfabrika/src/door"]
 		},
+		{ "name": "next-chaos", "paths": ["next/packages/libfabrika/src/chaos"] },
 		{
 			"name": "next-app",
 			"paths": ["next/packages/libfabrika/src/app"]
@@ -113,6 +114,36 @@
 		}
 	],
 	"allowed": [
+		{
+			"from": "next/packages/libfabrika/src/app/handler-completion.test.ts",
+			"to": "next/packages/libfabrika/src/chaos/p27.test-support.ts",
+			"sites": 1,
+			"reason": "P27a's runner laws use the shared real library world. This exact test import grants no production import."
+		},
+		{
+			"from": "next/packages/libfabrika/src/app/step-fault.test.ts",
+			"to": "next/packages/libfabrika/src/chaos/p27.test-support.ts",
+			"sites": 1,
+			"reason": "P27a's hook laws use the shared real library world. This exact test import grants no production import."
+		},
+		{
+			"from": "next/packages/libfabrika/src/coordination/fault-journal.test.ts",
+			"to": "next/packages/libfabrika/src/chaos/p27.test-support.ts",
+			"sites": 1,
+			"reason": "P27a's journal laws use the shared real library world. This exact test import grants no production import."
+		},
+		{
+			"from": "next/packages/libfabrika/src/transport/gateway-fault.test.ts",
+			"to": "next/packages/libfabrika/src/chaos/p27.test-support.ts",
+			"sites": 1,
+			"reason": "P27a's gateway laws use the shared real storage and fault contracts. This exact test import grants no production import."
+		},
+		{
+			"from": "next/packages/libfabrika/src/transport/gateway-fault.test.ts",
+			"to": "next/packages/libfabrika/src/data/id.ts",
+			"sites": 1,
+			"reason": "P27a's gateway laws generate real typed input and session IDs. This exact test import grants no production import."
+		},
 		{
 			"from": "packages/pipeline/src/laws/agent.ts",
 			"to": "packages/pipeline/src/laws/explore.ts",

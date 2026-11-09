@@ -8,6 +8,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./coordination": "./src/coordination/index.ts",
+		"./chaos": "./src/chaos/index.ts",
 		"./data": "./src/data/index.ts",
 		"./door": "./src/door/index.ts",
 		"./sqlite": "./src/data/sqlite.ts",
@@ -22,6 +23,7 @@
 		"effect": "catalog:"
 	},
 	"devDependencies": {
+		"@effect/platform-node": "catalog:",
 		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
 		"fast-check": "catalog:",

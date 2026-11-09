@@ -26,10 +26,12 @@ import {noTypeAssertions} from "./no-type-assertions.ts";
 import {oneStoreHook} from "./one-store-hook.ts";
 import {outsideInputConstructor} from "./outside-input-constructor.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
+import {wiringOnly} from "./wiring-only.ts";
 
 const plugin: Plugin = {
 	meta: {name: "fabrika"},
 	rules: {
+		"wiring-only": wiringOnly,
 		"door-is-library": doorIsLibrary,
 		"edge-comment": edgeComment,
 		"effect-functions": effectFunctions,
