@@ -118,6 +118,18 @@ describe("leftIn reads a real box, today's tooling", () => {
 		git(off, "commit", "-q", "-m", "side");
 		expect(leftIn(off, "fabrikalfa/l")).toEqual(["1 commits off fabrikalfa/l"]);
 
+		// A clone's own main, ahead of the step's branch but on its remote, is not the box's work.
+		// themes build5, 2026-11-09: kept for "21 commits off" that were its local main.
+		const cloned = join(root, "cloned");
+		spawnSync("git", ["clone", "-q", "-b", "fabrikalfa/l", clean, cloned]);
+		git(clean, "switch", "-q", "-c", "main");
+		writeFileSync(join(clean, "m.ts"), "5\n");
+		git(clean, "add", "m.ts");
+		git(clean, "commit", "-q", "-m", "main moved");
+		git(clean, "switch", "-q", "fabrikalfa/l");
+		git(cloned, "fetch", "-q", "origin", "main:main");
+		expect(leftIn(cloned, "fabrikalfa/l")).toEqual([]);
+
 		// A branch the box does not have is a state drive cannot read, so the box stays.
 		expect(leftIn(clean, "fabrikalfa/missing")).toEqual(["a git state drive could not read"]);
 		expect(leftIn(join(root, "gone"), "fabrikalfa/l")).toEqual([]);
