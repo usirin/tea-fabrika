@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {checkHolds, laneStuck, startHead, wipOf} from "./lane.ts";
+import {checkHolds, laneRoot, laneStuck, startHead, wipOf} from "./lane.ts";
 
 // Today's tooling. Pure rules drive.ts and gc.ts share.
 const options = {seed: 119120, numRuns: 300};
@@ -49,6 +49,40 @@ describe("lane rules, today's tooling", () => {
 						saved !== undefined &&
 						(newest === undefined || (saved[0] === "c" && at(saved) > at(newest)));
 					expect(got).toBe(savedAhead || newest === undefined ? saved : newest);
+				},
+			),
+			options,
+		);
+	});
+
+	// Plants: keep any saved root the base holds (the old rule); always take the fresh merge base.
+	// ci375 tests6, 2026-11-09: after a catch-up, 48 of main's squash commits read as unsigned.
+	it("the lane root is the fresh merge base unless the base holds a saved root the merge base does not", () => {
+		// One line of history, "c0" < "c1" < ...; "x<n>" is off the line and holds nothing.
+		const at = (c: string) => Number(c.slice(1));
+		const isAncestor = (a: string, b: string) =>
+			a[0] === "c" && b[0] === "c" ? at(a) <= at(b) : a === b;
+		const on = fc.nat({max: 9});
+		fc.assert(
+			fc.property(
+				on,
+				on,
+				fc.option(
+					fc.oneof(
+						on.map((n) => `c${n}`),
+						on.map((n) => `x${n}`),
+					),
+					{nil: undefined},
+				),
+				(a, b, saved) => {
+					const [fresh, base] = [`c${Math.min(a, b)}`, `c${Math.max(a, b)}`];
+					const got = laneRoot(saved, fresh, base, isAncestor);
+					const between =
+						saved !== undefined &&
+						saved[0] === "c" &&
+						at(saved) > at(fresh) &&
+						at(saved) <= at(base);
+					expect(got).toBe(between ? saved : fresh);
 				},
 			),
 			options,
