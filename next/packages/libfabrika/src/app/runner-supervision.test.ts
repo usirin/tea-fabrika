@@ -32,10 +32,10 @@ import {
 	storage,
 	watcher,
 } from "../coordination/process.test-support.ts";
-import {Activity, Down, Recipient} from "../coordination/process.ts";
+import {Activity, Down, ProcessFact, Recipient} from "../coordination/process.ts";
 import {RecoveryStore} from "../coordination/recovery-store.ts";
 import {Ledger, LedgerError} from "../data/ledger.ts";
-import {InputId, lineFor} from "../data/log.ts";
+import {InputId, lineFor, valueFor} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {SpanSink} from "../data/sink.ts";
 import {
@@ -1337,6 +1337,9 @@ describe("P34 runner supervision", () => {
 							"foreign-dead",
 							lineFor(from({by: "SHA256:foreign"}), {
 								_tag: "dead",
+								process: A,
+								program: "counter",
+								name: NAME,
 								tries: 3,
 								limit: 3,
 								m: "poison",
@@ -1741,7 +1744,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
 		);
 	});
 
-	it("p80 plant, ignore the program's limit: a letter is tried the program's maxDeliveries, else the wiring's, else 3 times, then moves to dead with that limit", async () => {
+	it("p80 T319 plant, ignore the program's limit or use successor identity: a letter moves to dead at its limit with its process's started identity", async () => {
 		const limit = fc.option(fc.integer({min: 1, max: 32}), {nil: undefined});
 		const {maxDeliveries: _default, ...rest} = policy;
 		await fc.assert(
@@ -1777,9 +1780,22 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
 							const errors = Array.from({length: expected}, (_, n) =>
 								n === 1 ? "RangeError" : "TypeError",
 							);
-							expect((yield* dead).map((row) => row.body)).toMatchObject([
+							const rows = yield* dead;
+							expect(rows.map((row) => row.body)).toMatchObject([
 								{m: id, tries: expected, limit: expected, errors},
 							]);
+							const process = PIDS[expected - 1]!;
+							const started = (yield* lives)
+								.filter((row) => row._tag === "started" && row.by === brain().by)
+								.map((row) => Schema.decodeUnknownSync(ProcessFact.cases.started)(valueFor(row)))
+								.find((fact) => fact.process === process);
+							expect(started).toBeDefined();
+							expect(rows[0]!.stream).toBe(`${process}/dead`);
+							expect(rows[0]!.body).toMatchObject({
+								process: started!.process,
+								program: started!.program,
+								name: started!.name,
+							});
 						}).pipe(Effect.provide(w.layer()));
 					}).pipe(Effect.provide(TestClock.layer())),
 				),

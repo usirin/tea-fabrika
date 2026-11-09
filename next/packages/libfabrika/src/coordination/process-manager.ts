@@ -9,6 +9,7 @@ import {
 	type Caller,
 	clientInbox,
 	Dead,
+	DeadInput,
 	Down,
 	ProcessError,
 	ProcessFact,
@@ -54,7 +55,7 @@ export class ProcessManager extends Context.Service<
 		) => Effect.Effect<{readonly name: string; readonly state: typeof State.Type}, Failure>;
 		readonly dead: (
 			process: string,
-			dead: typeof Dead.Type,
+			dead: typeof DeadInput.Type,
 			from: From,
 		) => Effect.Effect<void, Failure>;
 		readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
@@ -315,16 +316,21 @@ export class ProcessManager extends Context.Service<
 					}),
 					dead: Effect.fn("process.dead")(function* (
 						process: string,
-						dead: typeof Dead.Type,
+						dead: typeof DeadInput.Type,
 						from: From,
 					) {
-						const value = yield* Effect.try({
-							try: () => Schema.decodeUnknownSync(Dead)(dead),
-							catch: () => new ProcessError({why: "bad_text"}),
-						});
+						const input = yield* Schema.decodeUnknownEffect(DeadInput)(dead).pipe(
+							Effect.mapError(() => new ProcessError({why: "bad_text"})),
+						);
 						yield* checked((table, turn) => {
 							const life = table.parent(process, caller.owner);
 							if (Result.isFailure(life)) return Result.fail(life.failure);
+							const value = Dead.make({
+								...input,
+								process: life.success.state.process,
+								program: life.success.state.code.program,
+								name: life.success.name,
+							});
 							const stream = `${process}/dead`;
 							const key = id("dead", process, value.m);
 							const prior = [...turn.read(stream, 0)].find(

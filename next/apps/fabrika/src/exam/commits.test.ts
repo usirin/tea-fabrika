@@ -793,6 +793,7 @@ describe("trusted config files", () => {
 				},
 				{ "glob": "next/**/*.test.ts", "why": "next/'s tests" },
 				{ "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
+				{ "glob": "next/packages/libfabrika/src/id.test-support.ts", "why": "the generated ID fixtures" },
 				{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
 				{ "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
 				{ "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },
@@ -810,6 +811,10 @@ describe("trusted config files", () => {
 				{
 					"glob": ".agents/skills/*/scripts/*.test.ts",
 					"why": "the step scripts' laws and planted breaks"
+				},
+				{
+					"glob": ".agents/skills/lead/scripts/skillscheck.sh",
+					"why": "the shared skills' source-and-link lint check"
 				},
 				{ "glob": "layer-rules.json", "why": "which way imports may point" },
 				{ "glob": "boundary-rules.json", "why": "which package may import which" },

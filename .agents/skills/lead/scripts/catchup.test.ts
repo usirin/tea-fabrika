@@ -12,6 +12,7 @@ const reads = ["head", "checks", "trust", "apps", "logs"] as const;
 const options = {seed: 520, numRuns: 12};
 type Call = {cmd: string; args: string[]; key?: string};
 type Setup = {
+	repo?: string;
 	failures: number[];
 	pending: number;
 	answer: "green" | "red" | "event" | "duplicate" | "app" | "ticket" | "trust-red";
@@ -81,6 +82,12 @@ if (cmd === "gh") {
   process.exit(0);
 }
 if (cmd === "git") {
+  if (setup.repo && (args.includes("merge-base") || args.includes("merge"))) {
+    const at = args.includes("merge-base") ? args.indexOf("merge-base") : args.indexOf("merge");
+    const ran = require("node:child_process").spawnSync("/usr/bin/git", ["-C", setup.repo, ...args.slice(at)], {encoding: "utf8"});
+    process.stdout.write(ran.stdout || ""); process.stderr.write(ran.stderr || "");
+    process.exit(ran.status ?? 1);
+  }
   if (args.includes("merge-base")) process.exit(setup.merge ? 1 : 0);
   if (args[0] === "rev-parse") console.log(args.includes("--short") ? process.env.CATCHUP_TIP.slice(0, 7) : process.env.CATCHUP_TIP);
   else if (args[0] === "push" && setup.refused === "branch") die("branch push refused");
@@ -101,7 +108,7 @@ if (cmd === "date") {
 }
 die("unhandled tool: " + cmd);
 `;
-const run = (setup: Setup) => {
+const run = (setup: Setup, args: string[] = []) => {
 	const dir = mkdtempSync(join(tmpdir(), "cu-"));
 	try {
 		const bin = join(dir, "bin");
@@ -112,7 +119,7 @@ const run = (setup: Setup) => {
 		for (const cmd of ["gh", "git", "node", "pnpm", "nice", "sleep", "date"]) {
 			writeFileSync(join(bin, cmd), `#!${process.execPath}\n${stub}`, {mode: 0o755});
 		}
-		const ran = spawnSync("sh", [script, "900", "520"], {
+		const ran = spawnSync("sh", [script, "900", "520", ...args], {
 			encoding: "utf8",
 			timeout: 15_000,
 			env: {
@@ -132,9 +139,12 @@ const run = (setup: Setup) => {
 		});
 		expect(ran.error).toBeUndefined();
 		expect(ran.signal).toBeNull();
-		const calls: Call[] = readFileSync(join(dir, "calls.jsonl"), "utf8")
+		const calls: Call[] = (
+			existsSync(join(dir, "calls.jsonl")) ? readFileSync(join(dir, "calls.jsonl"), "utf8") : ""
+		)
 			.trim()
 			.split("\n")
+			.filter(Boolean)
 			.map((line) => JSON.parse(line));
 		expect(existsSync(join(dir, "boxes/catchup.lock"))).toBe(false);
 		return {code: ran.status, text: ran.stdout + ran.stderr, calls};
@@ -154,6 +164,140 @@ const assertHead = (calls: Call[]) => {
 };
 
 describe("catchup, today's tooling", () => {
+	// Plants: always squash; omit the head pin; do work after invalid options.
+	it("T300 merge options choose exactly one method and keep the checked head", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					merge: fc.boolean(),
+					answer: fc.constantFrom<Setup["answer"]>("green", "red", "ticket"),
+					pending: fc.integer({min: 0, max: 1}),
+					invalid: fc.stringMatching(/^[a-z]{1,6}$/).filter((s) => s !== "merge" && s !== "squash"),
+				}),
+				({merge, answer: outcome, pending, invalid}) => {
+					for (const answer of new Set<Setup["answer"]>(["green", outcome])) {
+						for (const method of [undefined, "squash", "merge", invalid, ""] as const) {
+							const args = method === undefined ? [] : ["--merge-method", method];
+							const got = run({...green, merge, answer, pending}, args);
+							const valid = method === undefined || method === "squash" || method === "merge";
+							expect(got.code, got.text).toBe(valid && answer === "green" ? 0 : 1);
+							if (!valid) expect(got.calls).toEqual([]);
+							const landed = merges(got.calls);
+							expect(landed).toHaveLength(valid && answer === "green" ? 1 : 0);
+							for (const call of landed) {
+								expect(call.args.filter((a) => a === "--merge" || a === "--squash")).toEqual([
+									`--${method ?? "squash"}`,
+								]);
+							}
+							assertHead(got.calls);
+						}
+					}
+					for (const args of [
+						["--merge-method"],
+						["--unknown", "merge"],
+						["--merge-method", "merge", "extra"],
+					]) {
+						const got = run(green, args);
+						expect(got.code, got.text).toBe(1);
+						expect(got.calls).toEqual([]);
+					}
+				},
+			),
+			{seed: 300, numRuns: 5},
+		);
+	});
+
+	// Plants: remove union; retain one side; deduplicate IDs. Plain conflicts must still abort.
+	it("T300 real git preserves both field logs and aborts other conflicts without a push", () => {
+		fc.assert(
+			fc.property(
+				fc.array(
+					fc.record({
+						id: fc.integer({min: 0, max: 2}),
+						text: fc.stringMatching(/^[a-z]{1,8}$/),
+					}),
+					{minLength: 1, maxLength: 3},
+				),
+				(rows) => {
+					for (const conflict of [false, true]) {
+						const dir = mkdtempSync(join(tmpdir(), "cu-log-"));
+						const git = (...args: string[]) => {
+							const ran = spawnSync("/usr/bin/git", ["-C", dir, ...args], {
+								encoding: "utf8",
+								timeout: 5_000,
+								env: {
+									...process.env,
+									GIT_CONFIG_NOSYSTEM: "1",
+									GIT_CONFIG_GLOBAL: "/dev/null",
+									GIT_ATTR_NOSYSTEM: "1",
+									GIT_TERMINAL_PROMPT: "0",
+								},
+							});
+							expect(ran.error).toBeUndefined();
+							expect(ran.status, ran.stderr).toBe(0);
+							return ran.stdout.trim();
+						};
+						try {
+							git("init", "-q", "--initial-branch=main");
+							git("config", "user.name", "Fixture");
+							git("config", "user.email", "fixture@example.test");
+							git("config", "core.attributesFile", "/dev/null");
+							expect(git("remote")).toBe("");
+							mkdirSync(join(dir, "field"));
+							writeFileSync(
+								join(dir, ".gitattributes"),
+								readFileSync(join(import.meta.dirname, "../../../../.gitattributes")),
+							);
+							const prefix = rows.map((r) => JSON.stringify({...r, side: "base"}));
+							const tails = ["ours", "theirs"].map((side) =>
+								rows.map((r) => JSON.stringify({...r, side})),
+							);
+							const logs = ["runs", "notes"].map((name) => join(dir, `field/${name}.jsonl`));
+							for (const log of logs) writeFileSync(log, `${prefix.join("\n")}\n`);
+							writeFileSync(join(dir, "ordinary.txt"), "base\n");
+							git("add", ".");
+							git("commit", "-qm", "base");
+							git("branch", "peer");
+							for (const [i, branch] of ["main", "peer"].entries()) {
+								git("checkout", "-q", branch);
+								for (const log of logs)
+									writeFileSync(log, `${[...prefix, ...tails[i]!].join("\n")}\n`);
+								if (conflict) writeFileSync(join(dir, "ordinary.txt"), `${branch}\n`);
+								git("add", ".");
+								git("commit", "-qm", branch);
+							}
+							git("update-ref", "refs/remotes/origin/main", "peer");
+							git("checkout", "-q", "main");
+							const before = git("rev-parse", "HEAD");
+							const got = run({...green, merge: true, repo: dir});
+							expect(got.code, got.text).toBe(conflict ? 1 : 0);
+							if (conflict) {
+								expect(git("rev-parse", "HEAD")).toBe(before);
+								expect(git("status", "--porcelain")).toBe("");
+								expect(
+									got.calls.some(
+										(c) =>
+											c.cmd === "node" ||
+											c.cmd === "pnpm" ||
+											c.args[0] === "push" ||
+											c.key === "merge",
+									),
+								).toBe(false);
+							} else
+								for (const log of logs) {
+									const actual = readFileSync(log, "utf8").trimEnd().split("\n");
+									expect(actual.sort()).toEqual([...prefix, ...tails.flat()].sort());
+									for (const line of actual) expect(() => JSON.parse(line)).not.toThrow();
+								}
+						} finally {
+							rmSync(dir, {recursive: true, force: true});
+						}
+					}
+				},
+			),
+			{seed: 300, numRuns: 5},
+		);
+	});
 	// Plant: exit on the first read failure, or allow a fourth attempt.
 	it("brief read failures recover within the three-attempt budget", () => {
 		fc.assert(

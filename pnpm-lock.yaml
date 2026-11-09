@@ -186,17 +186,17 @@ catalogs:
       specifier: 0.25.0
       version: 0.25.0
     '@effect/opentelemetry':
-      specifier: 4.1.1
-      version: 4.1.1
+      specifier: 4.1.2
+      version: 4.1.2
     '@effect/platform-node':
-      specifier: 4.1.1
-      version: 4.1.1
+      specifier: 4.1.2
+      version: 4.1.2
     '@effect/tsgo':
       specifier: 0.63.0
       version: 0.63.0
     '@effect/vitest':
-      specifier: 4.1.1
-      version: 4.1.1
+      specifier: 4.1.2
+      version: 4.1.2
     '@manti-ui/react':
       specifier: 0.13.0
       version: 0.13.0
@@ -276,8 +276,8 @@ catalogs:
       specifier: 2.0.0-beta.84
       version: 2.0.0-beta.84
     effect:
-      specifier: 4.1.1
-      version: 4.1.1
+      specifier: 4.1.2
+      version: 4.1.2
     electron:
       specifier: 45.2.1
       version: 45.2.1
@@ -349,7 +349,7 @@ catalogs:
       version: 4.6.7
 
 overrides:
-  '@effect/platform-node-shared': 4.1.1
+  '@effect/platform-node-shared': 4.1.2
 
 patchedDependencies:
   '@demlik/tea@0.25.0': a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3
@@ -373,13 +373,13 @@ importers:
         version: 0.12.0
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/opentelemetry':
         specifier: 'catalog:'
-        version: 4.1.1(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.1)
+        version: 4.1.2(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.2)
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:packages/fabrika
@@ -439,7 +439,7 @@ importers:
         version: link:packs/ui-verification
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       smol-toml:
         specifier: 'catalog:'
         version: 1.9.1
@@ -449,7 +449,7 @@ importers:
     devDependencies:
       '@demlik/structure-sweep':
         specifier: 'catalog:'
-        version: 0.3.9(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.3.9(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.63.0
@@ -494,10 +494,10 @@ importers:
         version: 0.0.81
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-design':
         specifier: workspace:*
         version: link:../../packages/fabrika-design
@@ -560,7 +560,7 @@ importers:
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       ghostty-web:
         specifier: 'catalog:'
         version: 0.4.0(patch_hash=28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54)
@@ -615,16 +615,16 @@ importers:
         version: 0.3.316(@anthropic-ai/sdk@0.133.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../../packages/fabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -637,16 +637,16 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../../packages/fabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -693,10 +693,10 @@ importers:
     dependencies:
       '@alchemy.run/cloudflare':
         specifier: 'catalog:'
-        version: 2.0.0-beta.84(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0))(effect@4.1.1)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+        version: 2.0.0-beta.84(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -705,10 +705,10 @@ importers:
         version: link:../../packages/ledger-server
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0)
+        version: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
@@ -736,7 +736,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -748,7 +748,7 @@ importers:
         version: link:../../programs/tracker
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
@@ -809,10 +809,10 @@ importers:
         version: 0.12.0
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../packages/fabrika
@@ -824,7 +824,7 @@ importers:
         version: link:../wip
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       smol-toml:
         specifier: 'catalog:'
         version: 1.9.1
@@ -846,13 +846,13 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/libfabrika':
         specifier: workspace:*
         version: link:../../packages/libfabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       oxc-parser:
         specifier: 'catalog:'
         version: 0.157.0
@@ -862,10 +862,10 @@ importers:
     devDependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -886,14 +886,14 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -911,17 +911,17 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/libfabrika':
         specifier: workspace:*
         version: link:../../packages/libfabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -960,7 +960,7 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -976,13 +976,13 @@ importers:
         version: 0.0.81
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/opentelemetry':
         specifier: 'catalog:'
-        version: 4.1.1(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.1)
+        version: 4.1.2(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.2)
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@modelcontextprotocol/client':
         specifier: 'catalog:'
         version: 2.4.0
@@ -1009,7 +1009,7 @@ importers:
         version: 26.6.6
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
@@ -1036,7 +1036,7 @@ importers:
         version: 26.6.6
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
@@ -1054,19 +1054,19 @@ importers:
     dependencies:
       '@alchemy.run/cloudflare':
         specifier: 'catalog:'
-        version: 2.0.0-beta.84(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0))(effect@4.1.1)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+        version: 2.0.0-beta.84(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../fabrika
       alchemy:
         specifier: 'catalog:'
-        version: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0)
+        version: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
@@ -1088,7 +1088,7 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../fabrika
@@ -1107,10 +1107,10 @@ importers:
         version: 0.3.316(@anthropic-ai/sdk@0.133.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/opentelemetry':
         specifier: 'catalog:'
-        version: 4.1.1(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.1)
+        version: 4.1.2(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.2)
       '@opentelemetry/api':
         specifier: 'catalog:'
         version: 1.9.1
@@ -1140,7 +1140,7 @@ importers:
         version: 26.6.6
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
@@ -1158,10 +1158,10 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1183,11 +1183,11 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -1202,7 +1202,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1211,14 +1211,14 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@tea-fabrika/ask-log':
         specifier: workspace:*
         version: link:../ask-log
@@ -1245,11 +1245,11 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -1270,7 +1270,7 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1286,13 +1286,13 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1323,7 +1323,7 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1345,7 +1345,7 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1361,7 +1361,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1376,7 +1376,7 @@ importers:
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1404,7 +1404,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1416,7 +1416,7 @@ importers:
         version: 0.3.0
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
       mdast-util-from-markdown:
         specifier: 'catalog:'
         version: 2.1.0(supports-color@10.2.2)
@@ -1477,7 +1477,7 @@ importers:
         version: link:../../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1493,7 +1493,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1508,7 +1508,7 @@ importers:
         version: link:../tracker
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1536,7 +1536,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1551,7 +1551,7 @@ importers:
         version: link:../tracker
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1582,7 +1582,7 @@ importers:
     dependencies:
       '@demlik/tea':
         specifier: 'catalog:'
-        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+        version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
@@ -1594,7 +1594,7 @@ importers:
         version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1625,7 +1625,7 @@ importers:
         version: link:../packages/pipeline
       effect:
         specifier: 'catalog:'
-        version: 4.1.1
+        version: 4.1.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -2271,8 +2271,8 @@ packages:
     peerDependencies:
       effect: ^4.0.5
 
-  '@effect/opentelemetry@4.1.1':
-    resolution: {integrity: sha512-JmygxQy2BLHekSZk81gtFIUJOw7X9c8OoUslnFLH5Q7XghkoEU1MB9Lt2M/aKvOruzAWwf7OvPv7fGI7AJokiQ==}
+  '@effect/opentelemetry@4.1.2':
+    resolution: {integrity: sha512-FhxQy4I0nKLX0Dh9l6rZ5S/fRAMt7dKdekHtoxgx7N/XBtPP/IFhcJnGPenceuuSeVbcLp1vpZa43wC05qdxng==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
       '@opentelemetry/api': '>=1.9.0 <2.0.0'
@@ -2284,7 +2284,7 @@ packages:
       '@opentelemetry/sdk-trace-node': '>=2.0.0 <3.0.0'
       '@opentelemetry/sdk-trace-web': '>=2.0.0 <3.0.0'
       '@opentelemetry/semantic-conventions': '>=1.33.0 <2.0.0'
-      effect: ^4.1.1
+      effect: ^4.1.2
     peerDependenciesMeta:
       '@opentelemetry/api':
         optional: true
@@ -2303,17 +2303,17 @@ packages:
       '@opentelemetry/sdk-trace-web':
         optional: true
 
-  '@effect/platform-node-shared@4.1.1':
-    resolution: {integrity: sha512-29zdEDs3i5W+t92+mWTFNSfzSHsTpZMcFZ9k4lkkz4tETlC1m4lRwjdjieJtvQ/bKHMnYrCtZwizsBFSf3L5Yg==}
+  '@effect/platform-node-shared@4.1.2':
+    resolution: {integrity: sha512-wSwl9A/G1hcVvF8nLI+YfB3EyOIDvWS6+lsTZBkmgDnPBL7m8YWZF+1HD+mdEsb52SUGfukip46Q3gRwSdk3QA==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: ^4.1.1
+      effect: ^4.1.2
 
-  '@effect/platform-node@4.1.1':
-    resolution: {integrity: sha512-Oy3eP27XeipUgejftptHy0zf2W75HU8/yPKwBqdz8uYxAvWdf4c48OFYs6KJX/+uIEKdMjnF6mXYgbauWgIcVA==}
+  '@effect/platform-node@4.1.2':
+    resolution: {integrity: sha512-ye0UjxORdd5Qu3paZ1LljgGOALWHt7muP9VTpjUSCNfcesiB/Hm7wPJIvZeu4gnwpTe5BtEnO1VHngWqjJp8mA==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: ^4.1.1
+      effect: ^4.1.2
       redis: '>=5.1.0 <7.0.0'
 
   '@effect/sql-d1@4.0.6':
@@ -2365,10 +2365,10 @@ packages:
     resolution: {integrity: sha512-bRbvVj+YLE/nBmcBWGAwsul3mjEYlqqOmWMxvwSVKq/oNnJEuZYgi2OFDeUf7q49E2g3w+oMHMWyN2QayZ77RQ==}
     hasBin: true
 
-  '@effect/vitest@4.1.1':
-    resolution: {integrity: sha512-VkE9EUXE4G7mXMmV3X3Iu+6k3pZswWjOf7PB2qiaHMoFAZAPtHp+eUZo9oJM4Ip5z+ghQ9K0IDAQM2iG6+w5MA==}
+  '@effect/vitest@4.1.2':
+    resolution: {integrity: sha512-JJPwAHkJHxvM/woW9mMW/khjasAHcmwWdOMAgMy16rfqsxcVhFDnrRsvN9VI2+kMv8zDCCyBE2q1n5hzZlfE0w==}
     peerDependencies:
-      effect: ^4.1.1
+      effect: ^4.1.2
       vitest: '>=5.0.0 <6.0.0'
 
   '@electron-internal/extract-zip@1.0.6':
@@ -5162,8 +5162,8 @@ packages:
   effect@4.0.6:
     resolution: {integrity: sha512-Tc3mkzuLR6t6P9dhLt0D2GrxYtmU5td4XEJEiXCmILz53IRIfJyHsKZWjTA3xEjiwpNTtXBgI4iqYPxMztBDrw==}
 
-  effect@4.1.1:
-    resolution: {integrity: sha512-XYu65BrcmNqu5i7PPvP4dqL+R5ma37zIsfuSPjcn78mog+6e5PkilNg7Xo+pBpjXJYlWEIpH4j91tMrfW05CMw==}
+  effect@4.1.2:
+    resolution: {integrity: sha512-d3Oah1WyKxFLFh19yWheS5IXIVaITzxZ71JkE1rkUozq/6EcJSU5nPk5bF2QrSygZ3SQoiNQB8TsxFriyMeMaQ==}
 
   electron-to-chromium@1.5.467:
     resolution: {integrity: sha512-Nw9X371rtZmYcBSnEijnCDONILjs93biCZO34juC7MBOmK8E+GFnyD4T/WvyrlJkppul7oxg6TwvtKst9SODTw==}
@@ -6165,8 +6165,8 @@ packages:
     resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.12.2:
-    resolution: {integrity: sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==}
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
     engines: {node: '>=22.19.0'}
 
   unenv@2.0.0-rc.24:
@@ -6344,8 +6344,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  ws@8.22.0:
-    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
+  ws@8.22.1:
+    resolution: {integrity: sha512-oyL6OPYme/CmiFvNuGzeoxCJ4nOrZE2O1FwM9MWM1AsGri6nLXB2pg+lNA8aLeXMSav0J6eIVS1j6vUPzUtK9g==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -6427,20 +6427,20 @@ snapshots:
     optionalDependencies:
       '@modelcontextprotocol/server': 2.4.0
 
-  '@alchemy.run/acme@2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0))(effect@4.1.1)':
+  '@alchemy.run/acme@2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)':
     dependencies:
-      '@distilled.cloud/acme': 1.0.0-rc.17(effect@4.1.1)
-      alchemy: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0)
-      effect: 4.1.1
+      '@distilled.cloud/acme': 1.0.0-rc.17(effect@4.1.2)
+      alchemy: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+      effect: 4.1.2
 
-  '@alchemy.run/cloudflare-runtime@2.0.0-beta.84(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.1))(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.1)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
+  '@alchemy.run/cloudflare-runtime@2.0.0-beta.84(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2))(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
     dependencies:
       '@alchemy.run/node-utils': 2.0.0-beta.84
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261012.1)
-      '@distilled.cloud/cloudflare': 1.0.0-rc.17(effect@4.1.1)
+      '@distilled.cloud/cloudflare': 1.0.0-rc.17(effect@4.1.2)
       '@puppeteer/browsers': 3.2.6(yauzl@3.4.0)
       capnp-es: 0.0.16(typescript@7.0.2)
-      effect: 4.1.1
+      effect: 4.1.2
       magic-string: 0.30.21
       mime: 4.1.1
       sharp: 0.35.5(@types/node@26.6.6)
@@ -6448,7 +6448,7 @@ snapshots:
       workerd: 1.20261012.1
       yauzl: 3.4.0
     optionalDependencies:
-      '@effect/platform-node': 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@effect/platform-node': 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       rolldown: 1.2.13
       vite: 8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
     transitivePeerDependencies:
@@ -6456,24 +6456,24 @@ snapshots:
       - proxy-agent
       - typescript
 
-  '@alchemy.run/cloudflare@2.0.0-beta.84(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0))(effect@4.1.1)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
+  '@alchemy.run/cloudflare@2.0.0-beta.84(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
     dependencies:
-      '@alchemy.run/acme': 2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0))(effect@4.1.1)
-      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.84(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.1))(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.1)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
-      '@alchemy.run/docker': 2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0))(effect@4.1.1)
-      '@alchemy.run/sql': 2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0))(effect@4.1.1)
-      '@distilled.cloud/aws4signer': 1.0.0-rc.17(effect@4.1.1)
-      '@distilled.cloud/cloudflare': 1.0.0-rc.17(effect@4.1.1)
-      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.1.1)
-      '@distilled.cloud/iceberg': 1.0.0-rc.17(effect@4.1.1)
-      '@effect/sql-d1': 4.0.6(effect@4.1.1)
-      alchemy: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0)
-      effect: 4.1.1
+      '@alchemy.run/acme': 2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)
+      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.84(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2))(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+      '@alchemy.run/docker': 2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)
+      '@alchemy.run/sql': 2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)
+      '@distilled.cloud/aws4signer': 1.0.0-rc.17(effect@4.1.2)
+      '@distilled.cloud/cloudflare': 1.0.0-rc.17(effect@4.1.2)
+      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.1.2)
+      '@distilled.cloud/iceberg': 1.0.0-rc.17(effect@4.1.2)
+      '@effect/sql-d1': 4.0.6(effect@4.1.2)
+      alchemy: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+      effect: 4.1.2
       pathe: 2.0.3
       rolldown: 1.2.13
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@effect/platform-node': 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@effect/platform-node': 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
       vite: 8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
     transitivePeerDependencies:
       - '@effect/sql-libsql'
@@ -6485,10 +6485,10 @@ snapshots:
       - proxy-agent
       - typescript
 
-  '@alchemy.run/docker@2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0))(effect@4.1.1)':
+  '@alchemy.run/docker@2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)':
     dependencies:
-      alchemy: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0)
-      effect: 4.1.1
+      alchemy: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+      effect: 4.1.2
       rolldown: 1.2.13
 
   '@alchemy.run/node-utils@2.0.0-beta.84':
@@ -6500,10 +6500,10 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.3.0
 
-  '@alchemy.run/sql@2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0))(effect@4.1.1)':
+  '@alchemy.run/sql@2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)':
     dependencies:
-      alchemy: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0)
-      effect: 4.1.1
+      alchemy: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+      effect: 4.1.2
 
   '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.316':
     optional: true
@@ -6915,10 +6915,10 @@ snapshots:
       smol-toml: 1.9.1
       zod: 4.0.0
 
-  '@demlik/structure-sweep@0.3.9(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)':
+  '@demlik/structure-sweep@0.3.9(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
     dependencies:
       '@demlik/code-graph': 0.9.0
-      '@demlik/tea': 0.21.0(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)
+      '@demlik/tea': 0.21.0(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       oxc-parser: 0.151.0
       oxc-resolver: 11.24.2
       smol-toml: 1.9.1
@@ -6933,58 +6933,58 @@ snapshots:
       - vitest
       - ws
 
-  '@demlik/tea@0.21.0(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)':
+  '@demlik/tea@0.21.0(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
     dependencies:
       '@standard-schema/spec': 1.1.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      effect: 4.1.1
+      effect: 4.1.2
       fast-check: 4.10.2
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
-      ws: 8.22.0
+      ws: 8.22.1
 
-  '@demlik/tea@0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.0)':
+  '@demlik/tea@0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
     dependencies:
       '@standard-schema/spec': 1.1.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      effect: 4.1.1
+      effect: 4.1.2
       fast-check: 4.10.2
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
-      ws: 8.22.0
+      ws: 8.22.1
 
-  '@distilled.cloud/acme@1.0.0-rc.17(effect@4.1.1)':
+  '@distilled.cloud/acme@1.0.0-rc.17(effect@4.1.2)':
     dependencies:
-      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.1.1)
-      effect: 4.1.1
+      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.1.2)
+      effect: 4.1.2
 
-  '@distilled.cloud/aws4signer@1.0.0-rc.17(effect@4.1.1)':
+  '@distilled.cloud/aws4signer@1.0.0-rc.17(effect@4.1.2)':
     dependencies:
-      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.1.1)
-      effect: 4.1.1
+      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.1.2)
+      effect: 4.1.2
 
-  '@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.1)':
+  '@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2)':
     dependencies:
-      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.1.1)
-      effect: 4.1.1
+      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.1.2)
+      effect: 4.1.2
 
-  '@distilled.cloud/core@1.0.0-rc.17(effect@4.1.1)':
+  '@distilled.cloud/core@1.0.0-rc.17(effect@4.1.2)':
     dependencies:
-      effect: 4.1.1
+      effect: 4.1.2
 
-  '@distilled.cloud/iceberg@1.0.0-rc.17(effect@4.1.1)':
+  '@distilled.cloud/iceberg@1.0.0-rc.17(effect@4.1.2)':
     dependencies:
-      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.1.1)
-      effect: 4.1.1
+      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.1.2)
+      effect: 4.1.2
 
-  '@effect/opentelemetry@4.1.1(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.1)':
+  '@effect/opentelemetry@4.1.2(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.2)':
     dependencies:
       '@opentelemetry/semantic-conventions': 1.43.0
-      effect: 4.1.1
+      effect: 4.1.2
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.223.0
@@ -6993,29 +6993,29 @@ snapshots:
       '@opentelemetry/sdk-metrics': 2.12.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.9.1)
 
-  '@effect/platform-node-shared@4.1.1(effect@4.1.1)':
+  '@effect/platform-node-shared@4.1.2(effect@4.1.2)':
     dependencies:
       '@types/ws': 8.18.2
-      effect: 4.1.1
-      ws: 8.22.0
+      effect: 4.1.2
+      ws: 8.22.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))':
+  '@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))':
     dependencies:
-      '@effect/platform-node-shared': 4.1.1(effect@4.1.1)
-      effect: 4.1.1
+      '@effect/platform-node-shared': 4.1.2(effect@4.1.2)
+      effect: 4.1.2
       redis: 6.3.0(@opentelemetry/api@1.9.1)
-      undici: 8.12.2
+      undici: 8.12.4
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/sql-d1@4.0.6(effect@4.1.1)':
+  '@effect/sql-d1@4.0.6(effect@4.1.2)':
     dependencies:
       '@cloudflare/workers-types': 5.20261027.1
-      effect: 4.1.1
+      effect: 4.1.2
 
   '@effect/sql-sqlite-do@4.0.6(effect@4.0.6)':
     dependencies:
@@ -7052,9 +7052,9 @@ snapshots:
       '@effect/tsgo-win32-arm64': 0.63.0
       '@effect/tsgo-win32-x64': 0.63.0
 
-  '@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))':
+  '@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))':
     dependencies:
-      effect: 4.1.1
+      effect: 4.1.2
       vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
 
   '@electron-internal/extract-zip@1.0.6': {}
@@ -9169,12 +9169,12 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.1)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.0):
+  alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1):
     dependencies:
       '@alchemy.run/node-utils': 2.0.0-beta.84
       '@alchemy.run/sigil': 0.1.0-alpha.1(@types/react@19.3.0)
       capnweb: 0.12.0
-      effect: 4.1.1
+      effect: 4.1.2
       fflate: 0.8.3
       pathe: 2.0.3
       picomatch: 4.0.7
@@ -9182,10 +9182,10 @@ snapshots:
       tinyglobby: 0.2.17
       yaml: 2.9.1
     optionalDependencies:
-      '@effect/platform-node': 4.1.1(effect@4.1.1)(redis@6.3.0(@opentelemetry/api@1.9.1))
-      '@effect/vitest': 4.1.1(effect@4.1.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+      '@effect/platform-node': 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@effect/vitest': 4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       vite: 8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
-      ws: 8.22.0
+      ws: 8.22.1
     transitivePeerDependencies:
       - '@types/react'
       - react-devtools-core
@@ -9398,7 +9398,7 @@ snapshots:
 
   effect@4.0.6: {}
 
-  effect@4.1.1: {}
+  effect@4.1.2: {}
 
   electron-to-chromium@1.5.467: {}
 
@@ -10727,7 +10727,7 @@ snapshots:
 
   undici@7.28.0: {}
 
-  undici@8.12.2: {}
+  undici@8.12.4: {}
 
   unenv@2.0.0-rc.24:
     dependencies:
@@ -10845,7 +10845,7 @@ snapshots:
 
   ws@8.21.0: {}
 
-  ws@8.22.0: {}
+  ws@8.22.1: {}
 
   y18n@5.0.8: {}
 

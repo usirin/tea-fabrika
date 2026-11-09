@@ -6,6 +6,7 @@ import * as fc from "fast-check";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {processId} from "../id.test-support.ts";
 import {Mailbox, type From} from "./mailbox.ts";
 
 const opened: DatabaseSync[] = [];
@@ -17,7 +18,7 @@ const from: From = {
 	for: "person",
 	sentAt: "2026-11-08T01:00:00Z",
 	seen: 0,
-	parent: "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-1",
+	parent: `in-${Effect.runSync(processId)}-1`,
 	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	build: "build-original",
 };

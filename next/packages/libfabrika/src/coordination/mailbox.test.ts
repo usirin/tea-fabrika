@@ -23,12 +23,13 @@ import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import type {Line} from "../data/log.ts";
 import type {Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {processId, processIds} from "../id.test-support.ts";
 import {type From, type Letter, Mailbox, RunnerMail} from "./mailbox.ts";
 import {brainOnly, inRunnerSpace} from "./process.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
-const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
+const PARENT = `in-${Effect.runSync(processId)}-41`;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -111,61 +112,52 @@ const check = <A, E, R>(
 const json = fc.jsonValue();
 
 describe("P33, only the owning runner writes its answers", () => {
-	it.effect("runner permission requires its exact name and process id", () =>
-		check(
-			fc.record({
-				name: fc.string().map((s) => `runner:${s}`),
-				process: fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
-				step: fc.nat(),
-				count: fc.nat(),
-				m: json,
-			}),
-			[],
-			({name, process, step, count, m}) =>
-				Effect.gen(function* () {
-					for (const [to, pid, allowed] of [
-						[name, process, true],
-						[`${name}:other`, process, false],
-						[name, `${process}x`, false],
-						[`${name}:other`, `${process}x`, false],
-					] as const) {
-						for (const id of [`${pid}/${step}/${count}/answer`, `${pid}/due/${count}`]) {
-							const answer = yield* send(to, id, m);
-							expect(answer._tag, "runner writes only its own inbox and process").toBe(
-								allowed ? "placed" : "refused",
-							);
-							if (!allowed) expect(answer).toEqual({_tag: "refused", why: "forbidden"});
-						}
+	// Process ids come from processIds: exact UUIDv7 TypeIDs, not any 26 base32 characters.
+	const Nat = Schema.Int.check(Schema.isBetween({minimum: 0, maximum: Number.MAX_SAFE_INTEGER}));
+	const props = {arbitrary: {seed: SEED, runs: 40}};
+	it.effect.prop(
+		"runner permission requires its exact name and process id",
+		{suffix: Schema.String, process: processIds, step: Nat, count: Nat, m: Schema.Json},
+		({suffix, process, step, count, m}) => {
+			const name = `runner:${suffix}`;
+			return Effect.gen(function* () {
+				for (const [to, pid, allowed] of [
+					[name, process, true],
+					[`${name}:other`, process, false],
+					[name, `${process}x`, false],
+					[`${name}:other`, `${process}x`, false],
+				] as const) {
+					for (const id of [`${pid}/${step}/${count}/answer`, `${pid}/due/${count}`]) {
+						const answer = yield* send(to, id, m);
+						expect(answer._tag, "runner writes only its own inbox and process").toBe(
+							allowed ? "placed" : "refused",
+						);
+						if (!allowed) expect(answer).toEqual({_tag: "refused", why: "forbidden"});
 					}
-				}).pipe(Effect.provideService(RunnerMail, {name, process}), Effect.provide(mail())),
-		),
+				}
+			}).pipe(Effect.provideService(RunnerMail, {name, process}), Effect.provide(mail()));
+		},
+		props,
 	);
-	it("each protected stream, case and runner answer independently requires the brain", () => {
-		fc.assert(
-			fc.property(
-				fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
-				fc.nat(),
-				fc.nat(),
-				(process, step, count) => {
-					const answer = `${process}/${step}/${count}/answer`;
-					expect(inRunnerSpace(answer), "numeric runner answer").toBe(true);
-					expect(inRunnerSpace(`${answer}/result`)).toBe(true);
-					expect(inRunnerSpace(`${process}/${step}/word/answer`)).toBe(false);
-					for (const write of [
-						{stream: "processes", id: "ordinary", tag: "saved"},
-						{stream: `processes/name:${count}`, id: "ordinary", tag: "saved"},
-						{stream: "notes/inbox", id: "ordinary", tag: "registered"},
-						{stream: "notes/inbox", id: answer, tag: "send"},
-					])
-						expect(brainOnly(write), "each protected write requires the brain").toBe(true);
-					expect(brainOnly({stream: "notes/inbox", id: `letter:${count}`, tag: "send"})).toBe(
-						false,
-					);
-				},
-			),
-			{seed: SEED, numRuns: 100},
-		);
-	});
+	it.prop(
+		"each protected stream, case and runner answer independently requires the brain",
+		{process: processIds, step: Nat, count: Nat},
+		({process, step, count}) => {
+			const answer = `${process}/${step}/${count}/answer`;
+			expect(inRunnerSpace(answer), "numeric runner answer").toBe(true);
+			expect(inRunnerSpace(`${answer}/result`)).toBe(true);
+			expect(inRunnerSpace(`${process}/${step}/word/answer`)).toBe(false);
+			for (const write of [
+				{stream: "processes", id: "ordinary", tag: "saved"},
+				{stream: `processes/name:${count}`, id: "ordinary", tag: "saved"},
+				{stream: "notes/inbox", id: "ordinary", tag: "registered"},
+				{stream: "notes/inbox", id: answer, tag: "send"},
+			])
+				expect(brainOnly(write), "each protected write requires the brain").toBe(true);
+			expect(brainOnly({stream: "notes/inbox", id: `letter:${count}`, tag: "send"})).toBe(false);
+		},
+		{arbitrary: {seed: SEED, runs: 100}},
+	);
 });
 
 describe("p21, send", () => {

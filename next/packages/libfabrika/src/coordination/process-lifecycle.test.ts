@@ -5,6 +5,7 @@ import * as fc from "fast-check";
 import {Ledger} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
 import {ProcessId} from "../data/trace.ts";
+import {fcProcessIds} from "../id.test-support.ts";
 import {ProcessIdGenerator} from "./process-id.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
@@ -61,42 +62,54 @@ const hash = fc.string({minLength: 1, maxLength: 256});
 describe("P33, saved state and process authority", () => {
 	it("a process owner requires its valid process id", () => {
 		fc.assert(
-			fc.property(
-				fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
-				(process) => {
-					expect(Schema.is(Owner)({_tag: "process"}), "missing process owner id").toBe(false);
-					expect(Schema.decodeUnknownSync(Owner)({_tag: "process", process})).toEqual({
-						_tag: "process",
-						process,
-					});
-				},
-			),
+			fc.property(fcProcessIds, (process) => {
+				expect(Schema.is(Owner)({_tag: "process"}), "missing process owner id").toBe(false);
+				expect(Schema.decodeUnknownSync(Owner)({_tag: "process", process})).toEqual({
+					_tag: "process",
+					process,
+				});
+			}),
 			{seed: 119120, numRuns: 100},
 		);
 	});
 	it("dead letters keep exactly one error class per try", () => {
 		fc.assert(
-			fc.property(fc.array(hash, {minLength: 1, maxLength: 32}), hash, hash, (errors, m, build) => {
-				const dead = {_tag: "dead", tries: errors.length, limit: 32, m, build, errors};
-				expect(Schema.is(Dead)(dead), "one error class per try is accepted").toBe(true);
-				expect(Schema.is(Dead)({...dead, errors: errors.slice(1)})).toBe(false);
-				expect(Schema.is(Dead)({...dead, tries: errors.length + 1})).toBe(false);
-			}),
+			fc.property(
+				fc.array(hash, {minLength: 1, maxLength: 32}),
+				hash,
+				hash,
+				fc.record({
+					process: fcProcessIds,
+					program: hash,
+					name: fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/),
+				}),
+				(errors, m, build, identity) => {
+					const dead = {
+						...identity,
+						_tag: "dead",
+						tries: errors.length,
+						limit: 32,
+						m,
+						build,
+						errors,
+					};
+					expect(Schema.is(Dead)(dead), "one error class per try is accepted").toBe(true);
+					expect(Schema.is(Dead)({...dead, errors: errors.slice(1)})).toBe(false);
+					expect(Schema.is(Dead)({...dead, tries: errors.length + 1})).toBe(false);
+				},
+			),
 			{seed: 119120, numRuns: 100},
 		);
 	});
 	it("an idle saved marker recovers as idle with the same process", () => {
 		fc.assert(
-			fc.property(
-				fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
-				(process) => {
-					const idle = Activity.cases.idle.make({process});
-					expect(() => recoverActivity(idle)).not.toThrow();
-					const recovered = recoverActivity(idle);
-					expect(recovered._tag).toBe("Success");
-					if (recovered._tag === "Success") expect(recovered.success).toEqual(idle);
-				},
-			),
+			fc.property(fcProcessIds, (process) => {
+				const idle = Activity.cases.idle.make({process});
+				expect(() => recoverActivity(idle)).not.toThrow();
+				const recovered = recoverActivity(idle);
+				expect(recovered._tag).toBe("Success");
+				if (recovered._tag === "Success") expect(recovered.success).toEqual(idle);
+			}),
 			{seed: 119120, numRuns: 100},
 		);
 	});
