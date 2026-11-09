@@ -391,7 +391,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
   Never the full suite locally (owner, 2026-11-08). On a pull request, CI decides what to run from
   the changed paths (`.github/ci/changes.mjs`). Only Markdown or `field/*.jsonl` rows: it skips
   `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
-  and skips `test` and `e2e`. Only today's files: it skips `next`. Markdown that a program or skill reads counts as code.
+  and skips `test` and `e2e`; a change to next's exam `commits.ts` runs `test` too. Only today's files: it skips `next`.
+  Skill prose (skill Markdown outside `scripts/` and brief or prompt folders) skips `check`, `test`, `next` and
+  `e2e`: its one reader, `skillscheck.sh`, runs in `changes`. Skill scripts run `check` and `test`, and vitest
+  picks only the tests that `?raw`-import them (`script-reads` in `pnpm lint` keeps those imports whole).
+  Other Markdown that a program or skill reads counts as code.
   Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes

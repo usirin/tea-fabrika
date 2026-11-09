@@ -9,15 +9,20 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
 
 /**
  * Seconds per file from the repo root: medians of today's test-file times in CI runs
- * 42579837468, 42573088027 and 42571265116, rounded to one decimal. A file not seen
- * in those runs counts 1 s. next/ files belong to their own job and are not measured here.
+ * 42579837468, 42573088027 and 42571265116, rounded to one decimal.
+ * box, stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
+ * A file not measured counts 1 s. next/ files belong to their own job and are not measured here.
  */
 export const measured: Record<string, number> = {
+	".agents/skills/lead/scripts/box.test.ts": 485.3,
 	".agents/skills/lead/scripts/catchup.test.ts": 47.2,
+	".agents/skills/lead/scripts/gc.test.ts": 0.1,
+	".agents/skills/lead/scripts/redact.test.ts": 7.2,
 	".agents/skills/lead/scripts/skillscheck.test.ts": 1.8,
 	".agents/skills/mutation/scripts/run.test.ts": 5.8,
 	".agents/skills/mutation/scripts/sample.test.ts": 0.5,
 	".agents/skills/plan/scripts/plancheck.test.ts": 59.1,
+	".agents/skills/step-commit/scripts/stepcommit.test.ts": 18.2,
 	"apps/fabrika/src/asks.laws.test.ts": 1.8,
 	"apps/fabrika/src/asks.test.ts": 0.0,
 	"apps/fabrika/src/attach.test.ts": 0.0,

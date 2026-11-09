@@ -59,6 +59,19 @@ it("vector: real CI medians include the previously unweighted scripts", () => {
 	expect(measured["packages/pipeline/src/laws/standard.test.ts"]).toBe(3.5);
 });
 
+it("vector: lead test medians match the three green main CI runs", () => {
+	// T375 Amendment 1: fixed CI medians from 42631962689, 42631256491 and 42630840277.
+	// Plant: discard these rows, leaving the scripts to count as 1 s.
+	for (const [path, seconds] of [
+		[".agents/skills/lead/scripts/box.test.ts", 485.3],
+		[".agents/skills/step-commit/scripts/stepcommit.test.ts", 18.2],
+		[".agents/skills/lead/scripts/redact.test.ts", 7.2],
+		[".agents/skills/lead/scripts/gc.test.ts", 0.1],
+	] as const) {
+		expect.soft(measured[path], path).toBe(seconds);
+	}
+});
+
 // How the check's test machines split the test files: each gets about the same seconds, not the
 // same count of files.
 

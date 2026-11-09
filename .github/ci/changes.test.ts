@@ -16,6 +16,9 @@ import * as ci from "./changes.mjs";
 // checking each shared path alone closed that gap. Shared-check plants accepting
 // hidden tracked files or failed Git output both failed the tracked-file law.
 const options = {seed: 119120, numRuns: 100};
+// T375 plants caught: skill readTrees and shared scripts at the red baseline;
+// script Markdown counted as prose, scripts skipping test, all Markdown safe,
+// prose masking shared paths, and every skill-tree path counted as prose.
 const heavy = {check: true, test: true, next: true, e2e: true};
 type Runner = (args: string[]) => {status: number | null; stdout: string};
 const word = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
@@ -34,7 +37,6 @@ const shared = fc.oneof(
 		"packages/fabrika-design/src/colors.ts",
 		"packages-other/file.ts",
 		"nextish/file.ts",
-		".agents/skills/tests/SKILL.md",
 		".claude/skills/tests/SKILL.md",
 		"pnpm-lock.yaml",
 		"field/nested/a.jsonl",
@@ -42,11 +44,46 @@ const shared = fc.oneof(
 		"field/a.jsonl.ts",
 	),
 );
+const skillName = fc
+	.stringMatching(/^[a-z]{1,12}$/)
+	// Brief/prompt folders belong to readMarkdown's heavy-path family below.
+	.filter((s) => !["brief", "briefs", "prompt", "prompts", "scripts"].includes(s));
+const prose = fc.oneof(
+	fc
+		.tuple(skillName, fc.array(skillName, {maxLength: 2}), skillName)
+		.map(([skill, dirs, name]) => [".agents/skills", skill, ...dirs, `${name}.md`].join("/")),
+	skillName.map((skill) => `.claude/skills/${skill}`),
+);
+const script = fc
+	.tuple(
+		fc.constantFrom("lead", "mutation", "plan", "step-commit"),
+		skillName,
+		fc.constantFrom("sh", "py", "mjs", "ts", "json"),
+	)
+	.map(([skill, name, ext]) => `.agents/skills/${skill}/scripts/${name}.${ext}`);
+const otherSkill = fc.oneof(
+	fc
+		.tuple(
+			skillName,
+			fc.array(skillName, {maxLength: 2}),
+			skillName,
+			fc.constantFrom("json", "ts", "txt"),
+		)
+		.map(([skill, dirs, name, ext]) =>
+			[".agents/skills", skill, ...dirs, `${name}.${ext}`].join("/"),
+		),
+	fc
+		.tuple(skillName, skillName, fc.constantFrom("md", "json", "ts"))
+		.map(([skill, name, ext]) => `.claude/skills/${skill}/${name}.${ext}`),
+);
 const path = fc.oneof(
 	safe,
 	today,
 	next,
 	shared,
+	prose,
+	script,
+	otherSkill,
 	fc.string({minLength: 1}).map((s) => `unusual/${s}`),
 );
 const list = fc.array(path, {maxLength: 12});
@@ -59,9 +96,9 @@ it("main enables every job for every path list", () => {
 		options,
 	);
 });
-it("nonempty safe lists skip the heavy jobs and skills Markdown does not", () => {
+it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
 	fc.assert(
-		fc.property(fc.array(safe, {minLength: 1, maxLength: 12}), (paths) => {
+		fc.property(fc.array(fc.oneof(safe, prose), {minLength: 1, maxLength: 12}), (paths) => {
 			expect(ci.classify(paths, "pull_request")).toEqual({
 				check: false,
 				test: false,
@@ -69,10 +106,46 @@ it("nonempty safe lists skip the heavy jobs and skills Markdown does not", () =>
 				e2e: false,
 				field: paths.some((p) => /^field\/[^/]+\.jsonl$/.test(p)),
 			});
-			for (const tree of [".agents", ".claude"])
+		}),
+		options,
+	);
+});
+it("skill scripts run check and test; other version flags follow their readers", () => {
+	fc.assert(
+		fc.property(
+			fc.array(script, {minLength: 1, maxLength: 12}),
+			fc.array(fc.oneof(today, next), {maxLength: 12}),
+			(scripts, others) => {
+				expect(ci.classify(scripts, "pull_request")).toEqual({
+					...heavy,
+					next: false,
+					e2e: false,
+					field: false,
+				});
+				// A Markdown file beside a script is still script input, even though prose is quiet.
 				expect(
-					ci.classify([...paths, `${tree}/skills/tests/SKILL.md`], "pull_request"),
-				).toMatchObject(heavy);
+					ci.classify(
+						scripts.map((path) => path.replace(/\.[^.]+$/, ".md")),
+						"pull_request",
+					),
+				).toEqual({...heavy, next: false, e2e: false, field: false});
+				const flags = ci.classify([...scripts, ...others], "pull_request");
+				expect(flags).toEqual({
+					check: true,
+					test: true,
+					next: others.some((p) => p.startsWith("next/")),
+					e2e: others.some((p) => !p.startsWith("next/")),
+					field: false,
+				});
+			},
+		),
+		options,
+	);
+});
+it("other skill-tree paths still run every heavy job", () => {
+	fc.assert(
+		fc.property(fc.array(otherSkill, {minLength: 1, maxLength: 12}), (paths) => {
+			expect(ci.classify(paths, "pull_request")).toMatchObject(heavy);
 		}),
 		options,
 	);
@@ -134,13 +207,40 @@ it("shared paths run everything; adding paths never disables a job", () => {
 });
 it("today, next, mixed and the shared plant helper have separate version flags", () => {
 	fc.assert(
-		fc.property(fc.array(today, {minLength: 1}), fc.array(next, {minLength: 1}), (old, fresh) => {
-			expect(ci.classify(old, "pull_request")).toMatchObject({...heavy, next: false});
-			expect(ci.classify(fresh, "pull_request")).toMatchObject({...heavy, test: false, e2e: false});
-			expect(ci.classify([...old, ...fresh], "pull_request")).toMatchObject(heavy);
-			expect(
-				ci.classify([...fresh, "next/apps/fabrika/src/exam/plant.ts"], "pull_request"),
-			).toMatchObject({test: true, e2e: false});
+		fc.property(
+			fc.array(today, {minLength: 1, maxLength: 12}),
+			fc.array(next, {minLength: 1, maxLength: 12}),
+			(old, fresh) => {
+				expect(ci.classify(old, "pull_request")).toMatchObject({...heavy, next: false});
+				expect(ci.classify(fresh, "pull_request")).toMatchObject({
+					...heavy,
+					test: false,
+					e2e: false,
+				});
+				expect(ci.classify([...old, ...fresh], "pull_request")).toMatchObject(heavy);
+				expect(
+					ci.classify([...fresh, "next/apps/fabrika/src/exam/plant.ts"], "pull_request"),
+				).toMatchObject({test: true, e2e: false});
+			},
+		),
+		options,
+	);
+});
+it("next's exam signer runs today's tests, alone or beside other paths", () => {
+	// T375 Amendment 1: box, plancheck and stepcommit tests read the signer.
+	// Plant caught: let commits.ts skip test like any other next/ path.
+	const commits = "next/apps/fabrika/src/exam/commits.ts";
+	const helper = "next/apps/fabrika/src/exam/plant.ts";
+	fc.assert(
+		fc.property(list, (paths) => {
+			expect(ci.classify([commits], "pull_request")).toEqual({
+				...heavy,
+				e2e: false,
+				field: false,
+			});
+			expect(ci.classify([...paths, commits], "pull_request")).toEqual(
+				ci.classify([...paths, helper], "pull_request"),
+			);
 		}),
 		options,
 	);
@@ -244,6 +344,31 @@ it("shared tracked-file check agrees with Git, including command errors", () => 
 			} finally {
 				rmSync(root, {recursive: true, force: true});
 			}
+		}),
+		options,
+	);
+});
+
+// T375 mutation: unanchored skill paths. A skill-shaped path below another folder is no skill.
+it("skill script and prose rules apply only at the repo root", () => {
+	fc.assert(
+		fc.property(fc.array(skillName, {maxLength: 2}), script, skillName, (dirs, script, skill) => {
+			const prefix = ["next", ...dirs].join("/");
+			expect(ci.classify([`${prefix}/${script}`], "pull_request")).toEqual({
+				...heavy,
+				test: false,
+				e2e: false,
+				field: false,
+			});
+			for (const root of ["next", "docs"])
+				expect(
+					ci.classify([[root, ...dirs, ".claude/skills", skill].join("/")], "pull_request"),
+				).toEqual({
+					...heavy,
+					test: root !== "next",
+					e2e: root !== "next",
+					field: false,
+				});
 		}),
 		options,
 	);
