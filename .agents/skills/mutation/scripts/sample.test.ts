@@ -229,6 +229,38 @@ describe("mutation sampling, today's tooling", () => {
 	});
 });
 
+describe("mutation sampling across files, today's tooling", () => {
+	// Plant: walk changed lines in file-name order, so the first files take the whole cap.
+	it("every changed file gets a mutant when the cap is at least the file count", () => {
+		fc.assert(
+			fc.property(
+				fc.array(fc.integer({min: 1, max: 40}), {minLength: 2, maxLength: 8}),
+				fc.integer(),
+				fc.nat({max: 150}),
+				(sizes, seed, extra) => {
+					// File names sort in this order, and the first file alone has more lines than any cap.
+					const files = sizes.map((_, i) => `src/f${String(i).padStart(2, "0")}.ts`);
+					const counts = sizes.map((n, i) => (i === 0 ? n + 150 : n));
+					const candidates = files.flatMap((file, f) =>
+						Array.from({length: counts[f]}, (_, l) => candidate(f * 1000 + l, file, l + 1, 0, 1)),
+					);
+					const changed = candidates.map((c) => ({file: c.fileName, line: c.location.start.line}));
+					const max = Math.min(150, files.length + extra);
+					const report: Report = sample({candidates, changed, seed, max});
+					const selected = checkReport(report, candidates, changed, seed, max);
+					expect(selected).toHaveLength(max);
+					expect(new Set(selected.map((c) => c.fileName))).toEqual(new Set(files));
+					// Round-robin: a file that still has lines left trails no other file by more than one.
+					const per = files.map((file) => selected.filter((c) => c.fileName === file).length);
+					const open = per.filter((mine, i) => mine < counts[i]);
+					expect(Math.max(...per)).toBeLessThanOrEqual(Math.min(...open, Infinity) + 1);
+				},
+			),
+			{...options, seed: 119120},
+		);
+	});
+});
+
 describe("mutation sampling across lines, today's tooling", () => {
 	const span = (id: number, from: Position, to: Position): Candidate => ({
 		...candidate(id, "src/a.ts", from.line, from.column, to.column),
