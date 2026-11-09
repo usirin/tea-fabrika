@@ -11,9 +11,13 @@ import {dark, light} from "./theme-colors.ts";
 // What Take rec is drawn with (programs/tracker/src/ask-window.tsx, the toolbar's Button): Manti's
 // primary solid, `--manti-accent-fill` = turn-fill, label `--manti-text-on-accent` = on-turn, and
 // Manti's own state mixes in oklab (hover 88% fill over white in light, black in dark; pressed 78%);
-// a disabled Button (busy: saving) is drawn at opacity .5 over the surface. While a note is open
+// While a note is open
 // Take rec is the outline variant: label = 78% fill over black in light, 45% fill over white in
 // dark (Manti's `--variant-text`), on the raised surface.
+//
+// The saving state (busy: every action disabled, Manti draws the button at opacity .5) is not
+// covered: WCAG 1.4.3 exempts inactive user interface components, so the 4.5:1 law holds only while
+// Take rec is enabled (https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html, "Incidental").
 //
 // Properties, not a list: for any look and any ask-box state, the pair reads 4.5. The pairs are
 // generated over looks x states; the plant is a paler fill, which must fail the same check.
@@ -32,7 +36,6 @@ const STATES = [
 	"pick: other",
 	"hovered",
 	"pressed",
-	"saving",
 	"failed save",
 ] as const;
 type State = (typeof STATES)[number];
@@ -77,8 +80,6 @@ const mix = (a: string, percent: number, b: string) => {
 	const p = percent / 100;
 	return fromLab([0, 1, 2].map((i) => A[i]! * p + B[i]! * (1 - p)) as [number, number, number]);
 };
-// A color at an opacity, drawn over a solid backdrop.
-const faded = (color: string, alpha: number, backdrop: string) => mix(color, alpha * 100, backdrop);
 
 /** Take rec's label and background in a state and a look: what the page draws, from the tokens. */
 const takeRec = (look: Look, state: State): {fg: string; bg: string} => {
@@ -96,8 +97,6 @@ const takeRec = (look: Look, state: State): {fg: string; bg: string} => {
 			return {fg: t["on-turn"], bg: mix(fill, 88, toward)};
 		case "pressed":
 			return {fg: t["on-turn"], bg: mix(fill, 78, toward)};
-		case "saving": // busy: every action disabled, Manti draws the whole button at opacity .5
-			return {fg: faded(t["on-turn"], 0.5, surface), bg: faded(fill, 0.5, surface)};
 		default:
 			return {fg: t["on-turn"], bg: fill};
 	}

@@ -1282,7 +1282,7 @@ const oneRing = async (when: string, field: Locator) => {
 };
 /**
  * Round 29, law 1 (WCAG 1.4.3, color-principles): in every ask-box state, Take rec's label reads
- * at least 4.5:1 on its own background, in both looks. Read from the page as drawn: the label's
+ * at least 4.5:1 on its own background while enabled, in both looks. Read from the page as drawn: the label's
  * computed color and the button's computed backgrounds, each drawn over what lies behind and
  * faded by every opacity from the button up (a disabled Manti button is drawn at opacity .5).
  * The unit law is packages/fabrika-design/src/take-rec.ask-desk.test.ts.
@@ -1340,6 +1340,15 @@ const takeRecReads = async (when: string, where: Locator) => {
 			disabled: (element as HTMLButtonElement).disabled,
 		};
 	});
+	// WCAG 1.4.3 exempts inactive user interface components
+	// (https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html, "Incidental"), so 4.5:1
+	// binds only while Take rec is enabled. A disabled one (busy: saving) is recorded, never failed.
+	if (seen.disabled) {
+		console.log(
+			`note ask desk P23 11-09, ${when}: Take rec is disabled, exempt from 4.5:1, reads ${seen.ratio.toFixed(2)}:1 ${JSON.stringify(seen)}`,
+		);
+		return;
+	}
 	check(
 		`P23 11-09, ${when}: Take rec's label reads at least 4.5:1 on its background`,
 		seen.ratio >= 4.5,
