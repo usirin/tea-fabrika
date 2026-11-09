@@ -49,6 +49,7 @@ import {
 	readFileSync,
 	renameSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import {homedir} from "node:os";
@@ -140,6 +141,8 @@ const Ask = Schema.Struct({
 	events: Schema.String,
 	err: Schema.String,
 	minutes: Schema.Number,
+	/** When this run started, in ms: a report older than this is not this run's. */
+	started: Schema.Number,
 });
 type Ask = typeof Ask.Type;
 
@@ -310,6 +313,43 @@ const decide = (ask: Ask, read: Read): Judged => {
 	}
 };
 
+/** Every file drive keeps for one box, by suffix. A box name is fresh only when none exists. */
+const BOX_FILES = [
+	"",
+	"-gitdata",
+	"-prompt.md",
+	".md",
+	".jsonl",
+	".err",
+	".log",
+	"-plan.md",
+	"-plan.jsonl",
+];
+
+/**
+ * The first box `<lane>-<step><n>`, from `n` up, that no file of an older run holds. A refused run
+ * once returned an older run's `<box>.md` as its report (p12 review5, 2026-11-09, ticket 383).
+ */
+export const freshBox = (
+	lane: string,
+	step: string,
+	n: number,
+	taken: (name: string) => boolean,
+): string => {
+	for (let i = n; ; i += 1) {
+		const box = `${lane}-${step}${i}`;
+		if (!BOX_FILES.some((suffix) => taken(`${box}${suffix}`))) return box;
+	}
+};
+
+/**
+ * The report's path when this run wrote it: the file exists (`mtime` is its mtime in ms) and is no
+ * older than the run's start, read to the whole second for file systems that keep only seconds. A
+ * run that wrote none, such as one box.sh refused before the agent started, gives no report.
+ */
+export const reportOf = (path: string, started: number, mtime: number | null): string | null =>
+	mtime !== null && mtime >= Math.floor(started / 1000) * 1000 ? path : null;
+
 // ---------------------------------------------------------------- the machine
 
 type Step = readonly [Model, readonly Cmds[]];
@@ -425,6 +465,12 @@ const sh = (cmd: string, args: readonly string[], cwd?: string) => {
 	return {code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? ""};
 };
 const tail = (text: string, n = 3) => text.trim().split("\n").slice(-n).join(" | ");
+
+/** This run's report, or `null` when it wrote none. */
+const writtenReport = (ask: Ask) => {
+	const mtime = existsSync(ask.report) ? statSync(ask.report).mtimeMs : null;
+	return reportOf(ask.report, ask.started, mtime);
+};
 
 /** The paths env.sh gives every lead script. */
 const loadEnv = (): Env => {
@@ -657,7 +703,8 @@ const handlers = (env: Env) => {
 			}),
 		step_read: (ask: Ask) =>
 			Effect.sync((): Read => {
-				const report = existsSync(ask.report) ? readFileSync(ask.report, "utf8") : "";
+				const written = writtenReport(ask);
+				const report = written === null ? "" : readFileSync(written, "utf8");
 				const left = ask.step === "plan" ? [] : leftIn(join(env.BOXES, ask.box), ask.branch);
 				const empty = {
 					commits: 0,
@@ -847,7 +894,7 @@ const handlers = (env: Env) => {
 					outcome,
 					why: ok ? e.why : `${e.why} (${notes.join("; ")})`,
 					exit: ok ? e.exit : 30,
-					report: ask.report,
+					report: writtenReport(ask),
 					kept: keep,
 					ended,
 				};
@@ -1210,13 +1257,13 @@ const main = () => {
 		process.exit(2);
 	}
 	const s = step as StepName;
-	let n = (saved?.steps.filter((e) => e.step === s).length ?? 0) + 1;
-	while (
-		existsSync(join(env.BOXES, `${lane}-${s}${n}`)) ||
-		existsSync(join(env.BOXES, `${lane}-${s}${n}-prompt.md`))
-	)
-		n += 1;
-	const box = `${lane}-${s}${n}`;
+	const box = freshBox(
+		lane,
+		s,
+		(saved?.steps.filter((e) => e.step === s).length ?? 0) + 1,
+		(name) => existsSync(join(env.BOXES, name)),
+	);
+	const n = Number(box.slice(`${lane}-${s}`.length));
 	const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
 	const claude = agent === "claude";
 	const ask: Ask = {
@@ -1237,6 +1284,7 @@ const main = () => {
 		events: s === "plan" ? at("-plan.jsonl") : at(".jsonl"),
 		err: at(".err"),
 		minutes: Number(process.env.DRIVE_MINUTES ?? 60),
+		started: Date.now(),
 	};
 	const count = (pattern: string) =>
 		sh("pgrep", ["-f", pattern]).out.split("\n").filter(Boolean).length;
@@ -1315,7 +1363,7 @@ const main = () => {
 			from: base,
 			head: end.head,
 			reason: end.why,
-			report: ask.report,
+			report: writtenReport(ask),
 			kept: end.kept,
 			exit: exitOf(end.outcome),
 			...(claude ? {model: ask.model, session: ask.session} : {}),

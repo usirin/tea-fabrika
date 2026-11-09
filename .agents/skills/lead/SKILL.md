@@ -186,7 +186,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
   drive started, under 20 GB free after `box.sh gc`, or the lane's branch checked out in a
   worktree, which the end-of-step fetch could not update). It never retries. A stuck step keeps its
-  box. The commits check reads the whole lane, from where it left main, so each earlier step's
+  box. A box's number is the first that no older run's files hold, and the line's `report` is `null`
+  when this run wrote none, as when box.sh refused it before the agent started. The commits check reads the whole lane, from where it left main, so each earlier step's
   newest link is in its chain. After a lead merge of main it starts at the merge-base with
   `origin/main` instead, so main's own commits are not judged as the lane's. A tests, build or mutation step waits while `pgrep -x tsgo` finds
   one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.

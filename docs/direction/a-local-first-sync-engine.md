@@ -495,6 +495,8 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   follows OTP: registry, mailbox, links, monitors, trap exit, supervisors. A
   difference from OTP needs a written reason. A check that ours matches OTP is
   still owed, since experiment 99 came before experiment 107.
+  *Done 2026-11-09 for Tier 1's slice: [experiment 239](../../experiments/239-supervision-vs-otp.md),
+  with tickets 404 to 406 for what it found.*
 - **The desk keeps its name;** workspaces are the numbered layouts inside it.
 - **Limits** (money, turns, seconds, tokens) moved up to the app layer as
   `LimitManager` (A2).
@@ -515,6 +517,36 @@ new code fixes all six.
 Two differences stay, each with its reason written in the code: names are
 never freed (a name is a stream, and the log keeps every stream), and only the
 parent sends exit signals (a job cannot kill a job it does not own).
+
+Five more differences stay in `next/`. [Experiment 239](../../experiments/239-supervision-vs-otp.md)
+found them with no written reason; these are the reasons. Paths are under
+`next/packages/libfabrika/src/`.
+
+- **The supervisor lives inside the program's own object,** not in a process of its own. It is a
+  tea machine (`app/supervisor.ts:59`) that the runner steps (`app/runner.ts:310-431`). Its
+  receipts and its pending action are saved in that object's own SQLite
+  (`coordination/recovery-store.ts:18`), beside the step they guard, and it saves the pending
+  action before it acts, so an eviction at any point resumes from what was saved. Its backoff and
+  `down` deadlines sit on the object's one alarm (`app/runner.ts:292`). A supervisor elsewhere
+  would keep that state one hop away from the step. C4 says why there is one child.
+- **`demonitor` always flushes.** OTP keeps a queued `DOWN` unless the caller asks for `flush`
+  ([`demonitor/2`](https://www.erlang.org/doc/apps/erts/erlang.html#demonitor/2)). Here a
+  canceled watch's `DOWN` is dropped every time (`coordination/process.ts:423-429`): once the
+  watch is canceled, that `DOWN` serves nobody.
+- **A `DOWN` is a letter, not a separate signal.** It lands in the inbox under a signal id that
+  only the brain may write (`coordination/process.ts:61-72`, `:183-184`, `:415-430`). So there is
+  one durable stream, kept like any other, and a browser reads its `DOWN`s from
+  `client:<id>/inbox` like any letter. A browser has no pid and could not take an OTP signal.
+- **No selective receive.** Every letter reaches the program in inbox order; none waits in the
+  inbox for a later match. That is Elm's shape: one `update` takes every Msg
+  ([Elm first](./elm-first.md)). A program may still say no to a letter with `refuse`, but it
+  cannot leave one for later.
+- **Exit is a fenced `brutal_kill` in Tier 1.** There is no shutdown timeout and no terminate
+  step: `exited` is written at once (`coordination/process-manager.ts:182-214`). Steps run one at
+  a time under one permit (`app/runner.ts:224`), and a retired process's later writes are refused
+  (`door/door.ts:1350`, `:1356`), so nothing lands half-written. The doubt: once an agent run is
+  a Cmd (Tiers 4 and 5), an exit mid-run may need a graceful stop that tells the agent to end and
+  records what it cost. Nothing in Tier 1 runs one, so this is checked again then.
 
 ### What the first pass proposed, and what became of it
 
