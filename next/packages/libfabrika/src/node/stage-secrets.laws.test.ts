@@ -24,6 +24,10 @@ import type {Env} from "../workers/runtime.ts";
 import {brainOutbox} from "./local-stage.ts";
 import {startStage} from "./stage.ts";
 
+class CallError extends Schema.TaggedError<CallError>()("CallError", {
+	cause: Schema.Unknown,
+}) {}
+
 const platform = vi.hoisted(() => ({bytes: "made-up-control-secret"}));
 vi.mock("node:crypto", async (original) => ({
 	...(await original<typeof import("node:crypto")>()),
@@ -306,11 +310,11 @@ const flow = async (sample: Flow) => {
 										.message(socket, move === "malformed" ? `${rawFrame}!` : rawFrame)
 										.pipe(Effect.provide(logger)),
 								),
-							catch: (error) => error,
+							catch: (cause) => new CallError({cause}),
 						});
 						yield* Effect.tryPromise({
 							try: () => Reflect.get(stage.project(config.name), "info")(),
-							catch: (error) => error,
+							catch: (cause) => new CallError({cause}),
 						}).pipe(Effect.ignore);
 						outputs.outbox.push(yield* outbox.pending);
 					}
