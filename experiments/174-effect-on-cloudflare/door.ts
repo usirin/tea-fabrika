@@ -12,7 +12,7 @@ import * as RpcMessage from "effect/rpc/RpcMessage";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 
-export interface Attached {
+interface Attached {
 	readonly client: number;
 	readonly open: boolean;
 	/** Streams parked as data: they need no fiber, so the object can sleep under them. */

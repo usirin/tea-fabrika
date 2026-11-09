@@ -5,7 +5,7 @@ import {execFile} from "node:child_process";
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 
-export interface ThreadComment {
+interface ThreadComment {
 	readonly id: number;
 	readonly url: string;
 	readonly at: string;
@@ -15,7 +15,7 @@ export interface ThreadComment {
 	readonly bot: boolean;
 	readonly body: string;
 }
-export interface ThreadReview {
+interface ThreadReview {
 	readonly url: string;
 	readonly state: string;
 	readonly at: string | null;
@@ -117,7 +117,7 @@ async function restOf(
 }
 
 /** One text a comment has held, and when it was given that text. */
-export interface Version {
+interface Version {
 	readonly at: string;
 	readonly body: string;
 }
@@ -241,7 +241,7 @@ export function readClosers(cache: string): Readonly<Record<string, readonly num
 }
 
 /** What changed between two commits: each file, and the lines the change added to it. */
-export interface Compare {
+interface Compare {
 	readonly files: readonly {readonly path: string; readonly added: readonly string[]}[];
 	/** GitHub could not compare them (a commit it no longer has). */
 	readonly missing: boolean;

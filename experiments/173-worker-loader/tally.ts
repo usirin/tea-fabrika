@@ -13,13 +13,13 @@ import {Effect, Schema} from "effect";
 export const Tally = Schema.Struct({n: Schema.Int, pad: Schema.String});
 export type Tally = typeof Tally.Type;
 
-export const Msg = Schema.Union([
+const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("plus")}),
 	Schema.Struct({type: Schema.Literal("add"), by: Schema.Int}),
 ]);
-export type Msg = typeof Msg.Type;
+type Msg = typeof Msg.Type;
 
-export const tally = defineMachine({
+const tally = defineMachine({
 	types: {model: {} as Tally, msg: {} as Msg, ctx: undefined},
 	cmds: [],
 	init: (loaded) => [loaded ?? {n: 0, pad: ""}, []],

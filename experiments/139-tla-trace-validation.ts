@@ -346,7 +346,7 @@ const moveOf = (from: SpecState, to: SpecState, act: string) => {
 };
 
 /** One script from the spec, the lane's moves its paths make, and how many paths gave it. */
-export interface PathScript {
+interface PathScript {
 	readonly script: Script;
 	readonly lane: readonly string[];
 	readonly paths: number;

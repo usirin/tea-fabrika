@@ -22,7 +22,7 @@ import {request as httpsRequest} from "node:https";
 import type {AddressInfo, Socket} from "node:net";
 
 /** Where the box reaches the relay: a port on the host's loopback, or a unix socket. */
-export type Listen = {readonly kind: "port"} | {readonly kind: "socket"; readonly path: string};
+type Listen = {readonly kind: "port"} | {readonly kind: "socket"; readonly path: string};
 
 export interface RelayConfig {
 	readonly listen: Listen;
@@ -43,7 +43,7 @@ export interface RelayConfig {
 }
 
 /** One request as the relay saw it. Header names only, never a value. */
-export interface Seen {
+interface Seen {
 	readonly method: string;
 	readonly target: string;
 	readonly model: string | null;

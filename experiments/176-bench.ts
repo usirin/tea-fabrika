@@ -54,7 +54,7 @@ declare const __loop: any;
 
 // ---------------------------------------------------------------- the one output shape
 
-export interface Sample {
+interface Sample {
 	readonly bench: 1;
 	/** What was measured: "cold-start", "keystroke-echo", "workspace-switch", "open-ticket", ... */
 	readonly moment: string;
@@ -117,7 +117,7 @@ export interface Sample {
 const quantile = (sorted: readonly number[], q: number) =>
 	sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
 const round = (n: number) => Math.round(n * 100) / 100;
-export const summary = (values: readonly number[]) => {
+const summary = (values: readonly number[]) => {
 	if (values.length === 0) return null;
 	const sorted = [...values].sort((a, b) => a - b);
 	return {
@@ -439,7 +439,7 @@ const waitFor = async <T>(
 	return seen;
 };
 
-export interface Bench {
+interface Bench {
 	readonly app: any;
 	readonly page: any;
 	readonly label: string;
@@ -460,7 +460,7 @@ const hostPidOf = (home: string) => {
 };
 
 /** Open a copy of the app on a fresh temp home, and leave no host behind. */
-export const withApp = async <T>(
+const withApp = async <T>(
 	label: string,
 	use: (b: Bench) => Promise<T>,
 	options: {
@@ -587,17 +587,17 @@ const screen = (b: Bench, id: string): Promise<string> =>
 const lastRow = (t: string) => t.split("\n").at(-1) ?? "";
 
 /** Ctrl-B, then a key: the desk's prefix. */
-export const prefixed = async (b: Bench, key: string) => {
+const prefixed = async (b: Bench, key: string) => {
 	await b.page.keyboard.press("Control+b");
 	await b.page.keyboard.press(key);
 };
 
-export const tilesNow = (b: Bench): Promise<string[]> =>
+const tilesNow = (b: Bench): Promise<string[]> =>
 	b.page
 		.locator("[data-tile]")
 		.evaluateAll((all: any[]) => all.map((t) => t.getAttribute("data-tile")));
 /** The tiles a person can see now: a hidden one may stay in the DOM. */
-export const visibleTiles = (b: Bench): Promise<string[]> =>
+const visibleTiles = (b: Bench): Promise<string[]> =>
 	b.page.evaluate(() =>
 		[...document.querySelectorAll<HTMLElement>("[data-tile]")]
 			.filter((t) => t.checkVisibility())
@@ -611,7 +611,7 @@ const focusedNow = (b: Bench): Promise<string | null> =>
 				?.getAttribute("data-tile") ?? null,
 	);
 /** The tile whose window is this program. */
-export const tileShowing = async (b: Bench, program: string): Promise<string> => {
+const tileShowing = async (b: Bench, program: string): Promise<string> => {
 	const found: string | null = await b.page.evaluate((p: string) => {
 		const view = [...document.querySelectorAll(`[aria-label="${p} view"]`)].find((v) =>
 			v.checkVisibility(),
@@ -621,13 +621,13 @@ export const tileShowing = async (b: Bench, program: string): Promise<string> =>
 	if (found === null) throw new Error(`no tile shows ${program}`);
 	return found;
 };
-export const focusIs = (b: Bench, id: string) =>
+const focusIs = (b: Bench, id: string) =>
 	waitFor(
 		`focus on ${id}`,
 		() => focusedNow(b),
 		(f) => f === id,
 	);
-export const prompted = (b: Bench, id: string) =>
+const prompted = (b: Bench, id: string) =>
 	waitFor(
 		`${id} at its prompt`,
 		() => screen(b, id),
@@ -635,7 +635,7 @@ export const prompted = (b: Bench, id: string) =>
 	);
 
 /** Split the focused tile: answers the new tile, focused, at its prompt. */
-export const split = async (b: Bench, key: "|" | "-") => {
+const split = async (b: Bench, key: "|" | "-") => {
 	const before = await tilesNow(b);
 	await prefixed(b, key);
 	const after = await waitFor(
@@ -650,24 +650,24 @@ export const split = async (b: Bench, key: "|" | "-") => {
 	return fresh;
 };
 
-export const focusTile = async (b: Bench, id: string) => {
+const focusTile = async (b: Bench, id: string) => {
 	await b.page.locator(`[data-tile="${id}"] .titlebar`).click();
 	await focusIs(b, id);
 };
 
 /** Send a whole line to a tile's tsh on its own port: the real path, without typing each key. */
-export const lineTo = (b: Bench, tile: string, line: string) =>
+const lineTo = (b: Bench, tile: string, line: string) =>
 	b.page.evaluate(
 		([t, l]: string[]) => window.fabrika.send(`tile:${t}`, {type: "keys", data: `${l}\r`}),
 		[tile, line],
 	);
 
-export const programIn = (b: Bench, tile: string, program: string) =>
+const programIn = (b: Bench, tile: string, program: string) =>
 	b.page.locator(`[data-tile="${tile}"] [aria-label="${program} view"]`).waitFor({timeout: 20000});
 
 // ---------------------------------------------------------------- what is open
 
-export const LONG_MARKDOWN = (blocks: number, salt = "") =>
+const LONG_MARKDOWN = (blocks: number, salt = "") =>
 	Array.from({length: blocks}, (_, i) =>
 		i % 10 === 0
 			? `## Part ${i} ${salt}`
@@ -677,7 +677,7 @@ export const LONG_MARKDOWN = (blocks: number, salt = "") =>
 	).join("\n\n");
 
 /** Tell a markdown window a whole text, on its run's port: the program's own `text` input. */
-export const tellMarkdown = (b: Bench, tile: string, text: string) =>
+const tellMarkdown = (b: Bench, tile: string, text: string) =>
 	b.page.evaluate(
 		([t, value]: string[]) => {
 			const run = __probe.runIn(t);
@@ -696,7 +696,7 @@ const fileTicket = async (b: Bench, tile: string, title: string) => {
 };
 
 /** The five windows the picks ask for: tracker, ticket, markdown, map, and a bare terminal. */
-export const fiveWindows = async (b: Bench, markdownBlocks = 200) => {
+const fiveWindows = async (b: Bench, markdownBlocks = 200) => {
 	const t1 = "t1";
 	const t2 = await split(b, "|");
 	const t3 = await split(b, "-");
@@ -783,13 +783,13 @@ const metrics = async (b: Bench) => {
 };
 
 /** Clear the page's and main's counters, so what is read next is this moment's alone. */
-export const resetCounters = async (b: Bench) => {
+const resetCounters = async (b: Bench) => {
 	await b.page.evaluate(() => __probe.reset());
 	await b.app.evaluate(() => __loop.reset());
 	await b.app.evaluate(({app}: any) => app.getAppMetrics());
 };
 
-export const readSample = async (
+const readSample = async (
 	b: Bench,
 	moment: string,
 	values: readonly number[],
@@ -832,7 +832,7 @@ export const readSample = async (
 	};
 };
 
-export const keep = (sample: Sample) => {
+const keep = (sample: Sample) => {
 	mkdirSync(join(root, "experiments/results"), {recursive: true});
 	appendFileSync(RESULTS, `${JSON.stringify(sample)}\n`);
 	const m = sample.ms;
@@ -2138,7 +2138,7 @@ const soak = async (b: Bench, minutes: number) => {
 	}
 };
 
-export const MOMENTS: Record<string, Moment> = {
+const MOMENTS: Record<string, Moment> = {
 	walk,
 	keeps,
 	rects,

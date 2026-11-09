@@ -21,7 +21,7 @@ const own = (name: string) => {
 	};
 };
 
-export interface ServerOptions {
+interface ServerOptions {
 	/** The data folder, or `false`: in memory. */
 	readonly persist: string | false;
 	/** Signs every session. */

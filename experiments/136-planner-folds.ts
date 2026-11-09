@@ -359,7 +359,7 @@ const READING: Record<Arm, string> = {
 };
 
 /** The fold question, in the planner's own framing. Pure: the same case and arm give the same text. */
-export function promptOf(c: Case, arm: Arm): string {
+function promptOf(c: Case, arm: Arm): string {
 	return [
 		`You are the planner for one ticket: https://github.com/${REPO}/issues/${c.ticket.n}. Before any plan is written, answer one question: does this ticket belong inside the plan of one of the open tickets listed below, so that one pull request carries the work of both?`,
 		"",
@@ -389,7 +389,7 @@ export function promptOf(c: Case, arm: Arm): string {
 }
 
 /** Part B's question: the head's planner, asked what else its pull request should carry. Brief `must`. Pure. */
-export function pullPromptOf(c: Case): string {
+function pullPromptOf(c: Case): string {
 	return [
 		`You are the planner for one ticket: https://github.com/${REPO}/issues/${c.ticket.n}. Before you write its plan, answer one question: should the pull request for this ticket also carry the work of any of the open tickets listed below?`,
 		"",

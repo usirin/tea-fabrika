@@ -13,11 +13,11 @@ import {tmpdir} from "node:os";
 import {dirname, join, resolve} from "node:path";
 import {expectThat, Given, need, type Problems, Then, When, type World} from "./moves.ts";
 
-export const PACKAGE = resolve(import.meta.dirname, "..", "..");
+const PACKAGE = resolve(import.meta.dirname, "..", "..");
 const TSC = createRequire(join(PACKAGE, "package.json")).resolve("typescript/bin/tsc");
 
 /** One tsc error, read off `--pretty false` output. */
-export interface Diagnostic {
+interface Diagnostic {
 	readonly file: string;
 	readonly line: number;
 	readonly code: string;

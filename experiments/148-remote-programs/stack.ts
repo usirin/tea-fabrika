@@ -20,7 +20,7 @@ import * as Alchemy from "alchemy";
 import type {SecretProviders} from "alchemy/Stack";
 import {Config, Effect} from "effect";
 
-export interface StackInputs {
+interface StackInputs {
 	/** With the job box. Without, a box job answers "the box did not start". */
 	readonly boxes: boolean;
 	/** On the cloud stage, the model is the Worker's own stand-in entrypoint: no real model, no real key. */

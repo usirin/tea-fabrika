@@ -24,7 +24,7 @@ export interface Answerer {
 
 export const START: Answerer = {cursor: 0, answered: 0, repeats: 0, last: null};
 
-export type Asked = {
+type Asked = {
 	readonly id: string;
 	readonly corr: string;
 	/** The inbox the reply goes to: the caller's address. */

@@ -152,5 +152,3 @@ export const Pill: React.FC<{ text: string; at?: number; accent?: boolean; mono?
 
 /** Row height BarChart uses for `n` bars, so overlays can line up with it. */
 export const barRowHeight = (n: number): number => (n > 4 ? 84 : 104);
-/** Height BarChart's title takes, label line plus its margin. */
-export const BAR_TITLE_HEIGHT = 39 + 32;

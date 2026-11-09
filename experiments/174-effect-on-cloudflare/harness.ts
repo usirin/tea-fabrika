@@ -40,7 +40,7 @@ export const bundle = async (
 };
 
 /** Miniflare from another folder and a chosen date, to compare runtimes. Same options otherwise. */
-export const startOn = async (
+const startOn = async (
 	miniflarePath: string | undefined,
 	compatibilityDate: string,
 	code: string,

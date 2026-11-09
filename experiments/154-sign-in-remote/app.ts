@@ -16,7 +16,7 @@ import {Ledger, streams} from "@kampus/fabrika-old";
 import {Duration, Effect, Schema} from "effect";
 import {boxName, personName, redirectOf, SIWC, type ToBox, ToPerson} from "./wire.ts";
 
-export interface AppOptions {
+interface AppOptions {
 	readonly who: string;
 	/** The sign-in page the app agrees to open: its origin and path, nothing else. */
 	readonly authorize: string;
@@ -81,7 +81,7 @@ export const readCallback = (
 };
 
 /** Is `url` the sign-in page, made for this catcher? Then its state. */
-export const readSignInUrl = (raw: string, authorize: string, port: number): string | null => {
+const readSignInUrl = (raw: string, authorize: string, port: number): string | null => {
 	let url: URL;
 	try {
 		url = new URL(raw);

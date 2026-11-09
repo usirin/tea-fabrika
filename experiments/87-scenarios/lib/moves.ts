@@ -39,7 +39,7 @@ type Args = readonly unknown[];
 type Step<R> = (world: World, ...args: Args) => R | Promise<R>;
 
 /** Every step registered, with its Gherkin word and its move. */
-export const registered: {
+const registered: {
 	readonly word: string;
 	readonly move: string;
 	readonly pattern: string;

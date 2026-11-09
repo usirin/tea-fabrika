@@ -27,7 +27,7 @@ export interface Meter {
 }
 export const meter = (): Meter => ({reads: 0, events: 0, bytes: 0, wakes: 0, connects: 0});
 
-export interface TailOptions {
+interface TailOptions {
 	/** The ledger's base URL (http), and its name. */
 	readonly base: string;
 	readonly name: string;

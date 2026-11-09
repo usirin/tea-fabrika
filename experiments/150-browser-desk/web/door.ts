@@ -95,7 +95,7 @@ const pipe = (ws: Socket.Socket, sock: string) =>
 	}).pipe(Effect.scoped, Effect.ignore);
 
 /** The door: serves until the process is stopped. */
-export const door = Effect.gen(function* () {
+const door = Effect.gen(function* () {
 	if (home === "") return yield* Effect.die("fabrika door: FABRIKA_HOME is not set");
 	const fs = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;

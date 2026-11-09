@@ -19,7 +19,7 @@ import type {Ledger, Row} from "@kampus/fabrika-old";
 import {Cause, Duration, Effect, Exit, Schema} from "effect";
 
 /** What the host says about each save. */
-export type WriteNote = {
+type WriteNote = {
 	readonly ev: "write";
 	readonly fence: number;
 	readonly expected: number;

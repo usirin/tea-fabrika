@@ -21,11 +21,11 @@ import {mint} from "./ticket.ts";
 
 const HERE = new URL(".", import.meta.url).pathname;
 
-export class DevFailed extends Schema.TaggedError<DevFailed>()("DevFailed", {
+class DevFailed extends Schema.TaggedError<DevFailed>()("DevFailed", {
 	message: Schema.String,
 }) {}
 
-export const attempt = <A>(what: string, f: () => Promise<A>) =>
+const attempt = <A>(what: string, f: () => Promise<A>) =>
 	Effect.tryPromise({
 		try: f,
 		catch: (e) =>

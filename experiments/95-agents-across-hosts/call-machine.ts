@@ -25,7 +25,7 @@ export interface CallSettings {
 	readonly real: boolean;
 }
 
-export interface Pending {
+interface Pending {
 	readonly i: number;
 	/** Sends so far, this one included. Every one carries the same message id. */
 	readonly tries: number;
@@ -58,7 +58,7 @@ export const START: Asker = {
 	last: null,
 };
 
-export type Reply = {
+type Reply = {
 	readonly id: string;
 	readonly corr: string;
 	readonly answer: string;
@@ -84,7 +84,7 @@ export type CallCmd = {
 
 /** One deadline a pending call waits on. */
 export type Deadline = {readonly i: number; readonly tries: number; readonly at: number};
-export type CallSub = Sub<"deadlines", {readonly list: readonly Deadline[]}>;
+type CallSub = Sub<"deadlines", {readonly list: readonly Deadline[]}>;
 
 /** The send of try `tries` of call `i`: the message id and correlation id come from `i` alone. */
 export const sendOf = (settings: CallSettings, i: number, tries: number): CallCmd => {
@@ -93,7 +93,7 @@ export const sendOf = (settings: CallSettings, i: number, tries: number): CallCm
 };
 
 /** Every pending call whose send landed, and when it times out. The laws read this same function. */
-export const deadlinesOf = (s: Asker): readonly Deadline[] =>
+const deadlinesOf = (s: Asker): readonly Deadline[] =>
 	s.pending.flatMap((p) => (p.due === null ? [] : [{i: p.i, tries: p.tries, at: p.due}]));
 
 export const isDone = (settings: CallSettings, s: Asker): boolean =>
@@ -166,7 +166,7 @@ export const callUpdate =
 		}
 	};
 
-export const callSubs = () => [
+const callSubs = () => [
 	// The one cast: tea's `DepKeyedSub` is a conditional type that a literal cannot be checked against.
 	{
 		type: "deadlines",

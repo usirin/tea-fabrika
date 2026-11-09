@@ -26,7 +26,7 @@ const Loaded = Schema.decodeUnknownEffect(
 	Schema.Struct({ok: Schema.Literal(true), rows: Schema.Number}),
 );
 
-export class MoveError extends Schema.TaggedError<MoveError>()("MoveError", {
+class MoveError extends Schema.TaggedError<MoveError>()("MoveError", {
 	object: Schema.String,
 	message: Schema.String,
 }) {}
@@ -42,7 +42,7 @@ const bodyAs =
 			),
 		);
 
-export interface Moved {
+interface Moved {
 	readonly object: string;
 	readonly rows: number;
 	readonly tables: Readonly<Record<string, number>>;

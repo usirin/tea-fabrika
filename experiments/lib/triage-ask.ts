@@ -5,10 +5,10 @@ import {Schema} from "effect";
 import {type Brief, Tokens, Verdict} from "./brief-eval.ts";
 
 /** Why a ticket stays open without asking. */
-export const KEEP_WHY = ["fault", "feature"] as const;
+const KEEP_WHY = ["fault", "feature"] as const;
 /** Why the owner is asked: worth, a security ticket (always), or a trace that does not settle it. */
-export const ASK_WHY = ["worth", "security", "unclear"] as const;
-export type AskWhy = (typeof ASK_WHY)[number];
+const ASK_WHY = ["worth", "security", "unclear"] as const;
+type AskWhy = (typeof ASK_WHY)[number];
 
 /** The answer a three-way brief asks for. A close names one of the brief's own close facts. */
 export const answerOf = (brief: Brief) =>
@@ -49,7 +49,7 @@ export type Triage =
 	  };
 
 /** The two sets part 4 scores on: the 119 of parts 1 to 3, and the 63 of part 3's exam. */
-export const SETS = ["tuning", "exam"] as const;
+const SETS = ["tuning", "exam"] as const;
 export const SetName = Schema.Literals(SETS);
 export type SetName = typeof SetName.Type;
 

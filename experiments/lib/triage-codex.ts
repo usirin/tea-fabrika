@@ -54,9 +54,9 @@ import {
 } from "./triage-135.ts";
 
 const here = join(import.meta.dirname, "..");
-export const CODEX = process.env.CODEX ?? join(homedir(), ".local", "bin", "codex");
+const CODEX = process.env.CODEX ?? join(homedir(), ".local", "bin", "codex");
 /** GPT sol, the model the owner picked for stage agents (docs/direction/a-canvas-per-work.md). */
-export const MODEL = "gpt-6.1-sol";
+const MODEL = "gpt-6.1-sol";
 const TRIES = 2;
 
 /**
@@ -75,7 +75,7 @@ const READ_CODE =
 // ---------------------------------------------------------------- the calls
 
 const Tokens = Schema.Struct({input: Schema.Number, cached: Schema.Number, output: Schema.Number});
-export type Tokens = typeof Tokens.Type;
+type Tokens = typeof Tokens.Type;
 /** One Codex turn: what it said, how long, its tokens and how many tools it ran. */
 const Turn = {
 	error: Schema.NullOr(Schema.String),
@@ -87,7 +87,7 @@ const Turn = {
 	stop: Schema.NullOr(Schema.String),
 };
 const PRun = Schema.Struct({answer: Schema.NullOr(PSortAnswer), ...Turn});
-export type PRun = typeof PRun.Type;
+type PRun = typeof PRun.Type;
 const Try = Schema.Struct({
 	answer: Schema.NullOr(SortReply),
 	problems: Schema.Array(Schema.String),
@@ -95,7 +95,7 @@ const Try = Schema.Struct({
 });
 type Try = typeof Try.Type;
 const DRun = Schema.Struct({tries: Schema.Array(Try)});
-export type DRun = typeof DRun.Type;
+type DRun = typeof DRun.Type;
 
 const serviceOf = (access: "write" | "read") =>
 	Effect.gen(function* () {
@@ -168,7 +168,7 @@ export async function codexTurn<A>(
 }
 
 /** Where a turn runs: the experiment's name for its sessions, the folder, the effort. */
-export interface Where {
+interface Where {
 	readonly name: string;
 	readonly folder: string;
 	readonly effort: string;
@@ -195,7 +195,7 @@ async function dSort(brief: Brief, at: Where, edit: (prompt: string) => string):
 	return {tries};
 }
 
-export const dTokens = (r: DRun): Tokens =>
+const dTokens = (r: DRun): Tokens =>
 	r.tries.reduce(
 		(s, t) => ({
 			input: s.input + t.tokens.input,
@@ -204,7 +204,7 @@ export const dTokens = (r: DRun): Tokens =>
 		}),
 		{input: 0, cached: 0, output: 0},
 	);
-export const dMs = (r: DRun) => r.tries.reduce((s, t) => s + t.ms, 0);
+const dMs = (r: DRun) => r.tries.reduce((s, t) => s + t.ms, 0);
 const dTools = (r: DRun) => r.tries.reduce((s, t) => s + t.tools, 0);
 
 // ---------------------------------------------------------------- results
@@ -214,7 +214,7 @@ const DPool = Schema.Record(Schema.String, Schema.Array(DRun));
 const Saved = Schema.Struct({
 	configs: Schema.Record(Schema.String, Schema.Struct({p: PPool, d: DPool})),
 });
-export type Pools<P = PRun, D = DRun> = {p: Record<string, P[]>; d: Record<string, D[]>};
+type Pools<P = PRun, D = DRun> = {p: Record<string, P[]>; d: Record<string, D[]>};
 type SavedRuns = {configs: Record<string, Pools>};
 
 /** An experiment's results file: every config's runs, read once, written after each sort. */
@@ -245,7 +245,7 @@ const load = <T>(file: string, schema: Schema.Codec<T, unknown>, group: "p" | "d
 // ---------------------------------------------------------------- the sorts
 
 /** What one sort step runs: which tickets, how, and where the answers go. */
-export interface SortStep {
+interface SortStep {
 	readonly name: string;
 	readonly group: "p" | "d";
 	readonly cache: string;
@@ -427,7 +427,7 @@ const Saved133 = Schema.Struct({
 	),
 });
 
-export type Column = {id: string; label: string; pools: Pools<PAnswered, DAnswered>};
+type Column = {id: string; label: string; pools: Pools<PAnswered, DAnswered>};
 /** The saved columns every table starts with: sonnet (92b, 133), and 135's opus. */
 export function savedColumns(): Column[] {
 	const saved135 = Schema.decodeUnknownSync(Saved135, {onExcessProperty: "ignore"})(

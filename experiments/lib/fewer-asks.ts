@@ -230,7 +230,7 @@ const STOP = new Set(
 	),
 );
 /** Words of three letters or more, lower case, with no stop words. Pure. */
-export const wordsOf = (text: string): string[] =>
+const wordsOf = (text: string): string[] =>
 	(text.toLowerCase().match(/[a-z0-9_][a-z0-9_.-]{2,}/g) ?? [])
 		.map((w) => w.replace(/[.-]+$/, ""))
 		.filter((w) => w.length >= 3 && !STOP.has(w));

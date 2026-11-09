@@ -9,7 +9,7 @@
 
 export type ChapterId = "Ch01" | "Ch02" | "Ch03" | "Ch04" | "Ch05" | "Ch06" | "Ch07" | "Ch08" | "Ch09" | "Ch10";
 
-export type ChapterRow = {
+type ChapterRow = {
   readonly id: ChapterId;
   readonly number: number;
   /** The post's title, as the header card shows it. */

@@ -117,7 +117,7 @@ export const FLOOR = 0.8;
 export const top = (p: Readonly<Record<string, number>>): [string, number] =>
 	Object.entries(p).sort((x, y) => y[1] - x[1])[0] ?? ["none", 0];
 /** Jev's three answers read as one, the way sort's are: a duplicate, a no, or a route. */
-export const jevSaid = (r: JevRun): Said => {
+const jevSaid = (r: JevRun): Said => {
 	if (top(r.dup)[0] === "duplicate") return "dup";
 	if (top(r.worth)[0] === "no") return "no";
 	return top(r.next)[0] as Said;
@@ -129,8 +129,7 @@ export type Pool = Record<string, Run[]>;
 export type JevPool = Record<string, JevRun[]>;
 export const pct = (a: number, b: number) =>
 	b === 0 ? "-" : `${a} of ${b} (${Math.round((100 * a) / b)}%)`;
-export const yesNo = (s: Said | null) =>
-	s === null ? null : s === "no" || s === "dup" ? "no" : "yes";
+const yesNo = (s: Said | null) => (s === null ? null : s === "no" || s === "dup" ? "no" : "yes");
 export const isRoute = (s: Said) => s === "plan" || s === "ruling" || s === "research";
 export const median = (xs: number[]) =>
 	[...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
@@ -196,7 +195,7 @@ export function scoring(truth: Readonly<Record<string, TruthEntry>>) {
 }
 
 /** One Jev answer beside Claude's answer to the same ticket in the same run. */
-export type JevPair = {n: number; i: number; j: JevRun; said: Said; jev: Said};
+type JevPair = {n: number; i: number; j: JevRun; said: Said; jev: Said};
 
 /** Jev's answers paired with Claude's, run by run, where Claude answered. */
 export const jevPairs = (claude: Pool, jev: JevPool, tickets: readonly number[]): JevPair[] =>

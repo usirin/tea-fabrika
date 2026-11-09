@@ -19,7 +19,7 @@ import {Count} from "../94-tea-host/counter.ts";
 import type {Ledger, Row} from "./service.ts";
 
 /** What a host says about each write, for the harness. */
-export type WriteNote = {
+type WriteNote = {
 	readonly ev: "write";
 	readonly fence: number;
 	readonly expected: number;

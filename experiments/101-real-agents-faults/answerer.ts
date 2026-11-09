@@ -28,7 +28,7 @@ import {Question} from "../98-tea-host-package/answerer.ts";
 import {CHECK, runTurns} from "./agent.ts";
 import {type AnswerCmd, AnswererState, answerer, type Entry, planFor} from "./machine.ts";
 
-export interface AnswererSettings {
+interface AnswererSettings {
 	readonly mode: "fresh" | "resume";
 	readonly model: string;
 	readonly crashAfter: string | null;

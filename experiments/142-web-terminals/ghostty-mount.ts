@@ -10,7 +10,7 @@ import {FONT, FONT_SIZE, listeners, type Mount, SCROLLBACK, THEME} from "./term.
 type Lib = typeof import("ghostty-web");
 
 /** Time spent inside render calls, every terminal together: read as `bench.renderTime`. */
-export const renderTime = {ms: 0, calls: 0};
+const renderTime = {ms: 0, calls: 0};
 Object.assign(globalThis, {renderTime});
 
 export const mountWith = ({FitAddon, Ghostty, Terminal}: Lib): Mount => {

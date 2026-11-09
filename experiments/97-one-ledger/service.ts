@@ -24,50 +24,50 @@ import {HttpClient, HttpClientRequest, HttpClientResponse} from "effect/http";
 // ---------------------------------------------------------------- the errors
 
 /** No answer, a 500 or a timeout. Whether a write landed is unknown: send it again with its id. */
-export class LedgerUnreachable extends Schema.TaggedError<LedgerUnreachable>()(
-	"LedgerUnreachable",
-	{method: Schema.String, message: Schema.String},
-) {}
+class LedgerUnreachable extends Schema.TaggedError<LedgerUnreachable>()("LedgerUnreachable", {
+	method: Schema.String,
+	message: Schema.String,
+}) {}
 /** EventStoreDB's WrongExpectedVersion: the stream ends at `rev`, not where the write said. */
-export class Stale extends Schema.TaggedError<Stale>()("Stale", {
+class Stale extends Schema.TaggedError<Stale>()("Stale", {
 	stream: Schema.String,
 	rev: Schema.Number,
 }) {}
 /** Kafka's ProducerFenced: the fence names no live lease that may write this stream. Stop writing. */
-export class Fenced extends Schema.TaggedError<Fenced>()("Fenced", {stream: Schema.String}) {}
+class Fenced extends Schema.TaggedError<Fenced>()("Fenced", {stream: Schema.String}) {}
 /** EventStoreDB's AccessDenied: a claimed name's stream, written with no fence; or a claim inside one. */
-export class Denied extends Schema.TaggedError<Denied>()("Denied", {stream: Schema.String}) {}
+class Denied extends Schema.TaggedError<Denied>()("Denied", {stream: Schema.String}) {}
 /** etcd's lock is held: someone else has a live lease on the name until `expiresAt`. */
-export class Held extends Schema.TaggedError<Held>()("Held", {
+class Held extends Schema.TaggedError<Held>()("Held", {
 	name: Schema.String,
 	holder: Schema.String,
 	expiresAt: Schema.Number,
 }) {}
 /** etcd's lease not found: this fence's lease ran out or was taken over. */
-export class LeaseLost extends Schema.TaggedError<LeaseLost>()("LeaseLost", {
+class LeaseLost extends Schema.TaggedError<LeaseLost>()("LeaseLost", {
 	name: Schema.String,
 }) {}
 /** The lease is live, but someone cancelled the work: stop. */
-export class Cancelled extends Schema.TaggedError<Cancelled>()("Cancelled", {
+class Cancelled extends Schema.TaggedError<Cancelled>()("Cancelled", {
 	name: Schema.String,
 }) {}
 
 // ---------------------------------------------------------------- what comes back
 
 /** Where a write landed. `dup`: this message id was there already, and nothing was written. */
-export const Appended = Schema.Struct({
+const Appended = Schema.Struct({
 	pos: Schema.Number,
 	rev: Schema.Number,
 	dup: Schema.Boolean,
 });
-export type Appended = typeof Appended.Type;
+type Appended = typeof Appended.Type;
 /** A won claim: the fence every write under the name must carry, and the lease's end. */
-export const Claimed = Schema.Struct({
+const Claimed = Schema.Struct({
 	fence: Schema.Number,
 	rev: Schema.Number,
 	expiresAt: Schema.Number,
 });
-export type Claimed = typeof Claimed.Type;
+type Claimed = typeof Claimed.Type;
 
 /** One event, as the ledger keeps it. `data` is the event's JSON, as text. */
 export const Row = Schema.Struct({
@@ -83,14 +83,14 @@ export const Row = Schema.Struct({
 export type Row = typeof Row.Type;
 const Rows = Schema.Array(Row);
 
-export const Lease = Schema.Struct({
+const Lease = Schema.Struct({
 	stream: Schema.String,
 	holder: Schema.String,
 	expires_at: Schema.Number,
 	fence: Schema.Number,
 	stop: Schema.Number,
 });
-export type Lease = typeof Lease.Type;
+type Lease = typeof Lease.Type;
 
 export interface NewEvent {
 	readonly kind: string;
