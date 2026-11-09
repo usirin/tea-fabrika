@@ -1,6 +1,7 @@
 // The repo's custom lint rules, one per file, loaded by `.oxlintrc.json`. README.md says where each
 // came from and what it was measured against.
 import type {Plugin} from "@oxlint/plugins";
+import {doorIsLibrary} from "./door-is-library.ts";
 import {edgeComment} from "./edge-comment.ts";
 import {effectFunctions} from "./effect-functions.ts";
 import {noBareDisable} from "./no-bare-disable.ts";
@@ -23,11 +24,13 @@ import {noSecretEnv} from "./no-secret-env.ts";
 import {noThrowInEffectGen} from "./no-throw-in-effect-gen.ts";
 import {noTypeAssertions} from "./no-type-assertions.ts";
 import {oneStoreHook} from "./one-store-hook.ts";
+import {outsideInputConstructor} from "./outside-input-constructor.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
 	meta: {name: "fabrika"},
 	rules: {
+		"door-is-library": doorIsLibrary,
 		"edge-comment": edgeComment,
 		"effect-functions": effectFunctions,
 		"no-bare-disable": noBareDisable,
@@ -50,6 +53,7 @@ const plugin: Plugin = {
 		"no-throw-in-effect-gen": noThrowInEffectGen,
 		"no-type-assertions": noTypeAssertions,
 		"one-store-hook": oneStoreHook,
+		"outside-input-constructor": outsideInputConstructor,
 		"use-import-extensions": useImportExtensions,
 	},
 };

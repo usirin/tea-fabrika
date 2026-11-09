@@ -2,8 +2,9 @@
 // Effect<ProcessId>. The schema stays in data/trace.ts. RFC 9562 §5.7, TypeID's base32 encoding.
 // Plants: UUIDv4 in a TypeID wrapper; random ids in one ms; wall-clock rollback; a constant id.
 import {describe, expect, it, vi} from "@effect/vitest";
-import {Clock, Effect, Exit, Schema} from "effect";
+import {Clock, Effect, Exit, Schema, Tracer} from "effect";
 import {TestClock} from "effect/testing";
+import * as fc from "fast-check";
 import {ProcessId} from "../data/trace.ts";
 import * as Coordination from "./index.ts";
 
@@ -13,6 +14,34 @@ const decode = (id: string): Uint8Array => {
 	return Uint8Array.from({length: 16}, (_, i) => Number((value >> BigInt((15 - i) * 8)) & 255n));
 };
 describe("P10 shared process ids", () => {
+	// T287 mutation: renaming process.next to an empty string lost the operation in traces.
+	it("every generated process id ends its own process.next span", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.integer({min: 1, max: 16}), async (count) => {
+				const spans: Array<Tracer.NativeSpan> = [];
+				const tracer = Tracer.make({
+					span(options) {
+						const span = new Tracer.NativeSpan(options);
+						spans.push(span);
+						return span;
+					},
+				});
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const generator = yield* Coordination.ProcessIdGenerator;
+						yield* Effect.forEach(Array.from({length: count}), () => generator.next, {
+							concurrency: 1,
+						});
+					}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer), Effect.withTracer(tracer)),
+				);
+				const operations = spans.filter((span) => span.name === "process.next");
+				expect(operations).toHaveLength(count);
+				expect(new Set(operations.map((span) => span.spanId)).size).toBe(count);
+				for (const span of operations) expect(span.status._tag).toBe("Ended");
+			}),
+			{seed: 119120, numRuns: 25, endOnFailure: true},
+		);
+	});
 	it.effect("monotonic: exhausted random bits advance the clock before the next id", () =>
 		Effect.gen(function* () {
 			const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
