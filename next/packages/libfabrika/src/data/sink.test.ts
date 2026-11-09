@@ -1,3 +1,4 @@
+import {Buffer} from "node:buffer";
 // p98 and p99 (P37's plan writes them out; the lead commit adds them to docs/plan/tier-1-detail.md,
 // "Properties"), for `data/sink.ts` and `data/trace.ts`: a span that ends is never dropped, and its
 // tags hold names, ids and numbers only. From "design for bounded objects" and "monitoring is in
@@ -22,10 +23,20 @@ import {mkdtempSync, readdirSync, readFileSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
-import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Cause, Effect, Exit, Layer, Option, Redacted, Stream, Tracer} from "effect";
+import {afterAll, beforeEach, describe, expect, it} from "@effect/vitest";
+import {
+	Arbitrary,
+	Cause,
+	Effect,
+	Exit,
+	Layer,
+	Option,
+	Redacted,
+	Schema,
+	Stream,
+	Tracer,
+} from "effect";
 import {TestClock} from "effect/testing";
-import * as fc from "fast-check";
 import {processId, processIds} from "../id.test-support.ts";
 import {Archive, type BucketCalls} from "./archive.ts";
 import {RecordManager} from "./records.ts";
@@ -92,7 +103,8 @@ const traced = <A, E, R>(
 	name: string,
 	attributes: Record<string, unknown>,
 	body: Effect.Effect<A, E, R>,
-) => body.pipe(Effect.withSpan(name, {attributes}));
+	kind: Tracer.SpanKind = "internal",
+) => body.pipe(Effect.withSpan(name, {attributes, kind}));
 const step = (name: string, attributes: Record<string, unknown> = {}) =>
 	traced(name, attributes, Effect.void);
 
@@ -170,6 +182,147 @@ const bucket = () => {
 
 const ids = (rows: ReadonlyArray<Row>) => rows.map((r) => r.spanId);
 
+const N = (minimum: number, maximum: number) =>
+	Schema.Int.check(Schema.isBetween({minimum, maximum}));
+const text = (minLength: number, maxLength: number) =>
+	Arbitrary.array(Arbitrary.schema(N(0, 65535)), {minLength, maxLength}).pipe(
+		Arbitrary.map((units) => unicode(String.fromCharCode(...units))),
+	);
+// UTF-8 replaces lone surrogates, including one left at a generated marker's cut.
+const unicode = (value: string) => Buffer.from(value, "utf8").toString("utf8");
+const Inputs = Arbitrary.all({
+	P1: processIds,
+	P2: processIds,
+	time: Arbitrary.schema(N(0, 4102444800000)),
+	duration: Arbitrary.schema(N(0, 900)),
+	kind: Arbitrary.schema(Schema.Literals(["internal", "server", "client", "producer", "consumer"])),
+	count: Arbitrary.schema(N(1, 8)),
+	batch: Arbitrary.schema(N(1, 100)),
+	cap: Arbitrary.schema(N(1, 131072)),
+	made: Arbitrary.schema(N(120, 160)),
+	pad: Arbitrary.schema(N(100, 256)),
+	length: Arbitrary.schema(N(0, 4096)),
+	astral: Arbitrary.schema(N(65536, 1114111)),
+	content: Arbitrary.schema(N(0, 1100001)).pipe(Arbitrary.map((n) => (n === 0 ? 1100000 : n - 1))),
+	secret: text(16, 128),
+	note: text(16, 128),
+	other: text(16, 128),
+	ops: Arbitrary.schema(
+		Schema.Array(Schema.Literals(["success", "failure", "flush", "retry", "refusal"])).check(
+			Schema.isMinLength(1),
+			Schema.isMaxLength(12),
+		),
+	),
+});
+const roots = Schema.Array(
+	Schema.Array(Schema.Literals(["one", "two", "none"])).check(
+		Schema.isMinLength(1),
+		Schema.isMaxLength(8),
+	),
+).check(Schema.isMinLength(1), Schema.isMaxLength(5));
+const eventInputs = Arbitrary.schema(N(0, 8)).pipe(
+	Arbitrary.flatMap((count) =>
+		Arbitrary.array(
+			Arbitrary.all({
+				name: text(1, 256),
+				time: Arbitrary.schema(N(0, 4102444800000)),
+				attributes: tags,
+			}),
+			{minLength: count, maxLength: count},
+		),
+	),
+);
+type Params = {
+	time: number;
+	duration: number;
+	kind: Tracer.SpanKind;
+	count: number;
+	batch: number;
+	cap: number;
+	made: number;
+	pad: number;
+	length: number;
+	astral: number;
+	content: number;
+	secret: string;
+	note: string;
+	other: string;
+	old: boolean;
+	roots: ReadonlyArray<ReadonlyArray<"one" | "two" | "none">>;
+	events: ReadonlyArray<{
+		name: string;
+		time: number;
+		attributes: Readonly<Record<string, unknown>>;
+	}>;
+	ops: ReadonlyArray<"success" | "failure" | "flush" | "retry" | "refusal">;
+};
+const law = (
+	name: string,
+	check: (P1: string, P2: string, input: Params) => Effect.Effect<unknown, unknown>,
+	runs = 60,
+	profile: "base" | "events" | "roots" = "base",
+) =>
+	describe(name, () => {
+		const run = (P1: string, P2: string, input: Params) =>
+			Effect.suspend(() => check(P1, P2, input)).pipe(
+				Effect.provide(TestClock.layer()),
+				Effect.ensuring(
+					Effect.sync(() => {
+						for (const db of opened.splice(0)) if (db.isOpen) db.close();
+					}),
+				),
+			);
+		beforeEach(() =>
+			Effect.runPromise(
+				run(P1, P2, {
+					time: Date.UTC(2026, 10, 7, 21, 59, 59, 990),
+					duration: 3,
+					kind: "internal",
+					count: 4,
+					batch: 30,
+					cap: 16384,
+					made: 120,
+					pad: 100,
+					length: 200,
+					astral: 65536,
+					content: 1100000,
+					secret: SECRET,
+					note: NOTE,
+					other: NOTE_TWO,
+					old: true,
+					events: [],
+					roots: [],
+					ops: [],
+				}),
+			),
+		);
+		it.effect.prop(
+			name,
+			{
+				input: Arbitrary.all({
+					input: Inputs,
+					events: profile === "events" ? eventInputs : Arbitrary.Constant([]),
+					roots: profile === "roots" ? Arbitrary.schema(roots) : Arbitrary.Constant([]),
+				}).pipe(Arbitrary.map(({input, events, roots}) => ({...input, events, roots}))),
+			},
+			({input}) =>
+				run(
+					input.P1,
+					input.P2 === input.P1
+						? `${input.P2.slice(0, -1)}${input.P2.endsWith("0") ? "1" : "0"}`
+						: input.P2,
+					{
+						...input,
+						secret: unicode(`secret${input.secret.slice(6)}`),
+						note: unicode(`note--${input.note.slice(6)}`),
+						other: unicode(`other-${input.other.slice(6)}`),
+						old: false,
+					},
+				),
+			{arbitrary: {seed: SEED, runs, size: 4096}, timeout: 60000},
+		);
+	});
+
 describe("T246, P37 decodes TypeID process ids", () => {
 	it.effect.prop(
 		"a generated valid process reaches its JobRecord",
@@ -181,13 +334,20 @@ describe("T246, P37 decodes TypeID process ids", () => {
 				expect(yield* flush).toEqual({sent: 1});
 				expect(count(db, "unsent")).toBe(0);
 				expect((yield* recorded(job(process))).map((row) => row.name)).toEqual(["runner.step"]);
-			}).pipe(Effect.provide(world(sql)));
+			}).pipe(
+				Effect.provide(world(sql)),
+				Effect.ensuring(
+					Effect.sync(() => {
+						if (db.isOpen) db.close();
+					}),
+				),
+			);
 		},
-		{arbitrary: {seed: SEED, runs: 40}},
+		{arbitrary: {seed: SEED, runs: 60, size: 4096}},
 	);
 
 	// Plant: keep ProcessId as NonEmptyString. P37 must refuse a stored chain with a bad id.
-	it.effect.each([
+	for (const [label, original] of [
 		["old eight-hex id", "3f9a0c21"],
 		...["i", "l", "o", "u"].map((char) => [char, `process_0${char}${"0".repeat(24)}`] as const),
 		["first character 8", `process_8${"0".repeat(25)}`],
@@ -198,60 +358,78 @@ describe("T246, P37 decodes TypeID process ids", () => {
 		["leading space", ` ${P1}`],
 		["trailing space", `${P1} `],
 		["trailing newline", `${P1}\n`],
-	] as const)(
-		"a stored process with %s fails bad_row, keeps its row, and sends nothing",
-		([, process]) => {
-			const {db, sql} = home();
-			return Effect.gen(function* () {
-				yield* step("runner.step", {"fab.process": P1});
-				expect(count(db, "unsent")).toBe(1);
-				sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, process);
-				const exit = yield* Effect.exit(flush);
-				expect(Exit.isFailure(exit), "P37 must reject the stored process id before sending").toBe(
-					true,
-				);
-				const error = Exit.match(exit, {onFailure: Cause.squash, onSuccess: () => undefined});
-				expect(error).toBeInstanceOf(SinkError);
-				expect(error).toMatchObject({why: "bad_row", held: 0});
-				expect(count(db, "unsent")).toBe(1);
-				expect(yield* recorded(job(P1))).toEqual([]);
-				expect(yield* recorded(job(process))).toEqual([]);
-				sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, P1);
-				expect(yield* flush).toEqual({sent: 1});
-				expect(count(db, "unsent")).toBe(0);
-				expect((yield* recorded(job(P1))).map((row) => row.name)).toEqual(["runner.step"]);
-			}).pipe(Effect.provide(world(sql)));
-		},
-	);
+	] as const)
+		law(
+			`a stored process with ${label} fails bad_row, keeps its row, and sends nothing`,
+			(P1, _P2, input) => {
+				const process = input.old
+					? original
+					: label === "uppercase suffix"
+						? `process_${P1.slice(8).toUpperCase()}`
+						: label === "wrong prefix"
+							? `person_${P1.slice(8)}`
+							: label === "leading space"
+								? ` ${P1}`
+								: label === "trailing space"
+									? `${P1} `
+									: label === "trailing newline"
+										? `${P1}\n`
+										: original;
+				const {db, sql} = home();
+				return Effect.gen(function* () {
+					yield* step("runner.step", {"fab.process": P1});
+					expect(count(db, "unsent")).toBe(1);
+					sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, process);
+					const exit = yield* Effect.exit(flush);
+					expect(Exit.isFailure(exit), "P37 must reject the stored process id before sending").toBe(
+						true,
+					);
+					const error = Exit.match(exit, {onFailure: Cause.squash, onSuccess: () => undefined});
+					expect(error).toBeInstanceOf(SinkError);
+					expect(error).toMatchObject({why: "bad_row", held: 0});
+					expect(count(db, "unsent")).toBe(1);
+					expect(yield* recorded(job(P1))).toEqual([]);
+					expect(yield* recorded(job(process))).toEqual([]);
+					sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, P1);
+					expect(yield* flush).toEqual({sent: 1});
+					expect(count(db, "unsent")).toBe(0);
+					expect((yield* recorded(job(P1))).map((row) => row.name)).toEqual(["runner.step"]);
+				}).pipe(Effect.provide(world(sql)));
+			},
+		);
 });
 
 describe("p98, a span that ends is never dropped", () => {
-	it("its rows are in the object's own SQLite before end returns, and a later process's flush sends them", async () => {
-		const {db, open} = home();
-		// Effect.runSync: nothing may wait on a fiber or a timer for the rows to land.
-		const exit = Effect.runSyncExit(
-			traced("runner.step", {"fab.process": P1}, step("ledger.call")).pipe(
-				Effect.provide(SpanSink.layer(nodeSql(db), {object: OBJECT})),
-			),
-		);
-		expect(Exit.isSuccess(exit)).toBe(true);
-		db.close();
-		const again = open("object.db");
-		expect(count(again, "health", "piece IN ('runner.step', 'ledger.call')")).toBe(2);
-		expect(count(again, "unsent")).toBe(2);
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				expect(yield* flush).toEqual({sent: 2});
-				const rows = yield* recorded(job(P1));
-				expect(rows.map((r) => r.name).sort()).toEqual(["ledger.call", "runner.step"]);
-				expect(count(again, "unsent")).toBe(0);
-			}).pipe(Effect.provide(world(nodeSql(again)))),
-		);
-	});
+	law(
+		"its rows are in the object's own SQLite before end returns, and a later process's flush sends them",
+		(P1) =>
+			Effect.promise(async () => {
+				const {db, open} = home();
+				// Effect.runSync: nothing may wait on a fiber or a timer for the rows to land.
+				const exit = Effect.runSyncExit(
+					traced("runner.step", {"fab.process": P1}, step("ledger.call")).pipe(
+						Effect.provide(SpanSink.layer(nodeSql(db), {object: OBJECT})),
+					),
+				);
+				expect(Exit.isSuccess(exit)).toBe(true);
+				db.close();
+				const again = open("object.db");
+				expect(count(again, "health", "piece IN ('runner.step', 'ledger.call')")).toBe(2);
+				expect(count(again, "unsent")).toBe(2);
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						expect(yield* flush).toEqual({sent: 2});
+						const rows = yield* recorded(job(P1));
+						expect(rows.map((r) => r.name).sort()).toEqual(["ledger.call", "runner.step"]);
+						expect(count(again, "unsent")).toBe(0);
+					}).pipe(Effect.provide(world(nodeSql(again)))),
+				);
+			}),
+	);
 
-	it.effect(
+	law(
 		"a span goes to its own process, else its nearest ancestor's, else to spans; each to one chain",
-		() => {
+		(P1, P2, input) => {
 			const {db, sql} = home();
 			return Effect.gen(function* () {
 				yield* traced(
@@ -288,13 +466,54 @@ describe("p98, a span that ends is never dropped", () => {
 				const all = [...ids(one), ...ids(two), ...ids(outside)];
 				expect(new Set(all).size, "no span in two chains").toBe(10);
 				expect(count(db, "unsent")).toBe(0);
+				if (!input.old) {
+					const expected = new Map<string, Array<string>>([
+						["one", []],
+						["two", []],
+						["none", []],
+					]);
+					for (const [root, routes] of input.roots.entries()) {
+						let owner = "none";
+						for (const [n, route] of routes.entries()) {
+							if (route !== "none") owner = route;
+							expected.get(owner)?.push(`generated.${root}.${n}`);
+						}
+						let body = Effect.void;
+						for (let n = routes.length - 1; n >= 0; n--)
+							body = traced(
+								`generated.${root}.${n}`,
+								routes[n] === "one"
+									? {"fab.process": P1}
+									: routes[n] === "two"
+										? {"fab.process": P2}
+										: {},
+								body,
+							);
+						yield* body;
+					}
+					const total = input.roots.reduce((n, root) => n + root.length, 0);
+					expect(count(db, "unsent")).toBe(total);
+					expect(yield* flush).toEqual({sent: total});
+					const extra: Array<string> = [];
+					for (const [owner, names] of expected) {
+						const rows = (yield* recorded(
+							owner === "one" ? job(P1) : owner === "two" ? job(P2) : spans,
+						)).filter((row) => row.name.startsWith("generated."));
+						expect(rows.map((row) => row.name).sort()).toEqual([...names].sort());
+						extra.push(...ids(rows));
+					}
+					expect(new Set(extra).size).toBe(total);
+					expect(count(db, "unsent")).toBe(0);
+				}
 			}).pipe(Effect.provide(world(sql)));
 		},
+		60,
+		"roots",
 	);
 
-	it.effect("a row keeps OTLP's span fields, its parent and its times", () => {
+	law("a row keeps OTLP's span fields, its parent and its times", (P1, _P2, input) => {
 		const {db, sql} = home();
-		const T = Date.UTC(2026, 10, 7, 21, 59, 59, 990);
+		const T = input.time;
 		const nanos = (ms: number) => String(BigInt(ms) * 1_000_000n);
 		return Effect.gen(function* () {
 			yield* TestClock.setTime(T);
@@ -302,8 +521,11 @@ describe("p98, a span that ends is never dropped", () => {
 				"runner.step",
 				{"fab.process": P1, "fab.letter.id": "m-17"},
 				TestClock.adjust(4).pipe(
-					Effect.andThen(traced("ledger.call", {"rpc.method": "append"}, TestClock.adjust(3))),
+					Effect.andThen(
+						traced("ledger.call", {"rpc.method": "append"}, TestClock.adjust(input.duration)),
+					),
 				),
+				input.kind,
 			);
 			yield* flush;
 			const rows = yield* recorded(job(P1));
@@ -314,9 +536,9 @@ describe("p98, a span that ends is never dropped", () => {
 				spanId: expect.any(String),
 				parentSpanId: null,
 				name: "runner.step",
-				kind: "internal",
+				kind: input.kind,
 				startTimeUnixNano: nanos(T),
-				endTimeUnixNano: nanos(T + 7),
+				endTimeUnixNano: nanos(T + 4 + input.duration),
 				attributes: {"fab.process": P1, "fab.letter.id": "m-17"},
 				events: [],
 				links: [],
@@ -327,21 +549,21 @@ describe("p98, a span that ends is never dropped", () => {
 				traceId: parent?.traceId,
 				parentSpanId: parent?.spanId,
 				startTimeUnixNano: nanos(T + 4),
-				endTimeUnixNano: nanos(T + 7),
+				endTimeUnixNano: nanos(T + 4 + input.duration),
 				attributes: {"rpc.method": "append"},
 				ok: true,
 			});
 			const health = db.prepare(`SELECT piece, ms, ok FROM health ORDER BY piece`).all();
 			expect(health.map((h) => [h["piece"], h["ms"], Boolean(h["ok"])])).toEqual([
-				["ledger.call", 3, true],
-				["runner.step", 7, true],
+				["ledger.call", input.duration, true],
+				["runner.step", 4 + input.duration, true],
 			]);
 		}).pipe(Effect.provide(world(sql)));
 	});
 
-	it.effect(
+	law(
 		"every row names the object that ended it, as OTLP's resource, inside a process and outside one",
-		() => {
+		(P1, P2) => {
 			// Two objects end spans. The spans outside a process share one chain, `spans`, so the row
 			// is the only place that says which object ended each one (review must-fix, p98).
 			const one = home();
@@ -363,7 +585,11 @@ describe("p98, a span that ends is never dropped", () => {
 						.sort((x, y) =>
 							String(x.attributes["fab.object"]).localeCompare(String(y.attributes["fab.object"])),
 						),
-				).toEqual([{attributes: {"fab.object": OBJECT}}, {attributes: {"fab.object": P2}}]);
+				).toEqual(
+					[{attributes: {"fab.object": OBJECT}}, {attributes: {"fab.object": P2}}].sort((x, y) =>
+						String(x.attributes["fab.object"]).localeCompare(String(y.attributes["fab.object"])),
+					),
+				);
 				for (const row of outside)
 					expect(row.attributes, "the object is the resource's, not a span tag").not.toHaveProperty(
 						"fab.object",
@@ -381,9 +607,10 @@ describe("p98, a span that ends is never dropped", () => {
 		},
 	);
 
-	it.effect(
+	law(
 		"a span's links stay on its row, in OTLP's link shape, their tags kept as a span's are",
-		() => {
+		(P1, _P2, input) => {
+			const secret = input.old ? "sk-p98-link" : input.secret;
 			const {sql, bytes} = home();
 			const first = Tracer.externalSpan({
 				traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
@@ -403,7 +630,7 @@ describe("p98, a span that ends is never dropped", () => {
 								attributes: {
 									"fab.link": "follows-from",
 									"fab.n": 2,
-									"fab.key": Redacted.make("sk-p98-link"),
+									"fab.key": Redacted.make(secret),
 								},
 							},
 							{span: second, attributes: {}},
@@ -420,17 +647,23 @@ describe("p98, a span that ends is never dropped", () => {
 					},
 					{traceId: "5bf92f3577b34da6a3ce929d0e0e4737", spanId: "10f067aa0ba902b8", attributes: {}},
 				]);
-				expect(bytes("sk-p98-link"), "a link's secret is never written").toEqual([]);
+				for (const marker of [
+					secret,
+					JSON.stringify(secret).slice(1, -1),
+					encodeURIComponent(secret),
+				])
+					expect(bytes(marker), "a link's secret is never written").toEqual([]);
 			}).pipe(Effect.provide(world(sql)));
 		},
 	);
 
-	it.effect(
+	law(
 		"a RecordManager that fails leaves every unsent row; a lost answer's resend adds nothing",
-		() => {
+		(P1, _P2, input) => {
 			const {db, sql} = home();
 			return Effect.gen(function* () {
-				for (let n = 0; n < 4; n++) yield* step("runner.step", {"fab.process": P1, "fab.n": n});
+				for (let n = 0; n < input.count; n++)
+					yield* step("runner.step", {"fab.process": P1, "fab.n": n});
 				const real = yield* RecordManager;
 				const down = {
 					...real,
@@ -438,7 +671,7 @@ describe("p98, a span that ends is never dropped", () => {
 				};
 				const failed = yield* Effect.flip(flush.pipe(Effect.provideService(RecordManager, down)));
 				expect(failed).toBeInstanceOf(SinkError);
-				expect(count(db, "unsent"), "unsent is deleted only after a good answer").toBe(4);
+				expect(count(db, "unsent"), "unsent is deleted only after a good answer").toBe(input.count);
 				expect(yield* recorded(job(P1))).toEqual([]);
 
 				// The part takes the write, and the answer is lost on the way back.
@@ -457,35 +690,57 @@ describe("p98, a span that ends is never dropped", () => {
 							),
 				};
 				yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
-				expect(count(db, "unsent")).toBe(4);
-				expect(yield* flush).toEqual({sent: 4});
+				expect(count(db, "unsent")).toBe(input.count);
+				expect(yield* flush).toEqual({sent: input.count});
 				const rows = yield* recorded(job(P1));
-				expect(rows).toHaveLength(4);
-				expect(new Set(ids(rows)).size, "the resend wrote nothing twice").toBe(4);
+				expect(rows).toHaveLength(input.count);
+				expect(new Set(ids(rows)).size, "the resend wrote nothing twice").toBe(input.count);
 				expect(count(db, "unsent")).toBe(0);
 				expect(yield* flush).toEqual({sent: 0});
 			}).pipe(Effect.provide(world(sql)));
 		},
 	);
 
-	it.effect("flush follows a part's roll and the next batch starts at the new part", () => {
+	law("flush follows a part's roll and the next batch starts at the new part", (P1, _P2, input) => {
 		const {db, sql} = home();
+		const batches = input.old ? 3 : input.count;
+		const batchSize = input.batch;
 		return Effect.gen(function* () {
-			for (let batch = 0; batch < 3; batch++) {
-				for (let n = 0; n < 30; n++)
-					yield* step("runner.step", {"fab.process": P1, "fab.n": batch * 30 + n});
-				expect(yield* flush).toEqual({sent: 30});
+			const real = yield* RecordManager;
+			const calls: Array<number> = [];
+			const observed = {
+				...real,
+				write: (...args: Parameters<typeof real.write>) => {
+					calls.push(args[1]);
+					return real.write(...args);
+				},
+			};
+			for (let batch = 0; batch < batches; batch++) {
+				for (let n = 0; n < batchSize; n++)
+					yield* step("runner.step", {"fab.process": P1, "fab.n": batch * batchSize + n});
+				const from = Number(db.prepare(`SELECT max(part) AS part FROM parts`).get()?.["part"] ?? 0);
+				calls.length = 0;
+				expect(yield* flush.pipe(Effect.provideService(RecordManager, observed))).toEqual({
+					sent: batchSize,
+				});
+				expect(calls[0], "a new batch starts at the saved part").toBe(from);
 			}
 			const rows = yield* recorded(job(P1));
-			expect(rows.map((r) => r.attributes["fab.n"])).toEqual(Array.from({length: 90}, (_, n) => n));
+			expect(rows.map((r) => r.attributes["fab.n"])).toEqual(
+				Array.from({length: batches * batchSize}, (_, n) => n),
+			);
 			const part = db.prepare(`SELECT max(part) AS part FROM parts`).get()?.["part"];
-			expect(Number(part), "90 spans under a 16 KB cap roll past part 0").toBeGreaterThan(0);
-		}).pipe(Effect.provide(world(sql, RecordManager.memory(16 * 1024))));
+			const priorBytes = rows
+				.slice(0, -batchSize)
+				.reduce((n, row) => n + new TextEncoder().encode(JSON.stringify(row)).length, 0);
+			if (priorBytes >= input.cap)
+				expect(Number(part), "rows past the cap roll past part 0").toBeGreaterThan(0);
+		}).pipe(Effect.provide(world(sql, RecordManager.memory(input.cap))));
 	});
 
-	it.effect(
+	law(
 		"a write that meets SQLITE_FULL once: the step's flush fails with storage, the span lands later",
-		() => {
+		(P1) => {
 			const {db, sql: real} = home();
 			const {sql, arm} = filling(real);
 			return Effect.gen(function* () {
@@ -507,43 +762,45 @@ describe("p98, a span that ends is never dropped", () => {
 		},
 	);
 
-	it.effect(
+	law(
 		"a disk that stays full: every flush fails, held counts every span, none goes missing",
-		() => {
+		(_P1, _P2, input) => {
 			const {db, sql: real} = home();
 			const {sql, arm} = filling(real);
 			return Effect.gen(function* () {
 				yield* step("warm", {});
 				arm(Number.POSITIVE_INFINITY);
-				for (let n = 0; n < 5; n++) yield* step("runner.step", {"fab.n": n});
-				expect((yield* Effect.flip(flush)).held).toBe(5);
-				for (let n = 5; n < 8; n++) yield* step("runner.step", {"fab.n": n});
+				const first = input.old ? 5 : input.count;
+				const total = first + 3;
+				for (let n = 0; n < first; n++) yield* step("runner.step", {"fab.n": n});
+				expect((yield* Effect.flip(flush)).held).toBe(first);
+				for (let n = first; n < total; n++) yield* step("runner.step", {"fab.n": n});
 				const error = yield* Effect.flip(flush);
 				expect(error.why).toBe("storage");
-				expect(error.held).toBe(8);
+				expect(error.held).toBe(total);
 				expect(count(db, "unsent")).toBe(1);
 				arm(0);
-				yield* step("runner.step", {"fab.n": 8});
-				expect(yield* flush).toEqual({sent: 10});
+				yield* step("runner.step", {"fab.n": total});
+				expect(yield* flush).toEqual({sent: total + 2});
 				const rows = yield* recorded(spans);
 				expect(rows.map((r) => r.attributes["fab.n"] ?? "warm").sort()).toEqual(
-					[0, 1, 2, 3, 4, 5, 6, 7, 8, "warm"].sort(),
+					[...Array.from({length: total + 1}, (_, n) => n), "warm"].sort(),
 				);
 			}).pipe(Effect.provide(world(sql)));
 		},
 	);
 
-	it.effect(
+	law(
 		"a real full file (max_page_count): unsent plus held is every span, and all land once it has room",
-		() => {
+		(_P1, _P2, input) => {
 			const {db, sql} = home();
 			return Effect.gen(function* () {
 				yield* step("warm", {});
 				const pages = Number(db.prepare("PRAGMA page_count").get()?.["page_count"]);
 				db.exec(`PRAGMA max_page_count = ${pages}`);
-				const made = 120;
+				const made = input.made;
 				for (let n = 0; n < made; n++)
-					yield* step("runner.step", {"fab.n": n, "fab.pad": "p".repeat(100)});
+					yield* step("runner.step", {"fab.n": n, "fab.pad": "p".repeat(input.pad)});
 				const error = yield* Effect.flip(flush);
 				expect(error.why).toBe("storage");
 				expect(error.held).toBeGreaterThan(0);
@@ -556,20 +813,23 @@ describe("p98, a span that ends is never dropped", () => {
 				expect(new Set(ids(rows)).size).toBe(made + 2);
 			}).pipe(Effect.provide(world(sql)));
 		},
+		3,
 	);
 
-	it.effect(
+	law(
 		"a second flush after a storage failure still fails while spans are held, and sends nothing",
-		() => {
+		(_P1, _P2, input) => {
 			const {db, sql: real} = home();
 			const {sql, arm} = filling(real);
 			return Effect.gen(function* () {
 				yield* step("warm", {});
 				arm(Number.POSITIVE_INFINITY);
-				yield* step("runner.step", {"fab.n": 0});
+				yield* step("runner.step", {"fab.n": input.old ? 0 : input.count});
 				expect((yield* Effect.flip(flush)).held).toBe(1);
 				arm(0);
-				const again = yield* Effect.flip(flush);
+				const retried = yield* Effect.exit(flush);
+				expect(Exit.isFailure(retried), "a held span keeps the second flush failed").toBe(true);
+				const again = yield* Effect.flip(retried);
 				expect(again.why, "no end since, but the span is still only in memory").toBe("storage");
 				expect(again.held).toBe(1);
 				expect(yield* recorded(spans), "the second flush sent nothing").toEqual([]);
@@ -580,9 +840,9 @@ describe("p98, a span that ends is never dropped", () => {
 		},
 	);
 
-	it.effect(
+	law(
 		"after a roll, rows the old part already holds are not written again to the next part",
-		() => {
+		(P1) => {
 			const {db, sql} = home();
 			return Effect.gen(function* () {
 				yield* step("runner.step", {"fab.process": P1, "fab.n": 0});
@@ -616,9 +876,9 @@ describe("p98, a span that ends is never dropped", () => {
 		},
 	);
 
-	it.effect(
+	law(
 		"building touches nothing: on a Sql that always throws it builds, and traced work still succeeds",
-		() => {
+		(P1) => {
 			const throwing: Sql = {
 				exec: () => {
 					throw full();
@@ -629,7 +889,11 @@ describe("p98, a span that ends is never dropped", () => {
 				size: () => 0,
 			};
 			return Effect.gen(function* () {
-				expect(yield* traced("runner.step", {"fab.process": P1}, Effect.succeed(7))).toBe(7);
+				const work = yield* Effect.exit(
+					traced("runner.step", {"fab.process": P1}, Effect.succeed(7)),
+				);
+				expect(Exit.isSuccess(work), "traced work succeeds when storage throws").toBe(true);
+				expect(yield* work).toBe(7);
 				const error = yield* Effect.flip(flush);
 				expect(error.why).toBe("storage");
 				expect(error.held).toBe(1);
@@ -645,11 +909,74 @@ const a = (n: number) => "a".repeat(n);
 class NoteError extends Error {
 	override readonly name = "NoteError";
 }
+const choose = (
+	...options: ReadonlyArray<Arbitrary.Arbitrary<unknown>>
+): Arbitrary.Arbitrary<unknown> =>
+	Arbitrary.schema(N(0, options.length - 1)).pipe(
+		Arbitrary.flatMap((n) => options[n] ?? Arbitrary.Constant(null)),
+	);
+const binary = Arbitrary.array(Arbitrary.schema(N(0, 65535)), {minLength: 0, maxLength: 10}).pipe(
+	Arbitrary.map((units) => String.fromCharCode(...units)),
+);
+const scalar = choose(
+	text(0, 10),
+	Arbitrary.schema(Schema.Boolean),
+	Arbitrary.schema(N(-9007199254740991, 9007199254740991)),
+	Arbitrary.schema(Schema.Number),
+	Arbitrary.Constant(Number.NaN),
+	Arbitrary.Constant(Infinity),
+	Arbitrary.Constant(-Infinity),
+	Arbitrary.Constant(undefined),
+	Arbitrary.Constant(null),
+);
+const object = (value: Arbitrary.Arbitrary<unknown>) =>
+	Arbitrary.array(Arbitrary.all({key: binary, value}), {minLength: 0, maxLength: 10}).pipe(
+		Arbitrary.map((pairs) => Object.fromEntries(pairs.map(({key, value}) => [key, value]))),
+	);
+const O1 = object(
+	choose(scalar, Arbitrary.array(scalar, {minLength: 0, maxLength: 10}), object(scalar)),
+);
+const tagValue = choose(
+	text(0, 400),
+	Arbitrary.schema(N(-2147483648, 2147483647)),
+	Arbitrary.schema(Schema.Finite).pipe(Arbitrary.filter((n) => !Object.is(n, -0))),
+	Arbitrary.schema(Schema.Boolean),
+	text(0, 256).pipe(Arbitrary.map((value) => Redacted.make(`${SECRET}-${value}`))),
+	O1,
+	Arbitrary.array(Arbitrary.schema(N(-2147483648, 2147483647)), {minLength: 0, maxLength: 3}),
+	Arbitrary.Constant(null),
+	Arbitrary.schema(
+		Schema.BigInt.check(Schema.isBetweenBigInt({minimum: -(2n ** 255n), maximum: 2n ** 255n - 1n})),
+	),
+);
+// Eight optional keys draw every subset, including no keys and all eight.
+const subset = Schema.Struct({
+	"fab.k0": Schema.optionalKey(Schema.Boolean),
+	"fab.k1": Schema.optionalKey(Schema.Boolean),
+	"fab.k2": Schema.optionalKey(Schema.Boolean),
+	"fab.k3": Schema.optionalKey(Schema.Boolean),
+	"fab.k4": Schema.optionalKey(Schema.Boolean),
+	"fab.k5": Schema.optionalKey(Schema.Boolean),
+	"fab.k6": Schema.optionalKey(Schema.Boolean),
+	"fab.k7": Schema.optionalKey(Schema.Boolean),
+});
+const tags = Arbitrary.all({
+	keys: Arbitrary.schema(subset),
+	values: Arbitrary.array(tagValue, {minLength: 8, maxLength: 8}),
+}).pipe(
+	Arbitrary.map(({keys, values}) =>
+		Object.fromEntries(Object.keys(keys).map((key) => [key, values[Number(key.slice(5))]])),
+	),
+);
 
 describe("p99, tags hold names, ids and numbers; a message only in content", () => {
-	it.effect(
+	law(
 		"no Redacted text anywhere, and a throw's message only in content, never in a tag, health or R2",
-		() => {
+		(P1, _P2, input) => {
+			const SECRET = input.secret,
+				NOTE = input.note,
+				NOTE_TWO = input.other;
+			const PASS = unicode(`pass--${SECRET.slice(6)}`);
 			const h = home();
 			const r2 = bucket();
 			const day = Date.UTC(2026, 9, 23, 10);
@@ -659,10 +986,32 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 					traced(
 						"runner.step",
 						{"fab.process": P1, "fab.key": Redacted.make(SECRET)},
-						Effect.sync(() => {
-							// oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- the law is about a step that throws, as the plan's trace has it
-							throw new TypeError(`${NOTE} was not a function`);
-						}),
+						(input.old
+							? Effect.void
+							: Effect.currentSpan.pipe(
+									Effect.tap((span) =>
+										Effect.sync(() => {
+											span.event("flow.event", 1000000n, {"fab.key": Redacted.make(SECRET)});
+											span.addLinks([
+												{
+													span: Tracer.externalSpan({
+														traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+														spanId: "00f067aa0ba902b7",
+													}),
+													attributes: {"fab.pass": Redacted.make(PASS)},
+												},
+											]);
+										}),
+									),
+								)
+						).pipe(
+							Effect.andThen(
+								Effect.sync(() => {
+									// oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- the law is about a step that throws, as the plan's trace has it
+									throw new TypeError(`${NOTE} was not a function`);
+								}),
+							),
+						),
 					),
 				);
 				expect(Exit.isFailure(thrown)).toBe(true);
@@ -678,6 +1027,15 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 					["unsent.content"],
 				);
 				expect(places(h.db, NOTE_TWO)).toEqual(["unsent.content"]);
+				for (const marker of [
+					SECRET,
+					JSON.stringify(SECRET).slice(1, -1),
+					encodeURIComponent(SECRET),
+				])
+					expect(
+						places(h.db, marker),
+						"unsent, health and local metadata contain no secret",
+					).toEqual([]);
 				const health = h.db.prepare(`SELECT piece, ok, error FROM health ORDER BY piece`).all();
 				expect(health.map((x) => [x["piece"], Boolean(x["ok"]), x["error"]])).toEqual([
 					["ledger.call", false, "NoteError"],
@@ -705,6 +1063,63 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 				expect(
 					Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "",
 				).toContain(NOTE);
+				const clean = () => {
+					for (const marker of [NOTE, NOTE_TWO]) {
+						for (const encoded of [
+							marker,
+							JSON.stringify(marker).slice(1, -1),
+							encodeURIComponent(marker),
+						]) {
+							for (const place of places(h.db, encoded))
+								expect(place, "messages stay in unsent content").toBe("unsent.content");
+							for (const db of h.parts.values())
+								for (const place of places(db, encoded))
+									expect(place.startsWith("content."), `message outside content: ${place}`).toBe(
+										true,
+									);
+						}
+					}
+					for (const marker of [SECRET, PASS])
+						for (const encoded of [
+							marker,
+							JSON.stringify(marker).slice(1, -1),
+							encodeURIComponent(marker),
+						]) {
+							expect(
+								places(h.db, encoded),
+								"no secret in unsent, health or local metadata",
+							).toEqual([]);
+							for (const db of h.parts.values())
+								expect(places(db, encoded), "no secret in any record column").toEqual([]);
+						}
+				};
+				clean();
+				// Keep the old flow, then vary later success, failure and flush order on the same real stores.
+				for (const op of input.ops) {
+					if (op === "flush" || op === "retry") yield* flush;
+					else if (op === "refusal") {
+						yield* step("flow.refusal", {"fab.process": P1, "fab.pass": Redacted.make(PASS)});
+						const real = yield* RecordManager;
+						const error = yield* Effect.flip(
+							flush.pipe(
+								Effect.provideService(RecordManager, {
+									...real,
+									write: () => Effect.fail(new SinkError({why: "bad_row", held: 0})),
+								}),
+							),
+						);
+						expect(error.why).toBe("bad_row");
+					} else
+						yield* Effect.exit(
+							traced(
+								"flow.generated",
+								{"fab.process": P1, "fab.pass": Redacted.make(PASS)},
+								op === "failure" ? Effect.fail(new NoteError(NOTE_TWO)) : Effect.void,
+							),
+						);
+					clean();
+				}
+				yield* flush;
 
 				// Two weeks on, the day's raw rows go to R2: they hold the class, never the message.
 				yield* TestClock.setTime(day + 15 * 24 * 3_600_000);
@@ -713,9 +1128,13 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 				expect(r2.files.size, "the day was archived").toBeGreaterThan(0);
 				for (const body of r2.files.values()) {
 					const text = new TextDecoder().decode(body);
-					expect(text).not.toContain(SECRET);
-					expect(text).not.toContain(NOTE);
-					expect(text).not.toContain(NOTE_TWO);
+					for (const marker of [SECRET, PASS, NOTE, NOTE_TWO])
+						for (const encoded of [
+							marker,
+							JSON.stringify(marker).slice(1, -1),
+							encodeURIComponent(marker),
+						])
+							expect(text).not.toContain(encoded);
 				}
 
 				expect(places(h.db, NOTE), "the object keeps no message after flush").toEqual([]);
@@ -724,159 +1143,239 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 						expect(place.startsWith("content."), `${name}: ${place}`).toBe(true);
 					}
 				}
-				expect(h.bytes(SECRET), "no file holds the Redacted text, in any byte").toEqual([]);
+				for (const marker of [
+					SECRET,
+					JSON.stringify(SECRET).slice(1, -1),
+					encodeURIComponent(SECRET),
+					PASS,
+					JSON.stringify(PASS).slice(1, -1),
+					encodeURIComponent(PASS),
+				])
+					expect(h.bytes(marker), "no file holds the Redacted text, in any byte").toEqual([]);
 			}).pipe(
 				Effect.provide(world(h.sql, RecordManager.sql(h.part, BIG), Archive.bucket(r2.calls))),
 			);
 		},
 	);
 
-	it("every kept tag is a string of at most 128 characters, a number or a boolean; the rest is counted", async () => {
-		const key = fc.constantFrom(...Array.from({length: 8}, (_, n) => `fab.k${n}`));
-		const value = fc.oneof(
-			fc.string({maxLength: 400}),
-			fc.integer(),
-			fc.double({noNaN: true, noDefaultInfinity: true}).filter((x) => !Object.is(x, -0)),
-			fc.boolean(),
-			fc.string().map((text) => Redacted.make(`${SECRET}-${text}`)),
-			fc.object({maxDepth: 1}),
-			fc.array(fc.integer(), {maxLength: 3}),
-			fc.constant(null),
-			fc.bigInt(),
-		);
-		await fc.assert(
-			fc.asyncProperty(fc.dictionary(key, value, {maxKeys: 8}), (tags) => {
-				const {sql} = home();
-				return Effect.runPromise(
-					Effect.gen(function* () {
-						yield* step("runner.step", {"fab.process": P1, ...tags});
-						yield* flush;
-						const [row] = yield* recorded(job(P1));
-						const kept = row?.attributes ?? {};
-						let dropped = 0;
-						for (const [k, v] of Object.entries(tags)) {
-							if (typeof v === "string") {
-								if (v.length <= 128) expect(kept[k]).toBe(v);
-								else {
-									expect(v.startsWith(String(kept[k]))).toBe(true);
-									expect(String(kept[k]).length).toBeLessThanOrEqual(128);
-									expect(kept[`${k}.length`]).toBe(v.length);
-								}
-							} else if (typeof v === "number" || typeof v === "boolean") expect(kept[k]).toBe(v);
-							else if (Redacted.isRedacted(v)) expect(kept[k]).toBe("<redacted>");
-							else {
-								expect(k in kept, `${k} is dropped`).toBe(false);
-								dropped += 1;
-							}
-						}
-						expect(kept["fab.sink.dropped"] ?? 0).toBe(dropped);
-						for (const v of Object.values(kept)) {
-							expect(["string", "number", "boolean"]).toContain(typeof v);
-							if (typeof v === "string") {
-								expect(v.length).toBeLessThanOrEqual(128);
-								expect(v).not.toContain(SECRET);
-							}
-						}
-					}).pipe(Effect.provide(world(sql))),
-				);
-			}),
-			{seed: SEED, numRuns: 60},
-		);
-	});
-
-	it.effect(
-		"text past 128 is cut to 128, or to 127 when the cut would split a surrogate pair, with <key>.length beside",
-		() => {
+	it.effect.prop(
+		"every kept tag is a string of at most 128 characters, a number or a boolean; the rest is counted",
+		{tags},
+		({tags}) => {
 			const {sql} = home();
 			return Effect.gen(function* () {
-				yield* step("runner.step", {
-					"fab.process": P1,
-					"fab.fits": a(128),
-					"fab.over": a(200),
-					// A high surrogate at the 128th character: the pair would split, so the cut keeps 127.
-					"fab.d800": `${a(127)}\u{10000}`,
-					"fab.d83d": `${a(127)}😀`,
-					"fab.dbff": `${a(127)}\u{10FFFF}`,
-					// A low surrogate there ends a pair, and the characters next to the range are not one.
-					"fab.low": `${a(126)}😀b`,
-					"fab.d7ff": `${a(127)}퟿b`,
-					"fab.e000": `${a(127)}b`,
-				});
+				yield* step("runner.step", {"fab.process": P1, ...tags});
 				yield* flush;
 				const [row] = yield* recorded(job(P1));
-				expect(row?.attributes).toEqual({
-					"fab.process": P1,
-					"fab.fits": a(128),
-					"fab.over": a(128),
-					"fab.over.length": 200,
-					"fab.d800": a(127),
-					"fab.d800.length": 129,
-					"fab.d83d": a(127),
-					"fab.d83d.length": 129,
-					"fab.dbff": a(127),
-					"fab.dbff.length": 129,
-					"fab.low": `${a(126)}😀`,
-					"fab.low.length": 129,
-					"fab.d7ff": `${a(127)}퟿`,
-					"fab.d7ff.length": 129,
-					"fab.e000": `${a(127)}`,
-					"fab.e000.length": 129,
-				});
+				const kept = row?.attributes ?? {};
+				let dropped = 0;
+				for (const [k, v] of Object.entries(tags)) {
+					if (typeof v === "string") {
+						if (v.length <= 128) expect(kept[k]).toBe(v);
+						else {
+							expect(v.startsWith(String(kept[k]))).toBe(true);
+							expect(String(kept[k]).length).toBeLessThanOrEqual(128);
+							expect(kept[`${k}.length`]).toBe(v.length);
+						}
+					} else if (typeof v === "number" || typeof v === "boolean") expect(kept[k]).toBe(v);
+					else if (Redacted.isRedacted(v)) expect(kept[k]).toBe("<redacted>");
+					else {
+						expect(k in kept, `${k} is dropped`).toBe(false);
+						dropped += 1;
+					}
+				}
+				expect(kept["fab.sink.dropped"] ?? 0).toBe(dropped);
+				for (const v of Object.values(kept)) {
+					expect(["string", "number", "boolean"]).toContain(typeof v);
+					if (typeof v === "string") {
+						expect(v.length).toBeLessThanOrEqual(128);
+						expect(v).not.toContain(SECRET);
+					}
+				}
+			}).pipe(
+				Effect.provide(world(sql)),
+				Effect.ensuring(
+					Effect.sync(() => {
+						for (const db of opened.splice(0)) if (db.isOpen) db.close();
+					}),
+				),
+			);
+		},
+		{arbitrary: {seed: SEED, runs: 60, size: 4096}, timeout: 60000},
+	);
+
+	law(
+		"text past 128 is cut to 128, or to 127 when the cut would split a surrogate pair, with <key>.length beside",
+		(P1, _P2, input) => {
+			const {sql} = home();
+			return Effect.gen(function* () {
+				const generated = {
+					"fab.short": a(input.length),
+					"fab.high": `${a(127) + String.fromCodePoint(input.astral)}x`,
+					"fab.fitsPair": a(126) + String.fromCodePoint(input.astral),
+					"fab.low": `${a(126) + String.fromCodePoint(input.astral)}x`,
+				};
+				const values = input.old
+					? {
+							"fab.process": P1,
+							"fab.fits": a(128),
+							"fab.over": a(200),
+							// A high surrogate at the 128th character: the pair would split, so the cut keeps 127.
+							"fab.d800": `${a(127)}\u{10000}`,
+							"fab.d83d": `${a(127)}😀`,
+							"fab.dbff": `${a(127)}\u{10FFFF}`,
+							// A low surrogate there ends a pair, and the characters next to the range are not one.
+							"fab.low": `${a(126)}😀b`,
+							"fab.d7ff": `${a(127)}퟿b`,
+							"fab.e000": `${a(127)}b`,
+						}
+					: {"fab.process": P1, ...generated};
+				yield* step("runner.step", values);
+				yield* flush;
+				const [row] = yield* recorded(job(P1));
+				const expected = input.old
+					? {
+							"fab.process": P1,
+							"fab.fits": a(128),
+							"fab.over": a(128),
+							"fab.over.length": 200,
+							"fab.d800": a(127),
+							"fab.d800.length": 129,
+							"fab.d83d": a(127),
+							"fab.d83d.length": 129,
+							"fab.dbff": a(127),
+							"fab.dbff.length": 129,
+							"fab.low": `${a(126)}😀`,
+							"fab.low.length": 129,
+							"fab.d7ff": `${a(127)}퟿`,
+							"fab.d7ff.length": 129,
+							"fab.e000": `${a(127)}`,
+							"fab.e000.length": 129,
+						}
+					: Object.fromEntries(
+							Object.entries(values).flatMap(([key, value]): Array<[string, string | number]> =>
+								value.length <= 128
+									? [[key, value]]
+									: [
+											[
+												key,
+												value.slice(
+													0,
+													value.charCodeAt(127) >= 0xd800 && value.charCodeAt(127) <= 0xdbff
+														? 127
+														: 128,
+												),
+											],
+											[`${key}.length`, value.length],
+										],
+							),
+						);
+				expect(row?.attributes).toEqual(expected);
 			}).pipe(Effect.provide(world(sql)));
 		},
 	);
 
-	it.effect(
+	law(
 		"a row keeps its events' names, times and tags; a tag an event drops is counted",
-		() => {
+		(P1, _P2, input) => {
 			const {sql} = home();
 			return Effect.gen(function* () {
+				const events = input.old
+					? [
+							{
+								name: "cache.miss",
+								time: 1250000000n,
+								attributes: {"fab.key": "k-1", "fab.bad": {}},
+							},
+							{name: "cache.fill", time: 1260000000n, attributes: {"fab.n": 3, "fab.worse": [1]}},
+						]
+					: input.events.map((event) => ({...event, time: BigInt(event.time) * 1000000n}));
+				let dropped = 0;
+				const expected = events.map((event) => {
+					const attributes: Record<string, string | number | boolean> = {};
+					for (const [key, value] of Object.entries(event.attributes)) {
+						if (Redacted.isRedacted(value)) attributes[key] = "<redacted>";
+						else if (
+							(typeof value === "number" && Number.isFinite(value)) ||
+							typeof value === "boolean"
+						)
+							attributes[key] = value;
+						else if (typeof value === "string") {
+							const end = value.charCodeAt(127);
+							attributes[key] =
+								value.length <= 128
+									? value
+									: value.slice(0, end >= 0xd800 && end <= 0xdbff ? 127 : 128);
+							if (value.length > 128) attributes[`${key}.length`] = value.length;
+						} else dropped++;
+					}
+					return {name: event.name, timeUnixNano: String(event.time), attributes};
+				});
 				yield* Effect.currentSpan.pipe(
 					Effect.flatMap((span) =>
 						Effect.sync(() => {
-							span.event("cache.miss", 1_250_000_000n, {"fab.key": "k-1", "fab.bad": {}});
-							span.event("cache.fill", 1_260_000_000n, {"fab.n": 3, "fab.worse": [1]});
+							for (const event of events) span.event(event.name, event.time, {...event.attributes});
 						}),
 					),
 					Effect.withSpan("runner.step", {attributes: {"fab.process": P1}}),
 				);
 				yield* flush;
 				const [row] = yield* recorded(job(P1));
-				expect(row?.events).toEqual([
-					{name: "cache.miss", timeUnixNano: "1250000000", attributes: {"fab.key": "k-1"}},
-					{name: "cache.fill", timeUnixNano: "1260000000", attributes: {"fab.n": 3}},
-				]);
+				expect(row?.events).toEqual(expected);
 				expect(row?.attributes, "the span's own tags drop nothing; its events drop two").toEqual({
 					"fab.process": P1,
-					"fab.sink.dropped": 2,
+					...(dropped > 0 ? {"fab.sink.dropped": dropped} : {}),
 				});
 			}).pipe(Effect.provide(world(sql)));
 		},
+		60,
+		"events",
 	);
 
-	it.effect(
+	law(
 		"a failure's text past 1,000,000 characters is cut there, with its full length after",
-		() => {
+		(P1, _P2, sample) => {
 			const {sql} = home();
 			return Effect.gen(function* () {
-				const exit = yield* Effect.exit(
-					traced("runner.step", {"fab.process": P1}, Effect.fail(new NoteError(a(1_100_000)))),
-				);
-				expect(Exit.isFailure(exit)).toBe(true);
-				yield* flush;
-				const [row] = yield* recorded(job(P1));
-				const content = yield* RecordManager.use((records) =>
-					records.content(job(P1), row?.spanId ?? ""),
-				);
-				const message =
-					Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
-				const tail = /\n\[cut: (\d+) characters\]$/.exec(message);
-				expect(tail, "the cut text ends with its full length").not.toBeNull();
-				const full = Number(tail?.[1]);
-				expect(full).toBeGreaterThan(1_100_000);
-				expect(message.length).toBe(1_000_000 + (tail?.[0].length ?? 0));
-				expect(message.slice(0, 1_000_000)).toContain(`NoteError: ${a(1000)}`);
+				// Keep the full 0..1,100,000 draw and also exercise the cut with fresh generated text.
+				for (const input of sample.old
+					? [sample]
+					: [sample, {...sample, content: 1000001 + (sample.content % 100000)}]) {
+					const exit = yield* Effect.exit(
+						traced(
+							"runner.step",
+							{"fab.process": P1},
+							Effect.fail(new NoteError(a(input.content))),
+						),
+					);
+					expect(Exit.isFailure(exit)).toBe(true);
+					yield* flush;
+					const row = (yield* recorded(job(P1))).at(-1);
+					const content = yield* RecordManager.use((records) =>
+						records.content(job(P1), row?.spanId ?? ""),
+					);
+					const message =
+						Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
+					const tail = /\n\[cut: (\d+) characters\]$/.exec(message);
+					const original = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
+					const expected =
+						original.length <= 1000000
+							? original
+							: `${original.slice(0, 1000000)}\n[cut: ${original.length} characters]`;
+					expect(message).toBe(expected);
+					if (input.content > 1000000) {
+						expect(tail, "the cut text ends with its full length").not.toBeNull();
+						const full = Number(tail?.[1]);
+						expect(full).toBeGreaterThan(input.content);
+						expect(message.length).toBe(1_000_000 + (tail?.[0].length ?? 0));
+						expect(message.slice(0, 1_000_000)).toContain(`NoteError: ${a(1000)}`);
+					} else if (tail === null) {
+						expect(message).toContain(`NoteError: ${a(input.content)}`);
+						expect(message.length).toBeLessThanOrEqual(1000000);
+					}
+				}
 			}).pipe(Effect.provide(world(sql)));
 		},
+		3,
 	);
 });

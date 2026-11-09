@@ -1,3 +1,4 @@
+import {Buffer} from "node:buffer";
 // p68 and p92 (docs/plan/tier-1-detail.md, "Properties"; P6's plan writes them out), for
 // `data/log.ts` and the referee's first step: every entry has every field, a writer can leave none
 // out and set none of the referee's, and an entry keeps its `parent` as text. Written before the
@@ -15,10 +16,11 @@ import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
-import {afterAll, describe, expect, expectTypeOf, it} from "@effect/vitest";
-import {Effect, Layer, Schema, Stream} from "effect";
+import {afterAll, beforeEach, describe, expect, expectTypeOf, it} from "@effect/vitest";
+import {Arbitrary, Effect, Layer, Schema, Stream} from "effect";
 import * as fc from "fast-check";
 import {inputParents, processId} from "../id.test-support.ts";
+import * as Id from "../id.ts";
 import * as data from "./index.ts";
 import {Doorbell, Ledger} from "./ledger.ts";
 import type {Entry, InputId, Line} from "./log.ts";
@@ -30,11 +32,112 @@ const READER = "gateway:t1";
 
 // T246's approved addendum: a parent names the door's process, then its input counter.
 const PARENT = /^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/;
+// UUIDv7's version and variant bits, independent of ParentText and Id.Input.
+const INPUT =
+	/^input_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{2}[89abrstv][0-9a-hjkmnp-tv-z]{12}$/;
+const validParent = (text: string) =>
+	[PARENT, INPUT].some((pattern) => pattern.exec(text)?.[0] === text);
 const PROCESS = Effect.runSync(processId);
+// Replay only: Effect cannot reproduce the old fast-check seed's exact fixture stream.
+// All new parent generation below uses Effect.
 const parents = (count: number): ReadonlyArray<string> =>
 	fc.sample(fc.stringMatching(PARENT), {seed: SEED, numRuns: count});
 const [goodParent = "", otherParent = ""] = parents(2);
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
+const N = (minimum: number, maximum: number) =>
+	Schema.Int.check(Schema.isBetween({minimum, maximum}));
+// Construct UTF-16 units, since Schema.String's alphabet omits arbitrary binary text.
+const text = (minLength: number, maxLength: number) =>
+	Arbitrary.array(Arbitrary.schema(N(0, 65535)), {minLength, maxLength}).pipe(
+		Arbitrary.map((units) => String.fromCharCode(...units)),
+	);
+const unicode = (minLength: number, maxLength: number) =>
+	text(minLength, maxLength).pipe(
+		Arbitrary.map((value) => Buffer.from(value, "utf8").toString("utf8")),
+	);
+const choose = <A>(
+	first: Arbitrary.Arbitrary<A>,
+	...values: ReadonlyArray<Arbitrary.Arbitrary<A>>
+) =>
+	Arbitrary.schema(N(0, values.length)).pipe(
+		Arbitrary.flatMap((index) => (index === 0 ? first : (values[index - 1] ?? first))),
+	);
+const leaf: Arbitrary.Arbitrary<Schema.Json> = choose<Schema.Json>(
+	Arbitrary.Constant(null),
+	unicode(0, 256),
+	Arbitrary.schema(Schema.Finite).pipe(
+		Arbitrary.map((number) => JSON.parse(JSON.stringify(number))),
+	),
+	Arbitrary.schema(Schema.Boolean),
+);
+const jsonLevel = (value: Arbitrary.Arbitrary<Schema.Json>): Arbitrary.Arbitrary<Schema.Json> =>
+	choose(
+		value,
+		Arbitrary.array(value, {minLength: 0, maxLength: 10}),
+		Arbitrary.array(Arbitrary.all({key: unicode(0, 64), value}), {
+			minLength: 0,
+			maxLength: 10,
+		}).pipe(
+			Arbitrary.map((pairs) => Object.fromEntries(pairs.map(({key, value}) => [key, value]))),
+		),
+	);
+const legacy = Arbitrary.schema(
+	Schema.String.check(
+		Schema.isPattern(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]{0,31}$/),
+	),
+);
+const parent = Arbitrary.all({
+	choice: Arbitrary.schema(N(0, 3)),
+	legacy,
+	input: Arbitrary.schema(Id.Input),
+	old: inputParents,
+}).pipe(
+	Arbitrary.map(({choice, legacy, input, old}) => [null, legacy, input, old][choice] ?? null),
+);
+const Inputs = {
+	line: Arbitrary.all({
+		by: unicode(1, 256),
+		for: unicode(1, 256),
+		build: unicode(1, 256),
+		_tag: unicode(1, 256),
+		sentAt: unicode(0, 4096),
+		seen: Arbitrary.schema(N(0, 2147483647)),
+		parent,
+		traceId: Arbitrary.schema(data.TraceId),
+		body: jsonLevel(jsonLevel(jsonLevel(leaf))),
+	}),
+	parent,
+	legacy,
+	binary: text(0, 4096),
+	offset: Arbitrary.schema(N(-4096, 4096)),
+	wide: Arbitrary.schema(N(1, 4096)),
+};
+const freshLine = Inputs.line.pipe(Arbitrary.map((value) => ({...value, seen: 0})));
+
+// Replays use the same checker, without using up any of the 60 generated cases.
+const law = <A>(
+	name: string,
+	input: Arbitrary.Arbitrary<A>,
+	examples: ReadonlyArray<A>,
+	check: (value: A) => Effect.Effect<unknown, unknown>,
+	runs = 60,
+) =>
+	describe(name, () => {
+		const run = (value: A) =>
+			Effect.suspend(() => check(value)).pipe(
+				Effect.ensuring(
+					Effect.sync(() => {
+						for (const db of opened.splice(0)) if (db.isOpen) db.close();
+					}),
+				),
+			);
+		beforeEach(() => Effect.runPromise(Effect.forEach(examples, run, {concurrency: 1})));
+		it.effect.prop(name, {input}, ({input}) => run(input), {
+			arbitrary: {seed: SEED, runs, size: 4096},
+			timeout: 60000,
+		});
+	});
 
 /** Texts one slip away from a good parent: none of them may pass. */
 const badParents = (good: string): ReadonlyArray<string> => [
@@ -90,9 +193,7 @@ const full: Line = {
 	body: {note: "n-7f3a", base: 3},
 };
 /** The same line as plain JSON, the way it comes in across an object call. */
-const json = (): Record<string, unknown> => JSON.parse(JSON.stringify(full));
-const without = (key: string): Record<string, unknown> =>
-	Object.fromEntries(Object.entries(json()).filter(([k]) => k !== key));
+const json = (value: Line = full): Record<string, unknown> => JSON.parse(JSON.stringify(value));
 
 const KEYS = ["by", "for", "sentAt", "seen", "parent", "traceId", "build", "_tag", "body"] as const;
 const ENTRY_KEYS = [...KEYS, "id", "stream", "pos", "rev", "arrivedAt"].sort();
@@ -181,36 +282,47 @@ describe("p92, every entry has every field: the type", () => {
 
 describe("p92, every entry has every field: at the referee", () => {
 	// Plant: traceId is optionalKey; the missing-key case must fail while the full line is placed.
-	it.effect.each(KEYS)("a line missing `%s` is refused bad_line, and nothing is written", (key) =>
-		Effect.gen(function* () {
-			const {answers, entries} = yield* handIn([without(key), json()]);
-			expect(answers).toEqual([refused("bad_line"), {_tag: "placed", rev: 1, pos: 1}]);
-			expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
-		}).pipe(Effect.provide(onReferee(fresh()))),
-	);
+	for (const key of KEYS)
+		law(
+			`a line missing \`${key}\` is refused bad_line, and nothing is written`,
+			freshLine,
+			[full],
+			(value) =>
+				Effect.gen(function* () {
+					const {answers, entries} = yield* handIn([
+						Object.fromEntries(Object.entries(json(value)).filter(([k]) => k !== key)),
+						json(value),
+					]);
+					expect(answers).toEqual([refused("bad_line"), {_tag: "placed", rev: 1, pos: 1}]);
+					expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
+				}).pipe(Effect.provide(onReferee(fresh()))),
+		);
 
-	it.effect.each(["by", "for", "build", "_tag"])(
-		"a line with an empty `%s` is refused bad_line",
-		(key) =>
+	for (const key of ["by", "for", "build", "_tag"])
+		law(`a line with an empty \`${key}\` is refused bad_line`, freshLine, [full], (value) =>
 			Effect.gen(function* () {
-				const {answers, entries} = yield* handIn([{...json(), [key]: ""}]);
+				const {answers, entries} = yield* handIn([{...json(value), [key]: ""}]);
 				expect(answers).toEqual([refused("bad_line")]);
 				expect(entries).toEqual([]);
 			}).pipe(Effect.provide(onReferee(fresh()))),
-	);
+		);
 
-	it.effect.each(["arrivedAt", "rev", "pos", "id", "stream", "color"])(
-		"a line that names `%s` is refused bad_line: a writer sets nothing the referee sets",
-		(key) =>
-			Effect.gen(function* () {
-				const {answers, entries} = yield* handIn([{...json(), [key]: 7}, json()]);
-				expect(answers).toEqual([refused("bad_line"), {_tag: "placed", rev: 1, pos: 1}]);
-				expect(entries.map((entry) => [entry.id, entry.rev, entry.pos])).toEqual([["w-2", 1, 1]]);
-			}).pipe(Effect.provide(onReferee(fresh()))),
-	);
+	for (const key of ["arrivedAt", "rev", "pos", "id", "stream", "color"])
+		law(
+			`a line that names \`${key}\` is refused bad_line: a writer sets nothing the referee sets`,
+			freshLine,
+			[full],
+			(value) =>
+				Effect.gen(function* () {
+					const {answers, entries} = yield* handIn([{...json(value), [key]: 7}, json(value)]);
+					expect(answers).toEqual([refused("bad_line"), {_tag: "placed", rev: 1, pos: 1}]);
+					expect(entries.map((entry) => [entry.id, entry.rev, entry.pos])).toEqual([["w-2", 1, 1]]);
+				}).pipe(Effect.provide(onReferee(fresh()))),
+		);
 
-	it.effect("a line with a wrong type is refused bad_line", () =>
+	law("a line with a wrong type is refused bad_line", Inputs.line, [full], (value) =>
 		Effect.gen(function* () {
+			const json = () => ({...value});
 			const wrong = [
 				{...json(), seen: "0"},
 				{...json(), seen: -1},
@@ -230,10 +342,13 @@ describe("p92, every entry has every field: at the referee", () => {
 		}).pipe(Effect.provide(onReferee(fresh()))),
 	);
 
-	it.effect(
+	law(
 		"every entry read back has all its fields, and rev, pos and arrivedAt are the referee's",
-		() =>
+		Inputs.line,
+		[full],
+		(input) =>
 			Effect.gen(function* () {
+				const full = {...input, seen: 0};
 				const ledger = yield* Ledger;
 				yield* ledger.append("notes:1", "w-1", full);
 				yield* ledger.append("notes:2", "w-2", {...full, parent: goodParent});
@@ -249,12 +364,14 @@ describe("p92, every entry has every field: at the referee", () => {
 			}).pipe(Effect.provide(onLedger(fresh()))),
 	);
 
-	it.effect(
+	law(
 		"a line whose row would pass 2,000,000 bytes is refused too_big, as workerd would",
-		() =>
+		Inputs.offset,
+		[0],
+		(offset) =>
 			Effect.gen(function* () {
-				const big = "x".repeat(2_000_001);
-				const near = "x".repeat(1_900_000);
+				const big = "x".repeat(2_000_001 + Math.abs(offset));
+				const near = "x".repeat(1_900_000 + offset);
 				const {answers, entries} = yield* handIn([
 					{...json(), body: {note: big}},
 					{...json(), body: {note: near}},
@@ -262,11 +379,17 @@ describe("p92, every entry has every field: at the referee", () => {
 				expect(answers).toEqual([refused("too_big"), {_tag: "placed", rev: 1, pos: 1}]);
 				expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
 			}).pipe(Effect.provide(onReferee(fresh()))),
+		3,
 	);
 
-	it.effect(
+	law(
 		"a row of exactly 2,000,000 UTF-8 bytes is placed, and one byte more is refused too_big",
-		() =>
+		Arbitrary.all({
+			wide: Inputs.wide,
+			char: Arbitrary.schema(Schema.Literals(["ü", "😀", '"', "\\", "\n", "\u0000", "\u2028"])),
+		}),
+		[{wide: 1000, char: "ü"}],
+		({wide, char}) =>
 			Effect.gen(function* () {
 				// The row's bytes: its texts as UTF-8 (stream, id, by, for, sentAt, parent, traceId, build, _tag) and
 				// the body as JSON; numbers are not counted. handIn's ids, w-1 and w-2, are the same length.
@@ -285,7 +408,10 @@ describe("p92, every entry has every field: at the referee", () => {
 						JSON.stringify(line.body),
 					].reduce((n, text) => n + encoder.encode(text).length, 0);
 				// A thousand two-byte letters, so a count of characters instead of bytes misses the limit.
-				const WIDE = "ü".repeat(1_000);
+				const WIDE =
+					char === "ü"
+						? char.repeat(wide)
+						: `ü${char.repeat(Math.floor((wide - 1) / char.length))}`;
 				const sized = (total: number): Line => {
 					const rest = total - rowBytes({...full, body: {note: WIDE}});
 					return {...full, body: {note: WIDE + "x".repeat(rest)}};
@@ -297,53 +423,69 @@ describe("p92, every entry has every field: at the referee", () => {
 				expect(answers).toEqual([refused("too_big"), {_tag: "placed", rev: 1, pos: 1}]);
 				expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
 			}).pipe(Effect.provide(onReferee(fresh()))),
+		3,
 	);
 
-	it.effect("sentAt never decides: any text the writer sent is placed and read back as sent", () =>
-		Effect.gen(function* () {
-			const sent = ["", "yesterday, around nine", "2099-01-01T00:00:00Z", "1970-01-01T00:00:00Z"];
-			const {answers, entries} = yield* handIn(sent.map((sentAt) => ({...json(), sentAt})));
-			expect(answers.map((answer) => answer._tag)).toEqual(sent.map(() => "placed"));
-			expect(entries.map((entry) => entry.sentAt)).toEqual(sent);
-		}).pipe(Effect.provide(onReferee(fresh()))),
+	law(
+		"sentAt never decides: any text the writer sent is placed and read back as sent",
+		Arbitrary.array(unicode(0, 4096), {minLength: 1, maxLength: 40}),
+		[["", "yesterday, around nine", "2099-01-01T00:00:00Z", "1970-01-01T00:00:00Z"]],
+		(sent) =>
+			Effect.gen(function* () {
+				const {answers, entries} = yield* handIn(sent.map((sentAt) => ({...json(), sentAt})));
+				expect(answers.map((answer) => answer._tag)).toEqual(sent.map(() => "placed"));
+				expect(entries.map((entry) => entry.sentAt)).toEqual(sent);
+			}).pipe(Effect.provide(onReferee(fresh()))),
 	);
 });
 
 describe("p68, an entry keeps its parent", () => {
 	// Plants: keep the old eight-hex pattern, loosen it to in-.*, or answer bad_line.
-	it("p68b, ParentText takes a TypeID process and a positive counter, and nothing one slip away", () => {
-		expect(data.ParentText, "the parent text schema is public").toBeDefined();
-		const is = Schema.is(data.ParentText);
-		expect(parents(50).every(is)).toBe(true);
-		expect(badParents(goodParent).filter(is)).toEqual([]);
-	});
+	law(
+		"p68b, ParentText takes a TypeID process and a positive counter, and nothing one slip away",
+		legacy,
+		parents(50),
+		(goodParent) =>
+			Effect.sync(() => {
+				expect(data.ParentText, "the parent text schema is public").toBeDefined();
+				const is = Schema.is(data.ParentText);
+				expect(is(goodParent)).toBe(true);
+				expect(badParents(goodParent).filter(is)).toEqual([]);
+			}),
+	);
 
-	it.effect.prop(
+	law(
 		"p68b, a generated process parent and positive counter are placed and kept as sent",
-		{parent: inputParents},
-		({parent}) =>
+		Inputs.parent,
+		[],
+		(parent) =>
 			Effect.gen(function* () {
 				const {answers, entries} = yield* handIn([{...json(), parent}]);
 				expect(answers).toEqual([{_tag: "placed", rev: 1, pos: 1}]);
 				expect(entries.map((entry) => entry.parent)).toEqual([parent]);
 			}).pipe(Effect.provide(onReferee(fresh()))),
-		{arbitrary: {seed: SEED, runs: 40}},
 	);
 
-	it.effect("a parent, or null for an own write, is read back the same", () =>
-		Effect.gen(function* () {
-			const ledger = yield* Ledger;
-			yield* ledger.append("notes:1", "w-1", {...full, parent: goodParent});
-			yield* ledger.append("notes:1", "w-2", {...full, parent: null});
-			yield* ledger.append("notes:1", "w-3", {...full, parent: otherParent});
-			const entries = yield* Stream.runCollect(ledger.read("notes:1", 0));
-			expect(entries.map((entry) => entry.parent)).toEqual([goodParent, null, otherParent]);
-		}).pipe(Effect.provide(onLedger(fresh()))),
+	law(
+		"a parent, or null for an own write, is read back the same",
+		Arbitrary.all({one: parent, two: parent}),
+		[{one: goodParent, two: otherParent}],
+		({one: goodParent, two: otherParent}) =>
+			Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				yield* ledger.append("notes:1", "w-1", {...full, parent: goodParent});
+				yield* ledger.append("notes:1", "w-2", {...full, parent: null});
+				yield* ledger.append("notes:1", "w-3", {...full, parent: otherParent});
+				const entries = yield* Stream.runCollect(ledger.read("notes:1", 0));
+				expect(entries.map((entry) => entry.parent)).toEqual([goodParent, null, otherParent]);
+			}).pipe(Effect.provide(onLedger(fresh()))),
 	);
 
-	it.effect(
+	law(
 		"p68b, old eight-hex parents and malformed TypeID parents are refused bad_parent and write nothing",
-		() =>
+		legacy,
+		[goodParent],
+		(goodParent) =>
 			Effect.gen(function* () {
 				const bad = badParents(goodParent);
 				const {answers, entries} = yield* handIn([
@@ -358,33 +500,37 @@ describe("p68, an entry keeps its parent", () => {
 			}).pipe(Effect.provide(onReferee(fresh()))),
 	);
 
-	it("for any text, the referee places it as a parent exactly when it has the form (fast-check)", async () => {
-		const text = fc.oneof(fc.stringMatching(PARENT), fc.string(), fc.string({unit: "binary"}));
-		await fc.assert(
-			fc.asyncProperty(fc.array(text, {minLength: 1, maxLength: 8}), (texts) =>
-				Effect.runPromise(
-					Effect.gen(function* () {
-						const {answers, entries} = yield* handIn(texts.map((parent) => ({...json(), parent})));
-						expect(answers.map((answer) => answer._tag === "placed")).toEqual(
-							texts.map((parent) => PARENT.test(parent)),
-						);
-						expect(answers.filter((answer) => answer._tag === "refused")).toEqual(
-							texts.filter((parent) => !PARENT.test(parent)).map(() => refused("bad_parent")),
-						);
-						expect(entries.map((entry) => entry.parent)).toEqual(
-							texts.filter((parent) => PARENT.test(parent)),
-						);
-					}).pipe(Effect.provide(onReferee(fresh()))),
+	law(
+		"for any text, the referee places it as a parent exactly when it has the form",
+		Arbitrary.array(
+			choose(
+				parent.pipe(Arbitrary.map((parent) => parent ?? "")),
+				Inputs.binary,
+				Arbitrary.schema(
+					Schema.String.check(Schema.isPattern(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/)),
+				),
+				Arbitrary.all({parent: legacy, edit: Arbitrary.schema(N(0, 22))}).pipe(
+					Arbitrary.map(({parent, edit}) => badParents(parent)[edit] ?? ""),
 				),
 			),
-			{seed: SEED, numRuns: 40},
-		);
-	});
+			{minLength: 1, maxLength: 8},
+		),
+		[],
+		(texts) =>
+			Effect.gen(function* () {
+				const {answers, entries} = yield* handIn(texts.map((parent) => ({...json(), parent})));
+				expect(answers.map((answer) => answer._tag === "placed")).toEqual(texts.map(validParent));
+				expect(answers.filter((answer) => answer._tag === "refused")).toEqual(
+					texts.filter((parent) => !validParent(parent)).map(() => refused("bad_parent")),
+				);
+				expect(entries.map((entry) => entry.parent)).toEqual(texts.filter(validParent));
+			}).pipe(Effect.provide(onReferee(fresh()))),
+	);
 });
 
 describe("p68b, an entry keeps a W3C trace id", () => {
 	// Plants: drop the all-zeros guard, or allow uppercase hex.
-	it.effect.each([
+	for (const [label, original] of [
 		["all zeros", "0".repeat(32)],
 		["uppercase", TRACE.toUpperCase()],
 		["31 characters", TRACE.slice(1)],
@@ -394,11 +540,40 @@ describe("p68b, an entry keeps a W3C trace id", () => {
 		["leading space", ` ${TRACE}`],
 		["trailing space", `${TRACE} `],
 		["trailing newline", `${TRACE}\n`],
-	] as const)("%s is refused bad_trace and writes nothing", ([, traceId]) =>
-		Effect.gen(function* () {
-			const {answers, entries} = yield* handIn([{...json(), traceId}, json()]);
-			expect(answers).toEqual([refused("bad_trace"), {_tag: "placed", rev: 1, pos: 1}]);
-			expect(entries.map((entry) => [entry.id, entry.traceId])).toEqual([["w-2", TRACE]]);
-		}).pipe(Effect.provide(onReferee(fresh()))),
-	);
+	] as const)
+		law(
+			`${label} is refused bad_trace and writes nothing`,
+			Arbitrary.schema(data.TraceId),
+			[TRACE],
+			(trace) =>
+				Effect.gen(function* () {
+					const traceId =
+						label === "all zeros"
+							? "0".repeat(32)
+							: label === "uppercase"
+								? /[a-f]/.test(trace)
+									? trace.toUpperCase()
+									: `A${trace.slice(1)}`
+								: label === "31 characters"
+									? trace.slice(1)
+									: label === "33 characters"
+										? `a${trace}`
+										: label === "not hex"
+											? `g${trace.slice(1)}`
+											: label === "empty"
+												? ""
+												: label === "leading space"
+													? ` ${trace}`
+													: label === "trailing space"
+														? `${trace} `
+														: `${trace}\n`;
+					const invalid = trace === TRACE ? original : traceId;
+					const {answers, entries} = yield* handIn([
+						{...json(), traceId: invalid},
+						{...json(), traceId: trace},
+					]);
+					expect(answers).toEqual([refused("bad_trace"), {_tag: "placed", rev: 1, pos: 1}]);
+					expect(entries.map((entry) => [entry.id, entry.traceId])).toEqual([["w-2", trace]]);
+				}).pipe(Effect.provide(onReferee(fresh()))),
+		);
 });

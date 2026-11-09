@@ -1,10 +1,12 @@
 // T246, next/: fromHere reads the writer's current span. Its entry joins P37's ledger.call
 // record by traceId, including an own write. With no span, the helper fails instead of making one.
+import {Buffer} from "node:buffer";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import {inputParents} from "../id.test-support.ts";
+import * as Id from "../id.ts";
 import {Archive} from "./archive.ts";
 import * as data from "./index.ts";
 import {Doorbell, Ledger, type LedgerCalls} from "./ledger.ts";
@@ -25,6 +27,32 @@ const from = {
 	parent: null,
 	build: "b-7c1d073",
 } as const;
+const N = (minimum: number, maximum: number) =>
+	Schema.Int.check(Schema.isBetween({minimum, maximum}));
+const text = (minLength: number, maxLength: number) =>
+	Arbitrary.array(Arbitrary.schema(N(0, 65535)), {minLength, maxLength}).pipe(
+		Arbitrary.map((units) => Buffer.from(String.fromCharCode(...units), "utf8").toString("utf8")),
+	);
+const parents = Arbitrary.schema(N(0, 2)).pipe(
+	Arbitrary.flatMap((choice): Arbitrary.Arbitrary<string> =>
+		choice === 0
+			? inputParents
+			: choice === 1
+				? Arbitrary.schema(Id.Input)
+				: Arbitrary.schema(
+						Schema.String.check(
+							Schema.isPattern(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]{0,31}$/),
+						),
+					),
+	),
+);
+const writer = Arbitrary.all({
+	by: text(1, 256),
+	for: text(1, 256),
+	build: text(1, 256),
+	seen: Arbitrary.schema(N(0, 2147483647)),
+	parent: parents,
+});
 
 const opened: Array<DatabaseSync> = [];
 afterAll(() => {
@@ -35,13 +63,20 @@ describe("T518, TraceId generation", () => {
 	// Plant: a lookahead in the schema's pattern prevents Effect Arbitrary generation.
 	it.effect.prop(
 		"Effect Arbitrary generates 200 decodable trace ids and their all-zero form is refused",
-		{sampleSeed: Schema.Int},
+		{sampleSeed: N(-2147483648, 2147483647)},
 		({sampleSeed}) =>
 			Effect.gen(function* () {
-				const values = yield* Arbitrary.sampleEffect(Arbitrary.schema(data.TraceId), {
-					count: 200,
-					seed: sampleSeed,
-				});
+				const sampled = yield* Effect.exit(
+					Effect.suspend(() =>
+						Arbitrary.sampleEffect(Arbitrary.schema(data.TraceId), {
+							count: 200,
+							seed: sampleSeed,
+							size: 4096,
+						}),
+					),
+				);
+				expect(Exit.isSuccess(sampled), "the schema must generate all 200 samples").toBe(true);
+				const values = yield* sampled;
 				expect(values).toHaveLength(200);
 				for (const value of values) {
 					expect(Schema.decodeUnknownSync(data.TraceId)(value)).toBe(value);
@@ -50,7 +85,7 @@ describe("T518, TraceId generation", () => {
 					expect(() => Schema.decodeUnknownSync(data.TraceId)(zero)).toThrow();
 				}
 			}),
-		{arbitrary: {seed: 119120, runs: 40}},
+		{arbitrary: {seed: 119120, runs: 60, size: 4096}},
 	);
 });
 
@@ -58,7 +93,7 @@ describe("T246, fromHere", () => {
 	// Plant: fromHere returns a fresh random traceId instead of the current span's.
 	it.effect.prop(
 		"an entry with a generated parent or null joins the ledger.call span P37 records",
-		{input: inputParents, own: Schema.Boolean, traceId: traceIds},
+		{input: parents, own: Schema.Boolean, traceId: traceIds},
 		({input, own, traceId}) => {
 			const parent = own ? null : input;
 			const db = new DatabaseSync(":memory:");
@@ -108,17 +143,31 @@ describe("T246, fromHere", () => {
 				expect(append).toHaveLength(1);
 				expect(append[0]?.traceId).toBe(traceId);
 				expect(entry?.traceId).toBe(append[0]?.traceId);
-			}).pipe(Effect.provide(world));
+			}).pipe(
+				Effect.provide(world),
+				Effect.ensuring(
+					Effect.sync(() => {
+						if (db.isOpen) db.close();
+					}),
+				),
+			);
 		},
-		{arbitrary: {seed: 119120, runs: 40}},
+		{arbitrary: {seed: 119120, runs: 60, size: 4096}},
 	);
 
 	// Plant: fromHere falls back to a random id, or starts its own root span.
-	it("no span no write: fromHere fails with NoSuchElementError outside a span", () => {
-		expect(data.fromHere, "fromHere requires a writer's span").toBeTypeOf("function");
-		const exit = Effect.runSyncExit(data.fromHere(from));
-		expect(Exit.isFailure(exit)).toBe(true);
-		const error = Exit.match(exit, {onFailure: Cause.squash, onSuccess: () => undefined});
-		expect(Cause.isNoSuchElementError(error)).toBe(true);
-	});
+	it.prop(
+		"no span no write: fromHere fails with NoSuchElementError outside a span",
+		{writer},
+		({writer}) => {
+			expect(data.fromHere, "fromHere requires a writer's span").toBeTypeOf("function");
+			for (const input of [writer, from]) {
+				const exit = Effect.runSyncExit(data.fromHere(input));
+				expect(Exit.isFailure(exit)).toBe(true);
+				const error = Exit.match(exit, {onFailure: Cause.squash, onSuccess: () => undefined});
+				expect(Cause.isNoSuchElementError(error)).toBe(true);
+			}
+		},
+		{arbitrary: {seed: 119120, runs: 60, size: 4096}},
+	);
 });
