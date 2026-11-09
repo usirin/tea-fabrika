@@ -796,6 +796,12 @@ importers:
         specifier: 'catalog:'
         version: 26.6.6
 
+  fixtures/themes:
+    devDependencies:
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
+
   next/apps/fabrika:
     dependencies:
       '@effect/platform-node':
@@ -981,7 +987,14 @@ importers:
         version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
 
   packages/fabrika-design:
+    dependencies:
+      apca-w3:
+        specifier: 0.1.9
+        version: 0.1.9
     devDependencies:
+      '@kampus/themes-fixture':
+        specifier: workspace:*
+        version: link:../../fixtures/themes
       '@radix-ui/colors':
         specifier: 'catalog:'
         version: 3.0.0
@@ -4766,6 +4779,9 @@ packages:
     resolution: {integrity: sha512-4Dj6M28JB+oAH8kFkTLUo+a2jwOFkuqb3yucU0CANcRRUbxS0cP0nZYCGjcc3BNXwRIsUVmDGgzawme7zvJHvg==}
     engines: {node: '>=12'}
 
+  apca-w3@0.1.9:
+    resolution: {integrity: sha512-Zrf6AeBeQjNe/fxK7U1jCo5zfdjDl6T4/kdw5Xlky3G7u+EJTZkyItjMYQGtwf9pkftsINxcYyOpuLkzKf1ITQ==}
+
   argparse@3.0.4:
     resolution: {integrity: sha512-fwWK3Zq22l4XJJjx5mcBHGikIk+hJqO+32dPm0Jur7+rtG5x1scOjSfdT9ZKeWHPpsya/l0HHK4tDImBkTrtvA==}
 
@@ -4859,6 +4875,9 @@ packages:
 
   colord@2.10.0:
     resolution: {integrity: sha512-AidJptpBJmjTclAp9BkLwJi0T93fo5epJnbaZslpg6QVzpHjAiveF55mE9AcUJiGMqRHgMDY8soMsQtuNYMHfw==}
+
+  colorparsley@0.1.8:
+    resolution: {integrity: sha512-rObESTTTE6G5qO5WFwFxWPggpw4KfpxnLC6Ssl8bITBnNVRhDsyCeTRAUxWQNVTx2pRknKlO2nddYTxjkdNFaw==}
 
   commander@11.1.0:
     resolution: {integrity: sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ==}
@@ -9041,6 +9060,10 @@ snapshots:
 
   ansi-styles@6.2.3: {}
 
+  apca-w3@0.1.9:
+    dependencies:
+      colorparsley: 0.1.8
+
   argparse@3.0.4: {}
 
   assertion-error@2.0.1: {}
@@ -9122,6 +9145,8 @@ snapshots:
   code-block-writer@13.0.3: {}
 
   colord@2.10.0: {}
+
+  colorparsley@0.1.8: {}
 
   commander@11.1.0: {}
 
