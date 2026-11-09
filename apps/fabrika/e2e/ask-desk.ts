@@ -630,6 +630,38 @@ export const askDesk = async (tools: Tools) => {
 				await tools.run(page, "t1", "ticket --ticket 118");
 				await box(page).waitFor();
 				await shot(page, "shown", layout, look);
+				await takeRecReads(`shown-${layout}-${look}`, box(page));
+				// Round 29, law 3 (property 22): #118 holds earlier asks with the open ask's question. The
+				// unit law is programs/ticket/src/earlier.ask-desk.test.ts; here the real tile says it too.
+				await attempt(
+					`P22 11-09, shown-${layout}-${look}: the open question is in Activity unmarked`,
+					async () => {
+						const said = await page.locator('[data-tile="t1"]').evaluate((tile, question) => {
+							const rows = [...tile.querySelectorAll('[aria-label="Activity"] .act-r')].map(
+								(row) => row.textContent ?? "",
+							);
+							const mine = rows.filter((row) => row.includes(question));
+							const text = (tile as HTMLElement).innerText;
+							return {
+								rows: mine,
+								unmarkedRows: mine.filter((row) => !/earlier/i.test(row)).length,
+								unmarkedInTile: text
+									.split("\n")
+									.filter((line) => line.includes(question) && !/earlier/i.test(line)).length,
+							};
+						}, DRAFT.what);
+						check(
+							`P22 11-09, shown-${layout}-${look}: no Activity row reads as the bar's open ask (an answered row with its question names itself earlier)`,
+							said.unmarkedRows === 0,
+							said,
+						);
+						check(
+							`P22 11-09, shown-${layout}-${look}: the open question appears once in the tile, unmarked`,
+							said.unmarkedInTile === 1,
+							said,
+						);
+					},
+				);
 				const rec = button(box(page), "Take rec");
 				check(
 					`P14 7, shown-${layout}-${look}: the shot shows the decided rec key, y`,
@@ -673,6 +705,7 @@ export const askDesk = async (tools: Tools) => {
 				await inspectBar(page, box(page));
 				await button(box(page), "Every pick").click();
 				await shot(page, "every-pick", layout, look);
+				await takeRecReads(`every-pick-${layout}-${look}`, box(page));
 				check("P17 d: the marks stay with every pick open", (await marksIn(box(page))) === 2);
 				check(
 					"P23 E: Recommended once with every pick open",
@@ -691,6 +724,7 @@ export const askDesk = async (tools: Tools) => {
 				await box(page).getByRole("textbox").waitFor();
 				await oneRing(`required-note-${layout}-${look}`, box(page).getByRole("textbox"));
 				await shot(page, "required-note", layout, look);
+				await takeRecReads(`required-note-${layout}-${look}`, box(page));
 				check("P17 d: the marks stay with a note open", (await marksIn(box(page))) === 2);
 				check("P23 E: Recommended once with the note open", (await recommendedIn(box(page))) === 1);
 				await inspectBar(page, box(page));
@@ -705,6 +739,7 @@ export const askDesk = async (tools: Tools) => {
 				] as const) {
 					await button(box(page), name).click();
 					await shot(page, state, layout, look);
+					await takeRecReads(`${state}-${layout}-${look}`, box(page));
 				}
 				await button(box(page), "Agent could work it out").click();
 				await box(page).getByRole("textbox").focus();
@@ -713,6 +748,7 @@ export const askDesk = async (tools: Tools) => {
 				await box(page).focus();
 				await page.keyboard.press("Space");
 				await shot(page, "evidence-open", layout, look);
+				await takeRecReads(`evidence-open-${layout}-${look}`, box(page));
 				await inspectBar(page, box(page));
 				await inspectCard(page, box(page));
 				for (const [ticket, state] of [
@@ -753,6 +789,8 @@ export const askDesk = async (tools: Tools) => {
 					await attempt("P12 a save shows it is pending", () =>
 						page.locator('[data-tile="t1"] [aria-busy="true"]').waitFor({timeout: 5000}),
 					);
+					await inTile(`saving-${layout}-${look}`, box(page), "saving");
+					await takeRecReads(`saving-${layout}-${look}`, box(page));
 					await shot(page, "saving", layout, look);
 					await attempt("P12 a failed real write says so", async () => {
 						await box(page).getByRole("alert").waitFor({timeout: 15000});
@@ -776,6 +814,8 @@ export const askDesk = async (tools: Tools) => {
 							(await recommendedIn(box(page))) === 1,
 						);
 						await inView(`failed-save-${layout}-${look}`, box(page).getByRole("alert"));
+						await inTile(`failed-save-${layout}-${look}`, box(page), "failed");
+						await takeRecReads(`failed-save-${layout}-${look}`, box(page));
 						await shot(page, "failed-save", layout, look);
 					});
 				} finally {
@@ -1238,6 +1278,125 @@ const oneRing = async (when: string, field: Locator) => {
 			ring.thick >= 1.5 &&
 			ring.thick <= 2.5,
 		read,
+	);
+};
+/**
+ * Round 29, law 1 (WCAG 1.4.3, color-principles): in every ask-box state, Take rec's label reads
+ * at least 4.5:1 on its own background, in both looks. Read from the page as drawn: the label's
+ * computed color and the button's computed backgrounds, each drawn over what lies behind and
+ * faded by every opacity from the button up (a disabled Manti button is drawn at opacity .5).
+ * The unit law is packages/fabrika-design/src/take-rec.ask-desk.test.ts.
+ */
+const takeRecReads = async (when: string, where: Locator) => {
+	const rec = button(where, "Take rec");
+	const seen = await rec.evaluate((element) => {
+		const canvas = document.createElement("canvas");
+		canvas.width = canvas.height = 1;
+		const ctx = canvas.getContext("2d", {willReadFrequently: true});
+		if (ctx === null) throw new Error("no canvas");
+		// Any CSS color (oklab, color-mix, light-dark results) to rgba, as the page draws it.
+		const rgba = (css: string): [number, number, number, number] => {
+			ctx.clearRect(0, 0, 1, 1);
+			ctx.fillStyle = "#000";
+			ctx.fillStyle = css;
+			ctx.fillRect(0, 0, 1, 1);
+			const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+			return [r ?? 0, g ?? 0, b ?? 0, (a ?? 0) / 255];
+		};
+		const over = (top: number[], alpha: number, under: number[]) =>
+			[0, 1, 2].map((i) => (top[i] ?? 0) * alpha + (under[i] ?? 0) * (1 - alpha));
+		const chain: Element[] = [];
+		for (let e: Element | null = element; e !== null; e = e.parentElement) chain.unshift(e);
+		let backdrop = [255, 255, 255];
+		let faded = 1;
+		for (const e of chain) {
+			const style = getComputedStyle(e);
+			faded *= Number(style.opacity);
+			const bg = rgba(style.backgroundColor);
+			backdrop = over(bg, bg[3] * faded, backdrop);
+		}
+		// The label: the button's first own text, not its key chip.
+		const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+		let label: Element = element;
+		for (let n = walker.nextNode(); n !== null; n = walker.nextNode())
+			if ((n.textContent ?? "").trim() !== "" && n.parentElement !== null) {
+				label = n.parentElement;
+				break;
+			}
+		const ink = rgba(getComputedStyle(label).color);
+		const text = over(ink, ink[3] * faded, backdrop);
+		const lin = (c: number) => {
+			const v = c / 255;
+			return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+		};
+		const lum = (c: number[]) =>
+			0.2126 * lin(c[0] ?? 0) + 0.7152 * lin(c[1] ?? 0) + 0.0722 * lin(c[2] ?? 0);
+		const [hi, lo] = [lum(text), lum(backdrop)].sort((a, b) => b - a);
+		return {
+			ratio: ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05),
+			text: text.map(Math.round),
+			background: backdrop.map(Math.round),
+			opacity: faded,
+			disabled: (element as HTMLButtonElement).disabled,
+		};
+	});
+	check(
+		`P23 11-09, ${when}: Take rec's label reads at least 4.5:1 on its background`,
+		seen.ratio >= 4.5,
+		seen,
+	);
+};
+/**
+ * Round 29, law 2, at every layout: in the saving and failed-save states, the "Your turn" line and
+ * the save status line (Saving your answer..., or Not saved. with Try again) each lie fully inside
+ * the ticket tile's visible scroll area. The area is the nearest scrolling ancestor's client box,
+ * cut to the window.
+ */
+const inTile = async (when: string, where: Locator, status: "saving" | "failed") => {
+	const read = () =>
+		where.evaluate((root, which) => {
+			const turn = root.querySelector(".ask-turn");
+			const line = root.querySelector(which === "saving" ? ".ask-quiet" : ".ask-fail");
+			const retry = which === "failed" ? root.querySelector(".ask-fail button") : null;
+			const scrollerOf = (element: Element) => {
+				let at = element.parentElement;
+				while (at !== null && !/(auto|scroll|overlay)/.test(getComputedStyle(at).overflowY))
+					at = at.parentElement;
+				return at;
+			};
+			const area = (element: Element) => {
+				const scroller = scrollerOf(element);
+				if (scroller === null) return {top: 0, bottom: innerHeight, name: null};
+				const r = scroller.getBoundingClientRect();
+				const top = r.top + scroller.clientTop;
+				return {
+					top: Math.max(top, 0),
+					bottom: Math.min(top + scroller.clientHeight, innerHeight),
+					name: `${scroller.tagName}.${scroller.className}`,
+				};
+			};
+			const measure = (name: string, element: Element | null) => {
+				if (element === null) return {name, found: false, inside: false};
+				const at = element.getBoundingClientRect();
+				const port = area(element);
+				return {
+					name,
+					found: true,
+					box: {top: at.top, bottom: at.bottom},
+					port,
+					inside: at.height > 0 && at.top >= port.top - 1 && at.bottom <= port.bottom + 1,
+				};
+			};
+			return [
+				measure("Your turn line", turn),
+				measure(which === "saving" ? "Saving your answer line" : "Not saved line", line),
+				...(retry === null ? [] : [measure("Try again", retry)]),
+			];
+		}, status);
+	await until(
+		`P23 11-09, ${when}: the Your turn line and the save status lie inside the tile's scroll area`,
+		read,
+		(seen) => seen.every((part) => part.inside),
 	);
 };
 /**
