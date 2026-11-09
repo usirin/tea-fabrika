@@ -1,8 +1,8 @@
 // P33 / p79 and p80, next/: real restart policy and recovery functions.
 import {describe, expect, it} from "@effect/vitest";
 import {Arbitrary, Effect, Result, Schema} from "effect";
+import * as fc from "fast-check";
 import {ProcessId} from "../data/trace.ts";
-import {unboundedJson} from "./arbitrary.test-support.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
 	A,
@@ -16,6 +16,17 @@ import {
 	W,
 } from "./process.test-support.ts";
 import {Activity, canRestart, Dead, ProcessFact, recoverActivity, State} from "./process.ts";
+
+// fast-check 4.10.2's default JSON has no hard depth bound. Effect 4.1.1's
+// recursive Schema.Json spends one shared size budget, so no finite size
+// preserves that range. Keep the old generator for this input only.
+const unboundedJson = Arbitrary.schema(
+	Schema.Int.check(Schema.isBetween({minimum: -2_147_483_648, maximum: 2_147_483_647})),
+).pipe(
+	Arbitrary.map((seed) =>
+		Schema.decodeUnknownSync(Schema.Json)(fc.sample(fc.jsonValue(), {seed, numRuns: 1})[0]),
+	),
+);
 
 const text = Schema.NonEmptyString.check(Schema.isMaxLength(40));
 // The old integer generator never made -0; JSON storage cannot distinguish it from 0.

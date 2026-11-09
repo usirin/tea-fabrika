@@ -6,11 +6,11 @@ import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Arbitrary, Effect, Layer, Schema, Stream} from "effect";
+import * as fc from "fast-check";
 import type {LedgerError} from "../data/ledger.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
-import {unboundedJson} from "./arbitrary.test-support.ts";
 import {type From} from "./mailbox.ts";
 import {
 	Checkpoint as CheckpointSchema,
@@ -19,6 +19,17 @@ import {
 	RuntimeRecord,
 } from "./process-store.ts";
 import {Activity} from "./process.ts";
+
+// fast-check 4.10.2's default JSON has no hard depth bound. Effect 4.1.1's
+// recursive Schema.Json spends one shared size budget, so no finite size
+// preserves that range. Keep the old generator for this input only.
+const unboundedJson = Arbitrary.schema(
+	Schema.Int.check(Schema.isBetween({minimum: -2_147_483_648, maximum: 2_147_483_647})),
+).pipe(
+	Arbitrary.map((seed) =>
+		Schema.decodeUnknownSync(Schema.Json)(fc.sample(fc.jsonValue(), {seed, numRuns: 1})[0]),
+	),
+);
 
 const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
 const folder = mkdtempSync(join(tmpdir(), "p11-store-"));

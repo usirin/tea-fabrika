@@ -4,7 +4,6 @@ import {describe, expect, it} from "@effect/vitest";
 import {Arbitrary, Effect, Result, Schema} from "effect";
 import {Ledger} from "../data/ledger.ts";
 import {type Entry, lineFor} from "../data/log.ts";
-import {json} from "./arbitrary.test-support.ts";
 import {Mailbox} from "./mailbox.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
@@ -26,6 +25,26 @@ import {
 	X,
 } from "./process.test-support.ts";
 import {brainOnly, Down, ProcessFact, Recipient, Start} from "./process.ts";
+
+// Match fc.jsonValue({maxDepth: depth}): finite numbers, strings/keys of
+// length 0..10, and arrays/objects of width 0..10. No required object keys.
+// Finite schema levels give every child its own full range. Call with size >= 10.
+const scalar = Schema.Union([
+	Schema.Null,
+	Schema.Boolean,
+	Schema.Finite,
+	Schema.String.check(Schema.isMaxLength(10)),
+]);
+const json = (depth: number): Schema.Codec<Schema.Json> =>
+	depth === 0
+		? scalar
+		: Schema.Union([
+				scalar,
+				Schema.Array(json(depth - 1)).check(Schema.isMaxLength(10)),
+				Schema.Record(Schema.String.check(Schema.isMaxLength(10)), json(depth - 1)).check(
+					Schema.isMaxProperties(10),
+				),
+			]);
 
 const examples =
 	<A extends ReadonlyArray<unknown>, E, R>(

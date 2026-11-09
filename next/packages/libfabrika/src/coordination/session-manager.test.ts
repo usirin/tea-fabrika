@@ -12,9 +12,28 @@ import {type InputId} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import {ProcessId} from "../data/trace.ts";
-import {json} from "./arbitrary.test-support.ts";
 import * as C from "./index.ts";
 import {signalId} from "./process.ts";
+
+// Match fc.jsonValue({maxDepth: depth}): finite numbers, strings/keys of
+// length 0..10, and arrays/objects of width 0..10. No required object keys.
+// Finite schema levels give every child its own full range. Call with size >= 10.
+const scalar = Schema.Union([
+	Schema.Null,
+	Schema.Boolean,
+	Schema.Finite,
+	Schema.String.check(Schema.isMaxLength(10)),
+]);
+const json = (depth: number): Schema.Codec<Schema.Json> =>
+	depth === 0
+		? scalar
+		: Schema.Union([
+				scalar,
+				Schema.Array(json(depth - 1)).check(Schema.isMaxLength(10)),
+				Schema.Record(Schema.String.check(Schema.isMaxLength(10)), json(depth - 1)).check(
+					Schema.isMaxProperties(10),
+				),
+			]);
 
 const OTHER_PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjt";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
