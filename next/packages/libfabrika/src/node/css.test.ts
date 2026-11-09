@@ -257,6 +257,77 @@ describe("P16 CSS tokens", () => {
 		);
 	});
 
+	it("a bare layer on a later import is refused after ordinary imports and line breaks", () => {
+		fc.assert(
+			fc.property(ids, fc.constantFrom(" ", "\n", "\r\n", "\r", "\f"), (id, gap) => {
+				const f = fixture(id),
+					first = `@import "child${id}.css";${gap}`,
+					last = `.root${id} { color: blue; }`;
+				const verify = (condition: string) =>
+					expect(() =>
+						f.read(`${first}@import "child${id}.css" ${condition};${gap}${last}`),
+					).toThrow("unsupported @import condition");
+				verify("layer");
+				// Removing the unsupported condition must make this refusal check fail.
+				expect(() => verify("")).toThrow();
+			}),
+			runs,
+		);
+	});
+
+	it("nested stylesheets keep remote imports with their media conditions before local rules", () => {
+		fc.assert(
+			fc.property(ids, fc.constantFrom("print", "screen and (color)"), (id, media) => {
+				const f = fixture(id),
+					remote = `@import url("https://test.invalid/theme${id}.css") ${media};`,
+					last = `.root${id} { color: blue; }`;
+				writeFileSync(join(f.home, `child${id}.css`), `${remote}\n${f.body}`);
+				const verify = (css: string) =>
+					expect(
+						meaning(cssRules(css)),
+						"nested imports keep their URLs, order and conditions",
+					).toEqual(meaning(cssRules(`${remote}\n${f.body}\n${last}`)));
+				verify(f.read(`@import "child${id}.css";\n${last}`));
+				for (const plant of [
+					`${f.body}\n${last}`,
+					`@import url("https://test.invalid/theme${id}.css");\n${f.body}\n${last}`,
+				])
+					expect(() => verify(plant)).toThrow("nested imports");
+			}),
+			runs,
+		);
+	});
+
+	it("broken CSS reports an Error that names the broken token", () => {
+		fc.assert(
+			fc.property(ids, fc.constantFrom("string", "url()", "@import"), (id, token) => {
+				const f = fixture(id);
+				const css =
+					token === "string"
+						? `@import "child\n${id}.css";`
+						: token === "url()"
+							? `a { background: url(https://test.invalid/a ${id}); }`
+							: `@import ("child${id}.css");`;
+				let error: unknown;
+				try {
+					f.read(css);
+				} catch (caught) {
+					error = caught;
+				}
+				const verify = (actual: unknown) => {
+					expect(actual).toBeInstanceOf(Error);
+					expect(actual).toMatchObject({
+						message: expect.stringContaining(`stylesheet has a broken ${token}`),
+					});
+				};
+				verify(error);
+				for (const plant of [undefined, new Error("wrong reason")])
+					expect(() => verify(plant)).toThrow();
+			}),
+			runs,
+		);
+	});
+
 	it("CSS multiplication does not hide a later local file reference", () => {
 		fc.assert(
 			fc.property(ids, (id) => {
