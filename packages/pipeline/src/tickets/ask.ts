@@ -182,8 +182,6 @@ export const sealAsk = (input: unknown, policy?: {seed: number}) =>
 					? Schema.TaggedStruct("hidden", {}).make({})
 					: draft.rec,
 		};
-		// Decode for validation, but keep every JSON field of the full plan, including future fields.
-		const complete = shows;
 		return Asked.make({
 			type: "asked",
 			format: 1,
@@ -194,8 +192,8 @@ export const sealAsk = (input: unknown, policy?: {seed: number}) =>
 			why: draft.why,
 			rec: draft.rec,
 			until: draft.until,
-			shows: complete,
-			saw: yield* hash(complete),
+			shows,
+			saw: yield* hash(shows),
 			blind,
 			...(draft.replaces === undefined ? {} : {replaces: draft.replaces}),
 			...(draft.trace === undefined ? {} : {trace: draft.trace}),

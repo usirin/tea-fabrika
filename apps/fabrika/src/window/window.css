@@ -2961,6 +2961,16 @@ main.program:has(> .view) {
 	vertical-align: middle;
 	white-space: nowrap;
 }
+/* In a tile under about 320px the piece cannot hold one line: the question, then each mark, take
+   the next line at the words' left edge, so nothing scrolls sideways (review 3). */
+@container main (max-width: 320px) {
+	.ask-marks,
+	.ask-mark-pair {
+		flex-wrap: wrap;
+		max-inline-size: 100%;
+		white-space: normal;
+	}
+}
 .ask-view button {
 	white-space: normal;
 }
@@ -3026,12 +3036,13 @@ main.program:has(> .view) {
 /* One ring, not two: focused, Manti's field turns its 1px border the ring's color and draws its
    2px ring 2px outside it, two lines with a gap. Here the ring lies over the border instead, so a
    person sees one 2px line. The field's side padding moves into the textarea, so the ring hugs the
-   box the words are typed in. */
+   box the words are typed in. Its width is the design's 12px step, the side padding of Manti's
+   default (md) field. */
 .ask-note [data-scope="field"][data-part="control"] {
 	padding-inline: 0;
 }
 .ask-note [data-scope="field"][data-part="input"] {
-	padding-inline: var(--manti-field-padding-x);
+	padding-inline: var(--s-3);
 }
 .ask-note [data-scope="field"][data-part="control"]:has([data-part="input"]:focus-visible) {
 	outline-offset: -1px;

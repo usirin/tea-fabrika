@@ -567,7 +567,7 @@ function OneTicket({view, send}: WindowProps<typeof ticket>) {
 	const paragraphs = paragraphsOf(page.body);
 	return (
 		<div className="view ticket-view">
-			<AskStatus>
+			<AskStatus left={opened.head._tag === "asks" ? opened.head.asks.length : 0}>
 				<div className="tkv">
 					<div className="tk-main">
 						<div className="tk-col">

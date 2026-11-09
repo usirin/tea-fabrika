@@ -521,7 +521,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	);
 	return (
 		<Panel id={POP.asks} label="Asks" onClose={close}>
-			<AskStatus>
+			<AskStatus left={asks.asks.filter((a) => a.kind === "ask").length}>
 				<p className="pop-head">
 					{asksHead(
 						asks.asks.filter((a) => a.kind === "ask").length,

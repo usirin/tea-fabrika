@@ -128,7 +128,6 @@ const failed = (model: Model, error: unknown): Step => [
 	[],
 ];
 
-/** The save landed: the editor reads again, and says what was saved. */
 /** What a saved answer says, in words: "Approved.", or the pick it saved. Pure. */
 const savedWords = (shows: Shows, answer: Answer | null): string => {
 	const chosen =
@@ -140,6 +139,7 @@ const savedWords = (shows: Shows, answer: Answer | null): string => {
 	return chosen === "approve" ? "Approved." : `${chosen} saved.`;
 };
 
+/** The save landed: the editor reads again, and says what was saved. */
 const saved = (model: Model): Step => {
 	const status = savedWords(
 		model.ask.shows,
@@ -413,15 +413,25 @@ const Says = createContext<((text: string) => void) | null>(null);
 /**
  * The window's one polite status region, always drawn and visually hidden, outside any ask view,
  * so what a save said is read out even when the next ask, or none, takes the view's place
- * (WCAG 4.1.3).
+ * (WCAG 4.1.3). It says what was saved and how many asks still wait, as in "Approved. 2 left.".
+ * Each saying is a fresh text node: a second "Approved." changes the region, so it is read out
+ * again, where setting the same words twice would change nothing.
  */
-export function AskStatus({children}: {readonly children: ReactNode}) {
-	const [text, say] = useState("");
+export function AskStatus({
+	children,
+	left,
+}: {
+	readonly children: ReactNode;
+	/** How many asks still wait where this region sits. */
+	readonly left: number;
+}) {
+	const [said, setSaid] = useState<{readonly text: string; readonly count: number} | null>(null);
+	const say = (text: string) => setSaid((last) => ({text, count: (last?.count ?? 0) + 1}));
 	return (
 		<Says.Provider value={say}>
 			{children}
 			<p className="ask-status" role="status" aria-live="polite">
-				{text}
+				{said !== null && <span key={said.count}>{`${said.text} ${left} left.`}</span>}
 			</p>
 		</Says.Provider>
 	);
@@ -619,9 +629,9 @@ export function AskView({
 					return yield* Fiber.join(fiber);
 				}).pipe(Effect.mapError((e) => ({_tag: "refused", why: e.why})));
 			},
-			answered: (cmd) =>
+			// The save already said its words, once: saying them here again would read them twice.
+			answered: () =>
 				Effect.sync(() => {
-					says?.(cmd.said);
 					(program.current ?? root.current)?.focus();
 				}),
 			later: (cmd) => Effect.sync(() => actions?.later(cmd.key)),
