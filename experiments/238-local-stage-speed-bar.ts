@@ -9,7 +9,9 @@
 //
 // Each stage run gets its own fresh FABRIKA_HOME (mktemp -d /tmp/fh.XXXX), removed after. One stage
 // at a time; before each, it waits while 6 or more vitest workers run. Every reading is saved, not
-// only medians, in results/238-local-stage-speed-bar.json (each call appends its runs).
+// only medians, in the raw file (each call appends its runs): runs/238-local-stage-speed-bar.json, or
+// the file EXP238_RAW names. Each call also writes results/238-local-stage-speed-bar-summary.json,
+// the numbers the write-up quotes. `summary` alone rewrites the summary from the raw file.
 // The wire client below is a copy of the one in next/apps/fabrika/src/stage-wire.test.ts.
 import {execFileSync, spawn, type ChildProcess} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
@@ -25,13 +27,16 @@ import {
 } from "node:fs";
 import {createRequire} from "node:module";
 import {createServer} from "node:net";
-import {join, resolve} from "node:path";
+import {dirname, join, resolve} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {pathToFileURL} from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const APP = join(ROOT, "next/apps/fabrika");
-const OUT = join(ROOT, "experiments/results/238-local-stage-speed-bar.json");
+// Raw samples (every reading and health row) stay out of the public repo: runs/ is ignored by git.
+// EXP238_RAW names another file, such as a private copy of an earlier sitting.
+const OUT = resolve(process.env.EXP238_RAW ?? join(ROOT, "runs/238-local-stage-speed-bar.json"));
+const SUMMARY = join(ROOT, "experiments/results/238-local-stage-speed-bar-summary.json");
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -52,16 +57,134 @@ const vitests = () => {
 		return 0;
 	}
 };
-const saved = (): {runs: Array<unknown>; compiler: Array<unknown>} =>
+const saved = (): Raw =>
 	existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : {runs: [], compiler: []};
 // Still one JSON document, but one run per line: every sample kept, and a diff shows whole runs.
-const save = (data: Record<string, Array<unknown>>) => {
+const save = (data: Raw) => {
 	const parts = Object.entries(data).map(
-		([key, rows]) =>
+		([key, rows]: [string, Array<unknown>]) =>
 			`${JSON.stringify(key)}:[\n${rows.map((row) => JSON.stringify(row)).join(",\n")}\n]`,
 	);
+	mkdirSync(dirname(OUT), {recursive: true});
 	writeFileSync(OUT, `{${parts.join(",")}}\n`);
+	writeSummary(data);
 };
+
+// --- The summary: only the numbers the write-up quotes, made from the raw file ---
+type Health = {piece: string; ms: number};
+type Run = {
+	label: string;
+	load: string;
+	sendMs: Array<number>;
+	publishMs: Array<number>;
+	brainFacts: Array<{_tag: string}>;
+	health: Array<Health>;
+	leftBehind: number;
+	nodeRssMb: Array<number>;
+} & Record<string, unknown>;
+type Raw = {
+	runs: Array<Run>;
+	compiler: Array<{compiler: boolean; ms: number; load: string}>;
+	sink?: Array<{queued: number; ms: number; warmup: boolean; load: string}>;
+};
+// One reading per run, by its field name in the raw file.
+const PER_RUN = [
+	"startMs",
+	"helloMs",
+	"replaceMs",
+	"reconnectMs",
+	"firstSendAfterReplaceMs",
+	"workerdRssMb",
+	"workerdRssAfterReplaceMb",
+	"stopMs",
+] as const;
+// Spans the write-up quotes, pooled over every health row of the label's runs.
+const SPANS = [
+	"brain.start",
+	"brain.restart",
+	"brain.flush",
+	"brain.stop",
+	"members.read",
+	"process.info",
+	"execution.fold",
+	"ledger.append",
+] as const;
+const round = (x: number) => Math.round(x * 100) / 100;
+// Linear between the two nearest ranks (R's type 7), so p50 of an even count is the middle mean.
+const quantile = (sorted: Array<number>, q: number) => {
+	const at = (sorted.length - 1) * q;
+	const low = Math.floor(at);
+	return sorted[low] + (sorted[Math.ceil(at)] - sorted[low]) * (at - low);
+};
+const median = (values: Array<number>) =>
+	quantile(
+		[...values].sort((a, b) => a - b),
+		0.5,
+	);
+const stats = (values: Array<number>) => {
+	const sorted = [...values].sort((a, b) => a - b);
+	return {
+		n: sorted.length,
+		min: round(sorted[0]),
+		p50: round(quantile(sorted, 0.5)),
+		p90: round(quantile(sorted, 0.9)),
+		p95: round(quantile(sorted, 0.95)),
+		max: round(sorted[sorted.length - 1]),
+	};
+};
+// The 1-minute load average from each `uptime` line, lowest and highest.
+const loads = (lines: Array<string>) => {
+	const ones = lines.map((line) => Number(/load averages?: ([\d.]+)/.exec(line)?.[1]));
+	return {min: Math.min(...ones), max: Math.max(...ones)};
+};
+const stageSummary = (runs: Array<Run>) => {
+	const measures: Record<string, ReturnType<typeof stats>> = {};
+	for (const key of PER_RUN) measures[key] = stats(runs.map((run) => Number(run[key])));
+	measures.sendMsPooledWithoutFirst = stats(runs.flatMap((run) => run.sendMs.slice(1)));
+	measures.firstSendMs = stats(runs.map((run) => run.sendMs[0]));
+	measures.publishMsPooled = stats(runs.flatMap((run) => run.publishMs));
+	measures.publishMsRunMedian = stats(runs.map((run) => median(run.publishMs)));
+	measures.nodeRssMb = stats(runs.flatMap((run) => run.nodeRssMb));
+	const spans = Object.fromEntries(
+		SPANS.map((piece) => {
+			const rows = runs.flatMap((run) => run.health.filter((row) => row.piece === piece));
+			return [piece, {...stats(rows.map((row) => row.ms)), perRun: rows.length / runs.length}];
+		}),
+	);
+	// What a door/brain read showed right after the reconnect, and in how many runs.
+	const facts = runs.map((run) => run.brainFacts.map((fact) => fact._tag).join(","));
+	const brainFactsAfterReconnect = Object.fromEntries(
+		[...new Set(facts)].map((seen) => [seen, facts.filter((f) => f === seen).length]),
+	);
+	const leftBehindMax = Math.max(...runs.map((run) => run.leftBehind));
+	const load = loads(runs.map((run) => run.load));
+	return {runs: runs.length, load, measures, spans, brainFactsAfterReconnect, leftBehindMax};
+};
+const summarize = (raw: Raw) => {
+	const labels = [...new Set(raw.runs.map((run) => run.label))];
+	const stage = Object.fromEntries(
+		labels.map((label) => [label, stageSummary(raw.runs.filter((run) => run.label === label))]),
+	);
+	const compiler = Object.fromEntries(
+		[true, false].map((on) => {
+			const rows = raw.compiler.filter((row) => row.compiler === on);
+			const load = loads(rows.map((row) => row.load));
+			return [on ? "on" : "off", {...stats(rows.map((row) => row.ms)), load}];
+		}),
+	);
+	const sinkRows = raw.sink ?? [];
+	const sink = Object.fromEntries(
+		[...new Set(sinkRows.map((row) => row.queued))].map((queued) => {
+			const rows = sinkRows.filter((row) => row.queued === queued);
+			const warmupMs = rows.filter((row) => row.warmup).map((row) => round(row.ms));
+			const readings = rows.filter((row) => !row.warmup).map((row) => row.ms);
+			return [String(queued), {warmupMs, ...stats(readings), load: loads(rows.map((r) => r.load))}];
+		}),
+	);
+	return {stage, compiler, sink};
+};
+const writeSummary = (raw: Raw) =>
+	writeFileSync(SUMMARY, `${JSON.stringify(summarize(raw), null, "\t")}\n`);
 
 // --- The wire client (copied from stage-wire.test.ts) ---
 const field = (a: string | Buffer) => {
@@ -638,5 +761,7 @@ if (mode === "stage") {
 	save(data);
 } else if (mode === "sink") {
 	const sink = await sinkRuns(Number(label ?? 5));
-	save({...data, sink: [...((data as {sink?: Array<unknown>}).sink ?? []), ...sink]});
-} else throw new Error("mode: stage <label> <count> | compiler <count> | sink <count>");
+	save({...data, sink: [...(data.sink ?? []), ...sink]});
+} else if (mode === "summary") {
+	writeSummary(data);
+} else throw new Error("mode: stage <label> <count> | compiler <count> | sink <count> | summary");
