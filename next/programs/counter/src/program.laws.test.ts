@@ -2,8 +2,9 @@
 // No window export exists until P14. No copied counter implementation lives in the library.
 import {propertyInvariant} from "@demlik/tea/pbt";
 import {describe, expect, it} from "@effect/vitest";
-import {Schema} from "effect";
+import {Effect, Schema} from "effect";
 import * as fc from "fast-check";
+import {expectTypeOf} from "vitest";
 
 const SEED = 119120;
 // Defer export lookup so the red base's missing exports do not prevent law collection.
@@ -14,14 +15,24 @@ const msgs = fc.array(fc.constantFrom({type: "inc"}, {type: "dec"}, {type: "rese
 });
 
 describe("P11 real counter laws", () => {
-	it("counter ports allow agents and give each action a readable description", async () => {
-		const {counter} = await import("./program.ts");
-		for (const type of ["inc", "dec", "reset"] as const) {
-			const port = counter.inputs[type];
-			expect(port.personOnly).toBe(false);
-			expect(port.description.trim().length).toBeGreaterThan(0);
-			expect(Schema.decodeUnknownSync(port.schema)({type})).toEqual({type});
-		}
+	it("Program.make keeps the exported machine and uses its own schemas", async () => {
+		const {counter, counterMachine} = await import("./program.ts");
+		fc.assert(
+			fc.property(fc.integer(), fc.constantFrom("inc", "dec", "reset"), (count, type) => {
+				expect(counter.machine).toBe(counterMachine);
+				expect(counter.state.schema).toBe(counterMachine.model);
+				expect(counter.msg).toBe(counterMachine.msg);
+				expect(counter.view.data).toBe(Schema.Json);
+				expectTypeOf(counter.view.select({count}).count).toEqualTypeOf<number>();
+				expect(counter.view.select({count})).toEqual({count});
+				expect(counter.wake({count})).toBeNull();
+				const port = counter.inputs[type];
+				expect(port.personOnly).toBe(false);
+				expect(port.description.trim().length).toBeGreaterThan(0);
+				expect(Schema.decodeUnknownSync(port.schema)({type})).toEqual({type});
+			}),
+			{seed: SEED, numRuns: 100},
+		);
 	});
 	it("S2 plant, lose saved count: every JSON cut preserves every later model and Cmd", async () => {
 		const {counter} = await import("./program.ts");
@@ -69,16 +80,20 @@ describe("P11 real counter laws", () => {
 	});
 	it("plant, leave a declaration out: real program declares saved state, ports, view and fact policy", async () => {
 		const {counter} = await import("./program.ts");
-		const {Program, stepper}: typeof import("@kampus/libfabrika") = await import(LIBRARY);
-		expect(Schema.decodeUnknownSync(Program)(counter)).toMatchObject({
+		const {Program, ProgramLoader}: typeof import("@kampus/libfabrika") = await import(LIBRARY);
+		expect(Schema.decodeUnknownSync(Program.schema)(counter)).toMatchObject({
 			name: "counter",
 			state: {v: 1},
 			writes: {},
 		});
-		const p = stepper(counter);
+		const p = Effect.runSync(
+			Effect.gen(function* () {
+				return (yield* (yield* ProgramLoader).load("counter")).stepper;
+			}).pipe(Effect.provide(ProgramLoader.layer({counter}, {}))),
+		);
 		const boot = p.init(null);
 		expect(boot).toMatchObject({_tag: "stepped", view: {count: 0}, cmds: []});
-		for (const type of ["inc", "dec", "reset"])
+		for (const type of ["inc", "dec", "reset"] as const)
 			expect(counter.refuse({count: 0}, {type})).toBeNull();
 		expect(p.step({count: 0}, {type: "inc", value: "wrong"})).toMatchObject({
 			_tag: "stepped",

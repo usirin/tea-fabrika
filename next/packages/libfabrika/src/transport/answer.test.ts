@@ -2,6 +2,7 @@
 // wait is data. Plants: answer a notification; route before initialize; turn a failure into err.
 import {assert, describe, expect, it, vi} from "@effect/vitest";
 import {Effect, Schema} from "effect";
+import * as fc from "fast-check";
 import * as T from "./index.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -21,6 +22,48 @@ const online = () =>
 		watching: false,
 		busy: false,
 	});
+const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+// Method names the door and the ledger answer today, and two near misses of door.knock.
+const METHODS = [
+	"door.knock",
+	"door.watch",
+	"door.grant",
+	"door.deny",
+	"door.input",
+	"door.initialize",
+	"ledger.read",
+	"ledger.append",
+	"ledger.wait",
+	"process.send",
+	"process.start",
+	"process.exit",
+	"spans.read",
+	"session.end",
+	"Door.knock",
+	"door.knock ",
+] as const;
+const unauthenticated = fc.oneof(
+	fc.record({client: fc.string(), nonce: fc.string()}).map((a) => T.Attached.cases.new.make(a)),
+	fc
+		.record({
+			client: fc.string(),
+			key: fc.string(),
+			nonce: fc.string(),
+			hello: fc.record({
+				versions: fc.array(fc.integer({min: 1, max: 9})),
+				has: fc.array(fc.string()),
+				ping: fc.string(),
+				key: fc.string(),
+				tab: fc.string(),
+				nonce: fc.string(),
+				platform: fc.constantFrom("browser", "electron", "headless"),
+				os: fc.constantFrom("macos", "windows", "linux", "android", "ios", "unknown"),
+				sentAt: fc.string(),
+				signed: fc.string(),
+			}),
+		})
+		.map((a) => T.Attached.cases.waiting.make(a)),
+);
 const admit = () => Effect.die("online routing must not repeat hello admission");
 const frame = (over: Record<string, unknown> = {}) =>
 	JSON.stringify({
@@ -89,34 +132,80 @@ describe("P10 JSON-RPC", () => {
 				expect((yield* T.answerFrame(text, online(), admit, route)).send).toBeNull();
 			}),
 		);
-	for (const state of ["new", "waiting"] as const)
-		it.effect(`p23: ${state} never reaches an application route`, () =>
-			Effect.gen(function* () {
-				const attached =
-					state === "new"
-						? T.Attached.cases.new.make({client: "c1", nonce: "n"})
-						: T.Attached.cases.waiting.make({
-								client: "c1",
-								key: "k",
-								nonce: "n",
-								hello: {
-									versions: [1],
-									has: [],
-									ping: "30s",
-									key: "k",
-									tab: "t",
-									nonce: "n",
-									platform: "headless",
-									os: "linux",
-									sentAt: "",
-									signed: "",
-								},
-							});
-				const route = vi.fn(() => Effect.die("unauthenticated route"));
-				yield* T.answerFrame(frame(), attached, admit, route);
-				expect(route).not.toHaveBeenCalled();
-			}),
+	// d2/p23: a connection that is not online never reaches a route. Every request gets one
+	// no_hello error with its own id, and the attachment stays as it was. The one way through
+	// is a waiting client's door.knock: its handler runs once with the params, and its answer is
+	// the one reply. Plants: drop the request silently; let waiting reach any method; answer
+	// no_hello to a waiting knock; pass a third argument to the knock handler.
+	it("d2: for any unauthenticated state, method and id, only a waiting door.knock is routed", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				unauthenticated,
+				fc.oneof(fc.constant("door.knock"), fc.constantFrom(...METHODS), fc.string()),
+				fc.oneof(fc.string(), fc.integer()),
+				fc.jsonValue(),
+				fc.jsonValue(),
+				(attached, method, id, params, answer) =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const route = vi.fn((..._: ReadonlyArray<unknown>) =>
+								Effect.succeed(T.Answer.cases.ok.make({result: answer})),
+							);
+							const result = yield* T.answerFrame(
+								frame({id, method, params}),
+								attached,
+								admit,
+								route,
+							);
+							expect(result.send).not.toBeNull();
+							expect(result.attached).toEqual(attached);
+							const wire = <A>(value: A): A => JSON.parse(JSON.stringify(value));
+							if (attached._tag === "waiting" && method === "door.knock") {
+								expect(route.mock.calls).toEqual([["door.knock", wire(params)]]);
+								expect(JSON.parse(result.send!)).toEqual({
+									jsonrpc: "2.0",
+									id,
+									result: wire(answer),
+								});
+							} else {
+								expect(route).not.toHaveBeenCalled();
+								expect(JSON.parse(result.send!)).toEqual({
+									jsonrpc: "2.0",
+									id,
+									error: {code: -32000, message: "no_hello", data: {why: "no_hello"}},
+								});
+							}
+						}),
+					),
+			),
+			{seed: SEED, endOnFailure: true, numRuns: 300},
 		);
+	});
+	// d2: a waiting knock whose handler parks sends nothing and the client stays waiting, as it
+	// was. Only an online client keeps a parked wait. Plant: treat every parked answer as online.
+	it("d2: for any waiting state, a knock that parks sends nothing and leaves it waiting", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				unauthenticated.filter((a) => a._tag === "waiting"),
+				fc.oneof(fc.string(), fc.integer()),
+				fc.string(),
+				fc.nat(),
+				(attached, id, stream, after) =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const result = yield* T.answerFrame(
+								frame({id, method: "door.knock"}),
+								attached,
+								admit,
+								() => Effect.succeed(T.Answer.cases.parked.make({stream, after})),
+							);
+							expect(result).toEqual({send: null, attached});
+						}),
+					),
+			),
+			{seed: SEED, endOnFailure: true, numRuns: 100},
+		);
+	});
 	for (const id of ["r1", 0])
 		it.effect(`p23: parked wait retains reply id ${id} and cursor, with no unresolved work`, () =>
 			Effect.gen(function* () {

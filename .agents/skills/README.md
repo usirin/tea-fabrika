@@ -1,0 +1,34 @@
+# Step skills
+
+The hand-run pipeline's steps, as [Agent Skills](https://agentskills.io). Codex reads them here.
+They are today's hand-run tools, used for work in either version: `next/` or today's.
+Each `.claude/skills/<name>` is a link to the same folder, so Claude Code loads them too. One copy,
+both tools.
+
+| Skill | For |
+|---|---|
+| [plan](./plan/SKILL.md) | write one pull request's plan, read-only, with an owner step per file |
+| [tests](./tests/SKILL.md) | write the plan's laws and plants, and the exam work, before the build |
+| [build](./build/SKILL.md) | make the red laws green in product code, never touching the exam |
+| [mutation](./mutation/SKILL.md) | a fixed StrykerJS sample on the build's files, then laws for real survivors |
+| [review](./review/SKILL.md) | the one read-only review of the whole diff |
+| [lead](./lead/SKILL.md) | start the boxes, approve plans, run e2e, push and land |
+| [step-commit](./step-commit/SKILL.md) | commit and sign a step's work in one command |
+
+## How a brief uses them
+
+A brief names the skill and the ticket's facts, nothing more:
+
+```text
+Use the tests skill for ticket 277, door fixes, next/. Plan at ../door-PLAN.md. Box door.
+This round: laws d1 to d3, and d4 yourself, since commits.ts is an exam path.
+```
+
+The skill holds what every brief used to repeat: what to read, the caps, how to commit and sign,
+what never to do, and how to report.
+
+## Changing a skill
+
+A run that teaches something updates its skill in the same pull request as its field note. Scripts
+hold no machine paths: they find the repo from where they sit, and read the rest from the
+environment.

@@ -1,0 +1,3 @@
+.declares { --slate-a9: #dfebfd6d; }
+.reads { color: var(--indigo-9); }
+.fallback { color: var(--focus, var(--slateA9)); }

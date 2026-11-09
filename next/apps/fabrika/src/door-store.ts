@@ -18,8 +18,8 @@ export const doorStore = (sql: Sql) => {
 			"CREATE INDEX IF NOT EXISTS door_delivered_trace ON door_bindings (json_extract(value, '$.process'), json_extract(value, '$.span.traceId')) WHERE json_extract(value, '$.state._tag')='delivered'",
 		);
 	};
-	const atomic = <A>(step: () => A) =>
-		Effect.try({
+	const atomic = Effect.fnUntraced(function* <A>(step: () => A) {
+		return yield* Effect.try({
 			try: () =>
 				sql.transaction(() => {
 					ensure();
@@ -27,6 +27,7 @@ export const doorStore = (sql: Sql) => {
 				}),
 			catch: () => new LedgerError({why: "storage"}),
 		});
+	});
 	const get = <A>(name: string, schema: Schema.Codec<A>) => {
 		const [row] = sql.exec("SELECT value FROM door_state WHERE name=?", name);
 		return row === undefined

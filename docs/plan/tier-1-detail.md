@@ -540,7 +540,7 @@ export const Fault = Schema.TaggedUnion({
 	delay: {client: Schema.String, ms: Schema.Number},
 	abort: {target: Schema.Literals(["gateway", "process", "project"]), name: Schema.String},
 	abort_all: {},
-	fail_step: {pid: Schema.String},
+	fail_step: {pid: Schema.String}, // P17 adds a "three times" case, for P34's dead letter
 });
 export type Fault = typeof Fault.Type;
 
@@ -572,7 +572,7 @@ export class Nemesis extends Context.Service<Nemesis, {
 | `delay` | a slow link is not a lost link | gateway waits before sending | same |
 | `abort` one object | wake from the log | `ctx.abort` | same |
 | `abort_all` | closest to a brain restart | all objects in the run's list | same; unmeasured |
-| `fail_step` | a failure is not a refusal (p25) | the runner fails one step, once | same |
+| `fail_step` | a failure is not a refusal (p25) | the runner fails one step, once; P17 adds a "three times" case, which moves a letter to dead (P34) | same |
 | `kill_brain`, `hang_brain` | process death, a hung brain | the drill: `kill -9`, `SIGSTOP` | none: nothing there can do it |
 | redeploy mid-run | old object, new Worker, up to 5 min (exp 144) | none | the drill, by the owner, after a plan |
 
@@ -1788,7 +1788,7 @@ The prepared step in 6 is a check: what is installed is the fold of the landed l
 
 **How a wake works.** A runner loads on its first call, and catches up at the start of every turn after.
 
-- **Load.** The loader gives the stepper. A missing checkpoint boots with `init(null)`. A saved one decodes its dispatched Cmds, climbs through `Saved.upgrade`, boots with `init(model)`, and records `state.upgraded {program, from, to, ran, build}` when it climbed. Dispatched writes are kept to retry in the next turn, under the same id; a handler Cmd is never fired again, so one with no answer stays visible as dispatched.
+- **Load.** The loader gives the stepper. A missing checkpoint boots with `init(null)`. As built, the stepper drops the Cmds `init` returns; from 2026-11-08 they run once per process start, never on a wake or a hot reload ([init's Cmds run once per process start](../direction/init-runs-once-per-process.md)). A saved one decodes its dispatched Cmds, climbs through `Saved.upgrade`, boots with `init(model)`, and records `state.upgraded {program, from, to, ran, build}` when it climbed. Dispatched writes are kept to retry in the next turn, under the same id; a handler Cmd is never fired again, so one with no answer stays visible as dispatched.
 - **Catch up.** It reads `Mailbox.read(name, after)`. A letter counts as accepted when it is the runner's own (an answer or a timer), this call's letter, the saved prepared turn's id, or a placing the store kept. An accepted letter folds with its parent stamped back on; a fold that fails is `ProgramDown saved_letter`, and every letter stays. Any other letter is mail: it takes the fresh checks (a write port that is not person-only, no `parent`, its schema) and a refusal or a throw just skips it. Each folded letter records `stepped`; its Cmds are saved as dispatched, but only this call's letter's Cmds run now.
 - **`stepping`.** The runner writes `Activity stepping {process, letter, build}` before every fresh step and every fold of an accepted letter, and `idle` after, success or failure. Mail checked in a catch up gets no marker. On workerd's storage it calls `put`, then `storage.sync()`, then steps, since [experiment 231](../../experiments/231-process-wakes.md) found `await put()` returns before the marker is on disk. On Node, the SQL commit is the flush. If writing `idle` fails after a failed step, the step's failure is the one kept.
 - **Reading the marker.** `recoverActivity` reads it: a marker never written is `idle`; `idle` is `idle`; `stepping` is `interrupted {process, letter, build, why: "interrupted"}`; anything else is `LedgerError bad_row`. The law: an abort right after the step starts wakes as `interrupted`, never `idle`. The runner does not call it yet.
@@ -1998,7 +1998,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p28 is widened** (owner, 2026-11-06, built by P9): equal device roots, the grant tree, one live sheet, the limits. Its full list is in [P9's row](./tier-1.md#the-pull-requests-one-at-a-time) and P9's tests, fast-check, seed 119120. Added plants: a dropped device whose tabs stay; a dropped device that takes another with it; a spent sheet used twice; two live sheets; an agent's approve accepted; a revoked key let back in by a new grant.
 - **p22** adds, from PR D: a program's own `refuse` leaves no line and answers with that program's `why`. `bad_msg` stays for a bad shape.
 - **p24** runs oxlint on `next/`, with an edge only on a line under an edge comment, `-- edge: <why>` (owner, 2026-11-05; it said: only in files the exam PR lists).
-- **p25** is `new`, no longer waits on the owner. **Rewritten 2026-11-06 (owner):** when a program's step throws on a fresh letter: no answer and no line, and the letter is counted; on the third throw it moves to dead (p80). A wake that fails on a saved letter marks the process `down` and keeps every letter, never skipping it. A real refusal still gets `bad_msg`. From PR D, "old letters the new code refuses count for nothing" holds only for the counter and chaos; a saved note always folds (p55). *It said, from plan-115: on a wake, the wake fails rather than skipping the letter, which no note backed and which left a process down for good with no way to say why.*
+- **p25** is `new`, no longer waits on the owner. **Rewritten 2026-11-06 (owner):** when a program's step throws on a fresh letter: no answer and no line, and the letter is counted; on the third throw it moves to dead (p80). A wake that fails on a saved letter is a crash like any other: inside the restart budget the process restarts after its backoff, only the brake writes `down`, and every letter is kept, never skipped or moved (owner, 2026-11-08, following [OTP's supervisor restart intensity](https://www.erlang.org/doc/system/sup_princ.html)). A real refusal still gets `bad_msg`. From PR D, "old letters the new code refuses count for nothing" holds only for the counter and chaos; a saved note always folds (p55). *It said, from plan-115: on a wake, the wake fails rather than skipping the letter, which no note backed and which left a process down for good with no way to say why.*
 
 **p26, the signed hello (scenario of T4).** `new`, node. s4. `transport/hello.ts`, `answer.ts`.
 - A known key with a good signature goes online, `who` from the fold. A key that does not hash to the dialed name, a signature over another nonce, url or tab, and a reused nonce are each refused and change nothing. Unknown key: `not_granted`, and every method but `door.knock` gets `no_hello`. Nothing is written before online. `door.watch` and `door.deny` answer only an online client.
@@ -2213,7 +2213,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 **p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `app/runner.ts`. *Added 2026-11-06 (owner).*
 - A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build, errors}`, and its sender gets `{why: "dead"}`, so the outbox stops resending. `errors` holds each throw's error class, one per try; the message goes only to the trace, where a person can delete it, since a message can quote a note (owner, 2026-11-07).
 - A process that crashes N times in T seconds goes `down {why, crashes, until}`, with backoff, and a resend does not wake it. `until` is when it tries again, on the referee's clock (owner, 2026-11-07). `[Restart]` exits it and starts it with the new `init`.
-- A wake that fails on a saved letter marks the process `down`, writes why, and keeps every letter. No saved letter is ever skipped or moved, so a saved note always folds (p55).
+- A wake that fails on a saved letter is a crash like any other: inside the restart budget the process restarts after its backoff, and only the brake writes `down`, with why. Every letter is kept; no saved letter is ever skipped or moved, so a saved note always folds (p55) (owner, 2026-11-08, following [OTP's supervisor restart intensity](https://www.erlang.org/doc/system/sup_princ.html)).
 - Plants: a fourth try; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend; a `dead` fact with fewer error classes than tries; a message in `errors`; a `down` with no `until`, or one it does not wake at.
 
 **p81, the brain comes back (scenario of P12 and P19).** `new`, stage and real Electron. s3, s8. `dev.ts`, the launchd plist.
