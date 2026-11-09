@@ -239,7 +239,7 @@ describe("T23 the applied theme reaches the window closed and complete", () => {
 					else if (how !== "path") colors[how] = "#ffffff";
 					const altered =
 						how === "path"
-							? {...value, file: "/invented/home/.fabrika/themes/mine.toml"}
+							? {...value, file: "/invented/place/.fabrika/themes/mine.toml"}
 							: {...value, colors};
 					expect(readToPage({type: "theme", value: altered, version: "1", report}).kind).toBe(
 						"refused",
