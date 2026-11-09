@@ -468,11 +468,29 @@ describe("P33, the signer refuses every id in the signal id space", () => {
 				expect((yield* signer("write-after")).parent).toBe(parent);
 			}).pipe(Effect.provide(authority(sql)));
 		});
+	// Match the old fast-check JSON's depth and its default width/string length of 10.
+	// Finite schema levels give each value its full range without a shared recursion cap.
+	const scalar = Schema.Union([
+		Schema.Null,
+		Schema.Boolean,
+		Schema.Finite,
+		Schema.String.check(Schema.isMaxLength(10)),
+	]);
+	const json = (depth: number): Schema.Codec<Schema.Json> =>
+		depth === 0
+			? scalar
+			: Schema.Union([
+					scalar,
+					Schema.Array(json(depth - 1)).check(Schema.isMaxLength(10)),
+					Schema.Record(Schema.String.check(Schema.isMaxLength(10)), json(depth - 1)).check(
+						Schema.isMaxProperties(10),
+					),
+				]);
 	const id = Arbitrary.schema(
 		Schema.Tuple([
 			Schema.Literals([0, 1, 2]),
 			Schema.Literals(["", " ", "\n", "\t"]),
-			Schema.Array(Schema.Json).check(Schema.isMaxLength(4)),
+			Schema.Array(json(2)).check(Schema.isMaxLength(4)),
 			Schema.String.check(Schema.isMaxLength(20)),
 		]),
 	).pipe(
@@ -498,6 +516,6 @@ describe("P33, the signer refuses every id in the signal id space", () => {
 					}),
 				{concurrency: 1},
 			),
-		{arbitrary: {seed: 119120, runs: 25}},
+		{arbitrary: {seed: 119120, runs: 25, size: 440}},
 	);
 });

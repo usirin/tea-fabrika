@@ -326,10 +326,28 @@ describe("P33, signal ids belong to the brain alone", () => {
 
 describe("P33, an inbox read is total", () => {
 	// Pinned: a `send` whose body has no `m` is skipped; any `m`, whatever its shape, is plain mail.
+	// Match the old fast-check JSON's depth and its default width/string length of 10.
+	// Finite schema levels avoid Effect's shared recursion budget and unbounded tree growth.
+	const scalar = Schema.Union([
+		Schema.Null,
+		Schema.Boolean,
+		Schema.Finite,
+		Schema.String.check(Schema.isMaxLength(10)),
+	]);
+	const json = (depth: number): Schema.Codec<Schema.Json> =>
+		depth === 0
+			? scalar
+			: Schema.Union([
+					scalar,
+					Schema.Array(json(depth - 1)).check(Schema.isMaxLength(10)),
+					Schema.Record(Schema.String.check(Schema.isMaxLength(10)), json(depth - 1)).check(
+						Schema.isMaxProperties(10),
+					),
+				]);
 	const junk = Schema.Union([
-		Schema.Json,
-		Schema.Record(Schema.Literals(["m", "n", "_tag", "ref", "to"]), Schema.Json),
-		Schema.Struct({m: Schema.Struct({_tag: Schema.Literal("DOWN"), ref: Schema.Json})}),
+		json(1),
+		Schema.Record(Schema.Literals(["m", "n", "_tag", "ref", "to"]), json(2)),
+		Schema.Struct({m: Schema.Struct({_tag: Schema.Literal("DOWN"), ref: json(1)})}),
 	]);
 	const hasM = (body: unknown): body is {readonly m: unknown} =>
 		typeof body === "object" && body !== null && !Array.isArray(body) && Object.hasOwn(body, "m");
@@ -359,7 +377,7 @@ describe("P33, an inbox read is total", () => {
 				).pipe(Effect.provide(manager(store)));
 				expect((yield* fresh(store, last)).map((letter) => letter.id)).toEqual(["later"]);
 			}),
-		{arbitrary: {seed: 119120, runs: 40}},
+		{arbitrary: {seed: 119120, runs: 40, size: 110}},
 	);
 });
 

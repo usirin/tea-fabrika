@@ -357,6 +357,13 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 });
 
 describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
+	/** Each probe asks the monitor on a fresh ledger, without using DOWN's schema cap. */
+	const accepts = (ref: string) =>
+		Effect.gen(function* () {
+			const store = storage();
+			yield* seed(store);
+			return Exit.isSuccess(yield* Effect.exit(monitor(store, ref)));
+		});
 	const delivered = (ref: string, why: string) =>
 		Effect.gen(function* () {
 			const store = storage();
@@ -367,13 +374,25 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
 		});
 	it.effect.prop(
 		"the longest ref a monitor accepts still lets the target's exit land",
-		[acceptedText, acceptedText],
-		examples([[at(CAP), at(CAP, '"')]], (ref: string, why: string) =>
+		[Schema.NonEmptyString.check(Schema.isMaxLength(CAP)), Down.fields.why],
+		(generated) =>
 			Effect.gen(function* () {
-				yield* delivered(ref, "crashed");
-				yield* delivered(ref, why);
+				// Find the limit by calling the monitor, so raising its cap cannot hide a lost DOWN.
+				let low = 1;
+				let high = 2_100_000;
+				while (high - low > 1) {
+					const mid = Math.floor((low + high) / 2);
+					if (yield* accepts(at(mid))) low = mid;
+					else high = mid;
+				}
+				yield* delivered(at(low), "crashed");
+				yield* examples([[at(CAP), at(CAP, '"')]], (ref: string, why: string) =>
+					Effect.gen(function* () {
+						yield* delivered(ref, "crashed");
+						yield* delivered(ref, why);
+					}),
+				)(generated);
 			}),
-		),
 		{arbitrary: {seed: 119120, runs: 20}},
 	);
 	// Effect has no grapheme or grapheme-composite generator. Only those two inputs use fast-check.
