@@ -134,7 +134,8 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   after every step ran, each by its own agent (plan, tests, build, mutation, one review saying
   merge-ready), with CI green and the leak grep clean. No step is ever skipped. The driver keeps its
   own status line and field rows. Plans and amendments always return unsigned to the lead session.
-  A new design call or an exam hit waits on the owner.
+  A new design call waits on the owner. An exam hit goes to the lead's hand check, with the hit list
+  in the PR; only real loosening waits on the owner.
 - **A driver never writes a step's code or tests itself** (owner, 2026-11-08). It starts the step agents, fetches, hands
   work along, and runs what a Codex box cannot: e2e runs and screenshots.
 - Plan every row as soon as its tier opens, and start each test writer when its plan is approved.

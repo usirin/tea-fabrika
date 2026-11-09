@@ -381,6 +381,8 @@ try:
             target = key if key in after else (moved.get(key[0]), key[1])
             if target not in destinations:
                 hit(file, "removed law", key[0]); continue
+            # A law moved to another file runs beside that file's helpers and suites: hand check.
+            if target not in after: hit(file, "moved law", key[0])
             owner = records[file] if target in after else next((r for r in records.values() if target in r[3]), None)
             if owner:
                 a, b, _ = owner[3][target]

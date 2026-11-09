@@ -84,6 +84,26 @@ try:
                 raise ValueError("unsupported MAIN storage path")
             return value
 
+        def walk(gitdir, common, objects):
+            # Every entry below MAIN's storage roots counts, at any depth: packs, loose folders,
+            # refs, logs, the index and names Git may add later. A link anywhere is followed and
+            # both ends are kept; a link that cannot be followed stops cleanup. Other worktrees'
+            # admin folders are their own storage, not MAIN's.
+            others = common / "worktrees"
+            stack, walked = [gitdir, common, *objects], set()
+            while stack:
+                real = resolve(stack.pop())
+                if real in walked or not real.is_dir():
+                    continue
+                walked.add(real)
+                for child in sorted(os.listdir(real)):
+                    entry = real / child
+                    protected.add(entry)
+                    if entry == others and entry != gitdir:
+                        continue
+                    if entry.is_symlink() or entry.is_dir():
+                        stack.append(entry)
+
         # Read only MAIN's bindings from outside. Never ask the box's Git config.
         gitdir = resolve(main / ".git")
         if gitdir.is_file():
@@ -111,6 +131,7 @@ try:
                         if not value or value.startswith('"') or "\0" in value:
                             raise ValueError("unsupported MAIN alternate")
                         pending.append(objects / value)
+        walk(gitdir, common, seen)
         if any(holds(root, path) for root in (work, data) for path in protected):
             keep("pair holds MAIN Git storage")
 

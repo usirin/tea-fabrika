@@ -15,7 +15,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import {tmpdir} from "node:os";
-import {join, relative} from "node:path";
+import {basename, join, relative} from "node:path";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
@@ -366,7 +366,11 @@ const run = (setup: Setup, args: string[] = []) => {
 					mkdirSync(join(storage, ".."), {recursive: true});
 					stored = path.through ? join(dir, "outside-storage") : storage;
 					renameSync(source, stored);
-					const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
+					// Git names the admin folder by its real path; a relative link must use real paths
+					// on both ends, or a linked temp folder (macOS /var) breaks it.
+					const real = (at: string) => join(realpathSync(join(at, "..")), basename(at));
+					const name = (from: string, to: string) =>
+						path.relative ? relative(realpathSync(from), real(to)) : to;
 					if (path.through) symlinkSync(name(join(storage, ".."), stored), storage);
 					symlinkSync(name(join(source, ".."), storage), source);
 				}

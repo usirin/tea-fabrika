@@ -191,6 +191,26 @@ try:
                 raise ValueError("unsupported MAIN storage path")
             return value
 
+        def walk(gitdir, common, objects):
+            # Every entry below MAIN's storage roots counts, at any depth: packs, loose folders,
+            # refs, logs, the index and names Git may add later. A link anywhere is followed and
+            # both ends are kept; a link that cannot be followed stops cleanup. Other worktrees'
+            # admin folders are their own storage, not MAIN's.
+            others = common / "worktrees"
+            stack, walked = [gitdir, common, *objects], set()
+            while stack:
+                real = resolve(stack.pop())
+                if real in walked or not real.is_dir():
+                    continue
+                walked.add(real)
+                for child in sorted(os.listdir(real)):
+                    entry = real / child
+                    protected.add(entry)
+                    if entry == others and entry != gitdir:
+                        continue
+                    if entry.is_symlink() or entry.is_dir():
+                        stack.append(entry)
+
         # Read only MAIN's bindings from outside. Never ask a candidate's Git config.
         gitdir = resolve(main / ".git")
         if gitdir.is_file():
@@ -218,14 +238,26 @@ try:
                         if not value or value.startswith('"') or "\0" in value:
                             raise ValueError("unsupported MAIN alternate")
                         pending.append(objects / value)
-        return protected
+        walk(gitdir, common, seen)
+        return protected, gitdir
 
     def remove_worktree(path, fields):
         label = f"worktree {path.name}"
         root = path.resolve()
         state = boxes / "state"
         try:
-            if any(holds(root, protected) for protected in main_storage()):
+            protected, gitdir = main_storage()
+            # Worktree removal also deletes the worktree's admin folder, outside its checkout.
+            # Read the checkout's own pointer from outside; never ask its Git config.
+            pointer = path / ".git"
+            if pointer.is_symlink() or not pointer.is_file():
+                raise ValueError("unsupported worktree pointer")
+            line = pointer.read_text().removesuffix("\n")
+            if not line.startswith("gitdir: ") or any(c in line for c in "\0\r\n"):
+                raise ValueError("unsupported worktree pointer")
+            admin = (path / line[8:]).resolve(strict=True)
+            if any(holds(place, kept_path) for place in (root, admin) for kept_path in protected) \
+                    or holds(admin, gitdir):
                 kept(label, "holds MAIN Git storage")
                 return
         except (OSError, ValueError, RuntimeError):
