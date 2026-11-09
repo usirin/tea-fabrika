@@ -1,5 +1,6 @@
-Draft, waits on the owner's yes to [keys editor](../direction/keys-editor.md). Builds its
-principles E1 to E4 and E7 for the list (design A). `keys --map` (E5, E6) is the next plan.
+Builds [keys editor](../direction/keys-editor.md), decided 2026-11-08, in two pull requests of the
+same `keys` program. **PR 1 = A:** the list, principles E1 to E4 and E7; this plan. **PR 2 = D:**
+the keyboard map view, `keys --map` (E5, E6), with its own plan after PR 1 lands.
 
 Today's version (`apps/fabrika`). Ticket 278 found the look; this plan builds it.
 

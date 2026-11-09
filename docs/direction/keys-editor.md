@@ -1,7 +1,9 @@
 # Keys editor
 
-**Proposed 2026-11-08.** Decided before the walk, by the owner on 2026-11-08, after four designs
-were built in the app and shot next to Linear:
+**Decided 2026-11-08** by the owner, after the look walk: build A first, as PR 1; D, the keyboard
+map view (`keys --map`), is PR 2 of the same program. The leans below keep their numbers as
+written. Decided before the walk, by the owner on 2026-11-08, after four designs were built in the
+app and shot next to Linear:
 
 - **The editor is one searchable list in a tile** (design A). It is built first.
 - **A keyboard map is a second view of the same `keys` program,** `keys --map` (design D), built
@@ -140,10 +142,10 @@ Neither pick changes what a key does. A key still matches by the character it ty
   1024x700; a narrower tile is not shot. Double-click was never pressed in the shoot.
 - **Cost.** The recorder in the row and the search's key handler: about 120 lines, in the list's
   build.
-- **Today.** Half: recording happens in a details pane below the list.
-- **Today.** Breaks: the search is an Input with no key handler (`keys/window.tsx:190-196`), beside
-  the Listbox (`keys/window.tsx:205`). After typing `zoom`, Down and Enter do nothing: the shoot
-  pressed both and the screen did not change. A row can be picked only with a click, then Change.
+- **Today.** Breaks: recording happens in a details pane below the list, and the search is an Input
+  with no key handler (`keys/window.tsx:190-196`) beside the Listbox (`keys/window.tsx:205`), so
+  after typing `zoom` Down and Enter do nothing (the shoot pressed both); a row is picked only with
+  a click, then Change.
 
 ### E4: every change says what it took, in words, with Undo
 
