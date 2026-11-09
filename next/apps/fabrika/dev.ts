@@ -1,10 +1,9 @@
 import {spawn} from "node:child_process";
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {homedir} from "node:os";
 import {join, resolve} from "node:path";
 import {parseArgs} from "node:util";
 import {NodeRuntime, NodeServices} from "@effect/platform-node";
-import {Effect, Schema} from "effect";
+import {Effect, FileSystem, Path, Schema} from "effect";
 import {build} from "./src/build.ts";
 import {localStage} from "./src/local-stage.ts";
 import {Settings} from "./src/settings.ts";
@@ -44,20 +43,31 @@ const child = Effect.scoped(
 	Effect.raceFirst(
 		guard,
 		Effect.gen(function* () {
-			mkdirSync(home, {recursive: true});
-			const file = join(home, "stage.json");
-			const saved = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
-			const config = Schema.decodeUnknownSync(Settings)({
-				...saved,
-				name: options.name ?? saved.name,
-				person: options.person ?? saved.person,
-				founder: options.founder ?? saved.founder,
-				window: options.window ?? saved.window ?? null,
-				port: Number(options.port ?? saved.port ?? 18787),
-				build: "pending",
-			});
-			writeFileSync(file, JSON.stringify(config), {mode: 0o600});
-			const built = yield* build({out: join(home, "build")});
+			const fs = yield* FileSystem.FileSystem,
+				path = yield* Path.Path;
+			const {file, config} = yield* Effect.gen(function* () {
+				yield* fs.makeDirectory(home, {recursive: true});
+				const file = path.join(home, "stage.json");
+				const saved = (yield* fs.exists(file))
+					? yield* fs
+							.readFileString(file)
+							.pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))))
+					: undefined;
+				const config = yield* Schema.decodeUnknownEffect(Settings)({
+					...saved,
+					name: options.name ?? saved?.name,
+					person: options.person ?? saved?.person,
+					founder: options.founder ?? saved?.founder,
+					window: options.window ?? saved?.window ?? null,
+					port: Number(options.port ?? saved?.port ?? 18787),
+					build: "pending",
+				});
+				return {file, config};
+			}).pipe(Effect.mapError(() => new StageError({why: "settings"})));
+			yield* fs
+				.writeFileString(file, JSON.stringify(config), {mode: 0o600})
+				.pipe(Effect.mapError(() => new StageError({why: "settings"})));
+			const built = yield* build({out: path.join(home, "build")});
 			yield* localStage(built, {...config, home});
 			process.stdout.write(
 				`${JSON.stringify({ready: `http://127.0.0.1:${config.port}`, build: built.build})}\n`,

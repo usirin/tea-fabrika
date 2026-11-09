@@ -1,19 +1,13 @@
-import {
-	closeSync,
-	existsSync,
-	fsyncSync,
-	mkdirSync,
-	openSync,
-	readFileSync,
-	renameSync,
-	writeFileSync,
-} from "node:fs";
-import {join} from "node:path";
-import {Effect, Schema, Semaphore} from "effect";
+import {Effect, FileSystem, Path, Result, Schema, Semaphore} from "effect";
 import {BrainFact} from "../app/brain-fact.ts";
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
 	why: Schema.Literals(["storage", "bad_row", "id_reused"]),
 }) {}
+// Facts have no transforms. Validate without rebuilding them, keeping retry bytes in their saved order.
+const PendingFact = Schema.declare<typeof BrainFact.Type>(
+	(raw): raw is typeof BrainFact.Type =>
+		Result.isSuccess(Schema.decodeUnknownResult(BrainFact, {onExcessProperty: "error"})(raw)),
+);
 
 export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(options: {
 	readonly pid: number;
@@ -29,87 +23,68 @@ export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(optio
 });
 
 export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
-	const file = join(home, "brain.pending.jsonl");
-	const lastFile = join(home, "brain.last.json");
+	const fs = yield* FileSystem.FileSystem,
+		path = yield* Path.Path;
+	const file = path.join(home, "brain.pending.jsonl");
+	const lastFile = path.join(home, "brain.last.json");
 	const turn = yield* Semaphore.make(1);
-	const read = Effect.try({
-		try: () => {
-			if (!existsSync(file)) return [];
-			return readFileSync(file, "utf8")
-				.split("\n")
-				.filter(Boolean)
-				.map((row) => Schema.decodeUnknownSync(BrainFact)(JSON.parse(row)));
+	const read = Effect.gen(function* () {
+		if (!(yield* fs.exists(file))) return [];
+		const text = yield* fs.readFileString(file);
+		return yield* Effect.forEach(
+			text.split("\n").filter(Boolean),
+			(row) => Schema.decodeUnknownEffect(Schema.fromJsonString(PendingFact))(row),
+			{concurrency: 1},
+		);
+	}).pipe(Effect.mapError(() => new BrainError({why: "bad_row"})));
+	const durableWrite = Effect.fnUntraced(
+		function* (target: string, text: string) {
+			yield* fs.makeDirectory(home, {recursive: true});
+			const pending = `${target}.tmp`;
+			yield* Effect.scoped(
+				Effect.gen(function* () {
+					const file = yield* fs.open(pending, {flag: "w", mode: 0o600});
+					yield* file.writeAll(new TextEncoder().encode(text));
+					yield* file.sync;
+				}),
+			);
+			yield* fs.rename(pending, target);
+			// Node's FileSystem provider can open and sync a directory, so no raw fs adapter is needed.
+			yield* Effect.scoped(
+				Effect.gen(function* () {
+					const folder = yield* fs.open(home, {flag: "r"});
+					yield* folder.sync;
+				}),
+			);
 		},
-		catch: () => new BrainError({why: "bad_row"}),
-	});
+		Effect.mapError(() => new BrainError({why: "storage"})),
+	);
 	const write = (rows: ReadonlyArray<typeof BrainFact.Type>) =>
-		Effect.try({
-			try: () => {
-				mkdirSync(home, {recursive: true});
-				const pending = `${file}.tmp`;
-				const fd = openSync(pending, "w", 0o600);
-				try {
-					writeFileSync(
-						fd,
-						rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""),
-					);
-					fsyncSync(fd);
-				} finally {
-					closeSync(fd);
-				}
-				renameSync(pending, file);
-				const dir = openSync(home, "r");
-				try {
-					fsyncSync(dir);
-				} finally {
-					closeSync(dir);
-				}
-			},
-			catch: () => new BrainError({why: "storage"}),
-		});
+		durableWrite(
+			file,
+			rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""),
+		);
 	const last = Effect.fnUntraced(function* () {
 		const pending = (yield* read).filter((fact) => fact._tag === "started").at(-1);
 		if (pending !== undefined) return pending.start;
-		return yield* Effect.try({
-			try: () =>
-				existsSync(lastFile)
-					? Schema.decodeUnknownSync(Schema.fromJsonString(Schema.NonEmptyString))(
-							readFileSync(lastFile, "utf8"),
-						)
-					: null,
-			catch: () => new BrainError({why: "bad_row"}),
-		});
+		return yield* Effect.gen(function* () {
+			if (!(yield* fs.exists(lastFile))) return null;
+			return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.NonEmptyString))(
+				yield* fs.readFileString(lastFile),
+			);
+		}).pipe(Effect.mapError(() => new BrainError({why: "bad_row"})));
 	});
 	const saveLast = Effect.fnUntraced(function* () {
 		const start = yield* last();
 		if (start === null) return;
-		yield* Effect.try({
-			try: () => {
-				const pending = `${lastFile}.tmp`;
-				const fd = openSync(pending, "w", 0o600);
-				try {
-					writeFileSync(fd, JSON.stringify(start));
-					fsyncSync(fd);
-				} finally {
-					closeSync(fd);
-				}
-				renameSync(pending, lastFile);
-				const dir = openSync(home, "r");
-				try {
-					fsyncSync(dir);
-				} finally {
-					closeSync(dir);
-				}
-			},
-			catch: () => new BrainError({why: "storage"}),
-		});
+		yield* durableWrite(lastFile, JSON.stringify(start));
 	});
 	return {
 		last: last().pipe(turn.withPermit),
 		pending: read.pipe(turn.withPermit),
 		add: Effect.fn("brain.pending")(function* (raw: unknown) {
 			yield* Effect.gen(function* () {
-				const fact = yield* Schema.decodeUnknownEffect(BrainFact)(raw).pipe(
+				const fact = yield* Schema.decodeUnknownEffect(PendingFact)(raw).pipe(
 					Effect.mapError(() => new BrainError({why: "bad_row"})),
 				);
 				const rows = yield* read;

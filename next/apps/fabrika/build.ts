@@ -1,5 +1,5 @@
 import {resolve} from "node:path";
-import {NodeRuntime} from "@effect/platform-node";
+import {NodeRuntime, NodeServices} from "@effect/platform-node";
 import {Effect} from "effect";
 import {build} from "./src/build.ts";
 
@@ -10,5 +10,6 @@ NodeRuntime.runMain(
 				process.stdout.write(`${built.build}\n`);
 			}),
 		),
+		Effect.provide(NodeServices.layer),
 	),
 );

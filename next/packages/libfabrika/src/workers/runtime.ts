@@ -189,9 +189,10 @@ export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: Durabl
 export const processDescriptor = Effect.fn("process.descriptor")(function* (
 	ctx: DurableObjectState,
 ) {
-	const descriptor = yield* rpc(StorageClient.make(ctx.storage).get<Descriptor>("descriptor"));
-	if (descriptor === undefined) return yield* new LedgerError({why: "bad_row"});
-	return descriptor;
+	const descriptor = yield* rpc(StorageClient.make(ctx.storage).get("descriptor"));
+	return yield* Schema.decodeUnknownEffect(SavedDescriptor)(descriptor).pipe(
+		Effect.mapError(() => new LedgerError({why: "bad_row"})),
+	);
 });
 
 const hex = (bytes: ArrayBuffer) =>
@@ -472,7 +473,12 @@ const projectLogic = Effect.fn("project.init")(function* (
 	const Bootstrap = Schema.Struct({process: Schema.String});
 	const boot =
 		original !== undefined
-			? {process: Schema.decodeUnknownSync(Bootstrap)(original.body).process, rev: original.rev}
+			? {
+					process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
+						Effect.mapError(() => new LedgerError({why: "bad_row"})),
+					)).process,
+					rev: original.rev,
+				}
 			: yield* start(
 					Start.cases.first.make({
 						id: bootstrap.id,
@@ -492,12 +498,14 @@ const projectLogic = Effect.fn("project.init")(function* (
 		if (!(yield* processes.isLive(pid))) return yield* new LedgerError({why: "refused"});
 		if (stream.startsWith("door/") || stream.startsWith("processes"))
 			return yield* new LedgerError({why: "refused"});
-		const body = Schema.decodeUnknownSync(Fact)(fact);
+		const body = yield* Schema.decodeUnknownEffect(Fact)(fact).pipe(
+			Effect.mapError(() => new LedgerError({why: "bad_row"})),
+		);
 		const [saved] = sql.exec("SELECT value FROM stage_descriptors WHERE process=?", pid);
 		if (saved === undefined) return yield* new LedgerError({why: "bad_row"});
-		const descriptor = Schema.decodeUnknownSync(
+		const descriptor = yield* Schema.decodeUnknownEffect(
 			Schema.fromJsonString(Schema.Struct({owner: Writer, build: Schema.String})),
-		)(saved.value);
+		)(saved.value).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
 		const origin = yield* fromHere({
 			by: descriptor.owner.key,
 			for: descriptor.owner.for,
@@ -592,7 +600,9 @@ const projectLogic = Effect.fn("project.init")(function* (
 								build: config.build,
 							},
 							Schema.TaggedStruct("send", {m: Schema.Json}).make({
-								m: Schema.decodeUnknownSync(Schema.Json)(input.envelope.input),
+								m: yield* Schema.decodeUnknownEffect(Schema.Json)(input.envelope.input).pipe(
+									Effect.mapError(() => new LedgerError({why: "bad_row"})),
+								),
 							}),
 						),
 					);
@@ -621,12 +631,12 @@ export class ProjectService extends Context.Service<
 	ProjectService,
 	Effect.Success<ReturnType<typeof projectLogic>>
 >()("fabrika/Project") {}
-export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
-	ManagedRuntime.make(
-		Layer.effect(ProjectService, projectLogic(ctx, env, options)).pipe(
-			Layer.provide(ProcessIdGenerator.layer),
-		),
+export const projectLayer = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
+	Layer.effect(ProjectService, projectLogic(ctx, env, options)).pipe(
+		Layer.provide(ProcessIdGenerator.layer),
 	);
+export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
+	ManagedRuntime.make(projectLayer(ctx, env, options));
 
 // The trace a delivered letter carries from the door, as P11's Incoming names it.
 const Delivered = Schema.Struct({
@@ -637,9 +647,9 @@ const processLogic = Effect.fnUntraced(function* (
 	env: Env,
 	programs: Readonly<Record<string, ProgramSource>>,
 ) {
-	const [project, pid] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.String]))(
-		JSON.parse(Schema.decodeUnknownSync(Schema.String)(ctx.id.name)),
-	);
+	const [project, pid] = yield* Schema.decodeUnknownEffect(
+		Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
+	)(ctx.id.name).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
 	const stub = projectStub(env, project),
 		p = ProjectClient.make(stub),
 		storage = StorageClient.make(ctx.storage),
@@ -653,8 +663,7 @@ const processLogic = Effect.fnUntraced(function* (
 	const services = yield* Layer.build(all);
 	const store = Context.get(services, ProcessStore),
 		sink = Context.get(services, SpanSink);
-	const saved = yield* rpc(storage.get<Descriptor>("descriptor"));
-	if (saved === undefined) return yield* new LedgerError({why: "bad_row"});
+	const saved = yield* processDescriptor(ctx);
 	const publish = Effect.fn("process.publish")(function* (client: string, update: unknown) {
 		yield* rpc(p.publish(client, update));
 	});

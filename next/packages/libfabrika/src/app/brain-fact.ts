@@ -22,6 +22,7 @@ export const BrainFact = Schema.TaggedUnion({
 		...Exit,
 	},
 	exited: {...Life, why: Reason, ...Exit},
+	restarting: {...Life, why: Reason, ...Exit, backoff: Schema.Number},
 	braked: {...Life, why: Schema.Literals(["intensity", "restart_failed"]), ...Exit},
 	stopped: {...Life, why: Schema.Literal("stop"), ...Exit},
 });

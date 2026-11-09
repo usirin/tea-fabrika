@@ -1,4 +1,5 @@
 import {Effect, Result, Schema} from "effect";
+import {LedgerError} from "../data/index.ts";
 import {workerLoader, type ProgramSource} from "./index.ts";
 import {ProcessClient, ProjectClient, RecordClient} from "./platform.ts";
 import {
@@ -53,13 +54,17 @@ const dispatch = Effect.fnUntraced(function* (
 		return yield* Effect.fail({why: "unknown_method"});
 	}
 	if (target === "bucket") {
-		if (method === "put")
+		if (method === "put") {
+			const bytes = yield* Schema.decodeUnknownEffect(Schema.Array(Schema.Number))(args[1]).pipe(
+				Effect.mapError(() => new LedgerError({why: "bad_row"})),
+			);
 			return yield* checkedPut(
 				env.HEALTH,
 				String(args[0]),
-				Uint8Array.from(Schema.decodeUnknownSync(Schema.Array(Schema.Number))(args[1])),
+				Uint8Array.from(bytes),
 				String(args[2]),
 			);
+		}
 		if (method === "head") return yield* bucketHead(env.HEALTH, String(args[0]));
 		return yield* Effect.fail({why: "unknown_method"});
 	}

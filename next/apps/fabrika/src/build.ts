@@ -1,21 +1,8 @@
-import {
-	existsSync,
-	globSync,
-	mkdirSync,
-	mkdtempSync,
-	readFileSync,
-	renameSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
-import {dirname, join, relative, resolve} from "node:path";
 import {BuildError, bundle, bundlePrograms, hash} from "@kampus/libfabrika/node/build";
-import {Effect, Schema} from "effect";
+import {Effect, FileSystem, Path, Schema} from "effect";
 import type {Plugin} from "rolldown";
 import {check, compile, Row} from "./exam/compiler.ts";
 
-const APP = resolve(import.meta.dirname, "..");
-const ROOT = resolve(APP, "../../..");
 export type Built = {
 	readonly build: string;
 	readonly brain: string;
@@ -28,31 +15,38 @@ type Options = {
 	readonly programs?: Readonly<Record<string, string>>;
 };
 export const build = Effect.fn("build.build")(function* (options: Options) {
-	const files = yield* Effect.try({
-		try: () =>
-			new Map(
-				(
-					options.files ??
-					globSync("next/**/*.tsx", {cwd: ROOT})
-						.filter((p) => !p.includes("node_modules") && !p.includes(".test."))
-						.map((p) => join(ROOT, p))
-				).map((file) => [
-					relative(ROOT, resolve(ROOT, file)),
-					readFileSync(resolve(ROOT, file), "utf8"),
-				]),
+	const fs = yield* FileSystem.FileSystem,
+		path = yield* Path.Path;
+	const APP = path.resolve(import.meta.dirname, ".."),
+		ROOT = path.resolve(APP, "../../..");
+	const files = yield* Effect.gen(function* () {
+		const inputs =
+			options.files ??
+			(yield* fs.glob("next/**/*.tsx", {root: ROOT})).filter(
+				(p) => !p.includes("node_modules") && !p.includes(".test."),
+			);
+		return new Map(
+			yield* Effect.forEach(
+				inputs,
+				Effect.fnUntraced(function* (file) {
+					const absolute = path.resolve(ROOT, file);
+					return [path.relative(ROOT, absolute), yield* fs.readFileString(absolute)] as const;
+				}),
+				{concurrency: 1},
 			),
-		catch: () => new BuildError({why: "read"}),
-	});
+		);
+	}).pipe(Effect.mapError(() => new BuildError({why: "read"})));
 	const ledger =
 		options.ledger ??
-		Schema.decodeUnknownSync(Schema.Array(Row))(
-			JSON.parse(readFileSync(join(ROOT, "compiler-ledger.json"), "utf8")),
-		);
+		(yield* fs.readFileString(path.join(ROOT, "compiler-ledger.json")).pipe(
+			Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Row)))),
+			Effect.mapError(() => new BuildError({why: "read"})),
+		));
 	const compiler: Plugin = {
 		name: "fabrika-compiler",
 		transform(code, id) {
 			if (!id.endsWith(".tsx")) return;
-			files.set(relative(ROOT, id), code);
+			files.set(path.relative(ROOT, id), code);
 			const out = compile(id, code);
 			return {code: out.code};
 		},
@@ -70,7 +64,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 			]),
 		),
 	});
-	const output = yield* bundle(join(APP, "src/brain.ts"), [
+	const output = yield* bundle(path.join(APP, "src/brain.ts"), [
 		compiler,
 		{
 			name: "fabrika-table",
@@ -89,29 +83,32 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 	const build = hash(brain);
 	// Include modules discovered by Rolldown, then check the whole ledger for stale rows.
 	if (check(files, ledger).length) return yield* new BuildError({why: "compiler"});
-	yield* Effect.try({
-		try: () => {
-			mkdirSync(dirname(options.out), {recursive: true});
-			const pending = mkdtempSync(join(dirname(options.out), ".fabrika-build-"));
-			const backup = `${pending}.old`;
-			try {
-				writeFileSync(join(pending, "brain.mjs"), brain);
-				for (const [file, text] of files)
-					writeFileSync(join(pending, `${hash(file)}.js`), compile(file, text).code);
-				if (existsSync(options.out)) renameSync(options.out, backup);
-				try {
-					renameSync(pending, options.out);
-				} catch (error) {
-					if (existsSync(backup)) renameSync(backup, options.out);
-					// oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- filesystem rollback rethrows into Effect.try's typed publish error
-					throw error;
-				}
-			} finally {
-				rmSync(pending, {recursive: true, force: true});
-				rmSync(backup, {recursive: true, force: true});
-			}
-		},
-		catch: () => new BuildError({why: "publish"}),
-	});
-	return {build, brain: join(options.out, "brain.mjs"), programs} satisfies Built;
+	yield* Effect.gen(function* () {
+		const directory = path.dirname(options.out);
+		if (!(yield* fs.exists(directory))) yield* fs.makeDirectory(directory, {recursive: true});
+		const pending = yield* fs.makeTempDirectory({directory, prefix: ".fabrika-build-"});
+		const backup = `${pending}.old`;
+		yield* Effect.gen(function* () {
+			yield* fs.writeFileString(path.join(pending, "brain.mjs"), brain);
+			for (const [file, text] of files)
+				yield* fs.writeFileString(path.join(pending, `${hash(file)}.js`), compile(file, text).code);
+			if (yield* fs.exists(options.out)) yield* fs.rename(options.out, backup);
+			yield* fs.rename(pending, options.out).pipe(
+				Effect.catch((error) =>
+					Effect.gen(function* () {
+						if (yield* fs.exists(backup)) yield* fs.rename(backup, options.out);
+						return yield* Effect.fail(error);
+					}),
+				),
+			);
+		}).pipe(
+			Effect.onExit(() =>
+				fs
+					.remove(pending, {recursive: true, force: true})
+					.pipe(Effect.onExit(() => fs.remove(backup, {recursive: true, force: true}))),
+			),
+			Effect.uninterruptible,
+		);
+	}).pipe(Effect.mapError(() => new BuildError({why: "publish"})));
+	return {build, brain: path.join(options.out, "brain.mjs"), programs} satisfies Built;
 });
