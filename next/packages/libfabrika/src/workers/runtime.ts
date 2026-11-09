@@ -149,7 +149,7 @@ const checkedReply = Effect.fnUntraced(function* <A, B>(
 		Effect.map(ok),
 		Effect.catchIf(
 			(error): error is SigningRefused => error instanceof SigningRefused,
-			(error) => Effect.succeed(SigningReply.cases.SigningRefused.make({why: error.why})),
+			(error) => Effect.succeed(SigningReply.cases.SigningRefused.make({reason: error.reason})),
 		),
 		Effect.catchIf(
 			(error): error is NotGranted => error instanceof NotGranted,
@@ -173,7 +173,7 @@ const checkedValue = Effect.fnUntraced(function* <A>(
 		| typeof SigningReply.cases.SigningRefused.Type
 		| typeof SigningReply.cases.NotGranted.Type,
 ) {
-	if (reply._tag === "SigningRefused") return yield* new SigningRefused({why: reply.why});
+	if (reply._tag === "SigningRefused") return yield* new SigningRefused({reason: reply.reason});
 	if (reply._tag === "NotGranted") return yield* new NotGranted({});
 	return reply.value;
 });
@@ -192,7 +192,7 @@ export const processDescriptor = Effect.fn("process.descriptor")(function* (
 ) {
 	const descriptor = yield* rpc(StorageClient.make(ctx.storage).get("descriptor"));
 	return yield* Schema.decodeUnknownEffect(SavedDescriptor)(descriptor).pipe(
-		Effect.mapError(() => new LedgerError({why: "bad_row"})),
+		Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 	);
 });
 
@@ -207,11 +207,11 @@ export const checkedPut = Effect.fnUntraced(function* (
 	sha256: string,
 ) {
 	const copy = new Uint8Array(body);
-	const fail = () => new LedgerError({why: "crypto"});
+	const fail = () => new LedgerError({reason: "crypto"});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
 	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", copy), catch: fail});
 	const digest = yield* work;
-	if (hex(digest) !== sha256.toLowerCase()) return yield* new LedgerError({why: "bad_row"});
+	if (hex(digest) !== sha256.toLowerCase()) return yield* new LedgerError({reason: "bad_row"});
 	yield* BucketClient.make(bucket).put(key, copy, sha256);
 });
 export const bucketHead = Effect.fn(function* (bucket: R2Bucket, key: string) {
@@ -248,9 +248,9 @@ export const recordingLayer = (sql: Sql, env: Env, project: string, object: stri
 const fingerprint = Effect.fnUntraced(function* (value: string) {
 	const ssh = value.startsWith("ssh-");
 	const blob = ssh ? Base64.decode(value.trim().split(/\s+/)[1] ?? "") : Base64Url.decode(value);
-	if (Result.isFailure(blob)) return yield* new LedgerError({why: "bad_row"});
+	if (Result.isFailure(blob)) return yield* new LedgerError({reason: "bad_row"});
 	const bytes = blob.success.slice(-32);
-	const fail = () => new LedgerError({why: "crypto"});
+	const fail = () => new LedgerError({reason: "crypto"});
 	// SSH Ed25519 blobs end with the 32 public bytes. P10 uses this same key fingerprint.
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
 	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail});
@@ -342,7 +342,7 @@ const projectLogic = Effect.fn("project.init")(function* (
 		if (saved === undefined) return;
 		const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
 			saved.value,
-		).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+		).pipe(Effect.mapError(() => new LedgerError({reason: "bad_row"})));
 		yield* rpc(ProcessClient.make(processStub(env, name, pid)).configure(descriptor));
 		sql.exec("UPDATE stage_descriptors SET pending=0 WHERE process=?", pid);
 	});
@@ -376,9 +376,9 @@ const projectLogic = Effect.fn("project.init")(function* (
 	}
 	const policy = Effect.fnUntraced(function* (pid: string) {
 		const process = (yield* processes.info).find((row) => row.process === pid);
-		if (process === undefined) return yield* new LedgerError({why: "refused"});
+		if (process === undefined) return yield* new LedgerError({reason: "refused"});
 		const policy = policies.get(pid);
-		if (policy === undefined) return yield* new LedgerError({why: "bad_row"});
+		if (policy === undefined) return yield* new LedgerError({reason: "bad_row"});
 		return policy;
 	});
 	const notify = Effect.fnUntraced(function* (client: string, news: unknown) {
@@ -407,7 +407,7 @@ const projectLogic = Effect.fn("project.init")(function* (
 				rpc(ProcessClient.make(processStub(env, name, pid)).open(client)).pipe(
 					Effect.flatMap((value) =>
 						Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
-							Effect.mapError(() => new LedgerError({why: "bad_row"})),
+							Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 						),
 					),
 				),
@@ -426,7 +426,7 @@ const projectLogic = Effect.fn("project.init")(function* (
 								[...m.keys.keys()],
 								(raw) =>
 									Effect.gen(function* () {
-										if ("why" in admitted(m, raw)) return false;
+										if ("reason" in admitted(m, raw)) return false;
 										return raw === key || (yield* fingerprint(raw)) === key;
 									}),
 								{concurrency: 1},
@@ -445,7 +445,7 @@ const projectLogic = Effect.fn("project.init")(function* (
 	});
 	const start = Effect.fnUntraced(function* (request: Start, origin: From) {
 		if (!Object.hasOwn(programs, request.code.program))
-			return yield* new LedgerError({why: "refused"});
+			return yield* new LedgerError({reason: "refused"});
 		const program = yield* loader.load(request.code.program, `project:${name}/${request.name}`);
 		const result = yield* write(
 			Effect.gen(function* () {
@@ -479,7 +479,7 @@ const projectLogic = Effect.fn("project.init")(function* (
 		original !== undefined
 			? {
 					process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
-						Effect.mapError(() => new LedgerError({why: "bad_row"})),
+						Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 					)).process,
 					rev: original.rev,
 				}
@@ -499,17 +499,17 @@ const projectLogic = Effect.fn("project.init")(function* (
 		stream: string,
 		event: unknown,
 	) {
-		if (!(yield* processes.isLive(pid))) return yield* new LedgerError({why: "refused"});
+		if (!(yield* processes.isLive(pid))) return yield* new LedgerError({reason: "refused"});
 		if (stream.startsWith("door/") || stream.startsWith("processes"))
-			return yield* new LedgerError({why: "refused"});
+			return yield* new LedgerError({reason: "refused"});
 		const body = yield* Schema.decodeUnknownEffect(Event)(event).pipe(
-			Effect.mapError(() => new LedgerError({why: "bad_row"})),
+			Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 		);
 		const [saved] = sql.exec("SELECT value FROM stage_descriptors WHERE process=?", pid);
-		if (saved === undefined) return yield* new LedgerError({why: "bad_row"});
+		if (saved === undefined) return yield* new LedgerError({reason: "bad_row"});
 		const descriptor = yield* Schema.decodeUnknownEffect(
 			Schema.fromJsonString(Schema.Struct({owner: Writer, build: Schema.String})),
-		)(saved.value).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+		)(saved.value).pipe(Effect.mapError(() => new LedgerError({reason: "bad_row"})));
 		const origin = yield* fromHere({
 			by: descriptor.owner.key,
 			for: descriptor.owner.for,
@@ -586,10 +586,10 @@ const projectLogic = Effect.fn("project.init")(function* (
 		inbox: (pid: string, input: Incoming) =>
 			wrapped(
 				Effect.gen(function* () {
-					if (!(yield* processes.isLive(pid))) return yield* new LedgerError({why: "refused"});
+					if (!(yield* processes.isLive(pid))) return yield* new LedgerError({reason: "refused"});
 					yield* door.checkDelivery(pid, input);
 					const row = (yield* processes.info).find((r) => r.process === pid);
-					if (row === undefined) return yield* new LedgerError({why: "refused"});
+					if (row === undefined) return yield* new LedgerError({reason: "refused"});
 					return yield* ledger.append(
 						`${row.name}/inbox`,
 						input.id,
@@ -605,7 +605,7 @@ const projectLogic = Effect.fn("project.init")(function* (
 							},
 							Schema.TaggedStruct("send", {m: Schema.Json}).make({
 								m: yield* Schema.decodeUnknownEffect(Schema.Json)(input.envelope.input).pipe(
-									Effect.mapError(() => new LedgerError({why: "bad_row"})),
+									Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 								),
 							}),
 						),
@@ -653,7 +653,7 @@ const processLogic = Effect.fnUntraced(function* (
 ) {
 	const [project, pid] = yield* Schema.decodeUnknownEffect(
 		Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
-	)(ctx.id.name).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+	)(ctx.id.name).pipe(Effect.mapError(() => new LedgerError({reason: "bad_row"})));
 	const stub = projectStub(env, project),
 		p = ProjectClient.make(stub),
 		storage = StorageClient.make(ctx.storage),
@@ -676,16 +676,14 @@ const processLogic = Effect.fnUntraced(function* (
 			sign: (id, parent, kind) =>
 				rpc(p.sign(pid, id, parent, kind)).pipe(
 					Effect.flatMap(Schema.decodeUnknownEffect(SigningReply)),
-					Effect.mapError(() => new LedgerError({why: "unreachable"})),
+					Effect.mapError(() => new LedgerError({reason: "unreachable"})),
 					Effect.flatMap(checkedValue),
 				),
 			append: (input) => rpc(p.inbox(pid, input)),
 			commit: (id, session, stream, event) =>
-				rpc(
-					p.commit(pid, {id, parent: session.parent, kind: event._tag, stream, fact: event}),
-				).pipe(
+				rpc(p.commit(pid, {id, parent: session.parent, kind: event._tag, stream, event})).pipe(
 					Effect.flatMap(Schema.decodeUnknownEffect(CommitReply)),
-					Effect.mapError(() => new LedgerError({why: "unreachable"})),
+					Effect.mapError(() => new LedgerError({reason: "unreachable"})),
 					Effect.flatMap(checkedValue),
 				),
 			own: Effect.fn("process.own")(function* (id: string, stream: string, event: unknown) {

@@ -12,7 +12,7 @@ import {
 	DeadInput,
 	Down,
 	ProcessError,
-	ProcessFact,
+	ProcessEvent,
 	type ProcessInfo,
 	ProcessTable,
 	signalId,
@@ -24,22 +24,22 @@ import {
 const tag = (word: string): string => `fab.process.${word}`;
 const id = (...parts: ReadonlyArray<Schema.Json>): string => JSON.stringify(parts);
 const Send = Schema.TaggedStruct("send", {m: Down});
-type Policy = {readonly why: string; readonly crashes: number; readonly until: number};
+type Policy = {readonly reason: string; readonly crashes: number; readonly until: number};
 type Failure = ProcessError | LedgerError;
 /**
  * Trusted wiring, never decoded from public params: who calls, and `by`, the brain's own writer
- * key. Every fact this manager writes carries that `by`, and its fold trusts no other.
+ * key. Every event this manager writes carries that `by`, and its fold trusts no other.
  */
 type Wiring = Caller & {readonly by: string};
 const failed = Effect.fnUntraced(function* (error: Failure) {
-	yield* Effect.annotateCurrentSpan({[tag("answer")]: "refused", [tag("why")]: error.why});
+	yield* Effect.annotateCurrentSpan({[tag("answer")]: "refused", [tag("reason")]: error.reason});
 });
 
 export class ProcessManager extends Context.Service<
 	ProcessManager,
 	{
 		readonly start: (request: Start, from: From) => Effect.Effect<StartAnswer, Failure>;
-		readonly exit: (process: string, why: string, from: From) => Effect.Effect<void, Failure>;
+		readonly exit: (process: string, reason: string, from: From) => Effect.Effect<void, Failure>;
 		readonly info: Effect.Effect<ReadonlyArray<ProcessInfo>, LedgerError>;
 		readonly status: (name: string) => Effect.Effect<
 			{
@@ -76,8 +76,8 @@ export class ProcessManager extends Context.Service<
 				const fold = (turn: LedgerTurn) => ProcessTable.read(turn.read, caller.by);
 				// The brain writes every line here; `from` keeps the call's person, parent and trace, and
 				// `asked` keeps the caller's own key. The fold trusts `by` alone and never reads `asked`.
-				const line = (from: From, fact: Parameters<typeof lineFor>[1]) =>
-					lineFor({...from, by: caller.by}, {...fact, asked: from.by});
+				const line = (from: From, event: Parameters<typeof lineFor>[1]) =>
+					lineFor({...from, by: caller.by}, {...event, asked: from.by});
 				const checked = Effect.fnUntraced(function* <A>(
 					step: (table: ProcessTable, turn: LedgerTurn) => Result.Result<A, ProcessError>,
 				) {
@@ -88,7 +88,7 @@ export class ProcessManager extends Context.Service<
 					turn: LedgerTurn,
 					watch: {readonly ref: string; readonly round: number},
 					process: string,
-					why: string,
+					reason: string,
 					to: (typeof Down.Type)["to"],
 					from: From,
 				) => {
@@ -107,7 +107,7 @@ export class ProcessManager extends Context.Service<
 					turn.append(
 						inbox,
 						letter,
-						line(from, Send.make({m: Down.make({ref, process, why, to})})),
+						line(from, Send.make({m: Down.make({ref, process, reason, to})})),
 					);
 				};
 				const start = Effect.fn("process.start")(function* (request: Start, from: From) {
@@ -128,14 +128,14 @@ export class ProcessManager extends Context.Service<
 									if (Result.isFailure(current)) return Result.fail(current.failure);
 									if (Option.isSome(current.success)) return Result.succeed(current.success.value);
 									if (table.collision(process))
-										return Result.fail(new ProcessError({why: "id_collision"}));
+										return Result.fail(new ProcessError({reason: "id_collision"}));
 									if (request._tag === "first")
 										turn.append(
 											ProcessTable.stream,
 											id("registered", request.name),
 											line(
 												from,
-												ProcessFact.cases.registered.make({
+												ProcessEvent.cases.registered.make({
 													name: request.name,
 													program: request.code.program,
 													owner: caller.owner,
@@ -143,11 +143,11 @@ export class ProcessManager extends Context.Service<
 											),
 										);
 									const placed = turn.append(
-										ProcessTable.facts(request.name),
+										ProcessTable.events(request.name),
 										request.id,
 										line(
 											from,
-											ProcessFact.cases.started.make({
+											ProcessEvent.cases.started.make({
 												process,
 												name: request.name,
 												...request.code,
@@ -156,15 +156,15 @@ export class ProcessManager extends Context.Service<
 									);
 									if (request._tag === "again")
 										turn.append(
-											ProcessTable.facts(request.name),
+											ProcessTable.events(request.name),
 											id("restarted", process),
 											line(
 												from,
-												ProcessFact.cases.restarted.make({
+												ProcessEvent.cases.restarted.make({
 													process,
 													after: request.after,
 													name: request.name,
-													why: request.why,
+													reason: request.reason,
 													build: request.code.hash,
 												}),
 											),
@@ -181,31 +181,31 @@ export class ProcessManager extends Context.Service<
 				}, Effect.tapError(failed));
 				const exit = Effect.fn("process.exit")(function* (
 					process: string,
-					why: string,
+					reason: string,
 					from: From,
 				) {
 					yield* Effect.annotateCurrentSpan({"fab.process": process});
 					yield* checked((table, turn) => {
-						const life = table.exit(process, why, caller.owner);
+						const life = table.exit(process, reason, caller.owner);
 						if (Result.isFailure(life)) return Result.fail(life.failure);
 						if (life.success.state._tag !== "live") return Result.succeed(undefined);
 						turn.append(
-							ProcessTable.facts(life.success.name),
+							ProcessTable.events(life.success.name),
 							id("exited", process),
-							line(from, ProcessFact.cases.exited.make({process, why})),
+							line(from, ProcessEvent.cases.exited.make({process, reason})),
 						);
 						for (const watch of table.inbound(process))
-							signal(table, turn, watch, process, why, watch.to, from);
+							signal(table, turn, watch, process, reason, watch.to, from);
 						for (const watch of table.outbound(process))
 							turn.append(
 								ProcessTable.stream,
 								id("demonitored", watch.to, watch.ref, watch.round),
 								line(
 									from,
-									ProcessFact.cases.demonitored.make({
+									ProcessEvent.cases.demonitored.make({
 										ref: watch.ref,
 										to: watch.to,
-										why: "watcher_exited",
+										reason: "watcher_exited",
 									}),
 								),
 							);
@@ -228,7 +228,7 @@ export class ProcessManager extends Context.Service<
 						turn.append(
 							ProcessTable.stream,
 							id("monitored", caller.recipient, ref, round.success.value),
-							line(from, ProcessFact.cases.monitored.make({ref, process, to: caller.recipient})),
+							line(from, ProcessEvent.cases.monitored.make({ref, process, to: caller.recipient})),
 						);
 						if (!table.isLive(process))
 							signal(
@@ -253,7 +253,11 @@ export class ProcessManager extends Context.Service<
 								id("demonitored", caller.recipient, ref, watch.value.round),
 								line(
 									from,
-									ProcessFact.cases.demonitored.make({ref, to: caller.recipient, why: "canceled"}),
+									ProcessEvent.cases.demonitored.make({
+										ref,
+										to: caller.recipient,
+										reason: "canceled",
+									}),
 								),
 							);
 						return Result.succeed(undefined);
@@ -266,12 +270,12 @@ export class ProcessManager extends Context.Service<
 				) {
 					yield* Effect.annotateCurrentSpan({"fab.process": process});
 					yield* checked((table, turn) => {
-						const life = table.down(process, policy.why, caller.owner);
+						const life = table.down(process, policy.reason, caller.owner);
 						if (Result.isFailure(life)) return Result.fail(life.failure);
 						turn.append(
-							ProcessTable.facts(life.success.name),
+							ProcessTable.events(life.success.name),
 							id("down", process, policy),
-							line(from, ProcessFact.cases.down.make({process, ...policy})),
+							line(from, ProcessEvent.cases.down.make({process, ...policy})),
 						);
 						return Result.succeed(undefined);
 					});
@@ -283,7 +287,7 @@ export class ProcessManager extends Context.Service<
 							const mail = yield* checked((table, turn) => {
 								const life = table.life(process);
 								if (Option.isNone(life) || !table.isLive(process))
-									return Result.fail(new ProcessError({why: "ended"}));
+									return Result.fail(new ProcessError({reason: "ended"}));
 								return Result.succeed(
 									processMail(table, process, turn.read(`${life.value.name}/inbox`, after)),
 								);
@@ -320,7 +324,7 @@ export class ProcessManager extends Context.Service<
 						from: From,
 					) {
 						const input = yield* Schema.decodeUnknownEffect(DeadInput)(dead).pipe(
-							Effect.mapError(() => new ProcessError({why: "bad_text"})),
+							Effect.mapError(() => new ProcessError({reason: "bad_text"})),
 						);
 						yield* checked((table, turn) => {
 							const life = table.parent(process, caller.owner);

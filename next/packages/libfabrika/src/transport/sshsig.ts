@@ -100,12 +100,12 @@ const read = (armored: string): Option.Option<Sshsig> =>
 		};
 	});
 
-type Answer = {readonly signer: string} | {readonly why: "bad_signature"};
-const refused: Answer = {why: "bad_signature"};
+type Answer = {readonly signer: string} | {readonly reason: "bad_signature"};
+const refused: Answer = {reason: "bad_signature"};
 
 /**
  * Which of `signers` signed `text` under `space`: that entry, as given. Any refusal, of any cause,
- * is the one answer `{why: "bad_signature"}` (p27). It never fails and never dies. The key inside
+ * is the one answer `{reason: "bad_signature"}` (p27). It never fails and never dies. The key inside
  * the signature is matched to a signer first, as Go's sshsig `Verify` does; a signer line that is
  * not Ed25519 never matches.
  */
@@ -119,9 +119,9 @@ export const Checked = Schema.TaggedUnion({
 		bs: Schema.Boolean,
 		counter: Schema.Int,
 	},
-	refused: {why: Schema.Literal("bad_signature")},
+	refused: {reason: Schema.Literal("bad_signature")},
 });
-const bad = Checked.cases.refused.make({why: "bad_signature"});
+const bad = Checked.cases.refused.make({reason: "bad_signature"});
 
 export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
 	readonly text: string;

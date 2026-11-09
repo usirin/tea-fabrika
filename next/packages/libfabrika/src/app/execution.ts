@@ -24,7 +24,7 @@ const Typed = Schema.Struct({type: Schema.String});
 const MOST_CONTENT = 1_000_000;
 /** Program failures are checked RPC data; a rejected call is a transport failure. */
 const Failure = {
-	reason: ProgramDown.fields.why,
+	reason: ProgramDown.fields.reason,
 	error: Schema.String,
 	content: Schema.String.check(Schema.isMaxLength(MOST_CONTENT)),
 };
@@ -32,7 +32,7 @@ export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", Failure);
 
 export const executionFailure = (error: ProgramDown) =>
 	ExecutionFailure.make({
-		reason: error.why,
+		reason: error.reason,
 		error: error.errorClass,
 		content: Cause.pretty(Cause.fail(Object.hasOwn(error, "cause") ? error.cause : error)).slice(
 			0,
@@ -44,7 +44,7 @@ const programFailure = (failure: typeof ExecutionFailure.Type) => {
 	// Restore only checked text, never an arbitrary remote object or prototype.
 	const cause = new Error(failure.content);
 	cause.stack = failure.content;
-	return new ProgramDown({why: failure.reason, error: failure.error, cause});
+	return new ProgramDown({reason: failure.reason, error: failure.error, cause});
 };
 
 /** A checked reply failure crosses RPC as data; a rejected call remains an RPC failure. */
@@ -90,11 +90,10 @@ export type ExecutionCalls = {
 	readonly admit?: (m: unknown) => Promise<unknown>;
 };
 
-const attempt = <A>(reason: ProgramDown["why"], f: () => A) =>
+const attempt = <A>(reason: ProgramDown["reason"], f: () => A) =>
 	Effect.try({
 		try: f,
-		catch: (cause) =>
-			cause instanceof ProgramDown ? cause : new ProgramDown({why: reason, cause}),
+		catch: (cause) => (cause instanceof ProgramDown ? cause : new ProgramDown({reason, cause})),
 	});
 
 const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> =>
@@ -102,7 +101,7 @@ const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> =>
 
 /** A Cmd answer as its schema encodes it, as JSON; a schema that is not a codec answers nothing. */
 const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
-	if (!isCodec(schema)) throw new ProgramDown({why: "step"});
+	if (!isCodec(schema)) throw new ProgramDown({reason: "step"});
 	return Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value));
 };
 
@@ -121,7 +120,7 @@ const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean =>
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {
 	const type = Schema.decodeUnknownSync(Typed)(cmd).type;
 	const def = defs.find((d) => d.cmdType === type);
-	if (def === undefined) throw new ProgramDown({why: "step"});
+	if (def === undefined) throw new ProgramDown({reason: "step"});
 	const outcome = Schema.decodeUnknownSync(Outcome)(raw);
 	if (outcome._tag === "Ok")
 		return Schema.decodeUnknownSync(Schema.Json)({
@@ -131,7 +130,7 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
 			at: outcome.at,
 		});
 	const tag = outcome.error._tag;
-	if (!def.errTags.includes(tag)) throw new ProgramDown({why: "step"});
+	if (!def.errTags.includes(tag)) throw new ProgramDown({reason: "step"});
 	return Schema.decodeUnknownSync(Schema.Json)({
 		type: def.errType,
 		cmd,
@@ -142,9 +141,9 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
 
 export const nodeExecution = (declared: unknown, build = "node"): Execution => {
 	const pure = Effect.fromResult(stepper(declared)).pipe(
-		Effect.mapError(() => new ProgramDown({why: "load"})),
+		Effect.mapError(() => new ProgramDown({reason: "load"})),
 	);
-	const run = <A>(reason: ProgramDown["why"], f: (pure: Stepper) => A) =>
+	const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
 		pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
 	return {
 		init: Effect.fn("execution.init")((saved) => run("load", (pure) => pure.init(saved))),
@@ -183,36 +182,36 @@ class ExecutionClient extends Context.Service<
 	static make(rpc: ExecutionCalls): ExecutionClient["Service"] {
 		return {
 			init: (saved) => {
-				const fail = (cause: unknown) => new ProgramDown({why: "load", source: "rpc", cause});
+				const fail = (cause: unknown) => new ProgramDown({reason: "load", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader init RPC enters Effect
 				return Effect.tryPromise({try: () => rpc.init(saved), catch: fail});
 			},
 			step: (model, msg) => {
-				const fail = (cause: unknown) => new ProgramDown({why: "step", source: "rpc", cause});
+				const fail = (cause: unknown) => new ProgramDown({reason: "step", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader step RPC enters Effect
 				return Effect.tryPromise({try: () => rpc.step(model, msg), catch: fail});
 			},
 			fold: (model, msg) => {
 				const fail = (cause: unknown) =>
-					new ProgramDown({why: "saved_letter", source: "rpc", cause});
+					new ProgramDown({reason: "saved_letter", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader fold RPC enters Effect
 				return Effect.tryPromise({try: () => rpc.fold(model, msg), catch: fail});
 			},
 			upgrade: (saved) => {
 				const fail = (cause: unknown) =>
-					new ProgramDown({why: "saved_state", source: "rpc", cause});
+					new ProgramDown({reason: "saved_state", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader upgrade RPC enters Effect
 				return Effect.tryPromise({try: () => rpc.upgrade(saved), catch: fail});
 			},
 			reply: (cmd, outcome) => {
-				const fail = (cause: unknown) => new ProgramDown({why: "step", source: "rpc", cause});
+				const fail = (cause: unknown) => new ProgramDown({reason: "step", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader reply RPC enters Effect
 				return Effect.tryPromise({try: () => rpc.reply(cmd, outcome), catch: fail});
 			},
 			check: (kind, event) => {
 				const check = rpc.check;
-				if (check === undefined) return Effect.fail(new ProgramDown({why: "load"}));
-				const fail = (cause: unknown) => new ProgramDown({why: "step", source: "rpc", cause});
+				if (check === undefined) return Effect.fail(new ProgramDown({reason: "load"}));
+				const fail = (cause: unknown) => new ProgramDown({reason: "step", source: "rpc", cause});
 				const args: Parameters<typeof check> = [kind, event];
 				// Reflect.apply keeps this without reading a remote method named call off the stub.
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader check RPC enters Effect
@@ -220,8 +219,8 @@ class ExecutionClient extends Context.Service<
 			},
 			admit: (m) => {
 				const admit = rpc.admit;
-				if (admit === undefined) return Effect.fail(new ProgramDown({why: "load"}));
-				const fail = (cause: unknown) => new ProgramDown({why: "step", source: "rpc", cause});
+				if (admit === undefined) return Effect.fail(new ProgramDown({reason: "load"}));
+				const fail = (cause: unknown) => new ProgramDown({reason: "step", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader admit RPC enters Effect
 				return Effect.tryPromise({try: () => Reflect.apply(admit, rpc, [m]), catch: fail});
 			},
@@ -234,7 +233,7 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
 	const ask = <A>(
 		schema: Schema.Decoder<A>,
 		work: Effect.Effect<unknown, ProgramDown>,
-		reason: ProgramDown["why"],
+		reason: ProgramDown["reason"],
 	) =>
 		work.pipe(
 			Effect.flatMap((raw) => {
@@ -243,7 +242,7 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
 				const decoded = Schema.decodeUnknownResult(schema)(raw);
 				return Result.isSuccess(decoded)
 					? Effect.succeed(decoded.success)
-					: Effect.fail(new ProgramDown({why: reason, source: "decode", cause: decoded.failure}));
+					: Effect.fail(new ProgramDown({reason, source: "decode", cause: decoded.failure}));
 			}),
 		);
 	return {

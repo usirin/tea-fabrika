@@ -34,9 +34,9 @@ const isSteps = (u: unknown): u is Steps =>
 
 const Schemas = Schema.declare(isDeclared, {expected: "a schema"});
 
-/** A program's refusal: why, and the numbers that explain it. */
+/** A program's refusal: reason, and the numbers that explain it. */
 export const Refusal = Schema.Struct({
-	why: Schema.String,
+	reason: Schema.String,
 	now: Schema.optionalKey(Schema.Number),
 	most: Schema.optionalKey(Schema.Number),
 });
@@ -118,10 +118,10 @@ export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
 	cases: {read: readCase, write: writeCase},
 });
 
-/** A fact a program may write: its schema, and whether only a person's input may cause it. This is
+/** An event a program may write: its schema, and whether only a person's input may cause it. This is
  *  the trusted policy the door checks. Elm outputs never authorize a ledger write. */
-export const FactPolicy = Schema.Struct({schema: Schemas, personOnly: Schema.Boolean});
-export type FactPolicy = typeof FactPolicy.Type;
+export const EventPolicy = Schema.Struct({schema: Schemas, personOnly: Schema.Boolean});
+export type EventPolicy = typeof EventPolicy.Type;
 
 const Declaration = Schema.Struct({
 	name: Schema.NonEmptyString,
@@ -137,7 +137,7 @@ const Declaration = Schema.Struct({
 	refuse: code<Code<[model: unknown, msg: unknown], unknown>>("a refusal check"),
 	inputs: Schema.Record(Schema.String, Input),
 	outputs: Schema.Record(Schema.String, Schemas),
-	writes: Schema.Record(Schema.String, FactPolicy),
+	writes: Schema.Record(Schema.String, EventPolicy),
 	wake: code<Code<[model: unknown], unknown>>("a wake time"),
 });
 
@@ -217,7 +217,7 @@ export type Program<
 	V extends Schema.Json = Schema.Json,
 	I = Record<string, Input>,
 	O = Record<string, Declared>,
-	W = Record<string, FactPolicy>,
+	W = Record<string, EventPolicy>,
 > = {
 	readonly name: string;
 	readonly maxDeliveries?: number;
@@ -301,7 +301,7 @@ const make = <
 	V extends Schema.Json,
 	const I extends Readonly<Record<string, unknown>>,
 	O extends Readonly<Record<string, Declared>>,
-	W extends Readonly<Record<string, FactPolicy>>,
+	W extends Readonly<Record<string, EventPolicy>>,
 >(
 	spec: Spec<T, V, I, O, W>,
 ): Program<T, V, I, O, W> => {
@@ -314,7 +314,7 @@ const makeEffect = Effect.fn("program.make")(function* <
 	V extends Schema.Json,
 	const I extends Readonly<Record<string, unknown>>,
 	O extends Readonly<Record<string, Declared>>,
-	W extends Readonly<Record<string, FactPolicy>>,
+	W extends Readonly<Record<string, EventPolicy>>,
 >(spec: Spec<T, V, I, O, W>): Effect.fn.Return<Program<T, V, I, O, W>, SchemaIssue.Issue> {
 	const checked = construct(spec);
 	if (Result.isFailure(checked)) return yield* Effect.fail(checked.failure.issue);
@@ -325,13 +325,13 @@ const makeEffect = Effect.fn("program.make")(function* <
 
 export const Program = {schema: Declaration, make, makeEffect};
 
-/** A JSON object: a fact as it travels inside a write. Its declared schema gives its `_tag`. */
-const Fact = Schema.Record(Schema.String, Schema.Json);
+/** A JSON object: an event as it travels inside a write. Its declared schema gives its `_tag`. */
+const Event = Schema.Record(Schema.String, Schema.Json);
 
 /** What a program asks to write: caused by an earlier input it names, or explicitly its own. */
 export const Write = Schema.TaggedUnion({
-	caused: {parent: ParentText, fact: Fact},
-	own: {fact: Fact},
+	caused: {parent: ParentText, event: Event},
+	own: {event: Event},
 });
 export type Write = typeof Write.Type;
 
@@ -350,7 +350,7 @@ export type Step = typeof Step.Type;
 /** The program cannot run: it did not load, a fresh step threw or returned bad data, or saved
  *  state or a saved letter does not fold. Never a refusal: nothing was decided. */
 export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown", {
-	why: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
+	reason: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
 	/** An RPC or reply decode failure decided nothing about the input. It must be retried. */
 	source: Schema.optionalKey(Schema.Literals(["rpc", "decode"])),
 	/** The thrown class, preserved as checked data across Worker RPC. */
@@ -386,11 +386,11 @@ const decodeTyped = (u: unknown): Option.Option<Typed> =>
 	isTyped(u) ? Option.some(u) : Option.none();
 const decodeWake = Schema.decodeUnknownResult(Schema.NullOr(Schema.Number));
 
-/** Runs `f`, turning any throw into ProgramDown with `why`. */
-const guard = <A>(why: ProgramDown["why"], f: () => A): A => {
+/** Runs `f`, turning any throw into ProgramDown with `reason`. */
+const guard = <A>(reason: ProgramDown["reason"], f: () => A): A => {
 	const done = Result.try({
 		try: f,
-		catch: (cause) => (cause instanceof ProgramDown ? cause : new ProgramDown({why, cause})),
+		catch: (cause) => (cause instanceof ProgramDown ? cause : new ProgramDown({reason, cause})),
 	});
 	if (Result.isFailure(done)) throw done.failure;
 	return done.success;
@@ -433,10 +433,10 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 	const encodeView = Schema.encodeUnknownResult(program.view.data);
 	const decodeMsg = Schema.decodeUnknownResult(program.msg);
 
-	/** A model as the program's own value, or ProgramDown with `why`. */
-	const model = (raw: unknown, why: ProgramDown["why"]): unknown => {
+	/** A model as the program's own value, or ProgramDown with `reason`. */
+	const model = (raw: unknown, reason: ProgramDown["reason"]): unknown => {
 		const decoded = decodeModel(raw);
-		if (Result.isFailure(decoded)) throw new ProgramDown({why});
+		if (Result.isFailure(decoded)) throw new ProgramDown({reason});
 		return decoded.success;
 	};
 
@@ -472,11 +472,15 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 		return "input" in schemas && accepts(schemas.input, cmd);
 	};
 
-	/** The machine's answer as JSON, checked. Bad data is ProgramDown with `why`. */
-	const prepare = (next: unknown, cmds: ReadonlyArray<unknown>, why: ProgramDown["why"]): Step => {
+	/** The machine's answer as JSON, checked. Bad data is ProgramDown with `reason`. */
+	const prepare = (
+		next: unknown,
+		cmds: ReadonlyArray<unknown>,
+		reason: ProgramDown["reason"],
+	): Step => {
 		const encoded = encodeModel(next);
-		const view = guard(why, () => encodeView(program.view.select(next)));
-		const wake = guard(why, () => decodeWake(program.wake(next)));
+		const view = guard(reason, () => encodeView(program.view.select(next)));
+		const wake = guard(reason, () => decodeWake(program.wake(next)));
 		const json = cmds.map((cmd) => (cmdOk(cmd) ? decodeJson(cmd) : Result.fail(null)));
 		if (
 			Result.isFailure(encoded) ||
@@ -484,10 +488,10 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 			Result.isFailure(wake) ||
 			json.some(Result.isFailure)
 		)
-			throw new ProgramDown({why});
+			throw new ProgramDown({reason});
 		const model = decodeJson(encoded.success);
 		const shown = decodeJson(view.success);
-		if (Result.isFailure(model) || Result.isFailure(shown)) throw new ProgramDown({why});
+		if (Result.isFailure(model) || Result.isFailure(shown)) throw new ProgramDown({reason});
 		return Step.cases.stepped.make({
 			model: model.success,
 			view: shown.success,
@@ -507,9 +511,9 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 			const now = model(raw, "saved_state");
 			const m = message(msg, false);
 			if (Option.isNone(m) || !cells.has(m.value.type))
-				return Step.cases.refused.make({why: "bad_msg"});
+				return Step.cases.refused.make({reason: "bad_msg"});
 			const refusal = guard("step", () => decodeRefusal(program.refuse(now, m.value)));
-			if (Result.isFailure(refusal)) throw new ProgramDown({why: "step"});
+			if (Result.isFailure(refusal)) throw new ProgramDown({reason: "step"});
 			if (refusal.success !== null) return Step.cases.refused.make(refusal.success);
 			const [next, cmds] = guard("step", () => applyCell(machine, now, m.value));
 			return prepare(next, cmds, "step");
@@ -521,7 +525,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 			if (Option.isSome(typed) && !cells.has(typed.value.type))
 				return prepare(now, [], "saved_letter");
 			const m = message(msg, true);
-			if (Option.isNone(m)) throw new ProgramDown({why: "saved_letter"});
+			if (Option.isNone(m)) throw new ProgramDown({reason: "saved_letter"});
 			const [next, cmds] = guard("saved_letter", () => applyCell(machine, now, m.value));
 			return prepare(next, cmds, "saved_letter");
 		},

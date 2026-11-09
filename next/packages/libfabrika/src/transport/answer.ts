@@ -46,7 +46,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <
 			send: JSON.stringify({
 				jsonrpc: "2.0",
 				id,
-				error: {code: -32000, message: "no_hello", data: {why: "no_hello"}},
+				error: {code: -32000, message: "no_hello", data: {reason: "no_hello"}},
 			}),
 			attached,
 		};
@@ -56,8 +56,12 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <
 	if (Exit.isFailure(exit)) return {send: null, attached};
 	return Answer.match(exit.value, {
 		ok: ({result}) => ({send: JSON.stringify({jsonrpc: "2.0", id, result}), attached}),
-		refused: ({why}) => ({
-			send: JSON.stringify({jsonrpc: "2.0", id, error: {code: -32000, message: why, data: {why}}}),
+		refused: ({reason}) => ({
+			send: JSON.stringify({
+				jsonrpc: "2.0",
+				id,
+				error: {code: -32000, message: reason, data: {reason}},
+			}),
 			attached,
 		}),
 		parked: ({stream, after}) => ({

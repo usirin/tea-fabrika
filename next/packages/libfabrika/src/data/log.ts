@@ -1,5 +1,5 @@
 // The log's shapes: what a writer hands in, what the referee keeps, and what it answers. Tier 1,
-// P6 (laws p68 and p92). The one file `no-hand-tag` lets write `_tag`: the log stores any fact and
+// P6 (laws p68 and p92). The one file `no-hand-tag` lets write `_tag`: the log stores any event and
 // knows no cases, so a line's `_tag` is an open string, the case as the writer's own schema wrote it.
 // `lineFor` and `valueFor` turn a schema's value into a line and an entry back, so no other file
 // writes the key.
@@ -42,9 +42,9 @@ export const Line = Schema.Struct({
 	traceId: TraceId,
 	/** The build of the code that wrote it (H6). */
 	build: Text,
-	/** The fact's case. */
+	/** The event's case. */
 	_tag: Text,
-	/** The fact's fields, kept as JSON. */
+	/** The event's fields, kept as JSON. */
 	body: Schema.Json,
 });
 export type Line = typeof Line.Type;
@@ -89,7 +89,7 @@ export const Row = Schema.Struct({...Entry.fields, body: Schema.fromJsonString(S
 export const Appended = Schema.TaggedUnion({
 	placed: {rev: Rev, pos: Rev},
 	refused: {
-		why: Schema.Literals([
+		reason: Schema.Literals([
 			"bad_line",
 			"bad_parent",
 			"bad_trace",
@@ -107,5 +107,5 @@ export type Appended = typeof Appended.Type;
 export const Waited = Schema.TaggedUnion({ready: {rev: Rev}, parked: {}});
 export type Waited = typeof Waited.Type;
 
-/** The most entries one read answers. A guess: far under an object call's message for small facts. */
+/** The most entries one read answers. A guess: far under an object call's message for small events. */
 export const PAGE = 256;

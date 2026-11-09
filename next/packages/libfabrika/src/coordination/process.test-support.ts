@@ -33,9 +33,9 @@ export const PIDS: ReadonlyArray<string> = [
 	),
 ];
 export const CODE = {program: "counter", hash: "build-a"};
-/** The brain's own writer key: the `by` on every process fact, and the only one the fold trusts. */
+/** The brain's own writer key: the `by` on every process event, and the only one the fold trusts. */
 export const BRAIN = "SHA256:brain";
-/** A client's own key: what it asks with, never a fact the fold trusts. */
+/** A client's own key: what it asks with, never an event the fold trusts. */
 export const CLIENT = "SHA256:window-a";
 export const from = (over: Partial<From> = {}): From => ({
 	by: BRAIN,
@@ -60,7 +60,7 @@ export const watcher = (process: string): Caller => ({
 export const first = (id = "start:counter:1", name = "counter:1", code = CODE) =>
 	Start.cases.first.make({id, name, code});
 export const again = (after: string, id = `restart:${after}`, code = CODE) =>
-	Start.cases.again.make({id, name: "counter:1", after, why: "crashed", code});
+	Start.cases.again.make({id, name: "counter:1", after, reason: "crashed", code});
 
 const folder = mkdtempSync(join(tmpdir(), "p33-"));
 const opened: Array<DatabaseSync> = [];
@@ -147,7 +147,7 @@ export const manager = (
 	);
 export const read = (stream: string) =>
 	Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, 0)));
-/** A registered name's lifecycle facts, on the stream only the brain may write. */
-export const facts = (name: string) => read(`processes/${name}`);
+/** A registered name's lifecycle events, on the stream only the brain may write. */
+export const events = (name: string) => read(`processes/${name}`);
 export const receive = (process: string, after = 0) =>
 	ProcessManager.use((processes) => Stream.runCollect(processes.receive(process, after)));

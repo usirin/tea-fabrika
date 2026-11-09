@@ -39,7 +39,7 @@ const Lookup = Schema.TaggedUnion({
 type Lookup = typeof Lookup.Type;
 
 /** Who deleted a content row, when on the caller's clock, and why. */
-const Deletion = Schema.Struct({by: Schema.String, at: Schema.Int, why: Schema.String});
+const Deletion = Schema.Struct({by: Schema.String, at: Schema.Int, reason: Schema.String});
 type Deletion = typeof Deletion.Type;
 
 /** How many spans one page holds. */
@@ -175,9 +175,9 @@ const manager = (
 				]),
 		),
 	content: (chain, spanId) => walk(calls, chain, (one) => one.lookup(spanId)),
-	deleteContent: (chain, spanId, {by, why}) =>
+	deleteContent: (chain, spanId, {by, reason}) =>
 		Effect.clockWith((clock) => {
-			const deletion = {by, why, at: clock.currentTimeMillisUnsafe()};
+			const deletion = {by, reason, at: clock.currentTimeMillisUnsafe()};
 			return walk(calls, chain, (one) => one.erase(spanId, deletion));
 		}).pipe(Effect.asVoid),
 });
@@ -189,7 +189,7 @@ const PART_TABLES = [
 		attributes TEXT NOT NULL, events TEXT NOT NULL, links TEXT NOT NULL, resource TEXT NOT NULL,
 		ok INTEGER NOT NULL)`,
 	`CREATE TABLE IF NOT EXISTS content (
-		"spanId" TEXT PRIMARY KEY, state TEXT NOT NULL, message TEXT, "by" TEXT, at INTEGER, why TEXT)`,
+	"spanId" TEXT PRIMARY KEY, state TEXT NOT NULL, message TEXT, "by" TEXT, at INTEGER, reason TEXT)`,
 	`CREATE TABLE IF NOT EXISTS rolled (
 		one INTEGER PRIMARY KEY CHECK (one = 1), part INTEGER NOT NULL, next TEXT NOT NULL,
 		bytes INTEGER NOT NULL)`,
@@ -213,7 +213,7 @@ const decodeKept = Schema.decodeUnknownSync(
 	Schema.Struct({spanId: Schema.String, message: Schema.String}),
 );
 const decodeDeleted = Schema.decodeUnknownSync(
-	Schema.Struct({spanId: Schema.String, by: Schema.String, at: Schema.Int, why: Schema.String}),
+	Schema.Struct({spanId: Schema.String, by: Schema.String, at: Schema.Int, reason: Schema.String}),
 );
 const decodeRolled = Schema.decodeUnknownSync(
 	Schema.Struct({part: Schema.Int, next: Schema.String, bytes: Schema.Int}),
@@ -297,13 +297,13 @@ const sqlStore = (sql: Sql): Store => {
 					? Content.cases.kept.make(decodeKept(row))
 					: Content.cases.deleted.make(decodeDeleted(row));
 			}),
-		erase: (spanId, {by, at, why}) =>
+		erase: (spanId, {by, at, reason}) =>
 			void sql.exec(
-				`UPDATE content SET state = 'deleted', message = NULL, "by" = ?, at = ?, why = ?
+				`UPDATE content SET state = 'deleted', message = NULL, "by" = ?, at = ?, reason = ?
 				WHERE "spanId" = ? AND state = 'kept'`,
 				by,
 				at,
-				why,
+				reason,
 				spanId,
 			),
 	};
@@ -398,11 +398,11 @@ export class RecordManager extends Context.Service<
 			chain: Chain,
 			spanId: string,
 		) => Effect.Effect<Option.Option<Content>, SinkError>;
-		/** Turns a span's `kept` content into `deleted {by, at, why}`, in whichever part holds it. */
+		/** Turns a span's `kept` content into `deleted {by, at, reason}`, in whichever part holds it. */
 		readonly deleteContent: (
 			chain: Chain,
 			spanId: string,
-			by: {readonly by: string; readonly why: string},
+			by: {readonly by: string; readonly reason: string},
 		) => Effect.Effect<void, SinkError>;
 	}
 >()("@kampus/libfabrika/RecordManager") {
@@ -423,14 +423,14 @@ export class RecordManager extends Context.Service<
 			method: M,
 			...args: Parameters<RecordCalls[M]>
 		): Effect.fn.Return<A, SinkError> {
-			const fail = () => new SinkError({why: "unreachable", held: 0});
+			const fail = () => new SinkError({reason: "unreachable", held: 0});
 			const rpc = yield* Effect.try({try: () => stub(name), catch: fail});
 			// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
 			const io = Effect.tryPromise({try: () => Reflect.apply(rpc[method], rpc, args), catch: fail});
 			return yield* io.pipe(
 				Effect.flatMap((raw) =>
 					Schema.decodeUnknownEffect(answer)(raw).pipe(
-						Effect.mapError(() => new SinkError({why: "bad_row", held: 0})),
+						Effect.mapError(() => new SinkError({reason: "bad_row", held: 0})),
 					),
 				),
 			);

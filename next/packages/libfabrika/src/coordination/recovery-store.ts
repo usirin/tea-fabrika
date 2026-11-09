@@ -9,7 +9,7 @@ const decodeReceipt = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt));
 const encodeReceipt = Schema.encodeSync(Schema.fromJsonString(Receipt));
 const receiptFor = (value: unknown, letter: unknown) => {
 	const saved = decodeReceipt(value);
-	if (saved.letter !== letter) throw new LedgerError({why: "bad_row"});
+	if (saved.letter !== letter) throw new LedgerError({reason: "bad_row"});
 	return saved;
 };
 
@@ -43,13 +43,13 @@ export class RecoveryStore extends Context.Service<
 				catch: (error) =>
 					error instanceof LedgerError
 						? error
-						: new LedgerError({why: Schema.isSchemaError(error) ? "bad_row" : "storage"}),
+						: new LedgerError({reason: Schema.isSchemaError(error) ? "bad_row" : "storage"}),
 			});
 		const snapshot = () => {
 			const [row] = sql.exec("SELECT value FROM process_recovery WHERE name=?", who.name);
 			if (row === undefined) return null;
 			const saved = decode(row.value);
-			if (saved.name !== who.name) throw new LedgerError({why: "bad_row"});
+			if (saved.name !== who.name) throw new LedgerError({reason: "bad_row"});
 			return saved;
 		};
 		const load = stored(() => {
@@ -80,7 +80,7 @@ export class RecoveryStore extends Context.Service<
 		const save = (value: unknown) =>
 			stored(() => {
 				const saved = Schema.decodeUnknownSync(Supervision)(value);
-				if (saved.name !== who.name) throw new LedgerError({why: "bad_row"});
+				if (saved.name !== who.name) throw new LedgerError({reason: "bad_row"});
 				const text = encode({...saved, receipts: []});
 				sql.transaction(() => {
 					const old = sql.exec("SELECT value FROM process_recovery WHERE name=?", who.name)[0];
@@ -103,7 +103,7 @@ export class RecoveryStore extends Context.Service<
 						if (prior === undefined) growth += bytes(who.name) + bytes(receipt.letter);
 						changed.push({letter: receipt.letter, text: next});
 					}
-					if (sql.size() + growth > who.capacity) throw new LedgerError({why: "storage"});
+					if (sql.size() + growth > who.capacity) throw new LedgerError({reason: "storage"});
 					for (const receipt of changed)
 						sql.exec(
 							"INSERT INTO process_receipts (name,letter,value) VALUES (?,?,?) ON CONFLICT(name,letter) DO UPDATE SET value=excluded.value",

@@ -34,28 +34,28 @@ export const Recipient = Schema.TaggedUnion({
 export type Caller = {readonly owner: typeof Owner.Type; readonly recipient: typeof Recipient.Type};
 export const Start = Schema.TaggedUnion({
 	first: {id: Text, name: Text, code: Code},
-	again: {id: Text, name: Text, code: Code, after: ProcessId, why: Text},
+	again: {id: Text, name: Text, code: Code, after: ProcessId, reason: Text},
 });
 export type Start = typeof Start.Type;
 export const State = Schema.TaggedUnion({
 	live: {process: ProcessId, code: Code},
-	ended: {process: ProcessId, code: Code, why: Text},
-	down: {process: ProcessId, code: Code, why: Text, crashes: Count, until: Schema.Int},
+	ended: {process: ProcessId, code: Code, reason: Text},
+	down: {process: ProcessId, code: Code, reason: Text, crashes: Count, until: Schema.Int},
 });
-export const ProcessFact = Schema.TaggedUnion({
+export const ProcessEvent = Schema.TaggedUnion({
 	registered: {name: Text, program: Text, owner: Owner},
 	started: {process: ProcessId, name: Text, program: Text, hash: Text},
-	exited: {process: ProcessId, why: Text},
-	restarted: {process: ProcessId, after: ProcessId, name: Text, why: Text, build: Text},
-	down: {process: ProcessId, why: Text, crashes: Count, until: Schema.Int},
+	exited: {process: ProcessId, reason: Text},
+	restarted: {process: ProcessId, after: ProcessId, name: Text, reason: Text, build: Text},
+	down: {process: ProcessId, reason: Text, crashes: Count, until: Schema.Int},
 	monitored: {ref: Text, process: ProcessId, to: Recipient},
-	demonitored: {ref: Text, to: Recipient, why: Schema.Literals(["canceled", "watcher_exited"])},
+	demonitored: {ref: Text, to: Recipient, reason: Schema.Literals(["canceled", "watcher_exited"])},
 });
-/** Where a registered name's own lifecycle facts live: `processes/<name>`. */
-const factStream = (name: string): string => `${PROCESSES}/${name}`;
+/** Where a registered name's own lifecycle events live: `processes/<name>`. */
+const eventStream = (name: string): string => `${PROCESSES}/${name}`;
 /**
  * The one rule for who may write what: only the brain's ProcessManager writes `processes` or any
- * stream under `processes/`, any ProcessFact case, or any id in the signal id space. The door and
+ * stream under `processes/`, any ProcessEvent case, or any id in the signal id space. The door and
  * the mailbox refuse every such write.
  */
 export const brainOnly = (write: {
@@ -67,7 +67,7 @@ export const brainOnly = (write: {
 	write.stream.startsWith(`${PROCESSES}/`) ||
 	write.stream.endsWith("/dead") ||
 	write.tag === "dead" ||
-	Object.hasOwn(ProcessFact.cases, write.tag) ||
+	Object.hasOwn(ProcessEvent.cases, write.tag) ||
 	inSignalSpace(write.id) ||
 	inRunnerSpace(write.id);
 
@@ -77,7 +77,7 @@ export const inRunnerSpace = (id: string): boolean =>
 export const Down = Schema.TaggedStruct("DOWN", {
 	ref: Text,
 	process: ProcessId,
-	why: Text,
+	reason: Text,
 	to: Recipient,
 });
 const deadFields = {
@@ -104,14 +104,19 @@ export const Activity = Schema.TaggedUnion({
 });
 const Recovered = Schema.TaggedUnion({
 	idle: {process: Schema.optionalKey(ProcessId)},
-	interrupted: {process: ProcessId, letter: Text, build: Text, why: Schema.Literal("interrupted")},
+	interrupted: {
+		process: ProcessId,
+		letter: Text,
+		build: Text,
+		reason: Schema.Literal("interrupted"),
+	},
 });
 export const recoverActivity = (
 	raw: unknown,
 ): Result.Result<typeof Recovered.Type, LedgerError> => {
 	if (raw === undefined) return Result.succeed(Recovered.cases.idle.make({}));
 	const saved = Schema.decodeUnknownResult(Activity)(raw);
-	if (Result.isFailure(saved)) return Result.fail(new LedgerError({why: "bad_row"}));
+	if (Result.isFailure(saved)) return Result.fail(new LedgerError({reason: "bad_row"}));
 	const value = saved.success;
 	return Result.succeed(
 		value._tag === "idle"
@@ -120,7 +125,7 @@ export const recoverActivity = (
 					process: value.process,
 					letter: value.letter,
 					build: value.build,
-					why: "interrupted",
+					reason: "interrupted",
 				}),
 	);
 };
@@ -132,7 +137,7 @@ export const canRestart = (
 ): boolean => times.filter((at) => at >= now - period).length + 1 <= intensity;
 
 export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessError", {
-	why: Schema.Literals([
+	reason: Schema.Literals([
 		"not_parent",
 		"name_taken",
 		"alive",
@@ -146,7 +151,7 @@ export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessErr
 	]),
 }) {}
 
-type Reservation = typeof ProcessFact.cases.registered.Type;
+type Reservation = typeof ProcessEvent.cases.registered.Type;
 type Life = {
 	readonly name: string;
 	readonly state: typeof State.Type;
@@ -154,8 +159,8 @@ type Life = {
 	readonly from: From;
 	readonly rev: number;
 };
-/** `round` counts this (recipient, ref)'s monitored facts, so a monitor after a cancel is new. */
-type Watch = typeof ProcessFact.cases.monitored.Type & {
+/** `round` counts this (recipient, ref)'s monitored events, so a monitor after a cancel is new. */
+type Watch = typeof ProcessEvent.cases.monitored.Type & {
 	readonly canceled: boolean;
 	readonly round: number;
 };
@@ -167,9 +172,9 @@ export type ProcessInfo = {
 	readonly build: string;
 	readonly restarts: number;
 };
-const decodeFact = Schema.decodeUnknownSync(ProcessFact);
+const decodeEvent = Schema.decodeUnknownSync(ProcessEvent);
 const decodeDown = Schema.decodeUnknownOption(Down);
-const denied = (why: ProcessError["why"]) => Result.fail(new ProcessError({why}));
+const denied = (reason: ProcessError["reason"]) => Result.fail(new ProcessError({reason}));
 const isText = Schema.is(Text);
 const canonical = (to: typeof Recipient.Type): typeof Recipient.Type =>
 	to._tag === "process"
@@ -191,12 +196,12 @@ export const inSignalSpace = (id: string): boolean =>
 	id.startsWith(SIGNAL_LEAD) || Option.exists(decodeIdParts(id), (parts) => parts[0] === "DOWN");
 
 /**
- * A disposable fold of the ledger. No process authority survives outside its facts, and a fact
+ * A disposable fold of the ledger. No process authority survives outside its events, and an event
  * counts only when `by` is the brain's own writer.
  */
 export class ProcessTable {
 	static readonly stream = PROCESSES;
-	static readonly facts = factStream;
+	static readonly events = eventStream;
 	readonly #by: string;
 	readonly #names = new Map<string, Reservation>();
 	readonly #lives = new Map<string, Life>();
@@ -207,70 +212,70 @@ export class ProcessTable {
 	constructor(entries: Iterable<Entry>, by: string) {
 		this.#by = by;
 		for (const entry of entries) {
-			if (!Object.hasOwn(ProcessFact.cases, entry._tag) || entry.by !== by) continue;
-			const fact = decodeFact(valueFor(entry));
-			switch (fact._tag) {
+			if (!Object.hasOwn(ProcessEvent.cases, entry._tag) || entry.by !== by) continue;
+			const event = decodeEvent(valueFor(entry));
+			switch (event._tag) {
 				case "registered":
-					this.#names.set(fact.name, fact);
+					this.#names.set(event.name, event);
 					break;
 				case "started": {
-					const code = {program: fact.program, hash: fact.hash};
-					this.#lives.set(fact.process, {
-						name: fact.name,
-						state: State.cases.live.make({process: fact.process, code}),
-						request: Start.cases.first.make({id: entry.id, name: fact.name, code}),
+					const code = {program: event.program, hash: event.hash};
+					this.#lives.set(event.process, {
+						name: event.name,
+						state: State.cases.live.make({process: event.process, code}),
+						request: Start.cases.first.make({id: entry.id, name: event.name, code}),
 						from: entry,
 						rev: entry.rev,
 					});
-					this.#current.set(fact.name, fact.process);
+					this.#current.set(event.name, event.process);
 					break;
 				}
 				case "restarted": {
-					const life = this.require(fact.process);
-					this.#lives.set(fact.process, {
+					const life = this.require(event.process);
+					this.#lives.set(event.process, {
 						...life,
 						request: Start.cases.again.make({
 							id: life.request.id,
-							name: fact.name,
+							name: event.name,
 							code: life.state.code,
-							after: fact.after,
-							why: fact.why,
+							after: event.after,
+							reason: event.reason,
 						}),
 					});
-					this.#restarts.set(fact.name, [
-						...(this.#restarts.get(fact.name) ?? []),
+					this.#restarts.set(event.name, [
+						...(this.#restarts.get(event.name) ?? []),
 						entry.arrivedAt,
 					]);
 					break;
 				}
 				case "exited": {
-					const life = this.require(fact.process);
-					this.#lives.set(fact.process, {
+					const life = this.require(event.process);
+					this.#lives.set(event.process, {
 						...life,
 						state: State.cases.ended.make({
-							process: fact.process,
+							process: event.process,
 							code: life.state.code,
-							why: fact.why,
+							reason: event.reason,
 						}),
 					});
 					break;
 				}
 				case "down": {
-					const life = this.require(fact.process);
-					this.#lives.set(fact.process, {
+					const life = this.require(event.process);
+					this.#lives.set(event.process, {
 						...life,
-						state: State.cases.down.make({...fact, code: life.state.code}),
+						state: State.cases.down.make({...event, code: life.state.code}),
 					});
 					break;
 				}
 				case "monitored": {
-					const key = watchKey(fact.to, fact.ref);
+					const key = watchKey(event.to, event.ref);
 					const round = (this.#watches.get(key)?.round ?? 0) + 1;
-					this.#watches.set(key, {...fact, canceled: false, round});
+					this.#watches.set(key, {...event, canceled: false, round});
 					break;
 				}
 				case "demonitored": {
-					const key = watchKey(fact.to, fact.ref);
+					const key = watchKey(event.to, event.ref);
 					const watch = this.#watches.get(key);
 					if (watch !== undefined) this.#watches.set(key, {...watch, canceled: true});
 					break;
@@ -281,7 +286,7 @@ export class ProcessTable {
 
 	private require(process: string): Life {
 		const life = this.#lives.get(process);
-		if (life === undefined) throw new LedgerError({why: "bad_row"});
+		if (life === undefined) throw new LedgerError({reason: "bad_row"});
 		return life;
 	}
 
@@ -289,9 +294,11 @@ export class ProcessTable {
 		const control = [...read(ProcessTable.stream, 0)];
 		const names = control
 			.filter((entry) => entry._tag === "registered" && entry.by === by)
-			.map((entry) => Schema.decodeUnknownSync(ProcessFact.cases.registered)(valueFor(entry)).name);
+			.map(
+				(entry) => Schema.decodeUnknownSync(ProcessEvent.cases.registered)(valueFor(entry)).name,
+			);
 		return new ProcessTable(
-			[...control, ...names.flatMap((name) => [...read(factStream(name), 0)])].sort(
+			[...control, ...names.flatMap((name) => [...read(eventStream(name), 0)])].sort(
 				(a, b) => a.rev - b.rev,
 			),
 			by,
@@ -362,16 +369,24 @@ export class ProcessTable {
 			? Result.succeed(life)
 			: denied("not_parent");
 	}
-	exit(process: string, why: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
-		if (!isText(why)) return denied("bad_text");
+	exit(
+		process: string,
+		reason: string,
+		owner: typeof Owner.Type,
+	): Result.Result<Life, ProcessError> {
+		if (!isText(reason)) return denied("bad_text");
 		const parent = this.parent(process, owner);
 		if (Result.isFailure(parent)) return parent;
 		const state = parent.success.state;
-		return state._tag !== "live" && state.why !== why ? denied("ended") : parent;
+		return state._tag !== "live" && state.reason !== reason ? denied("ended") : parent;
 	}
 	/** The life a supervisor gives up on; refused while that process still lives. */
-	down(process: string, why: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
-		if (!isText(why)) return denied("bad_text");
+	down(
+		process: string,
+		reason: string,
+		owner: typeof Owner.Type,
+	): Result.Result<Life, ProcessError> {
+		if (!isText(reason)) return denied("bad_text");
 		const parent = this.parent(process, owner);
 		if (Result.isFailure(parent)) return parent;
 		return parent.success.state._tag === "live" ? denied("alive") : parent;

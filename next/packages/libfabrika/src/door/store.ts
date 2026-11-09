@@ -25,14 +25,14 @@ export const doorStore = (sql: Sql) => {
 					ensure();
 					return step();
 				}),
-			catch: () => new LedgerError({why: "storage"}),
+			catch: () => new LedgerError({reason: "storage"}),
 		});
 	});
 	const get = <A>(name: string, schema: Schema.Codec<A>) => {
 		const [row] = sql.exec("SELECT value FROM door_state WHERE name=?", name);
 		if (row === undefined) return null;
 		const decoded = Schema.decodeUnknownResult(Schema.fromJsonString(schema))(row.value);
-		if (Result.isFailure(decoded)) throw new LedgerError({why: "bad_row"});
+		if (Result.isFailure(decoded)) throw new LedgerError({reason: "bad_row"});
 		return decoded.success;
 	};
 	const set = <A>(name: string, schema: Schema.Codec<A>, value: A) => {

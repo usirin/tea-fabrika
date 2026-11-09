@@ -11,7 +11,7 @@ export interface Env extends Bindings {
 }
 export const settings = Effect.fn("stage.settings")(function* (env: Env) {
 	return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(env.STAGE).pipe(
-		Effect.mapError(() => new LedgerError({why: "bad_row"})),
+		Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 	);
 });
 export const gatewayRuntime = (ctx: DurableObjectState, env: Env) =>
@@ -56,7 +56,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
 													? m.type
 													: undefined,
 										},
-										facts: {personOnly: []},
+										events: {personOnly: []},
 									}),
 								),
 							),

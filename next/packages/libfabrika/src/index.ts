@@ -16,7 +16,7 @@ export {
 } from "./app/entry.ts";
 export {diff, type Patch} from "./app/patch.ts";
 export {
-	FactPolicy,
+	EventPolicy,
 	Input,
 	Program,
 	ProgramDown,

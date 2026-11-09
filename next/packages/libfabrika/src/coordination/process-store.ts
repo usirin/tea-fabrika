@@ -26,7 +26,7 @@ export type Checkpoint = typeof Checkpoint.Type;
 export const Placed = Schema.Struct({id: Schema.String, rev: Rev, pos: Rev});
 export type Placed = typeof Placed.Type;
 
-/** The only facts the runtime writes to a process's stream: a step it installed, and an upgrade it
+/** The only events the runtime writes to a process's stream: a step it installed, and an upgrade it
  *  ran on saved state. A program never writes either. */
 export const RuntimeRecord = Schema.TaggedUnion({
 	"cmd.answered": {m: Schema.Json, cmd: Schema.NonEmptyString, build: Schema.NonEmptyString},
@@ -79,7 +79,7 @@ type ProcessStorage = {
 	 */
 	readonly placedByAny: (id: string) => Effect.Effect<Placed | null, LedgerError>;
 	/** Appends one RuntimeRecord to the process's stream. A retry answers its first placing. */
-	readonly record: (id: string, fact: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
+	readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
 export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(
 	"@kampus/libfabrika/ProcessStore",
@@ -112,7 +112,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 						},
 						catch: (error) =>
 							new LedgerError({
-								why: Schema.isSchemaError(error) ? "bad_row" : "storage",
+								reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
 								message: String(error),
 							}),
 					});
@@ -132,7 +132,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 											? Effect.succeed(undefined)
 											: Effect.try({
 													try: () => Schema.decodeUnknownSync(Activity)(raw),
-													catch: () => new LedgerError({why: "bad_row"}),
+													catch: () => new LedgerError({reason: "bad_row"}),
 												}),
 									),
 								)
@@ -203,16 +203,16 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 							);
 							return row === undefined ? null : decodePlaced(row);
 						}),
-					record: Effect.fn("process.record")(function* (id: string, fact: unknown, from: From) {
-						const decoded = decodeRecord(fact);
-						if (Result.isFailure(decoded)) return yield* new LedgerError({why: "refused"});
+					record: Effect.fn("process.record")(function* (id: string, event: unknown, from: From) {
+						const decoded = decodeRecord(event);
+						if (Result.isFailure(decoded)) return yield* new LedgerError({reason: "refused"});
 						const answer = yield* ledger.append(
 							who.process,
 							id,
 							lineFor(from, encodeRecord(decoded.success)),
 						);
 						if (answer._tag === "refused")
-							return yield* new LedgerError({why: "refused", message: answer.why});
+							return yield* new LedgerError({reason: "refused", message: answer.reason});
 						return answer;
 					}),
 				};

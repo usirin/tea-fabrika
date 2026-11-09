@@ -19,7 +19,7 @@ export type IdValue<P extends string> = Brand.Branded<string, P>;
 export type IdSchema<P extends string> = S.Codec<IdValue<P>, string>;
 
 export class IdError extends S.TaggedError<IdError>()("IdError", {
-	why: S.Literals(["prefix", "clock", "entropy", "exhausted"]),
+	reason: S.Literals(["prefix", "clock", "entropy", "exhausted"]),
 }) {}
 
 const prefixes = new WeakMap<S.Top, string>();
@@ -67,13 +67,13 @@ type Specific<P extends string> = ReturnType<typeof specific<P>>;
 
 /** A schema branded for one trusted prefix. An invalid prefix throws, as Schema.make does. */
 export const make = <const P extends string>(prefix: P): Specific<P> => {
-	if (!validPrefix(prefix)) throw new IdError({why: "prefix"});
+	if (!validPrefix(prefix)) throw new IdError({reason: "prefix"});
 	return specific(prefix);
 };
 
 /** The factory for a supplied prefix: invalid prefixes fail with a typed IdError. */
 export const makeEffect = Effect.fn("id.makeEffect")(function* <const P extends string>(prefix: P) {
-	if (!validPrefix(prefix)) return yield* new IdError({why: "prefix"});
+	if (!validPrefix(prefix)) return yield* new IdError({reason: "prefix"});
 	return specific(prefix);
 });
 
@@ -153,14 +153,14 @@ export class Generator extends Context.Service<
 			// Keep allocation and validation synchronous so fibers observe IDs in allocation order.
 			const allocate = <P extends string>(schema: IdSchema<P>, prefix: string, now: number) => {
 				if (!Number.isSafeInteger(now) || now < 0 || now > maxTime)
-					throw new IdError({why: "clock"});
+					throw new IdError({reason: "clock"});
 				let nextAt = at,
 					nextRandom = random;
 				if (now > at) {
 					nextAt = now;
 					nextRandom = entropy();
 				} else if (random === maxRandom) {
-					if (at === maxTime) throw new IdError({why: "exhausted"});
+					if (at === maxTime) throw new IdError({reason: "exhausted"});
 					nextAt++;
 					nextRandom = 0n;
 				} else nextRandom++;
@@ -168,18 +168,18 @@ export class Generator extends Context.Service<
 				random = nextRandom;
 				return Result.getOrThrowWith(
 					S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`),
-					() => new IdError({why: "prefix"}),
+					() => new IdError({reason: "prefix"}),
 				);
 			};
 			return {
 				next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
 					const prefix = prefixes.get(schema);
-					if (prefix === undefined) return yield* new IdError({why: "prefix"});
+					if (prefix === undefined) return yield* new IdError({reason: "prefix"});
 					yield* Effect.annotateCurrentSpan({type: prefix});
 					const now = yield* Clock.currentTimeMillis;
 					return yield* Effect.try({
 						try: () => allocate(schema, prefix, now),
-						catch: (error) => (error instanceof IdError ? error : new IdError({why: "entropy"})),
+						catch: (error) => (error instanceof IdError ? error : new IdError({reason: "entropy"})),
 					});
 				}),
 			};

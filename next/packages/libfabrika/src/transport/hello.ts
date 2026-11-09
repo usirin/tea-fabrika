@@ -42,9 +42,9 @@ export const sameOrigin = (a: {
 
 const CheckedHello = Schema.TaggedUnion({
 	online: {who: Who, version: Schema.Int, ping: Schema.Number, hello: Hello},
-	refused: {why: Schema.String, fingerprint: Schema.optionalKey(Schema.String)},
+	refused: {reason: Schema.String, fingerprint: Schema.optionalKey(Schema.String)},
 });
-const no = (why: string) => CheckedHello.cases.refused.make({why});
+const no = (reason: string) => CheckedHello.cases.refused.make({reason});
 const pingMs = (text: string, min: number, max: number): number => {
 	const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(text);
 	const scale = new Map([
@@ -96,10 +96,10 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
 		space: "fabrika-client",
 		signers: [`ssh-ed25519 ${Base64.encode(field)}`],
 	});
-	if ("why" in checked) return no("bad_signature");
+	if ("reason" in checked) return no("bad_signature");
 	const admitted = yield* a.admit(fingerprint);
 	if (admitted._tag === "refused")
-		return CheckedHello.cases.refused.make({why: admitted.why, fingerprint});
+		return CheckedHello.cases.refused.make({reason: admitted.reason, fingerprint});
 	if (!a.consume()) return no("bad_nonce");
 	return CheckedHello.cases.online.make({
 		who: admitted.who,

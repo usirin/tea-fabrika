@@ -18,8 +18,8 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 	});
 	const bytes = Base64Url.decode(secret);
 	if (Result.isFailure(bytes) || bytes.success.length !== 32)
-		return yield* new LedgerError({why: "storage"});
-	const fail = () => new LedgerError({why: "crypto"});
+		return yield* new LedgerError({reason: "storage"});
+	const fail = () => new LedgerError({reason: "crypto"});
 	const args: Parameters<SubtleCrypto["importKey"]> = [
 		"raw",
 		new Uint8Array(bytes.success),
@@ -78,7 +78,7 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 			Number(store.sql.exec("SELECT count(*) n FROM door_spent WHERE until>?", at)[0]?.n ?? 0) >=
 			cap
 		)
-			return Result.fail(new LedgerError({why: "storage"}));
+			return Result.fail(new LedgerError({reason: "storage"}));
 		store.sql.exec("DELETE FROM door_spent WHERE until<=?", at);
 		store.sql.exec("INSERT INTO door_spent (nonce,until) VALUES (?,?)", nonce, until);
 		return Result.succeed(true);

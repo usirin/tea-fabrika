@@ -13,13 +13,13 @@ export {
 	admitted,
 	foldMembers,
 	Grant,
-	MemberFact,
+	MemberEvent,
 	type Members,
 	Revoke,
 	Saw,
 	Signed,
 	Took,
-	Why,
+	Reason,
 } from "./members.ts";
 export {CoordinationLayer, ProcessManager} from "./process-manager.ts";
 export {ProcessIdGenerator} from "./process-id.ts";
@@ -34,7 +34,7 @@ export {
 	inSignalSpace,
 	Owner,
 	ProcessError,
-	ProcessFact,
+	ProcessEvent,
 	Recipient,
 	recoverActivity,
 	Start,

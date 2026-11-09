@@ -10,11 +10,11 @@ import type {Answer, checkHello} from "../transport/index.ts";
 export type ConnectionId = string & Brand.Brand<"ConnectionId">;
 const GrantReply = Schema.TaggedUnion({
 	applied: {rev: Schema.Number},
-	ignored: {rev: Schema.Number, why: Schema.String},
-	refused: {why: Schema.String},
+	ignored: {rev: Schema.Number, reason: Schema.String},
+	refused: {reason: Schema.String},
 });
 const refusals = {
-	SigningRefused: {why: SigningRefused.fields.why},
+	SigningRefused: {reason: SigningRefused.fields.reason},
 	NotGranted: {},
 };
 export const SigningReply = Schema.TaggedUnion({ok: {value: Session}, ...refusals});
@@ -64,7 +64,7 @@ export interface DoorCalls {
 		readonly parent: string;
 		readonly kind: string;
 		readonly stream: string;
-		readonly fact: unknown;
+		readonly event: unknown;
 	}) => Effect.Effect<Appended, unknown>;
 	readonly retire: (process: string) => Effect.Effect<void, unknown>;
 	readonly checkDelivery: (process: string, incoming: Incoming) => Effect.Effect<void, unknown>;

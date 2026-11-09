@@ -41,17 +41,17 @@ const start = Cmd.make("start", {
 	err: [],
 });
 const pending = (s: Supervision) => [s, []] as const;
-const crashWhy = (failure: Failure) =>
+const crashReason = (failure: Failure) =>
 	failure._tag === "saved" ? "saved_letter" : failure._tag === "fresh" ? "step" : "interrupted";
 /** The successor's start request, after the process that crashed. */
-const again = (s: Supervision, after: string, why: string) =>
+const again = (s: Supervision, after: string, reason: string) =>
 	Recovery.cases.starting.make({
 		after,
 		request: Start.cases.again.make({
 			id: `recover:${after}:${s.seq}`,
 			name: s.name,
 			after,
-			why,
+			reason,
 			code: {program: s.name.split(":")[0] ?? s.name, hash: s.build},
 		}),
 	});
@@ -107,11 +107,11 @@ export const supervisor = Machine.make({
 				s.policy.backoff.maxMs,
 			);
 			const until = m.at + wait;
-			const why = crashWhy(failure);
+			const reason = crashReason(failure);
 			// Inside the restart budget the successor waits its backoff, and nothing goes down.
 			if (canRestart(s.restarts, until, s.policy.periodMs, s.policy.intensity)) {
 				const pending = start({process, until});
-				return [{...s, recovery: again(s, process, why), pending}, [pending]];
+				return [{...s, recovery: again(s, process, reason), pending}, [pending]];
 			}
 			// The brake: N crashes in T. Down waits until the window has room again.
 			const times = s.restarts
@@ -123,7 +123,7 @@ export const supervisor = Machine.make({
 			return [
 				{
 					...s,
-					recovery: Recovery.cases.down.make({process, why, crashes, until: held}),
+					recovery: Recovery.cases.down.make({process, reason, crashes, until: held}),
 					pending,
 				},
 				[pending],
@@ -132,7 +132,10 @@ export const supervisor = Machine.make({
 		due: (s, m) => {
 			if (s.recovery._tag !== "down" || m.at < s.recovery.until) return [s, []];
 			const pending = start({process: s.recovery.process, until: s.recovery.until});
-			return [{...s, recovery: again(s, s.recovery.process, s.recovery.why), pending}, [pending]];
+			return [
+				{...s, recovery: again(s, s.recovery.process, s.recovery.reason), pending},
+				[pending],
+			];
 		},
 		started: (s, m) => [
 			{

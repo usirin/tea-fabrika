@@ -24,7 +24,7 @@ import {
 	type Envelope,
 	foldMembers,
 	type From,
-	MemberFact,
+	MemberEvent,
 	NotGranted,
 	ProcessManager,
 	type ProcessError,
@@ -85,11 +85,11 @@ const reserved = (a: unknown) => {
 		value !== null && ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(value, key))
 	);
 };
-const no = (why: string) => Answer.cases.refused.make({why});
+const no = (reason: string) => Answer.cases.refused.make({reason});
 const ok = (result: typeof Schema.Json.Type) => Answer.cases.ok.make({result});
 // A dead letter stops the sender's outbox. Other program refusals keep their full reply.
 const deliveryAnswer = (result: Schema.Json) =>
-	Schema.is(Answer.cases.refused)(result) && result.why === "dead" ? no("dead") : ok(result);
+	Schema.is(Answer.cases.refused)(result) && result.reason === "dead" ? no("dead") : ok(result);
 const EnvelopeState = Schema.TaggedUnion({
 	allocated: {},
 	recorded: {},
@@ -120,7 +120,7 @@ type Binding = typeof Binding.Type;
 const encodeBinding = Schema.encodeSync(Schema.fromJsonString(Binding));
 const decodeBinding = Schema.decodeUnknownResult(Schema.fromJsonString(Binding));
 // Saved pre-P17 inputs keep their original shape when checking a retry.
-const LegacyInputFact = Schema.TaggedUnion({
+const LegacyInputEvent = Schema.TaggedUnion({
 	received: {
 		method: Schema.String,
 		target: Schema.String,
@@ -137,29 +137,29 @@ const LegacyInputFact = Schema.TaggedUnion({
 		arrivedAt: Schema.Number,
 		traceId: Schema.String,
 		spanId: Schema.String,
-		why: Schema.String,
+		reason: Schema.String,
 	},
 });
-const InputFact = Schema.TaggedUnion({
+const InputEvent = Schema.TaggedUnion({
 	received: {
-		...LegacyInputFact.cases.received.fields,
+		...LegacyInputEvent.cases.received.fields,
 		door: ProcessId,
 		n: Schema.Int,
 	},
 	refused: {
-		...LegacyInputFact.cases.refused.fields,
+		...LegacyInputEvent.cases.refused.fields,
 		door: ProcessId,
 		n: Schema.Int,
 	},
 });
 const GrantReply = Schema.TaggedUnion({
 	applied: {rev: Schema.Number},
-	ignored: {rev: Schema.Number, why: Schema.String},
-	refused: {why: Schema.String},
+	ignored: {rev: Schema.Number, reason: Schema.String},
+	refused: {reason: Schema.String},
 });
 const WatchReply = Schema.TaggedUnion({
 	watching: {rows: Schema.Array(Row)},
-	refused: {why: Schema.String, rows: Schema.Array(Row)},
+	refused: {reason: Schema.String, rows: Schema.Array(Row)},
 });
 const Enrollment = Schema.Struct({
 	id: Schema.String,
@@ -196,7 +196,7 @@ const Send = Schema.Struct({
 	seen: Schema.Int,
 	traceId: Schema.optional(Schema.String),
 });
-const InboxFact = Schema.TaggedStruct("send", {m: Schema.Json});
+const InboxEvent = Schema.TaggedStruct("send", {m: Schema.Json});
 const Read = Schema.Struct({
 	stream: Schema.String,
 	after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -206,7 +206,7 @@ const SpanRead = Schema.Struct({
 	after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 const SpanContent = Schema.Struct({chain: Chain, spanId: Schema.String});
-const DeleteContent = Schema.Struct({...SpanContent.fields, why: Schema.String});
+const DeleteContent = Schema.Struct({...SpanContent.fields, reason: Schema.String});
 const methods: ReadonlySet<string> = new Set([
 	"process.send",
 	"view.open",
@@ -275,7 +275,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
 		readonly log: Schema.Encoder<unknown>;
 		readonly name?: (input: A) => string | undefined;
 	};
-	readonly facts: {readonly personOnly: ReadonlyArray<string>};
+	readonly events: {readonly personOnly: ReadonlyArray<string>};
 };
 
 const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
@@ -325,8 +325,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			yield* Effect.forEach(
 				rows,
 				(row) =>
-					Schema.decodeUnknownEffect(MemberFact)(valueFor(row)).pipe(
-						Effect.mapError(() => new LedgerError({why: "bad_row"})),
+					Schema.decodeUnknownEffect(MemberEvent)(valueFor(row)).pipe(
+						Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 					),
 				{concurrency: 1},
 			),
@@ -335,7 +335,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 	const membership = Effect.fnUntraced(function* (raw: string) {
 		const members = yield* clients.members;
 		const who = admitted(members, raw);
-		if ("why" in who) return yield* new NotGranted({});
+		if ("reason" in who) return yield* new NotGranted({});
 		const key = yield* fingerprint(raw, false);
 		return Writer.cases[who.as === "agent" ? "agent" : "person"].make({key, for: who.person});
 	});
@@ -343,7 +343,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		Effect.provide(
 			SessionManager.layer(sql, membership, {
 				input: (name) => options.inputs.personOnly.includes(name),
-				fact: (kind) => options.facts.personOnly.includes(kind),
+				event: (kind) => options.events.personOnly.includes(kind),
 			}),
 		),
 	);
@@ -354,7 +354,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			Effect.provide(
 				SessionManager.layer(sql, membership, {
 					input: (name) => policy.inputs.includes(name),
-					fact: (kind) => policy.events.includes(kind),
+					event: (kind) => policy.events.includes(kind),
 				}),
 			),
 		);
@@ -455,22 +455,22 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					});
 					if (Result.isFailure(spent)) return yield* spent.failure;
 					claimed = spent.success;
-					if (!claimed) return Admission.cases.refused.make({why: "not_granted"});
+					if (!claimed) return Admission.cases.refused.make({reason: "not_granted"});
 					const raw = hello.key;
 					const existing = yield* readMembers();
 					if (existing === null && raw !== options.founder.window)
-						return Admission.cases.refused.make({why: "not_granted"});
+						return Admission.cases.refused.make({reason: "not_granted"});
 					const members = existing ?? (yield* clients.members);
 					const who = admitted(members, raw);
-					return "why" in who
-						? Admission.cases.refused.make({why: "not_granted"})
+					return "reason" in who
+						? Admission.cases.refused.make({reason: "not_granted"})
 						: Admission.cases.admitted.make({who: {...who, key: trusted.name}});
 				}),
 			}),
 		);
 		if (result._tag === "refused") {
-			if (result.why === "not_granted" && !claimed) return no("bad_nonce");
-			if (claimed && result.why === "not_granted") {
+			if (result.reason === "not_granted" && !claimed) return no("bad_nonce");
+			if (claimed && result.reason === "not_granted") {
 				const at = yield* clock;
 				yield* store.atomic(() => {
 					const current = store.get(`client/${client}`, Attached);
@@ -503,7 +503,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				parent: null,
 				build: options.build,
 			});
-			const fact = HelloFact.make({
+			const event = HelloEvent.make({
 				...result.hello,
 				url: trusted.url,
 				version: result.version,
@@ -513,9 +513,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			const placed = yield* appendChecked(result.hello.key, {
 				stream: "door/hellos",
 				id: `hello-${random()}`,
-				line: lineFor(from, fact),
+				line: lineFor(from, event),
 			});
-			if (placed._tag === "refused") return yield* new LedgerError({why: "refused"});
+			if (placed._tag === "refused") return yield* new LedgerError({reason: "refused"});
 			yield* store.atomic(() => {
 				sql.exec("DELETE FROM door_pending WHERE client=?", client);
 				store.set(`key/${client}`, Schema.String, result.hello.key);
@@ -574,9 +574,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 	const watch = Effect.fnUntraced(function* (client: ConnectionId) {
 		const checked = yield* silent(Effect.result(online(client)));
 		if (Result.isFailure(checked))
-			return WatchReply.cases.refused.make({why: "not_granted", rows: []});
+			return WatchReply.cases.refused.make({reason: "not_granted", rows: []});
 		if (checked.success.by._tag !== "person")
-			return WatchReply.cases.refused.make({why: "person_only", rows: []});
+			return WatchReply.cases.refused.make({reason: "person_only", rows: []});
 		const at = yield* clock;
 		const state = yield* store.atomic(() => {
 			store.set(
@@ -639,7 +639,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			const [row] = sql.exec("SELECT value FROM door_bindings WHERE id=?", id);
 			if (row === undefined) return null;
 			const decoded = decodeBinding(row.value);
-			if (Result.isFailure(decoded)) throw new LedgerError({why: "bad_row"});
+			if (Result.isFailure(decoded)) throw new LedgerError({reason: "bad_row"});
 			return decoded.success;
 		});
 	});
@@ -647,21 +647,21 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		const decoded = Schema.decodeUnknownResult(
 			Schema.Struct({text: Schema.String, armored: Schema.String}),
 		)(input);
-		if (Result.isFailure(decoded)) return GrantReply.cases.refused.make({why: "bad_signature"});
+		if (Result.isFailure(decoded)) return GrantReply.cases.refused.make({reason: "bad_signature"});
 		const {text, armored} = decoded.success;
 		const change = Schema.decodeUnknownResult(Schema.fromJsonString(Change))(text);
-		if (Result.isFailure(change)) return GrantReply.cases.refused.make({why: "bad_signature"});
+		if (Result.isFailure(change)) return GrantReply.cases.refused.make({reason: "bad_signature"});
 		const c = change.success;
 		const value = Change.match(c, {
 			granted: ({grant}) => grant,
 			revoked: ({revoke}) => revoke,
 			added: ({add}) => add,
 		});
-		if (value.to !== options.name) return GrantReply.cases.refused.make({why: "wrong_ledger"});
+		if (value.to !== options.name) return GrantReply.cases.refused.make({reason: "wrong_ledger"});
 		const members =
 			(yield* silent(readMembers())) ??
 			foldMembers([
-				MemberFact.cases.founded.make({
+				MemberEvent.cases.founded.make({
 					id: options.founder.person,
 					name: options.founder.name,
 					keys: options.founder.keys,
@@ -688,7 +688,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				break;
 			}
 		}
-		if (verified === null) return GrantReply.cases.refused.make({why: "bad_signature"});
+		if (verified === null) return GrantReply.cases.refused.make({reason: "bad_signature"});
 		const checked = verified;
 		const signer = checked.signer;
 		const signerFingerprint = yield* silent(fingerprint(signer, true));
@@ -696,14 +696,14 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		if (cached !== null)
 			return cached.text === text && cached.armored === armored
 				? cached.reply
-				: GrantReply.cases.refused.make({why: "id_reused"});
+				: GrantReply.cases.refused.make({reason: "id_reused"});
 		let enrollmentChecked: typeof Enrolled.Type | null = null;
 		if (c._tag === "added" && c.add.adds._tag === "person") {
 			const added = c.add.adds;
 			if (!Schema.is(KeyLine)(added.key) && !Schema.is(PasskeyLine)(added.key))
-				return GrantReply.cases.refused.make({why: "bad_enrollment"});
+				return GrantReply.cases.refused.make({reason: "bad_enrollment"});
 			if (added.passkey !== undefined && !Schema.is(PasskeyLine)(added.key))
-				return GrantReply.cases.refused.make({why: "bad_enrollment"});
+				return GrantReply.cases.refused.make({reason: "bad_enrollment"});
 			if (Schema.is(PasskeyLine)(added.key)) {
 				const pass = added.passkey;
 				const issued = yield* store.atomic(() => store.get(`enrollment/${c.add.id}`, Enrolled));
@@ -723,7 +723,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 							}),
 						)
 				)
-					return GrantReply.cases.refused.make({why: "bad_enrollment"});
+					return GrantReply.cases.refused.make({reason: "bad_enrollment"});
 				const proof = yield* silent(
 					verifySshsig({
 						text: enrollmentText({...issued.binding, nonce: issued.nonce}),
@@ -739,7 +739,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					proof.be !== pass.be ||
 					proof.bs !== pass.bs
 				)
-					return GrantReply.cases.refused.make({why: "bad_enrollment"});
+					return GrantReply.cases.refused.make({reason: "bad_enrollment"});
 				enrollmentChecked = issued;
 			}
 		}
@@ -748,12 +748,13 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			if (prior !== null)
 				return prior.text === text && prior.armored === armored
 					? prior.reply
-					: GrantReply.cases.refused.make({why: "id_reused"});
-			if (value.for !== members.person) return GrantReply.cases.refused.make({why: "not_member"});
+					: GrantReply.cases.refused.make({reason: "id_reused"});
+			if (value.for !== members.person)
+				return GrantReply.cases.refused.make({reason: "not_member"});
 			if (enrollmentChecked !== null) {
 				const issued = yield* store.atomic(() => store.get(`enrollment/${value.id}`, Enrolled));
 				if (issued === null || issued.used || issued.nonce !== enrollmentChecked.nonce)
-					return GrantReply.cases.refused.make({why: "bad_enrollment"});
+					return GrantReply.cases.refused.make({reason: "bad_enrollment"});
 			}
 			const signed = {
 				text,
@@ -771,10 +772,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 						}
 					: {}),
 			};
-			const fact = Change.match(c, {
-				granted: ({grant}) => MemberFact.cases.granted.make({grant, signed}),
-				revoked: ({revoke}) => MemberFact.cases.revoked.make({revoke, signed}),
-				added: ({add}) => MemberFact.cases.added.make({add, signed}),
+			const event = Change.match(c, {
+				granted: ({grant}) => MemberEvent.cases.granted.make({grant, signed}),
+				revoked: ({revoke}) => MemberEvent.cases.revoked.make({revoke, signed}),
+				added: ({add}) => MemberEvent.cases.added.make({add, signed}),
 			});
 			const currentFrom = yield* fromHere({
 				by: signerFingerprint,
@@ -790,9 +791,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				store.set(`changePending/${value.id}`, ChangePending, next);
 				return next;
 			});
-			if (pending === null) return GrantReply.cases.refused.make({why: "id_reused"});
-			const reply = yield* clients.write(fact, pending.from);
-			if (reply._tag === "refused") return GrantReply.cases.refused.make({why: reply.why});
+			if (pending === null) return GrantReply.cases.refused.make({reason: "id_reused"});
+			const reply = yield* clients.write(event, pending.from);
+			if (reply._tag === "refused") return GrantReply.cases.refused.make({reason: reply.reason});
 			yield* store.atomic(() => {
 				store.set(`change/${value.id}`, Receipt, {text, armored, reply});
 				if (
@@ -814,7 +815,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 						const at = yield* clock;
 						const pending = yield* store.atomic(() => {
 							const live = waiting(at);
-							const accepted = live.rows.filter((r) => !("why" in admitted(latest, r.key)));
+							const accepted = live.rows.filter((r) => !("reason" in admitted(latest, r.key)));
 							store.set(
 								"waiting",
 								Waiting,
@@ -834,7 +835,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 							const name = String(connection.name),
 								client = name.slice(4);
 							const key = yield* store.atomic(() => store.get(name, Schema.String));
-							if (key !== null && "why" in admitted(latest, key))
+							if (key !== null && "reason" in admitted(latest, key))
 								yield* notify(client, {close: 4003});
 						}
 					}
@@ -855,16 +856,16 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 	});
 	const deny = Effect.fnUntraced(function* (client: ConnectionId, input: unknown) {
 		const checked = yield* silent(Effect.result(online(client)));
-		if (Result.isFailure(checked)) return GrantReply.cases.refused.make({why: "not_granted"});
+		if (Result.isFailure(checked)) return GrantReply.cases.refused.make({reason: "not_granted"});
 		if (checked.success.by._tag !== "person")
-			return GrantReply.cases.refused.make({why: "person_only"});
+			return GrantReply.cases.refused.make({reason: "person_only"});
 		const params = Schema.decodeUnknownResult(Schema.Struct({key: Schema.String, saw: Saw}))(input);
 		if (Result.isFailure(params) || reserved(input))
-			return GrantReply.cases.refused.make({why: "bad_input"});
+			return GrantReply.cases.refused.make({reason: "bad_input"});
 		const {key, saw} = params.success;
 		const from = yield* denyFrom(checked.success.by);
 		return yield* clients
-			.write(MemberFact.cases.denied.make({id: random(), key, saw, by: from.by}), from)
+			.write(MemberEvent.cases.denied.make({id: random(), key, saw, by: from.by}), from)
 			.pipe(write);
 	});
 	const route = Effect.fnUntraced(function* (
@@ -909,7 +910,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		const policy =
 			target !== "door" && options.policy !== undefined
 				? yield* options.policy(target)
-				: {inputs: options.inputs.personOnly, events: options.facts.personOnly};
+				: {inputs: options.inputs.personOnly, events: options.events.personOnly};
 		if (
 			request !== null &&
 			Result.isSuccess(request) &&
@@ -932,7 +933,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		const process = yield* allocateStart();
 		const inputId = yield* ids
 			.next(InputId)
-			.pipe(Effect.mapError(() => new LedgerError({why: "storage"})));
+			.pipe(Effect.mapError(() => new LedgerError({reason: "storage"})));
 		const at = yield* clock;
 		const letter =
 			refusal === null && request !== null && Result.isSuccess(request)
@@ -954,7 +955,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				let processId = destination?.state._tag === "live" ? destination.state.process : target;
 				if (prior !== undefined) {
 					const decoded = decodeBinding(prior.value);
-					if (Result.isFailure(decoded)) return Result.fail(new LedgerError({why: "bad_row"}));
+					if (Result.isFailure(decoded)) return Result.fail(new LedgerError({reason: "bad_row"}));
 					const old = decoded.success;
 					if (old.client !== raw || old.digest !== digest) return Result.succeed(null);
 					if (
@@ -975,7 +976,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 						) >= options.inputCap) ||
 					!Number.isSafeInteger(count + 1)
 				)
-					return Result.fail(new LedgerError({why: "storage"}));
+					return Result.fail(new LedgerError({reason: "storage"}));
 				count++;
 				const binding: Binding = {
 					id: inputId,
@@ -1032,26 +1033,26 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				traceId: binding.span.traceId,
 				spanId: binding.span.spanId,
 			};
-			const fact =
+			const event =
 				refusal === null
-					? LegacyInputFact.cases.received.make({
+					? LegacyInputEvent.cases.received.make({
 							...fields,
 							...(safe === undefined ? {} : {input: safe}),
 						})
-					: LegacyInputFact.cases.refused.make({...fields, why: refusal});
-			const recordedFact = Schema.is(InputId)(binding.id)
-				? yield* Schema.decodeUnknownEffect(InputFact)({
-						...fact,
+					: LegacyInputEvent.cases.refused.make({...fields, reason: refusal});
+			const recordedEvent = Schema.is(InputId)(binding.id)
+				? yield* Schema.decodeUnknownEffect(InputEvent)({
+						...event,
 						door: binding.door,
 						n: binding.n,
-					}).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})))
-				: fact;
+					}).pipe(Effect.mapError(() => new LedgerError({reason: "bad_row"})))
+				: event;
 			const placed = yield* appendChecked(binding.client, {
 				stream: "door/inputs",
 				id: binding.id,
-				line: lineFor(fromInput(binding), recordedFact),
+				line: lineFor(fromInput(binding), recordedEvent),
 			});
-			if (placed._tag === "refused") return yield* new LedgerError({why: "refused"});
+			if (placed._tag === "refused") return yield* new LedgerError({reason: "refused"});
 			if (binding.state._tag === "allocated") {
 				const recorded: Binding = {...binding, state: EnvelopeState.cases.recorded.make({})};
 				if (letter !== null) yield* store.atomic(() => saveBinding(recorded));
@@ -1069,11 +1070,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				if (refusal !== null) return no(refusal);
 				if (method === "door.watch") {
 					const answer = yield* watch(client);
-					return answer._tag === "refused" ? no(answer.why) : ok({rows: answer.rows});
+					return answer._tag === "refused" ? no(answer.reason) : ok({rows: answer.rows});
 				}
 				if (method === "door.deny") {
 					const answer = yield* deny(client, params);
-					return answer._tag === "refused" ? no(answer.why) : ok(answer);
+					return answer._tag === "refused" ? no(answer.reason) : ok(answer);
 				}
 				if (
 					method === "process.send" &&
@@ -1098,7 +1099,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 								binding.process,
 								{
 									id: yield* Schema.decodeUnknownEffect(InputId)(binding.id).pipe(
-										Effect.mapError(() => new LedgerError({why: "bad_row"})),
+										Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 									),
 									by: binding.by,
 									arrivedAt: binding.arrivedAt,
@@ -1109,7 +1110,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 									id: request.success.letter,
 									envelope: {
 										id: yield* Schema.decodeUnknownEffect(InputId)(binding.id).pipe(
-											Effect.mapError(() => new LedgerError({why: "bad_row"})),
+											Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 										),
 										by: binding.by,
 										arrivedAt: binding.arrivedAt,
@@ -1161,7 +1162,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 											Schema.TaggedUnion({ready: {rev: Schema.Int}, parked: {}}),
 										),
 									),
-									Effect.mapError(() => new LedgerError({why: "bad_row"})),
+									Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 								);
 					return waited._tag === "parked"
 						? Answer.cases.parked.make(p.success)
@@ -1187,7 +1188,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					if (Result.isFailure(p)) return no("bad_input");
 					yield* records.deleteContent(p.success.chain, p.success.spanId, {
 						by: by.key,
-						why: p.success.why,
+						reason: p.success.reason,
 					});
 					return ok(null);
 				}
@@ -1204,7 +1205,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 	/** The runner may save only the exact input whose checked binding the door delivered. */
 	const accept = Effect.fn("door.accept")(function* (input: Incoming) {
 		const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
-			Effect.mapError(() => new LedgerError({why: "bad_row"})),
+			Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 		);
 		const parent = Schema.decodeUnknownResult(InputId)(incoming.envelope.id);
 		if (Result.isFailure(parent)) return yield* new NotGranted({});
@@ -1226,7 +1227,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			return yield* new NotGranted({});
 		// route already decoded this body; the guard checks its decoded type.
 		const message = incoming.envelope.input;
-		if (!Schema.is(options.inputs.schema)(message)) return yield* new LedgerError({why: "bad_row"});
+		if (!Schema.is(options.inputs.schema)(message))
+			return yield* new LedgerError({reason: "bad_row"});
 		if (binding.hash !== (yield* hash(JSON.stringify(message)))) return yield* new NotGranted({});
 		const destination = Option.isSome(processes)
 			? yield* processes.value.resolve(binding.process)
@@ -1241,7 +1243,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		const stream = `${destination?.name ?? binding.process}/inbox`;
 		if (brainOnly({stream, id: incoming.id, tag: "send"})) return yield* new NotGranted({});
 		const m = yield* Schema.decodeUnknownEffect(Schema.Json)(message).pipe(
-			Effect.mapError(() => new LedgerError({why: "bad_row"})),
+			Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 		);
 		return yield* appendChecked(binding.client, {
 			stream,
@@ -1252,7 +1254,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					seen: incoming.seen,
 					parent: parent.success,
 				},
-				InboxFact.make({m}),
+				InboxEvent.make({m}),
 			),
 		});
 	});
@@ -1262,28 +1264,28 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		readonly process: string;
 		readonly kind: string;
 		readonly stream: string;
-		readonly fact: unknown;
+		readonly event: unknown;
 	}) {
 		return yield* Effect.gen(function* () {
 			if (options.isLive !== undefined && !(yield* options.isLive(a.process)))
-				return yield* new SigningRefused({why: "not_delivered"});
+				return yield* new SigningRefused({reason: "not_delivered"});
 			const sessions = yield* sessionsFor(a.process);
 			const session = yield* sessions.receipt(a.id, a.parent, a.process, a.kind);
 			const binding = yield* savedBinding(a.parent);
-			if (binding === null) return yield* new SigningRefused({why: "not_delivered"});
-			const fact = rawObject(a.fact);
+			if (binding === null) return yield* new SigningRefused({reason: "not_delivered"});
+			const event = rawObject(a.event);
 			if (
-				fact === null ||
-				fact._tag !== a.kind ||
+				event === null ||
+				event._tag !== a.kind ||
 				a.stream.startsWith("door/") ||
 				brainOnly({stream: a.stream, id: a.id, tag: a.kind})
 			)
-				return yield* new SigningRefused({why: "not_delivered"});
+				return yield* new SigningRefused({reason: "not_delivered"});
 			const schema = Schema.StructWithRest(Schema.TaggedStruct(a.kind, {}), [
 				Schema.Record(Schema.String, Schema.Json),
 			]);
-			const decoded = Schema.decodeUnknownResult(schema)(fact);
-			if (Result.isFailure(decoded)) return yield* new SigningRefused({why: "not_delivered"});
+			const decoded = Schema.decodeUnknownResult(schema)(event);
+			if (Result.isFailure(decoded)) return yield* new SigningRefused({reason: "not_delivered"});
 			const digest = yield* hash(JSON.stringify(decoded.success));
 			const at = yield* clock;
 			const meta = yield* store.atomic(() => {
@@ -1294,7 +1296,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				store.set(`append/${a.id}`, AppendMeta, next);
 				return next;
 			});
-			if (meta === null) return yield* new SigningRefused({why: "spent"});
+			if (meta === null) return yield* new SigningRefused({reason: "spent"});
 			return yield* appendChecked(binding.client, {
 				stream: a.stream,
 				id: a.id,
@@ -1348,7 +1350,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			kind: string,
 		) {
 			if (options.isLive !== undefined && !(yield* options.isLive(process)))
-				return yield* new SigningRefused({why: "not_delivered"});
+				return yield* new SigningRefused({reason: "not_delivered"});
 			return yield* (yield* sessionsFor(process))
 				.signer(parent, process, kind)
 				.pipe(Effect.provideService(SignRequest, {id}));
@@ -1357,7 +1359,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		checkDelivery: Effect.fn("door.checkDelivery")(function* (process: string, input: Incoming) {
 			const binding = yield* savedBinding(input.envelope.id);
 			if (binding === null || binding.letter !== input.id || binding.process !== process)
-				return yield* new SigningRefused({why: "not_delivered"});
+				return yield* new SigningRefused({reason: "not_delivered"});
 			const by = yield* membership(binding.client);
 			if (
 				!["delivered", "retryable", "settled"].includes(binding.state._tag) ||
@@ -1371,7 +1373,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				binding.hash === undefined ||
 				binding.hash !== (yield* hash(JSON.stringify(input.envelope.input)))
 			)
-				return yield* new SigningRefused({why: "not_delivered"});
+				return yield* new SigningRefused({reason: "not_delivered"});
 		}),
 		append,
 		accept,
@@ -1386,7 +1388,7 @@ export class Door extends Context.Service<Door, Effect.Success<ReturnType<typeof
 	) => Layer.effect(Door, make(options));
 }
 
-const HelloFact = Schema.TaggedStruct("initialized", {
+const HelloEvent = Schema.TaggedStruct("initialized", {
 	...Hello.fields,
 	url: Schema.String,
 	nonce: Schema.String,
@@ -1399,7 +1401,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 	const bytes = line ? Base64.decode(value.split(/\s+/)[1] ?? "") : Base64Url.decode(value);
 	if (Result.isFailure(bytes)) return yield* new NotGranted({});
 	const body = new Uint8Array(bytes.success);
-	const fail = () => new LedgerError({why: "crypto"});
+	const fail = () => new LedgerError({reason: "crypto"});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
 	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", body), catch: fail});
 	const digest = yield* work;
@@ -1407,7 +1409,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 });
 const hash = Effect.fnUntraced(function* (text: string) {
 	const bytes = new TextEncoder().encode(text);
-	const fail = () => new LedgerError({why: "crypto"});
+	const fail = () => new LedgerError({reason: "crypto"});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
 	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail});
 	const digest = yield* work;

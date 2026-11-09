@@ -23,7 +23,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 	const p = ProjectClient.make(projectStub(env, config.name)),
 		ids = yield* ProcessIdGenerator;
 	const gateway = yield* Schema.decodeUnknownEffect(Schema.String)(ctx.id.name).pipe(
-		Effect.mapError(() => new LedgerError({why: "bad_row"})),
+		Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 	);
 	const recording = yield* Layer.build(
 		recordingLayer(workerSql(ctx.storage), env, config.name, `gateway:${gateway}`),
@@ -34,13 +34,13 @@ const gatewayLogic = Effect.fnUntraced(function* (
 	const connections = new Map<WebSocket, ReturnType<typeof connection>>();
 	const attached = Effect.fnUntraced(function* (ws: WebSocket) {
 		return yield* Schema.decodeUnknownEffect(Attached)(ws.deserializeAttachment()).pipe(
-			Effect.mapError(() => new LedgerError({why: "bad_row"})),
+			Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 		);
 	});
 	const make = Effect.fnUntraced(function* (ws: WebSocket) {
 		const [session, tab, key] = yield* Schema.decodeUnknownEffect(
 			Schema.Tuple([Schema.String, Schema.String, Schema.String]),
-		)(ctx.getTags(ws)).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+		)(ctx.getTags(ws)).pipe(Effect.mapError(() => new LedgerError({reason: "bad_row"})));
 		const c = connection({
 			reader: gateway,
 			session,
@@ -58,7 +58,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 				if (answer._tag !== "ok") return yield* Effect.fail(answer);
 				const ready = yield* Schema.decodeUnknownEffect(Schema.Struct({rev: Schema.Int}))(
 					answer.result,
-				).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+				).pipe(Effect.mapError(() => new LedgerError({reason: "bad_row"})));
 				return Waited.cases.ready.make(ready);
 			}),
 			call: Effect.fnUntraced(
@@ -103,12 +103,12 @@ const gatewayLogic = Effect.fnUntraced(function* (
 					if (method === "door.knock") {
 						const input = yield* Schema.decodeUnknownEffect(Schema.Struct({label: Schema.String}))(
 							params,
-						).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+						).pipe(Effect.mapError(() => new LedgerError({reason: "bad_row"})));
 						const result = yield* rpc(p.knock(client, input));
 						if (result._tag === "ok") {
 							const waiting = yield* Schema.decodeUnknownEffect(
 								Schema.Struct({code: Schema.String, until: Schema.Number}),
-							)(result.result).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+							)(result.result).pipe(Effect.mapError(() => new LedgerError({reason: "bad_row"})));
 							yield* rpc(p.publish(client, {method: "door.waiting", params: waiting}));
 							return Answer.cases.ok.make({result: waiting});
 						}
@@ -117,7 +117,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 					return yield* rpc(p.route(client, method, params));
 				},
 				// A failed or defective call still answers its request without exposing error details.
-				Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({why: "unreachable"}))),
+				Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({reason: "unreachable"}))),
 			),
 		});
 		connections.set(ws, c);
@@ -130,7 +130,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 		const state = yield* attached(ws),
 			[session] = yield* Schema.decodeUnknownEffect(
 				Schema.Tuple([Schema.String, Schema.String, Schema.String]),
-			)(ctx.getTags(ws)).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+			)(ctx.getTags(ws)).pipe(Effect.mapError(() => new LedgerError({reason: "bad_row"})));
 		yield* rpc(p.leave(state.client, session));
 		yield* rpc(p.disconnect(state.client as ConnectionId));
 		connections.delete(ws);
@@ -143,7 +143,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 		for (const ws of ctx.getWebSockets(session))
 			if ((yield* attached(ws))._tag === "online")
 				return yield* (yield* connected(ws)).probe(session);
-		return yield* new LedgerError({why: "unreachable"});
+		return yield* new LedgerError({reason: "unreachable"});
 	});
 	const notify = Effect.fn("gateway.notify")(function* (client: string, news: unknown) {
 		for (const ws of ctx.getWebSockets())
@@ -165,7 +165,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 								}),
 							);
 					},
-					catch: () => new LedgerError({why: "unreachable"}),
+					catch: () => new LedgerError({reason: "unreachable"}),
 				});
 	});
 	for (const ws of ctx.getWebSockets()) {
@@ -179,10 +179,10 @@ const gatewayLogic = Effect.fnUntraced(function* (
 				return new Response("WebSocket required", {status: 426});
 			const segments = yield* Schema.decodeUnknownEffect(
 				Schema.Tuple([Schema.String, Schema.String]),
-			)(path.slice(2, 4)).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+			)(path.slice(2, 4)).pipe(Effect.mapError(() => new LedgerError({reason: "bad_row"})));
 			const [key, tab] = yield* Effect.try({
 				try: () => [decodeURIComponent(segments[0]), decodeURIComponent(segments[1])] as const,
-				catch: () => new LedgerError({why: "bad_row"}),
+				catch: () => new LedgerError({reason: "bad_row"}),
 			});
 			const client = yield* rpc(p.clientConnect()),
 				nonce = yield* rpc(p.challenge(client)),
