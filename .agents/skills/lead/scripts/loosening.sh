@@ -1,6 +1,7 @@
 #!/bin/sh
 # Today's tooling: compare exam content at two local refs. No checkout or network.
 # Fail closed: a pattern parser cannot cover every form TypeScript can write.
+# Additions to an existing test file are a hit for the lead's hand check: added code there can reach old laws' state.
 # A hit goes to the lead's hand check, with the hit list in the PR.
 # Only real loosening waits on the owner.
 set -eu
@@ -8,6 +9,8 @@ set -eu
     cat >&2 <<'HELP'
 usage: loosening.sh <base> <head> [mapping.md]
 Fail closed: a pattern parser cannot cover every form TypeScript can write.
+All additions to an existing test file are a hit for the lead's hand check: added code there can reach old laws' state.
+A new test file can still touch the filesystem or the process outside the file.
 A hit goes to the lead's hand check, with the hit list in the PR.
 Only real loosening waits on the owner.
 Exit 0: no hits; 1: hits; 2: operating error or bad arguments.
@@ -22,6 +25,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import unicodedata
 
 classifier, base, head, *mapping = sys.argv[1:]
 
@@ -35,8 +39,8 @@ def content(ref, path):
     exists = subprocess.run(["git", "cat-file", "-e", f"{ref}:{path}"], capture_output=True)
     return git("show", f"{ref}:{path}").decode(errors="replace") if exists.returncode == 0 else ""
 
-# A small lexer, rather than line counts: comments, strings, wrapping and moving
-# an assertion to a new line must not look like a weaker exam. Tokens retain lines.
+# Tokens name familiar forms in hit messages. They never clear old edits:
+# raw bytes and in-place title swaps decide that below. Tokens retain lines.
 token = re.compile(r'''//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|[A-Za-z_$][\w$]*|\d+(?:\.\d+)?|=>|[^\s]''')
 
 def lex(text):
@@ -270,176 +274,103 @@ def replacements(path):
                 answer[old] = new
     return answer
 
-def values(tokens):
-    return [value for value, _ in tokens]
+def clean_new_file(raw):
+    # Read raw text conservatively. A regex or comment must not hide a shared-state call.
+    # False positives go to the lead; a token parser cannot prove an addition is isolated.
+    try: text = raw.decode()
+    except UnicodeError: return False
+    return not re.search(r"\b(?:vi|process|globalThis|global|beforeEach|afterEach|beforeAll|afterAll|configureGlobal)\b|"
+                         r"\bexpect\b[\s\S]*?\bextend\b|\bimport\s*(?:(?:/\*[\s\S]*?\*/|//[^\n]*\n)\s*)*(?:['\"`]|\()", text)
 
-def statement_ranges(tokens):
-    """Only these boundaries permit insertions. Never descend into an old test.
+def raw_renames(left, right, moved):
+    # Tokens locate titles only. Clearance compares raw lines, including comments,
+    # whitespace and line endings. No insertion, move or second edit can clear.
+    try: left, right = left.decode(), right.decode()
+    except UnicodeError: return False
+    # Nested template strings can make text look like a call. Do not guess.
+    if "${" in left or "${" in right: return False
+    before, after = left.split("\n"), right.split("\n")
+    if len(before) != len(after): return False
+    def titles(text):
+        matches = [m for m in token.finditer(text) if not m.group().startswith(("//", "/*"))]
+        tokens = [(m.group(), text.count("\n", 0, m.start()) + 1) for m in matches]
+        pairs = paired(tokens)
+        found = []
+        for kind, title, call, start, end, _, _ in test_calls(tokens, pairs):
+            args = arguments(tokens, pairs, start, end)
+            literal = matches[start + 1]
+            # A regex containing it('title') is not a test title. Only a call
+            # starting its raw line can clear; complex lines get a hand check.
+            position = matches[call].start()
+            if text[text.rfind("\n", 0, position) + 1:position].strip(): continue
+            if kind in ("it", "test") and args[0][1] - args[0][0] == 1 and "${" not in literal.group():
+                found.append((kind, title, literal))
+        return found
+    old, new = titles(left), titles(right)
+    if len(old) != len(new): return False
+    allowed = {}
+    for (kind, title, a), (other, replacement, b) in zip(old, new):
+        if kind != other or moved.get(title) != replacement: continue
+        line = left.count("\n", 0, a.start())
+        if right.count("\n", 0, b.start()) != line: continue
+        start = a.start() - (left.rfind("\n", 0, a.start()) + 1)
+        end = start + len(a.group())
+        allowed.setdefault(line, []).append(before[line][:start] + b.group() + before[line][end:])
+    return all(a == b or b in allowed.get(i, []) for i, (a, b) in enumerate(zip(before, after)))
 
-    Unknown statements can stay byte-for-token identical. They cannot acquire
-    inserts. An unfamiliar delimiter or statement shape simply fails closed.
-    """
-    pairs = paired(tokens); result = {}; boundaries = set()
-    def block(left, right):
-        boundaries.add(left); boundaries.add(right)
-        start = left
-        while start < right:
-            end = start
-            while end < right:
-                if tokens[end][0] == ";":
-                    end += 1; break
-                end = pairs[end] + 1 if end in pairs else end + 1
-                # ASI: a new declaration or test on a new line cannot continue
-                # the preceding expression. Do not guess about other starts.
-                if end < right and tokens[end][1] > tokens[end - 1][1] and tokens[end][0] in (
-                    "const", "let", "var", "import", "it", "test", "describe", "suite"
-                ):
-                    break
-            result[start] = end; boundaries.add(end)
-            # A plain describe's synchronous arrow body is another statement
-            # list. Other callbacks, functions and blocks are never opened.
-            part = values(tokens[start:end])
-            if part[:2] == ["describe", "("] and start + 1 in pairs:
-                close = pairs[start + 1]
-                args = arguments(tokens, pairs, start + 1, close)
-                if len(args) == 2:
-                    a, b = args[1]
-                    if values(tokens[a:a + 4]) == ["(", ")", "=>", "{"] and pairs.get(a + 3) == b - 1:
-                        block(a + 4, b - 1)
-            start = end
-    block(0, len(tokens))
-    return result, boundaries
-
-def shared_state(tokens):
-    words = values(tokens)
-    # These calls change other laws. Check the whole added statement, including
-    # callbacks and const initializers. Computed access is too uncertain to clear.
-    hooks = {"beforeEach", "afterEach", "beforeAll", "afterAll"}
-    for i, word in enumerate(words):
-        if word in hooks or word in ("vi", "process", "globalThis", "global"):
-            return True
-        if words[i:i + 3] in (["fc", ".", "configureGlobal"], ["expect", ".", "extend"]):
-            return True
-        if word in ("delete", "++", "--") or words[i:i + 2] in (["+", "+"], ["-", "-"]):
-            return True
-    return False
-
-def safe_statement(tokens, old_names, new_names):
-    words = values(tokens)
-    if words[-1:] == [";"]: words = words[:-1]; tokens = tokens[:-1]
-    if not words: return False
-    pairs = paired(tokens)
-    if words[0] == "import":
-        # An import with bindings adds names. A bare import runs shared setup.
-        return len(words) >= 4 and "from" in words and not quoted(words[1]) and quoted(words[-1])
-    if shared_state(tokens): return False
-    if words[0] == "const":
-        if len(words) < 4 or not re.fullmatch(r"[A-Za-z_$][\w$]*", words[1]) or words[2] != "=": return False
-        if words[1] in old_names or new_names[words[1]] != 1: return False
-        # A helper may hold data, a function, or a fast-check generator. Unknown
-        # eager calls and writes may change shared state, so request a hand check.
-        for i in range(3, len(words)):
-            if words[i] == "=" and words[i + 1:i + 2] != [">"]: return False
-            if words[i] == "(" and i and re.fullmatch(r"[A-Za-z_$][\w$]*", words[i - 1]):
-                if i < 3 or words[i - 3:i - 1] != ["fc", "."]: return False
-        return True
-    if words[0] not in ("it", "test", "describe") or words[1:2] != ["("] or pairs.get(1) != len(words) - 1: return False
-    args = arguments(tokens, pairs, 1, len(words) - 1)
-    if len(args) != 2 or args[0][1] - args[0][0] != 1: return False
-    title = words[args[0][0]]
-    if not quoted(title) or (title.startswith('`') and "${" in title): return False
-    a, b = args[1]
-    if words[a:a + 3] != ["(", ")", "=>"]: return False
-    if words[0] == "describe":
-        if words[a + 3:a + 4] != ["{"] or pairs.get(a + 3) != b - 1: return False
-        body = tokens[a + 4:b - 1]
-        spans, _ = statement_ranges(body)
-        start = 0
-        while start < len(body):
-            end = spans[start]
-            if not safe_statement(body[start:end], old_names, new_names): return False
-            start = end
-    return True
-
-def pure_additions(old, new):
-    if values(old) == values(new): return True
-    spans, _ = statement_ranges(new)
-    _, boundaries = statement_ranges(old)
-    old_names = set(values(old))
-    # Duplicate const bindings cannot count as new names, even in two inserts.
-    new_names = Counter(new[i + 1][0] for i in range(len(new) - 1) if new[i][0] == "const")
-    inserts = {a: b for a, b in spans.items() if safe_statement(new[a:b], old_names, new_names)}
-    pending = [(0, 0)]; visited = set()
-    while pending:
-        a, b = pending.pop()
-        if (a, b) in visited: continue
-        visited.add((a, b))
-        if a == len(old) and b == len(new): return True
-        if a in boundaries and b in inserts: pending.append((a, inserts[b]))
-        if a < len(old) and b < len(new) and old[a][0] == new[b][0]: pending.append((a + 1, b + 1))
-    return False
-
-def mapped_tokens(records, moved):
-    # A mapping is permission for exactly a title swap, never a changed body.
-    # Match once across all exam files, so a law may move between retained files.
-    removed = {file: set() for file in records}; added = {file: set() for file in records}
-    normalized = {file: list(old) for file, (old, _, _, _) in records.items()}
-    used = set()
-    for file, (old, _, before, _) in records.items():
-        for (title, ordinal), (start, end, _) in before.items():
-            if title not in moved: continue
-            for destination, (_, new, _, after) in records.items():
-                key = (moved[title], ordinal)
-                if key not in after or (destination, key) in used: continue
-                a, b, _ = after[key]
-                left, right = values(old[start:end]), values(new[a:b])
-                old_call = next((c for c in test_calls(old, paired(old)) if c[2] == start), None)
-                new_call = next((c for c in test_calls(new, paired(new)) if c[2] == a), None)
-                if not old_call or not new_call: continue
-                offset = old_call[3] + 1 - start
-                if offset != new_call[3] + 1 - a: continue
-                left[offset] = right[offset]
-                if left != right: continue
-                used.add((destination, key))
-                if destination == file:
-                    normalized[file][start + offset] = new[a + offset]
-                else:
-                    # Consume a whole statement, including its optional terminator.
-                    removed[file].update(range(start, end + (end < len(old) and old[end][0] == ";")))
-                    added[destination].update(range(a, b + (b < len(new) and new[b][0] == ";")))
-                break
-    return {file: ([t for i, t in enumerate(normalized[file]) if i not in removed[file]],
-                   [t for i, t in enumerate(record[1]) if i not in added[file]])
-            for file, record in records.items()}
+def tree(ref):
+    entries = {}
+    for row in git("ls-tree", "-r", "-z", "--full-tree", ref).split(b"\0"):
+        if not row: continue
+        metadata, path = row.split(b"\t", 1)
+        entries[path.decode(errors="surrogateescape")] = tuple(metadata.decode().split())
+    return entries
 
 try:
     # Resolve both refs first. A typo is an operating error, never a clean result.
     for ref in (base, head): git("rev-parse", "--verify", f"{ref}^{{commit}}")
-    paths = [p.decode() for p in git("diff", "--name-only", "-z", "--no-renames", base, head, "--").split(b"\0") if p]
-    selected_paths = set()
+    paths = [p.decode(errors="surrogateescape") for p in git("diff", "--name-only", "-z", "--no-renames", base, head, "--").split(b"\0") if p]
+    unsafe = {p for p in paths if any(unicodedata.category(c) in ("Cc", "Cs") for c in p)}
+    selected_paths = set(unsafe)
     with tempfile.TemporaryDirectory(prefix="exam-lists-") as temporary:
         for ref in (base, head):
             source = Path(temporary) / "exam-paths.json"
             source.write_text(content(ref, "exam-paths.json") or "[]")
-            selected = subprocess.run(["python3", classifier, str(source), *paths], capture_output=True, text=True)
-            if selected.returncode not in (0, 1): raise ValueError(selected.stderr.strip())
-            selected_paths.update(line.split("\t", 1)[0] for line in selected.stdout.splitlines())
+            # One path per call: use the exit code, never a newline/tab-delimited
+            # path list. Git's input lists above and below are all NUL-delimited.
+            # Run even with no safe paths, so a broken classifier is an error.
+            for path in [p for p in paths if p not in unsafe] or [None]:
+                selected = subprocess.run(["python3", classifier, str(source), *([path] if path is not None else [])], capture_output=True, text=True)
+                if (selected.returncode not in (0, 1) or selected.stderr or
+                        (selected.returncode == 0 and selected.stdout) or
+                        (selected.returncode == 1 and (path is None or not selected.stdout.startswith(path + "\t")))):
+                    raise ValueError("exam classifier failed: " + selected.stderr.strip())
+                if selected.returncode == 1: selected_paths.add(path)
     files = [path for path in paths if path in selected_paths]
     moved = replacements(mapping[0] if mapping else None)
-    deleted = {p.decode() for p in git("diff", "--name-only", "-z", "--no-renames", "--diff-filter=D", base, head, "--").split(b"\0") if p}
+    trees = [tree(ref) for ref in (base, head)]
+    raw = {}
     records = {}
     for file in files:
-        old, new = (lex(content(ref, file)) for ref in (base, head))
+        raw[file] = tuple(git("cat-file", "blob", t[file][2]) if file in t and t[file][1] == "blob" else b"" for t in trees)
+        old, new = (lex(value.decode(errors="replace")) for value in raw[file])
         records[file] = (old, new, laws(old, paired(old)), laws(new, paired(new)))
     destinations = {key for _, _, _, after in records.values() for key in after}
-    normalized = mapped_tokens(records, moved)
     hits = []
     def hit(file, kind, title):
+        if file in unsafe: file = json.dumps(file, ensure_ascii=True)
         row = f"{file}: {kind}: {title}"
         if row not in hits: hits.append(row)
     for file, (old, new, before, after) in records.items():
-        left, right = normalized[file]
-        if file in deleted or not re.search(r"\.(?:test|spec)\.[cm]?[jt]sx?$", file) or not pure_additions(left, right):
+        prior, current = (t.get(file) for t in trees)
+        left, right = raw[file]
+        regular = lambda entry: entry is not None and entry[0] in ("100644", "100755") and entry[1] == "blob"
+        # An embedded test sample is still a change to a non-test exam file.
+        test_file = re.search(r"\.(?:test|spec)\.[cm]?[jt]sx?$", file)
+        clear = file not in unsafe and regular(current) and (
+            (prior is None and test_file and clean_new_file(right)) or
+            (regular(prior) and prior[:2] == current[:2] and (left == right or (test_file and raw_renames(left, right, moved)))))
+        if not clear:
             position = next((i for i, (a, b) in enumerate(zip(old, new)) if a[0] != b[0]), min(len(old), len(new)))
             line = new[min(position, len(new) - 1)][1] if new else (old[min(position, len(old) - 1)][1] if old else 1)
             hit(file, "unrecognized change", f"line {line}")

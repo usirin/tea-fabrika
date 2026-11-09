@@ -1,10 +1,13 @@
 import {spawnSync} from "node:child_process";
 import {
+	cpSync,
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	readdirSync,
+	readlinkSync,
 	realpathSync,
 	renameSync,
 	rmSync,
@@ -19,6 +22,21 @@ import {describe, expect, it} from "vitest";
 // Today's tooling. GitHub, signing and pushes are stubbed. Cleanup uses disposable local Git.
 const script = join(import.meta.dirname, "catchup.sh");
 const tip = "0123456789abcdef0123456789abcdef01234567";
+const storageFiles = (root: string) => {
+	const files: Record<string, string> = {};
+	const visit = (path: string, name: string) => {
+		const info = lstatSync(path);
+		files[name] = info.isSymbolicLink()
+			? `link:${readlinkSync(path)}`
+			: info.isFile()
+				? `file:${readFileSync(path).toString("base64")}`
+				: "directory";
+		if (info.isDirectory())
+			for (const child of readdirSync(path)) visit(join(path, child), `${name}/${child}`);
+	};
+	visit(root, ".");
+	return files;
+};
 const reads = ["head", "checks", "trust", "apps", "logs"] as const;
 const options = {seed: 520, numRuns: 12};
 type Call = {cmd: string; args: string[]; key?: string};
@@ -45,6 +63,17 @@ type Setup = {
 		relative: boolean;
 		hops: number;
 	};
+	deepStorage?: {
+		worktree: "catchup-900" | "driver";
+		location: "work" | "admin";
+		kind: string;
+		root: "gitdir" | "common" | "alternate";
+		parts: string[];
+		through: boolean;
+		relative: boolean;
+	};
+	sharedAdmin?: "catchup-900" | "driver";
+	unwalkable?: {worktree: "catchup-900" | "driver"; parts: string[]};
 	// Seconds since the start, read by `date` after that many check reads (the last one repeats).
 	clock?: number[];
 };
@@ -172,6 +201,9 @@ const run = (setup: Setup, args: string[] = []) => {
 		let main = dir;
 		let storage = "",
 			history = "";
+		let admin = "";
+		let stored = "";
+		let savedStorage: Record<string, string> = {};
 		let protectedWork = "",
 			protectedData = "",
 			saved = "";
@@ -259,6 +291,90 @@ const run = (setup: Setup, args: string[] = []) => {
 				writeFileSync(saved, setup.branch);
 			}
 			expect(git(dir, "remote")).toBe("");
+			if (setup.deepStorage || setup.sharedAdmin || setup.unwalkable) {
+				const original = join(dir, ".git");
+				const worktree =
+					setup.deepStorage?.worktree ?? setup.sharedAdmin ?? setup.unwalkable!.worktree;
+				admin = git(join(dir, "boxes", worktree), "rev-parse", "--absolute-git-dir");
+				history = git(dir, "rev-list", "--objects", "--all");
+				if (setup.sharedAdmin) {
+					// A worktree removal deletes its admin directory outside the work folder.
+					// MAIN is another reader of that exact directory, with the same common store.
+					const common = join(dir, "main-common");
+					renameSync(original, common);
+					for (const name of ["catchup-900", "driver", "sibling"]) {
+						writeFileSync(
+							join(dir, "boxes", name, ".git"),
+							`gitdir: ${join(common, "worktrees", name)}\n`,
+						);
+					}
+					admin = join(common, "worktrees", worktree);
+					writeFileSync(original, `gitdir: ${admin}\n`);
+					storage = admin;
+					stored = admin;
+				} else if (setup.unwalkable) {
+					storage = join(original, "objects/pack", ...setup.unwalkable.parts);
+					mkdirSync(join(storage, ".."), {recursive: true});
+					symlinkSync(join(dir, "missing-storage"), storage);
+				} else {
+					const path = setup.deepStorage!;
+					git(dir, "pack-refs", "--all");
+					if (path.kind === "objects/pack") git(dir, "repack", "-ad");
+					if (path.kind === "refs") git(dir, "update-ref", "refs/keep/storage", "HEAD");
+					history = git(dir, "rev-list", "--objects", "--all");
+					let root = original;
+					if (path.root === "common") {
+						root = join(dir, "main-common");
+						cpSync(original, root, {recursive: true});
+						rmSync(join(root, "worktrees"), {recursive: true});
+						symlinkSync(join(original, "worktrees"), join(root, "worktrees"));
+						writeFileSync(
+							join(original, "commondir"),
+							`${path.relative ? relative(original, root) : root}\n`,
+						);
+					}
+					if (path.root === "alternate") {
+						root = join(dir, "main-alternate");
+						renameSync(join(original, "objects"), root);
+						mkdirSync(join(original, "objects/info"), {recursive: true});
+						writeFileSync(
+							join(original, "objects/info/alternates"),
+							`${path.relative ? relative(join(original, "objects"), root) : root}\n`,
+						);
+					}
+					const source = join(
+						root,
+						path.kind === "loose"
+							? `${path.root === "alternate" ? "" : "objects/"}${git(dir, "rev-parse", "HEAD").slice(0, 2)}`
+							: path.kind.startsWith("generated")
+								? join("extra", ...path.parts, "saved")
+								: path.root === "alternate"
+									? path.kind.replace(/^objects\//, "")
+									: path.kind,
+					);
+					if (!existsSync(source)) {
+						mkdirSync(join(source, ".."), {recursive: true});
+						if (["generated-file", "packed-refs", "index"].includes(path.kind))
+							writeFileSync(source, setup.branch);
+						else mkdirSync(source);
+					}
+					storage = join(
+						path.location === "admin" ? admin : join(dir, "boxes", path.worktree, "node_modules"),
+						...path.parts,
+						"borrowed",
+					);
+					mkdirSync(join(storage, ".."), {recursive: true});
+					stored = path.through ? join(dir, "outside-storage") : storage;
+					renameSync(source, stored);
+					const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
+					if (path.through) symlinkSync(name(join(storage, ".."), stored), storage);
+					symlinkSync(name(join(source, ".."), storage), source);
+				}
+				if (stored) savedStorage = storageFiles(stored);
+				expect(git(dir, "rev-list", "--objects", "--all")).toBe(history);
+				const registered = git(dir, "worktree", "list", "--porcelain", "-z");
+				expect(registered).toContain(`worktree ${realpathSync(join(dir, "boxes", worktree))}\0`);
+			}
 			if (setup.storage) {
 				const path = setup.storage;
 				const original = join(dir, ".git");
@@ -354,7 +470,9 @@ const run = (setup: Setup, args: string[] = []) => {
 			setup.cleanup && existsSync(join(dir, "boxes/state/driver.md"))
 				? readFileSync(join(dir, "boxes/state/driver.md"), "utf8")
 				: "";
-		const registrations = setup.storage
+		const inspectStorage =
+			setup.storage || setup.deepStorage || setup.sharedAdmin || setup.unwalkable;
+		const registrations = inspectStorage
 			? spawnSync("/usr/bin/git", ["-C", dir, "worktree", "list", "--porcelain", "-z"], {
 					encoding: "utf8",
 					env: localEnv,
@@ -362,7 +480,7 @@ const run = (setup: Setup, args: string[] = []) => {
 			: setup.cleanup
 				? git(dir, "worktree", "list", "--porcelain", "-z")
 				: "";
-		const after = setup.storage
+		const after = inspectStorage
 			? spawnSync("/usr/bin/git", ["-C", dir, "rev-list", "--objects", "--all"], {
 					encoding: "utf8",
 					env: localEnv,
@@ -379,6 +497,9 @@ const run = (setup: Setup, args: string[] = []) => {
 			registrations,
 			storage: {
 				exists: existsSync(storage),
+				admin: existsSync(admin),
+				saved: savedStorage,
+				files: stored && existsSync(stored) ? storageFiles(stored) : {},
 				history,
 				code: after?.status,
 				after: after?.stdout.trim(),
@@ -403,6 +524,125 @@ const assertHead = (calls: Call[]) => {
 };
 
 describe("catchup, today's tooling", () => {
+	// Plant: review3's guard walks selected roots only and compares only the work folder.
+	// Generate storage in both the work folder and the admin directory Git also removes.
+	it.each(
+		(["catchup-900", "driver"] as const).flatMap((worktree) =>
+			(["work", "admin"] as const).flatMap((location) =>
+				(["gitdir", "common", "alternate"] as const).flatMap((root) =>
+					[
+						"objects/pack",
+						"loose",
+						"refs",
+						"packed-refs",
+						"logs",
+						"index",
+						"generated-file",
+						"generated-folder",
+					].map((kind) => ({worktree, location, root, kind})),
+				),
+			),
+		),
+	)(
+		"T318 review3 $worktree keeps nested MAIN $root $kind in its $location storage",
+		({worktree, location, root, kind}) => {
+			fc.assert(
+				fc.property(
+					fc.record({
+						branch: fc.stringMatching(/^[a-z]{2,10}$/),
+						parts: fc.array(fc.stringMatching(/^[a-z]{1,8}$/), {minLength: 1, maxLength: 6}),
+						through: fc.boolean(),
+						relative: fc.boolean(),
+					}),
+					({branch, ...path}) => {
+						const got = run({
+							...green,
+							branch: `fabrikalfa/${branch}`,
+							cleanup: "clean",
+							deepStorage: {worktree, location, root, kind, ...path},
+						});
+						expect(got.code, got.text).toBe(0);
+						expect(merges(got.calls)).toHaveLength(1);
+						expect(got.remaining, got.text).toContain(worktree);
+						expect(got.storage.admin, got.text).toBe(true);
+						expect(got.storage.exists, got.text).toBe(true);
+						expect(got.storage.files).toEqual(expect.objectContaining(got.storage.saved));
+						expect(got.storage.code, got.storage.error).toBe(0);
+						expect(got.storage.after).toBe(got.storage.history);
+						expect(got.registrations).toContain(`/${worktree}\0`);
+						expect(got.text).toMatch(new RegExp(`^kept worktree ${worktree}: [^\\n]+$`, "m"));
+						expect(
+							got.calls.some(
+								(c) =>
+									c.cmd === "git" &&
+									c.args.includes("remove") &&
+									c.args.some((a) => a.endsWith(`/${worktree}`)),
+							),
+						).toBe(false);
+						expect(got.keptHead).toBe(got.checkedTip);
+						expect(got.state).toBe("saved wait");
+					},
+				),
+				{seed: 31862, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: protect the worktree path while forgetting the separate admin directory it deletes.
+	it.each(["catchup-900", "driver"] as const)(
+		"T318 review3 MAIN sharing %s admin data prevents worktree removal",
+		(worktree) => {
+			fc.assert(
+				fc.property(fc.stringMatching(/^[a-z]{2,10}$/), (branch) => {
+					const got = run({
+						...green,
+						branch: `fabrikalfa/${branch}`,
+						cleanup: "clean",
+						sharedAdmin: worktree,
+					});
+					expect(got.code, got.text).toBe(0);
+					expect(merges(got.calls)).toHaveLength(1);
+					expect(got.remaining, got.text).toContain(worktree);
+					expect(got.storage.admin, got.text).toBe(true);
+					expect(got.storage.exists, got.text).toBe(true);
+					expect(got.storage.files).toEqual(expect.objectContaining(got.storage.saved));
+					expect(got.storage.code, got.storage.error).toBe(0);
+					expect(got.storage.after).toBe(got.storage.history);
+					expect(got.text).toMatch(new RegExp(`^kept worktree ${worktree}: [^\\n]+$`, "m"));
+					expect(
+						got.calls.some(
+							(c) =>
+								c.cmd === "git" &&
+								c.args.includes("remove") &&
+								c.args.some((a) => a.endsWith(`/${worktree}`)),
+						),
+					).toBe(false);
+				}),
+				{seed: 31863, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: ignore a nested walk failure and remove a candidate without proving independence.
+	it.each(["catchup-900", "driver"] as const)(
+		"T318 review3 %s stays when MAIN cannot be fully walked",
+		(worktree) => {
+			fc.assert(
+				fc.property(
+					fc.array(fc.stringMatching(/^[a-z]{1,8}$/), {minLength: 1, maxLength: 6}),
+					(parts) => {
+						const got = run({...green, cleanup: "clean", unwalkable: {worktree, parts}});
+						expect(got.code, got.text).toBe(0);
+						expect(got.remaining, got.text).toContain(worktree);
+						expect(got.storage.admin, got.text).toBe(true);
+						expect(got.text).toMatch(new RegExp(`^kept worktree ${worktree}: [^\\n]+$`, "m"));
+					},
+				),
+				{seed: 31864, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
 	// Plant: today's guard protects MAIN's folder alone and removes borrowed Git storage.
 	// Both worktree-removal calls must keep nested alternates and intermediate links, too.
 	it.each(

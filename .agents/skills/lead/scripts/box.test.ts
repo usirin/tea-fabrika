@@ -1,9 +1,13 @@
 import {spawnSync} from "node:child_process";
 import {
+	cpSync,
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	readdirSync,
+	readlinkSync,
 	renameSync,
 	rmSync,
 	symlinkSync,
@@ -15,6 +19,21 @@ import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
 const script = join(import.meta.dirname, "box.sh");
+const storageFiles = (root: string) => {
+	const files: Record<string, string> = {};
+	const visit = (path: string, name: string) => {
+		const info = lstatSync(path);
+		files[name] = info.isSymbolicLink()
+			? `link:${readlinkSync(path)}`
+			: info.isFile()
+				? `file:${readFileSync(path).toString("base64")}`
+				: "directory";
+		if (info.isDirectory())
+			for (const child of readdirSync(path)) visit(join(path, child), `${name}/${child}`);
+	};
+	visit(root, ".");
+	return files;
+};
 const input = fc.record({
 	name: fc.stringMatching(/^[a-z]{2,8}$/),
 	value: fc.stringMatching(/^[a-z]{1,12}$/),
@@ -62,7 +81,7 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
 		const ran = spawnSync("/usr/bin/git", ["-C", at, ...args], {
 			encoding: "utf8",
 			env,
-			timeout: 5_000,
+			timeout: 15_000,
 		});
 		expect(ran.error).toBeUndefined();
 		expect(ran.status, ran.stderr).toBe(0);
@@ -175,6 +194,130 @@ const kept = (f: ReturnType<typeof setup>, code = 1) => {
 };
 
 describe("box rm, today's tooling", () => {
+	// Plant: review3's root-only walk misses a symlink anywhere below MAIN storage.
+	// Arbitrary paths matter too: an unfamiliar storage name must fail closed.
+	it.each(
+		(["direct", "catchup"] as const).flatMap((entry) =>
+			(["gitdir", "common", "alternate"] as const).flatMap((root) =>
+				[false, true].flatMap((data) =>
+					[
+						"objects/pack",
+						"loose",
+						"refs",
+						"packed-refs",
+						"logs",
+						"index",
+						"generated-file",
+						"generated-folder",
+					].map((kind) => ({entry, root, data, kind})),
+				),
+			),
+		),
+	)(
+		"T318 review3 $entry keeps nested MAIN $root $kind in box data $data",
+		({entry, root: rootKind, data, kind}) => {
+			fc.assert(
+				fc.property(
+					input,
+					fc.record({
+						parts: fc.array(fc.stringMatching(/^[a-z]{1,8}$/), {minLength: 1, maxLength: 6}),
+						through: fc.boolean(),
+						relative: fc.boolean(),
+					}),
+					(v, path) =>
+						fixture(v, (f) => {
+							const original = join(f.main, ".git");
+							f.git(f.main, "pack-refs", "--all");
+							if (kind === "objects/pack") f.git(f.main, "repack", "-ad");
+							if (kind === "refs") f.git(f.main, "update-ref", "refs/keep/storage", "HEAD");
+							const history = f.git(f.main, "rev-list", "--objects", "--all");
+							let root = original;
+							if (rootKind === "common") {
+								root = join(f.dir, "main-common");
+								cpSync(original, root, {recursive: true});
+								writeFileSync(
+									join(original, "commondir"),
+									`${path.relative ? relative(original, root) : root}\n`,
+								);
+							}
+							if (rootKind === "alternate") {
+								root = join(f.dir, "main-alternate");
+								renameSync(join(original, "objects"), root);
+								mkdirSync(join(original, "objects/info"), {recursive: true});
+								writeFileSync(
+									join(original, "objects/info/alternates"),
+									`${path.relative ? relative(join(original, "objects"), root) : root}\n`,
+								);
+							}
+							const source = join(
+								root,
+								kind === "loose"
+									? `${rootKind === "alternate" ? "" : "objects/"}${f.git(f.main, "rev-parse", "HEAD").slice(0, 2)}`
+									: kind.startsWith("generated")
+										? join("extra", ...path.parts, "saved")
+										: rootKind === "alternate"
+											? kind.replace(/^objects\//, "")
+											: kind,
+							);
+							if (!existsSync(source)) {
+								mkdirSync(join(source, ".."), {recursive: true});
+								if (kind === "generated-file" || kind === "packed-refs" || kind === "index")
+									writeFileSync(source, v.value);
+								else mkdirSync(source);
+							}
+							const target = join(
+								data ? join(f.data, "objects/info") : join(f.work, "node_modules"),
+								...path.parts,
+								"borrowed",
+							);
+							mkdirSync(join(target, ".."), {recursive: true});
+							const stored = path.through ? join(f.dir, "outside-storage") : target;
+							renameSync(source, stored);
+							const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
+							if (path.through) symlinkSync(name(join(target, ".."), stored), target);
+							symlinkSync(name(join(source, ".."), target), source);
+							const saved = storageFiles(stored);
+							expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
+							const got = f.run(f.name, {}, entry);
+							expect(got.code, got.text).toBe(entry === "direct" ? 1 : 0);
+							expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`, "m"));
+							expect(existsSync(f.work), got.text).toBe(true);
+							expect(existsSync(f.data), got.text).toBe(true);
+							expect(existsSync(target), got.text).toBe(true);
+							expect(storageFiles(stored)).toEqual(expect.objectContaining(saved));
+							expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
+						}),
+				),
+				{seed: 31860, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: ignore a walk error below an object root, leaving uncertainty treated as safe.
+	it.each(["direct", "catchup"] as const)(
+		"T318 review3 %s keeps the pair when MAIN cannot be fully walked",
+		(entry) => {
+			fc.assert(
+				fc.property(
+					input,
+					fc.array(fc.stringMatching(/^[a-z]{1,8}$/), {minLength: 1, maxLength: 6}),
+					(v, parts) =>
+						fixture(v, (f) => {
+							const path = join(f.main, ".git/objects/pack", ...parts);
+							mkdirSync(join(path, ".."), {recursive: true});
+							symlinkSync(join(f.dir, "missing-storage"), path);
+							const got = f.run(f.name, {}, entry);
+							expect(got.code, got.text).toBe(entry === "direct" ? 1 : 0);
+							expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`, "m"));
+							expect(existsSync(f.work), got.text).toBe(true);
+							expect(existsSync(f.data), got.text).toBe(true);
+						}),
+				),
+				{seed: 31861, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
 	// Plant: today's guard protects only MAIN's checkout, so borrowed storage is deleted.
 	// Cover nested alternates and intermediate links through both public callers.
 	it.each(

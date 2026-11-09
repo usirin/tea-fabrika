@@ -1,5 +1,5 @@
 import {spawnSync} from "node:child_process";
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import fc from "fast-check";
@@ -38,18 +38,16 @@ const env = {
 	GIT_TERMINAL_PROMPT: "0",
 	TYPESAFE_API_KEY: undefined,
 };
-const compare = (
-	before: Record<string, string>,
-	after: Record<string, string>,
-	mapping?: string,
-) => {
+type File = string | {content: string; mode: number} | {link: string};
+const compare = (before: Record<string, File>, after: Record<string, File>, mapping?: string) => {
 	const dir = mkdtempSync(join(tmpdir(), "loosening-"));
 	const git = (...args: string[]) => {
 		const ran = spawnSync("/usr/bin/git", ["-C", dir, ...args], {
 			encoding: "utf8",
 			env,
-			timeout: 5_000,
+			timeout: 15_000,
 		});
+		expect(ran.error).toBeUndefined();
 		expect(ran.status, ran.stderr).toBe(0);
 		return ran.stdout.trim();
 	};
@@ -70,10 +68,13 @@ const compare = (
 			].map((glob) => ({glob})),
 		];
 		writeFileSync(join(dir, "exam-paths.json"), JSON.stringify(rows));
-		const write = (files: Record<string, string>) => {
+		const write = (files: Record<string, File>) => {
 			for (const [path, content] of Object.entries(files)) {
 				mkdirSync(dirname(join(dir, path)), {recursive: true});
-				writeFileSync(join(dir, path), content);
+				rmSync(join(dir, path), {force: true});
+				if (typeof content === "string") writeFileSync(join(dir, path), content);
+				else if ("link" in content) symlinkSync(content.link, join(dir, path));
+				else writeFileSync(join(dir, path), content.content, {mode: content.mode});
 			}
 			git("add", ".");
 			git("commit", "-qm", "fixture", "--allow-empty");
@@ -274,22 +275,23 @@ describe("loosening, today's tooling", () => {
 		);
 	});
 
-	// Plants: reject additions or mapped renames; clear an edit to an old range.
-	it("T318 source forms accept additions and mapped renames but flag wider settings", () => {
+	// Plants: clear additions or wrapping in an existing file; reject an in-place mapped rename.
+	it("T318 source forms hit existing additions and wrapping but clear in-place mapped renames", () => {
 		fc.assert(
 			fc.property(input, form, range, (v, shape, r) => {
 				const before = call(v, shape, false);
 				const renamed = `${v.name}-new`;
-				for (const [after, mapping] of [
-					[before + source(v, undefined, "", renamed), undefined],
-					[before.replaceAll(" ", v.space), undefined],
+				for (const [after, mapping, code] of [
+					[before + source(v, undefined, "", renamed), undefined, 1],
+					[before.replaceAll(" ", v.space), undefined, v.space === " " ? 0 : 1],
 					[
 						call({...v, name: renamed}, shape, false),
 						`| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`,
+						0,
 					],
 				] as const) {
 					const got = compare({[file]: before}, {[file]: after}, mapping);
-					expect(got.code, got.text).toBe(0);
+					expect(got.code, got.text).toBe(code);
 				}
 				const start = r.bound;
 				const end = start + (r.key.startsWith("min") ? -v.delta : v.delta);
@@ -399,23 +401,25 @@ describe("loosening, today's tooling", () => {
 		);
 	});
 
-	// Plants: flag all changed files or all renames; accept a missing replacement through any prose mention.
-	it("T318 additions wrapping and mapped renames pass but old body edits and file moves hit", () => {
+	// Plants: clear existing additions or wrapping; reject mapped titles or accept a file move.
+	it("T318 only identical bytes and in-place mapped renames clear existing exam files", () => {
 		let accepted = 0;
 		fc.assert(
 			fc.property(input, (v) => {
 				const before = source(v),
 					renamed = `${v.name}-${v.extra}`;
-				for (const [after, map] of [
-					[before + source(v, undefined, "", renamed), undefined],
-					[before.replaceAll(" ", v.space), undefined],
+				for (const [after, map, code] of [
+					[before + source(v, undefined, "", renamed), undefined, 1],
+					[before.replaceAll(" ", v.space), undefined, v.space === " " ? 0 : 1],
 					[
 						source(v, undefined, "", renamed),
 						`Unrelated text\n\n| replacement | removed |\n| --- | --- |\n| \`${renamed}\` | \`${v.name}\` |\n`,
+						0,
 					],
 					[
 						source(v, undefined, "", renamed),
 						`removed | replacement\n--- | ---\n${v.name} | ${renamed}\n`,
+						0,
 					],
 				] as const) {
 					const got = compare(
@@ -423,11 +427,13 @@ describe("loosening, today's tooling", () => {
 						{[file]: after, "product.ts": "it.skip('ignored');"},
 						map,
 					);
-					expect(got.code, got.text).toBe(0);
-					expect(got.text.trim()).toBe(
-						`loosening: 0 hits in ${after === before ? 0 : 1} exam files`,
-					);
-					accepted++;
+					expect(got.code, got.text).toBe(code);
+					if (code === 0) {
+						expect(got.text.trim()).toBe(
+							`loosening: 0 hits in ${after === before ? 0 : 1} exam files`,
+						);
+						accepted++;
+					}
 				}
 				const moved = compare(
 					{[file]: before},
@@ -452,8 +458,7 @@ describe("loosening, today's tooling", () => {
 					{[file]: existing},
 					{[file]: `// ${v.extra}\n${existing}\n${source(v, undefined, "", renamed)}`},
 				);
-				expect(shifted.code, shifted.text).toBe(0);
-				accepted++;
+				expect(shifted.code, shifted.text).toBe(1);
 			}),
 			{seed: 3185, numRuns: 4},
 		);
@@ -621,8 +626,8 @@ describe("loosening, today's tooling", () => {
 		},
 	);
 
-	// Plants: reject whole statements in a describe, or accept insertions inside old tests or consts.
-	it("T318 only whole new statements at file or describe level clear", () => {
+	// Plant: clear a whole added statement, comment, or mapped move in an existing file.
+	it("T318 existing files hit for all insertions comments and mapped moves", () => {
 		fc.assert(
 			fc.property(input, (v) => {
 				const before = `const old_${v.extra} = [${v.count}];\ndescribe('group', () => {${source(v)}});\n`;
@@ -639,7 +644,7 @@ describe("loosening, today's tooling", () => {
 						before.replace(source(v), addition + source(v)),
 					]) {
 						const got = compare({[file]: before}, {[file]: after});
-						expect(got.code, got.text).toBe(0);
+						expect(got.code, got.text).toBe(1);
 					}
 				}
 				for (const after of [
@@ -652,7 +657,7 @@ describe("loosening, today's tooling", () => {
 				const wrapped = before
 					.replaceAll(" ", v.space)
 					.replace("fc.assert", `/* ${v.extra} */ fc.assert`);
-				expect(compare({[file]: before}, {[file]: wrapped}).code).toBe(0);
+				expect(compare({[file]: before}, {[file]: wrapped}).code).toBe(1);
 				const destination = "checks/destination.test.ts";
 				const renamed = `${v.name}-new`;
 				const mapped = compare(
@@ -660,7 +665,7 @@ describe("loosening, today's tooling", () => {
 					{[file]: "// kept file\n", [destination]: source(v, undefined, "", renamed)},
 					`| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`,
 				);
-				expect(mapped.code, mapped.text).toBe(0);
+				expect(mapped.code, mapped.text).toBe(1);
 			}),
 			{seed: 31842, numRuns: 3, endOnFailure: true},
 		);
@@ -719,6 +724,271 @@ describe("loosening, today's tooling", () => {
 		);
 	});
 
+	// Plants: the review3 parser clears mutations that added code makes to old state.
+	it.each(["options", "helper", "getter", "module"])(
+		"T318 review3 added %s access in an existing file is a hit",
+		(kind) => {
+			fc.assert(
+				fc.property(input, (v) => {
+					const prelude =
+						kind === "options"
+							? `const settings = {numRuns: ${v.count}};\n`
+							: kind === "module"
+								? `import {state} from './product';\n`
+								: `const shared = {check: n => expect(n).toBe(n), get disable() { this.check = () => {}; return ${v.count}; }};\n`;
+					const before =
+						prelude +
+						(kind === "options"
+							? source(v).replace(`{numRuns: ${v.count}}`, "settings")
+							: kind === "module"
+								? source(v, "state.check(value);")
+								: source(v, "shared.check(value);"));
+					const write =
+						kind === "options"
+							? "settings.numRuns = 1;"
+							: kind === "module"
+								? "state.check = () => {};"
+								: "shared.check = () => {};";
+					const additions =
+						kind === "getter"
+							? [
+									`const added_${v.extra} = shared.disable;\n`,
+									source(v, "shared.disable;", "", `${v.name}-added`),
+								]
+							: [source(v, write, "", `${v.name}-added`)];
+					for (const addition of additions) {
+						const got = compare({[file]: before}, {[file]: before + addition});
+						expect(got.code, `${kind}\n${got.text}`).toBe(1);
+						expect(got.text).toContain(`${file}: unrecognized change:`);
+					}
+				}),
+				{seed: 31850, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plants: token equality hides automatic semicolons, regex text, and mid-line comments.
+	it.each(["return-newline", "regex", "mid-line-comment"])(
+		"T318 review3 raw %s edits in an existing law hit",
+		(kind) => {
+			fc.assert(
+				fc.property(input, (v) => {
+					const before =
+						kind === "return-newline"
+							? source(v, "return expect(value).toBe(value);")
+							: kind === "regex"
+								? source(v, "const pattern = /[//]/; expect(value).toBe(value);")
+								: source(v, "return /* same line */ expect(value).toBe(value);");
+					const after =
+						kind === "return-newline"
+							? before.replace("return expect", "return\nexpect")
+							: kind === "regex"
+								? before.replace("expect(value).toBe(value);", "")
+								: before.replace("same line", "split\nline");
+					const got = compare({[file]: before}, {[file]: after});
+					expect(got.code, got.text).toBe(1);
+					expect(got.text).toContain(`${file}: unrecognized change:`);
+				}),
+				{seed: 31851, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: a mapping consumes the same body across files, ignoring its new suite or helper.
+	it.each(["skipped-suite", "weaker-helper"])(
+		"T318 review3 mapped move onto %s is a hit",
+		(kind) => {
+			fc.assert(
+				fc.property(input, (v) => {
+					const renamed = `${v.name}-new`,
+						destination = "checks/destination.test.ts";
+					const old = source(v, "check(value);"),
+						next = source(v, "check(value);", "", renamed);
+					const shell =
+						kind === "skipped-suite"
+							? `describe.skip('${v.extra}', () => {\n});\n`
+							: "const check = () => {};\n";
+					const before = {
+						[file]: `const check = n => expect(n).toBe(n);\n${old}`,
+						[destination]: shell,
+					};
+					const after = {
+						[file]: "const check = n => expect(n).toBe(n);\n",
+						[destination]:
+							kind === "skipped-suite" ? shell.replace("\n});", `\n${next}});`) : shell + next,
+					};
+					const got = compare(
+						before,
+						after,
+						`| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`,
+					);
+					expect(got.code, got.text).toBe(1);
+					expect(got.text).toContain(`${file}: unrecognized change:`);
+				}),
+				{seed: 31852, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: compare blob text alone, missing symlinks and executable-mode changes.
+	it.each(["symlink", "mode", "new-symlink"])(
+		"T318 review3 %s exam paths never clear identical Git content",
+		(kind) => {
+			fc.assert(
+				fc.property(word, (name) => {
+					const target = `target-${name}`;
+					const original = kind === "new-symlink" ? {} : {[file]: target};
+					const got = compare(original, {
+						[file]: kind === "mode" ? {content: target, mode: 0o755} : {link: target},
+					});
+					expect(got.code, got.text).toBe(1);
+					expect(got.text).toContain("unrecognized change:");
+				}),
+				{seed: 31853, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: split classifier output into lines or tabs, losing deleted exam filenames.
+	it.each(["\t", "\n", "\r", "\v"])(
+		"T318 review3 deleted names containing control %j are hits",
+		(control) => {
+			fc.assert(
+				fc.property(
+					input,
+					fc.integer({min: 1, max: 159}).filter((n) => n < 32 || n >= 127),
+					(v, generated) => {
+						for (const character of new Set([control, String.fromCharCode(generated)])) {
+							const path = `checks/${v.extra}${character}${v.name}.test.ts`;
+							const got = compare({[path]: source(v)}, {});
+							expect(got.code, `${JSON.stringify(path)}\n${got.text}`).toBe(1);
+							expect(got.text).toContain("unrecognized change:");
+						}
+					},
+				),
+				{seed: 31854, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plants: reject a clean new regular file or miss one shared-state entry in a new file.
+	it.each([0o644, 0o755])(
+		"T318 new regular test mode %i clears only without shared state",
+		(mode) => {
+			fc.assert(
+				fc.property(input, (v) => {
+					const clean = `import {it, expect} from 'vitest';\nimport fc from 'fast-check';\n${source(v)}`;
+					expect(compare({}, {[file]: {content: clean, mode}}).code).toBe(0);
+					for (const shared of [
+						`vi.mock('./${v.extra}');`,
+						`process.env.${v.extra} = '${v.count}';`,
+						`globalThis.${v.extra} = ${v.count};`,
+						"beforeEach(() => {});",
+						"afterEach(() => {});",
+						"beforeAll(() => {});",
+						"afterAll(() => {});",
+						`fc.configureGlobal({numRuns: ${v.count}});`,
+						`expect.extend({${v.extra}: () => ({pass: true})});`,
+						`import './${v.extra}';`,
+					]) {
+						const got = compare({}, {[file]: {content: clean + shared, mode}});
+						expect(got.code, `${shared}\n${got.text}`).toBe(1);
+					}
+				}),
+				{seed: 31855, numRuns: 2, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plants: accept a title edit elsewhere on the line, a moved line, or a second raw edit.
+	// Regex and nested template text that looks like a call must not count as a test title.
+	it("T318 mapped renames change one quoted title per line in place", () => {
+		fc.assert(
+			fc.property(input, fc.constantFrom("'", '"', "`"), (v, quote) => {
+				const renamed = `${v.name}-new`;
+				const before = source(v).replace(JSON.stringify(v.name), `${quote}${v.name}${quote}`);
+				const after = before.replace(`${quote}${v.name}${quote}`, `${quote}${renamed}${quote}`);
+				const map = `| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`;
+				expect(compare({[file]: before}, {[file]: after}, map).code).toBe(0);
+				expect(
+					compare(
+						{"skillscheck.sh": `cat <<'JS'\n${before}JS\n`},
+						{"skillscheck.sh": `cat <<'JS'\n${after}JS\n`},
+						map,
+					).code,
+				).toBe(1);
+				for (const changed of [
+					`\n${after}`,
+					after.replace("fc.assert", "/* added */ fc.assert"),
+					`${after}\n`,
+				]) {
+					const got = compare({[file]: before}, {[file]: changed}, map);
+					expect(got.code, got.text).toBe(1);
+				}
+				const duplicate = source(
+					v,
+					`expect(${quote}${v.name}${quote}).toBe(${quote}${v.name}${quote});`,
+				);
+				expect(
+					compare(
+						{[file]: duplicate},
+						{
+							[file]: duplicate.replace(
+								`expect(${quote}${v.name}${quote})`,
+								`expect(${quote}${renamed}${quote})`,
+							),
+						},
+						map,
+					).code,
+				).toBe(1);
+				const computed = before.replace(
+					`${quote}${v.name}${quote}`,
+					`${quote}${v.name}${quote} + suffix`,
+				);
+				expect(
+					compare(
+						{[file]: computed},
+						{[file]: computed.replace(`${quote}${v.name}${quote}`, `${quote}${renamed}${quote}`)},
+						map,
+					).code,
+				).toBe(1);
+				for (const pattern of [
+					`const pattern = /it('${v.name}-pattern')/;\n${source(v)}`,
+					`const title = \`\${\`\nit('${v.name}-pattern')\n\`}\`;\n${source(v)}`,
+				])
+					expect(
+						compare(
+							{[file]: pattern},
+							{[file]: pattern.replace(`${v.name}-pattern`, `${v.name}-replacement`)},
+							`| Removed | Replacement |\n| --- | --- |\n| ${v.name}-pattern | ${v.name}-replacement |`,
+						).code,
+					).toBe(1);
+			}),
+			{seed: 31856, numRuns: 3, endOnFailure: true},
+		);
+	});
+
+	// Plant: a failed classifier becomes an empty selected list and therefore a clean diff.
+	it("T318 classifier failures are operating errors", () => {
+		fc.assert(
+			fc.property(input, (v) => {
+				for (const invalid of [
+					"[",
+					JSON.stringify([{glob: v.count}]),
+					JSON.stringify([{unknown: v.extra}]),
+				]) {
+					const got = compare(
+						{[file]: source(v), "exam-paths.json": invalid},
+						{[file]: "", "exam-paths.json": invalid},
+					);
+					expect(got.code, got.text).toBe(2);
+					expect(got.text).not.toContain("0 hits");
+				}
+			}),
+			{seed: 31857, numRuns: 2, endOnFailure: true},
+		);
+	});
+
 	// Plant: report every parser hit as an owner read, or turn bad refs into a clear diff.
 	it("T318 usage explains hand checks and operating errors exit two", () => {
 		fc.assert(
@@ -730,6 +1000,9 @@ describe("loosening, today's tooling", () => {
 					"lead's hand check",
 					"hit list in the PR",
 					"Only real loosening waits on the owner",
+					"additions to an existing test file",
+					"added code there can reach old laws' state",
+					"new test file can still touch the filesystem or the process outside the file",
 				])
 					expect(usage.stderr).toContain(phrase);
 				const invalid = spawnSync("sh", [script, `missing-${missing}`, "HEAD"], {
