@@ -615,7 +615,12 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 										className="asks-title"
 										variant="tertiary"
 										tabIndex={-1}
-										onClick={() => select({type: "select", key: row.key})}
+										// A pointer target only: the grid keeps the focus through
+										// aria-activedescendant, so the answer keys still reach the ask.
+										onClick={() => {
+											select({type: "select", key: row.key});
+											grid.current?.focus();
+										}}
 									>
 										<WordsOf words={labels.get(row.key)?.title ?? row.what} />
 									</Button>

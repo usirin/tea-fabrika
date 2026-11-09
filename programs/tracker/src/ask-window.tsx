@@ -954,7 +954,12 @@ export function AskView({
 				return true;
 			}
 		}
-		if (e.key === " " && (passed || e.target === root.current)) {
+		// Space opens the evidence from the view's own surface, the toolbar's gap included (a click
+		// there focuses it); on a button, Space presses that button.
+		if (
+			e.key === " " &&
+			(passed || (e.target instanceof HTMLElement && e.target.closest("button") === null))
+		) {
 			e.preventDefault();
 			send({type: "open", name: "evidence", now: Date.now()});
 			return true;
