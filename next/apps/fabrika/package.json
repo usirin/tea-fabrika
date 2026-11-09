@@ -10,13 +10,17 @@
 	},
 	"dependencies": {
 		"@kampus/libfabrika": "workspace:*",
+		"@kampus/notes": "workspace:*",
 		"@effect/platform-node": "catalog:",
 		"effect": "catalog:",
 		"oxc-parser": "catalog:",
 		"oxc-transform-react": "catalog:"
 	},
 	"devDependencies": {
+		"@demlik/tea": "catalog:",
 		"@effect/vitest": "catalog:",
+		"@modelcontextprotocol/client": "2.4.0",
+		"rolldown": "1.2.13",
 		"@types/node": "catalog:",
 		"esbuild": "catalog:",
 		"fast-check": "catalog:",

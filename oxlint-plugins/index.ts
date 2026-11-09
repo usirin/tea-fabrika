@@ -24,10 +24,12 @@ import {noThrowInEffectGen} from "./no-throw-in-effect-gen.ts";
 import {noTypeAssertions} from "./no-type-assertions.ts";
 import {oneStoreHook} from "./one-store-hook.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
+import {wiringOnly} from "./wiring-only.ts";
 
 const plugin: Plugin = {
 	meta: {name: "fabrika"},
 	rules: {
+		"wiring-only": wiringOnly,
 		"edge-comment": edgeComment,
 		"effect-functions": effectFunctions,
 		"no-bare-disable": noBareDisable,

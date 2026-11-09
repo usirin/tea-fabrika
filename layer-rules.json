@@ -39,6 +39,14 @@
 			]
 		},
 		{
+			"name": "next-node",
+			"paths": ["next/packages/libfabrika/src/node"]
+		},
+		{
+			"name": "next-server",
+			"paths": ["next/packages/libfabrika/src/server"]
+		},
+		{
 			"name": "next-mcp",
 			"paths": ["next/packages/libfabrika/src/mcp"]
 		},
@@ -127,6 +135,12 @@
 		}
 	],
 	"allowed": [
+		{
+			"from": "next/packages/libfabrika/src/mcp/call-store.test.ts",
+			"to": "next/packages/libfabrika/src/node/agent.test-support.ts",
+			"sites": 1,
+			"reason": "P25's receipt law starts outside Node processes against the real filesystem. This test helper owns the children and their cleanup."
+		},
 		{
 			"from": "packages/pipeline/src/laws/agent.ts",
 			"to": "packages/pipeline/src/laws/explore.ts",

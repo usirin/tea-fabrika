@@ -260,6 +260,66 @@
 	},
 	"overrides": [
 		{
+			"files": ["next/**"],
+			"rules": {
+				"eslint/no-restricted-imports": [
+					"error",
+					{
+						"patterns": [
+							{
+								"group": ["@kampus/fabrika-old", "@kampus/fabrika-old/*"],
+								"message": "next/ uses libfabrika only."
+							},
+							{
+								"group": ["@radix-ui/colors", "@radix-ui/colors/*"],
+								"message": "Read design tokens."
+							}
+						]
+					}
+				]
+			}
+		},
+		{
+			"files": ["next/apps/fabrika/mcp.ts", "next/apps/fabrika/bin.ts"],
+			"rules": { "fabrika/wiring-only": "error" }
+		},
+		{
+			"files": [
+				"next/packages/libfabrika/src/index.ts",
+				"next/packages/libfabrika/src/app/**",
+				"next/packages/libfabrika/src/coordination/**",
+				"next/packages/libfabrika/src/data/**",
+				"next/packages/libfabrika/src/transport/**",
+				"next/packages/libfabrika/src/server/**"
+			],
+			"rules": {
+				"eslint/no-restricted-imports": [
+					"error",
+					{
+						"patterns": [
+							{
+								"group": ["@modelcontextprotocol/*"],
+								"message": "MCP stays in the headless client adapter. The brain and browser core do not import it."
+							},
+							{
+								"group": ["@kampus/fabrika-old", "@kampus/fabrika-old/*"],
+								"message": "next/ uses libfabrika only."
+							},
+							{
+								"group": ["@radix-ui/colors", "@radix-ui/colors/*"],
+								"message": "Read design tokens."
+							}
+						]
+					}
+				]
+			}
+		},
+		{
+			// Only this key module imports private bytes for signing and private-file installation.
+			"files": ["next/packages/libfabrika/src/node/agent-key.ts"],
+			"rules": { "fabrika/no-redacted-value": "off" }
+		},
+		{
 			// Test files only: an `expect` that sits only inside an `if` may never run.
 			// `!` is allowed here: a test that hits a missing value fails on its own.
 			"files": ["**/*.test.ts"],

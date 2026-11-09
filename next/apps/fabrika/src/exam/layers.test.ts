@@ -81,7 +81,7 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
 				return skip ? [] : codeFiles(path);
 			});
 
-const isTest = (file: string): boolean => /\.test\.tsx?$/.test(file);
+const isTest = (file: string): boolean => /\.test(?:-support)?\.tsx?$/.test(file);
 
 const IMPORTS = [
 	/^[ \t]*(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gm,
@@ -181,6 +181,8 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 	coordination: ["data", "id"],
 	app: ["coordination", "id"],
 	mcp: ["app", "transport", "id"], // the named exception: the bridge is a client, as a window is
+	node: ["mcp", "app", "transport", "coordination", "data", "id"],
+	server: ["app", "coordination", "data", "transport", "id"],
 	desktop: [LIBRARY], // the app layer's names, nothing lower
 	window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
 	dom: ["desktop"],
@@ -193,7 +195,7 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 
 /** The folders under `src/` of the two library packages, each a part above. */
 const FOLDERS: Readonly<Record<string, ReadonlyArray<string>>> = {
-	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp"],
+	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp", "node", "server"],
 	[TUVAL]: ["desktop", "window", "dom", "browser", "electron", "headless"],
 };
 
@@ -249,6 +251,14 @@ const faults = (next: string): ReadonlyArray<string> => {
 		// Across the whole library, tests included: nothing imports tuval, a program or the app.
 		if (pkg.manifest.name === LIBRARY) {
 			for (const spec of importsInFile(file).filter((s) => !isRelative(s))) {
+				// P25's two real-notes laws need the actual P13 program as a test dependency.
+				if (
+					spec === "@kampus/notes" &&
+					["src/mcp/drive.test.ts", "src/server/agent.test-support.ts"].includes(
+						shown(pkg.dir, file),
+					)
+				)
+					continue;
 				if (above.has(packageAt(spec).name))
 					found.push(`${where} imports "${spec}": the library imports nothing above it`);
 			}

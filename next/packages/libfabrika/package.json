@@ -8,7 +8,11 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./coordination": "./src/coordination/index.ts",
+		"./client": "./src/mcp/client.ts",
+		"./mcp": "./src/mcp/index.ts",
+		"./server": "./src/server/index.ts",
 		"./data": "./src/data/index.ts",
+		"./desktop": "./src/desktop/index.ts",
 		"./sqlite": "./src/data/sqlite.ts",
 		"./testing": "./src/testing.ts",
 		"./transport": "./src/transport/index.ts"
@@ -18,10 +22,14 @@
 	},
 	"dependencies": {
 		"@demlik/tea": "catalog:",
+		"@modelcontextprotocol/server": "2.4.0",
 		"effect": "catalog:"
 	},
 	"devDependencies": {
+		"@kampus/notes": "workspace:*",
 		"@effect/vitest": "catalog:",
+		"@effect/platform-node": "catalog:",
+		"@modelcontextprotocol/client": "2.4.0",
 		"@types/node": "catalog:",
 		"fast-check": "catalog:",
 		"typescript": "catalog:",
