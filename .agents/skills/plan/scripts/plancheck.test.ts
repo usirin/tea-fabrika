@@ -1,3 +1,20 @@
+import "./plancheck.sh?raw";
+import "../../step-commit/scripts/exam.py?raw";
+import "../../step-commit/scripts/stepcommit.sh?raw";
+import "../../lead/scripts/box.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/drive.ts?raw";
+import "../../lead/scripts/fieldrow.py?raw";
+import "../../lead/scripts/runplan.sh?raw";
+import "../../lead/scripts/env.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/gc.ts?raw";
+import "../../lead/scripts/redact.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/botpush.mjs?raw";
+import "../../lead/scripts/clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../../../exam-paths.json?raw";
 import {spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";

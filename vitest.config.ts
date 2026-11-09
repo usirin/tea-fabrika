@@ -19,9 +19,7 @@ export default defineConfig({
 			"**/layer-rules.json",
 			"**/fixtures/**",
 			"**/.github/**",
-			"**/.agents/skills/**",
 			"**/.gitattributes",
-			"**/.claude/skills/**",
 		],
 		include: [
 			"apps/*/src/**/*.test.ts",
