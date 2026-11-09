@@ -298,6 +298,68 @@ const last = (w: World) => {
 };
 
 describe("P17a, revoke stops writes at the final door", () => {
+	it("current inputs keep their fields and a retry with missing metadata fails as a bad row", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.constantFrom("counter", "notes"),
+				fc.constantFrom("door", "n"),
+				fc.uuid(),
+				fc.string({maxLength: 30}),
+				async (target, missing, letter, text) => {
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const w = yield* world();
+							const door = yield* Door.pipe(Effect.provide(w.layers().layer));
+							const client = yield* hello(door, w.old, "current-input");
+							expect(client.result._tag).toBe("online");
+							const params = request(target, letter, text);
+							expect((yield* send(door, client.client, w, target, letter, text))._tag).toBe("ok");
+							const [received] = yield* rows(w, "door/inputs");
+							expect(received).toMatchObject({
+								_tag: "received",
+								body: {
+									method: "process.send",
+									target: params.pid,
+									by: {_tag: "person", key: w.old.fingerprint, for: person},
+									input: params.m,
+									door: expect.stringMatching(/^process_/),
+									n: 1,
+								},
+							});
+							const refused = yield* door.route(client.client, "unknown.method", {});
+							expect(refused._tag).toBe("refused");
+							expect((yield* rows(w, "door/inputs"))[1]).toMatchObject({
+								_tag: "refused",
+								body: {
+									method: "unknown.method",
+									why: refused._tag === "refused" ? refused.why : "",
+									door: expect.stringMatching(/^process_/),
+									n: 2,
+								},
+							});
+							const [saved] = w.first.sql.exec("SELECT id,value FROM door_bindings");
+							const binding = {...JSON.parse(String(saved?.value)), [missing]: undefined};
+							w.first.sql.exec(
+								"UPDATE door_bindings SET value=? WHERE id=?",
+								JSON.stringify(binding),
+								saved?.id,
+							);
+							const before = w.first.sql.exec("SELECT * FROM entries ORDER BY rev");
+							expect(
+								yield* Effect.result(door.route(client.client, "process.send", params)),
+							).toMatchObject({
+								_tag: "Failure",
+								failure: {_tag: "LedgerError", why: "bad_row"},
+							});
+							expect(w.first.sql.exec("SELECT * FROM entries ORDER BY rev")).toEqual(before);
+							expect(w.deliveries).toHaveLength(1);
+						}).pipe(Effect.provide(TestClock.layer())),
+					);
+				},
+			),
+			checks,
+		);
+	});
 	it("a hello paused before its final write cannot land after revoke", async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.boolean(), fc.uuid(), async (revokeFirst, tab) => {
