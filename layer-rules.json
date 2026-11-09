@@ -37,6 +37,10 @@
 			"paths": ["next/packages/libfabrika/src/mcp"]
 		},
 		{
+			"name": "next-door",
+			"paths": ["next/packages/libfabrika/src/door"]
+		},
+		{
 			"name": "next-app",
 			"paths": ["next/packages/libfabrika/src/app", "next/packages/libfabrika/src/testing.ts"]
 		},

@@ -913,7 +913,12 @@ const runnerWorld = (
 	const input = (n: number, m: unknown) =>
 		decodeIncoming({
 			id: `letter-${n}`,
-			envelope: {id: `in-${PROCESS}-${n}`, by: owner, arrivedAt: n, input: m},
+			envelope: {
+				id: `input_0000000000e008${n.toString(16).padStart(12, "0")}`,
+				by: owner,
+				arrivedAt: n,
+				input: m,
+			},
 			sentAt: "2026-11-08T00:00:00.000Z",
 			seen: 0,
 			span: signer,
