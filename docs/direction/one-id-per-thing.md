@@ -39,8 +39,11 @@ class Ticket extends Schema.Class<Ticket>("Ticket")({
 
 ## Where main stands
 
-Main's `next/` does not follow this yet. It has no `Id` module, and `Entry`, `Letter` and member
-ids are loose strings. A build pull request will fix it.
+Main's `next/` has the `Id` module since ticket 518's first pull request:
+`next/packages/libfabrika/src/id.ts`, exported as `Id` from `@kampus/libfabrika`. It has
+`Id.make`, `Id.makeEffect`, `Id.Generator` and `Id.Order`, and process ids are made with it.
+`ProcessId` stays unbranded for now. `Entry`, `Letter` and member ids are still loose strings.
+The second pull request moves them, with input ids and `n`, once P12 and P34 land.
 
 Main's door (P10, [PR 502](https://github.com/usirin/tea-fabrika/pull/502)) still makes
 `in-<process>-<n>`, and the entry's `parent` pattern matches that shape. A build pull request
