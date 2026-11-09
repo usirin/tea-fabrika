@@ -514,7 +514,8 @@ describe("the asks' later and seen", () => {
 			return yield* Effect.die(`waited for asks.json to hold ${JSON.stringify(marks)}: ${last}`);
 		});
 
-	it("keeps later and seen across a host restart, and drops an answered ask's later", async () => {
+	// scenario: a real host stops and starts on its temporary home, SQLite ledger and Unix socket.
+	it("scenario: keeps later and seen across a host restart, and drops an answered ask's later", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const {home, paths} = yield* seeded;
@@ -553,38 +554,42 @@ describe("the asks' later and seen", () => {
 	it.each([
 		["a broken file", "{"],
 		["a file an older build wrote", '{"later":["1/a-1"]}'],
-	])("starts on %s with every ask counted and new, and says so in the log", async (_, text) => {
-		const seen = await go(
-			Effect.gen(function* () {
-				const fs = yield* FileSystem.FileSystem;
-				const {home, paths} = yield* seeded;
-				yield* fs.writeFileString(join(home, "asks.json"), text);
-				const logs: string[] = [];
-				const scope = yield* Scope.make();
-				yield* runHost({home, pid: process.pid}).pipe(
-					Effect.scoped,
-					Effect.provide(Logger.layer([Logger.make((l) => logs.push(String(l.message)))])),
-					Effect.forkIn(scope),
-				);
-				yield* live(paths.sock);
-				const {app, asks} = yield* asksOn(paths.sock);
-				const now = said(asks());
-				yield* app.leave;
-				yield* Scope.close(scope, Exit.void);
-				return {now, logs};
-			}),
-		);
-		expect(seen.now).toEqual({
-			asks: [
-				["1/a-1", false],
-				["3/a-1", false],
-			],
-			later: [],
-		});
-		expect(
-			seen.logs.filter((l) => l.includes("the asks' later and seen did not read back")),
-		).toHaveLength(1);
-	});
+		// scenario: start a real host on a temporary home containing each historical asks.json file.
+	])(
+		"scenario: starts on %s with every ask counted and new, and says so in the log",
+		async (_, text) => {
+			const seen = await go(
+				Effect.gen(function* () {
+					const fs = yield* FileSystem.FileSystem;
+					const {home, paths} = yield* seeded;
+					yield* fs.writeFileString(join(home, "asks.json"), text);
+					const logs: string[] = [];
+					const scope = yield* Scope.make();
+					yield* runHost({home, pid: process.pid}).pipe(
+						Effect.scoped,
+						Effect.provide(Logger.layer([Logger.make((l) => logs.push(String(l.message)))])),
+						Effect.forkIn(scope),
+					);
+					yield* live(paths.sock);
+					const {app, asks} = yield* asksOn(paths.sock);
+					const now = said(asks());
+					yield* app.leave;
+					yield* Scope.close(scope, Exit.void);
+					return {now, logs};
+				}),
+			);
+			expect(seen.now).toEqual({
+				asks: [
+					["1/a-1", false],
+					["3/a-1", false],
+				],
+				later: [],
+			});
+			expect(
+				seen.logs.filter((l) => l.includes("the asks' later and seen did not read back")),
+			).toHaveLength(1);
+		},
+	);
 });
 
 describe("attaching", () => {

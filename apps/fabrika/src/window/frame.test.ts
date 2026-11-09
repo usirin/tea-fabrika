@@ -1,8 +1,9 @@
 import {applyCell} from "@demlik/tea";
-import {Result} from "effect";
+import {Result, Schema} from "effect";
 import {createElement, isValidElement, type ReactNode} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
+import {property} from "../../../../fixtures/ask-desk/property.ts";
 import type {Ask, AsksNow} from "../asks.ts";
 import {
 	activeOf,
@@ -69,13 +70,24 @@ const fold = (msgs: readonly DeskMsg[]): Open => {
 	return s;
 };
 
-it.each([
-	[0, 0, "0 asks · 0 stops"],
-	[1, 1, "1 ask · 1 stop"],
-	[2, 3, "2 asks · 3 stops"],
-] as const)("the asks head names %s asks and %s stops", (asks, stops, words) => {
-	expect(asksHead(asks, stops)).toBe(words);
-});
+property(
+	"the asks head names asks and stops with the right counts",
+	{
+		asks: Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 10000})),
+		stops: Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 10000})),
+	},
+	({asks, stops}) => {
+		for (const [a, s] of [
+			[0, 0],
+			[1, 1],
+			[2, 3],
+			[asks, stops],
+		])
+			expect(asksHead(a!, s!)).toBe(
+				`${a} ${a === 1 ? "ask" : "asks"} · ${s} ${s === 1 ? "stop" : "stops"}`,
+			);
+	},
+);
 
 it("K18: moved keys update palette search, prefix hints, keycaps and spoken words", () => {
 	const read = decodeKeys('prefix = "ctrl+a"\ntezgah.zoom = "<prefix>shift+f6"', true);

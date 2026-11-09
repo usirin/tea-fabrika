@@ -60,8 +60,9 @@ describe("a lane, on what the real agents answered", () => {
 			};
 
 			// P28: this replaces a test whose new test passed from the start, which only a fake could write.
+			// scenario: the local builder process runs again and the real git change lands on a local main.
 			it.each([undefined, "Keep the empty input test."])(
-				"`again` with no recommendation carries only the person's note=%j to the builder, with no new test writer",
+				"scenario: `again` with no recommendation carries only the person's note=%j to the builder, with no new test writer",
 				async (note) => {
 					const ran = await lane({
 						within: 50,
@@ -149,7 +150,8 @@ describe("a lane, on what the real agents answered", () => {
 			});
 
 			// P26: the one path where a go_on asks again from inside the same step's end.
-			it("a finding marked against a decision, beside a row the review could not see: two questions, each with its own id and its own answer", async () => {
+			// scenario: the real lane stores and answers two questions from a local review process.
+			it("scenario: a finding marked against a decision, beside a row the review could not see: two questions, each with its own id and its own answer", async () => {
 				const ran = await lane({
 					within: 50,
 					steps: ["go_on", "stop"],
@@ -190,7 +192,8 @@ describe("a lane, on what the real agents answered", () => {
 				};
 
 				// P29
-				it("its question says the finding and the decision side by side, and that go_on lets the finding through", async () => {
+				// scenario: inspect the question and local pull request produced by one real lane.
+				it("scenario: its question says the finding and the decision side by side, and that go_on lets the finding through", async () => {
 					const ran = await lane({
 						within: 50,
 						picks: {approve: "approve", step: "stop"},

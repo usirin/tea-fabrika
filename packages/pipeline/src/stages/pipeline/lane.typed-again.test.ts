@@ -166,7 +166,8 @@ describe("a stopped lane, typed again", () => {
 		expect(ran.lines.at(-1)).toContain("ended: done");
 	});
 
-	it("main changes an exam file while the lane is stuck: the restart asks exam_conflict with the file, and `again` reruns the test writer, then build", async () => {
+	// scenario: move the local git remote's main while a real lane is saved, then resume it.
+	it("scenario: main changes an exam file while the lane is stuck: the restart asks exam_conflict with the file, and `again` reruns the test writer, then build", async () => {
 		const ON_MAIN =
 			'import {expect, it} from "vitest";\n\nit("lowers on main", () => {\n\texpect("AB".toLowerCase()).toBe("ab");\n});\n';
 		const ran = await lane({
@@ -243,7 +244,8 @@ describe("a stopped lane, typed again", () => {
 		expect(ran.lines.at(-1)).toContain("ended: done");
 	});
 
-	it("a `no` on the plan's yes, then the same line: the plan runs again with the person's note, and triage does not", async () => {
+	// scenario: the real lane resumes twice on a temporary checkout after two plan refusals.
+	it("scenario: a `no` on the plan's yes, then the same line: the plan runs again with the person's note, and triage does not", async () => {
 		const NOTE = "Keep it to ASCII.";
 		const ran = await lane({
 			within: 50,
@@ -356,7 +358,8 @@ describe("a stopped lane, typed again", () => {
 		expect(keys[1]).not.toBe(keys[0]);
 	});
 
-	it("exam_touched, `test_wrong`: the test writer redoes the touched file alone, with no invented note, its check runs, and build goes on from the builder's head as the next round", async () => {
+	// scenario: the writer and builder are real local processes on the saved git heads.
+	it("scenario: exam_touched, `test_wrong`: the test writer redoes the touched file alone, with no invented note, its check runs, and build goes on from the builder's head as the next round", async () => {
 		const ran = await lane({
 			within: 50,
 			// Answered once: a second exam_touched fails the test at once, out loud.

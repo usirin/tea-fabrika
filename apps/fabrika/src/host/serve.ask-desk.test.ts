@@ -6,13 +6,14 @@ import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import {Ledger, streams, writerText} from "@kampus/fabrika-old";
 import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
-import {type Asked, blindDraw, Rec, sealAsk} from "@kampus/pipeline/tickets/ask";
+import {type Asked, blindDraw, Rec, sealAsk, Via} from "@kampus/pipeline/tickets/ask";
 import {type Fact, nameOf} from "@kampus/pipeline/tickets/ticket";
 import {pullRequestsOf} from "@tea-fabrika/tracker";
 import * as askWindow from "@tea-fabrika/tracker/ask-window";
 import {Effect, Exit, FileSystem, Layer, Schedule, Scope} from "effect";
 import {describe, expect, it} from "vitest";
 import {policyFor} from "../../../../fixtures/ask-desk/cases.ts";
+import {property} from "../../../../fixtures/ask-desk/property.ts";
 import {type Down} from "../link.ts";
 import {readFromPage, readToPage, type ToPage} from "../messages.ts";
 import {appWire} from "../wire.ts";
@@ -131,12 +132,12 @@ const asked = sealAsk(
 );
 
 /** The save Cmd the shared ask editor gives for Take rec on `ask`, as its interpreter gets it. */
-const saveFor = (ask: Asked) => {
+const saveFor = (ask: Asked, key = "y") => {
 	const [model] = askWindow.askMachine.init(null, {ticket: 1, ask, now: 0});
 	const [, cmds] = applyCell(askWindow.askMachine, model, {
 		type: "do",
 		value: {_tag: "rec"},
-		key: "y",
+		key,
 		now: 10,
 	});
 	const save = cmds.find((c) => c.type === "save");
@@ -177,19 +178,28 @@ const seeded = (opened: boolean) =>
 	});
 
 describe("ask desk S1: the window's answer is what the host decodes", () => {
-	it("the answer handed to the window's `answer` has no Cmd `type`, and the page's message reads", async () => {
-		const ask = await Effect.runPromise(asked);
-		const value = answerOfSave(saveFor(ask));
-		expect(value).not.toHaveProperty("type");
-		expect(value).toMatchObject({ticket: 1, ask: ASK, answer: {_tag: "rec"}, saw: ask.saw});
-		expect(readFromPage({type: "ask_answer", id: "a1", value}).kind).toBe("read");
-	});
-	it("the Cmd as it is, `type` and all, is what the host refuses", async () => {
-		const ask = await Effect.runPromise(asked);
-		const read = readFromPage({type: "ask_answer", id: "a1", value: saveFor(ask)});
-		expect(read.kind).toBe("refused");
-	});
-	it("across the real host: the window's answer is saved, and the window is told so", async () => {
+	property(
+		"the answer handed to the window's `answer` has no Cmd `type`, and the page's message reads",
+		{key: Via.cases.window.fields.took.fields.key},
+		async ({key}) => {
+			const ask = await Effect.runPromise(asked);
+			const value = answerOfSave(saveFor(ask, key));
+			expect(value).not.toHaveProperty("type");
+			expect(value).toMatchObject({ticket: 1, ask: ASK, answer: {_tag: "rec"}, saw: ask.saw});
+			expect(readFromPage({type: "ask_answer", id: "a1", value}).kind).toBe("read");
+		},
+	);
+	property(
+		"the Cmd as it is, `type` and all, is what the host refuses",
+		{key: Via.cases.window.fields.took.fields.key},
+		async ({key}) => {
+			const ask = await Effect.runPromise(asked);
+			const read = readFromPage({type: "ask_answer", id: "a1", value: saveFor(ask, key)});
+			expect(read.kind).toBe("refused");
+		},
+	);
+	// scenario: a real host, Unix socket and SQLite save, including the reply on that socket.
+	it("scenario: across the real host: the window's answer is saved, and the window is told so", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const {home, ask, app, sent, done} = yield* seeded(true);
@@ -202,7 +212,8 @@ describe("ask desk S1: the window's answer is what the host decodes", () => {
 		expect(seen.reply).toEqual({type: "ask_answered", id: "s1", why: null});
 		expect(seen.answers).toHaveLength(1);
 	});
-	it("an answer the host cannot read still gets a reply, with why, and nothing is saved", async () => {
+	// scenario: an unreadable message travels over a real socket and must get its own reply.
+	it("scenario: an answer the host cannot read still gets a reply, with why, and nothing is saved", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const {home, ask, app, sent, done} = yield* seeded(true);
@@ -218,7 +229,8 @@ describe("ask desk S1: the window's answer is what the host decodes", () => {
 });
 
 describe("ask desk review 12: only a link with an opened page may answer", () => {
-	it("an answer from a link that opened no page is refused in words, and nothing is saved", async () => {
+	// scenario: a second real client connects without opening a page; its save must be refused.
+	it("scenario: an answer from a link that opened no page is refused in words, and nothing is saved", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const {home, ask, app, sent, done} = yield* seeded(false);

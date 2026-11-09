@@ -22,6 +22,7 @@ import {
 	TOOK,
 	type Sealed,
 } from "../../../fixtures/ask-desk/cases.ts";
+import {property} from "../../../fixtures/ask-desk/property.ts";
 import {headOf} from "./head.ts";
 import {Author, loadCell, prepareAsk, saveCell} from "./ledger.ts";
 import {load, save} from "./machine.ts";
@@ -58,7 +59,8 @@ const on = <A, E>(program: Effect.Effect<A, E, Ledger | Author | Tickets>) =>
 	);
 
 describe("ask desk P21: ticket 117 parked on plan v2", () => {
-	it("replaces the old ask once, follows it from the old wait, and resumes after the completed plan", async () => {
+	// pinned: the parked-plan-v2 bug on ticket 117, with its saved old facts from experiment 196.
+	it("pinned: replaces the old ask once, follows it from the old wait, and resumes after the completed plan", async () => {
 		expect(prepareAsk, "missing planned prepareAsk operation").toBeTypeOf("function");
 		await on(
 			Effect.gen(function* () {
@@ -111,7 +113,8 @@ describe("ask desk P21: ticket 117 parked on plan v2", () => {
 			}),
 		);
 	});
-	it("reads old facts unchanged, with unknown timing, and never reuses their text hash as plan approval", async () => {
+	// format: the pre-format-1 answered row is read exactly, with no timing fields invented.
+	it("format: reads old facts unchanged, with unknown timing, and never reuses their text hash as plan approval", async () => {
 		await on(
 			Effect.gen(function* () {
 				yield* seed;
@@ -128,47 +131,51 @@ describe("ask desk P21: ticket 117 parked on plan v2", () => {
 });
 
 describe("ask desk P22: every reader understands current answers", () => {
-	it("the load, head, activity, approval, listener and restart agree on a new rec answer", async () => {
-		expect(prepareAsk, "missing planned prepareAsk operation").toBeTypeOf("function");
-		await on(
-			Effect.gen(function* () {
-				yield* seed;
-				const ask = yield* prepare(117, "a-approve-8", restored);
-				const write = Schema.decodeUnknownSync(Write)({
-					kind: "answer",
-					ticket: 117,
-					ask: ask.ask,
-					answer: {_tag: "chose", pick: "approve"},
-					saw: ask.saw,
-					via: {_tag: "window", took: {...TOOK, rec: "none"}},
-					needed: false,
-				});
-				yield* saveCell(save({id: "readers", next: 118, write}));
-				const loaded = yield* loadCell(load({after: 0}));
-				expect(loaded.broken).toEqual([]);
-				const ticket = yield* (yield* Tickets).read(117);
-				expect(headOf(ticket.timeline, NOW)._tag).not.toBe("asks");
-				const activity = rowsOf(ticket.timeline).filter((r) => r.type === "answered");
-				expect(JSON.stringify(activity.at(-1))).toContain("approve");
-				expect(JSON.stringify(activity.at(-1))).not.toContain("undefined");
-				const last = ticket.timeline.at(-1)?.fact;
-				if (last?.type !== "answered") return yield* Effect.die("the answer is missing");
-				expect(yield* covers(last, ticket)).toBe(true);
-				const newer = {
-					...ticket,
-					timeline: [
-						...ticket.timeline,
-						Schema.decodeUnknownSync(Entry)({
-							pos: ticket.timeline.length + 1,
-							ticket: 117,
-							by: AGENT,
-							at: NOW,
-							fact: {type: "planned", version: 3, tasks: []},
-						}),
-					],
-				};
-				expect(yield* covers(last, newer)).toBe(false);
-			}),
-		);
-	});
+	property(
+		"the load, head, activity, approval, listener and restart agree on a new rec answer",
+		{key: Schema.NonEmptyString},
+		async ({key}) => {
+			expect(prepareAsk, "missing planned prepareAsk operation").toBeTypeOf("function");
+			await on(
+				Effect.gen(function* () {
+					yield* seed;
+					const ask = yield* prepare(117, "a-approve-8", restored);
+					const write = Schema.decodeUnknownSync(Write)({
+						kind: "answer",
+						ticket: 117,
+						ask: ask.ask,
+						answer: {_tag: "chose", pick: "approve"},
+						saw: ask.saw,
+						via: {_tag: "window", took: {...TOOK, rec: "none", key}},
+						needed: false,
+					});
+					yield* saveCell(save({id: "readers", next: 118, write}));
+					const loaded = yield* loadCell(load({after: 0}));
+					expect(loaded.broken).toEqual([]);
+					const ticket = yield* (yield* Tickets).read(117);
+					expect(headOf(ticket.timeline, NOW)._tag).not.toBe("asks");
+					const activity = rowsOf(ticket.timeline).filter((r) => r.type === "answered");
+					expect(JSON.stringify(activity.at(-1))).toContain("approve");
+					expect(JSON.stringify(activity.at(-1))).not.toContain("undefined");
+					const last = ticket.timeline.at(-1)?.fact;
+					if (last?.type !== "answered") return yield* Effect.die("the answer is missing");
+					expect(yield* covers(last, ticket)).toBe(true);
+					const newer = {
+						...ticket,
+						timeline: [
+							...ticket.timeline,
+							Schema.decodeUnknownSync(Entry)({
+								pos: ticket.timeline.length + 1,
+								ticket: 117,
+								by: AGENT,
+								at: NOW,
+								fact: {type: "planned", version: 3, tasks: []},
+							}),
+						],
+					};
+					expect(yield* covers(last, newer)).toBe(false);
+				}),
+			);
+		},
+	);
 });

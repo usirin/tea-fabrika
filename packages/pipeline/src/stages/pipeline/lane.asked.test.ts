@@ -132,7 +132,8 @@ describe("a lane, on what the real agents answered", () => {
 	});
 
 	// P15
-	it("a person's go_on past a property with no test: the ticket and the pull request say which", async () => {
+	// scenario: a real temporary git repo, local step processes, and a pull request on the local host.
+	it("scenario: a person's go_on past a property with no test: the ticket and the pull request say which", async () => {
 		const ran = await onGitHub({
 			within: 50,
 			rubrics: null,
@@ -300,7 +301,8 @@ describe("a lane, on what the real agents answered", () => {
 			});
 
 			// P20
-			it("the note against a recommendation reaches the steps after the revised plan", async () => {
+			// scenario: a real lane runs two plan refusals and carries their notes into later local processes.
+			it("scenario: the note against a recommendation reaches the steps after the revised plan", async () => {
 				const NOTE = "Fold ß to ss. Keep the rest of the plan.";
 				const ran = await lane({
 					within: 50,

@@ -169,7 +169,8 @@ const writeByHand = (dir: string, line: string) => {
 // ---- the files themselves ----------------------------------------------------------------------
 
 describe("one TOML file per color token, flat in tokens/color/", () => {
-	it("holds exactly today's 30 color tokens, under today's names", () => {
+	// format: the committed tokens/color/*.toml file names are the public token names, exactly.
+	it("format: holds exactly today's 30 color tokens, under today's names", () => {
 		const files = readdirSync(COLOR).sort();
 		expect(files).toEqual(TOKENS.map((t) => `${t}.toml`).sort());
 	});
@@ -318,7 +319,8 @@ describe("tokens.css keeps one :root, with two marked regions the build writes",
 		}).toEqual({inside: true, ordered: true, colors: 1, manti: 1});
 	});
 
-	it("writes the 30 color tokens in the colors region, and no color outside it", () => {
+	// format: the generated CSS region writes each public custom-property name exactly once.
+	it("format: writes the 30 color tokens in the colors region, and no color outside it", () => {
 		const css = TOKENS_CSS();
 		const colors = declarationsIn(regionOf(css, "colors"));
 		const rest = rootOf(css)
@@ -367,7 +369,8 @@ describe("theme-colors.ts is generated, and themes.ts reads it", () => {
 		expect(Object.keys(generated).sort()).toEqual(["dark", "light"]);
 	});
 
-	it("gives the themes their sixteen colors, both looks", async () => {
+	// format: the generated module's exact sixteen-field records are what both theme files read.
+	it("format: gives the themes their sixteen colors, both looks", async () => {
 		const {dark, light} = await import("../theme-colors.ts");
 		const {fabrika, fabrikaLight} = await import("../themes.ts");
 		expect({dark, light}).toEqual({dark: fabrika.colors, light: fabrikaLight.colors});

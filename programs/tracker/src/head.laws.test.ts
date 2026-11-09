@@ -469,19 +469,33 @@ const mixed: fc.Arbitrary<readonly Entry[]> = fc
 
 describe("what wakes a ticket (label-guidelines.md, L1: nothing decides on advice)", () => {
 	it("has a row for every kind of fact a ticket's stream can hold, so a new kind must say if it is work", () => {
-		const kinds = new Set(Fact.members.map((m) => m.fields.type.literal));
-		expect([...KINDS].sort()).toEqual([...kinds].sort());
-		expect(Object.keys(ONE_OF_EACH).sort()).toEqual([...kinds].sort());
+		fc.assert(
+			fc.property(
+				fc.shuffledSubarray(Fact.members, {minLength: Fact.members.length}),
+				(members) => {
+					const kinds = new Set(members.map((m) => m.fields.type.literal));
+					expect([...KINDS].sort()).toEqual([...kinds].sort());
+					expect(Object.keys(ONE_OF_EACH).sort()).toEqual([...kinds].sort());
+				},
+			),
+			OPTS,
+		);
 	});
 
 	it.each(WORK_KINDS)(
 		"wakes an idle ticket on a %s fact, and the hour starts again from it",
 		(kind) => {
-			const {before, by, fact} = ONE_OF_EACH[kind];
-			const t = ticketOf(before, [by, fact]);
-			expect(headOf(t, AT + 30 * MINUTE)._tag).not.toBe("idle");
-			const later = headOf(t, AT + HOUR + 1);
-			if (later._tag === "idle") expect(later.since).toBe(AT);
+			fc.assert(
+				fc.property(fc.nat({max: HOUR - 1}), (elapsed) => {
+					const {before, by, fact} = ONE_OF_EACH[kind];
+					const t = ticketOf(before, [by, fact]);
+					expect(headOf(t, AT + 30 * MINUTE)._tag).not.toBe("idle");
+					expect(headOf(t, AT + elapsed)._tag).not.toBe("idle");
+					const later = headOf(t, AT + HOUR + 1);
+					if (later._tag === "idle") expect(later.since).toBe(AT);
+				}),
+				OPTS,
+			);
 		},
 	);
 

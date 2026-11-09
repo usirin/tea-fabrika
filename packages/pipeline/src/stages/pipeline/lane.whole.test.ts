@@ -74,7 +74,8 @@ describe("a lane, whole", () => {
 		}
 	});
 
-	it("ties each ask to its lane's trace, and tags each step's span and each wait's span by name, never with a note (ticket 141, P1 to P3)", async () => {
+	// scenario: real local step processes write spans while one whole lane changes a temporary repo.
+	it("scenario: ties each ask to its lane's trace, and tags each step's span and each wait's span by name, never with a note (ticket 141, P1 to P3)", async () => {
 		const NOTE = "Please revise the plan before building";
 		const ran = await lane({
 			picks: YES,
@@ -193,7 +194,8 @@ describe("a lane, whole", () => {
 
 	// Self-fix PR 5: a touched exam is the person's call now, with two picks. The person here leaves
 	// it unanswered, so the lane waits on it, and the line ends there.
-	it("keeps nothing of a build that changes a test the writer wrote, and asks the person", async () => {
+	// scenario: a local builder changes an exam file in a real checkout and the lane must refuse it.
+	it("scenario: keeps nothing of a build that changes a test the writer wrote, and asks the person", async () => {
 		const ran = await lane({
 			title: "[touch-exam] Read names in one form",
 			picks: {approve: "approve"},
@@ -214,7 +216,8 @@ describe("a lane, whole", () => {
 	// Self-fix PR 3's whole-lane case, as PR 4 has it: each build leaves a test that fails, so code's
 	// checks after the build find the head red three times. No mutation step, no review: it stops at
 	// the rounds' question.
-	it("sends a red head back to the builder with the failing test's name, and asks once the rounds are spent", async () => {
+	// scenario: real test commands fail on the local builder's git heads before the lane asks again.
+	it("scenario: sends a red head back to the builder with the failing test's name, and asks once the rounds are spent", async () => {
 		const NAME = "src/red.test.ts > a planted red > stays red";
 		/** A build's own test that fails, a little different each round so each build changes something. */
 		const red = (n: number) => [

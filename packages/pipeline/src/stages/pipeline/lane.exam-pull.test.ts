@@ -51,7 +51,8 @@ describe("the exam's pull request", () => {
 	const lastEndOf = (ran: Ran, stage: string) =>
 		ran.facts.findLastIndex((f) => f.type === "ended" && f.stage === stage);
 
-	it("is reviewed against the plan's own words before the person is asked, and the ask says what the review met", async () => {
+	// scenario: the real lane's exam writer and reviewer run on a temporary git repository.
+	it("scenario: is reviewed against the plan's own words before the person is asked, and the ask says what the review met", async () => {
 		const ran = await lane({title: RULES, picks: YES});
 		const said = ran.lines.join("\n");
 		expect(ran.lines.at(-1), said).toContain("ended: done");

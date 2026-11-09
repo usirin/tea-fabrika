@@ -224,7 +224,8 @@ describe("a lane, on what a real agent might answer", () => {
 	});
 
 	// P6, and P27: its `stop` lands nothing with or without a guard, so what is on offer is the point.
-	it("every review row unseen goes to the person with the reviewer's reason, nothing lands on it, and nothing on offer lets it through", async () => {
+	// scenario: a local reviewer process returns unseen rows; the real git remote must stay unchanged.
+	it("scenario: every review row unseen goes to the person with the reviewer's reason, nothing lands on it, and nothing on offer lets it through", async () => {
 		const REASON = "The fixture run is elsewhere, so nothing here could show it.";
 		const ran = await lane({
 			within: 50,
@@ -246,7 +247,8 @@ describe("a lane, on what a real agent might answer", () => {
 	});
 
 	// P27: a lane saved with `go_on` on offer, picked. What stops it is ship's guard, not the question.
-	it("a lane saved asking with go_on on offer, and picked, opens its pull request and ends stuck: nothing lands", async () => {
+	// scenario: one saved lane resumes across real local processes and a temporary git remote.
+	it("scenario: a lane saved asking with go_on on offer, and picked, opens its pull request and ends stuck: nothing lands", async () => {
 		const ran = await lane({
 			within: 50,
 			picks: {...YES, step: "go_on"},

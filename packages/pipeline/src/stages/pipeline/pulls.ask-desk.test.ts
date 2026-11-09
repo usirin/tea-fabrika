@@ -1,6 +1,7 @@
 import {readFileSync} from "node:fs";
-import {Effect} from "effect";
-import {describe, expect, it} from "vitest";
+import {Effect, Schema} from "effect";
+import {describe, expect} from "vitest";
+import {property} from "../../ask-desk.test-support.ts";
 import {sealAsk} from "../../tickets/ask.ts";
 import {type Pull, yesOf} from "./pulls.ts";
 
@@ -54,31 +55,48 @@ const said = (ask: {ask: string; saw: string}, answer: unknown) => ({
 });
 
 describe("ask desk P22: the merge read takes the sealed answer", () => {
-	it("binds a merge answer to the head the ask showed", async () => {
-		const ask = await Effect.runPromise(sealAsk({...merge, ask: "a-merge-1"}));
-		const timeline = [{by: LANE, fact: ask}, said(ask, {_tag: "rec"})];
-		expect(yesOf({timeline}, PULL)).toEqual({_tag: "asked", head: HEAD});
-	});
-	it("a no answer is not a merge", async () => {
-		const ask = await Effect.runPromise(sealAsk({...merge, ask: "a-merge-1"}));
-		const timeline = [
-			{by: LANE, fact: ask},
-			said(ask, {_tag: "against", pick: "no", note: "Wait"}),
-		];
-		expect(yesOf({timeline}, PULL)).toEqual({_tag: "none"});
-	});
-	it("a merge to an older ask does not answer the newest one, though it showed the same", async () => {
-		// No rec, so no blind draw tells the two displays apart.
-		const plain = {...merge, rec: NONE};
-		const first = await Effect.runPromise(sealAsk({...plain, ask: "a-merge-1"}));
-		const newest = await Effect.runPromise(sealAsk({...plain, ask: "a-merge-2"}));
-		expect(newest.saw).toBe(first.saw);
-		const yes = said(first, {_tag: "chose", pick: "merge"});
-		expect(yesOf({timeline: [{by: LANE, fact: first}, yes]}, PULL)).toEqual({
-			_tag: "asked",
-			head: HEAD,
-		});
-		const timeline = [{by: LANE, fact: first}, yes, {by: LANE, fact: newest}];
-		expect(yesOf({timeline}, PULL)).toEqual({_tag: "none"});
-	});
+	property(
+		"binds a merge answer to the head the ask showed",
+		{head: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/))},
+		async ({head}) => {
+			const ask = await Effect.runPromise(
+				sealAsk({...merge, ask: "a-merge-1", evidence: {...evidence, head}}),
+			);
+			const timeline = [{by: LANE, fact: ask}, said(ask, {_tag: "rec"})];
+			expect(yesOf({timeline}, {...PULL, head})).toEqual({_tag: "asked", head});
+		},
+	);
+	property(
+		"a no answer is not a merge",
+		{
+			note: Schema.NonEmptyString.check(
+				Schema.isTrimmed(),
+				Schema.isMaxLength(120),
+				Schema.isPattern(/^[^\r\n\uD800-\uDFFF]*$/u),
+			),
+		},
+		async ({note}) => {
+			const ask = await Effect.runPromise(sealAsk({...merge, ask: "a-merge-1"}));
+			const timeline = [{by: LANE, fact: ask}, said(ask, {_tag: "against", pick: "no", note})];
+			expect(yesOf({timeline}, PULL)).toEqual({_tag: "none"});
+		},
+	);
+	property(
+		"a merge to an older ask does not answer the newest one, though it showed the same",
+		{n: Schema.Int},
+		async ({n}) => {
+			// No rec, so no blind draw tells the two displays apart.
+			const plain = {...merge, rec: NONE};
+			const first = await Effect.runPromise(sealAsk({...plain, ask: `a-merge-${n}-old`}));
+			const newest = await Effect.runPromise(sealAsk({...plain, ask: `a-merge-${n}-new`}));
+			expect(newest.saw).toBe(first.saw);
+			const yes = said(first, {_tag: "chose", pick: "merge"});
+			expect(yesOf({timeline: [{by: LANE, fact: first}, yes]}, PULL)).toEqual({
+				_tag: "asked",
+				head: HEAD,
+			});
+			const timeline = [{by: LANE, fact: first}, yes, {by: LANE, fact: newest}];
+			expect(yesOf({timeline}, PULL)).toEqual({_tag: "none"});
+		},
+	);
 });

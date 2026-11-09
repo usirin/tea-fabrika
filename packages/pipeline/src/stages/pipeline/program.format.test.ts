@@ -171,8 +171,9 @@ describe("an exam file that fails the format check before a build round", () => 
 		rmSync(dir, {recursive: true, force: true});
 	});
 
+	// scenario: run the real formatter and local builder on a temporary git repository's second round.
 	it(
-		"before round 2 gets a code commit, the builder's head is on it, and its diff does not count it as exam_touched",
+		"scenario: before round 2 gets a code commit, the builder's head is on it, and its diff does not count it as exam_touched",
 		{timeout: 300_000},
 		async () => {
 			const {home, seed} = makeLaneHome({
@@ -284,8 +285,9 @@ describe("a test the mutants' writer adds that fails the format check", () => {
 		rmSync(dir, {recursive: true, force: true});
 	});
 
+	// scenario: a real formatter process fails once, then the local lane commits and reviews its output.
 	it(
-		"gets a code commit after the answers, and the review is handed that head",
+		"scenario: gets a code commit after the answers, and the review is handed that head",
 		{timeout: 300_000},
 		async () => {
 			const formatter = crashesOnce(join(dir, "seen"));

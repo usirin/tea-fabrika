@@ -1,5 +1,6 @@
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
+import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
 // Today's version. Round 4 of the ask desk's tests, from the shots' fix list (askdesk-review.md,
@@ -300,26 +301,44 @@ const LOOK = {
 	color: /^color$/,
 	corners: /radius$/,
 };
+const stylesHold = (check: (state: {focus: boolean; focusVisible: boolean}) => void) =>
+	fc.assert(
+		fc.property(
+			fc
+				.record({focus: fc.boolean(), focusVisible: fc.boolean()})
+				.filter((s) => !s.focusVisible || s.focus),
+			check,
+		),
+		{seed: 119120},
+	);
 
 describe("shot S2: one button look for the ask's actions, in the menu and in a window", () => {
 	const pairs = ["ticket", "tracker"].flatMap((place) =>
 		Object.keys(BUTTONS).map((button) => [button, place] as const),
 	);
 	it.each(pairs)("%s gets the same rules in the %s as in the asks menu", (button, place) => {
-		const under = BUTTONS[button] as readonly El[];
-		const there = [...(PLACES[place] as Chain), CARD, ...under];
-		const menu = [...(PLACES.menu as Chain), CARD, ...under];
-		for (const [what, names] of Object.entries(LOOK))
-			expect(winner(there, names)?.value ?? "Manti's", `${what} of ${button}`).toBe(
-				winner(menu, names)?.value ?? "Manti's",
-			);
+		stylesHold((state) => {
+			const under = BUTTONS[button] as readonly El[];
+			const there = [...(PLACES[place] as Chain), {...CARD, ...state}, ...under];
+			const menu = [...(PLACES.menu as Chain), {...CARD, ...state}, ...under];
+			for (const [what, names] of Object.entries(LOOK))
+				expect(winner(there, names)?.value ?? "Manti's", `${what} of ${button}`).toBe(
+					winner(menu, names)?.value ?? "Manti's",
+				);
+		});
 	});
 	// Only Take rec is indigo (the plan's "What the person sees"): Manti's primary fill, or the
 	// app's own name for indigo 9 (`--key`), never stripped and never the gray of a plain button.
 	it.each(Object.keys(PLACES))("Take rec keeps its indigo fill in the %s", (place) => {
-		const chain = [...(PLACES[place] as Chain), CARD, ...(BUTTONS["Take rec"] as readonly El[])];
-		const fill = winner(chain, LOOK.background)?.value ?? "Manti's";
-		expect(fill).toMatch(/^Manti's$|indigo|--key\b|--accent/);
+		stylesHold((state) => {
+			const chain = [
+				...(PLACES[place] as Chain),
+				{...CARD, ...state},
+				...(BUTTONS["Take rec"] as readonly El[]),
+			];
+			const fill = winner(chain, LOOK.background)?.value ?? "Manti's";
+			expect(fill).toMatch(/^Manti's$|indigo|--key\b|--accent/);
+		});
 	});
 });
 
@@ -327,11 +346,13 @@ const CORNERS = /^border(-(top|bottom|start|end)-(left|right|start|end))?-radius
 
 describe("shot S10: the card keeps its 8px corners, focused or not", () => {
 	it.each(Object.keys(PLACES))("in the %s", (place) => {
-		const chain = PLACES[place] as Chain;
-		for (const state of [{}, {focus: true}, {focus: true, focusVisible: true}]) {
-			const radius = winner([...chain, {...CARD, ...state}], CORNERS)?.value;
-			expect(["var(--r-lg)", "8px"], `${JSON.stringify(state)}: ${radius}`).toContain(radius);
-		}
+		stylesHold((generated) => {
+			const chain = PLACES[place] as Chain;
+			for (const state of [{}, {focus: true}, {focus: true, focusVisible: true}, generated]) {
+				const radius = winner([...chain, {...CARD, ...state}], CORNERS)?.value;
+				expect(["var(--r-lg)", "8px"], `${JSON.stringify(state)}: ${radius}`).toContain(radius);
+			}
+		});
 	});
 });
 
@@ -342,17 +363,20 @@ describe("ask desk review 6: no rule hides an empty status region", () => {
 		empty: true,
 	};
 	it.each(Object.keys(PLACES))("in the %s, in the ask view or beside it", (place) => {
-		const chain = PLACES[place] as Chain;
-		for (const where of [
-			[...chain, STATUS],
-			[...chain, CARD, STATUS],
-		])
-			expect(winner(where, /^display$/)?.value).not.toBe("none");
+		stylesHold((state) => {
+			const chain = PLACES[place] as Chain;
+			for (const where of [
+				[...chain, {...STATUS, ...state}],
+				[...chain, CARD, {...STATUS, ...state}],
+			])
+				expect(winner(where, /^display$/)?.value).not.toBe("none");
+		});
 	});
 });
 
 describe("the cascade above reads window.css as a browser does", () => {
-	it("reads the rules it needs, and a plain view button loses its fill to `.view button`", () => {
+	// pinned: round 4, shot S2's .view-button-fill bug. This reproduces the old selector clash.
+	it("pinned: reads the rules it needs, and a plain view button loses its fill to `.view button`", () => {
 		expect(READ.length).toBeGreaterThan(100);
 		const plain = [...(PLACES.ticket as Chain), {tag: "button"}];
 		expect(winner(plain, LOOK.background)?.value).toBe("none");

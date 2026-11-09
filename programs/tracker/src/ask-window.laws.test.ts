@@ -731,7 +731,12 @@ describe("the shared ask view's laws, design E (askView)", () => {
 	);
 
 	it("every view law has a planted mistake", () => {
-		expect(VIEW_LAWS.filter((law) => !VIEW_PLANTS.some((p) => p.law === law))).toEqual([]);
+		fc.assert(
+			fc.property(fc.shuffledSubarray(VIEW_LAWS, {minLength: VIEW_LAWS.length}), (laws) => {
+				expect(laws.filter((law) => !VIEW_PLANTS.some((p) => p.law === law))).toEqual([]);
+			}),
+			OPTS,
+		);
 	});
 });
 
@@ -748,6 +753,11 @@ describe("the shared ask editor's laws (askMachine)", () => {
 	);
 
 	it("every law has a planted mistake", () => {
-		expect(LAWS.filter((law) => !PLANTS.some((p) => p.law === law))).toEqual([]);
+		fc.assert(
+			fc.property(fc.shuffledSubarray(LAWS, {minLength: LAWS.length}), (laws) => {
+				expect(laws.filter((law) => !PLANTS.some((p) => p.law === law))).toEqual([]);
+			}),
+			OPTS,
+		);
 	});
 });

@@ -3,7 +3,7 @@ import type {MsgOf} from "@kampus/fabrika-old";
 import {blindDraw, sealAsk} from "@kampus/pipeline/tickets/ask";
 import {Entry} from "@kampus/pipeline/tickets/ticket";
 import {Effect, Schema} from "effect";
-import {describe, expect, it} from "vitest";
+import {describe, expect} from "vitest";
 import {
 	DRAFT,
 	FILED,
@@ -12,6 +12,7 @@ import {
 	policyFor,
 	type Sealed,
 } from "../../../fixtures/ask-desk/cases.ts";
+import {property} from "../../../fixtures/ask-desk/property.ts";
 import {type Asks, AsksNow, asksMachine, asksNow, load, NO_MARKS} from "./asks.ts";
 
 // Today's version. Review 7 of the ask desk's fix list (askdesk-review.md): what the host sends
@@ -40,9 +41,10 @@ const pathsIn = (value: unknown, at = ""): readonly string[] =>
 			});
 
 describe("ask desk review 7: the page never receives the sealed rec", () => {
-	it.each([true, false])(
-		"the asks sent to every page hold shows and saw only (hidden=%s)",
-		async (hidden) => {
+	property(
+		"the asks sent to every page hold shows and saw only",
+		{hidden: Schema.Boolean},
+		async ({hidden}) => {
 			// A blind ask is a step's: an approve ask is never drawn blind (review 2, medium 2).
 			const draft = hidden ? {...DRAFT, for: "step"} : DRAFT;
 			const ask = await Effect.runPromise(seal(draft, policyFor(DRAFT.ask, hidden, blindDraw)));

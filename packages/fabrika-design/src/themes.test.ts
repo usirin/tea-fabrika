@@ -556,6 +556,12 @@ describe("law 5: text and state words read 4.5:1 where they sit (WCAG 1.4.3)", (
 					([where, bg]) => [`${fg} on ${where}`, tokenIn(fg, look), bg, 4.5] as const,
 				),
 			);
+			fc.assert(
+				fc.property(fc.constantFrom(...pairs), (pair) => {
+					expect(under([pair])).toEqual([]);
+				}),
+				{seed: 119120},
+			);
 			expect(under(pairs)).toEqual([]);
 		},
 	);
@@ -597,32 +603,37 @@ describe("law 7: the lines a person must see read 3:1 (WCAG 1.4.11)", () => {
 	it.each(LOOKS)("the turn fill, and focus: every ring and the focused tile's edge, %s", (look) => {
 		const ground = tokenIn("--surface", look);
 		const ring = tokenIn("--focus", look);
-		expect(
-			under([
-				["--turn-fill on --surface", tokenIn("--turn-fill", look), ground, 3],
-				...["--surface-sunken", "--surface", "--surface-raised", "--surface-card"].map(
-					(bg) => [`--focus on ${bg}`, ring, tokenIn(bg, look), 3] as const,
-				),
-				...["--surface-sunken", "--surface", "--surface-raised"].map(
-					(page) =>
-						[
-							`--focus on a hovered row on ${page}`,
-							ring,
-							rowOver("--surface-hover", page, look),
-							3,
-						] as const,
-				),
-				...["--surface", "--surface-raised"].map(
-					(page) =>
-						[
-							`--focus on a selected row on ${page}`,
-							ring,
-							rowOver("--surface-selected", page, look),
-							3,
-						] as const,
-				),
-			]),
-		).toEqual([]);
+		const pairs = [
+			["--turn-fill on --surface", tokenIn("--turn-fill", look), ground, 3],
+			...["--surface-sunken", "--surface", "--surface-raised", "--surface-card"].map(
+				(bg) => [`--focus on ${bg}`, ring, tokenIn(bg, look), 3] as const,
+			),
+			...["--surface-sunken", "--surface", "--surface-raised"].map(
+				(page) =>
+					[
+						`--focus on a hovered row on ${page}`,
+						ring,
+						rowOver("--surface-hover", page, look),
+						3,
+					] as const,
+			),
+			...["--surface", "--surface-raised"].map(
+				(page) =>
+					[
+						`--focus on a selected row on ${page}`,
+						ring,
+						rowOver("--surface-selected", page, look),
+						3,
+					] as const,
+			),
+		] as const;
+		fc.assert(
+			fc.property(fc.constantFrom(...pairs), (pair) => {
+				expect(under([pair])).toEqual([]);
+			}),
+			{seed: 119120},
+		);
+		expect(under(pairs)).toEqual([]);
 	});
 
 	// The focus bend's reason (flag 3): in dark the ring is slate a9, a solid step used as a line,

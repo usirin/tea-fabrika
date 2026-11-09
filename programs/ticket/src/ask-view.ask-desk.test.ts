@@ -1,4 +1,4 @@
-import {type Asked, blindDraw, sealAsk} from "@kampus/pipeline/tickets/ask";
+import {Asked, blindDraw, sealAsk} from "@kampus/pipeline/tickets/ask";
 import {Entry, fold, type Ticket} from "@kampus/pipeline/tickets/ticket";
 import {AskActions, AskView} from "@tea-fabrika/tracker/ask-window";
 import {Effect, Schema} from "effect";
@@ -16,6 +16,7 @@ import {
 	policyFor,
 	TOOK,
 } from "../../../fixtures/ask-desk/cases.ts";
+import {property} from "../../../fixtures/ask-desk/property.ts";
 import {pageOf, type Shown} from "./view.ts";
 import {TicketWindow} from "./window.tsx";
 
@@ -77,22 +78,26 @@ const firstOf = (markup: string, open: RegExp): string => {
 
 describe("ask desk review 10: the toolbar is one tab stop", () => {
 	it("one control in the toolbar takes Tab, the rest roam by arrow keys", async () => {
-		const toolbar = firstOf(view(await sealed()), /<div[^>]*role="toolbar"/);
-		const container = /^<div[^>]*>/.exec(toolbar)?.[0] ?? "";
-		const inner = toolbar.slice(container.length);
-		const tabbable = [...inner.matchAll(/<(button|a|input|textarea|select)\b[^>]*>/g)].filter(
-			([tag]) => !/tabindex="-1"/.test(tag) && !/\bdisabled=""/.test(tag),
-		);
-		const stops = tabbable.length + (/tabindex="0"/.test(container) ? 1 : 0);
-		expect(stops).toBe(1);
+		await onAnyAsk((ask) => {
+			const toolbar = firstOf(view(ask), /<div[^>]*role="toolbar"/);
+			const container = /^<div[^>]*>/.exec(toolbar)?.[0] ?? "";
+			const inner = toolbar.slice(container.length);
+			const tabbable = [...inner.matchAll(/<(button|a|input|textarea|select)\b[^>]*>/g)].filter(
+				([tag]) => !/tabindex="-1"/.test(tag) && !/\bdisabled=""/.test(tag),
+			);
+			const stops = tabbable.length + (/tabindex="0"/.test(container) ? 1 : 0);
+			expect(stops).toBe(1);
+		});
 	});
 });
 
 describe("ask desk review 11: Later is a button in the ask view", () => {
 	it("the shared ask view has a Later button, in the ticket and the tracker alike", async () => {
-		const markup = view(await sealed());
-		const buttons = [...markup.matchAll(/<button\b[\s\S]*?<\/button>/g)].map(([b]) => textOf(b));
-		expect(buttons.some((b) => /^Later\b/.test(b))).toBe(true);
+		await onAnyAsk((ask) => {
+			const markup = view(ask);
+			const buttons = [...markup.matchAll(/<button\b[\s\S]*?<\/button>/g)].map(([b]) => textOf(b));
+			expect(buttons.some((b) => /^Later\b/.test(b))).toBe(true);
+		});
 	});
 });
 
@@ -107,42 +112,58 @@ const CHANGE = {
 };
 
 describe("ask desk review 9 and shot S5: evidence is drawn as text", () => {
-	it.each([
+	describe.each([
 		["plan", DRAFT.evidence],
 		["change", CHANGE],
 		["other", {_tag: "other", text: "The build stopped and needs your call."}],
-	])("%s evidence reads as words, with no JSON and no tag", async (_, evidence) => {
-		const markup = view(await sealed({...DRAFT, evidence}));
-		const drawn = textOf(firstOf(markup, /<div class="ask-evidence"/));
-		expect(drawn).not.toMatch(/_tag/);
-		expect(drawn).not.toMatch(/[{}]|"\w+":/);
-		expect(markup).not.toMatch(/<pre\b[^>]*>\s*\{/);
+	])("%s evidence", (_, evidence) => {
+		property("reads as words, with no JSON and no tag", {id: Asked.fields.ask}, async ({id}) => {
+			const markup = view(await sealed({...DRAFT, ask: id, evidence}));
+			const drawn = textOf(firstOf(markup, /<div class="ask-evidence"/));
+			expect(drawn).not.toMatch(/_tag/);
+			expect(drawn).not.toMatch(/[{}]|"\w+":/);
+			expect(markup).not.toMatch(/<pre\b[^>]*>\s*\{/);
+		});
 	});
-	it("plan evidence names the summary, each question and its lean", async () => {
-		const drawn = textOf(firstOf(view(await sealed()), /<div class="ask-evidence"/));
-		const {plan} = DRAFT.evidence;
-		expect(drawn).toContain(plan.summary);
-		for (const q of plan.questions as readonly {ask: string; lean: string}[]) {
-			expect(drawn).toContain(q.ask);
-			expect(drawn).toContain(q.lean);
-		}
-	});
-	it("change evidence names the checks, the rule files and the words beside the change", async () => {
-		const drawn = textOf(
-			firstOf(view(await sealed({...DRAFT, evidence: CHANGE})), /<div class="ask-evidence"/),
-		);
-		expect(drawn).toContain("ci");
-		expect(drawn).toContain("rules/slug.md");
-		expect(drawn).toContain("A slug is lower case.");
-		expect(drawn).toContain(CHANGE.text);
-		expect(drawn).toContain("t.trim().toLowerCase()");
-	});
+	property(
+		"plan evidence names the summary, each question and its lean",
+		{id: Asked.fields.ask},
+		async ({id}) => {
+			const drawn = textOf(
+				firstOf(view(await sealed({...DRAFT, ask: id})), /<div class="ask-evidence"/),
+			);
+			const {plan} = DRAFT.evidence;
+			expect(drawn).toContain(plan.summary);
+			for (const q of plan.questions as readonly {ask: string; lean: string}[]) {
+				expect(drawn).toContain(q.ask);
+				expect(drawn).toContain(q.lean);
+			}
+		},
+	);
+	property(
+		"change evidence names the checks, the rule files and the words beside the change",
+		{id: Asked.fields.ask},
+		async ({id}) => {
+			const drawn = textOf(
+				firstOf(
+					view(await sealed({...DRAFT, ask: id, evidence: CHANGE})),
+					/<div class="ask-evidence"/,
+				),
+			);
+			expect(drawn).toContain("ci");
+			expect(drawn).toContain("rules/slug.md");
+			expect(drawn).toContain("A slug is lower case.");
+			expect(drawn).toContain(CHANGE.text);
+			expect(drawn).toContain("t.trim().toLowerCase()");
+		},
+	);
 });
 
 describe("shot S8: no machine ids in what the person reads", () => {
 	it("the ask view never shows the ask's id", async () => {
-		const ask = await sealed();
-		expect(textOf(view(ask))).not.toContain(ask.ask);
+		await onAnyAsk((ask) => {
+			expect(textOf(view(ask))).not.toContain(ask.ask);
+		});
 	});
 });
 
@@ -181,6 +202,12 @@ const anyAsk = fc
 	});
 const sealedAny = (a: {draft: unknown; policy: {seed: number}}) =>
 	Effect.runPromise(sealAsk(a.draft, a.policy));
+async function onAnyAsk(check: (ask: Asked) => void) {
+	await fc.assert(
+		fc.asyncProperty(anyAsk, async (a) => check(await sealedAny(a))),
+		{seed: 119120},
+	);
+}
 
 /** How many times the words say Recommended. */
 const recommendedIn = (text: string) => text.match(/\brecommended\b/gi)?.length ?? 0;
@@ -226,20 +253,24 @@ describe("ask desk design E: the bar before anything is pressed", () => {
 		);
 	});
 	// The plants: the look branch's design E drew both of these.
-	it("the planted blind line Recommended · Hidden until you pick is caught", () => {
+	// format: exact invalid display text used to test the recommendation-word checker itself.
+	it("format: the planted blind line Recommended · Hidden until you pick is caught", () => {
 		expect(recommendedOnce("blind", "Your turn Recommended Hidden until you pick")).toBe(false);
 	});
-	it("the planted marks on a row of their own, after the rec line, are caught", () => {
+	// format: this literal invalid HTML template tests the markup checker, not a generated ask.
+	it("format: the planted marks on a row of their own, after the rec line, are caught", () => {
 		expect(
 			marksOnTheLine(
 				'<p class="ask-rec">Recommended approve · 95% sure</p><div role="group" aria-label="Did this need you?"><button type="button">Needed me</button><button type="button">Agent could work it out</button></div>',
 			),
 		).toBe(false);
 	});
-	it("the planted marks drawn only after a pick are caught", () => {
+	// format: the literal missing-marks template must be rejected by the markup checker.
+	it("format: the planted marks drawn only after a pick are caught", () => {
 		expect(marksOnTheLine('<p class="ask-rec">Recommended approve · 95% sure</p>')).toBe(false);
 	});
-	it("marks at the end of the rec line pass", () => {
+	// format: the exact valid HTML template is a positive control for that same checker.
+	it("format: marks at the end of the rec line pass", () => {
 		expect(
 			marksOnTheLine(
 				'<div class="ask-rec"><span>Recommended approve · 95% sure</span><div role="group" aria-label="Did this need you?"><button type="button">Needed me</button><button type="button">Agent could work it out</button></div></div>',
@@ -293,22 +324,26 @@ const MERGED = {
 const turnOf = (markup: string) => firstOf(markup, /<section[^>]*aria-label="Whose turn"/);
 
 describe("ask desk review 6: one status region, always there, outside the ask view", () => {
-	it.each([
+	describe.each([
 		["waits on an ask", async () => [FILED, await sealed()]],
 		["runs", async () => [FILED, RUNNING]],
 		["is done", async () => [FILED, MERGED]],
-	])("the ticket's window holds a polite status region when it %s", async (_, facts) => {
-		const markup = drawn(ticketOf(await facts()));
-		const ask = markup.search(/<section class="ask-view"/);
-		const outside = ask < 0 ? markup : markup.replace(elementAt(markup, ask), "");
-		expect(outside).toMatch(/<[a-z]+\b[^>]*role="status"/);
-		const status = firstOf(outside, /<[a-z]+\b[^>]*role="status"/);
-		expect(status).not.toMatch(/aria-live="(off|assertive)"/);
+	])("when the ticket %s", (_, facts) => {
+		property("its window holds a polite status region", {id: Schema.Int}, async ({id}) => {
+			const all = await facts();
+			const markup = drawn(ticketOf([{...FILED, title: `Ticket ${id}`}, ...all.slice(1)]));
+			const ask = markup.search(/<section class="ask-view"/);
+			const outside = ask < 0 ? markup : markup.replace(elementAt(markup, ask), "");
+			expect(outside).toMatch(/<[a-z]+\b[^>]*role="status"/);
+			const status = firstOf(outside, /<[a-z]+\b[^>]*role="status"/);
+			expect(status).not.toMatch(/aria-live="(off|assertive)"/);
+		});
 	});
 });
 
 describe("shot S8: the running card names no run id", () => {
-	it("says the step that runs and since when, never r-build-121", () => {
+	// pinned: round 4 shot S8 exposed r-build-121 as the running card's label.
+	it("pinned: says the step that runs and since when, never r-build-121", () => {
 		const turn = textOf(turnOf(drawn(ticketOf([FILED, RUNNING]))));
 		expect(turn).not.toContain("r-build-121");
 		expect(turn).not.toMatch(/\br-[a-z_]+-\d+\b/);
@@ -316,7 +351,8 @@ describe("shot S8: the running card names no run id", () => {
 });
 
 describe("shot S9: the done card draws its check once", () => {
-	it("one check mark, beside the word Done", () => {
+	// pinned: round 4 shot S9's double-check-mark bug on the completed ticket card.
+	it("pinned: one check mark, beside the word Done", () => {
 		const turn = turnOf(drawn(ticketOf([FILED, MERGED])));
 		const marks = (textOf(turn).match(/✓/g) ?? []).length + (turn.match(/<svg\b/g) ?? []).length;
 		expect(marks).toBe(1);

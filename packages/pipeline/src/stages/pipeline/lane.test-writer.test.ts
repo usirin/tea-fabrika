@@ -283,7 +283,8 @@ describe("a stopped lane, typed again", () => {
 		// The other way through `writtenAgain`'s `passed`: a redo that tests one Property and says no
 		// test can check the other ends `cannot_test`, and every test it wrote did as the plan says.
 		// The person lets the rest through, and the redo goes on the head as a `done` one does.
-		it("exam_touched, `test_wrong`, and the redo ends ask:owner:cannot_test: after the owner's `go_on`, the redo is on the build's head and nothing is touched", async () => {
+		// scenario: the real test writer process reopens a temporary checkout and refuses a redo there.
+		it("scenario: exam_touched, `test_wrong`, and the redo ends ask:owner:cannot_test: after the owner's `go_on`, the redo is on the build's head and nothing is touched", async () => {
 			const SECOND = {
 				...property("new"),
 				when: "a name is in lower case already",

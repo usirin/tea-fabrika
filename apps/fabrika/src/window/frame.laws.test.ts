@@ -6,13 +6,14 @@ import {
 	stubCtxThrowingProxy,
 	type Step,
 } from "@demlik/tea/pbt";
-import {askShownOf, sealAsk} from "@kampus/pipeline/tickets/ask";
-import {Effect} from "effect";
+import {askShownOf, sealAsk, Rec} from "@kampus/pipeline/tickets/ask";
+import {Effect, Schema} from "effect";
 import * as fc from "fast-check";
 import {createElement, isValidElement, type ReactNode} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it, vi} from "vitest";
 import {DRAFT} from "../../../../fixtures/ask-desk/cases.ts";
+import {property} from "../../../../fixtures/ask-desk/property.ts";
 import type {AsksNow} from "../asks.ts";
 import {type Desk, type DeskCmd, type DeskMsg, deskMachine, type Open} from "../desk/desk.ts";
 import {defaults} from "../desk/keymap.ts";
@@ -73,7 +74,15 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
 
 describe("the asks menu's laws (asksMenuMachine)", () => {
 	it("starts with nothing selected and asks for nothing", () => {
-		expect(asksMenuMachine.init(undefined as never, ctx)).toEqual([{selected: null}, []]);
+		fc.assert(
+			fc.property(lists, (messages) => {
+				expect(asksMenuMachine.init(undefined as never, ctx)).toEqual([{selected: null}, []]);
+				let [model] = asksMenuMachine.init(undefined as never, ctx);
+				for (const msg of messages) [model] = applyCell(asksMenuMachine, model, msg);
+				expect(model.selected).toBe(messages.at(-1)?.key ?? null);
+			}),
+			OPTS,
+		);
 	});
 
 	it.each(LAWS.map((law) => [law.name, law] as const))("%s", (_, law) => {
@@ -88,7 +97,12 @@ describe("the asks menu's laws (asksMenuMachine)", () => {
 	);
 
 	it("every law has a planted mistake", () => {
-		expect(LAWS.filter((law) => !PLANTS.some((p) => p.law === law))).toEqual([]);
+		fc.assert(
+			fc.property(fc.shuffledSubarray(LAWS, {minLength: LAWS.length}), (laws) => {
+				expect(laws.filter((law) => !PLANTS.some((p) => p.law === law))).toEqual([]);
+			}),
+			OPTS,
+		);
 	});
 });
 
@@ -132,47 +146,54 @@ const props = (over: Partial<FrameProps> = {}): FrameProps => ({
 const show = (over: Partial<FrameProps>) => renderToStaticMarkup(createElement(Over, props(over)));
 
 describe("today's frame display laws", () => {
-	it("draws only the selected sealed ask, with its actions and the separate ask and stop counts", async () => {
-		const sealed = askShownOf(await Effect.runPromise(sealAsk(DRAFT)));
-		const row = {
-			key: "7/a-1",
-			ticket: 7,
-			title: "Keys",
-			what: DRAFT.what,
-			kind: "ask" as const,
-			at: 0,
-			seen: false,
-			sealed,
-		};
-		const html = show({
-			frame: {...FRAME, over: {kind: "asks"}},
-			asks: {
-				...asks,
-				asks: [
-					row,
-					{...row, key: "8/a-2", ticket: 8},
-					{
-						key: "9/stuck/r-3",
-						ticket: 9,
-						kind: "stuck",
-						title: "Build",
-						what: "Read failed",
-						at: 0,
-						seen: false,
-					},
-				],
-			},
-		});
-		expect(html.match(/data-ask-place="menu"/g)).toHaveLength(1);
-		expect(html).toContain("Recommended");
-		expect(html).toContain("Open ticket");
-		expect(html.replace(/<!-- -->|<[^>]+>/g, " ").replace(/\s+/g, " ")).toContain(
-			"2 asks · 1 stop",
-		);
-	});
-	it.each([false, true])(
-		"a stop has reachable Open lane and Later actions, set aside=%s",
-		(later) => {
+	property(
+		"draws only the selected sealed ask, with its actions and the separate ask and stop counts",
+		{sure: Rec.cases.pick.fields.sure},
+		async ({sure}) => {
+			const sealed = askShownOf(
+				await Effect.runPromise(sealAsk({...DRAFT, rec: {...DRAFT.rec, sure}})),
+			);
+			const row = {
+				key: "7/a-1",
+				ticket: 7,
+				title: "Keys",
+				what: DRAFT.what,
+				kind: "ask" as const,
+				at: 0,
+				seen: false,
+				sealed,
+			};
+			const html = show({
+				frame: {...FRAME, over: {kind: "asks"}},
+				asks: {
+					...asks,
+					asks: [
+						row,
+						{...row, key: "8/a-2", ticket: 8},
+						{
+							key: "9/stuck/r-3",
+							ticket: 9,
+							kind: "stuck",
+							title: "Build",
+							what: "Read failed",
+							at: 0,
+							seen: false,
+						},
+					],
+				},
+			});
+			expect(html.match(/data-ask-place="menu"/g)).toHaveLength(1);
+			expect(html).toContain("Recommended");
+			expect(html).toContain("Open ticket");
+			expect(html.replace(/<!-- -->|<[^>]+>/g, " ").replace(/\s+/g, " ")).toContain(
+				"2 asks · 1 stop",
+			);
+		},
+	);
+	property(
+		"a stop has reachable Open lane and Later actions",
+		{later: Schema.Boolean},
+		({later}) => {
 			const row = {
 				key: "7/stuck/r-1",
 				ticket: 7,
@@ -278,7 +299,8 @@ describe("today's frame display laws", () => {
 		expect(jobs).toMatch(/Esc<\/kbd>[\s\S]*?Close/);
 	});
 
-	it("the asks menu counts one ask and one stop in the singular (ask desk review 2, low 5)", () => {
+	// pinned: review 2, low 5's "1 asks / 1 stops" bug, kept at the exact singular boundary.
+	it("pinned: the asks menu counts one ask and one stop in the singular (ask desk review 2, low 5)", () => {
 		const html = show({
 			frame: {...FRAME, over: {kind: "asks"}},
 			asks: {

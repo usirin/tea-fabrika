@@ -10,6 +10,10 @@
 	{ "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
 	{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
 	{ "glob": "**/*.ask-desk.test.ts", "why": "today's ask-desk PR 1 laws" },
+	{
+		"glob": "packages/pipeline/src/ask-desk.test-support.ts",
+		"why": "the ask-desk properties' test runner and input constraints"
+	},
 	{ "glob": "fixtures/ask-desk/**", "why": "ask-desk saved cases, vectors and mutation plants" },
 	{ "glob": "apps/fabrika/e2e.ts", "why": "today's real-app checks and their routing" },
 	{ "glob": "apps/fabrika/e2e/**", "why": "today's real-app checks and captures" },

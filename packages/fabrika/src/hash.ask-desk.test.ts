@@ -11,10 +11,15 @@ const {CANONICAL_INPUT, CANONICAL_TEXT} = JSON.parse(
 // P3. Today's version. Chromium runs the same vector in e2e/ask-desk.ts.
 const digest: (value: unknown) => Effect.Effect<string, unknown> = hash;
 describe("ask desk P3: canonical display hash", () => {
-	it("matches RFC 8785 bytes and an independent Node SHA-256", async () => {
+	// vector: RFC 8785's serialization sample supplies these exact bytes, before SHA-256.
+	it("vector: matches RFC 8785 bytes and an independent Node SHA-256", async () => {
 		expect(await Effect.runPromise(digest(CANONICAL_INPUT))).toBe(
 			`sha256:${createHash("sha256").update(CANONICAL_TEXT).digest("hex")}`,
 		);
+	});
+	// vector: RFC 8785 section 3.2.2.2 requires rejection of lone UTF-16 surrogates.
+	it.each(["\ud800", "\udfff"])("vector: RFC 8785 rejects lone surrogate %j", async (text) => {
+		expect(await Effect.runPromise(Effect.exit(digest(text)))).toMatchObject({_tag: "Failure"});
 	});
 	it("ignores object insertion order at every depth, but preserves array order and text", async () => {
 		await fc.assert(
@@ -33,10 +38,21 @@ describe("ask desk P3: canonical display hash", () => {
 			await Effect.runPromise(digest("e\u0301")),
 		);
 	});
-	it.each([Number.NaN, Infinity, undefined, {missing: undefined}])(
-		"refuses non-JSON display data %j",
-		async (value) => {
-			expect(await Effect.runPromise(Effect.exit(digest(value)))).toMatchObject({_tag: "Failure"});
-		},
-	);
+	it("refuses non-JSON display data wherever it is nested", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.array(fc.string(), {maxLength: 8}), async (keys) => {
+				for (const invalid of [Number.NaN, Infinity, undefined, {missing: undefined}]) {
+					let value: unknown = invalid;
+					for (const key of keys) value = {[key]: value};
+					expect(await Effect.runPromise(Effect.exit(digest(invalid)))).toMatchObject({
+						_tag: "Failure",
+					});
+					expect(await Effect.runPromise(Effect.exit(digest(value)))).toMatchObject({
+						_tag: "Failure",
+					});
+				}
+			}),
+			{seed: 119120},
+		);
+	});
 });

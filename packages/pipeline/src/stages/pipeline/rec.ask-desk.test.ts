@@ -55,16 +55,17 @@ afterAll(() => {
 });
 
 describe("ask desk review 1: a recommendation only from a recorded lean", () => {
-	it("a plan with no open question has no lean to recommend from: Rec.none", () => {
+	// scenario: these read the three real lane runs above, with local agents and temporary git repos.
+	it("scenario: a plan with no open question has no lean to recommend from: Rec.none", () => {
 		const ask = approveOf(plain);
 		expect(ask.rec._tag).toBe("none");
 	});
-	it("a step's question has no recorded lean: Rec.none, never its first pick", () => {
+	it("scenario: a step's question has no recorded lean: Rec.none, never its first pick", () => {
 		const ask = stepOf(stepped);
 		expect(ask.rec._tag).toBe("none");
 		expect(JSON.stringify(ask)).not.toContain("The step recommends this answer");
 	});
-	it("a plan whose questions all have leans recommends approve, with why and cost from those leans", () => {
+	it("scenario: a plan whose questions all have leans recommends approve, with why and cost from those leans", () => {
 		const {rec} = approveOf(leaned);
 		if (rec._tag !== "pick") return expect.unreachable(`no rec: ${JSON.stringify(rec)}`);
 		expect(rec.pick).toBe("approve");
@@ -78,7 +79,8 @@ describe("ask desk review 1: a recommendation only from a recorded lean", () => 
 });
 
 describe("ask desk review 3: a step's ask records what it asked about", () => {
-	it("for is the step outcome's own `for`, never unknown", () => {
+	// scenario: the real test writer process returns already_passes and the lane seals its ask.
+	it("scenario: for is the step outcome's own `for`, never unknown", () => {
 		const outcomes = stepped.facts.flatMap((f) =>
 			f.type === "ended" && f.stage === "test_writer" ? [f.outcome] : [],
 		);
@@ -89,7 +91,8 @@ describe("ask desk review 3: a step's ask records what it asked about", () => {
 });
 
 describe("ask desk review 4: an approve ask keeps the step's own words, and a reason", () => {
-	it("the plan evidence carries the words the plan step wrote, as text", () => {
+	// scenario: the real lane's stored ask is compared with its local planner process's output.
+	it("scenario: the plan evidence carries the words the plan step wrote, as text", () => {
 		const ask = approveOf(plain);
 		const run = plain.facts.findLast((f) => f.type === "started" && f.stage === "plan")?.run;
 		const said = plain.facts.flatMap((f) =>
@@ -104,7 +107,8 @@ describe("ask desk review 4: an approve ask keeps the step's own words, and a re
 	it.each([
 		["the approve ask", () => approveOf(plain)],
 		["a step's ask", () => stepOf(stepped)],
-	])("%s says why it asks, from the step's outcome", (_, ask) => {
+		// scenario: compare the saved ask with the outcome from each of the real lane runs above.
+	])("scenario: %s says why it asks, from the step's outcome", (_, ask) => {
 		const {why} = ask();
 		expect(typeof why).toBe("string");
 		expect(why?.trim()).not.toBe("");

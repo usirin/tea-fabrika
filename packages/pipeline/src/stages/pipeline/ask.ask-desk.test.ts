@@ -10,7 +10,8 @@ afterEach(() => {
 	for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
 });
 describe("ask desk P2: seal before showing the question", () => {
-	it("the first observable asked fact is complete, and restarting the wait cannot rewrite it", async () => {
+	// scenario: a real lane starts local agent processes and writes a real temporary repository.
+	it("scenario: the first observable asked fact is complete, and restarting the wait cannot rewrite it", async () => {
 		vi.stubEnv("TYPESAFE_API_KEY", "");
 		const ran = await lane({within: 50, leave: ["approve"], again: [{}], fold: true});
 		const asks = ran.facts.filter((f) => f.type === "asked");
