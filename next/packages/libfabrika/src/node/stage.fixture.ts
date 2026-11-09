@@ -2,11 +2,15 @@
 import {Effect, Layer, Sink, Stream} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 
-export const rssLayer = (sample: () => number) =>
+export const rssLayer = (
+	sample: () => number,
+	onSpawn?: (command: string, args: ReadonlyArray<unknown>) => void,
+) =>
 	Layer.succeed(
 		ChildProcessSpawner.ChildProcessSpawner,
-		ChildProcessSpawner.make(() =>
+		ChildProcessSpawner.make((command) =>
 			Effect.sync(() => {
+				if (command._tag === "StandardCommand") onSpawn?.(command.command, command.args);
 				const stdout = Stream.make(new TextEncoder().encode(String(sample())));
 				return ChildProcessSpawner.makeHandle({
 					pid: ChildProcessSpawner.ProcessId(27000),

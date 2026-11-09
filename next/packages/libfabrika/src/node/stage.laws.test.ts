@@ -84,6 +84,9 @@ it("every observed exit is durable once across restart or brake, with its reason
 	await fc.assert(
 		fc.asyncProperty(sequence, async ({restarts, final, reason}) => {
 			const platform = {rss: 0, samples: 0};
+			type Call = {target: string; project: string; name: string; method: string; args: unknown[]};
+			const calls: Call[] = [];
+			const spawned: Array<{command: string; args: ReadonlyArray<unknown>}> = [];
 			const home = mkdtempSync(join(tmpdir(), "p12-exit-"));
 			vi.stubEnv("FABRIKA_HOME", home);
 			const kill = vi.spyOn(process, "kill").mockReturnValue(true);
@@ -116,7 +119,8 @@ it("every observed exit is durable once across restart or brake, with its reason
 								}),
 							);
 							fetch.mockImplementation(async (_url, options) => {
-								const call = JSON.parse(String(options?.body)) as {method: string};
+								const call = JSON.parse(String(options?.body)) as Call;
+								calls.push(call);
 								return Response.json(
 									call.method === "brain"
 										? {error: {reason: "offline"}}
@@ -220,16 +224,54 @@ it("every observed exit is durable once across restart or brake, with its reason
 						Effect.provide(ProcessIdGenerator.layer),
 						Effect.provide(SecureRandom.layerWebCrypto),
 						Effect.provide(
-							rssLayer(() => {
-								platform.samples++;
-								return platform.rss;
-							}),
+							rssLayer(
+								() => {
+									platform.samples++;
+									return platform.rss;
+								},
+								(command, args) => spawned.push({command, args}),
+							),
 						),
 						Effect.provide(NodeServices.layer),
 						Effect.provide(TestClock.layer()),
 					),
 					{signal},
 				);
+				// The memory sampler asks ps for one runtime's RSS, never another command.
+				const pids = new Set([...restarts, final].map((_, i) => String(27001 + i)));
+				expect(spawned.length).toBeGreaterThan(0);
+				for (const {command, args} of spawned) {
+					expect(command).toBe("ps");
+					expect(args.slice(0, 3)).toEqual(["-o", "rss=", "-p"]);
+					expect(args).toHaveLength(4);
+					expect(pids.has(String(args[3]))).toBe(true);
+				}
+				// Lifecycle events go to the project object's own brain method, with no name.
+				const brainCalls = calls.filter((call) => call.method === "brain");
+				expect(brainCalls.length).toBeGreaterThan(0);
+				for (const call of brainCalls) {
+					expect({target: call.target, project: call.project, name: call.name}).toEqual({
+						target: "project",
+						project: "life-test",
+						name: "",
+					});
+				}
+				// A stop while a replacement waits fails that replacement, and the failure is recorded.
+				const failed = calls
+					.filter((call) => call.target === "record" && call.method === "write")
+					.flatMap(
+						(call) =>
+							(call.args[2] as Array<{
+								span: {name: string; ok: boolean; attributes: Record<string, unknown>};
+							}>) ?? [],
+					)
+					.filter(
+						({span}) =>
+							span.name === "brain.restart" &&
+							!span.ok &&
+							span.attributes["error.type"] === "ControlError",
+					);
+				expect(failed.length).toBeGreaterThan(0);
 				const pending = await Effect.runPromise(
 					brainOutbox(home).pipe(
 						Effect.flatMap((outbox) => outbox.pending),
