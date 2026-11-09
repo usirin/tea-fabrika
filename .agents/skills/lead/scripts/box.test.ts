@@ -299,6 +299,30 @@ describe("box rm, today's tooling", () => {
 		);
 	});
 
+	// Plant (mutation, seed 119120): skip the keep on a malformed gitdir pointer, which ends in a
+	// traceback. Missing refs or objects must keep too; a later guard also catches those.
+	it("T318 a malformed pointer or missing refs or objects keeps the pair with one result line", () => {
+		const word = fc.stringMatching(/^[a-z]{1,12}$/);
+		const pointer = fc.oneof(
+			fc.constant(""),
+			word,
+			word.map((s) => `gitdir:${s}`),
+			word.map((s) => `gitdir: ${s}\n\n`),
+			word.map((s) => `gitdir: a\0${s}`),
+		);
+		fc.assert(
+			fc.property(input, pointer, (v, text) => {
+				for (const kind of ["pointer", "refs", "objects"])
+					fixture(v, (f) => {
+						if (kind === "pointer") writeFileSync(join(f.work, ".git"), text);
+						else rmSync(join(f.data, kind), {recursive: true});
+						kept(f);
+					});
+			}),
+			{seed: 3194, numRuns: 6},
+		);
+	});
+
 	// Plant: use the box's original gitdir/config and observe its fsmonitor/filter/include marker run.
 	it("T318 inspection never executes box or inherited Git programs or writes its index", () => {
 		fc.assert(
