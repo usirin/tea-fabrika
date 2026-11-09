@@ -28,6 +28,8 @@ const declarations = (key: string, i: number) => [
 	`class G${i} {static ${key}() {}}`,
 	`class H${i} {get ${key}() {return 1;}}`,
 	`class I${i} {set ${key}(value: number) {}}`,
+	`abstract class R${i} {abstract ${key}: number;}`,
+	`abstract class S${i} {abstract ${key}(): void;}`,
 	`type J${i} = {readonly ${key}?: number};`,
 	`type K${i} = {${key}(): void};`,
 	`interface L${i} {readonly ${key}: number}`,

@@ -87,7 +87,7 @@ which the plan does not name. Report any miss.
 ### Ticket 337: reason keys in next/
 
 `no-why-key` checks object fields, shorthand, methods, getters and setters; class fields and
-methods; and type or interface property and method signatures. Effect Schema field maps use
+methods, including abstract declarations; and type or interface property and method signatures. Effect Schema field maps use
 the same object syntax. Quoted and escaped names, computed string literals and expression-free
 templates count by their decoded value. The match is exactly `why`, including readonly members.
 

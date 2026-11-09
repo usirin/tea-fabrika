@@ -25,6 +25,8 @@ export const noWhyKey: CreateRule = {
 			},
 			PropertyDefinition: (node) => check(node.key, node.computed),
 			MethodDefinition: (node) => check(node.key, node.computed),
+			TSAbstractPropertyDefinition: (node) => check(node.key, node.computed),
+			TSAbstractMethodDefinition: (node) => check(node.key, node.computed),
 			TSPropertySignature: (node) => check(node.key, node.computed),
 			TSMethodSignature: (node) => check(node.key, node.computed),
 		};
