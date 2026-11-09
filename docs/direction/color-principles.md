@@ -26,6 +26,9 @@ type Color =
      edge failed.
 2. **A color means one thing.**
    - State colors say state, and the accent says your turn.
+   - **Decided 2026-11-08 by the owner:** your turn includes the one action waiting on you now,
+     such as Save after a key is recorded in the keys editor, or answering an ask. See
+     [The action waiting on you](#the-action-waiting-on-you-decided-2026-11-08).
    - A pipe's color says which pipe and nothing else, so no pipe color sits near a state color.
 3. **Color never works alone.**
    - Every fact color carries is also a letter, a shape or a word
@@ -102,6 +105,38 @@ place it sits, hovered and selected rows included, not only on the page.
 - What it costs: done and stuck in light read close to black, so the word and the mark carry the
   state more than the hue does. Quiet top-bar numbers and pipes get as strong as its other quiet
   words.
+
+## The action waiting on you (decided 2026-11-08)
+
+The accent goes on at most one control per view, and only while something waits on you. When
+nothing waits, that control is plain.
+
+```css
+/* A sketch. Save takes the accent only while a recorded key waits on it. */
+.view .btn.save { background: var(--surface); }
+.view[data-waiting] .btn.save { background: var(--turn-fill); color: var(--turn-fg); }
+```
+
+- **What it means.** One control per view can be the one waiting on you: Save once a key is
+  recorded, or the answer on an open ask. It takes the turn fill while it waits, and goes plain
+  once you act or cancel. A view with nothing waiting has no accent at all.
+- **The known way.** Apple's HIG gives the primary role to "the button people are most likely to
+  choose". A primary button "uses an app's accent color" and answers the Return key, and a view
+  keeps prominent buttons "to one or two"
+  ([Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons), read
+  2026-11-08). We take one, not two. Apple also never gives the primary role to a destructive
+  action, so neither does the accent here. That Linear shows one main action per view is a guess
+  from using its app; no page of theirs we read says so. Its redesign did keep colored chrome low
+  ([How we redesigned the Linear UI](https://linear.app/now/how-we-redesigned-the-linear-ui), read
+  2026-11-08).
+- **How it fits.** Principle 3 still holds: the control's word and the Return key say it too, so
+  the color is never alone.
+- **The law must learn this case.** The accent law (A3 in `apps/fabrika/src/window/colors.test.ts`)
+  lists fixed turn selectors, so it cannot yet say "accented only while waiting" or "one per view".
+  That change is tracker ticket 305, and its plan goes to the owner.
+- **How sure:** 75%. The doubt: many views, each with its own accent, may dull the top bar's turn
+  count, the one place that says how many turns are yours. Shots of three views side by side, each
+  with an action waiting, would settle it.
 
 ## What today's code still breaks
 
