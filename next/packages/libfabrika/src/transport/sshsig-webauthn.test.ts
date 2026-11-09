@@ -477,7 +477,10 @@ describe("P10 WebAuthn SSHSIG", () => {
 					}),
 				),
 			),
-			{...runs, examples: policyCases.map(([, options]) => [text, options])},
+			{
+				...runs,
+				examples: policyCases.map(([, options]): [string, typeof options] => [text, options]),
+			},
 		);
 	});
 	it("question 19: signed backup flags and counters pass", async () => {
@@ -538,7 +541,12 @@ describe("P10 WebAuthn SSHSIG", () => {
 					}),
 				),
 			),
-			{...runs, examples: bindingCases.map(([, body, over]) => [{body, over}])},
+			{
+				...runs,
+				examples: bindingCases.map(([, body, over]): [{body: string; over: typeof over}] => [
+					{body, over},
+				]),
+			},
 		);
 	});
 	it("p27: a different admitted signer cannot borrow the embedded key", async () => {
