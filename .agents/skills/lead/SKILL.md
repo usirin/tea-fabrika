@@ -165,8 +165,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - Mutation runs on `--agent claude` only, since it binds ports and starts Electron. One mutation
   step at a time holds `BOXES/state/electron.lock`; the next waits.
 - It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
-  by a step it accepted) or the branch's tip on origin when that is ahead of it, else
-  `origin/main`. A plan reads the main checkout and takes no `--from`.
+  by a step it accepted) or the newest tip on origin of the branch or its `-wip` backup when that
+  is ahead of it, else `origin/main`. So a lead commit (a merge of main, a lockfile commit) pushed
+  to `-wip` is where the next step starts, and `box.sh new` takes a verified lead head as a base
+  like a build head. A plan reads the main checkout and takes no `--from`.
 - `box.sh new` refuses `shared_ticket` only when another live branch carries a link for the same
   ticket: one with an open PR, or one a box on disk names. A branch the base already holds, one
   with neither, or one whose change is only `field/*.jsonl` rows, does not block.
