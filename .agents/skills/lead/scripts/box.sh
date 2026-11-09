@@ -1,7 +1,7 @@
 #!/bin/sh
 # box.sh: a Codex agent's own copy of tea-fabrika, whose git data is outside any folder named .git,
 # so Codex's sandbox lets it commit. The lead never runs git inside a box; it only fetches from it.
-#   box.sh new   <name> <base-ref> <branch> --ticket <n> --plan <path>
+#   box.sh new   <name> <base-ref> <branch> --ticket <n> --plan <path> [--root <lane root>]
 #   box.sh run   <name> <prompt-file> <out> --step tests|build|mutation|review
 #   box.sh fetch <name> <branch> [--sign <step> --ticket <n>]
 #   box.sh gc [--dry-run]                     remove boxes whose work is safe elsewhere (gc.ts says how)
@@ -97,7 +97,7 @@ def rows():
     return [json.loads(l) for l in path.read_text().splitlines() if l] if path.exists() else []
 def new_box():
     if len(args) < 2: refuse("new needs base and branch")
-    base, branch = args[:2]; ticket, plan = flag("--ticket"), flag("--plan")
+    base, branch = args[:2]; ticket, plan, root = flag("--ticket"), flag("--plan"), flag("--root")
     if not branch.startswith("fabrikalfa/"): refuse("branch prefix must be fabrikalfa/")
     if not ticket or not plan: refuse("plan and ticket required")
     plan = str(pathlib.Path(plan).absolute())
@@ -106,6 +106,8 @@ def new_box():
     digest = hashlib.sha256(pathlib.Path(plan).read_bytes().split(b"\n", 2)[2]).hexdigest()
     must(git("fetch", "-q", "origin"), "base fetch failed")
     head, parent = rev(base), "none"
+    root_sha = rev(root) if root else head
+    if not ancestor(root_sha, head): refuse("root is not an ancestor of the base")
     # A lane that starts one box per step continues its own branch: that head is a valid base too.
     own = any(git("rev-parse", "-q", "--verify", r + "^{commit}").stdout.decode().strip() == head for r in ("refs/heads/" + branch, "refs/remotes/origin/" + branch))
     if head != rev("origin/main") and not own:
@@ -141,7 +143,11 @@ def new_box():
         must(git(*edge, "fetch", "-q", str(main), "refs/notes/fabrika:refs/notes/fabrika"), "box notes fetch failed")
     installed = subprocess.run(["nice", "-n", "15", "pnpm", "install", "--silent"], cwd=work, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if installed.returncode: refuse("box install failed")
-    save({"ticket": ticket, "branch": branch, "base": head, "parent": parent, "children": "none", "plan": plan, "plan-sha256": digest})
+    facts_new = {"ticket": ticket, "branch": branch, "base": head, "parent": parent, "children": "none", "plan": plan, "plan-sha256": digest}
+    # The lane's root: where it left main. Order and the commits check read the whole lane from
+    # here, so a later step's box still sees the earlier steps' links.
+    if root: facts_new["root"] = root_sha
+    save(facts_new)
     if parent != "none":
         for path in state_dir.glob("*.box"):
             state = facts(path)
@@ -157,7 +163,7 @@ def run_box():
     if step not in ("tests", "build", "mutation", "review"): refuse("run step required")
     if ticket != state["ticket"]: refuse("run ticket mismatch")
     plan_owners(state)  # the approval and body hash, checked again before every step
-    if step == "build" and not any(verified(sha, "tests") for sha in commits(state["base"], state["branch"])):
+    if step == "build" and not any(verified(sha, "tests") for sha in commits(state.get("root", state["base"]), state["branch"])):
         refuse("step_out_of_order: verified tests since base required")
     if step == "review" and not any(r.get("step", r.get("role")) == "mutation" and str(r.get("ticket")) == ticket and r.get("outcome") in ("done", "skip") for r in rows()):
         refuse("step_out_of_order: mutation row or skip required")
@@ -274,7 +280,7 @@ def fetch_box():
                     signed = call(["pnpm", "commits", "sign", "--step", role, "--ticket", ticket, "--key", str(pathlib.Path.home() / ".fabrika/step-keys" / role)], env=env)
                     if signed.returncode: refuse("sign failed " + sha)
             state["fetched-head"] = head; save(state)
-        checked = call(["pnpm", "commits", "check", "--base", state["base"], "--head", head])
+        checked = call(["pnpm", "commits", "check", "--base", state.get("root", state["base"]), "--head", head])
         answers, unreadable = [], 0
         for l in checked.stdout.splitlines():
             if not l.strip(): continue
