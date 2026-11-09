@@ -77,6 +77,41 @@ it("nonempty safe lists skip the heavy jobs and skills Markdown does not", () =>
 		options,
 	);
 });
+// Plan change, 2026-11-09: only paths no check reads are safe. Markdown under these trees, or
+// in any brief or prompt folder, is read by a program (a brief is an agent's input; a fixture is
+// a test's input), so it runs every check. Plant caught: the old "every .md outside the skill
+// trees is safe" rule, which skipped programs/pipeline/briefs/x.md and fixtures/a/b.md.
+const folder = fc.constantFrom("brief", "briefs", "prompt", "prompts");
+const readMarkdown = fc.oneof(
+	fc
+		.tuple(
+			fc.constantFrom("programs", "fixtures", "packages", "next"),
+			fc.array(word, {maxLength: 3}),
+			word,
+		)
+		.map(([root, dirs, name]) => [root, ...dirs, `${name}.md`].join("/")),
+	fc
+		.tuple(fc.array(word, {maxLength: 3}), folder, fc.array(word, {maxLength: 2}), word)
+		.map(([above, dir, below, name]) => [...above, dir, ...below, `${name}.md`].join("/")),
+);
+it("Markdown a check reads runs every check, alone or beside safe paths", () => {
+	fc.assert(
+		fc.property(readMarkdown, fc.array(safe, {maxLength: 6}), (read, paths) => {
+			expect(ci.classify([read], "pull_request")).toMatchObject(heavy);
+			expect(ci.classify([...paths, read], "pull_request")).toMatchObject(heavy);
+		}),
+		{
+			...options,
+			examples: [
+				// pinned: review of PR 578, a brief-only PR skipped every check.
+				["programs/pipeline/briefs/x.md", []],
+				// pinned: review of PR 578, a fixture-only PR skipped every check.
+				["fixtures/a/b.md", []],
+			],
+		},
+	);
+});
+
 it("shared paths run everything; adding paths never disables a job", () => {
 	fc.assert(
 		fc.property(

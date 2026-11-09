@@ -1,3 +1,7 @@
+import {spawnSync} from "node:child_process";
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {dirname, join} from "node:path";
 import {Arbitrary, Effect, Schema} from "effect";
 import * as fc from "fast-check";
 import {expect, it} from "vitest";
@@ -126,7 +130,7 @@ it("added rows preserve occurrence counts and head line numbers", () => {
 	);
 });
 
-it("field history keeps exact event trees and refuses failed diff, tree or blob reads", () => {
+it("a push keeps its two event trees and refuses failed diff, tree or blob reads", () => {
 	fc.assert(
 		fc.property(
 			fc.string(),
@@ -152,7 +156,7 @@ it("field history keeps exact event trees and refuses failed diff, tree or blob 
 									: headText;
 					return {status: 0, stdout};
 				};
-				expect(checker.readFieldFiles(base, head, run)).toEqual([
+				expect(checker.readFieldFiles(base, head, "push", run)).toEqual([
 					{file, base: existed ? baseText : "", head: remains ? headText : ""},
 				]);
 				expect(calls.some((args) => args[0] === "merge-base")).toBe(false);
@@ -160,7 +164,7 @@ it("field history keeps exact event trees and refuses failed diff, tree or blob 
 				for (let at = 0; at < reads; at++) {
 					let i = 0;
 					expect(() =>
-						checker.readFieldFiles(base, head, (args) =>
+						checker.readFieldFiles(base, head, "push", (args) =>
 							i++ === at ? {status: 128, stdout: ""} : run(args),
 						),
 					).toThrow();
@@ -169,6 +173,110 @@ it("field history keeps exact event trees and refuses failed diff, tree or blob 
 		),
 		options,
 	);
+});
+
+// Plan change, 2026-11-09: field-check reads a PR's rows from the merge base, as changes.mjs
+// reads its paths. Plant caught: diffing the event's base SHA (main's tip), which counts main's
+// newer rows and edits against the PR and shows a field file the PR never touched.
+const gitEnv = {...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1"};
+const gitIn =
+	(dir: string) =>
+	(args: string[]): {status: number | null; stdout: string} =>
+		spawnSync(
+			"git",
+			[
+				"-C",
+				dir,
+				"-c",
+				"user.name=t",
+				"-c",
+				"user.email=t@t",
+				"-c",
+				"core.hooksPath=/dev/null",
+				...args,
+			],
+			{encoding: "utf8", env: gitEnv},
+		);
+const text = (rows: readonly string[]) => rows.map((row) => `${row}\n`).join("");
+it("a PR's field rows compare to the merge base while main moves ahead", () => {
+	const row = fc.stringMatching(/^[ -~]{0,20}$/);
+	fc.assert(
+		fc.property(
+			fc.array(row, {maxLength: 6}),
+			fc.array(row, {maxLength: 4}),
+			fc.array(row, {minLength: 1, maxLength: 4}),
+			fc.boolean(),
+			fc.boolean(),
+			(fork, mine, theirs, dropFirst, notesToo) => {
+				const dir = mkdtempSync(join(tmpdir(), "ci-field-"));
+				try {
+					const git = gitIn(dir);
+					const commit = (files: Record<string, string>, message: string) => {
+						for (const [file, body] of Object.entries(files)) {
+							mkdirSync(dirname(join(dir, file)), {recursive: true});
+							writeFileSync(join(dir, file), body);
+						}
+						expect(git(["add", "-A"]).status).toBe(0);
+						expect(git(["commit", "-q", "--allow-empty", "-m", message]).status).toBe(0);
+						return git(["rev-parse", "HEAD"]).stdout.trim();
+					};
+					expect(git(["init", "-q", "-b", "main"]).status).toBe(0);
+					const runs = "field/runs.jsonl";
+					commit({[runs]: text(fork), "field/notes.jsonl": "", "docs/a.md": ""}, "fork");
+					expect(git(["checkout", "-q", "-b", "pr"]).status).toBe(0);
+					const head = commit(
+						mine.length > 0 ? {[runs]: text([...fork, ...mine])} : {"docs/a.md": "pr\n"},
+						"pr",
+					);
+					expect(git(["checkout", "-q", "main"]).status).toBe(0);
+					const ahead = [...(dropFirst ? fork.slice(1) : fork), ...theirs];
+					const base = commit(
+						{[runs]: text(ahead), ...(notesToo ? {"field/notes.jsonl": text(theirs)} : {})},
+						"main moves ahead",
+					);
+					const files = checker.readFieldFiles(base, head, "pull_request", git);
+					expect(files).toEqual(
+						mine.length > 0 ? [{file: runs, base: text(fork), head: text([...fork, ...mine])}] : [],
+					);
+					for (const input of files)
+						expect(checker.selectAdded(input.base, input.head).map((added) => added.text)).toEqual(
+							mine,
+						);
+				} finally {
+					rmSync(dir, {recursive: true, force: true});
+				}
+			},
+		),
+		{...options, numRuns: 25},
+	);
+});
+
+// Plan change, 2026-11-09: `note` stays optional for rows written before the change. 111 rows
+// in field/runs.jsonl, dated 2026-10-23 to 2026-10-27, have no `note`. Plant caught: `note`
+// as a required core, which fails each such row when a PR edits or moves it.
+it("a run row written before the plan change passes without note", () => {
+	const daysBack = Arbitrary.schema(
+		Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 4000})),
+	);
+	const result = Effect.runSync(
+		Arbitrary.checkEffect(
+			Arbitrary.all([Arbitrary.schema(Run), daysBack]),
+			([row, back]) => {
+				const date = new Date(Date.UTC(2026, 10, 8) - back * 86_400_000).toISOString().slice(0, 10);
+				const old = Object.fromEntries(
+					Object.entries({...row, date}).filter(([key]) => key !== "note"),
+				);
+				const report = checker.checkFile("field/runs.jsonl", "", `${JSON.stringify(old)}\n`);
+				return (
+					report.exitCode === 0 &&
+					report.findings.every((f) => f._tag !== "error") &&
+					report.added === 1
+				);
+			},
+			schemaOptions,
+		),
+	);
+	expect(result._tag).toBe("Passed");
 });
 
 it("valid cores pass, each blocking field rejects bad types, optional facts stay unknown", () => {
@@ -202,7 +310,7 @@ it("valid cores pass, each blocking field rejects bad types, optional facts stay
 									"model",
 									"effort",
 									"outcome",
-									"note",
+									// `note` is optional for rows written before the plan change.
 									"why",
 									"tokens",
 									"tools",
@@ -247,6 +355,8 @@ it("negative and nonfinite counts, missing cores and wrong dates fail without co
 					].flatMap((field) => [-1, "0", true].map((bad) => ({...row, [field]: bad}))),
 					...Object.keys(Run.fields)
 						.slice(0, 10)
+						// `note` is optional for rows written before the plan change.
+						.filter((field) => field !== "note")
 						.map((field) =>
 							Object.fromEntries(Object.entries(row).filter(([key]) => key !== field)),
 						),
