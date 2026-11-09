@@ -26,7 +26,7 @@ run)
 	prompt=$3; out=$4
 	cd "$work"
 	exec nice -n 15 codex exec --ignore-user-config -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" \
-		-s workspace-write -c "sandbox_workspace_write.writable_roots=[\"$work\",\"$gitdata\"]" \
+		-s workspace-write -c "sandbox_workspace_write.writable_roots=[\"$work\",\"$work/.agents\",\"$gitdata\"]" \
 		-C "$work" --json -o "$out" - < "$prompt"
 	;;
 fetch)

@@ -80,15 +80,24 @@ export const Down = Schema.TaggedStruct("DOWN", {
 	why: Text,
 	to: Recipient,
 });
-export const Dead = Schema.TaggedStruct("dead", {
+const deadFields = {
 	tries: Count,
 	limit: Count,
 	m: Text,
 	build: Text,
 	errors: Schema.Array(Text).check(Schema.isMaxLength(32)),
-}).check(
-	Schema.makeFilter((value) => value.errors.length === value.tries || "one error class per try"),
+};
+const oneErrorPerTry = Schema.makeFilter(
+	(value: Schema.Struct.Type<typeof deadFields>) =>
+		value.errors.length === value.tries || "one error class per try",
 );
+export const DeadInput = Schema.Struct(deadFields).check(oneErrorPerTry);
+export const Dead = Schema.TaggedStruct("dead", {
+	...deadFields,
+	process: ProcessId,
+	program: Code.fields.program,
+	name: ProcessName,
+}).check(oneErrorPerTry);
 export const Activity = Schema.TaggedUnion({
 	idle: {process: ProcessId},
 	stepping: {process: ProcessId, letter: Text, build: Text},

@@ -11,6 +11,12 @@ import * as Coordination from "./index.ts";
 const maxClock = 2 ** 48 - 1;
 const Time = Schema.Int.check(Schema.isBetween({minimum: 0, maximum: maxClock - 10_000}));
 const Count = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 512}));
+const Calls = Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 16}));
+const Many = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 1024}));
+const BeforeEpoch = Schema.Int.check(
+	Schema.isBetween({minimum: 1, maximum: Number.MAX_SAFE_INTEGER}),
+);
+const Rollback = Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 1_000_000_000}));
 const options = {arbitrary: {seed: 119120, runs: 40}};
 const decode = (id: string): Uint8Array => {
 	const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
@@ -48,6 +54,31 @@ describe("P10 shared process ids", () => {
 		},
 		options,
 	);
+	// T287 mutation: renaming process.next to an empty string lost the operation in traces.
+	it.effect.prop(
+		"every generated process id ends its own process.next span",
+		{at: Time, count: Calls},
+		({at, count}) => {
+			const spans: Array<Tracer.NativeSpan> = [];
+			const tracer = Tracer.make({
+				span: (settings) => {
+					const span = new Tracer.NativeSpan(settings);
+					spans.push(span);
+					return span;
+				},
+			});
+			return Effect.gen(function* () {
+				yield* TestClock.setTime(at);
+				const generator = yield* Coordination.ProcessIdGenerator;
+				for (let i = 0; i < count; i++) yield* generator.next;
+				const operations = spans.filter((span) => span.name === "process.next");
+				expect(operations).toHaveLength(count);
+				expect(new Set(operations.map((span) => span.spanId)).size).toBe(count);
+				for (const span of operations) expect(span.status._tag).toBe("Ended");
+			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer), Effect.withTracer(tracer));
+		},
+		options,
+	);
 	it.effect.prop(
 		"monotonic: exhausted random bits advance the clock before the next id",
 		{at: Time},
@@ -73,7 +104,7 @@ describe("P10 shared process ids", () => {
 	);
 	it.effect.prop(
 		"shape: a clock before the UUID epoch cannot produce a process id",
-		{distance: Count},
+		{distance: BeforeEpoch},
 		({distance}) =>
 			Effect.gen(function* () {
 				yield* TestClock.setTime(-distance);
@@ -118,7 +149,7 @@ describe("P10 shared process ids", () => {
 	);
 	it.effect.prop(
 		"monotonic: same-millisecond calls never repeat or sort backward",
-		{at: Time, count: Count},
+		{at: Time, count: Many},
 		({at, count}) =>
 			Effect.gen(function* () {
 				yield* TestClock.setTime(at);
@@ -133,11 +164,12 @@ describe("P10 shared process ids", () => {
 	);
 	it.effect.prop(
 		"monotonic: a clock rollback cannot reuse or lower an id",
-		{at: Time, distance: Count},
-		({at, distance}) =>
+		{at: Time, rollback: Rollback},
+		({at, rollback}) =>
 			Effect.gen(function* () {
+				// Time stops 10,000 ms below the 48-bit limit, so the clock always moves back at least 1 ms.
+				const now = Math.min(at + rollback, maxClock);
 				const gen = yield* Coordination.ProcessIdGenerator;
-				const now = at + distance;
 				yield* TestClock.setTime(now);
 				const before = yield* gen.next;
 				yield* TestClock.setTime(at);

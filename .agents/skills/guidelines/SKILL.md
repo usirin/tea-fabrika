@@ -234,6 +234,24 @@ prototype. Shots and the prototype are in dark mode first, as the owner runs it.
   artboard per call. List the round's artboards first, so none is sent twice. The link goes in no
   file in the repo.
 
+The owner's plain walk page uses the same real parts, states, working keys and clicks. It sits
+beside the canvas for the walk. Keep the distinct designs from step 5 available to choose.
+
+- **One selected design per screen.** Show today's version on the left and the selected design
+  on the right. Label both. Switch the design between screens or walk steps. Never pack three
+  or four frames into one row to show all choices at once.
+- **Keep both at 1:1 real size.** Use their real dimensions. Allow scrolling when the pair needs
+  more space. Never shrink the screens to fit the page or redraw their layout at a smaller size.
+- **Lead looks before sending.** Capture the plain page at 1440x900 and look at that capture.
+  Check the left and right order, real sizes, scrolling and the chosen design. Fix clipping or
+  crowding before the owner sees it. Press the keys and clicks too.
+- **Make one HTML copy with everything inline.** Include styles, scripts, fonts, images and
+  real parts, so the owner's side panel needs no other files or server. Open that copy and
+  check its keys, clicks and states before sending it.
+- These checks apply only to the plain walk page and its single-file copy. Keep the canvas
+  type's own rule against an agent checking its own canvas render. The owner's canvas look
+  still checks each proof slide against its real shot.
+
 ### 10. Open a docs-only pull request
 
 - Branch from `origin/main`. Stage the note, the experiment and the two index rows by name.

@@ -4,6 +4,7 @@
 import {describe, expect, it} from "@effect/vitest";
 import {Effect, Result, Schema} from "effect";
 import * as fc from "fast-check";
+import {fcProcessIds} from "../id.test-support.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {A, BRAIN, first, from, manager, storage} from "./process.test-support.ts";
 import {Activity, canRestart, Dead, ProcessFact, recoverActivity, State} from "./process.ts";
@@ -113,6 +114,9 @@ describe("p80, supplied policy facts", () => {
 	);
 	it("plant, fewer error classes than tries: dead keeps one class per attempt", () => {
 		const dead = {
+			process: A,
+			program: "counter",
+			name: "counter:1",
 			tries: 3,
 			limit: 3,
 			m: "letter-17",
@@ -130,4 +134,34 @@ describe("p80, supplied policy facts", () => {
 			expect(Schema.is(Dead)({_tag: "dead", ...dead, errors})).toBe(false);
 		}
 	});
+});
+
+describe("T319, next/ complete dead values", () => {
+	const text = fc.string({minLength: 1, maxLength: 256});
+	const complete = fc
+		.record({
+			process: fcProcessIds,
+			program: text,
+			name: fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/),
+			m: text,
+			build: text,
+			errors: fc.array(text, {minLength: 1, maxLength: 32}),
+		})
+		.map((value) => ({
+			...value,
+			_tag: "dead" as const,
+			tries: value.errors.length,
+			limit: value.errors.length,
+		}));
+	for (const field of ["process", "program", "name"] as const)
+		it(`plant, make ${field} optional or default it: complete dead values decode, removing ${field} fails`, () => {
+			fc.assert(
+				fc.property(complete, (value) => {
+					expect(Result.isSuccess(Schema.decodeUnknownResult(Dead)(value))).toBe(true);
+					const {[field]: _removed, ...missing} = value;
+					expect(Result.isFailure(Schema.decodeUnknownResult(Dead)(missing))).toBe(true);
+				}),
+				{seed: 119120},
+			);
+		});
 });

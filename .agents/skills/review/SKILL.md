@@ -27,9 +27,14 @@ skill holds the rest.
      ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)).
      A fixed test is fine only when its name starts with one of four labels and it is that kind:
      `vector:`, `format:`, `pinned:` or `scenario:`. A hand-picked example checking a general rule,
-     labeled or not, is a defect.
+     labeled or not, is a defect. Check that the property or label is present and fits, against the
+     named spec, format, bug or run. Do not reopen each test's merits.
    - Each law catches its plant. Plant a break yourself where a law looks weak, in your head or in a
      scratch copy, never in the branch.
+   - If secrets must stay out of records, URLs or spans, the plan's Law cell has `[secrets]` and
+     the law generates flows: made-up words, keys and passes, operation orders, refusals and
+     failures. Check every named output, including encoded URL forms, and a leak planted in each.
+     A scenario only supplements the property. Report a missing marker or flow law as a defect.
    - No `build` commit touches a path in `exam-paths.json`. Check each commit's step note with
      `git notes --ref=fabrika show <sha>`.
    - Nothing private in added lines: no personal or account names, no machine paths, no keys.
@@ -43,3 +48,8 @@ skill holds the rest.
 - Change, stage or commit a file. Run a command that writes to the branch.
 - Give style nits. A finding is something that is wrong or that a decided note rules out.
 - Approve a pull request on GitHub, or answer a question the machine put to a person.
+- Approve a plan. Plan writers and agents reviewing or revising plans return them unsigned.
+  Only the lead session fills the blank approval line after its own read and draft check.
+
+Every agent may file tracker tickets, even during read-only repo work. Filing a ticket does not
+claim it or start its build.
