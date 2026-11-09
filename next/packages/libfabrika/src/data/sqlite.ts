@@ -1,6 +1,6 @@
 // node:sqlite as the referee's `Sql`, on its own subpath so the data layer's top level names no
 // platform. For tests, never a ledger file of its own: the one ledger is a Durable Object. Tier 1, P6.
-import type {DatabaseSync, SQLOutputValue, StatementSync} from "node:sqlite";
+import type {DatabaseSync, SQLOutputValue, StatementSync} from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import type {Sql, SqlValue} from "./referee.ts";
 
 /** The ledger writes text, integers and nulls only. A blob or a big integer is a row it never wrote. */
