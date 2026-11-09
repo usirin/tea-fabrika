@@ -10,6 +10,11 @@ import * as ci from "./changes.mjs";
 // Today's CI, both versions. Covers changes.mjs and the shared gitignore.mjs.
 // Red baseline adapters are preserved in the first T342 tests commit. These laws
 // now import the implementation directly, so deleting it cannot bypass a check.
+// T342 source plants, all caught: PR skips on main, all Markdown safe, broad
+// packages prefix, any-match skips, every next path skips test, newline splitting,
+// and ignored diff failure. The broad-prefix plant first survived mixed lists;
+// checking each shared path alone closed that gap. Shared-check plants accepting
+// hidden tracked files or failed Git output both failed the tracked-file law.
 const options = {seed: 119120, numRuns: 100};
 const heavy = {check: true, test: true, next: true, e2e: true};
 type Runner = (args: string[]) => {status: number | null; stdout: string};
@@ -77,6 +82,7 @@ it("shared paths run everything; adding paths never disables a job", () => {
 			list,
 			shared,
 			(paths, more, unknown) => {
+				expect(ci.classify([unknown], "pull_request")).toMatchObject(heavy);
 				expect(ci.classify([...paths, unknown], "pull_request")).toMatchObject(heavy);
 				const before = ci.classify(paths, "pull_request");
 				const after = ci.classify([...paths, ...more], "pull_request");
@@ -152,6 +158,15 @@ it("NUL diff keeps both move names and unusual paths; failed reads cannot skip",
 					"--",
 				]);
 				expect(ci.readPaths("--bad", "c".repeat(40), "pull_request", run)).toBeNull();
+				// A platform refusal has null stdout at runtime, despite Node's generic string type.
+				expect(
+					ci.readPaths("b".repeat(40), "c".repeat(40), "pull_request", () =>
+						spawnSync("git", ["status"], {
+							cwd: join(tmpdir(), "t342-no-such-folder", old),
+							encoding: "utf8",
+						}),
+					),
+				).toBeNull();
 				expect(ci.readPaths("0".repeat(40), "c".repeat(40), "push", run)).toBeNull();
 			},
 		),

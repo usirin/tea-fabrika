@@ -5,6 +5,8 @@ import {lintWorkflow as lint} from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
 // also receives every listed plant, one at a time, so an unrelated error cannot mask it.
+// T342: all 24 input plants were rejected in each of 100 generated workflows.
+// A source plant ignoring next's required job condition failed this property too.
 const options = {seed: 119120, numRuns: 100};
 const guard = (job: string) =>
 	`\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${job} != 'false') }}`;
@@ -140,7 +142,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
 	[
 		"classifier bypass",
 		(w) => {
-			w.jobs.changes.steps[1] = {run: "echo check=false"};
+			Object.assign(w.jobs.changes.steps[1]!, {run: "echo check=false"});
 		},
 	],
 	[

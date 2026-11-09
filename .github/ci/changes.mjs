@@ -59,8 +59,9 @@ export const readPaths = (base, head, event, run = git) => {
 	let from = base;
 	if (event === "pull_request") {
 		const merged = run(["merge-base", base, head]);
+		if (merged.status !== 0) return null;
 		from = merged.stdout.trim();
-		if (merged.status !== 0 || !validSha(from)) return null;
+		if (!validSha(from)) return null;
 	}
 	const diff = run(["diff", "--no-renames", "--name-only", "-z", from, head, "--"]);
 	if (diff.status !== 0 || (diff.stdout !== "" && !diff.stdout.endsWith("\0"))) return null;

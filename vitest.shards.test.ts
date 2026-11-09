@@ -8,6 +8,8 @@ import {assign, measured, Shards} from "./vitest.shards.ts";
 
 // T342, today's sharding. Covers assign and the measured table. Plants: drop a file,
 // restore equal-count assignment, or discard measured script times.
+// T342: all three plants failed their laws. Equal-count placement initially survived
+// the final load bound; checking the least measured load at each placement caught it.
 it("generated sharding assigns once, ignores input order and balances measured seconds", () => {
 	fc.assert(
 		fc.property(
@@ -19,6 +21,18 @@ it("generated sharding assigns once, ignores input order and balances measured s
 			(files, count) => {
 				const machines = assign(files, count);
 				expect(machines).toHaveLength(files.length);
+				const running = Array.from({length: count}, () => 0);
+				for (const {file, index} of files
+					.map((file, index) => ({file, index}))
+					.toSorted(
+						(a, b) =>
+							b.file.seconds - a.file.seconds ||
+							(a.file.path < b.file.path ? -1 : a.file.path > b.file.path ? 1 : 0),
+					)) {
+					const machine = machines[index]!;
+					expect(running[machine]).toBe(Math.min(...running));
+					running[machine] = running[machine]! + file.seconds;
+				}
 				expect(machines.every((m) => m >= 0 && m < count && Number.isInteger(m))).toBe(true);
 				const first = Object.fromEntries(files.map((f, i) => [f.path, machines[i]]));
 				const reversed = files.toReversed();

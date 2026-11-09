@@ -5,7 +5,7 @@ import {Schema} from "effect";
 const Day = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/));
 const Text = Schema.NullOr(Schema.String);
 const Count = Schema.NullOr(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
-export const Note = Schema.Struct({
+const Note = Schema.Struct({
 	id: Schema.String,
 	date: Day,
 	stage: Schema.String,
@@ -19,7 +19,7 @@ export const Note = Schema.Struct({
 	test: Schema.optionalKey(Text),
 	links: Schema.optionalKey(Schema.Array(Schema.String)),
 });
-export const Run = Schema.Struct({
+const Run = Schema.Struct({
 	date: Day,
 	role: Schema.String,
 	model: Text,

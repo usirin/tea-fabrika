@@ -5,6 +5,9 @@ import * as checker from "./field-check.ts";
 
 // Today's field records. Covers field-schema.ts and field-check.ts, including added-row
 // selection, optional facts, advisory drift and annotations. No network or real rows.
+// T342 source plants, all caught: set-like selection, checking the whole head,
+// blocking README enums, accepting bad counts, failing on advice, row text in an
+// annotation, and treating failed history reads as empty successful input.
 const options = {seed: 119120, numRuns: 100};
 const schemaOptions = {seed: 119120, runs: 100};
 // Type-law plants are compiled by the final workspace typecheck. Each directive
