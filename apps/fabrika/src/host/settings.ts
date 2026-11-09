@@ -8,6 +8,7 @@ import {
 	Path,
 	type PlatformError,
 	Result,
+	Schedule,
 	Stream,
 } from "effect";
 import type {Launch} from "../launch.ts";
@@ -22,8 +23,8 @@ import type {Launch} from "../launch.ts";
 //     a file that does not                      {_tag: "refused", line, why}
 //     a save, in place or by a rename over it   the next answer, with no restart
 //
-// The folder is watched, not the file: an editor saves by writing a new file and renaming it
-// over the old one, and a watch on the old file would end there. Each file is read apart, so a
+// The folder hears new files; the file hears writes. Its watch is replaced after a rename or
+// deletion, since a watch on the old file would stay there. Each file is read apart, so a
 // bad fabrika.toml never touches the keys, and the other way round. An answer is said once: a
 // save that leaves the text as it was says nothing. A page never reads a file; the host sends
 // each value on (a browser is always a client).
@@ -116,40 +117,67 @@ export const settingsFile = <A>(
 				yield* Effect.logWarning("fabrika host: the settings folder could not be created");
 				return Stream.fromEffect(Effect.map(text, answer));
 			}
-			// NodeFileSystem 4.1.2 calls onReady as soon as fs.watch returns. macOS starts
-			// its event stream on another thread, so that callback can precede native watching.
-			const ready = yield* Deferred.make<boolean>();
-			const saves = fs
-				.watch(folder, {onReady: () => Deferred.doneUnsafe(ready, Effect.succeed(true))})
-				.pipe(
-					// A rename save may report the temporary name, including for later writes. Treat
-					// every folder event as a reason to reread the fixed path. Unchanged text below
-					// keeps edits to another file from producing another answer.
-					Stream.debounce(`${SETTLE_MS} millis`),
-					// A watch that fails before it is ready still lets the first read go, so the file is
-					// read once and the host never waits on a watch that will not start.
-					Stream.catchCause(() =>
-						Stream.fromEffect(
-							Deferred.succeed(ready, false).pipe(
-								Effect.andThen(Effect.logWarning("fabrika host: the settings watch ended")),
-							),
-						).pipe(Stream.drain),
-					),
-				);
-			const initial = Stream.unwrap(
-				Deferred.await(ready).pipe(
-					Effect.map((started) =>
-						started
-							? Stream.succeed(undefined).pipe(
-									// Reread once after startup settles, even if the first save had no event.
-									// This ends after one reread; later saves use only the folder watch.
-									Stream.concat(Stream.fromEffect(Effect.sleep(`${SETTLE_MS} millis`))),
-								)
-							: Stream.succeed(undefined),
-					),
-				),
-			);
-			return Stream.merge(initial, saves).pipe(
+			// NodeFileSystem 4.1.2 uses fs.watch. macOS folder watches use FSEvents, which can
+			// coalesce writes; file watches use kqueue. A folder event is not a receipt for each
+			// write after a rename or deletion. Keep a file watch too, bound before rereading.
+			// https://github.com/libuv/libuv/blob/v1.52.1/src/unix/kqueue.c#L531-L558
+			// https://github.com/apple-oss-distributions/xnu/blob/main/bsd/vfs/vfs_fsevents.c#L398-L461
+			const watch = (target: string): Stream.Stream<void> =>
+				Stream.suspend(() => {
+					let replaced = false;
+					return Stream.unwrap(
+						Effect.gen(function* () {
+							replaced = false;
+							const ready = yield* Deferred.make<boolean>();
+							const saves = fs
+								.watch(target, {onReady: () => Deferred.doneUnsafe(ready, Effect.succeed(true))})
+								.pipe(
+									Stream.tap((event) =>
+										Effect.sync(() => {
+											replaced ||= event._tag !== "Update";
+										}),
+									),
+									Stream.debounce(`${SETTLE_MS} millis`),
+									Stream.takeUntil(() => replaced),
+									Stream.map(() => undefined),
+									// A failed watch still releases the first read, then ends. A missing file
+									// is bound again only when the folder hears a change, never by polling.
+									Stream.catchCause(() =>
+										Stream.fromEffect(
+											Effect.gen(function* () {
+												replaced = false;
+												yield* Deferred.succeed(ready, false);
+												if (target === folder)
+													yield* Effect.logWarning("fabrika host: the settings watch ended");
+											}),
+										).pipe(Stream.drain),
+									),
+								);
+							const initial = Stream.unwrap(
+								Deferred.await(ready).pipe(
+									Effect.map((started) =>
+										started && target === folder
+											? Stream.succeed(undefined).pipe(
+													// fs.watch returns before macOS starts its folder stream. Close
+													// that gap after every binding, including after a replacement.
+													Stream.concat(Stream.fromEffect(Effect.sleep(`${SETTLE_MS} millis`))),
+												)
+											: Stream.succeed(undefined),
+									),
+								),
+							);
+							return Stream.merge(initial, saves);
+						}),
+					).pipe(
+						// Closing a watch releases its native state. A structural event rebinds it;
+						// an idle, missing or failed watch never starts another iteration.
+						Stream.repeat(Schedule.forever.pipe(Schedule.while(() => replaced))),
+					);
+				});
+			return watch(folder).pipe(
+				// A folder event may be the only notice of replacement. Cancel the old file
+				// watch, bind the new one, then read, including any save made during the handoff.
+				Stream.switchMap(() => watch(file)),
 				Stream.mapEffect(() => text),
 				Stream.changesWith((a, b) => a === b),
 				Stream.map(answer),
