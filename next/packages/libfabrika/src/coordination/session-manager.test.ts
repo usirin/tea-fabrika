@@ -61,6 +61,7 @@ const sessionExamples = [sample, {...sample, id: "write-b"}];
 // the old 1..40 suffix, not just one suffix character at the default size.
 // It also covers write- plus every 1..20-character suffix in the id tuple.
 const sessionOptions = {arbitrary: {seed: 119120, runs: 20, size: 54}};
+// Id.Process generates its whole UUIDv7 space, including both version chars and all eight variants.
 const sessionSchema = Schema.Struct({
 	PROCESS: Id.Process,
 	OTHER_PROCESS: Id.Process,

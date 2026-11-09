@@ -6,7 +6,8 @@ import {TestClock} from "effect/testing";
 import {Archive} from "../data/archive.ts";
 import {RecordManager} from "../data/records.ts";
 import {SpanSink} from "../data/sink.ts";
-import {Chain, ProcessId, type SpanRow} from "../data/trace.ts";
+import {Chain, type SpanRow} from "../data/trace.ts";
+import * as Id from "../id.ts";
 import {Mailbox} from "./mailbox.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
@@ -156,7 +157,8 @@ describe("p97, process calls", () => {
 	it.effect.prop(
 		"plant, replacement spans in the old record: P37 stores each life in its own JobRecord",
 		[
-			Arbitrary.schema(Schema.Tuple([ProcessId, ProcessId])).pipe(
+			// Generate from the UUIDv7 pattern, not ProcessId's opaque compatibility filter.
+			Arbitrary.schema(Schema.Tuple([Id.Process, Id.Process])).pipe(
 				Arbitrary.filter(([old, replacement]) => old !== replacement),
 			),
 		],

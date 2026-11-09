@@ -354,6 +354,7 @@ describe("P11 process storage", () => {
 				})),
 			),
 			// ProcessId's compatibility filter is opaque to generation; use its source schema.
+			// Id.Process keeps every free base32 position, both version chars and all eight variants.
 			Arbitrary.schema(
 				Schema.Union([
 					Schema.Struct({...Activity.cases.idle.fields, process: Id.Process}),

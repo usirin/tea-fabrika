@@ -44,6 +44,8 @@ const nat = (max: number) => Schema.Int.check(Schema.isBetween({minimum: 0, maxi
 // Retain 0..40 times/texts and 2..31 errors. Explicit number bounds above
 // keep the old full nat range without making every string that large.
 const options = {arbitrary: {seed: 119120, runs: 100, size: 40}};
+// The schema generates every free base32 character, both version characters and all eight variants.
+const processIds = Arbitrary.schema(Id.Process);
 
 describe("p79, inclusive restart window", () => {
 	it.prop(
@@ -95,7 +97,7 @@ describe("p79, inclusive restart window", () => {
 describe("p79, saved activity is not a crash detector", () => {
 	it.prop(
 		"P11 plant, decode an absent marker: a marker never written wakes as idle",
-		[Schema.UndefinedOr(Activity.cases.idle)],
+		[processIds.pipe(Arbitrary.map((process) => Activity.cases.idle.make({process})))],
 		([generated]) => {
 			for (const saved of [undefined, generated])
 				expect(
@@ -109,7 +111,7 @@ describe("p79, saved activity is not a crash detector", () => {
 	);
 	it.prop(
 		"plant, new ID on constructor entry: an idle marker restores the same process",
-		[Id.Process],
+		[processIds],
 		([generated]) => {
 			for (const process of [A, generated]) {
 				const saved = Activity.cases.idle.make({process});
@@ -122,7 +124,7 @@ describe("p79, saved activity is not a crash detector", () => {
 	);
 	it.prop(
 		"plant, label every entry crashed: an unfinished step reports only interruption",
-		[Id.Process, Activity.cases.stepping.fields.letter, Activity.cases.stepping.fields.build],
+		[processIds, Activity.cases.stepping.fields.letter, Activity.cases.stepping.fields.build],
 		([process, letter, build]) => {
 			for (const [p, l, b] of [
 				[A, "letter-17", "build-a"],
@@ -155,10 +157,48 @@ describe("p79, saved activity is not a crash detector", () => {
 	);
 });
 
+describe("T540, next/ process UUIDv7 refusals", () => {
+	const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
+	it.prop(
+		"plant, relax the process ID pattern: decode refuses each malformed part",
+		[
+			Schema.Struct({
+				process: Id.Process,
+				version: Schema.Literals([...alphabet].filter((char) => !"ef".includes(char))),
+				variant: Schema.Literals([...alphabet].filter((char) => !"89abrstv".includes(char))),
+				first: Schema.Literals([...alphabet.slice(8)]),
+				length: Schema.Union([
+					nat(25),
+					Schema.Int.check(Schema.isBetween({minimum: 27, maximum: 52})),
+				]),
+				char: Schema.String.check(Schema.isPattern(/^[^0-9a-hjkmnp-tv-z]$/u)),
+				position: nat(25),
+				prefix: Schema.String.check(Schema.makeFilter((prefix) => prefix !== "process")),
+			}),
+		],
+		([{process, version, variant, first, length, char, position, prefix}]) => {
+			const suffix = process.slice("process_".length);
+			const replace = (at: number, char: string) =>
+				`process_${suffix.slice(0, at)}${char}${suffix.slice(at + 1)}`;
+			expect(Result.isSuccess(Schema.decodeUnknownResult(Id.Process)(process))).toBe(true);
+			for (const [part, invalid] of [
+				["version", replace(10, version)],
+				["variant", replace(13, variant)],
+				["first character", replace(0, first)],
+				["length", `process_${suffix.repeat(2).slice(0, length)}`],
+				["alphabet", replace(position, char)],
+				["prefix", `${prefix}_${suffix}`],
+			])
+				expect(Result.isFailure(Schema.decodeUnknownResult(Id.Process)(invalid)), part).toBe(true);
+		},
+		options,
+	);
+});
+
 describe("p80, supplied policy facts", () => {
 	it.prop(
 		"plant, omit until: both down shapes require the promised retry time",
-		[Id.Process, policy],
+		[processIds, policy],
 		([process, supplied]) => {
 			for (const [p, s] of [
 				[A, {why: "intensity", crashes: 3, until: 50_000}],
