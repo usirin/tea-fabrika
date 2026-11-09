@@ -720,6 +720,22 @@ describe("P17a, one valid typed identity", () => {
 
 describe("T518 Id order and generation", () => {
 	it.effect.prop(
+		"unregistered schemas fail typed instead of generating an undefined prefix",
+		{at: Time, type: Prefix},
+		({at, type}) =>
+			Effect.gen(function* () {
+				yield* TestClock.setTime(at);
+				const generator = yield* Id.Generator;
+				const Unregistered = Schema.String.pipe(Schema.brand("unregistered"));
+				expectIdFailure(yield* Effect.exit(generator.next(Unregistered)), "prefix");
+				const Specific = Id.make(type);
+				const value = yield* generator.next(Specific);
+				expect(accepts(value, type)).toBe(true);
+				expect(timestamp(value)).toBe(at);
+			}).pipe(Effect.provide(Id.Generator.layer)),
+		effectOptions,
+	);
+	it.effect.prop(
 		"built-in prefixes generate UUIDv7 bursts; empty prefixes fail typed",
 		{at: Time, count: Count, type: Id.Type},
 		({at, count, type}) =>
