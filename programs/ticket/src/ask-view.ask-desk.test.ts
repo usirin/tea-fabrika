@@ -1,11 +1,12 @@
 import {Asked, blindDraw, sealAsk} from "@kampus/pipeline/tickets/ask";
 import {Entry, fold, type Ticket} from "@kampus/pipeline/tickets/ticket";
 import {AskActions, AskView} from "@tea-fabrika/tracker/ask-window";
+import * as AskWindow from "@tea-fabrika/tracker/ask-window";
 import {Effect, Schema} from "effect";
 import fc from "fast-check";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
 import {
 	AGENT,
 	DRAFT,
@@ -322,6 +323,29 @@ const MERGED = {
 	checks: [],
 };
 const turnOf = (markup: string) => firstOf(markup, /<section[^>]*aria-label="Whose turn"/);
+
+describe("ask desk P12: the ticket's status counts its waiting asks", () => {
+	// Today's version. Mutation found that a window could always pass zero to AskStatus.
+	// Its own DOM laws cover the announcement; this checks the count the ticket gives it.
+	property(
+		"gives the live region every waiting ask, and zero when none wait",
+		{count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8))},
+		async ({count}) => {
+			const status = vi.spyOn(AskWindow, "AskStatus");
+			try {
+				for (const total of new Set([0, 1, count])) {
+					const asks = await Promise.all(
+						Array.from({length: total}, (_, i) => sealed({...DRAFT, ask: `a-status-${i}`})),
+					);
+					drawn(ticketOf([FILED, ...asks]));
+					expect(status.mock.calls.at(-1)?.[0].left).toBe(total);
+				}
+			} finally {
+				status.mockRestore();
+			}
+		},
+	);
+});
 
 describe("ask desk review 6: one status region, always there, outside the ask view", () => {
 	describe.each([
