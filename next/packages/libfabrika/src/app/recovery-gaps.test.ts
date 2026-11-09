@@ -25,6 +25,7 @@ import {
 	first,
 	from,
 	ids,
+	PIDS,
 	read,
 	storage,
 } from "../coordination/process.test-support.ts";
@@ -80,7 +81,7 @@ const world = Effect.fnUntraced(function* () {
 	const ledger = storage(),
 		state = storage(),
 		authority = storage();
-	const next = ids(A, B, W, X);
+	const next = ids(...PIDS);
 	const gate = yield* Deferred.make<void>();
 	const entered = yield* Deferred.make<void>();
 	const controls = {

@@ -28,6 +28,7 @@ import {
 	first,
 	from,
 	ids,
+	PIDS,
 	read,
 	storage,
 	watcher,
@@ -102,7 +103,7 @@ const world = (
 	const ledger = storage(),
 		state = storage(),
 		authority = storage();
-	const next = ids(A, B, W, X);
+	const next = ids(...PIDS);
 	const controls = {
 		throws: true,
 		savedThrows: false,
@@ -371,7 +372,7 @@ const world = (
 };
 const lives = read(`processes/${NAME}`);
 const inbox = read(`${NAME}/inbox`);
-const dead = Effect.forEach([A, B, W, X], (p) => read(`${p}/dead`), {concurrency: 1}).pipe(
+const dead = Effect.forEach(PIDS, (p) => read(`${p}/dead`), {concurrency: 1}).pipe(
 	Effect.map((rows) => rows.flat()),
 );
 const failed = <A, E, R>(e: Effect.Effect<A, E, R>) =>
@@ -654,13 +655,17 @@ describe("P34 runner supervision", () => {
 								Effect.gen(function* () {
 									const restarting = path === "Restart live" || path === "Restart down";
 									// A selected Restart build gets a timer even if the old build had none.
-									const w = world(false, false, restarting ? null : time);
+									// P34 amendment: after_down crashes until the brake trips, past 2300 ms, so its
+									// program wake sits beyond every recovery deadline.
+									const wakeAt = path === "after_down" ? time + 10_000 : time;
+									const w = world(false, false, restarting ? null : wakeAt);
 									yield* w.boot;
 									if (history)
 										yield* ProgramRunner.use((r) => r.msg(w.input(id, {type: "add", n}))).pipe(
 											Effect.provide(w.layer()),
 										);
 									const before = yield* inbox.pipe(Effect.provide(w.manager()));
+									let crashes = 1;
 									// A platform alarm has fired before due enters the runner.
 									const fire = (r: Context.Service.Shape<typeof ProgramRunner>, at: number) => {
 										w.consumeAlarm();
@@ -683,12 +688,38 @@ describe("P34 runner supervision", () => {
 										yield* ProgramRunner.use((r) => failed(r.msg(w.input(`crash-${id}`)))).pipe(
 											Effect.provide(w.layer()),
 										);
+										// P34 amendment: down is written only when the brake trips, so after_down
+										// crashes a fresh letter after each recovery until the cut is reached.
+										for (let n = 0; path === "after_down" && w.controls.hits.length === 0; n++) {
+											expect(n, "the brake trips within the restart intensity").toBeLessThan(
+												policy.intensity,
+											);
+											const at = w.alarm()!;
+											w.reopen();
+											yield* TestClock.setTime(at);
+											yield* ProgramRunner.use((r) => fire(r, at)).pipe(Effect.provide(w.layer()));
+											yield* ProgramRunner.use((r) =>
+												failed(r.msg(w.input(`crash-${n}-${id}`))),
+											).pipe(Effect.provide(w.layer()));
+										}
+										// The tripped brake's deadline is the down fact's own `until`.
+										const tripped = (yield* lives.pipe(Effect.provide(w.manager()))).filter(
+											(row) => row._tag === "down",
+										);
+										const deadline =
+											path === "after_down"
+												? Schema.decodeUnknownSync(Schema.Struct({until: Schema.Int}))(
+														tripped.at(-1)?.body,
+													).until
+												: 100;
+										// Each crash's successor takes the next ID; A was the first.
+										crashes = path === "after_down" ? w.controls.steps.length : 1;
 										w.reopen();
 										if (earlyCut)
 											yield* ProgramRunner.use((r) => failed(r.open("resume-down"))).pipe(
 												Effect.provide(w.layer()),
 											);
-										expect(w.alarm(), "only recovery is eligible while down").toBe(100);
+										expect(w.alarm(), "only recovery is eligible while down").toBe(deadline);
 										if (earlyCut) expect(w.controls.hits).toEqual([path]);
 										if (path === "Restart down") {
 											w.controls.build = `build-${id}`;
@@ -705,11 +736,11 @@ describe("P34 runner supervision", () => {
 												Effect.provide(w.layer()),
 											);
 										} else {
-											yield* TestClock.setTime(100);
+											yield* TestClock.setTime(deadline!);
 											const lateCut = path === "after_start" || path === "after_checkpoint";
 											if (lateCut) w.controls.cut = path;
 											yield* ProgramRunner.use((r) =>
-												lateCut ? failed(fire(r, 100)) : fire(r, 100),
+												lateCut ? failed(fire(r, deadline!)) : fire(r, deadline!),
 											).pipe(Effect.provide(w.layer()));
 											if (lateCut) {
 												expect(w.controls.hits).toEqual([path]);
@@ -730,30 +761,32 @@ describe("P34 runner supervision", () => {
 									// exits above checked the other side of the same earliest-deadline law.
 									expect(recovery?.recovery._tag ?? "live").toBe("live");
 									expect(
-										yield* ProcessManager.use((p) => p.isLive(path === "wake" ? A : B)).pipe(
-											Effect.provide(w.manager()),
-										),
+										yield* ProcessManager.use((p) =>
+											p.isLive(path === "wake" ? A : PIDS[crashes]!),
+										).pipe(Effect.provide(w.manager())),
 									).toBe(true);
 									expect(yield* inbox.pipe(Effect.provide(w.manager()))).toEqual(before);
 									expect(w.controls.timers).toEqual([]);
 									yield* Effect.gen(function* () {
 										const r = yield* ProgramRunner;
-										yield* TestClock.setTime(time);
-										yield* fire(r, time);
-										yield* fire(r, time);
+										yield* TestClock.setTime(wakeAt);
+										yield* fire(r, wakeAt);
+										yield* fire(r, wakeAt);
 										expect({
 											armed,
 											timers: w.controls.timers,
 											view: (yield* r.open("timer")).view,
 										}).toEqual({
-											armed: time,
-											timers: [time],
+											armed: wakeAt,
+											timers: [wakeAt],
 											view: {count: history ? n : 0, replies: 1},
 										});
 										expect(w.alarm()).toBeNull();
 										const rows = yield* inbox;
 										expect(rows).toHaveLength(before.length + 1);
-										expect(rows.at(-1)?.id).toBe(`${path === "wake" ? A : B}/due/${time}`);
+										expect(rows.at(-1)?.id).toBe(
+											`${path === "wake" ? A : PIDS[crashes]!}/due/${wakeAt}`,
+										);
 									}).pipe(Effect.provide(w.layer()));
 								}).pipe(Effect.provide(TestClock.layer())),
 							),
