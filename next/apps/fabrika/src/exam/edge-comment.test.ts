@@ -64,8 +64,8 @@ const CASES: Readonly<Record<string, readonly [string, string, boolean]>> = {
 const at = (name: string) => `next/packages/libfabrika/src/data/${name}.ts`;
 const UNUSED = at("unused");
 
-describe("edge-comment", () => {
-	const all = plant({
+describe("edge-comment", async () => {
+	const all = await plant({
 		...Object.fromEntries(
 			Object.entries(CASES).map(([name, [comment, line]]) => [
 				at(name),

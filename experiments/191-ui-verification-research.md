@@ -60,7 +60,7 @@ const verifyUi = (change: Change) => [
   change touches a file a user sees, it asks the owner yes or no with before and after pictures. It
   names the pictures and takes none.
 - **Today's fabrika skills** have a `review-ui` gate: an agent answers PASS, FAIL or N/A per design
-  rule row. The [skill map](../docs/skill-map.md) says to build that lane last.
+  rule row. The skill map says to build that lane last.
 - **Not there at all:** axe or any accessibility scan, ARIA snapshots, layout laws, golden images,
   a model judge, and any screen reader run. The [tile guidelines](../docs/direction/tile-guidelines.md)
   list "no screen reader ran" and "layouts were not shot" as open.

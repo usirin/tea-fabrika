@@ -1,3 +1,22 @@
+import "./stepcommit.sh?raw";
+import "./exam.py?raw";
+import "../../plan/scripts/plancheck.sh?raw";
+import "../../lead/scripts/box.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/drive.ts?raw";
+import "../../lead/scripts/fieldrow.py?raw";
+import "../../lead/scripts/runplan.sh?raw";
+import "../../lead/scripts/env.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/gc.ts?raw";
+import "../../lead/scripts/redact.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/botpush.mjs?raw";
+import "../../lead/scripts/clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/lane.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../../../exam-paths.json?raw";
 import {spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {
@@ -160,6 +179,29 @@ console.error("fixture refuses package or network command"); process.exit(97);
 }
 
 describe("T321 K4 named paths, ownership and format, today's tooling", () => {
+	// Plants: read the first .box on the branch; read a stale file whose box folder is gone.
+	// themes tests, 2026-11-09: a stale themes-tests3.box on the same branch, with an old plan
+	// hash, refused the commits of the box that was really running.
+	it("K4 reads the facts of the box it runs in, never a stale box on the same branch", () => {
+		each(["own", "stale-only", "live-other"] as const, (kind) =>
+			withRepo([["src/owned.ts", "tests"]], (r) => {
+				const facts = readFileSync(join(r.boxes, "state/one.box"), "utf8");
+				const stale = facts.replace(/plan-sha256: .*/, `plan-sha256: ${"0".repeat(64)}`);
+				for (const name of ["a", "b", "c", "zz"]) put(join(r.boxes, `state/${name}.box`), stale);
+				if (kind !== "own") rmSync(join(r.boxes, "state/one.box"));
+				if (kind === "live-other") {
+					mkdirSync(join(r.boxes, "live"));
+					put(join(r.boxes, "state/live.box"), facts);
+				}
+				r.changed("src/owned.ts");
+				const got = r.commit("tests", ["src/owned.ts"]);
+				// stale-only: no live box on the branch, so there is no plan to check, as outside a box.
+				expect(got.code, got.text).toBe(0);
+				expect(got.text).not.toMatch(/hash mismatch/);
+			}),
+		);
+	});
+
 	// Plant: drop the staged-index refusal. Both routes must preserve the index and checkout.
 	it("K4 refuses an occupied index with exit 4 before staging or signing", () => {
 		fc.assert(

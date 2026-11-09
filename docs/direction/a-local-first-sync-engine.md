@@ -82,7 +82,7 @@ has no single place that can say who was first.
   Miniflare, Cloudflare's local runtime, its data kept on disk. A team that
   wants no Cloudflare runs the same bundle on a self-hosted runtime
   (workerd, celld). Which one a host uses is config; see
-  [tea-host](./tea-host.md).
+  tea-host.
 - **Experiment 93 backs it** ([write-up](../../experiments/93-ledger-miniflare.md)).
   All 10 laws hold in Miniflare. A 30-minute soak at about 100 times a
   team's load, killed every 5 minutes, lost no acknowledged write and made

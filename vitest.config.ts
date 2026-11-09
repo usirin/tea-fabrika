@@ -23,9 +23,7 @@ export const testConfig = {
 			"**/layer-rules.json",
 			"**/fixtures/**",
 			"**/.github/**",
-			"**/.agents/skills/**",
 			"**/.gitattributes",
-			"**/.claude/skills/**",
 		],
 		// One run over every package. `fixtures/` holds toy repos with their own
 		// `node --test` files. They are the lane's subject, not this repo's tests.

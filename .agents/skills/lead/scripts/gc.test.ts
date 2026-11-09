@@ -1,6 +1,25 @@
+import "./box.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./drive.ts?raw";
+import "./fieldrow.py?raw";
+import "./runplan.sh?raw";
+import "./env.sh?raw";
+import "./redact.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./botpush.mjs?raw";
+import "./clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./lane.ts?raw";
+import "../../plan/scripts/plancheck.sh?raw";
+import "../../step-commit/scripts/exam.py?raw";
+import "../../step-commit/scripts/stepcommit.sh?raw";
+import {spawnSync} from "node:child_process";
+import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import fc from "fast-check";
-import {describe, expect, it} from "vitest";
-import {backupsOf, decide, IDLE, type Seen, STUCK} from "./gc.ts";
+import {afterAll, describe, expect, it} from "vitest";
+import {backupsOf, deadFacts, decide, dirtyIn, IDLE, type Seen, STUCK} from "./gc.ts";
 
 // Today's tooling. The decision is pure; the world (lsof, git, gh, botpush) is not run here.
 const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
@@ -20,6 +39,7 @@ const seen = fc.record({
 	stuck: fc.option(fc.integer({min: 0, max: 3 * STUCK}), {nil: null}),
 	merged: fc.boolean(),
 	onRemote: fc.boolean(),
+	dirty: fc.option(fc.nat({max: 12}), {nil: null}),
 }) satisfies fc.Arbitrary<Seen>;
 const options = {seed: 119120, numRuns: 300};
 
@@ -54,10 +74,28 @@ describe("box gc, today's tooling", () => {
 	it("an idle box with a HEAD is always removed or backed up, never kept", () => {
 		fc.assert(
 			fc.property(seen, sha, (s, head) => {
-				const idle = {...s, git: {head, branch: s.git?.branch ?? null}, busy: false};
+				const idle = {...s, git: {head, branch: s.git?.branch ?? null}, busy: false, dirty: 0};
 				const v = decide({...idle, idle: IDLE + s.idle, stuck: s.stuck === null ? null : STUCK});
 				expect(v._tag === "remove" || v._tag === "backup").toBe(true);
 			}),
+			options,
+		);
+	});
+
+	// Plants: back up or remove a box with uncommitted files, or one git could not read. A backup
+	// pushes HEAD only (field note 2026-11-09-42: a box went with 10 uncommitted product files).
+	it("never removes or backs up a box holding uncommitted files, or one it could not read", () => {
+		fc.assert(
+			fc.property(
+				seen,
+				sha,
+				fc.option(fc.integer({min: 1, max: 12}), {nil: null}),
+				(s, head, dirty) => {
+					const idle = {...s, git: {head, branch: s.git?.branch ?? null}, busy: false};
+					const v = decide({...idle, idle: IDLE + s.idle, stuck: null, dirty});
+					expect(v._tag).toBe("keep");
+				},
+			),
 			options,
 		);
 	});
@@ -75,5 +113,47 @@ describe("box gc, today's tooling", () => {
 			}),
 			options,
 		);
+	});
+
+	// Plants: keep a dead box's facts; remove a live box's; remove a file that is not a box's facts.
+	// themes tests, 2026-11-09: a stale themes-tests3.box was read by stepcommit after its box went.
+	it("removes exactly the state/*.box files whose box folder is gone", () => {
+		const name = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/);
+		fc.assert(
+			fc.property(fc.uniqueArray(name), fc.uniqueArray(name), (facts, dirs) => {
+				const files = [...facts.map((f) => `${f}.box`), ...facts.map((f) => `${f}.rows.jsonl`)];
+				const live = new Set(dirs);
+				const dead = deadFacts(files, live);
+				expect(dead.sort()).toEqual(
+					facts
+						.filter((f) => !live.has(f))
+						.map((f) => `${f}.box`)
+						.sort(),
+				);
+			}),
+			options,
+		);
+	});
+});
+
+describe("dirtyIn reads a real box, today's tooling", () => {
+	const root = mkdtempSync(join(tmpdir(), "gc-dirty-"));
+	afterAll(() => rmSync(root, {recursive: true, force: true}));
+	// Plants: drop the status read; drop untracked files; count a clean box as dirty.
+	it("counts edited and untracked files in a box with separate git data", () => {
+		const box = join(root, "box");
+		const data = join(root, "box-gitdata");
+		spawnSync("git", ["init", "-q", `--separate-git-dir=${data}`, box]);
+		const git = (...args: string[]) => spawnSync("git", ["-C", box, ...args], {encoding: "utf8"});
+		git("config", "user.email", "t@example.com");
+		git("config", "user.name", "t");
+		writeFileSync(join(box, "a.ts"), "1\n");
+		git("add", "a.ts");
+		git("commit", "-q", "-m", "base");
+		expect(dirtyIn(data, box)).toBe(0);
+		writeFileSync(join(box, "a.ts"), "2\n");
+		writeFileSync(join(box, "new.ts"), "3\n");
+		expect(dirtyIn(data, box)).toBe(2);
+		expect(dirtyIn(join(root, "missing"), box)).toBeNull();
 	});
 });

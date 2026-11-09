@@ -57,6 +57,28 @@ Plain short sentences, American English.
 plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments.
 leakgrep.sh checks added text; private words stay outside the repo.
 
+Draft and approved checks cover sections, questions, exam paths and the exact body bytes after
+line two. The draft prints the digest. `--approved` checks the approval line against it.
+The draft check checks the handoff format. It cannot prove session identity, because the step agents
+and the lead share shell access. Do not add a marker, key or readable file as proof.
+
+`scripts/plancheck.sh --draft <plan.md>` requires a blank first line, `Plancheck-Version: 2` on
+line two, and no unfenced line beginning `Approved by the lead agent,`. The lead session runs it
+before approval. It checks the format, not who wrote it.
+
+`scripts/plancheck.sh <plan.md>` keeps saved-plan behavior, including approved and legacy plans. It
+checks owners in every plan. Version 2 also checks each laws table's generator grammar and requires
+generated inputs on `[secrets]` rows. An unmarked plan prints `legacy plan: generator checks
+skipped`; unknown, malformed or duplicate markers fail. Escaped pipes stay in their cells. Every
+exam path in a files table's file/path cell counts, whatever words or punctuation surround it,
+unless the cell names another package with a possessive (`Counter's package.json`); then only paths
+with a `/` count. A possessive of this repository (`the repo's package.json`) is not another
+package. Bare root paths in prose or other columns never decide the exit code. Apart from that
+check, the `exam path named` listing is a total scan that reads no Markdown: it splits the whole
+file, fences, link titles and comments included, into words and lists each one the exam list
+matches, wherever it stands. A false listing is harmless; the lead checks each listed path is owned
+by `tests`. The lead runs this before approving. Return the checked draft unsigned.
+
 ## Where code goes in `next/`
 
 Anyone must be able to take `@kampus/libfabrika` alone and build a client that works exactly like
