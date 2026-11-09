@@ -1,7 +1,7 @@
 // The typed half of no-promises. Oxlint's JS plugins have no type checker. This lint
 // command uses the installed TypeScript 7.0.2 API, without emitting code or type diagnostics.
-import {globSync} from "node:fs";
-import {join, relative, resolve} from "node:path";
+import {NodeRuntime, NodeServices} from "@effect/platform-node";
+import {Effect, FileSystem, Path} from "effect";
 import * as ts from "typescript/unstable/ast";
 import {API, SignatureKind, type Project, type Type} from "typescript/unstable/sync";
 
@@ -11,7 +11,11 @@ interface PromiseFinding {
 	readonly why: string;
 }
 
-export const checkPromiseTypes = (project: Project, root: string): readonly PromiseFinding[] => {
+export const checkPromiseTypes = (
+	project: Project,
+	root: string,
+	pathService: Path.Path,
+): readonly PromiseFinding[] => {
 	const {checker, program} = project;
 	const found = new Map<string, PromiseFinding>();
 	const memo = new Map<number, boolean>();
@@ -34,7 +38,7 @@ export const checkPromiseTypes = (project: Project, root: string): readonly Prom
 		return yes;
 	};
 	for (const path of program.getSourceFileNames()) {
-		const file = relative(root, path).replaceAll("\\", "/");
+		const file = pathService.relative(root, path).replaceAll("\\", "/");
 		if (
 			!file.startsWith("next/") ||
 			file.includes("node_modules/") ||
@@ -105,18 +109,24 @@ export const checkPromiseTypes = (project: Project, root: string): readonly Prom
 	return [...found.values()].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
 };
 
-if (import.meta.main) {
-	const root = resolve(import.meta.dirname, "../../../../..");
+const main = Effect.gen(function* () {
+	const path = yield* Path.Path;
+	const fs = yield* FileSystem.FileSystem;
+	const root = path.resolve(import.meta.dirname, "../../../../..");
 	const api = new API({cwd: root});
 	try {
-		const configs = globSync("next/**/tsconfig.json", {cwd: root})
+		const configs = (yield* fs.glob("next/**/tsconfig.json", {
+			root,
+			exclude: ["**/node_modules/**"],
+		}))
 			.filter((file) => !file.includes("node_modules/"))
-			.map((file) => join(root, file));
+			.map((file) => path.join(root, file));
 		const snapshot = api.updateSnapshot({openProjects: configs});
 		try {
 			const findings = new Map<string, PromiseFinding>();
 			for (const project of snapshot.getProjects())
-				for (const f of checkPromiseTypes(project, root)) findings.set(`${f.file}:${f.line}`, f);
+				for (const f of checkPromiseTypes(project, root, path))
+					findings.set(`${f.file}:${f.line}`, f);
 			for (const f of findings.values())
 				console.error(`${f.file}:${f.line} fabrika(no-promises): ${f.why}`);
 			console.info(`lint:promise-types: ${findings.size} findings`);
@@ -127,4 +137,5 @@ if (import.meta.main) {
 	} finally {
 		api.close();
 	}
-}
+});
+if (import.meta.main) NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)));

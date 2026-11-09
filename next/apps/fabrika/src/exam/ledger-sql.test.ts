@@ -6,13 +6,13 @@ import {plant} from "./plant.ts";
 const CODE = "fabrika(no-ledger-sql)";
 const FILE = "next/packages/libfabrika/src/workers/runtime.ts";
 describe("ledger SQL stays behind its service", () => {
-	it("refuses ledger table reads and writes outside the service, including aliases and templates", () => {
-		fc.assert(
-			fc.property(
+	it("refuses ledger table reads and writes outside the service, including aliases and templates", async () => {
+		await fc.assert(
+			fc.asyncProperty(
 				fc.constantFrom("entries", "rings"),
 				fc.constantFrom(" ", "\n", " /* checked */ "),
 				fc.boolean(),
-				(table, space, upper) => {
+				async (table, space, upper) => {
 					const word = upper ? table.toUpperCase() : table;
 					const queries = [
 						`SELECT * FROM${space}${word} AS e`,
@@ -25,7 +25,7 @@ describe("ledger SQL stays behind its service", () => {
 					const body = `${queries
 						.map((query) => `sql.exec(${JSON.stringify(query)});`)
 						.join("\n")}\nsql.exec(\`SELECT * FROM entries WHERE stream=\${stream}\`);`;
-					const findings = plant({
+					const findings = await plant({
 						[FILE]: body,
 						"next/packages/libfabrika/src/data/ledger-store.ts": body,
 						"next/packages/libfabrika/src/workers/runtime.test.ts": body,

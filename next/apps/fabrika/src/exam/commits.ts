@@ -16,9 +16,8 @@
 // `check`, `chain`), and a thin edge that runs `git` and `ssh-keygen`, the reference verifier. It
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
 // 0 on `done` and `ask`, 2 when the run fails: a keys file p87 refuses, or something it could not read.
-import {join} from "node:path";
 import {NodeRuntime, NodeServices} from "@effect/platform-node";
-import {Config, Console, Effect, Exit, FileSystem, Option, Schema, Stream} from "effect";
+import {Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream} from "effect";
 import {ChildProcess} from "effect/process";
 
 export const ROLES = ["tests", "build", "lead"] as const;
@@ -377,13 +376,14 @@ const fileAt = Effect.fnUntraced(function* (rev: string, path: string) {
  */
 const verifier = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
 	const dir = yield* fs.makeTempDirectoryScoped();
 	let n = 0;
 	return Effect.fnUntraced(function* (keys: string, note: Note) {
 		return yield* Effect.gen(function* () {
 			n += 1;
-			const allowed = join(dir, `allowed-${n}`);
-			const sig = join(dir, `sig-${n}`);
+			const allowed = path.join(dir, `allowed-${n}`);
+			const sig = path.join(dir, `sig-${n}`);
 			yield* fs.writeFileString(allowed, keys);
 			yield* fs.writeFileString(sig, note.sig);
 			const found = yield* run("ssh-keygen", ["-Y", "find-principals", "-s", sig, "-f", allowed]);

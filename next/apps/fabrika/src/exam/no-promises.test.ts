@@ -1,6 +1,8 @@
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
+import {NodePath} from "@effect/platform-node";
+import {Effect, Path} from "effect";
 import * as fc from "fast-check";
 import {API} from "typescript/unstable/sync";
 // `no-promises` (exam item 1): every Promise shape fires in next/, Effect's own Promise calls with
@@ -14,6 +16,7 @@ const CODE = "fabrika(no-promises)";
 const FIRES = "next/packages/libfabrika/src/app/fires.ts";
 const PASSES = "next/packages/libfabrika/src/app/passes.ts";
 const EDGE = "next/packages/libfabrika/src/data/project.ts";
+const paths = Effect.runSync(Path.Path.pipe(Effect.provide(NodePath.layer)));
 
 const typed = (files: Readonly<Record<string, string>>) => {
 	const root = mkdtempSync(join(tmpdir(), "p12-types-"));
@@ -32,7 +35,7 @@ const typed = (files: Readonly<Record<string, string>>) => {
 		try {
 			const project = snapshot.getProject(config)!;
 			expect(project.program.getSemanticDiagnostics()).toEqual([]);
-			return checkPromiseTypes(project, root);
+			return checkPromiseTypes(project, root, paths);
 		} finally {
 			snapshot.dispose();
 		}
@@ -131,7 +134,7 @@ const edges = [
 	"});", // 14
 ].join("\n");
 
-describe("no-promises", () => {
+describe("no-promises", async () => {
 	it("covers Promise findings throughout a wrapped marked statement", () => {
 		fc.assert(
 			fc.property(markedEdge, ([method, rule, indent]) => {
@@ -217,7 +220,7 @@ describe("no-promises", () => {
 			{seed: 119120, numRuns: 20},
 		);
 	});
-	const all = plant({
+	const all = await plant({
 		[FIRES]: fires,
 		[PASSES]: passes,
 		[EDGE]: edges,

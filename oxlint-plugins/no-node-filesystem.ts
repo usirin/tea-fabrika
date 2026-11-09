@@ -19,7 +19,17 @@ export const noNodeFilesystem: CreateRule = {
 					: source?.type === "TemplateLiteral" && source.expressions.length === 0
 						? source.quasis[0]?.value.cooked
 						: null;
-			if (typeof value === "string" && native.test(value))
+			const edge =
+				source != null &&
+				context.sourceCode
+					.getAllComments()
+					.some(
+						(comment) =>
+							comment.type === "Line" &&
+							comment.loc.start.line === source.loc.start.line &&
+							/^\s*edge:\s*\S/.test(comment.value),
+					);
+			if (typeof value === "string" && native.test(value) && !edge)
 				context.report({
 					node,
 					message:

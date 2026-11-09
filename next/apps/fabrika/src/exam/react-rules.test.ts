@@ -31,8 +31,8 @@ const passes = [
 	");",
 ].join("\n");
 
-describe("React's rules in next/", () => {
-	const all = plant({
+describe("React's rules in next/", async () => {
+	const all = await plant({
 		[FIRES]: fires,
 		[PASSES]: passes,
 		"next/packages/tuval/src/window/fires.test.tsx": fires,

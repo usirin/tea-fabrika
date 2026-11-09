@@ -3,9 +3,13 @@ import {spawnSync} from "node:child_process";
 import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
+import {NodeServices} from "@effect/platform-node";
+import {Effect} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {scan} from "./twin.ts";
+import {scanner} from "./twin.ts";
+
+const scan = await Effect.runPromise(scanner.pipe(Effect.provide(NodeServices.layer)));
 
 const stack = resolve(import.meta.dirname, "../../alchemy.run.ts");
 const text = () => readFileSync(stack, "utf8");
