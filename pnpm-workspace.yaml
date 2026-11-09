@@ -1,5 +1,4 @@
 # packages: what other code may build on. programs: one runnable tea program each.
-# packs: add-on packs, wired to the core by one config line; the core names none.
 # docs/tutorials: a tutorial's finished files, type-checked so it cannot drift.
 # apps: what a person opens, on top of everything else. Nothing imports an app.
 # experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
@@ -13,7 +12,6 @@ packages:
   - apps/*
   - packages/*
   - programs/*
-  - packs/*
   - docs/tutorials/*
   - oxlint-plugins
   - experiments/142-web-terminals
