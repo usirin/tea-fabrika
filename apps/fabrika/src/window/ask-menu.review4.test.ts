@@ -65,6 +65,13 @@ class DomElement {
 			(this.listeners.get(type) ?? []).filter((item) => item.fn !== fn),
 		);
 	}
+	// React's input fallback uses these when react-dom loads before the DOM stubs.
+	attachEvent(type: string, fn: EventListener) {
+		this.addEventListener(type.slice(2), fn);
+	}
+	detachEvent(type: string, fn: EventListener) {
+		this.removeEventListener(type.slice(2), fn);
+	}
 	dispatchEvent(event: Event): boolean {
 		Object.defineProperty(event, "target", {value: this, configurable: true});
 		const path: DomElement[] = [this];
@@ -286,6 +293,8 @@ const menu = (ticket: number, keys = defaults, kind: Ask["kind"] = "ask") => {
 	const toHost = vi.fn<FrameProps["toHost"]>();
 	const answer = vi.fn<AskActions["answer"]>(() => Effect.fail({why: "The host is disconnected"}));
 	const open = desk();
+	const keyFor = (name: keyof AskActions["keys"]) =>
+		keys.programs?.find((r) => r.does === `program.ask.${name}`)?.keys.map((k) => k.key) ?? [];
 	const actions: AskActions = {
 		answer,
 		openLane: (ticket) => toHost({type: "open_lane", from: focusedOf(open)!.id, ticket}),
@@ -300,12 +309,7 @@ const menu = (ticket: number, keys = defaults, kind: Ask["kind"] = "ask") => {
 			});
 			return command === undefined ? undefined : {key: press.key, value: command.value};
 		},
-		keys: Object.fromEntries(
-			["rec", "not", "picks", "later"].map((name) => [
-				name,
-				keys.programs?.find((r) => r.does === `program.ask.${name}`)?.keys.map((k) => k.key) ?? [],
-			]),
-		) as AskActions["keys"],
+		keys: {rec: keyFor("rec"), not: keyFor("not"), picks: keyFor("picks"), later: keyFor("later")},
 	};
 	const props: FrameProps = {
 		desk: open,

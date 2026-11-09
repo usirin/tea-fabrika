@@ -561,14 +561,18 @@ describe("the bottom line and the asks list", () => {
 				),
 				(rows) => {
 					const shown = rows.filter((row) => row.shown);
+					const [first, ...rest] = shown.map((row) => ({
+						id: `ticket:${row.ticket}`,
+						program: "ticket",
+					}));
 					const desk = fold(
-						shown.length === 0
+						first === undefined
 							? []
 							: [
 									{
 										type: "covered",
 										tile: "t1",
-										runs: shown.map((row) => ({id: `ticket:${row.ticket}`, program: "ticket"})),
+										runs: [first, ...rest],
 									},
 								],
 					);
