@@ -3,6 +3,16 @@ import type {CreateRule, ESTree} from "@oxlint/plugins";
 import {cssName} from "./css-support.ts";
 import {isWritten} from "./match.ts";
 
+const rawTemplate = (node: ESTree.Node): ESTree.TemplateLiteral | null =>
+	node.type === "TaggedTemplateExpression" &&
+	node.tag.type === "MemberExpression" &&
+	node.tag.object.type === "Identifier" &&
+	node.tag.object.name === "String" &&
+	(node.tag.property.type === "Identifier" ? node.tag.property.name : text(node.tag.property)) ===
+		"raw"
+		? node.quasi
+		: null;
+
 const text = (node: ESTree.Node): string | null => {
 	if (node.type === "Literal" && typeof node.value === "string") return node.value;
 	if (node.type === "BinaryExpression" && node.operator === "+") {
@@ -10,17 +20,11 @@ const text = (node: ESTree.Node): string | null => {
 		const right = text(node.right);
 		return left === null || right === null ? null : left + right;
 	}
-	const raw =
-		node.type === "TaggedTemplateExpression" &&
-		node.tag.type === "MemberExpression" &&
-		node.tag.object.type === "Identifier" &&
-		node.tag.object.name === "String" &&
-		(node.tag.property.type === "Identifier" ? node.tag.property.name : text(node.tag.property)) ===
-			"raw";
-	const template = raw && node.type === "TaggedTemplateExpression" ? node.quasi : node;
+	const raw = rawTemplate(node);
+	const template = raw ?? node;
 	if (template.type !== "TemplateLiteral") return null;
 	const spelling = (quasi: ESTree.TemplateElement) =>
-		raw ? quasi.value.raw : (quasi.value.cooked ?? "");
+		raw !== null ? quasi.value.raw : (quasi.value.cooked ?? "");
 	let value = template.quasis[0] === undefined ? "" : spelling(template.quasis[0]);
 	for (const [index, expression] of template.expressions.entries()) {
 		const part = text(expression);
@@ -44,11 +48,14 @@ const css = (node: ESTree.Node): boolean => {
 		return css(node.left) || css(node.right);
 	// Unknown values cannot hide a known declaration name. A separator prevents inventing
 	// a name by joining text across an expression whose value we do not know.
+	const raw = rawTemplate(node);
+	const template = raw ?? (node.type === "TemplateLiteral" ? node : null);
 	const known =
 		value ??
-		(node.type === "TemplateLiteral"
-			? node.quasis.map((part) => part.value.cooked ?? part.value.raw).join("\0")
-			: "");
+		template?.quasis
+			.map((part) => (raw !== null ? part.value.raw : (part.value.cooked ?? part.value.raw)))
+			.join("\0") ??
+		"";
 	const declarations = cssName(known.replace(/\/\*[\s\S]*?\*\//g, ""));
 	return /(?:z-index|--layer-[\w-]+|--manti-(?:dialog|popover|tooltip)-z-index)\s*:/i.test(
 		declarations,

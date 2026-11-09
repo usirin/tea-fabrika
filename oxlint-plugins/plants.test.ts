@@ -49,6 +49,50 @@ const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect"
 const PLANTS: readonly Plant[] = [
 	{
 		code: "fabrika(no-layer-style)",
+		label: "pinned: review 4 String.raw value expressions cannot hide fixed layer names",
+		file: "layer-raw-values.ts",
+		prelude: ["declare const el: HTMLElement;", "declare const rank: number;"],
+		// Review 4: ten names x three spellings x two values x two writes = 120 refusals.
+		// Ordinary templates are controls. Safe raw writes must keep passing too.
+		lines: [
+			...[
+				"z-index",
+				...["desk", "sheet", "float", "popover", "palette", "tooltip"].map(
+					(layer) => `--layer-${layer}`,
+				),
+				...["dialog", "popover", "tooltip"].map((part) => `--manti-${part}-z-index`),
+			].flatMap((name) => [
+				...[name, name.replace("-", String.raw`\2d `), `${name}/**/`].flatMap((spelling) =>
+					["99", "rank"].flatMap((value) => {
+						const css = `String.raw\`${spelling}:\${${value}}\``;
+						return [
+							[`el.style.cssText = ${css};`, true] as const,
+							[`el.setAttribute("style", ${css});`, true] as const,
+						];
+					}),
+				),
+				[`el.style.cssText = \`${name}:\${rank}\`;`, true] as const,
+				[`el.setAttribute("style", \`${name}:\${rank}\`);`, true] as const,
+			]),
+			...["opacity", "--tile-wash", "--manti-dialog-radius"].flatMap((name) =>
+				[
+					name,
+					name.replace(/^[a-z-]/, (first) => `\\${first.charCodeAt(0).toString(16)} `),
+					`${name}/**/`,
+				].flatMap((spelling) =>
+					["99", "rank"].flatMap((value) => {
+						const css = `String.raw\`${spelling}:\${${value}}\``;
+						return [
+							[`el.style.cssText = ${css};`, false] as const,
+							[`el.setAttribute("style", ${css});`, false] as const,
+						];
+					}),
+				),
+			),
+		],
+	},
+	{
+		code: "fabrika(no-layer-style)",
 		label: "pinned: review 3 CSS escapes and comments in both inline declaration routes",
 		file: "layer-css-spellings.ts",
 		prelude: ["declare const el: HTMLElement;"],

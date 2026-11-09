@@ -9,7 +9,7 @@ import {Socket, SocketServer} from "effect/socket";
 import * as fc from "fast-check";
 import {assert, describe, expect, it, vi} from "vitest";
 import {deskMachine, savedOf} from "../desk/desk.ts";
-import {defaults} from "../desk/keymap.ts";
+import {defaults, File, Key as BindingKey, type Keys} from "../desk/keymap.ts";
 import {type Does, SHOWS, wordOf} from "../desk/keys.ts";
 import {memoryHistory, sharedHistory} from "../editor/history.ts";
 import type {Down, Up} from "../link.ts";
@@ -74,6 +74,7 @@ const hostSays = (
 	drive: (said: NonNullable<typeof edge.said>, receive: (message: Up) => void) => void,
 	/** False: the client has not announced a page, as an app that only relays does. */
 	loaded = true,
+	keys: Keys = defaults,
 ) =>
 	Effect.gen(function* () {
 		const vertical = does.kind === "focus" && (does.to === "up" || does.to === "down");
@@ -91,7 +92,7 @@ const hostSays = (
 			edge.said = edge.receive = null;
 			edge.down = [];
 		});
-		const snapshot = {version: "test", keys: defaults, changes: []};
+		const snapshot = {version: "test", keys, changes: []};
 		const server = SocketServer.SocketServer.of({
 			address: NetAddress.unixPathAddress("memory"),
 			run: (handler) =>
@@ -180,17 +181,36 @@ describe("today's host: tsh navigation under an overlay", () => {
 		);
 	});
 	it("a client that loaded no page is told nothing of a show or navigation", async () => {
-		const sent = await Effect.runPromise(
-			hostSays(
-				{kind: "show", what: "info"},
-				(said) => {
-					expect(said("t1", {kind: "show", what: "info"})).toBeNull();
-					expect(said("t1", {kind: "split", orientation: "horizontal"})).toBeNull();
+		const commands: readonly Does[] = [
+			...navigation,
+			{kind: "close"},
+			...SHOWS.map((what) => ({kind: "show", what}) as const),
+		];
+		// Plant: announce a page for this relay. Real show/navigation replies then break the law.
+		await fc.assert(
+			fc.asyncProperty(
+				fc.shuffledSubarray([...commands], {minLength: commands.length}),
+				async (order) => {
+					for (const does of order) {
+						const sent = await Effect.runPromise(
+							hostSays(
+								does,
+								(said) => {
+									// Keep the original info-then-split sequence intact. Generated commands
+									// also try the other navigation and show words a relay can receive.
+									expect(said("t1", {kind: "show", what: "info"})).toBeNull();
+									expect(said("t1", {kind: "split", orientation: "horizontal"})).toBeNull();
+									expect(said("t1", does), wordOf(does)).toBeNull();
+								},
+								false,
+							),
+						);
+						expect(sent).toEqual([]);
+					}
 				},
-				false,
 			),
+			{seed: 119120, numRuns: 5},
 		);
-		expect(sent).toEqual([]);
 	});
 	it("a tsh show word toggles in the page and a focus cycle cleans up there: neither is told a navigation", async () => {
 		// The page closes the overlay itself on these, so a host navigation first would reopen a
@@ -218,6 +238,63 @@ describe("today's host: tsh navigation under an overlay", () => {
 				},
 			),
 			{seed: 119120, numRuns: 5},
+		);
+	});
+});
+
+describe("today's host: focus cycle replies", () => {
+	it("prefix-bound and palette cycles deliver navigation before the cycle reply", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz"), async (letter) => {
+				const keys: Keys = {
+					...defaults,
+					file: File.cases.read.make({}),
+					prefix: `<c-${letter}>`,
+					rows: defaults.rows.map((row) => ({
+						...row,
+						keys:
+							row.does === 'tezgah."focus --to next"'
+								? [BindingKey.cases.after_prefix.make({key: "n"})]
+								: row.does === 'tezgah."focus --to previous"'
+									? [BindingKey.cases.after_prefix.make({key: "p"})]
+									: row.keys,
+					})),
+				};
+				for (const to of ["next", "previous"] as const) {
+					for (const route of ["prefix", "palette"] as const) {
+						const messages = await Effect.runPromise(
+							hostSays(
+								{kind: "cycle", to},
+								(_said, receive) => {
+									const send = (m: object) => receive({type: "on", port: "desk", m});
+									if (route === "palette") send({type: "run", does: `tezgah."focus --to ${to}"`});
+									else {
+										send({type: "press", id: 1, key: keys.prefix});
+										send({type: "press", id: 2, key: to === "next" ? "n" : "p"});
+									}
+								},
+								true,
+								keys,
+							),
+						);
+						expect(
+							messages.filter((m) => m.type === "navigation" || m.type === "show"),
+							`${route} ${to}`,
+						).toEqual([
+							{type: "navigation"},
+							{
+								type: "show",
+								what: `focus-${to}`,
+								via:
+									route === "palette"
+										? {_tag: "palette"}
+										: {_tag: "key", keys: `ctrl+${letter} ${to === "next" ? "n" : "p"}`},
+							},
+						]);
+					}
+				}
+			}),
+			{seed: 119120, numRuns: 10},
 		);
 	});
 });

@@ -5,9 +5,16 @@ import {createElement, isValidElement, type ReactNode} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, expectTypeOf, it, vi} from "vitest";
 import type {AsksNow} from "../asks.ts";
-import {type Desk, type DeskCmd, type DeskMsg, deskMachine, type Open} from "../desk/desk.ts";
+import {
+	type Desk,
+	type DeskCmd,
+	type DeskMsg,
+	deskMachine,
+	forPage,
+	type Open,
+} from "../desk/desk.ts";
 import {holdMachine, type HoldMsg, type Key} from "../desk/hold.ts";
-import {defaults} from "../desk/keymap.ts";
+import {defaults, Key as BindingKey, type Keys} from "../desk/keymap.ts";
 import type {FromPage, ToPage} from "../messages.ts";
 import {
 	bottomLineShows,
@@ -355,6 +362,144 @@ describe("today's layers: generated key ownership and Escape", () => {
 			vi.unstubAllGlobals();
 		}
 	});
+	// Review 4's plant is today's combined navigation + cycle reply. The host law in
+	// serve.test.ts verifies that order for both routes. Browser cleanup/layout hooks are
+	// omitted here, so restore their opener focus between dismissal and the cycle reply.
+	it("combined host replies exit every overlay through open tiles on prefix and palette cycles", async () => {
+		const page = replayPage(true);
+		const cases = (["asks", "jobs", "agents", "sync", "host", "palette", "keys"] as const).flatMap(
+			(what) =>
+				(["prefix", "held-prefix", "palette"] as const).flatMap((route) =>
+					(["single", "first", "middle", "last"] as const).flatMap((position) =>
+						(["next", "previous"] as const).map((to) => ({what, route, position, to})),
+					),
+				),
+		);
+		try {
+			vi.resetModules();
+			await import("./desk.tsx");
+			expect(page.ready()).toBe(true);
+			fc.assert(
+				fc.property(prefix, fc.string(), (pref, query) => {
+					const keys: Keys = {
+						...defaults,
+						prefix: pref,
+						rows: defaults.rows.map((row) => ({
+							...row,
+							keys:
+								row.does === 'tezgah."focus --to next"'
+									? [BindingKey.cases.after_prefix.make({key: "n"})]
+									: row.does === 'tezgah."focus --to previous"'
+										? [BindingKey.cases.after_prefix.make({key: "p"})]
+										: row.keys,
+						})),
+					};
+					const missed: string[] = [];
+					for (const {what, route, position, to} of cases) {
+						page.reset(pref);
+						page.send({type: "keys", ...keys});
+						const current = position === "last" ? "t3" : position === "middle" ? "t2" : "t1";
+						const tiles: readonly ("t1" | "t2" | "t3")[] =
+							position === "single" ? ["t1"] : ["t1", "t2", "t3"];
+						const target =
+							tiles[
+								(tiles.indexOf(current) + (to === "next" ? 1 : tiles.length - 1)) % tiles.length
+							]!;
+						const moves: DeskMsg[] = [
+							{type: "keys", keys},
+							...(position === "single"
+								? []
+								: [
+										{
+											type: "typed",
+											tile: "t1",
+											does: {kind: "split", orientation: "horizontal"},
+										} as const,
+										{
+											type: "typed",
+											tile: "t2",
+											does: {kind: "split", orientation: "horizontal"},
+										} as const,
+									]),
+							{type: "go", tile: current},
+						];
+						const desk = fold(...moves);
+						page.send({type: "desk", desk: forPage(desk), takes: {all: false, keys: [pref]}});
+						page.send({type: "show", what});
+						page.frameProps().step({type: "query", query});
+						expect(page.frameProps().frame.over.kind).not.toBe("none");
+						page.cover(true);
+						page.input.focus();
+						page.clear();
+						if (route !== "palette") {
+							const held = route === "held-prefix";
+							const suffix = to === "next" ? "n" : "p";
+							page.press(pref[3]!, true);
+							const pending = page.sent.find((m) => m.type === "press");
+							if (pending?.type !== "press") throw new Error("prefix never reached the host");
+							if (held) page.press(suffix);
+							page.send({
+								type: "desk",
+								desk: forPage(fold(...moves, {type: "key", key: pref, at: 0})),
+								takes: {all: true, keys: []},
+							});
+							page.send({type: "answer", id: pending.id, took: true});
+							if (!held) page.press(suffix);
+						} else {
+							// Open the command palette from each starting overlay, then run its
+							// real Focus action. Its own `ran` closes it before the host replies.
+							page.send({type: "show", what: "palette"});
+							page.frameProps().step({type: "query", query: `focus ${to}`});
+							renderToStaticMarkup(createElement(Over, page.frameProps()));
+							const drawn = palette.props;
+							if (drawn === null) throw new Error("palette did not render");
+							const at = drawn.sections
+								.flatMap((section) => section.options)
+								.findIndex((option) => option.name === `focus ${to}`);
+							if (at < 0) throw new Error(`palette has no focus ${to}`);
+							drawn.onRun(at);
+						}
+						const request = page.sent.flatMap((m) =>
+							route === "palette" && m.type === "run"
+								? [m.does]
+								: route !== "palette" && m.type === "press"
+									? [m.key]
+									: [],
+						);
+						expect(request).toEqual(
+							route === "palette"
+								? [`tezgah."focus --to ${to}"`]
+								: [pref, to === "next" ? "n" : "p"],
+						);
+						page.send({type: "navigation"});
+						page.cover(false);
+						page.focusTile(current);
+						const close = page.sent.findIndex(
+							(m) => m.type === "layer" && m.change._tag === "close",
+						);
+						page.send({type: "show", what: `focus-${to}`});
+						const goes = page.sent.flatMap((m) => (m.type === "go" ? [m.tile] : []));
+						const expected = target === current ? [] : [target];
+						const go = page.sent.findIndex((m) => m.type === "go");
+						if (
+							page.frameProps().frame.over.kind !== "none" ||
+							close < 0 ||
+							!page.inWorkspace() ||
+							JSON.stringify(goes) !== JSON.stringify(expected) ||
+							(go >= 0 && go <= close)
+						)
+							missed.push(
+								`${what}/${route}/${position}/${to}: go ${goes.join(",")}, workspace ${page.inWorkspace()}`,
+							);
+					}
+					expect(missed).toEqual([]);
+				}),
+				options,
+			);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
 	// Plant: remove pressAgain's keyForOver guard in desk.tsx. A held letter then reaches
 	// this terminal listener while an overlay owns it, even though frame.ts routes it correctly.
 	it("held letters go through the real page replay handoff before any terminal receives them", async () => {
@@ -673,6 +818,7 @@ const replayPage = (navigationTargets = false) => {
 	const box = new PageElement();
 	const input = new PageInput();
 	const other = new PageElement();
+	const third = new PageElement();
 	const top = new PageElement();
 	const bottom = new PageElement();
 	const page = {
@@ -684,6 +830,7 @@ const replayPage = (navigationTargets = false) => {
 				if (selector === ".bottomline button") return bottom;
 				if (selector === '[data-tile="t1"] .screen') return terminal;
 				if (selector === '[data-tile="t2"] .screen') return other;
+				if (selector === '[data-tile="t3"] .screen') return third;
 				if (selector === ".desk") return page.body;
 			}
 			return covered ? box : null;
@@ -726,6 +873,8 @@ const replayPage = (navigationTargets = false) => {
 			hear(message);
 		},
 		cover: (value: boolean) => (covered = value),
+		focusTile: (tile: "t1" | "t2" | "t3") => ({t1: terminal, t2: other, t3: third})[tile].focus(),
+		inWorkspace: () => [terminal, other, third].includes(page.activeElement),
 		clear: () => {
 			sent.length = typed.length = inserted.length = 0;
 		},
