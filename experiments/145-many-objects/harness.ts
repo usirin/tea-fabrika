@@ -45,7 +45,7 @@ export interface Running {
 }
 
 /** Web Crypto refused to sign a session. */
-export class MintFailed extends Schema.TaggedError<MintFailed>()("MintFailed", {
+class MintFailed extends Schema.TaggedError<MintFailed>()("MintFailed", {
 	message: Schema.String,
 }) {}
 
@@ -63,7 +63,7 @@ export const sessionOf = (s: Running, who: Who) =>
 		catch: (cause) => new MintFailed({message: String(cause)}),
 	});
 
-export interface Start {
+interface Start {
 	readonly planted?: string;
 	/** `true`: a new temp folder. A string: that folder (a restart keeps the data). Default memory. */
 	readonly persist?: boolean | string;

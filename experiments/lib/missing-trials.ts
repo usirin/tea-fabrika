@@ -22,7 +22,7 @@ export const git = (...args: string[]) =>
 const gh = <T>(...args: string[]) =>
 	JSON.parse(execFileSync("gh", args, {cwd: PHOENIX, encoding: "utf8"})) as T;
 
-export type Scope = "folder" | "package";
+type Scope = "folder" | "package";
 
 export interface Trial {
 	readonly pr: number;

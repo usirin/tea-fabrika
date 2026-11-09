@@ -39,7 +39,7 @@ interface Refresh {
 	used: boolean;
 }
 
-export interface FakeOptions {
+interface FakeOptions {
 	/** The pass's life in seconds. OpenAI's is 3600. */
 	readonly expiresIn: number;
 	/** The scopes it grants. OpenAI's, unless a test drops the plan scope. */

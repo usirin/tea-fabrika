@@ -46,7 +46,7 @@ const need = (base: Record<string, string>, key: string): string => {
  * ink, base08 red, base0A yellow, base0B green, base0C cyan, base0D blue, base0E magenta. Base24
  * adds the bright six; Base16 repeats the plain ones, as base16-shell does.
  */
-export const fromTinted = (text: string) => {
+const fromTinted = (text: string) => {
 	const s = readScheme(text);
 	const b = (key: string) => need(s.base, key);
 	const bright = (key: string, plain: string) => s.base[key] ?? b(plain);
@@ -95,7 +95,7 @@ export const fromTinted = (text: string) => {
 };
 
 /** A Ghostty theme file, keeping only its color keys. Any other key in the file is left out. */
-export const fromGhostty = (name: string, text: string, look: "dark" | "light") => {
+const fromGhostty = (name: string, text: string, look: "dark" | "light") => {
 	const keys: Record<string, string> = {};
 	const palette: string[] = [];
 	for (const line of text.split("\n")) {

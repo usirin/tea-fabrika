@@ -26,7 +26,7 @@ const LANE_WRITER: Writer = {kind: "agent", id: "lane", for: "owner"};
 const PEOPLE = ["owner", "teammate"] as const;
 
 /** A lane's trace id: 32 hex characters, one per lane. */
-export const traceOfLane = (i: number): string => (i + 1).toString(16).padStart(2, "0").repeat(16);
+const traceOfLane = (i: number): string => (i + 1).toString(16).padStart(2, "0").repeat(16);
 
 const STAGES = [
 	"triage",
@@ -99,7 +99,7 @@ const storyShape = fc.record({
 });
 
 /** One step as made: the truth a law checks a step row against. */
-export interface TrueStep {
+interface TrueStep {
 	readonly run: string;
 	readonly stage: string;
 	readonly from: number;
@@ -115,7 +115,7 @@ export interface TrueStep {
 }
 
 /** One ask as made. `lane`: the lane it belongs in, by its place. */
-export interface TrueAsk {
+interface TrueAsk {
 	readonly ask: string;
 	readonly what: string;
 	readonly at: number;
@@ -141,7 +141,7 @@ export interface Story {
 }
 
 /** A step's price as L6 words it, from what its `ended` holds. */
-export const priceFrom = (
+const priceFrom = (
 	runner: (typeof RUNNER)[Runner],
 	ended: {
 		readonly listUsd: Said;

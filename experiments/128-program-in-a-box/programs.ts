@@ -27,12 +27,12 @@ export class Greeter extends Context.Service<
 	{readonly greet: (name: string) => Effect.Effect<string>}
 >()("exp128/Greeter") {}
 
-export const GreeterRpcs = RpcGroup.make(
+const GreeterRpcs = RpcGroup.make(
 	Rpc.make("greet", {payload: {name: Schema.String}, success: Schema.String}),
 );
 
 /** How Greeter crosses the wall. */
-export const greeterWall: Wall<Greeter, Greeter["Service"], RpcGroup.Rpcs<typeof GreeterRpcs>> = {
+const greeterWall: Wall<Greeter, Greeter["Service"], RpcGroup.Rpcs<typeof GreeterRpcs>> = {
 	name: "greeter",
 	tag: Greeter,
 	group: GreeterRpcs,
@@ -84,7 +84,7 @@ export const greet = boxable(
 // ---------------------------------------------------------------- the Cmd wall
 
 /** Runs inside the box: counts the words of a text. */
-export const countWords = Cmd.make("count_words", {
+const countWords = Cmd.make("count_words", {
 	input: Schema.Struct({text: Schema.String}),
 	ok: Schema.Int,
 	err: ["empty"],

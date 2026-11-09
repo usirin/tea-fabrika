@@ -15,7 +15,7 @@ type Phase = "init" | "run";
 let phase: Phase = "init";
 const used: Record<Phase, Map<string, number>> = {init: new Map(), run: new Map()};
 
-export class EffectAtRunTime extends Error {
+class EffectAtRunTime extends Error {
 	constructor(readonly what: string) {
 		super(`the program touched Effect at run time: ${what}`);
 	}

@@ -63,7 +63,7 @@ const percentile = (xs: readonly number[], p: number) => {
 	return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1) + 0.5))] ?? null;
 };
 
-export const countLink = (
+const countLink = (
 	samples: readonly Sample[],
 	sleeps: ReadonlyArray<readonly [number, number]>,
 ) => {

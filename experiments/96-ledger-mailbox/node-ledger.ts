@@ -12,7 +12,7 @@ import type {LedgerClient} from "./client.ts";
 import * as L from "./sql.ts";
 
 /** The node:sqlite driver. `BEGIN IMMEDIATE` takes the write lock up front; inner txs are savepoints. */
-export const openNodeDb = (path: string): {db: L.Db; close(): void; raw: DatabaseSync} => {
+const openNodeDb = (path: string): {db: L.Db; close(): void; raw: DatabaseSync} => {
 	const raw = new DatabaseSync(path);
 	raw.exec("PRAGMA journal_mode = WAL");
 	raw.exec("PRAGMA busy_timeout = 10000");

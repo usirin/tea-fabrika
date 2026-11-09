@@ -30,7 +30,7 @@ const logChoose = (n: number, k: number) => logFact(n) - logFact(k) - logFact(n 
  * of the probabilities, under fixed margins, of every table no more likely than the one seen.
  * `a` and `b` are the two rows' counts per column, in the same column order.
  */
-export const fisherExact = (a: readonly number[], b: readonly number[]): number => {
+const fisherExact = (a: readonly number[], b: readonly number[]): number => {
 	const pairs = a.map((x, i) => [x, x + (b[i] ?? 0)] as const).filter(([, c]) => c > 0);
 	const cols = pairs.map(([, c]) => c);
 	const kept = pairs.map(([x]) => x);
@@ -118,12 +118,12 @@ const compare = (label: string, killed: readonly PlanRun[], controls: readonly P
 		),
 	};
 };
-export type Comparison = ReturnType<typeof compare>;
+type Comparison = ReturnType<typeof compare>;
 
 /** The rule, as written before the runs. */
-export const ALPHA = 0.05;
-export const SHAPE_SHARE = 0.95;
-export const SHAPE_SLACK = 0.1;
+const ALPHA = 0.05;
+const SHAPE_SHARE = 0.95;
+const SHAPE_SLACK = 0.1;
 
 const holds = (c: Comparison) => {
 	const failed: string[] = [];

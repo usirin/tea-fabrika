@@ -28,7 +28,7 @@ export interface Serving {
 }
 
 /** How one delivery ended. `fenced`: this program's lease is gone, so it may not speak. */
-export type Delivered =
+type Delivered =
 	| {readonly how: "sent"; readonly rev: number; readonly dup: boolean}
 	| {readonly how: "fenced"}
 	| {readonly how: "denied"}

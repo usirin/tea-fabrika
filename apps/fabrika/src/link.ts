@@ -92,7 +92,7 @@ export const readUp = reader(Up);
 export const readDown = reader(Down);
 
 /** Who runs the link: the host, which answers, or the app, which greets first. */
-export type Side = "host" | "app";
+type Side = "host" | "app";
 
 /** What the link is started with: its side, and the version it speaks. */
 export interface LinkCtx {

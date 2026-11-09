@@ -18,7 +18,7 @@ import {Cause, Duration, Effect, Exit, Schema} from "effect";
 import type {Ledger, Row} from "./service.ts";
 
 /** What a host says about each write, for the harness. */
-export type WriteNote = {
+type WriteNote = {
 	readonly ev: "write";
 	readonly fence: number;
 	readonly expected: number;

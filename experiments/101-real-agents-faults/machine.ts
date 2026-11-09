@@ -43,7 +43,7 @@ export interface AgentRun {
 	readonly entries: readonly Entry[];
 }
 
-export interface InFlight {
+interface InFlight {
 	readonly id: string;
 	readonly rev: number;
 	readonly runs: readonly AgentRun[];
@@ -90,7 +90,7 @@ export const AnswererState = Schema.Struct({
 	),
 });
 
-export type Asked = {
+type Asked = {
 	readonly id: string;
 	readonly corr: string;
 	readonly replyTo: string;

@@ -1,7 +1,7 @@
 // Experiment 148's view of the account, through Cloudflare's own API: what a run made, listed and
 // deleted by its prefix only. Shared by the live box round (live-box.ts) and the egress round
 // (egress.ts). Nothing here names, or counts by name, anything without the prefix.
-export const PREFIX = "tf-exp-148";
+const PREFIX = "tf-exp-148";
 const REGISTRY = "registry.cloudflare.com";
 
 type App = {id: string; name: string};

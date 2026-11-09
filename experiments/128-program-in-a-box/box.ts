@@ -170,7 +170,7 @@ export const srtSettings = (o: {
 // ---------------------------------------------------------------- docker
 
 /** Node and pnpm only, as experiment 98's image. No source and no secret goes in. */
-export const dockerfile = `FROM node:26.12.0-slim
+const dockerfile = `FROM node:26.12.0-slim
 RUN npm install --global pnpm@10.27.0 && npm cache clean --force
 USER node
 WORKDIR /repo

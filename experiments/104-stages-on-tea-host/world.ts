@@ -40,7 +40,7 @@ const failed = Effect.fail<Failed>({_tag: "unknown"});
 
 /** The pull requests the fake starts each run with. */
 export const SHIP_PR = "https://github.com/example/repo/pull/629";
-export const SHIP_HEAD = "abc1234def5678";
+const SHIP_HEAD = "abc1234def5678";
 export const FIXTURES = [
 	{number: 628, branch: "review-fixture", head: HEADS.final},
 	{number: 629, branch: "ship-fixture", head: SHIP_HEAD},
@@ -50,7 +50,7 @@ export const BUILD_TICKET = "https://github.com/example/repo/issues/1";
 export const PLAN_TICKET = "https://github.com/example/repo/issues/7";
 
 /** What one scripted turn bills. */
-export const TURN_USD = 0.1;
+const TURN_USD = 0.1;
 const TURN = Duration.millis(300);
 const spendOf = (usd: number): Spend => ({
 	costUsd: usd,
@@ -233,7 +233,7 @@ export const scriptedReview = scriptedReviewer(
 	{hold: Effect.sleep(TURN)},
 ).layer;
 
-export const PLAN_TICKET_READ: PlanTicket = {
+const PLAN_TICKET_READ: PlanTicket = {
 	url: PLAN_TICKET,
 	number: 7,
 	state: "open",
@@ -300,7 +300,7 @@ export const planReads = Layer.mergeAll(
 	}),
 );
 
-export const BUILD_TICKET_READ: Ticket = {
+const BUILD_TICKET_READ: Ticket = {
 	url: BUILD_TICKET,
 	number: 1,
 	state: "open",

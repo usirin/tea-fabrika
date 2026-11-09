@@ -74,7 +74,7 @@ function makeInput(
 }
 
 /** The inputs, as one Msg schema the machine takes. It keeps the inputs for Program.make. */
-export type Inputs<T extends ReadonlyArray<Input>> = Schema.Codec<
+type Inputs<T extends ReadonlyArray<Input>> = Schema.Codec<
 	T[number]["schema"]["Type"],
 	T[number]["schema"]["Encoded"]
 > & {readonly inputs: T};
@@ -105,7 +105,7 @@ type Cause<P extends boolean> = {readonly parent: string} & (P extends true ? Fr
  * and swaps its event still compiles: a brand stops a mistake, not a forger, and the signer
  * refuses a person-only event the Msg's sender could not cause (`person_only`).
  */
-export type EventWrite<S extends EventSchema, P extends boolean> = WriteDef<S> &
+type EventWrite<S extends EventSchema, P extends boolean> = WriteDef<S> &
 	((msg: Cause<P>, event: S["Type"]) => ReturnType<WriteDef<S>>);
 
 /** An event a program may write: its schema, who may cause it, and its write Cmd. */

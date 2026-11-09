@@ -11,8 +11,6 @@ import {GRACE_MS, started} from "./harness.ts";
 /** The ledger the hosts use (the laws use their own, `acme-app`). */
 export const LEDGER = "tea-host";
 
-export type Handle = Awaited<ReturnType<typeof openLocal>>;
-
 export const openLocal = async (
 	persist: string,
 	o: {readonly port?: number; readonly capMb?: number; readonly ledger?: string} = {},
@@ -68,7 +66,7 @@ export const connect = (url: string, ledger = LEDGER, maxSockets = 8) => {
 };
 
 /** Every event in the log, in order, a page at a time. */
-export const readAllOf = Effect.gen(function* () {
+const readAllOf = Effect.gen(function* () {
 	const ledger = yield* Ledger;
 	const all: Row[] = [];
 	for (;;) {

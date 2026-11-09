@@ -11,12 +11,12 @@
 //
 //   linkUpdate(away, {type: "answered", ms: 2900, at: 5000})
 //   // {link: {state: "live"}, back: 5000, recent: [...]}: the call was sent while away, not counted
-export type Link =
+type Link =
 	| {readonly state: "live"}
 	| {readonly state: "slow"; readonly ms: number}
 	| {readonly state: "away"; readonly since: number; readonly waiting: number};
 
-export type LinkMsg =
+type LinkMsg =
 	| {readonly type: "answered"; readonly ms: number; readonly at: number}
 	| {readonly type: "failed"; readonly at: number; readonly waiting: number};
 

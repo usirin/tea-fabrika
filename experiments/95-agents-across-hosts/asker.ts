@@ -25,7 +25,7 @@ import {questionOf} from "./question.ts";
 import type {Serving} from "./serving.ts";
 import {lastStateOf, ledgerStore} from "./store.ts";
 
-export const AskerState = Schema.Struct({
+const AskerState = Schema.Struct({
 	next: Schema.Number,
 	pending: Schema.Array(
 		Schema.Struct({i: Schema.Number, tries: Schema.Number, due: Schema.NullOr(Schema.Number)}),
@@ -39,7 +39,7 @@ export const AskerState = Schema.Struct({
 	),
 });
 
-export const ReplyIn = Schema.Struct({
+const ReplyIn = Schema.Struct({
 	id: Schema.String,
 	corr: Schema.String,
 	answer: Schema.String,
@@ -50,7 +50,7 @@ const ReplyData = Schema.Struct({id: Schema.String, corr: Schema.String, answer:
 const decodeReply = Schema.decodeUnknownExit(Schema.fromJsonString(ReplyData));
 
 /** What the asker's host gives it. */
-export class Caller extends Context.Service<
+class Caller extends Context.Service<
 	Caller,
 	{
 		readonly settings: CallSettings;
@@ -72,7 +72,7 @@ const deadlines = (list: readonly Deadline[]) =>
 		),
 	);
 
-export const askerProgram = defineProgram({
+const askerProgram = defineProgram({
 	name: "asker",
 	description:
 		"Asks its questions of another program, each as a call with a timeout, and sends a call again under the same message id when its reply is late.",

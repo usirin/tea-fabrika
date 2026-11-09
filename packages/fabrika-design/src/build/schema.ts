@@ -96,7 +96,7 @@ const Extends = Schema.Struct({
 	description: Schema.optionalKey(Schema.NonEmptyString),
 	colors: Schema.Struct({extends: Name}),
 });
-export type Extends = typeof Extends.Type;
+type Extends = typeof Extends.Type;
 
 export type TokenFile = Own | Extends;
 
@@ -181,7 +181,7 @@ export const isTranslucent = (value: Value): boolean => {
 export const isOwn = (token: TokenFile): token is Own => !("extends" in token.colors);
 
 /** Everything one file cannot see. */
-export interface Sources {
+interface Sources {
 	readonly tokens: ReadonlyMap<string, TokenFile>;
 	readonly manti: Manti;
 	readonly parts: Parts;

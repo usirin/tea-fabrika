@@ -13,7 +13,7 @@ import {Call, defineProgram, envelope, type Inbox, input, Self, streams} from "@
 import {Effect, Schema, Stream} from "effect";
 import {isRight, questionOf} from "../95-agents-across-hosts/question.ts";
 
-export const AskerState = Schema.Struct({
+const AskerState = Schema.Struct({
 	/** The next question to ask, 1-based. */
 	next: Schema.Number,
 	/** The call module's state: the calls pending, and the inbox rev of the last reply read. */
@@ -36,7 +36,7 @@ export const AskerState = Schema.Struct({
 		Schema.Struct({i: Schema.Number, answer: Schema.String, right: Schema.Boolean}),
 	),
 });
-export type AskerState = typeof AskerState.Type;
+type AskerState = typeof AskerState.Type;
 
 const START: AskerState = {
 	next: 1,
@@ -47,7 +47,7 @@ const START: AskerState = {
 	last: null,
 };
 
-export interface AskerSettings extends Call.CallSettings {
+interface AskerSettings extends Call.CallSettings {
 	/** How many questions in all. */
 	readonly total: number;
 	/** How many calls may be pending at once. */
@@ -73,7 +73,7 @@ const fill = (settings: AskerSettings, s: AskerState, cmds: readonly Cmd[]): Ste
 	return [next === s.next ? s : {...s, calls, next}, sends];
 };
 
-export const askerUpdate = (settings: AskerSettings) => {
+const askerUpdate = (settings: AskerSettings) => {
 	const calls = Call.update(settings);
 	return (s: AskerState, m: Msg): Step => {
 		const stepped = calls<number, string>(s.calls, m);
@@ -99,7 +99,7 @@ export const askerUpdate = (settings: AskerSettings) => {
 	};
 };
 
-export const createAsker = (settings: AskerSettings) => {
+const createAsker = (settings: AskerSettings) => {
 	const step = askerUpdate(settings);
 	return defineMachine<AskerState, Msg, Cmd, CallSub, undefined>({
 		types: {
@@ -125,7 +125,7 @@ export const createAsker = (settings: AskerSettings) => {
 };
 
 /** A reply as the answerer sends it. */
-export const Reply = Schema.Struct({
+const Reply = Schema.Struct({
 	id: Schema.String,
 	corr: Schema.String,
 	answer: Schema.String,

@@ -8,17 +8,17 @@ import {Schema} from "effect";
 export const TicketNumber = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
 /** One open ask on a ticket: its id and the picks a person may answer with. */
-export const Ask = Schema.Struct({id: Schema.String, picks: Schema.Array(Schema.String)});
+const Ask = Schema.Struct({id: Schema.String, picks: Schema.Array(Schema.String)});
 
 /** One ticket as its window draws it: what the `ticket_read` Cmd hands back. */
-export const Page = Schema.Struct({
+const Page = Schema.Struct({
 	number: TicketNumber,
 	title: Schema.String,
 	body: Schema.String,
 	state: Schema.Literals(["open", "closed"]),
 	asks: Schema.Array(Ask),
 });
-export type Page = typeof Page.Type;
+type Page = typeof Page.Type;
 
 // What a client sends. The door adds `parent`, its own envelope id, to every input it lets in.
 export const Show = Schema.Struct({ticket: TicketNumber});

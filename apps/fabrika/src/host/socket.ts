@@ -30,7 +30,7 @@ export interface HostPaths {
 }
 
 /** The longest socket path macOS takes, in bytes (`sun_path`, less its closing zero). */
-export const MAX_SOCKET_PATH = 103;
+const MAX_SOCKET_PATH = 103;
 
 export const pathsOf = (home: string) =>
 	Effect.gen(function* () {

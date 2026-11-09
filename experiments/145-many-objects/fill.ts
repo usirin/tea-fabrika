@@ -8,7 +8,7 @@ import {deskOf, openDesk} from "./desk.ts";
 import {A, agent, B, OPERATOR, personObject, type Running, user} from "./harness.ts";
 import {runCounter} from "./programs.ts";
 
-export interface Fill {
+interface Fill {
 	readonly projects: number;
 	readonly people: number;
 	readonly saves: number;

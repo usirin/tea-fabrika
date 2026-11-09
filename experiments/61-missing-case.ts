@@ -144,7 +144,7 @@ function withoutOriginal(body: string): string {
  * A ticket's acceptance criteria as written: every checkbox line under a
  * heading that says "Acceptance criteria", outside the original report.
  */
-export function criteriaOf(body: string): string[] {
+function criteriaOf(body: string): string[] {
 	const out: string[] = [];
 	let under = false;
 	for (const line of withoutOriginal(body).split("\n")) {
@@ -353,7 +353,7 @@ interface Key extends Case {
 }
 
 /** A changed file is a test file by its name or by a folder it sits in. */
-export const isTestFile = (path: string) =>
+const isTestFile = (path: string) =>
 	/\.test(-d)?\.[cm]?[jt]sx?$/.test(path) ||
 	path.split("/").some((part) => ["test", "tests", "__tests__", "test-helpers"].includes(part));
 
@@ -474,7 +474,7 @@ type Answer = typeof Answer.Type;
 const readAnswer = reader(Answer);
 
 /** What the reviewer is sent. Pure: the same key and arm give the same text. */
-export function promptOf(key: Pick<Key, "title" | "criteria" | "tests">, arm: "code" | "tests") {
+function promptOf(key: Pick<Key, "title" | "criteria" | "tests">, arm: "code" | "tests") {
 	return [
 		"You are checking the tests of one finished change against its ticket.",
 		"",

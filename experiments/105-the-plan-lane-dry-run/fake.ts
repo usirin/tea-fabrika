@@ -31,7 +31,7 @@ export const issueUrl = (n: number) => `https://github.com/${REPO}/issues/${n}`;
 const prUrl = (n: number) => `https://github.com/${REPO}/pull/${n}`;
 const LAND_MS = 300;
 
-export interface Issue {
+interface Issue {
 	readonly number: number;
 	readonly url: string;
 	readonly title: string;
@@ -42,7 +42,7 @@ export interface Issue {
 	readonly comments: string[];
 }
 
-export interface Pr {
+interface Pr {
 	readonly url: string;
 	readonly number: number;
 	readonly branch: string;
@@ -58,7 +58,7 @@ export interface Pr {
 }
 
 /** One landing on main: the head, main as it stood, whether the head held that main, whether it had passed. */
-export interface Landing {
+interface Landing {
 	readonly pr: string;
 	readonly head: string;
 	readonly onto: string;
@@ -422,4 +422,3 @@ export const startFake = async (o: {readonly dir: string; readonly leaseOf: Leas
 		close: () => new Promise<void>((r) => server.close(() => r())),
 	};
 };
-export type Fake = Awaited<ReturnType<typeof startFake>>;

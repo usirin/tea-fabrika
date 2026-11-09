@@ -97,7 +97,7 @@ const replayOf = (n: number): Replay =>
 const reportOf = (r: Replay) => r.rawReport.replace(/\n---\n<sub>[\s\S]*$/, "").trim();
 
 /** Today's criteria: the triaged ticket's checklist, less the rows marked for review only. */
-export function todayOf(r: Replay): string[] {
+function todayOf(r: Replay): string[] {
 	const at = r.enriched.indexOf("### Acceptance criteria");
 	if (at < 0) return [];
 	const rest = r.enriched.slice(at + "### Acceptance criteria".length);

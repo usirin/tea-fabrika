@@ -177,8 +177,8 @@ catalogs:
       specifier: 0.0.81
       version: 0.0.81
     '@demlik/code-graph':
-      specifier: 0.12.0
-      version: 0.12.0
+      specifier: 0.15.0
+      version: 0.15.0
     '@demlik/structure-sweep':
       specifier: 0.3.9
       version: 0.3.9
@@ -352,6 +352,7 @@ overrides:
   '@effect/platform-node-shared': 4.1.2
 
 patchedDependencies:
+  '@demlik/code-graph@0.15.0': 327c1b18f1f541ef6d69cb38b361a79f6019380cf78f69482f35c7b3916bcf83
   '@demlik/tea@0.25.0': a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3
   '@manti-ui/react@0.13.0': 520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef
   alchemy@2.0.0-beta.84: 8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a
@@ -369,7 +370,7 @@ importers:
         version: 0.3.316(@anthropic-ai/sdk@0.133.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)
       '@demlik/code-graph':
         specifier: 'catalog:'
-        version: 0.12.0
+        version: 0.15.0(patch_hash=327c1b18f1f541ef6d69cb38b361a79f6019380cf78f69482f35c7b3916bcf83)
       '@demlik/tea':
         specifier: 'catalog:'
         version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
@@ -2024,8 +2025,8 @@ packages:
     peerDependencies:
       postcss-selector-parser: ^7.1.1
 
-  '@demlik/code-graph@0.12.0':
-    resolution: {integrity: sha512-n2QxRiuTz6aNPcttNZ2JzHYhHU2YQpuaY7jKPjiIXrLORTIR4plT50A661EhOyOtBJYi3pgxlH2G5ScOPc5j3A==}
+  '@demlik/code-graph@0.15.0':
+    resolution: {integrity: sha512-jj+rxrbaWu0SvnvJ64psn1lqgTGEKFJFRcBPfwdobsEt8uSPyA0M8x56qH5/vXLQI3EHZfqp9m0lNXrfMb8i8g==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -5889,6 +5890,10 @@ packages:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
 
+  smol-toml@1.9.0:
+    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
+    engines: {node: '>= 18'}
+
   smol-toml@1.9.1:
     resolution: {integrity: sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ==}
     engines: {node: '>= 18'}
@@ -6204,6 +6209,11 @@ packages:
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
     engines: {node: '>=10'}
+
+  yaml@2.9.0:
+    resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
 
   yaml@2.9.1:
     resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
@@ -6738,7 +6748,7 @@ snapshots:
     dependencies:
       postcss-selector-parser: 7.1.7
 
-  '@demlik/code-graph@0.12.0':
+  '@demlik/code-graph@0.15.0(patch_hash=327c1b18f1f541ef6d69cb38b361a79f6019380cf78f69482f35c7b3916bcf83)':
     dependencies:
       '@typescript/native-preview': 7.0.0-dev.20260707.2
       chalk: 5.6.2
@@ -6746,7 +6756,9 @@ snapshots:
       jsonc-parser: 3.3.1
       oxc-parser: 0.151.0
       oxc-resolver: 11.24.2
-      smol-toml: 1.9.1
+      smol-toml: 1.9.0
+      tinyglobby: 0.2.17
+      yaml: 2.9.0
       zod: 4.0.0
 
   '@demlik/code-graph@0.9.0':
@@ -10435,6 +10447,8 @@ snapshots:
 
   signal-exit@4.1.0: {}
 
+  smol-toml@1.9.0: {}
+
   smol-toml@1.9.1: {}
 
   source-map-js@1.2.2: {}
@@ -10693,6 +10707,8 @@ snapshots:
   ws@8.22.1: {}
 
   y18n@5.0.8: {}
+
+  yaml@2.9.0: {}
 
   yaml@2.9.1: {}
 

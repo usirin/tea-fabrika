@@ -85,7 +85,7 @@ function prompt(title: string, body: string, brief?: string): string {
 	].join("\n\n");
 }
 
-export interface Triaged {
+interface Triaged {
 	readonly title: string;
 	readonly goal: string;
 	readonly criteria: readonly DataCriterion[];

@@ -8,14 +8,14 @@
 //     cannot put a pass back, and `put` answers `false` so its caller revokes what it got.
 import {Context, Effect, type Redacted} from "effect";
 
-export interface Pending {
+interface Pending {
 	readonly verifier: Redacted.Redacted<string>;
 	readonly redirect: string;
 	/** The client the URL was made with: `dynamic_agent_client`, or a saved issued id. */
 	readonly client: string;
 }
 
-export interface Held {
+interface Held {
 	readonly access: Redacted.Redacted<string>;
 	/** `null`: a pass with no renewal key, way (b) or way (c). */
 	readonly refresh: Redacted.Redacted<string> | null;

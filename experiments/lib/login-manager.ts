@@ -27,7 +27,7 @@ const Answer = Schema.Struct({
 });
 
 /** The provider refused the refresh: the person must sign in again. */
-export class LoginDead extends Schema.TaggedError<LoginDead>()("LoginDead", {
+class LoginDead extends Schema.TaggedError<LoginDead>()("LoginDead", {
 	status: Schema.Number,
 }) {}
 
@@ -37,13 +37,13 @@ type Login =
 	| {readonly kind: "dead"; readonly status: number};
 
 /** One refresh the manager sent, timed. */
-export interface Spend {
+interface Spend {
 	readonly ok: boolean;
 	readonly from: number;
 	readonly to: number;
 }
 
-export interface Counts {
+interface Counts {
 	/** Every `renew` call. */
 	readonly asks: number;
 	/** Asks answered with a token someone else already renewed: no refresh spent. */
@@ -59,7 +59,7 @@ export interface LoginManager {
 	readonly counts: Effect.Effect<Counts>;
 }
 
-export interface SignIn {
+interface SignIn {
 	readonly accessToken: string;
 	readonly refreshToken: string;
 	readonly accountId: string;

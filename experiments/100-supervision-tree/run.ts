@@ -431,7 +431,7 @@ const GROUPS = {"sup:all": ["a:1", "a:2", "a:3"], "sup:rest": ["r:1", "r:2", "r:
 type Group = keyof typeof GROUPS;
 
 /** Every check, from the ledger's rows, the hosts' lines and what the harness did. */
-export function check(
+function check(
 	rows: readonly Row[],
 	lines: readonly Line[],
 	faults: readonly Fault[],
