@@ -59,8 +59,8 @@ const ALIASES: Record<string, Record<Look, string>> = {
 	"--line": {dark: "#d6ebfd30", light: "#00002f26"}, // slate a6
 	"--pop-edge": {dark: "#d6ebfd30", light: "#00002f26"},
 	"--key": {dark: "#3e63dd", light: "#3e63dd"}, // indigo 9
-	"--open": {dark: "#71d083", light: "#203c25"}, // grass 11; grass 12
-	"--alert": {dark: "#ff9592", light: "#641723"}, // red 11; red 12
+	"--open": {dark: "#89ff9fcd", light: "#203c25"}, // T343: grass a11; grass 12
+	"--alert": {dark: "#ffd1d9", light: "#641723"}, // T343: red 12 in both looks
 };
 
 // ---- reading the stylesheets -------------------------------------------------------------------
@@ -343,7 +343,8 @@ describe("A2: the terminal, the window's frame and the build read the package", 
 // ---- A3: the app's rules still read ------------------------------------------------------------
 
 describe("A3: the app's colors are the package's, in both looks", () => {
-	it.each(LOOKS)("each name the app keeps follows the package token it names, %s", (look) => {
+	// pinned: Nov 7's APCA row failures changed dark done to grass a11 and stuck to red 12.
+	it.each(LOOKS)("pinned: each app alias keeps the Nov 7 two-floor pick, %s", (look) => {
 		const got = Object.fromEntries(Object.keys(ALIASES).map((name) => [name, tokenIn(name, look)]));
 		const want = Object.fromEntries(Object.entries(ALIASES).map(([name, v]) => [name, v[look]]));
 		expect(got).toEqual(want);

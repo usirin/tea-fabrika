@@ -363,11 +363,14 @@ describe("theme-colors.ts is generated, and themes.ts reads it", () => {
 		expect(Object.keys(generated).sort()).toEqual(["dark", "light"]);
 	});
 
-	it("gives the themes their fifteen colors, both looks", async () => {
+	// format: format 1 contains the closed 21 global names, with no old-name compatibility map.
+	it("format: gives both themes exactly the 21 global colors", async () => {
 		const {dark, light} = await import("../theme-colors.ts");
 		const {fabrika, fabrikaLight} = await import("../themes.ts");
+		const {globalNames} = await import("@kampus/themes-fixture/laws");
 		expect({dark, light}).toEqual({dark: fabrika.colors, light: fabrikaLight.colors});
-		expect(Object.keys(dark)).toHaveLength(15);
+		for (const colors of [dark, light])
+			expect(Object.keys(colors).sort()).toEqual([...globalNames].sort());
 	});
 });
 

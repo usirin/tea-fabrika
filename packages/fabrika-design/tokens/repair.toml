@@ -1,10 +1,13 @@
 # Today's app, T343/T13. Experiment 239, seed 119120, both default floors.
-# All 21 global names are mapped by 0009. Measurement reached the real checker.
-# Three real inputs cannot finish: the built-in fallback uses the old names.
-# The made-up input also stops on the old fallback map. It never sets the cap.
-# Two complete uncapped reports and all four errors are in the fixture report.
-# No shipping cap, cap-setting pair or repair version can be pinned yet.
-status = "unmeasured"
-reason = "Nord, Solarized Light and Dracula: no color: turn-fg. Made-up input: no color: text-faint. The complete mapped inputs contain these names; themes.ts/theme-colors.ts still export the old 15-name built-in fallback. The five-real-theme uncapped pass is incomplete."
+# Largest finite minimal OKLCH lightness move among the five real mapped sources.
+# The made-up input never sets the cap. Remaining failures stay in the report.
+# Fixture shots and visual acceptance remain pending.
+status = "measured"
+version = "1"
+cap = 0.1705827986227786
 report = "fixtures/themes/calibration.json"
-attemptedVersion = "1"
+
+[setsCap]
+theme = "solarized-light"
+token = "text-faint"
+on = "surface-selected/surface-raised"

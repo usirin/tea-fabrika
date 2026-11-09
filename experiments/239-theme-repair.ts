@@ -1,6 +1,6 @@
 // Today's app, T343 PR 1, tests-owned calibration. No network or model calls.
-// node experiments/239-theme-repair.ts --map     prepares the kept input themes
-// node experiments/239-theme-repair.ts          measures using the real shared checker
+// pnpm exec node experiments/239-theme-repair.ts --map     prepares the kept input themes
+// pnpm exec node experiments/239-theme-repair.ts          measures using the real shared checker
 // Reports go to runs/. Review before copying into fixtures/themes/calibration.json.
 import {createHash} from "node:crypto";
 import {mkdirSync, readFileSync, writeFileSync} from "node:fs";
@@ -12,6 +12,8 @@ import {parse as parseToml, stringify} from "smol-toml";
 const fixture = createRequire(new URL("../fixtures/themes/package.json", import.meta.url));
 const {
 	builtinColors,
+	composite,
+	flatten,
 	importedColors,
 	lab,
 	ladder,
@@ -162,6 +164,8 @@ if (process.argv.includes("--map")) {
 		),
 	);
 } else {
+	const {Result} = await import("effect");
+	const {decodeTheme} = await import("../packages/fabrika-design/src/theme.ts");
 	const {check} = await import("../packages/fabrika-design/src/build/contrast.ts");
 	const {pairs} = await import("../packages/fabrika-design/src/theme-contract.ts");
 	const policy = {fix: "nudge", contrast: 4.5} as const;
@@ -169,12 +173,15 @@ if (process.argv.includes("--map")) {
 	// version, not a calibrated shipping policy until all five inputs finish.
 	const version = {version: "1", cap: 1};
 	const hash = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
-	const mapped = <T>(input: T & {name: string}) => {
+	const mapped = (input: {name: string}) => {
 		const bytes = readFileSync(new URL(`mapped/${input.name}.toml`, root));
 		const written = parseToml(bytes.toString("utf8"));
 		if (JSON.stringify(written) !== JSON.stringify(input))
 			throw new Error(`mapped/${input.name}.toml differs from the mapping oracle; run --map`);
-		return {input: written as T, sha256: hash(bytes)};
+		return {
+			input: Result.getOrThrow(decodeTheme(bytes.toString("utf8"), `${input.name}.toml`)),
+			sha256: hash(bytes),
+		};
 	};
 	const measure = (input: (typeof inputs)[number] | typeof ugly) => {
 		const {input: written, sha256} = mapped(input);
@@ -227,7 +234,7 @@ if (process.argv.includes("--map")) {
 			status: "unmeasured",
 			reason:
 				errors.length > 0
-					? `All 21 mapped colors now exist. The shared checker cannot finish its uncapped pass: ${errors.map(({name, error}) => `${name}: ${error}`).join("; ")}. These names exist in the input; the failure comes from the built-in fallback in themes.ts/theme-colors.ts, which still exports 15 old names. No shipping cap, pair or repair version can be pinned from an incomplete pass.`
+					? `The shared checker cannot finish all six inputs: ${errors.map(({name, error}) => `${name}: ${error}`).join("; ")}. No cap, pair or repair version can be pinned from an incomplete pass.`
 					: "The five real themes produced no finite minimal lightness move; no cap can be measured.",
 			...common,
 			moves,
@@ -236,6 +243,18 @@ if (process.argv.includes("--map")) {
 	} else {
 		const cap = setsCap.move;
 		if (!Number.isFinite(cap)) throw new Error("no finite measured cap");
+		const themes = inputs.map((input) => {
+			const written = mapped(input).input;
+			return {
+				name: input.name,
+				from: written.from,
+				result: check(written, pairs, policy, {...version, cap}),
+			};
+		});
+		const invented = {
+			name: ugly.name,
+			result: check(mapped(ugly).input, pairs, policy, {...version, cap}),
+		};
 		report = {
 			status: "measured",
 			...common,
@@ -243,12 +262,33 @@ if (process.argv.includes("--map")) {
 			cap,
 			setsCap,
 			moves,
-			themes: inputs.map((input) => ({
-				name: input.name,
-				from: input.from,
-				result: check(input, pairs, policy, {...version, cap}),
+			themes,
+			unreadable: invented,
+			// Final 8-bit drawn colors, including alpha. Every required pair stays visible.
+			rendered: [...themes, invented].map(({name, result}) => ({
+				name,
+				pairs: pairs.map(({token, on}) => {
+					const color = (theme: typeof result.written, key: string) =>
+						key === "cursor"
+							? theme.terminal.cursor
+							: key === "terminal.background"
+								? theme.terminal.background
+								: required(theme.colors[key as keyof typeof theme.colors]);
+					const background = flatten(
+						on
+							.split("/")
+							.reverse()
+							.map((key) => color(result.written, key)),
+					);
+					return {
+						token,
+						on,
+						background,
+						was: composite(color(result.written, token), background),
+						now: composite(color(result.shown, token), background),
+					};
+				}),
 			})),
-			unreadable: {name: ugly.name, result: check(ugly, pairs, policy, {...version, cap})},
 		};
 	}
 	const output = process.argv[process.argv.indexOf("--output") + 1];

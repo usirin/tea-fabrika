@@ -39,8 +39,8 @@ const fakeWindow = () => {
 
 describe("the window's frame takes the desk's color in the system's look", () => {
 	it("is fabrika's desk in dark and fabrika-light's in light", () => {
-		expect(frameColor({shouldUseDarkColors: true})).toBe(fabrika.colors.desk);
-		expect(frameColor({shouldUseDarkColors: false})).toBe(fabrikaLight.colors.desk);
+		expect(frameColor({shouldUseDarkColors: true})).toBe(fabrika.colors["surface-sunken"]);
+		expect(frameColor({shouldUseDarkColors: false})).toBe(fabrikaLight.colors["surface-sunken"]);
 	});
 
 	it("follows the look while the window is open", () => {
@@ -49,7 +49,10 @@ describe("the window's frame takes the desk's color in the system's look", () =>
 		followLook(look, window);
 		look.turn(false);
 		look.turn(true);
-		expect(window.painted).toEqual([fabrikaLight.colors.desk, fabrika.colors.desk]);
+		expect(window.painted).toEqual([
+			fabrikaLight.colors["surface-sunken"],
+			fabrika.colors["surface-sunken"],
+		]);
 	});
 
 	it("stops listening once the window has closed", () => {
@@ -84,7 +87,7 @@ describe("the window's frame takes the desk's color in the system's look", () =>
 					expect({painted: window.painted, listeners: look.listeners}).toEqual({
 						painted: changes
 							.slice(0, cut)
-							.map((dark) => (dark ? fabrika : fabrikaLight).colors.desk),
+							.map((dark) => (dark ? fabrika : fabrikaLight).colors["surface-sunken"]),
 						listeners: 0,
 					});
 				},

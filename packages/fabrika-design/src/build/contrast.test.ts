@@ -1,3 +1,4 @@
+import {readFileSync} from "node:fs";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {fabrika, fabrikaLight} from "../themes.ts";
@@ -167,8 +168,11 @@ describe("it agrees with the second implementation", () => {
 
 	it("on every theme color over each solid page of its look, and over a hovered row", () => {
 		const pairs = [fabrika.colors, fabrikaLight.colors].flatMap((colors) => {
-			const pages = [colors.desk, colors.ground, colors.raised];
-			const backdrops = [...pages, ...pages.map((page) => referenceOver(colors.hover, page))];
+			const pages = [colors["surface-sunken"], colors.surface, colors["surface-raised"]];
+			const backdrops = [
+				...pages,
+				...pages.map((page) => referenceOver(colors["surface-hover"], page)),
+			];
 			return Object.values(colors).flatMap((fg) => backdrops.map((bg) => [fg, bg] as const));
 		});
 		expect(pairs.length).toBeGreaterThan(100);
@@ -445,6 +449,60 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 				}
 			}),
 			RUNS,
+		);
+	});
+	// T11/T13 use the real cap-setting input. Plant: ignore the cap, or use < instead of <=.
+	it("T11 falls back just below the measured cap and nudges at and above it", async () => {
+		const {Result} = await import("effect");
+		const {decodeTheme} = await import("../theme.ts");
+		const {pairs} = await import("../theme-contract.ts");
+		const {check} = await import("./contrast.ts");
+		const report = JSON.parse(
+			readFileSync(
+				new URL("../../../../fixtures/themes/calibration.json", import.meta.url),
+				"utf8",
+			),
+		) as {
+			version: string;
+			cap: number;
+			setsCap: {theme: string; token: keyof typeof fabrika.colors; now: string};
+		};
+		const input = Result.getOrThrow(
+			decodeTheme(
+				readFileSync(
+					new URL(
+						`../../../../fixtures/themes/mapped/${report.setsCap.theme}.toml`,
+						import.meta.url,
+					),
+					"utf8",
+				),
+			),
+		);
+		const token = report.setsCap.token;
+		const requirements = pairs.filter((pair) => pair.token === token);
+		const builtin = input.look === "light" ? fabrikaLight : fabrika;
+		expect(requirements.length).toBeGreaterThan(0);
+		fc.assert(
+			fc.property(fc.double({min: 1e-10, max: 1e-6, noNaN: true}), (distance) => {
+				for (const side of [-1, 0, 1]) {
+					const result = check(
+						input,
+						requirements,
+						{fix: "nudge", contrast: 4.5},
+						{
+							version: report.version,
+							cap: report.cap + side * distance,
+						},
+					);
+					expect(result.changes.some((change) => change._tag === "builtin")).toBe(side < 0);
+					expect(result.shown.colors[token]).toBe(
+						side < 0 ? builtin.colors[token] : report.setsCap.now,
+					);
+					expect({...result.shown.colors, [token]: input.colors[token]}).toEqual(input.colors);
+					expect(result.shown.terminal).toEqual(input.terminal);
+				}
+			}),
+			{seed: 119120, numRuns: 150},
 		);
 	});
 	it("T11 never reports a failed replacement as passing", async () => {

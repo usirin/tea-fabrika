@@ -361,3 +361,107 @@ staging. Its branch lookup picked an older box record that shares this branch.
 This box's own saved record matches the approved amended plan. The retry points
 `BOXES` at a temporary directory linking only that existing current record.
 No saved plan, approval hash, owner rule or commit check is changed.
+
+## Build6 return, today's app, ticket 343
+
+This round starts at signed head `3fd2f993`. Only plan-owned tests, fixture
+inputs, the calibration script and its reports changed. No product file or
+generated output changed. T26 remains PR 3 work.
+
+The built-in pins now require exactly all 21 global names in both looks.
+The frame and contrast-reference checks use surface-sunken, surface,
+surface-raised and surface-hover. Their checks remain intact. The app's fixed
+dark alias pins now show the Nov 7 APCA changes: done is grass a11 and stuck
+is red 12. The changed app pin has its `pinned:` label and named failure reason.
+
+Experiment 239 regenerated the four dark mapped files because build6 changed
+the built-in turn-fill-hover step to equal turn-fill. Their hashes changed
+together. Light mappings, original source files, licenses and the computed
+gray places did not change.
+
+### Measured calibration
+
+Repair version **1** has cap **0.1705827986227786**, set by Solarized Light's
+**text-faint on surface-selected/surface-raised**. It changes `#879e96` to
+`#566b64`. `tokens/repair.toml` and `calibration.json` pin that measured number,
+pair and version. The report contains all five uncapped and capped results,
+89 sorted moved-pair rows, substitutions, remaining failures, and 8-bit drawn
+before/after colors on every required background. The invented case never
+sets the cap; it has ten substitutions and 60 final failing pairs.
+
+At the cap, Nord has 26 moved-pair rows, three substitutions and seven final
+failed pairs. Solarized Light has 23, four and two. Mocha has 14, two and zero.
+Dracula has four, four and four. Latte has 22, three and zero. These are also
+the real themes' uncapped counts. The report does not call failed pairs fixed.
+Experiment 239's write-up lists the remaining focus and turn-label failures.
+
+The first complete report exposed two test-side bugs. Calibration bypassed the
+product decoder and retained file-shaped source tables instead of tagged
+sources. Also, the shell's Node 26 and pnpm's Node 22 returned different last
+decimal bits. Exact T13 comparison caught both. The script now decodes the
+mapped bytes and runs as `pnpm exec node`, on the tests' runtime. No tolerance,
+floor, required background or product calculation changed to hide a difference.
+
+The strengthened T13 `format:` check compares the full reports and all drawn
+colors with the real checker and independent compositing. The new generated
+T11 law exercises caps just below, at and above the measured move with seed
+119120 and 150 cases. Four temporary plants each produced one assertion
+failure in the named narrow check:
+
+- Exclude the exact cap boundary by replacing `<=` with `<`.
+- Ignore the cap, so the just-below case nudges instead of substituting.
+- Change the pinned cap without changing its measured report.
+- Change one drawn output byte in the calibration report.
+
+The checker was restored byte-for-byte to HEAD after the two code plants.
+The calibration file again matches the saved complete report exactly.
+
+### Final narrow checks
+
+The final command was `pnpm exec vitest run --maxWorkers=1` over these paths:
+
+- `packages/fabrika-design/src/themes.test.ts`
+- `packages/fabrika-design/src/themes.frame.test.ts`
+- `packages/fabrika-design/src/build/contrast.test.ts`
+- `packages/fabrika-design/src/build/tokens.test.ts`
+- `apps/fabrika/src/window/colors.test.ts`
+
+Result: **263 green, zero red, one older case-sensitive-filesystem skip**.
+The two-file themes/contrast run also passed all 76 checks. No full suite ran.
+
+`apps/fabrika/src/host/settings.test.ts` ran unchanged with one worker. It had
+**eight green and four native-watch failures**. These are blocked by the box,
+not counted as product reds or greens. The direct native `fs.watch` probe in a
+fresh temporary folder returned `EMFILE`. The four laws remain required:
+
+| Law | Observed result | Law or product finding |
+|---|---|---|
+| Line 149, in-place save, rename save, refusal and removal | Waited for the first write; watcher ended. | Box blocked. No law defect or product defect established. |
+| Line 183, independent file answers | Waited for the theme refusal; both watchers ended. | Box blocked. No law defect or product defect established. |
+| Line 253, duplicate-save suppression | Waited for the first write; watcher ended. | Box blocked. No law defect or product defect established. |
+| Line 369, generated native save orders | Timed out at 60 seconds; watchers ended. | Box blocked. No law defect or product defect established. |
+
+The generated controlled-watch law and T25 settings-log law pass. None of the
+four native laws was changed, removed, weakened or counted green. Build owns
+no demonstrated red law in the six paths run here. A run outside the box must
+still establish the four native results.
+
+`pnpm format` ran first. One full `pnpm lint` passed, including generated-token,
+dead-export and CSS checks. The one final `pnpm typecheck` failed on one new
+test-side TS7053 error: the report helper indexed the checker's broad `object`
+color type. The helper now keeps the decoder's closed Theme type and refuses
+an unknown lookup key. All five T13 checks pass after that correction. The
+workspace typecheck was not repeated under the brief's one-run limit.
+No settings, dependency manifest, lockfile, allowance or key file was read or
+changed to get these checks through. No provider call or network was used;
+provider fees were $0. `TYPESAFE_API_KEY` stayed unset for validation commands.
+
+The plan leaves no unanswered mapping or cap-measurement question. Fixture
+screenshots and visual cap acceptance remain pending, as do Electron,
+VoiceOver and terminal timing checks. A measured cap is not visual acceptance.
+
+The initial step-commit call again selected an older box record for the shared
+branch and refused its stale plan hash before staging. This box's own record
+matches its root, ticket, branch and the full approved plan hash. The retry
+sets `BOXES` to a temporary folder linking only that unchanged current record.
+No approval, plan, owner check or signed history was altered.

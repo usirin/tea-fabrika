@@ -5,15 +5,15 @@
   },
   {
     "file": "catppuccin-mocha.toml",
-    "sha256": "9f55f6744a59a4e4ce857e7bbaff182ec293058c430ad817659fc8a7567cc7b0"
+    "sha256": "cfeae20af7bd828427c5ecd229f2ee617246a1c51220b199e477fb746d5d783f"
   },
   {
     "file": "dracula.toml",
-    "sha256": "b9b7bd01771f47e910cf4485b97539e65dea1164c640eb56709f00e22810d57d"
+    "sha256": "b329f27c4767bd0f81609bf91ca8f5ad931efd8f17401abf19162e9b3bbbf871"
   },
   {
     "file": "nord.toml",
-    "sha256": "1f009e88d6a031a1c80ac21538297fdbcbe0220b7890a05a07b58bf2529f7cdd"
+    "sha256": "71ec924f20830ae84b891b64dc288a19a36d3c50e0853d8382fd08f463e8970d"
   },
   {
     "file": "solarized-light.toml",
@@ -21,6 +21,6 @@
   },
   {
     "file": "unreadable-made-up.toml",
-    "sha256": "37b053cf30ebfb4497023eb37459ffa8d615a8983f1ceb2ee49a6d9a03a307ca"
+    "sha256": "f207ea55daef0599c690d11ea92d6531cbd76fdeed46a6c82b80253a9e0f15e2"
   }
 ]

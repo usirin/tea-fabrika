@@ -12,9 +12,9 @@ The six mapped inputs use all 21 global names. `laws.ts` owns decision 0009's
 independent gray derivation; experiment 239 uses it for every kept input.
 `mapped-hashes.json` pins the resulting bytes. The source files are unchanged.
 
-Calibration reaches the shared checker but cannot finish three real themes:
-the built-in fallback still exports the old names and cannot resolve `turn-fg`.
-The invented case similarly stops at `text-faint`. `calibration.json` contains
-the errors and two completed uncapped reports. `tokens/repair.toml` remains
-`unmeasured`, with no shipping cap, cap-setting pair or calibrated version.
-Experiment 239 records the exact block and the pending visual review.
+Experiment 239 measured repair version `1` at cap `0.1705827986227786`.
+Solarized Light's `text-faint` on `surface-selected/surface-raised` sets it.
+`calibration.json` holds all five uncapped and capped reports, the invented
+result, sorted moves, substitutions, remaining failures and drawn colors.
+`tokens/repair.toml` pins the same version, cap and pair. Run calibration with
+`pnpm exec node` to use the tests' runtime. Visual review remains pending.

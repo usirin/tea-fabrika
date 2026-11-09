@@ -1,8 +1,8 @@
 # 239: measuring the theme repair cap
 
-Today's app, ticket 343, PR 1. Seed 119120. All 21 global names are now mapped.
-Measurement reached the shared checker, but its built-in fallback stops three
-real themes. The cap and its pair remain unmeasured.
+Today's app, ticket 343, PR 1. Seed 119120. Repair version `1` has a measured
+cap of **0.1705827986227786** in OKLCH lightness. Solarized Light sets it with
+`text-faint` on `surface-selected/surface-raised`. Visual acceptance is pending.
 
 ## Mapping by decision 0009
 
@@ -49,46 +49,72 @@ change the calibration inputs.
 Commands, with `TYPESAFE_API_KEY` unset and no provider calls:
 
 ```sh
-node experiments/239-theme-repair.ts --map
-node experiments/239-theme-repair.ts --output runs/themes-tests9-repair.json
+pnpm exec node experiments/239-theme-repair.ts --map
+pnpm exec node experiments/239-theme-repair.ts --output runs/themes-tests10-repair.json
 ```
 
-The second command exits 1 after saving the incomplete report. It checks the
-mapped bytes against the oracle, then gives the checker the whole lightness
-interval. Text must meet WCAG 4.5 and APCA magnitude 60; non-text must meet WCAG
-3 and APCA magnitude 15. Substitutions and final failures are retained even in
-the uncapped pass. A pair with no feasible lightness move cannot set the cap.
+Both commands exit 0. The script checks mapped bytes against the oracle, decodes
+them through the product decoder, and gives the shared checker the whole
+lightness interval before applying a cap. Text must meet WCAG 4.5 and APCA
+magnitude 60; non-text must meet WCAG 3 and APCA magnitude 15. The largest finite
+minimal move from the five real sources sets the cap. A token with no feasible
+move cannot set it. The invented case is checked afterward and cannot enlarge it.
 
-| Input | Uncapped outcome |
-|---|---|
-| Nord | Stops at `no color: turn-fg` during built-in fallback. |
-| Solarized Light | Stops at `no color: turn-fg` during built-in fallback. |
-| Catppuccin Mocha | Completes: 14 moved-pair rows, 2 substitutions, 12 remaining failing pairs. |
-| Dracula | Stops at `no color: turn-fg` during built-in fallback. |
-| Catppuccin Latte | Completes: 22 moved-pair rows, 3 substitutions, 0 remaining failing pairs. |
-| Invented unreadable case | Stops at `no color: text-faint` during built-in fallback. Never sets the cap. |
+| Input | Moved pairs | Moved tokens | Substitutions | Final failed pairs |
+|---|---:|---:|---:|---:|
+| Nord | 26 | 4 | 3 | 7 |
+| Solarized Light | 23 | 4 | 4 | 2 |
+| Catppuccin Mocha | 14 | 2 | 2 | 0 |
+| Dracula | 4 | 2 | 4 | 4 |
+| Catppuccin Latte | 22 | 4 | 3 | 0 |
+| Invented unreadable case | 0 | 0 | 10 | 60 |
 
-The complete inputs contain `turn-fg` and `text-faint`. The failure is in the
-built-in fallback lookup: `themes.ts` and `theme-colors.ts` still expose the old
-15-name map, with `on-turn` and `faint`. These are builder-owned files. The two
-completed reports do not establish a cap for all five real sources.
+The real themes have the same counts before and after applying the measured cap.
+The 89 moved-pair rows are sorted by their measured move in `calibration.json`.
+The cap-setting repair changes `#879e96` to `#566b64` on drawn background
+`#e6e6d2`. WCAG rises from 2.256924311674268 to 4.511247442356628; signed APCA
+rises from 39.10771089509601 to 62.97441476324208. The lightness move is
+0.1705827986227786. These are measured values, without rounding before comparison.
 
-`fixtures/themes/calibration.json` keeps both complete reports, their sorted
-finite moves, all four errors, mapped hashes, generated-CSS hash, pair list,
-policy, and the attempted algorithm version `1`. `tokens/repair.toml` records
-the same block and points to that report. Neither file assigns a shipping cap,
-a cap-setting pair, or a calibrated repair version. No number was invented.
+Nord's remaining failures are five focus pairs and two turn-label pairs.
+Solarized Light retains two turn-label failures. Dracula retains two focus and
+two turn-label failures. Those backgrounds cannot move under this policy, and
+the required built-in substitutions do not fix those pairs. The report keeps
+every failure rather than calling those themes repaired successfully.
 
-After build provides complete built-in values, tests must regenerate the mapped
-files if the generated values changed, rerun all six inputs, and review the
-results. The largest finite minimal move from the five real themes then sets
-the first cap. The invented case is checked with that cap afterward. T13 compares
-the cap, its pair, version, hashes, uncapped moves, capped reports and invented
-report against the actual checker. Its `format:` reason is that calibration must
-use these five real source files. T26 remains PR 3 work.
+`calibration.json` records version `1`, the cap and its pair, source metadata,
+mapped hashes, generated-CSS hash, pair list, policy, all five uncapped reports,
+the capped reports, and the invented result. It also records final 8-bit drawn
+foregrounds before and after repair on every required background. `repair.toml`
+pins the measured version, cap and pair. T13 compares all these reports against
+the real checker; generated T11 cases exercise caps just below, at and above
+this measured move. T26 remains PR 3 work.
 
-No screenshots, visual cap review, VoiceOver or Electron run were performed.
-Provider fees were $0. This report does not accept a cap.
+Run calibration through `pnpm exec node`, as Vitest does. The shell's Node 26 and
+pnpm's Node 22 produced different last decimal bits. The first complete attempt
+also bypassed the decoder and kept file-shaped source tables instead of the
+decoded tagged source. Exact T13 report comparison caught both test-side bugs.
+The script now measures decoded themes on the same runtime as the tests. No
+comparison tolerance or product math changed to hide them.
+
+## Earlier incomplete attempt
+
+The tests9 run could not finish Nord, Solarized Light or Dracula because the
+built-in fallback lacked `turn-fg`; the invented case lacked `text-faint`.
+Mocha finished with 14 moved-pair rows, 2 substitutions and 12 final failures;
+Latte finished with 22, 3 and 0. No cap was assigned from those partial results.
+Build6 supplied all 21 fallback names. Its dark hover step changed to indigo 9,
+so this run regenerated the four dark mapped files and their hashes. The six
+note places and four computed gray places did not change. Original source and
+license bytes remain unchanged.
+
+## What this cannot tell us
+
+The number is measured, but fixture screenshots and visual acceptance remain
+pending. No Electron, VoiceOver or four-terminal timing run was performed here.
+Five real sources do not establish that this cap suits every imported theme.
+Some backgrounds still make the required floors impossible under this policy.
+Calibration used no model calls or network. Provider fees were $0.
 
 References: [themes note](../docs/direction/themes.md),
 [decision 0009](../.decisions/0009-imported-themes-derive-their-grays.md),

@@ -45,16 +45,22 @@ const LOOKS: readonly Look[] = ["dark", "light"];
 
 /** The note's `[colors]` for `fabrika`, as written there. */
 const DARK = {
-	desk: "#0c0d0e", // not a step: nothing in slate is darker than 1
-	ground: "#111113", // slate 1
-	raised: "#18191b", // slate 2
-	hover: "#ddeaf814", // slate a3
-	edge: "#d3edf81d", // slate a4
+	"surface-sunken": "#0c0d0e", // not a step: nothing in slate is darker than 1
+	surface: "#111113", // slate 1
+	"surface-raised": "#18191b", // slate 2
+	"surface-hover": "#ddeaf814", // slate a3
+	"surface-selected": "#d9edfe25", // slate a5
+	"border-faint": "#d3edf81d", // slate a4
+	border: "#d6ebfd30", // slate a6
+	"border-strong": "#d9edff40", // slate a7
+	wire: "#d9edff5d", // slate a8
+	scrim: "#00000099", // black a8, the approved overlay
 	focus: "#dfebfd6d", // slate a9: a8 reads 2.82 on a selected row
-	text: "#edeef0", // slate 12
-	faint: "#f1f7feb5", // slate a11
+	"text-primary": "#edeef0", // slate 12
+	"text-faint": "#f1f7feb5", // slate a11
 	"turn-fill": "#3e63dd", // indigo 9
-	"on-turn": "#ffffff", // Radix's rule for text on step 9
+	"turn-fill-hover": "#3e63dd", // T343: indigo 10 -> 9, both floors for white labels
+	"turn-fg": "#ffffff", // Radix's rule for text on step 9
 	"turn-text": "#d6e1ff", // T343: indigo 11 -> 12, Lc 60 on every row
 	done: "#89ff9fcd", // T343: grass 11 -> a11, Lc 60 on every row
 	running: "#ffca16", // amber 11
@@ -68,16 +74,22 @@ const DARK = {
  * on a hovered and a selected row too: grass 12, red 12 and indigo a11.
  */
 const LIGHT = {
-	desk: "#f9f9fb", // slate 2
-	ground: "#fcfcfd", // slate 1
-	raised: "#fcfcfd", // slate 1
-	hover: "#0000330f", // slate a3
-	edge: "#00002d17", // slate a4
+	"surface-sunken": "#f9f9fb", // slate 2
+	surface: "#fcfcfd", // slate 1
+	"surface-raised": "#fcfcfd", // slate 1
+	"surface-hover": "#0000330f", // slate a3
+	"surface-selected": "#0009321f", // slate a5
+	"border-faint": "#00002d17", // slate a4
+	border: "#00002f26", // slate a6
+	"border-strong": "#00062e32", // slate a7
+	wire: "#00083046", // slate a8
+	scrim: "#00000066", // black a6, the approved overlay
 	focus: "#00051d74", // slate a9: a8 reads 1.90
-	text: "#1c2024", // slate 12
-	faint: "#0007149f", // slate a11
+	"text-primary": "#1c2024", // slate 12
+	"text-faint": "#0007149f", // slate a11
 	"turn-fill": "#3e63dd", // indigo 9
-	"on-turn": "#ffffff",
+	"turn-fill-hover": "#3358d4", // indigo 10
+	"turn-fg": "#ffffff",
 	"turn-text": "#002bb7c5", // indigo a11: indigo 11 reads 4.47 on a selected row
 	done: "#203c25", // grass 12: grass 11 reads 4.34 on a hovered row
 	running: "#4f3422", // amber 12: amber 11 reads 4.38
@@ -162,63 +174,63 @@ const both = (name: keyof typeof DARK) => ({dark: DARK[name], light: LIGHT[name]
  * owner picks that step by eye (principle 8).
  */
 const TOKENS: Record<string, Record<Look, string>> = {
-	"--surface-sunken": both("desk"),
-	"--surface": both("ground"),
-	"--surface-raised": both("raised"),
-	"--surface-hover": both("hover"),
+	"--surface-sunken": both("surface-sunken"),
+	"--surface": both("surface"),
+	"--surface-raised": both("surface-raised"),
+	"--surface-hover": both("surface-hover"),
 	"--surface-selected": SELECTED,
-	"--border-faint": both("edge"),
+	"--border-faint": both("border-faint"),
 	"--border": BORDER,
 	"--border-strong": BORDER_STRONG,
 	"--wire": WIRE,
 	"--focus": both("focus"),
-	"--text-primary": both("text"),
-	"--text-faint": both("faint"),
+	"--text-primary": both("text-primary"),
+	"--text-faint": both("text-faint"),
 	"--turn-text": both("turn-text"),
 	"--turn-fill": both("turn-fill"),
 	"--turn-fill-hover": TURN_HOVER,
-	"--turn-fg": both("on-turn"),
+	"--turn-fg": both("turn-fg"),
 	"--done": both("done"),
 	"--running": both("running"),
 	"--stuck": both("stuck"),
 	"--closed": both("closed"),
 	// A tile's own names (tile guidelines): each points at a theme token, so a brought theme
 	// repaints a tile.
-	"--tile-edge": both("edge"),
+	"--tile-edge": both("border-faint"),
 	"--tile-edge-on": both("focus"),
 	"--tile-edge-hover": BORDER_STRONG,
-	"--tile-edge-loud": both("faint"),
-	"--tile-text": both("faint"),
-	"--tile-text-on": both("text"),
+	"--tile-edge-loud": both("text-faint"),
+	"--tile-text": both("text-faint"),
+	"--tile-text-on": both("text-primary"),
 	"--tile-wash": WASH,
-	"--tile-wash-on": both("hover"),
+	"--tile-wash-on": both("surface-hover"),
 	// Manti's tokens, set from ours (ui-on-manti, section 3).
-	"--manti-bg": both("desk"),
-	"--manti-bg-subtle": both("ground"),
-	"--manti-surface": both("ground"),
-	"--manti-surface-raised": both("raised"),
-	"--manti-surface-sunken": both("desk"),
+	"--manti-bg": both("surface-sunken"),
+	"--manti-bg-subtle": both("surface"),
+	"--manti-surface": both("surface"),
+	"--manti-surface-raised": both("surface-raised"),
+	"--manti-surface-sunken": both("surface-sunken"),
 	"--manti-border": BORDER,
 	"--manti-border-strong": BORDER_STRONG,
-	"--manti-text": both("text"),
-	"--manti-text-muted": both("faint"),
-	"--manti-text-subtle": both("faint"),
-	"--manti-link": both("text"), // the accent says your turn and nothing else (flag 4)
-	"--manti-fill-subtle": both("hover"),
-	"--manti-fill": both("hover"),
+	"--manti-text": both("text-primary"),
+	"--manti-text-muted": both("text-faint"),
+	"--manti-text-subtle": both("text-faint"),
+	"--manti-link": both("text-primary"), // the accent says your turn and nothing else (flag 4)
+	"--manti-fill-subtle": both("surface-hover"),
+	"--manti-fill": both("surface-hover"),
 	"--manti-fill-strong": SELECTED,
 	"--manti-focus-ring": both("focus"),
 	"--manti-selection-bg": {dark: TERMINALS.dark.selection, light: TERMINALS.light.selection},
-	"--manti-selection-text": both("text"),
+	"--manti-selection-text": both("text-primary"),
 	"--manti-accent-fill": both("turn-fill"),
-	"--manti-text-on-accent": both("on-turn"),
+	"--manti-text-on-accent": both("turn-fg"),
 	"--manti-danger-text": both("stuck"),
 	"--manti-danger-icon": both("stuck"),
 	"--manti-danger-border": both("stuck"),
 	"--manti-warning-text": both("running"),
-	"--manti-panel-tint": both("raised"),
-	"--manti-panel-tint-strong": both("raised"),
-	"--manti-panel-tint-pressed": both("hover"),
+	"--manti-panel-tint": both("surface-raised"),
+	"--manti-panel-tint-strong": both("surface-raised"),
+	"--manti-panel-tint-pressed": both("surface-hover"),
 	"--manti-panel-border": BORDER,
 };
 
@@ -1056,6 +1068,10 @@ describe("T13 kept source bytes and versioned calibration", () => {
 			uncapped: {name: string; sha256: string; result: unknown}[];
 			themes: {name: string; result: unknown}[];
 			unreadable: {result: unknown};
+			rendered: {
+				name: string;
+				pairs: {token: string; on: string; background: string; was: string; now: string}[];
+			}[];
 		};
 		const token = parse(readFileSync(repair, "utf8"));
 		expect(
@@ -1080,7 +1096,7 @@ describe("T13 kept source bytes and versioned calibration", () => {
 		const {decodeTheme} = await import("./theme.ts");
 		const {check} = await import("./build/contrast.ts");
 		const {pairs} = await import("./theme-contract.ts");
-		const {lab} = await import("@kampus/themes-fixture/laws");
+		const {composite, flatten, lab} = await import("@kampus/themes-fixture/laws");
 		expect(report.pairs).toEqual(pairs);
 		const realNames = [
 			"nord",
@@ -1118,12 +1134,41 @@ describe("T13 kept source bytes and versioned calibration", () => {
 			}
 		}
 		expect(report.moves).toEqual(measuredMoves.sort((a, b) => a.move - b.move));
+		expect(report.rendered.map(({name}) => name).sort()).toEqual(
+			[...realNames, "unreadable-made-up"].sort(),
+		);
 		for (const {name, result} of [
 			...report.themes,
 			{name: "unreadable-made-up", result: report.unreadable.result},
 		]) {
-			const written = Result.getOrThrow<Parameters<typeof check>[0], unknown>(
+			const written = Result.getOrThrow(
 				decodeTheme(readFileSync(join(fixture, "mapped", `${name}.toml`), "utf8")),
+			);
+			const shown = (result as {shown: typeof written}).shown;
+			const drawn = report.rendered.find((row) => row.name === name);
+			expect(drawn?.pairs).toEqual(
+				pairs.map(({token, on}) => {
+					const color = (theme: typeof written, key: string) => {
+						if (key === "cursor") return theme.terminal.cursor;
+						if (key === "terminal.background") return theme.terminal.background;
+						const value = Object.entries(theme.colors).find(([name]) => name === key)?.[1];
+						if (value === undefined) throw new Error("report names an unknown global color");
+						return value;
+					};
+					const background = flatten(
+						on
+							.split("/")
+							.reverse()
+							.map((key) => color(written, key)),
+					);
+					return {
+						token,
+						on,
+						background,
+						was: composite(color(written, token), background),
+						now: composite(color(shown, token), background),
+					};
+				}),
 			);
 			expect(
 				check(
