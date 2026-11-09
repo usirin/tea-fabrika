@@ -2879,19 +2879,18 @@ main.program:has(> .view) {
 }
 
 /* Line two: the rec line, then the optional mark, quiet, at its end. */
+/* Line two flows as one run of text. A long hint (a blind ask's "Your pick first: …") wraps like
+   words, and "Did this need you?" goes on after its last word where it fits, never on a line of its
+   own while the hint's line has room. The pair of marks moves as one piece. */
 .ask-rec {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: var(--s-1) var(--s-3);
-	font-size: var(--fs-small);
-}
-.ask-recwords {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 0 var(--s-1);
 	min-inline-size: 0;
+	font-size: var(--fs-small);
+	line-height: 1.5;
+}
+.ask-view .ask-recwords {
+	display: inline;
+	margin-inline-end: var(--s-2);
+	overflow-wrap: normal;
 }
 .ask-recwords strong {
 	font-weight: 600;
@@ -2914,7 +2913,6 @@ main.program:has(> .view) {
 	min-inline-size: 0;
 }
 .ask-toolbar,
-.ask-marks,
 .ask-row {
 	display: flex;
 	flex-wrap: wrap;
@@ -2932,17 +2930,21 @@ main.program:has(> .view) {
 		display: none;
 	}
 }
-/* Narrow, the marks drop under the rec's words, at the start. Narrower still, the pair drops under
-   its question, both buttons together: never one button to a line. */
+/* The marks' question keeps its words together; narrow, it drops under the rec's words at the
+   start, and the pair drops under its question, both buttons together: never one to a line. */
 .ask-marks {
-	min-inline-size: 0;
-	gap: var(--s-1) var(--s-2);
+	display: inline;
+}
+.ask-marks > span[aria-hidden] {
+	margin-inline-end: var(--s-2);
+	white-space: nowrap;
 }
 .ask-mark-pair {
-	display: flex;
+	display: inline-flex;
 	flex-wrap: nowrap;
 	align-items: center;
-	gap: var(--s-3);
+	gap: var(--s-2);
+	vertical-align: middle;
 	white-space: nowrap;
 }
 .ask-view button {
@@ -2963,6 +2965,10 @@ main.program:has(> .view) {
 }
 /* The marks are quiet: small words, and a pressed one takes the selected fill and its check. */
 .ask-marks [data-scope="button"] {
+	/* A 24px target (WCAG 2.5.8) that takes a text line's height in the flow: the line under the
+	   marks starts where it would under words. */
+	min-block-size: 24px;
+	margin-block: -4px;
 	color: var(--text-faint);
 }
 .ask-marks [aria-pressed="true"] {
@@ -3002,6 +3008,19 @@ main.program:has(> .view) {
 /* Manti's field draws the note's one box and its focus: the textarea inside draws neither. */
 .ask-view textarea:focus-visible {
 	outline: none;
+}
+/* One ring, not two: focused, Manti's field turns its 1px border the ring's color and draws its
+   2px ring 2px outside it, two lines with a gap. Here the ring lies over the border instead, so a
+   person sees one 2px line. The field's side padding moves into the textarea, so the ring hugs the
+   box the words are typed in. */
+.ask-note [data-scope="field"][data-part="control"] {
+	padding-inline: 0;
+}
+.ask-note [data-scope="field"][data-part="input"] {
+	padding-inline: var(--manti-field-padding-x);
+}
+.ask-note [data-scope="field"][data-part="control"]:has([data-part="input"]:focus-visible) {
+	outline-offset: -1px;
 }
 
 /* A failed save is a line under the bar, not a red box: its mark, its words, Try again. */
@@ -3055,6 +3074,13 @@ main.program:has(> .view) {
 	white-space: nowrap;
 }
 
+/* The asks menu is wider than a panel of a few lines: an open row holds the whole ask. At 360px its
+   words took five lines; at 660px, a little wider than the command palette, they take three: the
+   actions, the rec line with "Did this need you?" and its marks, then Evidence. */
+#pop-asks.panel {
+	width: min(660px, calc(100% - 2 * var(--s-2)));
+}
+
 /* In the asks menu a row is a row: padded off the menu's edge, and its ask has no card of its own. */
 .asks-row {
 	padding: var(--s-1) var(--s-2);
@@ -3073,9 +3099,22 @@ main.program:has(> .view) {
 	gap: var(--s-1);
 }
 
-/* A row's question lines up with the words under it: a button by role, plain text by look. */
+/* A row's question lines up with the words under it: a button by role, plain text by look. A
+   closed row is two tight lines, the question and its ticket's title right under it: the button
+   keeps no control height of its own. */
+/* The row's own lines carry no paragraph margins: the browser's 1em under the question was the
+   blank band between it and its title. */
+.asks-row [role="gridcell"] > p {
+	margin: 0;
+}
 .asks-row .asks-title {
+	display: flex;
+	inline-size: fit-content;
+	max-inline-size: 100%;
+	min-block-size: 0;
+	padding-block: 0;
 	padding-inline: 0;
+	line-height: 1.5;
 	justify-content: flex-start;
 	text-align: start;
 	font-weight: 500;

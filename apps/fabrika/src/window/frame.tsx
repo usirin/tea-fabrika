@@ -491,6 +491,32 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 				? {type: "back", key: row.id}
 				: {type: "later", key: row.id},
 		);
+	/**
+	 * A row's own two actions. On an ask they end the ask's toolbar (`toolbar`), so all its actions
+	 * share one row and the toolbar keeps its one tab stop; a stuck row draws them alone.
+	 */
+	const rowActs = (row: (typeof rows)[number], toolbar: boolean) => (
+		<>
+			<Button
+				size="sm"
+				variant="outline"
+				tabIndex={toolbar ? -1 : undefined}
+				onClick={() => open({id: row.key})}
+			>
+				{row.kind === "stuck" ? "Open lane" : "Open ticket"}
+				<Kbd size="sm">↵</Kbd>
+			</Button>
+			<Button
+				size="sm"
+				variant="outline"
+				tabIndex={toolbar ? -1 : undefined}
+				onClick={() => aside({id: row.key})}
+			>
+				{asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
+				<Kbd size="sm">h</Kbd>
+			</Button>
+		</>
+	);
 	return (
 		<Panel id={POP.asks} label="Asks" onClose={close}>
 			<AskStatus>
@@ -562,27 +588,24 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 									<p>
 										<WordsOf words={labels.get(row.key)?.sub ?? ""} />
 									</p>
-									{row.key === active?.key && (
+									{row.key !== active?.key ? null : row.kind === "ask" &&
+									  row.sealed !== undefined ? (
+										<AskView
+											key={row.key}
+											ticket={row.ticket}
+											ask={row.sealed}
+											place="menu"
+											acts={rowActs(row, true)}
+										/>
+									) : (
 										<>
-											{row.kind === "ask" && row.sealed !== undefined && (
-												<AskView key={row.key} ticket={row.ticket} ask={row.sealed} place="menu" />
-											)}
 											{row.kind === "stuck" && (
 												<p>
 													{row.why ?? "State not recorded"} · resume at{" "}
 													{row.resume ?? "the saved step"}
 												</p>
 											)}
-											<div className="asks-acts">
-												<Button size="sm" variant="outline" onClick={() => open({id: row.key})}>
-													{row.kind === "stuck" ? "Open lane" : "Open ticket"}
-													<Kbd size="sm">↵</Kbd>
-												</Button>
-												<Button size="sm" variant="outline" onClick={() => aside({id: row.key})}>
-													{asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
-													<Kbd size="sm">h</Kbd>
-												</Button>
-											</div>
+											<div className="asks-acts">{rowActs(row, false)}</div>
 										</>
 									)}
 								</div>

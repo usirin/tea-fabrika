@@ -581,10 +581,17 @@ export function AskView({
 	ticket,
 	ask,
 	place = "ticket",
+	acts,
 }: {
 	readonly ticket: number;
 	readonly ask: AskShown;
 	readonly place?: AskPlace;
+	/**
+	 * The place's own actions for this ask (the menu's Open ticket and Later), drawn at the end of
+	 * the answer's toolbar, so every action of the ask sits in one row. Each passes `tabIndex={-1}`:
+	 * the toolbar keeps one tab stop, and its arrows reach them.
+	 */
+	readonly acts?: ReactNode;
 }) {
 	const actions = useContext(AskActions);
 	const says = useContext(Says);
@@ -592,6 +599,7 @@ export function AskView({
 	/** The program the view sits in, kept from its mount: an answered view draws nothing. */
 	const program = useRef<HTMLElement | null>(null);
 	const note = useRef<HTMLTextAreaElement>(null);
+	const alert = useRef<HTMLDivElement>(null);
 	const ctx = useRef({ticket, ask: askShownOf(ask), now: Date.now()}).current;
 	const [model, send] = useMachine(askMachine, {
 		run,
@@ -651,6 +659,14 @@ export function AskView({
 	useEffect(() => {
 		if (view.editor._tag === "note") note.current?.focus();
 	}, [view.editor._tag]);
+	const failing = view.failure !== null && !view.busy;
+	// A failed save says so where a person is looking: its line scrolls into the tile's view, the
+	// least distance that shows it, with no motion for those who asked for less.
+	useEffect(() => {
+		if (!failing) return;
+		const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		alert.current?.scrollIntoView({block: "nearest", behavior: still ? "auto" : "smooth"});
+	}, [failing]);
 	const command = (name: AskCommand["_tag"], key = "click") =>
 		send({...ASK_COMMANDS[name].send, key, now: Date.now()});
 	const onKey = (e: KeyboardEvent) => {
@@ -794,6 +810,7 @@ export function AskView({
 							</Button>
 						);
 					})}
+					{acts}
 				</div>
 			</div>
 			<div className="ask-rec">
@@ -937,8 +954,8 @@ export function AskView({
 				</form>
 			)}
 			{view.busy && <p className="ask-quiet">Saving your answer…</p>}
-			{view.failure !== null && !view.busy && (
-				<div className="ask-fail" role="alert">
+			{failing && view.failure !== null && (
+				<div ref={alert} className="ask-fail" role="alert">
 					{FAILED}
 					<p>
 						<strong>Not saved.</strong> {failureWords(view.failure)}
