@@ -1,6 +1,4 @@
 # packages: what other code may build on. programs: one runnable tea program each.
-# wip: everything not yet pulled out. legacy: the first-generation factory.
-# packs: add-on packs, wired to the core by one config line; the core names none.
 # docs/tutorials: a tutorial's finished files, type-checked so it cannot drift.
 # apps: what a person opens, on top of everything else. Nothing imports an app.
 # experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
@@ -14,11 +12,9 @@ packages:
   - apps/*
   - packages/*
   - programs/*
-  - packs/*
   - docs/tutorials/*
   - oxlint-plugins
-  - wip
-  - legacy
+  - .github/ci
   - experiments/142-web-terminals
   - experiments/171-alchemy-local-twin
   - experiments/173-worker-loader

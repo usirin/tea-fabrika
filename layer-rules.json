@@ -76,18 +76,6 @@
 			]
 		},
 		{
-			"name": "packs",
-			"paths": ["packs"]
-		},
-		{
-			"name": "legacy",
-			"paths": ["legacy"]
-		},
-		{
-			"name": "wip",
-			"paths": ["wip"]
-		},
-		{
 			"name": "programs",
 			"paths": ["programs"]
 		},
