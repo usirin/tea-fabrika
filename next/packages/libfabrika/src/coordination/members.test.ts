@@ -23,6 +23,21 @@ import {describe, expect, it} from "@effect/vitest";
 import {Result, Schema} from "effect";
 import * as fc from "fast-check";
 import {
+	DAY as EMAIL_DAY,
+	EPOCH as EMAIL_EPOCH,
+	LEDGER as EMAIL_LEDGER,
+	MembershipFlow,
+	RecoveryFlow,
+	added as emailAdd,
+	initial as emailInitial,
+	input as emailInput,
+	membershipView,
+	pureLaw,
+	pureModule,
+	requested as emailRequested,
+	type Row as EmailRow,
+} from "../email/email.test-support.ts";
+import {
 	admitted,
 	allows,
 	EMPTY,
@@ -35,6 +50,104 @@ import {
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 300;
+
+// P36's entry-aware path is separate from P9's timeless callers. These are P36 properties only;
+// the older P9 properties below retain their original generators and budgets.
+const emailMembers = pureModule(async () => {
+	const module = await import("./members.ts");
+	return module.foldMemberEntries;
+});
+const emailHistory = (flow: Parameters<typeof emailInitial>[0]): EmailRow[] => [
+	...emailInitial(flow).map((fact) => ({fact, arrivedAt: EMAIL_EPOCH - 2, parent: null})),
+	{
+		fact: {
+			_tag: "verified",
+			id: emailInput(1),
+			for: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+			to: EMAIL_LEDGER,
+			email: "email_checked",
+			key: "email-key",
+			signed: {signer: "person-0", text: "checked", armored: "checked"},
+		},
+		arrivedAt: EMAIL_EPOCH - 1,
+		parent: null,
+	},
+	{fact: emailRequested(flow), arrivedAt: EMAIL_EPOCH, parent: null},
+];
+pureLaw(
+	"P36.08 requested admits and drops nothing",
+	RecoveryFlow,
+	() => {
+		expect(emailMembers(), "missing P36 export foldMemberEntries").toBeTypeOf("function");
+	},
+	(flow, plant) => {
+		const rows = emailHistory(flow);
+		const before = foldMembers(emailInitial(flow));
+		const pending = emailMembers()(rows, EMAIL_LEDGER);
+		const after =
+			plant === "apply future add now"
+				? foldMembers([
+						...emailInitial(flow),
+						{
+							_tag: "added",
+							add: emailAdd(flow),
+							signed: {signer: "person-0", text: "checked", armored: "checked"},
+						},
+					])
+				: pending;
+		// Registering the email signing key is allowed; admitting or removing a dialing client is not.
+		for (const key of [
+			"window-0",
+			...Array.from({length: flow.live}, (_, n) => `agent-${n}`),
+			"new-window-0",
+		])
+			expect(admitted(after, key)).toEqual(admitted(before, key));
+		expect(after.person).toBe(before.person);
+		expect(after.name).toBe(before.name);
+	},
+	["apply future add now"],
+);
+pureLaw(
+	"P36.15 completion keeps equal roots, cascades selected drops and preserves founding",
+	MembershipFlow,
+	() => {
+		expect(emailMembers(), "missing P36 export foldMemberEntries").toBeTypeOf("function");
+	},
+	(flow, plant) => {
+		const rows = emailHistory(flow);
+		const add = emailAdd(flow);
+		const actual =
+			plant === "drop another device" ? {...add, drops: ["person-0", "person-1"]} : add;
+		rows.push({
+			fact: {
+				_tag: "added",
+				add: actual,
+				signed: {signer: "email-key", text: "checked", armored: "checked"},
+			},
+			arrivedAt: EMAIL_EPOCH + EMAIL_DAY,
+			parent: emailInput(200),
+		});
+		const members = emailMembers()(rows, EMAIL_LEDGER);
+		expect(admitted(members, "new-window-0")).toEqual({
+			key: "new-window-0",
+			person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+			as: "window",
+		});
+		expect(members.keys.get("new-person-0")?.under).toBeNull();
+		for (let n = 0; n < flow.live; n++) {
+			const live = flow.old === "kept" || n !== 0;
+			const admittedAgent =
+				plant === "leave removed agent live" && n === 0
+					? true
+					: "as" in admitted(members, `agent-${n}`);
+			expect(admittedAgent).toBe(live);
+		}
+		expect(membershipView(members).person).toBe("person_01m6v5270hf3c8x2q7w9z4k5mn");
+		expect(members.name).toBe("test home");
+	},
+	["drop another device", "leave removed agent live"],
+	(flow) => ({...flow, old: "lost", live: 4}),
+);
 
 // The ids are in the open id study's TypeID shape; the prefixes are made up (the plan's "Ids").
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";

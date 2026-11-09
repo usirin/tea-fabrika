@@ -865,12 +865,21 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
+      electron:
+        specifier: 'catalog:'
+        version: 45.2.1(supports-color@10.2.2)
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
+      miniflare:
+        specifier: 'catalog:'
+        version: 4.20260730.0
+      playwright:
+        specifier: 'catalog:'
+        version: 1.64.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

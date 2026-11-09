@@ -10,6 +10,7 @@
 		"./coordination": "./src/coordination/index.ts",
 		"./data": "./src/data/index.ts",
 		"./door": "./src/door/index.ts",
+		"./email": "./src/email/index.ts",
 		"./sqlite": "./src/data/sqlite.ts",
 		"./testing": "./src/testing.ts",
 		"./transport": "./src/transport/index.ts"

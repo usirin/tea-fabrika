@@ -373,6 +373,32 @@
 			}
 		},
 		{
+			// P36's two named test fixtures capture made-up secrets in memory. They never send
+			// real mail or choose a sender through the environment. They also drive Promise-only
+			// vitest, Playwright and Miniflare APIs, outside product code.
+			"files": [
+				"next/packages/libfabrika/src/email/email.test-support.ts",
+				"next/apps/fabrika/e2e/email.test-support.ts"
+			],
+			"rules": {
+				"fabrika/no-redacted-value": "off",
+				"fabrika/no-promises": "off",
+				"fabrika/no-effect-run-outside-edge": "off",
+				"fabrika/effect-functions": "off",
+				"fabrika/no-hand-tag": "off",
+				"typescript/no-non-null-assertion": "off"
+			}
+		},
+		{
+			// P36 private edges only: store code hashes/address references privately; pass an
+			// unwrapped address/code to Cloudflare's binding and key bytes to signing, nowhere else.
+			"files": [
+				"next/packages/libfabrika/src/email/store.ts",
+				"next/packages/libfabrika/src/workers/email.ts"
+			],
+			"rules": { "fabrika/no-redacted-value": "off" }
+		},
+		{
 			// Tests are left out: they await vitest, feed raw frames and may plant a broken view.
 			// `no-of` stays on, since a test names its helpers too.
 			// Tests also manufacture spans as input for the sink. Tracing plants use product paths.

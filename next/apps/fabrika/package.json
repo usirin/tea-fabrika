@@ -6,7 +6,7 @@
 	"description": "The new fabrika's app: wiring and the deploy stack. So far only src/exam/, which the exam pull requests write.",
 	"sideEffects": false,
 	"scripts": {
-		"typecheck": "tsc --noEmit -p ."
+		"typecheck": "tsc --noEmit -p . && tsc --noEmit --target esnext --module nodenext --moduleResolution nodenext --allowImportingTsExtensions --strict --skipLibCheck e2e.ts e2e/email.test.ts"
 	},
 	"dependencies": {
 		"@kampus/libfabrika": "workspace:*",
@@ -20,7 +20,10 @@
 		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
 		"esbuild": "catalog:",
+		"electron": "catalog:",
 		"fast-check": "catalog:",
+		"miniflare": "catalog:",
+		"playwright": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}

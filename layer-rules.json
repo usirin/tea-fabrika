@@ -37,12 +37,39 @@
 			"paths": ["next/packages/libfabrika/src/mcp"]
 		},
 		{
+			"name": "next-email-tests",
+			"paths": [
+				"next/packages/libfabrika/src/coordination/email.test.ts",
+				"next/packages/libfabrika/src/coordination/members.test.ts",
+				"next/packages/libfabrika/src/door/email.test.ts",
+				"next/packages/libfabrika/src/email/*.test.ts",
+				"next/packages/libfabrika/src/desktop/email.test.ts",
+				"next/packages/libfabrika/src/workers/email.test.ts"
+			]
+		},
+		{
+			"name": "next-email-test-support",
+			"paths": ["next/packages/libfabrika/src/email/email.test-support.ts"]
+		},
+		{
+			"name": "next-lib-desktop",
+			"paths": ["next/packages/libfabrika/src/desktop"]
+		},
+		{
+			"name": "next-workers",
+			"paths": ["next/packages/libfabrika/src/workers"]
+		},
+		{
 			"name": "next-door",
 			"paths": ["next/packages/libfabrika/src/door"]
 		},
 		{
 			"name": "next-app",
 			"paths": ["next/packages/libfabrika/src/app", "next/packages/libfabrika/src/testing.ts"]
+		},
+		{
+			"name": "next-email",
+			"paths": ["next/packages/libfabrika/src/email"]
 		},
 		{
 			"name": "next-coordination",
