@@ -324,6 +324,8 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 	});
 
 	// Plant: --commit-only skips the gates, signs anyway, or makes more than one commit.
+	// T321, 2026-11-08: all 30 repos took 69 s alone. Allow 180 s on the shared laptop;
+	// keep the run count, input sizes and fresh repo per case.
 	it("K4 --commit-only shares every gate and makes one unsigned commit; legacy calls still sign", () => {
 		fc.assert(
 			fc.property(word, (name) => {
@@ -364,7 +366,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 			}),
 			options,
 		);
-	});
+	}, 180_000);
 
 	// Plant: make the new flag an alias for the legacy commit-and-sign path.
 	it("K4 --commit-only makes a named owned commit without invoking the signer", () => {
