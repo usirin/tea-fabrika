@@ -103,7 +103,10 @@ person:<id> namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...
   request the owner approves. GitHub helps find the key and is never trusted for it
   ([a key per client](./a-key-per-client-and-no-github-trust.md)). Added by hand for now; from
   Tier 3, from the ledger's members.
-- **Exam files still need the owner's read,** and a person's commit is never `build_touched_exam`.
+- **Exam files get the lead's check,** and a person's commit is never `build_touched_exam`. Only
+  real loosening of a law waits on the owner
+  ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). *Changed 2026-11-09
+  (owner): it said exam files still need the owner's read.*
 - Ticket 251 builds it.
 
 ## Squash merges stay: each step signs a link from tree to tree
@@ -199,7 +202,8 @@ How sure: 85%. The owner decided it. The doubts are in the next section.
 - **A key on the laptop is only as private as the agent's reach.** In Tier 1 every agent of the
   session runs as the same user, so a builder with a shell could read the test writer's key and sign
   as it. The signature proves which key, not which agent, until each step runs in its own box
-  (Tier 5). The owner's read of every exam path is what holds the gap meanwhile.
+  (Tier 5). The lead's hand check and `loosening.sh` hold the gap meanwhile (0014). *It said: the
+  owner's read of every exam path.*
 - **A rebase breaks every proof.** Tested 2026-11-06: a plain rebase drops the note; git's
   `notes.rewriteRef` carries it over, but the signature still names the old commit, so the step
   would have to sign again. A lean, not tried: update a branch by merging main in, as a `lead`
@@ -214,4 +218,5 @@ How sure: 85%. The owner decided it. The doubts are in the next section.
   that also names the checks it ran is a later field, and adding it later loses those runs.
   *Squash merges were a doubt here; the owner kept them on 2026-11-05, with the links above.*
 - **Gaming in the test writer's commit.** The test writer may now change the exam in the same
-  pull request it writes tests for. The owner's read of every exam path is what holds that.
+  pull request it writes tests for. The lead's hand check and `loosening.sh` hold that (0014). *It
+  said: the owner's read of every exam path.*
