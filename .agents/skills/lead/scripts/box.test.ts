@@ -912,6 +912,46 @@ describe("T321 K2 box start, today's tooling", () => {
 		);
 	}, 180_000); // about 51 s alone on CI, over 60 s on a busy shard (#598); same cases
 
+	// Plant: drop --root, save the base as the root, or accept a root the base does not hold.
+	it("K2 saves the lane's root only when the base holds it", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				each(["none", "held", "elsewhere"] as const, (root) =>
+					fixture((b) => {
+						b.git(b.main, "checkout", "-q", b.branch);
+						const head = b.commit(b.main, "src/a.ts", `${text}\n`);
+						b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/side", "main");
+						const side = b.commit(b.main, "src/b.ts", `${text}\n`);
+						b.git(b.main, "checkout", "-q", "main");
+						const extra = root === "none" ? [] : ["--root", root === "held" ? b.base : side];
+						const got = b.call("sh", [
+							program,
+							"new",
+							"new",
+							head,
+							b.branch,
+							"--ticket",
+							"321",
+							"--plan",
+							b.plan,
+							...extra,
+						]);
+						if (root === "elsewhere") {
+							refused(got, /root is not an ancestor/);
+							return;
+						}
+						expect(got.code, got.text).toBe(0);
+						const state = readFileSync(join(b.boxes, "state/new.box"), "utf8");
+						expect(state).toContain(`base: ${head}`);
+						if (root === "held") expect(state).toContain(`root: ${b.base}`);
+						else expect(state).not.toContain("root:");
+					}),
+				);
+			}),
+			options,
+		);
+	});
+
 	// Plant: accept any parent head, any role or any signer, rather than a verified build link.
 	it("K2 accepts only origin/main or a verified parent build head and records checked facts", () => {
 		fc.assert(
