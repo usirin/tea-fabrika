@@ -5,6 +5,11 @@ builds on [a unit of work is a commit](./a-unit-of-work-is-a-commit.md) and come
 steps run by hand in today's version. One rule walks a decided line back: who holds a step's key
 (rule 1).
 
+Owner, 2026-11-08: today's hand-run tooling adopts signing at fetch early. Agents still commit,
+and MAIN checks saved run bounds and owners before signing missing notes. Existing commit-and-sign
+calls remain valid. This note stays proposed for `next/`; the call approves neither removing Git
+from agent tools nor adding signing roles. Mutation still uses the tests key.
+
 ```ts
 // A sketch, next/. One step program, after its agent answers. The agent ran no git and holds no key.
 // tea's Msgs keep `type`; our outcomes are `_tag` unions with the five verbs.

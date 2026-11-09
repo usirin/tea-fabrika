@@ -5,7 +5,7 @@
 //
 //   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude]
 //                 [--model sonnet|opus] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>]
-//                 [--plan-only]
+//                 [--plan <approved plan>] [--plan-only]
 //
 // Claude runs `claude -p` in the same kind of box, under sandbox-exec: it cannot read the step keys,
 // the leak words or Codex's login, and it writes only its box. It commits with plain git; drive
@@ -14,6 +14,7 @@
 //
 // The step is a tea machine on the Effect engine, made of the pipeline's moves:
 //
+//   (before)           box.sh gc, then a refusal when the data volume has under 20 GB free
 //   starting   Act     box.sh new, at the lane's head
 //   drafting   Draft   a Sub: Codex (box.sh run) or Claude (claude -p) in the box, waited on
 //   reading    Gather  fetch (and sign Claude's work), then the commits, their step notes, exam
@@ -25,9 +26,9 @@
 //
 // Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (a question for
 // the lead, in `reason`), 30 stuck, 2 usage, 3 refused to start (8 agents running: Codex boxes plus
-// Claude steps drive started). It never retries. A stuck step keeps its box for the lead to look
-// at. DRIVE_MINUTES (default 60) is how long the agent may run before it is stopped and the step
-// is stuck.
+// Claude steps drive started, or under 20 GB free after box.sh gc). It never retries. A stuck step
+// keeps its box for the lead to look at. DRIVE_MINUTES (default 60) is how long the agent may run
+// before it is stopped and the step is stuck.
 
 import {spawn, spawnSync} from "node:child_process";
 import {randomUUID} from "node:crypto";
@@ -108,8 +109,13 @@ const Ask = Schema.Struct({
 	model: Schema.String,
 	session: Schema.String,
 	ticket: Schema.String,
+	/** The approved plan box.sh checks at every start and step. */
+	plan: Schema.String,
 	branch: Schema.String,
 	base: Schema.String,
+	/** Where the lane left main. The commits check reads the whole lane from here, so the earlier
+	 * steps' links are in its chain and the newest of each is not stale. */
+	root: Schema.String,
 	box: Schema.String,
 	run: Schema.String,
 	prompt: Schema.String,
@@ -208,6 +214,16 @@ const answerOf = (step: StepName, report: string) => {
 	return null;
 };
 
+const GREEN = /^[`* \t]*laws:[ \t]*green\b[`* \t:]*(.*)$/im;
+
+/** A build that changed nothing says which laws it ran green with a `laws: green <paths>` line.
+ * The head is the tests step's, already checked, and the mutation step's baseline reruns them. */
+const greenOf = (report: string) => {
+	const m = GREEN.exec(report);
+	if (m === null) return null;
+	return (m[1] ?? "").replace(/[`*\s]+$/, "") || "laws named";
+};
+
 type Judged = {readonly outcome: Outcome; readonly why: string};
 const stuck = (why: Extract<Outcome, {kind: "stuck"}>["why"], text: string): Judged => ({
 	outcome: {kind: "stuck", why},
@@ -237,7 +253,15 @@ const decide = (ask: Ask, read: Read): Judged => {
 	if (said === null) return stuck("no_answer", "no answer line in the report");
 	switch (said.verb) {
 		case "done":
-			if ((ask.step === "tests" || ask.step === "build") && read.commits === 0)
+			if (ask.step === "build" && read.commits === 0) {
+				const green = greenOf(read.report);
+				if (green === null) return stuck("no_commit", "answered done with no commit");
+				return {
+					outcome: {kind: "done", part: false, head: read.head},
+					why: `no commit: every law already green at ${read.head.slice(0, 8)} (${green})`,
+				};
+			}
+			if (ask.step === "tests" && read.commits === 0)
 				return stuck("no_commit", "answered done with no commit");
 			return {outcome: {kind: "done", part: false, head: read.head}, why: said.why};
 		case "send": {
@@ -516,7 +540,16 @@ const handlers = (env: Env) => {
 	return {
 		box_new: (cmd: Ask) =>
 			Effect.sync(() => {
-				const r = box("new", cmd.box, cmd.base, cmd.branch);
+				const r = box(
+					"new",
+					cmd.box,
+					cmd.base,
+					cmd.branch,
+					"--ticket",
+					cmd.ticket,
+					"--plan",
+					cmd.plan,
+				);
 				writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
 				return {ok: r.code === 0, detail: r.code === 0 ? "" : `box.sh new: ${tail(r.err)}`};
 			}),
@@ -544,7 +577,7 @@ const handlers = (env: Env) => {
 						? git("fetch", "-q", "-f", join(env.BOXES, ask.box), `refs/heads/${ask.branch}:${ref}`)
 						: ask.agent === "claude"
 							? signClaude(env, ask)
-							: box("fetch", ask.box, ask.branch);
+							: box("fetch", ask.box, ask.branch, "--sign", ask.step, "--ticket", ask.ticket);
 				if (f.code !== 0)
 					return {
 						...empty,
@@ -592,7 +625,7 @@ const handlers = (env: Env) => {
 									join(env.MAIN, "next/apps/fabrika/src/exam/commits.ts"),
 									"check",
 									"--base",
-									ask.base,
+									ask.root,
 									"--head",
 									head,
 								],
@@ -690,7 +723,9 @@ const handlers = (env: Env) => {
 				const lane: Lane = {
 					...saved,
 					ticket: ask.ticket,
+					plan: ask.plan,
 					branch: ask.branch,
+					root: ask.root,
 					head: accepted ? e.head : (saved.head ?? ask.base),
 					steps: [...saved.steps, entry],
 				};
@@ -807,7 +842,15 @@ const draftRunner = (env: Env) => (sub: DraftSub) =>
 						args:
 							ask.step === "plan"
 								? [join(HERE, "runplan.sh"), ask.box, ask.prompt]
-								: [join(HERE, "box.sh"), "run", ask.box, ask.prompt, ask.report],
+								: [
+										join(HERE, "box.sh"),
+										"run",
+										ask.box,
+										ask.prompt,
+										ask.report,
+										"--step",
+										ask.step,
+									],
 					};
 			// Its own process group, so a stop reaches every command the agent started too.
 			const child = spawn(how.cmd, how.args, {
@@ -852,7 +895,9 @@ const draftRunner = (env: Env) => (sub: DraftSub) =>
 type Lane = {
 	readonly lane: string;
 	readonly ticket?: string;
+	readonly plan?: string;
 	readonly branch?: string;
+	readonly root?: string;
 	readonly head?: string;
 	readonly steps: readonly {readonly step: string}[];
 };
@@ -868,7 +913,19 @@ answer: send tests <why>
 answer: send build <why>
 answer: ask <the one question for the lead>
 answer: stuck <why>
+
+A build that needs no commit, because every law is already green at its start, puts this line
+just before \`answer: done\`: laws: green <the narrow test paths you ran>
 `;
+
+const MIN_FREE_GB = 20;
+
+/** Whole GB free on the volume that holds `path`, from `df -k`; `null` when df says nothing usable. */
+const freeGb = (path: string): number | null => {
+	const r = sh("df", ["-k", path]);
+	const kb = Number(r.out.trim().split("\n").at(-1)?.trim().split(/\s+/)[3]);
+	return r.code === 0 && Number.isFinite(kb) ? Math.floor(kb / 1024 / 1024) : null;
+};
 
 /** What a Claude step is told on top of the brief: its skill, and how its work is committed. */
 const claudeTail = (ask: Ask) => {
@@ -888,7 +945,7 @@ const claudeTail = (ask: Ask) => {
 
 const usage = () => {
 	console.error(
-		"usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan-only]",
+		"usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
 	);
 	process.exit(2);
 };
@@ -955,6 +1012,7 @@ const main = () => {
 		process.exit(2);
 	}
 	const branch = flag(args, "--branch") ?? saved?.branch ?? `fabrikalfa/${lane}`;
+	const plan = flag(args, "--plan") ?? saved?.plan ?? join(env.BOXES, `${lane}-PLAN.md`);
 	if (!branch.startsWith("fabrikalfa/")) usage();
 	sh("git", ["-C", env.MAIN, "fetch", "-q", "origin"]);
 	// A plan writer reads the main checkout as it stands, so its base is that checkout's HEAD.
@@ -975,6 +1033,13 @@ const main = () => {
 		console.error(`drive.ts: ${from} is not a commit in the main checkout`);
 		process.exit(2);
 	}
+	// The lane's root, kept from its first step: where its base left main.
+	const root =
+		saved?.root ?? sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim();
+	if (!root) {
+		console.error(`drive.ts: ${base.slice(0, 8)} shares no history with origin/main`);
+		process.exit(2);
+	}
 	const s = step as StepName;
 	let n = (saved?.steps.filter((e) => e.step === s).length ?? 0) + 1;
 	while (
@@ -992,8 +1057,10 @@ const main = () => {
 		model: claude ? (flag(args, "--model") ?? "sonnet") : "",
 		session: claude ? randomUUID() : "",
 		ticket,
+		plan,
 		branch,
 		base,
+		root,
 		box,
 		run: `t${ticket}-${s}${n === 1 ? "" : n}`,
 		prompt: at("-prompt.md"),
@@ -1014,6 +1081,19 @@ const main = () => {
 			JSON.stringify({
 				outcome: "refused",
 				reason: `${agents} agents running (Codex boxes and drive's Claude steps); the cap is 8`,
+			}),
+		);
+		process.exit(3);
+	}
+	// Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk.
+	spawnSync("sh", [join(HERE, "box.sh"), "gc"], {stdio: ["ignore", 2, 2]});
+	const free = freeGb(env.BOXES);
+	if (free === null || free < MIN_FREE_GB) {
+		const said = free === null ? "df could not read the free space" : `${free} GB free`;
+		console.log(
+			JSON.stringify({
+				outcome: "refused",
+				reason: `${said} on the boxes' volume; drive needs ${MIN_FREE_GB}`,
 			}),
 		);
 		process.exit(3);

@@ -22,7 +22,7 @@ and agents there find a ruling by its file name and title.
 
 **Decisions live in `.decisions/`, one short file per decision, written the turn the owner decides.**
 
-- The file is `NNNN-slug.md`, numbered in order, in the shape the folder's README gives.
+- The file is `NNNN-slug.md`, numbered in order, in the shape [the adr skill](../.agents/skills/adr/SKILL.md) gives.
 - `docs/direction/` keeps the long design notes. A decision file links its note when one exists.
 - Before an agent asks the owner or writes a plan, it searches `.decisions/`, `.glossary/` and
   `docs/direction/`.
