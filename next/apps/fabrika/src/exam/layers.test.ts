@@ -180,6 +180,7 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 	app: ["coordination"],
 	node: ["app", "coordination", "data"],
 	workers: ["app", "coordination", "data", "transport"],
+	door: ["app", "coordination", "data", "transport"], // P17a: the library's door composes all four
 	mcp: ["app", "transport"], // the named exception: the bridge is a client, as a window is
 	desktop: [LIBRARY], // the app layer's names, nothing lower
 	window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
@@ -193,7 +194,7 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 
 /** The folders under `src/` of the two library packages, each a part above. */
 const FOLDERS: Readonly<Record<string, ReadonlyArray<string>>> = {
-	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp", "node", "workers"],
+	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp", "door", "node", "workers"],
 	[TUVAL]: ["desktop", "window", "dom", "browser", "electron", "headless"],
 };
 
@@ -281,6 +282,31 @@ describe("the real next/", () => {
 });
 
 describe("planted breaks", () => {
+	it("P17a: the door composes lower parts; lower parts cannot import it", () => {
+		const tree = plant({
+			"packages/libfabrika/package.json": manifest(LIBRARY),
+			"packages/libfabrika/src/door/door.ts": lines(
+				'import {run} from "../app/runner.ts";',
+				'import {member} from "../coordination/member.ts";',
+				'import {log} from "../data/log.ts";',
+				'import {wire} from "../transport/wire.ts";',
+			),
+			...Object.fromEntries(
+				["app", "coordination", "data", "transport"].map((part) => [
+					`packages/libfabrika/src/${part}/up.ts`,
+					lines('import {Door} from "../door/door.ts";'),
+				]),
+			),
+		});
+		expect([...faults(tree)].sort()).toEqual(
+			["app", "coordination", "data", "transport"]
+				.map(
+					(part) =>
+						`packages/libfabrika/src/${part}/up.ts imports "../door/door.ts": ${part} may not import door`,
+				)
+				.sort(),
+		);
+	});
 	const lib = (extra: object = {}) =>
 		manifest(LIBRARY, {
 			exports: {

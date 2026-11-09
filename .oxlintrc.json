@@ -29,6 +29,10 @@
 		"fabrika/no-numeric-duration": "error",
 		"fabrika/no-throw-in-effect-gen": "error",
 		"fabrika/no-type-assertions": "error",
+		// P17a counted before enabling: 53 retired-door statements, 1 throwing saved decoder.
+		// All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
+		"fabrika/door-is-library": "error",
+		"fabrika/outside-input-constructor": "error",
 
 		// Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
 		// out below (experiment 155). So are tests: they write the options' shape to check it, and

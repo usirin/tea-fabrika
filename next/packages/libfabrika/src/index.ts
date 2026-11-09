@@ -34,3 +34,4 @@ export {
 	nodeExecution,
 	workerExecution,
 } from "./app/execution.ts";
+export {Door, type ConnectionId} from "./door/index.ts";

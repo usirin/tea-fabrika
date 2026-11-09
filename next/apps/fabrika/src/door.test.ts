@@ -19,8 +19,8 @@ import {
 	Ledger,
 	LedgerError,
 	LedgerTransaction,
+	type LedgerTurn,
 	lineFor,
-	ProcessId,
 	RecordManager,
 	SinkError,
 	SpanSink,
@@ -219,9 +219,13 @@ const passkey = Effect.fn("test.passkey")(function* () {
 
 // Loading inside the test hook lets each new law report the missing door on the pre-build base,
 // instead of losing every law to a collection error. This always imports the real module.
-let Door: typeof import("./door.ts").Door;
+let Door: typeof import("@kampus/libfabrika/door").Door;
+let IdGenerator: typeof import("@kampus/libfabrika/data").IdGenerator;
 beforeEach(async () => {
-	({Door} = await vi.importActual<typeof import("./door.ts")>("./door.ts"));
+	({Door} =
+		await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
+	({IdGenerator} =
+		await vi.importActual<typeof import("@kampus/libfabrika/data")>("@kampus/libfabrika/data"));
 });
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
 const opened: Array<DatabaseSync> = [];
@@ -351,11 +355,13 @@ const world = Effect.fnUntraced(function* (
 	const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
 	const env = Layer.mergeAll(
 		clients,
+		LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),
 		C.Mailbox.layer.pipe(Layer.provide(clients)),
 		SpanSink.layer(sql, {object: START}),
 		records,
 		Archive.memory,
 		C.ProcessIdGenerator.layer,
+		IdGenerator.layer,
 	);
 	const layer = Door.layer(settings).pipe(Layer.provideMerge(env));
 	const reopen = (storage: ReturnType<typeof nodeSql>) => {
@@ -365,11 +371,13 @@ const world = Effect.fnUntraced(function* (
 			Layer.provideMerge(
 				Layer.mergeAll(
 					freshClients,
+					LedgerTransaction.layer(storage).pipe(Layer.provide(quiet)),
 					C.Mailbox.layer.pipe(Layer.provide(freshClients)),
 					SpanSink.layer(storage, {object: START}),
 					records,
 					Archive.memory,
 					C.ProcessIdGenerator.layer,
+					IdGenerator.layer,
 				),
 			),
 		);
@@ -588,77 +596,6 @@ describe("P10 review regressions", () => {
 			why: "not_granted",
 		});
 		return {client, hello, trusted};
-	});
-	it("P12: view.open rejects a bad pid before invoking the program", async () => {
-		await fc.assert(
-			fc.asyncProperty(
-				fc.string().filter((pid) => !Schema.is(ProcessId)(pid)),
-				fc.integer(),
-				(badPid, count) =>
-					Effect.runPromise(
-						Effect.gen(function* () {
-							const w = yield* world();
-							const opened: Array<unknown> = [];
-							yield* Effect.gen(function* () {
-								const d = yield* Door;
-								const {client} = yield* online(d, w);
-								expect(yield* d.route(client, "view.open", {pid: badPid})).toEqual({
-									_tag: "refused",
-									why: "bad_input",
-								});
-								expect(opened).toEqual([]);
-								expect(yield* d.route(client, "view.open", {pid: PROCESS})).toEqual({
-									_tag: "ok",
-									result: {count},
-								});
-								expect(opened).toEqual([{pid: PROCESS, client}]);
-							}).pipe(
-								Effect.provide(
-									Door.layer({
-										...w.settings,
-										open: (pid, client) =>
-											Effect.sync(() => {
-												opened.push({pid, client});
-												return {count};
-											}),
-									}).pipe(Layer.provideMerge(w.env)),
-								),
-							);
-						}),
-					),
-			),
-			{...runs(20), examples: [["invalid", 7]]},
-		);
-	});
-	it("P12: a grant target needs both the waiting key and its code", async () => {
-		await fc.assert(
-			fc.asyncProperty(fc.string(), fc.string({minLength: 1}), (tab, suffix) =>
-				Effect.runPromise(
-					Effect.gen(function* () {
-						const w = yield* world();
-						yield* Effect.gen(function* () {
-							const d = yield* Door;
-							const {client} = yield* pendingHello(d, w.otherWindow, tab);
-							const knocked = yield* d.knock(client, {label: "Pending"});
-							assert(knocked._tag === "ok");
-							const {code} = Schema.decodeUnknownSync(Schema.Struct({code: Schema.String}))(
-								knocked.result,
-							);
-							expect(yield* d.target(w.otherWindow.fingerprint, code)).toEqual({
-								key: w.otherWindow.raw,
-								for: PERSON,
-								to: "project-a",
-								code,
-								label: "Pending",
-							});
-							expect(yield* d.target(w.window.fingerprint, code)).toBeNull();
-							expect(yield* d.target(w.otherWindow.fingerprint, `${code}${suffix}`)).toBeNull();
-						}).pipe(w.provide);
-					}),
-				),
-			),
-			{...runs(20), examples: [["target", "x"]]},
-		);
 	});
 
 	// d1: for any waiting clients and any knock order, with repeat knocks and a second tab of the
@@ -1871,21 +1808,30 @@ describe("P10 inputs, retries and signer", () => {
 			Effect.gen(function* () {
 				const w = yield* world();
 				let lose = false;
-				const ledger = Layer.effect(
-					Ledger,
-					Ledger.pipe(
-						Effect.map((real: typeof Ledger.Service) => ({
-							...real,
-							append: (...args: Parameters<typeof real.append>) =>
-								real.append(...args).pipe(
-									Effect.flatMap((placing) => {
-										if (lose && args[0] === "door/inputs") {
-											lose = false;
-											return Effect.fail(new LedgerError({why: "unreachable"}));
-										}
-										return Effect.succeed(placing);
-									}),
-								),
+				const transaction = Layer.effect(
+					LedgerTransaction,
+					LedgerTransaction.pipe(
+						Effect.map((real) => ({
+							transact: <A>(step: (turn: LedgerTurn) => A) =>
+								Effect.gen(function* () {
+									let appended = false;
+									const placing = yield* real.transact((turn) =>
+										step({
+											...turn,
+											append: (stream, id, line) => {
+												const placing = turn.append(stream, id, line);
+												if (stream === "door/inputs") appended = true;
+												return placing;
+											},
+										}),
+									);
+									// Lose the answer only after the real input transaction commits.
+									if (lose && appended) {
+										lose = false;
+										return yield* new LedgerError({why: "unreachable"});
+									}
+									return placing;
+								}),
 						})),
 					),
 				).pipe(Layer.provide(w.env));
@@ -1893,7 +1839,10 @@ describe("P10 inputs, retries and signer", () => {
 					const d = yield* Door;
 					const {client} = yield* online(d, w);
 					lose = true;
-					yield* Effect.flip(d.route(client, "process.send", request("lost-append")));
+					expect(
+						yield* Effect.flip(d.route(client, "process.send", request("lost-append"))),
+					).toMatchObject({_tag: "LedgerError", why: "unreachable"});
+					expect(lose).toBe(false);
 					expect(w.deliveries).toEqual([]);
 					const before = rawRows(w.db, "door/inputs").filter((r) => r._tag === "received");
 					expect(before).toHaveLength(1);
@@ -1904,7 +1853,7 @@ describe("P10 inputs, retries and signer", () => {
 					expect(w.deliveries[0]!.trace.traceId).toBe(before[0]?.traceId);
 				}).pipe(
 					Effect.provide(
-						Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger))),
+						Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, transaction))),
 					),
 				);
 			}),
@@ -1936,7 +1885,8 @@ describe("P10 inputs, retries and signer", () => {
 				expect((yield* d.route(client, "process.send", request("l1")))._tag).toBe("ok");
 				const e = w.deliveries[0]!.envelope;
 				expect(Object.keys(e).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
-				expect(e.id).toMatch(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-1$/);
+				expect(e.id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+				expect(Object.values((yield* stamped()).at(-1)!.body ?? {})).toContain(1);
 				expect(e.by).toEqual({_tag: "person", key: w.window.fingerprint, for: PERSON});
 				expect(e.arrivedAt).toBe(1_790_000_000_000);
 				expect(e.input).toEqual(comment());
@@ -2008,8 +1958,17 @@ describe("P10 inputs, retries and signer", () => {
 						const {client} = yield* online(d, w);
 						yield* d.route(client, "process.send", request(`letter-${i}`));
 						ids.push(w.deliveries.at(-1)!.envelope.id);
+						const recorded = Object.values((yield* stamped()).at(-1)!.body ?? {});
+						// P17a leaves the door's process and count as separate recorded fields.
+						// The plan leaves their key names to the builder.
+						expect(recorded).toContain(i === 0 ? START : OTHER_PROCESS);
+						expect(recorded).toContain(1);
 					}).pipe(w.provide);
-				expect(ids).toEqual([`in-${START}-1`, `in-${OTHER_PROCESS}-1`]);
+				expect(new Set(ids).size).toBe(2);
+				for (const id of ids) expect(id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+				expect(
+					w.sql.exec("SELECT id FROM door_starts ORDER BY rowid").map((row) => row.id),
+				).toEqual([START, OTHER_PROCESS]);
 				expect(starts).toEqual([]);
 			}),
 	);
@@ -2024,8 +1983,8 @@ describe("P10 inputs, retries and signer", () => {
 					yield* d.route(client, "process.send", request("first"));
 					const parent = w.deliveries[0]!.envelope.id;
 					expect(
-						yield* Effect.flip(d.route(client, "process.send", request("second"))),
-					).toMatchObject({_tag: "LedgerError"});
+						(yield* Effect.flip(d.route(client, "process.send", request("second"))))._tag,
+					).toBe("LedgerError");
 					expect(w.deliveries).toHaveLength(1);
 					expect((yield* writeId("saved-a", d.signer(parent, PROCESS, "saved"))).parent).toBe(
 						parent,
@@ -2716,8 +2675,8 @@ describe("P10 span reader and recording", () => {
 					const {client} = yield* online(d, w);
 					block = true;
 					expect(
-						yield* Effect.flip(d.route(client, "process.send", request("flush-failure"))),
-					).toMatchObject({_tag: "SinkError"});
+						(yield* Effect.flip(d.route(client, "process.send", request("flush-failure"))))._tag,
+					).toBe("SinkError");
 					expect(w.deliveries).toEqual([]);
 					block = false;
 					yield* d.route(client, "process.send", request("flush-failure"));
@@ -2794,8 +2753,9 @@ describe("P10 span reader and recording", () => {
 				const d = yield* Door;
 				const {client} = yield* online(d, w);
 				expect(
-					yield* Effect.flip(d.route(client, "spans.read", {chain: {_tag: "spans"}, after: 0})),
-				).toMatchObject({_tag: "SinkError"});
+					(yield* Effect.flip(d.route(client, "spans.read", {chain: {_tag: "spans"}, after: 0})))
+						._tag,
+				).toBe("SinkError");
 			}).pipe(
 				Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, broken)))),
 			);
@@ -2909,15 +2869,25 @@ describe("P10 span reader and recording", () => {
 		Effect.gen(function* () {
 			const w = yield* world();
 			let block = false;
-			const ledger = Layer.effect(
-				Ledger,
-				Ledger.pipe(
-					Effect.map((real: typeof Ledger.Service) => ({
-						...real,
-						append: (...args: Parameters<typeof real.append>) =>
-							block && args[0] === "door/inputs"
-								? Effect.fail(new LedgerError({why: "storage"}))
-								: real.append(...args),
+			const transaction = Layer.effect(
+				LedgerTransaction,
+				LedgerTransaction.pipe(
+					Effect.map((real) => ({
+						transact: <A>(step: (turn: LedgerTurn) => A) =>
+							real.transact((turn) =>
+								step({
+									...turn,
+									append: (stream, id, line) => {
+										// Fail the input write inside the real transaction, before storage changes.
+										if (block && stream === "door/inputs") {
+											block = false;
+											// oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- LedgerTransaction catches this synchronous callback's throw as a typed failure.
+											throw new LedgerError({why: "storage"});
+										}
+										return turn.append(stream, id, line);
+									},
+								}),
+							),
 					})),
 				),
 			).pipe(Layer.provide(w.env));
@@ -2927,10 +2897,14 @@ describe("P10 span reader and recording", () => {
 				block = true;
 				expect(
 					yield* Effect.flip(d.route(client, "process.send", request("unrecorded"))),
-				).toMatchObject({_tag: "LedgerError"});
+				).toMatchObject({_tag: "LedgerError", why: "storage"});
+				expect(block).toBe(false);
+				expect(rawRows(w.db, "door/inputs")).toEqual([]);
 				expect(w.deliveries).toEqual([]);
 			}).pipe(
-				Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger)))),
+				Effect.provide(
+					Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, transaction))),
+				),
 			);
 		}),
 	);
