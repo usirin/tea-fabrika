@@ -116,24 +116,40 @@ export const settingsFile = <A>(
 				yield* Effect.logWarning("fabrika host: the settings folder could not be created");
 				return Stream.fromEffect(Effect.map(text, answer));
 			}
-			// The first read waits for the watch, so no save between the two is missed.
-			const ready = yield* Deferred.make<void>();
-			const saves = fs.watch(folder, {onReady: () => Deferred.doneUnsafe(ready, Effect.void)}).pipe(
-				// A rename save may report the temporary name, including for later writes. Treat
-				// every folder event as a reason to reread the fixed path. Unchanged text below
-				// keeps edits to another file from producing another answer.
-				Stream.debounce(`${SETTLE_MS} millis`),
-				// A watch that fails before it is ready still lets the first read go, so the file is
-				// read once and the host never waits on a watch that will not start.
-				Stream.catchCause(() =>
-					Stream.fromEffect(
-						Deferred.succeed(ready, undefined).pipe(
-							Effect.andThen(Effect.logWarning("fabrika host: the settings watch ended")),
-						),
-					).pipe(Stream.drain),
+			// NodeFileSystem 4.1.2 calls onReady as soon as fs.watch returns. macOS starts
+			// its event stream on another thread, so that callback can precede native watching.
+			const ready = yield* Deferred.make<boolean>();
+			const saves = fs
+				.watch(folder, {onReady: () => Deferred.doneUnsafe(ready, Effect.succeed(true))})
+				.pipe(
+					// A rename save may report the temporary name, including for later writes. Treat
+					// every folder event as a reason to reread the fixed path. Unchanged text below
+					// keeps edits to another file from producing another answer.
+					Stream.debounce(`${SETTLE_MS} millis`),
+					// A watch that fails before it is ready still lets the first read go, so the file is
+					// read once and the host never waits on a watch that will not start.
+					Stream.catchCause(() =>
+						Stream.fromEffect(
+							Deferred.succeed(ready, false).pipe(
+								Effect.andThen(Effect.logWarning("fabrika host: the settings watch ended")),
+							),
+						).pipe(Stream.drain),
+					),
+				);
+			const initial = Stream.unwrap(
+				Deferred.await(ready).pipe(
+					Effect.map((started) =>
+						started
+							? Stream.succeed(undefined).pipe(
+									// Reread once after startup settles, even if the first save had no event.
+									// This ends after one reread; later saves use only the folder watch.
+									Stream.concat(Stream.fromEffect(Effect.sleep(`${SETTLE_MS} millis`))),
+								)
+							: Stream.succeed(undefined),
+					),
 				),
 			);
-			return Stream.merge(Stream.fromEffect(Deferred.await(ready)), saves).pipe(
+			return Stream.merge(initial, saves).pipe(
 				Stream.mapEffect(() => text),
 				Stream.changesWith((a, b) => a === b),
 				Stream.map(answer),
