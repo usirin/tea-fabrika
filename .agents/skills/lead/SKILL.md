@@ -240,7 +240,7 @@ visible, and never weaken the rules to hide this message.
    Box removal ignores untracked-only files and installs. It requires clean tracked files and
    every local branch, detached HEAD, stash and step-note tip retained in MAIN. Remote-tracking
    refs and object presence do not count. Fetch remote-only work into a retained MAIN ref first.
-   Every ref namespace and reflog entry needs that proof. Keep operation or linked-worktree
+   HEAD, ORIG_HEAD, refs outside refs/remotes/ and reflogs outside logs/refs/remotes/ need that proof; FETCH_HEAD is a fetched copy, and ORIG_HEAD and config.worktree are ordinary metadata. Keep operation or linked-worktree
    metadata, unknown state, and any pair holding MAIN or BOXES/state.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
     `MergeRow`, then `git pull --ff-only origin main` and `pnpm install` in the main checkout.

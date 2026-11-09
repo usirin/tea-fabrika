@@ -45,7 +45,7 @@ gitdir, without the box's config or hooks or inherited settings. Tracked files m
 Untracked-only files and ignored installs may go. Every local branch, detached HEAD, stash and
 step-note tip must be reachable under a retained MAIN ref. Objects alone and remote-tracking
 refs do not count. Fetch remote-only work into a retained MAIN ref before retrying.
-Every ref namespace and reflog entry needs that proof. Keep operation or linked-worktree
+HEAD, ORIG_HEAD, refs outside refs/remotes/ and reflogs outside logs/refs/remotes/ need that proof; FETCH_HEAD is a fetched copy, and ORIG_HEAD and config.worktree are ordinary metadata. Keep operation or linked-worktree
 metadata, unknown state, and any pair holding MAIN or BOXES/state.
 
 Both paths absent succeeds. One missing keeps the other. Removal or absence exits 0, a refusal

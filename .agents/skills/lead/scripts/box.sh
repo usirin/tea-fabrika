@@ -83,8 +83,9 @@ try:
         keep("unsupported shared, shallow or graft metadata")
     # Operation state and linked worktrees can hold commits and staged files outside this index.
     # Unknown metadata also stays: deletion needs proof for every saved state.
-    ordinary = {"HEAD", "index", "config", "description", "hooks", "info", "logs", "refs",
-                "objects", "packed-refs", "branches", "FETCH_HEAD", "COMMIT_EDITMSG"}
+    ordinary = {"HEAD", "ORIG_HEAD", "index", "config", "config.worktree", "description",
+                "hooks", "info", "logs", "refs", "objects", "packed-refs", "branches",
+                "FETCH_HEAD", "COMMIT_EDITMSG"}
     if any(entry.name not in ordinary for entry in data.iterdir()):
         keep("operation, linked worktree or unknown metadata")
 
@@ -103,7 +104,14 @@ try:
         raise error
 
     tips, symbolic = set(), set()
-    # Read every saved reflog entry, including older stashes. Do not copy logs or config.
+    original = data / "ORIG_HEAD"
+    if os.path.lexists(original):
+        value = plain(original)
+        if not re.fullmatch(rb"[0-9a-f]{40}\n?", value):
+            keep("unsupported ORIG_HEAD")
+        tips.add(value.strip())
+    # Read saved reflogs, including older stashes. Remote reflogs are fetched copies.
+    # Do not copy logs or config.
     logs = data / "logs"
     if os.path.lexists(logs):
         if logs.is_symlink() or not logs.is_dir():
@@ -111,19 +119,21 @@ try:
         for folder, dirs, files in os.walk(logs, followlinks=False, onerror=unreadable):
             if any((Path(folder) / entry).is_symlink() for entry in dirs):
                 keep("symlinked reflog metadata")
+            if Path(folder) == logs / "refs":
+                dirs[:] = [entry for entry in dirs if entry != "remotes"]
             for entry in files:
                 for line in plain(Path(folder) / entry).splitlines():
                     match = re.fullmatch(rb"([0-9a-f]{40}) ([0-9a-f]{40}) [^\x00\r\n]+", line)
                     if match is None:
                         keep("unsupported reflog entry")
                     tips.update(oid for oid in match.groups() if oid != b"0" * 40)
+    # FETCH_HEAD records fetched copies, not saved work.
     fetched = data / "FETCH_HEAD"
     if os.path.lexists(fetched):
         for line in plain(fetched).splitlines():
             match = re.fullmatch(rb"([0-9a-f]{40})\t(?:not-for-merge)?\t[^\x00\r\n]*", line)
             if match is None:
                 keep("unsupported fetch metadata")
-            tips.add(match[1])
 
     # Only small metadata is copied. Object files stay where they are, read through an alternate.
     with tempfile.TemporaryDirectory(prefix="box-inspect-") as temporary:
@@ -136,6 +146,7 @@ try:
         (inspect / "config").write_text("[core]\nrepositoryformatversion = 0\nbare = false\n")
         for folder, dirs, files in os.walk(data / "refs", followlinks=False, onerror=unreadable):
             relative = Path(folder).relative_to(data)
+            saved = relative.parts[:2] != ("refs", "remotes")
             (inspect / relative).mkdir(parents=True, exist_ok=True)
             for entry in dirs:
                 if (Path(folder) / entry).is_symlink():
@@ -144,9 +155,11 @@ try:
                 source = Path(folder) / entry
                 value = plain(source)
                 if re.fullmatch(rb"[0-9a-f]{40}\n?", value):
-                    tips.add(value.strip())
+                    if saved:
+                        tips.add(value.strip())
                 elif re.fullmatch(rb"ref: refs/[^\x00-\x20\x7f]+\n?", value):
-                    symbolic.add(value[5:].strip().decode())
+                    if saved:
+                        symbolic.add(value[5:].strip().decode())
                 else:
                     raise ValueError("unsupported ref metadata")
                 (inspect / relative / entry).write_bytes(value)
@@ -172,6 +185,8 @@ try:
             keep("tracked changes")
         for line in git(["for-each-ref", "--format=%(refname) %(objectname)"], inspect).splitlines():
             ref, tip = line.split(b" ", 1)
+            if ref.startswith(b"refs/remotes/"):
+                continue
             tips.add(tip)
             # A replace ref also saves the original object's name in its path.
             if ref.startswith(b"refs/replace/"):
