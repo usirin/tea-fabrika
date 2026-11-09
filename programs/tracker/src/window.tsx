@@ -1,5 +1,6 @@
 import type {WindowProps} from "@kampus/fabrika-old";
 import {type Suggested, suggestedName} from "@kampus/pipeline/tickets/area";
+import {AskIdentity} from "@kampus/pipeline/tickets/ask";
 import {Kbd} from "@manti-ui/react";
 import {
 	type FormEvent,
@@ -109,7 +110,10 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 	const [find, setFind] = useState(view.filter.find);
 	const [comments, setComments] = useState<Readonly<Record<number, string>>>({});
 	const {page} = view;
-	const asks = page.kind === "list" ? [] : (page.opened?.asks ?? []);
+	const asks =
+		page.kind === "list"
+			? []
+			: (page.opened?.asks ?? []).map((ask) => ({ticket: page.number, ask: ask.ask}));
 	return (
 		<section className="tracker" aria-label="tracker">
 			<AskStatus asks={asks} left={asks.length}>
@@ -850,7 +854,11 @@ function TicketPage(props: {
 						))}
 					</ol>
 					{opened.asks.map((ask) => (
-						<AskBox key={ask.ask} number={number} ask={ask} />
+						<AskBox
+							key={new AskIdentity({ticket: number, ask: ask.ask}).key}
+							number={number}
+							ask={ask}
+						/>
 					))}
 					<form className="tracker-composer tracker-reply" onSubmit={comment} aria-label="comment">
 						<textarea

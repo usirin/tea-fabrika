@@ -3,6 +3,7 @@ import {Cmd, run as runEffect, runIn} from "@demlik/tea/effect";
 import {useMachine} from "@demlik/tea/react";
 import {
 	Answer,
+	AskIdentity,
 	AskShown,
 	askShownOf,
 	ASK_COMMANDS,
@@ -11,7 +12,7 @@ import {
 } from "@kampus/pipeline/tickets/ask";
 import {isAnswerRefusal} from "@kampus/pipeline/tickets/ticket";
 import {Button, Kbd, Textarea} from "@manti-ui/react";
-import {Effect, Fiber, Layer, ManagedRuntime, Schema, Scope} from "effect";
+import {Effect, Fiber, HashSet, Layer, ManagedRuntime, Schema, Scope} from "effect";
 import {
 	createContext,
 	type KeyboardEvent,
@@ -175,7 +176,10 @@ const update = (model: Model, msg: Msg): Step => {
 				case "picks":
 					return [{...model, editor: Editor.cases.picks.make({})}, []];
 				case "later":
-					return [model, [later({key: `${model.ticket}/${model.ask.ask}`})]];
+					return [
+						model,
+						[later({key: new AskIdentity({ticket: model.ticket, ask: model.ask.ask}).key})],
+					];
 			}
 			return [model, []];
 		}
@@ -495,21 +499,21 @@ const attend = (actions: AskActions, msg: AttentionMsg) => {
 const held = new Set<string>();
 
 /** Where an ask view says what it saved: the one status region its window holds (review 6). */
-const Says = createContext<((text: string, ask?: string) => void) | null>(null);
+const Says = createContext<((text: string, ask?: AskIdentity) => void) | null>(null);
 
-type Waiting = number | readonly {readonly ask: string}[];
+type Waiting = number | HashSet.HashSet<AskIdentity>;
 /** Live asks, saves not yet removed by a poll, and the last announcement. */
 type Said = {
 	readonly waiting: Waiting;
-	readonly saved: ReadonlySet<string>;
+	readonly saved: HashSet.HashSet<AskIdentity>;
 	readonly said: {readonly text: string; readonly count: number; readonly left: number} | null;
 };
-type StatusMsg = {type: "say"; text: string; ask?: string} | {type: "count"; waiting: Waiting};
+type StatusMsg = {type: "say"; text: string; ask?: AskIdentity} | {type: "count"; waiting: Waiting};
 const statusMachine = defineMachine({
 	types: {model: {} as Said, msg: {} as StatusMsg, ctx: {} as Waiting},
 	cmds: [],
 	init: (_loaded, waiting = 0): [Said, readonly never[]] => [
-		{waiting, saved: new Set(), said: null},
+		{waiting, saved: HashSet.empty(), said: null},
 		[],
 	],
 	update: {
@@ -517,23 +521,19 @@ const statusMachine = defineMachine({
 			{
 				...model,
 				waiting,
-				saved: new Set(
+				saved:
 					typeof waiting === "number"
-						? []
-						: waiting.filter((ask) => model.saved.has(ask.ask)).map((ask) => ask.ask),
-				),
+						? HashSet.empty()
+						: HashSet.intersection(model.saved, waiting),
 			},
 			[],
 		],
 		say: (model, msg): [Said, readonly never[]] => {
 			const {waiting = 0} = model;
-			const saved = new Set(model.saved);
-			if (
-				msg.ask !== undefined &&
-				typeof waiting !== "number" &&
-				waiting.some((ask) => ask.ask === msg.ask)
-			)
-				saved.add(msg.ask);
+			const saved =
+				msg.ask !== undefined && typeof waiting !== "number" && HashSet.has(waiting, msg.ask)
+					? HashSet.add(model.saved, msg.ask)
+					: model.saved;
 			return [
 				{
 					...model,
@@ -544,7 +544,7 @@ const statusMachine = defineMachine({
 						left:
 							typeof waiting === "number"
 								? waiting
-								: waiting.filter((ask) => !saved.has(ask.ask)).length,
+								: HashSet.size(HashSet.difference(waiting, saved)),
 					},
 				},
 				[],
@@ -552,6 +552,14 @@ const statusMachine = defineMachine({
 		},
 	},
 });
+
+const waitingAsks = (
+	asks: readonly (typeof AskIdentity.Encoded)[] | undefined,
+	left: number,
+): Waiting =>
+	asks === undefined
+		? left
+		: HashSet.fromIterable(asks.map(({ticket, ask}) => new AskIdentity({ticket, ask})));
 
 /**
  * The window's one polite status region, always drawn and visually hidden, outside any ask view,
@@ -568,14 +576,17 @@ export function AskStatus({
 	readonly children: ReactNode;
 	/** How many asks still wait where this region sits. */
 	readonly left: number;
-	/** The same live asks the count shows. Their ids account for saves before the next poll. */
-	readonly asks?: readonly {readonly ask: string}[];
+	/** The same live asks the count shows. Ticket and id account for saves before the next poll. */
+	readonly asks?: readonly (typeof AskIdentity.Encoded)[];
 }) {
-	const ctx = useRef(asks ?? left).current;
+	const ctx = useRef(waitingAsks(asks, left)).current;
 	const [{said}, send] = useMachine(statusMachine, {run, ctx});
-	useLayoutEffect(() => send({type: "count", waiting: asks ?? left}), [asks, left, send]);
-	// A save may outlive its view. Only its id travels with the reply; the machine holds the list.
-	const say = (text: string, ask?: string) =>
+	useLayoutEffect(
+		() => send({type: "count", waiting: waitingAsks(asks, left)}),
+		[asks, left, send],
+	);
+	// A save may outlive its view. Its ticket and id travel with the reply; tea holds the list.
+	const say = (text: string, ask?: AskIdentity) =>
 		send({type: "say", text, ...(ask === undefined ? {} : {ask})});
 	return (
 		<Says.Provider value={say}>
@@ -850,7 +861,8 @@ export function AskView({
 	const note = useRef<HTMLTextAreaElement>(null);
 	const alert = useRef<HTMLDivElement>(null);
 	const ctx = useRef({ticket, ask: askShownOf(ask), now: Date.now()}).current;
-	const attention = useRef({key: `${ticket}/${ask.ask}`, view: crypto.randomUUID()}).current;
+	const identity = useRef(new AskIdentity({ticket, ask: ask.ask})).current;
+	const attention = useRef({key: identity.key, view: crypto.randomUUID()}).current;
 	const [model, dispatch] = useMachine(askMachine, {
 		run,
 		ctx,
@@ -872,7 +884,7 @@ export function AskView({
 								: answer;
 						const result = yield* actions.answer(value);
 						yield* attend(actions, {...attention, type: "saved", now: Date.now()});
-						yield* Effect.sync(() => says?.(words, answer.ask));
+						yield* Effect.sync(() => says?.(words, identity));
 						return result;
 					}).pipe(Effect.forkDetach);
 					return yield* Fiber.join(fiber);

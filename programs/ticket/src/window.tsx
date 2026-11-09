@@ -1,5 +1,6 @@
 import type {WindowProps, Writer} from "@kampus/fabrika-old";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
+import {AskIdentity} from "@kampus/pipeline/tickets/ask";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {Kbd} from "@manti-ui/react";
 import {Button} from "@manti-ui/react";
@@ -120,7 +121,11 @@ function AskCard(props: {
 	return ask.sealed === undefined ? (
 		<StopView ticket={page.opened.ticket.number} why="State not recorded" />
 	) : (
-		<AskView key={ask.ask} ticket={page.opened.ticket.number} ask={ask.sealed} />
+		<AskView
+			key={new AskIdentity({ticket: page.opened.ticket.number, ask: ask.ask}).key}
+			ticket={page.opened.ticket.number}
+			ask={ask.sealed}
+		/>
 	);
 }
 
@@ -594,7 +599,7 @@ function OneTicket({view, send}: WindowProps<typeof ticket>) {
 	const paragraphs = paragraphsOf(page.body);
 	return (
 		<div className="view ticket-view">
-			<AskStatus asks={asks} left={asks.length}>
+			<AskStatus asks={asks.map((ask) => ({ticket: number, ask: ask.ask}))} left={asks.length}>
 				<div className="tkv">
 					<div className="tk-main">
 						<div className="tk-col">

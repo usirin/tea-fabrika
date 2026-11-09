@@ -14,6 +14,16 @@ const Line = Schema.String.check(
 // come back as it was written (review 5).
 // oxlint-disable-next-line no-control-regex -- the class names the control characters it refuses
 const Id = Schema.String.check(Schema.isPattern(/^[^\s\u0000-\u001f\u007f]{1,128}$/));
+/** Ask ids are local to a ticket. Equality includes both fields. */
+export class AskIdentity extends Schema.Class<AskIdentity>("AskIdentity")({
+	ticket: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+	ask: Schema.NonEmptyString,
+}) {
+	/** React and the window's Later messages require a string key. */
+	get key(): string {
+		return `${this.ticket}/${this.ask}`;
+	}
+}
 const Hash = Schema.String.check(Schema.isPattern(/^sha256:[0-9a-f]{64}$/));
 const Percent = Schema.Finite.check(Schema.isBetween({minimum: 0, maximum: 100}));
 export const Rec = Schema.TaggedUnion({

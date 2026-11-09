@@ -535,7 +535,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	return (
 		<Panel id={POP.asks} label="Asks" onClose={close}>
 			<AskStatus
-				asks={waiting.map((ask) => ({ask: ask.sealed?.ask ?? ask.key}))}
+				asks={waiting.map((ask) => ({ticket: ask.ticket, ask: ask.sealed?.ask ?? ask.key}))}
 				left={waiting.length}
 			>
 				<p className="pop-head">
