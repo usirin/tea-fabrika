@@ -1,0 +1,12 @@
+.scale { font-size: var(--fs-body); }
+.manti { font-size: var(--manti-text-sm); }
+.inherit { font-size: inherit; font: inherit; }
+.keywords { font-size: medium; }
+.font { font: 600 var(--fs-small) / 12px var(--font); }
+.text { content: "font-size: 12px"; padding: 12px; }
+.alias { --size: var(--fs-body); font: 600 var(--size) / 12px var(--font); }
+.alias-comment { --size: var(--fs-body); font: var(--size) /* size */ / /* height */ 12px var(--font); }
+.oblique { font: oblique 10deg var(--fs-body) / 12px var(--font); }
+.oblique-calc { font: oblique calc(10deg + 2deg) var(--fs-body) var(--font); }
+.weight-calc { font: calc(400 + 100) var(--fs-body) / 12px var(--font); }
+.family { font: medium "12px"; }

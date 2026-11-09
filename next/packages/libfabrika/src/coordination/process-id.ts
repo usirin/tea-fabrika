@@ -31,21 +31,20 @@ export class ProcessIdGenerator extends Context.Service<
 		Effect.sync(() => {
 			let at = -1,
 				random = 0n;
-			return {
-				next: Effect.gen(function* () {
-					const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
-					if (now > at) {
-						at = now;
-						random = entropy();
-					} else if (random === maxRandom) {
-						at++;
-						random = 0n;
-					} else random++;
-					if (!Number.isSafeInteger(at) || at < 0 || at >= 2 ** 48)
-						return yield* Effect.die("UUIDv7 clock exhausted");
-					return encode(at, random);
-				}).pipe(Effect.withSpan("process.next")),
-			};
+			const next = Effect.fn("process.next")(function* () {
+				const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
+				if (now > at) {
+					at = now;
+					random = entropy();
+				} else if (random === maxRandom) {
+					at++;
+					random = 0n;
+				} else random++;
+				if (!Number.isSafeInteger(at) || at < 0 || at >= 2 ** 48)
+					return yield* Effect.die("UUIDv7 clock exhausted");
+				return encode(at, random);
+			});
+			return {next: next()};
 		}),
 	);
 }

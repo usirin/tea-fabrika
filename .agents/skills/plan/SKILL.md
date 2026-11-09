@@ -41,7 +41,7 @@ rows to read, and an older plan to copy the shape of. This skill holds the rest.
   `vector:` names fixed inputs from a specification; `format:` names the exact bytes of a fixed
   format; `pinned:` names a past bug's exact input, beside the property covering it; `scenario:`
   names one scripted outside run. Its internal logic still gets properties
-  ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#four-reason-labels-2026-11-08)).
+  ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)).
   Ask of each law: lint, type or test? A shape check's cell says `lint` or `type`.
   Other cells say `fc.<name>` for a function exported by installed fast-check,
   `@demlik/tea/pbt.arbMsg`, `.arbRecordMsg`, `.arbMsgSequence` or `.arbGuidedSequence`, optionally

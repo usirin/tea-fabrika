@@ -1,0 +1,23 @@
+.hex { color: #fff; }
+.named { color: red; }
+.custom { --x: oklch(0.7 0.1 200); }
+.mix { color: color-mix(in oklab, var(--done) 30%, transparent); }
+.relative { color: rgb(from var(--stuck) r g b / 50%); }
+.system { outline-color: Highlight; }
+.rgb { color: rgb(255 255 255); }
+.hsl { color: hsl(0 0% 100%); }
+.hwb { color: hwb(0 100% 0%); }
+.lab { color: lab(100% 0 0); }
+.lch { color: lch(100% 0 0); }
+.oklab { color: oklab(1 0 0); }
+.color { color: color(display-p3 1 1 1); }
+[data-pipe="sky"] { color: #fff; }
+.decoration { text-decoration: underline red; }
+.column { column-rule: 1px solid red; }
+.scrollbar { scrollbar-color: red blue; }
+.emphasis { text-emphasis: filled circle red; }
+.stroke { -webkit-text-stroke: 1px red; }
+.filter { filter: drop-shadow(0 0 2px red); }
+.mask { mask-image: linear-gradient(red, blue); }
+.image-color { list-style-image: image(url(icon.svg), red); }
+.cross-fade { content: cross-fade(red, url(icon.svg)); }

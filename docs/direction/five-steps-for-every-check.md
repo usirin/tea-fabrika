@@ -55,6 +55,15 @@ Decided 2026-11-08 by the owner, after PR 516's laws were all example tests.
 - **A hand-picked example stays only as a pinned case of a named past bug,** in fast-check's
   `examples`, with the bug named beside it.
 - **A check on the shape of code is a lint rule or a type,** not a test.
+- **Four kinds of law may be a fixed test, and the test's name says which** (owner, 2026-11-08).
+  Anything else is a property. A hand-picked example that checks a general rule is a miss.
+
+| Label | What it is | Example |
+|---|---|---|
+| `vector:` | A fixed input and answer from a spec | a TypeID from the TypeID spec's test vectors |
+| `format:` | A fixed format the code must write or read exactly | the `keybindings.toml` a person would write by hand |
+| `pinned:` | A named past bug, kept so it never comes back | the duplicate-id bug |
+| `scenario:` | One scripted run against the outside world | a real Electron window opens; a real `git push` lands |
 
 ```ts
 // A sketch: one law, with one pinned case of a named past bug.
@@ -62,42 +71,24 @@ fc.assert(
 	fc.property(fc.array(fc.integer()), (xs) => isSorted(sortIds(xs))),
 	{examples: [[[2, 1, 2]]]}, // the duplicate-id bug, pinned
 );
-```
 
-## Four reason labels, 2026-11-08
-
-Amendment for both versions and today's step skills. This replaces the earlier blanket rule
-against fixed examples. Every law uses generated inputs unless it has one of these reason labels:
-
-- `vector:` names fixed inputs from a specification.
-- `format:` names the exact bytes of a fixed format.
-- `pinned:` names a past bug's exact input, beside the property covering it.
-- `scenario:` names one scripted outside run. Its internal logic still gets properties.
-
-```ts
-// A sketch: the bug's fixed input stays beside the generated cases.
-fc.assert(
-	fc.property(fc.array(fc.integer()), (xs) => isSorted(sortIds(xs))),
-	{examples: [[[2, 1, 2]]]}, // pinned: the duplicate-id bug
-);
-// vector: inputs and answers from the named specification's test table.
-// format: exact bytes of the named version's wire message.
-// scenario: Stryker tests changed sample.ts with seed 119120 and its adjacent laws.
+// A sketch: the four fixed kinds, each named by its label.
+it("vector: TypeID spec, the nil UUID", () => {/* ... */});
+it("format: keys writes keybindings.toml as a person would", () => {/* ... */});
+it("pinned: duplicate ids sort once (the duplicate-id bug)", () => {/* ... */});
+it("scenario: the app opens a real window on a fresh home", () => {/* ... */});
 ```
 
 [Claessen and Hughes's QuickCheck](https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf)
 checks general rules with generated inputs.
 [Hypothesis's `@example`](https://hypothesis.readthedocs.io/en/latest/tutorial/replaying-failures.html#using-example-to-run-a-specific-input)
-keeps explicit inputs alongside generated cases. Our four labels name why a fixed case exists;
-they do not claim that one example checks a general rule.
+keeps explicit inputs alongside generated cases, as fast-check's `examples` does for `pinned:`.
+The four labels name why a fixed case exists; they do not claim that one example checks a general
+rule.
 
-The plan names the generator or a label with a reason for each law. The test writer keeps that
-reason beside the check. The reviewer checks that a property or permitted label is present and
-fits. Review does not reopen each test's merits. Shape checks remain lint rules or types.
-
-Cost: a label can be misused. The checker validates its syntax; review checks its reason against
-the specification, bytes, past bug or outside run. Confidence: 90%. This amendment cannot show
-that a particular set of generated inputs will find every bug.
+The plan names the generator, or a label with its reason, for each law. The test writer keeps that
+reason beside the check. The reviewer checks that the property or label is present and fits, and
+does not reopen each test's merits.
 
 ## Why
 
