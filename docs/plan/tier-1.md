@@ -458,7 +458,6 @@ const Write = Schema.TaggedUnion({caused: {cause: CauseText, fact: Schema.Unknow
 | [A unit of work is a commit](../direction/a-unit-of-work-is-a-commit.md) | decided 2026-11-05 | Each exam change is the test writer's commit inside its build pull request, and P32 builds the check that walks the commits. Closes [question 18](#open-questions). |
 | [Every pull request takes the steps](../direction/next-is-a-pipeline-pre-run.md) | order changed 2026-11-05 ([PR 396](https://github.com/usirin/tea-fabrika/pull/396)) | How it is built: `next/` no longer waits on the pipeline, and each step goes by hand. This plan already followed it. Its "how a change lands" now follows the [autonomy](../direction/autonomy-is-measured-trust.md) note: a merge does not wait on the owner, except exam pull requests, the exam asks and new design calls (owner, 2026-11-05; it said "the owner's yes"). |
 | [A browser tab's key survives](../../experiments/215-browser-key-survives-reload.md), [T8's four unknowns](../../experiments/214-mac-app-four-unknowns.md) | experiments 215 and 214, 2026-11-05 | P3 and P4, done: a fixed port for the person's brain, and P19's and P21's lines from P4. |
-| [Kept branches](./kept-branches-2026-11-05.md) | 2026-11-05 ([PR 400](https://github.com/usirin/tea-fabrika/pull/400)) | Nothing: "none touches `next/`". |
 
 ## The backup needs a design pass first
 
