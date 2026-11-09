@@ -117,3 +117,19 @@ it("reports exactly undeclared direct and transitive script reads", () => {
 			{seed: 119120, numRuns: 100},
 		);
 });
+
+// Mutation round 2: tests are parsed as TypeScript, and only static imports declare a read.
+it("parses TypeScript tests and counts only static imports as declarations", () => {
+	const script = ".agents/skills/s0/scripts/tool.mjs";
+	const test = ".agents/skills/s0/scripts/tool.test.ts";
+	const tree = (text: string) =>
+		new Map([
+			[script, ""],
+			[test, text],
+		]);
+	const typed = 'import "./tool.mjs";\nconst n: number = 1;\ninterface X { a: string }\n';
+	expect(scriptReads(tree(typed))).toEqual([]);
+	expect(scriptReads(tree('const m = await import("./tool.mjs");\n// tool.mjs'))).toEqual([
+		{test, path: script, via: test},
+	]);
+});
