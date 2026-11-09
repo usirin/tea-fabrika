@@ -1,3 +1,4 @@
+import {useMachine} from "@demlik/tea/react";
 import {it} from "@effect/vitest";
 import {AskStatus} from "@tea-fabrika/tracker/ask-window";
 import {Schema} from "effect";
@@ -12,6 +13,13 @@ import {
 import {flushSync} from "react-dom";
 import {createRoot} from "react-dom/client";
 import {afterEach, expect, vi} from "vitest";
+import {property} from "../../../fixtures/ask-desk/property.ts";
+
+// Observe the real tea hook, without replacing its state or dispatch behavior.
+vi.mock("@demlik/tea/react", async (original) => {
+	const actual = await original<typeof import("@demlik/tea/react")>();
+	return {...actual, useMachine: vi.fn(actual.useMachine)};
+});
 
 // Today's version. Plan trace: "polite status: Approved. N left." Review 3 found that a
 // second Approved. is silent. Run the real React renderer and AskStatus on a small DOM host.
@@ -143,6 +151,39 @@ afterEach(async () => {
 
 const left = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(100));
 const repeats = Schema.Int.check(Schema.isGreaterThanOrEqualTo(2), Schema.isLessThanOrEqualTo(8));
+
+// Review 5, finding 6. elm-first.md requires today's component state to live in tea.
+// Plant present: AskStatus uses React state, so no tea model changes when a saying arrives.
+// This observes the running model and repeated DOM announcements, not the component's source text.
+property(
+	"each repeated status changes its tea model and announces again",
+	{left, repeats},
+	async ({left, repeats}) => {
+		vi.mocked(useMachine).mockClear();
+		const test = mount(left);
+		try {
+			expect(
+				useMachine,
+				"AskStatus keeps no announcement state in a tea machine",
+			).toHaveBeenCalled();
+			for (let i = 0; i < repeats; i++) {
+				const before = vi.mocked(useMachine).mock.results.at(-1)?.value[0];
+				const writes = test.document.writes;
+				test.announce("Approved.");
+				await new Promise<void>((resolve) => setImmediate(resolve));
+				const after = vi.mocked(useMachine).mock.results.at(-1)?.value[0];
+				expect(after).not.toEqual(before);
+				expect(JSON.stringify(after), "the tea model must hold the announcement").toContain(
+					"Approved.",
+				);
+				expect(test.document.body.findStatus()?.textContent).toBe(`Approved. ${left} left.`);
+				expect(test.document.writes).toBeGreaterThan(writes);
+			}
+		} finally {
+			test.close();
+		}
+	},
+);
 
 it.prop(
 	"each accepted answer changes the live region even when its words repeat",

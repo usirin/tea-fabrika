@@ -1,7 +1,7 @@
 import {applyCell} from "@demlik/tea";
-import {askShownOf, sealAsk, type AskShown} from "@kampus/pipeline/tickets/ask";
+import {askShownOf, sealAsk, Evidence, type AskShown} from "@kampus/pipeline/tickets/ask";
 import {AskActions, AskView} from "@tea-fabrika/tracker/ask-window";
-import {Effect, Result} from "effect";
+import {Effect, Result, Schema} from "effect";
 import fc from "fast-check";
 import {act, createElement, type ReactNode} from "react";
 import {createRoot, type Root} from "react-dom/client";
@@ -212,6 +212,7 @@ beforeAll(async () => {
 	sealed = askShownOf(await Effect.runPromise(sealAsk(DRAFT)));
 });
 afterEach(() => {
+	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
 });
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -341,6 +342,156 @@ const table = (text: string): Keys => {
 	return decoded.success;
 };
 const number = fc.integer({min: 1, max: 100_000});
+
+// Review 5, finding 1. The sealed display promises the full plan, including later writers' fields.
+// Plant present in today's renderer: Listed stops at a title, and EvidenceText drops whole fields.
+const words = fc.stringMatching(/^[a-z]{6,18}$/);
+// Keep fields distinguishable even after shrinking, so a summary cannot stand in for a doubt.
+const marked = (value: unknown, path = "plan"): unknown =>
+	typeof value === "string"
+		? /^(s1|t1|q1|pr|test)$/.test(value)
+			? value
+			: `${path}: ${value}`
+		: Array.isArray(value)
+			? value.map((child, i) => marked(child, `${path}.${i}`))
+			: value !== null && typeof value === "object"
+				? Object.fromEntries(
+						Object.entries(value).map(([key, child]) => [key, marked(child, `${path}.${key}`)]),
+					)
+				: value;
+const claim = fc.record({
+	when: words,
+	result: words,
+	fixture: words,
+	check: fc.record({how: fc.constant("test"), what: words}),
+	serves: fc.constant(["s1"]),
+});
+const plan = fc
+	.record({
+		summary: words,
+		stories: fc.array(
+			fc.record({id: fc.constant("s1"), who: words, want: words, why: words, from: number}),
+			{minLength: 1, maxLength: 2},
+		),
+		tasks: fc.array(
+			fc.record({
+				id: fc.constant("t1"),
+				title: words,
+				ends: fc.constant("pr"),
+				job: claim,
+				criteria: fc.array(claim, {minLength: 1, maxLength: 2}),
+			}),
+			{minLength: 1, maxLength: 2},
+		),
+		goal: fc.record({job: claim, criteria: fc.array(claim, {minLength: 1, maxLength: 2})}),
+		pointers: fc.array(fc.record({at: words, why: words}), {minLength: 1, maxLength: 2}),
+		questions: fc.array(
+			fc.record({
+				id: fc.constant("q1"),
+				ask: words,
+				options: fc.array(words, {minLength: 2, maxLength: 3}),
+				lean: words,
+				why: words,
+				cost: words,
+				sure: fc.integer({min: 1, max: 79}),
+				doubt: words,
+			}),
+			{minLength: 1, maxLength: 2},
+		),
+		additional: fc.record({
+			explanation: words,
+			alternatives: fc.array(words, {minLength: 1, maxLength: 2}),
+		}),
+	})
+	.map((plan) => marked(plan));
+const leaves = (value: unknown, path = "plan"): readonly {path: string; text: string}[] =>
+	value === null || value === undefined
+		? []
+		: typeof value === "object"
+			? Object.entries(value).flatMap(([key, child]) => leaves(child, `${path}.${key}`))
+			: [{path, text: String(value)}];
+
+it("opened plan evidence shows every field held in the sealed plan", async () => {
+	await fc.assert(
+		fc.asyncProperty(plan, async (plan) => {
+			const evidence = {_tag: "plan", version: 2, plan};
+			expect(Schema.is(Evidence)(evidence)).toBe(true);
+			const ask = askShownOf(await Effect.runPromise(sealAsk({...DRAFT, evidence})));
+			const test = await mount(createElement(AskView, {ticket: 117, ask}));
+			try {
+				await test.press(" ");
+				const opened = test.find(".ask-evidence");
+				expect(opened.hasAttribute("hidden")).toBe(false);
+				expect(leaves(plan).filter(({text}) => !opened.textContent.includes(text))).toEqual([]);
+			} finally {
+				await test.close();
+			}
+		}),
+		{seed: 119120, numRuns: 30},
+	);
+});
+
+// Review 5, finding 3. Plant present: the menu forwards keys but never forwards its focus.
+it("focused reading time reaches the answer from both the menu and the tile", async () => {
+	const clock = vi.spyOn(Date, "now");
+	await fc.assert(
+		fc.asyncProperty(number, fc.integer({min: 1, max: 120_000}), async (ticket, ms) => {
+			const results: {place: string; ms: number | undefined}[] = [];
+			for (const place of ["tile", "menu"] as const) {
+				let now = 10_000;
+				clock.mockImplementation(() => now);
+				const subject = menu(ticket);
+				const test = await mount(
+					place === "menu"
+						? subject.node
+						: createElement(
+								AskActions.Provider,
+								{value: subject.actions},
+								createElement(AskView, {ticket, ask: sealed}),
+							),
+				);
+				try {
+					expect(test.document.activeElement).toBe(
+						test.find(place === "menu" ? '[role="grid"]' : ".ask-view"),
+					);
+					now += ms;
+					await test.press("y");
+					expect(subject.answer).toHaveBeenCalledTimes(1);
+					const answer = subject.answer.mock.calls[0]![0];
+					results.push({place, ms: answer.via._tag === "window" ? answer.via.took.ms : undefined});
+				} finally {
+					await test.close();
+				}
+			}
+			expect(results).toEqual([
+				{place: "tile", ms},
+				{place: "menu", ms},
+			]);
+		}),
+		{seed: 119120, numRuns: 20, examples: [[117, 60_000]]},
+	); // Review 5: a minute read in the menu saved zero.
+});
+
+// Review 5, finding 4. Plant present: built-in j/k consume a person's answer binding first.
+it("a mapped answer key wins over built-in menu navigation", async () => {
+	await fc.assert(
+		fc.asyncProperty(number, fc.constantFrom("j", "k"), async (ticket, key) => {
+			const subject = menu(ticket, table(`program.ask.rec = "${key}"`));
+			const test = await mount(subject.node);
+			try {
+				expect(test.document.activeElement).toBe(test.find('[role="grid"]'));
+				expect(test.find(`button[aria-keyshortcuts="${key}"]`).textContent).toContain("Take rec");
+				await test.press(key);
+				expect(subject.answer.mock.calls.map(([answer]) => answer)).toMatchObject([
+					{ticket, answer: {_tag: "rec"}, via: {took: {key}}},
+				]);
+			} finally {
+				await test.close();
+			}
+		}),
+		{seed: 119120, numRuns: 20},
+	);
+});
 
 // Plant already present: the focused grid handles no answer/evidence keys and hardcodes h.
 it("from the menu's first focus, actions use the current key map and unbound actions have no key", async () => {
