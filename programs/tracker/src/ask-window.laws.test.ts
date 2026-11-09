@@ -1,3 +1,5 @@
+import {isDeepStrictEqual} from "node:util";
+import {defineMachine, type Machine as TeaMachine} from "@demlik/tea";
 import {
 	arbConstantMsg,
 	arbMsg,
@@ -17,9 +19,16 @@ import {
 } from "@kampus/pipeline/tickets/ask";
 import {Effect} from "effect";
 import * as fc from "fast-check";
-import {beforeAll, describe, expect, it} from "vitest";
+import {beforeAll, describe, expect, it, vi} from "vitest";
 import {DRAFT, NONE, NOW, PICKS, policyFor} from "../../../fixtures/ask-desk/cases.ts";
 import {askMachine, askView} from "./ask-window.tsx";
+
+// Observe the two private machines without changing their init or reducers, or exporting them
+// from product code. Every constructor call still goes through tea's real defineMachine.
+vi.mock("@demlik/tea", async (original) => {
+	const tea = await original<typeof import("@demlik/tea")>();
+	return {...tea, defineMachine: vi.fn(tea.defineMachine)};
+});
 
 // The laws of today's shared ask editor (askMachine), on tea's pbt: after every step of any list
 // of Msgs, from the real init, on four sealed asks: a shown rec with two picks, a shown rec with
@@ -759,5 +768,294 @@ describe("the shared ask editor's laws (askMachine)", () => {
 			}),
 			OPTS,
 		);
+	});
+});
+
+// ---------------------------------------------------------------- the window's private machines
+
+type PureMachine<S, M extends {type: string}> = TeaMachine<S, M, never, never, undefined> & {
+	readonly update: {
+		[K in M["type"]]: (model: S, msg: Extract<M, {type: K}>) => [S, readonly never[]];
+	};
+};
+type AttentionView = {focused: boolean; active: boolean; visible: boolean; evidence: boolean};
+type Attention = {
+	took: {ms: number; opened: readonly string[]};
+	views: ReadonlyMap<string, AttentionView>;
+	at: number;
+};
+type AttentionModel = ReadonlyMap<string, Attention>;
+type AttentionEvent =
+	| {type: "focus" | "active" | "visible"; value: boolean; now: number}
+	| {type: "open"; name: string; now: number};
+type AttentionMsg = {key: string; view: string; now: number} & (
+	| {type: "change"; event: AttentionEvent}
+	| {type: "leave"}
+	| {type: "read"}
+	| {type: "saved"}
+);
+type AttentionMachine = PureMachine<AttentionModel, AttentionMsg>;
+type AttentionStep = Step<AttentionModel, AttentionMsg, never>;
+type Said = {said: {text: string; count: number} | null};
+type StatusMsg = {type: "say"; text: string};
+type StatusMachine = PureMachine<Said, StatusMsg>;
+
+const made = vi.mocked(defineMachine).mock.results.filter((r) => r.type === "return");
+const attentionMachine = made.find((r) => "change" in r.value.update && "saved" in r.value.update)
+	?.value as AttentionMachine;
+const statusMachine = made.find((r) => "say" in r.value.update)?.value as StatusMachine;
+
+const attentionFields = {
+	key: fc.constantFrom("117/a", "118/b"),
+	view: fc.constantFrom("ticket", "menu"),
+	now,
+};
+const attentionTable: MsgArbitraryTable<AttentionMsg> = {
+	change: arbRecordMsg("change", {
+		...attentionFields,
+		event: fc.oneof(
+			arbRecordMsg("focus", {value: fc.boolean(), now}),
+			arbRecordMsg("active", {value: fc.boolean(), now}),
+			arbRecordMsg("visible", {value: fc.boolean(), now}),
+			arbRecordMsg("open", {name: fc.constantFrom("evidence", "questions"), now}),
+		),
+	}),
+	leave: arbRecordMsg("leave", attentionFields),
+	read: arbRecordMsg("read", attentionFields),
+	saved: arbRecordMsg("saved", attentionFields),
+};
+// Generated clocks with two views of one ask guarantee overlapping time is exercised, followed
+// by arbitrary changes, leaves, reads and saves for both asks and both views.
+const attentionSequence = fc
+	.tuple(now, fc.integer({min: 1, max: 1_000_000}))
+	.chain(([at, elapsed]) =>
+		arbMsgSequence(arbMsg(attentionTable, {weights: {change: 4}}), {
+			prefix: [
+				...(["ticket", "menu"] as const).map((view): AttentionMsg => ({
+					type: "change",
+					key: "117/a",
+					view,
+					now: at,
+					event: {type: "focus", value: true, now: at},
+				})),
+				{type: "read", key: "117/a", view: "ticket", now: at + elapsed},
+			],
+			maxLength: 40,
+			size: "max",
+		}),
+	);
+const everyAttention = (name: string, law: (step: AttentionStep) => boolean | string) => ({
+	name,
+	check: (machine: AttentionMachine) =>
+		propertyInvariant(machine, undefined, attentionSequence, law, OPTS),
+});
+
+// P16: overlapping views share one clock; hidden, inactive and unfocused views add no time.
+const sharedTime = everyAttention(
+	"reading time counts once while any view is attentive",
+	(step) => {
+		const {prev, msg, next} = step;
+		const before = prev.get(msg.key);
+		const after = next.get(msg.key);
+		if (after === undefined) return true;
+		const counting = [...(before?.views.values() ?? [])].some(
+			(v) => v.focused && v.active && v.visible,
+		);
+		const elapsed = before !== undefined && counting ? Math.max(0, msg.now - before.at) : 0;
+		return (
+			(after.took.ms === (before?.took.ms ?? 0) + elapsed && after.at === msg.now) ||
+			"reading time counted incorrectly"
+		);
+	},
+);
+
+const orderedOpenings = everyAttention("only openings append, in the order they arrive", (step) => {
+	const {prev, msg, next} = step;
+	const before = prev.get(msg.key);
+	const after = next.get(msg.key);
+	if (after === undefined) return true;
+	const event = msg.type === "change" ? msg.event : undefined;
+	const opening =
+		event?.type === "open" &&
+		(event.name !== "evidence" || before?.views.get(msg.view)?.evidence !== true);
+	const expected = [...(before?.took.opened ?? []), ...(opening ? [event.name] : [])];
+	return JSON.stringify(after.took.opened) === JSON.stringify(expected) || "openings changed";
+});
+
+const sameView = (a: AttentionView | undefined, b: AttentionView | undefined) =>
+	a === b ||
+	(a !== undefined &&
+		b !== undefined &&
+		a.focused === b.focused &&
+		a.active === b.active &&
+		a.visible === b.visible &&
+		a.evidence === b.evidence);
+
+const viewAttention = everyAttention(
+	"each view keeps its flags, and leaving stops its clock",
+	(step) => {
+		const {prev, msg, next} = step;
+		const before = prev.get(msg.key)?.views ?? new Map<string, AttentionView>();
+		const after = next.get(msg.key)?.views;
+		if (after === undefined) return true;
+		for (const [view, flags] of before)
+			if (view !== msg.view && !sameView(after.get(view), flags)) return "another view changed";
+		const old = before.get(msg.view);
+		if (msg.type === "change") {
+			const expected = {...(old ?? {focused: false, active: true, visible: true, evidence: false})};
+			const event = msg.event;
+			if (event.type === "open") {
+				if (event.name === "evidence") expected.evidence = !expected.evidence;
+			} else expected[event.type === "focus" ? "focused" : event.type] = event.value;
+			if (!sameView(after.get(msg.view), expected)) return "view flags changed incorrectly";
+		} else {
+			const expected = msg.type === "leave" && old !== undefined ? {...old, focused: false} : old;
+			if (!sameView(after.get(msg.view), expected)) return "leaving lost evidence or kept focus";
+		}
+		return (
+			after.size === before.size + (msg.type === "change" && old === undefined ? 1 : 0) ||
+			"a view was invented or lost"
+		);
+	},
+);
+
+const askLifetimes = everyAttention(
+	"only a change starts an ask, and saving forgets only that ask",
+	(step) => {
+		const {prev, msg, next, cmds} = step;
+		for (const [key, record] of prev)
+			if (key !== msg.key && !isDeepStrictEqual(next.get(key), record))
+				return "another ask changed";
+		const kept = msg.type !== "saved" && (prev.has(msg.key) || msg.type === "change");
+		return (
+			(next.has(msg.key) === kept &&
+				next.size === prev.size - Number(prev.has(msg.key)) + Number(kept) &&
+				cmds.length === 0) ||
+			"an ask started or survived at the wrong time"
+		);
+	},
+);
+
+const ATTENTION_LAWS = [sharedTime, orderedOpenings, viewAttention, askLifetimes];
+const attentionPlant = (update: Partial<AttentionMachine["update"]>): AttentionMachine => ({
+	...attentionMachine,
+	update: {...attentionMachine.update, ...update},
+});
+const ATTENTION_PLANTS = [
+	{
+		law: sharedTime,
+		reason: "reading time counted incorrectly",
+		machine: attentionPlant({
+			read: (model, msg) => {
+				const [next, cmds] = attentionMachine.update.read(model, msg);
+				const record = next.get(msg.key);
+				return [
+					record === undefined
+						? next
+						: new Map(next).set(msg.key, {
+								...record,
+								took: {...record.took, ms: record.took.ms + 1},
+							}),
+					cmds,
+				];
+			},
+		}),
+	},
+	{
+		law: orderedOpenings,
+		reason: "openings changed",
+		machine: attentionPlant({
+			change: (model, msg) => {
+				const [next, cmds] = attentionMachine.update.change(model, msg);
+				const record = next.get(msg.key)!;
+				return [new Map(next).set(msg.key, {...record, took: {...record.took, opened: []}}), cmds];
+			},
+		}),
+	},
+	{
+		law: viewAttention,
+		reason: "leaving lost evidence or kept focus",
+		machine: attentionPlant({leave: (model) => [model, []]}),
+	},
+	{
+		law: askLifetimes,
+		reason: "an ask started or survived at the wrong time",
+		machine: attentionPlant({saved: (model) => [model, []]}),
+	},
+];
+
+const statusSequence = fc.string().chain((text) =>
+	arbMsgSequence(arbMsg<StatusMsg>({say: arbRecordMsg("say", {text: fc.string()})}), {
+		// Repeating generated words must still create a fresh announcement for the screen reader.
+		prefix: [
+			{type: "say", text},
+			{type: "say", text},
+		],
+		maxLength: 30,
+		size: "max",
+	}),
+);
+const everyStatus = (
+	name: string,
+	law: (step: Step<Said, StatusMsg, never>) => boolean | string,
+) => ({
+	name,
+	check: (machine: StatusMachine) =>
+		propertyInvariant(machine, undefined, statusSequence, law, OPTS),
+});
+// P24: the persistent status region announces every accepted save, including repeated words.
+const freshAnnouncement = everyStatus(
+	"every saying gets a fresh count, even repeated words",
+	(step) =>
+		(step.next.said?.count === (step.prev.said?.count ?? 0) + 1 && step.cmds.length === 0) ||
+		"an announcement did not advance",
+);
+const latestWords = everyStatus(
+	"the status keeps exactly the latest words",
+	(step) => step.next.said?.text === step.msg.text || "the latest words changed",
+);
+const STATUS_LAWS = [freshAnnouncement, latestWords];
+const STATUS_PLANTS = [
+	{
+		law: freshAnnouncement,
+		reason: "an announcement did not advance",
+		machine: {
+			...statusMachine,
+			update: {
+				say: (model, msg) =>
+					model.said?.text === msg.text ? [model, []] : statusMachine.update.say(model, msg),
+			},
+		} satisfies StatusMachine,
+	},
+	{
+		law: latestWords,
+		reason: "the latest words changed",
+		machine: {
+			...statusMachine,
+			update: {
+				say: (model, msg) => {
+					const [next, cmds] = statusMachine.update.say(model, msg);
+					return [{said: {...next.said!, text: `${msg.text} changed`}}, cmds];
+				},
+			},
+		} satisfies StatusMachine,
+	},
+];
+
+describe("the shared attention clock's laws (attentionMachine)", () => {
+	it.each(ATTENTION_LAWS)("$name", (law) => {
+		law.check(attentionMachine);
+	});
+	it.each(ATTENTION_PLANTS)("the planted mistake $reason is caught", ({law, machine, reason}) => {
+		expect(() => law.check(machine)).toThrow(reason);
+	});
+});
+
+describe("the window status's laws (statusMachine)", () => {
+	it.each(STATUS_LAWS)("$name", (law) => {
+		law.check(statusMachine);
+	});
+	it.each(STATUS_PLANTS)("the planted mistake $reason is caught", ({law, machine, reason}) => {
+		expect(() => law.check(machine)).toThrow(reason);
 	});
 });

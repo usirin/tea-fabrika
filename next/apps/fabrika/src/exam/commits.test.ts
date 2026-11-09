@@ -795,6 +795,15 @@ describe("trusted config files", () => {
 				{ "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
 				{ "glob": "next/packages/libfabrika/src/id.test-support.ts", "why": "the generated ID fixtures" },
 				{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
+				{ "glob": "**/*.ask-desk.test.ts", "why": "today's ask-desk PR 1 laws" },
+				{
+					"glob": "packages/pipeline/src/ask-desk.test-support.ts",
+					"why": "the ask-desk properties' test runner and input constraints"
+				},
+				{ "glob": "fixtures/ask-desk/**", "why": "ask-desk saved cases, vectors and mutation plants" },
+				{ "glob": "apps/fabrika/e2e.ts", "why": "today's real-app checks and their routing" },
+				{ "glob": "apps/fabrika/e2e/**", "why": "today's real-app checks and captures" },
+				{ "glob": "programs/tracker/package.json", "why": "the shared ask-view subpath" },
 				{ "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
 				{ "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },
 				{
@@ -825,6 +834,7 @@ describe("trusted config files", () => {
 				},
 				{ "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
 				{ "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
+				{ "glob": "pnpm-lock.yaml", "why": "the exact dependencies the tests and checks run" },
 				{ "glob": "tsconfig.base.json", "why": "the type checker's strictness" },
 				{ "glob": "patches/**", "why": "the Effect checks patched into tsgo" },
 				{
