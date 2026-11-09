@@ -4,12 +4,17 @@
 #   box.sh new   <name> <base-ref> <branch>   make the box, install, print its paths
 #   box.sh run   <name> <prompt-file> <out>   run codex in it (CODEX_MODEL, CODEX_EFFORT, standard tier), writable: box + its git data
 #   box.sh fetch <name> <branch>              pull the box's branch and step notes into the main checkout
+#   box.sh gc [--dry-run]                     remove boxes whose work is safe elsewhere (gc.ts says how)
 # Paths come from env.sh beside this script.
 set -eu
 . "$(dirname "$0")/env.sh"
-cmd=$1; name=$2
+cmd=${1:-}; name=${2:-}
 work=$BOXES/$name; gitdata=$BOXES/$name-gitdata
 case $cmd in
+gc)
+	shift
+	exec node "$(dirname "$0")/gc.ts" "$@"
+	;;
 new)
 	base=$3; branch=$4
 	mkdir -p "$BOXES"
@@ -37,5 +42,5 @@ fetch)
 		git -C "$MAIN" notes --ref=fabrika merge -q -s cat_sort_uniq "box-$name" 2>/dev/null || true
 	git -C "$MAIN" log --format='%h %an | %s' -3 "$branch"
 	;;
-*) echo "usage: box.sh new|run|fetch <name> ..." >&2; exit 2 ;;
+*) echo "usage: box.sh new|run|fetch <name> ... | box.sh gc [--dry-run]" >&2; exit 2 ;;
 esac

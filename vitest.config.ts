@@ -27,7 +27,6 @@ export default defineConfig({
 			"apps/*/src/**/*.test.ts",
 			"packages/*/src/**/*.test.ts",
 			"programs/*/src/**/*.test.ts",
-			"packs/*/src/**/*.test.ts",
 			"oxlint-plugins/*.test.ts",
 			"vitest.shards.test.ts",
 			".github/ci/*.test.ts",

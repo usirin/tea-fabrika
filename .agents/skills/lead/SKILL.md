@@ -34,9 +34,8 @@ first step:
 ```text
 Parent: ticket <id>, branch <branch>, signed build head <sha>, or none.
 Children: <ticket, branch and signed parent head for each child>, or none. Record before starting.
-Merge method: merge when this parent has a stacked child; squash otherwise.
 Start a child at its parent's signed build head. Keep the child's tests through catch-up.
-Land the child after the parent reaches main. Pass the recorded method to catchup.sh.
+Land the stack with `gh stack merge <pr> --squash`, then `gh stack sync --prune`.
 Return plans unsigned, including reviews and revisions. Only the lead session approves them.
 Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
 and starts no build.
@@ -80,10 +79,12 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh new <name> <base> <branch>` | a Codex box: its own clone, git data outside `.git`, installed |
 | `box.sh run <name> <prompt> <out>` | run Codex in the box, writable only there |
 | `box.sh fetch <name> <branch>` | fetch the branch and step notes into the main checkout, nothing else |
+| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first; drive runs it at start |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
-| `catchup.sh <pr> <ticket> [--merge-method squash\|merge]` | merge `main` in as the bot, sign `lead`, push, check that exact head and land pinned to it; squash by default |
+| `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
+| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head and squash-land pinned to it; a PR in a gh stack lands with `gh stack merge` |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
 
@@ -96,9 +97,9 @@ look green. Pushes and merges are never retried by that helper.
 
 ## Use drive.ts for any step
 
-Use `drive.ts` for any step, on a Codex box or a Claude agent. A Claude agent in the lead session
-only reads its result and makes the judgment call. Start it in the background and read the last
-line only:
+Every step goes through `drive.ts`, on a Codex box or a Claude agent; no box is made by hand. A
+Claude agent in the lead session only reads its result and makes the judgment call. Start it in the
+background and read the last line only:
 
 ```sh
 node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|review> <brief.md> \
@@ -127,9 +128,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   A stop after the time limit takes the agent's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
   is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
-  drive started). It never retries. A stuck step keeps its box. A tests, build or mutation step
-  waits while `pgrep -x tsgo` finds one. `DRIVE_MINUTES` (default 60) stops a step that runs too
-  long.
+  drive started, or under 20 GB free after `box.sh gc`). It never retries. A stuck step keeps its
+  box. The commits check reads the whole lane, from where it left main, so each earlier step's
+  newest link is in its chain. A tests, build or mutation step waits while `pgrep -x tsgo` finds
+  one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
 
 ## Pushes and protected refs
 
@@ -159,15 +161,15 @@ visible, and never weaken the rules to hide this message.
    A plan that only builds decided notes: write "Approved by the lead agent, builds
    <note>" on its blank first line. A plan that raises a new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
-4. **Start a box** on a `fabrikalfa/<name>` branch, with `box.sh new`. Use `origin/main` for an
-   independent ticket. A stacked child starts at the parent's signed build head, before the
+4. **Start the lane** on a `fabrikalfa/<name>` branch through `drive.ts`, never `box.sh new` by
+   hand. Use `origin/main` for an independent ticket. A stacked child starts at the parent's signed build head, before the
    parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
    Record the child, parent branch and signed head before starting it. Keep the child's tests
    when merging parent work in. Never replace them with the parent's older tests.
-5. **Run the steps in order,** in the background: tests, build, mutation, review. Each runs in the
-   box with `box.sh run`, except a step with Electron or socket work, which a Claude agent runs
+5. **Run the steps in order,** in the background: tests, build, mutation, review. Each runs
+   through `drive.ts`, except a step with Electron or socket work, which a Claude agent runs
    (above). No builder starts before tests that exist. Each brief names its skill.
-6. **After each step:** `box.sh fetch`, read the report and the diff, and log the run the same day:
+6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
    one `field/runs.jsonl` row (`fieldrow.py` for Codex, `clauderow.py` for a Claude agent, a
    driver included, once it has finished), and one `field/notes.jsonl` note for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
@@ -186,10 +188,16 @@ visible, and never weaken the rules to hide this message.
    `ask owner exam_read`; never write "owner read" unless the owner did, and give each such merge
    a field note. Then run `catchup.sh` in the background: it brings the PR up to
    date, signs only the new merge as `lead`, waits for every check on that exact head (e2e and
-   commits included) and lands it pinned to that head. Pass `--merge-method merge` for a parent
-   with a recorded stacked child, so the signed parent head stays in main's history. Otherwise
-   pass `--merge-method squash`, the default. A child lands only after its parent reaches main.
-   Catch-up merges main in and keeps the child's tests. It never signs a step's commit: an
+   commits included) and squash-lands it pinned to that head; a PR in a gh stack lands with
+   `gh stack merge <pr> --squash --yes` once its head reads unchanged. Every PR squash-merges, a stacked
+   parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
+   GitHub stack ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)):
+   `gh stack init <bottom> ... <top>` adopts the branches, `gh stack submit` opens the PRs,
+   `gh stack merge <pr> --squash` lands bottom-up, and `gh stack sync --prune` rebases the rest
+   onto main and pushes. Rebase by hand only locally (`gh stack rebase`, then `gh stack push`),
+   never with the web "Rebase stack" button: it makes unsigned commits. The child's trees stay the
+   same, so its links hold; if a tree changed, that child's steps sign again. A child keeps its own
+   tests. It never signs a step's commit: an
    unsigned one goes back to its own step.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
     `MergeRow`, then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the
@@ -219,11 +227,26 @@ Product code (`next/` and today's app) keeps its steps.
 
 ## Decisions land at once
 
-A decision lands in the repo as soon as it is made (owner, 2026-11-09). Each decision gets its own
-docs PR, opened the turn it is decided, with a docs agent. Never batch decisions, and never wait for
-a code PR or for the end of the day. A docs-only PR that writes down a decision is merged when CI
-is green and the leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their
-steps.
+Decisions live in `.decisions/`, one file per decision
+([0001](../../../.decisions/0001-decisions-live-in-the-repo.md), owner, 2026-11-09). The whole path:
+
+```text
+owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on green
+```
+
+- **Write it the turn it is decided,** with a docs agent using [the adr skill](../adr/SKILL.md),
+  in the shape the adr skill gives. Link its `docs/direction/` note when
+  one exists.
+- **One decision, one PR.** Never batch decisions, and never wait for a code PR or for the end of
+  the day.
+- **Merge on green.** A docs-only PR that writes down a decision is merged when CI is green and the
+  leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their steps.
+- **Search before you ask.** Before the lead or any step asks the owner or writes a plan, it
+  searches `.decisions/`, `.glossary/` and `docs/direction/` for the topic.
+- **Read what a diff touches.** Before a review and before a merge, run
+  `sh .agents/skills/lead/scripts/governance.sh` on the branch. It lists the decision files the
+  diff's words touch. The review step and the lead read each one and say whether the diff walks it
+  back. It only lists for now; it blocks later, once its false alarms are measured.
 
 The lead owns the count of decisions still missing from the repo. Its status gives that count and
 the open docs PRs carrying them. The owner does not keep the list. Code cannot count decisions
@@ -248,7 +271,8 @@ push or merge, and the lead checks it by hand. A hit is never waved through by t
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase, force-push or `gh pr update-branch`. Catch up by merging `main` in.
+- Rebase, force-push or `gh pr update-branch`. Catch up by merging `main` in. The one exception is
+  a stacked child, moved with the `gh stack` commands (0004).
 - Merge a live run by hand, approve a pull request, or answer a question the machine put to a person.
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 
