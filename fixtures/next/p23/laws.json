@@ -2,7 +2,7 @@
 	"version": "next/",
 	"ticket": 327,
 	"seed": 119120,
-	"scope": "P23 round 2. Paths below start at the repository root.",
+	"scope": "P23 round 3. Paths below start at the repository root.",
 	"rows": [
 		{
 			"law": "Only the native action creates a pass",
@@ -12,9 +12,9 @@
 			"law": "Secure bytes and one shared hash format",
 			"checks": [
 				"next/packages/libfabrika/src/transport/browser-pass.test.ts",
-				"next/packages/libfabrika/src/desktop/browser-link.test.ts"
-			],
-			"missing": "Generated requests through the relocated Door to compare its stored digest with generation."
+				"next/packages/libfabrika/src/desktop/browser-link.test.ts",
+				"next/packages/libfabrika/src/server/browser-link.test.ts"
+			]
 		},
 		{
 			"law": "Install the hash before opening",
@@ -35,14 +35,15 @@
 			"law": "Used, old and unknown links give normal code rows",
 			"checks": [
 				"next/packages/libfabrika/src/desktop/menu-browser.laws.test.ts",
+				"next/packages/libfabrika/src/server/browser-link.test.ts",
 				"next/apps/fabrika/e2e/browser-link.test.ts"
-			],
-			"missing": "Generated requests through the relocated Door. The live scenario covers the recovery screen."
+			]
 		},
 		{
 			"law": "Existing waiting key can use a fresh link",
 			"checks": [
 				"next/packages/libfabrika/src/client/browser-knock.test.ts",
+				"next/packages/libfabrika/src/server/browser-link.test.ts",
 				"next/apps/fabrika/e2e/browser-link.test.ts"
 			]
 		},
@@ -77,6 +78,7 @@
 				"next/packages/libfabrika/src/desktop/menu-browser.laws.test.ts",
 				"next/packages/libfabrika/src/client/browser-knock.test.ts",
 				"next/packages/libfabrika/src/transport/browser-pass.test.ts",
+				"next/packages/libfabrika/src/server/browser-link.test.ts",
 				"next/apps/fabrika/e2e/browser-link.test.ts"
 			]
 		},
@@ -160,6 +162,7 @@
 		"The secret laws' Law cells omit the required [secrets] marker. The approved plan stays unchanged in this round."
 	],
 	"limits": [
+		"The real Door properties await P21's relocated server/door.ts. The direct Waiting property is red because main's rows still keep pass instead of digest. Generated assertion plants run without P21.",
 		"The journal behavior is red on the missing recording.ts. The independent encoded leak plants run without that module.",
 		"Real Electron, Chromium, launchd and OS prompt evidence must come from the lead's run. The root unit-test command excludes e2e files.",
 		"P12 readiness and lifecycle callbacks and P19/P18 registrations still need comparison with their built exports. The fixture has no replacement admission, menu or reconnect machine.",
