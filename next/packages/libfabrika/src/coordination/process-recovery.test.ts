@@ -43,6 +43,26 @@ const name = fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/);
 const input = fc
 	.record({m: text, build: text, errors: fc.array(text, {minLength: 1, maxLength: 32})})
 	.map((value) => ({...value, tries: value.errors.length, limit: value.errors.length}));
+const invalidInputs = fc
+	.tuple(
+		input,
+		fc.string({minLength: 257, maxLength: 300}),
+		fc.oneof(
+			fc.integer({max: 0}),
+			fc.integer({min: 0, max: 32}).map((n) => n + 0.5),
+		),
+	)
+	.map(([value, long, count]) => [
+		{...value, errors: value.errors.slice(1)},
+		{...value, m: ""},
+		{...value, m: long},
+		{...value, build: ""},
+		{...value, build: long},
+		{...value, errors: ["", ...value.errors.slice(1)]},
+		{...value, errors: [long, ...value.errors.slice(1)]},
+		{...value, tries: count},
+		{...value, limit: count},
+	]);
 // Two programs with different registered names; either may restart several times.
 const history = fc.record({
 	programs: fc.uniqueArray(text, {minLength: 2, maxLength: 2}),
@@ -55,68 +75,64 @@ const history = fc.record({
 	input,
 });
 type History = typeof history extends fc.Arbitrary<infer Value> ? Value : never;
-const seeded = (h: History) =>
-	Effect.gen(function* () {
-		const disk = storage();
-		const next = ids(...h.processes);
-		const starts: Array<typeof ProcessFact.cases.started.Type> = [];
-		const current: string[] = [];
-		const layer = () => manager(disk, brain(), next.next);
-		for (const i of [0, 1]) {
-			const started = yield* ProcessManager.use((p) =>
-				p.start(
-					first(`start:${i}`, h.names[i]!, {program: h.programs[i]!, hash: "build-a"}),
-					from(),
-				),
-			).pipe(Effect.provide(layer()));
+const seeded = Effect.fnUntraced(function* (h: History) {
+	const disk = storage();
+	const next = ids(...h.processes);
+	const starts: Array<typeof ProcessFact.cases.started.Type> = [];
+	const current: string[] = [];
+	const layer = () => manager(disk, brain(), next.next);
+	for (const i of [0, 1]) {
+		const started = yield* ProcessManager.use((p) =>
+			p.start(first(`start:${i}`, h.names[i]!, {program: h.programs[i]!, hash: "build-a"}), from()),
+		).pipe(Effect.provide(layer()));
+		current[i] = started.process;
+	}
+	for (const i of h.restarts) {
+		yield* Effect.gen(function* () {
+			const p = yield* ProcessManager;
+			const after = current[i]!;
+			yield* p.exit(after, "crashed", from());
+			const started = yield* p.start(
+				Start.cases.again.make({
+					id: `restart:${after}`,
+					name: h.names[i]!,
+					code: {program: h.programs[i]!, hash: "build-b"},
+					after,
+					why: "crashed",
+				}),
+				from(),
+			);
 			current[i] = started.process;
-		}
-		for (const i of h.restarts) {
-			yield* Effect.gen(function* () {
-				const p = yield* ProcessManager;
-				const after = current[i]!;
-				yield* p.exit(after, "crashed", from());
-				const started = yield* p.start(
-					Start.cases.again.make({
-						id: `restart:${after}`,
-						name: h.names[i]!,
-						code: {program: h.programs[i]!, hash: "build-b"},
-						after,
-						why: "crashed",
-					}),
-					from(),
-				);
-				current[i] = started.process;
-			}).pipe(Effect.provide(layer()));
-			if (h.reopen) disk.reopen();
-		}
-		for (const row of disk.rows())
-			if (row._tag === "started" && row.by === BRAIN)
-				starts.push(Schema.decodeUnknownSync(ProcessFact.cases.started)(valueFor(row)));
-		return {disk, layer, starts: h.reverse ? starts.reverse() : starts};
-	});
+		}).pipe(Effect.provide(layer()));
+		if (h.reopen) disk.reopen();
+	}
+	for (const row of disk.rows())
+		if (row._tag === "started" && row.by === BRAIN)
+			starts.push(Schema.decodeUnknownSync(ProcessFact.cases.started)(valueFor(row)));
+	return {disk, layer, starts: h.reverse ? starts.reverse() : starts};
+});
 
 describe("T319, next/ dead-letter identity", () => {
-	it.effect(
-		"plant, drop bad_text: invalid dead input returns a typed refusal and writes nothing",
-		() => {
-			const disk = storage();
-			return Effect.gen(function* () {
-				const processes = yield* ProcessManager;
-				yield* processes.start(first(), from());
-				const before = disk.rows();
-				for (const invalid of [
-					{...deadInput, errors: []},
-					{...deadInput, m: ""},
-					{...deadInput, build: ""},
-				]) {
-					const error = yield* processes.dead(A, invalid, from()).pipe(Effect.flip);
-					expect(error).toMatchObject({_tag: "ProcessError", why: "bad_text"});
-					expect(disk.rows()).toEqual(before);
-				}
-			}).pipe(Effect.provide(manager(disk)));
-		},
-	);
+	it("plant, drop bad_text: invalid dead input returns a typed refusal and writes nothing", async () => {
+		await fc.assert(
+			fc.asyncProperty(invalidInputs, (values) => {
+				const disk = storage();
+				return Effect.runPromise(
+					Effect.gen(function* () {
+						const processes = yield* ProcessManager;
+						yield* processes.start(first(), from());
+						const before = disk.rows();
+						for (const invalid of values) {
+							const error = yield* processes.dead(A, invalid, from()).pipe(Effect.flip);
+							expect(error).toMatchObject({_tag: "ProcessError", why: "bad_text"});
+							expect(disk.rows()).toEqual(before);
+						}
+					}).pipe(Effect.provide(manager(disk))),
+				);
+			}),
+			{seed: 119120, numRuns: 12},
+		);
+	});
 
 	for (const [field, plant] of [
 		["process", "use the successor ID or a registered-name stream"],
