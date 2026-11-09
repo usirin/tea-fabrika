@@ -107,13 +107,37 @@ const collect = Effect.fn("build.collect")(function* (
 	return assets;
 });
 
-// A stylesheet a window imports becomes an asset of its own; the script keeps no trace of it.
-// Rolldown calls this hook outside Effect, so it reads the file directly; a throw fails the bundle.
+// A stylesheet a window imports becomes one asset of its own, its `@import`s inlined in order, so
+// every rule it needs is in the table and the script keeps no trace of it. Any other relative
+// `url()` would need a file the table cannot carry, so it stops the build rather than 404 later.
+// Rolldown calls this hook outside Effect, so it reads files directly; a throw fails the bundle.
+const IMPORT = /@import\s+(?:url\(\s*(["']?)([^"')\s]+)\1\s*\)|(["'])([^"']+)\3)\s*([^;]*);/g;
+const URL_REF = /url\(\s*(["']?)([^"')\s]+)\1\s*\)/g;
+const remote = (ref: string) => /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(ref);
+const inlineCss = (file: string, seen: ReadonlySet<string>): string => {
+	if (seen.has(file)) throw new Error("stylesheet imports itself");
+	const within = new Set([...seen, file]);
+	return readFileSync(file, "utf8").replace(
+		IMPORT,
+		(rule, _q, url: string | undefined, _q2, quoted: string | undefined, media: string) => {
+			const ref = url ?? quoted ?? "";
+			if (remote(ref)) return rule;
+			const body = inlineCss(resolve(dirname(file), ref), within);
+			const condition = media.trim();
+			if (condition === "") return body;
+			if (/^(?:layer|supports)\b/.test(condition)) throw new Error("unsupported @import condition");
+			return `@media ${condition} {\n${body}\n}`;
+		},
+	);
+};
 const stylesheets: Plugin = {
 	name: "fabrika-css",
 	load(id) {
 		if (!id.endsWith(".css")) return;
-		this.emitFile({type: "asset", name: basename(id), source: readFileSync(id, "utf8")});
+		const source = inlineCss(id, new Set());
+		for (const [, , ref] of source.replace(IMPORT, "").matchAll(URL_REF))
+			if (ref !== undefined && !remote(ref)) throw new Error("stylesheet references a file");
+		this.emitFile({type: "asset", name: basename(id), source});
 		return {code: "", moduleType: "js"};
 	},
 };
@@ -182,14 +206,19 @@ const publish = Effect.fn("build.emit")(function* (
 			prefix: ".fabrika-build-",
 		});
 		const backup = `${pending}.old`;
+		// Once the last good file is moved aside, a failure or an interruption at any later point
+		// (the final rename included, even one that landed) puts it back. The disk says how far it got.
+		const restore = Effect.gen(function* () {
+			if (!(yield* fs.exists(backup))) return;
+			yield* fs.remove(out, {recursive: true, force: true});
+			yield* fs.rename(backup, out);
+		}).pipe(Effect.ignore);
 		yield* Effect.gen(function* () {
 			yield* fs.writeFileString(resolve(pending, "brain.mjs"), brain);
-			const had = yield* fs.exists(out);
-			if (had) yield* fs.rename(out, backup);
-			yield* fs
-				.rename(pending, out)
-				.pipe(Effect.tapError(() => (had ? fs.rename(backup, out) : Effect.void)));
+			if (yield* fs.exists(out)) yield* fs.rename(out, backup);
+			yield* fs.rename(pending, out);
 		}).pipe(
+			Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : restore)),
 			Effect.ensuring(
 				Effect.all(
 					[

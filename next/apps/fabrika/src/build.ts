@@ -2,7 +2,7 @@
 import {globSync} from "node:fs";
 import {join, resolve} from "node:path";
 import {NodeServices} from "@effect/platform-node";
-import {build as buildOne, type Selection} from "@kampus/libfabrika/build";
+import {BuildError, build as buildOne, type Selection} from "@kampus/libfabrika/build";
 import type {Row} from "@kampus/libfabrika/compiler";
 import {Effect} from "effect";
 import {programs as selected} from "./table.ts";
@@ -29,9 +29,13 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
 	];
 	const files =
 		options.files ??
-		globSync("next/**/*.tsx", {cwd: ROOT})
-			.filter((p) => !p.includes("node_modules") && !p.includes(".test."))
-			.map((p) => join(ROOT, p));
+		(yield* Effect.try({
+			try: () =>
+				globSync("next/**/*.tsx", {cwd: ROOT})
+					.filter((p) => !p.includes("node_modules") && !p.includes(".test."))
+					.map((p) => join(ROOT, p)),
+			catch: () => new BuildError({why: "compiler"}),
+		}));
 	return yield* buildOne({
 		out: options.out,
 		root: ROOT,
