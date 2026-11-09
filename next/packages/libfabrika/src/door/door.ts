@@ -1079,11 +1079,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					Result.isSuccess(request)
 				) {
 					if (binding.state._tag === "settled") {
-						const result = binding.state.result;
-						const value = rawObject(result);
-						return value?._tag === "refused" && typeof value.why === "string"
-							? no(value.why)
-							: ok(result);
+						return ok(binding.state.result);
 					}
 					const sessions = yield* sessionsFor(binding.process);
 					yield* sessions.record({...binding, traceId: binding.span.traceId});
@@ -1133,7 +1129,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					yield* store.atomic(() =>
 						saveBinding({...binding, state: EnvelopeState.cases.settled.make({result: answer})}),
 					);
-					return result.value?._tag === "refused" ? no(result.value.why) : ok(answer);
+					return ok(answer);
 				}
 				if (method === "view.open" && options.open !== undefined) {
 					const opened = Schema.decodeUnknownResult(Schema.Struct({pid: ProcessId}))(params);
