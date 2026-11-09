@@ -8,6 +8,8 @@ import "./redact.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./botpush.mjs?raw";
 import "./clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./lane.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
