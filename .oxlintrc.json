@@ -5,7 +5,7 @@
 	"plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest"],
 	// Custom rules, copied from the pipeline this repo rebuilds, and this repo's own. See
 	// oxlint-plugins/README.md.
-	"jsPlugins": ["./oxlint-plugins/index.ts"],
+	"jsPlugins": ["./oxlint-plugins/index.ts", "./oxlint-plugins/wiring-only.ts"],
 	// Each rule is named here, so a new oxlint release adds none on its own.
 	"categories": { "correctness": "off" },
 	"options": { "reportUnusedDisableDirectives": "error" },
@@ -17,6 +17,7 @@
 		"unreachable-ledger.json"
 	],
 	"rules": {
+		"fabrika-wiring/wiring-only": "error",
 		// "warn" here only advises: lint.ts prints these two and does not fail on them. They were
 		// wrong too often to block (experiment 125). Any other warning fails.
 		"fabrika/no-effect-promise": "warn",
@@ -372,7 +373,12 @@
 			// Tests are left out: they await vitest, feed raw frames and may plant a broken view.
 			// `no-of` stays on, since a test names its helpers too.
 			// Tests also manufacture spans as input for the sink. Tracing plants use product paths.
-			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
+			"files": [
+				"next/**/*.test.ts",
+				"next/**/*.test.tsx",
+				"next/**/p24.test-support.ts",
+				"next/apps/fabrika/e2e/cloud.test-support.ts"
+			],
 			"rules": {
 				"fabrika/no-promises": "off",
 				"fabrika/no-effect-run-outside-edge": "off",

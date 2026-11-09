@@ -1,7 +1,7 @@
+import {check, type Row} from "@kampus/libfabrika/compiler";
 // The React Compiler check (exam item 13, C1 and C5): every skip and purity finding fails, and the
 // one way out is `"use no memo"` with a ledger row.
 import {describe, expect, it} from "vitest";
-import {check, type Row} from "./compiler.ts";
 
 const at = (file: string, text: string, ledger: readonly Row[] = []) =>
 	check(new Map([[file, text]]), ledger).map((f) => `${f.fn}:${f.line} ${f.why}`);

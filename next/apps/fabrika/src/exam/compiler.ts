@@ -1,4 +1,4 @@
-// The exam command and the build share one Compiler check in libfabrika.
+// The exam command and the build share the tests-owned build/compiler.ts checker in libfabrika.
 import {globSync, readFileSync} from "node:fs";
 import {join, relative} from "node:path";
 import {NodeRuntime} from "@effect/platform-node";

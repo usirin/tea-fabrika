@@ -16,7 +16,8 @@ import {
 import {builtinModules} from "node:module";
 import {tmpdir} from "node:os";
 import {dirname, join, relative, resolve, sep} from "node:path";
-import {Schema} from "effect";
+import {it as effectIt} from "@effect/vitest";
+import {Effect, Schema} from "effect";
 import {rolldown, type Plugin} from "rolldown";
 import {afterAll, describe, expect, it} from "vitest";
 
@@ -240,6 +241,7 @@ const importFaults = (next: string): ReadonlyArray<string> => {
 /** What a top level bundled for a browser must not reach. */
 const FORBIDDEN: ReadonlyArray<{readonly name: string; readonly test: (spec: string) => boolean}> =
 	[
+		{name: "alchemy", test: (name) => /^(?:alchemy|@alchemy\.run\/cloudflare)(?:\/|$)/.test(name)},
 		{
 			name: "node:*",
 			test: (spec) => spec.startsWith("node:") || builtinModules.includes(spec.split("/")[0] ?? ""),
@@ -359,6 +361,29 @@ describe("reading imports", () => {
 });
 
 describe("planted breaks", () => {
+	effectIt.effect.prop(
+		"P24 plants: platform subpaths cannot leak through the browser top level",
+		{
+			subpath: Schema.Literals(["build", "deployment", "desktop"]),
+			platform: Schema.Literals(["node:fs", "alchemy", "electron"]),
+		},
+		({subpath, platform}) =>
+			Effect.gen(function* () {
+				const root = plant({
+					"packages/libfabrika/package.json": manifest("@kampus/libfabrika", {
+						exports: {".": "./src/index.ts", [`./${subpath}`]: `./src/${subpath}/index.ts`},
+					}),
+					"packages/libfabrika/src/index.ts": lines(`export * from "./${subpath}/index.ts";`),
+					[`packages/libfabrika/src/${subpath}/index.ts`]: lines(`export * from "${platform}";`),
+				});
+				expect(
+					(yield* Effect.promise(() => bundleFaults(root))).some((f) =>
+						f.startsWith("@kampus/libfabrika reaches"),
+					),
+				).toBe(true);
+			}),
+		{arbitrary: {seed: 119120, runs: 100, size: 100}},
+	);
 	const library = manifest("@kampus/libfabrika", {
 		exports: {".": "./src/index.ts", "./transport": "./src/transport/index.ts"},
 		dependencies: {effect: "catalog:"},
