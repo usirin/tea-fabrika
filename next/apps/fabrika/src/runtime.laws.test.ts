@@ -13,10 +13,11 @@ import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {Attached} from "@kampus/libfabrika/transport";
 import {GatewayService, gatewayRuntime} from "@kampus/libfabrika/workers/gateway";
 import {ProjectService, bucketCalls} from "@kampus/libfabrika/workers/runtime";
-import {Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Tracer} from "effect";
+import {Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schema, Tracer} from "effect";
 import * as fc from "fast-check";
 import {afterEach, describe, expect, it, vi} from "vitest";
 import {projectRuntime, settings, type Env} from "./runtime.ts";
+import {Settings} from "./settings.ts";
 
 const table = vi.hoisted(() => ({programs: {} as Record<string, {hash: string; source: string}>}));
 vi.mock("./table.ts", () => table);
@@ -258,6 +259,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
 		span,
 		key,
 		env,
+		ctx,
 		db,
 		from,
 		descriptors,
@@ -301,6 +303,11 @@ const world = async (trace = TRACE, build = "counter-b") => {
 			table.programs.counter = {hash: build, source: "changed counter"};
 			runtime = projectRuntime(ctx, env);
 			return run(ProjectService);
+		},
+		reopenExit: async () => {
+			await runtime.dispose();
+			runtime = projectRuntime(ctx, env);
+			return runtime.runPromiseExit(ProjectService);
 		},
 	};
 };
@@ -484,6 +491,89 @@ describe("P12 Project authority", () => {
 				field === "writer"
 					? {by: w.descriptors.get(pid)!.owner.key, for: PERSON, parent: null}
 					: {traceId: trace},
+			);
+		});
+});
+
+describe("P12 Project saved and wire readers", () => {
+	const malformed = fc.jsonValue().filter((value) => typeof value !== "string");
+	const typed = (exit: Exit.Exit<unknown, unknown>) => {
+		expect(Exit.isFailure(exit)).toBe(true);
+		const cause = Exit.isFailure(exit) ? exit.cause : Cause.die("unexpected success");
+		expect(Cause.hasDies(cause)).toBe(false);
+		expect(Cause.hasFails(cause)).toBe(true);
+		expect(Cause.findErrorOption(cause)).toMatchObject({
+			_tag: "Some",
+			value: {_tag: "LedgerError", why: "bad_row"},
+		});
+	};
+	it("saved stage settings fail through the Project runtime's typed error channel", async () => {
+		const encoded = Schema.fromJsonString(Settings);
+		const invalid = fc
+			.oneof(
+				fc.string(),
+				fc.jsonValue().map((value) => JSON.stringify(value)),
+			)
+			.filter((value) => !Schema.is(encoded)(value));
+		await fc.assert(
+			fc.asyncProperty(invalid, async (raw) => {
+				let runtime: ReturnType<typeof projectRuntime> | undefined;
+				try {
+					const w = await world();
+					typed(
+						await Effect.runPromiseExit(
+							Effect.suspend(() => {
+								runtime = projectRuntime(w.ctx, {...w.env, STAGE: raw});
+								return runtime.contextEffect;
+							}),
+						),
+					);
+				} finally {
+					await runtime?.dispose();
+					for (const close of closers.splice(0).reverse()) await close();
+				}
+			}),
+			{seed: 119120, numRuns: 20, examples: [["{"], ["{}"], ["null"]]},
+		);
+	});
+	for (const reader of ["bootstrap", "own descriptor", "pending descriptor", "own fact"] as const)
+		it(`${reader} rejects malformed saved or wire values with LedgerError, never a defect`, async () => {
+			const fact = Schema.Struct({_tag: Schema.String});
+			const values =
+				reader === "own fact"
+					? fc.jsonValue().filter((value) => !Schema.is(fact)(value))
+					: malformed;
+			await fc.assert(
+				fc.asyncProperty(values, async (raw) => {
+					try {
+						const w = await world(),
+							pid = w.p.boot.process;
+						if (reader === "bootstrap") {
+							// An unrelated fact at the stable bootstrap ID passes the generic ledger schema.
+							// ProcessTable ignores its unknown tag; the bootstrap reader must check its body.
+							w.db
+								.prepare('UPDATE entries SET "_tag"=?, body=? WHERE stream=? AND id=?')
+								.run("noted", JSON.stringify({process: raw}), "processes/counter:1", "counter:1");
+							typed(await w.reopenExit());
+						} else if (reader === "own fact") {
+							typed(await w.run(Effect.exit(w.p.own(pid, "invalid-fact", "facts", raw))));
+						} else {
+							w.db
+								.prepare("UPDATE stage_descriptors SET value=?, pending=? WHERE process=?")
+								.run(JSON.stringify(raw), reader === "pending descriptor" ? 1 : 0, pid);
+							const exit =
+								reader === "pending descriptor"
+									? await w.reopenExit()
+									: await w.run(
+											Effect.exit(w.p.own(pid, "invalid-descriptor", "facts", {_tag: "noted"})),
+										);
+							typed(exit);
+						}
+					} finally {
+						for (const close of closers.splice(0).reverse()) await close();
+					}
+				}),
+				{seed: 119120, numRuns: 20, examples: [[null], [{}], [17]]},
 			);
 		});
 });

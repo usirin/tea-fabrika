@@ -75,15 +75,19 @@ not carry a Promise or a function returning one outside a marked edge line. Type
 declarations, tests, test support files and today's code are left alone. The scanner does not emit code
 or run type diagnostics. `no-promises.test.ts` plants imported aliases, inferred
 returns, generic thunks, object methods and line-local edge comments. The initial
-P12 head scan at `4577f6b0` found 103 lines. Each was read: all carried a Promise value or thunk
-outside its marked line, including multiline platform calls. No false alarms in
-that sample. Unknown types still need the regular typecheck.
+P12 head scan at `4577f6b0` found 103 lines. Some were false alarms inside wrapped
+statements whose first line had an edge marker. The marker now covers exactly the
+next statement. After that fix, 60 real findings were in P12's files and 27 in
+unchanged files from main. P12's new files reached zero; the 27 inherited findings
+remain. See `field/notes.jsonl`, note `2026-11-08-44`. The check stays out of
+`pnpm lint` until its false alarms are measured on main. Unknown types still need
+the regular typecheck.
 
 `no-ledger-sql` refuses SQL strings naming the ledger's `entries` or `rings` outside
 its three service files in `next/`. Tests, test support files and today's code are left alone. Its
 generated plants cover reads, joins, writes, quoted names, SQL comments, templates
-and allowed tables. The P12 head has one finding, the bootstrap read in
-`workers/runtime.ts`. It is a real read outside the ledger service. The first scan
+and allowed tables. The bootstrap read in `workers/runtime.ts` now uses `Ledger.read`;
+P12's product files have zero findings. The first scan
 also found a test helper reading rows for assertions. Leaving test support files
 out removes that false alarm. This check
 recognizes SQL text; it cannot resolve a table name assembled at runtime.

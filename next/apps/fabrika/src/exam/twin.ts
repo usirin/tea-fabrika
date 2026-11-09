@@ -33,7 +33,22 @@ const tree = (file: string, body?: string): Program => {
 	if (body === undefined) parsedFiles.set(file, parsed.program);
 	return parsed.program;
 };
-const member = (node: Tree): string | null => {
+// These wrappers preserve the called value. Follow them at every member depth.
+const unwrap = (node: Tree): Tree => {
+	while (
+		[
+			"ParenthesizedExpression",
+			"TSAsExpression",
+			"TSTypeAssertion",
+			"TSNonNullExpression",
+			"TSSatisfiesExpression",
+		].includes(node?.type)
+	)
+		node = node.expression;
+	return node;
+};
+const member = (raw: Tree): string | null => {
+	const node = unwrap(raw);
 	if (node?.type === "Identifier") return node.name;
 	if (node?.type === "MemberExpression" && !node.computed) {
 		const base = member(node.object);
@@ -41,7 +56,8 @@ const member = (node: Tree): string | null => {
 	}
 	return null;
 };
-const root = (node: Tree): string | null => {
+const root = (raw: Tree): string | null => {
+	const node = unwrap(raw);
 	if (node?.type === "Identifier") return node.name;
 	return node?.type === "MemberExpression" ? root(node.object) : null;
 };
@@ -194,16 +210,17 @@ export const scan = (file: string, body: string): Array<Finding> => {
 			}
 		}
 	let total = 0;
+	const isRemote = (callee: string | null) =>
+		callee !== null && (remote.has(callee) || [...alchemy].some((a) => callee === `${a}.remote`));
 	nodes(ast, (node) => {
 		if (node.type === "VariableDeclarator") {
 			const alias = member(node.init);
-			if (cloudImport(node.init) || (alias && remote.has(alias)))
+			if (cloudImport(node.init) || isRemote(alias))
 				report(node, "unsupported-case: aliased resource or remote function");
 		}
 		if (node.type !== "CallExpression") return;
 		const callee = member(node.callee);
-		if (callee && (remote.has(callee) || [...alchemy].some((a) => callee === `${a}.remote`)))
-			report(node, "remote override");
+		if (isRemote(callee)) report(node, "remote override");
 		const call = callee?.split(".") ?? [];
 		const first = call[0];
 		const imported = first === undefined ? undefined : named.get(first);
@@ -216,8 +233,7 @@ export const scan = (file: string, body: string): Array<Finding> => {
 					: null;
 		if (!parts) {
 			// Computed Cloudflare calls and aliased constructors must be understood before blocking.
-			if (node.callee?.type === "MemberExpression" && cloudImport(node.callee))
-				report(node, "unsupported-case: computed resource");
+			if (cloudImport(node.callee)) report(node, "unsupported-case: computed resource");
 			return;
 		}
 		if (["providers", "localState"].includes(parts.join("."))) return;

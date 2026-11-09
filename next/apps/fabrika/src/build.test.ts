@@ -14,12 +14,15 @@ import {syncBuiltinESMExports} from "node:module";
 import {tmpdir} from "node:os";
 import {join, relative, resolve} from "node:path";
 import {pathToFileURL} from "node:url";
-import {Effect, Exit} from "effect";
+import {NodeServices} from "@effect/platform-node";
+import {Effect, Exit, type FileSystem, type Path} from "effect";
 import * as fc from "fast-check";
 import {rolldown} from "rolldown";
 import {afterEach, describe, expect, it, vi} from "vitest";
 
 const homes: Array<string> = [];
+const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
+	Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));
 afterEach(() => {
 	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
 });
@@ -89,10 +92,10 @@ describe("P12 Rolldown build", () => {
 				`import {Tip} from "./${name}.tsx"; import {counter} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))}; export const program = {...counter, fixture: Tip};`,
 			);
 			const options = {out, files: [], ledger: [], programs: {counter: program}};
-			await Effect.runPromise(build(options));
+			await runNode(build(options));
 			const before = snapshot(out);
 			writeFileSync(file, source);
-			const failed = await Effect.runPromise(Effect.exit(build(options)));
+			const failed = await runNode(Effect.exit(build(options)));
 			expect(Exit.isFailure(failed), "reachable input is checked even with files: []").toBe(true);
 			expect(snapshot(out)).toEqual(before);
 		});
@@ -108,7 +111,7 @@ describe("P12 Rolldown build", () => {
 			const found = vi.spyOn(fs, "globSync").mockReturnValue([path]);
 			syncBuiltinESMExports();
 			try {
-				const result = await Effect.runPromise(
+				const result = await runNode(
 					Effect.exit(
 						build({
 							out: join(folder, "dist"),
@@ -144,7 +147,7 @@ describe("P12 Rolldown build", () => {
 			syncBuiltinESMExports();
 			chmodSync(parent, 0o500);
 			try {
-				const built = await Effect.runPromise(build({out, programs: {counter: program}}));
+				const built = await runNode(build({out, programs: {counter: program}}));
 				expect(built.programs.counter?.hash).toMatch(/^[a-f0-9]{64}$/);
 				const views = readdirSync(out).filter((file) => file.endsWith(".js"));
 				expect(views).toHaveLength(1);
@@ -166,13 +169,13 @@ describe("P12 Rolldown build", () => {
 				out = join(h, "dist");
 			writeFileSync(file, clean);
 			const options = {out, files: [file], ledger: []};
-			const good = await Effect.runPromise(build(options));
+			const good = await runNode(build(options));
 			expect(good).toMatchObject({build: expect.any(String)});
 			const before = snapshot(out);
 			expect(before.length).toBeGreaterThan(0);
 			for (const [name, source] of plants) {
 				writeFileSync(file, source);
-				const failed = await Effect.runPromise(Effect.exit(build(options)));
+				const failed = await runNode(Effect.exit(build(options)));
 				expect(Exit.isFailure(failed), name).toBe(true);
 				expect(snapshot(out), name).toEqual(before);
 			}
@@ -186,10 +189,10 @@ describe("P12 Rolldown build", () => {
 				file = join(h, `${name}.tsx`),
 				out = join(h, "dist");
 			writeFileSync(file, clean);
-			await Effect.runPromise(build({out, files: [file], ledger: []}));
+			await runNode(build({out, files: [file], ledger: []}));
 			const before = snapshot(out);
 			for (const stale of [file, join(h, "gone.tsx")]) {
-				const result = await Effect.runPromise(
+				const result = await runNode(
 					Effect.exit(
 						build({
 							out,
@@ -207,7 +210,7 @@ describe("P12 Rolldown build", () => {
 		"sealed program plant: generated source must execute without host imports or ambient bindings",
 		async ({name}) => {
 			const {build} = await import("./build.ts");
-			const built = await Effect.runPromise(build({out: join(home(), "dist")}));
+			const built = await runNode(build({out: join(home(), "dist")}));
 			expect(built.brain).toEqual(expect.any(String));
 			expect(built.programs.counter).toMatchObject({
 				hash: expect.any(String),

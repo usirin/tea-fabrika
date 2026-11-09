@@ -32,6 +32,47 @@ const law = (
 	);
 
 describe("P12 local twin lint", () => {
+	// Review 5: each plant used to hide beside a valid local stack with zero findings.
+	for (const wrap of [
+		"assertion",
+		"non-null",
+		"parentheses",
+		"satisfies",
+		"nested wrappers",
+	] as const)
+		law(`wrapped remote-only callee beside the valid stack: ${wrap}`, ({name}) => {
+			const resource = "Cloudflare.Zone.Zone";
+			const callee = {
+				assertion: `(${resource} as typeof ${resource})`,
+				"non-null": `${resource}!`,
+				parentheses: `((${resource}))`,
+				satisfies: `(${resource} satisfies typeof ${resource})`,
+				"nested wrappers": `(((${resource})! as typeof ${resource}))!`,
+			}[wrap];
+			const findings = scan(
+				stack,
+				`${text()}\n${callee}("Remote", {name: ${JSON.stringify(name)}});`,
+			);
+			expect(findings.length).toBeGreaterThan(0);
+			expect(findings.every((f) => /^(no local provider:|unsupported-case:)/.test(f.why))).toBe(
+				true,
+			);
+		});
+	for (const wrap of ["plain", "assertion", "non-null", "parentheses"] as const)
+		law(`namespace remote alias beside the valid stack: ${wrap}`, ({alias, name}) => {
+			const callee = {
+				plain: "Alchemy.remote",
+				assertion: "(Alchemy.remote as typeof Alchemy.remote)",
+				"non-null": "Alchemy.remote!",
+				parentheses: "((Alchemy.remote))",
+			}[wrap];
+			const findings = scan(
+				stack,
+				`${text()}\nconst make${alias} = ${callee};\nCloudflare.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs"}).pipe(make${alias}());`,
+			);
+			expect(findings.length).toBeGreaterThan(0);
+			expect(findings.some((f) => /remote|unsupported-case:/.test(f.why))).toBe(true);
+		});
 	for (const why of ["computed resource", "aliased resource"])
 		law(`named import plant beside the valid stack: ${why}`, ({alias, name}) => {
 			const call =
