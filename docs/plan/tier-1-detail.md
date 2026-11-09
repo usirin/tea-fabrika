@@ -2218,7 +2218,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - A monitor gets one `DOWN {process, why, to}` when its process ends, `noproc` at once if it was already gone, and none after `demonitor`, which also flushes a `DOWN` already in the inbox. A `DOWN` from an earlier process never lands in a later one.
 - The restart window counts a restart on its edge. A name is never freed. Only the parent sends an exit signal.
 - Who is online folds from each gateway's last ping and is never written.
-- C5's owed check: each of the above against OTP's own documentation, since experiment 99 came before experiment 107.
+- C5's owed check: each of the above against OTP's own documentation, since experiment 99 came before experiment 107. *Done 2026-11-09: [experiment 239](../../experiments/239-supervision-vs-otp.md).*
 - Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new process.
 
 **p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `app/runner.ts`. *Added 2026-11-06 (owner).*
