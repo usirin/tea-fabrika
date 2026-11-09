@@ -19,6 +19,8 @@ type Setup = {
 	branch: string;
 	merge: boolean;
 	refused: "none" | "notes" | "branch";
+	// In a gh stack: `gh pr merge` refuses, and the head read again is `moved` or not.
+	stack?: "none" | "same" | "moved";
 	// Seconds since the start, read by `date` after that many check reads (the last one repeats).
 	clock?: number[];
 };
@@ -43,7 +45,8 @@ const cmd = path.basename(process.argv[1]);
 const args = process.argv.slice(2);
 let key;
 if (cmd === "gh") {
-  if (args[0] === "pr" && args[1] === "view") key = "head";
+  if (args[0] === "pr" && args[1] === "view") key = args.includes("headRefOid") ? "oid" : "head";
+  else if (args[0] === "stack" && args[1] === "merge") key = "stack";
   else if (args[0] === "pr" && args[1] === "merge") key = "merge";
   else if (args[0] === "run" && args[1] === "view") key = "logs";
   else if (args[0] === "api" && args[1].includes("check_name=")) key = "apps";
@@ -64,6 +67,9 @@ if (cmd === "gh") {
     die("temporary " + key + " read failure");
   }
   if (key === "head") console.log(setup.branch);
+  if (key === "oid") console.log(setup.stack === "moved" ? "f".repeat(40) : process.env.CATCHUP_TIP);
+  if (key === "merge" && setup.stack && setup.stack !== "none")
+    die("This pull request is part of a stack and must be merged using the asynchronous merge REST API");
   if (key === "checks") {
     const pending = n - setup.failures[index] < setup.pending;
     for (const name of ["check", "e2e", "next", "commits"]) {
@@ -166,38 +172,43 @@ const assertHead = (calls: Call[]) => {
 };
 
 describe("catchup, today's tooling", () => {
-	// Plants: always squash; omit the head pin; do work after invalid options.
-	it("T300 merge options choose exactly one method and keep the checked head", () => {
+	// Plants: merge without --squash; omit the head pin; do work after extra options; skip the head
+	// read before a stack merge; stack-merge a PR whose head moved.
+	it("T300 squash only, pinned to the checked head, and a stack lands by gh stack merge", () => {
 		fc.assert(
 			fc.property(
 				fc.record({
 					merge: fc.boolean(),
 					answer: fc.constantFrom<Setup["answer"]>("green", "red", "ticket"),
 					pending: fc.integer({min: 0, max: 1}),
-					invalid: fc.stringMatching(/^[a-z]{1,6}$/).filter((s) => s !== "merge" && s !== "squash"),
+					stack: fc.constantFrom<NonNullable<Setup["stack"]>>("none", "same", "moved"),
 				}),
-				({merge, answer: outcome, pending, invalid}) => {
+				({merge, answer: outcome, pending, stack}) => {
 					for (const answer of new Set<Setup["answer"]>(["green", outcome])) {
-						for (const method of [undefined, "squash", "merge", invalid, ""] as const) {
-							const args = method === undefined ? [] : ["--merge-method", method];
-							const got = run({...green, merge, answer, pending}, args);
-							const valid = method === undefined || method === "squash" || method === "merge";
-							expect(got.code, got.text).toBe(valid && answer === "green" ? 0 : 1);
-							if (!valid) expect(got.calls).toEqual([]);
-							const landed = merges(got.calls);
-							expect(landed).toHaveLength(valid && answer === "green" ? 1 : 0);
-							for (const call of landed) {
-								expect(call.args.filter((a) => a === "--merge" || a === "--squash")).toEqual([
-									`--${method ?? "squash"}`,
-								]);
-							}
-							assertHead(got.calls);
+						const got = run({...green, merge, answer, pending, stack});
+						const reached = answer === "green";
+						const lands = reached && stack !== "moved";
+						expect(got.code, got.text).toBe(lands ? 0 : 1);
+						const tried = merges(got.calls);
+						expect(tried).toHaveLength(reached ? 1 : 0);
+						for (const call of tried) {
+							expect(
+								call.args.filter((a) => a.startsWith("--") && a !== "--match-head-commit"),
+							).toEqual(["--squash"]);
 						}
+						const stacked = got.calls.filter((c) => c.key === "stack");
+						expect(stacked.map((c) => c.args)).toEqual(
+							reached && stack === "same" ? [["stack", "merge", "900", "--squash", "--yes"]] : [],
+						);
+						expect(got.calls.filter((c) => c.key === "oid")).toHaveLength(
+							reached && stack !== "none" ? 1 : 0,
+						);
+						assertHead(got.calls);
 					}
 					for (const args of [
-						["--merge-method"],
-						["--unknown", "merge"],
-						["--merge-method", "merge", "extra"],
+						["--merge-method", "squash"],
+						["--merge-method", "merge"],
+						["--unknown"],
 					]) {
 						const got = run(green, args);
 						expect(got.code, got.text).toBe(1);
