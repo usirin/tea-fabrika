@@ -387,6 +387,20 @@ When something is wrong, its word says so, in red where it is broken:
   starts a host, and tsh runs in the host.
 - **Color is never alone.** The accent says "asks you" and red says "broken", each beside its
   word; running and done are gray words.
+- **The bottom line names who takes the keys** while a layer is open, in place of the tile's
+  word, with its way out ([layers](../../docs/direction/layers.md), L3). It stays with the bars
+  hidden, and the prefix still works under every layer:
+
+  ```text
+  ASKS · the menu takes the keys                         esc closes it
+  PALETTE · takes the keys                               esc closes it
+  ```
+
+- **One layer order, owned by the frame:** desk, sheet, float, popover, palette, tooltip, in one
+  rank table in `window.css`. No program picks a z-index: `fabrika/frame-layers` (stylelint) and
+  `fabrika/no-layer-style` (oxlint) hold that (L1). Each layer's open and close is recorded with
+  how it opened and why it closed, never what was typed. Shots of each state at the five layouts
+  are in [`docs/layers/`](./docs/layers/).
 
 ## Tiles
 

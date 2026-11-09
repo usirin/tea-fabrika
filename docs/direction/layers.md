@@ -55,7 +55,9 @@ menu is titled Asks, so it says `ASKS`; after the rename to inbox (program guide
 ## Which version
 
 - **Today's version (`apps/fabrika`):** built first, in three pull requests and one small fix
-  (ticket 203). See [the build](#the-build-in-todays-version).
+  (ticket 203). See [the build](#the-build-in-todays-version). PR 1 is built (2026-11-09):
+  the status bar names who takes the keys, one frame-owned layer order, and the layer lint. The
+  sheet (PR 2), the peek (PR 3) and ticket 203 are not built yet.
 - **`next/`:** all of it, with tezgah, the window manager, in Tier 2. The `Layer` union is the
   frame's, and a program returns its sheet as part of its view. Nothing about layers is built in
   `next/` yet.

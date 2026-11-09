@@ -1,0 +1,14 @@
+{
+	"experiment": 240,
+	"ticket": 204,
+	"head": "4fc95eaf",
+	"base": "9f126695",
+	"command": "node experiments/240-layer-fire-counts.ts --audit --assert-clean",
+	"summary": {
+		"base": {"files": 3, "declarations": 2060, "fires": 4, "falseFires": 0},
+		"tree": {"files": 3, "declarations": 2070, "fires": 0, "falseFires": 0},
+		"good": {"files": 1, "declarations": 15, "fires": 0, "falseFires": 0},
+		"bad": {"files": 1, "declarations": 6, "fires": 6, "falseFires": 0}
+	},
+	"checkedBy": "lead, by hand, each base fire read at its line"
+}

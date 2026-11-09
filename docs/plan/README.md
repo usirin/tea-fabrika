@@ -77,6 +77,7 @@ raises a new design call goes to the owner.
 
 - **Configurable keys on today's app, ticket 174.** Two pull requests. Keys PR 1, change your keys without leaving the app, is built and in review. Keys PR 2 brings program and mode keys into the same table. → the lead agent lands PR 1, then plans PR 2
 - **Design foundations on today's app, approved by the owner 2026-11-07.** [The build plan](./design-foundations.md): ticket 245, three pull requests. → the lead agent builds it
+- **Layers on today's app, ticket 204.** PR 1 (the status bar names who takes the keys, one frame-owned layer order, the layer lint) is built and in review; PR 2 (the sheet) and PR 3 (the peek) are next. Ticket 203 (the desk inert under the palette) lands on its own. → the lead agent
 
 - **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo, then ticket 117 (below). → the self-fix plan
 - **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Merged 2026-11-01. Its leftovers are ticket 125. → nothing
