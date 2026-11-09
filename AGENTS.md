@@ -131,6 +131,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   part is small, never absent. A rule that code already checks leaves a skill's prose; a rule
   that code could check becomes a check, then leaves the prose; only judgment stays in prose
   (owner, 2026-11-08).
+  Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
+  with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
+  owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
+  with the hit list in the PR. Only real loosening waits on the owner.
 - **One fresh agent per step** (owner, 2026-11-09). Each step's agent reads the lane's state
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment

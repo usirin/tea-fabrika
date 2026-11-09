@@ -1,4 +1,4 @@
-# clauderow.py --run ID [--billing subscription|key] [--role R] [--ticket T] [--pr P] [--parent RUN] [--outcome O] [--note ID]
+# clauderow.py --run ID [--billing subscription|key] [--role R] [--ticket T] [--pr P] [--parent RUN] [--outcome O] [--note ID] [--step S]
 #              [--corrects RUN] [--turns] <transcript.jsonl> [why...]
 #   -> prints one field/runs.jsonl row for a Claude Code subagent, from its transcript.
 #   With --turns it prints one line per model call instead (context, dollars, tool calls), so the
@@ -112,6 +112,7 @@ def row(path,a):
        "outputTokens":s["output"]}
     if a.billing: r["billing"]=a.billing
     if a.corrects: r["corrects"]=a.corrects
+    if a.step: r["step"]=a.step
     return r
 
 def turns(path):
@@ -123,7 +124,7 @@ def turns(path):
 
 if __name__=="__main__":
     p=argparse.ArgumentParser()
-    for k in ("ticket","pr","parent","outcome","note","corrects"): p.add_argument("--"+k)
+    for k in ("ticket","pr","parent","outcome","note","corrects","step"): p.add_argument("--"+k)
     p.add_argument("--billing",choices=("subscription","key"))
     p.add_argument("--role",default="hand"); p.add_argument("--turns",action="store_true")
     p.add_argument("transcript"); p.add_argument("why",nargs="*")

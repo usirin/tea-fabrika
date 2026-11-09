@@ -85,6 +85,8 @@ Plain short sentences, American English, no em dashes.
 plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments.
 Draft and approved checks cover sections, questions, exam paths and the exact body bytes after
 line two. The draft prints the digest. `--approved` checks the approval line against it.
+The draft check checks the handoff format. It cannot prove session identity, because the step agents
+and the lead share shell access. Do not add a marker, key or readable file as proof.
 
 `scripts/plancheck.sh --draft <plan.md>` requires a blank first line, `Plancheck-Version: 2` on
 line two, and no unfenced line beginning `Approved by the lead agent,`. The lead session runs it
