@@ -134,7 +134,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   A stop after the time limit takes the agent's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
   is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
-  drive started, or under 20 GB free after `box.sh gc`). It never retries. A stuck step keeps its
+  drive started, under 20 GB free after `box.sh gc`, or the lane's branch checked out in a
+  worktree, which the end-of-step fetch could not update). It never retries. A stuck step keeps its
   box. The commits check reads the whole lane, from where it left main, so each earlier step's
   newest link is in its chain. A tests, build or mutation step waits while `pgrep -x tsgo` finds
   one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.

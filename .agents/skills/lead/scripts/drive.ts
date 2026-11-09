@@ -14,7 +14,8 @@
 //
 // The step is a tea machine on the Effect engine, made of the pipeline's moves:
 //
-//   (before)           box.sh gc, then a refusal when the data volume has under 20 GB free
+//   (before)           box.sh gc, then a refusal when the data volume has under 20 GB free, or
+//                      when a worktree of the main checkout holds the lane's branch
 //   starting   Act     box.sh new, at the lane's head
 //   drafting   Draft   a Sub: Codex (box.sh run) or Claude (claude -p) in the box, waited on
 //   reading    Gather  fetch (and sign Claude's work), then the commits, their step notes, exam
@@ -26,7 +27,8 @@
 //
 // Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (a question for
 // the lead, in `reason`), 30 stuck, 2 usage, 3 refused to start (8 agents running: Codex boxes plus
-// Claude steps drive started, or under 20 GB free after box.sh gc). It never retries. A stuck step
+// Claude steps drive started, under 20 GB free after box.sh gc, or the lane's branch checked out in
+// a worktree, which the fetch could not update). It never retries. A stuck step
 // keeps its box for the lead to look at. DRIVE_MINUTES (default 60) is how long the agent may run
 // before it is stopped and the step is stuck.
 
@@ -582,7 +584,7 @@ const handlers = (env: Env) => {
 					return {
 						...empty,
 						head: null,
-						problem: `fetch: ${tail(f.err)} (is ${ask.branch} checked out in a worktree?)`,
+						problem: `fetch: ${tail(f.err)}`,
 					};
 				const head = git("rev-parse", ref).out.trim();
 				if (ask.step === "review") git("update-ref", "-d", ref);
@@ -927,6 +929,20 @@ const freeGb = (path: string): number | null => {
 	return r.code === 0 && Number.isFinite(kb) ? Math.floor(kb / 1024 / 1024) : null;
 };
 
+/**
+ * The worktree that has `branch` checked out, from `git worktree list --porcelain`; `null` when none.
+ * The fetch at the end of a step updates `refs/heads/<branch>`, which git refuses while a worktree
+ * holds it, so a step that started anyway would lose its fetch after the agent's whole run.
+ */
+const holderOf = (porcelain: string, branch: string): string | null => {
+	for (const block of porcelain.split("\n\n")) {
+		const lines = block.split("\n");
+		if (lines.includes(`branch refs/heads/${branch}`))
+			return lines.find((l) => l.startsWith("worktree "))?.slice("worktree ".length) ?? "";
+	}
+	return null;
+};
+
 /** What a Claude step is told on top of the brief: its skill, and how its work is committed. */
 const claudeTail = (ask: Ask) => {
 	const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
@@ -1097,6 +1113,20 @@ const main = () => {
 			}),
 		);
 		process.exit(3);
+	}
+	// A plan reads the main checkout and a review fetches to a side ref; every other step fetches the
+	// lane's branch at the end. Refuse now, not after the agent ran (themes tests, 2026-11-09).
+	if (s !== "plan" && s !== "review") {
+		const list = sh("git", ["-C", env.MAIN, "worktree", "list", "--porcelain"]);
+		const holder = list.code === 0 ? holderOf(list.out, branch) : "";
+		if (holder !== null) {
+			const said =
+				list.code === 0
+					? `${branch} is checked out in ${holder}; detach it there (git switch --detach) first`
+					: `git worktree list failed: ${tail(list.err)}`;
+			console.log(JSON.stringify({outcome: "refused", reason: said}));
+			process.exit(3);
+		}
 	}
 	const verdict =
 		s === "review"
