@@ -77,8 +77,9 @@ Plain short sentences, American English, no em dashes.
 `scripts/plancheck.sh <plan.md>` checks owners in every plan. Version 2 also checks each laws
 table's generator grammar. An unmarked plan prints `legacy plan: generator checks skipped`;
 unknown, malformed or duplicate markers fail. Escaped pipes stay in their cells. Every exam path in
-a files table's file/path cell counts, whatever words surround it, unless the cell names another
-package with a possessive (`Counter's package.json`); then only paths with a `/` count. Bare root
+a files table's file/path cell counts, whatever words or punctuation surround it, unless the cell
+names another package with a possessive (`Counter's package.json`); then only paths with a `/`
+count. A possessive of this repository (`the repo's package.json`) is not another package. Bare root
 paths in prose or other columns never count. Explicit qualified exam paths elsewhere still get listed. The lead runs this before approving.
 
 ## Where code goes in `next/`

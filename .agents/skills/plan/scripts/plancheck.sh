@@ -26,12 +26,22 @@ def plain(text):
                        if text.startswith(m) and text.endswith(m) and len(text) >= 2 * len(m)), None)
         if marker is None: return text
         text = text[len(marker):-len(marker)].strip()
+def bare(word):
+    # Strip the punctuation around a word, as a plan writer types it: `x`, [x], (x), "x", 'x', x, x; x: x.
+    while True:
+        out = plain(word).lstrip("`[(\"'").rstrip("`])\"',;:.")
+        if out == word: return out
+        word = out
+HOME = {"repository", "repo", "root", "project", "workspace", "monorepo", "top-level"}
 def paths(text):
-    # Every word in a path cell is a candidate path; hits() keeps the exam paths, whatever words
-    # surround them. A cell that names another package with a possessive ("Counter's package.json")
-    # holds that package's files, so only its qualified paths (with a "/") are candidates.
-    words = [plain(w) for w in re.split(r"[\s,;]+|<br\s*/?>", text) if plain(w)]
-    return [w for w in words if "/" in norm(w)] if re.search(r"\w's\b", text) else words
+    # Every word in a path cell is a candidate path once the punctuation around it is stripped; hits()
+    # keeps the exam paths, whatever words surround them. A cell that names another package with a
+    # possessive ("Counter's package.json") holds that package's files, so only its qualified paths
+    # (with a "/") are candidates. A possessive of a word meaning this repository ("the repo's
+    # package.json"), in any letter case, names no other package and keeps every word.
+    words = [bare(w) for w in re.split(r"[\s,;]+|<br\s*/?>", text) if bare(w)]
+    owners = [m[1].lower() for m in (re.fullmatch(r"([\w-]+)'s", w) for w in words) if m]
+    return [w for w in words if "/" in norm(w)] if any(o not in HOME for o in owners) else words
 def cells(text):
     out, start, slashes = [], 0, 0
     for j, char in enumerate(text):

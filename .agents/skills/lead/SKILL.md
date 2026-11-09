@@ -83,7 +83,7 @@ visible, and never weaken the rules to hide this message.
    the shape of. Run `runplan.sh` in the background. Save the answer as `BOXES/<name>-PLAN.md`.
 2. **Check the plan.** Run `sh .agents/skills/plan/scripts/plancheck.sh <plan>`. It lists every exam
    path the plan names and exits 1 when a files table has no owner, gives an exam path to a step
-   other than `tests`, or a law has no generator. Then the plan goes back. Check that each listed path is in the files table at all.
+   other than `tests`, or a law has no generator. Then the plan goes back. Check that each listed path is in the files table at all. The files-table check is a parser over free text, so also check that every `exam path named` line it prints is owned by `tests`.
 3. **Approve.** A plan that only builds decided notes: write "Approved by the lead agent, builds
    <note>" on its blank first line. A plan that raises a new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
