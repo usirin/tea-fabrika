@@ -173,15 +173,15 @@ are for other people's repos only.
 
 ## Decisions land at once
 
-The lead owns the count of decisions still missing from the repo. Its status gives that count
-and the docs PR carrying them. The owner does not keep the list.
+A decision lands in the repo as soon as it is made (owner, 2026-11-09). Each decision gets its own
+docs PR, opened the turn it is decided, with a docs agent. Never batch decisions, and never wait for
+a code PR or for the end of the day. A docs-only PR that writes down a decision is merged when CI
+is green and the leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their
+steps.
 
-A decision lands in the repo as soon as it is made (owner, 2026-11-09). Start its docs PR in the
-same turn, with a docs agent. Never wait for a code PR or for the end of the day. A docs-only PR
-that writes down a decision is opened the turn it is decided and merged when CI is green and the
-leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their steps. Keep it separate
-from slow builds. Update that PR as more decisions arrive. Keep the count current until all are
-in the repo. Code cannot count decisions nobody recorded.
+The lead owns the count of decisions still missing from the repo. Its status gives that count and
+the open docs PRs carrying them. The owner does not keep the list. Code cannot count decisions
+nobody recorded.
 
 ## The leak grep
 
