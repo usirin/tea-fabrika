@@ -8,7 +8,7 @@
 		"typecheck": "effect-tsgo patch --typescript && pnpm -r typecheck",
 		"build": "pnpm --filter @kampus/fabrika-old --filter @kampus/pipeline build",
 		"test": "vitest run",
-		"lint": "node oxlint-plugins/lint.ts && node oxlint-plugins/format.ts --check && pnpm -s lint:versions && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser && pnpm -s lint:dead && pnpm -s lint:compiler && node packages/fabrika-design/src/build/tokens.ts --check",
+		"lint": "node oxlint-plugins/lint.ts && node oxlint-plugins/format.ts --check && pnpm -s lint:versions && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser && pnpm -s lint:dead && pnpm -s lint:compiler && node packages/fabrika-design/src/build/tokens.ts --check && node oxlint-plugins/stylelint.ts",
 		"lint:versions": "node oxlint-plugins/exact-versions.ts",
 		"lint:layers": "code-graph . --layers --layer-rules layer-rules.json",
 		"lint:boundaries": "code-graph . --boundaries --ci --boundary-rules boundary-rules.json",
@@ -68,6 +68,7 @@
 		"miniflare": "catalog:",
 		"oxfmt": "catalog:",
 		"oxlint": "catalog:",
+		"stylelint": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},

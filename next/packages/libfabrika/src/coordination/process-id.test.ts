@@ -37,8 +37,9 @@ const check = <A, E, R>(
 	});
 const time = fc.integer({min: 0, max: 2 ** 48 - 1024});
 describe("P10 shared process ids", () => {
-	it.effect("each generated id ends its process.next span", () =>
-		check(fc.tuple(time, fc.integer({min: 1, max: 10})), [], ([at, count]) => {
+	// T287 mutation: renaming process.next to an empty string lost the operation in traces.
+	it.effect("every generated process id ends its own process.next span", () =>
+		check(fc.tuple(time, fc.integer({min: 1, max: 16})), [], ([at, count]) => {
 			const spans: Tracer.NativeSpan[] = [];
 			const tracer = Tracer.make({
 				span: (options) => {
@@ -51,9 +52,10 @@ describe("P10 shared process ids", () => {
 				yield* TestClock.setTime(at);
 				const generator = yield* Coordination.ProcessIdGenerator;
 				for (let i = 0; i < count; i++) yield* generator.next;
-				expect(
-					spans.filter((s) => s.name === "process.next" && s.status._tag === "Ended"),
-				).toHaveLength(count);
+				const operations = spans.filter((s) => s.name === "process.next");
+				expect(operations).toHaveLength(count);
+				expect(new Set(operations.map((s) => s.spanId)).size).toBe(count);
+				for (const s of operations) expect(s.status._tag).toBe("Ended");
 			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer), Effect.withTracer(tracer));
 		}),
 	);
@@ -127,7 +129,9 @@ describe("P10 shared process ids", () => {
 	);
 	it.effect("monotonic: a clock rollback cannot reuse or lower an id", () =>
 		check(
-			fc.tuple(time, fc.nat({max: 1_000_000_000})),
+			// The shared IdGenerator refuses a clock before the epoch (the before-epoch law), so the
+			// rolled-back clock stays at or above 0.
+			time.chain((at) => fc.tuple(fc.constant(at), fc.nat({max: Math.min(at, 1_000_000_000)}))),
 			[[1_790_000_000_000, 1_000_000]],
 			([at, rollback]) =>
 				Effect.gen(function* () {

@@ -8,6 +8,7 @@ import {processMail} from "./process-mail.ts";
 import {
 	type Caller,
 	clientInbox,
+	Dead,
 	Down,
 	ProcessError,
 	ProcessFact,
@@ -16,6 +17,7 @@ import {
 	signalId,
 	type Start,
 	type StartAnswer,
+	type State,
 } from "./process.ts";
 
 const tag = (word: string): string => `fab.process.${word}`;
@@ -38,6 +40,23 @@ export class ProcessManager extends Context.Service<
 		readonly start: (request: Start, from: From) => Effect.Effect<StartAnswer, Failure>;
 		readonly exit: (process: string, why: string, from: From) => Effect.Effect<void, Failure>;
 		readonly info: Effect.Effect<ReadonlyArray<ProcessInfo>, LedgerError>;
+		readonly status: (name: string) => Effect.Effect<
+			{
+				readonly name: string;
+				readonly state: typeof State.Type;
+				readonly at: number;
+				readonly restarts: ReadonlyArray<number>;
+			},
+			Failure
+		>;
+		readonly resolve: (
+			process: string,
+		) => Effect.Effect<{readonly name: string; readonly state: typeof State.Type}, Failure>;
+		readonly dead: (
+			process: string,
+			dead: typeof Dead.Type,
+			from: From,
+		) => Effect.Effect<void, Failure>;
 		readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
 		readonly monitor: (ref: string, process: string, from: From) => Effect.Effect<void, Failure>;
 		readonly demonitor: (ref: string, from: From) => Effect.Effect<void, Failure>;
@@ -278,14 +297,50 @@ export class ProcessManager extends Context.Service<
 							return Stream.fromIterable(mail.map(({letter}) => letter));
 						}).pipe(Effect.tapError(failed)),
 					).pipe(Stream.withSpan("process.receive"));
+				const info = Effect.fn("process.info")(function* () {
+					return yield* tx.transact((turn) => fold(turn).info);
+				});
 				return {
+					resolve: Effect.fn("process.resolve")(function* (process: string) {
+						return yield* checked((table) => {
+							const old = table.parent(process, caller.owner);
+							return Result.isFailure(old)
+								? Result.fail(old.failure)
+								: table.status(old.success.name, caller.owner);
+						});
+					}),
+					status: Effect.fn("process.status")(function* (name: string) {
+						const status = yield* checked((table) => table.status(name, caller.owner));
+						return {...status, at: yield* Effect.clockWith((clock) => clock.currentTimeMillis)};
+					}),
+					dead: Effect.fn("process.dead")(function* (
+						process: string,
+						dead: typeof Dead.Type,
+						from: From,
+					) {
+						const value = yield* Effect.try({
+							try: () => Schema.decodeUnknownSync(Dead)(dead),
+							catch: () => new ProcessError({why: "bad_text"}),
+						});
+						yield* checked((table, turn) => {
+							const life = table.parent(process, caller.owner);
+							if (Result.isFailure(life)) return Result.fail(life.failure);
+							const stream = `${process}/dead`;
+							const key = id("dead", process, value.m);
+							const prior = [...turn.read(stream, 0)].find(
+								(entry) => entry.id === key && entry.by === caller.by,
+							);
+							if (prior === undefined) turn.append(stream, key, line(from, value));
+							return Result.succeed(undefined);
+						});
+					}),
 					start,
 					exit,
 					monitor,
 					demonitor,
 					down,
 					receive,
-					info: tx.transact((turn) => fold(turn).info).pipe(Effect.withSpan("process.info")),
+					info: info(),
 					isLive: Effect.fn("process.isLive")(function* (process: string) {
 						return yield* tx.transact((turn) => fold(turn).isLive(process));
 					}),

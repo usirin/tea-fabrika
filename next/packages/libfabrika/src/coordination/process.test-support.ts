@@ -20,6 +20,17 @@ export const A = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
 export const B = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
 export const W = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
 export const X = "process_01jc9q4w7z3m8n5r2t6v0xkb4g";
+/** A, B, W, X, then 36 more: enough for a world that restarts past the brake or a 32-try limit. */
+export const PIDS: ReadonlyArray<string> = [
+	A,
+	B,
+	W,
+	X,
+	...Array.from(
+		{length: 36},
+		(_, n) => `process_01jc9q4w7z3m8n5r2t6v0xm${String(n).padStart(3, "0")}`,
+	),
+];
 export const CODE = {program: "counter", hash: "build-a"};
 /** The brain's own writer key: the `by` on every process fact, and the only one the fold trusts. */
 export const BRAIN = "SHA256:brain";
