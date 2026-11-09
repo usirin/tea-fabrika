@@ -11,6 +11,8 @@ import type {LedgerError} from "../data/ledger.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {processId} from "../id.test-support.ts";
+import * as Id from "../id.ts";
 import {type From} from "./mailbox.ts";
 import {
 	Checkpoint as CheckpointSchema,
@@ -31,7 +33,7 @@ const unboundedJson = Arbitrary.schema(
 	),
 );
 
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PROCESS = Effect.runSync(processId);
 const folder = mkdtempSync(join(tmpdir(), "p11-store-"));
 const opened: DatabaseSync[] = [];
 afterAll(() => {
@@ -208,7 +210,7 @@ describe("P11 process storage", () => {
 						_tag: "prepared",
 						id: "letter-a",
 						input: {type: "add", n: 3},
-						parent: "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-2",
+						parent: `in-${PROCESS}-2`,
 						span: {traceId: from.traceId, spanId: "00f067aa0ba902b7"},
 						sentAt: from.sentAt,
 						seen: from.seen,
@@ -351,7 +353,13 @@ describe("P11 process storage", () => {
 					pos: value.pos + 0,
 				})),
 			),
-			Arbitrary.schema(Activity).pipe(Arbitrary.filter((value) => value.process !== PROCESS)),
+			// ProcessId's compatibility filter is opaque to generation; use its source schema.
+			Arbitrary.schema(
+				Schema.Union([
+					Schema.Struct({...Activity.cases.idle.fields, process: Id.Process}),
+					Schema.Struct({...Activity.cases.stepping.fields, process: Id.Process}),
+				]),
+			).pipe(Arbitrary.filter((value) => value.process !== PROCESS)),
 		],
 		([value, placed, activity]) => {
 			const disk = database();

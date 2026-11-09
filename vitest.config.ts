@@ -19,6 +19,9 @@ export default defineConfig({
 			"**/layer-rules.json",
 			"**/fixtures/**",
 			"**/.github/**",
+			"**/.agents/skills/**",
+			"**/.gitattributes",
+			"**/.claude/skills/**",
 		],
 		include: [
 			"apps/*/src/**/*.test.ts",
@@ -29,6 +32,7 @@ export default defineConfig({
 			"legacy/src/**/*.test.ts",
 			"oxlint-plugins/*.test.ts",
 			"vitest.shards.test.ts",
+			".agents/skills/*/scripts/*.test.ts",
 			// next/, the new version. Its end-to-end tests sit outside `src/`, in
 			// `next/apps/fabrika/e2e/`, and run through `node next/apps/fabrika/e2e.ts`.
 			"next/packages/*/src/**/*.test.{ts,tsx}",

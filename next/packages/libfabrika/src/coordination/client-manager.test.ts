@@ -22,11 +22,12 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Effect, Layer, References, Stream} from "effect";
+import {Effect, Layer, References, Schema, Stream, Tracer} from "effect";
 import * as fc from "fast-check";
 import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import type {Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {processId} from "../id.test-support.ts";
 import {ClientManager} from "./client-manager.ts";
 import type {From} from "./mailbox.ts";
 import {foldMembers, type MemberFact, type Members} from "./members.ts";
@@ -34,7 +35,7 @@ import {foldMembers, type MemberFact, type Members} from "./members.ts";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
 const MEMBERS = "door/members";
-const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
+const PARENT = `in-${Effect.runSync(processId)}-41`;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -72,8 +73,40 @@ afterAll(() => {
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
 const onSql = (sql: Sql) => Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(quiet));
 /** A ClientManager and the Ledger beneath it, so a test can read what was written. */
-const clientsOn = (ledger: Layer.Layer<Ledger>) =>
-	ClientManager.layer(FOUNDER).pipe(Layer.provideMerge(ledger));
+const clientsOn = (
+	ledger: Layer.Layer<Ledger>,
+	founder: Parameters<typeof ClientManager.layer>[0] = FOUNDER,
+) => ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
+const founderArb: fc.Arbitrary<Parameters<typeof ClientManager.layer>[0]> = fc.record({
+	name: fc.string(),
+	keys: fc.uniqueArray(fc.string(), {minLength: 1, maxLength: 5}),
+	window: fc.option(fc.string(), {nil: null}),
+	person: fc.string({minLength: 1}),
+	by: fc.string({minLength: 1}),
+	build: fc.string({minLength: 1}),
+});
+const leaf = fc.string().map((s) => `tab:${s}`);
+const check = <A, E, R>(
+	arb: fc.Arbitrary<A>,
+	examples: NoInfer<A>[],
+	law: (a: A) => Effect.Effect<void, E, R>,
+) =>
+	Effect.gen(function* () {
+		const context = yield* Effect.context<R>();
+		yield* Effect.promise(() =>
+			fc.assert(
+				fc.asyncProperty(arb, (a) =>
+					Effect.runPromise(law(a).pipe(Effect.provideContext(context))),
+				),
+				{
+					seed: SEED,
+					numRuns: 40,
+					includeErrorInReport: true,
+					examples: examples.map((a): [A] => [a]),
+				},
+			),
+		);
+	});
 
 const from = (over: Partial<From> = {}): From => ({
 	by: "SHA256:door",
@@ -203,6 +236,48 @@ const view = (m: Members) => ({
 	spent: [...m.spent].sort(),
 });
 
+describe("p96 and p97, replay and write answers", () => {
+	it.effect("unknown member facts preserve the view and still advance the write head", () =>
+		check(fc.tuple(leaf, fc.jsonValue()), [], ([key, body]) =>
+			Effect.gen(function* () {
+				const before = yield* members;
+				const ledger = yield* Ledger;
+				yield* ledger.append(MEMBERS, "future", {
+					...from(),
+					_tag: "future_member_fact",
+					body: Schema.decodeUnknownSync(Schema.Json)({value: body}),
+				});
+				const loaded = yield* Effect.exit(members);
+				expect(loaded._tag, "unknown member facts are skipped").toBe("Success");
+				if (loaded._tag === "Success") expect(view(loaded.value)).toEqual(view(before));
+				expect(yield* write(granted("pA", key))).toMatchObject({_tag: "applied"});
+				expect((yield* entries).at(-1)?.seen).toBe(2);
+			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		),
+	);
+	it.effect("each write span keeps its answer and a refusal's why", () =>
+		check(leaf, [], (key) => {
+			const spans: Tracer.NativeSpan[] = [];
+			const tracer = Tracer.make({
+				span: (options) => {
+					const span = new Tracer.NativeSpan(options);
+					spans.push(span);
+					return span;
+				},
+			});
+			return Effect.gen(function* () {
+				for (const signer of ["pA", "wA", "unknown-signer"]) {
+					const answer = yield* write(granted(signer, key));
+					const span = spans.filter((s) => s.name === "members.write").at(-1)!;
+					expect(span.attributes.get("fab.members.answer")).toBe(answer._tag);
+					if (answer._tag === "refused")
+						expect(span.attributes.get("fab.members.why")).toBe(answer.why);
+				}
+			}).pipe(Effect.provide(clientsOn(onSql(fresh()))), Effect.withTracer(tracer));
+		}),
+	);
+});
+
 /**
  * A Ledger that, on the append of `id`, first runs `before`: another Mac's whole write, landing
  * between this write's first check and its append. The race, made certain.
@@ -233,20 +308,33 @@ describe("p96, founded is written once, by the first call", () => {
 	it.effect(
 		"building the Layer writes nothing; the first call writes founded under its fixed id",
 		() =>
-			Effect.gen(function* () {
-				expect(yield* entries).toEqual([]);
-				const m = yield* members;
-				expect(view(m)).toEqual(view(foldMembers([FOUNDED])));
-				const written = yield* entries;
-				expect(written.map((e) => [e.id, e._tag, e.rev])).toEqual([["founded", "founded", 1]]);
-				yield* members;
-				expect((yield* entries).length).toBe(1);
-			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+			check(founderArb, [FOUNDER], (founder) =>
+				Effect.gen(function* () {
+					expect(yield* entries).toEqual([]);
+					const m = yield* members;
+					expect(view(m)).toEqual(
+						view(
+							foldMembers([
+								{
+									_tag: "founded",
+									id: founder.person,
+									name: founder.name,
+									keys: founder.keys,
+									window: founder.window,
+								},
+							]),
+						),
+					);
+					const written = yield* entries;
+					expect(written.map((e) => [e.id, e._tag, e.rev])).toEqual([["founded", "founded", 1]]);
+					yield* members;
+					expect((yield* entries).length).toBe(1);
+				}).pipe(Effect.provide(clientsOn(onSql(fresh()), founder))),
+			),
 	);
 
-	it.effect(
-		"plant, founded written at Layer build: a Ledger that always fails still builds",
-		() => {
+	it.effect("plant, founded written at Layer build: a Ledger that always fails still builds", () =>
+		check(leaf, ["t1"], (key) => {
 			const broken = Layer.succeed(Ledger, {
 				append: () => Effect.fail(new LedgerError({why: "storage"})),
 				read: () => Stream.fail(new LedgerError({why: "storage"})),
@@ -256,51 +344,56 @@ describe("p96, founded is written once, by the first call", () => {
 				const failed = yield* Effect.flip(members);
 				expect(failed).toBeInstanceOf(LedgerError);
 				expect(failed.why).toBe("storage");
-				const refused = yield* Effect.flip(write(granted("pA", "t1")));
+				const refused = yield* Effect.flip(write(granted("pA", key)));
 				expect(refused.why).toBe("storage");
 			}).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(broken))));
-		},
+		}),
 	);
 
 	it.live("two first calls at once, and two ClientManagers on one ledger, leave one founded", () =>
-		Effect.gen(function* () {
-			const sql = fresh();
-			const one = clientsOn(onSql(sql));
-			const two = ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
-			yield* Effect.all(
-				[
-					members.pipe(Effect.provide(one)),
-					members.pipe(Effect.provide(two)),
-					write(granted("pA", "t1")).pipe(Effect.provide(two)),
-					members.pipe(Effect.provide(one)),
-				],
-				{concurrency: "unbounded"},
-			).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
-			const written = yield* entries.pipe(Effect.provide(onSql(sql)));
-			expect(written.filter((e) => e._tag === "founded").map((e) => e.id)).toEqual(["founded"]);
-		}),
+		check(leaf, ["t1"], (key) =>
+			Effect.gen(function* () {
+				const sql = fresh();
+				const one = clientsOn(onSql(sql));
+				const two = ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
+				yield* Effect.all(
+					[
+						members.pipe(Effect.provide(one)),
+						members.pipe(Effect.provide(two)),
+						write(granted("pA", key)).pipe(Effect.provide(two)),
+						members.pipe(Effect.provide(one)),
+					],
+					{concurrency: "unbounded"},
+				).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
+				const written = yield* entries.pipe(Effect.provide(onSql(sql)));
+				expect(written.filter((e) => e._tag === "founded").map((e) => e.id)).toEqual(["founded"]);
+			}),
+		),
 	);
 });
 
 describe("p96, founded carries true facts and is never refused quietly", () => {
 	it.effect("the founded line carries the writer's key and build the layer was handed", () =>
-		Effect.gen(function* () {
-			yield* members;
-			const [founding, ...more] = yield* entries;
-			expect(more).toEqual([]);
-			expect(founding).toMatchObject({
-				id: "founded",
-				_tag: "founded",
-				by: FOUNDER_BY,
-				build: FOUNDER_BUILD,
-				for: P,
-				seen: 0,
-				parent: null,
-			});
-		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		check(founderArb, [FOUNDER], (founder) =>
+			Effect.gen(function* () {
+				yield* members;
+				const [founding, ...more] = yield* entries;
+				expect(more).toEqual([]);
+				expect(founding).toMatchObject({
+					id: "founded",
+					_tag: "founded",
+					by: founder.by,
+					build: founder.build,
+					for: founder.person,
+					seen: 0,
+					parent: null,
+				});
+			}).pipe(Effect.provide(clientsOn(onSql(fresh()), founder))),
+		),
 	);
 
 	it("the layer's type requires the writer's key and build", () => {
+		// Compile-time type law; the owner rule keeps the required-field checks as type checks.
 		const base = {name: NAME, keys: ["pA"], window: "wA", person: P};
 		const noBy = {...base, build: FOUNDER_BUILD};
 		const noBuild = {...base, by: FOUNDER_BY};
@@ -332,229 +425,259 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
 		).pipe(Layer.provide(onSql(sql)));
 
 	it.effect("a founding the ledger refuses fails loud, and never starts with no members", () =>
-		Effect.gen(function* () {
-			for (const why of ["bad_line", "bad_parent", "bad_trace", "seen_ahead", "too_big"] as const) {
-				const sql = fresh();
-				const layer = ClientManager.layer(FOUNDER).pipe(Layer.provide(refusing(sql, why)));
-				const failed = yield* Effect.flip(members.pipe(Effect.provide(layer)));
-				expect(failed, why).toBeInstanceOf(LedgerError);
-				expect(failed.why, why).toBe("refused");
-				const got = yield* Effect.flip(write(granted("pA", "t1")).pipe(Effect.provide(layer)));
-				expect(got, why).toBeInstanceOf(LedgerError);
-				expect(got.why, why).toBe("refused");
-				expect((yield* entries.pipe(Effect.provide(onSql(sql)))).length, why).toBe(0);
-			}
-		}),
+		check(
+			fc.constantFrom("bad_line", "bad_parent", "bad_trace", "seen_ahead", "too_big"),
+			["bad_line", "bad_parent", "bad_trace", "seen_ahead", "too_big"],
+			(why) =>
+				Effect.gen(function* () {
+					const sql = fresh();
+					const layer = ClientManager.layer(FOUNDER).pipe(Layer.provide(refusing(sql, why)));
+					const failed = yield* Effect.flip(members.pipe(Effect.provide(layer)));
+					expect(failed, why).toBeInstanceOf(LedgerError);
+					expect(failed.why, why).toBe("refused");
+					const got = yield* Effect.flip(write(granted("pA", "t1")).pipe(Effect.provide(layer)));
+					expect(got, why).toBeInstanceOf(LedgerError);
+					expect(got.why, why).toBe("refused");
+					expect((yield* entries.pipe(Effect.provide(onSql(sql)))).length, why).toBe(0);
+				}),
+		),
 	);
 
-	it.effect("a founding refused id_reused, a second load that lost the race, goes on", () => {
-		const sql = fresh();
-		// Another load's whole first call lands first, so this one's append hears id_reused.
-		const other = members.pipe(
-			Effect.asVoid,
-			Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
-		);
-		const raced = refusing(sql, "id_reused", other);
-		return Effect.gen(function* () {
-			expect(view(yield* members)).toEqual(view(foldMembers([FOUNDED])));
-			expect(yield* write(granted("pA", "t1"))).toEqual({_tag: "applied", rev: 2});
-			expect((yield* entries).map((e) => e.id)[0]).toBe("founded");
-		}).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
-	});
+	it.effect("a founding refused id_reused, a second load that lost the race, goes on", () =>
+		check(leaf, ["t1"], (key) => {
+			const sql = fresh();
+			// Another load's whole first call lands first, so this one's append hears id_reused.
+			const other = members.pipe(
+				Effect.asVoid,
+				Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+			);
+			const raced = refusing(sql, "id_reused", other);
+			return Effect.gen(function* () {
+				expect(view(yield* members)).toEqual(view(foldMembers([FOUNDED])));
+				expect(yield* write(granted("pA", key))).toEqual({_tag: "applied", rev: 2});
+				expect((yield* entries).map((e) => e.id)[0]).toBe("founded");
+			}).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
+		}),
+	);
 });
 
 describe("p96, the traced history from the plan", () => {
 	it.effect("each write answers what the fold does with it, and a refusal writes nothing", () =>
-		Effect.gen(function* () {
-			const t2 = granted("pB", "t2");
-			const sheet = addedSheet("pB", "r1");
-			const steps: ReadonlyArray<readonly [MemberFact, unknown]> = [
-				[granted("pA", "t1"), {_tag: "applied", rev: 2}],
-				[addedDevice("pA", "pB", "wB"), {_tag: "applied", rev: 3}],
-				[t2, {_tag: "applied", rev: 4}],
-				[sheet, {_tag: "applied", rev: 5}],
-				[granted("pA", "g1", {as: "agent"}), {_tag: "applied", rev: 6}],
-				[granted("wB", "t3"), {_tag: "refused", why: "not_allowed"}],
-				[revoked("g1", "pB"), {_tag: "refused", why: "not_allowed"}],
-				[
-					addedDevice("r1", "pC", "wC", {drops: ["pA", "wA"], old: "lost"}),
-					{_tag: "applied", rev: 7},
-				],
-				[addedDevice("r1", "pX", "wX", {old: "lost"}), {_tag: "refused", why: "used"}],
-				[t2, {_tag: "applied", rev: 4}], // the rev-4 grant resent after the drop: nothing new
-			];
-			const kept: Array<MemberFact> = [FOUNDED];
-			yield* members; // founded first, so each step below counts only its own entry
-			for (const [fact, answer] of steps) {
-				const before = (yield* entries).length;
-				const got = yield* write(fact);
-				expect(got, fact._tag).toEqual(answer);
-				const after = yield* entries;
-				const wrote = got._tag === "applied" && got.rev > before;
-				expect(after.length, fact._tag).toBe(before + (wrote ? 1 : 0));
-				if (wrote) kept.push(fact);
-			}
-			const m = yield* members;
-			expect(view(m)).toEqual(view(foldMembers(kept)));
-			expect([...m.spent]).toEqual(["r1"]);
-		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		check(leaf, ["t2"], (key) =>
+			Effect.gen(function* () {
+				const t2 = granted("pB", key);
+				const sheet = addedSheet("pB", "r1");
+				const steps: ReadonlyArray<readonly [MemberFact, unknown]> = [
+					[granted("pA", "t1"), {_tag: "applied", rev: 2}],
+					[addedDevice("pA", "pB", "wB"), {_tag: "applied", rev: 3}],
+					[t2, {_tag: "applied", rev: 4}],
+					[sheet, {_tag: "applied", rev: 5}],
+					[granted("pA", "g1", {as: "agent"}), {_tag: "applied", rev: 6}],
+					[granted("wB", "t3"), {_tag: "refused", why: "not_allowed"}],
+					[revoked("g1", "pB"), {_tag: "refused", why: "not_allowed"}],
+					[
+						addedDevice("r1", "pC", "wC", {drops: ["pA", "wA"], old: "lost"}),
+						{_tag: "applied", rev: 7},
+					],
+					[addedDevice("r1", "pX", "wX", {old: "lost"}), {_tag: "refused", why: "used"}],
+					[t2, {_tag: "applied", rev: 4}], // the rev-4 grant resent after the drop: nothing new
+				];
+				const kept: Array<MemberFact> = [FOUNDED];
+				yield* members; // founded first, so each step below counts only its own entry
+				for (const [fact, answer] of steps) {
+					const before = (yield* entries).length;
+					const got = yield* write(fact);
+					expect(got, fact._tag).toEqual(answer);
+					const after = yield* entries;
+					const wrote = got._tag === "applied" && got.rev > before;
+					expect(after.length, fact._tag).toBe(before + (wrote ? 1 : 0));
+					if (wrote) kept.push(fact);
+				}
+				const m = yield* members;
+				expect(view(m)).toEqual(view(foldMembers(kept)));
+				expect([...m.spent]).toEqual(["r1"]);
+			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		),
 	);
 
 	it.effect(
 		"an applied fact sits under its own id, with its tag, the writer's fields and seen = the head",
 		() =>
-			Effect.gen(function* () {
-				const grant = granted("pA", "t1");
-				yield* write(grant, {seen: 0});
-				const sheet = addedSheet("pA", "r1");
-				yield* write(sheet, {seen: 0, parent: null, by: "SHA256:door-2"});
-				const [founding, first, second] = yield* entries;
-				expect(founding?.id).toBe("founded");
-				expect(first).toMatchObject({
-					id: factId(grant),
-					_tag: "granted",
-					rev: 2,
-					seen: 1,
-					by: "SHA256:door",
-					for: P,
-					sentAt: SENT,
-					parent: PARENT,
-					traceId: TRACE,
-					build: "b-7c1d073",
-				});
-				expect(second).toMatchObject({
-					id: factId(sheet),
-					_tag: "added",
-					rev: 3,
-					seen: 2,
-					parent: null,
-					traceId: TRACE,
-				});
-				expect(second?.by).toBe("SHA256:door-2");
-			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+			check(
+				fc.record({
+					by: fc.string({minLength: 1}),
+					build: fc.string({minLength: 1}),
+					sentAt: fc.string(),
+				}),
+				[{by: "SHA256:door", build: "b-7c1d073", sentAt: SENT}],
+				(over) =>
+					Effect.gen(function* () {
+						const grant = granted("pA", "t1");
+						yield* write(grant, {...over, seen: 0});
+						const sheet = addedSheet("pA", "r1");
+						yield* write(sheet, {seen: 0, parent: null, by: "SHA256:door-2"});
+						const [founding, first, second] = yield* entries;
+						expect(founding?.id).toBe("founded");
+						expect(first).toMatchObject({
+							id: factId(grant),
+							_tag: "granted",
+							rev: 2,
+							seen: 1,
+							by: over.by,
+							for: P,
+							sentAt: over.sentAt,
+							parent: PARENT,
+							traceId: TRACE,
+							build: over.build,
+						});
+						expect(second).toMatchObject({
+							id: factId(sheet),
+							_tag: "added",
+							rev: 3,
+							seen: 2,
+							parent: null,
+							traceId: TRACE,
+						});
+						expect(second?.by).toBe("SHA256:door-2");
+					}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+			),
 	);
 });
 
 describe("p96, why a write is refused", () => {
 	it.effect("not_member, revoked, replaced and used, each writing nothing", () =>
-		Effect.gen(function* () {
-			yield* write(addedDevice("pA", "pB", "wB"));
-			yield* write(addedSheet("pA", "r1"));
-			yield* write(addedSheet("pB", "r2"));
-			yield* write(revoked("pB", "pA"));
-			yield* write(addedDevice("r2", "pC", "wC", {old: "kept"}));
-			const before = (yield* entries).length;
-			expect(yield* write(granted("x1", "t1"))).toEqual({_tag: "refused", why: "not_member"});
-			expect(yield* write(granted("pA", "t1"))).toEqual({_tag: "refused", why: "revoked"});
-			expect(yield* write(addedDevice("r1", "pD", "wD", {old: "lost"}))).toEqual({
-				_tag: "refused",
-				why: "replaced",
-			});
-			expect(yield* write(addedDevice("r2", "pD", "wD", {old: "lost"}))).toEqual({
-				_tag: "refused",
-				why: "used",
-			});
-			expect((yield* entries).length).toBe(before);
-		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		check(leaf, ["t1"], (key) =>
+			Effect.gen(function* () {
+				yield* write(addedDevice("pA", "pB", "wB"));
+				yield* write(addedSheet("pA", "r1"));
+				yield* write(addedSheet("pB", "r2"));
+				yield* write(revoked("pB", "pA"));
+				yield* write(addedDevice("r2", "pC", "wC", {old: "kept"}));
+				const before = (yield* entries).length;
+				expect(yield* write(granted("x1", key))).toEqual({_tag: "refused", why: "not_member"});
+				expect(yield* write(granted("pA", key))).toEqual({_tag: "refused", why: "revoked"});
+				expect(yield* write(addedDevice("r1", "pD", "wD", {old: "lost"}))).toEqual({
+					_tag: "refused",
+					why: "replaced",
+				});
+				expect(yield* write(addedDevice("r2", "pD", "wD", {old: "lost"}))).toEqual({
+					_tag: "refused",
+					why: "used",
+				});
+				expect((yield* entries).length).toBe(before);
+			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		),
 	);
 
 	it.effect(
 		"the ledger's own refusal passes through: another fact under a used id is id_reused",
 		() =>
-			Effect.gen(function* () {
-				const first = granted("pA", "t1", {id: "grant_01m6v5270hf3c8x2q7w9z4k5aa"});
-				expect(yield* write(first)).toEqual({_tag: "applied", rev: 2});
-				const other = granted("pA", "t2", {id: "grant_01m6v5270hf3c8x2q7w9z4k5aa"});
-				expect(yield* write(other)).toEqual({_tag: "refused", why: "id_reused"});
-				expect((yield* entries).length).toBe(2);
-				expect((yield* members).keys.has("t2")).toBe(false);
-			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+			check(fc.string({minLength: 1}), ["grant_01m6v5270hf3c8x2q7w9z4k5aa"], (id) =>
+				Effect.gen(function* () {
+					const first = granted("pA", "t1", {id});
+					expect(yield* write(first)).toEqual({_tag: "applied", rev: 2});
+					const other = granted("pA", "t2", {id});
+					expect(yield* write(other)).toEqual({_tag: "refused", why: "id_reused"});
+					expect((yield* entries).length).toBe(2);
+					expect((yield* members).keys.has("t2")).toBe(false);
+				}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+			),
 	);
 
 	it.effect("plant, the check after the append only: a refused fact never reaches the log", () =>
-		Effect.gen(function* () {
-			yield* members; // founded first, so the count below is only the refused facts
-			const before = (yield* entries).length;
-			for (const fact of [granted("wA", "t1"), revoked("pA", "pA"), granted("x1", "t1")]) {
-				const answer = yield* write(fact);
-				expect(answer._tag, fact._tag).toBe("refused");
-			}
-			expect((yield* entries).length).toBe(before);
-			expect(view(yield* members)).toEqual(view(foldMembers([FOUNDED])));
-			expect((yield* write(denied("t1", "SHA256:menu")))._tag).not.toBe("ignored");
-		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		check(leaf, ["t1"], (key) =>
+			Effect.gen(function* () {
+				yield* members; // founded first, so the count below is only the refused facts
+				const before = (yield* entries).length;
+				for (const fact of [granted("wA", key), revoked("pA", "pA"), granted("x1", key)]) {
+					const answer = yield* write(fact);
+					expect(answer._tag, fact._tag).toBe("refused");
+				}
+				expect((yield* entries).length).toBe(before);
+				expect(view(yield* members)).toEqual(view(foldMembers([FOUNDED])));
+				expect((yield* write(denied(key, "SHA256:menu")))._tag).not.toBe("ignored");
+			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		),
 	);
 });
 
 describe("p96, the stolen sheet race", () => {
 	it.effect(
 		"plant, write that skips the second fold: the Mac that lost the race hears ignored used",
-		() => {
-			const sql = fresh();
-			const sheet = addedSheet("pA", "r1");
-			const macC = addedDevice("r1", "pC", "wC", {drops: ["pA"], old: "lost"});
-			const macX = addedDevice("r1", "pX", "wX", {old: "lost"});
-			let xAnswer: unknown = null;
-			const hook: {readonly id: string; before: Effect.Effect<void, LedgerError> | null} = {
-				id: factId(macC),
-				before: write(macX).pipe(
-					Effect.tap((answer) =>
-						Effect.sync(() => {
-							xAnswer = answer;
-						}),
+		() =>
+			check(fc.constantFrom("lost", "kept"), ["lost"], (old) => {
+				const sql = fresh();
+				const sheet = addedSheet("pA", "r1");
+				const macC = addedDevice("r1", "pC", "wC", {drops: ["pA"], old});
+				const macX = addedDevice("r1", "pX", "wX", {old});
+				let xAnswer: unknown = null;
+				const hook: {readonly id: string; before: Effect.Effect<void, LedgerError> | null} = {
+					id: factId(macC),
+					before: write(macX).pipe(
+						Effect.tap((answer) =>
+							Effect.sync(() => {
+								xAnswer = answer;
+							}),
+						),
+						Effect.asVoid,
+						Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
 					),
-					Effect.asVoid,
-					Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
-				),
-			};
-			return Effect.gen(function* () {
-				expect(yield* write(sheet)).toEqual({_tag: "applied", rev: 2});
-				const answer = yield* write(macC);
-				expect(hook.before).toBeNull(); // the other Mac did run in between
-				expect(xAnswer).toEqual({_tag: "applied", rev: 3});
-				expect(answer).toEqual({_tag: "ignored", rev: 4, why: "used"});
-				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
-				const m = yield* members;
-				expect(m.keys.get("pX")?.live).toBe(true);
-				expect(m.keys.get("pC")?.live ?? false).toBe(false);
-				expect(m.keys.get("pA")?.live).toBe(true);
-				// Both facts are in the log; the fold took only the first.
-				expect((yield* entries).map((e) => e.id)).toEqual([
-					"founded",
-					factId(sheet),
-					factId(macX),
-					factId(macC),
-				]);
-			}).pipe(
-				Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provideMerge(racing(sql, hook)))),
-			);
-		},
+				};
+				return Effect.gen(function* () {
+					expect(yield* write(sheet)).toEqual({_tag: "applied", rev: 2});
+					const answer = yield* write(macC);
+					expect(hook.before).toBeNull(); // the other Mac did run in between
+					expect(xAnswer).toEqual({_tag: "applied", rev: 3});
+					expect(answer).toEqual({_tag: "ignored", rev: 4, why: "used"});
+					expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
+					const m = yield* members;
+					expect(m.keys.get("pX")?.live).toBe(true);
+					expect(m.keys.get("pC")?.live ?? false).toBe(false);
+					expect(m.keys.get("pA")?.live).toBe(true);
+					// Both facts are in the log; the fold took only the first.
+					expect((yield* entries).map((e) => e.id)).toEqual([
+						"founded",
+						factId(sheet),
+						factId(macX),
+						factId(macC),
+					]);
+				}).pipe(
+					Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provideMerge(racing(sql, hook)))),
+				);
+			}),
 	);
 
 	it.live("two writes of one sheet at once, as fibers: one applied, never two", () =>
-		Effect.gen(function* () {
-			for (let round = 0; round < 12; round++) {
-				const sql = fresh();
-				const one = clientsOn(onSql(sql));
-				const two = ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
-				yield* write(addedSheet("pA", "r1")).pipe(Effect.provide(one));
-				const answers = yield* Effect.all(
-					[
-						write(addedDevice("r1", "pC", "wC", {old: "lost"})).pipe(Effect.provide(one)),
-						write(addedDevice("r1", "pX", "wX", {old: "lost"})).pipe(Effect.provide(two)),
-					],
-					{concurrency: "unbounded"},
-				).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
-				expect(answers.filter((a) => a._tag === "applied").length, `round ${round}`).toBe(1);
-				const lost = answers.find((a) => a._tag !== "applied");
-				expect(lost?._tag === "ignored" || lost?._tag === "refused", `round ${round}`).toBe(true);
-				expect(lost !== undefined && "why" in lost ? lost.why : null).toBe("used");
-				const m = yield* members.pipe(Effect.provide(one));
-				expect([m.keys.get("pC")?.live, m.keys.get("pX")?.live].filter((l) => l === true)).toEqual([
-					true,
-				]);
-			}
-		}),
+		check(
+			fc.string().map((suffix) => `pC${suffix}`),
+			["pC"],
+			(device) =>
+				Effect.gen(function* () {
+					for (let round = 0; round < 12; round++) {
+						const sql = fresh();
+						const one = clientsOn(onSql(sql));
+						const two = ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
+						yield* write(addedSheet("pA", "r1")).pipe(Effect.provide(one));
+						const answers = yield* Effect.all(
+							[
+								write(addedDevice("r1", device, "wC", {old: "lost"})).pipe(Effect.provide(one)),
+								write(addedDevice("r1", "pX", "wX", {old: "lost"})).pipe(Effect.provide(two)),
+							],
+							{concurrency: "unbounded"},
+						).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
+						expect(answers.filter((a) => a._tag === "applied").length, `round ${round}`).toBe(1);
+						const lost = answers.find((a) => a._tag !== "applied");
+						expect(lost?._tag === "ignored" || lost?._tag === "refused", `round ${round}`).toBe(
+							true,
+						);
+						expect(lost !== undefined && "why" in lost ? lost.why : null).toBe("used");
+						const m = yield* members.pipe(Effect.provide(one));
+						expect(
+							[m.keys.get(device)?.live, m.keys.get("pX")?.live].filter((l) => l === true),
+						).toEqual([true]);
+					}
+				}),
+		),
 	);
 });
 
@@ -660,38 +783,44 @@ describe("p96, write tells the truth over any history", () => {
 // Gaps the mutation step found on the build (ticket 236): answers the tests above held loose.
 describe("p96, a write tells the truth about a key that is out", () => {
 	it.effect("a revoked tab granted again is refused revoked, and nothing is written", () =>
-		Effect.gen(function* () {
-			yield* write(addedDevice("pA", "pB", "wB"));
-			yield* write(granted("pA", "t1"));
-			expect((yield* write(revoked("pB", "t1")))._tag).toBe("applied");
-			const before = (yield* entries).length;
-			expect(yield* write(granted("pA", "t1"))).toEqual({_tag: "refused", why: "revoked"});
-			expect((yield* entries).length).toBe(before);
-		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		check(leaf, ["t1"], (key) =>
+			Effect.gen(function* () {
+				yield* write(addedDevice("pA", "pB", "wB"));
+				yield* write(granted("pA", key));
+				expect((yield* write(revoked("pB", key)))._tag).toBe("applied");
+				const before = (yield* entries).length;
+				expect(yield* write(granted("pA", key))).toEqual({_tag: "refused", why: "revoked"});
+				expect((yield* entries).length).toBe(before);
+			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		),
 	);
 
 	it.effect("revoking a key already revoked is refused revoked, and nothing is written", () =>
-		Effect.gen(function* () {
-			yield* write(addedDevice("pA", "pB", "wB"));
-			yield* write(granted("pA", "t1"));
-			expect((yield* write(revoked("pA", "t1")))._tag).toBe("applied");
-			const before = (yield* entries).length;
-			expect(yield* write(revoked("pB", "t1"))).toEqual({_tag: "refused", why: "revoked"});
-			expect((yield* entries).length).toBe(before);
-		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		check(leaf, ["t1"], (key) =>
+			Effect.gen(function* () {
+				yield* write(addedDevice("pA", "pB", "wB"));
+				yield* write(granted("pA", key));
+				expect((yield* write(revoked("pA", key)))._tag).toBe("applied");
+				const before = (yield* entries).length;
+				expect(yield* write(revoked("pB", key))).toEqual({_tag: "refused", why: "revoked"});
+				expect((yield* entries).length).toBe(before);
+			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		),
 	);
 
 	it.effect("a sheet revoked before a new one is made answers revoked, never replaced", () =>
-		Effect.gen(function* () {
-			yield* write(addedSheet("pA", "r1"));
-			expect((yield* write(revoked("pA", "r1")))._tag).toBe("applied");
-			expect((yield* write(addedSheet("pA", "r2")))._tag).toBe("applied");
-			expect(yield* write(addedDevice("r1", "pY", "wY", {old: "lost"}))).toEqual({
-				_tag: "refused",
-				why: "revoked",
-			});
-			// The new sheet still works: the one it ended was the live one, and there was none.
-			expect((yield* write(addedDevice("r2", "pY", "wY", {old: "lost"})))._tag).toBe("applied");
-		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		check(fc.constantFrom("lost", "kept"), ["lost"], (old) =>
+			Effect.gen(function* () {
+				yield* write(addedSheet("pA", "r1"));
+				expect((yield* write(revoked("pA", "r1")))._tag).toBe("applied");
+				expect((yield* write(addedSheet("pA", "r2")))._tag).toBe("applied");
+				expect(yield* write(addedDevice("r1", "pY", "wY", {old}))).toEqual({
+					_tag: "refused",
+					why: "revoked",
+				});
+				// The new sheet still works: the one it ended was the live one, and there was none.
+				expect((yield* write(addedDevice("r2", "pY", "wY", {old})))._tag).toBe("applied");
+			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		),
 	);
 });

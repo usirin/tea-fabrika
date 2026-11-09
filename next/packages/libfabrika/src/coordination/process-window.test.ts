@@ -2,7 +2,8 @@
 import {describe, expect, it} from "@effect/vitest";
 import {Arbitrary, Effect, Result, Schema} from "effect";
 import * as fc from "fast-check";
-import {ProcessId} from "../data/trace.ts";
+import {fcProcessIds} from "../id.test-support.ts";
+import * as Id from "../id.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
 	A,
@@ -108,7 +109,7 @@ describe("p79, saved activity is not a crash detector", () => {
 	);
 	it.prop(
 		"plant, new ID on constructor entry: an idle marker restores the same process",
-		[ProcessId],
+		[Id.Process],
 		([generated]) => {
 			for (const process of [A, generated]) {
 				const saved = Activity.cases.idle.make({process});
@@ -121,7 +122,7 @@ describe("p79, saved activity is not a crash detector", () => {
 	);
 	it.prop(
 		"plant, label every entry crashed: an unfinished step reports only interruption",
-		[ProcessId, Activity.cases.stepping.fields.letter, Activity.cases.stepping.fields.build],
+		[Id.Process, Activity.cases.stepping.fields.letter, Activity.cases.stepping.fields.build],
 		([process, letter, build]) => {
 			for (const [p, l, b] of [
 				[A, "letter-17", "build-a"],
@@ -157,7 +158,7 @@ describe("p79, saved activity is not a crash detector", () => {
 describe("p80, supplied policy facts", () => {
 	it.prop(
 		"plant, omit until: both down shapes require the promised retry time",
-		[ProcessId, policy],
+		[Id.Process, policy],
 		([process, supplied]) => {
 			for (const [p, s] of [
 				[A, {why: "intensity", crashes: 3, until: 50_000}],
@@ -211,9 +212,15 @@ describe("p80, supplied policy facts", () => {
 		{arbitrary: {seed: 119120, runs: 20, size: 40}},
 	);
 	// Dead needs dependent generation: errors.length must equal tries.
-	const dead = Arbitrary.array(Arbitrary.schema(text), {minLength: 2, maxLength: 31}).pipe(
-		Arbitrary.map((errors) =>
+	const dead = Arbitrary.all({
+		process: Arbitrary.schema(Id.Process),
+		program: Arbitrary.schema(Dead.fields.program),
+		name: Arbitrary.schema(Dead.fields.name),
+		errors: Arbitrary.array(Arbitrary.schema(text), {minLength: 2, maxLength: 31}),
+	}).pipe(
+		Arbitrary.map(({errors, ...identity}) =>
 			Dead.make({
+				...identity,
 				tries: errors.length,
 				limit: errors.length,
 				m: "letter-17",
@@ -228,6 +235,9 @@ describe("p80, supplied policy facts", () => {
 		([generated]) => {
 			for (const value of [
 				Dead.make({
+					process: A,
+					program: "counter",
+					name: "counter:1",
 					tries: 3,
 					limit: 3,
 					m: "letter-17",
@@ -274,4 +284,34 @@ describe("p80, supplied policy facts", () => {
 		},
 		{arbitrary: {seed: 119120, runs: 20, size: 40}},
 	);
+});
+
+describe("T319, next/ complete dead values", () => {
+	const text = fc.string({minLength: 1, maxLength: 256});
+	const complete = fc
+		.record({
+			process: fcProcessIds,
+			program: text,
+			name: fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/),
+			m: text,
+			build: text,
+			errors: fc.array(text, {minLength: 1, maxLength: 32}),
+		})
+		.map((value) => ({
+			...value,
+			_tag: "dead" as const,
+			tries: value.errors.length,
+			limit: value.errors.length,
+		}));
+	for (const field of ["process", "program", "name"] as const)
+		it(`plant, make ${field} optional or default it: complete dead values decode, removing ${field} fails`, () => {
+			fc.assert(
+				fc.property(complete, (value) => {
+					expect(Result.isSuccess(Schema.decodeUnknownResult(Dead)(value))).toBe(true);
+					const {[field]: _removed, ...missing} = value;
+					expect(Result.isFailure(Schema.decodeUnknownResult(Dead)(missing))).toBe(true);
+				}),
+				{seed: 119120},
+			);
+		});
 });

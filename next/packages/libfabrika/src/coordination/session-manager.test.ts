@@ -11,7 +11,8 @@ import {Arbitrary, Brand, Effect, Result, Schema} from "effect";
 import {type InputId} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
-import {ProcessId} from "../data/trace.ts";
+import {processId} from "../id.test-support.ts";
+import * as Id from "../id.ts";
 import * as C from "./index.ts";
 import {signalId} from "./process.ts";
 
@@ -35,11 +36,11 @@ const json = (depth: number): Schema.Codec<Schema.Json> =>
 				),
 			]);
 
-const OTHER_PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjt";
+const OTHER_PROCESS = Effect.runSync(processId);
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
-const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+const PROCESS = Effect.runSync(processId);
 const SPAN = "00f067aa0ba902b7";
-const START = "process_01m6v5270hetdrt4r8h9vvjwjr";
+const START = Effect.runSync(processId);
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const sample = {
 	PROCESS,
@@ -61,9 +62,9 @@ const sessionExamples = [sample, {...sample, id: "write-b"}];
 // It also covers write- plus every 1..20-character suffix in the id tuple.
 const sessionOptions = {arbitrary: {seed: 119120, runs: 20, size: 54}};
 const sessionSchema = Schema.Struct({
-	PROCESS: ProcessId,
-	OTHER_PROCESS: ProcessId,
-	START: ProcessId,
+	PROCESS: Id.Process,
+	OTHER_PROCESS: Id.Process,
+	START: Id.Process,
 	PERSON: C.Writer.cases.person.fields.for.check(
 		Schema.isPattern(/^person_[0-7][0-9a-hjkmnp-tv-z]{25}$/),
 	),
@@ -115,7 +116,7 @@ const setup = ({
 	agentKey,
 	id,
 	kinds,
-}: typeof sessionSchema.Type) => {
+}: typeof sessionSchema.Encoded) => {
 	const parent = inputId(`in-${START}-1`);
 	const policy = {
 		input: (name: string) => name === "approve",

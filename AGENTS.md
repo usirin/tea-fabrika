@@ -20,7 +20,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), one note per decision | A note there, the same day a direction is set or changed, plus its row in that folder's README. Mark it **proposed** until it is settled. |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
-| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. |
+| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. Raw samples, such as every timing of a run, are still recorded but kept privately, not in git (owner, 2026-11-09): the script writes them under `runs/` or to a path a flag names, and `results/` keeps a small summary of the numbers the write-up quotes. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
 | Check a change against old tickets | [`replay/README.md`](./replay/README.md) | New replay cases under `replay/`, as that README describes. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/fabrika-sdk.md`](./docs/fabrika-sdk.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
@@ -215,9 +215,12 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
   every pull request, prose included. An Effect service name is never plural: one that holds many is
   `<Thing>Manager`, such as `LeaseManager`.
-- **Data keys are short everyday words.** `for`, not `forWhat`. `why`, not
-  `reasonCode`. A key does not say again what its parent already says: inside
-  an outcome, the reason is `why`, not `outcomeReason`. If a short word could
+- **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not
+  `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
+  `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
+  goes, as with `kind`, and main's `next/` code is renamed by a sweep after PR 530 merges (ticket
+  337). A key does not say again what its parent already says: inside
+  an outcome, the reason is `reason`, not `outcomeReason`. If a short word could
   mean two things, pick a clearer short word before you reach for a long one.
   A short word that already means something here keeps that one meaning inside its
   [bounded context](./docs/direction/we-follow-ddd.md): `at` is a
@@ -227,15 +230,15 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   CreateTime). Today's code says `at` and `said`. In `next/`, a word means one thing. "Run"
   means an agent run only; one start of a program is a process (a restart is a new process, as
   in OTP). A place, a path, a ref, a state, a reason or a total gets its own word
-  (`location`, `path`, `ref`, `state`, `why`, `total`). `rg` the word under
+  (`location`, `path`, `ref`, `state`, `reason`, `total`). `rg` the word under
   `docs/direction/` and `next/` before you use it.
 
   ```ts
   // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.
-  // Today's code says `kind` here.
+  // Today's code says `kind` and `why` here.
   // Yes: read it out loud and it is a sentence.
   { _tag: "ask", who: "owner", for: "approval" }
-  { _tag: "send", to: "builder", why: "checks_red" }
+  { _tag: "send", to: "builder", reason: "checks_red" }
 
   // No: longer, and the parent already said it.
   { _tag: "ask", askWho: "owner", forWhat: "owner_approval" }

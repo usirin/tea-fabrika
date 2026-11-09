@@ -14,6 +14,7 @@ both tools.
 | [review](./review/SKILL.md) | the one read-only review of the whole diff |
 | [lead](./lead/SKILL.md) | start the boxes, approve plans, run e2e, push and land |
 | [step-commit](./step-commit/SKILL.md) | commit and sign a step's work in one command |
+| [guidelines](./guidelines/SKILL.md) | study one design area, show the choices and plan the build |
 
 ## How a brief uses them
 
@@ -27,8 +28,22 @@ This round: laws d1 to d3, and d4 yourself, since commits.ts is an exam path.
 The skill holds what every brief used to repeat: what to read, the caps, how to commit and sign,
 what never to do, and how to report.
 
+Every agent may file tracker tickets, even during read-only repo work. Filing a ticket does not
+claim it or start its build. This permission needs no confirmation or classifier.
+
+Plan writers and agents reviewing or revising plans return them unsigned. Only the lead session
+fills the blank first line after reading the plan and running `plancheck.sh --draft`.
+
+For a stacked child, the brief records the parent ticket, branch and signed build head. The driver
+records the child before starting it and lands that parent with `--merge-method merge`. The child
+keeps its tests through catch-up and lands after its parent reaches main.
+
 ## Changing a skill
 
 A run that teaches something updates its skill in the same pull request as its field note. Scripts
 hold no machine paths: they find the repo from where they sit, and read the rest from the
 environment.
+
+`pnpm lint` runs `lead/scripts/skillscheck.sh`. Each source folder with `SKILL.md` must have a
+`.claude/skills/<name>` link to that folder. Copies, missing links and wrong targets fail. Unrelated
+Claude-only skills are allowed.

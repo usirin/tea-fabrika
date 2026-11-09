@@ -172,6 +172,9 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 	// A dead letter keeps one error class per try, so its list is capped too: 32 entries at most.
 	const dead = (errors: ReadonlyArray<string>) => ({
 		_tag: "dead",
+		process: A,
+		program: "counter",
+		name: "counter:1",
 		tries: errors.length,
 		limit: errors.length,
 		m: "letter-17",
@@ -216,6 +219,22 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 		},
 		schemaOptions,
 	);
+	for (const key of ["program", "name"] as const)
+		it(`T319 plant, omit the ${key} cap: a dead letter accepts ${CAP} characters and refuses longer text`, () => {
+			fc.assert(
+				fc.property(
+					fc.stringMatching(/^[a-z0-9]{256}$/),
+					fc.integer({min: 1, max: CAP}),
+					(text, extra) => {
+						expect(Schema.is(Dead)({...dead(classes(1)), [key]: text})).toBe(true);
+						expect(Schema.is(Dead)({...dead(classes(1)), [key]: text + "a".repeat(extra)})).toBe(
+							false,
+						);
+					},
+				),
+				{seed: 119120},
+			);
+		});
 });
 
 describe("P33 rule 1, an over-cap text is refused as a typed error and writes nothing", () => {
