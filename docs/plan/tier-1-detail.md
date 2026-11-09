@@ -540,7 +540,7 @@ export const Fault = Schema.TaggedUnion({
 	delay: {client: Schema.String, ms: Schema.Number},
 	abort: {target: Schema.Literals(["gateway", "process", "project"]), name: Schema.String},
 	abort_all: {},
-	fail_step: {pid: Schema.String},
+	fail_step: {pid: Schema.String}, // P17 adds a "three times" case, for P34's dead letter
 });
 export type Fault = typeof Fault.Type;
 
@@ -572,7 +572,7 @@ export class Nemesis extends Context.Service<Nemesis, {
 | `delay` | a slow link is not a lost link | gateway waits before sending | same |
 | `abort` one object | wake from the log | `ctx.abort` | same |
 | `abort_all` | closest to a brain restart | all objects in the run's list | same; unmeasured |
-| `fail_step` | a failure is not a refusal (p25) | the runner fails one step, once | same |
+| `fail_step` | a failure is not a refusal (p25) | the runner fails one step, once; P17 adds a "three times" case, which moves a letter to dead (P34) | same |
 | `kill_brain`, `hang_brain` | process death, a hung brain | the drill: `kill -9`, `SIGSTOP` | none: nothing there can do it |
 | redeploy mid-run | old object, new Worker, up to 5 min (exp 144) | none | the drill, by the owner, after a plan |
 
