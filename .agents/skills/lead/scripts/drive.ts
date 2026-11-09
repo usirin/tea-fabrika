@@ -721,8 +721,7 @@ const CLAUDE_TOOLS: Record<StepName, string> = {
 /**
  * Claude's walls, written beside the box: a sandbox-exec profile the OS enforces on Claude and
  * every command it starts (no reading the step keys, leak words or Codex's login; writes only in
- * its box and the caches it needs), and settings that say the same to Claude's own tools. The
- * keychain stays reachable, since Claude's own login lives there; the settings deny `security`.
+ * its box and the caches it needs), and settings that say the same to Claude's own tools.
  */
 const claudeArgs = (env: Env, ask: Ask) => {
 	const home = homedir();

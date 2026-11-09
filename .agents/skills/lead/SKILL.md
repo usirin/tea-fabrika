@@ -113,8 +113,7 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   the field row with tokens and list-price dollars.
 - Claude runs under `sandbox-exec`: it cannot read `~/.fabrika/step-keys`, the leak words or
   `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
-  work as one commit through `stepcommit.sh`, with main's own signer, never the box's code. The
-  keychain stays open to it (Claude's own login lives there); its settings deny `security`.
+  work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
 - Mutation runs on `--agent claude` only, since it binds ports and starts Electron. One mutation
   step at a time holds `BOXES/state/electron.lock`; the next waits.
 - It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
