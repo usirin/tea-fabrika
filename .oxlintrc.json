@@ -332,11 +332,6 @@
 			"rules": { "fabrika/no-redacted-value": "off" }
 		},
 		{
-			// Jev's authorization header (the old factory).
-			"files": ["legacy/src/local.ts"],
-			"rules": { "fabrika/no-redacted-value": "off" }
-		},
-		{
 			// The new version's exam rules (Tier 1, P2). They block from the start, and their fires on PR
 			// 223's tree were read by hand (oxlint-plugins/README.md). An edge is one line under an edge
 			// comment, which `edge-comment` holds to its shape (P35). No override below turns the two
