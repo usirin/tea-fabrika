@@ -1,4 +1,5 @@
-import {readFileSync} from "node:fs";
+import {createHash} from "node:crypto";
+import {existsSync, readFileSync} from "node:fs";
 import {join} from "node:path";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
@@ -886,5 +887,123 @@ describe("law 16: the terminal's names keep ANSI order", () => {
 			),
 			{seed: 119120, numRuns: 200},
 		);
+	});
+});
+
+// T343 PR 1. The current built-in values are part of the Radix guarantee too.
+// Plant: keep a WCAG-only exemption, skip hovered/selected backgrounds, or use |Lc| < 60.
+describe("T7 built-in picks pass both floors", () => {
+	it("checks every existing text role on every resting, hovered and selected backdrop", async () => {
+		const {apca, wcag} = await import("../../../fixtures/themes/laws.ts");
+		const names = [
+			"--text-primary",
+			"--text-faint",
+			"--turn-text",
+			"--done",
+			"--running",
+			"--stuck",
+			"--closed",
+		];
+		fc.assert(
+			fc.property(fc.constantFrom(...LOOKS), (look) => {
+				const failures = names.flatMap((token) =>
+					backgroundsIn(look).flatMap(([on, bg]) => {
+						const fg = tokenIn(token, look),
+							w = wcag(fg, bg),
+							a = apca(fg, bg);
+						return w >= 4.5 && Math.abs(a) >= 60 ? [] : [{token, on, wcag: w, apca: a}];
+					}),
+				);
+				expect(failures).toEqual([]);
+			}),
+			{seed: 119120, numRuns: 150},
+		);
+	});
+});
+
+describe("T13 kept source bytes and versioned calibration", () => {
+	// format: upstream source files and their license bytes are immutable comparison inputs.
+	it("format: all five original sources and licenses retain their exact SHA-256", () => {
+		const fixture = join(import.meta.dirname, "../../../fixtures/themes");
+		const hashes = JSON.parse(readFileSync(join(fixture, "source-hashes.json"), "utf8")) as {
+			file: string;
+			sha256: string;
+		}[];
+		expect(hashes).toHaveLength(7);
+		for (const {file, sha256} of hashes)
+			expect(
+				createHash("sha256")
+					.update(readFileSync(join(fixture, "source", file)))
+					.digest("hex"),
+			).toBe(sha256);
+	});
+	// format: mapping inputs are pinned independently of whatever the product importer produces.
+	it("format: all five mapped inputs and the invented input keep their bytes", () => {
+		const fixture = join(import.meta.dirname, "../../../fixtures/themes");
+		const hashes = JSON.parse(readFileSync(join(fixture, "mapped-hashes.json"), "utf8")) as {
+			file: string;
+			sha256: string;
+		}[];
+		expect(hashes).toHaveLength(6);
+		for (const {file, sha256} of hashes) {
+			expect(
+				createHash("sha256")
+					.update(readFileSync(join(fixture, "mapped", file)))
+					.digest("hex"),
+			).toBe(sha256);
+		}
+	});
+	// format: these values may be filled only after measuring and reviewing the five real themes.
+	it("format: the repair cap and version equal the reviewed fixture report", async () => {
+		const fixture = join(import.meta.dirname, "../../../fixtures/themes");
+		const calibration = join(fixture, "calibration.json");
+		const repair = join(import.meta.dirname, "../tokens/repair.toml");
+		expect(
+			existsSync(calibration),
+			"T13 requires a measured report; no historical counts or guessed cap",
+		).toBe(true);
+		expect(
+			existsSync(repair),
+			"T13 requires the measured cap and repair version in token data",
+		).toBe(true);
+		const {parse} = await import("smol-toml");
+		const report = JSON.parse(readFileSync(calibration, "utf8")) as {
+			version: string;
+			cap: number;
+			policy: unknown;
+			moves: {move: number}[];
+			themes: {name: string; result: unknown}[];
+			unreadable: {result: unknown};
+		};
+		const token = parse(readFileSync(repair, "utf8"));
+		expect(token["version"]).toBe(report.version);
+		expect(token["cap"]).toBe(report.cap);
+		expect(report.cap).toBe(Math.max(...report.moves.map((move) => move.move)));
+		expect(Number.isFinite(report.cap)).toBe(true);
+		expect(report.themes).toHaveLength(5);
+		expect(report.policy).toEqual({fix: "nudge", contrast: 4.5});
+		const {Result} = await import("effect");
+		const {decodeTheme} = await import("./theme.ts");
+		const {check} = await import("./build/contrast.ts");
+		const {pairs} = await import("./theme-contract.ts");
+		for (const {name, result} of [
+			...report.themes,
+			{name: "unreadable-made-up", result: report.unreadable.result},
+		]) {
+			const written = Result.getOrThrow(
+				decodeTheme(readFileSync(join(fixture, "mapped", `${name}.toml`), "utf8")),
+			);
+			expect(
+				check(
+					written,
+					pairs,
+					{fix: "nudge", contrast: 4.5},
+					{
+						version: report.version,
+						cap: report.cap,
+					},
+				),
+			).toEqual(result);
+		}
 	});
 });

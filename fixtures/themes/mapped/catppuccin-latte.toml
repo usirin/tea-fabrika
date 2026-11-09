@@ -1,0 +1,31 @@
+format = 1
+name = "catppuccin-latte"
+look = "light"
+
+[from.ghostty]
+file = "ghostty-Catppuccin_Latte"
+sha256 = "de3e61fce3876b3513ef996743427d7ff16e7b7a217456d1568b0b0b1bcd1bdd"
+
+[colors]
+desk = "#edeff3"
+raised = "#eff1f5"
+hover = "#e4e7ec"
+edge = "#dee1e8"
+focus = "#9da2b2"
+faint = "#7f8497"
+ground = "#eff1f5"
+text = "#4c4f69"
+turn-fill = "#1e66f5"
+turn-text = "#1e66f5"
+on-turn = "#ffffff"
+done = "#40a02b"
+running = "#df8e1d"
+stuck = "#d20f39"
+closed = "#7f8497"
+
+[terminal]
+foreground = "#4c4f69"
+background = "#eff1f5"
+cursor = "#dc8a78"
+selection = "#dc8a78"
+palette = [ "#bcc0cc", "#d20f39", "#40a02b", "#df8e1d", "#1e66f5", "#ea76cb", "#179299", "#5c5f77", "#acb0be", "#e7103f", "#46b02f", "#e49931", "#3878f6", "#ef95d7", "#19a1a8", "#6c6f85" ]

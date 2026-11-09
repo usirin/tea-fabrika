@@ -260,6 +260,20 @@
 	},
 	"overrides": [
 		{
+			"files": [
+				"apps/fabrika/src/window/**/*.ts",
+				"apps/fabrika/src/window/**/*.tsx",
+				"programs/*/src/window/**/*.ts",
+				"programs/*/src/window/**/*.tsx",
+				"programs/*/src/view.tsx"
+			],
+			"rules": { "fabrika/no-raw-color": "error" }
+		},
+		{
+			"files": ["**/*.test.ts", "**/*.test.tsx"],
+			"rules": { "fabrika/no-raw-color": "off" }
+		},
+		{
 			// Test files only: an `expect` that sits only inside an `if` may never run.
 			// `!` is allowed here: a test that hits a missing value fails on its own.
 			"files": ["**/*.test.ts"],

@@ -1,0 +1,31 @@
+format = 1
+name = "dracula"
+look = "dark"
+
+[from.ghostty]
+file = "ghostty-Dracula"
+sha256 = "e6990f485cb0001cd62109e5aa94d34d4f60bb85798735b995a4158ee1ff033f"
+
+[colors]
+desk = "#252531"
+raised = "#2e323e"
+hover = "#363c47"
+edge = "#3c444e"
+focus = "#6c797b"
+faint = "#bec5bf"
+ground = "#282a36"
+text = "#f8f8f2"
+turn-fill = "#bd93f9"
+turn-text = "#bd93f9"
+on-turn = "#000000"
+done = "#50fa7b"
+running = "#f1fa8c"
+stuck = "#ff5555"
+closed = "#bec5bf"
+
+[terminal]
+foreground = "#f8f8f2"
+background = "#282a36"
+cursor = "#f8f8f2"
+selection = "#44475a"
+palette = [ "#21222c", "#ff5555", "#50fa7b", "#f1fa8c", "#bd93f9", "#ff79c6", "#8be9fd", "#f8f8f2", "#6272a4", "#ff6e6e", "#69ff94", "#ffffa5", "#d6acff", "#ff92df", "#a4ffff", "#ffffff" ]

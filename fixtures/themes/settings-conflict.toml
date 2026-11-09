@@ -1,0 +1,5 @@
+# format: the former key/table conflict must be refused, never preprocessed.
+theme = "nord"
+[theme]
+fix = "off"
+contrast = 7

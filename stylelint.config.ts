@@ -9,6 +9,7 @@ export default {
 	plugins: [
 		"token-exists",
 		"no-raw-color",
+		"text-token",
 		"no-primitive-var",
 		"part-token-owner",
 		"motion-under-guard",
@@ -84,6 +85,7 @@ export default {
 				],
 			},
 		],
+		"fabrika/text-token": [true, {severity: "error", known: []}],
 		"fabrika/no-primitive-var": [true, {severity: "error", known: []}],
 		"fabrika/part-token-owner": [true, {severity: "error", known: []}],
 		"fabrika/motion-under-guard": [true, {severity: "error", known: []}],

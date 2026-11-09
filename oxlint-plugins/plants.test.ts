@@ -272,6 +272,8 @@ describe("each rule refuses what it is there to refuse", () => {
 			"no-hand-tag",
 			"one-store-hook",
 			"no-clock-in-view",
+			// T343's view-only colors are planted below at a window path.
+			"no-raw-color",
 		];
 		const missing = Object.keys(plugin.rules).filter(
 			(rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
@@ -496,5 +498,36 @@ describe("rules that apply by path", () => {
 		const {at, file} = plantIn("packages", HOOK);
 		made.push(at);
 		expect(fires(file, "react-hooks(rules-of-hooks)")).toEqual([]);
+	});
+});
+
+// T343/T22. format: literal source programs are the input format of this lint rule.
+// Plants cover literals, templates, canvas, JSX and the existing Radix import ban.
+describe("T343/T22 view colors", () => {
+	it("format: rejects raw colors and Radix imports and accepts global token readers", () => {
+		const folder = mkdtempSync(join(ROOT, "apps/fabrika/src/window/.color-law-"));
+		const path = join(folder, "view.tsx");
+		try {
+			writeFileSync(
+				path,
+				[
+					"declare const ctx: {fillStyle: string};",
+					"declare const readColors: () => {text: string};",
+					'const a = "#abcdef";',
+					'ctx.fillStyle = "rgb(10 20 30)";',
+					"const b = `#aabbcc`;",
+					'export const View = () => <span style={{color: "#fff"}}>word</span>;',
+					"ctx.fillStyle = readColors().text;",
+					'const label = "red";',
+					'const length = "16px";',
+					'import {red} from "@radix-ui/colors";',
+					"void [a,b,label,length,red];",
+				].join("\n"),
+			);
+			expect(fires(path, "fabrika(no-raw-color)")).toEqual([3, 4, 5, 6]);
+			expect(fires(path, "eslint(no-restricted-imports)")).toEqual([10]);
+		} finally {
+			rmSync(folder, {recursive: true, force: true});
+		}
 	});
 });

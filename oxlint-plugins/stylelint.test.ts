@@ -24,6 +24,7 @@ const FIXTURES = join(import.meta.dirname, "css/fixtures");
 const WINDOW = "apps/fabrika/src/window/window.css";
 const TOKENS = "packages/fabrika-design/src/tokens.css";
 const RULES = [
+	{law: "T343/T22", name: "text-token", lines: [1, 2, 3, 4, 5, 6]},
 	{law: 21, name: "token-exists", lines: [1, 2, 3, 4]},
 	{
 		law: 22,
@@ -95,7 +96,14 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 		expect([...new Set(fires.map((warning) => warning.line))].sort((a, b) => a - b)).toEqual(lines);
 		expect(fires.every((warning) => warning.severity === "error")).toBe(true);
 		const good = fixture("good", name);
-		expect(await lint(good, name === "part-token-owner" ? WINDOW : undefined)).toEqual([]);
+		// Older fixtures use valid token names in text positions; T343 now checks their roles too.
+		// Keep every pre-existing rule checked here, and test the new role rule on its own fixtures.
+		const goodWarnings = await lint(good, name === "part-token-owner" ? WINDOW : undefined);
+		expect(
+			goodWarnings.filter(
+				(warning) => name === "text-token" || warning.rule !== "fabrika/text-token",
+			),
+		).toEqual([]);
 	});
 
 	it("law 21 reads only var() past comments and spaces and names the unknown token", async () => {

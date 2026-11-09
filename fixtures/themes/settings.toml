@@ -1,0 +1,4 @@
+# format: decided top-level keys must coexist in standard TOML.
+theme = "nord-fabrika"
+theme-fix = "nudge"
+theme-contrast = 4.5

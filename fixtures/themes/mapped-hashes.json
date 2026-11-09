@@ -1,0 +1,26 @@
+[
+  {
+    "file": "catppuccin-latte.toml",
+    "sha256": "af2e9cbedabd47f5522ab279e2821ca941bcf65266e83ec41f3bc4fa4c41987c"
+  },
+  {
+    "file": "catppuccin-mocha.toml",
+    "sha256": "2641789b24f1d424a1240cd458496b7a8838478478f50babac7c2151211e93df"
+  },
+  {
+    "file": "dracula.toml",
+    "sha256": "cd532a2a81b00606c318c969d6325dc2aa7fd39b13c19689b76d68a9288ccf63"
+  },
+  {
+    "file": "nord.toml",
+    "sha256": "fe9a40be2a0c01b188d000b201c325b80891b5a976d2b09ae70611f7aad3ba86"
+  },
+  {
+    "file": "solarized-light.toml",
+    "sha256": "e8acf079f89a2389c884ca19227150286f143df1402047e4474278564fb595c9"
+  },
+  {
+    "file": "unreadable-made-up.toml",
+    "sha256": "615d3ed65e4b0381120828c6de61b28d863c4e29e3657b5c068875c897934428"
+  }
+]

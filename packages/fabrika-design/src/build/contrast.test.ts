@@ -178,3 +178,247 @@ describe("it agrees with the second implementation", () => {
 		expect(apart).toEqual([]);
 	});
 });
+
+// T343, today's app, PR 1. These are independent of the production APCA dependency.
+// Plants: ignore alpha; swap APCA's arguments; round before comparing; combine floors with OR.
+// fast-check generates invalid/boundary mixtures for which no Effect schema exists.
+describe("T5 signed APCA and WCAG on drawn colors", () => {
+	it("agrees with independent equations for alpha layers and either polarity", async () => {
+		const reference = await import("../../../../fixtures/themes/laws.ts");
+		const checker = await import("./contrast.ts");
+		fc.assert(
+			fc.property(
+				fc.tuple(anyColor, solid, fc.array(translucent, {maxLength: 5})),
+				([fg, base, layers]) => {
+					const bg = reference.flatten([base, ...layers]);
+					const actual = checker.measure(fg, bg);
+					expect(actual.wcag).toBeCloseTo(reference.wcag(fg, bg), 10);
+					expect(actual.apca).toBeCloseTo(reference.apca(fg, bg), 10);
+					const flipped = checker.measure(bg, reference.composite(fg, bg));
+					expect(flipped.apca).toBeCloseTo(reference.apca(bg, reference.composite(fg, bg)), 10);
+				},
+			),
+			RUNS,
+		);
+	});
+	// vector: published apca-w3 0.1.9 black/white endpoints establish signed polarity.
+	it("vector: black on white is positive and white on black negative", async () => {
+		const {measure} = await import("./contrast.ts");
+		expect(measure("#000000", "#ffffff").apca).toBeCloseTo(106.04067321268862, 9);
+		expect(measure("#ffffff", "#000000").apca).toBeCloseTo(-107.88473318309848, 9);
+	});
+});
+
+describe("T6 both floors, with unrounded readings", () => {
+	it("requires each floor independently at, just below and just above its reading", async () => {
+		const {reading} = await import("../../../../fixtures/themes/laws.ts");
+		const {passes} = await import("./contrast.ts");
+		fc.assert(
+			fc.property(anyColor, solid, (fg, bg) => {
+				const r = reading(fg, bg),
+					magnitude = Math.abs(r.apca);
+				const epsilon = 1e-8;
+				expect(passes(fg, bg, {wcag: r.wcag, apca: magnitude})).toBe(true);
+				expect(
+					passes(fg, bg, {wcag: r.wcag + epsilon, apca: Math.max(0, magnitude - epsilon)}),
+				).toBe(false);
+				expect(
+					passes(fg, bg, {wcag: Math.max(1, r.wcag - epsilon), apca: magnitude + epsilon}),
+				).toBe(false);
+			}),
+			RUNS,
+		);
+	});
+	it("uses text 4.5/Lc60 and non-text 3/Lc15 in either polarity", async () => {
+		const {meets} = await import("../../../../fixtures/themes/laws.ts");
+		const {passes} = await import("./contrast.ts");
+		fc.assert(
+			fc.property(
+				anyColor,
+				solid,
+				fc.constantFrom({wcag: 4.5, apca: 60}, {wcag: 7, apca: 60}, {wcag: 3, apca: 15}),
+				(fg, bg, floor) => {
+					expect(passes(fg, bg, floor)).toBe(meets(fg, bg, floor));
+				},
+			),
+			RUNS,
+		);
+	});
+});
+
+// T9-T12 use the plan's check(theme, pairs, policy, version) entry point.
+// The version value carries the test cap; the measured shipping cap stays in repair.toml.
+// Plants: alter a background/chroma/alpha; move only lighter; clip channels; replace the theme;
+// claim a failing built-in replacement passed; repair despite off.
+describe("T9-T12 bounded, lightness-only repair", () => {
+	const pair = (token = "text", on = "ground", floor = {wcag: 4.5, apca: 60}) => ({
+		token,
+		on,
+		floor,
+	});
+	const version = {version: "test-343", cap: 1};
+	it("T9 is deterministic, does not mutate input, and preserves non-repairable colors", async () => {
+		const {
+			complete,
+			lab,
+			fromLab,
+			channels,
+			opacity,
+			RUNS: runs,
+		} = await import("../../../../fixtures/themes/laws.ts");
+		const {check} = await import("./contrast.ts");
+		fc.assert(
+			fc.property(complete, (theme) => {
+				const before = structuredClone(theme);
+				const pairs = [
+					pair("text"),
+					pair("faint"),
+					pair("focus", "ground", {wcag: 3, apca: 15}),
+					pair("cursor", "terminal.background", {wcag: 3, apca: 15}),
+				];
+				const got = check(theme, pairs, {fix: "nudge", contrast: 4.5}, version);
+				expect(check(theme, pairs, {fix: "nudge", contrast: 4.5}, version)).toEqual(got);
+				expect(theme).toEqual(before);
+				expect(got.written).toEqual(before);
+				for (const name of ["desk", "ground", "raised", "hover", "edge"])
+					expect(got.shown.colors[name]).toBe(theme.colors[name]);
+				expect(got.shown.terminal.background).toBe(theme.terminal.background);
+				expect(got.shown.terminal.palette).toEqual(theme.terminal.palette);
+				for (const change of got.changes.filter(
+					(c: {readonly _tag: string; readonly was: string; readonly now: string}) =>
+						c._tag === "moved",
+				)) {
+					const from = lab(change.was),
+						to = lab(change.now);
+					// Reconstruct with the original chroma/hue. Serialization has one 8-bit channel quantum.
+					const unchangedHue = fromLab(to[0], from[1], from[2]);
+					expect(unchangedHue).not.toBeNull();
+					expect(
+						channels(unchangedHue ?? "#000000").every(
+							(n, i) => Math.abs(n - channels(change.now)[i]!) <= 1,
+						),
+					).toBe(true);
+					expect(opacity(change.now)).toBe(opacity(change.was));
+				}
+			}),
+			runs,
+		);
+	});
+	it("T10 has no smaller passing move among every representable achromatic candidate", async () => {
+		const {complete, gray, lab, meets} = await import("../../../../fixtures/themes/laws.ts");
+		const {check} = await import("./contrast.ts");
+		fc.assert(
+			fc.property(complete, fc.integer({min: 0, max: 255}), fc.boolean(), (theme, n, light) => {
+				const background = light ? "#ffffff" : "#000000";
+				const fg = gray(n);
+				const input = {...theme, colors: {...theme.colors, text: fg, ground: background}};
+				const got = check(input, [pair()], {fix: "nudge", contrast: 4.5}, version);
+				const now = got.shown.colors.text;
+				expect(meets(now, background)).toBe(true);
+				const move = Math.abs(lab(now)[0] - lab(fg)[0]);
+				const smaller = Array.from({length: 256}, (_, i) => gray(i)).filter(
+					(c) => Math.abs(lab(c)[0] - lab(fg)[0]) < move - 1e-10 && meets(c, background),
+				);
+				expect(smaller).toEqual([]);
+				expect(got.failures).toEqual([]);
+			}),
+			RUNS,
+		);
+	});
+	it("T10 satisfies every backdrop together, or reports impossibility", async () => {
+		const {complete, gray, meets} = await import("../../../../fixtures/themes/laws.ts");
+		const {check} = await import("./contrast.ts");
+		fc.assert(
+			fc.property(complete, fc.integer({min: 0, max: 255}), (theme, n) => {
+				const input = {
+					...theme,
+					colors: {...theme.colors, text: gray(n), ground: "#000000", raised: "#ffffff"},
+				};
+				const pairs = [pair(), pair("text", "raised")];
+				const got = check(input, pairs, {fix: "nudge", contrast: 21}, version);
+				expect(got.shown.colors.ground).toBe("#000000");
+				expect(got.shown.colors.raised).toBe("#ffffff");
+				expect(got.failures.length).toBeGreaterThan(0);
+				const expectedFailures = [
+					["ground", "#000000"],
+					["raised", "#ffffff"],
+				]
+					.filter(([, bg]) => !meets(got.shown.colors.text, bg!, {wcag: 21, apca: 60}))
+					.map(([on]) => `text:${on}`)
+					.sort();
+				expect(
+					got.failures
+						.map(
+							(failure: {readonly token: string; readonly on: string}) =>
+								`${failure.token}:${failure.on}`,
+						)
+						.sort(),
+				).toEqual(expectedFailures);
+			}),
+			RUNS,
+		);
+	});
+	it("T11 past-cap fallback touches only that token and uses its own look", async () => {
+		const {complete, gray, lab} = await import("../../../../fixtures/themes/laws.ts");
+		const {check} = await import("./contrast.ts");
+		fc.assert(
+			fc.property(complete, fc.boolean(), (theme, light) => {
+				const builtin = light ? fabrikaLight : fabrika;
+				const input = {
+					...theme,
+					look: light ? "light" : "dark",
+					colors: {...theme.colors, text: gray(light ? 255 : 0), ground: gray(light ? 255 : 0)},
+				};
+				const unrestricted = check(input, [pair()], {fix: "nudge", contrast: 4.5}, version);
+				const move = Math.abs(lab(unrestricted.shown.colors.text)[0] - lab(input.colors.text)[0]);
+				expect(move).toBeGreaterThan(0);
+				for (const cap of [move - 1e-8, move, move + 1e-8]) {
+					const got = check(input, [pair()], {fix: "nudge", contrast: 4.5}, {...version, cap});
+					const replacement = got.changes.filter(
+						(c: {readonly _tag: string}) => c._tag === "builtin",
+					);
+					expect(replacement.length).toBe(cap < move ? 1 : 0);
+					expect({...got.shown.colors, text: input.colors.text}).toEqual(input.colors);
+					expect(got.shown.terminal).toEqual(input.terminal);
+					expect(cap < move ? got.shown.colors.text : unrestricted.shown.colors.text).toBe(
+						cap < move ? builtin.colors.text : got.shown.colors.text,
+					);
+				}
+			}),
+			RUNS,
+		);
+	});
+	it("T11 never reports a failed replacement as passing", async () => {
+		const {complete, meets} = await import("../../../../fixtures/themes/laws.ts");
+		const {check} = await import("./contrast.ts");
+		fc.assert(
+			fc.property(complete, fc.boolean(), (theme, light) => {
+				const builtin = light ? fabrikaLight : fabrika;
+				const input = {
+					...theme,
+					look: light ? "light" : "dark",
+					colors: {...theme.colors, ground: builtin.colors.text, text: builtin.colors.text},
+				};
+				const got = check(input, [pair()], {fix: "nudge", contrast: 21}, {...version, cap: 0});
+				expect(got.shown.colors.text).toBe(builtin.colors.text);
+				expect(meets(got.shown.colors.text, input.colors.ground, {wcag: 21, apca: 60})).toBe(false);
+				expect(got.failures.length).toBeGreaterThan(0);
+			}),
+			RUNS,
+		);
+	});
+	it("T12 off preserves every color and still lists the failing pairs", async () => {
+		const {complete} = await import("../../../../fixtures/themes/laws.ts");
+		const {check} = await import("./contrast.ts");
+		fc.assert(
+			fc.property(complete, fc.double({min: 4.5, max: 21, noNaN: true}), (theme, contrast) => {
+				const input = {...theme, colors: {...theme.colors, text: theme.colors.ground}};
+				const got = check(input, [pair()], {fix: "off", contrast}, version);
+				expect(got.shown).toEqual(input);
+				expect(got.written).toEqual(input);
+				expect(got.failures.length).toBeGreaterThan(0);
+			}),
+			RUNS,
+		);
+	});
+});

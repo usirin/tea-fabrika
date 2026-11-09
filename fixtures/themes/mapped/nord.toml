@@ -1,0 +1,32 @@
+format = 1
+name = "nord"
+look = "dark"
+
+[from.base16]
+file = "base16-nord.yaml"
+sha256 = "bf0620d47f2326576d9f7f28302c9acd67fb4c753c5d496986d34687027c717b"
+by = "arcticicestudio"
+
+[colors]
+desk = "#2a303c"
+raised = "#353b47"
+hover = "#3d434f"
+edge = "#444a55"
+focus = "#727782"
+faint = "#b6bbc4"
+ground = "#2e3440"
+text = "#e5e9f0"
+turn-fill = "#81a1c1"
+turn-text = "#81a1c1"
+on-turn = "#000000"
+done = "#a3be8c"
+running = "#ebcb8b"
+stuck = "#bf616a"
+closed = "#b6bbc4"
+
+[terminal]
+foreground = "#e5e9f0"
+background = "#2e3440"
+cursor = "#e5e9f0"
+selection = "#434c5e"
+palette = [ "#2e3440", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0", "#4c566a", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#8fbcbb" ]

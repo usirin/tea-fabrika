@@ -1,0 +1,6 @@
+.words { color: var(--text-primary); }
+.quiet { color: var(--text-faint); }
+.edge { border-color: var(--focus); }
+.fill { background: var(--turn-fill); }
+.alias { --words: var(--text-primary); color: var(--words); }
+@media (forced-colors: active) { .words { color: CanvasText; } }

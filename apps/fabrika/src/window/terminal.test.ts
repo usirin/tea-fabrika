@@ -1,4 +1,5 @@
 import {fabrika, fabrikaLight, terminalTheme} from "@kampus/fabrika-design";
+import fc from "fast-check";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
 // A terminal follows the system's look while it is open (tracker ticket 144). The window's
@@ -53,6 +54,8 @@ class FakeTerminal {
 	}
 	write(data: string, done?: () => void) {
 		this.written.push(data);
+		// DSR is answered synchronously by ghostty-web. A replay must have no key listener yet.
+		if (data.includes("\x1b[6n")) for (const hear of this.keys) hear("\x1b[1;1R");
 		done?.();
 	}
 	reset() {
@@ -414,5 +417,68 @@ describe("an open terminal follows the system's look", () => {
 			made: 0,
 			showing: 0,
 		});
+	});
+});
+
+// Today's app, T343 PR 1. Generated operation orders retain the old replay laws.
+// Plants: replay answers to tsh; lose the last reset; let an unfocused tile take focus;
+// repaint after disposal. These call the actual terminalFor implementation above.
+describe("T19/T24 generated terminal changes", () => {
+	it("keeps bytes, focus and size while switches never answer old terminal requests", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.array(
+					fc.record({
+						kind: fc.constantFrom("write", "reset", "switch", "attach", "outside"),
+						text: fc.oneof(fc.string({maxLength: 30}), fc.constant("\x1b[6n")),
+					}),
+					{minLength: 1, maxLength: 20},
+				),
+				async (ops) => {
+					for (const old of showing()) old.dispose();
+					lists.length = 0;
+					for (const timer of FakeTerminal.timers) clearTimeout(timer);
+					FakeTerminal.timers = [];
+					FakeTerminal.made = [];
+					sent.length = 0;
+					look = "dark";
+					const terminal = await openTerminal([]);
+					let expected = "";
+					let drawn = "";
+					const input = {
+						focus: () => {
+							page.activeElement = input;
+						},
+					};
+					for (const op of ops) {
+						if (op.kind === "write" || op.kind === "reset") {
+							const bytes = op.kind === "reset" ? `\x1bc${op.text}` : op.text;
+							toTile?.({type: "write", data: bytes});
+							drawn += bytes;
+							const reset = (expected + bytes).lastIndexOf("\x1bc");
+							expected = reset < 0 ? expected + bytes : (expected + bytes).slice(reset);
+						} else if (op.kind === "outside") input.focus();
+						else if (op.kind === "attach") terminal.attach(element() as never);
+						else {
+							const wasOutside = page.activeElement === input;
+							const before = sent.length;
+							switchTo(look === "dark" ? "light" : "dark");
+							drawn = expected;
+							expect(sent.slice(before)).toEqual([
+								{port: "tile:t1", msg: {type: "size", cols: 80, rows: 24}},
+							]);
+							expect(wasOutside ? page.activeElement : input).toBe(input);
+						}
+						expect(replayed()).toBe(drawn);
+					}
+					terminal.dispose();
+					const made = FakeTerminal.made.length;
+					switchTo(look === "dark" ? "light" : "dark");
+					expect(FakeTerminal.made.length).toBe(made);
+					expect(showing()).toEqual([]);
+				},
+			),
+			{seed: 119120, numRuns: 40},
+		);
 	});
 });

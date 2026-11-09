@@ -1,0 +1,30 @@
+[
+  {
+    "file": "base16-nord.yaml",
+    "sha256": "bf0620d47f2326576d9f7f28302c9acd67fb4c753c5d496986d34687027c717b"
+  },
+  {
+    "file": "base16-solarized-light.yaml",
+    "sha256": "9e9ab6cfab64904e85250ae097a52dfd2de7bde320d28a64997e86b1fe42e306"
+  },
+  {
+    "file": "base24-catppuccin-mocha.yaml",
+    "sha256": "54c359be467d013e916a2f8ec56c437abdf088d5d5f2b6c2eb36757fd1887b62"
+  },
+  {
+    "file": "ghostty-Catppuccin_Latte",
+    "sha256": "de3e61fce3876b3513ef996743427d7ff16e7b7a217456d1568b0b0b1bcd1bdd"
+  },
+  {
+    "file": "ghostty-Dracula",
+    "sha256": "e6990f485cb0001cd62109e5aa94d34d4f60bb85798735b995a4158ee1ff033f"
+  },
+  {
+    "file": "iterm2-LICENSE",
+    "sha256": "2373168614b527494dff99eb393024608216db79f687d58bad420f6c1e0ad192"
+  },
+  {
+    "file": "tinted-LICENSE",
+    "sha256": "7edf0999a3912df0383b383f1464e9e97c282051a4de95f651fdaa63dd224231"
+  }
+]

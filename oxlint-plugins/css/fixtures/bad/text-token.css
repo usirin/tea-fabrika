@@ -1,0 +1,6 @@
+.words { color: var(--border); }
+.words { color: var(--turn-fill); }
+.words { color: var(--tile-edge-on); }
+.words { --words: var(--focus); color: var(--words); }
+.words { -webkit-text-fill-color: var(--wire); }
+.words { --a: var(--b); --b: var(--border-strong); color: var(--a); }

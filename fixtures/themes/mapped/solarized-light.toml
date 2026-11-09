@@ -1,0 +1,32 @@
+format = 1
+name = "solarized-light"
+look = "light"
+
+[from.base16]
+file = "base16-solarized-light.yaml"
+sha256 = "9e9ab6cfab64904e85250ae097a52dfd2de7bde320d28a64997e86b1fe42e306"
+by = "Ethan Schoonover (modified by aramisgithub)"
+
+[colors]
+desk = "#fbf4e1"
+raised = "#fdf6e3"
+hover = "#f2eeda"
+edge = "#ecead6"
+focus = "#a6b7a9"
+faint = "#879e96"
+ground = "#fdf6e3"
+text = "#586e75"
+turn-fill = "#268bd2"
+turn-text = "#268bd2"
+on-turn = "#000000"
+done = "#859900"
+running = "#b58900"
+stuck = "#dc322f"
+closed = "#879e96"
+
+[terminal]
+foreground = "#586e75"
+background = "#fdf6e3"
+cursor = "#586e75"
+selection = "#93a1a1"
+palette = [ "#fdf6e3", "#dc322f", "#859900", "#b58900", "#268bd2", "#6c71c4", "#2aa198", "#586e75", "#839496", "#dc322f", "#859900", "#b58900", "#268bd2", "#6c71c4", "#2aa198", "#002b36" ]

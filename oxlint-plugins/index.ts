@@ -18,6 +18,7 @@ import {noNumericDuration} from "./no-numeric-duration.ts";
 import {noOf} from "./no-of.ts";
 import {noProjectSettings} from "./no-project-settings.ts";
 import {noPromises} from "./no-promises.ts";
+import {noRawColor} from "./no-raw-color.ts";
 import {noRawTryCatch} from "./no-raw-try-catch.ts";
 import {noRedactedValue} from "./no-redacted-value.ts";
 import {noSecretEnv} from "./no-secret-env.ts";
@@ -49,6 +50,7 @@ const plugin: Plugin = {
 		"no-project-settings": noProjectSettings,
 		"no-promises": noPromises,
 		"no-raw-try-catch": noRawTryCatch,
+		"no-raw-color": noRawColor,
 		"no-redacted-value": noRedactedValue,
 		"no-secret-env": noSecretEnv,
 		"no-throw-in-effect-gen": noThrowInEffectGen,

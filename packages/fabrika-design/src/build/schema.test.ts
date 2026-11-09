@@ -318,3 +318,58 @@ describe("what a value is", () => {
 		});
 	});
 });
+
+// Today's app, T343/T8 input law. Plant: leave scale choices unsupported and move steps at runtime.
+describe("T8 build-time scale choices", () => {
+	it("accepts every decided Radix scale as a global text choice", async () => {
+		const {default: fc} = await import("fast-check");
+		const scales = [
+			"gray",
+			"mauve",
+			"slate",
+			"sage",
+			"olive",
+			"sand",
+			"tomato",
+			"red",
+			"ruby",
+			"crimson",
+			"pink",
+			"plum",
+			"purple",
+			"violet",
+			"iris",
+			"indigo",
+			"blue",
+			"cyan",
+			"teal",
+			"jade",
+			"green",
+			"grass",
+			"brown",
+			"bronze",
+			"gold",
+			"sky",
+			"mint",
+			"lime",
+			"yellow",
+			"amber",
+			"orange",
+		] as const;
+		fc.assert(
+			fc.property(fc.constantFrom(...scales), (scale) => {
+				const token = {
+					type: "text",
+					tier: "global",
+					owner: "design",
+					description: "generated scale candidate",
+					on: ["surface", "surface-hover/surface", "surface-selected/surface"],
+					floor: 4.5,
+					colors: {scale},
+				};
+				expect(decodeToken("text-test.toml", token)._tag).toBe("ok");
+			}),
+			{seed: 119120, numRuns: 150},
+		);
+	});
+});

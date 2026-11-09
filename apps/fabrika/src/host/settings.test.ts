@@ -5,12 +5,14 @@ import {
 	Effect,
 	FileSystem,
 	Layer,
+	Logger,
 	type Path,
 	PlatformError,
 	Result,
 	type Scope,
 	Stream,
 } from "effect";
+import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {settingsFile, settingsFolder} from "./settings.ts";
 
@@ -269,5 +271,123 @@ describe("a settings file, saved with the same text", () => {
 			{_tag: "read", value: "one"},
 			{_tag: "read", value: "two"},
 		]);
+	});
+});
+
+// Today's app, T343 PR 1. Plant: watch a replaced inode; skip a save; cross-wire keys.
+// Real file operations exercise the installed platform watcher, not a second implementation.
+describe("T14 generated settings saves stay independent", () => {
+	it("hears writes, atomic replacements, refusal and deletion in any order", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.array(fc.constantFrom("write", "rename", "bad", "delete"), {minLength: 1, maxLength: 7}),
+				async (ops) => {
+					await go(
+						Effect.gen(function* () {
+							const {fs, dir} = yield* folder;
+							const target = join(dir, "fabrika.toml");
+							yield* fs.writeFileString(join(dir, "keybindings.toml"), "ctrl+a");
+							const keys = yield* watching(dir, "keybindings.toml");
+							const themes = yield* watching(dir, "fabrika.toml");
+							yield* until("initial values", () => keys.length > 0 && themes.length > 0);
+							for (const [i, op] of ops.entries()) {
+								const value = `${op === "bad" ? "bad " : ""}saved-${i}`;
+								if (op === "delete") yield* fs.remove(target, {force: true});
+								else if (op === "rename") {
+									const temporary = join(dir, ".fabrika.toml.new");
+									yield* fs.writeFileString(temporary, value);
+									yield* fs.rename(temporary, target);
+								} else yield* fs.writeFileString(target, value);
+								const tag = op === "bad" ? "refused" : op === "delete" ? "none" : "read";
+								yield* until(
+									"latest theme result",
+									() =>
+										last(themes)?._tag === tag &&
+										(tag !== "read" || last(themes)?.value === value) &&
+										(tag !== "refused" || last(themes)?.why === value),
+								);
+								expect(last(themes)).toEqual(
+									op === "delete"
+										? {_tag: "none"}
+										: op === "bad"
+											? {_tag: "refused", line: 1, why: value}
+											: {_tag: "read", value},
+								);
+								expect(keys).toEqual([{_tag: "read", value: "ctrl+a"}]);
+							}
+						}),
+					);
+				},
+			),
+			{seed: 119120, numRuns: 15},
+		);
+	});
+});
+
+// T25 [secrets]. The values are invented. No real settings or machine path is read.
+// Plants: echo a failed folder path, serialize a watch cause, or quote source on refusal.
+describe("T25 [secrets] settings failures keep private data out of outputs", () => {
+	it("keeps generated paths and source contents out of diagnostics and logs", async () => {
+		const word = fc.stringMatching(/^[a-z]{12,20}$/).map((s) => `invented-${s}`);
+		await fc.assert(
+			fc.asyncProperty(
+				word,
+				word,
+				fc.array(fc.constantFrom("folder", "watch", "read", "pass"), {minLength: 1, maxLength: 6}),
+				async (privateName, privatePass, ops) => {
+					const fullPath = `/made-up-home/${privateName}/settings`;
+					const content = `theme = "fabrika"\nunrelated-pass = "${privatePass}"\n`;
+					for (const mode of ops) {
+						const logs: string[] = [];
+						const failure = (method: string) =>
+							PlatformError.systemError({
+								_tag: "PermissionDenied",
+								module: "FileSystem",
+								method,
+								pathOrDescriptor: fullPath,
+								description: content,
+							});
+						const fs = FileSystem.makeNoop({
+							makeDirectory: () =>
+								mode === "folder" ? Effect.fail(failure("makeDirectory")) : Effect.void,
+							readFileString: () =>
+								mode === "read" ? Effect.fail(failure("readFileString")) : Effect.succeed(content),
+							watch: (_path, options) => {
+								options?.onReady?.();
+								return mode === "watch" ? Stream.fail(failure("watch")) : Stream.empty;
+							},
+						});
+						const answer = await Effect.runPromise(
+							settingsFile(fullPath, "fabrika.toml", () => Result.succeed({pick: "fabrika"})).pipe(
+								Stream.runCollect,
+								Effect.scoped,
+								Effect.provideService(FileSystem.FileSystem, fs),
+								Effect.provide(NodePath.layer),
+								Effect.provide(
+									Logger.layer([
+										Logger.make((o) => {
+											logs.push(Logger.formatSimple.log(o));
+										}),
+									]),
+								),
+							),
+						);
+						const outputs = [JSON.stringify(answer), ...logs];
+						expect(outputs.length).toBeGreaterThan(0);
+						for (const output of outputs)
+							for (const secret of [privateName, privatePass, fullPath, content]) {
+								for (const form of [
+									secret,
+									encodeURI(secret),
+									encodeURIComponent(secret),
+									encodeURIComponent(encodeURIComponent(secret)),
+								])
+									expect(output).not.toContain(form);
+							}
+					}
+				},
+			),
+			{seed: 119120, numRuns: 50},
+		);
 	});
 });

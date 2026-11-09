@@ -55,5 +55,13 @@
 	{ "glob": "apps/fabrika/src/window/colors.test.ts", "why": "the app's color laws" },
 	{ "glob": "apps/fabrika/src/pipes.test.ts", "why": "the pipe color laws" },
 	{ "glob": "apps/fabrika/e2e.ts", "why": "today's app's keyboard focus laws and capture stages" },
-	{ "glob": "apps/fabrika/aria/**", "why": "the approved ARIA snapshots" }
+	{ "glob": "apps/fabrika/aria/**", "why": "the approved ARIA snapshots" },
+	{
+		"glob": "fixtures/themes/**",
+		"why": "T343 source bytes, independent references and expected repairs"
+	},
+	{
+		"glob": "experiments/*-theme-repair.*",
+		"why": "T343 cap calibration script and measured report"
+	}
 ]

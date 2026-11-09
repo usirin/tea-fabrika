@@ -1,0 +1,32 @@
+format = 1
+name = "catppuccin-mocha"
+look = "dark"
+
+[from.base24]
+file = "base24-catppuccin-mocha.yaml"
+sha256 = "54c359be467d013e916a2f8ec56c437abdf088d5d5f2b6c2eb36757fd1887b62"
+by = "https://github.com/catppuccin/catppuccin"
+
+[colors]
+desk = "#1a1a2a"
+raised = "#252536"
+hover = "#2c2d3e"
+edge = "#323345"
+focus = "#5e6177"
+faint = "#a0a6c1"
+ground = "#1e1e2e"
+text = "#cdd6f4"
+turn-fill = "#89b4fa"
+turn-text = "#89b4fa"
+on-turn = "#000000"
+done = "#a6e3a1"
+running = "#f9e2af"
+stuck = "#f38ba8"
+closed = "#a0a6c1"
+
+[terminal]
+foreground = "#cdd6f4"
+background = "#1e1e2e"
+cursor = "#cdd6f4"
+selection = "#313244"
+palette = [ "#1e1e2e", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#cba6f7", "#94e2d5", "#cdd6f4", "#45475a", "#eba0ac", "#a6e3a1", "#f5e0dc", "#74c7ec", "#f5c2e7", "#89dceb", "#b4befe" ]

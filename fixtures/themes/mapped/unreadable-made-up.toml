@@ -1,0 +1,28 @@
+# Deliberately unreadable invented test input. It never sets the cap.
+format = 1
+name = "unreadable-made-up"
+look = "dark"
+
+[colors]
+desk = "#777777"
+raised = "#777777"
+hover = "#777777"
+edge = "#777777"
+focus = "#777777"
+faint = "#777777"
+ground = "#777777"
+text = "#777777"
+turn-fill = "#777777"
+turn-text = "#777777"
+on-turn = "#777777"
+done = "#777777"
+running = "#777777"
+stuck = "#777777"
+closed = "#777777"
+
+[terminal]
+foreground = "#777777"
+background = "#777777"
+cursor = "#777777"
+selection = "#777777"
+palette = [ "#777777", "#777777", "#777777", "#777777", "#777777", "#777777", "#777777", "#777777", "#777777", "#777777", "#777777", "#777777", "#777777", "#777777", "#777777", "#777777" ]

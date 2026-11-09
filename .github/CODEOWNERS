@@ -8,3 +8,8 @@
 /packages/fabrika-design/src/themes.test.ts           @usirin
 /apps/fabrika/src/window/colors.test.ts               @usirin
 /apps/fabrika/src/pipes.test.ts                       @usirin
+
+# T343: source fixtures, measurements and all design laws stay tests-owned.
+/fixtures/themes/                                    @usirin
+/experiments/*-theme-repair.*                         @usirin
+/packages/fabrika-design/src/*.test.ts                @usirin
