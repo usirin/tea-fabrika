@@ -41,8 +41,10 @@ class Ticket extends Schema.Class<Ticket>("Ticket")({
 
 Main's `next/` has the `Id` module since ticket 518's first pull request:
 `next/packages/libfabrika/src/id.ts`, exported as `Id` from `@kampus/libfabrika`. It has
-`Id.make`, `Id.makeEffect`, `Id.Generator` and `Id.Order`, and process ids are made with it.
-`ProcessId` stays unbranded for now. `Entry`, `Letter` and member ids are still loose strings.
+`Id.make`, `Id.makeEffect`, `Id.Generator` (it fails with a typed `IdError`) and `Id.Order`, and
+process and input ids are made with it. It took in the smaller `data/id.ts` that P17 had added, so
+there is one module. An id's check is a plain pattern, so Effect's `Arbitrary` can generate ids in
+tests. `ProcessId` stays unbranded for now. `Entry`, `Letter` and member ids are still loose strings.
 The second pull request moves them, with input ids and `n`, once P12 and P34 land.
 
 Main's door (P10, [PR 502](https://github.com/usirin/tea-fabrika/pull/502)) still makes
