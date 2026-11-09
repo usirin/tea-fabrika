@@ -316,10 +316,12 @@ fi
 # The commits check is never trusted by its name: any workflow can name a job `commits`
 # (docs/how-to/sign-a-step-commit.md). Read the runs of main's `.github/workflows/commits.yaml` on
 # this head instead: exactly one, from `pull_request_target` (so main's copy ran, not the PR's),
-# completed with success, and its own check run made by GitHub Actions.
+# completed with success, and its own check run made by GitHub Actions. A run that never started
+# (`startup_failure`: no job ran and no check run exists, as in GitHub's pull_request_target
+# pause of 2026-11-09) is not counted; reopening the PR starts a fresh one.
 trusted=$(read_gh api "repos/$GH_REPO/actions/runs?head_sha=$tip&per_page=100" \
 	-q '.workflow_runs[]|select(.path==".github/workflows/commits.yaml")|"\(.id)\t\(.event)\t\(.status)\t\(.conclusion)\t\(.check_suite_id)"')
-target=$(printf '%s\n' "$trusted" | awk -F'\t' '$2=="pull_request_target"')
+target=$(printf '%s\n' "$trusted" | awk -F'\t' '$2=="pull_request_target" && $4!="startup_failure"')
 if [ "$(printf '%s\n' "$target" | grep -c .)" != 1 ]; then
 	echo "pr $pr: want exactly one pull_request_target run of commits.yaml at $tip, got: ${trusted:-none}" >&2
 	exit 1
