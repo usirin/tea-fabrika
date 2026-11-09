@@ -2,7 +2,7 @@
 // in the schema, small enough that no brain line can reach the ledger's per-line limit. The cap is
 // the lead's lean, 256 characters, counted as `string.length`, as Schema's max length counts.
 import {describe, expect, it} from "@effect/vitest";
-import {Effect, Exit, Schema} from "effect";
+import {Arbitrary, Effect, Exit, Schema} from "effect";
 import * as fc from "fast-check";
 import {ProcessManager} from "./process-manager.ts";
 import {
@@ -26,8 +26,19 @@ import {Dead, Down, Owner, ProcessFact, Recipient, Start} from "./process.ts";
 const CAP = 256;
 const at = (length: number, unit = "a") => unit.repeat(length);
 const over = at(CAP + 1);
-const acceptedText = fc.string({minLength: 1, maxLength: CAP});
-const overText = fc.string({minLength: CAP + 1, maxLength: CAP * 4});
+const acceptedText = Down.fields.ref;
+const overText = Schema.String.check(Schema.isMinLength(CAP + 1), Schema.isMaxLength(CAP * 4));
+// The installed Effect runner has no examples option; keep old inputs in the callback.
+const examples =
+	<A extends ReadonlyArray<unknown>, E, R>(
+		cases: ReadonlyArray<A>,
+		law: (...args: A) => Effect.Effect<unknown, E, R>,
+	) =>
+	(args: A) =>
+		Effect.forEach([...cases, args], (input) => Effect.suspend(() => law(...input)), {
+			discard: true,
+			concurrency: 1,
+		});
 const toW = Recipient.cases.process.make({process: W});
 
 const seed = (store: Storage) =>
@@ -143,15 +154,17 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 		},
 	];
 	for (const {name, schema, value} of cases)
-		it(`${name}: ${CAP} characters decode, ${CAP + 1} do not`, () => {
-			fc.assert(
-				fc.property(acceptedText, overText, (accepted, refused) => {
+		it.prop(
+			`${name}: ${CAP} characters decode, ${CAP + 1} do not`,
+			[acceptedText, overText],
+			(generated) => {
+				for (const [accepted, refused] of [[at(CAP), over], generated] as const) {
 					expect(Schema.is(schema)(value(accepted))).toBe(true);
 					expect(Schema.is(schema)(value(refused))).toBe(false);
-				}),
-				{seed: 119120, examples: [[at(CAP), over]]},
-			);
-		});
+				}
+			},
+			{arbitrary: {seed: 119120, runs: 100}},
+		);
 	// A dead letter keeps one error class per try, so its list is capped too: 32 entries at most.
 	const dead = (errors: ReadonlyArray<string>) => ({
 		_tag: "dead",
@@ -162,118 +175,124 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 		errors,
 	});
 	const classes = (count: number) => Array.from({length: count}, () => "TypeError");
-	it("a dead letter's errors: 32 entries decode, 33 do not", () => {
-		fc.assert(
-			fc.property(fc.integer({min: 1, max: 32}), (count) => {
+	it.prop(
+		"a dead letter's errors: 32 entries decode, 33 do not",
+		[Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 32}))],
+		([generated]) => {
+			for (const count of [32, generated]) {
 				expect(Schema.is(Dead)(dead(classes(count)))).toBe(true);
 				expect(Schema.is(Dead)(dead(classes(count + 32)))).toBe(false);
 				// Keep the old 33-entry refusal as well as generated over-cap counts.
 				expect(Schema.is(Dead)(dead(classes(33)))).toBe(false);
-			}),
-			{seed: 119120, examples: [[32]]},
-		);
-	});
-	it(`a dead letter's errors: each entry is capped at ${CAP} characters`, () => {
-		fc.assert(
-			fc.property(acceptedText, overText, (accepted, refused) => {
+			}
+		},
+		{arbitrary: {seed: 119120, runs: 100}},
+	);
+	it.prop(
+		`a dead letter's errors: each entry is capped at ${CAP} characters`,
+		[acceptedText, overText],
+		(generated) => {
+			for (const [accepted, refused] of [[at(CAP), over], generated] as const) {
 				expect(Schema.is(Dead)(dead([...classes(31), accepted]))).toBe(true);
 				expect(Schema.is(Dead)(dead([...classes(31), refused]))).toBe(false);
-			}),
-			{seed: 119120, examples: [[at(CAP), over]]},
-		);
-	});
-	it(`a dead letter's m and build: ${CAP} characters decode, ${CAP + 1} do not`, () => {
-		fc.assert(
-			fc.property(acceptedText, overText, (accepted, refused) => {
+			}
+		},
+		{arbitrary: {seed: 119120, runs: 100}},
+	);
+	it.prop(
+		`a dead letter's m and build: ${CAP} characters decode, ${CAP + 1} do not`,
+		[acceptedText, overText],
+		(generated) => {
+			for (const [accepted, refused] of [[at(CAP), over], generated] as const) {
 				for (const key of ["m", "build"]) {
 					expect(Schema.is(Dead)({...dead(classes(1)), [key]: accepted})).toBe(true);
 					expect(Schema.is(Dead)({...dead(classes(1)), [key]: refused})).toBe(false);
 				}
-			}),
-			{seed: 119120, examples: [[at(CAP), over]]},
-		);
-	});
+			}
+		},
+		{arbitrary: {seed: 119120, runs: 100}},
+	);
 });
 
 describe("P33 rule 1, an over-cap text is refused as a typed error and writes nothing", () => {
-	it(`a monitor with a ${CAP + 1}-character ref`, async () => {
-		await fc.assert(
-			fc.asyncProperty(overText, (over) => {
-				const store = storage();
-				return Effect.gen(function* () {
-					yield* seed(store);
-					yield* refusedWritingNothing(store, monitor(store, over));
-				}).pipe(Effect.runPromise);
-			}),
-			{seed: 119120, numRuns: 20, examples: [[over]]},
-		);
-	});
-	it(`a monitor with a ${CAP}-character ref is accepted`, async () => {
-		await fc.assert(
-			fc.asyncProperty(acceptedText, (ref) => {
-				const store = storage();
-				return Effect.gen(function* () {
-					yield* seed(store);
-					yield* monitor(store, ref);
-					yield* exit(store);
-					expect(downs(yield* fresh(store)).map((down) => down.ref)).toEqual([ref]);
-				}).pipe(Effect.runPromise);
-			}),
-			{seed: 119120, numRuns: 20, examples: [[at(CAP)]]},
-		);
-	});
-	it(`a monitor for a client whose id has ${CAP + 1} characters`, async () => {
-		await fc.assert(
-			fc.asyncProperty(overText, (over) => {
-				const store = storage();
-				return Effect.gen(function* () {
-					yield* seed(store);
-					const client = {
-						owner: Owner.cases.brain.make({}),
-						recipient: {_tag: "client", client: over, session: X} as typeof Recipient.Type,
-					};
-					yield* refusedWritingNothing(
-						store,
-						ProcessManager.use((p) => p.monitor("watch:1", A, from())).pipe(
-							Effect.provide(manager(store, client)),
-						),
-					);
-				}).pipe(Effect.runPromise);
-			}),
-			{seed: 119120, numRuns: 20, examples: [[over]]},
-		);
-	});
-	it(`an exit whose why has ${CAP + 1} characters`, async () => {
-		await fc.assert(
-			fc.asyncProperty(overText, (over) => {
-				const store = storage();
-				return Effect.gen(function* () {
-					yield* seed(store);
-					yield* monitor(store, "watch:1");
-					yield* refusedWritingNothing(store, exit(store, over));
-				}).pipe(Effect.runPromise);
-			}),
-			{seed: 119120, numRuns: 20, examples: [[over]]},
-		);
-	});
-	it(`a down whose why has ${CAP + 1} characters`, async () => {
-		await fc.assert(
-			fc.asyncProperty(overText, (over) => {
-				const store = storage();
-				return Effect.gen(function* () {
-					yield* seed(store);
-					yield* exit(store);
-					yield* refusedWritingNothing(
-						store,
-						ProcessManager.use((p) => p.down(A, {why: over, crashes: 1, until: 0}, from())).pipe(
-							Effect.provide(manager(store)),
-						),
-					);
-				}).pipe(Effect.runPromise);
-			}),
-			{seed: 119120, numRuns: 20, examples: [[over]]},
-		);
-	});
+	it.effect.prop(
+		`a monitor with a ${CAP + 1}-character ref`,
+		[overText],
+		examples([[over]], (over: string) => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* refusedWritingNothing(store, monitor(store, over));
+			});
+		}),
+		{arbitrary: {seed: 119120, runs: 20}},
+	);
+	it.effect.prop(
+		`a monitor with a ${CAP}-character ref is accepted`,
+		[acceptedText],
+		examples([[at(CAP)]], (ref: string) => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* monitor(store, ref);
+				yield* exit(store);
+				expect(downs(yield* fresh(store)).map((down) => down.ref)).toEqual([ref]);
+			});
+		}),
+		{arbitrary: {seed: 119120, runs: 20}},
+	);
+	it.effect.prop(
+		`a monitor for a client whose id has ${CAP + 1} characters`,
+		[overText],
+		examples([[over]], (over: string) => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				const client = {
+					owner: Owner.cases.brain.make({}),
+					recipient: {_tag: "client", client: over, session: X} as typeof Recipient.Type,
+				};
+				yield* refusedWritingNothing(
+					store,
+					ProcessManager.use((p) => p.monitor("watch:1", A, from())).pipe(
+						Effect.provide(manager(store, client)),
+					),
+				);
+			});
+		}),
+		{arbitrary: {seed: 119120, runs: 20}},
+	);
+	it.effect.prop(
+		`an exit whose why has ${CAP + 1} characters`,
+		[overText],
+		examples([[over]], (over: string) => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* monitor(store, "watch:1");
+				yield* refusedWritingNothing(store, exit(store, over));
+			});
+		}),
+		{arbitrary: {seed: 119120, runs: 20}},
+	);
+	it.effect.prop(
+		`a down whose why has ${CAP + 1} characters`,
+		[overText],
+		examples([[over]], (over: string) => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* exit(store);
+				yield* refusedWritingNothing(
+					store,
+					ProcessManager.use((p) => p.down(A, {why: over, crashes: 1, until: 0}, from())).pipe(
+						Effect.provide(manager(store)),
+					),
+				);
+			});
+		}),
+		{arbitrary: {seed: 119120, runs: 20}},
+	);
 	const starts: ReadonlyArray<readonly [string, Start]> = [
 		["id", raw({_tag: "first", id: over, name: "counter:2", code: CODE})],
 		["name", raw({_tag: "first", id: "start:long", name: over, code: CODE})],
@@ -287,54 +306,54 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 		],
 	];
 	for (const [field, original] of starts)
-		it(`a start whose ${field} has ${CAP + 1} characters`, async () => {
-			await fc.assert(
-				fc.asyncProperty(overText, (over) => {
-					const request = raw(
-						field === "program" || field === "hash"
-							? {...original, code: {...original.code, [field]: over}}
-							: {...original, [field]: over},
-					);
-					const store = storage();
-					return Effect.gen(function* () {
-						yield* seed(store);
-						yield* refusedWritingNothing(
-							store,
-							ProcessManager.use((p) => p.start(request, from())).pipe(
-								Effect.provide(manager(store, brain(), ids(B).next)),
-							),
-						);
-					}).pipe(Effect.runPromise);
-				}),
-				{seed: 119120, numRuns: 20, examples: [[over]]},
-			);
-		});
-	it(`a restart whose why has ${CAP + 1} characters`, async () => {
-		await fc.assert(
-			fc.asyncProperty(overText, (over) => {
+		it.effect.prop(
+			`a start whose ${field} has ${CAP + 1} characters`,
+			[overText],
+			examples([[over]], (over: string) => {
+				const request = raw(
+					field === "program" || field === "hash"
+						? {...original, code: {...original.code, [field]: over}}
+						: {...original, [field]: over},
+				);
 				const store = storage();
 				return Effect.gen(function* () {
 					yield* seed(store);
-					yield* exit(store);
-					const request = raw({
-						_tag: "again",
-						id: "restart:long",
-						name: "counter:1",
-						code: CODE,
-						after: A,
-						why: over,
-					});
 					yield* refusedWritingNothing(
 						store,
 						ProcessManager.use((p) => p.start(request, from())).pipe(
 							Effect.provide(manager(store, brain(), ids(B).next)),
 						),
 					);
-				}).pipe(Effect.runPromise);
+				});
 			}),
-			{seed: 119120, numRuns: 20, examples: [[over]]},
+			{arbitrary: {seed: 119120, runs: 20}},
 		);
-	});
+	it.effect.prop(
+		`a restart whose why has ${CAP + 1} characters`,
+		[overText],
+		examples([[over]], (over: string) => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* exit(store);
+				const request = raw({
+					_tag: "again",
+					id: "restart:long",
+					name: "counter:1",
+					code: CODE,
+					after: A,
+					why: over,
+				});
+				yield* refusedWritingNothing(
+					store,
+					ProcessManager.use((p) => p.start(request, from())).pipe(
+						Effect.provide(manager(store, brain(), ids(B).next)),
+					),
+				);
+			});
+		}),
+		{arbitrary: {seed: 119120, runs: 20}},
+	);
 });
 
 describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
@@ -346,47 +365,63 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
 			yield* exit(store, why);
 			expect(downs(yield* fresh(store))).toEqual([Down.make({ref, process: A, why, to: toW})]);
 		});
-	it("the longest ref a monitor accepts still lets the target's exit land", async () => {
-		await fc.assert(
-			fc.asyncProperty(acceptedText, acceptedText, (ref, why) =>
-				Effect.gen(function* () {
-					yield* delivered(ref, "crashed");
-					yield* delivered(ref, why);
-				}).pipe(Effect.runPromise),
+	it.effect.prop(
+		"the longest ref a monitor accepts still lets the target's exit land",
+		[acceptedText, acceptedText],
+		examples([[at(CAP), at(CAP, '"')]], (ref: string, why: string) =>
+			Effect.gen(function* () {
+				yield* delivered(ref, "crashed");
+				yield* delivered(ref, why);
+			}),
+		),
+		{arbitrary: {seed: 119120, runs: 20}},
+	);
+	// Effect has no grapheme or grapheme-composite generator. Only those two inputs use fast-check.
+	const generatorSeed = Arbitrary.schema(
+		Schema.Int.check(Schema.isBetween({minimum: -2_147_483_648, maximum: 2_147_483_647})),
+	);
+	const graphemes = (
+		unit: "grapheme" | "grapheme-composite",
+		minLength: number,
+		maxLength: number,
+	) =>
+		generatorSeed.pipe(
+			Arbitrary.map(
+				(seed) => fc.sample(fc.string({unit, minLength, maxLength}), {seed, numRuns: 1})[0]!,
 			),
-			{seed: 119120, numRuns: 20, examples: [[at(CAP), at(CAP, '"')]]},
 		);
-	});
-	it("for any ref: refused over the cap with no write, else the exit lands and DOWN arrives", async () => {
-		const ref = fc.oneof(
-			fc.string({unit: "grapheme", minLength: 1, maxLength: 40}),
-			fc.string({unit: "grapheme-composite", minLength: CAP - 4, maxLength: CAP + 4}),
-			fc
-				.tuple(
-					fc.constantFrom("a", '"', "\\", "é", "\u{1f600}"),
-					fc.integer({min: 200, max: 2_100_000}),
-				)
-				.map(([unit, length]) => unit.repeat(Math.ceil(length / unit.length))),
-		);
-		await fc.assert(
-			fc.asyncProperty(ref, (text) =>
-				Effect.runPromise(
-					Effect.gen(function* () {
-						const store = storage();
-						yield* seed(store);
-						if (text.length > CAP) {
-							yield* refusedWritingNothing(store, monitor(store, text));
-							return;
-						}
-						yield* monitor(store, text);
-						yield* exit(store);
-						expect(downs(yield* fresh(store))).toEqual([
-							Down.make({ref: text, process: A, why: "crashed", to: toW}),
-						]);
-					}),
-				),
-			),
-			{seed: 119120, numRuns: 25},
-		);
-	});
+	const repeated = Arbitrary.schema(
+		Schema.Tuple([
+			Schema.Literals(["a", '"', "\\", "é", "\u{1f600}"]),
+			Schema.Int.check(Schema.isBetween({minimum: 200, maximum: 2_100_000})),
+		]),
+	).pipe(Arbitrary.map(([unit, length]) => unit.repeat(Math.ceil(length / unit.length))));
+	const unicodeRef = Arbitrary.schema(Schema.Literals([0, 1, 2])).pipe(
+		Arbitrary.flatMap((kind) =>
+			kind === 0
+				? graphemes("grapheme", 1, 40)
+				: kind === 1
+					? graphemes("grapheme-composite", CAP - 4, CAP + 4)
+					: repeated,
+		),
+	);
+	it.effect.prop(
+		"for any ref: refused over the cap with no write, else the exit lands and DOWN arrives",
+		[unicodeRef],
+		([text]) =>
+			Effect.gen(function* () {
+				const store = storage();
+				yield* seed(store);
+				if (text.length > CAP) {
+					yield* refusedWritingNothing(store, monitor(store, text));
+					return;
+				}
+				yield* monitor(store, text);
+				yield* exit(store);
+				expect(downs(yield* fresh(store))).toEqual([
+					Down.make({ref: text, process: A, why: "crashed", to: toW}),
+				]);
+			}),
+		{arbitrary: {seed: 119120, runs: 25}},
+	);
 });

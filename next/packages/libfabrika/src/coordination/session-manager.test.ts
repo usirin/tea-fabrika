@@ -7,11 +7,11 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Brand, Effect, Result, Schema} from "effect";
-import * as fc from "fast-check";
+import {Arbitrary, Brand, Effect, Result, Schema} from "effect";
 import {type InputId} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {ProcessId} from "../data/trace.ts";
 import * as C from "./index.ts";
 import {signalId} from "./process.ts";
 
@@ -33,24 +33,36 @@ const sample = {
 	id: "write-a",
 	kinds: ["saved", "commented"],
 };
-const processId = fc.stringMatching(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
-const sessionArb = fc
-	.record({
-		PROCESS: processId,
-		OTHER_PROCESS: processId,
-		START: processId,
-		PERSON: fc.stringMatching(/^person_[0-7][0-9a-hjkmnp-tv-z]{25}$/),
-		TRACE: fc.stringMatching(/^[1-9a-f][0-9a-f]{31}$/),
-		SPAN: fc.stringMatching(/^[1-9a-f][0-9a-f]{15}$/),
-		key: fc.string({minLength: 1, maxLength: 40}).map((key) => `SHA256:person-${key}`),
-		agentKey: fc.string({minLength: 1, maxLength: 40}).map((key) => `SHA256:agent-${key}`),
-		id: fc.stringMatching(/^write-[a-z0-9]{1,20}$/),
-		kinds: fc.uniqueArray(
-			fc.string({minLength: 1, maxLength: 30}).filter((kind) => kind !== "answered"),
-			{minLength: 2, maxLength: 2},
+const sessionSchema = Schema.Struct({
+	PROCESS: ProcessId,
+	OTHER_PROCESS: ProcessId,
+	START: ProcessId,
+	PERSON: C.Writer.cases.person.fields.for.check(
+		Schema.isPattern(/^person_[0-7][0-9a-hjkmnp-tv-z]{25}$/),
+	),
+	TRACE: C.Session.fields.traceId.check(Schema.isPattern(/^[1-9a-f][0-9a-f]{31}$/)),
+	SPAN: C.Session.fields.span.fields.spanId.check(Schema.isPattern(/^[1-9a-f][0-9a-f]{15}$/)),
+	key: C.Writer.cases.person.fields.key.check(
+		Schema.isPattern(/^SHA256:person-[\x20-\x7e]{1,40}$/),
+	),
+	agentKey: C.Writer.cases.agent.fields.key.check(
+		Schema.isPattern(/^SHA256:agent-[\x20-\x7e]{1,40}$/),
+	),
+	id: Schema.String.check(Schema.isPattern(/^write-[a-z0-9]{1,20}$/)),
+	kinds: Schema.Array(
+		Schema.String.check(
+			Schema.isPattern(/^[\x20-\x7e]{1,30}$/),
+			Schema.makeFilter((kind) => kind !== "answered"),
 		),
-	})
-	.filter((value) => value.PROCESS !== value.OTHER_PROCESS);
+	).check(
+		Schema.isMinLength(2),
+		Schema.isMaxLength(2),
+		Schema.makeFilter((kinds) => new Set(kinds).size === kinds.length),
+	),
+});
+const sessionArb = Arbitrary.schema(sessionSchema).pipe(
+	Arbitrary.filter((value) => value.PROCESS !== value.OTHER_PROCESS),
+);
 
 const folder = mkdtempSync(join(tmpdir(), "p10-session-"));
 const opened: Array<DatabaseSync> = [];
@@ -76,7 +88,7 @@ const setup = ({
 	agentKey,
 	id,
 	kinds,
-}: typeof sample) => {
+}: typeof sessionSchema.Type) => {
 	const parent = inputId(`in-${START}-1`);
 	const policy = {
 		input: (name: string) => name === "approve",
@@ -136,12 +148,12 @@ const authorityProperty = (
 	name: string,
 	law: (context: ReturnType<typeof setup>) => Effect.Effect<void, unknown>,
 ) =>
-	it(name, async () => {
-		await fc.assert(
-			fc.asyncProperty(sessionArb, (value) => Effect.runPromise(law(setup(value)))),
-			{seed: 119120, numRuns: 20, examples: [[sample]]},
-		);
-	});
+	it.effect.prop(
+		name,
+		[sessionArb],
+		([value]) => Effect.andThen(law(setup(sample)), law(setup(value))),
+		{arbitrary: {seed: 119120, runs: 20}},
+	);
 const snapshot = (db: DatabaseSync) =>
 	JSON.stringify(
 		db
@@ -181,9 +193,11 @@ const commitFault = (inner: Sql) => {
 };
 
 describe("P10 saved signing authority", () => {
-	it("question 16: a session without a complete parent span is not a valid receipt", () => {
-		fc.assert(
-			fc.property(sessionArb, (value) => {
+	it.prop(
+		"question 16: a session without a complete parent span is not a valid receipt",
+		[sessionArb],
+		([generated]) => {
+			for (const value of [sample, generated]) {
 				const {writer, parent, TRACE, SPAN} = setup(value);
 				const session = {
 					by: writer("person"),
@@ -194,10 +208,61 @@ describe("P10 saved signing authority", () => {
 				expect(Schema.decodeUnknownSync(C.Session)(session)).toEqual(session);
 				for (const span of [{}, {traceId: TRACE}, {spanId: SPAN}])
 					expect(Schema.is(C.Session)({...session, span})).toBe(false);
-			}),
-			{seed: 119120, examples: [[sample]]},
-		);
-	});
+			}
+		},
+		{arbitrary: {seed: 119120, runs: 100}},
+	);
+	authorityProperty(
+		"unknown delivery and a signer on a fresh database refuse not_delivered",
+		({parent, signer, authority, PROCESS}) => {
+			const {sql} = database();
+			return Effect.gen(function* () {
+				expect(yield* Effect.flip(signer())).toMatchObject({
+					_tag: "SigningRefused",
+					why: "not_delivered",
+				});
+				const sessions = yield* C.SessionManager;
+				expect(yield* Effect.flip(sessions.delivered(parent, PROCESS))).toMatchObject({
+					_tag: "SigningRefused",
+					why: "not_delivered",
+				});
+			}).pipe(Effect.provide(authority(sql)));
+		},
+	);
+	authorityProperty(
+		"replaying an input preserves its first body and refuses a different body",
+		({saved, parent, authority, PROCESS}) => {
+			const {sql, db} = database();
+			return Effect.gen(function* () {
+				const sessions = yield* C.SessionManager;
+				const input = saved();
+				yield* sessions.record(input);
+				yield* sessions.delivered(parent, PROCESS);
+				const before = snapshot(db);
+				yield* sessions.record(input);
+				expect(snapshot(db)).toBe(before);
+				expect(
+					yield* Effect.flip(sessions.record({...input, digest: `${input.digest}-changed`})),
+				).toMatchObject({_tag: "SigningRefused", why: "not_delivered"});
+				expect(snapshot(db)).toBe(before);
+			}).pipe(Effect.provide(authority(sql)));
+		},
+	);
+	authorityProperty(
+		"policy permission does not turn an ordinary input into person-only approval",
+		({saved, parent, signer, authority, PROCESS}) => {
+			const {sql} = database();
+			return Effect.gen(function* () {
+				const sessions = yield* C.SessionManager;
+				yield* sessions.record({...saved("person", false), name: "approve"});
+				yield* sessions.delivered(parent, PROCESS);
+				expect(yield* Effect.result(signer())).toMatchObject({
+					_tag: "Failure",
+					failure: {_tag: "SigningRefused", why: "person_only"},
+				});
+			}).pipe(Effect.provide(authority(sql)));
+		},
+	);
 	authorityProperty(
 		"question 16: interleaved writers keep the direct parent's identity and span",
 		({saved, parent, signer, writer, authority, PROCESS, START, TRACE, SPAN}) =>
@@ -403,28 +468,36 @@ describe("P33, the signer refuses every id in the signal id space", () => {
 				expect((yield* signer("write-after")).parent).toBe(parent);
 			}).pipe(Effect.provide(authority(sql)));
 		});
-	it("for any id the signal id space holds, the signer answers SigningRefused", async () => {
-		const id = fc.oneof(
-			fc
-				.array(fc.jsonValue({maxDepth: 2}), {maxLength: 4})
-				.map((rest) => JSON.stringify(["DOWN", ...rest])),
-			fc
-				.tuple(
-					fc.constantFrom("", " ", "\n", "\t"),
-					fc.array(fc.jsonValue({maxDepth: 1}), {maxLength: 3}),
-				)
-				.map(([space, rest]) => `[${space}${JSON.stringify(["DOWN", ...rest]).slice(1)}`),
-			fc.string({maxLength: 20}).map((tail) => `["DOWN"${tail}`),
-		);
-		await fc.assert(
-			fc.asyncProperty(
-				id.filter((value) => C.inSignalSpace(value)),
-				(value) => {
-					expect(C.inSignalSpace(value)).toBe(true);
-					return Effect.runPromise(refusedThenFree(value));
-				},
+	const id = Arbitrary.schema(
+		Schema.Tuple([
+			Schema.Literals([0, 1, 2]),
+			Schema.Literals(["", " ", "\n", "\t"]),
+			Schema.Array(Schema.Json).check(Schema.isMaxLength(4)),
+			Schema.String.check(Schema.isMaxLength(20)),
+		]),
+	).pipe(
+		Arbitrary.map(([kind, space, rest, tail]) =>
+			kind === 0
+				? JSON.stringify(["DOWN", ...rest])
+				: kind === 1
+					? `[${space}${JSON.stringify(["DOWN", ...rest]).slice(1)}`
+					: `["DOWN"${tail}`,
+		),
+		Arbitrary.filter(C.inSignalSpace),
+	);
+	it.effect.prop(
+		"for any id the signal id space holds, the signer answers SigningRefused",
+		[id],
+		([generated]) =>
+			Effect.forEach(
+				[...ids, generated],
+				(value) =>
+					Effect.gen(function* () {
+						expect(C.inSignalSpace(value)).toBe(true);
+						yield* refusedThenFree(value);
+					}),
+				{concurrency: 1},
 			),
-			{seed: 119120, numRuns: 25, examples: ids.map((id): [string] => [id])},
-		);
-	});
+		{arbitrary: {seed: 119120, runs: 25}},
+	);
 });
