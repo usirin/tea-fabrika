@@ -2,6 +2,7 @@
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Effect, Layer, Schema, Stream} from "effect";
+import * as fc from "fast-check";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
 import {nodeSql} from "../data/sqlite.ts";
@@ -31,61 +32,83 @@ const world = () => {
 		),
 	);
 };
+const check = <A, E, R>(
+	arb: fc.Arbitrary<A>,
+	examples: A[],
+	law: (a: A) => Effect.Effect<void, E, R>,
+) =>
+	Effect.gen(function* () {
+		const context = yield* Effect.context<R>();
+		yield* Effect.promise(() =>
+			fc.assert(
+				fc.asyncProperty(arb, (a) =>
+					Effect.runPromise(law(a).pipe(Effect.provideContext(context))),
+				),
+				{
+					seed: 119120,
+					numRuns: 40,
+					includeErrorInReport: true,
+					examples: examples.map((a): [A] => [a]),
+				},
+			),
+		);
+	});
+const metadata = fc.record({build: fc.string({minLength: 1}), sentAt: fc.string()});
 
 describe("P11 richer mailbox history", () => {
 	it.effect("plant, project away build or clocks: rich history preserves the original entry", () =>
-		Effect.gen(function* () {
-			const mailbox = yield* Mailbox;
-			const ledger = yield* Ledger;
-			yield* mailbox.send("counter:1", "a", {type: "add", n: 1}, from);
-			yield* ledger.append("elsewhere", "noise", lineFor(from, {_tag: "noise"}));
-			yield* mailbox.send(
-				"counter:1",
-				"b",
-				{type: "add", n: 2},
-				{...from, seen: 2, build: "build-later"},
-			);
-			const entries = yield* Stream.runCollect(ledger.read("counter:1/inbox", 0));
-			const rich = yield* Stream.runCollect(mailbox.read("counter:1", 0));
-			const plain = yield* Stream.runCollect(mailbox.receive("counter:1", 0));
-			expect(rich).toEqual(
-				entries.map((row) => ({
-					id: row.id,
-					m: Schema.decodeUnknownSync(Schema.Struct({m: Schema.Json}))(row.body).m,
-					by: row.by,
-					for: row.for,
-					sentAt: row.sentAt,
-					parent: row.parent,
-					traceId: row.traceId,
-					rev: row.rev,
-					pos: row.pos,
-					build: row.build,
-					seen: row.seen,
-					arrivedAt: row.arrivedAt,
-				})),
-			);
-			expect(
-				rich.map(({build: _build, seen: _seen, arrivedAt: _arrivedAt, ...letter}) => letter),
-			).toEqual(plain);
-			expect(rich.map((row) => row.pos)).toEqual([1, 2]);
-			expect(rich.map((row) => row.rev)).toEqual([1, 3]);
-			expect(yield* Stream.runCollect(mailbox.read("counter:1", 1))).toEqual(rich.slice(1));
-		}).pipe(Effect.provide(world())),
-	);
-	it.effect("plant, replace first delivery metadata: resend keeps its first build and clocks", () =>
-		Effect.gen(function* () {
-			const mailbox = yield* Mailbox;
-			const first = yield* mailbox.send("counter:1", "a", {type: "add", n: 1}, from);
-			const before = yield* Stream.runCollect(mailbox.read("counter:1", 0));
-			expect(
+		check(metadata, [{build: from.build, sentAt: from.sentAt}], (over) =>
+			Effect.gen(function* () {
+				const original = {...from, ...over};
+				const mailbox = yield* Mailbox;
+				const ledger = yield* Ledger;
+				yield* mailbox.send("counter:1", "a", {type: "add", n: 1}, original);
+				yield* ledger.append("elsewhere", "noise", lineFor(from, {_tag: "noise"}));
 				yield* mailbox.send(
 					"counter:1",
-					"a",
-					{type: "add", n: 1},
-					{...from, build: "retry-build", seen: 1, sentAt: "later"},
-				),
-			).toEqual(first);
-			expect(yield* Stream.runCollect(mailbox.read("counter:1", 0))).toEqual(before);
-		}).pipe(Effect.provide(world())),
+					"b",
+					{type: "add", n: 2},
+					{...original, seen: 2, build: "build-later"},
+				);
+				const entries = yield* Stream.runCollect(ledger.read("counter:1/inbox", 0));
+				const rich = yield* Stream.runCollect(mailbox.read("counter:1", 0));
+				const plain = yield* Stream.runCollect(mailbox.receive("counter:1", 0));
+				expect(rich).toEqual(
+					entries.map((row) => ({
+						id: row.id,
+						m: Schema.decodeUnknownSync(Schema.Struct({m: Schema.Json}))(row.body).m,
+						by: row.by,
+						for: row.for,
+						sentAt: row.sentAt,
+						parent: row.parent,
+						traceId: row.traceId,
+						rev: row.rev,
+						pos: row.pos,
+						build: row.build,
+						seen: row.seen,
+						arrivedAt: row.arrivedAt,
+					})),
+				);
+				expect(
+					rich.map(({build: _build, seen: _seen, arrivedAt: _arrivedAt, ...letter}) => letter),
+				).toEqual(plain);
+				expect(rich.map((row) => row.pos)).toEqual([1, 2]);
+				expect(rich.map((row) => row.rev)).toEqual([1, 3]);
+				expect(yield* Stream.runCollect(mailbox.read("counter:1", 1))).toEqual(rich.slice(1));
+			}).pipe(Effect.provide(world())),
+		),
+	);
+	it.effect("plant, replace first delivery metadata: resend keeps its first build and clocks", () =>
+		check(metadata, [{build: "retry-build", sentAt: "later"}], (retry) =>
+			Effect.gen(function* () {
+				const mailbox = yield* Mailbox;
+				const first = yield* mailbox.send("counter:1", "a", {type: "add", n: 1}, from);
+				const before = yield* Stream.runCollect(mailbox.read("counter:1", 0));
+				expect(
+					yield* mailbox.send("counter:1", "a", {type: "add", n: 1}, {...from, ...retry, seen: 1}),
+				).toEqual(first);
+				expect(yield* Stream.runCollect(mailbox.read("counter:1", 0))).toEqual(before);
+			}).pipe(Effect.provide(world())),
+		),
 	);
 });
