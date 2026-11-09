@@ -494,17 +494,29 @@ const attend = (actions: AskActions, msg: AttentionMsg) => {
 const held = new Set<string>();
 
 /** Where an ask view says what it saved: the one status region its window holds (review 6). */
-const Says = createContext<((text: string) => void) | null>(null);
+const Says = createContext<((text: string, answered?: boolean) => void) | null>(null);
 
 /** The last announcement and its count, or null before the first. */
-type Said = {readonly said: {readonly text: string; readonly count: number} | null};
+type Said = {
+	readonly left: number;
+	readonly said: {readonly text: string; readonly count: number; readonly left: number} | null;
+};
+type StatusMsg = {type: "say"; text: string; left: number} | {type: "count"; left: number};
 const statusMachine = defineMachine({
-	types: {model: {} as Said, msg: {} as {type: "say"; text: string}, ctx: undefined},
+	types: {model: {} as Said, msg: {} as StatusMsg, ctx: {} as number},
 	cmds: [],
-	init: (): [Said, readonly never[]] => [{said: null}, []],
+	init: (_loaded, left): [Said, readonly never[]] => [{left, said: null}, []],
 	update: {
-		say: ({said}, msg): [Said, readonly never[]] => [
-			{said: {text: msg.text, count: (said?.count ?? 0) + 1}},
+		count: (model, msg): [Said, readonly never[]] => [{...model, left: msg.left}, []],
+		say: (model, msg): [Said, readonly never[]] => [
+			{
+				...model,
+				said: {
+					text: msg.text,
+					count: (model.said?.count ?? 0) + 1,
+					left: Math.min(model.left, msg.left),
+				},
+			},
 			[],
 		],
 	},
@@ -525,13 +537,18 @@ export function AskStatus({
 	/** How many asks still wait where this region sits. */
 	readonly left: number;
 }) {
-	const [{said}, send] = useMachine(statusMachine, {run, ctx: undefined});
-	const say = (text: string) => send({type: "say", text});
+	const ctx = useRef(left).current;
+	const [{said}, send] = useMachine(statusMachine, {run, ctx});
+	useEffect(() => send({type: "count", left}), [left, send]);
+	// A save keeps this callback from before its reply. Exclude its ask, or use the poll's
+	// smaller count if it arrived first. Later polls never revise an announced result.
+	const say = (text: string, answered = false) =>
+		send({type: "say", text, left: Math.max(0, left - (answered ? 1 : 0))});
 	return (
 		<Says.Provider value={say}>
 			{children}
 			<p className="ask-status" role="status" aria-live="polite">
-				{said !== null && <span key={said.count}>{`${said.text} ${left} left.`}</span>}
+				{said !== null && <span key={said.count}>{`${said.text} ${said.left} left.`}</span>}
 			</p>
 		</Says.Provider>
 	);
@@ -822,7 +839,7 @@ export function AskView({
 								: answer;
 						const result = yield* actions.answer(value);
 						yield* attend(actions, {...attention, type: "saved", now: Date.now()});
-						yield* Effect.sync(() => says?.(words));
+						yield* Effect.sync(() => says?.(words, true));
 						return result;
 					}).pipe(Effect.forkDetach);
 					return yield* Fiber.join(fiber);
