@@ -31,6 +31,7 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
 - **Except Electron or socket work** (owner, 2026-11-08): a step whose laws or shots need the app
   running (a program's window, the desk, keys, the look) or need to bind a socket is run by a Claude
   agent instead. A Codex box can start neither, so a Codex build there would come back half checked.
+  The mutation step is socket work: Stryker binds a port, so it always runs on Claude.
   Still one agent per step.
 - **One driver per ticket, start to finish** (owner, 2026-11-08): a Claude agent carries one ticket
   through every step, starting one agent per step on the runner above. It merges its own PR only
