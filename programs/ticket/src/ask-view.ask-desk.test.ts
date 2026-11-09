@@ -356,10 +356,12 @@ const entriesOf = (facts: readonly {readonly type: string}[]): Ticket => {
 };
 /** The words of the window's Activity section. */
 const activityOf = (markup: string) => textOf(firstOf(markup, /<section aria-label="Activity"/));
-/** The fact that ends `ask`: the rec taken where one is drawn, else the first pick chosen. */
+/**
+ * The fact that ends `ask`: an expired withdrawal (a "changed" one stays open until its replacement
+ * stands, as closedAsks reads it), or the rec taken where one is drawn, else the first pick chosen. */
 const endOf = (ask: Asked, end: string) =>
 	end === "withdrawn"
-		? {type: "withdrawn", ask: ask.ask, why: "changed"}
+		? {type: "withdrawn", ask: ask.ask, why: "expired"}
 		: {
 				type: "answered",
 				format: 1,
@@ -382,6 +384,9 @@ describe("ask desk design E: the bar is the ask, so the activity does not say it
 				expect(textOf(open)).toContain(a.what);
 				expect(activityOf(open)).not.toContain(row);
 				expect(activityOf(drawn(entriesOf([FILED, ask, endOf(ask, a.end)])))).toContain(row);
+				// A "changed" withdrawal with no replacement yet leaves the ask open, so still no row.
+				const changed = {type: "withdrawn", ask: ask.ask, why: "changed"};
+				expect(activityOf(drawn(entriesOf([FILED, ask, changed])))).not.toContain(row);
 			}),
 			{seed: 119120, numRuns: 40},
 		);
