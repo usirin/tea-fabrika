@@ -910,7 +910,7 @@ describe("T321 K2 box start, today's tooling", () => {
 			}),
 			options,
 		);
-	});
+	}, 180_000); // about 51 s alone on CI, over 60 s on a busy shard (#598); same cases
 
 	// Plant: accept any parent head, any role or any signer, rather than a verified build link.
 	it("K2 accepts only origin/main or a verified parent build head and records checked facts", () => {
