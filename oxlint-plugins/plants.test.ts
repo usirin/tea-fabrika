@@ -49,6 +49,53 @@ const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect"
 const PLANTS: readonly Plant[] = [
 	{
 		code: "fabrika(no-layer-style)",
+		label: "pinned: review 3 CSS escapes and comments in both inline declaration routes",
+		file: "layer-css-spellings.ts",
+		prelude: ["declare const el: HTMLElement;"],
+		// Review 3's full matrix: ten names, two spellings, two write routes = forty plants.
+		lines: [
+			"z-index",
+			...["desk", "sheet", "float", "popover", "palette", "tooltip"].map(
+				(rank) => `--layer-${rank}`,
+			),
+			...["dialog", "popover", "tooltip"].map((part) => `--manti-${part}-z-index`),
+		].flatMap((name) =>
+			[name.replace("-", String.raw`\2d `), `${name}/**/`].flatMap((spelling) => {
+				const value = JSON.stringify(`${spelling}:99`);
+				return [
+					[`el.style.cssText = ${value};`, true] as const,
+					[`el.setAttribute("style", ${value});`, true] as const,
+				];
+			}),
+		),
+	},
+	{
+		code: "fabrika(no-layer-style)",
+		label: "pinned: review 3 static String.raw bypasses in all seven write routes",
+		file: "layer-raw.tsx",
+		prelude: ["declare const el: HTMLElement;"],
+		lines: [
+			["const style = {[String.raw`zIndex`]: 99};", true],
+			['el.style[String.raw`zIndex`] = "99";', true],
+			['el.style.setProperty(String.raw`z-index`, "99");', true],
+			['el.style[String.raw`setProperty`]("--layer-palette", "99");', true],
+			["el.style.cssText = String.raw`z-index:99`;", true],
+			['el.setAttribute("style", String.raw`z-index:99`);', true],
+			['el[String.raw`setAttribute`]("style", "--manti-dialog-z-index:99");', true],
+			// format: raw templates retain backslashes, and unrelated names and reads stay valid.
+			["const safe = {[String.raw`opacity`]: 1};", false],
+			['el.style[String.raw`opacity`] = "1";', false],
+			['el.style.setProperty(String.raw`--tile-wash`, "transparent");', false],
+			['el.style[String.raw`setProperty`]("opacity", "1");', false],
+			["el.style.cssText = String.raw`opacity/**/:1`;", false],
+			['el.setAttribute("style", String.raw`opacity:1`);', false],
+			['el[String.raw`setAttribute`]("style", "opacity:1");', false],
+			["const read = el.style[String.raw`zIndex`];", false],
+			["const rawName = {[String.raw`z\\u0049ndex`]: 1};", false],
+		],
+	},
+	{
+		code: "fabrika(no-layer-style)",
 		label: "pinned: review 2 static layer spelling bypasses",
 		file: "layer-plant.tsx",
 		prelude: ["declare const el: HTMLElement;"],

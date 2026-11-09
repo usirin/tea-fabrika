@@ -17,6 +17,8 @@
 	[data-scope="popover"][data-part="positioner"] { --manti-popover-z-index: var(--layer-popover); }
 	[data-scope="tooltip"][data-part="positioner"] { --manti-tooltip-z-index: var(--layer-tooltip); }
 	.nested { & .child { z-index: var(/* allowed token comment */ --layer-popover); } }
+	/* format: an escaped CSS name keeps the same approved frame value. */
+	.escaped { z\2d index/**/: var(--layer-tooltip); }
 }
 /* z-index: 99; */
 .label { content: "z-index: 99; --layer-sheet: 99"; }

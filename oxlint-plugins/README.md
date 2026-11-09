@@ -12,8 +12,9 @@ Computed dynamic names and runtime CSS assembled by helpers need review; these r
 
 The real-plugin count is repeatable with `node experiments/240-layer-fire-counts.ts --audit`.
 Add `--assert-clean` after the product build. Raw reports go under ignored `runs/`, or `--out`.
-On the pinned base and this test-step tree: three fires, all real, no false alarms, 0 of 3.
-They are `.pop` choosing 10, `.scrim` choosing 9 and `.tip` choosing 20 in today's window CSS.
+On the pinned base: four fires, all real, no false alarms, 0 of 4. They are the missing
+required rank table, `.pop` choosing 10, `.scrim` choosing 9 and `.tip` choosing 20 in
+today's window CSS. The completed tree has zero fires, matching experiment 240.
 Good fixtures have zero fires; the bad fixture has six. This is a small policy count,
 not a broad estimate of false alarms. The lead owns the experiment's public summary.
 

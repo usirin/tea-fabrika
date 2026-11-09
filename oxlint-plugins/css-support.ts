@@ -19,6 +19,15 @@ const place = (decl: CssNode) =>
 		: `${file(decl)} { ${decl.type} }`;
 
 const layerRanks = ["desk", "sheet", "float", "popover", "palette", "tooltip"] as const;
+// CSS Syntax's escaped code points: up to six hex digits and one optional space.
+export const cssName = (name: string) =>
+	name.replace(/\\(?:([\da-f]{1,6})(?:\r\n|[ \t\r\n\f])?|([^\r\n\f]))/gi, (_, hex, char) => {
+		if (hex === undefined) return char;
+		const point = Number.parseInt(hex, 16);
+		return String.fromCodePoint(
+			point === 0 || point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff) ? 0xfffd : point,
+		);
+	});
 export const layerToken = (name: string) => layerRanks.some((rank) => name === `--layer-${rank}`);
 export const layerValue = (value: string): boolean => {
 	const nodes = valueParser(value).nodes.filter(
@@ -39,12 +48,12 @@ export const frameLayerBlock = (root: Root) => {
 	const block = blocks[0];
 	if (file(root) !== WINDOW || blocks.length !== 1 || block?.parent !== root) return null;
 	const definitions: Declaration[] = [];
-	root.walkDecls(/^--layer-/, (decl) => {
-		definitions.push(decl);
+	root.walkDecls((decl) => {
+		if (cssName(decl.prop).startsWith("--layer-")) definitions.push(decl);
 	});
 	if (definitions.length !== layerRanks.length) return null;
 	for (const [rank, name] of layerRanks.entries()) {
-		const found = definitions.filter((decl) => decl.prop === `--layer-${name}`);
+		const found = definitions.filter((decl) => cssName(decl.prop) === `--layer-${name}`);
 		const decl = found[0];
 		if (
 			found.length !== 1 ||

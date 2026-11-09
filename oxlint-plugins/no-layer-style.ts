@@ -1,5 +1,6 @@
 // Today's frame owns every CSS layer choice, including equivalent static JS spellings.
 import type {CreateRule, ESTree} from "@oxlint/plugins";
+import {cssName} from "./css-support.ts";
 import {isWritten} from "./match.ts";
 
 const text = (node: ESTree.Node): string | null => {
@@ -9,12 +10,23 @@ const text = (node: ESTree.Node): string | null => {
 		const right = text(node.right);
 		return left === null || right === null ? null : left + right;
 	}
-	if (node.type !== "TemplateLiteral") return null;
-	let value = node.quasis[0]?.value.cooked ?? "";
-	for (const [index, expression] of node.expressions.entries()) {
+	const raw =
+		node.type === "TaggedTemplateExpression" &&
+		node.tag.type === "MemberExpression" &&
+		node.tag.object.type === "Identifier" &&
+		node.tag.object.name === "String" &&
+		(node.tag.property.type === "Identifier" ? node.tag.property.name : text(node.tag.property)) ===
+			"raw";
+	const template = raw && node.type === "TaggedTemplateExpression" ? node.quasi : node;
+	if (template.type !== "TemplateLiteral") return null;
+	const spelling = (quasi: ESTree.TemplateElement) =>
+		raw ? quasi.value.raw : (quasi.value.cooked ?? "");
+	let value = template.quasis[0] === undefined ? "" : spelling(template.quasis[0]);
+	for (const [index, expression] of template.expressions.entries()) {
 		const part = text(expression);
 		if (part === null) return null;
-		value += part + (node.quasis[index + 1]?.value.cooked ?? "");
+		const quasi = template.quasis[index + 1];
+		value += part + (quasi === undefined ? "" : spelling(quasi));
 	}
 	return value;
 };
@@ -37,7 +49,10 @@ const css = (node: ESTree.Node): boolean => {
 		(node.type === "TemplateLiteral"
 			? node.quasis.map((part) => part.value.cooked ?? part.value.raw).join("\0")
 			: "");
-	return /(?:z-index|--layer-[\w-]+|--manti-(?:dialog|popover|tooltip)-z-index)\s*:/i.test(known);
+	const declarations = cssName(known.replace(/\/\*[\s\S]*?\*\//g, ""));
+	return /(?:z-index|--layer-[\w-]+|--manti-(?:dialog|popover|tooltip)-z-index)\s*:/i.test(
+		declarations,
+	);
 };
 const message =
 	"Layer choices belong to the frame's CSS block, never inline styles or DOM writes (layers L1).";

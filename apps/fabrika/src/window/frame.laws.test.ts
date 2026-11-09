@@ -288,6 +288,73 @@ describe("today's layers: generated key ownership and Escape", () => {
 			options,
 		);
 	});
+	// Review 3's plant is the existing show/focus handler: it cycles under an open overlay.
+	// This exercises desk.tsx itself. The host's complete tsh command set is in serve.test.ts.
+	it("tsh navigation closes every overlay before entering the workspace, like its key routes", async () => {
+		const page = replayPage(true);
+		try {
+			vi.resetModules();
+			await import("./desk.tsx");
+			expect(page.ready()).toBe(true);
+			fc.assert(
+				fc.property(prefix, fc.string(), fc.boolean(), (pref, query, second) => {
+					const missed: string[] = [];
+					for (const what of [
+						"asks",
+						"jobs",
+						"agents",
+						"sync",
+						"host",
+						"palette",
+						"keys",
+					] as const) {
+						// serve.test.ts checks all sixteen commands. These are their three page routes.
+						for (const route of ["navigation", "focus-next", "focus-previous"] as const) {
+							page.reset(pref);
+							page.send({
+								type: "desk",
+								desk: fold(
+									{type: "typed", tile: "t1", does: {kind: "split", orientation: "horizontal"}},
+									{type: "go", tile: second ? "t2" : "t1"},
+								),
+								takes: {all: false, keys: [pref]},
+							});
+							page.send({type: "show", what});
+							page.frameProps().step({type: "query", query});
+							expect(page.frameProps().frame.over.kind).not.toBe("none");
+							page.cover(true);
+							page.input.focus();
+							page.clear();
+							page.send(
+								route === "navigation"
+									? {type: "navigation"}
+									: {type: "show", what: route, via: {_tag: "word"}},
+							);
+							const close = page.sent.findIndex(
+								(msg) =>
+									msg.type === "layer" &&
+									msg.change._tag === "close" &&
+									msg.change.reason === "navigation",
+							);
+							const go = page.sent.findIndex(
+								(msg) => msg.type === "go" && msg.tile === (second ? "t1" : "t2"),
+							);
+							if (
+								page.frameProps().frame.over.kind !== "none" ||
+								close < 0 ||
+								(route !== "navigation" && go <= close)
+							)
+								missed.push(`${what}: ${route}`);
+						}
+					}
+					expect(missed).toEqual([]);
+				}),
+				options,
+			);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
 	// Plant: remove pressAgain's keyForOver guard in desk.tsx. A held letter then reaches
 	// this terminal listener while an overlay owns it, even though frame.ts routes it correctly.
 	it("held letters go through the real page replay handoff before any terminal receives them", async () => {
@@ -541,7 +608,7 @@ describe("today's layers: generated key ownership and Escape", () => {
 
 // A small DOM boundary: capture runs before the terminal's listener, and only an uncanceled
 // key reaches it. No frame routing, hold logic or replay decision is reimplemented here.
-const replayPage = () => {
+const replayPage = (navigationTargets = false) => {
 	let capture: ((event: PageKey) => void) | undefined;
 	let hear: ((raw: unknown) => void) | undefined;
 	let covered = false;
@@ -575,6 +642,12 @@ const replayPage = () => {
 	}
 	class PageElement extends EventTarget {
 		isContentEditable = false;
+		getClientRects() {
+			return [{}];
+		}
+		matches(selector: string) {
+			return selector === ".desk" && this === page.body;
+		}
 		closest() {
 			return null;
 		}
@@ -599,10 +672,22 @@ const replayPage = () => {
 	const terminal = new PageElement();
 	const box = new PageElement();
 	const input = new PageInput();
+	const other = new PageElement();
+	const top = new PageElement();
+	const bottom = new PageElement();
 	const page = {
 		activeElement: terminal,
 		body: new PageElement(),
-		querySelector: () => (covered ? box : null),
+		querySelector: (selector: string) => {
+			if (navigationTargets) {
+				if (selector === ".topbar button") return top;
+				if (selector === ".bottomline button") return bottom;
+				if (selector === '[data-tile="t1"] .screen') return terminal;
+				if (selector === '[data-tile="t2"] .screen') return other;
+				if (selector === ".desk") return page.body;
+			}
+			return covered ? box : null;
+		},
 		getElementById: (id: string) => (id === "root" ? {} : null),
 		execCommand: (_command: string, _ui: boolean, value: string) => inserted.push(value),
 	};

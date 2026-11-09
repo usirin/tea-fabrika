@@ -227,6 +227,26 @@ describe("T204 PR 1 frame layer policy through the real root config", () => {
 		return lint(file, path);
 	};
 	const allowed = () => readFileSync(fixture("good", "frame-layers"), "utf8");
+	// pinned: review 3 found escaped definitions could override every rank inside a valid block.
+	it.each(["desk", "sheet", "float", "popover", "palette", "tooltip"])(
+		"pinned: review 3 refuses an escaped %s rank override inside the approved block",
+		async (rank) => {
+			const plant = allowed().replace(
+				"@layer fabrika-frame-layers {",
+				String.raw`@layer fabrika-frame-layers { :root { --l\61yer-${rank}: 99; }`,
+			);
+			expect((await check(plant)).map((warning) => warning.rule)).toContain("fabrika/frame-layers");
+		},
+	);
+	// format: escape spelling cannot change a rank's fixed value or uniqueness.
+	it.each(["desk", "sheet", "float", "popover", "palette", "tooltip"])(
+		"format: an escaped %s definition keeps its one approved rank",
+		async (rank) => {
+			expect(
+				await check(allowed().replace(`--layer-${rank}:`, String.raw`--l\61yer-${rank}:`)),
+			).toEqual([]);
+		},
+	);
 	// pinned: review 2 found CSS escapes and @property could change the frame's ranks.
 	it.each([
 		String.raw`.a { z\2d index: 99; }`,
