@@ -2892,32 +2892,6 @@ main.program:has(> .view) {
 	margin-inline-end: var(--s-2);
 	overflow-wrap: normal;
 }
-/* In the ticket bar the marks keep the words' last line: a long hint wraps in its own column, and
-   the marks sit beside it on that last line, so "Did this need you?" never drops under a blind
-   ask's "Your pick first". Only a bar too narrow for both lets them take the next line. */
-.ask-view:not([data-ask-place="menu"]) .ask-rec {
-	display: flex;
-	align-items: last baseline;
-	column-gap: var(--s-2);
-}
-.ask-view:not([data-ask-place="menu"]) .ask-recwords {
-	flex: 0 1 auto;
-	min-inline-size: 0;
-	margin-inline-end: 0;
-	/* A wrapped hint never leaves one word alone on its last line, the line the marks share. */
-	text-wrap: pretty;
-}
-.ask-view:not([data-ask-place="menu"]) .ask-marks {
-	flex: none;
-}
-@container main (max-width: 420px) {
-	.ask-view:not([data-ask-place="menu"]) .ask-rec {
-		display: block;
-	}
-	.ask-view:not([data-ask-place="menu"]) .ask-recwords {
-		margin-inline-end: var(--s-2);
-	}
-}
 .ask-recwords strong {
 	font-weight: 600;
 }
@@ -2959,12 +2933,13 @@ main.program:has(> .view) {
 /* "Did this need you?" and its two marks are one piece: they go on after the rec's words where
    they fit, or take the next line together, at the words' left edge. Never split, never one mark
    to a line. */
+/* Baseline, not middle: on the hint's line "Did this need you?" reads as the same line of text. */
 .ask-marks {
 	display: inline-flex;
 	flex-wrap: nowrap;
-	align-items: center;
+	align-items: baseline;
 	gap: var(--s-2);
-	vertical-align: middle;
+	vertical-align: baseline;
 	white-space: nowrap;
 }
 .ask-mark-pair {

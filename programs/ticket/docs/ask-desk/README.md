@@ -10,10 +10,10 @@ Look E: the ask is one quiet bar under the ticket title, with only a hairline un
 
 - The question is on line one. The actions are on the line under it, starting at the content's left
   edge, on every layout.
-- The rec line ends with "Did this need you?" and the two marks, one piece that never splits. In the
-  bar, a long hint (a blind ask's "Your pick first") wraps in its own column, never leaving one word
-  alone on its last line, and the marks sit beside that last line. Only a bar under 420px lets them
-  take the next line.
+- The rec line ends with "Did this need you?" and the two marks, one piece that never splits. The
+  rec's words (or a blind ask's hint, "Your pick first") flow as plain text at their full width, and
+  the marks follow the last word on the same line where they fit. Where they do not, they take the
+  next line together, at the words' left edge. The bar and the menu use the same rule.
 - The reason is on the next line, with Evidence right after it. With no reason (blind, no rec),
   Evidence starts the next line.
 - The shots use the default keys: Take rec shows `y`.
@@ -47,18 +47,19 @@ The same in dark and light unless a line says otherwise.
 - **one** (one tile fills the window): everything is on its own line with room to spare. The actions
   sit under the question at the left edge, not far right. Nothing wraps.
 - **side** and **stacked**: a shown rec has no wraps in the bar: the rec line, "Did this need you?"
-  and both marks fit on one line. A blind ask's hint is longer: at side it wraps to two lines
-  ("Your pick first: the rec shows once" / "you answer"), and "Did this need you?" with both marks
-  sits on the second, at the bar's right.
+  and both marks fit on one line. A blind ask's hint is longer: at stacked the hint and the marks
+  still fit one line; at side the hint keeps its one line and "Did this need you?" with both marks
+  takes the next line, at the hint's left edge.
 - **2x2** (each tile about 930px wide in a 1440 window): the Properties side column is still shown. The bar
-  sits in the main column, and the rec line with both marks fits on one line. A blind ask wraps as in
-  side, the marks on its second line. With evidence open, the
+  sits in the main column, and the rec line with both marks fits on one line. A blind ask is as in
+  side: the hint on one line, the marks on the next. With evidence open, the
   bar and its first lines fit, and the rest scrolls inside the tile.
 - **small** (1024x700, four tiles): the ticket tile is short, so a note, its buttons or a failed
   save's line can sit below the fold. The tile scrolls, and the e2e checks each one in flow.
   - In `failed-save`, the tile scrolls the failure line into view, so it is at the tile's bottom
     edge in the shot, and the question's line is scrolled off the top.
-  - The rec line with both marks still fits on one line in the ticket tile.
+  - The rec line with both marks still fits on one line in the ticket tile, and so does a blind
+    ask's hint with its marks.
 - **asks menu**: 400px wide, or the window less 16px (round 7 tried 660px; the lead kept it narrow).
   The menu is the same at every layout. An open row is at most four lines: the actions, the hint,
   "Did this need you?" with both marks on the next line as one piece, starting at the hint's left
@@ -86,9 +87,9 @@ The same in dark and light unless a line says otherwise.
   from the bar. Whether that is enough needs a person to try it.
 - The five menu actions fit 400px with only a few pixels to spare in `small`, where the menu has a
   scrollbar. A longer label (a renamed action, a translation) would overflow the row.
-- In the bar's blind ask at side and 2x2, the marks sit at the right end of the hint's second line,
-  with a gap after "you answer". It holds the one-line rule; whether it reads well is the owner's
-  call.
+- In the bar's blind ask at side and 2x2, the marks take a line of their own under the hint, so the
+  bar is one line taller than with a shown rec. That follows the rule; whether two short lines read
+  better than one long one is the owner's call.
 - No VoiceOver run was made (`capture-record.json`: "not run").
 - In `small`, the tracker tile next to the ticket has a sideways scrollbar under its onboarding card.
   That is the tracker's, not the bar's.
