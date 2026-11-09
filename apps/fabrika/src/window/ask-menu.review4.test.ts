@@ -534,7 +534,7 @@ property(
 				}),
 			);
 			const state = {
-				...tickets.init()[0],
+				...tickets.init(null, undefined)[0],
 				ready: true,
 				tickets: fold([], entries).tickets,
 				open: ticket,
