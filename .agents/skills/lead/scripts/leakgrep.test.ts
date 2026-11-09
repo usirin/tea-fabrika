@@ -377,7 +377,7 @@ describe("T396 leakgrep plain /tmp paths, today's tooling (decision 0011)", () =
 	// and the other four are home or per-user temp folders.
 	for (const leak of [
 		"/" + "tmp/claude-501/x",
-		"/" + "private/tmp/x",
+		"/private/" + "tmp/x",
 		"/" + "var/folders/ab/x",
 		"/" + "Users/x",
 	])
