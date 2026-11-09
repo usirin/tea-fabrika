@@ -126,7 +126,9 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - It runs the agent with the brief and an `answer:` line it asks for, waits with no agent, fetches,
   and checks: `pnpm commits check` and this step's name on every new commit, no exam path in any
   build commit, the leak grep on each commit's added lines, a review committing nothing, and
-  `plancheck --draft` on a plan. A check that cannot run is `stuck`, never a pass.
+  `plancheck --draft` on a plan. A check that cannot run is `stuck`, never a pass. A build that
+  answers `done` with no commit is done only with a `laws: green <paths>` line (every law already
+  green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
 - Then it pushes `<branch>-wip` as the bot when the step committed, writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
   A stop after the time limit takes the agent's whole process group with it.
