@@ -4,3 +4,7 @@
 .words { --words: var(--focus); color: var(--words); }
 .words { -webkit-text-fill-color: var(--wire); }
 .words { --a: var(--b); --b: var(--border-strong); color: var(--a); }
+.bad { --ink: var(--border); color: var(--ink); }
+.good { --ink: var(--text-primary); }
+.bad2 { --ink2: var(--border); color: var(--ink2); }
+@media (forced-colors: active) { .bad2 { --ink2: var(--text-primary); } }

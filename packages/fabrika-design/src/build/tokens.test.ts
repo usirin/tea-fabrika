@@ -169,13 +169,15 @@ describe("one TOML file per color token, flat in tokens/color/", () => {
 		expect(files).toEqual(TOKENS.map((t) => `${t}.toml`).sort());
 	});
 
-	// format: this directory is the closed set of token-build inputs, including repair calibration.
+	// format: this directory is the closed set of token-build inputs, including repair calibration
+	// and, since T343 review 2, the terminal's built-in colors (tokens/terminal.toml).
 	it("format: keeps the token inputs and the explicit repair calibration beside color", () => {
 		expect(readdirSync(join(PACKAGE, "tokens")).sort()).toEqual([
 			"color",
 			"manti.toml",
 			"parts.toml",
 			"repair.toml",
+			"terminal.toml",
 		]);
 	});
 
@@ -840,3 +842,108 @@ describe("the build's edges", () => {
 		}).toEqual({code: 1, differs: true, named: false});
 	});
 });
+
+// T343 review 2, class 4: "two floors, both always" (themes.md point 4) holds for every final
+// token value, not only for scale selection. A fixed step, a bent step or a hex bend that clears
+// WCAG on every backdrop but misses APCA Lc 60 on one must fail the build, naming its file and
+// floor. The oracle is the tests' own WCAG/APCA (fixtures/themes/laws.ts). Plant: judge final
+// values with `ratio` alone, as tokens.ts does at 056f6ce3.
+describe("T6 the build judges every final value by both floors", () => {
+	const TEXT = ["text-primary", "text-faint", "turn-text", "done", "running", "stuck"] as const;
+	type Look = "dark" | "light";
+	const backdropsOf = async (token: string, look: Look) => {
+		const {composite} = await import("@kampus/themes-fixture/laws");
+		const colors: Readonly<Record<string, string>> = (await import("../theme-colors.ts"))[look];
+		const on = (await readToken(PACKAGE, token))["on"] as readonly string[];
+		return on.map((stack) => {
+			const layers = stack.split("/").map((name) => colors[name]!);
+			return layers.slice(0, -1).reduceRight((under, top) => composite(top, under), layers.at(-1)!);
+		});
+	};
+	// WCAG holds on every backdrop, and APCA misses Lc 60 on at least one.
+	const wcagOnly = async (token: string, look: Look, hex: string) => {
+		const {wcag, apca} = await import("@kampus/themes-fixture/laws");
+		const backdrops = await backdropsOf(token, look);
+		return (
+			backdrops.every((bg) => wcag(hex, bg) >= 4.5) &&
+			backdrops.some((bg) => Math.abs(apca(hex, bg)) < 60)
+		);
+	};
+	it("fails a fixed Radix step that passes WCAG and misses APCA, in either look", async () => {
+		const radix: unknown = await import("@radix-ui/colors");
+		const read = (from: unknown, key: string): unknown =>
+			typeof from === "object" && from !== null ? Reflect.get(from, key) : undefined;
+		const found: (readonly [string, Look, string])[] = [];
+		for (const token of TEXT)
+			for (const look of ["dark", "light"] as const)
+				for (const scale of ["slate", "indigo", "grass", "amber", "red"])
+					for (let n = 1; n <= 12; n += 1)
+						for (const alpha of ["", "a"]) {
+							const set = read(
+								radix,
+								`${scale}${look === "dark" ? "Dark" : ""}${alpha ? "A" : ""}`,
+							);
+							const value = read(set, `${scale}${alpha ? "A" : ""}${n}`);
+							const hex = typeof value === "string" ? value.toLowerCase() : undefined;
+							if (hex !== undefined && (await wcagOnly(token, look, hex)))
+								found.push([token, look, `${scale}.${alpha}${n}`]);
+						}
+		expect(found.length).toBeGreaterThan(0);
+		await fc.assert(
+			fc.asyncProperty(fc.constantFrom(...found), async ([token, look, step]) => {
+				const dir = copy();
+				await edit(dir, token, look === "dark" ? lookIn("dark", step) : lookIn("light", step));
+				const {code, said} = run("--root", dir);
+				expect({code, file: said.includes(`${token}.toml`), floor: /floor/.test(said)}).toEqual({
+					code: 1,
+					file: true,
+					floor: true,
+				});
+			}),
+			{seed: 119120, numRuns: 6},
+		);
+	});
+	it("fails a hex bend that passes WCAG and misses APCA, in either look", async () => {
+		const candidates = fc
+			.tuple(
+				fc.constantFrom(...TEXT),
+				fc.constantFrom("dark" as const, "light" as const),
+				fc.integer({min: 0, max: 0xffffff}),
+			)
+			.map(([token, look, n]) => [token, look, `#${n.toString(16).padStart(6, "0")}`] as const);
+		const found = fc.sample(candidates, {seed: 119120, numRuns: 4000});
+		const kept: (readonly [string, Look, string])[] = [];
+		for (const entry of found) if (await wcagOnly(...entry)) kept.push(entry);
+		expect(kept.length).toBeGreaterThan(0);
+		await fc.assert(
+			fc.asyncProperty(fc.constantFrom(...kept), async ([token, look, hex]) => {
+				const dir = copy();
+				await edit(dir, token, lookIn(look, {hex, bend: "a generated bend under Lc 60"}));
+				const {code, said} = run("--root", dir);
+				expect({code, file: said.includes(`${token}.toml`), floor: /floor/.test(said)}).toEqual({
+					code: 1,
+					file: true,
+					floor: true,
+				});
+			}),
+			{seed: 119120, numRuns: 6},
+		);
+	});
+	// pinned: review 2 restored dark turn-text to indigo.11 (WCAG 5.7327, APCA -55.0062 on
+	// surface-selected/surface-raised) and the token build exited 0.
+	it("pinned: dark turn-text at indigo.11 fails the build on APCA", async () => {
+		const dir = copy();
+		await edit(dir, "turn-text", lookIn("dark", "indigo.11"));
+		const {code, said} = run("--root", dir);
+		expect({code, file: said.includes("turn-text.toml"), floor: /floor/.test(said)}).toEqual({
+			code: 1,
+			file: true,
+			floor: true,
+		});
+	});
+});
+const lookIn =
+	(key: "dark" | "light", value: unknown) =>
+	(t: Table): void => {
+		tableIn(t, "colors")[key] = value;
+	};

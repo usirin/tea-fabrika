@@ -9,6 +9,7 @@
 // Colors are lowercase `#rrggbb` or `#rrggbbaa`. A backdrop is solid.
 import {APCAcontrast, sRGBtoY} from "apca-w3";
 import {Schema} from "effect";
+import {RepairableColor} from "../theme-contract.ts";
 import {fabrika, fabrikaLight} from "../themes.ts";
 
 type Rgba = readonly [number, number, number, number];
@@ -234,18 +235,16 @@ export const check = <T extends Theme>(
 			: pair.floor;
 	const changes: (typeof Change.Type)[] = [];
 	const groups = new Map<string, Pair[]>();
-	const fixed = new Set([
-		"desk",
-		"ground",
-		"raised",
-		"hover",
-		"edge",
-		"turn-fill",
-		...pairs.flatMap(({on}) => on.split("/").map((name) => resolve(theme, name).name)),
-	]);
+	// Only the generated repairable globals (text, icon and fact-carrying line roles) and the
+	// cursor may move. Every other global, a background or a decorative line such as border-faint,
+	// border, border-strong or wire, stays as written, as does anything drawn under a pair.
+	const movable = new Set<string>(RepairableColor.literals);
+	const under = new Set(
+		pairs.flatMap(({on}) => on.split("/").map((name) => resolve(theme, name).name)),
+	);
 	for (const pair of pairs) {
 		const {name} = resolve(theme, pair.token);
-		if (fixed.has(name) || (name.startsWith("terminal.") && name !== "terminal.cursor")) continue;
+		if (!movable.has(name) || under.has(name)) continue;
 		groups.set(name, [...(groups.get(name) ?? []), pair]);
 	}
 	for (const [token, requirements] of groups) {

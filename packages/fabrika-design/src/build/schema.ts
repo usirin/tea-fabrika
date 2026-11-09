@@ -317,3 +317,30 @@ export const checkAcross = ({tokens, manti, parts, hand}: Sources): readonly str
 	}
 	return errors;
 };
+
+/**
+ * Today's app, T343. tokens/terminal.toml: each look's terminal colors as Radix 3.0.0 steps, any
+ * of the 31 scales (the palette needs blue, purple and cyan), solid or alpha. The one source of
+ * the built-in terminal values; themes.ts and themes/*.toml are generated from it.
+ *
+ *   [dark]
+ *   foreground = "slate.12"
+ *   palette = ["slate.3", "red.9", ...]   # sixteen, in ANSI order
+ */
+const TerminalStep = Schema.String.check(
+	Schema.isPattern(
+		new RegExp(`^(?:(?:${Scale.literals.join("|")})\\.a?|(?:black|white)\\.a)(?:[1-9]|1[0-2])$`),
+	),
+);
+const TerminalLook = Schema.Struct({
+	foreground: TerminalStep,
+	background: TerminalStep,
+	cursor: TerminalStep,
+	selection: TerminalStep,
+	palette: Schema.Array(TerminalStep).check(Schema.isMinLength(16), Schema.isMaxLength(16)),
+});
+const TerminalFile = Schema.Struct({dark: TerminalLook, light: TerminalLook});
+export type TerminalFile = typeof TerminalFile.Type;
+
+export const decodeTerminal = (input: unknown): Decoded<TerminalFile> =>
+	decodeWith(TerminalFile)("terminal.toml", input);

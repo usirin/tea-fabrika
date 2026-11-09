@@ -1,0 +1,53 @@
+# Today's app, T343. The built-in terminal colors, as Radix 3.0.0 steps: the one source the
+# token build turns into themes.ts's terminal values and the two built-in TOML files (design
+# language, call 5). Palette entries are in ANSI order: the eight, then their bright eight.
+# Entries 0 (dark) and 7 and 15 (light) are fills, not text. Some entries miss a text floor on
+# the default background; the drawn-cell correction (T18) fixes them where a cell is drawn.
+
+[dark]
+foreground = "slate.12"
+background = "slate.1"
+cursor = "slate.12"
+selection = "slate.a5"
+palette = [
+	"slate.3",
+	"red.9",
+	"grass.9",
+	"amber.9",
+	"blue.9",
+	"purple.11",
+	"cyan.9",
+	"slate.12",
+	"slate.11",
+	"red.11",
+	"grass.11",
+	"amber.11",
+	"blue.11",
+	"purple.11",
+	"cyan.11",
+	"slate.12",
+]
+
+[light]
+foreground = "slate.12"
+background = "slate.1"
+cursor = "slate.12"
+selection = "slate.a5"
+palette = [
+	"slate.12",
+	"red.11",
+	"grass.11",
+	"amber.12",
+	"blue.11",
+	"purple.11",
+	"cyan.11",
+	"slate.8",
+	"slate.11",
+	"red.11",
+	"grass.11",
+	"amber.12",
+	"blue.11",
+	"purple.9",
+	"cyan.11",
+	"slate.7",
+]

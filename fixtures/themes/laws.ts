@@ -146,6 +146,29 @@ export const complete = fc.record({
 	terminal,
 });
 
+// T343 review 2, class 2. A base background is the bottom of a drawn stack: nothing is under it,
+// so it has no final composited value and must be solid (themes.md point 4, "checks final
+// values"). theme.test.ts proves this list equals the bottoms of the generated pairs.
+export const baseColors = [
+	"surface-sunken",
+	"surface",
+	"surface-raised",
+	"turn-fill",
+	"turn-fill-hover",
+] as const;
+// A complete theme the decoder must accept: every base solid, every other color solid or alpha.
+export const decodable = complete.chain((theme) =>
+	fc
+		.record({
+			"surface-sunken": solid,
+			surface: solid,
+			"surface-raised": solid,
+			"turn-fill": solid,
+			"turn-fill-hover": solid,
+		})
+		.map((bases) => ({...theme, colors: {...theme.colors, ...bases}})),
+);
+
 // Inverse Oklab matrix, used only to prepare independent fixture inputs.
 export const fromLab = (L: number, a: number, b: number) => {
 	const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;

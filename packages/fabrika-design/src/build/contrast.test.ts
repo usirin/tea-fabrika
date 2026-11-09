@@ -311,6 +311,89 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 			runs,
 		);
 	});
+	// T343 review 2, class 3. Eligibility is the 21 global names, not the old desk/ground/raised/
+	// hover/edge words: only the generated repairable names and the cursor move. Every background
+	// and decorative line stays as written in the foreground position too, directly or through an
+	// alias, at any requested floor. Plant: the old fixed list, which moved surface-hover on surface.
+	it("T9 never moves a background or decorative color named as a pair's foreground", async () => {
+		const {complete, globalNames, RUNS: runs} = await import("@kampus/themes-fixture/laws");
+		const {RepairableColor, pairs: contract} = await import("../theme-contract.ts");
+		const {check} = await import("./contrast.ts");
+		const repairable: readonly string[] = RepairableColor.literals;
+		const protectedNames = globalNames.filter((n) => !repairable.includes(n));
+		expect([...protectedNames].sort()).toEqual(
+			[
+				"border",
+				"border-faint",
+				"border-strong",
+				"scrim",
+				"surface",
+				"surface-hover",
+				"surface-raised",
+				"surface-selected",
+				"surface-sunken",
+				"turn-fill",
+				"turn-fill-hover",
+				"wire",
+			].sort(),
+		);
+		const backdrops = [...new Set(contract.map(({on}) => on))].filter(
+			(on) => !on.startsWith("terminal."),
+		);
+		const solidBases = (theme: {colors: Record<string, string>}) =>
+			Object.fromEntries(
+				["surface-sunken", "surface", "surface-raised", "turn-fill", "turn-fill-hover"].map((n) => [
+					n,
+					theme.colors[n]!.slice(0, 7),
+				]),
+			);
+		fc.assert(
+			fc.property(
+				complete,
+				fc.array(fc.tuple(fc.constantFrom(...protectedNames), fc.constantFrom(...backdrops)), {
+					minLength: 1,
+					maxLength: 6,
+				}),
+				fc.constantFrom(...repairable.filter((n) => n !== "cursor")),
+				fc.double({min: 4.5, max: 21, noNaN: true}),
+				(theme, chosen, alias, contrast) => {
+					const target = chosen[0]![0];
+					const input = {
+						...theme,
+						colors: {...theme.colors, ...solidBases(theme), [alias]: target},
+					};
+					const requirements = [
+						...chosen.map(([token, on]) => pair(token, on, {wcag: 4.5, apca: 60})),
+						pair(alias, chosen[0]![1], {wcag: 4.5, apca: 60}),
+					];
+					const got = check(input, requirements, {fix: "nudge", contrast}, version);
+					for (const name of protectedNames)
+						expect(got.shown.colors[name]).toBe(input.colors[name]);
+					const shown: Readonly<Record<string, string>> = got.shown.colors;
+					expect(shown[alias]).toBe(target);
+					expect(got.changes).toEqual([]);
+				},
+			),
+			runs,
+		);
+	});
+	it("pinned: surface-hover #111113 checked on surface #111113 stayed, not #606062 (review 2)", async () => {
+		// pinned: the reviewer's reproduction of class 3 at 056f6ce3.
+		const {check} = await import("./contrast.ts");
+		const input = {
+			...fabrika,
+			colors: {...fabrika.colors, "surface-hover": "#111113", surface: "#111113"},
+		};
+		const got = check(
+			input,
+			[pair("surface-hover", "surface")],
+			{fix: "nudge", contrast: 4.5},
+			version,
+		);
+		expect(got.shown.colors["surface-hover"]).toBe("#111113");
+		expect(got.changes).toEqual([]);
+		expect(got.failures.length).toBe(1);
+	});
 	it("T10 has no smaller passing move among every representable achromatic candidate", async () => {
 		const {complete, gray, lab, meets} = await import("@kampus/themes-fixture/laws");
 		const {check} = await import("./contrast.ts");

@@ -482,3 +482,107 @@ describe("T19/T24 generated terminal changes", () => {
 		);
 	});
 });
+
+// T343 review 2, class 1: the terminal adapter (T18 app side, T24). Contract for build, in
+// window/theme.ts: `applyAppearance({_tag: "theme", value, version})` sets the applied theme, and
+// `terminalFor` makes each terminal with that theme's colors and a `correctForeground` (the
+// patched ghostty-web option) that runs the shared checker under both text floors. A named
+// theme's look wins over a later OS look change. Plants: keep `themeNow()` on matchMedia; make
+// a terminal without `correctForeground`; correct a passing cell; move further than needed.
+interface WindowTheme {
+	readonly applyAppearance: (next: {
+		readonly _tag: "theme";
+		readonly value: unknown;
+		readonly version: string;
+	}) => void;
+}
+// window/theme.ts is build's to make: loaded by URL so its absence is a runtime red.
+const built = (path: string): Promise<WindowTheme> =>
+	import(/* @vite-ignore */ new URL(path, import.meta.url).pathname) as Promise<WindowTheme>;
+describe("T18/T24 app side: terminals take the applied theme and the shared correction", () => {
+	const stubRoot = () => {
+		const props = new Map<string, string>();
+		Object.assign(page, {
+			documentElement: {
+				style: {
+					setProperty: (k: string, v: string) => props.set(k, v),
+					removeProperty: (k: string) => props.delete(k),
+					getPropertyValue: (k: string) => props.get(k) ?? "",
+				},
+			},
+		});
+	};
+	it("draws every new terminal in the applied theme, whatever the OS look does", async () => {
+		const {decodable} = await import("../../../../fixtures/themes/laws.ts");
+		await fc.assert(
+			fc.asyncProperty(
+				fc.array(
+					fc.oneof(
+						decodable.map((v) => ({theme: v})),
+						fc.constant({os: true}),
+					),
+					{
+						minLength: 1,
+						maxLength: 6,
+					},
+				),
+				async (ops) => {
+					stubRoot();
+					for (const old of showing()) old.dispose();
+					FakeTerminal.made = [];
+					const {applyAppearance} = await built("./theme.ts");
+					const terminal = await openTerminal([]);
+					let applied: Parameters<typeof terminalTheme>[0] | undefined;
+					for (const op of ops) {
+						if ("theme" in op) {
+							applied = op.theme as never;
+							applyAppearance({_tag: "theme", value: op.theme as never, version: "1"});
+						} else switchTo(look === "dark" ? "light" : "dark");
+						const now = showing().at(-1);
+						expect(typeof now?.options["correctForeground"]).toBe("function");
+						expect(now?.drawn).toEqual(applied === undefined ? now?.drawn : terminalTheme(applied));
+					}
+					terminal.dispose();
+				},
+			),
+			{seed: 119120, numRuns: 20},
+		);
+	});
+	it("leaves a passing cell alone and moves a failing one the least lightness that passes", async () => {
+		const {gray, lab, meets} = await import("../../../../fixtures/themes/laws.ts");
+		const {readFileSync} = await import("node:fs");
+		const cap = Number(
+			/^cap = ([\d.]+)$/m.exec(
+				readFileSync(
+					new URL("../../../../packages/fabrika-design/tokens/repair.toml", import.meta.url),
+					"utf8",
+				),
+			)?.[1],
+		);
+		stubRoot();
+		const {applyAppearance} = await built("./theme.ts");
+		applyAppearance({_tag: "theme", value: fabrika as never, version: "1"});
+		await openTerminal([]);
+		const correct = showing().at(-1)?.options["correctForeground"] as (
+			fg: string,
+			bg: string,
+		) => string;
+		expect(typeof correct).toBe("function");
+		fc.assert(
+			fc.property(fc.integer({min: 0, max: 255}), fc.integer({min: 0, max: 255}), (n, m) => {
+				const fg = gray(n),
+					bg = gray(m);
+				const out = correct(fg, bg);
+				const already = meets(fg, bg);
+				const passing = Array.from({length: 256}, (_, i) => gray(i)).filter((c) => meets(c, bg));
+				const least = Math.min(...passing.map((c) => Math.abs(lab(c)[0] - lab(fg)[0])));
+				// Within the measured cap a passing gray exists; past it the law asks nothing here.
+				const reachable = !already && Number.isFinite(least) && least <= cap;
+				expect(already ? out : fg).toBe(fg);
+				expect(!reachable || meets(out, bg)).toBe(true);
+				expect(!reachable || Math.abs(lab(out)[0] - lab(fg)[0]) <= least + 1e-10).toBe(true);
+			}),
+			{seed: 119120, numRuns: 300},
+		);
+	});
+});

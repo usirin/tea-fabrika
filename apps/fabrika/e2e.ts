@@ -3307,11 +3307,82 @@ const all = async () => {
 		await borderDrag();
 		await keysLook();
 		await trackerFocus();
+		await themesStart();
 		// The 60 focus images need a 1440 by 900 window, taller than a CI runner's screen, so they
 		// run only with --focus, the way the ARIA trees run only with --aria.
 	} finally {
 		// No person stops the host: there is no command for it. The run stops its own, by its pid.
 		const pid = await hostPid(home);
+		if (pid !== null) await stop(pid);
+	}
+};
+
+/**
+ * T343 review 2, class 1: T20 and T21's startup in the real app. scenario: one scripted run of
+ * the real Electron window, since appearance-ready reveal, the startup cache and forced colors
+ * exist only there. A person's `theme = "nord"` with the kept Nord fixture as themes/nord.toml:
+ * the window must never be visible before its appearance is ready, must never show fabrika's
+ * surface while Nord is selected (no default-theme flash, first start or cached start), and forced
+ * colors must drop the theme's custom properties. Contract for build: the page sets
+ * `document.documentElement.dataset.appearance = "ready"` once the first appearance is applied.
+ * Plants: show the window at creation; skip the cache; keep a cached color under forced colors.
+ */
+const themesStart = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fh-"));
+	const fixture = await readFile(join(here, "../../fixtures/themes/mapped/nord.toml"), "utf8");
+	const surface = /^surface = "(#[0-9a-f]+)"$/m.exec(fixture)?.[1];
+	check("the Nord fixture names its surface", surface !== undefined, surface);
+	await mkdir(join(own, "themes"), {recursive: true});
+	await writeFile(join(own, "themes", "nord.toml"), fixture);
+	await writeFile(join(own, "fabrika.toml"), 'theme = "nord"\n');
+	try {
+		for (const start of ["first start", "cached start"]) {
+			const app = await launch(own);
+			try {
+				const page = await app.firstWindow();
+				const seen: {visible: boolean; ready: boolean; surface: string}[] = [];
+				for (let i = 0; i < 400; i += 1) {
+					const visible = await app.evaluate(({BrowserWindow}) =>
+						BrowserWindow.getAllWindows().some((w) => w.isVisible()),
+					);
+					const drawn = await page
+						.evaluate(() => ({
+							ready: document.documentElement.dataset["appearance"] === "ready",
+							surface: getComputedStyle(document.documentElement)
+								.getPropertyValue("--surface")
+								.trim(),
+						}))
+						.catch(() => ({ready: false, surface: ""}));
+					seen.push({visible, ...drawn});
+					if (visible && drawn.ready && drawn.surface === surface) break;
+					await page.waitForTimeout(5);
+				}
+				check(
+					`${start}: the window is never visible before its appearance is ready`,
+					seen.every((s) => !s.visible || s.ready),
+					seen.filter((s) => s.visible && !s.ready).slice(0, 3),
+				);
+				check(
+					`${start}: a visible window only ever shows Nord's surface`,
+					seen.some((s) => s.visible) && seen.every((s) => !s.visible || s.surface === surface),
+					seen.filter((s) => s.visible && s.surface !== surface).slice(0, 3),
+				);
+				await page.emulateMedia({forcedColors: "active"});
+				const forced = await page.evaluate(() =>
+					getComputedStyle(document.documentElement).getPropertyValue("--surface").trim(),
+				);
+				check("forced colors drop the theme's surface", forced !== surface, forced);
+				await page.emulateMedia({forcedColors: "none"});
+				const back = await page.evaluate(() =>
+					getComputedStyle(document.documentElement).getPropertyValue("--surface").trim(),
+				);
+				check("leaving forced colors restores the chosen theme", back === surface, back);
+			} finally {
+				await app.close().catch(() => {});
+			}
+		}
+	} finally {
+		const pid = await hostPid(own);
 		if (pid !== null) await stop(pid);
 	}
 };
@@ -3323,6 +3394,7 @@ else if (process.argv.includes("--tiles")) await tilesLook();
 else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();
 else if (process.argv.includes("--focus")) await focusShots();
 else if (process.argv.includes("--tracker-focus")) await trackerFocus();
+else if (process.argv.includes("--themes")) await themesStart();
 else await all();
 const after = await pgrep(here);
 check(

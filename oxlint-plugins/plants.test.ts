@@ -531,3 +531,56 @@ describe("T343/T22 view colors", () => {
 		}
 	});
 });
+
+// T343 review 2, class 5. format: source text is this rule's input. Each line is one of the
+// review's bypasses: a CSS named color outside the old short list, a quoted key, a template value,
+// and an inline var() of a line or fill token in a property that draws words. Planted beside
+// every shipped view git lists (the top-level program windows, view.ts files and the keys
+// window), so a path rule that misses one fails here. Plants: the old path list; the old named
+// list; key names read from identifiers only; no role check on inline tokens.
+describe("T343/T22 view colors, review 2 bypasses", () => {
+	const lines = [
+		"declare const ctx: {fillStyle: string; strokeStyle: string};",
+		'export const a = {color: "navy"};',
+		'export const b = {"color": "red"};',
+		"export const c = {color: `red`};",
+		'export const d = {color: "var(--border)"};',
+		'export const e = {color: "var(--turn-fill)"};',
+		'ctx["strokeStyle"] = "teal";',
+		"export const f = {color: `var(--wire)`};",
+		'export const ok = {color: "var(--text-faint)", label: "navy", width: "1px"};',
+		'export const ok2 = {borderColor: "var(--border)", background: "var(--turn-fill)"};',
+	];
+	const views = spawnSync(
+		"git",
+		[
+			"ls-files",
+			"programs/*/src/*.tsx",
+			"programs/*/src/**/*.tsx",
+			"programs/*/src/view.ts",
+			"programs/*/src/**/view.ts",
+			"apps/fabrika/src/*.tsx",
+			"apps/fabrika/src/**/*.tsx",
+		],
+		{cwd: ROOT, encoding: "utf8"},
+	)
+		.stdout.split("\n")
+		.filter((path) => path !== "" && !/\.test\.tsx?$/.test(path));
+	it("format: lists every shipped program window and the keys window", () => {
+		for (const program of ["counter", "map", "markdown", "ticket", "trace", "tracker"])
+			expect(views).toContain(`programs/${program}/src/window.tsx`);
+		expect(views).toContain("apps/fabrika/src/keys/window.tsx");
+		expect(views).toContain("programs/ticket/src/view.ts");
+	});
+	it.each(views)("format: refuses each bypass beside %s", (view) => {
+		const at = join(ROOT, view, "..");
+		const folder = mkdtempSync(join(at, ".color-law-"));
+		const path = join(folder, view.split("/").at(-1)!);
+		try {
+			writeFileSync(path, lines.join("\n"));
+			expect(fires(path, "fabrika(no-raw-color)")).toEqual([2, 3, 4, 5, 6, 7, 8]);
+		} finally {
+			rmSync(folder, {recursive: true, force: true});
+		}
+	});
+});

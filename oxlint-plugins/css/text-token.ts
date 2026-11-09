@@ -33,13 +33,21 @@ const role = (name: string): unknown => {
 const textProperty = /^(?:color|(?:-webkit-)?text-(?:fill|stroke)-color)$/;
 const mantiText = /^--manti-(?:text(?:-.+)?|link|danger-text|warning-text|selection-text)$/;
 export default plugin("text-token", (root, fire) => {
-	const aliases = new Map<string, readonly string[]>();
+	// A custom property's value depends on which rule and media query reach an element, which a
+	// stylesheet alone cannot tell. So an alias may be any value it is given anywhere, in any
+	// selector or media block: one text value elsewhere never hides a border value (T343 review 2).
+	const aliases = new Map<string, Set<string>>();
+	const alias = (key: string, values: readonly string[]) => {
+		const known = aliases.get(key) ?? new Set<string>();
+		for (const value of values) known.add(value);
+		aliases.set(key, known);
+	};
 	// Manti is mapped in the shared stylesheet; check those aliases in consumers too.
 	const css = readFileSync(new URL(`../../${TOKENS}`, import.meta.url), "utf8");
 	for (const [, key = "", value = ""] of css.matchAll(/(--[a-z0-9-]+):\s*var\((--[a-z0-9-]+)\)/g))
-		aliases.set(key, [value]);
+		alias(key, [value]);
 	root.walkDecls((decl) => {
-		if (decl.prop.startsWith("--")) aliases.set(decl.prop, references(decl));
+		if (decl.prop.startsWith("--")) alias(decl.prop, references(decl));
 	});
 	root.walkDecls((decl) => {
 		if (generated(decl) || (!textProperty.test(decl.prop) && !mantiText.test(decl.prop))) return;

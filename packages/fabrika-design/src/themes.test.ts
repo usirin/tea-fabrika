@@ -1,6 +1,7 @@
 import {createHash} from "node:crypto";
 import {existsSync, readFileSync} from "node:fs";
 import {join} from "node:path";
+import {isDeepStrictEqual} from "node:util";
 import {apca, wcag} from "@kampus/themes-fixture/laws";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
@@ -1223,3 +1224,181 @@ describe("T13 kept source bytes and versioned calibration", () => {
 		}
 	});
 });
+
+// ---- T343 review 2, class 1: one source for terminal built-ins, and all 300 Radix picks -------
+
+// The Radix 3.0.0 values the rest of this file reads (experiments/177-themes/schemes): the import
+// of @radix-ui/colors is the token build's alone.
+const radixHex = async (step: string, look: Look) => {
+	const [scale = "", at = ""] = step.split(".");
+	const alpha = at.startsWith("a");
+	const n = Number(alpha ? at.slice(1) : at);
+	const hex = stepsOf(scale, `${look}${alpha ? "A" : ""}`)[n - 1];
+	if (hex === undefined) throw new Error(`no Radix step ${step} in ${look}`);
+	return hex;
+};
+
+// Design-language call 5 and fabrika-design-package.md: the terminal's built-in colors are token
+// data, not a second hand-written source. tokens/terminal.toml is the input (tests'); themes.ts
+// and themes/*.toml are generated (build's). Plants: keep hex in themes.ts and copy it into the
+// TOML; regenerate the TOML from themes.ts instead of from terminal.toml.
+describe("T8 terminal built-ins come from tokens/terminal.toml", () => {
+	const TERMINAL_TOML = join(import.meta.dirname, "..", "tokens", "terminal.toml");
+	it("format: tokens/terminal.toml decodes as two looks of Radix steps, sixteen in the palette", async () => {
+		const {parse} = await import("smol-toml");
+		const {decodeTerminal} = await import("./build/schema.ts");
+		const got = decodeTerminal(parse(readFileSync(TERMINAL_TOML, "utf8")));
+		expect(got._tag).toBe("ok");
+	});
+	it("gives each built-in terminal value as its terminal.toml step resolves", async () => {
+		const {parse} = await import("smol-toml");
+		const {fabrika, fabrikaLight} = await import("./themes.ts");
+		const file = parse(readFileSync(TERMINAL_TOML, "utf8")) as Record<
+			Look,
+			Record<string, string | readonly string[]>
+		>;
+		for (const [look, theme] of [
+			["dark", fabrika],
+			["light", fabrikaLight],
+		] as const) {
+			const t = file[look];
+			const want = {
+				foreground: await radixHex(t["foreground"] as string, look),
+				background: await radixHex(t["background"] as string, look),
+				cursor: await radixHex(t["cursor"] as string, look),
+				selection: await radixHex(t["selection"] as string, look),
+				palette: await Promise.all(
+					(t["palette"] as readonly string[]).map((step) => radixHex(step, look)),
+				),
+			};
+			expect(theme.terminal).toEqual(want);
+		}
+	});
+	it("regenerates the built-in theme files from a changed terminal.toml", async () => {
+		const {spawnSync} = await import("node:child_process");
+		const {cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync} = await import("node:fs");
+		const {tmpdir} = await import("node:os");
+		const {parse, stringify} = await import("smol-toml");
+		const PACKAGE = join(import.meta.dirname, "..");
+		const steps = fc.tuple(
+			fc.constantFrom(...LOOKS),
+			fc.integer({min: 0, max: 15}),
+			fc.constantFrom("red", "blue", "grass", "amber", "purple", "cyan", "slate"),
+			fc.integer({min: 9, max: 12}),
+		);
+		await fc.assert(
+			fc.asyncProperty(steps, async ([look, index, scale, n]) => {
+				const dir = mkdtempSync(join(tmpdir(), "fab-terminal-"));
+				try {
+					for (const part of ["tokens", "themes"])
+						cpSync(join(PACKAGE, part), join(dir, part), {recursive: true});
+					mkdirSync(join(dir, "src"));
+					for (const file of ["theme-colors.ts", "theme-contract.ts", "theme-settings.schema.json"])
+						cpSync(join(PACKAGE, "src", file), join(dir, "src", file));
+					const path = join(dir, "tokens", "terminal.toml");
+					const data = parse(readFileSync(path, "utf8")) as Record<Look, {palette: string[]}>;
+					data[look].palette[index] = `${scale}.${n}`;
+					writeFileSync(path, stringify(data));
+					const out = spawnSync(
+						process.execPath,
+						[join(PACKAGE, "src", "build", "themes.ts"), "--root", dir],
+						{encoding: "utf8"},
+					);
+					expect(out.status).toBe(0);
+					const name = look === "dark" ? "fabrika" : "fabrika-light";
+					const built = parse(readFileSync(join(dir, "themes", `${name}.toml`), "utf8")) as {
+						terminal: {palette: string[]};
+					};
+					expect(built.terminal.palette[index]).toBe(await radixHex(`${scale}.${n}`, look));
+				} finally {
+					rmSync(dir, {recursive: true, force: true});
+				}
+			}),
+			{seed: 119120, numRuns: 4},
+		);
+	});
+});
+
+// T7: every Radix pick, 6 grays x 25 accents x 2 looks, generated at build time with full
+// values, and each passes every generated pair under both floors at default settings. Contract
+// for build: src/theme-picks.ts (generated) exports `picks`, one entry per pick:
+// `{gray, accent, look, colors}` with the 21 global colors. slate/indigo equals the built-ins.
+// Plants: skip a gray, the light look, a hovered or selected backdrop, or APCA.
+describe("T7 all 300 Radix picks are generated and pass both floors", () => {
+	const GRAYS = ["gray", "mauve", "slate", "sage", "olive", "sand"] as const;
+	const ACCENTS = [
+		"tomato",
+		"red",
+		"ruby",
+		"crimson",
+		"pink",
+		"plum",
+		"purple",
+		"violet",
+		"iris",
+		"indigo",
+		"blue",
+		"cyan",
+		"teal",
+		"jade",
+		"green",
+		"grass",
+		"brown",
+		"bronze",
+		"gold",
+		"sky",
+		"mint",
+		"lime",
+		"yellow",
+		"amber",
+		"orange",
+	] as const;
+	type Pick = {gray: string; accent: string; look: Look; colors: Readonly<Record<string, string>>};
+	const load = async (): Promise<readonly Pick[]> => {
+		const module: {picks?: readonly Pick[]} = await import(
+			/* @vite-ignore */ `${"./theme-picks.ts"}`
+		).catch(() => ({}));
+		return module.picks ?? [];
+	};
+	it("format: holds exactly one complete pick per gray, accent and look", async () => {
+		const {globalNames} = await import("@kampus/themes-fixture/laws");
+		const picks = await load();
+		const keys = picks.map((p) => `${p.gray}/${p.accent}/${p.look}`).sort();
+		const want = GRAYS.flatMap((g) =>
+			ACCENTS.flatMap((a) => LOOKS.map((l) => `${g}/${a}/${l}`)),
+		).sort();
+		expect(keys).toEqual(want);
+		expect(picks.every((p) => isDeepStrictEqualKeys(p.colors, globalNames))).toBe(true);
+	});
+	it("passes every generated pair under both floors, and slate/indigo is the built-in", async () => {
+		const {composite, meets} = await import("@kampus/themes-fixture/laws");
+		const {pairs} = await import("./theme-contract.ts");
+		const {fabrika, fabrikaLight} = await import("./themes.ts");
+		const picks = await load();
+		expect(picks.length).toBe(300);
+		fc.assert(
+			fc.property(fc.constantFrom(...picks), (pick) => {
+				const failing = pairs
+					.filter(({on}) => !on.startsWith("terminal."))
+					.filter(({token, on, floor}) => {
+						const layers = on.split("/").map((n) => pick.colors[n]!);
+						const bg = layers
+							.slice(0, -1)
+							.reduceRight((under, top) => composite(top, under), layers.at(-1)!);
+						return !meets(pick.colors[token]!, bg, floor);
+					})
+					.map(({token, on}) => `${token} on ${on}`);
+				expect(failing).toEqual([]);
+				const builtin = pick.look === "dark" ? fabrika : fabrikaLight;
+				expect(
+					pick.gray !== "slate" ||
+						pick.accent !== "indigo" ||
+						isDeepStrictEqual(pick.colors, builtin.colors),
+				).toBe(true);
+			}),
+			{seed: 119120, numRuns: 300},
+		);
+	});
+});
+const isDeepStrictEqualKeys = (colors: object, names: readonly string[]) =>
+	isDeepStrictEqual(Object.keys(colors).sort(), [...names].sort());

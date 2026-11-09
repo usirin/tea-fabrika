@@ -1,4 +1,13 @@
-import {complete, globalNames, hex, name, RUNS} from "@kampus/themes-fixture/laws";
+import {
+	alpha,
+	baseColors,
+	complete,
+	decodable,
+	globalNames,
+	hex,
+	name,
+	RUNS,
+} from "@kampus/themes-fixture/laws";
 // Today's app, T343 PR 1. Plant: merge partial input with fabrika; accept two sources;
 // compare repaired.cursor with colors["text-primary"] instead of terminal.cursor.
 import {Result} from "effect";
@@ -29,7 +38,7 @@ const origins = fc.oneof(
 describe("T1 complete, closed theme files", () => {
 	it("keeps every supplied global and each of sixteen terminal entries", () => {
 		fc.assert(
-			fc.property(complete, (input) => {
+			fc.property(decodable, (input) => {
 				const got = decode(input);
 				expect(Result.isSuccess(got)).toBe(true);
 				expect(Result.getOrThrow(got)).toMatchObject(input);
@@ -157,7 +166,7 @@ describe("T1 complete, closed theme files", () => {
 describe("T2 source and repair records", () => {
 	it("accepts no source or exactly one known source without inventing metadata", () => {
 		fc.assert(
-			fc.property(complete, origins, (input, from) => {
+			fc.property(decodable, origins, (input, from) => {
 				expect(Result.getOrThrow(decode(input))).not.toHaveProperty("from");
 				expect(Result.isSuccess(decode({...input, from}))).toBe(true);
 				expect(Result.isFailure(decode({...input, from: {}}))).toBe(true);
@@ -188,7 +197,7 @@ describe("T2 source and repair records", () => {
 	it("checks repaired values at their destination, cursor separately", () => {
 		fc.assert(
 			fc.property(
-				complete,
+				decodable,
 				hex,
 				fc.constantFrom(
 					"text-primary",
@@ -251,6 +260,73 @@ describe("T2 source and repair records", () => {
 							}),
 						),
 					).toBe(true);
+				},
+			),
+			RUNS,
+		);
+	});
+});
+
+// T343 review 2, class 2: the decoder and the checker agree on accepted backgrounds. Decided at the
+// decoder (themes.md point 4: a file that does not decode is not applied and says why; the checker
+// "checks final values", and a stack's bottom has nothing under it to composite onto). A build
+// change in theme.ts. Plants: accept an 8-digit base again; refuse an alpha overlay such as
+// surface-hover; let `check` throw on any theme the decoder returned.
+describe("T1/T5 translucent base backgrounds", () => {
+	const translucent = alpha.filter((value) => !value.endsWith("ff"));
+	it("names exactly the bottoms of every generated pair as the base backgrounds", async () => {
+		const {pairs} = await import("./theme-contract.ts");
+		const bottoms = new Set(pairs.map(({on}) => on.split("/").at(-1)));
+		expect([...bottoms].sort()).toEqual([...baseColors, "terminal.background"].sort());
+	});
+	it("refuses a translucent value in each base background, naming that field", () => {
+		fc.assert(
+			fc.property(
+				decodable,
+				fc.constantFrom(...baseColors, "terminal.background"),
+				translucent,
+				(input, field, value) => {
+					const altered =
+						field === "terminal.background"
+							? {...input, terminal: {...input.terminal, background: value}}
+							: {...input, colors: {...input.colors, [field]: value}};
+					const got = decode(altered);
+					expect(Result.isFailure(got)).toBe(true);
+					expect(Result.isFailure(got) ? got.failure.field : undefined).toBe(
+						field === "terminal.background" ? "terminal.background" : `colors.${field}`,
+					);
+				},
+			),
+			RUNS,
+		);
+	});
+	it("still accepts alpha in every global that is never a stack's bottom", () => {
+		const overlays = globalNames.filter((n) => !(baseColors as readonly string[]).includes(n));
+		fc.assert(
+			fc.property(decodable, fc.constantFrom(...overlays), translucent, (input, field, value) => {
+				expect(
+					Result.isSuccess(decode({...input, colors: {...input.colors, [field]: value}})),
+				).toBe(true);
+			}),
+			RUNS,
+		);
+	});
+	it("checks every theme it accepts, under both policies, without throwing", async () => {
+		const {pairs} = await import("./theme-contract.ts");
+		const {check} = await import("./build/contrast.ts");
+		fc.assert(
+			fc.property(
+				complete,
+				hex,
+				fc.constantFrom("nudge" as const, "off" as const),
+				(input, background, fix) => {
+					const got = decode({...input, terminal: {...input.terminal, background}});
+					// Agreement: whatever the decoder returns, the checker can check.
+					const run = () =>
+						Result.isSuccess(got)
+							? check(got.success, pairs, {fix, contrast: 4.5}, {version: "test-343", cap: 1})
+							: undefined;
+					expect(run).not.toThrow();
 				},
 			),
 			RUNS,

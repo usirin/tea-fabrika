@@ -24,7 +24,9 @@ const FIXTURES = join(import.meta.dirname, "css/fixtures");
 const WINDOW = "apps/fabrika/src/window/window.css";
 const TOKENS = "packages/fabrika-design/src/tokens.css";
 const RULES = [
-	{law: "T343/T22", name: "text-token", lines: [1, 2, 3, 4, 5, 6]},
+	// format: CSS source is this rule's input. Lines 7 to 10 are review 2's alias cases: a text
+	// value in another selector (8) or a forced-colors block (10) must not hide 7 and 9.
+	{law: "T343/T22", name: "text-token", lines: [1, 2, 3, 4, 5, 6, 7, 9]},
 	{law: 21, name: "token-exists", lines: [1, 2, 3, 4]},
 	{
 		law: 22,

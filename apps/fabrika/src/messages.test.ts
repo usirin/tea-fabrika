@@ -201,3 +201,52 @@ describe("the desk's port", () => {
 		expect(readFromPage({type: "restart"}).kind).toBe("refused");
 	});
 });
+
+// T343 review 2, class 1 (T23, T25): the host tells the window its applied theme through today's
+// messages. Contract for build, a ToPage case:
+//
+//   {type: "theme", value: AppliedTheme, version: string,
+//    report: {name, changes, failures, diagnostics}}
+//
+// AppliedTheme is the decoded theme the window draws: format, name, look, the closed 21 global
+// colors, and the terminal. No path or Node object rides along. Plants: widen colors to a string
+// record; accept a partial applied value; let a component name in.
+describe("T23 the applied theme reaches the window closed and complete", () => {
+	const report = {name: "mine", changes: [], failures: [], diagnostics: []};
+	it("reads any complete applied theme and gives it back as sent", async () => {
+		const fc = (await import("fast-check")).default;
+		const {decodable, RUNS} = await import("../../../fixtures/themes/laws.ts");
+		fc.assert(
+			fc.property(decodable, (value) => {
+				const msg = {type: "theme", value, version: "1", report};
+				expect(readToPage(msg)).toEqual({kind: "read", msg});
+			}),
+			RUNS,
+		);
+	});
+	it("refuses a missing global, a component or unknown name, a non-hex value or an extra key", async () => {
+		const fc = (await import("fast-check")).default;
+		const {decodable, globalNames, RUNS} = await import("../../../fixtures/themes/laws.ts");
+		fc.assert(
+			fc.property(
+				decodable,
+				fc.constantFrom(...globalNames),
+				fc.constantFrom("missing", "tile-edge", "--manti-text", "nonhex", "path"),
+				(value, key, how) => {
+					const colors: Record<string, unknown> = {...value.colors};
+					if (how === "missing") delete colors[key];
+					else if (how === "nonhex") colors[key] = "var(--text-primary)";
+					else if (how !== "path") colors[how] = "#ffffff";
+					const altered =
+						how === "path"
+							? {...value, file: "/invented/home/.fabrika/themes/mine.toml"}
+							: {...value, colors};
+					expect(readToPage({type: "theme", value: altered, version: "1", report}).kind).toBe(
+						"refused",
+					);
+				},
+			),
+			RUNS,
+		);
+	});
+});

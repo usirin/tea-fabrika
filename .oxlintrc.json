@@ -261,11 +261,14 @@
 	"overrides": [
 		{
 			"files": [
+				// T343 review 2: every shipped view, the top-level program windows and the keys window
+				// included. plants.test.ts plants beside each one git lists.
 				"apps/fabrika/src/window/**/*.ts",
-				"apps/fabrika/src/window/**/*.tsx",
+				"apps/fabrika/src/**/*.tsx",
 				"programs/*/src/window/**/*.ts",
-				"programs/*/src/window/**/*.tsx",
-				"programs/*/src/view.tsx"
+				"programs/*/src/**/*.tsx",
+				"programs/*/src/**/view.ts",
+				"programs/*/src/**/view.*.ts"
 			],
 			"rules": { "fabrika/no-raw-color": "error" }
 		},

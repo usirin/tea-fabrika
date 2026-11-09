@@ -96,3 +96,67 @@ describe("the window's frame takes the desk's color in the system's look", () =>
 		);
 	});
 });
+
+// T343 review 2, class 1: frame repaint follows the applied theme. Contract for build:
+// `followLook(look, window)` returns `{apply(theme | null)}`. A named theme paints its own
+// surface-sunken and wins over later OS look changes; `null` (no theme, or forced colors) goes back
+// to following the OS with fabrika's built-ins. Nothing is painted after close and no listener
+// stays. Plants: keep painting the OS look over a named theme; paint after close.
+describe("T24 the frame takes the applied theme", () => {
+	it("paints each applied theme, ignores the OS while one is applied, and stops at close", async () => {
+		const {decodable} = await import("@kampus/themes-fixture/laws");
+		const op = fc.oneof(
+			fc.boolean().map((dark) => ({os: dark})),
+			fc.option(decodable, {nil: null}).map((theme) => ({theme})),
+		);
+		fc.assert(
+			fc.property(
+				fc.boolean(),
+				fc.array(op, {maxLength: 16}),
+				fc.nat({max: 16}),
+				(start, ops, at) => {
+					const look = fakeLook(start);
+					const window = fakeWindow();
+					const followed: unknown = followLook(look, window);
+					const apply = applyOf(followed);
+					expect(apply).toBeTypeOf("function");
+					const want: string[] = [];
+					let applied: {colors: {"surface-sunken": string}} | null = null;
+					let dark = start;
+					ops.forEach((o, i) => {
+						if (i === at) window.close();
+						const open = i < at;
+						if ("os" in o) {
+							dark = o.os;
+							look.turn(o.os);
+							if (open && applied === null)
+								want.push((dark ? fabrika : fabrikaLight).colors["surface-sunken"]);
+						} else {
+							applied = o.theme;
+							apply?.(o.theme);
+							if (open)
+								want.push((applied ?? (dark ? fabrika : fabrikaLight)).colors["surface-sunken"]);
+						}
+					});
+					if (at >= ops.length) window.close();
+					expect(window.painted).toEqual(want);
+					expect(look.listeners).toBe(0);
+				},
+			),
+			{seed: 119120, numRuns: 200},
+		);
+	});
+});
+
+/** `followLook`'s returned `apply`, when it has one (build's change; today it returns nothing). */
+const applyOf = (
+	followed: unknown,
+): ((theme: {colors: {"surface-sunken": string}} | null) => void) | undefined => {
+	const apply: unknown =
+		typeof followed === "object" && followed !== null ? Reflect.get(followed, "apply") : undefined;
+	return typeof apply === "function"
+		? (theme) => {
+				Reflect.apply(apply, followed, [theme]);
+			}
+		: undefined;
+};
