@@ -829,6 +829,10 @@ describe("trusted config files", () => {
 					"glob": ".agents/skills/lead/scripts/skillscheck.sh",
 					"why": "the shared skills' source-and-link lint check"
 				},
+				{
+					"glob": ".agents/skills/lead/scripts/loosening.sh",
+					"why": "the check for removed, muted or narrowed laws"
+				},
 				{ "glob": "layer-rules.json", "why": "which way imports may point" },
 				{ "glob": "boundary-rules.json", "why": "which package may import which" },
 				{ "glob": "pnpm-workspace.yaml", "why": "the packages and the catalog's versions" },

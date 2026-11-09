@@ -41,6 +41,49 @@ Every agent may file tracker tickets, even during read-only repo work. Filing cl
 and starts no build.
 ```
 
+The draft check checks the handoff format. Shared shell access cannot prove which session signed.
+Do not add a marker, key or readable file as proof of session identity.
+
+## Review brief template
+
+Use this for the whole diff, including a re-review after fixes:
+
+```text
+Use the review skill for the ticket below.
+Ticket: <id and title>
+Version: <today's tooling or next/>
+Approved plan: <path, including amendments>
+Parent base: <branch and full signed SHA, or origin/main and full SHA>
+Reviewed head: <branch and full SHA>
+Decided notes: <every decided note the PR builds>
+Last fixes: <commit range and report, or none>
+```
+
+Sweep, do not sample. For each law in the plan's table, list every way in: each public call,
+each cut point, and each saved or binding state. Check each one.
+A finding names its class and every case of it.
+A law written as examples over a class the plan names is a defect when a found case escapes
+those examples.
+On a re-review, read every line the last fixes changed and what calls them first. Then finish
+the remaining checks.
+Read every decided note the PR builds, following the plan's references and the change itself.
+Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law.
+Each blocker cites that source and shows the missed case.
+
+Start with merge-ready; tickets: <m> or changes: <n>; tickets: <m>.
+n counts blocking classes. Each class lists every affected case. m counts distinct confirmed
+tracker tickets linked in this answer.
+Give every finding in that answer, grouped by class, most serious first.
+Name each checked decided note and say where the change follows or breaks it.
+Other actionable findings become tracker tickets. Use tracker_query to find an existing ticket,
+or tracker_file with value: {title, body, from: {_tag: "pr", url, step: "review"}}.
+Record the returned ID.
+If filing fails, include the exact pending payload for lead to retry. Do not count it as filed
+or start another review round for it.
+Every agent may file. Filing claims no ticket and starts no build.
+Keep the four reason labels in the review skill. A missed case in a named class checks the law;
+it does not reopen every test's merits.
+
 ## Who runs which step
 
 Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-codex.md) (owner,
@@ -138,6 +181,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
 - Then it pushes `<branch>-wip` (a `-wip` branch as it is) as the bot when the step committed, writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
+  It keeps the box, whatever the step answered, while it holds uncommitted files or commits off the
+  step's branch, and the outcome line's `reason` ends with `(box kept: ...)` saying what is left.
   A stop after the time limit takes the agent's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
   is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
@@ -196,13 +241,29 @@ visible, and never weaken the rules to hide this message.
 8. **Push** with `botpush.mjs` and open the pull request. Its body says which parts were this repo's
    steps, what ran each one, and the dollars.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
-   `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep. An exam
-   change that is all proper property tests merges without the owner's read (owner, 2026-11-08):
-   every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or
-   `scenario:` with its reason; mutation shows no law got narrower; and nothing loosens. You check
-   that and say so in the PR. A change that loosens or removes a law still stays
-   `ask owner exam_read`; never write "owner read" unless the owner did, and give each such merge
-   a field note. Then run `catchup.sh` in the background: it brings the PR up to
+   `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
+   Every new or changed law is a property, or an example labeled vector, format, pinned or
+   scenario with its reason.
+   Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.
+   The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list
+   in the PR. Only real loosening waits on the owner.
+   Apply the labels rule and both zero-hit checks together. These are proper property tests.
+   Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
+   diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed
+   or replaced law, using exact test titles. Save that table as `mapping.md` for the command.
+   A pure addition needs no replacement row. `loosening.sh` fails closed: any exam-file change
+   other than purely new tests or a rename listed in the mapping table is a hit. A pattern parser
+   cannot cover every TypeScript form, so it names forms it knows but never clears a change it
+   does not understand.
+   Missing replacements, muted tests, removed assertions, fewer runs and tighter generated ranges
+   are hits for the lead's hand check. Include the
+   mutation step's narrowing list: a mutant main kills that the branch lets live is a hit too.
+   Before this new check blocks anything, measure false alarms on the last 20 merged `next/`
+   PRs and record the count. Do not claim that measure from generated tests alone.
+   Never write "owner read" unless the owner did. Log each required owner read in a field note.
+   An exam change that is all proper property tests merges without the owner's read (owner,
+   2026-11-08). A change that loosens or removes a law still stays `ask owner exam_read`.
+   Then run `catchup.sh` in the background: it brings the PR up to
    date, signs only the new merge as `lead`, waits for every check on that exact head (e2e and
    commits included) and squash-lands it pinned to that head; a PR in a gh stack lands with
    `gh stack merge <pr> --squash --yes` once its head reads unchanged. Every PR squash-merges, a stacked
@@ -215,6 +276,22 @@ visible, and never weaken the rules to hide this message.
    same, so its links hold; if a tree changed, that child's steps sign again. A child keeps its own
    tests. It never signs a step's commit: an
    unsigned one goes back to its own step.
+   After a successful merge, retain the checked head under refs/keep/pr/<pr> in MAIN.
+   Remove the registered catchup-<pr> worktree, exact-branch boxes through box.sh rm, and the
+   driver's linked MAIN worktree on that exact branch. Never remove MAIN itself.
+   Before each removal, read MAIN's gitdir, common directory, object directory and all alternates
+   from outside. Keep their paths and every link they use. Refuse any removal that contains one.
+   Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates
+   and any box that fails its guard.
+   Print one line per retained item and continue. Cleanup never changes a landed merge's success.
+   Saved plans, reports, logs and state/ remain.
+   Box removal ignores untracked-only files and installs. It requires clean tracked files and
+   every local branch, detached HEAD, stash and step-note tip retained in MAIN. Remote-tracking
+   refs and object presence do not count. Fetch remote-only work into a retained MAIN ref first.
+   HEAD, ORIG_HEAD, refs outside refs/remotes/ and reflogs outside logs/refs/remotes/ need that proof; FETCH_HEAD is a fetched copy, and ORIG_HEAD and config.worktree are ordinary metadata. Keep operation or linked-worktree
+   metadata, unknown state, and any pair holding MAIN or BOXES/state.
+   An annotated tag's own object ID must be reachable under MAIN's retained refs. Keeping only
+   its commit loses the annotation. This also applies to signed tags and tags pointing at tags.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
     `MergeRow`, then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the
     main checkout, plus any build the app needs to start. The owner runs the app from there and
