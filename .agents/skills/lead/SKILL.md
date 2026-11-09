@@ -51,7 +51,8 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
 - **Except Electron or socket work** (owner, 2026-11-08): a step whose laws or shots need the app
   running (a program's window, the desk, keys, the look) or need to bind a socket is run by a Claude
   agent instead. A Codex box can start neither, so a Codex build there would come back half checked.
-  The mutation step is socket work: Stryker binds a port, so it always runs on Claude.
+  The mutation step is socket work: Stryker binds a port, so it always runs on Claude
+  (`drive.ts --agent claude`).
   Still one agent per step.
 - **One fresh Claude agent per step, not one long driver per ticket** (owner, 2026-11-09). Each
   step gets a new agent with a short brief. It reads the lane's state file
@@ -93,30 +94,42 @@ Catch-up retries read-only `gh` failures three times, waiting 1 and 2 seconds. A
 untrusted answer stops immediately. Logs are captured before parsing, so a failed read cannot
 look green. Pushes and merges are never retried by that helper.
 
-## Use drive.ts for any Codex step
+## Use drive.ts for any step
 
-Use `drive.ts` for any Codex step. A Claude agent only reads its result and makes the judgment call.
-Start it in the background and read the last line only:
+Use `drive.ts` for any step, on a Codex box or a Claude agent. A Claude agent in the lead session
+only reads its result and makes the judgment call. Start it in the background and read the last
+line only:
 
 ```sh
-node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|review> <brief.md> \
-	[--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan-only] &
+node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|review> <brief.md> \
+	[--agent codex|claude] [--model sonnet|opus] [--from <ref>] [--ticket <n>] \
+	[--branch fabrikalfa/<name>] [--plan-only] &
 ```
 
+- `--agent codex` (the default) runs Codex in a box. `--agent claude` runs `claude -p` in the same
+  kind of box, with a new `--session-id`, `--model` (default `sonnet`; `opus` when asked), `--tools`
+  per step (a review gets no Edit or Write), no setting sources, no MCP servers, and the step's
+  skill named in its prompt. Its `stream-json` goes to the events file, and `clauderow.py` writes
+  the field row with tokens and list-price dollars.
+- Claude runs under `sandbox-exec`: it cannot read `~/.fabrika/step-keys`, the leak words or
+  `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
+  work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
+- Mutation runs on `--agent claude` only, since it binds ports and starts Electron. One mutation
+  step at a time holds `BOXES/state/electron.lock`; the next waits.
 - It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
   by a step it accepted), else `origin/main`. A plan reads the main checkout and takes no `--from`.
-- It runs Codex with the brief and an `answer:` line it asks for, waits with no agent, fetches,
+- It runs the agent with the brief and an `answer:` line it asks for, waits with no agent, fetches,
   and checks: `pnpm commits check` and this step's name on every new commit, no exam path in any
   build commit, the leak grep on each commit's added lines, a review committing nothing, and
   `plancheck --draft` on a plan. A check that cannot run is `stuck`, never a pass.
 - Then it pushes `<branch>-wip` as the bot when the step committed, writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
-  A stop after the time limit takes Codex's whole process group with it.
+  A stop after the time limit takes the agent's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
-  is in `why`), 30 stuck, 2 usage, 3 refused (8 Codex boxes running). It never retries. A stuck
-  step keeps its box. A tests or build step waits while `pgrep -x tsgo` finds one.
-- The mutation step binds a port, so a Claude agent still runs it. `DRIVE_MINUTES` (default 60)
-  stops a step that runs too long.
+  is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
+  drive started). It never retries. A stuck step keeps its box. A tests, build or mutation step
+  waits while `pgrep -x tsgo` finds one. `DRIVE_MINUTES` (default 60) stops a step that runs too
+  long.
 
 ## Pushes and protected refs
 
