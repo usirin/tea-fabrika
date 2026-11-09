@@ -26,6 +26,10 @@
 		"glob": ".agents/skills/*/scripts/*.test.ts",
 		"why": "the step scripts' laws and planted breaks"
 	},
+	{
+		"glob": ".agents/skills/lead/scripts/skillscheck.sh",
+		"why": "the shared skills' source-and-link lint check"
+	},
 	{ "glob": "layer-rules.json", "why": "which way imports may point" },
 	{ "glob": "boundary-rules.json", "why": "which package may import which" },
 	{ "glob": "pnpm-workspace.yaml", "why": "the packages and the catalog's versions" },
