@@ -4,12 +4,13 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	renameSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {join, relative} from "node:path";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
@@ -107,12 +108,51 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
 	git(work, "config", "user.email", "fixture@example.test");
 	expect(git(main, "remote")).toBe(remote ? "origin" : "");
 	expect(git(work, "remote")).toBe("origin");
-	const run = (chosen = name, extra: Record<string, string> = {}) => {
-		const ran = spawnSync("sh", [script, "rm", chosen], {
+	const run = (
+		chosen = name,
+		extra: Record<string, string> = {},
+		entry: "direct" | "catchup" = "direct",
+	) => {
+		let command = [script, "rm", chosen];
+		if (entry === "catchup") {
+			const bin = join(dir, "cleanup-bin");
+			mkdirSync(bin, {recursive: true});
+			mkdirSync(join(boxes, "catchup-900/node_modules"), {recursive: true});
+			const tip = git(main, "rev-parse", "HEAD");
+			// Run the real catch-up caller and real local cleanup. Only remote reads and the
+			// pre-merge checkout are stubbed. No signing or pushing is reached.
+			const stub = `
+const {spawnSync} = require("node:child_process");
+const cmd = require("node:path").basename(process.argv[1]);
+const args = process.argv.slice(2);
+if (cmd === "gh") {
+  if (args[0] === "pr" && args[1] === "view") console.log("main");
+  else if (args[0] === "pr" && args[1] === "merge") process.exit(0);
+  else if (args[0] === "run") console.log("commits\\tcheck\\t2026-11-08T00:00:00Z commits: 1 commits, ticket 318");
+  else if (args[1].includes("check_name=")) console.log("github-actions");
+  else if (args[1].includes("check-runs?")) console.log(["check", "e2e", "next", "commits"].map(n => n + "\\tcompleted\\tsuccess").join("\\n"));
+  else if (args[1].includes("actions/runs?")) console.log("71\\tpull_request_target\\tcompleted\\tsuccess\\t81");
+  else process.exit(1);
+} else if (cmd === "git") {
+  if (["fetch", "checkout", "merge-base"].includes(args[0])) process.exit(0);
+  if (args[0] === "rev-parse") console.log(args.includes("--short") ? ${JSON.stringify(tip.slice(0, 7))} : ${JSON.stringify(tip)});
+  else {
+    const got = spawnSync("/usr/bin/git", args, {encoding: "utf8"});
+    process.stdout.write(got.stdout || ""); process.stderr.write(got.stderr || "");
+    process.exit(got.status ?? 1);
+  }
+} else process.exit(1);
+`;
+			for (const tool of ["gh", "git"])
+				writeFileSync(join(bin, tool), `#!${process.execPath}\n${stub}`, {mode: 0o755});
+			extra = {...extra, PATH: `${bin}:/usr/bin:/bin`};
+			command = [join(import.meta.dirname, "catchup.sh"), "900", "318"];
+		}
+		const ran = spawnSync("sh", command, {
 			cwd: main,
 			encoding: "utf8",
 			env: {...env, ...extra},
-			timeout: 5_000,
+			timeout: 15_000,
 		});
 		expect(ran.error).toBeUndefined();
 		expect(ran.signal).toBeNull();
@@ -135,6 +175,220 @@ const kept = (f: ReturnType<typeof setup>, code = 1) => {
 };
 
 describe("box rm, today's tooling", () => {
+	// Plant: today's guard protects only MAIN's checkout, so borrowed storage is deleted.
+	// Cover nested alternates and intermediate links through both public callers.
+	it.each(
+		(["direct", "catchup"] as const).flatMap((entry) =>
+			(
+				[
+					"gitdir-root",
+					"shared",
+					"gitdir",
+					"commondir",
+					"objects",
+					"alternates",
+					"alternates-file",
+				] as const
+			).flatMap((binding) =>
+				(binding === "gitdir-root" || binding === "shared"
+					? (["data"] as const)
+					: (["work", "data"] as const)
+				).flatMap((location) =>
+					(binding === "gitdir-root" || binding === "shared" || binding === "alternates-file"
+						? [false]
+						: [false, true]
+					).map((through) => ({entry, binding, location, through})),
+				),
+			),
+		),
+	)(
+		"T318 $entry keeps MAIN storage reached by $binding in $location through link $through",
+		({entry, binding, location, through}) => {
+			fc.assert(
+				fc.property(
+					input,
+					fc.record({
+						parts: fc.array(fc.stringMatching(/^[a-z]{1,8}$/), {minLength: 1, maxLength: 5}),
+						relative: fc.boolean(),
+						hops: fc.integer({min: 2, max: 4}),
+					}),
+					(v, path) =>
+						fixture(v, (f) => {
+							const original = join(f.main, ".git");
+							const history = f.git(f.main, "rev-list", "--objects", "--all");
+							const target = join(
+								location === "work" ? join(f.work, "node_modules") : join(f.data, "objects/info"),
+								...path.parts,
+								"storage",
+							);
+							const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
+							mkdirSync(join(target, ".."), {recursive: true});
+							if (binding === "gitdir-root") {
+								rmSync(original, {recursive: true});
+								writeFileSync(join(f.main, ".git"), `gitdir: ${name(f.main, f.data)}\n`);
+							} else if (binding === "shared") {
+								const borrower = join(f.dir, "borrower");
+								f.git(f.dir, "clone", "-q", "--shared", f.work, borrower);
+								rmSync(original, {recursive: true});
+								renameSync(join(borrower, ".git"), original);
+								expect(readFileSync(join(original, "objects/info/alternates"), "utf8")).toContain(
+									join(f.data, "objects"),
+								);
+							} else if (binding === "alternates-file") {
+								// The objects stay outside the box. Losing this borrowed metadata still
+								// breaks MAIN, even though realpath(objects) points outside the pair.
+								const outside = join(f.dir, "outside-objects");
+								renameSync(join(original, "objects"), outside);
+								mkdirSync(join(original, "objects/info"), {recursive: true});
+								writeFileSync(target, `${name(join(original, "objects"), outside)}\n`);
+								symlinkSync(
+									name(join(original, "objects/info"), target),
+									join(original, "objects/info/alternates"),
+								);
+							} else {
+								const source = ["gitdir", "commondir"].includes(binding)
+									? original
+									: join(original, "objects");
+								const stored = through ? join(f.dir, "outside-storage") : target;
+								renameSync(source, stored);
+								if (through) symlinkSync(name(join(target, ".."), stored), target);
+								if (binding === "gitdir")
+									writeFileSync(original, `gitdir: ${name(f.main, target)}\n`);
+								if (binding === "commondir") {
+									mkdirSync(original);
+									writeFileSync(join(original, "HEAD"), readFileSync(join(stored, "HEAD")));
+									writeFileSync(join(original, "commondir"), `${name(original, target)}\n`);
+								}
+								if (binding === "objects") symlinkSync(name(original, target), source);
+								if (binding === "alternates") {
+									let next = target;
+									for (let i = 0; i < path.hops; i++) {
+										const objects = i === path.hops - 1 ? source : join(f.dir, `alternate-${i}`);
+										mkdirSync(join(objects, "info"), {recursive: true});
+										writeFileSync(join(objects, "info/alternates"), `${name(objects, next)}\n`);
+										next = objects;
+									}
+								}
+							}
+							expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
+							const got = f.run(f.name, {}, entry);
+							expect(got.code, got.text).toBe(entry === "direct" ? 1 : 0);
+							expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`, "m"));
+							expect(existsSync(f.work)).toBe(true);
+							expect(existsSync(f.data)).toBe(true);
+							expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
+						}),
+				),
+				{seed: 31840, numRuns: 4, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: peel a tag to its commit and accept it without retaining its annotation object.
+	// Signature bytes are saved content here, not a claim about signature validity. No key is used.
+	it.each(
+		(["direct", "catchup"] as const).flatMap((entry) =>
+			(["plain", "signed", "nested"] as const).flatMap((kind) =>
+				(kind === "nested"
+					? (["commit-only", "objects-only", "different-tag", "inner-only", "retained"] as const)
+					: (["commit-only", "objects-only", "different-tag", "retained"] as const)
+				).map((retention) => ({entry, kind, retention})),
+			),
+		),
+	)(
+		"T318 $entry preserves $kind annotation objects with $retention retention",
+		({entry, kind, retention}) => {
+			fc.assert(
+				fc.property(
+					input,
+					fc.record({
+						messages: fc.array(fc.string({unit: "grapheme", maxLength: 80}), {
+							minLength: 0,
+							maxLength: 5,
+						}),
+						depth: fc.integer({min: 2, max: 5}),
+						signedInner: fc.boolean(),
+					}),
+					(v, annotation) =>
+						fixture(v, (f) => {
+							const commit = f.git(f.work, "rev-parse", "HEAD");
+							const objects: string[] = [];
+							const raw: string[] = [];
+							const tag = (target: string, message: string, signed: boolean, label = v.name) => {
+								const text = `object ${target}\ntype ${target === commit ? "commit" : "tag"}\ntag ${label}\ntagger Fixture <fixture@example.test> 1794096000 +0000\n\n${message}${signed ? `\n-----BEGIN PGP SIGNATURE-----\n${Buffer.from(v.value).toString("base64")}\n-----END PGP SIGNATURE-----\n` : ""}`;
+								const made = spawnSync("/usr/bin/git", ["-C", f.work, "mktag"], {
+									input: text,
+									encoding: "utf8",
+									env: f.env,
+								});
+								expect(made.status, made.stderr).toBe(0);
+								return {oid: made.stdout.trim(), text};
+							};
+							let target = commit;
+							for (let i = 0; i < (kind === "nested" ? annotation.depth : 1); i++) {
+								const made = tag(
+									target,
+									annotation.messages.join("\n"),
+									kind === "signed" || (kind === "nested" && annotation.signedInner),
+								);
+								objects.push(made.oid);
+								raw.push(made.text);
+								target = made.oid;
+							}
+							const ref = `refs/tags/${v.name}`;
+							f.git(f.work, "update-ref", ref, target);
+							const retainTag = (source: string) =>
+								f.git(f.main, "fetch", "-q", "--no-tags", f.data, `${source}:refs/keep/${v.name}`);
+							if (retention === "retained" || retention === "objects-only") {
+								retainTag(ref);
+								if (retention === "objects-only")
+									f.git(f.main, "update-ref", "-d", `refs/keep/${v.name}`);
+							}
+							if (retention === "different-tag") {
+								const other = tag(commit, annotation.messages.join("\n"), false, `other-${v.name}`);
+								f.git(f.work, "update-ref", `refs/tags/other-${v.name}`, other.oid);
+								retainTag(`refs/tags/other-${v.name}`);
+							}
+							if (retention === "inner-only") retainTag(objects.at(-2)!);
+							const reachable = f
+								.git(f.main, "rev-list", "--objects", "--all")
+								.split("\n")
+								.map((line) => line.split(" ")[0]);
+							expect(reachable.includes(target)).toBe(retention === "retained");
+							if (retention === "commit-only") {
+								const absent = spawnSync("/usr/bin/git", ["-C", f.main, "cat-file", "-e", target], {
+									env: f.env,
+									encoding: "utf8",
+								});
+								expect(absent.status).not.toBe(0);
+							}
+							const got = f.run(f.name, {}, entry);
+							const remove = retention === "retained";
+							expect(got.code, got.text).toBe(entry === "catchup" || remove ? 0 : 1);
+							expect(got.text).toMatch(
+								new RegExp(
+									`^${remove ? "removed" : "kept"} box ${f.name}${remove ? "$" : ": [^\\n]+$"}`,
+									"m",
+								),
+							);
+							expect(existsSync(f.work)).toBe(!remove);
+							expect(existsSync(f.data)).toBe(!remove);
+							for (const [i, oid] of objects.entries()) {
+								const at = remove ? f.main : f.work;
+								const read = spawnSync("/usr/bin/git", ["-C", at, "cat-file", "tag", oid], {
+									env: f.env,
+									encoding: "utf8",
+								});
+								expect(read.status, read.stderr).toBe(0);
+								expect(read.stdout).toBe(raw[i]);
+							}
+						}),
+				),
+				{seed: 31841, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
 	// Plants: count fetched refs, remote reflogs or FETCH_HEAD as saved work; reject ORIG_HEAD
 	// or config.worktree after a completed merge. All are normal in boxes made by box.sh new.
 	it.each([false, true])(

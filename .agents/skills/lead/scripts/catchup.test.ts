@@ -5,11 +5,14 @@ import {
 	mkdtempSync,
 	readFileSync,
 	readdirSync,
+	realpathSync,
+	renameSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {join, relative} from "node:path";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
@@ -34,6 +37,14 @@ type Setup = {
 	trouble?: "list" | "keep" | "unregistered" | "twins" | "missing";
 	protected?: "main-work" | "main-data" | "main-child" | "main-data-child" | "state";
 	protectedDepth?: number;
+	storage?: {
+		binding: "gitdir" | "commondir" | "objects" | "alternates" | "alternates-file";
+		worktree: "catchup-900" | "driver";
+		parts: string[];
+		through: boolean;
+		relative: boolean;
+		hops: number;
+	};
 	// Seconds since the start, read by `date` after that many check reads (the last one repeats).
 	clock?: number[];
 };
@@ -159,6 +170,8 @@ const run = (setup: Setup, args: string[] = []) => {
 		};
 		let checkedTip = tip;
 		let main = dir;
+		let storage = "",
+			history = "";
 		let protectedWork = "",
 			protectedData = "",
 			saved = "";
@@ -167,7 +180,8 @@ const run = (setup: Setup, args: string[] = []) => {
 			git(dir, "config", "user.name", "Fixture");
 			git(dir, "config", "user.email", "fixture@example.test");
 			writeFileSync(join(dir, "tracked"), "base\n");
-			git(dir, "add", "tracked");
+			writeFileSync(join(dir, ".gitignore"), "node_modules/\n");
+			git(dir, "add", "tracked", ".gitignore");
 			git(dir, "commit", "-qm", "base");
 			const base = git(dir, "rev-parse", "HEAD");
 			git(dir, "checkout", "-qb", setup.branch);
@@ -245,6 +259,55 @@ const run = (setup: Setup, args: string[] = []) => {
 				writeFileSync(saved, setup.branch);
 			}
 			expect(git(dir, "remote")).toBe("");
+			if (setup.storage) {
+				const path = setup.storage;
+				const original = join(dir, ".git");
+				storage = join(dir, "boxes", path.worktree, "node_modules", ...path.parts, "storage");
+				mkdirSync(join(storage, ".."), {recursive: true});
+				const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
+				history = git(dir, "rev-list", "--objects", "--all");
+				if (path.binding === "alternates-file") {
+					const outside = join(dir, "outside-objects");
+					renameSync(join(original, "objects"), outside);
+					mkdirSync(join(original, "objects/info"), {recursive: true});
+					writeFileSync(storage, `${name(join(original, "objects"), outside)}\n`);
+					symlinkSync(
+						name(join(original, "objects/info"), storage),
+						join(original, "objects/info/alternates"),
+					);
+				} else {
+					const source = ["gitdir", "commondir"].includes(path.binding)
+						? original
+						: join(original, "objects");
+					const stored = path.through ? join(dir, "outside-storage") : storage;
+					renameSync(source, stored);
+					if (path.through) symlinkSync(name(join(storage, ".."), stored), storage);
+					if (path.binding === "gitdir") symlinkSync(name(dir, storage), original);
+					if (path.binding === "commondir") {
+						mkdirSync(original);
+						writeFileSync(join(original, "HEAD"), readFileSync(join(stored, "HEAD")));
+						writeFileSync(join(original, "commondir"), `${name(original, storage)}\n`);
+						// Linked worktrees already point through MAIN/.git/worktrees. Keep that
+						// spelling valid while the common directory is borrowed from a worktree.
+						symlinkSync(name(original, join(storage, "worktrees")), join(original, "worktrees"));
+					}
+					if (path.binding === "objects") symlinkSync(name(original, storage), source);
+					if (path.binding === "alternates") {
+						let next = storage;
+						for (let i = 0; i < path.hops; i++) {
+							const objects = i === path.hops - 1 ? source : join(dir, `alternate-${i}`);
+							mkdirSync(join(objects, "info"), {recursive: true});
+							writeFileSync(join(objects, "info/alternates"), `${name(objects, next)}\n`);
+							next = objects;
+						}
+					}
+				}
+				expect(git(dir, "rev-list", "--objects", "--all")).toBe(history);
+				expect(git(dir, "check-ignore", storage)).toBe(storage);
+				const registered = git(dir, "worktree", "list", "--porcelain", "-z");
+				for (const worktree of ["catchup-900", "driver"])
+					expect(registered).toContain(`worktree ${realpathSync(join(dir, "boxes", worktree))}\0`);
+			}
 		}
 		writeFileSync(join(dir, "setup.json"), JSON.stringify(setup));
 		for (const cmd of ["gh", "git", "node", "pnpm", "nice", "sleep", "date"]) {
@@ -291,7 +354,20 @@ const run = (setup: Setup, args: string[] = []) => {
 			setup.cleanup && existsSync(join(dir, "boxes/state/driver.md"))
 				? readFileSync(join(dir, "boxes/state/driver.md"), "utf8")
 				: "";
-		const registrations = setup.cleanup ? git(dir, "worktree", "list", "--porcelain", "-z") : "";
+		const registrations = setup.storage
+			? spawnSync("/usr/bin/git", ["-C", dir, "worktree", "list", "--porcelain", "-z"], {
+					encoding: "utf8",
+					env: localEnv,
+				}).stdout
+			: setup.cleanup
+				? git(dir, "worktree", "list", "--porcelain", "-z")
+				: "";
+		const after = setup.storage
+			? spawnSync("/usr/bin/git", ["-C", dir, "rev-list", "--objects", "--all"], {
+					encoding: "utf8",
+					env: localEnv,
+				})
+			: undefined;
 		return {
 			code: ran.status,
 			text: ran.stdout + ran.stderr,
@@ -301,6 +377,13 @@ const run = (setup: Setup, args: string[] = []) => {
 			checkedTip,
 			state,
 			registrations,
+			storage: {
+				exists: existsSync(storage),
+				history,
+				code: after?.status,
+				after: after?.stdout.trim(),
+				error: after?.stderr,
+			},
 			protectedPair: [protectedWork, protectedData].map((path) => existsSync(path)),
 			saved: saved && existsSync(saved) ? readFileSync(saved, "utf8") : "",
 		};
@@ -320,6 +403,54 @@ const assertHead = (calls: Call[]) => {
 };
 
 describe("catchup, today's tooling", () => {
+	// Plant: today's guard protects MAIN's folder alone and removes borrowed Git storage.
+	// Both worktree-removal calls must keep nested alternates and intermediate links, too.
+	it.each(
+		(["catchup-900", "driver"] as const).flatMap((worktree) =>
+			(["gitdir", "commondir", "objects", "alternates", "alternates-file"] as const).flatMap(
+				(binding) =>
+					(binding === "alternates-file" ? [false] : [false, true]).map((through) => ({
+						worktree,
+						binding,
+						through,
+					})),
+			),
+		),
+	)(
+		"T318 $worktree keeps MAIN storage reached by $binding through link $through",
+		({worktree, binding, through}) => {
+			fc.assert(
+				fc.property(
+					fc.record({
+						branch: fc.stringMatching(/^[a-z]{2,10}$/),
+						parts: fc.array(fc.stringMatching(/^[a-z]{1,8}$/), {minLength: 1, maxLength: 5}),
+						relative: fc.boolean(),
+						hops: fc.integer({min: 2, max: 4}),
+					}),
+					({branch, ...path}) => {
+						const got = run({
+							...green,
+							branch: `fabrikalfa/${branch}`,
+							cleanup: "clean",
+							storage: {worktree, binding, through, ...path},
+						});
+						expect(got.code, got.text).toBe(0);
+						expect(merges(got.calls)).toHaveLength(1);
+						expect(got.remaining, got.text).toContain(worktree);
+						expect(got.storage.exists, got.text).toBe(true);
+						expect(got.storage.code, got.storage.error).toBe(0);
+						expect(got.storage.after).toBe(got.storage.history);
+						expect(got.registrations).toContain(`/${worktree}\0`);
+						expect(got.text).toMatch(new RegExp(`^kept worktree ${worktree}: [^\\n]+$`, "m"));
+						expect(got.state).toBe("saved wait");
+						expect(got.keptHead).toBe(got.checkedTip);
+					},
+				),
+				{seed: 31842, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
 	// Plant: box removal accepts a pair holding MAIN or saved driver state.
 	it.each(["main-work", "main-data", "main-child", "main-data-child", "state"] as const)(
 		"T318 cleanup preserves protected %s pairs",
