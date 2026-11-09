@@ -30,7 +30,7 @@ Look E: the ask is one quiet bar under the ticket title, with only a hairline un
 | `every-pick` | Every pick opened as a list under the bar. |
 | `required-note` | Not the rec, with its required note ("Why no?") open and focused: one 2px ring, no second edge. |
 | `needed-true`, `needed-false` | A mark pressed: a check, the selected fill and the words. |
-| `evidence-open` | The evidence opened under the bar, as words. |
+| `evidence-open` | The evidence opened under the bar, as words: the ticket, then every field of the plan (stories, tasks, pointers, each open question with its options, lean, cost, sureness and doubt, and any field a later plan writer added). Each item's fields sit under one bullet. |
 | `running`, `stuck`, `done` | Not your turn: the turn card says what runs, what stopped or what ended. |
 | `saving` | The answer is being saved. |
 | `failed-save` | A save that did not land, with Try again. Its line scrolls into the tile's view when it appears. |
