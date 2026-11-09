@@ -192,8 +192,14 @@ const world = (adapter: "node" | "worker", limit: number, failure: unknown) => {
 		recover: Effect.gen(function* () {
 			const saved = yield* RecoveryStore.use((s) => s.load).pipe(Effect.provide(recovery));
 			expect(saved).not.toBeNull();
-			if (saved?.recovery._tag === "down") {
-				const until = saved.recovery.until;
+			// P34 keeps the restart wait in starting until the restart brake trips.
+			const until =
+				saved?.recovery._tag === "down"
+					? saved.recovery.until
+					: saved?.recovery._tag === "starting" && saved.pending?.type === "start"
+						? saved.pending.until
+						: undefined;
+			if (until !== undefined) {
 				expect(alarm).toBe(until);
 				yield* TestClock.setTime(until);
 				yield* ProgramRunner.use((r) => r.due(until)).pipe(Effect.provide(layer()));
