@@ -7,12 +7,12 @@ per input, holding its whole story) reads best and gates person-only writes per 
 machine for you and gives a step a second return form. Lean: shape 2, about 65%. The doubt is
 shape 3's reading. That is the owner's call, on the files.
 
-**Picked (owner, 2026-11-08, after a walk of each part).** Shape 2, with five changes:
+**Picked (owner, 2026-11-08, after a walk of each part).** Shape 2, with six changes:
 `Fact` becomes `Event`; `personOnly: true` is the one way to say person-only, on an input and on
 an event; an input is plain data and names no events; each event brings its own write Cmd
 (`answered.write`), which the machine lists in `cmds` and calls in `update`, and from which
 `Program.make` reads the events; and the two answers per event write (eight cells for the ticket)
-are accepted for now as a tea problem; and the event knows its stream, so a write stays
+are accepted for now as a tea problem. Last, the event knows its stream, so a write stays
 `answered.write(msg, Answered.make(msg))`. The probe below shows the changes type cleanly. The decided
 note is [a program's shape](../docs/direction/program-shape.md). The shape 2 files now hold the
 decided shape; the judgment table keeps shape 2 as it was proposed.

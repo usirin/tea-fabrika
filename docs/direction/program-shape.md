@@ -49,7 +49,7 @@ export const ticket = Program.make({
 	inputs,
 	view,
 	refuse,
-	outputs: [shown], // the runner reads the events off `cmds`
+	outputs: [shown], // Program.make reads the events off `cmds`
 });
 ```
 
