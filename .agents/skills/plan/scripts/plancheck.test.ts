@@ -1,5 +1,5 @@
 import {spawnSync} from "node:child_process";
-import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import fc from "fast-check";
@@ -212,55 +212,105 @@ describe("plancheck, today's tooling", () => {
 		);
 	});
 
-	// Plant: split a path cell on commas only, as the build did after bfd35fb0.
+	// Plant: split a path cell on commas only, as the build did after bfd35fb0; or read a several-word
+	// item as paths only when every word has a "." or "/", as the build did at 7010d22a.
 	it("every exam path in a multi-path cell keeps its owner check", () => {
+		// Extensionless exam paths come from the exam list itself: every glob with no "." and no "/".
+		const globs = (
+			JSON.parse(
+				readFileSync(join(import.meta.dirname, "../../../../exam-paths.json"), "utf8"),
+			) as {
+				glob: string;
+			}[]
+		).map((row) => row.glob);
+		const bare = globs.filter((glob) => !/[./]/.test(glob));
+		expect(bare).toContain("allowed_signers");
 		const exam = [
 			"package.json",
 			"vitest.config.ts",
 			"exam-paths.json",
 			".github/workflows/check.yaml",
 			"oxlint-plugins/laws.ts",
+			...bare,
 		];
-		const plainPaths = ["src/plain.ts", "README.md", "packages/pipeline/package.json"];
+		const plainPaths = [
+			"src/plain.ts",
+			"README.md",
+			"packages/pipeline/package.json",
+			"Makefile",
+			"LICENSE",
+		];
 		fc.assert(
 			fc.property(
 				fc.record({
-					picked: fc.uniqueArray(fc.constantFrom(...exam, ...plainPaths), {
-						minLength: 1,
-						maxLength: 4,
-					}),
+					picked: fc.uniqueArray(
+						fc.record({path: fc.constantFrom(...exam, ...plainPaths), tick: fc.boolean()}),
+						{minLength: 1, maxLength: 4, selector: (entry) => entry.path},
+					),
 					separators: fc.array(fc.constantFrom(", ", ",", "; ", ";", " and ", " ", ", and "), {
 						minLength: 3,
 						maxLength: 3,
 					}),
-					ticks: fc.boolean(),
 					owner: fc.constantFrom("tests", "build", "lead", "mutation"),
 				}),
-				({picked, separators, ticks, owner}) => {
+				({picked, separators, owner}) => {
 					const cell = picked
-						.map((p) => (ticks ? `\`${p}\`` : p))
+						.map(({path, tick}) => (tick ? `\`${path}\`` : path))
 						.reduce((joined, p, i) => `${joined}${separators[i - 1]}${p}`);
-					const got = check(table(["File", "Why", "Owner step"], [[cell, "the fix", owner]]));
-					const owned = picked.filter((p) => exam.includes(p));
-					const bad = owner !== "tests" && owned.length > 0;
-					expect(got.code, `${cell}\n${got.text}`).toBe(bad ? 1 : 0);
-					for (const p of picked) {
-						const line = `${p} is an exam path owned by ${owner}, not tests`;
-						if (bad && owned.includes(p)) expect(got.text, cell).toContain(line);
-						else expect(got.text, cell).not.toContain(line);
+					// Items are split by commas and semicolons. An item of several words that holds a bare,
+					// unticked name with no "." or "/" that is not an exam path may be read as a sentence, so
+					// its exam paths may go either way. Every other exam path must be checked.
+					const items: (typeof picked)[] = [];
+					picked.forEach((entry, i) => {
+						if (i === 0 || /[,;]/.test(separators[i - 1]!)) items.push([entry]);
+						else items.at(-1)!.push(entry);
+					});
+					const loose = (item: typeof picked) =>
+						item.length > 1 &&
+						item.some((e) => !e.tick && !/[./]/.test(e.path) && !exam.includes(e.path));
+					const sure = items.filter((item) => !loose(item)).flat();
+					const maybe = items.filter(loose).flat();
+					const wrong = owner !== "tests";
+					const owned = sure.filter((e) => exam.includes(e.path)).map((e) => e.path);
+					const open = maybe.filter((e) => exam.includes(e.path)).map((e) => e.path);
+					const line = (p: string) => `${p} is an exam path owned by ${owner}, not tests`;
+					const ran = check(table(["File", "Why", "Owner step"], [[cell, "the fix", owner]]));
+					// The answers the rule allows: a sure exam path decides, an open one may go either way.
+					const codes = wrong && owned.length > 0 ? [1] : wrong && open.length > 0 ? [0, 1] : [0];
+					expect(codes, `${cell}\n${ran.text}`).toContain(ran.code);
+					for (const {path} of picked) {
+						const named =
+							wrong && open.includes(path) ? [true, false] : [wrong && owned.includes(path)];
+						expect(named, `${path} in ${cell}\n${ran.text}`).toContain(
+							ran.text.includes(line(path)),
+						);
 					}
 				},
 			),
 			{
 				...options,
-				// pinned: ticket 520 review round 4, semicolon-separated paths in a path cell. The old
-				// script (bfd35fb0) refused this build-owned cell; the comma-only split passed it.
 				examples: [
+					// pinned: ticket 520 review round 4, semicolon-separated paths in a path cell. The old
+					// script (bfd35fb0) refused this build-owned cell; the comma-only split passed it.
 					[
 						{
-							picked: ["package.json", "vitest.config.ts"],
+							picked: [
+								{path: "package.json", tick: true},
+								{path: "vitest.config.ts", tick: true},
+							],
 							separators: ["; ", "; ", "; "],
-							ticks: true,
+							owner: "build",
+						},
+					],
+					// pinned: ticket 520 review round 2 of the build, an extensionless exam path in an "and"
+					// list. Main refused `allowed_signers` and `package.json` owned by build; 7010d22a passed it.
+					[
+						{
+							picked: [
+								{path: "allowed_signers", tick: true},
+								{path: "package.json", tick: true},
+							],
+							separators: [" and ", " and ", " and "],
 							owner: "build",
 						},
 					],
