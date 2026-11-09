@@ -554,6 +554,8 @@ const handlers = (env: Env) => {
 					cmd.ticket,
 					"--plan",
 					cmd.plan,
+					"--root",
+					cmd.root,
 				);
 				writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
 				return {ok: r.code === 0, detail: r.code === 0 ? "" : `box.sh new: ${tail(r.err)}`};
