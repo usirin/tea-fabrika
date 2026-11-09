@@ -165,11 +165,13 @@ describe("one TOML file per color token, flat in tokens/color/", () => {
 		expect(files).toEqual(TOKENS.map((t) => `${t}.toml`).sort());
 	});
 
-	it("puts manti.toml and parts.toml beside the color folder, and nothing else", () => {
+	// format: this directory is the closed set of token-build inputs, including repair calibration.
+	it("format: keeps the token inputs and the explicit repair calibration beside color", () => {
 		expect(readdirSync(join(PACKAGE, "tokens")).sort()).toEqual([
 			"color",
 			"manti.toml",
 			"parts.toml",
+			"repair.toml",
 		]);
 	});
 

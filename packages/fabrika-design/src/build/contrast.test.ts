@@ -184,7 +184,7 @@ describe("it agrees with the second implementation", () => {
 // fast-check generates invalid/boundary mixtures for which no Effect schema exists.
 describe("T5 signed APCA and WCAG on drawn colors", () => {
 	it("agrees with independent equations for alpha layers and either polarity", async () => {
-		const reference = await import("../../../../fixtures/themes/laws.ts");
+		const reference = await import("@kampus/themes-fixture/laws");
 		const checker = await import("./contrast.ts");
 		fc.assert(
 			fc.property(
@@ -211,7 +211,7 @@ describe("T5 signed APCA and WCAG on drawn colors", () => {
 
 describe("T6 both floors, with unrounded readings", () => {
 	it("requires each floor independently at, just below and just above its reading", async () => {
-		const {reading} = await import("../../../../fixtures/themes/laws.ts");
+		const {reading} = await import("@kampus/themes-fixture/laws");
 		const {passes} = await import("./contrast.ts");
 		fc.assert(
 			fc.property(anyColor, solid, (fg, bg) => {
@@ -230,7 +230,7 @@ describe("T6 both floors, with unrounded readings", () => {
 		);
 	});
 	it("uses text 4.5/Lc60 and non-text 3/Lc15 in either polarity", async () => {
-		const {meets} = await import("../../../../fixtures/themes/laws.ts");
+		const {meets} = await import("@kampus/themes-fixture/laws");
 		const {passes} = await import("./contrast.ts");
 		fc.assert(
 			fc.property(
@@ -261,26 +261,26 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 		const {
 			complete,
 			lab,
-			fromLab,
-			channels,
+			labBounds,
 			opacity,
 			RUNS: runs,
-		} = await import("../../../../fixtures/themes/laws.ts");
+		} = await import("@kampus/themes-fixture/laws");
 		const {check} = await import("./contrast.ts");
 		fc.assert(
 			fc.property(complete, (theme) => {
 				const before = structuredClone(theme);
 				const pairs = [
-					pair("text"),
-					pair("faint"),
-					pair("focus", "ground", {wcag: 3, apca: 15}),
+					// The base of each drawn stack is solid; ground itself may carry alpha.
+					pair("text", "ground/terminal.background"),
+					pair("faint", "ground/terminal.background"),
+					pair("focus", "ground/terminal.background", {wcag: 3, apca: 15}),
 					pair("cursor", "terminal.background", {wcag: 3, apca: 15}),
 				];
 				const got = check(theme, pairs, {fix: "nudge", contrast: 4.5}, version);
 				expect(check(theme, pairs, {fix: "nudge", contrast: 4.5}, version)).toEqual(got);
 				expect(theme).toEqual(before);
 				expect(got.written).toEqual(before);
-				for (const name of ["desk", "ground", "raised", "hover", "edge"])
+				for (const name of ["desk", "ground", "raised", "hover", "edge"] as const)
 					expect(got.shown.colors[name]).toBe(theme.colors[name]);
 				expect(got.shown.terminal.background).toBe(theme.terminal.background);
 				expect(got.shown.terminal.palette).toEqual(theme.terminal.palette);
@@ -289,15 +289,12 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 						c._tag === "moved",
 				)) {
 					const from = lab(change.was),
-						to = lab(change.now);
-					// Reconstruct with the original chroma/hue. Serialization has one 8-bit channel quantum.
-					const unchangedHue = fromLab(to[0], from[1], from[2]);
-					expect(unchangedHue).not.toBeNull();
-					expect(
-						channels(unchangedHue ?? "#000000").every(
-							(n, i) => Math.abs(n - channels(change.now)[i]!) <= 1,
-						),
-					).toBe(true);
+						bounds = labBounds(change.now);
+					// The emitted byte cell must contain the original hue and chroma.
+					for (const i of [1, 2]) {
+						expect(from[i]!).toBeGreaterThanOrEqual(bounds[i]![0]!);
+						expect(from[i]!).toBeLessThanOrEqual(bounds[i]![1]!);
+					}
 					expect(opacity(change.now)).toBe(opacity(change.was));
 				}
 			}),
@@ -305,7 +302,7 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 		);
 	});
 	it("T10 has no smaller passing move among every representable achromatic candidate", async () => {
-		const {complete, gray, lab, meets} = await import("../../../../fixtures/themes/laws.ts");
+		const {complete, gray, lab, meets} = await import("@kampus/themes-fixture/laws");
 		const {check} = await import("./contrast.ts");
 		fc.assert(
 			fc.property(complete, fc.integer({min: 0, max: 255}), fc.boolean(), (theme, n, light) => {
@@ -325,8 +322,34 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 			RUNS,
 		);
 	});
+	it("T9 resolves a foreground alias and an alpha background stack before repairing", async () => {
+		const {complete, solid, alpha, composite, meets} = await import("@kampus/themes-fixture/laws");
+		const {check} = await import("./contrast.ts");
+		fc.assert(
+			fc.property(complete, solid, alpha, (theme, base, overlay) => {
+				const input = {
+					...theme,
+					colors: {...theme.colors, ground: base, hover: overlay, faint: "text"},
+				};
+				const requirements = [pair("faint", "hover/ground")];
+				const got = check(input, requirements, {fix: "nudge", contrast: 4.5}, version);
+				expect(got.shown.colors.faint).toBe("text");
+				expect(got.shown.colors.ground).toBe(base);
+				expect(got.shown.colors.hover).toBe(overlay);
+				expect(got.failures.length === 0).toBe(
+					meets(got.shown.colors.text!, composite(overlay, base)),
+				);
+				const flattened = {...input, colors: {...input.colors, raised: composite(overlay, base)}};
+				expect(
+					check(flattened, [pair("text", "raised")], {fix: "nudge", contrast: 4.5}, version).shown
+						.colors.text,
+				).toBe(got.shown.colors.text);
+			}),
+			RUNS,
+		);
+	});
 	it("T10 satisfies every backdrop together, or reports impossibility", async () => {
-		const {complete, gray, meets} = await import("../../../../fixtures/themes/laws.ts");
+		const {complete, gray, meets} = await import("@kampus/themes-fixture/laws");
 		const {check} = await import("./contrast.ts");
 		fc.assert(
 			fc.property(complete, fc.integer({min: 0, max: 255}), (theme, n) => {
@@ -359,7 +382,7 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 		);
 	});
 	it("T11 past-cap fallback touches only that token and uses its own look", async () => {
-		const {complete, gray, lab} = await import("../../../../fixtures/themes/laws.ts");
+		const {complete, gray, lab} = await import("@kampus/themes-fixture/laws");
 		const {check} = await import("./contrast.ts");
 		fc.assert(
 			fc.property(complete, fc.boolean(), (theme, light) => {
@@ -389,7 +412,7 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 		);
 	});
 	it("T11 never reports a failed replacement as passing", async () => {
-		const {complete, meets} = await import("../../../../fixtures/themes/laws.ts");
+		const {complete, meets} = await import("@kampus/themes-fixture/laws");
 		const {check} = await import("./contrast.ts");
 		fc.assert(
 			fc.property(complete, fc.boolean(), (theme, light) => {
@@ -408,12 +431,23 @@ describe("T9-T12 bounded, lightness-only repair", () => {
 		);
 	});
 	it("T12 off preserves every color and still lists the failing pairs", async () => {
-		const {complete} = await import("../../../../fixtures/themes/laws.ts");
+		const {complete, composite} = await import("@kampus/themes-fixture/laws");
 		const {check} = await import("./contrast.ts");
 		fc.assert(
 			fc.property(complete, fc.double({min: 4.5, max: 21, noNaN: true}), (theme, contrast) => {
-				const input = {...theme, colors: {...theme.colors, text: theme.colors.ground}};
-				const got = check(input, [pair()], {fix: "off", contrast}, version);
+				const input = {
+					...theme,
+					colors: {
+						...theme.colors,
+						text: composite(theme.colors.ground!, theme.terminal.background),
+					},
+				};
+				const got = check(
+					input,
+					[pair("text", "ground/terminal.background")],
+					{fix: "off", contrast},
+					version,
+				);
 				expect(got.shown).toEqual(input);
 				expect(got.written).toEqual(input);
 				expect(got.failures.length).toBeGreaterThan(0);

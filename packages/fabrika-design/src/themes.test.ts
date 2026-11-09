@@ -894,7 +894,7 @@ describe("law 16: the terminal's names keep ANSI order", () => {
 // Plant: keep a WCAG-only exemption, skip hovered/selected backgrounds, or use |Lc| < 60.
 describe("T7 built-in picks pass both floors", () => {
 	it("checks every existing text role on every resting, hovered and selected backdrop", async () => {
-		const {apca, wcag} = await import("../../../fixtures/themes/laws.ts");
+		const {apca, wcag} = await import("@kampus/themes-fixture/laws");
 		const names = [
 			"--text-primary",
 			"--text-faint",
@@ -976,6 +976,11 @@ describe("T13 kept source bytes and versioned calibration", () => {
 			unreadable: {result: unknown};
 		};
 		const token = parse(readFileSync(repair, "utf8"));
+		expect(
+			report,
+			"T13 is unmeasured until the generated pairs and visual review exist",
+		).toHaveProperty("status", "measured");
+		expect(token["status"]).toBe("measured");
 		expect(token["version"]).toBe(report.version);
 		expect(token["cap"]).toBe(report.cap);
 		expect(report.cap).toBe(Math.max(...report.moves.map((move) => move.move)));
@@ -990,7 +995,7 @@ describe("T13 kept source bytes and versioned calibration", () => {
 			...report.themes,
 			{name: "unreadable-made-up", result: report.unreadable.result},
 		]) {
-			const written = Result.getOrThrow(
+			const written = Result.getOrThrow<Parameters<typeof check>[0], unknown>(
 				decodeTheme(readFileSync(join(fixture, "mapped", `${name}.toml`), "utf8")),
 			);
 			expect(

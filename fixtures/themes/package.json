@@ -1,0 +1,7 @@
+{
+	"name": "@kampus/themes-fixture",
+	"private": true,
+	"type": "module",
+	"exports": {"./laws": "./laws.ts"},
+	"devDependencies": {"fast-check": "catalog:"}
+}

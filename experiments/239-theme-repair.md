@@ -12,16 +12,21 @@ bright roles, and uses the themes note's stated OKLCH ladder fractions. A mappin
 outside sRGB stops rather than clipping channels. The current fifteen file keys
 follow the note; the plan's token rename is still a gate before shipping format 1.
 
-`node experiments/239-theme-repair.ts` cannot measure yet. Today's checker only
-exports `over` and `ratio`. It has no APCA measurement, multi-background repair,
-or generated pair contract. No measured cap, expected repair count, or repair
-version has been filled in. Historical WCAG-only counts are not expected results.
+`node experiments/239-theme-repair.ts` cannot measure yet. Today's checker now
+exports `measure`, `passes` and `check`, including signed APCA and repair over all
+listed backgrounds. The generated `theme-contract.ts` is still missing. The
+builder owns that file, the final global names, and their pairs and floors. The
+script was run again and stopped at that missing import, before any measurement.
+`fixtures/themes/calibration.json` and `tokens/repair.toml` explicitly record
+`unmeasured`. No cap, expected repair count or repair version has been filled in.
+Historical WCAG-only counts are not expected results.
 
 Once those exports exist, the script first runs with the full lightness interval
 available, sorts every required move, selects the maximum from the five real
 schemes, then checks the same inputs with that cap. It writes raw reports under
 `runs/` or the path given by `--output`. The test writer must review the report,
-add the invented case's fallback report, and pin `tokens/repair.toml` plus
+add the invented case's fallback report, and replace `unmeasured` with a measured
+status, cap and repair version in `tokens/repair.toml` plus
 `fixtures/themes/calibration.json`. The builder cannot bless those results.
 
 The tests additionally compare against independent WCAG and signed SAPC equations

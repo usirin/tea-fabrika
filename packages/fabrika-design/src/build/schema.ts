@@ -27,6 +27,41 @@ import {Cause, Exit, Schema} from "effect";
 /** A token's name, which is its file's name: lowercase words joined by hyphens. */
 const Name = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/));
 
+/** Radix Colors 3.0.0's six grays and twenty-five accents, without P3 variants. */
+const Scale = Schema.Literals([
+	"gray",
+	"mauve",
+	"slate",
+	"sage",
+	"olive",
+	"sand",
+	"tomato",
+	"red",
+	"ruby",
+	"crimson",
+	"pink",
+	"plum",
+	"purple",
+	"violet",
+	"iris",
+	"indigo",
+	"blue",
+	"cyan",
+	"teal",
+	"jade",
+	"green",
+	"grass",
+	"brown",
+	"bronze",
+	"gold",
+	"sky",
+	"mint",
+	"lime",
+	"yellow",
+	"amber",
+	"orange",
+]);
+
 /** A Radix 3.0.0 step: a scale and a step, `a` for alpha. Black and white come in alpha only. */
 const Step = Schema.String.check(
 	Schema.isPattern(/^(?:(?:slate|indigo|grass|amber|red)\.a?|(?:black|white)\.a)(?:[1-9]|1[0-2])$/),
@@ -86,7 +121,7 @@ const Own = Schema.Struct({
 	/** For a value no fact rides on: another cue identifies the part, so it needs no floor. */
 	carries: Schema.optionalKey(Schema.Literal("nothing")),
 	except: Schema.optionalKey(Schema.NonEmptyArray(Except)),
-	colors: Schema.Struct({dark: Value, light: Value}),
+	colors: Schema.Union([Schema.Struct({dark: Value, light: Value}), Schema.Struct({scale: Scale})]),
 });
 export type Own = typeof Own.Type;
 
@@ -228,7 +263,11 @@ export const checkAcross = ({tokens, manti, parts, hand}: Sources): readonly str
 		if (type === "background" && carries !== undefined) {
 			bad(name, "carries", "a background needs no floor, so it says nothing it carries");
 		}
-		if ((isTranslucent(colors.dark) || isTranslucent(colors.light)) && on === undefined) {
+		if (
+			!("scale" in colors) &&
+			(isTranslucent(colors.dark) || isTranslucent(colors.light)) &&
+			on === undefined
+		) {
 			bad(name, "on", "a translucent value names its backdrop");
 		}
 		if ((floor !== undefined || aim !== undefined) && on === undefined) {

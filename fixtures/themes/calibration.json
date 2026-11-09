@@ -1,0 +1,6 @@
+{
+	"status": "unmeasured",
+	"reason": "The generated theme-contract.ts pair list is missing. T13 cannot measure a cap until the builder supplies the final global names, aliases, backdrop pairs and floors. No cap, repair version or repair counts have been guessed. Fixture screenshots have not been reviewed.",
+	"policy": {"fix": "nudge", "contrast": 4.5},
+	"providerFees": 0
+}

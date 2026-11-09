@@ -64,6 +64,27 @@ export const lab = (c: string) => {
 		0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
 	] as const;
 };
+
+// Bound every Oklab coordinate in an output byte's rounding cell. A lightness move
+// can shift two RGB bytes when re-encoded from the *rounded* L near a gamut edge.
+// Interval arithmetic avoids assuming that round-trip stays within one byte.
+export const labBounds = (color: string) => {
+	const rgb = channels(color).map((n) => [linear(Math.max(0, n - 0.5)), linear(Math.min(255, n + 0.5))]);
+	const combine = (weights: readonly number[], values: readonly (readonly number[])[]) => [
+		weights.reduce((sum, w, i) => sum + w * values[i]![w < 0 ? 1 : 0]!, 0),
+		weights.reduce((sum, w, i) => sum + w * values[i]![w < 0 ? 0 : 1]!, 0),
+	];
+	const lms = [
+		[0.4122214708, 0.5363325363, 0.0514459929],
+		[0.2119034982, 0.6806995451, 0.1073969566],
+		[0.0883024619, 0.2817188376, 0.6299787005],
+	].map((weights) => combine(weights, rgb).map(Math.cbrt));
+	return [
+		[0.2104542553, 0.793617785, -0.0040720468],
+		[1.9779984951, -2.428592205, 0.4505937099],
+		[0.0259040371, 0.7827717662, -0.808675766],
+	].map((weights) => combine(weights, lms));
+};
 export const globalNames = [
 	"desk",
 	"ground",
@@ -81,7 +102,23 @@ export const globalNames = [
 	"stuck",
 	"closed",
 ] as const;
-export const colors = fc.record(Object.fromEntries(globalNames.map((key) => [key, hex])));
+export const colors = fc.record({
+	desk: hex,
+	ground: hex,
+	raised: hex,
+	hover: hex,
+	edge: hex,
+	focus: hex,
+	text: hex,
+	faint: hex,
+	"turn-fill": hex,
+	"on-turn": hex,
+	"turn-text": hex,
+	done: hex,
+	running: hex,
+	stuck: hex,
+	closed: hex,
+});
 export const terminal = fc.record({
 	foreground: hex,
 	background: solid,

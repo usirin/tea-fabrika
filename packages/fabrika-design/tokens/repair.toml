@@ -1,0 +1,6 @@
+# Today's app, T343/T13. This is not a measured or accepted repair policy.
+# The generated theme-contract.ts pair list is missing. T13 cannot measure a cap
+# until the builder supplies the final global names, aliases, backdrop pairs and
+# floors. No cap, repair version or repair counts have been guessed.
+# Fixture screenshots have not been reviewed.
+status = "unmeasured"

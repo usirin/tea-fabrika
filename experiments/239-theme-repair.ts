@@ -7,7 +7,12 @@ import {mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {createRequire} from "node:module";
 import {dirname, join} from "node:path";
 import {stringify} from "smol-toml";
-import {lab, mix, wcag} from "../fixtures/themes/laws.ts";
+
+// Resolve the fixture package from itself, so this standalone script needs no root dependency.
+const fixture = createRequire(new URL("../fixtures/themes/package.json", import.meta.url));
+const {lab, mix, wcag}: typeof import("@kampus/themes-fixture/laws") = fixture(
+	"@kampus/themes-fixture/laws",
+);
 
 const require = createRequire(new URL("../oxlint-plugins/package.json", import.meta.url));
 const {parse} = require("yaml") as {

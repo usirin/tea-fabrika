@@ -1,10 +1,10 @@
 // Today's app, T343 PR 1. Plants: accept contrast=3; clamp 22 to 21; preprocess [theme].
 import {readFileSync} from "node:fs";
+import {name, RUNS} from "@kampus/themes-fixture/laws";
 import {Result} from "effect";
 import fc from "fast-check";
 import {parse} from "smol-toml";
 import {describe, expect, it} from "vitest";
-import {name, RUNS} from "../../../fixtures/themes/laws.ts";
 import {decodeThemeSettings, readThemeSettings} from "./theme-settings.ts";
 
 const fixture = (file: string) =>

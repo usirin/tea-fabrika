@@ -15,6 +15,7 @@ packages:
   - docs/tutorials/*
   - oxlint-plugins
   - .github/ci
+  - fixtures/themes
   - experiments/142-web-terminals
   - experiments/171-alchemy-local-twin
   - experiments/173-worker-loader

@@ -321,6 +321,31 @@ describe("what a value is", () => {
 
 // Today's app, T343/T8 input law. Plant: leave scale choices unsupported and move steps at runtime.
 describe("T8 build-time scale choices", () => {
+	it("refuses unknown scales and a scale mixed with per-look values", async () => {
+		const {default: fc} = await import("fast-check");
+		fc.assert(
+			fc.property(fc.string(), (unknown) => {
+				const common = {
+					type: "text",
+					tier: "global",
+					owner: "design",
+					description: "scale refusal",
+					on: ["surface"],
+					floor: 4.5,
+				};
+				expect(
+					decodeToken("text-test.toml", {...common, colors: {scale: `unknown-${unknown}`}})._tag,
+				).toBe("bad");
+				expect(
+					decodeToken("text-test.toml", {
+						...common,
+						colors: {scale: "slate", dark: "slate.11", light: "slate.11"},
+					})._tag,
+				).toBe("bad");
+			}),
+			{seed: 119120, numRuns: 150},
+		);
+	});
 	it("accepts every decided Radix scale as a global text choice", async () => {
 		const {default: fc} = await import("fast-check");
 		const scales = [

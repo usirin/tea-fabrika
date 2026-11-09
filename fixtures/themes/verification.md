@@ -126,3 +126,70 @@ The previous run's commit was refused with `not_owner`: the saved plan used
 placeholder experiment names and a fixture glob. The lead expanded the table to
 the individual fixture files and experiment 239. This run restores that saved
 work and checks it under the corrected plan without changing product code.
+
+## Protected checker follow-up
+
+Today's app, ticket 343. This is a new tests commit on the signed `faeb2415`
+head. Earlier laws, fixture bytes and their hashes are kept.
+
+The tests-owned checker now exports `measure`, `passes` and `check`. It compares
+WCAG and signed APCA on composited bytes, resolves aliases, groups all backgrounds
+for each token, and searches both lightness directions without clipping channels.
+The search visits output-byte boundaries rather than a guessed lightness grid.
+It keeps hue, chroma and alpha, applies per-token fallback from the correct look,
+and reports final failures. `off` keeps the input and reports proposed changes.
+
+The token decoder accepts the closed set of 31 Radix scales through
+`colors.scale`. It refuses unknown scales and mixtures of scales with fixed steps.
+The builder still must resolve scale choices rather than indexing per-look values.
+
+Two repair-test inputs formerly put alpha colors at the bottom of a background
+stack. They now name the solid terminal backdrop too; all generated alpha colors
+remain covered. The original hue check incorrectly assumed that re-encoding a
+rounded Oklab lightness differs by at most one RGB byte. For the generated
+`#3bb5bb` focus color, a valid lightness-only move emits `#069aa0`, while that
+round trip emits `#089aa0`. The replacement check bounds the Oklab coordinates of
+the full output-byte rounding cell, independently of the production search.
+It still rejects changed chroma, hue or alpha. A new property compares aliases
+and alpha stacks with their independently flattened equivalents.
+
+The six-file narrow run had 239 passing checks, two failing checks and one older
+skip. Two suites could not collect because `theme.ts` and `theme-settings.ts` are
+still absent. The two failures are T7's current built-in APCA values and T13's
+explicitly unmeasured report. The last checker/decoder run had all 67 checks
+passing. Seed 119120 was used throughout. No full suite ran.
+
+Thirteen isolated source changes were all caught: skipping alpha, swapping APCA
+polarity, rounding readings, accepting either floor, changing chroma, dropping
+alpha, changing a background, stopping the search early, ignoring the cap,
+hiding a failed replacement, ignoring `off`, ignoring aliases and opening scales.
+The temporary source replacements never changed the working product files.
+
+The fixture helper is now a named workspace package, and tests import it by name.
+The standalone calibration script resolves that package from itself. The builder
+must add `@kampus/themes-fixture` as a design-package test dependency, pin
+`apca-w3` to 0.1.9, supply its narrow declaration and update the lockfile. Validation
+used the maker's 0.1.9 source in a temporary local package. No dependency manifest
+owned by build was edited here.
+
+`calibration.json` and `tokens/repair.toml` both say `unmeasured`. Experiment 239
+was run and stopped at the missing generated `theme-contract.ts`. It cannot
+measure the cap until the final names, aliases, background pairs and floors exist.
+No cap, repair version or fallback counts were invented. Screenshots and visual
+cap review remain undone. After generating the contract, build must return T13
+to tests for measurement and review.
+
+`pnpm format` ran first. The full lint command stopped on new non-null assertions,
+which were removed. Targeted lint and formatting then passed. The remaining lint
+checks passed separately: exact versions, layers, package boundaries, browser
+imports, dead exports, compiler, generated tokens and CSS. The dependency links
+were restored from an installation matching this branch's lockfile after an
+automatic install failed on network access. A temporary newer code-graph was
+replaced with the pinned 0.12.0 before accepting its results. No ledger changed.
+
+One compiler run of `pnpm typecheck` completed. It failed on missing product
+modules and the APCA declaration, plus the builder's unhandled scale choice.
+Test-side indexing and decoder-result inference errors were corrected afterward;
+the full typecheck was not repeated. An earlier command attempt stopped in an
+automatic install before reaching the compiler. No Electron or provider run
+started. Provider fees remain $0.

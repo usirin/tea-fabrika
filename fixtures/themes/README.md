@@ -12,5 +12,8 @@ The global file keys currently follow the fifteen names in the themes note.
 The plan requires the token rename before format 1 ships. These tests must move
 with that rename; they do not approve publishing the old names as another format.
 
-Calibration is pending the shared checker. No cap, repair count, mapped result,
-or repair version is guessed here. Experiment 239 records that dependency.
+The shared checker now provides WCAG, signed APCA and lightness-only repair.
+Calibration is still blocked on the generated `theme-contract.ts` pairs and the
+final global token names. `calibration.json` and `tokens/repair.toml` say
+`unmeasured`; neither contains a guessed cap, repair count or repair version.
+Experiment 239 records the missing inputs and the required visual review.

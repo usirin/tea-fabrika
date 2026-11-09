@@ -1,10 +1,10 @@
+import {complete, globalNames, hex, name, RUNS} from "@kampus/themes-fixture/laws";
 // Today's app, T343 PR 1. Plant: merge partial input with fabrika; accept two sources;
 // compare repaired.cursor with colors.text instead of terminal.cursor.
 import {Result} from "effect";
 import fc from "fast-check";
 import {stringify} from "smol-toml";
 import {describe, expect, it} from "vitest";
-import {complete, globalNames, hex, name, RUNS} from "../../../fixtures/themes/laws.ts";
 import {decodeTheme} from "./theme.ts";
 
 const decode = (input: unknown) => decodeTheme(stringify(input as Record<string, unknown>));
@@ -222,12 +222,13 @@ describe("T2 source and repair records", () => {
 				),
 				hex,
 				(input, token, was) => {
+					const colors: Readonly<Record<string, string>> = input.colors;
 					expect(
 						Result.isFailure(
 							decode({
 								...input,
 								repaired: {
-									[token]: {was, now: input.colors[token] ?? was, why: "not a repairable token"},
+									[token]: {was, now: colors[token] ?? was, why: "not a repairable token"},
 								},
 							}),
 						),
