@@ -43,7 +43,6 @@ import {
 	LedgerTransaction,
 	lineFor,
 	fromHere,
-	IdGenerator,
 	RecordManager,
 	Referee,
 	SpanSink,
@@ -51,6 +50,7 @@ import {
 	type Sql,
 } from "../data/index.ts";
 import {workerSql} from "../data/worker-sql.ts";
+import * as Id from "../id.ts";
 import {
 	CommitReply,
 	SigningReply,
@@ -126,7 +126,7 @@ export interface ProjectOptions {
 	) => Effect.Effect<
 		DoorCalls,
 		unknown,
-		Ledger | LedgerTransaction | IdGenerator | ClientManager | SpanSink | RecordManager | Archive
+		Ledger | LedgerTransaction | Id.Generator | ClientManager | SpanSink | RecordManager | Archive
 	>;
 }
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
@@ -638,7 +638,7 @@ export class ProjectService extends Context.Service<
 >()("fabrika/Project") {}
 export const projectLayer = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
 	Layer.effect(ProjectService, projectLogic(ctx, env, options)).pipe(
-		Layer.provide(Layer.merge(ProcessIdGenerator.layer, IdGenerator.layer)),
+		Layer.provide(Layer.merge(ProcessIdGenerator.layer, Id.Generator.layer)),
 	);
 export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
 	ManagedRuntime.make(projectLayer(ctx, env, options));
