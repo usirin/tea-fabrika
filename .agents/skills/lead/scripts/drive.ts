@@ -214,6 +214,16 @@ const answerOf = (step: StepName, report: string) => {
 	return null;
 };
 
+const GREEN = /^[`* \t]*laws:[ \t]*green\b[`* \t:]*(.*)$/im;
+
+/** A build that changed nothing says which laws it ran green with a `laws: green <paths>` line.
+ * The head is the tests step's, already checked, and the mutation step's baseline reruns them. */
+const greenOf = (report: string) => {
+	const m = GREEN.exec(report);
+	if (m === null) return null;
+	return (m[1] ?? "").replace(/[`*\s]+$/, "") || "laws named";
+};
+
 type Judged = {readonly outcome: Outcome; readonly why: string};
 const stuck = (why: Extract<Outcome, {kind: "stuck"}>["why"], text: string): Judged => ({
 	outcome: {kind: "stuck", why},
@@ -243,7 +253,15 @@ const decide = (ask: Ask, read: Read): Judged => {
 	if (said === null) return stuck("no_answer", "no answer line in the report");
 	switch (said.verb) {
 		case "done":
-			if ((ask.step === "tests" || ask.step === "build") && read.commits === 0)
+			if (ask.step === "build" && read.commits === 0) {
+				const green = greenOf(read.report);
+				if (green === null) return stuck("no_commit", "answered done with no commit");
+				return {
+					outcome: {kind: "done", part: false, head: read.head},
+					why: `no commit: every law already green at ${read.head.slice(0, 8)} (${green})`,
+				};
+			}
+			if (ask.step === "tests" && read.commits === 0)
 				return stuck("no_commit", "answered done with no commit");
 			return {outcome: {kind: "done", part: false, head: read.head}, why: said.why};
 		case "send": {
@@ -895,6 +913,9 @@ answer: send tests <why>
 answer: send build <why>
 answer: ask <the one question for the lead>
 answer: stuck <why>
+
+A build that needs no commit, because every law is already green at its start, puts this line
+just before \`answer: done\`: laws: green <the narrow test paths you ran>
 `;
 
 const MIN_FREE_GB = 20;

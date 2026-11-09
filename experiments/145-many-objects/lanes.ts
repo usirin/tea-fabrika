@@ -22,7 +22,7 @@ import {Effect, Layer} from "effect";
 import {HttpClient} from "effect/http";
 import {httpLayer, rawObject, type Server} from "./client.ts";
 
-export type FenceMode = "table" | "home";
+type FenceMode = "table" | "home";
 
 /** The laws that broke, as measured: with fences by table, and with fences that carry their home. */
 export const TABLE_BREAKS = ["2a", "18", "21", "22", "23", "24", "25", "26", "27", "29", "30"];
@@ -31,7 +31,7 @@ export const TABLE_SOMETIMES = ["28"];
 export const HOME_BREAKS = ["2a", "18", "21", "22", "23", "24", "25", "26", "27", "29", "30"];
 
 /** The lane key of a name: its first segment, in the router's lane alphabet; `_` for none. */
-export const keyOf = (name: string) =>
+const keyOf = (name: string) =>
 	(name.split("/")[0] || "_")
 		.toLowerCase()
 		.replace(/[^a-z0-9_.-]/g, ".")

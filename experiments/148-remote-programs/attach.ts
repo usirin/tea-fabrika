@@ -14,7 +14,7 @@
 // Node's own WebSocket and readline.
 import {createInterface} from "node:readline";
 
-export interface Down {
+interface Down {
 	readonly type: string;
 	readonly text?: string;
 	readonly ms?: number;

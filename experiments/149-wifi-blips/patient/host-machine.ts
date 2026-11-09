@@ -143,24 +143,24 @@ export type HostMsg =
 	/** The ledger refused the exit (the lease was gone), or did not answer. */
 	| {readonly type: "exit_refused"; readonly fence: number};
 
-export type HostCmd =
+type HostCmd =
 	| {readonly type: "claim"}
 	| {readonly type: "renew"; readonly fence: number}
 	| ({readonly type: "exit"; readonly fence: number} & ExitWord);
 
-export type HostSub =
+type HostSub =
 	| Sub<"registry_tail", {readonly on: true}>
 	| Sub<"program", {readonly fence: number; readonly incarnation: number}>
 	| Sub<"lease_clock", {readonly fence: number; readonly until: number}>;
 
-export const START: Host = {phase: "watching", waitMs: 0, tries: 0};
+const START: Host = {phase: "watching", waitMs: 0, tries: 0};
 
 /** The fence the program runs under, or `null`: it is off. The laws read this same function. */
-export const programOf = (s: Host): {readonly fence: number; readonly incarnation: number} | null =>
+const programOf = (s: Host): {readonly fence: number; readonly incarnation: number} | null =>
 	s.phase === "owning" ? {fence: s.fence, incarnation: s.incarnation} : null;
 
 /** The renew clock, or `null`: off. It runs while owning and while exiting. */
-export const renewClockOf = (s: Host, settings: HostSettings) =>
+const renewClockOf = (s: Host, settings: HostSettings) =>
 	s.phase === "owning" || s.phase === "exiting"
 		? {
 				ms: s.away ? settings.retryRenewMs : settings.renewEveryMs,
@@ -169,7 +169,7 @@ export const renewClockOf = (s: Host, settings: HostSettings) =>
 		: null;
 
 /** The lease clock, or `null`: off. 149: it runs to the lease's end plus the grace. */
-export const leaseClockOf = (s: Host, graceMs: number) =>
+const leaseClockOf = (s: Host, graceMs: number) =>
 	s.phase === "owning" || s.phase === "exiting" ? {fence: s.fence, until: s.until + graceMs} : null;
 
 const watching = (waitMs: number, tries: number): Host => ({phase: "watching", waitMs, tries});
@@ -178,14 +178,14 @@ const watching = (waitMs: number, tries: number): Host => ({phase: "watching", w
  * Did this Msg take the lease from an owner under `fence`, whose lease runs `until`? 149: its own
  * clock ends it only at `until` plus the grace; before that, only the ledger's word does.
  */
-export const losesLease = (fence: number, until: number, graceMs: number, m: HostMsg): boolean =>
+const losesLease = (fence: number, until: number, graceMs: number, m: HostMsg): boolean =>
 	(m.type === "renew_lost" && m.fence === fence) ||
 	(m.type === "seen_expiry" && m.fence === fence) ||
 	(m.type === "seen_claim" && m.fence > fence) ||
 	(m.type === "lease_due" && m.fence === fence && m.until === until + graceMs);
 
 /** The exit an owner asks for when its program ended this way, or `null`: no exit (lease lost, stopped). */
-export const exitOf = (end: ProgramEnd): ExitWord | null =>
+const exitOf = (end: ProgramEnd): ExitWord | null =>
 	end.how === "ended"
 		? {reason: "normal", why: "returned", suspect: null}
 		: end.how === "crashed"
@@ -194,7 +194,7 @@ export const exitOf = (end: ProgramEnd): ExitWord | null =>
 
 type Step = readonly [Host, readonly HostCmd[]];
 
-export const hostUpdate =
+const hostUpdate =
 	(settings: HostSettings) =>
 	(s: Host, m: HostMsg): Step => {
 		switch (s.phase) {
@@ -281,7 +281,7 @@ const sub = <T extends string, D>(type: T, deps: (s: Host) => D | null) =>
 	// The one cast: tea's `DepKeyedSub` is a conditional type that a literal cannot be checked against.
 	({type, deps}) as DepKeyedSub<Host, Sub<T, D>>;
 
-export const hostSubs = (settings: HostSettings) => [
+const hostSubs = (settings: HostSettings) => [
 	sub("timer", (s) =>
 		s.phase === "watching"
 			? {ms: s.waitMs, msg: {type: "claim_due" as const, tries: s.tries}}

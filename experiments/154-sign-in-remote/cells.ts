@@ -18,7 +18,7 @@ import {hostId, pkce, randomValue} from "./pkce.ts";
 import {Vault} from "./vault.ts";
 import {type Auth, boxName, personName, redirectOf, SIWC, ToBox, type ToPerson} from "./wire.ts";
 
-export interface BoxSettings {
+interface BoxSettings {
 	readonly box: string;
 	readonly who: string;
 	readonly auth: Auth;

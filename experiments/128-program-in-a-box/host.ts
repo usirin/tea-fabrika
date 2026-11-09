@@ -41,7 +41,7 @@ export interface Place {
 }
 
 /** How a boxed run ended. `gone`: the box ended without saying how. */
-export type BoxEnded =
+type BoxEnded =
 	| {readonly kind: "ended"}
 	| {readonly kind: "stopped"}
 	| {readonly kind: "failed"; readonly why: string}
@@ -53,7 +53,7 @@ type Out<P extends AnyProgram> = keyof P["outputs"] & string;
 type ServicesOf<P> =
 	P extends Program<any, any, any, any, any, infer R> ? Exclude<R, Outside> : never;
 
-export interface BoxedRun<P extends AnyProgram> {
+interface BoxedRun<P extends AnyProgram> {
 	readonly id: string;
 	tell(name: In<P>, value: unknown): Effect.Effect<Word>;
 	listen(name: Out<P>, listener: (value: unknown) => void): () => void;

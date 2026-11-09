@@ -35,7 +35,7 @@ const SETTINGS: Settings = {renewEveryMs: 300, retryMs: 50};
 const host = createHost(SETTINGS);
 
 /** How the laws see a host's Subs: the same functions the machine's `subs` call. */
-export interface View {
+interface View {
 	readonly program: (s: Host) => {readonly fence: number} | null;
 	readonly renewing: (s: Host) => boolean;
 }
@@ -46,7 +46,7 @@ const VIEW: View = {
 
 const FENCES = [1, 2] as const;
 
-export function hostWorld(): World<Host, HostMsg, HostCmd> {
+function hostWorld(): World<Host, HostMsg, HostCmd> {
 	return {
 		outside: (s) => [
 			...(s.phase === "watching" ? [{type: "claim_due" as const, tries: s.tries}] : []),
@@ -78,7 +78,7 @@ export function hostWorld(): World<Host, HostMsg, HostCmd> {
 
 const fenceOf = (m: HostMsg): number | null => ("fence" in m ? m.fence : null);
 
-export function hostLaws(view: View = VIEW): readonly Law<Host, HostMsg, HostCmd>[] {
+function hostLaws(view: View = VIEW): readonly Law<Host, HostMsg, HostCmd>[] {
 	return [
 		watched<Host, HostMsg, HostCmd, number | null>(
 			"the program runs only under the claim this host won last",
@@ -131,7 +131,7 @@ export function hostLaws(view: View = VIEW): readonly Law<Host, HostMsg, HostCmd
 	];
 }
 
-export const showHostMsg = (m: HostMsg): string => {
+const showHostMsg = (m: HostMsg): string => {
 	const {type, ...rest} = m;
 	const args = Object.values(rest).join(" ");
 	return args === "" ? type : `${type} ${args}`;
@@ -170,7 +170,7 @@ const renewsAfterStart: View = {
 	renewing: (s) => s.phase === "owning" && s.started,
 };
 
-export const HOST_PLANTED: readonly {
+const HOST_PLANTED: readonly {
 	readonly name: string;
 	readonly law: string;
 	readonly update: HostStep;
@@ -214,7 +214,7 @@ export const HOST_PLANTED: readonly {
 type CounterCmd = never;
 const counterStep = stepOf<Count, CounterMsg, CounterCmd>(counter);
 
-export function counterWorld(): World<Count, CounterMsg, CounterCmd> {
+function counterWorld(): World<Count, CounterMsg, CounterCmd> {
 	return {
 		outside: () =>
 			[1, 2, 3].flatMap((rev) =>
@@ -224,7 +224,7 @@ export function counterWorld(): World<Count, CounterMsg, CounterCmd> {
 	};
 }
 
-export function counterLaws(): readonly Law<Count, CounterMsg, CounterCmd>[] {
+function counterLaws(): readonly Law<Count, CounterMsg, CounterCmd>[] {
 	return [
 		law<Count, CounterMsg, CounterCmd>("the cursor never goes back", ({prev, next}) =>
 			next.cursor < prev.cursor ? `cursor ${prev.cursor} went back to ${next.cursor}` : null,
@@ -265,7 +265,7 @@ const namesTheFirst: Update<Count, CounterMsg, CounterCmd> = (s, m) =>
 		? [{count: s.count + 1, cursor: m.rev, last: s.last ?? m.id}, []]
 		: counterStep(s, m);
 
-export const COUNTER_PLANTED = [
+const COUNTER_PLANTED = [
 	{
 		name: "counts repeats",
 		law: "a message at or behind the cursor changes nothing",
@@ -282,7 +282,7 @@ export const COUNTER_PLANTED = [
 
 // ---------------------------------------------------------------- the check
 
-export interface LawsResult {
+interface LawsResult {
 	readonly machine: string;
 	readonly states: number;
 	readonly complete: boolean;

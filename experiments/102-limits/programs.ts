@@ -56,10 +56,10 @@ export const HOLD = {usd: TURN.usdMax, tokens: TURN.tokMax} as const;
 /** Scouts asked per burst, and the scouts supervisor's cap. */
 export const BURST = {asks: 10, cap: 3, bursts: 2, scoutTurns: 3} as const;
 
-export const ticket = (c: Case, i: number) => `t:${c}:${i}`;
-export const builder = (c: Case, i: number) => `b:${c}:${i}`;
-export const scouts = (c: Case, i: number) => `ss:${c}:${i}`;
-export const scout = (c: Case, i: number, k: number) => `sc:${c}:${i}:${k}`;
+const ticket = (c: Case, i: number) => `t:${c}:${i}`;
+const builder = (c: Case, i: number) => `b:${c}:${i}`;
+const scouts = (c: Case, i: number) => `ss:${c}:${i}`;
+const scout = (c: Case, i: number, k: number) => `sc:${c}:${i}:${k}`;
 
 /** The run's size, the same in every host process: `SCALE` multiplies every dollar limit. */
 export type Size = {readonly perCase: number; readonly scale: number};
@@ -67,7 +67,7 @@ export type Size = {readonly perCase: number; readonly scale: number};
 const caseOf = (name: string) => name.split(":")[1] as Case;
 
 /** Every limit, by the spec that declares it. */
-export const limitsOf = (size: Size) => {
+const limitsOf = (size: Size) => {
 	const usd = (x: number) => Math.round(x * size.scale * 100) / 100;
 	return {
 		ticket: (c: Case): Limits =>
@@ -125,7 +125,7 @@ export const namesOf = (size: Size) => {
 
 const LOOSE = {strategy: "one_for_one", intensity: 100, periodMs: 60_000} as const;
 
-export const specOf = (size: Size, name: string): SupervisorSpec => {
+const specOf = (size: Size, name: string): SupervisorSpec => {
 	const L = limitsOf(size);
 	if (name === "top")
 		return {
@@ -172,7 +172,7 @@ const unit = (s: string) => {
 	}
 	return h / 0x1_0000_0000;
 };
-export const costOf = (name: string, turn: string, fence: number) => {
+const costOf = (name: string, turn: string, fence: number) => {
 	const u = unit(`${name}|${turn}|${fence}`);
 	return {
 		usd: Math.round((TURN.usdMin + u * (TURN.usdMax - TURN.usdMin)) * 1e6) / 1e6,
@@ -181,8 +181,8 @@ export const costOf = (name: string, turn: string, fence: number) => {
 };
 
 /** The agent's journal: the last turn it charged. The host starts feeding it once it has loaded. */
-export const Turns = Schema.Struct({turns: Schema.Number});
-export type Turns = typeof Turns.Type;
+const Turns = Schema.Struct({turns: Schema.Number});
+type Turns = typeof Turns.Type;
 const turnsMachine = defineMachine({
 	types: {
 		model: {} as Turns,
@@ -224,7 +224,7 @@ const planOf = (name: string): Plan => {
 };
 
 /** One stdout line: the provider's bill, and what the program saw. */
-export type Say = (o: Record<string, unknown>) => void;
+type Say = (o: Record<string, unknown>) => void;
 
 export const agent = (size: Size, say: Say) =>
 	defineProgram({

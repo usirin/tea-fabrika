@@ -45,9 +45,9 @@ import {
 
 // ---------------------------------------------------------------- the world
 
-export const STAGES = ["triage", "plan", "build", "review", "ship"] as const;
-export type Stage = (typeof STAGES)[number];
-export type Pick = "approve" | "no";
+const STAGES = ["triage", "plan", "build", "review", "ship"] as const;
+type Stage = (typeof STAGES)[number];
+type Pick = "approve" | "no";
 
 /** One fact on the fake ledger. The real ledger's are richer; these are the ones a stage reads. */
 export type Fact =
@@ -93,9 +93,9 @@ export interface World {
 	readonly storage: Storage;
 }
 
-export class Factory extends Context.Service<Factory, World>()("exp168/Factory") {}
+class Factory extends Context.Service<Factory, World>()("exp168/Factory") {}
 
-export const keyOf = (stage: Stage, ticket: number) => `${stage}#${ticket}`;
+const keyOf = (stage: Stage, ticket: number) => `${stage}#${ticket}`;
 
 /** A world with these facts on its ledger and these runs scripted. */
 export const makeWorld = (
@@ -123,7 +123,7 @@ const append = (world: World, fact: Fact) =>
 	);
 
 /** Make a named pipe, as `mkfifo` does. One there already is made again, empty. */
-export const mkfifo = (world: World, name: string, holds: boolean) =>
+const mkfifo = (world: World, name: string, holds: boolean) =>
 	Effect.gen(function* () {
 		world.fifos.set(name, {
 			queue: yield* Queue.unbounded<number, Cause.Done>(),
@@ -136,7 +136,7 @@ export const mkfifo = (world: World, name: string, holds: boolean) =>
 // ---------------------------------------------------------------- reading fresh
 
 /** What a stage does with a ticket, read from the ticket's facts before any agent runs. */
-export type Look = "run" | "pass" | "wait" | "stop";
+type Look = "run" | "pass" | "wait" | "stop";
 
 const isSendTo = (fact: Fact, ticket: number, stage: Stage) =>
 	fact.ticket === ticket &&
@@ -178,7 +178,7 @@ export function lookOf(facts: readonly Fact[], stage: Stage, ticket: number): Lo
 }
 
 /** Tickets the tracker hands out: filed, and not ended (shipped, skipped, stuck, or answered no). */
-export const openTickets = (facts: readonly Fact[]): readonly number[] =>
+const openTickets = (facts: readonly Fact[]): readonly number[] =>
 	facts.flatMap((f) => {
 		if (f.kind !== "filed") return [];
 		const ended = STAGES.some((s) => {
@@ -191,21 +191,21 @@ export const openTickets = (facts: readonly Fact[]): readonly number[] =>
 // ---------------------------------------------------------------- the stages
 
 /** What a stage says of one ticket, printed for a person and read typed by a parent. */
-export const Said = Schema.Struct({
+const Said = Schema.Struct({
 	id: Schema.String,
 	stage: Schema.String,
 	name: Schema.String,
 	kind: Schema.Literals(["done", "send", "ask", "skip", "stuck"]),
 	to: Schema.NullOr(Schema.String),
 });
-export type Said = typeof Said.Type;
+type Said = typeof Said.Type;
 
 /** A person's answer to an ask, told on a stage's `answer` input. */
-export const Answer = Schema.Struct({
+const Answer = Schema.Struct({
 	ticket: TicketNumber,
 	pick: Schema.Literals(["approve", "no"]),
 });
-export type Answer = typeof Answer.Type;
+type Answer = typeof Answer.Type;
 
 const FifoName = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]*$/));
 
@@ -269,7 +269,7 @@ const outputsOf = {
  * One stage: for each ticket, read fresh, run the scripted agent if there is work, and act on its
  * outcome. `fifos`: the stage takes `--from` and `--to` (shapes 1 and 2).
  */
-export function stageProgram(stage: Stage, fifos: boolean) {
+function stageProgram(stage: Stage, fifos: boolean) {
 	return defineProgram({
 		name: stage,
 		description: DOES[stage],
@@ -442,7 +442,7 @@ export function stageProgram(stage: Stage, fifos: boolean) {
  * The line's head: every open ticket, then it waits, as the real tracker listens to the ledger.
  * `loop` (shape 4): a `send` on the ledger hands that ticket out again, so it comes round the line.
  */
-export function trackerProgram(loop: boolean) {
+function trackerProgram(loop: boolean) {
 	return defineProgram({
 		name: "tracker",
 		description: loop
@@ -469,7 +469,7 @@ export function trackerProgram(loop: boolean) {
 }
 
 /** `mkfifo --name redo`: shape 1's named pipe, made before the line that uses it. */
-export const mkfifoProgram = defineProgram({
+const mkfifoProgram = defineProgram({
 	name: "mkfifo",
 	description: "Makes a named pipe: a stage reads it with --from and writes it with --to.",
 	flags: {name: flag(FifoName, "The pipe's name.")},
@@ -486,7 +486,7 @@ export const mkfifoProgram = defineProgram({
  * children, for each ticket; review's `send:build` starts the next lap, up to `--laps`. The lap is
  * counted from the ledger, so a Ctrl-C does not hand a ticket fresh laps.
  */
-export function buildReviewProgram(
+function buildReviewProgram(
 	build: ReturnType<typeof stageProgram>,
 	review: ReturnType<typeof stageProgram>,
 ) {
@@ -590,7 +590,7 @@ export function listOf(shape: ShapeName, world: World): Shell.ProgramList {
 }
 
 /** Who may send a ticket back to whom: the stages' own words (docs/direction/outcome-names.md). */
-export const SENDS: Readonly<Partial<Record<Stage, readonly Stage[]>>> = {
+const SENDS: Readonly<Partial<Record<Stage, readonly Stage[]>>> = {
 	review: ["build"],
 	ship: ["build"],
 };

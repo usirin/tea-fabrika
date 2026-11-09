@@ -13,7 +13,7 @@ import {Config, Effect} from "effect";
 export const PREFIX = "tf-exp-199";
 
 /** standard-4: 4 vCPU, 12 GiB, 20 GB of disk (Cloudflare's limits page, read 2026-11-02). */
-export const STANDARD_4 = {vcpu: 4, memoryMib: 12 * 1024, diskMb: 20_000};
+const STANDARD_4 = {vcpu: 4, memoryMib: 12 * 1024, diskMb: 20_000};
 
 /** The box is destroyed after this long, whatever it is doing: the run's 45-minute cap. */
 export const RUN_CAP_MS = 45 * 60_000;

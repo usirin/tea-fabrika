@@ -8,7 +8,7 @@ import {Effect, Schema, Stream} from "effect";
 import {Count, counter} from "../94-tea-host/counter.ts";
 
 /** What a sender puts in each message: its id again, so the checks can read it from the row. */
-export const Sent = Schema.Struct({id: Schema.String});
+const Sent = Schema.Struct({id: Schema.String});
 
 export const counterProgram = defineProgram({
 	name: "counter",

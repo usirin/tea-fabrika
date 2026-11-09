@@ -34,7 +34,7 @@ const LEDGER = "tea-host";
 const GRACE_MS = 1000;
 
 export type Preset = "small" | "large";
-export const PRESETS = {
+const PRESETS = {
 	small: {perCase: 1, scale: 1, waitMs: 120_000},
 	large: {perCase: 4, scale: 3, waitMs: 300_000},
 } as const;

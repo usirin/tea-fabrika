@@ -12,10 +12,10 @@ import {createServer, type IncomingMessage, type ServerResponse} from "node:http
 import type {AddressInfo} from "node:net";
 import type {LeaseOf, WriteLine} from "../104-stages-on-tea-host/fake-github.ts";
 
-export const REPO = "example/repo";
+const REPO = "example/repo";
 export const issueUrl = (n: number) => `https://github.com/${REPO}/issues/${n}`;
 
-export interface Issue {
+interface Issue {
 	readonly number: number;
 	readonly url: string;
 	readonly title: string;
@@ -170,4 +170,3 @@ export const startFakeIssues = async (o: {readonly leaseOf: LeaseOf}) => {
 		close: () => new Promise<void>((r) => server.close(() => r())),
 	};
 };
-export type FakeIssues = Awaited<ReturnType<typeof startFakeIssues>>;

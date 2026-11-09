@@ -15,12 +15,11 @@ import {createServer, type IncomingMessage, type ServerResponse} from "node:http
 import type {AddressInfo} from "node:net";
 import {join} from "node:path";
 
-export const REPO = {owner: "example", name: "repo"} as const;
 const BASE_URL = "https://github.com/example/repo/pull/";
 /** A queue runs the checks again before it lands: longer than a takeover (about a lease). */
 const LAND_MS = 3000;
 
-export interface Pr {
+interface Pr {
 	readonly url: string;
 	readonly number: number;
 	readonly branch: string;
@@ -312,4 +311,3 @@ export const startFake = async (o: {
 		close: () => new Promise<void>((r) => server.close(() => r())),
 	};
 };
-export type Fake = Awaited<ReturnType<typeof startFake>>;

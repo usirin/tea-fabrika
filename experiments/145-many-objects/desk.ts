@@ -77,7 +77,7 @@ export const deskOf = (workspaces: number, tiles: number): Saved => {
 
 // ---------------------------------------------------------------- the desk on the ledger
 
-export const DESK = "desk";
+const DESK = "desk";
 export const SAVED = `${DESK}/saved`;
 
 const decodeSaved = Schema.decodeUnknownEffect(Schema.fromJsonString(Saved));

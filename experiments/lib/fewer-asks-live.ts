@@ -6,7 +6,7 @@ import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
 import {agentEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Option, type Schema} from "effect";
 
-export interface Heard<A> {
+interface Heard<A> {
 	readonly answer: A | null;
 	readonly modelId: string;
 	readonly usd: number | null;

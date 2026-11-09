@@ -12,11 +12,11 @@ import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 
 export const here = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
-export const RESULTS = here("results/97-one-ledger.json");
-export const DAEMON = here("97-one-ledger/daemon.ts");
+const RESULTS = here("results/97-one-ledger.json");
+const DAEMON = here("97-one-ledger/daemon.ts");
 export const GRACE_MS = 1000;
 /** The ledger the hosts use (the laws use their own, `acme-app`). */
-export const LEDGER = "tea-host";
+const LEDGER = "tea-host";
 
 export const results: Record<string, unknown> = existsSync(RESULTS)
 	? JSON.parse(readFileSync(RESULTS, "utf8"))
@@ -89,7 +89,7 @@ export const stopGroup = async (pgid: number) => {
 	if (group(pgid).length > 0) await killGroup(pgid);
 };
 /** Every group this harness started: killed on exit, whatever happened. */
-export const started = new Set<number>();
+const started = new Set<number>();
 
 export const freePort = () =>
 	new Promise<number>((resolve, reject) => {
@@ -147,7 +147,7 @@ export const until = async (what: string, ok: () => boolean, ms: number) => {
 
 // ---------------------------------------------------------------- the ledger daemon
 
-export type Daemon = {c: Child; url: string; port: number; ms: number};
+type Daemon = {c: Child; url: string; port: number; ms: number};
 export const startDaemon = async (persist: string, port?: number): Promise<Daemon> => {
 	const p = port ?? (await freePort());
 	const t0 = performance.now();

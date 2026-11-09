@@ -30,14 +30,14 @@ const HOST = here("99-monitors-supervisor/tree-host.ts");
 const LEDGER = "tea-host";
 const GRACE_MS = 1000;
 
-export type Preset = "small" | "large";
+type Preset = "small" | "large";
 const PRESETS = {
 	/** Messages per child, and the gap between two sends to one child. */
 	small: {perChild: 100, gapMs: 200},
 	large: {perChild: 1000, gapMs: 20},
 } as const;
 
-export interface RunOptions {
+interface RunOptions {
 	/** The ledger's dead letters: a number of crashes in a row, or `null` (off). */
 	readonly maxDeliveries: number | null;
 	readonly intensity: number;
@@ -310,7 +310,7 @@ type Reported = {
 };
 
 /** Every check, from the ledger's rows and the hosts' lines. */
-export function check(
+function check(
 	rows: readonly Row[],
 	lines: readonly Line[],
 	faults: readonly Fault[],

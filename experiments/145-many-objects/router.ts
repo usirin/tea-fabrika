@@ -7,7 +7,7 @@ import type {Who} from "./session.ts";
 
 // ---------------------------------------------------------------- the router
 
-export const KINDS = ["project", "person", "lane"] as const;
+const KINDS = ["project", "person", "lane"] as const;
 export type Kind = (typeof KINDS)[number];
 const isKind = (s: string): s is Kind => KINDS.some((k) => k === s);
 
@@ -106,7 +106,7 @@ export const routeOf = (rules: Rules, at: Address): string =>
 export type Members = {readonly founder: string | null; readonly ids: readonly string[]};
 
 /** The person a session acts for: the user, or the agent's person. */
-export const personOf = (who: Who) => (who.kind === "user" ? who.id : who.for);
+const personOf = (who: Who) => (who.kind === "user" ? who.id : who.for);
 
 /**
  * May `who` open this object? A person's object: that person alone, never an agent. A project's,
@@ -127,7 +127,7 @@ export const mayOpen = (rules: Rules, at: Address, who: Who, members: Members | 
 export const FACTS = "door/members";
 
 /** One of the door's facts, as the ledger keeps a row: its kind, and its data as JSON text. */
-export type Fact = {readonly kind: unknown; readonly data: unknown};
+type Fact = {readonly kind: unknown; readonly data: unknown};
 
 /**
  * The members, folded from a project's own facts: `created` names its founder, then `invited` and
@@ -153,11 +153,10 @@ export const membersOf = (rows: readonly Fact[], rules: Rules, operator: string)
 };
 
 /** Only the door writes under `door`: no method may name it. Reads are open to members. */
-export const isDoorName = (s: unknown) =>
-	typeof s === "string" && (s === "door" || s.startsWith("door/"));
+const isDoorName = (s: unknown) => typeof s === "string" && (s === "door" || s.startsWith("door/"));
 
 /** Which arguments of each method name a stream or a registered name. */
-export const NAMED: Readonly<Record<string, readonly number[]>> = {
+const NAMED: Readonly<Record<string, readonly number[]>> = {
 	register: [0],
 	append: [0],
 	claim: [0],

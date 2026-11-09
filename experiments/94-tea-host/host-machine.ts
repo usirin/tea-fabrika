@@ -60,9 +60,7 @@ export type HostMsg =
 
 export type HostCmd = {readonly type: "claim"} | {readonly type: "renew"; readonly fence: number};
 
-export type HostSub =
-	| Sub<"registry_tail", {readonly on: true}>
-	| Sub<"program", {readonly fence: number}>;
+type HostSub = Sub<"registry_tail", {readonly on: true}> | Sub<"program", {readonly fence: number}>;
 
 export const START: Host = {phase: "watching", waitMs: 0, tries: 0};
 
@@ -114,7 +112,7 @@ const sub = <T extends string, D>(type: T, deps: (s: Host) => D | null) =>
 	// The one cast: tea's `DepKeyedSub` is a conditional type that a literal cannot be checked against.
 	({type, deps}) as DepKeyedSub<Host, Sub<T, D>>;
 
-export const hostSubs = (settings: Settings) => [
+const hostSubs = (settings: Settings) => [
 	sub("timer", (s) =>
 		s.phase === "watching"
 			? {ms: s.waitMs, msg: {type: "claim_due" as const, tries: s.tries}}

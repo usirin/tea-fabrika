@@ -21,7 +21,7 @@ import {tmpdir} from "node:os";
 import type {SDKUserMessage, SessionStore} from "@anthropic-ai/claude-agent-sdk";
 import {Effect} from "effect";
 
-export const SYSTEM = "You answer one question. Reply with the answer only, no other words.";
+const SYSTEM = "You answer one question. Reply with the answer only, no other words.";
 export const CHECK = "Check that answer once more. Reply with the final number only.";
 
 /** One turn's result, as Claude Code reported it. */
@@ -38,7 +38,7 @@ export interface TurnResult {
 	readonly outputTokens: number;
 }
 
-export interface Thought {
+interface Thought {
 	/** The last turn's text, or "no answer: ..." when a turn failed. */
 	readonly answer: string;
 	readonly ok: boolean;
@@ -48,7 +48,7 @@ export interface Thought {
 	readonly session: string;
 }
 
-export interface RunSpec {
+interface RunSpec {
 	readonly model: string;
 	/** This run's session id: a fresh UUID, recorded before the run starts. */
 	readonly session: string;

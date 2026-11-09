@@ -8,7 +8,7 @@
 import {applyCell} from "@demlik/tea";
 
 /** The few parts of a tea machine the sandbox calls. */
-export interface Pure {
+interface Pure {
 	readonly init: (loaded?: never) => readonly [unknown, readonly unknown[]];
 	readonly subs?: readonly {readonly type: string; readonly deps: (s: never) => unknown}[];
 }

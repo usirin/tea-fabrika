@@ -107,8 +107,8 @@ const Outside = Schema.Union([
 	Schema.Struct({type: Schema.Literal("ship_checks_overdue"), ...At, wait: Schema.Int}),
 	Schema.Struct({type: Schema.Literal("ship_queue_overdue"), ...At}),
 ]);
-export const fits = (m: typeof Outside.Type): ShipMsg => m;
-export const covers = (m: ShipMsg): typeof Outside.Type => m;
+const _fits = (m: typeof Outside.Type): ShipMsg => m;
+const _covers = (m: ShipMsg): typeof Outside.Type => m;
 // ---- end
 
 // ---- lines: steering

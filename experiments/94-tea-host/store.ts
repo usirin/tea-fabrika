@@ -18,7 +18,7 @@ import {Count} from "./counter.ts";
 import type {Ledger, Row} from "./ledger.ts";
 
 /** What a host says about each write, for the harness. */
-export type WriteNote = {
+type WriteNote = {
 	readonly ev: "write";
 	readonly fence: number;
 	readonly expected: number;

@@ -9,8 +9,13 @@ One decision, one file, one docs pull request. Write it the turn the owner settl
 if nobody asked: a ruling that is not written down gets decided again, differently, by the next
 session. This skill holds the file's shape and the judgment around it.
 
-```text
-owner decides -> find the next number -> write the file -> sweep -> link, supersede or amend -> PR
+```mermaid
+flowchart LR
+  decides["owner decides"] --> number["find the next number"]
+  number --> write["write .decisions/NNNN-slug.md"]
+  write --> sweep["sweep: governance.sh and rg"]
+  sweep --> relate["link, supersede or amend"]
+  relate --> pr["one docs PR"]
 ```
 
 ## 1. Find the next number
@@ -96,6 +101,12 @@ What changes, what it costs, what is not decided here.
   `Gate scope handling`. One clause. Where it has a "not this" half, keep it inside the clause
   (`X, never Y`).
 - The `# NNNN: <title>` heading repeats the title exactly.
+- **A decision that has a shape opens with a picture**, right under the heading: a Mermaid diagram,
+  then one small real code block with the shape, then the words
+  ([0005](../../../.decisions/0005-patterns-and-decisions-are-visual.md)). A shape is a flow, a
+  state machine, a type, a file layout, who calls whom. A decision with no shape (a direction, a
+  yes or no, a name) skips the picture rather than drawing a box that says the sentence again. A
+  decision that changes a shape uses the [before and after form](#before-and-after).
 - `**What this decides:**` is one plain sentence for a reader who was not there.
 - `## Decision` opens with one bold sentence. Where it limits later work, end with a short
   **Binding constraints** list.
@@ -159,3 +170,70 @@ One decision per PR. Run `pnpm format`, `pnpm lint` and the leak grep, commit wi
 skill as `lead`, push, open it. It merges on green CI with a clean leak grep
 ([the lead skill](../lead/SKILL.md#decisions-land-at-once)). Report the file path and whether a
 glossary row was added.
+
+## Diagrams
+
+**Rule one: diagrams are Mermaid wherever possible.** Only when Mermaid really cannot express the
+thing may a decision use ASCII art or another form, and then it says in one line, right above the
+picture, why Mermaid could not.
+
+- The diagram shows the real mechanism, with real names: the files, functions, Msgs, states and
+  commands a reader will grep for. No decorative boxes, no "System" or "Service" placeholders.
+- Dark-mode safe: no `style`, `classDef`, `linkStyle` or `%%{init}` theme lines. GitHub picks the
+  colors for each theme.
+- About 12 nodes at most. A bigger idea gets two diagrams.
+- At most one table per section (AGENTS.md).
+
+Which diagram fits which idea. All of these render on GitHub:
+
+| The idea | Mermaid type |
+|---|---|
+| who calls whom, in time order | `sequenceDiagram` |
+| a machine's states and the Msgs that move it | `stateDiagram-v2` |
+| a route, a choice, a process with steps | `flowchart TD` or `flowchart LR` |
+| types and what holds or extends what | `classDiagram` |
+| stored records and their keys | `erDiagram` |
+| branches, merges, a stack of pull requests | `gitGraph` |
+
+Things that break on GitHub: quote a label with punctuation (`a["gh stack merge --squash"]`); write
+`<` and `>` in a label as `#lt;` and `#gt;`; keep a node id one plain word, and never `end` in
+lowercase; `%%` starts a comment.
+
+### Before and after
+
+A decision that changes a shape shows both, under `## Decision`, with the same node names in each so
+the difference is what changed. Then the code, before and after, the same way:
+
+````markdown
+**Before:**
+
+```mermaid
+gitGraph
+  commit id: "main"
+  branch parent
+  commit id: "parent head"
+  checkout main
+  merge parent id: "merge commit"
+```
+
+**After:**
+
+```mermaid
+gitGraph
+  commit id: "main"
+  branch parent
+  commit id: "parent head"
+  checkout main
+  commit id: "squash of parent"
+```
+
+```sh
+# before
+catchup.sh <pr> <ticket> --merge-method merge
+# after
+gh stack merge <pr> --squash
+```
+````
+
+That is [0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)'s change, drawn. One
+line after the pair says what the reader should see move.

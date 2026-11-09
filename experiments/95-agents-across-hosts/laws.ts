@@ -42,7 +42,7 @@ const SETTINGS: CallSettings = {total: 3, window: 2, timeoutMs: 100, retryMs: 10
 const calls = createCalls(SETTINGS);
 const Q = [1, 2, 3] as const;
 
-export function callWorld(): World<Asker, CallMsg, CallCmd> {
+function callWorld(): World<Asker, CallMsg, CallCmd> {
 	return {
 		outside: (s) => [
 			{type: "resume"},
@@ -70,7 +70,7 @@ export function callWorld(): World<Asker, CallMsg, CallCmd> {
 
 const pendingOf = (s: Asker, i: number) => s.pending.find((p) => p.i === i);
 
-export function callLaws(): readonly Law<Asker, CallMsg, CallCmd>[] {
+function callLaws(): readonly Law<Asker, CallMsg, CallCmd>[] {
 	return [
 		watched<Asker, CallMsg, CallCmd, readonly number[]>(
 			"a call is answered at most once",
@@ -200,7 +200,7 @@ const trustsAnswers: CallStep = (s, m) => {
 		: [{...next, wrong: s.wrong, last: {...next.last, right: true}}, cmds];
 };
 
-export const CALL_PLANTED: readonly {
+const CALL_PLANTED: readonly {
 	readonly name: string;
 	readonly law: string;
 	readonly update: CallStep;
@@ -243,7 +243,7 @@ export const CALL_PLANTED: readonly {
 
 const INBOX = "asker:1/inbox";
 
-export function answerWorld(): World<Answerer, AnswerMsg, AnswerCmd> {
+function answerWorld(): World<Answerer, AnswerMsg, AnswerCmd> {
 	return {
 		outside: (s) =>
 			["q-1", "q-2"].flatMap((id) =>
@@ -264,7 +264,7 @@ export function answerWorld(): World<Answerer, AnswerMsg, AnswerCmd> {
 	};
 }
 
-export function answerLaws(): readonly Law<Answerer, AnswerMsg, AnswerCmd>[] {
+function answerLaws(): readonly Law<Answerer, AnswerMsg, AnswerCmd>[] {
 	return [
 		law<Answerer, AnswerMsg, AnswerCmd>("the cursor never goes back", ({prev, next}) =>
 			next.cursor < prev.cursor ? `cursor ${prev.cursor} went back to ${next.cursor}` : null,
@@ -326,7 +326,7 @@ const answersTwiceOnReplay: AnswerStep = (s, m) =>
 		? [{...s, answered: s.answered + 1, last: {id: m.id, corr: m.corr, answer: m.answer}}, []]
 		: answerReal(s, m);
 
-export const ANSWER_PLANTED: readonly {
+const ANSWER_PLANTED: readonly {
 	readonly name: string;
 	readonly law: string;
 	readonly update: AnswerStep;
@@ -352,7 +352,7 @@ export const ANSWER_PLANTED: readonly {
 
 // ---------------------------------------------------------------- the check
 
-export interface LawsResult {
+interface LawsResult {
 	readonly machine: string;
 	readonly states: number;
 	readonly complete: boolean;

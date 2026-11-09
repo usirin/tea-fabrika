@@ -8,19 +8,19 @@ import {NodeHttpClient} from "@effect/platform-node";
 import {Context, Duration, Effect, Layer, Schema} from "effect";
 import {HttpClient, HttpClientRequest, HttpClientResponse} from "effect/http";
 
-export class LedgerUnreachable extends Schema.TaggedError<LedgerUnreachable>()(
-	"LedgerUnreachable",
-	{method: Schema.String, message: Schema.String},
-) {}
+class LedgerUnreachable extends Schema.TaggedError<LedgerUnreachable>()("LedgerUnreachable", {
+	method: Schema.String,
+	message: Schema.String,
+}) {}
 
-export const AppendResult = Schema.Union([
+const AppendResult = Schema.Union([
 	Schema.Struct({ok: Schema.Literal(true), pos: Schema.Number, rev: Schema.Number}),
 	Schema.Struct({ok: Schema.Literal(false), why: Schema.Literal("stale"), rev: Schema.Number}),
 	Schema.Struct({ok: Schema.Literal(false), why: Schema.Literal("fenced")}),
 ]);
-export type AppendResult = typeof AppendResult.Type;
+type AppendResult = typeof AppendResult.Type;
 
-export const ClaimResult = Schema.Union([
+const ClaimResult = Schema.Union([
 	Schema.Struct({
 		ok: Schema.Literal(true),
 		fence: Schema.Number,
@@ -35,13 +35,13 @@ export const ClaimResult = Schema.Union([
 	}),
 	Schema.Struct({ok: Schema.Literal(false), why: Schema.Literal("stale"), rev: Schema.Number}),
 ]);
-export type ClaimResult = typeof ClaimResult.Type;
+type ClaimResult = typeof ClaimResult.Type;
 
-export const RenewResult = Schema.Union([
+const RenewResult = Schema.Union([
 	Schema.Struct({ok: Schema.Literal(true), expiresAt: Schema.Number}),
 	Schema.Struct({ok: Schema.Literal(false), why: Schema.Literals(["lost", "stop"])}),
 ]);
-export type RenewResult = typeof RenewResult.Type;
+type RenewResult = typeof RenewResult.Type;
 
 /** One event, as the ledger keeps it. `data` is the event's JSON, as text. */
 export const Row = Schema.Struct({
@@ -56,16 +56,16 @@ export const Row = Schema.Struct({
 export type Row = typeof Row.Type;
 const Rows = Schema.Array(Row);
 
-export const Lease = Schema.Struct({
+const Lease = Schema.Struct({
 	stream: Schema.String,
 	holder: Schema.String,
 	expires_at: Schema.Number,
 	fence: Schema.Number,
 	stop: Schema.Number,
 });
-export type Lease = typeof Lease.Type;
+type Lease = typeof Lease.Type;
 
-export interface NewEvent {
+interface NewEvent {
 	readonly kind: string;
 	readonly writer: string;
 	readonly data?: unknown;
@@ -143,17 +143,6 @@ export const ledgerLayer = (base: string, name: string, maxSockets = 8) =>
 		Layer.provide(NodeHttpClient.layerNodeHttpNoAgent),
 		Layer.provide(NodeHttpClient.layerAgentOptions({keepAlive: true, maxSockets})),
 	);
-
-/** Every event of the log, page by page. */
-export const readAll = (ledger: Ledger["Service"], page = 5000) =>
-	Effect.gen(function* () {
-		const all: Row[] = [];
-		for (;;) {
-			const rows = yield* ledger.read(all.at(-1)?.pos ?? 0, page);
-			all.push(...rows);
-			if (rows.length < page) return all;
-		}
-	});
 
 /** The names a program's streams live under: OTP's registered name, its mailbox. */
 export const streams = (name: string) => ({

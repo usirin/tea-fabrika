@@ -9,14 +9,14 @@ import type {MiniflareOptions} from "miniflare";
 const here = (name: string) => fileURLToPath(new URL(name, import.meta.url));
 
 /** The two worker files, types stripped by Node's own stripper (no bundler). */
-export const ledgerModules = () =>
+const ledgerModules = () =>
 	["ledger.ts", "sql.ts"].map((name) => ({
 		type: "ESModule" as const,
 		path: here(name),
 		contents: stripTypeScriptTypes(readFileSync(here(name), "utf8")),
 	}));
 
-export type LedgerOptions = {
+type LedgerOptions = {
 	persist: string | false;
 	port?: number;
 	graceMs?: number;

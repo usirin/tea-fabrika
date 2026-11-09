@@ -15,13 +15,13 @@ import {createServer, type IncomingMessage, type ServerResponse} from "node:http
 import type {AddressInfo} from "node:net";
 
 /** One tool call the stand-in asks for. */
-export interface Step {
+interface Step {
 	readonly tool: "Bash" | "Read";
 	readonly input: Readonly<Record<string, unknown>>;
 }
 
 /** One request as the stand-in saw it. */
-export interface Arrived {
+interface Arrived {
 	readonly path: string;
 	/** It carried the fake key as the relay adds it. */
 	readonly keyed: boolean;
