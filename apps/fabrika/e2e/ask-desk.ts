@@ -1412,6 +1412,13 @@ const takeRecReads = async (when: string, where: Locator) => {
 		if (was !== null) was.focus();
 		else (document.activeElement as HTMLElement | null)?.blur();
 	});
+	// Manti keeps one module-wide focus-visible flag (@manti-ui/react src/internal/focusVisible.ts):
+	// a document pointerdown sets it to "pointer", a keydown without Meta, Alt or Ctrl sets it to
+	// "keyboard", and a field's outer ring shows only while it is keyboard. The press above left it
+	// on "pointer", so the next note opened by the keyboard path would read no ring. A keyboard
+	// user never sends that pointerdown, so put the page back as they had it with one key that
+	// changes nothing.
+	await page.keyboard.press("Shift");
 };
 /**
  * Round 29, law 2, at every layout: in the saving and failed-save states, the "Your turn" line and
