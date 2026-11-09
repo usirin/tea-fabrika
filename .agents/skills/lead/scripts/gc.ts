@@ -7,6 +7,7 @@
 //   else it is removed    when its branch (minus -wip) has a merged pull request, or its HEAD is
 //                         on a remote branch; else its HEAD is pushed as the bot to <branch>-wip
 //                         first (fabrikalfa/<box>-wip when that is refused), and kept if both fail
+//   then                  every state/<box>.box whose box folder is gone is removed too
 //
 // It never runs a command inside a box: it reads the box's git data with hooks off, and fetches
 // from it into the main checkout, as `box.sh fetch` does. One line per box removed, then a total.
@@ -14,6 +15,7 @@
 import {spawnSync} from "node:child_process";
 import {existsSync, readdirSync, readFileSync, rmSync, statSync} from "node:fs";
 import {isAbsolute, join, resolve} from "node:path";
+import {wipOf} from "./lane.ts";
 
 const HOUR = 3_600_000;
 export const IDLE = 2 * HOUR;
@@ -41,9 +43,14 @@ export type Verdict =
 /** The branch a box's commits are backed up to, best first. */
 export const backupsOf = (name: string, branch: string | null): string[] => {
 	const own = `fabrikalfa/${name}-wip`;
-	const base = branch?.replace(/(-wip)+$/, "");
-	return base?.startsWith("fabrikalfa/") && `${base}-wip` !== own ? [`${base}-wip`, own] : [own];
+	const wip = branch === null ? null : wipOf(branch);
+	return wip?.startsWith("fabrikalfa/") && wip !== own ? [wip, own] : [own];
 };
+
+/** The `state/*.box` files whose box folder is gone: facts of a dead box, which stepcommit would
+ * otherwise still read. A box saves its facts only after its folder exists, so none is half made. */
+export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>): string[] =>
+	files.filter((f) => f.endsWith(".box") && !boxes.has(f.slice(0, -".box".length)));
 
 /** The Check, pure. */
 export const decide = (s: Seen): Verdict => {
@@ -243,6 +250,17 @@ const main = () => {
 		removed += 1;
 		freed += mb;
 		console.log(`${dry ? "would remove" : "removed"} ${name}: ${why}, ${mb} MB`);
+	}
+	const state = join(env.BOXES, "state");
+	const left = new Set(
+		readdirSync(env.BOXES, {withFileTypes: true})
+			.filter((d) => d.isDirectory())
+			.map((d) => d.name),
+	);
+	const dead = existsSync(state) ? deadFacts(readdirSync(state), left) : [];
+	for (const f of dead) {
+		if (!dry) rmSync(join(state, f), {force: true});
+		console.log(`${dry ? "would remove" : "removed"} state/${f}: its box is gone`);
 	}
 	if (!dry) repo("worktree", "prune");
 	console.log(
