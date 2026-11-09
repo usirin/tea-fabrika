@@ -311,7 +311,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 						const answer = Result.isFailure(result)
 							? Schema.is(NotGranted)(result.failure)
 								? "not_granted"
-								: result.failure._tag
+								: result.failure
 							: result.success.result._tag === "refused"
 								? result.success.result.why
 								: result.success.result._tag;
