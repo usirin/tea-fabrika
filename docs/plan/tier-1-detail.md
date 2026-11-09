@@ -990,11 +990,13 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
 - **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen`, `parent` and `traceId` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
 - **On each `revoked`:** what the person saw and the check, inside the signed text, the same as a grant.
 - **Added 2026-11-07 (owner), three facts that were lost:** `dead` keeps each throw's error class (p80), `down` gains `until` (p80), and a failed Cmd always comes back as a letter with a `why` (p35). Each existed only at the moment it happened. The throw's message goes to the trace, never the ledger, since a message can quote a note and the trace's content can be deleted.
+- **Added 2026-11-08 (owner):** each `dead` entry keeps its `process`, `program` and registered `name`, filled from that process's checked history. Each process start has its own `<pid>/dead` stream (p80, ticket 319).
 - **Added 2026-11-07 (owner), the record of how it ran:** each process's spans in its thin JobRecord, kept forever (P37); a raw health row per ended span, local about 2 weeks and then in R2, forever, and an hourly summary per piece kept forever; each object's own size, about once an hour while awake. Why: a slow step or a growing object is a trend, and a trend not kept cannot be rebuilt. [Monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) has the rest.
 
 ```ts
-// A sketch of the new shapes, in next/'s Schema. Key names are P33's, P34's and P37's plans' to settle.
+// A sketch of the shapes in next/'s Schema, including ticket 319's dead-letter identity.
 const Dead = Schema.TaggedStruct("dead", {
+	process: ProcessId, program: Text, name: ProcessName,
 	tries: Schema.Number, limit: Schema.Number, m: Schema.String, build: Schema.String,
 	errors: Schema.Array(Schema.String), // each throw's error class, one per try: ["TypeError", "TypeError", "RangeError"]
 });
@@ -1583,7 +1585,15 @@ export const ProcessFact = Schema.TaggedUnion({
 	demonitored: {ref, to: Recipient, why: "canceled" | "watcher_exited"},
 });
 export const Down = Schema.TaggedStruct("DOWN", {ref, process, why, to: Recipient});
-export const Dead = Schema.TaggedStruct("dead", {tries, limit, m, build, errors}); // errors: one class per try, at most 32
+const deadFields = {tries, limit, m, build, errors}; // errors: at most 32 classes
+const oneErrorPerTry = Schema.makeFilter(
+	(value: Schema.Struct.Type<typeof deadFields>) =>
+		value.errors.length === value.tries || "one error class per try",
+);
+export const DeadInput = Schema.Struct(deadFields).check(oneErrorPerTry);
+export const Dead = Schema.TaggedStruct("dead", {
+	...deadFields, process: ProcessId, program: Code.fields.program, name: ProcessName,
+}).check(oneErrorPerTry);
 export const Activity = Schema.TaggedUnion({idle: {process}, stepping: {process, letter, build}}); // P11 writes it
 export const recoverActivity: (raw: unknown) => Result<{_tag: "idle", process} | {_tag: "interrupted", process, letter, build, why: "interrupted"}, LedgerError>; // bad_row on a broken marker
 export const canRestart: (times: ReadonlyArray<number>, now: number, period: number, intensity: number) => boolean; // at >= now - period
@@ -1597,6 +1607,7 @@ export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessErr
 export class ProcessManager extends Context.Service<ProcessManager, {
 	readonly start: (request: Start, from: From) => Effect.Effect<{process: string; rev: number}, ProcessError | LedgerError>;
 	readonly exit: (process: string, why: string, from: From) => Effect.Effect<void, ProcessError | LedgerError>;
+	readonly dead: (process: string, input: typeof DeadInput.Type, from: From) => Effect.Effect<void, ProcessError | LedgerError>;
 	readonly info: Effect.Effect<ReadonlyArray<{process, name, program, build, restarts}>, LedgerError>; // live ones; restarts folds from restarted
 	readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;                          // P10's signer asks this
 	readonly monitor: (ref: string, process: string, from: From) => Effect.Effect<void, ProcessError | LedgerError>;
@@ -2211,10 +2222,11 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new process.
 
 **p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `app/runner.ts`. *Added 2026-11-06 (owner).*
-- A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build, errors}`, and its sender gets `{why: "dead"}`, so the outbox stops resending. `errors` holds each throw's error class, one per try; the message goes only to the trace, where a person can delete it, since a message can quote a note (owner, 2026-11-07).
+- A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. At its delivery limit, 3 by default, it moves to `<pid>/dead` with `dead {process, program, name, tries, limit, m, build, errors}`, and its sender gets `{why: "dead"}`, so the outbox stops resending. `errors` holds each throw's error class, one per try; the message goes only to the trace, where a person can delete it, since a message can quote a note (owner, 2026-11-07).
+- Owner decided 2026-11-08, ticket 319: one dead-letter stream per process start. The runner supplies `DeadInput`; `ProcessManager.dead` decodes it and fills `process`, `program` and `name` from the parent-checked historical life inside the write transaction. Caller identity is dropped. After replacement or storage reopen, a repeat keeps the same entry. Both schemas require one error class per try.
 - A process that crashes N times in T seconds goes `down {why, crashes, until}`, with backoff, and a resend does not wake it. `until` is when it tries again, on the referee's clock (owner, 2026-11-07). `[Restart]` exits it and starts it with the new `init`.
 - A wake that fails on a saved letter is a crash like any other: inside the restart budget the process restarts after its backoff, and only the brake writes `down`, with why. Every letter is kept; no saved letter is ever skipped or moved, so a saved note always folds (p55) (owner, 2026-11-08, following [OTP's supervisor restart intensity](https://www.erlang.org/doc/system/sup_princ.html)).
-- Plants: a fourth try; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend; a `dead` fact with fewer error classes than tries; a message in `errors`; a `down` with no `until`, or one it does not wake at.
+- Plants: a try past the delivery limit; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend; a `dead` fact with fewer error classes than tries; a message in `errors`; a missing `process`, `program` or `name`; caller or successor identity on a historical process's dead letter; a `down` with no `until`, or one it does not wake at.
 
 **p81, the brain comes back (scenario of P12 and P19).** `new`, stage and real Electron. s3, s8. `dev.ts`, the launchd plist.
 - Under `dev.ts`: workerd killed with `kill -9` mid-burst comes back alone, with a start fact naming its build, and nothing acked is lost (with p13). A brain that dies in a loop stops at the brake, and says so. At the 500 MB mark it restarts.
