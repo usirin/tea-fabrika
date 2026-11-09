@@ -8,6 +8,11 @@ the exam is the owner's call. *Added the same day (owner):* each step's agent si
 its own key, and CI decides from the signature; squash merges stay, and each step signs a link
 from tree to tree that survives the squash.
 
+*Changed 2026-11-08 (owner): code signs each step's commits, not the step's agent. The lead's
+fetch signs them as it pulls a box's branch (`box.sh fetch --sign <step>`), with that step's key.
+The key stays one per step, and CI still decides from the signature. Not built yet. It said: "each
+step's agent signs its commits with its own key".*
+
 *Renamed 2026-11-08 (question 15): the link's `cause` is now `parent`, with `traceId` beside it; a link with `cause` is refused.*
 
 ```text
@@ -38,7 +43,8 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
   agent that is not the builder, inside the same pull request.
 - **The test writer's commit comes first on the branch,** and it may touch exam paths: a boundary
   row, a ledger line, a catalog line a test needs, an exam test moved to a new bundler.
-- **Each step's agent signs its commits with its own key,** the same SSHSIG shape the door checks
+- **Each step's commits are signed with its own key,** by code at fetch since 2026-11-08 (above),
+  the same SSHSIG shape the door checks
   (`ssh-keygen -Y sign`, namespace `fabrika-step`). [A key per
   client](./a-key-per-client-and-no-github-trust.md) already gives every client a key; a step is
   one more.
