@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {Cmd, runIn} from "@demlik/tea/effect";
+import {Cmd, run as runEffect, runIn} from "@demlik/tea/effect";
 import {useMachine} from "@demlik/tea/react";
 import {
 	Answer,
@@ -11,12 +11,13 @@ import {
 } from "@kampus/pipeline/tickets/ask";
 import {isAnswerRefusal} from "@kampus/pipeline/tickets/ticket";
 import {Button, Kbd, Textarea} from "@manti-ui/react";
-import {Effect, Fiber, Layer, ManagedRuntime, Schema} from "effect";
+import {Effect, Fiber, Layer, ManagedRuntime, Schema, Scope} from "effect";
 import {
 	createContext,
 	type KeyboardEvent,
 	type ReactNode,
 	type Ref,
+	useCallback,
 	useContext,
 	useEffect,
 	useImperativeHandle,
@@ -408,6 +409,87 @@ export function StopView({
 }
 const runtime = ManagedRuntime.make(Layer.empty);
 const run = runIn(runtime);
+
+type AttentionView = {focused: boolean; active: boolean; visible: boolean; evidence: boolean};
+type Attention = {
+	took: Model["took"];
+	views: ReadonlyMap<string, AttentionView>;
+	at: number;
+};
+type AttentionModel = ReadonlyMap<string, Attention>;
+type AttentionMsg = {key: string; view: string; now: number} & (
+	| {type: "change"; event: Extract<Msg, {type: "focus" | "active" | "visible" | "open"}>}
+	| {type: "leave" | "read" | "saved"}
+);
+/** One clock per ask. Overlapping views share its time and append openings in event order. */
+const attentionStep = (model: AttentionModel, msg: AttentionMsg): [AttentionModel, never[]] => {
+	const previous = model.get(msg.key);
+	if (previous === undefined && msg.type !== "change") return [model, []];
+	const current = previous ?? {took: {ms: 0, opened: []}, views: new Map(), at: msg.now};
+	const focused = [...current.views.values()].some((v) => v.focused && v.active && v.visible);
+	let took = {
+		...current.took,
+		ms: current.took.ms + (focused ? Math.max(0, msg.now - current.at) : 0),
+	};
+	const views = new Map(current.views);
+	if (msg.type === "change") {
+		const view = views.get(msg.view) ?? {
+			focused: false,
+			active: true,
+			visible: true,
+			evidence: false,
+		};
+		const event = msg.event;
+		if (event.type === "open") {
+			if (event.name !== "evidence" || !view.evidence)
+				took = {...took, opened: [...took.opened, event.name]};
+			views.set(msg.view, {
+				...view,
+				evidence: event.name === "evidence" ? !view.evidence : view.evidence,
+			});
+		} else {
+			views.set(msg.view, {
+				...view,
+				[event.type === "focus" ? "focused" : event.type]: event.value,
+			});
+		}
+	} else if (msg.type === "leave") {
+		// A view can hide and return with its evidence still open. Keep that flag, but stop time.
+		const view = views.get(msg.view);
+		if (view !== undefined) views.set(msg.view, {...view, focused: false});
+	}
+	const next = new Map(model);
+	if (msg.type === "saved") next.delete(msg.key);
+	else next.set(msg.key, {took, views, at: msg.now});
+	return [next, []];
+};
+const attentionMachine = defineMachine({
+	types: {model: {} as AttentionModel, msg: {} as AttentionMsg, ctx: undefined},
+	cmds: [],
+	init: (): [AttentionModel, never[]] => [new Map(), []],
+	update: {change: attentionStep, leave: attentionStep, read: attentionStep, saved: attentionStep},
+});
+const startAttention = () =>
+	runtime.runSync(
+		runEffect(attentionMachine, {ctx: undefined}).pipe(
+			Effect.provideService(Scope.Scope, runtime.scope),
+		),
+	);
+// The window's host actions own the record's lifetime, independently of any mounted view.
+const attentionRuns = new WeakMap<AskActions, ReturnType<typeof startAttention>>();
+const attend = (actions: AskActions, msg: AttentionMsg) => {
+	let running = attentionRuns.get(actions);
+	if (running === undefined) {
+		running = startAttention();
+		attentionRuns.set(actions, running);
+	}
+	const ready = running.ready;
+	return Effect.gen(function* () {
+		const handle = yield* ready;
+		yield* handle.dispatch(msg);
+		return handle.getState().get(msg.key)?.took ?? {ms: 0, opened: []};
+	}).pipe(Effect.mapError(() => ({why: "The ask's reading time could not be kept"})));
+};
 // Shared across mounts, so a held press cannot answer a newly mounted next ask.
 const held = new Set<string>();
 
@@ -718,7 +800,8 @@ export function AskView({
 	const note = useRef<HTMLTextAreaElement>(null);
 	const alert = useRef<HTMLDivElement>(null);
 	const ctx = useRef({ticket, ask: askShownOf(ask), now: Date.now()}).current;
-	const [model, send] = useMachine(askMachine, {
+	const attention = useRef({key: `${ticket}/${ask.ask}`, view: crypto.randomUUID()}).current;
+	const [model, dispatch] = useMachine(askMachine, {
 		run,
 		ctx,
 		interpret: {
@@ -729,10 +812,19 @@ export function AskView({
 				// The save and what it says outlive this view: a saved answer can take the ask, and
 				// the view with it, off the page before the host's reply comes back.
 				return Effect.gen(function* () {
-					const fiber = yield* actions.answer(answerOfSave(cmd)).pipe(
-						Effect.tap(() => Effect.sync(() => says?.(words))),
-						Effect.forkDetach,
-					);
+					const fiber = yield* Effect.gen(function* () {
+						const answer = answerOfSave(cmd);
+						const now = answer.via._tag === "window" ? answer.via.took.said : Date.now();
+						const took = yield* attend(actions, {...attention, type: "read", now});
+						const value =
+							answer.via._tag === "window"
+								? {...answer, via: {...answer.via, took: {...answer.via.took, ...took}}}
+								: answer;
+						const result = yield* actions.answer(value);
+						yield* attend(actions, {...attention, type: "saved", now: Date.now()});
+						yield* Effect.sync(() => says?.(words));
+						return result;
+					}).pipe(Effect.forkDetach);
 					return yield* Fiber.join(fiber);
 				}).pipe(Effect.mapError((e) => ({_tag: "refused", why: e.why})));
 			},
@@ -744,6 +836,27 @@ export function AskView({
 			later: (cmd) => Effect.sync(() => actions?.later(cmd.key)),
 		},
 	});
+	const send = useCallback(
+		(msg: Msg) => {
+			if (
+				actions !== null &&
+				(msg.type === "focus" ||
+					msg.type === "active" ||
+					msg.type === "visible" ||
+					msg.type === "open")
+			)
+				Effect.runFork(attend(actions, {...attention, type: "change", event: msg, now: msg.now}));
+			dispatch(msg);
+		},
+		[actions, attention, dispatch],
+	);
+	useEffect(
+		() => () => {
+			if (actions !== null)
+				Effect.runFork(attend(actions, {...attention, type: "leave", now: Date.now()}));
+		},
+		[actions, attention],
+	);
 	const view = askView(model);
 	const shown = useRef(model.ask.shows);
 	shown.current = model.ask.shows;
