@@ -222,6 +222,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 					leaks: [],
 					left: [],
 					plancheck: null,
+					manifests: [],
 					report,
 					problem: null,
 				};
