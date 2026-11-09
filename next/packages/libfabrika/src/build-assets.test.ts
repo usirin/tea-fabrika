@@ -122,6 +122,7 @@ describe("P16 assets and Compiler", () => {
 			fc.asyncProperty(values, fc.constantFrom("manifest", "ledger"), async (value, kind) => {
 				const f = fixture("View", value);
 				previous(f, value);
+				writeFileSync(join(f.home, "compiler-ledger.json"), "[]");
 				const file =
 					kind === "manifest"
 						? join(f.home, "programs/compiler/package.json")
@@ -131,7 +132,10 @@ describe("P16 assets and Compiler", () => {
 				const result = await Effect.runPromise(
 					Effect.result((await load()).build(options)).pipe(Effect.provide(NodeServices.layer)),
 				);
-				expect(result).toMatchObject({_tag: "Failure", failure: {_tag: "BuildError"}});
+				expect(result).toMatchObject({
+					_tag: "Failure",
+					failure: {_tag: "BuildError", why: kind === "manifest" ? "table" : "compiler"},
+				});
 				expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
 			}),
 			{...runs, numRuns: 4},
@@ -181,6 +185,53 @@ describe("P16 assets and Compiler", () => {
 						)
 					).status,
 				).toBe(404);
+			}),
+			runs,
+		);
+	});
+	it("asset byte buffers decode as UTF-8 and keep their body and hash", async () => {
+		await fc.assert(
+			fc.asyncProperty(graphs, async ({name, value}) => {
+				const f = fixture(name, value),
+					native = await vi.importActual<Roll>("rolldown"),
+					expected = new Map<string, string>();
+				writeFileSync(
+					join(dirname(f.file), "window.css"),
+					`b { --value: ${JSON.stringify(`${value}雪🫖`)}; }`,
+				);
+				vi.doMock("rolldown", () => ({
+					...native,
+					rolldown: async (options: RolldownOptions) => {
+						const handle = await native.rolldown(options);
+						return {
+							...handle,
+							generate: async (options: OutputOptions) => {
+								const output = await handle.generate(options);
+								return {
+									...output,
+									output: output.output.map((item) => {
+										if (item.type !== "asset" || typeof item.source !== "string") return item;
+										expected.set(`/${item.fileName}`, item.source);
+										return {...item, source: new TextEncoder().encode(item.source)};
+									}),
+								};
+							},
+							close: () => handle.close(),
+						};
+					},
+				}));
+				vi.resetModules();
+				try {
+					const built = await run(f.options);
+					expect(expected.size).toBeGreaterThan(0);
+					for (const [route, body] of expected) {
+						expect(built.assets[route]?.body).toBe(body);
+						expect(built.assets[route]?.hash).toBe(createHash("sha256").update(body).digest("hex"));
+					}
+				} finally {
+					vi.doUnmock("rolldown");
+					vi.resetModules();
+				}
 			}),
 			runs,
 		);
@@ -247,6 +298,41 @@ describe("P16 assets and Compiler", () => {
 				},
 			);
 		});
+	it("CSS imports keep remote rules and wrap local rules only when a media condition exists", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				graphs,
+				fc.constantFrom("", "print", "(min-width: 40em)"),
+				fc.constantFrom("https", "x1", "WEB+3"),
+				async ({name, value, id}, condition, scheme) => {
+					const f = fixture(name, value),
+						pkg = dirname(f.file),
+						remote = `@import url("${scheme}://test.invalid/theme${id}.css");`,
+						body = `.inner${id} { --value: ${id}; }`,
+						last = ".root { color: red; }";
+					writeFileSync(join(pkg, `local${id}.css`), body);
+					writeFileSync(
+						join(pkg, "window.css"),
+						`${remote}\n@import "./local${id}.css" ${condition};\n${last}`,
+					);
+					const built = await run(f.options);
+					const local = condition === "" ? body : `@media ${condition} {\n${body}\n}`;
+					expect(
+						Object.values(built.assets)
+							.filter((asset) => asset.type === "text/css; charset=utf-8")
+							.map((asset) => asset.body),
+					).toEqual([`${remote}\n${local}\n${last}`]);
+				},
+			),
+			{
+				...runs,
+				examples: [
+					[{name: "View", value: "css", id: 1}, "", "x1"],
+					[{name: "View", value: "css", id: 2}, "print", "https"],
+				],
+			},
+		);
+	});
 	it("Compiler: reachable refused TSX fails before replacing the last good brain", async () => {
 		await fc.assert(
 			fc.asyncProperty(
@@ -307,6 +393,49 @@ describe("P16 assets and Compiler", () => {
 });
 
 describe("P16 cleanup and recording", () => {
+	it("the bundler keeps dynamic imports in one module, records its default phase and types acquisition failures", async () => {
+		await fc.assert(
+			fc.asyncProperty(values, async (value) => {
+				const f = fixture("View", value),
+					entry = join(f.home, "dynamic.ts"),
+					spans: Tracer.Span[] = [];
+				writeFileSync(entry, 'export const load = () => import("./late.ts");');
+				writeFileSync(join(f.home, "late.ts"), `export const text = ${JSON.stringify(value)};`);
+				const tracer = Tracer.make({
+					span: (options) => {
+						const span = new Tracer.NativeSpan(options);
+						spans.push(span);
+						return span;
+					},
+				});
+				const {bundle} = await import("./node/build.ts");
+				const output = await Effect.runPromise(bundle(entry, []).pipe(Effect.withTracer(tracer)));
+				expect(output.output.filter((item) => item.type === "chunk")).toHaveLength(1);
+				expect(spans.find((span) => span.name === "build.bundle")?.attributes.get("phase")).toBe(
+					"bundle",
+				);
+				const native = await vi.importActual<Roll>("rolldown");
+				vi.doMock("rolldown", () => ({
+					...native,
+					rolldown: () => {
+						throw new Error("planted acquisition failure");
+					},
+				}));
+				vi.resetModules();
+				try {
+					const failing = await import("./node/build.ts");
+					expect(await Effect.runPromise(Effect.result(failing.bundle(entry, [])))).toMatchObject({
+						_tag: "Failure",
+						failure: {_tag: "BuildError", why: "bundle"},
+					});
+				} finally {
+					vi.doUnmock("rolldown");
+					vi.resetModules();
+				}
+			}),
+			runs,
+		);
+	});
 	for (const point of ["after backup", "before final", "after final"] as const)
 		for (const interrupt of [false, true])
 			it(`publication plant: ${interrupt ? "interruption" : "failure"} ${point} preserves the last good file`, async () => {

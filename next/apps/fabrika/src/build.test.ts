@@ -248,6 +248,35 @@ describe("P12 Rolldown build", () => {
 		},
 	);
 	law(
+		"discovery keeps program TSX and leaves out test files and installed dependencies",
+		async ({name}) => {
+			const {build} = await import("./build.ts");
+			const folder = home(),
+				out = join(folder, "dist"),
+				root = resolve(import.meta.dirname, "../../../.."),
+				good = join(folder, `${name}.tsx`),
+				test = join(folder, `${name}.test.tsx`),
+				dependency = join(folder, "node_modules", `${name}.tsx`);
+			mkdirSync(join(folder, "node_modules"));
+			writeFileSync(good, clean);
+			writeFileSync(test, "this is invalid TSX");
+			writeFileSync(dependency, "this is invalid TSX");
+			const found = vi
+				.spyOn(fs, "globSync")
+				.mockReturnValue([good, test, dependency].map((file) => relative(root, file)));
+			syncBuiltinESMExports();
+			try {
+				const built = await Effect.runPromise(build({out, ledger: []}));
+				expect(found).toHaveBeenCalled();
+				expect(built.brain).toBe(join(out, "brain.mjs"));
+				expect(readFileSync(built.brain, "utf8").length).toBeGreaterThan(0);
+			} finally {
+				found.mockRestore();
+				syncBuiltinESMExports();
+			}
+		},
+	);
+	law(
 		"discovery plant: a disk exception is a typed BuildError and preserves the last good file",
 		async ({label}) => {
 			const {build} = await import("./build.ts");

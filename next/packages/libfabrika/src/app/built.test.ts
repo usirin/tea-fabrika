@@ -23,6 +23,7 @@ type Api = {
 const load = async () => {
 	const file = join(import.meta.dirname, "built.ts");
 	assert(existsSync(file), "P16 not built: shared Built schemas and table validation absent");
+	vi.resetModules();
 	return vi.importActual<Api>(pathToFileURL(file).href);
 };
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
