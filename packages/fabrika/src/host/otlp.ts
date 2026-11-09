@@ -41,7 +41,7 @@ const OtlpSpan = Schema.Struct({
 	status: Schema.optional(Schema.Struct({code: Schema.optional(Schema.Int)})),
 });
 
-export const TracesRequest = Schema.Struct({
+const TracesRequest = Schema.Struct({
 	resourceSpans: Schema.optional(
 		Schema.Array(
 			Schema.Struct({
@@ -55,7 +55,7 @@ export const TracesRequest = Schema.Struct({
 });
 
 /** The most spans one request may hold, and the most text a tag's value may: the record is forever. */
-export const MAX_SPANS = 5000;
+const MAX_SPANS = 5000;
 const MAX_TAG = 1024;
 
 /**

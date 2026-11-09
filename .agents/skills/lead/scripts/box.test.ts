@@ -848,11 +848,12 @@ describe("T321 K1 fetch, today's tooling", () => {
 });
 
 describe("T321 K2 box start, today's tooling", () => {
-	// Plant: inspect only the current branch's links. Main and this box's branch are allowed.
+	// Plant: inspect only the current branch's links. Main and this box's branch are allowed, and so
+	// is an older branch whose links the base already holds. Plant: walk links from main, not the base.
 	it("K2 refuses a shared ticket only when its links are on another open branch", () => {
 		fc.assert(
 			fc.property(word, (text) => {
-				each(["main", "this", "other", "different-ticket"], (place) =>
+				each(["main", "this", "other", "different-ticket", "inside"], (place) =>
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
 						if (place === "other" || place === "different-ticket")
@@ -860,8 +861,12 @@ describe("T321 K2 box start, today's tooling", () => {
 						const sha = b.commit(b.main, "src/a.ts", `${text}\n`);
 						b.sign(b.main, "tests", place === "different-ticket" ? "322" : "321");
 						if (place === "main") b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+						if (place === "inside") b.git(b.main, "branch", "fabrikalfa/old", sha);
 						b.git(b.main, "checkout", "-q", "main");
-						const got = b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
+						const got =
+							place === "inside"
+								? b.new(sha, b.branch)
+								: b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
 						if (place === "other") refused(got, /shared_ticket/);
 						else expect(got.code, got.text).toBe(0);

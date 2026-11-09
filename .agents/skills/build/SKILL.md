@@ -35,7 +35,10 @@ the rest.
 6. **Commit and sign** with the step-commit skill:
    `sh .agents/skills/step-commit/scripts/stepcommit.sh build <ticket> "T<ticket> build: <subject>" <paths...>`
 7. **Report** in at most 6 lines: which laws went green, any still red and why, any file you needed
-   but may not touch, and what the lead's own run must show (Electron, screenshots).
+   but may not touch, and what the lead's own run must show (Electron, screenshots). If every law
+   was already green at the start and you changed nothing, do not commit: put
+   `laws: green <the narrow test paths you ran>` just before `answer: done`. drive.ts takes that as
+   done; `done` with no commit and no such line is `stuck:no_commit`.
 
 ## Go easy on the machine
 
