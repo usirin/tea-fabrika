@@ -1,9 +1,9 @@
 #!/bin/sh
 # plancheck.sh <plan.md>: list every exam path the plan names, and check the plan's files tables.
 # The listing is a total scan that reads no Markdown: the whole file, fences, link titles and
-# comments included, is split into words on whitespace and on marks that cannot sit in a repo path,
-# and each word the exam list matches is listed. A false listing is harmless; the lead checks each
-# listed path is owned by tests. A files table is one whose first header starts with "file" or
+# comments included, is split into words on every character outside `A-Z a-z 0-9 . _ / -`, and each
+# word the exam list matches, as it stands or with its leading dots removed, is listed. A false
+# listing is harmless; the lead checks each listed path is owned by tests. A files table is one whose first header starts with "file" or
 # "path", or that has an owner column ("owner", "step", "writer" or "writes it"). Exits 1 when a
 # files table has no owner column, a row has an empty owner, or an exam path in a row is owned by a
 # step other than tests. Version 2 checks the generator grammar on laws tables (a "plant" column).
@@ -96,14 +96,17 @@ def generator(text):
     match = re.fullmatch(r"(vector|format|pinned|scenario):\s*(.+)", text)
     return bool(match and any(c.isalnum() for c in match[2]))
 def scanned(word):
-    # A word as the total scan reads it: no leading `./`, trailing period, or wrapping `_` and `*`.
+    # A word as the total scan reads it: no leading `./`, `_` or `-`, and no trailing `_`, `-` or `.`.
+    # A leading `.` stays, since dotfiles start with one.
     while True:
-        out = norm(word).strip("_*").rstrip(".")
+        out = norm(word).lstrip("_-").rstrip("_-.")
         if out == word: return out
         word = out
-# The lead's backstop, a total scan: split the raw file on whitespace and on every mark that cannot
-# sit in a repo path, and list each word the exam list matches. Only path cells decide the exit code.
-named = hits(scanned(w) for w in re.split(r"[\s`\[\]()\"'*|,;:<>=]+", open(plan).read()))
+# The lead's backstop, a total scan: split the raw file on every character that cannot be in a repo
+# path, and list each word the exam list matches, as it stands or with its leading dots removed.
+# Only path cells decide the exit code.
+words = [scanned(w) for w in re.split(r"[^A-Za-z0-9._/-]+", open(plan).read())]
+named = hits(words + [w.lstrip(".") for w in words])
 col, files, gen, path = None, False, None, None
 for i, l in enumerate(lines):
     l = l.strip()
