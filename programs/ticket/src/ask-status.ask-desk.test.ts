@@ -1,5 +1,4 @@
 import {useMachine} from "@demlik/tea/react";
-import {it} from "@effect/vitest";
 import {AskStatus} from "@tea-fabrika/tracker/ask-window";
 import {Schema} from "effect";
 import {
@@ -185,15 +184,16 @@ property(
 	},
 );
 
-it.prop(
+property(
 	"each accepted answer changes the live region even when its words repeat",
 	{repeats},
-	({repeats}) => {
+	async ({repeats}) => {
 		const test = mount(0);
 		try {
 			for (let i = 0; i < repeats; i++) {
 				const before = test.document.writes;
 				test.announce("Approved.");
+				await new Promise<void>((resolve) => setImmediate(resolve));
 				expect(test.document.body.findStatus()?.textContent).toContain("Approved.");
 				expect(
 					test.document.writes,
@@ -204,20 +204,15 @@ it.prop(
 			test.close();
 		}
 	},
-	{arbitrary: {seed: 119120}},
 );
 
-it.prop(
-	"an accepted answer says how many asks are left",
-	{left},
-	({left}) => {
-		const test = mount(left);
-		try {
-			test.announce("Approved.");
-			expect(test.document.body.findStatus()?.textContent).toBe(`Approved. ${left} left.`);
-		} finally {
-			test.close();
-		}
-	},
-	{arbitrary: {seed: 119120}},
-);
+property("an accepted answer says how many asks are left", {left}, async ({left}) => {
+	const test = mount(left);
+	try {
+		test.announce("Approved.");
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(test.document.body.findStatus()?.textContent).toBe(`Approved. ${left} left.`);
+	} finally {
+		test.close();
+	}
+});
