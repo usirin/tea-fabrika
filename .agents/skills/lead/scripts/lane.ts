@@ -20,6 +20,21 @@ export const startHead = (
 	return newest && !(saved && isAncestor(newest, saved)) ? newest : saved;
 };
 
+/**
+ * The lane's root: where its base left main, so a step's commits check reads every earlier step's
+ * link from here. `fresh` is the merge base of main and the step's base. After a catch-up merges a
+ * newer main in, `fresh` moves past the saved root, and main's own squash commits would then sit in
+ * the saved root's range and read as unsigned (ci375 tests6, ticket 391). So `fresh` wins whenever
+ * it holds the saved root. A saved root the base holds and `fresh` does not is kept; any other saved
+ * root came from a step off the lane, and `fresh` is found again.
+ */
+export const laneRoot = (
+	saved: string | undefined,
+	fresh: string,
+	base: string,
+	isAncestor: (a: string, b: string) => boolean,
+): string => (saved && !isAncestor(saved, fresh) && isAncestor(saved, base) ? saved : fresh);
+
 /** The step a git note names, or none when it does not read. */
 export const stepOf = (note: string): string[] => {
 	let n: unknown;
