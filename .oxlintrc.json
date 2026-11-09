@@ -5,7 +5,7 @@
 	"plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest"],
 	// Custom rules, copied from the pipeline this repo rebuilds, and this repo's own. See
 	// oxlint-plugins/README.md.
-	"jsPlugins": ["./oxlint-plugins/index.ts"],
+	"jsPlugins": ["./oxlint-plugins/index.ts", "./oxlint-plugins/wiring-only.ts"],
 	// Each rule is named here, so a new oxlint release adds none on its own.
 	"categories": { "correctness": "off" },
 	"options": { "reportUnusedDisableDirectives": "error" },
@@ -17,6 +17,10 @@
 		"unreachable-ledger.json"
 	],
 	"rules": {
+		"fabrika-wiring/wiring-only": "error",
+		// P23 permits Redacted.value only on the digest's one-way hash line,
+		// client/socket.ts's door.knock send line, and electron/browser-link.ts's external-open line.
+		// Each needs its own explained line exception. No file-wide edge exception is granted.
 		// "warn" here only advises: lint.ts prints these two and does not fail on them. They were
 		// wrong too often to block (experiment 125). Any other warning fails.
 		"fabrika/no-effect-promise": "warn",
