@@ -495,6 +495,8 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   follows OTP: registry, mailbox, links, monitors, trap exit, supervisors. A
   difference from OTP needs a written reason. A check that ours matches OTP is
   still owed, since experiment 99 came before experiment 107.
+  *Done 2026-11-09 for Tier 1's slice: [experiment 239](../../experiments/239-supervision-vs-otp.md),
+  with tickets 404 to 406 for what it found.*
 - **The desk keeps its name;** workspaces are the numbered layouts inside it.
 - **Limits** (money, turns, seconds, tokens) moved up to the app layer as
   `LimitManager` (A2).
