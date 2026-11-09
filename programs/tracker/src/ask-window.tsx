@@ -559,7 +559,7 @@ function EvidenceText({shows}: {readonly shows: Shows}) {
 										)}
 										<p className="ask-quiet">
 											Lean: {q.lean}. {q.why}
-											{q.cost === undefined ? "" : ` Cost: ${q.cost}`}
+											{q.cost === undefined ? "" : ` Cost: ${q.cost}.`}
 											{q.sure === undefined ? "" : ` ${q.sure}% sure.`}
 										</p>
 										{q.doubt !== undefined && <p className="ask-quiet">Doubt: {q.doubt}</p>}

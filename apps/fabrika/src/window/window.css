@@ -3077,6 +3077,11 @@ main.program:has(> .view) {
 .ask-evidence li {
 	overflow-wrap: anywhere;
 }
+/* One item's fields sit under the item's own bullet, not under a second one. */
+.ask-evidence .ask-fields {
+	padding-inline-start: 0;
+	list-style: none;
+}
 .ask-evidence-label {
 	color: var(--text-faint);
 	font-size: var(--fs-small);
