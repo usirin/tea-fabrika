@@ -109,10 +109,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
   and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
   before an approved plan and tests that exist
-  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a
-  decided note is approved by the agent leading the session, which writes "Approved by the lead
-  agent, builds <note>" in it; a plan that raises a new design call goes to the owner (owner,
-  2026-11-03). A scheduled walk or approval that a decided note already answers is decided in
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a decided
+  note is approved by the lead session after its own read and draft check. It writes
+  `Approved by the lead agent, builds <note>; body <sha256-12>` on line 1 and replaces that line
+  after any body edit, including an appended amendment. A plan that raises a new design call
+  goes to the owner. A scheduled walk or approval that a decided note already answers is decided in
   the plan, and the lead approves it in one line; a question to the owner must be one they could
   answer no to without contradicting a decision (owner, 2026-11-08). In `next/`'s planner step
   this becomes code: a check on the plan's open questions. No merged pull request
