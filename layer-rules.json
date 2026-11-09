@@ -41,6 +41,10 @@
 			"paths": ["next/packages/libfabrika/src/door"]
 		},
 		{
+			"name": "next-libfabrika-desktop",
+			"paths": ["next/packages/libfabrika/src/desktop"]
+		},
+		{
 			"name": "next-app",
 			"paths": ["next/packages/libfabrika/src/app", "next/packages/libfabrika/src/testing.ts"]
 		},

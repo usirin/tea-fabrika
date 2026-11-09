@@ -1,0 +1,204 @@
+{
+  "format": 1,
+  "warning": "PUBLIC SYNTHETIC TEST DATA. Never fund or use these keys.",
+  "vectors": [
+    {
+      "entropy": "00000000000000000000000000000000",
+      "words": [
+        "abandon",
+        "abandon",
+        "abandon",
+        "abandon",
+        "abandon",
+        "abandon",
+        "abandon",
+        "abandon",
+        "abandon",
+        "abandon",
+        "abandon",
+        "about"
+      ],
+      "seed": "67f219d59a3125749c6a5f30516438911f80a061dcaec1193e40d1a8527365db",
+      "publicKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs"
+    },
+    {
+      "entropy": "000102030405060708090a0b0c0d0e0f",
+      "words": [
+        "abandon",
+        "amount",
+        "liar",
+        "amount",
+        "expire",
+        "adjust",
+        "cage",
+        "candy",
+        "arch",
+        "gather",
+        "drum",
+        "buyer"
+      ],
+      "seed": "66f1c08375d4551e4882bef84c23404c73b9cc127a4bee9658946d933c10fae9",
+      "publicKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEXzo3HduavZHOGsUquxqy2KEpWaz7JhvxNiArFUi9Xy"
+    },
+    {
+      "entropy": "ffffffffffffffffffffffffffffffff",
+      "words": [
+        "zoo",
+        "zoo",
+        "zoo",
+        "zoo",
+        "zoo",
+        "zoo",
+        "zoo",
+        "zoo",
+        "zoo",
+        "zoo",
+        "zoo",
+        "wrong"
+      ],
+      "seed": "24bf3cd13735ad234f0b43664d27a9dab9a15e49c4af2461850525feb60044cb",
+      "publicKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKV3z6pcdT9LaC5yvJXiPl11GORduEe1bcZLJxZxSzCF"
+    }
+  ],
+  "labelCollisions": [
+    {
+      "kind": "blob-hex",
+      "prefix": "df71",
+      "a": {
+        "entropy": "00000000000000000000000000000039",
+        "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICodMtZIsUOxcS1/EDfGxCwYTVBMAL/LiCq2jaJAf+c+"
+      },
+      "b": {
+        "entropy": "000000000000000000000000000000b2",
+        "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJya2dWtbZ9HNdPdden8G3VbRpIVH6Lke7b5UOkt6x/Q"
+      }
+    },
+    {
+      "kind": "raw-hex",
+      "prefix": "c0b0",
+      "a": {
+        "entropy": "00000000000000000000000000000128",
+        "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqt70ncvtRjlMg70FspwGJR6RBzm4uqmM/j43D3hrZh"
+      },
+      "b": {
+        "entropy": "000000000000000000000000000001be",
+        "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKMgV8a/AzVpOWuqp8rafUKklfjKys27kraWw/xRbkus"
+      }
+    },
+    {
+      "kind": "raw-base64",
+      "prefix": "FXix",
+      "a": {
+        "entropy": "00000000000000000000000000000af4",
+        "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGEt5te+2v+bZvelHLPLyii0vsVJYyH6d7fQAzW74jUI"
+      },
+      "b": {
+        "entropy": "000000000000000000000000000011a3",
+        "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAm/L1C76FMrjNXDRUHy0OVY3PrKmlSLtK4oVd4LG5UI"
+      }
+    },
+    {
+      "kind": "blob-base64",
+      "prefix": "50fy",
+      "a": {
+        "entropy": "00000000000000000000000000000e40",
+        "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBHekVGHjYQFa+hULlH8nmWZnx0mLduXEgTprCLeoY8C"
+      },
+      "b": {
+        "entropy": "000000000000000000000000000015f7",
+        "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUzv8WLwdccXwYfx9nhbeYJ6AokdpzzxFHCRfCsW4Mn"
+      }
+    }
+  ],
+  "keys": {
+    "person": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c",
+    "window": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q",
+    "windowLine": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIE5dw6ofRdfVqNUZsNMfszLjYqRtO43ol32D1uPybOU",
+    "agent": "7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E",
+    "agentLine": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfR",
+    "recovery": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs",
+    "fresh": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMqTrBcFGHBx1nuDx/8O/oEI6OxFMFdddyaHkzPb2r58",
+    "freshWindow": "bnoc3Smwt4_ROvTFWY_v9O8qlxZuPKby5Pv8zYBQW_E",
+    "replacement": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqHX/8es4RRV3rNWv7kBUVlaN18ieCQhjoFV7x69J8X"
+  },
+  "preview": {
+    "to": "p28",
+    "url": "https://fabrika.test/entry/p28",
+    "connection": "connection_01m6v5270hf3c8x2q7w9z4k5mn",
+    "nonce": "0.CAgICAgICAgICAgICAgICAgICAgICAgI.1FrPz4v-Y-lv5p-QsnVMZ9Cf0jY9ykg3W7Ci8ZZhRAg"
+  },
+  "signatures": [
+    {
+      "name": "sheet",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c",
+      "text": "{\"_tag\":\"added\",\"add\":{\"id\":\"input_01m6v5270hf3c8x2q7w9z4k5m1\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"to\":\"p28\",\"adds\":{\"_tag\":\"recovery\",\"key\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs\",\"v\":1},\"drops\":[],\"saw\":{\"how\":\"sheet\",\"check\":\"touch\",\"where\":\"test\",\"has\":[],\"typed\":true,\"kept\":\"print\",\"old\":null},\"seen\":null,\"sentAt\":\"2026-11-09T00:00:00.000Z\"}}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgiojj3XQJ8ZX9UtstPLpdcspnCb\n8dlBIb83SIAbQPb1wAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABAZHJSz+4iHOPqmo/5TWD2Eeksjtvu1caN3G7iuzPg6egLZPn/0O\n0hLFqRK4gH62b5TybNOl4jzfRooKj37RVOBQ==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "recover",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs",
+      "text": "{\"_tag\":\"added\",\"add\":{\"id\":\"input_01m6v5270hf3c8x2q7w9z4k5m2\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"to\":\"p28\",\"adds\":{\"_tag\":\"person\",\"key\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMqTrBcFGHBx1nuDx/8O/oEI6OxFMFdddyaHkzPb2r58\",\"window\":\"bnoc3Smwt4_ROvTFWY_v9O8qlxZuPKby5Pv8zYBQW_E\"},\"drops\":[\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c\",\"gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q\"],\"saw\":{\"how\":\"recovery\",\"check\":\"touch\",\"where\":\"test\",\"has\":[],\"typed\":false,\"kept\":null,\"old\":\"lost\"},\"seen\":2,\"sentAt\":\"2026-11-09T00:00:00.000Z\"}}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAggbtxujWI4uuFL4ow87eojh44fI\n3yVKSaKxw6k9CYqCwAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABAZiPb5gv31qFo7EpAEwdXo134JpvBW4lCoDammypT6K5vdJWWB2\n3cZNV5wuRPsepClaLDv8tiTARRd8HALLbCBg==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "window-add",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIE5dw6ofRdfVqNUZsNMfszLjYqRtO43ol32D1uPybOU",
+      "text": "{\"_tag\":\"added\",\"add\":{\"id\":\"input_01m6v5270hf3c8x2q7w9z4k5m6\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"to\":\"p28\",\"adds\":{\"_tag\":\"recovery\",\"key\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs\",\"v\":1},\"drops\":[],\"saw\":{\"how\":\"sheet\",\"check\":\"touch\",\"where\":\"test\",\"has\":[],\"typed\":true,\"kept\":\"print\",\"old\":null},\"seen\":null,\"sentAt\":\"2026-11-09T00:00:00.000Z\"}}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAggTl3Dqh9F19Wo1Rmw0x+zMuNip\nG07jeiXfYPW4/Js5QAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABAiIMz+RbnULjIqoOYFe8yQWhdMFO5LAQosMzv2TGL3EbhPJkSUN\nGezwbfyxWmORzAXblYjiGtFxk7CsQhpOqHAA==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "agent-add",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfR",
+      "text": "{\"_tag\":\"added\",\"add\":{\"id\":\"input_01m6v5270hf3c8x2q7w9z4k5m7\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"to\":\"p28\",\"adds\":{\"_tag\":\"recovery\",\"key\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs\",\"v\":1},\"drops\":[],\"saw\":{\"how\":\"sheet\",\"check\":\"touch\",\"where\":\"test\",\"has\":[],\"typed\":true,\"kept\":\"print\",\"old\":null},\"seen\":null,\"sentAt\":\"2026-11-09T00:00:00.000Z\"}}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg7UkoxijRwsbq6QM4kFmVYSlZJz\npcY/k2NsFGFKyHN9EAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABAbBSmisBtrl+CODB//cztvO6/kKREgdQjEnu+60hpNA8fPxOoL/\nv6I+drQBJP7Q1NljKNOZX+NBlH4Pv4MyFODQ==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "recover-again",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs",
+      "text": "{\"_tag\":\"added\",\"add\":{\"id\":\"input_01m6v5270hf3c8x2q7w9z4k5m9\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"to\":\"p28\",\"adds\":{\"_tag\":\"person\",\"key\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMqTrBcFGHBx1nuDx/8O/oEI6OxFMFdddyaHkzPb2r58\",\"window\":\"bnoc3Smwt4_ROvTFWY_v9O8qlxZuPKby5Pv8zYBQW_E\"},\"drops\":[\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c\",\"gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q\"],\"saw\":{\"how\":\"recovery\",\"check\":\"touch\",\"where\":\"test\",\"has\":[],\"typed\":false,\"kept\":null,\"old\":\"lost\"},\"seen\":2,\"sentAt\":\"2026-11-09T00:00:00.000Z\"}}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAggbtxujWI4uuFL4ow87eojh44fI\n3yVKSaKxw6k9CYqCwAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABA7pecqK8XKWgwWo2+R+12wS5qDOuyMziYx/gCODWrLjWXpCwqyd\nMqLfnbwbuP0vQMwtiY9FPau0kvMKKgMmssCQ==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "new-sheet",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c",
+      "text": "{\"_tag\":\"added\",\"add\":{\"id\":\"input_01m6v5270hf3c8x2q7w9z4k5ma\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"to\":\"p28\",\"adds\":{\"_tag\":\"recovery\",\"key\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqHX/8es4RRV3rNWv7kBUVlaN18ieCQhjoFV7x69J8X\",\"v\":1},\"drops\":[],\"saw\":{\"how\":\"sheet\",\"check\":\"touch\",\"where\":\"test\",\"has\":[],\"typed\":true,\"kept\":\"print\",\"old\":null},\"seen\":null,\"sentAt\":\"2026-11-09T00:00:00.000Z\"}}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgiojj3XQJ8ZX9UtstPLpdcspnCb\n8dlBIb83SIAbQPb1wAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABAc4oeS5tYKHBZa+R0S5D3TNZ6ra0JaXiB8cl7dSvqBccStZIxEn\n8lGWh34oRX+deM++h/mjXi18AKSHCS9nP1DA==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "recovery-sheet",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs",
+      "text": "{\"_tag\":\"added\",\"add\":{\"id\":\"input_01m6v5270hf3c8x2q7w9z4k5m4\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"to\":\"p28\",\"adds\":{\"_tag\":\"recovery\",\"key\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqHX/8es4RRV3rNWv7kBUVlaN18ieCQhjoFV7x69J8X\",\"v\":1},\"drops\":[],\"saw\":{\"how\":\"sheet\",\"check\":\"touch\",\"where\":\"test\",\"has\":[],\"typed\":true,\"kept\":\"print\",\"old\":null},\"seen\":null,\"sentAt\":\"2026-11-09T00:00:00.000Z\"}}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAggbtxujWI4uuFL4ow87eojh44fI\n3yVKSaKxw6k9CYqCwAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABAQbpcEZAiFxT5k6nQj603bhG27wDPUzZ9kI4hc6gN1wa/OQN2Sn\nr0fjrysfNPMZXNgE6jD2KZuiI61ngFyYVrCQ==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "recovery-grant",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs",
+      "text": "{\"_tag\":\"granted\",\"grant\":{\"id\":\"input_01m6v5270hf3c8x2q7w9z4k5m3\",\"key\":\"7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"to\":\"p28\",\"as\":\"agent\",\"saw\":{\"code\":\"1234\",\"label\":\"Test agent\",\"where\":\"test\",\"how\":\"command\",\"check\":\"none\",\"has\":[]},\"sentAt\":\"2026-11-09T00:00:00.000Z\"}}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAggbtxujWI4uuFL4ow87eojh44fI\n3yVKSaKxw6k9CYqCwAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABApr1b7QCzRmNAsIxl5dmFxG2fNl9MSpbCz4y7CxPyXss/gjGZRS\n1RbdagPvvwlpZsugdSRURQVrObjV0N27G+DQ==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "foreign-drop",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c",
+      "text": "{\"_tag\":\"added\",\"add\":{\"id\":\"input_01m6v5270hf3c8x2q7w9z4k5m5\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"to\":\"p28\",\"adds\":{\"_tag\":\"recovery\",\"key\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs\",\"v\":1},\"drops\":[\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKV3z6pcdT9LaC5yvJXiPl11GORduEe1bcZLJxZxSzCF\"],\"saw\":{\"how\":\"sheet\",\"check\":\"touch\",\"where\":\"test\",\"has\":[],\"typed\":true,\"kept\":\"print\",\"old\":null},\"seen\":null,\"sentAt\":\"2026-11-09T00:00:00.000Z\"}}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgiojj3XQJ8ZX9UtstPLpdcspnCb\n8dlBIb83SIAbQPb1wAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABAJlJbU9E1oO4Y+SnBJhUVJuwM4dBR83/2T8U3GPror4dni91x5P\nE0Bc0o7h6zH5gQIL2aOWh+AI4FZ5kZ2b4ICg==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "other-ledger",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs",
+      "text": "{\"_tag\":\"added\",\"add\":{\"id\":\"input_01m6v5270hf3c8x2q7w9z4k5m2\",\"for\":\"person_01m6v5270hf3c8x2q7w9z4k5mn\",\"to\":\"other\",\"adds\":{\"_tag\":\"person\",\"key\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMqTrBcFGHBx1nuDx/8O/oEI6OxFMFdddyaHkzPb2r58\",\"window\":\"bnoc3Smwt4_ROvTFWY_v9O8qlxZuPKby5Pv8zYBQW_E\"},\"drops\":[\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c\",\"gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q\"],\"saw\":{\"how\":\"recovery\",\"check\":\"touch\",\"where\":\"test\",\"has\":[],\"typed\":false,\"kept\":null,\"old\":\"lost\"},\"seen\":2,\"sentAt\":\"2026-11-09T00:00:00.000Z\"}}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAggbtxujWI4uuFL4ow87eojh44fI\n3yVKSaKxw6k9CYqCwAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABAjF46js3B4QdL1LkivQ8NuRbNyGphZMsKwJ8SMMYgyetym1/EOA\niWYR/B6ZempnOMmF0coEQEPl1Zxm8HLxZZBQ==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "preview",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs",
+      "text": "{\"_tag\":\"recovery_preview\",\"to\":\"p28\",\"url\":\"https://fabrika.test/entry/p28\",\"connection\":\"connection_01m6v5270hf3c8x2q7w9z4k5mn\",\"nonce\":\"0.CAgICAgICAgICAgICAgICAgICAgICAgI.1FrPz4v-Y-lv5p-QsnVMZ9Cf0jY9ykg3W7Ci8ZZhRAg\"}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAggbtxujWI4uuFL4ow87eojh44fI\n3yVKSaKxw6k9CYqCwAAAAOZmFicmlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAFMAAAAL\nc3NoLWVkMjU1MTkAAABA9wC9an3ZIWbXhGeRi+6e7K22zsG2WiP4C/Wfh1oNSlLSfrhZ7Q\nRfaUwd0lvkJKl37+YZc9LMvUWT/DiPWYixCg==\n-----END SSH SIGNATURE-----\n"
+    },
+    {
+      "name": "wrong-namespace",
+      "signer": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs",
+      "text": "{\"_tag\":\"recovery_preview\",\"to\":\"p28\",\"url\":\"https://fabrika.test/entry/p28\",\"connection\":\"connection_01m6v5270hf3c8x2q7w9z4k5mn\",\"nonce\":\"0.CAgICAgICAgICAgICAgICAgICAgICAgI.1FrPz4v-Y-lv5p-QsnVMZ9Cf0jY9ykg3W7Ci8ZZhRAg\"}\n",
+      "armored": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAggbtxujWI4uuFL4ow87eojh44fI\n3yVKSaKxw6k9CYqCwAAAAJZWxzZXdoZXJlAAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1l\nZDI1NTE5AAAAQFGO3HzpQQ8p7YAz8HnTxX9tmnB9nF3H1aWQfEEqEr9xVTIXOPBVGHyICE\nWo+FZ9LwKT2g28p0xlswqHGefsWwI=\n-----END SSH SIGNATURE-----\n"
+    }
+  ]
+}

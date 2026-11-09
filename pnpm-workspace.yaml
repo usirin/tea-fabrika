@@ -44,6 +44,8 @@ catalog:
   '@effect/platform-node': 4.1.2
   '@effect/tsgo': 0.63.0
   '@effect/vitest': 4.1.2
+  '@scure/bip39': 2.4.0
+  '@noble/hashes': 2.4.0
   # MCP's official TypeScript SDK, v2's split packages: the host serves programs as tools (@kampus/fabrika-old/mcp).
   '@modelcontextprotocol/client': 2.4.0
   '@modelcontextprotocol/server': 2.4.0
