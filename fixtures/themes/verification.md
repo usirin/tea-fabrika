@@ -402,6 +402,13 @@ decimal bits. Exact T13 comparison caught both. The script now decodes the
 mapped bytes and runs as `pnpm exec node`, on the tests' runtime. No tolerance,
 floor, required background or product calculation changed to hide a difference.
 
+Mutation round 1 showed the pinning wrong. The repo's runtime is Node 26.13.0
+(`package.json` engines, every CI job, and the shell `node` Stryker runs). On it
+the Node 22 report failed T13 on doubles alone: 3 machine epsilons, relative, and
+no tag, color or count changed. T13 now accepts a double within 4 epsilons of the
+report's value and stays exact everywhere else. The report is unchanged. A plant
+that scales WCAG by 1e-13 or APCA by 1e-14 still fails on both runtimes.
+
 The strengthened T13 `format:` check compares the full reports and all drawn
 colors with the real checker and independent compositing. The new generated
 T11 law exercises caps just below, at and above the measured move with seed

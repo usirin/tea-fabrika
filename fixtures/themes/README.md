@@ -16,5 +16,6 @@ Experiment 239 measured repair version `1` at cap `0.1705827986227786`.
 Solarized Light's `text-faint` on `surface-selected/surface-raised` sets it.
 `calibration.json` holds all five uncapped and capped reports, the invented
 result, sorted moves, substitutions, remaining failures and drawn colors.
-`tokens/repair.toml` pins the same version, cap and pair. Run calibration with
-`pnpm exec node` to use the tests' runtime. Visual review remains pending.
+`tokens/repair.toml` pins the same version, cap and pair. The readings' last
+bits differ between Node releases, so T13 accepts 4 epsilons on doubles alone
+(verification.md). Visual review remains pending.

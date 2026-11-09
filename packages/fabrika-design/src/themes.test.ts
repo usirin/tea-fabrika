@@ -943,6 +943,45 @@ describe("T7 built-in picks pass both floors", () => {
 	});
 });
 
+/**
+ * The report's readings and moves are doubles from `**`, `Math.pow` and `Math.cbrt`, and V8 does not
+ * fix their last bits across releases: on the same bytes, Node 22.22.3 and 26.13.0 (the repo's
+ * pinned runtime: package.json engines, CI, and the shell `node` the mutation step's Stryker runs)
+ * differ in the last bits (T343 mutation round 1: the report from 22 needs 3 machine epsilons,
+ * relative, on 26; 2 fails; every tag, color and count the same). This returns `actual` with each
+ * such double replaced by the report's value, so `toEqual` stays exact on every string, tag,
+ * count, key and order, and on any number more than ULPS epsilons, relative, away.
+ */
+const ULPS = 4;
+const libmBits = (actual: unknown, expected: unknown): unknown => {
+	if (typeof actual === "number" && typeof expected === "number") {
+		const near =
+			Number.isFinite(actual) &&
+			Number.isFinite(expected) &&
+			Math.sign(actual) === Math.sign(expected) &&
+			Math.abs(actual - expected) <=
+				ULPS * Number.EPSILON * Math.max(Math.abs(actual), Math.abs(expected));
+		return near ? expected : actual;
+	}
+	if (Array.isArray(actual) && Array.isArray(expected))
+		return actual.map((value, i) => libmBits(value, expected[i]));
+	if (
+		typeof actual === "object" &&
+		actual !== null &&
+		typeof expected === "object" &&
+		expected !== null &&
+		!Array.isArray(actual) &&
+		!Array.isArray(expected)
+	)
+		return Object.fromEntries(
+			Object.entries(actual).map(([key, value]) => [
+				key,
+				libmBits(value, (expected as Record<string, unknown>)[key]),
+			]),
+		);
+	return actual;
+};
+
 describe("T13 kept source bytes and versioned calibration", () => {
 	// pinned: tests7 could not map six globals. Keep 0009's computed places beside the
 	// note's six published places, so a changed alpha/compositing rule cannot silently remap them.
@@ -1118,7 +1157,7 @@ describe("T13 kept source bytes and versioned calibration", () => {
 				{fix: "nudge", contrast: 4.5},
 				{version: report.version, cap: 1},
 			);
-			expect(uncapped).toEqual(result);
+			expect(libmBits(uncapped, result)).toEqual(result);
 			for (const change of uncapped.changes) {
 				if (change._tag !== "moved") continue;
 				measuredMoves.push({
@@ -1133,7 +1172,8 @@ describe("T13 kept source bytes and versioned calibration", () => {
 				});
 			}
 		}
-		expect(report.moves).toEqual(measuredMoves.sort((a, b) => a.move - b.move));
+		const sortedMoves = measuredMoves.sort((a, b) => a.move - b.move);
+		expect(libmBits(sortedMoves, report.moves)).toEqual(report.moves);
 		expect(report.rendered.map(({name}) => name).sort()).toEqual(
 			[...realNames, "unreadable-made-up"].sort(),
 		);
@@ -1170,17 +1210,16 @@ describe("T13 kept source bytes and versioned calibration", () => {
 					};
 				}),
 			);
-			expect(
-				check(
-					written,
-					pairs,
-					{fix: "nudge", contrast: 4.5},
-					{
-						version: report.version,
-						cap: report.cap,
-					},
-				),
-			).toEqual(result);
+			const capped = check(
+				written,
+				pairs,
+				{fix: "nudge", contrast: 4.5},
+				{
+					version: report.version,
+					cap: report.cap,
+				},
+			);
+			expect(libmBits(capped, result)).toEqual(result);
 		}
 	});
 });
