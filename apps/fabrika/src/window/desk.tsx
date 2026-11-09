@@ -389,8 +389,8 @@ const frameStep = (m: FrameMsg): boolean => {
 
 /**
  * A configured focus key just dismissed something over the desk, and the host's answer to it has
- * not come yet. The dismissal gave focus back to where the opener was, which is no place to cycle
- * on from: the key's answer enters the workspace.
+ * not come yet. Its answer moves to the next open tile, wrapping within the workspace, before
+ * later presses can reach the bars. With one open tile it enters that tile again.
  */
 let leftOver = false;
 
@@ -398,16 +398,21 @@ const cycleFocus = (to: "next" | "previous") => {
 	const fromOver = leftOver;
 	leftOver = false;
 	const open = store.desk?.at === "open" ? store.desk : null;
-	const tile = open === null ? null : focusedOf(open);
-	const screen =
-		tile === null
-			? null
-			: document.querySelector<HTMLElement>(
-					`[data-tile="${tile.id}"] .screen, [data-view="${tile.id}"]`,
-				);
+	const ws = open === null ? null : activeOf(open);
+	const screens =
+		ws === null
+			? []
+			: tilesOf(ws).flatMap((tile) => {
+					const element = document.querySelector<HTMLElement>(
+						tile.shows.run === null
+							? `[data-tile="${tile.id}"] .screen`
+							: `[data-view="${tile.id}"]`,
+					);
+					return element === null || element.getClientRects().length === 0 ? [] : [{tile, element}];
+				});
 	const regions = [
 		document.querySelector<HTMLElement>(".topbar button"),
-		screen,
+		...screens.map(({element}) => element),
 		document.querySelector<HTMLElement>(".bottomline button"),
 	].filter((el): el is HTMLElement => el !== null && el.getClientRects().length > 0);
 	if (regions.length < 2)
@@ -415,12 +420,16 @@ const cycleFocus = (to: "next" | "previous") => {
 	const at = regions.findIndex((el) =>
 		el.matches(".desk") ? el === document.activeElement : el.contains(document.activeElement),
 	);
+	const tileAt = screens.findIndex(({tile}) => tile.id === ws?.focused);
 	const target =
-		fromOver && screen !== null && regions.includes(screen)
-			? screen
+		fromOver && screens.length > 0
+			? screens[(tileAt + (to === "next" ? 1 : screens.length - 1)) % screens.length]?.element
 			: regions[(at + (to === "next" ? 1 : regions.length - 1)) % regions.length];
-	if (target === screen && tile !== null && tile.shows.run === null)
-		terminals.get(tile.id)?.focus();
+	const screen = screens.find(({element}) => element === target);
+	if (screen !== undefined && screen.tile.id !== ws?.focused)
+		toHost({type: "go", tile: screen.tile.id});
+	if (screen !== undefined && screen.tile.shows.run === null)
+		terminals.get(screen.tile.id)?.focus();
 	else target?.focus();
 };
 
