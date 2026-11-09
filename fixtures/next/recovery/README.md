@@ -180,7 +180,7 @@ Paths in this table are relative to `next/packages/libfabrika/src/`, except the 
 | 14 | `door/sheet.test.ts:699` | Missing P28 byte-identical preview refusal. |
 | 15 | `door/sheet.test.ts:783` | Missing P28 preview nonce consumption/binding/lifetime. |
 | 16 | `door/sheet.test.ts:811`, `:831`, `:1015` | Behavior on main: addText drops signed seen, tampering is accepted, missing/stale seen is accepted. Snapshots assert no writes or spending on refusal. |
-| 17 | `door/sheet.test.ts:942` | Behavior on main: unsigned seen can be raised after signing; also the plan conflict below. No writes/spending is required for both tampered and stale requests. |
+| 17 | `door/sheet.test.ts:942` | Behavior on main: unsigned seen can be raised after signing. After a new sheet, B's re-read gets the shared refusal. No writes/spending is required for both tampered and stale requests. |
 | 18 | `coordination/sheet-check.test.ts:51`, `desktop/recovery.test.ts:337`, `door/sheet.test.ts:1141` | Missing P28 signed-check encoder, retry queue and door method. |
 | 19 | `door/sheet.test.ts:1195` | Main's close-4003 and removed-write assertions pass; the law then fails on missing P28 removalCounts. |
 | 20 | `desktop/recovery.test.ts:230` | Missing P28 reducer/view/handlers. Tea replay itself is the installed real implementation. |
@@ -251,12 +251,12 @@ outside evidence and rejects the test printer/PersonCheck. VoiceOver is a separa
 The failed-unseal scenario compares only the disposable sealed files' names, size and modification
 time. It never opens a key file, and must find those files before asserting they stay unchanged.
 
-## Plan issue kept visible
+## Law 17 sheet re-read
 
-Law 17 asks B to reread with its original sheet after the old Mac makes a new sheet. Call 6
-replaces B's sheet; call 13 refuses a replaced sheet. Those rules prevent that reread. The test
-keeps B's original key. Giving B the new sheet's secret would fake the recovery. The lead needs
-the owner to settle this conflict before build; no test here relaxes either requirement.
+After the old Mac makes a new sheet, law 17 requires B's `added` to get `stale` without a write
+or spend. The new sheet replaces B's sheet under call 6. B's re-read with its original sheet
+gets call 13's shared refusal and writes nothing. After a device is added, B's re-read still
+lists the new key, and a `lost` recovery from that list drops it.
 
 These tests cannot prove physical printing, Touch ID, VoiceOver, deployed cloud state, or memory
 erasure. Those remain outside checks. Missing exports and sandbox limits are never passes.

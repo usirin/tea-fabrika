@@ -988,20 +988,24 @@ describe("P28 door", () => {
 						why: "stale",
 					});
 					expect(w.snapshot()).toEqual(before);
-					// Plan conflict kept visible: making another sheet replaces B's sheet. The exam still
-					// asks B to reread. B must never silently be given the attacker's new secret.
+					expect(yield* w.members).toEqual(members);
 					const p = yield* preview(w, a, w.sheet);
-					const read = JSON.parse((yield* p.call()).body);
+					const answer = yield* p.call();
+					if (attack === "sheet") {
+						const refused = yield* p.call({...p.proof, armored: "bad"});
+						expect(JSON.parse(answer.body)).toEqual({_tag: "refused", why: "not_member"});
+						expect(reply(answer)).toEqual(reply(refused));
+						expect(w.snapshot()).toEqual(before);
+						expect(yield* w.members).toEqual(members);
+						continue;
+					}
+					const read = JSON.parse(answer.body);
 					expect(read.rev).toBe(head);
-					expect(
-						attack === "sheet"
-							? (yield* w.members).keys.has(w.other.line)
-							: read.devices.some((d: {key: string}) => d.key === w.other.line),
-					).toBe(true);
+					expect(read.devices.some((d: {key: string}) => d.key === w.other.line)).toBe(true);
 					const lost = {
 						...device(w, 6, read.rev, [
 							...read.devices.map((d: {key: string}) => d.key),
-							...(attack === "sheet" ? [] : [w.root.line]),
+							w.root.line,
 						]),
 						saw: saw("recovery", "lost"),
 					};
