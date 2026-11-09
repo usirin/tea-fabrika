@@ -111,23 +111,23 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
 					client.challenge !== Base64Url.encode(challenge)
 				)
 					return null;
-				const hash = new Uint8Array(yield* subtle(() => crypto.subtle.digest("SHA-256", p.rp)));
-				const clientHash = new Uint8Array(
-					yield* subtle(() => crypto.subtle.digest("SHA-256", p.client)),
-				);
+				const hash = new Uint8Array(yield* subtle("digest", "SHA-256", p.rp));
+				const clientHash = new Uint8Array(yield* subtle("digest", "SHA-256", p.client));
 				const auth = join(hash, new Uint8Array([p.flags]), u32(p.counter), p.extensions);
-				const key = yield* subtle(() =>
-					crypto.subtle.importKey("raw", p.point, {name: "ECDSA", namedCurve: "P-256"}, false, [
-						"verify",
-					]),
+				const key = yield* subtle(
+					"importKey",
+					"raw",
+					p.point,
+					{name: "ECDSA", namedCurve: "P-256"},
+					false,
+					["verify"],
 				);
-				const ok = yield* subtle(() =>
-					crypto.subtle.verify(
-						{name: "ECDSA", hash: "SHA-256"},
-						key,
-						p.raw,
-						join(auth, clientHash),
-					),
+				const ok = yield* subtle(
+					"verify",
+					{name: "ECDSA", hash: "SHA-256"},
+					key,
+					p.raw,
+					join(auth, clientHash),
 				);
 				return ok
 					? {origin, rp, be: (p.flags & 8) !== 0, bs: (p.flags & 16) !== 0, counter: p.counter}
@@ -173,7 +173,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
 		try: () => Schema.decodeUnknownSync(Client)(text(client)),
 		catch: () => new BadAssertion({}),
 	});
-	const rpHash = new Uint8Array(yield* subtle(() => crypto.subtle.digest("SHA-256", key.rp)));
+	const rpHash = new Uint8Array(yield* subtle("digest", "SHA-256", key.rp));
 	if (!same(rpHash, auth.slice(0, 32))) return yield* new BadAssertion({});
 	const signature = join(
 		field(SIG),
@@ -183,7 +183,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
 		field(client),
 		field(auth.slice(37)),
 	);
-	const digest = new Uint8Array(yield* subtle(() => crypto.subtle.digest("SHA-512", utf8(a.text))));
+	const digest = new Uint8Array(yield* subtle("digest", "SHA-512", utf8(a.text)));
 	const challenge = join(
 		utf8("SSHSIG"),
 		field("fabrika-client"),

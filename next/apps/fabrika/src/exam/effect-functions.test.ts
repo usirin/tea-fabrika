@@ -26,8 +26,8 @@ const source = [
 	'const callback = Effect.forEach([], () => append().pipe(Effect.withSpan("item")), {concurrency: 1});',
 ].join("\n");
 
-describe("effect-functions", () => {
-	const all = plant({
+describe("effect-functions", async () => {
+	const all = await plant({
 		[FILE]: source,
 		"next/packages/libfabrika/src/data/tracing.test.ts": source,
 		"packages/fabrika/src/tracing.ts": source,
