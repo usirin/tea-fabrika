@@ -4,7 +4,8 @@ import {LedgerError, Waited} from "../data/index.ts";
 import {workerSql} from "../data/worker-sql.ts";
 import {connection} from "../transport/gateway.ts";
 import {Answer, Attached, Hello} from "../transport/index.ts";
-import type {ConnectionId, ProjectBinding} from "./bindings.ts";
+import type {ConnectionId} from "./bindings.ts";
+import {ProjectClient} from "./platform.ts";
 import {
 	complete,
 	projectStub,
@@ -19,7 +20,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 	env: Env,
 	config: BrainOptions,
 ) {
-	const p = projectStub(env, config.name),
+	const p = ProjectClient.make(projectStub(env, config.name)),
 		ids = yield* ProcessIdGenerator;
 	const gateway = Schema.decodeUnknownSync(Schema.String)(ctx.id.name);
 	const recording = yield* Layer.build(
@@ -44,7 +45,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 			close: (code) => ws.close(code, "reconnect"),
 			ping: () => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? null,
 			wait: Effect.fnUntraced(function* (stream, after, reader) {
-				const answer = yield* rpc<typeof Answer.Type>(() =>
+				const answer = yield* rpc(
 					p.route(attached(ws).client as ConnectionId, "ledger.wait", {stream, after}, reader),
 				);
 				if (answer._tag === "parked") return Waited.cases.parked.make({});
@@ -58,7 +59,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 					const client = attached(ws).client as ConnectionId;
 					if (method === "initialize") {
 						const hello = Schema.decodeUnknownResult(Hello)(params);
-						const result = yield* rpc<Awaited<ReturnType<ProjectBinding["initialize"]>>>(() =>
+						const result = yield* rpc(
 							p.initialize(client, params, {
 								url: `http://127.0.0.1:${config.port}`,
 								tab,
@@ -87,9 +88,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 								busy: false,
 							}),
 						);
-						yield* rpc(() =>
-							p.join({client, key: result.who.key, gateway, session, at: Date.now()}),
-						);
+						yield* rpc(p.join({client, key: result.who.key, gateway, session, at: Date.now()}));
 						return Answer.cases.ok.make({
 							result: {who: result.who, version: result.version, ping: result.ping},
 						});
@@ -98,17 +97,17 @@ const gatewayLogic = Effect.fnUntraced(function* (
 						const input = yield* Schema.decodeUnknownEffect(Schema.Struct({label: Schema.String}))(
 							params,
 						);
-						const result = yield* rpc<typeof Answer.Type>(() => p.knock(client, input));
+						const result = yield* rpc(p.knock(client, input));
 						if (result._tag === "ok") {
 							const waiting = yield* Schema.decodeUnknownEffect(
 								Schema.Struct({code: Schema.String, until: Schema.Number}),
 							)(result.result);
-							yield* rpc(() => p.publish(client, {method: "door.waiting", params: waiting}));
+							yield* rpc(p.publish(client, {method: "door.waiting", params: waiting}));
 							return Answer.cases.ok.make({result: waiting});
 						}
 						return result;
 					}
-					return yield* rpc<typeof Answer.Type>(() => p.route(client, method, params));
+					return yield* rpc(p.route(client, method, params));
 				},
 				// A failed or defective call still answers its request without exposing error details.
 				Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({why: "unreachable"}))),
@@ -120,8 +119,8 @@ const gatewayLogic = Effect.fnUntraced(function* (
 	const close = Effect.fn("gateway.close")(function* (ws: WebSocket) {
 		const state = attached(ws),
 			session = Schema.decodeUnknownSync(Schema.String)(ctx.getTags(ws)[0]);
-		yield* rpc(() => p.leave(state.client, session));
-		yield* rpc(() => p.disconnect(state.client as ConnectionId));
+		yield* rpc(p.leave(state.client, session));
+		yield* rpc(p.disconnect(state.client as ConnectionId));
 		connections.delete(ws);
 	});
 	const ring = Effect.fn("gateway.ring")(function* (stream: string, rev: number) {
@@ -168,8 +167,8 @@ const gatewayLogic = Effect.fnUntraced(function* (
 			const path = new URL(request.url).pathname.split("/");
 			if (request.headers.get("upgrade")?.toLowerCase() !== "websocket")
 				return new Response("WebSocket required", {status: 426});
-			const client = yield* rpc(() => p.clientConnect()),
-				nonce = yield* rpc(() => p.challenge(client)),
+			const client = yield* rpc(p.clientConnect()),
+				nonce = yield* rpc(p.challenge(client)),
 				session = yield* ids.next;
 			const pair = new WebSocketPair(),
 				server = pair[1];
@@ -180,7 +179,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 			]);
 			ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
 			server.serializeAttachment(Attached.cases.new.make({client, nonce}));
-			yield* rpc(() => p.register(client, gateway, session));
+			yield* rpc(p.register(client, gateway, session));
 			make(server);
 			server.send(JSON.stringify({jsonrpc: "2.0", method: "challenge", params: {nonce}}));
 			return new Response(null, {status: 101, webSocket: pair[0]});

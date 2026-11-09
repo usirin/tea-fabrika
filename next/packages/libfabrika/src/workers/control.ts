@@ -1,11 +1,12 @@
 import {Effect, Result, Schema} from "effect";
 import {workerLoader, type ProgramSource} from "./index.ts";
+import {ProcessClient, ProjectClient, RecordClient} from "./platform.ts";
 import {
-	bucketCalls,
+	checkedPut,
+	bucketHead,
 	processStub,
 	projectStub,
 	recordStub,
-	recordCall,
 	rpc,
 	type Env,
 } from "./runtime.ts";
@@ -45,7 +46,6 @@ const dispatch = Effect.fnUntraced(function* (
 	request: typeof Request.Type,
 ) {
 	const {target, project, name, method, args} = request;
-	const call = target === "record" || target === "bucket" ? recordCall : rpc;
 	if (target === "loader") {
 		const loaded = yield* workerLoader(env.LOADER, programs).load(name, project);
 		if (method === "init") return yield* loaded.execution.init(args[0]);
@@ -53,16 +53,14 @@ const dispatch = Effect.fnUntraced(function* (
 		return yield* Effect.fail({why: "unknown_method"});
 	}
 	if (target === "bucket") {
-		const calls = bucketCalls(env.HEALTH);
 		if (method === "put")
-			return yield* call(() =>
-				calls.put(
-					String(args[0]),
-					Uint8Array.from(Schema.decodeUnknownSync(Schema.Array(Schema.Number))(args[1])),
-					String(args[2]),
-				),
+			return yield* checkedPut(
+				env.HEALTH,
+				String(args[0]),
+				Uint8Array.from(Schema.decodeUnknownSync(Schema.Array(Schema.Number))(args[1])),
+				String(args[2]),
 			);
-		if (method === "head") return yield* call(() => calls.head(String(args[0])));
+		if (method === "head") return yield* bucketHead(env.HEALTH, String(args[0]));
 		return yield* Effect.fail({why: "unknown_method"});
 	}
 	if (!methods[target].has(method)) return yield* Effect.fail({why: "unknown_method"});
@@ -74,16 +72,21 @@ const dispatch = Effect.fnUntraced(function* (
 		"process" in args[1]
 	)
 		return yield* Effect.fail({why: "reserved"});
-	const stub =
+	const client =
 		target === "project"
-			? projectStub(env, project)
+			? ProjectClient.make(projectStub(env, project))
 			: target === "process"
-				? processStub(env, project, name)
-				: recordStub(env, project, name);
+				? ProcessClient.make(processStub(env, project, name))
+				: RecordClient.make(recordStub(env, project, name));
 	// Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
-	// oxlint-disable-next-line fabrika/no-promises -- edge: dynamic platform RPC can return void or a Promise
-	const answer = call(() => Promise.resolve(Reflect.apply(Reflect.get(stub, method), stub, args)));
-	return yield* target === "process" && method === "abort" ? answer.pipe(Effect.ignore) : answer;
+	const answer: Effect.Effect<unknown, unknown> = Reflect.apply(
+		Reflect.get(client, method),
+		client,
+		args,
+	);
+	return yield* target === "process" && method === "abort"
+		? answer.pipe(Effect.ignore)
+		: rpc(answer);
 });
 
 export const control = Effect.fn("runtime.control")(function* (

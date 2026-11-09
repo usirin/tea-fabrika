@@ -1,6 +1,7 @@
 import type {Descriptor, Incoming} from "@kampus/libfabrika";
 import type {Activity, From, Start} from "@kampus/libfabrika/coordination";
 import type {Chain} from "@kampus/libfabrika/data";
+import {fetch} from "@kampus/libfabrika/workers";
 import {control} from "@kampus/libfabrika/workers/control";
 import {gatewayRuntime, GatewayService} from "@kampus/libfabrika/workers/gateway";
 import {
@@ -13,8 +14,6 @@ import {
 	processRuntime,
 	ProcessService,
 	ProjectService,
-	projectStub,
-	rpc,
 	configureProcess,
 	savedAlarm,
 	processDescriptor,
@@ -252,35 +251,9 @@ export class Control extends WorkerEntrypoint<Env, {token: string}> {
 	}
 }
 
-const fetch = Effect.fnUntraced(function* (request: Request, env: Env) {
-	const config = settings(env),
-		url = new URL(request.url),
-		origin = `http://127.0.0.1:${config.port}`;
-	if (request.headers.get("host") !== new URL(origin).host)
-		return new Response("Wrong host", {status: 421});
-	if (request.headers.get("origin") !== null && request.headers.get("origin") !== origin)
-		return new Response("Foreign origin", {status: 403});
-	if (url.pathname.startsWith("/client/"))
-		return yield* rpc(() => env.GATEWAY.getByName(url.pathname).fetch(request));
-	if (url.pathname === "/grant" && request.method === "POST") {
-		// oxlint-disable-next-line fabrika/no-promises -- edge: a Request body returns a Promise
-		const input = yield* Effect.tryPromise({try: () => request.json(), catch: () => null});
-		return Response.json(yield* rpc<unknown>(() => projectStub(env, config.name).grant(input)));
-	}
-	if (url.pathname.startsWith("/grant/client/") && request.method === "GET")
-		return Response.json(
-			yield* rpc(() =>
-				projectStub(env, config.name).target(
-					decodeURIComponent(url.pathname.slice("/grant/client/".length)),
-					url.searchParams.get("code") ?? "",
-				),
-			),
-		);
-	return new Response("fabrika", {headers: {"content-type": "text/plain"}});
-});
 export default {
 	fetch(request: Request, env: Env) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Worker fetch returns a Promise
-		return Effect.runPromise(fetch(request, env));
+		return Effect.runPromise(fetch(request, env, settings(env)));
 	},
 };

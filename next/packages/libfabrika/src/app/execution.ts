@@ -1,5 +1,5 @@
 import {type AnyCmdDef, type Tagged} from "@demlik/tea";
-import {Effect, Option, Result, Schema} from "effect";
+import {Context, Effect, Option, Result, Schema} from "effect";
 import {type Input, ProgramDown, stepper, Step, type Stepper} from "./program.ts";
 import {Saved} from "./state.ts";
 
@@ -139,14 +139,77 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
 	};
 };
 
-export const workerExecution = (rpc: ExecutionCalls): Execution => {
+class ExecutionClient extends Context.Service<
+	ExecutionClient,
+	{
+		readonly [K in keyof Execution]: (
+			...args: Parameters<Execution[K]>
+		) => Effect.Effect<unknown, ProgramDown>;
+	}
+>()("fabrika/ExecutionClient") {
+	static make(rpc: ExecutionCalls): ExecutionClient["Service"] {
+		return {
+			init: (saved) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader init RPC enters Effect
+				Effect.tryPromise({
+					try: () => rpc.init(saved),
+					catch: () => new ProgramDown({why: "load", source: "rpc"}),
+				}),
+			step: (model, msg) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader step RPC enters Effect
+				Effect.tryPromise({
+					try: () => rpc.step(model, msg),
+					catch: () => new ProgramDown({why: "step", source: "rpc"}),
+				}),
+			fold: (model, msg) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader fold RPC enters Effect
+				Effect.tryPromise({
+					try: () => rpc.fold(model, msg),
+					catch: () => new ProgramDown({why: "saved_letter", source: "rpc"}),
+				}),
+			upgrade: (saved) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader upgrade RPC enters Effect
+				Effect.tryPromise({
+					try: () => rpc.upgrade(saved),
+					catch: () => new ProgramDown({why: "saved_state", source: "rpc"}),
+				}),
+			reply: (cmd, outcome) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader reply RPC enters Effect
+				Effect.tryPromise({
+					try: () => rpc.reply(cmd, outcome),
+					catch: () => new ProgramDown({why: "step", source: "rpc"}),
+				}),
+			check: (kind, fact) => {
+				const check = rpc.check;
+				if (check === undefined) return Effect.fail(new ProgramDown({why: "load"}));
+				// Reflect.apply keeps this without reading a remote method named call off the stub.
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader check RPC enters Effect
+				return Effect.tryPromise({
+					try: () => Reflect.apply(check, rpc, [kind, fact]),
+					catch: () => new ProgramDown({why: "step", source: "rpc"}),
+				});
+			},
+			admit: (m) => {
+				const admit = rpc.admit;
+				if (admit === undefined) return Effect.fail(new ProgramDown({why: "load"}));
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader admit RPC enters Effect
+				return Effect.tryPromise({
+					try: () => Reflect.apply(admit, rpc, [m]),
+					catch: () => new ProgramDown({why: "step", source: "rpc"}),
+				});
+			},
+		};
+	}
+}
+
+export const workerExecution = (binding: ExecutionCalls): Execution => {
+	const rpc = ExecutionClient.make(binding);
 	const ask = <A>(
 		schema: Schema.Decoder<A>,
-		send: () => Promise<unknown>,
+		work: Effect.Effect<unknown, ProgramDown>,
 		why: ProgramDown["why"],
 	) =>
-		// oxlint-disable-next-line fabrika/no-promises -- edge: adapt one Worker Loader RPC to Effect
-		Effect.tryPromise({try: send, catch: () => new ProgramDown({why, source: "rpc"})}).pipe(
+		work.pipe(
 			Effect.flatMap((raw) => {
 				const decoded = Schema.decodeUnknownResult(schema)(raw);
 				return Result.isSuccess(decoded)
@@ -155,18 +218,16 @@ export const workerExecution = (rpc: ExecutionCalls): Execution => {
 			}),
 		);
 	return {
-		init: Effect.fn("execution.init")((saved) => ask(Step, () => rpc.init(saved), "load")),
-		step: Effect.fn("execution.step")((model, msg) =>
-			ask(Step, () => rpc.step(model, msg), "step"),
-		),
+		init: Effect.fn("execution.init")((saved) => ask(Step, rpc.init(saved), "load")),
+		step: Effect.fn("execution.step")((model, msg) => ask(Step, rpc.step(model, msg), "step")),
 		fold: Effect.fn("execution.fold")((model, msg) =>
-			ask(Step, () => rpc.fold(model, msg), "saved_letter"),
+			ask(Step, rpc.fold(model, msg), "saved_letter"),
 		),
 		upgrade: Effect.fn("execution.upgrade")((saved) =>
-			ask(Upgraded, () => rpc.upgrade(saved), "saved_state"),
+			ask(Upgraded, rpc.upgrade(saved), "saved_state"),
 		),
 		reply: Effect.fn("execution.reply")((cmd, outcome) =>
-			ask(Reply, () => rpc.reply(cmd, outcome), "step").pipe(
+			ask(Reply, rpc.reply(cmd, outcome), "step").pipe(
 				Effect.flatMap((answer) =>
 					answer._tag === "ok"
 						? Effect.succeed(answer.value)
@@ -174,20 +235,9 @@ export const workerExecution = (rpc: ExecutionCalls): Execution => {
 				),
 			),
 		),
-		// On a Workers RPC stub, `method.call(rpc, ...)` is a remote call to a method named "call"
-		// that sends the stub itself as an argument, and a Worker Loader stub cannot be sent.
-		// Reflect.apply keeps `this` without reading a property off the stub.
-		check: Effect.fn("execution.check")((kind, fact) => {
-			const check = rpc.check;
-			return check === undefined
-				? Effect.fail(new ProgramDown({why: "load"}))
-				: ask(Schema.Boolean, () => Reflect.apply(check, rpc, [kind, fact]), "step");
-		}),
-		admit: Effect.fn("execution.admit")((m) => {
-			const admit = rpc.admit;
-			return admit === undefined
-				? Effect.fail(new ProgramDown({why: "load"}))
-				: ask(Schema.Boolean, () => Reflect.apply(admit, rpc, [m]), "step");
-		}),
+		check: Effect.fn("execution.check")((kind, fact) =>
+			ask(Schema.Boolean, rpc.check(kind, fact), "step"),
+		),
+		admit: Effect.fn("execution.admit")((m) => ask(Schema.Boolean, rpc.admit(m), "step")),
 	};
 };

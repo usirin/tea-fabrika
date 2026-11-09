@@ -303,9 +303,10 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 			{
 				get: (_value, method) => {
 					if (method === "then") return undefined;
-					return (...args: ReadonlyArray<unknown>) =>
-						// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local binding proxy matches Durable Object's Promise API
-						Effect.runPromise(call(target, project, name, String(method), args));
+					const invoke = (args: ReadonlyArray<unknown>) =>
+						call(target, project, name, String(method), args);
+					// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local binding proxy matches Durable Object's Promise API
+					return (...args: ReadonlyArray<unknown>) => Effect.runPromise(invoke(args));
 				},
 			},
 		);
