@@ -37,6 +37,8 @@ const home = () => {
 };
 // Alchemy sends SIGKILL when its scope closes, but the child can still hold its port.
 // Await the real close events before reusing that same port and saved state. No fixed sleep.
+// The fixed brain port itself is Alchemy's in-process worker proxy, not workerd. Its 30-second
+// port reservation outlived the proxy until the local patch made a closed proxy drop it.
 const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
 	const spawn = childProcess.spawn,
 		closed: Promise<void>[] = [];
@@ -467,7 +469,10 @@ describe("P16 copied-file real stage, serial", () => {
 					const file = join(h, "sealed.ts");
 					writeFileSync(
 						file,
-						`import {env} from 'cloudflare:workers'; import {Machine} from '@demlik/tea/effect'; import {Schema} from 'effect'; let outbound='denied'; try {await fetch(${JSON.stringify(target)});outbound='allowed'} catch {} const Model=Schema.Struct({keys:Schema.Array(Schema.String),outbound:Schema.String}); const Msg=Schema.Struct({type:Schema.Literal('read')}); const machine=Machine.make({model:Model,msg:Msg,init:()=>[{keys:Object.keys(env),outbound},[]],update:{read:s=>[s,[]]}}); export const program={name:'sealed',machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};`,
+						// workerd refuses I/O at module scope whatever the policy, so a top-level fetch proves nothing.
+						// The program fetches inside the init call and keeps it alive with waitUntil, as a hostile
+						// program would; only the loader's own refusal counts as denied.
+						`import {env, waitUntil} from 'cloudflare:workers'; import {Machine} from '@demlik/tea/effect'; import {Schema} from 'effect'; let outbound='pending'; const probe=()=>{try {waitUntil(fetch(${JSON.stringify(target)}).then(()=>{outbound='allowed'},(e)=>{outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}))} catch (e) {outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}}; const Model=Schema.Struct({keys:Schema.Array(Schema.String),outbound:Schema.String}); const Msg=Schema.Struct({type:Schema.Literal('read')}); const machine=Machine.make({model:Model,msg:Msg,init:()=>{probe(); return [{keys:Object.keys(env),outbound},[]]},update:{read:s=>[{...s,outbound},[]]}}); export const program={name:'sealed',machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};`,
 					);
 					const {build} = await import("./build.ts"),
 						{localStage} = await import("./local-stage.ts"),
@@ -522,12 +527,20 @@ describe("P16 copied-file real stage, serial", () => {
 														expect(value.model).toEqual({count: 0});
 														continue;
 													}
+													// Read until the program's own fetch settles. The test time limit bounds the wait.
+													while (value.model.outbound === "pending") {
+														await new Promise((done) => setTimeout(done, 10));
+														value.model = (
+															await Reflect.get(program, "step")(value.model, {type: "read"})
+														).model;
+													}
 													const closed = (model: unknown) =>
 														assert.deepEqual(model, {keys: [], outbound: "denied"});
 													if (mode === "sealed") {
 														closed(value.model);
 														expect(hits).toBe(0);
 													} else {
+														if (mode === "outbound") expect(hits).toBeGreaterThan(0);
 														expect(() => closed(value.model)).toThrow();
 														expect(value.model).toEqual(
 															mode === "binding"
