@@ -13,7 +13,7 @@ const APP = resolve(import.meta.dirname, "..");
 const ROOT = resolve(APP, "../../..");
 type Options = {
 	readonly out: string;
-	/** `.tsx` files the Compiler checks and publishes. Every `.tsx` file under `next/` by default. */
+	/** `.tsx` files the Compiler checks. Every `.tsx` file under `next/` by default. */
 	readonly files?: ReadonlyArray<string>;
 	readonly ledger?: ReadonlyArray<Row>;
 	/** More programs by name, each a module that exports `program`. */

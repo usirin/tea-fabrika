@@ -34,7 +34,7 @@ export type Options = {
 	/** The brain's entry module. Package names resolve from its folder. */
 	readonly entry: string;
 	readonly programs: ReadonlyArray<Selection>;
-	/** `.tsx` files the Compiler checks beyond those the bundles reach. Each is published too. */
+	/** `.tsx` files the Compiler checks beyond those the bundles reach. Only brain.mjs is published. */
 	readonly files?: ReadonlyArray<string>;
 	/** The Compiler ledger. Read from `<root>/compiler-ledger.json` when absent. */
 	readonly ledger?: ReadonlyArray<Row>;
@@ -161,11 +161,10 @@ const recorded = <A, E, R>(work: Effect.Effect<A, E, R>) =>
 		),
 	);
 
-// Write the brain and the listed views beside `out`, then swap them in: all or nothing.
+// Write the brain beside `out`, then swap it in: all or nothing.
 const publish = Effect.fn("build.emit")(function* (
 	out: string,
 	brain: string,
-	views: ReadonlyArray<readonly [string, string]>,
 	sizes: {readonly programs: number; readonly window: number},
 ) {
 	const fs = yield* FileSystem.FileSystem;
@@ -185,7 +184,6 @@ const publish = Effect.fn("build.emit")(function* (
 		const backup = `${pending}.old`;
 		yield* Effect.gen(function* () {
 			yield* fs.writeFileString(resolve(pending, "brain.mjs"), brain);
-			for (const [name, code] of views) yield* fs.writeFileString(resolve(pending, name), code);
 			const had = yield* fs.exists(out);
 			if (had) yield* fs.rename(out, backup);
 			yield* fs
@@ -227,16 +225,14 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 				Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Row)))),
 				Effect.mapError(fail("compiler")),
 			));
-	// Listed files are checked and published; a file a bundle reaches is checked as it is reached.
+	// Listed files and every file a bundle reaches go through the one Compiler check.
 	const files = new Map<string, string>();
-	const views: Array<readonly [string, string]> = [];
 	// A listed file keeps the path it was listed by, as the ledger's rows name it.
 	for (const listed of options.files ?? []) {
 		const file = resolve(options.root, listed),
 			path = relative(options.root, file);
 		const text = yield* fs.readFileString(file).pipe(Effect.mapError(fail("compiler")));
 		files.set(path, text);
-		views.push([`${sha256(path)}.js`, compile(path, text).code]);
 	}
 	const compiler: Plugin = {
 		name: "fabrika-compiler",
@@ -292,7 +288,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 	if (check(files, ledger).length) return yield* new BuildError({why: "compiler"});
 	const size = (bodies: ReadonlyArray<string>) =>
 		bodies.reduce((total, body) => total + Buffer.byteLength(body), 0);
-	const digest = yield* publish(options.out, brain, views, {
+	const digest = yield* publish(options.out, brain, {
 		programs: size(Object.values(programs).map((p) => p.source)),
 		window: size(Object.values(assets).map((a) => a.body)),
 	});
