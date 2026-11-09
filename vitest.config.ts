@@ -38,6 +38,8 @@ export default defineConfig({
 			"next/packages/*/src/**/*.test.{ts,tsx}",
 			"next/programs/*/src/**/*.test.{ts,tsx}",
 			"next/apps/*/src/**/*.test.{ts,tsx}",
+			// P27a's red stage contract must collect under the box's permitted narrow command.
+			"next/apps/fabrika/e2e/chaos-live.test.ts",
 		],
 		// One time limit for every test, chosen from measured times, not vitest's 5 s default,
 		// which turned main red 6 times for slow tests and found no bug (experiment 125).
