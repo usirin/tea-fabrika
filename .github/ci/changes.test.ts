@@ -38,6 +38,8 @@ const shared = fc.oneof(
 		".claude/skills/tests/SKILL.md",
 		"pnpm-lock.yaml",
 		"field/nested/a.jsonl",
+		"tools/field/a.jsonl",
+		"field/a.jsonl.ts",
 	),
 );
 const path = fc.oneof(
@@ -168,6 +170,20 @@ it("NUL diff keeps both move names and unusual paths; failed reads cannot skip",
 					),
 				).toBeNull();
 				expect(ci.readPaths("0".repeat(40), "c".repeat(40), "push", run)).toBeNull();
+				// Zeros at either end are legal; only the all-zero SHA means no history.
+				const zeros = `0${"a".repeat(38)}0`;
+				expect(ci.readPaths(zeros, zeros, "push", run)).toEqual(paths);
+				// A merge base Git prints that is not a SHA cannot reach the diff.
+				expect(
+					ci.readPaths("b".repeat(40), "c".repeat(40), "pull_request", (args) =>
+						args[0] === "merge-base" ? {status: 0, stdout: "\n"} : run(args),
+					),
+				).toBeNull();
+				// Empty output is no paths; output cut before its last NUL cannot skip.
+				const answer = (stdout: string) =>
+					ci.readPaths("b".repeat(40), "c".repeat(40), "push", () => ({status: 0, stdout}));
+				expect(answer("")).toEqual([]);
+				expect(answer(paths.join("\0"))).toBeNull();
 			},
 		),
 		options,
