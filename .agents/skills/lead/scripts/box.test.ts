@@ -1,6 +1,7 @@
 import {spawn, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {
+	appendFileSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
@@ -1070,6 +1071,28 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 		});
 	});
 
+	// Plants: refuse on every stale link; waive a stale link of a step the lane signed. Themes tests4
+	// (2026-11-09) stopped at fetch on stale_link lead: PR 565 had a lead link on ticket 343.
+	it("K1 scenario: a stale link only for a step the lane has not signed does not stop the fetch", () => {
+		each(["lead", "tests"] as const, (step) =>
+			fixture((b) => {
+				const stale = JSON.stringify({_tag: "stuck", why: "stale_link", sha: "head", step});
+				const ask = JSON.stringify({_tag: "ask", who: "owner", for: "exam_read", paths: []});
+				b.setup({
+					operations: [{path: "src/a.ts", text: "run\n"}],
+					check: {status: 1, text: `${stale}\n${ask}\n`},
+				});
+				expect(b.run().code).toBe(0);
+				const got = b.fetch();
+				if (step === "tests") refused(got, /commits check failed/);
+				else {
+					expect(got.code, got.text).toBe(0);
+					expect(got.text).toContain("stale_link_outside_lane");
+				}
+			}),
+		);
+	});
+
 	// Plant: trust the installed checker's scope skip. Review round 1, finding 4.
 	it("K1 scenario: an unsigned commit outside the exam list is refused on a plain fetch", () => {
 		fixture((b) => {
@@ -1137,15 +1160,29 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 });
 
 describe("T321 K3 step order and rows, today's tooling", () => {
-	// Plant: count tests from before base, or any unverified note; skip review's mutation row.
+	// Plant: count tests from before base, or any unverified note; skip review's mutation row; read
+	// only the box's own rows, not the lane's where drive writes them (review boxes, 2026-11-09); read
+	// from the box's base when the lane's root is saved (layers build, 2026-11-09: each step's box
+	// starts at the last step's head, so its tests link sat before that box's base).
 	it("K3 gates build on a verified tests link since base and review on mutation or a recorded skip", () => {
 		fc.assert(
 			fc.property(word, (text) => {
 				each(
-					["absent", "before-base", "bad-note", "tests", "review-absent", "mutation", "skip"],
+					[
+						"absent",
+						"before-base",
+						"since-root",
+						"bad-note",
+						"tests",
+						"review-absent",
+						"mutation",
+						"skip",
+						"lane-row",
+						"lane-row-stuck",
+					],
 					(kind) =>
 						fixture((b) => {
-							if (["before-base", "bad-note", "tests"].includes(kind)) {
+							if (["before-base", "since-root", "bad-note", "tests"].includes(kind)) {
 								const sha = b.commit(b.work, "src/a.ts", `${text}\n`);
 								if (kind === "bad-note")
 									b.git(b.work, "notes", "--ref=fabrika", "add", "-m", '{"step":"tests"}', sha);
@@ -1159,6 +1196,10 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 									"refs/notes/fabrika:refs/notes/fabrika",
 								);
 								if (kind === "before-base") b.state(sha);
+								if (kind === "since-root") {
+									b.state(sha);
+									appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
+								}
 							}
 							if (kind === "mutation" || kind === "skip")
 								write(
@@ -1172,8 +1213,29 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										why: "recorded fixture result",
 									})}\n`,
 								);
-							const review = ["review-absent", "mutation", "skip"].includes(kind);
-							const pass = ["tests", "mutation", "skip"].includes(kind);
+							if (kind === "lane-row" || kind === "lane-row-stuck") {
+								// Where drive writes a step's row: BOXES/<lane>-rows.jsonl, not the box's own.
+								appendFileSync(join(b.boxes, "state/one.box"), "lane: onelane\n");
+								write(
+									join(b.boxes, "onelane-rows.jsonl"),
+									`${JSON.stringify({
+										run: "t321-mutation1",
+										ticket: "321",
+										role: "hand",
+										step: "mutation",
+										outcome: kind === "lane-row" ? "pass" : "stopped",
+										why: "drive.ts mutation fixture row",
+									})}\n`,
+								);
+							}
+							const review = [
+								"review-absent",
+								"mutation",
+								"skip",
+								"lane-row",
+								"lane-row-stuck",
+							].includes(kind);
+							const pass = ["tests", "since-root", "mutation", "skip", "lane-row"].includes(kind);
 							const got = b.run(review ? "review" : "build");
 							expect(got.code).not.toBeNull();
 							if (pass) expect(got.code, got.text).toBe(0);
