@@ -848,10 +848,18 @@ const main = Effect.gen(function* () {
 				}),
 		},
 	}).pipe(Scope.provide(scope));
-	projects.observe((_, s) => {
-		model = s;
+	// subscribe hears each transition before its Cmds run, so a Cmd's interpreter reads the state
+	// that made it (observe would hear only after them). It does not hear boot: the first state,
+	// read back from session.json, is read once the machine is up.
+	let up: {getState: () => Projects} | null = null;
+	projects.subscribe(() => {
+		if (up === null) return;
+		model = up.getState();
 		for (const win of windows.values()) tell(win);
 	});
+	up = yield* projects.ready;
+	model = up.getState();
+	for (const win of windows.values()) tell(win);
 	const dispatch = (m: ProjectsMsg) => {
 		Effect.runFork(projects.dispatch(m).pipe(Effect.ignore));
 	};

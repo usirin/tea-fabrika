@@ -910,8 +910,11 @@ export const serve = (options: {
 				}
 				case "run":
 					did(m.does, m.via === undefined ? Via.palette() : Via.key(m.via));
-					// The palette's and the projects box's are the page's own: it is told to show them.
+					// The palette's and the projects box's are the page's own. At a key, the page has
+					// shown it already and the prefix is put down; from the palette, it is told to.
 					if (m.does === "palette.open" || m.does === "projects.open") {
+						if (step({type: "run", does: m.does}, client)) shout();
+						if (m.via !== undefined) return;
 						toPage(client, {
 							type: "show",
 							what: m.does === "palette.open" ? "palette" : "projects",

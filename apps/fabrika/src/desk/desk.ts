@@ -704,8 +704,11 @@ const went = (s: Open, tile: TileId): readonly [Open, readonly DeskCmd[]] => {
  */
 const ran = (s: Open, does: Command): Step => {
 	const binding = bindingFor(does);
-	if (binding === undefined) return [s, []];
-	return act({...s, prefix: DISARMED, ask: null}, binding.does);
+	const ready: Open = s.prefix.armed || s.ask !== null ? {...s, prefix: DISARMED, ask: null} : s;
+	// The page's own (the palette, the projects box): nothing runs, but an armed prefix is put down,
+	// so the key after the box closes is a key again.
+	if (binding === undefined) return [ready, []];
+	return act(ready, binding.does);
 };
 
 /**

@@ -382,9 +382,46 @@ const frameStep = (m: FrameMsg): boolean => {
 		clearTimeout(noteTimer);
 		noteTimer = setTimeout(() => frameStep({type: "unnote"}), NOTE_MS);
 	}
+	// The palette or the projects box closed: focus goes back to where the first was opened from.
+	const back =
+		store.frame.over.kind === "palette" && next.over.kind === "none" ? store.frame.returnTo : null;
 	store.frame = next;
-	changed();
+	if (back === null) changed();
+	else {
+		// The desk's focus effect gives it back, in place of the tile, once the over is gone.
+		focusBackTo = back;
+		flushSync(changed);
+	}
 	return true;
+};
+
+/**
+ * The page opened the palette or the projects box at a key: the host is told, so it records the
+ * key and puts an armed prefix down. It shows nothing back, as the page already did.
+ */
+const said = (does: "palette.open" | "projects.open", name: string | null) =>
+	toHost({type: "run", does, via: {keys: spell(name ?? "")}});
+
+/** Where focus goes once the palette or the projects box closes, said once (`frameStep`). */
+let focusBackTo: string | null = null;
+
+/** Focus what `focusName` named, if it is still there: a tile's screen, a top bar item, a text box. */
+const focusNamed = (name: string): boolean => {
+	const [kind, id = ""] = name.split(/:(.*)/s);
+	const css = (v: string) => CSS.escape(v);
+	const el =
+		kind === "tile"
+			? document.querySelector<HTMLElement>(
+					`[data-tile="${css(id)}"] .screen, [data-view="${css(id)}"]`,
+				)
+			: kind === "button"
+				? document.querySelector<HTMLElement>(`[data-item="${css(id)}"]`)
+				: kind === "input"
+					? document.querySelector<HTMLElement>(`input[name="${css(id)}"], input#${css(id)}`)
+					: null;
+	if (el === null || !el.isConnected) return false;
+	el.focus();
+	return document.activeElement === el;
 };
 
 const cycleFocus = (to: "next" | "previous") => {
@@ -527,6 +564,10 @@ const heard = (raw: unknown) => {
 		case "show":
 			if (m.what === "focus-next" || m.what === "focus-previous")
 				return cycleFocus(m.what === "focus-next" ? "next" : "previous");
+			// The palette and the projects box take the keys: what a key pressed before them shows,
+			// answered late, never covers them.
+			if (store.frame.over.kind === "palette" && m.what !== "palette" && m.what !== "projects")
+				return;
 			if (m.what === "projects") return openProjects();
 			return m.what === "info"
 				? frameStep({type: "info", focus: focusWords()})
@@ -678,13 +719,15 @@ const onKey = (e: KeyboardEvent) => {
 	if (alone === "projects.open") {
 		swallow(e);
 		openProjects();
+		if (store.look?._tag === "project") said("projects.open", name);
 		return;
 	}
 	// Welcome has no desk and no host: its own rows take the keys.
 	if (store.look?._tag === "welcome") return;
 	if (alone === "palette.open") {
 		swallow(e);
-		toHost({type: "run", does: "palette.open", via: {keys: spell(name ?? "")}});
+		frameStep({type: "show", what: "palette"});
+		said("palette.open", name);
 		return;
 	}
 	if (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"') {
@@ -960,7 +1003,10 @@ function App(): ReactNode {
 		else document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`)?.focus();
 	});
 	useLayoutEffect(() => {
-		if (!away && over === "none") focusTile();
+		if (away || over !== "none") return;
+		const back = focusBackTo;
+		focusBackTo = null;
+		if (back === null || !focusNamed(back)) focusTile();
 	}, [shown, away, over]);
 	// The desk's key done, focus goes back to the bottom line's item it was on, if it fell.
 	const mid = (open?.prefix.armed ?? false) || open?.ask != null;

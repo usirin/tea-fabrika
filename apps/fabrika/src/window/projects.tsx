@@ -170,7 +170,7 @@ export function Projects(props: ProjectsProps): ReactNode {
 	const input = useRef<HTMLInputElement>(null);
 	const list = `${PROJECTS_BOX}-list`;
 	const optionId = (id: string) => `${PROJECTS_BOX}-o-${id}`;
-	useOverlay(box, PROJECTS_BOX, () => input.current?.focus(), props.onClose);
+	useOverlay(box, PROJECTS_BOX, () => input.current?.focus(), props.onClose, true);
 	const selected = props.rows.some((r) => r.id === props.selected)
 		? props.selected
 		: (props.rows[0]?.id ?? "folder");

@@ -129,6 +129,8 @@ export const useOverlay = (
 	id: string,
 	into: () => void,
 	onClose: () => void,
+	/** A modal box: a press outside closes it and goes no further, to no tile and no focus. */
+	modal = false,
 ) => {
 	const moveIn = useEffectEvent(into);
 	useLayoutEffect(() => {
@@ -146,11 +148,21 @@ export const useOverlay = (
 			const t = e.target;
 			if (!(t instanceof Element) || box.current?.contains(t) === true) return;
 			if (t.closest(`[aria-controls="${id}"]`) !== null) return;
+			if (modal) {
+				e.preventDefault();
+				e.stopPropagation();
+				const click = (c: MouseEvent) => {
+					c.preventDefault();
+					c.stopPropagation();
+				};
+				document.addEventListener("click", click, {capture: true, once: true});
+				setTimeout(() => document.removeEventListener("click", click, {capture: true}), 500);
+			}
 			onClose();
 		};
 		document.addEventListener("pointerdown", down, true);
 		return () => document.removeEventListener("pointerdown", down, true);
-	}, [box, id, onClose]);
+	}, [box, id, onClose, modal]);
 };
 
 /** A footer of key hints: `↑ ↓ Move   ↵ Open   H Later   Esc Close`. */
@@ -524,7 +536,7 @@ export function Palette(props: PaletteProps): ReactNode {
 	const input = useRef<HTMLInputElement>(null);
 	const list = `${props.id}-list`;
 	const optionId = (i: number) => `${props.id}-o${i}`;
-	useOverlay(box, props.id, () => input.current?.focus(), props.onClose);
+	useOverlay(box, props.id, () => input.current?.focus(), props.onClose, true);
 	const picked = optionId(props.at);
 	useLayoutEffect(() => {
 		document.getElementById(picked)?.scrollIntoView({block: "nearest"});

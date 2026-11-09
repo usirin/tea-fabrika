@@ -14,7 +14,7 @@ import {ProjectSchema} from "./projects.ts";
 //   yield* Project.check("~/code/demlik-link")      the same project: links resolve
 //   yield* Project.check("~/notes")                 ProjectRefused "Choose a folder in a git repository"
 //   yield* Project.paths(appHome, project)
-//   // {dir: "/tmp/fabrika-501/9c1e…", sock, mcp, pid, lock}     short, private, outside the home
+//   // {dir: "/tmp/fabrika-<uid>/9c1e…", sock, mcp, pid, lock}     short, private, outside the home
 //   // {log: "<appHome>/projects/<key>/host/log"}                durable, inside the home
 //
 // A subfolder picks its repository's root. A worktree and a second clone are projects of their
@@ -222,7 +222,7 @@ const CHAR_PX = 8;
  * parent folders that tells them apart, as editors title equal file names. `width` shortens what
  * is drawn; the full title is kept for the window's title and a screen reader.
  *
- *   titles([~/a/left/repo, ~/a/right/repo], 400)   ["repo — left", "repo — right"]
+ *   titles([~/a/left/repo, ~/a/right/repo], 400)   ["repo · left", "repo · right"]
  */
 const titles = (projects: readonly Project[], width: number): readonly Title[] => {
 	const parts = projects.map((p) => p.root.split("/").filter((s) => s !== ""));
@@ -239,7 +239,7 @@ const titles = (projects: readonly Project[], width: number): readonly Title[] =
 			twins.some((other) => parentsOf(other, depth) === parentsOf(mine, depth))
 		)
 			depth += 1;
-		const full = depth === 0 ? base : `${base} — ${parentsOf(mine, depth)}`;
+		const full = depth === 0 ? base : `${base} · ${parentsOf(mine, depth)}`;
 		const short = full.length > room ? `${full.slice(0, room - 1)}…` : full;
 		return {project, full, accessible: full, short};
 	});

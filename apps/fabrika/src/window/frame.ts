@@ -972,7 +972,13 @@ const shown = (f: Frame, what: Exclude<Show, "info">): Frame => {
 		case "keys":
 			return {...f, over: paletteOf({_tag: "keys"})};
 		case "palette":
-			return {...f, over: paletteOf({_tag: "commands"})};
+			// In the projects box's place, focus still goes back where that was opened from; opened
+			// alone, the desk's focus takes it back (desk.tsx).
+			return {
+				...f,
+				over: paletteOf({_tag: "commands"}),
+				returnTo: f.over.kind === "palette" ? f.returnTo : null,
+			};
 		case "projects":
 			return {
 				...f,
