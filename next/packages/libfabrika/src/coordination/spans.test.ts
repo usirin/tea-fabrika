@@ -27,7 +27,7 @@ import {ProcessManager} from "./process-manager.ts";
 import {A, brain, first as firstStart, ids} from "./process.test-support.ts";
 
 const READER = "gateway:t1";
-const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
+const PARENT = `in-${A}-41`;
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TO = "ledger:home";
 const SENT = "2026-11-07T21:10:01.204Z";

@@ -12,7 +12,6 @@ import * as C from "@kampus/libfabrika/coordination";
 import {
 	Archive,
 	Doorbell,
-	IdGenerator,
 	Ledger,
 	LedgerError,
 	LedgerTransaction,
@@ -27,10 +26,10 @@ import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {Door} from "./door.ts";
 
-const P1 = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
-const P2 = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
-const P3 = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
-const START = "process_01jc9q4w7z3m8n5r2t6v0xkb4g";
+const P1 = "process_0000000000e008000000000000";
+const P2 = "process_0000000000e008000000000001";
+const P3 = "process_0000000000e008000000000002";
+const START = "process_0000000000e008000000000003";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const NAME = "counter:1";
 const URL = "https://fabrika.test/entry/project-socket";
@@ -138,7 +137,7 @@ const world = () => {
 	const deliveries: Delivery[] = [];
 	const alarms: Array<number | null> = [];
 	let ids = 0;
-	let starts = 0;
+	const processIds = Effect.runSync(A.Id.Generator.pipe(Effect.provide(A.Id.Generator.layer)));
 	let steps = 0;
 	const controls = {
 		throws: true,
@@ -213,7 +212,7 @@ const world = () => {
 			C.ClientManager.layer(founder).pipe(Layer.provide(data())),
 			records,
 			Archive.memory,
-			IdGenerator.layer,
+			A.Id.Generator.layer,
 			Layer.effect(
 				SpanSink,
 				Effect.gen(function* () {
@@ -307,7 +306,7 @@ const world = () => {
 		ping: {min: 10000, max: 60000},
 		inputCap: 100,
 		spentCap: 100,
-		nextProcess: () => Effect.sync(() => `process_${String(++starts).padStart(26, "0")}`),
+		nextProcess: () => processIds.next(A.Id.Process).pipe(Effect.orDie),
 		notify: () => Effect.void,
 		inputs: {schema: Input, personOnly: [], raw: [], log: Schema.toCodecJson(Input)},
 		facts: {personOnly: []},
@@ -456,9 +455,7 @@ describe("P34 door recovery", () => {
 										r.msg({
 											id: letter,
 											envelope: {
-												id: Schema.decodeUnknownSync(
-													Schema.NonEmptyString.pipe(Schema.brand("InputId")),
-												)(old),
+												id: Schema.decodeUnknownSync(A.Id.InputId)(old),
 												by: C.Writer.cases.person.make({key: w.window.fingerprint, for: PERSON}),
 												arrivedAt: 0,
 												input: {type: "press", poison: false},

@@ -19,7 +19,9 @@ trusting any line that says an agent could not see a file.
   or read earlier results.
 - `lib/` holds the helpers the scripts share. They have no number.
 - `results/` holds the answers the scripts saved, and `failures/` the failing
-  runs experiment 34 reads.
+  runs experiment 34 reads. Raw samples are kept privately, not here: a script
+  writes them under `runs/`, which git ignores, or to a path a flag names, and
+  `results/` keeps only a small summary of the numbers its write-up quotes.
 - [open-questions.md](./open-questions.md) is the list of open questions the
   log kept up to experiment 20.
 

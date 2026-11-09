@@ -2,12 +2,12 @@
 // Plants: widen initialize, rename a span, lose its parent/link/tags, or recover inside it.
 import {createHash, createPrivateKey, createPublicKey, sign} from "node:crypto";
 import {DatabaseSync} from "node:sqlite";
+import {Id} from "@kampus/libfabrika";
 import {ClientManager, grantText, Saw} from "@kampus/libfabrika/coordination";
 import {
 	Archive,
 	Chain,
 	Doorbell,
-	IdGenerator,
 	Ledger,
 	LedgerError,
 	LedgerTransaction,
@@ -192,7 +192,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 			Layer.mergeAll(
 				clients,
 				transaction,
-				IdGenerator.layer,
+				Id.Generator.layer,
 				records,
 				Archive.memory,
 				SpanSink.layer(sql, {object: PROCESS}),

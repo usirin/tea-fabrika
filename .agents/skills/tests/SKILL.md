@@ -22,7 +22,11 @@ the rest.
    [property tests](../../../docs/direction/property-tests-not-our-own-search.md)):
    - On a machine: its real reducer from its real `init`, with `@demlik/tea/pbt`
      ([every machine has laws](../../../docs/direction/every-machine-has-laws.md)).
-   - On anything else: `fast-check` (`fc.assert(fc.property(...))`), or Effect's `Arbitrary`.
+   - On anything else, Effect's own tools first (owner, 2026-11-08): `Arbitrary.schema(S)`
+     for data when a schema exists, `@effect/vitest`'s
+     `it.prop` and `it.effect.prop` (they take schemas as inputs), and `effect/testing`
+     (`TestClock`, `TestConsole`, `TestSchema`). Hand-written `fast-check`
+     (`fc.assert(fc.property(...))`) only where Effect has nothing.
    - A hand-picked example stays only as a pinned case of a named past bug, in fast-check's
      `examples`, with the bug named beside it. A law that is only examples is not done.
    - Four kinds of law may be a fixed test, and the test's name starts with its label: `vector:` (a

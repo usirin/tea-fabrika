@@ -9,6 +9,12 @@ step signs a link from tree to tree that survives the squash. Changed by the own
 today's tooling signs at fetch in MAIN, after checking the recorded run and file owners. Agents
 still commit. This replaces the 2026-11-05 agent-signs call.
 
+*Changed 2026-11-08 (owner): code signs each step's commits, not the step's agent. The lead's
+fetch signs them as it pulls a box's branch (`box.sh fetch --sign <step>`), with that step's key.
+The key stays one per step, and CI still decides from the signature. Built for today's
+tooling by skills friction PR 1a (tracker 321). It said: "each
+step's agent signs its commits with its own key".*
+
 *Renamed 2026-11-08 (question 15): the link's `cause` is now `parent`, with `traceId` beside it; a link with `cause` is refused.*
 
 ```text
@@ -42,7 +48,9 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
 - **Code signs each step's link with that step's key.** Owner, 2026-11-08: today's `fetch --sign`
   checks the saved run, ticket, bounds and file owners before signing missing notes in MAIN.
   Existing notes and verified person signatures stay unchanged. The SSHSIG shape stays
-  `ssh-keygen -Y sign`, namespace `fabrika-step`. Mutation still uses the tests key; no new role.
+  `ssh-keygen -Y sign`, namespace `fabrika-step`, the shape the door checks. Mutation still uses
+  the tests key; no new role. [A key per client](./a-key-per-client-and-no-github-trust.md)
+  already gives every client a key; a step is one more.
 - **The signature goes in a git note, not in the commit.** *Changed 2026-11-06, the owner asking
   for no "Unverified" on GitHub.* Each step adds a note on `refs/notes/fabrika` to its commit,
   holding what it signs, the link (its step, the ticket, a version, the tree before and the tree
