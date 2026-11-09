@@ -1,8 +1,10 @@
-# clauderow.py [--run ID] [--role R] [--ticket T] [--pr P] [--parent RUN] [--outcome O] [--note ID]
+# clauderow.py --run ID [--billing subscription|key] [--role R] [--ticket T] [--pr P] [--parent RUN] [--outcome O] [--note ID]
 #              [--corrects RUN] [--turns] <transcript.jsonl> [why...]
 #   -> prints one field/runs.jsonl row for a Claude Code subagent, from its transcript.
 #   With --turns it prints one line per model call instead (context, dollars, tool calls), so the
 #   cost curve of a long run can be read.
+#   A subagent's transcript has no `system/init` line, so it does not say how the run was paid.
+#   `billing` is written only when the caller gives it (field/README.md), and left out otherwise.
 #
 # It reads only each assistant message's `usage`, `model`, `id` and tool-call count, the
 # timestamps, and the `.meta.json` beside the transcript (effort). No message text is read into
@@ -97,8 +99,9 @@ def row(path,a):
     why=" ".join(a.why)
     why+=(f" Claude Code subagent transcript: {s['calls']} model calls; tokens in {s['input']:,} uncached,"
           f" {s['write5m']:,} 5-minute and {s['write1h']:,} 1-hour cache writes, {s['read']:,} cache reads;"
-          f" out {s['output']:,}. Dollars are list price ({SOURCE}, read {READ}); billed on the subscription.")
+          f" out {s['output']:,}. Dollars are list price ({SOURCE}, read {READ}).")
     if open_run: why+=" Still running when read, so `ended` is null and the numbers are a floor."
+    if a.billing: why+=f" Billing `{a.billing}` as the caller gave it; the transcript does not record it."
     r={"date":b.strftime("%Y-%m-%d"),"run":a.run,"ticket":a.ticket,"pr":a.pr,
        "started":b.isoformat(timespec="seconds"),"ended":None if open_run else e.isoformat(timespec="seconds"),
        "parent":a.parent,"active":None,"role":a.role,"model":model,"effort":m.get("effort"),
@@ -106,7 +109,8 @@ def row(path,a):
        "minutes":round((e-b).total_seconds()/60,1),"note":a.note,"costUsd":None,"listUsd":round(s["usd"],4),
        "billed":s["input"]+s["write5m"]+s["write1h"]+s["read"]+s["output"],
        "inputTokens":s["input"]+s["write5m"]+s["write1h"]+s["read"],"cachedTokens":s["read"],
-       "outputTokens":s["output"],"billing":"subscription"}
+       "outputTokens":s["output"]}
+    if a.billing: r["billing"]=a.billing
     if a.corrects: r["corrects"]=a.corrects
     return r
 
@@ -119,10 +123,13 @@ def turns(path):
 
 if __name__=="__main__":
     p=argparse.ArgumentParser()
-    for k in ("run","ticket","pr","parent","outcome","note","corrects"): p.add_argument("--"+k)
+    for k in ("ticket","pr","parent","outcome","note","corrects"): p.add_argument("--"+k)
+    p.add_argument("--billing",choices=("subscription","key"))
     p.add_argument("--role",default="hand"); p.add_argument("--turns",action="store_true")
     p.add_argument("transcript"); p.add_argument("why",nargs="*")
+    p.add_argument("--run")
     a=p.parse_args()
+    if not a.turns and not a.run: p.error("--run is required: a row needs its id so parent and corrects can name it")
     if a.turns:
         for t in turns(a.transcript): print(json.dumps(t))
         sys.exit(0)

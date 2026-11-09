@@ -72,7 +72,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
 | `catchup.sh <pr> <ticket> [--merge-method squash\|merge]` | merge `main` in as the bot, sign `lead`, push, check that exact head and land pinned to it; squash by default |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
-| `clauderow.py [--run R] [--role R] [--parent R] [--corrects R] [--turns] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `--turns` prints each call's context and dollars |
+| `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
 
 `box.sh run` names the box's `.agents/` as its own writable root because Codex otherwise keeps
 that folder read-only inside the writable checkout.
