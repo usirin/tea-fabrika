@@ -147,6 +147,8 @@ const run = (setup: Setup, args: string[] = []) => {
 			.filter(Boolean)
 			.map((line) => JSON.parse(line));
 		expect(existsSync(join(dir, "boxes/catchup.lock"))).toBe(false);
+		// Its own checkout is gone once the run passed the usage check, success or failure.
+		if (calls.length > 0) expect(existsSync(join(dir, "boxes/catchup-900"))).toBe(false);
 		return {code: ran.status, text: ran.stdout + ran.stderr, calls};
 	} finally {
 		rmSync(dir, {recursive: true, force: true});

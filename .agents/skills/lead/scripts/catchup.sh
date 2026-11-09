@@ -3,8 +3,9 @@
 # Bring a pull request up to date with main, sign the new merge as the lead, push, wait for every
 # check on that exact head, then merge it pinned to that head. Squash is the default.
 # Run it in the background.
-#   - each pull request gets its own checkout (BOXES/catchup-<pr>), and one lock is held while it
-#     fetches, merges, signs and pushes, so two catch-ups never share a tree or the notes ref
+#   - each pull request gets its own checkout (BOXES/catchup-<pr>), removed when the run ends, and
+#     one lock is held while it fetches, merges, signs and pushes, so two catch-ups never share a
+#     tree or the notes ref
 #   - merges origin/main in as fabrikalfa[bot] (the person as co-author) when the head lacks it,
 #     and signs only that new merge commit as lead. It never signs a step's commit: an unsigned
 #     step commit fails the commits check, and goes back to its own step to sign
@@ -40,8 +41,16 @@ read_gh() {
 }
 mkdir -p "$BOXES"
 until mkdir "$LOCK" 2>/dev/null; do sleep 5; done
-# EXIT drops the lock; INT and TERM end the run (and so run EXIT), never carry on past a signal.
-trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
+# EXIT drops the lock while it is held and removes this run's own checkout, success or failure;
+# INT and TERM end the run (and so run EXIT), never carry on past a signal.
+held=yes
+cleanup() {
+	[ "$held" = no ] || rmdir "$LOCK" 2>/dev/null || true
+	cd "$BOXES"
+	git -C "$MAIN" worktree remove --force --force "$W" 2>/dev/null || rm -rf "$W"
+	git -C "$MAIN" worktree prune 2>/dev/null || true
+}
+trap cleanup EXIT
 trap 'exit 130' INT TERM
 head=$(read_gh pr view "$pr" -R "$GH_REPO" --json headRefName -q .headRefName)
 [ -d "$W" ] || git -C "$MAIN" worktree add -q --detach "$W" origin/main
@@ -64,7 +73,7 @@ if ! git merge-base --is-ancestor origin/main HEAD; then
 	*) node "$LEAD/botpush.mjs" . - ; git push -q origin "$tip:refs/heads/$head" ;;
 	esac
 fi
-rmdir "$LOCK"; trap - EXIT INT TERM
+rmdir "$LOCK"; held=no
 # Wait for every check on this exact sha, up to an hour. A skipped job (no code changed) is done.
 need="check e2e next commits"
 # The clock is read after every answer and before a green one can break out to the merge.
