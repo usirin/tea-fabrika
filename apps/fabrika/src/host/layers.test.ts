@@ -294,6 +294,76 @@ describe("today's LayerRecorder", () => {
 			settings,
 		);
 	});
+	it("an acknowledged event is sent once, rows are kind layer, and a bad report writes nothing and warns", async () => {
+		const {LayerRecorder} = await recorderModule();
+		await fc.assert(
+			fc.asyncProperty(input, async (data) => {
+				const logs: string[] = [];
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const ledger = yield* Ledger;
+						const sends: string[] = [];
+						const tapped = Ledger.of({
+							...ledger,
+							send: (inbox, id, event, fence) =>
+								Effect.suspend(() => {
+									sends.push(id);
+									return ledger.send(inbox, id, event, fence);
+								}),
+						});
+						const recorder = yield* LayerRecorder.make({
+							window: "window-once",
+							by: "user:test",
+						}).pipe(Effect.provideService(Ledger, tapped));
+						// An extra property from the page is refused before any write, with a warning.
+						const bad = yield* recorder
+							.record({...reportOf(data), extra: "x"} as never)
+							.pipe(Effect.flip);
+						expect(bad).toBeDefined();
+						expect(sends).toEqual([]);
+						expect(logs.length).toBe(1);
+						expect(logs[0]).not.toBe("");
+						expect(logs[0]).toMatch(/\S/);
+						const report = reportOf(data);
+						for (let i = 0; i < data.copies; i++) yield* recorder.record(report);
+						expect(sends).toEqual([data.id]);
+						// Open then close drops the interval: a later end sends nothing uncertain.
+						const close = {
+							...report,
+							id: `${data.id}-close`,
+							change: {_tag: "close" as const, layer: data.layer, reason: "escape"},
+						};
+						yield* recorder.record(close);
+						yield* recorder.ended();
+						expect(sends).toEqual([data.id, `${data.id}-close`]);
+						// An interval still open at the end is closed once, under its own id.
+						const other = {...report, id: `${data.id}-other`, instance: `${data.instance}-2`};
+						yield* recorder.record(other);
+						yield* recorder.ended();
+						yield* recorder.ended();
+						const key = `uncertain/window-once/${data.instance}-2`;
+						expect(sends.filter((id) => id.startsWith("uncertain/"))).toEqual([key]);
+						const rows = (yield* ledger.read(0, 100)).filter((row) =>
+							[data.id, `${data.id}-close`, `${data.id}-other`, key].includes(row.id ?? ""),
+						);
+						expect(rows).toHaveLength(4);
+						for (const row of rows) expect(row.kind).toBe("layer");
+					}).pipe(
+						Effect.provide(layerMemory()),
+						Effect.provide(
+							Logger.layer([
+								Logger.make((event) => {
+									logs.push([event.message].flat().join(" "));
+								}),
+							]),
+						),
+						Effect.scoped,
+					),
+				);
+			}),
+			{...settings, numRuns: 20},
+		);
+	});
 	it("the privacy law rejects a separately planted leak in every named output and encoding", () => {
 		fc.assert(
 			fc.property(fc.uuid(), (id) => {
