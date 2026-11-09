@@ -570,7 +570,7 @@ const billingOf = (events: string) => {
 
 /**
  * Work a box holds that no branch has: uncommitted or untracked files, and commits on its HEAD or
- * other branches that the step's branch lacks. Read with no hooks and no fsmonitor, so nothing the
+ * other branches that neither the step's branch nor a remote branch has. Read with no hooks and no fsmonitor, so nothing the
  * agent wrote runs as drive. A box git cannot read counts as holding work.
  */
 export const leftIn = (box: string, branch: string): string[] => {
@@ -588,7 +588,17 @@ export const leftIn = (box: string, branch: string): string[] => {
 		"-z",
 		"--untracked-files=all",
 	);
-	const off = git("rev-list", "--count", "HEAD", "--branches", "--not", `refs/heads/${branch}`);
+	// A clone's own `main` (or any branch a remote already holds) is not the box's work (themes
+	// build5, 2026-11-09: a box kept for "21 commits off" that were only its local main).
+	const off = git(
+		"rev-list",
+		"--count",
+		"HEAD",
+		"--branches",
+		"--not",
+		`refs/heads/${branch}`,
+		"--remotes",
+	);
 	if (status.code !== 0 || off.code !== 0) return ["a git state drive could not read"];
 	const files = status.out.split("\0").filter(Boolean).length;
 	const commits = Number(off.out.trim());
