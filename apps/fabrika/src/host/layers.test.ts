@@ -13,6 +13,8 @@ import {FRAME, type Frame, type FrameMsg} from "../window/frame.ts";
 const settings = {seed: 119120, numRuns: 60};
 const sources = fc.constantFrom(
 	{_tag: "click"} as const,
+	{_tag: "pointer"} as const,
+	{_tag: "focus"} as const,
 	{_tag: "word"} as const,
 	{_tag: "palette"} as const,
 	{_tag: "key", keys: "ctrl+b a"} as const,
@@ -38,7 +40,10 @@ const input = fc.record({
 type Generated<A> = A extends fc.Arbitrary<infer Value> ? Value : never;
 // The transition API accepts any item name or key string; the generators sample only some.
 type Layer = {_tag: "palette"} | {_tag: "popover"; item: string} | {_tag: "tooltip"; for: string};
-type Source = {_tag: "click" | "word" | "palette"} | {_tag: "key"; keys: string} | null;
+type Source =
+	| {_tag: "click" | "pointer" | "focus" | "word" | "palette"}
+	| {_tag: "key"; keys: string}
+	| null;
 type Change =
 	| {_tag: "open"; layer: Layer; via: Source}
 	| {_tag: "close"; layer: Layer; reason: string};

@@ -94,7 +94,13 @@ afterAll(() => {
 });
 
 type Layer = {_tag: "palette"} | {_tag: "popover"; item: string} | {_tag: "tooltip"; for: string};
-type Via = {_tag: "key"; keys: string} | {_tag: "click"} | {_tag: "word"} | {_tag: "palette"};
+type Via =
+	| {_tag: "key"; keys: string}
+	| {_tag: "click"}
+	| {_tag: "pointer"}
+	| {_tag: "focus"}
+	| {_tag: "word"}
+	| {_tag: "palette"};
 type Reason =
 	| "escape"
 	| "outside"
@@ -117,7 +123,13 @@ const step: FrameStep = (frame, msg) => {
 };
 const options = {seed: 119120, numRuns: 100};
 const via: fc.Arbitrary<Via> = fc.oneof(
-	fc.constantFrom({_tag: "click"} as const, {_tag: "word"} as const, {_tag: "palette"} as const),
+	fc.constantFrom(
+		{_tag: "click"} as const,
+		{_tag: "pointer"} as const,
+		{_tag: "focus"} as const,
+		{_tag: "word"} as const,
+		{_tag: "palette"} as const,
+	),
 	fc.constantFrom("ctrl+b a", "cmd+k", "ctrl+a J").map((keys) => ({_tag: "key" as const, keys})),
 );
 const reason = fc.constantFrom<Reason>(
