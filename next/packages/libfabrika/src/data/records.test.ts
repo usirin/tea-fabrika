@@ -27,6 +27,7 @@ import {afterAll, describe, expect, it} from "@effect/vitest";
 import type {Layer} from "effect";
 import {Effect, Option, Stream} from "effect";
 import {TestClock} from "effect/testing";
+import {processId} from "../id.test-support.ts";
 import {RecordManager, type RecordCalls} from "./records.ts";
 import type {Sql} from "./referee.ts";
 import {SinkError} from "./sink.ts";
@@ -73,7 +74,7 @@ const home = () => {
 	return {open, asked, rows, names: () => [...dbs.keys()]};
 };
 
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PROCESS = Effect.runSync(processId);
 const job: ChainValue = {_tag: "job", process: PROCESS};
 const spans: ChainValue = {_tag: "spans"};
 const part = (n: number) => `job/${PROCESS}/${n}`;

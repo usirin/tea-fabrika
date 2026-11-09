@@ -4,6 +4,7 @@ import {Effect, Layer, Schema} from "effect";
 import * as fc from "fast-check";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {type Entry, lineFor} from "../data/log.ts";
+import {fcProcessIds} from "../id.test-support.ts";
 import {Mailbox} from "./mailbox.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
@@ -27,7 +28,7 @@ import {Down, inSignalSpace, Owner, ProcessTable, Recipient, signalId, Start} fr
 
 const text = fc.string({minLength: 1, maxLength: 256});
 const refs = fc.uniqueArray(text, {minLength: 2, maxLength: 2});
-const session = fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/);
+const session = fcProcessIds;
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
 	examples: A[],

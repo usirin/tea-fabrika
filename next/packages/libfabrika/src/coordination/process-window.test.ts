@@ -4,6 +4,7 @@
 import {describe, expect, it} from "@effect/vitest";
 import {Effect, Result, Schema} from "effect";
 import * as fc from "fast-check";
+import {fcProcessIds} from "../id.test-support.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {A, BRAIN, first, from, manager, storage} from "./process.test-support.ts";
 import {Activity, canRestart, Dead, ProcessFact, recoverActivity, State} from "./process.ts";
@@ -139,7 +140,7 @@ describe("T319, next/ complete dead values", () => {
 	const text = fc.string({minLength: 1, maxLength: 256});
 	const complete = fc
 		.record({
-			process: fc.stringMatching(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/),
+			process: fcProcessIds,
 			program: text,
 			name: fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/),
 			m: text,

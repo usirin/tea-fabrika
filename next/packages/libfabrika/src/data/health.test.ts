@@ -27,6 +27,7 @@ import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Effect, Layer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
+import {processId} from "../id.test-support.ts";
 import {Archive, type BucketCalls} from "./archive.ts";
 import {RecordManager} from "./records.ts";
 import type {Sql} from "./referee.ts";
@@ -48,7 +49,7 @@ afterAll(() => {
 	rmSync(folder, {recursive: true, force: true});
 });
 
-const OBJECT = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const OBJECT = Effect.runSync(processId);
 const H = 3_600_000;
 const DAY = 24 * H;
 const KEEP = 336 * H;

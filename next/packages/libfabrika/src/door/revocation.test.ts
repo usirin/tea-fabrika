@@ -32,11 +32,11 @@ import {ProcessId} from "../data/trace.ts";
 import {Answer} from "../transport/index.ts";
 
 let Door: typeof import("@kampus/libfabrika/door").Door;
-let IdGenerator: typeof import("../data/id.ts").IdGenerator;
+let Id: typeof import("../id.ts");
 beforeEach(async () => {
 	({Door} =
 		await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
-	({IdGenerator} = await vi.importActual<typeof import("../data/id.ts")>("../data/id.ts"));
+	Id = await vi.importActual<typeof Id>("../id.ts");
 });
 const checks = {seed: 119120, numRuns: 20};
 const folder = mkdtempSync(join(tmpdir(), "p17-revoke-"));
@@ -177,7 +177,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 			RecordManager.memory(4 * 1024 * 1024),
 			Archive.memory,
 			ProcessIdGenerator.layer,
-			IdGenerator.layer,
+			Id.Generator.layer,
 		);
 		const layer = Door.layer({
 			sql: saved.sql,

@@ -11,6 +11,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, beforeEach, describe, expect, it, vi} from "@effect/vitest";
+import {Id} from "@kampus/libfabrika";
 import * as C from "@kampus/libfabrika/coordination";
 import {
 	Archive,
@@ -43,9 +44,11 @@ const ADD_SAW = {
 	kept: null,
 	old: null,
 } as const;
-const OTHER_PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjt";
+const ids = Effect.runSync(Id.Generator.pipe(Effect.provide(Id.Generator.layer)));
+const processId = (): string => Effect.runSync(ids.next(Id.Process));
+const OTHER_PROCESS = processId();
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
-const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+const PROCESS = processId();
 const SAW = {
 	code: "1234",
 	label: "Browser",
@@ -55,7 +58,7 @@ const SAW = {
 	has: ["verify", "seal"],
 } as const;
 const SENT = "2026-11-08T04:00:00.000Z";
-const START = "process_01m6v5270hetdrt4r8h9vvjwjr";
+const START = processId();
 const TOOK = {label: "Browser", where: "test", how: "panel", check: "touch"} as const;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SPACE = "fabrika-client";
@@ -220,12 +223,9 @@ const passkey = Effect.fn("test.passkey")(function* () {
 // Loading inside the test hook lets each new law report the missing door on the pre-build base,
 // instead of losing every law to a collection error. This always imports the real module.
 let Door: typeof import("@kampus/libfabrika/door").Door;
-let IdGenerator: typeof import("@kampus/libfabrika/data").IdGenerator;
 beforeEach(async () => {
 	({Door} =
 		await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
-	({IdGenerator} =
-		await vi.importActual<typeof import("@kampus/libfabrika/data")>("@kampus/libfabrika/data"));
 });
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
 const opened: Array<DatabaseSync> = [];
@@ -361,7 +361,7 @@ const world = Effect.fnUntraced(function* (
 		records,
 		Archive.memory,
 		C.ProcessIdGenerator.layer,
-		IdGenerator.layer,
+		Id.Generator.layer,
 	);
 	const layer = Door.layer(settings).pipe(Layer.provideMerge(env));
 	const reopen = (storage: ReturnType<typeof nodeSql>) => {
@@ -377,7 +377,7 @@ const world = Effect.fnUntraced(function* (
 					records,
 					Archive.memory,
 					C.ProcessIdGenerator.layer,
-					IdGenerator.layer,
+					Id.Generator.layer,
 				),
 			),
 		);
@@ -2407,8 +2407,8 @@ describe("P33 signal ids belong to the brain", () => {
 	// A DOWN's entry id is ["DOWN", recipient, ref]. The door refuses any id in that space, so no
 	// receipt holder can hold a signal's id before the brain writes it.
 	const BRAIN = "SHA256:brain";
-	const WATCHER = "process_01m6v5270hetdrt4r8h9vvjwjv";
-	const TARGET = "process_01m6v5270hetdrt4r8h9vvjwjw";
+	const WATCHER = processId();
+	const TARGET = processId();
 	const brainFrom = {
 		by: BRAIN,
 		for: PERSON,

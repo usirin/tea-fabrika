@@ -39,8 +39,6 @@ import {
 	Archive,
 	Chain,
 	fromHere,
-	IdGenerator,
-	InputId,
 	Ledger,
 	LedgerError,
 	LedgerTransaction,
@@ -52,6 +50,8 @@ import {
 	SpanSink,
 	valueFor,
 } from "../data/index.ts";
+import * as Id from "../id.ts";
+import {InputId} from "../id.ts";
 import {
 	Admission,
 	Answer,
@@ -285,7 +285,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 	const context = yield* Effect.context<RNext | RDeliver | RNotify>();
 	const ledger = yield* Ledger;
 	const transaction = yield* LedgerTransaction;
-	const ids = yield* IdGenerator;
+	const ids = yield* Id.Generator;
 	const appendChecked = Effect.fnUntraced(function* (
 		key: string,
 		write: Parameters<typeof appendAdmitted>[1],

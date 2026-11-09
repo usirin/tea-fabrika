@@ -174,14 +174,17 @@ const TUVAL = "@kampus/tuval";
 
 /** What each part may import beyond itself: the detail's table, as it stands. */
 const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
-	transport: [],
-	data: [],
-	coordination: ["data"],
-	app: ["coordination"],
-	node: ["app", "coordination", "data"],
-	workers: ["app", "coordination", "data", "transport"],
-	door: ["app", "coordination", "data", "transport"], // P17a: the library's door composes all four
-	mcp: ["app", "transport"], // the named exception: the bridge is a client, as a window is
+	id: [],
+	"id-test-support": ["id"],
+	"libfabrika-entry": ["id", "transport", "data", "coordination", "app", "mcp", "door"],
+	transport: ["id"],
+	data: ["id"],
+	coordination: ["data", "id"],
+	app: ["coordination", "id"],
+	node: ["app", "coordination", "data", "id"],
+	workers: ["app", "coordination", "data", "transport", "id"],
+	door: ["app", "coordination", "data", "transport", "id"], // P17a: the library's door composes all four
+	mcp: ["app", "transport", "id"], // the named exception: the bridge is a client, as a window is
 	desktop: [LIBRARY], // the app layer's names, nothing lower
 	window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
 	dom: ["desktop"],
@@ -225,6 +228,12 @@ const folderAt = (pkg: Package, file: string): string | null => {
 /** The part a file of `pkg` belongs to, or null when the table has no row for it. */
 const partAt = (pkg: Package, box: ReadonlySet<string>, file: string): string | null => {
 	if (pkg.group === "programs") return box.has(file) ? "program" : "program-window";
+	if (pkg.manifest.name === LIBRARY) {
+		if (file === join(pkg.dir, "src/id.ts")) return "id";
+		if (file === join(pkg.dir, "src/id.test-support.ts")) return "id-test-support";
+		if (file === join(pkg.dir, "src/testing.ts")) return "app";
+		if (file === join(pkg.dir, "src/index.ts")) return "libfabrika-entry";
+	}
 	const folder = folderAt(pkg, file);
 	return folder !== null && FOLDERS[pkg.manifest.name]?.includes(folder) === true ? folder : null;
 };

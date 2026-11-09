@@ -25,6 +25,7 @@ import {noRedactedValue} from "./no-redacted-value.ts";
 import {noSecretEnv} from "./no-secret-env.ts";
 import {noThrowInEffectGen} from "./no-throw-in-effect-gen.ts";
 import {noTypeAssertions} from "./no-type-assertions.ts";
+import {oneIdModule} from "./one-id-module.ts";
 import {oneStoreHook} from "./one-store-hook.ts";
 import {outsideInputConstructor} from "./outside-input-constructor.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
@@ -57,6 +58,7 @@ const plugin: Plugin = {
 		"no-throw-in-effect-gen": noThrowInEffectGen,
 		"no-type-assertions": noTypeAssertions,
 		"one-store-hook": oneStoreHook,
+		"one-id-module": oneIdModule,
 		"outside-input-constructor": outsideInputConstructor,
 		"use-import-extensions": useImportExtensions,
 	},
