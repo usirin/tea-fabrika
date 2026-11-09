@@ -23,10 +23,11 @@ rest.
    those files and use their laws.
 3. **Run the fast check** with [the command below](#the-command): mutants on the changed lines
    only, static mutants off, a 10 s test limit and a 5 s over-run. Five minutes of wall time for the
-   whole pull request, not per run: at five minutes, stop the Stryker process you started and keep
-   what it has. When the lines hold more mutants than five minutes reach, mutate one range per
-   changed line first (seed 119120 picks the order), then the rest. Never the whole set. Ask before
-   you scale up.
+   whole pull request, setup included: at five minutes, stop your workers and keep what they have.
+   `sample.ts` sorts candidate identities and uses seed 119120 to select one range per changed
+   line first, then remaining ranges, at most 150 enclosed mutants. Equal locations and nested
+   ranges count every mutant they select. The seed controls selection; Stryker does not promise
+   to execute ranges in that order. Never the whole set. Ask before you scale up.
    - **A round after a send-back** reuses the last round's answers: Stryker's `incremental`, with
      its file kept per ticket. Only mutants whose code or tests changed run again.
    - **The last round before review** runs with `force`, so a stale answer cannot reach the review.
@@ -39,7 +40,8 @@ rest.
 6. **Commit and sign** with the step-commit skill, as `mutation` (it signs as `tests` for now). If no
    law changed, commit nothing.
    `sh .agents/skills/step-commit/scripts/stepcommit.sh mutation <ticket> "T<ticket> tests: <subject>" <paths...>`
-7. **Report** in under 15 lines: mutants run, killed, survived, timeouts; each survivor with
+7. **Report** in under 15 lines: actual tested, killed, survived, timeout, compile-error, uncovered,
+   reused and unreached counts, plus the seed and `sample.json` totals; each survivor with
    `file:line` and real or equivalent; the laws added; the commit. If the five minutes ran out, say
    how many lines and mutants it did not reach. That is reported, and the pull request goes on.
 
@@ -47,28 +49,65 @@ rest.
 
 The settings are [the decided fast check](../../../docs/direction/fast-and-daily-mutation.md#the-fast-check-decided-2026-11-01)
 on StrykerJS 10.1.1 (read `pnpm-lock.yaml` first; a newer Stryker may rename an option). Run it
-from the repo root of your box or worktree. `T` is the ticket, `BUILD` the build commit.
+from the repo root of your worktree. `T` is the ticket, `BUILD` the build commit. Set
+`RELATED` to the explicit related-test paths, separated by commas. Ticket 520's proof uses
+`.agents/skills/mutation/scripts/sample.test.ts`, the new TypeScript sampler's adjacent laws.
+This does not grade plancheck's shell or Python. Those rely on properties and planted breaks.
+
+The supervisor caps the whole command, including setup, and stops its process group on exit or
+signal. It removes its temporary config after success or failure. Run one command at a time.
+Wait in the background while `pgrep -f "vitest run" | wc -l` is 6 or more before starting.
+
+**A Claude agent in a worktree runs this step, never a Codex box.** Stryker starts a local logging
+server that listens on a port, and the Codex sandbox refuses it (`listen EPERM`). On ticket 520,
+2026-11-08, the sampler picked its 150 mutants, then Stryker stopped before the dry run and no
+mutant ran. This is socket work, as the lead skill's "Who runs which step" says.
 
 ```sh
-T=277; BUILD=abc1234
+export T=520 BUILD=abc1234
+export RELATED=.agents/skills/mutation/scripts/sample.test.ts
+# nice lowers the priority of setup and all workers too.
+nice -n 15 node --input-type=module -e '
+import {spawn} from "node:child_process";
+import {rmSync} from "node:fs";
+const child = spawn("sh", ["-eu"], {detached: true, stdio: "inherit"});
+const kill = (signal) => { try { process.kill(-child.pid, signal); } catch (e) {
+  if (e.code !== "ESRCH") throw e;
+}};
+let stopped = false;
+const stop = () => { stopped = true; kill("SIGTERM");
+  hard = setTimeout(() => kill("SIGKILL"), 1000);
+};
+let hard;
+const cap = setTimeout(stop, 300_000);
+process.once("SIGINT", stop);
+process.once("SIGTERM", stop);
+child.once("exit", (code) => {
+  clearTimeout(cap); clearTimeout(hard); kill("SIGKILL");
+  rmSync("vitest.mutation.config.ts", {force: true});
+  process.exitCode = stopped ? 124 : code ?? 1;
+});
+' <<'SH'
 M=${TMPDIR:-/tmp}/mut-$T; mkdir -p "$M"   # one folder per ticket: the incremental file lives here
 S=packages/pipeline/node_modules/@stryker-mutator
-# The changed lines of the build's product files, as Stryker's `file:start-end` ranges.
-ranges=$(git diff -U0 "$BUILD^" "$BUILD" -- '*.ts' '*.tsx' ':!*.test.ts' ':!*.test.tsx' |
-	awk '/^\+\+\+ b\//{f=substr($0,7)} /^@@/{split($3,a,/[+,]/); n=a[3]==""?1:a[3]; if (n>0) {printf "%s\"%s:%d-%d\"", s, f, a[2], a[2]+n-1; s=","}}')
-# The 10 s test limit, and the tests that run Stryker themselves left out. Not committed: delete it after.
+ranges=$(node .agents/skills/mutation/scripts/sample.ts \
+  --build "$BUILD" --seed 119120 --max 150 --report "$M/sample.json")
+# This config is temporary. Keep the 10 s limit and the existing nested-Stryker and e2e excludes.
 cat > vitest.mutation.config.ts <<'TS'
 import base from "./vitest.config.ts";
-import {defineConfig, mergeConfig} from "vitest/config";
-export default mergeConfig(base, defineConfig({test: {testTimeout: 10_000, hookTimeout: 10_000,
+import {defineConfig} from "vitest/config";
+const include = process.env.RELATED?.split(",").filter(Boolean);
+if (!include?.length) throw new Error("RELATED must list the test paths");
+export default defineConfig({...base, test: {...base.test, include, maxWorkers: 1,
+  testTimeout: 10_000, hookTimeout: 10_000,
 	exclude: [...(base.test?.exclude ?? []), "**/node_modules/**", "**/dist/**",
 		"packages/pipeline/src/stages/mutation/stryker*.test.ts",
-		"packages/pipeline/src/stages/pipeline/{program,github}.test.ts"]}}));
+		"packages/pipeline/src/stages/pipeline/{program,github}.test.ts"]}});
 TS
 cat > "$M/stryker.json" <<JSON
-{"testRunner": "vitest", "vitest": {"configFile": "vitest.mutation.config.ts"},
+{"testRunner": "vitest", "vitest": {"configFile": "vitest.mutation.config.ts", "related": true},
  "plugins": ["$PWD/$S/vitest-runner/dist/src/index.js"], "coverageAnalysis": "perTest",
- "mutate": [$ranges], "ignoreStatic": true, "timeoutMS": 5000, "concurrency": 2,
+ "mutate": [$ranges], "ignoreStatic": true, "timeoutMS": 5000, "concurrency": 1,
  "incremental": true, "incrementalFile": "$M/incremental.json",
  "reporters": ["json", "event-recorder", "progress-append-only"],
  "jsonReporter": {"fileName": "$M/report.json"}, "eventReporter": {"baseDir": "$M/events"},
@@ -76,35 +115,40 @@ cat > "$M/stryker.json" <<JSON
  "ignorePatterns": [".claude", "runs"]}
 JSON
 echo '{}' > "$M/none.json"
-# Add --force on the last round before review. The 5 minutes are for the whole pull request.
-nice -n 15 node "$S/core/bin/stryker.js" run "$M/stryker.json" > "$M/log.txt" 2>&1 & pid=$!
-( sleep 300; kill "$pid" 2>/dev/null ) & cap=$!
-wait "$pid"; kill "$cap" 2>/dev/null; rm vitest.mutation.config.ts
+# Keep --force on the last round before review. Omit it only for an intermediate reused round.
+node "$S/core/bin/stryker.js" run "$M/stryker.json" --force > "$M/log.txt" 2>&1
+SH
 ```
 
 - `report.json` holds every answer when Stryker finished. When the cap stopped it, read
   `events/*-onMutantTested.json`, one file per mutant as it came: that is what it kept. Count the
-  lines and mutants it did not reach from `ranges`.
+  mutants it did not reach against `sample.json`. Keep selection omissions (`left`) separate from
+  selected mutants not tested before the cap. Reused answers are not fresh test results.
 - `incremental.json` is written only by a round that finished. A round the cap stopped leaves the
   last finished one in place.
-- **A dry run that fails on the 10 s limit** stops Stryker before any mutant runs. A test that
-  takes longer than 10 s alone is not a fast test: add its file to the `exclude` list above, say
-  so in the report, and run again. A 2026-11-08 try on one small file hit this after about 3
-  minutes of dry run, on a settings test in `packages/pipeline`.
-- `concurrency` is 2, the note's budget. With two or more code agents running, use 1.
+- **A dry run is not proof.** Ignored or uncovered mutants alone are not proof either. At least
+  one mutant needs a real test result. Record the dry-run log and the actual result counts.
+- **The historical settings timeout is still unidentified.** On 2026-11-08, tests measured
+  `packages/pipeline/src/settings.test.ts` at 0.45 s and `settings-source.test.ts` at 3.8 s, both
+  under 10 s. Exclude neither on a guess. If the real dry-run log shows a file passing 10 s,
+  report its exact path and seconds. Send that exclude to build, then reuse the remaining budget.
+- `concurrency` and Vitest's `maxWorkers` are both 1 under the current laptop caps.
 - `ignorePatterns` keeps `.claude` out of Stryker's sandbox copy: its skill links are folders
   linked to `.agents/skills`, and the copy fails on them (tried 2026-11-08).
 - `tsconfigFile` points at an empty file: Stryker rewrites a tsconfig with TypeScript's JavaScript
   API, which TypeScript 7 does not have (`packages/pipeline/src/stages/mutation/stryker.ts`).
-- In a Codex box, drop `nice`.
+- **The command as written ran** on 2026-11-08 on ticket 520's `sample.ts`, seed 119120: 150 of
+  202 mutants selected; the final round had 94 killed, 1 survived (equivalent), 49 no coverage (the
+  CLI block, which only the end-to-end run reaches) and 6 static ignored, in about 40 s. The dry run
+  took 1 s with `RELATED` limiting the tests, so no settings test came near 10 s.
 
 ## Go easy on the machine
 
 - Any run that starts the app, the brain or the stage sets its own temp `FABRIKA_HOME` first
   (`mktemp -d /tmp/fh.XXXX`, short, since a socket path has a 103-byte limit). Never the real
   `~/.fabrika`: a P12 hand run once wrote its stage files there.
-- Under `nice -n 15` outside a Codex box. In a box, `nice` and `pgrep` are blocked: skip them.
-- Two workers, one with two or more code agents running. Changed lines only, never the whole set.
+- Under `nice -n 15`, on a Claude agent in a worktree. A Codex box cannot bind Stryker's port.
+- One worker. Changed lines only, at most 150 enclosed mutants, never the whole set.
 
 ## Never
 

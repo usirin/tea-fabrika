@@ -31,6 +31,7 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
 - **Except Electron or socket work** (owner, 2026-11-08): a step whose laws or shots need the app
   running (a program's window, the desk, keys, the look) or need to bind a socket is run by a Claude
   agent instead. A Codex box can start neither, so a Codex build there would come back half checked.
+  The mutation step is socket work: Stryker binds a port, so it always runs on Claude.
   Still one agent per step.
 - **One driver per ticket, start to finish** (owner, 2026-11-08): a Claude agent carries one ticket
   through every step, starting one agent per step on the runner above. It merges its own PR only
@@ -57,13 +58,35 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `catchup.sh <pr> <ticket>` | in its own checkout, merge `main` in as the bot, sign that merge `lead`, push, wait for every check on that head, squash-merge pinned to it |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 
+`box.sh run` names the box's `.agents/` as its own writable root because Codex otherwise keeps
+that folder read-only inside the writable checkout.
+
+Catch-up retries read-only `gh` failures three times, waiting 1 and 2 seconds. A successful red or
+untrusted answer stops immediately. Logs are captured before parsing, so a failed read cannot
+look green. Pushes and merges are never retried by that helper.
+
+## Pushes and protected refs
+
+Keep the bot's explicit atomic push of notes plus branch. On a person's branch, notes-only as the
+bot and branch-only as the person are two intended writes. A refusal stops the step.
+
+`Cannot update this protected ref.` alone does not prove a push failed. Read the command's exit
+status and the rule suite's overall result and named ref. In
+[rule suite 4984058968](https://api.github.com/repos/usirin/tea-fabrika/rulesets/rule-suites/4984058968),
+the update check named a person's branch, and the overall result was `bypass`: that push
+succeeded through the owner's bypass. It did not show a refused notes ref. Keep real push failures
+visible, and never weaken the rules to hide this message.
+
 ## Steps
 
 1. **Plan.** Write a brief that names the ticket, its version, what to read and an older plan to copy
    the shape of. Run `runplan.sh` in the background. Save the answer as `BOXES/<name>-PLAN.md`.
 2. **Check the plan.** Run `sh .agents/skills/plan/scripts/plancheck.sh <plan>`. It lists every exam
    path the plan names and exits 1 when a files table has no owner, gives an exam path to a step
-   other than `tests`, or a law has no generator. Then the plan goes back. Check that each listed path is in the files table at all.
+   other than `tests`, or a law has no generator. Then the plan goes back. The `exam path named`
+   listing is a total scan of the whole file, fences and link titles included, so a false listing
+   is harmless. Check each listed path is owned by `tests` in the files table; the files-table
+   check is a parser over free text and may miss an exotic form the listing still shows.
 3. **Approve.** A plan that only builds decided notes: write "Approved by the lead agent, builds
    <note>" on its blank first line. A plan that raises a new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
