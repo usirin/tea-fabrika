@@ -54,7 +54,7 @@ const history = fc.record({
 	repeat: fc.boolean(),
 	input,
 });
-type History = fc.ArbitraryValue<typeof history>;
+type History = typeof history extends fc.Arbitrary<infer Value> ? Value : never;
 const seeded = (h: History) =>
 	Effect.gen(function* () {
 		const disk = storage();
