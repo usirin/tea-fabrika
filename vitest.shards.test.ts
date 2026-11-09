@@ -1,9 +1,49 @@
 import {readdirSync, statSync} from "node:fs";
 import {dirname, join, relative} from "node:path";
 import {fileURLToPath} from "node:url";
+import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {BaseSequencer, createVitest} from "vitest/node";
 import {assign, measured, Shards} from "./vitest.shards.ts";
+
+// T342, today's sharding. Covers assign and the measured table. Plants: drop a file,
+// restore equal-count assignment, or discard measured script times.
+it("generated sharding assigns once, ignores input order and balances measured seconds", () => {
+	fc.assert(
+		fc.property(
+			fc.uniqueArray(
+				fc.record({path: fc.string({minLength: 1}), seconds: fc.integer({min: 1, max: 500})}),
+				{selector: (f) => f.path, minLength: 1, maxLength: 40},
+			),
+			fc.integer({min: 1, max: 12}),
+			(files, count) => {
+				const machines = assign(files, count);
+				expect(machines).toHaveLength(files.length);
+				expect(machines.every((m) => m >= 0 && m < count && Number.isInteger(m))).toBe(true);
+				const first = Object.fromEntries(files.map((f, i) => [f.path, machines[i]]));
+				const reversed = files.toReversed();
+				expect(
+					Object.fromEntries(reversed.map((f, i) => [f.path, assign(reversed, count)[i]])),
+				).toEqual(first);
+				const load = Array.from({length: count}, (_, m) =>
+					files.reduce((sum, f, i) => sum + (machines[i] === m ? f.seconds : 0), 0),
+				);
+				expect(Math.max(...load) - Math.min(...load)).toBeLessThanOrEqual(
+					Math.max(...files.map((f) => f.seconds)),
+				);
+			},
+		),
+		{seed: 119120, numRuns: 100},
+	);
+});
+
+it("vector: plan-supplied real CI measurements include the previously unweighted scripts", () => {
+	// Fixed measurements, not invented timing limits. Run 42579837468, from the approved plan.
+	expect(measured[".agents/skills/lead/scripts/plancheck.test.ts"]).toBe(53.9);
+	expect(measured[".agents/skills/lead/scripts/catchup.test.ts"]).toBe(39.3);
+	expect(measured["apps/fabrika/src/bundles.test.ts"]).toBe(3.2);
+	expect(measured["packages/pipeline/src/laws/standard.test.ts"]).toBe(3.4);
+});
 
 // How the check's test machines split the test files: each gets about the same seconds, not the
 // same count of files.

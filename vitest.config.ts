@@ -32,8 +32,10 @@ export default defineConfig({
 			"legacy/src/**/*.test.ts",
 			"oxlint-plugins/*.test.ts",
 			"vitest.shards.test.ts",
+			".github/ci/*.test.ts",
 			".agents/skills/*/scripts/*.test.ts",
-			// next/, the new version. Its end-to-end tests sit outside `src/`, in
+			// Keep next/ for its own job and local runs. Today's CI excludes it on the CLI.
+			// Its end-to-end tests sit outside `src/`, in
 			// `next/apps/fabrika/e2e/`, and run through `node next/apps/fabrika/e2e.ts`.
 			"next/packages/*/src/**/*.test.{ts,tsx}",
 			"next/programs/*/src/**/*.test.{ts,tsx}",
