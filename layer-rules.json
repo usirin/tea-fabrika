@@ -30,13 +30,7 @@
 		},
 		{
 			"name": "next-libfabrika-entry",
-			"paths": [
-				"next/packages/libfabrika/src/index.ts",
-				"next/packages/libfabrika/src/testing.ts",
-				"next/packages/libfabrika/src/id.test.ts",
-				"next/packages/libfabrika/src/id.types.test.ts",
-				"next/packages/libfabrika/src/testing.test.ts"
-			]
+			"paths": ["next/packages/libfabrika/src/index.ts"]
 		},
 		{
 			"name": "next-mcp",
@@ -44,7 +38,7 @@
 		},
 		{
 			"name": "next-app",
-			"paths": ["next/packages/libfabrika/src/app"]
+			"paths": ["next/packages/libfabrika/src/app", "next/packages/libfabrika/src/testing.ts"]
 		},
 		{
 			"name": "next-coordination",
