@@ -163,7 +163,8 @@ export class ProgramRunner extends Context.Service<
 	static readonly layer = (
 		initial: Descriptor,
 		options?: {
-			readonly policy?: Policy;
+			/** The trusted wiring's policy. Without `maxDeliveries`, a letter is tried 3 times. */
+			readonly policy?: Omit<Policy, "maxDeliveries"> & {readonly maxDeliveries?: number};
 			readonly recovery: {readonly sql: Sql; readonly name: string; readonly capacity: number};
 			readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
 		},
@@ -235,11 +236,36 @@ export class ProgramRunner extends Context.Service<
 				);
 				const moved = (s: Supervision, msg: SupervisorMsg): Supervision =>
 					applyCell(supervisor, s, msg)[0];
+				/** Which delivery limit wins: the program's own, else the wiring's (3 when it sets none). */
+				const deliveries = (s: Supervision): number => s.maxDeliveries ?? s.policy.maxDeliveries;
+				/** The dead letter is written and its process exited: no dead or exit action is left. */
+				const deadDone = (s: Supervision): boolean =>
+					s.pending === null || (s.pending.type !== "dead" && s.pending.type !== "exit");
+				/** When recovery waits: down's own wait, or a successor's start that is not due yet. */
+				const waitUntil = (s: Supervision | null): number | null =>
+					s?.recovery._tag === "down"
+						? s.recovery.until
+						: s?.recovery._tag === "starting" && s.pending?.type === "start"
+							? (s.pending.until ?? null)
+							: null;
+				/** A successor's request names this runner's program, not a guess from its name. */
+				const ownCode = (s: Supervision): Supervision =>
+					s.recovery._tag === "starting"
+						? {
+								...s,
+								recovery: Recovery.cases.starting.make({
+									...s.recovery,
+									request: Start.cases.again.make({
+										...s.recovery.request,
+										code: {program: process.program, hash: s.build},
+									}),
+								}),
+							}
+						: s;
 				/** One object alarm: program work is eligible only while live. */
 				const setAlarm = Effect.fnUntraced(function* (retryAt?: number) {
 					const running = supervision === null || supervision.recovery._tag === "live";
-					const until =
-						retryAt ?? (supervision?.recovery._tag === "down" ? supervision.recovery.until : null);
+					const until = retryAt ?? waitUntil(supervision);
 					// Loading supplies the live program's wake; do not clear it before then.
 					if (running && live === null && until === null) return;
 					const wake = running ? (live?.wake ?? null) : null;
@@ -273,7 +299,7 @@ export class ProgramRunner extends Context.Service<
 										action.process,
 										Dead.make({
 											tries: receipt.tries,
-											limit: s.policy.maxDeliveries,
+											limit: deliveries(s),
 											m: receipt.letter,
 											build: s.build,
 											errors: receipt.errors,
@@ -322,9 +348,8 @@ export class ProgramRunner extends Context.Service<
 										pending: {type: "start", process: action.process, from: meta},
 									});
 								} else {
-									const next = moved(
-										{...s, restarts: status.restarts},
-										{type: "exited", at: status.at},
+									const next = ownCode(
+										moved({...s, restarts: status.restarts}, {type: "exited", at: status.at}),
 									);
 									yield* saveRecovery({
 										...next,
@@ -345,17 +370,26 @@ export class ProgramRunner extends Context.Service<
 							case "start": {
 								if (s.recovery._tag !== "starting") return yield* new LedgerError({why: "bad_row"});
 								const status = yield* p.status(s.name);
-								const started = yield* p.start(s.recovery.request, meta).pipe(
+								// The successor waits its backoff: the alarm resumes it when due.
+								if (action.until !== undefined && status.at < action.until) return;
+								const timing = {
+									[PROCESS]: action.process,
+									[tag("until")]: action.until ?? status.at,
+									[tag("lag")]: Math.max(0, status.at - (action.until ?? status.at)),
+								};
+								const restart = p.start(s.recovery.request, meta).pipe(
 									Effect.withSpan("runner.restart", {
 										attributes: {
-											[PROCESS]: action.process,
-											[tag("until")]: action.until ?? status.at,
-											[tag("lag")]: Math.max(0, status.at - (action.until ?? status.at)),
+											...timing,
 											[tag("build")]: s.build,
 											[tag("crashes")]: s.crashes ?? 0,
 										},
 									}),
 								);
+								// A supervised start has a wait; an explicit Restart has none.
+								const started = yield* action.until === undefined
+									? restart
+									: restart.pipe(Effect.withSpan("runner.recover", {attributes: timing}));
 								yield* fault("after_start");
 								yield* saveRecovery({
 									...s,
@@ -454,7 +488,7 @@ export class ProgramRunner extends Context.Service<
 						if (old === undefined || next.pending === null)
 							return yield* new LedgerError({why: "bad_row"});
 						const errors = [...old.errors, failure.error];
-						const terminal = errors.length >= s.policy.maxDeliveries;
+						const terminal = errors.length >= deliveries(s);
 						const receipt = {
 							...old,
 							errors,
@@ -496,7 +530,13 @@ export class ProgramRunner extends Context.Service<
 					const status = yield* p.status(initial.name);
 					if (supervision === null) {
 						const policy = yield* Effect.try({
-							try: () => Schema.decodeUnknownSync(Policy)(options?.policy ?? defaultPolicy),
+							try: () => {
+								const wiring = options?.policy ?? defaultPolicy;
+								return Schema.decodeUnknownSync(Policy)({
+									...wiring,
+									maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
+								});
+							},
 							catch: () => new LedgerError({why: "bad_row"}),
 						});
 						supervision = yield* recovery.load;
@@ -510,20 +550,19 @@ export class ProgramRunner extends Context.Service<
 							})[0];
 					}
 					const s = supervision;
-					if (
-						status.state._tag === "live" &&
-						s.recovery._tag === "down" &&
-						status.state.process !== s.recovery.process
-					) {
+					// Another starter placed a successor while this one waited: adopt it.
+					const waited =
+						s.recovery._tag === "down"
+							? s.recovery.process
+							: waitUntil(s) !== null && s.recovery._tag === "starting"
+								? s.recovery.after
+								: null;
+					if (status.state._tag === "live" && waited !== null && status.state.process !== waited) {
 						yield* saveRecovery({
 							...s,
 							build: status.state.code.hash,
 							restarts: status.restarts,
-							pending: {
-								type: "checkpoint",
-								after: s.recovery.process,
-								process: status.state.process,
-							},
+							pending: {type: "checkpoint", after: waited, process: status.state.process},
 						});
 					}
 					yield* continueRecovery();
@@ -559,30 +598,16 @@ export class ProgramRunner extends Context.Service<
 						status.at >= waiting.recovery.until
 					) {
 						const s = waiting;
-						const next = moved(s, {type: "due", at: status.at});
+						const next = ownCode(moved(s, {type: "due", at: status.at}));
 						if (next.recovery._tag === "starting") {
-							const request = Start.cases.again.make({
-								...next.recovery.request,
-								code: {program: process.program, hash: s.build},
-							});
 							yield* saveRecovery({
 								...next,
-								recovery: Recovery.cases.starting.make({...next.recovery, request}),
 								pending:
 									next.pending === null
 										? null
 										: {...next.pending, from: yield* from(null, yield* traceId)},
 							});
-							yield* continueRecovery().pipe(
-								Effect.withSpan("runner.recover", {
-									attributes: {
-										[PROCESS]: s.recovery._tag === "down" ? s.recovery.process : process.id,
-										[tag("until")]: s.recovery._tag === "down" ? s.recovery.until : 0,
-										[tag("lag")]:
-											s.recovery._tag === "down" ? Math.max(0, status.at - s.recovery.until) : 0,
-									},
-								}),
-							);
+							yield* continueRecovery();
 						}
 					}
 					const latest = yield* currentRecovery;
@@ -676,6 +701,14 @@ export class ProgramRunner extends Context.Service<
 				const load = Effect.fnUntraced(function* () {
 					const loaded = yield* loader.load(process.program);
 					const program = loaded.stepper.program;
+					if (supervision !== null && supervision.maxDeliveries !== program.maxDeliveries) {
+						const {maxDeliveries: _old, ...rest} = supervision;
+						yield* saveRecovery(
+							program.maxDeliveries === undefined
+								? rest
+								: {...rest, maxDeliveries: program.maxDeliveries},
+						);
+					}
 					const saved = yield* store.load;
 					if (saved === null) {
 						const boot = yield* stepped(
@@ -1316,7 +1349,8 @@ export class ProgramRunner extends Context.Service<
 								preparation.failure instanceof ProgramDown &&
 								terminal !== null &&
 								terminal !== undefined &&
-								supervision?.pending === null
+								supervision !== null &&
+								deadDone(supervision)
 							)
 								return {answer: Sent.cases.refused.make({why: "dead"}), jobs: []};
 							return yield* Effect.fail(preparation.failure);

@@ -4,6 +4,7 @@
 import {applyCell, msgKeysOf, type AnyCmdDef} from "@demlik/tea";
 import {Effect, Option, Result, Schema, type SchemaIssue} from "effect";
 import {ParentText} from "../coordination/index.ts";
+import {Deliveries} from "../coordination/recovery.ts";
 
 /** A function type whose parameters TypeScript checks both ways, as it does a method's: a program
  *  declares `(model: Model) => …`, and the runner calls it with the model it decoded. */
@@ -124,6 +125,8 @@ export type FactPolicy = typeof FactPolicy.Type;
 
 const Declaration = Schema.Struct({
 	name: Schema.NonEmptyString,
+	/** How many times one letter is tried before it is dead. Absent: the wiring's limit, else 3. */
+	maxDeliveries: Schema.optionalKey(Deliveries),
 	machine: Schema.declare(isSteps, {expected: "a tea machine"}),
 	state: State,
 	msg: Schemas,
@@ -186,6 +189,7 @@ type Policies<W> = {
 };
 type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W> = {
 	readonly name: string;
+	readonly maxDeliveries?: number;
 	readonly machine: T;
 	readonly state: Omit<State, "schema"> & {readonly schema?: never};
 	readonly msg?: never;
@@ -216,6 +220,7 @@ export type Program<
 	W = Record<string, FactPolicy>,
 > = {
 	readonly name: string;
+	readonly maxDeliveries?: number;
 	readonly machine: T;
 	readonly state: Omit<State, "schema"> & {readonly schema: T["model"] & Declared};
 	readonly msg: T["msg"] & Declared;
@@ -232,6 +237,7 @@ export type Program<
 
 const Authoring = Schema.Struct({
 	name: Declaration.fields.name,
+	maxDeliveries: Declaration.fields.maxDeliveries,
 	machine: Schema.declare(
 		(u): u is ProgramMachine & {readonly model: Declared; readonly msg: Declared} =>
 			isSteps(u) && "model" in u && isDeclared(u.model) && "msg" in u && isDeclared(u.msg),

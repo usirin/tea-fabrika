@@ -6,9 +6,11 @@ import {Start} from "./process.ts";
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 const Millis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Text = Schema.NonEmptyString;
+/** How many times one letter is tried before it moves to the dead letters: 1 to 32. */
+export const Deliveries = Count.check(Schema.isLessThanOrEqualTo(32));
 
 export const Policy = Schema.Struct({
-	maxDeliveries: Count.check(Schema.isLessThanOrEqualTo(32)),
+	maxDeliveries: Deliveries,
 	intensity: Count,
 	periodMs: Count,
 	backoff: Schema.Struct({minMs: Count, maxMs: Count, resetAfterMs: Count}),
@@ -93,6 +95,8 @@ export const Supervision = Schema.Struct({
 	restarts: Schema.Array(Millis),
 	observations: Schema.Array(Observation),
 	receipts: Schema.Array(Receipt),
+	/** The program's own delivery limit, from its declaration. It wins over the policy's. */
+	maxDeliveries: Schema.optionalKey(Deliveries),
 	crashes: Schema.optionalKey(Millis),
 	healthyAt: Schema.optionalKey(Millis),
 	restart: Schema.optionalKey(Schema.Struct({id: Text, build: Text})),
