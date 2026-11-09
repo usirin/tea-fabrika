@@ -21,7 +21,7 @@ import {
 	commitReply,
 } from "@kampus/libfabrika/workers/runtime";
 import {DurableObject, WorkerEntrypoint} from "cloudflare:workers";
-import {Effect} from "effect";
+import {Effect, Redacted} from "effect";
 import type {ConnectionId} from "./door.ts";
 import {gatewayRuntime, projectRuntime, settings, type Env} from "./runtime.ts";
 import {programs} from "./table.ts";
@@ -255,7 +255,9 @@ export class RecordPart extends DurableObject<Env> {
 export class Control extends WorkerEntrypoint<Env, {token: string}> {
 	fetch(request: Request) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the private local control socket enters Effect
-		return Effect.runPromise(control(request, this.env, this.ctx.props.token, programs));
+		return Effect.runPromise(
+			control(request, this.env, Redacted.make(this.ctx.props.token), programs),
+		);
 	}
 }
 

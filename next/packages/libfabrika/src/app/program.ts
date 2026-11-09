@@ -353,8 +353,20 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
 	why: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
 	/** An RPC or reply decode failure decided nothing about the input. It must be retried. */
 	source: Schema.optionalKey(Schema.Literals(["rpc", "decode"])),
+	/** The thrown class, preserved as checked data across Worker RPC. */
+	error: Schema.optionalKey(Schema.String),
 	cause: Schema.optionalKey(Schema.Unknown),
-}) {}
+}) {
+	get errorClass(): string {
+		if (this.error !== undefined) return this.error;
+		const original = Object.hasOwn(this, "cause") ? this.cause : this;
+		return original instanceof Error
+			? original.constructor.name
+			: original === null
+				? "null"
+				: typeof original;
+	}
+}
 
 export type Stepper = {
 	readonly program: typeof Declaration.Type;

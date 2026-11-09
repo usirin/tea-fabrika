@@ -1,4 +1,5 @@
 import {Effect} from "effect";
+import {LedgerError} from "../data/index.ts";
 import {GatewayClient, ProjectClient} from "./platform.ts";
 import {projectStub, rpc, type BrainOptions, type Env} from "./runtime.ts";
 
@@ -21,14 +22,12 @@ export const fetch = Effect.fn("workers.fetch")(function* (
 		const input = yield* Effect.tryPromise({try: () => request.json(), catch: () => null});
 		return Response.json(yield* rpc(project.grant(input)));
 	}
-	if (url.pathname.startsWith("/grant/client/") && request.method === "GET")
-		return Response.json(
-			yield* rpc(
-				project.target(
-					decodeURIComponent(url.pathname.slice("/grant/client/".length)),
-					url.searchParams.get("code") ?? "",
-				),
-			),
-		);
+	if (url.pathname.startsWith("/grant/client/") && request.method === "GET") {
+		const target = yield* Effect.try({
+			try: () => decodeURIComponent(url.pathname.slice("/grant/client/".length)),
+			catch: () => new LedgerError({why: "bad_row"}),
+		});
+		return Response.json(yield* rpc(project.target(target, url.searchParams.get("code") ?? "")));
+	}
 	return new Response("fabrika", {headers: {"content-type": "text/plain"}});
 });

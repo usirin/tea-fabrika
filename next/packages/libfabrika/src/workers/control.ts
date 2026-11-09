@@ -1,4 +1,4 @@
-import {Effect, Result, Schema} from "effect";
+import {Effect, Equal, Redacted, Result, Schema} from "effect";
 import {LedgerError} from "../data/index.ts";
 import {workerLoader, type ProgramSource} from "./index.ts";
 import {ProcessClient, ProjectClient, RecordClient} from "./platform.ts";
@@ -55,17 +55,17 @@ const dispatch = Effect.fnUntraced(function* (
 	}
 	if (target === "bucket") {
 		if (method === "put") {
-			const bytes = yield* Schema.decodeUnknownEffect(Schema.Array(Schema.Number))(args[1]).pipe(
+			const [key, bytes, checksum] = yield* Schema.decodeUnknownEffect(
+				Schema.Tuple([Schema.String, Schema.Array(Schema.Number), Schema.String]),
+			)(args).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+			return yield* checkedPut(env.HEALTH, key, Uint8Array.from(bytes), checksum);
+		}
+		if (method === "head") {
+			const [key] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String]))(args).pipe(
 				Effect.mapError(() => new LedgerError({why: "bad_row"})),
 			);
-			return yield* checkedPut(
-				env.HEALTH,
-				String(args[0]),
-				Uint8Array.from(bytes),
-				String(args[2]),
-			);
+			return yield* bucketHead(env.HEALTH, key);
 		}
-		if (method === "head") return yield* bucketHead(env.HEALTH, String(args[0]));
 		return yield* Effect.fail({why: "unknown_method"});
 	}
 	if (!methods[target].has(method)) return yield* Effect.fail({why: "unknown_method"});
@@ -97,11 +97,11 @@ const dispatch = Effect.fnUntraced(function* (
 export const control = Effect.fn("runtime.control")(function* (
 	request: globalThis.Request,
 	env: Env,
-	token: string,
+	token: Redacted.Redacted<string>,
 	programs: Readonly<Record<string, ProgramSource>>,
 ) {
-	if (typeof token !== "string" || request.headers.get("authorization") !== `Bearer ${token}`)
-		return new Response(null, {status: 403});
+	const bearer = Redacted.make(request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1]);
+	if (!Equal.equals(token, bearer)) return new Response(null, {status: 403});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: a Request body returns a Promise
 	const raw = yield* Effect.tryPromise({try: () => request.json(), catch: () => null});
 	const input = Schema.decodeUnknownResult(Request)(raw);

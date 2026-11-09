@@ -1,6 +1,5 @@
 import {spawn} from "node:child_process";
 import {homedir} from "node:os";
-import {join, resolve} from "node:path";
 import {parseArgs} from "node:util";
 import {NodeRuntime, NodeServices} from "@effect/platform-node";
 import {Effect, FileSystem, Path, Schema} from "effect";
@@ -29,7 +28,6 @@ for (let n = 2; n < process.argv.length; n++) {
 	if (flag) n++;
 }
 const options = parseArgs({args: words, options: flags}).values;
-const home = process.env.FABRIKA_HOME ?? join(homedir(), ".fabrika");
 process.env.DO_NOT_TRACK = "1";
 const guard = Effect.forever(
 	Effect.gen(function* () {
@@ -45,6 +43,7 @@ const child = Effect.scoped(
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem,
 				path = yield* Path.Path;
+			const home = process.env.FABRIKA_HOME ?? path.join(homedir(), ".fabrika");
 			const {file, config} = yield* Effect.gen(function* () {
 				yield* fs.makeDirectory(home, {recursive: true});
 				const file = path.join(home, "stage.json");
@@ -87,12 +86,13 @@ const exited = (child: import("node:child_process").ChildProcess) =>
 	});
 const parent = Effect.scoped(
 	Effect.gen(function* () {
+		const path = yield* Path.Path;
 		const stage = yield* Effect.acquireRelease(
 			Effect.sync(() =>
 				spawn(
 					process.execPath,
 					[
-						resolve(import.meta.dirname, "dev.ts"),
+						path.resolve(import.meta.dirname, "dev.ts"),
 						...process.argv.slice(2),
 						"--child",
 						`--parent=${process.pid}`,

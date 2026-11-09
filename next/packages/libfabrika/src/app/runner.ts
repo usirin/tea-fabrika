@@ -674,16 +674,25 @@ export class ProgramRunner extends Context.Service<
 							return yield* Effect.failCause(result.cause);
 						}
 						const wrapped = Cause.squash(result.cause);
+						if (wrapped instanceof ProgramDown && wrapped.source !== undefined) {
+							yield* saveRecovery({...supervision, attempt: null});
+							yield* store
+								.activity(Activity.cases.idle.make({process: process.id}))
+								.pipe(Effect.ignore);
+							return yield* wrapped;
+						}
 						const original =
 							wrapped instanceof ProgramDown && Object.hasOwn(wrapped, "cause")
 								? wrapped.cause
 								: wrapped;
 						const error =
-							original instanceof Error
-								? original.constructor.name
-								: original === null
-									? "null"
-									: typeof original;
+							wrapped instanceof ProgramDown
+								? wrapped.errorClass
+								: original instanceof Error
+									? original.constructor.name
+									: original === null
+										? "null"
+										: typeof original;
 						yield* observed(
 							(why === "step" ? Failure.cases.fresh : Failure.cases.saved).make({
 								...attempt,
@@ -1367,6 +1376,7 @@ export class ProgramRunner extends Context.Service<
 							const terminal = supervision?.receipts.find((r) => r.letter === input.id)?.result;
 							if (
 								preparation.failure instanceof ProgramDown &&
+								preparation.failure.source === undefined &&
 								terminal !== null &&
 								terminal !== undefined &&
 								supervision !== null &&

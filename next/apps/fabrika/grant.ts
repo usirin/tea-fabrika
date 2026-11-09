@@ -16,9 +16,13 @@ const Target = Schema.NullOr(
 	}),
 );
 const grant = Effect.fn("grant.client")(function* () {
-	const {positionals, values} = parseArgs({
-		allowPositionals: true,
-		options: {code: {type: "string"}, label: {type: "string"}, key: {type: "string"}},
+	const {positionals, values} = yield* Effect.try({
+		try: () =>
+			parseArgs({
+				allowPositionals: true,
+				options: {code: {type: "string"}, label: {type: "string"}, key: {type: "string"}},
+			}),
+		catch: () => new GrantError({why: "bad_args"}),
 	});
 	const [kind, url, fingerprint] = positionals;
 	if (
@@ -30,7 +34,10 @@ const grant = Effect.fn("grant.client")(function* () {
 	)
 		return yield* new GrantError({why: "usage: grant.ts client URL KEY --code=CODE --key=PATH"});
 	const {code, key} = values;
-	const origin = new URL(url).origin;
+	const origin = yield* Effect.try({
+		try: () => new URL(url).origin,
+		catch: () => new GrantError({why: "bad_url"}),
+	});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: the grant command reads a public target over HTTP
 	const response = yield* Effect.tryPromise({
 		try: () =>

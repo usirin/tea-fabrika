@@ -4,7 +4,7 @@ import * as Plugin from "@alchemy.run/cloudflare-runtime/core/Plugin";
 import {RuntimeLifecycle, type RuntimeEvent} from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import {SystemError} from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
 import {applyCell} from "@demlik/tea";
-import {Context, Deferred, Effect, Exit, Queue, Schema, Scope} from "effect";
+import {Context, Deferred, Effect, Exit, Queue, Redacted, Schema, Scope} from "effect";
 import {BrainFact} from "../app/brain-fact.ts";
 import {brainLife} from "../app/brain-life.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
@@ -75,7 +75,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		// listens. The control socket's first start opens this latch.
 		listening = yield* Deferred.make<void>(),
 		started = yield* Deferred.make<void>();
-	const token = randomBytes(32).toString("base64url");
+	const token = Redacted.make(randomBytes(32).toString("base64url"));
 	let port = 0,
 		pid = 0,
 		previous = yield* outbox.last,
@@ -108,7 +108,11 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 			try: () =>
 				fetch(`http://127.0.0.1:${port}`, {
 					method: "POST",
-					headers: {authorization: `Bearer ${token}`, "content-type": "application/json"},
+					headers: {
+						// oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
+						authorization: `Bearer ${Redacted.value(token)}`,
+						"content-type": "application/json",
+					},
 					body: JSON.stringify({target, project, name, method, args}),
 				}),
 			catch: () => new ControlError({why: "unreachable"}),
@@ -166,7 +170,8 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 					service: {
 						name: "user-worker",
 						entrypoint: "Control",
-						props: {json: JSON.stringify({token})},
+						// oxlint-disable-next-line fabrika/no-redacted-value -- Alchemy sends these entrypoint props to workerd
+						props: {json: JSON.stringify({token: Redacted.value(token)})},
 					},
 				},
 			],

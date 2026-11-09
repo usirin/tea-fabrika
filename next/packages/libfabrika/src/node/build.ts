@@ -1,6 +1,5 @@
 import {createHash} from "node:crypto";
-import {join} from "node:path";
-import {Effect, Schema} from "effect";
+import {Effect, Path, Schema} from "effect";
 import {rolldown, type Plugin} from "rolldown";
 import type {ProgramSource} from "../app/execution.ts";
 
@@ -33,6 +32,8 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 	readonly programs: Readonly<Record<string, {readonly module: string; readonly name: string}>>;
 	readonly plugins: Array<Plugin>;
 }) {
+	const path = yield* Path.Path;
+	const generated = path.join(options.root, "program.generated.ts");
 	const programs: Record<string, ProgramSource> = {};
 	for (const [name, entry] of Object.entries(options.programs)) {
 		const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${JSON.stringify(entry.module)}; export default programBox(program, ${JSON.stringify(name)});`;
@@ -41,10 +42,10 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 			{
 				name: "fabrika-program",
 				resolveId(id) {
-					if (id === "fabrika:program") return join(options.root, "program.generated.ts");
+					if (id === "fabrika:program") return generated;
 				},
 				load(id) {
-					if (id === join(options.root, "program.generated.ts")) return code;
+					if (id === generated) return code;
 				},
 			},
 		]);

@@ -20,6 +20,12 @@ const Outcome = Schema.TaggedUnion({
 });
 const Typed = Schema.Struct({type: Schema.String});
 
+/** Program failures are checked RPC data; a rejected call is a transport failure. */
+export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", {
+	why: ProgramDown.fields.why,
+	error: Schema.String,
+});
+
 /** A checked reply failure crosses RPC as data; a rejected call remains an RPC failure. */
 export const Reply = Schema.TaggedUnion({
 	ok: {value: Schema.Json},
@@ -216,6 +222,8 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
 	) =>
 		work.pipe(
 			Effect.flatMap((raw) => {
+				const failed = Schema.decodeUnknownResult(ExecutionFailure)(raw);
+				if (Result.isSuccess(failed)) return Effect.fail(new ProgramDown(failed.success));
 				const decoded = Schema.decodeUnknownResult(schema)(raw);
 				return Result.isSuccess(decoded)
 					? Effect.succeed(decoded.success)

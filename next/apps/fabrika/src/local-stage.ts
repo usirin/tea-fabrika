@@ -1,5 +1,4 @@
-import {join} from "node:path";
-import {Effect, Schema} from "effect";
+import {Effect, Path, Schema} from "effect";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
 	why: Schema.Literal("storage"),
@@ -9,8 +8,9 @@ export const localStage = Effect.fn("brain.localStage")(function* (
 	built: import("./build.ts").Built,
 	options: Omit<import("./settings.ts").Settings, "build"> & {readonly home: string},
 ) {
+	const path = yield* Path.Path;
 	process.env.DO_NOT_TRACK = "1";
-	process.env.ALCHEMY_HOME = join(options.home, "alchemy-home");
+	process.env.ALCHEMY_HOME = path.join(options.home, "alchemy-home");
 	// oxlint-disable-next-line fabrika/no-promises -- edge: load Alchemy only after disabling its telemetry
 	const {startStage} = yield* Effect.tryPromise({
 		// oxlint-disable-next-line fabrika/no-promises -- edge: defer Alchemy loading until telemetry is disabled
