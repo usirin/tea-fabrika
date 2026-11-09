@@ -14,6 +14,7 @@ import {dirname, join, matchesGlob, resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {testConfig} from "../vitest.config.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const options = {seed: 325, numRuns: 4};
@@ -36,6 +37,7 @@ if (process.env.TEST_SETUP === '1') {
 }
 console.log(JSON.stringify({workers: value.test.maxWorkers, home: process.env.FABRIKA_HOME ?? null,
   testTimeout: value.test.testTimeout, hookTimeout: value.test.hookTimeout,
+  shared,
   sharedTimeouts: [shared?.test?.testTimeout, shared?.test?.hookTimeout],
   setupFiles: value.test.setupFiles, sequencer: value.test.sequence?.sequencer === Shards,
   forceRerunTriggers: value.test.forceRerunTriggers, include: value.test.include}));
@@ -55,6 +57,14 @@ const probe = (cwd: string, args: string[], env: Record<string, string | undefin
 	});
 
 describe("T325 K9 machine caps, today's tooling", () => {
+	// pinned: T377, string-only imports left testConfig without a real consumer.
+	// Plant: import a different config in the child with one shared setting changed.
+	it("pinned: T377 child loads the parent's shared config", () => {
+		const ran = probe(root, ["run", "--maxWorkers=1", "scripts/caps.test.ts"]);
+		expect(ran.status, ran.stderr).toBe(0);
+		expect(JSON.parse(ran.stdout).shared).toEqual(JSON.parse(JSON.stringify(testConfig)));
+	});
+
 	// No domain Schema for runtime versions. Plant: omit the check or refuse CI too.
 	it("R5 refuses mismatched or missing local Node versions and lets CI run", () => {
 		const pinned = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).engines?.node;
