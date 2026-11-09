@@ -21,7 +21,7 @@ import {
 import {Body, Entry, fold, Ticket, TicketNumber, Title} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 import {Hint, hintsOn} from "./duplicates.ts";
-import {Head, headOf, OpenAsk, openAsksOf} from "./head.ts";
+import {Head, headOf, OpenAsk, openAsksOf, SealedAsk, sealedAsksOf} from "./head.ts";
 import {PullRequest} from "./pull-requests.ts";
 import {Row, rowsOf} from "./rows.ts";
 import {areaFact, areaFactOf, isAreaWrite, Summary, summaryOf, Write} from "./ticket.ts";
@@ -536,14 +536,16 @@ export type Listed = typeof Listed.Type;
 /**
  * One ticket's page. `head`: its top line (./head.ts). `rows`: one per fact, oldest first
  * (./rows.ts). `asks`: the asks with no answer yet, each drawn with its box, even on a closed
- * ticket. `duplicates`: its duplicate hints, each with accept and dismiss (./duplicates.ts). The
- * page's `opened` is `null` when no ticket has that number yet.
+ * ticket. `sealed`: every sealed ask, answered or not, as its Activity row opens, since `ticket`'s
+ * timeline leaves sealed asks out. `duplicates`: its duplicate hints, each with accept and dismiss
+ * (./duplicates.ts). The page's `opened` is `null` when no ticket has that number yet.
  */
 export const Opened = Schema.Struct({
 	ticket: Ticket,
 	head: Head,
 	rows: Schema.Array(Row),
 	asks: Schema.Array(OpenAsk),
+	sealed: Schema.Array(SealedAsk),
 	duplicates: Schema.Array(Hint),
 });
 export type Opened = typeof Opened.Type;
@@ -618,6 +620,7 @@ export const openedOf = (ticket: Ticket, now: number, tickets: readonly Ticket[]
 	head: headOf(ticket.timeline, now),
 	rows: rowsOf(ticket.timeline),
 	asks: openAsksOf(ticket.timeline),
+	sealed: sealedAsksOf(ticket.timeline),
 	duplicates: hintsOn(ticket, tickets),
 });
 

@@ -71,6 +71,12 @@ type Said = Pick<Row, "text" | "more" | "body">;
 
 const said = (text: string, more = "", body: string | null = null): Said => ({text, more, body});
 
+/** An ask's question in quotes, by its id: a row names it in words, never by id. */
+const askedOf = (timeline: readonly Entry[], ask: string): string => {
+	const asked = timeline.find((e) => e.fact.type === "asked" && e.fact.ask === ask)?.fact;
+	return asked?.type === "asked" ? `"${questionOf(asked)}"` : "a question";
+};
+
 /** A fact's words. `timeline`: the ticket's, for an answer to name what it answered. */
 const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
 	switch (fact.type) {
@@ -131,14 +137,16 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
 		case "asked":
 			return said(`asks you: ${questionOf(fact)}`, picksOf(fact).join(" / "));
 		case "withdrawn":
-			return said(`withdrew ask ${fact.ask}`, fact.why);
+			return said(`withdrew ${askedOf(timeline, fact.ask)}`, fact.why);
 		case "stopped":
 			return said(`stopped: ${words(fact.why)}`, `resume at ${fact.resume}`);
 		case "answered": {
-			const asked = timeline.find((e) => e.fact.type === "asked" && e.fact.ask === fact.ask);
-			const what = asked?.fact.type === "asked" ? questionOf(asked.fact) : fact.ask;
 			const answer = readAnswer(timeline, fact);
-			return said(`answered "${what}": ${answer?.pick ?? "unknown"}`, "", answer?.note || null);
+			return said(
+				`answered ${askedOf(timeline, fact.ask)}: ${answer?.pick ?? "unknown"}`,
+				"",
+				answer?.note || null,
+			);
 		}
 		case "rated":
 			return said(`rated finding ${fact.finding}: ${words(fact.says)}`);

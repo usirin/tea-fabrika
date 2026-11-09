@@ -83,6 +83,27 @@ export const OpenAsk = Schema.Struct({
 });
 export type OpenAsk = typeof OpenAsk.Type;
 
+/**
+ * A sealed ask, answered or not, as its Activity row opens: the question and each pick with what
+ * it does. A window's timeline leaves sealed asks out (their rec and blind draw), so this is what
+ * the row has to show (review 9).
+ */
+export const SealedAsk = Schema.Struct({
+	/** Its `asked` entry's place on the ledger: the key of its activity row. */
+	pos: Schema.Int,
+	what: AskShown.fields.shows.fields.what,
+	picks: AskShown.fields.shows.fields.picks,
+});
+export type SealedAsk = typeof SealedAsk.Type;
+
+/** Every sealed ask on a timeline, oldest first, as its row opens. Pure. */
+export const sealedAsksOf = (timeline: readonly Entry[]): readonly SealedAsk[] =>
+	timeline.flatMap((e) =>
+		e.fact.type === "asked" && "format" in e.fact
+			? [{pos: e.pos, what: e.fact.shows.what, picks: e.fact.shows.picks}]
+			: [],
+	);
+
 export const Head = Schema.Union([
 	/** `pr`: the merged pull request's URL, or `null` for a ticket a person closed once answered. */
 	Schema.TaggedStruct("done", {pr: Schema.NullOr(Schema.String)}),

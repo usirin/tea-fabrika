@@ -394,12 +394,31 @@ function Detail({entry, now}: {readonly entry: Entry; readonly now: number}) {
 	);
 }
 
+/** What opens under a sealed ask's row: its question and each pick with what it does. */
+function AskDetail({ask}: {readonly ask: Sealed}) {
+	return (
+		<dl className="kv">
+			<dt>question</dt>
+			<dd>{ask.what}</dd>
+			{ask.picks.map((p) => [
+				<dt key={`${p.pick}-k`}>{p.pick}</dt>,
+				<dd key={`${p.pick}-v`} className="muted">
+					{p.does}
+				</dd>,
+			])}
+		</dl>
+	);
+}
+
+type Sealed = Page["opened"]["sealed"][number];
+
 function Activity(props: {
 	readonly rows: readonly Row[];
 	readonly timeline: readonly Entry[];
+	readonly sealed: readonly Sealed[];
 	readonly now: number;
 }) {
-	const {rows, timeline, now} = props;
+	const {rows, timeline, sealed, now} = props;
 	const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
 	const flip = (pos: number) =>
 		setOpen((was) => {
@@ -429,7 +448,14 @@ function Activity(props: {
 			</div>
 			<ol className="acts-l" onKeyDown={walk}>
 				{rows.map((row) => {
+					const ask = sealed.find((a) => a.pos === row.pos);
 					const entry = timeline.find((e) => e.pos === row.pos);
+					const opens =
+						ask !== undefined ? (
+							<AskDetail ask={ask} />
+						) : entry !== undefined ? (
+							<Detail entry={entry} now={now} />
+						) : null;
 					const shown = open.has(row.pos);
 					return (
 						<li key={row.pos} className={`act${shown ? " open" : ""}`}>
@@ -452,9 +478,9 @@ function Activity(props: {
 								<time>{whenOf(row.at, now)}</time>
 								{CHEVRON}
 							</button>
-							{shown && entry !== undefined && (
+							{shown && opens !== null && (
 								<div className="act-x" id={`fact-${row.pos}`}>
-									<Detail entry={entry} now={now} />
+									{opens}
 								</div>
 							)}
 						</li>
@@ -614,6 +640,7 @@ function OneTicket({view, send}: WindowProps<typeof ticket>) {
 								<Activity
 									rows={rowsBeside(opened.head, opened.rows)}
 									timeline={opened.ticket.timeline}
+									sealed={opened.sealed}
 									now={now}
 								/>
 								<Composer ticket={number} send={send} saving={view.saving.length} />
