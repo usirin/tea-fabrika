@@ -9,6 +9,49 @@ import sys
 root = Path(sys.argv[1])
 sources = root / ".agents/skills"
 bad = []
+# Today's tooling, T321 slice 1a. Each clause has one source and one section.
+# An empty section means the whole skill. No spelling aliases or legacy phrase list.
+clauses = [
+    ("lead", "Scripts", "K19", "box.sh run and runplan.sh strip secret settings and redact saved output."),
+    ("lead", "Scripts", "K1", "fetch --sign checks owners and signs missing notes in MAIN."),
+    ("step-commit", "", "K1", "fetch --sign checks owners and signs missing notes in MAIN."),
+    ("lead", "Steps", "K2", "box.sh new checks the approved plan, base and ticket."),
+    ("lead", "Steps", "K3", "box.sh run --step checks order and slots, and saves the run row."),
+    ("step-commit", "", "K4", "stepcommit.sh checks named paths, owners, exam paths and staged formatting."),
+    ("plan", "", "K11", "plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments."),
+]
+import re
+def sections(text):
+    found = {"": []}
+    section, fence = "", None
+    for line in text.splitlines():
+        mark = re.match(r"^\s{0,3}(`{3,}|~{3,})(.*)$", line)
+        if fence:
+            if mark and mark[1][0] == fence[0] and len(mark[1]) >= len(fence) and not mark[2].strip():
+                fence = None
+            continue
+        if mark:
+            fence = mark[1]
+            continue
+        heading = re.match(r"^##\s+(.+?)\s*#*\s*$", line)
+        if heading:
+            section = heading[1]
+        found.setdefault(section, []).append(line)
+        if section:
+            found[""].append(line)
+    return {key: " ".join(" ".join(lines).split()) for key, lines in found.items()}
+
+# A tree holding none of the clause sources is a links-only tree (the laws' generated repos).
+# Once any clause source exists, a removed one drops no clause: each it held is reported.
+clause_tree = any((sources / skill / "SKILL.md").is_file() for skill, *_ in clauses)
+for skill, section, check, clause in clauses:
+    source = sources / skill / "SKILL.md"
+    if not clause_tree:
+        continue
+    if not source.is_file():
+        bad.append(f".agents/skills/{skill}/SKILL.md: {check} source missing for clause: {clause}")
+    elif clause not in sections(source.read_text()).get(section, ""):
+        bad.append(f".agents/skills/{skill}/SKILL.md: {check} missing clause in {section or 'skill'}: {clause}")
 count = 0
 for source in sorted(sources.iterdir()):
     if not (source / "SKILL.md").is_file():

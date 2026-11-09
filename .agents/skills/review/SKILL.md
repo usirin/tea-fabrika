@@ -12,6 +12,8 @@ merge ([how a change lands](../../../docs/plan/README.md#how-a-change-lands)).
 A brief names the ticket, the plan's path, the branch, and anything this round must look at. This
 skill holds the rest.
 
+Never print npm, pnpm or env settings. The runner strips secret settings and redacts saved output.
+
 ## Steps
 
 1. **Read** `AGENTS.md`, then the approved plan, then the decided notes it builds.

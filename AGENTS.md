@@ -109,10 +109,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
   and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
   before an approved plan and tests that exist
-  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a
-  decided note is approved by the agent leading the session, which writes "Approved by the lead
-  agent, builds <note>" in it; a plan that raises a new design call goes to the owner (owner,
-  2026-11-03). A scheduled walk or approval that a decided note already answers is decided in
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a decided
+  note is approved by the lead session after its own read and draft check. It writes
+  `Approved by the lead agent, builds <note>; body <sha256-12>` on line 1 and replaces that line
+  after any body edit, including an appended amendment. A plan that raises a new design call
+  goes to the owner. A scheduled walk or approval that a decided note already answers is decided in
   the plan, and the lead approves it in one line; a question to the owner must be one they could
   answer no to without contradicting a decision (owner, 2026-11-08). In `next/`'s planner step
   this becomes code: a check on the plan's open questions. No merged pull request
@@ -382,9 +383,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
 
 - Tests: `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you
   work, then `--changed origin/main` once at the end: only the tests that reach a changed file.
-  Never the full suite locally (owner, 2026-11-08). On a pull request, CI runs only the tests that
-  reach a changed file; the full suite runs after the merge, on main. `next/` has its own CI job that
-  runs all of its tests on every pull request. A run that
+  Never the full suite locally (owner, 2026-11-08). On a pull request, CI decides what to run from
+  the changed paths (`.github/ci/changes.mjs`). Only Markdown or `field/*.jsonl` rows: it skips
+  `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
+  and skips `test` and `e2e`. Only today's files: it skips `next`. Markdown that a program or skill reads counts as code.
+  Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.

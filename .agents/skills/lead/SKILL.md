@@ -76,9 +76,9 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 
 | Script | What it does |
 |---|---|
-| `box.sh new <name> <base> <branch>` | a Codex box: its own clone, git data outside `.git`, installed |
-| `box.sh run <name> <prompt> <out>` | run Codex in the box, writable only there |
-| `box.sh fetch <name> <branch>` | fetch the branch and step notes into the main checkout, nothing else |
+| `box.sh new <name> <base> <branch> --ticket <n> --plan <path>` | check the start and save its facts, then clone and install |
+| `box.sh run <name> <prompt> <out> --step <step>` | run Codex, save redacted output and the run row |
+| `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
 | `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first; drive runs it at start |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
@@ -90,6 +90,10 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 
 `box.sh run` names the box's `.agents/` as its own writable root because Codex otherwise keeps
 that folder read-only inside the writable checkout.
+
+box.sh run and runplan.sh strip secret settings and redact saved output.
+fetch --sign checks owners and signs missing notes in MAIN.
+Review and mutation briefs say never to print npm, pnpm or env settings.
 
 Catch-up retries read-only `gh` failures three times, waiting 1 and 2 seconds. A successful red or
 untrusted answer stops immediately. Logs are captured before parsing, so a failed read cannot
@@ -151,30 +155,32 @@ visible, and never weaken the rules to hide this message.
 
 1. **Plan.** Write a brief that names the ticket, its version, what to read and an older plan to copy
    the shape of. Run `runplan.sh` in the background. Save the answer as `BOXES/<name>-PLAN.md`.
-2. **Check the unsigned plan.** Run `sh .agents/skills/plan/scripts/plancheck.sh --draft <plan>`. It lists every exam
-   path the plan names and exits 1 when a files table has no owner, gives an exam path to a step
-   other than `tests`, or a law has no generator. Then the plan goes back. The `exam path named`
-   listing is a total scan of the whole file, fences and link titles included, so a false listing
-   is harmless. Check each listed path is owned by `tests` in the files table; the files-table
-   check is a parser over free text and may miss an exotic form the listing still shows.
+2. **Check the unsigned plan.** Run `sh .agents/skills/plan/scripts/plancheck.sh --draft <plan>`.
+   It checks sections, generators and file owners, and prints the whole body's hash.
+   The exam listing is a total scan of the whole file, fences and link titles included.
+   Read the list for paths the files-table parser may miss.
 3. **Approve in the lead session only.** Read the whole plan, its laws and generators or labels,
    its decided notes and open questions. Plan writers and agents reviewing or revising a plan
    return it unsigned, with line one blank. The agent that wrote it sends it to the lead session for approval.
-   A plan that only builds decided notes: write "Approved by the lead agent, builds
-   <note>" on its blank first line. A plan that raises a new design call goes to the owner as one
+   After the read, fill line one with `Approved by the lead agent, builds <note>; body <sha256-12>`
+   using the draft check's digest, then run `plancheck.sh --approved <plan>`. Any body edit,
+   including an amendment, needs the same read and checks again. A new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
 4. **Start the lane** on a `fabrikalfa/<name>` branch through `drive.ts`, never `box.sh new` by
    hand. Use `origin/main` for an independent ticket. A stacked child starts at the parent's signed build head, before the
    parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
    Record the child, parent branch and signed head before starting it. Keep the child's tests
    when merging parent work in. Never replace them with the parent's older tests.
+   box.sh new checks the approved plan, base and ticket.
 5. **Run the steps in order,** in the background: tests, build, mutation, review. Each runs
    through `drive.ts`, except a step with Electron or socket work, which a Claude agent runs
    (above). No builder starts before tests that exist. Each brief names its skill.
+   box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
    one `field/runs.jsonl` row (`fieldrow.py` for Codex, `clauderow.py` for a Claude agent, a
    driver included, once it has finished), and one `field/notes.jsonl` note for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
+   Step-commit checks file owners.
    Each correction the owner makes, and each slip of the lead's own, gets a note too, with the code
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
 7. **Run what the box cannot,** yourself: Electron e2e and screenshots. One Electron app at a time,
@@ -264,7 +270,7 @@ push or merge, and the lead checks it by hand. A hit is never waved through by t
 
 ## Go easy on the machine
 
-- At most 8 code agents at once. One `pnpm typecheck` at a time across all of them: wait while
+- One `pnpm typecheck` at a time across all agents: wait while
   `pgrep -x tsgo` finds one.
 - One Electron test app and one Docker box at a time. Every wait or poll loop runs in the background.
 - Every brief carries the caps the step's skill names. A Codex box blocks `nice` and `pgrep`, so
