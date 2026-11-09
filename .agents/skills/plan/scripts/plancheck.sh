@@ -33,13 +33,18 @@ def bare(word):
         if out == word: return out
         word = out
 HOME = {"repository", "repo", "root", "project", "workspace", "monorepo", "top-level"}
+def tokens(text):
+    # The words of a piece of plan text, each stripped of the punctuation around it. A Markdown link
+    # [text](target) gives its text's words and its target as words of their own.
+    text = re.sub(r"\[([^\]]*)\]\(([^)\s]*)\)", r" \1 \2 ", text)
+    return [bare(w) for w in re.split(r"[\s,;]+|<br\s*/?>", text) if bare(w)]
 def paths(text):
-    # Every word in a path cell is a candidate path once the punctuation around it is stripped; hits()
-    # keeps the exam paths, whatever words surround them. A cell that names another package with a
-    # possessive ("Counter's package.json") holds that package's files, so only its qualified paths
-    # (with a "/") are candidates. A possessive of a word meaning this repository ("the repo's
-    # package.json"), in any letter case, names no other package and keeps every word.
-    words = [bare(w) for w in re.split(r"[\s,;]+|<br\s*/?>", text) if bare(w)]
+    # Every word in a path cell is a candidate path; hits() keeps the exam paths, whatever words
+    # surround them. A cell that names another package with a possessive ("Counter's package.json")
+    # holds that package's files, so only its qualified paths (with a "/") are candidates. A
+    # possessive of a word meaning this repository ("the repo's package.json"), in any letter case,
+    # names no other package and keeps every word.
+    words = tokens(text)
     owners = [m[1].lower() for m in (re.fullmatch(r"([\w-]+)'s", w) for w in words) if m]
     return [w for w in words if "/" in norm(w)] if any(o not in HOME for o in owners) else words
 def cells(text):
@@ -86,8 +91,9 @@ def generator(text):
     if re.fullmatch(r"Effect Arbitrary:\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*", text): return True
     match = re.fullmatch(r"(vector|format|pinned|scenario):\s*(.+)", text)
     return bool(match and any(c.isalnum() for c in match[2]))
-# Explicit qualified paths still get reported outside files tables. Bare root files do not.
-named = hits(p for p in re.findall(r"`([^`\s]+)`", "\n".join(lines)) if "/" in norm(p))
+# The lead's backstop: every backticked path anywhere in the plan is listed, in links, emphasis,
+# tables or prose. Only path cells decide the exit code.
+named = hits(w for line in lines for span in re.findall(r"`([^`]+)`", line) for w in tokens(span))
 col, files, gen, path = None, False, None, None
 for i, l in enumerate(lines):
     l = l.strip()
