@@ -22,15 +22,15 @@ const input = fc.record({
 	descendant: fc.boolean(),
 });
 type Input = {name: string; value: string; space: boolean; depth: number; descendant: boolean};
-const fixture = (v: Input, body: (f: ReturnType<typeof setup>) => void) => {
-	const f = setup(v);
+const fixture = (v: Input, body: (f: ReturnType<typeof setup>) => void, clone = false) => {
+	const f = setup(v, clone);
 	try {
 		body(f);
 	} finally {
 		rmSync(f.dir, {recursive: true, force: true});
 	}
 };
-const setup = (v: Input) => {
+const setup = (v: Input, clone: boolean) => {
 	const dir = mkdtempSync(join(tmpdir(), "box-law-")),
 		main = join(dir, "main"),
 		boxes = join(dir, "boxes");
@@ -69,12 +69,23 @@ const setup = (v: Input) => {
 	writeFileSync(join(main, ".gitignore"), "node_modules/\n");
 	git(main, "add", ".");
 	git(main, "commit", "-qm", "base");
-	git(main, "clone", "-q", "--no-hardlinks", `--separate-git-dir=${data}`, main, work);
-	git(work, "remote", "remove", "origin");
+	const origin = join(dir, "origin.git");
+	git(main, "clone", "-q", "--bare", "--no-hardlinks", main, origin);
+	if (clone) {
+		git(main, "clone", "-q", "--reference", main, `--separate-git-dir=${data}`, origin, work);
+	} else {
+		// Build metadata directly to test refusals independently of the symbolic-ref bug.
+		// The real clone law below keeps the normal origin/HEAD, too.
+		mkdirSync(work);
+		git(work, "init", "-q", "--initial-branch=main", `--separate-git-dir=${data}`);
+		git(work, "remote", "add", "origin", origin);
+		git(work, "fetch", "-q", "origin", "main");
+		git(work, "checkout", "-q", "-B", "main", "FETCH_HEAD");
+	}
 	git(work, "config", "user.name", "Fixture");
 	git(work, "config", "user.email", "fixture@example.test");
 	expect(git(main, "remote")).toBe("");
-	expect(git(work, "remote")).toBe("");
+	expect(git(work, "remote")).toBe("origin");
 	const run = (chosen = name, extra: Record<string, string> = {}) => {
 		const ran = spawnSync("sh", [script, "rm", chosen], {
 			cwd: main,
@@ -103,6 +114,220 @@ const kept = (f: ReturnType<typeof setup>, code = 1) => {
 };
 
 describe("box rm, today's tooling", () => {
+	// Plant: refuse the symbolic origin/HEAD that box.sh new creates.
+	it("T318 a normal separate-gitdir clone keeps origin and removes cleanly", () => {
+		fc.assert(
+			fc.property(input, (v) =>
+				fixture(
+					v,
+					(f) => {
+						expect(f.git(f.work, "symbolic-ref", "refs/remotes/origin/HEAD")).toBe(
+							"refs/remotes/origin/main",
+						);
+						expect(f.run()).toEqual({code: 0, text: `removed box ${f.name}`});
+						expect(existsSync(f.work)).toBe(false);
+						expect(existsSync(f.data)).toBe(false);
+					},
+					true,
+				),
+			),
+			{seed: 31820, numRuns: 4, endOnFailure: true},
+		);
+	});
+
+	// Plant: enumerate only heads/stash/notes, dropping tags and other namespaces.
+	it.each(["lightweight", "annotated", "custom"])(
+		"T318 every %s ref saves unretained work",
+		(kind) => {
+			const namespace = fc.array(fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/), {
+				minLength: 1,
+				maxLength: 5,
+			});
+			fc.assert(
+				fc.property(input, namespace, (v, parts) =>
+					fixture(v, (f) => {
+						const base = f.git(f.work, "rev-parse", "HEAD");
+						writeFileSync(join(f.work, "tracked"), v.value);
+						const tip = f.commit();
+						f.git(f.work, "checkout", "-q", "--detach", base);
+						f.git(f.work, "branch", "-f", "main", base);
+						if (kind === "annotated")
+							f.git(f.work, "tag", "-a", parts.join("/"), tip, "-m", v.value);
+						else
+							f.git(
+								f.work,
+								"update-ref",
+								`refs/${kind === "lightweight" ? "tags" : parts.join("/")}/${v.name}`,
+								tip,
+							);
+						kept(f);
+					}),
+				),
+				{seed: 31821, numRuns: 5, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: inspect refs/stash alone instead of every saved entry in its reflog.
+	it("T318 every stash depth stays when only newer entries are retained", () => {
+		fc.assert(
+			fc.property(input, fc.integer({min: 2, max: 9}), fc.nat(), (v, depth, choice) =>
+				fixture(v, (f) => {
+					const missing = 1 + (choice % (depth - 1));
+					for (let i = 0; i < depth; i++) {
+						writeFileSync(join(f.work, "tracked"), `${v.value} ${i}`);
+						f.git(f.work, "stash", "push", "-qm", `${v.name}-${i}`);
+					}
+					for (let i = 0; i < depth; i++)
+						if (i !== missing)
+							f.git(
+								f.main,
+								"fetch",
+								"-q",
+								f.data,
+								`${f.git(f.work, "rev-parse", `stash@{${i}}`)}:refs/keep/stash-${i}`,
+							);
+					kept(f);
+				}),
+			),
+			{seed: 31822, numRuns: 5, endOnFailure: true},
+		);
+	});
+
+	// Plant: ignore operation state, including an unretained MERGE_AUTOSTASH.
+	it("T318 every operation-state file keeps the pair", () => {
+		const states = fc.oneof(
+			fc.constantFrom(
+				"MERGE_AUTOSTASH",
+				"MERGE_HEAD",
+				"CHERRY_PICK_HEAD",
+				"REVERT_HEAD",
+				"REBASE_HEAD",
+				"AUTO_MERGE",
+				"rebase-merge/autostash",
+				"rebase-apply/autostash",
+				"sequencer/head",
+				"BISECT_START",
+			),
+			fc.stringMatching(/^[A-Z]{2,12}$/).map((s) => `${s}_HEAD`),
+		);
+		fc.assert(
+			fc.property(input, states, (v, state) =>
+				fixture(v, (f) => {
+					const base = f.git(f.work, "rev-parse", "HEAD");
+					writeFileSync(join(f.work, "tracked"), v.value);
+					const tip = f.commit();
+					f.git(f.work, "checkout", "-q", "--detach", base);
+					f.git(f.work, "branch", "-f", "main", base);
+					const path = join(f.data, state);
+					mkdirSync(join(path, ".."), {recursive: true});
+					writeFileSync(path, `${tip}\n`);
+					kept(f);
+				}),
+			),
+			{seed: 31823, numRuns: 12, endOnFailure: true},
+		);
+	});
+
+	// Plants: inspect only the primary HEAD/index; ignore a linked worktree's saved index.
+	it.each(["detached", "staged"])("T318 linked worktrees keep %s work", (kind) => {
+		fc.assert(
+			fc.property(input, fc.integer({min: 1, max: 4}), fc.boolean(), (v, total, inside) =>
+				fixture(v, (f) => {
+					for (let i = 0; i < total; i++) {
+						const linked = join(inside ? f.work : f.dir, `${v.name}-linked-${i}`);
+						f.git(f.work, "worktree", "add", "-q", "--detach", linked, "HEAD");
+						if (i !== total - 1) continue;
+						writeFileSync(join(linked, "tracked"), `${v.value} saved`);
+						f.git(linked, "add", "tracked");
+						if (kind === "detached") f.git(linked, "commit", "-qm", v.value);
+						else writeFileSync(join(linked, "tracked"), readFileSync(join(f.main, "tracked")));
+					}
+					kept(f);
+				}),
+			),
+			{seed: 31824, numRuns: 4, endOnFailure: true},
+		);
+	});
+
+	// Plant: accept a valid pair even though it holds MAIN or BOXES/state.
+	it.each(["main-work", "main-data", "main-child", "main-data-child", "state"])(
+		"T318 protected %s locations survive direct removal",
+		(kind) => {
+			fc.assert(
+				fc.property(input, (v) =>
+					fixture(kind === "state" ? {...v, name: "state", space: false} : v, (f) => {
+						let main = f.main;
+						if (kind.startsWith("main")) {
+							main =
+								kind === "main-work"
+									? f.work
+									: kind === "main-data"
+										? f.data
+										: join(
+												kind === "main-data-child" ? f.data : f.work,
+												...Array.from({length: v.depth}, (_, i) => `child-${v.value}-${i}`),
+											);
+							if (kind.endsWith("child")) mkdirSync(main, {recursive: true});
+						}
+						const saved = join(kind === "state" ? f.work : main, "saved.md");
+						writeFileSync(saved, v.value);
+						const got = f.run(f.name, {MAIN: main});
+						expect(got.code, got.text).toBe(1);
+						expect(got.text).toMatch(/^kept box .*: [^\n]+$/);
+						expect(existsSync(f.work)).toBe(true);
+						expect(existsSync(f.data)).toBe(true);
+						expect(readFileSync(saved, "utf8")).toBe(v.value);
+					}),
+				),
+				{seed: 31825, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plants: use exists() for commondir/shallow; omit the sharedindex guard.
+	it.each(["commondir", "shallow", "sharedindex"])(
+		"T318 dangling %s metadata keeps both paths",
+		(kind) => {
+			fc.assert(
+				fc.property(input, fc.stringMatching(/^[0-9a-f]{40}$/), (v, hash) =>
+					fixture(v, (f) => {
+						symlinkSync(
+							join(f.dir, `${v.value}-missing`),
+							join(f.data, kind === "sharedindex" ? `sharedindex.${hash}` : kind),
+						);
+						kept(f);
+					}),
+				),
+				{seed: 31826, numRuns: 4, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: ignore only status's failed exit while ls-files still succeeds.
+	it("T318 failed status alone keeps both paths", () => {
+		fc.assert(
+			fc.property(input, (v) =>
+				fixture(v, (f) => {
+					const bin = join(f.dir, "bin"),
+						log = join(f.dir, "git-calls");
+					mkdirSync(bin);
+					writeFileSync(
+						join(bin, "git"),
+						`#!/bin/sh\nfor arg do\n case "$arg" in status) echo status >> '${log}'; exit 1;; ls-files) echo ls-files >> '${log}';; esac\ndone\nexec /usr/bin/git "$@"\n`,
+						{mode: 0o755},
+					);
+					const got = f.run(f.name, {PATH: `${bin}:/usr/bin:/bin`});
+					expect(got.code, got.text).toBe(1);
+					expect(got.text).toMatch(/^kept box .*: [^\n]+$/);
+					expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["ls-files", "status"]);
+					expect(existsSync(f.work)).toBe(true);
+					expect(existsSync(f.data)).toBe(true);
+				}),
+			),
+			{seed: 31827, numRuns: 4, endOnFailure: true},
+		);
+	});
 	// Plants: split a space-containing name; reject untracked-only files; delete a neighbor.
 	it("T318 rm deletes exactly a clean pair including spaces and untracked-only contents and repeats", () => {
 		fc.assert(

@@ -31,7 +31,9 @@ type Setup = {
 	mergeFails?: boolean;
 	// Cleanup trouble: worktree listing fails, keeping the head fails, the catch-up checkout is
 	// not registered, or two forced worktrees share the PR branch.
-	trouble?: "list" | "keep" | "unregistered" | "twins";
+	trouble?: "list" | "keep" | "unregistered" | "twins" | "missing";
+	protected?: "main-work" | "main-data" | "main-child" | "main-data-child" | "state";
+	protectedDepth?: number;
 	// Seconds since the start, read by `date` after that many check reads (the last one repeats).
 	clock?: number[];
 };
@@ -156,6 +158,10 @@ const run = (setup: Setup, args: string[] = []) => {
 			return got.stdout.trim();
 		};
 		let checkedTip = tip;
+		let main = dir;
+		let protectedWork = "",
+			protectedData = "",
+			saved = "";
 		if (setup.cleanup) {
 			git(dir, "init", "-q", "--initial-branch=main");
 			git(dir, "config", "user.name", "Fixture");
@@ -186,9 +192,13 @@ const run = (setup: Setup, args: string[] = []) => {
 			]) {
 				const work = join(dir, "boxes", name!),
 					data = `${work}-gitdata`;
-				git(dir, "clone", "-q", `--separate-git-dir=${data}`, dir, work);
+				// Isolate cleanup from the normal clone's symbolic-ref bug, tested in box.test.ts.
+				mkdirSync(work);
+				git(work, "init", "-q", "--initial-branch=main", `--separate-git-dir=${data}`);
+				git(work, "remote", "add", "origin", dir);
+				git(work, "fetch", "-q", "origin", `${branch}:refs/heads/${branch}`);
 				git(work, "checkout", "-q", branch!);
-				git(work, "remote", "remove", "origin");
+				expect(git(work, "remote")).toBe("origin");
 				git(work, "config", "user.name", "Fixture");
 				git(work, "config", "user.email", "fixture@example.test");
 				if (name === "exact box") {
@@ -208,8 +218,32 @@ const run = (setup: Setup, args: string[] = []) => {
 			}
 			if (setup.trouble === "twins")
 				git(dir, "worktree", "add", "-q", "-f", join(dir, "boxes/driver twin"), setup.branch);
+			if (setup.trouble === "missing") rmSync(join(dir, "boxes/driver"), {recursive: true});
 			mkdirSync(join(dir, "boxes/state"));
 			writeFileSync(join(dir, "boxes/state/driver.md"), "saved wait");
+			if (setup.protected) {
+				protectedWork = join(dir, "boxes", setup.protected === "state" ? "state" : "protected");
+				protectedData = `${protectedWork}-gitdata`;
+				mkdirSync(protectedWork, {recursive: true});
+				git(protectedWork, "init", "-q", `--separate-git-dir=${protectedData}`);
+				git(protectedWork, "remote", "add", "origin", dir);
+				git(protectedWork, "fetch", "-q", "origin", `${setup.branch}:refs/heads/${setup.branch}`);
+				git(protectedWork, "checkout", "-q", setup.branch);
+				if (setup.protected !== "state") {
+					main =
+						setup.protected === "main-work"
+							? protectedWork
+							: setup.protected === "main-data"
+								? protectedData
+								: join(
+										setup.protected === "main-data-child" ? protectedData : protectedWork,
+										...Array.from({length: setup.protectedDepth ?? 1}, (_, i) => `nested-${i}`),
+									);
+					mkdirSync(main, {recursive: true});
+				}
+				saved = join(setup.protected === "state" ? protectedWork : main, "saved.md");
+				writeFileSync(saved, setup.branch);
+			}
 			expect(git(dir, "remote")).toBe("");
 		}
 		writeFileSync(join(dir, "setup.json"), JSON.stringify(setup));
@@ -225,7 +259,7 @@ const run = (setup: Setup, args: string[] = []) => {
 				HOME: join(dir, "home"),
 				FABRIKA_HOME: join(dir, "fh"),
 				FABRIKA_COAUTHOR: "Fixture <fixture@example.test>",
-				MAIN: dir,
+				MAIN: main,
 				BOXES: join(dir, "boxes"),
 				REMOTE: "https://github.com/fixture/repo.git",
 				GH_REPO: "fixture/repo",
@@ -253,7 +287,11 @@ const run = (setup: Setup, args: string[] = []) => {
 					env: localEnv,
 				}).stdout.trim()
 			: "";
-		const state = setup.cleanup ? readFileSync(join(dir, "boxes/state/driver.md"), "utf8") : "";
+		const state =
+			setup.cleanup && existsSync(join(dir, "boxes/state/driver.md"))
+				? readFileSync(join(dir, "boxes/state/driver.md"), "utf8")
+				: "";
+		const registrations = setup.cleanup ? git(dir, "worktree", "list", "--porcelain", "-z") : "";
 		return {
 			code: ran.status,
 			text: ran.stdout + ran.stderr,
@@ -262,6 +300,9 @@ const run = (setup: Setup, args: string[] = []) => {
 			keptHead,
 			checkedTip,
 			state,
+			registrations,
+			protectedPair: [protectedWork, protectedData].map((path) => existsSync(path)),
+			saved: saved && existsSync(saved) ? readFileSync(saved, "utf8") : "",
 		};
 	} finally {
 		rmSync(dir, {recursive: true, force: true});
@@ -279,6 +320,66 @@ const assertHead = (calls: Call[]) => {
 };
 
 describe("catchup, today's tooling", () => {
+	// Plant: box removal accepts a pair holding MAIN or saved driver state.
+	it.each(["main-work", "main-data", "main-child", "main-data-child", "state"] as const)(
+		"T318 cleanup preserves protected %s pairs",
+		(protectedLocation) => {
+			fc.assert(
+				fc.property(
+					fc.stringMatching(/^[a-z]{2,12}$/),
+					fc.integer({min: 1, max: 4}),
+					(name, depth) => {
+						const branch = `fabrikalfa/${name}`;
+						const got = run({
+							...green,
+							branch,
+							cleanup: "clean",
+							protected: protectedLocation,
+							protectedDepth: depth,
+						});
+						expect(got.code, got.text).toBe(0);
+						expect(merges(got.calls)).toHaveLength(1);
+						expect(got.protectedPair, got.text).toEqual([true, true]);
+						expect(got.saved).toBe(branch);
+						expect(got.state).toBe("saved wait");
+						expect(got.text).toMatch(
+							new RegExp(
+								`^kept box ${protectedLocation === "state" ? "state" : "protected"}: [^\\n]+$`,
+								"m",
+							),
+						);
+					},
+				),
+				{seed: 31828, numRuns: 3, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: remove the locked/prunable guard, formerly catchup.sh line 175.
+	it("T318 missing registered worktrees keep their registration and print a reason", () => {
+		fc.assert(
+			fc.property(fc.stringMatching(/^[a-z]{2,12}$/), (name) => {
+				const branch = `fabrikalfa/${name}`;
+				const got = run({...green, branch, cleanup: "clean", trouble: "missing"});
+				expect(got.code, got.text).toBe(0);
+				expect(merges(got.calls)).toHaveLength(1);
+				expect(got.registrations).toContain(`branch refs/heads/${branch}\0`);
+				expect(got.text).toMatch(/^kept worktree driver: [^\n]+$/m);
+				expect(
+					got.calls.some(
+						(c) =>
+							c.cmd === "git" &&
+							c.args.includes("remove") &&
+							c.args.some((arg) => arg.endsWith("/driver")),
+					),
+				).toBe(false);
+				expect(got.remaining).not.toContain("later box");
+				expect(got.state).toBe("saved wait");
+			}),
+			{seed: 31829, numRuns: 4, endOnFailure: true},
+		);
+	});
+
 	// Plants: always squash; omit the head pin; do work after invalid options.
 	it("T300 merge options choose exactly one method and keep the checked head", () => {
 		fc.assert(

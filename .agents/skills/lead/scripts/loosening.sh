@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 
 classifier, base, head, *mapping = sys.argv[1:]
 
@@ -48,68 +49,176 @@ def name(value):
         except ValueError: pass
     return value[1:-1].replace(r"\'", "'").replace(r'\"', '"')
 
-def laws(tokens, pairs):
+def arguments(tokens, pairs, start, end):
+    parts = []; left = start + 1; i = left
+    while i < end:
+        if tokens[i][0] == ",":
+            parts.append((left, i)); left = i + 1
+        i = pairs[i] + 1 if i in pairs else i + 1
+    if left < end: parts.append((left, end))
+    return parts
+
+def declarations(tokens, pairs):
     found = {}
-    for i, (value, line) in enumerate(tokens):
-        if value not in ("it", "test") or (i and tokens[i - 1][0] in (".", "function")):
-            continue
-        j = i + 1
-        while j + 1 < len(tokens) and tokens[j][0] == ".":
-            member = tokens[j + 1][0]; j += 2
-            if member in ("each", "for", "skipIf", "runIf") and j in pairs:
-                j = pairs[j] + 1
-        if j not in pairs or j + 1 >= len(tokens) or not quoted(tokens[j + 1][0]):
-            continue
-        title = name(tokens[j + 1][0])
-        # Keep duplicate names separate instead of silently dropping a law.
-        ordinal = sum(k[0] == title for k in found)
-        found[(title, ordinal)] = (i, pairs[j] + 1, line)
+    for i in range(len(tokens) - 3):
+        if tokens[i][0] not in ("const", "let", "var") or tokens[i + 2][0] != "=": continue
+        start = i + 3; end = start
+        while end < len(tokens) and tokens[end][0] not in (";", ","):
+            end = pairs[end] + 1 if end in pairs else end + 1
+        found[tokens[i + 1][0]] = (start, end)
     return found
 
-def muted(tokens):
-    result = Counter()
-    named = laws(tokens, paired(tokens))
+def api_names(tokens, pairs):
+    names = {word: word for word in ("it", "test", "describe", "suite")}
+    values = [v for v, _ in tokens]
+    for i, value in enumerate(values):
+        if value != "import": continue
+        end = next((j for j in range(i + 1, len(values)) if values[j] == ";"), len(values))
+        part = values[i:end]
+        if "from" not in part or name(part[part.index("from") + 1]) != "vitest": continue
+        if "*" in part and "as" in part:
+            namespace = part[part.index("as") + 1]
+            names.update({f"{namespace}.{word}": word for word in ("it", "test", "describe", "suite")})
+        for j in range(len(part) - 1):
+            if part[j] in names and part[j + 1] == "as" and j + 2 < len(part):
+                names[part[j + 2]] = names[part[j]]
+    # Follow local aliases, including aliases of aliases. Never guess their spelling.
+    pending = declarations(tokens, pairs)
+    for _ in range(len(pending)):
+        for alias, (start, end) in pending.items():
+            target = "".join(values[start:end])
+            if target in names: names[alias] = names[target]
+            # Vitest's extended and parameterized functions keep being test functions.
+            for width in (3, 1):
+                root = "".join(values[start:start + width])
+                if root in names and start + width < end and values[start + width] == ".":
+                    names[alias] = names[root]
+    for i in range(len(tokens) - 4):
+        if values[i] not in ("const", "let", "var") or values[i + 1] != "{": continue
+        end = pairs.get(i + 1)
+        if end is None or end + 2 >= len(tokens) or values[end + 1] != "=": continue
+        namespace = values[end + 2]
+        for left, right in arguments(tokens, pairs, i + 1, end):
+            root = f"{namespace}.{values[left]}"
+            if root in names:
+                alias = values[left + 2] if left + 2 < right and values[left + 1] == ":" else values[left]
+                names[alias] = names[root]
+    return names
+
+def test_calls(tokens, pairs):
+    names = api_names(tokens, pairs); found = []
     for i, (value, line) in enumerate(tokens):
-        if value not in ("it", "test", "describe") or (i and tokens[i - 1][0] == "."):
-            continue
-        j = i + 1
+        if i and tokens[i - 1][0] in (".", "function"): continue
+        j = i + 1; root = value
+        if j + 1 < len(tokens) and tokens[j][0] == "." and f"{root}.{tokens[j + 1][0]}" in names:
+            root += "." + tokens[j + 1][0]; j += 2
+        if root not in names: continue
+        modifiers = []
         while j + 1 < len(tokens) and tokens[j][0] == ".":
-            member = tokens[j + 1][0]
-            if member in ("skip", "todo", "fails", "only"):
-                title = next((key[0] for key, (start, end, _) in named.items() if start <= i < end), f"line {line}")
-                if value == "describe":
-                    call = j + 2
-                    if call + 1 < len(tokens) and tokens[call][0] == "(" and quoted(tokens[call + 1][0]):
-                        title = "describe " + name(tokens[call + 1][0])
+            member = tokens[j + 1][0]; modifiers.append(member); j += 2
+            if member in ("each", "for", "skipIf", "runIf") and j in pairs: j = pairs[j] + 1
+        if j not in pairs or j + 1 >= len(tokens) or not quoted(tokens[j + 1][0]): continue
+        found.append((names[root], name(tokens[j + 1][0]), i, j, pairs[j], line, modifiers))
+    return found
+
+def laws(tokens, pairs):
+    found = {}
+    for kind, title, start, _, end, line, _ in test_calls(tokens, pairs):
+        if kind not in ("it", "test"): continue
+        # Keep duplicate names separate instead of silently dropping a law.
+        ordinal = sum(k[0] == title for k in found)
+        found[(title, ordinal)] = (start, end + 1, line)
+    return found
+
+def fields(tokens, pairs, variables, start, end, seen=(), external=None):
+    if end - start == 1 and tokens[start][0] in variables:
+        key = tokens[start][0]
+        if key in seen: return {}
+        return fields(tokens, pairs, variables, *variables[key], (*seen, key), external)
+    if end - start == 1 and external and tokens[start][0] in external:
+        return external[tokens[start][0]]
+    if start >= end or tokens[start][0] != "{" or pairs.get(start) != end - 1: return {}
+    answer = {}
+    for left, right in arguments(tokens, pairs, start, end - 1):
+        values = [v for v, _ in tokens[left:right]]
+        if values[:3] == [".", ".", "."]:
+            answer.update(fields(tokens, pairs, variables, left + 3, right, seen, external))
+        elif len(values) >= 3 and values[1] == ":":
+            answer[values[0].strip("\"'")] = values[2:]
+        elif len(values) == 1:
+            answer[values[0]] = values # A shorthand or unknown value needs an owner read.
+    return answer
+
+def muted(tokens):
+    result = Counter(); pairs = paired(tokens); variables = declarations(tokens, pairs)
+    for kind, title, _, start, end, _, modifiers in test_calls(tokens, pairs):
+        if kind in ("describe", "suite"): title = "describe " + title
+        flags = list(modifiers)
+        for left, right in arguments(tokens, pairs, start, end)[1:]:
+            flags.extend(key for key, value in fields(tokens, pairs, variables, left, right).items() if value != ["false"])
+        for member in flags:
+            if member in ("skip", "todo", "fails", "only", "skipIf", "runIf"):
                 result[("it.fails" if member == "fails" else member, title)] += 1
-            j += 2
     return result
 
-def bounds(tokens):
-    pairs = paired(tokens); groups = []; active = []
+def bounds(tokens, scope):
+    pairs = paired(tokens); groups = {}; active = []; variables = declarations(tokens, pairs)
+    scope_pairs = paired(scope); scope_variables = declarations(scope, scope_pairs)
+    external = {key: fields(scope, scope_pairs, scope_variables, start, end) for key, (start, end) in scope_variables.items()}
     for i in range(len(tokens) - 3):
         if tokens[i][0] == "fc" and tokens[i + 1][0] == "." and tokens[i + 3][0] == "(" and i + 3 in pairs:
             active.append((i + 3, pairs[i + 3], tokens[i + 2][0]))
+
+    def binding(position):
+        owners = [(end - start, key) for key, (start, end) in variables.items() if start <= position < end]
+        return min(owners)[1] if owners else ""
+
+    def argument(start, position):
+        return next((i for i, (a, b) in enumerate(arguments(tokens, pairs, start, pairs[start])) if a <= position < b), -1)
+
+    def context(position):
+        return tuple((function, argument(start, position)) for start, end, function in active if start < position < end)
+
+    # Calls match by binding and enclosing argument, not by equal option values.
+    # An unused call cannot stand in for the generator passed to a property.
+    counts = Counter()
     for start, end, function in active:
-        values = []
-        for j in range(start + 1, end - 1):
-            key = tokens[j][0].strip("\"'")
-            if key not in ("numRuns", "min", "max", "minLength", "maxLength") or tokens[j + 1][0] != ":":
-                continue
-            # Attribute the option only to its nearest enclosing fc call.
-            if any(start < a < j < b < end for a, b, _ in active):
-                continue
-            n = j + 2; sign = 1
-            if tokens[n][0] == "-": sign = -1; n += 1
-            if re.fullmatch(r"\d+(?:\.\d+)?", tokens[n][0]):
-                values.append((key, sign * float(tokens[n][0]), tokens[j][1]))
-        groups.append((function, values))
-    # Shared assert options, such as const options = {seed: 318, numRuns: 50}.
-    for i in range(len(tokens) - 2):
-        if tokens[i][0].strip("\"'") == "numRuns" and tokens[i + 1][0] == ":" and not any(a < i < b for a, b, _ in active) and re.fullmatch(r"\d+", tokens[i + 2][0]):
-            groups.append(("options", [("numRuns", float(tokens[i + 2][0]), tokens[i][1])]))
-    # fc.assert options often sit after fc.property; assertion itself is an fc call.
+        identity = (binding(start), context(start), function)
+        ordinal = counts[identity]; counts[identity] += 1
+        options = {}
+        for left, right in arguments(tokens, pairs, start, end):
+            options.update(fields(tokens, pairs, variables, left, right, external=external))
+        groups[(*identity, ordinal)] = (options, tokens[start][1])
+    # Compare shared objects too. Their uses can be outside a named test.
+    for variable, (start, end) in variables.items():
+        options = fields(tokens, pairs, variables, start, end)
+        if options: groups[(variable, (), "options", 0)] = (options, tokens[start][1])
     return groups
+
+def numeric(value):
+    text = "".join(value)
+    return float(text) if re.fullmatch(r"-?\d+(?:\.\d+)?", text) else None
+
+def narrowing(left, right):
+    for identity in left.keys() | right.keys():
+        prior, line = left.get(identity, ({}, right.get(identity, ({}, 1))[1]))
+        current, _ = right.get(identity, ({}, line))
+        # A whole new call or object is an addition, not a change to an old range.
+        if identity not in left: continue
+        for key in ("numRuns", "min", "max", "minLength", "maxLength"):
+            if key not in prior and key not in current: continue
+            before = numeric(prior[key]) if key in prior else None
+            now = numeric(current[key]) if key in current else None
+            if key == "numRuns":
+                # fast-check 4.10.2, readNumRuns: absent numRuns means 100.
+                before = 100 if key not in prior else before
+                now = 100 if key not in current else now
+            if prior.get(key) == current.get(key): continue
+            unsure = (key in prior and before is None) or (key in current and now is None)
+            added = key != "numRuns" and key not in prior and key in current
+            tighter = before is not None and now is not None and (now > before if key in ("min", "minLength") else now < before)
+            if unsure or added or tighter:
+                yield "fewer numRuns" if key == "numRuns" else "tighter fast-check bound", line
 
 def properties(tokens):
     return sum(tokens[i][0] == "fc" and tokens[i + 1][0] == "." and tokens[i + 2][0] in ("property", "asyncProperty") for i in range(max(0, len(tokens) - 2)))
@@ -153,9 +262,15 @@ try:
     # Resolve both refs first. A typo is an operating error, never a clean result.
     for ref in (base, head): git("rev-parse", "--verify", f"{ref}^{{commit}}")
     paths = [p.decode() for p in git("diff", "--name-only", "-z", "--no-renames", base, head, "--").split(b"\0") if p]
-    selected = subprocess.run(["python3", classifier, "exam-paths.json", *paths], capture_output=True, text=True)
-    if selected.returncode not in (0, 1): raise ValueError(selected.stderr.strip())
-    files = [line.split("\t", 1)[0] for line in selected.stdout.splitlines()]
+    selected_paths = set()
+    with tempfile.TemporaryDirectory(prefix="exam-lists-") as temporary:
+        for ref in (base, head):
+            source = Path(temporary) / "exam-paths.json"
+            source.write_text(content(ref, "exam-paths.json") or "[]")
+            selected = subprocess.run(["python3", classifier, str(source), *paths], capture_output=True, text=True)
+            if selected.returncode not in (0, 1): raise ValueError(selected.stderr.strip())
+            selected_paths.update(line.split("\t", 1)[0] for line in selected.stdout.splitlines())
+    files = [path for path in paths if path in selected_paths]
     moved = replacements(mapping[0] if mapping else None)
     records = {}
     for file in files:
@@ -177,32 +292,16 @@ try:
             owner = records[file] if target in after else next((r for r in records.values() if target in r[3]), None)
             if owner:
                 a, b, _ = owner[3][target]
-                comparisons.append((key[0], old[start:end], owner[1][a:b]))
+                comparisons.append((key[0], old[start:end], owner[1][a:b], owner[1]))
         # Also inspect unnamed properties and shared settings outside named tests.
         covered_old = {i for start, end, _ in before.values() for i in range(start, end)}
         covered_new = {i for start, end, _ in after.values() for i in range(start, end)}
-        comparisons.append(("line 1", [t for i, t in enumerate(old) if i not in covered_old], [t for i, t in enumerate(new) if i not in covered_new]))
-        for title, left, right in comparisons:
+        comparisons.append(("line 1", [t for i, t in enumerate(old) if i not in covered_old], [t for i, t in enumerate(new) if i not in covered_new], new))
+        for title, left, right, scope in comparisons:
             if properties(right) < properties(left): hit(file, "removed law", title)
             if expects(left) - expects(right): hit(file, "removed expect", title)
-            a, b = bounds(left), bounds(right)
-            # Match unchanged calls first. Adding a new call with a smaller range
-            # must not steal the match from an unchanged, existing call.
-            unmatched = []
-            for function, prior in a:
-                same = next((i for i, (other, values) in enumerate(b) if function == other and [(k, v) for k, v, _ in prior] == [(k, v) for k, v, _ in values]), None)
-                if same is None: unmatched.append((function, prior))
-                else: b.pop(same)
-            for function, prior in unmatched:
-                following = next((i for i, (other, _) in enumerate(b) if function == other), None)
-                if following is None: continue
-                _, current = b.pop(following)
-                by_key = {key: value for key, value, _ in current}
-                for key, value, line in prior:
-                    if key not in by_key: continue
-                    now = by_key[key]
-                    if (key in ("min", "minLength") and now > value) or (key in ("max", "maxLength", "numRuns") and now < value):
-                        hit(file, "fewer numRuns" if key == "numRuns" else "tighter fast-check bound", title if title != "line 1" else f"line {line}")
+            for kind, line in narrowing(bounds(left, old), bounds(right, scope)):
+                hit(file, kind, title if title != "line 1" else f"line {line}")
     print("\n".join(hits) if hits else f"loosening: 0 hits in {len(files)} exam files")
     sys.exit(1 if hits else 0)
 except (OSError, ValueError) as error:

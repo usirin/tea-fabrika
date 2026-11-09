@@ -94,6 +94,203 @@ const flagged = (v: Input, before: string, after: string, kind: string, mapping?
 };
 
 describe("loosening, today's tooling", () => {
+	// Plant: classify from head alone, letting a deleted row hide its deleted exam.
+	it("T318 either ref's exam list protects deleted or newly classified laws", () => {
+		fc.assert(
+			fc.property(input, word, (v, folder) => {
+				const path = `${folder}/${v.extra}.ts`;
+				for (const side of ["base", "head"]) {
+					const rows = JSON.stringify([{glob: `${folder}/**/*.ts`}]);
+					const got = compare(
+						{[path]: source(v), "exam-paths.json": side === "base" ? rows : "[]"},
+						{"exam-paths.json": side === "head" ? rows : "[]"},
+					);
+					expect(got.code, got.text).toBe(1);
+					expect(got.text).toContain(`${path}: removed law: ${v.name}`);
+				}
+			}),
+			{seed: 31830, numRuns: 5, endOnFailure: true},
+		);
+	});
+
+	const form = fc.record({
+		base: fc.constantFrom("it", "test"),
+		alias: fc.constantFrom("direct", "import", "const", "namespace", "destructure", "extended"),
+		parameter: fc.constantFrom("", ".each([1, 2])", ".for([1, 2])"),
+		options: fc.constantFrom("inline", "shared", "spread"),
+		last: fc.boolean(),
+		quote: fc.constantFrom("'", '"', "`"),
+		chainFirst: fc.boolean(),
+	});
+	type Form = {
+		base: string;
+		alias: string;
+		parameter: string;
+		options: string;
+		last: boolean;
+		quote: string;
+		chainFirst?: boolean;
+	};
+	const call = (v: Input, shape: Form, suite: boolean, modifier = "", option = "") => {
+		const base = suite ? (shape.base === "it" ? "describe" : "suite") : shape.base;
+		const alias = `law_${v.extra}`;
+		const prefix =
+			shape.alias === "import"
+				? `import {${base} as ${alias}} from 'vitest';\n`
+				: shape.alias === "const"
+					? `const ${alias} = ${base};\n`
+					: shape.alias === "destructure"
+						? `import * as checks from 'vitest';\nconst {${base}: ${alias}} = checks;\n`
+						: shape.alias === "extended"
+							? `const ${alias} = ${suite ? base : `${base}.extend({})`};\n`
+							: shape.alias === "namespace"
+								? "import * as checks from 'vitest';\n"
+								: "";
+		const target =
+			shape.alias === "direct" ? base : shape.alias === "namespace" ? `checks.${base}` : alias;
+		const options = option
+			? shape.options === "inline"
+				? `{${option}: true}`
+				: shape.options === "spread"
+					? `{...settings}`
+					: "settings"
+			: "{}";
+		const shared =
+			option && shape.options !== "inline" ? `const settings = {${option}: true};\n` : "";
+		const body = suite ? `() => { test('${v.extra}', () => check(value)); }` : "() => check(value)";
+		const args = shape.last ? `${body}, ${options}` : `${options}, ${body}`;
+		return `${prefix}${shared}${target}${shape.chainFirst ? shape.parameter + modifier : modifier + shape.parameter}(${shape.quote}${v.name}${shape.quote}, ${args});\n`;
+	};
+
+	// Plants: recognize only direct it/test names, dot modifiers, or one options position.
+	it.each(["skipIf", "runIf", "skip", "todo", "only", "fails"])(
+		"T318 generated test and suite forms report %s muting",
+		(kind) => {
+			fc.assert(
+				fc.property(input, form, (v, shape) => {
+					for (const suite of kind === "fails" ? [false] : [false, true]) {
+						const conditional = kind === "skipIf" || kind === "runIf";
+						const modifier = conditional ? `.${kind}(${kind === "skipIf" ? "true" : "false"})` : "";
+						const got = compare(
+							{[file]: call(v, shape, suite)},
+							{[file]: call(v, shape, suite, modifier, conditional ? "" : kind)},
+						);
+						expect(got.code, got.text).toBe(1);
+						expect(got.text).toContain(`${file}: ${kind === "fails" ? "it.fails" : kind}:`);
+					}
+				}),
+				{seed: 31831, numRuns: 12, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: miss an aliased call when neither expect nor fc.property appears directly.
+	it("T318 removed aliased law calls remain laws across generated source forms", () => {
+		fc.assert(
+			fc.property(input, form, (v, shape) => {
+				flagged(v, call(v, shape, false), "", "removed law");
+			}),
+			{seed: 31832, numRuns: 12, endOnFailure: true},
+		);
+	});
+
+	const range = fc.record({
+		generator: fc.constantFrom("integer", "float", "double", "string", "array"),
+		key: fc.constantFrom("min", "max", "minLength", "maxLength"),
+		shared: fc.boolean(),
+		bound: fc.integer({min: 200, max: 2000}),
+		wrapped: fc.boolean(),
+	});
+	type Range = {generator: string; key: string; shared: boolean; bound: number; wrapped: boolean};
+	const ranged = (v: Input, r: Range, value: number | undefined, decoy = "") => {
+		const key = ["array", "string"].includes(r.generator)
+			? r.key.startsWith("min")
+				? "minLength"
+				: "maxLength"
+			: r.key.startsWith("min")
+				? "min"
+				: "max";
+		const options = value === undefined ? "" : `{${key}: ${value}}`;
+		const arg = r.shared && options ? "settings" : options;
+		const generator = `fc.${r.generator}(${r.generator === "array" ? `fc.integer()${arg ? ", " : ""}` : ""}${arg})`;
+		const prelude = r.shared && options ? `const settings = ${options};\n` : "";
+		const active = r.wrapped ? `const active_${v.extra} = ${generator};\n` : "";
+		return `${prelude}${active}${r.wrapped ? decoy : ""}${v.title}('${v.name}', () => { ${r.wrapped ? "" : decoy} fc.assert(fc.property(${r.wrapped ? `active_${v.extra}` : generator}, check)); });\n`;
+	};
+
+	// Plants: compare only bounds already present, ignore shared objects, or match an unused call.
+	it.each(["added", "shared", "unused"])(
+		"T318 generated generator source forms expose %s narrowing",
+		(kind) => {
+			fc.assert(
+				fc.property(input, range, (v, shape) => {
+					const r = {...shape, shared: kind === "shared" || shape.shared};
+					const start =
+						r.key.startsWith("min") && !["array", "string"].includes(r.generator)
+							? -r.bound
+							: r.bound;
+					const end = start + (r.key.startsWith("min") ? v.delta : -v.delta);
+					const before = ranged(v, r, kind === "added" ? undefined : start);
+					const decoy =
+						kind === "unused"
+							? `${
+									ranged(v, {...r, shared: false, wrapped: false}, start)
+										.split("fc.property(")[1]!
+										.split(", check")[0]
+								};`
+							: "";
+					const got = compare({[file]: before}, {[file]: ranged(v, r, end, decoy)});
+					expect(got.code, got.text).toBe(1);
+					expect(got.text).toContain(": tighter fast-check bound:");
+				}),
+				{seed: 31833, numRuns: 12, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plant: drop a numRuns option and quietly restore fast-check's default of 100.
+	it("T318 removing generated high run counts is a hit for inline and shared options", () => {
+		fc.assert(
+			fc.property(input, fc.integer({min: 101, max: 2000}), fc.boolean(), (v, runs, shared) => {
+				const options = `{seed: ${v.count}, numRuns: ${runs}}`;
+				const before = `${
+					shared ? `const settings = ${options};\n` : ""
+				}${call(v, {base: v.title, alias: "direct", parameter: "", options: "inline", last: false, quote: "'"}, false)}\nfc.assert(fc.property(fc.integer(), check), ${shared ? "settings" : options});`;
+				const after = before.replace(`, numRuns: ${runs}`, "");
+				const got = compare({[file]: before}, {[file]: after});
+				expect(got.code, got.text).toBe(1);
+				expect(got.text).toContain(": fewer numRuns:");
+			}),
+			{seed: 31834, numRuns: 8, endOnFailure: true},
+		);
+	});
+
+	// Plant: conservatively flag even unchanged aliases, additions, mapped renames, or wider bounds.
+	it("T318 generated source forms accept additions mapped renames and wider settings", () => {
+		fc.assert(
+			fc.property(input, form, range, (v, shape, r) => {
+				const before = call(v, shape, false);
+				const renamed = `${v.name}-new`;
+				for (const [after, mapping] of [
+					[before + call({...v, name: renamed}, {...shape, alias: "direct"}, false), undefined],
+					[before.replaceAll(" ", v.space), undefined],
+					[
+						call({...v, name: renamed}, shape, false),
+						`| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`,
+					],
+				] as const) {
+					const got = compare({[file]: before}, {[file]: after}, mapping);
+					expect(got.code, got.text).toBe(0);
+				}
+				const start = r.bound;
+				const end = start + (r.key.startsWith("min") ? -v.delta : v.delta);
+				const wider = compare({[file]: ranged(v, r, start)}, {[file]: ranged(v, r, end)});
+				expect(wider.code, wider.text).toBe(0);
+			}),
+			{seed: 31835, numRuns: 12, endOnFailure: true},
+		);
+	});
+
 	// Plant: stop reporting a disappeared it/test/fc.property, or trust a mapping with no replacement.
 	it("T318 removed laws and properties require an existing named replacement", () => {
 		fc.assert(
