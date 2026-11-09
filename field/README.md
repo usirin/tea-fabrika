@@ -4,9 +4,8 @@ What happens when fabrika runs real work on kamp-us/demlik, written down as it
 happens, so it can be counted later. A few rows are tea-fabrika's own parts run
 on that same work, and each is marked as such.
 
-tea-fabrika is built to fix what goes wrong in fabrika. The replay set
-(`replay/`) checks tea-fabrika against old tickets. This folder is the other
-half: what goes wrong (and right) in today's fabrika when it drives live lanes,
+tea-fabrika is built to fix what goes wrong in fabrika. This folder is the
+half that records what goes wrong (and right) in today's fabrika when it drives live lanes,
 and which part of tea-fabrika would change it.
 
 Two files, one record per line, so a script can read them:
