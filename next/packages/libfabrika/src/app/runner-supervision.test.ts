@@ -21,7 +21,6 @@ import {
 	A,
 	B,
 	W,
-	X,
 	again,
 	brain,
 	data,
@@ -36,7 +35,7 @@ import {
 import {Activity, Down, Recipient} from "../coordination/process.ts";
 import {RecoveryStore} from "../coordination/recovery-store.ts";
 import {Ledger, LedgerError} from "../data/ledger.ts";
-import {lineFor} from "../data/log.ts";
+import {InputId, lineFor} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {SpanSink} from "../data/sink.ts";
 import {
@@ -154,8 +153,8 @@ const world = (
 	const input = (id = "poison", m: unknown = {type: "poison", key: id}): Incoming => ({
 		id,
 		envelope: {
-			id: Schema.decodeUnknownSync(Schema.NonEmptyString.pipe(Schema.brand("InputId")))(
-				`in-${X}-${controls.steps.length + 1}`,
+			id: Schema.decodeUnknownSync(InputId)(
+				`input_0000000000e008${(controls.steps.length + 1).toString(16).padStart(12, "0")}`,
 			),
 			by: person,
 			arrivedAt: 0,

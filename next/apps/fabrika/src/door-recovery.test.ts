@@ -12,6 +12,7 @@ import * as C from "@kampus/libfabrika/coordination";
 import {
 	Archive,
 	Doorbell,
+	IdGenerator,
 	Ledger,
 	LedgerError,
 	LedgerTransaction,
@@ -212,6 +213,7 @@ const world = () => {
 			C.ClientManager.layer(founder).pipe(Layer.provide(data())),
 			records,
 			Archive.memory,
+			IdGenerator.layer,
 			Layer.effect(
 				SpanSink,
 				Effect.gen(function* () {
