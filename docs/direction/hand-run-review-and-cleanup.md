@@ -47,6 +47,12 @@ step-note tip must be reachable under a retained MAIN ref. Objects alone and rem
 refs do not count. Fetch remote-only work into a retained MAIN ref before retrying.
 HEAD, ORIG_HEAD, refs outside refs/remotes/ and reflogs outside logs/refs/remotes/ need that proof; FETCH_HEAD is a fetched copy, and ORIG_HEAD and config.worktree are ordinary metadata. Keep operation or linked-worktree
 metadata, unknown state, and any pair holding MAIN or BOXES/state.
+Before each box or worktree removal, read MAIN's gitdir, common directory, object directory and
+all alternates from outside. Keep their paths and every link they use. Refuse a removal that
+contains any of them, even when the final destination is outside the removed path. Read only
+MAIN's own bindings for this check. Never follow a box's config.
+An annotated tag's own object ID must be reachable under MAIN's retained refs. Keeping only its
+commit loses the annotation. Signed tags and nested tags need the same proof for their objects.
 
 Both paths absent succeeds. One missing keeps the other. Removal or absence exits 0, a refusal
 or operating error exits 1, and bad arguments or names exit 2. Partial removal is reported.

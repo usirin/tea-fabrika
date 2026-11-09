@@ -63,6 +63,59 @@ try:
            for root in (work, data) for protected in (main, state, state.resolve())):
         keep("pair holds MAIN or saved state")
 
+    def protect_main_storage():
+        protected = set()
+
+        def resolve(path):
+            # Keep each link as well as its destination. Removing either breaks MAIN.
+            if path == path.parent:
+                return path
+            parent = resolve(path.parent)
+            current = parent / path.name
+            protected.add(current)
+            if current.is_symlink():
+                return resolve(parent / os.readlink(current))
+            current.stat()
+            return parent.parent if path.name == ".." else current
+
+        def read_path(path):
+            value = resolve(path).read_text().removesuffix("\n")
+            if not value or any(c in value for c in "\0\r\n"):
+                raise ValueError("unsupported MAIN storage path")
+            return value
+
+        # Read only MAIN's bindings from outside. Never ask the box's Git config.
+        gitdir = resolve(main / ".git")
+        if gitdir.is_file():
+            pointer = read_path(main / ".git")
+            if not pointer.startswith("gitdir: "):
+                raise ValueError("unsupported MAIN gitdir")
+            gitdir = resolve(main / pointer[8:])
+        common = gitdir
+        if os.path.lexists(gitdir / "commondir"):
+            common = resolve(gitdir / read_path(gitdir / "commondir"))
+        pending, seen = [common / "objects"], set()
+        while pending:
+            objects = resolve(pending.pop())
+            if not objects.is_dir():
+                raise ValueError("unsupported MAIN object directory")
+            if objects in seen:
+                continue
+            seen.add(objects)
+            info = objects / "info"
+            if os.path.lexists(info):
+                info = resolve(info)
+                alternates = info / "alternates"
+                if os.path.lexists(alternates):
+                    for value in resolve(alternates).read_text().splitlines():
+                        if not value or value.startswith('"') or "\0" in value:
+                            raise ValueError("unsupported MAIN alternate")
+                        pending.append(objects / value)
+        if any(holds(root, path) for root in (work, data) for path in protected):
+            keep("pair holds MAIN Git storage")
+
+    protect_main_storage()
+
     def plain(path):
         if path.is_symlink() or not path.is_file():
             raise ValueError("missing or unsupported metadata")
@@ -192,23 +245,24 @@ try:
             if ref.startswith(b"refs/replace/"):
                 tips.add(ref[len(b"refs/replace/"):])
         for ref in symbolic | {"HEAD"}:
-            tips.update(git(["rev-parse", "--verify", f"{ref}^{{commit}}"], inspect).splitlines())
-        # Peel annotated tags to commits. A ref to another object type cannot prove safety.
-        tips = {git(["rev-parse", "--verify", f"{tip.decode()}^{{commit}}"], inspect).strip()
-                for tip in tips}
+            tips.update(git(["rev-parse", "--verify", f"{ref}^{{object}}"], inspect).splitlines())
         retained = git(["for-each-ref", "--format=%(objectname)", "refs/heads/", "refs/tags/", "refs/keep/", "refs/stash", "refs/notes/"]).splitlines()
         # Enumerate only MAIN's retained history. Mere object presence and remote refs prove nothing.
+        # Keep annotation objects themselves, including signatures and nested tags.
         reachable = set()
         if retained:
-            reachable.update(git(["rev-list", *[tip.decode() for tip in retained]]).splitlines())
+            reachable.update(git(["rev-list", "--objects", "--no-object-names",
+                                  *[tip.decode() for tip in retained]]).splitlines())
         if any(tip not in reachable for tip in tips):
             keep("tip not retained in MAIN")
 
     try:
+        protect_main_storage()
         shutil.rmtree(work)
     except OSError:
         keep("work removal failed; pair may be partly removed")
     try:
+        protect_main_storage()
         shutil.rmtree(data)
     except OSError:
         keep("work removed; git data removal failed and may be partial")

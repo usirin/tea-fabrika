@@ -233,6 +233,8 @@ visible, and never weaken the rules to hide this message.
    After a successful merge, retain the checked head under refs/keep/pr/<pr> in MAIN.
    Remove the registered catchup-<pr> worktree, exact-branch boxes through box.sh rm, and the
    driver's linked MAIN worktree on that exact branch. Never remove MAIN itself.
+   Before each removal, read MAIN's gitdir, common directory, object directory and all alternates
+   from outside. Keep their paths and every link they use. Refuse any removal that contains one.
    Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates
    and any box that fails its guard.
    Print one line per retained item and continue. Cleanup never changes a landed merge's success.
@@ -242,6 +244,8 @@ visible, and never weaken the rules to hide this message.
    refs and object presence do not count. Fetch remote-only work into a retained MAIN ref first.
    HEAD, ORIG_HEAD, refs outside refs/remotes/ and reflogs outside logs/refs/remotes/ need that proof; FETCH_HEAD is a fetched copy, and ORIG_HEAD and config.worktree are ordinary metadata. Keep operation or linked-worktree
    metadata, unknown state, and any pair holding MAIN or BOXES/state.
+   An annotated tag's own object ID must be reachable under MAIN's retained refs. Keeping only
+   its commit loses the annotation. This also applies to signed tags and tags pointing at tags.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
     `MergeRow`, then `git pull --ff-only origin main` and `pnpm install` in the main checkout.
 

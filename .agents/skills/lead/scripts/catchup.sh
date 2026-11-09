@@ -170,10 +170,67 @@ try:
         return any(root == parent or (root.exists() and parent.exists() and root.samefile(parent))
                    for parent in (protected, *protected.parents))
 
+    def main_storage():
+        protected = set()
+
+        def resolve(path):
+            # Keep each link as well as its destination. Removing either breaks MAIN.
+            if path == path.parent:
+                return path
+            parent = resolve(path.parent)
+            current = parent / path.name
+            protected.add(current)
+            if current.is_symlink():
+                return resolve(parent / os.readlink(current))
+            current.stat()
+            return parent.parent if path.name == ".." else current
+
+        def read_path(path):
+            value = resolve(path).read_text().removesuffix("\n")
+            if not value or any(c in value for c in "\0\r\n"):
+                raise ValueError("unsupported MAIN storage path")
+            return value
+
+        # Read only MAIN's bindings from outside. Never ask a candidate's Git config.
+        gitdir = resolve(main / ".git")
+        if gitdir.is_file():
+            pointer = read_path(main / ".git")
+            if not pointer.startswith("gitdir: "):
+                raise ValueError("unsupported MAIN gitdir")
+            gitdir = resolve(main / pointer[8:])
+        common = gitdir
+        if os.path.lexists(gitdir / "commondir"):
+            common = resolve(gitdir / read_path(gitdir / "commondir"))
+        pending, seen = [common / "objects"], set()
+        while pending:
+            objects = resolve(pending.pop())
+            if not objects.is_dir():
+                raise ValueError("unsupported MAIN object directory")
+            if objects in seen:
+                continue
+            seen.add(objects)
+            info = objects / "info"
+            if os.path.lexists(info):
+                info = resolve(info)
+                alternates = info / "alternates"
+                if os.path.lexists(alternates):
+                    for value in resolve(alternates).read_text().splitlines():
+                        if not value or value.startswith('"') or "\0" in value:
+                            raise ValueError("unsupported MAIN alternate")
+                        pending.append(objects / value)
+        return protected
+
     def remove_worktree(path, fields):
         label = f"worktree {path.name}"
         root = path.resolve()
         state = boxes / "state"
+        try:
+            if any(holds(root, protected) for protected in main_storage()):
+                kept(label, "holds MAIN Git storage")
+                return
+        except (OSError, ValueError, RuntimeError):
+            kept(label, "cannot read MAIN Git storage")
+            return
         if path.is_symlink() or any(holds(root, protected)
                                    for protected in (main, state, state.resolve())):
             kept(label, "MAIN, saved state or symlinked target")
