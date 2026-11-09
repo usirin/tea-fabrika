@@ -1,36 +1,22 @@
-import {existsSync, readFileSync} from "node:fs";
 import {Arbitrary, Effect, Schema} from "effect";
 import * as fc from "fast-check";
 import {expect, it} from "vitest";
+import * as checker from "./field-check.ts";
 
 // Today's field records. Covers field-schema.ts and field-check.ts, including added-row
 // selection, optional facts, advisory drift and annotations. No network or real rows.
 const options = {seed: 119120, numRuns: 100};
 const schemaOptions = {seed: 119120, runs: 100};
-type Finding = {
-	readonly _tag: "error" | "warning";
-	readonly file: string;
-	readonly line: number;
-	readonly field: string;
-};
-type Report = {findings: Finding[]; annotations: string[]; exitCode: number; added: number};
-const url = new URL("./field-check.ts", import.meta.url);
-// Main has no field validator or row selector. Model that absence explicitly so bad
-// rows pass in the red run, rather than failing the test loader on a missing import.
-const checker: {
-	selectAdded: (base: string, head: string) => {line: number; text: string}[];
-	checkFile: (file: string, base: string, head: string) => Report;
-} = existsSync(url)
-	? await import(url.href)
-	: {
-			selectAdded: () => [],
-			checkFile: () => {
-				expect(
-					readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"),
-				).not.toContain("field-check.ts");
-				return {findings: [], annotations: [], exitCode: 0, added: 0};
-			},
-		};
+// Type-law plants are compiled by the final workspace typecheck. Each directive
+// itself fails if the installed API or the checked result stops refusing the plant.
+// @ts-expect-error Effect 4.1.2 has no Schema.notAnInstalledApi.
+type UnsupportedSchemaApi = typeof Schema.notAnInstalledApi;
+const typePlants = (
+	_unsupported: UnsupportedSchemaApi,
+	_report: ReturnType<typeof checker.checkFile>,
+) => {};
+// @ts-expect-error An unchecked success is missing findings, annotations and added count.
+typePlants(undefined, {exitCode: 0});
 const Text = Schema.NullOr(Schema.String);
 const Count = Schema.NullOr(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
 // Independent contract schemas keep the input generator from weakening with a decoder.
@@ -137,6 +123,51 @@ it("added rows preserve occurrence counts and head line numbers", () => {
 	);
 });
 
+it("field history keeps exact event trees and refuses failed diff, tree or blob reads", () => {
+	fc.assert(
+		fc.property(
+			fc.string(),
+			fc.string(),
+			fc.boolean(),
+			fc.boolean(),
+			(baseText, headText, existed, remains) => {
+				const base = "b".repeat(40),
+					head = "c".repeat(40),
+					file = "field/notes.jsonl";
+				const calls: string[][] = [];
+				const run = (args: string[]) => {
+					calls.push(args);
+					const stdout =
+						args[0] === "diff"
+							? `${file}\0`
+							: args[0] === "ls-tree"
+								? (args[4] === base ? existed : remains)
+									? `${file}\0`
+									: ""
+								: args[1]?.startsWith(base)
+									? baseText
+									: headText;
+					return {status: 0, stdout};
+				};
+				expect(checker.readFieldFiles(base, head, run)).toEqual([
+					{file, base: existed ? baseText : "", head: remains ? headText : ""},
+				]);
+				expect(calls.some((args) => args[0] === "merge-base")).toBe(false);
+				const reads = calls.length;
+				for (let at = 0; at < reads; at++) {
+					let i = 0;
+					expect(() =>
+						checker.readFieldFiles(base, head, (args) =>
+							i++ === at ? {status: 128, stdout: ""} : run(args),
+						),
+					).toThrow();
+				}
+			},
+		),
+		options,
+	);
+});
+
 it("valid cores pass, each blocking field rejects bad types, optional facts stay unknown", () => {
 	for (const [schema, file, fields] of [
 		[Note, "field/notes.jsonl", noteFields],
@@ -159,7 +190,32 @@ it("valid cores pass, each blocking field rejects bad types, optional facts stay
 							bad.findings.some((f) => f._tag === "error" && f.field === field)
 						);
 					});
-					return good.exitCode === 0 && good.added === 1 && broken;
+					const required =
+						file === "field/notes.jsonl"
+							? ["id", "date", "stage", "kind", "what", "lanes", "fix"]
+							: [
+									"date",
+									"role",
+									"model",
+									"effort",
+									"outcome",
+									"note",
+									"why",
+									"tokens",
+									"tools",
+									"minutes",
+								];
+					const missing = required.every(
+						(field) =>
+							checker.checkFile(
+								file,
+								"",
+								JSON.stringify(
+									Object.fromEntries(Object.entries(row).filter(([key]) => key !== field)),
+								),
+							).exitCode !== 0,
+					);
+					return good.exitCode === 0 && good.added === 1 && broken && missing;
 				},
 				schemaOptions,
 			),

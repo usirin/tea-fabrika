@@ -17,6 +17,7 @@ packages:
   - packs/*
   - docs/tutorials/*
   - oxlint-plugins
+  - .github/ci
   - wip
   - legacy
   - experiments/142-web-terminals

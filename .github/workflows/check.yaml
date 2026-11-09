@@ -16,32 +16,70 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Which kind of pull request this is. One that changes only Markdown or field/ rows skips the
-  # test shards, next and e2e: nothing they run reads those files (a search of every test file on
-  # 2026-11-08 found them named in comments only). check still runs (lint holds the Markdown's
-  # format, typecheck holds docs/tutorials), and so does commits. The list names what may skip,
-  # so a path nobody thought of runs every test. A push to main runs everything. None of the three
-  # is a required check, so a skipped one blocks nothing.
+  # Today's CI, both versions. One no-install classifier holds every path rule.
+  # Safe Markdown and direct field JSONL skip the heavy jobs; unknown paths and main run all.
+  # These small checks still run when pnpm setup and the heavy jobs skip.
   changes:
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.diff.outputs.code }}
+      check: ${{ steps.diff.outputs.check }}
+      test: ${{ steps.diff.outputs.test }}
+      next: ${{ steps.diff.outputs.next }}
+      e2e: ${{ steps.diff.outputs.e2e }}
+      field: ${{ steps.diff.outputs.field }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: diff
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          code=true
-          if [ -n "$BASE" ] && ! git diff --name-only "$BASE...$HEAD" | grep -v -E '\.md$|^field/' | grep -q .; then
-            code=false
-          fi
-          echo "code=$code" >> "$GITHUB_OUTPUT"
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: node .github/ci/changes.mjs
+      - run: sh .agents/skills/lead/scripts/skillscheck.sh
+        if: ${{ !cancelled() }}
+      - run: node oxlint-plugins/gitignore.mjs
+        if: ${{ !cancelled() }}
+
+  # Start beside changes and commits. No workspace setup for Markdown alone.
+  # Filtered install uses the root lockfile and all workspace supply-chain rules.
+  # The proof PR measures this path's cold install and cache cost.
+  field:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: node .github/ci/changes.mjs
+      - uses: pnpm/action-setup@v6
+        if: steps.diff.outputs.field == 'true'
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        if: steps.diff.outputs.field == 'true'
+        with:
+          node-version: 26.13.0
+      - run: pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts
+        if: steps.diff.outputs.field == 'true'
+      - run: node .github/ci/field-check.ts
+        if: steps.diff.outputs.field == 'true'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
 
   check:
+    needs: changes
+    if: >-
+      ${{ !cancelled() &&
+          (needs.changes.result != 'success' ||
+           needs.changes.outputs.check != 'false') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -90,7 +128,10 @@ jobs:
   # jobs fetch is Electron's own binary, from its GitHub release, kept in the cache after once.
   e2e:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: >-
+      ${{ !cancelled() &&
+          (needs.changes.result != 'success' ||
+           needs.changes.outputs.e2e != 'false') }}
     runs-on: macos-latest
     # 15 for the run, and room for the ARIA stage's own app and its about 35 cells.
     timeout-minutes: 25
@@ -152,7 +193,10 @@ jobs:
   # in 2.9 to 3.9 min a machine (pull request 412's run, experiment 222).
   test:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: >-
+      ${{ !cancelled() &&
+          (needs.changes.result != 'success' ||
+           needs.changes.outputs.test != 'false') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -197,15 +241,15 @@ jobs:
           SHARD: ${{ matrix.shard }}/6
         run: |
           if [ -n "$BASE" ]; then
-            pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests
+            pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts
             if [ "${{ matrix.shard }}" = 1 ]; then
-              pnpm exec vitest run apps/fabrika/src/bundles.test.ts packages/pipeline/src/laws/standard.test.ts
+              pnpm exec vitest run apps/fabrika/src/bundles.test.ts packages/pipeline/src/laws/standard.test.ts --exclude 'next/**'
             fi
           else
-            pnpm exec vitest run --shard "$SHARD"
+            pnpm exec vitest run --shard "$SHARD" --exclude 'next/**'
           fi
 
-  # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs on every pull request:
+  # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected:
   # the exam's tests read files and the later ones start a brain, so `--changed` in the test job,
   # which follows imports, would not pick them up. Then the thin runner over next/apps/fabrika/e2e/,
   # which passes while that folder is empty. Chromium is fetched only once an e2e file exists, by
@@ -213,7 +257,10 @@ jobs:
   # xvfb and the keychain are tried.
   next:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: >-
+      ${{ !cancelled() &&
+          (needs.changes.result != 'success' ||
+           needs.changes.outputs.next != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

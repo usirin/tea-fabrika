@@ -1,63 +1,23 @@
 import {spawnSync} from "node:child_process";
-import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import * as fc from "fast-check";
 import {expect, it} from "vitest";
+import {checkTracked} from "../../oxlint-plugins/gitignore.mjs";
+import * as ci from "./changes.mjs";
 
 // Today's CI, both versions. Covers changes.mjs and the shared gitignore.mjs.
-// Before changes.mjs exists, run main's actual shell classifier. This is a behavioral
-// baseline, not a missing-import red. Remove the adapter once the implementation lands.
+// Red baseline adapters are preserved in the first T342 tests commit. These laws
+// now import the implementation directly, so deleting it cannot bypass a check.
 const options = {seed: 119120, numRuns: 100};
 const heavy = {check: true, test: true, next: true, e2e: true};
-type Flags = typeof heavy & {field: boolean};
 type Runner = (args: string[]) => {status: number | null; stdout: string};
-const baseline = (paths: string[] | null, event: string): Flags => {
-	const root = mkdtempSync(join(tmpdir(), "ci-red-"));
-	try {
-		const workflow = readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8");
-		const script = workflow.slice(
-			workflow.indexOf("          code=true"),
-			workflow.indexOf("\n  check:"),
-		);
-		writeFileSync(join(root, "git"), '#!/bin/sh\ncat "$DIFF"\n', {mode: 0o755});
-		writeFileSync(join(root, "diff"), paths?.join("\n") ?? "");
-		const output = join(root, "output");
-		const ran = spawnSync("bash", ["-c", script], {
-			encoding: "utf8",
-			env: {
-				...process.env,
-				PATH: `${root}:${process.env["PATH"]}`,
-				DIFF: join(root, "diff"),
-				BASE: event === "push" ? "" : "base",
-				HEAD: "head",
-				GITHUB_OUTPUT: output,
-			},
-		});
-		expect(ran.status).toBe(0);
-		const code = readFileSync(output, "utf8").trim() === "code=true";
-		return {check: true, test: code, next: code, e2e: code, field: false};
-	} finally {
-		rmSync(root, {recursive: true, force: true});
-	}
-};
-const moduleUrl = new URL("./changes.mjs", import.meta.url);
-const ci: {
-	classify: (paths: string[] | null, event: string) => Flags;
-	readPaths: (base: string, head: string, event: string, run: Runner) => string[] | null;
-} = existsSync(moduleUrl)
-	? await import(moduleUrl.href)
-	: {
-			classify: baseline,
-			readPaths: (_base, _head, _event, run) => {
-				const result = run(["diff", "--name-only"]);
-				return result.stdout.trim().split("\n");
-			},
-		};
 const word = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 const safe = fc.oneof(
 	word.map((s) => `field/${s}.jsonl`),
 	word.map((s) => `docs/${s}.md`),
+	word.map((s) => `field/${s}.md`),
 );
 const today = fc
 	.tuple(fc.constantFrom("apps", "programs", "packs", "wip", "legacy", "packages/fabrika"), word)
@@ -86,9 +46,9 @@ const list = fc.array(path, {maxLength: 12});
 
 it("main enables every job for every path list", () => {
 	fc.assert(
-		fc.property(list, (paths) =>
-			expect(ci.classify(paths, "push")).toEqual({...heavy, field: true}),
-		),
+		fc.property(list, (paths) => {
+			expect(ci.classify(paths, "push")).toEqual({...heavy, field: true});
+		}),
 		options,
 	);
 });
@@ -100,7 +60,7 @@ it("nonempty safe lists skip the heavy jobs and skills Markdown does not", () =>
 				test: false,
 				next: false,
 				e2e: false,
-				field: paths.some((p) => p.startsWith("field/")),
+				field: paths.some((p) => /^field\/[^/]+\.jsonl$/.test(p)),
 			});
 			for (const tree of [".agents", ".claude"])
 				expect(
@@ -176,6 +136,21 @@ it("NUL diff keeps both move names and unusual paths; failed reads cannot skip",
 						stdout: "",
 					})),
 				).toBeNull();
+				expect(
+					ci.readPaths("b".repeat(40), "c".repeat(40), "pull_request", (args) =>
+						args[0] === "merge-base" ? {status: 0, stdout: "a".repeat(40)} : {status, stdout: ""},
+					),
+				).toBeNull();
+				expect(ci.readPaths("b".repeat(40), "c".repeat(40), "push", run)).toEqual(paths);
+				expect(calls.at(-1)).toEqual([
+					"diff",
+					"--no-renames",
+					"--name-only",
+					"-z",
+					"b".repeat(40),
+					"c".repeat(40),
+					"--",
+				]);
 				expect(ci.readPaths("--bad", "c".repeat(40), "pull_request", run)).toBeNull();
 				expect(ci.readPaths("0".repeat(40), "c".repeat(40), "push", run)).toBeNull();
 			},
@@ -184,17 +159,7 @@ it("NUL diff keeps both move names and unusual paths; failed reads cannot skip",
 	);
 });
 
-it("shared tracked-file check agrees with Git, including command errors", async () => {
-	const url = new URL("../../oxlint-plugins/gitignore.mjs", import.meta.url);
-	const check: (root: string) => {ok: boolean} = existsSync(url)
-		? (await import(url.href)).checkTracked
-		: (root) => {
-				const got = spawnSync("git", ["ls-files", "-ci", "--exclude-per-directory=.gitignore"], {
-					cwd: root,
-					encoding: "utf8",
-				});
-				return {ok: got.status === 0 && got.stdout === ""};
-			};
+it("shared tracked-file check agrees with Git, including command errors", () => {
 	fc.assert(
 		fc.property(word, fc.boolean(), (name, ignored) => {
 			const root = mkdtempSync(join(tmpdir(), "ci-ignore-"));
@@ -208,8 +173,8 @@ it("shared tracked-file check agrees with Git, including command errors", async 
 				writeFileSync(join(tree, name), "test");
 				expect(spawnSync("git", ["add", "--", name], {cwd: tree}).status).toBe(0);
 				writeFileSync(join(tree, ".gitignore"), ignored ? `${name}\n` : "other\n");
-				expect(check(tree).ok).toBe(!ignored);
-				expect(check(join(root, "missing")).ok).toBe(false);
+				expect(checkTracked(tree).ok).toBe(!ignored);
+				expect(checkTracked(join(root, "missing")).ok).toBe(false);
 			} finally {
 				rmSync(root, {recursive: true, force: true});
 			}

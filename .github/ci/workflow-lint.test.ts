@@ -1,15 +1,11 @@
-import {existsSync, readFileSync} from "node:fs";
+import {readFileSync} from "node:fs";
 import * as fc from "fast-check";
 import {expect, it} from "vitest";
+import {lintWorkflow as lint} from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
 // also receives every listed plant, one at a time, so an unrelated error cannot mask it.
 const options = {seed: 119120, numRuns: 100};
-const url = new URL("./workflow-lint.ts", import.meta.url);
-// Main's pnpm lint does not inspect workflow wiring, so it accepts all variants.
-const lint: (text: string) => string[] = existsSync(url)
-	? (await import(url.href)).lintWorkflow
-	: () => [];
 const guard = (job: string) =>
 	`\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${job} != 'false') }}`;
 const env = {
@@ -35,8 +31,8 @@ const valid = (label: string, extra: string) => ({
 			steps: [
 				{uses: "actions/checkout@v7", with: {"fetch-depth": 0}},
 				diff,
-				{run: "sh .agents/skills/lead/scripts/skillscheck.sh"},
-				{run: "node oxlint-plugins/gitignore.mjs"},
+				{run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()"},
+				{run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()"},
 				{name: extra, run: "echo checked"},
 			],
 		},
@@ -87,6 +83,36 @@ const valid = (label: string, extra: string) => ({
 });
 type Workflow = ReturnType<typeof valid>;
 const plants: [string, (workflow: Workflow) => void][] = [
+	[
+		"scan skips after failure",
+		(w) => {
+			Object.assign(w.jobs.changes.steps[2]!, {if: "success()"});
+		},
+	],
+	[
+		"changes skips",
+		(w) => {
+			Object.assign(w.jobs.changes, {if: "false"});
+		},
+	],
+	[
+		"field ignores failure",
+		(w) => {
+			Object.assign(w.jobs.field, {"continue-on-error": true});
+		},
+	],
+	[
+		"checker ignores failure",
+		(w) => {
+			Object.assign(w.jobs.field.steps[5]!, {"continue-on-error": true});
+		},
+	],
+	[
+		"missing field setup",
+		(w) => {
+			w.jobs.field.steps.splice(2, 1);
+		},
+	],
 	[
 		"unconditional check",
 		(w) => {

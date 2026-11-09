@@ -10,8 +10,15 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
 /**
  * Seconds a file took, from the repo root: every file of 20 s or more in the CI run of pull request
  * 412 (2026-11-06), where vitest's log prints each file's time. A file not named here counts 1.
+ * T342: the plan quotes these four today's-file times from main run 42579837468.
+ * TODO lead: job-log downloads failed in the sandbox. Refresh all observed today's files
+ * with medians from 42579837468, 42573088027 and 42571265116. No next/ weights belong here.
  */
 export const measured: Record<string, number> = {
+	".agents/skills/plan/scripts/plancheck.test.ts": 53.9,
+	".agents/skills/lead/scripts/catchup.test.ts": 39.3,
+	"apps/fabrika/src/bundles.test.ts": 3.2,
+	"packages/pipeline/src/laws/standard.test.ts": 3.4,
 	"packages/fabrika/src/host/door.laws.test.ts": 170,
 	[`${LANE}.asked.test.ts`]: 158,
 	[`${LANE}.typed-again.test.ts`]: 147,
