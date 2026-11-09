@@ -1,4 +1,5 @@
 import "./stepcommit.sh?raw";
+import "../../lead/scripts/leakgrep.sh?raw";
 import "./exam.py?raw";
 import "../../plan/scripts/plancheck.sh?raw";
 import "../../lead/scripts/box.sh?raw";

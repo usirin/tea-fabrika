@@ -296,13 +296,17 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 						expect(ran.status, `broad filter ${filter}`).toBe(1);
 						expect(ran.stderr).toContain("<narrow path>");
 					}
-					for (const trigger of [
-						`fixtures/.${suffix}/input.ts`,
-						`.agents/skills/${suffix}/SKILL.md`,
-					]) {
-						put(trigger, "untracked");
-						expect(probe(dir, ["run", "--changed"]).status, `untracked ${trigger}`).toBe(1);
-						rmSync(join(dir, trigger));
+					// T375: skill paths follow imports instead of forcing every test to rerun.
+					for (const [path, refused] of [
+						[`fixtures/.${suffix}/input.ts`, true],
+						[`.agents/skills/${suffix}/SKILL.md`, false],
+						[`.claude/skills/${suffix}/SKILL.md`, false],
+					] as const) {
+						put(path, "untracked");
+						expect(probe(dir, ["run", "--changed"]).status, `untracked ${path}`).toBe(
+							refused ? 1 : 0,
+						);
+						rmSync(join(dir, path));
 					}
 					put("pnpm-lock.yaml", "staged");
 					git("add", "pnpm-lock.yaml");
@@ -426,7 +430,6 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 				fc.record({
 					trigger: fc.constantFrom(
 						"pnpm-lock.yaml",
-						".agents/skills/lead/SKILL.md",
 						"oxlint-plugins/index.ts",
 						"fixtures/toy/input.txt",
 					),
@@ -465,9 +468,21 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 						expect(probe(dir, ["run", "scripts/caps.test.ts"]).status).toBe(0);
 						git("restore", "--staged", "--", trigger);
 						rmSync(join(dir, trigger));
-						writeFileSync(join(dir, "plain.ts"), "export const value = 1;");
-						git("add", "plain.ts");
-						expect(probe(dir, ["run", "--changed=origin/main"]).status).toBe(0);
+						// T375: source and skill changes alone must not force a broad run.
+						for (const path of [
+							"plain.ts",
+							".agents/skills/lead/SKILL.md",
+							".claude/skills/lead/SKILL.md",
+						]) {
+							mkdirSync(dirname(join(dir, path)), {recursive: true});
+							writeFileSync(join(dir, path), "changed");
+							git("add", path);
+							for (const args of [
+								["run", form],
+								["run", "--changed", "origin/main"],
+							])
+								expect(probe(dir, args).status, path).toBe(0);
+						}
 					} finally {
 						rmSync(dir, {recursive: true, force: true});
 					}
@@ -493,7 +508,6 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 					ci: fc.constantFrom(undefined, "1"),
 					trigger: fc.constantFrom(
 						"pnpm-lock.yaml",
-						".agents/skills/tests/SKILL.md",
 						"fixtures/toy/input.txt",
 						".github/workflows/check.yaml",
 					),
@@ -538,9 +552,16 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 							expect(got.setupFiles).toContain("./scripts/vitest.setup.ts");
 							expect(got.sequencer).toBe(true);
 							expect(got.sharedTimeouts).toEqual([60_000, 60_000]);
-							expect(
-								got.forceRerunTriggers.some((glob: string) => matchesGlob(trigger, glob)),
-							).toBe(true);
+							// T375: Stryker keeps the remaining triggers and skill non-triggers.
+							for (const [path, forced] of [
+								[trigger, true],
+								[".agents/skills/tests/SKILL.md", false],
+								[".claude/skills/tests/SKILL.md", false],
+							] as const)
+								expect(
+									got.forceRerunTriggers.some((glob: string) => matchesGlob(path, glob)),
+									path,
+								).toBe(forced);
 							if (mutation) {
 								expect(got.workers).toBe(1);
 								expect(got.include).toEqual(paths);

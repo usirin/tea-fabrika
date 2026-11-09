@@ -1,3 +1,6 @@
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./botpush.mjs?raw";
+import "./leakgrep.sh?raw";
 import {spawnSync} from "node:child_process";
 import {cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";

@@ -1,4 +1,5 @@
 import "./skillscheck.sh?raw";
+import "./leakgrep.sh?raw";
 import "./loosening.sh?raw";
 import "./box.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.

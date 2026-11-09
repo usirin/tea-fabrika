@@ -1,4 +1,5 @@
 import "./box.sh?raw";
+import "./leakgrep.sh?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 import "./env.sh?raw";

@@ -1,4 +1,5 @@
 import "./catchup.sh?raw";
+import "./leakgrep.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./botpush.mjs?raw";
 import "./env.sh?raw";
