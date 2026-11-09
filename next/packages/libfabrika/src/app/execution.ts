@@ -19,6 +19,12 @@ const Outcome = Schema.TaggedUnion({
 });
 const Typed = Schema.Struct({type: Schema.String});
 
+/** A checked reply failure crosses RPC as data; a rejected call remains an RPC failure. */
+export const Reply = Schema.TaggedUnion({
+	ok: {value: Schema.Json},
+	ProgramDown: {why: ProgramDown.fields.why},
+});
+
 export const Declaration = Schema.Struct({
 	name: Schema.String,
 	v: Schema.Int,
@@ -160,7 +166,13 @@ export const workerExecution = (rpc: ExecutionCalls): Execution => {
 			ask(Upgraded, () => rpc.upgrade(saved), "saved_state"),
 		),
 		reply: Effect.fn("execution.reply")((cmd, outcome) =>
-			ask(Schema.Json, () => rpc.reply(cmd, outcome), "step"),
+			ask(Reply, () => rpc.reply(cmd, outcome), "step").pipe(
+				Effect.flatMap((answer) =>
+					answer._tag === "ok"
+						? Effect.succeed(answer.value)
+						: Effect.fail(new ProgramDown({why: answer.why})),
+				),
+			),
 		),
 		// On a Workers RPC stub, `method.call(rpc, ...)` is a remote call to a method named "call"
 		// that sends the stub itself as an argument, and a Worker Loader stub cannot be sent.
