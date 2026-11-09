@@ -1,7 +1,6 @@
 // The one-file build (Tier 1, P12 and P16): every selected program as a sealed Worker Loader module,
 // every window script, chunk and stylesheet, and the brain that carries them all as text. Nothing
 // is published until every bundle and the Compiler check pass; a failure keeps the last good file.
-import {readFileSync} from "node:fs";
 import {basename, dirname, isAbsolute, relative, resolve} from "node:path";
 import {Effect, Exit, FileSystem, Option, Schema} from "effect";
 import type {OutputAsset, OutputChunk, Plugin} from "rolldown";
@@ -15,6 +14,7 @@ import {
 } from "./app/built.ts";
 import {check, compile, Row} from "./compiler.ts";
 import {bundle, bundlePrograms} from "./node/build.ts";
+import {inlineStylesheet} from "./node/css.ts";
 
 export {BuildError} from "./app/built.ts";
 
@@ -107,37 +107,13 @@ const collect = Effect.fn("build.collect")(function* (
 	return assets;
 });
 
-// A stylesheet a window imports becomes one asset of its own, its `@import`s inlined in order, so
-// every rule it needs is in the table and the script keeps no trace of it. Any other relative
-// `url()` would need a file the table cannot carry, so it stops the build rather than 404 later.
-// Rolldown calls this hook outside Effect, so it reads files directly; a throw fails the bundle.
-const IMPORT = /@import\s+(?:url\(\s*(["']?)([^"')\s]+)\1\s*\)|(["'])([^"']+)\3)\s*([^;]*);/g;
-const URL_REF = /url\(\s*(["']?)([^"')\s]+)\1\s*\)/g;
-const remote = (ref: string) => /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(ref);
-const inlineCss = (file: string, seen: ReadonlySet<string>): string => {
-	if (seen.has(file)) throw new Error("stylesheet imports itself");
-	const within = new Set([...seen, file]);
-	return readFileSync(file, "utf8").replace(
-		IMPORT,
-		(rule, _q, url: string | undefined, _q2, quoted: string | undefined, media: string) => {
-			const ref = url ?? quoted ?? "";
-			if (remote(ref)) return rule;
-			const body = inlineCss(resolve(dirname(file), ref), within);
-			const condition = media.trim();
-			if (condition === "") return body;
-			if (/^(?:layer|supports)\b/.test(condition)) throw new Error("unsupported @import condition");
-			return `@media ${condition} {\n${body}\n}`;
-		},
-	);
-};
+// A stylesheet a window imports becomes one asset of its own, its local `@import`s inlined in
+// order (`node/css.ts`), so every rule it needs is in the table and the script keeps no trace of it.
 const stylesheets: Plugin = {
 	name: "fabrika-css",
 	load(id) {
 		if (!id.endsWith(".css")) return;
-		const source = inlineCss(id, new Set());
-		for (const [, , ref] of source.replace(IMPORT, "").matchAll(URL_REF))
-			if (ref !== undefined && !remote(ref)) throw new Error("stylesheet references a file");
-		this.emitFile({type: "asset", name: basename(id), source});
+		this.emitFile({type: "asset", name: basename(id), source: inlineStylesheet(id)});
 		return {code: "", moduleType: "js"};
 	},
 };
@@ -213,10 +189,12 @@ const publish = Effect.fn("build.emit")(function* (
 			yield* fs.remove(out, {recursive: true, force: true});
 			yield* fs.rename(backup, out);
 		}).pipe(Effect.ignore);
+		// Each disk step, once asked for, runs to its end: an interruption waits for it, so cleanup
+		// and restore never race a write or a rename the disk is still doing.
 		yield* Effect.gen(function* () {
-			yield* fs.writeFileString(resolve(pending, "brain.mjs"), brain);
-			if (yield* fs.exists(out)) yield* fs.rename(out, backup);
-			yield* fs.rename(pending, out);
+			yield* Effect.uninterruptible(fs.writeFileString(resolve(pending, "brain.mjs"), brain));
+			if (yield* fs.exists(out)) yield* Effect.uninterruptible(fs.rename(out, backup));
+			yield* Effect.uninterruptible(fs.rename(pending, out));
 		}).pipe(
 			Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : restore)),
 			Effect.ensuring(
