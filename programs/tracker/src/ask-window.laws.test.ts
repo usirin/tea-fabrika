@@ -1,5 +1,5 @@
 import {isDeepStrictEqual} from "node:util";
-import {defineMachine, type Machine as TeaMachine} from "@demlik/tea";
+import {defineMachine, type Machine as TeaMachine, type Reducer} from "@demlik/tea";
 import {
 	arbConstantMsg,
 	arbMsg,
@@ -774,9 +774,7 @@ describe("the shared ask editor's laws (askMachine)", () => {
 // ---------------------------------------------------------------- the window's private machines
 
 type PureMachine<S, M extends {type: string}> = TeaMachine<S, M, never, never, undefined> & {
-	readonly update: {
-		[K in M["type"]]: (model: S, msg: Extract<M, {type: K}>) => [S, readonly never[]];
-	};
+	readonly update: Reducer<S, M, never>;
 };
 type AttentionView = {focused: boolean; active: boolean; visible: boolean; evidence: boolean};
 type Attention = {
@@ -800,10 +798,18 @@ type Said = {said: {text: string; count: number} | null};
 type StatusMsg = {type: "say"; text: string};
 type StatusMachine = PureMachine<Said, StatusMsg>;
 
-const made = vi.mocked(defineMachine).mock.results.filter((r) => r.type === "return");
-const attentionMachine = made.find((r) => "change" in r.value.update && "saved" in r.value.update)
-	?.value as AttentionMachine;
-const statusMachine = made.find((r) => "say" in r.value.update)?.value as StatusMachine;
+// Specialize the generic constructor before reading the machines captured by the mock.
+const capturedMachine = <S, M extends {type: string}>(
+	...cells: M["type"][]
+): TeaMachine<S, M, never, never, undefined> => {
+	const result = vi
+		.mocked(defineMachine<S, M, never, never, undefined>)
+		.mock.results.find((r) => r.type === "return" && cells.every((cell) => cell in r.value.update));
+	if (result?.type !== "return") throw new Error(`No captured machine handles ${cells.join(", ")}`);
+	return result.value;
+};
+const attentionMachine = capturedMachine<AttentionModel, AttentionMsg>("change", "saved");
+const statusMachine = capturedMachine<Said, StatusMsg>("say");
 
 const attentionFields = {
 	key: fc.constantFrom("117/a", "118/b"),
@@ -1015,30 +1021,28 @@ const latestWords = everyStatus(
 	(step) => step.next.said?.text === step.msg.text || "the latest words changed",
 );
 const STATUS_LAWS = [freshAnnouncement, latestWords];
+const statusPlant = (update: StatusMachine["update"]): StatusMachine => ({
+	...statusMachine,
+	update,
+});
 const STATUS_PLANTS = [
 	{
 		law: freshAnnouncement,
 		reason: "an announcement did not advance",
-		machine: {
-			...statusMachine,
-			update: {
-				say: (model, msg) =>
-					model.said?.text === msg.text ? [model, []] : statusMachine.update.say(model, msg),
-			},
-		} satisfies StatusMachine,
+		machine: statusPlant({
+			say: (model, msg) =>
+				model.said?.text === msg.text ? [model, []] : statusMachine.update.say(model, msg),
+		}),
 	},
 	{
 		law: latestWords,
 		reason: "the latest words changed",
-		machine: {
-			...statusMachine,
-			update: {
-				say: (model, msg) => {
-					const [next, cmds] = statusMachine.update.say(model, msg);
-					return [{said: {...next.said!, text: `${msg.text} changed`}}, cmds];
-				},
+		machine: statusPlant({
+			say: (model, msg) => {
+				const [next, cmds] = statusMachine.update.say(model, msg);
+				return [{said: {...next.said!, text: `${msg.text} changed`}}, cmds];
 			},
-		} satisfies StatusMachine,
+		}),
 	},
 ];
 
