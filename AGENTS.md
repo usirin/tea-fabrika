@@ -409,7 +409,7 @@ brief carries these caps. Each one came from a laptop that became unusable.
   once, not the agent count, is what froze it before. Raised to 8 on 2026-11-08 (owner): Codex
   step runs are light on the laptop. Still one type check at a time. If it feels slow, drop back
   to 5. Raised to 12 on 2026-11-09 (owner,
-  [0011](./.decisions/0011-twelve-agents-at-once.md)): most lane agents wait on Codex steps, and
+  [0012](./.decisions/0012-twelve-agents-at-once.md)): most lane agents wait on Codex steps, and
   two type checks at once, not the agent count, is what froze it. If it feels slow, drop back to 8.
 - Never run the sandbox runtime or a shimmed tool with `env -i` or `HOME` unset while a
   version-manager shim is on `PATH`: one run made about 7,000 processes. Set `ulimit -u`

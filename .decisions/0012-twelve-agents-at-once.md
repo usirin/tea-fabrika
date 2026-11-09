@@ -1,12 +1,12 @@
 ---
-id: 0011
+id: 0012
 title: At most 12 code agents run at once, still with one type check, one Electron app and one Docker box
 status: accepted
 date: 2026-11-09
 tags: [machine, load, agents, laptop]
 ---
 
-# 0011: At most 12 code agents run at once, still with one type check, one Electron app and one Docker box
+# 0012: At most 12 code agents run at once, still with one type check, one Electron app and one Docker box
 
 **What this decides:** the cap on code agents running at once on the laptop goes from 8 to 12, and
 the other caps stay as they are.
