@@ -355,7 +355,7 @@ patchedDependencies:
   '@demlik/tea@0.25.0': a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3
   '@manti-ui/react@0.13.0': 520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef
   alchemy@2.0.0-beta.84: 8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a
-  ghostty-web@0.4.0: 28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54
+  ghostty-web@0.4.0: fd84aaefe600dfc4e0b0d88df1f41075be93ef746c677c13c7560c8824a97f21
 
 importers:
 
@@ -560,7 +560,7 @@ importers:
         version: 4.1.2
       ghostty-web:
         specifier: 'catalog:'
-        version: 0.4.0(patch_hash=28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54)
+        version: 0.4.0(patch_hash=fd84aaefe600dfc4e0b0d88df1f41075be93ef746c677c13c7560c8824a97f21)
       react:
         specifier: 'catalog:'
         version: 19.3.1
@@ -671,7 +671,7 @@ importers:
         version: 6.0.0
       ghostty-web:
         specifier: 'catalog:'
-        version: 0.4.0(patch_hash=28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54)
+        version: 0.4.0(patch_hash=fd84aaefe600dfc4e0b0d88df1f41075be93ef746c677c13c7560c8824a97f21)
       restty:
         specifier: 'catalog:'
         version: 0.3.0
@@ -9488,7 +9488,7 @@ snapshots:
       '@sec-ant/readable-stream': 0.4.1
       is-stream: 4.0.1
 
-  ghostty-web@0.4.0(patch_hash=28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54): {}
+  ghostty-web@0.4.0(patch_hash=fd84aaefe600dfc4e0b0d88df1f41075be93ef746c677c13c7560c8824a97f21): {}
 
   gopd@1.2.0: {}
 
