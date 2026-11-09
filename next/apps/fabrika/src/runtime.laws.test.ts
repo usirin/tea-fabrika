@@ -13,13 +13,17 @@ import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {Attached} from "@kampus/libfabrika/transport";
 import {GatewayService, gatewayRuntime} from "@kampus/libfabrika/workers/gateway";
 import {ProjectService, bucketCalls} from "@kampus/libfabrika/workers/runtime";
-import {Deferred, Effect, Exit, Option, Tracer} from "effect";
+import {Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Tracer} from "effect";
 import * as fc from "fast-check";
 import {afterEach, describe, expect, it, vi} from "vitest";
 import {projectRuntime, settings, type Env} from "./runtime.ts";
 
 const table = vi.hoisted(() => ({programs: {} as Record<string, {hash: string; source: string}>}));
 vi.mock("./table.ts", () => table);
+vi.mock("effect", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("effect")>();
+	return {...actual, ManagedRuntime: {...actual.ManagedRuntime}};
+});
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SENT = "2026-11-08T04:00:00.000Z";
@@ -195,18 +199,28 @@ const world = async (trace = TRACE, build = "counter-b") => {
 			}),
 		},
 	} as unknown as Env;
-	let runtime = projectRuntime(ctx, env);
+	const span = Tracer.externalSpan({traceId: trace, spanId: "00f067aa0ba902b7"});
+	const make = ManagedRuntime.make;
+	// ManagedRuntime builds its layer before the requested Effect runs, in a separate fiber.
+	// Put the caller's span on that real layer so it is current during bootstrap.
+	const startup = vi
+		.spyOn(ManagedRuntime, "make")
+		.mockImplementationOnce((layer, options) =>
+			make(layer.pipe(Layer.withParentSpan(span)), options),
+		);
+	let runtime: ReturnType<typeof projectRuntime>;
+	try {
+		runtime = projectRuntime(ctx, env);
+	} finally {
+		startup.mockRestore();
+	}
 	const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
 	closers.push(async () => {
 		await runtime.dispose();
 		db.close();
 		rmSync(home, {recursive: true, force: true});
 	});
-	const p = await run(
-		ProjectService.pipe(
-			Effect.withParentSpan(Tracer.externalSpan({traceId: trace, spanId: "00f067aa0ba902b7"})),
-		),
-	);
+	const p = await run(ProjectService);
 	const from: From = {
 		by: key.fingerprint,
 		for: PERSON,
@@ -241,6 +255,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
 	return {
 		p,
 		run,
+		span,
 		key,
 		env,
 		db,
@@ -294,7 +309,7 @@ describe("P12 Project authority", () => {
 	law("the bootstrap entry keeps the caller's span trace", async ({trace}) => {
 		const w = await world(trace);
 		const [row] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
-		expect(row).toMatchObject({traceId: trace, rev: w.p.boot.rev});
+		expect(row).toMatchObject({traceId: w.span.traceId, rev: w.p.boot.rev});
 	});
 	law("a brain lifecycle entry keeps the caller's span trace", async ({trace, write}) => {
 		const w = await world();
@@ -307,7 +322,8 @@ describe("P12 Project authority", () => {
 				),
 		);
 		const [row] = await w.run(w.p.read("door/brain", 0, "audit"));
-		expect(row).toMatchObject({traceId: trace, id: write, body: fact});
+		const {_tag, ...body} = fact;
+		expect(row).toMatchObject({traceId: trace, id: write, _tag, body});
 	});
 	law(
 		"reopening an exited bootstrap reads its first placing without starting it again",
