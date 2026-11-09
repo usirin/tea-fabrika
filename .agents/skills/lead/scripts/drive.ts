@@ -56,7 +56,7 @@ import {run} from "@demlik/tea/effect";
 import {act, gather, intentOf, listen} from "@kampus/pipeline/primitives";
 import {nameOf, outcomesOf} from "@kampus/pipeline/stages/outcome";
 import {Effect, Schema, Stream} from "effect";
-import {checkHolds, startHead, stepOf, wipOf} from "./lane.ts";
+import {checkHolds, laneRoot, startHead, stepOf, wipOf} from "./lane.ts";
 
 const HERE = import.meta.dirname;
 const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -1162,12 +1162,13 @@ const main = () => {
 		console.error(`drive.ts: ${from} is not a commit in the main checkout`);
 		process.exit(2);
 	}
-	// The lane's root, kept from its first step: where its base left main. A saved root the base
-	// does not hold came from a step that started off the lane, so it is found again.
-	const root =
-		saved?.root && isAncestor(saved.root, base)
-			? saved.root
-			: sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim();
+	// The lane's root: where its base left main, moved up past a caught-up main (lane.ts).
+	const root = laneRoot(
+		saved?.root,
+		sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim(),
+		base,
+		isAncestor,
+	);
 	if (!root) {
 		console.error(`drive.ts: ${base.slice(0, 8)} shares no history with origin/main`);
 		process.exit(2);
