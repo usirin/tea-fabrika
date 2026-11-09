@@ -43,6 +43,7 @@ import {
 	RuntimeRecord,
 	RunnerMail,
 	SessionManager,
+	sha256,
 	SigningRefused,
 	SignRequest,
 	type SinkError,
@@ -50,7 +51,6 @@ import {
 	type Writer,
 } from "../coordination/index.ts";
 import {Failure, Policy, Recovery, type Supervision} from "../coordination/recovery.ts";
-import {sha256} from "../data/archive.ts";
 import {
 	Alarm,
 	CheckedWriter,
