@@ -76,7 +76,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 
 | Script | What it does |
 |---|---|
-| `box.sh new <name> <base> <branch> --ticket <n> --plan <path>` | check the start and save its facts, then clone and install |
+| `box.sh new <name> <base> <branch> --ticket <n> --plan <path> [--root <sha>]` | check the start and save its facts (the lane root that build order and the commits check read from), then clone and install |
 | `box.sh run <name> <prompt> <out> --step <step>` | run Codex, save redacted output and the run row |
 | `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
 | `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first; drive runs it at start |
