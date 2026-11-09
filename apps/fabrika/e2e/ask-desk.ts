@@ -83,29 +83,29 @@ const finishAnimations = (locator: Locator) =>
 		await Promise.all(element.getAnimations().map((animation) => animation.finished));
 	});
 /**
- * Puts the window on the primary display's work area with its page `want` big, or as much of it as
- * the work area holds, and waits until the page is that wide. The window opens on whichever display
- * the system picks, and a second display can leave it narrower than main.ts asks (784 wide on a
- * desktop of two), so no layout trusts the size it opened at.
+ * Takes the window off the screen for good: a hidden window is one no window manager (yabai, a
+ * tiling one) can move or size. The quiet launch (FABRIKA_HOME, launch.ts) draws it hidden and
+ * keeps its page awake (`paintWhenInitiallyHidden`, no background throttling), so it still lays
+ * out, runs its frames and takes Playwright's screenshots. It shows for a moment at launch, before
+ * this runs; nothing here changes the app, only this test's window.
  */
+const hide = (app: ElectronApplication) =>
+	app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0]?.hide());
+/** Sizes the hidden window's page to exactly `want`, whatever the displays, and waits for it. */
 const sizeTo = async (
 	app: ElectronApplication,
 	page: Page,
 	want: {readonly width: number; readonly height: number},
 ) => {
-	const got = await app.evaluate(({BrowserWindow, screen}, want) => {
-		const area = screen.getPrimaryDisplay().workArea;
-		const size = {
-			width: Math.min(want.width, area.width),
-			height: Math.min(want.height, area.height),
-		};
-		BrowserWindow.getAllWindows()[0]?.setContentBounds({x: area.x, y: area.y, ...size});
-		return size;
-	}, want);
+	await app.evaluate(
+		({BrowserWindow}, want) =>
+			BrowserWindow.getAllWindows()[0]?.setContentSize(want.width, want.height),
+		want,
+	);
 	await until(
-		`the window's page is ${got.width} wide on the primary display`,
-		() => page.evaluate(() => window.innerWidth),
-		(width) => width === got.width,
+		`the hidden window's page is ${want.width} by ${want.height}`,
+		() => page.evaluate(() => ({width: window.innerWidth, height: window.innerHeight})),
+		(size) => size.width === want.width && size.height === want.height,
 	);
 };
 const seal: (draft: unknown, policy: {seed: number}) => Effect.Effect<Sealed, unknown> = sealAsk;
@@ -245,7 +245,8 @@ export const askDesk = async (tools: Tools) => {
 	try {
 		const page = await app.firstWindow();
 		watched = page;
-		// The size main.ts asks for, on the primary display, whatever display the window opened on.
+		await hide(app);
+		// The size main.ts asks for.
 		await sizeTo(app, page, {width: 1200, height: 760});
 		failShots = soft ? join(tools.shots, "ask-desk-failed") : null;
 		if (failShots !== null) await mkdir(failShots, {recursive: true});
@@ -491,7 +492,7 @@ export const askDesk = async (tools: Tools) => {
 						: layout === "stacked"
 							? ["t1", "t4"]
 							: ["t1", "t4", "t2", "t5"];
-			// Unfold at one known size, the big one, so a strip's tile gets its room on any display.
+			// Unfold at one known size, the big one, so a strip's tile gets its room.
 			await sizeTo(app, page, {width: 1440, height: 1000});
 			// Open every strip first: a column whose tiles all folded is one strip named by the
 			// column, not by a tile, so a tile's own strip may not exist.
@@ -511,7 +512,6 @@ export const askDesk = async (tools: Tools) => {
 			await tools.focusOn(page, "t1");
 			const size = layout === "small" ? {width: 1024, height: 700} : {width: 1440, height: 1000};
 			for (const look of ["dark", "light"] as const) {
-				// Again before each look's shots: a tiling window manager (yabai) may have moved it.
 				await sizeTo(app, page, size);
 				await tools.lookIs(app, page, look);
 				await shot(page, "blind", layout, look);
