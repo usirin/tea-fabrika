@@ -910,7 +910,7 @@ describe("T321 K2 box start, today's tooling", () => {
 			}),
 			options,
 		);
-	});
+	}, 180_000); // about 51 s alone on CI, over 60 s on a busy shard (#598); same cases
 
 	// Plant: drop --root, save the base as the root, or accept a root the base does not hold.
 	it("K2 saves the lane's root only when the base holds it", () => {
