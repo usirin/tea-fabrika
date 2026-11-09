@@ -164,9 +164,19 @@ export const leaks = (secret: string, value: unknown, seen = new WeakSet<object>
 	if (value !== null && typeof value === "object") {
 		if (seen.has(value)) return false;
 		seen.add(value);
+		if (value instanceof Uint8Array) return leaks(secret, new TextDecoder().decode(value), seen);
+		if (value instanceof ArrayBuffer) return leaks(secret, new TextDecoder().decode(value), seen);
 		if (value instanceof Error)
 			return leaks(secret, [value.message, value.stack, value.cause, {...value}], seen);
-		if (Array.isArray(value)) return value.some((part) => leaks(secret, part, seen));
+		if (Array.isArray(value)) {
+			const bytes = value.every(
+				(part) => typeof part === "number" && Number.isInteger(part) && part >= 0 && part <= 255,
+			);
+			return (
+				(bytes && leaks(secret, new TextDecoder().decode(Uint8Array.from(value)), seen)) ||
+				value.some((part) => leaks(secret, part, seen))
+			);
+		}
 		return Object.entries(value).some(
 			([key, part]) => leaks(secret, key, seen) || leaks(secret, part, seen),
 		);

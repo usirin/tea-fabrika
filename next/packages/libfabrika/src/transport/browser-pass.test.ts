@@ -91,7 +91,13 @@ describe("P23 shared pass codec", () => {
 				"attachment",
 				"capture",
 			])
-				for (const form of secretForms(raw)) {
+				for (const form of [
+					...secretForms(raw),
+					Buffer.from(raw),
+					new TextEncoder().encode(raw),
+					[...Buffer.from(raw)],
+					Buffer.from(raw).toJSON(),
+				]) {
 					expect(() => expect(leaks(raw, {[destination]: form})).toBe(false)).toThrow();
 				}
 			expect(leaks(raw, {why: "open", secret: Redacted.make(raw)})).toBe(false);

@@ -2,7 +2,18 @@
 import {createHash} from "node:crypto";
 import {run} from "@demlik/tea/effect";
 import {describe, expect, it, vi} from "@effect/vitest";
-import {Context, Duration, Effect, Exit, Fiber, Layer, Redacted, Schema, Scope} from "effect";
+import {
+	Context,
+	Deferred,
+	Duration,
+	Effect,
+	Exit,
+	Fiber,
+	Layer,
+	Redacted,
+	Schema,
+	Scope,
+} from "effect";
 import {TestClock} from "effect/testing";
 import {
 	browserLinkFixture,
@@ -191,8 +202,8 @@ describe("P23 native browser link", () => {
 	);
 	it.effect.prop(
 		"interrupted native dispatch removes both held bytes and installed menu authority",
-		{bytes: Bytes32, at: SafeTime},
-		({bytes, at}) =>
+		{bytes: Bytes32, at: SafeTime, phase: Schema.Literals(["dispatch", "handler", "external"])},
+		({bytes, at, phase}) =>
 			Effect.gen(function* () {
 				const {BrowserLink, openBrowserLink} = yield* load();
 				const {menuMachine} = yield* loadMenu();
@@ -200,10 +211,16 @@ describe("P23 native browser link", () => {
 				yield* TestClock.setTime(at);
 				yield* Effect.gen(function* () {
 					const link = yield* BrowserLink;
+					const entered = yield* Deferred.make<void>();
+					const release = yield* Deferred.make<void>();
+					const pause = Deferred.succeed(entered, undefined).pipe(
+						Effect.andThen(Deferred.await(release)),
+					);
 					const handle = yield* run(menuMachine, {
 						interpret: {
 							menu_open: (cmd: Extract<import("./menu.ts").MenuCmd, {type: "menu_open"}>) =>
-								link.open(cmd.id).pipe(
+								(phase === "handler" ? pause : Effect.void).pipe(
+									Effect.andThen(link.open(cmd.id)),
 									Effect.as(null),
 									Effect.mapError(() => ({_tag: "open"})),
 								),
@@ -217,16 +234,47 @@ describe("P23 native browser link", () => {
 					});
 					const runtime = yield* handle.ready;
 					yield* runtime.dispatch({type: "connected", context});
-					const pending = yield* Effect.forkChild(openBrowserLink(runtime));
-					yield* fixture.entered;
-					const issued = runtime.getState().passes;
+					const issued: Array<import("./menu.ts").MenuMsg & {type: "open_browser"}> = [];
+					const observed = {
+						...link,
+						prepare: link.prepare.pipe(
+							Effect.tap((prepared) =>
+								Effect.sync(() => {
+									issued.push({type: "open_browser", pass: prepared.pass, at: prepared.at});
+								}),
+							),
+						),
+					};
+					const delayed = {
+						...runtime,
+						dispatch: (
+							msg: import("./menu.ts").MenuMsg,
+							options?: Parameters<typeof runtime.dispatch>[1],
+						) =>
+							(phase === "dispatch" && msg.type === "open_browser" ? pause : Effect.void).pipe(
+								Effect.andThen(runtime.dispatch(msg, options)),
+							),
+						dispatchOnce: (msg: import("./menu.ts").MenuMsg) =>
+							(phase === "dispatch" && msg.type === "open_browser" ? pause : Effect.void).pipe(
+								Effect.andThen(runtime.dispatchOnce(msg)),
+							),
+					};
+					const pending = yield* Effect.forkChild(
+						openBrowserLink(delayed).pipe(Effect.provideService(BrowserLink, observed)),
+					);
+					yield* phase === "external" ? fixture.entered : Deferred.await(entered);
 					expect(issued).toHaveLength(1);
+					expect(runtime.getState().passes).toHaveLength(phase === "dispatch" ? 0 : 1);
 					yield* Fiber.interrupt(pending);
+					yield* Deferred.succeed(release, undefined);
 					yield* fixture.release;
 					yield* runtime.idle();
 					expect(runtime.getState().passes).toEqual([]);
-					for (const pass of issued)
-						expect(yield* Effect.result(link.open(pass.id))).toHaveProperty("_tag", "Failure");
+					for (const message of issued)
+						expect(yield* Effect.result(link.open(message.pass.id))).toHaveProperty(
+							"_tag",
+							"Failure",
+						);
 				}).pipe(Effect.provide(fixture.layer));
 			}),
 		checks,
