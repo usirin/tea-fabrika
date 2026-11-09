@@ -12,7 +12,8 @@ shape 3's reading. That is the owner's call, on the files.
 an event; an input is plain data and names no events; each event brings its own write Cmd
 (`answered.write`), which the machine lists in `cmds` and calls in `update`, and from which
 `Program.make` reads the events; and the two answers per event write (eight cells for the ticket)
-are accepted for now as a tea problem. The probe below shows the changes type cleanly. The decided
+are accepted for now as a tea problem; and the event knows its stream, so a write stays
+`answered.write(msg, Answered.make(msg))`. The probe below shows the changes type cleanly. The decided
 note is [a program's shape](../docs/direction/program-shape.md). The shape 2 files now hold the
 decided shape; the judgment table keeps shape 2 as it was proposed.
 
@@ -20,18 +21,42 @@ This is reading, not a measurement. One script checks that all three shapes step
 file checks which mistakes compile. `next/` only.
 
 ```ts
-// The whole difference, for one input, `answer` (a person only).
+// The whole difference, for one input, `answer` (a person only), as
+// proposed before the pick.
 // Shape 1, today: four places, linked by matching strings.
-Schema.Struct({type: Schema.Literal("answer"), parent, ...Answer.fields})       // in Msg
-answer: (m, msg) => [{...m, saving: m.saving + 1}, [caused(msg, Answered.make(...))]] // in update
-answer: {description: "...", personOnly: true}                                  // in inputs
-answered: {schema: Answered, personOnly: true}                                   // in writes
+// in Msg:
+Schema.Struct({type: Schema.Literal("answer"), parent, ...Answer.fields})
+// in update:
+answer: (m, msg) => [
+	{...m, saving: m.saving + 1},
+	[caused(msg, Answered.make(...))],
+]
+// in inputs:
+answer: {description: "...", personOnly: true}
+// in writes:
+answered: {schema: Answered, personOnly: true}
 // Shape 2, values: one value, used by reference.
-const answer = Input.make("answer", {fields: Answer.fields, description: "...", who: "person", causes: [answered]});
-answer: (m, msg) => [{...m, saving: m.saving + 1}, [answer.write(msg, stream(msg.ticket), Answered.make(...))]]
+const answer = Input.make("answer", {
+	fields: Answer.fields,
+	description: "...",
+	who: "person",
+	causes: [answered],
+});
+answer: (m, msg) => [
+	{...m, saving: m.saving + 1},
+	[answer.write(msg, stream(msg.ticket), Answered.make(...))],
+]
 // Shape 3, records: one block.
-answer: input({fields: Answer.fields, description: "...", who: "person", refuse: notShown,
-	update: (m, msg, write) => ({model: {...m, saving: m.saving + 1}, cmds: [write(stream(msg.ticket), Answered.make(...))]})}),
+answer: input({
+	fields: Answer.fields,
+	description: "...",
+	who: "person",
+	refuse: notShown,
+	update: (m, msg, write) => ({
+		model: {...m, saving: m.saving + 1},
+		cmds: [write(stream(msg.ticket), Answered.make(...))],
+	}),
+}),
 ```
 
 ## The files
@@ -176,10 +201,11 @@ answered.write(answerMsg, anAnswer); // compiles
   A brand stops a mistake, not a forger, and the signer refuses it at run time (`person_only`).
   Review 3 found that the first version of this call crashed instead; it now reaches the signer.
 
-The write's call takes `(msg, event)` and no stream, as the owner's sketch does. So an event says
-its stream once, `Event.make(Answered, {stream, ...})`. That is one call beyond the owner's five,
-named in the decided note for the owner to confirm; the other way is a third argument. Each event's write Cmd is named by the
-event's `_tag`, so the stepper sees `{type: "answered", stream, write}`. The merged runner performs
+The write's call takes `(msg, event)` and no stream, as the owner's sketch does. An event says
+its stream once, `Event.make(Answered, {personOnly: true, stream: onTicket})`, and the owner
+decided it that way on 2026-11-08: one place picks the stream, so two writes cannot send one event
+kind to two streams. The doubt stays: an event kind that needs several streams would favor a third
+argument. Each event's write Cmd is named by the event's `_tag`, so the stepper sees `{type: "answered", stream, write}`. The merged runner performs
 only `{type: "write"}`; the runner reading event writes off `cmds` is the build ticket. The script
 maps shape 2's event writes to `write` before it compares, and folds `commented_err` where the
 others fold `write_err`. With that, all 8 steps, the ports and the event policies still match.

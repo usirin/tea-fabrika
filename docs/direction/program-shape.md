@@ -1,8 +1,12 @@
 # A program's shape: one thing means one thing, and one way to do each job
 
 **Decided 2026-11-08** (owner, after a walk of each part). `next/` only. From
-[experiment 235](../../experiments/235-program-shape.md). It picks shape 2, values, with five
-changes, all probed in the experiment's code.
+[experiment 235](../../experiments/235-program-shape.md). Every call, each probed in the
+experiment's code: shape 2, values; `Fact` becomes `Event`; `who: "person"` becomes
+`personOnly: true`; an input is plain data; each event brings its own write Cmd, listed in `cmds`;
+tsc lets only a `personOnly` input's Msg into a `personOnly` event's write (the `Schema.brand`
+probe); the two copied answers per write (`_ok`, `_err`) are accepted as a tea problem for now;
+and the event knows its stream.
 
 **The rule (owner, 2026-11-08).** In a program's API, one word means one thing only, and there is
 only one way to do each job. A shape that offers two ways (a string or an object for an input,
@@ -15,8 +19,8 @@ use is left out, and a part that is written holds something.
 ```ts
 // A sketch of the ticket's person-only path; experiment 235 has it whole.
 const answered = Event.make(Answered, {
-	stream: (e) => `ticket/${e.ticket}`,
 	personOnly: true, // only `true`; left out, anyone
+	stream: (e) => ticketStream(e.ticket), // one place picks it
 });
 const answer = Input.make("answer", {
 	fields: Answer.fields, // plain data: no events on an input
@@ -32,7 +36,7 @@ export const ticketMachine = Machine.make({
 	init: (loaded) => [loaded ?? start, []],
 	update: {
 		// tsc lets only a person-only input's Msg in here
-		answer: (m, msg) => [m, [answered.write(msg, toAnswered(msg))]],
+		answer: (m, msg) => [m, [answered.write(msg, Answered.make(msg))]],
 		answered_ok: saved, // two answers per event write, from tea
 		answered_err: failed,
 		// ...
@@ -51,7 +55,7 @@ export const ticket = Program.make({
 
 ## What was picked
 
-Shape 2, values, with five changes (owner, 2026-11-08):
+Shape 2, values, with six changes (owner, 2026-11-08):
 
 1. **`Fact` becomes `Event`.** The industry's word, as in event sourcing. The glossary row is
    renamed in the same pull request; older notes still say fact.
@@ -66,12 +70,19 @@ Shape 2, values, with five changes (owner, 2026-11-08):
    events list: `Program.make` reads the events off the machine's `cmds`.
 5. **Two answers per event write** (`answered_ok`, `answered_err`; eight for the ticket program)
    are accepted for now as a tea problem. Nobody works around them.
+6. **The event knows its stream.** `Event.make` takes it once, and a write stays two arguments:
 
-**One addition beyond the five, for the owner to confirm: `stream` on the event.** The owner's
-call form, `answered.write(msg, event)`, has two arguments, and a write needs a stream. So the
-probe has each event say where it goes, once (`stream: (e) => ...`), and no step writes it. The
-other way is a third argument, `answered.write(msg, stream, event)`, as the proposed shape had.
-The build ticket (302) builds the stream on the event unless the owner says otherwise.
+   ```ts
+   const answered = Event.make(Answered, {
+   	personOnly: true,
+   	stream: (e) => ticketStream(e.ticket),
+   });
+   answered.write(msg, Answered.make(msg)); // no stream here
+   ```
+
+   Why: one place picks the stream, so two writes cannot send one event kind to two different
+   streams. The doubt, kept: an event kind that has to go to several streams would favor a third
+   argument, `answered.write(msg, stream, event)`. None is known yet; the first one reopens this.
 
 **tea's one-argument call.** tea reads a Cmd's types off a one-argument call (`CmdOf`, `Settled`),
 so an event's write also has one, and it runs as the plain Cmd. It takes only a sealed write,
@@ -122,6 +133,7 @@ them today), and the Cmd list the runner reads at runtime. tea does not change.
 - **Each event's write Cmd is made by libfabrika.** No program names a write Cmd, its input or the
   runner's refusals.
 - **The events are the event writes in `cmds`.** No second list to keep in step.
+- **An event says its stream once,** in `Event.make`. A step never names a stream.
 - **An output is a value picked from the model and sent when it changes** (C8, "a source sends after
   each change"). tsc checks the value against the output's schema; `null` means nothing to send. It
   is never a Cmd, so "output" and "Cmd" keep one meaning each.
