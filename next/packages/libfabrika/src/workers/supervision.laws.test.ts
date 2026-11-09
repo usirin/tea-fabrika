@@ -229,7 +229,7 @@ const sequence = fc.record({
 });
 
 for (const source of ["rpc", "decode"] as const)
-	it(`supervised ${source} failures never change deliveries, receipt failures or dead facts`, async () => {
+	it(`supervised ${source} failures never change deliveries, receipt failures or dead events`, async () => {
 		await fc.assert(
 			fc.asyncProperty(sequence, (sample) =>
 				Effect.runPromise(

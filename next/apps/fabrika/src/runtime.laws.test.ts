@@ -6,7 +6,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import type {Descriptor, Incoming, Sent} from "@kampus/libfabrika";
-import {BrainFact} from "@kampus/libfabrika/brain-fact";
+import {BrainEvent} from "@kampus/libfabrika/brain-event";
 import {revokeText, SigningRefused, Start, type From} from "@kampus/libfabrika/coordination";
 import type {SpanRow} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
@@ -320,16 +320,16 @@ describe("P12 Project authority", () => {
 	});
 	law("a brain lifecycle entry keeps the caller's span trace", async ({trace, write}) => {
 		const w = await world();
-		const fact = BrainFact.cases.stopped.make({id: write, start: write, at: 1, why: "stop"});
+		const event = BrainEvent.cases.stopped.make({id: write, start: write, at: 1, reason: "stop"});
 		await w.run(
 			w.p
-				.brain(fact)
+				.brain(event)
 				.pipe(
 					Effect.withParentSpan(Tracer.externalSpan({traceId: trace, spanId: "00f067aa0ba902b7"})),
 				),
 		);
 		const [row] = await w.run(w.p.read("door/brain", 0, "audit"));
-		const {_tag, ...body} = fact;
+		const {_tag, ...body} = event;
 		expect(row).toMatchObject({traceId: trace, id: write, _tag, body});
 	});
 	law(
@@ -349,7 +349,7 @@ describe("P12 Project authority", () => {
 		},
 	);
 	law(
-		"a program's person-only facts require its own person-only input",
+		"a program's person-only events require its own person-only input",
 		async ({letter, write}) => {
 			const w = await world(),
 				pid = await w.start();
@@ -363,7 +363,7 @@ describe("P12 Project authority", () => {
 		},
 	);
 	law(
-		"a program's declared person-only input authorizes its person-only fact",
+		"a program's declared person-only input authorizes its person-only event",
 		async ({letter, write}) => {
 			const w = await world(),
 				pid = await w.start();
@@ -416,7 +416,7 @@ describe("P12 Project authority", () => {
 					pid = w.p.boot.process;
 				const stream =
 					operation === "own"
-						? "facts"
+						? "events"
 						: operation === "inbox"
 							? "counter:1/inbox"
 							: operation === "start"
@@ -443,7 +443,7 @@ describe("P12 Project authority", () => {
 					);
 					reentered = Option.isSome(answer);
 				});
-				if (operation === "own") await w.run(w.p.own(pid, write, "facts", {_tag: "noted"}));
+				if (operation === "own") await w.run(w.p.own(pid, write, "events", {_tag: "noted"}));
 				else if (operation === "start") await w.start();
 				else if (operation === "exit") await w.run(w.p.exit(pid, "normal", w.from));
 				else {
@@ -479,14 +479,14 @@ describe("P12 Project authority", () => {
 				pid = w.p.boot.process;
 			await w.run(
 				w.p
-					.own(pid, write, "facts", {_tag: "noted"})
+					.own(pid, write, "events", {_tag: "noted"})
 					.pipe(
 						Effect.withParentSpan(
 							Tracer.externalSpan({traceId: trace, spanId: "00f067aa0ba902b7"}),
 						),
 					),
 			);
-			const [row] = await w.run(w.p.read("facts", 0, "audit"));
+			const [row] = await w.run(w.p.read("events", 0, "audit"));
 			expect(row).toMatchObject(
 				field === "writer"
 					? {by: w.descriptors.get(pid)!.owner.key, for: PERSON, parent: null}
@@ -536,12 +536,12 @@ describe("P12 Project saved and wire readers", () => {
 			{seed: 119120, numRuns: 20, examples: [["{"], ["{}"], ["null"]]},
 		);
 	});
-	for (const reader of ["bootstrap", "own descriptor", "pending descriptor", "own fact"] as const)
+	for (const reader of ["bootstrap", "own descriptor", "pending descriptor", "own event"] as const)
 		it(`${reader} rejects malformed saved or wire values with LedgerError, never a defect`, async () => {
-			const fact = Schema.Struct({_tag: Schema.String});
+			const event = Schema.Struct({_tag: Schema.String});
 			const values =
-				reader === "own fact"
-					? fc.jsonValue().filter((value) => !Schema.is(fact)(value))
+				reader === "own event"
+					? fc.jsonValue().filter((value) => !Schema.is(event)(value))
 					: malformed;
 			await fc.assert(
 				fc.asyncProperty(values, async (raw) => {
@@ -549,14 +549,14 @@ describe("P12 Project saved and wire readers", () => {
 						const w = await world(),
 							pid = w.p.boot.process;
 						if (reader === "bootstrap") {
-							// An unrelated fact at the stable bootstrap ID passes the generic ledger schema.
+							// An unrelated event at the stable bootstrap ID passes the generic ledger schema.
 							// ProcessTable ignores its unknown tag; the bootstrap reader must check its body.
 							w.db
 								.prepare('UPDATE entries SET "_tag"=?, body=? WHERE stream=? AND id=?')
 								.run("noted", JSON.stringify({process: raw}), "processes/counter:1", "counter:1");
 							typed(await w.reopenExit());
-						} else if (reader === "own fact") {
-							typed(await w.run(Effect.exit(w.p.own(pid, "invalid-fact", "facts", raw))));
+						} else if (reader === "own event") {
+							typed(await w.run(Effect.exit(w.p.own(pid, "invalid-event", "events", raw))));
 						} else {
 							w.db
 								.prepare("UPDATE stage_descriptors SET value=?, pending=? WHERE process=?")
@@ -565,7 +565,7 @@ describe("P12 Project saved and wire readers", () => {
 								reader === "pending descriptor"
 									? await w.reopenExit()
 									: await w.run(
-											Effect.exit(w.p.own(pid, "invalid-descriptor", "facts", {_tag: "noted"})),
+											Effect.exit(w.p.own(pid, "invalid-descriptor", "events", {_tag: "noted"})),
 										);
 							typed(exit);
 						}
@@ -585,7 +585,7 @@ describe("P12 WebCrypto failures", () => {
 		fc.constant(new DOMException("digest refused", "OperationError")),
 	);
 	for (const edge of ["fingerprint", "archive checksum"] as const)
-		it(`${edge} refuses every thrown or rejected failure with why crypto`, async () => {
+		it(`${edge} refuses every thrown or rejected failure with reason crypto`, async () => {
 			await fc.assert(
 				fc.asyncProperty(failure, fc.boolean(), fc.uint8Array(), async (value, throws, body) => {
 					const w = edge === "fingerprint" ? await world() : null;
@@ -667,7 +667,7 @@ describe("P12 Gateway recording", () => {
 						before = w.recorded.length;
 					const action: Effect.Effect<unknown, unknown> =
 						operation === "ring"
-							? gateway.ring("facts", rev)
+							? gateway.ring("events", rev)
 							: operation === "probe"
 								? gateway.probe("session-test")
 								: operation === "close"

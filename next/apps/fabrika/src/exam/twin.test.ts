@@ -121,7 +121,7 @@ describe("P12 local twin lint", () => {
 				expect(findings.length).toBeGreaterThan(0);
 				expect(
 					findings.every((f) =>
-						/^(remote override|no local provider:|unsupported-case:)/.test(f.why),
+						/^(remote override|no local provider:|unsupported-case:)/.test(f.reason),
 					),
 				).toBe(true);
 			});
@@ -171,7 +171,7 @@ describe("P12 local twin lint", () => {
 				`${text()}\n${callee}("Remote", {name: ${JSON.stringify(name)}});`,
 			);
 			expect(findings.length).toBeGreaterThan(0);
-			expect(findings.every((f) => /^(no local provider:|unsupported-case:)/.test(f.why))).toBe(
+			expect(findings.every((f) => /^(no local provider:|unsupported-case:)/.test(f.reason))).toBe(
 				true,
 			);
 		});
@@ -188,17 +188,17 @@ describe("P12 local twin lint", () => {
 				`${text()}\nconst make${alias} = ${callee};\nCloudflare.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs"}).pipe(make${alias}());`,
 			);
 			expect(findings.length).toBeGreaterThan(0);
-			expect(findings.some((f) => /remote|unsupported-case:/.test(f.why))).toBe(true);
+			expect(findings.some((f) => /remote|unsupported-case:/.test(f.reason))).toBe(true);
 		});
-	for (const why of ["computed resource", "aliased resource"])
-		law(`named import plant beside the valid stack: ${why}`, ({alias, name}) => {
+	for (const reason of ["computed resource", "aliased resource"])
+		law(`named import plant beside the valid stack: ${reason}`, ({alias, name}) => {
 			const call =
-				why === "computed resource"
+				reason === "computed resource"
 					? `${alias}["Zone"]("Remote", {name: ${JSON.stringify(name)}});`
 					: `const resourceAlias = ${alias}.Zone; resourceAlias("Remote", {name: ${JSON.stringify(name)}});`;
 			const body = `${text()}\nimport {Zone as ${alias}} from "@alchemy.run/cloudflare";\n${call}`;
-			expect(scan(stack, body).map((f) => f.why)).toContainEqual(
-				expect.stringContaining(`unsupported-case: ${why}`),
+			expect(scan(stack, body).map((f) => f.reason)).toContainEqual(
+				expect.stringContaining(`unsupported-case: ${reason}`),
 			);
 		});
 	law(
@@ -209,7 +209,7 @@ describe("P12 local twin lint", () => {
 				[`Zone as ${alias}`, `${alias}.Zone`],
 			]) {
 				const body = `${text()}\nimport {${imported}} from "@alchemy.run/cloudflare";\n${call}("Remote", {name: ${JSON.stringify(name)}});`;
-				expect(scan(stack, body).map((f) => f.why)).toContain(
+				expect(scan(stack, body).map((f) => f.reason)).toContain(
 					"no local provider: Cloudflare.Zone.Zone",
 				);
 			}
@@ -217,7 +217,7 @@ describe("P12 local twin lint", () => {
 	);
 	law("a called stack helper is inspected or reported as unsupported", ({alias}) => {
 		const body = `${text()}\nimport {extraResources as ${alias}} from "./unfollowed-stack-helper.ts";\n${alias}();`;
-		expect(scan(stack, body).some((f) => f.why.startsWith("unsupported-case:"))).toBe(true);
+		expect(scan(stack, body).some((f) => f.reason.startsWith("unsupported-case:"))).toBe(true);
 	});
 	law("the actual stack has no findings, with no second resource list", ({name}) => {
 		expect(scan(stack, `${text()}\nconst checkedName = ${JSON.stringify(name)};`)).toEqual([]);
@@ -229,7 +229,7 @@ describe("P12 local twin lint", () => {
 			`const remote = ${alias}.Zone.Zone("Zone", {name: ${JSON.stringify(name)}});`,
 			"remote.pipe(Alchemy.remote());",
 		].join("\n");
-		expect(scan("plant.ts", body).map((f) => f.why)).toEqual([
+		expect(scan("plant.ts", body).map((f) => f.reason)).toEqual([
 			"no local provider: Cloudflare.Zone.Zone",
 			"remote override",
 		]);
@@ -246,7 +246,7 @@ describe("P12 local twin lint", () => {
 					`import * as ${alias} from "@alchemy.run/cloudflare";\n${call};`,
 				);
 				expect(findings).toHaveLength(1);
-				expect(findings[0]!.why).toMatch(/^unsupported-case:/);
+				expect(findings[0]!.reason).toMatch(/^unsupported-case:/);
 			}
 		},
 	);

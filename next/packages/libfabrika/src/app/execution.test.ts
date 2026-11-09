@@ -111,13 +111,13 @@ describe("P12 Effect execution adapter", () => {
 								upgrade: rpc,
 								reply: rpc,
 							});
-							for (const [action, why] of [
+							for (const [action, reason] of [
 								[remote.init(null), "load"],
 								[remote.step({}, {}), "step"],
 								[remote.fold({}, {}), "saved_letter"],
 							] as const) {
 								const result = yield* Effect.flip(action);
-								expect(result).toMatchObject({_tag: "ProgramDown", why});
+								expect(result).toMatchObject({_tag: "ProgramDown", why: reason});
 								expect(JSON.stringify(result)).not.toContain("private RPC body");
 							}
 						}),

@@ -41,7 +41,7 @@ vi.mock("./exam/compiler.ts", async (original) => ({
 	check: () => [],
 }));
 vi.mock("./local-stage.ts", () => ({
-	localStage: () => Effect.fail({why: "test_stage_ready"}),
+	localStage: () => Effect.fail({reason: "test_stage_ready"}),
 }));
 
 const root = resolve(import.meta.dirname, "../../../..");
@@ -177,7 +177,7 @@ for (const failed of [false, true])
 					if (failed)
 						expect(Cause.findErrorOption(cause)).toMatchObject({
 							_tag: "Some",
-							value: {_tag: "BuildError", why: "publish"},
+							value: {_tag: "BuildError", reason: "publish"},
 						});
 				} finally {
 					rmSync(folder, {recursive: true, force: true});
@@ -224,7 +224,7 @@ it("dev reads saved settings and writes chosen settings before building through 
 				const exit = await Effect.runPromiseExit(cli.work!);
 				expect(
 					Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty),
-				).toMatchObject({_tag: "Some", value: {why: "test_stage_ready"}});
+				).toMatchObject({_tag: "Some", value: {reason: "test_stage_ready"}});
 				const calls = w.calls.filter(([, path]) => path === folder || path === file);
 				expect(calls).toEqual([
 					["mkdir", folder],
@@ -272,7 +272,7 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
 				expect(Cause.hasFails(cause)).toBe(true);
 				expect(Cause.findErrorOption(cause)).toMatchObject({
 					_tag: "Some",
-					value: {_tag: "BuildError", why: "read"},
+					value: {_tag: "BuildError", reason: "read"},
 				});
 				expect(w.calls.filter(([call]) => call === "write" || call === "rename")).toEqual([]);
 			} finally {

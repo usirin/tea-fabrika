@@ -4,7 +4,7 @@ import {join} from "node:path";
 import {RuntimeLifecycle} from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import {NodeServices} from "@effect/platform-node";
 import {afterEach, expect, it} from "@effect/vitest";
-import type {BrainFact} from "@kampus/libfabrika/brain-fact";
+import type {BrainEvent} from "@kampus/libfabrika/brain-event";
 import {ProcessIdGenerator} from "@kampus/libfabrika/coordination";
 import {Context, Effect} from "effect";
 import * as fc from "fast-check";
@@ -52,13 +52,13 @@ it("a later dev command links its first start to the last runtime in that home",
 				const {startStage} = await import("./stage.ts");
 				const folder = home();
 				vi.stubEnv("FABRIKA_HOME", folder);
-				const facts: Array<typeof BrainFact.Type> = [];
+				const events: Array<typeof BrainEvent.Type> = [];
 				vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
 					const call = JSON.parse(String(options?.body)) as {
 						method: string;
-						args: Array<typeof BrainFact.Type>;
+						args: Array<typeof BrainEvent.Type>;
 					};
-					if (call.method === "brain") facts.push(call.args[0]!);
+					if (call.method === "brain") events.push(call.args[0]!);
 					return Response.json({value: call.method === "info" ? [] : null});
 				});
 				const config = {
@@ -77,7 +77,7 @@ it("a later dev command links its first start to the last runtime in that home",
 						),
 					);
 				}
-				const starts = facts.filter((fact) => fact._tag === "started");
+				const starts = events.filter((event) => event._tag === "started");
 				expect(starts).toHaveLength(2);
 				expect(starts[1]).toMatchObject({after: starts[0]!.start, build: builds[1]});
 				expect(starts[1]!.start).not.toBe(starts[0]!.start);

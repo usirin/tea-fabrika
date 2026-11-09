@@ -10,7 +10,7 @@ import {NodeServices} from "@effect/platform-node";
 import {Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema} from "effect";
 import * as fc from "fast-check";
 import {expect, expectTypeOf, it, vi} from "vitest";
-import {BrainFact} from "../app/brain-fact.ts";
+import {BrainEvent} from "../app/brain-event.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
@@ -152,12 +152,12 @@ const flow = async (sample: Flow) => {
 			return Response.json({value: await delivered(`node/${call.name}`, call.args)});
 		if (call.method === "brain") {
 			if (mode === "rpc") throw new Error(`${bearer} ${rawFrame}`);
-			const fact = Schema.decodeUnknownSync(BrainFact)(call.args[0]);
+			const event = Schema.decodeUnknownSync(BrainEvent)(call.args[0]);
 			await journal.runPromise(
 				Ledger.use((ledger) =>
 					ledger.append(
 						"door/brain",
-						fact.id,
+						event.id,
 						lineFor(
 							{
 								by: "SHA256:brain-test",
@@ -168,7 +168,7 @@ const flow = async (sample: Flow) => {
 								traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 								build: config.build,
 							},
-							fact,
+							event,
 						),
 					),
 				),
@@ -177,7 +177,7 @@ const flow = async (sample: Flow) => {
 		}
 		if (mode === "rpc") throw new Error(`${bearer} ${rawFrame}`);
 		if (mode === "malformed") return new Response(`${bearer} ${rawFrame}`);
-		if (mode === "refused") return Response.json({error: {why: "refused"}});
+		if (mode === "refused") return Response.json({error: {reason: "refused"}});
 		return Response.json({value: []});
 	});
 	const consoleSpies = (["log", "info", "warn", "error", "debug"] as const).map((name) =>
@@ -274,7 +274,7 @@ const flow = async (sample: Flow) => {
 						}),
 					);
 					const outbox = yield* brainOutbox(home);
-					const awaitFact = (
+					const awaitEvent = (
 						ready: (row: Effect.Success<typeof outbox.pending>[number]) => boolean,
 					) =>
 						Effect.gen(function* () {
@@ -300,7 +300,7 @@ const flow = async (sample: Flow) => {
 								exit: {exitCode: 1, signal: null, stderr: ""},
 							});
 							observe({type: "start", worker: config.name, pid: 27003});
-							yield* awaitFact((row) => row._tag === "started" && row.after === previous);
+							yield* awaitEvent((row) => row._tag === "started" && row.after === previous);
 						}
 						// Arbitrary bodies and passes cross real Gateway parsing, including refusals and throws.
 						yield* Effect.tryPromise({
@@ -328,10 +328,10 @@ const flow = async (sample: Flow) => {
 					observe({
 						type: "stop",
 						worker: config.name,
-						why: "intensity",
+						reason: "intensity",
 						exit: {exitCode: 1, signal: null, stderr: ""},
 					});
-					yield* awaitFact((row) => row._tag === "braked");
+					yield* awaitEvent((row) => row._tag === "braked");
 					outputs.outbox.push(yield* outbox.pending);
 				}),
 			).pipe(

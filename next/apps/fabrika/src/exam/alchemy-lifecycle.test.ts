@@ -21,7 +21,7 @@ type Event = {worker: string} & (
 	| {type: "start"; pid: number}
 	| {type: "exit"; exit: End}
 	| {type: "restart"; exit: End; delay: number}
-	| {type: "stop"; exit: End; why: "intensity" | "restart_failed"}
+	| {type: "stop"; exit: End; reason: "intensity" | "restart_failed"}
 );
 const spawned = () => {
 	const children: Array<{pid: number; closed: boolean; crash: () => void}> = [];
@@ -172,7 +172,7 @@ describe("P12 Alchemy lifecycle patch", () => {
 								expect(events.at(-1)).toMatchObject({
 									type: "stop",
 									worker: worker.name,
-									why: "intensity",
+									reason: "intensity",
 								});
 								expect(
 									events

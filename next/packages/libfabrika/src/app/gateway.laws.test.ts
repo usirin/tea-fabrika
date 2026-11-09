@@ -136,12 +136,12 @@ describe("P12 Gateway attachment laws", () => {
 					const ledger = yield* Ledger;
 					const f = yield* setup(referee.wait);
 					ring = f.c.ring;
-					yield* f.c.frame(request("early", "facts", 0));
-					yield* f.c.frame(request("later", "facts", after));
+					yield* f.c.frame(request("early", "events", 0));
+					yield* f.c.frame(request("later", "events", after));
 					for (let n = 1; n <= after + 1; n++) {
 						yield* ledger.append(
-							"facts",
-							`fact-${n}`,
+							"events",
+							`event-${n}`,
 							lineFor(
 								{
 									by: "writer",

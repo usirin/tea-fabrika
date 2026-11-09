@@ -8,7 +8,7 @@ import {Cause, Context, Effect, Exit, Schema} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {expect, it, vi} from "vitest";
-import type {BrainFact} from "../app/brain-fact.ts";
+import type {BrainEvent} from "../app/brain-event.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
 import {brainOutbox} from "./local-stage.ts";
 import {startStage} from "./stage.ts";
@@ -78,22 +78,22 @@ const crashBrake: Step = {rss: null, exitCode: 1, signal: null, delay: 0};
 const sequence = fc.record({
 	restarts: fc.array(step, {maxLength: 4}),
 	final: step,
-	why: fc.constantFrom<"intensity" | "restart_failed">("intensity", "restart_failed"),
+	reason: fc.constantFrom<"intensity" | "restart_failed">("intensity", "restart_failed"),
 });
 
 it("every observed exit is durable once across restart or brake, with its reason and RSS", async ({
 	signal,
 }) => {
 	await fc.assert(
-		fc.asyncProperty(sequence, async ({restarts, final, why}) => {
+		fc.asyncProperty(sequence, async ({restarts, final, reason}) => {
 			const home = mkdtempSync(join(tmpdir(), "p12-exit-"));
 			vi.stubEnv("FABRIKA_HOME", home);
 			const kill = vi.spyOn(process, "kill").mockReturnValue(true);
 			const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
 				const call = JSON.parse(String(options?.body)) as {method: string};
-				// Keep lifecycle facts in the real outbox while the real record sink still flushes.
+				// Keep lifecycle events in the real outbox while the real record sink still flushes.
 				return Response.json(
-					call.method === "brain" ? {error: {why: "offline"}} : {value: {_tag: "written"}},
+					call.method === "brain" ? {error: {reason: "offline"}} : {value: {_tag: "written"}},
 				);
 			});
 			try {
@@ -102,7 +102,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 						Effect.gen(function* () {
 							let observe: (event: RuntimeEvent) => void = () => {};
 							platform.rss = 0;
-							// The first info call succeeds. Startup flush has no facts until deployment yields.
+							// The first info call succeeds. Startup flush has no events until deployment yields.
 							fetch.mockImplementation(async (_url, options) => {
 								const call = JSON.parse(String(options?.body)) as {method: string};
 								return Response.json({value: call.method === "write" ? {_tag: "written"} : null});
@@ -120,11 +120,13 @@ it("every observed exit is durable once across restart or brake, with its reason
 							fetch.mockImplementation(async (_url, options) => {
 								const call = JSON.parse(String(options?.body)) as {method: string};
 								return Response.json(
-									call.method === "brain" ? {error: {why: "offline"}} : {value: {_tag: "written"}},
+									call.method === "brain"
+										? {error: {reason: "offline"}}
+										: {value: {_tag: "written"}},
 								);
 							});
 							const outbox = yield* brainOutbox(home);
-							const waitForFact = (ready: (fact: typeof BrainFact.Type) => boolean) =>
+							const waitForEvent = (ready: (event: typeof BrainEvent.Type) => boolean) =>
 								Effect.gen(function* () {
 									// The event queue writes files asynchronously, outside the supplied clock.
 									// The enclosing test's abort signal bounds this wait.
@@ -136,20 +138,20 @@ it("every observed exit is durable once across restart or brake, with its reason
 								});
 							const expected: Array<{
 								start: string;
-								why: string;
+								reason: string;
 								exitCode: number | null;
 								signal: string | null;
 								bytes?: number;
 							}> = [];
 							const assertExits = Effect.gen(function* () {
 								const rows = yield* outbox.pending;
-								const exits = rows.filter((fact) => fact._tag === "exited");
+								const exits = rows.filter((event) => event._tag === "exited");
 								expect(exits).toHaveLength(expected.length);
-								expect(new Set(exits.map((fact) => fact.id)).size).toBe(expected.length);
+								expect(new Set(exits.map((event) => event.id)).size).toBe(expected.length);
 								expect(
-									exits.map(({start, why, exitCode, signal, bytes}) => ({
+									exits.map(({start, reason, exitCode, signal, bytes}) => ({
 										start,
-										why,
+										reason,
 										exitCode,
 										signal,
 										...(bytes === undefined ? {} : {bytes}),
@@ -170,32 +172,34 @@ it("every observed exit is durable once across restart or brake, with its reason
 								const rows = yield* outbox.pending;
 								// Startup may already be acknowledged; last remains durable in either case.
 								const start =
-									rows.filter((fact) => fact._tag === "started").at(-1)?.start ??
+									rows.filter((event) => event._tag === "started").at(-1)?.start ??
 									(yield* outbox.last)!;
 								const exit = {exitCode: item.exitCode, signal: item.signal, stderr: ""};
 								expected.push({
 									start,
 									exitCode: item.exitCode,
 									signal: item.signal === null ? null : String(item.signal),
-									why: item.rss === null ? "crash" : "memory",
+									reason: item.rss === null ? "crash" : "memory",
 									...(item.rss === null ? {} : {bytes: item.rss * 1024}),
 								});
 								observe({type: "exit", worker: "life-test", exit});
 								if (index < restarts.length) {
 									observe({type: "restart", worker: "life-test", exit, delay: item.delay});
-									yield* waitForFact((fact) => fact._tag === "restarting" && fact.start === start);
+									yield* waitForEvent(
+										(event) => event._tag === "restarting" && event.start === start,
+									);
 									yield* assertExits;
 									observe({type: "start", worker: "life-test", pid: 27002 + index});
-									yield* waitForFact((fact) => fact._tag === "started" && fact.after === start);
+									yield* waitForEvent((event) => event._tag === "started" && event.after === start);
 								} else {
-									observe({type: "stop", worker: "life-test", exit, why});
-									const pending = yield* waitForFact(
-										(fact) => fact._tag === "braked" && fact.start === start,
+									observe({type: "stop", worker: "life-test", exit, reason});
+									const pending = yield* waitForEvent(
+										(event) => event._tag === "braked" && event.start === start,
 									);
-									expect(pending.filter((fact) => fact._tag === "braked")).toMatchObject([
-										{start, why, exitCode: exit.exitCode, signal: expected.at(-1)!.signal},
+									expect(pending.filter((event) => event._tag === "braked")).toMatchObject([
+										{start, reason, exitCode: exit.exitCode, signal: expected.at(-1)!.signal},
 									]);
-									// Review 5: HEAD keeps braked but loses the final exited fact and its RSS.
+									// Review 5: HEAD keeps braked but loses the final exited event and its RSS.
 									yield* assertExits;
 								}
 							}
@@ -223,10 +227,10 @@ it("every observed exit is durable once across restart or brake, with its reason
 			numRuns: 20,
 			examples: [
 				// Review 5: final memory kill, no replacement to carry the RSS.
-				[{restarts: [], final: memoryBrake, why: "intensity"}],
-				[{restarts: [memoryBrake, crashBrake], final: crashBrake, why: "restart_failed"}],
+				[{restarts: [], final: memoryBrake, reason: "intensity"}],
+				[{restarts: [memoryBrake, crashBrake], final: crashBrake, reason: "restart_failed"}],
 				// Review 5: a pending start write resets the next memory kill's reason and RSS.
-				[{restarts: [crashBrake], final: memoryBrake, why: "intensity"}],
+				[{restarts: [crashBrake], final: memoryBrake, reason: "intensity"}],
 			],
 		},
 	);

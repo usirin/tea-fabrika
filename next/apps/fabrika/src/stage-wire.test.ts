@@ -302,7 +302,7 @@ const view = async (c: Client, pid: string) => {
 };
 
 describe("P12 real dev.ts wire", () => {
-	it("scenario: a new dev command links its lifecycle fact to the previous runtime", async () => {
+	it("scenario: a new dev command links its lifecycle event to the previous runtime", async () => {
 		const first = await stage(),
 			c = await connected(first);
 		const starts = (await read(c, "door/brain")).filter((row) => row._tag === "started");
@@ -378,7 +378,7 @@ describe("P12 real dev.ts wire", () => {
 		);
 		expect(accepted.map((a) => a.pos)).toEqual(Array.from({length: PAGE + 3}, (_, n) => n + 1));
 		expect(accepted.every((a, n) => n === 0 || a.rev > accepted[n - 1]!.rev)).toBe(true);
-		// Door input facts occupy the intervening global revisions.
+		// Door input events occupy the intervening global revisions.
 		expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
 	});
 	it("scenario: a parked wire wait receives the next append and a ready wait answers now", async () => {
@@ -625,7 +625,7 @@ describe("P12 real dev.ts wire", () => {
 		expect((await view(resumed, pid)).view.count).toBe(20);
 		expect(await counter(resumed)).toBe(pid);
 		let starts: Entry[] = [];
-		// Replacement facts arrive on the outbox's periodic flush, after traffic can recover.
+		// Replacement events arrive on the outbox's periodic flush, after traffic can recover.
 		// The enclosing test's existing timeout bounds this wait.
 		for (;;) {
 			signal.throwIfAborted();
@@ -637,7 +637,7 @@ describe("P12 real dev.ts wire", () => {
 		expect(starts[1]!.body).toMatchObject({
 			after: firstStart,
 			build: expect.any(String),
-			why: "crash",
+			reason: "crash",
 		});
 	});
 });

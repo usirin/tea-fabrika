@@ -258,7 +258,7 @@ const generatedThrow = fc.oneof(
 );
 
 for (const adapter of ["node", "worker"] as const)
-	it(`${adapter}: generated throw content is deletable; classes alone stay in receipts, dead facts and health`, async () => {
+	it(`${adapter}: generated throw content is deletable; classes alone stay in receipts, dead events and health`, async () => {
 		await fc.assert(
 			fc.asyncProperty(generatedThrow, (sample) =>
 				Effect.runPromise(
@@ -266,7 +266,7 @@ for (const adapter of ["node", "worker"] as const)
 						const w = world(sample.value, adapter, 1);
 						yield* w.boot;
 						yield* Effect.gen(function* () {
-							// A limit of one reaches the dead fact on this first Worker failure.
+							// A limit of one reaches the dead event on this first Worker failure.
 							yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
 							const rows = yield* recorded(A);
 							const r = yield* RecordManager;
@@ -287,7 +287,7 @@ for (const adapter of ["node", "worker"] as const)
 								Effect.provide(RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3})),
 							);
 							const dead = yield* read(`${A}/dead`);
-							const facts = yield* read(`processes/${NAME}`);
+							const events = yield* read(`processes/${NAME}`);
 							const health = w.sink.sql.exec("SELECT * FROM health");
 							const name =
 								sample.value instanceof Error
@@ -309,7 +309,7 @@ for (const adapter of ["node", "worker"] as const)
 								for (const permanent of [
 									rows,
 									receipt,
-									facts,
+									events,
 									dead,
 									health,
 									w.sink.sql.exec("SELECT * FROM summary"),
@@ -341,7 +341,7 @@ for (const adapter of ["node", "worker"] as const)
 								),
 							).toEqual(receipt);
 							expect(yield* read(`${A}/dead`)).toEqual(dead);
-							expect(yield* read(`processes/${NAME}`)).toEqual(facts);
+							expect(yield* read(`processes/${NAME}`)).toEqual(events);
 						}).pipe(Effect.provide(w.layer()));
 					}).pipe(Effect.provide(TestClock.layer())),
 				),

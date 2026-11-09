@@ -8,7 +8,7 @@ import {API, SignatureKind, type Project, type Type} from "typescript/unstable/s
 interface PromiseFinding {
 	readonly file: string;
 	readonly line: number;
-	readonly why: string;
+	readonly reason: string;
 }
 
 export const checkPromiseTypes = (
@@ -102,7 +102,7 @@ export const checkPromiseTypes = (
 			found.set(`${file}:${line + 1}`, {
 				file,
 				line: line + 1,
-				why: candidates.get(node) ?? "Promise value outside a marked edge",
+				reason: candidates.get(node) ?? "Promise value outside a marked edge",
 			});
 		}
 	}
@@ -128,7 +128,7 @@ const main = Effect.gen(function* () {
 				for (const f of checkPromiseTypes(project, root, path))
 					findings.set(`${f.file}:${f.line}`, f);
 			for (const f of findings.values())
-				console.error(`${f.file}:${f.line} fabrika(no-promises): ${f.why}`);
+				console.error(`${f.file}:${f.line} fabrika(no-promises): ${f.reason}`);
 			console.info(`lint:promise-types: ${findings.size} findings`);
 			process.exitCode = findings.size === 0 ? 0 : 1;
 		} finally {

@@ -6,7 +6,7 @@ import {parseSync, type ModuleExportName} from "oxc-parser";
 
 type Tree = any;
 type Program = ReturnType<typeof parseSync>["program"];
-type Finding = {file: string; line: number; why: string};
+type Finding = {file: string; line: number; reason: string};
 const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, string>) => {
 	const {dirname, join, resolve} = path;
 	const text = (file: string) => {
@@ -210,8 +210,8 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 			const first = root(node);
 			return first !== null && (cloud.has(first) || named.has(first));
 		};
-		const report = (node: Tree, why: string) =>
-			found.push({file, line: body.slice(0, node.start).split("\n").length, why});
+		const report = (node: Tree, reason: string) =>
+			found.push({file, line: body.slice(0, node.start).split("\n").length, reason});
 		for (const node of ast.body)
 			if (node.type === "ImportDeclaration") {
 				if (node.importKind === "type") continue;
@@ -360,7 +360,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 		};
 		references(ast);
 		if (total === 0 && found.length === 0)
-			found.push({file, line: 1, why: "unsupported-case: no stack resources found"});
+			found.push({file, line: 1, reason: "unsupported-case: no stack resources found"});
 		return found;
 	};
 	return scan;
@@ -387,7 +387,7 @@ export const lint = Effect.fnUntraced(function* (file: string) {
 	const fs = yield* FileSystem.FileSystem;
 	const scan = yield* scanner;
 	const findings = scan(file, yield* fs.readFileString(file));
-	for (const f of findings) yield* Console.error(`${f.file}:${f.line} ${f.why}`);
+	for (const f of findings) yield* Console.error(`${f.file}:${f.line} ${f.reason}`);
 	yield* Console.info(`lint:twin: ${findings.length} findings`);
 	return findings.length === 0 ? 0 : 1;
 });

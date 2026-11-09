@@ -11,10 +11,10 @@ const SEED = 119120;
 const start = Effect.runSync(processId);
 const after = Effect.runSync(processId);
 const events = [
-	{type: "started", start, after: null, build: "build-a", why: "open"},
-	{type: "waiting", after: start, until: 250, why: "crash"},
-	{type: "started", start: after, after: start, build: "build-a", why: "crash"},
-	{type: "braked", after, why: "intensity"},
+	{type: "started", start, after: null, build: "build-a", reason: "open"},
+	{type: "waiting", after: start, until: 250, reason: "crash"},
+	{type: "started", start: after, after: start, build: "build-a", reason: "crash"},
+	{type: "braked", after, reason: "intensity"},
 	{type: "stop"},
 	{type: "stopped"},
 ] as const;
@@ -23,17 +23,17 @@ const lifecycle = fc.record({
 	after: fcProcessIds,
 	build: fc.string(),
 	until: fc.nat(),
-	why: fc.string(),
+	reason: fc.string(),
 });
-const normalLife = {start, after, build: "build-a", until: 250, why: "crash"};
+const normalLife = {start, after, build: "build-a", until: 250, reason: "crash"};
 const stopInFlight = [events[0], {type: "stop"}, events[1], events[2], {type: "stopped"}] as const;
 const messages = lifecycle.map(
-	({start, after, build, until, why}) =>
+	({start, after, build, until, reason}) =>
 		[
-			{type: "started", start, after: null, build, why: "open"},
-			{type: "waiting", after: start, until, why},
-			{type: "started", start: after, after: start, build, why},
-			{type: "braked", after, why},
+			{type: "started", start, after: null, build, reason: "open"},
+			{type: "waiting", after: start, until, reason},
+			{type: "started", start: after, after: start, build, reason},
+			{type: "braked", after, reason},
 			{type: "stop"},
 			{type: "stopped"},
 		] as const,
@@ -44,12 +44,12 @@ describe("P12 stage machine laws", () => {
 	it("p88 plant: missing start or stop transition cannot finish a normal life", async () => {
 		const {brainLife} = await import("./brain-life.ts");
 		fc.assert(
-			fc.property(lifecycle, ({start, after, build, until, why}) => {
+			fc.property(lifecycle, ({start, after, build, until, reason}) => {
 				const msgs = [
-					{type: "started", start, after: null, build, why: "open"},
-					{type: "waiting", after: start, until, why},
-					{type: "started", start: after, after: start, build, why},
-					{type: "braked", after, why},
+					{type: "started", start, after: null, build, reason: "open"},
+					{type: "waiting", after: start, until, reason},
+					{type: "started", start: after, after: start, build, reason},
+					{type: "braked", after, reason},
 				] as const;
 				const [initial] = brainLife.init(null, {});
 				expect(initial).toMatchObject({_tag: "starting"});

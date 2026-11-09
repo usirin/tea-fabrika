@@ -22,7 +22,7 @@ it("every native import form needs a nonempty reason on its own line, in product
 			),
 			fc.boolean(),
 			fc.uuid(),
-			async (name, prefix, why) => {
+			async (name, prefix, reason) => {
 				const module = `${prefix ? "node:" : ""}${name}`;
 				// Node's prefix-only modules are not bare builtins.
 				const native = prefix || !["test", "sqlite"].includes(name);
@@ -57,14 +57,14 @@ it("every native import form needs a nonempty reason on its own line, in product
 				const lines = forms.flatMap((form, i) =>
 					[
 						"",
-						` // edge: ${why}`,
+						` // edge: ${reason}`,
 						" // edge:   ",
 						"before",
-						` /* edge: ${why} */`,
-						` // not edge: ${why}`,
+						` /* edge: ${reason} */`,
+						` // not edge: ${reason}`,
 					].map((mark, j) => {
 						const unique = form.replace(/\b(a|A|X|x)\b/g, (name) => `${name}${i}_${j}`);
-						return mark === "before" ? `// edge: ${why}\n${unique}` : unique + mark;
+						return mark === "before" ? `// edge: ${reason}\n${unique}` : unique + mark;
 					}),
 				);
 				const body = lines.join("\n");
@@ -85,15 +85,15 @@ it("every native import form needs a nonempty reason on its own line, in product
 
 it("multiline imports use the module string's line; strings and neighboring marks grant nothing", async () => {
 	await fc.assert(
-		fc.asyncProperty(fc.uuid(), async (why) => {
+		fc.asyncProperty(fc.uuid(), async (reason) => {
 			const path = "next/apps/fabrika/src/exam/native.ts";
 			const product = "next/packages/libfabrika/src/native.ts";
 			const result = await plant({
-				[product]: `import {readFile} from "node:fs"; // edge: ${why}`,
+				[product]: `import {readFile} from "node:fs"; // edge: ${reason}`,
 				[path]: [
-					`import {\n readFile\n} from "node:fs"; // edge: ${why}`,
-					`import { // edge: ${why}\n writeFile\n} from "node:fs";`,
-					`const fake = "// edge: ${why}"; const a = require("node:fs");`,
+					`import {\n readFile\n} from "node:fs"; // edge: ${reason}`,
+					`import { // edge: ${reason}\n writeFile\n} from "node:fs";`,
+					`const fake = "// edge: ${reason}"; const a = require("node:fs");`,
 					'import {Effect} from "effect";',
 					'import a from "some-package";',
 					'import b from "./fs.ts";',

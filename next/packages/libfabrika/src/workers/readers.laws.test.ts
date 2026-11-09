@@ -276,7 +276,7 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
 				typed(attempts[0]!);
 				const response = Exit.isSuccess(exit) ? exit.value : new Response(null);
 				expect(response.status).toBe(500);
-				expect(await response.json()).toEqual({error: {why: "bad_row"}});
+				expect(await response.json()).toEqual({error: {reason: "bad_row"}});
 			} finally {
 				inspect.mockRestore();
 				w.db.close();
@@ -332,7 +332,7 @@ for (const field of ["put key", "put checksum", "head key"] as const)
 					expect(exit).toMatchObject({_tag: "Success"});
 					const response = Exit.isSuccess(exit) ? exit.value : new Response(null);
 					expect(response.status).toBe(500);
-					expect(await response.json()).toEqual({error: {why: "bad_row"}});
+					expect(await response.json()).toEqual({error: {reason: "bad_row"}});
 				} finally {
 					inspect.mockRestore();
 					w.db.close();

@@ -138,9 +138,9 @@ const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0)
 		const pending = await Effect.runPromise(
 			outbox.pending.pipe(Effect.provide(NodeServices.layer)),
 		);
-		const stopped = pending.find((fact) => fact._tag === "braked");
+		const stopped = pending.find((event) => event._tag === "braked");
 		if (stopped !== undefined)
-			throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.why})\n${details()}`);
+			throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.reason})\n${details()}`);
 		if (stage.child.exitCode !== null || stage.child.signalCode !== null)
 			throw new Error(
 				`P12 dev.ts exited while waiting for workerd: exitCode=${stage.child.exitCode}, signal=${stage.child.signalCode}\n${details()}`,

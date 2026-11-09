@@ -132,7 +132,7 @@ const world = async (
 			"const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
 			'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("prepare")}), Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
 			'const write = Cmd.make("write", {input: Schema.Struct({stream: Schema.String, write: Schema.Json}), ok: Schema.Json, err: ["not_delivered"]});',
-			'const machine = Machine.make({model: Model, msg: Msg, cmds: [write], init: (loaded) => [loaded ?? {count:0,replies:0,wake:null}, []], update: {throw: () => {throw new Error("private failure P12");}, prepare: s => [s,[]], schedule: (s,m) => [{...s,wake:m.at},[]], timer: (s,m) => [{...s,count:s.count+1,wake:m.at+10},[write({stream:"timer-facts",write:{_tag:"own",fact:{_tag:"noted",n:s.count+1}}})]], write_ok: s => [{...s,replies:s.replies+1},[]], write_err: s => [{...s,replies:s.replies+1},[]]}});',
+			'const machine = Machine.make({model: Model, msg: Msg, cmds: [write], init: (loaded) => [loaded ?? {count:0,replies:0,wake:null}, []], update: {throw: () => {throw new Error("private failure P12");}, prepare: s => [s,[]], schedule: (s,m) => [{...s,wake:m.at},[]], timer: (s,m) => [{...s,count:s.count+1,wake:m.at+10},[write({stream:"timer-events",write:{_tag:"own",fact:{_tag:"noted",n:s.count+1}}})]], write_ok: s => [{...s,replies:s.replies+1},[]], write_err: s => [{...s,replies:s.replies+1},[]]}});',
 			'const declaration = {machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{throw:{_tag:"write",schema:Msg,description:"Fail",personOnly:false},prepare:{_tag:"write",schema:Msg,description:"Prepare",personOnly:false},schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false}},outputs:{},writes:{noted:{schema:noted,personOnly:false}},wake:s=>s.wake};',
 		].join("\n");
 		writeFileSync(
@@ -246,7 +246,7 @@ export class Control extends Brain.Control {
     const q = await request.clone().json();
     if (!q.method.startsWith("test")) return super.fetch(request);
     const stub = q.target === "project" ? this.env.PROJECT.getByName(q.project) : this.env.PROCESS.getByName(JSON.stringify([q.project,q.name]));
-    try {return Response.json({value: await stub[q.method](...q.args) ?? null});} catch {return Response.json({error:{why:"unreachable"}});}
+    try {return Response.json({value: await stub[q.method](...q.args) ?? null});} catch {return Response.json({error:{reason:"unreachable"}});}
   }
 }`,
 	);
@@ -641,7 +641,7 @@ describe("P12 real object adapters", () => {
 						1,
 					);
 					expect(db.prepare("SELECT * FROM archived").all()).toEqual([]);
-					// The try happened and failed: its own health row says why.
+					// The try happened and failed: its own health row gives the reason.
 					expect(
 						db.prepare("SELECT ok,error FROM health WHERE piece='sink.archive'").all(),
 					).toEqual([{ok: 0, error: fail === "put" ? "unreachable" : "mismatch"}]);
@@ -707,7 +707,7 @@ describe("P12 real object adapters", () => {
 		async (end) => {
 			await world(async (stage, key, fixture) => {
 				const {p, client} = await admitted(stage, key);
-				// Trusted declarations for this process permit the fact; the signer is bound to this pid.
+				// Trusted declarations for this process permit the event; the signer is bound to this pid.
 				const started = await fixture.start("writer:1", "writer-fixture");
 				const pid = started.process;
 				const delivered = await routed(p, client, "process.send", {
@@ -748,12 +748,12 @@ describe("P12 real object adapters", () => {
 							id: "write-1",
 							parent,
 							kind: "noted",
-							stream: "facts",
+							stream: "events",
 							fact: {_tag: "noted", n: 1},
 						}),
 					),
 				).toMatchObject(refused);
-				expect(await p.read("facts", 0, "audit")).toEqual([]);
+				expect(await p.read("events", 0, "audit")).toEqual([]);
 				// A changed process identity cannot reuse a capability issued to the old process.
 				await expect(
 					capability.append({
@@ -761,11 +761,11 @@ describe("P12 real object adapters", () => {
 						parent,
 						process: "another",
 						kind: "noted",
-						stream: "facts",
+						stream: "events",
 						fact: {_tag: "noted"},
 					}),
-				).rejects.toMatchObject({_tag: "ControlError", why: "reserved"});
-				expect(await p.read("facts", 0, "audit")).toEqual([]);
+				).rejects.toMatchObject({_tag: "ControlError", reason: "reserved"});
+				expect(await p.read("events", 0, "audit")).toEqual([]);
 			});
 		},
 	);

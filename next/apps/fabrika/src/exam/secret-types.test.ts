@@ -12,7 +12,7 @@ import {expect, it} from "vitest";
 // This reads types, not spellings of Redacted.make or a particular helper's name.
 const checkSecretTypes = (project: Project, root: string) => {
 	const {program, checker} = project;
-	const findings: Array<{file: string; line: number; why: string}> = [];
+	const findings: Array<{file: string; line: number; reason: string}> = [];
 	for (const path of program.getSourceFileNames()) {
 		const file = relative(root, path).replaceAll("\\", "/");
 		if (
@@ -36,13 +36,13 @@ const checkSecretTypes = (project: Project, root: string) => {
 				for (const spec of bindings.elements)
 					if ((spec.propertyName ?? spec.name).text === "randomBytes") entropy.add(spec.name.text);
 		}
-		const reads: Array<{node: ts.Node; why: string; ancestors: Array<ts.Node>}> = [];
+		const reads: Array<{node: ts.Node; reason: string; ancestors: Array<ts.Node>}> = [];
 		const visit = (node: ts.Node): void => {
-			let why: string | undefined;
+			let reason: string | undefined;
 			if (ts.isCallExpression(node)) {
 				const argument = node.arguments[0];
 				if (ts.isIdentifier(node.expression) && entropy.has(node.expression.text))
-					why = "random secret";
+					reason = "random secret";
 				if (
 					ts.isPropertyAccessExpression(node.expression) &&
 					node.expression.name.text === "get" &&
@@ -50,7 +50,7 @@ const checkSecretTypes = (project: Project, root: string) => {
 					ts.isStringLiteral(argument) &&
 					argument.text.toLowerCase() === "authorization"
 				)
-					why = "Authorization read";
+					reason = "Authorization read";
 			}
 			if (
 				ts.isPropertyAccessExpression(node) &&
@@ -58,14 +58,14 @@ const checkSecretTypes = (project: Project, root: string) => {
 				ts.isPropertyAccessExpression(node.expression) &&
 				node.expression.name.text === "props"
 			)
-				why = "control binding read";
-			if (why) {
+				reason = "control binding read";
+			if (reason) {
 				const ancestors: Array<ts.Node> = [];
 				for (let parent: ts.Node = node; !ts.isStatement(parent); parent = parent.parent) {
 					ancestors.push(ts.isVariableDeclaration(parent) ? parent.name : parent);
 					if (parent === source) break;
 				}
-				reads.push({node, why, ancestors});
+				reads.push({node, reason, ancestors});
 			}
 			node.forEachChild(visit);
 		};
@@ -85,7 +85,7 @@ const checkSecretTypes = (project: Project, root: string) => {
 				findings.push({
 					file,
 					line: source.getLineAndCharacterOfPosition(read.node.getStart(source)).line + 1,
-					why: `${read.why} must enter Redacted at its source`,
+					reason: `${read.reason} must enter Redacted at its source`,
 				});
 		}
 	}

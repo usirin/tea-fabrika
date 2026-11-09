@@ -71,7 +71,7 @@ export const noNodeImports: CreateRule = {
 				return;
 			context.report({
 				node: source,
-				message: `Use ${replacement(module)}. Native imports in next/ need // edge: <why> on this line (docs/direction/build-on-effect.md).`,
+				message: `Use ${replacement(module)}. Native imports in next/ need // edge: <reason> on this line (docs/direction/build-on-effect.md).`,
 			});
 		};
 		return {

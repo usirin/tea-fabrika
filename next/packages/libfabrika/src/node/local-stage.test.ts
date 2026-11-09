@@ -5,20 +5,20 @@ import {NodeServices} from "@effect/platform-node";
 import {afterEach, describe, expect, it} from "@effect/vitest";
 import {Cause, Effect, Exit, FileSystem, Layer, Path, Schema} from "effect";
 import * as fc from "fast-check";
-import {BrainFact} from "../app/brain-fact.ts";
+import {BrainEvent} from "../app/brain-event.ts";
 import {processId} from "../id.test-support.ts";
 import {brainOutbox, checkMemory} from "./local-stage.ts";
 
 const SEED = 119120;
 const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
 	Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));
-const firstStart: typeof BrainFact.Type = {
+const firstStart: typeof BrainEvent.Type = {
 	id: "brain-start-1",
 	_tag: "started",
 	start: Effect.runSync(processId),
 	after: null,
 	build: "build-a",
-	why: "open",
+	reason: "open",
 	pid: 417,
 	at: 42,
 };
@@ -32,22 +32,22 @@ const life = {
 	backoff: fc.integer({min: 0}),
 };
 const reason = fc.constantFrom("open", "crash", "memory", "core");
-const brainFact: fc.Arbitrary<typeof BrainFact.Type> = fc.oneof(
+const brainEvent: fc.Arbitrary<typeof BrainEvent.Type> = fc.oneof(
 	fc.record({
 		...life,
 		_tag: fc.constant("started"),
 		after: fc.option(fc.string(), {nil: null}),
 		build: fc.string(),
-		why: reason,
+		reason,
 		pid: fc.integer({min: 1}),
 	}),
-	fc.record({...life, _tag: fc.constant("exited"), why: reason}),
+	fc.record({...life, _tag: fc.constant("exited"), reason}),
 	fc.record({
 		...life,
 		_tag: fc.constant("braked"),
-		why: fc.constantFrom("intensity", "restart_failed"),
+		reason: fc.constantFrom("intensity", "restart_failed"),
 	}),
-	fc.record({...life, _tag: fc.constant("stopped"), why: fc.constant("stop")}),
+	fc.record({...life, _tag: fc.constant("stopped"), reason: fc.constant("stop")}),
 );
 
 describe("P12 local brain life", () => {
@@ -85,26 +85,26 @@ describe("P12 local brain life", () => {
 						});
 						expect(sampled).toEqual([pid]);
 						expect(sampled).not.toContain(process.pid);
-						expect(requests).toEqual(bytes < 500_000_000 ? [] : [{why: "memory", pid, bytes}]);
+						expect(requests).toEqual(bytes < 500_000_000 ? [] : [{reason: "memory", pid, bytes}]);
 					}),
 				),
 			),
 			{seed: SEED, examples: [belowCap, atCap, aboveCap]},
 		);
 	});
-	it("p81/content plant: remove a pending fact before acknowledgement or leak error text", async () => {
+	it("p81/content plant: remove a pending event before acknowledgement or leak error text", async () => {
 		await fc.assert(
-			fc.asyncProperty(brainFact, (fact) =>
+			fc.asyncProperty(brainEvent, (event) =>
 				runNode(
 					Effect.gen(function* () {
 						const folder = home();
 						let outbox = yield* brainOutbox(folder);
-						yield* outbox.add(fact);
+						yield* outbox.add(event);
 						yield* Effect.exit(
 							outbox.flush(() => Effect.fail(new Error("private control failure"))),
 						);
 						outbox = yield* brainOutbox(folder);
-						expect(yield* outbox.pending).toEqual([fact]);
+						expect(yield* outbox.pending).toEqual([event]);
 						expect(readFileSync(join(folder, "brain.pending.jsonl"), "utf8")).not.toContain(
 							"private control failure",
 						);
@@ -114,15 +114,15 @@ describe("P12 local brain life", () => {
 								sent.push(row);
 							}),
 						);
-						expect(sent).toEqual([fact]);
+						expect(sent).toEqual([event]);
 						expect(yield* outbox.pending).toEqual([]);
-						yield* outbox.add(fact);
+						yield* outbox.add(event);
 						yield* outbox.flush((row: unknown) =>
 							Effect.sync(() => {
 								sent.push(row);
 							}),
 						);
-						expect(sent).toEqual([fact, fact]); // Same stable id lets Project deduplicate a lost reply.
+						expect(sent).toEqual([event, event]); // Same stable id lets Project deduplicate a lost reply.
 						expect(readFileSync(join(folder, "brain.pending.jsonl"), "utf8")).not.toContain(
 							"private control failure",
 						);
@@ -146,7 +146,7 @@ describe("P12 durable brain outbox", () => {
 	});
 	for (const reader of ["pending", "last"] as const)
 		it(`malformed saved ${reader} returns BrainError without a defect`, async () => {
-			const schema = reader === "pending" ? BrainFact : Schema.NonEmptyString;
+			const schema = reader === "pending" ? BrainEvent : Schema.NonEmptyString;
 			await fc.assert(
 				fc.asyncProperty(
 					fc.jsonValue().filter((raw) => !Schema.is(schema)(raw)),
@@ -168,7 +168,7 @@ describe("P12 durable brain outbox", () => {
 						expect(Cause.hasFails(cause)).toBe(true);
 						expect(Cause.findErrorOption(cause)).toMatchObject({
 							_tag: "Some",
-							value: {_tag: "BrainError", why: "bad_row"},
+							value: {_tag: "BrainError", reason: "bad_row"},
 						});
 					},
 				),
@@ -178,7 +178,7 @@ describe("P12 durable brain outbox", () => {
 	it("FileSystem writes each pending and last file in durable order, including acknowledgement", async () => {
 		await fc.assert(
 			fc.asyncProperty(
-				fc.uniqueArray(brainFact, {minLength: 1, maxLength: 4, selector: (row) => row.id}),
+				fc.uniqueArray(brainEvent, {minLength: 1, maxLength: 4, selector: (row) => row.id}),
 				async (rows) => {
 					const folder = home();
 					const files = new Map<string, string>();
@@ -242,7 +242,7 @@ describe("P12 durable brain outbox", () => {
 						["sync", folder],
 						["close", folder],
 					];
-					const encoded = (rows: ReadonlyArray<typeof BrainFact.Type>) =>
+					const encoded = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
 						rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
 					await Effect.runPromise(
 						Effect.scoped(
@@ -257,7 +257,7 @@ describe("P12 durable brain outbox", () => {
 									expect(calls).toEqual(expected);
 								}
 								const latest = rows.filter((row) => row._tag === "started").at(-1);
-								const sent: Array<typeof BrainFact.Type> = [];
+								const sent: Array<typeof BrainEvent.Type> = [];
 								yield* outbox.flush((row) =>
 									Effect.sync(() => {
 										sent.push(row);
@@ -291,28 +291,28 @@ describe("P12 durable brain outbox", () => {
 	});
 	it("an outbox id accepts an exact retry once and rejects changed content", async () => {
 		await fc.assert(
-			fc.asyncProperty(brainFact, (fact) =>
+			fc.asyncProperty(brainEvent, (event) =>
 				runNode(
 					Effect.gen(function* () {
 						const folder = home();
 						const outbox = yield* brainOutbox(folder);
-						yield* outbox.add(fact);
-						yield* outbox.add(fact);
-						expect(yield* outbox.pending).toEqual([fact]);
-						if (fact._tag === "started") {
-							const build = fact.build === "build-b" ? "build-c" : "build-b";
-							expect(yield* Effect.flip(outbox.add({...fact, build}))).toMatchObject({
+						yield* outbox.add(event);
+						yield* outbox.add(event);
+						expect(yield* outbox.pending).toEqual([event]);
+						if (event._tag === "started") {
+							const build = event.build === "build-b" ? "build-c" : "build-b";
+							expect(yield* Effect.flip(outbox.add({...event, build}))).toMatchObject({
 								_tag: "BrainError",
-								why: "id_reused",
+								reason: "id_reused",
 							});
 						}
 						expect(
-							yield* Effect.flip(outbox.add({...fact, start: `${fact.start}-changed`})),
+							yield* Effect.flip(outbox.add({...event, start: `${event.start}-changed`})),
 						).toMatchObject({
 							_tag: "BrainError",
-							why: "id_reused",
+							reason: "id_reused",
 						});
-						expect(yield* (yield* brainOutbox(folder)).pending).toEqual([fact]);
+						expect(yield* (yield* brainOutbox(folder)).pending).toEqual([event]);
 					}),
 				),
 			),
@@ -322,12 +322,12 @@ describe("P12 durable brain outbox", () => {
 
 	it("outbox writes release both the pending file and its directory handle", async () => {
 		await fc.assert(
-			fc.asyncProperty(brainFact, (fact) =>
+			fc.asyncProperty(brainEvent, (event) =>
 				runNode(
 					Effect.gen(function* () {
 						const outbox = yield* brainOutbox(home());
 						const before = readdirSync("/dev/fd").sort();
-						yield* outbox.add(fact);
+						yield* outbox.add(event);
 						expect(readdirSync("/dev/fd").sort()).toEqual(before);
 						yield* outbox.flush(() => Effect.void);
 						expect(readdirSync("/dev/fd").sort()).toEqual(before);
