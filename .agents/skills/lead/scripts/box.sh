@@ -130,12 +130,17 @@ def new_box():
             open_heads[0] = set(got.stdout.decode().split())
         if lane in open_heads[0]: return True
         return any(facts(p).get("branch") == lane and (boxes / p.stem).is_dir() for p in state_dir.glob("*.box") if p.stem != name)
+    # A branch whose change is only field/*.jsonl rows is the lead logging runs, not a lane writing
+    # the ticket (field-rows PR 601 on ticket 276, 2026-11-09). Judged by its paths, not its name.
+    def rows_only(other):
+        changed = must(git("diff", "--name-only", "--no-renames", head + "..." + other), "branch paths unreadable").splitlines()
+        return bool(changed) and all(re.fullmatch(r"field/[^/]+\.jsonl", p) for p in changed)
     for other in must(git("for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines():
         # The branch itself and its own backup copy (<branch>-wip) are not other branches.
         if other in (branch, "origin/" + branch, branch + "-wip", "origin/" + branch + "-wip", "main", "origin/main", "origin/HEAD"): continue
         # Only links this lane's base lacks: an older branch of the same lane, already merged into
         # the base, is history, not another lane holding the ticket.
-        if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits(head, other))) and live(other):
+        if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits(head, other))) and not rows_only(other) and live(other):
             refuse("shared_ticket " + ticket + " on " + other)
     must(git("clone", "-q", "--no-checkout", "--reference", str(main), "--separate-git-dir=" + str(gitdata), os.environ["REMOTE"], str(work)), "box clone failed")
     edge = ["--git-dir=" + str(gitdata), "--work-tree=" + str(work)]

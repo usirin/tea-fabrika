@@ -125,8 +125,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   by a step it accepted) or the branch's tip on origin when that is ahead of it, else
   `origin/main`. A plan reads the main checkout and takes no `--from`.
 - `box.sh new` refuses `shared_ticket` only when another live branch carries a link for the same
-  ticket: one with an open PR, or one a box on disk names. A branch the base already holds, or one
-  with neither, is history and does not block.
+  ticket: one with an open PR, or one a box on disk names. A branch the base already holds, one
+  with neither, or one whose change is only `field/*.jsonl` rows, does not block.
 - It runs the agent with the brief and an `answer:` line it asks for, waits with no agent, fetches,
   and checks: `pnpm commits check` and this step's name on every new commit, no exam path in any
   build commit, the leak grep on each commit's added lines, a review committing nothing, and
