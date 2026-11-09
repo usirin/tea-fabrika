@@ -223,6 +223,10 @@ describe("plancheck, today's tooling", () => {
 	// Amendment A10: the listing reads no Markdown. It splits the whole file, fences and link titles
 	// included, on whitespace and on punctuation that cannot sit in a repo path, so an exam path is
 	// listed wherever it stands and whatever wraps it. A false listing is harmless; a miss is the defect.
+	// Amendment A12 replaces A10's list: split on every character outside `A-Z a-z 0-9 . _ / -`, then
+	// strip a leading `./`, leading `_`/`-` and trailing `_`/`-`/`.`; a leading `.` stays for dotfiles,
+	// and a word also matches with its leading dots removed. Plant: split on a named list of marks, as
+	// f9f57901 does, or strip a dotfile's leading `.`.
 	it("every exam path anywhere in the plan is listed, in any context and any wrapping", () => {
 		const globs = (
 			JSON.parse(
@@ -238,26 +242,30 @@ describe("plancheck, today's tooling", () => {
 		const under = fc
 			.tuple(fc.constantFrom(...starred), segments, fc.array(word, {minLength: 2, maxLength: 2}))
 			.map(([glob, deep, [a, b]]) => glob.replaceAll("**", deep).replace("*", a!).replace("*", b!));
-		const examPath = fc.oneof(fc.constantFrom(...literal), under);
-		// A10's punctuation: none of it can sit inside a repo path.
-		const punct = fc.constantFrom(
-			"`",
-			"[",
-			"]",
-			"(",
-			")",
-			'"',
-			"'",
-			"*",
-			"|",
-			",",
-			";",
-			":",
-			"<",
-			">",
-			"=",
+		// Dotfile exam paths, so a leading `.` must survive the stripping (A12).
+		const dotfile = fc.oneof(
+			fc.constantFrom(".oxlintrc.json", ".oxfmtrc.json"),
+			word.map((w) => `.github/${w}.yaml`),
 		);
-		const marks = fc.array(punct, {maxLength: 3}).map((m) => m.join(""));
+		const examPath = fc.oneof(fc.constantFrom(...literal), under, dotfile);
+		// Amendment A12: the wrapping is any character outside the path alphabet `A-Z a-z 0-9 . _ / -`,
+		// drawn from all of Unicode, so no named mark is special. A few marks are weighted in.
+		const pathChar = /^[A-Za-z0-9._/-]$/;
+		const codePoint = (min: number, max: number) =>
+			fc
+				.integer({min, max})
+				.filter((c) => c < 0xd800 || c > 0xdfff)
+				.map((c) => String.fromCodePoint(c))
+				.filter((c) => !pathChar.test(c));
+		const outside = fc.oneof(
+			fc.constantFrom("“", "”", "‘", "’", "~", "!", "#", "`", "<", ">", "|", " ", " ", "😀"),
+			codePoint(0, 0x7f),
+			codePoint(0x80, 0x10ffff),
+		);
+		const marks = fc.string({unit: outside, maxLength: 4});
+		// Runs A12 strips from a word: leading `_` and `-`, trailing `_`, `-` and `.`.
+		const leadRun = fc.string({unit: fc.constantFrom("_", "-"), maxLength: 3});
+		const trailRun = fc.string({unit: fc.constantFrom("_", "-", "."), maxLength: 3});
 		// How the wrapped word stands: a link's text, target or title, emphasis, an HTML comment.
 		const forms = {
 			plain: (t: string) => t,
@@ -290,6 +298,17 @@ describe("plancheck, today's tooling", () => {
 			tildeFence: (t: string, lang: string) => `~~~${lang}\n  "glob": ${t}\n~~~`,
 		};
 		type Place = keyof typeof place;
+		// A pinned case's defaults: no wrapping at all.
+		const bare = {
+			ticks: false,
+			dot: false,
+			before: "",
+			lead: "",
+			dots: 0,
+			trail: "",
+			after: "",
+			lang: "",
+		};
 		fc.assert(
 			fc.property(
 				fc.record({
@@ -297,18 +316,20 @@ describe("plancheck, today's tooling", () => {
 					ticks: fc.boolean(),
 					dot: fc.boolean(),
 					before: marks,
+					lead: leadRun,
+					dots: fc.nat({max: 2}),
+					trail: trailRun,
 					after: marks,
-					period: fc.nat({max: 4}),
 					form: fc.constantFrom(...(Object.keys(forms) as Form[])),
 					where: fc.constantFrom(...(Object.keys(place) as Place[])),
 					lang: fc.oneof(fc.constantFrom("", "md", "sh", "json", "ts", "text"), word),
 				}),
-				({path, ticks, dot, before, after, period, form, where, lang}) => {
+				({path, ticks, dot, before, lead, dots, trail, after, form, where, lang}) => {
 					const tick = ticks ? "`" : "";
-					// At most one period, somewhere in the trailing punctuation (index past the end: none).
-					const tail =
-						period > after.length ? after : `${after.slice(0, period)}.${after.slice(period)}`;
-					const token = `${before}${tick}${dot ? "./" : ""}${path}${tick}${tail}`;
+					// A `./` prefix, or a stripped run: leading `_`/`-`, then leading dots on a path that is
+					// not a dotfile (A12 matches a word with its leading dots removed).
+					const head = dot ? "./" : `${lead}${path.startsWith(".") ? "" : ".".repeat(dots)}`;
+					const token = `${before}${tick}${head}${path}${trail}${tick}${after}`;
 					const body = place[where](forms[form](token, path), lang);
 					const got = check(body);
 					expect(got.text, `${body}\n${got.text}`).toContain(`exam path named: ${path}\t`);
@@ -316,66 +337,62 @@ describe("plancheck, today's tooling", () => {
 			),
 			{
 				...options,
-				numRuns: 64,
+				numRuns: 96,
 				examples: [
 					// pinned: ticket 520 review round 6, a link title. The build-owned cell
 					// [package.json](package.json "manifest") was missed by both checks at bb7d5a09.
-					[
-						{
-							path: "package.json",
-							ticks: false,
-							dot: false,
-							before: "",
-							after: "",
-							period: 9,
-							form: "linkSelfTitle",
-							where: "fileCell",
-							lang: "",
-						},
-					],
+					[{...bare, path: "package.json", form: "linkSelfTitle", where: "fileCell"}],
 					// pinned: ticket 520 review round 6, a fenced block holding package.json was never
 					// listed at bb7d5a09.
-					[
-						{
-							path: "package.json",
-							ticks: false,
-							dot: false,
-							before: "",
-							after: "",
-							period: 9,
-							form: "plain",
-							where: "fence",
-							lang: "sh",
-						},
-					],
+					[{...bare, path: "package.json", form: "plain", where: "fence", lang: "sh"}],
 					// pinned: ticket 520 amendment A11, underscore emphasis around a path with an inner
 					// underscore. _allowed_signers_ was not listed at bb7d5a09.
-					[
-						{
-							path: "allowed_signers",
-							ticks: false,
-							dot: false,
-							before: "",
-							after: "",
-							period: 9,
-							form: "underscore",
-							where: "prose",
-							lang: "",
-						},
-					],
+					[{...bare, path: "allowed_signers", form: "underscore", where: "prose"}],
 					// pinned: ticket 520 review round 5, [`package.json`](package.json) in a build-owned
 					// cell printed "no exam paths named" at 2e25c4e7.
 					[
 						{
+							...bare,
 							path: "package.json",
 							ticks: true,
-							dot: false,
 							before: "[",
 							after: "](package.json)",
-							period: 99,
 							form: "plain",
 							where: "fileCell",
-							lang: "",
+						},
+					],
+					// pinned: ticket 520 review round 7, three cells that printed "no exam paths named" at
+					// f9f57901: ~~package.json~~, “package.json” and <!--package.json-->.
+					[
+						{
+							...bare,
+							path: "package.json",
+							before: "~~",
+							after: "~~",
+							form: "plain",
+							where: "fileCell",
+						},
+					],
+					[
+						{
+							...bare,
+							path: "package.json",
+							before: "“",
+							after: "”",
+							form: "plain",
+							where: "fileCell",
+						},
+					],
+					[
+						{
+							...bare,
+							path: "package.json",
+							before: "<!",
+							lead: "--",
+							trail: "--",
+							after: ">",
+							form: "plain",
+							where: "fileCell",
 						},
 					],
 				],
