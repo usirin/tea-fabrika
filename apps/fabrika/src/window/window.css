@@ -2892,6 +2892,32 @@ main.program:has(> .view) {
 	margin-inline-end: var(--s-2);
 	overflow-wrap: normal;
 }
+/* In the ticket bar the marks keep the words' last line: a long hint wraps in its own column, and
+   the marks sit beside it on that last line, so "Did this need you?" never drops under a blind
+   ask's "Your pick first". Only a bar too narrow for both lets them take the next line. */
+.ask-view:not([data-ask-place="menu"]) .ask-rec {
+	display: flex;
+	align-items: last baseline;
+	column-gap: var(--s-2);
+}
+.ask-view:not([data-ask-place="menu"]) .ask-recwords {
+	flex: 0 1 auto;
+	min-inline-size: 0;
+	margin-inline-end: 0;
+	/* A wrapped hint never leaves one word alone on its last line, the line the marks share. */
+	text-wrap: pretty;
+}
+.ask-view:not([data-ask-place="menu"]) .ask-marks {
+	flex: none;
+}
+@container main (max-width: 420px) {
+	.ask-view:not([data-ask-place="menu"]) .ask-rec {
+		display: block;
+	}
+	.ask-view:not([data-ask-place="menu"]) .ask-recwords {
+		margin-inline-end: var(--s-2);
+	}
+}
 .ask-recwords strong {
 	font-weight: 600;
 }
@@ -2930,13 +2956,15 @@ main.program:has(> .view) {
 		display: none;
 	}
 }
-/* The marks' question keeps its words together; narrow, it drops under the rec's words at the
-   start, and the pair drops under its question, both buttons together: never one to a line. */
+/* "Did this need you?" and its two marks are one piece: they go on after the rec's words where
+   they fit, or take the next line together, at the words' left edge. Never split, never one mark
+   to a line. */
 .ask-marks {
-	display: inline;
-}
-.ask-marks > span[aria-hidden] {
-	margin-inline-end: var(--s-2);
+	display: inline-flex;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: var(--s-2);
+	vertical-align: middle;
 	white-space: nowrap;
 }
 .ask-mark-pair {
@@ -3074,11 +3102,25 @@ main.program:has(> .view) {
 	white-space: nowrap;
 }
 
-/* The asks menu is wider than a panel of a few lines: an open row holds the whole ask. At 360px its
-   words took five lines; at 660px, a little wider than the command palette, they take three: the
-   actions, the rec line with "Did this need you?" and its marks, then Evidence. */
+/* The asks menu stays a menu: narrow, as a list of rows is. An open row's ask takes up to four
+   lines there: the actions, the rec's words, "Did this need you?" with its marks where they do not
+   fit after the words, then Evidence. */
 #pop-asks.panel {
-	width: min(660px, calc(100% - 2 * var(--s-2)));
+	width: min(400px, calc(100% - 2 * var(--s-2)));
+}
+/* At 400px an open row's five actions fit one row only as words: the key chips go, as the bar's do
+   in a narrow tile, the sides get tighter, and each label keeps its one line. The keys still work,
+   and each button still names its key (aria-keyshortcuts). Evidence drops its chip too, so it fits
+   after the rec's reason on one line. */
+#pop-asks .ask-view [data-scope="kbd"] {
+	display: none;
+}
+#pop-asks .ask-toolbar button {
+	--manti-button-padding-x: var(--s-1);
+	white-space: nowrap;
+}
+#pop-asks .ask-why {
+	column-gap: var(--s-2);
 }
 
 /* In the asks menu a row is a row: padded off the menu's edge, and its ask has no card of its own. */
@@ -3092,6 +3134,11 @@ main.program:has(> .view) {
 /* In the menu the row draws the edge: the view adds no hairline of its own. */
 .asks-row .ask-view::after {
 	content: none;
+}
+/* With no hairline to clear, the ask ends where its last line does: the row's own padding is the
+   space under it. */
+.asks-row .ask-view {
+	padding-block-end: 0;
 }
 .asks-row .asks-acts {
 	display: flex;

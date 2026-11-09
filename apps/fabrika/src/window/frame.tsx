@@ -501,6 +501,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 				size="sm"
 				variant="outline"
 				tabIndex={toolbar ? -1 : undefined}
+				aria-keyshortcuts="Enter"
 				onClick={() => open({id: row.key})}
 			>
 				{row.kind === "stuck" ? "Open lane" : "Open ticket"}
@@ -510,6 +511,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 				size="sm"
 				variant="outline"
 				tabIndex={toolbar ? -1 : undefined}
+				aria-keyshortcuts="h"
 				onClick={() => aside({id: row.key})}
 			>
 				{asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
