@@ -1,6 +1,6 @@
 # 94. A tea-host counter survives its host dying
 
-The question: tea-host's first test ([tea-host](../docs/direction/tea-host.md)).
+The question: tea-host's first test (tea-host).
 Three hosts share one ledger. A `counter` tea program, registered as
 `counter:1`, runs on exactly one of them at a time. Two senders send it
 increments while its host is killed, frozen, and woken late. Does the count
@@ -221,7 +221,7 @@ to write that does. (Elm: something that stays open is a Sub.)
   traffic (4 renews a second per owned name at 250 ms).
 - **The send path: a ledger append with a message id is enough for test 1.**
   p99 under 7 ms locally, far below the 50 ms line in
-  [tea-host](../docs/direction/tea-host.md) (a deployed ledger is not
+  tea-host (a deployed ledger is not
   measured here). Replay and takeover came for free, as that note leaned.
   Two changes the ledger wants for a mailbox: an "append at the end"
   (today an append must name the rev, so senders race and 41% of tries

@@ -1,6 +1,6 @@
 # 122. Can an agent write a check for a plain-sentence promise that catches what the repo's own tests miss?
 
-The question: [Promises in the pipeline](../docs/direction/promises-in-the-pipeline.md)
+The question: Promises in the pipeline
 proposes a verify writer, an agent that is not the builder and writes one
 check per promise before any code exists. Is such a check any good? This
 experiment replays the step on three closed kamp-us/demlik tickets. One agent
@@ -221,7 +221,7 @@ September 2026, after the model's training cutoff.
 The rule was decided after this run was set up, so the script does not apply
 it: every mutant that lives blocks, and the one way out is a disable comment
 the owner approves
-([Promises in the pipeline](../docs/direction/promises-in-the-pipeline.md)).
+(Promises in the pipeline).
 Read against it by hand:
 
 - **All three tickets would have been sent back.** 24 mutants lived on #483,

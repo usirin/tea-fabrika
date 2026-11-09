@@ -1,6 +1,6 @@
 # 124. Can the verify writer kill every mutant that lives, and what does the skip list cost?
 
-The question: [Promises in the pipeline](../docs/direction/promises-in-the-pipeline.md)
+The question: Promises in the pipeline
 runs mutation testing after the build, and every mutant that lives blocks the
 pull request. It goes back to the verify writer, about a promise or not. A
 fixed skip list leaves out error and log text. A mutant the writer believes no

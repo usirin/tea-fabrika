@@ -126,7 +126,7 @@ Toyota      daily kaizen on the standing line is the norm; a kaizen event is the
 | A scheduled job never changes code; it files a ticket, as an agent writer. | [scheduled jobs](../docs/direction/scheduled-jobs-on-the-host.md):33 |
 | A check too long for a pull request runs daily, and what it finds becomes a ticket. | [fast and daily mutation](../docs/direction/fast-and-daily-mutation.md):37 |
 | Every fact says who wrote it. | [the ticket is the lane's one view](../docs/direction/the-ticket-is-the-lane-view.md) |
-| The project object is the whole ledger in `next/`, one per repository. | [tea-host](../docs/direction/tea-host.md):23, [the cloud is one more host](../docs/direction/the-cloud-is-one-more-host.md):315 |
+| The project object is the whole ledger in `next/`, one per repository. | tea-host:23, [the cloud is one more host](../docs/direction/the-cloud-is-one-more-host.md):315 |
 
 ### Leaned (proposed, not settled)
 
@@ -410,7 +410,7 @@ The lean handed to this study: an optional **area** (one at most, never ends), a
 - **Elm or OTP.** The parent plan folds its children's states, as a parent steps its children.
   It closes itself only by its success check, a supervisor whose children all exited normally.
 - **The word clash.** In `next/`, "the project object" is the repository's whole ledger
-  ([tea-host](../docs/direction/tea-host.md):23). Linear's word for that level is a workspace or
+  (tea-host:23). Linear's word for that level is a workspace or
   a team. A `next/` tracker showing "project" for both breaks
   [use the industry's names](../docs/direction/use-the-industrys-names.md)'s one-meaning rule.
   No lean: the owner picks which side gets a new word.

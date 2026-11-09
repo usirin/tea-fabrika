@@ -55,7 +55,7 @@ const host = yield* Host.start({where, ledger}); // runs programs and jobs, keep
   special thing: laptops run hosts, and the cloud runs something else that
   only stores. Two kinds of place, two sets of rules.
 - **The change:** there is one abstraction, the host
-  ([tea-host](./tea-host.md), OTP's node). A laptop's host keeps a local
+  (tea-host, OTP's node). A laptop's host keeps a local
   ledger; the Cloudflare host keeps the shared one. The Cloudflare host runs
   programs and jobs in its own environment.
 - ~~"like a laptop that never sleeps"~~ **Wrong, marked 2026-10-27.** A
@@ -66,7 +66,7 @@ const host = yield* Host.start({where, ledger}); // runs programs and jobs, keep
   not talk to each other directly. The door, the SSH-key login, invites and
   the move of a laptop's tickets carry over as they are.
 - **What it reopens:** the host on Cloudflare was parked on 2026-10-25
-  ([tea-host](./tea-host.md)). This brings it back, for the shape, not yet for
+  (tea-host). This brings it back, for the shape, not yet for
   running a person's agent there
   ([where a person's login lives](./agents-behind-one-service.md#where-a-persons-login-lives)).
 - **Others:** Erlang/OTP nodes are all the same kind of process wherever they
@@ -257,7 +257,7 @@ the alarm, is decided.*
 - [Scheduled jobs run on the host's alarms](./scheduled-jobs-on-the-host.md)
   and [tickets start in our tracker](./tickets-start-in-our-tracker.md) say
   each job has its own alarm because the ledger's is for leases. The ledger's
-  alarm already serves two kinds of row, and [tea-host](./tea-host.md) sketches
+  alarm already serves two kinds of row, and tea-host sketches
   one alarm at the earliest timer. The draft: one alarm per host.
   **Decided 2026-11-07 (owner): one alarm per object, set in one function, at
   the earliest timer.** Every timer an object holds (a lease, a backoff's
@@ -276,7 +276,7 @@ the alarm, is decided.*
   ```
 - The same scheduled-jobs note says jobs that read code cannot run on
   Cloudflare. Experiment 148's box per job did.
-- [tea-host](./tea-host.md) parked the Cloudflare host on 2026-10-25, and
+- tea-host parked the Cloudflare host on 2026-10-25, and
   sketches tsh and the app as clients of a separate Node host.
 
 ## Proposed answers (2026-10-30 walk)
@@ -391,7 +391,7 @@ The seven open questions, each with its lean. Proposed, not decided.
   one set of hands serving many objects, links and supervisors across objects,
   and a window that mirrors a model kept in an object.
 - **Notes this changes:**
-  - [tea-host](./tea-host.md) and [the GUI is an Electron app first](./the-gui-is-electron-first.md):
+  - tea-host and [the GUI is an Electron app first](./the-gui-is-electron-first.md):
     a Node host no longer runs programs. Node is the hands.
   - [Programs run in a box](./programs-run-in-a-box.md): the program is in
     workerd now, so the box goes around the hands' work, not around the

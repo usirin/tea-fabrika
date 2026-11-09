@@ -227,7 +227,7 @@ plan's ids use.
 ## 2. The verify writer and promises
 
 Not built yet as a stage. The names come from
-[Promises in the pipeline](../direction/promises-in-the-pipeline.md) and from
+Promises in the pipeline and from
 `packages/promises/`, the record and gate built in experiment 117, whose names
 a promise stage would inherit.
 
