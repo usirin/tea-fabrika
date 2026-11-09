@@ -362,6 +362,14 @@ describe("P17a, revoke stops writes at the final door", () => {
 						expect(w.deliveries).toHaveLength(1);
 						const incoming = last(w);
 						expect(incoming.envelope.input).toEqual({_tag: "add", n});
+						// Mutation regression: safe transformed input must stay in the authenticated log.
+						const recorded = (yield* rows(w, "door/inputs")).find(
+							(row) => row.id === incoming.envelope.id,
+						);
+						expect(recorded).toMatchObject({
+							_tag: "received",
+							body: {input: {_tag: "add", n: String(n)}},
+						});
 						// Plant: decode the already decoded input a second time in accept.
 						expect(yield* Effect.result(d.a.accept(incoming))).toMatchObject({
 							_tag: "Success",
