@@ -1,12 +1,14 @@
 // Today's app, T343 PR 1, tests-owned calibration. No network or model calls.
 // pnpm exec node experiments/239-theme-repair.ts --map     prepares the kept input themes
 // pnpm exec node experiments/239-theme-repair.ts          measures using the real shared checker
+// pnpm exec node experiments/239-theme-repair.ts --radix  measures all 300 token picks independently
 // Reports go to runs/. Review before copying into fixtures/themes/calibration.json.
 import {createHash} from "node:crypto";
-import {mkdirSync, readFileSync, writeFileSync} from "node:fs";
+import {mkdirSync, readdirSync, readFileSync, writeFileSync} from "node:fs";
 import {createRequire} from "node:module";
 import {dirname} from "node:path";
 import {parse as parseToml, stringify} from "smol-toml";
+import type {TokenFile} from "../packages/fabrika-design/src/build/schema.ts";
 
 // Resolve the fixture package from itself, so this standalone script needs no root dependency.
 const fixture = createRequire(new URL("../fixtures/themes/package.json", import.meta.url));
@@ -18,6 +20,7 @@ const {
 	lab,
 	ladder,
 	positions,
+	radixPick,
 }: typeof import("@kampus/themes-fixture/laws") = fixture("@kampus/themes-fixture/laws");
 
 const require = createRequire(new URL("../oxlint-plugins/package.json", import.meta.url));
@@ -132,7 +135,102 @@ const ugly = {
 		palette: Array.from({length: 16}, () => "#777777"),
 	},
 };
-if (process.argv.includes("--map")) {
+if (process.argv.includes("--radix")) {
+	const {decodeToken} = await import("../packages/fabrika-design/src/build/schema.ts");
+	const dir = new URL("../packages/fabrika-design/tokens/color/", import.meta.url);
+	const tokens = new Map<string, TokenFile>();
+	const hashes: Record<string, string> = {};
+	for (const file of readdirSync(dir).sort()) {
+		const bytes = readFileSync(new URL(file, dir));
+		const decoded = decodeToken(file, parseToml(bytes.toString("utf8")));
+		if (decoded._tag === "bad") throw new Error(decoded.errors.join("\n"));
+		tokens.set(file.replace(/\.toml$/, ""), decoded.value);
+		hashes[file] = createHash("sha256").update(bytes).digest("hex");
+	}
+	const radix = JSON.parse(
+		readFileSync(new URL("./177-themes/schemes/radix-colors-3.0.0.json", import.meta.url), "utf8"),
+	) as {
+		scales: Record<string, Record<string, string[]>>;
+	};
+	const grays = ["gray", "mauve", "slate", "sage", "olive", "sand"];
+	const accents = [
+		"tomato",
+		"red",
+		"ruby",
+		"crimson",
+		"pink",
+		"plum",
+		"purple",
+		"violet",
+		"iris",
+		"indigo",
+		"blue",
+		"cyan",
+		"teal",
+		"jade",
+		"green",
+		"grass",
+		"brown",
+		"bronze",
+		"gold",
+		"sky",
+		"mint",
+		"lime",
+		"yellow",
+		"amber",
+		"orange",
+	];
+	const looks = ["dark", "light"] as const;
+	const picks = grays.flatMap((gray) =>
+		accents.flatMap((accent) =>
+			looks.map((look) => ({
+				gray,
+				accent,
+				look,
+				...radixPick(tokens, {gray, accent, look}, (scale, at, look) => {
+					const n = Number(at.replace(/^a/, "")) - 1;
+					if (scale === "black" || scale === "white") {
+						const a = required([0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95][n]);
+						return `${scale === "black" ? "#000000" : "#ffffff"}${Math.round(a * 255)
+							.toString(16)
+							.padStart(2, "0")}`;
+					}
+					return required(
+						required(radix.scales[scale])[`${look}${at.startsWith("a") ? "A" : ""}`]?.[n],
+					).toLowerCase();
+				}),
+			})),
+		),
+	);
+	const failures = picks.filter((pick) => pick.failures.length > 0);
+	const builtinChanges = picks
+		.filter((pick) => pick.gray === "slate" && pick.accent === "indigo")
+		.map((pick) => ({
+			look: pick.look,
+			changes: Object.entries(builtin[pick.look])
+				.filter(([name, color]) => pick.colors[name] !== color)
+				.map(([token, was]) => ({token, was, now: pick.colors[token]})),
+		}));
+	const report = {
+		version: "radix-3.0.0",
+		seed: 119120,
+		providerFees: 0,
+		tokens: hashes,
+		passing: picks.length - failures.length,
+		failing: failures.length,
+		builtinChanges,
+		picks,
+	};
+	const output = process.argv[process.argv.indexOf("--output") + 1];
+	const file = process.argv.includes("--output") && output ? output : "runs/themes-radix.json";
+	mkdirSync(dirname(file), {recursive: true});
+	writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
+	console.log(`${report.passing}/300 picks pass; ${report.failing} fail; report ${file}`);
+	for (const pick of failures)
+		console.log(
+			`${pick.gray}/${pick.accent}/${pick.look}: ${pick.failures.map(({token, on}) => `${token} on ${on}`).join("; ")}`,
+		);
+} else if (process.argv.includes("--map")) {
 	mkdirSync(new URL("mapped/", root), {recursive: true});
 	for (const input of inputs)
 		writeFileSync(new URL(`mapped/${input.name}.toml`, root), stringify(input));

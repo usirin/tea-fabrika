@@ -1,7 +1,7 @@
 type = "text"
 tier = "global"
 owner = "design"
-description = "the turn's text only: your turn, and nothing else; light takes indigo a11, since indigo 11 reads 4.47 on a selected row"
+description = "the turn's text only: the faintest accent step that passes both floors on every listed background"
 theme = "turn-text"
 on = [
 	"surface-sunken",
@@ -15,5 +15,4 @@ on = [
 floor = 4.5
 
 [colors]
-dark = "indigo.12" # T343: 11 -> 12, so dark selected rows also reach APCA Lc 60.
-light = "indigo.a11"
+scale = "indigo" # Each pick replaces indigo with its accent, before choosing among all 24 steps.

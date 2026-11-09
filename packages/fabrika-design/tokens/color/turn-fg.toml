@@ -1,11 +1,12 @@
 type = "text"
 tier = "global"
 owner = "design"
-description = "text on the turn fill"
+description = "text on both turn fills: white if it passes both floors on both, otherwise black; neither passing fails the pick"
 theme = "on-turn"
 on = ["turn-fill", "turn-fill-hover"]
 floor = 4.5
 
 [colors]
-dark = { hex = "#ffffff", bend = "Radix's rule for text on step 9" }
-light = { hex = "#ffffff", bend = "Radix's rule for text on step 9" }
+# First candidate passing every listed background under both floors, separately per look.
+# Neither background moves. No candidate passing means a visible build failure.
+choose = ["#ffffff", "#000000"]

@@ -480,3 +480,257 @@ to link exactly that unchanged record. This report correction is a second
 step-commit call with the correct selector and its owner checks. No approval,
 plan, owner rule or signed history was altered. The first call's missed box
 owner check remains recorded here.
+
+## Radix token inputs, ticket 343, after e7b34c16
+
+Today's app only. The original two T7 laws are unchanged. Every pick still needs every pair to pass WCAG and APCA. No failing pick is exempted or reported as passing.
+
+`turn-text.toml` now says `colors.scale = "indigo"`. Each pick replaces that scale with its accent and chooses the faintest of all 24 solid/alpha steps passing WCAG 4.5 and APCA Lc 60 on every listed background, per look. The other fixed text tokens already pass all 300 picks, so their inputs stay unchanged.
+
+The former token format could not express the label rule. `turn-fg.toml` now says `colors.choose = ["#ffffff", "#000000"]`. The decoder accepts exactly this ordered pair, not an arbitrary list or mixed selection modes. Build must choose the first candidate passing both text floors on both `turn-fill` and `turn-fill-hover`, separately per look. If neither passes, the pick fails. Both fill files and their steps are unchanged.
+
+Run `pnpm exec node experiments/239-theme-repair.ts --radix` to reproduce the full enumeration. `runs/themes-radix.json` keeps every resolved value, token input hash, failed or unresolved pair, fixed background and both candidates' signed readings. It stays out of git. The measurement mode reports its results without changing token files or generated files. Seed 119120 remains in the properties; the count itself enumerates all 300 picks. No model calls; provider fees $0.
+
+**90 of 300 picks pass; 210 fail.** Before these input changes, 60 passed and 240 failed. All 300 `turn-text` choices now pass. No other fixed text token fails. Both built-ins stay byte-for-byte the same in their 21 global colors and terminal values. The rules still choose dark `#d6e1ff`, light `#002bb7c5` for `turn-text`, and white for `turn-fg` in slate/indigo.
+
+The 90 passing picks are all six grays with indigo, iris, plum, purple or violet in both looks, and sky, mint, lime, yellow or amber in dark only. The unresolved label affects 180 picks. Fixed `turn-fill` on `surface` fails in 50 picks; 20 of those also have no label candidate. That makes 210 failing picks, not 230. The report contains 360 unresolved label pairs and 50 failed fill pairs. An unresolved label pair has no chosen foreground; both candidates' readings remain visible rather than inventing a color.
+
+All six grays with tomato, red, ruby, crimson, pink, blue, cyan, teal, jade, green, grass, brown, bronze, gold or orange fail the common white/black label choice in both looks. All six grays with cyan, grass, sky, mint, lime, yellow, amber or orange also fail `turn-fill` on `surface` in light. Gray and slate with teal fail that fill pair in light too. The table below lists every failing pick and every failed or unresolved pair.
+
+Cross-check: all 1,488 saved sRGB Radix values match installed Radix Colors 3.0.0. All 770 reported candidate readings match the shared checker within 1e-10. An independent pass count using the generated product pairs and shared checker also gives 90. The non-text floor remains WCAG 3 and APCA Lc 15; the text floor remains WCAG 4.5 and APCA Lc 60.
+
+### Every remaining failing pick
+
+| Gray | Accent | Look | Failed or unresolved pairs |
+|---|---|---|---|
+| gray | tomato | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | tomato | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | red | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | red | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | ruby | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | ruby | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | crimson | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | crimson | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | pink | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | pink | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | blue | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | blue | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | cyan | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | cyan | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| gray | teal | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | teal | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| gray | jade | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | jade | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | green | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | green | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | grass | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | grass | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| gray | brown | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | brown | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | bronze | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | bronze | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | gold | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | gold | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | sky | light | `turn-fill` on `surface` |
+| gray | mint | light | `turn-fill` on `surface` |
+| gray | lime | light | `turn-fill` on `surface` |
+| gray | yellow | light | `turn-fill` on `surface` |
+| gray | amber | light | `turn-fill` on `surface` |
+| gray | orange | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| gray | orange | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| mauve | tomato | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | tomato | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | red | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | red | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | ruby | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | ruby | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | crimson | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | crimson | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | pink | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | pink | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | blue | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | blue | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | cyan | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | cyan | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| mauve | teal | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | teal | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | jade | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | jade | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | green | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | green | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | grass | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | grass | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| mauve | brown | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | brown | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | bronze | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | bronze | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | gold | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | gold | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | sky | light | `turn-fill` on `surface` |
+| mauve | mint | light | `turn-fill` on `surface` |
+| mauve | lime | light | `turn-fill` on `surface` |
+| mauve | yellow | light | `turn-fill` on `surface` |
+| mauve | amber | light | `turn-fill` on `surface` |
+| mauve | orange | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| mauve | orange | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| slate | tomato | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | tomato | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | red | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | red | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | ruby | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | ruby | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | crimson | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | crimson | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | pink | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | pink | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | blue | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | blue | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | cyan | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | cyan | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| slate | teal | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | teal | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| slate | jade | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | jade | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | green | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | green | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | grass | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | grass | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| slate | brown | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | brown | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | bronze | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | bronze | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | gold | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | gold | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | sky | light | `turn-fill` on `surface` |
+| slate | mint | light | `turn-fill` on `surface` |
+| slate | lime | light | `turn-fill` on `surface` |
+| slate | yellow | light | `turn-fill` on `surface` |
+| slate | amber | light | `turn-fill` on `surface` |
+| slate | orange | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| slate | orange | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| sage | tomato | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | tomato | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | red | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | red | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | ruby | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | ruby | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | crimson | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | crimson | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | pink | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | pink | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | blue | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | blue | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | cyan | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | cyan | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| sage | teal | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | teal | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | jade | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | jade | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | green | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | green | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | grass | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | grass | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| sage | brown | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | brown | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | bronze | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | bronze | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | gold | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | gold | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | sky | light | `turn-fill` on `surface` |
+| sage | mint | light | `turn-fill` on `surface` |
+| sage | lime | light | `turn-fill` on `surface` |
+| sage | yellow | light | `turn-fill` on `surface` |
+| sage | amber | light | `turn-fill` on `surface` |
+| sage | orange | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sage | orange | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| olive | tomato | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | tomato | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | red | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | red | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | ruby | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | ruby | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | crimson | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | crimson | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | pink | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | pink | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | blue | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | blue | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | cyan | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | cyan | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| olive | teal | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | teal | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | jade | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | jade | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | green | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | green | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | grass | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | grass | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| olive | brown | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | brown | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | bronze | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | bronze | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | gold | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | gold | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | sky | light | `turn-fill` on `surface` |
+| olive | mint | light | `turn-fill` on `surface` |
+| olive | lime | light | `turn-fill` on `surface` |
+| olive | yellow | light | `turn-fill` on `surface` |
+| olive | amber | light | `turn-fill` on `surface` |
+| olive | orange | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| olive | orange | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| sand | tomato | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | tomato | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | red | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | red | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | ruby | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | ruby | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | crimson | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | crimson | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | pink | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | pink | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | blue | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | blue | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | cyan | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | cyan | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| sand | teal | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | teal | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | jade | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | jade | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | green | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | green | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | grass | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | grass | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+| sand | brown | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | brown | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | bronze | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | bronze | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | gold | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | gold | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | sky | light | `turn-fill` on `surface` |
+| sand | mint | light | `turn-fill` on `surface` |
+| sand | lime | light | `turn-fill` on `surface` |
+| sand | yellow | light | `turn-fill` on `surface` |
+| sand | amber | light | `turn-fill` on `surface` |
+| sand | orange | dark | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover` |
+| sand | orange | light | `turn-fg` on `turn-fill`; `turn-fg` on `turn-fill-hover`; `turn-fill` on `surface` |
+
+### Build handoff
+
+The generator currently indexes `colors.dark`/`colors.light` after excluding only scale choices. It must read `colors.choose`, resolve its backgrounds first, test candidates in order under both floors, and report the pick and pairs when neither candidate passes. Its generated comments must also handle that choice. Then generate all 300 complete picks at `src/theme-picks.ts`, using each pick's gray/accent before resolving scale choices, and run the unchanged T7 laws. The 210 impossible picks above remain visible failures under the authorized rules. Changing either fill to hide them is forbidden.
+
+The fixed-value T6 plant now replaces a selection mode with two fixed looks, retaining the other look's current built-in value. Adding a `dark` field alongside `scale` would only test a format refusal and would not establish the APCA law. The two new labeled input checks pin the exact scale and white/black formats; every other own token still supplies both looks.
+
+Validation used only these narrow paths with one Vitest worker:
+
+- `packages/fabrika-design/src/build/schema.test.ts`: 39 passed.
+- `packages/fabrika-design/src/build/contrast.test.ts`: 32 passed.
+- `packages/fabrika-design/src/build/tokens.test.ts`: 84 passed, 49 failed, one older skip.
+- `packages/fabrika-design/src/themes.test.ts`: 49 passed, three failed.
+
+Total: 204 passed, 52 failed, one older skip. The 49 token failures all come from the generator trying to read the new choice as fixed per-look values; its copy baselines cannot reach their plants. The three T7 failures come from the still-missing `theme-picks.ts`. These are visible product failures. No law was skipped to hide one.
+
+Five isolated input/decoder plants were caught: removing choice support, opening the list to arbitrary colors, reversing white/black, restoring fixed `turn-text`, and restoring fixed-white `turn-fg`. The temporary changes were restored before the final narrow run. The added exact-resolution property also fails against the real missing-picks output. Its equality checks cover the chosen text and the fixed fills.
+
+`pnpm format` passed. The single full `pnpm lint` passed its earlier checks and then failed at the token generator's unsupported choice. The final format run found zero blocking lint findings. The single final `pnpm typecheck` reached three product errors in `src/build/tokens.ts`: line 215 indexes a choice as per-look data, and line 359 reads its missing `dark` and `light` fields for comments. No test-side type errors were reported before the workspace check stopped. Other checks in that recursive command were terminated after this failure, so this is not a clean workspace typecheck.
+
+Build must handle the new union case at both locations, generate picks and generated outputs, and keep the 210 failed picks visible. No Electron, host-watch, paid call, full local suite, push, or product edit was performed in this tests step.

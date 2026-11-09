@@ -1,10 +1,11 @@
 import {createHash} from "node:crypto";
-import {existsSync, readFileSync} from "node:fs";
+import {existsSync, readdirSync, readFileSync} from "node:fs";
 import {join} from "node:path";
 import {isDeepStrictEqual} from "node:util";
 import {apca, wcag} from "@kampus/themes-fixture/laws";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import type {TokenFile} from "./build/schema.ts";
 
 // The design package's laws (docs/direction/fabrika-design-package.md, decided 2026-11-02): the
 // built-in `fabrika` and `fabrika-light` themes (docs/direction/themes.md, decided 2026-11-01),
@@ -1395,6 +1396,39 @@ describe("T7 all 300 Radix picks are generated and pass both floors", () => {
 						pick.accent !== "indigo" ||
 						isDeepStrictEqual(pick.colors, builtin.colors),
 				).toBe(true);
+			}),
+			{seed: 119120, numRuns: 300},
+		);
+	});
+	// Independent token oracle adds the faintest-step and white-first rules without changing the
+	// two preceding laws. Plants: keep turn-text at 11, choose white on bright fills, or move a fill.
+	it("uses the faintest passing scale step and ordered label choice while keeping fills fixed", async () => {
+		const {globalNames, radixPick} = await import("@kampus/themes-fixture/laws");
+		const {decodeToken} = await import("./build/schema.ts");
+		const {parse} = await import("smol-toml");
+		const dir = join(import.meta.dirname, "..", "tokens", "color");
+		const tokens = new Map<string, TokenFile>();
+		for (const file of readdirSync(dir).sort()) {
+			const decoded = decodeToken(file, parse(readFileSync(join(dir, file), "utf8")));
+			if (decoded._tag === "bad") throw new Error(decoded.errors.join("\n"));
+			tokens.set(file.replace(/\.toml$/, ""), decoded.value);
+		}
+		const picks = await load();
+		expect(picks.length).toBe(300);
+		fc.assert(
+			fc.property(fc.constantFrom(...picks), (pick) => {
+				const want = radixPick(tokens, pick, (scale, at, look) => {
+					const n = Number(at.replace(/^a/, "")) - 1;
+					const value =
+						scale === "black"
+							? BLACK_A[n]
+							: stepsOf(scale, `${look}${at.startsWith("a") ? "A" : ""}`)[n];
+					if (value === undefined) throw new Error(`no Radix step ${scale}.${at} in ${look}`);
+					return value;
+				});
+				expect(pick.colors).toEqual(
+					Object.fromEntries(globalNames.map((name) => [name, want.colors[name]])),
+				);
 			}),
 			{seed: 119120, numRuns: 300},
 		);
