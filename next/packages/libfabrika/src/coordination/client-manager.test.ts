@@ -22,7 +22,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Effect, Layer, References, Stream} from "effect";
+import {Effect, Layer, References, Schema, Stream, Tracer} from "effect";
 import * as fc from "fast-check";
 import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import type {Sql} from "../data/referee.ts";
@@ -233,6 +233,48 @@ const view = (m: Members) => ({
 		.map(([key, k]) => ({key, rank: k.rank, live: k.live, under: k.under}))
 		.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
 	spent: [...m.spent].sort(),
+});
+
+describe("p96 and p97, replay and write answers", () => {
+	it.effect("unknown member facts preserve the view and still advance the write head", () =>
+		check(fc.tuple(leaf, fc.jsonValue()), [], ([key, body]) =>
+			Effect.gen(function* () {
+				const before = yield* members;
+				const ledger = yield* Ledger;
+				yield* ledger.append(MEMBERS, "future", {
+					...from(),
+					_tag: "future_member_fact",
+					body: Schema.decodeUnknownSync(Schema.Json)({value: body}),
+				});
+				const loaded = yield* Effect.exit(members);
+				expect(loaded._tag, "unknown member facts are skipped").toBe("Success");
+				if (loaded._tag === "Success") expect(view(loaded.value)).toEqual(view(before));
+				expect(yield* write(granted("pA", key))).toMatchObject({_tag: "applied"});
+				expect((yield* entries).at(-1)?.seen).toBe(2);
+			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+		),
+	);
+	it.effect("each write span keeps its answer and a refusal's why", () =>
+		check(leaf, [], (key) => {
+			const spans: Tracer.NativeSpan[] = [];
+			const tracer = Tracer.make({
+				span: (options) => {
+					const span = new Tracer.NativeSpan(options);
+					spans.push(span);
+					return span;
+				},
+			});
+			return Effect.gen(function* () {
+				for (const signer of ["pA", "wA", "unknown-signer"]) {
+					const answer = yield* write(granted(signer, key));
+					const span = spans.filter((s) => s.name === "members.write").at(-1)!;
+					expect(span.attributes.get("fab.members.answer")).toBe(answer._tag);
+					if (answer._tag === "refused")
+						expect(span.attributes.get("fab.members.why")).toBe(answer.why);
+				}
+			}).pipe(Effect.provide(clientsOn(onSql(fresh()))), Effect.withTracer(tracer));
+		}),
+	);
 });
 
 /**

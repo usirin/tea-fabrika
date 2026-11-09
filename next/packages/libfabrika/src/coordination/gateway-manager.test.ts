@@ -4,7 +4,7 @@
 // join({key, client, gateway, session, at}), leave(client, session), online(key).
 // Join values are already checked by P10/P12; probe timestamps come from the gateway.
 import {describe, expect, it} from "@effect/vitest";
-import {Effect, Tracer} from "effect";
+import {Effect, Fiber, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {LedgerError} from "../data/ledger.ts";
@@ -62,6 +62,75 @@ const check = <A, E, R>(
 	});
 
 describe("p79, online is a fresh read of admitted gateway sessions", () => {
+	it.effect("gateway probes start without waiting for another gateway's reply", () =>
+		check(
+			fc.record({count: fc.integer({min: 2, max: 8}), delay: fc.integer({min: 2, max: 100})}),
+			[],
+			({count, delay}) => {
+				const world = setup(NOW);
+				const started: string[] = [];
+				const layer = GatewayManager.layer(world.store.sql, {
+					admitted: () => Effect.succeed(true),
+					probe: (gateway) =>
+						Effect.gen(function* () {
+							started.push(gateway);
+							yield* Effect.sleep(delay);
+							return NOW;
+						}),
+				});
+				return Effect.gen(function* () {
+					yield* TestClock.setTime(NOW);
+					const gateway = yield* GatewayManager;
+					for (let i = 0; i < count; i++) yield* gateway.join(world.connection(`tab-${i}`));
+					const pending = yield* Effect.forkChild(gateway.online("key-a"));
+					yield* Effect.gen(function* () {
+						yield* TestClock.adjust(1);
+						expect(started, "all gateways are probed before any reply").toHaveLength(count);
+						yield* TestClock.adjust(delay);
+						expect(yield* Fiber.join(pending)).toHaveLength(count);
+					}).pipe(Effect.ensuring(Fiber.interrupt(pending)));
+				}).pipe(Effect.provide(layer));
+			},
+		),
+	);
+	it.effect("storage and broken connection rows keep their typed LedgerError", () =>
+		check(fc.string(), [], (message) => {
+			const world = setup(NOW);
+			const broken = GatewayManager.layer(
+				{
+					...world.store.sql,
+					transaction: () => {
+						throw new Error(message);
+					},
+				},
+				{
+					admitted: () => Effect.succeed(true),
+					probe: () => Effect.succeed(null),
+				},
+			);
+			return Effect.gen(function* () {
+				yield* Effect.gen(function* () {
+					const gateway = yield* GatewayManager;
+					for (const action of [
+						gateway.join(world.connection()),
+						gateway.leave("tab-a", A),
+						gateway.online("key-a").pipe(Effect.asVoid),
+					]) {
+						const result = yield* Effect.result(action);
+						expect(result).toMatchObject({_tag: "Failure", failure: {why: "storage"}});
+						if (result._tag === "Failure") expect(result.failure).toBeInstanceOf(LedgerError);
+					}
+				}).pipe(Effect.provide(broken));
+				yield* Effect.gen(function* () {
+					const gateway = yield* GatewayManager;
+					yield* gateway.join(world.connection());
+					world.store.sql.exec("UPDATE process_gateways SET session = ?", `invalid:${message}`);
+					const result = yield* Effect.result(gateway.online("key-a"));
+					expect(result).toMatchObject({_tag: "Failure", failure: {why: "bad_row"}});
+				}).pipe(Effect.provide(world.layer()));
+			});
+		}),
+	);
 	for (const [elapsed, state] of [
 		[74_999, "online"],
 		[75_000, "away"],

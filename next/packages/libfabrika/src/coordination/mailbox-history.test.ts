@@ -1,7 +1,7 @@
 // P11 adds history without changing P9 Letter. One reader must keep entry timing and build.
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Effect, Layer, Schema, Stream} from "effect";
+import {Effect, Layer, Schema, Stream, Tracer} from "effect";
 import * as fc from "fast-check";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
@@ -56,6 +56,29 @@ const check = <A, E, R>(
 const metadata = fc.record({build: fc.string({minLength: 1}), sentAt: fc.string()});
 
 describe("P11 richer mailbox history", () => {
+	it.effect("each history read ends one mailbox.read span", () =>
+		check(fc.array(fc.jsonValue(), {maxLength: 10}), [], (messages) => {
+			const spans: Tracer.NativeSpan[] = [];
+			const tracer = Tracer.make({
+				span: (options) => {
+					const span = new Tracer.NativeSpan(options);
+					spans.push(span);
+					return span;
+				},
+			});
+			return Effect.gen(function* () {
+				const mailbox = yield* Mailbox;
+				for (const [i, m] of messages.entries())
+					yield* mailbox.send("counter:1", `letter:${i}`, m, from);
+				expect(yield* Stream.runCollect(mailbox.read("counter:1", 0))).toHaveLength(
+					messages.length,
+				);
+				expect(
+					spans.filter((s) => s.name === "mailbox.read" && s.status._tag === "Ended"),
+				).toHaveLength(1);
+			}).pipe(Effect.provide(world()), Effect.withTracer(tracer));
+		}),
+	);
 	it.effect("plant, project away build or clocks: rich history preserves the original entry", () =>
 		check(metadata, [{build: from.build, sentAt: from.sentAt}], (over) =>
 			Effect.gen(function* () {

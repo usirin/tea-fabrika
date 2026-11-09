@@ -20,9 +20,18 @@
 //   else is `{why: "not_granted"}`.
 // Signatures are not checked here, so `signed` values are opaque text with the signer named.
 import {describe, expect, it} from "@effect/vitest";
-import {Result} from "effect";
+import {Result, Schema} from "effect";
 import * as fc from "fast-check";
-import {admitted, allows, EMPTY, foldMembers, type MemberFact, type Members} from "./members.ts";
+import {
+	admitted,
+	allows,
+	EMPTY,
+	foldMembers,
+	type MemberFact,
+	type Members,
+	Saw,
+	Took,
+} from "./members.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 300;
@@ -289,6 +298,72 @@ const opts = <A>(example: A): fc.Parameters<[A]> => ({
 	numRuns: RUNS,
 	includeErrorInReport: true,
 	examples: [[example]],
+});
+
+describe("p28, recorded choices and founding limits", () => {
+	it("admission and removal records accept link and an absent check", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					code: fc.string(),
+					label: fc.string(),
+					where: fc.string(),
+					has: fc.array(fc.string()),
+				}),
+				(fields) => {
+					expect(Schema.is(Saw)({...fields, how: "link", check: "touch"})).toBe(true);
+					expect(Schema.is(Saw)({...fields, how: "compare", check: "none"})).toBe(true);
+					expect(
+						Schema.is(Took)({
+							label: fields.label,
+							where: fields.where,
+							how: "panel",
+							check: "none",
+						}),
+					).toBe(true);
+				},
+			),
+			{seed: SEED, numRuns: RUNS},
+		);
+	});
+	it("a founding window needs both its key and a first person key", () => {
+		fc.assert(
+			fc.property(
+				fc.uniqueArray(
+					fc.string().map((s) => `person:${s}`),
+					{maxLength: 5},
+				),
+				fc.option(
+					fc.string().map((s) => `window:${s}`),
+					{nil: null},
+				),
+				(keys, window) => {
+					const members = foldMembers([founded(keys, window)]);
+					expect([...members.keys.keys()]).toEqual(
+						window !== null && keys.length > 0 ? [...keys, window] : keys,
+					);
+					if (window !== null && keys.length > 0)
+						expect(members.keys.get(window)?.under).toBe(keys[0]);
+				},
+			),
+			{seed: SEED, numRuns: RUNS},
+		);
+	});
+	it("a fresh fact can name the same live recovery key without changing its rank", () => {
+		fc.assert(
+			fc.property(
+				fc.string().map((s) => `sheet:${s}`),
+				(key) => {
+					const start = Result.getOrThrow(allows(EMPTY, founded()));
+					const once = Result.getOrThrow(allows(start, addedSheet("pA", key)));
+					const twice = allows(once, addedSheet("pA", key));
+					expect(Result.isSuccess(twice), "same live sheet may join again").toBe(true);
+					if (Result.isSuccess(twice)) expect(twice.success.members).toEqual(once.members);
+				},
+			),
+			{seed: SEED, numRuns: RUNS},
+		);
+	});
 });
 
 describe("p28, the traced history from the plan", () => {

@@ -23,7 +23,8 @@ import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import type {Line} from "../data/log.ts";
 import type {Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
-import {type From, type Letter, Mailbox} from "./mailbox.ts";
+import {type From, type Letter, Mailbox, RunnerMail} from "./mailbox.ts";
+import {brainOnly, inRunnerSpace} from "./process.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
@@ -108,6 +109,64 @@ const check = <A, E, R>(
 		);
 	});
 const json = fc.jsonValue();
+
+describe("P33, only the owning runner writes its answers", () => {
+	it.effect("runner permission requires its exact name and process id", () =>
+		check(
+			fc.record({
+				name: fc.string().map((s) => `runner:${s}`),
+				process: fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
+				step: fc.nat(),
+				count: fc.nat(),
+				m: json,
+			}),
+			[],
+			({name, process, step, count, m}) =>
+				Effect.gen(function* () {
+					for (const [to, pid, allowed] of [
+						[name, process, true],
+						[`${name}:other`, process, false],
+						[name, `${process}x`, false],
+						[`${name}:other`, `${process}x`, false],
+					] as const) {
+						for (const id of [`${pid}/${step}/${count}/answer`, `${pid}/due/${count}`]) {
+							const answer = yield* send(to, id, m);
+							expect(answer._tag, "runner writes only its own inbox and process").toBe(
+								allowed ? "placed" : "refused",
+							);
+							if (!allowed) expect(answer).toEqual({_tag: "refused", why: "forbidden"});
+						}
+					}
+				}).pipe(Effect.provideService(RunnerMail, {name, process}), Effect.provide(mail())),
+		),
+	);
+	it("each protected stream, case and runner answer independently requires the brain", () => {
+		fc.assert(
+			fc.property(
+				fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
+				fc.nat(),
+				fc.nat(),
+				(process, step, count) => {
+					const answer = `${process}/${step}/${count}/answer`;
+					expect(inRunnerSpace(answer), "numeric runner answer").toBe(true);
+					expect(inRunnerSpace(`${answer}/result`)).toBe(true);
+					expect(inRunnerSpace(`${process}/${step}/word/answer`)).toBe(false);
+					for (const write of [
+						{stream: "processes", id: "ordinary", tag: "saved"},
+						{stream: `processes/name:${count}`, id: "ordinary", tag: "saved"},
+						{stream: "notes/inbox", id: "ordinary", tag: "registered"},
+						{stream: "notes/inbox", id: answer, tag: "send"},
+					])
+						expect(brainOnly(write), "each protected write requires the brain").toBe(true);
+					expect(brainOnly({stream: "notes/inbox", id: `letter:${count}`, tag: "send"})).toBe(
+						false,
+					);
+				},
+			),
+			{seed: SEED, numRuns: 100},
+		);
+	});
+});
 
 describe("p21, send", () => {
 	it.effect("non-JSON mail is refused as bad_line and writes no entry", () =>

@@ -3,7 +3,7 @@ import {describe, expect, it} from "@effect/vitest";
 import {Effect, Layer, Schema} from "effect";
 import * as fc from "fast-check";
 import {Doorbell, Ledger} from "../data/ledger.ts";
-import {lineFor} from "../data/log.ts";
+import {type Entry, lineFor} from "../data/log.ts";
 import {Mailbox} from "./mailbox.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
@@ -23,7 +23,7 @@ import {
 	type Storage,
 	watcher,
 } from "./process.test-support.ts";
-import {Down, Owner, Recipient, Start} from "./process.ts";
+import {Down, inSignalSpace, Owner, ProcessTable, Recipient, signalId, Start} from "./process.ts";
 
 const text = fc.string({minLength: 1, maxLength: 256});
 const refs = fc.uniqueArray(text, {minLength: 2, maxLength: 2});
@@ -87,6 +87,97 @@ const cancel = (store: Storage, ref: string, to = W) =>
 	);
 const fresh = (store: Storage, process = W, after = 0) =>
 	receive(process, after).pipe(Effect.provide(manager(store, watcher(process))));
+
+describe("P33, signal ids, ownership and delivery", () => {
+	it("signal ids keep DOWN and JSON whitespace cannot escape the protected id space", () => {
+		fc.assert(
+			fc.property(text, session, fc.integer({min: 1, max: 20}), (ref, process, round) => {
+				const to = Recipient.cases.process.make({process});
+				const id = signalId(to, ref, round);
+				expect(JSON.parse(id)[0], "signal id protocol starts with DOWN").toBe("DOWN");
+				for (const spaces of [" ", "\t", "\n"]) {
+					const spaced = `${spaces}[${spaces}${id.slice(1)}`;
+					expect(inSignalSpace(spaced), "JSON whitespace does not release a signal id").toBe(true);
+				}
+			}),
+			{seed: 119120, numRuns: 100},
+		);
+	});
+	it.effect("only an existing brain row can satisfy an owed signal", () =>
+		check(text, [], (ref) =>
+			Effect.gen(function* () {
+				for (const own of [true, false]) {
+					const store = storage();
+					yield* seed(store);
+					yield* monitor(store, ref);
+					const id = signalId(Recipient.cases.process.make({process: W}), ref, 1);
+					yield* Ledger.use((ledger) =>
+						ledger.append(
+							"watcher:1/inbox",
+							id,
+							lineFor(from({by: own ? from().by : CLIENT, parent: null}), {
+								_tag: "send",
+								m: {saved: ref},
+							}),
+						),
+					).pipe(Effect.provide(manager(store)));
+					const before = store.rows();
+					const result = yield* Effect.result(exit(store));
+					expect(result._tag, "only the brain's existing signal counts").toBe(
+						own ? "Success" : "Failure",
+					);
+					if (own)
+						expect(store.rows().filter((row) => row.id === id)).toEqual(
+							before.filter((row) => row.id === id),
+						);
+					else {
+						expect(result).toMatchObject({_tag: "Failure", failure: {why: "refused"}});
+						expect(store.rows()).toEqual(before);
+					}
+				}
+			}),
+		),
+	);
+	it.effect("monitor refs reject empty and over-cap text", () =>
+		check(fc.string({minLength: 257, maxLength: 300}), [], (long) => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				const table = new ProcessTable(store.rows(), from().by);
+				for (const ref of ["", long])
+					expect(table.monitor(ref, A, Recipient.cases.process.make({process: W}))).toMatchObject({
+						_tag: "Failure",
+						failure: {why: "bad_text"},
+					});
+			});
+		}),
+	);
+	it.effect("signal delivery checks both the watched target and the receiving process", () =>
+		check(text, [], (ref) => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* monitor(store, ref);
+				const table = new ProcessTable(store.rows(), from().by);
+				const to = Recipient.cases.process.make({process: W});
+				const down = Down.make({ref, process: A, to, why: "crashed"});
+				const entry: Entry = {
+					...lineFor(from(), {_tag: "send", m: down}),
+					id: signalId(to, ref, 1),
+					stream: "watcher:1/inbox",
+					rev: 100,
+					pos: 1,
+					arrivedAt: 0,
+				};
+				expect(table.deliver(entry, down, W)).toBe("signal");
+				expect(table.deliver(entry, {...down, process: B}, W), "another target is plain mail").toBe(
+					"mail",
+				);
+				expect(table.deliver(entry, down, X), "another recipient drops the signal").toBe("drop");
+			});
+		}),
+	);
+});
 
 describe("p79, addressed and independent monitors", () => {
 	for (const ended of [false, true])

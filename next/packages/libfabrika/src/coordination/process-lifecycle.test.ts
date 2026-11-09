@@ -25,7 +25,15 @@ import {
 	type Storage,
 	watcher,
 } from "./process.test-support.ts";
-import {Owner, ProcessFact, Recipient} from "./process.ts";
+import {
+	Activity,
+	Dead,
+	Owner,
+	ProcessFact,
+	ProcessTable,
+	Recipient,
+	recoverActivity,
+} from "./process.ts";
 
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
@@ -49,6 +57,113 @@ const check = <A, E, R>(
 		);
 	});
 const hash = fc.string({minLength: 1, maxLength: 256});
+
+describe("P33, saved state and process authority", () => {
+	it("a process owner requires its valid process id", () => {
+		fc.assert(
+			fc.property(
+				fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
+				(process) => {
+					expect(Schema.is(Owner)({_tag: "process"}), "missing process owner id").toBe(false);
+					expect(Schema.decodeUnknownSync(Owner)({_tag: "process", process})).toEqual({
+						_tag: "process",
+						process,
+					});
+				},
+			),
+			{seed: 119120, numRuns: 100},
+		);
+	});
+	it("dead letters keep exactly one error class per try", () => {
+		fc.assert(
+			fc.property(fc.array(hash, {minLength: 1, maxLength: 32}), hash, hash, (errors, m, build) => {
+				const dead = {_tag: "dead", tries: errors.length, limit: 32, m, build, errors};
+				expect(Schema.is(Dead)(dead), "one error class per try is accepted").toBe(true);
+				expect(Schema.is(Dead)({...dead, errors: errors.slice(1)})).toBe(false);
+				expect(Schema.is(Dead)({...dead, tries: errors.length + 1})).toBe(false);
+			}),
+			{seed: 119120, numRuns: 100},
+		);
+	});
+	it("an idle saved marker recovers as idle with the same process", () => {
+		fc.assert(
+			fc.property(
+				fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
+				(process) => {
+					const idle = Activity.cases.idle.make({process});
+					expect(() => recoverActivity(idle)).not.toThrow();
+					const recovered = recoverActivity(idle);
+					expect(recovered._tag).toBe("Success");
+					if (recovered._tag === "Success") expect(recovered.success).toEqual(idle);
+				},
+			),
+			{seed: 119120, numRuns: 100},
+		);
+	});
+	it.effect("down replay retains the full state and refuses a missing or foreign child", () =>
+		check(
+			fc.record({
+				why: hash,
+				crashes: fc.integer({min: 1, max: 32}),
+				until: fc.integer(),
+				build: hash,
+			}),
+			[],
+			({build, ...policy}) => {
+				const store = storage();
+				return Effect.gen(function* () {
+					const processes = yield* ProcessManager;
+					yield* processes.start(first(undefined, undefined, {...CODE, hash: build}), from());
+					yield* processes.exit(A, policy.why, from());
+					const table = new ProcessTable(store.rows(), BRAIN);
+					expect(
+						() => table.down(B, policy.why, brain().owner),
+						"missing child is a typed refusal",
+					).not.toThrow();
+					expect(table.down(B, policy.why, brain().owner)).toMatchObject({
+						_tag: "Failure",
+						failure: {why: "ended"},
+					});
+					expect(table.down(A, policy.why, watcher(W).owner)).toMatchObject({
+						_tag: "Failure",
+						failure: {why: "not_parent"},
+					});
+					yield* processes.down(A, policy, from());
+					store.reopen();
+					expect(
+						() => new ProcessTable(store.rows(), BRAIN),
+						"down state still decodes",
+					).not.toThrow();
+					const life = new ProcessTable(store.rows(), BRAIN).life(A);
+					expect(life).toMatchObject({
+						_tag: "Some",
+						value: {state: {_tag: "down", process: A, code: {...CODE, hash: build}, ...policy}},
+					});
+				}).pipe(Effect.provide(manager(store)));
+			},
+		),
+	);
+	it.effect("exit retries ignore fresh caller metadata but refuse a different reason", () =>
+		check(fc.uniqueArray(hash, {minLength: 2, maxLength: 2}), [], ([why, other]) => {
+			const store = storage();
+			return Effect.gen(function* () {
+				const processes = yield* ProcessManager;
+				yield* processes.start(first(), from());
+				yield* processes.exit(A, why!, from());
+				const before = store.rows();
+				const retried = yield* Effect.exit(
+					processes.exit(A, why!, from({parent: null, for: "retry-person"})),
+				);
+				expect(retried._tag, "ended exit is a no-op even with fresh caller metadata").toBe(
+					"Success",
+				);
+				const changed = yield* Effect.result(processes.exit(A, other!, from()));
+				expect(changed).toMatchObject({_tag: "Failure", failure: {why: "ended"}});
+				expect(store.rows()).toEqual(before);
+			}).pipe(Effect.provide(manager(store)));
+		}),
+	);
+});
 
 describe("p79, process identity", () => {
 	it.effect(

@@ -1,7 +1,7 @@
 // Exam amendment, P33 / ticket 252. Replaces P9's per-build start identity only.
 // Mail, writer fields, ledger refusals and lazy layer failures stay covered.
 import {describe, expect, it} from "@effect/vitest";
-import {Effect, Layer, Stream} from "effect";
+import {Cause, Effect, Layer, Stream, Tracer} from "effect";
 import * as fc from "fast-check";
 import {LedgerTransaction} from "../data/ledger-transaction.ts";
 import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
@@ -49,6 +49,43 @@ const check = <A, E, R>(
 	});
 
 describe("p21 amended by p79, starts have request IDs and process IDs", () => {
+	it.effect("each exit ends process.exit with the real process tag", () =>
+		check(hash, [], (why) => {
+			const store = storage();
+			const spans: Tracer.NativeSpan[] = [];
+			const tracer = Tracer.make({
+				span: (options) => {
+					const span = new Tracer.NativeSpan(options);
+					spans.push(span);
+					return span;
+				},
+			});
+			return Effect.gen(function* () {
+				const processes = yield* ProcessManager;
+				yield* processes.start(makeFirst(), from());
+				yield* processes.exit(A, why, from());
+				const exits = spans.filter((s) => s.name === "process.exit" && s.status._tag === "Ended");
+				expect(exits).toHaveLength(1);
+				expect(exits[0]?.attributes.get("fab.process")).toBe(A);
+			}).pipe(Effect.provide(manager(store)), Effect.withTracer(tracer));
+		}),
+	);
+	it.effect("fresh receive refuses missing and ended lives with the typed ended error", () =>
+		check(hash, [], (why) => {
+			const store = storage();
+			return Effect.gen(function* () {
+				const processes = yield* ProcessManager;
+				yield* processes.start(makeFirst(), from());
+				yield* processes.exit(A, why, from());
+				for (const process of [A, B]) {
+					const result = yield* Effect.exit(Stream.runCollect(processes.receive(process, 0)));
+					expect(result._tag, "fresh receive refuses a life that is not live").toBe("Failure");
+					if (result._tag === "Failure")
+						expect(Cause.squash(result.cause)).toMatchObject({_tag: "ProcessError", why: "ended"});
+				}
+			}).pipe(Effect.provide(manager(store)));
+		}),
+	);
 	it.effect("plant, key by build hash: two starts on one build have separate lives", () =>
 		check(hash, ["build-a"], (hash) => {
 			const {CODE, first} = fixture(hash);
