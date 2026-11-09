@@ -53,6 +53,15 @@ try:
     main = Path(os.environ["MAIN"]).resolve(strict=True)
     if work.resolve(strict=True).parent != boxes or data.resolve(strict=True).parent != boxes:
         keep("target outside BOXES")
+    def holds(root, protected):
+        # File identity also catches different path casing on a case-insensitive disk.
+        return any(root == parent or (root.exists() and parent.exists() and root.samefile(parent))
+                   for parent in (protected, *protected.parents))
+
+    state = boxes / "state"
+    if any(holds(root, protected)
+           for root in (work, data) for protected in (main, state, state.resolve())):
+        keep("pair holds MAIN or saved state")
 
     def plain(path):
         if path.is_symlink() or not path.is_file():
@@ -70,8 +79,14 @@ try:
     for folder in ("refs", "objects"):
         if (data / folder).is_symlink() or not (data / folder).is_dir():
             keep("missing or unsupported metadata")
-    if any((data / p).exists() for p in ("commondir", "shallow")) or list(data.glob("sharedindex.*")):
-        keep("unsupported shared or shallow metadata")
+    if any(os.path.lexists(data / p) for p in ("commondir", "shallow", "info/grafts")) or list(data.glob("sharedindex.*")):
+        keep("unsupported shared, shallow or graft metadata")
+    # Operation state and linked worktrees can hold commits and staged files outside this index.
+    # Unknown metadata also stays: deletion needs proof for every saved state.
+    ordinary = {"HEAD", "index", "config", "description", "hooks", "info", "logs", "refs",
+                "objects", "packed-refs", "branches", "FETCH_HEAD", "COMMIT_EDITMSG"}
+    if any(entry.name not in ordinary for entry in data.iterdir()):
+        keep("operation, linked worktree or unknown metadata")
 
     def git(args, inspect=None):
         command = ["git", "-C", str(main)]
@@ -86,6 +101,29 @@ try:
 
     def unreadable(error):
         raise error
+
+    tips, symbolic = set(), set()
+    # Read every saved reflog entry, including older stashes. Do not copy logs or config.
+    logs = data / "logs"
+    if os.path.lexists(logs):
+        if logs.is_symlink() or not logs.is_dir():
+            keep("unsupported reflog metadata")
+        for folder, dirs, files in os.walk(logs, followlinks=False, onerror=unreadable):
+            if any((Path(folder) / entry).is_symlink() for entry in dirs):
+                keep("symlinked reflog metadata")
+            for entry in files:
+                for line in plain(Path(folder) / entry).splitlines():
+                    match = re.fullmatch(rb"([0-9a-f]{40}) ([0-9a-f]{40}) [^\x00\r\n]+", line)
+                    if match is None:
+                        keep("unsupported reflog entry")
+                    tips.update(oid for oid in match.groups() if oid != b"0" * 40)
+    fetched = data / "FETCH_HEAD"
+    if os.path.lexists(fetched):
+        for line in plain(fetched).splitlines():
+            match = re.fullmatch(rb"([0-9a-f]{40})\t(?:not-for-merge)?\t[^\x00\r\n]*", line)
+            if match is None:
+                keep("unsupported fetch metadata")
+            tips.add(match[1])
 
     # Only small metadata is copied. Object files stay where they are, read through an alternate.
     with tempfile.TemporaryDirectory(prefix="box-inspect-") as temporary:
@@ -105,7 +143,11 @@ try:
             for entry in files:
                 source = Path(folder) / entry
                 value = plain(source)
-                if not re.fullmatch(rb"[0-9a-f]{40}\n?", value):
+                if re.fullmatch(rb"[0-9a-f]{40}\n?", value):
+                    tips.add(value.strip())
+                elif re.fullmatch(rb"ref: refs/[^\x00-\x20\x7f]+\n?", value):
+                    symbolic.add(value[5:].strip().decode())
+                else:
                     raise ValueError("unsupported ref metadata")
                 (inspect / relative / entry).write_bytes(value)
         packed = data / "packed-refs"
@@ -128,8 +170,17 @@ try:
             keep("unsupported submodule metadata")
         if git(["status", "--porcelain=v1", "-z", "--untracked-files=no"], inspect):
             keep("tracked changes")
-        tips = git(["for-each-ref", "--format=%(objectname)", "refs/heads/", "refs/stash", "refs/notes/"], inspect).splitlines()
-        tips += git(["rev-parse", "--verify", "HEAD^{commit}"], inspect).splitlines()
+        for line in git(["for-each-ref", "--format=%(refname) %(objectname)"], inspect).splitlines():
+            ref, tip = line.split(b" ", 1)
+            tips.add(tip)
+            # A replace ref also saves the original object's name in its path.
+            if ref.startswith(b"refs/replace/"):
+                tips.add(ref[len(b"refs/replace/"):])
+        for ref in symbolic | {"HEAD"}:
+            tips.update(git(["rev-parse", "--verify", f"{ref}^{{commit}}"], inspect).splitlines())
+        # Peel annotated tags to commits. A ref to another object type cannot prove safety.
+        tips = {git(["rev-parse", "--verify", f"{tip.decode()}^{{commit}}"], inspect).strip()
+                for tip in tips}
         retained = git(["for-each-ref", "--format=%(objectname)", "refs/heads/", "refs/tags/", "refs/keep/", "refs/stash", "refs/notes/"]).splitlines()
         # Enumerate only MAIN's retained history. Mere object presence and remote refs prove nothing.
         reachable = set()

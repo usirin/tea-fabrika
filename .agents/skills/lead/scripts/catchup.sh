@@ -166,10 +166,17 @@ try:
             worktrees = []
             kept("worktrees", "ambiguous or unreadable registration")
 
+    def holds(root, protected):
+        return any(root == parent or (root.exists() and parent.exists() and root.samefile(parent))
+                   for parent in (protected, *protected.parents))
+
     def remove_worktree(path, fields):
         label = f"worktree {path.name}"
-        if path.is_symlink() or path.resolve() == main:
-            kept(label, "MAIN or symlinked target")
+        root = path.resolve()
+        state = boxes / "state"
+        if path.is_symlink() or any(holds(root, protected)
+                                   for protected in (main, state, state.resolve())):
+            kept(label, "MAIN, saved state or symlinked target")
         elif not retained:
             kept(label, "checked head not retained")
         elif any(field.split(" ", 1)[0] in ("locked", "prunable") for field in fields):
