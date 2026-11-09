@@ -218,9 +218,12 @@ describe("plancheck, today's tooling", () => {
 	});
 
 	// Plant: split a path cell on commas only, as the build did after bfd35fb0; drop a several-word item
-	// with a bare non-exam name as a sentence, as ebb2cca5 does; or ignore the possessive qualifier.
+	// with a bare non-exam name as a sentence, as ebb2cca5 does; ignore the possessive qualifier; keep
+	// the punctuation around a word, or let any possessive trigger the exception, as d1686a3b does.
 	// Amendment A8: every exam path in a path cell counts, whatever words surround it, unless the cell
 	// names another package with a possessive (`<name>'s`); then only qualified paths (with a "/") count.
+	// Amendment A9: punctuation around a word is stripped first, and a possessive of a word meaning this
+	// repository does not trigger the exception.
 	it("every exam path in a path cell counts unless a possessive names another package", () => {
 		// Extensionless exam paths come from the exam list itself: every glob with no "." and no "/".
 		const globs = (
@@ -250,10 +253,45 @@ describe("plancheck, today's tooling", () => {
 		];
 		// Generated plain words cannot be an exam path: no ".", "/", "_" or "'".
 		const term = fc.oneof(fc.constantFrom(...exam, ...plainPaths), word);
+		// A9's punctuation, each kind put around one word.
+		const wraps = {
+			none: (w: string) => w,
+			backticks: (w: string) => `\`${w}\``,
+			brackets: (w: string) => `[${w}]`,
+			parentheses: (w: string) => `(${w})`,
+			doubleQuotes: (w: string) => `"${w}"`,
+			singleQuotes: (w: string) => `'${w}'`,
+			comma: (w: string) => `${w},`,
+			semicolon: (w: string) => `${w};`,
+			colon: (w: string) => `${w}:`,
+			period: (w: string) => `${w}.`,
+		};
+		type Wrap = keyof typeof wraps;
+		const wrap = fc.constantFrom(...(Object.keys(wraps) as Wrap[]));
+		// Any letter case, as a plan writer might type it.
+		const anyCase = (base: fc.Arbitrary<string>) =>
+			fc
+				.tuple(base, fc.array(fc.boolean(), {minLength: 12, maxLength: 12}))
+				.map(([w, ups]) =>
+					[...w].map((c, i) => (ups[i] ? c.toUpperCase() : c.toLowerCase())).join(""),
+				);
+		const thisRepo = [
+			"repository",
+			"repo",
+			"root",
+			"project",
+			"workspace",
+			"monorepo",
+			"top-level",
+		];
+		const ownerName = fc.oneof(
+			anyCase(fc.constantFrom("Counter", "Libfabrika", "pipeline")),
+			anyCase(word.filter((w) => !thisRepo.includes(w))),
+		);
 		fc.assert(
 			fc.property(
 				fc.record({
-					picked: fc.uniqueArray(fc.record({path: term, tick: fc.boolean()}), {
+					picked: fc.uniqueArray(fc.record({path: term, wrap}), {
 						minLength: 1,
 						maxLength: 5,
 						selector: (entry) => entry.path,
@@ -263,9 +301,17 @@ describe("plancheck, today's tooling", () => {
 						{minLength: 4, maxLength: 4},
 					),
 					owner: fc.constantFrom("tests", "build", "lead", "mutation"),
-					// Another package's possessive, put before one of the words, as in "Counter's package.json".
+					// A possessive put before one of the words: another package's, as in "Counter's
+					// package.json", or this repository's, as in "the repository's package.json".
 					possessive: fc.option(
-						fc.record({name: word, capital: fc.boolean(), at: fc.nat({max: 4})}),
+						fc.oneof(
+							fc.record({repo: fc.constant(false), name: ownerName, at: fc.nat({max: 4})}),
+							fc.record({
+								repo: fc.constant(true),
+								name: anyCase(fc.constantFrom(...thisRepo)),
+								at: fc.nat({max: 4}),
+							}),
+						),
 						{nil: undefined},
 					),
 					why: fc.constantFrom(
@@ -275,18 +321,16 @@ describe("plancheck, today's tooling", () => {
 					),
 				}),
 				({picked, separators, owner, possessive, why}) => {
-					const words = picked.map(({path, tick}) => (tick ? `\`${path}\`` : path));
+					const words = picked.map(({path, wrap}) => wraps[wrap](path));
 					if (possessive) {
-						const name = possessive.capital
-							? possessive.name[0]!.toUpperCase() + possessive.name.slice(1)
-							: possessive.name;
 						const at = possessive.at % words.length;
-						words[at] = `${name}'s ${words[at]}`;
+						words[at] = `${possessive.name}'s ${words[at]}`;
 					}
+					const other = possessive !== undefined && !possessive.repo;
 					const cell = words.reduce((joined, p, i) => `${joined}${separators[i - 1]}${p}`);
 					const counted = picked
 						.map((e) => e.path)
-						.filter((p) => exam.includes(p) && (!possessive || p.includes("/")));
+						.filter((p) => exam.includes(p) && (!other || p.includes("/")));
 					const wrong = owner !== "tests";
 					const line = (p: string) => `${p} is an exam path owned by ${owner}, not tests`;
 					const ran = check(table(["File", "Why", "Owner step"], [[cell, why, owner]]));
@@ -306,8 +350,8 @@ describe("plancheck, today's tooling", () => {
 					[
 						{
 							picked: [
-								{path: "package.json", tick: true},
-								{path: "vitest.config.ts", tick: true},
+								{path: "package.json", wrap: "backticks"},
+								{path: "vitest.config.ts", wrap: "backticks"},
 							],
 							separators: ["; ", "; ", "; ", "; "],
 							owner: "build",
@@ -320,8 +364,8 @@ describe("plancheck, today's tooling", () => {
 					[
 						{
 							picked: [
-								{path: "allowed_signers", tick: true},
-								{path: "package.json", tick: true},
+								{path: "allowed_signers", wrap: "backticks"},
+								{path: "package.json", wrap: "backticks"},
 							],
 							separators: [" and ", " and ", " and ", " and "],
 							owner: "build",
@@ -334,13 +378,41 @@ describe("plancheck, today's tooling", () => {
 					[
 						{
 							picked: [
-								{path: "Makefile", tick: false},
-								{path: "package.json", tick: false},
+								{path: "Makefile", wrap: "none"},
+								{path: "package.json", wrap: "none"},
 							],
 							separators: [" and ", " and ", " and ", " and "],
 							owner: "build",
 							possessive: undefined,
 							why: "build",
+						},
+					],
+					// pinned: ticket 520 review round 4, punctuation hid an exam path. `Makefile and
+					// (package.json)` owned by build passed at d1686a3b (amendment A9).
+					[
+						{
+							picked: [
+								{path: "Makefile", wrap: "none"},
+								{path: "package.json", wrap: "parentheses"},
+							],
+							separators: [" and ", " and ", " and ", " and "],
+							owner: "build",
+							possessive: undefined,
+							why: "the fix",
+						},
+					],
+					// pinned: ticket 520 review round 4, any possessive triggered the other-package exception.
+					// `the repository's package.json` owned by build passed at d1686a3b (amendment A9).
+					[
+						{
+							picked: [
+								{path: "the", wrap: "none"},
+								{path: "package.json", wrap: "none"},
+							],
+							separators: [" ", " ", " ", " "],
+							owner: "build",
+							possessive: {repo: true, name: "repository", at: 1},
+							why: "the fix",
 						},
 					],
 				],
