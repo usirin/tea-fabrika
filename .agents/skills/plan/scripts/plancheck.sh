@@ -28,12 +28,14 @@ def plain(text):
         text = text[len(marker):-len(marker)].strip()
 def paths(text):
     # A cell lists items split by commas, semicolons or line breaks. A one-word item is a path. An
-    # item of several words is a list of paths, joined by spaces or "and", only when every word has
-    # a "." or a "/". Otherwise it is a sentence: "edit package.json after install" names no path.
+    # item of several words is a list of paths only when every word is "and", is backticked, has a
+    # "." or "/", or is an exam path. Otherwise it is a sentence: "edit package.json after install".
     out = []
     for item in re.split(r"[,;]|<br\s*/?>", text):
-        words = [w for w in (plain(w) for w in item.split()) if w and w != "and"]
-        if len(words) == 1 or all(re.search(r"[./]", w) for w in words): out += words
+        raw = [w for w in item.split() if plain(w) and plain(w) != "and"]
+        words = [plain(w) for w in raw]
+        bare = [plain(w) for w in raw if not re.fullmatch(r"`[^`]+`", w) and not re.search(r"[./]", w)]
+        if len(words) == 1 or not bare or set(norm(w) for w in bare) <= set(hits(bare)): out += words
     return out
 def cells(text):
     out, start, slashes = [], 0, 0
