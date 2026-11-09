@@ -343,7 +343,9 @@ const pressAgain = (key: Key) => {
 /** Step the hold by one Msg. Answers whether the key pressed this instant goes on as it is. */
 const holdStep = (msg: HoldMsg): boolean => {
 	const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, hold, msg);
+	const wasWaiting = hold.waiting !== null;
 	hold = next;
+	if (wasWaiting !== (next.waiting !== null)) changed();
 	let live = false;
 	for (const c of cmds) {
 		if (c.type === "press") toHost({type: "press", id: c.id, key: c.key});
@@ -918,7 +920,8 @@ function App(): ReactNode {
 		if (!away && over === "none") focusTile();
 	}, [shown, away, over]);
 	// The desk's key done, focus goes back to the bottom line's item it was on, if it fell.
-	const mid = (open?.prefix.armed ?? false) || open?.ask != null;
+	const pending = midKey();
+	const mid = pending.armed || pending.asking;
 	useLayoutEffect(() => {
 		if (!mid) focusBack();
 	}, [mid]);
@@ -935,7 +938,8 @@ function App(): ReactNode {
 		editKeys,
 		shapes: store.shapes,
 		tickets: ticketsShown(store.views),
-		armed: open?.prefix.armed ?? false,
+		armed:
+			pending.armed && (store.keysEditor === null || store.keysEditor.recording._tag === "idle"),
 		toHost,
 		toApp,
 		toRun,

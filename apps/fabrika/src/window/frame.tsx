@@ -1016,7 +1016,9 @@ export function BottomLine(props: FrameProps): ReactNode {
 						id: POP.palette,
 						open: frame.over.kind === "palette" && frame.over.title === "keys",
 					}}
-					onClick={() => props.step({type: "show", what: "keys"})}
+					onClick={() =>
+						props.step({type: "show", what: "keys", via: LayerVia.cases.click.make({})})
+					}
 				>
 					{keys ?? ""} keys
 				</Item>

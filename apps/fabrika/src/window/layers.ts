@@ -11,6 +11,8 @@ export type Layer = typeof Layer.Type;
 export const LayerVia = Schema.TaggedUnion({
 	key: {keys: Schema.String},
 	click: {},
+	pointer: {},
+	focus: {},
 	word: {},
 	palette: {},
 });

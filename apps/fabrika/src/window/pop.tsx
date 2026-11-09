@@ -12,7 +12,7 @@ import {
 	useState,
 } from "react";
 import {createPortal} from "react-dom";
-import {Layer, LayerChange, type LayerReason} from "./layers.ts";
+import {Layer, LayerChange, type LayerReason, LayerVia} from "./layers.ts";
 import {
 	activeIn,
 	type Cap,
@@ -687,22 +687,22 @@ const placeOf = (r: DOMRect) => ({
 export const useTip = (tip: Tip, quiet: boolean) => {
 	const events = useContext(LayerEvents);
 	const report = useEffectEvent(events);
-	const [at, setAt] = useState<DOMRect | null>(null);
+	const [shown, setShown] = useState<{readonly at: DOMRect; readonly via: LayerVia} | null>(null);
 	const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	const id = useRef(`tip-${Math.random().toString(36).slice(2, 9)}`).current;
 	const reason = useRef<LayerReason>("owner_gone");
-	const visible = at !== null;
+	const visible = shown !== null;
 	useLayoutEffect(() => {
-		if (!visible) return;
+		if (shown === null) return;
 		reason.current = "owner_gone";
 		const layer = Layer.cases.tooltip.make({for: id});
-		report(LayerChange.cases.open.make({layer, via: null}));
+		report(LayerChange.cases.open.make({layer, via: shown.via}));
 		return () => report(LayerChange.cases.close.make({layer, reason: reason.current}));
-	}, [visible, id]);
+	}, [shown, id]);
 	const hide = (why: LayerReason = "outside") => {
 		clearTimeout(timer.current);
 		reason.current = why;
-		setAt((was) => {
+		setShown((was) => {
 			if (was !== null) lastGone = Date.now();
 			return null;
 		});
@@ -712,35 +712,39 @@ export const useTip = (tip: Tip, quiet: boolean) => {
 	}, [quiet]);
 	useEffect(() => () => clearTimeout(timer.current), []);
 	useEffect(() => {
-		if (at === null) return;
+		if (!visible) return;
 		const key = (e: globalThis.KeyboardEvent) => {
 			if (e.key === "Escape") hide("escape");
 		};
 		window.addEventListener("keydown", key, true);
 		return () => window.removeEventListener("keydown", key, true);
-	}, [at]);
-	const show = (el: Element, wait: number) => {
+	}, [visible]);
+	const show = (el: Element, wait: number, via: LayerVia) => {
 		clearTimeout(timer.current);
 		if (quiet) return;
-		timer.current = setTimeout(() => setAt(el.getBoundingClientRect()), wait);
+		timer.current = setTimeout(() => {
+			const at = el.getBoundingClientRect();
+			setShown((was) => was ?? {at, via});
+		}, wait);
 	};
 	return {
 		on: {
-			"aria-describedby": at === null ? undefined : id,
+			"aria-describedby": shown === null ? undefined : id,
 			onPointerEnter: (e: {readonly currentTarget: Element}) =>
-				show(e.currentTarget, tipWait(Date.now(), lastGone)),
+				show(e.currentTarget, tipWait(Date.now(), lastGone), LayerVia.cases.pointer.make({})),
 			onPointerLeave: () => hide("outside"),
 			onPointerDownCapture: () => hide("done"),
 			onFocus: (e: {readonly currentTarget: Element}) => {
-				if (e.currentTarget.matches(":focus-visible")) show(e.currentTarget, 0);
+				if (e.currentTarget.matches(":focus-visible"))
+					show(e.currentTarget, 0, LayerVia.cases.focus.make({}));
 			},
 			onBlur: () => hide("done"),
 		},
 		node:
-			at === null
+			shown === null
 				? null
 				: createPortal(
-						<div className="tip" id={id} role="tooltip" style={placeOf(at)}>
+						<div className="tip" id={id} role="tooltip" style={placeOf(shown.at)}>
 							{tip.typed ? <code>{tip.name}</code> : <span>{tip.name}</span>}
 							{tip.caps.length > 0 && <Caps caps={tip.caps} />}
 							{tip.word !== null && <code className="word">{tip.word}</code>}
