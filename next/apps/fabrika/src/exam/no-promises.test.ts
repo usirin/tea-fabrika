@@ -1,13 +1,46 @@
+import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {dirname, join} from "node:path";
+import * as fc from "fast-check";
+import {API} from "typescript/unstable/sync";
 // `no-promises` (exam item 1): every Promise shape fires in next/, Effect's own Promise calls with
 // them, and the Effect ones pass. A line passes only under an edge comment, which covers that one
 // line (Tier 1, P35).
 import {describe, expect, it} from "vitest";
 import {plant} from "./plant.ts";
+import {checkPromiseTypes} from "./promise-types.ts";
 
 const CODE = "fabrika(no-promises)";
 const FIRES = "next/packages/libfabrika/src/app/fires.ts";
 const PASSES = "next/packages/libfabrika/src/app/passes.ts";
 const EDGE = "next/packages/libfabrika/src/data/project.ts";
+
+const typed = (files: Readonly<Record<string, string>>) => {
+	const root = mkdtempSync(join(tmpdir(), "p12-types-"));
+	const api = new API({cwd: root});
+	try {
+		for (const [file, body] of Object.entries(files)) {
+			mkdirSync(dirname(join(root, file)), {recursive: true});
+			writeFileSync(join(root, file), body);
+		}
+		const config = join(root, "tsconfig.json");
+		writeFileSync(
+			config,
+			JSON.stringify({compilerOptions: {strict: true, target: "ES2023"}, include: ["**/*.ts"]}),
+		);
+		const snapshot = api.updateSnapshot({openProjects: [config]});
+		try {
+			const project = snapshot.getProject(config)!;
+			expect(project.program.getSemanticDiagnostics()).toEqual([]);
+			return checkPromiseTypes(project, root);
+		} finally {
+			snapshot.dispose();
+		}
+	} finally {
+		api.close();
+		rmSync(root, {recursive: true, force: true});
+	}
+};
 
 const fires = [
 	'import {Effect, Schema, Stream} from "effect";', // 1
@@ -74,10 +107,9 @@ const edges = [
 ].join("\n");
 
 describe("no-promises", () => {
-	// Known gap: no-promises misses object methods that return storage Promises directly.
-	it.fails("pinned: the P12 storage-method gap misses unmarked returned Promises", () => {
+	it("pinned: the P12 storage-method gap refuses unmarked returned Promises", () => {
 		const file = "next/apps/fabrika/src/storage-method.ts";
-		const findings = plant({
+		const findings = typed({
 			[file]: [
 				"declare const storage: {put(key: string, value: unknown): Promise<void>};",
 				"export class Process {",
@@ -85,7 +117,53 @@ describe("no-promises", () => {
 				"}",
 			].join("\n"),
 		});
-		expect(findings(CODE, file)).toContain(3);
+		expect(findings.filter((f) => f.file === file).map((f) => f.line)).toContain(3);
+	});
+	it("refuses Promise values, inferred returns, imported aliases and thunks outside one marked line", () => {
+		fc.assert(
+			fc.property(fc.stringMatching(/^[a-z]{1,8}$/), (suffix) => {
+				const file = `next/case-${suffix}.ts`;
+				const findings = typed({
+					"next/binding.ts":
+						"export type Later<T> = Promise<T>; export declare const platform: {read(): Later<number>};",
+					[file]: [
+						'import {platform, type Later} from "./binding";',
+						"declare const p: Later<number>;",
+						"const identity = (value: Later<number>) => value;",
+						"const thunk = (send: () => Later<number>) => send;",
+						"const inferred = () => platform.read();",
+						"const take = <A>(send: () => Promise<A>) => send;",
+						"identity(p);",
+						"take(() => platform.read());",
+						"thunk(platform.read);",
+						"// oxlint-disable-next-line fabrika/no-promises -- edge: platform read enters Effect",
+						"const edge = () => platform.read();",
+						"const afterEdge = () => platform.read();",
+						"// oxlint-disable-next-line fabrika/no-promises -- edge: covers only the next line",
+						"const twoLines = () => {",
+						"  return platform.read();",
+						"};",
+						"void [inferred, edge, afterEdge, twoLines];",
+					].join("\n"),
+					"next/allowed.ts":
+						"export const read = (n: number) => n; export const f = () => read(1); export const domain = () => ({then: 1});",
+					"next/runner.ts": [
+						"declare const runner: {runPromise(n: number): Promise<number>};",
+						"// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: platform method returns a Promise",
+						"export const run = () => runner.runPromise(1);",
+					].join("\n"),
+					"next/allowed.test.ts": "declare const p: Promise<number>; export const f = () => p;",
+					"next/helper.test-support.ts":
+						"declare const p: Promise<number>; export const f = () => p;",
+					"packages/today.ts": "declare const p: Promise<number>; export const f = () => p;",
+				});
+				expect(findings.filter((f) => f.file === file).map((f) => f.line)).toEqual([
+					3, 4, 5, 6, 7, 8, 9, 12, 15,
+				]);
+				expect(findings.filter((f) => f.file !== file)).toEqual([]);
+			}),
+			{seed: 119120, numRuns: 20},
+		);
 	});
 	const all = plant({
 		[FIRES]: fires,

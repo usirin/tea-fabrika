@@ -13,6 +13,7 @@ import {noEffectRunOutsideEdge} from "./no-effect-run-outside-edge.ts";
 import {noExpectInIf} from "./no-expect-in-if.ts";
 import {noHandTag} from "./no-hand-tag.ts";
 import {noImplicitEffectConcurrency} from "./no-implicit-effect-concurrency.ts";
+import {noLedgerSql} from "./no-ledger-sql.ts";
 import {noNumericDuration} from "./no-numeric-duration.ts";
 import {noOf} from "./no-of.ts";
 import {noProjectSettings} from "./no-project-settings.ts";
@@ -40,6 +41,7 @@ const plugin: Plugin = {
 		"no-expect-in-if": noExpectInIf,
 		"no-hand-tag": noHandTag,
 		"no-implicit-effect-concurrency": noImplicitEffectConcurrency,
+		"no-ledger-sql": noLedgerSql,
 		"no-numeric-duration": noNumericDuration,
 		"no-of": noOf,
 		"no-project-settings": noProjectSettings,

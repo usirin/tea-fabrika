@@ -58,7 +58,35 @@ React's own `react/refs`, `react/immutability`, `react/display-name` and `react/
 
 **Edges are comments, not files** (owner, 2026-11-05; Tier 1, P35). The one line a platform demands, such as a Durable Object method that must answer a Promise, passes either rule only under `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, or the same for `fabrika/no-effect-run-outside-edge`, or one comment naming both. Until P35 the run rule held a list of 18 whole paths, which let a whole file wrap Promises; the list is gone. `edge-comment` keeps every such comment to one shape, reported at the top of the file as `no-bare-disable` is, so a comment cannot silence it. An edge comment over a line where nothing fires fails through `reportUnusedDisableDirectives`. CI's `edges` step (`next/apps/fabrika/src/exam/edges.ts`) lists each edge comment a pull request adds, with its reason, in the step summary and as a note on the diff, for the owner to read; it never blocks. Its industry match is clippy's `undocumented_unsafe_blocks`, with `edge:` for `SAFETY:`, and eslint-comments' `require-description` and `no-restricted-disable`.
 
-None of these rules sees types. A `.catch` is told apart by the name it is called on, `Effect.promise` and the run functions by their written names, so an Effect module under another name, or a Promise reached through a helper, passes. `no-hand-tag` misses `x._tag = "a"`, which the plan does not name. Report any miss.
+The oxlint rules see syntax. A `.catch` is told apart by the name it is called on,
+and `Effect.promise` and the run functions by their written names. P12 adds the typed
+check below for Promises passed through helpers. `no-hand-tag` misses `x._tag = "a"`,
+which the plan does not name. Report any miss.
+
+### P12 checks in lint
+
+`pnpm lint:twin` runs `next/apps/fabrika/src/exam/twin.ts` on the real Alchemy stack.
+It reads the installed providers, prints the finding count and exits nonzero for any
+finding. Its generated plants stay in `twin.test.ts`, with seed 119120.
+
+`pnpm lint:promise-types` adds types to `no-promises`. TypeScript 7.0.2's installed
+sync API resolves every `next/` project. Calls, returns and function parameters may
+not carry a Promise or a function returning one outside a marked edge line. Type
+declarations, tests, test support files and today's code are left alone. The scanner does not emit code
+or run type diagnostics. `no-promises.test.ts` plants imported aliases, inferred
+returns, generic thunks, object methods and line-local edge comments. The initial
+P12 head scan at `4577f6b0` found 103 lines. Each was read: all carried a Promise value or thunk
+outside its marked line, including multiline platform calls. No false alarms in
+that sample. Unknown types still need the regular typecheck.
+
+`no-ledger-sql` refuses SQL strings naming the ledger's `entries` or `rings` outside
+its three service files in `next/`. Tests, test support files and today's code are left alone. Its
+generated plants cover reads, joins, writes, quoted names, SQL comments, templates
+and allowed tables. The P12 head has one finding, the bootstrap read in
+`workers/runtime.ts`. It is a real read outside the ledger service. The first scan
+also found a test helper reading rows for assertions. Leaving test support files
+out removes that false alarm. This check
+recognizes SQL text; it cannot resolve a table name assembled at runtime.
 
 Their count on PR 223's tree at `7c1d073` (33 files), each fire read by hand, on 2026-11-05:
 

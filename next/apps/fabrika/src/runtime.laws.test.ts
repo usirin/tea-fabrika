@@ -6,12 +6,13 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import type {Descriptor, Incoming, Sent} from "@kampus/libfabrika";
+import {BrainFact} from "@kampus/libfabrika/brain-fact";
 import {revokeText, SigningRefused, Start, type From} from "@kampus/libfabrika/coordination";
 import type {SpanRow} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {Attached} from "@kampus/libfabrika/transport";
 import {GatewayService, gatewayRuntime} from "@kampus/libfabrika/workers/gateway";
-import {ProjectService} from "@kampus/libfabrika/workers/runtime";
+import {ProjectService, bucketCalls} from "@kampus/libfabrika/workers/runtime";
 import {Deferred, Effect, Exit, Option, Tracer} from "effect";
 import * as fc from "fast-check";
 import {afterEach, describe, expect, it, vi} from "vitest";
@@ -196,12 +197,16 @@ const world = async (trace = TRACE, build = "counter-b") => {
 	} as unknown as Env;
 	let runtime = projectRuntime(ctx, env);
 	const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
-	const p = await run(ProjectService);
 	closers.push(async () => {
 		await runtime.dispose();
 		db.close();
 		rmSync(home, {recursive: true, force: true});
 	});
+	const p = await run(
+		ProjectService.pipe(
+			Effect.withParentSpan(Tracer.externalSpan({traceId: trace, spanId: "00f067aa0ba902b7"})),
+		),
+	);
 	const from: From = {
 		by: key.fingerprint,
 		for: PERSON,
@@ -286,6 +291,40 @@ const world = async (trace = TRACE, build = "counter-b") => {
 };
 
 describe("P12 Project authority", () => {
+	law("the bootstrap entry keeps the caller's span trace", async ({trace}) => {
+		const w = await world(trace);
+		const [row] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
+		expect(row).toMatchObject({traceId: trace, rev: w.p.boot.rev});
+	});
+	law("a brain lifecycle entry keeps the caller's span trace", async ({trace, write}) => {
+		const w = await world();
+		const fact = BrainFact.cases.stopped.make({id: write, start: write, at: 1, why: "stop"});
+		await w.run(
+			w.p
+				.brain(fact)
+				.pipe(
+					Effect.withParentSpan(Tracer.externalSpan({traceId: trace, spanId: "00f067aa0ba902b7"})),
+				),
+		);
+		const [row] = await w.run(w.p.read("door/brain", 0, "audit"));
+		expect(row).toMatchObject({traceId: trace, id: write, body: fact});
+	});
+	law(
+		"reopening an exited bootstrap reads its first placing without starting it again",
+		async ({trace, build}) => {
+			const w = await world(trace, build);
+			const first = w.p.boot;
+			const before = await w.run(w.p.read("processes/counter:1", 0, "audit"));
+			await w.run(w.p.exit(first.process, "normal", w.from));
+			const configured = w.configured.length;
+			const reopened = await w.reopen();
+			expect(reopened.boot).toEqual(first);
+			expect(w.configured).toHaveLength(configured);
+			const entries = await w.run(reopened.read("processes/counter:1", 0, "audit"));
+			expect(entries[0]).toEqual(before[0]);
+			expect(entries).toHaveLength(2);
+		},
+	);
 	law(
 		"a program's person-only facts require its own person-only input",
 		async ({letter, write}) => {
@@ -429,6 +468,49 @@ describe("P12 Project authority", () => {
 				field === "writer"
 					? {by: w.descriptors.get(pid)!.owner.key, for: PERSON, parent: null}
 					: {traceId: trace},
+			);
+		});
+});
+
+describe("P12 WebCrypto failures", () => {
+	const failure = fc.oneof(
+		fc.anything(),
+		fc.string().map((message) => new Error(message)),
+		fc.constant(new DOMException("digest refused", "OperationError")),
+	);
+	for (const edge of ["fingerprint", "archive checksum"] as const)
+		it(`${edge} refuses every thrown or rejected failure with why crypto`, async () => {
+			await fc.assert(
+				fc.asyncProperty(failure, fc.boolean(), fc.uint8Array(), async (value, throws, body) => {
+					const w = edge === "fingerprint" ? await world() : null;
+					const digest = vi.spyOn(crypto.subtle, "digest").mockImplementation(() => {
+						if (throws) throw value;
+						return Promise.reject(value);
+					});
+					const put = vi.fn(async () => null);
+					try {
+						if (w !== null) {
+							const result = await w.run(Effect.exit(w.p.online(w.key.fingerprint)));
+							expect(result).toMatchObject({_tag: "Failure"});
+							expect(Option.getOrThrow(Exit.findErrorOption(result))).toMatchObject({
+								_tag: "LedgerError",
+								why: "crypto",
+							});
+						} else {
+							// oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
+							const bucket = {put} as unknown as R2Bucket;
+							await expect(
+								bucketCalls(bucket).put("health", body, "0".repeat(64)),
+							).rejects.toMatchObject({_tag: "LedgerError", why: "crypto"});
+							expect(put).not.toHaveBeenCalled();
+						}
+						expect(digest).toHaveBeenCalled();
+					} finally {
+						digest.mockRestore();
+						for (const close of closers.splice(0).reverse()) await close();
+					}
+				}),
+				{seed: 119120, numRuns: 20},
 			);
 		});
 });
