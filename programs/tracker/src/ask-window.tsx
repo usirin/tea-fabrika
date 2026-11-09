@@ -128,7 +128,7 @@ const failed = (model: Model, error: unknown): Step => [
 	[],
 ];
 
-/** What a saved answer says, in words: "Approved.", or the pick it saved. Pure. */
+/** What a saved answer says, in words: "Approved.", or "You chose <pick>." Pure. */
 const savedWords = (shows: Shows, answer: Answer | null): string => {
 	const chosen =
 		answer?._tag === "rec" && shows.rec._tag === "pick"
@@ -136,7 +136,7 @@ const savedWords = (shows: Shows, answer: Answer | null): string => {
 			: answer !== null && "pick" in answer
 				? answer.pick
 				: "Answer";
-	return chosen === "approve" ? "Approved." : `${chosen} saved.`;
+	return chosen === "approve" ? "Approved." : `You chose ${chosen}.`;
 };
 
 /** The save landed: the editor reads again, and says what was saved. */
