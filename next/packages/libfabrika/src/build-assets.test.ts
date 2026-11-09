@@ -52,7 +52,7 @@ type Roll = {readonly rolldown: (o: RolldownOptions) => Promise<Handle>};
 const fixture = (name: string, value: string) => {
 	const home = mkdtempSync("/tmp/fh.");
 	homes.push(home);
-	mkdirSync(join(home, "node_modules/@p16/compiler"), {recursive: true});
+	mkdirSync(join(home, "node_modules/@p16"), {recursive: true});
 	for (const pkg of ["effect", "@demlik", "@kampus"])
 		symlinkSync(
 			join(ROOT, "next/apps/fabrika/node_modules", pkg),
@@ -60,8 +60,11 @@ const fixture = (name: string, value: string) => {
 			"dir",
 		);
 	symlinkSync(join(import.meta.dirname, "../node_modules/react"), join(home, "node_modules/react"));
-	const pkg = join(home, "node_modules/@p16/compiler"),
+	const pkg = join(home, "programs/compiler"),
 		file = join(pkg, "window.tsx");
+	mkdirSync(pkg, {recursive: true});
+	// Match workspace resolution without asking the Compiler to compile installed dependencies.
+	symlinkSync(pkg, join(home, "node_modules/@p16/compiler"), "dir");
 	writeFileSync(join(home, "package.json"), '{"type":"module"}');
 	writeFileSync(
 		join(pkg, "package.json"),
@@ -116,7 +119,7 @@ describe("P16 assets and Compiler", () => {
 				previous(f, value);
 				const file =
 					kind === "manifest"
-						? join(f.home, "node_modules/@p16/compiler/package.json")
+						? join(f.home, "programs/compiler/package.json")
 						: join(f.home, "compiler-ledger.json");
 				writeFileSync(file, `{${JSON.stringify(value)}`);
 				const {ledger: _ledger, ...options} = f.options;
@@ -195,7 +198,7 @@ describe("P16 assets and Compiler", () => {
 								: kind === "directive"
 									? `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`
 									: `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`;
-					const path = "node_modules/@p16/compiler/window.tsx",
+					const path = "programs/compiler/window.tsx",
 						ledger = kind === "stale" ? [{file: path, fn: name, why: "planted stale row"}] : [];
 					expect(check(new Map([[path, source]]), ledger).length).toBeGreaterThan(0);
 					writeFileSync(f.file, source);

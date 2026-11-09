@@ -1,6 +1,7 @@
 // P16, next/. P12's actual workerLoader, stack and localStage contracts, not saved proof JSON.
 // The input-ID migration is missing on the base. Never manufacture an old stamped ID here.
 import assert from "node:assert/strict";
+import childProcess, {spawn} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
 import {
 	cpSync,
@@ -12,6 +13,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import {createServer as httpServer} from "node:http";
+import {syncBuiltinESMExports} from "node:module";
 import {createServer} from "node:net";
 import {join, resolve} from "node:path";
 import {NodeServices} from "@effect/platform-node";
@@ -32,6 +34,25 @@ const home = () => {
 	vi.stubEnv("TYPESAFE_API_KEY", undefined);
 	vi.stubEnv("DO_NOT_TRACK", "1");
 	return h;
+};
+// Alchemy sends SIGKILL when its scope closes, but the child can still hold its port.
+// Await the real close events before reusing that same port and saved state. No fixed sleep.
+const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
+	const spawn = childProcess.spawn,
+		closed: Promise<void>[] = [];
+	const spy = vi.spyOn(childProcess, "spawn").mockImplementation((...args) => {
+		const child = spawn(...args);
+		closed.push(new Promise<void>((done) => child.once("close", () => done())));
+		return child;
+	});
+	syncBuiltinESMExports();
+	try {
+		return await task();
+	} finally {
+		spy.mockRestore();
+		syncBuiltinESMExports();
+		await Promise.all(closed);
+	}
 };
 // Change the disposable completed file, then exercise that file on the real stage below.
 // Parsing finds P12's loader policy, so the plant cannot silently miss a formatting change.
@@ -374,6 +395,30 @@ class Client {
 }
 
 describe("P16 copied-file real stage, serial", () => {
+	it("shutdown: a stopped child closes before the next stage, including when the prior stage fails", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.boolean(), fc.integer(), async (fail, value) => {
+				let closed = false;
+				const task = afterChildrenStop(async () => {
+					const child = spawn(process.execPath, ["-e", ""]);
+					child.once("close", () => {
+						closed = true;
+					});
+					await new Promise<void>((done, reject) => {
+						child.once("spawn", done);
+						child.once("error", reject);
+					});
+					child.kill("SIGKILL");
+					if (fail) throw new Error(`planted stage failure ${value}`);
+					return value;
+				});
+				if (fail) await expect(task).rejects.toThrow(`planted stage failure ${value}`);
+				else expect(await task).toBe(value);
+				expect(closed, "next stage must wait for the real child close event").toBe(true);
+			}),
+			{...runs, numRuns: 8},
+		);
+	});
 	it("isolation plants reach the actual compiled loader policy before a real-stage run", async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.integer({min: 1, max: 9999}), async (n) => {
@@ -449,49 +494,54 @@ describe("P16 copied-file real stage, serial", () => {
 							mode === "sealed" ? bytes : plantPolicy(bytes, mode, `P16_${n}`, String(n)),
 						);
 						hits = 0;
-						await Effect.runPromise(
-							Effect.scoped(
-								Effect.gen(function* () {
-									const stage = yield* localStage(
-										{...built, brain: join(alone, "brain.mjs")},
-										{
-											home: h,
-											name: "p16-isolation",
-											person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-											founder: key.line,
-											window: key.raw,
-											port: brainPort,
-										},
-									);
-									yield* Effect.tryPromise({
-										try: async () => {
-											expect(Object.keys(built.programs).length).toBeGreaterThan(0);
-											for (const name of Object.keys(built.programs)) {
-												const program = await stage.loader.load(name, `probe-${n}-${mode}-${name}`);
-												const value = await Reflect.get(program, "init")(null);
-												if (name === "counter") {
-													expect(value.model).toEqual({count: 0});
-													continue;
-												}
-												const closed = (model: unknown) =>
-													assert.deepEqual(model, {keys: [], outbound: "denied"});
-												if (mode === "sealed") {
-													closed(value.model);
-													expect(hits).toBe(0);
-												} else {
-													expect(() => closed(value.model)).toThrow();
-													expect(value.model).toEqual(
-														mode === "binding"
-															? {keys: [`P16_${n}`], outbound: "denied"}
-															: {keys: [], outbound: "allowed"},
+						await afterChildrenStop(() =>
+							Effect.runPromise(
+								Effect.scoped(
+									Effect.gen(function* () {
+										const stage = yield* localStage(
+											{...built, brain: join(alone, "brain.mjs")},
+											{
+												home: h,
+												name: "p16-isolation",
+												person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+												founder: key.line,
+												window: key.raw,
+												port: brainPort,
+											},
+										);
+										yield* Effect.tryPromise({
+											try: async () => {
+												expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+												for (const name of Object.keys(built.programs)) {
+													const program = await stage.loader.load(
+														name,
+														`probe-${n}-${mode}-${name}`,
 													);
+													const value = await Reflect.get(program, "init")(null);
+													if (name === "counter") {
+														expect(value.model).toEqual({count: 0});
+														continue;
+													}
+													const closed = (model: unknown) =>
+														assert.deepEqual(model, {keys: [], outbound: "denied"});
+													if (mode === "sealed") {
+														closed(value.model);
+														expect(hits).toBe(0);
+													} else {
+														expect(() => closed(value.model)).toThrow();
+														expect(value.model).toEqual(
+															mode === "binding"
+																? {keys: [`P16_${n}`], outbound: "denied"}
+																: {keys: [], outbound: "allowed"},
+														);
+													}
 												}
-											}
-										},
-										catch: (error) => new Error("P16 isolation check failed", {cause: error}),
-									});
-								}),
-							).pipe(Effect.provide(localState()), Effect.provide(NodeServices.layer)),
+											},
+											catch: (error) => new Error("P16 isolation check failed", {cause: error}),
+										});
+									}),
+								).pipe(Effect.provide(localState()), Effect.provide(NodeServices.layer)),
+							),
 						);
 					}
 				} finally {
@@ -540,107 +590,109 @@ describe("P16 copied-file real stage, serial", () => {
 						stamped = "",
 						total = 0;
 					const stage = async (again: boolean) =>
-						Effect.runPromise(
-							Effect.scoped(
-								Effect.gen(function* () {
-									const runtime = yield* localStage(copied, options);
-									yield* Effect.tryPromise({
-										try: async () => {
-											const a = new Client(runtime.url, key, "a"),
-												b = new Client(runtime.url, key, "b");
-											try {
-												expect((await a.hello()).error).toBeUndefined();
-												expect((await b.hello()).error).toBeUndefined();
-												const rows = (
-													await a.call("ledger.read", {stream: "processes/counter:1", after: 0})
-												).result.entries;
-												const current = rows.findLast((r: any) => r._tag === "started").body
-													.process;
-												if (again) expect(current).toBe(pid);
-												else pid = current;
-												await b.call("view.open", {pid});
-												for (const [n, type] of messages.entries()) {
-													const answer = await a.call("process.send", {
-														pid,
-														letter: `p16-${n}`,
-														m: {type},
-														sentAt: "2026-11-08T04:00:00.000Z",
-														seen: 0,
-													});
-													expect(answer.result).toMatchObject({_tag: "accepted"});
-													if (n === 0) {
-														if (again) expect(answer.result).toEqual(first);
-														else first = answer.result;
+						afterChildrenStop(async () =>
+							Effect.runPromise(
+								Effect.scoped(
+									Effect.gen(function* () {
+										const runtime = yield* localStage(copied, options);
+										yield* Effect.tryPromise({
+											try: async () => {
+												const a = new Client(runtime.url, key, "a"),
+													b = new Client(runtime.url, key, "b");
+												try {
+													expect((await a.hello()).error).toBeUndefined();
+													expect((await b.hello()).error).toBeUndefined();
+													const rows = (
+														await a.call("ledger.read", {stream: "processes/counter:1", after: 0})
+													).result.entries;
+													const current = rows.findLast((r: any) => r._tag === "started").body
+														.process;
+													if (again) expect(current).toBe(pid);
+													else pid = current;
+													await b.call("view.open", {pid});
+													for (const [n, type] of messages.entries()) {
+														const answer = await a.call("process.send", {
+															pid,
+															letter: `p16-${n}`,
+															m: {type},
+															sentAt: "2026-11-08T04:00:00.000Z",
+															seen: 0,
+														});
+														expect(answer.result).toMatchObject({_tag: "accepted"});
+														if (n === 0) {
+															if (again) expect(answer.result).toEqual(first);
+															else first = answer.result;
+														}
+														if (!again)
+															total = type === "reset" ? 0 : total + (type === "inc" ? 1 : -1);
 													}
-													if (!again)
-														total = type === "reset" ? 0 : total + (type === "inc" ? 1 : -1);
-												}
-												const inbox = (
-													await a.call("ledger.read", {stream: "counter:1/inbox", after: 0})
-												).result.entries;
-												const acknowledged = inbox.filter((r: any) =>
-													String(r.id).startsWith("p16-"),
-												);
-												expect(acknowledged).toHaveLength(messages.length);
-												expect(new Set(acknowledged.map((r: any) => r.id)).size).toBe(
-													messages.length,
-												);
-												const input = inbox[0].parent;
-												expect(input).toMatch(/^input_[0-9a-hjkmnp-tv-z]{26}$/);
-												if (again) expect(input).toBe(stamped);
-												else stamped = input;
-												if (again) {
-													const retried = await a.call("process.send", {
-														pid,
-														letter: "unanswered",
-														m: {type: "inc"},
-														sentAt: "2026-11-08T04:00:00.000Z",
-														seen: 0,
-													});
-													expect(retried.result).toMatchObject({_tag: "accepted"});
-													const after = (
+													const inbox = (
 														await a.call("ledger.read", {stream: "counter:1/inbox", after: 0})
 													).result.entries;
-													expect(after.filter((r: any) => r.id === "unanswered")).toHaveLength(1);
-													for (const c of [a, b])
-														expect((await c.call("view.open", {pid})).result.view).toEqual({
-															count: total + 1,
-														});
-												} else {
-													for (const c of [a, b])
-														expect((await c.call("view.open", {pid})).result.view).toEqual({
-															count: total,
-														});
-													a.ws.send(
-														JSON.stringify({
-															jsonrpc: "2.0",
-															id: 999999,
-															method: "process.send",
-															params: {
-																pid,
-																letter: "unanswered",
-																m: {type: "inc"},
-																sentAt: "2026-11-08T04:00:00.000Z",
-																seen: 0,
-															},
-														}),
+													const acknowledged = inbox.filter((r: any) =>
+														String(r.id).startsWith("p16-"),
 													);
+													expect(acknowledged).toHaveLength(messages.length);
+													expect(new Set(acknowledged.map((r: any) => r.id)).size).toBe(
+														messages.length,
+													);
+													const input = inbox[0].parent;
+													expect(input).toMatch(/^input_[0-9a-hjkmnp-tv-z]{26}$/);
+													if (again) expect(input).toBe(stamped);
+													else stamped = input;
+													if (again) {
+														const retried = await a.call("process.send", {
+															pid,
+															letter: "unanswered",
+															m: {type: "inc"},
+															sentAt: "2026-11-08T04:00:00.000Z",
+															seen: 0,
+														});
+														expect(retried.result).toMatchObject({_tag: "accepted"});
+														const after = (
+															await a.call("ledger.read", {stream: "counter:1/inbox", after: 0})
+														).result.entries;
+														expect(after.filter((r: any) => r.id === "unanswered")).toHaveLength(1);
+														for (const c of [a, b])
+															expect((await c.call("view.open", {pid})).result.view).toEqual({
+																count: total + 1,
+															});
+													} else {
+														for (const c of [a, b])
+															expect((await c.call("view.open", {pid})).result.view).toEqual({
+																count: total,
+															});
+														a.ws.send(
+															JSON.stringify({
+																jsonrpc: "2.0",
+																id: 999999,
+																method: "process.send",
+																params: {
+																	pid,
+																	letter: "unanswered",
+																	m: {type: "inc"},
+																	sentAt: "2026-11-08T04:00:00.000Z",
+																	seen: 0,
+																},
+															}),
+														);
+														a.ws.close();
+													}
+													// Every embedded route must answer from this one file. P14 is absent on this base.
+													const missing = await fetch(`${runtime.url}/p16-missing.js`);
+													expect(missing.status).toBe(404);
+												} finally {
 													a.ws.close();
+													b.ws.close();
 												}
-												// Every embedded route must answer from this one file. P14 is absent on this base.
-												const missing = await fetch(`${runtime.url}/p16-missing.js`);
-												expect(missing.status).toBe(404);
-											} finally {
-												a.ws.close();
-												b.ws.close();
-											}
-										},
-										catch: (error) => new Error("P16 recovery check failed", {cause: error}),
-									});
-								}),
-							).pipe(
-								Effect.provide((await import("alchemy/State/LocalState")).localState()),
-								Effect.provide(NodeServices.layer),
+											},
+											catch: (error) => new Error("P16 recovery check failed", {cause: error}),
+										});
+									}),
+								).pipe(
+									Effect.provide((await import("alchemy/State/LocalState")).localState()),
+									Effect.provide(NodeServices.layer),
+								),
 							),
 						);
 					await stage(false);

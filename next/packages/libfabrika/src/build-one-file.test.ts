@@ -70,8 +70,10 @@ const fixture = (value: string, count = 1) => {
 	symlinkSync(join(import.meta.dirname, "../node_modules/react"), join(home, "node_modules/react"));
 	for (let n = 0; n < count; n++) {
 		const name = `program${n}`,
-			pkg = join(home, "node_modules/@p16", name);
-		mkdirSync(pkg);
+			pkg = join(home, "programs", name);
+		mkdirSync(pkg, {recursive: true});
+		// Workspace packages resolve by name, but their real source is outside node_modules.
+		symlinkSync(pkg, join(home, "node_modules/@p16", name), "dir");
 		writeFileSync(
 			join(pkg, "package.json"),
 			JSON.stringify({
@@ -187,6 +189,7 @@ const observe = async () => {
 			};
 		},
 	}));
+	vi.resetModules();
 	return emitted;
 };
 

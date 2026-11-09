@@ -13,8 +13,8 @@ import {
 import {syncBuiltinESMExports} from "node:module";
 import {tmpdir} from "node:os";
 import {join, relative, resolve} from "node:path";
-import {pathToFileURL} from "node:url";
 import {Effect, Exit} from "effect";
+import * as fc from "fast-check";
 import {rolldown} from "rolldown";
 import {afterEach, describe, expect, it, vi} from "vitest";
 
@@ -103,36 +103,46 @@ describe("P12 Rolldown build", () => {
 			syncBuiltinESMExports();
 		}
 	});
-	it("default discovery publishes a view and custom modules export program", async () => {
-		const {build} = await import("./build.ts");
-		const parent = home(),
-			folder = join(parent, "owned"),
-			view = join(folder, "view.tsx"),
-			program = join(folder, "program.ts"),
-			out = join(folder, "dist");
-		mkdirSync(folder);
-		writeFileSync(view, 'export const label = "view-built";');
-		writeFileSync(
-			program,
-			`export {counter as program} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))};`,
+	it("default discovery checks a view without publishing siblings and custom modules export program", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.integer({min: 0, max: 10000}), async (n) => {
+				const {build} = await import("./build.ts");
+				const parent = home(),
+					folder = join(parent, `owned${n}`),
+					view = join(folder, "view.tsx"),
+					program = join(folder, "program.ts"),
+					out = join(folder, "dist");
+				mkdirSync(folder);
+				writeFileSync(view, `export const label = ${JSON.stringify(`view-built-${n}`)};`);
+				writeFileSync(
+					program,
+					`export {counter as program} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))};`,
+				);
+				const found = vi
+					.spyOn(fs, "globSync")
+					.mockReturnValue([relative(resolve(import.meta.dirname, "../../../.."), view)]);
+				syncBuiltinESMExports();
+				chmodSync(parent, 0o500);
+				try {
+					const built = await Effect.runPromise(build({out, programs: {counter: program}}));
+					expect(built.programs.counter?.hash).toMatch(/^[a-f0-9]{64}$/);
+					// P16 replaces P12's loose view files. Discovery must still reach the real Compiler.
+					const before = snapshot(out);
+					writeFileSync(view, plants[1][1]);
+					const failed = await Effect.runPromise(
+						Effect.exit(build({out, programs: {counter: program}})),
+					);
+					expect(Exit.isFailure(failed), "default discovery must check its TSX inputs").toBe(true);
+					expect(snapshot(out)).toEqual(before);
+					expect(readdirSync(out)).toEqual(["brain.mjs"]);
+				} finally {
+					chmodSync(parent, 0o700);
+					found.mockRestore();
+					syncBuiltinESMExports();
+				}
+			}),
+			{seed: 119120, numRuns: 3},
 		);
-		const found = vi
-			.spyOn(fs, "globSync")
-			.mockReturnValue([relative(resolve(import.meta.dirname, "../../../.."), view)]);
-		syncBuiltinESMExports();
-		chmodSync(parent, 0o500);
-		try {
-			const built = await Effect.runPromise(build({out, programs: {counter: program}}));
-			expect(built.programs.counter?.hash).toMatch(/^[a-f0-9]{64}$/);
-			const views = readdirSync(out).filter((file) => file.endsWith(".js"));
-			expect(views).toHaveLength(1);
-			const compiled = await import(pathToFileURL(join(out, views[0]!)).href);
-			expect(compiled.label).toBe("view-built");
-		} finally {
-			chmodSync(parent, 0o700);
-			found.mockRestore();
-			syncBuiltinESMExports();
-		}
 	});
 	it("Compiler plant: calling compile without check publishes a skipped or impure rebuild", async () => {
 		const {build} = await import("./build.ts");

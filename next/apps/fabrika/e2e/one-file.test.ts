@@ -65,11 +65,13 @@ describe("P16 real browser from a copied one-file build", () => {
 					try {
 						// Try the real browser even when P16's library build has not been written yet.
 						browser = await chromium.launch({headless: true});
-						mkdirSync(join(home, "node_modules/@p16/browser"), {recursive: true});
+						mkdirSync(join(home, "node_modules/@p16"), {recursive: true});
 						for (const name of ["@kampus", "@demlik", "effect"])
 							symlinkSync(join(APP, "node_modules", name), join(home, "node_modules", name));
 						writeFileSync(join(home, "package.json"), '{"type":"module"}');
-						const pkg = join(home, "node_modules/@p16/browser");
+						const pkg = join(home, "programs/browser");
+						mkdirSync(pkg, {recursive: true});
+						symlinkSync(pkg, join(home, "node_modules/@p16/browser"), "dir");
 						writeFileSync(
 							join(pkg, "package.json"),
 							JSON.stringify({
