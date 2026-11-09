@@ -204,13 +204,7 @@ These still run, but they are not the way forward:
 
 - `operate ticket=<url>` in tsh: the older one-ticket loop (build, review, ship). It is going to
   be deleted. Use [the pipeline](./docs/how-to/run-a-pipeline-ticket.md).
-- `pnpm demo`: the first-generation factory (`legacy/`) on a toy ticket, with scripted agents. It
-  costs nothing and prints every step.
-- `pnpm demo:claude` and `pnpm demo:hard` (a harder toy): the same with real Claude Code. They
-  need the `claude` CLI and they spend money. With `TYPESAFE_API_KEY` set, the sort step uses
-  Jev, a small paid classifier, instead of a script.
-- `pnpm real`: the first-generation factory on one GitHub issue. See
-  [Run a real ticket](./docs/how-to/run-a-real-ticket.md).
+- The first-generation factory (`pnpm demo`, `pnpm real`) is gone from main. It stays in git at the tag `archive/2026-11-09`.
 
 ## Where to go next
 
@@ -225,7 +219,6 @@ These still run, but they are not the way forward:
 | See what was tried, and what came back | [`experiments/`](./experiments/README.md) |
 | See what happened on real tickets | [`field/`](./field/README.md) |
 | Read one finding, short | [`singles/`](./singles/README.md) |
-| Check a change against old tickets | [`replay/`](./replay/README.md) |
 
 ## What is in this repository
 
@@ -259,9 +252,6 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
     page, and two runs side by side (experiment 170).
   - [`programs/markdown`](./programs/markdown/README.md), `@tea-fabrika/markdown`: draws any
     markdown it is told, in a window, as `glow` or `less` does.
-- `wip`: the old operator's live wiring that `legacy` still uses. Nothing new goes here.
-- [`legacy`](./legacy/README.md): the first-generation factory and the old operator. Nothing new
-  goes here.
 - `packs/`: add-on packs. A repository turns one on with one line in its `.fabrika/fabrika.toml`; the core
   names none of them.
   - [`packs/owner-desk`](./packs/owner-desk/README.md): the owner's inbox, and their answers back.
