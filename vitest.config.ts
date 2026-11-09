@@ -27,7 +27,6 @@ export default defineConfig({
 			"apps/*/src/**/*.test.ts",
 			"packages/*/src/**/*.test.ts",
 			"programs/*/src/**/*.test.ts",
-			"packs/*/src/**/*.test.ts",
 			"wip/src/**/*.test.ts",
 			"legacy/src/**/*.test.ts",
 			"oxlint-plugins/*.test.ts",
