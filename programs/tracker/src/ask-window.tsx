@@ -859,7 +859,7 @@ export function AskView({
 	/** The program the view sits in, kept from its mount: an answered view draws nothing. */
 	const program = useRef<HTMLElement | null>(null);
 	const note = useRef<HTMLTextAreaElement>(null);
-	const alert = useRef<HTMLDivElement>(null);
+	const heading = useRef<HTMLDivElement>(null);
 	const ctx = useRef({ticket, ask: askShownOf(ask), now: Date.now()}).current;
 	const identity = useRef(new AskIdentity({ticket, ask: ask.ask})).current;
 	const attention = useRef({key: identity.key, view: crypto.randomUUID()}).current;
@@ -959,13 +959,13 @@ export function AskView({
 		if (view.editor._tag === "note") note.current?.focus();
 	}, [view.editor._tag]);
 	const failing = view.failure !== null && !view.busy;
-	// A failed save says so where a person is looking: its line scrolls into the tile's view, the
-	// least distance that shows it, with no motion for those who asked for less.
+	// The question and save status scroll together. Showing only the error can push "Your turn"
+	// above a short tile, and a note's focused field can leave the saving status out of view.
 	useEffect(() => {
-		if (!failing) return;
+		if ((!view.busy && !failing) || heading.current?.scrollIntoView === undefined) return;
 		const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-		alert.current?.scrollIntoView({block: "nearest", behavior: still ? "auto" : "smooth"});
-	}, [failing]);
+		heading.current.scrollIntoView({block: "nearest", behavior: still ? "auto" : "smooth"});
+	}, [view.busy, failing]);
 	const command = (name: AskCommand["_tag"], key = "click") =>
 		send({...ASK_COMMANDS[name].send, key, now: Date.now()});
 	/**
@@ -1068,11 +1068,23 @@ export function AskView({
 					send({type: "focus", value: false, now: Date.now()});
 			}}
 		>
-			<div className="ask-line">
+			<div ref={heading} className="ask-line">
 				{place !== "menu" && (
 					<p className="ask-question">
 						<span className="ask-turn">Your turn</span> <span>{view.shows.what}</span>
 					</p>
+				)}
+				{view.busy && <p className="ask-quiet">Saving your answer…</p>}
+				{failing && view.failure !== null && (
+					<div className="ask-fail" role="alert">
+						{FAILED}
+						<p>
+							<strong>Not saved.</strong> {failureWords(view.failure)}
+						</p>
+						<Button size="sm" variant="outline" onClick={retry}>
+							Try again
+						</Button>
+					</div>
 				)}
 				{/* Focusable by code only (-1): Tab reaches its one roving button, never the toolbar itself. */}
 				<div
@@ -1267,18 +1279,6 @@ export function AskView({
 						</Button>
 					</div>
 				</form>
-			)}
-			{view.busy && <p className="ask-quiet">Saving your answer…</p>}
-			{failing && view.failure !== null && (
-				<div ref={alert} className="ask-fail" role="alert">
-					{FAILED}
-					<p>
-						<strong>Not saved.</strong> {failureWords(view.failure)}
-					</p>
-					<Button size="sm" variant="outline" onClick={retry}>
-						Try again
-					</Button>
-				</div>
 			)}
 			<div className="ask-evidence" id={evidenceId} hidden={model.evidence !== true}>
 				<p className="ask-evidence-label">The ticket</p>
