@@ -110,8 +110,10 @@ class Element {
 		this.parentNode?.bubbleClick(event);
 	}
 	private changed() {
-		if (this.attributes.role === "status") this.ownerDocument.writes++;
-		else this.parentNode?.changed();
+		if (this.attributes.role === "status") {
+			this.ownerDocument.writes++;
+			if (this.textContent !== "") this.ownerDocument.announcements.push(this.textContent);
+		} else this.parentNode?.changed();
 	}
 	findStatus(): Element | undefined {
 		return this.attributes.role === "status"
@@ -132,6 +134,7 @@ class Dom {
 	activeElement = this.body;
 	readonly hidden = false;
 	writes = 0;
+	readonly announcements: string[] = [];
 	hasFocus() {
 		return true;
 	}
@@ -253,8 +256,8 @@ property("an accepted answer says how many asks are left", {left}, async ({left}
 	}
 });
 
-// Today's version, round 25, review 11, P24. The current product is the plant: save success
-// says "Approved. N left." against the old queue, then a poll changes that same live result.
+// Today's version, rounds 25/26, reviews 11/12, A1 and plan laws 10/24. The current product
+// is the plant: a captured count minus one misses Later, arrivals and multiple saved answers.
 // Run the real AskView save, tea hooks, AskStatus and React DOM. Only the outside answer reply
 // and ledger poll are controlled, so either can finish first, including after the view unmounts.
 const waiting = Schema.UniqueArray(Asked.fields.ask).check(
@@ -273,31 +276,39 @@ const mountAnswer = (asks: readonly Asked[], selected: Asked) => {
 	vi.stubGlobal("window", document.defaultView);
 	// @ts-expect-error The test host supplies only the DOM calls the shared ask view uses.
 	const root = createRoot(document.body);
-	const started = Deferred.makeUnsafe<void>();
-	const reply = Deferred.makeUnsafe<null>();
+	const requests = new Map<
+		string,
+		{started: Deferred.Deferred<void>; reply: Deferred.Deferred<null>}
+	>();
+	let queue = asks;
+	let current = selected;
+	const aside = new Set<string>();
+	// Exactly the live-ask list frame.tsx uses for both its header and AskStatus. Later stays out.
+	const waiting = () => queue.filter((ask) => !aside.has(ask.ask));
 	const answers: string[] = [];
 	const actions: AskActions = {
 		openLane: () => {},
 		command: () => undefined,
 		answer: (answer) =>
 			Effect.gen(function* () {
+				const request = requests.get(answer.ask)!;
 				answers.push(answer.ask);
-				yield* Deferred.succeed(started, undefined);
-				return yield* Deferred.await(reply);
+				yield* Deferred.succeed(request.started, undefined);
+				return yield* Deferred.await(request.reply);
 			}),
 		later: () => {},
 		keys: {rec: ["y"], not: ["n"], picks: ["o"], later: ["h"]},
 		blocked: () => false,
 	};
-	const render = (queue: readonly Asked[]) => {
-		const ask = queue.find((ask) => ask.ask === selected.ask) ?? queue[0];
+	const render = () => {
+		const ask = queue.find((ask) => ask.ask === current.ask) ?? queue[0];
 		flushSync(() =>
 			root.render(
 				createElement(
 					AskActions.Provider,
 					{value: actions},
 					createElement(AskStatus, {
-						left: queue.length,
+						left: waiting().length,
 						children:
 							ask === undefined ? null : createElement(AskView, {key: ask.ask, ticket: 102, ask}),
 					}),
@@ -305,11 +316,19 @@ const mountAnswer = (asks: readonly Asked[], selected: Asked) => {
 			),
 		);
 	};
-	render(asks);
+	render();
 	return {
 		document,
 		answers,
-		start: async () => {
+		waiting,
+		available: () => queue.filter((ask) => !requests.has(ask.ask)),
+		start: async (ask = selected, from: "list" | "later" = "list") => {
+			current = ask;
+			if (from === "later") aside.add(ask.ask);
+			else aside.delete(ask.ask);
+			render();
+			const started = Deferred.makeUnsafe<void>();
+			requests.set(ask.ask, {started, reply: Deferred.makeUnsafe<null>()});
 			const button = document.body.find(
 				(node) => node.tagName === "BUTTON" && node.textContent.startsWith("Take rec"),
 			)[0];
@@ -318,12 +337,18 @@ const mountAnswer = (asks: readonly Asked[], selected: Asked) => {
 			await Effect.runPromise(Deferred.await(started));
 			await drain();
 		},
-		save: async () => {
-			await Effect.runPromise(Deferred.succeed(reply, null));
+		save: async (ask = selected) => {
+			await Effect.runPromise(Deferred.succeed(requests.get(ask.ask)!.reply, null));
 			await drain();
 		},
-		poll: async () => {
-			render(asks.filter((ask) => ask.ask !== selected.ask));
+		arrive: async (ask: Asked) => {
+			queue = [...queue, ask];
+			render();
+			await drain();
+		},
+		poll: async (removed: readonly Asked[] = [selected]) => {
+			queue = queue.filter((ask) => !removed.some((removed) => removed.ask === ask.ask));
+			render();
 			await drain();
 		},
 		close: () => flushSync(() => root.unmount()),
@@ -371,6 +396,147 @@ describe.each(["save-first", "poll-first"] as const)("answer status with %s", (o
 					`${order}: one save must announce once, counting only unanswered asks`,
 				).toEqual([`Approved. ${asks.length - 1} left.`]);
 			} finally {
+				test.close();
+				await drain();
+			}
+		},
+	);
+});
+
+const flowAsks = Schema.UniqueArray(Asked.fields.ask).check(
+	Schema.isMinLength(2),
+	Schema.isMaxLength(6),
+);
+const flowChoice = Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 5}));
+const statusStep = Schema.TaggedUnion({
+	answer: {choice: flowChoice, from: Schema.Literals(["list", "later"])},
+	arrive: {},
+	save: {choice: flowChoice},
+	// A poll may see a persisted answer before that answer's save reply reaches its view.
+	poll: {choice: flowChoice, beforeReply: Schema.Boolean},
+});
+const steps = Schema.Array(statusStep).check(Schema.isMaxLength(24));
+
+// Keep review 12's three bug families in every run, with generated ask ids, targets and tails.
+// The free-flow family has no prescribed prefix: any answer/arrival/save/poll order is drawn.
+describe.each([
+	"Later with a live ask",
+	"arrival while saving, save-first",
+	"arrival while saving, poll-first",
+	"two answers before polling",
+	"free-flow",
+] as const)("remaining count across %s", (flow) => {
+	property(
+		"every saved answer announces once, counting the current live asks without saved answers",
+		{waiting: flowAsks, choice: flowChoice, steps},
+		async ({waiting, choice, steps}) => {
+			const asks = await Promise.all(
+				waiting.map((ask) =>
+					Effect.runPromise(sealAsk({...DRAFT, ask}, policyFor(ask, false, blindDraw))),
+				),
+			);
+			const first = asks[choice % asks.length]!;
+			const rest = asks.filter((ask) => ask !== first);
+			const initial = flow.startsWith("arrival") ? [first] : [first, rest[0]!];
+			const future = asks.filter((ask) => !initial.includes(ask));
+			const test = mountAnswer(initial, first);
+			const started: Asked[] = [];
+			const saved = new Set<string>();
+			const expected: string[] = [];
+			const trace: string[] = [];
+			const pending = () => started.filter((ask) => !saved.has(ask.ask));
+			const check = () => {
+				expect(
+					test.document.announcements,
+					`${flow}: ${trace.join(" -> ")}; each save must announce once with the header's live asks minus saved answers`,
+				).toEqual(expected);
+				expect(test.document.body.findStatus()?.textContent).toBe(expected.at(-1) ?? "");
+			};
+			const answer = async (ask: Asked, from: "list" | "later") => {
+				trace.push(`answer ${ask.ask} from ${from}`);
+				started.push(ask);
+				await test.start(ask, from);
+				expect(test.answers).toEqual(started.map((ask) => ask.ask));
+				check();
+			};
+			const arrive = async () => {
+				const ask = future.shift();
+				if (ask === undefined) return;
+				trace.push(`arrival ${ask.ask}`);
+				await test.arrive(ask);
+				check();
+			};
+			const save = async (ask: Asked) => {
+				trace.push(`save ${ask.ask}`);
+				saved.add(ask.ask);
+				const left = test.waiting().filter((ask) => !saved.has(ask.ask)).length;
+				expected.push(`Approved. ${left} left.`);
+				await test.save(ask);
+				check();
+			};
+			const poll = async (beforeReply?: Asked) => {
+				trace.push(`poll${beforeReply === undefined ? "" : ` including ${beforeReply.ask}`}`);
+				await test.poll([
+					...started.filter((ask) => saved.has(ask.ask)),
+					...(beforeReply === undefined ? [] : [beforeReply]),
+				]);
+				check();
+			};
+			try {
+				switch (flow) {
+					case "Later with a live ask":
+						await answer(first, "later");
+						await save(first);
+						break;
+					case "arrival while saving, save-first":
+					case "arrival while saving, poll-first":
+						await answer(first, "list");
+						await arrive();
+						if (flow === "arrival while saving, poll-first") await poll(first);
+						await save(first);
+						await poll();
+						break;
+					case "two answers before polling":
+						await answer(first, "list");
+						await answer(rest[0]!, "list");
+						await save(first);
+						await save(rest[0]!);
+						break;
+					case "free-flow":
+						break;
+				}
+				for (const step of steps) {
+					switch (step._tag) {
+						case "answer": {
+							const available = test.available();
+							const ask = available[step.choice % available.length];
+							if (ask !== undefined) await answer(ask, step.from);
+							break;
+						}
+						case "arrive":
+							await arrive();
+							break;
+						case "save": {
+							const waiting = pending();
+							const ask = waiting[step.choice % waiting.length];
+							if (ask !== undefined) await save(ask);
+							break;
+						}
+						case "poll": {
+							const waiting = pending();
+							await poll(step.beforeReply ? waiting[step.choice % waiting.length] : undefined);
+							break;
+						}
+					}
+				}
+				// Deliver every outstanding reply, even for an ask a poll already unmounted.
+				while (pending().length > 0) await save(pending()[choice % pending().length]!);
+				await poll();
+				await poll();
+				expect(expected).toHaveLength(started.length);
+			} finally {
+				// A failing count must not leave detached saves waiting across generated samples.
+				for (const ask of pending()) await test.save(ask);
 				test.close();
 				await drain();
 			}
