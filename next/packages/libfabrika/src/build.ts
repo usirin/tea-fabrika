@@ -113,8 +113,14 @@ const stylesheets: Plugin = {
 	name: "fabrika-css",
 	load(id) {
 		if (!id.endsWith(".css")) return;
-		this.emitFile({type: "asset", name: basename(id), source: inlineStylesheet(id)});
-		return {code: "", moduleType: "js"};
+		const emit = inlineStylesheet(id).pipe(
+			Effect.map((source) => {
+				this.emitFile({type: "asset", name: basename(id), source});
+				return {code: "", moduleType: "js" as const};
+			}),
+		);
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Rolldown hook answers with a Promise
+		return Effect.runPromise(emit);
 	},
 };
 

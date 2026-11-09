@@ -1,26 +1,24 @@
-// One stylesheet with its local `@import`s inlined, parsed by lightningcss (a real CSS parser).
-// lightningcss lists each `@import` and `url()` it finds with the URL already decoded, and drops the
-// imports from the printed sheet; this file follows the local imports itself, so it stays sync.
+// One stylesheet with its local `@import`s inlined by lightningcss's own bundler, which keeps the
+// cascade: layer order, source order, and a refusal when a remote import follows a bundled one.
+// Each file it reads is checked first (`check`), since the bundler would keep a local `url()` and
+// wrap a `layer` or `supports()` import that the build does not accept.
 // A window's stylesheet is served from the brain's table, which holds scripts and stylesheets only,
 // so any other local file a stylesheet names stops the build instead of answering 404 later.
-// It runs inside a Rolldown hook, outside Effect: it reads files directly, and a throw fails the bundle.
 import {Buffer} from "node:buffer";
 import {readFileSync, realpathSync} from "node:fs";
 import {dirname, resolve} from "node:path";
-import {type ImportDependency, transform} from "lightningcss";
+import {Effect} from "effect";
+import {bundleAsync, transform} from "lightningcss";
 
 /** A reference to a scheme (`https:`, `data:`), a host (`//`) or a fragment is not a local file. */
 const remote = (ref: string) => /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(ref);
-const quoted = (url: string) =>
-	`"${url.replace(/[\\"]/g, (c) => `\\${c}`).replace(/[\n\r\f]/g, (c) => `\\${c.charCodeAt(0).toString(16)} `)}"`;
-
-type Sheet = {readonly imports: ReadonlyArray<string>; readonly body: string};
 const unsupported = "unsupported @import condition";
 
 // lightningcss names the bad token in its message; the build's errors name what is broken.
 const parseError = (error: unknown) => {
 	const message = error instanceof Error ? error.message : String(error);
-	if (message === unsupported) return new Error(unsupported);
+	const known = message.match(/(?:unsupported @import condition|stylesheet [^:]*)$/)?.[0];
+	if (known !== undefined) return new Error(known);
 	if (message.includes("BadString")) return new Error("stylesheet has a broken string");
 	if (message.includes("BadUrl")) return new Error("stylesheet has a broken url()");
 	return new Error(`stylesheet has a broken @import: ${message}`);
@@ -42,11 +40,13 @@ const bareLayer = (rule: string) =>
 		transform({filename: "import.css", code: Buffer.from(rule)}).code.toString(),
 	);
 
-const parse = (file: string) => {
-	const text = readFileSync(file, "utf8"),
-		at = offsets(text),
+// One file's own checks, run as the bundler reads it: the token errors, the import conditions it
+// cannot keep, and any local file a `url()` names.
+const check = (file: string, text: string) => {
+	const at = offsets(text),
 		starts: number[] = [],
 		imports: number[] = [];
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- runs in the bundler's read callback, which fails by throwing
 	try {
 		const result = transform({
 			filename: file,
@@ -71,45 +71,54 @@ const parse = (file: string) => {
 			const end = Math.min(text.length, ...starts.filter((next) => next > start));
 			if (bareLayer(text.slice(start, end))) throw new Error(unsupported);
 		}
-		return result;
+		for (const dependency of result.dependencies ?? [])
+			if (dependency.type === "url" && !remote(dependency.url))
+				throw new Error("stylesheet references a file");
 	} catch (error) {
 		throw parseError(error);
 	}
 };
 
-const local = (dependency: ImportDependency, file: string, seen: ReadonlySet<string>): Sheet => {
-	const child = inline(resolve(dirname(file), dependency.url), seen);
-	if (dependency.media === null) return child;
-	if (child.imports.length > 0) throw new Error(unsupported);
-	return {imports: [], body: `@media ${dependency.media} {\n${child.body}\n}`};
+// The bundler drops an import it has already entered, so a cycle is found from the edges it resolved.
+const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
+	const done = new Set<string>(),
+		open = new Set<string>();
+	const visit = (file: string): boolean => {
+		if (open.has(file)) return true;
+		if (done.has(file)) return false;
+		open.add(file);
+		const found = [...(edges.get(file) ?? [])].some(visit);
+		open.delete(file);
+		done.add(file);
+		return found;
+	};
+	return [...edges.keys()].some(visit);
 };
 
-const inline = (path: string, seen: ReadonlySet<string>): Sheet => {
-	const file = realpathSync(path);
-	if (seen.has(file)) throw new Error("stylesheet imports itself");
-	const inside = new Set([...seen, file]),
-		{code, dependencies = []} = parse(file);
-	let body = code.toString();
-	const imports: string[] = [],
-		parts: string[] = [];
-	for (const dependency of dependencies) {
-		if (dependency.type === "url") {
-			if (!remote(dependency.url)) throw new Error("stylesheet references a file");
-			body = body.replaceAll(`"${dependency.placeholder}"`, quoted(dependency.url));
-		} else if (dependency.type === "import") {
-			const media = dependency.media === null ? "" : ` ${dependency.media}`;
-			if (remote(dependency.url)) imports.push(`@import url(${quoted(dependency.url)})${media};`);
-			else {
-				const child = local(dependency, file, inside);
-				imports.push(...child.imports);
-				parts.push(child.body);
-			}
-		}
-	}
-	return {imports, body: [...parts, body].filter((part) => part.trim() !== "").join("\n")};
-};
-
-export const inlineStylesheet = (file: string) => {
-	const {imports, body} = inline(file, new Set());
-	return [...imports, body].join("\n");
-};
+export const inlineStylesheet = Effect.fn("build.css")(function* (file: string) {
+	const edges = new Map<string, Set<string>>();
+	// oxlint-disable-next-line fabrika/no-promises -- edge: lightningcss takes a resolver only in bundleAsync
+	const result = yield* Effect.tryPromise({
+		try: () =>
+			bundleAsync({
+				filename: realpathSync(file),
+				errorRecovery: false,
+				resolver: {
+					resolve: (specifier, from) => {
+						if (remote(specifier)) return {external: specifier};
+						const path = realpathSync(resolve(dirname(from), specifier));
+						edges.set(from, (edges.get(from) ?? new Set()).add(path));
+						return path;
+					},
+					read: (path) => {
+						const text = readFileSync(path, "utf8");
+						check(path, text);
+						return text;
+					},
+				},
+			}),
+		catch: parseError,
+	});
+	if (cyclic(edges)) return yield* Effect.fail(new Error("stylesheet imports itself"));
+	return result.code.toString();
+});
