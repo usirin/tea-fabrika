@@ -25,5 +25,6 @@ if [ "$step" = build ]; then
 fi
 git -c user.name="fabrikalfa[bot]" -c user.email="353269643+fabrikalfa[bot]@users.noreply.github.com" \
 	commit -q -m "$subject" -m "Co-authored-by: $coauthor"
-pnpm commits sign --step "$step" --ticket "$ticket" --key "$HOME/.fabrika/step-keys/$step"
+# STEPCOMMIT_SIGNER: drive.ts names main's own signer when the tree holds an agent's edits.
+${STEPCOMMIT_SIGNER:-pnpm commits} sign --step "$step" --ticket "$ticket" --key "$HOME/.fabrika/step-keys/$step"
 git log --oneline -1
