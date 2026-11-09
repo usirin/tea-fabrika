@@ -27,7 +27,8 @@ skill holds the rest.
      ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)).
      A fixed test is fine only when its name starts with one of four labels and it is that kind:
      `vector:`, `format:`, `pinned:` or `scenario:`. A hand-picked example checking a general rule,
-     labeled or not, is a defect.
+     labeled or not, is a defect. Check that the property or label is present and fits, against the
+     named spec, format, bug or run. Do not reopen each test's merits.
    - Each law catches its plant. Plant a break yourself where a law looks weak, in your head or in a
      scratch copy, never in the branch.
    - No `build` commit touches a path in `exam-paths.json`. Check each commit's step note with

@@ -16,8 +16,8 @@ the rest.
 
 1. **Read** `AGENTS.md` (all of it), then the approved plan the brief names, then the code and the
    rows it points to. Say which version you are in: `next/` or today's.
-2. **Write each law with its plant.** Every law is a property test on the real code, over generated
-   inputs, not only the laws on a machine
+2. **Write each law with its plant.** Every law uses generated inputs on the real code unless it
+   has one of the four reason labels, not only laws on a machine
    ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property),
    [property tests](../../../docs/direction/property-tests-not-our-own-search.md)):
    - On a machine: its real reducer from its real `init`, with `@demlik/tea/pbt`
@@ -30,6 +30,8 @@ the rest.
      `pinned:` (a named past bug), `scenario:` (one scripted run against the outside world, such
      as a real Electron window or a real `git push`). Anything else is a property
      ([the four labels](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)).
+   - Keep the plan's reason for each label beside the check. The reviewer checks that each law's
+     property or label is present and fits.
    - A shape check (an import ban, a naming rule) is a lint rule, not a test.
 3. **Do the exam work yourself.** Every exam path the plan gives `tests` is yours: lint rules,
    `exam-paths.json` rows, fixtures, an e2e runner. A builder is never handed one.
