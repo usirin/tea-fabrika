@@ -43,7 +43,8 @@ await connect(url, key, "again");                          // reconnectMs
 
 ## How it was run
 
-- `experiments/238-local-stage-speed-bar.ts` is the driver. It starts the real
+- `experiments/238-local-stage-speed-bar.ts` is the driver. It is not kept on main: it lives on
+  branch `fabrikalfa/p12-exp238-script`. It starts the real
   `next/apps/fabrika/dev.ts` with its own `FABRIKA_HOME` from `mktemp -d /tmp/fh.XXXX`. The key is
   unset. Every child runs under `nice -n 15`. Only one stage runs at a time. Before each run, the
   driver waits while 6 or more vitest workers run, and it records `uptime`.
