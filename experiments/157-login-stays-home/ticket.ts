@@ -8,7 +8,7 @@
 // The form is `t1.<payload>.<HMAC-SHA256 of the payload>`, both base64url. Web Crypto only, and
 // erasable TypeScript with no imports, so the same file runs in the Worker and in Node.
 
-export type Pass = {readonly kind: "person"; readonly person: string; readonly until: number};
+type Pass = {readonly kind: "person"; readonly person: string; readonly until: number};
 
 const enc = new TextEncoder();
 

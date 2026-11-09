@@ -6,7 +6,7 @@ export interface Example {
 	readonly result: string;
 }
 
-export type Outcome =
+type Outcome =
 	| {readonly ok: true; readonly value: unknown}
 	| {readonly ok: false; readonly error: string};
 

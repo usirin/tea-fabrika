@@ -1,1156 +1,1404 @@
-import {spawnSync} from "node:child_process";
+import {spawn, spawnSync} from "node:child_process";
+import {createHash} from "node:crypto";
 import {
-	cpSync,
 	existsSync,
-	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	readdirSync,
-	readlinkSync,
-	renameSync,
+	realpathSync,
 	rmSync,
-	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import {tmpdir} from "node:os";
-import {join, relative} from "node:path";
+import {dirname, join, resolve} from "node:path";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
-const script = join(import.meta.dirname, "box.sh");
-const storageFiles = (root: string) => {
-	const files: Record<string, string> = {};
-	const visit = (path: string, name: string) => {
-		const info = lstatSync(path);
-		files[name] = info.isSymbolicLink()
-			? `link:${readlinkSync(path)}`
-			: info.isFile()
-				? `file:${readFileSync(path).toString("base64")}`
-				: "directory";
-		if (info.isDirectory())
-			for (const child of readdirSync(path)) visit(join(path, child), `${name}/${child}`);
-	};
-	visit(root, ".");
-	return files;
+// Today's tooling. Real Git and the installed signer, local paths only. The only keys are
+// throwaway keys made here; scripts open them, this test never reads their files.
+const root = resolve(import.meta.dirname, "../../../..");
+const program = join(import.meta.dirname, "box.sh");
+const signer = join(root, "next/apps/fabrika/src/exam/commits.ts");
+const options = {seed: 321, numRuns: 3, endOnFailure: true};
+const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
+type Call = {cmd: string; args: string[]; cwd: string; head?: string};
+type Operation = {path: string; text?: string; to?: string};
+type Setup = {
+	operations?: Operation[];
+	batches?: Operation[][];
+	exit?: number;
+	signal?: boolean;
+	usage?: boolean;
+	hold?: boolean;
+	check?: {status: number; text: string};
+	secrets?: string[];
 };
-const input = fc.record({
-	name: fc.stringMatching(/^[a-z]{2,8}$/),
-	value: fc.stringMatching(/^[a-z]{1,12}$/),
-	space: fc.boolean(),
-	depth: fc.integer({min: 1, max: 3}),
-	descendant: fc.boolean(),
-});
-type Input = {name: string; value: string; space: boolean; depth: number; descendant: boolean};
-type Remote = {branches: string[]; local: number};
-const fixture = (
-	v: Input,
-	body: (f: ReturnType<typeof setup>) => void,
-	clone = false,
-	remote?: Remote,
-) => {
-	const dir = mkdtempSync(join(tmpdir(), "box-law-"));
-	try {
-		body(setup(v, clone, dir, remote));
-	} finally {
-		rmSync(dir, {recursive: true, force: true});
-	}
+const body = (
+	files: Array<[string, string]> = [
+		["src/a.ts", "tests"],
+		["src/b.ts", "build"],
+	],
+) =>
+	`# Today's tooling\n\n\`\`\`text\nstep -> fetch\n\`\`\`\n\n## Laws\n| Law | Generator | Plant |\n| --- | --- | --- |\n| holds | fc.record: files | break |\n\n## Files\n| File | Owner step |\n| --- | --- |\n${files.map(([path, owner]) => `| ${path} | ${owner} |`).join("\n")}\n\n## Size\n1 agent hour, 80 lines. Confidence: 90%.\n\n## What it records\nRun IDs and digests.\n\n## What it cannot tell us\nNo live service.\n\n## Open questions\nNone.\n`;
+const hash = (text: string) => createHash("sha256").update(Buffer.from(text)).digest("hex");
+const approve = (text: string) =>
+	`Approved by the lead agent, builds the decided note; body ${hash(text).slice(0, 12)}\nPlancheck-Version: 2\n${text}`;
+const write = (path: string, text: string) => {
+	mkdirSync(dirname(path), {recursive: true});
+	writeFileSync(path, text);
 };
-const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
-	const main = join(dir, "main"),
-		boxes = join(dir, "boxes");
-	const name = `${v.name}${v.space ? " with space" : ""}`;
-	const work = join(boxes, name),
-		data = `${work}-gitdata`,
-		home = join(dir, "home");
-	for (const path of [main, boxes, home]) mkdirSync(path);
-	const env = {
-		...process.env,
-		HOME: home,
-		GIT_CONFIG_NOSYSTEM: "1",
-		GIT_CONFIG_GLOBAL: "/dev/null",
-		GIT_TERMINAL_PROMPT: "0",
-		MAIN: main,
-		BOXES: boxes,
-		REMOTE: "unused",
-		GH_REPO: "fixture/repo",
-		FABRIKA_COAUTHOR: "Fixture <fixture@example.test>",
-		TYPESAFE_API_KEY: undefined,
-	};
-	const git = (at: string, ...args: string[]) => {
-		const ran = spawnSync("/usr/bin/git", ["-C", at, ...args], {
-			encoding: "utf8",
-			env,
-			timeout: 15_000,
-		});
-		expect(ran.error).toBeUndefined();
-		expect(ran.status, ran.stderr).toBe(0);
-		return ran.stdout.trim();
-	};
-	git(main, "init", "-q", "--initial-branch=main");
-	git(main, "config", "user.name", "Fixture");
-	git(main, "config", "user.email", "fixture@example.test");
-	writeFileSync(join(main, "tracked"), `base ${v.value}\n`);
-	writeFileSync(join(main, ".gitignore"), "node_modules/\n");
-	git(main, "add", ".");
-	git(main, "commit", "-qm", "base");
-	if (remote) {
-		const base = git(main, "rev-parse", "HEAD"),
-			tree = git(main, "rev-parse", "HEAD^{tree}");
-		for (const branch of remote.branches) {
-			const tip = git(main, "commit-tree", tree, "-p", base, "-m", `${v.value} ${branch}`);
-			git(main, "update-ref", `refs/heads/${branch}`, tip);
-		}
-	}
-	const origin = join(dir, "origin.git");
-	git(main, "clone", "-q", "--bare", "--no-hardlinks", main, origin);
-	if (remote) {
-		rmSync(main, {recursive: true});
-		git(dir, "clone", "-q", "--no-hardlinks", origin, main);
-		git(main, "config", "user.name", "Fixture");
-		git(main, "config", "user.email", "fixture@example.test");
-		for (const branch of remote.branches.slice(0, remote.local))
-			git(main, "branch", branch, `origin/${branch}`);
-	}
-	if (clone) {
-		git(main, "clone", "-q", "--reference", main, `--separate-git-dir=${data}`, origin, work);
-	} else {
-		// Build metadata directly to test refusals independently of the symbolic-ref bug.
-		// The real clone law below keeps the normal origin/HEAD, too.
-		mkdirSync(work);
-		git(work, "init", "-q", "--initial-branch=main", `--separate-git-dir=${data}`);
-		git(work, "remote", "add", "origin", origin);
-		git(work, "fetch", "-q", "origin", "main");
-		git(work, "checkout", "-q", "-B", "main", "FETCH_HEAD");
-	}
-	git(work, "config", "user.name", "Fixture");
-	git(work, "config", "user.email", "fixture@example.test");
-	expect(git(main, "remote")).toBe(remote ? "origin" : "");
-	expect(git(work, "remote")).toBe("origin");
-	const run = (
-		chosen = name,
-		extra: Record<string, string> = {},
-		entry: "direct" | "catchup" = "direct",
-	) => {
-		let command = [script, "rm", chosen];
-		if (entry === "catchup") {
-			const bin = join(dir, "cleanup-bin");
-			mkdirSync(bin, {recursive: true});
-			mkdirSync(join(boxes, "catchup-900/node_modules"), {recursive: true});
-			const tip = git(main, "rev-parse", "HEAD");
-			// Run the real catch-up caller and real local cleanup. Only remote reads and the
-			// pre-merge checkout are stubbed. No signing or pushing is reached.
-			const stub = `
-const {spawnSync} = require("node:child_process");
-const cmd = require("node:path").basename(process.argv[1]);
-const args = process.argv.slice(2);
-if (cmd === "gh") {
-  if (args[0] === "pr" && args[1] === "view") console.log("main");
-  else if (args[0] === "pr" && args[1] === "merge") process.exit(0);
-  else if (args[0] === "run") console.log("commits\\tcheck\\t2026-11-08T00:00:00Z commits: 1 commits, ticket 318");
-  else if (args[1].includes("check_name=")) console.log("github-actions");
-  else if (args[1].includes("check-runs?")) console.log(["check", "e2e", "next", "commits"].map(n => n + "\\tcompleted\\tsuccess").join("\\n"));
-  else if (args[1].includes("actions/runs?")) console.log("71\\tpull_request_target\\tcompleted\\tsuccess\\t81");
-  else process.exit(1);
-} else if (cmd === "git") {
-  if (["fetch", "checkout", "merge-base"].includes(args[0])) process.exit(0);
-  if (args[0] === "rev-parse") console.log(args.includes("--short") ? ${JSON.stringify(tip.slice(0, 7))} : ${JSON.stringify(tip)});
-  else {
-    const got = spawnSync("/usr/bin/git", args, {encoding: "utf8"});
-    process.stdout.write(got.stdout || ""); process.stderr.write(got.stderr || "");
-    process.exit(got.status ?? 1);
+
+// Only codex is fake. pnpm dispatches commits to the real installed program, and refuses all
+// package/network commands except the no-op local install. nice is a transparent local shim.
+const stub = String.raw`
+const fs = require("node:fs"), path = require("node:path"), cp = require("node:child_process");
+const dir = process.env.T321_FIXTURE;
+const setup = JSON.parse(fs.readFileSync(path.join(dir, "setup.json"), "utf8"));
+const cmd = path.basename(process.argv[1]), args = process.argv.slice(2);
+const run = (cmd, args, more = {}) => cp.spawnSync(cmd, args, {encoding:"utf8", env:process.env, ...more});
+const finish = r => { process.stdout.write(r.stdout || ""); process.stderr.write(r.stderr || ""); process.exit(r.status ?? 2); };
+const head = run("/usr/bin/git", ["rev-parse", "HEAD"]).stdout.trim();
+fs.appendFileSync(path.join(dir,"calls.jsonl"), JSON.stringify({cmd,args,cwd:process.cwd(),head}) + "\n");
+if (cmd === "nice") finish(run(args[2],args.slice(3)));
+if (cmd === "git") {
+  let cwd=process.cwd();
+  for(let i=0;i<args.length;i++) if(args[i]==="-C") cwd=path.resolve(cwd,args[++i]);
+  if(process.env.T321_FETCH==="1" && cwd===path.join(dir,"boxes/one")) {
+    console.error("fixture refuses Git inside the box during fetch"); process.exit(98);
   }
-} else process.exit(1);
+  finish(run("/usr/bin/git",args,{input:fs.readFileSync(0)}));
+}
+if (cmd === "pnpm") {
+  if (args[0] === "install") process.exit(0);
+  if (args[0] === "commits") {
+    if (args[1] === "check" && setup.check) { process.stdout.write(setup.check.text); process.exit(setup.check.status); }
+    finish(run(process.execPath,[process.env.T321_SIGNER,...args.slice(1)]));
+  }
+  if (args[0] === "exec" && args[1] === "oxfmt") finish(run(process.env.T321_OXFMT,args.slice(2)));
+  console.error("fixture refuses package or network command"); process.exit(97);
+}
+if (cmd === "codex") {
+  const out = args[args.indexOf("-o")+1];
+  let envLeaks = 0;
+  for (const [name,value] of Object.entries(process.env)) {
+    if (/TOKEN|SECRET|KEY|PASSWORD|_AUTH|^NPM_CONFIG_/i.test(name) && !/^NPM_CONFIG_(USERCONFIG|GLOBALCONFIG)$/i.test(name) && value) envLeaks++;
+  }
+  // Ask the real local npm about all config layers, capturing its output without printing it.
+  const config = run("npm",["config","list","--json"]);
+  if(config.status!==0) { console.error("fixture could not read its fake npm config"); process.exit(96); }
+  const settings=JSON.parse(config.stdout);
+  const authLeaks=Object.entries(settings).filter(([key,value])=>/_auth|password|token/i.test(key)&&value!=null&&value!=="").length;
+  const observation = {envLeaks,authLeaks,home:process.env.HOME,path:process.env.PATH};
+  fs.writeFileSync(path.join(dir,"observed.json"),JSON.stringify(observation));
+  for (const batch of setup.batches || (setup.operations || []).map(op=>[op])) {
+    for (const op of batch) {
+      const target = path.join(process.cwd(),op.path);
+      if (op.to) { fs.mkdirSync(path.dirname(path.join(process.cwd(),op.to)),{recursive:true}); finishIfBad(run("/usr/bin/git",["mv",op.path,op.to])); }
+      else if (op.text === undefined) fs.rmSync(target);
+      else { fs.mkdirSync(path.dirname(target),{recursive:true}); fs.writeFileSync(target,op.text); }
+    }
+    finishIfBad(run("/usr/bin/git",["add","--all"]));
+    finishIfBad(run("/usr/bin/git",["commit","-q","-m","step change"]));
+  }
+  function finishIfBad(r) { if (r.status !== 0) finish(r); }
+  const tokens = setup.secrets || [];
+  const answer = "safe text\n" + tokens.join("\n");
+  fs.writeFileSync(out,answer);
+  for (const token of tokens) console.log(JSON.stringify({type:"item.completed",text:token,url:"https://example.test/?q="+encodeURIComponent(token)}));
+  if (setup.usage !== false) console.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:100,cached_input_tokens:20,output_tokens:10}}));
+  if (setup.hold) {
+    fs.writeFileSync(path.join(dir,"ready"),"ready");
+    setInterval(()=>{},1000);
+  } else if (setup.signal) process.kill(process.pid,"SIGTERM");
+  else process.exit(setup.exit || 0);
+}
 `;
-			for (const tool of ["gh", "git"])
-				writeFileSync(join(bin, tool), `#!${process.execPath}\n${stub}`, {mode: 0o755});
-			extra = {...extra, PATH: `${bin}:/usr/bin:/bin`};
-			command = [join(import.meta.dirname, "catchup.sh"), "900", "318"];
+
+class Box {
+	readonly dir = mkdtempSync(join(tmpdir(), "bx321-"));
+	readonly main = join(this.dir, "main");
+	readonly boxes = join(this.dir, "boxes");
+	readonly home = join(this.dir, "home");
+	readonly bin = join(this.dir, "bin");
+	readonly plan = join(this.dir, "plan.md");
+	readonly work = join(this.boxes, "one");
+	readonly data = join(this.boxes, "one-gitdata");
+	readonly branch = "fabrikalfa/one";
+	readonly env: NodeJS.ProcessEnv;
+	readonly base: string;
+	constructor(files?: Array<[string, string]>) {
+		for (const path of [this.main, this.boxes, this.home, this.bin, join(this.boxes, "state")])
+			mkdirSync(path, {recursive: true});
+		this.env = {
+			HOME: this.home,
+			PATH: `${this.bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
+			TMPDIR: this.dir,
+			MAIN: this.main,
+			BOXES: this.boxes,
+			REMOTE: this.main,
+			GH_REPO: "fixture/local",
+			FABRIKA_COAUTHOR: "Person <person@example.test>",
+			GIT_CONFIG_GLOBAL: "/dev/null",
+			GIT_CONFIG_NOSYSTEM: "1",
+			GIT_TERMINAL_PROMPT: "0",
+			GIT_AUTHOR_NAME: "fixture",
+			GIT_AUTHOR_EMAIL: "fixture@example.test",
+			GIT_COMMITTER_NAME: "fixture",
+			GIT_COMMITTER_EMAIL: "fixture@example.test",
+			CODEX_MODEL: "gpt-6.1-sol",
+			CODEX_EFFORT: "low",
+			T321_FIXTURE: this.dir,
+			T321_SIGNER: signer,
+			T321_OXFMT: join(root, "node_modules/.bin/oxfmt"),
+			NPM_CONFIG_USERCONFIG: join(this.home, ".npmrc"),
+			NPM_CONFIG_GLOBALCONFIG: join(this.dir, "global.npmrc"),
+		};
+		write(join(this.home, ".npmrc"), "");
+		write(join(this.dir, "global.npmrc"), "");
+		this.setup({});
+		for (const cmd of ["pnpm", "codex", "git"])
+			writeFileSync(join(this.bin, cmd), `#!${process.execPath}\n${stub}`, {mode: 0o755});
+		writeFileSync(join(this.bin, "nice"), '#!/bin/sh\nshift 2\nexec "$@"\n', {mode: 0o755});
+		this.git(
+			this.main,
+			"init",
+			"-q",
+			"-b",
+			"main",
+			`--separate-git-dir=${join(this.dir, "main-gitdata")}`,
+		);
+		const lines: string[] = [];
+		for (const role of ["tests", "build", "lead", "person", "stranger"]) {
+			const key = join(this.home, ".fabrika/step-keys", role);
+			mkdirSync(dirname(key), {recursive: true});
+			this.must("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "fixture", "-f", key]);
+			const pub = this.must("ssh-keygen", ["-y", "-f", key])
+				.trim()
+				.split(" ")
+				.slice(0, 2)
+				.join(" ");
+			if (role !== "stranger")
+				lines.push(
+					`${role === "person" ? "person:fixture" : role} namespaces="${role === "person" ? "git" : "fabrika-step"}" ${pub}`,
+				);
 		}
-		const ran = spawnSync("sh", command, {
-			cwd: main,
-			encoding: "utf8",
-			env: {...env, ...extra},
-			timeout: 15_000,
-		});
-		expect(ran.error).toBeUndefined();
-		expect(ran.signal).toBeNull();
-		return {code: ran.status, text: (ran.stdout + ran.stderr).trim()};
-	};
-	const commit = () => {
-		git(work, "add", ".");
-		git(work, "commit", "-qm", v.value);
-		return git(work, "rev-parse", "HEAD");
-	};
-	const retained = (ref: string) => git(main, "fetch", "-q", data, `${ref}:refs/keep/${v.name}`);
-	return {dir, main, boxes, name, work, data, git, run, commit, retained, env};
+		write(join(this.main, "allowed_signers"), `${lines.join("\n")}\n`);
+		const exam = JSON.parse(readFileSync(join(root, "exam-paths.json"), "utf8"));
+		// The installed checker skips ordinary tooling files. This disposable exam row makes its
+		// real signature, person and stale-link checks run instead of accepting its scope skip.
+		exam.push({glob: "src/a.ts", why: "this fixture's signed tests change"});
+		write(join(this.main, "exam-paths.json"), JSON.stringify(exam));
+		write(join(this.main, "package.json"), "{}\n");
+		write(join(this.main, "src/a.ts"), 'export const a = "before";\n');
+		write(join(this.main, "src/b.ts"), 'export const b = "before";\n');
+		write(join(this.main, "src/old.ts"), 'export const old = "before";\n');
+		write(join(this.main, "src/a.test.ts"), 'export const test = "before";\n');
+		this.git(this.main, "add", "--all");
+		this.git(this.main, "commit", "-q", "-m", "base");
+		this.base = this.head(this.main);
+		this.git(this.main, "update-ref", "refs/remotes/origin/main", this.base);
+		// origin is this disposable local repo. No command can contact a host.
+		this.git(this.main, "remote", "add", "origin", this.main);
+		this.git(this.dir, "clone", "-q", `--separate-git-dir=${this.data}`, this.main, this.work);
+		this.git(this.work, "config", "user.name", "fixture");
+		this.git(this.work, "config", "user.email", "fixture@example.test");
+		this.git(this.work, "checkout", "-q", "-b", this.branch);
+		this.git(this.main, "update-ref", `refs/heads/${this.branch}`, this.base);
+		write(this.plan, approve(body(files)));
+		write(join(this.dir, "prompt"), "A bounded fixture run.\n");
+		this.state();
+	}
+	close() {
+		rmSync(this.dir, {recursive: true, force: true});
+	}
+	setup(value: Setup) {
+		write(join(this.dir, "setup.json"), JSON.stringify(value));
+	}
+	call(cmd: string, args: string[], cwd = this.main, env = this.env) {
+		const r = spawnSync(cmd, args, {cwd, env, encoding: "utf8", timeout: 15_000});
+		expect(r.error, `${cmd} failed to start`).toBeUndefined();
+		return {code: r.status, signal: r.signal, text: r.stdout + r.stderr, stdout: r.stdout};
+	}
+	must(cmd: string, args: string[], cwd = this.main) {
+		const r = this.call(cmd, args, cwd);
+		expect(r.code, r.text).toBe(0);
+		return r.stdout;
+	}
+	git(cwd: string, ...args: string[]) {
+		return this.must("/usr/bin/git", args, cwd);
+	}
+	head(cwd = this.main, rev = "HEAD") {
+		return this.git(cwd, "rev-parse", rev).trim();
+	}
+	state(base = this.base) {
+		const approvedBody = readFileSync(this.plan, "utf8").split("\n").slice(2).join("\n");
+		write(
+			join(this.boxes, "state/one.box"),
+			`ticket: 321\nbranch: ${this.branch}\nbase: ${base}\nparent: none\nchildren: none\nplan: ${this.plan}\nplan-sha256: ${hash(approvedBody)}\n`,
+		);
+	}
+	run(step = "tests") {
+		return this.call("sh", [
+			program,
+			"run",
+			"one",
+			join(this.dir, "prompt"),
+			join(this.dir, "answer"),
+			"--step",
+			step,
+			"--ticket",
+			"321",
+		]);
+	}
+	fetch(step = "tests", ticket = "321") {
+		return this.call(
+			"sh",
+			[program, "fetch", "one", this.branch, "--sign", step, "--ticket", ticket],
+			this.main,
+			{...this.env, T321_FETCH: "1"},
+		);
+	}
+	new(base = "origin/main", branch = "fabrikalfa/new") {
+		return this.call("sh", [
+			program,
+			"new",
+			"new",
+			base,
+			branch,
+			"--ticket",
+			"321",
+			"--plan",
+			this.plan,
+		]);
+	}
+	calls(): Call[] {
+		return existsSync(join(this.dir, "calls.jsonl"))
+			? readFileSync(join(this.dir, "calls.jsonl"), "utf8")
+					.trim()
+					.split("\n")
+					.filter(Boolean)
+					.map((s) => JSON.parse(s))
+			: [];
+	}
+	notes() {
+		return this.git(this.main, "notes", "--ref=fabrika", "list");
+	}
+	sign(cwd: string, step: string, ticket = "321", key = step) {
+		return this.must(
+			process.execPath,
+			[
+				signer,
+				"sign",
+				"--step",
+				step,
+				"--ticket",
+				ticket,
+				"--key",
+				join(this.home, ".fabrika/step-keys", key),
+			],
+			cwd,
+		);
+	}
+	commit(cwd: string, path: string, text: string) {
+		write(join(cwd, path), text);
+		this.git(cwd, "add", "--", path);
+		this.git(cwd, "commit", "-q", "-m", "outside change");
+		return this.head(cwd);
+	}
+	rows(): Array<Record<string, unknown>> {
+		const path = join(this.boxes, "state/one.rows.jsonl");
+		return existsSync(path)
+			? readFileSync(path, "utf8")
+					.trim()
+					.split("\n")
+					.filter(Boolean)
+					.map((s) => JSON.parse(s))
+			: [];
+	}
+}
+const fixture = (f: (b: Box) => void, files?: Array<[string, string]>) => {
+	const b = new Box(files);
+	try {
+		f(b);
+	} finally {
+		b.close();
+	}
 };
-const kept = (f: ReturnType<typeof setup>, code = 1) => {
-	const got = f.run();
-	expect(got.code, got.text).toBe(code);
-	expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`));
-	expect(existsSync(f.work)).toBe(true);
-	expect(existsSync(f.data)).toBe(true);
+const refused = (r: {code: number | null; text: string}, why: RegExp) => {
+	expect(r.code, r.text).not.toBe(0);
+	expect(r.text).toMatch(why);
+	expect(r.text).not.toMatch(/usage:|Traceback|command not found|cannot open/);
 };
-
-describe("box rm, today's tooling", () => {
-	// Plant: review3's root-only walk misses a symlink anywhere below MAIN storage.
-	// Arbitrary paths matter too: an unfamiliar storage name must fail closed.
-	it.each(
-		(["direct", "catchup"] as const).flatMap((entry) =>
-			(["gitdir", "common", "alternate"] as const).flatMap((root) =>
-				[false, true].flatMap((data) =>
-					[
-						"objects/pack",
-						"loose",
-						"refs",
-						"packed-refs",
-						"logs",
-						"index",
-						"generated-file",
-						"generated-folder",
-					].map((kind) => ({entry, root, data, kind})),
+// Exercise every independent fault, even while the product still lacks several checks.
+const each = <A>(values: readonly A[], check: (value: A) => void) => {
+	const errors: Error[] = [];
+	for (const value of values) {
+		try {
+			check(value);
+		} catch (cause) {
+			errors.push(
+				new Error(
+					`${JSON.stringify(value)}: ${cause instanceof Error ? cause.message : String(cause)}`,
+					{cause},
 				),
-			),
-		),
-	)(
-		"T318 review3 $entry keeps nested MAIN $root $kind in box data $data",
-		({entry, root: rootKind, data, kind}) => {
-			fc.assert(
-				fc.property(
-					input,
-					fc.record({
-						parts: fc.array(fc.stringMatching(/^[a-z]{1,8}$/), {minLength: 1, maxLength: 6}),
-						through: fc.boolean(),
-						relative: fc.boolean(),
-					}),
-					(v, path) =>
-						fixture(v, (f) => {
-							const original = join(f.main, ".git");
-							f.git(f.main, "pack-refs", "--all");
-							if (kind === "objects/pack") f.git(f.main, "repack", "-ad");
-							if (kind === "refs") f.git(f.main, "update-ref", "refs/keep/storage", "HEAD");
-							const history = f.git(f.main, "rev-list", "--objects", "--all");
-							let root = original;
-							if (rootKind === "common") {
-								root = join(f.dir, "main-common");
-								cpSync(original, root, {recursive: true});
-								writeFileSync(
-									join(original, "commondir"),
-									`${path.relative ? relative(original, root) : root}\n`,
-								);
-							}
-							if (rootKind === "alternate") {
-								root = join(f.dir, "main-alternate");
-								renameSync(join(original, "objects"), root);
-								mkdirSync(join(original, "objects/info"), {recursive: true});
-								writeFileSync(
-									join(original, "objects/info/alternates"),
-									`${path.relative ? relative(join(original, "objects"), root) : root}\n`,
-								);
-							}
-							const source = join(
-								root,
-								kind === "loose"
-									? `${rootKind === "alternate" ? "" : "objects/"}${f.git(f.main, "rev-parse", "HEAD").slice(0, 2)}`
-									: kind.startsWith("generated")
-										? join("extra", ...path.parts, "saved")
-										: rootKind === "alternate"
-											? kind.replace(/^objects\//, "")
-											: kind,
-							);
-							if (!existsSync(source)) {
-								mkdirSync(join(source, ".."), {recursive: true});
-								if (kind === "generated-file" || kind === "packed-refs" || kind === "index")
-									writeFileSync(source, v.value);
-								else mkdirSync(source);
-							}
-							const target = join(
-								data ? join(f.data, "objects/info") : join(f.work, "node_modules"),
-								...path.parts,
-								"borrowed",
-							);
-							mkdirSync(join(target, ".."), {recursive: true});
-							const stored = path.through ? join(f.dir, "outside-storage") : target;
-							renameSync(source, stored);
-							const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
-							if (path.through) symlinkSync(name(join(target, ".."), stored), target);
-							symlinkSync(name(join(source, ".."), target), source);
-							const saved = storageFiles(stored);
-							expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
-							const got = f.run(f.name, {}, entry);
-							expect(got.code, got.text).toBe(entry === "direct" ? 1 : 0);
-							expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`, "m"));
-							expect(existsSync(f.work), got.text).toBe(true);
-							expect(existsSync(f.data), got.text).toBe(true);
-							expect(existsSync(target), got.text).toBe(true);
-							expect(storageFiles(stored)).toEqual(expect.objectContaining(saved));
-							expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
-						}),
-				),
-				{seed: 31860, numRuns: 3, endOnFailure: true},
 			);
-		},
-	);
-
-	// Plant: ignore a walk error below an object root, leaving uncertainty treated as safe.
-	it.each(["direct", "catchup"] as const)(
-		"T318 review3 %s keeps the pair when MAIN cannot be fully walked",
-		(entry) => {
-			fc.assert(
-				fc.property(
-					input,
-					fc.array(fc.stringMatching(/^[a-z]{1,8}$/), {minLength: 1, maxLength: 6}),
-					(v, parts) =>
-						fixture(v, (f) => {
-							const path = join(f.main, ".git/objects/pack", ...parts);
-							mkdirSync(join(path, ".."), {recursive: true});
-							symlinkSync(join(f.dir, "missing-storage"), path);
-							const got = f.run(f.name, {}, entry);
-							expect(got.code, got.text).toBe(entry === "direct" ? 1 : 0);
-							expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`, "m"));
-							expect(existsSync(f.work), got.text).toBe(true);
-							expect(existsSync(f.data), got.text).toBe(true);
-						}),
-				),
-				{seed: 31861, numRuns: 3, endOnFailure: true},
-			);
-		},
-	);
-
-	// Plant: today's guard protects only MAIN's checkout, so borrowed storage is deleted.
-	// Cover nested alternates and intermediate links through both public callers.
-	it.each(
-		(["direct", "catchup"] as const).flatMap((entry) =>
-			(
-				[
-					"gitdir-root",
-					"shared",
-					"gitdir",
-					"commondir",
-					"objects",
-					"alternates",
-					"alternates-file",
-				] as const
-			).flatMap((binding) =>
-				(binding === "gitdir-root" || binding === "shared"
-					? (["data"] as const)
-					: (["work", "data"] as const)
-				).flatMap((location) =>
-					(binding === "gitdir-root" || binding === "shared" || binding === "alternates-file"
-						? [false]
-						: [false, true]
-					).map((through) => ({entry, binding, location, through})),
-				),
-			),
-		),
-	)(
-		"T318 $entry keeps MAIN storage reached by $binding in $location through link $through",
-		({entry, binding, location, through}) => {
-			fc.assert(
-				fc.property(
-					input,
-					fc.record({
-						parts: fc.array(fc.stringMatching(/^[a-z]{1,8}$/), {minLength: 1, maxLength: 5}),
-						relative: fc.boolean(),
-						hops: fc.integer({min: 2, max: 4}),
-					}),
-					(v, path) =>
-						fixture(v, (f) => {
-							const original = join(f.main, ".git");
-							const history = f.git(f.main, "rev-list", "--objects", "--all");
-							const target = join(
-								location === "work" ? join(f.work, "node_modules") : join(f.data, "objects/info"),
-								...path.parts,
-								"storage",
-							);
-							const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
-							mkdirSync(join(target, ".."), {recursive: true});
-							if (binding === "gitdir-root") {
-								rmSync(original, {recursive: true});
-								writeFileSync(join(f.main, ".git"), `gitdir: ${name(f.main, f.data)}\n`);
-							} else if (binding === "shared") {
-								const borrower = join(f.dir, "borrower");
-								f.git(f.dir, "clone", "-q", "--shared", f.work, borrower);
-								rmSync(original, {recursive: true});
-								renameSync(join(borrower, ".git"), original);
-								expect(readFileSync(join(original, "objects/info/alternates"), "utf8")).toContain(
-									join(f.data, "objects"),
-								);
-							} else if (binding === "alternates-file") {
-								// The objects stay outside the box. Losing this borrowed metadata still
-								// breaks MAIN, even though realpath(objects) points outside the pair.
-								const outside = join(f.dir, "outside-objects");
-								renameSync(join(original, "objects"), outside);
-								mkdirSync(join(original, "objects/info"), {recursive: true});
-								writeFileSync(target, `${name(join(original, "objects"), outside)}\n`);
-								symlinkSync(
-									name(join(original, "objects/info"), target),
-									join(original, "objects/info/alternates"),
-								);
-							} else {
-								const source = ["gitdir", "commondir"].includes(binding)
-									? original
-									: join(original, "objects");
-								const stored = through ? join(f.dir, "outside-storage") : target;
-								renameSync(source, stored);
-								if (through) symlinkSync(name(join(target, ".."), stored), target);
-								if (binding === "gitdir")
-									writeFileSync(original, `gitdir: ${name(f.main, target)}\n`);
-								if (binding === "commondir") {
-									mkdirSync(original);
-									writeFileSync(join(original, "HEAD"), readFileSync(join(stored, "HEAD")));
-									writeFileSync(join(original, "commondir"), `${name(original, target)}\n`);
-								}
-								if (binding === "objects") symlinkSync(name(original, target), source);
-								if (binding === "alternates") {
-									let next = target;
-									for (let i = 0; i < path.hops; i++) {
-										const objects = i === path.hops - 1 ? source : join(f.dir, `alternate-${i}`);
-										mkdirSync(join(objects, "info"), {recursive: true});
-										writeFileSync(join(objects, "info/alternates"), `${name(objects, next)}\n`);
-										next = objects;
-									}
-								}
-							}
-							expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
-							const got = f.run(f.name, {}, entry);
-							expect(got.code, got.text).toBe(entry === "direct" ? 1 : 0);
-							expect(got.text).toMatch(new RegExp(`^kept box ${f.name}: [^\\n]+$`, "m"));
-							expect(existsSync(f.work)).toBe(true);
-							expect(existsSync(f.data)).toBe(true);
-							expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
-						}),
-				),
-				{seed: 31840, numRuns: 4, endOnFailure: true},
-			);
-		},
-	);
-
-	// Plant: peel a tag to its commit and accept it without retaining its annotation object.
-	// Signature bytes are saved content here, not a claim about signature validity. No key is used.
-	it.each(
-		(["direct", "catchup"] as const).flatMap((entry) =>
-			(["plain", "signed", "nested"] as const).flatMap((kind) =>
-				(kind === "nested"
-					? (["commit-only", "objects-only", "different-tag", "inner-only", "retained"] as const)
-					: (["commit-only", "objects-only", "different-tag", "retained"] as const)
-				).map((retention) => ({entry, kind, retention})),
-			),
-		),
-	)(
-		"T318 $entry preserves $kind annotation objects with $retention retention",
-		({entry, kind, retention}) => {
-			fc.assert(
-				fc.property(
-					input,
-					fc.record({
-						messages: fc.array(fc.string({unit: "grapheme", maxLength: 80}), {
-							minLength: 0,
-							maxLength: 5,
-						}),
-						depth: fc.integer({min: 2, max: 5}),
-						signedInner: fc.boolean(),
-					}),
-					(v, annotation) =>
-						fixture(v, (f) => {
-							const commit = f.git(f.work, "rev-parse", "HEAD");
-							const objects: string[] = [];
-							const raw: string[] = [];
-							const tag = (target: string, message: string, signed: boolean, label = v.name) => {
-								const text = `object ${target}\ntype ${target === commit ? "commit" : "tag"}\ntag ${label}\ntagger Fixture <fixture@example.test> 1794096000 +0000\n\n${message}${signed ? `\n-----BEGIN PGP SIGNATURE-----\n${Buffer.from(v.value).toString("base64")}\n-----END PGP SIGNATURE-----\n` : ""}`;
-								const made = spawnSync("/usr/bin/git", ["-C", f.work, "mktag"], {
-									input: text,
-									encoding: "utf8",
-									env: f.env,
-								});
-								expect(made.status, made.stderr).toBe(0);
-								return {oid: made.stdout.trim(), text};
-							};
-							let target = commit;
-							for (let i = 0; i < (kind === "nested" ? annotation.depth : 1); i++) {
-								const made = tag(
-									target,
-									annotation.messages.join("\n"),
-									kind === "signed" || (kind === "nested" && annotation.signedInner),
-								);
-								objects.push(made.oid);
-								raw.push(made.text);
-								target = made.oid;
-							}
-							const ref = `refs/tags/${v.name}`;
-							f.git(f.work, "update-ref", ref, target);
-							const retainTag = (source: string) =>
-								f.git(f.main, "fetch", "-q", "--no-tags", f.data, `${source}:refs/keep/${v.name}`);
-							if (retention === "retained" || retention === "objects-only") {
-								retainTag(ref);
-								if (retention === "objects-only")
-									f.git(f.main, "update-ref", "-d", `refs/keep/${v.name}`);
-							}
-							if (retention === "different-tag") {
-								const other = tag(commit, annotation.messages.join("\n"), false, `other-${v.name}`);
-								f.git(f.work, "update-ref", `refs/tags/other-${v.name}`, other.oid);
-								retainTag(`refs/tags/other-${v.name}`);
-							}
-							if (retention === "inner-only") retainTag(objects.at(-2)!);
-							const reachable = f
-								.git(f.main, "rev-list", "--objects", "--all")
-								.split("\n")
-								.map((line) => line.split(" ")[0]);
-							expect(reachable.includes(target)).toBe(retention === "retained");
-							if (retention === "commit-only") {
-								const absent = spawnSync("/usr/bin/git", ["-C", f.main, "cat-file", "-e", target], {
-									env: f.env,
-									encoding: "utf8",
-								});
-								expect(absent.status).not.toBe(0);
-							}
-							const got = f.run(f.name, {}, entry);
-							const remove = retention === "retained";
-							expect(got.code, got.text).toBe(entry === "catchup" || remove ? 0 : 1);
-							expect(got.text).toMatch(
-								new RegExp(
-									`^${remove ? "removed" : "kept"} box ${f.name}${remove ? "$" : ": [^\\n]+$"}`,
-									"m",
-								),
-							);
-							expect(existsSync(f.work)).toBe(!remove);
-							expect(existsSync(f.data)).toBe(!remove);
-							for (const [i, oid] of objects.entries()) {
-								const at = remove ? f.main : f.work;
-								const read = spawnSync("/usr/bin/git", ["-C", at, "cat-file", "tag", oid], {
-									env: f.env,
-									encoding: "utf8",
-								});
-								expect(read.status, read.stderr).toBe(0);
-								expect(read.stdout).toBe(raw[i]);
-							}
-						}),
-				),
-				{seed: 31841, numRuns: 3, endOnFailure: true},
-			);
-		},
-	);
-
-	// Plants: count fetched refs, remote reflogs or FETCH_HEAD as saved work; reject ORIG_HEAD
-	// or config.worktree after a completed merge. All are normal in boxes made by box.sh new.
-	it.each([false, true])(
-		"T318 a fetched box branch removes with remote copies and config.worktree %s",
-		(worktreeConfig) => {
-			const branches = fc.uniqueArray(fc.stringMatching(/^[a-z]{2,8}$/), {
-				minLength: 2,
-				maxLength: 4,
+		}
+	}
+	if (errors.length) throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
+};
+// A real SIGTERM to the runner and its child. The separate group contains only this fixture.
+const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
+	new Promise<{code: number | null; signal: NodeJS.Signals | null; text: string}>(
+		(resolve, reject) => {
+			const args =
+				runner === "box"
+					? [
+							program,
+							"run",
+							"one",
+							join(b.dir, "prompt"),
+							join(b.dir, "answer"),
+							"--step",
+							"tests",
+							"--ticket",
+							"321",
+						]
+					: [join(import.meta.dirname, "runplan.sh"), "one", join(b.dir, "prompt")];
+			const child = spawn("sh", args, {cwd: b.main, env: b.env, detached: true});
+			child.stdin.end();
+			let text = "",
+				sent = false;
+			const poll = setInterval(() => {
+				if (!sent && existsSync(join(b.dir, "ready"))) {
+					sent = true;
+					if (child.pid) process.kill(-child.pid, "SIGTERM");
+				}
+			}, 10);
+			const timeout = setTimeout(() => {
+				if (child.pid) {
+					try {
+						process.kill(-child.pid, "SIGKILL");
+					} catch {}
+				}
+				reject(new Error("fixture runner never reached the signal point"));
+			}, 10_000);
+			child.stdout.on("data", (s) => {
+				text += s;
 			});
-			fc.assert(
-				fc.property(input, branches, fc.nat(), (v, names, choice) => {
-					const remote = {
-						branches: names.map((name) => `topic-${name}`),
-						local: choice % names.length,
-					};
+			child.stderr.on("data", (s) => {
+				text += s;
+			});
+			child.on("error", reject);
+			child.on("close", (code, signal) => {
+				clearInterval(poll);
+				clearTimeout(timeout);
+				resolve({code, signal, text});
+			});
+		},
+	);
+
+describe("T321 K1 fetch, today's tooling", () => {
+	// Plant: keep -f in fetch. update-ref creates each bad graph without rewriting this repo.
+	it("K1 refuses amend, reset and rebase graphs without moving MAIN's branch ref", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				each(["amend", "reset", "rebase"], (kind) =>
+					fixture((b) => {
+						const before = b.commit(b.work, "src/a.ts", `${text}\n`);
+						b.git(b.main, "fetch", "-q", b.work, `${b.branch}:${b.branch}`);
+						const tree = b.head(b.work, "HEAD^{tree}");
+						const rewritten =
+							kind === "reset"
+								? b.base
+								: b.git(b.work, "commit-tree", tree, "-p", b.base, "-m", kind).trim();
+						b.git(b.work, "update-ref", `refs/heads/${b.branch}`, rewritten);
+						refused(b.fetch(), /rewrite|non.fast.forward|rejected/);
+						expect(b.head(b.main, b.branch)).toBe(before);
+					}),
+				);
+			}),
+			options,
+		);
+	});
+
+	// Plants: sign the base or an existing link; move MAIN's HEAD to sign; use the box's signer.
+	it("K1 signs only unsigned run-owned commits oldest first; repeat fetch changes nothing", () => {
+		fc.assert(
+			fc.property(
+				fc.array(word, {minLength: 1, maxLength: 3}),
+				fc.constantFrom("tests", "mutation"),
+				(texts, step) =>
 					fixture(
-						v,
-						(f) => {
-							const origin = join(f.dir, "origin.git"),
-								branch = `step-${v.name}`,
-								base = f.git(f.work, "rev-parse", "HEAD"),
-								tree = f.git(f.main, "rev-parse", "HEAD^{tree}"),
-								changed = remote.branches[remote.branches.length - 1]!;
-							const packed = readFileSync(join(f.data, "packed-refs"), "utf8");
-							for (const name of remote.branches)
-								expect(packed).toContain(` refs/remotes/origin/${name}\n`);
-							expect(f.git(f.main, "for-each-ref", "--format=%(refname)", "refs/heads")).toBe(
-								["main", ...remote.branches.slice(0, remote.local)]
-									.sort()
-									.map((name) => `refs/heads/${name}`)
-									.join("\n"),
+						(b) => {
+							const before = {
+								head: b.head(),
+								index: b.git(b.main, "write-tree"),
+								status: b.git(b.main, "status", "--porcelain"),
+							};
+							b.setup({
+								operations: texts.map((text, i) => ({path: "src/a.ts", text: `${text}-${i}\n`})),
+							});
+							expect(b.run(step).code).toBe(0);
+							const commits = b
+								.git(b.work, "rev-list", "--reverse", `${b.base}..HEAD`)
+								.trim()
+								.split("\n");
+							const fetched = b.fetch(step);
+							expect(fetched.code, fetched.text).toBe(0);
+							expect(b.head(b.main, b.branch)).toBe(b.head(b.work));
+							for (const [i, sha] of commits.entries()) {
+								const note = JSON.parse(b.git(b.main, "notes", "--ref=fabrika", "show", sha));
+								expect(note).toMatchObject({step: "tests", ticket: "321", version: i + 1});
+								expect(note.from).toBe(b.head(b.main, `${sha}^1^{tree}`));
+								expect(note.to).toBe(b.head(b.main, `${sha}^{tree}`));
+							}
+							const verified = b.call(process.execPath, [
+								signer,
+								"check",
+								"--base",
+								b.base,
+								"--head",
+								b.head(b.work),
+							]);
+							expect(verified.code, verified.text).toBe(0);
+							expect(b.notes().split("\n").filter(Boolean)).toHaveLength(commits.length);
+							const notes = b.notes();
+							const repeat = b.fetch(step);
+							expect(repeat.code, repeat.text).toBe(0);
+							expect(b.notes()).toBe(notes);
+							expect(readFileSync(join(b.boxes, "state/one.box"), "utf8")).toContain(
+								b.head(b.work),
 							);
-							f.git(f.work, "checkout", "-qb", branch);
-							for (let i = 0; i < v.depth; i++) {
-								writeFileSync(join(f.work, "tracked"), `${v.value} step ${i}`);
-								f.commit();
-							}
-							const step = f.git(f.work, "rev-parse", "HEAD");
-							// Move origin/main and one topic after both clones. The topic's older packed
-							// tip, loose tip and remote reflog are all fetched copies, absent from MAIN's
-							// retained history. FETCH_HEAD records every remote branch, too.
-							for (const name of ["main", changed]) {
-								const parent = f.git(f.main, "rev-parse", `origin/${name}`),
-									tip = f.git(f.main, "commit-tree", tree, "-p", parent, "-m", `advance ${name}`);
-								f.git(origin, "fetch", "-q", f.main, `${tip}:refs/heads/${name}`);
-							}
-							f.git(f.main, "fetch", "-q", "origin");
-							f.git(f.work, "fetch", "-q", "origin");
-							f.git(f.work, "merge", "-qm", `${v.value} merge`, "origin/main");
-							expect(f.git(f.work, "rev-parse", "ORIG_HEAD")).toBe(step);
-							expect(f.git(f.work, "rev-parse", "HEAD^2")).not.toBe(base);
-							const fetched = f.git(f.work, "rev-parse", `origin/${changed}`);
-							expect(
-								readFileSync(join(f.data, "refs/remotes/origin", changed), "utf8").trim(),
-							).toBe(fetched);
-							expect(
-								readFileSync(join(f.data, "logs/refs/remotes/origin", changed), "utf8"),
-							).toContain(fetched);
-							const fetchHead = readFileSync(join(f.data, "FETCH_HEAD"), "utf8");
-							expect(fetchHead.trim().split("\n")).toHaveLength(remote.branches.length + 1);
-							expect(fetchHead).toContain(fetched);
-							if (worktreeConfig) {
-								f.git(f.work, "config", "extensions.worktreeConfig", "true");
-								f.git(f.work, "config", "--worktree", "user.name", "Fixture");
-								expect(existsSync(join(f.data, "config.worktree"))).toBe(true);
-							}
-							f.retained(`refs/heads/${branch}`);
-							expect(
-								f
-									.git(f.main, "rev-list", "--branches", "--tags", `refs/keep/${v.name}`)
-									.split("\n"),
-							).not.toContain(fetched);
-							expect(f.run()).toEqual({code: 0, text: `removed box ${f.name}`});
-							expect(existsSync(f.work)).toBe(false);
-							expect(existsSync(f.data)).toBe(false);
+							expect({
+								head: b.head(),
+								index: b.git(b.main, "write-tree"),
+								status: b.git(b.main, "status", "--porcelain"),
+							}).toEqual(before);
+							const signs = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign");
+							expect(signs.map((c) => c.head)).toEqual(commits);
+							expect(signs.every((c) => realpathSync(c.cwd) === realpathSync(b.main))).toBe(true);
+							const checks = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "check");
+							expect(checks).toHaveLength(2);
+							for (const c of checks)
+								expect(c.args).toEqual([
+									"commits",
+									"check",
+									"--base",
+									b.base,
+									"--head",
+									b.head(b.work),
+								]);
 						},
-						true,
-						remote,
+						[["src/a.ts", "tests"]],
+					),
+			),
+			options,
+		);
+	});
+
+	// Plants: sign a native person signature or an existing valid link; reuse MAIN's index.
+	it("K1 preserves verified person signatures, existing links and a dirty MAIN checkout", () => {
+		fc.assert(
+			fc.property(word, (text) =>
+				fixture((b) => {
+					const linked = b.commit(b.work, "src/a.ts", "linked\n");
+					b.sign(b.work, "tests");
+					const note = b.git(b.work, "notes", "--ref=fabrika", "show", linked);
+					write(join(b.work, "src/a.ts"), "person\n");
+					b.git(b.work, "add", "--", "src/a.ts");
+					b.git(
+						b.work,
+						"-c",
+						"gpg.format=ssh",
+						"-c",
+						`user.signingkey=${join(b.home, ".fabrika/step-keys/person")}`,
+						"commit",
+						"-q",
+						"--gpg-sign",
+						"-m",
+						"person signed",
 					);
-				}),
-				{seed: 31828, numRuns: 4, endOnFailure: true},
-			);
-		},
-	);
-
-	// Plant: allow ORIG_HEAD as ordinary metadata but never read its saved commit.
-	it("T318 a local commit saved only by ORIG_HEAD keeps the pair", () => {
-		fc.assert(
-			fc.property(input, (v) =>
-				fixture(v, (f) => {
-					const base = f.git(f.work, "rev-parse", "HEAD");
-					for (let i = 0; i < v.depth; i++) {
-						writeFileSync(join(f.work, "tracked"), `${v.value} saved ${i}`);
-						f.commit();
-					}
-					const saved = f.git(f.work, "rev-parse", "HEAD");
-					f.git(f.work, "checkout", "-q", "--detach", base);
-					f.git(f.work, "branch", "-f", "main", base);
-					rmSync(join(f.data, "logs"), {recursive: true});
-					f.git(f.work, "update-ref", "ORIG_HEAD", saved);
-					expect(f.git(f.work, "rev-list", "HEAD", "--all").split("\n")).not.toContain(saved);
-					expect(existsSync(join(f.data, "logs"))).toBe(false);
-					expect(f.git(f.work, "rev-parse", "ORIG_HEAD")).toBe(saved);
-					kept(f);
-				}),
-			),
-			{seed: 31829, numRuns: 4, endOnFailure: true},
-		);
-	});
-
-	// Plant: skip every reflog, or skip names that merely start with refs/remotes.
-	it.each([
-		"HEAD",
-		"refs/heads/saved",
-		"refs/notes/saved",
-		"refs/custom/saved",
-		"refs/remotes-copy/saved",
-	])("T318 a local commit saved only by the %s reflog keeps the pair", (ref) => {
-		fc.assert(
-			fc.property(input, (v) =>
-				fixture(v, (f) => {
-					const base = f.git(f.work, "rev-parse", "HEAD");
-					for (let i = 0; i < v.depth; i++) {
-						writeFileSync(join(f.work, "tracked"), `${v.value} saved ${i}`);
-						f.commit();
-					}
-					const saved = f.git(f.work, "rev-parse", "HEAD");
-					f.git(f.work, "checkout", "-q", "--detach", base);
-					f.git(f.work, "branch", "-f", "main", base);
-					rmSync(join(f.data, "logs"), {recursive: true});
-					const name = ref === "HEAD" ? ref : `${ref}/${v.name}`,
-						path = join(f.data, "logs", name);
-					f.git(f.work, "update-ref", "--create-reflog", name, saved);
-					f.git(f.work, "update-ref", "--create-reflog", name, base);
-					if (name !== "HEAD") rmSync(join(f.data, name));
-					expect(f.git(f.work, "rev-list", "HEAD", "--all").split("\n")).not.toContain(saved);
-					expect(existsSync(join(f.data, "ORIG_HEAD"))).toBe(false);
-					expect(readFileSync(path, "utf8")).toContain(saved);
-					kept(f);
-				}),
-			),
-			{seed: 31830, numRuns: 4, endOnFailure: true},
-		);
-	});
-
-	// Plant: refuse the symbolic origin/HEAD that box.sh new creates.
-	it("T318 a normal separate-gitdir clone keeps origin and removes cleanly", () => {
-		fc.assert(
-			fc.property(input, (v) =>
-				fixture(
-					v,
-					(f) => {
-						expect(f.git(f.work, "symbolic-ref", "refs/remotes/origin/HEAD")).toBe(
-							"refs/remotes/origin/main",
-						);
-						expect(f.run()).toEqual({code: 0, text: `removed box ${f.name}`});
-						expect(existsSync(f.work)).toBe(false);
-						expect(existsSync(f.data)).toBe(false);
-					},
-					true,
-				),
-			),
-			{seed: 31820, numRuns: 4, endOnFailure: true},
-		);
-	});
-
-	// Plant: enumerate only heads/stash/notes, dropping tags and other namespaces.
-	it.each(["lightweight", "annotated", "custom"])(
-		"T318 every %s ref saves unretained work",
-		(kind) => {
-			const namespace = fc.array(fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/), {
-				minLength: 1,
-				maxLength: 5,
-			});
-			fc.assert(
-				fc.property(input, namespace, (v, parts) =>
-					fixture(v, (f) => {
-						const base = f.git(f.work, "rev-parse", "HEAD");
-						writeFileSync(join(f.work, "tracked"), v.value);
-						const tip = f.commit();
-						f.git(f.work, "checkout", "-q", "--detach", base);
-						f.git(f.work, "branch", "-f", "main", base);
-						if (kind === "annotated")
-							f.git(f.work, "tag", "-a", parts.join("/"), tip, "-m", v.value);
-						else
-							f.git(
-								f.work,
-								"update-ref",
-								`refs/${kind === "lightweight" ? "tags" : parts.join("/")}/${v.name}`,
-								tip,
-							);
-						kept(f);
-					}),
-				),
-				{seed: 31821, numRuns: 5, endOnFailure: true},
-			);
-		},
-	);
-
-	// Plant: inspect refs/stash alone instead of every saved entry in its reflog.
-	it("T318 every stash depth stays when only newer entries are retained", () => {
-		fc.assert(
-			fc.property(input, fc.integer({min: 2, max: 9}), fc.nat(), (v, depth, choice) =>
-				fixture(v, (f) => {
-					const missing = 1 + (choice % (depth - 1));
-					for (let i = 0; i < depth; i++) {
-						writeFileSync(join(f.work, "tracked"), `${v.value} ${i}`);
-						f.git(f.work, "stash", "push", "-qm", `${v.name}-${i}`);
-					}
-					for (let i = 0; i < depth; i++)
-						if (i !== missing)
-							f.git(
-								f.main,
-								"fetch",
-								"-q",
-								f.data,
-								`${f.git(f.work, "rev-parse", `stash@{${i}}`)}:refs/keep/stash-${i}`,
-							);
-					kept(f);
-				}),
-			),
-			{seed: 31822, numRuns: 5, endOnFailure: true},
-		);
-	});
-
-	// Plant: ignore operation state, including an unretained MERGE_AUTOSTASH.
-	it("T318 every operation-state file keeps the pair", () => {
-		const states = fc.oneof(
-			fc.constantFrom(
-				"MERGE_AUTOSTASH",
-				"MERGE_HEAD",
-				"CHERRY_PICK_HEAD",
-				"REVERT_HEAD",
-				"REBASE_HEAD",
-				"AUTO_MERGE",
-				"rebase-merge/autostash",
-				"rebase-apply/autostash",
-				"sequencer/head",
-				"BISECT_START",
-			),
-			fc.stringMatching(/^[A-Z]{2,12}$/).map((s) => `${s}_HEAD`),
-		);
-		fc.assert(
-			fc.property(input, states, (v, state) =>
-				fixture(v, (f) => {
-					const base = f.git(f.work, "rev-parse", "HEAD");
-					writeFileSync(join(f.work, "tracked"), v.value);
-					const tip = f.commit();
-					f.git(f.work, "checkout", "-q", "--detach", base);
-					f.git(f.work, "branch", "-f", "main", base);
-					const path = join(f.data, state);
-					mkdirSync(join(path, ".."), {recursive: true});
-					writeFileSync(path, `${tip}\n`);
-					kept(f);
-				}),
-			),
-			{seed: 31823, numRuns: 12, endOnFailure: true},
-		);
-	});
-
-	// Plants: inspect only the primary HEAD/index; ignore a linked worktree's saved index.
-	it.each(["detached", "staged"])("T318 linked worktrees keep %s work", (kind) => {
-		fc.assert(
-			fc.property(input, fc.integer({min: 1, max: 4}), fc.boolean(), (v, total, inside) =>
-				fixture(v, (f) => {
-					for (let i = 0; i < total; i++) {
-						const linked = join(inside ? f.work : f.dir, `${v.name}-linked-${i}`);
-						f.git(f.work, "worktree", "add", "-q", "--detach", linked, "HEAD");
-						if (i !== total - 1) continue;
-						writeFileSync(join(linked, "tracked"), `${v.value} saved`);
-						f.git(linked, "add", "tracked");
-						if (kind === "detached") f.git(linked, "commit", "-qm", v.value);
-						else writeFileSync(join(linked, "tracked"), readFileSync(join(f.main, "tracked")));
-					}
-					kept(f);
-				}),
-			),
-			{seed: 31824, numRuns: 4, endOnFailure: true},
-		);
-	});
-
-	// Plant: accept a valid pair even though it holds MAIN or BOXES/state.
-	it.each(["main-work", "main-data", "main-child", "main-data-child", "state"])(
-		"T318 protected %s locations survive direct removal",
-		(kind) => {
-			fc.assert(
-				fc.property(input, (v) =>
-					fixture(kind === "state" ? {...v, name: "state", space: false} : v, (f) => {
-						let main = f.main;
-						if (kind.startsWith("main")) {
-							main =
-								kind === "main-work"
-									? f.work
-									: kind === "main-data"
-										? f.data
-										: join(
-												kind === "main-data-child" ? f.data : f.work,
-												...Array.from({length: v.depth}, (_, i) => `child-${v.value}-${i}`),
-											);
-							if (kind.endsWith("child")) mkdirSync(main, {recursive: true});
-						}
-						const saved = join(kind === "state" ? f.work : main, "saved.md");
-						writeFileSync(saved, v.value);
-						const got = f.run(f.name, {MAIN: main});
-						expect(got.code, got.text).toBe(1);
-						expect(got.text).toMatch(/^kept box .*: [^\n]+$/);
-						expect(existsSync(f.work)).toBe(true);
-						expect(existsSync(f.data)).toBe(true);
-						expect(readFileSync(saved, "utf8")).toBe(v.value);
-					}),
-				),
-				{seed: 31825, numRuns: 3, endOnFailure: true},
-			);
-		},
-	);
-
-	// Plants: use exists() for commondir/shallow; omit the sharedindex guard.
-	it.each(["commondir", "shallow", "sharedindex"])(
-		"T318 dangling %s metadata keeps both paths",
-		(kind) => {
-			fc.assert(
-				fc.property(input, fc.stringMatching(/^[0-9a-f]{40}$/), (v, hash) =>
-					fixture(v, (f) => {
-						symlinkSync(
-							join(f.dir, `${v.value}-missing`),
-							join(f.data, kind === "sharedindex" ? `sharedindex.${hash}` : kind),
-						);
-						kept(f);
-					}),
-				),
-				{seed: 31826, numRuns: 4, endOnFailure: true},
-			);
-		},
-	);
-
-	// Plant: ignore only status's failed exit while ls-files still succeeds.
-	it("T318 failed status alone keeps both paths", () => {
-		fc.assert(
-			fc.property(input, (v) =>
-				fixture(v, (f) => {
-					const bin = join(f.dir, "bin"),
-						log = join(f.dir, "git-calls");
-					mkdirSync(bin);
-					writeFileSync(
-						join(bin, "git"),
-						`#!/bin/sh\nfor arg do\n case "$arg" in status) echo status >> '${log}'; exit 1;; ls-files) echo ls-files >> '${log}';; esac\ndone\nexec /usr/bin/git "$@"\n`,
-						{mode: 0o755},
+					const person = b.head(b.work);
+					const control = b.call(
+						process.execPath,
+						[signer, "check", "--base", b.base, "--head", person],
+						b.work,
 					);
-					const got = f.run(f.name, {PATH: `${bin}:/usr/bin:/bin`});
-					expect(got.code, got.text).toBe(1);
-					expect(got.text).toMatch(/^kept box .*: [^\n]+$/);
-					expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["ls-files", "status"]);
-					expect(existsSync(f.work)).toBe(true);
-					expect(existsSync(f.data)).toBe(true);
-				}),
-			),
-			{seed: 31827, numRuns: 4, endOnFailure: true},
-		);
-	});
-	// Plants: split a space-containing name; reject untracked-only files; delete a neighbor.
-	it("T318 rm deletes exactly a clean pair including spaces and untracked-only contents and repeats", () => {
-		fc.assert(
-			fc.property(input, (v) =>
-				fixture({...v, space: true}, (f) => {
-					for (const path of [join(f.boxes, `${f.name}-neighbor`), join(f.boxes, "state")]) {
-						mkdirSync(path);
-						writeFileSync(join(path, "saved.md"), v.value);
-					}
-					writeFileSync(join(f.work, `${v.value}.untracked`), v.value);
-					mkdirSync(join(f.work, "node_modules"));
-					writeFileSync(join(f.work, "node_modules/install"), v.value);
-					const got = f.run();
+					expect(control.code, control.text).toBe(0);
+					expect(control.text).toContain("exam_read");
+					b.setup({operations: [{path: "src/a.ts", text: `${text}\n`}]});
+					expect(b.run().code).toBe(0);
+					write(join(b.main, "src/b.ts"), "staged main edit\n");
+					b.git(b.main, "add", "--", "src/b.ts");
+					write(join(b.main, "src/old.ts"), "unstaged main edit\n");
+					const snapshot = {
+						head: b.head(),
+						index: b.git(b.main, "write-tree"),
+						diff: b.git(b.main, "diff"),
+						status: b.git(b.main, "status", "--porcelain"),
+					};
+					const got = b.fetch();
 					expect(got.code, got.text).toBe(0);
-					expect(got.text).toBe(`removed box ${f.name}`);
-					expect(existsSync(f.work)).toBe(false);
-					expect(existsSync(f.data)).toBe(false);
-					for (const path of [`${f.name}-neighbor`, "state"])
-						expect(readFileSync(join(f.boxes, path, "saved.md"), "utf8")).toBe(v.value);
-					expect(f.run()).toEqual({code: 0, text: `absent box ${f.name}`});
+					expect(b.git(b.main, "notes", "--ref=fabrika", "show", linked)).toBe(note);
+					expect(b.call("/usr/bin/git", ["notes", "--ref=fabrika", "show", person]).code).not.toBe(
+						0,
+					);
+					expect(b.notes().trim().split("\n")).toHaveLength(2);
+					expect(
+						b
+							.calls()
+							.filter((c) => c.cmd === "pnpm" && c.args[1] === "sign")
+							.map((c) => c.head),
+					).toEqual([b.head(b.work)]);
+					expect({
+						head: b.head(),
+						index: b.git(b.main, "write-tree"),
+						diff: b.git(b.main, "diff"),
+						status: b.git(b.main, "status", "--porcelain"),
+					}).toEqual(snapshot);
+					const check = b.call(process.execPath, [
+						signer,
+						"check",
+						"--base",
+						b.base,
+						"--head",
+						b.head(b.work),
+					]);
+					expect(check.code, check.text).toBe(0);
 				}),
 			),
-			{seed: 3186, numRuns: 4},
+			options,
 		);
 	});
 
-	// Plants: inspect only unstaged changes; treat an unsuccessful status as empty output.
-	it("T318 every tracked change and failed status keep both paths", () => {
+	// Plant: release the shared notes lock before the signer exits, losing one branch's note.
+	it("K1 overlapping fetches preserve both branches' independently verified links", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.boolean(), async (reverse) => {
+				const b = new Box();
+				try {
+					const two = join(b.boxes, "two"),
+						data = join(b.boxes, "two-gitdata");
+					b.git(b.dir, "clone", "-q", `--separate-git-dir=${data}`, b.main, two);
+					b.git(two, "config", "user.name", "fixture");
+					b.git(two, "config", "user.email", "fixture@example.test");
+					b.git(two, "checkout", "-q", "-b", "fabrikalfa/two");
+					b.git(b.main, "update-ref", "refs/heads/fabrikalfa/two", b.base);
+					write(
+						join(b.boxes, "state/two.box"),
+						readFileSync(join(b.boxes, "state/one.box"), "utf8")
+							.replace("ticket: 321", "ticket: 322")
+							.replace("branch: fabrikalfa/one", "branch: fabrikalfa/two"),
+					);
+					b.setup({operations: [{path: "src/a.ts", text: "one\n"}]});
+					expect(b.run().code).toBe(0);
+					b.setup({operations: [{path: "src/a.ts", text: "two\n"}]});
+					expect(
+						b.call("sh", [
+							program,
+							"run",
+							"two",
+							join(b.dir, "prompt"),
+							join(b.dir, "answer-two"),
+							"--step",
+							"tests",
+							"--ticket",
+							"322",
+						]).code,
+					).toBe(0);
+					const fetch = (name: string, ticket: string) =>
+						new Promise<{code: number | null; text: string}>((resolve, reject) => {
+							const child = spawn(
+								"sh",
+								[
+									program,
+									"fetch",
+									name,
+									`fabrikalfa/${name}`,
+									"--sign",
+									"tests",
+									"--ticket",
+									ticket,
+								],
+								{cwd: b.main, env: {...b.env, T321_FETCH: "1"}, timeout: 15_000},
+							);
+							child.stdin.end();
+							let text = "";
+							child.stdout.on("data", (s) => {
+								text += s;
+							});
+							child.stderr.on("data", (s) => {
+								text += s;
+							});
+							child.on("error", reject);
+							child.on("close", (code) => resolve({code, text}));
+						});
+					const order = reverse
+						? [
+								["two", "322"],
+								["one", "321"],
+							]
+						: [
+								["one", "321"],
+								["two", "322"],
+							];
+					for (const got of await Promise.all(order.map(([name, ticket]) => fetch(name!, ticket!))))
+						expect(got.code, got.text).toBe(0);
+					for (const name of ["one", "two"]) {
+						const check = b.call(process.execPath, [
+							signer,
+							"check",
+							"--base",
+							b.base,
+							"--head",
+							b.head(b.main, `fabrikalfa/${name}`),
+						]);
+						expect(check.code, check.text).toBe(0);
+					}
+					expect(b.notes().trim().split("\n")).toHaveLength(2);
+				} finally {
+					b.close();
+				}
+			}),
+			{...options, numRuns: 2},
+		);
+	});
+
+	// Plant: trust --sign without checking the run ticket, step and bounds, or the state base.
+	it("K1 refuses a mismatched run, a commit outside its run, or a non-ancestor state base", () => {
 		fc.assert(
-			fc.property(input, (v) => {
-				for (const change of [
-					"staged",
-					"unstaged",
-					"addition",
-					"deletion",
-					"staged-deletion",
-					"conflict",
-					"status-failed",
-				])
-					fixture(v, (f) => {
-						expect.hasAssertions();
-						const tracked = join(f.work, "tracked");
-						if (change === "staged" || change === "unstaged") {
-							writeFileSync(tracked, `changed ${v.value}`);
-							if (change === "staged") f.git(f.work, "add", "tracked");
+			fc.property(word, (text) => {
+				each(["ticket", "step", "outside", "base"], (fault) =>
+					fixture((b) => {
+						if (fault === "outside") b.commit(b.work, "src/a.ts", "outside\n");
+						b.setup({operations: [{path: "src/a.ts", text: `${text}\n`}]});
+						expect(b.run().code).toBe(0);
+						if (fault === "base") {
+							const other = b
+								.git(b.main, "commit-tree", b.head(b.main, "HEAD^{tree}"), "-m", "unrelated")
+								.trim();
+							b.state(other);
 						}
-						if (change === "addition") {
-							writeFileSync(join(f.work, "added"), v.value);
-							f.git(f.work, "add", "added");
+						refused(
+							b.fetch(fault === "step" ? "build" : "tests", fault === "ticket" ? "322" : "321"),
+							/run|ticket|step|base|ancestor|unsigned/,
+						);
+						expect(b.notes()).toBe("");
+					}),
+				);
+			}),
+			options,
+		);
+	});
+
+	// Plant: check only rename destinations, or sign mixed and unknown owners before refusal.
+	it("K1 checks unknown, mixed, deleted and both renamed paths before any signing", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				each(["unknown", "mixed", "rename", "delete", "exam"], (fault) =>
+					fixture(
+						(b) => {
+							if (fault === "exam") {
+								b.commit(b.work, "src/a.ts", "tests prerequisite\n");
+								b.sign(b.work, "tests");
+								b.git(
+									b.main,
+									"fetch",
+									"-q",
+									b.work,
+									`${b.branch}:${b.branch}`,
+									"refs/notes/fabrika:refs/notes/fabrika",
+								);
+							}
+							const notes = b.notes();
+							const operations: Operation[] = [{path: "src/a.ts", text: `${text}\n`}];
+							operations.push(
+								fault === "rename"
+									? {path: "src/old.ts", to: "src/new.ts"}
+									: fault === "delete"
+										? {path: "src/old.ts"}
+										: {
+												path:
+													fault === "exam"
+														? ".agents/skills/lead/scripts/fixture.test.ts"
+														: fault === "mixed"
+															? "src/b.ts"
+															: "src/unknown.ts",
+												text: "changed\n",
+											},
+							);
+							b.setup({batches: [operations]});
+							expect(b.run(fault === "exam" ? "build" : "tests").code).toBe(0);
+							refused(b.fetch(fault === "exam" ? "build" : "tests"), /owner|exam|path|tests|order/);
+							expect(b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign")).toEqual([]);
+							expect(b.notes()).toBe(notes);
+						},
+						[
+							["src/a.ts", fault === "exam" ? "build" : "tests"],
+							["src/b.ts", "build"],
+							["src/old.ts", "build"],
+							["src/new.ts", "tests"],
+							[".agents/skills/lead/scripts/fixture.test.ts", "build"],
+						],
+					),
+				);
+			}),
+			options,
+		);
+	}, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
+
+	// Plant: overwrite existing notes, including stale or invalid ones; concatenate a conflict.
+	it("K1 preserves stale, malformed, invalid and conflicting notes and reports their checks", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				each(["stale", "malformed", "invalid", "conflict"], (kind) =>
+					fixture((b) => {
+						b.setup({operations: [{path: "src/a.ts", text: `${text}\n`}]});
+						expect(b.run().code).toBe(0);
+						const sha = b.head(b.work);
+						if (kind === "malformed")
+							b.git(b.work, "notes", "--ref=fabrika", "add", "-m", "not JSON", sha);
+						else {
+							b.sign(b.work, "tests");
+							if (kind === "invalid") {
+								const note = JSON.parse(b.git(b.work, "notes", "--ref=fabrika", "show", sha));
+								b.git(
+									b.work,
+									"notes",
+									"--ref=fabrika",
+									"add",
+									"-f",
+									"-m",
+									JSON.stringify({...note, sig: "bad signature"}),
+									sha,
+								);
+							}
+							if (kind === "stale") {
+								b.git(b.main, "fetch", "-q", b.work, "refs/notes/fabrika:refs/notes/fabrika");
+								b.git(b.main, "checkout", "-q", "-b", "other");
+								b.commit(b.main, "src/a.ts", "newer\n");
+								b.sign(b.main, "tests");
+								b.git(b.main, "checkout", "-q", "main");
+								// Make the box's v1 stale with a real v2 link on the other branch.
+								b.git(b.work, "fetch", "-q", b.main, "refs/notes/fabrika:refs/notes/newer");
+								b.git(b.work, "notes", "--ref=fabrika", "merge", "newer");
+							}
 						}
-						if (change.includes("deletion")) {
-							rmSync(tracked);
-							if (change === "staged-deletion") f.git(f.work, "add", "tracked");
+						const original = b.git(b.work, "notes", "--ref=fabrika", "show", sha);
+						if (kind === "conflict") {
+							b.git(b.main, "fetch", "-q", b.work, `${b.branch}:refs/heads/incoming`);
+							b.git(b.main, "notes", "--ref=fabrika", "add", "-m", "different note", sha);
 						}
-						if (change === "conflict") {
-							const hash = f.git(f.work, "rev-parse", "HEAD:tracked");
-							f.git(f.work, "update-index", "--force-remove", "tracked");
-							const ran = spawnSync(
-								"/usr/bin/git",
-								["-C", f.work, "update-index", "--index-info"],
-								{
-									input: `100644 ${hash} 1\ttracked\n100644 ${hash} 2\ttracked\n100644 ${hash} 3\ttracked\n`,
-									encoding: "utf8",
-									env: f.env,
+						const mainNote =
+							kind === "conflict" ? b.git(b.main, "notes", "--ref=fabrika", "show", sha) : original;
+						refused(
+							b.fetch(),
+							kind === "stale"
+								? /stale_link/
+								: kind === "conflict"
+									? /conflict|note/
+									: /unsigned_commit|invalid|malformed/,
+						);
+						expect(b.git(b.main, "notes", "--ref=fabrika", "show", sha)).toBe(mainNote);
+						expect(b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign")).toEqual([]);
+					}),
+				);
+			}),
+			options,
+		);
+	}, 180_000); // measured 61 to 68 s under load in review and here; same cases and sizes
+
+	// Plant: treat exit 2, truncated JSON or a failed check as success; hide owner asks.
+	it("K1 prints every check answer and fails closed on status or unreadable output", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				each(
+					[
+						[
+							1,
+							'{"_tag":"stuck","why":"unsigned_commit","sha":"one"}\n{"_tag":"stuck","why":"stale_link","sha":"two"}\n',
+							false,
+						],
+						[2, "", false],
+						[2, '{"_tag":"done"}\n', false],
+						[0, "not json\n", false],
+						[0, '{"_tag":"ask","who":"owner","for":"exam_read","paths":["src/a.test.ts"]}\n', true],
+					] as const,
+					([status, output, pass]) =>
+						fixture((b) => {
+							b.setup({
+								operations: [{path: "src/a.ts", text: `${text}\n`}],
+								check: {status, text: output},
+							});
+							expect(b.run().code).toBe(0);
+							const got = b.fetch();
+							expect(got.code, got.text).toBe(pass ? 0 : 1);
+							if (status === 1) {
+								expect(got.text).toContain("unsigned_commit");
+								expect(got.text).toContain("stale_link");
+							}
+							if (pass) expect(got.text).toContain("exam_read");
+						}),
+				);
+			}),
+			options,
+		);
+	}, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
+});
+
+describe("T321 K2 box start, today's tooling", () => {
+	// Plant: inspect only the current branch's links. Main and this box's branch are allowed, and so
+	// is an older branch whose links the base already holds. Plant: walk links from main, not the base.
+	it("K2 refuses a shared ticket only when its links are on another open branch", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				each(["main", "this", "other", "different-ticket", "inside"], (place) =>
+					fixture((b) => {
+						b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
+						if (place === "other" || place === "different-ticket")
+							b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+						const sha = b.commit(b.main, "src/a.ts", `${text}\n`);
+						b.sign(b.main, "tests", place === "different-ticket" ? "322" : "321");
+						if (place === "main") b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+						if (place === "inside") b.git(b.main, "branch", "fabrikalfa/old", sha);
+						b.git(b.main, "checkout", "-q", "main");
+						const got =
+							place === "inside"
+								? b.new(sha, b.branch)
+								: b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
+						expect(got.code).not.toBeNull();
+						if (place === "other") refused(got, /shared_ticket/);
+						else expect(got.code, got.text).toBe(0);
+					}),
+				);
+			}),
+			options,
+		);
+	});
+
+	// Plant: accept any parent head, any role or any signer, rather than a verified build link.
+	it("K2 accepts only origin/main or a verified parent build head and records checked facts", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				each(["main", "build", "unsigned", "tests", "forged"], (kind) =>
+					fixture((b) => {
+						b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/parent");
+						const parent = b.commit(b.main, "src/b.ts", `${text}\n`);
+						if (kind === "build" || kind === "tests") b.sign(b.main, kind, "300");
+						if (kind === "forged")
+							b.git(
+								b.main,
+								"notes",
+								"--ref=fabrika",
+								"add",
+								"-m",
+								'{"step":"build","ticket":"300","sig":"fake"}',
+								parent,
+							);
+						b.git(b.main, "checkout", "-q", "main");
+						const got = b.new(kind === "main" ? "origin/main" : parent);
+						expect(got.code).not.toBeNull();
+						if (kind === "main" || kind === "build") {
+							expect(got.code, got.text).toBe(0);
+							expect(
+								existsSync(join(b.boxes, "state/new.box")),
+								"new must save its checked facts",
+							).toBe(true);
+							const state = readFileSync(join(b.boxes, "state/new.box"), "utf8");
+							expect(state).toContain(`base: ${kind === "main" ? b.base : parent}`);
+							expect(state).toContain(`plan-sha256: ${hash(body())}`);
+							expect(state).toContain("ticket: 321");
+							if (kind === "build") expect(state).toContain(`fabrikalfa/parent@${parent}`);
+						} else refused(got, /base_not_signed|base|build/);
+					}),
+				);
+			}),
+			options,
+		);
+	});
+
+	// Plants: skip the approval hash or hash line one too; accept a branch without the prefix.
+	it("K2 rejects bad branch names, unsigned plans and byte edits anywhere in the approved body", () => {
+		fc.assert(
+			fc.property(word, fc.constantFrom("\n", "\r\n", "猫"), (text, ending) => {
+				each(["branch", "unsigned", "body", "amendment", "renewed"], (fault) =>
+					fixture((b) => {
+						const original = `${body()}\n## Amendment 1\n${text}${ending}`;
+						let plan = approve(original);
+						if (fault === "unsigned") plan = `\nPlancheck-Version: 2\n${original}`;
+						if (fault === "body") plan = plan.replace(text, `${text}changed`);
+						if (fault === "amendment") plan += "\n## Amendment 2\nChanged.\n";
+						if (fault === "renewed") plan = approve(`${original}\n## Amendment 2\nChanged.\n`);
+						write(b.plan, plan);
+						const got = b.new("origin/main", fault === "branch" ? "other/new" : "fabrikalfa/new");
+						expect(got.code).not.toBeNull();
+						if (fault === "renewed") expect(got.code, got.text).toBe(0);
+						else refused(got, /branch|prefix|plan|approval|hash|body/);
+					}),
+				);
+			}),
+			options,
+		);
+	});
+});
+
+describe("T321 review round 1 fixes, today's tooling", () => {
+	// Plant: merge the box's notes ref, so a note the box deleted is dropped from MAIN.
+	// Review round 1, finding 3.
+	it("K1 scenario: a note the box deleted stays in MAIN, and the linked commit is not signed again", () => {
+		fixture((b) => {
+			b.setup({operations: [{path: "src/a.ts", text: "linked\n"}]});
+			expect(b.run().code).toBe(0);
+			const first = b.fetch();
+			expect(first.code, first.text).toBe(0);
+			const linked = b.notes();
+			const sha = b.head(b.main, b.branch);
+			expect(linked).toContain(sha);
+			const note = b.git(b.main, "notes", "--ref=fabrika", "show", sha);
+			b.git(b.work, "fetch", "-q", b.main, "refs/notes/fabrika:refs/notes/fabrika");
+			b.git(b.work, "notes", "--ref=fabrika", "remove", sha);
+			b.call("sh", [program, "fetch", "one", b.branch], b.main, {...b.env, T321_FETCH: "1"});
+			expect(b.notes()).toContain(sha);
+			expect(b.git(b.main, "notes", "--ref=fabrika", "show", sha)).toBe(note);
+			const again = b.fetch();
+			expect(
+				b
+					.notes()
+					.split("\n")
+					.filter((l) => l.endsWith(sha)),
+			).toHaveLength(1);
+			expect(again.text).not.toMatch(/sign failed/);
+		});
+	});
+
+	// Plant: trust the installed checker's scope skip. Review round 1, finding 4.
+	it("K1 scenario: an unsigned commit outside the exam list is refused on a plain fetch", () => {
+		fixture((b) => {
+			b.setup({operations: [{path: "src/b.ts", text: "unsigned\n"}]});
+			expect(b.run().code).toBe(0);
+			const got = b.call("sh", [program, "fetch", "one", b.branch], b.main, {
+				...b.env,
+				T321_FETCH: "1",
+			});
+			refused(got, /unlinked_commit|commits check failed/);
+		});
+	});
+
+	// Plant: drop every answer when one line is unreadable. Review round 1, finding 11.
+	it("K1 scenario: a valid stuck answer before a bad line is still printed", () => {
+		fixture((b) => {
+			b.setup({
+				operations: [{path: "src/a.ts", text: "answer\n"}],
+				check: {status: 1, text: '{"_tag":"stuck","why":"fixture_reason"}\nnot json\nnull\n'},
+			});
+			expect(b.run().code).toBe(0);
+			const got = b.fetch();
+			refused(got, /unreadable/);
+			expect(got.text).toContain("fixture_reason");
+		});
+	});
+
+	// Plants: accept only origin/main or a parent build head, or treat the lane's own -wip backup
+	// as another open branch. drive.ts starts one box per step on the lane's branch, so the next
+	// box starts at that branch's tests head.
+	it("K2 scenario: a new box may continue its own branch beside its -wip backup", () => {
+		fixture((b) => {
+			b.setup({operations: [{path: "src/a.ts", text: "tested\n"}]});
+			expect(b.run().code).toBe(0);
+			const fetched = b.fetch();
+			expect(fetched.code, fetched.text).toBe(0);
+			const head = b.head(b.main, b.branch);
+			b.git(b.main, "update-ref", `refs/heads/${b.branch}-wip`, head);
+			const started = b.call("sh", [
+				program,
+				"new",
+				"two",
+				head,
+				b.branch,
+				"--ticket",
+				"321",
+				"--plan",
+				b.plan,
+			]);
+			expect(started.code, started.text).toBe(0);
+			const state = readFileSync(join(b.boxes, "state/two.box"), "utf8");
+			expect(state).toContain(`base: ${head}`);
+		});
+	});
+
+	// Plant: check the approval digest only at new. Review round 1, finding 6.
+	it("K2 scenario: a run refuses a plan amended after approval", () => {
+		fixture((b) => {
+			writeFileSync(b.plan, `${readFileSync(b.plan, "utf8")}\n## Amendment\nUnsigned.\n`);
+			const got = b.run("tests");
+			refused(got, /hash mismatch|approval/);
+			expect(b.calls().some((c) => c.cmd === "codex")).toBe(false);
+		});
+	});
+});
+
+describe("T321 K3 step order and rows, today's tooling", () => {
+	// Plant: count tests from before base, or any unverified note; skip review's mutation row.
+	it("K3 gates build on a verified tests link since base and review on mutation or a recorded skip", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				each(
+					["absent", "before-base", "bad-note", "tests", "review-absent", "mutation", "skip"],
+					(kind) =>
+						fixture((b) => {
+							if (["before-base", "bad-note", "tests"].includes(kind)) {
+								const sha = b.commit(b.work, "src/a.ts", `${text}\n`);
+								if (kind === "bad-note")
+									b.git(b.work, "notes", "--ref=fabrika", "add", "-m", '{"step":"tests"}', sha);
+								else b.sign(b.work, "tests");
+								b.git(
+									b.main,
+									"fetch",
+									"-q",
+									b.work,
+									`${b.branch}:${b.branch}`,
+									"refs/notes/fabrika:refs/notes/fabrika",
+								);
+								if (kind === "before-base") b.state(sha);
+							}
+							if (kind === "mutation" || kind === "skip")
+								write(
+									join(b.boxes, "state/one.rows.jsonl"),
+									`${JSON.stringify({
+										run: "mutation-321",
+										ticket: "321",
+										step: "mutation",
+										role: "mutation",
+										outcome: kind === "skip" ? "skip" : "done",
+										why: "recorded fixture result",
+									})}\n`,
+								);
+							const review = ["review-absent", "mutation", "skip"].includes(kind);
+							const pass = ["tests", "mutation", "skip"].includes(kind);
+							const got = b.run(review ? "review" : "build");
+							expect(got.code).not.toBeNull();
+							if (pass) expect(got.code, got.text).toBe(0);
+							else {
+								refused(got, /step_out_of_order|tests|mutation/);
+								expect(b.calls().filter((c) => c.cmd === "codex")).toEqual([]);
+							}
+						}),
+				);
+			}),
+			options,
+		);
+	});
+
+	// Plant: count dead pid files as live; omit the eighth-slot cap.
+	it("K3 refuses a ninth live box, ignores dead pid files and frees finished slots", () => {
+		fc.assert(
+			fc.property(fc.integer({min: 0, max: 9}), (count) =>
+				fixture((b) => {
+					for (let i = 0; i < count; i++)
+						write(join(b.boxes, `state/live-${i}.pid`), `${process.pid}\n`);
+					for (let i = 0; i < 3; i++) write(join(b.boxes, `state/dead-${i}.pid`), "2147483647\n");
+					const got = b.run();
+					if (count >= 8) {
+						refused(got, /slot|running|limit/);
+						expect(b.calls().filter((c) => c.cmd === "codex")).toEqual([]);
+					} else {
+						expect(got.code, got.text).toBe(0);
+						expect(b.rows()).toHaveLength(1);
+					}
+					expect(readdirSync(join(b.boxes, "state")).filter((n) => n === "one.pid")).toEqual([]);
+					for (let i = 0; i < count; i++)
+						rmSync(join(b.boxes, `state/live-${i}.pid`), {force: true});
+					expect(b.run().code).toBe(0);
+					const rows = b.rows();
+					expect(rows).toHaveLength(count >= 8 ? 1 : 2);
+					expect(new Set(rows.map((row) => row.run)).size).toBe(rows.length);
+				}),
+			),
+			// pinned: the slot-cap off-by-one plant (a ninth box let through at exactly 8 live) and
+			// the empty-state plant (a stale pid file counted as live at 0).
+			{...options, examples: [[8], [0]]},
+		);
+	});
+
+	// Plants: drop failed/missing-usage runs, leave a pid behind, or append a row on every fetch.
+	it("K3 every exit saves one run with bounds, status and nullable usage; collection is idempotent", () => {
+		fc.assert(
+			fc.property(
+				fc.record({exit: fc.constantFrom(0, 7), signal: fc.boolean(), usage: fc.boolean()}),
+				(setup) =>
+					fixture((b) => {
+						const start = b.commit(b.work, "src/a.ts", "before this run\n");
+						b.sign(b.work, "tests");
+						b.git(
+							b.main,
+							"fetch",
+							"-q",
+							b.work,
+							`${b.branch}:${b.branch}`,
+							"refs/notes/fabrika:refs/notes/fabrika",
+						);
+						b.setup(setup);
+						const got = b.run();
+						expect(got.code, got.text).toBe(setup.signal ? 143 : setup.exit);
+						const rows = b.rows();
+						expect(rows).toHaveLength(1);
+						expect(rows[0]).toMatchObject({
+							ticket: "321",
+							step: "tests",
+							outcome: setup.signal || setup.exit ? "stuck" : "done",
+						});
+						expect(rows[0]!.run).toEqual(expect.any(String));
+						expect(rows[0]!.started).toEqual(expect.any(String));
+						expect(rows[0]!.ended).toEqual(expect.any(String));
+						expect(rows[0]!.billed).toBe(setup.usage ? 110 : null);
+						const state = readFileSync(join(b.boxes, "state/one.box"), "utf8");
+						expect(state).toContain(start);
+						expect(state).toContain(String(rows[0]!.run));
+						expect(state).toContain("tests");
+						expect(existsSync(join(b.boxes, "state/one.pid"))).toBe(false);
+						b.fetch();
+						b.fetch();
+						expect(b.rows()).toEqual(rows);
+					}),
+			),
+			{
+				...options,
+				// pinned: the dropped-row plants: no row for a failed run with no usage, or for an
+				// interrupted run that exited 0.
+				examples: [
+					[{exit: 7, signal: false, usage: false}],
+					[{exit: 0, signal: true, usage: true}],
+				],
+			},
+		);
+	});
+
+	// Plant: reset usage totals at each completed turn, retaining only the last turn.
+	it("K3 fieldrow sums usage across completed turns and ignores partial events", () => {
+		fc.assert(
+			fc.property(
+				fc.array(
+					fc.record({
+						fresh: fc.integer({min: 1, max: 100_000}),
+						cached: fc.integer({min: 0, max: 50_000}),
+						output: fc.integer({min: 0, max: 50_000}),
+					}),
+					{minLength: 2, maxLength: 5},
+				),
+				(turns) => {
+					const dir = mkdtempSync(join(tmpdir(), "row321-"));
+					try {
+						const events = join(dir, "events.jsonl");
+						const lines = turns.map((turn) =>
+							JSON.stringify({
+								type: "turn.completed",
+								usage: {
+									input_tokens: turn.fresh + turn.cached,
+									cached_input_tokens: turn.cached,
+									output_tokens: turn.output,
 								},
-							);
-							expect(ran.status).toBe(0);
-						}
-						if (change === "status-failed")
-							writeFileSync(join(f.data, "index"), "unreadable index bytes");
-						kept(f);
-					});
-			}),
-			{seed: 3187, numRuns: 3},
-		);
-	});
-
-	// Plants: check HEAD alone; accept objects or remote-tracking refs without retained MAIN ancestry.
-	it("T318 each local branch detached HEAD stash and step-note needs MAIN retention", () => {
-		fc.assert(
-			fc.property(input, (v) => {
-				for (const kind of ["branch", "detached", "stash", "notes", "remote-only", "objects-only"])
-					for (const retain of [false, true])
-						fixture(v, (f) => {
-							const base = f.git(f.work, "rev-parse", "HEAD");
-							for (let i = 0; i < v.depth; i++) {
-								writeFileSync(join(f.work, "tracked"), `extra ${v.value} ${i}`);
-								f.commit();
-							}
-							const tip = f.git(f.work, "rev-parse", "HEAD");
-							let ref = "refs/heads/extra";
-							if (kind === "detached") {
-								f.git(f.work, "checkout", "-q", "--detach", tip);
-								f.git(f.work, "branch", "-f", "main", base);
-								ref = "HEAD";
-							} else {
-								f.git(f.work, "branch", "extra", tip);
-								f.git(f.work, "checkout", "-q", "--detach", base);
-								f.git(f.work, "branch", "-f", "main", base);
-								if (kind === "stash" || kind === "notes") {
-									ref = kind === "stash" ? "refs/stash" : "refs/notes/fabrika";
-									f.git(f.work, "update-ref", ref, tip);
-									f.git(f.work, "branch", "-D", "extra");
-								}
-							}
-							if (kind === "objects-only" || kind === "remote-only") {
-								f.git(f.main, "fetch", "-q", f.data, `${ref}:refs/remotes/fixture/extra`);
-								if (kind === "objects-only")
-									f.git(f.main, "update-ref", "-d", "refs/remotes/fixture/extra");
-							}
-							if (retain) {
-								f.retained(ref);
-								if (v.descendant) {
-									const kept = `refs/keep/${v.name}`,
-										tree = f.git(f.main, "rev-parse", `${kept}^{tree}`);
-									const child = f.git(
-										f.main,
-										"commit-tree",
-										tree,
-										"-p",
-										tip,
-										"-m",
-										"retained descendant",
-									);
-									f.git(f.main, "update-ref", kept, child);
-								}
-							}
-							const got = f.run();
-							expect(got.code, `${kind}: ${got.text}`).toBe(retain ? 0 : 1);
-							expect(got.text).toMatch(retain ? /^removed box / : /^kept box /);
-							expect(existsSync(f.work)).toBe(!retain);
-							expect(existsSync(f.data)).toBe(!retain);
+							}),
+						);
+						lines.splice(1, 0, "partial{", '{"type":"item.completed"}');
+						lines.push('{"type":"turn.completed","usage":{"input_tokens":999}}');
+						writeFileSync(events, `${lines.join("\n")}\n`);
+						const got = spawnSync(
+							"python3",
+							[
+								join(import.meta.dirname, "fieldrow.py"),
+								"--model",
+								"gpt-6.1-sol",
+								events,
+								"multi-turn",
+								"321",
+								"done",
+								"test usage",
+							],
+							{
+								encoding: "utf8",
+								timeout: 5_000,
+								env: {HOME: dir, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`},
+							},
+						);
+						expect(got.error).toBeUndefined();
+						expect(got.status, got.stderr).toBe(0);
+						const input = turns.reduce((sum, turn) => sum + turn.fresh + turn.cached, 0);
+						const cached = turns.reduce((sum, turn) => sum + turn.cached, 0);
+						const output = turns.reduce((sum, turn) => sum + turn.output, 0);
+						expect(JSON.parse(got.stdout)).toMatchObject({
+							inputTokens: input,
+							cachedTokens: cached,
+							outputTokens: output,
+							billed: input + output,
+							tokens: null,
 						});
-			}),
-			{seed: 3188, numRuns: 3},
+					} finally {
+						rmSync(dir, {recursive: true, force: true});
+					}
+				},
+			),
+			{seed: 119120, numRuns: 4, endOnFailure: true},
 		);
 	});
 
-	// Plants: follow a symlink/escaping name, or delete one half before validating the other.
-	it("T318 invalid names partial pairs malformed metadata and symlinks keep all other paths", () => {
+	// Plant: trap only a normal child exit and lose the row or slot on a runner signal.
+	it("K3 SIGTERM releases the slot and records the interrupted run without usage", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.boolean(), async (usage) => {
+				const b = new Box();
+				try {
+					b.setup({hold: true, usage});
+					const got = await signalRun(b);
+					expect(got.code === 143 || got.signal === "SIGTERM").toBe(true);
+					expect(b.rows()).toHaveLength(1);
+					expect(b.rows()[0]).toMatchObject({
+						ticket: "321",
+						step: "tests",
+						outcome: "stuck",
+						billed: usage ? 110 : null,
+					});
+					expect(existsSync(join(b.boxes, "state/one.pid"))).toBe(false);
+				} finally {
+					b.close();
+				}
+			}),
+			{...options, numRuns: 2},
+		);
+	});
+});
+
+describe("T321 K19 box and plan runners, today's tooling", () => {
+	// Plant: let the read-only planner run with workspace-write access.
+	it("K19 plan writer remains read-only in the main checkout", () => {
 		fc.assert(
-			fc.property(input, (v) => {
-				for (const kind of [
-					"name",
-					"missing-data",
-					"missing-work",
-					"metadata",
-					"data-link",
-					"work-link",
-					"outside-pointer",
-				])
-					fixture(v, (f) => {
-						const outside = join(f.dir, "outside");
-						mkdirSync(outside);
-						writeFileSync(join(outside, "keep"), v.value);
-						if (kind === "name") {
+			fc.property(word, (name) =>
+				fixture((b) => {
+					const got = b.call("sh", [
+						join(import.meta.dirname, "runplan.sh"),
+						name,
+						join(b.dir, "prompt"),
+					]);
+					expect(got.code, got.text).toBe(0);
+					const calls = b.calls().filter((call) => call.cmd === "codex");
+					expect(calls).toHaveLength(1);
+					const args = calls[0]!.args;
+					expect(args[args.indexOf("-s") + 1]).toBe("read-only");
+					expect(args[args.indexOf("-C") + 1]).toBe(b.main);
+					expect(args).toContain("--ignore-user-config");
+				}),
+			),
+			{...options, seed: 119120},
+		);
+	});
+
+	// [secrets] Plants: match names case-sensitively, leak any config layer, skip either output
+	// on a failed or signaled run. Values are made up and never taken from the parent environment.
+	it.each(["box", "plan"])(
+		"K19 %s sanitizes children and redacts both outputs on success, failure and signal",
+		(runner) => {
+			fc.assert(
+				fc.property(
+					fc.record({
+						value: word,
+						lower: fc.boolean(),
+						exit: fc.constantFrom(0, 7),
+						signal: fc.boolean(),
+					}),
+					({value, lower, exit, signal}) => {
+						fixture((b) => {
+							const secrets = [
+								`npm_${value.repeat(36).slice(0, 36)}`,
+								`ghp_${value.repeat(36).slice(0, 36)}`,
+								`sk-${value.repeat(48).slice(0, 48)}`,
+								`private-${value}-pass`,
+							];
 							for (const name of [
-								"",
-								".",
-								"..",
-								`../${v.name}`,
-								`x/${v.name}`,
-								`x\\${v.name}`,
-								`${v.name}\n`,
-								`${v.name}\t`,
-								`${v.name}\u0001`,
-								outside,
-							]) {
-								const got = f.run(name);
-								expect(got.code, got.text).toBe(2);
-								expect(existsSync(f.work)).toBe(true);
-								expect(existsSync(f.data)).toBe(true);
+								"MY_TOKEN",
+								"SERVICE_SECRET",
+								"MY_KEY",
+								"DB_PASSWORD",
+								"HTTP_AUTH",
+								"NPM_CONFIG_AUTH",
+							])
+								b.env[lower ? name.toLowerCase() : name] = secrets[3];
+							for (const [file, token] of [
+								[join(b.home, ".npmrc"), secrets[0]],
+								[join(b.dir, "global.npmrc"), secrets[1]],
+								[join(runner === "box" ? b.work : b.main, ".npmrc"), secrets[2]],
+							])
+								write(file!, `//registry.example.test/:_authToken=${token}\n`);
+							b.env.NPM_CONFIG_GLOBALCONFIG = join(b.dir, "global.npmrc");
+							b.setup({secrets, exit, signal});
+							const got =
+								runner === "box"
+									? b.run()
+									: b.call("sh", [
+											join(import.meta.dirname, "runplan.sh"),
+											"one",
+											join(b.dir, "prompt"),
+										]);
+							expect(got.code).toBe(signal ? 143 : exit);
+							const seen = JSON.parse(readFileSync(join(b.dir, "observed.json"), "utf8"));
+							expect(seen.envLeaks, "secret-shaped env names reached the child").toBe(0);
+							expect(seen.authLeaks, "auth settings reached the child").toBe(0);
+							expect(seen.home === b.home, "HOME must stay set").toBe(true);
+							expect(seen.path === b.env.PATH, "PATH must stay set").toBe(true);
+							const answer =
+								runner === "box" ? join(b.dir, "answer") : join(b.boxes, "one-plan.md");
+							const events =
+								runner === "plan"
+									? readFileSync(join(b.boxes, "one-plan.jsonl"), "utf8")
+									: got.text;
+							for (const output of [readFileSync(answer, "utf8"), events]) {
+								for (const secret of secrets) {
+									expect(output.includes(secret)).toBe(false);
+									expect(output.includes(encodeURIComponent(secret))).toBe(false);
+								}
+								expect(output).toContain("[redacted]");
 							}
-						} else {
-							if (kind === "missing-data" || kind === "data-link")
-								rmSync(f.data, {recursive: true});
-							if (kind === "missing-work" || kind === "work-link")
-								rmSync(f.work, {recursive: true});
-							if (kind === "data-link") symlinkSync(outside, f.data);
-							if (kind === "work-link") symlinkSync(outside, f.work);
-							if (kind === "metadata") writeFileSync(join(f.data, "HEAD"), "not git metadata");
-							if (kind === "outside-pointer")
-								writeFileSync(join(f.work, ".git"), `gitdir: ${outside}\n`);
-							const got = f.run();
-							expect(got.code, got.text).toBe(1);
-							expect(got.text).toMatch(/^kept box /);
-							expect(existsSync(f.work)).toBe(kind !== "missing-work");
-							expect(existsSync(f.data)).toBe(kind !== "missing-data");
-						}
-						expect(readFileSync(join(outside, "keep"), "utf8")).toBe(v.value);
-					});
-			}),
-			{seed: 3189, numRuns: 3},
-		);
-	});
-
-	// Plant (mutation, seed 119120): skip the keep on a malformed gitdir pointer, which ends in a
-	// traceback. Missing refs or objects must keep too; a later guard also catches those.
-	it("T318 a malformed pointer or missing refs or objects keeps the pair with one result line", () => {
-		const word = fc.stringMatching(/^[a-z]{1,12}$/);
-		const pointer = fc.oneof(
-			fc.constant(""),
-			word,
-			word.map((s) => `gitdir:${s}`),
-			word.map((s) => `gitdir: ${s}\n\n`),
-			word.map((s) => `gitdir: a\0${s}`),
-		);
-		fc.assert(
-			fc.property(input, pointer, (v, text) => {
-				for (const kind of ["pointer", "refs", "objects"])
-					fixture(v, (f) => {
-						if (kind === "pointer") writeFileSync(join(f.work, ".git"), text);
-						else rmSync(join(f.data, kind), {recursive: true});
-						kept(f);
-					});
-			}),
-			{seed: 3194, numRuns: 6},
-		);
-	});
-
-	// Plant: use the box's original gitdir/config and observe its fsmonitor/filter/include marker run.
-	it("T318 inspection never executes box or inherited Git programs or writes its index", () => {
-		fc.assert(
-			fc.property(input, (v) => {
-				for (const kind of ["hook", "fsmonitor", "filter", "include", "inherited"])
-					for (const dirty of [false, true])
-						fixture(v, (f) => {
-							const marker = join(f.dir, "executed"),
-								program = join(f.dir, "program");
-							writeFileSync(program, `#!/bin/sh\nprintf bad >> '${marker}'\ncat\n`, {mode: 0o755});
-							const include = join(f.dir, "included-config");
-							writeFileSync(include, `[core]\nfsmonitor = ${program}\n`);
-							if (kind === "fsmonitor") f.git(f.work, "config", "core.fsmonitor", program);
-							if (kind === "hook") f.git(f.work, "config", "core.hooksPath", f.dir);
-							if (kind === "include") f.git(f.work, "config", "include.path", include);
-							if (kind === "filter") {
-								f.git(f.work, "config", "filter.fixture.clean", program);
-								writeFileSync(join(f.work, ".gitattributes"), "tracked filter=fixture\n");
-							}
-							writeFileSync(join(f.work, "tracked"), readFileSync(join(f.work, "tracked")));
-							if (dirty) writeFileSync(join(f.work, "tracked"), `dirty ${v.value}`);
-							writeFileSync(join(f.dir, "post-index-change"), readFileSync(program), {mode: 0o755});
-							const index = readFileSync(join(f.data, "index"));
-							const got = f.run(
-								f.name,
-								kind === "inherited"
-									? {
-											GIT_CONFIG_COUNT: "1",
-											GIT_CONFIG_KEY_0: "core.fsmonitor",
-											GIT_CONFIG_VALUE_0: program,
-										}
-									: {},
-							);
-							expect(got.code, got.text).toBe(dirty ? 1 : 0);
-							expect(got.text).toMatch(dirty ? /^kept box / : /^removed box /);
-							expect(existsSync(marker)).toBe(false);
-							if (dirty) expect(readFileSync(join(f.data, "index"))).toEqual(index);
 						});
-			}),
-			{seed: 3190, numRuns: 4},
-		);
-	});
+					},
+				),
+				{
+					...options,
+					// pinned: the case-sensitive secret-name plant (a lowercase name kept its value)
+					// and the interrupted-run plant (a signal skipped the scrub).
+					examples: [
+						[{value: "madeup", lower: true, exit: 7, signal: false}],
+						[{value: "madeup", lower: false, exit: 0, signal: true}],
+					],
+				},
+			);
+		},
+	);
+
+	// [secrets] Plant: redact only when Codex returns normally, leaving outputs on SIGTERM.
+	it.each(["box", "plan"] as const)(
+		"K19 %s redacts answer and events before a signaled runner returns",
+		async (runner) => {
+			await fc.assert(
+				fc.asyncProperty(word, async (value) => {
+					const b = new Box();
+					try {
+						const secret = `npm_${value.repeat(40).slice(0, 36)}`;
+						b.env.PLANTED_TOKEN = secret;
+						b.setup({hold: true, secrets: [secret], usage: false});
+						const got = await signalRun(b, runner);
+						expect(got.code === 143 || got.signal === "SIGTERM").toBe(true);
+						const answer = runner === "box" ? join(b.dir, "answer") : join(b.boxes, "one-plan.md");
+						const events =
+							runner === "box" ? got.text : readFileSync(join(b.boxes, "one-plan.jsonl"), "utf8");
+						for (const output of [readFileSync(answer, "utf8"), events]) {
+							expect(output.includes(secret)).toBe(false);
+							expect(output).toContain("[redacted]");
+						}
+					} finally {
+						b.close();
+					}
+				}),
+				{...options, numRuns: 2},
+			);
+		},
+	);
 });

@@ -36,11 +36,6 @@ const answer = [
 	'Use tracker_query to find an existing ticket, or tracker_file with value: {title, body, from: {_tag: "pr", url, step: "review"}}. Record the returned ID.',
 	"If filing fails, include the exact pending payload for lead to retry. Do not count it as filed or start another review round for it.",
 ];
-const handoff = [
-	"A ticket's driver is not the lead session. Every plan and amendment returns unsigned.",
-	"Before handing it to lead, the driver runs plancheck.sh --draft, saves the approval wait and ends.",
-	"Only the lead session reads and signs each plan and amendment itself.",
-];
 const sections: Record<string, Record<string, string[]>> = {
 	".agents/skills/review/SKILL.md": {"3. **Check:**": check, "4. **Answer**": answer},
 	".agents/skills/lead/SKILL.md": {
@@ -55,26 +50,6 @@ const sections: Record<string, Record<string, string[]>> = {
 			...check,
 			...answer,
 		],
-		"## Saved driver state": [
-			"$BOXES/state/<name>.md",
-			"Ticket or row:",
-			"Branch and full SHA:",
-			"Plan path:",
-			"Parent branch and signed head:",
-			"Children and merge method:",
-			"Worktree and box names:",
-			"Wait: kind, target, report or log path",
-			"Cleared when: exact fact to read",
-			"Next step:",
-			"Field rows already written: run IDs, note IDs, commits",
-			"Saved at:",
-			"A Codex box, parent build, CI, plan approval or owner read is a wait.",
-			"Before ending, save completed field work and replace a temporary sibling with this file. Then end the driver session.",
-			"Lead checks the saved clearing condition and starts a fresh driver when it holds.",
-			"The new driver reads the current branch, SHA, reports and checks again before acting. It does not rerun completed steps or duplicate listed field rows.",
-			"Missing or unclear state sends it back to those facts.",
-		],
-		"## Driver brief template": handoff,
 		"9. **Land it**": [
 			"After a successful merge, retain the checked head under refs/keep/pr/<pr> in MAIN.",
 			"Remove the registered catchup-<pr> worktree, exact-branch boxes through box.sh rm, and the driver's linked MAIN worktree on that exact branch. Never remove MAIN itself.",
@@ -84,7 +59,6 @@ const sections: Record<string, Record<string, string[]>> = {
 			...exam,
 		],
 	},
-	".agents/skills/plan/SKILL.md": {"## Scripts": handoff},
 	"AGENTS.md": {
 		"- **Every pull request, next/ or today's, goes through the pipeline's steps:**": exam,
 	},
@@ -100,7 +74,9 @@ const tree = (dir: string, whitespace = " ", omit?: [string, string, number], ou
 		);
 		if (outside && omit) chunks.push(`## Unrelated\n${sections[omit[0]]![omit[1]]![omit[2]]}\n`);
 		mkdirSync(join(dir, file, ".."), {recursive: true});
-		writeFileSync(join(dir, file), chunks.join("\n"));
+		// A skill file also holds slice 1a's clauses, so both checks read one whole tree.
+		const own = file === "AGENTS.md" ? "" : `\n${mainText(file.split("/")[2]!)}`;
+		writeFileSync(join(dir, file), chunks.join("\n") + own);
 		if (file !== "AGENTS.md") {
 			const skill = file.split("/")[2]!;
 			mkdirSync(join(dir, ".claude/skills"), {recursive: true});
@@ -108,6 +84,13 @@ const tree = (dir: string, whitespace = " ", omit?: [string, string, number], ou
 			rmSync(alias, {recursive: true, force: true});
 			symlinkSync(`../../.agents/skills/${skill}`, alias);
 		}
+	}
+	// plan and step-commit hold only slice 1a's clauses.
+	for (const skill of ["plan", "step-commit"]) {
+		mkdirSync(join(dir, ".agents/skills", skill), {recursive: true});
+		writeFileSync(join(dir, ".agents/skills", skill, "SKILL.md"), mainText(skill));
+		rmSync(join(dir, ".claude/skills", skill), {recursive: true, force: true});
+		symlinkSync(`../../.agents/skills/${skill}`, join(dir, ".claude/skills", skill));
 	}
 };
 const run = (dir: string) =>
@@ -180,7 +163,7 @@ describe("skillscheck, today's tooling", () => {
 							for (const n of names) {
 								mkdirSync(join(sources, n), {recursive: true});
 								if (!["review", "lead", "plan"].includes(n))
-									writeFileSync(join(sources, n, "SKILL.md"), `# ${n}\n`);
+									writeFileSync(join(sources, n, "SKILL.md"), skillText(n));
 							}
 							const actual: State[] = [];
 							for (const [i, n] of names.entries()) {
@@ -234,7 +217,7 @@ describe("skillscheck, today's tooling", () => {
 							for (const n of bad) expect(ran.stderr).toContain(`.claude/skills/${n}:`);
 							if (!bad.length)
 								expect(ran.stdout).toContain(
-									`${new Set([...names, "review", "lead", "plan"]).size} shared skills`,
+									`${new Set([...names, "review", "lead", "plan", "step-commit"]).size} shared skills`,
 								);
 							if (bad.length) refused++;
 							else clean++;
@@ -334,5 +317,144 @@ describe("skillscheck, today's tooling", () => {
 			),
 			{seed: 319, numRuns: 4},
 		);
+	});
+});
+
+const clauses = [
+	[
+		"lead",
+		"Scripts",
+		"K19",
+		"box.sh run and runplan.sh strip secret settings and redact saved output.",
+	],
+	["lead", "Scripts", "K1", "fetch --sign checks owners and signs missing notes in MAIN."],
+	["step-commit", "", "K1", "fetch --sign checks owners and signs missing notes in MAIN."],
+	["lead", "Steps", "K2", "box.sh new checks the approved plan, base and ticket."],
+	["lead", "Steps", "K3", "box.sh run --step checks order and slots, and saves the run row."],
+	[
+		"step-commit",
+		"",
+		"K4",
+		"stepcommit.sh checks named paths, owners, exam paths and staged formatting.",
+	],
+	[
+		"plan",
+		"",
+		"K11",
+		"plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments.",
+	],
+] as const;
+const mainText = (skill: string, omit = -1, wrap = " ") => {
+	const sections = new Map<string, string[]>();
+	for (const [i, [source, section, , text]] of clauses.entries()) {
+		if (source !== skill || i === omit) continue;
+		sections.set(section, [...(sections.get(section) ?? []), text.split(" ").join(wrap)]);
+	}
+	return `# ${skill}\n${[...sections].map(([section, texts]) => `${section ? `## ${section}\n` : ""}${texts.join("\n\n")}`).join("\n\n")}\n`;
+};
+// A skill file also holds T318's sections, so both checks read one whole tree.
+const skillText = (skill: string, omit = -1, wrap = " ") => {
+	const file = `.agents/skills/${skill}/SKILL.md`;
+	const own = Object.entries(sections[file] ?? {}).map(
+		([heading, texts]) => `${heading}\n${texts.join("\n")}\n`,
+	);
+	return [...own, mainText(skill, omit, wrap)].join("\n");
+};
+const clauseTree = (f: (dir: string) => void, program = script) => {
+	const dir = mkdtempSync(join(tmpdir(), "clauses-"));
+	try {
+		// T318's files (review, AGENTS.md) come from its own tree.
+		tree(dir);
+		for (const n of ["lead", "plan", "step-commit"])
+			writeFileSync(join(dir, ".agents/skills", n, "SKILL.md"), skillText(n));
+		f(dir);
+		const ran = spawnSync("sh", [program, dir], {encoding: "utf8", timeout: 5_000});
+		expect(ran.error).toBeUndefined();
+		return {code: ran.status, text: ran.stdout + ran.stderr};
+	} finally {
+		rmSync(dir, {recursive: true, force: true});
+	}
+};
+
+describe("T321 required clauses, today's tooling, slice 1a", () => {
+	// Plant: require the retired mechanical sentence as well as its script pointer.
+	it("accepts wrapping and removal of the named mechanical prose", () => {
+		fc.assert(
+			fc.property(fc.constantFrom(" ", "\n", " \n\t"), fc.boolean(), (wrap, old) => {
+				const got = clauseTree((dir) => {
+					for (const n of ["lead", "plan", "step-commit"]) {
+						const retired = old
+							? "Never rebase, force-push or update-branch.\nRun draft check; every exam path in the files table.\n"
+							: "";
+						writeFileSync(
+							join(dir, ".agents/skills", n, "SKILL.md"),
+							skillText(n, -1, wrap) + retired,
+						);
+					}
+				});
+				expect(got.code, got.text).toBe(0);
+			}),
+			{seed: 321, numRuns: 6},
+		);
+	});
+
+	// Plant: accept a clause in a different section, code fence, or different skill.
+	it("refuses each absent clause alone, including misplaced and fenced copies", () => {
+		fc.assert(
+			fc.property(
+				// "removed": review round 1, finding 10, a deleted source dropped its clauses.
+				fc.constantFrom("missing", "wrong-section", "fenced", "wrong-skill", "removed"),
+				fc.constantFrom(" ", "\n"),
+				(where, wrap) => {
+					for (const [i, [skill, section, check, text]] of clauses.entries()) {
+						const got = clauseTree((dir) => {
+							let content = skillText(skill, i, wrap);
+							if (where === "wrong-section" && section) content += `\n## Elsewhere\n${text}\n`;
+							if (where === "fenced")
+								content += `\n## ${section || "Example"}\n~~~md\n${text}\n~~~\n`;
+							writeFileSync(join(dir, ".agents/skills", skill, "SKILL.md"), content);
+							if (where === "removed") rmSync(join(dir, ".agents/skills", skill, "SKILL.md"));
+							if (where === "wrong-skill")
+								writeFileSync(
+									join(dir, ".agents/skills", skill === "plan" ? "lead" : "plan", "SKILL.md"),
+									`${skillText(skill === "plan" ? "lead" : "plan")}\n${text}\n`,
+								);
+						});
+						expect(got.code, `${check}: ${got.text}`).toBe(1);
+						expect(got.text).toContain(`${skill}/SKILL.md: ${check}`);
+					}
+				},
+			),
+			{seed: 321, numRuns: 10},
+		);
+	});
+
+	// scenario: each exact hand plant runs once on a disposable copy, which is then deleted.
+	it("scenario: kills the retired-clause and wrong-section plants", () => {
+		const dir = mkdtempSync(join(tmpdir(), "clause-plants-"));
+		try {
+			const source = readFileSync(script, "utf8");
+			for (const [plant, before, after] of [
+				["retired clause", "bad = []", 'bad = ["retired mechanical prose required"]'],
+				["wrong section", '.get(section, "")', '.get("", "")'],
+			] as const) {
+				expect(source).toContain(before);
+				const planted = join(dir, "skillscheck.sh");
+				writeFileSync(planted, source.replace(before, after));
+				const got = clauseTree((tree) => {
+					if (plant === "wrong section")
+						writeFileSync(
+							join(tree, ".agents/skills/lead/SKILL.md"),
+							`${skillText("lead", 0)}\n## Elsewhere\n${clauses[0][3]}\n`,
+						);
+				}, planted);
+				expect(got.code).toBe(plant === "retired clause" ? 1 : 0);
+				// The law expects the opposite result for this same input.
+				expect(() => expect(got.code).toBe(plant === "retired clause" ? 0 : 1)).toThrow();
+				rmSync(planted);
+			}
+		} finally {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 });

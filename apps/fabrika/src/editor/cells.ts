@@ -26,7 +26,7 @@ import {TABLE} from "./cells.table.ts";
 //     row. A character in the last cell leaves the cursor there, and the next one wraps first.
 
 /** A code point's grapheme class, as Ghostty's break rule sees it. */
-export const CLASSES = [
+const CLASSES = [
 	"other",
 	"L",
 	"V",
@@ -70,7 +70,7 @@ const unpack = (n: number): Facts => ({
 // U+10FFFF, in order.
 
 /** The runs of a table's text: where each starts, and its facts. */
-export const runsOf = (
+const runsOf = (
 	text: string,
 ): {readonly starts: readonly number[]; readonly facts: readonly Facts[]} => {
 	const starts: number[] = [];
@@ -170,7 +170,7 @@ const breaksAfter = (cluster: readonly number[], cp: number): boolean => {
  * How a cell sits in a wide character: `wide` holds it, `tail` is the second cell behind it, and
  * `head` is a row's last cell left blank because a wide character did not fit there.
  */
-export type Wide = "narrow" | "wide" | "tail" | "head";
+type Wide = "narrow" | "wide" | "tail" | "head";
 
 /** One cell: the code points drawn in it, none when blank, and its part in a wide character. */
 export interface Cell {

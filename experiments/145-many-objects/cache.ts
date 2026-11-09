@@ -32,7 +32,7 @@ const Held = Schema.Array(HeldSave);
 type Held = typeof Held.Type;
 
 /** Where a desk came from at a start. */
-export type Restored =
+type Restored =
 	| {readonly from: "server"; readonly desk: Saved | null}
 	| {
 			readonly from: "copy";

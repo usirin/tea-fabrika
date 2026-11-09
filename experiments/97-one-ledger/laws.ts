@@ -11,7 +11,7 @@
 import type {LedgerClient} from "./client.ts";
 import type {AppendResult, ClaimResult} from "./sql.ts";
 
-export type LawResult = {law: string; pass: boolean; numbers: string};
+type LawResult = {law: string; pass: boolean; numbers: string};
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let seq = 0;

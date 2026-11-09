@@ -96,7 +96,7 @@ interface Shape {
 	readonly holds?: boolean;
 }
 
-export const SHAPES: readonly Shape[] = [
+const SHAPES: readonly Shape[] = [
 	{
 		name: "1 named pipe",
 		list: "fifo",

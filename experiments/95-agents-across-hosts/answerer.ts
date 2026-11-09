@@ -20,7 +20,7 @@ import {type Row, sender, streams} from "./client.ts";
 import type {Serving} from "./serving.ts";
 import {lastStateOf, ledgerStore} from "./store.ts";
 
-export const AnswererState = Schema.Struct({
+const AnswererState = Schema.Struct({
 	cursor: Schema.Number,
 	answered: Schema.Number,
 	repeats: Schema.Number,
@@ -30,14 +30,14 @@ export const AnswererState = Schema.Struct({
 });
 
 /** One question as the program reads it: the send, and its place in the inbox. */
-export const Asked = Schema.Struct({
+const Asked = Schema.Struct({
 	id: Schema.String,
 	corr: Schema.String,
 	replyTo: Schema.String,
 	text: Schema.String,
 	rev: Schema.Int,
 });
-export type Asked = typeof Asked.Type;
+type Asked = typeof Asked.Type;
 const Sent = Schema.Struct({
 	id: Schema.String,
 	corr: Schema.String,
@@ -47,7 +47,7 @@ const Sent = Schema.Struct({
 const decodeSent = Schema.decodeUnknownExit(Schema.fromJsonString(Sent));
 
 /** What the answerer's host gives it: its journal, where failures with no caller go, how to reply, the answers on record. */
-export class Desk extends Context.Service<
+class Desk extends Context.Service<
 	Desk,
 	{
 		readonly store: ReturnType<typeof ledgerStore<Answerer>>;
@@ -60,7 +60,7 @@ export class Desk extends Context.Service<
 	}
 >()("exp95/Desk") {}
 
-export const answererProgram = defineProgram({
+const answererProgram = defineProgram({
 	name: "answerer",
 	description:
 		"Answers each question it is sent, once per message id: a retried call gets the answer on record, and the agent is not asked again.",

@@ -13,9 +13,9 @@ import {build} from "esbuild";
 const here = import.meta.dirname;
 const root = resolve(here, "../..");
 
-export const IMAGE = "exp154-box:local";
+const IMAGE = "exp154-box:local";
 
-export const buildBox = async () => {
+const buildBox = async () => {
 	const out = join(here, "box", "box.mjs");
 	await build({
 		entryPoints: [join(here, "box.ts")],

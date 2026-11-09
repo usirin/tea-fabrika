@@ -32,7 +32,7 @@ type Failed = {readonly _tag: "unknown"};
 const failed = Effect.fail<Failed>({_tag: "unknown"});
 
 /** What one scripted try bills. */
-export const TURN_USD = 0.1;
+const TURN_USD = 0.1;
 const TURN = Duration.millis(300);
 const spendOf = (usd: number): Spend => ({
 	costUsd: usd,
@@ -92,7 +92,7 @@ export const CASES: Record<Case, Seed> = {
 		body: "Bundling the font makes the package 400 KB bigger; not bundling it means a network fetch.",
 	},
 };
-export const caseOf = (number: number): Case | null =>
+const caseOf = (number: number): Case | null =>
 	(Object.entries(CASES).find(([, s]) => s.number === number)?.[0] as Case | undefined) ?? null;
 
 /** The plan for #8, as the `planned` fact the harness seeds for the fold case. */

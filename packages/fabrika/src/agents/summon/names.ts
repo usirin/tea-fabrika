@@ -29,8 +29,8 @@ export const Name = Schema.Struct({
 });
 export type Name = typeof Name.Type;
 
-export const Names = Schema.Struct({names: Schema.Array(Name)});
-export type Names = typeof Names.Type;
+const Names = Schema.Struct({names: Schema.Array(Name)});
+type Names = typeof Names.Type;
 
 type NamesMsg =
 	| {readonly type: "taken"; readonly name: Name}

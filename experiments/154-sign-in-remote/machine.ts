@@ -65,7 +65,7 @@ export const forget = Cmd.make("forget", {
 	err: ["unreachable"],
 });
 
-export const Why = Schema.Literals([
+const Why = Schema.Literals([
 	"done",
 	"denied",
 	"timed_out",
@@ -75,13 +75,13 @@ export const Why = Schema.Literals([
 	"refresh_refused",
 	"unreachable",
 ]);
-export type Why = typeof Why.Type;
+type Why = typeof Why.Type;
 
 /**
  * `round` counts the person's sign-ins for this box: 0 at the start, one more each time a pass
  * with no renewal key runs out and the person is asked again (way b). `turn` counts refreshes.
  */
-export type SignIn =
+type SignIn =
 	| {readonly at: "asking"; readonly round: number; readonly port: number | null}
 	| {
 			readonly at: "waiting";

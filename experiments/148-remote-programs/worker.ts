@@ -53,7 +53,7 @@ interface Env {
 }
 
 /** What the host writes as, on the project's ledger: PR 92's stamp, `agent:<id> for:<person>`. */
-export const stampOf = (who: string) => `agent:host for:${who}`;
+const stampOf = (who: string) => `agent:host for:${who}`;
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

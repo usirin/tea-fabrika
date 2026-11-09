@@ -17,7 +17,7 @@ import type {Entry, FactOf} from "@kampus/pipeline/tickets/ticket";
 // `upTo`, at `upTo`, as Elm's debugger replays a history.
 
 /** A step's end, as the ticket holds it. */
-export type Ended = FactOf<"ended">;
+type Ended = FactOf<"ended">;
 
 /**
  * A step's price, in four cases: a known price in dollars, a model with no known price, a step that
@@ -298,7 +298,7 @@ export const childrenOf = (
  * What the lane line and the ticket line say. `usd`: the sum of the `usd` rows, `null` when no row
  * has a known price, so nothing reads as $0.00. `waited`: ms of the wait rows.
  */
-export type Summary = {
+type Summary = {
 	readonly lanes: number;
 	readonly steps: number;
 	readonly waits: number;

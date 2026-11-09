@@ -19,7 +19,7 @@ type Via =
 
 declare const notChecked: unique symbol;
 /** A line the compiler did not read. Only `unchecked` makes one. */
-export type Unchecked = string & {readonly [notChecked]: true};
+type Unchecked = string & {readonly [notChecked]: true};
 
 /** Mark a line built at run time: the desk checks it when it opens, and may answer `bad_line`. */
 export const unchecked = (line: string): Unchecked => line as Unchecked;
@@ -28,7 +28,7 @@ export const unchecked = (line: string): Unchecked => line as Unchecked;
 type Literal<S extends string> = Record<never, never> extends Record<S, true> ? false : true;
 
 /** What `open` takes for a line: the line itself when it reads, else the reason, ArkType's way. */
-export type Checked<S extends string> = S extends Unchecked
+type Checked<S extends string> = S extends Unchecked
 	? S
 	: Literal<S> extends false
 		? "a line built at run time: pass it through unchecked(line)"
@@ -36,7 +36,7 @@ export type Checked<S extends string> = S extends Unchecked
 			? S
 			: Answer<S>;
 
-export interface Open<S extends string> {
+interface Open<S extends string> {
 	readonly line: Checked<S>;
 	readonly from: string;
 	readonly via: Via;

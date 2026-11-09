@@ -104,7 +104,7 @@ const startQueue = <E1, R1, E2, R2>(
 		return {told, drained: Queue.end(line).pipe(Effect.andThen(Fiber.join(worker)))};
 	});
 
-export const createSpikeShip = (machine = ship) =>
+const createSpikeShip = (machine = ship) =>
 	Program.make("ship", {
 		description:
 			"Puts pull requests in the merge queue, or merges them when the repository has no queue, one after another, as it is told them, and says how each one ended. In read mode it changes nothing, and says what it would do.",
@@ -187,4 +187,4 @@ export const createSpikeShip = (machine = ship) =>
 			}).pipe(Effect.scoped),
 	});
 
-export const spikeShip = createSpikeShip();
+const _spikeShip = createSpikeShip();

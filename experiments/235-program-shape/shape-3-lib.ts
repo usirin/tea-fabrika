@@ -33,7 +33,7 @@ type Fields = {
 };
 
 /** What one step returns: the next model and the Cmds to run. Both always written, as Elm does. */
-export type Next<S, C> = {readonly model: S; readonly cmds: ReadonlyArray<C>};
+type Next<S, C> = {readonly model: S; readonly cmds: ReadonlyArray<C>};
 
 /** What an input's step gets: its fields and the door's `parent`. Its name is its key. */
 type Got<F extends Fields> = Schema.Struct<F>["Type"] & {readonly parent: string};

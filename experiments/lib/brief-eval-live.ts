@@ -47,7 +47,7 @@ export interface Tree {
  * Files added to one case's copy (part 4: the pull requests open when the ticket was filed). The
  * copy is then the case's own: `key` names it beside the commit.
  */
-export interface Extra {
+interface Extra {
 	readonly key: string;
 	/** Path inside the copy, and its text. */
 	readonly files: Readonly<Record<string, string>>;

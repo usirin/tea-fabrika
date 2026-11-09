@@ -74,6 +74,8 @@ type Setup = {
 	};
 	sharedAdmin?: "catchup-900" | "driver";
 	unwalkable?: {worktree: "catchup-900" | "driver"; parts: string[]};
+	// In a gh stack: `gh pr merge` refuses, and the head read again is `moved` or not.
+	stack?: "none" | "same" | "moved";
 	// Seconds since the start, read by `date` after that many check reads (the last one repeats).
 	clock?: number[];
 };
@@ -98,7 +100,8 @@ const cmd = path.basename(process.argv[1]);
 const args = process.argv.slice(2);
 let key;
 if (cmd === "gh") {
-  if (args[0] === "pr" && args[1] === "view") key = "head";
+  if (args[0] === "pr" && args[1] === "view") key = args.includes("headRefOid") ? "oid" : "head";
+  else if (args[0] === "stack" && args[1] === "merge") key = "stack";
   else if (args[0] === "pr" && args[1] === "merge") key = "merge";
   else if (args[0] === "run" && args[1] === "view") key = "logs";
   else if (args[0] === "api" && args[1].includes("check_name=")) key = "apps";
@@ -119,6 +122,9 @@ if (cmd === "gh") {
     die("temporary " + key + " read failure");
   }
   if (key === "head") console.log(setup.branch);
+  if (key === "oid") console.log(setup.stack === "moved" ? "f".repeat(40) : process.env.CATCHUP_TIP);
+  if (key === "merge" && setup.stack && setup.stack !== "none")
+    die("This pull request is part of a stack and must be merged using the asynchronous merge REST API");
   if (key === "checks") {
     const pending = n - setup.failures[index] < setup.pending;
     for (const name of ["check", "e2e", "next", "commits"]) {
@@ -463,6 +469,23 @@ const run = (setup: Setup, args: string[] = []) => {
 			.filter(Boolean)
 			.map((line) => JSON.parse(line));
 		expect(existsSync(join(dir, "boxes/catchup.lock"))).toBe(false);
+		// Its own checkout is gone once the run passed the usage check, success or failure, unless it
+		// holds MAIN's Git storage, or MAIN cannot be read to tell: then a line says why it stayed.
+		if (calls.length > 0) {
+			const guarded =
+				/^kept worktree catchup-900: (holds MAIN Git storage|cannot read MAIN Git storage|MAIN, saved state or symlinked target|symlinked target)$/m.test(
+					ran.stdout,
+				);
+			expect(existsSync(join(dir, "boxes/catchup-900")), ran.stdout).toBe(guarded);
+			// A plain real MAIN, with no storage moved anywhere, never keeps it.
+			const planted =
+				setup.protected ??
+				setup.storage ??
+				setup.deepStorage ??
+				setup.sharedAdmin ??
+				setup.unwalkable;
+			if (setup.cleanup && planted === undefined) expect(guarded, ran.stdout).toBe(false);
+		}
 		const remaining = readdirSync(join(dir, "boxes"));
 		const keptHead = setup.cleanup
 			? spawnSync("/usr/bin/git", ["-C", dir, "rev-parse", "--verify", "refs/keep/pr/900"], {
@@ -755,38 +778,43 @@ describe("catchup, today's tooling", () => {
 		);
 	});
 
-	// Plants: always squash; omit the head pin; do work after invalid options.
-	it("T300 merge options choose exactly one method and keep the checked head", () => {
+	// Plants: merge without --squash; omit the head pin; do work after extra options; skip the head
+	// read before a stack merge; stack-merge a PR whose head moved.
+	it("T300 squash only, pinned to the checked head, and a stack lands by gh stack merge", () => {
 		fc.assert(
 			fc.property(
 				fc.record({
 					merge: fc.boolean(),
 					answer: fc.constantFrom<Setup["answer"]>("green", "red", "ticket"),
 					pending: fc.integer({min: 0, max: 1}),
-					invalid: fc.stringMatching(/^[a-z]{1,6}$/).filter((s) => s !== "merge" && s !== "squash"),
+					stack: fc.constantFrom<NonNullable<Setup["stack"]>>("none", "same", "moved"),
 				}),
-				({merge, answer: outcome, pending, invalid}) => {
+				({merge, answer: outcome, pending, stack}) => {
 					for (const answer of new Set<Setup["answer"]>(["green", outcome])) {
-						for (const method of [undefined, "squash", "merge", invalid, ""] as const) {
-							const args = method === undefined ? [] : ["--merge-method", method];
-							const got = run({...green, merge, answer, pending}, args);
-							const valid = method === undefined || method === "squash" || method === "merge";
-							expect(got.code, got.text).toBe(valid && answer === "green" ? 0 : 1);
-							if (!valid) expect(got.calls).toEqual([]);
-							const landed = merges(got.calls);
-							expect(landed).toHaveLength(valid && answer === "green" ? 1 : 0);
-							for (const call of landed) {
-								expect(call.args.filter((a) => a === "--merge" || a === "--squash")).toEqual([
-									`--${method ?? "squash"}`,
-								]);
-							}
-							assertHead(got.calls);
+						const got = run({...green, merge, answer, pending, stack});
+						const reached = answer === "green";
+						const lands = reached && stack !== "moved";
+						expect(got.code, got.text).toBe(lands ? 0 : 1);
+						const tried = merges(got.calls);
+						expect(tried).toHaveLength(reached ? 1 : 0);
+						for (const call of tried) {
+							expect(
+								call.args.filter((a) => a.startsWith("--") && a !== "--match-head-commit"),
+							).toEqual(["--squash"]);
 						}
+						const stacked = got.calls.filter((c) => c.key === "stack");
+						expect(stacked.map((c) => c.args)).toEqual(
+							reached && stack === "same" ? [["stack", "merge", "900", "--squash", "--yes"]] : [],
+						);
+						expect(got.calls.filter((c) => c.key === "oid")).toHaveLength(
+							reached && stack !== "none" ? 1 : 0,
+						);
+						assertHead(got.calls);
 					}
 					for (const args of [
-						["--merge-method"],
-						["--unknown", "merge"],
-						["--merge-method", "merge", "extra"],
+						["--merge-method", "squash"],
+						["--merge-method", "merge"],
+						["--unknown"],
 					]) {
 						const got = run(green, args);
 						expect(got.code, got.text).toBe(1);
@@ -910,22 +938,20 @@ describe("catchup, today's tooling", () => {
 							...patch,
 						});
 						expect(got.code, got.text).toBe(1);
-						for (const path of [
-							"exact box",
-							"exact box-gitdata",
-							"later box",
-							"catchup-900",
-							"driver",
-							"sibling",
-						])
+						for (const path of ["exact box", "exact box-gitdata", "later box", "driver", "sibling"])
 							expect(got.remaining).toContain(path);
+						// The catch-up checkout holds nothing of MAIN's, so the EXIT trap force-removes it.
+						expect(got.remaining).not.toContain("catchup-900");
 						expect(got.keptHead).toBe("");
-						expect(
-							got.calls.filter(
-								(c) =>
-									c.cmd === "git" && (c.args.includes("remove") || c.args.includes("update-ref")),
-							),
-						).toEqual([]);
+						const touched = got.calls.filter(
+							(c) =>
+								c.cmd === "git" && (c.args.includes("remove") || c.args.includes("update-ref")),
+						);
+						expect(touched).toHaveLength(1);
+						for (const call of touched) {
+							expect(call.args).toContain("--force");
+							expect(call.args.at(-1)).toMatch(/\/catchup-900$/);
+						}
 					}
 					// Positive case keeps this law red until cleanup exists; absence alone is insufficient.
 					const landed = run({...green, branch: `fabrikalfa/cleanup-${suffix}`, cleanup: "clean"});
@@ -944,50 +970,48 @@ describe("catchup, today's tooling", () => {
 	// Plants: match a branch prefix, omit refs/keep, or leave the catch-up/driver checkout registered.
 	it("T318 cleanup retains the checked head and removes only exact branch boxes and registered worktrees", () => {
 		fc.assert(
-			fc.property(
-				fc.record({
-					suffix: fc.stringMatching(/^[a-z]{2,8}$/),
-					method: fc.constantFrom("merge", "squash"),
-				}),
-				({suffix, method}) => {
-					const got = run({...green, branch: `fabrikalfa/${suffix}`, cleanup: "clean"}, [
-						"--merge-method",
-						method,
-					]);
-					expect(got.code, got.text).toBe(0);
-					expect(got.keptHead).toBe(got.checkedTip);
-					for (const path of [
-						"exact box",
-						"exact box-gitdata",
-						"later box",
-						"later box-gitdata",
-						"catchup-900",
-						"driver",
-					])
-						expect(got.remaining).not.toContain(path);
-					for (const path of ["sibling box", "sibling box-gitdata", "sibling", "state"])
-						expect(got.remaining).toContain(path);
-					expect(got.state).toBe("saved wait");
-					const removes = got.calls.filter(
-						(c) => c.cmd === "git" && c.args.includes("worktree") && c.args.includes("remove"),
-					);
-					expect(removes).toHaveLength(2);
-					for (const call of removes) expect(call.args).not.toContain("--force");
-					expect(
-						got.calls.some(
-							(c) =>
-								c.cmd === "git" &&
-								c.args.includes("list") &&
-								c.args.includes("--porcelain") &&
-								c.args.includes("-z"),
-						),
-					).toBe(true);
-					const keepAt = got.calls.findIndex((c) => c.args.includes("refs/keep/pr/900"));
-					const firstRemove = got.calls.findIndex((c) => c.args.includes("remove"));
-					expect(keepAt).toBeGreaterThan(-1);
-					expect(keepAt).toBeLessThan(firstRemove);
-				},
-			),
+			fc.property(fc.record({suffix: fc.stringMatching(/^[a-z]{2,8}$/)}), ({suffix}) => {
+				// Every PR squash-merges (0004), so the run takes no merge method.
+				const got = run({...green, branch: `fabrikalfa/${suffix}`, cleanup: "clean"});
+				expect(got.code, got.text).toBe(0);
+				expect(got.keptHead).toBe(got.checkedTip);
+				for (const path of [
+					"exact box",
+					"exact box-gitdata",
+					"later box",
+					"later box-gitdata",
+					"catchup-900",
+					"driver",
+				])
+					expect(got.remaining).not.toContain(path);
+				for (const path of ["sibling box", "sibling box-gitdata", "sibling", "state"])
+					expect(got.remaining).toContain(path);
+				expect(got.state).toBe("saved wait");
+				const removes = got.calls.filter(
+					(c) => c.cmd === "git" && c.args.includes("worktree") && c.args.includes("remove"),
+				);
+				// The driver goes only when Git agrees; the catch-up checkout is forced, last, by EXIT.
+				expect(removes).toHaveLength(2);
+				expect(
+					removes.map((c) => [c.args.at(-1)?.split("/").at(-1), c.args.includes("--force")]),
+				).toEqual([
+					["driver", false],
+					["catchup-900", true],
+				]);
+				expect(
+					got.calls.some(
+						(c) =>
+							c.cmd === "git" &&
+							c.args.includes("list") &&
+							c.args.includes("--porcelain") &&
+							c.args.includes("-z"),
+					),
+				).toBe(true);
+				const keepAt = got.calls.findIndex((c) => c.args.includes("refs/keep/pr/900"));
+				const firstRemove = got.calls.findIndex((c) => c.args.includes("remove"));
+				expect(keepAt).toBeGreaterThan(-1);
+				expect(keepAt).toBeLessThan(firstRemove);
+			}),
 			{seed: 3192, numRuns: 3},
 		);
 	});
@@ -1030,22 +1054,22 @@ describe("catchup, today's tooling", () => {
 					expect(merges(got.calls)).toHaveLength(1);
 					expect(got.state).toBe("saved wait");
 					const has = (path: string) => got.remaining.includes(path);
+					// The catch-up checkout holds nothing of MAIN's here, so whatever the trouble, EXIT
+					// force-removes it; only the branch's other worktrees and boxes wait on the trouble.
+					expect(has("catchup-900")).toBe(false);
 					if (trouble === "list") {
 						expect(got.text).toMatch(/^kept worktrees: [^\n]+$/m);
 						expect(got.keptHead).toBe(got.checkedTip);
-						for (const path of ["catchup-900", "driver", "sibling"]) expect(has(path)).toBe(true);
+						for (const path of ["driver", "sibling"]) expect(has(path)).toBe(true);
 						for (const path of ["exact box", "later box"]) expect(has(path)).toBe(false);
 					}
 					if (trouble === "keep") {
 						expect(got.keptHead).toBe("");
-						expect(got.text).toMatch(/^kept worktree catchup-900: [^\n]+$/m);
+						expect(got.text).toMatch(/^kept worktree driver: [^\n]+$/m);
 						expect(got.text).toMatch(/^kept box exact box: [^\n]+$/m);
-						for (const path of ["catchup-900", "driver", "exact box", "later box"])
-							expect(has(path)).toBe(true);
+						for (const path of ["driver", "exact box", "later box"]) expect(has(path)).toBe(true);
 					}
 					if (trouble === "unregistered") {
-						expect(got.text).toMatch(/^kept worktree catchup-900: [^\n]+$/m);
-						expect(has("catchup-900")).toBe(true);
 						for (const path of ["driver", "exact box", "later box"]) expect(has(path)).toBe(false);
 					}
 					if (trouble === "twins") {

@@ -46,12 +46,12 @@ import {issueUrl, REPO, type Seed} from "./fake.ts";
 type Failed = {readonly _tag: "unknown"};
 const failed = Effect.fail<Failed>({_tag: "unknown"});
 
-export const SCENARIOS = ["A", "B", "C"] as const;
-export type Scenario = (typeof SCENARIOS)[number];
+const SCENARIOS = ["A", "B", "C"] as const;
+type Scenario = (typeof SCENARIOS)[number];
 const scenario = (): Scenario => (process.env.SCENARIO ?? "C") as Scenario;
 
 /** What one scripted turn bills. */
-export const TURN_USD = 0.1;
+const TURN_USD = 0.1;
 const TURN = Duration.millis(300);
 const spendOf = (usd: number): Spend => ({
 	costUsd: usd,
@@ -73,7 +73,7 @@ const git = (args: readonly string[], cwd: string) =>
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 /** The lockfile made again from the manifests, from nothing but the workspace: no network. */
-export const relock = (tree: string) =>
+const relock = (tree: string) =>
 	execFileSync("pnpm", ["install", "--lockfile-only", "--offline", "--ignore-scripts"], {
 		cwd: tree,
 		encoding: "utf8",
@@ -251,7 +251,7 @@ const BRACES = claim(
 );
 
 /** #700's plan as demlik built it: three tasks and a goal. `folded`: version 2, with #707 in. */
-export const planDraft = (folded: boolean): PlanDraft => ({
+const planDraft = (folded: boolean): PlanDraft => ({
 	summary:
 		"structure-sweep move apply moves files into another workspace package: it refuses such a move first, then writes the imports through the target's exports and adds the workspace dependency.",
 	stories: [

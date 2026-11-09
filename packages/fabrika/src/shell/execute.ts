@@ -113,13 +113,13 @@ const stopIfAsked = (stop: JobStop, runs: readonly AnyRunning[]) =>
 		: Effect.void;
 
 /** How a line ended, as a shell's exit status, and the values a `$( )` took. */
-export interface Done {
+interface Done {
 	readonly status: number;
 	readonly values: readonly unknown[];
 }
 
 /** How a line is run. `capture`: a `$( )`; the values its last stage sends on `output` are taken, not printed. */
-export type Mode =
+type Mode =
 	| {readonly kind: "foreground"; readonly typed: string}
 	| {readonly kind: "background"; readonly typed: string}
 	| {readonly kind: "capture"; readonly output: string};
@@ -198,7 +198,7 @@ const isRefusal = (failure: unknown): boolean => {
  * refuses: older code saved it. Its program declared the failure or died of
  * it; either way the run never booted that machine, and wrote nothing over it.
  */
-export const refusedEnd = (ended: Ended<unknown>): boolean =>
+const refusedEnd = (ended: Ended<unknown>): boolean =>
 	ended.kind === "failed" &&
 	ended.cause.reasons.some((reason) =>
 		Cause.isFailReason(reason)
@@ -219,7 +219,7 @@ const whyOf = (ended: Ended<unknown>): string => {
  * A declared failure in words: its `message` when it has one, else its tag
  * with the underscores as spaces (`read_failed`: read failed), else as JSON.
  */
-export const inWords = (failure: unknown): string => {
+const inWords = (failure: unknown): string => {
 	if (typeof failure !== "object" || failure === null) return show(failure);
 	const {message, _tag} = failure as {readonly message?: unknown; readonly _tag?: unknown};
 	if (typeof message === "string" && message !== "") return message;
@@ -595,7 +595,7 @@ const sayJobEnd = (
 	});
 
 /** What a run left on its inputs' lines, in words: `5 told on n never read`. `null`: it read all it was told. */
-export const unreadWords = (unread: Unread): string | null => {
+const unreadWords = (unread: Unread): string | null => {
 	const left = Object.entries(unread).map(([input, n]) => `${n} told on ${input}`);
 	return left.length === 0 ? null : `${left.join(", ")} never read`;
 };

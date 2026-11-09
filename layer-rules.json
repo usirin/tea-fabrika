@@ -29,6 +29,10 @@
 			"paths": ["next/packages/tuval/src/desktop"]
 		},
 		{
+			"name": "next-libfabrika-entry",
+			"paths": ["next/packages/libfabrika/src/index.ts"]
+		},
+		{
 			"name": "next-mcp",
 			"paths": ["next/packages/libfabrika/src/mcp"]
 		},
@@ -38,7 +42,7 @@
 		},
 		{
 			"name": "next-app",
-			"paths": ["next/packages/libfabrika/src/app"]
+			"paths": ["next/packages/libfabrika/src/app", "next/packages/libfabrika/src/testing.ts"]
 		},
 		{
 			"name": "next-coordination",
@@ -53,6 +57,14 @@
 			"paths": ["next/packages/libfabrika/src/transport"]
 		},
 		{
+			"name": "next-id-test-support",
+			"paths": ["next/packages/libfabrika/src/id.test-support.ts"]
+		},
+		{
+			"name": "next-id",
+			"paths": ["next/packages/libfabrika/src/id.ts"]
+		},
+		{
 			"name": "apps",
 			"paths": ["apps"]
 		},
@@ -62,18 +74,6 @@
 				"packages/pipeline/src/laws/explore.ts",
 				"packages/pipeline/src/laws/world/search.ts"
 			]
-		},
-		{
-			"name": "packs",
-			"paths": ["packs"]
-		},
-		{
-			"name": "legacy",
-			"paths": ["legacy"]
-		},
-		{
-			"name": "wip",
-			"paths": ["wip"]
 		},
 		{
 			"name": "programs",

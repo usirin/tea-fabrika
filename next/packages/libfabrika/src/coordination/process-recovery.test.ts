@@ -7,6 +7,7 @@ import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {Ledger} from "../data/ledger.ts";
 import {lineFor, valueFor} from "../data/log.ts";
+import {fcProcessIds} from "../id.test-support.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
 	A,
@@ -37,7 +38,7 @@ const deadInput = {
 // Keep the older authority law exercising an already-tagged caller, which is still valid input.
 const dead = Dead.make({process: A, program: "counter", name: "counter:1", ...deadInput});
 
-const processId = fc.stringMatching(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+const processId = fcProcessIds;
 const text = fc.string({minLength: 1, maxLength: 256});
 const name = fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/);
 const input = fc

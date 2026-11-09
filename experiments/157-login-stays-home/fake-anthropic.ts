@@ -15,7 +15,7 @@ import {createServer, type IncomingMessage, type ServerResponse} from "node:http
 import type {AddressInfo} from "node:net";
 import {TOOL_PRINTS} from "./fake-openai.ts";
 
-export interface ClaudeCall {
+interface ClaudeCall {
 	readonly who: string | null;
 	readonly why: "ok" | "no_bearer" | "unknown" | "no_oauth_beta";
 	readonly run: string | null;
@@ -35,7 +35,7 @@ export interface FakeAnthropic {
 }
 
 /** The one tool call: Bash runs the same check as Codex's, in the box's copy. */
-export const BASH = `node -e "import('./bytes.js').then((m) => console.log('formatBytes(2048) =', m.formatBytes(2048)))"`;
+const BASH = `node -e "import('./bytes.js').then((m) => console.log('formatBytes(2048) =', m.formatBytes(2048)))"`;
 
 let ids = 0;
 

@@ -6,13 +6,13 @@ import {runChild} from "@kampus/pipeline/child";
 import {SpecState, type Step} from "@kampus/pipeline/hosted/lane-trace";
 import {Effect, FileSystem, Path, Schema} from "effect";
 
-export const SPECS = import.meta.dirname;
+const SPECS = import.meta.dirname;
 const HERE = SPECS.slice(0, SPECS.lastIndexOf("/"));
 /** 116's spec, as it was written: TraceV1 checks the runs against it. */
 const V1 = `${HERE}/116-established-checkers/HostedLane.tla`;
 
 /** A JS value as a TLA+ one: strings, whole numbers, booleans, arrays and records. */
-export const tla = (v: unknown): string => {
+const tla = (v: unknown): string => {
 	if (typeof v === "string") return JSON.stringify(v);
 	if (typeof v === "number" && Number.isInteger(v)) return String(v);
 	if (typeof v === "boolean") return v ? "TRUE" : "FALSE";
@@ -25,7 +25,7 @@ export const tla = (v: unknown): string => {
 };
 
 /** The two trace specs: 139's v2, and 116's spec as written (rows have no kind there). */
-export type Against = "v2" | "v1";
+type Against = "v2" | "v1";
 
 const forSpec = (against: Against, s: SpecState) =>
 	against === "v2" ? s : {...s, row: s.row.map((r) => r !== "none")};
@@ -46,7 +46,7 @@ const dataModule = (name: string, against: Against, runs: readonly (readonly Ste
 	].join("\n");
 
 /** How TLC ended and what it printed, with the wall time. */
-export interface Ran {
+interface Ran {
 	readonly code: number;
 	readonly out: string;
 	readonly ms: number;
@@ -86,7 +86,7 @@ const workDir = Effect.gen(function* () {
 });
 
 /** One run's verdict: accepted, or the first event TLC could not match (`at`, 0 first; `rest`). */
-export interface Verdict {
+interface Verdict {
 	readonly accepted: boolean;
 	/** The first event no behaviour of the spec matched; its length: the end, not at rest. */
 	readonly at: number;

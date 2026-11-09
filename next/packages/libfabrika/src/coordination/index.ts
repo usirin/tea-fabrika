@@ -41,7 +41,7 @@ export {
 	State,
 } from "./process.ts";
 export {Appended, ParentText, Rev} from "../data/log.ts";
-export {InputId} from "../data/id.ts";
+export {InputId} from "../id.ts";
 export {LedgerError} from "../data/ledger.ts";
 export {type Sql} from "../data/referee.ts";
 export {Archive, sha256} from "../data/archive.ts";

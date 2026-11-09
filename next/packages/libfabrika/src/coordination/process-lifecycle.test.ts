@@ -5,6 +5,7 @@ import * as fc from "fast-check";
 import {Ledger} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
 import {ProcessId} from "../data/trace.ts";
+import {fcProcessIds} from "../id.test-support.ts";
 import {ProcessIdGenerator} from "./process-id.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
@@ -61,16 +62,13 @@ const hash = fc.string({minLength: 1, maxLength: 256});
 describe("P33, saved state and process authority", () => {
 	it("a process owner requires its valid process id", () => {
 		fc.assert(
-			fc.property(
-				fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
-				(process) => {
-					expect(Schema.is(Owner)({_tag: "process"}), "missing process owner id").toBe(false);
-					expect(Schema.decodeUnknownSync(Owner)({_tag: "process", process})).toEqual({
-						_tag: "process",
-						process,
-					});
-				},
-			),
+			fc.property(fcProcessIds, (process) => {
+				expect(Schema.is(Owner)({_tag: "process"}), "missing process owner id").toBe(false);
+				expect(Schema.decodeUnknownSync(Owner)({_tag: "process", process})).toEqual({
+					_tag: "process",
+					process,
+				});
+			}),
 			{seed: 119120, numRuns: 100},
 		);
 	});
@@ -81,7 +79,7 @@ describe("P33, saved state and process authority", () => {
 				hash,
 				hash,
 				fc.record({
-					process: fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
+					process: fcProcessIds,
 					program: hash,
 					name: fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/),
 				}),
@@ -105,16 +103,13 @@ describe("P33, saved state and process authority", () => {
 	});
 	it("an idle saved marker recovers as idle with the same process", () => {
 		fc.assert(
-			fc.property(
-				fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
-				(process) => {
-					const idle = Activity.cases.idle.make({process});
-					expect(() => recoverActivity(idle)).not.toThrow();
-					const recovered = recoverActivity(idle);
-					expect(recovered._tag).toBe("Success");
-					if (recovered._tag === "Success") expect(recovered.success).toEqual(idle);
-				},
-			),
+			fc.property(fcProcessIds, (process) => {
+				const idle = Activity.cases.idle.make({process});
+				expect(() => recoverActivity(idle)).not.toThrow();
+				const recovered = recoverActivity(idle);
+				expect(recovered._tag).toBe("Success");
+				if (recovered._tag === "Success") expect(recovered.success).toEqual(idle);
+			}),
 			{seed: 119120, numRuns: 100},
 		);
 	});

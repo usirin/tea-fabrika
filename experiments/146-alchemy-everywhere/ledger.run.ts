@@ -14,7 +14,7 @@ import * as Provider from "alchemy/Provider";
 import {Resource} from "alchemy/Resource";
 import {Config, Effect, Layer} from "effect";
 
-export type Name = Resource<
+type Name = Resource<
 	"Fabrika.Name",
 	{readonly stream: string; readonly writer: string},
 	{
@@ -24,9 +24,9 @@ export type Name = Resource<
 		readonly events: number;
 	}
 >;
-export const Name = Resource<Name>("Fabrika.Name");
+const Name = Resource<Name>("Fabrika.Name");
 
-export const NameProvider = () =>
+const NameProvider = () =>
 	Provider.effect(
 		Name,
 		Effect.gen(function* () {

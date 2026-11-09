@@ -23,7 +23,7 @@ import {hostId, pkce, randomValue} from "./pkce.ts";
 import {seal} from "./seal.ts";
 import {type Auth, boxName, personName, redirectOf, SIWC, type ToBox, ToPerson} from "./wire.ts";
 
-export interface LenderOptions {
+interface LenderOptions {
 	readonly who: string;
 	readonly auth: Auth;
 	/** Opens the sign-in page: a browser on the laptop, or the fake person in a test. */
@@ -74,7 +74,7 @@ const keep = (t: typeof TokenAnswer.Type, client: string): Session => ({
 });
 
 /** The person's own session: one sign-in, then refreshes, one at a time. */
-export const makeSession = (o: LenderOptions) => {
+const makeSession = (o: LenderOptions) => {
 	// Stable for this app on this machine, as the sign-in page asks of ext_agent_host_id.
 	const host = hostId();
 	let session: Session | null = null;
