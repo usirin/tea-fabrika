@@ -53,6 +53,9 @@ const sample = {
 	id: "write-a",
 	kinds: ["saved", "commented"],
 };
+// T540 regression: write-b collided with the refusal law's fixed second id.
+// The retry/wake law also checks that two write-b calls return the same receipt.
+const sessionExamples = [sample, {...sample, id: "write-b"}];
 // Size covers the whole pattern: 14 characters of SHA256:person- plus
 // the old 1..40 suffix, not just one suffix character at the default size.
 const sessionOptions = {arbitrary: {seed: 119120, runs: 20, size: 54}};
@@ -153,6 +156,7 @@ const setup = ({
 			Effect.provideService(C.SignRequest, {id: writeId}),
 		);
 	return {
+		secondId: `${id}-second`,
 		PROCESS,
 		OTHER_PROCESS,
 		START,
@@ -174,7 +178,11 @@ const authorityProperty = (
 	it.effect.prop(
 		name,
 		[sessionArb],
-		([value]) => Effect.andThen(law(setup(sample)), law(setup(value))),
+		([value]) =>
+			Effect.forEach([...sessionExamples, value], (example) => law(setup(example)), {
+				concurrency: 1,
+				discard: true,
+			}),
 		sessionOptions,
 	);
 const snapshot = (db: DatabaseSync) =>
@@ -314,7 +322,7 @@ describe("P10 saved signing authority", () => {
 	for (const why of ["not_delivered", "spent", "person_only", "ended"] as const)
 		authorityProperty(
 			`question 16: ${why} is distinct and changes no saved rows`,
-			({saved, parent, signer, authority, PROCESS}) =>
+			({saved, parent, signer, authority, PROCESS, secondId}) =>
 				Effect.gen(function* () {
 					const {sql, db} = database();
 					yield* Effect.gen(function* () {
@@ -324,7 +332,7 @@ describe("P10 saved signing authority", () => {
 						if (why === "spent") yield* signer();
 						if (why === "ended") yield* s.end(PROCESS);
 						const before = snapshot(db);
-						const error = yield* Effect.flip(signer("write-b"));
+						const error = yield* Effect.flip(signer(secondId));
 						expect(error).toMatchObject({_tag: "SigningRefused", why});
 						expect(snapshot(db)).toBe(before);
 					}).pipe(Effect.provide(authority(sql)));
