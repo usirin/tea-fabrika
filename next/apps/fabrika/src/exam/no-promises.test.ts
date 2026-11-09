@@ -4,8 +4,8 @@ import {dirname, join} from "node:path";
 import * as fc from "fast-check";
 import {API} from "typescript/unstable/sync";
 // `no-promises` (exam item 1): every Promise shape fires in next/, Effect's own Promise calls with
-// them, and the Effect ones pass. A line passes only under an edge comment, which covers that one
-// line (Tier 1, P35).
+// them, and the Effect ones pass. The typed check follows a marked statement through wrapping.
+// Oxlint's syntax-only plants still check physical lines (Tier 1, P35).
 import {describe, expect, it} from "vitest";
 import {plant} from "./plant.ts";
 import {checkPromiseTypes} from "./promise-types.ts";
@@ -41,6 +41,31 @@ const typed = (files: Readonly<Record<string, string>>) => {
 		rmSync(root, {recursive: true, force: true});
 	}
 };
+
+const wrappedEdge = (method: string, rule: string, indent: string) =>
+	[
+		"declare const platform: {read(): Promise<number>};",
+		"declare const Effect: {",
+		"  tryPromise(options: {try: () => Promise<number>; catch: () => Error}): number;",
+		"  runPromise(value: number): Promise<number>;",
+		"};",
+		`// oxlint-disable-next-line ${rule} -- edge: the platform call enters or leaves Effect`,
+		`export const edge = Effect.${method}(`,
+		...(method === "runPromise" ? [`${indent}Effect.tryPromise(`] : []),
+		`${indent}{`,
+		`${indent}  try: () =>`,
+		`${indent}    platform.read(),`,
+		`${indent}  catch: () => new Error("platform"),`,
+		`${indent}}`,
+		...(method === "runPromise" ? [`${indent})`] : []),
+		");",
+	].join("\n");
+
+const markedEdge = fc.tuple(
+	fc.constantFrom("tryPromise", "runPromise"),
+	fc.constantFrom("fabrika/no-promises", "fabrika/no-effect-run-outside-edge"),
+	fc.constantFrom(" ", "  ", "\t"),
+);
 
 const fires = [
 	'import {Effect, Schema, Stream} from "effect";', // 1
@@ -88,7 +113,7 @@ const passes = [
 	"export const f = other.promise() + other.tryPromise();",
 ].join("\n");
 
-// The edge comment covers the next line and only that line.
+// Oxlint's syntax-only edge comment covers the next physical line.
 const edges = [
 	'import {Effect} from "effect";', // 1
 	"declare const p: Promise<number>;", // 2
@@ -107,6 +132,33 @@ const edges = [
 ].join("\n");
 
 describe("no-promises", () => {
+	it("covers Promise findings throughout a wrapped marked statement", () => {
+		fc.assert(
+			fc.property(markedEdge, ([method, rule, indent]) => {
+				expect(typed({"next/wrapped.ts": wrappedEdge(method, rule, indent)})).toEqual([]);
+			}),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// P12 door-nonce: importKey starts two lines below the marked tryPromise.
+				examples: [[["tryPromise", "fabrika/no-promises", "\t"]]],
+			},
+		);
+	});
+	it("refuses the unmarked statement immediately after a wrapped marked statement", () => {
+		fc.assert(
+			fc.property(markedEdge, fc.boolean(), ([method, rule, indent], sameLine) => {
+				const file = "next/wrapped.ts";
+				const before = wrappedEdge(method, rule, indent);
+				const line = before.split("\n").length + (sameLine ? 0 : 1);
+				const source = `${before}${sameLine ? " " : "\n"}platform.read();`;
+				expect(typed({[file]: source}).map((f) => ({file: f.file, line: f.line}))).toEqual([
+					{file, line},
+				]);
+			}),
+			{seed: 119120, numRuns: 12},
+		);
+	});
 	it("pinned: the P12 storage-method gap refuses unmarked returned Promises", () => {
 		const file = "next/apps/fabrika/src/storage-method.ts";
 		const findings = typed({
@@ -119,7 +171,7 @@ describe("no-promises", () => {
 		});
 		expect(findings.filter((f) => f.file === file).map((f) => f.line)).toContain(3);
 	});
-	it("refuses Promise values, inferred returns, imported aliases and thunks outside one marked line", () => {
+	it("refuses Promise values, inferred returns, imported aliases and thunks outside one marked statement", () => {
 		fc.assert(
 			fc.property(fc.stringMatching(/^[a-z]{1,8}$/), (suffix) => {
 				const file = `next/case-${suffix}.ts`;
@@ -139,7 +191,7 @@ describe("no-promises", () => {
 						"// oxlint-disable-next-line fabrika/no-promises -- edge: platform read enters Effect",
 						"const edge = () => platform.read();",
 						"const afterEdge = () => platform.read();",
-						"// oxlint-disable-next-line fabrika/no-promises -- edge: covers only the next line",
+						"// oxlint-disable-next-line fabrika/no-promises -- edge: covers the wrapped statement",
 						"const twoLines = () => {",
 						"  return platform.read();",
 						"};",
@@ -158,7 +210,7 @@ describe("no-promises", () => {
 					"packages/today.ts": "declare const p: Promise<number>; export const f = () => p;",
 				});
 				expect(findings.filter((f) => f.file === file).map((f) => f.line)).toEqual([
-					3, 4, 5, 6, 7, 8, 9, 12, 15,
+					3, 4, 5, 6, 7, 8, 9, 12,
 				]);
 				expect(findings.filter((f) => f.file !== file)).toEqual([]);
 			}),
