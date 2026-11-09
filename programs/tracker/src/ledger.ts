@@ -13,7 +13,9 @@ import {AREAS, type AreaEntry, areasOf, readAreaRow} from "@kampus/pipeline/tick
 import {questionLine, sealAsk} from "@kampus/pipeline/tickets/ask";
 import {askedFor, askedStep, LaneStep} from "@kampus/pipeline/tickets/steps";
 import {
+	type AnswerRefusal,
 	type Entry,
+	alreadyAnswered,
 	answerRefused,
 	closedAsks,
 	factsOf,
@@ -219,11 +221,11 @@ const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
 					// The same pick again is one answer: a retry, or a second click. Another pick lost the race.
 					const won = readAnswer(timeline, landed)?.pick;
 					if (won === undefined || won === readAnswer(timeline, fact)?.pick) return {ticket};
-					return yield* Effect.fail(refusal(`Already answered: ${won}`));
+					return yield* Effect.fail(refusal(alreadyAnswered(won)));
 				}
 				const now = yield* Clock.currentTimeMillis;
 				const ask = factsOf(timeline, "asked").find((a) => a.ask === fact.ask);
-				const why =
+				const why: AnswerRefusal | null =
 					"format" in fact
 						? answerRefused(timeline, fact, now)
 						: ask === undefined
@@ -249,7 +251,9 @@ const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
 					);
 				if (wrote) return {ticket};
 			}
-			return yield* Effect.fail(refusal("The question kept changing. Try again."));
+			return yield* Effect.fail(
+				refusal("The question kept changing. Try again." satisfies AnswerRefusal),
+			);
 		}
 		// A comment names the run live as it is written, read off the ticket's own facts.
 		const data =

@@ -9,14 +9,17 @@ import {
 	type AskCommand,
 	type Shows,
 } from "@kampus/pipeline/tickets/ask";
+import {isAnswerRefusal} from "@kampus/pipeline/tickets/ticket";
 import {Button, Kbd, Textarea} from "@manti-ui/react";
 import {Effect, Fiber, Layer, ManagedRuntime, Schema} from "effect";
 import {
 	createContext,
 	type KeyboardEvent,
 	type ReactNode,
+	type Ref,
 	useContext,
 	useEffect,
+	useImperativeHandle,
 	useRef,
 	useState,
 } from "react";
@@ -581,19 +584,45 @@ const MARKS = [
  */
 export type AskPlace = "ticket" | "tracker" | "menu";
 
-/** A failed save in a person's words: what happened, and that nothing is lost. Never the store's. */
+/**
+ * A failed save in a person's words: what happened, and that nothing is lost. The answer path's own
+ * refusals already say what changed, so they stand as they are; a store's or a transport's words
+ * never show.
+ */
 const failureWords = (why: string): string =>
-	/locked|busy|SQLITE/i.test(why)
-		? "The ledger was busy, so nothing was saved. Your answer is kept."
-		: /disconnect|host/i.test(why)
-			? "fabrika's host is not connected, so nothing was saved. Your answer is kept."
-			: "Nothing was saved. Your answer is kept.";
+	isAnswerRefusal(why)
+		? why
+		: /locked|busy|SQLITE/i.test(why)
+			? "The ledger was busy, so nothing was saved. Your answer is kept."
+			: /disconnect|host/i.test(why)
+				? "fabrika's host is not connected, so nothing was saved. Your answer is kept."
+				: "Nothing was saved. Your answer is kept.";
+
+/** One key press, as a view reads it: a React event, its own or one a place passes on. */
+type KeyPress = Pick<
+	KeyboardEvent,
+	| "key"
+	| "ctrlKey"
+	| "altKey"
+	| "metaKey"
+	| "repeat"
+	| "target"
+	| "preventDefault"
+	| "stopPropagation"
+>;
+/**
+ * What a place that holds the focus for a view can do with it: pass on a key pressed there, as if
+ * pressed on the view. `true`: the view took the key. The asks menu's grid holds the focus while
+ * its selected row's view is drawn, so its answer keys still work from the menu's first focus.
+ */
+export type AskKeys = {readonly press: (e: KeyPress) => boolean};
 
 export function AskView({
 	ticket,
 	ask,
 	place = "ticket",
 	acts,
+	keys: handle,
 }: {
 	readonly ticket: number;
 	readonly ask: AskShown;
@@ -604,6 +633,8 @@ export function AskView({
 	 * the toolbar keeps one tab stop, and its arrows reach them.
 	 */
 	readonly acts?: ReactNode;
+	/** Set by a place that holds the focus for the view, to pass its key presses on (`AskKeys`). */
+	readonly keys?: Ref<AskKeys>;
 }) {
 	const actions = useContext(AskActions);
 	const says = useContext(Says);
@@ -681,7 +712,11 @@ export function AskView({
 	}, [failing]);
 	const command = (name: AskCommand["_tag"], key = "click") =>
 		send({...ASK_COMMANDS[name].send, key, now: Date.now()});
-	const onKey = (e: KeyboardEvent) => {
+	/**
+	 * One key press on the view, or passed on to it (`passed`), where its own surface is the place's
+	 * and its focus stays there. `true`: the view took it. In the menu, Later is the menu's own key.
+	 */
+	const onKey = (e: KeyPress, passed = false): boolean => {
 		const typing =
 			e.target instanceof HTMLInputElement ||
 			e.target instanceof HTMLTextAreaElement ||
@@ -690,10 +725,10 @@ export function AskView({
 			e.preventDefault();
 			e.stopPropagation();
 			send({type: "escape"});
-			root.current?.focus();
-			return;
+			if (!passed) root.current?.focus();
+			return true;
 		}
-		if (typing || actions?.blocked()) return;
+		if (typing || actions?.blocked()) return false;
 		const binding = actions?.command(
 			{key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey},
 			typing,
@@ -704,15 +739,15 @@ export function AskView({
 						(name) => !e.ctrlKey && !e.metaKey && !e.altKey && ASK_COMMANDS[name].keys === e.key,
 					)
 				: binding?.value._tag;
-		if (name !== undefined) {
+		if (name !== undefined && !(place === "menu" && name === "later")) {
 			e.preventDefault();
 			e.stopPropagation();
-			if (e.repeat || held.has(e.key)) return;
+			if (e.repeat || held.has(e.key)) return true;
 			held.add(e.key);
 			command(name, binding?.key ?? e.key);
-			return;
+			return true;
 		}
-		if (e.ctrlKey || e.metaKey || e.altKey) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return false;
 		if (model.editor._tag === "picks" && /^[1-9]$/.test(e.key)) {
 			const chosen = view.shows.picks[Number(e.key) - 1];
 			if (chosen !== undefined) {
@@ -722,13 +757,17 @@ export function AskView({
 					held.add(e.key);
 					send({type: "pick", pick: chosen.pick, key: e.key, now: Date.now()});
 				}
+				return true;
 			}
 		}
-		if (e.key === " " && e.target === root.current) {
+		if (e.key === " " && (passed || e.target === root.current)) {
 			e.preventDefault();
 			send({type: "open", name: "evidence", now: Date.now()});
+			return true;
 		}
+		return false;
 	};
+	useImperativeHandle(handle, () => ({press: (e) => onKey(e, true)}));
 	// Answered: the view goes, so the next ask, or the turn card, takes its place at once.
 	if (model.status !== undefined) return null;
 	const rec = view.shows.rec;
@@ -758,7 +797,7 @@ export function AskView({
 			aria-busy={view.busy}
 			data-ask-editor={view.editor._tag}
 			data-ask-place={place}
-			onKeyDown={onKey}
+			onKeyDown={(e) => onKey(e)}
 			onFocus={() => send({type: "focus", value: true, now: Date.now()})}
 			onBlur={(e) => {
 				if (!e.currentTarget.contains(e.relatedTarget))

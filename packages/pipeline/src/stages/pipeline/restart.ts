@@ -236,7 +236,8 @@ export const fold = (seen: Seen): Folded => {
 				const kind = kinds.get(fact.ask) ?? kinds.get(answer.ask);
 				if (kind === undefined) break;
 				kinds.delete(fact.ask);
-				trail = [...trail, {step: fact.ask, said: answer.pick}];
+				// The question's own identity, never a replacement's `/sealed` id: `boundOf` reads its grant by it.
+				trail = [...trail, {step: answer.ask, said: answer.pick}];
 				// A `merge` on the exam's pull request is a yes on what its review read, as the lane lays it.
 				const said = kind === "exam_merge" && answer.pick === "merge" ? saidYes(carry) : carry;
 				const noted = withNote(said, answer.note);

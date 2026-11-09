@@ -444,46 +444,46 @@ export const nowhereNote = (ticket: number): string =>
 	`no tile shows #${ticket} · the tracker opens it`;
 
 /**
- * One ask as a row: what it asks, in sentence case; its ticket, title and tile under it; its time
- * at the right. `Approve plan` over `#1 Login fails on Safari · t2`, at `11:13`.
+ * One ask as a row: what it asks, in sentence case; its ticket and title under it; its time at the
+ * right. `Approve plan` over `#1 Login fails on Safari`, at `11:13`. A person's words only: a
+ * tile's id is the desk's own, and Open ticket finds the tile without the row naming it (review 4).
  */
-const askRowOf = (ask: Ask, tile: TileId | undefined, now: number, later: boolean): Row => ({
+const askRowOf = (ask: Ask, now: number, later: boolean): Row => ({
 	id: ask.key,
 	icon: later ? "later" : ask.kind,
 	title: sentence(ask.kind === "stuck" ? `stuck: ${ask.what}` : ask.what),
-	sub: `#${ask.ticket} ${ask.title}${tile === undefined ? "" : ` · ${tile}`}`,
+	sub: `#${ask.ticket} ${ask.title}`,
 	side: whenOf(ask.at, now),
 	second: later ? {name: "Bring back", cap: "H"} : {name: "Later", cap: "H"},
 });
 
-/** The asks list's sections: the live asks, then the ones set aside, under `Later`, which folds. */
+/**
+ * The asks list's sections: the live asks, then the ones set aside, under `Later`, which folds.
+ * The desk and its tickets no longer change a row: no row names where its ticket is shown.
+ */
 export const asksSections = (
 	asks: AsksNow,
-	desk: Open | null,
-	tickets: TicketsShown,
+	_desk: Open | null,
+	_tickets: TicketsShown,
 	now: number,
-): readonly Section[] => {
-	const tileOf = (ticket: number) =>
-		desk === null ? undefined : tileOfTicket(desk, ticket, tickets);
-	return [
-		{
-			id: "asks",
-			title: null,
-			fold: false,
-			rows: asks.asks.map((a) => askRowOf(a, tileOf(a.ticket), now, false)),
-		},
-		...(asks.later.length === 0
-			? []
-			: [
-					{
-						id: "later",
-						title: "Later",
-						fold: true,
-						rows: asks.later.map((a) => askRowOf(a, tileOf(a.ticket), now, true)),
-					},
-				]),
-	];
-};
+): readonly Section[] => [
+	{
+		id: "asks",
+		title: null,
+		fold: false,
+		rows: asks.asks.map((a) => askRowOf(a, now, false)),
+	},
+	...(asks.later.length === 0
+		? []
+		: [
+				{
+					id: "later",
+					title: "Later",
+					fold: true,
+					rows: asks.later.map((a) => askRowOf(a, now, true)),
+				},
+			]),
+];
 
 /**
  * The focused tile, said at the bottom left: its name, what it takes and sends, and its

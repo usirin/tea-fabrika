@@ -629,12 +629,37 @@ export const closedAsks = (timeline: readonly Entry[]): ReadonlySet<string> => {
 	]);
 };
 
+/**
+ * The answer path's own refusals, each already in a person's words: what changed under the ask,
+ * so the window shows it as it is. A store's or a transport's failure is none of these.
+ */
+const ANSWER_REFUSALS = [
+	"The sealed ask is missing",
+	"The ask was withdrawn",
+	"The ask expired",
+	"The displayed question changed",
+	"The answer is not offered by this ask",
+	"The plan changed",
+	"The change head moved",
+	// An old ask's, from before the sealed display.
+	"The ask is missing",
+	"The ask needs an exact display answer",
+	"The answer is not offered",
+	"The question kept changing. Try again.",
+] as const;
+export type AnswerRefusal = (typeof ANSWER_REFUSALS)[number];
+/** A second pick that lost the race to the first, which it names. */
+export const alreadyAnswered = (pick: string) => `Already answered: ${pick}`;
+/** Whether `why` is one of the answer path's own refusals, so a person may read it as it is. Pure. */
+export const isAnswerRefusal = (why: string): boolean =>
+	why.startsWith(alreadyAnswered("")) || (ANSWER_REFUSALS as readonly string[]).includes(why);
+
 /** The current subject still matches the sealed display. Writer clocks never decide expiry. */
 export const answerRefused = (
 	timeline: readonly Entry[],
 	fact: Answered,
 	at: number,
-): string | null => {
+): AnswerRefusal | null => {
 	const ask = factsOf(timeline, "asked").find((a) => a.ask === fact.ask);
 	if (ask === undefined || !("format" in ask)) return "The sealed ask is missing";
 	if (factsOf(timeline, "withdrawn").some((w) => w.ask === ask.ask)) return "The ask was withdrawn";

@@ -1,12 +1,14 @@
 import {runIn} from "@demlik/tea/effect";
 import {useMachine} from "@demlik/tea/react";
+import {ASK_COMMANDS} from "@kampus/pipeline/tickets/ask";
 import {Button, Dialog, Kbd} from "@manti-ui/react";
-import {AskStatus, AskView} from "@tea-fabrika/tracker/ask-window";
+import {AskActions, type AskKeys, AskStatus, AskView} from "@tea-fabrika/tracker/ask-window";
 import {Layer, ManagedRuntime} from "effect";
 import {
 	type ReactNode,
 	type RefObject,
 	useCallback,
+	useContext,
 	useEffect,
 	useEffectEvent,
 	useLayoutEffect,
@@ -435,11 +437,11 @@ export function Band(): ReactNode {
 	return <div className="band" data-info={INFO.drag} />;
 }
 
-/** The asks list's footer: the keys no row shows. */
-const ASKS_FOOT: readonly Hint[] = [
+/** The asks list's footer: the keys no row shows, with Later's from the person's key map. None: no hint. */
+const asksFoot = (later: readonly string[]): readonly Hint[] => [
 	{caps: ["↑", "↓"], name: "Move"},
 	{caps: ["↵"], name: "Open"},
-	{caps: ["H"], name: "Later"},
+	...(later.length === 0 ? [] : [{caps: later.map((k) => k.toUpperCase()), name: "Later"}]),
 	{caps: ["Esc"], name: "Close"},
 ];
 
@@ -450,7 +452,12 @@ const menuRun = runIn(ManagedRuntime.make(Layer.empty));
 function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	const {asks, desk, step, toHost, toRun, tickets} = props;
 	const [menu, select] = useMachine(asksMenuMachine, {run: menuRun, ctx: undefined});
+	const actions = useContext(AskActions);
+	// Later is the menu's own action, on the key the person's map gives it; unbound, no key.
+	const laterKeys = actions?.keys.later ?? [ASK_COMMANDS.later.keys];
 	const grid = useRef<HTMLDivElement>(null);
+	/** The selected ask's view: the grid keeps the focus and passes it the answer keys. */
+	const view = useRef<AskKeys>(null);
 	useEffect(() => {
 		grid.current?.focus();
 	}, []);
@@ -472,6 +479,11 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	const open = (row: {id: string}) => {
 		const ask = [...asks.asks, ...asks.later].find((a) => a.key === row.id);
 		if (ask === undefined) return;
+		// A stop opens its lane, as its button says: the host finds or opens the lane's tile.
+		if (ask.kind === "stuck" && actions !== null) {
+			actions.openLane(ask.ticket);
+			return close();
+		}
 		const to = opensOf(desk, ask.ticket, tickets);
 		switch (to.kind) {
 			case "tile":
@@ -511,11 +523,11 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 				size="sm"
 				variant="outline"
 				tabIndex={toolbar ? -1 : undefined}
-				aria-keyshortcuts="h"
+				aria-keyshortcuts={laterKeys.length === 0 ? undefined : laterKeys.join(" ")}
 				onClick={() => aside({id: row.key})}
 			>
 				{asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
-				<Kbd size="sm">h</Kbd>
+				{laterKeys.length > 0 && <Kbd size="sm">{laterKeys.join(" / ")}</Kbd>}
 			</Button>
 		</>
 	);
@@ -541,11 +553,24 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 							active === undefined ? undefined : `ask-row-${rows.indexOf(active)}`
 						}
 						onKeyDown={(e) => {
-							if (
-								e.target instanceof HTMLTextAreaElement ||
-								e.target instanceof HTMLInputElement ||
-								(e.target !== e.currentTarget && (e.target as Element).closest(".ask-view"))
-							)
+							if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement)
+								return;
+							// Later, from the row or its view: the key the person's map gives it.
+							const command = actions?.command(
+								{key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey},
+								false,
+							);
+							const later =
+								actions === null
+									? e.key === ASK_COMMANDS.later.keys && !e.ctrlKey && !e.altKey && !e.metaKey
+									: command?.value._tag === "later" && !actions.blocked();
+							if (later && active !== undefined) {
+								e.preventDefault();
+								aside({id: active.key});
+								return;
+							}
+							// A key inside the selected ask's view is the view's own.
+							if (e.target !== e.currentTarget && (e.target as Element).closest(".ask-view"))
 								return;
 							const by =
 								e.key === "ArrowDown" || e.key === "j"
@@ -558,15 +583,15 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 								const at = active === undefined ? -1 : rows.indexOf(active);
 								const next = rows[(at + by + rows.length) % rows.length];
 								if (next !== undefined) select({type: "select", key: next.key});
+								return;
 							}
 							if (e.key === "Enter" && active !== undefined) {
 								e.preventDefault();
 								open({id: active.key});
+								return;
 							}
-							if (e.key === "h" && active !== undefined) {
-								e.preventDefault();
-								aside({id: active.key});
-							}
+							// The rest are the selected ask's: its answer keys and Space, as if pressed on its view.
+							if (e.target === e.currentTarget) view.current?.press(e);
 						}}
 					>
 						{rows.map((row, i) => (
@@ -597,6 +622,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 											ticket={row.ticket}
 											ask={row.sealed}
 											place="menu"
+											keys={view}
 											acts={rowActs(row, true)}
 										/>
 									) : (
@@ -615,7 +641,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 						))}
 					</div>
 				)}
-				{rows.length > 0 && <Foot hints={ASKS_FOOT} />}
+				{rows.length > 0 && <Foot hints={asksFoot(laterKeys)} />}
 			</AskStatus>
 		</Panel>
 	);

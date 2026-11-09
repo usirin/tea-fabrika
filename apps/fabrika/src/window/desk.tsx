@@ -189,8 +189,11 @@ const askActions: AskActions = {
 		});
 		return command === undefined ? undefined : {key, value: command.value};
 	},
+	// From the tile the press came from; from the asks menu, over the desk, the focused tile.
 	openLane: (ticket) => {
-		const from = document.activeElement?.closest<HTMLElement>("[data-tile]")?.dataset.tile;
+		const from =
+			document.activeElement?.closest<HTMLElement>("[data-tile]")?.dataset.tile ??
+			(store.desk?.at === "open" ? focusedOf(store.desk)?.id : undefined);
 		if (from !== undefined) toHost({type: "open_lane", from, ticket});
 	},
 	answer: (value) =>
