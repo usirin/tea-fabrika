@@ -301,7 +301,7 @@ const view = async (c: Client, pid: string) => {
 };
 
 describe("P12 real dev.ts wire", () => {
-	it("a new dev command links its lifecycle fact to the previous runtime", async () => {
+	it("scenario: a new dev command links its lifecycle fact to the previous runtime", async () => {
 		const first = await stage(),
 			c = await connected(first);
 		const starts = (await read(c, "door/brain")).filter((row) => row._tag === "started");
@@ -315,7 +315,7 @@ describe("P12 real dev.ts wire", () => {
 		expect(now).toHaveLength(2);
 		expect(now[1]!.body).toMatchObject({after: (starts[0]!.body as {start: string}).start});
 	});
-	it("p10 plant: save twice or accept changed content; return the original placing", async () => {
+	it("scenario: p10 plant: save twice or accept changed content; return the original placing", async () => {
 		const s = await stage(),
 			c = await connected(s),
 			pid = await counter(c);
@@ -362,7 +362,7 @@ describe("P12 real dev.ts wire", () => {
 		expect(identityChanged.error?.data?.why ?? identityChanged.result?.why).toBe("id_reused");
 		expect(await read(c, "counter:1/inbox")).toHaveLength(1);
 	});
-	it("p11 plant: reverse or repeat a page, or stop at the first page", async () => {
+	it("scenario: p11 plant: reverse or repeat a page, or stop at the first page", async () => {
 		const s = await stage(),
 			c = await connected(s),
 			pid = await counter(c);
@@ -380,7 +380,7 @@ describe("P12 real dev.ts wire", () => {
 		// Door input facts occupy the intervening global revisions.
 		expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
 	});
-	it("a parked wire wait receives the next append and a ready wait answers now", async () => {
+	it("scenario: a parked wire wait receives the next append and a ready wait answers now", async () => {
 		const s = await stage(),
 			c = await connected(s),
 			other = await connected(s, "tab-b"),
@@ -398,7 +398,7 @@ describe("P12 real dev.ts wire", () => {
 			result: {rev: next.rev},
 		});
 	});
-	it("p14 wire plant: drop placing or use global revisions as patch positions", async () => {
+	it("scenario: p14 wire plant: drop placing or use global revisions as patch positions", async () => {
 		const s = await stage(),
 			a = await connected(s),
 			b = await connected(s, "tab-b"),
@@ -423,7 +423,7 @@ describe("P12 real dev.ts wire", () => {
 		expect((await view(b, pid)).view.count).toBe(12);
 		expect(await read(a, "counter:1/inbox")).toHaveLength(12);
 	});
-	it("unauthenticated connections leave no input or span records", async () => {
+	it("scenario: unauthenticated connections leave no input or span records", async () => {
 		const s = await stage(),
 			c = await connected(s);
 		expect(await statusWithHost(s.url, "wrong.test")).toBe(421);
@@ -470,7 +470,7 @@ describe("P12 real dev.ts wire", () => {
 		expect(traces.error).toBeUndefined();
 		expect(await c.ping()).toBe("pong");
 	});
-	it("delivery and retry retain the original saved binding and nonzero seen revision", async () => {
+	it("scenario: delivery and retry retain the original saved binding and nonzero seen revision", async () => {
 		const s = await stage(),
 			c = await connected(s),
 			pid = await counter(c);
@@ -511,7 +511,7 @@ describe("P12 real dev.ts wire", () => {
 			records.result.spans.some((r: any) => r.traceId === row.traceId && r.name.includes("runner")),
 		).toBe(true);
 	});
-	it("sealed program plant: unknown programs never fall back to a host import", async () => {
+	it("scenario: sealed program plant: unknown programs never fall back to a host import", async () => {
 		const s = await stage(),
 			c = await connected(s);
 		// The trusted process API is exercised by stage-records, including an outbound probe program.
@@ -526,7 +526,7 @@ describe("P12 real dev.ts wire", () => {
 			expect(response.error?.data?.why).toBe("unknown_method");
 		}
 	});
-	it("dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the stage child fails", async () => {
+	it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the stage child fails", async () => {
 		const s = await stage();
 		const ready = `${JSON.stringify({ready: s.url}).slice(0, -1)},"build":`;
 		for (let n = 0; !s.output().includes(ready); n++) {
@@ -566,10 +566,14 @@ describe("P12 real dev.ts wire", () => {
 		const code = await new Promise<number | null>((done) => failed.once("exit", (c) => done(c)));
 		expect(code).not.toBe(0);
 	});
-	it("p13/p81 plant: acknowledge before append or restart twice; retry a killed mid-burst once", async () => {
+	it("scenario: p13/p81 plant: acknowledge before append or restart twice; retry a killed mid-burst once", async ({
+		signal,
+	}) => {
 		const s = await stage(),
 			c = await connected(s),
 			pid = await counter(c);
+		const first = (await read(c, "door/brain")).find((row) => row._tag === "started")!;
+		const firstStart = (first.body as {start: string}).start;
 		const accepted = new Map<string, {rev: number; pos: number}>();
 		const pending = Array.from({length: 20}, (_, n) => {
 			const id = `kill-${n}`;
@@ -615,10 +619,18 @@ describe("P12 real dev.ts wire", () => {
 		expect(new Set(inbox.map((r) => r.id)).size).toBe(20);
 		expect((await view(resumed, pid)).view.count).toBe(20);
 		expect(await counter(resumed)).toBe(pid);
-		const starts = (await read(resumed, "door/brain")).filter((r) => r._tag === "started");
+		let starts: Entry[] = [];
+		// Replacement facts arrive on the outbox's periodic flush, after traffic can recover.
+		// The enclosing test's existing timeout bounds this wait.
+		for (;;) {
+			signal.throwIfAborted();
+			starts = (await read(resumed, "door/brain")).filter((r) => r._tag === "started");
+			if (starts.some((row) => (row.body as {after: string | null}).after === firstStart)) break;
+			await pause();
+		}
 		expect(starts).toHaveLength(2);
 		expect(starts[1]!.body).toMatchObject({
-			after: (starts[0]!.body as {start: string}).start,
+			after: firstStart,
 			build: expect.any(String),
 			why: "crash",
 		});

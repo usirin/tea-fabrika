@@ -25,7 +25,7 @@ export const stack = (
 				name: settings.name,
 				main: built.brain,
 				bundle: false,
-				compatibility: {date: "2026-10-12", flags: ["nodejs_compat"]},
+				compatibility: {date: "2026-10-12"},
 				observability: {enabled: false},
 				dev: {host: "127.0.0.1", port: settings.port, strictPort: true},
 				env: {

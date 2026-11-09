@@ -124,9 +124,22 @@ const launch = async (startupGate = false) => {
 	}
 	return {child, folder, url, output: () => output};
 };
-const workerd = async (parent: number, excluding = 0) => {
+const workerd = async (stage: {child: ChildProcess; folder: string}, excluding = 0) => {
+	const until = performance.now() + 10_000;
+	const {brainOutbox} = await import("@kampus/libfabrika/node/local-stage");
+	const outbox = await Effect.runPromise(brainOutbox(stage.folder));
 	for (;;) {
-		const children = tree(parent).filter(
+		const pending = await Effect.runPromise(outbox.pending);
+		const stopped = pending.find((fact) => fact._tag === "braked");
+		if (stopped !== undefined)
+			throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.why})`);
+		if (stage.child.exitCode !== null || stage.child.signalCode !== null)
+			throw new Error(
+				`P12 dev.ts exited while waiting for workerd: exitCode=${stage.child.exitCode}, signal=${stage.child.signalCode}`,
+			);
+		if (performance.now() >= until)
+			throw new Error(`P12 workerd did not appear within 10 seconds (excluding pid ${excluding})`);
+		const children = tree(stage.child.pid!).filter(
 			(r) => /\/workerd(?:\s|$)/.test(r.command) && r.pid !== excluding,
 		);
 		if (children.length === 0) {
@@ -140,7 +153,7 @@ const workerd = async (parent: number, excluding = 0) => {
 
 describe("P12 local brain life", () => {
 	// Outside only: real dev.ts, process groups and TCP. This sandbox cannot bind sockets.
-	it("parent death before listener readiness leaves no stage group", async () => {
+	it("scenario: parent death before listener readiness leaves no stage group", async () => {
 		const s = await launch(true);
 		const leader = Number(readFileSync(join(s.folder, "starting"), "utf8"));
 		groups.push(leader);
@@ -159,7 +172,7 @@ describe("P12 local brain life", () => {
 		await expect(fetch(s.url)).rejects.toThrow();
 	});
 	// Outside only: cleanup must address the process group after its leader already exited.
-	it("stage group cleanup still reaches descendants after the leader exits", async () => {
+	it("scenario: stage group cleanup still reaches descendants after the leader exits", async () => {
 		const s = await launch();
 		const rows = tree(s.child.pid!),
 			leader = rows.find((row) => row.parent === s.child.pid && row.command.includes("--child"));
@@ -175,18 +188,18 @@ describe("P12 local brain life", () => {
 		expect(descendants.filter(living)).toEqual([]);
 		await expect(fetch(s.url)).rejects.toThrow();
 	});
-	it("p81 plant: an outer retry loop defeats Alchemy's three-replacement brake", async () => {
+	it("scenario: p81 plant: an outer retry loop defeats Alchemy's three-replacement brake", async () => {
 		const s = await launch();
 		let prior = 0;
 		const pids: Array<number> = [];
 		const delays: Array<number> = [];
 		for (let n = 0; n < 4; n++) {
-			const pid = await workerd(s.child.pid!, prior);
+			const pid = await workerd(s, prior);
 			pids.push(pid);
 			const began = performance.now();
 			process.kill(pid, "SIGKILL");
 			if (n < 3) {
-				prior = await workerd(s.child.pid!, pid);
+				prior = await workerd(s, pid);
 				delays.push(performance.now() - began);
 				prior = pid;
 			}
@@ -206,10 +219,10 @@ describe("P12 local brain life", () => {
 		expect(tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command))).toEqual([]);
 	});
 	it.each(["SIGTERM", "SIGKILL"] as const)(
-		"group cleanup plant: killing only Node leaves a listener after %s",
+		"scenario: group cleanup plant: killing only Node leaves a listener after %s",
 		async (signal) => {
 			const s = await launch();
-			await workerd(s.child.pid!);
+			await workerd(s);
 			const descendants = tree(s.child.pid!).map((r) => r.pid);
 			s.child.kill(signal);
 			for (;;) {

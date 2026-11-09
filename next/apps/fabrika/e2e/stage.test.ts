@@ -246,7 +246,7 @@ const rpc = (page: Page, method: string, params: unknown) =>
 	});
 
 describe("P12 real browser protocol", () => {
-	it("p29 stage plant: notify the wrong key, issue one code per tab, or require reconnect after command grant", async () => {
+	it("scenario: p29 stage plant: notify the wrong key, issue one code per tab, or require reconnect after command grant", async () => {
 		const s = await start(),
 			a = await s.context.newPage(),
 			b = await s.context.newPage();
