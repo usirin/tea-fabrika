@@ -7,8 +7,7 @@ description: Record one owner decision as a `.decisions/NNNN-slug.md` file. Use 
 
 One decision, one file, one docs pull request. Write it the turn the owner settles something, even
 if nobody asked: a ruling that is not written down gets decided again, differently, by the next
-session. The folder's shape is in [`.decisions/README.md`](../../../.decisions/README.md); this skill
-is the judgment around it.
+session. This skill holds the file's shape and the judgment around it.
 
 ```mermaid
 flowchart LR
@@ -30,9 +29,73 @@ Take the highest number on `origin/main` or in an open PR, plus one. A number is
 your PR is open, so check again just before you open it. If another PR took it first, the one opened
 first keeps it, and you renumber yours.
 
-The slug is kebab-case, at most five words.
+The slug is kebab-case, at most five words. The file is `NNNN-slug.md`, with the next free
+four-digit number:
+
+```markdown
+---
+id: 0002
+title: <the decision in one clause, not the topic>
+status: accepted
+date: YYYY-MM-DD
+tags: [a, few, words]
+---
+
+# 0002: <the same title>
+
+**What this decides:** one plain sentence.
+
+## Context
+
+Why it came up. Link the note, ticket or pull request.
+
+## Decision
+
+**One bold sentence first.** Then the rules, as short bullets.
+
+## Consequences
+
+What changes, what it costs, what is not decided here.
+```
+
+`status` is `accepted`, `superseded` or `amended` (step 4 says how it changes). Nobody deletes a
+decision. Keep it short: the long reasoning goes in a `docs/direction/` note. A decision moved in
+from elsewhere leaves only a one-line link behind
+([0002](../../../.decisions/0002-moving-a-decision-removes-it-from-its-source.md)).
 
 ## 2. Write the decision
+
+```markdown
+---
+id: 0002
+title: <the decision in one clause, not the topic>
+status: accepted
+date: YYYY-MM-DD
+tags: [a, few, words]
+---
+
+# 0002: <the same title>
+
+**What this decides:** one plain sentence.
+
+## Context
+
+Why it came up. Link the note, ticket or pull request.
+
+## Decision
+
+**One bold sentence first.** Then the rules, as short bullets.
+
+## Consequences
+
+What changes, what it costs, what is not decided here.
+```
+
+- `status` is `accepted`, `superseded` or `amended`; step 4 says how an older file changes. Nobody
+  deletes a decision.
+- Keep it short. The long reasoning goes in a `docs/direction/` note.
+- A decision moved in from elsewhere leaves only a one-line link behind
+  ([0002](../../../.decisions/0002-moving-a-decision-removes-it-from-its-source.md)).
 
 - **The `title` carries the decision, not the topic.** `Every gate fails closed on zero scope`, never
   `Gate scope handling`. One clause. Where it has a "not this" half, keep it inside the clause
@@ -61,7 +124,9 @@ sh .agents/skills/lead/scripts/governance.sh
 rg -il '<word>' .decisions docs/direction .glossary
 ```
 
-The script lists the decision files whose title, tags or slug words show up in your diff. An empty
+The script lists the decision files whose title, tags or slug words show up in your diff, and
+every decision file the diff edits. For now it only lists and always exits 0; it blocks later, once
+its false alarms are measured. An empty
 list is not a clearance: two decisions that disagree about what a word means may share no words.
 Read the area by hand too.
 

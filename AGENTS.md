@@ -17,7 +17,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 | You want to | Read | Write |
 |---|---|---|
 | Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
-| Know what the owner decided | [`.decisions/`](./.decisions/README.md), one short file per decision. Search it, `.glossary/` and `docs/direction/` before you ask the owner or write a plan | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, in the shape that README gives. |
+| Know what the owner decided | [`.decisions/`](./.decisions/), one short file per decision; see [Decision discovery](#decision-discovery) | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, with [`/adr`](./.agents/skills/adr/SKILL.md). |
 | Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes | A note there when a decision needs the long reasoning, plus its row in that folder's README. Mark it **proposed** until it is settled. Its decision file links it. |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
 | Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), the index, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md): a Mermaid diagram first, then one real code block, then words, citing `path:line` ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)). |
@@ -33,6 +33,22 @@ was decided are all kept here on purpose, so they can be analysed later.
 
 `blog/` and `video/` are finished pieces about earlier stages. Leave them unless
 asked.
+
+Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
+GitHub issues are for other people's repos
+([the lead skill](./.agents/skills/lead/SKILL.md#tickets-and-tracker-posts)).
+
+## Decision discovery
+
+List `.decisions/`: filenames identify records, and each record's frontmatter gives
+its `id`, `title` and `status`. Read applicable records when changing the choice they
+govern or resolving conflicting guidance. Record new decisions with `/adr`
+([the adr skill](./.agents/skills/adr/SKILL.md)).
+
+There is no committed decision index and no startup hook. Filenames plus frontmatter are the
+discovery contract
+([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md), after
+[phoenix ADR 0129](https://github.com/kamp-us/phoenix/blob/main/.decisions/0129-adr-discovery-is-the-claude-md-contract.md)).
 
 **Rule of thumb:** a decision goes in `.decisions/`, and its long reasoning in
 `docs/direction/`. A measurement goes in `experiments/`. Something that happened on a real ticket goes in `field/`. If a
@@ -147,12 +163,29 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 - `next/` is the lab until a person opens it for real work, so it may be rough. "No
   rough first versions" (below) applies from then on.
 
+## Decision discovery
+
+List `.decisions/`: filenames identify records, and each record's frontmatter gives its `id`,
+`title` and `status`. Read applicable records when changing the choice they govern or resolving
+conflicting guidance. Record new decisions with `/adr`
+([skill](./.agents/skills/adr/SKILL.md)). Before you ask the owner or write a plan, also search
+`.glossary/` and `docs/direction/`.
+
+There is no committed decision index and no startup hook. Filenames plus frontmatter are the
+discovery contract
+([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md)).
+
+Repo tooling adds no Claude Code hooks, SessionStart or any other (owner, 2026-11-09). A tool runs
+when called: `drive.ts` runs `box.sh gc` itself on start.
+
+Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
+GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/SKILL.md)).
+
 ## Before you design anything
 
 - **Check what is settled first.** Before any question to the owner, design question,
   recommendation or plan, search `.decisions/`, `.glossary/`, `docs/direction/`, `experiments/`
-  and the plan for the topic. A decision the owner makes is written to `.decisions/` the turn it
-  is made ([0001](./.decisions/0001-decisions-live-in-the-repo.md)). That holds for
+  and the plan for the topic. That holds for
   a question an agent's plan raises and for a pull request you walk: compare its shape
   with the note it says it builds, and name any place it walks a decision back. A
   claim about how a piece runs comes from reading that piece's note now, never from a

@@ -40,7 +40,7 @@ and `.decisions/` lead with a picture.
 
 ## Context
 
-The repo had a place for why ([`.decisions/`](./README.md) and
+The repo had a place for why ([`.decisions/`](./) and
 [`docs/direction/`](../docs/direction/README.md)), for words
 ([`.glossary/`](../.glossary/TERMS.md)) and for measurements ([`experiments/`](../experiments/README.md)),
 but not for how the code is shaped now. Agents learned a shape by reading code each session, or
@@ -74,7 +74,7 @@ words.**
 
 ## Consequences
 
-- The adr skill and [`.decisions/README.md`](./README.md) gain the diagram step and a Mermaid
+- The [adr skill](../.agents/skills/adr/SKILL.md) gains the diagram step and a Mermaid
   cheat sheet; the write-pattern skill carries the same cheat sheet.
 - Decisions 0001 to 0004 are not redrawn by this decision.
 - `.patterns/` starts empty. Which shapes get the first docs is not decided here.

@@ -232,7 +232,7 @@ owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on gr
 ```
 
 - **Write it the turn it is decided,** with a docs agent using [the adr skill](../adr/SKILL.md),
-  in the shape [the folder's README](../../../.decisions/README.md) gives. Link its `docs/direction/` note when
+  in the shape the adr skill gives. Link its `docs/direction/` note when
   one exists.
 - **One decision, one PR.** Never batch decisions, and never wait for a code PR or for the end of
   the day.
