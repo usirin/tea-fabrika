@@ -20,6 +20,7 @@ class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
 	reason: Schema.String,
 }) {}
 type Target = "project" | "process" | "record" | "loader" | "bucket";
+type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
 const Response = Schema.Struct({
 	value: Schema.optionalKey(Schema.Unknown),
 	error: Schema.optionalKey(Schema.Struct({reason: Schema.String})),
@@ -326,52 +327,52 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 			}),
 		),
 	);
-	const proxy = (target: Target, project: string, name = "") =>
-		new Proxy(
-			{},
-			{
-				get: (_value, method) => {
-					if (method === "then") return undefined;
-					const invoke = (args: ReadonlyArray<unknown>) =>
-						call(target, project, name, String(method), args);
-					// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local binding proxy matches Durable Object's Promise API
-					return (...args: ReadonlyArray<unknown>) => Effect.runPromise(invoke(args));
-				},
+	const proxy = <Members extends object>(
+		invoke: (method: string, args: ReadonlyArray<unknown>) => Effect.Effect<unknown, ControlError>,
+		members: Members,
+	) =>
+		new Proxy(Object.assign<Binding, Members>({}, members), {
+			get: (_value, method) => {
+				if (method === "then") return undefined;
+				if (Object.hasOwn(members, method)) return members[method as keyof Members];
+				const work = (args: ReadonlyArray<unknown>) => invoke(String(method), args);
+				// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local binding proxy matches Durable Object's Promise API
+				return (...args: ReadonlyArray<unknown>) => Effect.runPromise(work(args));
 			},
-		);
+		});
+	const binding = (target: Target, project: string, name = "") =>
+		proxy((method, args) => call(target, project, name, method, args), {});
 	return {
 		url: `http://127.0.0.1:${config.port}`,
-		project: (project: string) => {
-			const p = proxy("project", project);
-			return new Proxy(p, {
-				get: (value, method) =>
-					method === "connect"
-						? Reflect.get(p, "clientConnect")
-						: method === "gateways"
-							? {
-									join: Reflect.get(p, "join"),
-									leave: Reflect.get(p, "leave"),
-									online: Reflect.get(p, "online"),
-								}
-							: method === "forProcess"
-								? (pid: string) => ({
-										sign: (id: string, parent: string, kind: string) =>
-											Reflect.get(p, "sign")(pid, id, parent, kind),
-										append: (input: unknown) => Reflect.get(p, "commit")(pid, input),
-									})
-								: Reflect.get(value, method),
-			});
-		},
+		project: (project: string) =>
+			proxy(
+				(method, args) =>
+					call("project", project, "", method === "connect" ? "clientConnect" : method, args),
+				{
+					gateways: binding("project", project),
+					forProcess: (pid: string) =>
+						proxy(
+							(method, args) =>
+								call("project", project, "", method === "append" ? "commit" : method, [
+									pid,
+									...args,
+								]),
+							{},
+						),
+				},
+			),
 		process: (pid: string) =>
-			new Proxy(proxy("process", config.name, pid), {
-				get: (value, method) => Reflect.get(value, method === "alarm" ? "savedAlarm" : method),
-			}),
-		record: (project: string, name: string) => proxy("record", project, name),
+			proxy(
+				(method, args) =>
+					call("process", config.name, pid, method === "alarm" ? "savedAlarm" : method, args),
+				{},
+			),
+		record: (project: string, name: string) => binding("record", project, name),
 		loader: {
 			load: (name: string, pid: string) =>
 				// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Worker Loader proxy matches the platform's Promise API
 				Effect.runPromise(
-					call("loader", pid, name, "init", [null]).pipe(Effect.as(proxy("loader", pid, name))),
+					call("loader", pid, name, "init", [null]).pipe(Effect.as(binding("loader", pid, name))),
 				),
 		},
 		bucket: {
