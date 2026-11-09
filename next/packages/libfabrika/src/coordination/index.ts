@@ -28,6 +28,7 @@ export {
 	brainOnly,
 	canRestart,
 	Dead,
+	DeadInput,
 	Down,
 	inRunnerSpace,
 	inSignalSpace,
