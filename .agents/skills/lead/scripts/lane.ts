@@ -4,6 +4,22 @@
 /** The lane's backup branch: `<branch>-wip`, and a branch that already ends in -wip as it is. */
 export const wipOf = (branch: string): string => `${branch.replace(/(-wip)+$/, "")}-wip`;
 
+/**
+ * Where a step with no --from starts: the newest pushed tip, the branch's or its -wip backup's,
+ * unless the saved head has moved past it (a step accepted but not yet pushed). A lead commit (a
+ * merge of main, a lockfile commit) is pushed to the backup outside drive, so the backup's tip is
+ * how drive learns it (layers, 2026-11-09: the saved mutation head was taken over the lead merge).
+ * `pushed` lists the tips that exist; `isAncestor(a, b)` says whether b holds a.
+ */
+export const startHead = (
+	pushed: readonly string[],
+	saved: string | undefined,
+	isAncestor: (a: string, b: string) => boolean,
+): string | undefined => {
+	const newest = pushed.find((p) => pushed.every((q) => isAncestor(q, p))) ?? pushed[0];
+	return newest && !(saved && isAncestor(newest, saved)) ? newest : saved;
+};
+
 /** The step a git note names, or none when it does not read. */
 export const stepOf = (note: string): string[] => {
 	let n: unknown;
