@@ -1,13 +1,30 @@
-// P16, next/. CSS spelling changes must keep the same imported bytes.
+// P16, next/. CSS spelling changes must keep the same imported rules.
 import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import * as fc from "fast-check";
+import {type Rule, transform} from "lightningcss";
 import {afterEach, describe, expect, it} from "vitest";
 import {inlineStylesheet} from "./css.ts";
 
 const runs = {seed: 119120, numRuns: 30};
 const ids = fc.integer({min: 0, max: 10000});
 const homes: string[] = [];
+// Inspect the parsed rules before printing can merge or normalize them. Only locations differ.
+const cssRules = (css: string) => {
+	let rules: Rule[] = [];
+	transform({
+		filename: "law.css",
+		code: Buffer.from(css),
+		visitor: {
+			StyleSheet: (sheet) => {
+				rules = sheet.rules;
+			},
+		},
+	});
+	return rules;
+};
+const meaning = (rules: readonly Rule[]): unknown =>
+	JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
 const fixture = (id: number) => {
 	const home = mkdtempSync("/tmp/p16css.");
 	homes.push(home);
@@ -30,9 +47,16 @@ afterEach(() => {
 describe("P16 CSS tokens", () => {
 	// The expected rule comes from the file, never from decoding the generated import spelling.
 	const verifyImport = (css: string, id: number) => {
-		expect(css, "the imported rule must be in the output").toMatch(
-			new RegExp(`\\.child${id}\\s*\\{[^}]*color:\\s*red\\s*;?\\s*\\}`),
-		);
+		expect(
+			meaning(cssRules(css)),
+			"the imported rule must appear once, with its declarations",
+		).toEqual(meaning(cssRules(`.child${id} { color: red; }`)));
+	};
+	const imported = (css: string, id: number) => {
+		verifyImport(css, id);
+		// Drop or repeat the actual child output. Both must fail the same semantic check.
+		for (const plant of ["", `${css}\n${css}`])
+			expect(() => verifyImport(plant, id)).toThrow("imported rule");
 	};
 	it("escaped at-keywords import the same file as their unescaped spelling", () => {
 		fc.assert(
@@ -44,7 +68,7 @@ describe("P16 CSS tokens", () => {
 						css = `@${keyword} "./child${id}.css";`;
 					// Plant the review bug: leave the import in the served text without its child.
 					expect(() => verifyImport(css, id)).toThrow("imported rule");
-					verifyImport(f.read(css), id);
+					imported(f.read(css), id);
 				},
 			),
 			{...runs, examples: [[0, "im\\70ort"]]}, // Pinned round-3 escaped @import bug.
@@ -60,7 +84,7 @@ describe("P16 CSS tokens", () => {
 					const f = fixture(id),
 						css = `@import ${url}(${quote}./child${id}.css${quote});`;
 					expect(() => verifyImport(css, id)).toThrow("imported rule");
-					verifyImport(f.read(css), id);
+					imported(f.read(css), id);
 				},
 			),
 			{...runs, examples: [[0, "u\\72l", '"']]}, // Pinned round-3 escaped url() bug.
@@ -80,22 +104,28 @@ describe("P16 CSS tokens", () => {
 					const f = fixture(id),
 						css = `@import ${quote}./chi\\${newline}ld${id}.css${quote};`;
 					expect(() => verifyImport(css, id)).toThrow("imported rule");
-					verifyImport(f.read(css), id);
+					imported(f.read(css), id);
 				}),
 				runs,
 			);
 		});
-	it("comments and whitespace around a quoted import URL keep every imported byte", () => {
+	it("comments and whitespace around a quoted import URL keep every imported rule", () => {
 		fc.assert(
 			fc.property(
 				ids,
 				fc.constantFrom(" ", "\t", "\n", "\r", "\f", "/**/", " /*first*/\t/*second*/ "),
 				fc.constantFrom('"', "'"),
 				(id, gap, quote) => {
+					expect.hasAssertions();
 					const f = fixture(id);
-					expect(f.read(`@import${gap}url(${gap}${quote}./child${id}.css${quote}${gap});`)).toBe(
-						f.body,
-					);
+					// A quoted url() allows whitespace before its quote, but no comment there.
+					// https://www.w3.org/TR/css-syntax-3/#consume-ident-like-token
+					const space = gap.includes("/*") ? " " : gap;
+					imported(f.read(`@import${gap}url(${space}${quote}./child${id}.css${quote}${gap});`), id);
+					if (gap.includes("/*"))
+						expect(() =>
+							f.read(`@import${gap}url(${gap}${quote}./child${id}.css${quote}${gap});`),
+						).toThrow("stylesheet has a broken url()");
 				},
 			),
 			runs,
@@ -106,7 +136,7 @@ describe("P16 CSS tokens", () => {
 		fc.assert(
 			fc.property(ids, fc.constantFrom("", " ", "\t", "\n", "\r", "\f", "\r\n"), (id, gap) => {
 				const f = fixture(id);
-				expect(f.read(`@import "\\63${gap}hild${id}.css";`)).toBe(f.body);
+				imported(f.read(`@import "\\63${gap}hild${id}.css";`), id);
 			}),
 			runs,
 		);
@@ -117,7 +147,7 @@ describe("P16 CSS tokens", () => {
 			fc.property(ids, fc.constantFrom('"', "'"), (id, quote) => {
 				const f = fixture(id);
 				writeFileSync(join(f.home, `*child${id}.css`), f.body);
-				expect(f.read(`@import url(${quote}*child${id}.css${quote});`)).toBe(f.body);
+				imported(f.read(`@import url(${quote}*child${id}.css${quote});`), id);
 			}),
 			runs,
 		);
@@ -127,7 +157,7 @@ describe("P16 CSS tokens", () => {
 		fc.assert(
 			fc.property(ids, fc.constantFrom(" ", "\t", "\n", "\r", "\f"), (id, gap) => {
 				const f = fixture(id);
-				expect(f.read(`@import url(./child${id}.css${gap});`)).toBe(f.body);
+				imported(f.read(`@import url(./child${id}.css${gap});`), id);
 				expect(() => f.read(`a { background: url(https://test.invalid/a${gap}b); }`)).toThrow(
 					"stylesheet has a broken url()",
 				);
@@ -141,7 +171,7 @@ describe("P16 CSS tokens", () => {
 			fc.property(ids, fc.constantFrom("0", "d800", "dfff", "110000"), (id, hex) => {
 				const f = fixture(id);
 				writeFileSync(join(f.home, `child�${id}.css`), f.body);
-				expect(f.read(`@import "child\\${hex} ${id}.css";`)).toBe(f.body);
+				imported(f.read(`@import "child\\${hex} ${id}.css";`), id);
 			}),
 			runs,
 		);
@@ -152,7 +182,7 @@ describe("P16 CSS tokens", () => {
 			fc.property(ids, fc.constantFrom("af", "face", "00"), (id, suffix) => {
 				const f = fixture(id);
 				writeFileSync(join(f.home, `c${suffix}${id}.css`), f.body);
-				expect(f.read(`@import "\\000063${suffix}${id}.css";`)).toBe(f.body);
+				imported(f.read(`@import "\\000063${suffix}${id}.css";`), id);
 			}),
 			runs,
 		);
@@ -175,7 +205,7 @@ describe("P16 CSS tokens", () => {
 		fc.assert(
 			fc.property(ids, fc.constantFrom('"', "'"), (id, quote) => {
 				const f = fixture(id);
-				expect(f.read(`@import ${quote}child${id}.css`)).toBe(f.body);
+				imported(f.read(`@import ${quote}child${id}.css`), id);
 			}),
 			runs,
 		);
@@ -186,15 +216,32 @@ describe("P16 CSS tokens", () => {
 			fc.property(ids, fc.constantFrom("", "note", "* longer *", "line\nnext"), (id, note) => {
 				const f = fixture(id),
 					last = `.root${id} { color: blue; }`;
-				expect(
+				const rules = cssRules(
 					f.read(`@import "child${id}.css" print/*${note}*/and/*${note}*/(color);${last}`),
-				).toBe(`@media print and (color) {\n${f.body}\n}${last}`);
+				);
+				const verify = (actual: readonly Rule[]) =>
+					expect(meaning(actual), "imported rules keep their order and media condition").toEqual(
+						meaning(cssRules(`@media print and (color) {${f.body}}${last}`)),
+					);
+				verify(rules);
+				const media = rules[0]!;
+				expect(media.type).toBe("media");
+				if (media.type !== "media") throw new Error("imported media rule missing");
+				for (const plant of [
+					rules.slice(1),
+					[media, ...rules],
+					[...rules].reverse(),
+					[...media.value.rules, ...rules.slice(1)],
+				])
+					expect(() => verify(plant)).toThrow("imported rules");
 			}),
 			runs,
 		);
 	});
 
 	it("layer and supports imports fail before their rules can become a media query", () => {
+		// 1.33.0 reports layer:null for both bare layer and no layer, and dependencies omit it.
+		// Keep the refusal: flattening an anonymous layer changes the cascade. Raw CSS retains it.
 		fc.assert(
 			fc.property(
 				ids,
@@ -206,7 +253,7 @@ describe("P16 CSS tokens", () => {
 					);
 				},
 			),
-			runs,
+			{...runs, examples: [[0, "layer"]]}, // Pinned 1.33.0 anonymous-layer loss.
 		);
 	});
 
@@ -251,7 +298,21 @@ describe("P16 CSS tokens", () => {
 			fc.property(ids, fc.constantFrom("61", "000061", "62", "000062"), (id, hex) => {
 				const f = fixture(id),
 					css = `a { --value: \\${hex}url(./file${id}.png); }`;
-				expect(f.read(css)).toBe(css);
+				const expected = cssRules(
+					`a { --value: ${hex.endsWith("61") ? "a" : "b"}url(./file${id}.png); }`,
+				);
+				const verify = (rules: readonly Rule[]) =>
+					expect(meaning(rules), "the escaped function and its argument must remain").toEqual(
+						meaning(expected),
+					);
+				const rules = cssRules(f.read(css));
+				verify(rules);
+				for (const plant of [
+					[],
+					[...rules, ...rules],
+					cssRules(`a { --value: url(./file${id}.png); }`),
+				])
+					expect(() => verify(plant)).toThrow("escaped function");
 			}),
 			runs,
 		);

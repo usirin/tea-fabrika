@@ -351,12 +351,14 @@ describe("P16 stack and sealed loader", () => {
 class Client {
 	readonly frames: any[] = [];
 	readonly ws: WebSocket;
+	readonly url: string;
+	readonly key: ReturnType<typeof identity>;
+	readonly tab: string;
 	serial = 0;
-	constructor(
-		readonly url: string,
-		readonly key: ReturnType<typeof identity>,
-		readonly tab: string,
-	) {
+	constructor(url: string, key: ReturnType<typeof identity>, tab: string) {
+		this.url = url;
+		this.key = key;
+		this.tab = tab;
 		this.ws = new WebSocket(
 			`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
 		);

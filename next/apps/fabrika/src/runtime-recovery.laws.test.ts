@@ -13,13 +13,15 @@ import {Process, Project} from "./brain.ts";
 import type {Env} from "./runtime.ts";
 
 const table = vi.hoisted(() => ({programs: {} as Record<string, {hash: string; source: string}>}));
-vi.mock("./table.ts", () => table);
+vi.mock("virtual:fabrika-built", () => ({...table, assets: {}}));
 vi.mock("cloudflare:workers", () => ({
 	DurableObject: class {
-		constructor(
-			readonly ctx: DurableObjectState,
-			readonly env: Env,
-		) {}
+		readonly ctx: DurableObjectState;
+		readonly env: Env;
+		constructor(ctx: DurableObjectState, env: Env) {
+			this.ctx = ctx;
+			this.env = env;
+		}
 	},
 	WorkerEntrypoint: class {},
 }));

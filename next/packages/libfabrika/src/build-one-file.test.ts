@@ -34,6 +34,8 @@ const text = fc
 	.map((xs) => xs.join(""));
 const graph = fc.record({text, chaos: fc.boolean(), count: fc.integer({min: 1, max: 3})});
 const runs = {seed: 119120, numRuns: 3};
+// Three real clean-build samples took 5.6 s under load. Allow 10 s per generated sample.
+const buildTimeout = (samples = runs.numRuns) => samples * 10_000;
 type Selection = {readonly name: string; readonly package: string; readonly export: string};
 type Built = {
 	readonly brain: string;
@@ -202,103 +204,121 @@ afterEach(() => {
 });
 
 describe("P16 p33 one-file build", () => {
-	it("text embedding: generated compiled bytes survive exactly and outer import is inert", async () => {
-		await fc.assert(
-			fc.asyncProperty(graph, async ({text, count, chaos}) => {
-				const actual = await observe();
-				const f = fixture(text, count),
-					built = await build({...f.options, chaos});
-				const bytes = readFileSync(built.brain, "utf8");
-				embedded(bytes, [
-					...Object.values(built.programs).map((p) => p.source),
-					...Object.values(built.assets).map((a) => a.body),
-				]);
-				const inner = actual.slice(0, -1);
-				expect(inner.length).toBeGreaterThanOrEqual(count + 3);
-				embedded(bytes, inner);
-				expect(Object.keys(built.programs)).toHaveLength(count);
-				for (const p of Object.values(built.programs)) expect(p.hash).toBe(sha(p.source));
-				inert(built.brain);
-				const planted = join(f.home, "executed.mjs");
-				writeFileSync(planted, `globalThis.__p16Inner = true;\n${bytes}`);
-				expect(() => inert(planted)).toThrow();
-			}),
-			runs,
-		);
-	});
-	it("same file: clean builds ignore time and checkout path for equal chaos", async () => {
-		await fc.assert(
-			fc.asyncProperty(graph, async ({text, count, chaos}) => {
-				vi.useFakeTimers({toFake: ["Date"]});
-				vi.setSystemTime(new Date("2030-01-01"));
-				const a = fixture(text, count),
-					first = await build({...a.options, chaos});
-				vi.setSystemTime(new Date("2031-01-01"));
-				const b = fixture(text, count),
-					second = await build({...b.options, chaos});
-				expect(readFileSync(second.brain)).toEqual(readFileSync(first.brain));
-				for (const f of [a, b]) expect(readFileSync(first.brain, "utf8")).not.toContain(f.home);
-				expect(readdirSync(join(a.home, "dist")).filter((p) => /\.(?:m?js|css)$/.test(p))).toEqual([
-					"brain.mjs",
-				]);
-				for (const marker of [b.home, String(Date.now()), "https://stage.invalid"])
-					expect(sha(readFileSync(second.brain) + marker)).not.toBe(sha(readFileSync(first.brain)));
-			}),
-			runs,
-		);
-	});
-	it("table: duplicate selections fail with a typed error and keep the last good file", async () => {
-		await fc.assert(
-			fc.asyncProperty(text, async (value) => {
-				const f = fixture(value),
-					previous = `last-good-${value}`;
-				mkdirSync(f.options.out);
-				writeFileSync(join(f.options.out, "brain.mjs"), previous);
-				const result = await Effect.runPromise(
-					Effect.result(
-						(await api()).build({
-							...f.options,
-							programs: [f.options.programs[0]!, f.options.programs[0]!],
-						}),
-					).pipe(Effect.provide(NodeServices.layer)),
-				);
-				expect(result).toMatchObject({
-					_tag: "Failure",
-					failure: {_tag: "BuildError", why: "table"},
-				});
-				expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(previous);
-			}),
-			runs,
-		);
-	});
-	it("plants: actual Rolldown bytes catch escaping, newline normalization and executable source", async () => {
-		await fc.assert(
-			fc.asyncProperty(text, async (value) => {
-				const f = fixture(value),
-					file = join(f.home, "inner.ts");
-				writeFileSync(file, `export const text=${JSON.stringify(`${value}\r\n\\雪</script>`)};`);
-				const handle = await rolldown({input: file});
-				let source = "";
-				try {
-					const out = await handle.generate({format: "esm"});
-					for (const item of out.output) if (item.type === "chunk") source = item.code;
-				} finally {
-					await handle.close();
-				}
-				embedded(`export const source=${JSON.stringify(source)};`, [source]);
-				for (const changed of [
-					source.replaceAll("\\r\\n", "\\n"),
-					source.replaceAll("\\\\", "\\"),
-					`${source}\n`,
-				]) {
-					assert.notEqual(changed, source);
-					expect(() =>
-						embedded(`export const source=${JSON.stringify(changed)}`, [source]),
-					).toThrow("compiled text changed");
-				}
-				expect(() => embedded(source, [source])).toThrow("compiled text changed");
-			}),
-			{...runs, numRuns: 8},
-		);
-	});
+	it(
+		"text embedding: generated compiled bytes survive exactly and outer import is inert",
+		{timeout: buildTimeout()},
+		async () => {
+			await fc.assert(
+				fc.asyncProperty(graph, async ({text, count, chaos}) => {
+					const actual = await observe();
+					const f = fixture(text, count),
+						built = await build({...f.options, chaos});
+					const bytes = readFileSync(built.brain, "utf8");
+					embedded(bytes, [
+						...Object.values(built.programs).map((p) => p.source),
+						...Object.values(built.assets).map((a) => a.body),
+					]);
+					const inner = actual.slice(0, -1);
+					expect(inner.length).toBeGreaterThanOrEqual(count + 3);
+					embedded(bytes, inner);
+					expect(Object.keys(built.programs)).toHaveLength(count);
+					for (const p of Object.values(built.programs)) expect(p.hash).toBe(sha(p.source));
+					inert(built.brain);
+					const planted = join(f.home, "executed.mjs");
+					writeFileSync(planted, `globalThis.__p16Inner = true;\n${bytes}`);
+					expect(() => inert(planted)).toThrow();
+				}),
+				runs,
+			);
+		},
+	);
+	it(
+		"same file: clean builds ignore time and checkout path for equal chaos",
+		{timeout: buildTimeout()},
+		async () => {
+			await fc.assert(
+				fc.asyncProperty(graph, async ({text, count, chaos}) => {
+					vi.useFakeTimers({toFake: ["Date"]});
+					vi.setSystemTime(new Date("2030-01-01"));
+					const a = fixture(text, count),
+						first = await build({...a.options, chaos});
+					vi.setSystemTime(new Date("2031-01-01"));
+					const b = fixture(text, count),
+						second = await build({...b.options, chaos});
+					expect(readFileSync(second.brain)).toEqual(readFileSync(first.brain));
+					for (const f of [a, b]) expect(readFileSync(first.brain, "utf8")).not.toContain(f.home);
+					expect(
+						readdirSync(join(a.home, "dist")).filter((p) => /\.(?:m?js|css)$/.test(p)),
+					).toEqual(["brain.mjs"]);
+					for (const marker of [b.home, String(Date.now()), "https://stage.invalid"])
+						expect(sha(readFileSync(second.brain) + marker)).not.toBe(
+							sha(readFileSync(first.brain)),
+						);
+				}),
+				runs,
+			);
+		},
+	);
+	it(
+		"table: duplicate selections fail with a typed error and keep the last good file",
+		{timeout: buildTimeout()},
+		async () => {
+			await fc.assert(
+				fc.asyncProperty(text, async (value) => {
+					const f = fixture(value),
+						previous = `last-good-${value}`;
+					mkdirSync(f.options.out);
+					writeFileSync(join(f.options.out, "brain.mjs"), previous);
+					const result = await Effect.runPromise(
+						Effect.result(
+							(await api()).build({
+								...f.options,
+								programs: [f.options.programs[0]!, f.options.programs[0]!],
+							}),
+						).pipe(Effect.provide(NodeServices.layer)),
+					);
+					expect(result).toMatchObject({
+						_tag: "Failure",
+						failure: {_tag: "BuildError", why: "table"},
+					});
+					expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(previous);
+				}),
+				runs,
+			);
+		},
+	);
+	it(
+		"plants: actual Rolldown bytes catch escaping, newline normalization and executable source",
+		{timeout: buildTimeout(8)},
+		async () => {
+			await fc.assert(
+				fc.asyncProperty(text, async (value) => {
+					const f = fixture(value),
+						file = join(f.home, "inner.ts");
+					writeFileSync(file, `export const text=${JSON.stringify(`${value}\r\n\\雪</script>`)};`);
+					const handle = await rolldown({input: file});
+					let source = "";
+					try {
+						const out = await handle.generate({format: "esm"});
+						for (const item of out.output) if (item.type === "chunk") source = item.code;
+					} finally {
+						await handle.close();
+					}
+					embedded(`export const source=${JSON.stringify(source)};`, [source]);
+					for (const changed of [
+						source.replaceAll("\\r\\n", "\\n"),
+						source.replaceAll("\\\\", "\\"),
+						`${source}\n`,
+					]) {
+						assert.notEqual(changed, source);
+						expect(() =>
+							embedded(`export const source=${JSON.stringify(changed)}`, [source]),
+						).toThrow("compiled text changed");
+					}
+					expect(() => embedded(source, [source])).toThrow("compiled text changed");
+				}),
+				{...runs, numRuns: 8},
+			);
+		},
+	);
 });
