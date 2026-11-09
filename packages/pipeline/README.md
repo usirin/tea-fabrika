@@ -98,7 +98,6 @@ The `exports` map has `"./*": "./src/*.ts"`, so any file is importable as
 | `jev-live.ts` | The live `Jev`: one HTTP call each, a spend cap checked before each call, and a receipt per call (`JevReceipts`). `jevFromConfig` reads `TYPESAFE_API_KEY` and fails to build without it. No test builds it |
 | `tickets/duplicates.ts` | The duplicate hint at filing: the cheap filter (`candidatesOf`), the Jev question (`duplicateJudge`), the ranking at the floor (`hintsOf`). Experiment 167 |
 | `code-host-github.ts`, `code-host-github-writes.ts`, `code-host-local.ts`, `codeowners.ts` | `CodeHost` and `CodeHostWrites` over GitHub, and `CodeHost` over a local git copy |
-| `sandboxes.ts` | What is mounted in each stage's sandbox: nothing, a worktree, or the commit; a model credential only where an agent runs. `sandboxes.test.ts` plants an `env \| curl` line in every stage's sandbox |
 | `child.ts` | One command run to its end |
 | `ids.ts`, `entity.ts`, `verdict.ts`, `check-runs.ts`, `local-checks.ts`, `worktrees.ts` | Ids, ledger entities, reading today's review verdicts, check runs, working copies |
 | `sh.ts`, `comments.ts` | One command run through `execFile`, and `isMachines`: which issue comments a machine wrote. Both were in `wip/src/operator-live.ts`, which stays in `wip` with the old operator's live Layers |
@@ -126,7 +125,6 @@ Moved to `@kampus/fabrika-old` in experiment 114, because nothing in them is the
   - `handlers.ts`: its handlers and the runners of its two Listens, the reads kept apart from the writes.
   - `look.ts`: the machine stepped as far as its first write or wait, with that write handed back, never sent.
   - `program.ts`: the `ship` program, the thing you start. A mode as its flag, pull requests told on its input `pr` at any time, a fresh run of the machine per pull request, one at a time. `CodeHost` and `CodeHostWrites` come through Effect's context.
-  - `run.ts`, with `launch.ts` behind it: `node packages/pipeline/src/stages/ship/run.ts <pull request url>... --own <account>` only reads. It prints the facts, the machine's answer and the write it would send. With `--write` the machine runs to its end on each pull request. A url that is not a pull request's answers `bad_shape` before anything runs. Every option is in the comment at the top of the file.
   - Its live runs: [experiment 56](../../experiments/56-first-live-run-of-the-ship-machine.md), and [63](../../experiments/63-ship-as-a-program.md) for ship as a program.
 - `stages/review/`: one pull request at one head commit in, one typed outcome and a report out ([`docs/review-machine.md`](../../docs/review-machine.md), last section).
   - `pack.ts`: code reads everything a reviewer needs. `gate.ts`: stops before any agent when a required check is red or the pack is not whole.
@@ -135,7 +133,6 @@ Moved to `@kampus/fabrika-old` in experiment 114, because nothing in them is the
   - `verdict.ts`: the verdict of each kind. `render.ts`: the comment's text.
   - `machine.ts`: the review machine around the reviewer. `program.ts`: the `review` program. It only reads: a note the reviewer files goes out on the output `note`, and nothing is posted.
   - `outcome.ts`: its own words for the five verbs, 19 names in all.
-  - `run.ts`: `node packages/pipeline/src/stages/review/run.ts <pull request url> --rubrics <folder> --repo <local clone>`. It prints the notes, the verdict, the comments it would post, and the cost. Every option is in the comment at the top of the file.
   - The rubric texts tsh hands the live `review` are in `rubrics/`, unless `tsh.toml` names a folder.
   - Tested on recorded answers under `fixtures/review/`, with a scripted reviewer. Its real runs: [`docs/review-machine.md`](../../docs/review-machine.md), "The three runs beside today's reviewer".
 - `code-host-github.ts`, `codeowners.ts`: `CodeHost` on GitHub, the read side only.

@@ -573,7 +573,7 @@ const drained = async (req: Request, res: Response): Promise<Response> => {
  * objects (one per project, one per person); today the name is the path's first part. A router
  * goes here (experiment 145), and every object keeps its own door and its own members.
  */
-export const objectOf = (url: URL): string | null => url.pathname.split("/")[1] || null;
+const objectOf = (url: URL): string | null => url.pathname.split("/")[1] || null;
 
 /**
  * Plain HTTP for processes that cannot hold an RPC stub: every request goes to its object, whose

@@ -85,7 +85,7 @@ the app opens several projects the way Obsidian opens vaults.**
   own host, and so its own tsh: its own jobs, its own history, its own
   programs, all on that project's server. This is how Erlang runs two
   separate systems on one machine, as two nodes, each with its own database
-  folder and its own cookie. It keeps [tea-host](./tea-host.md)'s rule, every
+  folder and its own cookie. It keeps tea-host's rule, every
   host uses exactly one ledger, as written.
 
 ```text
@@ -216,7 +216,7 @@ ledger.append(stream, rev, {...event, writer: writerText(who)}); // the body's o
   2026-10-19).
 - The ledger is a service, and it is tea-host's
   ([the ledger behind a service](./ledger-behind-a-service.md),
-  [tea-host](./tea-host.md)).
+  tea-host).
 - Tickets are facts in our own tracker, and only people on the ledger write
   them ([tickets start in our tracker](./tickets-start-in-our-tracker.md)).
 - Which ledger a repository uses is `[ledger] at` in its `fabrika.toml`
@@ -1186,14 +1186,14 @@ apart, or whether GitHub's keys list answers a Worker reliably.
   model calls.
 - **The owner approved it the same day,** under $1, with everything deleted
   after. It is experiment 144. The account and its keys are not in this repo.
-- **It settles:** the 50 ms p99 bar in [tea-host](./tea-host.md) ("If a
+- **It settles:** the 50 ms p99 bar in tea-host ("If a
   deployed ledger's p99 append is over about 50 ms, a direct host-to-host path
   comes next"); poll or tail; whether a deploy mid-run loses anything; and
   whether the SSH proof can lean on GitHub's public list.
 
 ## Where it disagrees with a decided note
 
-- **[tea-host](./tea-host.md) says "every host uses exactly one ledger"**, and
+- **tea-host says "every host uses exactly one ledger"**, and
   the GUI note says everything the app keeps is on the host's one ledger.
   It no longer disagrees. Each open project gets its own host (decided at
   the top), and that host uses one server: the project's object and the

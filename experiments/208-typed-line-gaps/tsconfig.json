@@ -1,6 +1,0 @@
-{
-	// Experiment 208 alone: `tsc -p experiments/208-typed-line-gaps`. The root typecheck skips experiments.
-	"extends": "../../tsconfig.base.json",
-	"compilerOptions": { "types": ["node"] },
-	"include": ["*.ts", "programs/*.ts"]
-}

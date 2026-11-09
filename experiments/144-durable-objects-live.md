@@ -15,7 +15,7 @@ GitHub's keys list.**
 - **Reads:** 28 ms at p50 and 55 ms at p99 from the laptop. The network alone is 19 and 40.
 - **Writes:** an append is 56 ms at p50 and 74 ms at p95, but 426 ms at p99. About 1 write in
   100 waits 0.4 to 0.8 s inside Cloudflare. That is far over
-  [tea-host](../docs/direction/tea-host.md)'s 50 ms bar. Reads have no such tail, so a read
+  tea-host's 50 ms bar. Reads have no such tail, so a read
   cache, the note's answer to a slow ledger, would not fix it. *That bar was dropped the same
   day: these times are good enough for two people (part 1).*
 - **Two writers for 10 minutes, a redeploy in the middle:** run twice, 5,670 and 5,342 facts,
@@ -138,7 +138,7 @@ between them. All 900 answered 200.
     pending write and handle a refused one. **How sure: 65%.** The doubt: one afternoon. A
     second run on another day, and one from a far network, would show whether the tail is
     steady.
-  - **Decided the same day** ([tea-host](../docs/direction/tea-host.md)): these write times
+  - **Decided the same day** (tea-host): these write times
     are good enough for two people. The 50 ms line was an agent's lean, never agreed, so no
     direct host-to-host path comes next. Showing a change before its write settles is later,
     and only if it feels slow in use.

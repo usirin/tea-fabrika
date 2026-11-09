@@ -1,7 +1,7 @@
 # Stage agents run on GPT sol through Codex
 
 Decided 2026-10-27 by the owner. It replaces
-[agents run on opus, for now](./agents-run-on-opus-for-now.md) for every
+agents run on opus, for now for every
 stage but triage, which waits on experiment 159.
 
 *Changed 2026-11-01, about today's version: the default model is now `gpt-6-astra`,
