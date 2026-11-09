@@ -28,6 +28,10 @@ field note 2026-11-08-20).
   before it stages anything, and lists them. Do not unstage another step's work: tell the lead.
 - **A build that names an exam path is refused** (exit 3) and nothing is committed. The paths are in
   `exam-paths.json`. Do not work around it: answer `send` to tests with the paths.
+- **A `lead` link signs only under a ticket no other branch's open PR holds.** Otherwise it
+  refuses (exit 5) and names that PR and branch: the new link would be that ticket's newest, outside
+  the PR's chain, and the commits check would read the PR's own lead links as `stale_link`. Sign
+  field rows and other lead work under a lead ticket of its own.
 - **One commit per call.** Several commits mean several calls, in order.
 - **Never rewrite history.** No `reset`, `rebase`, `commit --amend` or force-push. A takeover is a
   new commit on top. A rewrite leaves signed links that no longer match (`stale_link`).
