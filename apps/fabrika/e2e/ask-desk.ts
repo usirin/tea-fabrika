@@ -77,6 +77,11 @@ const until = async <A>(what: string, read: () => Promise<A>, ok: (value: A) => 
 	check(what, ok(value), value);
 	return value;
 };
+/** Capture a menu only after its fade has reached the final frame. */
+const finishAnimations = (locator: Locator) =>
+	locator.evaluate(async (element) => {
+		await Promise.all(element.getAnimations().map((animation) => animation.finished));
+	});
 /**
  * Puts the window on the primary display's work area with its page `want` big, or as much of it as
  * the work area holds, and waits until the page is that wide. The window opens on whichever display
@@ -518,10 +523,7 @@ export const askDesk = async (tools: Tools) => {
 				await attempt("P10 the asks menu opens", async () => {
 					await tools.prefixed(page, "a");
 					await page.locator("#pop-asks").getByText(DRAFT.what, {exact: true}).first().waitFor();
-					// The menu fades in: the shot waits for it to finish, so it shows the menu as it stays.
-					await page
-						.locator("#pop-asks")
-						.evaluate((menu) => Promise.all(menu.getAnimations().map((a) => a.finished)));
+					await finishAnimations(page.locator("#pop-asks"));
 					await shot(page, "asks-menu", layout, look);
 					const menu = page.locator("#pop-asks");
 					await menuWidth(`asks-menu-${layout}-${look}`, menu);
