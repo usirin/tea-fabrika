@@ -394,7 +394,14 @@ const frameStep = (m: FrameMsg): boolean => {
  */
 let leftOver = false;
 
+const closeForFocus = () => {
+	if (store.frame.over.kind === "none") return;
+	flushSync(() => frameStep({type: "close", reason: "navigation"}));
+	leftOver = true;
+};
+
 const cycleFocus = (to: "next" | "previous") => {
+	closeForFocus();
 	const fromOver = leftOver;
 	leftOver = false;
 	const open = store.desk?.at === "open" ? store.desk : null;
@@ -667,10 +674,7 @@ const onKey = (e: KeyboardEvent) => {
 	}
 	if (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"') {
 		swallow(e);
-		if (store.frame.over.kind !== "none") {
-			flushSync(() => frameStep({type: "close", reason: "navigation"}));
-			leftOver = true;
-		}
+		closeForFocus();
 		toHost({type: "run", does: alone, via: {keys: spell(name ?? "")}});
 		return;
 	}

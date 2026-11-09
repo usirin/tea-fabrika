@@ -560,6 +560,9 @@ export const serve = (options: {
 					if (why !== null) return why;
 					const word = commandFor(does);
 					if (word !== undefined) did(word, Via.word());
+					// Focus cycles close the overlay in the page before moving its DOM focus.
+					if (does.kind !== "show" && does.kind !== "cycle")
+						for (const client of clients) if (client.page) toPage(client, {type: "navigation"});
 					if (step({type: "typed", tile, does}, "every")) shout();
 					return null;
 				},
