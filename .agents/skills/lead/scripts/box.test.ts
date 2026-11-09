@@ -1070,6 +1070,74 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 		);
 	});
 
+	// Plant: reset usage totals at each completed turn, retaining only the last turn.
+	it("K3 fieldrow sums usage across completed turns and ignores partial events", () => {
+		fc.assert(
+			fc.property(
+				fc.array(
+					fc.record({
+						fresh: fc.integer({min: 1, max: 100_000}),
+						cached: fc.integer({min: 0, max: 50_000}),
+						output: fc.integer({min: 0, max: 50_000}),
+					}),
+					{minLength: 2, maxLength: 5},
+				),
+				(turns) => {
+					const dir = mkdtempSync(join(tmpdir(), "row321-"));
+					try {
+						const events = join(dir, "events.jsonl");
+						const lines = turns.map((turn) =>
+							JSON.stringify({
+								type: "turn.completed",
+								usage: {
+									input_tokens: turn.fresh + turn.cached,
+									cached_input_tokens: turn.cached,
+									output_tokens: turn.output,
+								},
+							}),
+						);
+						lines.splice(1, 0, "partial{", '{"type":"item.completed"}');
+						lines.push('{"type":"turn.completed","usage":{"input_tokens":999}}');
+						writeFileSync(events, `${lines.join("\n")}\n`);
+						const got = spawnSync(
+							"python3",
+							[
+								join(import.meta.dirname, "fieldrow.py"),
+								"--model",
+								"gpt-6.1-sol",
+								events,
+								"multi-turn",
+								"321",
+								"done",
+								"test usage",
+							],
+							{
+								encoding: "utf8",
+								timeout: 5_000,
+								env: {HOME: dir, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`},
+							},
+						);
+						expect(got.error).toBeUndefined();
+						expect(got.status, got.stderr).toBe(0);
+						const input = turns.reduce((sum, turn) => sum + turn.fresh + turn.cached, 0);
+						const cached = turns.reduce((sum, turn) => sum + turn.cached, 0);
+						const output = turns.reduce((sum, turn) => sum + turn.output, 0);
+						expect(JSON.parse(got.stdout)).toMatchObject({
+							inputTokens: input,
+							cachedTokens: cached,
+							outputTokens: output,
+							billed: input + output,
+							tokens: null,
+						});
+					} finally {
+						rmSync(dir, {recursive: true, force: true});
+					}
+				},
+			),
+			{seed: 119120, numRuns: 4, endOnFailure: true},
+		);
+	});
+
 	// Plant: trap only a normal child exit and lose the row or slot on a runner signal.
 	it("K3 SIGTERM releases the slot and records the interrupted run without usage", async () => {
 		await fc.assert(
@@ -1097,6 +1165,29 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 });
 
 describe("T321 K19 box and plan runners, today's tooling", () => {
+	// Plant: let the read-only planner run with workspace-write access.
+	it("K19 plan writer remains read-only in the main checkout", () => {
+		fc.assert(
+			fc.property(word, (name) =>
+				fixture((b) => {
+					const got = b.call("sh", [
+						join(import.meta.dirname, "runplan.sh"),
+						name,
+						join(b.dir, "prompt"),
+					]);
+					expect(got.code, got.text).toBe(0);
+					const calls = b.calls().filter((call) => call.cmd === "codex");
+					expect(calls).toHaveLength(1);
+					const args = calls[0]!.args;
+					expect(args[args.indexOf("-s") + 1]).toBe("read-only");
+					expect(args[args.indexOf("-C") + 1]).toBe(b.main);
+					expect(args).toContain("--ignore-user-config");
+				}),
+			),
+			{...options, seed: 119120},
+		);
+	});
+
 	// [secrets] Plants: match names case-sensitively, leak any config layer, skip either output
 	// on a failed or signaled run. Values are made up and never taken from the parent environment.
 	it.each(["box", "plan"])(

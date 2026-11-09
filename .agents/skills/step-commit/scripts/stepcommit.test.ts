@@ -160,6 +160,36 @@ console.error("fixture refuses package or network command"); process.exit(97);
 }
 
 describe("T321 K4 named paths, ownership and format, today's tooling", () => {
+	// Plant: drop the staged-index refusal. Both routes must preserve the index and checkout.
+	it("K4 refuses an occupied index with exit 4 before staging or signing", () => {
+		fc.assert(
+			fc.property(word, (name) => {
+				each([false, true], (only) =>
+					withRepo(
+						[
+							["src/owned.ts", "tests"],
+							["src/foreign.ts", "tests"],
+						],
+						(r) => {
+							r.changed("src/foreign.ts", `export const value = "staged-${name}";\n`);
+							r.git("add", "--", "src/foreign.ts");
+							r.changed("src/owned.ts");
+							const index = r.git("write-tree");
+							const diff = r.git("diff");
+							const got = r.commit("tests", ["src/owned.ts"], only);
+							expect(got.code, got.text).toBe(4);
+							expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+							expect(r.git("write-tree")).toBe(index);
+							expect(r.git("diff")).toBe(diff);
+							expect(r.signs()).toEqual([]);
+						},
+					),
+				);
+			}),
+			{...options, seed: 119120},
+		);
+	});
+
 	// Plant: match owners by prefix, allowing owned.tsx via the owned.ts row; skip unknown paths.
 	it("K4 commits only paths owned by this step, including normalized ./ names", () => {
 		fc.assert(
