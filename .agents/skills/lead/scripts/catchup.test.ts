@@ -29,6 +29,9 @@ type Setup = {
 	refused: "none" | "notes" | "branch";
 	cleanup?: "clean" | "dirty" | "locked" | "unsaved" | "malformed" | "error";
 	mergeFails?: boolean;
+	// Cleanup trouble: worktree listing fails, keeping the head fails, the catch-up checkout is
+	// not registered, or two forced worktrees share the PR branch.
+	trouble?: "list" | "keep" | "unregistered" | "twins";
 	// Seconds since the start, read by `date` after that many check reads (the last one repeats).
 	clock?: number[];
 };
@@ -104,6 +107,8 @@ if (cmd === "git") {
   const local = ["update-ref", "worktree", "rev-parse", "for-each-ref", "status", "cat-file", "show-ref", "symbolic-ref", "rev-list", "config", "ls-files", "log"];
   if (setup.cleanup && args.some(a => local.includes(a)) && !["fetch", "checkout", "push"].includes(op[0]) && !args.includes("merge")) {
     if (setup.cleanup === "error" && args.includes("remove") && args.some(a => a.endsWith("driver"))) die("planted worktree removal failure");
+    if (setup.trouble === "list" && args.includes("worktree") && args.includes("list")) die("planted worktree list failure");
+    if (setup.trouble === "keep" && args.includes("refs/keep/pr/900")) die("planted keep ref failure");
     const ran = require("node:child_process").spawnSync("/usr/bin/git", args, {encoding: "utf8"});
     process.stdout.write(ran.stdout || ""); process.stderr.write(ran.stderr || ""); process.exit(ran.status ?? 1);
   }
@@ -197,6 +202,12 @@ const run = (setup: Setup, args: string[] = []) => {
 			}
 			if (setup.cleanup === "dirty") writeFileSync(join(dir, "boxes/driver/tracked"), "dirty");
 			if (setup.cleanup === "locked") git(dir, "worktree", "lock", join(dir, "boxes/driver"));
+			if (setup.trouble === "unregistered") {
+				git(dir, "worktree", "remove", "--force", join(dir, "boxes/catchup-900"));
+				mkdirSync(join(dir, "boxes/catchup-900/node_modules"), {recursive: true});
+			}
+			if (setup.trouble === "twins")
+				git(dir, "worktree", "add", "-q", "-f", join(dir, "boxes/driver twin"), setup.branch);
 			mkdirSync(join(dir, "boxes/state"));
 			writeFileSync(join(dir, "boxes/state/driver.md"), "saved wait");
 			expect(git(dir, "remote")).toBe("");
@@ -528,6 +539,50 @@ describe("catchup, today's tooling", () => {
 				}
 			}),
 			{seed: 3193, numRuns: 3},
+		);
+	});
+
+	// Plants (mutation, seed 119120): drop the line for a failed worktree listing; remove
+	// worktrees after the keep ref failed; skip an unregistered catch-up checkout silently; or
+	// remove one of two worktrees that share the PR branch.
+	it("T318 listing keep-ref registration and shared-branch trouble each keep with a line and stay green", () => {
+		fc.assert(
+			fc.property(fc.stringMatching(/^[a-z]{2,8}$/), (suffix) => {
+				for (const trouble of ["list", "keep", "unregistered", "twins"] as const) {
+					const got = run({...green, branch: `fabrikalfa/${suffix}`, cleanup: "clean", trouble});
+					expect(got.code, got.text).toBe(0);
+					expect(merges(got.calls)).toHaveLength(1);
+					expect(got.state).toBe("saved wait");
+					const has = (path: string) => got.remaining.includes(path);
+					if (trouble === "list") {
+						expect(got.text).toMatch(/^kept worktrees: [^\n]+$/m);
+						expect(got.keptHead).toBe(got.checkedTip);
+						for (const path of ["catchup-900", "driver", "sibling"]) expect(has(path)).toBe(true);
+						for (const path of ["exact box", "later box"]) expect(has(path)).toBe(false);
+					}
+					if (trouble === "keep") {
+						expect(got.keptHead).toBe("");
+						expect(got.text).toMatch(/^kept worktree catchup-900: [^\n]+$/m);
+						expect(got.text).toMatch(/^kept box exact box: [^\n]+$/m);
+						for (const path of ["catchup-900", "driver", "exact box", "later box"])
+							expect(has(path)).toBe(true);
+					}
+					if (trouble === "unregistered") {
+						expect(got.text).toMatch(/^kept worktree catchup-900: [^\n]+$/m);
+						expect(has("catchup-900")).toBe(true);
+						for (const path of ["driver", "exact box", "later box"]) expect(has(path)).toBe(false);
+					}
+					if (trouble === "twins") {
+						for (const path of ["driver", "driver twin"]) {
+							expect(has(path)).toBe(true);
+							expect(got.text).toMatch(new RegExp(`^kept worktree ${path}: [^\\n]+$`, "m"));
+						}
+						for (const path of ["catchup-900", "exact box", "later box"])
+							expect(has(path)).toBe(false);
+					}
+				}
+			}),
+			{seed: 3195, numRuns: 2},
 		);
 	});
 
