@@ -226,6 +226,25 @@ it("today, next, mixed and the shared plant helper have separate version flags",
 		options,
 	);
 });
+it("next's exam signer runs today's tests, alone or beside other paths", () => {
+	// T375 Amendment 1: box, plancheck and stepcommit tests read the signer.
+	// Plant caught: let commits.ts skip test like any other next/ path.
+	const commits = "next/apps/fabrika/src/exam/commits.ts";
+	const helper = "next/apps/fabrika/src/exam/plant.ts";
+	fc.assert(
+		fc.property(list, (paths) => {
+			expect(ci.classify([commits], "pull_request")).toEqual({
+				...heavy,
+				e2e: false,
+				field: false,
+			});
+			expect(ci.classify([...paths, commits], "pull_request")).toEqual(
+				ci.classify([...paths, helper], "pull_request"),
+			);
+		}),
+		options,
+	);
+});
 it("NUL diff keeps both move names and unusual paths; failed reads cannot skip", () => {
 	fc.assert(
 		fc.property(

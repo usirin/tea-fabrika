@@ -9,6 +9,7 @@ import {fileURLToPath} from "node:url";
 const all = {check: true, test: true, next: true, e2e: true, field: true};
 const today = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
 const helper = "next/apps/fabrika/src/exam/plant.ts";
+const commits = "next/apps/fabrika/src/exam/commits.ts";
 /** @param {string} path */
 const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path);
 const readTrees = ["programs/", "fixtures/", "packages/", "next/"];
@@ -55,7 +56,9 @@ export const classify = (paths, event) => {
 	const quiet = (path) => safe(path) || prose(path);
 	return {
 		check: !paths.every(quiet),
-		test: !paths.every((path) => quiet(path) || (path.startsWith("next/") && path !== helper)),
+		test: !paths.every(
+			(path) => quiet(path) || (path.startsWith("next/") && path !== helper && path !== commits),
+		),
 		next: !paths.every((path) => quiet(path) || script(path) || old(path)),
 		e2e: !paths.every((path) => quiet(path) || script(path) || path.startsWith("next/")),
 		field: paths.some(rows),
