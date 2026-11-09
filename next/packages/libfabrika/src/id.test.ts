@@ -720,6 +720,37 @@ describe("P17a, one valid typed identity", () => {
 
 describe("T518 Id order and generation", () => {
 	it.effect.prop(
+		"id.next keeps the generated type on completed success and failure spans",
+		{at: Time, type: Prefix},
+		({at, type}) => {
+			const spans: Array<Tracer.NativeSpan> = [];
+			const tracer = Tracer.make({
+				span(settings) {
+					const span = new Tracer.NativeSpan(settings);
+					spans.push(span);
+					return span;
+				},
+			});
+			return Effect.gen(function* () {
+				const Specific = Id.make(type);
+				const generator = yield* Id.Generator;
+				yield* TestClock.setTime(at);
+				expect(accepts(yield* generator.next(Specific), type)).toBe(true);
+				yield* TestClock.setTime(-at - 1);
+				expectIdFailure(yield* Effect.exit(generator.next(Specific)), "clock");
+				const made = spans.filter((span) => span.name === "id.next");
+				expect(made).toHaveLength(2);
+				for (const [index, span] of made.entries()) {
+					expect(span.attributes.get("type")).toBe(type);
+					expect(span.status._tag).toBe("Ended");
+					if (span.status._tag === "Ended")
+						expect(Exit.isSuccess(span.status.exit)).toBe(index === 0);
+				}
+			}).pipe(Effect.provide(Id.Generator.layer), Effect.withTracer(tracer));
+		},
+		effectOptions,
+	);
+	it.effect.prop(
 		"unregistered schemas fail typed instead of generating an undefined prefix",
 		{at: Time, type: Prefix},
 		({at, type}) =>
