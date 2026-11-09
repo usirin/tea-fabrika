@@ -338,6 +338,16 @@ const spoken = (value: Value): string => {
 	return "step" in value ? `${step(value.step)}, a bend` : "a bend";
 };
 
+/** The chosen scale step, in the same solid-then-alpha order as resolveAll. */
+const spokenScale = (scale: string, look: Look, hex: string): string => {
+	for (let n = 1; n <= 12; n++) {
+		for (const step of [`${scale}.${n}`, `${scale}.a${n}`]) {
+			if (stepIn(step, look) === hex) return spoken(step);
+		}
+	}
+	throw new Error(`no ${scale} step matches ${hex} in ${look}`);
+};
+
 const colorsRegion = (sources: Sources, resolved: Resolved): string => {
 	const {tokens, parts} = sources;
 	const byName = ([a]: readonly [string, unknown], [b]: readonly [string, unknown]) =>
@@ -355,7 +365,10 @@ const colorsRegion = (sources: Sources, resolved: Resolved): string => {
 				const value = dark === light ? dark : `light-dark(${light}, ${dark})`;
 				const [d, l] =
 					"scale" in t.colors
-						? [t.colors.scale, t.colors.scale]
+						? [
+								spokenScale(t.colors.scale, "dark", dark),
+								spokenScale(t.colors.scale, "light", light),
+							]
 						: [spoken(t.colors.dark), spoken(t.colors.light)];
 				return [`\t--${name}: ${value}; /* ${d === l ? d : `light ${l}; dark ${d}`} */`];
 			});

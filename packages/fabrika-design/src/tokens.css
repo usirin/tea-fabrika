@@ -48,7 +48,7 @@
 	--text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
 	--text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
 	--turn-fg: #ffffff; /* a bend */
-	--turn-text: light-dark(#002bb7c5, #d6e1ff); /* indigo */
+	--turn-text: light-dark(#002bb7c5, #d6e1ff); /* light indigo a11; dark indigo 12 */
 
 	/* The design's names for other tokens. */
 	--closed: var(--text-faint);
