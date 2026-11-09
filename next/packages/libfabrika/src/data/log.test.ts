@@ -18,7 +18,7 @@ import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, expectTypeOf, it} from "@effect/vitest";
 import {Effect, Layer, Schema, Stream} from "effect";
 import * as fc from "fast-check";
-import {processId} from "../id.test-support.ts";
+import {inputParents, processId} from "../id.test-support.ts";
 import * as data from "./index.ts";
 import {Doorbell, Ledger} from "./ledger.ts";
 import type {Entry, InputId, Line} from "./log.ts";
@@ -318,15 +318,16 @@ describe("p68, an entry keeps its parent", () => {
 		expect(badParents(goodParent).filter(is)).toEqual([]);
 	});
 
-	it.effect.each([
-		["first character 0, counter 1", "in-process_0000000000e008000000000000-1"],
-		["first character 7, counter 41", "in-process_7zzzzzzzzzfzzvzzzzzzzzzzzz-41"],
-	] as const)("p68b, a parent with %s is placed and kept as sent", ([, parent]) =>
-		Effect.gen(function* () {
-			const {answers, entries} = yield* handIn([{...json(), parent}]);
-			expect(answers).toEqual([{_tag: "placed", rev: 1, pos: 1}]);
-			expect(entries.map((entry) => entry.parent)).toEqual([parent]);
-		}).pipe(Effect.provide(onReferee(fresh()))),
+	it.effect.prop(
+		"p68b, a generated process parent and positive counter are placed and kept as sent",
+		{parent: inputParents},
+		({parent}) =>
+			Effect.gen(function* () {
+				const {answers, entries} = yield* handIn([{...json(), parent}]);
+				expect(answers).toEqual([{_tag: "placed", rev: 1, pos: 1}]);
+				expect(entries.map((entry) => entry.parent)).toEqual([parent]);
+			}).pipe(Effect.provide(onReferee(fresh()))),
+		{arbitrary: {seed: SEED, runs: 40}},
 	);
 
 	it.effect("a parent, or null for an own write, is read back the same", () =>

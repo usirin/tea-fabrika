@@ -1,9 +1,10 @@
 // Next/, P10/P33 shared process generator contract, retained by T518 PR 1.
 // ProcessIdGenerator.layer owns one writer's state; next remains an Effect<ProcessId>.
 import {describe, expect, it, vi} from "@effect/vitest";
-import {Cause, Clock, Effect, Exit, Schema} from "effect";
+import {Cause, Clock, Effect, Exit, Option, Schema, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import {ProcessId} from "../data/trace.ts";
+import {processClocks} from "../id.test-support.ts";
 import * as Id from "../id.ts";
 import * as Coordination from "./index.ts";
 
@@ -20,6 +21,33 @@ const timestamp = (id: string): number =>
 	[...decode(id).slice(0, 6)].reduce((n, b) => n * 256 + b, 0);
 
 describe("P10 shared process ids", () => {
+	it.effect.prop(
+		"next records process.next with an inner id.next span on generated clocks",
+		{at: processClocks},
+		({at}) => {
+			const spans: Array<Tracer.NativeSpan> = [];
+			const tracer = Tracer.make({
+				span: (options) => {
+					const span = new Tracer.NativeSpan(options);
+					spans.push(span);
+					return span;
+				},
+			});
+			return Effect.gen(function* () {
+				yield* TestClock.setTime(at);
+				const generator = yield* Coordination.ProcessIdGenerator;
+				yield* generator.next;
+				const process = spans.filter((span) => span.name === "process.next");
+				const id = spans.filter((span) => span.name === "id.next");
+				expect(process).toHaveLength(1);
+				expect(id).toHaveLength(1);
+				expect(process[0]!.status._tag).toBe("Ended");
+				expect(id[0]!.status._tag).toBe("Ended");
+				expect(id[0]!.parent).toEqual(Option.some(process[0]!));
+			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer), Effect.withTracer(tracer));
+		},
+		options,
+	);
 	it.effect.prop(
 		"monotonic: exhausted random bits advance the clock before the next id",
 		{at: Time},
