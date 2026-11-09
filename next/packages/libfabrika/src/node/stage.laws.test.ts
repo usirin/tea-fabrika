@@ -57,9 +57,11 @@ it("the control plugin returns a typed error for malformed platform port data", 
 					const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
 					expect(Cause.hasDies(cause)).toBe(false);
 					expect(Cause.hasFails(cause)).toBe(true);
+					// Alchemy beta.84's PluginConfig.start fails with RuntimeError. A bad
+					// platform port is its SystemError case, not our private ControlError.
 					expect(Cause.findErrorOption(cause)).toMatchObject({
 						_tag: "Some",
-						value: {_tag: "ControlError", why: "bad_row"},
+						value: {_tag: "SystemError", subtag: "control_port"},
 					});
 				} finally {
 					vi.unstubAllEnvs();

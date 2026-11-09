@@ -157,7 +157,7 @@ const world = async (
 			build({
 				out: join(home, "dist"),
 				programs: {"writer-fixture": writer, "timer-fixture": timer, "sealed-fixture": sealed},
-			}),
+			}).pipe(Effect.provide(NodeServices.layer)),
 		);
 		if (instrument) await instrumentBrain(built.brain, home);
 		await Effect.runPromise(

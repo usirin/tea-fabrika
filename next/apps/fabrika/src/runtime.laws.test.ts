@@ -660,7 +660,8 @@ describe("P12 Gateway recording", () => {
 				} as unknown as Env["PROJECT"];
 				// oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
 				const socket = ws as unknown as WebSocket;
-				const runtime = gatewayRuntime(ctx, {...w.env, PROJECT: project}, settings(w.env));
+				const config = await Effect.runPromise(settings(w.env));
+				const runtime = gatewayRuntime(ctx, {...w.env, PROJECT: project}, config);
 				try {
 					const gateway = await runtime.runPromise(GatewayService),
 						before = w.recorded.length;

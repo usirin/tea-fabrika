@@ -16,6 +16,7 @@ import {
 import {workerExecution} from "../app/execution.ts";
 import {ProgramRunner} from "../app/runner.ts";
 import {Mailbox, ProcessStore, Writer} from "../coordination/index.ts";
+import {IdGenerator, InputId} from "../data/id.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import {programBox} from "./box.ts";
@@ -23,7 +24,7 @@ import {programBox} from "./box.ts";
 const SEED = 119120;
 // Only the platform base class is fake. Every RPC method runs the real programBox.
 vi.mock("cloudflare:workers", () => ({WorkerEntrypoint: class {}}));
-const PID = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
 const NAME = "reply:1";
 const owner = Writer.cases.person.make({key: "SHA256:fixture", for: "person-test"});
 const Model = Schema.Struct({replies: Schema.Int, why: Schema.NullOr(Schema.String)});
@@ -66,6 +67,9 @@ const replyCase = (
 	adapter: "node" | "worker" = "worker",
 ) =>
 	Effect.gen(function* () {
+		const inputId = yield* IdGenerator.use((ids) => ids.next(InputId)).pipe(
+			Effect.provide(IdGenerator.layer),
+		);
 		const db = new DatabaseSync(":memory:");
 		try {
 			const sql = nodeSql(db);
@@ -160,7 +164,7 @@ const replyCase = (
 				const incoming = Schema.decodeUnknownSync(Incoming)({
 					id: letter,
 					envelope: {
-						id: `in-${PID}-1`,
+						id: inputId,
 						by: owner,
 						arrivedAt: 1794099600000,
 						input: {type: "work", n},
