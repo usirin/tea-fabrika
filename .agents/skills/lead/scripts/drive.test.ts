@@ -65,6 +65,7 @@ const recorded = (report: string, commits: number, held: readonly string[]) => {
 		exam: [],
 		leaks: [],
 		left: held,
+		manifests: [],
 		plancheck: null,
 		report,
 		problem: null,
@@ -96,6 +97,59 @@ describe("drive keeps a box that holds work, today's tooling", () => {
 				// The outcome line's reason says what was kept.
 				for (const what of held) expect(cmd.why).toContain(what);
 				if (held.length === 0) expect(cmd.why).not.toContain("box kept");
+			}),
+			options,
+		);
+	});
+});
+
+describe("drive asks the lead for the lockfile, today's tooling", () => {
+	const read = (report: string, manifests: readonly string[]) =>
+		machine.update.step_read_ok({phase: "reading", ask}, {
+			type: "step_read_ok",
+			value: {
+				head: "c".repeat(40),
+				commits: 1,
+				unsigned: [],
+				exam: [],
+				leaks: [],
+				left: [],
+				manifests,
+				plancheck: null,
+				report,
+				problem: null,
+			},
+		} as never)[0];
+	const manifest = fc.constantFrom(
+		"package.json",
+		"apps/fabrika/package.json",
+		"pnpm-workspace.yaml",
+	);
+
+	// Plant: trust the step's own answer. themes build2 (ticket 385): a box could not refresh the
+	// lockfile, answered send tests, and the lane looped build -> tests -> build.
+	it("a lockfile left behind is an ask for the lead, whatever the step answered, and names each manifest", () => {
+		fc.assert(
+			fc.property(answer, fc.uniqueArray(manifest, {minLength: 1}), (report, paths) => {
+				const s = read(report, paths);
+				expect(s.phase).toBe("pushing");
+				if (s.phase !== "pushing") return;
+				expect(s.outcome).toEqual({kind: "ask", who: "lead", for: "lockfile"});
+				for (const p of paths) expect(s.why).toContain(p);
+				expect(s.why).toContain("fabrikalfa/l-wip");
+			}),
+			options,
+		);
+	});
+
+	// Plant: ask on every step. With nothing behind, the step's own answer decides as before.
+	it("with no manifest behind, no answer becomes a lockfile ask", () => {
+		fc.assert(
+			fc.property(answer, (report) => {
+				const s = read(report, []);
+				expect(["pushing", "recording"]).toContain(s.phase);
+				const outcome = s.phase === "pushing" || s.phase === "recording" ? s.outcome : null;
+				expect(outcome).not.toEqual({kind: "ask", who: "lead", for: "lockfile"});
 			}),
 			options,
 		);
