@@ -5,15 +5,18 @@ import {
 	readdirSync,
 	readFileSync,
 	realpathSync,
+	rmSync,
 	writeFileSync,
 } from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Duration, Effect, Exit, Fiber, Logger, type Scope, Stream} from "effect";
-import {describe, expect, it} from "vitest";
+import * as fc from "fast-check";
+import {afterEach, describe, expect, it} from "vitest";
 import {memoryStorage, type Storage} from "../../program/storage.ts";
 import {SummonManager, type TurnNews} from "../../shell/summon.ts";
 import {summonManager} from "./manager.ts";
+import {openNames} from "./names.ts";
 
 // The summon tryout, PR 1 (ticket 237), today's version: the real `SummonManager` on the fake
 // ACP agent (../acp/fake-agent.ts), a child process spoken to over ACP with no model, so no test
@@ -28,10 +31,15 @@ import {summonManager} from "./manager.ts";
 // Laws S-4, S-5, S-6, S-7 and S-9 of the plan. S-3 is in manager.laws.test.ts.
 
 const PERSON = "user:owner";
+const made: string[] = [];
+afterEach(() => {
+	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});
+});
 
 /** A fresh git repository with two files to read. */
 const repo = () => {
 	const folder = realpathSync(mkdtempSync(join(tmpdir(), "summon-")));
+	made.push(folder);
 	execFileSync("git", ["init", "-q"], {cwd: folder});
 	writeFileSync(join(folder, "a.txt"), "The river is called Kura.\n");
 	writeFileSync(join(folder, "b.txt"), "The bridge has 7 arches.\n");
@@ -107,6 +115,73 @@ const whyOf = (e: unknown) =>
 	`${JSON.stringify(e)} ${e instanceof Error ? e.message : String((e as {message?: unknown})?.message ?? "")}`;
 
 const TIME = 60_000;
+
+it("P16: saved summons keep their original folder; another root stays down and is never reopened", async () => {
+	await fc.assert(
+		fc.asyncProperty(
+			fc.record({matching: fc.boolean(), name: fc.stringMatching(/^[a-z][a-z0-9]{0,10}$/)}),
+			async (input) => {
+				for (const matching of [input.matching, !input.matching]) {
+					const {name} = input;
+					const folder = repo();
+					const original = matching ? folder : repo();
+					const storage = memoryStorage();
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const names = yield* openNames(storage);
+							yield* names.take({
+								name,
+								agent: "fake",
+								run: `acp:${name}-fixture`,
+								model: {typed: null, resolved: "fake-small"},
+								effort: {typed: null, set: null},
+								folder: original,
+								since: 1,
+								by: PERSON,
+							});
+						}).pipe(Effect.scoped),
+					);
+					const seen = await hosted(
+						storage,
+						folder,
+						Effect.gen(function* () {
+							const manager = yield* SummonManager;
+							let list = yield* manager.list;
+							for (let i = 0; i < 150 && list.some((s) => s.state === "opening"); i++) {
+								yield* Effect.sleep("20 millis");
+								list = yield* manager.list;
+							}
+							return list;
+						}),
+					);
+					expect(seen).toHaveLength(1);
+					expect(seen[0]?.folder).toBe(original);
+					expect(seen[0]?.state).toBe(matching ? "idle" : "down");
+					if (!matching) expect(sessions(original)).toEqual([]);
+					const keptNames = await Effect.runPromise(
+						Effect.gen(function* () {
+							return (yield* openNames(storage)).now().names;
+						}).pipe(Effect.scoped),
+					);
+					expect(keptNames[0]?.folder).toBe(original);
+				}
+			},
+		),
+		{seed: 119120, numRuns: 5},
+	);
+});
+it("plant: P16 replace every saved folder", () => {
+	const result = fc.check(
+		fc.property(
+			fc.record({old: fc.stringMatching(/^[a-z]+$/), current: fc.stringMatching(/^[a-z]+$/)}),
+			({old, current}) => {
+				expect(`/current/${current}`).toBe(`/original/${old}`);
+			},
+		),
+		{seed: 119120, numRuns: 25},
+	);
+	expect(result.failed).toBe(true);
+});
 
 describe("summon", () => {
 	it(

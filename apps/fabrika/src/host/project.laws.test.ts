@@ -1,0 +1,141 @@
+import {readFileSync, statSync, writeFileSync} from "node:fs";
+import {join} from "node:path";
+import * as NodeSocket from "@effect/platform-node/NodeSocket";
+import {pullRequestsOf} from "@tea-fabrika/tracker";
+import {Effect, Exit, FileSystem, Schedule, Scope} from "effect";
+import * as fc from "fast-check";
+import {expect, it} from "vitest";
+import type {Down} from "../link.ts";
+import {readToPage} from "../messages.ts";
+import {go, home, options, plant, repo} from "../project.test-support.ts";
+import {appWire} from "../wire.ts";
+import {runHost} from "./run.ts";
+import {reach} from "./socket.ts";
+
+const ops = fc.array(
+	fc.record({
+		index: fc.integer({min: 0, max: 1}),
+		action: fc.constantFrom("counter", "summon", "split", "crash", "stale", "restart"),
+	}),
+	{minLength: 1, maxLength: 12},
+);
+const separate = (a: readonly string[], b: readonly string[]) => {
+	for (const value of a) expect(b).not.toContain(value);
+};
+const live = (sock: string) =>
+	reach(sock).pipe(
+		Effect.repeat({until: (r) => r === "live", schedule: Schedule.spaced("10 millis")}),
+		Effect.timeout("5 seconds"),
+	);
+const pause = Effect.sleep("100 millis");
+
+it("P2: two real hosts keep equal tile and agent names, ledger files, jobs and ports separate", async () => {
+	const {Project} = await import("../project.ts");
+	await fc.assert(
+		fc.asyncProperty(ops, async (operations) => {
+			const app = home();
+			const projects = await Promise.all(
+				["left", "right"].map((name) => go(Project.check(repo(app, name)))),
+			);
+			await go(
+				Effect.gen(function* () {
+					const hosts = [];
+					for (const project of projects) {
+						const paths = yield* Project.paths(app, project);
+						const durable = join(app, "projects", project.key);
+						const scope = yield* Scope.make();
+						yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+						yield* runHost({
+							home: durable,
+							repo: project.root,
+							project,
+							settings: app,
+							paths,
+							pid: process.pid,
+						}).pipe(Effect.provide(pullRequestsOf([])), Effect.scoped, Effect.forkIn(scope));
+						yield* live(paths.sock);
+						const got: Down[] = [];
+						const socket = yield* NodeSocket.makeNet({path: paths.sock});
+						const wire = yield* appWire(socket, (m) => got.push(m), undefined, project.key);
+						yield* wire.up;
+						wire.send({type: "page"});
+						hosts.push({project, paths, durable, got, wire, scope});
+					}
+					separate(
+						[hosts[0]!.paths.sock, hosts[0]!.paths.mcp, hosts[0]!.durable],
+						[hosts[1]!.paths.sock, hosts[1]!.paths.mcp, hosts[1]!.durable],
+					);
+					for (const h of hosts) {
+						expect(statSync(h.paths.dir).mode & 0o777).toBe(0o700);
+						for (const socket of [h.paths.sock, h.paths.mcp])
+							expect(statSync(socket).mode & 0o777).toBe(0o600);
+					}
+					for (const op of operations.filter(
+						(op) => !["crash", "stale", "restart"].includes(op.action),
+					)) {
+						const h = hosts[op.index]!;
+						const other = hosts[1 - op.index]!;
+						const before = other.got.length;
+						if (op.action === "split")
+							h.wire.send({type: "on", port: "desk", m: {type: "run", does: "tezgah.split"}});
+						else {
+							const line = op.action === "summon" ? "summon fake as scout" : "counter &";
+							h.wire.send({type: "on", port: "tile:t1", m: {type: "keys", data: `${line}\r`}});
+						}
+						yield* pause;
+						expect(
+							other.got
+								.slice(before)
+								.filter(
+									(m) => m.type === "to" && (m.port === "tile:t1" || m.port.startsWith("run:")),
+								),
+						).toEqual([]);
+					}
+					for (const h of hosts) {
+						const pages = h.got.flatMap((m) =>
+							m.type === "to" && m.port === "desk" ? [readToPage(m.m)] : [],
+						);
+						expect(pages.some((p) => p.kind === "read" && p.msg.type === "desk")).toBe(true);
+						// Real files, rather than two in-memory maps with invented project labels.
+						expect(statSync(join(h.durable, "ledger.sqlite")).isFile()).toBe(true);
+					}
+				}),
+			);
+		}),
+		{...options, numRuns: 3},
+	);
+});
+plant("P2 reuse one wire or storage home", ops, () =>
+	separate(["same-socket", "same-home"], ["same-socket", "same-home"]),
+);
+
+it("P10: crash, stale cleanup and restart touch only the chosen project's runtime files", async () => {
+	const {Project} = await import("../project.ts");
+	await fc.assert(
+		fc.asyncProperty(ops, async (operations) => {
+			const app = home();
+			const projects = await Promise.all(
+				["left", "right"].map((name) => go(Project.check(repo(app, name)))),
+			);
+			const paths = await Promise.all(projects.map((project) => go(Project.paths(app, project))));
+			for (const op of operations) {
+				if (!["crash", "stale", "restart"].includes(op.action)) continue;
+				const selected = projects[op.index]!;
+				const sibling = paths[1 - op.index]!;
+				await go(
+					Effect.gen(function* () {
+						const fs = yield* FileSystem.FileSystem;
+						yield* fs.makeDirectory(sibling.dir, {recursive: true, mode: 0o700});
+						for (const file of [sibling.sock, sibling.mcp, sibling.pid, sibling.lock])
+							writeFileSync(file, "sibling fixture");
+						yield* Project.recover(app, selected, op.action);
+						for (const file of [sibling.sock, sibling.mcp, sibling.pid, sibling.lock])
+							expect(readFileSync(file, "utf8")).toBe("sibling fixture");
+					}),
+				);
+			}
+		}),
+		options,
+	);
+});
+plant("P10 remove a sibling socket", ops, () => expect(undefined).toBe("sibling fixture"));

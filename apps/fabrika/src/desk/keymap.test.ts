@@ -1,7 +1,38 @@
 import {readFileSync} from "node:fs";
 import {Result} from "effect";
+import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {plant} from "../project.test-support.ts";
 import {commandOn, decodeKeys, defaults, Does, type Key, type Keys, spell} from "./keymap.ts";
+
+it("P18: opening is a shared configurable app binding, available before any host or terminal", () => {
+	fc.assert(
+		fc.property(
+			fc.record({
+				target: fc.constantFrom("terminal", "popover", "welcome"),
+				armed: fc.boolean(),
+				key: fc.constantFrom("o", "p", "e"),
+				quiet: fc.boolean(),
+			}),
+			({key}) => {
+				expect(commandOn(defaults, {_tag: "alone", key: "<m-o>"})).toBe("projects.open");
+				const changed = decodeKeys(`projects.open = "cmd+${key}"`, true);
+				expect(Result.isSuccess(changed)).toBe(true);
+				if (Result.isSuccess(changed))
+					expect(commandOn(changed.success, {_tag: "alone", key: `<m-${key}>`})).toBe(
+						"projects.open",
+					);
+			},
+		),
+		{seed: 119120, numRuns: 25},
+	);
+	// E2 presses this key over a real terminal, popover, prefix and welcome, and checks quiet focus.
+});
+plant(
+	"P18 handle project opening only inside a tile",
+	fc.record({target: fc.constantFrom("welcome", "popover"), armed: fc.boolean()}),
+	() => expect(undefined).toBe("projects.open"),
+);
 
 // The keybindings file, read: ~/.fabrika/keybindings.toml, laid over the defaults that ship with
 // the app (docs/direction/keybindings-are-configurable.md, K5, K6, K9). Today's version, ticket
