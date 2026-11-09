@@ -175,3 +175,117 @@ export const mix = (bg: string, fg: string, t: number) => {
 	if (result === null) throw new Error("fixture ladder left sRGB; review mapping before clipping");
 	return result;
 };
+
+type Look = "dark" | "light";
+type GlobalName = (typeof globalNames)[number];
+type GlobalColors = Readonly<Record<GlobalName, string>>;
+
+// Read generated CSS values, including aliases, without using the product's old theme map.
+export const builtinColors = (css: string, look: Look): GlobalColors => {
+	const declarations = new Map(
+		[...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/--([\w-]+):\s*([^;]+);/g)].map(
+			([, key = "", value = ""]) => [key, value.trim()],
+		),
+	);
+	const resolve = (name: string, seen: readonly string[] = []): string => {
+		if (seen.includes(name)) throw new Error(`fixture CSS alias cycle: ${name}`);
+		const value = declarations.get(name);
+		if (value === undefined) throw new Error(`fixture CSS has no ${name}`);
+		const alias = /^var\(--([\w-]+)\)$/.exec(value)?.[1];
+		if (alias !== undefined) return resolve(alias, [...seen, name]);
+		const pair = /^light-dark\((#[\da-f]+),\s*(#[\da-f]+)\)$/.exec(value);
+		const color = pair === null ? value : pair[look === "light" ? 1 : 2];
+		if (color === undefined || !/^#[\da-f]{6}([\da-f]{2})?$/.test(color))
+			throw new Error(`fixture CSS value is not a color: ${name}`);
+		return color;
+	};
+	return Object.fromEntries(globalNames.map((name) => [name, resolve(name)])) as GlobalColors;
+};
+
+// The note's six published places. focus is retained here only as a historical comparison;
+// 0009 keeps focus at the look's built-in slate a9 instead of mixing it.
+export const ladder = {
+	dark: {desk: -0.026, raised: 0.045, hover: 0.096, edge: 0.136, focus: 0.403, faint: 0.766},
+	light: {desk: 0.012, raised: 0, hover: 0.059, edge: 0.091, focus: 0.467, faint: 0.656},
+} as const;
+
+// 0009's four extra places are calculated from the drawn built-in, never typed in.
+export const positions = (builtin: GlobalColors) => {
+	const base = lab(builtin.surface)[0];
+	const span = lab(builtin["text-primary"])[0] - base;
+	const pos = (token: GlobalName) => (lab(composite(builtin[token], builtin.surface))[0] - base) / span;
+	return {
+		"surface-selected": pos("surface-selected"),
+		border: pos("border"),
+		"border-strong": pos("border-strong"),
+		wire: pos("wire"),
+	};
+};
+
+// Lower only chroma when a changed lightness leaves sRGB. Binary search at number precision
+// keeps the original hue, rather than clipping individual RGB channels.
+const lightness = (color: string, L: number): string => {
+	const [, a, b] = lab(color);
+	const direct = fromLab(L, a, b);
+	if (direct !== null) return direct;
+	let low = 0,
+		high = 1;
+	let result = fromLab(L, 0, 0);
+	if (result === null) throw new Error("fixture lightness cannot fit sRGB even at zero chroma");
+	for (let bit = 0; bit < 53; bit++) {
+		const mid = (low + high) / 2;
+		const candidate = fromLab(L, a * mid, b * mid);
+		if (candidate === null) high = mid;
+		else {
+			low = mid;
+			result = candidate;
+		}
+	}
+	return result;
+};
+
+// Today's app, T13. The tests' one independent import-mapping oracle, also used by experiment 239.
+// PR 3's product importer must not depend on this file.
+export const importedColors = (
+	look: Look,
+	bg: string,
+	fg: string,
+	palette: readonly string[],
+	builtin: GlobalColors,
+): GlobalColors => {
+	const at = (index: number) => {
+		const color = palette[index];
+		if (color === undefined) throw new Error(`fixture palette has no ${index}`);
+		return color;
+	};
+	const fill = at(4);
+	const sunken = mix(bg, fg, ladder[look].desk);
+	const faint = mix(bg, fg, ladder[look].faint);
+	const extra = positions(builtin);
+	return {
+		"surface-sunken": sunken,
+		surface: bg,
+		"surface-raised": mix(bg, fg, ladder[look].raised),
+		"surface-hover": mix(bg, fg, ladder[look].hover),
+		"surface-selected": mix(bg, fg, extra["surface-selected"]),
+		"border-faint": mix(bg, fg, ladder[look].edge),
+		border: mix(bg, fg, extra.border),
+		"border-strong": mix(bg, fg, extra["border-strong"]),
+		wire: mix(bg, fg, extra.wire),
+		scrim: `${sunken}${builtin.scrim.slice(7)}`,
+		focus: builtin.focus,
+		"text-primary": fg,
+		"text-faint": faint,
+		"turn-fill": fill,
+		"turn-fill-hover": lightness(
+			fill,
+			lab(fill)[0] + lab(builtin["turn-fill-hover"])[0] - lab(builtin["turn-fill"])[0],
+		),
+		"turn-fg": wcag("#ffffff", fill) >= wcag("#000000", fill) ? "#ffffff" : "#000000",
+		"turn-text": fill,
+		done: at(2),
+		running: at(3),
+		stuck: at(1),
+		closed: faint,
+	};
+};

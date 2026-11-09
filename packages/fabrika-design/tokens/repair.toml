@@ -1,9 +1,10 @@
-# Today's app, T343/T13. This is not a measured or accepted repair policy.
-# Experiment 239 ran against build5. The 21-global pair list exists, but the
-# mapped themes still use 15 old names; the checker stops at surface-sunken.
-# The plan supplies no mapping for surface-selected, border, border-strong,
-# wire, scrim or turn-fill-hover. Filling these from a built-in would hide the gap.
-# themes.ts also still supplies fallback colors under the 15 old names.
-# No complete uncapped pass ran. No cap, version or repair counts were guessed.
-# Fixture screenshots have not been reviewed.
+# Today's app, T343/T13. Experiment 239, seed 119120, both default floors.
+# All 21 global names are mapped by 0009. Measurement reached the real checker.
+# Three real inputs cannot finish: the built-in fallback uses the old names.
+# The made-up input also stops on the old fallback map. It never sets the cap.
+# Two complete uncapped reports and all four errors are in the fixture report.
+# No shipping cap, cap-setting pair or repair version can be pinned yet.
 status = "unmeasured"
+reason = "Nord, Solarized Light and Dracula: no color: turn-fg. Made-up input: no color: text-faint. The complete mapped inputs contain these names; themes.ts/theme-colors.ts still export the old 15-name built-in fallback. The five-real-theme uncapped pass is incomplete."
+report = "fixtures/themes/calibration.json"
+attemptedVersion = "1"

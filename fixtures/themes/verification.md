@@ -287,3 +287,77 @@ The requested full step-commit command refused before staging anything:
 The remaining exact-owned files are committed separately; the five token input
 edits and their saved diff are left for the lead to resolve. No ownership check
 was bypassed.
+
+## T13 after decision 0009, today's app, ticket 343
+
+This round changes only T13 and its tests-owned inputs. T26 stays in PR 3.
+The independent oracle in `laws.ts` now computes the four extra gray places
+from generated built-in CSS, derives scrim from the theme's surface-sunken,
+uses the built-in turn-fill-hover lightness step with chroma-only gamut fitting,
+and keeps focus at that look's built-in slate a9. The note's six published places
+and the four computed places are pinned together with a `pinned:` reason naming
+tests7's missing-mapping block. Experiment 239 prints and records those places.
+
+All five real inputs and the invented case now contain exactly the 21 global
+names and pass the product decoder. The six mapped byte hashes were refreshed
+together. The original source and license bytes are unchanged. The invented
+case uses the same mapping oracle and cannot set the cap.
+
+Experiment 239 ran against the actual shared checker with both default floors,
+seed 119120 and attempted algorithm version `1`. It saved the incomplete report:
+
+- Nord, Solarized Light and Dracula stop at `no color: turn-fg` during fallback.
+- The invented case stops at `no color: text-faint` during fallback.
+- Catppuccin Mocha completes with 14 moved-pair rows, 2 substitutions and 12 final failures.
+- Catppuccin Latte completes with 22 moved-pair rows, 3 substitutions and no final failures.
+
+The missing colors exist in every mapped input. The fallback in builder-owned
+`themes.ts`/`theme-colors.ts` still exports 15 old names, including `on-turn`
+and `faint`. This is now a product block, not a missing mapping decision.
+`calibration.json` keeps the two full uncapped reports, sorted finite moves,
+all four errors, mapped hashes, CSS hash, pair list, policy and attempted version.
+`repair.toml` states the same block and points to that report. No shipping cap,
+cap-setting pair or calibrated repair version is assigned from these partial
+results. No number was invented. The plan leaves no unanswered mapping question.
+
+The T13 `format:` law now checks the eventual measured cap and its setting pair,
+repair version, generated CSS hash, complete real-source set, uncapped changes
+and minimal moves, and capped checker reports for all six files. It stays red
+until the complete calibration exists. Its downstream measured-cap assertions
+cannot yet run because the real checker stops first. No fake measured report
+was used to make that law green.
+
+Eight temporary helper changes were caught by the two new checks: ignore alpha
+when computing places; copy the built-in selected color, border, strong border,
+wire or scrim; use the built-in hover lightness rather than its step; mix focus.
+Each plant produced one assertion failure in its named narrow check. The helper
+was restored byte-for-byte afterward. No product file was changed for a plant.
+
+The final narrow run and remaining check results are recorded below. No full
+suite, Electron run, fixture shots, visual cap review or VoiceOver run was made.
+No network, provider call or key read was used. Provider fees were $0.
+
+Final command: `pnpm exec vitest run --maxWorkers=1 packages/fabrika-design/src/themes.test.ts`.
+It finished with **39 green, 7 red, no skips or blocked checks**. T13 alone has
+**4 green and 1 red**. Its new pinned ladder and complete-mapping checks pass;
+the cap/report check fails on the recorded incomplete measurement. The six
+other reds are existing built-in/generated-value failures: the dark pick's
+values, dark CSS values, dark text pairs, two dark turn-fill checks, and T7's
+both-floor property. All seven now need build work, followed by tests rerunning
+calibration when the fallback and generated values are complete.
+
+`pnpm format` ran first. One full `pnpm lint` found a string-template style issue
+in the changed script; it was fixed. The complete code-lint pass then had zero
+blocking findings. The remaining lint stages ran separately: formatting, exact
+versions, layers, package boundaries, browser imports, compiler and CSS passed.
+The dead-export check still finds three existing builder-owned decoders used
+only by tests. Generated-token checking still finds stale turn-fill-hover,
+done, stuck, turn-text and theme-colors outputs. No ledger allowance or product
+file was changed to hide those findings. One final `pnpm typecheck` passed
+across the workspace. No full local test suite ran.
+
+The first step-commit attempt refused `plan approval body hash mismatch` before
+staging. Its branch lookup picked an older box record that shares this branch.
+This box's own saved record matches the approved amended plan. The retry points
+`BOXES` at a temporary directory linking only that existing current record.
+No saved plan, approval hash, owner rule or commit check is changed.

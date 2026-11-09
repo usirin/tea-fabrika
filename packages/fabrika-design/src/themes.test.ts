@@ -932,6 +932,71 @@ describe("T7 built-in picks pass both floors", () => {
 });
 
 describe("T13 kept source bytes and versioned calibration", () => {
+	// pinned: tests7 could not map six globals. Keep 0009's computed places beside the
+	// note's six published places, so a changed alpha/compositing rule cannot silently remap them.
+	it("pinned: tests7's six missing mappings use the drawn built-in ladder from 0009", async () => {
+		const {builtinColors, ladder, positions} = await import("@kampus/themes-fixture/laws");
+		expect(ladder).toEqual({
+			dark: {desk: -0.026, raised: 0.045, hover: 0.096, edge: 0.136, focus: 0.403, faint: 0.766},
+			light: {desk: 0.012, raised: 0, hover: 0.059, edge: 0.091, focus: 0.467, faint: 0.656},
+		});
+		const expected = {
+			dark: {
+				"surface-selected": 0.17295817324214394,
+				border: 0.21810051303876932,
+				"border-strong": 0.2865445053882994,
+				wire: 0.4034163775428278,
+			},
+			light: {
+				"surface-selected": 0.11967235459686824,
+				border: 0.15049232381844008,
+				"border-strong": 0.1926589848544969,
+				wire: 0.2712446035531011,
+			},
+		};
+		for (const look of LOOKS) {
+			const actual = positions(builtinColors(TOKENS_CSS, look));
+			for (const token of ["surface-selected", "border", "border-strong", "wire"] as const)
+				expect(actual[token]).toBeCloseTo(expected[look][token], 14);
+		}
+	});
+	// format: T13's five real sources and invented input use 0009's one mapping oracle.
+	// These are the kept calibration files, not PR 3's importer laws. Plant: copy slate/black
+	// values into the derived six, or mix focus instead of keeping built-in slate a9.
+	it("format: the five real sources and invented input map to all 21 global names by 0009", async () => {
+		const {builtinColors, globalNames, importedColors} =
+			await import("@kampus/themes-fixture/laws");
+		const {Result} = await import("effect");
+		const {decodeTheme} = await import("./theme.ts");
+		const names = [
+			"nord",
+			"solarized-light",
+			"catppuccin-mocha",
+			"dracula",
+			"catppuccin-latte",
+			"unreadable-made-up",
+		];
+		for (const name of names) {
+			const theme = Result.getOrThrow(
+				decodeTheme(
+					readFileSync(
+						join(import.meta.dirname, `../../../fixtures/themes/mapped/${name}.toml`),
+						"utf8",
+					),
+				),
+			);
+			expect(Object.keys(theme.colors).sort()).toEqual([...globalNames].sort());
+			expect(theme.colors).toEqual(
+				importedColors(
+					theme.look,
+					theme.terminal.background,
+					theme.terminal.foreground,
+					theme.terminal.palette,
+					builtinColors(TOKENS_CSS, theme.look),
+				),
+			);
+		}
+	});
 	// format: upstream source files and their license bytes are immutable comparison inputs.
 	it("format: all five original sources and licenses retain their exact SHA-256", () => {
 		const fixture = join(import.meta.dirname, "../../../fixtures/themes");
@@ -963,7 +1028,8 @@ describe("T13 kept source bytes and versioned calibration", () => {
 			).toBe(sha256);
 		}
 	});
-	// format: these values may be filled only after measuring and reviewing the five real themes.
+	// format: the five real sources mapped by 0009 set the measured cap. The invented case
+	// cannot enlarge it. Plant: change the cap or repair math without its version and report.
 	it("format: the repair cap and version equal the reviewed fixture report", async () => {
 		const fixture = join(import.meta.dirname, "../../../fixtures/themes");
 		const calibration = join(fixture, "calibration.json");
@@ -978,22 +1044,35 @@ describe("T13 kept source bytes and versioned calibration", () => {
 		).toBe(true);
 		const {parse} = await import("smol-toml");
 		const report = JSON.parse(readFileSync(calibration, "utf8")) as {
+			status: string;
+			reason?: string;
 			version: string;
 			cap: number;
 			policy: unknown;
-			moves: {move: number}[];
+			builtinCssSha256: string;
+			pairs: unknown;
+			setsCap: {theme: string; token: string; on: string; move: number};
+			moves: {theme: string; token: string; on: string; move: number; was: string; now: string}[];
+			uncapped: {name: string; sha256: string; result: unknown}[];
 			themes: {name: string; result: unknown}[];
 			unreadable: {result: unknown};
 		};
 		const token = parse(readFileSync(repair, "utf8"));
 		expect(
 			report,
-			"T13 is unmeasured until the generated pairs and visual review exist",
+			report.reason ?? "T13 requires the complete five-theme measured report",
 		).toHaveProperty("status", "measured");
 		expect(token["status"]).toBe("measured");
 		expect(token["version"]).toBe(report.version);
 		expect(token["cap"]).toBe(report.cap);
+		expect(token["setsCap"]).toEqual({
+			theme: report.setsCap.theme,
+			token: report.setsCap.token,
+			on: report.setsCap.on,
+		});
+		expect(report.builtinCssSha256).toBe(createHash("sha256").update(TOKENS_CSS).digest("hex"));
 		expect(report.cap).toBe(Math.max(...report.moves.map((move) => move.move)));
+		expect(report.setsCap).toEqual(report.moves.at(-1));
 		expect(Number.isFinite(report.cap)).toBe(true);
 		expect(report.themes).toHaveLength(5);
 		expect(report.policy).toEqual({fix: "nudge", contrast: 4.5});
@@ -1001,6 +1080,44 @@ describe("T13 kept source bytes and versioned calibration", () => {
 		const {decodeTheme} = await import("./theme.ts");
 		const {check} = await import("./build/contrast.ts");
 		const {pairs} = await import("./theme-contract.ts");
+		const {lab} = await import("@kampus/themes-fixture/laws");
+		expect(report.pairs).toEqual(pairs);
+		const realNames = [
+			"nord",
+			"solarized-light",
+			"catppuccin-mocha",
+			"dracula",
+			"catppuccin-latte",
+		];
+		expect(report.themes.map(({name}) => name).sort()).toEqual([...realNames].sort());
+		expect(report.uncapped.map(({name}) => name).sort()).toEqual([...realNames].sort());
+		const measuredMoves = [];
+		for (const {name, sha256, result} of report.uncapped) {
+			const bytes = readFileSync(join(fixture, "mapped", `${name}.toml`));
+			expect(createHash("sha256").update(bytes).digest("hex")).toBe(sha256);
+			const input = Result.getOrThrow(decodeTheme(bytes.toString("utf8")));
+			const uncapped = check(
+				input,
+				pairs,
+				{fix: "nudge", contrast: 4.5},
+				{version: report.version, cap: 1},
+			);
+			expect(uncapped).toEqual(result);
+			for (const change of uncapped.changes) {
+				if (change._tag !== "moved") continue;
+				measuredMoves.push({
+					theme: name,
+					token: change.token,
+					on: change.on,
+					move: Math.abs(lab(change.now)[0] - lab(change.was)[0]),
+					was: change.was,
+					now: change.now,
+					from: change.from,
+					to: change.to,
+				});
+			}
+		}
+		expect(report.moves).toEqual(measuredMoves.sort((a, b) => a.move - b.move));
 		for (const {name, result} of [
 			...report.themes,
 			{name: "unreadable-made-up", result: report.unreadable.result},

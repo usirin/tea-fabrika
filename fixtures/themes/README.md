@@ -8,12 +8,13 @@ with them. They are public theme inputs, never settings from a machine.
 `settings.toml` is the corrected combined settings example.
 `settings-conflict.toml` keeps the old, invalid key/table spelling for refusal.
 
-The global file keys currently follow the fifteen names in the themes note.
-The plan requires the token rename before format 1 ships. These tests must move
-with that rename; they do not approve publishing the old names as another format.
+The six mapped inputs use all 21 global names. `laws.ts` owns decision 0009's
+independent gray derivation; experiment 239 uses it for every kept input.
+`mapped-hashes.json` pins the resulting bytes. The source files are unchanged.
 
-The shared checker now provides WCAG, signed APCA and lightness-only repair.
-Calibration is still blocked on the generated `theme-contract.ts` pairs and the
-final global token names. `calibration.json` and `tokens/repair.toml` say
-`unmeasured`; neither contains a guessed cap, repair count or repair version.
-Experiment 239 records the missing inputs and the required visual review.
+Calibration reaches the shared checker but cannot finish three real themes:
+the built-in fallback still exports the old names and cannot resolve `turn-fg`.
+The invented case similarly stops at `text-faint`. `calibration.json` contains
+the errors and two completed uncapped reports. `tokens/repair.toml` remains
+`unmeasured`, with no shipping cap, cap-setting pair or calibrated version.
+Experiment 239 records the exact block and the pending visual review.
