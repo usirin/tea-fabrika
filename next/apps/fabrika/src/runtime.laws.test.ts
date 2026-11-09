@@ -13,6 +13,7 @@ import {Attached} from "@kampus/libfabrika/transport";
 import {GatewayService, gatewayRuntime} from "@kampus/libfabrika/workers/gateway";
 import {ProjectService} from "@kampus/libfabrika/workers/runtime";
 import {Deferred, Effect, Exit, Option, Tracer} from "effect";
+import * as fc from "fast-check";
 import {afterEach, describe, expect, it, vi} from "vitest";
 import {projectRuntime, settings, type Env} from "./runtime.ts";
 
@@ -63,6 +64,39 @@ const identity = () => {
 	};
 };
 const closers: Array<() => Promise<void>> = [];
+const generated = fc.record({
+	letter: fc.uuid(),
+	write: fc.uuid(),
+	trace: fc
+		.uint8Array({minLength: 16, maxLength: 16})
+		.map((bytes) => Buffer.from(bytes).toString("hex")),
+	build: fc.uuid(),
+	rev: fc.integer({min: 1, max: 1_000_000}),
+});
+const prepareInput = {
+	letter: "prepare",
+	write: "write-1",
+	trace: TRACE,
+	build: "counter-b",
+	rev: 1,
+};
+const approveInput = {...prepareInput, letter: "approve"};
+const law = (
+	name: string,
+	check: (input: ReturnType<typeof generated.generate>["value"]) => Promise<void>,
+) =>
+	it(name, async () => {
+		await fc.assert(
+			fc.asyncProperty(generated, async (input) => {
+				try {
+					await check(input);
+				} finally {
+					for (const close of closers.splice(0).reverse()) await close();
+				}
+			}),
+			{seed: 119120, numRuns: 20, examples: [[prepareInput], [approveInput]]},
+		);
+	});
 afterEach(async () => {
 	for (const close of closers.splice(0).reverse()) await close();
 });
@@ -83,7 +117,7 @@ const storage = (db: DatabaseSync) => {
 		},
 	};
 };
-const world = async () => {
+const world = async (trace = TRACE, build = "counter-b") => {
 	table.programs.counter = {hash: "counter-a", source: "counter"};
 	table.programs.approvals = {hash: "approvals-a", source: "approvals"};
 	const home = mkdtempSync(join(tmpdir(), "p12-r-")),
@@ -174,7 +208,7 @@ const world = async () => {
 		sentAt: SENT,
 		seen: 0,
 		parent: null,
-		traceId: TRACE,
+		traceId: trace,
 		build: "brain-test",
 	};
 	const client = await run(p.connect()),
@@ -244,7 +278,7 @@ const world = async () => {
 		},
 		reopen: async () => {
 			await runtime.dispose();
-			table.programs.counter = {hash: "counter-b", source: "changed counter"};
+			table.programs.counter = {hash: build, source: "changed counter"};
 			runtime = projectRuntime(ctx, env);
 			return run(ProjectService);
 		},
@@ -252,34 +286,40 @@ const world = async () => {
 };
 
 describe("P12 Project authority", () => {
-	it("a program's person-only facts require its own person-only input", async () => {
-		const w = await world(),
-			pid = await w.start();
-		await w.send(pid, "prepare");
-		const parent = w.received[0]!.envelope.id;
-		const result = await w.run(Effect.exit(w.p.sign(pid, "write-1", parent, "answered")));
-		expect(result).toMatchObject({_tag: "Failure"});
-		const failure = Option.getOrThrow(Exit.findErrorOption(result));
-		expect(failure).toBeInstanceOf(SigningRefused);
-		expect(failure).toMatchObject({why: "person_only"});
-	});
-	it("a program's declared person-only input authorizes its person-only fact", async () => {
-		const w = await world(),
-			pid = await w.start();
-		await w.send(pid, "approve");
-		const result = await w.run(
-			Effect.exit(w.p.sign(pid, "write-1", w.received[0]!.envelope.id, "answered")),
-		);
-		expect(result).toMatchObject({_tag: "Success", value: {by: {_tag: "person"}}});
-		// The saved delivery is independent evidence of the declaration used at admission.
-		const saved = w.db
-			.prepare("SELECT saved FROM door_sessions WHERE parent=?")
-			.get(w.received[0]!.envelope.id);
-		expect(JSON.parse(String(saved!.saved))).toMatchObject({
-			input: {personOnly: true, process: pid},
-		});
-	});
-	it("input permission is checked again at the final append", async () => {
+	law(
+		"a program's person-only facts require its own person-only input",
+		async ({letter, write}) => {
+			const w = await world(),
+				pid = await w.start();
+			await w.send(pid, "prepare", letter);
+			const parent = w.received[0]!.envelope.id;
+			const result = await w.run(Effect.exit(w.p.sign(pid, write, parent, "answered")));
+			expect(result).toMatchObject({_tag: "Failure"});
+			const failure = Option.getOrThrow(Exit.findErrorOption(result));
+			expect(failure).toBeInstanceOf(SigningRefused);
+			expect(failure).toMatchObject({why: "person_only"});
+		},
+	);
+	law(
+		"a program's declared person-only input authorizes its person-only fact",
+		async ({letter, write}) => {
+			const w = await world(),
+				pid = await w.start();
+			await w.send(pid, "approve", letter);
+			const result = await w.run(
+				Effect.exit(w.p.sign(pid, write, w.received[0]!.envelope.id, "answered")),
+			);
+			expect(result).toMatchObject({_tag: "Success", value: {by: {_tag: "person"}}});
+			// The saved delivery is independent evidence of the declaration used at admission.
+			const saved = w.db
+				.prepare("SELECT saved FROM door_sessions WHERE parent=?")
+				.get(w.received[0]!.envelope.id);
+			expect(JSON.parse(String(saved!.saved))).toMatchObject({
+				input: {personOnly: true, process: pid},
+			});
+		},
+	);
+	law("input permission is checked again at the final append", async ({letter}) => {
 		const w = await world(),
 			pid = w.p.boot.process;
 		const entered = await Effect.runPromise(Deferred.make<void>()),
@@ -293,7 +333,7 @@ describe("P12 Project authority", () => {
 				? {_tag: "accepted", rev: result.rev, pos: result.pos}
 				: {_tag: "refused", why: result.why};
 		});
-		const pending = w.send(pid, "inc").then(
+		const pending = w.send(pid, "inc", letter).then(
 			(answer) => ({answer}),
 			(error: unknown) => ({error}),
 		);
@@ -306,77 +346,81 @@ describe("P12 Project authority", () => {
 		await pending;
 		expect(await w.run(w.p.read("counter:1/inbox", 0, "audit"))).toEqual([]);
 	});
-	it.each(["own", "inbox", "start", "exit"] as const)(
-		"the Project releases its write permit before notifying %s",
-		async (operation) => {
-			const w = await world(),
-				pid = w.p.boot.process;
-			const stream =
-				operation === "own"
-					? "facts"
-					: operation === "inbox"
-						? "counter:1/inbox"
-						: operation === "start"
-							? "processes/approvals:1"
-							: "processes/counter:1";
-			const after = (await w.run(w.p.read(stream, 0, "audit"))).at(-1)?.rev ?? 0;
-			await w.run(w.p.wait(stream, after, "gateway-test"));
-			let reentered = false;
-			let inside = false;
-			w.ring(async () => {
-				if (inside) return;
-				inside = true;
-				const answer = await w.run(
-					w.p
-						.start(
-							Start.cases.first.make({
-								id: "nested:1",
-								name: "nested:1",
-								code: {program: "counter", hash: "counter-a"},
-							}),
-							w.from,
-						)
-						.pipe(Effect.timeoutOption("150 millis")),
-				);
-				reentered = Option.isSome(answer);
-			});
-			if (operation === "own") await w.run(w.p.own(pid, "background-1", "facts", {_tag: "noted"}));
-			else if (operation === "start") await w.start();
-			else if (operation === "exit") await w.run(w.p.exit(pid, "normal", w.from));
-			else {
-				await w.send(pid, "inc");
-				await w.run(w.p.inbox(pid, w.received[0]!));
+	for (const operation of ["own", "inbox", "start", "exit"] as const)
+		law(
+			`the Project releases its write permit before notifying ${operation}`,
+			async ({write, letter}) => {
+				const w = await world(),
+					pid = w.p.boot.process;
+				const stream =
+					operation === "own"
+						? "facts"
+						: operation === "inbox"
+							? "counter:1/inbox"
+							: operation === "start"
+								? "processes/approvals:1"
+								: "processes/counter:1";
+				const after = (await w.run(w.p.read(stream, 0, "audit"))).at(-1)?.rev ?? 0;
+				await w.run(w.p.wait(stream, after, "gateway-test"));
+				let reentered = false;
+				let inside = false;
+				w.ring(async () => {
+					if (inside) return;
+					inside = true;
+					const answer = await w.run(
+						w.p
+							.start(
+								Start.cases.first.make({
+									id: `nested:${write}`,
+									name: `nested:${write}`,
+									code: {program: "counter", hash: "counter-a"},
+								}),
+								w.from,
+							)
+							.pipe(Effect.timeoutOption("150 millis")),
+					);
+					reentered = Option.isSome(answer);
+				});
+				if (operation === "own") await w.run(w.p.own(pid, write, "facts", {_tag: "noted"}));
+				else if (operation === "start") await w.start();
+				else if (operation === "exit") await w.run(w.p.exit(pid, "normal", w.from));
+				else {
+					await w.send(pid, "inc", letter);
+					await w.run(w.p.inbox(pid, w.received[0]!));
+				}
+				expect(reentered, "a ring can reenter Project without waiting on its caller").toBe(true);
+			},
+		);
+	law(
+		"reopening a project restores its process when the available bundle changes",
+		async ({build}) => {
+			const w = await world(TRACE, build),
+				before = await w.run(w.p.info),
+				configured = w.configured.length;
+			const result = await Effect.runPromise(
+				Effect.tryPromise({
+					try: w.reopen,
+					catch: (cause) => new Error("project reopen failed", {cause}),
+				}).pipe(Effect.exit),
+			);
+			expect(result).toMatchObject({_tag: "Success"});
+			if (Exit.isSuccess(result)) {
+				expect(await w.run(result.value.info)).toEqual(before);
+				expect(w.configured).toHaveLength(configured);
+				expect(await w.run(result.value.read("processes/counter:1", 0, "audit"))).toHaveLength(1);
 			}
-			expect(reentered, "a ring can reenter Project without waiting on its caller").toBe(true);
 		},
 	);
-	it("reopening a project restores its process when the available bundle changes", async () => {
-		const w = await world(),
-			before = await w.run(w.p.info),
-			configured = w.configured.length;
-		const result = await Effect.runPromise(
-			Effect.tryPromise({
-				try: w.reopen,
-				catch: (cause) => new Error("project reopen failed", {cause}),
-			}).pipe(Effect.exit),
-		);
-		expect(result).toMatchObject({_tag: "Success"});
-		if (Exit.isSuccess(result)) {
-			expect(await w.run(result.value.info)).toEqual(before);
-			expect(w.configured).toHaveLength(configured);
-			expect(await w.run(result.value.read("processes/counter:1", 0, "audit"))).toHaveLength(1);
-		}
-	});
 	for (const field of ["writer", "trace"] as const)
-		it(`an own write retains its process ${field}`, async () => {
-			const w = await world(),
+		law(`an own write retains its process ${field}`, async ({trace, write}) => {
+			const w = await world(trace),
 				pid = w.p.boot.process;
 			await w.run(
 				w.p
-					.own(pid, "own-1", "facts", {_tag: "noted"})
+					.own(pid, write, "facts", {_tag: "noted"})
 					.pipe(
 						Effect.withParentSpan(
-							Tracer.externalSpan({traceId: TRACE, spanId: "00f067aa0ba902b7"}),
+							Tracer.externalSpan({traceId: trace, spanId: "00f067aa0ba902b7"}),
 						),
 					),
 			);
@@ -384,67 +428,70 @@ describe("P12 Project authority", () => {
 			expect(row).toMatchObject(
 				field === "writer"
 					? {by: w.descriptors.get(pid)!.owner.key, for: PERSON, parent: null}
-					: {traceId: TRACE},
+					: {traceId: trace},
 			);
 		});
 });
 
 describe("P12 Gateway recording", () => {
 	for (const operation of ["ring", "probe", "close", "notify"] as const)
-		it(`an authenticated ${operation} records through the project's sink`, async () => {
-			const w = await world(),
-				db = new DatabaseSync(":memory:");
-			let attached: typeof Attached.Type = Attached.cases.online.make({
-				client: "client-test",
-				who: {key: w.key.fingerprint, person: PERSON, as: "window"},
-				version: 1,
-				waits: [],
-				watching: false,
-				busy: false,
-			});
-			const ws = {
-				deserializeAttachment: () => attached,
-				serializeAttachment: (a: typeof Attached.Type) => {
-					attached = a;
-				},
-				send: () => {
-					if (operation === "notify") throw new Error("delivery failed");
-				},
-				close: () => {},
-			};
-			// oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Gateway
-			const ctx = {
-				id: {name: "gateway-test"},
-				storage: storage(db),
-				getWebSockets: () => [ws],
-				getTags: () => ["session-test", "tab-a", w.key.fingerprint],
-				getWebSocketAutoResponseTimestamp: () => new Date(42),
-			} as unknown as DurableObjectState;
-			// oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
-			const project = {
-				getByName: () => ({leave: async () => {}, disconnect: async () => {}}),
-			} as unknown as Env["PROJECT"];
-			// oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
-			const socket = ws as unknown as WebSocket;
-			const runtime = gatewayRuntime(ctx, {...w.env, PROJECT: project}, settings(w.env));
-			try {
-				const gateway = await runtime.runPromise(GatewayService),
-					before = w.recorded.length;
-				const action: Effect.Effect<unknown, unknown> =
-					operation === "ring"
-						? gateway.ring("facts", 1)
-						: operation === "probe"
-							? gateway.probe("session-test")
-							: operation === "close"
-								? gateway.close(socket)
-								: gateway.notify("client-test", {method: "view.patch", params: {}});
-				await runtime.runPromise(Effect.exit(action));
-				const rows = w.recorded.slice(before);
-				expect(rows.some((row) => row.name === `gateway.${operation}`)).toBe(true);
-				if (operation === "notify") expect(rows.some((row) => !row.ok)).toBe(true);
-			} finally {
-				await runtime.dispose();
-				db.close();
-			}
-		});
+		law(
+			`an authenticated ${operation} records through the project's sink`,
+			async ({letter, rev}) => {
+				const w = await world(),
+					db = new DatabaseSync(":memory:");
+				let attached: typeof Attached.Type = Attached.cases.online.make({
+					client: letter,
+					who: {key: w.key.fingerprint, person: PERSON, as: "window"},
+					version: 1,
+					waits: [],
+					watching: false,
+					busy: false,
+				});
+				const ws = {
+					deserializeAttachment: () => attached,
+					serializeAttachment: (a: typeof Attached.Type) => {
+						attached = a;
+					},
+					send: () => {
+						if (operation === "notify") throw new Error("delivery failed");
+					},
+					close: () => {},
+				};
+				// oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Gateway
+				const ctx = {
+					id: {name: "gateway-test"},
+					storage: storage(db),
+					getWebSockets: () => [ws],
+					getTags: () => ["session-test", "tab-a", w.key.fingerprint],
+					getWebSocketAutoResponseTimestamp: () => new Date(42),
+				} as unknown as DurableObjectState;
+				// oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
+				const project = {
+					getByName: () => ({leave: async () => {}, disconnect: async () => {}}),
+				} as unknown as Env["PROJECT"];
+				// oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
+				const socket = ws as unknown as WebSocket;
+				const runtime = gatewayRuntime(ctx, {...w.env, PROJECT: project}, settings(w.env));
+				try {
+					const gateway = await runtime.runPromise(GatewayService),
+						before = w.recorded.length;
+					const action: Effect.Effect<unknown, unknown> =
+						operation === "ring"
+							? gateway.ring("facts", rev)
+							: operation === "probe"
+								? gateway.probe("session-test")
+								: operation === "close"
+									? gateway.close(socket)
+									: gateway.notify(letter, {method: "view.patch", params: {}});
+					await runtime.runPromise(Effect.exit(action));
+					const rows = w.recorded.slice(before);
+					expect(rows.some((row) => row.name === `gateway.${operation}`)).toBe(true);
+					if (operation === "notify") expect(rows.some((row) => !row.ok)).toBe(true);
+				} finally {
+					await runtime.dispose();
+					db.close();
+				}
+			},
+		);
 });

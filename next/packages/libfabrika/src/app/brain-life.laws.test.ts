@@ -17,24 +17,55 @@ const events = [
 	{type: "stop"},
 	{type: "stopped"},
 ] as const;
+const lifecycle = fc.record({
+	start: fc.uuid(),
+	after: fc.uuid(),
+	build: fc.string(),
+	until: fc.nat(),
+	why: fc.string(),
+});
+const normalLife = {start, after, build: "build-a", until: 250, why: "crash"};
+const stopInFlight = [events[0], {type: "stop"}, events[1], events[2], {type: "stopped"}] as const;
+const messages = lifecycle.map(
+	({start, after, build, until, why}) =>
+		[
+			{type: "started", start, after: null, build, why: "open"},
+			{type: "waiting", after: start, until, why},
+			{type: "started", start: after, after: start, build, why},
+			{type: "braked", after, why},
+			{type: "stop"},
+			{type: "stopped"},
+		] as const,
+);
+const message = messages.chain((msgs) => fc.constantFrom(...msgs));
 
 describe("P12 stage machine laws", () => {
 	it("p88 plant: missing start or stop transition cannot finish a normal life", async () => {
 		const {brainLife} = await import("./brain-life.ts");
-		const [initial] = brainLife.init(null, {});
-		expect(initial).toMatchObject({_tag: "starting"});
-		const [online] = applyCell(brainLife, initial, events[0]);
-		expect(online).toMatchObject({_tag: "online", start, build: "build-a"});
-		const [stopping] = applyCell(brainLife, online, {type: "stop"});
-		for (const msg of events.slice(0, 4))
-			expect(applyCell(brainLife, stopping, msg)[0]).toEqual(stopping);
-		const [stopped] = applyCell(brainLife, stopping, {type: "stopped"});
-		expect(stopped).toMatchObject({_tag: "stopped"});
+		fc.assert(
+			fc.property(lifecycle, ({start, after, build, until, why}) => {
+				const msgs = [
+					{type: "started", start, after: null, build, why: "open"},
+					{type: "waiting", after: start, until, why},
+					{type: "started", start: after, after: start, build, why},
+					{type: "braked", after, why},
+				] as const;
+				const [initial] = brainLife.init(null, {});
+				expect(initial).toMatchObject({_tag: "starting"});
+				const [online] = applyCell(brainLife, initial, msgs[0]);
+				expect(online).toMatchObject({_tag: "online", start, build});
+				const [stopping] = applyCell(brainLife, online, {type: "stop"});
+				for (const msg of msgs) expect(applyCell(brainLife, stopping, msg)[0]).toEqual(stopping);
+				const [stopped] = applyCell(brainLife, stopping, {type: "stopped"});
+				expect(stopped).toMatchObject({_tag: "stopped"});
+			}),
+			{seed: SEED, examples: [[normalLife]]},
+		);
 	});
 	it("p88 plant: saved pending stop is lost; every generated JSON cut must resume unchanged", async () => {
 		const {brainLife, BrainState} = await import("./brain-life.ts");
 		fc.assert(
-			fc.property(fc.array(fc.constantFrom(...events), {maxLength: 30}), (msgs) => {
+			fc.property(fc.array(message, {maxLength: 30}), (msgs) => {
 				syncTest(
 					brainLife,
 					{},
@@ -47,19 +78,7 @@ describe("P12 stage machine laws", () => {
 					},
 				);
 			}),
-			{seed: SEED, numRuns: 100},
-		);
-		// A generated list need not contain this exact stop-in-flight cut.
-		syncTest(
-			brainLife,
-			{},
-			{
-				msgs: [events[0], {type: "stop"}, events[1], events[2], {type: "stopped"}],
-				encode: Schema.encodeSync(BrainState),
-				decode: Schema.decodeUnknownSync(BrainState),
-				equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-				seed: SEED,
-			},
+			{seed: SEED, numRuns: 100, examples: [[[...stopInFlight]]]},
 		);
 	});
 	it("p81 plant: a braked or cleanly stopped stage must never launch a replacement", async () => {
@@ -67,7 +86,7 @@ describe("P12 stage machine laws", () => {
 		propertyInvariant(
 			brainLife,
 			{},
-			fc.array(fc.constantFrom(...events), {maxLength: 40}),
+			fc.array(message, {maxLength: 40}),
 			({
 				prev,
 				next,

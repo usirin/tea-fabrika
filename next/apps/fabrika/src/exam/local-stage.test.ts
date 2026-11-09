@@ -3,6 +3,7 @@
 import {existsSync, readFileSync} from "node:fs";
 import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import * as fc from "fast-check";
 import {parseSync, type ModuleExportName} from "oxc-parser";
 import {describe, expect, it} from "vitest";
 
@@ -14,6 +15,27 @@ const CF = resolve(
 	"../src",
 );
 const text = (path: string) => readFileSync(path, "utf8");
+// An added import must not redeclare one already in the real stack.
+const generated = fc.record({
+	alias: fc
+		.stringMatching(/^[A-Z][a-zA-Z0-9]{0,10}$/)
+		.filter((alias) => !["Cloudflare", "Alchemy", "Context", "Effect", "Layer"].includes(alias)),
+	name: fc.string(),
+});
+const namedImport = {alias: "Zone", name: "test.invalid"};
+const namespaceImport = {alias: "CF", name: "x"};
+const shortAlias = {alias: "C", name: "Brain"};
+const law = (
+	name: string,
+	check: (input: ReturnType<typeof generated.generate>["value"]) => void,
+) =>
+	it(name, () =>
+		fc.assert(fc.property(generated, check), {
+			seed: 119120,
+			numRuns: 20,
+			examples: [[namedImport], [namespaceImport], [shortAlias]],
+		}),
+	);
 const source = (file: string, spec: string) => resolve(dirname(file), spec.replace(/\.js$/, ".ts"));
 const nodes = (node: Tree, visit: (node: Tree) => void): void => {
 	if (node === null || typeof node !== "object") return;
@@ -239,49 +261,57 @@ const scan = (file: string, body: string): Array<Finding> => {
 };
 
 describe("P12 local twin exam", () => {
-	it.each([
-		['Zone["Zone"]("Remote", {name: "test.invalid"});', "computed resource"],
-		['const Z = Zone.Zone; Z("Remote", {name: "test.invalid"});', "aliased resource"],
-	])("named import plant beside the valid stack: %s", (call, why) => {
-		const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
-		const body = `${text(stack)}\nimport {Zone} from "@alchemy.run/cloudflare";\n${call}`;
-		expect(scan(stack, body).map((finding) => finding.why)).toContainEqual(
-			expect.stringContaining(`unsupported-case: ${why}`),
-		);
-	});
-	it("every named Cloudflare namespace is checked alongside valid local resources", () => {
-		const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
-		for (const [imported, call] of [
-			["Zone", "Zone.Zone"],
-			["Zone as Z", "Z.Zone"],
-		]) {
-			const body = `${text(stack)}\nimport {${imported}} from "@alchemy.run/cloudflare";\n${call}("Remote", {name: "test.invalid"});`;
-			expect(scan(stack, body).map((finding) => finding.why)).toContain(
-				"no local provider: Cloudflare.Zone.Zone",
+	for (const why of ["computed resource", "aliased resource"])
+		law(`named import plant beside the valid stack: ${why}`, ({alias, name}) => {
+			const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
+			const call =
+				why === "computed resource"
+					? `${alias}["Zone"]("Remote", {name: ${JSON.stringify(name)}});`
+					: `const resourceAlias = ${alias}.Zone; resourceAlias("Remote", {name: ${JSON.stringify(name)}});`;
+			const body = `${text(stack)}\nimport {Zone as ${alias}} from "@alchemy.run/cloudflare";\n${call}`;
+			expect(scan(stack, body).map((finding) => finding.why)).toContainEqual(
+				expect.stringContaining(`unsupported-case: ${why}`),
 			);
-		}
-	});
-	it("a called stack helper is inspected or reported as unsupported", () => {
+		});
+	law(
+		"every named Cloudflare namespace is checked alongside valid local resources",
+		({alias, name}) => {
+			const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
+			for (const [imported, call] of [
+				["Zone", "Zone.Zone"],
+				[`Zone as ${alias}`, `${alias}.Zone`],
+			]) {
+				const body = `${text(stack)}\nimport {${imported}} from "@alchemy.run/cloudflare";\n${call}("Remote", {name: ${JSON.stringify(name)}});`;
+				expect(scan(stack, body).map((finding) => finding.why)).toContain(
+					"no local provider: Cloudflare.Zone.Zone",
+				);
+			}
+		},
+	);
+	law("a called stack helper is inspected or reported as unsupported", ({alias}) => {
 		const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
-		const body = `${text(stack)}\nimport {extraResources} from "./unfollowed-stack-helper.ts";\nextraResources();`;
+		const body = `${text(stack)}\nimport {extraResources as ${alias}} from "./unfollowed-stack-helper.ts";\n${alias}();`;
 		// This unresolved helper may declare remote-only resources. Existing valid resources
 		// must not let it silently pass. Following it or refusing it are both honest answers.
 		expect(scan(stack, body).some((finding) => finding.why.startsWith("unsupported-case:"))).toBe(
 			true,
 		);
 	});
-	it("local twin plant: inspect every finding on the actual stack, with no second resource list", () => {
-		const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
-		expect(existsSync(stack), "P12 has no working stage on its base").toBe(true);
-		const findings = scan(stack, text(stack));
-		console.info("local twin actual findings", JSON.stringify(findings));
-		expect(findings).toEqual([]);
-	});
-	it("plant: a remote-only resource and remote override both fail", () => {
+	law(
+		"local twin plant: inspect every finding on the actual stack, with no second resource list",
+		({name}) => {
+			const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
+			expect(existsSync(stack), "P12 has no working stage on its base").toBe(true);
+			const findings = scan(stack, `${text(stack)}\nconst checkedName = ${JSON.stringify(name)};`);
+			console.info("local twin actual findings", JSON.stringify(findings));
+			expect(findings).toEqual([]);
+		},
+	);
+	law("plant: a remote-only resource and remote override both fail", ({alias, name}) => {
 		const source = [
-			'import * as Cloudflare from "@alchemy.run/cloudflare";',
+			`import * as ${alias} from "@alchemy.run/cloudflare";`,
 			'import * as Alchemy from "alchemy";',
-			'const remote = Cloudflare.Zone.Zone("Zone", {name: "test.invalid"});',
+			`const remote = ${alias}.Zone.Zone("Zone", {name: ${JSON.stringify(name)}});`,
 			"remote.pipe(Alchemy.remote());",
 		].join("\n");
 		const findings = scan("plant.ts", source);
@@ -291,31 +321,43 @@ describe("P12 local twin exam", () => {
 			"remote override",
 		]);
 	});
-	it("plant: unknown resources and unsupported computed calls never silently count as local", () => {
-		for (const call of ['Cloudflare.Unknown("x", {})', 'Cloudflare["Workers"]("x", {})']) {
-			const findings = scan(
-				"plant.ts",
-				`import * as Cloudflare from "@alchemy.run/cloudflare";\n${call};`,
-			);
-			expect(findings).toHaveLength(1);
-			expect(findings[0]!.why).toMatch(/^unsupported-case:/);
-		}
-	});
-	it("uses installed Worker and R2 local registrations, including import aliases", () => {
-		const source = [
-			'import * as C from "@alchemy.run/cloudflare";',
-			'const worker = C.Workers.Worker("Brain", {main: "brain.mjs"});',
-			'const bucket = C.R2.Bucket("Health", {name: "health"});',
-		].join("\n");
-		expect(scan("plant.ts", source)).toEqual([]);
-	});
-	it("plant: aliased constructors, subpath imports and named remote overrides fail closed", () => {
-		for (const source of [
-			'import * as C from "@alchemy.run/cloudflare"; const W = C.Worker; W("Brain", {});',
-			'import * as C from "@alchemy.run/cloudflare/Workers"; C.Worker("Brain", {});',
-			'import {remote as remoteOnly} from "alchemy"; remoteOnly();',
-			"export const stack = {};",
-		])
-			expect(scan("plant.ts", source).length).toBeGreaterThan(0);
-	});
+	law(
+		"plant: unknown resources and unsupported computed calls never silently count as local",
+		({alias, name}) => {
+			for (const call of [
+				`${alias}.Unknown(${JSON.stringify(name)}, {})`,
+				`${alias}["Workers"](${JSON.stringify(name)}, {})`,
+			]) {
+				const findings = scan(
+					"plant.ts",
+					`import * as ${alias} from "@alchemy.run/cloudflare";\n${call};`,
+				);
+				expect(findings).toHaveLength(1);
+				expect(findings[0]!.why).toMatch(/^unsupported-case:/);
+			}
+		},
+	);
+	law(
+		"uses installed Worker and R2 local registrations, including import aliases",
+		({alias, name}) => {
+			const source = [
+				`import * as ${alias} from "@alchemy.run/cloudflare";`,
+				`const worker = ${alias}.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs"});`,
+				`const bucket = ${alias}.R2.Bucket("Health", {name: "health"});`,
+			].join("\n");
+			expect(scan("plant.ts", source)).toEqual([]);
+		},
+	);
+	law(
+		"plant: aliased constructors, subpath imports and named remote overrides fail closed",
+		({alias, name}) => {
+			for (const source of [
+				`import * as ${alias} from "@alchemy.run/cloudflare"; const W = ${alias}.Worker; W(${JSON.stringify(name)}, {});`,
+				`import * as ${alias} from "@alchemy.run/cloudflare/Workers"; ${alias}.Worker(${JSON.stringify(name)}, {});`,
+				`import {remote as ${alias}} from "alchemy"; ${alias}();`,
+				"export const stack = {};",
+			])
+				expect(scan("plant.ts", source).length).toBeGreaterThan(0);
+		},
+	);
 });

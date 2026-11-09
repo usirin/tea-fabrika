@@ -6,6 +6,7 @@ import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Effect} from "effect";
+import * as fc from "fast-check";
 import type {Sql} from "./referee.ts";
 import {nodeSql} from "./sqlite.ts";
 import type {SpanRow} from "./trace.ts";
@@ -26,6 +27,9 @@ type Part = {
 };
 
 const home = mkdtempSync(join(tmpdir(), "p12-r-"));
+const SEED = 119120;
+const pageBoundary: [number, string, number] = [503, "private failure", 42];
+const rollAtCap: [number[], number, number] = [[1, 2], 1000, 0];
 afterAll(() => rmSync(home, {recursive: true, force: true}));
 const span = (n: number): SpanRow => ({
 	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
@@ -43,74 +47,103 @@ const span = (n: number): SpanRow => ({
 });
 
 describe("P12 single record part", () => {
-	it.effect("P37 wiring plant: reopen, page past 500, and retry without duplicating a span", () =>
-		Effect.gen(function* () {
-			const {recordPart} = yield* Effect.promise(() => import("./record-part.ts"));
-			const file = join(home, "page.sqlite");
-			let db = new DatabaseSync(file);
-			try {
-				let part: Part = recordPart(nodeSql(db), {_tag: "spans"}, 0, 1_000_000_000);
-				const rows = Array.from({length: 503}, (_, n) => ({
-					span: span(n),
-					content: n === 502 ? "private failure" : null,
-				}));
-				expect(yield* part.write(rows)).toEqual({_tag: "written"});
-				db.close();
-				db = new DatabaseSync(file);
-				part = recordPart(nodeSql(db), {_tag: "spans"}, 0, 1_000_000_000);
-				expect(yield* part.write(rows)).toEqual({_tag: "written"});
-				const first = yield* part.read(0);
-				const last = yield* part.read(first.after);
-				expect(first.spans).toEqual(rows.slice(0, 500).map((r) => r.span));
-				expect(last.spans).toEqual(rows.slice(500).map((r) => r.span));
-				expect(yield* part.content(span(502).spanId)).toMatchObject({
-					_tag: "found",
-					content: {_tag: "kept", message: "private failure"},
-				});
-				const by = {by: "person-test", at: 42, why: "requested"};
-				yield* part.deleteContent(span(502).spanId, by);
-				yield* part.deleteContent(span(502).spanId, {...by, at: 43});
-				expect(yield* part.content(span(502).spanId)).toMatchObject({
-					_tag: "found",
-					content: {_tag: "deleted", ...by},
-				});
-				expect((yield* part.read(500)).spans).toHaveLength(3);
-			} finally {
-				db.close();
-			}
-		}),
-	);
-	it.effect(
-		"P37 wiring plant: check held IDs before cap, return had, keep each part separate",
-		() =>
-			Effect.gen(function* () {
-				const {recordPart} = yield* Effect.promise(() => import("./record-part.ts"));
-				const a = new DatabaseSync(":memory:");
-				const b = new DatabaseSync(":memory:");
-				let size = 0;
-				const inner = nodeSql(a);
-				const sql: Sql = {...inner, size: () => size};
-				try {
-					const first: Part = recordPart(sql, {_tag: "spans"}, 0, 1000);
-					const next: Part = recordPart(nodeSql(b), {_tag: "spans"}, 1, 1_000_000_000);
-					const old = {span: span(1), content: null};
-					const fresh = {span: span(2), content: null};
-					yield* first.write([old]);
-					size = 1000;
-					expect(yield* first.write([old])).toEqual({_tag: "written"});
-					expect(yield* first.write([old, fresh])).toEqual({
-						_tag: "rolled",
-						next: "spans/1",
-						had: [old.span.spanId],
-					});
-					yield* next.write([fresh]);
-					expect((yield* first.read(0)).spans).toEqual([old.span]);
-					expect((yield* next.read(0)).spans).toEqual([fresh.span]);
-					expect(yield* first.content(fresh.span.spanId)).toEqual({_tag: "absent", rolled: true});
-				} finally {
-					a.close();
-					b.close();
-				}
-			}),
-	);
+	it("P37 wiring plant: reopen, page past 500, and retry without duplicating a span", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.integer({min: 501, max: 550}),
+				fc.string(),
+				fc.nat(),
+				(total, content, at) =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const {recordPart} = yield* Effect.promise(() => import("./record-part.ts"));
+							const file = join(home, `page-${total}-${at}.sqlite`);
+							rmSync(file, {force: true});
+							let db = new DatabaseSync(file);
+							try {
+								let part: Part = recordPart(nodeSql(db), {_tag: "spans"}, 0, 1_000_000_000);
+								const rows = Array.from({length: total}, (_, n) => ({
+									span: span(n),
+									content: n === total - 1 ? content : null,
+								}));
+								expect(yield* part.write(rows)).toEqual({_tag: "written"});
+								db.close();
+								db = new DatabaseSync(file);
+								part = recordPart(nodeSql(db), {_tag: "spans"}, 0, 1_000_000_000);
+								expect(yield* part.write(rows)).toEqual({_tag: "written"});
+								const first = yield* part.read(0);
+								const last = yield* part.read(first.after);
+								expect(first.spans).toEqual(rows.slice(0, 500).map((r) => r.span));
+								expect(last.spans).toEqual(rows.slice(500).map((r) => r.span));
+								expect(yield* part.content(span(total - 1).spanId)).toMatchObject({
+									_tag: "found",
+									content: {_tag: "kept", message: content},
+								});
+								const by = {by: "person-test", at, why: "requested"};
+								yield* part.deleteContent(span(total - 1).spanId, by);
+								yield* part.deleteContent(span(total - 1).spanId, {...by, at: at + 1});
+								expect(yield* part.content(span(total - 1).spanId)).toMatchObject({
+									_tag: "found",
+									content: {_tag: "deleted", ...by},
+								});
+								expect((yield* part.read(500)).spans).toHaveLength(total - 500);
+							} finally {
+								db.close();
+							}
+						}),
+					),
+			),
+			{seed: SEED, numRuns: 20, examples: [pageBoundary]},
+		);
+	});
+	it("P37 wiring plant: check held IDs before cap, return had, keep each part separate", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.uniqueArray(fc.nat(), {minLength: 2, maxLength: 2}),
+				fc.integer({min: 1, max: 1_000_000}),
+				fc.nat({max: 1000}),
+				([oldId, freshId], cap, index) =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const {recordPart} = yield* Effect.promise(() => import("./record-part.ts"));
+							const a = new DatabaseSync(":memory:");
+							const b = new DatabaseSync(":memory:");
+							let size = 0;
+							const inner = nodeSql(a);
+							const sql: Sql = {...inner, size: () => size};
+							try {
+								const first: Part = recordPart(sql, {_tag: "spans"}, index, cap);
+								const next: Part = recordPart(
+									nodeSql(b),
+									{_tag: "spans"},
+									index + 1,
+									1_000_000_000,
+								);
+								const old = {span: span(oldId!), content: null};
+								const fresh = {span: span(freshId!), content: null};
+								yield* first.write([old]);
+								size = cap;
+								expect(yield* first.write([old])).toEqual({_tag: "written"});
+								expect(yield* first.write([old, fresh])).toEqual({
+									_tag: "rolled",
+									next: `spans/${index + 1}`,
+									had: [old.span.spanId],
+								});
+								yield* next.write([fresh]);
+								expect((yield* first.read(0)).spans).toEqual([old.span]);
+								expect((yield* next.read(0)).spans).toEqual([fresh.span]);
+								expect(yield* first.content(fresh.span.spanId)).toEqual({
+									_tag: "absent",
+									rolled: true,
+								});
+							} finally {
+								a.close();
+								b.close();
+							}
+						}),
+					),
+			),
+			{seed: SEED, examples: [rollAtCap]},
+		);
+	});
 });

@@ -20,6 +20,7 @@ import {
 	LedgerError,
 	LedgerTransaction,
 	lineFor,
+	ProcessId,
 	RecordManager,
 	SinkError,
 	SpanSink,
@@ -588,60 +589,77 @@ describe("P10 review regressions", () => {
 		});
 		return {client, hello, trusted};
 	});
-	it.effect("P12: view.open rejects a bad pid before invoking the program", () =>
-		Effect.gen(function* () {
-			const w = yield* world();
-			const opened: Array<unknown> = [];
-			yield* Effect.gen(function* () {
-				const d = yield* Door;
-				const {client} = yield* online(d, w);
-				expect(yield* d.route(client, "view.open", {pid: "invalid"})).toEqual({
-					_tag: "refused",
-					why: "bad_input",
-				});
-				expect(opened).toEqual([]);
-				expect(yield* d.route(client, "view.open", {pid: PROCESS})).toEqual({
-					_tag: "ok",
-					result: {count: 7},
-				});
-				expect(opened).toEqual([{pid: PROCESS, client}]);
-			}).pipe(
-				Effect.provide(
-					Door.layer({
-						...w.settings,
-						open: (pid, client) =>
-							Effect.sync(() => {
-								opened.push({pid, client});
-								return {count: 7};
-							}),
-					}).pipe(Layer.provideMerge(w.env)),
+	it("P12: view.open rejects a bad pid before invoking the program", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.string().filter((pid) => !Schema.is(ProcessId)(pid)),
+				fc.integer(),
+				(badPid, count) =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const w = yield* world();
+							const opened: Array<unknown> = [];
+							yield* Effect.gen(function* () {
+								const d = yield* Door;
+								const {client} = yield* online(d, w);
+								expect(yield* d.route(client, "view.open", {pid: badPid})).toEqual({
+									_tag: "refused",
+									why: "bad_input",
+								});
+								expect(opened).toEqual([]);
+								expect(yield* d.route(client, "view.open", {pid: PROCESS})).toEqual({
+									_tag: "ok",
+									result: {count},
+								});
+								expect(opened).toEqual([{pid: PROCESS, client}]);
+							}).pipe(
+								Effect.provide(
+									Door.layer({
+										...w.settings,
+										open: (pid, client) =>
+											Effect.sync(() => {
+												opened.push({pid, client});
+												return {count};
+											}),
+									}).pipe(Layer.provideMerge(w.env)),
+								),
+							);
+						}),
+					),
+			),
+			{...runs(20), examples: [["invalid", 7]]},
+		);
+	});
+	it("P12: a grant target needs both the waiting key and its code", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.string(), fc.string({minLength: 1}), (tab, suffix) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = yield* world();
+						yield* Effect.gen(function* () {
+							const d = yield* Door;
+							const {client} = yield* pendingHello(d, w.otherWindow, tab);
+							const knocked = yield* d.knock(client, {label: "Pending"});
+							assert(knocked._tag === "ok");
+							const {code} = Schema.decodeUnknownSync(Schema.Struct({code: Schema.String}))(
+								knocked.result,
+							);
+							expect(yield* d.target(w.otherWindow.fingerprint, code)).toEqual({
+								key: w.otherWindow.raw,
+								for: PERSON,
+								to: "project-a",
+								code,
+								label: "Pending",
+							});
+							expect(yield* d.target(w.window.fingerprint, code)).toBeNull();
+							expect(yield* d.target(w.otherWindow.fingerprint, `${code}${suffix}`)).toBeNull();
+						}).pipe(w.provide);
+					}),
 				),
-			);
-		}),
-	);
-	it.live("P12: a grant target needs both the waiting key and its code", () =>
-		Effect.gen(function* () {
-			const w = yield* world();
-			yield* Effect.gen(function* () {
-				const d = yield* Door;
-				const {client} = yield* pendingHello(d, w.otherWindow, "target");
-				const knocked = yield* d.knock(client, {label: "Pending"});
-				assert(knocked._tag === "ok");
-				const {code} = Schema.decodeUnknownSync(Schema.Struct({code: Schema.String}))(
-					knocked.result,
-				);
-				expect(yield* d.target(w.otherWindow.fingerprint, code)).toEqual({
-					key: w.otherWindow.raw,
-					for: PERSON,
-					to: "project-a",
-					code,
-					label: "Pending",
-				});
-				expect(yield* d.target(w.window.fingerprint, code)).toBeNull();
-				expect(yield* d.target(w.otherWindow.fingerprint, `${code}x`)).toBeNull();
-			}).pipe(w.provide);
-		}),
-	);
+			),
+			{...runs(20), examples: [["target", "x"]]},
+		);
+	});
 
 	// d1: for any waiting clients and any knock order, with repeat knocks and a second tab of the
 	// same key, each knock answers exactly its own row's code and until, read back from the

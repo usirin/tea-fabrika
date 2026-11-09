@@ -4,15 +4,25 @@ import {Outcome} from "@demlik/tea";
 import {Cmd, Machine} from "@demlik/tea/effect";
 import {Cause, Effect, Exit, Layer, Schema, Stream} from "effect";
 import * as fc from "fast-check";
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
+import {
+	Alarm,
+	CheckedWriter,
+	Incoming,
+	ProgramLoader,
+	Recording,
+	WatcherManager,
+} from "../app/entry.ts";
+import {workerExecution} from "../app/execution.ts";
+import {ProgramRunner} from "../app/runner.ts";
 import {Mailbox, ProcessStore, Writer} from "../coordination/index.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {nodeSql} from "../data/sqlite.ts";
-import {Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager} from "./entry.ts";
-import {workerExecution} from "./execution.ts";
-import {ProgramRunner} from "./runner.ts";
+import {programBox} from "./box.ts";
 
 const SEED = 119120;
+// Only the platform base class is fake. Every RPC method runs the real programBox.
+vi.mock("cloudflare:workers", () => ({WorkerEntrypoint: class {}}));
 const PID = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
 const NAME = "reply:1";
 const owner = Writer.cases.person.make({key: "SHA256:fixture", for: "person-test"});
@@ -49,7 +59,12 @@ const input = fc.record({n: fc.integer(), letter: fc.uuid()});
 // Final review's lost-reply probe, kept beside generated inputs.
 const lostReply = {n: 7, letter: "00000000-0000-1000-8000-000000000007"};
 
-const replyCase = (mode: "rpc" | "decode" | "checked" | "refused", n: number, letter: string) =>
+const replyCase = (
+	mode: "rpc" | "decode" | "checked" | "refused",
+	n: number,
+	letter: string,
+	adapter: "node" | "worker" = "worker",
+) =>
 	Effect.gen(function* () {
 		const db = new DatabaseSync(":memory:");
 		try {
@@ -70,30 +85,33 @@ const replyCase = (mode: "rpc" | "decode" | "checked" | "refused", n: number, le
 									expect(cmd).toEqual(work({n}));
 									return mode === "refused"
 										? Outcome.err({_tag: "disk"})
-										: Outcome.ok(mode === "checked" ? "not an integer" : n);
+										: Outcome.ok(mode === "checked" ? "invalid integer" : n);
 								}),
 						},
 					),
 				),
 			);
 			const node = loaded.execution;
+			const Box = programBox(program, "test");
+			// Cloudflare owns context construction. The real box never reads it in these calls.
+			const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
 			const remote = workerExecution({
-				init: (saved) => Effect.runPromise(node.init(saved)),
-				step: (model, msg) => Effect.runPromise(node.step(model, msg)),
-				fold: (model, msg) => Effect.runPromise(node.fold(model, msg)),
-				upgrade: (saved) => Effect.runPromise(node.upgrade(saved)),
-				admit: (msg) => Effect.runPromise(node.admit(msg)),
+				init: (saved) => box.init(saved),
+				step: (model, msg) => box.step(model, msg),
+				fold: (model, msg) => box.fold(model, msg),
+				upgrade: (saved) => box.upgrade(saved),
+				admit: (msg) => box.admit(msg),
 				reply: async (cmd, outcome) => {
 					before = checkpoint();
 					replyCalls++;
 					if (mode === "rpc" && replyCalls === 1)
 						return Effect.runPromise(Effect.fail(new Error("reply RPC lost")));
 					if (mode === "decode" && replyCalls === 1) return undefined;
-					return Effect.runPromise(node.reply(cmd, outcome));
+					return box.reply(cmd, outcome);
 				},
 			});
 			const execution =
-				mode === "checked"
+				adapter === "node"
 					? {
 							...remote,
 							reply: (cmd: unknown, outcome: unknown) =>
@@ -209,10 +227,13 @@ describe("P12 Cmd reply failure versus refusal", () => {
 			);
 		});
 	for (const mode of ["checked", "refused"] as const)
-		it(`${mode} program refusal saves its answer and completes the Cmd once`, async () => {
-			await fc.assert(
-				fc.asyncProperty(input, ({n, letter}) => Effect.runPromise(replyCase(mode, n, letter))),
-				{seed: SEED},
-			);
-		});
+		for (const adapter of ["node", "worker"] as const)
+			it(`${adapter} ${mode} program refusal saves its answer and completes the Cmd once`, async () => {
+				await fc.assert(
+					fc.asyncProperty(input, ({n, letter}) =>
+						Effect.runPromise(replyCase(mode, n, letter, adapter)),
+					),
+					{seed: SEED, examples: [[lostReply]]},
+				);
+			});
 });
