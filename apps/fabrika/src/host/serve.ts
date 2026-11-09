@@ -33,6 +33,7 @@ import {
 	type Marks,
 	marksOf,
 	NO_MARKS,
+	noticeCell,
 	readMarks,
 } from "../asks.ts";
 import {BUILD} from "../build-id.ts";
@@ -993,6 +994,17 @@ export const serve = (options: {
 					toPage(client, saidAsks);
 					toPage(client, deskNow());
 					for (const [name, screen] of screens) showTo(client, name, screen);
+					return;
+				// The app showed a system notification of new asks: kept, so attention counts can fold it.
+				case "noticed":
+					Effect.runForkWith(services)(
+						noticeCell(m, writerText(author)).pipe(
+							Effect.provideService(Ledger, ledger),
+							Effect.catch((e) =>
+								Effect.logWarning(`fabrika host: could not keep a notice: ${String(e._tag)}`),
+							),
+						),
+					);
 					return;
 				case "away":
 					Queue.offerUnsafe(editorQueue, {client, message: {type: "keys.close"}});

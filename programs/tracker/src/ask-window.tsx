@@ -489,35 +489,89 @@ function Listed({label, items}: {readonly label: string; readonly items: readonl
 	);
 }
 
+/** One JSON value of a plan, every field of it, as words in nested lists: no braces, no quotes. */
+function Fields({value}: {readonly value: unknown}): ReactNode {
+	if (value === null || value === undefined) return null;
+	if (typeof value !== "object") return String(value);
+	if (Array.isArray(value)) {
+		if (value.every((v) => typeof v !== "object" || v === null))
+			return value.map((v) => String(v)).join(", ");
+		return (
+			<ul>
+				{value.map((v, i) => (
+					// one list of a plan's items, in order, never moved
+					<li key={i}>
+						<Fields value={v} />
+					</li>
+				))}
+			</ul>
+		);
+	}
+	return (
+		<ul className="ask-fields">
+			{Object.entries(value).map(([key, v]) => (
+				<li key={key}>
+					<span className="ask-quiet">{key}</span> <Fields value={v} />
+				</li>
+			))}
+		</ul>
+	);
+}
+
+/** One part of a plan under its label, drawn only when it holds something. */
+function Section({label, value}: {readonly label: string; readonly value: unknown}) {
+	if (value === null || value === undefined || (Array.isArray(value) && value.length === 0))
+		return null;
+	return (
+		<>
+			<p className="ask-evidence-label">{label}</p>
+			<div>
+				<Fields value={value} />
+			</div>
+		</>
+	);
+}
+
 /** What the ask stands on, drawn as words, never as JSON (review 9). */
 function EvidenceText({shows}: {readonly shows: Shows}) {
 	const evidence = shows.evidence;
 	switch (evidence._tag) {
 		case "plan": {
-			const {plan} = evidence;
+			const {summary, stories, tasks, pointers, questions, ...rest} = evidence.plan;
 			return (
 				<>
 					<p className="ask-evidence-label">Plan version {evidence.version}</p>
-					<p>{plan.summary}</p>
-					<Listed label="Stories" items={plan.stories} />
-					<Listed label="Tasks" items={plan.tasks} />
-					{plan.questions.length > 0 && (
+					<p>{summary}</p>
+					<Section label="Stories" value={stories} />
+					<Section label="Tasks" value={tasks} />
+					<Section label="Pointers" value={pointers} />
+					{questions.length > 0 && (
 						<>
 							<p className="ask-evidence-label">Open questions</p>
 							<ul>
-								{plan.questions.map((q) => (
+								{questions.map((q) => (
 									<li key={q.id}>
-										<p>{q.ask}</p>
+										<p>
+											<span className="ask-quiet mono">{q.id}</span> {q.ask}
+										</p>
+										{q.options.length > 0 && (
+											<p className="ask-quiet">Options: {q.options.join("; ")}</p>
+										)}
 										<p className="ask-quiet">
 											Lean: {q.lean}. {q.why}
 											{q.cost === undefined ? "" : ` Cost: ${q.cost}`}
 											{q.sure === undefined ? "" : ` ${q.sure}% sure.`}
 										</p>
+										{q.doubt !== undefined && <p className="ask-quiet">Doubt: {q.doubt}</p>}
 									</li>
 								))}
 							</ul>
 						</>
 					)}
+					{/* Fields a later plan writer added: shown too, since the yes covers the whole plan. */}
+					{Object.entries(rest).map(([key, value]) => (
+						<Section key={key} label={said(key)} value={value} />
+					))}
 					{evidence.text !== undefined && evidence.text !== "" && (
 						<p className="ask-said">{evidence.text}</p>
 					)}
@@ -615,7 +669,14 @@ type KeyPress = Pick<
  * pressed on the view. `true`: the view took the key. The asks menu's grid holds the focus while
  * its selected row's view is drawn, so its answer keys still work from the menu's first focus.
  */
-export type AskKeys = {readonly press: (e: KeyPress) => boolean};
+export type AskKeys = {
+	readonly press: (e: KeyPress) => boolean;
+	/**
+	 * The place's own focus came or went. While the place holds it for the view, the view counts as
+	 * focused, so reading time in the menu reaches the answer's `took.ms` (review 5).
+	 */
+	readonly focus: (held: boolean) => void;
+};
 
 export function AskView({
 	ticket,
@@ -679,6 +740,13 @@ export function AskView({
 		const active = document.activeElement;
 		if (active === document.body || active === program.current) root.current?.focus();
 	}, []);
+	// Drawn inside a place that already holds the focus for it, as the menu's grid does when its
+	// selection moves: the view is read from there, so it counts as focused from its first draw.
+	useEffect(() => {
+		const active = document.activeElement;
+		if (handle === undefined || active === null || active === root.current) return;
+		if (active.contains(root.current)) send({type: "focus", value: true, now: Date.now()});
+	}, [handle, send]);
 	useEffect(() => {
 		const up = (e: globalThis.KeyboardEvent) => held.delete(e.key);
 		const active = () => {
@@ -767,7 +835,10 @@ export function AskView({
 		}
 		return false;
 	};
-	useImperativeHandle(handle, () => ({press: (e) => onKey(e, true)}));
+	useImperativeHandle(handle, () => ({
+		press: (e) => onKey(e, true),
+		focus: (held) => send({type: "focus", value: held, now: Date.now()}),
+	}));
 	// Answered: the view goes, so the next ask, or the turn card, takes its place at once.
 	if (model.status !== undefined) return null;
 	const rec = view.shows.rec;

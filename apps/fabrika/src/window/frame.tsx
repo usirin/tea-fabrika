@@ -572,6 +572,9 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 							// A key inside the selected ask's view is the view's own.
 							if (e.target !== e.currentTarget && (e.target as Element).closest(".ask-view"))
 								return;
+							// The selected ask's keys come first, as if pressed on its view: a key the
+							// person mapped to an answer wins over the built-in j and k (review 5).
+							if (e.target === e.currentTarget && view.current?.press(e) === true) return;
 							const by =
 								e.key === "ArrowDown" || e.key === "j"
 									? 1
@@ -590,8 +593,12 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 								open({id: active.key});
 								return;
 							}
-							// The rest are the selected ask's: its answer keys and Space, as if pressed on its view.
-							if (e.target === e.currentTarget) view.current?.press(e);
+						}}
+						onFocus={(e) => {
+							if (e.target === e.currentTarget) view.current?.focus(true);
+						}}
+						onBlur={(e) => {
+							if (e.target === e.currentTarget) view.current?.focus(false);
 						}}
 					>
 						{rows.map((row, i) => (

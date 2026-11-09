@@ -1,6 +1,6 @@
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {Ledger} from "@kampus/fabrika-old";
+import {Ledger, streams} from "@kampus/fabrika-old";
 import {AskShown} from "@kampus/pipeline/tickets/ask";
 import {
 	Entry,
@@ -13,6 +13,7 @@ import {
 } from "@kampus/pipeline/tickets/ticket";
 import {headOf, words, preparePending} from "@tea-fabrika/tracker";
 import {Cause, Clock, Duration, Effect, Exit, Schema, Stream} from "effect";
+import type {Noticed} from "./link.ts";
 
 // The asks: every ask on the ledger that waits on the person, folded in the host, once, for
 // every place that shows a count of them: the window's top bar, the Dock badge and the asks list
@@ -328,6 +329,30 @@ export const noticeOf = (fresh: readonly [Ask, ...Ask[]]): {title: string; body:
 };
 
 // ---------------------------------------------------------------- the cells, on the `Ledger`
+
+/**
+ * The name whose inbox keeps each system notification sent of new asks, one row per notification
+ * (plan: "Record each newly sent notice"). Outside `tracker/ticket`, so no ticket's facts and no
+ * count of asks reads it; attention per ticket folds it by the tickets each row names.
+ */
+export const NOTICES = "asks/notices";
+
+/**
+ * Keep one sent notification on the ledger, as `noticed` in `asks/notices/inbox`, written as the
+ * person whose app showed it. Its id is the app's send time and first ask, so a retry of one send
+ * is one row. A past notification is never invented: only a send the app reports is kept.
+ */
+export const noticeCell = (notice: Noticed, writer: string) =>
+	Effect.gen(function* () {
+		const ledger = yield* Ledger;
+		yield* ledger.register(NOTICES, writer);
+		const {type: _type, ...data} = notice;
+		yield* ledger.send(streams(NOTICES).inbox, `notice/${notice.sentAt}/${notice.asks[0].key}`, {
+			kind: "noticed",
+			writer,
+			data,
+		});
+	});
 
 /** Rows read per call. */
 const PAGE = 500;
