@@ -15,6 +15,7 @@ import {noExpectInIf} from "./no-expect-in-if.ts";
 import {noHandTag} from "./no-hand-tag.ts";
 import {noImplicitEffectConcurrency} from "./no-implicit-effect-concurrency.ts";
 import {noLedgerSql} from "./no-ledger-sql.ts";
+import {noNodeFilesystem} from "./no-node-filesystem.ts";
 import {noNumericDuration} from "./no-numeric-duration.ts";
 import {noOf} from "./no-of.ts";
 import {noProjectSettings} from "./no-project-settings.ts";
@@ -45,6 +46,7 @@ const plugin: Plugin = {
 		"no-hand-tag": noHandTag,
 		"no-implicit-effect-concurrency": noImplicitEffectConcurrency,
 		"no-ledger-sql": noLedgerSql,
+		"no-node-filesystem": noNodeFilesystem,
 		"no-numeric-duration": noNumericDuration,
 		"no-of": noOf,
 		"no-project-settings": noProjectSettings,

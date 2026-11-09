@@ -349,6 +349,7 @@
 			"rules": {
 				"fabrika/no-promises": "error",
 				"fabrika/no-ledger-sql": "error",
+				"fabrika/no-node-filesystem": "error",
 				"fabrika/no-effect-run-outside-edge": "error",
 				"fabrika/edge-comment": "error",
 				"fabrika/effect-functions": "error",

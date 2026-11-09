@@ -65,6 +65,17 @@ which the plan does not name. Report any miss.
 
 ### P12 checks in lint
 
+`no-node-filesystem` refuses `fs`, `fs/promises` and `path`, with or without `node:`,
+in `next/` product files. It covers imports, re-exports, dynamic imports, `require`
+and TypeScript import assignments. Tests, test support files, declarations, the
+exam and browser test drivers are left out. Its generated plants use the real
+config at these paths. The P12 review-6 sweep found one filesystem import in
+`node/stage-recording.ts`, plus six path imports: that file, `node/build.ts`,
+and the app's `build.ts`, `dev.ts`, `src/local-stage.ts` and `src/stage.ts`.
+These are seven findings in six files, all read by hand, with no false alarm.
+All can use Effect's existing FileSystem or Path service. This rule deliberately
+stays red until the builder removes those imports.
+
 `pnpm lint:twin` runs `next/apps/fabrika/src/exam/twin.ts` on the real Alchemy stack.
 It reads the installed providers, prints the finding count and exits nonzero for any
 finding. Its generated plants stay in `twin.test.ts`, with seed 119120.

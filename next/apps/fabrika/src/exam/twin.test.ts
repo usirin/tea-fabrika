@@ -32,6 +32,119 @@ const law = (
 	);
 
 describe("P12 local twin lint", () => {
+	// Review 6 sweep: every way a function value can leave a checked direct call.
+	// Rejected syntax is a finding even when the constructor or decorator is never called here.
+	const forms: ReadonlyArray<
+		readonly [string, (ref: string, alias: string, args: string) => string]
+	> = [
+		["computed literal", (r, _a, args) => `${r.replace(/\.([^.]+)$/, '["$1"]')}(${args});`],
+		[
+			"computed expression",
+			(r, _a, args) => `${r.replace(/\.([^.]+)$/, '[String("$1")]')}(${args});`,
+		],
+		["optional member", (r, _a, args) => `${r.replace(/\.([^.]+)$/, "?.$1")}(${args});`],
+		["optional call", (r, _a, args) => `${r}?.(${args});`],
+		[
+			"bare destructure",
+			(r, _a, args) =>
+				`const {${r.split(".").at(-1)}} = ${r.slice(0, r.lastIndexOf("."))}; ${r.split(".").at(-1)}(${args});`,
+		],
+		[
+			"bare default destructure",
+			(r, _a, args) =>
+				`const {${r.split(".").at(-1)} = () => null} = ${r.slice(0, r.lastIndexOf("."))}; ${r.split(".").at(-1)}(${args});`,
+		],
+		[
+			"renamed destructure",
+			(r, a, args) =>
+				`const {${r.split(".").at(-1)}: outside${a}} = ${r.slice(0, r.lastIndexOf("."))}; outside${a}(${args});`,
+		],
+		[
+			"default destructure",
+			(r, a, args) =>
+				`const {${r.split(".").at(-1)}: outside${a} = () => null} = ${r.slice(0, r.lastIndexOf("."))}; outside${a}(${args});`,
+		],
+		[
+			"computed destructure",
+			(r, a, args) =>
+				`const {[${JSON.stringify(r.split(".").at(-1))}]: outside${a}} = ${r.slice(0, r.lastIndexOf("."))}; outside${a}(${args});`,
+		],
+		[
+			"rest destructure",
+			(r, a, args) =>
+				`const {...outside${a}} = ${r.slice(0, r.lastIndexOf("."))}; outside${a}[${JSON.stringify(r.split(".").at(-1))}](${args});`,
+		],
+		[
+			"assignment destructure",
+			(r, a, args) =>
+				`let outside${a}; ({${r.split(".").at(-1)}: outside${a}} = ${r.slice(0, r.lastIndexOf("."))}); outside${a}(${args});`,
+		],
+		[
+			"namespace spread",
+			(r, a, args) =>
+				`const outside${a} = {...${r.slice(0, r.lastIndexOf("."))}}; outside${a}[${JSON.stringify(r.split(".").at(-1))}](${args});`,
+		],
+		["array spread", (r, a, args) => `const outside${a} = [...[${r}]]; outside${a}[0](${args});`],
+		["call", (r, _a, args) => `${r}.call(null, ${args});`],
+		["apply", (r, _a, args) => `${r}.apply(null, [${args}]);`],
+		["Reflect.apply", (r, _a, args) => `Reflect.apply(${r}, null, [${args}]);`],
+		[
+			"Reflect.get",
+			(r, _a, args) =>
+				`Reflect.get(${r.slice(0, r.lastIndexOf("."))}, ${JSON.stringify(r.split(".").at(-1))})(${args});`,
+		],
+		[
+			"bound reference",
+			(r, a, args) => `const outside${a} = ${r}.bind(null); outside${a}(${args});`,
+		],
+		["argument", (r, _a, args) => `((make) => make(${args}))(${r});`],
+		["returned reference", (r, _a, args) => `(() => ${r})()(${args});`],
+		[
+			"object property",
+			(r, a, args) => `const outside${a} = {make: ${r}}; outside${a}.make(${args});`,
+		],
+		["conditional", (r, _a, args) => `(true ? ${r} : (() => null))(${args});`],
+		["sequence", (r, _a, args) => `(0, ${r})(${args});`],
+		["tagged template", (r) => `${r}\`hidden\`;`],
+		["exported reference", (r, a) => `export const outside${a} = ${r};`],
+	];
+	for (const kind of ["remote", "resource"] as const)
+		for (const [form, plant] of forms)
+			law(`review 6: ${kind} ${form} fails closed beside the valid stack`, ({alias, name}) => {
+				const ref = kind === "remote" ? "Alchemy.remote" : "Cloudflare.Zone.Zone";
+				const args = kind === "remote" ? "" : `${JSON.stringify(name)}, {name: "test.invalid"}`;
+				const findings = scan(stack, `${text()}\n${plant(ref, alias, args)}`);
+				expect(findings.length).toBeGreaterThan(0);
+				expect(
+					findings.every((f) =>
+						/^(remote override|no local provider:|unsupported-case:)/.test(f.why),
+					),
+				).toBe(true);
+			});
+	for (const [form, plant] of [
+		["remote re-export", 'export {remote as outside} from "alchemy";'],
+		["resource re-export", 'export {Zone as outside} from "@alchemy.run/cloudflare";'],
+		["star re-export", 'export * from "@alchemy.run/cloudflare";'],
+		["namespace re-export", 'export * as outside from "alchemy";'],
+		["local re-export", 'export {outside} from "./remote-helper.ts";'],
+		[
+			"imported reference passed on",
+			'import {outside} from "./remote-helper.ts"; consume(outside);',
+		],
+		[
+			"namespace import passed on",
+			'import * as outside from "./remote-helper.ts"; consume(outside);',
+		],
+		["default import passed on", 'import outside from "./remote-helper.ts"; consume(outside);'],
+		["side effect import", 'import "./remote-helper.ts";'],
+		["external helper", 'import {outside} from "unfollowed-package"; consume(outside);'],
+		["dynamic import", 'const outside = await import("alchemy"); outside.remote();'],
+		["require", 'const outside = require("alchemy"); outside.remote();'],
+		["alchemy subpath", 'import {remote as outside} from "alchemy/Remote"; outside();'],
+	] as const)
+		law(`review 6: ${form} is followed or fails closed`, () => {
+			expect(scan(stack, `${text()}\n${plant}`).length).toBeGreaterThan(0);
+		});
 	// Review 5: each plant used to hide beside a valid local stack with zero findings.
 	for (const wrap of [
 		"assertion",

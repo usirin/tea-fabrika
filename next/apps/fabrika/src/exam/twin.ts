@@ -116,8 +116,20 @@ const sameSymbol = (file: string, symbol: string, targetFile: string, target: st
 	const imported = imports(file).get(symbol);
 	return imported !== undefined && imported.file === targetFile && imported.name === target;
 };
+// Installed trees are one snapshot for this command, just like parsedFiles above.
+const cached = (read: (file: string, symbol: string) => boolean) => {
+	const answers = new Map<string, boolean>();
+	return (file: string, symbol: string) => {
+		const key = `${file}:${symbol}`;
+		const known = answers.get(key);
+		if (known !== undefined) return known;
+		const answer = read(file, symbol);
+		answers.set(key, answer);
+		return answer;
+	};
+};
 // Read the sidecar's real registration calls, rather than believing a LocalProvider filename.
-const registered = (targetFile: string, target: string): boolean => {
+const registered = cached((targetFile: string, target: string): boolean => {
 	const local = join(CF, "Local.ts");
 	const providers = imports(local);
 	const installed = new Set<string>();
@@ -154,8 +166,8 @@ const registered = (targetFile: string, target: string): boolean => {
 		);
 	});
 	return dual;
-};
-const resource = (file: string, symbol: string): boolean => {
+});
+const resource = cached((file: string, symbol: string): boolean => {
 	let found = false;
 	nodes(tree(file), (node) => {
 		if (
@@ -168,7 +180,7 @@ const resource = (file: string, symbol: string): boolean => {
 	});
 	// Worker is implemented by overloads, and its provider registration is still independent evidence.
 	return found || registered(file, symbol);
-};
+});
 export const scan = (file: string, body: string): Array<Finding> => {
 	const ast = tree(file, body),
 		found: Array<Finding> = [];
@@ -177,6 +189,14 @@ export const scan = (file: string, body: string): Array<Finding> => {
 		named = new Map<string, string>();
 	const remote = new Set<string>();
 	const helpers = new Set<string>();
+	// A reference may be used only as the root of a checked direct call. Rejecting its
+	// escape also covers aliases, destructuring, spread, callbacks and indirect invocation.
+	const checkedRoots = new Set<Tree>();
+	const checkRoot = (raw: Tree) => {
+		let node = unwrap(raw);
+		while (node?.type === "MemberExpression") node = unwrap(node.object);
+		if (node?.type === "Identifier") checkedRoots.add(node);
+	};
 	const cloudImport = (node: Tree) => {
 		const first = root(node);
 		return first !== null && (cloud.has(first) || named.has(first));
@@ -185,7 +205,14 @@ export const scan = (file: string, body: string): Array<Finding> => {
 		found.push({file, line: body.slice(0, node.start).split("\n").length, why});
 	for (const node of ast.body)
 		if (node.type === "ImportDeclaration") {
-			if (node.source.value.startsWith(".") && node.importKind !== "type")
+			if (node.importKind === "type") continue;
+			if (!["@alchemy.run/cloudflare", "alchemy", "effect"].includes(node.source.value))
+				if (
+					node.specifiers.length === 0 ||
+					node.specifiers.some((s) => s.type !== "ImportSpecifier" || s.importKind !== "type")
+				)
+					report(node, "unsupported-case: unfollowed stack import");
+			if (node.source.value.startsWith("."))
 				for (const spec of node.specifiers)
 					if (spec.type !== "ImportSpecifier" || spec.importKind !== "type")
 						helpers.add(spec.local.name);
@@ -207,8 +234,19 @@ export const scan = (file: string, body: string): Array<Finding> => {
 					name(s.imported) === "remote"
 				)
 					remote.add(s.local.name);
+				else if (
+					node.source.value === "alchemy" &&
+					s.type === "ImportSpecifier" &&
+					s.importKind !== "type"
+				)
+					report(node, "unsupported-case: named Alchemy import");
 			}
-		}
+		} else if (
+			(node.type === "ExportAllDeclaration" || node.type === "ExportNamedDeclaration") &&
+			node.source &&
+			node.exportKind !== "type"
+		)
+			report(node, "unsupported-case: unfollowed stack re-export");
 	let total = 0;
 	const isRemote = (callee: string | null) =>
 		callee !== null && (remote.has(callee) || [...alchemy].some((a) => callee === `${a}.remote`));
@@ -220,7 +258,12 @@ export const scan = (file: string, body: string): Array<Finding> => {
 		}
 		if (node.type !== "CallExpression") return;
 		const callee = member(node.callee);
-		if (isRemote(callee)) report(node, "remote override");
+		if (isRemote(callee)) {
+			checkRoot(node.callee);
+			report(node, "remote override");
+		}
+		if ([...alchemy].some((a) => callee === `${a}.Stack` || callee === `${a}.localState`))
+			checkRoot(node.callee);
 		const call = callee?.split(".") ?? [];
 		const first = call[0];
 		const imported = first === undefined ? undefined : named.get(first);
@@ -233,9 +276,13 @@ export const scan = (file: string, body: string): Array<Finding> => {
 					: null;
 		if (!parts) {
 			// Computed Cloudflare calls and aliased constructors must be understood before blocking.
-			if (cloudImport(node.callee)) report(node, "unsupported-case: computed resource");
+			if (cloudImport(node.callee)) {
+				checkRoot(node.callee);
+				report(node, "unsupported-case: computed resource");
+			}
 			return;
 		}
+		checkRoot(node.callee);
 		if (["providers", "localState"].includes(parts.join("."))) return;
 		const owner = exported(join(CF, "index.ts"), parts);
 		if (owner === null) {
@@ -258,6 +305,51 @@ export const scan = (file: string, body: string): Array<Finding> => {
 				report(node, `unsupported-case: Cloudflare.${parts.join(".")}`);
 		}
 	});
+	const references = (node: Tree): void => {
+		if (node === null || typeof node !== "object") return;
+		if (Array.isArray(node)) {
+			for (const child of node) references(child);
+			return;
+		}
+		if (
+			node.type === "ImportDeclaration" ||
+			node.type === "TSTypeQuery" ||
+			node.type === "TSTypeReference"
+		)
+			return;
+		if (
+			node.type === "ImportExpression" ||
+			(node.type === "CallExpression" && member(node.callee) === "require")
+		)
+			report(node, "unsupported-case: dynamic stack import");
+		if (
+			node.type === "Identifier" &&
+			(cloud.has(node.name) ||
+				named.has(node.name) ||
+				alchemy.has(node.name) ||
+				remote.has(node.name)) &&
+			!checkedRoots.has(node)
+		)
+			report(node, "unsupported-case: escaped resource or remote reference");
+		// Optional calls and members are deliberately unsupported, even when their dotted
+		// spelling looks like an ordinary direct constructor or decorator call.
+		if (
+			(node.type === "CallExpression" || node.type === "MemberExpression") &&
+			node.optional &&
+			(cloudImport(node) ||
+				cloudImport(node.callee) ||
+				alchemy.has(root(node) ?? "") ||
+				alchemy.has(root(node.callee) ?? ""))
+		)
+			report(node, "unsupported-case: optional resource or remote call");
+		for (const [key, child] of Object.entries(node)) {
+			// The name after a dot, and a literal object's key, are names rather than references.
+			if (node.type === "MemberExpression" && !node.computed && key === "property") continue;
+			if (node.type === "Property" && !node.computed && key === "key") continue;
+			if (!["comments", "tokens"].includes(key)) references(child);
+		}
+	};
+	references(ast);
 	if (total === 0 && found.length === 0)
 		found.push({file, line: 1, why: "unsupported-case: no stack resources found"});
 	return found;

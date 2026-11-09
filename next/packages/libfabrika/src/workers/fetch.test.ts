@@ -1,6 +1,6 @@
 // P12, next/. The public Worker route is plain libfabrika code. No socket or workerd class.
 // Builder contract: workers/fetch.ts exports fetch(request, env, config), returning an Effect.
-import {Effect} from "effect";
+import {Cause, Effect, Exit} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import type {BrainOptions, Env} from "./runtime.ts";
@@ -91,6 +91,52 @@ const world = (port: number, name: string) => {
 };
 
 describe("P12 public Worker fetch", () => {
+	it("malformed grant target escapes fail typed before any Project call", async () => {
+		const fetch = await load();
+		const bad = fc
+			.tuple(
+				fc.string(),
+				fc.constantFrom("%", "%G0", "%0G", "%C0%AF", "%E0%A4", "%ED%A0%80", "%F4%90%80%80"),
+			)
+			.map(([prefix, suffix]) => encodeURIComponent(prefix) + suffix);
+		await fc.assert(
+			fc.asyncProperty(bad, async (target) => {
+				const w = world(18787, "parse-test");
+				const exit = await Effect.runPromiseExit(
+					fetch(w.request(`/grant/client/${target}`), w.env, w.config),
+				);
+				expect(Exit.isFailure(exit)).toBe(true);
+				const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
+				expect(Cause.hasDies(cause)).toBe(false);
+				expect(Cause.hasFails(cause)).toBe(true);
+				expect(w.calls).toEqual([]);
+			}),
+			{seed: 119120, numRuns: 30, examples: [["%"]]},
+		);
+	});
+	it("malformed JSON grant bodies fail typed before any Project call", async () => {
+		const fetch = await load();
+		await fc.assert(
+			fc.asyncProperty(
+				fc.jsonValue().map((v) => `${JSON.stringify(v)}!`),
+				async (body) => {
+					const w = world(18787, "parse-test");
+					const request = new Request(`${w.origin}/grant`, {
+						method: "POST",
+						headers: {host: "127.0.0.1:18787"},
+						body,
+					});
+					const exit = await Effect.runPromiseExit(fetch(request, w.env, w.config));
+					expect(Exit.isFailure(exit)).toBe(true);
+					const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
+					expect(Cause.hasDies(cause)).toBe(false);
+					expect(Cause.hasFails(cause)).toBe(true);
+					expect(w.calls).toEqual([]);
+				},
+			),
+			{seed: 119120, numRuns: 20, examples: [["{"]]},
+		);
+	});
 	law(
 		"wrong hosts refuse every route before RPC or body work",
 		async ({port, name, body}, fetch) => {

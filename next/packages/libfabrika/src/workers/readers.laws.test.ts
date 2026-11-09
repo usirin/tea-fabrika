@@ -1,6 +1,7 @@
 // P12, next/. Saved and wire values enter the real services over in-memory platform handles.
+import {createHash} from "node:crypto";
 import {DatabaseSync} from "node:sqlite";
-import {Cause, Effect, Exit, Schema} from "effect";
+import {Cause, Effect, Exit, Redacted, Schema} from "effect";
 import * as fc from "fast-check";
 import {expect, it, vi} from "vitest";
 import {Writer} from "../coordination/index.ts";
@@ -25,6 +26,26 @@ const config = {
 };
 const malformed = (schema: Schema.Top) =>
 	fc.jsonValue().filter((value) => !Schema.is(schema)(value));
+// Keep parser checks independent of the bearer migration. The separate [secrets] type and
+// flow laws require Redacted; this fixture also reaches HEAD's parser using its old signature.
+const parserControl = (request: Request, env: Env) =>
+	Effect.gen(function* () {
+		const secure: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [
+			request.clone(),
+			env,
+			Redacted.make("test"),
+			{},
+		]);
+		const response = yield* secure;
+		if (response.status !== 403) return response;
+		const legacy: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [
+			request,
+			env,
+			"test",
+			{},
+		]);
+		return yield* legacy;
+	});
 const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
 	expect(Exit.isFailure(exit)).toBe(true);
 	const cause = Exit.isFailure(exit) ? exit.cause : Cause.die("unexpected success");
@@ -249,7 +270,7 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
 						args: ["key", raw, "checksum"],
 					}),
 				});
-				const exit = await Effect.runPromiseExit(control(request, w.env, "test", {}));
+				const exit = await Effect.runPromiseExit(parserControl(request, w.env));
 				expect(Exit.isSuccess(exit)).toBe(true);
 				expect(attempts).toHaveLength(1);
 				typed(attempts[0]!);
@@ -264,6 +285,62 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
 		{seed: 119120, numRuns: 20, examples: [[null], [{}], [["byte"]]]},
 	);
 });
+
+for (const field of ["put key", "put checksum", "head key"] as const)
+	it(`control checks outside ${field} as text instead of coercing it or throwing`, async () => {
+		const input: fc.Arbitrary<unknown> = fc.oneof(
+			malformed(Schema.String),
+			fc.record({toString: fc.jsonValue()}),
+		);
+		await fc.assert(
+			fc.asyncProperty(input, async (raw) => {
+				const w = world(),
+					attempts: Array<Exit.Exit<unknown, unknown>> = [];
+				const original = Effect.result;
+				const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
+					original(
+						work.pipe(
+							Effect.onExit((exit) =>
+								Effect.sync(() => {
+									attempts.push(exit);
+								}),
+							),
+						),
+					),
+				);
+				try {
+					const args: Array<unknown> =
+						field === "head key"
+							? [raw]
+							: ["key", [], createHash("sha256").update("").digest("hex")];
+					if (field === "put key") args[0] = raw;
+					if (field === "put checksum") args[2] = raw;
+					const request = new Request("http://local/", {
+						method: "POST",
+						headers: {authorization: "Bearer test"},
+						body: JSON.stringify({
+							target: "bucket",
+							project: "parse-test",
+							name: "",
+							method: field === "head key" ? "head" : "put",
+							args,
+						}),
+					});
+					const exit = await Effect.runPromiseExit(parserControl(request, w.env));
+					expect(attempts).toHaveLength(1);
+					typed(attempts[0]!);
+					expect(exit).toMatchObject({_tag: "Success"});
+					const response = Exit.isSuccess(exit) ? exit.value : new Response(null);
+					expect(response.status).toBe(500);
+					expect(await response.json()).toEqual({error: {why: "bad_row"}});
+				} finally {
+					inspect.mockRestore();
+					w.db.close();
+				}
+			}),
+			{seed: 119120, numRuns: 20, examples: [[{toString: 0}], [null], [17]]},
+		);
+	});
 
 const objectName = Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String]));
 for (const service of ["process", "record"] as const)
