@@ -283,7 +283,7 @@ const mountAnswer = (asks: readonly Asked[], selected: Asked) => {
 	let queue = asks;
 	let current = selected;
 	const aside = new Set<string>();
-	// Exactly the live-ask list frame.tsx uses for both its header and AskStatus. Later stays out.
+	// The live asks behind frame.tsx's header count, including each ask's id. Later stays out.
 	const waiting = () => queue.filter((ask) => !aside.has(ask.ask));
 	const answers: string[] = [];
 	const actions: AskActions = {
@@ -302,17 +302,16 @@ const mountAnswer = (asks: readonly Asked[], selected: Asked) => {
 	};
 	const render = () => {
 		const ask = queue.find((ask) => ask.ask === current.ask) ?? queue[0];
+		const live = waiting();
+		// Keep ids: polling out A or B can leave the same count but change A's save result.
+		const status = {
+			asks: live,
+			left: live.length,
+			children: ask === undefined ? null : createElement(AskView, {key: ask.ask, ticket: 102, ask}),
+		};
 		flushSync(() =>
 			root.render(
-				createElement(
-					AskActions.Provider,
-					{value: actions},
-					createElement(AskStatus, {
-						left: waiting().length,
-						children:
-							ask === undefined ? null : createElement(AskView, {key: ask.ask, ticket: 102, ask}),
-					}),
-				),
+				createElement(AskActions.Provider, {value: actions}, createElement(AskStatus, status)),
 			),
 		);
 	};
