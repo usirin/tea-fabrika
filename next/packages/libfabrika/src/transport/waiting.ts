@@ -16,7 +16,7 @@ export const Row = Schema.Struct({
 export class Waiting extends Schema.Opaque<Waiting>()(
 	Schema.Struct({
 		rows: Schema.Array(Row),
-		most: Schema.Int,
+		most: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
 		ttl: Schema.Number,
 	}),
 ) {

@@ -40,25 +40,23 @@ const CODE = /\.[cm]?[jt]sx?$/;
 class Unparsed extends Schema.TaggedError<Unparsed>()("Unparsed", {path: Schema.String}) {}
 
 /** The edge comments in one file, in line order. */
-const edgesIn = (path: string, text: string) => {
+const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
 	const parsed = parseSync(path, text);
-	if (parsed.errors.length > 0) return Effect.fail(new Unparsed({path}));
-	return Effect.succeed(
-		parsed.comments.flatMap((comment): Edge[] => {
-			const rest = DISABLE.exec(comment.value)?.[1];
-			if (rest === undefined) return [];
-			const at = rest.search(REASON);
-			const rules = (at < 0 ? rest : rest.slice(0, at))
-				.split(",")
-				.map((rule) => rule.trim())
-				.filter((rule) => rule !== "");
-			if (!rules.some((rule) => EDGE_RULES.has(rule))) return [];
-			const why = at < 0 ? "" : rest.slice(at).replace(REASON, "").trim();
-			const line = text.slice(0, comment.start).split("\n").length;
-			return [{path, line, rules: rules.join(", "), why}];
-		}),
-	);
-};
+	if (parsed.errors.length > 0) return yield* new Unparsed({path});
+	return parsed.comments.flatMap((comment): Edge[] => {
+		const rest = DISABLE.exec(comment.value)?.[1];
+		if (rest === undefined) return [];
+		const at = rest.search(REASON);
+		const rules = (at < 0 ? rest : rest.slice(0, at))
+			.split(",")
+			.map((rule) => rule.trim())
+			.filter((rule) => rule !== "");
+		if (!rules.some((rule) => EDGE_RULES.has(rule))) return [];
+		const why = at < 0 ? "" : rest.slice(at).replace(REASON, "").trim();
+		const line = text.slice(0, comment.start).split("\n").length;
+		return [{path, line, rules: rules.join(", "), why}];
+	});
+});
 
 const matchKey = (edge: Edge) => JSON.stringify([edge.path, edge.rules, edge.why]);
 
@@ -66,22 +64,24 @@ const matchKey = (edge: Edge) => JSON.stringify([edge.path, edge.rules, edge.why
  * The edge comments at `head` that were not at `base`, each map keyed by path from the top of the
  * repo, in path then line order.
  */
-export const asks = (base: ReadonlyMap<string, string>, head: ReadonlyMap<string, string>) =>
-	Effect.gen(function* () {
-		const found: Edge[] = [];
-		for (const path of [...head.keys()].sort()) {
-			const old = base.get(path);
-			const before = old === undefined ? [] : yield* edgesIn(path, old);
-			const left = new Map<string, number>();
-			for (const edge of before) left.set(matchKey(edge), (left.get(matchKey(edge)) ?? 0) + 1);
-			for (const edge of yield* edgesIn(path, head.get(path) ?? "")) {
-				const n = left.get(matchKey(edge)) ?? 0;
-				if (n > 0) left.set(matchKey(edge), n - 1);
-				else found.push(edge);
-			}
+export const asks = Effect.fn("exam.asks")(function* (
+	base: ReadonlyMap<string, string>,
+	head: ReadonlyMap<string, string>,
+) {
+	const found: Edge[] = [];
+	for (const path of [...head.keys()].sort()) {
+		const old = base.get(path);
+		const before = old === undefined ? [] : yield* edgesIn(path, old);
+		const left = new Map<string, number>();
+		for (const edge of before) left.set(matchKey(edge), (left.get(matchKey(edge)) ?? 0) + 1);
+		for (const edge of yield* edgesIn(path, head.get(path) ?? "")) {
+			const n = left.get(matchKey(edge)) ?? 0;
+			if (n > 0) left.set(matchKey(edge), n - 1);
+			else found.push(edge);
 		}
-		return found;
-	});
+	}
+	return found;
+});
 
 class GitFailed extends Schema.TaggedError<GitFailed>()("GitFailed", {
 	args: Schema.String,
@@ -89,18 +89,15 @@ class GitFailed extends Schema.TaggedError<GitFailed>()("GitFailed", {
 }) {}
 
 /** One git command's output; any exit but 0 fails. */
-const git = (args: ReadonlyArray<string>) =>
-	Effect.scoped(
-		Effect.gen(function* () {
-			const run = yield* ChildProcess.make("git", [...args]);
-			const [out, code] = yield* Effect.all(
-				[run.stdout.pipe(Stream.decodeText(), Stream.mkString), run.exitCode],
-				{concurrency: 2},
-			);
-			if (code !== 0) return yield* new GitFailed({args: args.join(" "), code});
-			return out;
-		}),
+const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
+	const run = yield* ChildProcess.make("git", [...args]);
+	const [out, code] = yield* Effect.all(
+		[run.stdout.pipe(Stream.decodeText(), Stream.mkString), run.exitCode],
+		{concurrency: 2},
 	);
+	if (code !== 0) return yield* new GitFailed({args: args.join(" "), code});
+	return out;
+}, Effect.scoped);
 
 const lines = (text: string) => text.split("\n").filter((line) => line !== "");
 
@@ -119,7 +116,9 @@ const main = Effect.gen(function* () {
 	const flag = args.indexOf("--base");
 	const against = (flag < 0 ? undefined : args[flag + 1]) ?? "origin/main";
 	const top = (yield* git(["rev-parse", "--show-toplevel"])).trim();
-	const at = (more: ReadonlyArray<string>) => git(["-C", top, ...more]);
+	const at = Effect.fnUntraced(function* (more: ReadonlyArray<string>) {
+		return yield* git(["-C", top, ...more]);
+	});
 	const base = (yield* at(["merge-base", against, "HEAD"])).trim();
 	const changed = lines(yield* at(["diff", "--name-only", "--no-renames", base, "--", "next"]));
 	const atBase = new Set(lines(yield* at(["ls-tree", "-r", "--name-only", base, "--", "next"])));

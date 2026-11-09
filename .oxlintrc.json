@@ -350,6 +350,7 @@
 				"fabrika/no-promises": "error",
 				"fabrika/no-effect-run-outside-edge": "error",
 				"fabrika/edge-comment": "error",
+				"fabrika/effect-functions": "error",
 				"fabrika/no-of": "error",
 				"fabrika/no-hand-tag": "error",
 				"fabrika/one-store-hook": "error"
@@ -372,10 +373,12 @@
 		{
 			// Tests are left out: they await vitest, feed raw frames and may plant a broken view.
 			// `no-of` stays on, since a test names its helpers too.
+			// Tests also manufacture spans as input for the sink. Tracing plants use product paths.
 			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
 			"rules": {
 				"fabrika/no-promises": "off",
 				"fabrika/no-effect-run-outside-edge": "off",
+				"fabrika/effect-functions": "off",
 				"fabrika/no-hand-tag": "off",
 				"fabrika/one-store-hook": "off",
 				"react/refs": "off",
