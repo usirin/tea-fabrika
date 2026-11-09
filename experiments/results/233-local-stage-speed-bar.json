@@ -81488,5 +81488,133 @@
 			"ms": 242.7904999999996,
 			"load": "load averages: 19.96 26.01 28.70"
 		}
+	],
+	"sink": [
+		{
+			"queued": 5,
+			"sent": 5,
+			"ms": 18.21479199999976,
+			"warmup": true,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 5,
+			"sent": 5,
+			"ms": 3.0888749999994616,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 5,
+			"sent": 5,
+			"ms": 2.1662909999995463,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 5,
+			"sent": 5,
+			"ms": 2.4345830000002024,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 5,
+			"sent": 5,
+			"ms": 2.0049580000004426,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 5,
+			"sent": 5,
+			"ms": 3.1326669999998558,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 100,
+			"sent": 100,
+			"ms": 11.260124999999789,
+			"warmup": true,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 100,
+			"sent": 100,
+			"ms": 8.355708999999479,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 100,
+			"sent": 100,
+			"ms": 3.77337499999976,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 100,
+			"sent": 100,
+			"ms": 7.108541999999943,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 100,
+			"sent": 100,
+			"ms": 4.057165999999597,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 100,
+			"sent": 100,
+			"ms": 3.885833000000275,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 0,
+			"sent": 0,
+			"ms": 1.254041999999572,
+			"warmup": true,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 0,
+			"sent": 0,
+			"ms": 0.12308300000040617,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 0,
+			"sent": 0,
+			"ms": 0.12449999999989814,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 0,
+			"sent": 0,
+			"ms": 0.0902089999999589,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 0,
+			"sent": 0,
+			"ms": 0.08104100000036851,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		},
+		{
+			"queued": 0,
+			"sent": 0,
+			"ms": 0.07691599999998289,
+			"warmup": false,
+			"load": "load averages: 10.88 11.99 15.52"
+		}
 	]
 }
