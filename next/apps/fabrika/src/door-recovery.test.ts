@@ -306,7 +306,7 @@ const world = () => {
 		ping: {min: 10000, max: 60000},
 		inputCap: 100,
 		spentCap: 100,
-		nextProcess: () => processIds.next(A.Id.Process),
+		nextProcess: () => processIds.next(A.Id.Process).pipe(Effect.orDie),
 		notify: () => Effect.void,
 		inputs: {schema: Input, personOnly: [], raw: [], log: Schema.toCodecJson(Input)},
 		facts: {personOnly: []},
