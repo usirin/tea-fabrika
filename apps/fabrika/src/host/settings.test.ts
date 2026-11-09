@@ -479,4 +479,42 @@ describe("T25 [secrets] settings failures keep private data out of outputs", () 
 			{seed: 119120, numRuns: 50},
 		);
 	});
+
+	// pinned: the warning's words are what a person reads in the log when the settings
+	// folder cannot be made, so an emptied message hides the only sign of the failure.
+	it("pinned: a refused settings folder logs one warning that names the folder", async () => {
+		const logs: string[] = [];
+		const fs = FileSystem.makeNoop({
+			makeDirectory: () =>
+				Effect.fail(
+					PlatformError.systemError({
+						_tag: "PermissionDenied",
+						module: "FileSystem",
+						method: "makeDirectory",
+						pathOrDescriptor: "/made-up-home/settings",
+					}),
+				),
+			readFileString: () => Effect.succeed(""),
+		});
+		await Effect.runPromise(
+			settingsFile("/made-up-home/settings", "fabrika.toml", () =>
+				Result.succeed({pick: "fabrika"}),
+			).pipe(
+				Stream.runCollect,
+				Effect.scoped,
+				Effect.provideService(FileSystem.FileSystem, fs),
+				Effect.provide(NodePath.layer),
+				Effect.provide(
+					Logger.layer([
+						Logger.make((o) => {
+							logs.push(Logger.formatSimple.log(o));
+						}),
+					]),
+				),
+			),
+		);
+		expect(
+			logs.filter((line) => line.includes("the settings folder could not be created")),
+		).toHaveLength(1);
+	});
 });
