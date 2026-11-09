@@ -21,7 +21,6 @@ import {
 	useEffect,
 	useImperativeHandle,
 	useRef,
-	useState,
 } from "react";
 import {AskAnswer} from "./ticket.ts";
 
@@ -415,6 +414,20 @@ const held = new Set<string>();
 /** Where an ask view says what it saved: the one status region its window holds (review 6). */
 const Says = createContext<((text: string) => void) | null>(null);
 
+/** The last announcement and its count, or null before the first. */
+type Said = {readonly said: {readonly text: string; readonly count: number} | null};
+const statusMachine = defineMachine({
+	types: {model: {} as Said, msg: {} as {type: "say"; text: string}, ctx: undefined},
+	cmds: [],
+	init: (): [Said, readonly never[]] => [{said: null}, []],
+	update: {
+		say: ({said}, msg): [Said, readonly never[]] => [
+			{said: {text: msg.text, count: (said?.count ?? 0) + 1}},
+			[],
+		],
+	},
+});
+
 /**
  * The window's one polite status region, always drawn and visually hidden, outside any ask view,
  * so what a save said is read out even when the next ask, or none, takes the view's place
@@ -430,8 +443,8 @@ export function AskStatus({
 	/** How many asks still wait where this region sits. */
 	readonly left: number;
 }) {
-	const [said, setSaid] = useState<{readonly text: string; readonly count: number} | null>(null);
-	const say = (text: string) => setSaid((last) => ({text, count: (last?.count ?? 0) + 1}));
+	const [{said}, send] = useMachine(statusMachine, {run, ctx: undefined});
+	const say = (text: string) => send({type: "say", text});
 	return (
 		<Says.Provider value={say}>
 			{children}
