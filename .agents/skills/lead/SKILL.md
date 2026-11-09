@@ -121,7 +121,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone; drive runs it at start |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
-| `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
+| `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
 | `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head and squash-land pinned to it; a PR in a gh stack lands with `gh stack merge` |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
@@ -171,6 +171,12 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   `stuck`, never a pass. A build that
   answers `done` with no commit is done only with a `laws: green <paths>` line (every law already
   green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
+- A box has no network, so it cannot refresh `pnpm-lock.yaml`. When a step's commits change a
+  locked field of a workspace `package.json` (its name or dependencies) or `pnpm-workspace.yaml`
+  and leave the lockfile alone, drive answers `ask` (`lockfile`, exit 20) whatever the step said,
+  and still pushes `-wip`. The lead then, outside the box, runs `pnpm install --lockfile-only` on
+  `-wip`, checks each new version is exact and named in the approved plan, commits the lockfile
+  with `stepcommit.sh lead` and pushes it with `botpush.mjs`. The next step starts at that tip.
 - Then it pushes `<branch>-wip` (a `-wip` branch as it is) as the bot when the step committed, writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
   It keeps the box, whatever the step answered, while it holds uncommitted files or commits off the

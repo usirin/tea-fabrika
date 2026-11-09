@@ -43,7 +43,7 @@ same way. Like every layer, it must run in a browser tab
 // Workspace 1 on the Mac's window: tsh in t1, build:7's view in t2.
 did({does: "split_right"});            // Ctrl-B % in the window: t2 opens, running tsh
 // in t2, type `attach build:7`          t2 now shows build:7's process
-// build:7 crashes: DOWN {pid, why: "limit"} reaches the desktop
+// build:7 crashes: DOWN {process, why: "limit", to} reaches the desktop
 //   t2.keep = "failed" (the default) -> t2 stays, with the last view and the reason
 // open a browser tab on workspace 1     same layout, same focus, folded to the tab's size
 // press Ctrl-B in the tab               only the tab is armed; the Mac's window is not
@@ -91,8 +91,9 @@ did({does: "split_right"});            // Ctrl-B % in the window: t2 opens, runn
 ### W3: a tile shows one process
 
 ```ts
-// The desktop monitors the tile's process (OTP's monitor, from coordination).
-{_tag: "DOWN", pid: "build:7#2", why: "crashed"}
+// The desktop monitors the process the tile shows (OTP's monitor, from coordination).
+{_tag: "DOWN", ref: "m-3", process: "process_01jc9q4w7z3m8n5r2t6v0xkb4f", why: "crashed",
+ to: {_tag: "client", client: "c-1", session: "process_01jc9q5b2k..."}} // lands in client:c-1/inbox
 // then the tile follows its keep:
 //   "never"   close it, as a tmux pane closes when its command exits
 //   "failed"  keep it only after a crash, with the final view and the reason (the default)
@@ -100,6 +101,13 @@ did({does: "split_right"});            // Ctrl-B % in the window: t2 opens, runn
 ```
 
 - tsh is only the default process for a new tile.
+- *As built 2026-11-09 (P33 and P34, `next/`):* each start or restart is a new
+  process with its own id, `process_<26 chars>`, and `build:7` is only its
+  registered name. A monitor watches one process id and never follows the name,
+  so after a restart the old monitor is done. Whether a tile watches the name or
+  monitors the successor again is open, on P18's row in
+  [Tier 1](../plan/tier-1.md). *It said: `DOWN {pid: "build:7#2"}`, and a tile
+  monitors "its process".*
 - tmux's `remain-on-exit` has the same three. The word `keep` reads as a
   sentence: `{keep: "failed"}`.
 - A crash's reason is already recorded (C1) and goes to the desk too.

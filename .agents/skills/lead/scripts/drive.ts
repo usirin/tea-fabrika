@@ -21,6 +21,8 @@
 //   reading    Gather  fetch (and sign Claude's work), then the commits, their step notes, exam
 //                      paths, leaks and the report
 //   (update)   Check   pure: what the step answered and what the reads found make one outcome
+//                      (a manifest the lockfile must follow, changed with the lockfile left alone,
+//                      is an ask: a box has no network, so the lead refreshes it outside)
 //   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
 //                      the step committed
 //   recording  Act     the field row, state/<lane>.json and .md, and the box removed unless stuck
@@ -57,7 +59,15 @@ import {run} from "@demlik/tea/effect";
 import {act, gather, intentOf, listen} from "@kampus/pipeline/primitives";
 import {nameOf, outcomesOf} from "@kampus/pipeline/stages/outcome";
 import {Effect, Schema, Stream} from "effect";
-import {checkHolds, laneRoot, startHead, stepOf, wipOf} from "./lane.ts";
+import {
+	checkHolds,
+	laneRoot,
+	lockfileBehind,
+	startHead,
+	stepOf,
+	wipOf,
+	workspaceGlobs,
+} from "./lane.ts";
 
 const HERE = import.meta.dirname;
 const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -73,7 +83,7 @@ const drive = outcomesOf({
 		build: ["step_said"],
 		plan: ["plancheck", "step_said"],
 	},
-	ask: {lead: ["question"]},
+	ask: {lead: ["question", "lockfile"]},
 	skip: [],
 	stuck: [
 		"box_failed",
@@ -147,6 +157,8 @@ const Read = Schema.Struct({
 	/** Work the box holds that no branch has, as `N uncommitted files` or `N commits off <branch>`;
 	 * a box with any is never removed. */
 	left: Schema.Array(Schema.String),
+	/** Manifests the step changed that pnpm-lock.yaml must follow, with the lockfile left alone. */
+	manifests: Schema.Array(Schema.String),
 	/** What `plancheck --draft` said when it failed; `null` when it passed or did not run. */
 	plancheck: Schema.NullOr(Schema.String),
 	report: Schema.String,
@@ -258,6 +270,17 @@ const decide = (ask: Ask, read: Read): Judged => {
 		return {
 			outcome: {kind: "send", to: "tests", why: "exam_paths"},
 			why: `the build touched exam paths: ${read.exam.join(" ")}`,
+		};
+	// A box has no network, so it cannot refresh the lockfile; the lead does, outside it (ticket 385).
+	if (read.manifests.length > 0)
+		return {
+			outcome: {kind: "ask", who: "lead", for: "lockfile"},
+			why:
+				`pnpm-lock.yaml is behind ${read.manifests.join(" ")}, and a box has no network. ` +
+				`Outside the box, on ${wipOf(ask.branch)} at ${read.head.slice(0, 8)}: ` +
+				"pnpm install --lockfile-only, check each new version is exact and the plan names it, " +
+				`commit pnpm-lock.yaml as a lead commit with stepcommit.sh, push it with botpush.mjs, ` +
+				`then run ${ask.step} again`,
 		};
 	if (ask.step === "plan" && read.plancheck !== null)
 		return {
@@ -689,6 +712,7 @@ const handlers = (env: Env) => {
 					exam: [],
 					leaks: [],
 					left,
+					manifests: [],
 					plancheck: null,
 					report,
 				};
@@ -733,6 +757,17 @@ const handlers = (env: Env) => {
 				const touched = git("log", "--format=", "--name-only", `${ask.base}..${head}`);
 				if (touched.code !== 0) return failed("git log", touched);
 				const names = [...new Set(touched.out.split("\n").filter(Boolean))];
+				const at = (rev: string, path: string) => {
+					const r = git("show", `${rev}:${path}`);
+					return r.code === 0 ? r.out : null;
+				};
+				const manifests = lockfileBehind(
+					names
+						.filter((n) => n === "pnpm-workspace.yaml" || /(^|\/)package\.json$/.test(n))
+						.map((path) => ({path, before: at(ask.base, path), after: at(head, path)})),
+					workspaceGlobs(at(head, "pnpm-workspace.yaml") ?? ""),
+					names.includes("pnpm-lock.yaml"),
+				);
 				const examRun =
 					names.length === 0
 						? {code: 0, out: "", err: ""}
@@ -780,6 +815,7 @@ const handlers = (env: Env) => {
 					exam,
 					leaks: leaksIn(diff.out, env.GH_REPO),
 					left,
+					manifests,
 					plancheck: null,
 					report,
 					problem: null,
