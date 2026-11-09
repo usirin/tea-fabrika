@@ -101,13 +101,16 @@ def new_box():
     digest = hashlib.sha256(pathlib.Path(plan).read_bytes().split(b"\n", 2)[2]).hexdigest()
     must(git("fetch", "-q", "origin"), "base fetch failed")
     head, parent = rev(base), "none"
-    if head != rev("origin/main"):
+    # A lane that starts one box per step continues its own branch: that head is a valid base too.
+    own = any(git("rev-parse", "-q", "--verify", r + "^{commit}").stdout.decode().strip() == head for r in ("refs/heads/" + branch, "refs/remotes/origin/" + branch))
+    if head != rev("origin/main") and not own:
         if not verified(head, "build"): refuse("base_not_signed: verified build head required")
         branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/"), "parent lookup failed").splitlines()
         if not branches: refuse("base_not_signed: no parent branch at head")
         parent = branches[0] + "@" + head
     for other in must(git("for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines():
-        if other in (branch, "origin/" + branch, "main", "origin/main", "origin/HEAD"): continue
+        # The branch itself and its own backup copy (<branch>-wip) are not other branches.
+        if other in (branch, "origin/" + branch, branch + "-wip", "origin/" + branch + "-wip", "main", "origin/main", "origin/HEAD"): continue
         for sha in commits("origin/main", other):
             note = read_note(sha)
             if isinstance(note, dict) and note.get("ticket") == ticket: refuse("shared_ticket " + ticket + " on " + other)

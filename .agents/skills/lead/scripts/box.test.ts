@@ -994,6 +994,34 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 		});
 	});
 
+	// Plants: accept only origin/main or a parent build head, or treat the lane's own -wip backup
+	// as another open branch. drive.ts starts one box per step on the lane's branch, so the next
+	// box starts at that branch's tests head.
+	it("K2 scenario: a new box may continue its own branch beside its -wip backup", () => {
+		fixture((b) => {
+			b.setup({operations: [{path: "src/a.ts", text: "tested\n"}]});
+			expect(b.run().code).toBe(0);
+			const fetched = b.fetch();
+			expect(fetched.code, fetched.text).toBe(0);
+			const head = b.head(b.main, b.branch);
+			b.git(b.main, "update-ref", `refs/heads/${b.branch}-wip`, head);
+			const started = b.call("sh", [
+				program,
+				"new",
+				"two",
+				head,
+				b.branch,
+				"--ticket",
+				"321",
+				"--plan",
+				b.plan,
+			]);
+			expect(started.code, started.text).toBe(0);
+			const state = readFileSync(join(b.boxes, "state/two.box"), "utf8");
+			expect(state).toContain(`base: ${head}`);
+		});
+	});
+
 	// Plant: check the approval digest only at new. Review round 1, finding 6.
 	it("K2 scenario: a run refuses a plan amended after approval", () => {
 		fixture((b) => {
