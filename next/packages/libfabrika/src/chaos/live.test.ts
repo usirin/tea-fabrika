@@ -13,7 +13,7 @@ import {
 	request,
 	SEED,
 	TestProcessId,
-	TestInstanceId,
+	instanceId,
 	withIds,
 	type EntryModule,
 	type Hit,
@@ -65,7 +65,7 @@ describe("P27a live faults", () => {
 						Effect.gen(function* () {
 							const ids = yield* IdGenerator;
 							const session = yield* ids.next(TestProcessId);
-							const instance = yield* ids.next(TestInstanceId);
+							const instance = yield* instanceId();
 							const letter = yield* ids.next(InputId);
 							const raw =
 								replace === "session"
@@ -100,7 +100,7 @@ describe("P27a live faults", () => {
 								replace === "session"
 									? yield* ids.next(TestProcessId)
 									: replace === "instance"
-										? yield* ids.next(TestInstanceId)
+										? yield* instanceId()
 										: yield* ids.next(InputId);
 							const wrong = {...hit, [replace]: next};
 							const receipt = {
@@ -138,7 +138,7 @@ describe("P27a live faults", () => {
 									target: "process",
 									name: `${target.name}:${i}`,
 									process: target.process,
-									instance: yield* ids.next(TestInstanceId),
+									instance: yield* instanceId(),
 								}),
 							);
 						const w = yield* faultWorld({resolve: hits});

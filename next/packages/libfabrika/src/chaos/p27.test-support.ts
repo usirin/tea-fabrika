@@ -48,7 +48,17 @@ export const forSchema = Effect.fn("p27.test.forSchema")(function* <A, E, R>(
 });
 export const Positive = Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 100}));
 export const TestProcessId = Id.make("process");
-export const TestInstanceId = Id.make("instance");
+export const instanceId = Effect.fn("p27.test.instanceId")(function* () {
+	const {InstanceId}: {InstanceId: IdSchema<"instance">} = yield* production(
+		"../workers/lifecycle.ts",
+		"InstanceId",
+	);
+	return yield* (yield* IdGenerator).next(InstanceId);
+});
+export const chaosId = Effect.fn("p27.test.chaosId")(function* () {
+	const {ChaosId}: {ChaosId: IdSchema<"chaos">} = yield* production("../app/nemesis.ts", "ChaosId");
+	return yield* (yield* IdGenerator).next(ChaosId);
+});
 type RunnerFailure = Effect.Error<ReturnType<(typeof ProgramRunner)["Service"]["msg"]>>;
 export const FROM: From = {
 	by: "SHA256:brain",

@@ -7,7 +7,7 @@ import {Effect, Exit, Layer, Schema} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {Dead, ProcessFact} from "../coordination/process.ts";
-import {Id, IdGenerator, InputId} from "../data/id.ts";
+import {IdGenerator, InputId} from "../data/id.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {Entry, PAGE} from "../data/log.ts";
 import {RecordManager} from "../data/records.ts";
@@ -20,13 +20,13 @@ import {
 	production,
 	SEED,
 	TestProcessId,
-	TestInstanceId,
+	instanceId,
+	chaosId,
 	withIds,
 	type HistoryModule,
 	type NemesisModule,
 } from "./p27.test-support.ts";
 
-const Chaos = Id.make("chaos");
 const Case = Schema.Struct({
 	name: Schema.Literals(["counter", "notes"]),
 	fault: Schema.Literals([
@@ -51,14 +51,14 @@ const Case = Schema.Struct({
 const evidence = Effect.fn("p27.test.evidence")(function* (draw: typeof Case.Type) {
 	const N = yield* production<NemesisModule>("../app/nemesis.ts", "Fault");
 	const ids = yield* IdGenerator;
-	const experiment = yield* ids.next(Chaos);
+	const experiment = yield* chaosId();
 	const tick = yield* ids.next(InputId);
 	const pid = yield* ids.next(TestProcessId);
 	const next = yield* ids.next(TestProcessId);
 	const session = yield* ids.next(TestProcessId);
 	const laterSession = yield* ids.next(TestProcessId);
-	const instance = yield* ids.next(TestInstanceId);
-	const laterInstance = yield* ids.next(TestInstanceId);
+	const instance = yield* instanceId();
+	const laterInstance = yield* instanceId();
 	const letter = yield* ids.next(InputId);
 	const name = `${draw.name}:1`;
 	const client = "client-a";

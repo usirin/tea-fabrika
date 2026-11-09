@@ -4,7 +4,7 @@ import {spawn} from "node:child_process";
 import {existsSync} from "node:fs";
 import {resolve} from "node:path";
 import {grantText, revokeText} from "@kampus/libfabrika/coordination";
-import {Id, IdGenerator, InputId} from "@kampus/libfabrika/data";
+import {Id, IdGenerator, InputId, type IdSchema} from "@kampus/libfabrika/data";
 import {Chain, Entry, SpanRow} from "@kampus/libfabrika/data";
 import {helloText, KeyLine, writeSshsig} from "@kampus/libfabrika/transport";
 import {Effect, Result, Schema} from "effect";
@@ -71,9 +71,7 @@ export type StageResult = {
 };
 
 const APP = resolve(import.meta.dirname, "..");
-const RevokeId = Id.make("revoke");
 const GrantId = Id.make("grant");
-const ChaosId = Id.make("chaos");
 const Json = Schema.Json;
 const Rpc = Schema.Struct({
 	jsonrpc: Schema.Literal("2.0"),
@@ -274,7 +272,12 @@ export const stageFaults = Effect.fn("p27.stage.faults")(function* (options: {
 	yield* production("../../../programs/notes/src/program.ts", "notes");
 	const N = yield* production<{
 		FaultOffer: Schema.Schema<Readonly<Record<"_tag", string>> & {fault: string}>;
+		ChaosId: IdSchema<"chaos">;
 	}>("../../../packages/libfabrika/src/app/nemesis.ts", "FaultOffer");
+	const {RevokeId}: {RevokeId: IdSchema<"revoke">} = yield* production(
+		"../../../packages/libfabrika/src/coordination/fault-journal.ts",
+		"RevokeId",
+	);
 	const P = yield* production<{
 		planFaults: (
 			input: unknown,
@@ -356,7 +359,7 @@ export const stageFaults = Effect.fn("p27.stage.faults")(function* (options: {
 	const expected: ExpectedOperation[] = [];
 	const controls: StageResult["controls"][number][] = [];
 	const cases: StageResult["cases"][number][] = [];
-	const experiment = yield* ids.next(ChaosId);
+	const experiment = yield* ids.next(N.ChaosId);
 	const target = {
 		program: "counter",
 		name: "counter:1",
@@ -430,7 +433,7 @@ export const stageFaults = Effect.fn("p27.stage.faults")(function* (options: {
 		if (wanted === "revoke_key") for (let n = 0; n < 300; n++) yield* work;
 		target.process = counter;
 		target.client = a.tab;
-		const id = yield* ids.next(ChaosId);
+		const id = yield* ids.next(N.ChaosId);
 		experiments.push(id);
 		let seed = options.seed;
 		if (wanted !== "seeded") {
