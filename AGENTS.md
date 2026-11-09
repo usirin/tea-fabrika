@@ -106,7 +106,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   has been built this way yet ([where we are](./docs/plan/README.md#where-we-are-now)).
   A docs-only pull request that writes down a decision is opened the turn it is decided and
   merged when CI is green and the leak grep is clean, with no plan, tests, review or field rows.
-  Code pull requests keep their steps (owner, 2026-11-09).
+  Code pull requests keep their steps (owner, 2026-11-09). Lead tooling is fast-tracked too
+  (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
+  they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
+  agent changes them directly, keeps each change small, and merges on green CI with a clean leak
+  grep. Product code (`next/` and today's app) keeps its steps.
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
   part is small, never absent. A rule that code already checks leaves a skill's prose; a rule

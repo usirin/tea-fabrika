@@ -171,6 +171,13 @@ are for other people's repos only.
 - A post is 2 to 5 plain lines with full pull request URLs. No security holes, secrets or personal
   names: the tracker will be shared.
 
+## Lead tooling is fast-tracked
+
+Skills, the lead scripts and the drive script run on our own laptop, so they are not product work
+(owner, 2026-11-09). They skip the plan, tests, mutation and review steps. The lead or one agent
+changes them directly, keeps each change small, and merges on green CI with a clean leak grep.
+Product code (`next/` and today's app) keeps its steps.
+
 ## Decisions land at once
 
 A decision lands in the repo as soon as it is made (owner, 2026-11-09). Each decision gets its own
