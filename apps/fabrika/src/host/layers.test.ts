@@ -6,9 +6,10 @@ import {layerMemory} from "@kampus/fabrika-old/memory";
 import {Effect, Logger, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
-import {describe, expect, it} from "vitest";
+import {assert, describe, expect, it} from "vitest";
 import {readFromPage} from "../messages.ts";
-import {FRAME, type Frame, stepFrame} from "../window/frame.ts";
+import * as frameModule from "../window/frame.ts";
+import {FRAME, type Frame, type FrameMsg} from "../window/frame.ts";
 const settings = {seed: 119120, numRuns: 60};
 const sources = fc.constantFrom(
 	{_tag: "click"} as const,
@@ -38,6 +39,14 @@ type Generated<A> = A extends fc.Arbitrary<infer Value> ? Value : never;
 type Change =
 	| {_tag: "open"; layer: Generated<typeof layers>; via: Generated<typeof sources>}
 	| {_tag: "close"; layer: Generated<typeof layers>; reason: string};
+type FrameStep = (frame: Frame, msg: FrameMsg) => readonly [Frame, readonly Change[]];
+// The recorder law still requires the real PR 1 transition function once it exists.
+const frameApi: typeof frameModule & {readonly stepFrame?: FrameStep} = frameModule;
+const stepFrame: FrameStep = (frame, msg) => {
+	const run = frameApi.stepFrame;
+	assert(run !== undefined, "PR 1 must add the real stepFrame transition function");
+	return run(frame, msg);
+};
 interface Report {
 	readonly type: "layer";
 	readonly id: string;

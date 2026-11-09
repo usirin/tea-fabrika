@@ -1,8 +1,9 @@
 // Today's app, T204 PR 1. The new step returns data; clocks, IDs and writes stay in adapters.
 import * as fc from "fast-check";
-import {describe, expect, it} from "vitest";
+import {assert, describe, expect, it} from "vitest";
 import {readFromPage} from "../messages.ts";
-import {FRAME, type Frame, type FrameMsg, frameUpdate, stepFrame} from "./frame.ts";
+import * as frameModule from "./frame.ts";
+import {FRAME, type Frame, type FrameMsg, frameUpdate} from "./frame.ts";
 
 type Layer = {_tag: "palette"} | {_tag: "popover"; item: string} | {_tag: "tooltip"; for: string};
 type Via = {_tag: "key"; keys: string} | {_tag: "click"} | {_tag: "word"} | {_tag: "palette"};
@@ -18,7 +19,14 @@ type Change =
 	| {_tag: "open"; layer: Layer; via: Via | null}
 	| {_tag: "close"; layer: Layer; reason: Reason};
 type Message = FrameMsg & {readonly via?: Via; readonly reason?: Reason};
-const step: (frame: Frame, msg: Message) => readonly [Frame, readonly Change[]] = stepFrame;
+type FrameStep = (frame: Frame, msg: Message) => readonly [Frame, readonly Change[]];
+// Keep missing PR 1 behavior red at runtime without importing a nonexistent export.
+const frameApi: typeof frameModule & {readonly stepFrame?: FrameStep} = frameModule;
+const step: FrameStep = (frame, msg) => {
+	const run = frameApi.stepFrame;
+	assert(run !== undefined, "PR 1 must add the real stepFrame transition function");
+	return run(frame, msg);
+};
 const options = {seed: 119120, numRuns: 100};
 const via: fc.Arbitrary<Via> = fc.oneof(
 	fc.constantFrom({_tag: "click"} as const, {_tag: "word"} as const, {_tag: "palette"} as const),
