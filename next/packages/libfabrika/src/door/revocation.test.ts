@@ -4,6 +4,7 @@
 // membership checked only before a paused hello write; decoding a transformed input twice;
 // answering a cached placing without checking membership after hashing a settled retry;
 // rebuilding a pre-P17 input row with new door and n fields before comparing a duplicate.
+import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -338,11 +339,12 @@ describe("P17a, revoke stops writes at the final door", () => {
 								},
 							});
 							const [saved] = w.first.sql.exec("SELECT id,value FROM door_bindings");
-							const binding = {...JSON.parse(String(saved?.value)), [missing]: undefined};
+							assert(saved?.id !== undefined, "input binding must have a saved id");
+							const binding = {...JSON.parse(String(saved.value)), [missing]: undefined};
 							w.first.sql.exec(
 								"UPDATE door_bindings SET value=? WHERE id=?",
 								JSON.stringify(binding),
-								saved?.id,
+								saved.id,
 							);
 							const before = w.first.sql.exec("SELECT * FROM entries ORDER BY rev");
 							expect(
