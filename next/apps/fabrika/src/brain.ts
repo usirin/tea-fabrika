@@ -1,6 +1,7 @@
 import type {Descriptor, Incoming} from "@kampus/libfabrika";
 import type {Activity, From, Start} from "@kampus/libfabrika/coordination";
 import type {Chain} from "@kampus/libfabrika/data";
+import {serveAsset} from "@kampus/libfabrika/workers";
 import {control} from "@kampus/libfabrika/workers/control";
 import {gatewayRuntime, GatewayService} from "@kampus/libfabrika/workers/gateway";
 import {
@@ -23,9 +24,9 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import {DurableObject, WorkerEntrypoint} from "cloudflare:workers";
 import {Effect} from "effect";
+import {assets, programs} from "virtual:fabrika-built";
 import type {ConnectionId} from "./door.ts";
 import {projectRuntime, settings, type Env} from "./runtime.ts";
-import {programs} from "./table.ts";
 
 export class Project extends DurableObject<Env> {
 	readonly runtime = projectRuntime(this.ctx, this.env);
@@ -276,6 +277,9 @@ const fetch = Effect.fnUntraced(function* (request: Request, env: Env) {
 				),
 			),
 		);
+	// A window file is read by GET or HEAD from the embedded table; an unknown file is 404.
+	if (url.pathname !== "/" && (request.method === "GET" || request.method === "HEAD"))
+		return yield* serveAsset(assets, request);
 	return new Response("fabrika", {headers: {"content-type": "text/plain"}});
 });
 export default {

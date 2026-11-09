@@ -1,8 +1,8 @@
 import {projectRuntime as runtime, type Env as Bindings} from "@kampus/libfabrika/workers/runtime";
 import {Effect, Schema} from "effect";
+import {programs} from "virtual:fabrika-built";
 import {Door} from "./door.ts";
 import {Settings} from "./settings.ts";
-import {programs} from "./table.ts";
 
 export interface Env extends Bindings {
 	readonly STAGE: string;

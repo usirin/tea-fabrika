@@ -1,4 +1,5 @@
 import {Effect, Option, Schema} from "effect";
+import type {Asset} from "../app/built.ts";
 import {
 	Declaration,
 	workerExecution,
@@ -46,3 +47,16 @@ export const workerLoader = (
 		};
 	}),
 });
+
+/** Answer a request from the brain's embedded window files. Nothing else is read: an unknown route is 404. */
+export const serveAsset = (assets: Readonly<Record<string, Asset>>, request: Request) =>
+	Effect.sync(() => {
+		const route = new URL(request.url).pathname;
+		const asset = Object.hasOwn(assets, route) ? assets[route] : undefined;
+		if (asset === undefined) return new Response("Not found", {status: 404});
+		if (request.method !== "GET" && request.method !== "HEAD")
+			return new Response("Method not allowed", {status: 405, headers: {allow: "GET, HEAD"}});
+		return new Response(request.method === "HEAD" ? null : asset.body, {
+			headers: {"content-type": asset.type, etag: `"${asset.hash}"`},
+		});
+	}).pipe(Effect.withSpan("brain.asset"));
