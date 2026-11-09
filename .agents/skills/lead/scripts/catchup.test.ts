@@ -1,3 +1,22 @@
+import "./catchup.sh?raw";
+import "./leakgrep.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./botpush.mjs?raw";
+import "./env.sh?raw";
+import "./box.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./drive.ts?raw";
+import "./fieldrow.py?raw";
+import "./runplan.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./gc.ts?raw";
+import "./redact.sh?raw";
+import "./clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./lane.ts?raw";
+import "../../plan/scripts/plancheck.sh?raw";
+import "../../step-commit/scripts/exam.py?raw";
+import "../../step-commit/scripts/stepcommit.sh?raw";
 import {spawnSync} from "node:child_process";
 import {
 	cpSync,
@@ -44,7 +63,7 @@ type Setup = {
 	repo?: string;
 	failures: number[];
 	pending: number;
-	answer: "green" | "red" | "event" | "duplicate" | "app" | "ticket" | "trust-red";
+	answer: "green" | "red" | "event" | "duplicate" | "startup" | "app" | "ticket" | "trust-red";
 	branch: string;
 	merge: boolean;
 	refused: "none" | "notes" | "branch";
@@ -135,6 +154,7 @@ if (cmd === "gh") {
   if (key === "trust") {
     const event = setup.answer === "event" ? "push" : "pull_request_target";
     const result = setup.answer === "trust-red" ? "failure" : "success";
+    if (setup.answer === "startup") console.log("70\tpull_request_target\tcompleted\tstartup_failure\t80");
     console.log("71\t" + event + "\tcompleted\t" + result + "\t81");
     if (setup.answer === "duplicate") console.log("72\tpull_request_target\tcompleted\tsuccess\t82");
   }
@@ -1114,6 +1134,7 @@ describe("catchup, today's tooling", () => {
 	});
 
 	// Plant: retry a successful red answer, mask failed logs, or use a different merge head.
+	// A run that never started (startup_failure) neither blocks nor counts as a second run.
 	it("red and untrusted answers never merge or get retried as transport failures", () => {
 		fc.assert(
 			fc.property(
@@ -1123,6 +1144,7 @@ describe("catchup, today's tooling", () => {
 						"red",
 						"event",
 						"duplicate",
+						"startup",
 						"app",
 						"ticket",
 						"trust-red",
@@ -1142,12 +1164,14 @@ describe("catchup, today's tooling", () => {
 						red: 1,
 						event: 2,
 						duplicate: 2,
+						startup: 5,
 						app: 3,
 						ticket: 4,
 						"trust-red": 2,
 					}[answer];
-					expect(got.code, got.text).toBe(answer === "green" ? 0 : 1);
-					expect(merges(got.calls)).toHaveLength(answer === "green" ? 1 : 0);
+					const merged = answer === "green" || answer === "startup";
+					expect(got.code, got.text).toBe(merged ? 0 : 1);
+					expect(merges(got.calls)).toHaveLength(merged ? 1 : 0);
 					for (const [i, key] of reads.entries()) {
 						const count = i > stop ? 0 : failures[i]! + 1 + (key === "checks" ? pending : 0);
 						expect(got.calls.filter((c) => c.key === key).length, key).toBe(count);

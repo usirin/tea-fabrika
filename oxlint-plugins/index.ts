@@ -14,6 +14,9 @@ import {noEffectRunOutsideEdge} from "./no-effect-run-outside-edge.ts";
 import {noExpectInIf} from "./no-expect-in-if.ts";
 import {noHandTag} from "./no-hand-tag.ts";
 import {noImplicitEffectConcurrency} from "./no-implicit-effect-concurrency.ts";
+import {noLedgerSql} from "./no-ledger-sql.ts";
+import {noNodeFilesystem} from "./no-node-filesystem.ts";
+import {noNodeImports} from "./no-node-imports.ts";
 import {noNumericDuration} from "./no-numeric-duration.ts";
 import {noOf} from "./no-of.ts";
 import {noProjectSettings} from "./no-project-settings.ts";
@@ -26,6 +29,7 @@ import {noTypeAssertions} from "./no-type-assertions.ts";
 import {oneIdModule} from "./one-id-module.ts";
 import {oneStoreHook} from "./one-store-hook.ts";
 import {outsideInputConstructor} from "./outside-input-constructor.ts";
+import {preferSchemaArbitrary} from "./prefer-schema-arbitrary.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
@@ -44,6 +48,9 @@ const plugin: Plugin = {
 		"no-expect-in-if": noExpectInIf,
 		"no-hand-tag": noHandTag,
 		"no-implicit-effect-concurrency": noImplicitEffectConcurrency,
+		"no-ledger-sql": noLedgerSql,
+		"no-node-filesystem": noNodeFilesystem,
+		"no-node-imports": noNodeImports,
 		"no-numeric-duration": noNumericDuration,
 		"no-of": noOf,
 		"no-project-settings": noProjectSettings,
@@ -56,6 +63,7 @@ const plugin: Plugin = {
 		"one-store-hook": oneStoreHook,
 		"one-id-module": oneIdModule,
 		"outside-input-constructor": outsideInputConstructor,
+		"prefer-schema-arbitrary": preferSchemaArbitrary,
 		"use-import-extensions": useImportExtensions,
 	},
 };

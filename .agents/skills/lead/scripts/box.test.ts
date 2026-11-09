@@ -1,3 +1,26 @@
+// Declare script reads for Vitest's affected walk, including transitive calls.
+import "./box.sh?raw";
+import "./leakgrep.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./drive.ts?raw";
+import "./fieldrow.py?raw";
+import "./runplan.sh?raw";
+import "./env.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./gc.ts?raw";
+import "./redact.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./botpush.mjs?raw";
+import "./clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./lane.ts?raw";
+import "../../plan/scripts/plancheck.sh?raw";
+import "../../step-commit/scripts/exam.py?raw";
+import "../../step-commit/scripts/stepcommit.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../../../exam-paths.json?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../../../next/apps/fabrika/src/exam/commits.ts?raw";
 import {spawn, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {
@@ -93,11 +116,12 @@ if (cmd === "codex") {
   for (const [name,value] of Object.entries(process.env)) {
     if (/TOKEN|SECRET|KEY|PASSWORD|_AUTH|^NPM_CONFIG_/i.test(name) && !/^NPM_CONFIG_(USERCONFIG|GLOBALCONFIG)$/i.test(name) && value) envLeaks++;
   }
-  // Ask the real local npm about all config layers, capturing its output without printing it.
-  const config = run("npm",["config","list","--json"]);
-  if(config.status!==0) { console.error("fixture could not read its fake npm config"); process.exit(96); }
-  const settings=JSON.parse(config.stdout);
-  const authLeaks=Object.entries(settings).filter(([key,value])=>/_auth|password|token/i.test(key)&&value!=null&&value!=="").length;
+  // Read only the fixture's user, global and project layers; no npm binary is needed.
+  const userConfig=process.env.NPM_CONFIG_USERCONFIG;
+  if(!userConfig || !fs.existsSync(userConfig) || fs.readFileSync(userConfig,"utf8")!=="") { console.error("fixture requires an empty user config"); process.exit(96); }
+  const layers=[userConfig,process.env.NPM_CONFIG_GLOBALCONFIG || path.join(dir,"global.npmrc"),path.join(process.cwd(),".npmrc")];
+  const settings=layers.filter(file=>fs.existsSync(file)).flatMap(file=>fs.readFileSync(file,"utf8").split(/\r?\n/)).map(line=>line.match(/^\s*([^#;\s][^=]*)=(.*)$/)).filter(Boolean);
+  const authLeaks=settings.filter(([,key,value])=>/_auth|password|token/i.test(key)&&value.trim()!=="").length;
   const observation = {envLeaks,authLeaks,home:process.env.HOME,path:process.env.PATH};
   fs.writeFileSync(path.join(dir,"observed.json"),JSON.stringify(observation));
   for (const batch of setup.batches || (setup.operations || []).map(op=>[op])) {
@@ -983,15 +1007,17 @@ describe("T321 K2 box start, today's tooling", () => {
 		);
 	});
 
-	// Plant: accept any parent head, any role or any signer, rather than a verified build link.
-	it("K2 accepts only origin/main or a verified parent build head and records checked facts", () => {
+	// Plant: accept any parent head, any role or any signer, rather than a verified build or lead link.
+	// layers and themes, 2026-11-09: a signed lead commit (a merge of main, a lockfile) was refused.
+	it("K2 accepts only origin/main or a verified parent build or lead head and records checked facts", () => {
 		fc.assert(
 			fc.property(word, (text) => {
-				each(["main", "build", "unsigned", "tests", "forged"], (kind) =>
+				each(["main", "build", "lead", "unsigned", "tests", "forged"], (kind) =>
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/parent");
 						const parent = b.commit(b.main, "src/b.ts", `${text}\n`);
-						if (kind === "build" || kind === "tests") b.sign(b.main, kind, "300");
+						if (kind === "build" || kind === "tests" || kind === "lead")
+							b.sign(b.main, kind, "300");
 						if (kind === "forged")
 							b.git(
 								b.main,
@@ -1005,7 +1031,7 @@ describe("T321 K2 box start, today's tooling", () => {
 						b.git(b.main, "checkout", "-q", "main");
 						const got = b.new(kind === "main" ? "origin/main" : parent);
 						expect(got.code).not.toBeNull();
-						if (kind === "main" || kind === "build") {
+						if (kind === "main" || kind === "build" || kind === "lead") {
 							expect(got.code, got.text).toBe(0);
 							expect(
 								existsSync(join(b.boxes, "state/new.box")),
@@ -1015,7 +1041,7 @@ describe("T321 K2 box start, today's tooling", () => {
 							expect(state).toContain(`base: ${kind === "main" ? b.base : parent}`);
 							expect(state).toContain(`plan-sha256: ${hash(body())}`);
 							expect(state).toContain("ticket: 321");
-							if (kind === "build") expect(state).toContain(`fabrikalfa/parent@${parent}`);
+							if (kind !== "main") expect(state).toContain(`fabrikalfa/parent@${parent}`);
 						} else refused(got, /base_not_signed|base|build/);
 					}),
 				);
@@ -1119,6 +1145,35 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 					expect(got.code, got.text).toBe(0);
 					expect(got.text).toContain("stale_link_outside_lane");
 				}
+			}),
+		);
+	});
+
+	// Plants: hand the checker the lane's root, or the merge-base even when it does not hold the root.
+	// Layers tests10 (2026-11-09): after a lead merge of main, main's own commits sat in root..head.
+	it("K1 scenario: main's commits after the lane's root are not judged as the lane's", () => {
+		each(["main-moved", "root-off-main"] as const, (kind) =>
+			fixture((b) => {
+				const moved = b.commit(b.main, "src/b.ts", "main moved\n");
+				b.git(b.main, "update-ref", "refs/remotes/origin/main", moved);
+				b.git(b.work, "fetch", "-q", b.main, moved);
+				b.git(b.work, "reset", "-q", "--hard", moved);
+				let start = moved;
+				if (kind === "root-off-main") {
+					start = b.commit(b.work, "src/old.ts", "off main\n");
+					b.git(b.main, "fetch", "-q", b.work, start);
+				}
+				b.state(start);
+				const root = kind === "main-moved" ? b.base : start;
+				appendFileSync(join(b.boxes, "state/one.box"), `root: ${root}\n`);
+				b.setup({operations: [{path: "src/a.ts", text: "tested\n"}]});
+				expect(b.run().code).toBe(0);
+				const got = b.fetch();
+				expect(got.code, got.text).toBe(0);
+				const check = b
+					.calls()
+					.find((c) => c.cmd === "pnpm" && c.args[0] === "commits" && c.args[1] === "check");
+				expect(check?.args[check.args.indexOf("--base") + 1]).toBe(start);
 			}),
 		);
 	});

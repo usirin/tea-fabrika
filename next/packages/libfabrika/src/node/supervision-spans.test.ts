@@ -4,6 +4,18 @@ import {Machine} from "@demlik/tea/effect";
 import {describe, expect, it} from "@effect/vitest";
 import {Effect, Layer, Option, Schema, Stream} from "effect";
 import {TestClock} from "effect/testing";
+import * as fc from "fast-check";
+import {vi} from "vitest";
+import {
+	Alarm,
+	CheckedWriter,
+	type Incoming,
+	ProgramLoader,
+	Recording,
+	WatcherManager,
+} from "../app/entry.ts";
+import {workerExecution} from "../app/execution.ts";
+import {type Descriptor, ProgramRunner} from "../app/runner.ts";
 import {
 	Archive,
 	Mailbox,
@@ -25,17 +37,10 @@ import {
 	read,
 	storage,
 } from "../coordination/process.test-support.ts";
+import {RecoveryStore} from "../coordination/recovery-store.ts";
 import {type Sql} from "../data/referee.ts";
 import {SpanSink} from "../data/sink.ts";
-import {
-	Alarm,
-	CheckedWriter,
-	type Incoming,
-	ProgramLoader,
-	Recording,
-	WatcherManager,
-} from "./entry.ts";
-import {type Descriptor, ProgramRunner} from "./runner.ts";
+import {programBox} from "../workers/box.ts";
 
 const policy = {
 	maxDeliveries: 3,
@@ -49,11 +54,17 @@ const owner = Writer.cases.person.make({key: "SHA256:caller", for: from().for});
 const Model = Schema.Struct({count: Schema.Int});
 type Model = typeof Model.Type;
 const Msg = Schema.Struct({type: Schema.Literal("poison")});
+// Only the platform base class and the RPC transport are supplied. Box methods are real.
+vi.mock("cloudflare:workers", () => ({WorkerEntrypoint: class {}}));
 const runnerLayer: (
 	p: Descriptor,
 	options: {policy: typeof policy; recovery: {sql: Sql; name: string; capacity: number}},
 ) => ReturnType<typeof ProgramRunner.layer> = ProgramRunner.layer;
-const world = (thrown: unknown = new TypeError(PRIVATE)) => {
+const world = (
+	thrown: unknown,
+	adapter: "node" | "worker" = "node",
+	maxDeliveries = policy.maxDeliveries,
+) => {
 	const ledger = storage(),
 		state = storage(),
 		sink = storage();
@@ -91,6 +102,25 @@ const world = (thrown: unknown = new TypeError(PRIVATE)) => {
 		wake: () => null,
 	};
 	const alarms: Array<number | null> = [];
+	const loader = ProgramLoader.layer({counter: p}, {});
+	const workerLoader = Layer.effect(
+		ProgramLoader,
+		Effect.gen(function* () {
+			const loaded = yield* ProgramLoader.use((l) => l.load("counter", "build-a"));
+			const Box = programBox(p, "build-a");
+			const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
+			const execution = workerExecution({
+				init: (s) => box.init(s),
+				step: (s, m) => box.step(s, m),
+				fold: (s, m) => box.fold(s, m),
+				upgrade: (s) => box.upgrade(s),
+				reply: (c, o) => box.reply(c, o),
+				check: (k, f) => box.check(k, f),
+				admit: (m) => box.admit(m),
+			});
+			return {load: () => Effect.succeed({...loaded, execution})};
+		}),
+	).pipe(Layer.provide(loader));
 	const base = () =>
 		Layer.mergeAll(
 			data(ledger.sql),
@@ -102,11 +132,14 @@ const world = (thrown: unknown = new TypeError(PRIVATE)) => {
 	const layer = () =>
 		runnerLayer(
 			{id: A, name: NAME, program: "counter", build: "build-a", owner},
-			{policy, recovery: {sql: state.sql, name: NAME, capacity: 1024 ** 3}},
+			{
+				policy: {...policy, maxDeliveries},
+				recovery: {sql: state.sql, name: NAME, capacity: 1024 ** 3},
+			},
 		).pipe(
 			Layer.provideMerge(
 				Layer.mergeAll(
-					ProgramLoader.layer({counter: p}, {}),
+					adapter === "worker" ? workerLoader : loader,
 					ProcessStore.layer(state.sql, {process: A}),
 					ProcessManager.layer(brain(), next.next),
 					Mailbox.layer,
@@ -179,6 +212,144 @@ const recoverySpans = (w: ReturnType<typeof world>, process: string) =>
 		}).pipe(Effect.provide(w.layer()));
 	});
 
+const failure = fc
+	.tuple(
+		fc.constantFrom(
+			"Error",
+			"TypeError",
+			"RangeError",
+			"SyntaxError",
+			"custom",
+			"string",
+			"object",
+		),
+		fc.uuid(),
+	)
+	.map(([kind, id]) => {
+		const message = `private-message-${id}`;
+		class ProgramError extends Error {}
+		const value =
+			kind === "TypeError"
+				? new TypeError(message)
+				: kind === "RangeError"
+					? new RangeError(message)
+					: kind === "SyntaxError"
+						? new SyntaxError(message)
+						: kind === "custom"
+							? new ProgramError(message)
+							: kind === "Error"
+								? new Error(message)
+								: kind === "object"
+									? {message}
+									: message;
+		return {value, private: [message, ...(value instanceof Error ? [value.stack!] : [])]};
+	});
+const generatedThrow = fc.oneof(
+	failure,
+	fc
+		.oneof(
+			fc.jsonValue(),
+			fc.constant(undefined),
+			fc.bigInt(),
+			fc.constant(Symbol("made-up-throw")),
+			fc.func(fc.jsonValue()),
+		)
+		.map((value) => ({value, private: [] as string[]})),
+);
+
+for (const adapter of ["node", "worker"] as const)
+	it(`${adapter}: generated throw content is deletable; classes alone stay in receipts, dead events and health`, async () => {
+		await fc.assert(
+			fc.asyncProperty(generatedThrow, (sample) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = world(sample.value, adapter, 1);
+						yield* w.boot;
+						yield* Effect.gen(function* () {
+							// A limit of one reaches the dead event on this first Worker failure.
+							yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
+							const rows = yield* recorded(A);
+							const r = yield* RecordManager;
+							const chain = {_tag: "job", process: A} as const;
+							const contents = yield* Effect.forEach(rows, (row) => r.content(chain, row.spanId), {
+								concurrency: 1,
+							});
+							const kept = contents.flatMap((c) =>
+								Option.isSome(c) && c.value._tag === "kept" ? [c.value] : [],
+							);
+							expect(kept.length).toBeGreaterThan(0);
+							for (const text of sample.private)
+								expect(
+									kept.some((c) => c.message.includes(text)),
+									"original message and stack must reach P37",
+								).toBe(true);
+							const receipt = yield* RecoveryStore.use((s) => s.receipt(w.input.id)).pipe(
+								Effect.provide(RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3})),
+							);
+							const dead = yield* read(`${A}/dead`);
+							const events = yield* read(`processes/${NAME}`);
+							const health = w.sink.sql.exec("SELECT * FROM health");
+							const name =
+								sample.value instanceof Error
+									? sample.value.constructor.name
+									: sample.value === null
+										? "null"
+										: typeof sample.value;
+							expect(receipt).toMatchObject({errors: [name], tries: 1});
+							expect(
+								rows.find((row) => row.name === "runner.throw")?.attributes["error.type"],
+							).toBe(name);
+							expect(health.filter((row) => row.piece === "runner.throw")).toMatchObject([
+								{error: name},
+							]);
+							expect(dead.map((row) => row.body)).toEqual([
+								expect.objectContaining({errors: [name], tries: 1}),
+							]);
+							for (const text of sample.private)
+								for (const permanent of [
+									rows,
+									receipt,
+									events,
+									dead,
+									health,
+									w.sink.sql.exec("SELECT * FROM summary"),
+								])
+									expect(JSON.stringify(permanent)).not.toContain(
+										JSON.stringify(text).slice(1, -1),
+									);
+							for (const content of kept) {
+								yield* r.deleteContent(chain, content.spanId, {
+									by: owner.key,
+									why: "test deletion",
+								});
+								expect(Option.getOrNull(yield* r.content(chain, content.spanId))).toMatchObject({
+									_tag: "deleted",
+								});
+							}
+							const after = yield* Effect.forEach(rows, (row) => r.content(chain, row.spanId), {
+								concurrency: 1,
+							});
+							for (const text of sample.private)
+								expect(JSON.stringify(after)).not.toContain(JSON.stringify(text).slice(1, -1));
+							expect(yield* recorded(A)).toEqual(rows);
+							expect(w.sink.sql.exec("SELECT * FROM health")).toEqual(health);
+							expect(
+								yield* RecoveryStore.use((s) => s.receipt(w.input.id)).pipe(
+									Effect.provide(
+										RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3}),
+									),
+								),
+							).toEqual(receipt);
+							expect(yield* read(`${A}/dead`)).toEqual(dead);
+							expect(yield* read(`processes/${NAME}`)).toEqual(events);
+						}).pipe(Effect.provide(w.layer()));
+					}).pipe(Effect.provide(TestClock.layer())),
+				),
+			),
+			{seed: 119120, numRuns: 40},
+		);
+	});
+
 describe("P34 supervision recording", () => {
 	for (const [value, name] of [
 		[new TypeError(PRIVATE), "TypeError"],
@@ -217,7 +388,7 @@ describe("P34 supervision recording", () => {
 		"content plant, message in errors/why/health: only deletable content holds failure text and stack",
 		() =>
 			Effect.gen(function* () {
-				const w = world();
+				const w = world(new TypeError(PRIVATE));
 				yield* w.boot;
 				yield* Effect.gen(function* () {
 					yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
@@ -254,7 +425,7 @@ describe("P34 supervision recording", () => {
 		"recording plant, successor spans in predecessor record or flush before span end: every recovery is attributed",
 		() =>
 			Effect.gen(function* () {
-				const w = world();
+				const w = world(new TypeError(PRIVATE));
 				yield* w.boot;
 				for (const [n, process] of [A, B, W].entries()) {
 					yield* Effect.gen(function* () {

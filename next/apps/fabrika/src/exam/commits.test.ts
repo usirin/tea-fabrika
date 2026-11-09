@@ -829,6 +829,8 @@ describe("trusted config files", () => {
 					"glob": ".agents/skills/lead/scripts/skillscheck.sh",
 					"why": "the shared skills' source-and-link lint check"
 				},
+				{ "glob": ".agents/skills/lead/scripts/leakgrep.sh", "why": "the added-text check before push" },
+				{ "glob": "scripts/*.test.ts", "why": "today's tooling limits and script laws" },
 				{
 					"glob": ".agents/skills/lead/scripts/loosening.sh",
 					"why": "the check for removed, muted or narrowed laws"

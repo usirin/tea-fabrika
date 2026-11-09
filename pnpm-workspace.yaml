@@ -50,6 +50,7 @@ catalog:
   # Held exact: 0.x and weekly, and the port is "experimental".
   oxc-parser: 0.157.0
   oxc-transform-react: 0.157.0
+  rolldown: 1.2.13
   # Held on the SDK's 2.x line: OpenTelemetry 3 needs api 1.10, and @effect/opentelemetry 4.1.2 asks for
   # resources below 3. On that line sdk-trace-base 2.12.0 asks for api below 1.10, so api stays 1.9.1.
   '@opentelemetry/api': 1.9.1
@@ -118,6 +119,10 @@ overrides:
   '@effect/platform-node-shared': 4.1.2
 
 patchedDependencies:
+  # P12 observes workerd PIDs, exits, replacement delays and recovery stopping.
+  # Keep Alchemy's existing restart policy. Drop this when Alchemy exposes the hooks
+  # (https://github.com/alchemy-run/alchemy/issues/3184).
+  '@alchemy.run/cloudflare-runtime@2.0.0-beta.84': patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.84.patch
   # demlik#897: expose the machine's existing schemas; drop at the release that has it.
   '@demlik/tea@0.25.0': patches/@demlik__tea@0.25.0.patch
   # effect 4.1 deleted effect/Crypto, which alchemy 2.0.0-beta.84 imports, so its Cloudflare

@@ -3,7 +3,8 @@
 //
 //   a box is kept while   a process has its cwd there, or its git index changed in the last 2 h
 //                         (or its git data or folder did, so a box being made is safe),
-//                         or drive kept it stuck less than 24 h ago
+//                         or drive kept it stuck less than 24 h ago, or it holds uncommitted
+//                         or untracked files (a backup saves only HEAD, so they would be lost)
 //   else it is removed    when its branch (minus -wip) has a merged pull request, or its HEAD is
 //                         on a remote branch; else its HEAD is pushed as the bot to <branch>-wip
 //                         first (fabrikalfa/<box>-wip when that is refused), and kept if both fail
@@ -33,6 +34,8 @@ export type Seen = {
 	readonly stuck: number | null;
 	readonly merged: boolean;
 	readonly onRemote: boolean;
+	/** Uncommitted and untracked files in the box; `null` when git could not say. */
+	readonly dirty: number | null;
 };
 
 export type Verdict =
@@ -61,6 +64,10 @@ export const decide = (s: Seen): Verdict => {
 	if (s.stuck !== null && s.stuck < STUCK)
 		return {_tag: "keep", reason: `stuck, kept by drive ${Math.round(s.stuck / HOUR)} h ago`};
 	if (s.git.head === null) return {_tag: "keep", reason: "no HEAD commit"};
+	// A backup pushes HEAD only, so files never committed would go with the folder (field note
+	// 2026-11-09-42: a box removed with 10 uncommitted product files). The lead saves or drops them.
+	if (s.dirty === null) return {_tag: "keep", reason: "its files could not be read"};
+	if (s.dirty > 0) return {_tag: "keep", reason: `${s.dirty} uncommitted files`};
 	if (s.merged) return {_tag: "remove", reason: "merged"};
 	if (s.onRemote) return {_tag: "remove", reason: "on_remote"};
 	return {_tag: "backup", to: backupsOf(s.name, s.git.branch)};
@@ -85,6 +92,24 @@ const loadEnv = (): Env => {
 	const [MAIN = "", BOXES = "", GH_REPO = ""] = r.out.split("\n");
 	if (r.code !== 0 || !MAIN || !BOXES) throw new Error(`env.sh failed: ${r.err}`);
 	return {MAIN, BOXES, GH_REPO};
+};
+
+/** How many uncommitted and untracked files a box holds, read from its git data with hooks and
+ * fsmonitor off; `null` when git cannot say. */
+export const dirtyIn = (gitDir: string, box: string): number | null => {
+	const r = sh("git", [
+		...SAFE,
+		"-c",
+		"status.renames=false",
+		`--git-dir=${gitDir}`,
+		`--work-tree=${box}`,
+		"status",
+		"--porcelain=v1",
+		"-z",
+		"--untracked-files=all",
+	]);
+	// No rename pairs, so each NUL-ended entry is one file.
+	return r.code === 0 ? r.out.split("\0").filter(Boolean).length : null;
 };
 
 /** The folder a box's `.git` file points at, or the `.git` folder itself. */
@@ -207,6 +232,7 @@ const main = () => {
 			stuck: kept.has(name) ? now - (kept.get(name) ?? now) : null,
 			merged: branch !== null && merged.has(branch),
 			onRemote,
+			dirty: gitDir === null ? null : dirtyIn(gitDir, box),
 		};
 		const verdict = decide(seen);
 		if (verdict._tag === "keep") {

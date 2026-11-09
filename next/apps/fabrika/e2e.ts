@@ -34,6 +34,7 @@ const run = Effect.gen(function* () {
 				"exec",
 				"vitest",
 				"run",
+				"--maxWorkers=1",
 				"--root",
 				folder,
 				"--fileParallelism=false",

@@ -142,12 +142,29 @@ today's for now: `packages/pipeline`, `programs/pipeline`.
 | triage | The first step. It answers duplicate, decline, accept or escalate, and asks the owner when worth is unclear. No priority and no "later". [Sort answers yes or no](../docs/direction/sort-answers-yes-or-no.md), [triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md) | Not "sort", its old name. |
 
 ## Runtime
+
 Programs, the machines inside them, and the processes that run them: layer 4, the app layer
 ([the cloud is one more host](../docs/direction/the-cloud-is-one-more-host.md), A1 to A5), and the
 shell. Paths: `next/`'s app layer and `fabsh`.
 
 | Term | Definition | Not |
 |---|---|---|
+| BrainEvent | A local brain's `started`, `exited`, `restarting`, `braked` or `stopped` event, with its start ID and clock. `app/brain-event.ts` | Not a program's event or a span. |
+| BrainState, brainLife | The local brain lifecycle state and its tea machine. `brain-life` | Not a process's state. |
+| brainOutbox, checkMemory | The Node brain's durable event queue and RSS replacement check. `node/local-stage` | Not the span queue or a program's memory limit. |
+| startStage, stageRecording | The Node lifecycle driver and its durable span queue. `node/stage`, `node/stage-recording` | Not the app's deploy stack or chosen Layers. |
+| ConnectionId, DoorCalls | One door connection's branded ID and the calls Project needs from the door. `workers/bindings` | Not a client key or the door implementation. |
+| ProjectBinding, ProcessBinding, GatewayBinding, RecordBinding | The object-call contracts for Project, Process, Gateway and record parts. `workers/bindings` | Not object classes or public HTTP routes. |
+| Env, BrainOptions, ProjectOptions, ProjectDoorOptions | The Worker bindings, settings, program sources, first program and door wiring supplied to the Worker runtime. `workers/runtime` | Not app settings validation or program choices. |
+| ProjectService, ProcessService, GatewayService | The Effect services holding the shared object behavior. `workers/runtime`, `workers/gateway` | Not the thin Durable Object classes. |
+| projectRuntime, processRuntime, gatewayRuntime | Construct the object's Effect runtime from supplied wiring. `workers/runtime`, `workers/gateway` | Not a deploy command. |
+| projectStub, processStub, recordStub | Resolve a named object through its Worker binding. `workers/runtime` | Not local storage. |
+| rpc, complete, recordingLayer | Run an object call under its span, flush completed work and install durable recording. `workers/runtime` | Not the app's concrete Layer choices. |
+| configureProcess, savedAlarm, processDescriptor | Store or read a process descriptor and its saved wake time. `workers/runtime` | Not program execution or an alarm delivery. |
+| bucketCalls | Convert R2 calls and check SHA-256 before storing a body. `workers/runtime` | Not a second archive format. |
+| recordWrite, recordRead, recordContent, recordDelete | Record-part adapters that check the object's identity. `workers/record` | Not app-owned recording rules. |
+| control | The trusted local object-call dispatcher. `workers/control` | Not the public client door. |
+| bundlePrograms, bundle, hash, BuildError | Bundle program boxes and Worker entries with Rolldown, hash their code and report build errors. `node/build` | Not the app's program table, brain entry or Compiler exam. |
 | Alarm | (Nov 8, P11) The service for an object's one alarm: `set(at)`, the program's next `wake` time, or `null` for none. The runner sets it after each installed step; P12 wires the real alarm. `app/entry.ts`, [Tier 1's P11](../docs/plan/tier-1-detail.md#programs-as-p11-built-it) | Not a timer letter, what `due` saves when it fires. Not a Cmd. |
 | archived | A row `{day, part, key, sha256, rows}`, kept forever in the object: where one part of a day of its raw health rows went in R2, and the hash it was checked by. Part 1 is `health/<object>/<day>.jsonl`; rows that land after it leave as `<day>.2.jsonl` and on. [Tier 1's P37](../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) | Not a deletion: the rows are in R2. Not a ledger fact. |
 | CheckedWriter | (Nov 8, P11) The door's checked edges as the runner sees them: `append` saves a delivered input in the inbox, `commit` writes a fact under a signed `Session`, and `own` under the process owner. Each rechecks admission. `app/entry.ts`, [Tier 1's P11](../docs/plan/tier-1-detail.md#programs-as-p11-built-it) | Not `Mailbox.send`, which checks no sender. Not the `Ledger`, which a program never reaches. |

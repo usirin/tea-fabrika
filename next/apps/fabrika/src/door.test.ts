@@ -1983,8 +1983,8 @@ describe("P10 inputs, retries and signer", () => {
 					yield* d.route(client, "process.send", request("first"));
 					const parent = w.deliveries[0]!.envelope.id;
 					expect(
-						(yield* Effect.flip(d.route(client, "process.send", request("second"))))._tag,
-					).toBe("LedgerError");
+						yield* Effect.flip(d.route(client, "process.send", request("second"))),
+					).toMatchObject({_tag: "LedgerError"});
 					expect(w.deliveries).toHaveLength(1);
 					expect((yield* writeId("saved-a", d.signer(parent, PROCESS, "saved"))).parent).toBe(
 						parent,
@@ -2675,8 +2675,8 @@ describe("P10 span reader and recording", () => {
 					const {client} = yield* online(d, w);
 					block = true;
 					expect(
-						(yield* Effect.flip(d.route(client, "process.send", request("flush-failure"))))._tag,
-					).toBe("SinkError");
+						yield* Effect.flip(d.route(client, "process.send", request("flush-failure"))),
+					).toMatchObject({_tag: "SinkError"});
 					expect(w.deliveries).toEqual([]);
 					block = false;
 					yield* d.route(client, "process.send", request("flush-failure"));
@@ -2753,9 +2753,8 @@ describe("P10 span reader and recording", () => {
 				const d = yield* Door;
 				const {client} = yield* online(d, w);
 				expect(
-					(yield* Effect.flip(d.route(client, "spans.read", {chain: {_tag: "spans"}, after: 0})))
-						._tag,
-				).toBe("SinkError");
+					yield* Effect.flip(d.route(client, "spans.read", {chain: {_tag: "spans"}, after: 0})),
+				).toMatchObject({_tag: "SinkError"});
 			}).pipe(
 				Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, broken)))),
 			);

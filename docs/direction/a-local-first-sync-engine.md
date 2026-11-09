@@ -466,9 +466,12 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
 - **C2, mail delivery:** at least once. After N crashes on one message, it
   moves to `<pid>/dead`, recording its process, program, registered name,
   tries, limit, letter id, build and each throw's error class. A message can
-  arrive twice, so a job must handle a repeat. N comes from
-  `[coordination] max_deliveries = 3`, which a program can change for its own
-  inbox.
+  arrive twice, so a job must handle a repeat. N is the delivery limit, 3 by
+  default and from 1 to 32: the program's own `maxDeliveries` in its
+  declaration wins, else the trusted wiring's `Policy.maxDeliveries`.
+  *Fixed 2026-11-09 to match P34 ([PR 535](https://github.com/usirin/tea-fabrika/pull/535)).
+  It said: N comes from `[coordination] max_deliveries = 3`, a config key the
+  code does not have.*
   Owner decided 2026-11-08: one stream per process start, `<pid>/dead`; each entry carries `process`, `program` and `name`.
 - **C3, leases (2026-10-25; renew logging 2026-10-31):** a claim lasts 30 s
   and is renewed every 10 s, a third, as etcd's keepalive. An old holder stays
@@ -480,6 +483,14 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   (`packages/fabrika/src/host/supervisor.ts`, experiments 99 to 102): OTP's
   strategies, restart types, restart intensity with escalation to the parent,
   Kubernetes-style backoff, and limits. Each restart is an entry.
+  *As built 2026-11-09 (P34, [PR 535](https://github.com/usirin/tea-fabrika/pull/535), `next/`):*
+  Tier 1 has no process that starts another, so P34 built a one-child
+  supervisor in `next/packages/libfabrika/src/app/supervisor.ts`, rethought and
+  not ported. It restarts the one crashed program inside an intensity window
+  (5 in 5 s by default), with doubling backoff (100 ms to 800 ms). Past the
+  brake it writes `down` with its `until`, and tries again then; nothing
+  escalates to a parent. Strategies, restart types and escalation wait for
+  Tier 4 ([Tier 1's slice](../plan/tier-1.md)). The decision above stands.
 - **C5, which OTP calls stay:** coordination sits where OTP sits, so it
   follows OTP: registry, mailbox, links, monitors, trap exit, supervisors. A
   difference from OTP needs a written reason. A check that ours matches OTP is

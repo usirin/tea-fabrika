@@ -189,15 +189,17 @@ const ended = (
 
 /** A span that tells the sink when it ends. Effect calls `end` once, synchronously. */
 class SinkSpan extends Tracer.NativeSpan {
+	private readonly onEnd: (
+		span: SinkSpan,
+		endTime: bigint,
+		exit: Exit.Exit<unknown, unknown>,
+	) => void;
 	constructor(
 		options: ConstructorParameters<typeof Tracer.NativeSpan>[0],
-		private readonly onEnd: (
-			span: SinkSpan,
-			endTime: bigint,
-			exit: Exit.Exit<unknown, unknown>,
-		) => void,
+		onEnd: (span: SinkSpan, endTime: bigint, exit: Exit.Exit<unknown, unknown>) => void,
 	) {
 		super(options);
+		this.onEnd = onEnd;
 	}
 
 	override end(endTime: bigint, exit: Exit.Exit<unknown, unknown>): void {

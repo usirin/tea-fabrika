@@ -1,3 +1,6 @@
+import "./run.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./sample.ts?raw";
 import {spawn, spawnSync} from "node:child_process";
 import {
 	existsSync,
@@ -8,6 +11,7 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
+import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {pathToFileURL} from "node:url";
@@ -70,7 +74,7 @@ const fixture = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: st
 	writeFileSync(join(dir, ".agents/skills/mutation/scripts/sample.ts"), "// intercepted sampler\n");
 	writeFileSync(
 		join(dir, "vitest.config.ts"),
-		'export default {test: {include: ["all/**/*.test.ts"], exclude: ["keep-me"]}};\n',
+		'export const testConfig = {test: {include: ["all/**/*.test.ts"], exclude: ["keep-me"]}};\nexport default testConfig;\n',
 	);
 	return {
 		dir,
@@ -144,6 +148,64 @@ const alive = (pid: number) => {
 };
 
 describe("mutation command, today's tooling", () => {
+	// Plant: import the default config, which also installs the local CLI guard.
+	// Resolve the emitted config in a fresh process without starting Stryker's socket server.
+	it("T325 resolves shared settings without running the local CLI guard", () => {
+		const dir = mkdtempSync(join(tmpdir(), "mut-config-"));
+		try {
+			const got = run(defaults, {T: "325", BUILD: "abc1234", RELATED: "math.test.ts"});
+			expect(got.code, got.text).toBe(0);
+			expect(got.invocation).toBeDefined();
+			const source = got.invocation!.vitest;
+			const wrapper = join(dir, "vitest.mutation.config.mjs");
+			writeFileSync(
+				wrapper,
+				source
+					.replace(
+						'"./vitest.config.ts"',
+						JSON.stringify(pathToFileURL(join(root, "vitest.config.ts")).href),
+					)
+					.replace('"vitest/config"', JSON.stringify(import.meta.resolve("vitest/config"))),
+			);
+			const vite = createRequire(import.meta.resolve("vitest/package.json")).resolve("vite");
+			const imported = spawnSync(
+				process.execPath,
+				[
+					"--input-type=module",
+					"-e",
+					`
+process.argv = ['node', 'vitest'];
+const {default: config} = await import(${JSON.stringify(pathToFileURL(wrapper).href)});
+const {resolveConfig} = await import(${JSON.stringify(pathToFileURL(vite).href)});
+const resolved = await resolveConfig({...config, configFile: false}, 'serve', 'test');
+console.log(JSON.stringify(resolved.test));
+`,
+				],
+				{
+					cwd: root,
+					encoding: "utf8",
+					timeout: 5_000,
+					env: {
+						...process.env,
+						CI: undefined,
+						RELATED: "math.test.ts",
+						TYPESAFE_API_KEY: undefined,
+					},
+				},
+			);
+			expect(imported.status, imported.stderr).toBe(0);
+			expect(JSON.parse(imported.stdout)).toMatchObject({
+				include: ["math.test.ts"],
+				maxWorkers: 1,
+				setupFiles: ["./scripts/vitest.setup.ts"],
+				testTimeout: 10_000,
+				hookTimeout: 10_000,
+			});
+		} finally {
+			rmSync(dir, {recursive: true, force: true});
+		}
+	});
+
 	// Plants: related true; inherit all tests; accept an empty list or missing build/ranges.
 	it("T300 emits related false and restricts Vitest to explicit tests", () => {
 		fc.assert(
@@ -402,8 +464,29 @@ describe("mutation command, today's tooling", () => {
 			);
 			writeFileSync(
 				join(dir, "vitest.config.ts"),
-				'import {defineConfig} from "vitest/config";\nexport default defineConfig({test: {include: ["*.test.ts"], maxWorkers: 1}});\n',
+				'import {defineConfig} from "vitest/config";\nexport const testConfig = defineConfig({test: {include: ["*.test.ts"], maxWorkers: 1}});\nexport default testConfig;\n',
 			);
+			// Check run.sh's real imports before Stryker tries to bind its logging port.
+			const emitted = readFileSync(script, "utf8").split("<<'TS'\n")[1]?.split("\nTS\n")[0];
+			expect(emitted, "run.sh must emit the shared-config import").toBeDefined();
+			const wrapper = join(dir, "vitest.mutation.config.ts");
+			writeFileSync(wrapper, emitted!);
+			const imported = spawnSync(
+				process.execPath,
+				[
+					"--input-type=module",
+					"-e",
+					`const {default: config} = await import(${JSON.stringify(pathToFileURL(wrapper).href)}); console.log(JSON.stringify(config.test.include));`,
+				],
+				{
+					cwd: dir,
+					encoding: "utf8",
+					env: {...process.env, RELATED: "math.test.ts", TYPESAFE_API_KEY: undefined},
+				},
+			);
+			expect(imported.status, imported.stderr).toBe(0);
+			expect(JSON.parse(imported.stdout)).toEqual(["math.test.ts"]);
+			rmSync(wrapper);
 			// Selection has separate real laws. This scenario keeps exactly one cheap source range.
 			writeFileSync(
 				join(dir, ".agents/skills/mutation/scripts/sample.ts"),

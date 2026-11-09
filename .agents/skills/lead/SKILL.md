@@ -20,8 +20,6 @@ A step's brief is short. It names the skill and the ticket's facts, and nothing 
 ```text
 Use the build skill for ticket 277, door fixes, next/. Plan at ../door-PLAN.md.
 Laws d1 to d3 are red. This round: make them green in door.ts, answer.ts and hello.ts.
-Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
-and starts no build.
 ```
 
 A brief never prints npm, pnpm or environment settings (owner, 2026-11-08), not even to show a
@@ -37,8 +35,6 @@ Children: <ticket, branch and signed parent head for each child>, or none. Recor
 Start a child at its parent's signed build head. Keep the child's tests through catch-up.
 Land the stack with `gh stack merge <pr> --squash`, then `gh stack sync --prune`.
 Return plans unsigned, including reviews and revisions. Only the lead session approves them.
-Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
-and starts no build.
 ```
 
 The draft check checks the handoff format. Shared shell access cannot prove which session signed.
@@ -122,25 +118,19 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh new <name> <base> <branch> --ticket <n> --plan <path> [--root <sha>]` | check the start and save its facts (the lane root that build order and the commits check read from), then clone and install |
 | `box.sh run <name> <prompt> <out> --step <step>` | run Codex, save redacted output and the run row |
 | `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
-| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first, then every `state/<box>.box` whose box is gone; drive runs it at start |
+| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone; drive runs it at start |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
-| `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
+| `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
 | `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head and squash-land pinned to it; a PR in a gh stack lands with `gh stack merge` |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
 
-`box.sh run` names the box's `.agents/` as its own writable root because Codex otherwise keeps
-that folder read-only inside the writable checkout.
-
 box.sh run and runplan.sh strip secret settings and redact saved output.
 fetch --sign checks owners and signs missing notes in MAIN.
 Review and mutation briefs say never to print npm, pnpm or env settings.
-
-Catch-up retries read-only `gh` failures three times, waiting 1 and 2 seconds. A successful red or
-untrusted answer stops immediately. Logs are captured before parsing, so a failed read cannot
-look green. Pushes and merges are never retried by that helper.
+leakgrep.sh checks added text; private words stay outside the repo.
 
 ## Use drive.ts for any step
 
@@ -165,8 +155,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - Mutation runs on `--agent claude` only, since it binds ports and starts Electron. One mutation
   step at a time holds `BOXES/state/electron.lock`; the next waits.
 - It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
-  by a step it accepted) or the branch's tip on origin when that is ahead of it, else
-  `origin/main`. A plan reads the main checkout and takes no `--from`.
+  by a step it accepted) or the newest tip on origin of the branch or its `-wip` backup when that
+  is ahead of it, else `origin/main`. So a lead commit (a merge of main, a lockfile commit) pushed
+  to `-wip` is where the next step starts, and `box.sh new` takes a verified lead head as a base
+  like a build head. A plan reads the main checkout and takes no `--from`.
 - `box.sh new` refuses `shared_ticket` only when another live branch carries a link for the same
   ticket: one with an open PR, or one a box on disk names. A branch the base already holds, one
   with neither, or one whose change is only `field/*.jsonl` rows, does not block.
@@ -179,6 +171,12 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   `stuck`, never a pass. A build that
   answers `done` with no commit is done only with a `laws: green <paths>` line (every law already
   green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
+- A box has no network, so it cannot refresh `pnpm-lock.yaml`. When a step's commits change a
+  locked field of a workspace `package.json` (its name or dependencies) or `pnpm-workspace.yaml`
+  and leave the lockfile alone, drive answers `ask` (`lockfile`, exit 20) whatever the step said,
+  and still pushes `-wip`. The lead then, outside the box, runs `pnpm install --lockfile-only` on
+  `-wip`, checks each new version is exact and named in the approved plan, commits the lockfile
+  with `stepcommit.sh lead` and pushes it with `botpush.mjs`. The next step starts at that tip.
 - Then it pushes `<branch>-wip` (a `-wip` branch as it is) as the bot when the step committed, writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
   It keeps the box, whatever the step answered, while it holds uncommitted files or commits off the
@@ -189,7 +187,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   drive started, under 20 GB free after `box.sh gc`, or the lane's branch checked out in a
   worktree, which the end-of-step fetch could not update). It never retries. A stuck step keeps its
   box. The commits check reads the whole lane, from where it left main, so each earlier step's
-  newest link is in its chain. A tests, build or mutation step waits while `pgrep -x tsgo` finds
+  newest link is in its chain. After a lead merge of main it starts at the merge-base with
+  `origin/main` instead, so main's own commits are not judged as the lane's. A tests, build or mutation step waits while `pgrep -x tsgo` finds
   one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
 
 ## Pushes and protected refs
@@ -345,28 +344,17 @@ The lead owns the count of decisions still missing from the repo. Its status giv
 the open docs PRs carrying them. The owner does not keep the list. Code cannot count decisions
 nobody recorded.
 
-## The leak grep
-
-Before every push and every merge, grep the added lines (`git diff origin/main | grep '^+'`) for
-personal and account names, machine paths (a home folder, a temp folder), key prefixes and em
-dashes. Keep the list of names out of the repo: it is the lead's own. Only the repo's own name in a
-GitHub URL may match. The leak check script fails closed (owner, 2026-11-08): any hit stops the
-push or merge, and the lead checks it by hand. A hit is never waved through by the script.
+The leak check fails closed (owner, 2026-11-08): any hit stops the push or merge for the lead's
+hand check.
 
 ## Go easy on the machine
 
-- One `pnpm typecheck` at a time across all agents: wait while
-  `pgrep -x tsgo` finds one.
 - One Electron test app and one Docker box at a time. Every wait or poll loop runs in the background.
-- Every brief carries the caps the step's skill names. A Codex box blocks `nice` and `pgrep`, so
-  `box.sh` runs Codex itself under `nice -n 15`.
 
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase, force-push or `gh pr update-branch`. Catch up by merging `main` in. The one exception is
-  a stacked child, moved with the `gh stack` commands (0004).
-- Merge a live run by hand, approve a pull request, or answer a question the machine put to a person.
+- Rebase, force-push or `gh pr update-branch`, except a stacked child moved with `gh stack` (0004).
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 
 ## When a run teaches something

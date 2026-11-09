@@ -21,6 +21,8 @@
 //   reading    Gather  fetch (and sign Claude's work), then the commits, their step notes, exam
 //                      paths, leaks and the report
 //   (update)   Check   pure: what the step answered and what the reads found make one outcome
+//                      (a manifest the lockfile must follow, changed with the lockfile left alone,
+//                      is an ask: a box has no network, so the lead refreshes it outside)
 //   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
 //                      the step committed
 //   recording  Act     the field row, state/<lane>.json and .md, and the box removed unless stuck
@@ -56,7 +58,15 @@ import {run} from "@demlik/tea/effect";
 import {act, gather, intentOf, listen} from "@kampus/pipeline/primitives";
 import {nameOf, outcomesOf} from "@kampus/pipeline/stages/outcome";
 import {Effect, Schema, Stream} from "effect";
-import {checkHolds, stepOf, wipOf} from "./lane.ts";
+import {
+	checkHolds,
+	laneRoot,
+	lockfileBehind,
+	startHead,
+	stepOf,
+	wipOf,
+	workspaceGlobs,
+} from "./lane.ts";
 
 const HERE = import.meta.dirname;
 const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -72,7 +82,7 @@ const drive = outcomesOf({
 		build: ["step_said"],
 		plan: ["plancheck", "step_said"],
 	},
-	ask: {lead: ["question"]},
+	ask: {lead: ["question", "lockfile"]},
 	skip: [],
 	stuck: [
 		"box_failed",
@@ -144,6 +154,8 @@ const Read = Schema.Struct({
 	/** Work the box holds that no branch has, as `N uncommitted files` or `N commits off <branch>`;
 	 * a box with any is never removed. */
 	left: Schema.Array(Schema.String),
+	/** Manifests the step changed that pnpm-lock.yaml must follow, with the lockfile left alone. */
+	manifests: Schema.Array(Schema.String),
 	/** What `plancheck --draft` said when it failed; `null` when it passed or did not run. */
 	plancheck: Schema.NullOr(Schema.String),
 	report: Schema.String,
@@ -255,6 +267,17 @@ const decide = (ask: Ask, read: Read): Judged => {
 		return {
 			outcome: {kind: "send", to: "tests", why: "exam_paths"},
 			why: `the build touched exam paths: ${read.exam.join(" ")}`,
+		};
+	// A box has no network, so it cannot refresh the lockfile; the lead does, outside it (ticket 385).
+	if (read.manifests.length > 0)
+		return {
+			outcome: {kind: "ask", who: "lead", for: "lockfile"},
+			why:
+				`pnpm-lock.yaml is behind ${read.manifests.join(" ")}, and a box has no network. ` +
+				`Outside the box, on ${wipOf(ask.branch)} at ${read.head.slice(0, 8)}: ` +
+				"pnpm install --lockfile-only, check each new version is exact and the plan names it, " +
+				`commit pnpm-lock.yaml as a lead commit with stepcommit.sh, push it with botpush.mjs, ` +
+				`then run ${ask.step} again`,
 		};
 	if (ask.step === "plan" && read.plancheck !== null)
 		return {
@@ -570,7 +593,7 @@ const billingOf = (events: string) => {
 
 /**
  * Work a box holds that no branch has: uncommitted or untracked files, and commits on its HEAD or
- * other branches that the step's branch lacks. Read with no hooks and no fsmonitor, so nothing the
+ * other branches that neither the step's branch nor a remote branch has. Read with no hooks and no fsmonitor, so nothing the
  * agent wrote runs as drive. A box git cannot read counts as holding work.
  */
 export const leftIn = (box: string, branch: string): string[] => {
@@ -588,7 +611,17 @@ export const leftIn = (box: string, branch: string): string[] => {
 		"-z",
 		"--untracked-files=all",
 	);
-	const off = git("rev-list", "--count", "HEAD", "--branches", "--not", `refs/heads/${branch}`);
+	// A clone's own `main` (or any branch a remote already holds) is not the box's work (themes
+	// build5, 2026-11-09: a box kept for "21 commits off" that were only its local main).
+	const off = git(
+		"rev-list",
+		"--count",
+		"HEAD",
+		"--branches",
+		"--not",
+		`refs/heads/${branch}`,
+		"--remotes",
+	);
 	if (status.code !== 0 || off.code !== 0) return ["a git state drive could not read"];
 	const files = status.out.split("\0").filter(Boolean).length;
 	const commits = Number(off.out.trim());
@@ -632,6 +665,7 @@ const handlers = (env: Env) => {
 					exam: [],
 					leaks: [],
 					left,
+					manifests: [],
 					plancheck: null,
 					report,
 				};
@@ -676,6 +710,17 @@ const handlers = (env: Env) => {
 				const touched = git("log", "--format=", "--name-only", `${ask.base}..${head}`);
 				if (touched.code !== 0) return failed("git log", touched);
 				const names = [...new Set(touched.out.split("\n").filter(Boolean))];
+				const at = (rev: string, path: string) => {
+					const r = git("show", `${rev}:${path}`);
+					return r.code === 0 ? r.out : null;
+				};
+				const manifests = lockfileBehind(
+					names
+						.filter((n) => n === "pnpm-workspace.yaml" || /(^|\/)package\.json$/.test(n))
+						.map((path) => ({path, before: at(ask.base, path), after: at(head, path)})),
+					workspaceGlobs(at(head, "pnpm-workspace.yaml") ?? ""),
+					names.includes("pnpm-lock.yaml"),
+				);
 				const examRun =
 					names.length === 0
 						? {code: 0, out: "", err: ""}
@@ -723,6 +768,7 @@ const handlers = (env: Env) => {
 					exam,
 					leaks: leaksIn(diff.out, env.GH_REPO),
 					left,
+					manifests,
 					plancheck: null,
 					report,
 					problem: null,
@@ -1121,21 +1167,24 @@ const main = () => {
 		console.error("drive.ts: a plan reads the main checkout; it takes no --from");
 		process.exit(2);
 	}
-	// With no --from, a lane whose branch is on origin continues from that tip, unless the saved
-	// head has moved past it (a step accepted but not yet pushed). A box started at main on a
+	// With no --from, a lane whose branch or -wip backup is on origin continues from the newest
+	// tip, unless the saved head has moved past it (`startHead`). A box started at main on a
 	// branch that has work drops that work (2026-11-09), so a saved head off the branch loses.
-	const pushed = sh("git", [
-		"-C",
-		env.MAIN,
-		"rev-parse",
-		"-q",
-		"--verify",
-		`refs/remotes/origin/${branch}^{commit}`,
-	]).out.trim();
+	const pushed = [branch, wipOf(branch)]
+		.map((ref) =>
+			sh("git", [
+				"-C",
+				env.MAIN,
+				"rev-parse",
+				"-q",
+				"--verify",
+				`refs/remotes/origin/${ref}^{commit}`,
+			]).out.trim(),
+		)
+		.filter(Boolean);
 	const isAncestor = (a: string, b: string) =>
 		sh("git", ["-C", env.MAIN, "merge-base", "--is-ancestor", a, b]).code === 0;
-	const lastHead =
-		pushed && !(saved?.head && isAncestor(pushed, saved.head)) ? pushed : saved?.head;
+	const lastHead = startHead(pushed, saved?.head, isAncestor);
 	const from = step === "plan" ? "HEAD" : (flag(args, "--from") ?? lastHead ?? "origin/main");
 	const base = sh("git", [
 		"-C",
@@ -1149,12 +1198,13 @@ const main = () => {
 		console.error(`drive.ts: ${from} is not a commit in the main checkout`);
 		process.exit(2);
 	}
-	// The lane's root, kept from its first step: where its base left main. A saved root the base
-	// does not hold came from a step that started off the lane, so it is found again.
-	const root =
-		saved?.root && isAncestor(saved.root, base)
-			? saved.root
-			: sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim();
+	// The lane's root: where its base left main, moved up past a caught-up main (lane.ts).
+	const root = laneRoot(
+		saved?.root,
+		sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim(),
+		base,
+		isAncestor,
+	);
 	if (!root) {
 		console.error(`drive.ts: ${base.slice(0, 8)} shares no history with origin/main`);
 		process.exit(2);

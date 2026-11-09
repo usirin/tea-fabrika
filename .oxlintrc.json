@@ -1,5 +1,5 @@
 // The lint settings. `pnpm lint` runs them through oxlint-plugins/lint.ts, which fails on any
-// diagnostic but the two advice rules. docs/direction/oxlint-and-oxfmt.md says what each choice costs.
+// diagnostic but the advice rules. docs/direction/oxlint-and-oxfmt.md says what each choice costs.
 {
 	"$schema": "./node_modules/oxlint/configuration_schema.json",
 	"plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest"],
@@ -339,6 +339,9 @@
 			"files": ["next/**"],
 			"rules": {
 				"fabrika/no-promises": "error",
+				"fabrika/no-ledger-sql": "error",
+				"fabrika/no-node-filesystem": "error",
+				"fabrika/no-node-imports": "error",
 				"fabrika/no-effect-run-outside-edge": "error",
 				"fabrika/edge-comment": "error",
 				"fabrika/effect-functions": "error",
@@ -367,6 +370,7 @@
 			// Tests also manufacture spans as input for the sink. Tracing plants use product paths.
 			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
 			"rules": {
+				"fabrika/prefer-schema-arbitrary": "warn",
 				"fabrika/no-promises": "off",
 				"fabrika/no-effect-run-outside-edge": "off",
 				"fabrika/effect-functions": "off",

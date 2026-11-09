@@ -399,8 +399,10 @@ def new_box():
     # A lane that starts one box per step continues its own branch: that head is a valid base too.
     own = any(git("rev-parse", "-q", "--verify", r + "^{commit}").stdout.decode().strip() == head for r in ("refs/heads/" + branch, "refs/remotes/origin/" + branch))
     if head != rev("origin/main") and not own:
-        if not verified(head, "build"): refuse("base_not_signed: verified build head required")
-        branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/"), "parent lookup failed").splitlines()
+        # A lead commit (a merge of main, a lockfile commit) is signed and checked like a step's, so
+        # it is a base too (layers and themes, 2026-11-09: a lead commit left both lanes stuck).
+        if not (verified(head, "build") or verified(head, "lead")): refuse("base_not_signed: verified build or lead head required")
+        branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/", "refs/remotes/origin/fabrikalfa/"), "parent lookup failed").splitlines()
         if not branches: refuse("base_not_signed: no parent branch at head")
         parent = branches[0] + "@" + head
     # Two live lanes must not write one ticket. A branch that shares the ticket blocks only while it
@@ -576,6 +578,11 @@ def fetch_box():
                     if signed.returncode: refuse("sign failed " + sha)
             state["fetched-head"] = head; save(state)
         lane_root = state.get("root", state["base"])
+        # A lead merge of main brings main's own commits into root..head, and the checker calls each
+        # one unsigned (layers tests10, 2026-11-09). Start at the merge-base with origin/main when it
+        # holds the root, so only the lane's commits are judged; a root off main keeps its root.
+        joined = must(git("merge-base", head, "origin/main"), "merge-base with origin/main failed")
+        if ancestor(lane_root, joined): lane_root = joined
         checked = call(["pnpm", "commits", "check", "--base", lane_root, "--head", head])
         # A stale link is judged here only for a step the lane itself has signed. A step the lane
         # has not reached yet (lead, before catch-up) may hold a newer link from an older PR on the

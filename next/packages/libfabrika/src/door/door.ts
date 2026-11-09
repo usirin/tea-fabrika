@@ -31,6 +31,7 @@ import {
 	Saw,
 	SessionManager,
 	SigningRefused,
+	SignRequest,
 	Writer,
 } from "../coordination/index.ts";
 import type {SinkError} from "../data/index.ts";
@@ -86,6 +87,9 @@ const reserved = (a: unknown) => {
 };
 const no = (why: string) => Answer.cases.refused.make({why});
 const ok = (result: typeof Schema.Json.Type) => Answer.cases.ok.make({result});
+// A dead letter stops the sender's outbox. Other program refusals keep their full reply.
+const deliveryAnswer = (result: Schema.Json) =>
+	Schema.is(Answer.cases.refused)(result) && result.why === "dead" ? no("dead") : ok(result);
 const EnvelopeState = Schema.TaggedUnion({
 	allocated: {},
 	recorded: {},
@@ -205,6 +209,7 @@ const SpanContent = Schema.Struct({chain: Chain, spanId: Schema.String});
 const DeleteContent = Schema.Struct({...SpanContent.fields, why: Schema.String});
 const methods: ReadonlySet<string> = new Set([
 	"process.send",
+	"view.open",
 	"ledger.read",
 	"ledger.wait",
 	"spans.read",
@@ -227,12 +232,30 @@ type Options<A, RNext, RDeliver, RNotify> = {
 	readonly ping: {readonly min: number; readonly max: number};
 	readonly inputCap: number;
 	readonly spentCap: number;
+	readonly turn?: Semaphore.Semaphore;
+	readonly write?: <B, E, R>(work: Effect.Effect<B, E, R>) => Effect.Effect<B, E, R>;
+	readonly policy?: (
+		process: string,
+	) => Effect.Effect<
+		{readonly inputs: ReadonlyArray<string>; readonly events: ReadonlyArray<string>},
+		LedgerError
+	>;
+	readonly isLive?: (process: string) => Effect.Effect<boolean, LedgerError>;
+	readonly open?: (
+		process: string,
+		client: string,
+	) => Effect.Effect<Schema.Json, LedgerError, RDeliver>;
+	readonly wait?: (
+		stream: string,
+		after: number,
+		reader: string,
+	) => Effect.Effect<unknown, LedgerError>;
 	readonly nextProcess: () => Effect.Effect<string, never, RNext>;
 	readonly deliver: (
 		process: string,
 		envelope: Envelope<A>,
 		span: typeof Link.Type,
-		meta: {readonly id: string; readonly sentAt: string; readonly seen: number},
+		incoming: Incoming,
 	) => Effect.Effect<
 		Sent | void,
 		| LedgerError
@@ -250,6 +273,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
 		readonly personOnly: ReadonlyArray<string>;
 		readonly raw: ReadonlyArray<string>;
 		readonly log: Schema.Encoder<unknown>;
+		readonly name?: (input: A) => string | undefined;
 	};
 	readonly facts: {readonly personOnly: ReadonlyArray<string>};
 };
@@ -280,7 +304,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 	const nonces = yield* silent(doorNonce(store, options.waiting.ttl, options.spentCap));
 	// Only calls currently checking a proof live here. No challenge is retained.
 	const checking = new Map<ConnectionId, Set<{current: boolean}>>();
-	const turn = yield* Semaphore.make(1);
+	const turn = options.turn ?? (yield* Semaphore.make(1));
+	const write = options.write ?? turn.withPermit;
 	const flush = sink.flush.pipe(
 		Effect.provideService(RecordManager, records),
 		Effect.provideService(Archive, archive),
@@ -322,6 +347,18 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			}),
 		),
 	);
+	const sessionsFor = Effect.fnUntraced(function* (process: string) {
+		if (options.policy === undefined) return sessions;
+		const policy = yield* options.policy(process);
+		return yield* SessionManager.pipe(
+			Effect.provide(
+				SessionManager.layer(sql, membership, {
+					input: (name) => policy.inputs.includes(name),
+					fact: (kind) => policy.events.includes(kind),
+				}),
+			),
+		);
+	});
 	const prunePending = (at: number) => {
 		const expired = sql.exec(
 			"SELECT client FROM door_pending WHERE until<=? OR client IN (SELECT client FROM door_pending ORDER BY rowid DESC LIMIT -1 OFFSET ?)",
@@ -768,7 +805,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				}
 			});
 			return reply;
-		}, turn.withPermits(1));
+		}, write);
 		return yield* applyGrant().pipe(
 			Effect.flatMap((reply) =>
 				Effect.gen(function* () {
@@ -828,18 +865,19 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		const from = yield* denyFrom(checked.success.by);
 		return yield* clients
 			.write(MemberFact.cases.denied.make({id: random(), key, saw, by: from.by}), from)
-			.pipe(turn.withPermits(1));
+			.pipe(write);
 	});
 	const route = Effect.fnUntraced(function* (
 		client: ConnectionId,
 		method: string,
 		params: unknown,
+		reader = String(client),
 	) {
 		const checked = yield* silent(Effect.result(online(client)));
 		if (Result.isFailure(checked)) return no("not_granted");
 		const {by, raw} = checked.success;
-		let refusal: string | null = reserved(params) ? "reserved" : null;
-		if (!methods.has(method)) refusal ??= "unknown_method";
+		let refusal: string | null = methods.has(method) ? null : "unknown_method";
+		if (reserved(params)) refusal ??= "reserved";
 		if ((method === "ledger.read" || method === "ledger.wait") && !Schema.is(Read)(params))
 			refusal ??= "bad_input";
 		if (method === "spans.read" && !Schema.is(SpanRead)(params)) refusal ??= "bad_input";
@@ -855,7 +893,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				? Schema.decodeUnknownResult(options.inputs.schema)(request.success.m)
 				: null;
 		const message = decoded !== null && Result.isSuccess(decoded) ? decoded.success : null;
-		const name = rawObject(message)?._tag;
+		const name =
+			message === null ? undefined : (options.inputs.name?.(message) ?? rawObject(message)?._tag);
 		if (
 			method === "process.send" &&
 			(request === null ||
@@ -867,6 +906,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		)
 			refusal ??= "bad_input";
 		const target = request !== null && Result.isSuccess(request) ? request.success.pid : "door";
+		const policy =
+			target !== "door" && options.policy !== undefined
+				? yield* options.policy(target)
+				: {inputs: options.inputs.personOnly, events: options.facts.personOnly};
 		if (
 			request !== null &&
 			Result.isSuccess(request) &&
@@ -946,7 +989,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					by,
 					process: processId,
 					name: typeof name === "string" ? name : method,
-					personOnly: typeof name === "string" && options.inputs.personOnly.includes(name),
+					personOnly: typeof name === "string" && policy.inputs.includes(name),
 					digest,
 					arrivedAt: at,
 					span: {traceId: span.traceId, spanId: span.spanId},
@@ -1039,12 +1082,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					Result.isSuccess(request)
 				) {
 					if (binding.state._tag === "settled") {
-						const result = binding.state.result;
-						const value = rawObject(result);
-						return value?._tag === "refused" && typeof value.why === "string"
-							? no(value.why)
-							: ok(result);
+						return deliveryAnswer(binding.state.result);
 					}
+					const sessions = yield* sessionsFor(binding.process);
 					yield* sessions.record({...binding, traceId: binding.span.traceId});
 					yield* sessions.delivered(binding.id, binding.process);
 					const delivered: Binding = {
@@ -1067,8 +1107,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 								binding.span,
 								{
 									id: request.success.letter,
-									sentAt: request.success.sentAt,
-									seen: request.success.seen,
+									envelope: {
+										id: yield* Schema.decodeUnknownEffect(InputId)(binding.id).pipe(
+											Effect.mapError(() => new LedgerError({why: "bad_row"})),
+										),
+										by: binding.by,
+										arrivedAt: binding.arrivedAt,
+										input: message,
+									},
+									sentAt: binding.sentAt,
+									seen: binding.seen ?? 0,
+									span: binding.span,
 								},
 							)
 							.pipe(Effect.provideContext(context)),
@@ -1083,7 +1132,16 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					yield* store.atomic(() =>
 						saveBinding({...binding, state: EnvelopeState.cases.settled.make({result: answer})}),
 					);
-					return result.value?._tag === "refused" ? no(result.value.why) : ok(answer);
+					return deliveryAnswer(answer);
+				}
+				if (method === "view.open" && options.open !== undefined) {
+					const opened = Schema.decodeUnknownResult(Schema.Struct({pid: ProcessId}))(params);
+					if (Result.isFailure(opened)) return no("bad_input");
+					return ok(
+						yield* options
+							.open(opened.success.pid, String(client))
+							.pipe(Effect.provideContext(context)),
+					);
 				}
 				if (method === "ledger.read" || method === "ledger.wait") {
 					const p = Schema.decodeUnknownResult(Read)(params);
@@ -1094,7 +1152,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 								ledger.read(p.success.stream, p.success.after).pipe(Stream.take(PAGE)),
 							),
 						});
-					const waited = yield* ledger.wait(p.success.stream, p.success.after);
+					const waited =
+						options.wait === undefined
+							? yield* ledger.wait(p.success.stream, p.success.after)
+							: yield* options.wait(p.success.stream, p.success.after, reader).pipe(
+									Effect.flatMap(
+										Schema.decodeUnknownEffect(
+											Schema.TaggedUnion({ready: {rev: Schema.Int}, parked: {}}),
+										),
+									),
+									Effect.mapError(() => new LedgerError({why: "bad_row"})),
+								);
 					return waited._tag === "parked"
 						? Answer.cases.parked.make(p.success)
 						: ok({rev: waited.rev});
@@ -1197,6 +1265,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		readonly fact: unknown;
 	}) {
 		return yield* Effect.gen(function* () {
+			if (options.isLive !== undefined && !(yield* options.isLive(a.process)))
+				return yield* new SigningRefused({why: "not_delivered"});
+			const sessions = yield* sessionsFor(a.process);
 			const session = yield* sessions.receipt(a.id, a.parent, a.process, a.kind);
 			const binding = yield* savedBinding(a.parent);
 			if (binding === null) return yield* new SigningRefused({why: "not_delivered"});
@@ -1240,9 +1311,23 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					decoded.success,
 				),
 			});
-		}).pipe(turn.withPermits(1));
+		}).pipe(write);
 	});
 	return {
+		target: Effect.fn("door.target")(function* (name: string, code: string) {
+			const at = yield* clock;
+			const rows = yield* store.atomic(() => waiting(at).rows);
+			for (const row of rows)
+				if (row.code === code && (yield* fingerprint(row.key, false)) === name)
+					return {
+						key: row.key,
+						for: options.founder.person,
+						to: options.name,
+						code: row.code,
+						label: row.label,
+					};
+			return null;
+		}),
 		connect,
 		challenge,
 		initialize,
@@ -1253,7 +1338,41 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		grant,
 		deny,
 		route,
-		signer: sessions.signer,
+		signer: Effect.fn("door.signer")(function* (parent: string, process: string, kind: string) {
+			return yield* (yield* sessionsFor(process)).signer(parent, process, kind);
+		}),
+		sign: Effect.fn("door.sign")(function* (
+			process: string,
+			id: string,
+			parent: string,
+			kind: string,
+		) {
+			if (options.isLive !== undefined && !(yield* options.isLive(process)))
+				return yield* new SigningRefused({why: "not_delivered"});
+			return yield* (yield* sessionsFor(process))
+				.signer(parent, process, kind)
+				.pipe(Effect.provideService(SignRequest, {id}));
+		}),
+		retire: sessions.end,
+		checkDelivery: Effect.fn("door.checkDelivery")(function* (process: string, input: Incoming) {
+			const binding = yield* savedBinding(input.envelope.id);
+			if (binding === null || binding.letter !== input.id || binding.process !== process)
+				return yield* new SigningRefused({why: "not_delivered"});
+			const by = yield* membership(binding.client);
+			if (
+				!["delivered", "retryable", "settled"].includes(binding.state._tag) ||
+				JSON.stringify(by) !== JSON.stringify(binding.by) ||
+				JSON.stringify(by) !== JSON.stringify(input.envelope.by) ||
+				binding.arrivedAt !== input.envelope.arrivedAt ||
+				binding.sentAt !== input.sentAt ||
+				(binding.seen ?? 0) !== input.seen ||
+				binding.span.traceId !== input.span.traceId ||
+				binding.span.spanId !== input.span.spanId ||
+				binding.hash === undefined ||
+				binding.hash !== (yield* hash(JSON.stringify(input.envelope.input)))
+			)
+				return yield* new SigningRefused({why: "not_delivered"});
+		}),
 		append,
 		accept,
 	};
@@ -1279,18 +1398,18 @@ const random = () => Base64Url.encode(crypto.getRandomValues(new Uint8Array(24))
 const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 	const bytes = line ? Base64.decode(value.split(/\s+/)[1] ?? "") : Base64Url.decode(value);
 	if (Result.isFailure(bytes)) return yield* new NotGranted({});
+	const body = new Uint8Array(bytes.success);
+	const fail = () => new LedgerError({why: "crypto"});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
-	const digest = yield* Effect.tryPromise({
-		try: () => crypto.subtle.digest("SHA-256", new Uint8Array(bytes.success)),
-		catch: () => new LedgerError({why: "crypto"}),
-	});
+	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", body), catch: fail});
+	const digest = yield* work;
 	return `SHA256:${Base64.encode(new Uint8Array(digest)).replace(/=+$/, "")}`;
 });
 const hash = Effect.fnUntraced(function* (text: string) {
+	const bytes = new TextEncoder().encode(text);
+	const fail = () => new LedgerError({why: "crypto"});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
-	const digest = yield* Effect.tryPromise({
-		try: () => crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
-		catch: () => new LedgerError({why: "crypto"}),
-	});
+	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail});
+	const digest = yield* work;
 	return Base64Url.encode(new Uint8Array(digest));
 });

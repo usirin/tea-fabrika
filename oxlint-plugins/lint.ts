@@ -1,14 +1,20 @@
 // `pnpm lint`'s first step: oxlint, with one difference. Oxlint has two levels, warn and error, and
 // this repo needs a third: printed, and never failing. So oxlint reports everything as JSON here,
-// and this prints all of it and fails on all of it but the two advice rules.
+// and this prints all of it and fails on all of it but the advice rules.
 //
 // Why one run and not two: an `oxlint-disable` that names a rule turned off counts as unused. A
 // second run for the advice rules would turn their own disable comments into failures of the first.
 import {spawnSync} from "node:child_process";
+import {readdirSync, readFileSync} from "node:fs";
 import {join} from "node:path";
 import {checkTracked} from "./gitignore.mjs";
+import {scriptReads} from "./script-reads.mjs";
 
-const ADVICE = new Set(["fabrika(no-effect-promise)", "fabrika(no-raw-try-catch)"]);
+const ADVICE = new Set([
+	"fabrika(no-effect-promise)",
+	"fabrika(no-raw-try-catch)",
+	"fabrika(prefer-schema-arbitrary)",
+]);
 
 interface Diagnostic {
 	readonly code?: string;
@@ -18,6 +24,16 @@ interface Diagnostic {
 }
 
 const ROOT = join(import.meta.dirname, "..");
+const scripts = readdirSync(join(ROOT, ".agents/skills"), {recursive: true, withFileTypes: true})
+	.filter((entry) => entry.isFile())
+	.map((entry) => join(entry.parentPath, entry.name).slice(ROOT.length + 1))
+	.filter((path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path));
+const missing = scriptReads(
+	new Map(scripts.map((path) => [path, readFileSync(join(ROOT, path), "utf8")])),
+);
+for (const row of missing)
+	console.error(`${row.test}: declare ${row.path}?raw, read through ${row.via}`);
+if (missing.length) process.exit(1);
 
 // A `.gitignore` hides a file from oxlint and oxfmt, and neither can be told to stop without also
 // walking into `node_modules`. Git keeps a tracked file tracked under a new `.gitignore`, so one line

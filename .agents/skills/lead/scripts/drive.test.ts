@@ -1,7 +1,24 @@
+import "./box.sh?raw";
+import "./leakgrep.sh?raw";
+import "./fieldrow.py?raw";
+import "./runplan.sh?raw";
+import "./env.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./gc.ts?raw";
+import "./redact.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./botpush.mjs?raw";
+import "./clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./lane.ts?raw";
+import "../../plan/scripts/plancheck.sh?raw";
+import "../../step-commit/scripts/exam.py?raw";
+import "../../step-commit/scripts/stepcommit.sh?raw";
 import {spawnSync} from "node:child_process";
 import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {nameOf} from "@kampus/pipeline/stages/outcome";
 import fc from "fast-check";
 import {afterAll, describe, expect, it} from "vitest";
 import {leftIn, machine} from "./drive.ts";
@@ -48,6 +65,7 @@ const recorded = (report: string, commits: number, held: readonly string[]) => {
 		exam: [],
 		leaks: [],
 		left: held,
+		manifests: [],
 		plancheck: null,
 		report,
 		problem: null,
@@ -79,6 +97,59 @@ describe("drive keeps a box that holds work, today's tooling", () => {
 				// The outcome line's reason says what was kept.
 				for (const what of held) expect(cmd.why).toContain(what);
 				if (held.length === 0) expect(cmd.why).not.toContain("box kept");
+			}),
+			options,
+		);
+	});
+});
+
+describe("drive asks the lead for the lockfile, today's tooling", () => {
+	const read = (report: string, manifests: readonly string[]) =>
+		machine.update.step_read_ok({phase: "reading", ask}, {
+			type: "step_read_ok",
+			value: {
+				head: "c".repeat(40),
+				commits: 1,
+				unsigned: [],
+				exam: [],
+				leaks: [],
+				left: [],
+				manifests,
+				plancheck: null,
+				report,
+				problem: null,
+			},
+		} as never)[0];
+	const manifest = fc.constantFrom(
+		"package.json",
+		"apps/fabrika/package.json",
+		"pnpm-workspace.yaml",
+	);
+
+	// Plant: trust the step's own answer. themes build2 (ticket 385): a box could not refresh the
+	// lockfile, answered send tests, and the lane looped build -> tests -> build.
+	it("a lockfile left behind is an ask for the lead, whatever the step answered, and names each manifest", () => {
+		fc.assert(
+			fc.property(answer, fc.uniqueArray(manifest, {minLength: 1}), (report, paths) => {
+				const s = read(report, paths);
+				expect(s.phase).toBe("pushing");
+				if (s.phase !== "pushing") return;
+				expect(s.outcome).toEqual({kind: "ask", who: "lead", for: "lockfile"});
+				for (const p of paths) expect(s.why).toContain(p);
+				expect(s.why).toContain("fabrikalfa/l-wip");
+			}),
+			options,
+		);
+	});
+
+	// Plant: ask on every step. With nothing behind, the step's own answer decides as before.
+	it("with no manifest behind, no answer becomes a lockfile ask", () => {
+		fc.assert(
+			fc.property(answer, (report) => {
+				const s = read(report, []);
+				expect(["pushing", "recording"]).toContain(s.phase);
+				const outcome = s.phase === "pushing" || s.phase === "recording" ? s.outcome : null;
+				expect(outcome).not.toEqual({kind: "ask", who: "lead", for: "lockfile"});
 			}),
 			options,
 		);
@@ -118,8 +189,62 @@ describe("leftIn reads a real box, today's tooling", () => {
 		git(off, "commit", "-q", "-m", "side");
 		expect(leftIn(off, "fabrikalfa/l")).toEqual(["1 commits off fabrikalfa/l"]);
 
+		// A clone's own main, ahead of the step's branch but on its remote, is not the box's work.
+		// themes build5, 2026-11-09: kept for "21 commits off" that were its local main.
+		const cloned = join(root, "cloned");
+		spawnSync("git", ["clone", "-q", "-b", "fabrikalfa/l", clean, cloned]);
+		git(clean, "switch", "-q", "-c", "main");
+		writeFileSync(join(clean, "m.ts"), "5\n");
+		git(clean, "add", "m.ts");
+		git(clean, "commit", "-q", "-m", "main moved");
+		git(clean, "switch", "-q", "fabrikalfa/l");
+		git(cloned, "fetch", "-q", "origin", "main:main");
+		expect(leftIn(cloned, "fabrikalfa/l")).toEqual([]);
+
 		// A branch the box does not have is a state drive cannot read, so the box stays.
 		expect(leftIn(clean, "fabrikalfa/missing")).toEqual(["a git state drive could not read"]);
 		expect(leftIn(join(root, "gone"), "fabrikalfa/l")).toEqual([]);
+	});
+});
+
+describe("T388 drive accepts a step once its backup push lands, today's tooling", () => {
+	// Plants: a landed push still recorded stuck; the head left at the base; a refused push accepted.
+	// ci375 build, 2026-11-09: a signed, green build came back stuck:push_failed on a notes race
+	// that botpush now retries once, so the push result alone decides the step.
+	it("records the step's own answer at the pushed head, and stuck:push_failed when refused", () => {
+		fc.assert(
+			fc.property(answer, fc.integer({min: 1, max: 3}), fc.boolean(), (report, commits, landed) => {
+				const value = {
+					head: "c".repeat(40),
+					commits,
+					unsigned: [],
+					exam: [],
+					leaks: [],
+					left: [],
+					plancheck: null,
+					report,
+					problem: null,
+				};
+				const [read] = machine.update.step_read_ok({phase: "reading", ask}, {
+					type: "step_read_ok",
+					value,
+				} as never);
+				// A stuck answer is never pushed.
+				if (read.phase !== "pushing") {
+					expect(read.phase === "recording" && read.outcome.kind).toBe("stuck");
+					return;
+				}
+				const [state, cmds] = machine.update.backup_push_ok(read, {
+					type: "backup_push_ok",
+					value: {ok: landed, detail: landed ? "pushed" : "botpush: push refused"},
+				} as never);
+				const cmd = cmds[0] as {outcome: string; head: string};
+				expect(state.phase).toBe("recording");
+				expect(cmd.head).toBe(value.head);
+				if (landed) expect(cmd.outcome).toBe(nameOf(read.outcome));
+				else expect(cmd.outcome).toBe("stuck:push_failed");
+			}),
+			options,
+		);
 	});
 });
