@@ -224,7 +224,6 @@ These still run, but they are not the way forward:
 | Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
 | See what was tried, and what came back | [`experiments/`](./experiments/README.md) |
 | See what happened on real tickets | [`field/`](./field/README.md) |
-| Read one finding, short | [`singles/`](./singles/README.md) |
 | Check a change against old tickets | [`replay/`](./replay/README.md) |
 
 ## What is in this repository
@@ -277,7 +276,6 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
   [`review-machine.md`](./docs/review-machine.md), [`ship-machine.md`](./docs/ship-machine.md)
   and [`fabrika-sdk.md`](./docs/fabrika-sdk.md).
 - `fixtures/`: toy projects the tests use.
-- `blog/` and `video/`: finished pieces about earlier stages.
 
 ## Working on this repository
 
