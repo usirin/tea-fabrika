@@ -215,9 +215,12 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
   every pull request, prose included. An Effect service name is never plural: one that holds many is
   `<Thing>Manager`, such as `LeaseManager`.
-- **Data keys are short everyday words.** `for`, not `forWhat`. `why`, not
-  `reasonCode`. A key does not say again what its parent already says: inside
-  an outcome, the reason is `why`, not `outcomeReason`. If a short word could
+- **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not
+  `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
+  `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
+  goes, as with `kind`, and main's `next/` code is renamed by a sweep after PR 530 merges (ticket
+  337). A key does not say again what its parent already says: inside
+  an outcome, the reason is `reason`, not `outcomeReason`. If a short word could
   mean two things, pick a clearer short word before you reach for a long one.
   A short word that already means something here keeps that one meaning inside its
   [bounded context](./docs/direction/we-follow-ddd.md): `at` is a
@@ -227,15 +230,15 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   CreateTime). Today's code says `at` and `said`. In `next/`, a word means one thing. "Run"
   means an agent run only; one start of a program is a process (a restart is a new process, as
   in OTP). A place, a path, a ref, a state, a reason or a total gets its own word
-  (`location`, `path`, `ref`, `state`, `why`, `total`). `rg` the word under
+  (`location`, `path`, `ref`, `state`, `reason`, `total`). `rg` the word under
   `docs/direction/` and `next/` before you use it.
 
   ```ts
   // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.
-  // Today's code says `kind` here.
+  // Today's code says `kind` and `why` here.
   // Yes: read it out loud and it is a sentence.
   { _tag: "ask", who: "owner", for: "approval" }
-  { _tag: "send", to: "builder", why: "checks_red" }
+  { _tag: "send", to: "builder", reason: "checks_red" }
 
   // No: longer, and the parent already said it.
   { _tag: "ask", askWho: "owner", forWhat: "owner_approval" }
