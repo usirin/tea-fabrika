@@ -15,7 +15,7 @@ a code pull request. A docs-only decision PR merges on green CI with a clean lea
 
 `NNNN-slug.md`: the next free four-digit number, then a kebab-case slug of at most five words.
 
-```markdown
+````markdown
 ---
 id: 0002
 title: <the decision in one clause, not the topic>
@@ -25,6 +25,15 @@ tags: [a, few, words]
 ---
 
 # 0002: <the same title>
+
+```mermaid
+flowchart LR
+  a["the real thing"] --> b["what it does next"]
+```
+
+```ts
+// one small real code block with the shape
+```
 
 **What this decides:** one plain sentence.
 
@@ -39,7 +48,11 @@ Why it came up. Link the note, ticket or pull request.
 ## Consequences
 
 What changes, what it costs, what is not decided here.
-```
+````
+
+- A decision that has a shape opens with the Mermaid diagram and the code block; one with no shape
+  leaves both out ([0005](./0005-patterns-and-decisions-are-visual.md), and the
+  [adr skill's diagram rules](../.agents/skills/adr/SKILL.md#diagrams)).
 
 - `status` is `accepted`, `superseded` or `amended`. A later decision that replaces one sets the
   old file's status to `superseded by NNNN`; nobody deletes a decision.
