@@ -20,7 +20,7 @@ import {
 } from "effect";
 import {
 	Activity,
-	Dead,
+	DeadInput,
 	Down,
 	type Appended,
 	brainOnly,
@@ -323,7 +323,7 @@ export class ProgramRunner extends Context.Service<
 								yield* p
 									.dead(
 										action.process,
-										Dead.make({
+										DeadInput.make({
 											tries: receipt.tries,
 											limit: deliveries(s),
 											m: receipt.letter,

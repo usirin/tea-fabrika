@@ -7,6 +7,9 @@ description: Write the plan for one tea-fabrika pull request, read-only, as the 
 
 You write one plan and nothing else: no code, no tests, no commits, no pull requests. Your final
 message is the whole plan, in Markdown. The lead saves it and approves it, or sends it back.
+Return it unsigned, including when reviewing or revising a plan. Only the lead session may fill
+the blank approval line. Every agent may file tracker tickets, even during read-only repo work.
+Filing a ticket does not claim it or start its build.
 
 A brief names only the ticket: what it builds, which version (`next/` or today's), the notes and
 rows to read, and an older plan to copy the shape of. This skill holds the rest.
@@ -47,6 +50,12 @@ rows to read, and an older plan to copy the shape of. This skill holds the rest.
   `@demlik/tea/pbt.arbMsg`, `.arbRecordMsg`, `.arbMsgSequence` or `.arbGuidedSequence`, optionally
   followed by `: description`; or `Effect Arbitrary: Schema.name`. A label needs a reason with a
   letter or digit. Put arguments and custom-generator details after the colon.
+- When secrets must stay out of records, URLs or spans, mark the Law cell with `[secrets]`.
+  Require a property over generated flows. Generate made-up words, keys and passes, operation
+  orders, refusals and failures. Inspect every named output, including encoded URL forms. Plant
+  a leak into each named output. The marked row needs an `fc`, tea or Effect generated-input
+  family. A separate scenario row may supplement it, but a fixed label, `lint` or `type` cannot
+  replace the property. Ordinary keyboard laws keep the normal grammar.
 - **The files table, with lines, and an owner step for every file:** `tests`, `build` or `lead`.
   Every path that matches a glob in `exam-paths.json` belongs to `tests`. A builder is never handed
   one. If the build needs an exam file changed, that change goes in the tests commit.
@@ -74,17 +83,22 @@ Plain short sentences, American English, no em dashes.
 
 ## Scripts
 
-`scripts/plancheck.sh <plan.md>` checks owners in every plan. Version 2 also checks each laws
-table's generator grammar. An unmarked plan prints `legacy plan: generator checks skipped`;
-unknown, malformed or duplicate markers fail. Escaped pipes stay in their cells. Every exam path in
-a files table's file/path cell counts, whatever words or punctuation surround it, unless the cell
-names another package with a possessive (`Counter's package.json`); then only paths with a `/`
-count. A possessive of this repository (`the repo's package.json`) is not another package. Bare root
-paths in prose or other columns never decide the exit code. Apart from that check, the `exam path
-named` listing is a total scan that reads no Markdown: it splits the whole file, fences, link titles
-and comments included, into words and lists each one the exam list matches, wherever it stands. A
-false listing is harmless; the lead checks each listed path is owned by `tests`. The lead runs this
-before approving.
+`scripts/plancheck.sh --draft <plan.md>` requires a blank first line, `Plancheck-Version: 2` on
+line two, and no unfenced line beginning `Approved by the lead agent,`. The lead session runs it
+before approval. It checks the format, not who wrote it.
+
+`scripts/plancheck.sh <plan.md>` keeps saved-plan behavior, including approved and legacy plans. It
+checks owners in every plan. Version 2 also checks each laws table's generator grammar and requires
+generated inputs on `[secrets]` rows. An unmarked plan prints `legacy plan: generator checks
+skipped`; unknown, malformed or duplicate markers fail. Escaped pipes stay in their cells. Every
+exam path in a files table's file/path cell counts, whatever words or punctuation surround it,
+unless the cell names another package with a possessive (`Counter's package.json`); then only paths
+with a `/` count. A possessive of this repository (`the repo's package.json`) is not another
+package. Bare root paths in prose or other columns never decide the exit code. Apart from that
+check, the `exam path named` listing is a total scan that reads no Markdown: it splits the whole
+file, fences, link titles and comments included, into words and lists each one the exam list
+matches, wherever it stands. A false listing is harmless; the lead checks each listed path is owned
+by `tests`. The lead runs this before approving. Return the checked draft unsigned.
 
 ## Where code goes in `next/`
 
