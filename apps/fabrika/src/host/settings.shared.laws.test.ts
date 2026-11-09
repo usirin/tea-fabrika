@@ -66,54 +66,58 @@ const worker = (folder: string) => {
 		send: (request: object) => child.stdin.write(`${JSON.stringify(request)}\n`),
 	};
 };
-it("P13: two processes preserve independent concurrent edits, both watchers update, and stale Undo refuses", async () => {
-	await fc.assert(
-		fc.asyncProperty(edits, async (flow) => {
-			expect(flow.length).toBeGreaterThan(0);
-			const folder = home();
-			const a = worker(folder);
-			const b = worker(folder);
-			try {
-				await Promise.all([a.next(), b.next()]);
-				for (const op of flow) {
-					const pair = op.reverse
-						? ([
-								[b, "tezgah.fold", op.right],
-								[a, "tezgah.zoom", op.left],
-							] as const)
-						: ([
-								[a, "tezgah.zoom", op.left],
-								[b, "tezgah.fold", op.right],
-							] as const);
-					for (const [client, does, key] of pair)
-						client.send({type: "bind", does, key: `<prefix>${key}`});
-					const answers = await Promise.all([a.next(), b.next()]);
-					preserved(readFileSync(join(folder, "keybindings.toml"), "utf8"), op.left, op.right);
-					if (op.watcher) {
-						for (const client of [a, b])
-							client.send({type: "watch", left: op.left, right: op.right});
-						for (const answer of await Promise.all([a.next(), b.next()]))
-							expect(answer.seen).toBe(true);
+// Multi-process timing law (two settings workers per run, over Stryker's 10 s limit): the lead runs it outside Stryker.
+it.skipIf(process.env.STRYKER_MUTATOR_WORKER !== undefined)(
+	"P13: two processes preserve independent concurrent edits, both watchers update, and stale Undo refuses",
+	async () => {
+		await fc.assert(
+			fc.asyncProperty(edits, async (flow) => {
+				expect(flow.length).toBeGreaterThan(0);
+				const folder = home();
+				const a = worker(folder);
+				const b = worker(folder);
+				try {
+					await Promise.all([a.next(), b.next()]);
+					for (const op of flow) {
+						const pair = op.reverse
+							? ([
+									[b, "tezgah.fold", op.right],
+									[a, "tezgah.zoom", op.left],
+								] as const)
+							: ([
+									[a, "tezgah.zoom", op.left],
+									[b, "tezgah.fold", op.right],
+								] as const);
+						for (const [client, does, key] of pair)
+							client.send({type: "bind", does, key: `<prefix>${key}`});
+						const answers = await Promise.all([a.next(), b.next()]);
+						preserved(readFileSync(join(folder, "keybindings.toml"), "utf8"), op.left, op.right);
+						if (op.watcher) {
+							for (const client of [a, b])
+								client.send({type: "watch", left: op.left, right: op.right});
+							for (const answer of await Promise.all([a.next(), b.next()]))
+								expect(answer.seen).toBe(true);
+						}
+						if (op.undo) {
+							const before = readFileSync(join(folder, "keybindings.toml"), "utf8");
+							const version = createHash("sha256").update(`file:${before}`).digest("hex");
+							const first = answers.findIndex((answer) => answer.version !== version);
+							if (first === -1) continue; // Both saves were no-ops. No newer version exists.
+							const client = first === 0 ? a : b;
+							client.send({type: "undo", version: answers[first].version});
+							expect((await client.next()).refused).toBe(true);
+							expect(readFileSync(join(folder, "keybindings.toml"), "utf8")).toBe(before);
+						}
 					}
-					if (op.undo) {
-						const before = readFileSync(join(folder, "keybindings.toml"), "utf8");
-						const version = createHash("sha256").update(`file:${before}`).digest("hex");
-						const first = answers.findIndex((answer) => answer.version !== version);
-						if (first === -1) continue; // Both saves were no-ops. No newer version exists.
-						const client = first === 0 ? a : b;
-						client.send({type: "undo", version: answers[first].version});
-						expect((await client.next()).refused).toBe(true);
-						expect(readFileSync(join(folder, "keybindings.toml"), "utf8")).toBe(before);
-					}
+				} finally {
+					a.close();
+					b.close();
 				}
-			} finally {
-				a.close();
-				b.close();
-			}
-		}),
-		{...options, numRuns: 3},
-	);
-});
+			}),
+			{...options, numRuns: 3},
+		);
+	},
+);
 plant("P13 local semaphores lose the other process's edit", edits, (flow) =>
 	preserved(`tezgah.zoom = "<prefix>${flow[0]!.left}"`, flow[0]!.left, flow[0]!.right),
 );

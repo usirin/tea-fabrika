@@ -318,7 +318,8 @@ const checkRecord = (kind: keyof typeof recordFields, row: Record<string, unknow
 // Electron launch of about 15 s, so the test states its own limit, 150 s, instead of vitest's 5 s.
 // The first property (100 runs, pure) is unchanged and takes milliseconds.
 const P17_LIMIT_MS = 150_000;
-it(
+// Starts Electron, which cannot run inside a Stryker worker: it runs outside Stryker.
+it.skipIf(process.env.STRYKER_MUTATOR_WORKER !== undefined)(
 	"P17: every successful or failed operation keeps its own record and opening source",
 	async () => {
 		const {projectsMachine} = await import("./projects.ts");
@@ -456,7 +457,8 @@ const secretsCheck = (credential: string, observed: Readonly<Record<string, unkn
 // encoding, so a leak is still caught without more Electron launches.
 const P29_RUNS = 3;
 const P29_LIMIT_MS = 150_000;
-it(
+// Starts Electron, which cannot run inside a Stryker worker: it runs outside Stryker.
+it.skipIf(process.env.STRYKER_MUTATOR_WORKER !== undefined)(
 	"P29: [secrets] generated refusals, failures and operation orders keep every named output clean",
 	async () => {
 		// Fail here while the checked-project product is absent. Never count an unbuilt Electron

@@ -1,5 +1,6 @@
 import {mkdirSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
+import {isMainThread} from "node:worker_threads";
 import {Effect, Exit, Layer} from "effect";
 import * as fc from "fast-check";
 import {afterEach, expect, it, vi} from "vitest";
@@ -17,6 +18,17 @@ vi.mock("@tea-fabrika/tracker/github", () => ({
 }));
 vi.mock("./jev.ts", () => ({hostJev: () => Layer.empty}));
 vi.mock("./run.ts", () => ({runHost: vi.fn(() => Effect.void)}));
+// Stryker's vitest runner runs tests in a worker thread, where process.umask(mode) throws
+// ("not supported in workers"). There, host/main's umask call and the restore below act on a
+// stand-in; on the main thread the real umask is used exactly as before.
+if (!isMainThread) {
+	let fake = process.umask();
+	vi.spyOn(process, "umask").mockImplementation(((next?: string | number) => {
+		const before = fake;
+		if (next !== undefined) fake = typeof next === "string" ? Number.parseInt(next, 8) : next;
+		return before;
+	}) as typeof process.umask);
+}
 const mask = process.umask();
 afterEach(() => process.umask(mask));
 
