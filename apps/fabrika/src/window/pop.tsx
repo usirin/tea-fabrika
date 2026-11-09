@@ -155,8 +155,15 @@ export const useOverlay = (
 					c.preventDefault();
 					c.stopPropagation();
 				};
+				// It eats the click of this press only: gone as soon as the press ends, so a press the box
+				// no longer sees (it closed, and its scrim with it) leaves nothing to eat the next one.
+				const drop = () => document.removeEventListener("click", click, {capture: true});
 				document.addEventListener("click", click, {capture: true, once: true});
-				setTimeout(() => document.removeEventListener("click", click, {capture: true}), 500);
+				document.addEventListener("pointerup", () => setTimeout(drop, 0), {
+					capture: true,
+					once: true,
+				});
+				setTimeout(drop, 500);
 			}
 			onClose();
 		};

@@ -188,12 +188,24 @@ function Item(props: {
 }
 
 /**
+ * A name as the bar draws it: the folder's name, which may be cut, and the parent folders that tell
+ * two of the same name apart (project.ts, `titles`), which never are.
+ *
+ *   twinOf("repo · left")   {name: "repo", twin: "left"}
+ */
+const twinOf = (full: string): {readonly name: string; readonly twin: string | null} => {
+	const at = full.lastIndexOf(" · ");
+	return at < 0 ? {name: full, twin: null} : {name: full.slice(0, at), twin: full.slice(at + 3)};
+};
+
+/**
  * The project this window shows, first in the top bar: a button by the ARIA APG's dialog button,
  * whose full name says what it is and does, with a chevron since it opens the projects box. Long
  * names are cut by the bar's width; the title keeps the whole one. It is never a drag region.
  */
 function ProjectButton(props: FrameProps & {readonly name: string}): ReactNode {
 	const open = props.frame.over.kind === "palette" && props.frame.over.source._tag === "projects";
+	const shown = twinOf(props.name);
 	return (
 		<button
 			type="button"
@@ -213,7 +225,8 @@ function ProjectButton(props: FrameProps & {readonly name: string}): ReactNode {
 				)
 			}
 		>
-			<span className="project-name">{props.name}</span>
+			<span className="project-name">{shown.name}</span>
+			{shown.twin !== null && <span className="project-twin">{` · ${shown.twin}`}</span>}
 			<span className="chevron" aria-hidden="true">
 				▾
 			</span>

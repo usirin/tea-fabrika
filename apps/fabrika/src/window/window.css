@@ -4174,8 +4174,18 @@ main.program:has(> .view) {
 }
 
 .topbar .project-name {
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The parent folders that tell two equal names apart: kept whole while the name is cut. */
+.topbar .project-twin {
+	flex: none;
+	color: var(--text-faint);
+	font-weight: 400;
+	white-space: nowrap;
 }
 
 .topbar .chevron {
@@ -4187,14 +4197,16 @@ main.program:has(> .view) {
 	flex: 1;
 	display: flex;
 	justify-content: center;
-	padding: 10vh var(--s-3) var(--s-3);
+	/* Centered in what the top bar leaves; a list taller than that starts at the top. */
+	align-items: safe center;
+	padding: var(--s-3);
 	font: 400 var(--fs-body) / 1.4 var(--font);
 	-webkit-app-region: drag;
 	app-region: drag;
 }
 
 .welcome-body {
-	width: min(560px, 100%);
+	width: min(640px, 100%);
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
@@ -4241,10 +4253,14 @@ main.program:has(> .view) {
 }
 
 .welcome-row {
+	/* The path has the row's whole width on its own line, so it is cut last. */
 	display: grid;
-	grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-areas:
+		"name when"
+		"path path";
 	align-items: baseline;
-	gap: 10px;
+	column-gap: 10px;
 	padding: 8px 10px;
 	border-radius: var(--r);
 	color: var(--text-primary);
@@ -4262,6 +4278,7 @@ main.program:has(> .view) {
 }
 
 .welcome-row .name {
+	grid-area: name;
 	overflow: hidden;
 	font-weight: 500;
 	text-overflow: ellipsis;
@@ -4274,7 +4291,12 @@ main.program:has(> .view) {
 	color: var(--text-faint);
 }
 
+.welcome-row .when {
+	grid-area: when;
+}
+
 .welcome-row .path {
+	grid-area: path;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
