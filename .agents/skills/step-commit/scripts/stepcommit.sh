@@ -93,7 +93,9 @@ if not coauthor:
 commit = subprocess.run(["git", "-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com", "commit", "-q", "-m", subject, "-m", "Co-authored-by: " + coauthor])
 if commit.returncode: sys.exit(commit.returncode)
 if not only:
-    signed = subprocess.run(["pnpm", "commits", "sign", "--step", role, "--ticket", ticket, "--key", str(pathlib.Path.home() / ".fabrika/step-keys" / role)])
+    # STEPCOMMIT_SIGNER: drive.ts names main's own signer when the tree holds an agent's edits.
+    signer = os.environ.get("STEPCOMMIT_SIGNER", "pnpm commits").split()
+    signed = subprocess.run([*signer, "sign", "--step", role, "--ticket", ticket, "--key", str(pathlib.Path.home() / ".fabrika/step-keys" / role)])
     if signed.returncode: sys.exit(signed.returncode)
 subprocess.run(["git", "log", "--oneline", "-1"])
 PY
