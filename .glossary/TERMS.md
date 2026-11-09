@@ -149,9 +149,9 @@ shell. Paths: `next/`'s app layer and `fabsh`.
 
 | Term | Definition | Not |
 |---|---|---|
-| BrainFact | A local brain's `started`, `exited`, `braked` or `stopped` fact, with its start ID and clock. `brain-fact` | Not a program's fact or a span. |
+| BrainEvent | A local brain's `started`, `exited`, `restarting`, `braked` or `stopped` event, with its start ID and clock. `app/brain-event.ts` | Not a program's event or a span. |
 | BrainState, brainLife | The local brain lifecycle state and its tea machine. `brain-life` | Not a process's state. |
-| brainOutbox, checkMemory | The Node brain's durable fact queue and RSS replacement check. `node/local-stage` | Not the span queue or a program's memory limit. |
+| brainOutbox, checkMemory | The Node brain's durable event queue and RSS replacement check. `node/local-stage` | Not the span queue or a program's memory limit. |
 | startStage, stageRecording | The Node lifecycle driver and its durable span queue. `node/stage`, `node/stage-recording` | Not the app's deploy stack or chosen Layers. |
 | ConnectionId, DoorCalls | One door connection's branded ID and the calls Project needs from the door. `workers/bindings` | Not a client key or the door implementation. |
 | ProjectBinding, ProcessBinding, GatewayBinding, RecordBinding | The object-call contracts for Project, Process, Gateway and record parts. `workers/bindings` | Not object classes or public HTTP routes. |
@@ -159,7 +159,7 @@ shell. Paths: `next/`'s app layer and `fabsh`.
 | ProjectService, ProcessService, GatewayService | The Effect services holding the shared object behavior. `workers/runtime`, `workers/gateway` | Not the thin Durable Object classes. |
 | projectRuntime, processRuntime, gatewayRuntime | Construct the object's Effect runtime from supplied wiring. `workers/runtime`, `workers/gateway` | Not a deploy command. |
 | projectStub, processStub, recordStub | Resolve a named object through its Worker binding. `workers/runtime` | Not local storage. |
-| recordCall, rpc, complete, recordingLayer | Adapt object calls, flush completed work and install durable recording. `workers/runtime` | Not the app's concrete Layer choices. |
+| rpc, complete, recordingLayer | Run an object call under its span, flush completed work and install durable recording. `workers/runtime` | Not the app's concrete Layer choices. |
 | configureProcess, savedAlarm, processDescriptor | Store or read a process descriptor and its saved wake time. `workers/runtime` | Not program execution or an alarm delivery. |
 | bucketCalls | Convert R2 calls and check SHA-256 before storing a body. `workers/runtime` | Not a second archive format. |
 | recordWrite, recordRead, recordContent, recordDelete | Record-part adapters that check the object's identity. `workers/record` | Not app-owned recording rules. |
