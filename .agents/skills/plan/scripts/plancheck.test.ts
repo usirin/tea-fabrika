@@ -269,6 +269,9 @@ describe("plancheck, today's tooling", () => {
 			linkSelfTitle: (t: string, p: string) => `[${t}](${p} "manifest")`,
 			emphasis: (t: string) => `*${t}*`,
 			strong: (t: string) => `**${t}**`,
+			// Amendment A11: a word's leading and trailing `_` are stripped; an inner `_` stays.
+			underscore: (t: string) => `_${t}_`,
+			doubleUnderscore: (t: string) => `__${t}__`,
 			comment: (t: string) => `<!-- ${t} -->`,
 		};
 		type Form = keyof typeof forms;
@@ -343,6 +346,21 @@ describe("plancheck, today's tooling", () => {
 							form: "plain",
 							where: "fence",
 							lang: "sh",
+						},
+					],
+					// pinned: ticket 520 amendment A11, underscore emphasis around a path with an inner
+					// underscore. _allowed_signers_ was not listed at bb7d5a09.
+					[
+						{
+							path: "allowed_signers",
+							ticks: false,
+							dot: false,
+							before: "",
+							after: "",
+							period: 9,
+							form: "underscore",
+							where: "prose",
+							lang: "",
 						},
 					],
 					// pinned: ticket 520 review round 5, [`package.json`](package.json) in a build-owned
