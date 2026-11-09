@@ -2,11 +2,6 @@
 # packs: add-on packs, wired to the core by one config line; the core names none.
 # docs/tutorials: a tutorial's finished files, type-checked so it cannot drift.
 # apps: what a person opens, on top of everything else. Nothing imports an app.
-# experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
-# experiments/171-alchemy-local-twin: one experiment's harness, so it imports the ledger server's stack by name.
-# experiments/173-worker-loader: one experiment's harness, so it bundles a program with esbuild for Worker Loader.
-# experiments/174-effect-on-cloudflare: one experiment's harness, so Effect's plumbing can be bundled into a Durable Object.
-# experiments/195-oxc-toolchain: one experiment's harness, so the React Compiler's Rust port, Rolldown and Vite stay out of the app.
 # oxlint-plugins: this repo's own lint rules, type-checked and tested like the rest.
 # next/apps: the new version's app (AGENTS.md, "Two versions, side by side"). So far its exam folder.
 packages:
@@ -16,11 +11,6 @@ packages:
   - packs/*
   - docs/tutorials/*
   - oxlint-plugins
-  - experiments/142-web-terminals
-  - experiments/171-alchemy-local-twin
-  - experiments/173-worker-loader
-  - experiments/174-effect-on-cloudflare
-  - experiments/195-oxc-toolchain
   # next/: the new version (docs/plan/tier-1.md). Real packages, one lockfile, this catalog.
   - next/packages/*
   - next/programs/*
@@ -83,7 +73,6 @@ catalog:
   '@types/node': 26.6.6
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
-  # Experiment 142's other terminals (experiments/142-web-terminals), held exact like ghostty-web.
   # wterm, Apache-2.0, a Vercel Labs experiment: rows in the DOM, libghostty's core opt-in.
   '@wterm/dom': 0.5.7
   '@wterm/ghostty': 0.5.7
