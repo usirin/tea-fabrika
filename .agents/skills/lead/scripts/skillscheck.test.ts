@@ -1,5 +1,13 @@
 import {spawnSync} from "node:child_process";
-import {cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {
+	cpSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
 import {join, relative} from "node:path";
 import fc from "fast-check";
@@ -33,7 +41,7 @@ describe("skillscheck, today's tooling", () => {
 							mkdirSync(aliases, {recursive: true});
 							for (const n of names) {
 								mkdirSync(join(sources, n));
-								writeFileSync(join(sources, n, "SKILL.md"), `# ${n}\n`);
+								writeFileSync(join(sources, n, "SKILL.md"), skillText(n));
 							}
 							const actual: State[] = [];
 							for (const [i, n] of names.entries()) {
@@ -98,5 +106,136 @@ describe("skillscheck, today's tooling", () => {
 		console.info(
 			`T300 skillscheck: ${clean} clean trees accepted, ${refused} bad trees refused, 0 false alarms`,
 		);
+	});
+});
+
+const clauses = [
+	[
+		"lead",
+		"Scripts",
+		"K19",
+		"box.sh run and runplan.sh strip secret settings and redact saved output.",
+	],
+	["lead", "Scripts", "K1", "fetch --sign checks owners and signs missing notes in MAIN."],
+	["step-commit", "", "K1", "fetch --sign checks owners and signs missing notes in MAIN."],
+	["lead", "Steps", "K2", "box.sh new checks the approved plan, base and ticket."],
+	["lead", "Steps", "K3", "box.sh run --step checks order and slots, and saves the run row."],
+	[
+		"step-commit",
+		"",
+		"K4",
+		"stepcommit.sh checks named paths, owners, exam paths and staged formatting.",
+	],
+	[
+		"plan",
+		"",
+		"K11",
+		"plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments.",
+	],
+] as const;
+const skillText = (skill: string, omit = -1, wrap = " ") => {
+	const sections = new Map<string, string[]>();
+	for (const [i, [source, section, , text]] of clauses.entries()) {
+		if (source !== skill || i === omit) continue;
+		sections.set(section, [...(sections.get(section) ?? []), text.split(" ").join(wrap)]);
+	}
+	return `# ${skill}\n${[...sections].map(([section, texts]) => `${section ? `## ${section}\n` : ""}${texts.join("\n\n")}`).join("\n\n")}\n`;
+};
+const clauseTree = (f: (dir: string) => void, program = script) => {
+	const dir = mkdtempSync(join(tmpdir(), "clauses-"));
+	try {
+		for (const n of ["lead", "plan", "step-commit"]) {
+			mkdirSync(join(dir, ".agents/skills", n), {recursive: true});
+			mkdirSync(join(dir, ".claude/skills"), {recursive: true});
+			writeFileSync(join(dir, ".agents/skills", n, "SKILL.md"), skillText(n));
+			symlinkSync(`../../.agents/skills/${n}`, join(dir, ".claude/skills", n));
+		}
+		f(dir);
+		const ran = spawnSync("sh", [program, dir], {encoding: "utf8", timeout: 5_000});
+		expect(ran.error).toBeUndefined();
+		return {code: ran.status, text: ran.stdout + ran.stderr};
+	} finally {
+		rmSync(dir, {recursive: true, force: true});
+	}
+};
+
+describe("T321 required clauses, today's tooling, slice 1a", () => {
+	// Plant: require the retired mechanical sentence as well as its script pointer.
+	it("accepts wrapping and removal of the named mechanical prose", () => {
+		fc.assert(
+			fc.property(fc.constantFrom(" ", "\n", " \n\t"), fc.boolean(), (wrap, old) => {
+				const got = clauseTree((dir) => {
+					for (const n of ["lead", "plan", "step-commit"]) {
+						const retired = old
+							? "Never rebase, force-push or update-branch.\nRun draft check; every exam path in the files table.\n"
+							: "";
+						writeFileSync(
+							join(dir, ".agents/skills", n, "SKILL.md"),
+							skillText(n, -1, wrap) + retired,
+						);
+					}
+				});
+				expect(got.code, got.text).toBe(0);
+			}),
+			{seed: 321, numRuns: 6},
+		);
+	});
+
+	// Plant: accept a clause in a different section, code fence, or different skill.
+	it("refuses each absent clause alone, including misplaced and fenced copies", () => {
+		fc.assert(
+			fc.property(
+				fc.constantFrom("missing", "wrong-section", "fenced", "wrong-skill"),
+				fc.constantFrom(" ", "\n"),
+				(where, wrap) => {
+					for (const [i, [skill, section, check, text]] of clauses.entries()) {
+						const got = clauseTree((dir) => {
+							let content = skillText(skill, i, wrap);
+							if (where === "wrong-section" && section) content += `\n## Elsewhere\n${text}\n`;
+							if (where === "fenced")
+								content += `\n## ${section || "Example"}\n~~~md\n${text}\n~~~\n`;
+							writeFileSync(join(dir, ".agents/skills", skill, "SKILL.md"), content);
+							if (where === "wrong-skill")
+								writeFileSync(
+									join(dir, ".agents/skills", skill === "plan" ? "lead" : "plan", "SKILL.md"),
+									`${skillText(skill === "plan" ? "lead" : "plan")}\n${text}\n`,
+								);
+						});
+						expect(got.code, `${check}: ${got.text}`).toBe(1);
+						expect(got.text).toContain(`${skill}/SKILL.md: ${check}`);
+					}
+				},
+			),
+			{seed: 321, numRuns: 4},
+		);
+	});
+
+	// scenario: each exact hand plant runs once on a disposable copy, which is then deleted.
+	it("kills the retired-clause and wrong-section plants", () => {
+		const dir = mkdtempSync(join(tmpdir(), "clause-plants-"));
+		try {
+			const source = readFileSync(script, "utf8");
+			for (const [plant, before, after] of [
+				["retired clause", "bad = []", 'bad = ["retired mechanical prose required"]'],
+				["wrong section", '.get(section, "")', '.get("", "")'],
+			] as const) {
+				expect(source).toContain(before);
+				const planted = join(dir, "skillscheck.sh");
+				writeFileSync(planted, source.replace(before, after));
+				const got = clauseTree((tree) => {
+					if (plant === "wrong section")
+						writeFileSync(
+							join(tree, ".agents/skills/lead/SKILL.md"),
+							`${skillText("lead", 0)}\n## Elsewhere\n${clauses[0][3]}\n`,
+						);
+				}, planted);
+				expect(got.code).toBe(plant === "retired clause" ? 1 : 0);
+				// The law expects the opposite result for this same input.
+				expect(() => expect(got.code).toBe(plant === "retired clause" ? 0 : 1)).toThrow();
+				rmSync(planted);
+			}
+		} finally {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 });
