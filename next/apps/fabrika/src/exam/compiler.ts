@@ -32,7 +32,7 @@ interface Finding {
 }
 
 /** The one compile step: oxc's Rust port of the React Compiler, with its findings reported. */
-const compile = (file: string, code: string) =>
+export const compile = (file: string, code: string) =>
 	transformSync(file, code, {
 		jsx: {runtime: "automatic"},
 		reactCompiler: {

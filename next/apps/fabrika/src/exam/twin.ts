@@ -383,7 +383,7 @@ export const scanner = Effect.gen(function* () {
 });
 
 /** The command and its tests share the same scan, output and exit status. */
-export const lint = Effect.fnUntraced(function* (file: string) {
+const lint = Effect.fnUntraced(function* (file: string) {
 	const fs = yield* FileSystem.FileSystem;
 	const scan = yield* scanner;
 	const findings = scan(file, yield* fs.readFileString(file));
