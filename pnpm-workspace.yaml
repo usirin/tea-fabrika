@@ -135,7 +135,8 @@ overrides:
 
 patchedDependencies:
   # P12 observes workerd PIDs, exits, replacement delays and recovery stopping.
-  # Keep Alchemy's existing restart policy. Drop this when Alchemy exposes the hooks.
+  # Keep Alchemy's existing restart policy. Drop this when Alchemy exposes the hooks
+  # (https://github.com/alchemy-run/alchemy/issues/3184).
   '@alchemy.run/cloudflare-runtime@2.0.0-beta.84': patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.84.patch
   # demlik#897: expose the machine's existing schemas; drop at the release that has it.
   '@demlik/tea@0.25.0': patches/@demlik__tea@0.25.0.patch
