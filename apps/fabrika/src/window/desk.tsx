@@ -19,6 +19,7 @@ import {
 	focusedOf,
 	type Open,
 	questionOf,
+	route,
 	tilesOf,
 	type Workspace,
 } from "../desk/desk.ts";
@@ -169,7 +170,19 @@ const terminals = new Map<TileId, TileTerminal>();
 const followed = new Set<string>();
 let ghostty: Ghostty | null = null;
 
-const toHost = (m: FromPage) => window.fabrika.send("desk", m);
+const toHost = (m: FromPage) => {
+	const routed =
+		m.type === "press" && store.desk?.at === "open" && store.frame.over.kind !== "none"
+			? route({...store.desk, keys: store.keys}, m.key, Date.now())
+			: null;
+	const does = m.type === "run" ? m.does : routed?.kind === "desk" ? routed.ran?.does : undefined;
+	if (
+		(does === 'tezgah."focus --to next"' || does === 'tezgah."focus --to previous"') &&
+		store.frame.over.kind !== "none"
+	)
+		leftOver = true;
+	window.fabrika.send("desk", m);
+};
 const layerInstances = new Map<string, string>();
 const reportLayer = (change: LayerChange) => {
 	const key = JSON.stringify(change.layer);
@@ -388,9 +401,8 @@ const frameStep = (m: FrameMsg): boolean => {
 };
 
 /**
- * A configured focus key just dismissed something over the desk, and the host's answer to it has
- * not come yet. Its answer moves to the next open tile, wrapping within the workspace, before
- * later presses can reach the bars. With one open tile it enters that tile again.
+ * A cycle request keeps the overlay exit until its reply, even if navigation or the palette
+ * closes it first. The exit wraps within open tiles; with one, it enters that tile again.
  */
 let leftOver = false;
 
@@ -553,6 +565,7 @@ const heard = (raw: unknown) => {
 			store.link = m.now;
 			// Off a host, a key held for its answer gets none: the hold lets them go.
 			if (!attached(m.now)) {
+				leftOver = false;
 				holdStep({type: "down"});
 				if (store.keysEditor !== null) frameStep({type: "close", reason: "owner_gone"});
 			}
