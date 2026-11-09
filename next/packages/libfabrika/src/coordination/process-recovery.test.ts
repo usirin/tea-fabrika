@@ -97,6 +97,27 @@ const seeded = (h: History) =>
 	});
 
 describe("T319, next/ dead-letter identity", () => {
+	it.effect(
+		"plant, drop bad_text: invalid dead input returns a typed refusal and writes nothing",
+		() => {
+			const disk = storage();
+			return Effect.gen(function* () {
+				const processes = yield* ProcessManager;
+				yield* processes.start(first(), from());
+				const before = disk.rows();
+				for (const invalid of [
+					{...deadInput, errors: []},
+					{...deadInput, m: ""},
+					{...deadInput, build: ""},
+				]) {
+					const error = yield* processes.dead(A, invalid, from()).pipe(Effect.flip);
+					expect(error).toMatchObject({_tag: "ProcessError", why: "bad_text"});
+					expect(disk.rows()).toEqual(before);
+				}
+			}).pipe(Effect.provide(manager(disk)));
+		},
+	);
+
 	for (const [field, plant] of [
 		["process", "use the successor ID or a registered-name stream"],
 		["program", "use another process's program or a constant"],
