@@ -819,7 +819,15 @@ const draftRunner = (env: Env) => (sub: DraftSub) =>
 						args:
 							ask.step === "plan"
 								? [join(HERE, "runplan.sh"), ask.box, ask.prompt]
-								: [join(HERE, "box.sh"), "run", ask.box, ask.prompt, ask.report, "--step", ask.step],
+								: [
+										join(HERE, "box.sh"),
+										"run",
+										ask.box,
+										ask.prompt,
+										ask.report,
+										"--step",
+										ask.step,
+									],
 					};
 			// Its own process group, so a stop reaches every command the agent started too.
 			const child = spawn(how.cmd, how.args, {
