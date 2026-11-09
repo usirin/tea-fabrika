@@ -201,7 +201,7 @@ type Task = {id: TaskId; title: string; ends: "pr" | "answer"; scenario: Scenari
   `packages/pipeline/src/asks/rules.ts` gives it ids and makes the `Plan`.
 - **Held for a later glossary pass:** `pointers`, `goal`, `Claim`, and
   calling a revision's number `version`. Each has a weak lean in
-  [the naming sweep](../naming-sweep/pipeline.md); none is picked or dropped.
+  the naming sweep; none is picked or dropped.
   A pointer's `at` was held too; it became `path` on 2026-11-03.
 
 ### 7. Plan has no ask of its own
