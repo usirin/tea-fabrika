@@ -113,10 +113,9 @@ const Binding = Schema.Struct({
 type Binding = typeof Binding.Type;
 const encodeBinding = Schema.encodeSync(Schema.fromJsonString(Binding));
 const decodeBinding = Schema.decodeUnknownResult(Schema.fromJsonString(Binding));
-const InputFact = Schema.TaggedUnion({
+// Saved pre-P17 inputs keep their original shape when checking a retry.
+const LegacyInputFact = Schema.TaggedUnion({
 	received: {
-		door: ProcessId,
-		n: Schema.Int,
 		method: Schema.String,
 		target: Schema.String,
 		by: Writer,
@@ -126,8 +125,6 @@ const InputFact = Schema.TaggedUnion({
 		input: Schema.optionalKey(Schema.Json),
 	},
 	refused: {
-		door: ProcessId,
-		n: Schema.Int,
 		method: Schema.String,
 		target: Schema.String,
 		by: Writer,
@@ -135,6 +132,18 @@ const InputFact = Schema.TaggedUnion({
 		traceId: Schema.String,
 		spanId: Schema.String,
 		why: Schema.String,
+	},
+});
+const InputFact = Schema.TaggedUnion({
+	received: {
+		...LegacyInputFact.cases.received.fields,
+		door: ProcessId,
+		n: Schema.Int,
+	},
+	refused: {
+		...LegacyInputFact.cases.refused.fields,
+		door: ProcessId,
+		n: Schema.Int,
 	},
 });
 const GrantReply = Schema.TaggedUnion({
@@ -954,8 +963,6 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				}
 			}
 			const fields = {
-				door: binding.door ?? process,
-				n: binding.n ?? count,
 				method,
 				target,
 				by,
@@ -965,15 +972,22 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			};
 			const fact =
 				refusal === null
-					? InputFact.cases.received.make({
+					? LegacyInputFact.cases.received.make({
 							...fields,
 							...(safe === undefined ? {} : {input: safe}),
 						})
-					: InputFact.cases.refused.make({...fields, why: refusal});
+					: LegacyInputFact.cases.refused.make({...fields, why: refusal});
+			const recordedFact = Schema.is(InputId)(binding.id)
+				? yield* Schema.decodeUnknownEffect(InputFact)({
+						...fact,
+						door: binding.door,
+						n: binding.n,
+					}).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})))
+				: fact;
 			const placed = yield* appendChecked(binding.client, {
 				stream: "door/inputs",
 				id: binding.id,
-				line: lineFor(fromInput(binding), fact),
+				line: lineFor(fromInput(binding), recordedFact),
 			});
 			if (placed._tag === "refused") return yield* new LedgerError({why: "refused"});
 			if (binding.state._tag === "allocated") {
