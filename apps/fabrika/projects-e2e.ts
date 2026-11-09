@@ -134,7 +134,12 @@ const prompt = async (page: Page) => {
 		},
 		(n) => n >= 8,
 		30_000,
-	);
+	).catch((error: unknown) => {
+		throw new Error(
+			`project check timed out: no settled tsh$ prompt; the screen last read was ${JSON.stringify(last)}`,
+			{cause: error},
+		);
+	});
 };
 const command = async (page: Page, line: string) => {
 	await prompt(page);
@@ -157,6 +162,13 @@ export const openFixtureProject = async (
 	from: Page,
 	root: string | null,
 ) => {
+	// A fresh window has not drawn yet: wait for the welcome's option or the project button.
+	await until(
+		async () =>
+			(await from.getByRole("option", {name: /Open Folder…/}).count()) +
+			(await button(from).count()),
+		(n) => n > 0,
+	);
 	const wasWelcome = (await button(from).count()) === 0;
 	let known = openedPages.get(app);
 	if (!known) {
@@ -666,7 +678,18 @@ const openingKeys = async (app: ElectronApplication, page: Page) => {
 	for (const target of ["terminal", "popover", "prefix"] as const) {
 		await tile(page).click();
 		const original = await page.evaluateHandle(() => document.activeElement);
-		if (target === "popover") await prefix(page, "A");
+		if (target === "popover") {
+			await prefix(page, "A");
+			// A missed prefix fails here, with its own message and the screen, not 30 s later.
+			await page
+				.getByRole("dialog", {name: "The agents", exact: true})
+				.waitFor({timeout: 5_000})
+				.catch(async () => {
+					throw new Error(
+						`P18: C-b A did not open the agents popover; screen ${JSON.stringify(await screen(page))}`,
+					);
+				});
+		}
 		if (target === "prefix") await page.keyboard.press("Control+b");
 		await page.keyboard.press("Meta+o");
 		await boxChecks(page);
@@ -686,6 +709,13 @@ const openingKeys = async (app: ElectronApplication, page: Page) => {
 			"P23: original terminal focus was lost",
 		);
 		await original.dispose();
+		if (target === "popover") {
+			// The popover opened (checked above), so the line is the shell's own to clear: leave it
+			// `tsh$` for the next round and the captures after.
+			await tile(page).click();
+			await page.keyboard.press("Control+u");
+			await prompt(page);
+		}
 	}
 	check(
 		await app.evaluate(
