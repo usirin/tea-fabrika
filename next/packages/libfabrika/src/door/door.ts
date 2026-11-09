@@ -87,6 +87,9 @@ const reserved = (a: unknown) => {
 };
 const no = (why: string) => Answer.cases.refused.make({why});
 const ok = (result: typeof Schema.Json.Type) => Answer.cases.ok.make({result});
+// A dead letter stops the sender's outbox. Other program refusals keep their full reply.
+const deliveryAnswer = (result: Schema.Json) =>
+	Schema.is(Answer.cases.refused)(result) && result.why === "dead" ? no("dead") : ok(result);
 const EnvelopeState = Schema.TaggedUnion({
 	allocated: {},
 	recorded: {},
@@ -1079,7 +1082,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					Result.isSuccess(request)
 				) {
 					if (binding.state._tag === "settled") {
-						return ok(binding.state.result);
+						return deliveryAnswer(binding.state.result);
 					}
 					const sessions = yield* sessionsFor(binding.process);
 					yield* sessions.record({...binding, traceId: binding.span.traceId});
@@ -1129,7 +1132,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					yield* store.atomic(() =>
 						saveBinding({...binding, state: EnvelopeState.cases.settled.make({result: answer})}),
 					);
-					return ok(answer);
+					return deliveryAnswer(answer);
 				}
 				if (method === "view.open" && options.open !== undefined) {
 					const opened = Schema.decodeUnknownResult(Schema.Struct({pid: ProcessId}))(params);
