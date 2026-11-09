@@ -128,8 +128,9 @@ def new_box():
     for other in must(git("for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines():
         # The branch itself and its own backup copy (<branch>-wip) are not other branches.
         if other in (branch, "origin/" + branch, branch + "-wip", "origin/" + branch + "-wip", "main", "origin/main", "origin/HEAD"): continue
-        if ancestor(other, head): continue
-        if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits("origin/main", other))) and live(other):
+        # Only links this lane's base lacks: an older branch of the same lane, already merged into
+        # the base, is history, not another lane holding the ticket.
+        if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits(head, other))) and live(other):
             refuse("shared_ticket " + ticket + " on " + other)
     must(git("clone", "-q", "--no-checkout", "--reference", str(main), "--separate-git-dir=" + str(gitdata), os.environ["REMOTE"], str(work)), "box clone failed")
     edge = ["--git-dir=" + str(gitdata), "--work-tree=" + str(work)]

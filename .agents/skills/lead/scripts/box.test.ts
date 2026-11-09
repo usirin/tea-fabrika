@@ -857,7 +857,8 @@ describe("T321 K1 fetch, today's tooling", () => {
 
 describe("T321 K2 box start, today's tooling", () => {
 	// Plant: inspect only the current branch's links, or block on any branch that shares the
-	// ticket. Main and this box's branch are allowed; another branch blocks only while it is live.
+	// ticket. Main and this box's branch are allowed; another branch blocks only while it is live,
+	// and an older branch whose links the base already holds never does. Plant: walk from main.
 	it("K2 refuses a shared ticket only when another live branch carries its links", () => {
 		const places = [
 			"main",
@@ -868,6 +869,7 @@ describe("T321 K2 box start, today's tooling", () => {
 			"merged",
 			"gh-down",
 			"different-ticket",
+			"inside",
 		] as const;
 		const blocks = new Set(["open-pr", "running-box", "gh-down"]);
 		fc.assert(
@@ -875,12 +877,14 @@ describe("T321 K2 box start, today's tooling", () => {
 				each(places, (place) =>
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
-						const other = !["main", "this"].includes(place);
+						const other = !["main", "this", "inside"].includes(place);
 						if (other) b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
 						const sha = b.commit(b.main, "src/a.ts", `${text}\n`);
 						b.sign(b.main, "tests", place === "different-ticket" ? "322" : "321");
 						if (place === "main" || place === "merged")
 							b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+						// An older branch of this lane that the base already holds is history (#590).
+						if (place === "inside") b.git(b.main, "branch", "fabrikalfa/old", sha);
 						b.setup({
 							openPrs: place === "open-pr" ? ["fabrikalfa/other"] : ["fabrikalfa/unrelated"],
 							...(place === "gh-down" ? {gh: "down" as const} : {}),
@@ -894,7 +898,10 @@ describe("T321 K2 box start, today's tooling", () => {
 							write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
 						}
 						b.git(b.main, "checkout", "-q", "main");
-						const got = b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
+						const got =
+							place === "inside"
+								? b.new(sha, b.branch)
+								: b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
 						if (blocks.has(place)) refused(got, /shared_ticket 321 on fabrikalfa\/other/);
 						else expect(got.code, got.text).toBe(0);
