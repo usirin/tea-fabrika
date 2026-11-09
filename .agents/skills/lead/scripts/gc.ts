@@ -3,10 +3,12 @@
 //
 //   a box is kept while   a process has its cwd there, or its git index changed in the last 2 h
 //                         (or its git data or folder did, so a box being made is safe),
-//                         or drive kept it stuck less than 24 h ago
+//                         or drive kept it stuck less than 24 h ago, or it holds uncommitted
+//                         or untracked files (a backup saves only HEAD, so they would be lost)
 //   else it is removed    when its branch (minus -wip) has a merged pull request, or its HEAD is
 //                         on a remote branch; else its HEAD is pushed as the bot to <branch>-wip
 //                         first (fabrikalfa/<box>-wip when that is refused), and kept if both fail
+//   then                  every state/<box>.box whose box folder is gone is removed too
 //
 // It never runs a command inside a box: it reads the box's git data with hooks off, and fetches
 // from it into the main checkout, as `box.sh fetch` does. One line per box removed, then a total.
@@ -14,6 +16,7 @@
 import {spawnSync} from "node:child_process";
 import {existsSync, readdirSync, readFileSync, rmSync, statSync} from "node:fs";
 import {isAbsolute, join, resolve} from "node:path";
+import {wipOf} from "./lane.ts";
 
 const HOUR = 3_600_000;
 export const IDLE = 2 * HOUR;
@@ -31,6 +34,8 @@ export type Seen = {
 	readonly stuck: number | null;
 	readonly merged: boolean;
 	readonly onRemote: boolean;
+	/** Uncommitted and untracked files in the box; `null` when git could not say. */
+	readonly dirty: number | null;
 };
 
 export type Verdict =
@@ -41,9 +46,14 @@ export type Verdict =
 /** The branch a box's commits are backed up to, best first. */
 export const backupsOf = (name: string, branch: string | null): string[] => {
 	const own = `fabrikalfa/${name}-wip`;
-	const base = branch?.replace(/(-wip)+$/, "");
-	return base?.startsWith("fabrikalfa/") && `${base}-wip` !== own ? [`${base}-wip`, own] : [own];
+	const wip = branch === null ? null : wipOf(branch);
+	return wip?.startsWith("fabrikalfa/") && wip !== own ? [wip, own] : [own];
 };
+
+/** The `state/*.box` files whose box folder is gone: facts of a dead box, which stepcommit would
+ * otherwise still read. A box saves its facts only after its folder exists, so none is half made. */
+export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>): string[] =>
+	files.filter((f) => f.endsWith(".box") && !boxes.has(f.slice(0, -".box".length)));
 
 /** The Check, pure. */
 export const decide = (s: Seen): Verdict => {
@@ -54,6 +64,10 @@ export const decide = (s: Seen): Verdict => {
 	if (s.stuck !== null && s.stuck < STUCK)
 		return {_tag: "keep", reason: `stuck, kept by drive ${Math.round(s.stuck / HOUR)} h ago`};
 	if (s.git.head === null) return {_tag: "keep", reason: "no HEAD commit"};
+	// A backup pushes HEAD only, so files never committed would go with the folder (field note
+	// 2026-11-09-42: a box removed with 10 uncommitted product files). The lead saves or drops them.
+	if (s.dirty === null) return {_tag: "keep", reason: "its files could not be read"};
+	if (s.dirty > 0) return {_tag: "keep", reason: `${s.dirty} uncommitted files`};
 	if (s.merged) return {_tag: "remove", reason: "merged"};
 	if (s.onRemote) return {_tag: "remove", reason: "on_remote"};
 	return {_tag: "backup", to: backupsOf(s.name, s.git.branch)};
@@ -78,6 +92,24 @@ const loadEnv = (): Env => {
 	const [MAIN = "", BOXES = "", GH_REPO = ""] = r.out.split("\n");
 	if (r.code !== 0 || !MAIN || !BOXES) throw new Error(`env.sh failed: ${r.err}`);
 	return {MAIN, BOXES, GH_REPO};
+};
+
+/** How many uncommitted and untracked files a box holds, read from its git data with hooks and
+ * fsmonitor off; `null` when git cannot say. */
+export const dirtyIn = (gitDir: string, box: string): number | null => {
+	const r = sh("git", [
+		...SAFE,
+		"-c",
+		"status.renames=false",
+		`--git-dir=${gitDir}`,
+		`--work-tree=${box}`,
+		"status",
+		"--porcelain=v1",
+		"-z",
+		"--untracked-files=all",
+	]);
+	// No rename pairs, so each NUL-ended entry is one file.
+	return r.code === 0 ? r.out.split("\0").filter(Boolean).length : null;
 };
 
 /** The folder a box's `.git` file points at, or the `.git` folder itself. */
@@ -200,6 +232,7 @@ const main = () => {
 			stuck: kept.has(name) ? now - (kept.get(name) ?? now) : null,
 			merged: branch !== null && merged.has(branch),
 			onRemote,
+			dirty: gitDir === null ? null : dirtyIn(gitDir, box),
 		};
 		const verdict = decide(seen);
 		if (verdict._tag === "keep") {
@@ -243,6 +276,17 @@ const main = () => {
 		removed += 1;
 		freed += mb;
 		console.log(`${dry ? "would remove" : "removed"} ${name}: ${why}, ${mb} MB`);
+	}
+	const state = join(env.BOXES, "state");
+	const left = new Set(
+		readdirSync(env.BOXES, {withFileTypes: true})
+			.filter((d) => d.isDirectory())
+			.map((d) => d.name),
+	);
+	const dead = existsSync(state) ? deadFacts(readdirSync(state), left) : [];
+	for (const f of dead) {
+		if (!dry) rmSync(join(state, f), {force: true});
+		console.log(`${dry ? "would remove" : "removed"} state/${f}: its box is gone`);
 	}
 	if (!dry) repo("worktree", "prune");
 	console.log(

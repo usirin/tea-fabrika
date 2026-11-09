@@ -263,7 +263,6 @@ export const measured: Record<string, number> = {
 	"packages/pipeline/src/poll.test.ts": 0.0,
 	"packages/pipeline/src/rate.test.ts": 0.1,
 	"packages/pipeline/src/refine.test.ts": 0.0,
-	"packages/pipeline/src/sandboxes.test.ts": 3.0,
 	"packages/pipeline/src/schema.test.ts": 0.0,
 	"packages/pipeline/src/settings-source.test.ts": 3.0,
 	"packages/pipeline/src/settings.test.ts": 0.0,
