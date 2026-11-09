@@ -2,7 +2,7 @@
 
 Read 2026-11-08. **This is reading, not a measurement,** with one look step that ran. It feeds
 [keys editor](../docs/direction/keys-editor.md), a proposed note, and a private Design canvas,
-"Keys editor guidelines", not drawn yet.
+"Keys editor guidelines": 31 slides, then pressable prototypes of today, A (both rounds), D (the system's guess and the Corne) and Linear's screens, each beside its real shots.
 
 The look step ran in today's version (`apps/fabrika`) on a local branch, not pushed, off main
 at `6041f99e`, on Electron 45.2.1 and Manti 0.13.0. Four designs were built for real in the app,
@@ -11,7 +11,7 @@ by side, two stacked, a 2x2 grid and a 1024x700 window. Each design was pressed 
 (open, a row picked, listening, a clash, saved), and design D on three keyboards (the system's guess,
 Colemak-DHm on a laptop board, Colemak-DHm on a Corne). Two refine rounds followed the owner's pick.
 That is 6 design runs x 5 layouts x 5 states = 150 states, each with a real shot, its words and its
-DOM. The prototype on the canvas is not built yet, so no prototype state has a shot beside it.
+DOM. A later pass pressed every key and click the editor takes, from each state on the walk's path and one press off it: today 56 states, A 63 and D on the Corne 61, each with a saved page and a shot at one tile, and the path's states at all five layouts. The canvas's prototypes take their presses from those graphs.
 
 **The answer.** The makers agree on one shape: one searchable list of every command, the name on
 the left and its keys on the right, grouped; press Enter or double-click a row, then press the new
@@ -159,7 +159,7 @@ Undo keep Manti's soft fill.
   layer bindings were not shot.
 - The shots are of a stand-in: the design is mounted over a tsh tile, not opened as a real program.
 - Where `C-b ?` opens the tile (split beside, or in place) was not shot both ways.
-- The prototype on the canvas is not built, so the press-by-press table is the shoot's only.
+- The press graphs stop two presses off the walk's path: any key can be recorded as a new key, so the space has no end. Double-click to record was never pressed.
 
 Dollars: $0. No model ran. The probe and the designs stay on the local branch, not pushed.
 
