@@ -150,6 +150,13 @@ type Live = {
 /** A failed Cmd's settled Msg error: its case is its why. */
 const failure = (why: string) => Schema.TaggedStruct(why, {}).make({});
 
+type RunnerOptions = {
+	/** The trusted wiring's policy. Without `maxDeliveries`, a letter is tried 3 times. */
+	readonly policy?: Omit<Policy, "maxDeliveries"> & {readonly maxDeliveries?: number};
+	readonly recovery: {readonly sql: Sql; readonly name: string; readonly capacity: number};
+	readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
+};
+
 export class ProgramRunner extends Context.Service<
 	ProgramRunner,
 	{
@@ -168,28 +175,26 @@ export class ProgramRunner extends Context.Service<
 	/** Load in process, keeping the pure stepper available to callers of ProgramLoader. */
 	static readonly layer = (
 		initial: Descriptor,
-		options?: {
-			/** The trusted wiring's policy. Without `maxDeliveries`, a letter is tried 3 times. */
-			readonly policy?: Omit<Policy, "maxDeliveries"> & {readonly maxDeliveries?: number};
-			readonly recovery: {readonly sql: Sql; readonly name: string; readonly capacity: number};
-			readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
-		},
+		options?: RunnerOptions,
 	): Layer.Layer<
 		ProgramRunner,
 		never,
 		ProgramLoader | ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording
 	> =>
-		Layer.unwrap(Effect.map(ProgramLoader, (loader) => ProgramRunner.withLoader(process, loader)));
+		Layer.unwrap(
+			Effect.map(ProgramLoader, (loader) => ProgramRunner.withLoader(initial, loader, options)),
+		);
 
 	/** Worker programs keep their pure stepper inside the box; the runner needs only execution. */
 	static readonly withLoader = (
-		process: Descriptor,
+		initial: Descriptor,
 		loader: {
 			readonly load: (
 				name: string,
 				build?: string,
 			) => Effect.Effect<Omit<Loaded, "stepper">, ProgramDown>;
 		},
+		options?: RunnerOptions,
 	): Layer.Layer<
 		ProgramRunner,
 		never,
@@ -639,15 +644,6 @@ export class ProgramRunner extends Context.Service<
 					yield* setAlarm();
 				});
 
-				/** A pure call: a ProgramDown it throws stays itself; any other throw is `why`. */
-				const pure = Effect.fnUntraced(function* <A>(why: ProgramDown["why"], f: () => A) {
-					return yield* Effect.try({
-						try: f,
-						catch: (error) =>
-							error instanceof ProgramDown ? error : new ProgramDown({why, cause: error}),
-					});
-				});
-
 				const step = Effect.fnUntraced(function* (
 					why: ProgramDown["why"],
 					letter: string,
@@ -669,7 +665,7 @@ export class ProgramRunner extends Context.Service<
 					yield* store.activity(
 						Activity.cases.stepping.make({process: process.id, letter, build: process.build}),
 					);
-					const result = yield* f().pipe(Effect.exit);
+					const result = yield* Effect.suspend(f).pipe(Effect.exit);
 					if (supervision !== null && result._tag === "Failure") {
 						const attempt = supervision.attempt;
 						if (attempt === null) return yield* new LedgerError({why: "bad_row"});
@@ -696,7 +692,9 @@ export class ProgramRunner extends Context.Service<
 							attempt.at,
 							original,
 						);
-						return yield* new ProgramDown({why, cause: original});
+						return yield* wrapped instanceof ProgramDown
+							? wrapped
+							: new ProgramDown({why, cause: original});
 					}
 					if (supervision !== null) yield* saveRecovery({...supervision, attempt: null});
 					return yield* result.pipe(
@@ -817,9 +815,9 @@ export class ProgramRunner extends Context.Service<
 				) {
 					const letters = yield* Stream.runCollect(mailbox.read(process.name, state.after));
 					const saved = yield* store.load;
-					if (saved === null) yield* store.save(checkpoint(state, null));
 					if (letters.length === 0 && options.dirty !== true)
 						return {state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>()};
+					if (saved === null) yield* store.save(checkpoint(state, null));
 					let model = state.model;
 					let view = state.view;
 					let wake = state.wake;

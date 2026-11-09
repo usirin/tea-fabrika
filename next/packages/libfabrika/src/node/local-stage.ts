@@ -4,9 +4,8 @@ class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
 	why: Schema.Literals(["storage", "bad_row", "id_reused"]),
 }) {}
 // Facts have no transforms. Validate without rebuilding them, keeping retry bytes in their saved order.
-const PendingFact = Schema.declare<typeof BrainFact.Type>(
-	(raw): raw is typeof BrainFact.Type =>
-		Result.isSuccess(Schema.decodeUnknownResult(BrainFact, {onExcessProperty: "error"})(raw)),
+const PendingFact = Schema.declare<typeof BrainFact.Type>((raw): raw is typeof BrainFact.Type =>
+	Result.isSuccess(Schema.decodeUnknownResult(BrainFact, {onExcessProperty: "error"})(raw)),
 );
 
 export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(options: {

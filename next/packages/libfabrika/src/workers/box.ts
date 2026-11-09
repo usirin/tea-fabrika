@@ -20,6 +20,9 @@ export const programBox = (declared: unknown, build: string) => {
 			Declaration.make({
 				name: pure.program.name,
 				v: pure.program.state.v,
+				...(pure.program.maxDeliveries === undefined
+					? {}
+					: {maxDeliveries: pure.program.maxDeliveries}),
 				writes: Object.fromEntries(
 					Object.entries(pure.program.writes).map(([name, p]) => [
 						name,

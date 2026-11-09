@@ -43,6 +43,7 @@ import {
 	LedgerTransaction,
 	lineFor,
 	fromHere,
+	IdGenerator,
 	RecordManager,
 	Referee,
 	SpanSink,
@@ -109,7 +110,7 @@ export interface ProjectDoorOptions {
 	readonly nextProcess: () => Effect.Effect<string>;
 	readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
 	readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
-	readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, unknown>;
+	readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError>;
 	readonly wait: (
 		stream: string,
 		after: number,
@@ -125,7 +126,7 @@ export interface ProjectOptions {
 	) => Effect.Effect<
 		DoorCalls,
 		unknown,
-		Ledger | ClientManager | SpanSink | RecordManager | Archive
+		Ledger | LedgerTransaction | IdGenerator | ClientManager | SpanSink | RecordManager | Archive
 	>;
 }
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
@@ -405,7 +406,11 @@ const projectLogic = Effect.fn("project.init")(function* (
 				rpc(ProcessClient.make(processStub(env, name, pid)).msg(incoming)),
 			open: (pid, client) =>
 				rpc(ProcessClient.make(processStub(env, name, pid)).open(client)).pipe(
-					Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
+					Effect.flatMap((value) =>
+						Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
+							Effect.mapError(() => new LedgerError({why: "bad_row"})),
+						),
+					),
 				),
 			wait: referee.wait,
 		})
@@ -633,7 +638,7 @@ export class ProjectService extends Context.Service<
 >()("fabrika/Project") {}
 export const projectLayer = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
 	Layer.effect(ProjectService, projectLogic(ctx, env, options)).pipe(
-		Layer.provide(ProcessIdGenerator.layer),
+		Layer.provide(Layer.merge(ProcessIdGenerator.layer, IdGenerator.layer)),
 	);
 export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
 	ManagedRuntime.make(projectLayer(ctx, env, options));

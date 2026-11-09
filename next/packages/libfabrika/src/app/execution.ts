@@ -1,5 +1,6 @@
 import {type AnyCmdDef, type Tagged} from "@demlik/tea";
 import {Context, Effect, Option, Result, Schema} from "effect";
+import {Deliveries} from "../coordination/recovery.ts";
 import {type Input, ProgramDown, stepper, Step, type Stepper} from "./program.ts";
 import {Saved} from "./state.ts";
 
@@ -28,6 +29,7 @@ export const Reply = Schema.TaggedUnion({
 export const Declaration = Schema.Struct({
 	name: Schema.String,
 	v: Schema.Int,
+	maxDeliveries: Schema.optionalKey(Deliveries),
 	writes: Schema.Record(Schema.String, Schema.Struct({personOnly: Schema.Boolean})),
 	/** Each input port: whether it takes writes, and whether only a person may send it. */
 	inputs: Schema.Record(
@@ -62,7 +64,10 @@ export type ExecutionCalls = {
 };
 
 const attempt = <A>(why: ProgramDown["why"], f: () => A) =>
-	Effect.try({try: f, catch: () => new ProgramDown({why})});
+	Effect.try({
+		try: f,
+		catch: (cause) => (cause instanceof ProgramDown ? cause : new ProgramDown({why, cause})),
+	});
 
 const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> =>
 	Schema.isSchema(schema);
@@ -153,31 +158,31 @@ class ExecutionClient extends Context.Service<
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader init RPC enters Effect
 				Effect.tryPromise({
 					try: () => rpc.init(saved),
-					catch: () => new ProgramDown({why: "load", source: "rpc"}),
+					catch: (cause) => new ProgramDown({why: "load", source: "rpc", cause}),
 				}),
 			step: (model, msg) =>
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader step RPC enters Effect
 				Effect.tryPromise({
 					try: () => rpc.step(model, msg),
-					catch: () => new ProgramDown({why: "step", source: "rpc"}),
+					catch: (cause) => new ProgramDown({why: "step", source: "rpc", cause}),
 				}),
 			fold: (model, msg) =>
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader fold RPC enters Effect
 				Effect.tryPromise({
 					try: () => rpc.fold(model, msg),
-					catch: () => new ProgramDown({why: "saved_letter", source: "rpc"}),
+					catch: (cause) => new ProgramDown({why: "saved_letter", source: "rpc", cause}),
 				}),
 			upgrade: (saved) =>
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader upgrade RPC enters Effect
 				Effect.tryPromise({
 					try: () => rpc.upgrade(saved),
-					catch: () => new ProgramDown({why: "saved_state", source: "rpc"}),
+					catch: (cause) => new ProgramDown({why: "saved_state", source: "rpc", cause}),
 				}),
 			reply: (cmd, outcome) =>
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader reply RPC enters Effect
 				Effect.tryPromise({
 					try: () => rpc.reply(cmd, outcome),
-					catch: () => new ProgramDown({why: "step", source: "rpc"}),
+					catch: (cause) => new ProgramDown({why: "step", source: "rpc", cause}),
 				}),
 			check: (kind, fact) => {
 				const check = rpc.check;
@@ -186,7 +191,7 @@ class ExecutionClient extends Context.Service<
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader check RPC enters Effect
 				return Effect.tryPromise({
 					try: () => Reflect.apply(check, rpc, [kind, fact]),
-					catch: () => new ProgramDown({why: "step", source: "rpc"}),
+					catch: (cause) => new ProgramDown({why: "step", source: "rpc", cause}),
 				});
 			},
 			admit: (m) => {
@@ -195,7 +200,7 @@ class ExecutionClient extends Context.Service<
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader admit RPC enters Effect
 				return Effect.tryPromise({
 					try: () => Reflect.apply(admit, rpc, [m]),
-					catch: () => new ProgramDown({why: "step", source: "rpc"}),
+					catch: (cause) => new ProgramDown({why: "step", source: "rpc", cause}),
 				});
 			},
 		};
@@ -214,7 +219,7 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
 				const decoded = Schema.decodeUnknownResult(schema)(raw);
 				return Result.isSuccess(decoded)
 					? Effect.succeed(decoded.success)
-					: Effect.fail(new ProgramDown({why, source: "decode"}));
+					: Effect.fail(new ProgramDown({why, source: "decode", cause: decoded.failure}));
 			}),
 		);
 	return {
