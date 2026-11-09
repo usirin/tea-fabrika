@@ -140,7 +140,7 @@ const workerd = async (parent: number, excluding = 0) => {
 
 describe("P12 local brain life", () => {
 	// Outside only: real dev.ts, process groups and TCP. This sandbox cannot bind sockets.
-	it("parent death before listener readiness leaves no stage group", async () => {
+	it("scenario: parent death before listener readiness leaves no stage group", async () => {
 		const s = await launch(true);
 		const leader = Number(readFileSync(join(s.folder, "starting"), "utf8"));
 		groups.push(leader);
@@ -159,7 +159,7 @@ describe("P12 local brain life", () => {
 		await expect(fetch(s.url)).rejects.toThrow();
 	});
 	// Outside only: cleanup must address the process group after its leader already exited.
-	it("stage group cleanup still reaches descendants after the leader exits", async () => {
+	it("scenario: stage group cleanup still reaches descendants after the leader exits", async () => {
 		const s = await launch();
 		const rows = tree(s.child.pid!),
 			leader = rows.find((row) => row.parent === s.child.pid && row.command.includes("--child"));
@@ -175,7 +175,7 @@ describe("P12 local brain life", () => {
 		expect(descendants.filter(living)).toEqual([]);
 		await expect(fetch(s.url)).rejects.toThrow();
 	});
-	it("p81 plant: an outer retry loop defeats Alchemy's three-replacement brake", async () => {
+	it("scenario: p81 plant: an outer retry loop defeats Alchemy's three-replacement brake", async () => {
 		const s = await launch();
 		let prior = 0;
 		const pids: Array<number> = [];
@@ -206,7 +206,7 @@ describe("P12 local brain life", () => {
 		expect(tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command))).toEqual([]);
 	});
 	it.each(["SIGTERM", "SIGKILL"] as const)(
-		"group cleanup plant: killing only Node leaves a listener after %s",
+		"scenario: group cleanup plant: killing only Node leaves a listener after %s",
 		async (signal) => {
 			const s = await launch();
 			await workerd(s.child.pid!);
