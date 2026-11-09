@@ -31,10 +31,21 @@ for p in paths:
     named.append(n)
 branch = git("branch", "--show-current").stdout.decode().strip()
 boxes = pathlib.Path(os.environ.get("BOXES", str(root.parent)))
+def facts(path):
+    return dict(l.split(": ", 1) for l in path.read_text().splitlines() if ": " in l)
+# The box this runs in: STEPCOMMIT_BOX (drive's detached sign worktree), else the checkout's own
+# folder. Only outside a box, a live box on the branch (its folder still there); never a stale file.
+named_box = os.environ.get("STEPCOMMIT_BOX")
+own = boxes / "state" / ((named_box or root.name) + ".box")
 state = None
-for path in (boxes / "state").glob("*.box"):
-    facts = dict(l.split(": ", 1) for l in path.read_text().splitlines() if ": " in l)
-    if facts.get("branch") == branch: state = facts; break
+if named_box and not own.exists(): refuse("not_owner: no facts for box " + named_box)
+if own.exists():
+    state = facts(own)
+    if not named_box and state.get("branch") != branch: refuse("not_owner: branch differs from box")
+else:
+    for path in sorted((boxes / "state").glob("*.box")):
+        found = facts(path)
+        if found.get("branch") == branch and (boxes / path.stem).is_dir(): state = found; break
 owners = None
 if state:
     if state.get("ticket") != ticket: refuse("not_owner: ticket differs from box")
