@@ -36,10 +36,11 @@ const input = fc.record({
 	failure: fc.constantFrom("none" as const, "before" as const, "after" as const),
 });
 type Generated<A> = A extends fc.Arbitrary<infer Value> ? Value : never;
-// The transition API accepts any item name; the generator only samples some of them.
+// The transition API accepts any item name or key string; the generators sample only some.
 type Layer = {_tag: "palette"} | {_tag: "popover"; item: string} | {_tag: "tooltip"; for: string};
+type Source = {_tag: "click" | "word" | "palette"} | {_tag: "key"; keys: string} | null;
 type Change =
-	| {_tag: "open"; layer: Layer; via: Generated<typeof sources>}
+	| {_tag: "open"; layer: Layer; via: Source}
 	| {_tag: "close"; layer: Layer; reason: string};
 type FrameStep = (frame: Frame, msg: FrameMsg) => readonly [Frame, readonly Change[]];
 // The recorder law still requires the real PR 1 transition function once it exists.
