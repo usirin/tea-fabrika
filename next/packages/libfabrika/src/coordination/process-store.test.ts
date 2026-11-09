@@ -10,9 +10,10 @@ import type {LedgerError} from "../data/ledger.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {processId} from "../id.test-support.ts";
 import {type From} from "./mailbox.ts";
 
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PROCESS = Effect.runSync(processId);
 const folder = mkdtempSync(join(tmpdir(), "p11-store-"));
 const opened: DatabaseSync[] = [];
 afterAll(() => {
@@ -144,7 +145,7 @@ describe("P11 process storage", () => {
 				_tag: "prepared",
 				id: "letter-a",
 				input: {type: "add", n: 3},
-				parent: "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-2",
+				parent: `in-${PROCESS}-2`,
 				span: {traceId: from.traceId, spanId: "00f067aa0ba902b7"},
 				sentAt: from.sentAt,
 				seen: from.seen,

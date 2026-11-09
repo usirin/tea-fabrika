@@ -27,6 +27,7 @@ import * as fc from "fast-check";
 import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import type {Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {processId} from "../id.test-support.ts";
 import {ClientManager} from "./client-manager.ts";
 import type {From} from "./mailbox.ts";
 import {foldMembers, type MemberFact, type Members} from "./members.ts";
@@ -34,7 +35,7 @@ import {foldMembers, type MemberFact, type Members} from "./members.ts";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
 const MEMBERS = "door/members";
-const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
+const PARENT = `in-${Effect.runSync(processId)}-41`;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";

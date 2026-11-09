@@ -4,9 +4,9 @@
 // `lineFor` and `valueFor` turn a schema's value into a line and an entry back, so no other file
 // writes the key.
 import {DateTime, Effect, Schema} from "effect";
-import {InputId} from "./id.ts";
+import {InputId} from "../id.ts";
 
-export {InputId} from "./id.ts";
+export {InputId} from "../id.ts";
 
 /** A place in the log or in a stream. Both count from 1; 0 means before the first. */
 export const Rev = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -19,7 +19,10 @@ const LegacyParentText = Schema.String.check(
 export const ParentText = Schema.Union([InputId, LegacyParentText]);
 
 /** A W3C trace id: 32 lowercase hex characters, never all zeros. */
-export const TraceId = Schema.String.check(Schema.isPattern(/^(?!0{32})[0-9a-f]{32}$/));
+export const TraceId = Schema.String.check(
+	Schema.isPattern(/^[0-9a-f]{32}$/),
+	Schema.makeFilter((traceId) => traceId !== "0".repeat(32), {expected: "a nonzero W3C trace id"}),
+);
 
 const Text = Schema.NonEmptyString;
 
