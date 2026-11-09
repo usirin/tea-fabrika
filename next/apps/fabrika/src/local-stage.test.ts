@@ -6,7 +6,7 @@ import {NodeServices} from "@effect/platform-node";
 import {afterEach, expect, it} from "@effect/vitest";
 import type {BrainEvent} from "@kampus/libfabrika/brain-event";
 import {ProcessIdGenerator} from "@kampus/libfabrika/coordination";
-import {Context, Effect} from "effect";
+import {Context, Deferred, Effect, Fiber} from "effect";
 import {SecureRandom} from "effect/crypto";
 import * as fc from "fast-check";
 import {vi} from "vitest";
@@ -86,5 +86,60 @@ it("a later dev command links its first start to the last runtime in that home",
 			},
 		),
 		{seed: 119120, numRuns: 20, examples: [[["build-a", "build-b"]]]},
+	);
+});
+
+it("stage readiness waits for the started event to reach the ledger", async () => {
+	await fc.assert(
+		fc.asyncProperty(fc.uuid(), async (build) => {
+			const folder = home();
+			vi.stubEnv("FABRIKA_HOME", folder);
+			const reached = Effect.runSync(Deferred.make<void>());
+			const release = Effect.runSync(Deferred.make<void>());
+			const events: Array<typeof BrainEvent.Type> = [];
+			vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+				const call = JSON.parse(String(options?.body)) as {
+					method: string;
+					args: Array<typeof BrainEvent.Type>;
+				};
+				if (call.method === "brain") {
+					events.push(call.args[0]!);
+					Effect.runSync(Deferred.succeed(reached, undefined));
+					await Effect.runPromise(Deferred.await(release));
+				}
+				return Response.json({value: call.method === "write" ? {_tag: "written"} : null});
+			});
+			const {startStage} = await import("./stage.ts");
+			await Effect.runPromise(
+				Effect.scoped(
+					Effect.gen(function* () {
+						const starting = yield* Effect.forkChild(
+							startStage(
+								{build, brain: "unused.mjs", programs: {}},
+								{
+									home: folder,
+									name: "life-contract",
+									person: "person-test",
+									founder: "public-test",
+									window: null,
+									port: 18787,
+								},
+							),
+						);
+						yield* Deferred.await(reached);
+						yield* Effect.yieldNow;
+						expect(starting.pollUnsafe()).toBeUndefined();
+						expect(events).toMatchObject([{_tag: "started", reason: "open", build}]);
+						yield* Deferred.succeed(release, undefined);
+						yield* Fiber.join(starting);
+					}).pipe(Effect.ensuring(Deferred.succeed(release, undefined))),
+				).pipe(
+					Effect.provide(ProcessIdGenerator.layer),
+					Effect.provide(SecureRandom.layerWebCrypto),
+					Effect.provide(NodeServices.layer),
+				),
+			);
+		}),
+		{seed: 119120, numRuns: 10},
 	);
 });

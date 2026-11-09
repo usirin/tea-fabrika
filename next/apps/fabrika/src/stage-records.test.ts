@@ -812,7 +812,7 @@ describe("P12 real object adapters", () => {
 		await world(async (stage, _key, probe) => {
 			const loader = stage.loader;
 			await expect(loader.load("no-such-program", processId())).rejects.toMatchObject({
-				why: "no_program",
+				reason: "no_program",
 			});
 			const sealed = await loader.load("sealed-fixture", processId());
 			expect((await sealed.init(null)).view).toEqual({bindings: [], outbound: "blocked"});

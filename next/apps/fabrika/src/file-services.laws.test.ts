@@ -2,7 +2,19 @@
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join, relative, resolve} from "node:path";
-import {Cause, Effect, Exit, FileSystem, Layer, Path, PlatformError, Schema} from "effect";
+import {
+	Cause,
+	Effect,
+	Exit,
+	FileSystem,
+	Layer,
+	Path,
+	PlatformError,
+	Schema,
+	Sink,
+	Stream,
+} from "effect";
+import {ChildProcessSpawner} from "effect/process";
 import * as fc from "fast-check";
 import {expect, it, vi} from "vitest";
 import {build} from "./build.ts";
@@ -10,7 +22,10 @@ import {Row} from "./exam/compiler.ts";
 
 const cli = vi.hoisted(() => ({
 	work: undefined as Effect.Effect<unknown, unknown> | undefined,
-	layer: undefined as Layer.Layer<FileSystem.FileSystem | Path.Path> | undefined,
+	layer: undefined as
+		| Layer.Layer<FileSystem.FileSystem | Path.Path>
+		| Layer.Layer<FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner>
+		| undefined,
 }));
 vi.mock("@effect/platform-node", async (original) => {
 	const actual = await original<typeof import("@effect/platform-node")>();
@@ -29,6 +44,156 @@ vi.mock("@effect/platform-node", async (original) => {
 		},
 	};
 });
+
+const stageFailure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
+	expect(Exit.isFailure(exit)).toBe(true);
+	const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
+	expect(Cause.hasDies(cause)).toBe(false);
+	expect(Cause.findErrorOption(cause)).toMatchObject({
+		_tag: "Some",
+		value: {_tag: "StageError", reason},
+	});
+};
+
+it("dev refuses every invalid parent with reason parent_gone before touching settings", async () => {
+	const invalid = fc.oneof(
+		fc.string().map((text) => `not-a-pid-${text}`),
+		fc.integer().map((n) => String(n + 0.5)),
+		fc.integer({min: -100, max: 1}).map(String),
+		fc
+			.integer({min: 2})
+			.filter((pid) => pid !== process.ppid)
+			.map(String),
+	);
+	await fc.assert(
+		fc.asyncProperty(invalid, async (parent) => {
+			const argv = process.argv;
+			const touched = vi.fn(() => Effect.never);
+			cli.layer = Layer.merge(FileSystem.layerNoop({makeDirectory: touched}), Path.layer);
+			process.argv = [process.execPath, "dev.ts", "--child", `--parent=${parent}`];
+			try {
+				vi.resetModules();
+				await import("../dev.ts");
+				stageFailure(await Effect.runPromiseExit(cli.work!), "parent_gone");
+				expect(touched).not.toHaveBeenCalled();
+			} finally {
+				process.argv = argv;
+				cli.layer = undefined;
+				cli.work = undefined;
+			}
+		}),
+		{seed: 119120, numRuns: 30, examples: [["1"], ["1.5"]]},
+	);
+});
+
+it("dev defaults to a scoped detached child and reports its nonzero exit as child_failed", async () => {
+	await fc.assert(
+		fc.asyncProperty(fc.uuid(), fc.integer({min: 0, max: 255}), async (name, code) => {
+			const argv = process.argv;
+			const commands: Array<import("effect/process/ChildProcess").Command> = [];
+			const spawn = Layer.succeed(
+				ChildProcessSpawner.ChildProcessSpawner,
+				ChildProcessSpawner.make((command) =>
+					Effect.sync(() => {
+						commands.push(command);
+						return ChildProcessSpawner.makeHandle({
+							pid: ChildProcessSpawner.ProcessId(27000),
+							exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(code)),
+							isRunning: Effect.succeed(false),
+							kill: () => Effect.void,
+							stdin: Sink.drain,
+							stdout: Stream.empty,
+							stderr: Stream.empty,
+							all: Stream.empty,
+							getInputFd: () => Sink.drain,
+							getOutputFd: () => Stream.empty,
+							unref: Effect.succeed(Effect.void),
+						});
+					}),
+				),
+			);
+			cli.layer = Layer.mergeAll(FileSystem.layerNoop({}), Path.layer, spawn);
+			process.argv = [process.execPath, "dev.ts", "--name", name];
+			try {
+				vi.resetModules();
+				await import("../dev.ts");
+				const exit = await Effect.runPromiseExit(cli.work!);
+				if (code === 0) expect(Exit.isSuccess(exit)).toBe(true);
+				else stageFailure(exit, "child_failed");
+				expect(commands).toHaveLength(1);
+				expect(commands[0]).toMatchObject({
+					_tag: "StandardCommand",
+					command: process.execPath,
+					args: [
+						resolve(import.meta.dirname, "../dev.ts"),
+						"--name",
+						name,
+						"--child",
+						`--parent=${process.pid}`,
+					],
+					options: {
+						detached: true,
+						stdin: "inherit",
+						stdout: "inherit",
+						stderr: "inherit",
+						forceKillAfter: "3 seconds",
+					},
+				});
+			} finally {
+				process.argv = argv;
+				cli.layer = undefined;
+				cli.work = undefined;
+			}
+		}),
+		{seed: 119120, numRuns: 15, examples: [["clean-exit", 0]]},
+	);
+});
+
+for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as const)
+	it(`dev reports ${edge} failure with reason settings and never starts a build`, async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.uuid(), async (name) => {
+				const argv = process.argv;
+				const folder = mkdtempSync(join(tmpdir(), "p12-dev-error-"));
+				const failure = PlatformError.systemError({
+					module: "FileSystem",
+					method: edge,
+					_tag: "PermissionDenied",
+				});
+				const fs = FileSystem.layerNoop({
+					makeDirectory: () => Effect.void,
+					exists: () => Effect.succeed(true),
+					readFileString: () =>
+						Effect.succeed(
+							JSON.stringify({
+								name,
+								person: "person",
+								founder: "public",
+								window: null,
+								port: 18787,
+								build: "old",
+							}),
+						),
+					[edge]: () => Effect.fail(failure),
+				});
+				vi.stubEnv("FABRIKA_HOME", folder);
+				cli.layer = Layer.merge(fs, Path.layer);
+				process.argv = [process.execPath, "dev.ts", "--child", `--parent=${process.ppid}`];
+				try {
+					vi.resetModules();
+					await import("../dev.ts");
+					stageFailure(await Effect.runPromiseExit(cli.work!), "settings");
+				} finally {
+					process.argv = argv;
+					cli.layer = undefined;
+					cli.work = undefined;
+					vi.unstubAllEnvs();
+					rmSync(folder, {recursive: true, force: true});
+				}
+			}),
+			{seed: 119120, numRuns: 10},
+		);
+	});
 // Bundler output is platform input here. Compiler behavior has its own real-build laws.
 vi.mock("@kampus/libfabrika/node/build", async (original) => ({
 	...(await original<typeof import("@kampus/libfabrika/node/build")>()),
@@ -60,6 +225,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
 		[join(root, "compiler-ledger.json"), "[]"],
 		[join(out, "brain.mjs"), "last good"],
 	]);
+	const modes: Array<ReadonlyArray<unknown>> = [];
 	const calls: Array<ReadonlyArray<unknown>> = [],
 		paths: Array<ReadonlyArray<string>> = [];
 	const note = (name: string, ...args: ReadonlyArray<unknown>) => {
@@ -97,7 +263,10 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
 				note("temp", pending);
 				return pending;
 			}),
-		writeFileString: write,
+		writeFileString: (path, text, options) => {
+			modes.push([path, options?.mode]);
+			return write(path, text);
+		},
 		writeFile: (path, bytes) => write(path, new TextDecoder().decode(bytes)),
 		rename: (from, to) =>
 			Effect.suspend(() => {
@@ -132,7 +301,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
 			},
 		}),
 	);
-	return {out, pending, backup, files, calls, paths, layer};
+	return {out, pending, backup, files, calls, paths, modes, layer};
 };
 
 for (const failed of [false, true])
@@ -187,63 +356,134 @@ for (const failed of [false, true])
 		);
 	});
 
-it("dev reads saved settings and writes chosen settings before building through FileSystem", async () => {
+it("dev chooses flags, saved settings or defaults and saves with mode 0600 before building", async () => {
 	await fc.assert(
-		fc.asyncProperty(generated, async ({name, port}) => {
-			const folder = mkdtempSync(join(tmpdir(), "p12-dev-fs-")),
-				file = join(folder, "stage.json"),
-				source = join(folder, "view.tsx");
-			const saved = {
-				name: "saved-project",
-				person: "person-test",
-				founder: "public-test",
-				window: null,
-				port: 18787,
-				build: "old",
-			};
-			const w = recorded(folder, source, "export const view = 1;", false);
-			w.files.set(file, JSON.stringify(saved));
-			writeFileSync(file, JSON.stringify(saved));
-			writeFileSync(source, "export const view = 1;");
-			const argv = process.argv;
-			vi.stubEnv("FABRIKA_HOME", folder);
-			cli.layer = w.layer;
-			cli.work = undefined;
-			process.argv = [
-				process.execPath,
-				"dev.ts",
-				"--child",
-				`--parent=${process.ppid}`,
-				`--name=${name}`,
-				`--port=${port}`,
-			];
-			try {
-				vi.resetModules();
-				await import("../dev.ts");
-				expect(cli.work).toBeDefined();
-				const exit = await Effect.runPromiseExit(cli.work!);
-				expect(
-					Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty),
-				).toMatchObject({_tag: "Some", value: {reason: "test_stage_ready"}});
-				const calls = w.calls.filter(([, path]) => path === folder || path === file);
-				expect(calls).toEqual([
-					["mkdir", folder],
-					["read", file],
-					["write", file, JSON.stringify({...saved, name, port, build: "pending"})],
-				]);
-				const savedAt = w.calls.findIndex(([call, path]) => call === "write" && path === file);
-				const buildAt = w.calls.findIndex(([call, path]) => call === "read" && path === source);
-				expect(savedAt).toBeLessThan(buildAt);
-				expect(w.paths).toContainEqual([folder, "stage.json"]);
-			} finally {
-				process.argv = argv;
-				cli.layer = undefined;
+		fc.asyncProperty(
+			generated,
+			fc.record({
+				saved: fc.boolean(),
+				inline: fc.boolean(),
+				name: fc.boolean(),
+				person: fc.boolean(),
+				founder: fc.boolean(),
+				window: fc.boolean(),
+				port: fc.boolean(),
+				savedWindow: fc.option(fc.uuid(), {nil: null}),
+			}),
+			async ({name, port}, choices) => {
+				const folder = mkdtempSync(join(tmpdir(), "p12-dev-fs-")),
+					file = join(folder, "stage.json"),
+					source = join(folder, "view.tsx");
+				const saved = {
+					name: "saved-project",
+					person: "person-test",
+					founder: "public-test",
+					window: choices.savedWindow,
+					port: 18787,
+					build: "old",
+				};
+				const w = recorded(folder, source, "export const view = 1;", false);
+				if (choices.saved) w.files.set(file, JSON.stringify(saved));
+				writeFileSync(source, "export const view = 1;");
+				const argv = process.argv;
+				vi.stubEnv("FABRIKA_HOME", folder);
+				cli.layer = w.layer;
 				cli.work = undefined;
-				vi.unstubAllEnvs();
-				rmSync(folder, {recursive: true, force: true});
-			}
-		}),
-		{seed: 119120, numRuns: 10, examples: [[boundary], [{...boundary, port: 65535}]]},
+				const overrides = {
+					name,
+					person: `person-${name}`,
+					founder: `-public-${name}`,
+					window: `-window-${name}`,
+					port,
+				};
+				const selected = Object.entries(overrides).filter(
+					([field]) =>
+						choices[field as keyof typeof overrides] ||
+						(!choices.saved && ["name", "person", "founder"].includes(field)),
+				);
+				process.argv = [
+					process.execPath,
+					"dev.ts",
+					"--child",
+					`--parent=${process.ppid}`,
+					...selected.flatMap(([field, value]) =>
+						choices.inline ? [`--${field}=${value}`] : [`--${field}`, String(value)],
+					),
+				];
+				try {
+					vi.resetModules();
+					await import("../dev.ts");
+					expect(cli.work).toBeDefined();
+					const exit = await Effect.runPromiseExit(cli.work!);
+					expect(
+						Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty),
+					).toMatchObject({_tag: "Some", value: {reason: "test_stage_ready"}});
+					const calls = w.calls.filter(([, path]) => path === folder || path === file);
+					const expected = {
+						...(choices.saved ? saved : {...overrides, window: null, port: 18787}),
+						...Object.fromEntries(selected),
+						build: "pending",
+					};
+					expect(calls).toEqual([
+						["mkdir", folder],
+						...(choices.saved ? [["read", file]] : []),
+						["write", file, w.files.get(file)],
+					]);
+					expect(JSON.parse(w.files.get(file)!)).toEqual(expected);
+					expect(w.modes.filter(([path]) => path === file)).toEqual([[file, 0o600]]);
+					const savedAt = w.calls.findIndex(([call, path]) => call === "write" && path === file);
+					const buildAt = w.calls.findIndex(([call, path]) => call === "read" && path === source);
+					expect(savedAt).toBeLessThan(buildAt);
+					expect(w.paths).toContainEqual([folder, "stage.json"]);
+				} finally {
+					process.argv = argv;
+					cli.layer = undefined;
+					cli.work = undefined;
+					vi.unstubAllEnvs();
+					rmSync(folder, {recursive: true, force: true});
+				}
+			},
+		),
+		{seed: 119120, numRuns: 40},
+	);
+});
+
+it("dev without saved settings reports settings for each missing required value", async () => {
+	await fc.assert(
+		fc.asyncProperty(
+			fc.uuid(),
+			fc.constantFrom("name", "person", "founder"),
+			async (name, missing) => {
+				const folder = mkdtempSync(join(tmpdir(), "p12-empty-"));
+				const source = join(folder, "view.tsx");
+				const w = recorded(folder, source, "export const view = 1;", false);
+				const argv = process.argv;
+				vi.stubEnv("FABRIKA_HOME", folder);
+				cli.layer = w.layer;
+				process.argv = [
+					process.execPath,
+					"dev.ts",
+					"--child",
+					`--parent=${process.ppid}`,
+					...["name", "person", "founder"]
+						.filter((field) => field !== missing)
+						.map((field) => `--${field}=${name}`),
+				];
+				try {
+					vi.resetModules();
+					await import("../dev.ts");
+					stageFailure(await Effect.runPromiseExit(cli.work!), "settings");
+					expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
+				} finally {
+					process.argv = argv;
+					cli.layer = undefined;
+					cli.work = undefined;
+					vi.unstubAllEnvs();
+					rmSync(folder, {recursive: true, force: true});
+				}
+			},
+		),
+		{seed: 119120, numRuns: 15},
 	);
 });
 
@@ -321,7 +561,7 @@ it("dev returns StageError for malformed saved settings without writing or build
 				expect(Cause.hasFails(cause)).toBe(true);
 				expect(Cause.findErrorOption(cause)).toMatchObject({
 					_tag: "Some",
-					value: {_tag: "StageError"},
+					value: {_tag: "StageError", reason: "settings"},
 				});
 				expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
 			} finally {

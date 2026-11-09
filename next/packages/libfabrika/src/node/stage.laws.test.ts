@@ -186,9 +186,19 @@ it("every observed exit is durable once across restart or brake, with its reason
 									yield* waitForEvent(
 										(event) => event._tag === "restarting" && event.start === start,
 									);
+									expect(
+										(yield* outbox.pending).find(
+											(event) => event._tag === "restarting" && event.start === start,
+										),
+									).toMatchObject({reason: item.rss === null ? "crash" : "memory"});
 									yield* assertExits;
 									observe({type: "start", worker: "life-test", pid: 27002 + index});
 									yield* waitForEvent((event) => event._tag === "started" && event.after === start);
+									expect(
+										(yield* outbox.pending).find(
+											(event) => event._tag === "started" && event.after === start,
+										),
+									).toMatchObject({reason: item.rss === null ? "crash" : "memory"});
 								} else {
 									observe({type: "stop", worker: "life-test", exit, reason});
 									const pending = yield* waitForEvent(
@@ -220,6 +230,15 @@ it("every observed exit is durable once across restart or brake, with its reason
 					),
 					{signal},
 				);
+				const pending = await Effect.runPromise(
+					brainOutbox(home).pipe(
+						Effect.flatMap((outbox) => outbox.pending),
+						Effect.provide(NodeServices.layer),
+					),
+				);
+				expect(pending.filter((event) => event._tag === "stopped")).toMatchObject([
+					{reason: "stop"},
+				]);
 			} finally {
 				fetch.mockRestore();
 				kill.mockRestore();

@@ -139,7 +139,10 @@ const stage = async (saved?: {key: ReturnType<typeof identity>; home: string; po
 	for (;;) {
 		if (child.exitCode !== null) throw new Error(`P12 dev.ts did not start: ${output}`);
 		try {
-			if ((await fetch(url)).ok) break;
+			// The page is served while startup is still flushing the lifecycle outbox.
+			// dev.ts emits ready only after that flush. Read history after its ready message.
+			if (output.includes(`{"ready":${JSON.stringify(url)},"build":`) && (await fetch(url)).ok)
+				break;
 		} catch {
 			/* Listener is not ready. */
 		}
