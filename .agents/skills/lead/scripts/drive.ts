@@ -52,7 +52,6 @@ import {run} from "@demlik/tea/effect";
 import {act, gather, intentOf, listen} from "@kampus/pipeline/primitives";
 import {nameOf, outcomesOf} from "@kampus/pipeline/stages/outcome";
 import {Effect, Schema, Stream} from "effect";
-import {signTree} from "./signtree.ts";
 
 const HERE = import.meta.dirname;
 const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -492,11 +491,8 @@ const signClaude = (env: Env, ask: Ask) => {
 	const prefix = `T${ask.ticket} ${ask.step}:`;
 	const subject = said.startsWith(prefix) ? said : `${prefix} ${said || "the step's work"}`;
 	const wt = join(env.BOXES, `${ask.box}-sign`);
-	const add = signTree(env.MAIN, wt, ask.base, SAFE_GIT);
-	if (add.code !== 0) {
-		git("worktree", "remove", "--force", wt);
-		return add;
-	}
+	const add = git("worktree", "add", "-q", "--detach", wt, ask.base);
+	if (add.code !== 0) return add;
 	try {
 		const restore = sh("git", ["-C", wt, "restore", `--source=${made}`, "--worktree", "--", "."]);
 		if (restore.code !== 0) return restore;
