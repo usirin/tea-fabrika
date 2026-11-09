@@ -68,6 +68,8 @@ const MOVES = {
 /** An ask with no answer yet: what its box shows. */
 export const OpenAsk = Schema.Struct({
 	ask: Id,
+	/** Its `asked` entry's place on the ledger: the key of that entry's activity row. */
+	pos: Schema.Int,
 	what: Title,
 	picks: Schema.NonEmptyArray(Title),
 	/** A sealed ask as a window gets it, with no rec or blind draw. Left out: an ask from before sealing. */
@@ -107,6 +109,7 @@ export const openAsksOf = (timeline: readonly Entry[]): readonly OpenAsk[] => {
 			? [
 					{
 						ask: e.fact.ask,
+						pos: e.pos,
 						what: questionOf(e.fact),
 						picks: picksOf(e.fact) as readonly [string, ...string[]],
 						...("format" in e.fact ? {sealed: askShownOf(e.fact), for: e.fact.for} : {}),

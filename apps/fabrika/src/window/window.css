@@ -2839,12 +2839,14 @@ main.program:has(> .view) {
 	content: "";
 }
 
-/* Focused, the hairline turns the focus gray, still 1px: the bar never becomes a box. */
+/* Focused from the keyboard, the hairline becomes the app's focus ring line: its color and its 2px,
+   the whole width of the bar (WCAG 2.4.7). A 1px gray line was too faint to find. Still a line under
+   the bar, never a box around it; each control inside draws its own ring (`.view :focus-visible`). */
 .ask-view:focus-visible {
-	border-radius: var(--r-lg);
 	outline: none;
 }
 .ask-view:focus-visible::after {
+	block-size: 2px;
 	background: var(--focus);
 }
 
@@ -2915,6 +2917,13 @@ main.program:has(> .view) {
 	flex-wrap: wrap;
 	align-items: center;
 	gap: var(--s-1);
+}
+/* Narrow, the marks drop under the rec's words as one unit, at the start: their question and both
+   buttons stay on one line, never one button to a line. */
+.ask-marks {
+	flex: none;
+	flex-wrap: nowrap;
+	white-space: nowrap;
 }
 .ask-view button {
 	white-space: normal;

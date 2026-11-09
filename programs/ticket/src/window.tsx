@@ -524,6 +524,16 @@ function Composer(props: {readonly ticket: number; readonly send: Send; readonly
 }
 
 /**
+ * The activity rows, less the "asks you" row of the ask the bar holds: the bar is that ask, so the
+ * list does not say it twice. The row comes back once the ask is answered or withdrawn.
+ */
+function rowsBeside(head: Head, rows: readonly Row[]): readonly Row[] {
+	if (head._tag !== "asks") return rows;
+	const inBar = head.asks[0].pos;
+	return rows.filter((row) => row.pos !== inBar);
+}
+
+/**
  * The window, drawn afresh for each ticket it shows: a half-written comment or an opened row of
  * #7 never shows on #3 when a pipe moves it there.
  */
@@ -601,7 +611,11 @@ function OneTicket({view, send}: WindowProps<typeof ticket>) {
 								)}
 							</div>
 							<section aria-label="Activity">
-								<Activity rows={opened.rows} timeline={opened.ticket.timeline} now={now} />
+								<Activity
+									rows={rowsBeside(opened.head, opened.rows)}
+									timeline={opened.ticket.timeline}
+									now={now}
+								/>
 								<Composer ticket={number} send={send} saving={view.saving.length} />
 							</section>
 						</div>
