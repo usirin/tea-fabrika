@@ -10,9 +10,14 @@
 		"./package.json": "./package.json"
 	},
 	"scripts": {
+		"themes": "node src/build/themes.ts",
 		"typecheck": "tsc --noEmit -p ."
 	},
+	"dependencies": {
+		"apca-w3": "0.1.9"
+	},
 	"devDependencies": {
+		"@kampus/themes-fixture": "workspace:*",
 		"@radix-ui/colors": "catalog:",
 		"@types/node": "catalog:",
 		"effect": "catalog:",

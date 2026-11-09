@@ -17,7 +17,7 @@ import {join, resolve} from "node:path";
 // `pnpm format` leaves it alone.
 import * as radix from "@radix-ui/colors";
 import {parse} from "smol-toml";
-import {over, ratio} from "./contrast.ts";
+import {over, passes, ratio} from "./contrast.ts";
 import {
 	checkAcross,
 	decodeManti,
@@ -198,18 +198,70 @@ const ownOf = (tokens: ReadonlyMap<string, TokenFile>, name: string): Own | unde
 type Resolved = ReadonlyMap<string, Readonly<Record<Look, string>>>;
 
 const resolveAll = (tokens: ReadonlyMap<string, TokenFile>, said: Said): Resolved => {
-	const out = new Map<string, Record<Look, string>>();
-	for (const name of tokens.keys()) {
-		const own = ownOf(tokens, name);
-		if (own === undefined) continue;
-		const [dark, light] = LOOKS.map((look) => valueIn(own.colors[look], look));
-		if (dark === undefined || light === undefined) {
-			said.errors.push(`${name}.toml: colors: a step Radix 3.0.0 does not have`);
-			continue;
+	const resolved = {dark: new Map<string, string>(), light: new Map<string, string>()};
+	const active = new Set<string>();
+	const inLook = (name: string, look: Look): string | undefined => {
+		const known = resolved[look].get(name);
+		if (known !== undefined) return known;
+		const key = `${look}/${name}`;
+		if (active.has(key)) {
+			said.errors.push(`${name}.toml: on: a scale depends on itself in ${look}`);
+			return undefined;
 		}
-		out.set(name, {dark, light});
-	}
-	return out;
+		const own = ownOf(tokens, name);
+		if (own === undefined) return undefined;
+		active.add(key);
+		const choose = (): string | undefined => {
+			if (!("scale" in own.colors)) return valueIn(own.colors[look], look);
+			const {scale} = own.colors;
+			if (own.floor === undefined || own.on === undefined) {
+				said.errors.push(`${name}.toml: floor: a scale needs a floor and its backdrops`);
+				return undefined;
+			}
+			const backgrounds: string[] = [];
+			for (const on of own.on) {
+				const layers = on.split("/").map((part) => inLook(part, look));
+				const bottom = layers.at(-1);
+				if (bottom === undefined || layers.some((layer) => layer === undefined)) return undefined;
+				if (bottom.length !== 7) {
+					said.errors.push(`${name}.toml: on: "${on}" ends on a translucent token`);
+					return undefined;
+				}
+				backgrounds.push(
+					layers
+						.slice(0, -1)
+						.reduceRight<string>((under, top) => over(top ?? under, under), bottom),
+				);
+			}
+			const floor = {wcag: own.floor, apca: own.type === "text" ? 60 : 15};
+			const candidates = Array.from({length: 12}, (_, i) => i + 1).flatMap((n) =>
+				[`${scale}.${n}`, `${scale}.a${n}`].flatMap((step) => {
+					const hex = stepIn(step, look);
+					return hex !== undefined && backgrounds.every((bg) => passes(hex, bg, floor))
+						? [{hex, contrast: Math.max(...backgrounds.map((bg) => ratio(hex, bg)))}]
+						: [];
+				}),
+			);
+			// The faintest passing color has the lowest contrast across its drawn backdrops.
+			const chosen = candidates.sort((a, b) => a.contrast - b.contrast)[0];
+			if (chosen === undefined)
+				said.errors.push(`${name}.toml: floor: no ${scale} step passes both floors in ${look}`);
+			return chosen?.hex;
+		};
+		const hex = choose();
+		active.delete(key);
+		if (hex !== undefined) resolved[look].set(name, hex);
+		else if (!("scale" in own.colors))
+			said.errors.push(`${name}.toml: colors: a step Radix 3.0.0 does not have`);
+		return hex;
+	};
+	return new Map(
+		[...tokens.keys()].flatMap((name) => {
+			const dark = inLook(name, "dark"),
+				light = inLook(name, "light");
+			return dark === undefined || light === undefined ? [] : [[name, {dark, light}] as const];
+		}),
+	);
 };
 
 /** A backdrop, `a/b` drawn as a over b, in a look, as hex; why, when it cannot be drawn. */
@@ -294,7 +346,10 @@ const colorsRegion = (sources: Sources, resolved: Resolved): string => {
 				if (!isOwn(t) || t.type !== type) return [];
 				const {dark = "", light = ""} = resolved.get(name) ?? {};
 				const value = dark === light ? dark : `light-dark(${light}, ${dark})`;
-				const [d, l] = [spoken(t.colors.dark), spoken(t.colors.light)];
+				const [d, l] =
+					"scale" in t.colors
+						? [t.colors.scale, t.colors.scale]
+						: [spoken(t.colors.dark), spoken(t.colors.light)];
 				return [`\t--${name}: ${value}; /* ${d === l ? d : `light ${l}; dark ${d}`} */`];
 			});
 			group(`The ${owner}'s ${PLURAL[type]}.`, lines);
