@@ -1,7 +1,7 @@
 // Today's app: a complete theme file, with only the globals generated from token data.
 import {Cause, Exit, Option, Result, Schema, type SchemaIssue} from "effect";
 import {parse, TomlError} from "smol-toml";
-import {GlobalColors, RepairableColor} from "./theme-contract.ts";
+import {GlobalColors, pairs, RepairableColor} from "./theme-contract.ts";
 
 const Hex = Schema.String.check(Schema.isPattern(/^#[0-9a-f]{6}([0-9a-f]{2})?$/));
 export const ThemeName = Schema.String.check(Schema.isPattern(/^[a-z0-9]+(-[a-z0-9]+)*$/u));
@@ -86,6 +86,9 @@ const ThemeFile = Schema.Struct({
 	repaired: Schema.optionalKey(Schema.Record(RepairableColor, Schema.optionalKey(Repair))),
 });
 
+/** The bottoms of every generated backdrop stack: these must be opaque. */
+const bases = [...new Set(pairs.map(({on}) => on.split("/").at(-1) ?? on))];
+
 export type Theme = Omit<typeof ThemeFile.Type, "from"> & {
 	readonly from?: typeof Source.Type;
 };
@@ -167,6 +170,16 @@ export const decodeTheme = (text: string, file?: string): Result.Result<Theme, D
 		return refuse(safe.join(".") || "theme", "expected a complete theme with valid fields");
 	}
 	const {from, ...theme} = decoded.value;
+	// A stack's bottom has nothing under it to composite onto, so the checker could not judge it.
+	for (const base of bases) {
+		const value =
+			base === "terminal.background" ? theme.terminal.background : Reflect.get(theme.colors, base);
+		if (typeof value === "string" && value.length === 9 && !value.endsWith("ff"))
+			return refuse(
+				base.startsWith("terminal.") ? base : `colors.${base}`,
+				"a base background must be opaque",
+			);
+	}
 	if (file !== undefined && (file !== filename || filename !== `${theme.name}.toml`))
 		return refuse("name", "the theme name must match its file");
 	for (const token of RepairableColor.literals) {

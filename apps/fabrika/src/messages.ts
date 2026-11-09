@@ -1,3 +1,5 @@
+import {ThemeName} from "@kampus/fabrika-design/theme";
+import {GlobalColors} from "@kampus/fabrika-design/theme-contract";
 import {Cause, Effect, Exit, Schema} from "effect";
 import {AskKey, AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
@@ -196,6 +198,90 @@ export const HostNow = Schema.Struct({
 });
 export type HostNow = typeof HostNow.Type;
 
+const Hex = Schema.String.check(Schema.isPattern(/^#[0-9a-f]{6}([0-9a-f]{2})?$/));
+
+/**
+ * The theme the window draws (T343, themes.md): a decoded, checked theme, complete and closed. Its
+ * colors are the 21 global colors and nothing else, so no component name, Manti name or partial
+ * value reaches the page; no path or source rides along.
+ */
+export const AppliedTheme = Schema.Struct({
+	format: Schema.Literal(1),
+	name: ThemeName,
+	look: Schema.Literals(["dark", "light"]),
+	colors: GlobalColors,
+	terminal: Schema.Struct({
+		foreground: Hex,
+		background: Hex,
+		cursor: Hex,
+		selection: Hex,
+		palette: Schema.Array(Hex).check(Schema.isMinLength(16), Schema.isMaxLength(16)),
+	}),
+});
+export type AppliedTheme = typeof AppliedTheme.Type;
+
+const Reading = Schema.Struct({wcag: Schema.Number, apca: Schema.Number});
+const Floor = Schema.Struct({wcag: Schema.Number, apca: Schema.Number});
+
+/**
+ * What came of loading the selected theme (the shared checker's report, contrast.ts): each color
+ * moved and each that took fabrika's own past the cap, each pair that still fails, and why a file
+ * was not applied. Names only, as a person knows them: no path, no unrelated setting, no file text.
+ */
+export const ThemeReport = Schema.Struct({
+	name: Schema.String,
+	changes: Schema.Array(
+		Schema.Union([
+			Schema.TaggedStruct("moved", {
+				token: Schema.String,
+				on: Schema.String,
+				was: Hex,
+				now: Hex,
+				from: Reading,
+				to: Reading,
+			}),
+			Schema.TaggedStruct("builtin", {
+				token: Schema.String,
+				was: Hex,
+				now: Hex,
+				why: Schema.Literal("past_cap"),
+			}),
+		]),
+	),
+	failures: Schema.Array(
+		Schema.Struct({token: Schema.String, on: Schema.String, floor: Floor, reading: Reading}),
+	),
+	diagnostics: Schema.Array(
+		Schema.Struct({
+			file: Schema.String,
+			field: Schema.String,
+			line: Schema.Int,
+			message: Schema.String,
+		}),
+	),
+});
+export type ThemeReport = typeof ThemeReport.Type;
+
+/** The person's theme-fix and theme-contrast: one policy for app text, the cursor and drawn cells. */
+export const ThemePolicy = Schema.Struct({
+	fix: Schema.Literals(["nudge", "off"]),
+	contrast: Schema.Number.check(Schema.isBetween({minimum: 4.5, maximum: 21})),
+});
+export type ThemePolicy = typeof ThemePolicy.Type;
+
+/**
+ * The applied theme, its repair version and its report, sent as a page loads and on each change.
+ * `policy` is the person's theme-fix and theme-contrast for drawn terminal cells; without it, the
+ * defaults (nudge, 4.5).
+ */
+export const ThemeMessage = Schema.Struct({
+	type: Schema.Literal("theme"),
+	value: AppliedTheme,
+	version: Schema.String,
+	report: ThemeReport,
+	policy: Schema.optionalKey(ThemePolicy),
+});
+
 /**
  * What the host tells the page, on the desk's port. The desk runs in the host (host/serve.ts);
  * the page draws what it is sent and nothing else. `keys` is the keys file's table (desk/keymap.ts):
@@ -227,6 +313,12 @@ export type HostNow = typeof HostNow.Type;
  *   {type: "show", what: "keys"}
  *   {type: "host", now: {pid: 4121, since: 1793400000000, build: "3f9a0c21b7d4",
  *    ledger: {kind: "own"}, agents: [{name: "claude", since: 1793400060000}]}}
+ *
+ * `theme` is the person's selected theme as the host loaded and checked it (host/themes.ts), sent
+ * as a page loads and on each save of fabrika.toml or the theme's file.
+ *
+ *   {type: "theme", value: {format: 1, name: "nord", look: "dark", colors: {...}, terminal: {...}},
+ *    version: "1", report: {name: "nord", changes: [...], failures: [], diagnostics: []}}
  */
 export const ToPage = Schema.Union([
 	Schema.Struct({
@@ -266,6 +358,7 @@ export const ToPage = Schema.Union([
 	}),
 	Schema.Struct({type: Schema.Literal("answer"), id: PressId, took: Schema.Boolean}),
 	Schema.Struct({type: Schema.Literal("link"), now: LinkNow}),
+	ThemeMessage,
 ]);
 export type ToPage = typeof ToPage.Type;
 
@@ -276,10 +369,13 @@ export type ToPage = typeof ToPage.Type;
  *
  *   {type: "again"}
  *   {type: "restart"}
+ *   {type: "ready"}      its first appearance is applied: the window is shown now
  */
 export const ToApp = Schema.Union([
 	Schema.Struct({type: Schema.Literal("again")}),
 	Schema.Struct({type: Schema.Literal("restart")}),
+	// The page's first appearance is applied: the window may be shown (no default-theme flash).
+	Schema.Struct({type: Schema.Literal("ready")}),
 ]);
 export type ToApp = typeof ToApp.Type;
 
@@ -373,3 +469,5 @@ export const readToPage = reader(ToPage);
 export const readToApp = reader(ToApp);
 /** What main reads of the host's messages on the desk's port: the asks, for the Dock badge. */
 export const readAsks = reader(AsksMessage);
+/** And the applied theme, for the window's frame (main.ts). */
+export const readTheme = reader(ThemeMessage);

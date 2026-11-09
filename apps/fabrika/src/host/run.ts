@@ -7,7 +7,7 @@ import {recordTracing} from "@kampus/fabrika-old/otel";
 import {sqliteRecords} from "@kampus/fabrika-old/records";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Author} from "@tea-fabrika/tracker";
-import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
+import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope, Stream} from "effect";
 import {SocketServer} from "effect/socket";
 import {BUILD} from "../build-id.ts";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
@@ -19,6 +19,7 @@ import {logSteps, sampleLag} from "./log.ts";
 import {leaveNote, takeNote} from "./restart.ts";
 import {serve} from "./serve.ts";
 import {pathsOf, reach} from "./socket.ts";
+import {appliedTheme} from "./themes.ts";
 
 // The host on a home: its socket, its files and its services, around the server (serve.ts).
 // host/main.ts runs it as a process of its own; a test runs it in its own process, on a home of
@@ -56,8 +57,8 @@ import {pathsOf, reach} from "./socket.ts";
 //   host/restart.json    who restarted the host before, why and when, read once (restart.ts)
 //
 // In the settings folder, `~/.fabrika` for the owner's start and the home for any other
-// (host/settings.ts): keybindings.toml, the keys the person changed (desk/keymap.ts), heard on
-// each save.
+// (host/settings.ts): keybindings.toml, the keys the person changed (desk/keymap.ts), and
+// fabrika.toml's theme with themes/<name>.toml (host/themes.ts), each heard on each save.
 //
 // One host per home: a host that finds another answering on the socket does not start, and
 // hosts started at the same moment take turns under the start lock, so exactly one listens. The
@@ -80,8 +81,8 @@ export const runHost = (options: {
 	/** The build this host's hello names, for a test of an older host; `null` names none. */
 	readonly build?: string | null | undefined;
 	/**
-	 * The person's settings folder, which holds keybindings.toml (host/settings.ts,
-	 * `settingsFolder`): `~/.fabrika` for the owner's start. The home itself when not said, as for
+	 * The person's settings folder, which holds keybindings.toml, fabrika.toml and themes/
+	 * (host/settings.ts, `settingsFolder`): `~/.fabrika` for the owner's start. The home itself when not said, as for
 	 * a test's or an agent's start, so none reads the person's real file.
 	 */
 	readonly settings?: string | undefined;
@@ -211,6 +212,8 @@ export const runHost = (options: {
 		return yield* serve({
 			history,
 			keybindings,
+			// The theme fabrika.toml selects, from the same settings folder (host/themes.ts).
+			themes: appliedTheme(settings).pipe(Stream.provideContext(platform)),
 			ours,
 			build: named,
 			agents: {server: agents},

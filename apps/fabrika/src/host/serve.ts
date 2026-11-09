@@ -79,6 +79,7 @@ import {serveAgents} from "./agents.ts";
 import {KeybindingManager} from "./keybindings.ts";
 import type {RestartNote} from "./restart.ts";
 import type {Setting} from "./settings.ts";
+import type {Loaded} from "./themes.ts";
 
 // The host's server: what the host process does with each app that attaches, as tmux's server
 // does with each client. It names no platform: it takes Effect's `SocketServer`, which
@@ -216,6 +217,12 @@ export const serve = (options: {
 	 * host serves no page before the first.
 	 */
 	readonly keybindings: KeybindingManager;
+	/**
+	 * The person's selected theme, loaded and checked (host/themes.ts): the first as the host
+	 * starts, then one each save of fabrika.toml or that theme's file. None, no theme message: a
+	 * page then draws fabrika's own in the system's look.
+	 */
+	readonly themes?: Stream.Stream<Loaded> | undefined;
 	/** The link's version this host speaks: `PROTOCOL`, but in a test of an old host. */
 	readonly ours?: number | undefined;
 	/**
@@ -751,6 +758,31 @@ export const serve = (options: {
 			Effect.forkScoped,
 		);
 		yield* Deferred.await(heardKeys);
+
+		// The selected theme, heard as the keys are: the first before any page is served, so a
+		// page is never shown fabrika's colors while another theme is selected.
+		let themeNow: ToPage | null = null;
+		const heardTheme = yield* Deferred.make<void>();
+		if (options.themes === undefined) yield* Deferred.succeed(heardTheme, undefined);
+		else
+			yield* options.themes.pipe(
+				Stream.runForEach((loaded) =>
+					Effect.sync(() => {
+						const now: ToPage = {
+							type: "theme",
+							value: loaded.value,
+							version: loaded.version,
+							report: loaded.report,
+							policy: loaded.policy,
+						};
+						themeNow = now;
+						for (const client of clients) if (client.page) toPage(client, now);
+					}).pipe(Effect.andThen(Deferred.succeed(heardTheme, undefined))),
+				),
+				Effect.ensuring(Deferred.succeed(heardTheme, undefined)),
+				Effect.forkScoped,
+			);
+		yield* Deferred.await(heardTheme);
 		const editorQueue = yield* Queue.unbounded<{
 			client: Client;
 			message: Extract<FromPage, {type: "keys.open" | "keys.close" | "keys.edit"}>;
@@ -947,6 +979,8 @@ export const serve = (options: {
 					toPage(client, hostNow());
 					toPage(client, saidAsks);
 					toPage(client, deskNow());
+					// Right after the desk: the window stays hidden until the page applied it.
+					if (themeNow !== null) toPage(client, themeNow);
 					for (const [name, screen] of screens) showTo(client, name, screen);
 					return;
 				case "away":

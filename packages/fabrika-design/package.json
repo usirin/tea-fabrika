@@ -6,6 +6,10 @@
 	"description": "fabrika's design: the two built-in themes and one stylesheet of tokens, with Manti's set from them. Today's app and next/ both import it (docs/direction/fabrika-design-package.md).",
 	"exports": {
 		".": "./src/index.ts",
+		"./theme": "./src/theme.ts",
+		"./theme-settings": "./src/theme-settings.ts",
+		"./theme-contract": "./src/theme-contract.ts",
+		"./contrast": "./src/build/contrast.ts",
 		"./tokens.css": "./src/tokens.css",
 		"./package.json": "./package.json"
 	},

@@ -1,9 +1,10 @@
-import {fabrika, fabrikaLight, terminalTheme} from "@kampus/fabrika-design";
+import {terminalTheme} from "@kampus/fabrika-design";
 import {Effect} from "effect";
 import {FitAddon, Ghostty, Terminal} from "ghostty-web";
 import wasm from "ghostty-web/ghostty-vt.wasm";
 import type {TileId} from "../desk/layout/index.ts";
 import {readToTerminal} from "../messages.ts";
+import {correctCell, onTheme, readColors, themeApplied} from "./theme.ts";
 
 // A tile's terminal: a terminal, and nothing more. ghostty-web draws it: Ghostty's terminal,
 // built to WebAssembly, on a canvas. It sends the keys pressed and its size on its tile's port,
@@ -27,11 +28,39 @@ import {readToTerminal} from "../messages.ts";
 // every tile's terminal shares it.
 
 const LIGHT = "(prefers-color-scheme: light)";
+
 /**
- * The built-in theme for the system's look, as the window's stylesheet picks it with light-dark().
- * Read when a terminal is made: ghostty-web 0.4 cannot change a terminal's colors once it is open.
+ * A CSS system color as the canvas draws it, `rgb(r, g, b)`: under forced colors the window's
+ * appearance gives the terminal `Canvas` and `CanvasText` (theme.ts), and ghostty-web reads only
+ * hex and rgb() colors. A probe element asks the page what the system's color is now.
  */
-const themeNow = () => terminalTheme(window.matchMedia(LIGHT).matches ? fabrikaLight : fabrika);
+const drawable = (color: string): string => {
+	if (color.startsWith("#") || document.body === undefined || document.body === null) return color;
+	const probe = document.createElement("span");
+	probe.style.color = color;
+	document.body.append(probe);
+	const rgb = getComputedStyle(probe).color;
+	probe.remove();
+	return rgb;
+};
+
+/**
+ * The applied theme's terminal colors (theme.ts): the host's theme, fabrika's own in the system's
+ * look until it comes, or the system's colors under forced colors. Read when a terminal is made:
+ * ghostty-web 0.4 cannot change a terminal's colors once it is open.
+ */
+const themeNow = () => {
+	const {terminal} = readColors();
+	return terminalTheme({
+		terminal: {
+			foreground: drawable(terminal.foreground),
+			background: drawable(terminal.background),
+			cursor: drawable(terminal.cursor),
+			selection: drawable(terminal.selection),
+			palette: terminal.palette.map(drawable),
+		},
+	});
+};
 /**
  * The most bytes a tile keeps to write again when its look changes, as experiment 177's spike kept
  * (1 MiB a tile). A full reset (RIS) drops what came before it.
@@ -159,6 +188,10 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 			cursorBlink: false,
 			scrollback: 1000,
 			theme: themeNow(),
+			// The patched renderer's hook (patches/ghostty-web@0.4.0.patch): each cell's text, once
+			// its drawn colors are known, held to both text floors under the person's policy. The
+			// palette and the bytes stay as they are.
+			correctForeground: correctCell,
 		});
 		const fit = new FitAddon();
 		made.loadAddon(fit);
@@ -247,9 +280,9 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	};
 
 	/**
-	 * The system's look changed. ghostty-web 0.4 does not draw a theme set after open(), so the
-	 * terminal is made again in the new one and opened with what it showed (themes.md, live
-	 * switching). Keys go to it as they went to the old one.
+	 * The applied theme or the system's look changed. ghostty-web 0.4 does not draw a theme set
+	 * after open(), so the terminal is made again in the new one and opened with what it showed
+	 * (themes.md, live switching). Keys go to it as they went to the old one.
 	 *
 	 * ghostty-web 0.4's open() calls focus(), which also queues a second focus. Suppress that
 	 * call for an unfocused tile so neither focus can steal a key between timer turns. Restore
@@ -276,6 +309,8 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		const remade = term;
 		const nowhere = active === null || active === document.body;
 		const back = () => {
+			// The timer below can outlive the page it was queued on.
+			if (typeof document === "undefined") return;
 			if (nowhere) {
 				const held = document.activeElement;
 				for (const at of [remade.textarea, remade.element])
@@ -292,8 +327,14 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		// A focus queued before the remake can still be waiting from the old terminal.
 		setTimeout(back, 0);
 	};
+	// A new applied theme, or forced colors on or off: made again in it. A system look change
+	// moves a terminal only while no named theme is applied, since a named theme's look wins.
+	const followOs = () => {
+		if (!themeApplied()) remake();
+	};
 	const look = window.matchMedia(LIGHT);
-	look.addEventListener("change", remake);
+	look.addEventListener("change", followOs);
+	const unheard = onTheme(remake);
 
 	return {
 		attach: (slot) => {
@@ -319,7 +360,8 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		},
 		focus: () => term.focus(),
 		dispose: () => {
-			look.removeEventListener("change", remake);
+			look.removeEventListener("change", followOs);
+			unheard();
 			statusTo.stop();
 			window.fabrika.forget(port);
 			term.dispose();

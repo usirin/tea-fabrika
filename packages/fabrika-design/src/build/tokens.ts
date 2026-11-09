@@ -17,7 +17,7 @@ import {join, resolve} from "node:path";
 // `pnpm format` leaves it alone.
 import * as radix from "@radix-ui/colors";
 import {parse} from "smol-toml";
-import {over, passes, ratio} from "./contrast.ts";
+import {measure, over, passes, ratio} from "./contrast.ts";
 import {
 	checkAcross,
 	decodeManti,
@@ -287,10 +287,17 @@ const judge = (tokens: ReadonlyMap<string, TokenFile>, resolved: Resolved, said:
 					said.errors.push(`${name}.toml: on: ${bg.why}; name what it is drawn over`);
 					continue;
 				}
-				const r = ratio(fg, bg);
+				const {wcag: r, apca} = measure(fg, bg);
 				const reads = r.toFixed(2);
 				const i = except.findIndex((e) => e.on === backdrop && e.look === look);
 				const e = except[i];
+				// Two floors, both always (themes.md point 4). A WCAG exception never excuses APCA.
+				const lc = token.type === "text" ? 60 : 15;
+				if (floor !== undefined && !passes(fg, bg, {wcag: 0, apca: lc})) {
+					said.errors.push(
+						`${name}.toml: floor: ${look} on ${backdrop} reads Lc ${Math.abs(apca).toFixed(1)}, under Lc ${lc}`,
+					);
+				}
 				if (floor !== undefined && r < floor) {
 					if (e === undefined) {
 						said.errors.push(

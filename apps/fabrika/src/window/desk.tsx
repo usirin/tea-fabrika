@@ -62,6 +62,8 @@ import {
 } from "./frame.ts";
 import {Band, BottomArea, type FrameProps, Over, TopBar} from "./frame.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
+import {markReady, startTheme} from "./theme-start.ts";
+import {applyAppearance, themeWord} from "./theme.ts";
 import {Strip, Tile} from "./tile.tsx";
 import {WINDOWS} from "./windows.tsx";
 
@@ -130,6 +132,8 @@ const store: {
 	frame: Frame;
 	/** What the window shows of the link, as the app said last. */
 	link: LinkNow;
+	/** The theme's load word the bottom line said last (theme.ts, `themeWord`): said once. */
+	themeSaid: string | null;
 	readonly views: Map<string, ToWindow>;
 	readonly listeners: Set<() => void>;
 	version: number;
@@ -145,6 +149,7 @@ const store: {
 	host: null,
 	frame: FRAME,
 	link: {kind: "up"},
+	themeSaid: null,
 	views: new Map(),
 	listeners: new Set(),
 	version: 0,
@@ -441,6 +446,29 @@ const focusBack = () => {
 	[...items].find((el) => el.dataset.item === from.item)?.focus();
 };
 
+// The window's appearance (theme.ts): the cached theme painted before the first draw, the host's
+// theme as it comes, and the system's forced colors over both. The app shows the window once the
+// first appearance is applied, so a person's theme never starts as fabrika's: the cache, the
+// host's theme (right after its desk), forced colors, an older host's desk (it may send no
+// theme), or no host at all.
+const FORCED = "(forced-colors: active)";
+let appeared = false;
+const appearanceReady = () => {
+	if (appeared) return;
+	appeared = true;
+	markReady();
+	window.fabrika.send("desk", {type: "ready"} satisfies ToApp);
+};
+const startAppearance = () => {
+	const forced = window.matchMedia(FORCED);
+	if (startTheme(localStorage, forced.matches)) appearanceReady();
+	if (forced.matches) {
+		applyAppearance({_tag: "forced", on: true});
+		appearanceReady();
+	}
+	forced.addEventListener("change", (e) => applyAppearance({_tag: "forced", on: e.matches}));
+};
+
 /** What the host, or the app when the host is not there, tells the page on the desk's port. */
 const heard = (raw: unknown) => {
 	const read = readToPage(raw);
@@ -489,7 +517,18 @@ const heard = (raw: unknown) => {
 			return m.what === "info"
 				? frameStep({type: "info", focus: focusWords()})
 				: frameStep({type: "show", what: m.what});
+		case "theme": {
+			applyAppearance({_tag: "theme", value: m.value, version: m.version, policy: m.policy});
+			appearanceReady();
+			const word = themeWord(m.report);
+			if (word === store.themeSaid) return;
+			store.themeSaid = word;
+			if (word !== null) frameStep({type: "say", note: word});
+			return;
+		}
 		case "desk":
+			// A host of this build sends its theme right after the desk; an older one may send none.
+			if (store.link.kind !== "up") appearanceReady();
 			store.desk = m.desk;
 			store.attachedOnce = true;
 			follows(m.desk);
@@ -504,6 +543,7 @@ const heard = (raw: unknown) => {
 			store.link = m.now;
 			// Off a host, a key held for its answer gets none: the hold lets them go.
 			if (!attached(m.now)) {
+				appearanceReady();
 				holdStep({type: "down"});
 				if (store.keysEditor !== null) frameStep({type: "close"});
 			}
@@ -968,6 +1008,7 @@ function ZoomedTile(props: {
 }
 
 const boot = Effect.gen(function* () {
+	startAppearance();
 	ghostty = yield* loadGhostty;
 	window.addEventListener("keydown", onKey, {capture: true});
 	for (const on of EXPLAIN_ON) window.addEventListener(on, explainAt);
@@ -980,6 +1021,7 @@ Effect.runFork(
 	boot.pipe(
 		Effect.catchCause((cause) =>
 			Effect.sync(() => {
+				appearanceReady();
 				const root = document.getElementById("root");
 				if (root === null) return;
 				root.setAttribute("role", "alert");

@@ -28,7 +28,14 @@ import {pathsOf} from "./host/socket.ts";
 import {NotStopped} from "./host/stop.ts";
 import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
 import type {Down, Up} from "./link.ts";
-import {type LinkNow, readAsks, readToApp, type ToPage} from "./messages.ts";
+import {
+	type AppliedTheme,
+	type LinkNow,
+	readAsks,
+	readTheme,
+	readToApp,
+	type ToPage,
+} from "./messages.ts";
 import {Browser, NotOpened, openOutside} from "./outside.ts";
 import {noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
 import {startHost} from "./start-host.ts";
@@ -51,8 +58,10 @@ import {Unattached, type Wire} from "./wire.ts";
 //                   it stops that host by its pid, waits for it to exit, and attaches, which starts
 //                   one of this build (attach.ts, `restart`). Its running jobs stop; their saved
 //                   lists stay, and each comes back with `attach %n`
-//   the page        it loads and says hello: the host is told `page`, and sends the desk, its
-//                   Ctrl-B table, and a port for every tile's terminal and every run shown
+//   the page        it loads and says hello: the host is told `page`, and sends the theme, the
+//                   desk, its Ctrl-B table, and a port for every tile's terminal and every run
+//                   shown. The window stays hidden until the page says its first appearance is
+//                   applied (`ready`), and its frame takes the applied theme's desk color
 //   a port          what the page sends on one goes to the host as {type: "on", port, m}; what
 //                   the host sends for one goes to the page. Read by the host, not here
 //   the link drops  the reconnect machine (reconnect.ts) waits a moment and attaches again, the
@@ -182,8 +191,15 @@ const FRAME =
 		: {};
 
 /**
- * The one window, with the same safe settings the app's windows always had. Quiet, it is made
- * hidden and drawn anyway, then shown without taking focus.
+ * How long a window waits for its page's first appearance before it is shown anyway: a page that
+ * never says it is ready (it failed to load) must not leave the app with no window at all.
+ */
+const READY_WAIT_MS = 10_000;
+
+/**
+ * The one window, with the same safe settings the app's windows always had. It is made hidden and
+ * drawn anyway, and shown once its page applied its first appearance (`reveal`), so a person's
+ * theme never starts as fabrika's. Quiet, it is shown without taking focus.
  */
 const deskWindow = (preload: string, icon: string, launch: Launch) => {
 	const quiet = launch.kind === "quiet";
@@ -195,7 +211,7 @@ const deskWindow = (preload: string, icon: string, launch: Launch) => {
 		// The desk's color in the system's look, so the window shows no other color before its page.
 		backgroundColor: frameColor(nativeTheme),
 		...FRAME,
-		show: !quiet,
+		show: false,
 		paintWhenInitiallyHidden: true,
 		webPreferences: {
 			sandbox: true,
@@ -206,12 +222,22 @@ const deskWindow = (preload: string, icon: string, launch: Launch) => {
 			preload,
 		},
 	});
-	followLook(nativeTheme, window);
-	if (quiet) window.showInactive();
+	const frame = followLook(nativeTheme, window);
+	let shown = false;
+	/** Show it once: quiet, without taking focus. */
+	const reveal = () => {
+		if (shown || window.isDestroyed()) return;
+		shown = true;
+		clearTimeout(waiting);
+		if (quiet) window.showInactive();
+		else window.show();
+	};
+	const waiting = setTimeout(reveal, READY_WAIT_MS);
+	window.once("closed", () => clearTimeout(waiting));
 	window
 		.loadURL(DESK)
 		.catch((cause) => console.error(`fabrika: the window could not load ${DESK}`, cause));
-	return window;
+	return {window, frame, reveal};
 };
 
 /** The sender is the window's own top frame, showing the desk page of our files: nothing else is answered. */
@@ -317,6 +343,15 @@ const main = Effect.gen(function* () {
 
 	/** The desk's window now, or none: closed, and on macOS the app runs on in the dock. */
 	let current: BrowserWindow | null = null;
+	/** Its frame's painter and its reveal (`deskWindow`). */
+	let shown: Omit<ReturnType<typeof deskWindow>, "window"> | null = null;
+	/** The theme the host applied last, for the frame of this window and the next. */
+	let applied: AppliedTheme | null = null;
+	/** The frame takes the applied theme's desk; forced colors, or none yet, the system's look. */
+	const paintFrame = () =>
+		shown?.frame.apply(applied === null || nativeTheme.inForcedColorsMode ? null : applied);
+	// Forced colors going on or off is heard as a look change too.
+	nativeTheme.on("updated", paintFrame);
 	/** The current window's page said hello, and is to be shown the desk once the link is up. */
 	let paged = false;
 	/** The link while it is up. Down, the reconnect machine (reconnect.ts) says what is done. */
@@ -373,6 +408,11 @@ const main = Effect.gen(function* () {
 				if (m.port === "desk") {
 					const asks = readAsks(m.m);
 					if (asks.kind === "read") heardAsks(asks.msg.now);
+					const theme = readTheme(m.m);
+					if (theme.kind === "read") {
+						applied = theme.msg.value;
+						paintFrame();
+					}
 				}
 				return ports.post(m.port, m.m);
 			}
@@ -460,9 +500,9 @@ const main = Effect.gen(function* () {
 		const toDesk = onTo("desk");
 		ports.push("desk", (raw) => {
 			const own = readToApp(raw);
-			if (own.kind === "read")
-				Effect.runFork(reconnect.dispatch({type: own.msg.type}).pipe(Effect.ignore));
-			else toDesk(raw);
+			if (own.kind !== "read") toDesk(raw);
+			else if (own.msg.type === "ready") shown?.reveal();
+			else Effect.runFork(reconnect.dispatch({type: own.msg.type}).pipe(Effect.ignore));
 		});
 	};
 
@@ -477,11 +517,14 @@ const main = Effect.gen(function* () {
 			current.focus();
 			return;
 		}
-		const made = deskWindow(path.join(DIST, "preload.cjs"), icon, launch);
+		const {window: made, ...rest} = deskWindow(path.join(DIST, "preload.cjs"), icon, launch);
 		current = made;
+		shown = rest;
+		paintFrame();
 		made.once("closed", () => {
 			if (current !== made) return;
 			current = null;
+			shown = null;
 			paged = false;
 			ports.reset();
 			// Nothing stops: the host only stops showing this page anything.
