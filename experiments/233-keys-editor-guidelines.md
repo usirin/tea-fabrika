@@ -9,7 +9,7 @@ at `6041f99e`, on Electron 45.2.1 and Manti 0.13.0. Four designs were built for 
 around the real tile, and shot with Playwright on Electron at five layouts, dark: one tile, two side
 by side, two stacked, a 2x2 grid and a 1024x700 window. Each design was pressed through five states
 (open, a row picked, listening, a clash, saved), and design D on three keyboards (the system's guess,
-Colemak-DHm on a laptop board, Colemak-DHm on a Corne). Two refine rounds followed the owner's pick.
+Colemak-DHm on a laptop's row-staggered physical layout, Colemak-DHm on a Corne). Two refine rounds followed the owner's pick.
 That is 6 design runs x 5 layouts x 5 states = 150 states, each with a real shot, its words and its
 DOM. A later pass pressed every key and click the editor takes, from each state on the walk's path and one press off it: today 56 states, A 63 and D on the Corne 61, each with a saved page and a shot at one tile, and the path's states at all five layouts. The canvas's prototypes take their presses from those graphs.
 
@@ -18,7 +18,7 @@ the left and its keys on the right, grouped; press Enter or double-click a row, 
 key; say a clash where you record; reset one row or all. VS Code, Zed, JetBrains and macOS all do it,
 and Linear's shortcuts help is that list without the editing. Only the place differs: VS Code opens
 it over the editor, and our settled notes say nothing covers what you work on, so ours sits in a
-tile. The owner picked that list in a tile (design A) on 2026-11-08, and a keyboard drawing (design
+tile. The owner picked that list in a tile (design A) on 2026-11-08, and a keyboard map (design
 D) as a second view of the same program.
 
 Today's editor (keys PR 1) has the right jobs and the wrong look:
@@ -57,10 +57,10 @@ Premiere    a drawn keyboard with each key's command (a guess: Adobe's page refu
 | [k7] | Linear changelog, 2021-03-25 | The keyboard shortcuts help: a side panel, search on top, groups, the name on the left in sans, keycaps on the right. Read only. |
 | [k8] | Linear changelog, 2024-12-18, personalized sidebar | Its image of settings: grouped rows, the control on the right. Linear lets nobody rebind (guess: no Linear page says otherwise). |
 
-### A keyboard drawing on someone else's layout
+### A keyboard map on someone else's keyboard layout
 
 The owner types Colemak-DHm, through Karabiner on a Mac and through QMK on a Corne, so the system
-always reports US QWERTY. These sources set how a drawing learns the layout.
+always reports US QWERTY. These sources set how a keyboard map learns the keyboard layout.
 
 | Tag | Source | What it says |
 |---|---|---|
@@ -73,8 +73,8 @@ always reports US QWERTY. These sources set how a drawing learns the layout.
 | [l8] | Monkeytype layouts | Keeps `colemak_dh` and `colemak_dh_matrix` apart. |
 
 A probe on the branch: `navigator.keyboard.getLayoutMap()` works in the app's window on Electron
-45.2.1 and read 50 keys, `KeyQ` = `q`. On the owner's machines it would say QWERTY on both boards:
-right for matching, wrong for drawing.
+45.2.1 and read 50 keys, `KeyQ` = `q`. On the owner's machines it would say QWERTY on both physical layouts:
+right for matching, wrong for the keyboard map.
 
 ### Outside software
 
@@ -83,7 +83,7 @@ right for matching, wrong for drawing.
 - **Premiere Pro and DaVinci Resolve (video), a guess, not read:** Adobe's page refused the
   fetch and Blackmagic's keyboard page shows no key map, so this is from memory. A drawn keyboard with each key's command. It shows
   free keys at a glance. It carries over poorly to a prefix key: everything sits under `C-b`, so the
-  drawing is the board after the prefix, not the board itself.
+  map shows the keys after the prefix, not the keyboard itself.
 - **A cockpit checklist, a guess with no source:** one item per line, read top to bottom, the state in words. It is the list.
 
 ## Today's editor
@@ -96,6 +96,7 @@ Read on main at `6041f99e`. Today's version.
 | Width | 900px | `apps/fabrika/src/window/window.css:1346` |
 | Font | Mono, from the root; the editor never sets `--font` | `apps/fabrika/src/window/window.css:58` |
 | Row | name · command · tsh word · spoken keys · source · moved | `apps/fabrika/src/keys/window.tsx:225` |
+| Search | An Input with no key handler, beside the Listbox: after typing, Down and Enter do nothing, so a row is picked only by a click (the shoot pressed both; the screen did not change) | `apps/fabrika/src/keys/window.tsx:190-196`, Listbox at `:205` |
 | Details | The row again: name, command, tsh word, source | `apps/fabrika/src/keys/window.tsx:237` |
 | Not ours | A `details` at the bottom | `apps/fabrika/src/keys/window.tsx:341` |
 | Close | A full-width button | `apps/fabrika/src/keys/window.tsx:363` |
@@ -105,13 +106,13 @@ Save. `|` belongs to split, so split loses it.
 
 | Principle in the note | Today |
 |---|---|
-| K-E1 a tile, not a box | Breaks: two tiles side by side are both covered |
-| K-E2 one list, name left, keys right | Half: one list, but each row reads out six facts in mono |
-| K-E3 record in the row | Half: recording happens in a details pane below the list |
-| K-E4 every change says what it took | Passes: "close lost ctrl+b then x." and Undo |
-| K-E5 one model, every size | Breaks: the box has one size; a narrow window squeezes it |
-| K-E6 a drawing is the person's | Not there: today draws no keyboard |
-| K-E7 quiet, with the tile's own edge | Breaks: mono names, Manti's orange row and ring, a wide Close |
+| E1 a tile, not a box | Breaks: two tiles side by side are both covered |
+| E2 one list, name left, keys right | Half: one list, but each row reads out six facts in mono |
+| E3 record in the row | Half: recording happens in a details pane below the list. Breaks: Down and Enter from the search do nothing |
+| E4 every change says what it took | Passes: "close lost ctrl+b then x." and Undo |
+| E5 one model, every size | Breaks: the box has one size; a narrow window squeezes it |
+| E6 a keyboard map is on the person's own layouts | Not there: today draws no keyboard |
+| E7 quiet, with the tile's own edge | Breaks: mono names, Manti's orange row and ring, a wide Close |
 
 ## The four designs
 
@@ -122,7 +123,7 @@ Each had its tsh line first. A and B are one program; D is the same program's se
 | A. One list in a tile | `keys` | Reads well at every size; recording fits in the row; crowded Save and Cancel in a quarter tile until round 2. **Picked.** |
 | B. List and details | `keys` | Best in a big tile; in a narrow one the details drop under the list and repeat the row. |
 | C. The palette's box, cleaned up | `C-b ?` | Same list as A, but still over the tiles and over a tile's edge (the edge check fails on t1's right side). |
-| D. A keyboard drawing | `keys --map` | Shows free keys at a glance. On a Corne, digits and `|` sit on another layer, so they go to a list under it. Too wide for a quarter tile until round 2. **Picked as a second view.** |
+| D. A keyboard map | `keys --map` | Shows free keys at a glance. On a Corne, digits and `|` sit on another layer, so they go to a list under it. Too wide for a quarter tile until round 2. **Picked as a second view.** |
 
 ## The refine rounds
 
@@ -137,7 +138,7 @@ Each had its tsh line first. A and B are one program; D is the same program's se
   longer runs past the list on the right; a key's caps are one named image for a screen reader
   (ARIA 1.2 drops `aria-label` on a plain span). D in a narrow tile drops the command names from
   the caps, marks bound keys by fill and bold, and wraps its pickers: the whole Corne now fits a
-  quarter of a 1024x700 window, with the record row and the "Not on this drawing" list a scroll
+  quarter of a 1024x700 window, with the record row and the "Not on this map" list (the builds say "Not on this drawing"; the build changes it) a scroll
   below. Zoom (`C-b z`) shows the names on the caps.
 
 What still looks off: in a quarter tile the keys line under the list wraps to two lines; Save and
@@ -146,16 +147,16 @@ Undo keep Manti's soft fill.
 ## What this tells us for fabrika
 
 - The list is the known way and the owner's pick. A tile, not a box, is ours (L5).
-- A keyboard drawing is a view, not the editor: it needs a layout and a board the system cannot
-  tell, so it cannot be the only way in.
+- A keyboard map is a view, not the editor: it needs a keyboard layout and a physical layout the
+  system cannot tell, so it cannot be the only way in.
 - Matching by the character typed (experiment 182) holds for Karabiner and QMK alike, since both
-  change what the system hears. Only the drawing needs the person's picks.
+  change what the system hears. Only the keyboard map needs the person's picks.
 - The edge check is a law the test writer can hold for every program in a tile, not only keys.
 
 ## What it cannot tell us
 
 - No screen reader ran. The recording announcements and the image name on the caps need VoiceOver.
-- Only the owner's board and layout were drawn. A non-Latin layout, ISO boards and thumb-key or
+- Only the owner's keyboard layout and physical layouts were drawn. A non-Latin layout, ISO keyboards and thumb-key or
   layer bindings were not shot.
 - The shots are of a stand-in: the design is mounted over a tsh tile, not opened as a real program.
 - Where `C-b ?` opens the tile (split beside, or in place) was not shot both ways.

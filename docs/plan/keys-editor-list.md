@@ -34,6 +34,7 @@ case "keys": return said({kind: "split", to: "right", run: "keys"});
 ```text
 C-b ?        desk: split t1 to the right, run `keys` in t2; focus t2's search
 type zoom    editor {query: "zoom"}; the list shows Tile · Zoom · ⌃B Z
+Down         focus moves from the search into the list; editor {selected: "zoom"}
 Enter        editor.recording {_tag: "waiting", prefix: false}; the row listens
 C-b |        editor.recording {_tag: "candidate", keys: [⌃B |]}; row: Takes it from Split · Save · Cancel
 Enter        edit sent to the host; saved {version}; row: Zoom Changed ⌃B |
@@ -43,24 +44,28 @@ C-b x        asks y or n, as every tile does; y: t2 closes, its process ends, fo
 
 ## Properties the tests check
 
-| Property | Principle | Kind |
-|---|---|---|
-| The keys window's box sits inside its tile's box, in every layout | E1 | e2e box check |
-| `C-b ?` with one tile makes two; nothing is drawn over t1 | E1 | e2e |
-| A row's accessible name is the command and its spoken keys, nothing else | E2 | unit (window.test.ts) |
-| Names use `--font`; mono only in the search input | E2, E7 | lint on window.css |
-| Enter on a row makes that row listen; Escape leaves it unchanged | E3 | unit |
-| A press on Save or Cancel never selects the row again | E3 | unit (found in round 1) |
-| After a save, the live region names what was lost, in words, and Undo restores it | E4 | unit, as today |
-| The keycaps of one key are one image with the spoken name | E4 | unit |
-| The tile's left, right and bottom edge pixel differs from 3px inside by 6 or more | E7 | e2e pixel check |
-| `F6` prints as `F6` | E2 | unit (pop.test.ts) |
+| Property | Principle | Kind | Generator |
+|---|---|---|---|
+| The keys window's box sits inside its tile's box, in every layout | E1 | e2e box check | the five layouts, each shot |
+| `C-b ?` with one tile makes two; nothing is drawn over t1 | E1 | e2e | one tile, then each of the five layouts |
+| A row's accessible name is the command and its spoken keys, nothing else | E2 | unit (window.test.ts) | fast-check: commands and key lists drawn from the real command table |
+| Names use `--font`; mono only in the search input | E2, E7 | lint on window.css | lint |
+| Down from the search moves into the list; Enter on the active row records | E3 | unit | fast-check: a query drawn from the commands' names (prefixes and full words), then n Downs, n in 1 to the row count; the recording row is the nth row the query shows. Pinned case: `zoom`, Down, Enter, today's bug |
+| Enter on a row makes that row listen; Escape leaves it unchanged | E3 | unit | fast-check: any row, any keybindings file drawn from the commands |
+| A press on Save or Cancel never selects the row again | E3 | unit (found in round 1) | fast-check: any row, then Save or Cancel. Pinned case: round 1's bug |
+| After a save, the live region names what was lost, in words, and Undo restores it | E4 | unit, as today | fast-check: a key taken from another command, or a free key |
+| The keycaps of one key are one image with the spoken name | E4 | unit | fast-check: key lists with prefix, modifiers and F-keys |
+| The tile's left, right and bottom edge pixel differs from 3px inside by 6 or more | E7 | e2e pixel check | the five layouts, each state shot |
+| `F6` prints as `F6` | E2 | unit (pop.test.ts) | fast-check: F1 to F24, any modifiers |
+
+The e2e rows run on the real app; their inputs are the layouts and states the shots name, not
+random draws.
 
 ## Files and lines
 
 | File | Change | Lines |
 |---|---|---|
-| `apps/fabrika/src/keys/window.tsx` | The list window, replacing today's Dialog body | ~250 changed |
+| `apps/fabrika/src/keys/window.tsx` | The list window, replacing today's Dialog body; the search's Down and Enter | ~260 changed |
 | `apps/fabrika/src/keys/window.test.ts` | The properties above | ~120 |
 | `apps/fabrika/src/keys/program.ts` | `keysRequest` goes; `keys` is one program with a window | ~-40 |
 | `apps/fabrika/src/window/windows.tsx` | One `known(...)` row | ~2 |
