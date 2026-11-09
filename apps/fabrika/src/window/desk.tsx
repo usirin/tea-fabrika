@@ -54,13 +54,15 @@ import {
 	FRAME,
 	type Frame,
 	type FrameMsg,
-	frameUpdate,
+	stepFrame,
 	keyGoesTo,
 	type MidKey,
 	type Shapes,
 	ticketsShown,
 } from "./frame.ts";
 import {Band, BottomArea, type FrameProps, Over, TopBar} from "./frame.tsx";
+import {type LayerChange} from "./layers.ts";
+import {LayerEvents} from "./pop.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {Strip, Tile} from "./tile.tsx";
 import {WINDOWS} from "./windows.tsx";
@@ -168,6 +170,15 @@ const followed = new Set<string>();
 let ghostty: Ghostty | null = null;
 
 const toHost = (m: FromPage) => window.fabrika.send("desk", m);
+const layerInstances = new Map<string, string>();
+const reportLayer = (change: LayerChange) => {
+	const key = JSON.stringify(change.layer);
+	const instance = change._tag === "open" ? crypto.randomUUID() : layerInstances.get(key);
+	if (instance === undefined) return;
+	if (change._tag === "open") layerInstances.set(key, instance);
+	else layerInstances.delete(key);
+	toHost({type: "layer", id: crypto.randomUUID(), instance, change, said: Date.now()});
+};
 const editKeys = (message: EditorMsg) => {
 	if (store.keysEditor === null) return;
 	const [next, cmds] = applyCell<Editor, EditorMsg, EditorCmd>(
@@ -351,7 +362,7 @@ let noteTimer: ReturnType<typeof setTimeout> | undefined;
  * the frame changed: a key it did not change goes on.
  */
 const frameStep = (m: FrameMsg): boolean => {
-	const next = frameUpdate(store.frame, m);
+	const [next, changes] = stepFrame(store.frame, m);
 	if (next === store.frame) return false;
 	const wasKeys = store.frame.over.kind === "palette" && store.frame.over.title === "keys";
 	const isKeys = next.over.kind === "palette" && next.over.title === "keys";
@@ -369,6 +380,7 @@ const frameStep = (m: FrameMsg): boolean => {
 		noteTimer = setTimeout(() => frameStep({type: "unnote"}), NOTE_MS);
 	}
 	store.frame = next;
+	for (const change of changes) reportLayer(change);
 	changed();
 	return true;
 };
@@ -487,8 +499,15 @@ const heard = (raw: unknown) => {
 			if (m.what === "focus-next" || m.what === "focus-previous")
 				return cycleFocus(m.what === "focus-next" ? "next" : "previous");
 			return m.what === "info"
-				? frameStep({type: "info", focus: focusWords()})
-				: frameStep({type: "show", what: m.what});
+				? frameStep({
+						type: "info",
+						focus: focusWords(),
+						...(m.via === undefined ? {} : {via: m.via}),
+					})
+				: frameStep({type: "show", what: m.what, ...(m.via === undefined ? {} : {via: m.via})});
+		case "navigation":
+			flushSync(() => frameStep({type: "close", reason: "navigation"}));
+			return;
 		case "desk":
 			store.desk = m.desk;
 			store.attachedOnce = true;
@@ -505,7 +524,7 @@ const heard = (raw: unknown) => {
 			// Off a host, a key held for its answer gets none: the hold lets them go.
 			if (!attached(m.now)) {
 				holdStep({type: "down"});
-				if (store.keysEditor !== null) frameStep({type: "close"});
+				if (store.keysEditor !== null) frameStep({type: "close", reason: "owner_gone"});
 			}
 			// On one, it may be a host that never heard the workspace's size.
 			else tellArea(true);
@@ -625,7 +644,8 @@ const onKey = (e: KeyboardEvent) => {
 	}
 	if (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"') {
 		swallow(e);
-		if (store.frame.over.kind !== "none") frameStep({type: "close"});
+		if (store.frame.over.kind !== "none")
+			flushSync(() => frameStep({type: "close", reason: "navigation"}));
 		toHost({type: "run", does: alone, via: {keys: spell(name ?? "")}});
 		return;
 	}
@@ -973,7 +993,12 @@ const boot = Effect.gen(function* () {
 	for (const on of EXPLAIN_ON) window.addEventListener(on, explainAt);
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");
-	if (root !== null) createRoot(root).render(<App />);
+	if (root !== null)
+		createRoot(root).render(
+			<LayerEvents value={reportLayer}>
+				<App />
+			</LayerEvents>,
+		);
 });
 
 Effect.runFork(

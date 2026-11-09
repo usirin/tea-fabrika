@@ -1,5 +1,7 @@
 import {Kbd} from "@manti-ui/react";
 import {
+	createContext,
+	useContext,
 	type KeyboardEvent,
 	type ReactNode,
 	type RefObject,
@@ -10,6 +12,7 @@ import {
 	useState,
 } from "react";
 import {createPortal} from "react-dom";
+import {Layer, LayerChange, type LayerReason} from "./layers.ts";
 import {
 	activeIn,
 	type Cap,
@@ -28,6 +31,9 @@ import {
 	tipWait,
 	type Words,
 } from "./pop.ts";
+
+/** The frame adapter records presentation facts; tooltips never send their text. */
+export const LayerEvents = createContext<(change: LayerChange) => void>(() => {});
 
 // What opens over the desk, drawn: one raised box of rows for every popover, in the program
 // windows' own font and sizes (docs/direction/popovers.md). Its rules are pop.ts's; this file
@@ -128,7 +134,7 @@ const useOverlay = (
 	box: RefObject<HTMLElement | null>,
 	id: string,
 	into: () => void,
-	onClose: () => void,
+	onClose: (reason?: LayerReason) => void,
 ) => {
 	const moveIn = useEffectEvent(into);
 	useLayoutEffect(() => {
@@ -146,7 +152,7 @@ const useOverlay = (
 			const t = e.target;
 			if (!(t instanceof Element) || box.current?.contains(t) === true) return;
 			if (t.closest(`[aria-controls="${id}"]`) !== null) return;
-			onClose();
+			onClose("outside");
 		};
 		document.addEventListener("pointerdown", down, true);
 		return () => document.removeEventListener("pointerdown", down, true);
@@ -196,7 +202,7 @@ export interface MenuProps {
 	readonly onAct: (row: Row) => void;
 	/** H, or a click on the active row's second button. */
 	readonly onSecond: (row: Row) => void;
-	readonly onClose: () => void;
+	readonly onClose: (reason?: LayerReason) => void;
 }
 
 /**
@@ -235,7 +241,7 @@ export function Menu(props: MenuProps): ReactNode {
 				return setFolded(next);
 			}
 			case "close":
-				return props.onClose();
+				return props.onClose("done");
 		}
 	};
 	const onKeyDown = (e: KeyboardEvent) => {
@@ -503,7 +509,7 @@ export interface PaletteProps {
 	readonly onQuery: (query: string) => void;
 	readonly onMove: (by: number) => void;
 	readonly onRun: (at: number) => void;
-	readonly onClose: () => void;
+	readonly onClose: (reason?: LayerReason) => void;
 }
 
 const PALETTE_FOOT: readonly Hint[] = [
@@ -625,7 +631,7 @@ export function Palette(props: PaletteProps): ReactNode {
 export function Panel(props: {
 	readonly id: string;
 	readonly label: string;
-	readonly onClose: () => void;
+	readonly onClose: (reason?: LayerReason) => void;
 	readonly children: ReactNode;
 }): ReactNode {
 	const box = useRef<HTMLDivElement>(null);
@@ -679,24 +685,36 @@ const placeOf = (r: DOMRect) => ({
  *   <button {...tip.on}>2 ask you</button>{tip.node}
  */
 export const useTip = (tip: Tip, quiet: boolean) => {
+	const events = useContext(LayerEvents);
+	const report = useEffectEvent(events);
 	const [at, setAt] = useState<DOMRect | null>(null);
 	const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	const id = useRef(`tip-${Math.random().toString(36).slice(2, 9)}`).current;
-	const hide = () => {
+	const reason = useRef<LayerReason>("owner_gone");
+	const visible = at !== null;
+	useLayoutEffect(() => {
+		if (!visible) return;
+		reason.current = "owner_gone";
+		const layer = Layer.cases.tooltip.make({for: id});
+		report(LayerChange.cases.open.make({layer, via: null}));
+		return () => report(LayerChange.cases.close.make({layer, reason: reason.current}));
+	}, [visible, id]);
+	const hide = (why: LayerReason = "outside") => {
 		clearTimeout(timer.current);
+		reason.current = why;
 		setAt((was) => {
 			if (was !== null) lastGone = Date.now();
 			return null;
 		});
 	};
 	useEffect(() => {
-		if (quiet) hide();
+		if (quiet) hide("replacement");
 	}, [quiet]);
 	useEffect(() => () => clearTimeout(timer.current), []);
 	useEffect(() => {
 		if (at === null) return;
 		const key = (e: globalThis.KeyboardEvent) => {
-			if (e.key === "Escape") hide();
+			if (e.key === "Escape") hide("escape");
 		};
 		window.addEventListener("keydown", key, true);
 		return () => window.removeEventListener("keydown", key, true);
@@ -711,12 +729,12 @@ export const useTip = (tip: Tip, quiet: boolean) => {
 			"aria-describedby": at === null ? undefined : id,
 			onPointerEnter: (e: {readonly currentTarget: Element}) =>
 				show(e.currentTarget, tipWait(Date.now(), lastGone)),
-			onPointerLeave: hide,
-			onPointerDownCapture: hide,
+			onPointerLeave: () => hide("outside"),
+			onPointerDownCapture: () => hide("done"),
 			onFocus: (e: {readonly currentTarget: Element}) => {
 				if (e.currentTarget.matches(":focus-visible")) show(e.currentTarget, 0);
 			},
-			onBlur: hide,
+			onBlur: () => hide("done"),
 		},
 		node:
 			at === null

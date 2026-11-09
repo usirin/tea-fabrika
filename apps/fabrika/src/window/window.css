@@ -8,6 +8,42 @@
  * stuck or broken; amber running; green done. A line or a fill token is never a text color. The
  * four type colors live only on the program map's ports and wires, never on text.
  */
+@layer fabrika-frame-layers {
+	:root {
+		--layer-desk: 0;
+		--layer-sheet: 1;
+		--layer-float: 2;
+		--layer-popover: 3;
+		--layer-palette: 4;
+		--layer-tooltip: 5;
+	}
+
+	.workspace {
+		z-index: var(--layer-desk);
+	}
+	.pop {
+		z-index: var(--layer-popover);
+	}
+	.scrim,
+	.pop.palette {
+		z-index: var(--layer-palette);
+	}
+	.tip {
+		z-index: var(--layer-tooltip);
+	}
+
+	[data-scope="dialog"][data-part="backdrop"],
+	[data-scope="dialog"][data-part="positioner"] {
+		--manti-dialog-z-index: var(--layer-palette);
+	}
+	[data-scope="popover"][data-part="positioner"] {
+		--manti-popover-z-index: var(--layer-popover);
+	}
+	[data-scope="tooltip"][data-part="positioner"] {
+		--manti-tooltip-z-index: var(--layer-tooltip);
+	}
+}
+
 :root {
 	/* Secondary, muted and faint are one step under three names; the package names it once. */
 	--text-muted: var(--text-faint);
@@ -873,7 +909,6 @@ main.program > [role="alert"] {
 
 .pop {
 	position: absolute;
-	z-index: 10;
 	box-sizing: border-box;
 	padding: var(--pop-pad);
 	border: 1px solid var(--pop-edge);
@@ -1204,7 +1239,6 @@ main.program > [role="alert"] {
  */
 .scrim {
 	position: absolute;
-	z-index: 9;
 	inset: 0;
 }
 
@@ -1431,7 +1465,6 @@ main.program > [role="alert"] {
 /* A tooltip: a name and its keys, after a short wait. Never under the pointer's way. */
 .tip {
 	position: fixed;
-	z-index: 20;
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;

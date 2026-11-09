@@ -4,6 +4,7 @@ import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
 import {Does, KeyName, Keys} from "./desk/keymap.ts";
 import {SHOWS} from "./desk/keys.ts";
 import {Change, Edit} from "./keys/program.ts";
+import {LayerReport, LayerVia} from "./window/layers.ts";
 
 // What the app's one window and the host say to each other. The window draws the desk
 // (desk/desk.ts, run in the host), a terminal per tile, and a view per run of a program with one;
@@ -258,7 +259,9 @@ export const ToPage = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("show"),
 		what: Schema.Literals([...SHOWS, "focus-next", "focus-previous"]),
+		via: Schema.optionalKey(LayerVia),
 	}),
+	Schema.Struct({type: Schema.Literal("navigation")}),
 	Schema.Struct({
 		type: Schema.Literal("desk"),
 		desk: DeskSchema,
@@ -306,6 +309,7 @@ export type ToApp = typeof ToApp.Type;
  *   {type: "seen"}                    the asks list was opened: no ask is new any more
  */
 export const FromPage = Schema.Union([
+	LayerReport,
 	Schema.Struct({
 		type: Schema.Literal("keys.edit"),
 		request: Schema.String,
