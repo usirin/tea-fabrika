@@ -461,7 +461,15 @@ screenshots and visual cap acceptance remain pending, as do Electron,
 VoiceOver and terminal timing checks. A measured cap is not visual acceptance.
 
 The initial step-commit call again selected an older box record for the shared
-branch and refused its stale plan hash before staging. This box's own record
-matches its root, ticket, branch and the full approved plan hash. The retry
-sets `BOXES` to a temporary folder linking only that unchanged current record.
-No approval, plan, owner check or signed history was altered.
+branch and refused its stale plan hash before staging. The selector setup then
+failed because it treated the record's root commit hash as a directory. The
+next call still ran, with an absent selector folder, so the script used its
+legacy route without a box owner check. It committed and signed `6d51f9e4`.
+
+An explicit audit through the plan's owner reader verified all 16 committed
+paths as tests-owned. The current box record's ticket, branch, step, plan path
+and full approval hash also match. The selector was then created and checked
+to link exactly that unchanged record. This report correction is a second
+step-commit call with the correct selector and its owner checks. No approval,
+plan, owner rule or signed history was altered. The first call's missed box
+owner check remains recorded here.
