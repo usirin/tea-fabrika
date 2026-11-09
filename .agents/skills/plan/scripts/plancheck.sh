@@ -17,7 +17,11 @@ case ${1:-} in --draft) draft=1; shift;; --approved) draft=approved; shift;; --o
 [ "$#" = 1 ] || { echo "usage: plancheck.sh [--draft|--approved] <plan.md>" >&2; exit 1; }
 here=$(cd "$(dirname "$0")" && pwd -P)
 plan=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
-cd "$here/../../../.." && python3 - "$plan" "$here/../../step-commit/scripts/exam.py" "$draft" <<'PY'
+cd "$here/../../../.."
+if [ "$draft" != owners ]; then
+    sh "$here/../../lead/scripts/leakgrep.sh" --text "$plan" >&2
+fi
+python3 - "$plan" "$here/../../step-commit/scripts/exam.py" "$draft" <<'PY'
 import hashlib, json, re, subprocess, sys
 plan, exam, draft = sys.argv[1:]
 def norm(w):
@@ -142,6 +146,7 @@ named = hits(words + [w.lstrip(".") for w in words])
 owned, file_paths = {}, set()
 files_table, laws_table = False, False
 col, files, gen, path, law = None, False, None, None, None
+owned, file_paths, laws_table, files_table = {}, set(), False, False
 for i, l in enumerate(lines):
     l = l.strip()
     if not l.startswith("|"): col = gen = None; continue

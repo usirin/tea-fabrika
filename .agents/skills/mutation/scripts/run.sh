@@ -45,7 +45,7 @@ ranges=$(node .agents/skills/mutation/scripts/sample.ts \
 [ -n "$ranges" ] || { echo "no mutation ranges selected" >&2; exit 1; }
 # Keep the 10 s limit and the existing nested-Stryker and e2e excludes.
 cat > vitest.mutation.config.ts <<'TS'
-import base from "./vitest.config.ts";
+import {testConfig as base} from "./vitest.config.ts";
 import {defineConfig} from "vitest/config";
 const include = process.env.RELATED?.split(",").map(p => p.trim()).filter(Boolean);
 if (!include?.length) throw new Error("RELATED must list the test paths");

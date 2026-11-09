@@ -10,8 +10,13 @@ import sys
 root = Path(sys.argv[1])
 sources = root / ".agents/skills"
 bad = []
-# Today's tooling, T321 slice 1a. Each clause has one source and one section.
-# An empty section means the whole skill. No spelling aliases or legacy phrase list.
+# Today's tooling, T321 slice 1a and T325 slice 1b: one clause table, one parser.
+# Each clause has one source and one section. An empty section means the whole skill.
+# No spelling aliases or legacy phrase list. Source: approved skills-friction plan, Amendment 1,
+# required clauses. K20's source is the dated addition to five-steps-for-every-check.md.
+leak = "leakgrep.sh checks added text; private words stay outside the repo."
+caps = "The test config and typecheck.sh hold worker, home and typecheck limits."
+effect = "For a new property, use @effect/vitest's it.prop or it.effect.prop with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases."
 clauses = [
     ("lead", "Scripts", "K19", "box.sh run and runplan.sh strip secret settings and redact saved output."),
     ("lead", "Scripts", "K1", "fetch --sign checks owners and signs missing notes in MAIN."),
@@ -20,11 +25,20 @@ clauses = [
     ("lead", "Steps", "K3", "box.sh run --step checks order and slots, and saves the run row."),
     ("step-commit", "", "K4", "stepcommit.sh checks named paths, owners, exam paths and staged formatting."),
     ("plan", "", "K11", "plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments."),
+    ("lead", "Scripts", "K6", leak),
+    ("plan", "Scripts", "K6", leak),
+    ("guidelines", "10. Open a docs-only pull request", "K6", leak),
+    ("tests", "Go easy on the machine", "K9", caps),
+    ("build", "Go easy on the machine", "K9", caps),
+    ("mutation", "Go easy on the machine", "K9", caps),
+    ("tests", "Steps", "K20", effect),
 ]
-import re
+def normalized(text):
+    return " ".join(text.replace("`", "").replace("**", "").split())
 def sections(text):
-    found = {"": []}
-    section, fence = "", None
+    # CommonMark fences: a closing fence uses the opening's character, is at least as long and has
+    # no info string. A section holds its subsections; "" holds every line.
+    found, open_, fence = {"": []}, [], None
     for line in text.splitlines():
         mark = re.match(r"^\s{0,3}(`{3,}|~{3,})(.*)$", line)
         if fence:
@@ -34,13 +48,17 @@ def sections(text):
         if mark:
             fence = mark[1]
             continue
-        heading = re.match(r"^##\s+(.+?)\s*#*\s*$", line)
+        heading = re.match(r"^(#{2,6})\s+(.+?)\s*#*\s*$", line)
         if heading:
-            section = heading[1]
-        found.setdefault(section, []).append(line)
-        if section:
-            found[""].append(line)
-    return {key: " ".join(" ".join(lines).split()) for key, lines in found.items()}
+            level = len(heading[1])
+            open_ = [(n, l) for n, l in open_ if l < level] + [(normalized(heading[2]), level)]
+            for name, _ in open_:
+                found.setdefault(name, [])
+            continue
+        found[""].append(line)
+        for name, _ in open_:
+            found[name].append(line)
+    return {key: normalized(" ".join(lines)) for key, lines in found.items()}
 
 # A tree holding none of the clause sources is a links-only tree (the laws' generated repos).
 # Once any clause source exists, a removed one drops no clause: each it held is reported.
@@ -51,7 +69,7 @@ for skill, section, check, clause in clauses:
         continue
     if not source.is_file():
         bad.append(f".agents/skills/{skill}/SKILL.md: {check} source missing for clause: {clause}")
-    elif clause not in sections(source.read_text()).get(section, ""):
+    elif normalized(clause) not in sections(source.read_text()).get(section, ""):
         bad.append(f".agents/skills/{skill}/SKILL.md: {check} missing clause in {section or 'skill'}: {clause}")
 count = 0
 for source in sorted(sources.iterdir()) if sources.is_dir() else []:

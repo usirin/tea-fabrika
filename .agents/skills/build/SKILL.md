@@ -5,8 +5,7 @@ description: Be the builder for one tea-fabrika ticket, the pipeline step that m
 
 # The builder
 
-You make the test writer's red laws green, in product code only, as the approved plan says. You
-never touch a test or an exam path. No builder starts before an approved plan and tests that exist
+You make the test writer's red laws green, in product code only, as the approved plan says
 ([the steps](../../../docs/direction/next-is-a-pipeline-pre-run.md)).
 
 A brief names the ticket, the plan's path, the branch, and what this round fixes. This skill holds
@@ -19,22 +18,9 @@ the rest.
 2. **Run the red laws** on a narrow path and read why each fails.
 3. **Build** as the plan and decided notes say, and nothing they leave undecided.
    Step-commit checks the plan's file owners.
-4. **If a test or an exam path must change, stop.** Name the file, the line and why, and answer
-   `send` to tests. The step-commit script refuses a build commit that holds an exam path anyway.
-5. **Run** one capped command, for the narrow check while you work and the final check:
-   `nice -n 15 pnpm exec vitest run --changed origin/main --maxWorkers=3` (only tests that reach a
-   changed file; a pull request's CI runs the same, the full suite runs on main after the merge,
-   and `next/`'s own job runs all its tests). In a Codex box, drop `nice` and use
-   `--maxWorkers=1`. Then one typecheck at the end.
-   - When the change touches a file in `forceRerunTriggers` (`vitest.config.ts`: vitest's own,
-     such as `package.json` and the vitest config, plus the lockfile, `pnpm-workspace.yaml`, a
-     `tsconfig`, the lint and format settings, `oxlint-plugins/`, `layer-rules.json`, `fixtures/`
-     and `.github/`), `--changed` selects the whole suite. Do not run it: never the full suite locally
-     (`AGENTS.md`, "Go easy on the machine"). Run the narrow laws, leave the rest to CI, and say so
-     in the report.
-6. **Commit and sign** with the step-commit skill:
-   `sh .agents/skills/step-commit/scripts/stepcommit.sh build <ticket> "T<ticket> build: <subject>" <paths...>`
-7. **Report** in at most 6 lines: which laws went green, any still red and why, any file you needed
+4. **Run** the relevant narrow laws.
+5. **Commit** with the step-commit skill.
+6. **Report** which laws went green, any still red and why, any file you needed
    but may not touch, and what the lead's own run must show (Electron, screenshots). If every law
    was already green at the start and you changed nothing, do not commit: put
    `laws: green <the narrow test paths you ran>` just before `answer: done`. drive.ts takes that as
@@ -42,20 +28,11 @@ the rest.
 
 ## Go easy on the machine
 
-- Any run that starts the app, the brain or the stage sets its own temp `FABRIKA_HOME` first
-  (`mktemp -d /tmp/fh.XXXX`, short, since a socket path has a 103-byte limit). Never the real
-  `~/.fabrika`: a P12 hand run once wrote its stage files there.
-- In a Codex box: `pnpm exec vitest run --maxWorkers=1 <narrow path>`. `nice` and `pgrep` are
-  blocked there, so skip them.
-- Elsewhere: `nice -n 15 pnpm exec vitest run --maxWorkers=3 <narrow path>`, and `nice -n 19` with
-  `--maxWorkers=1` when two or more code agents run.
-- Step-commit checks staged formatting. Run `pnpm lint` once. One `pnpm typecheck` at the very end, never while another runs.
+The test config and typecheck.sh hold worker, home and typecheck limits.
+
+- Step-commit checks staged formatting. Run `pnpm lint` once.
 - Electron cannot start in a box. Reason from the code and say what the lead's rerun must show.
 
 ## Never
 
-- Change a test, a fixture, a lint rule or any path in `exam-paths.json`.
-- Switch a lint rule off to pass. A `// oxlint-disable-next-line <rule> -- <why>` is only for a line
-  where the code is right and the rule does not fit.
 - Leave a stub, a dead button or "(not yet)" in the product ("no rough first versions").
-- Reset, rebase or amend. Read, print or copy a key file. Push.

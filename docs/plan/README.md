@@ -39,6 +39,10 @@ program (ticket 114). They and Tier 1 do not wait for each other. Past Tier 1,
 
 Ticket numbers are this project's own tracker, not GitHub issues.
 
+Ticket 325 builds skills friction slice 1b in today's hand-run tooling: K6 leak checks, K9 machine
+limits and K20 advice on `next/` test data. Its checks and prose cuts are in build; slice 1a keeps
+K19, K1 to K4 and K11. [The decision and replay](../direction/skills-hold-only-judgment.md).
+
 **The deal, decided 2026-10-31:** every pull request, `next/` or today's, goes through
 today's pipeline programs. A step that cannot run yet goes by hand for that pull request
 and is logged in `field/` ([the note](../direction/next-is-a-pipeline-pre-run.md)).

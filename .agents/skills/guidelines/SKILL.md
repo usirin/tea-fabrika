@@ -13,13 +13,6 @@ work: slides that walk the story, and at the end a clickable prototype of the pi
 every key and click the guidelines name. It is a Design canvas in Claude Design with the design
 system installed ([drawn on Claude Design](../../../docs/direction/design-on-claude-design.md)).
 
-Two earlier shapes failed. A canvas of artboards alone was hard to use: nothing on it said what to
-look at or why (2026-11-03). The plain page that replaced it lifted the real build's saved DOM, so
-any press nobody had captured said "not shot", and the owner turned that down on 2026-11-06: a
-press in a demo always does something. And a decided note with no build step stayed a note: from
-2026-11-01 to 2026-11-03, tile guidelines, keybindings, modes and typography were decided for
-today's app and none was built.
-
 The models are themes (PR 281), keybindings (PR 282), hot reload (PR 286) and modes (PR 287).
 Themes came first; the other three set the note's shape and the order of the principle slides,
 and modes is the closest to it all: copy modes for those. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model.
@@ -27,11 +20,6 @@ The prototype copies the mockup rounds instead (the tile, the pipe marker finali
 window, the outline round): there the screen is the point, and the words sit beside it.
 
 Read `AGENTS.md` first. Its rules on names, writing, version and the public repo all apply.
-
-The guidelines and the keys come first, and they worked. The look is where studies went wrong:
-the ask desk's screen had a left bar for the selected row, boxes inside boxes and mono meta text,
-because nothing made the agent look at it next to Linear. So the look gets its own step, 5,
-with real shots and the owner's yes.
 
 ## The steps
 
@@ -142,7 +130,7 @@ request opens, even when no study is running (owner, 2026-11-08).
 
 - The title is the question. Line one: the date read, and **"This is reading, not a
   measurement."** unless something ran. It names the note and the Design canvas "<Area>
-  guidelines" by title. Never put the canvas's link in the repo.
+  guidelines" by title.
 - When step 5 ran, say so: the branch, the app version, the designs and rounds shot, and how many
   states each prototype has, with how many of them have a real shot.
 - **The answer** first: what the makers agree on, then how today's example follows and breaks it.
@@ -230,9 +218,21 @@ prototype. Shots and the prototype are in dark mode first, as the owner runs it.
   uploaded as an image, at the same size and scale. Any difference in words, boxes or sizes sends
   the round back: fix the prototype, not the shot. A round is ready for that look only when every
   row of the press checklist is ticked and every state has a real shot.
-- **Publish one file at a time,** as the canvas type asks: the index with the first slide, then one
-  artboard per call. List the round's artboards first, so none is sent twice. The link goes in no
-  file in the repo.
+
+The owner's plain walk page uses the same real parts, states, working keys and clicks. It sits
+beside the canvas for the walk. Keep the distinct designs from step 5 available to choose.
+
+- **One selected design per screen.** Show today's version on the left and the selected design
+  on the right. Label both. Switch the design between screens or walk steps. Never pack three
+  or four frames into one row to show all choices at once.
+- **Keep both at 1:1 real size.** Use their real dimensions. Allow scrolling when the pair needs
+  more space. Never shrink the screens to fit the page or redraw their layout at a smaller size.
+- **Lead looks before sending.** Capture the plain page at 1440x900 and look at that capture.
+  Check the left and right order, real sizes, scrolling and the chosen design. Fix clipping or
+  crowding before the owner sees it. Press the keys and clicks too.
+- **Make one HTML copy with everything inline.** Include styles, scripts, fonts, images and
+  real parts, so the owner's side panel needs no other files or server. Open that copy and
+  check its keys, clicks and states before sending it.
 
 The owner's plain walk page uses the same real parts, states, working keys and clicks. It sits
 beside the canvas for the walk. Keep the distinct designs from step 5 available to choose.
@@ -254,9 +254,8 @@ beside the canvas for the walk. Keep the distinct designs from step 5 available 
 
 ### 10. Open a docs-only pull request
 
-- Branch from `origin/main`. Stage the note, the experiment and the two index rows by name.
-- Run `pnpm format`, then `pnpm lint` once. Grep the added lines for names, machine paths and
-  keys, as `AGENTS.md`'s public repo rules say.
+leakgrep.sh checks added text; private words stay outside the repo.
+
 - Title: `direction: <area>, proposed, with experiment NN`. The body, as PR 287: what is in it,
   the principles with their leans (or "No lean, the owner picks"), the shape, today's example, what was decided, what other open
   pull requests would change to match, open calls, what it cannot tell us. It names the canvas
@@ -286,11 +285,8 @@ beside the canvas for the walk. Keep the distinct designs from step 5 available 
 A decided note is not done until the app shows it. The owner decided on 2026-11-03 that every
 study ends here.
 
-- **The same day as the merge,** write the build plan for the version the note names, in the shape
-  of an approved plan (the whole idea in one code block, the shape, one value traced, a table of
-  properties a test checks, a files table with lines, screenshots at five layouts, size in agent
-  hours with how sure, what it cannot tell us, open questions with leans). A big note splits into
-  two or three pull requests that each land whole, ordered by what the owner sees first.
+- **The same day as the merge,** write the build plan for the version the note names, using the
+  plan skill.
 - **Today's version is in scope.** A note about today's app, or one whose tryout the owner took,
   is the owner's pick by that yes; it needs no second ask before it is planned.
 - **Bring it to the owner as one yes or no:** approve the plan? On a yes, the test writer starts

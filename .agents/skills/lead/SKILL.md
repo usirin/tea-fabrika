@@ -20,8 +20,6 @@ A step's brief is short. It names the skill and the ticket's facts, and nothing 
 ```text
 Use the build skill for ticket 277, door fixes, next/. Plan at ../door-PLAN.md.
 Laws d1 to d3 are red. This round: make them green in door.ts, answer.ts and hello.ts.
-Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
-and starts no build.
 ```
 
 A brief never prints npm, pnpm or environment settings (owner, 2026-11-08), not even to show a
@@ -37,8 +35,6 @@ Children: <ticket, branch and signed parent head for each child>, or none. Recor
 Start a child at its parent's signed build head. Keep the child's tests through catch-up.
 Land the stack with `gh stack merge <pr> --squash`, then `gh stack sync --prune`.
 Return plans unsigned, including reviews and revisions. Only the lead session approves them.
-Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
-and starts no build.
 ```
 
 The draft check checks the handoff format. Shared shell access cannot prove which session signed.
@@ -131,16 +127,10 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
 
-`box.sh run` names the box's `.agents/` as its own writable root because Codex otherwise keeps
-that folder read-only inside the writable checkout.
-
 box.sh run and runplan.sh strip secret settings and redact saved output.
 fetch --sign checks owners and signs missing notes in MAIN.
 Review and mutation briefs say never to print npm, pnpm or env settings.
-
-Catch-up retries read-only `gh` failures three times, waiting 1 and 2 seconds. A successful red or
-untrusted answer stops immediately. Logs are captured before parsing, so a failed read cannot
-look green. Pushes and merges are never retried by that helper.
+leakgrep.sh checks added text; private words stay outside the repo.
 
 ## Use drive.ts for any step
 
@@ -348,28 +338,17 @@ The lead owns the count of decisions still missing from the repo. Its status giv
 the open docs PRs carrying them. The owner does not keep the list. Code cannot count decisions
 nobody recorded.
 
-## The leak grep
-
-Before every push and every merge, grep the added lines (`git diff origin/main | grep '^+'`) for
-personal and account names, machine paths (a home folder, a temp folder), key prefixes and em
-dashes. Keep the list of names out of the repo: it is the lead's own. Only the repo's own name in a
-GitHub URL may match. The leak check script fails closed (owner, 2026-11-08): any hit stops the
-push or merge, and the lead checks it by hand. A hit is never waved through by the script.
+The leak check fails closed (owner, 2026-11-08): any hit stops the push or merge for the lead's
+hand check.
 
 ## Go easy on the machine
 
-- One `pnpm typecheck` at a time across all agents: wait while
-  `pgrep -x tsgo` finds one.
 - One Electron test app and one Docker box at a time. Every wait or poll loop runs in the background.
-- Every brief carries the caps the step's skill names. A Codex box blocks `nice` and `pgrep`, so
-  `box.sh` runs Codex itself under `nice -n 15`.
 
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase, force-push or `gh pr update-branch`. Catch up by merging `main` in. The one exception is
-  a stacked child, moved with the `gh stack` commands (0004).
-- Merge a live run by hand, approve a pull request, or answer a question the machine put to a person.
+- Rebase, force-push or `gh pr update-branch`, except a stacked child moved with `gh stack` (0004).
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 
 ## When a run teaches something
