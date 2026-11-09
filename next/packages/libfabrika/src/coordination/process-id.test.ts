@@ -84,7 +84,8 @@ describe("P10 shared process ids", () => {
 					expect(exit.cause.reasons.length).toBeGreaterThan(0);
 					for (const reason of exit.cause.reasons) {
 						expect(Cause.isDieReason(reason)).toBe(true);
-						if (Cause.isDieReason(reason)) expect(reason.defect).toBe("UUIDv7 clock exhausted");
+						if (Cause.isDieReason(reason))
+							expect(reason.defect).toMatchObject({_tag: "IdError", why: "clock"});
 					}
 				}
 			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
@@ -146,4 +147,53 @@ describe("P10 shared process ids", () => {
 			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
 		options,
 	);
+	for (const why of ["clock", "entropy", "exhausted"] as const) {
+		it.effect.prop(
+			`next dies on IdError ${why} and keeps process.next around id.next`,
+			{at: Time, distance: Count, marker: Schema.String},
+			({at, distance, marker}) => {
+				const spans: Array<Tracer.NativeSpan> = [];
+				const tracer = Tracer.make({
+					span: (settings) => {
+						const span = new Tracer.NativeSpan(settings);
+						spans.push(span);
+						return span;
+					},
+				});
+				const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+					if (why === "entropy") throw new Error(marker);
+					if (array instanceof Uint8Array) array.fill(255);
+					return array;
+				});
+				return Effect.gen(function* () {
+					try {
+						yield* TestClock.setTime(
+							why === "clock" ? -distance : why === "exhausted" ? maxClock : at,
+						);
+						const generator = yield* Coordination.ProcessIdGenerator;
+						if (why === "exhausted") yield* generator.next;
+						const exit = yield* Effect.exit(generator.next);
+						expect(Exit.isFailure(exit)).toBe(true);
+						if (Exit.isFailure(exit)) {
+							expect(exit.cause.reasons).toHaveLength(1);
+							const reason = exit.cause.reasons[0]!;
+							expect(Cause.isDieReason(reason)).toBe(true);
+							if (Cause.isDieReason(reason))
+								expect(reason.defect).toMatchObject({_tag: "IdError", why});
+						}
+						const process = spans.filter((span) => span.name === "process.next").at(-1)!;
+						const id = spans.filter((span) => span.name === "id.next").at(-1)!;
+						expect(id.parent).toEqual(Option.some(process));
+						for (const span of [process, id]) {
+							expect(span.status._tag).toBe("Ended");
+							if (span.status._tag === "Ended") expect(Exit.isFailure(span.status.exit)).toBe(true);
+						}
+					} finally {
+						random.mockRestore();
+					}
+				}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer), Effect.withTracer(tracer));
+			},
+			options,
+		);
+	}
 });

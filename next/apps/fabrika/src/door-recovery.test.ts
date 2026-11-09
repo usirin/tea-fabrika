@@ -12,7 +12,6 @@ import * as C from "@kampus/libfabrika/coordination";
 import {
 	Archive,
 	Doorbell,
-	IdGenerator,
 	Ledger,
 	LedgerError,
 	LedgerTransaction,
@@ -213,7 +212,7 @@ const world = () => {
 			C.ClientManager.layer(founder).pipe(Layer.provide(data())),
 			records,
 			Archive.memory,
-			IdGenerator.layer,
+			A.Id.Generator.layer,
 			Layer.effect(
 				SpanSink,
 				Effect.gen(function* () {
@@ -456,9 +455,7 @@ describe("P34 door recovery", () => {
 										r.msg({
 											id: letter,
 											envelope: {
-												id: Schema.decodeUnknownSync(
-													Schema.NonEmptyString.pipe(Schema.brand("InputId")),
-												)(old),
+												id: Schema.decodeUnknownSync(A.Id.InputId)(old),
 												by: C.Writer.cases.person.make({key: w.window.fingerprint, for: PERSON}),
 												arrivedAt: 0,
 												input: {type: "press", poison: false},

@@ -3,6 +3,8 @@
 // Fabrika deliberately requires UUIDv7 on decode too; the spec permits other versions on decode.
 import {describe, expect, it, vi} from "@effect/vitest";
 import {Id} from "@kampus/libfabrika";
+import * as Public from "@kampus/libfabrika";
+import * as Data from "@kampus/libfabrika/data";
 import {Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
@@ -17,7 +19,6 @@ const letters = fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz");
 const text = (minLength: number, maxLength: number) =>
 	fc.array(letters, {minLength, maxLength}).map((chars) => chars.join(""));
 const prefix = fc.oneof(
-	fc.constant(""),
 	letters,
 	fc
 		.tuple(
@@ -31,7 +32,6 @@ const prefix = fc.oneof(
 const prefixShapes = fc
 	.tuple(letters, text(2, 62), text(63, 63), letters, letters)
 	.map(([single, word, longest, first, last]) => [
-		"",
 		single,
 		word,
 		longest,
@@ -42,6 +42,7 @@ const prefixShapes = fc
 const badPrefixShapes = fc
 	.tuple(text(1, 63), text(64, 100), fc.constantFrom("0", "-", "/", "é", "\0", " ", "\n"))
 	.map(([word, long, bad]) => [
+		"", // A8 keeps main's nonempty prefix rule.
 		"_",
 		`_${word}`,
 		`${word}_`,
@@ -84,8 +85,10 @@ const split = (value: string): readonly [string, string] => {
 	return separator < 0 ? ["", value] : [value.slice(0, separator), value.slice(separator + 1)];
 };
 const validPrefix = (type: string): boolean =>
+	type.length > 0 &&
 	type.length <= 63 &&
-	(type === "" || (/^[a-z]$/.test(type[0]!) && /^[a-z]$/.test(type.at(-1)!))) &&
+	/^[a-z]$/.test(type[0]!) &&
+	/^[a-z]$/.test(type.at(-1)!) &&
 	[...type].every((char) => "abcdefghijklmnopqrstuvwxyz_".includes(char));
 const accepts = (input: unknown, type?: string): boolean => {
 	if (typeof input !== "string") return false;
@@ -126,6 +129,26 @@ const compare = (left: string, right: string): -1 | 0 | 1 =>
 	left < right ? -1 : left > right ? 1 : 0;
 const Time = Schema.Int.check(Schema.isBetween({minimum: 0, maximum: maxClock}));
 const Count = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 128}));
+const rawBytes = fc.uint8Array({minLength: 16, maxLength: 16});
+const v7 = (raw: Uint8Array): Uint8Array => {
+	const bytes = raw.slice();
+	bytes[6] = (bytes[6]! & 15) | 0x70;
+	bytes[8] = (bytes[8]! & 63) | 0x80;
+	return bytes;
+};
+const expectIdFailure = <A, E>(exit: Exit.Exit<A, E>, why: string): void => {
+	expect(Exit.isFailure(exit)).toBe(true);
+	if (Exit.isFailure(exit)) {
+		expect(exit.cause.reasons).toHaveLength(1);
+		const reason = exit.cause.reasons[0]!;
+		expect(Cause.isFailReason(reason)).toBe(true);
+		if (Cause.isFailReason(reason)) {
+			expect(Public.IdError, "IdError is exported from the public package").toBeTypeOf("function");
+			expect(reason.error).toBeInstanceOf(Public.IdError);
+			expect(reason.error).toMatchObject({_tag: "IdError", why});
+		}
+	}
+};
 
 describe("T518 Id format", () => {
 	it("built-in schemas and the type list keep every declared prefix", () => {
@@ -156,6 +179,37 @@ describe("T518 Id format", () => {
 					expect(Schema.is(Specific)(wire("", bytes))).toBe(false);
 				}
 				expect(Schema.is(Id.Type)(type)).toBe(builtins.some(([name]) => name === type));
+			}),
+			options,
+		);
+	});
+	it("the data exports use the one public Id module", () => {
+		fc.assert(
+			fc.property(prefix, uuid, (type, bytes) => {
+				expect(Data.Id).toBe(Id);
+				expect(Data.IdError).toBe(Public.IdError);
+				const raw = wire(type, bytes);
+				expect(Schema.decodeUnknownSync(Data.Id.make(type))(raw)).toBe(raw);
+			}),
+			options,
+		);
+	});
+	it("InputId is a built-in schema with the same checked input format", () => {
+		fc.assert(
+			fc.property(uuid, unknown, (bytes, input) => {
+				expect(Id.InputId, "InputId is built into the Id module").toBeDefined();
+				const builtin: typeof Id.Input = Id.InputId;
+				expect(Data.InputId).toBe(Id.InputId);
+				for (const value of [wire("input", bytes), wire("process", bytes), input]) {
+					for (const schema of [builtin, Id.Input, Data.InputId]) {
+						expectDecoded(
+							Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(schema)(value))),
+							accepts(value, "input"),
+							value,
+							Schema.isSchemaError,
+						);
+					}
+				}
 			}),
 			options,
 		);
@@ -265,14 +319,15 @@ describe("T518 Id format", () => {
 			options,
 		);
 	});
-	it("keeps prefixes distinct at runtime, including the empty prefix", () => {
+	it("keeps prefixes distinct at runtime and refuses an unprefixed UUID", () => {
 		fc.assert(
 			fc.property(prefix, uuid, (type, bytes) => {
-				const other = type === "" ? "process" : "";
+				const other = type === "process" ? "letter" : "process";
 				const left = wire(type, bytes),
 					right = wire(other, bytes);
 				expect(Schema.is(Id.make(type))(left)).toBe(true);
 				expect(Schema.is(Id.make(other))(right)).toBe(true);
+				expect(Schema.is(Id.Schema)(wire("", bytes))).toBe(false);
 				for (const [target, input] of [
 					[type, right],
 					[other, left],
@@ -297,10 +352,7 @@ describe("T518 Id format", () => {
 					expect(() => Id.make(type)).toThrow();
 					const exit = Effect.runSync(Effect.exit(Id.makeEffect(type)));
 					expect(Exit.isFailure(exit)).toBe(true);
-					if (Exit.isFailure(exit)) {
-						expect(exit.cause.reasons.length).toBeGreaterThan(0);
-						expect(exit.cause.reasons.every(Cause.isFailReason)).toBe(true);
-					}
+					expectIdFailure(exit, "prefix");
 					expect(Schema.is(Id.Schema)(wire(type, bytes))).toBe(false);
 				}
 			}),
@@ -418,13 +470,233 @@ describe("T518 Id format", () => {
 	});
 });
 
+// A8: all six runtime laws from P17a's data/id.test.ts, now exercising the shared module.
+describe("P17a, one valid typed identity", () => {
+	it("decodes generated UUIDv7 bytes exactly; rejects other prefixes, versions and variants", async () => {
+		await fc.assert(
+			fc.asyncProperty(prefix, rawBytes, async (p, raw) => {
+				const schema = await Effect.runPromise(Id.makeEffect(p));
+				const valid = v7(raw),
+					value = wire(p, valid);
+				expect(await Effect.runPromise(Schema.decodeUnknownEffect(schema)(value))).toBe(value);
+				expect(Schema.encodeSync(schema)(Schema.decodeUnknownSync(schema)(value))).toBe(value);
+				expect(Schema.is(Id.Input)(wire("input", valid))).toBe(true);
+				expect(Schema.is(Id.make("chaos"))(wire("input", valid))).toBe(false);
+				expect(Schema.is(schema)(wire(`${p}x`, valid))).toBe(false);
+				for (const version of Array.from({length: 16}, (_, n) => n).filter((n) => n !== 7)) {
+					const bad = valid.slice();
+					bad[6] = (bad[6]! & 15) | (version << 4);
+					expectDecoded(
+						Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(schema)(wire(p, bad)))),
+						false,
+						wire(p, bad),
+						Schema.isSchemaError,
+					);
+				}
+				for (const variant of [0, 1, 3]) {
+					const bad = valid.slice();
+					bad[8] = (bad[8]! & 63) | (variant << 6);
+					expectDecoded(
+						Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(schema)(wire(p, bad)))),
+						false,
+						wire(p, bad),
+						Schema.isSchemaError,
+					);
+				}
+			}),
+			{...options, numRuns: 60},
+		);
+	});
+	it("rejects base32 mutations, overflow, nonstrings and count-derived input ids", () => {
+		fc.assert(
+			fc.property(
+				rawBytes,
+				fc.integer({min: 0, max: 25}),
+				fc.constantFrom("i", "l", "o", "u", "A", "-", "_"),
+				fc.integer({min: 1}),
+				(raw, at, mutation, count) => {
+					const s = referenceEncode(v7(raw));
+					for (const bad of [
+						`input_${s.slice(0, at)}${mutation}${s.slice(at + 1)}`,
+						`input_8${s.slice(1)}`,
+						`input_${s.slice(1)}`,
+						`input_${s}0`,
+						`in-process_${s}-${count}`,
+						`input_${count}`,
+						null,
+						count,
+						{id: `input_${s}`},
+					])
+						expectDecoded(
+							Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(Id.Input)(bad))),
+							false,
+							bad,
+							Schema.isSchemaError,
+						);
+				},
+			),
+			{...options, numRuns: 60},
+		);
+	});
+	it("outside prefixes get typed errors, while code declarations may throw", async () => {
+		await fc.assert(
+			fc.asyncProperty(prefix, fc.integer({min: 64, max: 90}), rawBytes, async (p, length, raw) => {
+				const valid = await Effect.runPromise(Id.makeEffect(p));
+				expect(Schema.is(valid)(wire(p, v7(raw)))).toBe(true);
+				for (const bad of [
+					p.toUpperCase(),
+					`_${p}`,
+					`${p}_`,
+					`${p}1`,
+					`${p}-x`,
+					"a".repeat(length),
+					wire("input", v7(raw)),
+				]) {
+					expectIdFailure(await Effect.runPromise(Effect.exit(Id.makeEffect(bad))), "prefix");
+					expect(() => Id.make(bad)).toThrow();
+				}
+			}),
+			{...options, numRuns: 60},
+		);
+	});
+	it("keeps unique, increasing UUIDv7 ids over equal clocks and rollback; process ids share the format", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.integer({min: 10_000, max: 2 ** 46}),
+				fc.array(fc.integer({min: -1000, max: 1000}), {minLength: 1, maxLength: 12}),
+				rawBytes,
+				async (at, changes, raw) => {
+					const entropy = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+						if (array instanceof Uint8Array)
+							array.forEach((_, i) => {
+								array[i] = raw[i % raw.length]!;
+							});
+						return array;
+					});
+					try {
+						await Effect.runPromise(
+							Effect.gen(function* () {
+								const gen = yield* Id.Generator,
+									Input = Id.make("input"),
+									Chaos = Id.make("chaos");
+								const made: string[] = [];
+								let highest = at;
+								for (const now of [at, at, at - 1, ...changes.map((n) => at + n)]) {
+									yield* TestClock.setTime(now);
+									highest = Math.max(now, highest);
+									const input = yield* gen.next(Input),
+										chaos = yield* gen.next(Chaos);
+									if (made.length === 0) {
+										const expected =
+											Array.from({length: 10}, (_, i) => raw[i]!).reduce(
+												(n, byte) => (n << 8n) | BigInt(byte),
+												0n,
+											) &
+											((1n << 74n) - 1n);
+										const uuid = [...referenceDecode(split(input)[1])].reduce(
+											(n, byte) => (n << 8n) | BigInt(byte),
+											0n,
+										);
+										const actual = (((uuid >> 64n) & 4095n) << 62n) | (uuid & ((1n << 62n) - 1n));
+										expect(actual, "fresh identity uses the supplied entropy, not a count").toBe(
+											expected,
+										);
+									}
+									expect(Schema.is(Input)(input)).toBe(true);
+									expect(Schema.is(Chaos)(chaos)).toBe(true);
+									expect(timestamp(input)).toBeGreaterThanOrEqual(highest);
+									expect(referenceDecode(split(input)[1])[6]! >>> 4).toBe(7);
+									expect(referenceDecode(split(input)[1])[8]! >>> 6).toBe(2);
+									made.push(split(input)[1], split(chaos)[1]);
+								}
+								expect(made).toEqual([...new Set(made)].sort());
+								const process = yield* gen.next(Id.make("process"));
+								expect(Schema.is(ProcessId)(process)).toBe(true);
+								expect(process).toMatch(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+								expect(referenceDecode(split(process)[1])[6]! >>> 4).toBe(7);
+								expect(referenceDecode(split(process)[1])[8]! >>> 6).toBe(2);
+							}).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer())),
+						);
+					} finally {
+						entropy.mockRestore();
+					}
+				},
+			),
+			{...options, numRuns: 30},
+		);
+	});
+	for (const why of ["clock", "entropy"] as const) {
+		it(`${why} failures are typed IdErrors, never defects`, async () => {
+			await fc.assert(
+				fc.asyncProperty(
+					fc.oneof(
+						fc.integer({max: -1}),
+						fc.integer({min: 2 ** 48, max: Number.MAX_SAFE_INTEGER}),
+						fc.double({min: 0, max: maxClock, noNaN: true}).filter((n) => !Number.isInteger(n)),
+						fc.constantFrom(Number.NaN, Infinity),
+					),
+					fc.string({minLength: 1, maxLength: 20}),
+					async (at, marker) => {
+						const run = (time: number) =>
+							Effect.gen(function* () {
+								yield* TestClock.setTime(time);
+								return yield* Id.Generator.use((g) => g.next(Id.Input));
+							}).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer()));
+						const entropy = vi.spyOn(crypto, "getRandomValues").mockImplementation(() => {
+							throw new Error(marker);
+						});
+						try {
+							expectIdFailure(
+								await Effect.runPromise(Effect.exit(run(why === "clock" ? at : 1000))),
+								why,
+							);
+						} finally {
+							entropy.mockRestore();
+						}
+					},
+				),
+				{...options, numRuns: 20},
+			);
+		});
+	}
+	it("random overflow advances the logical clock; its final millisecond refuses exhaustion", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.integer({min: 1, max: maxClock - 1}), async (at) => {
+				const entropy = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+					if (array instanceof Uint8Array) array.fill(255);
+					return array;
+				});
+				const run = (now: number) =>
+					Effect.gen(function* () {
+						yield* TestClock.setTime(now);
+						const gen = yield* Id.Generator,
+							Input = Id.make("input");
+						const first = yield* gen.next(Input);
+						return {first, second: yield* Effect.exit(gen.next(Input))};
+					}).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer()));
+				try {
+					const ordinary = await Effect.runPromise(run(at));
+					expect(Exit.isSuccess(ordinary.second)).toBe(true);
+					if (Exit.isSuccess(ordinary.second))
+						expect(timestamp(ordinary.second.value)).toBe(at + 1);
+					const last = await Effect.runPromise(run(maxClock));
+					expectIdFailure(last.second, "exhausted");
+				} finally {
+					entropy.mockRestore();
+				}
+			}),
+			{...options, numRuns: 20},
+		);
+	});
+});
+
 describe("T518 Id order and generation", () => {
 	it.effect.prop(
-		"an empty-prefix schema generates bare UUIDv7 suffixes on generated clocks and bursts",
-		{at: Time, count: Count},
-		({at, count}) =>
+		"built-in prefixes generate UUIDv7 bursts; empty prefixes fail typed",
+		{at: Time, count: Count, type: Id.Type},
+		({at, count, type}) =>
 			Effect.gen(function* () {
-				const Specific = Id.make("");
+				const Specific = Id.make(type);
 				const generator = yield* Id.Generator;
 				const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
 					if (array instanceof Uint8Array) array.fill(0);
@@ -441,11 +713,13 @@ describe("T518 Id order and generation", () => {
 					);
 					increasing(ids);
 					for (const id of ids) {
-						expect(accepts(id, "")).toBe(true);
-						expect(id).not.toContain("_");
+						expect(accepts(id, type)).toBe(true);
+						expect(id.startsWith(`${type}_`)).toBe(true);
 						expect(Schema.decodeUnknownSync(Specific)(id)).toBe(id);
 						expect(timestamp(id)).toBe(at);
 					}
+					expect(() => Id.make("")).toThrow();
+					expectIdFailure(yield* Effect.exit(Id.makeEffect("")), "prefix");
 				} finally {
 					random.mockRestore();
 				}
@@ -577,7 +851,7 @@ describe("T518 Id order and generation", () => {
 		effectOptions,
 	);
 	it.effect.prop(
-		"clock exhaustion dies with the existing ProcessIdGenerator defect",
+		"out-of-range clocks fail with a typed IdError",
 		{extra: Count},
 		({extra}) =>
 			Effect.gen(function* () {
@@ -588,19 +862,13 @@ describe("T518 Id order and generation", () => {
 						const generator = yield* Id.Generator;
 						return yield* generator.next(Specific);
 					}).pipe(Effect.provide(Id.Generator.layer), Effect.exit);
-					expect(Exit.isFailure(exit)).toBe(true);
-					if (Exit.isFailure(exit)) {
-						expect(exit.cause.reasons).toHaveLength(1);
-						const reason = exit.cause.reasons[0]!;
-						expect(Cause.isDieReason(reason)).toBe(true);
-						if (Cause.isDieReason(reason)) expect(reason.defect).toBe("UUIDv7 clock exhausted");
-					}
+					expectIdFailure(exit, "clock");
 				}
 			}),
 		effectOptions,
 	);
 	it.effect.prop(
-		"random-bit overflow at the last millisecond dies instead of wrapping",
+		"random-bit overflow at the last millisecond fails typed instead of wrapping",
 		{count: Count},
 		({count}) =>
 			Effect.gen(function* () {
@@ -615,12 +883,7 @@ describe("T518 Id order and generation", () => {
 					expect(timestamp(yield* generator.next(Specific))).toBe(maxClock);
 					for (let i = 1; i < count; i++) {
 						const exit = yield* Effect.exit(generator.next(Specific));
-						expect(Exit.isFailure(exit)).toBe(true);
-						if (Exit.isFailure(exit)) {
-							expect(exit.cause.reasons.every(Cause.isDieReason)).toBe(true);
-							for (const reason of exit.cause.reasons)
-								if (Cause.isDieReason(reason)) expect(reason.defect).toBe("UUIDv7 clock exhausted");
-						}
+						expectIdFailure(exit, "exhausted");
 					}
 				} finally {
 					random.mockRestore();

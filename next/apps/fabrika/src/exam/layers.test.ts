@@ -175,6 +175,7 @@ const TUVAL = "@kampus/tuval";
 /** What each part may import beyond itself: the detail's table, as it stands. */
 const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 	id: [],
+	"id-test-support": ["id"],
 	"libfabrika-entry": ["id", "transport", "data", "coordination", "app", "mcp", "door"],
 	transport: ["id"],
 	data: ["id"],
@@ -227,8 +228,9 @@ const partAt = (pkg: Package, box: ReadonlySet<string>, file: string): string | 
 	if (pkg.group === "programs") return box.has(file) ? "program" : "program-window";
 	if (pkg.manifest.name === LIBRARY) {
 		if (file === join(pkg.dir, "src/id.ts")) return "id";
-		if (["index.ts", "testing.ts"].some((name) => file === join(pkg.dir, "src", name)))
-			return "libfabrika-entry";
+		if (file === join(pkg.dir, "src/id.test-support.ts")) return "id-test-support";
+		if (file === join(pkg.dir, "src/testing.ts")) return "app";
+		if (file === join(pkg.dir, "src/index.ts")) return "libfabrika-entry";
 	}
 	const folder = folderAt(pkg, file);
 	return folder !== null && FOLDERS[pkg.manifest.name]?.includes(folder) === true ? folder : null;

@@ -32,6 +32,8 @@
 		// P17a counted before enabling: 53 retired-door statements, 1 throwing saved decoder.
 		// All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
 		"fabrika/door-is-library": "error",
+		// T518 A8: the only current match is P17a's second module, confirmed by hand.
+		"fabrika/one-id-module": "error",
 		"fabrika/outside-input-constructor": "error",
 
 		// Where a Claude run's settings come from is said by `ownRules` alone, so its file is left

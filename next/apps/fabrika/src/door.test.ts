@@ -223,12 +223,9 @@ const passkey = Effect.fn("test.passkey")(function* () {
 // Loading inside the test hook lets each new law report the missing door on the pre-build base,
 // instead of losing every law to a collection error. This always imports the real module.
 let Door: typeof import("@kampus/libfabrika/door").Door;
-let IdGenerator: typeof import("@kampus/libfabrika/data").IdGenerator;
 beforeEach(async () => {
 	({Door} =
 		await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
-	({IdGenerator} =
-		await vi.importActual<typeof import("@kampus/libfabrika/data")>("@kampus/libfabrika/data"));
 });
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
 const opened: Array<DatabaseSync> = [];
@@ -364,7 +361,7 @@ const world = Effect.fnUntraced(function* (
 		records,
 		Archive.memory,
 		C.ProcessIdGenerator.layer,
-		IdGenerator.layer,
+		Id.Generator.layer,
 	);
 	const layer = Door.layer(settings).pipe(Layer.provideMerge(env));
 	const reopen = (storage: ReturnType<typeof nodeSql>) => {
@@ -380,7 +377,7 @@ const world = Effect.fnUntraced(function* (
 					records,
 					Archive.memory,
 					C.ProcessIdGenerator.layer,
-					IdGenerator.layer,
+					Id.Generator.layer,
 				),
 			),
 		);
