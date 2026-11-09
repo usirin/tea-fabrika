@@ -346,11 +346,19 @@ describe("P33, an inbox read is total", () => {
 				]);
 	const junk = Schema.Union([
 		json(1),
-		Schema.Record(Schema.Literals(["m", "n", "_tag", "ref", "to"]), json(2)),
+		// Optional keys keep every subset, from 0 to 5 keys, with nested JSON in every value.
+		Schema.Struct({
+			m: Schema.optionalKey(json(2)),
+			n: Schema.optionalKey(json(2)),
+			_tag: Schema.optionalKey(json(2)),
+			ref: Schema.optionalKey(json(2)),
+			to: Schema.optionalKey(json(2)),
+		}),
 		Schema.Struct({m: Schema.Struct({_tag: Schema.Literal("DOWN"), ref: json(1)})}),
 	]);
 	const hasM = (body: unknown): body is {readonly m: unknown} =>
 		typeof body === "object" && body !== null && !Array.isArray(body) && Object.hasOwn(body, "m");
+	// Plant: drop nested mail in envelopes with 2 to 4 keys. Shrinks to {ref: 0, m: []}.
 	it.effect.prop(
 		"junk send bodies never fail a receive, and later receives on that inbox still work",
 		[Schema.Array(junk).check(Schema.isMinLength(1), Schema.isMaxLength(8))],
