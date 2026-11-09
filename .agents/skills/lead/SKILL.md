@@ -34,9 +34,8 @@ first step:
 ```text
 Parent: ticket <id>, branch <branch>, signed build head <sha>, or none.
 Children: <ticket, branch and signed parent head for each child>, or none. Record before starting.
-Merge method: merge when this parent has a stacked child; squash otherwise.
 Start a child at its parent's signed build head. Keep the child's tests through catch-up.
-Land the child after the parent reaches main. Pass the recorded method to catchup.sh.
+Land the stack with `gh stack merge <pr> --squash`, then `gh stack sync --prune`.
 Return plans unsigned, including reviews and revisions. Only the lead session approves them.
 Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
 and starts no build.
@@ -82,7 +81,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
-| `catchup.sh <pr> <ticket> [--merge-method squash\|merge]` | merge `main` in as the bot, sign `lead`, push, check that exact head and land pinned to it; squash by default |
+| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head and squash-land pinned to it |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
 
@@ -148,10 +147,15 @@ visible, and never weaken the rules to hide this message.
    `ask owner exam_read`; never write "owner read" unless the owner did, and give each such merge
    a field note. Then run `catchup.sh` in the background: it brings the PR up to
    date, signs only the new merge as `lead`, waits for every check on that exact head (e2e and
-   commits included) and lands it pinned to that head. Pass `--merge-method merge` for a parent
-   with a recorded stacked child, so the signed parent head stays in main's history. Otherwise
-   pass `--merge-method squash`, the default. A child lands only after its parent reaches main.
-   Catch-up merges main in and keeps the child's tests. It never signs a step's commit: an
+   commits included) and squash-lands it pinned to that head. Every PR squash-merges, a stacked
+   parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
+   GitHub stack ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)):
+   `gh stack init <bottom> ... <top>` adopts the branches, `gh stack submit` opens the PRs,
+   `gh stack merge <pr> --squash` lands bottom-up, and `gh stack sync --prune` rebases the rest
+   onto main and pushes. Rebase by hand only locally (`gh stack rebase`, then `gh stack push`),
+   never with the web "Rebase stack" button: it makes unsigned commits. The child's trees stay the
+   same, so its links hold; if a tree changed, that child's steps sign again. A child keeps its own
+   tests. It never signs a step's commit: an
    unsigned one goes back to its own step.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
     `MergeRow`, then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the
@@ -225,7 +229,8 @@ push or merge, and the lead checks it by hand. A hit is never waved through by t
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase, force-push or `gh pr update-branch`. Catch up by merging `main` in.
+- Rebase, force-push or `gh pr update-branch`. Catch up by merging `main` in. The one exception is
+  a stacked child, moved with the `gh stack` commands (0004).
 - Merge a live run by hand, approve a pull request, or answer a question the machine put to a person.
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 

@@ -36,8 +36,9 @@ Plan writers and agents reviewing or revising plans return them unsigned. Only t
 fills the blank first line after reading the plan and running `plancheck.sh --draft`.
 
 For a stacked child, the brief records the parent ticket, branch and signed build head. The driver
-records the child before starting it and lands that parent with `--merge-method merge`. The child
-keeps its tests through catch-up and lands after its parent reaches main.
+records the child before starting it. The stack lands with `gh stack merge <pr> --squash`, then
+`gh stack sync --prune` moves the rest onto main ([0004](../../.decisions/0004-squash-merges-and-native-stacks.md)). The child
+keeps its tests and lands after its parent reaches main.
 
 ## Changing a skill
 
