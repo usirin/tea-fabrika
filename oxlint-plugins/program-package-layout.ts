@@ -3,7 +3,7 @@
 import {existsSync, readFileSync} from "node:fs";
 import {dirname, join, resolve} from "node:path";
 import type {CreateRule} from "@oxlint/plugins";
-import {parseSync} from "oxc-parser";
+import {parseSync, Visitor} from "oxc-parser";
 
 const map = (x: unknown): x is Record<string, unknown> =>
 	typeof x === "object" && x !== null && !Array.isArray(x);
@@ -21,12 +21,24 @@ const pureFiles = (root: string, entries: readonly string[]) => {
 		if (seen.has(file) || !existsSync(file)) return;
 		seen.add(file);
 		const tree = parseSync(file, readFileSync(file, "utf8")).program;
-		for (const node of tree.body) {
-			if (!("source" in node) || node.source == null || typeof node.source.value !== "string")
-				continue;
-			const name = node.source.value;
+		const follow = (name: string) => {
 			if (name.startsWith(".")) visit(resolve(dirname(file), name));
-		}
+		};
+		new Visitor({
+			ImportDeclaration(node) {
+				if (typeof node.source.value === "string") follow(node.source.value);
+			},
+			ExportNamedDeclaration(node) {
+				if (typeof node.source?.value === "string") follow(node.source.value);
+			},
+			ExportAllDeclaration(node) {
+				if (typeof node.source.value === "string") follow(node.source.value);
+			},
+			ImportExpression(node) {
+				if (node.source.type === "Literal" && typeof node.source.value === "string")
+					follow(node.source.value);
+			},
+		}).visit(tree);
 	};
 	for (const entry of entries) visit(resolve(root, entry));
 	return seen;

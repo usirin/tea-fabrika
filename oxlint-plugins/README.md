@@ -46,10 +46,11 @@ P16 adds `fabrika/program-package-layout` for `next/programs/` only. A package e
 its pure program at `.` and its real window at `./window`. A package awaiting a window needs
 no stub. Worker entries and Worker runtime imports in the pure import graph fail. Type-only
 imports pass. This follows `docs/plan/tier-1-detail.md`, Packages, and the approved P16 plan.
-On 2026-11-08 it checked 3 files in the real program tree: 0 findings, 0 false alarms.
-The counter's only public entry was inspected. Generated layouts at seed 119120 exercise
-each plant with the real oxlint plugin. The rule blocks. It does not resolve package aliases
-or computed dynamic imports; those need a future resolved-import check.
+On 2026-11-08 it checked 3 files in the real program tree: 0 findings, 0 false alarms,
+including a recount after following literal dynamic imports. The counter's only public entry
+was inspected. Generated layouts at seed 119120 exercise each plant with the real oxlint plugin,
+including nested dynamic imports through helpers and cycles. The rule blocks. It does not resolve
+package aliases or computed dynamic imports; those need a future resolved-import check.
 
 Seven rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, and P35). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests live with the rest of the exam, in `next/apps/fabrika/src/exam/`, and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
 

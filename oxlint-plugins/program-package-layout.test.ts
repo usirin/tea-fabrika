@@ -134,6 +134,39 @@ describe("fabrika/program-package-layout", () => {
 			runs,
 		);
 	});
+	it("plant: literal dynamic imports follow pure helpers through nested functions and cycles", () => {
+		fc.assert(
+			fc.property(
+				name,
+				fc.constantFrom("cloudflare:workers", "@kampus/libfabrika/workers", "workerd"),
+				(name, source) => {
+					const files = {
+						"src/program.ts": 'export const load = () => import("./helper.ts");',
+						"src/helper.ts":
+							'export const load = async () => { return import("./nested/runtime.ts"); };',
+						"src/nested/runtime.ts":
+							'export const load = () => import("../helper.ts"); export const pure = 1;',
+					};
+					expect(run(name, {".": "./src/program.ts"}, files)).toEqual([]);
+					for (const statement of [
+						`import {env} from ${JSON.stringify(source)}; export {env};`,
+						`export * from ${JSON.stringify(source)};`,
+						`export const worker = () => import(${JSON.stringify(source)});`,
+					]) {
+						const planted = {
+							...files,
+							"src/nested/runtime.ts": `${files["src/nested/runtime.ts"]}\n${statement}`,
+						};
+						expect(
+							run(name, {".": "./src/program.ts"}, planted).length,
+							"dynamic pure helper imports a Worker API",
+						).toBeGreaterThan(0);
+					}
+				},
+			),
+			{...runs, numRuns: 3},
+		);
+	});
 	it("measures the real tree: findings are inspected, with zero false alarms required to block", () => {
 		const result = spawnSync(
 			join(ROOT, "node_modules/.bin/oxlint"),

@@ -11,21 +11,26 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
-import {join, resolve} from "node:path";
+import {dirname, join, resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {NodeServices} from "@effect/platform-node";
-import {Deferred, Effect, Fiber, Tracer} from "effect";
+import {Cause, Deferred, Effect, Exit, Fiber, FileSystem, PlatformError, Tracer} from "effect";
 import * as fc from "fast-check";
 import type {RolldownOutput, RolldownOptions, OutputOptions} from "rolldown";
 import {afterEach, describe, expect, it, vi} from "vitest";
+import type {Asset} from "./app/built.ts";
 import {check} from "./compiler.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../../..");
 const runs = {seed: 119120, numRuns: 3};
 const names = fc.integer({min: 0, max: 10000}).map((n) => `View${n}`);
 const values = fc.string({minLength: 1, maxLength: 30});
+const graphs = fc.record({
+	name: names,
+	value: values,
+	id: fc.integer({min: 0, max: 10000}),
+});
 const homes: string[] = [];
-type Asset = {readonly hash: string; readonly type: string; readonly body: string};
 type Options = {
 	readonly out: string;
 	readonly root: string;
@@ -180,6 +185,68 @@ describe("P16 assets and Compiler", () => {
 			runs,
 		);
 	});
+	for (const url of [false, true])
+		it(`CSS graph plant: ${url ? "import url()" : "quoted imports"} resolves to served routes after rebasing`, async () => {
+			await fc.assert(
+				fc.asyncProperty(graphs, async ({name, value, id}) => {
+					const f = fixture(name, value),
+						pkg = dirname(f.file),
+						nested = `styles${id}`;
+					mkdirSync(join(pkg, nested));
+					const theme = `./${nested}/theme.css`,
+						tokens = `../tokens${id}.css`;
+					writeFileSync(
+						join(pkg, "window.css"),
+						`@import ${url ? `url("${theme}")` : `"${theme}"`}; b { color: red; }`,
+					);
+					writeFileSync(
+						join(pkg, nested, "theme.css"),
+						`@import url("${tokens}"); b { --theme: ${id}; }`,
+					);
+					writeFileSync(join(pkg, `tokens${id}.css`), `b { --tokens: ${id}; }`);
+					const built = await run(f.options);
+					const {serveAsset} = await import("./workers/index.ts");
+					const verify = async (assets: Readonly<Record<string, Asset>>) => {
+						for (const [route, asset] of Object.entries(assets)) {
+							const refs = asset.type.startsWith("text/css")
+								? [
+										...asset.body.matchAll(
+											/@import\s+["']([^"']+)["']|url\(\s*["']?([^\s"')]+)["']?\s*\)/g,
+										),
+									].map((m) => m[1] ?? m[2]!)
+								: [...asset.body.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g)].map(
+										(m) => m[1]!,
+									);
+							for (const ref of refs) {
+								if (/^(?:data:|https?:|#)/.test(ref)) continue;
+								const request = new Request(new URL(ref, `https://test.invalid${route}`));
+								const response = await Effect.runPromise(serveAsset(assets, request));
+								expect(response.status, `${route} references ${request.url}`).toBe(200);
+							}
+						}
+					};
+					// Plant the exact old behavior in real output: retain a CSS import to an absent route.
+					const css = Object.entries(built.assets).find(([, a]) => a.type.startsWith("text/css"));
+					assert(css, "window stylesheet must be emitted");
+					await expect(
+						verify({...built.assets, [css[0]]: {...css[1], body: '@import "./absent-theme.css";'}}),
+					).rejects.toThrow("references");
+					await verify(built.assets);
+					const styles = Object.values(built.assets)
+						.filter((a) => a.type.startsWith("text/css"))
+						.map((a) => a.body)
+						.join("\n");
+					expect(styles).toContain(`--theme: ${id}`);
+					expect(styles).toContain(`--tokens: ${id}`);
+				}),
+				// Pinned review bug: the published stylesheet's two import forms request absent routes.
+				{
+					...runs,
+					examples: [[{name: "View", value: "css", id: 1}]],
+					endOnFailure: true,
+				},
+			);
+		});
 	it("Compiler: reachable refused TSX fails before replacing the last good brain", async () => {
 		await fc.assert(
 			fc.asyncProperty(
@@ -240,6 +307,76 @@ describe("P16 assets and Compiler", () => {
 });
 
 describe("P16 cleanup and recording", () => {
+	for (const point of ["after backup", "before final", "after final"] as const)
+		for (const interrupt of [false, true])
+			it(`publication plant: ${interrupt ? "interruption" : "failure"} ${point} preserves the last good file`, async () => {
+				await fc.assert(
+					fc.asyncProperty(values, async (value) => {
+						const f = fixture("View", value);
+						previous(f, value);
+						const entered = Effect.runSync(Deferred.make<void>()),
+							release = Effect.runSync(Deferred.make<void>());
+						let fired = false;
+						const builder = await load();
+						const task = Effect.gen(function* () {
+							const fs = yield* FileSystem.FileSystem;
+							const stop = Effect.gen(function* () {
+								fired = true;
+								yield* Deferred.succeed(entered, undefined);
+								if (interrupt) yield* Deferred.await(release);
+								else
+									return yield* Effect.fail(
+										PlatformError.systemError({
+											_tag: "PermissionDenied",
+											module: "FileSystem",
+											method: "rename",
+											description: "planted publication failure",
+										}),
+									);
+							});
+							const rename: typeof fs.rename = (from, to) =>
+								Effect.gen(function* () {
+									const backup = from === f.options.out && to.endsWith(".old");
+									const final = to === f.options.out && !from.endsWith(".old");
+									if (!fired && point === "before final" && final) yield* stop;
+									yield* fs.rename(from, to);
+									if (
+										!fired &&
+										((point === "after backup" && backup) || (point === "after final" && final))
+									)
+										yield* stop;
+								});
+							return yield* builder
+								.build(f.options)
+								.pipe(Effect.provideService(FileSystem.FileSystem, {...fs, rename}));
+						}).pipe(Effect.provide(NodeServices.layer));
+						if (interrupt) {
+							const fiber = Effect.runFork(task);
+							try {
+								await Effect.runPromise(Effect.race(Deferred.await(entered), Fiber.join(fiber)));
+								fiber.interruptUnsafe();
+								await Effect.runPromise(Deferred.succeed(release, undefined));
+								const exit = await Effect.runPromise(Fiber.await(fiber));
+								expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
+							} finally {
+								await Effect.runPromise(Deferred.succeed(release, undefined));
+								await Effect.runPromise(Fiber.interrupt(fiber));
+							}
+						} else
+							expect(await Effect.runPromise(Effect.result(task))).toMatchObject({
+								_tag: "Failure",
+								failure: {_tag: "BuildError", why: "output"},
+							});
+						expect(fired, "plant reached the real publication rename").toBe(true);
+						expect(
+							existsSync(join(f.options.out, "brain.mjs")),
+							"last good brain must remain published",
+						).toBe(true);
+						expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
+					}),
+					{...runs, numRuns: 2, endOnFailure: true},
+				);
+			});
 	it("cleanup plants run on P12's real bundler: failed and interrupted generation closes acquired handles", async () => {
 		await fc.assert(
 			fc.asyncProperty(values, async (value) => {
@@ -398,63 +535,115 @@ describe("P16 cleanup and recording", () => {
 	});
 	it("recording: success and failure retain phases, outcomes, duration, versions, sizes and hashes without content", async () => {
 		await fc.assert(
-			fc.asyncProperty(values, fc.boolean(), async (value, fail) => {
-				const f = fixture("View", value),
-					spans: Tracer.Span[] = [];
-				if (fail) writeFileSync(f.options.entry, "import './missing.ts';");
-				const tracer = Tracer.make({
-					span: (o) => {
-						const span = new Tracer.NativeSpan(o);
-						spans.push(span);
-						return span;
-					},
-				});
-				const result = await Effect.runPromise(
-					Effect.result((await load()).build(f.options)).pipe(
-						Effect.withTracer(tracer),
-						Effect.provide(NodeServices.layer),
-					),
-				);
-				expect(result._tag).toBe(fail ? "Failure" : "Success");
-				const phases = spans.filter((s) => ["build.bundle", "build.emit"].includes(s.name));
-				expect(phases.some((s) => s.name === "build.bundle")).toBe(true);
-				const data = phases.map((s) => ({
-					name: s.name,
-					attributes: Object.fromEntries(s.attributes),
-					status: s.status,
-				}));
-				for (const row of data) {
-					expect(row.status._tag).toBe("Ended");
-					if (row.status._tag === "Ended")
-						expect(row.status.endTime >= row.status.startTime).toBe(true);
-					expect(
-						Object.values(row.attributes).some((v) => v === "failure" || v === "success"),
-					).toBe(true);
-				}
-				expect(
-					data.some((row) => Object.values(row.attributes).includes(fail ? "failure" : "success")),
-				).toBe(true);
-				const recorded = JSON.stringify(data.map(({name, attributes}) => ({name, attributes})));
-				for (const marker of [ROOT, f.home, readFileSync(f.file, "utf8")]) {
-					expect(recorded).not.toContain(marker);
-					expect(recorded).not.toContain(JSON.stringify(marker).slice(1, -1));
-				}
-				expect(recorded).toContain("1.2.13");
-				expect(recorded).toContain("4.1.1");
-				if (fail) expect(recorded).toContain("error.type");
-				else {
-					expect(data.some((s) => s.name === "build.emit")).toBe(true);
-					expect(recorded).toMatch(/[a-f0-9]{64}/);
-					expect(
-						data
-							.flatMap((row) => Object.entries(row.attributes))
-							.some(
-								([key, value]) => /bytes|size/.test(key) && typeof value === "number" && value > 0,
+			fc.asyncProperty(values, async (value) => {
+				for (const phase of ["success", "program", "window", "brain"] as const) {
+					const f = fixture("View", value),
+						spans: Tracer.Span[] = [];
+					const fail = phase !== "success";
+					if (fail)
+						writeFileSync(
+							phase === "brain"
+								? f.options.entry
+								: phase === "window"
+									? f.file
+									: join(dirname(f.file), "program.ts"),
+							"import './missing.ts';",
+						);
+					const tracer = Tracer.make({
+						span: (o) => {
+							const span = new Tracer.NativeSpan(o);
+							spans.push(span);
+							return span;
+						},
+					});
+					const result = await Effect.runPromise(
+						Effect.result((await load()).build(f.options)).pipe(
+							Effect.withTracer(tracer),
+							Effect.provide(NodeServices.layer),
+						),
+					);
+					expect(result._tag).toBe(fail ? "Failure" : "Success");
+					const phases = spans.filter((s) => ["build.bundle", "build.emit"].includes(s.name));
+					expect(phases.some((s) => s.name === "build.bundle")).toBe(true);
+					const data = phases.map((s) => ({
+						name: s.name,
+						attributes: Object.fromEntries(s.attributes),
+						status: s.status,
+					}));
+					const verifyPhases = (rows: typeof data) => {
+						const bundles = rows.filter((r) => r.name === "build.bundle");
+						const order = ["program", "window", "brain"];
+						const expected = fail ? order.slice(0, order.indexOf(phase) + 1) : order;
+						expect(
+							bundles.map((r) => r.attributes.phase),
+							"every attempted bundle keeps its phase",
+						).toEqual(expected);
+						for (const row of bundles) {
+							expect(row.attributes.outcome).toBe(
+								fail && row.attributes.phase === phase ? "failure" : "success",
+							);
+							expect(row.attributes["rolldown.version"]).toBe("1.2.13");
+							expect(row.attributes["effect.version"]).toBe("4.1.1");
+						}
+						if (fail) expect(bundles.at(-1)?.attributes["error.type"]).toBe("BuildError");
+					};
+					verifyPhases(data);
+					// Run both review plants on actual recorded output, not invented span rows.
+					for (const omit of ["all", "failed"] as const) {
+						if (omit === "failed" && !fail) continue;
+						const planted = data.map((row) => ({
+							...row,
+							attributes: Object.fromEntries(
+								Object.entries(row.attributes).filter(
+									([key]) =>
+										key !== "phase" || (omit === "failed" && row.attributes.outcome !== "failure"),
+								),
 							),
+						}));
+						expect(() => verifyPhases(planted), `omit ${omit} phase attributes`).toThrow(
+							"keeps its phase",
+						);
+					}
+					if (fail)
+						expect(() =>
+							verifyPhases(data.filter((row) => row.attributes.outcome !== "failure")),
+						).toThrow("keeps its phase");
+					for (const row of data) {
+						expect(row.status._tag).toBe("Ended");
+						if (row.status._tag === "Ended")
+							expect(row.status.endTime >= row.status.startTime).toBe(true);
+						expect(
+							Object.values(row.attributes).some((v) => v === "failure" || v === "success"),
+						).toBe(true);
+					}
+					expect(
+						data.some((row) =>
+							Object.values(row.attributes).includes(fail ? "failure" : "success"),
+						),
 					).toBe(true);
+					const recorded = JSON.stringify(data.map(({name, attributes}) => ({name, attributes})));
+					for (const marker of [ROOT, f.home, readFileSync(f.file, "utf8")]) {
+						expect(recorded).not.toContain(marker);
+						expect(recorded).not.toContain(JSON.stringify(marker).slice(1, -1));
+					}
+					expect(recorded).toContain("1.2.13");
+					expect(recorded).toContain("4.1.1");
+					if (fail) expect(recorded).toContain("error.type");
+					else {
+						expect(data.some((s) => s.name === "build.emit")).toBe(true);
+						expect(recorded).toMatch(/[a-f0-9]{64}/);
+						expect(
+							data
+								.flatMap((row) => Object.entries(row.attributes))
+								.some(
+									([key, value]) =>
+										/bytes|size/.test(key) && typeof value === "number" && value > 0,
+								),
+						).toBe(true);
+					}
 				}
 			}),
-			{...runs, numRuns: 4},
+			{...runs, numRuns: 3},
 		);
 	});
 });
