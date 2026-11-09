@@ -90,6 +90,17 @@ What it takes from each tool studied:
   click and one press. Live marks them in red; ours needs a second cue, such as a key cap on each
   part, since color is never the only cue.
 
+**Decided 2026-11-08 by the owner (ticket 278), after the keys editor's look step:** the editor is
+design A, one list in a tile, and it ships first. Design D, the keyboard map with a board and a
+layout picker (such as Colemak-DHm on a Corne), comes right after as a second view of the same
+`keys` program, `keys --map`, not a program of its own. D may not fit a quarter tile at 1024x700:
+the build tries to fix that, and zoom and fold are the accepted fallback.
+
+```text
+keys          the list (A), first
+keys --map    the board (D), the same program and the same keys
+```
+
 ### K4: the tiers
 
 Decided by the owner today. **Tier 1 reads the file.** **The keybindings program is in Tier 2,**

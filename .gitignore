@@ -10,3 +10,5 @@ runs
 # Alchemy's state for a deploy (packages/ledger-server). It names a real account, so it stays local.
 .alchemy
 .claude/worktrees
+# Plant copies door.laws.test.ts leaves when a run is killed before it cleans up.
+packages/fabrika/src/host/.door-laws-plant-*
