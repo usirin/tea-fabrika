@@ -1,5 +1,4 @@
 # packages: what other code may build on. programs: one runnable tea program each.
-# packs: add-on packs, wired to the core by one config line; the core names none.
 # docs/tutorials: a tutorial's finished files, type-checked so it cannot drift.
 # apps: what a person opens, on top of everything else. Nothing imports an app.
 # oxlint-plugins: this repo's own lint rules, type-checked and tested like the rest.
@@ -8,7 +7,6 @@ packages:
   - apps/*
   - packages/*
   - programs/*
-  - packs/*
   - docs/tutorials/*
   - oxlint-plugins
   # next/: the new version (docs/plan/tier-1.md). Real packages, one lockfile, this catalog.
