@@ -21,7 +21,6 @@ import {
 	A,
 	B,
 	W,
-	X,
 	again,
 	brain,
 	data,
