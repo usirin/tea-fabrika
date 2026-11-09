@@ -10,7 +10,7 @@ Inline object properties, DOM member writes, `setProperty`, literal `cssText` an
 literal style attributes cannot choose layers either. Reads and unrelated styles pass.
 Computed dynamic names and runtime CSS assembled by helpers need review; these rules see syntax.
 
-The real-plugin count is repeatable with `node experiments/238-layer-fire-counts.ts --audit`.
+The real-plugin count is repeatable with `node experiments/240-layer-fire-counts.ts --audit`.
 Add `--assert-clean` after the product build. Raw reports go under ignored `runs/`, or `--out`.
 On the pinned base and this test-step tree: three fires, all real, no false alarms, 0 of 3.
 They are `.pop` choosing 10, `.scrim` choosing 9 and `.tip` choosing 20 in today's window CSS.

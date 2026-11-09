@@ -12,7 +12,7 @@ const arg = (name: string, fallback: string) => {
 	return at === -1 ? fallback : (process.argv[at + 1] ?? fallback);
 };
 const pinned = arg("--base", "9f126695");
-const output = arg("--out", "runs/238-layer-fire-counts.json");
+const output = arg("--out", "runs/240-layer-fire-counts.json");
 const config = {
 	...base,
 	rules: Object.fromEntries(
