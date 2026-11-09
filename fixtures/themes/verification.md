@@ -481,15 +481,23 @@ step-commit call with the correct selector and its owner checks. No approval,
 plan, owner rule or signed history was altered. The first call's missed box
 owner check remains recorded here.
 
-## Radix token inputs, ticket 343, after e7b34c16
+## PR 1 laws after the Radix split, ticket 343
 
-Today's app only. The original two T7 laws are unchanged. Every pick still needs every pair to pass WCAG and APCA. No failing pick is exempted or reported as passing.
+Today's app only, from `3e0c2320`, under the approved plan's last amendment. The exact restore patch for PR 2 stays outside git. An isolated index check confirms it restores all eight moved files exactly while preserving PR 1's added built-in check. The 210 failing-pick rows below are unchanged.
+
+PR 1 keeps the original built-in text law and checks all 61 generated pairs for both looks under both floors, including focus, turn fills, labels and terminal cursor. A planted cursor equal to its background makes that check fail at seed 119120. The plant was removed before the full narrow run. `turn-text` remains a scale choice with dark `#d6e1ff` and light `#002bb7c5`. Fixed white passes both built-ins' fill backgrounds under both floors, so the white/black choice and its decoder law move with PR 2.
+
+The three touched suites ran once with one worker: `build/schema.test.ts` 38 passed; `themes.test.ts` 50 passed; `build/tokens.test.ts` 132 passed, 1 failed, 1 skipped. Total: 220 passed, 1 failed, 1 skipped. The remaining red is the package's `--check`: `tokens.css` differs from the new scale input. Generated files belong to build. All built-in values and contrast laws pass. `pnpm lint` reaches the same generated-CSS drift after its other checks pass. One final `pnpm typecheck` passed. The calibration script ran with no source or fixture writes and reproduced `calibration.json` exactly, including the five-theme cap, `0.1705827986227786`.
+
+## Radix token inputs for PR 2, ticket 343, after e7b34c16
+
+Today's app only, for PR 2. The following records tests15's inputs and measurements. The 300-pick laws, enumeration, measurement generator and white/black choice move to PR 2 under the approved plan's last amendment. PR 1 keeps both built-ins, both looks and every generated pair under both floors, with no rounding or exemptions. The 210 failing picks below remain evidence for PR 2.
 
 `turn-text.toml` now says `colors.scale = "indigo"`. Each pick replaces that scale with its accent and chooses the faintest of all 24 solid/alpha steps passing WCAG 4.5 and APCA Lc 60 on every listed background, per look. The other fixed text tokens already pass all 300 picks, so their inputs stay unchanged.
 
-The former token format could not express the label rule. `turn-fg.toml` now says `colors.choose = ["#ffffff", "#000000"]`. The decoder accepts exactly this ordered pair, not an arbitrary list or mixed selection modes. Build must choose the first candidate passing both text floors on both `turn-fill` and `turn-fill-hover`, separately per look. If neither passes, the pick fails. Both fill files and their steps are unchanged.
+The measured token format expressed the label rule as `colors.choose = ["#ffffff", "#000000"]` in `turn-fg.toml`. Its decoder law accepts exactly this ordered pair, not an arbitrary list or mixed selection modes. PR 2 must choose the first candidate passing both text floors on both `turn-fill` and `turn-fill-hover`, separately per look. If neither passes, the pick fails. Both fill files and their steps are unchanged. PR 1 restores fixed white in both looks because both built-ins already pass with it; the choice and its decoder law are saved with PR 2's patch.
 
-Run `pnpm exec node experiments/239-theme-repair.ts --radix` to reproduce the full enumeration. `runs/themes-radix.json` keeps every resolved value, token input hash, failed or unresolved pair, fixed background and both candidates' signed readings. It stays out of git. The measurement mode reports its results without changing token files or generated files. Seed 119120 remains in the properties; the count itself enumerates all 300 picks. No model calls; provider fees $0.
+After restoring PR 2's patch, run `pnpm exec node experiments/239-theme-repair.ts --radix` to reproduce the full enumeration. `runs/themes-radix.json` keeps every resolved value, token input hash, failed or unresolved pair, fixed background and both candidates' signed readings. It stays out of git. The measurement mode reports its results without changing token files or generated files. Seed 119120 remains in the properties; the count itself enumerates all 300 picks. No model calls; provider fees $0.
 
 **90 of 300 picks pass; 210 fail.** Before these input changes, 60 passed and 240 failed. All 300 `turn-text` choices now pass. No other fixed text token fails. Both built-ins stay byte-for-byte the same in their 21 global colors and terminal values. The rules still choose dark `#d6e1ff`, light `#002bb7c5` for `turn-text`, and white for `turn-fg` in slate/indigo.
 
@@ -499,7 +507,7 @@ All six grays with tomato, red, ruby, crimson, pink, blue, cyan, teal, jade, gre
 
 Cross-check: all 1,488 saved sRGB Radix values match installed Radix Colors 3.0.0. All 770 reported candidate readings match the shared checker within 1e-10. An independent pass count using the generated product pairs and shared checker also gives 90. The non-text floor remains WCAG 3 and APCA Lc 15; the text floor remains WCAG 4.5 and APCA Lc 60.
 
-### Every remaining failing pick
+### Every remaining failing pick, for PR 2
 
 | Gray | Accent | Look | Failed or unresolved pairs |
 |---|---|---|---|

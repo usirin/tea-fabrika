@@ -108,15 +108,6 @@ const Common = {
 	theme: Schema.optionalKey(Schema.NonEmptyString),
 };
 
-/**
- * T343: the first of white and black passing both floors on every `on` background, per look.
- * White wins when both pass. Neither passing fails the pick; its backgrounds never move.
- * The tuple is closed: this records the decided label rule, not arbitrary color candidates.
- */
-const Choice = Schema.Struct({
-	choose: Schema.Tuple([Schema.Literal("#ffffff"), Schema.Literal("#000000")]),
-});
-
 /** A token with values of its own. */
 const Own = Schema.Struct({
 	...Common,
@@ -130,11 +121,7 @@ const Own = Schema.Struct({
 	/** For a value no fact rides on: another cue identifies the part, so it needs no floor. */
 	carries: Schema.optionalKey(Schema.Literal("nothing")),
 	except: Schema.optionalKey(Schema.NonEmptyArray(Except)),
-	colors: Schema.Union([
-		Schema.Struct({dark: Value, light: Value}),
-		Schema.Struct({scale: Scale}),
-		Choice,
-	]),
+	colors: Schema.Union([Schema.Struct({dark: Value, light: Value}), Schema.Struct({scale: Scale})]),
 });
 export type Own = typeof Own.Type;
 
@@ -278,7 +265,6 @@ export const checkAcross = ({tokens, manti, parts, hand}: Sources): readonly str
 		}
 		if (
 			!("scale" in colors) &&
-			!("choose" in colors) &&
 			(isTranslucent(colors.dark) || isTranslucent(colors.light)) &&
 			on === undefined
 		) {

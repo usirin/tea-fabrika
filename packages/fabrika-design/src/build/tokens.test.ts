@@ -210,7 +210,7 @@ describe("each file says the owner's decided keys", () => {
 		}).toEqual({tier: true, owner: true, old: []});
 	});
 
-	it.each(Object.entries(TYPES).filter(([name]) => name !== "turn-text" && name !== "turn-fg"))(
+	it.each(Object.entries(TYPES).filter(([name]) => name !== "turn-text"))(
 		"%s is a %s, says what it is for, and has both looks",
 		async (token, type) => {
 			const colors = tableIn(await readToken(PACKAGE, token), "colors");
@@ -222,19 +222,19 @@ describe("each file says the owner's decided keys", () => {
 			}).toEqual({type, description: true, looks: ["dark", "light"]});
 		},
 	);
-	// format: these two token inputs now select per look from the decided candidates. Every
+	// format: this token input selects per look from the decided scale. Every
 	// other own token still supplies both fixed looks. The floors and `on` lists stay required.
-	it.each([
-		["turn-text", {scale: "indigo"}],
-		["turn-fg", {choose: ["#ffffff", "#000000"]}],
-	] as const)("format: %s records its exact build-time color choice", async (token, colors) => {
-		const t = await readToken(PACKAGE, token);
-		expect({
-			type: t["type"],
-			description: typeof t["description"] === "string" && t["description"] !== "",
-			colors: t["colors"],
-		}).toEqual({type: "text", description: true, colors});
-	});
+	it.each([["turn-text", {scale: "indigo"}]] as const)(
+		"format: %s records its exact build-time color choice",
+		async (token, colors) => {
+			const t = await readToken(PACKAGE, token);
+			expect({
+				type: t["type"],
+				description: typeof t["description"] === "string" && t["description"] !== "",
+				colors: t["colors"],
+			}).toEqual({type: "text", description: true, colors});
+		},
+	);
 
 	it.each(Object.entries(EXTENDS))("%s extends %s", async (token, target) => {
 		const colors = tableIn(await readToken(PACKAGE, token), "colors");
@@ -960,8 +960,8 @@ const lookIn =
 	(t: Table): void => {
 		const colors = tableIn(t, "colors");
 		// A fixed-value plant replaces a selection mode, rather than making invalid TOML by
-		// combining scale/choose with per-look values. Preserve the other look's built-in value.
-		if ("scale" in colors || "choose" in colors) {
+		// combining a scale with per-look values. Preserve the other look's built-in value.
+		if ("scale" in colors) {
 			const name = t["theme"];
 			if (name !== "turn-text") throw new Error("selection plant needs its token's built-in");
 			t["colors"] = {

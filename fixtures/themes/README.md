@@ -19,9 +19,3 @@ result, sorted moves, substitutions, remaining failures and drawn colors.
 `tokens/repair.toml` pins the same version, cap and pair. The readings' last
 bits differ between Node releases, so T13 accepts 4 epsilons on doubles alone
 (verification.md). Visual review remains pending.
-
-`pnpm exec node experiments/239-theme-repair.ts --radix` measures every gray,
-accent and look from the current token inputs. It keeps full values and readings
-under `runs/`; `verification.md` lists every remaining failure. Scale text chooses
-the faintest passing step. Accent labels choose white, then black, against both
-fixed fills. A pick with no passing label remains a failure under T7.

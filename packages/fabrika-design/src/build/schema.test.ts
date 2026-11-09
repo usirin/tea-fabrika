@@ -398,36 +398,3 @@ describe("T8 build-time scale choices", () => {
 		);
 	});
 });
-
-// T343: the label rule is ordered white/black, never an arbitrary list or a fixed fallback.
-// Plants: refuse the new input, accept any candidate, reverse its preference, or mix modes.
-describe("T7 build-time white/black label choice", () => {
-	it("accepts exactly the white-first choice and refuses other colors or mixed modes", async () => {
-		const {default: fc} = await import("fast-check");
-		fc.assert(
-			fc.property(fc.string(), fc.constantFrom(4.5, 7), (other, floor) => {
-				const token = {
-					type: "text",
-					tier: "global",
-					owner: "design",
-					description: "text on fixed accent fills",
-					on: ["turn-fill", "turn-fill-hover"],
-					floor,
-				};
-				const colors = {choose: ["#ffffff", "#000000"]};
-				expect(decodeToken("turn-fg.toml", {...token, colors})._tag).toBe("ok");
-				for (const invalid of [
-					{choose: ["#000000", "#ffffff"]},
-					{choose: ["#ffffff"]},
-					{choose: []},
-					{choose: ["#ffffff", "#000000", other]},
-					{choose: ["#ffffff", `${other}!`]},
-					{...colors, scale: "indigo"},
-					{...colors, dark: "indigo.11", light: "indigo.11"},
-				])
-					expect(decodeToken("turn-fg.toml", {...token, colors: invalid})._tag).toBe("bad");
-			}),
-			{seed: 119120, numRuns: 150},
-		);
-	});
-});

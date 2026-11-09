@@ -1,11 +1,9 @@
 import {createHash} from "node:crypto";
-import {existsSync, readdirSync, readFileSync} from "node:fs";
+import {existsSync, readFileSync} from "node:fs";
 import {join} from "node:path";
-import {isDeepStrictEqual} from "node:util";
 import {apca, wcag} from "@kampus/themes-fixture/laws";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import type {TokenFile} from "./build/schema.ts";
 
 // The design package's laws (docs/direction/fabrika-design-package.md, decided 2026-11-02): the
 // built-in `fabrika` and `fabrika-light` themes (docs/direction/themes.md, decided 2026-11-01),
@@ -917,6 +915,40 @@ describe("law 16: the terminal's names keep ANSI order", () => {
 // T343 PR 1. The current built-in values are part of the Radix guarantee too.
 // Plant: keep a WCAG-only exemption, skip hovered/selected backgrounds, or use |Lc| < 60.
 describe("T7 built-in picks pass both floors", () => {
+	// PR 1 keeps the full generated pair list, including fills, focus and the terminal cursor.
+	// Plant: restore dark turn-text to indigo.11, or paint a generated pair's foreground as its bg.
+	it("passes every generated pair for both built-ins under both floors", async () => {
+		const {flatten} = await import("@kampus/themes-fixture/laws");
+		const {pairs} = await import("./theme-contract.ts");
+		const {fabrika, fabrikaLight} = await import("./themes.ts");
+		const seen = new Set<Look>();
+		expect(pairs.length).toBeGreaterThan(0);
+		fc.assert(
+			fc.property(fc.constantFrom(...LOOKS), (look) => {
+				seen.add(look);
+				const theme = look === "dark" ? fabrika : fabrikaLight;
+				const color = (key: string): string => {
+					if (key === "cursor") return theme.terminal.cursor;
+					if (key === "terminal.background") return theme.terminal.background;
+					const value = Object.entries(theme.colors).find(([name]) => name === key)?.[1];
+					if (value === undefined) throw new Error(`no built-in color: ${key}`);
+					return value;
+				};
+				const failures = pairs.flatMap(({token, on, floor}) => {
+					const bg = flatten(on.split("/").reverse().map(color));
+					const fg = color(token);
+					const w = wcag(fg, bg),
+						a = apca(fg, bg);
+					return w >= floor.wcag && Math.abs(a) >= floor.apca
+						? []
+						: [{look, token, on, wcag: w, apca: a, floor}];
+				});
+				expect(failures).toEqual([]);
+			}),
+			{seed: 119120, numRuns: 150},
+		);
+		expect([...seen].sort()).toEqual([...LOOKS].sort());
+	});
 	it("checks every existing text role on every resting, hovered and selected backdrop", async () => {
 		const {apca, wcag} = await import("@kampus/themes-fixture/laws");
 		const names = [
@@ -1226,7 +1258,7 @@ describe("T13 kept source bytes and versioned calibration", () => {
 	});
 });
 
-// ---- T343 review 2, class 1: one source for terminal built-ins, and all 300 Radix picks -------
+// ---- T343 review 2, class 1: one source for terminal built-ins -------------------------------
 
 // The Radix 3.0.0 values the rest of this file reads (experiments/177-themes/schemes): the import
 // of @radix-ui/colors is the token build's alone.
@@ -1319,120 +1351,3 @@ describe("T8 terminal built-ins come from tokens/terminal.toml", () => {
 		);
 	});
 });
-
-// T7: every Radix pick, 6 grays x 25 accents x 2 looks, generated at build time with full
-// values, and each passes every generated pair under both floors at default settings. Contract
-// for build: src/theme-picks.ts (generated) exports `picks`, one entry per pick:
-// `{gray, accent, look, colors}` with the 21 global colors. slate/indigo equals the built-ins.
-// Plants: skip a gray, the light look, a hovered or selected backdrop, or APCA.
-describe("T7 all 300 Radix picks are generated and pass both floors", () => {
-	const GRAYS = ["gray", "mauve", "slate", "sage", "olive", "sand"] as const;
-	const ACCENTS = [
-		"tomato",
-		"red",
-		"ruby",
-		"crimson",
-		"pink",
-		"plum",
-		"purple",
-		"violet",
-		"iris",
-		"indigo",
-		"blue",
-		"cyan",
-		"teal",
-		"jade",
-		"green",
-		"grass",
-		"brown",
-		"bronze",
-		"gold",
-		"sky",
-		"mint",
-		"lime",
-		"yellow",
-		"amber",
-		"orange",
-	] as const;
-	type Pick = {gray: string; accent: string; look: Look; colors: Readonly<Record<string, string>>};
-	const load = async (): Promise<readonly Pick[]> => {
-		const module: {picks?: readonly Pick[]} = await import(
-			/* @vite-ignore */ `${"./theme-picks.ts"}`
-		).catch(() => ({}));
-		return module.picks ?? [];
-	};
-	it("format: holds exactly one complete pick per gray, accent and look", async () => {
-		const {globalNames} = await import("@kampus/themes-fixture/laws");
-		const picks = await load();
-		const keys = picks.map((p) => `${p.gray}/${p.accent}/${p.look}`).sort();
-		const want = GRAYS.flatMap((g) =>
-			ACCENTS.flatMap((a) => LOOKS.map((l) => `${g}/${a}/${l}`)),
-		).sort();
-		expect(keys).toEqual(want);
-		expect(picks.every((p) => isDeepStrictEqualKeys(p.colors, globalNames))).toBe(true);
-	});
-	it("passes every generated pair under both floors, and slate/indigo is the built-in", async () => {
-		const {composite, meets} = await import("@kampus/themes-fixture/laws");
-		const {pairs} = await import("./theme-contract.ts");
-		const {fabrika, fabrikaLight} = await import("./themes.ts");
-		const picks = await load();
-		expect(picks.length).toBe(300);
-		fc.assert(
-			fc.property(fc.constantFrom(...picks), (pick) => {
-				const failing = pairs
-					.filter(({on}) => !on.startsWith("terminal."))
-					.filter(({token, on, floor}) => {
-						const layers = on.split("/").map((n) => pick.colors[n]!);
-						const bg = layers
-							.slice(0, -1)
-							.reduceRight((under, top) => composite(top, under), layers.at(-1)!);
-						return !meets(pick.colors[token]!, bg, floor);
-					})
-					.map(({token, on}) => `${token} on ${on}`);
-				expect(failing).toEqual([]);
-				const builtin = pick.look === "dark" ? fabrika : fabrikaLight;
-				expect(
-					pick.gray !== "slate" ||
-						pick.accent !== "indigo" ||
-						isDeepStrictEqual(pick.colors, builtin.colors),
-				).toBe(true);
-			}),
-			{seed: 119120, numRuns: 300},
-		);
-	});
-	// Independent token oracle adds the faintest-step and white-first rules without changing the
-	// two preceding laws. Plants: keep turn-text at 11, choose white on bright fills, or move a fill.
-	it("uses the faintest passing scale step and ordered label choice while keeping fills fixed", async () => {
-		const {globalNames, radixPick} = await import("@kampus/themes-fixture/laws");
-		const {decodeToken} = await import("./build/schema.ts");
-		const {parse} = await import("smol-toml");
-		const dir = join(import.meta.dirname, "..", "tokens", "color");
-		const tokens = new Map<string, TokenFile>();
-		for (const file of readdirSync(dir).sort()) {
-			const decoded = decodeToken(file, parse(readFileSync(join(dir, file), "utf8")));
-			if (decoded._tag === "bad") throw new Error(decoded.errors.join("\n"));
-			tokens.set(file.replace(/\.toml$/, ""), decoded.value);
-		}
-		const picks = await load();
-		expect(picks.length).toBe(300);
-		fc.assert(
-			fc.property(fc.constantFrom(...picks), (pick) => {
-				const want = radixPick(tokens, pick, (scale, at, look) => {
-					const n = Number(at.replace(/^a/, "")) - 1;
-					const value =
-						scale === "black"
-							? BLACK_A[n]
-							: stepsOf(scale, `${look}${at.startsWith("a") ? "A" : ""}`)[n];
-					if (value === undefined) throw new Error(`no Radix step ${scale}.${at} in ${look}`);
-					return value;
-				});
-				expect(pick.colors).toEqual(
-					Object.fromEntries(globalNames.map((name) => [name, want.colors[name]])),
-				);
-			}),
-			{seed: 119120, numRuns: 300},
-		);
-	});
-});
-const isDeepStrictEqualKeys = (colors: object, names: readonly string[]) =>
-	isDeepStrictEqual(Object.keys(colors).sort(), [...names].sort());
