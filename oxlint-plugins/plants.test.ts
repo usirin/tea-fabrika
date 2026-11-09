@@ -46,6 +46,27 @@ const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect"
 
 const PLANTS: readonly Plant[] = [
 	{
+		code: "fabrika(no-layer-style)",
+		file: "layer-plant.tsx",
+		prelude: ["declare const el: HTMLElement;"],
+		lines: [
+			["const view = <div style={{zIndex: 99}} />;", true],
+			['const style = {"zIndex": 99};', true],
+			['el.style.zIndex = "99";', true],
+			['el.style["zIndex"] = "99";', true],
+			['el.style.setProperty("z-index", "99");', true],
+			['el.style.setProperty("--layer-palette", "99");', true],
+			['const bypass = {"--manti-dialog-z-index": 99};', true],
+			['el.style.cssText = "z-index:99";', true],
+			['el.setAttribute("style", "z-index:99");', true],
+			["Object.assign(el.style, {zIndex: 99});", true],
+			["const safe = <div style={{opacity: 1}} />;", false],
+			['const name = "zIndex";', false],
+			["const read = el.style.zIndex;", false],
+			['el.style.setProperty("--tile-wash", "transparent");', false],
+		],
+	},
+	{
 		code: "fabrika(no-bare-tell)",
 		prelude: [
 			"declare const run: {tell: (n: string, x: number) => unknown};",

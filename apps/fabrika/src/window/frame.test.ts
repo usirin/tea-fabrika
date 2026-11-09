@@ -557,9 +557,9 @@ describe("keys while something lies over the desk", () => {
 		expect(keyGoesTo({kind: "jobs"}, "J", PREFIX, {armed: true, asking: false})).toBe("desk");
 	});
 
-	it("keeps every key in the palette, a modal dialog, even Ctrl-B", () => {
-		expect(keyGoesTo(palette, PREFIX, PREFIX, quiet)).toBe("over");
-		expect(keyGoesTo(palette, "a", PREFIX, {armed: true, asking: true})).toBe("over");
+	it("pinned: L3's palette prefix bug, the desk must still receive its escape route", () => {
+		expect(keyGoesTo(palette, PREFIX, PREFIX, quiet)).toBe("desk");
+		expect(keyGoesTo(palette, "a", PREFIX, {armed: true, asking: true})).toBe("desk");
 	});
 });
 

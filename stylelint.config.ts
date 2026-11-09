@@ -13,6 +13,7 @@ export default {
 		"part-token-owner",
 		"motion-under-guard",
 		"font-size-from-scale",
+		"frame-layers",
 	].map((name) => join(import.meta.dirname, "oxlint-plugins/css", `${name}.ts`)),
 	defaultSeverity: "error",
 	reportDescriptionlessDisables: true,
@@ -20,6 +21,7 @@ export default {
 	reportInvalidScopeDisables: true,
 	reportUnscopedDisables: true,
 	rules: {
+		"fabrika/frame-layers": [true, {severity: "error", known: []}],
 		"fabrika/token-exists": [
 			true,
 			{

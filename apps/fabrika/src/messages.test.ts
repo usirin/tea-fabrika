@@ -1,4 +1,5 @@
 import {Result} from "effect";
+import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {fresh, takenNow} from "./desk/desk.ts";
 import {decodeKeys, defaults} from "./desk/keymap.ts";
@@ -30,6 +31,79 @@ describe("from the terminal", () => {
 		expect(readFromTerminal({type: "size", cols: 80.5, rows: 30}).kind).toBe("refused");
 		expect(readFromTerminal({type: "keys", data: "x".repeat(65537)}).kind).toBe("refused");
 		expect(readFromTerminal("seq --to 3").kind).toBe("refused");
+	});
+});
+
+describe("T204 PR 1 today's layer report protocol", () => {
+	const via = fc.constantFrom(
+		{_tag: "click"} as const,
+		{_tag: "word"} as const,
+		{_tag: "palette"} as const,
+		{_tag: "key", keys: "ctrl+b a"} as const,
+	);
+	const layer = fc.oneof(
+		fc.constant({_tag: "palette"} as const),
+		fc
+			.constantFrom("asks", "jobs", "host", "sync", "agents")
+			.map((item) => ({_tag: "popover" as const, item})),
+		fc.constantFrom("asks", "jobs", "info").map((name) => ({_tag: "tooltip" as const, for: name})),
+	);
+	const change = fc.oneof(
+		fc.record({_tag: fc.constant("open" as const), layer, via: fc.option(via, {nil: null})}),
+		fc.record({
+			_tag: fc.constant("close" as const),
+			layer,
+			reason: fc.constantFrom(
+				"escape",
+				"outside",
+				"done",
+				"owner_gone",
+				"toggle",
+				"replacement",
+				"navigation",
+			),
+		}),
+	);
+	const report = fc.record({
+		type: fc.constant("layer" as const),
+		id: fc.uuid(),
+		instance: fc.uuid(),
+		change,
+		said: fc.option(fc.integer({min: 0, max: Number.MAX_SAFE_INTEGER}), {nil: null}),
+	});
+	it("reads only lifecycle facts, preserving supplied or explicitly absent clocks", () => {
+		fc.assert(
+			fc.property(report, (msg) => {
+				expect(readFromPage(msg)).toEqual({kind: "read", msg});
+			}),
+			{seed: 119120},
+		);
+	});
+	it("refuses client identities, authoritative clocks, snapshots and typed content at every level", () => {
+		fc.assert(
+			fc.property(report, fc.uuid(), (msg, madeUp) => {
+				for (const bad of [
+					{...msg, by: "user:forged"},
+					{...msg, window: "forged-window"},
+					{...msg, at: 123},
+					{...msg, query: madeUp},
+					{...msg, note: madeUp},
+					{...msg, terminal: madeUp},
+					{...msg, change: {...msg.change, frame: {query: madeUp}}},
+					{...msg, change: {...msg.change, layer: {...msg.change.layer, title: madeUp}}},
+					{
+						...msg,
+						change: {_tag: "open", layer: msg.change.layer, via: {_tag: "click", text: madeUp}},
+					},
+					{...msg, said: "host-clock"},
+					{...msg, said: -1},
+					{...msg, said: Infinity},
+					{...msg, change: {_tag: "close", layer: msg.change.layer, reason: madeUp}},
+				])
+					expect(readFromPage(bad).kind).toBe("refused");
+			}),
+			{seed: 119120},
+		);
 	});
 });
 

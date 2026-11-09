@@ -1,4 +1,6 @@
 import {applyCell} from "@demlik/tea";
+import {foldEvents} from "@demlik/tea/pbt";
+import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {
 	foundOf,
@@ -127,5 +129,52 @@ describe("the link", () => {
 			theirs: null,
 			ours: "3f9a0c21b7d4",
 		});
+	});
+});
+
+describe("T204 PR 1 today's layer protocol version", () => {
+	it("refuses the pre-layer protocol before delivering any recording message, on either side", () => {
+		fc.assert(
+			fc.property(fc.constantFrom("app" as const, "host" as const), fc.uuid(), (side, id) => {
+				expect(PROTOCOL).toBeGreaterThan(2);
+				const record = {
+					type: "layer",
+					id,
+					instance: "instance-1",
+					said: null,
+					change: {_tag: "open", layer: {_tag: "palette"}, via: null},
+				};
+				for (const [ours, theirs] of [
+					[PROTOCOL, 2],
+					[2, PROTOCOL],
+				] as const) {
+					const trace = foldEvents(linkMachine, {side, ours}, null, [
+						{type: "hello", version: theirs},
+						{type: "line", m: record},
+					]);
+					expect(trace.finalState.at).toBe("refused");
+					expect(trace.steps.flatMap((s) => s.cmds).filter((c) => c.type === "deliver")).toEqual(
+						[],
+					);
+				}
+			}),
+			{seed: 119120},
+		);
+	});
+	it("carries a checked layer report on the existing page port without rewriting it", () => {
+		fc.assert(
+			fc.property(fc.uuid(), fc.integer({min: 0}), (id, said) => {
+				const msg = {
+					type: "layer",
+					id,
+					instance: "instance-1",
+					said,
+					change: {_tag: "open", layer: {_tag: "palette"}, via: {_tag: "click"}},
+				};
+				const up = readUp({type: "on", port: "desk", m: msg});
+				expect(up).toEqual({kind: "read", msg: {type: "on", port: "desk", m: msg}});
+			}),
+			{seed: 119120},
+		);
 	});
 });

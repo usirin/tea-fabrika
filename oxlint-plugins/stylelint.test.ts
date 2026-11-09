@@ -34,6 +34,7 @@ const RULES = [
 	{law: 24, name: "part-token-owner", lines: [1, 2]},
 	{law: 25, name: "motion-under-guard", lines: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]},
 	{law: 26, name: "font-size-from-scale", lines: [1, 2, 3, 4, 5, 6, 7]},
+	{law: 31, name: "frame-layers", lines: [1, 2, 3, 4, 5, 6]},
 ] as const;
 const temps: string[] = [];
 afterAll(() => {
@@ -95,7 +96,9 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 		expect([...new Set(fires.map((warning) => warning.line))].sort((a, b) => a - b)).toEqual(lines);
 		expect(fires.every((warning) => warning.severity === "error")).toBe(true);
 		const good = fixture("good", name);
-		expect(await lint(good, name === "part-token-owner" ? WINDOW : undefined)).toEqual([]);
+		expect(
+			await lint(good, name === "part-token-owner" || name === "frame-layers" ? WINDOW : undefined),
+		).toEqual([]);
 	});
 
 	it("law 21 reads only var() past comments and spaces and names the unknown token", async () => {
@@ -203,6 +206,64 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 			]);
 		},
 	);
+});
+
+describe("T204 PR 1 frame layer policy through the real root config", () => {
+	const check = async (css: string, path = WINDOW) => {
+		const file = write(temp(), "layers.css", css);
+		return lint(file, path);
+	};
+	const allowed = () => readFileSync(fixture("good", "frame-layers"), "utf8");
+	it("format: L1 grants layer tokens only to the checked frame block at its exact path", async () => {
+		expect(await check(allowed())).toEqual([]);
+		for (const path of [
+			"programs/ticket/window.css",
+			"apps/other/window.css",
+			"packages/frame/window.css",
+		]) {
+			const warnings = await check(allowed(), path);
+			expect(
+				warnings.some((w) => w.rule === "fabrika/frame-layers"),
+				path,
+			).toBe(true);
+		}
+	});
+	it("format: changed, duplicate, missing or nested rank tables grant no permission", async () => {
+		for (const css of [
+			allowed().replace("--layer-sheet: 1", "--layer-sheet: 99"),
+			allowed().replace("--layer-sheet: 1;", ""),
+			allowed().replace("--layer-sheet: 1;", "--layer-sheet: 1; --layer-sheet: 1;"),
+			`${allowed()}\n${allowed()}`,
+			`@media (min-width: 1px) { ${allowed()} }`,
+		]) {
+			const warnings = await check(css);
+			expect(warnings.some((w) => w.rule === "fabrika/frame-layers")).toBe(true);
+		}
+	});
+	it("format: raw ranks, fallbacks, calculations and unknown names are forbidden inside the frame too", async () => {
+		for (const value of [
+			"99",
+			"var(--layer-palette, 99)",
+			"calc(var(--layer-palette) + 1)",
+			"var(--layer-nope)",
+			"var(--layer-palette) !important",
+		]) {
+			const warnings = await check(
+				allowed().replace("z-index: var(--layer-desk)", `z-index: ${value}`),
+			);
+			expect(
+				warnings.some((w) => w.rule === "fabrika/frame-layers"),
+				value,
+			).toBe(true);
+		}
+	});
+	it("format: a local declaration cannot turn a reserved token into a global exemption", async () => {
+		const warnings = await check(
+			`${allowed()}\n.outside { --layer-palette: 4; order: var(--layer-palette); }`,
+		);
+		expect(warnings.map((w) => w.rule)).toContain("fabrika/token-exists");
+		expect(warnings.map((w) => w.rule)).toContain("fabrika/frame-layers");
+	});
 });
 
 const settingsProblems = (config: stylelint.Config | undefined, base: stylelint.Config) => {
