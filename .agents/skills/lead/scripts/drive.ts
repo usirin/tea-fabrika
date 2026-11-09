@@ -510,6 +510,9 @@ const signClaude = (env: Env, ask: Ask) => {
 				encoding: "utf8",
 				env: {
 					...SAFE_GIT,
+					// The fresh worktree has no node_modules, so stepcommit's format check finds
+					// oxfmt in the main checkout's, where the signer comes from too.
+					PATH: `${join(env.MAIN, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
 					STEPCOMMIT_SIGNER: `node ${join(env.MAIN, "next/apps/fabrika/src/exam/commits.ts")}`,
 				},
 			},
@@ -1036,7 +1039,22 @@ const main = () => {
 		console.error("drive.ts: a plan reads the main checkout; it takes no --from");
 		process.exit(2);
 	}
-	const from = step === "plan" ? "HEAD" : (flag(args, "--from") ?? saved?.head ?? "origin/main");
+	// With no --from, a lane whose branch is on origin continues from that tip, unless the saved
+	// head has moved past it (a step accepted but not yet pushed). A box started at main on a
+	// branch that has work drops that work (2026-11-09), so a saved head off the branch loses.
+	const pushed = sh("git", [
+		"-C",
+		env.MAIN,
+		"rev-parse",
+		"-q",
+		"--verify",
+		`refs/remotes/origin/${branch}^{commit}`,
+	]).out.trim();
+	const isAncestor = (a: string, b: string) =>
+		sh("git", ["-C", env.MAIN, "merge-base", "--is-ancestor", a, b]).code === 0;
+	const lastHead =
+		pushed && !(saved?.head && isAncestor(pushed, saved.head)) ? pushed : saved?.head;
+	const from = step === "plan" ? "HEAD" : (flag(args, "--from") ?? lastHead ?? "origin/main");
 	const base = sh("git", [
 		"-C",
 		env.MAIN,
@@ -1049,9 +1067,12 @@ const main = () => {
 		console.error(`drive.ts: ${from} is not a commit in the main checkout`);
 		process.exit(2);
 	}
-	// The lane's root, kept from its first step: where its base left main.
+	// The lane's root, kept from its first step: where its base left main. A saved root the base
+	// does not hold came from a step that started off the lane, so it is found again.
 	const root =
-		saved?.root ?? sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim();
+		saved?.root && isAncestor(saved.root, base)
+			? saved.root
+			: sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim();
 	if (!root) {
 		console.error(`drive.ts: ${base.slice(0, 8)} shares no history with origin/main`);
 		process.exit(2);
