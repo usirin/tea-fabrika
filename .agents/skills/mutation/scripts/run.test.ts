@@ -34,13 +34,17 @@ if (args[0]?.endsWith("/core/bin/stryker.js")) {
   const config = JSON.parse(fs.readFileSync(args[2], "utf8"));
   const vitest = fs.readFileSync(path.join(dir, config.vitest.configFile), "utf8");
   fs.writeFileSync(path.join(dir, "invoked.json"), JSON.stringify({args, config, vitest}));
+  if (setup.orphan) {
+    const left = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio:"ignore"});
+    fs.writeFileSync(path.join(dir, "pids.json"), JSON.stringify([left.pid]));
+  }
   if (!setup.hold) process.exit(setup.exit);
   const child = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio:"ignore"});
   fs.writeFileSync(path.join(dir, "pids.json"), JSON.stringify([process.pid, child.pid]));
   setInterval(() => {}, 1000);
 } else throw new Error("unhandled tool " + args[0]);
 `;
-type Setup = {ranges: string[]; sampleExit: number; exit: number; hold: boolean};
+type Setup = {ranges: string[]; sampleExit: number; exit: number; hold: boolean; orphan?: boolean};
 const defaults: Setup = {ranges: ['"src/math.ts:1:0-1:30"'], sampleExit: 0, exit: 0, hold: false};
 const fixture = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: string}) => {
 	expect(existsSync(script), "build must extract the executable run.sh").toBe(true);
@@ -228,7 +232,9 @@ describe("mutation command, today's tooling", () => {
 					const inputs = {T: `${ticket}`, BUILD: "abc1234", RELATED: "math.test.ts"};
 					for (const [setup, env] of [
 						[defaults, {...inputs, T: undefined}],
+						[defaults, {...inputs, T: ""}],
 						[defaults, {...inputs, BUILD: undefined}],
+						[defaults, {...inputs, BUILD: ""}],
 						[defaults, {...inputs, RELATED: undefined}],
 						[defaults, {...inputs, RELATED: ""}],
 						[defaults, {...inputs, RELATED: ",,"}],
@@ -261,6 +267,40 @@ describe("mutation command, today's tooling", () => {
 				}
 			}),
 			{...options, numRuns: 3},
+		);
+	});
+
+	// Plant: drop the SIGKILL to the child group after the child exits.
+	it("T300 stops a worker the child leaves behind when it exits on its own", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.integer({min: 0, max: 5}), async (exit) => {
+				const f = fixture(
+					{...defaults, exit, orphan: true},
+					{T: "300", BUILD: "abc1234", RELATED: "math.test.ts"},
+				);
+				let pids: number[] = [];
+				try {
+					const ran = spawnSync("sh", [f.script], {
+						cwd: f.dir,
+						env: f.env,
+						encoding: "utf8",
+						timeout: 10_000,
+					});
+					expect(ran.status, ran.stdout + ran.stderr).toBe(exit);
+					pids = JSON.parse(readFileSync(join(f.dir, "pids.json"), "utf8"));
+					for (let i = 0; i < 100 && pids.some(alive); i++)
+						await new Promise((r) => setTimeout(r, 10));
+					expect(pids.filter(alive), "the left-behind worker must be stopped").toEqual([]);
+				} finally {
+					for (const pid of pids) {
+						try {
+							process.kill(pid, "SIGKILL");
+						} catch {}
+					}
+					rmSync(f.dir, {recursive: true, force: true});
+				}
+			}),
+			{...options, numRuns: 2},
 		);
 	});
 
