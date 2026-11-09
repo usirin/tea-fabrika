@@ -372,6 +372,9 @@ brief carries these caps. Each one came from a laptop that became unusable.
   scale up.
 - A test window always sets its own `FABRIKA_HOME`, with a short path, since a socket
   path has a 103-byte limit. It never sets `FABRIKA_FOREGROUND=1`.
+- A test window stays out of the way of the person at the laptop. Right after launch, each
+  `BrowserWindow` gets `setOpacity(0)`, `setIgnoreMouseEvents(true)` and a position in the work
+  area's corner. Never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
 
 ### Tool facts that cost us time
