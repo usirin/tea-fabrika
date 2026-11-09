@@ -65,9 +65,9 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 
 | Script | What it does |
 |---|---|
-| `box.sh new <name> <base> <branch>` | a Codex box: its own clone, git data outside `.git`, installed |
-| `box.sh run <name> <prompt> <out>` | run Codex in the box, writable only there |
-| `box.sh fetch <name> <branch>` | fetch the branch and step notes into the main checkout, nothing else |
+| `box.sh new <name> <base> <branch> --ticket <n> --plan <path>` | check the start and save its facts, then clone and install |
+| `box.sh run <name> <prompt> <out> --step <step>` | run Codex, save redacted output and the run row |
+| `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
 | `catchup.sh <pr> <ticket> [--merge-method squash\|merge]` | merge `main` in as the bot, sign `lead`, push, check that exact head and land pinned to it; squash by default |
@@ -75,6 +75,10 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 
 `box.sh run` names the box's `.agents/` as its own writable root because Codex otherwise keeps
 that folder read-only inside the writable checkout.
+
+box.sh run and runplan.sh strip secret settings and redact saved output.
+fetch --sign checks owners and signs missing notes in MAIN.
+Review and mutation briefs say never to print npm, pnpm or env settings.
 
 Catch-up retries read-only `gh` failures three times, waiting 1 and 2 seconds. A successful red or
 untrusted answer stops immediately. Logs are captured before parsing, so a failed read cannot
@@ -105,20 +109,18 @@ visible, and never weaken the rules to hide this message.
 3. **Approve in the lead session only.** Read the whole plan, its laws and generators or labels,
    its decided notes and open questions. Plan writers and agents reviewing or revising a plan
    return it unsigned, with line one blank. A driver sends it to the lead session for approval.
-   A plan that only builds decided notes: write "Approved by the lead agent, builds
-   <note>" on its blank first line. A plan that raises a new design call goes to the owner as one
+   After the read, fill line one with `Approved by the lead agent, builds <note>; body <sha256-12>`
+   using the draft check's digest, then run `plancheck.sh --approved <plan>`. Any body edit,
+   including an amendment, needs the same read and checks again. A new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
-4. **Start a box** on a `fabrikalfa/<name>` branch, with `box.sh new`. Use `origin/main` for an
-   independent ticket. A stacked child starts at the parent's signed build head, before the
-   parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
-   Record the child, parent branch and signed head before starting it. Keep the child's tests
+4. box.sh new checks the approved plan, base and ticket. Keep the child's tests
    when merging parent work in. Never replace them with the parent's older tests.
-5. **Run the steps in order,** in the background: tests, build, mutation, review. Each runs in the
-   box with `box.sh run`, except a step with Electron or socket work, which a Claude agent runs
-   (above). No builder starts before tests that exist. Each brief names its skill.
-6. **After each step:** `box.sh fetch`, read the report and the diff, and log the run the same day:
-   one `field/runs.jsonl` row (`fieldrow.py`), and one `field/notes.jsonl` note for anything that
-   broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
+5. box.sh run --step checks order and slots, and saves the run row.
+   Run steps in the background, except Electron or socket work goes to a Claude agent above.
+   Each brief names its skill.
+6. **After each step:** fetch with `--sign`, then read the report and diff. Commit the saved
+   `state/<name>.rows.jsonl` rows in `field/runs.jsonl`. Write a `field/notes.jsonl` note for anything
+   that broke, cost too much, needed a person or worked well. Step-commit checks file owners.
 7. **Run what the box cannot,** yourself: Electron e2e and screenshots. One Electron app at a time,
    each run with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`. Look at every shot.
 8. **Push** with `botpush.mjs` and open the pull request. Its body says which parts were this repo's
@@ -131,8 +133,7 @@ visible, and never weaken the rules to hide this message.
    commits included) and lands it pinned to that head. Pass `--merge-method merge` for a parent
    with a recorded stacked child, so the signed parent head stays in main's history. Otherwise
    pass `--merge-method squash`, the default. A child lands only after its parent reaches main.
-   Catch-up merges main in and keeps the child's tests. It never signs a step's commit: an
-   unsigned one goes back to its own step.
+   Catch-up merges main in and keeps the child's tests. It never signs a step's commit.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
     `MergeRow`, then `git pull --ff-only origin main` and `pnpm install` in the main checkout.
 
@@ -154,7 +155,7 @@ GitHub URL may match.
 
 ## Go easy on the machine
 
-- At most 8 code agents at once. One `pnpm typecheck` at a time across all of them: wait while
+- One `pnpm typecheck` at a time across all agents: wait while
   `pgrep -x tsgo` finds one.
 - One Electron test app and one Docker box at a time. Every wait or poll loop runs in the background.
 - Every brief carries the caps the step's skill names. A Codex box blocks `nice` and `pgrep`, so
@@ -163,7 +164,6 @@ GitHub URL may match.
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase, force-push or `gh pr update-branch`. Catch up by merging `main` in.
 - Merge a live run by hand, approve a pull request, or answer a question the machine put to a person.
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 

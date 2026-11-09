@@ -33,6 +33,11 @@ claim it or start its build. This permission needs no confirmation or classifier
 
 Plan writers and agents reviewing or revising plans return them unsigned. Only the lead session
 fills the blank first line after reading the plan and running `plancheck.sh --draft`.
+Approval names the draft's body digest. An edit anywhere after line two, including an amendment,
+needs a fresh read and approval. `plancheck.sh --approved` checks that digest at box creation.
+
+`box.sh run --step` checks order and slots, saves run facts, and redacts output. Step-commit checks
+owners and staged formatting; its `--commit-only` route leaves missing notes for `fetch --sign`.
 
 For a stacked child, the brief records the parent ticket, branch and signed build head. The driver
 records the child before starting it and lands that parent with `--merge-method merge`. The child

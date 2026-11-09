@@ -34,7 +34,6 @@ rows to read, and an older plan to copy the shape of. This skill holds the rest.
 - A first line left blank, for the approval.
 - Write `Plancheck-Version: 2` immediately after that blank line. Approval fills only the first
   line. Do not add a marker to a saved legacy plan.
-- The whole idea in one code block.
 - How others do it, with sources.
 - The shape: types in code blocks, Effect Schema, `_tag` unions, names from settled notes.
 - One value traced through, step by step.
@@ -60,11 +59,8 @@ rows to read, and an older plan to copy the shape of. This skill holds the rest.
   Every path that matches a glob in `exam-paths.json` belongs to `tests`. A builder is never handed
   one. If the build needs an exam file changed, that change goes in the tests commit.
 - Screenshots at five layouts when a window changes (`AGENTS.md`, "Shoot more than one layout").
-- Size in agent hours, with how sure.
-- What it records, and what fact is lost if it is not recorded now.
-- What it cannot tell us.
-- Open questions, each with a lean and how sure. A big plan splits into pull requests that each
-  land whole, ordered by what the owner sees first.
+- Say what fact is lost if it is not recorded now.
+- Split a big plan into pull requests that each land whole, ordered by what the owner sees first.
 
 ## The open questions test
 
@@ -82,6 +78,10 @@ without contradicting a decision already made? If not, it is not a question.
 Plain short sentences, American English, no em dashes.
 
 ## Scripts
+
+plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments.
+Draft and approved checks cover sections, questions, exam paths and the exact body bytes after
+line two. The draft prints the digest. `--approved` checks the approval line against it.
 
 `scripts/plancheck.sh --draft <plan.md>` requires a blank first line, `Plancheck-Version: 2` on
 line two, and no unfenced line beginning `Approved by the lead agent,`. The lead session runs it
