@@ -81,6 +81,17 @@ const lint = async (file: string, codeFilename?: string) => {
 	).toEqual([]);
 	return result.warnings;
 };
+// Unrelated token/color fixtures at the real frame path still need its required rank table.
+// Append it so each fixture keeps its original diagnostic lines.
+const lintInFrame = (file: string) =>
+	lint(
+		write(
+			temp(),
+			"window.css",
+			`${readFileSync(file, "utf8")}\n${readFileSync(fixture("good", "frame-layers"), "utf8")}`,
+		),
+		WINDOW,
+	);
 
 describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 	it.each(RULES)("law $law: $name", async ({name, lines}) => {
@@ -97,7 +108,9 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 		expect(fires.every((warning) => warning.severity === "error")).toBe(true);
 		const good = fixture("good", name);
 		expect(
-			await lint(good, name === "part-token-owner" || name === "frame-layers" ? WINDOW : undefined),
+			name === "part-token-owner"
+				? await lintInFrame(good)
+				: await lint(good, name === "frame-layers" ? WINDOW : undefined),
 		).toEqual([]);
 	});
 
@@ -193,7 +206,7 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 				"pipe.css",
 				`[data-pipe=${name}] { --tile-wash: #fff; --tile-wash-on: #fff; --tile-edge-hover: #fff; --tile-edge-on: #fff; --tile-edge-loud: #fff; }\n`,
 			);
-			expect(await lint(file, WINDOW)).toEqual([]);
+			expect(await lintInFrame(file)).toEqual([]);
 			const warnings = await lint(file, "programs/css-plant/window.css");
 			expect(warnings.map(({rule}) => rule)).toContain("fabrika/no-raw-color");
 			const nested = write(
@@ -201,7 +214,7 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 				"nested-pipe.css",
 				`.outer [data-pipe=${name}] { --tile-wash: #fff; }\n`,
 			);
-			expect(await lint(nested, WINDOW)).toEqual([
+			expect(await lintInFrame(nested)).toEqual([
 				expect.objectContaining({rule: "fabrika/no-raw-color"}),
 			]);
 		},
@@ -214,6 +227,24 @@ describe("T204 PR 1 frame layer policy through the real root config", () => {
 		return lint(file, path);
 	};
 	const allowed = () => readFileSync(fixture("good", "frame-layers"), "utf8");
+	// format: L1 requires this exact table even if no declaration currently uses a layer token.
+	it("format: window.css must contain a complete frame rank table even without layer choices", async () => {
+		for (const css of [
+			"",
+			".workspace { position: relative; }",
+			"@layer fabrika-frame-layers;",
+			"@layer fabrika-frame-layers {}",
+		]) {
+			const warnings = await check(css);
+			expect(
+				warnings.filter((w) => w.rule === "fabrika/frame-layers"),
+				css,
+			).not.toEqual([]);
+			expect(await check(css, "programs/ticket/window.css")).toEqual(
+				css.includes("@layer") ? [expect.objectContaining({rule: "fabrika/frame-layers"})] : [],
+			);
+		}
+	});
 	it("format: L1 grants layer tokens only to the checked frame block at its exact path", async () => {
 		expect(await check(allowed())).toEqual([]);
 		for (const path of [

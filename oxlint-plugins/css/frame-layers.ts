@@ -10,6 +10,11 @@ import {
 
 export default plugin("frame-layers", (root, fire) => {
 	const checked = frameLayerBlock(root);
+	if (file(root) === WINDOW && checked === null)
+		fire(
+			root,
+			"window.css must contain the complete fabrika-frame-layers rank table: desk 0, sheet 1, float 2, popover 3, palette 4, tooltip 5.",
+		);
 	root.walkAtRules("layer", (block) => {
 		if (block.params.trim() !== "fabrika-frame-layers") return;
 		if (block !== checked)

@@ -18,7 +18,7 @@ const place = (decl: CssNode) =>
 		? `${file(decl)} ${decl.parent?.type === "rule" ? decl.parent.selector.replace(/\s+/g, " ").trim() : ""} { ${decl.prop} }`
 		: `${file(decl)} { ${decl.type} }`;
 
-export const layerRanks = ["desk", "sheet", "float", "popover", "palette", "tooltip"] as const;
+const layerRanks = ["desk", "sheet", "float", "popover", "palette", "tooltip"] as const;
 export const layerToken = (name: string) => layerRanks.some((rank) => name === `--layer-${rank}`);
 export const layerValue = (value: string): boolean => {
 	const nodes = valueParser(value).nodes.filter(

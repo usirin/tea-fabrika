@@ -8,6 +8,7 @@ import type {AsksNow} from "../asks.ts";
 import {type Desk, type DeskCmd, type DeskMsg, deskMachine, type Open} from "../desk/desk.ts";
 import {holdMachine, type HoldMsg, type Key} from "../desk/hold.ts";
 import {defaults} from "../desk/keymap.ts";
+import type {FromPage, ToPage} from "../messages.ts";
 import {
 	bottomLineShows,
 	FRAME,
@@ -16,7 +17,6 @@ import {
 	frameUpdate,
 	keyGoesTo,
 	type MidKey,
-	type Over as Overlay,
 } from "./frame.ts";
 import {BottomArea, BottomLine, type FrameProps, Over, TopBar} from "./frame.tsx";
 import type {PaletteProps} from "./pop.tsx";
@@ -32,9 +32,17 @@ vi.mock("./pop.tsx", async (original) => {
 		},
 	};
 });
+// Only the browser and terminal engine are replaced. desk.tsx boots its real listener,
+// reads real host messages, steps holdMachine and calls its own pressAgain handoff.
+vi.mock("./terminal.ts", async () => {
+	const {Effect} = await import("effect");
+	return {loadGhostty: Effect.succeed(null), terminalFor: vi.fn()};
+});
+vi.mock("./windows.tsx", () => ({WINDOWS: new Map()}));
 
 // Today's app, T204 PR 1. These generators cover every Over case, including the keys editor.
 // Frame is a plain reducer, so fast-check drives it directly. Hold is a tea machine and uses pbt.
+type Overlay = Parameters<typeof keyGoesTo>[0];
 const options = {seed: 119120, numRuns: 100};
 const overlay: fc.Arbitrary<Overlay> = fc.oneof(
 	fc.constant({kind: "none"} as const),
@@ -262,7 +270,177 @@ describe("today's layers: generated key ownership and Escape", () => {
 			options,
 		);
 	});
+	// Plant: remove pressAgain's keyForOver guard in desk.tsx. A held letter then reaches
+	// this terminal listener while an overlay owns it, even though frame.ts routes it correctly.
+	it("held letters go through the real page replay handoff before any terminal receives them", async () => {
+		const page = replayPage();
+		try {
+			await import("./desk.tsx");
+			expect(page.ready()).toBe(true);
+			fc.assert(
+				fc.property(
+					prefix,
+					fc.array(fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz"), {minLength: 1, maxLength: 12}),
+					fc.array(fc.constantFrom("asks", "jobs", "palette", "agents", "sync", "host", "keys"), {
+						minLength: 1,
+						maxLength: 12,
+					}),
+					fc.boolean(),
+					(pref, letters, changes, took) => {
+						// Each generated flow checks a stale terminal focus, focus already in the menu,
+						// and the positive case: closing the menu really releases text to the terminal.
+						for (const focus of ["terminal", "overlay", "closed"] as const) {
+							page.send({type: "link", now: {kind: "stopped", why: "test reset"}});
+							page.send({type: "navigation"});
+							page.send({type: "keys", ...defaults, prefix: pref});
+							const desk = fold();
+							page.send({type: "desk", desk, takes: {all: false, keys: [pref]}});
+							page.clear();
+							page.terminal.focus();
+							page.press(pref[3]!, true);
+							const pending = page.sent.find((m) => m.type === "press");
+							if (pending?.type !== "press") throw new Error("prefix never reached the host");
+							for (const letter of letters) page.press(letter);
+							expect(page.typed).toEqual([]);
+							for (const what of changes) page.send({type: "show", what});
+							// Avoid a final toggle closing the generated overlay.
+							page.send({type: "navigation"});
+							page.send({type: "show", what: changes.at(-1)!});
+							if (focus === "closed") page.send({type: "navigation"});
+							page.cover(focus !== "closed");
+							if (focus === "overlay") page.input.focus();
+							else page.terminal.focus();
+							page.send({type: "desk", desk, takes: {all: false, keys: [pref]}});
+							page.send({type: "answer", id: pending.id, took});
+							expect(page.typed).toEqual(focus === "closed" ? letters : []);
+							expect(page.inserted).toEqual(
+								focus === "closed" ? [] : focus === "terminal" ? letters.slice(1) : letters,
+							);
+							page.terminal.focus();
+							page.press(letters[0]!);
+							expect(page.typed).toEqual(focus === "closed" ? [...letters, letters[0]] : []);
+						}
+					},
+				),
+				options,
+			);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
 });
+
+// A small DOM boundary: capture runs before the terminal's listener, and only an uncanceled
+// key reaches it. No frame routing, hold logic or replay decision is reimplemented here.
+const replayPage = () => {
+	let capture: ((event: PageKey) => void) | undefined;
+	let hear: ((raw: unknown) => void) | undefined;
+	let covered = false;
+	const sent: FromPage[] = [];
+	const typed: string[] = [];
+	const inserted: string[] = [];
+	class PageKey extends Event {
+		from: EventTarget | null = null;
+		readonly key: string;
+		readonly code: string;
+		readonly ctrlKey: boolean;
+		readonly altKey: boolean;
+		readonly metaKey: boolean;
+		readonly shiftKey: boolean;
+		readonly isComposing = false;
+		constructor(type: string, init: KeyboardEventInit) {
+			super(type, init);
+			this.key = init.key ?? "";
+			this.code = init.code ?? "";
+			this.ctrlKey = init.ctrlKey ?? false;
+			this.altKey = init.altKey ?? false;
+			this.metaKey = init.metaKey ?? false;
+			this.shiftKey = init.shiftKey ?? false;
+		}
+		override get target() {
+			return this.from;
+		}
+		getModifierState() {
+			return false;
+		}
+	}
+	class PageElement extends EventTarget {
+		isContentEditable = false;
+		closest() {
+			return null;
+		}
+		contains(target: unknown) {
+			return target === this || (this === box && target === input);
+		}
+		querySelector() {
+			return this === box ? input : null;
+		}
+		focus() {
+			page.activeElement = this;
+		}
+		override dispatchEvent(event: Event) {
+			if (event instanceof PageKey) {
+				event.from = this;
+				capture?.(event);
+			}
+			return event.defaultPrevented ? false : super.dispatchEvent(event);
+		}
+	}
+	class PageInput extends PageElement {}
+	const terminal = new PageElement();
+	const box = new PageElement();
+	const input = new PageInput();
+	const page = {
+		activeElement: terminal,
+		body: new PageElement(),
+		querySelector: () => (covered ? box : null),
+		getElementById: () => null,
+		execCommand: (_command: string, _ui: boolean, value: string) => inserted.push(value),
+	};
+	terminal.addEventListener("keydown", (event) => {
+		if (event instanceof PageKey && !event.ctrlKey) typed.push(event.key);
+	});
+	vi.stubGlobal("Element", PageElement);
+	vi.stubGlobal("HTMLElement", PageElement);
+	vi.stubGlobal("HTMLInputElement", PageInput);
+	vi.stubGlobal("HTMLTextAreaElement", class extends PageElement {});
+	vi.stubGlobal("KeyboardEvent", PageKey);
+	vi.stubGlobal("ResizeObserver", class {});
+	vi.stubGlobal("navigator", {userAgent: "Linux"});
+	vi.stubGlobal("document", page);
+	vi.stubGlobal("window", {
+		addEventListener: (name: string, listener: (event: PageKey) => void) => {
+			if (name === "keydown") capture = listener;
+		},
+		fabrika: {
+			send: (_port: string, message: FromPage) => sent.push(message),
+			forget: () => {},
+			onMessage: (port: string, listener: (raw: unknown) => void) => {
+				if (port === "desk") hear = listener;
+			},
+		},
+	});
+	return {
+		terminal,
+		input,
+		sent,
+		typed,
+		inserted,
+		ready: () => capture !== undefined && hear !== undefined,
+		send: (message: ToPage) => {
+			if (hear === undefined) throw new Error("page did not hear the host");
+			hear(message);
+		},
+		cover: (value: boolean) => (covered = value),
+		clear: () => {
+			sent.length = typed.length = inserted.length = 0;
+		},
+		press: (key: string, ctrlKey = false) =>
+			page.activeElement.dispatchEvent(
+				new PageKey("keydown", {key, code: `Key${key.toUpperCase()}`, ctrlKey, cancelable: true}),
+			),
+	};
+};
 
 const fold = (...msgs: DeskMsg[]): Open => {
 	let desk = deskMachine.init(null, undefined)[0];
