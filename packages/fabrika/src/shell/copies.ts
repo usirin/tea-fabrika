@@ -19,13 +19,13 @@ import type {Copy, Mailbox} from "../program/program.ts";
 // each row is tagged with which.
 
 /** How many ended copies of one machine keep their own row. */
-export const ENDED = 5;
+const ENDED = 5;
 /** The widest row: tsh's one-line width. */
 const WIDTH = 100;
 const INDENT = "      ";
 
 /** One machine's copies, in the order each was first shown: every live one, and the newest ended ones. */
-export function shownCopies(copies: readonly Copy[]): {
+function shownCopies(copies: readonly Copy[]): {
 	readonly rows: readonly Copy[];
 	readonly folded: number;
 } {

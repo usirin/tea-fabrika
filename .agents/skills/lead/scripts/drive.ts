@@ -14,19 +14,22 @@
 //
 // The step is a tea machine on the Effect engine, made of the pipeline's moves:
 //
-//   (before)           box.sh gc, then a refusal when the data volume has under 20 GB free
+//   (before)           box.sh gc, then a refusal when the data volume has under 20 GB free, or
+//                      when a worktree of the main checkout holds the lane's branch
 //   starting   Act     box.sh new, at the lane's head
 //   drafting   Draft   a Sub: Codex (box.sh run) or Claude (claude -p) in the box, waited on
 //   reading    Gather  fetch (and sign Claude's work), then the commits, their step notes, exam
 //                      paths, leaks and the report
 //   (update)   Check   pure: what the step answered and what the reads found make one outcome
-//   pushing    Act     botpush the backup branch, <branch>-wip, when the step committed
+//   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
+//                      the step committed
 //   recording  Act     the field row, state/<lane>.json and .md, and the box removed unless stuck
 //   over               the outcome
 //
 // Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (a question for
 // the lead, in `reason`), 30 stuck, 2 usage, 3 refused to start (8 agents running: Codex boxes plus
-// Claude steps drive started, or under 20 GB free after box.sh gc). It never retries. A stuck step
+// Claude steps drive started, under 20 GB free after box.sh gc, or the lane's branch checked out in
+// a worktree, which the fetch could not update). It never retries. A stuck step
 // keeps its box for the lead to look at. DRIVE_MINUTES (default 60) is how long the agent may run
 // before it is stopped and the step is stuck.
 
@@ -50,6 +53,7 @@ import {run} from "@demlik/tea/effect";
 import {act, gather, intentOf, listen} from "@kampus/pipeline/primitives";
 import {nameOf, outcomesOf} from "@kampus/pipeline/stages/outcome";
 import {Effect, Schema, Stream} from "effect";
+import {checkHolds, stepOf, wipOf} from "./lane.ts";
 
 const HERE = import.meta.dirname;
 const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -455,6 +459,18 @@ const unsignedIn = (env: Env, ask: Ask, head: string): string[] => {
 	});
 };
 
+/** The steps signed on the lane's own commits, from where it left main. */
+const stepsIn = (env: Env, root: string, head: string): Set<string> =>
+	new Set(
+		sh("git", ["-C", env.MAIN, "rev-list", `${root}..${head}`])
+			.out.split("\n")
+			.filter(Boolean)
+			.flatMap((sha) => {
+				const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
+				return r.code === 0 ? stepOf(r.out) : [];
+			}),
+	);
+
 // Git with no hooks and no repo-set helpers, so nothing Claude wrote into a tree runs as drive.
 const SAFE_GIT = {
 	...process.env,
@@ -508,7 +524,12 @@ const signClaude = (env: Env, ask: Ask) => {
 				encoding: "utf8",
 				env: {
 					...SAFE_GIT,
+					// The fresh worktree has no node_modules, so stepcommit's format check finds
+					// oxfmt in the main checkout's, where the signer comes from too.
+					PATH: `${join(env.MAIN, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
 					STEPCOMMIT_SIGNER: `node ${join(env.MAIN, "next/apps/fabrika/src/exam/commits.ts")}`,
+					// The sign worktree is not the box: name the box whose facts stepcommit checks.
+					STEPCOMMIT_BOX: ask.box,
 				},
 			},
 		);
@@ -549,6 +570,10 @@ const handlers = (env: Env) => {
 					cmd.ticket,
 					"--plan",
 					cmd.plan,
+					"--root",
+					cmd.root,
+					"--lane",
+					cmd.lane,
 				);
 				writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
 				return {ok: r.code === 0, detail: r.code === 0 ? "" : `box.sh new: ${tail(r.err)}`};
@@ -582,7 +607,7 @@ const handlers = (env: Env) => {
 					return {
 						...empty,
 						head: null,
-						problem: `fetch: ${tail(f.err)} (is ${ask.branch} checked out in a worktree?)`,
+						problem: `fetch: ${tail(f.err)}`,
 					};
 				const head = git("rev-parse", ref).out.trim();
 				if (ask.step === "review") git("update-ref", "-d", ref);
@@ -632,8 +657,10 @@ const handlers = (env: Env) => {
 								env.MAIN,
 							);
 				if (check.code > 1) return failed("commits check", check);
+				// Exit 1 holds the step unless every stuck answer it gave was a waived stale link.
+				const holds = checkHolds(check.code, check.out, stepsIn(env, ask.root, head));
 				const unsigned = [
-					...(check.code === 1 ? [`commits check: ${tail(check.out + check.err)}`] : []),
+					...(holds ? [`commits check: ${tail(check.out + check.err)}`] : []),
 					...unsignedIn(env, ask, head),
 				];
 				return {
@@ -652,7 +679,7 @@ const handlers = (env: Env) => {
 				const r = sh("node", [
 					join(HERE, "botpush.mjs"),
 					env.MAIN,
-					`${cmd.ask.branch}-wip`,
+					wipOf(cmd.ask.branch),
 					cmd.head,
 				]);
 				return {
@@ -681,6 +708,8 @@ const handlers = (env: Env) => {
 									ask.ticket,
 									"--outcome",
 									row,
+									"--step",
+									ask.step,
 									"--billing",
 									billingOf(ask.events),
 									ask.events,
@@ -689,6 +718,8 @@ const handlers = (env: Env) => {
 							: sh("python3", [
 									"-I",
 									join(HERE, "fieldrow.py"),
+									"--step",
+									ask.step,
 									ask.events,
 									ask.run,
 									ask.ticket,
@@ -738,6 +769,8 @@ const handlers = (env: Env) => {
 				if (!keep && ask.step !== "plan" && ask.box) {
 					rmSync(join(env.BOXES, ask.box), {recursive: true, force: true});
 					rmSync(join(env.BOXES, `${ask.box}-gitdata`), {recursive: true, force: true});
+					// Its facts go with it, so no later stepcommit reads a dead box's plan hash.
+					rmSync(join(env.BOXES, "state", `${ask.box}.box`), {force: true});
 				}
 				return {ok, detail: notes.join("; ")};
 			}),
@@ -927,6 +960,20 @@ const freeGb = (path: string): number | null => {
 	return r.code === 0 && Number.isFinite(kb) ? Math.floor(kb / 1024 / 1024) : null;
 };
 
+/**
+ * The worktree that has `branch` checked out, from `git worktree list --porcelain`; `null` when none.
+ * The fetch at the end of a step updates `refs/heads/<branch>`, which git refuses while a worktree
+ * holds it, so a step that started anyway would lose its fetch after the agent's whole run.
+ */
+const holderOf = (porcelain: string, branch: string): string | null => {
+	for (const block of porcelain.split("\n\n")) {
+		const lines = block.split("\n");
+		if (lines.includes(`branch refs/heads/${branch}`))
+			return lines.find((l) => l.startsWith("worktree "))?.slice("worktree ".length) ?? "";
+	}
+	return null;
+};
+
 /** What a Claude step is told on top of the brief: its skill, and how its work is committed. */
 const claudeTail = (ask: Ask) => {
 	const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
@@ -1020,7 +1067,22 @@ const main = () => {
 		console.error("drive.ts: a plan reads the main checkout; it takes no --from");
 		process.exit(2);
 	}
-	const from = step === "plan" ? "HEAD" : (flag(args, "--from") ?? saved?.head ?? "origin/main");
+	// With no --from, a lane whose branch is on origin continues from that tip, unless the saved
+	// head has moved past it (a step accepted but not yet pushed). A box started at main on a
+	// branch that has work drops that work (2026-11-09), so a saved head off the branch loses.
+	const pushed = sh("git", [
+		"-C",
+		env.MAIN,
+		"rev-parse",
+		"-q",
+		"--verify",
+		`refs/remotes/origin/${branch}^{commit}`,
+	]).out.trim();
+	const isAncestor = (a: string, b: string) =>
+		sh("git", ["-C", env.MAIN, "merge-base", "--is-ancestor", a, b]).code === 0;
+	const lastHead =
+		pushed && !(saved?.head && isAncestor(pushed, saved.head)) ? pushed : saved?.head;
+	const from = step === "plan" ? "HEAD" : (flag(args, "--from") ?? lastHead ?? "origin/main");
 	const base = sh("git", [
 		"-C",
 		env.MAIN,
@@ -1033,9 +1095,12 @@ const main = () => {
 		console.error(`drive.ts: ${from} is not a commit in the main checkout`);
 		process.exit(2);
 	}
-	// The lane's root, kept from its first step: where its base left main.
+	// The lane's root, kept from its first step: where its base left main. A saved root the base
+	// does not hold came from a step that started off the lane, so it is found again.
 	const root =
-		saved?.root ?? sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim();
+		saved?.root && isAncestor(saved.root, base)
+			? saved.root
+			: sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim();
 	if (!root) {
 		console.error(`drive.ts: ${base.slice(0, 8)} shares no history with origin/main`);
 		process.exit(2);
@@ -1097,6 +1162,20 @@ const main = () => {
 			}),
 		);
 		process.exit(3);
+	}
+	// A plan reads the main checkout and a review fetches to a side ref; every other step fetches the
+	// lane's branch at the end. Refuse now, not after the agent ran (themes tests, 2026-11-09).
+	if (s !== "plan" && s !== "review") {
+		const list = sh("git", ["-C", env.MAIN, "worktree", "list", "--porcelain"]);
+		const holder = list.code === 0 ? holderOf(list.out, branch) : "";
+		if (holder !== null) {
+			const said =
+				list.code === 0
+					? `${branch} is checked out in ${holder}; detach it there (git switch --detach) first`
+					: `git worktree list failed: ${tail(list.err)}`;
+			console.log(JSON.stringify({outcome: "refused", reason: said}));
+			process.exit(3);
+		}
 	}
 	const verdict =
 		s === "review"

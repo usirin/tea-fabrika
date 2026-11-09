@@ -50,7 +50,7 @@ const LISTEN_WITHIN = "10 seconds";
 const HELLO_WITHIN = "10 seconds";
 
 /** How to attach: the home, where the host's lines go, and how a host is started. */
-export interface AttachOptions<E, R> {
+interface AttachOptions<E, R> {
 	readonly home: string;
 	readonly deliver: (m: Down) => void;
 	/** Start a host on the home, detached. Answers an Effect done when that host exits. */
@@ -62,7 +62,7 @@ export interface AttachOptions<E, R> {
 }
 
 /** Attached: the link, and what the app found of the host's build. */
-export interface Attachment {
+interface Attachment {
 	readonly wire: Wire<Up>;
 	readonly found: Attached;
 }

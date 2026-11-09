@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {backupsOf, decide, IDLE, type Seen, STUCK} from "./gc.ts";
+import {backupsOf, deadFacts, decide, IDLE, type Seen, STUCK} from "./gc.ts";
 
 // Today's tooling. The decision is pure; the world (lsof, git, gh, botpush) is not run here.
 const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
@@ -72,6 +72,26 @@ describe("box gc, today's tooling", () => {
 				expect(new Set(to).size).toBe(to.length);
 				const base = git?.branch?.replace(/(-wip)+$/, "");
 				if (base?.startsWith("fabrikalfa/")) expect(to[0]).toBe(`${base}-wip`);
+			}),
+			options,
+		);
+	});
+
+	// Plants: keep a dead box's facts; remove a live box's; remove a file that is not a box's facts.
+	// themes tests, 2026-11-09: a stale themes-tests3.box was read by stepcommit after its box went.
+	it("removes exactly the state/*.box files whose box folder is gone", () => {
+		const name = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/);
+		fc.assert(
+			fc.property(fc.uniqueArray(name), fc.uniqueArray(name), (facts, dirs) => {
+				const files = [...facts.map((f) => `${f}.box`), ...facts.map((f) => `${f}.rows.jsonl`)];
+				const live = new Set(dirs);
+				const dead = deadFacts(files, live);
+				expect(dead.sort()).toEqual(
+					facts
+						.filter((f) => !live.has(f))
+						.map((f) => `${f}.box`)
+						.sort(),
+				);
 			}),
 			options,
 		);

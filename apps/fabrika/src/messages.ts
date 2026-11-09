@@ -50,7 +50,7 @@ export const ToTerminal = Schema.Union([
 ]);
 export type ToTerminal = typeof ToTerminal.Type;
 
-export const FromTerminal = Schema.Union([
+const FromTerminal = Schema.Union([
 	// A paste is one message: 64 KiB is a long one. Past it, the message is refused whole.
 	Schema.Struct({
 		type: Schema.Literal("keys"),
@@ -58,7 +58,7 @@ export const FromTerminal = Schema.Union([
 	}),
 	Schema.Struct({type: Schema.Literal("size"), cols: Cells, rows: Cells}),
 ]);
-export type FromTerminal = typeof FromTerminal.Type;
+type FromTerminal = typeof FromTerminal.Type;
 
 export const ToWindow = Schema.Struct({
 	type: Schema.Literal("view"),
@@ -69,18 +69,18 @@ export const ToWindow = Schema.Struct({
 });
 export type ToWindow = typeof ToWindow.Type;
 
-export const FromWindow = Schema.Struct({
+const FromWindow = Schema.Struct({
 	type: Schema.Literal("msg"),
 	/** One of the run's inputs, `{type, value}`: read by its program, not here. */
 	msg: Schema.Unknown,
 });
-export type FromWindow = typeof FromWindow.Type;
+type FromWindow = typeof FromWindow.Type;
 
 /** A number the page gives each key it sends the host, so the answer names the key it is for. */
 const PressId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 /** What waits on the person, as the host folded it (asks.ts): on the desk's port, to every app. */
-export const AsksMessage = Schema.Struct({type: Schema.Literal("asks"), now: AsksNow});
+const AsksMessage = Schema.Struct({type: Schema.Literal("asks"), now: AsksNow});
 
 /** A size on the page, in whole px: no screen is wider than this. */
 const Pixels = Schema.Int.check(
@@ -116,12 +116,12 @@ export type Attached = Extract<Found, {readonly kind: "up" | "build"}>;
  * The link while the app is not on a host: it is reconnecting, it stopped trying and waits for
  * Try again, or it is stopping the old host to start its own (the restart).
  */
-export const Lost = Schema.Union([
+const Lost = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("reconnecting"), why: Schema.String}),
 	Schema.Struct({kind: Schema.Literal("stopped"), why: Schema.String}),
 	Schema.Struct({kind: Schema.Literal("restarting")}),
 ]);
-export type Lost = typeof Lost.Type;
+type Lost = typeof Lost.Type;
 
 /** What the window shows of the link now: what the app found, or how it is lost. */
 export const LinkNow = Schema.Union([Found, Lost]);

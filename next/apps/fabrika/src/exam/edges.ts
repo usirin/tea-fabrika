@@ -22,7 +22,7 @@ import {ChildProcess} from "effect/process";
 import {parseSync} from "oxc-parser";
 
 /** One edge comment: where it stands, the rules it names, as written, and its reason. */
-export interface Edge {
+interface Edge {
 	readonly path: string;
 	readonly line: number;
 	readonly rules: string;

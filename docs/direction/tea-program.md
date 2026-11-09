@@ -323,7 +323,7 @@ Three layers, each with one job.
   type. What it may carry is plain text a program declares about itself, the
   way Tuval's `title` and `status` are `state => string` lines sent only when
   they change, so every host can show the same line.
-  *Changed 2026-10-22 by [the GUI note](./the-gui-is-a-local-web-page-first.md):
+  *Changed 2026-10-22 by the GUI note:
   a program may declare a pure `view(state)`, with a schema for the data it
   picks, and its window is a React component in the same package, on
   `<package>/window`. The program itself still holds no renderer and no

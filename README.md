@@ -249,9 +249,8 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
     walking skeleton. One window, tiled like tmux; every tile runs its own tsh, with a line
     editor, and a program with a view runs inside a tile.
 - [`docs/tutorials/`](./docs/tutorials/): tutorials, with their finished files type-checked.
-- `docs/`: drafts too: [`skill-map.md`](./docs/skill-map.md),
-  [`review-machine.md`](./docs/review-machine.md), [`ship-machine.md`](./docs/ship-machine.md)
-  and [`fabrika-sdk.md`](./docs/fabrika-sdk.md).
+- `docs/`: drafts too: [`review-machine.md`](./docs/review-machine.md) and
+  [`ship-machine.md`](./docs/ship-machine.md).
 - `fixtures/`: toy projects the tests use.
 
 ## Working on this repository

@@ -66,7 +66,7 @@ import {type Placed, RESET, type Screen, startTsh, type Tsh, type WindowScreen} 
 export type TileNews = Extract<DeskMsg, {readonly type: "covered" | "over" | "jobs" | "ended"}>;
 
 /** What the tiles need of the edge: a way to tell the desk, and ports for the pages. */
-export interface Edge {
+interface Edge {
 	/** Tell the desk, beside the tiles in the host. */
 	readonly tell: (m: TileNews) => void;
 	/**
@@ -84,7 +84,7 @@ export interface Edge {
 	readonly typed?: ((tile: TileId) => void) | undefined;
 }
 
-export interface Tiles {
+interface Tiles {
 	/**
 	 * Start the tile's tsh, or show the one that runs on a fresh port. With an agent's name, its tsh
 	 * runs as that agent, or, when its session cannot be made, the tile says why.

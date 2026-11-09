@@ -1,7 +1,7 @@
 #!/bin/sh
 # box.sh: a Codex agent's own copy of tea-fabrika, whose git data is outside any folder named .git,
 # so Codex's sandbox lets it commit. The lead never runs git inside a box; it only fetches from it.
-#   box.sh new   <name> <base-ref> <branch> --ticket <n> --plan <path>
+#   box.sh new   <name> <base-ref> <branch> --ticket <n> --plan <path> [--root <lane root>] [--lane <lane>]
 #   box.sh run   <name> <prompt-file> <out> --step tests|build|mutation|review
 #   box.sh fetch <name> <branch> [--sign <step> --ticket <n>]
 #   box.sh gc [--dry-run]                     remove boxes whose work is safe elsewhere (gc.ts says how)
@@ -92,12 +92,15 @@ def fetched_head(branch):
     must(git("fetch", "-q", str(work), "refs/heads/" + branch + ":" + target), "run head fetch failed")
     head = rev(target); git("update-ref", "-d", target)
     return head
-def rows():
-    path = state_dir / (name + ".rows.jsonl")
-    return [json.loads(l) for l in path.read_text().splitlines() if l] if path.exists() else []
+def rows(state=None):
+    # The box's own rows, and the lane's, where drive writes each step's row (BOXES/<lane>-rows.jsonl).
+    lane = (state or {}).get("lane")
+    paths = [state_dir / (name + ".rows.jsonl")] + ([boxes / (lane + "-rows.jsonl")] if lane else [])
+    return [json.loads(l) for p in paths if p.exists() for l in p.read_text().splitlines() if l]
 def new_box():
     if len(args) < 2: refuse("new needs base and branch")
-    base, branch = args[:2]; ticket, plan = flag("--ticket"), flag("--plan")
+    base, branch = args[:2]; ticket, plan, root, lane = flag("--ticket"), flag("--plan"), flag("--root"), flag("--lane")
+    if lane is not None and not re.fullmatch(r"[A-Za-z0-9_-]+", lane): refuse("invalid lane name")
     if not branch.startswith("fabrikalfa/"): refuse("branch prefix must be fabrikalfa/")
     if not ticket or not plan: refuse("plan and ticket required")
     plan = str(pathlib.Path(plan).absolute())
@@ -106,6 +109,8 @@ def new_box():
     digest = hashlib.sha256(pathlib.Path(plan).read_bytes().split(b"\n", 2)[2]).hexdigest()
     must(git("fetch", "-q", "origin"), "base fetch failed")
     head, parent = rev(base), "none"
+    root_sha = rev(root) if root else head
+    if not ancestor(root_sha, head): refuse("root is not an ancestor of the base")
     # A lane that starts one box per step continues its own branch: that head is a valid base too.
     own = any(git("rev-parse", "-q", "--verify", r + "^{commit}").stdout.decode().strip() == head for r in ("refs/heads/" + branch, "refs/remotes/origin/" + branch))
     if head != rev("origin/main") and not own:
@@ -113,12 +118,31 @@ def new_box():
         branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/"), "parent lookup failed").splitlines()
         if not branches: refuse("base_not_signed: no parent branch at head")
         parent = branches[0] + "@" + head
+    # Two live lanes must not write one ticket. A branch that shares the ticket blocks only while it
+    # is live: an open PR, or a box on disk whose state names it. A branch the base already holds,
+    # or one with no open PR and no box, is history (an old or merged lane) and does not block.
+    open_heads = [None]
+    def live(other):
+        lane = other.removeprefix("origin/").removesuffix("-wip")
+        if open_heads[0] is None:
+            got = call(["gh", "pr", "list", "--state", "open", "--limit", "500", "--json", "headRefName", "-q", ".[].headRefName"])
+            if got.returncode: refuse("shared_ticket " + ticket + " on " + other + ": open PRs cannot be read")
+            open_heads[0] = set(got.stdout.decode().split())
+        if lane in open_heads[0]: return True
+        return any(facts(p).get("branch") == lane and (boxes / p.stem).is_dir() for p in state_dir.glob("*.box") if p.stem != name)
+    # A branch whose change is only field/*.jsonl rows is the lead logging runs, not a lane writing
+    # the ticket (field-rows PR 601 on ticket 276, 2026-11-09). Judged by its paths, not its name,
+    # from where it left main: a lane base on an older main would count main's newer files as its.
+    def rows_only(other):
+        changed = must(git("diff", "--name-only", "--no-renames", "origin/main..." + other), "branch paths unreadable").splitlines()
+        return bool(changed) and all(re.fullmatch(r"field/[^/]+\.jsonl", p) for p in changed)
     for other in must(git("for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines():
         # The branch itself and its own backup copy (<branch>-wip) are not other branches.
         if other in (branch, "origin/" + branch, branch + "-wip", "origin/" + branch + "-wip", "main", "origin/main", "origin/HEAD"): continue
-        for sha in commits("origin/main", other):
-            note = read_note(sha)
-            if isinstance(note, dict) and note.get("ticket") == ticket: refuse("shared_ticket " + ticket + " on " + other)
+        # Only links this lane's base lacks: an older branch of the same lane, already merged into
+        # the base, is history, not another lane holding the ticket.
+        if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits(head, other))) and not rows_only(other) and live(other):
+            refuse("shared_ticket " + ticket + " on " + other)
     must(git("clone", "-q", "--no-checkout", "--reference", str(main), "--separate-git-dir=" + str(gitdata), os.environ["REMOTE"], str(work)), "box clone failed")
     edge = ["--git-dir=" + str(gitdata), "--work-tree=" + str(work)]
     must(git(*edge, "fetch", "-q", str(main), head + ":refs/heads/" + branch), "box base fetch failed")
@@ -128,7 +152,12 @@ def new_box():
         must(git(*edge, "fetch", "-q", str(main), "refs/notes/fabrika:refs/notes/fabrika"), "box notes fetch failed")
     installed = subprocess.run(["nice", "-n", "15", "pnpm", "install", "--silent"], cwd=work, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if installed.returncode: refuse("box install failed")
-    save({"ticket": ticket, "branch": branch, "base": head, "parent": parent, "children": "none", "plan": plan, "plan-sha256": digest})
+    facts_new = {"ticket": ticket, "branch": branch, "base": head, "parent": parent, "children": "none", "plan": plan, "plan-sha256": digest}
+    # The lane's root: where it left main. Order and the commits check read the whole lane from
+    # here, so a later step's box still sees the earlier steps' links.
+    if root: facts_new["root"] = root_sha
+    if lane: facts_new["lane"] = lane
+    save(facts_new)
     if parent != "none":
         for path in state_dir.glob("*.box"):
             state = facts(path)
@@ -144,9 +173,9 @@ def run_box():
     if step not in ("tests", "build", "mutation", "review"): refuse("run step required")
     if ticket != state["ticket"]: refuse("run ticket mismatch")
     plan_owners(state)  # the approval and body hash, checked again before every step
-    if step == "build" and not any(verified(sha, "tests") for sha in commits(state["base"], state["branch"])):
+    if step == "build" and not any(verified(sha, "tests") for sha in commits(state.get("root", state["base"]), state["branch"])):
         refuse("step_out_of_order: verified tests since base required")
-    if step == "review" and not any(r.get("step", r.get("role")) == "mutation" and str(r.get("ticket")) == ticket and r.get("outcome") in ("done", "skip") for r in rows()):
+    if step == "review" and not any(r.get("step", r.get("role")) == "mutation" and str(r.get("ticket")) == ticket and r.get("outcome") in ("done", "skip", "pass") for r in rows(state)):
         refuse("step_out_of_order: mutation row or skip required")
     pid = state_dir / (name + ".pid")
     with lock("slots"):
@@ -207,6 +236,7 @@ def fetch_box():
         if fetched.returncode: refuse("rewrite: non-fast-forward fetch rejected")
         head = rev(branch)
         if not ancestor(state["base"], head): refuse("base is not an ancestor")
+        chain = commits(state["base"], head)
         incoming = "refs/notes/box-" + name + "-" + uuid.uuid4().hex
         has_notes = git("ls-remote", "--exit-code", str(work), "refs/notes/fabrika")
         if has_notes.returncode == 0:
@@ -214,10 +244,13 @@ def fetch_box():
             try:
                 # Check every note before copying any, so a conflict leaves MAIN's notes as they were.
                 # Notes are copied one by one, never merged as a ref: a note the box deleted stays in
-                # MAIN, and a commit MAIN already links is never linked again.
-                copies = []
+                # MAIN, and a commit MAIN already links is never linked again. Only the run's own
+                # commits are read: the rest of the box's notes are MAIN's copy from box start, and
+                # MAIN may have re-signed one since (themes and layers tests, 2026-11-09).
+                copies, own = [], set(chain)
                 for line in must(git("notes", "--ref=" + incoming, "list"), "notes list failed").splitlines():
                     blob, sha = line.split()
+                    if sha not in own: continue
                     current = git("notes", "--ref=fabrika", "show", sha)
                     if current.returncode != 0: copies.append((blob, sha))
                     elif current.stdout != git("cat-file", "blob", blob).stdout: refuse("note conflict " + sha)
@@ -225,7 +258,6 @@ def fetch_box():
                     must(git("notes", "--ref=fabrika", "add", "-C", blob, sha), "note copy failed " + sha)
             finally: git("update-ref", "-d", incoming)
         elif has_notes.returncode != 2: refuse("notes read failed")
-        chain = commits(state["base"], head)
         if step:
             if step not in ("tests", "build", "mutation", "review") or ticket != state.get("ticket") or step != state.get("run-step") or ticket != state.get("run-ticket"):
                 refuse("run step or ticket mismatch")
@@ -258,13 +290,20 @@ def fetch_box():
                     signed = call(["pnpm", "commits", "sign", "--step", role, "--ticket", ticket, "--key", str(pathlib.Path.home() / ".fabrika/step-keys" / role)], env=env)
                     if signed.returncode: refuse("sign failed " + sha)
             state["fetched-head"] = head; save(state)
-        checked = call(["pnpm", "commits", "check", "--base", state["base"], "--head", head])
-        answers, unreadable = [], 0
+        lane_root = state.get("root", state["base"])
+        checked = call(["pnpm", "commits", "check", "--base", lane_root, "--head", head])
+        # A stale link is judged here only for a step the lane itself has signed. A step the lane
+        # has not reached yet (lead, before catch-up) may hold a newer link from an older PR on the
+        # same ticket; CI judges that on the PR (themes tests, 2026-11-09: PR 565's lead link).
+        lane_steps = {n.get("step") for n in map(read_note, commits(lane_root, head)) if isinstance(n, dict)}
+        answers, unreadable, waived = [], 0, 0
         for l in checked.stdout.splitlines():
             if not l.strip(): continue
             try: a = json.loads(l)
             except (ValueError, UnicodeError): a = None
             if isinstance(a, dict) and a.get("_tag") in ("done", "stuck", "ask", "send", "skip"):
+                if a["_tag"] == "stuck" and a.get("why") == "stale_link" and a.get("step") not in lane_steps:
+                    waived += 1; print(json.dumps({**a, "_tag": "skip", "why": "stale_link_outside_lane"})); continue
                 answers.append(a); print(json.dumps(a))
             else: unreadable += 1
         # The checker skips paths outside its scope; every run commit still needs a valid link.
@@ -274,8 +313,10 @@ def fetch_box():
             if not isinstance(note, dict) or not isinstance(note.get("step"), str) or not verified(sha, note["step"]):
                 print(json.dumps({"_tag": "stuck", "why": "unlinked_commit", "commit": sha}))
                 answers.append({"_tag": "stuck"})
-        if unreadable or not answers: refuse("commits check unreadable output")
-        if checked.returncode or any(a["_tag"] == "stuck" for a in answers): refuse("commits check failed")
+        if unreadable or not (answers or waived): refuse("commits check unreadable output")
+        # The checker exits 1 for any stuck answer; when every stuck it gave was waived, that exit is
+        # explained. Any other failing exit still refuses.
+        if (checked.returncode and not (checked.returncode == 1 and waived)) or any(a["_tag"] == "stuck" for a in answers): refuse("commits check failed")
     return 0
 try:
     if cmd == "new": new_box(); status = 0

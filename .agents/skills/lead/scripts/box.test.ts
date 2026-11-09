@@ -1,6 +1,7 @@
 import {spawn, spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {
+	appendFileSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
@@ -33,6 +34,9 @@ type Setup = {
 	hold?: boolean;
 	check?: {status: number; text: string};
 	secrets?: string[];
+	/** Head branches of the open PRs the fake gh lists; `gh: "down"` makes it fail. */
+	openPrs?: string[];
+	gh?: "down";
 };
 const body = (
 	files: Array<[string, string]> = [
@@ -77,6 +81,11 @@ if (cmd === "pnpm") {
   }
   if (args[0] === "exec" && args[1] === "oxfmt") finish(run(process.env.T321_OXFMT,args.slice(2)));
   console.error("fixture refuses package or network command"); process.exit(97);
+}
+if (cmd === "gh") {
+  if (setup.gh === "down" || args.slice(0,2).join(" ") !== "pr list") { console.error("fixture gh is down"); process.exit(1); }
+  for (const head of setup.openPrs || []) console.log(head);
+  process.exit(0);
 }
 if (cmd === "codex") {
   const out = args[args.indexOf("-o")+1];
@@ -157,7 +166,7 @@ class Box {
 		write(join(this.home, ".npmrc"), "");
 		write(join(this.dir, "global.npmrc"), "");
 		this.setup({});
-		for (const cmd of ["pnpm", "codex", "git"])
+		for (const cmd of ["pnpm", "codex", "git", "gh"])
 			writeFileSync(join(this.bin, cmd), `#!${process.execPath}\n${stub}`, {mode: 0o755});
 		writeFileSync(join(this.bin, "nice"), '#!/bin/sh\nshift 2\nexec "$@"\n', {mode: 0o755});
 		this.git(
@@ -848,23 +857,125 @@ describe("T321 K1 fetch, today's tooling", () => {
 });
 
 describe("T321 K2 box start, today's tooling", () => {
-	// Plant: inspect only the current branch's links. Main and this box's branch are allowed.
-	it("K2 refuses a shared ticket only when its links are on another open branch", () => {
+	// Plant: inspect only the current branch's links, or block on any branch that shares the
+	// ticket. Main and this box's branch are allowed; another branch blocks only while it is live,
+	// and an older branch whose links the base already holds never does. Plant: walk from main.
+	// Plant: block on an open branch whose only change is field/*.jsonl rows.
+	it("K2 refuses a shared ticket only when another live branch carries its links", () => {
+		const places = [
+			"main",
+			"this",
+			"open-pr",
+			"running-box",
+			"history",
+			"merged",
+			"gh-down",
+			"different-ticket",
+			"inside",
+			"field-rows",
+		] as const;
+		const blocks = new Set(["open-pr", "running-box", "gh-down"]);
 		fc.assert(
 			fc.property(word, (text) => {
-				each(["main", "this", "other", "different-ticket"], (place) =>
+				each(places, (place) =>
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
-						if (place === "other" || place === "different-ticket")
-							b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
-						const sha = b.commit(b.main, "src/a.ts", `${text}\n`);
-						b.sign(b.main, "tests", place === "different-ticket" ? "322" : "321");
-						if (place === "main") b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+						const other = !["main", "this", "inside"].includes(place);
+						if (other) b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+						// Lead-only field rows on an open PR are not a lane (PR 601, 2026-11-09).
+						const path = place === "field-rows" ? "field/runs.jsonl" : "src/a.ts";
+						const sha = b.commit(b.main, path, `${text}\n`);
+						b.sign(
+							b.main,
+							place === "field-rows" ? "lead" : "tests",
+							place === "different-ticket" ? "322" : "321",
+						);
+						if (place === "main" || place === "merged")
+							b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+						// An older branch of this lane that the base already holds is history (#590).
+						if (place === "inside") b.git(b.main, "branch", "fabrikalfa/old", sha);
+						b.setup({
+							openPrs: ["open-pr", "field-rows"].includes(place)
+								? ["fabrikalfa/other"]
+								: ["fabrikalfa/unrelated"],
+							...(place === "gh-down" ? {gh: "down" as const} : {}),
+						});
+						if (place === "running-box") {
+							write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
+							mkdirSync(join(b.boxes, "two"));
+						}
+						if (place === "history") {
+							// A box state left behind with no box on disk is not a running lane.
+							write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
+						}
 						b.git(b.main, "checkout", "-q", "main");
-						const got = b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
+						const got =
+							place === "inside"
+								? b.new(sha, b.branch)
+								: b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
-						if (place === "other") refused(got, /shared_ticket/);
+						if (blocks.has(place)) refused(got, /shared_ticket 321 on fabrikalfa\/other/);
 						else expect(got.code, got.text).toBe(0);
+					}),
+				);
+			}),
+			options,
+		);
+	}, 180_000); // about 51 s alone on CI, over 60 s on a busy shard (#598); same cases
+
+	// Plant: judge a field-rows branch by its diff from the lane's base, not from main. A lane that
+	// started on an older main then sees main's newer files on the rows branch and refuses
+	// (projectwin build on ticket 276 beside field-rows PR 601, 2026-11-09).
+	it("K2 scenario: a rows-only branch on a newer main does not block a lane on an older one", () => {
+		fixture((b) => {
+			b.git(b.main, "checkout", "-q", b.branch);
+			const lane = b.commit(b.main, "src/a.ts", "lane work\n");
+			b.git(b.main, "checkout", "-q", "main");
+			const newer = b.commit(b.main, "src/b.ts", "main moved on\n");
+			b.git(b.main, "update-ref", "refs/remotes/origin/main", newer);
+			b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+			b.commit(b.main, "field/runs.jsonl", "{}\n");
+			b.sign(b.main, "lead", "321");
+			b.setup({openPrs: ["fabrikalfa/other"]});
+			b.git(b.main, "checkout", "-q", "main");
+			const got = b.new(lane, b.branch);
+			expect(got.code, got.text).toBe(0);
+		});
+	});
+
+	// Plant: drop --root, save the base as the root, or accept a root the base does not hold.
+	it("K2 saves the lane's root only when the base holds it", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				each(["none", "held", "elsewhere"] as const, (root) =>
+					fixture((b) => {
+						b.git(b.main, "checkout", "-q", b.branch);
+						const head = b.commit(b.main, "src/a.ts", `${text}\n`);
+						b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/side", "main");
+						const side = b.commit(b.main, "src/b.ts", `${text}\n`);
+						b.git(b.main, "checkout", "-q", "main");
+						const extra = root === "none" ? [] : ["--root", root === "held" ? b.base : side];
+						const got = b.call("sh", [
+							program,
+							"new",
+							"new",
+							head,
+							b.branch,
+							"--ticket",
+							"321",
+							"--plan",
+							b.plan,
+							...extra,
+						]);
+						if (root === "elsewhere") {
+							refused(got, /root is not an ancestor/);
+							return;
+						}
+						expect(got.code, got.text).toBe(0);
+						const state = readFileSync(join(b.boxes, "state/new.box"), "utf8");
+						expect(state).toContain(`base: ${head}`);
+						if (root === "held") expect(state).toContain(`root: ${b.base}`);
+						else expect(state).not.toContain("root:");
 					}),
 				);
 			}),
@@ -967,6 +1078,51 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 		});
 	});
 
+	// Plant: compare every note the box holds, not only its run's commits. Themes and layers tests
+	// (2026-11-09) were stuck at fetch after MAIN re-signed another branch's commit mid-run.
+	it("K1 scenario: MAIN re-signing a commit outside the run after box start does not stop the fetch", () => {
+		fixture((b) => {
+			b.git(b.main, "checkout", "-q", "-b", "other");
+			const outside = b.commit(b.main, "src/b.ts", "other\n");
+			b.sign(b.main, "tests");
+			b.git(b.main, "checkout", "-q", "main");
+			// The box copies MAIN's notes at start, as box.sh new does.
+			b.git(b.work, "fetch", "-q", b.main, "refs/notes/fabrika:refs/notes/fabrika");
+			b.git(b.main, "notes", "--ref=fabrika", "add", "-f", "-m", "re-signed in MAIN", outside);
+			b.setup({operations: [{path: "src/a.ts", text: "run\n"}]});
+			expect(b.run().code).toBe(0);
+			const got = b.fetch();
+			expect(got.code, got.text).toBe(0);
+			expect(got.text).not.toMatch(/conflict/);
+			expect(b.git(b.main, "notes", "--ref=fabrika", "show", outside).trim()).toBe(
+				"re-signed in MAIN",
+			);
+			expect(b.notes()).toContain(b.head(b.main, b.branch));
+		});
+	});
+
+	// Plants: refuse on every stale link; waive a stale link of a step the lane signed. Themes tests4
+	// (2026-11-09) stopped at fetch on stale_link lead: PR 565 had a lead link on ticket 343.
+	it("K1 scenario: a stale link only for a step the lane has not signed does not stop the fetch", () => {
+		each(["lead", "tests"] as const, (step) =>
+			fixture((b) => {
+				const stale = JSON.stringify({_tag: "stuck", why: "stale_link", sha: "head", step});
+				const ask = JSON.stringify({_tag: "ask", who: "owner", for: "exam_read", paths: []});
+				b.setup({
+					operations: [{path: "src/a.ts", text: "run\n"}],
+					check: {status: 1, text: `${stale}\n${ask}\n`},
+				});
+				expect(b.run().code).toBe(0);
+				const got = b.fetch();
+				if (step === "tests") refused(got, /commits check failed/);
+				else {
+					expect(got.code, got.text).toBe(0);
+					expect(got.text).toContain("stale_link_outside_lane");
+				}
+			}),
+		);
+	});
+
 	// Plant: trust the installed checker's scope skip. Review round 1, finding 4.
 	it("K1 scenario: an unsigned commit outside the exam list is refused on a plain fetch", () => {
 		fixture((b) => {
@@ -1034,15 +1190,29 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 });
 
 describe("T321 K3 step order and rows, today's tooling", () => {
-	// Plant: count tests from before base, or any unverified note; skip review's mutation row.
+	// Plant: count tests from before base, or any unverified note; skip review's mutation row; read
+	// only the box's own rows, not the lane's where drive writes them (review boxes, 2026-11-09); read
+	// from the box's base when the lane's root is saved (layers build, 2026-11-09: each step's box
+	// starts at the last step's head, so its tests link sat before that box's base).
 	it("K3 gates build on a verified tests link since base and review on mutation or a recorded skip", () => {
 		fc.assert(
 			fc.property(word, (text) => {
 				each(
-					["absent", "before-base", "bad-note", "tests", "review-absent", "mutation", "skip"],
+					[
+						"absent",
+						"before-base",
+						"since-root",
+						"bad-note",
+						"tests",
+						"review-absent",
+						"mutation",
+						"skip",
+						"lane-row",
+						"lane-row-stuck",
+					],
 					(kind) =>
 						fixture((b) => {
-							if (["before-base", "bad-note", "tests"].includes(kind)) {
+							if (["before-base", "since-root", "bad-note", "tests"].includes(kind)) {
 								const sha = b.commit(b.work, "src/a.ts", `${text}\n`);
 								if (kind === "bad-note")
 									b.git(b.work, "notes", "--ref=fabrika", "add", "-m", '{"step":"tests"}', sha);
@@ -1056,6 +1226,10 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 									"refs/notes/fabrika:refs/notes/fabrika",
 								);
 								if (kind === "before-base") b.state(sha);
+								if (kind === "since-root") {
+									b.state(sha);
+									appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
+								}
 							}
 							if (kind === "mutation" || kind === "skip")
 								write(
@@ -1069,8 +1243,29 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										why: "recorded fixture result",
 									})}\n`,
 								);
-							const review = ["review-absent", "mutation", "skip"].includes(kind);
-							const pass = ["tests", "mutation", "skip"].includes(kind);
+							if (kind === "lane-row" || kind === "lane-row-stuck") {
+								// Where drive writes a step's row: BOXES/<lane>-rows.jsonl, not the box's own.
+								appendFileSync(join(b.boxes, "state/one.box"), "lane: onelane\n");
+								write(
+									join(b.boxes, "onelane-rows.jsonl"),
+									`${JSON.stringify({
+										run: "t321-mutation1",
+										ticket: "321",
+										role: "hand",
+										step: "mutation",
+										outcome: kind === "lane-row" ? "pass" : "stopped",
+										why: "drive.ts mutation fixture row",
+									})}\n`,
+								);
+							}
+							const review = [
+								"review-absent",
+								"mutation",
+								"skip",
+								"lane-row",
+								"lane-row-stuck",
+							].includes(kind);
+							const pass = ["tests", "since-root", "mutation", "skip", "lane-row"].includes(kind);
 							const got = b.run(review ? "review" : "build");
 							expect(got.code).not.toBeNull();
 							if (pass) expect(got.code, got.text).toBe(0);
