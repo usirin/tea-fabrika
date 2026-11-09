@@ -16,7 +16,7 @@ import {type Cell, type Pen, print} from "./cells.ts";
 // Text takes cells as ghostty-web gives them (./cells.ts, `print`): a wide character two, and an
 // accent none, as it joins the cell before it.
 
-export interface Grid {
+interface Grid {
 	/** Every row written, oldest first, with no trailing spaces. */
 	readonly rows: readonly string[];
 	/** Where the cursor is: a row of `rows`, and a column. */

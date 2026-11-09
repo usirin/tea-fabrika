@@ -152,14 +152,7 @@ Steps:
    Every other key has a default. The keys are listed at the top of
    [`packages/pipeline/src/tsh/config.ts`](./packages/pipeline/src/tsh/config.ts).
 
-4. In the target repository, commit a `.fabrika/fabrika.toml` on its default branch that turns on the
-   owner's desk. Without it, nothing can take your answers:
-
-   ```toml
-   packs = ["@tea-fabrika/owner-desk"]
-   ```
-
-   Its other keys (agent models, install, checks, approval) are listed at the top of
+4. In the target repository, commit a `.fabrika/fabrika.toml` on its default branch. Its keys (agent models, install, checks, approval) are listed at the top of
    [`packages/pipeline/src/settings.ts`](./packages/pipeline/src/settings.ts).
    See also [One fabrika.toml per repo](./docs/direction/one-fabrika-toml-per-repo.md).
 
@@ -204,13 +197,7 @@ These still run, but they are not the way forward:
 
 - `operate ticket=<url>` in tsh: the older one-ticket loop (build, review, ship). It is going to
   be deleted. Use [the pipeline](./docs/how-to/run-a-pipeline-ticket.md).
-- `pnpm demo`: the first-generation factory (`legacy/`) on a toy ticket, with scripted agents. It
-  costs nothing and prints every step.
-- `pnpm demo:claude` and `pnpm demo:hard` (a harder toy): the same with real Claude Code. They
-  need the `claude` CLI and they spend money. With `TYPESAFE_API_KEY` set, the sort step uses
-  Jev, a small paid classifier, instead of a script.
-- `pnpm real`: the first-generation factory on one GitHub issue. See
-  [Run a real ticket](./docs/how-to/run-a-real-ticket.md).
+- The first-generation factory (`pnpm demo`, `pnpm real`) is gone from main. It stays in git at the tag `archive/2026-11-09`.
 
 ## Where to go next
 
@@ -224,8 +211,6 @@ These still run, but they are not the way forward:
 | Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
 | See what was tried, and what came back | [`experiments/`](./experiments/README.md) |
 | See what happened on real tickets | [`field/`](./field/README.md) |
-| Read one finding, short | [`singles/`](./singles/README.md) |
-| Check a change against old tickets | [`replay/`](./replay/README.md) |
 
 ## What is in this repository
 
@@ -259,25 +244,14 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
     page, and two runs side by side (experiment 170).
   - [`programs/markdown`](./programs/markdown/README.md), `@tea-fabrika/markdown`: draws any
     markdown it is told, in a window, as `glow` or `less` does.
-- `wip`: the old operator's live wiring that `legacy` still uses. Nothing new goes here.
-- [`legacy`](./legacy/README.md): the first-generation factory and the old operator. Nothing new
-  goes here.
-- `packs/`: add-on packs. A repository turns one on with one line in its `.fabrika/fabrika.toml`; the core
-  names none of them.
-  - [`packs/owner-desk`](./packs/owner-desk/README.md): the owner's inbox, and their answers back.
-  - [`packs/ask-log`](./packs/ask-log/README.md): one line per ask and answer, in a file.
-  - [`packs/ui-verification`](./packs/ui-verification/README.md): holds a build that changes
-    what a user sees, and asks the owner yes or no.
 - `apps/`: what a person opens, on top of everything else. Nothing imports an app.
   - [`apps/fabrika`](./apps/fabrika/README.md), `@kampus/fabrika-app-old`: the fabrika app, a
     walking skeleton. One window, tiled like tmux; every tile runs its own tsh, with a line
     editor, and a program with a view runs inside a tile.
 - [`docs/tutorials/`](./docs/tutorials/): tutorials, with their finished files type-checked.
-- `docs/`: drafts too: [`skill-map.md`](./docs/skill-map.md),
-  [`review-machine.md`](./docs/review-machine.md), [`ship-machine.md`](./docs/ship-machine.md)
-  and [`fabrika-sdk.md`](./docs/fabrika-sdk.md).
+- `docs/`: drafts too: [`review-machine.md`](./docs/review-machine.md) and
+  [`ship-machine.md`](./docs/ship-machine.md).
 - `fixtures/`: toy projects the tests use.
-- `blog/` and `video/`: finished pieces about earlier stages.
 
 ## Working on this repository
 

@@ -155,7 +155,7 @@ tool("ask", "Ask a helper one question", {question: z.string()}, ({question}) =>
   only moves some of the runtime's work to the other side of a wall.
 - **OTP does this already.** Erlang's [`peer`](https://www.erlang.org/doc/apps/stdlib/peer.html)
   starts a node in a Docker container and talks to it over stdin and stdout.
-  [tea-host](./tea-host.md) is OTP for tea programs.
+  tea-host is OTP for tea programs.
 - **Keeping the key outside is common practice.** Docker's agent sandboxes give
   the box a fake key, and a proxy swaps in the real one for the API's address
   only ([Docker](https://docs.docker.com/ai/sandboxes/customize/build-an-agent/)).
@@ -215,7 +215,7 @@ The doubt is the edges nobody has run yet, listed below.
     *Wrong, found later the same day:* trust between the two does not settle
     it. Anthropic's [Consumer Terms](https://www.anthropic.com/legal/consumer-terms)
     say "You may not share your … Account credentials with anyone else." The
-    host on Cloudflare is parked for now ([tea-host](./tea-host.md)). On a
+    host on Cloudflare is parked for now (tea-host). On a
     laptop, the token stays on its own person's machine, so this rule's
     laptop part is unchanged.
     *Ruled 2026-10-26, after experiment 157:* the owner takes the shared

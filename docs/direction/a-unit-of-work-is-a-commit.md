@@ -4,9 +4,16 @@
 open question 18, and it replaces the CI half of
 [nobody writes their own exam](./nobody-writes-their-own-exam.md), which was proposed at 75% and
 doubted by its own note. That note's core stays: the builder never touches the exam, and changing
-the exam is the owner's call. *Added the same day (owner):* each step's agent signs its commits with
-its own key, and CI decides from the signature; squash merges stay, and each step signs a link
-from tree to tree that survives the squash.
+the exam is the owner's call. CI decides from each step's signature; squash merges stay, and each
+step signs a link from tree to tree that survives the squash. Changed by the owner, 2026-11-08:
+today's tooling signs at fetch in MAIN, after checking the recorded run and file owners. Agents
+still commit. This replaces the 2026-11-05 agent-signs call.
+
+*Changed 2026-11-08 (owner): code signs each step's commits, not the step's agent. The lead's
+fetch signs them as it pulls a box's branch (`box.sh fetch --sign <step>`), with that step's key.
+The key stays one per step, and CI still decides from the signature. Built for today's
+tooling by skills friction PR 1a (tracker 321). It said: "each
+step's agent signs its commits with its own key".*
 
 *Renamed 2026-11-08 (question 15): the link's `cause` is now `parent`, with `traceId` beside it; a link with `cause` is refused.*
 
@@ -38,10 +45,12 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
   agent that is not the builder, inside the same pull request.
 - **The test writer's commit comes first on the branch,** and it may touch exam paths: a boundary
   row, a ledger line, a catalog line a test needs, an exam test moved to a new bundler.
-- **Each step's agent signs its commits with its own key,** the same SSHSIG shape the door checks
-  (`ssh-keygen -Y sign`, namespace `fabrika-step`). [A key per
-  client](./a-key-per-client-and-no-github-trust.md) already gives every client a key; a step is
-  one more.
+- **Code signs each step's link with that step's key.** Owner, 2026-11-08: today's `fetch --sign`
+  checks the saved run, ticket, bounds and file owners before signing missing notes in MAIN.
+  Existing notes and verified person signatures stay unchanged. The SSHSIG shape stays
+  `ssh-keygen -Y sign`, namespace `fabrika-step`, the shape the door checks. Mutation still uses
+  the tests key; no new role. [A key per client](./a-key-per-client-and-no-github-trust.md)
+  already gives every client a key; a step is one more.
 - **The signature goes in a git note, not in the commit.** *Changed 2026-11-06, the owner asking
   for no "Unverified" on GitHub.* Each step adds a note on `refs/notes/fabrika` to its commit,
   holding what it signs, the link (its step, the ticket, a version, the tree before and the tree
@@ -71,7 +80,9 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
 - **A key per step role that commits:** `tests`, `build`, and `lead` for the lead agent's own
   commits, such as a merge from main. Ed25519, made once.
 - **Where the private halves live:** in the lead session's home on the laptop, one file per role,
-  never in the repo. Each step's agent is started with its own role's key, the key it signs its notes with.
+  never in the repo or box. Owner, 2026-11-08: MAIN's fetch signer opens them. No key is copied or
+  printed. A temporary gitdir gives the signer its own detached HEAD; MAIN's checkout and index
+  stay put. The signature proves which step run supplied the commit, not which agent typed it.
 - **How CI knows the public halves:** one file in the repo in git's allowed-signers format, the
   role as each key's name. It is an exam path, so a change to it asks the owner.
 - **Tier 1's P32 builds it,** with planted commits for each answer.
@@ -123,6 +134,8 @@ and CI checks the chain of links from `main`'s tree to the squash commit's tree.
   way. A branch catches up by merging `main` in, with no rebases and no native stacks yet. The row
   that first allows a rebase carries each link across it by replay, Gerrit's trivial-rebase check
   ([experiment 221](../../experiments/221-signed-steps-and-rebases.md)).*
+  Lead, 2026-11-08: a catch-up merge of main whose conflict touches exam paths is resolved by a
+  tests run and signed tests, not lead; every other catch-up merge stays a lead link.
 - **No transparency-log server.** in-toto's links often go to a Sigstore Rekor server. Ours go to the
   ledger, which is already an append-only log with a referee, the way traces dropped Jaeger for the
   job record ([a job record holds its trace](./a-job-record-holds-its-trace.md)).

@@ -22,7 +22,11 @@ the rest.
    [property tests](../../../docs/direction/property-tests-not-our-own-search.md)):
    - On a machine: its real reducer from its real `init`, with `@demlik/tea/pbt`
      ([every machine has laws](../../../docs/direction/every-machine-has-laws.md)).
-   - On anything else: `fast-check` (`fc.assert(fc.property(...))`), or Effect's `Arbitrary`.
+   - On anything else, Effect's own tools first (owner, 2026-11-08): `Arbitrary.schema(S)`
+     for data when a schema exists, `@effect/vitest`'s
+     `it.prop` and `it.effect.prop` (they take schemas as inputs), and `effect/testing`
+     (`TestClock`, `TestConsole`, `TestSchema`). Hand-written `fast-check`
+     (`fc.assert(fc.property(...))`) only where Effect has nothing.
    - A hand-picked example stays only as a pinned case of a named past bug, in fast-check's
      `examples`, with the bug named beside it. A law that is only examples is not done.
    - Four kinds of law may be a fixed test, and the test's name starts with its label: `vector:` (a
@@ -45,8 +49,7 @@ the rest.
 5. **Fix test-side type errors** the build's product edits cause (a `// @ts-expect-error <why>` on a
    case that is invalid on purpose, or a reshaped test that still proves the refusal). Keep every
    law and plant.
-6. **Commit and sign** with the step-commit skill:
-   `sh .agents/skills/step-commit/scripts/stepcommit.sh tests <ticket> "T<ticket> tests: <subject>" <paths...>`
+6. **Commit** with the step-commit skill. In a box use `--commit-only`; fetch signs the run.
 7. **Report** in at most 6 lines: each new law with `file:line` and how you saw it fail, anything
    in the plan you found wrong, and any red that is a sandbox limit.
 
@@ -59,14 +62,14 @@ the rest.
   blocked there, so skip them.
 - Elsewhere: `nice -n 15 pnpm exec vitest run --maxWorkers=3 <narrow path>`, and `nice -n 19` with
   `--maxWorkers=1` when two or more code agents run.
-- `pnpm format` before each commit, `pnpm lint` once. One `pnpm typecheck` at the end only if the
+- Run `pnpm lint` once. Step-commit checks staged formatting. One `pnpm typecheck` at the end only if the
   brief allows it, and never while another runs (`pgrep -x tsgo`).
 - A sandbox may refuse sockets (`EPERM`), file watches (`EMFILE`), `ps` or Electron. Say which law
   that hits, and do not count it as red or green.
 
 ## Never
 
-- Change product code. The builder's uncommitted edits stay exactly as they are; stage only yours.
+- The builder's uncommitted edits stay exactly as they are.
 - Reset, rebase or amend. Taking over another step's work is a new commit on top.
 - Read, print or copy a key file. Push.
 - Write a law that cannot fail, or one whose plant you did not run.

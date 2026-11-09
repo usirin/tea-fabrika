@@ -133,7 +133,7 @@ import {type TileJobs, watchJobs} from "./tile-jobs.ts";
 // never runs as the agent.
 
 /** What became of a message from a page: read, and on its way, or refused, and why. */
-export type Heard = {readonly kind: "read"} | {readonly kind: "refused"; readonly why: string};
+type Heard = {readonly kind: "read"} | {readonly kind: "refused"; readonly why: string};
 
 /** A page, as tsh sees it. */
 export interface Screen<To> {
@@ -237,10 +237,10 @@ const behind = (text: string): boolean => {
 };
 
 /** tsh's run. In memory, so each tile's tsh has the same id with no clash. */
-export const TSH = "tsh:p1";
+const TSH = "tsh:p1";
 
 /** The bytes of the screen kept for a page loaded again, as a terminal's scrollback: the newest. */
-export const SCREEN_KEPT = 256 * 1024;
+const SCREEN_KEPT = 256 * 1024;
 
 /**
  * A terminal's full reset (ESC c, "RIS"): the screen and its scrollback cleared, the cursor home.

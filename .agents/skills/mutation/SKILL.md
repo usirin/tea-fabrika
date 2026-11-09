@@ -13,6 +13,8 @@ may kill a real survivor with a law. You change test files only.
 A brief names the ticket, the branch, and the build commit or files to mutate. This skill holds the
 rest.
 
+Never print npm, pnpm or env settings. The runner strips secret settings and redacts saved output.
+
 ## Steps
 
 1. **Read** `AGENTS.md`'s mutation rules. Find how earlier mutation steps ran here: `field/runs.jsonl`
@@ -25,7 +27,8 @@ rest.
    only, static mutants off, a 10 s test limit and a 5 s over-run. Five minutes of wall time for the
    whole pull request, setup included: at five minutes, stop your workers and keep what they have.
    `sample.ts` sorts candidate identities and uses seed 119120 to select one range per changed
-   line first, then remaining ranges, at most 150 enclosed mutants. Equal locations and nested
+   line first, taking lines round-robin across changed files so every file gets mutants when the
+   cap allows, then remaining ranges, at most 150 enclosed mutants. No brief needs per-file caps. Equal locations and nested
    ranges count every mutant they select. The seed controls selection; Stryker does not promise
    to execute ranges in that order. Never the whole set. Ask before you scale up.
    - **A round after a send-back** reuses the last round's answers: Stryker's `incremental`, with
@@ -40,7 +43,7 @@ rest.
    behavior changes. Otherwise report unconfirmed and why. Keep static mutants off.
 5. **Survivors advise.** A real survivor never holds the pull request. Kill one with a new or
    tighter law, in test files only, when the law is clear; list the rest in the report. Run the
-   touched tests, `pnpm format`, `pnpm lint`. No typecheck: another agent may be running one.
+   touched tests and `pnpm lint`. Step-commit checks staged formatting. No typecheck: another agent may be running one.
 6. **Commit and sign** with the step-commit skill, as `mutation` (it signs as `tests` for now). If no
    law changed, commit nothing.
    `sh .agents/skills/step-commit/scripts/stepcommit.sh mutation <ticket> "T<ticket> tests: <subject>" <paths...>`
@@ -123,7 +126,6 @@ its config and cleanup. They do not prove mutation coverage of shell or Python.
 
 ## Never
 
-- Change product code. A survivor the product should catch, but a law cannot reach, goes in the
-  report for the lead.
+- A survivor the product should catch, but a law cannot reach, goes in the report for the lead.
 - Write a mutation skip list: that is the exam, and the owner's.
 - Reset, rebase or amend. Read, print or copy a key file. Push.
