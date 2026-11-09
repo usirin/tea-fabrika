@@ -4,6 +4,8 @@
 **Amended 2026-11-09 by P28's plan (ticket 331), the owner deciding:** the words become the key by
 HKDF-SHA256 ([how the words become a key](#how-the-words-become-a-key)), and one signed read-only
 door call lets a new device see enough to recover ([call 13](#13-reading-enough-to-recover-decided-2026-11-09)).
+The same day, on reading P28's exam, the owner put the read's `rev` inside the signed text of a
+recovery `added`, as `add.seen`, so the race check does not rest on TLS alone.
 This is about `next/`. It is Tier 1's P5, the backup's design pass ([the plan](../plan/tier-1.md)),
 and the owner reads it before anyone writes a test for P28. Nothing here is built. The research
 behind several calls is experiment 216, how products do recovery kits
@@ -183,6 +185,9 @@ export const Add = Schema.Struct({
 	adds: Adds,
 	drops: Schema.Array(Schema.String), // this person's keys that stop now, forever, with all they let in
 	saw: AddSaw,
+	// The ledger rev the signer read (call 13). Signed, so nobody on the way can change it.
+	// A recovery key must give one; a person key may leave it null.
+	seen: Schema.NullOr(Schema.Int),
 	sentAt: Schema.String, // the writer's clock, shown, never used to decide
 });
 
@@ -580,9 +585,11 @@ const answer = yield* door.preview({key: recoveryPublic, text, signed: sshsig(re
 //   {_tag: "preview", person, name, rev: 41, devices: [{key: "...p1", windows: 2, agents: 1}]}
 // answer, on any refusal at all:
 //   {_tag: "refused", why: "not_member"}       // one shape, one status, whatever the cause
-// 3. Sign `added` as call 4 says. Its entry's `seen` is the read's `rev`.
-yield* door.grant(added, {seen: answer.rev});
-// The door refuses it `stale` if the person's keys changed after rev 41. The sheet is not spent.
+// 3. Sign `added` as call 4 says, with the read's `rev` inside the signed text.
+const add = {...added, seen: answer.rev};                    // seen: 41
+yield* door.grant({add, signed: sshsig(recoveryKey, addText(add))});
+// The door writes the entry's `seen` from `add.seen`, never from outside the signature.
+// It refuses the `added` `stale` if the person's keys changed after rev 41. The sheet is not spent.
 ```
 
 - **It spends nothing and lets nothing in.** No fact is written, no client is admitted, and the
@@ -596,9 +603,13 @@ yield* door.grant(added, {seen: answer.rev});
 - **(b) The challenge is one-time and short-lived.** It is the door's existing nonce: bound to the
   connection, good for the door's existing challenge lifetime (`waiting.ttl`), and spent in the
   same step that checks the signature, so a second use is refused. No new number.
-- **(c) The read's position travels to `added`.** The read returns the ledger `rev` it folded.
-  `added`'s entry carries it as its `seen`, the field every entry already has. The door refuses
-  that `added` with `stale`, and writes nothing, if any member fact placed after `seen` added,
+- **(c) The read's position travels to `added`, signed.** The read returns the ledger `rev` it
+  folded. The recovery key signs it inside `added`, as `add.seen` (amended the same day, owner:
+  inside the signed text, so the check does not rest on TLS alone). The door writes the entry's
+  `seen`, the field every entry already has, from `add.seen`, and from nothing outside the
+  signature. A `seen` changed after signing fails the signature like any other changed field.
+  The door refuses the `added` with `stale`, and writes nothing, if `seen` is missing or if any
+  member fact placed after `seen` added,
   dropped or spent one of this person's own keys: a person key or a recovery key. Why: a thief on
   the old Mac could otherwise add a new device or a new sheet between the read and the join, and
   the person, choosing from an old list, would leave the thief's key live. A tab or agent added
@@ -608,9 +619,8 @@ yield* door.grant(added, {seen: answer.rev});
 - **What it reveals, and to whom:** the person's name, the read's `rev`, and each device with how
   many windows and agents it let in. Only to someone who can sign with a live recovery key of that
   person, which is someone who already holds the words.
-- **Doubt:** `seen` is not inside the signed text, so it rests on the connection's TLS. A party that
-  could rewrite it could also drop the request. Equal-time refusals are not promised: the answers
-  are the same, the time each takes may not be.
+- **Known gap:** equal-time refusals are not promised. The answers are the same; the time each
+  takes may not be.
 
 ## Email recovery (decided, two unknowns open)
 
@@ -693,7 +703,8 @@ builder and read by the owner, holds:
   and makes no network call.
 - **The recovery read (call 13):** every refusal is byte-for-byte the same answer; a challenge
   works once and not after its lifetime; the read writes no fact and spends no sheet; an `added`
-  whose `seen` is older than a change to the person's keys is refused `stale`, including the race
+  whose signed `seen` is older than a change to the person's keys is refused `stale`, and one whose
+  `seen` was changed after signing fails its signature, including the race
   where the old Mac adds a device or a sheet between the read and the join.
 - **The secret stays home:** during a full recovery on a stage, every frame sent, every ledger row
   and every log line is searched for each of the 12 words, the entropy and the seed. None is found.
@@ -812,7 +823,8 @@ Decided by the owner, 2026-11-09, on P28's plan (ticket 331):
 19. One read-only door call, signed by the recovery key on a fresh challenge, returns the name, the
     ledger `rev` and what each device's drop would remove. It spends nothing. Its refusals all
     answer the same, its challenge is one-time and short-lived, and `added` carries its `rev` as
-    `seen` and is refused `stale` if the person's keys changed since (call 13).
+    `seen` inside the signed text and is refused `stale` if the person's keys changed since
+    (call 13).
 
 Inside the decided part, still a lean:
 
