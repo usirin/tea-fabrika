@@ -1,6 +1,9 @@
 # Account recovery: a sheet of 12 words, and email for the cloud
 
 **Proposed 2026-11-05. Decided by the owner, 2026-11-06, except two unknowns on the email path.**
+**Amended 2026-11-09 by P28's plan (ticket 331), the owner deciding:** the words become the key by
+HKDF-SHA256 ([how the words become a key](#how-the-words-become-a-key)), and one signed read-only
+door call lets a new device see enough to recover ([call 13](#13-reading-enough-to-recover-decided-2026-11-09)).
 This is about `next/`. It is Tier 1's P5, the backup's design pass ([the plan](../plan/tier-1.md)),
 and the owner reads it before anyone writes a test for P28. Nothing here is built. The research
 behind several calls is experiment 216, how products do recovery kits
@@ -253,7 +256,29 @@ export const wordsFor = (entropy: Uint8Array): ReadonlyArray<string> =>
 // The 32-byte Ed25519 seed is HKDF-SHA256 of the entropy, with a fixed label.
 // Not BIP39's own PBKDF2 seed: that is for wallets' key trees, which we do not need.
 export const seedFrom = (words: ReadonlyArray<string>): Effect.Effect<Uint8Array, BadWords> => /* ... */;
+
+// Decided 2026-11-09 (owner), sheet version 1:
+const seed = hkdf(sha256, entropy /* the 16 bytes the words hold */, new Uint8Array(0) /* salt */,
+	new TextEncoder().encode("fabrika-recovery-v1") /* info */, 32);
+// seed is the Ed25519 private seed. Its public half is the `ssh-ed25519` line in `adds.recovery.key`.
 ```
+
+**The v1 formula (decided by the owner, 2026-11-09).** The words give back exactly 16 entropy bytes
+(BIP39's checksum checked first). The seed is `HKDF-SHA256(ikm = entropy, salt = empty,
+info = UTF-8 "fabrika-recovery-v1", length = 32)` ([RFC 5869](https://www.rfc-editor.org/rfc/rfc5869.html)),
+used as the Ed25519 private seed. An empty salt is RFC 5869's default (section 2.2: a string of
+zeros as long as the hash). The label gives recovery its own key domain. The `v: 1` in
+`adds.recovery` names this formula; a change to any part is a new `v`, never an edit.
+
+- **Cost:** it is fabrika's own format, so wallet software cannot rebuild the key from the words.
+  Nobody needs it to. Sure: 85%.
+- **A public test answer.** The 16 zero bytes are the words `abandon` ×11 then `about` (BIP39's
+  first English vector). Their seed is
+  `67f219d59a3125749c6a5f30516438911f80a061dcaec1193e40d1a8527365db` (Python's `hmac` and Node's
+  `hkdfSync` agree), and its public key is
+  `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG7cbo1iOLrhS+KMPO3qI4eOHyN8lSkmiscOpPQmKgs` (Node's
+  `crypto`, one tool). These words are public test words: never a real sheet. P28's tests check the
+  same answer with their own vectors.
 
 - **12 words, 128 bits.** That is Proton's length and the common wallet length. Ed25519 itself gives
   about 128 bits of security, so more words add typing and no safety. Sure: 80%.
@@ -328,6 +353,13 @@ Every refusal writes nothing. The words never leave the Mac in any branch.
   `id`, as a grant.
 - **No sheet at all** → a new Mac that just opens fabrika and dials the address is a new window. It
   gets the waiting screen and nothing else, as any unknown key does.
+
+*Changed 2026-11-09 (owner, [call 13](#13-reading-enough-to-recover-decided-2026-11-09)):* a new
+device now reads first, through the recovery read, and that read answers every refusal the same.
+So on the recovery screen a sheet for another fabrika, a spent sheet and a replaced sheet all get
+one line, such as "This sheet does not open this fabrika. It may be for another one, already used,
+or replaced by a newer sheet." The `added` answers above (`not_member`, `used`, `replaced`) stay as
+they are for a signed `added`; the recovery screen does not reach them with a refused read.
 
 ### 6. A sheet works once, and a new one kills the old (decided)
 
@@ -530,6 +562,56 @@ Each says what the attacker gets in Tier 1.
 - **Malware on the new Mac while the sheet is typed.** It gets the words. Nothing in this design
   stops that. A clean Mac is the only answer, as for every product above.
 
+### 13. Reading enough to recover (decided 2026-11-09)
+
+**Decided by the owner, 2026-11-09, with three conditions from the lead's attack walk.** Call 3
+asks "lost or kept?" and call 10 counts what goes, so the new device must see the person's devices
+before it signs `added`. It holds only the recovery key, which cannot open a window (call 4). So
+the door offers one read, signed by the recovery key and tied to a fresh challenge.
+
+```ts
+// A sketch. One read; it spends nothing and lets nothing in.
+// 1. Ask the door for a challenge: the same one-time, short-lived nonce `initialize` uses.
+const nonce = yield* door.challenge(connection);
+// 2. Sign the read with the recovery key (SSHSIG, namespace `fabrika-client`).
+const text = previewText({to: ledger, url, connection, nonce});
+const answer = yield* door.preview({key: recoveryPublic, text, signed: sshsig(recoveryKey, text)});
+// answer, on success:
+//   {_tag: "preview", person, name, rev: 41, devices: [{key: "...p1", windows: 2, agents: 1}]}
+// answer, on any refusal at all:
+//   {_tag: "refused", why: "not_member"}       // one shape, one status, whatever the cause
+// 3. Sign `added` as call 4 says. Its entry's `seen` is the read's `rev`.
+yield* door.grant(added, {seen: answer.rev});
+// The door refuses it `stale` if the person's keys changed after rev 41. The sheet is not spent.
+```
+
+- **It spends nothing and lets nothing in.** No fact is written, no client is admitted, and the
+  sheet stays live. `added` still checks membership again when it arrives (call 7), so an old read
+  grants nothing.
+- **(a) Every refusal answers the same.** A malformed proof, a wrong ledger, URL or connection, an
+  old or reused challenge, a key that is not a member, a spent sheet and a replaced sheet all get
+  one answer: the same status, the same body, `not_member`. Why: otherwise the read would tell
+  someone whether a key belongs to this fabrika, or whether a sheet was used. Cost: the recovery
+  screen cannot say which of those it is (call 5's change).
+- **(b) The challenge is one-time and short-lived.** It is the door's existing nonce: bound to the
+  connection, good for the door's existing challenge lifetime (`waiting.ttl`), and spent in the
+  same step that checks the signature, so a second use is refused. No new number.
+- **(c) The read's position travels to `added`.** The read returns the ledger `rev` it folded.
+  `added`'s entry carries it as its `seen`, the field every entry already has. The door refuses
+  that `added` with `stale`, and writes nothing, if any member fact placed after `seen` added,
+  dropped or spent one of this person's own keys: a person key or a recovery key. Why: a thief on
+  the old Mac could otherwise add a new device or a new sheet between the read and the join, and
+  the person, choosing from an old list, would leave the thief's key live. A tab or agent added
+  meanwhile under a device being dropped goes with it anyway (call 9), so only the person's own
+  keys count. The app reads again and shows the new list. An exact retry of an `added` already
+  placed keeps its first answer, as now.
+- **What it reveals, and to whom:** the person's name, the read's `rev`, and each device with how
+  many windows and agents it let in. Only to someone who can sign with a live recovery key of that
+  person, which is someone who already holds the words.
+- **Doubt:** `seen` is not inside the signed text, so it rests on the connection's TLS. A party that
+  could rewrite it could also drop the request. Equal-time refusals are not promised: the answers
+  are the same, the time each takes may not be.
+
 ## Email recovery (decided, two unknowns open)
 
 **Decided by the owner, 2026-11-05 and 2026-11-06,** after walking experiment 217
@@ -609,6 +691,10 @@ builder and read by the owner, holds:
 - **The sheet's pure laws:** words to key and back. One changed word fails the checksum or gives
   another key. The label matches only the right key. "Check my sheet" answers live, old or wrong,
   and makes no network call.
+- **The recovery read (call 13):** every refusal is byte-for-byte the same answer; a challenge
+  works once and not after its lifetime; the read writes no fact and spends no sheet; an `added`
+  whose `seen` is older than a change to the person's keys is refused `stale`, including the race
+  where the old Mac adds a device or a sheet between the read and the join.
 - **The secret stays home:** during a full recovery on a stage, every frame sent, every ledger row
   and every log line is searched for each of the 12 words, the entropy and the seed. None is found.
 - **The done check, end to end,** on real Electron with a test `PersonCheck` and a stand-in
@@ -622,8 +708,8 @@ builder and read by the owner, holds:
      it was: no new ledger.
   4. Home A, still open, is closed with 4003 at once and says it was removed by a backup sheet. Its
      tab and agent are refused.
-  5. The same words again on home C: "This sheet was used". Home B's menu bar shows "No backup
-     sheet. [Make one]".
+  5. The same words again on home C: the recovery read's one refusal line (call 13). Home B's
+     menu bar shows "No backup sheet. [Make one]".
   6. Home C with no sheet: the waiting screen and nothing else.
   7. A local setup with no copy shows the warning once at setup, and never again.
   8. A home whose sealed keys will not open (the stand-in fails to unseal) goes to the recovery
@@ -719,6 +805,15 @@ Decided by the owner, 2026-11-08, for a few friends on one Cloudflare account
     wait. An admin's invite is already trust, so recovery has no barrier
     ([principles](./principles.md)). The ledger records who re-invited whom.
 
+Decided by the owner, 2026-11-09, on P28's plan (ticket 331):
+
+18. The words become the key by HKDF-SHA256 over the 16 entropy bytes, empty salt, label
+    `fabrika-recovery-v1`, 32 bytes, as the Ed25519 seed. Sheet `v: 1`.
+19. One read-only door call, signed by the recovery key on a fresh challenge, returns the name, the
+    ledger `rev` and what each device's drop would remove. It spends nothing. Its refusals all
+    answer the same, its challenge is one-time and short-lived, and `added` carries its `rev` as
+    `seen` and is refused `stale` if the person's keys changed since (call 13).
+
 Inside the decided part, still a lean:
 
 - **A browser tab cannot approve others.** 70% (call 7).
@@ -753,7 +848,8 @@ These are proposals, not settled words or numbers:
   `email`, the fact name `checked`, and the function `mayAdd`.
 - The fields inside `verified`, `requested` and `canceled` (the three names are decided).
 - The `why` words `used`, `replaced` and `not_allowed`.
-- The HKDF label and the choice of HKDF over BIP39's own seed.
+- The read's names: `preview`, `previewText`, the answer's fields, and the `why` word `stale` on
+  `added` (borrowed from the process registry's compare-and-set refusal).
 - The label's shape, `r1-7f3a`.
 - Every screen's words, the sheet's layout, and the file names.
 - The size and hours.
