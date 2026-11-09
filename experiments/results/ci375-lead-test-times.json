@@ -1,0 +1,12 @@
+{
+  "what": "Seconds per lead test file in today's test job on main, from vitest's per-file line in each test shard's log. Ticket 375, PR A medians.",
+  "measured": "2026-11-09",
+  "runs": [42631962689, 42631256491, 42630840277],
+  "files": {
+    ".agents/skills/lead/scripts/box.test.ts": {"samples": [485.3, 317.3, 505.8], "median": 485.3},
+    ".agents/skills/step-commit/scripts/stepcommit.test.ts": {"samples": [16.1, 21.9, 18.2], "median": 18.2},
+    ".agents/skills/lead/scripts/redact.test.ts": {"samples": [7.2, 3.7, 7.6], "median": 7.2},
+    ".agents/skills/lead/scripts/gc.test.ts": {"samples": [0.1, 0.1, 0.1], "median": 0.1}
+  },
+  "before_run": {"run": 42610835242, "box.test.ts": 319.0, "stepcommit.test.ts": 22.9, "redact.test.ts": 5.2, "gc.test.ts": 0.1}
+}
