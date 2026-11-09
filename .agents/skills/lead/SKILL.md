@@ -24,7 +24,12 @@ Every agent may file tracker tickets, even during read-only repo work. Filing cl
 and starts no build.
 ```
 
-For a driver, add the parent and landing facts before it starts:
+A brief never prints npm, pnpm or environment settings (owner, 2026-11-08), not even to show a
+step where they come from. A run once printed a token to a local log that way. Name the setting
+and say where it is set; never echo its value. `pnpm config list` and `env` stay out of briefs.
+
+For a stacked lane, put the parent and landing facts in the state file and the brief before the
+first step:
 
 ```text
 Parent: ticket <id>, branch <branch>, signed build head <sha>, or none.
@@ -48,13 +53,19 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   agent instead. A Codex box can start neither, so a Codex build there would come back half checked.
   The mutation step is socket work: Stryker binds a port, so it always runs on Claude.
   Still one agent per step.
-- **One driver per ticket, start to finish** (owner, 2026-11-08): a Claude agent carries one ticket
-  through every step, starting one agent per step on the runner above. It merges its own PR only
-  after every step ran, each by its own agent (plan, tests, build, mutation, one review saying
-  merge-ready), with CI green and the leak grep clean. No step is ever skipped. The driver keeps its
-  own status line and field rows. Only a new design call or an exam read comes back to the lead.
-- **A driver never writes a step's code or tests itself** (owner, 2026-11-08). It starts the step agents, fetches, hands
-  work along, and runs what a Codex box cannot: e2e runs and screenshots.
+- **One fresh Claude agent per step, not one long driver per ticket** (owner, 2026-11-09). Each
+  step gets a new agent with a short brief. It reads the lane's state file
+  (`BOXES/state/<lane>.md`), does its one step, and writes the state file back for the next agent:
+  the branch, the signed heads, what ran and what is next. Nothing is carried in an agent's
+  memory. A PR still merges only after every step ran, each by its own agent (plan, tests, build,
+  mutation, one review saying merge-ready), with CI green and the leak grep clean. No step is ever
+  skipped. Only a new design call or an exam read that does not meet the bar (step 9) comes back to
+  the lead. A drive script (tracker ticket 341) will chain the mechanical steps in code and start an
+  agent only where judgment is needed. *It said (owner, 2026-11-08): one driver per ticket, start
+  to finish. One driver ran for 11 hours, which was wasteful.*
+- **A step agent never writes another step's code or tests** (owner, 2026-11-08). The agent
+  that hands work along fetches, reads the report, and runs what a Codex box cannot: e2e runs and
+  screenshots.
 - Plan every row as soon as its tier opens, and start each test writer when its plan is approved.
   Tests do not wait for the code under them; only builds wait in line.
 
@@ -105,7 +116,7 @@ visible, and never weaken the rules to hide this message.
    check is a parser over free text and may miss an exotic form the listing still shows.
 3. **Approve in the lead session only.** Read the whole plan, its laws and generators or labels,
    its decided notes and open questions. Plan writers and agents reviewing or revising a plan
-   return it unsigned, with line one blank. A driver sends it to the lead session for approval.
+   return it unsigned, with line one blank. The agent that wrote it sends it to the lead session for approval.
    A plan that only builds decided notes: write "Approved by the lead agent, builds
    <note>" on its blank first line. A plan that raises a new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
@@ -129,8 +140,12 @@ visible, and never weaken the rules to hide this message.
    steps, what ran each one, and the dollars.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
    `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep. An exam
-   path touched stays `ask owner exam_read`; never write "owner read" unless the owner did, and give
-   each such merge a field note. Then run `catchup.sh` in the background: it brings the PR up to
+   change that is all proper property tests merges without the owner's read (owner, 2026-11-08):
+   every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or
+   `scenario:` with its reason; mutation shows no law got narrower; and nothing loosens. You check
+   that and say so in the PR. A change that loosens or removes a law still stays
+   `ask owner exam_read`; never write "owner read" unless the owner did, and give each such merge
+   a field note. Then run `catchup.sh` in the background: it brings the PR up to
    date, signs only the new merge as `lead`, waits for every check on that exact head (e2e and
    commits included) and lands it pinned to that head. Pass `--merge-method merge` for a parent
    with a recorded stacked child, so the signed parent head stays in main's history. Otherwise
@@ -156,21 +171,32 @@ are for other people's repos only.
 - A post is 2 to 5 plain lines with full pull request URLs. No security holes, secrets or personal
   names: the tracker will be shared.
 
-## Same-day decisions
+## Lead tooling is fast-tracked
 
-The lead owns the count of decisions still missing from the repo. Its status gives that count
-and the docs PR carrying them. The owner does not keep the list.
+Skills, the lead scripts and the drive script run on our own laptop, so they are not product work
+(owner, 2026-11-09). They skip the plan, tests, mutation and review steps. The lead or one agent
+changes them directly, keeps each change small, and merges on green CI with a clean leak grep.
+Product code (`next/` and today's app) keeps its steps.
 
-Start a docs agent the same day and land the day's decisions together in one docs PR, separate
-from slow builds. Update that PR as more decisions arrive. Keep the count current until all are
-in the repo. Code cannot count decisions nobody recorded.
+## Decisions land at once
+
+A decision lands in the repo as soon as it is made (owner, 2026-11-09). Each decision gets its own
+docs PR, opened the turn it is decided, with a docs agent. Never batch decisions, and never wait for
+a code PR or for the end of the day. A docs-only PR that writes down a decision is merged when CI
+is green and the leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their
+steps.
+
+The lead owns the count of decisions still missing from the repo. Its status gives that count and
+the open docs PRs carrying them. The owner does not keep the list. Code cannot count decisions
+nobody recorded.
 
 ## The leak grep
 
 Before every push and every merge, grep the added lines (`git diff origin/main | grep '^+'`) for
 personal and account names, machine paths (a home folder, a temp folder), key prefixes and em
 dashes. Keep the list of names out of the repo: it is the lead's own. Only the repo's own name in a
-GitHub URL may match.
+GitHub URL may match. The leak check script fails closed (owner, 2026-11-08): any hit stops the
+push or merge, and the lead checks it by hand. A hit is never waved through by the script.
 
 ## Go easy on the machine
 

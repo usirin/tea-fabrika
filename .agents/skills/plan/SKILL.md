@@ -59,6 +59,9 @@ rows to read, and an older plan to copy the shape of. This skill holds the rest.
 - **The files table, with lines, and an owner step for every file:** `tests`, `build` or `lead`.
   Every path that matches a glob in `exam-paths.json` belongs to `tests`. A builder is never handed
   one. If the build needs an exam file changed, that change goes in the tests commit.
+- **When the plan changes a skill** (owner, 2026-11-08): a rule that code already checks leaves the
+  skill's prose. A rule that code could check becomes a check, with its row in the files table,
+  and then leaves the prose. Only judgment stays in prose.
 - Screenshots at five layouts when a window changes (`AGENTS.md`, "Shoot more than one layout").
 - Size in agent hours, with how sure.
 - What it records, and what fact is lost if it is not recorded now.
