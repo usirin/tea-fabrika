@@ -9,6 +9,7 @@ packages:
   - programs/*
   - docs/tutorials/*
   - oxlint-plugins
+  - .github/ci
   # next/: the new version (docs/plan/tier-1.md). Real packages, one lockfile, this catalog.
   - next/packages/*
   - next/programs/*

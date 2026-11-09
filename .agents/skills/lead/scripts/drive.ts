@@ -5,7 +5,7 @@
 //
 //   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude]
 //                 [--model sonnet|opus] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>]
-//                 [--plan-only]
+//                 [--plan <approved plan>] [--plan-only]
 //
 // Claude runs `claude -p` in the same kind of box, under sandbox-exec: it cannot read the step keys,
 // the leak words or Codex's login, and it writes only its box. It commits with plain git; drive
@@ -109,6 +109,8 @@ const Ask = Schema.Struct({
 	model: Schema.String,
 	session: Schema.String,
 	ticket: Schema.String,
+	/** The approved plan box.sh checks at every start and step. */
+	plan: Schema.String,
 	branch: Schema.String,
 	base: Schema.String,
 	/** Where the lane left main. The commits check reads the whole lane from here, so the earlier
@@ -520,7 +522,16 @@ const handlers = (env: Env) => {
 	return {
 		box_new: (cmd: Ask) =>
 			Effect.sync(() => {
-				const r = box("new", cmd.box, cmd.base, cmd.branch);
+				const r = box(
+					"new",
+					cmd.box,
+					cmd.base,
+					cmd.branch,
+					"--ticket",
+					cmd.ticket,
+					"--plan",
+					cmd.plan,
+				);
 				writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
 				return {ok: r.code === 0, detail: r.code === 0 ? "" : `box.sh new: ${tail(r.err)}`};
 			}),
@@ -548,7 +559,7 @@ const handlers = (env: Env) => {
 						? git("fetch", "-q", "-f", join(env.BOXES, ask.box), `refs/heads/${ask.branch}:${ref}`)
 						: ask.agent === "claude"
 							? signClaude(env, ask)
-							: box("fetch", ask.box, ask.branch);
+							: box("fetch", ask.box, ask.branch, "--sign", ask.step, "--ticket", ask.ticket);
 				if (f.code !== 0)
 					return {
 						...empty,
@@ -694,6 +705,7 @@ const handlers = (env: Env) => {
 				const lane: Lane = {
 					...saved,
 					ticket: ask.ticket,
+					plan: ask.plan,
 					branch: ask.branch,
 					root: ask.root,
 					head: accepted ? e.head : (saved.head ?? ask.base),
@@ -812,7 +824,15 @@ const draftRunner = (env: Env) => (sub: DraftSub) =>
 						args:
 							ask.step === "plan"
 								? [join(HERE, "runplan.sh"), ask.box, ask.prompt]
-								: [join(HERE, "box.sh"), "run", ask.box, ask.prompt, ask.report],
+								: [
+										join(HERE, "box.sh"),
+										"run",
+										ask.box,
+										ask.prompt,
+										ask.report,
+										"--step",
+										ask.step,
+									],
 					};
 			// Its own process group, so a stop reaches every command the agent started too.
 			const child = spawn(how.cmd, how.args, {
@@ -857,6 +877,7 @@ const draftRunner = (env: Env) => (sub: DraftSub) =>
 type Lane = {
 	readonly lane: string;
 	readonly ticket?: string;
+	readonly plan?: string;
 	readonly branch?: string;
 	readonly root?: string;
 	readonly head?: string;
@@ -903,7 +924,7 @@ const claudeTail = (ask: Ask) => {
 
 const usage = () => {
 	console.error(
-		"usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan-only]",
+		"usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
 	);
 	process.exit(2);
 };
@@ -970,6 +991,7 @@ const main = () => {
 		process.exit(2);
 	}
 	const branch = flag(args, "--branch") ?? saved?.branch ?? `fabrikalfa/${lane}`;
+	const plan = flag(args, "--plan") ?? saved?.plan ?? join(env.BOXES, `${lane}-PLAN.md`);
 	if (!branch.startsWith("fabrikalfa/")) usage();
 	sh("git", ["-C", env.MAIN, "fetch", "-q", "origin"]);
 	// A plan writer reads the main checkout as it stands, so its base is that checkout's HEAD.
@@ -1014,6 +1036,7 @@ const main = () => {
 		model: claude ? (flag(args, "--model") ?? "sonnet") : "",
 		session: claude ? randomUUID() : "",
 		ticket,
+		plan,
 		branch,
 		base,
 		root,

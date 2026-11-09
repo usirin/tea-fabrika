@@ -6,6 +6,7 @@
 // second run for the advice rules would turn their own disable comments into failures of the first.
 import {spawnSync} from "node:child_process";
 import {join} from "node:path";
+import {checkTracked} from "./gitignore.mjs";
 
 const ADVICE = new Set(["fabrika(no-effect-promise)", "fabrika(no-raw-try-catch)"]);
 
@@ -22,13 +23,10 @@ const ROOT = join(import.meta.dirname, "..");
 // walking into `node_modules`. Git keeps a tracked file tracked under a new `.gitignore`, so one line
 // in one could take a whole folder out of the checks. Only `.gitignore` files count here, not this
 // machine's own ignore list.
-const hidden = spawnSync("git", ["ls-files", "-ci", "--exclude-per-directory=.gitignore"], {
-	encoding: "utf8",
-	maxBuffer: 2 ** 30,
-});
-if (hidden.status !== 0 || hidden.stdout !== "") {
+const hidden = checkTracked();
+if (!hidden.ok) {
 	console.error(
-		`A .gitignore hides these tracked files from the lint and format checks. Change the .gitignore, or stop tracking them:\n${hidden.stdout}${hidden.stderr}`,
+		`Git failed or a .gitignore hides tracked files from the lint and format checks: ${hidden.files.map((file: string) => JSON.stringify(file)).join(", ")}`,
 	);
 	process.exit(2);
 }
