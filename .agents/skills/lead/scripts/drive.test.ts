@@ -18,6 +18,7 @@ import {spawnSync} from "node:child_process";
 import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {nameOf} from "@kampus/pipeline/stages/outcome";
 import fc from "fast-check";
 import {afterAll, describe, expect, it} from "vitest";
 import {leftIn, machine} from "./drive.ts";
@@ -149,5 +150,47 @@ describe("leftIn reads a real box, today's tooling", () => {
 		// A branch the box does not have is a state drive cannot read, so the box stays.
 		expect(leftIn(clean, "fabrikalfa/missing")).toEqual(["a git state drive could not read"]);
 		expect(leftIn(join(root, "gone"), "fabrikalfa/l")).toEqual([]);
+	});
+});
+
+describe("T388 drive accepts a step once its backup push lands, today's tooling", () => {
+	// Plants: a landed push still recorded stuck; the head left at the base; a refused push accepted.
+	// ci375 build, 2026-11-09: a signed, green build came back stuck:push_failed on a notes race
+	// that botpush now retries once, so the push result alone decides the step.
+	it("records the step's own answer at the pushed head, and stuck:push_failed when refused", () => {
+		fc.assert(
+			fc.property(answer, fc.integer({min: 1, max: 3}), fc.boolean(), (report, commits, landed) => {
+				const value = {
+					head: "c".repeat(40),
+					commits,
+					unsigned: [],
+					exam: [],
+					leaks: [],
+					left: [],
+					plancheck: null,
+					report,
+					problem: null,
+				};
+				const [read] = machine.update.step_read_ok({phase: "reading", ask}, {
+					type: "step_read_ok",
+					value,
+				} as never);
+				// A stuck answer is never pushed.
+				if (read.phase !== "pushing") {
+					expect(read.phase === "recording" && read.outcome.kind).toBe("stuck");
+					return;
+				}
+				const [state, cmds] = machine.update.backup_push_ok(read, {
+					type: "backup_push_ok",
+					value: {ok: landed, detail: landed ? "pushed" : "botpush: push refused"},
+				} as never);
+				const cmd = cmds[0] as {outcome: string; head: string};
+				expect(state.phase).toBe("recording");
+				expect(cmd.head).toBe(value.head);
+				if (landed) expect(cmd.outcome).toBe(nameOf(read.outcome));
+				else expect(cmd.outcome).toBe("stuck:push_failed");
+			}),
+			options,
+		);
 	});
 });

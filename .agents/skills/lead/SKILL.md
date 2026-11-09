@@ -121,7 +121,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone; drive runs it at start |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
-| `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
+| `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
 | `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head and squash-land pinned to it; a PR in a gh stack lands with `gh stack merge` |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
