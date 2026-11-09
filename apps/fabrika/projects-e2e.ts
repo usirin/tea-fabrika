@@ -872,7 +872,10 @@ const migrationCaptures = async (shots: string) => {
 									`migration history did not reach the real desk; screen=${JSON.stringify(seen)}`,
 								);
 							}
-							await page.keyboard.press("Control+u");
+							// Down walks back to the typed (empty) line and ends the recall, as a person
+							// would; Ctrl+u keeps the recall, so the next ArrowUp would go past the only
+							// entry. Wait for the settled empty prompt before the next shot.
+							await page.keyboard.press("ArrowDown");
 							await prompt(page);
 						});
 				}
@@ -911,17 +914,19 @@ const captures = async (shots: string) => {
 							(await page.getByRole("dialog").count()) === 0,
 							"P27: Cmd-O stacked a welcome dialog",
 						);
-						check(
-							await page
+						const selected = () =>
+							page
 								.getByRole("option")
 								.first()
 								.evaluate(
 									(node) =>
 										node === document.activeElement ||
 										node.getAttribute("aria-selected") === "true",
-								),
-							"welcome first row not selected",
-						);
+								);
+						// The row is marked after the key lands: wait for it, then name the miss.
+						await until(selected, Boolean, 5_000).catch(() => {
+							throw new Error("welcome first row not selected");
+						});
 					});
 				}
 			if (layout === "one" || layout === "small") {
@@ -997,9 +1002,21 @@ const captures = async (shots: string) => {
 						);
 						check((await page.title()).includes(f.name), "E2: document title lacks project");
 						if (state === "fake-agent-summoned")
-							check((await screen(page)).includes("scout"), "E2: fake summon absent");
+							await until(
+								() => screen(page),
+								(text) => text.includes("scout"),
+								5_000,
+							).catch(() => {
+								throw new Error("E2: fake summon absent");
+							});
 						if (state === "second-project-independent")
-							check((await screen(page)).includes("counter"), "E2: second project's job absent");
+							await until(
+								() => screen(page),
+								(text) => text.includes("counter"),
+								5_000,
+							).catch(() => {
+								throw new Error("E2: second project's job absent");
+							});
 					});
 			}
 			for (const mode of ["selection", "filtering", "already-open"] as const)
@@ -1009,17 +1026,23 @@ const captures = async (shots: string) => {
 					if (mode === "filtering") await box(page).getByRole("combobox").fill("left");
 					await shot(app, page, shots, `projects-box-${mode}`, layout, look, false, async () => {
 						if (mode === "already-open")
-							check(
-								(await box(page).getByText("open", {exact: true}).count()) > 0,
-								"E2: open state absent",
-							);
+							await until(
+								() => box(page).getByText("open", {exact: true}).count(),
+								(n) => n > 0,
+								5_000,
+							).catch(() => {
+								throw new Error("E2: open state absent");
+							});
 						await boxChecks(page);
 					});
 					await page.keyboard.press("Escape");
-					check(
-						await button(page).evaluate((node) => node === document.activeElement),
-						"P23: Esc did not return to project button",
-					);
+					await until(
+						() => button(page).evaluate((node) => node === document.activeElement),
+						Boolean,
+						5_000,
+					).catch(() => {
+						throw new Error("P23: Esc did not return to project button");
+					});
 				}
 			// Native File menu is inspected independently of page captures.
 			const menu = await app.evaluate(({Menu}) =>
@@ -1052,7 +1075,19 @@ const captures = async (shots: string) => {
 						look,
 						true,
 						async () => {
-							check((await page.getByRole("option").count()) === 3, "welcome lost recents");
+							// The welcome loads its recents after the window shows: wait for all three rows.
+							let seen: string[] = [];
+							try {
+								await until(
+									async () => {
+										seen = await page.getByRole("option").allTextContents();
+										return seen.length;
+									},
+									(n) => n === 3,
+								);
+							} catch {
+								throw new Error(`welcome lost recents; options last seen ${JSON.stringify(seen)}`);
+							}
 						},
 					);
 		} finally {
