@@ -21,7 +21,7 @@ import {join} from "node:path";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
 import fc from "fast-check";
 import {afterAll, describe, expect, it} from "vitest";
-import {leftIn, machine} from "./drive.ts";
+import {claudeProfile, claudeTail, holdsElectron, leftIn, machine} from "./drive.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; leftIn reads a real git box.
 const options = {seed: 119120, numRuns: 300};
@@ -219,6 +219,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 					commits,
 					unsigned: [],
 					exam: [],
+					manifests: [],
 					leaks: [],
 					left: [],
 					plancheck: null,
@@ -246,5 +247,66 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 			}),
 			options,
 		);
+	});
+});
+
+describe("drive holds the Electron lock outside the box, today's tooling", () => {
+	const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
+		"plan" | "tests" | "build" | "mutation" | "review"
+	>;
+	const name = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+
+	it("holds it for mutation always, and for any other step only when started with --electron", () => {
+		fc.assert(
+			fc.property(steps, fc.boolean(), (step, flagged) => {
+				expect(holdsElectron(step, flagged)).toBe(step === "mutation" || flagged);
+			}),
+			options,
+		);
+	});
+
+	it("tells the agent the lock is held exactly when drive holds it", () => {
+		fc.assert(
+			fc.property(steps, fc.boolean(), (step, flagged) => {
+				const told = claudeTail({step, ticket: "1"}, flagged).includes("state/electron.lock");
+				expect(told).toBe(holdsElectron(step, flagged));
+			}),
+			options,
+		);
+	});
+
+	it("never lets the box write the lock or anything else in BOXES/state", () => {
+		fc.assert(
+			fc.property(steps, name, (step, box) => {
+				const profile = claudeProfile("/h", "/h/boxes", box, step);
+				expect(profile).not.toContain("/h/boxes/state");
+				expect(profile).not.toContain("electron");
+			}),
+			options,
+		);
+	});
+
+	it("pinned: the profile allows writes only to the box, its git data and the caches", () => {
+		// pinned: ticket 382 widens nothing. A change here is a change to what the box can reach.
+		expect(claudeProfile("/h", "/h/boxes", "l-build1", "build")).toBe(`(version 1)
+(allow default)
+(deny file-read* file-write* (subpath "/h/.fabrika/step-keys") (literal "/h/.fabrika/leak-words") (subpath "/h/.codex"))
+(deny file-write* (subpath "/h"))
+(allow file-write* (subpath "/h/boxes/l-build1") (subpath "/h/boxes/l-build1-gitdata") (subpath "/h/.claude") (subpath "/h/.cache") (subpath "/h/.local") (subpath "/h/.npm") (subpath "/h/Library") (regex #"^/h/\\.claude\\.json"))
+`);
+	});
+
+	it("scenario: --electron on a Codex box is refused before anything starts", () => {
+		const dir = mkdtempSync(join(tmpdir(), "drive-electron-"));
+		const brief = join(dir, "brief.md");
+		writeFileSync(brief, "brief");
+		const r = spawnSync(
+			process.execPath,
+			[join(import.meta.dirname, "drive.ts"), "l", "build", brief, "--electron"],
+			{encoding: "utf8", env: {...process.env, BOXES: join(dir, "boxes")}},
+		);
+		rmSync(dir, {recursive: true, force: true});
+		expect(r.status).toBe(2);
+		expect(r.stderr).toContain("--electron is for --agent claude");
 	});
 });

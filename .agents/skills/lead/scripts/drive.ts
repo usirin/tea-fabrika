@@ -4,13 +4,15 @@
 // report's path.
 //
 //   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude]
-//                 [--model sonnet|opus] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>]
-//                 [--plan <approved plan>] [--plan-only]
+//                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
+//                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
 //
 // Claude runs `claude -p` in the same kind of box, under sandbox-exec: it cannot read the step keys,
 // the leak words or Codex's login, and it writes only its box. It commits with plain git; drive
 // then signs its work as one commit through stepcommit, with main's own signer. Mutation runs on
-// Claude only (it binds ports and starts Electron), one Electron step at a time.
+// Claude only (it binds ports and starts Electron), one Electron step at a time. The box cannot
+// write state/electron.lock, so drive holds it for the whole step, outside the box: for mutation,
+// and for a Claude step started with --electron (a step whose laws or shots run the app).
 //
 // The step is a tea machine on the Effect engine, made of the pipeline's moves:
 //
@@ -891,19 +893,23 @@ const CLAUDE_TOOLS: Record<StepName, string> = {
  * every command it starts (no reading the step keys, leak words or Codex's login; writes only in
  * its box and the caches it needs), and settings that say the same to Claude's own tools.
  */
-const claudeArgs = (env: Env, ask: Ask) => {
-	const home = homedir();
-	const work = join(env.BOXES, ask.box);
-	const writable = ask.step === "plan" ? [] : [work, join(env.BOXES, `${ask.box}-gitdata`)];
+export const claudeProfile = (home: string, boxes: string, box: string, step: StepName) => {
+	const work = join(boxes, box);
+	const writable = step === "plan" ? [] : [work, join(boxes, `${box}-gitdata`)];
 	const allow = [...writable, ".claude", ".cache", ".local", ".npm", "Library"].map(
 		(p) => `(subpath "${p.startsWith("/") ? p : join(home, p)}")`,
 	);
-	const profile = `(version 1)
+	return `(version 1)
 (allow default)
 (deny file-read* file-write* (subpath "${home}/.fabrika/step-keys") (literal "${home}/.fabrika/leak-words") (subpath "${home}/.codex"))
 (deny file-write* (subpath "${home}"))
 (allow file-write* ${allow.join(" ")} (regex #"^${home}/\\.claude\\.json"))
 `;
+};
+
+const claudeArgs = (env: Env, ask: Ask) => {
+	const home = homedir();
+	const profile = claudeProfile(home, env.BOXES, ask.box, ask.step);
 	const sb = join(env.BOXES, `${ask.box}.sb`);
 	writeFileSync(sb, profile);
 	// The file's name is how the cap counts Claude steps drive started (pgrep -f).
@@ -1074,8 +1080,15 @@ const holderOf = (porcelain: string, branch: string): string | null => {
 	return null;
 };
 
+/**
+ * Whether drive holds `BOXES/state/electron.lock` for the whole step. The box cannot write the
+ * lock (its sandbox writes only the box and caches), so drive takes it outside, before the agent
+ * starts: always for mutation, and for any Claude step started with `--electron`.
+ */
+export const holdsElectron = (step: StepName, flagged: boolean) => step === "mutation" || flagged;
+
 /** What a Claude step is told on top of the brief: its skill, and how its work is committed. */
-const claudeTail = (ask: Ask) => {
+export const claudeTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) => {
 	const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
 	const commit =
 		ask.step === "plan"
@@ -1083,16 +1096,15 @@ const claudeTail = (ask: Ask) => {
 			: ask.step === "review"
 				? "Commit nothing and change no file.\n"
 				: `Commit your work here with plain git: \`git add <paths>\`, then \`git commit -m "T${ask.ticket} ${ask.step}: <subject>"\`. Do not run stepcommit or pnpm commits sign: you hold no step key, and drive.ts signs your commits as one commit after you answer. Never push, never rewrite history.\n`;
-	const electron =
-		ask.step === "mutation"
-			? "One Electron app at a time on this laptop: start at most one, and close it before you answer.\n"
-			: "";
-	return `\n\n---\n${skill}${commit}${electron}`;
+	const lock = holdsElectron(ask.step, electron)
+		? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
+		: "";
+	return `\n\n---\n${skill}${commit}${lock}`;
 };
 
 const usage = () => {
 	console.error(
-		"usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+		"usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
 	);
 	process.exit(2);
 };
@@ -1141,6 +1153,11 @@ const main = () => {
 		usage();
 	if (step === "mutation" && agent !== "claude") {
 		console.error("drive.ts: mutation binds ports and starts Electron; run it with --agent claude");
+		process.exit(2);
+	}
+	const electron = args.includes("--electron");
+	if (electron && agent !== "claude") {
+		console.error("drive.ts: --electron is for --agent claude; a Codex box cannot start Electron");
 		process.exit(2);
 	}
 	if (agent === "codex" && flag(args, "--model") !== undefined) {
@@ -1242,7 +1259,9 @@ const main = () => {
 		sh("pgrep", ["-f", pattern]).out.split("\n").filter(Boolean).length;
 	const agents = count("^codex exec") + count("drive-claude-settings");
 	if (args.includes("--plan-only")) {
-		console.log(JSON.stringify({outcome: "plan-only", ...ask, agents}));
+		console.log(
+			JSON.stringify({outcome: "plan-only", ...ask, agents, electron: holdsElectron(s, electron)}),
+		);
 		return;
 	}
 	if (agents >= 8) {
@@ -1287,11 +1306,11 @@ const main = () => {
 			: "";
 	writeFileSync(
 		ask.prompt,
-		readFileSync(brief, "utf8") + (claude ? claudeTail(ask) : "") + TAIL + verdict,
+		readFileSync(brief, "utf8") + (claude ? claudeTail(ask, electron) : "") + TAIL + verdict,
 	);
 
 	const program = Effect.gen(function* () {
-		if (s === "mutation") yield* takeElectron(env);
+		if (holdsElectron(s, electron)) yield* takeElectron(env);
 		// One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
 		if (s === "tests" || s === "build" || s === "mutation")
 			while (sh("pgrep", ["-x", "tsgo"]).code === 0) yield* Effect.sleep("20 seconds");
