@@ -358,7 +358,7 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 
 describe("P12 Project configure recovery", () => {
 	for (const fault of ["failed", "interrupted", "healthy"] as const)
-		it(`${fault} configure restores its saved configuration and the Process opens and takes a message`, async () => {
+		it(`pinned: ${fault} configure restores the descriptor after an interrupted start`, async () => {
 			const w = world(fault);
 			const first = w.project.info().then(
 				(value) => ({value}),
@@ -402,7 +402,7 @@ describe("P12 Project configure recovery", () => {
 
 describe("P12 Process RPC refusal answers", () => {
 	for (const why of ["person_only", "not_granted"] as const)
-		it(`a caused write refused with ${why} saves its typed answer through the real Process RPC adapter`, async () => {
+		it(`pinned: ${why} refusal survives the Process RPC adapter as a saved typed answer`, async () => {
 			const w = world();
 			await w.project.info();
 			const {process: pid} = await w.start(),

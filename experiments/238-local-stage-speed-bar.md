@@ -1,4 +1,4 @@
-# 233. The local stage's first speed bar
+# 238. The local stage's first speed bar
 
 This is P12, ticket 270, in `next/`. Nine runs of the real stage on one laptop, in one sitting:
 four initial runs, then five head runs, all on branch head `c2a38125`. Medians, initial then head:
@@ -14,7 +14,9 @@ four initial runs, then five head runs, all on branch head `c2a38125`. Medians, 
   A new signed wire then takes another 88 ms, then 82 ms.
 - **workerd RSS:** 124 MB under traffic and 98 MB after its replacement.
 - **Member fold and process history:** below workerd's clock. Every span reads 0 to 2 ms.
-- **Sink flush:** missing. It has no span, on purpose.
+- **Sink flush:** 2.4 ms with 5 records queued and 4.1 ms with 100 (one full batch), median of
+  five each, timed from outside the call since the sink has no span on purpose. That is the real
+  sink and record code on Node, not inside workerd. See "Sink flush, timed from outside".
 - **Compiler:** the build tests' `.tsx` input builds in 336 ms with the React Compiler and 243 ms
   without it, a median of five each. That is about 90 ms more.
 
@@ -39,7 +41,7 @@ await connect(url, key, "again");                          // reconnectMs
 
 ## How it was run
 
-- `experiments/233-local-stage-speed-bar.ts` is the driver. It starts the real
+- `experiments/238-local-stage-speed-bar.ts` is the driver. It starts the real
   `next/apps/fabrika/dev.ts` with its own `FABRIKA_HOME` from `mktemp -d /tmp/fh.XXXX`. The key is
   unset. Every child runs under `nice -n 15`. Only one stage runs at a time. Before each run, the
   driver waits while 6 or more vitest workers run, and it records `uptime`.
@@ -61,12 +63,12 @@ await connect(url, key, "again");                          // reconnectMs
   minute of wall time.
 
 ```sh
-env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts stage initial 4
-env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts stage head 5
-env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts compiler 5
+env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts stage initial 4
+env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts stage head 5
+env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts compiler 5
 ```
 
-Every individual reading is in `results/233-local-stage-speed-bar.json`, including every health
+Every individual reading is in `results/238-local-stage-speed-bar.json`, including every health
 row of every run.
 
 ## The readings
@@ -91,7 +93,7 @@ out each run's first send. Everything else is a median of one reading per run.
 | Member fold (`members.read`, 31 per run) | 0 ms | 0 ms | max 2 | records |
 | Process history (`process.info`, 94 per run) | 0 ms | 0 ms | max 2 | records |
 | Program fold (`execution.fold`, 31 per run) | 1 ms | 1 ms | max 3 | records |
-| Sink flush | missing | missing | | |
+| Sink flush, 5 / 100 records (Node, at `7453d4d8`, see below) | not taken | 2.43 / 4.06 ms | 2.00 to 8.36 | driver |
 | `brain.flush` (lifecycle outbox, not the sink) | 19.5 ms | 20.0 ms | max 37 | records |
 | `brain.stop` span | 79.8 ms | 59.4 ms | 54.8 to 96.0 | records |
 | Clean stop, SIGTERM to exit | 113 ms | 88 ms | 83 to 140 | driver |
@@ -106,7 +108,8 @@ There were also two smaller findings:
 - **Restart facts land late.** In 7 of 9 runs, a `door/brain` read right after the reconnect
   showed only the first `started` fact. The `exited` and second `started` facts reached the
   ledger later, through the 1 s outbox loop. In one run, `exited` was there and the new `started`
-  was not yet. Test p81 already waits for these facts. A reader that wants the restart's cause at
+  was not yet. When these runs were taken, test p81 did not wait for these facts; the stage-wire
+  test was changed afterward, in this step, so that it waits for them. A reader that wants the restart's cause at
   once must wait for the next outbox turn, up to about 1 s.
 
 ## Why the fold costs read as zero
@@ -120,16 +123,62 @@ I/O, and no fold crossed a clock step large enough to show. A real member-fold o
 needs either the same pure fold timed on Node, or a ledger large enough to cross a clock step.
 Neither was in scope here.
 
-## Sink flush: why it is missing
+## Sink flush, timed from outside
 
-`SpanSink.flush` has no span by design. The plan's recording law forbids "trace the sink's own
-delivery", and test `stage-records.test.ts` fails if `sink.flush` or `record.write` shows up as a
-span. The driver cannot see the flush from outside either, since it runs inside the 1 s loop in
-`node/stage.ts` and inside each object. So no reading was taken. The nearest one is
-`brain.flush`, about 20 ms, but that is the lifecycle outbox, a different queue. To measure the sink
-flush, it needs a counter or a timing that is not a span: a health row the sink writes about
-itself after a flush, outside the traced path. That is a product change, out of scope for this
-step.
+`SpanSink.flush` has no span by design. The plan's recording law forbids tracing the sink's own
+delivery, and `stage-records.test.ts` fails if `sink.flush` or `record.write` shows up as a span.
+That law stays. So the driver times the call itself, from outside, with `performance.now()` around
+one `flush`, and no product code changed. `brain.flush` (about 20 ms) is the lifecycle outbox, a
+different queue, and is not this reading.
+
+```ts
+// experiments/238-local-stage-speed-bar.ts, mode "sink": the real sink and the real record code.
+const object = new DatabaseSync(join(home, "brain.records.sqlite"));  // as node/stage-recording.ts
+object.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+Layer.mergeAll(
+	SpanSink.layer(nodeSql(object), {object: "brain:sink-probe"}),
+	RecordManager.remote((name) => ({write: (...args) => post(name, args), ...})), // JSON POST, 127.0.0.1
+	Archive.memory,
+);
+// The server behind `post` runs recordPart(nodeSql(part), chain, at, cap).write(rows), the code the
+// record Durable Object runs, on its own node:sqlite file.
+await queue(n);                              // n spans shaped like `door.send`, ended into `unsent`
+const start = now();
+const {sent} = await flushOnce();            // sink.flush: read unsent, one record call per 100, delete
+const ms = now() - start;
+```
+
+These readings ran later than the stage runs, at branch head `7453d4d8`. Each case got its own temp home, one warm-up flush first (it makes the record tables and the part
+file), then five readings. Every reading has `sent` equal to what was queued, so the sink's own
+calls queued nothing. The load average was 10.9 for all of them, with 12 cores.
+
+```text
+queued   warm-up   readings (ms)                    median
+  5      18.2      3.09  2.17  2.43  2.00  3.13     2.43 ms
+100      11.3      8.36  3.77  7.11  4.06  3.89     4.06 ms
+  0       1.25     0.12  0.12  0.09  0.08  0.08     0.09 ms
+```
+
+So a flush costs about 2 ms for a few records and about 4 ms for a full batch of 100, and nearly
+nothing when the queue is empty. Most of the cost is one record round trip and its durable
+write, not the row count: 20 times the rows cost under twice the time. The first flush of a fresh
+part costs 11 to 18 ms.
+
+What this method cannot tell us:
+
+- **It is not workerd.** The record part here is node:sqlite with `synchronous=FULL`, not a
+  Durable Object's storage, and the hop is one Node HTTP server, not the stage's control socket,
+  workerd's `Control` entrypoint and a Durable Object stub. Those hops add time this does not see.
+  The objects inside workerd flush too, and they cannot be timed this way, since workerd's clock
+  does not move during compute.
+- **Client and server share one Node process,** so they share an event loop and a CPU.
+- **One chain only.** Every span went to the `spans` chain. A flush that spans several chains
+  makes one record call per chain, so it costs more.
+- **No `rolled` answer and no archive.** The cap is the record object's default, so no part
+  rolled. `Archive.memory` stands in for the bucket, and no day was due, so `archiveDays` only ran
+  its query.
+- **Five readings a case,** on a loaded laptop. The 100-record case has two slow readings (7.1 and
+  8.4 ms) out of five; more runs would show whether that spread is load or the sink.
 
 ## Compiler on and off
 
@@ -166,7 +215,7 @@ here only as context.
   head being a little faster is drift and load, not a change. Together they are nine readings of
   one build.
 - **Member fold and process history are not measured as CPU.** See above.
-- **Sink flush is missing.** See above.
+- **Sink flush is timed on Node, not in workerd.** See "Sink flush, timed from outside".
 - **The ledger is small.** 31 inputs and about 70 appends per run. It shows nothing about the
   cost when one part holds thousands of entries.
 - **The sample is small.** Nine starts, nine replacements and five Compiler pairs. A blocking bar

@@ -115,8 +115,8 @@ const KEY_LINE =
 	/^(\S+) namespaces="(fabrika-step|git)" ssh-ed25519 (AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})$/;
 
 /**
- * p87 and p87b: each step exactly once in `fabrika-step`, and distinct `person:<id>` principals in
- * `git`. Ed25519 only, no key twice and no other option. No file is refused.
+ * p87 and p87b: each step at least once in `fabrika-step`, and distinct literal `person:<id>`
+ * principals in `git`. Ed25519 only, no key twice and no other option. No file is refused.
  */
 export const keysProblem = (text: string | null): string | null => {
 	if (text === null) return "no allowed_signers on the base";
@@ -127,11 +127,11 @@ export const keysProblem = (text: string | null): string | null => {
 		if (m === null) return `refused line ${JSON.stringify(line)}`;
 		const [, role = "", namespace = "", key = ""] = m;
 		const step = (ROLES as ReadonlyArray<string>).includes(role);
-		const person = role.startsWith("person:") && role.length > "person:".length;
+		const person = /^person:[A-Za-z0-9._:-]+$/.test(role);
 		if (!step && !person) return `unknown role ${JSON.stringify(role)}`;
 		if (namespace !== (step ? NAMESPACE : "git"))
 			return `wrong namespace for ${JSON.stringify(role)}`;
-		if (roles.has(role)) return `principal named twice: ${JSON.stringify(role)}`;
+		if (person && roles.has(role)) return `principal named twice: ${JSON.stringify(role)}`;
 		if (keys.has(key)) return `a key named twice, the second under ${role}`;
 		keys.add(key);
 		roles.add(role);
@@ -293,9 +293,11 @@ export const chain = (
 	const mine = rows.filter((r) => r.link.squash === squash);
 	const links = mine.map((r) => r.link);
 	const tickets = new Set(links.map((l) => l.ticket));
-	const froms = new Set(links.map((l) => l.from));
+	const moves = links.filter((l) => l.from !== l.to);
+	const empty = links.filter((l) => l.from === l.to);
 	const first = links[0];
 	const last = links.at(-1);
+	const visited = new Set([first?.from, ...moves.map((l) => l.to)]);
 	const whole =
 		first !== undefined &&
 		last !== undefined &&
@@ -303,7 +305,8 @@ export const chain = (
 		links.every((l) => placed.before.has(l.base)) &&
 		mine.every((r) => r.signer === r.link.step) &&
 		tickets.size === 1 &&
-		froms.size === links.length &&
+		visited.size === moves.length + 1 &&
+		new Set(empty.map((l) => l.from)).size === empty.length &&
 		first.from === trees.get(first.base) &&
 		links.every((l, i) => i === 0 || l.from === links[i - 1]?.to) &&
 		last.to === trees.get(squash);
@@ -320,12 +323,13 @@ export const chain = (
 
 class Failed extends Schema.TaggedError<Failed>()("Failed", {what: Schema.String}) {}
 
-const text = (s: Stream.Stream<Uint8Array, unknown>) =>
-	s.pipe(Stream.decodeText(), Stream.mkString);
+const text = Effect.fnUntraced(function* (s: Stream.Stream<Uint8Array, unknown>) {
+	return yield* s.pipe(Stream.decodeText(), Stream.mkString);
+});
 
 /** One process: its output, its errors and its exit code. Nothing it prints is trusted as a command. */
-const run = (cmd: string, args: ReadonlyArray<string>, input?: string) =>
-	Effect.scoped(
+const run = Effect.fnUntraced(function* (cmd: string, args: ReadonlyArray<string>, input?: string) {
+	return yield* Effect.scoped(
 		Effect.gen(function* () {
 			const stdin = input === undefined ? "ignore" : Stream.make(new TextEncoder().encode(input));
 			const proc = yield* ChildProcess.make(cmd, [...args], {stdin});
@@ -336,23 +340,36 @@ const run = (cmd: string, args: ReadonlyArray<string>, input?: string) =>
 			return {out, err, code: Number(code)};
 		}),
 	).pipe(Effect.mapError(() => new Failed({what: `could not start ${cmd}`})));
+});
 
-const must = (cmd: string, args: ReadonlyArray<string>, input?: string) =>
-	run(cmd, args, input).pipe(
+const must = Effect.fnUntraced(function* (
+	cmd: string,
+	args: ReadonlyArray<string>,
+	input?: string,
+) {
+	return yield* run(cmd, args, input).pipe(
 		Effect.flatMap((r) =>
 			r.code === 0
 				? Effect.succeed(r.out)
 				: Effect.fail(new Failed({what: `${cmd} ${args.join(" ")}: ${r.err.trim()}`})),
 		),
 	);
+});
 
-const git = (args: ReadonlyArray<string>, input?: string) => must("git", args, input);
-const gitMaybe = (args: ReadonlyArray<string>) =>
-	run("git", args).pipe(Effect.map((r) => (r.code === 0 ? r.out : null)));
+const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>, input?: string) {
+	return yield* must("git", args, input);
+});
+const gitMaybe = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
+	return yield* run("git", args).pipe(Effect.map((r) => (r.code === 0 ? r.out : null)));
+});
 const nul = (out: string) => out.split("\0").filter((p) => p !== "");
 const words = (out: string) => out.split("\n").filter((p) => p !== "");
-const treeAt = (rev: string) => gitMaybe(["rev-parse", "--verify", "-q", `${rev}^{tree}`]);
-const fileAt = (rev: string, path: string) => gitMaybe(["show", `${rev}:${path}`]);
+const treeAt = Effect.fnUntraced(function* (rev: string) {
+	return yield* gitMaybe(["rev-parse", "--verify", "-q", `${rev}^{tree}`]);
+});
+const fileAt = Effect.fnUntraced(function* (rev: string, path: string) {
+	return yield* gitMaybe(["show", `${rev}:${path}`]);
+});
 
 /**
  * Checks a link's text with ssh-keygen against one keys file: the role that signed it, or null. The
@@ -362,8 +379,8 @@ const verifier = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
 	const dir = yield* fs.makeTempDirectoryScoped();
 	let n = 0;
-	return (keys: string, note: Note) =>
-		Effect.gen(function* () {
+	return Effect.fnUntraced(function* (keys: string, note: Note) {
+		return yield* Effect.gen(function* () {
 			n += 1;
 			const allowed = join(dir, `allowed-${n}`);
 			const sig = join(dir, `sig-${n}`);
@@ -378,31 +395,54 @@ const verifier = Effect.gen(function* () {
 			const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(ok.out)?.[1];
 			return ok.code === 0 && used === note.key ? note.step : null;
 		}).pipe(Effect.mapError(() => new Failed({what: "could not write a temp file"})));
+	});
 });
 
+/** Git separates header lines only at LF and removes one space from continuation lines. */
+const headerField = (lines: ReadonlyArray<string>, name: string) => {
+	const values: string[] = [];
+	for (let i = 0; i < lines.length; i += 1) {
+		const line = lines[i] ?? "";
+		if (!line.startsWith(`${name} `)) continue;
+		const value = [line.slice(name.length + 1)];
+		while (lines[i + 1]?.startsWith(" ")) {
+			i += 1;
+			value.push((lines[i] ?? "").slice(1));
+		}
+		values.push(value.join("\n"));
+	}
+	return values.length === 1 ? values[0] : undefined;
+};
+
 /** p83b: git checks native SSH signatures using only the trusted file's person lines. */
-const personVerifier = (keys: string) =>
-	Effect.gen(function* () {
-		const people = words(keys).filter((line) => line.startsWith("person:"));
-		if (people.length === 0) return (_sha: string, _link?: PersonLink) => Effect.succeed(false);
-		const fs = yield* FileSystem.FileSystem;
-		const allowed = yield* fs.makeTempFileScoped();
-		yield* fs.writeFileString(allowed, `${people.join("\n")}\n`);
-		return (sha: string, link?: PersonLink) =>
-			Effect.gen(function* () {
+const personVerifier = Effect.gen(function* () {
+	const format = (yield* git(["rev-parse", "--show-object-format"])).trim();
+	const name = format === "sha256" ? "gpgsig-sha256" : "gpgsig";
+	return Effect.fnUntraced(function* (keys: string) {
+		return yield* Effect.gen(function* () {
+			const people = words(keys).filter((line) => line.startsWith("person:"));
+			if (people.length === 0)
+				return Effect.fnUntraced(function* (_sha: string, _link?: PersonLink) {
+					return yield* Effect.succeed(false);
+				});
+			const fs = yield* FileSystem.FileSystem;
+			const allowed = yield* fs.makeTempFileScoped();
+			yield* fs.writeFileString(allowed, `${people.join("\n")}\n`);
+			return Effect.fnUntraced(function* (sha: string, link?: PersonLink) {
 				// gpg.format chooses how to sign; verification detects the signature's own format.
 				const raw = yield* gitMaybe(["cat-file", "commit", sha]);
-				const header = (raw ?? "").split("\n\n", 1)[0] ?? "";
-				if (!/^gpgsig -----BEGIN SSH SIGNATURE-----$/m.test(header)) return false;
+				const headers = ((raw ?? "").split("\n\n", 1)[0] ?? "").split("\n");
+				const signature = headerField(headers, name);
+				const tree = headerField(headers, "tree");
+				if (
+					signature === undefined ||
+					tree === undefined ||
+					signature.split("\n", 1)[0] !== "-----BEGIN SSH SIGNATURE-----"
+				)
+					return false;
 				if (link !== undefined) {
-					const signature = /^gpgsig (.*(?:\n .*)*)/m.exec(header)?.[1] ?? "";
-					const tree = /^tree ([0-9a-f]+)$/m.exec(header)?.[1];
 					const parent = yield* treeAt(`${sha}^1`);
-					if (
-						link.sig !== `${signature.replaceAll("\n ", "\n")}\n` ||
-						link.to !== tree ||
-						link.from !== parent?.trim()
-					)
+					if (link.sig !== `${signature}\n` || link.to !== tree || link.from !== parent?.trim())
 						return false;
 				}
 				const result = yield* run("git", [
@@ -418,19 +458,20 @@ const personVerifier = (keys: string) =>
 				const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(result.err)?.[1];
 				return result.code === 0 && (link === undefined || used === link.key);
 			});
-	}).pipe(Effect.mapError(() => new Failed({what: "could not write person signers"})));
+		}).pipe(Effect.mapError(() => new Failed({what: "could not write person signers"})));
+	});
+});
 
 /** Every note on one notes ref, decoded; one that does not decode is left out. */
-const notesOn = (ref: string) =>
-	Effect.gen(function* () {
-		const found: Array<{commit: string; note: Note}> = [];
-		for (const line of words(yield* git(["notes", `--ref=${ref}`, "list"]))) {
-			const [blob = "", commit = ""] = line.split(" ");
-			const note = decodeNote((yield* git(["cat-file", "blob", blob])).trim());
-			if (Option.isSome(note)) found.push({commit, note: note.value});
-		}
-		return found;
-	});
+const notesOn = Effect.fnUntraced(function* (ref: string) {
+	const found: Array<{commit: string; note: Note}> = [];
+	for (const line of words(yield* git(["notes", `--ref=${ref}`, "list"]))) {
+		const [blob = "", commit = ""] = line.split(" ");
+		const note = decodeNote((yield* git(["cat-file", "blob", blob])).trim());
+		if (Option.isSome(note)) found.push({commit, note: note.value});
+	}
+	return found;
+});
 
 const HEX = /^[0-9a-f]{40}$/;
 const flag = (name: string) => {
@@ -438,14 +479,17 @@ const flag = (name: string) => {
 	const at = args.indexOf(name);
 	return at < 0 ? undefined : args[at + 1];
 };
-const need = (name: string) => {
+const need = Effect.fnUntraced(function* (name: string) {
 	const value = flag(name);
-	return value === undefined || value.startsWith("-")
+	return yield* value === undefined || value.startsWith("-")
 		? Effect.fail(new Failed({what: `${name} is required`}))
 		: Effect.succeed(value);
-};
-const resolve = (rev: string) =>
-	git(["rev-parse", "--verify", "-q", `${rev}^{commit}`]).pipe(Effect.map((s) => s.trim()));
+});
+const resolve = Effect.fnUntraced(function* (rev: string) {
+	return yield* git(["rev-parse", "--verify", "-q", `${rev}^{commit}`]).pipe(
+		Effect.map((s) => s.trim()),
+	);
+});
 
 /**
  * The commits to judge. `--main` is the main CI checked out, the trusted one: the keys file, the exam
@@ -491,30 +535,42 @@ export const plain = (a: Answer, show: (path: string) => string = quote) => {
  * Prints each answer three ways and returns the exit code, 1 on any `stuck`: one JSON line on stdout,
  * one plain line on stderr, and in GitHub Actions an annotation and a row of the step summary.
  */
-const report = (title: string, answers: ReadonlyArray<Answer>, extra: string) =>
-	Effect.gen(function* () {
+const report = Effect.fnUntraced(function* (
+	title: string,
+	answers: ReadonlyArray<Answer>,
+	extra: string,
+) {
+	for (const a of answers) {
+		yield* Console.log(JSON.stringify(a));
+		yield* Console.error(`${title}: ${plain(a)}`);
+	}
+	const summary = yield* Config.String("GITHUB_STEP_SUMMARY").pipe(Config.option);
+	if (Option.isSome(summary)) {
 		for (const a of answers) {
-			yield* Console.log(JSON.stringify(a));
-			yield* Console.error(`${title}: ${plain(a)}`);
+			const level = a._tag === "stuck" ? "error" : a._tag === "ask" ? "warning" : "notice";
+			yield* Console.log(`::${level} title=${title}::${annotate(plain(a, (p) => p))}`);
 		}
-		const summary = yield* Config.String("GITHUB_STEP_SUMMARY").pipe(Config.option);
-		if (Option.isSome(summary)) {
-			for (const a of answers) {
-				const level = a._tag === "stuck" ? "error" : a._tag === "ask" ? "warning" : "notice";
-				yield* Console.log(`::${level} title=${title}::${annotate(plain(a, (p) => p))}`);
-			}
-			const rows = answers.map((a) => `| \`${a._tag}\` | \`${plain(a)}\` |`);
-			const body = [`### ${title}${extra}`, "", "| answer | detail |", "|---|---|", ...rows, ""];
-			const fs = yield* FileSystem.FileSystem;
-			yield* fs
-				.writeFileString(summary.value, `${body.join("\n")}\n`, {flag: "a"})
-				.pipe(Effect.mapError(() => new Failed({what: "could not write the step summary"})));
-		}
-		return answers.some((a) => a._tag === "stuck") ? 1 : 0;
-	});
+		const rows = answers.map((a) => `| \`${a._tag}\` | \`${plain(a)}\` |`);
+		const body = [`### ${title}${extra}`, "", "| answer | detail |", "|---|---|", ...rows, ""];
+		const fs = yield* FileSystem.FileSystem;
+		yield* fs
+			.writeFileString(summary.value, `${body.join("\n")}\n`, {flag: "a"})
+			.pipe(Effect.mapError(() => new Failed({what: "could not write the step summary"})));
+	}
+	return answers.some((a) => a._tag === "stuck") ? 1 : 0;
+});
 
-const changedPaths = (from: string, sha: string) =>
-	git(["diff-tree", "-r", "-z", "-M", "--name-status", "--no-commit-id", from, sha]).pipe(
+const changedPaths = Effect.fnUntraced(function* (from: string, sha: string) {
+	return yield* git([
+		"diff-tree",
+		"-r",
+		"-z",
+		"-M",
+		"--name-status",
+		"--no-commit-id",
+		from,
+		sha,
+	]).pipe(
 		Effect.map((out) => {
 			const parts = nul(out);
 			const paths: string[] = [];
@@ -527,6 +583,7 @@ const changedPaths = (from: string, sha: string) =>
 			return paths;
 		}),
 	);
+});
 
 const checkMain = Effect.gen(function* () {
 	const {head, main} = yield* endpoints;
@@ -547,9 +604,11 @@ const checkMain = Effect.gen(function* () {
 	if (problem !== null || keys === null)
 		return yield* new Failed({what: `allowed_signers: ${problem}`});
 	const verify = yield* verifier;
-	const verifyPerson = yield* personVerifier(keys);
-	const signedBy = (note: Note) =>
-		verify(keys, note).pipe(Effect.map((signer): Signed => ({note, signer})));
+	const people = yield* personVerifier;
+	const verifyPerson = yield* people(keys);
+	const signedBy = Effect.fnUntraced(function* (note: Note) {
+		return yield* verify(keys, note).pipe(Effect.map((signer): Signed => ({note, signer})));
+	});
 	const notes = yield* notesOn("fabrika");
 	const byCommit = new Map(notes.map((n) => [n.commit, n.note]));
 	const commits: Commit[] = [];
@@ -588,35 +647,37 @@ const checkMain = Effect.gen(function* () {
  * Every `attested` link in one revision's `field/runs.jsonl`, with the line each came from. Each line
  * is parsed, never searched as text, so a key written with escapes cannot hide a row.
  */
-const loggedAt = (rev: string) =>
-	Effect.gen(function* () {
-		const lines = ((yield* fileAt(rev, "field/runs.jsonl")) ?? "").split("\n");
-		const found: Array<{line: string; link: ChainLink}> = [];
-		for (const [i, line] of lines.entries()) {
-			if (line.trim() === "") continue;
-			const row: unknown = yield* Effect.try({
-				try: () => JSON.parse(line),
-				catch: () => new Failed({what: `field/runs.jsonl line ${i + 1} is not JSON`}),
-			});
-			if (row === null || typeof row !== "object") continue;
-			const links = (row as {attested?: unknown}).attested;
-			if (links === undefined) continue;
-			if (!Array.isArray(links))
-				return yield* new Failed({what: `field/runs.jsonl line ${i + 1}: attested is not a list`});
-			for (const raw of links) {
-				const link = decodeLink(raw);
-				if (Option.isNone(link))
-					return yield* new Failed({
-						what: `field/runs.jsonl line ${i + 1}: a link that does not read`,
-					});
-				found.push({line, link: link.value});
-			}
+const loggedAt = Effect.fnUntraced(function* (rev: string) {
+	const lines = ((yield* fileAt(rev, "field/runs.jsonl")) ?? "").split("\n");
+	const found: Array<{line: string; link: ChainLink}> = [];
+	for (const [i, line] of lines.entries()) {
+		if (line.trim() === "") continue;
+		const row: unknown = yield* Effect.try({
+			try: () => JSON.parse(line),
+			catch: () => new Failed({what: `field/runs.jsonl line ${i + 1} is not JSON`}),
+		});
+		if (row === null || typeof row !== "object") continue;
+		const links = (row as {attested?: unknown}).attested;
+		if (links === undefined) continue;
+		if (!Array.isArray(links))
+			return yield* new Failed({what: `field/runs.jsonl line ${i + 1}: attested is not a list`});
+		for (const raw of links) {
+			const link = decodeLink(raw);
+			if (Option.isNone(link))
+				return yield* new Failed({
+					what: `field/runs.jsonl line ${i + 1}: a link that does not read`,
+				});
+			found.push({line, link: link.value});
 		}
-		return found;
-	});
+	}
+	return found;
+});
 
-const ancestor = (older: string, newer: string) =>
-	run("git", ["merge-base", "--is-ancestor", older, newer]).pipe(Effect.map((r) => r.code === 0));
+const ancestor = Effect.fnUntraced(function* (older: string, newer: string) {
+	return yield* run("git", ["merge-base", "--is-ancestor", older, newer]).pipe(
+		Effect.map((r) => r.code === 0),
+	);
+});
 
 const chainMain = Effect.gen(function* () {
 	const advice = process.argv.includes("--advise");
@@ -662,6 +723,7 @@ const chainMain = Effect.gen(function* () {
 	}
 	const verify = yield* verifier;
 	const rows: Logged<ChainLink>[] = [];
+	const people = yield* personVerifier;
 	// A row's keys commit counts only when it was on main before its squash. Anyone who can push can
 	// make a commit whose allowed_signers holds their own key, on a branch or in a log pull request.
 	for (const {link} of yield* loggedAt(rev)) {
@@ -674,7 +736,7 @@ const chainMain = Effect.gen(function* () {
 				// A squash does not keep the original commit in main's history.
 				if ((yield* gitMaybe(["cat-file", "-e", `${link.commit}^{commit}`])) === null)
 					yield* run("git", ["fetch", "--no-tags", "-q", "origin", link.commit]);
-				const verifyPerson = yield* personVerifier(keys);
+				const verifyPerson = yield* people(keys);
 				signer = (yield* verifyPerson(link.commit, link)) ? "person" : null;
 			} else signer = yield* verify(keys, link);
 		}

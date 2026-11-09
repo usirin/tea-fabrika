@@ -1,14 +1,15 @@
-// Experiment 233: the local stage's first speed bar (P12, ticket 270, `next/`).
+// Experiment 238: the local stage's first speed bar (P12, ticket 270, `next/`).
 // The real stage only: `next/apps/fabrika/dev.ts`, which builds the brain, deploys it at Alchemy's
 // local stage and serves it from workerd. No Miniflare stand-in, no network, no key, no model.
 //
-//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts stage initial 4
-//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts stage head 5
-//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts compiler 5
+//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts stage initial 4
+//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts stage head 5
+//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts compiler 5
+//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts sink 5
 //
 // Each stage run gets its own fresh FABRIKA_HOME (mktemp -d /tmp/fh.XXXX), removed after. One stage
 // at a time; before each, it waits while 6 or more vitest workers run. Every reading is saved, not
-// only medians, in results/233-local-stage-speed-bar.json (each call appends its runs).
+// only medians, in results/238-local-stage-speed-bar.json (each call appends its runs).
 // The wire client below is a copy of the one in next/apps/fabrika/src/stage-wire.test.ts.
 import {execFileSync, spawn, type ChildProcess} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
@@ -30,7 +31,7 @@ import {pathToFileURL} from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const APP = join(ROOT, "next/apps/fabrika");
-const OUT = join(ROOT, "experiments/results/233-local-stage-speed-bar.json");
+const OUT = join(ROOT, "experiments/results/238-local-stage-speed-bar.json");
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -493,6 +494,126 @@ const compilerRuns = async (count: number) => {
 	return readings;
 };
 
+// --- Sink flush, timed from outside ---
+// `SpanSink.flush` ends no span on purpose, so this times the call itself with `performance.now()`
+// around it. It is the real sink (`data/sink.ts`) on node:sqlite with the stage's own pragmas, as
+// `node/stage-recording.ts` opens it, and the real record code (`recordPart`, what the record
+// Durable Object runs) on its own node:sqlite file. Between them is the stage's transport shape: a
+// JSON POST to 127.0.0.1, answered over HTTP. Not workerd: see the write-up for what that leaves out.
+const sinkRuns = async (count: number) => {
+	const require = createRequire(join(ROOT, "next/packages/libfabrika/package.json"));
+	const {Context, Effect, Layer} = await import(pathToFileURL(require.resolve("effect")).href);
+	const lib = (file: string) =>
+		import(pathToFileURL(join(ROOT, "next/packages/libfabrika/src/data", file)).href);
+	const {Archive, RecordManager, SpanSink, recordPart} = await lib("index.ts");
+	const {nodeSql} = await lib("sqlite.ts");
+	const {createServer: httpServer} = await import("node:http");
+	const readings: Array<object> = [];
+	// Few records, one full batch (BATCH = 100 in sink.ts: one record call), and nothing queued.
+	for (const queued of [5, 100, 0]) {
+		while (vitests() >= 6) await pause(5000);
+		const home = mkdtempSync("/tmp/fh.");
+		const parts = new Map<string, DatabaseSync>();
+		const part = (name: string) => {
+			const known = parts.get(name);
+			if (known !== undefined) return known;
+			const db = new DatabaseSync(join(home, `record-${parts.size}.sqlite`));
+			db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+			parts.set(name, db);
+			return db;
+		};
+		const server = httpServer((request, response) => {
+			let body = "";
+			request.on("data", (chunk) => (body += chunk));
+			request.on("end", () => {
+				const {name, args} = JSON.parse(body);
+				const [chain, at, rows] = args;
+				Effect.runPromise(
+					recordPart(nodeSql(part(name)), chain, at, 1_000_000_000).write(rows),
+				).then(
+					(value: unknown) => response.end(JSON.stringify({value})),
+					(error: unknown) => {
+						response.statusCode = 500;
+						response.end(String(error));
+					},
+				);
+			});
+		});
+		await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+		const address = server.address();
+		const port = typeof address === "object" && address !== null ? address.port : 0;
+		const post = async (name: string, args: ReadonlyArray<unknown>) => {
+			const response = await fetch(`http://127.0.0.1:${port}`, {
+				method: "POST",
+				headers: {"content-type": "application/json"},
+				body: JSON.stringify({target: "record", name, method: "write", args}),
+			});
+			return ((await response.json()) as {value: unknown}).value;
+		};
+		const object = new DatabaseSync(join(home, "brain.records.sqlite"));
+		object.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+		const unused = () => Promise.reject(new Error("not timed here"));
+		const context = await Effect.runPromise(
+			Effect.scoped(
+				Layer.build(
+					Layer.mergeAll(
+						SpanSink.layer(nodeSql(object), {object: "brain:sink-probe"}),
+						RecordManager.remote((name: string) => ({
+							write: (...args: ReadonlyArray<unknown>) => post(name, args),
+							read: unused,
+							content: unused,
+							deleteContent: unused,
+						})),
+						Archive.memory,
+					),
+				),
+			),
+		);
+		const sink = Context.get(context, SpanSink);
+		// Spans shaped like a door's: a handful of short tags and one event.
+		const queue = (n: number) =>
+			Effect.runPromise(
+				Effect.forEach(
+					Array.from({length: n}, (_, i) => i),
+					(i: number) =>
+						Effect.void.pipe(
+							Effect.tap(() => Effect.annotateCurrentSpan("fab.seq", i)),
+							Effect.withSpan("door.send", {
+								attributes: {
+									"fab.client": "client_probe",
+									"fab.tab": "tab-1",
+									"fab.letter": "a",
+									"fab.ledger.lag": 0,
+								},
+							}),
+						),
+					{concurrency: 1, discard: true},
+				).pipe(Effect.provideContext(context)),
+			);
+		const flushOnce = () =>
+			Effect.runPromise(sink.flush.pipe(Effect.provideContext(context))) as Promise<{sent: number}>;
+		try {
+			// One warm-up flush per case: the tables, the part file and the first connection.
+			for (let i = 0; i <= count; i++) {
+				await queue(queued);
+				const before = load();
+				const start = now();
+				const {sent} = await flushOnce();
+				const ms = now() - start;
+				const reading = {queued, sent, ms, warmup: i === 0, load: before};
+				console.log(JSON.stringify(reading));
+				readings.push(reading);
+			}
+		} finally {
+			server.close();
+			object.close();
+			for (const db of parts.values()) db.close();
+			rmSync(home, {recursive: true, force: true});
+		}
+	}
+	return readings;
+};
+
 const [mode, label, times] = process.argv.slice(2);
 if (process.env.TYPESAFE_API_KEY !== undefined) throw new Error("unset TYPESAFE_API_KEY first");
 const data = saved();
@@ -508,4 +629,7 @@ if (mode === "stage") {
 } else if (mode === "compiler") {
 	data.compiler.push(...(await compilerRuns(Number(label ?? 5))));
 	save(data);
-} else throw new Error("mode: stage <label> <count> | compiler <count>");
+} else if (mode === "sink") {
+	const sink = await sinkRuns(Number(label ?? 5));
+	save({...data, sink: [...((data as {sink?: Array<unknown>}).sink ?? []), ...sink]});
+} else throw new Error("mode: stage <label> <count> | compiler <count> | sink <count>");

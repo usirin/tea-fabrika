@@ -1,7 +1,16 @@
 import {WorkerEntrypoint} from "cloudflare:workers";
 import {Effect} from "effect";
-import {Declaration, nodeExecution} from "../app/execution.ts";
+import {Declaration, type Execution, nodeExecution, Reply} from "../app/execution.ts";
 import {ProgramDown, stepper} from "../app/program.ts";
+
+const reply = Effect.fnUntraced(function* (execution: Execution, cmd: unknown, outcome: unknown) {
+	return yield* execution.reply(cmd, outcome).pipe(
+		Effect.match({
+			onSuccess: (value) => Reply.cases.ok.make({value}),
+			onFailure: (error) => Reply.cases.ProgramDown.make({why: error.why}),
+		}),
+	);
+});
 
 export const programBox = (declared: unknown, build: string) => {
 	const execution = nodeExecution(declared, build);
@@ -50,7 +59,7 @@ export const programBox = (declared: unknown, build: string) => {
 		}
 		reply(cmd: unknown, outcome: unknown) {
 			// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
-			return Effect.runPromise(execution.reply(cmd, outcome));
+			return Effect.runPromise(reply(execution, cmd, outcome));
 		}
 		check(kind: string, fact: unknown) {
 			// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise

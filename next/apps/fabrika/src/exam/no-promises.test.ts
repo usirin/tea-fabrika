@@ -75,7 +75,7 @@ const edges = [
 
 describe("no-promises", () => {
 	// Known gap: no-promises misses object methods that return storage Promises directly.
-	it.fails("unmarked object methods cannot return storage Promises directly", () => {
+	it.fails("pinned: the P12 storage-method gap misses unmarked returned Promises", () => {
 		const file = "next/apps/fabrika/src/storage-method.ts";
 		const findings = plant({
 			[file]: [

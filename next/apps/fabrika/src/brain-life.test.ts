@@ -105,13 +105,14 @@ const launch = async (startupGate = false) => {
 		output += b.toString();
 	});
 	const url = `http://127.0.0.1:${at.port}`;
+	const observed: Array<{at: number; pids: number[]; ready: boolean}> = [];
 	if (startupGate) {
 		while (!existsSync(join(folder, "starting"))) {
 			if (child.exitCode !== null || child.signalCode !== null)
 				throw new Error("stage ended before startup gate");
 			await pause();
 		}
-		return {child, folder, url};
+		return {child, folder, url, output: () => output, observed};
 	}
 	for (;;) {
 		if (child.exitCode !== null) throw new Error(`P12 dev.ts did not start: ${output}`);
@@ -122,25 +123,52 @@ const launch = async (startupGate = false) => {
 		}
 		await pause();
 	}
-	return {child, folder, url, output: () => output};
+	return {child, folder, url, output: () => output, observed};
 };
-const workerd = async (parent: number, excluding = 0) => {
+const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0) => {
+	const until = performance.now() + 10_000;
+	const details = () =>
+		`excluding=${excluding}, observed=${JSON.stringify(stage.observed)}\nstage output:\n${stage.output()}`;
+	const {brainOutbox} = await import("@kampus/libfabrika/node/local-stage");
+	const outbox = await Effect.runPromise(brainOutbox(stage.folder));
 	for (;;) {
-		const children = tree(parent).filter(
-			(r) => /\/workerd(?:\s|$)/.test(r.command) && r.pid !== excluding,
-		);
-		if (children.length === 0) {
+		const pending = await Effect.runPromise(outbox.pending);
+		const stopped = pending.find((fact) => fact._tag === "braked");
+		if (stopped !== undefined)
+			throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.why})\n${details()}`);
+		if (stage.child.exitCode !== null || stage.child.signalCode !== null)
+			throw new Error(
+				`P12 dev.ts exited while waiting for workerd: exitCode=${stage.child.exitCode}, signal=${stage.child.signalCode}\n${details()}`,
+			);
+		if (performance.now() >= until)
+			throw new Error(`P12 workerd did not become ready within 10 seconds\n${details()}`);
+		const children = tree(stage.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
+		const observation = {at: performance.now(), pids: children.map((row) => row.pid), ready: false};
+		stage.observed.push(observation);
+		if (children.length === 0 || children[0]!.pid === excluding) {
 			await pause();
 			continue;
 		}
-		expect(children).toHaveLength(1);
-		return children[0]!.pid;
+		expect(children, details()).toHaveLength(1);
+		// Alchemy retries SystemError spawns. A PID in ps may die before it ever listens.
+		// Accept it only after HTTP answers and a fresh ps still shows that sole PID.
+		try {
+			const response = await fetch(stage.url, {signal: AbortSignal.timeout(250)});
+			observation.ready = response.ok;
+			await response.body?.cancel();
+		} catch {
+			/* Spawn attempt has not reached its listener. */
+		}
+		const current = tree(stage.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
+		if (observation.ready && current.length === 1 && current[0]!.pid === children[0]!.pid)
+			return children[0]!.pid;
+		await pause();
 	}
 };
 
 describe("P12 local brain life", () => {
 	// Outside only: real dev.ts, process groups and TCP. This sandbox cannot bind sockets.
-	it("parent death before listener readiness leaves no stage group", async () => {
+	it("scenario: parent death before listener readiness leaves no stage group", async () => {
 		const s = await launch(true);
 		const leader = Number(readFileSync(join(s.folder, "starting"), "utf8"));
 		groups.push(leader);
@@ -159,7 +187,7 @@ describe("P12 local brain life", () => {
 		await expect(fetch(s.url)).rejects.toThrow();
 	});
 	// Outside only: cleanup must address the process group after its leader already exited.
-	it("stage group cleanup still reaches descendants after the leader exits", async () => {
+	it("scenario: stage group cleanup still reaches descendants after the leader exits", async () => {
 		const s = await launch();
 		const rows = tree(s.child.pid!),
 			leader = rows.find((row) => row.parent === s.child.pid && row.command.includes("--child"));
@@ -175,41 +203,56 @@ describe("P12 local brain life", () => {
 		expect(descendants.filter(living)).toEqual([]);
 		await expect(fetch(s.url)).rejects.toThrow();
 	});
-	it("p81 plant: an outer retry loop defeats Alchemy's three-replacement brake", async () => {
+	it("scenario: p81 plant: an outer retry loop defeats Alchemy's three-replacement brake", async () => {
 		const s = await launch();
 		let prior = 0;
 		const pids: Array<number> = [];
 		const delays: Array<number> = [];
-		for (let n = 0; n < 4; n++) {
-			const pid = await workerd(s.child.pid!, prior);
-			pids.push(pid);
-			const began = performance.now();
-			process.kill(pid, "SIGKILL");
-			if (n < 3) {
-				prior = await workerd(s.child.pid!, pid);
-				delays.push(performance.now() - began);
-				prior = pid;
+		const details = () =>
+			`pids=${JSON.stringify(pids)}, delays=${JSON.stringify(delays)}, observed=${JSON.stringify(s.observed)}\nstage output:\n${s.output()}`;
+		try {
+			for (let n = 0; n < 4; n++) {
+				const pid = await workerd(s, prior);
+				pids.push(pid);
+				const began = performance.now();
+				process.kill(pid, "SIGKILL");
+				if (n < 3) {
+					prior = await workerd(s, pid);
+					delays.push(performance.now() - began);
+					prior = pid;
+				}
 			}
+			expect(new Set(pids).size, details()).toBe(4);
+			// Installed compatibility policy, not a new fabrika default.
+			for (const [n, ms] of delays.entries())
+				expect(ms, details()).toBeGreaterThanOrEqual(250 * 2 ** n);
+			await pause();
+			expect(
+				tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command)),
+				details(),
+			).toEqual([]);
+			const {brainOutbox} = await import("@kampus/libfabrika/node/local-stage");
+			const pending = await Effect.runPromise(
+				Effect.flatMap(brainOutbox(s.folder), (o: any) => o.pending),
+			);
+			expect(pending, details()).toEqual(
+				expect.arrayContaining([expect.objectContaining({_tag: "braked"})]),
+			);
+			// Wait past every installed backoff. No new child or outer HTTP restart is allowed.
+			await new Promise<void>((done) => setTimeout(done, 2000));
+			expect(
+				tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command)),
+				details(),
+			).toEqual([]);
+		} catch (cause) {
+			throw new Error(`P12 replacement/brake failure\n${details()}`, {cause});
 		}
-		expect(new Set(pids).size).toBe(4);
-		// Installed compatibility policy, not a new fabrika default.
-		for (const [n, ms] of delays.entries()) expect(ms).toBeGreaterThanOrEqual(250 * 2 ** n);
-		await pause();
-		expect(tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command))).toEqual([]);
-		const {brainOutbox} = await import("@kampus/libfabrika/node/local-stage");
-		const pending = await Effect.runPromise(
-			Effect.flatMap(brainOutbox(s.folder), (o: any) => o.pending),
-		);
-		expect(pending).toEqual(expect.arrayContaining([expect.objectContaining({_tag: "braked"})]));
-		// Wait past every installed backoff. No new child or outer HTTP restart is allowed.
-		await new Promise<void>((done) => setTimeout(done, 2000));
-		expect(tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command))).toEqual([]);
 	});
 	it.each(["SIGTERM", "SIGKILL"] as const)(
-		"group cleanup plant: killing only Node leaves a listener after %s",
+		"scenario: group cleanup plant: killing only Node leaves a listener after %s",
 		async (signal) => {
 			const s = await launch();
-			await workerd(s.child.pid!);
+			await workerd(s);
 			const descendants = tree(s.child.pid!).map((r) => r.pid);
 			s.child.kill(signal);
 			for (;;) {

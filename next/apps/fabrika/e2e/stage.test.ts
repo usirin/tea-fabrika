@@ -246,7 +246,7 @@ const rpc = (page: Page, method: string, params: unknown) =>
 	});
 
 describe("P12 real browser protocol", () => {
-	it("p29 stage plant: notify the wrong key, issue one code per tab, or require reconnect after command grant", async () => {
+	it("scenario: p29 stage plant: notify the wrong key, issue one code per tab, or require reconnect after command grant", async () => {
 		const s = await start(),
 			a = await s.context.newPage(),
 			b = await s.context.newPage();
@@ -256,12 +256,10 @@ describe("P12 real browser protocol", () => {
 		expect(first.fingerprint).toBe(second.fingerprint);
 		expect(first.first.error.data.why).toBe("not_granted");
 		expect(second.first.error.data.why).toBe("not_granted");
-		await rpc(a, "door.knock", {label: "Chromium"});
-		await rpc(b, "door.knock", {label: "Chromium"});
-		await a.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "door.waiting"));
-		await b.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "door.waiting"));
-		const code = (await state(a)).find((f: any) => f.method === "door.waiting").params.code;
-		expect((await state(b)).find((f: any) => f.method === "door.waiting").params.code).toBe(code);
+		const firstKnock = await rpc(a, "door.knock", {label: "Chromium"});
+		const secondKnock = await rpc(b, "door.knock", {label: "Chromium"});
+		const code = firstKnock.result.code;
+		expect(secondKnock.result.code).toBe(code);
 		const output = execFileSync(
 			process.execPath,
 			[

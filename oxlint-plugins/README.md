@@ -78,3 +78,60 @@ Their count on PR 223's tree at `7c1d073` (33 files), each fire read by hand, on
 - `no-clock-in-view`: 2, none false by its words: `window/main.tsx:146` (the same read) and `main.tsx:19`, a module-level `crypto.randomUUID()` naming the tab. That one is not in a view function, only in a view file; whether a read at a view file's top level should pass is a later call.
 - `no-hand-tag`, `one-store-hook`, `react/refs`, `react/immutability`, `react/display-name`: 0. The slice holds no `_tag` and no store hook, so for those two a zero measures nothing.
 - `lint:compiler`: 0 findings on the slice's two `.tsx` files.
+
+## Function tracing, T285 PR 1
+
+`effect-functions` applies to product code in `next/`. A named function returning
+an Effect with a whole-function `Effect.withSpan` chain uses named `Effect.fn`.
+The rule also sees returned recovery and flush chains, direct `Effect.withSpan`,
+curried wrappers, and aliased Effect imports. It leaves inner spans and
+`Stream.withSpan` alone. Stream spans measure consumption.
+
+Round 1 measured base `600c6449`, 2026-11-08, with
+`node oxlint-plugins/lint.ts next`. Each finding was read against
+[`the tracing decision`](../docs/direction/effect-fn-for-traced-functions.md).
+Paths below start at `next/packages/libfabrika/src/`.
+
+| Finding | Verdict |
+|---|---|
+| `data/ledger-store.ts:261`, `ring`, `ledger.ring` | Real. Fixed in round 1. Recovery stays outside the failed span. |
+| `data/ledger-store.ts:312`, `append`, `ledger.append` | Real. Fixed in round 1. Validation refusals stay inside the span. |
+| `data/ledger-store.ts:340`, `read`, `ledger.read` | Real. Fixed in round 1. One span per answered page. |
+| `data/ledger-store.ts:370`, `wait`, `ledger.wait` | Real. Fixed in round 1. Ready and parked answers stay inside the span. |
+| `app/runner.ts:436`, `cmdSpan`, `runner.cmd` | Real. Fixed in round 1. Handler recovery stays outside the failed span. |
+| `app/runner.ts:470`, `commit`, `runner.write` | Real. Fixed in round 1. The signer's link and scope stay the same. |
+| `app/runner.ts:592`, `call`, public runner spans | Real. Fixed in round 1. The span ends before flushing. |
+| `data/ledger.ts:94`, `call`, `ledger.call` | Real. Still open in round 2. Use named `Effect.fn` and set argument attributes inside it. Forwarding methods need no second span. |
+| `data/sink.test.ts:94`, `traced`, arbitrary span input | False alarm in the first scan. This helper manufactures test input, rather than tracing a product operation. Tests are now outside this rule. |
+
+The first scan included tests: 9 findings, 8 real and 1 false alarm. The final
+config leaves tests out, as the other Effect exam rules do. A second scan of all
+`next/` had **8 findings, 8 real, 0 false alarms**.
+
+Round 2 scanned all of `next/` again on base `c20a363c`, 2026-11-08, with the
+same command after the door fixes landed. It has **1 finding, 1 real, 0 false
+alarms**, at `next/packages/libfabrika/src/data/ledger.ts:94:5`. The five partial
+door spans are accepted. Their scope stays covered by generated keep-laws in
+`next/apps/fabrika/src/door-spans.test.ts`. Remote forwarding, argument tags,
+pages and failed exits are covered by generated keep-laws in
+`next/packages/libfabrika/src/data/ledger-call-spans.test.ts`.
+The rule stays an **error**. The remaining finding is PR 1's red. It needs no
+advice exception in the lint runner. The seven advice diagnostics in this scan
+are from the existing advice rules.
+
+The planted exam is `next/apps/fabrika/src/exam/effect-functions.test.ts`.
+Nine rejected fixture sites are real violations. Seven allowed forms cover
+inner spans, consumed streams, named functions, untraced helpers, forwarding
+and one-use callbacks. Other fixtures check aliases, today's code and test span
+makers. A rule that rejects every `withSpan` fails these plants.
+
+This rule checks syntax, without types. It follows only the returned chain in an
+expression body or a block containing one return. It does not inspect Effect
+values such as `members` or `info`, infer indirect wrappers, or enforce every
+helper's use of `fnUntraced`. Behavior properties in
+`next/packages/libfabrika/src/app/effect-functions.test.ts` keep the names,
+attributes, parents, failed exits, signer links and flush order. The sample is
+one tree; zero false alarms here does not prove every future shape.
+
+`effectFnOpportunity` remains off. Its earlier 11 false alarms among 17 findings
+are not evidence for enabling it.

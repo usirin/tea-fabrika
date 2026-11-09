@@ -365,7 +365,7 @@ const read = async (p: any, client: string, stream: string) => {
 describe("P12 real object adapters", () => {
 	// Outside only. The saved attachment is read through the real object's private test method.
 	// Sleep uses real idle time and must prove a new object instance, not merely a delayed ring.
-	it("saved waits survive object sleep, object abort and workerd replacement", async () => {
+	it("scenario: saved waits survive object sleep, object abort and workerd replacement", async () => {
 		await world(async (stage, key) => {
 			const p = stage.project("p12-records"),
 				{client} = await admitted(stage, key);
@@ -480,7 +480,7 @@ describe("P12 real object adapters", () => {
 		}, true);
 	});
 	// Outside only. Hold an actual Process RPC before its inbox append, then kill that object.
-	it("workerd abort closes with 1006; p15 busy plant holds 1012; the stable letter retries once", async () => {
+	it("scenario: workerd abort closes with 1006; p15 busy plant holds 1012; the stable letter retries once", async () => {
 		await world(async (stage, key) => {
 			const p = stage.project("p12-records"),
 				pid = (await p.info()).find((row: any) => row.name === "counter:1").process;
@@ -519,7 +519,7 @@ describe("P12 real object adapters", () => {
 			}
 		}, true);
 	});
-	it("p79 plant: an old close cannot remove the newer session; failed real probes give unknown", async () => {
+	it("scenario: p79 plant: an old close cannot remove the newer session; failed real probes give unknown", async () => {
 		await world(async (stage, key) => {
 			const p = stage.project("p12-records");
 			const first = {
@@ -540,7 +540,7 @@ describe("P12 real object adapters", () => {
 			expect(await p.gateways.online(key.fingerprint)).toEqual([]);
 		});
 	});
-	it("P37 object wiring plant: alias every SQL part, omit project, or lose had after a lost reply", async () => {
+	it("scenario: P37 object wiring plant: alias every SQL part, omit project, or lose had after a lost reply", async () => {
 		await world(async (stage) => {
 			const chain = {_tag: "spans"} as const;
 			const first = stage.record("project-a", "spans/0");
@@ -576,7 +576,7 @@ describe("P12 real object adapters", () => {
 			expect(found.some((r) => r.spanId === span(100).spanId)).toBe(false);
 		});
 	});
-	it("R2 archive plant: unlike checksum encodings or a lost acknowledgement must not lose the local copy", async () => {
+	it("scenario: R2 archive plant: unlike checksum encodings or a lost acknowledgement must not lose the local copy", async () => {
 		await world(async (stage) => {
 			const {bucketCalls} = await import("@kampus/libfabrika/workers/runtime");
 			const calls = bucketCalls(stage.bucket);
@@ -651,7 +651,7 @@ describe("P12 real object adapters", () => {
 			}
 		});
 	});
-	it("recording/content plant: flush before final span, omit failure flush, or trace the sink recursively", async () => {
+	it("scenario: recording/content plant: flush before final span, omit failure flush, or trace the sink recursively", async () => {
 		await world(async (stage, key, fixture) => {
 			const {p, client} = await admitted(stage, key);
 			const info = await p.info(),
@@ -700,7 +700,7 @@ describe("P12 real object adapters", () => {
 		});
 	});
 	it.each(["revoke", "exit"] as const)(
-		"checked writes plant: a receipt cannot authorize a new append after %s",
+		"scenario: checked writes plant: a receipt cannot authorize a new append after %s",
 		async (end) => {
 			await world(async (stage, key, fixture) => {
 				const {p, client} = await admitted(stage, key);
@@ -766,7 +766,7 @@ describe("P12 real object adapters", () => {
 			});
 		},
 	);
-	it("p79/alarm handoff plant: storage wake keeps pid; durable due delivery has one letter and one Cmd", async () => {
+	it("scenario: p79/alarm handoff plant: storage wake keeps pid; durable due delivery has one letter and one Cmd", async () => {
 		await world(async (stage, key, fixture) => {
 			const {p, client} = await admitted(stage, key);
 			const start = await fixture.start("timer:1", "timer-fixture");
@@ -799,7 +799,7 @@ describe("P12 real object adapters", () => {
 			expect(await process.recover()).toMatchObject({_tag: "interrupted", letter: "interrupted"});
 		});
 	});
-	it("sealed program plant: external fetch and Project/R2 bindings stay unavailable; unknown program fails", async () => {
+	it("scenario: sealed program plant: external fetch and Project/R2 bindings stay unavailable; unknown program fails", async () => {
 		await world(async (stage, _key, probe) => {
 			const loader = stage.loader;
 			await expect(
