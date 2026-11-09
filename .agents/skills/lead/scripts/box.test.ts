@@ -983,15 +983,17 @@ describe("T321 K2 box start, today's tooling", () => {
 		);
 	});
 
-	// Plant: accept any parent head, any role or any signer, rather than a verified build link.
-	it("K2 accepts only origin/main or a verified parent build head and records checked facts", () => {
+	// Plant: accept any parent head, any role or any signer, rather than a verified build or lead link.
+	// layers and themes, 2026-11-09: a signed lead commit (a merge of main, a lockfile) was refused.
+	it("K2 accepts only origin/main or a verified parent build or lead head and records checked facts", () => {
 		fc.assert(
 			fc.property(word, (text) => {
-				each(["main", "build", "unsigned", "tests", "forged"], (kind) =>
+				each(["main", "build", "lead", "unsigned", "tests", "forged"], (kind) =>
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/parent");
 						const parent = b.commit(b.main, "src/b.ts", `${text}\n`);
-						if (kind === "build" || kind === "tests") b.sign(b.main, kind, "300");
+						if (kind === "build" || kind === "tests" || kind === "lead")
+							b.sign(b.main, kind, "300");
 						if (kind === "forged")
 							b.git(
 								b.main,
@@ -1005,7 +1007,7 @@ describe("T321 K2 box start, today's tooling", () => {
 						b.git(b.main, "checkout", "-q", "main");
 						const got = b.new(kind === "main" ? "origin/main" : parent);
 						expect(got.code).not.toBeNull();
-						if (kind === "main" || kind === "build") {
+						if (kind === "main" || kind === "build" || kind === "lead") {
 							expect(got.code, got.text).toBe(0);
 							expect(
 								existsSync(join(b.boxes, "state/new.box")),
@@ -1015,7 +1017,7 @@ describe("T321 K2 box start, today's tooling", () => {
 							expect(state).toContain(`base: ${kind === "main" ? b.base : parent}`);
 							expect(state).toContain(`plan-sha256: ${hash(body())}`);
 							expect(state).toContain("ticket: 321");
-							if (kind === "build") expect(state).toContain(`fabrikalfa/parent@${parent}`);
+							if (kind !== "main") expect(state).toContain(`fabrikalfa/parent@${parent}`);
 						} else refused(got, /base_not_signed|base|build/);
 					}),
 				);
@@ -1119,6 +1121,35 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 					expect(got.code, got.text).toBe(0);
 					expect(got.text).toContain("stale_link_outside_lane");
 				}
+			}),
+		);
+	});
+
+	// Plants: hand the checker the lane's root, or the merge-base even when it does not hold the root.
+	// Layers tests10 (2026-11-09): after a lead merge of main, main's own commits sat in root..head.
+	it("K1 scenario: main's commits after the lane's root are not judged as the lane's", () => {
+		each(["main-moved", "root-off-main"] as const, (kind) =>
+			fixture((b) => {
+				const moved = b.commit(b.main, "src/b.ts", "main moved\n");
+				b.git(b.main, "update-ref", "refs/remotes/origin/main", moved);
+				b.git(b.work, "fetch", "-q", b.main, moved);
+				b.git(b.work, "reset", "-q", "--hard", moved);
+				let start = moved;
+				if (kind === "root-off-main") {
+					start = b.commit(b.work, "src/old.ts", "off main\n");
+					b.git(b.main, "fetch", "-q", b.work, start);
+				}
+				b.state(start);
+				const root = kind === "main-moved" ? b.base : start;
+				appendFileSync(join(b.boxes, "state/one.box"), `root: ${root}\n`);
+				b.setup({operations: [{path: "src/a.ts", text: "tested\n"}]});
+				expect(b.run().code).toBe(0);
+				const got = b.fetch();
+				expect(got.code, got.text).toBe(0);
+				const check = b
+					.calls()
+					.find((c) => c.cmd === "pnpm" && c.args[0] === "commits" && c.args[1] === "check");
+				expect(check?.args[check.args.indexOf("--base") + 1]).toBe(start);
 			}),
 		);
 	});
