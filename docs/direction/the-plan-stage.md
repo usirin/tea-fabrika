@@ -100,7 +100,7 @@ type Criterion = {
 ### 2. A Property's shape
 
 Against the `Promise` of
-[Promises in the pipeline](./promises-in-the-pipeline.md), and today's plan
+Promises in the pipeline, and today's plan
 criterion for `serves`:
 
 | Was | Now | What it means |
@@ -119,7 +119,7 @@ criterion for `serves`:
   code already does, a characterization test
   ([Wikipedia](https://en.wikipedia.org/wiki/Characterization_test)). Its
   `code` is what the mutation step tests, as
-  [Promises in the pipeline](./promises-in-the-pipeline.md) describes.
+  Promises in the pipeline describes.
 - **No `"proof"` until something runs proofs.** A tool word with nothing behind
   it is a choice the planner cannot keep
   ([Make the mistake impossible](./make-the-mistake-impossible.md)).

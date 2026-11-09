@@ -3,7 +3,7 @@
 Decided 2026-10-11. Both names are working names.
 
 *2026-10-19: `Ledger` now belongs to tea-host, which gives it to the programs
-it runs; `CodeHost` stays with fabrika. See [tea-host](./tea-host.md).*
+it runs; `CodeHost` stays with fabrika. See tea-host.*
 
 *2026-10-24, said again by the owner: the end state is fabrika's own tracker,
 a Linear-like one inside fabrika. Agents and people talk through the ledger,
