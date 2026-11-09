@@ -219,6 +219,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 					commits,
 					unsigned: [],
 					exam: [],
+					manifests: [],
 					leaks: [],
 					left: [],
 					plancheck: null,
