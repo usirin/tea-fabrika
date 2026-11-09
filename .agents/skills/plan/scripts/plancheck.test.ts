@@ -218,59 +218,149 @@ describe("plancheck, today's tooling", () => {
 		);
 	});
 
-	// Plant: list only qualified paths (with a "/") outside path cells, as 2e25c4e7 does, or skip words
-	// inside a Markdown link or emphasis. Amendment A9: the lead's backstop is plancheck's listing of
-	// every exam path named anywhere in the plan, so a backticked exam path is always listed.
-	it("every backticked exam path anywhere in the plan is listed", () => {
-		const exam = [
-			"package.json",
-			"vitest.config.ts",
-			"exam-paths.json",
-			"allowed_signers",
-			"pnpm-workspace.yaml",
-			".github/workflows/check.yaml",
-			"oxlint-plugins/laws.ts",
-		];
-		// A backticked path, maybe inside a Markdown link's text or target, maybe inside emphasis.
-		const links = {
-			none: (c: string) => c,
-			textSelf: (c: string, p: string) => `[${c}](${p})`,
-			textDot: (c: string, p: string) => `[${c}](./${p})`,
-			textOther: (c: string) => `[${c}](README.md)`,
-			target: (c: string) => `[see](${c})`,
+	// Plant: list only backticked spans, as bb7d5a09 does; skip fenced blocks; read a link with a title
+	// as one word; or keep `./` or a trailing period on a word.
+	// Amendment A10: the listing reads no Markdown. It splits the whole file, fences and link titles
+	// included, on whitespace and on punctuation that cannot sit in a repo path, so an exam path is
+	// listed wherever it stands and whatever wraps it. A false listing is harmless; a miss is the defect.
+	it("every exam path anywhere in the plan is listed, in any context and any wrapping", () => {
+		const globs = (
+			JSON.parse(
+				readFileSync(join(import.meta.dirname, "../../../../exam-paths.json"), "utf8"),
+			) as {glob: string}[]
+		).map((row) => row.glob);
+		const literal = globs.filter((glob) => !glob.includes("*"));
+		const starred = globs.filter((glob) => glob.includes("*"));
+		expect(literal).toContain("package.json");
+		expect(starred).toContain("next/apps/fabrika/src/exam/**");
+		// A path under a glob: "**" becomes one or more segments, each "*" one word.
+		const segments = fc.array(word, {minLength: 1, maxLength: 3}).map((w) => w.join("/"));
+		const under = fc
+			.tuple(fc.constantFrom(...starred), segments, fc.array(word, {minLength: 2, maxLength: 2}))
+			.map(([glob, deep, [a, b]]) => glob.replaceAll("**", deep).replace("*", a!).replace("*", b!));
+		const examPath = fc.oneof(fc.constantFrom(...literal), under);
+		// A10's punctuation: none of it can sit inside a repo path.
+		const punct = fc.constantFrom(
+			"`",
+			"[",
+			"]",
+			"(",
+			")",
+			'"',
+			"'",
+			"*",
+			"|",
+			",",
+			";",
+			":",
+			"<",
+			">",
+			"=",
+		);
+		const marks = fc.array(punct, {maxLength: 3}).map((m) => m.join(""));
+		// How the wrapped word stands: a link's text, target or title, emphasis, an HTML comment.
+		const forms = {
+			plain: (t: string) => t,
+			linkText: (t: string) => `[${t}](README.md)`,
+			linkTarget: (t: string) => `[see](${t})`,
+			linkAngle: (t: string) => `[see](<${t}>)`,
+			linkTitle: (t: string) => `[see](README.md "${t}")`,
+			linkTitleSingle: (t: string) => `[see](README.md '${t}')`,
+			linkSelfTitle: (t: string, p: string) => `[${t}](${p} "manifest")`,
+			emphasis: (t: string) => `*${t}*`,
+			strong: (t: string) => `**${t}**`,
+			comment: (t: string) => `<!-- ${t} -->`,
 		};
-		type Link = keyof typeof links;
-		const emphasis = fc.constantFrom("", "**", "*", "_", "__");
+		type Form = keyof typeof forms;
+		const fileTable = (cells: string[]) => table(["File", "Why", "Owner step"], [cells]);
 		const place = {
 			prose: (t: string) => `Before the build, ${t} changes once.`,
-			fileColumn: (t: string) => table(["File", "Why", "Owner step"], [[t, "the fix", "build"]]),
-			whyColumn: (t: string) =>
-				table(["File", "Why", "Owner step"], [["`src/plain.ts`", `touches ${t}`, "build"]]),
-			otherTable: (t: string) => table(["Law", "Note"], [["holds", `see ${t}`]]),
 			bullet: (t: string) => `- ${t} keeps its owner.`,
+			heading: (t: string) => `## Why ${t}`,
+			fileCell: (t: string) => fileTable([t, "the fix", "build"]),
+			whyCell: (t: string) => fileTable(["`src/plain.ts`", `touches ${t}`, "build"]),
+			ownerCell: (t: string) => fileTable(["`src/plain.ts`", "the fix", `build, after ${t}`]),
+			lawCell: (t: string) =>
+				table(["Law", "Generator", "Plant"], [[`holds for ${t}`, "fc.string", "break it"]]),
+			otherCell: (t: string) => table(["Law", "Note"], [["holds", `see ${t}`]]),
+			fence: (t: string, lang: string) => `\`\`\`${lang}\ncat ${t}\n\`\`\``,
+			tildeFence: (t: string, lang: string) => `~~~${lang}\n  "glob": ${t}\n~~~`,
 		};
 		type Place = keyof typeof place;
 		fc.assert(
 			fc.property(
-				fc.constantFrom(...exam),
-				fc.boolean(),
-				fc.constantFrom(...(Object.keys(links) as Link[])),
-				emphasis,
-				fc.constantFrom(...(Object.keys(place) as Place[])),
-				(path, dot, link, around, where) => {
-					const code = `\`${dot ? "./" : ""}${path}\``;
-					const text = `${around}${links[link](code, path)}${around}`;
-					const got = check(place[where](text));
-					expect(got.text, `${text} in ${where}\n${got.text}`).toContain(
-						`exam path named: ${path}\t`,
-					);
+				fc.record({
+					path: examPath,
+					ticks: fc.boolean(),
+					dot: fc.boolean(),
+					before: marks,
+					after: marks,
+					period: fc.nat({max: 4}),
+					form: fc.constantFrom(...(Object.keys(forms) as Form[])),
+					where: fc.constantFrom(...(Object.keys(place) as Place[])),
+					lang: fc.oneof(fc.constantFrom("", "md", "sh", "json", "ts", "text"), word),
+				}),
+				({path, ticks, dot, before, after, period, form, where, lang}) => {
+					const tick = ticks ? "`" : "";
+					// At most one period, somewhere in the trailing punctuation (index past the end: none).
+					const tail =
+						period > after.length ? after : `${after.slice(0, period)}.${after.slice(period)}`;
+					const token = `${before}${tick}${dot ? "./" : ""}${path}${tick}${tail}`;
+					const body = place[where](forms[form](token, path), lang);
+					const got = check(body);
+					expect(got.text, `${body}\n${got.text}`).toContain(`exam path named: ${path}\t`);
 				},
 			),
 			{
 				...options,
-				// pinned: ticket 520 review round 5, the build-owned cell [`package.json`](package.json)
-				// printed "no exam paths named" at 2e25c4e7; main listed it.
-				examples: [["package.json", false, "textSelf", "", "fileColumn"]],
+				numRuns: 64,
+				examples: [
+					// pinned: ticket 520 review round 6, a link title. The build-owned cell
+					// [package.json](package.json "manifest") was missed by both checks at bb7d5a09.
+					[
+						{
+							path: "package.json",
+							ticks: false,
+							dot: false,
+							before: "",
+							after: "",
+							period: 9,
+							form: "linkSelfTitle",
+							where: "fileCell",
+							lang: "",
+						},
+					],
+					// pinned: ticket 520 review round 6, a fenced block holding package.json was never
+					// listed at bb7d5a09.
+					[
+						{
+							path: "package.json",
+							ticks: false,
+							dot: false,
+							before: "",
+							after: "",
+							period: 9,
+							form: "plain",
+							where: "fence",
+							lang: "sh",
+						},
+					],
+					// pinned: ticket 520 review round 5, [`package.json`](package.json) in a build-owned
+					// cell printed "no exam paths named" at 2e25c4e7.
+					[
+						{
+							path: "package.json",
+							ticks: true,
+							dot: false,
+							before: "[",
+							after: "](package.json)",
+							period: 99,
+							form: "plain",
+							where: "fileCell",
+							lang: "",
+						},
+					],
+				],
 			},
 		);
 	});
