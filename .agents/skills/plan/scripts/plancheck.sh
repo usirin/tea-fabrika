@@ -1,9 +1,10 @@
 #!/bin/sh
-# plancheck.sh [--draft] <plan.md>: list every exam path the plan names, and check the plan's files tables.
+# plancheck.sh [--draft|--approved|--owners-json] <plan.md>: list exam paths and check files tables.
 # The listing is a total scan that reads no Markdown: the whole file, fences, link titles and
 # comments included, is split into words on every character outside `A-Z a-z 0-9 . _ / -`, and each
-# word the exam list matches, as it stands or with its leading dots removed, is listed. A false
-# listing is harmless; the lead checks each listed path is owned by tests. A files table is one whose first header starts with "file" or
+# word the exam list matches, as it stands or with its leading dots removed, is listed. Saved-plan
+# mode checks owners in table rows. Draft and approved modes also require each listed path in a
+# files table. A files table is one whose first header starts with "file" or
 # "path", or that has an owner column ("owner", "step", "writer" or "writes it"). Exits 1 when a
 # files table has no owner column, a row has an empty owner, or an exam path in a row is owned by a
 # step other than tests. Version 2 checks the generator grammar on laws tables (a "plant" column).
@@ -133,9 +134,12 @@ def scanned(word):
         word = out
 # The lead's backstop, a total scan: split the raw file on every character that cannot be in a repo
 # path, and list each word the exam list matches, as it stands or with its leading dots removed.
-# Only path cells decide the exit code.
+# Saved-plan mode decides ownership from path cells. Draft and approved modes also require a
+# files-table row for every exam path named by the total scan.
 words = [scanned(w) for w in re.split(r"[^A-Za-z0-9._/-]+", open(plan).read())]
 named = hits(words + [w.lstrip(".") for w in words])
+owned, file_paths = {}, set()
+files_table, laws_table = False, False
 col, files, gen, path, law = None, False, None, None, None
 for i, l in enumerate(lines):
     l = l.strip()
