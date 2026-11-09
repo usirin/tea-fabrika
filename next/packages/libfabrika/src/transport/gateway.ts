@@ -62,14 +62,14 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 		const answer = yield* Effect.result(options.wait(wait.stream, wait.after, options.reader));
 		if (Result.isFailure(answer)) {
 			const error = answer.failure;
-			const why =
+			const reason =
 				typeof error === "object" &&
 				error !== null &&
 				"why" in error &&
 				typeof error.why === "string"
 					? error.why
 					: "unreachable";
-			yield* remove(wait, Answer.cases.refused.make({why}));
+			yield* remove(wait, Answer.cases.refused.make({why: reason}));
 		} else if (answer.success._tag === "ready")
 			yield* remove(wait, Answer.cases.ok.make({result: {rev: answer.success.rev}}));
 		return Result.isSuccess(answer) && answer.success._tag === "parked";

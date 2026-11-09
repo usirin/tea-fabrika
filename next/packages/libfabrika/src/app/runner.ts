@@ -487,7 +487,7 @@ export class ProgramRunner extends Context.Service<
 				const observed = Effect.fnUntraced(function* (
 					failure: Failure,
 					at: number,
-					original?: unknown,
+					content?: unknown,
 				) {
 					if (supervision === null) return;
 					const s = supervision;
@@ -533,7 +533,8 @@ export class ProgramRunner extends Context.Service<
 					yield* saveRecovery(next);
 					if (failure._tag !== "interrupted")
 						yield* Effect.exit(
-							Effect.fail(original).pipe(
+							// The original failure text belongs only in P37's deletable content.
+							Effect.fail(content).pipe(
 								Effect.withSpan("runner.throw", {
 									attributes: {
 										[PROCESS]: failure.process,

@@ -12,17 +12,17 @@ const Exit = {
 	bytes: Schema.optionalKey(Schema.Int),
 	backoff: Schema.optionalKey(Schema.Number),
 };
-export const BrainFact = Schema.TaggedUnion({
+export const BrainEvent = Schema.TaggedUnion({
 	started: {
 		...Life,
 		after: Schema.NullOr(Schema.String),
 		build: Schema.String,
-		why: Reason,
+		reason: Reason,
 		pid: Schema.Int,
 		...Exit,
 	},
-	exited: {...Life, why: Reason, ...Exit},
-	restarting: {...Life, why: Reason, ...Exit, backoff: Schema.Number},
-	braked: {...Life, why: Schema.Literals(["intensity", "restart_failed"]), ...Exit},
-	stopped: {...Life, why: Schema.Literal("stop"), ...Exit},
+	exited: {...Life, reason: Reason, ...Exit},
+	restarting: {...Life, reason: Reason, ...Exit, backoff: Schema.Number},
+	braked: {...Life, reason: Schema.Literals(["intensity", "restart_failed"]), ...Exit},
+	stopped: {...Life, reason: Schema.Literal("stop"), ...Exit},
 });

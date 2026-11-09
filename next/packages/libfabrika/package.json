@@ -23,7 +23,7 @@
 		"./node/stage": "./src/node/stage.ts",
 		"./node/stage-recording": "./src/node/stage-recording.ts",
 		"./brain-life": "./src/app/brain-life.ts",
-		"./brain-fact": "./src/app/brain-fact.ts",
+		"./brain-event": "./src/app/brain-event.ts",
 		"./testing": "./src/testing.ts",
 		"./transport": "./src/transport/index.ts",
 		"./transport/gateway": "./src/transport/gateway.ts"

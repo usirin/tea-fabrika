@@ -12,7 +12,7 @@ import {
 	Tracer,
 } from "effect";
 import {Base64, Base64Url} from "effect/encoding";
-import type {BrainFact} from "../app/brain-fact.ts";
+import type {BrainEvent} from "../app/brain-event.ts";
 import {Alarm, CheckedWriter, Recording, WatcherManager, type Incoming} from "../app/entry.ts";
 import type {Descriptor, Sent} from "../app/runner.ts";
 import {ProgramRunner} from "../app/runner.ts";
@@ -69,7 +69,7 @@ import {
 	ProjectClient,
 	StorageClient,
 } from "./platform.ts";
-const Fact = Schema.declare<Parameters<typeof lineFor>[1]>(
+const Event = Schema.declare<Parameters<typeof lineFor>[1]>(
 	(value): value is Parameters<typeof lineFor>[1] =>
 		Schema.is(Schema.JsonObject)(value) && typeof value._tag === "string",
 );
@@ -105,7 +105,7 @@ export interface ProjectDoorOptions {
 	readonly write: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
 	readonly policy: (
 		process: string,
-	) => Effect.Effect<{inputs: Array<string>; facts: Array<string>}, LedgerError>;
+	) => Effect.Effect<{inputs: Array<string>; events: Array<string>}, LedgerError>;
 	readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
 	readonly nextProcess: () => Effect.Effect<string>;
 	readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
@@ -347,13 +347,13 @@ const projectLogic = Effect.fn("project.init")(function* (
 		yield* rpc(ProcessClient.make(processStub(env, name, pid)).configure(descriptor));
 		sql.exec("UPDATE stage_descriptors SET pending=0 WHERE process=?", pid);
 	});
-	const policies = new Map<string, {inputs: Array<string>; facts: Array<string>}>();
+	const policies = new Map<string, {inputs: Array<string>; events: Array<string>}>();
 	const remember = (pid: string, declaration: typeof loaded.declaration) =>
 		policies.set(pid, {
 			inputs: Object.entries(declaration.inputs)
 				.filter(([, p]) => p.personOnly)
 				.map(([name]) => name),
-			facts: Object.entries(declaration.writes)
+			events: Object.entries(declaration.writes)
 				.filter(([, p]) => p.personOnly)
 				.map(([name]) => name),
 		});
@@ -498,12 +498,12 @@ const projectLogic = Effect.fn("project.init")(function* (
 		pid: string,
 		id: string,
 		stream: string,
-		fact: unknown,
+		event: unknown,
 	) {
 		if (!(yield* processes.isLive(pid))) return yield* new LedgerError({why: "refused"});
 		if (stream.startsWith("door/") || stream.startsWith("processes"))
 			return yield* new LedgerError({why: "refused"});
-		const body = yield* Schema.decodeUnknownEffect(Fact)(fact).pipe(
+		const body = yield* Schema.decodeUnknownEffect(Event)(event).pipe(
 			Effect.mapError(() => new LedgerError({why: "bad_row"})),
 		);
 		const [saved] = sql.exec("SELECT value FROM stage_descriptors WHERE process=?", pid);
@@ -520,8 +520,8 @@ const projectLogic = Effect.fn("project.init")(function* (
 		});
 		return yield* ledger.append(stream, id, lineFor(origin, body));
 	});
-	const brain = Effect.fn("project.brain")(function* (fact: typeof BrainFact.Type) {
-		return yield* ledger.append("door/brain", fact.id, lineFor(yield* from(), fact));
+	const brain = Effect.fn("project.brain")(function* (event: typeof BrainEvent.Type) {
+		return yield* ledger.append("door/brain", event.id, lineFor(yield* from(), event));
 	});
 	yield* flushed.pipe(Effect.provideContext(services));
 	return {
@@ -570,10 +570,10 @@ const projectLogic = Effect.fn("project.init")(function* (
 		online: (key: string) => wrapped(gateways.online(key)),
 		info: wrapped(processes.info),
 		start: (request: Start, origin: From) => wrapped(start(request, origin)),
-		exit: (pid: string, why: string, origin: From) =>
+		exit: (pid: string, reason: string, origin: From) =>
 			wrapped(
 				Effect.gen(function* () {
-					yield* processes.exit(pid, why, origin);
+					yield* processes.exit(pid, reason, origin);
 					yield* door.retire(pid);
 				}).pipe(write),
 			),
@@ -617,17 +617,17 @@ const projectLogic = Effect.fn("project.init")(function* (
 			pid: string,
 			id: string,
 			stream: string,
-			fact: unknown,
+			event: unknown,
 			trace?: {traceId: string; spanId: string},
 		) => {
-			const work = own(pid, id, stream, fact);
+			const work = own(pid, id, stream, event);
 			return wrapped(
 				write(
 					trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))),
 				),
 			);
 		},
-		brain: (fact: typeof BrainFact.Type) => wrapped(brain(fact)),
+		brain: (event: typeof BrainEvent.Type) => wrapped(brain(event)),
 		boot,
 	};
 });
@@ -681,16 +681,18 @@ const processLogic = Effect.fnUntraced(function* (
 					Effect.flatMap(checkedValue),
 				),
 			append: (input) => rpc(p.inbox(pid, input)),
-			commit: (id, session, stream, fact) =>
-				rpc(p.commit(pid, {id, parent: session.parent, kind: fact._tag, stream, fact})).pipe(
+			commit: (id, session, stream, event) =>
+				rpc(
+					p.commit(pid, {id, parent: session.parent, kind: event._tag, stream, fact: event}),
+				).pipe(
 					Effect.flatMap(Schema.decodeUnknownEffect(CommitReply)),
 					Effect.mapError(() => new LedgerError({why: "unreachable"})),
 					Effect.flatMap(checkedValue),
 				),
-			own: Effect.fn("process.own")(function* (id: string, stream: string, fact: unknown) {
+			own: Effect.fn("process.own")(function* (id: string, stream: string, event: unknown) {
 				const span = yield* Effect.currentSpan.pipe(Effect.orDie);
 				return yield* rpc(
-					p.own(pid, id, stream, fact, {traceId: span.traceId, spanId: span.spanId}),
+					p.own(pid, id, stream, event, {traceId: span.traceId, spanId: span.spanId}),
 				);
 			}),
 		}),

@@ -1,4 +1,4 @@
-import {DatabaseSync} from "node:sqlite";
+import {DatabaseSync} from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for P37's durable span queue
 import {Effect, FileSystem, Layer, Path, Schema} from "effect";
 import {Archive, RecordManager, SpanSink} from "../data/index.ts";
 import {nodeSql} from "../data/sqlite.ts";

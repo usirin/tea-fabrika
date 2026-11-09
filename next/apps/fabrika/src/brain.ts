@@ -90,9 +90,9 @@ export class Project extends DurableObject<Env> {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
 		return this.runtime.runPromise(ProjectService.use((p) => p.start(request, from)));
 	}
-	exit(pid: string, why: string, from: From) {
+	exit(pid: string, reason: string, from: From) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-		return this.runtime.runPromise(ProjectService.use((p) => p.exit(pid, why, from)));
+		return this.runtime.runPromise(ProjectService.use((p) => p.exit(pid, reason, from)));
 	}
 	read(stream: string, after: number, reader: string) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
@@ -120,11 +120,11 @@ export class Project extends DurableObject<Env> {
 		pid: string,
 		id: string,
 		stream: string,
-		fact: unknown,
+		event: unknown,
 		trace?: {traceId: string; spanId: string},
 	) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-		return this.runtime.runPromise(ProjectService.use((p) => p.own(pid, id, stream, fact, trace)));
+		return this.runtime.runPromise(ProjectService.use((p) => p.own(pid, id, stream, event, trace)));
 	}
 	inbox(pid: string, input: Incoming) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
@@ -134,9 +134,9 @@ export class Project extends DurableObject<Env> {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
 		return this.runtime.runPromise(ProjectService.use((p) => p.publish(client, update)));
 	}
-	brain(fact: Parameters<ContextProject["brain"]>[0]) {
+	brain(event: Parameters<ContextProject["brain"]>[0]) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-		return this.runtime.runPromise(ProjectService.use((p) => p.brain(fact)));
+		return this.runtime.runPromise(ProjectService.use((p) => p.brain(event)));
 	}
 }
 type ContextProject = (typeof ProjectService)["Service"];

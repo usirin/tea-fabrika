@@ -4,8 +4,8 @@ import {Schema} from "effect";
 export const BrainState = Schema.TaggedUnion({
 	starting: {},
 	online: {start: Schema.String, build: Schema.String},
-	waiting: {after: Schema.String, until: Schema.Number, why: Schema.String},
-	braked: {after: Schema.String, why: Schema.String},
+	waiting: {after: Schema.String, until: Schema.Number, reason: Schema.String},
+	braked: {after: Schema.String, reason: Schema.String},
 	stopping: {},
 	stopped: {},
 });
@@ -16,15 +16,15 @@ const Msg = Schema.Union([
 		start: Schema.String,
 		after: Schema.NullOr(Schema.String),
 		build: Schema.String,
-		why: Schema.String,
+		reason: Schema.String,
 	}),
 	Schema.Struct({
 		type: Schema.Literal("waiting"),
 		after: Schema.String,
 		until: Schema.Number,
-		why: Schema.String,
+		reason: Schema.String,
 	}),
-	Schema.Struct({type: Schema.Literal("braked"), after: Schema.String, why: Schema.String}),
+	Schema.Struct({type: Schema.Literal("braked"), after: Schema.String, reason: Schema.String}),
 	Schema.Struct({type: Schema.Literal("stop")}),
 	Schema.Struct({type: Schema.Literal("stopped")}),
 ]);
@@ -44,13 +44,13 @@ export const brainLife = Machine.make({
 		waiting: (s, m) => [
 			terminal(s) || s._tag === "stopping"
 				? s
-				: BrainState.cases.waiting.make({after: m.after, until: m.until, why: m.why}),
+				: BrainState.cases.waiting.make({after: m.after, until: m.until, reason: m.reason}),
 			[],
 		],
 		braked: (s, m) => [
 			terminal(s) || s._tag === "stopping"
 				? s
-				: BrainState.cases.braked.make({after: m.after, why: m.why}),
+				: BrainState.cases.braked.make({after: m.after, reason: m.reason}),
 			[],
 		],
 		stop: (s) => [terminal(s) ? s : BrainState.cases.stopping.make({}), []],

@@ -51,7 +51,7 @@ const dispatch = Effect.fnUntraced(function* (
 		const loaded = yield* workerLoader(env.LOADER, programs).load(name, project);
 		if (method === "init") return yield* loaded.execution.init(args[0]);
 		if (method === "step") return yield* loaded.execution.step(args[0], args[1]);
-		return yield* Effect.fail({why: "unknown_method"});
+		return yield* Effect.fail({reason: "unknown_method"});
 	}
 	if (target === "bucket") {
 		if (method === "put") {
@@ -66,9 +66,9 @@ const dispatch = Effect.fnUntraced(function* (
 			);
 			return yield* bucketHead(env.HEALTH, key);
 		}
-		return yield* Effect.fail({why: "unknown_method"});
+		return yield* Effect.fail({reason: "unknown_method"});
 	}
-	if (!methods[target].has(method)) return yield* Effect.fail({why: "unknown_method"});
+	if (!methods[target].has(method)) return yield* Effect.fail({reason: "unknown_method"});
 	if (
 		target === "project" &&
 		method === "commit" &&
@@ -76,7 +76,7 @@ const dispatch = Effect.fnUntraced(function* (
 		args[1] !== null &&
 		"process" in args[1]
 	)
-		return yield* Effect.fail({why: "reserved"});
+		return yield* Effect.fail({reason: "reserved"});
 	const client =
 		target === "project"
 			? ProjectClient.make(projectStub(env, project))
@@ -105,19 +105,23 @@ export const control = Effect.fn("runtime.control")(function* (
 	// oxlint-disable-next-line fabrika/no-promises -- edge: a Request body returns a Promise
 	const raw = yield* Effect.tryPromise({try: () => request.json(), catch: () => null});
 	const input = Schema.decodeUnknownResult(Request)(raw);
-	if (Result.isFailure(input)) return Response.json({error: {why: "bad_input"}}, {status: 400});
+	if (Result.isFailure(input)) return Response.json({error: {reason: "bad_input"}}, {status: 400});
 	const answer = yield* Effect.result(dispatch(env, programs, input.success));
 	return Result.isSuccess(answer)
 		? Response.json({value: answer.success ?? null})
 		: Response.json(
 				{
 					error: {
-						why:
+						reason:
 							typeof answer.failure === "object" &&
 							answer.failure !== null &&
-							"why" in answer.failure
-								? answer.failure.why
-								: "unreachable",
+							"reason" in answer.failure
+								? answer.failure.reason
+								: typeof answer.failure === "object" &&
+									  answer.failure !== null &&
+									  "why" in answer.failure
+									? answer.failure.why
+									: "unreachable",
 					},
 				},
 				{status: 500},

@@ -237,7 +237,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
 	readonly policy?: (
 		process: string,
 	) => Effect.Effect<
-		{readonly inputs: ReadonlyArray<string>; readonly facts: ReadonlyArray<string>},
+		{readonly inputs: ReadonlyArray<string>; readonly events: ReadonlyArray<string>},
 		LedgerError
 	>;
 	readonly isLive?: (process: string) => Effect.Effect<boolean, LedgerError>;
@@ -354,7 +354,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			Effect.provide(
 				SessionManager.layer(sql, membership, {
 					input: (name) => policy.inputs.includes(name),
-					fact: (kind) => policy.facts.includes(kind),
+					fact: (kind) => policy.events.includes(kind),
 				}),
 			),
 		);
@@ -909,7 +909,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		const policy =
 			target !== "door" && options.policy !== undefined
 				? yield* options.policy(target)
-				: {inputs: options.inputs.personOnly, facts: options.facts.personOnly};
+				: {inputs: options.inputs.personOnly, events: options.facts.personOnly};
 		if (
 			request !== null &&
 			Result.isSuccess(request) &&

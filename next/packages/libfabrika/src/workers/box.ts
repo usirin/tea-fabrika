@@ -3,7 +3,7 @@ import {Effect} from "effect";
 import {
 	Declaration,
 	type Execution,
-	ExecutionFailure,
+	executionFailure,
 	nodeExecution,
 	Reply,
 } from "../app/execution.ts";
@@ -13,7 +13,7 @@ const checked = Effect.fnUntraced(function* <A>(work: Effect.Effect<A, ProgramDo
 	return yield* work.pipe(
 		Effect.match({
 			onSuccess: (value) => value,
-			onFailure: (error) => ExecutionFailure.make({why: error.why, error: error.errorClass}),
+			onFailure: executionFailure,
 		}),
 	);
 });
@@ -22,7 +22,7 @@ const reply = Effect.fnUntraced(function* (execution: Execution, cmd: unknown, o
 	return yield* execution.reply(cmd, outcome).pipe(
 		Effect.match({
 			onSuccess: (value) => Reply.cases.ok.make({value}),
-			onFailure: (error) => Reply.cases.ProgramDown.make({why: error.why}),
+			onFailure: executionFailure,
 		}),
 	);
 });
@@ -79,9 +79,9 @@ export const programBox = (declared: unknown, build: string) => {
 			// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
 			return Effect.runPromise(reply(execution, cmd, outcome));
 		}
-		check(kind: string, fact: unknown) {
+		check(kind: string, event: unknown) {
 			// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
-			return Effect.runPromise(checked(execution.check(kind, fact)));
+			return Effect.runPromise(checked(execution.check(kind, event)));
 		}
 		admit(m: unknown) {
 			// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise

@@ -1,24 +1,24 @@
 import {Effect, FileSystem, Path, Result, Schema, Semaphore} from "effect";
-import {BrainFact} from "../app/brain-fact.ts";
+import {BrainEvent} from "../app/brain-event.ts";
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
-	why: Schema.Literals(["storage", "bad_row", "id_reused"]),
+	reason: Schema.Literals(["storage", "bad_row", "id_reused"]),
 }) {}
-// Facts have no transforms. Validate without rebuilding them, keeping retry bytes in their saved order.
-const PendingFact = Schema.declare<typeof BrainFact.Type>((raw): raw is typeof BrainFact.Type =>
-	Result.isSuccess(Schema.decodeUnknownResult(BrainFact, {onExcessProperty: "error"})(raw)),
+// Events have no transforms. Validate without rebuilding them, keeping retry bytes in their saved order.
+const PendingEvent = Schema.declare<typeof BrainEvent.Type>((raw): raw is typeof BrainEvent.Type =>
+	Result.isSuccess(Schema.decodeUnknownResult(BrainEvent, {onExcessProperty: "error"})(raw)),
 );
 
 export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(options: {
 	readonly pid: number;
 	readonly sample: (pid: number) => Effect.Effect<number, E, R>;
 	readonly replace: (reason: {
-		why: "memory";
+		reason: "memory";
 		pid: number;
 		bytes: number;
 	}) => Effect.Effect<void, E, R>;
 }) {
 	const bytes = yield* options.sample(options.pid);
-	if (bytes >= 500_000_000) yield* options.replace({why: "memory", pid: options.pid, bytes});
+	if (bytes >= 500_000_000) yield* options.replace({reason: "memory", pid: options.pid, bytes});
 });
 
 export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
@@ -32,10 +32,10 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
 		const text = yield* fs.readFileString(file);
 		return yield* Effect.forEach(
 			text.split("\n").filter(Boolean),
-			(row) => Schema.decodeUnknownEffect(Schema.fromJsonString(PendingFact))(row),
+			(row) => Schema.decodeUnknownEffect(Schema.fromJsonString(PendingEvent))(row),
 			{concurrency: 1},
 		);
-	}).pipe(Effect.mapError(() => new BrainError({why: "bad_row"})));
+	}).pipe(Effect.mapError(() => new BrainError({reason: "bad_row"})));
 	const durableWrite = Effect.fnUntraced(
 		function* (target: string, text: string) {
 			yield* fs.makeDirectory(home, {recursive: true});
@@ -56,22 +56,22 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
 				}),
 			);
 		},
-		Effect.mapError(() => new BrainError({why: "storage"})),
+		Effect.mapError(() => new BrainError({reason: "storage"})),
 	);
-	const write = (rows: ReadonlyArray<typeof BrainFact.Type>) =>
+	const write = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
 		durableWrite(
 			file,
 			rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""),
 		);
 	const last = Effect.fnUntraced(function* () {
-		const pending = (yield* read).filter((fact) => fact._tag === "started").at(-1);
+		const pending = (yield* read).filter((event) => event._tag === "started").at(-1);
 		if (pending !== undefined) return pending.start;
 		return yield* Effect.gen(function* () {
 			if (!(yield* fs.exists(lastFile))) return null;
 			return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.NonEmptyString))(
 				yield* fs.readFileString(lastFile),
 			);
-		}).pipe(Effect.mapError(() => new BrainError({why: "bad_row"})));
+		}).pipe(Effect.mapError(() => new BrainError({reason: "bad_row"})));
 	});
 	const saveLast = Effect.fnUntraced(function* () {
 		const start = yield* last();
@@ -83,22 +83,22 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
 		pending: read.pipe(turn.withPermit),
 		add: Effect.fn("brain.pending")(function* (raw: unknown) {
 			yield* Effect.gen(function* () {
-				const fact = yield* Schema.decodeUnknownEffect(PendingFact)(raw).pipe(
-					Effect.mapError(() => new BrainError({why: "bad_row"})),
+				const event = yield* Schema.decodeUnknownEffect(PendingEvent)(raw).pipe(
+					Effect.mapError(() => new BrainError({reason: "bad_row"})),
 				);
 				const rows = yield* read;
-				const old = rows.find((row) => row.id === fact.id);
+				const old = rows.find((row) => row.id === event.id);
 				if (old !== undefined) {
-					if (JSON.stringify(old) !== JSON.stringify(fact))
-						return yield* new BrainError({why: "id_reused"});
+					if (JSON.stringify(old) !== JSON.stringify(event))
+						return yield* new BrainError({reason: "id_reused"});
 					return;
 				}
-				yield* write([...rows, fact]);
-				if (fact._tag === "started") yield* saveLast();
+				yield* write([...rows, event]);
+				if (event._tag === "started") yield* saveLast();
 			}).pipe(turn.withPermit);
 		}),
 		flush: Effect.fn("brain.flush")(function* <E, R>(
-			send: (fact: typeof BrainFact.Type) => Effect.Effect<unknown, E, R>,
+			send: (event: typeof BrainEvent.Type) => Effect.Effect<unknown, E, R>,
 		) {
 			yield* Effect.gen(function* () {
 				const rows = [...(yield* read)];

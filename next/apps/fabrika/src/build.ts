@@ -35,12 +35,12 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 				{concurrency: 1},
 			),
 		);
-	}).pipe(Effect.mapError(() => new BuildError({why: "read"})));
+	}).pipe(Effect.mapError(() => new BuildError({reason: "read"})));
 	const ledger =
 		options.ledger ??
 		(yield* fs.readFileString(path.join(ROOT, "compiler-ledger.json")).pipe(
 			Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Row)))),
-			Effect.mapError(() => new BuildError({why: "read"})),
+			Effect.mapError(() => new BuildError({reason: "read"})),
 		));
 	const compiler: Plugin = {
 		name: "fabrika-compiler",
@@ -80,9 +80,9 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 		.filter((o) => o.type === "chunk")
 		.map((o) => o.code)
 		.join("\n");
-	const build = hash(brain);
+	const build = yield* hash(brain);
 	// Include modules discovered by Rolldown, then check the whole ledger for stale rows.
-	if (check(files, ledger).length) return yield* new BuildError({why: "compiler"});
+	if (check(files, ledger).length) return yield* new BuildError({reason: "compiler"});
 	yield* Effect.gen(function* () {
 		const directory = path.dirname(options.out);
 		if (!(yield* fs.exists(directory))) yield* fs.makeDirectory(directory, {recursive: true});
@@ -91,7 +91,10 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 		yield* Effect.gen(function* () {
 			yield* fs.writeFileString(path.join(pending, "brain.mjs"), brain);
 			for (const [file, text] of files)
-				yield* fs.writeFileString(path.join(pending, `${hash(file)}.js`), compile(file, text).code);
+				yield* fs.writeFileString(
+					path.join(pending, `${yield* hash(file)}.js`),
+					compile(file, text).code,
+				);
 			if (yield* fs.exists(options.out)) yield* fs.rename(options.out, backup);
 			yield* fs.rename(pending, options.out).pipe(
 				Effect.catch((error) =>
@@ -109,6 +112,6 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 			),
 			Effect.uninterruptible,
 		);
-	}).pipe(Effect.mapError(() => new BuildError({why: "publish"})));
+	}).pipe(Effect.mapError(() => new BuildError({reason: "publish"})));
 	return {build, brain: path.join(options.out, "brain.mjs"), programs} satisfies Built;
 });

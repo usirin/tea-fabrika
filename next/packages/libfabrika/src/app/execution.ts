@@ -1,5 +1,5 @@
 import {type AnyCmdDef, type Tagged} from "@demlik/tea";
-import {Context, Effect, Option, Result, Schema} from "effect";
+import {Cause, Context, Effect, Option, Result, Schema} from "effect";
 import {Deliveries} from "../coordination/recovery.ts";
 import {type Input, ProgramDown, stepper, Step, type Stepper} from "./program.ts";
 import {Saved} from "./state.ts";
@@ -20,16 +20,37 @@ const Outcome = Schema.TaggedUnion({
 });
 const Typed = Schema.Struct({type: Schema.String});
 
+// Match P37's deletable failure-content ceiling, half a Durable Object row.
+const MOST_CONTENT = 1_000_000;
 /** Program failures are checked RPC data; a rejected call is a transport failure. */
-export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", {
-	why: ProgramDown.fields.why,
+const Failure = {
+	reason: ProgramDown.fields.why,
 	error: Schema.String,
-});
+	content: Schema.String.check(Schema.isMaxLength(MOST_CONTENT)),
+};
+export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", Failure);
+
+export const executionFailure = (error: ProgramDown) =>
+	ExecutionFailure.make({
+		reason: error.why,
+		error: error.errorClass,
+		content: Cause.pretty(Cause.fail(Object.hasOwn(error, "cause") ? error.cause : error)).slice(
+			0,
+			MOST_CONTENT,
+		),
+	});
+
+const programFailure = (failure: typeof ExecutionFailure.Type) => {
+	// Restore only checked text, never an arbitrary remote object or prototype.
+	const cause = new Error(failure.content);
+	cause.stack = failure.content;
+	return new ProgramDown({why: failure.reason, error: failure.error, cause});
+};
 
 /** A checked reply failure crosses RPC as data; a rejected call remains an RPC failure. */
 export const Reply = Schema.TaggedUnion({
 	ok: {value: Schema.Json},
-	ProgramDown: {why: ProgramDown.fields.why},
+	ProgramDown: Failure,
 });
 
 export const Declaration = Schema.Struct({
@@ -54,7 +75,7 @@ export type Execution = {
 	readonly fold: (model: unknown, msg: unknown) => Effect.Effect<Step, ProgramDown>;
 	readonly upgrade: (saved: unknown) => Effect.Effect<typeof Upgraded.Type, ProgramDown>;
 	readonly reply: (cmd: unknown, outcome: unknown) => Effect.Effect<Schema.Json, ProgramDown>;
-	readonly check: (kind: string, fact: unknown) => Effect.Effect<boolean, ProgramDown>;
+	readonly check: (kind: string, event: unknown) => Effect.Effect<boolean, ProgramDown>;
 	/** Whether a stamped input decodes against its write port's schema, checked inside the box. */
 	readonly admit: (m: unknown) => Effect.Effect<boolean, ProgramDown>;
 };
@@ -65,14 +86,15 @@ export type ExecutionCalls = {
 	readonly fold: (model: unknown, msg: unknown) => Promise<unknown>;
 	readonly upgrade: (saved: unknown) => Promise<unknown>;
 	readonly reply: (cmd: unknown, outcome: unknown) => Promise<unknown>;
-	readonly check?: (kind: string, fact: unknown) => Promise<unknown>;
+	readonly check?: (kind: string, event: unknown) => Promise<unknown>;
 	readonly admit?: (m: unknown) => Promise<unknown>;
 };
 
-const attempt = <A>(why: ProgramDown["why"], f: () => A) =>
+const attempt = <A>(reason: ProgramDown["why"], f: () => A) =>
 	Effect.try({
 		try: f,
-		catch: (cause) => (cause instanceof ProgramDown ? cause : new ProgramDown({why, cause})),
+		catch: (cause) =>
+			cause instanceof ProgramDown ? cause : new ProgramDown({why: reason, cause}),
 	});
 
 const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> =>
@@ -122,8 +144,8 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
 	const pure = Effect.fromResult(stepper(declared)).pipe(
 		Effect.mapError(() => new ProgramDown({why: "load"})),
 	);
-	const run = <A>(why: ProgramDown["why"], f: (pure: Stepper) => A) =>
-		pure.pipe(Effect.flatMap((loaded) => attempt(why, () => f(loaded))));
+	const run = <A>(reason: ProgramDown["why"], f: (pure: Stepper) => A) =>
+		pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
 	return {
 		init: Effect.fn("execution.init")((saved) => run("load", (pure) => pure.init(saved))),
 		step: Effect.fn("execution.step")((model, msg) => run("step", (pure) => pure.step(model, msg))),
@@ -139,11 +161,11 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
 		admit: Effect.fn("execution.admit")((m) =>
 			run("step", (pure) => admits(pure.program.inputs, m)),
 		),
-		check: Effect.fn("execution.check")((kind, fact) =>
+		check: Effect.fn("execution.check")((kind, event) =>
 			run("step", (pure) => {
 				const policy = pure.program.writes[kind];
 				return (
-					policy !== undefined && Result.isSuccess(Schema.decodeUnknownResult(policy.schema)(fact))
+					policy !== undefined && Result.isSuccess(Schema.decodeUnknownResult(policy.schema)(event))
 				);
 			}),
 		),
@@ -190,13 +212,13 @@ class ExecutionClient extends Context.Service<
 					try: () => rpc.reply(cmd, outcome),
 					catch: (cause) => new ProgramDown({why: "step", source: "rpc", cause}),
 				}),
-			check: (kind, fact) => {
+			check: (kind, event) => {
 				const check = rpc.check;
 				if (check === undefined) return Effect.fail(new ProgramDown({why: "load"}));
 				// Reflect.apply keeps this without reading a remote method named call off the stub.
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader check RPC enters Effect
 				return Effect.tryPromise({
-					try: () => Reflect.apply(check, rpc, [kind, fact]),
+					try: () => Reflect.apply(check, rpc, [kind, event]),
 					catch: (cause) => new ProgramDown({why: "step", source: "rpc", cause}),
 				});
 			},
@@ -218,16 +240,16 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
 	const ask = <A>(
 		schema: Schema.Decoder<A>,
 		work: Effect.Effect<unknown, ProgramDown>,
-		why: ProgramDown["why"],
+		reason: ProgramDown["why"],
 	) =>
 		work.pipe(
 			Effect.flatMap((raw) => {
 				const failed = Schema.decodeUnknownResult(ExecutionFailure)(raw);
-				if (Result.isSuccess(failed)) return Effect.fail(new ProgramDown(failed.success));
+				if (Result.isSuccess(failed)) return Effect.fail(programFailure(failed.success));
 				const decoded = Schema.decodeUnknownResult(schema)(raw);
 				return Result.isSuccess(decoded)
 					? Effect.succeed(decoded.success)
-					: Effect.fail(new ProgramDown({why, source: "decode", cause: decoded.failure}));
+					: Effect.fail(new ProgramDown({why: reason, source: "decode", cause: decoded.failure}));
 			}),
 		);
 	return {
@@ -242,14 +264,12 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
 		reply: Effect.fn("execution.reply")((cmd, outcome) =>
 			ask(Reply, rpc.reply(cmd, outcome), "step").pipe(
 				Effect.flatMap((answer) =>
-					answer._tag === "ok"
-						? Effect.succeed(answer.value)
-						: Effect.fail(new ProgramDown({why: answer.why})),
+					answer._tag === "ok" ? Effect.succeed(answer.value) : Effect.fail(programFailure(answer)),
 				),
 			),
 		),
-		check: Effect.fn("execution.check")((kind, fact) =>
-			ask(Schema.Boolean, rpc.check(kind, fact), "step"),
+		check: Effect.fn("execution.check")((kind, event) =>
+			ask(Schema.Boolean, rpc.check(kind, event), "step"),
 		),
 		admit: Effect.fn("execution.admit")((m) => ask(Schema.Boolean, rpc.admit(m), "step")),
 	};

@@ -1,18 +1,22 @@
-import {createHash} from "node:crypto";
 import {Effect, Path, Schema} from "effect";
+import {Digest} from "effect/crypto";
 import {rolldown, type Plugin} from "rolldown";
 import type {ProgramSource} from "../app/execution.ts";
 
 export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
-	why: Schema.String,
+	reason: Schema.String,
 	message: Schema.optionalKey(Schema.String),
 }) {}
-export const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+export const hash = Effect.fn("build.hash")((text: string) =>
+	Digest.Digest.use((digest) =>
+		digest.digestHex(Digest.sha256, new TextEncoder().encode(text)),
+	).pipe(Effect.provide(Digest.layerWebCrypto)),
+);
 export const bundle = Effect.fn("build.bundle")(function* (input: string, plugins: Array<Plugin>) {
 	// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown's build API returns a Promise
 	const built = yield* Effect.tryPromise({
 		try: () => rolldown({input, plugins, platform: "browser", external: ["cloudflare:workers"]}),
-		catch: (error) => new BuildError({why: "bundle", message: String(error)}),
+		catch: (error) => new BuildError({reason: "bundle", message: String(error)}),
 	});
 	return yield* Effect.acquireUseRelease(
 		Effect.succeed(built),
@@ -20,7 +24,7 @@ export const bundle = Effect.fn("build.bundle")(function* (input: string, plugin
 			// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown generates through a Promise
 			Effect.tryPromise({
 				try: () => b.generate({format: "esm", codeSplitting: false}),
-				catch: (error) => new BuildError({why: "generate", message: String(error)}),
+				catch: (error) => new BuildError({reason: "generate", message: String(error)}),
 			}),
 		// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown closes through a Promise
 		(b) => Effect.promise(() => b.close()),
@@ -53,7 +57,7 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 			.filter((o) => o.type === "chunk")
 			.map((o) => o.code)
 			.join("\n");
-		programs[name] = {hash: hash(source), source};
+		programs[name] = {hash: yield* hash(source), source};
 	}
 	return programs;
 });

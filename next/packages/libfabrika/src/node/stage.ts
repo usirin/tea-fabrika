@@ -1,11 +1,12 @@
-import {execFile} from "node:child_process";
-import {randomBytes} from "node:crypto";
 import * as Plugin from "@alchemy.run/cloudflare-runtime/core/Plugin";
 import {RuntimeLifecycle, type RuntimeEvent} from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import {SystemError} from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
 import {applyCell} from "@demlik/tea";
-import {Context, Deferred, Effect, Exit, Queue, Redacted, Schema, Scope} from "effect";
-import {BrainFact} from "../app/brain-fact.ts";
+import {Context, Deferred, Effect, Exit, Queue, Redacted, Schema, Scope, Stream} from "effect";
+import {SecureRandom} from "effect/crypto";
+import {Base64Url} from "effect/encoding";
+import {ChildProcess} from "effect/process";
+import {BrainEvent} from "../app/brain-event.ts";
 import {brainLife} from "../app/brain-life.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
 import {SpanSink} from "../data/sink.ts";
@@ -16,30 +17,25 @@ class ControlPlugin extends Plugin.Service<ControlPlugin>()(
 	"cloudflare-runtime/plugin/FabrikaControl",
 ) {}
 class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
-	why: Schema.String,
+	reason: Schema.String,
 }) {}
 type Target = "project" | "process" | "record" | "loader" | "bucket";
 const Response = Schema.Struct({
 	value: Schema.optionalKey(Schema.Unknown),
-	error: Schema.optionalKey(Schema.Struct({why: Schema.String})),
+	error: Schema.optionalKey(Schema.Struct({reason: Schema.String})),
 });
 const sample = (pid: number) =>
-	Effect.callback<number, ControlError>((resume) => {
-		const child = execFile(
-			"ps",
-			["-o", "rss=", "-p", String(pid)],
-			{encoding: "utf8"},
-			(error, text) =>
-				resume(
-					error
-						? Effect.fail(new ControlError({why: "sample"}))
-						: Effect.succeed(Number(text.trim()) * 1024),
-				),
-		);
-		return Effect.sync(() => {
-			child.kill();
-		});
-	});
+	Effect.scoped(
+		Effect.gen(function* () {
+			const child = yield* ChildProcess.make("ps", ["-o", "rss=", "-p", String(pid)]);
+			const [text, code] = yield* Effect.all(
+				[Stream.mkString(Stream.decodeText(child.stdout)), child.exitCode],
+				{concurrency: 2},
+			);
+			if (code !== 0) return yield* new ControlError({reason: "sample"});
+			return Number(text.trim()) * 1024;
+		}),
+	).pipe(Effect.mapError(() => new ControlError({reason: "sample"})));
 const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) {
 	const raw = yield* work;
 	if (raw === null) return null;
@@ -68,14 +64,16 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		runtimeScope = yield* Scope.make(),
 		events = yield* Queue.unbounded<{
 			readonly event: RuntimeEvent;
-			readonly why: (typeof BrainFact.cases.started.Type)["why"];
+			readonly reason: (typeof BrainEvent.cases.started.Type)["reason"];
 			readonly bytes: number | undefined;
 		}>(),
 		// Alchemy's local Worker provider forks the workerd start, so deploy returns before workerd
 		// listens. The control socket's first start opens this latch.
 		listening = yield* Deferred.make<void>(),
 		started = yield* Deferred.make<void>();
-	const token = Redacted.make(randomBytes(32).toString("base64url"));
+	const token = Redacted.make(
+		Base64Url.encode(yield* SecureRandom.SecureRandom.use((random) => random.randomBytes(32))),
+	);
 	let port = 0,
 		pid = 0,
 		previous = yield* outbox.last,
@@ -88,8 +86,8 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 	const transition = (
 		msg:
 			| Parameters<typeof brainLife.update.started>[1]
-			| {type: "waiting"; after: string; until: number; why: string}
-			| {type: "braked"; after: string; why: string}
+			| {type: "waiting"; after: string; until: number; reason: string}
+			| {type: "braked"; after: string; reason: string}
 			| {type: "stop"}
 			| {type: "stopped"},
 	) => {
@@ -102,7 +100,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		method: string,
 		args: ReadonlyArray<unknown>,
 	) {
-		if (port === 0) return yield* new ControlError({why: "offline"});
+		if (port === 0) return yield* new ControlError({reason: "offline"});
 		// oxlint-disable-next-line fabrika/no-promises -- edge: the private runtime socket is an HTTP transport for object calls
 		const response = yield* Effect.tryPromise({
 			try: () =>
@@ -115,20 +113,20 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 					},
 					body: JSON.stringify({target, project, name, method, args}),
 				}),
-			catch: () => new ControlError({why: "unreachable"}),
+			catch: () => new ControlError({reason: "unreachable"}),
 		});
 		// oxlint-disable-next-line fabrika/no-promises -- edge: the binding transport response returns a Promise
 		const raw = yield* Effect.tryPromise({
 			try: () => response.json(),
-			catch: () => new ControlError({why: "bad_row"}),
+			catch: () => new ControlError({reason: "bad_row"}),
 		});
 		const answer = yield* Schema.decodeUnknownEffect(Response)(raw).pipe(
-			Effect.mapError(() => new ControlError({why: "bad_row"})),
+			Effect.mapError(() => new ControlError({reason: "bad_row"})),
 		);
 		if (answer.error !== undefined) return yield* new ControlError(answer.error);
 		return answer.value;
 	});
-	const flush = outbox.flush((fact) => call("project", config.name, "", "brain", [fact]));
+	const flush = outbox.flush((event) => call("project", config.name, "", "brain", [event]));
 	const recording = yield* stageRecording(
 		options.home,
 		`brain:${config.name}`,
@@ -153,7 +151,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		);
 	const local = Context.empty().pipe(
 		Context.add(RuntimeLifecycle, (event) => {
-			const observed = {event, why: reason, bytes};
+			const observed = {event, reason, bytes};
 			// A new child starts with a clean cause before any queued file write can yield.
 			if (event.type === "start") {
 				reason = "crash";
@@ -199,11 +197,11 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		yield* Scope.close(runtimeScope, Exit.void);
 		if (start !== "") {
 			yield* outbox.add(
-				BrainFact.cases.stopped.make({
+				BrainEvent.cases.stopped.make({
 					id: `${start}/stopped`,
 					start,
 					at: Date.now(),
-					why: "stop",
+					reason: "stop",
 				}),
 			);
 			yield* flush.pipe(Effect.ignore);
@@ -218,15 +216,15 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 	});
 	const recordEvents = Effect.forever(
 		Effect.gen(function* () {
-			const {event, why, bytes: rss} = yield* Queue.take(events);
+			const {event, reason, bytes: rss} = yield* Queue.take(events);
 			if (stopping) return;
 			if (event.type === "exit") {
 				yield* outbox.add(
-					BrainFact.cases.exited.make({
+					BrainEvent.cases.exited.make({
 						id: `${start}/exited`,
 						start,
 						at: Date.now(),
-						why,
+						reason,
 						exitCode: event.exit.exitCode,
 						signal: event.exit.signal === null ? null : String(event.exit.signal),
 						...(rss === undefined ? {} : {bytes: rss}),
@@ -241,27 +239,27 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 				previous = start || previous;
 				start = yield* ids.next;
 				pid = event.pid;
-				const fact = BrainFact.cases.started.make({
+				const startedEvent = BrainEvent.cases.started.make({
 					id: `${start}/started`,
 					start,
 					after: previous,
 					build: config.build,
-					why,
+					reason,
 					pid,
 					at: Date.now(),
 					...(rss === undefined ? {} : {bytes: rss}),
 				});
-				transition({type: "started", ...fact});
-				yield* outbox.add(fact);
+				transition({type: "started", ...startedEvent});
+				yield* outbox.add(startedEvent);
 				yield* Deferred.succeed(started, undefined);
 			} else if (event.type === "restart") {
-				transition({type: "waiting", after: start, until: Date.now() + event.delay, why});
+				transition({type: "waiting", after: start, until: Date.now() + event.delay, reason});
 				yield* outbox.add(
-					BrainFact.cases.restarting.make({
+					BrainEvent.cases.restarting.make({
 						id: `${start}/restarting`,
 						start,
 						at: Date.now(),
-						why,
+						reason,
 						exitCode: event.exit.exitCode,
 						signal: event.exit.signal === null ? null : String(event.exit.signal),
 						backoff: event.delay,
@@ -270,16 +268,16 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 				);
 			} else if (event.type === "stop") {
 				if (replacement !== null) {
-					yield* Deferred.fail(replacement, new ControlError({why: event.why}));
+					yield* Deferred.fail(replacement, new ControlError({reason: event.reason}));
 					replacement = null;
 				}
-				transition({type: "braked", after: start, why: event.why});
+				transition({type: "braked", after: start, reason: event.reason});
 				yield* outbox.add(
-					BrainFact.cases.braked.make({
+					BrainEvent.cases.braked.make({
 						id: `${start}/braked`,
 						start,
 						at: Date.now(),
-						why: event.why,
+						reason: event.reason,
 						exitCode: event.exit.exitCode,
 						signal: event.exit.signal === null ? null : String(event.exit.signal),
 					}),
@@ -294,7 +292,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		yield* Deferred.await(listening).pipe(
 			Effect.timeoutOrElse({
 				duration: "30 seconds",
-				orElse: () => Effect.fail(new ControlError({why: "start_timeout"})),
+				orElse: () => Effect.fail(new ControlError({reason: "start_timeout"})),
 			}),
 		);
 		yield* Deferred.await(started);
