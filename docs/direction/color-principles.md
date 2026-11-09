@@ -121,22 +121,20 @@ nothing waits, that control is plain.
   recorded, or the answer on an open ask. It takes the turn fill while it waits, and goes plain
   once you act or cancel. A view with nothing waiting has no accent at all.
 - **The known way.** Apple's HIG gives the primary role to "the button people are most likely to
-  choose". A primary button "uses an app's accent color" and answers the Return key, and a view
-  keeps prominent buttons "to one or two"
-  ([Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons), read
-  2026-11-08). We take one, not two. Apple also never gives the primary role to a destructive
-  action, so neither does the accent here. That Linear shows one main action per view is a guess
+  choose". A primary button "uses an app's accent color", and a view keeps prominent buttons "to
+  one or two" ([Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons),
+  read 2026-11-08). We take one, not two. That Linear shows one main action per view is a guess
   from using its app; no page of theirs we read says so. Its redesign did keep colored chrome low
   ([How we redesigned the Linear UI](https://linear.app/now/how-we-redesigned-the-linear-ui), read
   2026-11-08).
-- **How it fits.** Principle 3 still holds: the control's word and the Return key say it too, so
-  the color is never alone.
+- **How it fits.** Principle 3 still holds: the control's own word says it too, so the color is
+  never alone.
 - **The law must learn this case.** The accent law (A3 in `apps/fabrika/src/window/colors.test.ts`)
   lists fixed turn selectors, so it cannot yet say "accented only while waiting" or "one per view".
   That change is tracker ticket 305, and its plan goes to the owner.
-- **How sure:** 75%. The doubt: many views, each with its own accent, may dull the top bar's turn
-  count, the one place that says how many turns are yours. Shots of three views side by side, each
-  with an action waiting, would settle it.
+- **How sure:** the rule is decided. One doubt is left, at 75%: many views, each with its own
+  accent, may dull the top bar's turn count, the one place that says how many turns are yours.
+  Shots of three views side by side, each with an action waiting, would settle it.
 
 ## What today's code still breaks
 
