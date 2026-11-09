@@ -9,13 +9,7 @@
 	// Each rule is named here, so a new oxlint release adds none on its own.
 	"categories": { "correctness": "off" },
 	"options": { "reportUnusedDisableDirectives": "error" },
-	"ignorePatterns": [
-		"**/fixtures/**",
-		"**/experiments/results/**",
-		"blog/**",
-		"video/**",
-		"unreachable-ledger.json"
-	],
+	"ignorePatterns": ["**/fixtures/**", "**/experiments/results/**", "unreachable-ledger.json"],
 	"rules": {
 		// "warn" here only advises: lint.ts prints these two and does not fail on them. They were
 		// wrong too often to block (experiment 125). Any other warning fails.
