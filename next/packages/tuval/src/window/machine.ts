@@ -10,6 +10,12 @@
 // of the first one still waiting for its time, in slot order. Leaving online forgets both, so the
 // next dial starts over and a letter keeps its id across dials.
 //
+// A brain call (`process.send`, `view.open`, `door.knock`) is a `write` Cmd (plan A13): it settles
+// once its frame is handed to the socket, never waiting for the brain, since tea's loop folds
+// nothing while a Cmd is unanswered. Its answer is the socket Sub's Msg, matched by the write's
+// JSON-RPC id and dial against the calls in flight; an answer that matches none does nothing. A
+// dial's end drops its calls; their letters stay in the client and go again by the rules above.
+//
 // What it records (plan A8), each through the `record` Cmd: the key a dial found, one `connect` row
 // per link outcome with the `ms` its Msg carries, a press before its letter goes, a `reply` row when
 // a letter settles (with every `send` of it and the answer's `ms`), the persistence answer, and a
@@ -19,7 +25,8 @@
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { ClientRecord, Keys, ProgramClient, type Rows, Sent } from "@kampus/libfabrika";
-import { knock, Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "@kampus/libfabrika/transport";
+import type { knock } from "@kampus/libfabrika/transport";
+import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "@kampus/libfabrika/transport";
 import { Schema } from "effect";
 import { routeKey } from "../desktop/keys.ts";
 import { type Layout, tilesIn } from "../desktop/layout.ts";
@@ -55,6 +62,35 @@ const Rows = Schema.Record(Schema.String, Schema.Array(Schema.String));
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 
+/** One brain call as a write carries it: `process.send` for one ready letter, with the same id
+ *  and body every time; `view.open` for one pid; `door.knock` on the dial's socket. */
+const Call = Schema.TaggedUnion({
+  send: {
+    pid: Schema.String,
+    letter: Schema.String,
+    n: Schema.Int,
+    m: Schema.Json,
+    sentAt: Schema.String,
+    seen: Schema.Int,
+    traceId: Schema.optionalKey(Schema.String),
+  },
+  open: { pid: Schema.String },
+  knock: {},
+});
+type Call = typeof Call.Type;
+
+/** Why a call's answer is not its value: `unreachable`, the socket or the brain is gone for now, so
+ *  a later write retries; `unknown`, an answer this client cannot use, with the door's reason;
+ *  `closed`, a knock that could not go. */
+const CallError = Schema.TaggedUnion({
+  unreachable: {},
+  unknown: { reason: Schema.optionalKey(Schema.String) },
+  closed: {},
+});
+
+/** The dial and JSON-RPC id an answer names: the write it answers. */
+const OnWrite = { id: Schema.Int, dial: Schema.Int };
+
 export const WindowModel = Schema.Struct({
   /** The fixed layout's tiles, `{id, pid}` in reading order, read from the ctx at init. */
   tiles: Schema.Array(Schema.Struct({ id: Schema.String, pid: Schema.String })),
@@ -71,6 +107,10 @@ export const WindowModel = Schema.Struct({
   opened: Schema.Array(Schema.String),
   /** The letters out on this dial with no answer yet. */
   sent: Schema.Array(Schema.String),
+  /** The next write's JSON-RPC id: never two alike, on any dial. */
+  serial: Schema.Int,
+  /** Each write handed to the socket and not answered yet, on the dial whose socket is open. */
+  flight: Schema.Array(Schema.Struct({ id: Schema.Int, dial: Schema.Int, call: Call })),
   /** How many times each unsettled letter was sent, across dials, for its reply record. */
   attempts: Schema.Record(Schema.String, Count),
   /** How many patches each pid installed since its last view row: the run its next row ends. */
@@ -126,6 +166,19 @@ const Own = Schema.Union([
   Schema.Struct({ type: Schema.Literal("keys_failed"), error: Keys.KeyProblem }),
   /** The highest ledger revision the client has read. */
   Schema.Struct({ type: Schema.Literal("seen"), rev: Schema.Int }),
+  // The socket Sub's answers to the writes, by id and dial. `ms` is the runner's, from the write it
+  // saw to the frame it read.
+  Schema.Struct({ type: Schema.Literal("send_ok"), ...OnWrite, value: Sent, ms: Ms }),
+  Schema.Struct({ type: Schema.Literal("send_err"), ...OnWrite, error: CallError }),
+  Schema.Struct({
+    type: Schema.Literal("open_ok"),
+    ...OnWrite,
+    value: Schema.Struct({ rev: Schema.Int, view: Schema.Json }),
+    ms: Ms,
+  }),
+  Schema.Struct({ type: Schema.Literal("open_err"), ...OnWrite, error: CallError }),
+  Schema.Struct({ type: Schema.Literal("knock_ok"), ...OnWrite, value: Schema.Null, ms: Ms }),
+  Schema.Struct({ type: Schema.Literal("knock_err"), ...OnWrite, error: CallError }),
   /** How a dial found the profile's key: made now, reused, or made to replace a removed one. */
   Schema.Struct({ type: Schema.Literal("identity"), found: Schema.Literals(["created", "reused", "replaced"]) }),
 ]);
@@ -141,33 +194,12 @@ export const now = Cmd.make("now", {
   err: ["clock", "entropy"],
 });
 
-/** What `process.send` answered, a `Sent`, and how long the call took as the handler timed it. */
-const Answered = Schema.TaggedUnion({
-  accepted: { ...Sent.cases.accepted.fields, ms: Ms },
-  refused: { ...Sent.cases.refused.fields, ms: Ms },
-});
-
-/** `process.send` for one ready letter, with the same id and body every time. */
-export const send = Cmd.make("send", {
-  input: Schema.Struct({
-    pid: Schema.String,
-    letter: Schema.String,
-    n: Schema.Int,
-    m: Schema.Json,
-    sentAt: Schema.String,
-    seen: Schema.Int,
-    traceId: Schema.optionalKey(Schema.String),
-    dial: Schema.Int,
-  }),
-  ok: Answered,
-  err: ["unreachable", "unknown"],
-});
-
-/** `view.open` for one pid on one dial. */
-export const open = Cmd.make("open", {
-  input: Schema.Struct({ pid: Schema.String, dial: Schema.Int }),
-  ok: Schema.Struct({ rev: Schema.Int, view: Schema.Json }),
-  err: ["unreachable", "unknown"],
+/** Hand one call's frame to the dial's socket, as JSON-RPC id `id`. It settles once the frame is
+ *  handed over, or at once as unreachable when it cannot be; the brain's answer is the socket Sub's. */
+export const write = Cmd.make("write", {
+  input: Schema.Struct({ call: Call, id: Schema.Int, dial: Schema.Int }),
+  ok: Schema.Null,
+  err: ["unreachable"],
 });
 
 /** Ask the browser to keep this origin's storage, once per new grant. */
@@ -187,12 +219,10 @@ export const record = Cmd.make("record", {
 
 type Out = ReadonlyArray<
   | ReturnType<typeof now>
-  | ReturnType<typeof send>
-  | ReturnType<typeof open>
+  | ReturnType<typeof write>
   | ReturnType<typeof persist>
   | ReturnType<typeof record>
   | ReturnType<typeof ping>
-  | ReturnType<typeof knock>
 >;
 
 type Step = readonly [WindowModel, Out];
@@ -210,28 +240,43 @@ const commandFor = (s: WindowModel, pid: string, m: unknown): string => {
   return (s.commands[pid] ?? []).find((c) => c.endsWith(`.${type}`)) ?? type;
 };
 
-/** The letters that may go now and are not out yet, as `send` Cmds for this dial. */
-const sends = (s: WindowModel, dial: number): ReadonlyArray<ReturnType<typeof send>> =>
+type SendCall = typeof Call.cases.send.Type;
+
+/** The letters that may go now and are not out yet, as `send` calls. */
+const sends = (s: WindowModel): ReadonlyArray<SendCall> =>
   C.sendable(s.client)
     .filter((p) => !s.sent.includes(p.letter))
     .map((p) =>
-      send({
+      Call.cases.send.make({
         pid: p.pid,
         letter: p.letter,
         n: p.n,
         m: p.m,
         sentAt: p.sentAt,
         seen: p.seen,
-        dial,
         ...(p.traceId === undefined ? {} : { traceId: p.traceId }),
       }),
     );
 
-/** Each letter's send count, with one more for every `send` in `out`. */
-const counted = (
-  attempts: WindowModel["attempts"],
-  out: ReadonlyArray<ReturnType<typeof send>>,
-): WindowModel["attempts"] => {
+/** One write per call on `dial`, in order, each with the next id and kept in flight. */
+const wrote = (
+  s: WindowModel,
+  dial: number,
+  calls: ReadonlyArray<Call>,
+): readonly [WindowModel, ReadonlyArray<ReturnType<typeof write>>] => {
+  const out = calls.map((call, k) => write({ call, id: s.serial + k, dial }));
+  return [
+    {
+      ...s,
+      serial: s.serial + out.length,
+      flight: [...s.flight, ...out.map((c) => ({ id: c.id, dial: c.dial, call: c.call }))],
+    },
+    out,
+  ];
+};
+
+/** Each letter's send count, with one more for every send in `out`. */
+const counted = (attempts: WindowModel["attempts"], out: ReadonlyArray<SendCall>): WindowModel["attempts"] => {
   const next: Record<string, number> = { ...attempts };
 
   for (const c of out) {
@@ -241,16 +286,33 @@ const counted = (
   return next;
 };
 
-/** Sends what may go now when online, marking it out. */
+/** Writes what may go now when online, marking it out. */
 const flush = (s: WindowModel): Step => {
   if (s.link._tag !== "online") {
     return [s, []];
   }
 
-  const out = sends(s, s.link.dial);
+  const out = sends(s);
   return out.length === 0
     ? [s, []]
-    : [{ ...s, sent: [...s.sent, ...out.map((c) => c.letter)], attempts: counted(s.attempts, out) }, out];
+    : wrote(
+        { ...s, sent: [...s.sent, ...out.map((c) => c.letter)], attempts: counted(s.attempts, out) },
+        s.link.dial,
+        out,
+      );
+};
+
+/** The call in flight that an answer names by its id and dial, with the flight without it, or null
+ *  when the answer is stale: its dial or id is not in flight, or the call is not of its kind. */
+const answered = (
+  s: WindowModel,
+  m: { readonly id: number; readonly dial: number },
+  tag: Call["_tag"],
+): { readonly call: Call; readonly rest: WindowModel["flight"] } | null => {
+  const found = s.flight.find((f) => f.id === m.id && f.dial === m.dial);
+  return found === undefined || found.call._tag !== tag
+    ? null
+    : { call: found.call, rest: s.flight.filter((f) => f !== found) };
 };
 
 /** The row that ends `pid`'s run of patches, at the rev the last one installed, or none for an empty
@@ -386,19 +448,27 @@ const datedSlot = (
 
 /** Steps the link by hand, then does what its move means for this window. */
 const linked = (s: WindowModel, m: LinkMsg): Step => {
-  const [link, linkCmds] = applyCell<Link, LinkMsg, ReturnType<typeof ping> | ReturnType<typeof knock>>(
+  const [link, cmds] = applyCell<Link, LinkMsg, ReturnType<typeof ping> | ReturnType<typeof knock>>(
     linkMachine,
     s.link,
     m,
   );
   const granted = m.type === "granted" && s.link._tag === "waiting_grant" && s.link.dial === m.dial;
-  const next: WindowModel = {
-    ...s,
-    link,
-    dials: Math.max(s.dials, socketDial(link) ?? 0),
-    fresh: s.fresh || granted,
-    rejected: link._tag === "removed" ? link.fingerprint : s.rejected,
-  };
+  const open = socketDial(link);
+  // The link's knock is a write on its dial; a dial whose socket ended drops its calls in flight.
+  const [next, knocks] = wrote(
+    {
+      ...s,
+      link,
+      dials: Math.max(s.dials, open ?? 0),
+      fresh: s.fresh || granted,
+      rejected: link._tag === "removed" ? link.fingerprint : s.rejected,
+      flight: s.flight.filter((f) => f.dial === open),
+    },
+    open ?? 0,
+    cmds.filter((c) => c.type === "knock").map(() => Call.cases.knock.make({})),
+  );
+  const linkCmds = [...cmds.flatMap((c) => (c.type === "ping" ? [c] : [])), ...knocks];
   const connected = connectRow(s.link, link, m);
 
   if (link._tag !== "online") {
@@ -416,10 +486,9 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
 
   // Going online: open each distinct pid once, send what waited in order, ask persistence once.
   const pids = [...new Set(s.tiles.map((t) => t.pid))];
-  const opens = pids.map((pid) => open({ pid, dial: link.dial }));
-  const out = sends({ ...next, sent: [] }, link.dial);
+  const out = sends({ ...next, sent: [] });
   const asked = next.fresh ? [persist({})] : [];
-  return [
+  const [written, writes] = wrote(
     {
       ...next,
       opened: pids,
@@ -428,8 +497,10 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
       fresh: false,
       trouble: null,
     },
-    [...linkCmds, ...connected, ...opens, ...out, ...asked],
-  ];
+    link.dial,
+    [...pids.map((pid) => Call.cases.open.make({ pid })), ...out],
+  );
+  return [written, [...linkCmds, ...connected, ...writes, ...asked]];
 };
 
 const findTile = (s: WindowModel, id: string | null) =>
@@ -466,6 +537,8 @@ const fresh = (ctx: WindowCtx | undefined, client: ProgramClient.Client): Window
     client,
     opened: [],
     sent: [],
+    serial: 1,
+    flight: [],
     attempts: {},
     patches: {},
     fresh: false,
@@ -498,7 +571,7 @@ export const windowMachineFor = (checks: WindowChecks) => {
   return Machine.make({
     model: WindowModel,
     msg: Schema.Union([LinkMsg, Own]),
-    cmds: [now, send, open, persist, record, ping, knock],
+    cmds: [now, write, persist, record, ping],
     types: { sub: {} as SocketSub, ctx: {} as WindowCtx },
     init: (loaded, ctx) => [loaded ?? fresh(ctx, clientMachine.init(null, {})[0]), []],
     update: {
@@ -509,10 +582,34 @@ export const windowMachineFor = (checks: WindowChecks) => {
         s.client.pending.some((p) => p.n === m.cmd.n && p._tag === "dating") && !s.redate.includes(m.cmd.n)
           ? [{ ...s, redate: [...s.redate, m.cmd.n] }, []]
           : [s, []],
+      // A write handed over waits for its answer on the socket. One that could not be handed over is
+      // no longer in flight: its letter may go again, and an open that did not go says so.
+      write_ok: (s) => [s, []],
+      write_err: (s, m) => {
+        const found = answered(s, m.cmd, m.cmd.call._tag);
+
+        if (found === null) {
+          return [s, []];
+        }
+
+        const next = { ...s, flight: found.rest };
+        const call = found.call;
+        return call._tag === "send"
+          ? [{ ...next, sent: s.sent.filter((l) => l !== call.letter) }, []]
+          : call._tag === "open"
+            ? [{ ...next, trouble: "no_view" }, []]
+            : [next, []];
+      },
       // A letter its own answer settles keeps one reply row, with every send of it and the ms its
       // answer carries. A duplicate or stale answer settles nothing and keeps none.
       send_ok: (s, m) => {
-        const letter = m.cmd.letter;
+        const found = answered(s, m, "send");
+
+        if (found === null || found.call._tag !== "send") {
+          return [s, []];
+        }
+
+        const letter = found.call.letter;
         const [client] = step(s.client, { type: "reply", letter, answer: m.value });
         const settled =
           s.client.pending.some((p) => p._tag === "ready" && p.letter === letter) &&
@@ -524,7 +621,7 @@ export const windowMachineFor = (checks: WindowChecks) => {
                   letter,
                   result: m.value._tag,
                   attempts: s.attempts[letter] ?? 0,
-                  ms: m.value.ms,
+                  ms: m.ms,
                 }),
               }),
             ]
@@ -533,6 +630,7 @@ export const windowMachineFor = (checks: WindowChecks) => {
           {
             ...s,
             client,
+            flight: found.rest,
             sent: s.sent.filter((l) => l !== letter),
             attempts: settled
               ? Object.fromEntries(Object.entries(s.attempts).filter(([l]) => l !== letter))
@@ -544,25 +642,52 @@ export const windowMachineFor = (checks: WindowChecks) => {
       },
       // A transport failure frees the letter for the retry timer. An answer the client cannot read
       // keeps it out on this dial, so it is not sent again until the next one, and says so.
-      send_err: (s, m) =>
-        m.error._tag === "unreachable"
-          ? [{ ...s, sent: s.sent.filter((l) => l !== m.cmd.letter) }, []]
-          : [{ ...s, trouble: "unknown_reply" }, []],
-      // A whole view on the current dial. The client's ask for another becomes the window's
-      // trouble: this open just answered, so a second one would ask the same.
-      open_ok: (s, m) => {
-        if (s.link._tag !== "online" || s.link.dial !== m.cmd.dial) {
+      send_err: (s, m) => {
+        const found = answered(s, m, "send");
+
+        if (found === null || found.call._tag !== "send") {
           return [s, []];
         }
 
-        const [next, rows, asks] = noticed(s, step, m.cmd.pid, {
+        const letter = found.call.letter;
+        return m.error._tag === "unreachable"
+          ? [{ ...s, flight: found.rest, sent: s.sent.filter((l) => l !== letter) }, []]
+          : [{ ...s, flight: found.rest, trouble: "unknown_reply" }, []];
+      },
+      // A whole view on the current dial. The client's ask for another becomes the window's
+      // trouble: this open just answered, so a second one would ask the same.
+      open_ok: (s, m) => {
+        const found = answered(s, m, "open");
+
+        if (found === null || found.call._tag !== "open") {
+          return [s, []];
+        }
+
+        if (s.link._tag !== "online" || s.link.dial !== m.dial) {
+          return [{ ...s, flight: found.rest }, []];
+        }
+
+        const [next, rows, asks] = noticed({ ...s, flight: found.rest }, step, found.call.pid, {
           type: "whole",
           rev: m.value.rev,
           view: m.value.view,
         });
         return [{ ...next, trouble: asks.length > 0 ? "bad_view" : s.trouble }, rows];
       },
-      open_err: (s) => [{ ...s, trouble: "no_view" }, []],
+      open_err: (s, m) => {
+        const found = answered(s, m, "open");
+        return found === null ? [s, []] : [{ ...s, flight: found.rest, trouble: "no_view" }, []];
+      },
+      // A knock's answer only ends it: the link's renew timer knocks again, and `door.waiting`
+      // brings its code.
+      knock_ok: (s, m) => {
+        const found = answered(s, m, "knock");
+        return found === null ? [s, []] : [{ ...s, flight: found.rest }, []];
+      },
+      knock_err: (s, m) => {
+        const found = answered(s, m, "knock");
+        return found === null ? [s, []] : [{ ...s, flight: found.rest }, []];
+      },
       // The persistence answer is kept once: the browser's yes or no, or that it could not ask.
       persist_ok: (s, m) => [
         s,
@@ -583,18 +708,20 @@ export const windowMachineFor = (checks: WindowChecks) => {
       // A record the tab could not keep is lost to the door, never to the window's own state.
       record_ok: (s) => [s, []],
       record_err: (s) => [s, []],
-      // A ping or knock that could not go is the link's to notice: its timers move it on.
+      // A ping that could not go is the link's to notice: its timers move it on.
       ping_ok: (s) => [s, []],
       ping_err: (s) => [s, []],
-      knock_ok: (s) => [s, []],
-      knock_err: (s) => [s, []],
       // A view notification. The client's ask for a whole view becomes a fresh open when the
       // pid is open on this dial; otherwise the next dial's open brings one.
       view: (s, m) => {
         const [next, rows, asks] = noticed(s, step, m.pid, m.note);
-        return asks.length > 0 && s.link._tag === "online" && s.opened.includes(m.pid)
-          ? [next, [...rows, open({ pid: m.pid, dial: s.link.dial })]]
-          : [next, rows];
+
+        if (asks.length === 0 || s.link._tag !== "online" || !s.opened.includes(m.pid)) {
+          return [next, rows];
+        }
+
+        const [written, writes] = wrote(next, s.link.dial, [Call.cases.open.make({ pid: m.pid })]);
+        return [written, [...rows, ...writes]];
       },
       resend: (s, m) => {
         const redated = s.redate.flatMap((n) =>
@@ -646,7 +773,7 @@ export const windowMachineFor = (checks: WindowChecks) => {
         type: "timer",
         deps: (s) => {
           const dial = socketDial(s.link) ?? 0;
-          const waiting = s.redate.length > 0 || (s.link._tag === "online" && sends(s, s.link.dial).length > 0);
+          const waiting = s.redate.length > 0 || (s.link._tag === "online" && sends(s).length > 0);
           return waiting ? { ms: RETRY, msg: { type: "resend" as const, dial } } : null;
         },
       },

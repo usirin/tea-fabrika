@@ -23,7 +23,14 @@ import { type ReactNode, StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { keyEvent } from "../desktop/keys.ts";
 import { fold, type Layout, tilesIn } from "../desktop/layout.ts";
-import { type WindowChecks, type WindowCtx, windowMachineFor, type WindowModel, type WindowMsg } from "./machine.ts";
+import {
+  type WindowChecks,
+  type WindowCtx,
+  windowMachineFor,
+  type WindowModel,
+  type WindowMsg,
+  type write,
+} from "./machine.ts";
 
 /** The live window run, as `startWindow` booted it. */
 export type LiveWindow = EffectRun<WindowModel, WindowMsg>;
@@ -369,11 +376,10 @@ const caseName = (entry: unknown): unknown =>
   typeof entry === "object" && entry !== null && "_tag" in entry ? entry._tag : null;
 
 /**
- * How a Cmd's handler fails, as the Cmd declares it. `unreachable`: the socket or the brain is gone
- * for now, so a later dial retries. `unknown`: an answer this client cannot use, with the door's
- * reason. `entropy`: the random source failed while dating a press. `failed` and `unsupported`:
- * the storage persistence ask, or a record the tab could not keep. `closed`: the dial's socket is
- * not open.
+ * How a call or a Cmd's handler fails. `unreachable`: the socket or the brain is gone for now, so a
+ * later write retries. `unknown`: an answer this client cannot use, with the door's reason.
+ * `entropy`: the random source failed while dating a press. `failed` and `unsupported`: the storage
+ * persistence ask, or a record the tab could not keep. `closed`: the dial's socket is not open.
  */
 const Failure = Schema.TaggedUnion({
   unreachable: {},
@@ -391,16 +397,20 @@ const unreachable = F.unreachable.make({});
 /** Door reasons that mean "not now": the socket or the brain will be back. */
 const RETRYABLE: ReadonlySet<string> = new Set(["unreachable", "not_granted", "no_hello", "storage"]);
 
-/** A letter or a view call's failure as its Cmd declares it: "not now" reasons are retryable. */
-const retryable = (error: CallError): CallError =>
-  error._tag === "unknown" && RETRYABLE.has(error.reason) ? unreachable : error;
+/** A door error's reason as a call's failure: "not now" reasons are retryable. */
+const failure = (reason: string): CallError => (RETRYABLE.has(reason) ? unreachable : F.unknown.make({ reason }));
+
+/** One write the window machine asked, as its Cmd carries it. */
+type Write = ReturnType<typeof write>;
+
+/** One of the socket's own calls, which waits in its Sub for the door's answer. */
+type Call = (method: string, params: unknown) => Effect.Effect<unknown, CallError>;
 
 /** One dial's socket as the Cmd handlers use it. */
 type Connection = {
-  readonly call: (method: string, params: unknown) => Effect.Effect<unknown, CallError>;
+  /** Hands one write's frame to the socket, or fails at once; its answer comes on the socket Sub. */
+  readonly write: (cmd: Write) => Effect.Effect<void, typeof F.unreachable.Type>;
   readonly text: (text: string) => boolean;
-  /** A tile's name as its live process id on this dial. */
-  readonly resolve: (name: string) => Effect.Effect<string, CallError>;
 };
 
 const osName = (): "macos" | "windows" | "linux" | "android" | "ios" | "unknown" => {
@@ -465,7 +475,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
   const sentAt = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
   /** Offers every kept row to the door, and forgets each one it acknowledges, for the dial. */
-  const deliver = Effect.fnUntraced(function* (call: Connection["call"]) {
+  const deliver = Effect.fnUntraced(function* (call: Call) {
     for (;;) {
       const waiting = (yield* rows.all.pipe(Effect.orElseSucceed(() => []))).filter(isRow);
 
@@ -508,11 +518,15 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
     emit: (m: WindowMsg) => void,
   ): Effect.fn.Return<void, never, Scope.Scope> {
     const url = `${origin.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(tab)}`;
-    const pending = new Map<number, Deferred.Deferred<unknown, CallError>>();
+    // The socket's own calls (hello, reads, waits, records) carry string ids and wait here, in the
+    // Sub; the window's writes carry its numeric ids and are answered as Msgs, timed from the write.
+    const pending = new Map<string, Deferred.Deferred<unknown, CallError>>();
+    const written = new Map<number, { readonly call: Write["call"]["_tag"]; readonly at: number }>();
     const names = new Map<string, string>();
     const back = new Map<string, string>();
     const work = yield* Queue.unbounded<Effect.Effect<void>>();
     let serial = 0;
+    let isOpen = false;
     /** When the link last entered `dialing` on this socket: the dial's start, or the grant that has
      *  it sign again. A link outcome's `ms` is the time since, on Effect's Clock. */
     let since = yield* Clock.currentTimeMillis;
@@ -531,7 +545,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
     const call = Effect.fn("client.request")(function* (method: string, params: unknown) {
       yield* Effect.annotateCurrentSpan("fab.method", method);
       yield* Deferred.await(opened);
-      const id = ++serial;
+      const id = `s${++serial}`;
       const answer = yield* Deferred.make<unknown, CallError>();
       pending.set(id, answer);
 
@@ -583,7 +597,44 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
       back.set(pid, name);
       return pid;
     });
-    connections.set(dial, { call, text: ws.send, resolve });
+    /** The frame of one write: its call as the door's method, with the tile's live process id. */
+    const frameFor = (cmd: Write): string | null => {
+      const c = cmd.call;
+      const message =
+        c._tag === "knock"
+          ? { method: "door.knock", params: { label: options.label } }
+          : c._tag === "open"
+            ? { method: "view.open", params: { pid: names.get(c.pid) ?? c.pid } }
+            : {
+                method: "process.send",
+                params: {
+                  pid: names.get(c.pid) ?? c.pid,
+                  letter: c.letter,
+                  m: c.m,
+                  sentAt: c.sentAt,
+                  seen: c.seen,
+                  ...(c.traceId === undefined ? {} : { traceId: c.traceId }),
+                },
+              };
+      const named = c._tag === "knock" || c.pid.startsWith("process_") || names.has(c.pid);
+      return named ? JSON.stringify({ jsonrpc: "2.0", id: cmd.id, ...message }) : null;
+    };
+    const writeFrame = Effect.fn("client.write")(function* (cmd: Write) {
+      yield* Effect.annotateCurrentSpan("fab.call", cmd.call._tag);
+      const frame = frameFor(cmd);
+
+      if (!isOpen || frame === null) {
+        return yield* Effect.fail(unreachable);
+      }
+
+      written.set(cmd.id, { call: cmd.call._tag, at: yield* Clock.currentTimeMillis });
+
+      if (!ws.send(frame)) {
+        written.delete(cmd.id);
+        return yield* Effect.fail(unreachable);
+      }
+    });
+    connections.set(dial, { write: writeFrame, text: ws.send });
 
     /** The person's key settings: every page, then a wait past the cursor, for as long as the dial. */
     const settings = Effect.fnUntraced(function* (person: string) {
@@ -648,6 +699,13 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
           return ws.close(4000, "bad answer");
         }
 
+        // Each tile's name is resolved here, on the socket, so a write never waits for a read. A
+        // name that does not resolve leaves its writes unreachable until a later dial.
+        yield* Effect.forEach(
+          [...new Set(tilesIn(options.layout).map((t) => t.pid))],
+          (name) => resolve(name).pipe(Effect.ignore),
+          { concurrency: 1, discard: true },
+        );
         emit({ type: "admitted", dial, ping: admitted.ping, ms: took(yield* Clock.currentTimeMillis) });
         // Online: the person's key settings, and the rows this tab kept, for as long as the dial.
         return yield* Effect.all([settings(admitted.who.person).pipe(Effect.ignore), deliver(call)], {
@@ -712,6 +770,39 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
       }
     };
 
+    /** The answer to one write, as the window machine's Msg, by its id and this dial. */
+    const answer = (id: number, call: Write["call"]["_tag"], frame: typeof RpcAnswer.Type, ms: number): void => {
+      const error = frame.error === undefined ? null : failure(frame.error.data?.reason ?? "error");
+
+      if (call === "knock") {
+        return emit(
+          error === null
+            ? { type: "knock_ok", id, dial, value: null, ms }
+            : { type: "knock_err", id, dial, error: F.closed.make({}) },
+        );
+      }
+
+      if (call === "open") {
+        const view = error === null ? Option.getOrNull(Schema.decodeUnknownOption(Opened)(frame.result)) : null;
+        return emit(
+          view === null
+            ? { type: "open_err", id, dial, error: error ?? F.unknown.make({ reason: "bad_view" }) }
+            : { type: "open_ok", id, dial, value: view, ms },
+        );
+      }
+
+      const sent = error === null ? Option.getOrNull(Schema.decodeUnknownOption(Sent)(frame.result)) : null;
+      emit(
+        sent === null
+          ? { type: "send_err", id, dial, error: error ?? F.unknown.make({ reason: "bad_answer" }) }
+          : { type: "send_ok", id, dial, value: sent, ms },
+      );
+    };
+
+    const opening = (): void => {
+      isOpen = true;
+      Deferred.doneUnsafe(opened, Effect.void);
+    };
     const message = (data: unknown, at: number): void => {
       if (data === "pong") {
         return emit({ type: "pong", dial });
@@ -724,13 +815,24 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
       }
 
       if ("id" in frame) {
-        const waiting = pending.get(Number(frame.id));
+        if (typeof frame.id === "number") {
+          const write = written.get(frame.id);
+
+          if (write !== undefined) {
+            written.delete(frame.id);
+            answer(frame.id, write.call, frame, Math.max(0, at - write.at));
+          }
+
+          return;
+        }
+
+        const waiting = pending.get(frame.id);
 
         if (waiting === undefined) {
           return;
         }
 
-        pending.delete(Number(frame.id));
+        pending.delete(frame.id);
         const reason = frame.error?.data?.reason;
         Deferred.doneUnsafe(
           waiting,
@@ -748,17 +850,15 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
       }
 
       pending.clear();
+      // The window's writes on this dial are never answered: the dial's end drops them.
+      written.clear();
       emit({ type: "closed", dial, code, fingerprint: key.fingerprint, ms: took(at) });
     };
     yield* ws.events.pipe(
       Stream.runForEach((e) =>
         Effect.flatMap(Clock.currentTimeMillis, (at) =>
           Effect.sync(() =>
-            e.event === "open"
-              ? Deferred.doneUnsafe(opened, Effect.void)
-              : e.event === "message"
-                ? message(e.data, at)
-                : closed(e.code, at),
+            e.event === "open" ? opening() : e.event === "message" ? message(e.data, at) : closed(e.code, at),
           ),
         ),
       ),
@@ -781,34 +881,13 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         const letter = yield* ids.next(Id.Letter).pipe(Effect.mapError(() => F.entropy.make({})));
         return { letter, sentAt: yield* sentAt, traceId: yield* traceId };
       }),
-      // Its answer carries how long the call took, from the handler's start, for the reply row.
-      send: Effect.fn("client.send")(function* (cmd) {
-        const start = yield* Clock.currentTimeMillis;
-        const conn = yield* connection(cmd.dial);
-        const pid = yield* conn.resolve(cmd.pid).pipe(Effect.mapError(retryable));
-        const answer = yield* conn
-          .call("process.send", {
-            pid,
-            letter: cmd.letter,
-            m: cmd.m,
-            sentAt: cmd.sentAt,
-            seen: cmd.seen,
-            ...(cmd.traceId === undefined ? {} : { traceId: cmd.traceId }),
-          })
-          .pipe(Effect.mapError(retryable));
-        const sent = yield* Schema.decodeUnknownEffect(Sent)(answer).pipe(
-          Effect.mapError(() => F.unknown.make({ reason: "bad_answer" })),
-        );
-        return { ...sent, ms: Math.max(0, (yield* Clock.currentTimeMillis) - start) };
-      }),
-      open: Effect.fn("client.view")(function* (cmd) {
-        const conn = yield* connection(cmd.dial);
-        const pid = yield* conn.resolve(cmd.pid);
-        const answer = yield* conn.call("view.open", { pid }).pipe(Effect.mapError(retryable));
-        return yield* Schema.decodeUnknownEffect(Opened)(answer).pipe(
-          Effect.mapError(() => F.unknown.make({ reason: "bad_view" })),
-        );
-      }),
+      // A write settles once its frame is handed to the dial's socket, never waiting for the brain:
+      // its answer is the socket Sub's Msg (plan A13).
+      write: (cmd) =>
+        Effect.flatMap(connection(cmd.dial), (conn) => conn.write(cmd)).pipe(
+          Effect.as(null),
+          Effect.mapError(() => unreachable),
+        ),
       persist: Effect.fn("client.persist")(function* () {
         const claimed = yield* keys.claimPersist.pipe(Effect.mapError(() => F.failed.make({})));
 
@@ -838,11 +917,6 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         Effect.flatMap(connection(cmd.dial), (conn) =>
           conn.text("ping") ? Effect.succeed(null) : Effect.fail(F.closed.make({})),
         ).pipe(Effect.mapError(() => F.closed.make({}))),
-      knock: (cmd) =>
-        Effect.flatMap(connection(cmd.dial), (conn) => conn.call("door.knock", { label: options.label })).pipe(
-          Effect.as(null),
-          Effect.mapError(() => F.closed.make({})),
-        ),
     },
     subscribe: { socket: (sub) => socket(sub.deps.dial, sub.deps.rejected) },
   });
