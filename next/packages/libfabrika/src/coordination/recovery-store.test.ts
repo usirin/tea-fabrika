@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import { type Context, Effect, Exit, type Layer, Schema } from "effect";
 import type { LedgerError } from "../data/ledger.ts";
-import { type Sql } from "../data/referee.ts";
+import type { Sql } from "../Sql.ts";
 import { A, B, from, storage } from "./process.test-support.ts";
 
 type Store = {

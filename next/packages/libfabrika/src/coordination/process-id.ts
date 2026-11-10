@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect";
-import { type ProcessId } from "../data/trace.ts";
 import * as Id from "../id.ts";
+import { type ProcessId } from "../ProcessId.ts";
 
 export class ProcessIdGenerator extends Context.Service<
   ProcessIdGenerator,

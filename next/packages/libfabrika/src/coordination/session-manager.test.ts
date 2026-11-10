@@ -9,10 +9,10 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Brand, Effect, Result, Schema } from "effect";
 import { type InputId } from "../data/log.ts";
-import { type Sql } from "../data/referee.ts";
 import { nodeSql } from "../data/sqlite.ts";
 import { processId } from "../id.test-support.ts";
 import * as Id from "../id.ts";
+import type { Sql } from "../Sql.ts";
 import * as C from "./index.ts";
 import { signalId } from "./process.ts";
 

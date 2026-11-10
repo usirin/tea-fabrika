@@ -7,11 +7,13 @@
 // in its own step and rings once. No fiber, timer or Deferred is left behind, so the object can
 // sleep under a parked wait. Every call ends one span with names, ids and numbers only.
 import { Cause, Effect, Equal, Exit, Option, Result, Schema } from "effect";
+import { ParentText, Rev } from "../Rev.ts";
+import type { Sql, SqlValue } from "../Sql.ts";
 import type { LedgerTurn } from "./ledger-transaction.ts";
 import type { Doorbell } from "./ledger.ts";
 import { LedgerError } from "./ledger.ts";
-import { Appended, Entry, Line, PAGE, ParentText, Rev, Row, Waited } from "./log.ts";
-import type { Referee, Sql, SqlValue } from "./referee.ts";
+import { Appended, Entry, Line, PAGE, Row, Waited } from "./log.ts";
+import type { Referee } from "./referee.ts";
 import { errorClass, short } from "./trace.ts";
 
 /** Cloudflare's row limit, so node:sqlite answers what workerd would (flag 13). */
