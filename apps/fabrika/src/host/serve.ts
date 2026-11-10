@@ -4,6 +4,7 @@ import {
 	type Entry,
 	type JobsOnHost,
 	Ledger,
+	LedgerUnreachable,
 	memoryStorage,
 	type RunningOf,
 	Shell,
@@ -23,7 +24,7 @@ import {
 	StopRefused,
 } from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
-import {Data, Deferred, Duration, Effect, Option, Queue, Ref, Stream} from "effect";
+import {Data, Deferred, Duration, Effect, Option, Queue, Ref, Schedule, Stream} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
 import {
 	type AsksMsg,
@@ -53,6 +54,7 @@ import {
 	tilesOf,
 } from "../desk/desk.ts";
 import {
+	bindingFor,
 	commandFor,
 	type Does as Command,
 	defaults,
@@ -71,12 +73,15 @@ import {
 	readFromPage,
 	type ToPage,
 } from "../messages.ts";
+import {POLICY} from "../reconnect.ts";
 import {startTiles} from "../tiles.ts";
 import {appPrograms, type Screen, tshList, type WindowScreen} from "../tsh.ts";
+import {type LayerVia} from "../window/layers.ts";
 import {hostWire} from "../wire.ts";
 import type {AgentSessions} from "./agent-session.ts";
 import {serveAgents} from "./agents.ts";
 import {KeybindingManager} from "./keybindings.ts";
+import {LayerRecorder} from "./layers.ts";
 import type {RestartNote} from "./restart.ts";
 import type {Setting} from "./settings.ts";
 
@@ -168,6 +173,7 @@ const ANSWER_FIRST = Duration.millis(250);
 /** One app attached. */
 interface Client {
 	readonly id: string;
+	readonly layers: Effect.Success<ReturnType<typeof LayerRecorder.make>>;
 	editor: RunningOf<typeof keysProgram> | null;
 	send: (m: Down) => void;
 	/** Its link is up: it said hello with our version, so it is an app that will start a host again. */
@@ -339,7 +345,7 @@ export const serve = (options: {
 		 * tmux's `list-keys` shows on the client that pressed: it changes nothing on the host. A
 		 * desk word typed in a tile's tsh has no page of its own, so it is said to `every` page.
 		 */
-		const step = (msg: DeskMsg, from?: Client | "every") => {
+		const step = (msg: DeskMsg, from?: Client | "every", source?: LayerVia) => {
 			const [next, cmds] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, desk, msg);
 			const changed = next !== desk;
 			const agentsBefore = agentsOf(desk);
@@ -348,7 +354,16 @@ export const serve = (options: {
 				if (c.type !== "show") Queue.offerUnsafe(queue, c);
 				else
 					for (const to of from === "every" ? clients : from === undefined ? [] : [from])
-						if (to.page) toPage(to, {type: "show", what: c.what});
+						if (to.page)
+							toPage(to, {
+								type: "show",
+								what: c.what,
+								...(source === undefined
+									? from === "every"
+										? {via: Via.word()}
+										: {}
+									: {via: source}),
+							});
 			}
 			if (changed) {
 				if (JSON.stringify(agentsOf(desk)) !== JSON.stringify(agentsBefore)) tellHost();
@@ -404,6 +419,26 @@ export const serve = (options: {
 			Effect.runForkWith(services)(asks.dispatch(msg).pipe(Effect.ignore));
 		};
 		const ledger = yield* Ledger;
+		// Separate from desk input: a slow ledger must never hold Escape or a host key answer.
+		// Reuse the app connection's backoff and cap. Every retry keeps the delivered event ID.
+		const layerQueue = yield* Queue.unbounded<Effect.Effect<void, unknown>>();
+		yield* Queue.take(layerQueue).pipe(
+			Effect.flatMap((write) =>
+				write.pipe(
+					Effect.retry({
+						while: (error) => error instanceof LedgerUnreachable,
+						schedule: Schedule.exponential(POLICY.baseMs, POLICY.factor).pipe(
+							Schedule.modifyDelay(({duration}) =>
+								Effect.succeed(Math.min(Duration.toMillis(duration), POLICY.capMs)),
+							),
+						),
+					}),
+					Effect.ignore,
+				),
+			),
+			Effect.forever,
+			Effect.forkScoped,
+		);
 		const author = yield* Author;
 		/** The agents the person summoned here, when the host keeps any (its repository is known). */
 		const summons = Option.getOrUndefined(yield* Effect.serviceOption(Shell.SummonManager));
@@ -525,6 +560,9 @@ export const serve = (options: {
 					if (why !== null) return why;
 					const word = commandFor(does);
 					if (word !== undefined) did(word, Via.word());
+					// Focus cycles close the overlay in the page before moving its DOM focus.
+					if (does.kind !== "show" && does.kind !== "cycle")
+						for (const client of clients) if (client.page) toPage(client, {type: "navigation"});
 					if (step({type: "typed", tile, does}, "every")) shout();
 					return null;
 				},
@@ -845,7 +883,7 @@ export const serve = (options: {
 			);
 
 		/** A key the desk takes: logged when it runs a command, as the person spells it in the file. */
-		const pressed = (s: Open, key: string, at: number) => {
+		const pressed = (s: Open, key: string, at: number, client: Client) => {
 			const routed = route(s, key, at);
 			if (routed.kind !== "desk" || routed.ran === null) return;
 			const {does, key: on} = routed.ran;
@@ -853,11 +891,17 @@ export const serve = (options: {
 			const keys =
 				on._tag === "after_prefix" ? `${spell(table.prefix)} ${spell(on.key)}` : spell(on.key);
 			did(does, Via.key({keys}));
+			if (bindingFor(does)?.does.kind !== "show" && does !== "palette.open")
+				toPage(client, {type: "navigation"});
+			return Via.key({keys});
 		};
 
 		/** What the page sent on the desk's port. */
 		const fromPage = (client: Client, m: FromPage) => {
 			switch (m.type) {
+				case "layer":
+					if (client.page) Queue.offerUnsafe(layerQueue, client.layers.record(m));
+					return;
 				case "keys.open":
 				case "keys.close":
 				case "keys.edit":
@@ -867,8 +911,8 @@ export const serve = (options: {
 					const at = clock.currentTimeMillisUnsafe();
 					lastKey = at;
 					const took = claims(desk, m.key, at);
-					if (took && desk.at === "open") pressed(desk, m.key, at);
-					if (took) step({type: "key", key: m.key, at}, client);
+					const source = took && desk.at === "open" ? pressed(desk, m.key, at, client) : undefined;
+					if (took) step({type: "key", key: m.key, at}, client, source);
 					// The desk first, so the page knows what the desk takes before it lets the next key go.
 					shout();
 					toPage(client, {type: "answer", id: m.id, took});
@@ -906,10 +950,22 @@ export const serve = (options: {
 				case "run":
 					did(m.does, m.via === undefined ? Via.palette() : Via.key(m.via));
 					if (m.does === "palette.open") {
-						toPage(client, {type: "show", what: "palette"});
+						toPage(client, {
+							type: "show",
+							what: "palette",
+							via: m.via === undefined ? Via.palette() : Via.key(m.via),
+						});
 						return;
 					}
-					if (step({type: "run", does: m.does}, client)) shout();
+					if (bindingFor(m.does)?.does.kind !== "show") toPage(client, {type: "navigation"});
+					if (
+						step(
+							{type: "run", does: m.does},
+							client,
+							m.via === undefined ? Via.palette() : Via.key(m.via),
+						)
+					)
+						shout();
 					return;
 				case "later":
 				case "back":
@@ -940,6 +996,7 @@ export const serve = (options: {
 				case "hello":
 					return;
 				case "page":
+					if (client.page) Queue.offerUnsafe(layerQueue, client.layers.ended());
 					hide(client);
 					client.page = true;
 					toPage(client, keysNow());
@@ -950,6 +1007,7 @@ export const serve = (options: {
 					for (const [name, screen] of screens) showTo(client, name, screen);
 					return;
 				case "away":
+					Queue.offerUnsafe(layerQueue, client.layers.ended());
 					Queue.offerUnsafe(editorQueue, {client, message: {type: "keys.close"}});
 					hide(client);
 					client.page = false;
@@ -958,7 +1016,7 @@ export const serve = (options: {
 					if (m.port === "desk") {
 						const read = readFromPage(m.m);
 						if (read.kind === "read") fromPage(client, read.msg);
-						else warn(`refused a message from a page: ${read.why}`);
+						else warn("refused a message from a page");
 						return;
 					}
 					const heard = screens.get(m.port)?.heard(m.m);
@@ -973,8 +1031,11 @@ export const serve = (options: {
 
 		const attach = (socket: Socket.Socket) =>
 			Effect.gen(function* () {
+				const id = crypto.randomUUID();
+				const layers = yield* LayerRecorder.make({window: id, by: writerText(author)});
 				const client: Client = {
-					id: crypto.randomUUID(),
+					id,
+					layers,
 					editor: null,
 					send: () => {},
 					up: () => false,
@@ -986,6 +1047,7 @@ export const serve = (options: {
 				client.up = () => wire.state().at === "up";
 				clients.add(client);
 				const why = yield* wire.ended;
+				Queue.offerUnsafe(layerQueue, client.layers.ended());
 				client.page = false;
 				yield* closeEditor(client);
 				hide(client);

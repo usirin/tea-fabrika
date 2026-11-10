@@ -32,6 +32,7 @@ import {type LinkNow, readAsks, readToApp, type ToPage} from "./messages.ts";
 import {Browser, NotOpened, openOutside} from "./outside.ts";
 import {noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
 import {startHost} from "./start-host.ts";
+import {LayerVia} from "./window/layers.ts";
 import {Unattached, type Wire} from "./wire.ts";
 
 // The Electron edge: the main process. It runs nothing of fabrika's own: every tile's tsh, every
@@ -357,7 +358,7 @@ const main = Effect.gen(function* () {
 		notice.on("click", () => {
 			notices.delete(notice);
 			showWindow();
-			toPage({type: "show", what: "asks"});
+			toPage({type: "show", what: "asks", via: LayerVia.cases.click.make({})});
 		});
 		notice.show();
 	};

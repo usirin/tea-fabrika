@@ -9,6 +9,7 @@ import {type Group, groupOf, type Show, wordOf} from "../desk/keys.ts";
 import type {TileId, TileNode} from "../desk/layout/index.ts";
 import type {HostNow, LedgerLink, LinkNow, ToWindow} from "../messages.ts";
 import type {JobEnded, TileJobs} from "../tile-jobs.ts";
+import {Layer, LayerChange, type LayerReason, type LayerVia} from "./layers.ts";
 import {
 	type Cap,
 	capOf,
@@ -812,28 +813,71 @@ export const EXPLAIN_ON = ["pointerover", "focusin"] as const;
  * word is said there: a mode is always seen (docs/direction/modes.md, M3).
  */
 export const bottomLineShows = (f: Frame, desk: MidKey): boolean =>
-	!f.bare || desk.armed || desk.asking || f.note !== null || f.info.kind === "on";
+	!f.bare ||
+	f.over.kind !== "none" ||
+	desk.armed ||
+	desk.asking ||
+	f.note !== null ||
+	f.info.kind === "on";
 
 export type FrameMsg =
 	/** A key after Ctrl-B asked the frame to show something (desk.ts, `show`), but info mode. */
-	| {readonly type: "show"; readonly what: Exclude<Show, "info">}
-	/**
-	 * C-b i, or a click on the info item: info mode comes on or goes off. Coming on, it explains
-	 * at once what keyboard focus is on: `focus` is those words, or `null` when it has none.
-	 */
-	| {readonly type: "info"; readonly focus: string | null}
-	| {readonly type: "palette"}
-	| {readonly type: "item"; readonly what: Part}
-	| {readonly type: "query"; readonly query: string}
-	| {readonly type: "move"; readonly by: number; readonly of: number}
-	| {readonly type: "ran"; readonly key: string}
-	/** What lies over the desk closes, and the bottom line says why nothing happened. */
-	| {readonly type: "say"; readonly note: string}
-	| {readonly type: "explain"; readonly text: string | null}
-	| {readonly type: "unnote"}
-	| {readonly type: "close"}
-	/** Escape, as the page hands it on (desk.tsx, `onKey`), with the desk mid-key or not: see `escaped`. */
-	| {readonly type: "escape"; readonly desk: MidKey};
+	(
+		| {readonly type: "show"; readonly what: Exclude<Show, "info">}
+		/**
+		 * C-b i, or a click on the info item: info mode comes on or goes off. Coming on, it explains
+		 * at once what keyboard focus is on: `focus` is those words, or `null` when it has none.
+		 */
+		| {readonly type: "info"; readonly focus: string | null}
+		| {readonly type: "palette"}
+		| {readonly type: "item"; readonly what: Part}
+		| {readonly type: "query"; readonly query: string}
+		| {readonly type: "move"; readonly by: number; readonly of: number}
+		| {readonly type: "ran"; readonly key: string}
+		/** What lies over the desk closes, and the bottom line says why nothing happened. */
+		| {readonly type: "say"; readonly note: string}
+		| {readonly type: "explain"; readonly text: string | null}
+		| {readonly type: "unnote"}
+		| {readonly type: "close"; readonly reason?: LayerReason}
+		/** Escape, as the page hands it on (desk.tsx, `onKey`), with the desk mid-key or not: see `escaped`. */
+		| {readonly type: "escape"; readonly desk: MidKey}
+	) & {readonly via?: LayerVia};
+
+/** One description for the status word and the lifecycle identity. No typed content. */
+export const layerOf = (
+	over: Over,
+): {
+	readonly id: string;
+	readonly layer: Layer;
+	readonly word: string;
+	readonly takes: string;
+} | null => {
+	switch (over.kind) {
+		case "none":
+			return null;
+		case "palette":
+			return {
+				id: `palette/${over.title}`,
+				layer: Layer.cases.palette.make({}),
+				word: over.title === "keys" ? "KEYS" : "PALETTE",
+				takes: "takes the keys",
+			};
+		case "item":
+			return {
+				id: `popover/${over.what}`,
+				layer: Layer.cases.popover.make({item: over.what}),
+				word: over.what.toUpperCase(),
+				takes: "the popover takes the keys",
+			};
+		default:
+			return {
+				id: `popover/${over.kind}`,
+				layer: Layer.cases.popover.make({item: over.kind}),
+				word: over.kind.toUpperCase(),
+				takes: "the menu takes the keys",
+			};
+	}
+};
 
 /** A thing over the desk opens, or closes when it is open already, as a menu does. */
 const toggle = (f: Frame, over: Over): Frame =>
@@ -895,8 +939,8 @@ const shown = (f: Frame, what: Exclude<Show, "info">): Frame => {
 
 /**
  * Who a key goes to while something lies over the desk: the over, or the desk as always. The
- * palette is a modal dialog, so it takes every key. A menu or an item's lines take every key but
- * Ctrl-B and the key after it, so `C-b a` still closes the asks list. A key the desk's own
+ * prefix and its pending key reach the desk beneath every overlay. A menu or an item's lines
+ * take ordinary keys, so `C-b a` still closes the asks list. A key the desk's own
  * question waits on (`close t2? (y/n)`) goes to the desk. A key that goes to the over never
  * reaches a tile: not its terminal, not its view.
  */
@@ -906,9 +950,15 @@ export const keyGoesTo = (
 	prefix: string,
 	desk: MidKey,
 ): "over" | "desk" => {
-	if (over.kind === "none") return "desk";
+	if (key === prefix) return "desk";
+	return ordinaryKeyOwner(over, desk);
+};
+
+/** The status uses the same routing without guessing which character is ordinary. */
+export const ordinaryKeyOwner = (over: Over, desk: MidKey): "over" | "desk" => {
+	if (desk.armed) return "desk";
 	if (over.kind === "palette") return "over";
-	return key === prefix || desk.armed || desk.asking ? "desk" : "over";
+	return desk.asking || over.kind === "none" ? "desk" : "over";
 };
 
 export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
@@ -941,6 +991,36 @@ export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
 		case "escape":
 			return escaped(f, m.desk);
 	}
+};
+
+/** Pure update plus lifecycle facts. IDs, clocks and writes belong to the adapters. */
+export const stepFrame = (
+	frame: Frame,
+	msg: FrameMsg,
+): readonly [Frame, readonly LayerChange[]] => {
+	const next = frameUpdate(frame, msg);
+	const old = layerOf(frame.over);
+	const opened = layerOf(next.over);
+	if (old?.id === opened?.id) return [next, []];
+	const reason: LayerReason =
+		opened !== null
+			? "replacement"
+			: msg.type === "escape"
+				? "escape"
+				: msg.type === "ran" || msg.type === "say"
+					? "done"
+					: msg.type === "close"
+						? (msg.reason ?? "outside")
+						: "toggle";
+	return [
+		next,
+		[
+			...(old === null ? [] : [LayerChange.cases.close.make({layer: old.layer, reason})]),
+			...(opened === null
+				? []
+				: [LayerChange.cases.open.make({layer: opened.layer, via: msg.via ?? null})]),
+		],
+	];
 };
 
 /**

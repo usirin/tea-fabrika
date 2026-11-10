@@ -19,6 +19,7 @@ import {
 	focusedOf,
 	type Open,
 	questionOf,
+	route,
 	tilesOf,
 	type Workspace,
 } from "../desk/desk.ts";
@@ -54,13 +55,15 @@ import {
 	FRAME,
 	type Frame,
 	type FrameMsg,
-	frameUpdate,
+	stepFrame,
 	keyGoesTo,
 	type MidKey,
 	type Shapes,
 	ticketsShown,
 } from "./frame.ts";
 import {Band, BottomArea, type FrameProps, Over, TopBar} from "./frame.tsx";
+import {type LayerChange} from "./layers.ts";
+import {LayerEvents} from "./pop.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {Strip, Tile} from "./tile.tsx";
 import {WINDOWS} from "./windows.tsx";
@@ -167,7 +170,28 @@ const terminals = new Map<TileId, TileTerminal>();
 const followed = new Set<string>();
 let ghostty: Ghostty | null = null;
 
-const toHost = (m: FromPage) => window.fabrika.send("desk", m);
+const toHost = (m: FromPage) => {
+	const routed =
+		m.type === "press" && store.desk?.at === "open" && store.frame.over.kind !== "none"
+			? route({...store.desk, keys: store.keys}, m.key, Date.now())
+			: null;
+	const does = m.type === "run" ? m.does : routed?.kind === "desk" ? routed.ran?.does : undefined;
+	if (
+		(does === 'tezgah."focus --to next"' || does === 'tezgah."focus --to previous"') &&
+		store.frame.over.kind !== "none"
+	)
+		leftOver = true;
+	window.fabrika.send("desk", m);
+};
+const layerInstances = new Map<string, string>();
+const reportLayer = (change: LayerChange) => {
+	const key = JSON.stringify(change.layer);
+	const instance = change._tag === "open" ? crypto.randomUUID() : layerInstances.get(key);
+	if (instance === undefined) return;
+	if (change._tag === "open") layerInstances.set(key, instance);
+	else layerInstances.delete(key);
+	toHost({type: "layer", id: crypto.randomUUID(), instance, change, said: Date.now()});
+};
 const editKeys = (message: EditorMsg) => {
 	if (store.keysEditor === null) return;
 	const [next, cmds] = applyCell<Editor, EditorMsg, EditorCmd>(
@@ -332,7 +356,9 @@ const pressAgain = (key: Key) => {
 /** Step the hold by one Msg. Answers whether the key pressed this instant goes on as it is. */
 const holdStep = (msg: HoldMsg): boolean => {
 	const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, hold, msg);
+	const wasWaiting = hold.waiting !== null;
 	hold = next;
+	if (wasWaiting !== (next.waiting !== null)) changed();
 	let live = false;
 	for (const c of cmds) {
 		if (c.type === "press") toHost({type: "press", id: c.id, key: c.key});
@@ -351,7 +377,7 @@ let noteTimer: ReturnType<typeof setTimeout> | undefined;
  * the frame changed: a key it did not change goes on.
  */
 const frameStep = (m: FrameMsg): boolean => {
-	const next = frameUpdate(store.frame, m);
+	const [next, changes] = stepFrame(store.frame, m);
 	if (next === store.frame) return false;
 	const wasKeys = store.frame.over.kind === "palette" && store.frame.over.title === "keys";
 	const isKeys = next.over.kind === "palette" && next.over.title === "keys";
@@ -369,22 +395,43 @@ const frameStep = (m: FrameMsg): boolean => {
 		noteTimer = setTimeout(() => frameStep({type: "unnote"}), NOTE_MS);
 	}
 	store.frame = next;
+	for (const change of changes) reportLayer(change);
 	changed();
 	return true;
 };
 
+/**
+ * A cycle request keeps the overlay exit until its reply, even if navigation or the palette
+ * closes it first. The exit wraps within open tiles; with one, it enters that tile again.
+ */
+let leftOver = false;
+
+const closeForFocus = () => {
+	if (store.frame.over.kind === "none") return;
+	flushSync(() => frameStep({type: "close", reason: "navigation"}));
+	leftOver = true;
+};
+
 const cycleFocus = (to: "next" | "previous") => {
+	closeForFocus();
+	const fromOver = leftOver;
+	leftOver = false;
 	const open = store.desk?.at === "open" ? store.desk : null;
-	const tile = open === null ? null : focusedOf(open);
-	const screen =
-		tile === null
-			? null
-			: document.querySelector<HTMLElement>(
-					`[data-tile="${tile.id}"] .screen, [data-view="${tile.id}"]`,
-				);
+	const ws = open === null ? null : activeOf(open);
+	const screens =
+		ws === null
+			? []
+			: tilesOf(ws).flatMap((tile) => {
+					const element = document.querySelector<HTMLElement>(
+						tile.shows.run === null
+							? `[data-tile="${tile.id}"] .screen`
+							: `[data-view="${tile.id}"]`,
+					);
+					return element === null || element.getClientRects().length === 0 ? [] : [{tile, element}];
+				});
 	const regions = [
 		document.querySelector<HTMLElement>(".topbar button"),
-		screen,
+		...screens.map(({element}) => element),
 		document.querySelector<HTMLElement>(".bottomline button"),
 	].filter((el): el is HTMLElement => el !== null && el.getClientRects().length > 0);
 	if (regions.length < 2)
@@ -392,9 +439,16 @@ const cycleFocus = (to: "next" | "previous") => {
 	const at = regions.findIndex((el) =>
 		el.matches(".desk") ? el === document.activeElement : el.contains(document.activeElement),
 	);
-	const target = regions[(at + (to === "next" ? 1 : regions.length - 1)) % regions.length];
-	if (target === screen && tile !== null && tile.shows.run === null)
-		terminals.get(tile.id)?.focus();
+	const tileAt = screens.findIndex(({tile}) => tile.id === ws?.focused);
+	const target =
+		fromOver && screens.length > 0
+			? screens[(tileAt + (to === "next" ? 1 : screens.length - 1)) % screens.length]?.element
+			: regions[(at + (to === "next" ? 1 : regions.length - 1)) % regions.length];
+	const screen = screens.find(({element}) => element === target);
+	if (screen !== undefined && screen.tile.id !== ws?.focused)
+		toHost({type: "go", tile: screen.tile.id});
+	if (screen !== undefined && screen.tile.shows.run === null)
+		terminals.get(screen.tile.id)?.focus();
 	else target?.focus();
 };
 
@@ -487,8 +541,15 @@ const heard = (raw: unknown) => {
 			if (m.what === "focus-next" || m.what === "focus-previous")
 				return cycleFocus(m.what === "focus-next" ? "next" : "previous");
 			return m.what === "info"
-				? frameStep({type: "info", focus: focusWords()})
-				: frameStep({type: "show", what: m.what});
+				? frameStep({
+						type: "info",
+						focus: focusWords(),
+						...(m.via === undefined ? {} : {via: m.via}),
+					})
+				: frameStep({type: "show", what: m.what, ...(m.via === undefined ? {} : {via: m.via})});
+		case "navigation":
+			flushSync(() => frameStep({type: "close", reason: "navigation"}));
+			return;
 		case "desk":
 			store.desk = m.desk;
 			store.attachedOnce = true;
@@ -504,8 +565,9 @@ const heard = (raw: unknown) => {
 			store.link = m.now;
 			// Off a host, a key held for its answer gets none: the hold lets them go.
 			if (!attached(m.now)) {
+				leftOver = false;
 				holdStep({type: "down"});
-				if (store.keysEditor !== null) frameStep({type: "close"});
+				if (store.keysEditor !== null) frameStep({type: "close", reason: "owner_gone"});
 			}
 			// On one, it may be a host that never heard the workspace's size.
 			else tellArea(true);
@@ -625,7 +687,7 @@ const onKey = (e: KeyboardEvent) => {
 	}
 	if (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"') {
 		swallow(e);
-		if (store.frame.over.kind !== "none") frameStep({type: "close"});
+		closeForFocus();
 		toHost({type: "run", does: alone, via: {keys: spell(name ?? "")}});
 		return;
 	}
@@ -898,7 +960,8 @@ function App(): ReactNode {
 		if (!away && over === "none") focusTile();
 	}, [shown, away, over]);
 	// The desk's key done, focus goes back to the bottom line's item it was on, if it fell.
-	const mid = (open?.prefix.armed ?? false) || open?.ask != null;
+	const pending = midKey();
+	const mid = pending.armed || pending.asking;
 	useLayoutEffect(() => {
 		if (!mid) focusBack();
 	}, [mid]);
@@ -915,7 +978,8 @@ function App(): ReactNode {
 		editKeys,
 		shapes: store.shapes,
 		tickets: ticketsShown(store.views),
-		armed: open?.prefix.armed ?? false,
+		armed:
+			pending.armed && (store.keysEditor === null || store.keysEditor.recording._tag === "idle"),
 		toHost,
 		toApp,
 		toRun,
@@ -973,7 +1037,12 @@ const boot = Effect.gen(function* () {
 	for (const on of EXPLAIN_ON) window.addEventListener(on, explainAt);
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");
-	if (root !== null) createRoot(root).render(<App />);
+	if (root !== null)
+		createRoot(root).render(
+			<LayerEvents value={reportLayer}>
+				<App />
+			</LayerEvents>,
+		);
 });
 
 Effect.runFork(

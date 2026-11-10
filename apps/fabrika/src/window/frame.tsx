@@ -36,12 +36,14 @@ import {
 	type JobItem,
 	jobItem,
 	jobsList,
+	layerOf,
 	lineIn,
 	matching,
 	middleFree,
 	modeWord,
 	nowhereNote,
 	opensOf,
+	ordinaryKeyOwner,
 	type Part,
 	prefixLine,
 	questionWord,
@@ -52,6 +54,7 @@ import {
 	tileWord,
 	workspaceName,
 } from "./frame.ts";
+import {LayerVia, type LayerReason} from "./layers.ts";
 import {type Cap, type Hint, type Row, sentence, type Words} from "./pop.ts";
 import {type Empty, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
 
@@ -192,7 +195,8 @@ const reachedOf = (props: FrameProps): HostNow | null =>
  * its own shape when it is not.
  */
 export function TopBar(props: FrameProps): ReactNode {
-	const {desk, asks, step} = props;
+	const {desk, asks} = props;
+	const step = (msg: FrameMsg) => props.step({...msg, via: LayerVia.cases.click.make({})});
 	const ws = desk === null ? null : activeOf(desk);
 	const line = ws === null ? [] : lineIn(ws);
 	const reached = reachedOf(props);
@@ -451,7 +455,10 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	useLayoutEffect(() => {
 		sayAsksSeen();
 	}, [shown]);
-	const close = useCallback(() => step({type: "close"}), [step]);
+	const close = useCallback(
+		(reason: LayerReason = "outside") => step({type: "close", reason}),
+		[step],
+	);
 	const open = (row: Row) => {
 		const ask = [...asks.asks, ...asks.later].find((a) => a.key === row.id);
 		if (ask === undefined) return;
@@ -459,11 +466,11 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 		switch (to.kind) {
 			case "tile":
 				toHost({type: "go", tile: to.tile});
-				return close();
+				return close("done");
 			case "tracker":
 				toRun(to.run, {type: "query", value: {ticket: ask.ticket}});
 				toHost({type: "go", tile: to.tile});
-				return close();
+				return close("done");
 			case "none":
 				return step({type: "say", note: nowhereNote(ask.ticket)});
 		}
@@ -524,11 +531,14 @@ function JobsMenu(props: FrameProps & {readonly desk: Open}): ReactNode {
 	const now = useNow(() => true);
 	const list = jobsList(desk, now);
 	const here = focusedOf(desk)?.id;
-	const close = useCallback(() => step({type: "close"}), [step]);
+	const close = useCallback(
+		(reason: LayerReason = "outside") => step({type: "close", reason}),
+		[step],
+	);
 	const go = (row: Row) => {
 		const tile = list.tiles.get(row.id);
 		if (tile !== undefined && tile !== here) toHost({type: "go", tile});
-		close();
+		close("done");
 	};
 	return (
 		<Menu
@@ -561,7 +571,10 @@ const LINES_LABEL: Readonly<Record<Part, string>> = {
 /** A few lines on one item of the top bar, under it: the agents, the sync or the host. */
 function ItemLines(props: FrameProps & {readonly what: Part}): ReactNode {
 	const {link, step} = props;
-	const close = useCallback(() => step({type: "close"}), [step]);
+	const close = useCallback(
+		(reason: LayerReason = "outside") => step({type: "close", reason}),
+		[step],
+	);
 	const host = reachedOf(props);
 	const now = Date.now();
 	const body = (): ReactNode => {
@@ -892,8 +905,12 @@ export function BottomLine(props: FrameProps): ReactNode {
 	const jobs = desk === null || here === null ? undefined : desk.jobs[here.id];
 	const now = useNow((t) => jobItem(jobs, t) !== null);
 	const job = jobItem(jobs, now);
+	const layer =
+		ordinaryKeyOwner(frame.over, {armed, asking: question !== null}) === "over"
+			? layerOf(frame.over)
+			: null;
 	const left = (): ReactNode => {
-		if (question !== null)
+		if (question !== null && !armed && layer === null)
 			return (
 				<span className="prompt" role="alertdialog" aria-label={question}>
 					{question}
@@ -909,6 +926,14 @@ export function BottomLine(props: FrameProps): ReactNode {
 							<b>{k.key}</b> {k.name}
 						</span>
 					))}
+				</span>
+			);
+		if (layer !== null)
+			return (
+				<span className="layer-owner">
+					<b>{layer.word}</b>
+					<Sep />
+					{layer.takes}
 				</span>
 			);
 		if (frame.info.kind === "on")
@@ -935,8 +960,9 @@ export function BottomLine(props: FrameProps): ReactNode {
 		);
 	};
 	const right = (): ReactNode => {
-		if (question !== null) return <span className="quiet">y closes · n keeps it</span>;
 		if (armed) return <span className="quiet">esc cancels</span>;
+		if (layer !== null) return <span className="quiet">esc closes it</span>;
+		if (question !== null) return <span className="quiet">y closes · n keeps it</span>;
 		if (frame.note !== null) return <span className="note">{frame.note}</span>;
 		const keys = keyFor(props, "keys");
 		const info = keyFor(props, "info");
@@ -990,7 +1016,9 @@ export function BottomLine(props: FrameProps): ReactNode {
 						id: POP.palette,
 						open: frame.over.kind === "palette" && frame.over.title === "keys",
 					}}
-					onClick={() => props.step({type: "show", what: "keys"})}
+					onClick={() =>
+						props.step({type: "show", what: "keys", via: LayerVia.cases.click.make({})})
+					}
 				>
 					{keys ?? ""} keys
 				</Item>
@@ -1068,7 +1096,7 @@ function JobWord(props: FrameProps & {readonly job: JobItem}): ReactNode {
 			info={INFO.job}
 			className="job"
 			opens={{popup: "menu", id: POP.jobs, open: frame.over.kind === "jobs"}}
-			onClick={() => props.step({type: "show", what: "jobs"})}
+			onClick={() => props.step({type: "show", what: "jobs", via: LayerVia.cases.click.make({})})}
 		>
 			<b>%{job.n}</b> <span className="job-line">{job.text}</span>{" "}
 			<span className="took">{job.said}</span>
@@ -1096,7 +1124,10 @@ const countWord = (n: number, keys: boolean): string =>
  */
 function CommandPalette(props: FrameProps): ReactNode {
 	const {frame, step, desk} = props;
-	const close = useCallback(() => step({type: "close"}), [step]);
+	const close = useCallback(
+		(reason: LayerReason = "outside") => step({type: "close", reason}),
+		[step],
+	);
 	if (frame.over.kind !== "palette") return null;
 	const {title, query, at} = frame.over;
 	if (title === "keys" && props.keysEditor != null && props.editKeys !== undefined)
@@ -1119,7 +1150,7 @@ function CommandPalette(props: FrameProps): ReactNode {
 					editor={props.keysEditor}
 					send={props.editKeys}
 					changes={props.keyChanges ?? []}
-					close={close}
+					close={() => close("done")}
 				/>
 			</Dialog>
 		);
