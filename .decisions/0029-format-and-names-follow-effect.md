@@ -1,7 +1,7 @@
 ---
 id: 0029
 title: The repo formats code as Effect does, oxfmt stays, Module.of is allowed and a service that holds many has a plural name
-status: accepted
+status: amended-in-part by [0039](0039-keep-semicolons-and-es5-commas.md)
 date: 2026-11-09
 tags: [style, format, oxfmt, names, of, services, effect, next]
 ---
@@ -34,6 +34,8 @@ const lease = Lease.of(input)
 // a service that holds many is plural, as Effect has `Runners` and `Servers`
 class Leases extends Context.Service<Leases>()("Leases", { ... }) {}
 ```
+
+*[0039](0039-keep-semicolons-and-es5-commas.md) brings back semicolons, and trailing commas in objects and arrays; the rest of this file still holds.*
 
 ## Context
 
