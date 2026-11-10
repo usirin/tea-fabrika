@@ -64,11 +64,28 @@ const Input = Schema.Struct({
   ).check(Schema.isMinLength(1), Schema.isMaxLength(20)),
   after: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 25 })),
   by: Schema.Struct({ by: Schema.String, at: Schema.Int, reason: Schema.String }),
-}).check(
-  // A lone surrogate is repaired differently by workerd's SQLite (three U+FFFD) and node:sqlite (one).
-  // A finding records it; this law compares well-formed text.
-  Schema.makeFilter((input) => !/\\ud[89a-f][0-9a-f]{2}/i.test(JSON.stringify(input))),
-);
+});
+
+// A lone surrogate is repaired differently by workerd's SQLite (three U+FFFD) and node:sqlite (one).
+// A finding records it; this law compares well-formed text.
+const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
+  const repair = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      return value.toWellFormed();
+    }
+
+    if (Array.isArray(value)) {
+      return value.map(repair);
+    }
+
+    if (value !== null && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key.toWellFormed(), repair(item)]));
+    }
+
+    return value;
+  };
+  return Schema.decodeUnknownSync(Input)(repair(input));
+};
 
 const options = { arbitrary: { seed: 119120, runs: 30 } };
 let sequence = 0;
@@ -132,8 +149,9 @@ for (const kind of ["node", "wire"] as const) {
     it.effect.prop(
       "rows, retry, cursor, content and deletion agree with SQLite",
       { input: Input },
-      ({ input }) =>
+      ({ input: generated }) =>
         Effect.gen(function* () {
+          const input = wellFormed(generated);
           const chain = input.job
             ? Chain.cases.job.make({ process: `process_01m6v5270hf3c8x2q7w9z4k5${String(input.at).padStart(2, "0")}` })
             : Chain.cases.spans.make({});
@@ -202,8 +220,9 @@ for (const kind of ["node", "wire"] as const) {
 it.effect.prop(
   "a cap below the initialized database rolls before a fresh row",
   { input: Input },
-  ({ input }) =>
+  ({ input: generated }) =>
     Effect.gen(function* () {
+      const input = wellFormed(generated);
       const chain = Chain.cases.spans.make({});
       const name = JSON.stringify([`cap-${sequence++}`, partName(chain, input.at)]);
       const part = node(name, 1);
