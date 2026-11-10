@@ -9,8 +9,8 @@ import { assign, measured, Shards } from "./vitest.shards.ts";
 it("vector: next medians and four provisional split estimates match the recorded main runs", () => {
   // Today's CI, both versions. Main runs 42717511599, 42716453289 and 42715921306.
   // The four split files are estimates: original commits-git median 247.6 / 4 = 61.9 s.
-  // The other 103 rows are measured medians, including zero-second files, except build.test.ts:
-  // that one row is from PR 763's CI run 42905335144.
+  // 108 rows: four split estimates, two build rows from PR 763's CI run 42905335144,
+  // and 102 measured medians, including zero-second files.
   const expected = {
     "next/apps/fabrika/src/brain-life.test.ts": 27.4,
     "next/apps/fabrika/src/build.test.ts": 45.9,
@@ -62,6 +62,7 @@ it("vector: next medians and four provisional split estimates match the recorded
     "next/packages/libfabrika/src/app/runner.test.ts": 41.2,
     "next/packages/libfabrika/src/app/state.test.ts": 0.1,
     "next/packages/libfabrika/src/app/supervisor.laws.test.ts": 0.1,
+    "next/packages/libfabrika/src/build-one-file.test.ts": 54.3,
     "next/packages/libfabrika/src/coordination/authorization.test.ts": 16.4,
     "next/packages/libfabrika/src/coordination/client-manager.test.ts": 13.0,
     "next/packages/libfabrika/src/coordination/gateway-manager.test.ts": 2.5,
