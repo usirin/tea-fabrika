@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { afterAll, afterEach, describe, expect, it } from "@effect/vitest";
 import {
   Cause,
   Arbitrary,
@@ -275,22 +275,24 @@ type Update =
 const folder = mkdtempSync(join(tmpdir(), "p11-runner-"));
 const databases: DatabaseSync[] = [];
 
-afterAll(() => {
-  for (const db of databases) {
+afterEach(() => {
+  // Each case closes the connections it opened, so no hook closes the whole file's at once.
+  for (const db of databases.splice(0)) {
     if (db.isOpen) {
       db.close();
     }
   }
-
-  rmSync(folder, { recursive: true, force: true });
 });
+
+afterAll(() => rmSync(folder, { recursive: true, force: true }));
 
 let files = 0;
 
 const connect = (path: string) => {
   const db = new DatabaseSync(path);
-  // Match the product's Node span queue settings in src/node/stage-recording.ts.
-  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+  // Match stage-recording.ts's WAL. Its synchronous=FULL guards against power loss, which a test
+  // process cannot have; here it only made the time follow the disk (ticket 585, decision 0052).
+  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
   databases.push(db);
   return db;
 };
