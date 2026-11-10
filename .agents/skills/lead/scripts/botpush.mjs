@@ -11,16 +11,20 @@ const [dir, branch, src = "HEAD"] = process.argv.slice(2);
 if (!dir || !(branch === "-" || branch?.startsWith("fabrikalfa/")))
 	throw new Error("usage: botpush.mjs <worktree> fabrikalfa/<name>");
 // Check only committed additions, before reading credentials or making any network request.
+// A lane's diff can pass execFileSync's 1 MB default (a minified CSS patch did), so the buffer is
+// wide, and a failure says which part failed instead of exiting with no word.
+let diff;
 try {
-	const diff = execFileSync("git", [
-		"-C",
-		dir,
-		"diff",
-		"--no-ext-diff",
-		"--no-textconv",
-		"--unified=0",
-		`origin/main...${src}`,
-	]);
+	diff = execFileSync(
+		"git",
+		["-C", dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=0", `origin/main...${src}`],
+		{maxBuffer: 256 * 1024 * 1024},
+	);
+} catch {
+	console.error("botpush: cannot read the diff from origin/main");
+	process.exit(1);
+}
+try {
 	execFileSync("sh", [fileURLToPath(new URL("./leakgrep.sh", import.meta.url))], {
 		cwd: dir,
 		input: diff,
