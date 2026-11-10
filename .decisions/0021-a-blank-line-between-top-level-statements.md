@@ -1,7 +1,7 @@
 ---
 id: 0021
 title: A blank line stands between top-level statements and between class members, added by pnpm format
-status: accepted
+status: amended-in-part by [0025](0025-braces-always-and-blank-lines-around-blocks.md)
 date: 2026-11-09
 tags: [lint, format, oxlint, oxfmt, readability]
 ---
@@ -57,5 +57,7 @@ Binding constraints:
 - The first sweep added 2,920 blank lines to 566 files and nothing else. Open branches need
   `pnpm format` after merging main, since the blank lines conflict.
 - `path:line` citations in `.patterns/` and notes drift by a few lines in swept files.
-- Blank lines inside a function body are not decided here.
+- Blank lines inside a function body are not decided here, except around block statements:
+  [0025](0025-braces-always-and-blank-lines-around-blocks.md) puts one before and after each `if`,
+  loop, `switch` and `try`. The rest of this file still holds.
 - Long reasoning: [oxlint and oxfmt](../docs/direction/oxlint-and-oxfmt.md).

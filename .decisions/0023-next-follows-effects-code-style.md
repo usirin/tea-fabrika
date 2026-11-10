@@ -1,7 +1,7 @@
 ---
 id: 0023
 title: next/ follows the Effect codebase's code style and doc comments as strictly as it can, and each kept difference names its reason
-status: accepted
+status: amended-in-part by [0025](0025-braces-always-and-blank-lines-around-blocks.md)
 date: 2026-11-09
 tags: [style, format, lint, doc-comments, jsdoc, effect, next, readability, open-source]
 ---
@@ -92,7 +92,8 @@ stays only with a written reason in this file.**
 | Formatter | dprint | oxfmt | the same note | kept: the note settled oxfmt; it can print every setting above except the star |
 | Quotes, arrow parens, import sort | double, always, case-insensitive | the same | | same |
 | Blank lines | a blank line at about 93% of top-level boundaries after a multi-line statement in `packages/effect/src` (7,896 of 8,527), not enforced | enforced by a rule, with one-line groups kept ([PR 659](https://github.com/usirin/tea-fabrika/pull/659), 0021) | 0021, open as PR 659 | kept: stricter, same direction |
-| Braces on `if` | one-statement `if (x) return y` with no braces is common (2,228 lines in `packages/effect/src`), no `curly` rule | no rule yet | | follow Effect: a rule that forces braces everywhere is a difference and goes to the owner first |
+| Braces on `if` | one-statement `if (x) return y` with no braces is common (2,228 lines in `packages/effect/src`), no `curly` rule | braces on every body, `eslint/curly` `all` | owner, 2026-11-09, [0025](0025-braces-always-and-blank-lines-around-blocks.md) | differs: readability for a human reader |
+| Blank lines around blocks | not enforced | a blank line before and after each `if`, loop, `switch` and `try` | owner, 2026-11-09, [0025](0025-braces-always-and-blank-lines-around-blocks.md) | differs: readability for a human reader |
 | Library imports | namespace import by module path, `import * as Effect from "effect/Effect"`; `effect/no-import-from-barrel-package` bans the barrel in package code | `import {Effect} from "effect"` (170 import lines in `next/`) | | follow in libraries; apps keep the barrel |
 | Type imports | `consistent-type-imports` with `fixStyle: "inline-type-imports"` | `consistent-type-imports`, default fix style | | follow |
 | Array types | `typescript/array-type` generic: `ReadonlyArray<A>`, `Array<A>` | no rule | | follow |
@@ -118,7 +119,6 @@ stays only with a written reason in this file.**
     change gives Effect's spelling.
   - open: bare `of` in `next/`, banned or allowed where Effect uses it.
   - open: plural service names, `<Thing>Manager` or Effect's plural names.
-  - open, when proposed: a `curly` rule. Effect has none.
 - **Follow, each as its own lead-tooling or sweep ticket:** the import style, inline type imports,
   generic array types and `no-console` in libraries; PascalCase module files with `internal/`; the
   namespace barrel; doc comments on every public export.
@@ -133,4 +133,6 @@ stays only with a written reason in this file.**
   correct tree, so they stay off. Which tool blocks is the pattern ticket's call.
 - **Cost.** The follow items touch most files in `next/`. They are sweeps, not hand edits, and each
   lands as its own pull request.
+- **Decided since:** a `curly` rule and blank lines around blocks, both a difference from Effect
+  ([0025](0025-braces-always-and-blank-lines-around-blocks.md)).
 - **Not decided here:** the open items above; `@since` values while `libfabrika` is `0.0.0`.
