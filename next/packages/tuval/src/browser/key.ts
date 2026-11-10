@@ -9,9 +9,9 @@
 // compare-and-set, so a second tab that asks again takes the first one's replacement.
 //
 // It provides transport's `ClientKey` contract; the window consumes it.
-import {ClientKey, type Identity, KeyLine, StoreError} from "@kampus/libfabrika/transport";
-import {Effect, Layer, Schema} from "effect";
-import {Base64, Base64Url} from "effect/encoding";
+import { ClientKey, type Identity, KeyLine, StoreError } from "@kampus/libfabrika/transport";
+import { Effect, Layer, Schema } from "effect";
+import { Base64, Base64Url } from "effect/encoding";
 
 const DB = "fabrika";
 const STORE = "keys";
@@ -23,68 +23,64 @@ const USES: Array<KeyUsage> = ["sign", "verify"];
 /** A failure's platform name: a `DOMException`'s, which the platform takes from a fixed list, or
  *  `TypeError`, else `other`. Never its message. */
 const platformName = (error: unknown): string =>
-	error instanceof DOMException ? error.name : error instanceof TypeError ? "TypeError" : "other";
+  error instanceof DOMException ? error.name : error instanceof TypeError ? "TypeError" : "other";
 
 export const storeFailure = (op: StoreError["op"]) => (error: unknown) =>
-	new StoreError({op, error: platformName(error)});
+  new StoreError({ op, error: platformName(error) });
 
 type Stored = {
-	readonly pair: CryptoKeyPair;
-	readonly fingerprint: string;
-	readonly raw: string;
+  readonly pair: CryptoKeyPair;
+  readonly fingerprint: string;
+  readonly raw: string;
 };
 
 const isStored = (u: unknown): u is Stored =>
-	typeof u === "object" &&
-	u !== null &&
-	"pair" in u &&
-	"fingerprint" in u &&
-	typeof u.fingerprint === "string" &&
-	"raw" in u &&
-	typeof u.raw === "string";
+  typeof u === "object" &&
+  u !== null &&
+  "pair" in u &&
+  "fingerprint" in u &&
+  typeof u.fingerprint === "string" &&
+  "raw" in u &&
+  typeof u.raw === "string";
 
 /** One IndexedDB request as an Effect. */
 export const request = <A>(op: StoreError["op"], make: () => IDBRequest<A>) =>
-	Effect.callback<A, StoreError>((resume) => {
-		try {
-			const req = make();
-			req.onsuccess = () => resume(Effect.succeed(req.result));
-			req.onerror = () => resume(Effect.fail(storeFailure(op)(req.error)));
-		} catch (error) {
-			resume(Effect.fail(storeFailure(op)(error)));
-		}
-	});
+  Effect.callback<A, StoreError>((resume) => {
+    try {
+      const req = make();
+      req.onsuccess = () => resume(Effect.succeed(req.result));
+      req.onerror = () => resume(Effect.fail(storeFailure(op)(req.error)));
+    } catch (error) {
+      resume(Effect.fail(storeFailure(op)(error)));
+    }
+  });
 
 /** Opens database `name` at version 1, with its one object store `store`. */
 export const openDb = (name: string, store: string) =>
-	request("open", () => {
-		const open = indexedDB.open(name, 1);
-		open.onupgradeneeded = () => {
-			if (!open.result.objectStoreNames.contains(store)) {
-				open.result.createObjectStore(store);
-			}
-		};
-		return open;
-	});
+  request("open", () => {
+    const open = indexedDB.open(name, 1);
+    open.onupgradeneeded = () => {
+      if (!open.result.objectStoreNames.contains(store)) {
+        open.result.createObjectStore(store);
+      }
+    };
+    return open;
+  });
 
 /** One read-write transaction on `store` as an Effect: `work` runs inside it, and it succeeds once
  *  the transaction is complete, so what it wrote is durable. */
-export const transaction = <A>(
-	db: IDBDatabase,
-	store: string,
-	work: (s: IDBObjectStore) => () => A,
-) =>
-	Effect.callback<A, StoreError>((resume) => {
-		try {
-			const tx = db.transaction(store, "readwrite");
-			const result = work(tx.objectStore(store));
-			tx.oncomplete = () => resume(Effect.succeed(result()));
-			tx.onerror = () => resume(Effect.fail(storeFailure("write")(tx.error)));
-			tx.onabort = () => resume(Effect.fail(storeFailure("write")(tx.error)));
-		} catch (error) {
-			resume(Effect.fail(storeFailure("write")(error)));
-		}
-	});
+export const transaction = <A>(db: IDBDatabase, store: string, work: (s: IDBObjectStore) => () => A) =>
+  Effect.callback<A, StoreError>((resume) => {
+    try {
+      const tx = db.transaction(store, "readwrite");
+      const result = work(tx.objectStore(store));
+      tx.oncomplete = () => resume(Effect.succeed(result()));
+      tx.onerror = () => resume(Effect.fail(storeFailure("write")(tx.error)));
+      tx.onabort = () => resume(Effect.fail(storeFailure("write")(tx.error)));
+    } catch (error) {
+      resume(Effect.fail(storeFailure("write")(error)));
+    }
+  });
 
 /**
  * One read-write step on the key store: `decide` sees what is stored under `key` and answers what
@@ -92,136 +88,134 @@ export const transaction = <A>(
  * two tabs cannot both win.
  */
 const atomically = <A>(
-	db: IDBDatabase,
-	key: string,
-	decide: (stored: unknown) => {readonly put?: unknown; readonly value: A},
+  db: IDBDatabase,
+  key: string,
+  decide: (stored: unknown) => { readonly put?: unknown; readonly value: A },
 ) =>
-	transaction(db, STORE, (store) => {
-		let out: A | undefined;
-		const read = store.get(key);
-		read.onsuccess = () => {
-			const decided = decide(read.result);
-			out = decided.value;
+  transaction(db, STORE, (store) => {
+    let out: A | undefined;
+    const read = store.get(key);
+    read.onsuccess = () => {
+      const decided = decide(read.result);
+      out = decided.value;
 
-			if ("put" in decided) {
-				store.put(decided.put, key);
-			}
-		};
-		return () => out as A;
-	});
+      if ("put" in decided) {
+        store.put(decided.put, key);
+      }
+    };
+    return () => out as A;
+  });
 
 const readKey = (db: IDBDatabase) =>
-	request("read", () => db.transaction(STORE, "readonly").objectStore(STORE).get(KEY));
+  request("read", () => db.transaction(STORE, "readonly").objectStore(STORE).get(KEY));
 
 /** The SSH wire field of `bytes`: a 4-byte length, then the bytes. */
 const field = (bytes: Uint8Array): Uint8Array => {
-	const out = new Uint8Array(4 + bytes.length);
-	new DataView(out.buffer).setUint32(0, bytes.length);
-	out.set(bytes, 4);
-	return out;
+  const out = new Uint8Array(4 + bytes.length);
+  new DataView(out.buffer).setUint32(0, bytes.length);
+  out.set(bytes, 4);
+  return out;
 };
 
 /** A fresh non-extractable Ed25519 pair, with its public names. */
 const makeKey = Effect.gen(function* () {
-	const bad = storeFailure("make");
-	const s = crypto.subtle;
-	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto makes a key through a Promise
-	const pair = yield* Effect.tryPromise({try: () => s.generateKey(ED, false, USES), catch: bad});
+  const bad = storeFailure("make");
+  const s = crypto.subtle;
+  // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto makes a key through a Promise
+  const pair = yield* Effect.tryPromise({ try: () => s.generateKey(ED, false, USES), catch: bad });
 
-	if (!("privateKey" in pair)) {
-		return yield* Effect.fail(bad(new TypeError("not a key pair")));
-	}
+  if (!("privateKey" in pair)) {
+    return yield* Effect.fail(bad(new TypeError("not a key pair")));
+  }
 
-	const pub = pair.publicKey;
-	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto exports the public half through a Promise
-	const out = yield* Effect.tryPromise({try: () => s.exportKey("raw", pub), catch: bad});
-	const raw = new Uint8Array(out);
-	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
-	const digest = yield* Effect.tryPromise({try: () => s.digest("SHA-256", raw), catch: bad});
-	return {
-		pair,
-		raw: Base64Url.encode(raw),
-		fingerprint: `SHA256:${Base64.encode(new Uint8Array(digest)).replace(/=+$/, "")}`,
-	} satisfies Stored;
+  const pub = pair.publicKey;
+  // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto exports the public half through a Promise
+  const out = yield* Effect.tryPromise({ try: () => s.exportKey("raw", pub), catch: bad });
+  const raw = new Uint8Array(out);
+  // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
+  const digest = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", raw), catch: bad });
+  return {
+    pair,
+    raw: Base64Url.encode(raw),
+    fingerprint: `SHA256:${Base64.encode(new Uint8Array(digest)).replace(/=+$/, "")}`,
+  } satisfies Stored;
 });
 
 const lineFor = (raw: string): Effect.Effect<KeyLine, StoreError> => {
-	const bytes = Base64Url.decode(raw);
+  const bytes = Base64Url.decode(raw);
 
-	if (bytes._tag === "Failure") {
-		return Effect.fail(new StoreError({op: "read", error: "DataError"}));
-	}
+  if (bytes._tag === "Failure") {
+    return Effect.fail(new StoreError({ op: "read", error: "DataError" }));
+  }
 
-	const type = new TextEncoder().encode("ssh-ed25519");
-	const blob = new Uint8Array([...field(type), ...field(bytes.success)]);
-	return Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`).pipe(
-		Effect.mapError(() => new StoreError({op: "read", error: "DataError"})),
-	);
+  const type = new TextEncoder().encode("ssh-ed25519");
+  const blob = new Uint8Array([...field(type), ...field(bytes.success)]);
+  return Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`).pipe(
+    Effect.mapError(() => new StoreError({ op: "read", error: "DataError" })),
+  );
 };
 
 const identity = (stored: Stored, found: Identity["found"]): Effect.Effect<Identity, StoreError> =>
-	Effect.map(lineFor(stored.raw), (line) => ({
-		fingerprint: stored.fingerprint,
-		raw: stored.raw,
-		line,
-		found,
-		sign: (bytes: Uint8Array) => {
-			const [s, key, data] = [crypto.subtle, stored.pair.privateKey, new Uint8Array(bytes)];
-			const bad = storeFailure("sign");
-			// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs through a Promise
-			const signed = Effect.tryPromise({try: () => s.sign(ED, key, data), catch: bad});
-			return Effect.map(signed, (signature) => new Uint8Array(signature));
-		},
-	}));
+  Effect.map(lineFor(stored.raw), (line) => ({
+    fingerprint: stored.fingerprint,
+    raw: stored.raw,
+    line,
+    found,
+    sign: (bytes: Uint8Array) => {
+      const [s, key, data] = [crypto.subtle, stored.pair.privateKey, new Uint8Array(bytes)];
+      const bad = storeFailure("sign");
+      // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs through a Promise
+      const signed = Effect.tryPromise({ try: () => s.sign(ED, key, data), catch: bad });
+      return Effect.map(signed, (signature) => new Uint8Array(signature));
+    },
+  }));
 
 /** The browser's `ClientKey`: the profile's key in IndexedDB, and the Storage API's persistence. */
 export const browserKey = Layer.sync(ClientKey, () => {
-	let db: IDBDatabase | null = null;
-	const opened = Effect.suspend(() =>
-		db === null
-			? Effect.tap(openDb(DB, STORE), (d) => Effect.sync(() => (db = d)))
-			: Effect.succeed(db),
-	);
-	const current = Effect.fn("client.key")(function* (rejected: string | null) {
-		const d = yield* opened;
-		const stored = yield* readKey(d);
+  let db: IDBDatabase | null = null;
+  const opened = Effect.suspend(() =>
+    db === null ? Effect.tap(openDb(DB, STORE), (d) => Effect.sync(() => (db = d))) : Effect.succeed(db),
+  );
+  const current = Effect.fn("client.key")(function* (rejected: string | null) {
+    const d = yield* opened;
+    const stored = yield* readKey(d);
 
-		if (isStored(stored) && stored.fingerprint !== rejected) {
-			return yield* identity(stored, "reused");
-		}
+    if (isStored(stored) && stored.fingerprint !== rejected) {
+      return yield* identity(stored, "reused");
+    }
 
-		const candidate = yield* makeKey;
-		const chosen = yield* atomically<{
-			readonly stored: Stored;
-			readonly found: Identity["found"];
-		}>(d, KEY, (now) =>
-			isStored(now) && now.fingerprint !== rejected
-				? {value: {stored: now, found: "reused" as const}}
-				: {
-						put: candidate,
-						value: {
-							stored: candidate,
-							found: isStored(now) ? ("replaced" as const) : ("created" as const),
-						},
-					},
-		);
-		return yield* identity(chosen.stored, chosen.found);
-	});
-	const claimPersist = Effect.gen(function* () {
-		const d = yield* opened;
-		return yield* atomically(d, PERSIST, (now) =>
-			now === undefined ? {put: {claimed: true}, value: true} : {value: false},
-		);
-	}).pipe(Effect.withSpan("client.persist"));
-	const persist = Effect.suspend(() => {
-		const st: StorageManager | undefined = navigator.storage;
+    const candidate = yield* makeKey;
+    const chosen = yield* atomically<{
+      readonly stored: Stored;
+      readonly found: Identity["found"];
+    }>(d, KEY, (now) =>
+      isStored(now) && now.fingerprint !== rejected
+        ? { value: { stored: now, found: "reused" as const } }
+        : {
+            put: candidate,
+            value: {
+              stored: candidate,
+              found: isStored(now) ? ("replaced" as const) : ("created" as const),
+            },
+          },
+    );
+    return yield* identity(chosen.stored, chosen.found);
+  });
+  const claimPersist = Effect.gen(function* () {
+    const d = yield* opened;
+    return yield* atomically(d, PERSIST, (now) =>
+      now === undefined ? { put: { claimed: true }, value: true } : { value: false },
+    );
+  }).pipe(Effect.withSpan("client.persist"));
+  const persist = Effect.suspend(() => {
+    const st: StorageManager | undefined = navigator.storage;
 
-		if (st?.persist === undefined) {
-			return Effect.fail("unsupported" as const);
-		}
+    if (st?.persist === undefined) {
+      return Effect.fail("unsupported" as const);
+    }
 
-		// oxlint-disable-next-line fabrika/no-promises -- edge: the Storage API asks for persistence through a Promise
-		return Effect.tryPromise({try: () => st.persist(), catch: () => "failed" as const});
-	});
-	return {current, claimPersist, persist};
+    // oxlint-disable-next-line fabrika/no-promises -- edge: the Storage API asks for persistence through a Promise
+    return Effect.tryPromise({ try: () => st.persist(), catch: () => "failed" as const });
+  });
+  return { current, claimPersist, persist };
 });

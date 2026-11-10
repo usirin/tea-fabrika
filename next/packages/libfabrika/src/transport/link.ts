@@ -6,9 +6,9 @@
 // The link never sits still: every live state has a timer that moves it. A grant wait leaves only
 // by `client.granted` on its dial, a close or a block: no timer admits a key. A 4003 close means the
 // key was removed, and only a person's Ask again dials once more.
-import {Cmd, Machine} from "@demlik/tea/effect";
-import {Context, type Effect, Schema, type Scope, type Stream} from "effect";
-import type {KeyLine} from "./sshsig.ts";
+import { Cmd, Machine } from "@demlik/tea/effect";
+import { Context, type Effect, Schema, type Scope, type Stream } from "effect";
+import type { KeyLine } from "./sshsig.ts";
 
 /** No wait is longer than this: p5's 30-second cap. */
 export const CAP = 30_000;
@@ -26,190 +26,177 @@ const Dial = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 export const Link = Schema.TaggedUnion({
-	/** A socket for `dial` is opening, or a fresh hello is being signed on it. `tries` carries the
-	 *  failed attempts since the link was last online, so the backoff keeps growing. */
-	dialing: {dial: Dial, tries: Schema.optionalKey(Count)},
-	/** The key is not granted yet: the door showed `code` until `until`. `knocks` counts renewals. */
-	waiting_grant: {
-		dial: Dial,
-		fingerprint: Schema.String,
-		code: Schema.String,
-		until: Schema.Number,
-		knocks: Schema.optionalKey(Count),
-	},
-	/** Admitted. `ping` is the brain's interval in ms; `pings` the checks still unanswered. */
-	online: {dial: Dial, ping: Schema.Number, pings: Schema.optionalKey(Count)},
-	/** The last dial failed; the next one waits `backoff(tries)`. */
-	retrying: {dial: Dial, tries: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))},
-	/** The key was removed (close 4003). Nothing dials again until Ask again. */
-	removed: {fingerprint: Schema.String},
-	/** The client cannot go on, such as a key store that failed. */
-	blocked: {reason: Schema.String},
+  /** A socket for `dial` is opening, or a fresh hello is being signed on it. `tries` carries the
+   *  failed attempts since the link was last online, so the backoff keeps growing. */
+  dialing: { dial: Dial, tries: Schema.optionalKey(Count) },
+  /** The key is not granted yet: the door showed `code` until `until`. `knocks` counts renewals. */
+  waiting_grant: {
+    dial: Dial,
+    fingerprint: Schema.String,
+    code: Schema.String,
+    until: Schema.Number,
+    knocks: Schema.optionalKey(Count),
+  },
+  /** Admitted. `ping` is the brain's interval in ms; `pings` the checks still unanswered. */
+  online: { dial: Dial, ping: Schema.Number, pings: Schema.optionalKey(Count) },
+  /** The last dial failed; the next one waits `backoff(tries)`. */
+  retrying: { dial: Dial, tries: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)) },
+  /** The key was removed (close 4003). Nothing dials again until Ask again. */
+  removed: { fingerprint: Schema.String },
+  /** The client cannot go on, such as a key store that failed. */
+  blocked: { reason: Schema.String },
 });
 export type Link = typeof Link.Type;
 
-const OnDial = {dial: Dial};
+const OnDial = { dial: Dial };
 
 export const LinkMsg = Schema.Union([
-	Schema.Struct({type: Schema.Literal("admitted"), ...OnDial, ping: Schema.Number}),
-	Schema.Struct({
-		type: Schema.Literal("not_granted"),
-		...OnDial,
-		fingerprint: Schema.String,
-		code: Schema.String,
-		until: Schema.Number,
-	}),
-	Schema.Struct({type: Schema.Literal("granted"), ...OnDial}),
-	Schema.Struct({
-		type: Schema.Literal("closed"),
-		...OnDial,
-		code: Schema.Int,
-		fingerprint: Schema.String,
-	}),
-	Schema.Struct({type: Schema.Literal("retry"), ...OnDial, tries: Schema.Int}),
-	Schema.Struct({type: Schema.Literal("beat"), ...OnDial}),
-	Schema.Struct({type: Schema.Literal("pong"), ...OnDial}),
-	Schema.Struct({type: Schema.Literal("stalled"), ...OnDial}),
-	Schema.Struct({type: Schema.Literal("renew"), ...OnDial}),
-	Schema.Struct({type: Schema.Literal("blocked"), reason: Schema.String}),
-	Schema.Struct({type: Schema.Literal("ask_again"), ...OnDial}),
+  Schema.Struct({ type: Schema.Literal("admitted"), ...OnDial, ping: Schema.Number }),
+  Schema.Struct({
+    type: Schema.Literal("not_granted"),
+    ...OnDial,
+    fingerprint: Schema.String,
+    code: Schema.String,
+    until: Schema.Number,
+  }),
+  Schema.Struct({ type: Schema.Literal("granted"), ...OnDial }),
+  Schema.Struct({
+    type: Schema.Literal("closed"),
+    ...OnDial,
+    code: Schema.Int,
+    fingerprint: Schema.String,
+  }),
+  Schema.Struct({ type: Schema.Literal("retry"), ...OnDial, tries: Schema.Int }),
+  Schema.Struct({ type: Schema.Literal("beat"), ...OnDial }),
+  Schema.Struct({ type: Schema.Literal("pong"), ...OnDial }),
+  Schema.Struct({ type: Schema.Literal("stalled"), ...OnDial }),
+  Schema.Struct({ type: Schema.Literal("renew"), ...OnDial }),
+  Schema.Struct({ type: Schema.Literal("blocked"), reason: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("ask_again"), ...OnDial }),
 ]);
 export type LinkMsg = typeof LinkMsg.Type;
 
 /** Send the text `ping` on the dial's socket; the brain answers `pong`. */
 export const ping = Cmd.make("ping", {
-	input: Schema.Struct(OnDial),
-	ok: Schema.Null,
-	err: ["closed"],
+  input: Schema.Struct(OnDial),
+  ok: Schema.Null,
+  err: ["closed"],
 });
 
 /** Knock again on the dial's socket (`door.knock`), keeping or renewing the waiting code. */
 export const knock = Cmd.make("knock", {
-	input: Schema.Struct(OnDial),
-	ok: Schema.Null,
-	err: ["closed"],
+  input: Schema.Struct(OnDial),
+  ok: Schema.Null,
+  err: ["closed"],
 });
 
 /** The wait before retry number `tries`: doubling from half a second, never past the cap. */
-export const backoff = (tries: number): number =>
-	Math.min(CAP, 500 * 2 ** Math.max(-1, Math.min(tries - 1, 16)));
+export const backoff = (tries: number): number => Math.min(CAP, 500 * 2 ** Math.max(-1, Math.min(tries - 1, 16)));
 
 /** The timer the state waits on, or null when only a person can move it. */
-export const linkTimer = (link: Link): {readonly after: number; readonly msg: LinkMsg} | null => {
-	switch (link._tag) {
-		case "dialing":
-			return {after: DIALING, msg: {type: "stalled", dial: link.dial}};
-		case "waiting_grant":
-			return {after: RENEW, msg: {type: "renew", dial: link.dial}};
-		case "online": {
-			const after = Math.max(0, Math.min(link.ping, BEAT));
-			return (link.pings ?? 0) === 0
-				? {after, msg: {type: "beat", dial: link.dial}}
-				: {after, msg: {type: "stalled", dial: link.dial}};
-		}
-		case "retrying":
-			return {after: backoff(link.tries), msg: {type: "retry", dial: link.dial, tries: link.tries}};
-		case "removed":
-		case "blocked":
-			return null;
-	}
+export const linkTimer = (link: Link): { readonly after: number; readonly msg: LinkMsg } | null => {
+  switch (link._tag) {
+    case "dialing":
+      return { after: DIALING, msg: { type: "stalled", dial: link.dial } };
+    case "waiting_grant":
+      return { after: RENEW, msg: { type: "renew", dial: link.dial } };
+    case "online": {
+      const after = Math.max(0, Math.min(link.ping, BEAT));
+      return (link.pings ?? 0) === 0
+        ? { after, msg: { type: "beat", dial: link.dial } }
+        : { after, msg: { type: "stalled", dial: link.dial } };
+    }
+    case "retrying":
+      return { after: backoff(link.tries), msg: { type: "retry", dial: link.dial, tries: link.tries } };
+    case "removed":
+    case "blocked":
+      return null;
+  }
 };
 
 /** The link's timer as tea's built-in `timer` Sub takes it. */
-export const timerDeps = (link: Link): {readonly ms: number; readonly msg: LinkMsg} | null => {
-	const timer = linkTimer(link);
-	return timer === null ? null : {ms: timer.after, msg: timer.msg};
+export const timerDeps = (link: Link): { readonly ms: number; readonly msg: LinkMsg } | null => {
+  const timer = linkTimer(link);
+  return timer === null ? null : { ms: timer.after, msg: timer.msg };
 };
 
 /** The dial a live state has a socket for, or null. */
 export const socketDial = (link: Link): number | null =>
-	link._tag === "dialing" || link._tag === "waiting_grant" || link._tag === "online"
-		? link.dial
-		: null;
+  link._tag === "dialing" || link._tag === "waiting_grant" || link._tag === "online" ? link.dial : null;
 
 const failures = (link: Link): number =>
-	link._tag === "dialing" ? (link.tries ?? 0) : link._tag === "retrying" ? link.tries : 0;
+  link._tag === "dialing" ? (link.tries ?? 0) : link._tag === "retrying" ? link.tries : 0;
 
-const failed = (link: Link & {readonly dial: number}): Link =>
-	Link.cases.retrying.make({dial: link.dial, tries: failures(link) + 1});
+const failed = (link: Link & { readonly dial: number }): Link =>
+  Link.cases.retrying.make({ dial: link.dial, tries: failures(link) + 1 });
 
 type Step = readonly [Link, ReadonlyArray<ReturnType<typeof ping> | ReturnType<typeof knock>>];
 const stay = (link: Link): Step => [link, []];
 
 export const linkMachine = Machine.make({
-	model: Link,
-	msg: LinkMsg,
-	cmds: [ping, knock],
-	init: (loaded) => [loaded ?? Link.cases.dialing.make({dial: 1}), []],
-	update: {
-		admitted: (s, m) =>
-			s._tag === "dialing" && s.dial === m.dial
-				? [Link.cases.online.make({dial: m.dial, ping: m.ping, pings: 0}), []]
-				: stay(s),
-		not_granted: (s, m) => {
-			if (!(s._tag === "dialing" || s._tag === "waiting_grant") || s.dial !== m.dial) {
-				return stay(s);
-			}
+  model: Link,
+  msg: LinkMsg,
+  cmds: [ping, knock],
+  init: (loaded) => [loaded ?? Link.cases.dialing.make({ dial: 1 }), []],
+  update: {
+    admitted: (s, m) =>
+      s._tag === "dialing" && s.dial === m.dial
+        ? [Link.cases.online.make({ dial: m.dial, ping: m.ping, pings: 0 }), []]
+        : stay(s),
+    not_granted: (s, m) => {
+      if (!(s._tag === "dialing" || s._tag === "waiting_grant") || s.dial !== m.dial) {
+        return stay(s);
+      }
 
-			const knocks = s._tag === "waiting_grant" ? (s.knocks ?? 0) : 0;
-			return [
-				Link.cases.waiting_grant.make({
-					dial: m.dial,
-					fingerprint: m.fingerprint,
-					code: m.code,
-					until: m.until,
-					knocks,
-				}),
-				[],
-			];
-		},
-		granted: (s, m) =>
-			s._tag === "waiting_grant" && s.dial === m.dial
-				? [Link.cases.dialing.make({dial: m.dial}), []]
-				: stay(s),
-		closed: (s, m) => {
-			if (socketDial(s) !== m.dial || s._tag === "removed" || s._tag === "blocked") {
-				return stay(s);
-			}
+      const knocks = s._tag === "waiting_grant" ? (s.knocks ?? 0) : 0;
+      return [
+        Link.cases.waiting_grant.make({
+          dial: m.dial,
+          fingerprint: m.fingerprint,
+          code: m.code,
+          until: m.until,
+          knocks,
+        }),
+        [],
+      ];
+    },
+    granted: (s, m) =>
+      s._tag === "waiting_grant" && s.dial === m.dial ? [Link.cases.dialing.make({ dial: m.dial }), []] : stay(s),
+    closed: (s, m) => {
+      if (socketDial(s) !== m.dial || s._tag === "removed" || s._tag === "blocked") {
+        return stay(s);
+      }
 
-			if (m.code === REMOVED) {
-				return [Link.cases.removed.make({fingerprint: m.fingerprint}), []];
-			}
+      if (m.code === REMOVED) {
+        return [Link.cases.removed.make({ fingerprint: m.fingerprint }), []];
+      }
 
-			return s._tag === "retrying" ? stay(s) : [failed(s), []];
-		},
-		retry: (s, m) =>
-			s._tag === "retrying" && s.dial === m.dial
-				? [Link.cases.dialing.make({dial: s.dial + 1, tries: s.tries}), []]
-				: stay(s),
-		beat: (s, m) =>
-			s._tag === "online" && s.dial === m.dial
-				? [{...s, pings: (s.pings ?? 0) + 1}, [ping({dial: s.dial})]]
-				: stay(s),
-		pong: (s, m) =>
-			s._tag === "online" && s.dial === m.dial && (s.pings ?? 0) > 0
-				? [{...s, pings: 0}, []]
-				: stay(s),
-		stalled: (s, m) =>
-			(s._tag === "dialing" || s._tag === "online") && s.dial === m.dial
-				? [failed(s), []]
-				: stay(s),
-		renew: (s, m) =>
-			s._tag === "waiting_grant" && s.dial === m.dial
-				? [{...s, knocks: (s.knocks ?? 0) + 1}, [knock({dial: s.dial})]]
-				: stay(s),
-		blocked: (s, m) =>
-			s._tag === "removed" || s._tag === "blocked"
-				? stay(s)
-				: [Link.cases.blocked.make({reason: m.reason}), []],
-		ask_again: (s, m) =>
-			s._tag === "removed" ? [Link.cases.dialing.make({dial: m.dial}), []] : stay(s),
-		ping_ok: stay,
-		ping_err: stay,
-		knock_ok: stay,
-		knock_err: stay,
-	},
-	subs: [{type: "timer", deps: (s) => timerDeps(s)}],
+      return s._tag === "retrying" ? stay(s) : [failed(s), []];
+    },
+    retry: (s, m) =>
+      s._tag === "retrying" && s.dial === m.dial
+        ? [Link.cases.dialing.make({ dial: s.dial + 1, tries: s.tries }), []]
+        : stay(s),
+    beat: (s, m) =>
+      s._tag === "online" && s.dial === m.dial
+        ? [{ ...s, pings: (s.pings ?? 0) + 1 }, [ping({ dial: s.dial })]]
+        : stay(s),
+    pong: (s, m) =>
+      s._tag === "online" && s.dial === m.dial && (s.pings ?? 0) > 0 ? [{ ...s, pings: 0 }, []] : stay(s),
+    stalled: (s, m) => ((s._tag === "dialing" || s._tag === "online") && s.dial === m.dial ? [failed(s), []] : stay(s)),
+    renew: (s, m) =>
+      s._tag === "waiting_grant" && s.dial === m.dial
+        ? [{ ...s, knocks: (s.knocks ?? 0) + 1 }, [knock({ dial: s.dial })]]
+        : stay(s),
+    blocked: (s, m) =>
+      s._tag === "removed" || s._tag === "blocked" ? stay(s) : [Link.cases.blocked.make({ reason: m.reason }), []],
+    ask_again: (s, m) => (s._tag === "removed" ? [Link.cases.dialing.make({ dial: m.dial }), []] : stay(s)),
+    ping_ok: stay,
+    ping_err: stay,
+    knock_ok: stay,
+    knock_err: stay,
+  },
+  subs: [{ type: "timer", deps: (s) => timerDeps(s) }],
 });
 
 // --- What a client's platform gives it ----------------------------------------------------------
@@ -220,64 +207,64 @@ export const linkMachine = Machine.make({
 /** Why a client's own store could not be used: the step, and the failure's platform name (a
  *  `DOMException` name, `TypeError`, or `other`). Never a message or a value. */
 export class StoreError extends Schema.TaggedError<StoreError>()("StoreError", {
-	op: Schema.Literals(["open", "read", "write", "make", "sign"]),
-	error: Schema.String,
+  op: Schema.Literals(["open", "read", "write", "make", "sign"]),
+  error: Schema.String,
 }) {}
 
 /** A client's key as the door checks it. */
 export type Identity = {
-	/** `SHA256:` and the unpadded base64 of SHA-256 over the raw public key: the gateway's name. */
-	readonly fingerprint: string;
-	/** The raw public key in canonical base64url, as the hello carries it. */
-	readonly raw: string;
-	readonly line: KeyLine;
-	/** How this read found the key: made now, reused, or made to replace a removed one. */
-	readonly found: "created" | "reused" | "replaced";
-	readonly sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array, StoreError>;
+  /** `SHA256:` and the unpadded base64 of SHA-256 over the raw public key: the gateway's name. */
+  readonly fingerprint: string;
+  /** The raw public key in canonical base64url, as the hello carries it. */
+  readonly raw: string;
+  readonly line: KeyLine;
+  /** How this read found the key: made now, reused, or made to replace a removed one. */
+  readonly found: "created" | "reused" | "replaced";
+  readonly sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array, StoreError>;
 };
 
 /** The profile's one key, and the one persistence attempt of a new grant. */
 export class ClientKey extends Context.Service<
-	ClientKey,
-	{
-		/** The profile's key, made once. `rejected` names a key the door removed: if it is still the
-		 *  stored one, it is replaced; if another tab replaced it already, that one is used. */
-		readonly current: (rejected: string | null) => Effect.Effect<Identity, StoreError>;
-		/** Claims the one persistence attempt of a new grant. False when a tab claimed it before. */
-		readonly claimPersist: Effect.Effect<boolean, StoreError>;
-		/** Asks the platform to keep this client's storage: its answer, or why it could not ask. */
-		readonly persist: Effect.Effect<boolean, "unsupported" | "failed">;
-	}
+  ClientKey,
+  {
+    /** The profile's key, made once. `rejected` names a key the door removed: if it is still the
+     *  stored one, it is replaced; if another tab replaced it already, that one is used. */
+    readonly current: (rejected: string | null) => Effect.Effect<Identity, StoreError>;
+    /** Claims the one persistence attempt of a new grant. False when a tab claimed it before. */
+    readonly claimPersist: Effect.Effect<boolean, StoreError>;
+    /** Asks the platform to keep this client's storage: its answer, or why it could not ask. */
+    readonly persist: Effect.Effect<boolean, "unsupported" | "failed">;
+  }
 >()("@kampus/libfabrika/transport/ClientKey") {}
 
 /** What one dial's socket tells the client, in the order it happened. */
 export type SocketEvent =
-	| {readonly event: "open"}
-	| {readonly event: "message"; readonly data: unknown}
-	| {readonly event: "close"; readonly code: number};
+  | { readonly event: "open" }
+  | { readonly event: "message"; readonly data: unknown }
+  | { readonly event: "close"; readonly code: number };
 
 /** One dial's socket: its events from the instant it exists, and text out. It closes with its
  *  scope. */
 export type Socket = {
-	readonly events: Stream.Stream<SocketEvent>;
-	/** Sends `text`; false when the socket is not open. */
-	readonly send: (text: string) => boolean;
-	readonly close: (code: number, reason: string) => void;
+  readonly events: Stream.Stream<SocketEvent>;
+  /** Sends `text`; false when the socket is not open. */
+  readonly send: (text: string) => boolean;
+  readonly close: (code: number, reason: string) => void;
 };
 
 /** Dials the brain at `url`. */
 export class ClientSocket extends Context.Service<
-	ClientSocket,
-	{readonly dial: (url: string) => Effect.Effect<Socket, never, Scope.Scope>}
+  ClientSocket,
+  { readonly dial: (url: string) => Effect.Effect<Socket, never, Scope.Scope> }
 >()("@kampus/libfabrika/transport/ClientSocket") {}
 
 /** The client's own rows waiting for the door's acknowledgement, kept across a closed client. A row
  *  is any value with a string `id`; the client checks what it reads back. */
 export class ClientRows extends Context.Service<
-	ClientRows,
-	{
-		readonly put: (row: {readonly id: string}) => Effect.Effect<void, StoreError>;
-		readonly all: Effect.Effect<ReadonlyArray<unknown>, StoreError>;
-		readonly remove: (ids: ReadonlyArray<string>) => Effect.Effect<void, StoreError>;
-	}
+  ClientRows,
+  {
+    readonly put: (row: { readonly id: string }) => Effect.Effect<void, StoreError>;
+    readonly all: Effect.Effect<ReadonlyArray<unknown>, StoreError>;
+    readonly remove: (ids: ReadonlyArray<string>) => Effect.Effect<void, StoreError>;
+  }
 >()("@kampus/libfabrika/transport/ClientRows") {}

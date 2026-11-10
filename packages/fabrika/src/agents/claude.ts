@@ -4,7 +4,7 @@
 // with the sandbox and the environment, for a process that must not load the
 // SDK. An agent's spans are on `/agents/trace`.
 
-export {psReaper} from "./agent/reap.ts";
+export { psReaper } from "./agent/reap.ts";
 export * from "./claude/adapter.ts";
 export * from "./claude/draft.ts";
 export * from "./claude/schema.ts";

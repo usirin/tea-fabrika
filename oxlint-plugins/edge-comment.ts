@@ -18,12 +18,9 @@
 //
 // Where it reports, and why there: at the very start of the file, with the real line in the message,
 // as `no-bare-disable` does. A report on the comment's own line could be silenced by a comment.
-import type {CreateRule} from "@oxlint/plugins";
+import type { CreateRule } from "@oxlint/plugins";
 
-const EDGE_RULES: ReadonlySet<string> = new Set([
-	"fabrika/no-promises",
-	"fabrika/no-effect-run-outside-edge",
-]);
+const EDGE_RULES: ReadonlySet<string> = new Set(["fabrika/no-promises", "fabrika/no-effect-run-outside-edge"]);
 
 // No word boundary after the keyword: oxlint reads `oxlint-disablefoo` as naming a rule `foo`.
 const DISABLE = /^\s*(?:oxlint|eslint)-disable(-next-line|-line)?(.*)$/s;
@@ -32,53 +29,53 @@ const EDGE_WHY = /^edge: \S/;
 
 const SHAPE = "`// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`";
 
-const START = {line: 1, column: 0};
+const START = { line: 1, column: 0 };
 
 const problem = (comment: string): string | null => {
-	const found = DISABLE.exec(comment);
+  const found = DISABLE.exec(comment);
 
-	if (found === null) {
-		return null;
-	}
+  if (found === null) {
+    return null;
+  }
 
-	const [, form = "", rest = ""] = found;
-	const at = rest.search(REASON);
-	const rules = (at < 0 ? rest : rest.slice(0, at))
-		.split(",")
-		.map((rule) => rule.trim())
-		.filter((rule) => rule !== "");
+  const [, form = "", rest = ""] = found;
+  const at = rest.search(REASON);
+  const rules = (at < 0 ? rest : rest.slice(0, at))
+    .split(",")
+    .map((rule) => rule.trim())
+    .filter((rule) => rule !== "");
 
-	if (!rules.some((rule) => EDGE_RULES.has(rule))) {
-		return null;
-	}
+  if (!rules.some((rule) => EDGE_RULES.has(rule))) {
+    return null;
+  }
 
-	if (form !== "-next-line") {
-		return "is not the `-next-line` form. An edge is one line";
-	}
+  if (form !== "-next-line") {
+    return "is not the `-next-line` form. An edge is one line";
+  }
 
-	if (rules.some((rule) => !EDGE_RULES.has(rule))) {
-		return "names a rule that is not an edge rule. Give that exception its own comment";
-	}
+  if (rules.some((rule) => !EDGE_RULES.has(rule))) {
+    return "names a rule that is not an edge rule. Give that exception its own comment";
+  }
 
-	const why = at < 0 ? "" : rest.slice(at).replace(REASON, "");
-	return EDGE_WHY.test(why) ? null : "does not give its reason as `edge: <why>`";
+  const why = at < 0 ? "" : rest.slice(at).replace(REASON, "");
+  return EDGE_WHY.test(why) ? null : "does not give its reason as `edge: <why>`";
 };
 
 export const edgeComment: CreateRule = {
-	create: (context) => ({
-		Program() {
-			for (const comment of context.sourceCode.getAllComments()) {
-				const wrong = problem(comment.value);
+  create: (context) => ({
+    Program() {
+      for (const comment of context.sourceCode.getAllComments()) {
+        const wrong = problem(comment.value);
 
-				if (wrong === null) {
-					continue;
-				}
+        if (wrong === null) {
+          continue;
+        }
 
-				context.report({
-					loc: {start: START, end: START},
-					message: `The edge comment on line ${context.sourceCode.getLocFromIndex(comment.range[0]).line} ${wrong}: ${SHAPE}, or the same for \`fabrika/no-effect-run-outside-edge\`.`,
-				});
-			}
-		},
-	}),
+        context.report({
+          loc: { start: START, end: START },
+          message: `The edge comment on line ${context.sourceCode.getLocFromIndex(comment.range[0]).line} ${wrong}: ${SHAPE}, or the same for \`fabrika/no-effect-run-outside-edge\`.`,
+        });
+      }
+    },
+  }),
 };

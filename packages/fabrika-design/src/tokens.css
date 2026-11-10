@@ -21,151 +21,151 @@
  * after Manti's stylesheet and before its own rules.
  */
 :root {
-	color-scheme: light dark;
+  color-scheme: light dark;
 
-	/* @generated colors from tokens/color by pnpm tokens: edit the TOML, never this */
-	/* The design's backgrounds. */
-	--scrim: light-dark(#00000066, #00000099); /* light black a6; dark black a8 */
-	--surface: light-dark(#fcfcfd, #111113); /* slate 1 */
-	--surface-hover: light-dark(#0000330f, #ddeaf814); /* slate a3 */
-	--surface-raised: light-dark(#fcfcfd, #18191b); /* light slate 1; dark slate 2 */
-	--surface-selected: light-dark(#0009321f, #d9edfe25); /* slate a5 */
-	--surface-sunken: light-dark(#f9f9fb, #0c0d0e); /* light slate 2; dark a bend */
-	--turn-fill: #3e63dd; /* indigo 9 */
-	--turn-fill-hover: light-dark(#3358d4, #5472e4); /* indigo 10 */
+  /* @generated colors from tokens/color by pnpm tokens: edit the TOML, never this */
+  /* The design's backgrounds. */
+  --scrim: light-dark(#00000066, #00000099); /* light black a6; dark black a8 */
+  --surface: light-dark(#fcfcfd, #111113); /* slate 1 */
+  --surface-hover: light-dark(#0000330f, #ddeaf814); /* slate a3 */
+  --surface-raised: light-dark(#fcfcfd, #18191b); /* light slate 1; dark slate 2 */
+  --surface-selected: light-dark(#0009321f, #d9edfe25); /* slate a5 */
+  --surface-sunken: light-dark(#f9f9fb, #0c0d0e); /* light slate 2; dark a bend */
+  --turn-fill: #3e63dd; /* indigo 9 */
+  --turn-fill-hover: light-dark(#3358d4, #5472e4); /* indigo 10 */
 
-	/* The design's borders. */
-	--border: light-dark(#00002f26, #d6ebfd30); /* slate a6 */
-	--border-faint: light-dark(#00002d17, #d3edf81d); /* slate a4, a bend */
-	--border-strong: light-dark(#00062e32, #d9edff40); /* slate a7 */
-	--focus: light-dark(#00051d74, #dfebfd6d); /* slate a9, a bend */
-	--wire: light-dark(#00083046, #d9edff5d); /* slate a8 */
+  /* The design's borders. */
+  --border: light-dark(#00002f26, #d6ebfd30); /* slate a6 */
+  --border-faint: light-dark(#00002d17, #d3edf81d); /* slate a4, a bend */
+  --border-strong: light-dark(#00062e32, #d9edff40); /* slate a7 */
+  --focus: light-dark(#00051d74, #dfebfd6d); /* slate a9, a bend */
+  --wire: light-dark(#00083046, #d9edff5d); /* slate a8 */
 
-	/* The design's text. */
-	--done: light-dark(#203c25, #71d083); /* light grass 12; dark grass 11 */
-	--running: light-dark(#4f3422, #ffca16); /* light amber 12; dark amber 11 */
-	--stuck: light-dark(#641723, #ff9592); /* light red 12; dark red 11 */
-	--text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
-	--text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
-	--turn-fg: #ffffff; /* a bend */
-	--turn-text: light-dark(#002bb7c5, #9eb1ff); /* light indigo a11; dark indigo 11 */
+  /* The design's text. */
+  --done: light-dark(#203c25, #71d083); /* light grass 12; dark grass 11 */
+  --running: light-dark(#4f3422, #ffca16); /* light amber 12; dark amber 11 */
+  --stuck: light-dark(#641723, #ff9592); /* light red 12; dark red 11 */
+  --text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
+  --text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
+  --turn-fg: #ffffff; /* a bend */
+  --turn-text: light-dark(#002bb7c5, #9eb1ff); /* light indigo a11; dark indigo 11 */
 
-	/* The design's names for other tokens. */
-	--closed: var(--text-faint);
+  /* The design's names for other tokens. */
+  --closed: var(--text-faint);
 
-	/* The tile's backgrounds. */
-	--tile-wash: light-dark(#00005506, #d8f4f609); /* slate a2 */
+  /* The tile's backgrounds. */
+  --tile-wash: light-dark(#00005506, #d8f4f609); /* slate a2 */
 
-	/* The tile's names for other tokens. */
-	--tile-edge: var(--border-faint);
-	--tile-edge-hover: var(--border-strong);
-	--tile-edge-loud: var(--text-faint);
-	--tile-edge-on: var(--focus);
-	--tile-text: var(--text-faint);
-	--tile-text-on: var(--text-primary);
-	--tile-wash-on: var(--surface-hover);
-	/* @end generated colors */
+  /* The tile's names for other tokens. */
+  --tile-edge: var(--border-faint);
+  --tile-edge-hover: var(--border-strong);
+  --tile-edge-loud: var(--text-faint);
+  --tile-edge-on: var(--focus);
+  --tile-text: var(--text-faint);
+  --tile-text-on: var(--text-primary);
+  --tile-wash-on: var(--surface-hover);
+  /* @end generated colors */
 
-	/*
+  /*
 	 * Type: Inter for the UI, mono only for typed things. The scale is px: each size is the number
 	 * its name says (Linear's body is 13px, macOS's 13pt). Not rem: today's app's root is 14px, so a
 	 * rem size drew 12.5% small (tracker ticket 108).
 	 */
-	--font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-	--fs-title: 22px;
-	--fs-head: 15px;
-	--fs-body: 13px;
-	--fs-prose: 14px;
-	--fs-small: 12px;
-	--fs-micro: 11px;
+  --font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --fs-title: 22px;
+  --fs-head: 15px;
+  --fs-body: 13px;
+  --fs-prose: 14px;
+  --fs-small: 12px;
+  --fs-micro: 11px;
 
-	/* Room, shape and motion. */
-	--s-1: 4px;
-	--s-2: 8px;
-	--s-3: 12px;
-	--s-4: 16px;
-	--s-5: 20px;
-	--s-6: 24px;
-	--s-8: 32px;
-	--s-10: 40px;
-	--r-sm: 4px;
-	--r: 6px;
-	--r-lg: 8px;
-	--r-xl: 12px;
-	--row-h: 32px;
-	--row-2h: 44px;
-	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-	--fast: 120ms;
+  /* Room, shape and motion. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --r-sm: 4px;
+  --r: 6px;
+  --r-lg: 8px;
+  --r-xl: 12px;
+  --row-h: 32px;
+  --row-2h: 44px;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --fast: 120ms;
 
-	/* @generated manti from tokens/manti.toml by pnpm tokens: edit the TOML, never this */
-	--manti-font-sans: var(--font);
-	--manti-font-mono: var(--mono);
-	--manti-text-xs: var(--fs-micro);
-	--manti-text-sm: var(--fs-small);
-	--manti-text-base: var(--fs-body);
-	--manti-text-lg: var(--fs-prose);
-	--manti-text-xl: var(--fs-head);
-	--manti-text-2xl: var(--fs-title);
-	--manti-bg: var(--surface-sunken);
-	--manti-bg-subtle: var(--surface);
-	--manti-surface: var(--surface);
-	--manti-surface-raised: var(--surface-raised);
-	--manti-surface-sunken: var(--surface-sunken);
-	--manti-overlay: var(--scrim);
-	--manti-border: var(--border);
-	--manti-border-strong: var(--border-strong);
-	--manti-text: var(--text-primary);
-	--manti-text-muted: var(--text-faint);
-	--manti-text-subtle: var(--text-faint);
-	--manti-link: var(--text-primary);
-	--manti-fill-subtle: var(--surface-hover);
-	--manti-fill: var(--surface-hover);
-	--manti-fill-strong: var(--surface-selected);
-	--manti-focus-ring: var(--focus);
-	--manti-focus-ring-width: 2px; /* the ring's width, as ours is (1.4.11) */
-	--manti-focus-ring-offset: 2px; /* the ring's gap, as ours is */
-	--manti-selection-bg: var(--surface-selected);
-	--manti-selection-text: var(--text-primary);
-	--manti-accent-fill: var(--turn-fill);
-	--manti-text-on-accent: var(--turn-fg);
-	--manti-danger-text: var(--stuck);
-	--manti-danger-icon: var(--stuck);
-	--manti-danger-border: var(--stuck);
-	--manti-warning-text: var(--running);
-	--manti-panel-tint: var(--surface-raised);
-	--manti-panel-tint-strong: var(--surface-raised);
-	--manti-panel-tint-pressed: var(--surface-hover);
-	--manti-panel-border: var(--border);
-	--manti-panel-blur: none; /* popovers are opaque, no glass (popovers.md) */
-	--manti-radius-xs: var(--r-sm);
-	--manti-radius-sm: var(--r);
-	--manti-radius-md: var(--r-lg);
-	--manti-radius-lg: var(--r-xl);
-	--manti-radius-xl: var(--r-xl);
-	--manti-radius-2xl: var(--r-xl);
-	--manti-space-1: var(--s-1);
-	--manti-control-height-sm: 28px; /* ui-on-manti records it as the one raw value */
-	--manti-control-height-md: var(--row-h);
-	--manti-control-height-lg: var(--row-2h);
-	--manti-duration-fast: var(--fast);
-	--manti-ease-smooth: var(--ease-out);
-	--manti-ease-soft: var(--ease-out);
-	/* @end generated manti */
+  /* @generated manti from tokens/manti.toml by pnpm tokens: edit the TOML, never this */
+  --manti-font-sans: var(--font);
+  --manti-font-mono: var(--mono);
+  --manti-text-xs: var(--fs-micro);
+  --manti-text-sm: var(--fs-small);
+  --manti-text-base: var(--fs-body);
+  --manti-text-lg: var(--fs-prose);
+  --manti-text-xl: var(--fs-head);
+  --manti-text-2xl: var(--fs-title);
+  --manti-bg: var(--surface-sunken);
+  --manti-bg-subtle: var(--surface);
+  --manti-surface: var(--surface);
+  --manti-surface-raised: var(--surface-raised);
+  --manti-surface-sunken: var(--surface-sunken);
+  --manti-overlay: var(--scrim);
+  --manti-border: var(--border);
+  --manti-border-strong: var(--border-strong);
+  --manti-text: var(--text-primary);
+  --manti-text-muted: var(--text-faint);
+  --manti-text-subtle: var(--text-faint);
+  --manti-link: var(--text-primary);
+  --manti-fill-subtle: var(--surface-hover);
+  --manti-fill: var(--surface-hover);
+  --manti-fill-strong: var(--surface-selected);
+  --manti-focus-ring: var(--focus);
+  --manti-focus-ring-width: 2px; /* the ring's width, as ours is (1.4.11) */
+  --manti-focus-ring-offset: 2px; /* the ring's gap, as ours is */
+  --manti-selection-bg: var(--surface-selected);
+  --manti-selection-text: var(--text-primary);
+  --manti-accent-fill: var(--turn-fill);
+  --manti-text-on-accent: var(--turn-fg);
+  --manti-danger-text: var(--stuck);
+  --manti-danger-icon: var(--stuck);
+  --manti-danger-border: var(--stuck);
+  --manti-warning-text: var(--running);
+  --manti-panel-tint: var(--surface-raised);
+  --manti-panel-tint-strong: var(--surface-raised);
+  --manti-panel-tint-pressed: var(--surface-hover);
+  --manti-panel-border: var(--border);
+  --manti-panel-blur: none; /* popovers are opaque, no glass (popovers.md) */
+  --manti-radius-xs: var(--r-sm);
+  --manti-radius-sm: var(--r);
+  --manti-radius-md: var(--r-lg);
+  --manti-radius-lg: var(--r-xl);
+  --manti-radius-xl: var(--r-xl);
+  --manti-radius-2xl: var(--r-xl);
+  --manti-space-1: var(--s-1);
+  --manti-control-height-sm: 28px; /* ui-on-manti records it as the one raw value */
+  --manti-control-height-md: var(--row-h);
+  --manti-control-height-lg: var(--row-2h);
+  --manti-duration-fast: var(--fast);
+  --manti-ease-smooth: var(--ease-out);
+  --manti-ease-soft: var(--ease-out);
+  /* @end generated manti */
 }
 
 /* A keycap: our size and border, in the UI's own sans, as Linear's are (popovers.md). */
 [data-scope="kbd"][data-part="root"] {
-	--manti-kbd-radius: var(--r-sm);
-	--manti-kbd-padding-x: var(--s-1);
-	--manti-kbd-padding-y: 0;
-	--manti-kbd-font-size: var(--fs-micro);
-	--manti-kbd-border-width: 1px;
-	box-sizing: border-box;
-	min-width: 17px;
-	height: 17px;
-	background: transparent;
-	color: var(--text-faint);
-	font-family: var(--manti-font-sans);
-	line-height: 1;
+  --manti-kbd-radius: var(--r-sm);
+  --manti-kbd-padding-x: var(--s-1);
+  --manti-kbd-padding-y: 0;
+  --manti-kbd-font-size: var(--fs-micro);
+  --manti-kbd-border-width: 1px;
+  box-sizing: border-box;
+  min-width: 17px;
+  height: 17px;
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--manti-font-sans);
+  line-height: 1;
 }

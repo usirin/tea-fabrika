@@ -10,8 +10,8 @@ const agent = process.env.npm_config_user_agent ?? "";
 const name = process.env.npm_package_name ?? "This package";
 
 if (!agent.startsWith("pnpm/")) {
-	process.stderr.write(
-		`${name} is packed and published with pnpm only (this is ${agent.split(" ")[0] || "an unknown tool"}): pnpm swaps in publishConfig's dist/ exports, npm does not. Run pnpm pack or pnpm publish.\n`,
-	);
-	process.exit(1);
+  process.stderr.write(
+    `${name} is packed and published with pnpm only (this is ${agent.split(" ")[0] || "an unknown tool"}): pnpm swaps in publishConfig's dist/ exports, npm does not. Run pnpm pack or pnpm publish.\n`,
+  );
+  process.exit(1);
 }
