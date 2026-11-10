@@ -1,7 +1,7 @@
 ---
 id: 0043
 title: libfabrika's src/ has one folder per subject, a room, and a layer is a floor, a line in the rule file that says who may import whom, never a folder, and each room offers Effect services in its own types and errors
-status: amended-in-part by [0051](0051-gateway-connection-and-node-by-job.md)
+status: amended-in-part by [0051](0051-gateway-connection-and-node-by-job.md), [0055](0055-errors-named-by-their-service.md)
 date: 2026-11-09
 tags: [layout, files, folders, rooms, floors, layers, internal, services, errors, access, presence, telemetry, libfabrika, next]
 ---
@@ -28,7 +28,8 @@ flowchart TD
 An arrow points down a floor, from a room to one it imports today. A floor only forbids: no import
 goes up, and none goes sideways. Which lower rooms a room may import is the exam's table
 ([Amendments](#amendments)). The door reaches every room, and it is the only room that imports
-`transport/`.
+`transport/`. *That is today's imports: from 2026-11-10 the door imports no room two
+floors down ([Amendments](#amendments)).*
 
 ```text
 next/packages/libfabrika/src/
@@ -273,8 +274,8 @@ The rules:
     ([0016](0016-tier-1-supervision-is-otps-top-level-supervisor.md)).
   - **How lint checks rule 12,** that a room's exported signatures name no other room's types.
     See [Amendments](#amendments).
-  - **Whether the door and `access/` come under "never two floors down".** Both import `ledger/`
-    today. See [Amendments](#amendments).
+  - *Whether the door and `access/` come under "never two floors down".* Answered yes, 2026-11-10;
+    see [Amendments](#amendments).
   - The app's layout (`next/apps/fabrika`), as in 0032.
 
 ## Amendments
@@ -314,6 +315,8 @@ The rules:
     ([an error keeps its cause](../.patterns/effect-errors-keep-their-cause.md)).
   - `processes/` gets an error of its own for a fault from below. `ProcessError`
     (`coordination/process.ts:160`), its refusal, stays.
+    [0055](0055-errors-named-by-their-service.md) reads "an error of its own" as one per service:
+    `Mailbox` fails with `MailboxError` and `ProcessManager` with `ProcessManagerError`.
   - No room builds another room's error. The runner's 15 `new LedgerError` become the runtime's
     own error.
   - `LedgerError` is the ledger's own and leaves the list of shared names. The first text of this
@@ -343,10 +346,16 @@ The rules:
   [Issue 913](https://github.com/kamp-us/demlik/issues/913) asks for the same-floor rule, since
   `--layers` allows imports inside one layer today. Until they ship, a local `pnpm patch` is the
   way forward. A type-level test per room is the fallback.
-- 2026-11-10, **open: the door and `access/`.** Both import `ledger/` today, two floors down or
-  more (`door/door.ts:37-52`, `coordination/session-manager.ts`). The ruling names `runtime/`.
-  Their exam rows stay as they are. Lean: the door is where the rooms are put together and keeps
-  its row; `access/` is asked next, 60%.
+- 2026-11-10, **answered (owner): the door and `access/` never import `ledger/` either.** The
+  principle of the runtime ruling holds for every room, with no exemption: each floor offers its
+  own Effect services to the floor above, in its own words, and the floor above never sees what is
+  two floors down. So `gateway/` (was `door/`) and `access/` import no `ledger/` file. Where a room
+  needs something from two floors down, the floor between adds a service for it, and that service
+  names none of the lower room's types. This answers the folder move plan's open question 3
+  (ticket 477). *It said: open. Both import `ledger/` today, two floors down or more
+  (`door/door.ts:37-52`, `coordination/session-manager.ts`). The ruling names `runtime/`. Their
+  exam rows stay as they are. Lean: the door is where the rooms are put together and keeps its
+  row; `access/` is asked next, 60%. The lean was wrong: the door gets no exemption.*
 
 ## Records
 
