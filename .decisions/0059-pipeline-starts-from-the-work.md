@@ -76,3 +76,11 @@ one (owner, 2026-11-10).**
 - The cost: the pipeline's design starts later, and the study has to be run first.
 - Not decided here: the study's plan, which is not approved yet, and anything the study will
   conclude.
+
+## Amendments
+
+- 2026-11-10 (ticket 616): the owner approved the study's plan, in five parts: the basic loop in
+  plain words; how the best do it, from fetched sources; what really happens here, from `field/`;
+  the translation into fabrika's programs, tea machines and ledger facts; and about six
+  principles. Ticket 574 is the running example, and the loop starts at "decide what to work on
+  next". Those two were the lead's leans, and the owner did not object to them.
