@@ -6,11 +6,16 @@
 //   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude]
 //                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
 //                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
+//                 [--related <test paths>]
 //
 // Claude runs `claude -p` in the same kind of box, under sandbox-exec: it cannot read the step keys,
 // the leak words or Codex's login, and it writes only its box. It commits with plain git; drive
-// then signs its work as one commit through stepcommit, with main's own signer. Mutation runs on
-// Claude only (it binds ports and starts Electron), one Electron step at a time. The box cannot
+// then signs its work as one commit through stepcommit, with main's own signer. A mutation step's
+// Stryker run happens before its agent starts, in a container with its own network (mutbox.ts,
+// decision 0045): drive runs it on the lane's build commit with the tests a `RELATED=` line of the
+// brief (or --related) names, and the agent only reads the report. A run that is stuck there ends
+// the step stuck, with no agent; it is never run on the host. Mutation's agent is Claude only, one
+// Electron step at a time. The box cannot
 // write state/electron.lock, so drive holds it for the whole step, outside the box: for mutation,
 // and for a Claude step started with --electron (a step whose laws or shots run the app).
 //
@@ -1315,6 +1320,32 @@ const holderOf = (porcelain: string, branch: string): string | null => {
  */
 export const holdsElectron = (step: StepName, flagged: boolean) => step === "mutation" || flagged;
 
+/** The related test paths a mutation brief names, on a line of its own: `RELATED=a.test.ts,b.test.ts`. */
+export const relatedIn = (brief: string): string | undefined => /^RELATED=(\S.*)$/m.exec(brief)?.[1]?.trim();
+
+const MutboxLine = Schema.fromJsonString(
+  Schema.Struct({
+    outcome: Schema.Literals(["done", "skip", "stuck"]),
+    reason: Schema.String,
+    detail: Schema.String,
+  }),
+);
+
+/** What mutbox.ts answered, from its last line: its outcome and why. Anything else is stuck. */
+export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuck"; reason: string } => {
+  const line = Schema.decodeUnknownOption(MutboxLine)(stdout.trim().split("\n").at(-1) ?? "");
+  return line._tag === "Some"
+    ? {
+        outcome: line.value.outcome,
+        reason: [line.value.reason, line.value.detail].filter(Boolean).join(": "),
+      }
+    : { outcome: "stuck", reason: "mutbox.ts gave no answer" };
+};
+
+/** What a mutation agent is told about the run that already happened in the container. */
+export const mutboxTail = (report: string, skip: boolean) =>
+  `\n\n---\nThe Stryker run for this step already happened, in a container with its own network (decision 0045). Its report is the JSON file ${report}: the sample, the counts, each survivor with its file and line, the tests left out or skipped with the reason, and \`narrowing\`, the mutants arm a (the base's tests) kills and arm b (this branch's) lets live. Do not run Stryker, the mutation command or the sampler yourself, and start nothing that listens on a port. Read the report and do the skill's steps 3 to 6 from it.\n${skip ? "The sampler selected no mutation range, so commit nothing and end with `answer: skip <why>`.\n" : ""}`;
+
 /** What a Claude step is told on top of the brief: its skill, and how its work is committed. */
 export const claudeTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) => {
   const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
@@ -1332,7 +1363,7 @@ export const claudeTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean)
 
 const usage = () => {
   console.error(
-    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only] [--related <test paths>]",
   );
   process.exit(2);
 };
@@ -1388,7 +1419,16 @@ const main = () => {
   }
 
   if (step === "mutation" && agent !== "claude") {
-    console.error("drive.ts: mutation binds ports and starts Electron; run it with --agent claude");
+    console.error("drive.ts: a mutation step's agent may start Electron; run it with --agent claude");
+    process.exit(2);
+  }
+
+  const related = flag(args, "--related") ?? relatedIn(readFileSync(brief, "utf8"));
+
+  if (step === "mutation" && related === undefined) {
+    console.error(
+      "drive.ts: a mutation step needs its related tests: --related <paths>, or a line RELATED=<paths> in the brief (its Stryker run goes in a container, decision 0045)",
+    );
     process.exit(2);
   }
 
@@ -1553,7 +1593,59 @@ const main = () => {
 
   const verdict =
     s === "review" ? "Keep your verdict line, merge-ready or changes: <n>, as the report's first line.\n" : "";
-  writeFileSync(ask.prompt, readFileSync(brief, "utf8") + (claude ? claudeTail(ask, electron) : "") + TAIL + verdict);
+  // A mutation step's Stryker run: in a container with its own network, before any agent starts
+  // (0045). Docker missing, a second Docker box or a failed run is stuck. It never runs here.
+  let boxed = "";
+
+  if (s === "mutation") {
+    const out = at("-mutbox");
+    const ran = spawnSync(
+      process.execPath,
+      [
+        join(HERE, "mutbox.ts"),
+        "run",
+        "--checkout",
+        env.MAIN,
+        "--ticket",
+        ticket,
+        "--build",
+        base,
+        "--base",
+        root,
+        "--related",
+        related ?? "",
+        "--out",
+        out,
+        "--lock",
+        join(env.BOXES, "state", "docker.lock"),
+      ],
+      { stdio: ["ignore", "pipe", 2], encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    );
+    const answer = mutboxAnswer(ran.stdout ?? "");
+
+    if (answer.outcome === "stuck") {
+      console.log(
+        JSON.stringify({
+          outcome: "stuck:mutbox",
+          lane,
+          step: s,
+          box,
+          reason: answer.reason,
+          report: join(out, "mutbox.json"),
+          kept: false,
+          exit: 30,
+        }),
+      );
+      process.exit(30);
+    }
+
+    boxed = mutboxTail(join(out, "mutbox.json"), answer.outcome === "skip");
+  }
+
+  writeFileSync(
+    ask.prompt,
+    readFileSync(brief, "utf8") + boxed + (claude ? claudeTail(ask, electron) : "") + TAIL + verdict,
+  );
 
   const program = Effect.gen(function* () {
     if (holdsElectron(s, electron)) {
