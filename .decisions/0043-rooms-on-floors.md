@@ -1,7 +1,7 @@
 ---
 id: 0043
 title: libfabrika's src/ has one folder per subject, a room, and a layer is a floor, a line in the rule file that says who may import whom, never a folder, and each room offers Effect services in its own types and errors
-status: accepted
+status: amended-in-part by [0051](0051-gateway-connection-and-node-by-job.md)
 date: 2026-11-09
 tags: [layout, files, folders, rooms, floors, layers, internal, services, errors, access, presence, telemetry, libfabrika, next]
 ---
@@ -41,6 +41,10 @@ next/packages/libfabrika/src/
 ```
 
 All of this is about `next/`. Today's version is not touched.
+
+The room `door/` is now `gateway/`, presence's `GatewayManager` is `Connections`, and `workers/` is
+`cloudflare/`, later `@kampus/libfabrika-cloudflare`
+([0051](0051-gateway-connection-and-node-by-job.md)); the rest of this record holds.
 
 ## Context
 
