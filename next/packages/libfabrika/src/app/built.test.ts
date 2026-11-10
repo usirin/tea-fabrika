@@ -92,7 +92,8 @@ describe("P16 checked built tables", () => {
 				fc.jsonValue(),
 				fc.constantFrom("../escape", "/./x.js", "/a/../b.js", "no-slash.js", "", "/a//b.js"),
 				fc.constantFrom("text/html", "application/json", "text/javascript"),
-				async (rows, assets, junk, route, type) => {
+				fc.oneof(fc.integer(), fc.boolean(), fc.constant(null)),
+				async (rows, assets, junk, route, type, other) => {
 					const [a, b] = rows as [(typeof rows)[0], (typeof rows)[0]];
 					const asset = assets[0]!;
 					const good = {
@@ -118,6 +119,14 @@ describe("P16 checked built tables", () => {
 							assets: {[route]: {hash: sha(asset.body), type: asset.type, body: asset.body}},
 						},
 						{...good, assets: {[asset.route]: {hash: sha(asset.body), type, body: asset.body}}},
+						// A missing or non-text source or body fails even when the hash is its text's.
+						{...good, programs: {[a.name]: {hash: sha("")}}},
+						{...good, programs: {[a.name]: {hash: sha(String(other)), source: other}}},
+						{...good, assets: {[asset.route]: {hash: sha(""), type: asset.type}}},
+						{
+							...good,
+							assets: {[asset.route]: {hash: sha(String(other)), type: asset.type, body: other}},
+						},
 					]) {
 						if (raw === junk && typeof junk === "object" && junk !== null) continue;
 						await failed(api, raw);

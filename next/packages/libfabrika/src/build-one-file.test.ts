@@ -298,6 +298,41 @@ describe("P16 p33 one-file build", () => {
 		},
 	);
 	it(
+		"table: a selection name or export that is not a whole name fails typed and keeps the last good file",
+		{timeout: buildTimeout()},
+		async () => {
+			// Each bad text has a good name inside it, so a check on only its start or end lets it pass.
+			const word = fc.stringMatching(/^[A-Za-z_][\w]{0,6}$/);
+			const bad = fc.oneof(
+				fc.tuple(fc.constantFrom("1", "-", " ", ".", "/"), word).map(([a, b]) => a + b),
+				fc.tuple(word, fc.constantFrom(" ", ".", "/", ":", '"', "\n"), word).map((p) => p.join("")),
+			);
+			const f = fixture("table"),
+				previous = "last-good-table";
+			mkdirSync(f.options.out);
+			writeFileSync(join(f.options.out, "brain.mjs"), previous);
+			const selection = f.options.programs[0]!;
+			await fc.assert(
+				fc.asyncProperty(bad, fc.constantFrom("name", "export"), async (value, field) => {
+					const result = await Effect.runPromise(
+						Effect.result(
+							(await api()).build({
+								...f.options,
+								programs: [{...selection, [field]: value}],
+							}),
+						).pipe(Effect.provide(NodeServices.layer)),
+					);
+					expect(result).toMatchObject({
+						_tag: "Failure",
+						failure: {_tag: "BuildError", reason: "table"},
+					});
+					expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(previous);
+				}),
+				{...runs, numRuns: 30},
+			);
+		},
+	);
+	it(
 		"plants: actual Rolldown bytes catch escaping, newline normalization and executable source",
 		{timeout: buildTimeout(8)},
 		async () => {

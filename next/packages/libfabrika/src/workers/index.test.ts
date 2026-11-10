@@ -90,7 +90,7 @@ it("embedded assets keep their headers on GET and HEAD, refuse writes and ignore
 	);
 });
 
-it("fetch serves the embedded table only after its host and origin checks; an unknown window path is 404", async () => {
+it("fetch serves the embedded table on GET and HEAD only after its host and origin checks; an unknown window path is 404", async () => {
 	const {fetch} = await load();
 	await fc.assert(
 		fc.asyncProperty(
@@ -119,13 +119,20 @@ it("fetch serves the embedded table only after its host and origin checks; an un
 					PROJECT: {getByName: () => stub},
 				} as unknown as Env;
 				const origin = `http://127.0.0.1:${port}`;
-				const request = (path: string, headers: Record<string, string>) =>
-					new Request(`${origin}${path}`, {headers});
+				const request = (path: string, headers: Record<string, string>, method = "GET") =>
+					new Request(`${origin}${path}`, {headers, method});
 				const host = {host: `127.0.0.1:${port}`};
 				const served = await Effect.runPromise(fetch(request(route, host), env, config, table));
 				expect(served.status).toBe(200);
 				expect(served.headers.get("content-type")).toBe(type);
 				expect(await served.text()).toBe(body);
+				const head = await Effect.runPromise(
+					fetch(request(route, host, "HEAD"), env, config, table),
+				);
+				expect(head.status).toBe(200);
+				expect(head.headers.get("content-type")).toBe(type);
+				expect(head.headers.get("etag")).toBe(`"${sha(body)}"`);
+				expect(head.body).toBeNull();
 				const wrongHost = await Effect.runPromise(
 					fetch(request(route, {host: `127.0.0.2:${port}`}), env, config, table),
 				);
