@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { Data, Deferred, Effect, Exit, FileSystem, Path, type PlatformError, Result, Stream } from "effect";
+import { Data, Duration, Effect, Equal, Exit, FileSystem, Path, type PlatformError, Ref, Result, Stream } from "effect";
 import type { Launch } from "../launch.ts";
 
 // The one reader of the person's settings folder: keybindings.toml now (desk/keymap.ts), and
@@ -13,8 +13,10 @@ import type { Launch } from "../launch.ts";
 //     a save, in place or by a rename over it   the next answer, with no restart
 //
 // The folder is watched, not the file: an editor saves by writing a new file and renaming it
-// over the old one, and a watch on the old file would end there. Each file is read apart, so a
-// bad fabrika.toml never touches the keys, and the other way round. An answer is said once: a
+// over the old one, and a watch on the old file would end there. A one second poll also reads
+// the file, so a save is heard even without an OS event. Both wait out the same 50 ms settle.
+// Each file is read apart, so a bad fabrika.toml never touches the keys, and the other way round.
+// An answer is said once: a
 // save that leaves the text as it was says nothing. A page never reads a file; the host sends
 // each value on (a browser is always a client).
 
@@ -64,10 +66,16 @@ export const settingsFolder = (launch: Launch, userHome: string): string =>
 /** How long a burst of events from one save is waited out, in ms: an editor's write and rename are one save. */
 const SETTLE_MS = 50;
 
+/** How often the file itself is looked at, so a save is heard when the OS sends no event. */
+const POLL = Duration.seconds(1);
+
+/** How a save was heard: the OS watch told us, or the poll found it. */
+type Heard = "watch" | "poll";
+
 /**
- * Every answer for the file `name` in `folder`: one as the watch starts, then one each time a save
+ * Every answer for the file `name` in `folder`: one at once, then one each time a save
  * changes its text. The folder is made if it is missing, so a file put there later is heard; when it
- * cannot be made, or the watch fails, the answer stays as it was last said.
+ * cannot be made, the answer stays as it was last said. If the watch ends, the poll carries on.
  */
 export const settingsFile = <A>(
   folder: string,
@@ -111,24 +119,35 @@ export const settingsFile = <A>(
         return Stream.fromEffect(Effect.map(text, answer));
       }
 
-      // The first read waits for the watch, so no save between the two is missed.
-      const ready = yield* Deferred.make<void>();
-      const saves = fs.watch(folder, { onReady: () => Deferred.doneUnsafe(ready, Effect.void) }).pipe(
+      const seen = yield* Ref.make<string | null | Setting<never> | undefined>(undefined);
+      const say = (said: string | null | Setting<never>, by: Heard | "start") =>
+        Ref.set(seen, said).pipe(
+          Effect.andThen(Effect.logInfo("settings_heard").pipe(Effect.annotateLogs({ file: name, by }))),
+          Effect.as(said),
+        );
+      const heard = fs.watch(folder).pipe(
         Stream.filter((event) => path.basename(event.path) === name),
-        Stream.debounce(`${SETTLE_MS} millis`),
-        // A watch that fails before it is ready still lets the first read go, so the file is
-        // read once and the host never waits on a watch that will not start.
+        Stream.as("watch" as const),
+        Stream.concat(
+          Stream.fromEffect(Effect.logWarning(`fabrika host: the watch on ${folder} ended`)).pipe(Stream.drain),
+        ),
         Stream.catchCause((cause) =>
-          Stream.fromEffect(
-            Deferred.succeed(ready, undefined).pipe(
-              Effect.andThen(Effect.logWarning(`fabrika host: the watch on ${folder} ended`, cause)),
-            ),
-          ).pipe(Stream.drain),
+          Stream.fromEffect(Effect.logWarning(`fabrika host: the watch on ${folder} ended`, cause)).pipe(Stream.drain),
         ),
       );
-      return Stream.merge(Stream.fromEffect(Deferred.await(ready)), saves).pipe(
+      const polled = Stream.tick(POLL).pipe(
         Stream.mapEffect(() => text),
-        Stream.changesWith((a, b) => a === b),
+        Stream.filterEffect((now) => Effect.map(Ref.get(seen), (was) => !Equal.equals(now, was))),
+        Stream.as("poll" as const),
+      );
+      const saves = Stream.merge(heard, polled).pipe(
+        Stream.debounce(`${SETTLE_MS} millis`),
+        Stream.mapEffect((by) => Effect.map(text, (said) => ({ by, said }))),
+      );
+      const first = Stream.fromEffect(Effect.map(text, (said) => ({ by: "start" as const, said })));
+      return Stream.concat(first, saves).pipe(
+        Stream.changesWith((a, b) => Equal.equals(a.said, b.said)),
+        Stream.mapEffect(({ said, by }) => say(said, by)),
         Stream.map(answer),
       );
     }),
