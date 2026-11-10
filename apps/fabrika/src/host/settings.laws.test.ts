@@ -1,6 +1,7 @@
 import {
   ByteSize,
   type Cause,
+  Clock,
   Effect,
   Equal,
   FileSystem,
@@ -64,6 +65,7 @@ const start = Effect.fnUntraced(function* (ready = true) {
   const events = yield* Queue.unbounded<FileSystem.WatchEvent, PlatformError.PlatformError | Cause.Done>();
   let unreadable = false;
   const got: Setting<string>[] = [];
+  const at: number[] = [];
   const logs: Record<string, unknown>[] = [];
   const backend = FileSystem.WatchBackend.of({
     register: (_path, _stat, options) =>
@@ -115,7 +117,8 @@ const start = Effect.fnUntraced(function* (ready = true) {
   const fs = yield* make.pipe(Effect.provideService(FileSystem.WatchBackend, backend));
   yield* settingsFile("/settings", name, Result.succeed).pipe(
     Stream.runForEach((answer) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
+        at.push(yield* Clock.currentTimeMillis);
         got.push(answer);
       }),
     ),
@@ -139,10 +142,14 @@ const start = Effect.fnUntraced(function* (ready = true) {
   return {
     fs,
     got,
+    at,
     logs,
     events,
     refuse: Effect.sync(() => {
       unreadable = true;
+    }),
+    allow: Effect.sync(() => {
+      unreadable = false;
     }),
     event: (path = file): Effect.Effect<boolean> => Queue.offer(events, { _tag: "Update", path }),
   };
@@ -180,6 +187,215 @@ const save = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, step: Save)
 });
 
 const answer = (step: Save) => (step.kind === "remove" ? { _tag: "none" } : { _tag: "read", value: step.text });
+
+// One input space for L2, L6 and L7. fast-check is used for offsets and operation
+// sequences: there is no domain Schema for an editor's writes and OS hints.
+const timeline = fc.array(
+  fc.record({
+    kind: fc.constantFrom("write", "rename", "remove", "cut", "refuse"),
+    text: fc.string({ minLength: 2 }),
+    cut: fc.nat(),
+    offset: fc.integer({ min: 0, max: 999 }),
+    lead: fc.integer({ min: 1, max: 48 }),
+    lag: fc.integer({ min: 1, max: 48 }),
+    older: fc.option(fc.integer({ min: 1, max: 49 }), { nil: null }),
+    hints: fc.constantFrom("none", "one", "two", "other"),
+    first: fc.integer({ min: -51, max: 1100 }),
+    second: fc.integer({ min: -51, max: 1100 }),
+    anchor: fc.constantFrom("offset", "save", "done", "tick", "settle"),
+    edge: fc.constantFrom(-1, 0, 1),
+  }),
+  { minLength: 1, maxLength: 8 },
+);
+
+type Timeline = ReturnType<typeof timeline.generate>["value"];
+
+const caseAt = (change: Partial<Timeline[number]>): Timeline[number] => ({
+  kind: "cut",
+  text: "ab",
+  cut: 0,
+  offset: 0,
+  lead: 10,
+  lag: 20,
+  older: null,
+  hints: "none",
+  first: 0,
+  second: 0,
+  anchor: "offset",
+  edge: 0,
+  ...change,
+});
+
+const timelineRuns = {
+  ...runs,
+  examples: [
+    // pinned: review 2's old hint closes a fixed window between the two parts.
+    [[caseAt({ older: 30 })]],
+    // pinned: a closing read itself finds a partial text before the tick.
+    [[caseAt({ older: 40, lead: 20 })]],
+    // pinned: review 1's late and duplicate hints must not postpone the bound.
+    [[caseAt({ kind: "write", offset: 1, hints: "one", first: 1039 })]],
+    [[caseAt({ kind: "write", offset: 1, hints: "two", first: 1000, second: 1039 })]],
+    // pinned: review 1's poll must not replace the watch's hearing source.
+    [[caseAt({ kind: "write", offset: 980, hints: "one", first: 0 })]],
+    // scenario: chokidar 5 awaitWriteFinish's ENOENT/cancel and error exits,
+    // index.js:608-653,747-749. Our reader reports none/refused exactly once.
+    [[caseAt({ kind: "remove", older: 30 }), caseAt({ kind: "refuse", older: 30 })]],
+    // Keep the original silent split-write timing in the shared input too.
+    [[caseAt({})]],
+  ] satisfies [Timeline][],
+};
+
+const play = Effect.fnUntraced(function* (steps: Timeline, law: "L2" | "L6" | "L7") {
+  const h = yield* start();
+  expect(h.got).toEqual([{ _tag: "none" }]);
+  expect(h.logs).toEqual([{ file: name, by: "start" }]);
+  let now = 0;
+  const until = Effect.fnUntraced(function* (end: number) {
+    while (now < end) {
+      const next = Math.min(end, (Math.floor(now / 50) + 1) * 50);
+      yield* advance(next - now);
+      now = next;
+    }
+  });
+
+  for (const [i, step] of steps.entries()) {
+    // Precondition for a per-save bound: no later save replaces it before its
+    // bound. Slots leave > POLL + SETTLE between saves, and drain late hints.
+    const base = i * 6000;
+    yield* until(base);
+    yield* h.allow;
+    yield* h.fs.writeFileString(file, `before:${i}`);
+    yield* h.event();
+    yield* until(base + 50);
+    const from = h.got.length;
+    const tick = base + (step.kind === "cut" ? 1000 : 2000);
+    const begins = step.kind === "cut" ? tick - step.lead : base + 1000 + step.offset;
+    const done = step.kind === "cut" ? tick + 1 + ((step.lag - 1) % (49 - step.lead)) : begins;
+    const full = `${i}:${step.text}`;
+    // Prefix the part too, so it cannot equal a preceding save or the full text.
+    const part = `${i}:${step.text.slice(0, 1 + (step.cut % (step.text.length - 1)))}`;
+    const expected =
+      step.kind === "remove"
+        ? { _tag: "none" }
+        : step.kind === "refuse"
+          ? { _tag: "refused", line: 1, why: "it could not be read: permission denied" }
+          : { _tag: "read", value: full };
+    const anchor =
+      step.anchor === "save"
+        ? begins
+        : step.anchor === "done"
+          ? done
+          : step.anchor === "tick"
+            ? tick
+            : begins - (step.older ?? 0) + 50;
+    // Choose an arbitrary offset or before/at/after a named boundary. Keep the
+    // hint count independent: none, one, two, or one for another file.
+    const first = step.anchor === "offset" ? begins + step.first : anchor + step.edge;
+    const hints = step.hints === "none" ? [] : step.hints === "two" ? [first, begins + step.second] : [first];
+    const matching = step.hints === "other" ? [] : [...hints];
+    const other = step.hints === "other" ? hints : [];
+
+    if (step.older !== null) {
+      matching.push(begins - step.older);
+    }
+
+    matching.sort((a, b) => a - b);
+    let oldEnd = -1;
+
+    for (const hint of matching.filter((at) => at < begins)) {
+      if (hint >= oldEnd) {
+        oldEnd = hint + 50;
+      }
+    }
+
+    const deadline = done + 1050;
+    const end = Math.max(deadline, ...matching, ...other) + 1050;
+    const times = new Set([begins, done, deadline, end, ...matching, ...other]);
+
+    // Every possible timer end is 50 ms after a hint, tick or closing read.
+    // Stop there before doing same-time file/event actions: timer wins ties.
+    for (const at of [...times]) {
+      for (let next = at + 50; next <= end; next += 50) {
+        times.add(next);
+      }
+    }
+
+    for (const at of [...times].sort((a, b) => a - b)) {
+      yield* until(at);
+
+      if (at === begins) {
+        if (step.kind === "refuse") {
+          yield* h.refuse;
+        } else if (step.kind === "cut") {
+          yield* h.fs.writeFileString(file, part);
+        } else {
+          yield* save(h.fs, { kind: step.kind, text: full });
+        }
+      }
+
+      if (step.kind === "cut" && at === done) {
+        yield* h.fs.writeFileString(file, full);
+      }
+
+      for (const hint of matching) {
+        if (hint === at) {
+          yield* h.event();
+        }
+      }
+
+      for (const hint of other) {
+        if (hint === at) {
+          yield* h.event("/settings/other.toml");
+        }
+      }
+
+      yield* drain;
+
+      if (at === deadline && law === "L2") {
+        expect(h.got.at(-1)).toEqual(expected);
+      }
+    }
+
+    if (law === "L2") {
+      // Every emitted value must be a completed save, in time order, not merely
+      // a text that becomes a completed save at some future point.
+      for (let n = from; n < h.got.length; n++) {
+        expect(h.at[n]).toBeGreaterThanOrEqual(done);
+        expect(h.got[n]).toEqual(expected);
+      }
+
+      expect(h.got.slice(from)).toEqual([expected]);
+    }
+
+    if (law === "L6" && step.kind === "cut") {
+      expect(h.got).not.toContainEqual({ _tag: "read", value: part });
+      expect(h.got.at(-1)).toEqual(expected);
+    }
+
+    if (law === "L7") {
+      expect(h.logs).toHaveLength(h.got.length);
+
+      for (let n = from; n < h.got.length; n++) {
+        // A preceding matching hint counts only while its window is still
+        // open. A late hint after the answer cannot relabel that answer.
+        const watch =
+          (n === from && oldEnd > begins) ||
+          matching.some((at) => at >= (n === from ? begins : h.at[n - 1]!) && at < h.at[n]!);
+        expect(h.logs[n]).toEqual({ file: name, by: watch ? "watch" : "poll" });
+      }
+    }
+  }
+});
+
+for (const law of ["L2", "L6", "L7"] as const) {
+  it(`${law}: shared save/hint timeline, including an already-open settle`, async () => {
+    await fc.assert(
+      fc.asyncProperty(timeline, (steps) => go(play(steps, law))),
+      timelineRuns,
+    );
+  });
+}
 
 it("L1: silent watch still hears every save within the bound", async () => {
   await fc.assert(
@@ -368,7 +584,10 @@ it("L6: a tick between two write parts waits for the settled text", async () => 
           yield* advance(20); // inside the plan's 50 ms settle
           yield* h.fs.writeFileString(file, text);
           yield* advance(30);
-          expect(h.got).toEqual([{ _tag: "none" }, { _tag: "read", value: text }]);
+          // A2: the closing read can discover changed text and start another
+          // settle. 1050 is no longer a completion deadline. The shared L2
+          // checks completion at done + 1050; this check keeps L6's promise.
+          expect(h.got).not.toContainEqual({ _tag: "read", value: part });
         }),
       ),
     ),
