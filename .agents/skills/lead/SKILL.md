@@ -438,6 +438,10 @@ hand check.
 A flagged line that only respaces a line the same file's diff removes is old text, and is not a
 hit (owner, 2026-11-09, ticket 500). Spaces put inside braces and a line wrapped another way are
 still new text.
+A push reads each commit it sends on its own, beside the branch's net change (owner, 2026-11-10,
+[0048](../../../.decisions/0048-leak-check-reads-each-commit.md)): `botpush.mjs` runs
+`leakgrep.sh --commits <source> --not --remotes=origin`. A hit names its commit, and a later
+commit does not clear it.
 
 ## Go easy on the machine
 
