@@ -24,6 +24,9 @@ type Package = {
   readonly links?: Readonly<Record<string, string>>;
 };
 
+// A source written with this text names the scratch home's absolute path there.
+const HOME = "<home>";
+
 const run = (
   name: string,
   exports: unknown,
@@ -42,7 +45,7 @@ const run = (
 
     for (const [path, text] of Object.entries(sources)) {
       mkdirSync(dirname(join(home, pkg, path)), { recursive: true });
-      writeFileSync(join(home, pkg, path), text);
+      writeFileSync(join(home, pkg, path), text.replaceAll(HOME, home));
     }
 
     for (const [path, target] of Object.entries(links)) {
@@ -79,6 +82,9 @@ const run = (
 };
 
 describe("fabrika/program-package-layout", () => {
+  // Review 7 of P16b: the platform packages the laws draw are declared, as a program would declare
+  // them, so a link to one resolves to nothing and passes unless the rule knows it by name.
+  const declared = { dependencies: { "@cloudflare/containers": "1.0.0", wrangler: "1.0.0" } };
   // Review 6 of P16b: a link that resolves to nothing is unjudged, save these. A Node builtin has no
   // file to resolve to, and a package the manifest depends on is outside code not installed in the
   // scratch package; a `#` alias is fine when every target its entry names is one of them.
@@ -92,6 +98,11 @@ describe("fabrika/program-package-layout", () => {
     { line: 'export {x} from "dep-c";', manifest: { peerDependencies: { "dep-c": "1.0.0" } } },
     { line: 'import "dep-d";', manifest: { optionalDependencies: { "dep-d": "1.0.0" } } },
     { line: 'import "#path";', manifest: { imports: { "#path": "node:path" } } },
+    // Review 7 of P16b: the platform's types stay fine as types, whatever 0042's list holds.
+    {
+      line: 'import type {DurableObjectState} from "@cloudflare/workers-types"; export type {DurableObjectState};',
+      manifest: { devDependencies: { "@cloudflare/workers-types": "1.0.0" } },
+    },
     {
       line: 'export * from "#lib/x";',
       manifest: {
@@ -503,10 +514,22 @@ describe("fabrika/program-package-layout", () => {
       defines: true,
       pure: [],
     },
+    // Review 7 of P16b: two more of 0042's platform names, each a package the manifest declares
+    // (23, 24). Cloudflare's Container is a Durable Object class by another name.
+    {
+      text: (c) => `import {Container} from "@cloudflare/containers"; export class ${c} extends Container {}`,
+      defines: false,
+      pure: [imports],
+    },
+    {
+      text: (c) => `import {getPlatformProxy} from "wrangler"; export const ${c} = getPlatformProxy;`,
+      defines: false,
+      pure: [imports],
+    },
   ];
   // How the Worker file is reached from its export: itself, a `.ts` link, a link written without
   // an extension, which TypeScript resolves, a symlink to a file outside the package, or a link
-  // out of the package. Review 6 of P16b: the Worker file itself, with its Worker runtime import
+  // out of the package, relative or (review 7 of P16b) absolute. Review 6 of P16b: the Worker file itself, with its Worker runtime import
   // behind a `#` alias in the package's own `imports`, as a string, an array, a nested condition
   // after a file target, or a pattern key.
   const links = [
@@ -515,13 +538,15 @@ describe("fabrika/program-package-layout", () => {
     "no extension",
     "symlink",
     "outside",
+    "absolute",
     "imports alias",
     "imports array",
     "imports condition",
     "imports pattern",
   ] as const;
   // The Worker runtime name a shape links, if any.
-  const runtimeName = /"(cloudflare:workers|@kampus\/libfabrika\/box|workerd|miniflare)"/;
+  const runtimeName =
+    /"(cloudflare:workers|@kampus\/libfabrika\/box|workerd|miniflare|@cloudflare\/containers|wrangler)"/;
   // How the package exports the Worker file: its own key, a pattern key, or a runtime condition
   // of '.' beside the pure program. Review 3 of P16b: a fallback array on a key, inside a
   // condition, or under a runtime condition of '.'; a pattern whose target has no `*`; and a
@@ -615,9 +640,11 @@ describe("fabrika/program-package-layout", () => {
                 ? { [`${workerPath}.${ext}`]: text }
                 : link === "symlink"
                   ? { [outside]: text }
-                  : link === "outside"
+                  : link === "outside" || link === "absolute"
                     ? {
-                        [`${workerPath}.${ext}`]: `export * from ${JSON.stringify(up)};`,
+                        [`${workerPath}.${ext}`]: `export * from ${JSON.stringify(
+                          link === "outside" ? up : `${HOME}/outside/${last}.ts`,
+                        )};`,
                         [outside]: text,
                       }
                     : {
@@ -657,7 +684,7 @@ describe("fabrika/program-package-layout", () => {
             // Under '.', the file is pure code too: a Worker class or handler names '.', and a
             // Worker runtime import is reported on its own line, or for the package when the
             // file is one oxlint does not lint here (outside the package, or by a symlink).
-            lined = link !== "symlink" && link !== "outside",
+            lined = link !== "symlink" && link !== "outside" && link !== "absolute",
             away = link === "symlink" ? `${workerPath}.${ext}` : outside,
             pure = lined
               ? shapes[shape]!.pure
@@ -688,6 +715,7 @@ describe("fabrika/program-package-layout", () => {
               run(name, exports, files, {
                 manifest: (fields) => ({
                   ...manifests[manifest](fields),
+                  ...declared,
                   ...(Object.keys(aliases).length === 0 ? {} : { imports: aliases }),
                 }),
                 links: symlinks,
@@ -957,6 +985,34 @@ describe("fabrika/program-package-layout", () => {
             "workerd",
             "name",
           ],
+          // pinned: review 7 of P16b, `import {Container} from "@cloudflare/containers"; export
+          // class C extends Container {}` at '.', with the package in `dependencies`, gave no
+          // finding: worker() left out two of 0042's platform names.
+          [
+            "program0",
+            ["./server", "./ui", "./lib"],
+            ["src/worker", "src/ui", "src/lib"],
+            "C",
+            23,
+            "same file",
+            "condition",
+            "workerd",
+            "name",
+          ],
+          // pinned: review 7 of P16b, '.' linking a file out of the package by its absolute path,
+          // where that file imports cloudflare:workers, gave no finding: only a relative link out
+          // was followed.
+          [
+            "program0",
+            ["./server", "./ui", "./lib"],
+            ["src/worker", "src/ui", "src/lib"],
+            "Worker",
+            0,
+            "absolute",
+            "condition",
+            "workerd",
+            "name",
+          ],
         ],
       }),
     );
@@ -983,7 +1039,7 @@ describe("fabrika/program-package-layout", () => {
                     ? { [condition]: path, default: "./src/program.ts" }
                     : { [condition]: [path], default: ["./src/program.ts"] },
             messages = (exports: unknown) =>
-              run(name, exports, files)
+              run(name, exports, files, { manifest: (fields) => ({ ...fields, ...declared }) })
                 .map((d) => d.message)
                 .sort();
           expect(messages(as("./src/program.ts"))).toEqual([]);
@@ -1004,7 +1060,14 @@ describe("fabrika/program-package-layout", () => {
     fc.assert(
       fc.property(
         name,
-        fc.constantFrom("cloudflare:workers", "@kampus/libfabrika/box", "@kampus/libfabrika/workers", "workerd"),
+        fc.constantFrom(
+          "cloudflare:workers",
+          "@kampus/libfabrika/box",
+          "@kampus/libfabrika/workers",
+          "workerd",
+          "@cloudflare/containers",
+          "wrangler",
+        ),
         (name, source) => {
           for (const statement of [
             `import {env} from ${JSON.stringify(source)}; export {env};`,
@@ -1016,6 +1079,7 @@ describe("fabrika/program-package-layout", () => {
                 name,
                 { ".": "./src/program.ts" },
                 { "src/program.ts": 'export * from "./helper.ts";', "src/helper.ts": statement },
+                { manifest: (fields) => ({ ...fields, ...declared }) },
               ).length,
             ).toBeGreaterThan(0);
           }
@@ -1038,7 +1102,13 @@ describe("fabrika/program-package-layout", () => {
     fc.assert(
       fc.property(
         name,
-        fc.constantFrom("cloudflare:workers", "@kampus/libfabrika/workers", "workerd"),
+        fc.constantFrom(
+          "cloudflare:workers",
+          "@kampus/libfabrika/workers",
+          "workerd",
+          "@cloudflare/containers",
+          "wrangler",
+        ),
         (name, source) => {
           const files = {
             "src/program.ts": 'export const load = () => import("./helper.ts");',
@@ -1057,7 +1127,9 @@ describe("fabrika/program-package-layout", () => {
               "src/nested/runtime.ts": `${files["src/nested/runtime.ts"]}\n${statement}`,
             };
             expect(
-              run(name, { ".": "./src/program.ts" }, planted).length,
+              run(name, { ".": "./src/program.ts" }, planted, {
+                manifest: (fields) => ({ ...fields, ...declared }),
+              }).length,
               "dynamic pure helper imports a Worker API",
             ).toBeGreaterThan(0);
           }

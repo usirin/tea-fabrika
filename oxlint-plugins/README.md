@@ -87,6 +87,15 @@ only when every target its `imports` entry names is one of these two. A `#` alia
 runtime import when its `imports` entry names one under any condition, whatever the resolver
 answers. It parses other files with `oxc-parser`, a dev dependency of this folder.
 
+A Worker runtime import is one of the platform's names, the list
+[0042](../.decisions/0042-platform-pieces-go-through-alchemy.md) gives (`cloudflare:*`, `miniflare`,
+`workerd`, `wrangler`, `@cloudflare/*`), or Alchemy's local runtime
+(`@alchemy.run/cloudflare-runtime`) or libfabrika's `box` and `workers` entries. The rule's
+`platform` list cites 0042 and changes with it. A type-only import of any of them passes, so
+`@cloudflare/workers-types` stays fine as types. A link is followed when it is relative or when it
+resolves to a file that is not a dependency's, under `node_modules`: its own name, a `#` import or
+an absolute path, in the package or out of it.
+
 **Module resolution is a tool's, not ours** ([0040](../.decisions/0040-existing-tools-before-hand-written.md)).
 The tools looked at:
 
@@ -148,12 +157,13 @@ The hand-written part, and the generated case that tests each edge in
 | `./window` is judged for Worker code like every other subpath | entries `window`, `window tsx`, and the three pinned review 5 examples |
 | Every `*` in a target is the same text | the plants' two-`*` target |
 | A pattern target in build output, or under a symlinked folder, is listed | the plants' `dist/*.js` target and symlinked `src/lib` |
-| A link by a non-relative name (its own name, a `#` import) is followed when it resolves inside the package | the plants' `#server` import |
+| A link by a non-relative name (its own name, a `#` import, an absolute path) is followed when it resolves to a file outside `node_modules` | the plants' `#server` import; link `absolute` and its pinned review 7 example |
+| 0042's platform names are Worker runtime names, `@cloudflare/*` and `wrangler` included, even as declared dependencies | shapes 23 and 24 (`@cloudflare/containers`, `wrangler`), the drawn names of the runtime-import and dynamic-import plants, and the pinned review 7 `Container` example |
 | A `#` alias whose `imports` entry names a Worker runtime anywhere (a string, an array, a condition after a file target, a pattern key) is a Worker runtime import | links `imports alias`, `imports array`, `imports condition`, `imports pattern`, and the pinned review 6 `#cf` example |
 | A link that resolves to nothing is refused, save a `node:` builtin, a declared dependency, or a `#` alias whose every target is one | the plants' missing file, `#` with no entry, with a missing target or an undeclared target, undeclared package, own unexported subpath, `virtual:` scheme; the accept law's fine links |
 | A literal link is a string or a template literal with no `${}`; `require` and `import x = require()` are links; any other name is refused, never skipped | the plants' template literal, `require`, `import =` and computed import |
 | A file that cannot be read or parsed is refused, never read as empty | the plants' unparsable subpath and pure helper |
-| Pure code that oxlint does not lint line by line (outside the package, by a symlink, under `fixtures/`) is reported for the package | links `symlink`, `outside` under `condition` and `array dot`, and their two pinned examples; `fixtures/` has no test, as the harness lints with `--no-ignore` |
+| Pure code that oxlint does not lint line by line (outside the package, by a symlink, under `fixtures/`) is reported for the package | links `symlink`, `outside`, `absolute` under `condition` and `array dot`, and their two pinned examples; `fixtures/` has no test, as the harness lints with `--no-ignore` |
 | Package findings go on every file when the `.` entry is one oxlint skips (a test file is judged like any other) | the plants' `program.test.ts` and extensionless entries |
 | A plain subpath must name a real file; an export key is `.` or starts with `./` | the plants' `src/server.ts`, missing target and `import` key |
 

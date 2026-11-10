@@ -81,9 +81,22 @@ const targetStrings = (x: unknown): string[] =>
         ? Object.entries(x).flatMap(([condition, target]) => (condition === "types" ? [] : targetStrings(target)))
         : [];
 
+// The platform's own import names, as decision 0042 lists them
+// (.decisions/0042-platform-pieces-go-through-alchemy.md, "New `next/` code never imports the
+// platform directly"): `cloudflare:*`, `miniflare`, `workerd`, `wrangler` and `@cloudflare/*`. A
+// change to that list changes this one. A name ending in `:` or `/` is a prefix; the rest are
+// package names, with their subpaths.
+const platform = ["cloudflare:", "miniflare", "workerd", "wrangler", "@cloudflare/"] as const;
+
+// The Worker runtime as a program sees it besides the platform: Alchemy's local runtime and
+// libfabrika's own box and Worker entries.
+const runtimePackages = ["@alchemy.run/cloudflare-runtime", "@kampus/libfabrika/box", "@kampus/libfabrika/workers"];
+
 const worker = (name: string) =>
-  /^(?:cloudflare:|workerd(?:\/|$)|miniflare(?:\/|$)|@alchemy\.run\/cloudflare-runtime(?:\/|$)|@kampus\/libfabrika\/(?:box|workers)(?:\/|$))/.test(
-    name,
+  [...platform, ...runtimePackages].some((known) =>
+    known.endsWith(":") || known.endsWith("/")
+      ? name.startsWith(known)
+      : name === known || name.startsWith(`${known}/`),
   );
 
 // What the package's manifest says of the names its code links: its own `imports` aliases and the
@@ -223,8 +236,9 @@ const handlerObject = (node: unknown, named: (node: unknown) => unknown, seen = 
 // Follow an entry's value links, including re-exports, literal dynamic imports and `require`. Each
 // file says whether it loads Worker code: a Worker runtime import, a Worker class or a Worker
 // handler. `definesWorker` keeps the last two apart, for '.', whose runtime imports are reported
-// per line. A link by any other name is followed when it resolves inside the package (its own
-// name, a `#` import, an absolute path). A `#` link is a Worker runtime import when its `imports`
+// per line. A link by any other name is followed when it is relative or resolves to a file that is
+// not a dependency's (its own name, a `#` import, an absolute path, in the package or out of it). A
+// `#` link is a Worker runtime import when its `imports`
 // entry names one, whatever the resolver answers. What the rule cannot read or resolve is
 // `unjudged`, never fine, unless `known` names it.
 const graph = (entries: readonly string[], root: string, names: Names) => {
@@ -238,6 +252,9 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
 
     return !at.startsWith("..") && !/(?:^|\/)node_modules(?:\/|$)/.test(at);
   };
+  // A dependency's code, by the path the resolver gives or the file it stands for.
+  const modules = (path: string) =>
+    /(?:^|\/)node_modules(?:\/|$)/.test(path) || /(?:^|\/)node_modules(?:\/|$)/.test(realpathSync(path));
   let loadsWorker = false;
   let definesWorker = false;
   const defines = () => {
@@ -285,7 +302,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
           if (!known(names, name)) {
             unjudged.push(`'${at}' loads '${name}', which does not resolve`);
           }
-        } else if (name.startsWith(".") || inside(target)) {
+        } else if (name.startsWith(".") || inside(target) || !modules(target)) {
           visit(target);
         }
       }
