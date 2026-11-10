@@ -19,6 +19,8 @@ gh issue create -R kamp-us/demlik ...  # 2. file the same change upstream
   never a plan's answer.
 - **Every patch has an upstream issue.** The pull request that adds the patch links it. A fix we keep
   only for ourselves helps nobody else and drifts on each release.
+  - **The issue carries the patch (owner, 2026-11-10):** its body ends with our diff for it, folded in
+    `<details><summary>The patch we apply locally</summary>` ([0060](../../.decisions/0060-upstream-issue-carries-the-patch.md)).
   - **One exception (owner, 2026-11-09):** the six Alchemy gaps listed in 0042 are patched and not
     reported as a batch
     ([0042's amendment](../../.decisions/0042-platform-pieces-go-through-alchemy.md#amendments)).
