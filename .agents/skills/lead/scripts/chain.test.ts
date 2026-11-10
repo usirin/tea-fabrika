@@ -75,13 +75,16 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 			review: "open",
 		};
 
-		for (const s of STEPS)
-			{for (const o of ["done", "skip:step_said"]) {
+		for (const s of STEPS) {
+			for (const o of ["done", "skip:step_said"]) {
 				const m = moveOf(s, line(o, "h"), 0, 3);
 				expect(m._tag === "step" ? m.step : m._tag).toBe(walk[s]);
 
-				if (m._tag === "step") {expect(m.note).toBe("");}
-			}}
+				if (m._tag === "step") {
+					expect(m.note).toBe("");
+				}
+			}
+		}
 	});
 
 	it("a send goes to the step it names with the sender's word; a send to plan parks", () => {
@@ -90,7 +93,9 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 				const m = moveOf(from, line(`send:${to}:step_said`, "h", why), 0, 3);
 				expect(m).toMatchObject({_tag: "step", step: to});
 
-				if (m._tag === "step") {expect(m.note).toContain(why);}
+				if (m._tag === "step") {
+					expect(m.note).toContain(why);
+				}
 
 				expect(moveOf(from, line("send:plan:plancheck", "h", why), 0, 3)._tag).toBe("park");
 			}),
@@ -116,7 +121,9 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 				const slot = verb === "refused" && (check === "agent_cap" || check === "low_disk");
 				expect(slotRefusal(o)).toBe(slot ? check : null);
 
-				if (verb === "refused") {expect(moveOf(s, line(o, "h"), 0, 3)._tag).toBe("park");}
+				if (verb === "refused") {
+					expect(moveOf(s, line(o, "h"), 0, 3)._tag).toBe("park");
+				}
 			}),
 			options,
 		);
@@ -178,7 +185,9 @@ describe("T341 the judgment agent's answer, today's tooling", () => {
 				const sent = judgedOf(`${chatter}\n\nanswer: send ${s} ${note}\n`);
 				expect(sent).toMatchObject({_tag: "step", step: s});
 
-				if (sent._tag === "step") {expect(sent.note).toContain(note);}
+				if (sent._tag === "step") {
+					expect(sent.note).toContain(note);
+				}
 
 				expect(judgedOf(`answer: send ${s} old\n${chatter}\nanswer: park ${note}`)).toEqual({
 					_tag: "park",
@@ -229,8 +238,11 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
 				expect(text).toContain("Shared: ticket 7");
 				expect(text).toContain(cut.sections[s] ?? "nothing");
 
-				for (const other of STEPS)
-					{if (other !== s) {expect(text).not.toContain(cut.sections[other] ?? "nothing");}}
+				for (const other of STEPS) {
+					if (other !== s) {
+						expect(text).not.toContain(cut.sections[other] ?? "nothing");
+					}
+				}
 
 				expect(text).not.toContain("What changed.");
 				expect(text).toContain(`round ${round}`);
@@ -243,7 +255,9 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
 					expect(text).toContain(`Parent base: origin/main at ${root}`);
 				}
 
-				if (s === "mutation") {expect(text).toContain("T=7, BUILD=");}
+				if (s === "mutation") {
+					expect(text).toContain("T=7, BUILD=");
+				}
 			}),
 			options,
 		);
@@ -324,7 +338,9 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 				expect(m).toMatchObject({phase: "stepping", step: to});
 				expect(cmds[0]).toMatchObject({type: "step_run", step: to, round: 3});
 
-				if (cmds[0]?.type === "step_run") {expect(cmds[0].note).toContain(why);}
+				if (cmds[0]?.type === "step_run") {
+					expect(cmds[0].note).toContain(why);
+				}
 			}),
 			options,
 		);
@@ -349,7 +365,9 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 				} as never);
 				expect(parked).toMatchObject({phase: "over", end: {kind: "ask", reason: why}});
 
-				if (parked.phase === "over") {expect(exitOf(parked.end)).toBe(20);}
+				if (parked.phase === "over") {
+					expect(exitOf(parked.end)).toBe(20);
+				}
 			}),
 			options,
 		);
@@ -435,12 +453,13 @@ describe("T341 the chain record is a Schema value, today's tooling", () => {
 					],
 				};
 
-				for (const r of [before, after])
-					{expect(
+				for (const r of [before, after]) {
+					expect(
 						Schema.decodeUnknownSync(ChainRecord)(
 							JSON.parse(JSON.stringify(Schema.encodeSync(ChainRecord)(r))),
 						),
-					).toEqual(r);}
+					).toEqual(r);
+				}
 			}),
 			options,
 		);
