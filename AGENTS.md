@@ -181,7 +181,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   union with a transition function. The machine's Model, Msg and update live in that file, with no
   input or output code, and nothing outside it edits the Model by hand: it sends a Msg. A small
   private helper machine may share its parent's file
-  ([0044](./.decisions/0044-one-tea-machine-per-file.md)).
+  ([0045](./.decisions/0045-one-tea-machine-per-file.md)).
 - **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
   Effect does it: `Lease.of(...)` under `import * as Lease`
   ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
