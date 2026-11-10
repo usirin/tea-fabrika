@@ -29,6 +29,8 @@ describe("reading a marker line", () => {
 	});
 
 	it("reads a range verdict, as an epic child gets", () => {
+		// The marker's dash is stored data. Kept as written, so a reformat never reads this old line as new text.
+		// oxfmt-ignore
 		const read = parseMarker(
 			`review-code: PASS range:${BASE}..${HEAD} content:ec88294e7cd7 — record fixed`,
 		);
@@ -42,6 +44,8 @@ describe("reading a marker line", () => {
 	});
 
 	it("reads the older shapes: a short commit, no digest, no commit at all", () => {
+		// The marker's dash is stored data. Kept as written, so a reformat never reads this old line as new text.
+		// oxfmt-ignore
 		expect(
 			parseMarker("review-doc: PASS @ 7982558 — the guard boundary is written down"),
 		).toMatchObject({head: "7982558"});
@@ -213,6 +217,8 @@ describe("the findings in a failed verdict", () => {
 			[true, "item"],
 			[false, "item"],
 		]);
+		// The marker's dash is stored data. Kept as written, so a reformat never reads this old line as new text.
+		// oxfmt-ignore
 		expect(found[0]?.title).toBe(
 			"1 — the branch is renamed and the message says nothing changed (blocking).",
 		);

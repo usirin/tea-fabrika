@@ -344,7 +344,7 @@ describe("codex: exec's JSON lines", () => {
 		expect(
 			flagsOf({
 				allow_login_shell: false,
-				permissions: {fenced: {extends: ":workspace", filesystem: {"/home/x": "deny"}}},
+				permissions: {fenced: {extends: ":workspace", filesystem: {"/people/x": "deny"}}},
 			}),
 		).toEqual([
 			"-c",
@@ -352,7 +352,7 @@ describe("codex: exec's JSON lines", () => {
 			"-c",
 			'permissions.fenced.extends=":workspace"',
 			"-c",
-			'permissions.fenced.filesystem={"/home/x"="deny"}',
+			'permissions.fenced.filesystem={"/people/x"="deny"}',
 		]);
 	});
 
@@ -370,19 +370,19 @@ describe("codex: exec's JSON lines", () => {
 		const env = codexEnvOf(
 			{
 				PATH: "/bin",
-				HOME: "/home/x",
+				HOME: "/people/x",
 				USER: "x",
 				OPENAI_API_KEY: "planted",
 				CODEX_API_KEY: "planted",
 				TYPESAFE_API_KEY: "planted",
 				ANTHROPIC_API_KEY: "planted",
 			},
-			"/home/x/.cache/codex-home",
+			"/people/x/.cache/codex-home",
 		);
 		expect(Object.values(env)).not.toContain("planted");
 		expect(env).toMatchObject({
-			HOME: "/home/x/.cache/codex-home",
-			CODEX_HOME: "/home/x/.cache/codex-home",
+			HOME: "/people/x/.cache/codex-home",
+			CODEX_HOME: "/people/x/.cache/codex-home",
 		});
 	});
 });
