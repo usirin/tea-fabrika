@@ -512,19 +512,16 @@ const projectLogic = Effect.fn("project.init")(function* (
 					),
 				),
 			open: (pid, client) =>
-				processObject(pid)
-					.pipe(
-						Effect.flatMap((owner) =>
-							rpc(ProcessClient.make(processStub(env, name, owner)).open(client)),
-						),
-					)
-					.pipe(
-						Effect.flatMap((value) =>
-							Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
-								Effect.mapError(() => new LedgerError({why: "bad_row"})),
-							),
+				processObject(pid).pipe(
+					Effect.flatMap((owner) =>
+						rpc(ProcessClient.make(processStub(env, name, owner)).open(client)),
+					),
+					Effect.flatMap((value) =>
+						Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
+							Effect.mapError(() => new LedgerError({why: "bad_row"})),
 						),
 					),
+				),
 			wait: referee.wait,
 		})
 		.pipe(Effect.provideContext(services));

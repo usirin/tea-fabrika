@@ -801,7 +801,7 @@ export class ProgramRunner extends Context.Service<
 							}),
 							attempt.at,
 							original,
-						).pipe(Effect.catch(() => Effect.fail(down)));
+						).pipe(Effect.mapError(() => down));
 						return yield* down;
 					}
 
