@@ -12,13 +12,14 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * 42579837468, 42573088027 and 42571265116, rounded to one decimal.
  * The 18 lane rows use PR 757 runs 42850162592, 42853075395 and 42855774180,
  * one file at a time. The 12 refreshed rows use main runs 42803733957, 42807559589
- * and 42801440878.
+ * and 42801440878. box, boxrm, loosening and program-package-layout come from PR 757's check
+ * run 42874119130, attempts 5 to 14 (a median of 10).
  * stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
  * next/ medians use main runs 42717511599, 42716453289 and 42715921306, rounded to one decimal.
  * A file not measured counts 1 s.
  */
 export const measured: Record<string, number> = {
-  ".agents/skills/lead/scripts/box.test.ts": 416.1,
+  ".agents/skills/lead/scripts/box.test.ts": 348.7,
   ".agents/skills/lead/scripts/catchup.test.ts": 689.1,
   ".agents/skills/lead/scripts/gc.test.ts": 0.1,
   ".agents/skills/lead/scripts/redact.test.ts": 7.2,
@@ -555,12 +556,13 @@ export const measured: Record<string, number> = {
   "programs/tracker/src/ticket.test.ts": 0.0,
   "programs/tracker/src/tracker.test.ts": 3.2,
   "programs/tracker/src/window.test.ts": 0.0,
-  ".agents/skills/lead/scripts/boxrm.test.ts": 387.2,
-  ".agents/skills/lead/scripts/loosening.test.ts": 132.3,
+  ".agents/skills/lead/scripts/boxrm.test.ts": 295.0,
+  ".agents/skills/lead/scripts/loosening.test.ts": 234.6,
   "scripts/caps.test.ts": 108.5,
   "oxlint-plugins/padding-line-between-statements.test.ts": 44.7,
   ".agents/skills/lead/scripts/leakgrep.test.ts": 34.2,
   ".agents/skills/lead/scripts/mutbox.test.ts": 34.0,
+  "oxlint-plugins/program-package-layout.test.ts": 80.3,
   "vitest.shards.test.ts": 0.3,
 };
 
