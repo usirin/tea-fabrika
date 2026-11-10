@@ -1,8 +1,14 @@
 import {createConnection} from "node:net";
+import {defineMachine} from "@demlik/tea";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
-import {Effect, FileSystem, Logger} from "effect";
+import {Client} from "@modelcontextprotocol/client";
+import type {JSONRPCMessage, Transport} from "@modelcontextprotocol/client";
+import {Effect, FileSystem, Layer, Logger, Schema} from "effect";
 import {describe, expect, it} from "vitest";
+import {listed} from "../program/listed.ts";
+import {defineProgram, kind} from "../program/program.ts";
+import {input} from "../program/shape.ts";
 import {programList} from "../shell/programs.ts";
 import {SMALL} from "../shell/small.ts";
 import {AGENTS_PROTOCOL} from "./handshake.ts";
@@ -158,5 +164,136 @@ describe("an agent's initialize", () => {
 			}).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
 		);
 		expect(answer).toMatchObject({result: {capabilities: {tools: {listChanged: true}}}});
+	});
+});
+
+// scenario: tracker 411, the socket end to end, with the installed MCP SDK client (the plan's L9). The laws on `driveFor` (./drive.test.ts) and on the
+// tracker prove the view; this one proves it reaches the agent's JSON-RPC answer under that call's
+// own id, through the real server and the real serializer, and that a second connection on the same
+// host has its own run and its own view. A scenario, not a property: it needs a socket and two
+// connections, and the generated laws already hold the inputs.
+//
+//   agent 1  (SDK callTool, id 11) {"id":11,"method":"tools/call","params":{"name":"logs_put","arguments":{"value":{"p":5}}}}
+//   host     {"id":11,"result":{"content":[{"type":"text","text":"{... \"view\": {\"seen\": [5]}}"}]}}
+describe("a tool call on a program input, over the agents' socket", () => {
+	const Seen = Schema.Struct({seen: Schema.Array(Schema.Int)});
+	const Put = Schema.Struct({p: Schema.Int});
+	const log = defineMachine({
+		types: {
+			model: {} as typeof Seen.Type,
+			msg: {} as {readonly type: "saw"; readonly p: number},
+			ctx: undefined,
+		},
+		cmds: [],
+		init: (loaded) => [loaded ?? {seen: []}, []],
+		update: {saw: (s, m) => [{seen: [...s.seen, m.p]}, []]},
+	});
+	const logs = defineProgram({
+		name: "logs",
+		description: "Logs the numbers it is told, a few turns after each.",
+		inputs: {put: input(Put, "A number.")},
+		outputs: {},
+		machines: {
+			log: kind({
+				machine: log,
+				state: Seen,
+				parent: "main",
+				options: () => ({ctx: undefined}),
+				drawing: () => ({name: "log", steps: {}}),
+				status: (s) => `${s.seen.length} seen`,
+			}),
+		},
+		view: {machine: "log", data: Seen, of: (s) => ({seen: s.seen})},
+		main: ({serve, machines}) =>
+			Effect.gen(function* () {
+				const logged = yield* machines.log.get("log").start();
+				yield* serve({
+					put: ({p}) =>
+						Effect.yieldNow.pipe(
+							Effect.andThen(Effect.yieldNow),
+							Effect.andThen(logged.dispatch({type: "saw", p}).pipe(Effect.orDie)),
+						),
+				});
+			}).pipe(Effect.scoped),
+	});
+
+	it("scenario: each call is answered under its own id with the view its own input made, and a second connection has its own", async () => {
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({prefix: "sv-"});
+				const path = `${dir}/mcp.sock`;
+				const server = yield* NodeSocketServer.make({path});
+				yield* server
+					.run((socket) =>
+						serveAgent(socket, {
+							person: "owner",
+							programsFor: () =>
+								Effect.succeed({list: programList([listed(logs, Layer.empty)]), readOnly: null}),
+							tiles: () => [],
+						}).pipe(Effect.ignore),
+					)
+					.pipe(Effect.forkScoped);
+				// The installed SDK client, on a transport that is this socket: the handshake line first,
+				// then each JSON-RPC message as a line, as the bridge writes them. The SDK matches every
+				// answer to its call by id, so a mixed-up id would hang or fail that call.
+				const connect = (agent: string) =>
+					Effect.gen(function* () {
+						const transport: Transport = {
+							start: async () => {},
+							send: async (message: JSONRPCMessage) => {
+								client.write(`${JSON.stringify(message)}\n`);
+							},
+							close: async () => {},
+						};
+						const got: unknown[] = [];
+						const client = createConnection(path);
+						let rest = "";
+						client.on("data", (chunk) => {
+							rest += chunk.toString("utf8");
+							const parts = rest.split("\n");
+							rest = parts.pop() ?? "";
+							for (const part of parts) {
+								if (part.trim() === "") continue;
+								const message: unknown = JSON.parse(part);
+								got.push(message);
+								if (Reflect.get(Object(message), "type") !== "handshake")
+									transport.onmessage?.(message as JSONRPCMessage);
+							}
+						});
+						yield* Effect.addFinalizer(() => Effect.sync(() => client.destroy()));
+						client.write(
+							`${JSON.stringify({type: "handshake", version: AGENTS_PROTOCOL, agent})}\n`,
+						);
+						yield* until("the host's handshake", () =>
+							got.some((m) => Reflect.get(Object(m), "type") === "handshake") ? true : undefined,
+						);
+						const sdk = new Client({name: agent, version: "1.0.0"});
+						yield* Effect.acquireRelease(
+							Effect.promise(() => sdk.connect(transport)),
+							() => Effect.promise(() => sdk.close()).pipe(Effect.ignore),
+						);
+						/** One put, and the `seen` list its answer's view holds. */
+						const put = (p: number) =>
+							Effect.promise(async () => {
+								const answer = await sdk.callTool({name: "logs_put", arguments: {value: {p}}});
+								const content = Reflect.get(answer, "content");
+								const text: unknown = Reflect.get(
+									Object(Array.isArray(content) ? content[0] : {}),
+									"text",
+								);
+								return typeof text === "string" ? JSON.parse(text).view.seen : text;
+							});
+						return {put};
+					});
+				const one = yield* connect("claude");
+				const two = yield* connect("codex");
+				const first = yield* one.put(5);
+				const second = yield* one.put(5);
+				const third = yield* one.put(7);
+				const other = yield* two.put(9);
+				return {first, second, third, other};
+			}).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
+		);
+		expect(seen).toEqual({first: [5], second: [5, 5], third: [5, 5, 7], other: [9]});
 	});
 });
