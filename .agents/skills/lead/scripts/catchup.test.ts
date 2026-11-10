@@ -143,6 +143,10 @@ type Setup = {
   tickets?: Record<number, "open" | "closed">;
   // The last look at main refuses: main moved after the checks and the merged tree is red (552).
   stale?: boolean;
+  // gh reads merge state BEHIND and refuses on its own side (0049); the REST merge then answers
+  // merged, `moved` (a newer head, 409) or `refused` (GitHub's own rules, 405).
+  behind?: boolean;
+  rest?: "merged" | "moved" | "refused";
 };
 
 const green: Setup = {
@@ -171,6 +175,7 @@ if (cmd === "gh") {
     key = args.includes("state,mergeCommit") ? "landed" : args.includes("body") ? "body" : args.includes("headRefOid") ? "oid" : "head";
   else if (args[0] === "stack" && args[1] === "merge") key = "stack";
   else if (args[0] === "pr" && args[1] === "merge") key = "merge";
+  else if (args[0] === "api" && args.includes("PUT")) key = "rest";
   else if (args[0] === "run" && args[1] === "view") key = "logs";
   else if (args[0] === "api" && args[1].includes("check_name=")) key = "apps";
   else if (args[0] === "api" && args[1].includes("check-runs?")) key = "checks";
@@ -216,6 +221,10 @@ if (cmd === "gh") {
   if (key === "apps") console.log(setup.answer === "app" ? "impostor" : "github-actions");
   if (key === "logs") console.log("commits\tcheck\t2026-11-08T00:00:00Z commits: 3 commits, ticket " + (setup.answer === "ticket" ? "521" : "520"));
   if (key === "merge" && setup.mergeFails) die("merge refused");
+  if (key === "merge" && setup.behind)
+    die("X Pull request fixture/repo#900 is not mergeable: the head branch is not up to date with the base branch.");
+  if (key === "rest" && setup.rest === "moved") die("gh: Head branch was modified. Review and try the merge again. (HTTP 409)");
+  if (key === "rest" && setup.rest === "refused") die("gh: Pull Request is not mergeable (HTTP 405)");
   process.exit(0);
 }
 if (cmd === "git") {
@@ -1447,6 +1456,62 @@ describe("catchup, today's tooling", () => {
     // A check that never came back green never reaches the look.
     const red = run({ ...green, answer: "red" });
     expect(red.calls.some((c) => c.cmd === "node")).toBe(false);
+  });
+
+  // Plants: drop the BEHIND branch; merge behind without the sha pin or with another one; add
+  // --admin, --auto or bypass_rules; retry the write; reach it on red checks or a red lint; treat a
+  // 409 or a 405 as landed.
+  it("T552 property: a green, linted pull request that gh refuses as BEHIND lands by one pinned REST squash; red checks, a red lint, a moved head or GitHub's own refusal stop it (0049)", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          answer: fc.constantFrom<Setup["answer"]>("green", "red"),
+          stale: fc.boolean(),
+          behind: fc.boolean(),
+          rest: fc.constantFrom<NonNullable<Setup["rest"]>>("merged", "moved", "refused"),
+        }),
+        ({ answer, stale, behind, rest }) => {
+          const got = run({ ...green, answer, stale, behind, rest });
+          const reached = answer === "green" && !stale;
+          const behindTried = reached && behind;
+          const lands = reached && (!behind || rest === "merged");
+          expect(got.code, got.text).toBe(lands ? 0 : 1);
+          expect(merges(got.calls)).toHaveLength(reached ? 1 : 0);
+
+          const writes = got.calls.filter((c) => c.key === "rest");
+          expect(writes.map((c) => c.args)).toEqual(
+            behindTried
+              ? [
+                  [
+                    "api",
+                    "-X",
+                    "PUT",
+                    "repos/fixture/repo/pulls/900/merge",
+                    "-f",
+                    "merge_method=squash",
+                    "-f",
+                    `sha=${tip}`,
+                  ],
+                ]
+              : [],
+          );
+          expect(got.calls.flatMap((c) => c.args).filter((a) => /--admin|--auto|bypass/.test(a))).toEqual([]);
+          expect(got.calls.some((c) => c.key === "landed")).toBe(lands);
+
+          if (behindTried && rest !== "merged") {
+            expect(got.text).toContain("pr 900: merge behind main refused at");
+            expect(got.text).toContain(rest === "moved" ? "HTTP 409" : "HTTP 405");
+          }
+
+          if (behindTried && rest === "merged") {
+            expect(got.text).toContain("pr 900: landed behind main on purpose (0049)");
+          }
+
+          assertHead(got.calls);
+        },
+      ),
+      { seed: 552, numRuns: 12 },
+    );
   });
 
   // Plant: test the deadline only after the green-and-complete break, as review round 4 found.
