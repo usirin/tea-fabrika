@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { Schema } from "effect";
-import { _electron } from "playwright";
+import { _electron, type ElectronApplication } from "playwright";
 
 export const electronHookArgs = ["-r", resolve(import.meta.dirname, "electron-hook.cjs")] as const;
 
@@ -190,6 +190,7 @@ export const createElectronRunner = <A>(io: Dependencies<A>) => {
     }
 
     Object.assign(testEnv, {
+      HOME: home,
       FABRIKA_HOME: home,
       FABRIKA_E2E_REPORT: entry.path,
       FABRIKA_E2E_ID: id,
@@ -272,6 +273,14 @@ export const createElectronRunner = <A>(io: Dependencies<A>) => {
   return { launchElectron, runE2e };
 };
 
+/**
+ * Playwright 1.64.1's `close()` already treats a closed target as closed and rethrows any other
+ * failure. Its `process()` throws on a closed app, so the launcher never calls it.
+ */
+export const closeElectronApp = async (app: Pick<ElectronApplication, "close">): Promise<void> => {
+  await app.close();
+};
+
 const runner = createElectronRunner({
   launch: (options) => _electron.launch(options),
   inspect: async (app) => {
@@ -282,11 +291,7 @@ const runner = createElectronRunner({
       return { report: hook?.report?.(), live: BrowserWindow.getAllWindows().map((w) => w.id) };
     });
   },
-  close: async (app) => {
-    if (app.process().exitCode === null && app.process().signalCode === null) {
-      await app.close();
-    }
-  },
+  close: closeElectronApp,
   read: (path) => readFile(path, "utf8"),
   executable: () => createRequire(import.meta.url)("electron"),
   id: randomUUID,

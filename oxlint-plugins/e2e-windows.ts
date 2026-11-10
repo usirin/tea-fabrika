@@ -63,6 +63,56 @@ export const e2eWindows: CreateRule = {
       return undefined;
     };
     type Binding = NonNullable<ReturnType<typeof binding>>;
+    interface Write {
+      readonly at: number;
+      readonly pattern: Node;
+      readonly value: Node | null | undefined;
+    }
+    /** Declarator and assignment writes of a binding, in source order. */
+    const writesOf = (variable: Binding): Write[] => {
+      const writes: Write[] = [];
+      const def = variable.defs[0];
+
+      if (def?.node.type === "VariableDeclarator") {
+        writes.push({ at: def.node.range[0], pattern: def.node.id, value: def.node.init });
+      }
+
+      for (const ref of variable.references) {
+        const parent = (ref.identifier as Node & { parent?: Node }).parent;
+        let top: Node | undefined = parent;
+
+        // A destructuring assignment reaches its identifier through array, object and default patterns.
+        while (
+          top &&
+          (top.type === "ArrayPattern" ||
+            top.type === "ObjectPattern" ||
+            top.type === "Property" ||
+            top.type === "AssignmentPattern" ||
+            top.type === "RestElement")
+        ) {
+          top = (top as Node & { parent?: Node }).parent;
+        }
+
+        const target = ref.identifier.range;
+
+        if (
+          top?.type === "AssignmentExpression" &&
+          top.left.range[0] <= target[0] &&
+          target[1] <= top.left.range[1] &&
+          ["=", "||=", "??=", "&&="].includes(top.operator)
+        ) {
+          writes.push({ at: top.range[0], pattern: top.left, value: top.right });
+        }
+      }
+
+      return writes.sort((a, b) => a.at - b.at);
+    };
+    /** The write a use sees: the last one before it. A use ahead of every write sees any of them. */
+    const reaching = (variable: Binding, use: Node): Write[] => {
+      const writes = writesOf(variable);
+      const before = writes.filter((w) => w.at < use.range[0]);
+      return before.length ? [before[before.length - 1] as Write] : writes;
+    };
     const hasPosition = (node: Node | null | undefined, seen = new Set<Binding>()): boolean => {
       if (!node) {
         return false;
@@ -91,8 +141,9 @@ export const e2eWindows: CreateRule = {
       }
 
       seen.add(variable);
-      const def = variable.defs[0];
-      return def?.node.type === "VariableDeclarator" && hasPosition(def.node.init, seen);
+      return reaching(variable, node).some(
+        (w) => w.pattern.type === "Identifier" && hasPosition(w.value, new Set(seen)),
+      );
     };
     const propertyKind = (base: Kind | undefined, name: string | undefined): Kind | undefined => {
       if (base === "electron" && name === "BrowserWindow") {
@@ -251,7 +302,15 @@ export const e2eWindows: CreateRule = {
       }
 
       if (def?.node.type === "VariableDeclarator") {
-        return patternKind(def.node.id, node.name, infer(def.node.init, seen));
+        for (const w of reaching(variable, node)) {
+          const found = patternKind(w.pattern, node.name, infer(w.value, new Set(seen)));
+
+          if (found) {
+            return found;
+          }
+        }
+
+        return undefined;
       }
 
       if (def?.type === "Parameter") {

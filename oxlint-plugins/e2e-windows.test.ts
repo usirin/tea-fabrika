@@ -64,6 +64,13 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
       ({ name, optional, computed }) => {
         const call = (method: string, args = "") =>
           `${name}${optional ? "?." : computed ? "" : "."}${computed ? `["${method}"]` : method}${optional ? "?." : ""}(${args});`;
+        // Bindings created or changed by assignment, not by a declarator initializer.
+        const assigned = [
+          `import {BrowserWindow as W} from "electron"; let ${name}; ${name} = W.fromId(1);`,
+          `import {BrowserWindow as W} from "electron"; let ${name}; let other = page.locator("a"); ${name} = other; ${name} = W.getFocusedWindow();`,
+          `import {BrowserWindow as W} from "electron"; let first; [first] = W.getAllWindows(); const ${name} = first;`,
+          `import {BrowserWindow as W} from "electron"; let ${name} = page; ${name} = new W();`,
+        ];
         const forms = [
           `import {BrowserWindow as W} from "electron"; const ${name} = new W();`,
           `import * as E from "electron"; const ${name} = E.BrowserWindow.getAllWindows()[0];`,
@@ -73,6 +80,7 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
           `declare const app: unknown; app.evaluate(({BrowserWindow: W}) => { const ${name} = W.getAllWindows()[0]; CALLS });`,
           `import {launchElectron} from "./src/testing/electron-launch.ts"; const app = await launchElectron({}); const h = await app.browserWindow(page); h.evaluate((${name}) => { CALLS });`,
           `const E = require("electron"); const ${name} = E.BrowserWindow.fromWebContents(contents);`,
+          ...assigned,
         ];
         const banned = ["show", "focus", "setOpacity", "setIgnoreMouseEvents", "capturePage", "setPosition", "center"];
         const calls = [
@@ -80,6 +88,8 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
           call("setBounds", "{x: 0, width: 900}"),
           call("setBounds", "{y: -20, height: 900}"),
           `const position = {x: 0}; ${call("setBounds", "{...position, width: 900}")}`,
+          `let moved; moved = {y: 3}; ${call("setBounds", "{...moved, width: 900}")}`,
+          `let alias = {width: 5}; let again; again = {x: 1}; alias = again; ${call("setBounds", "alias")}`,
         ].join("\n");
         const allowed = [
           call("setBounds", "{width: 20000, height: 15000}"),
@@ -88,6 +98,7 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
           `{ const ${name} = page.locator("input"); ${name}.focus(); }`,
           `page.evaluate((element) => element.focus()); page.locator("input").focus();`,
           `function localRequire(require) { const E = require("electron"); E.BrowserWindow.fromId(1).focus(); }`,
+          `let sized = {x: 1}; sized = {width: 5}; ${call("setBounds", "sized")}`,
           `function shadowBrowser(W) { const local = new W(); local.focus(); }`,
         ].join("\n");
         const files: Record<string, string> = {};
@@ -106,6 +117,8 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
           'const P = await import("playwright"); const E = P._electron; E.launch({});',
           '(await import("playwright-core"))._electron["launch"]?.({});',
           'const P = require("@playwright/test"); P["_electron"].launch({});',
+          'let P; P = await import("playwright"); P._electron.launch({});',
+          'let E; E = require("playwright")._electron; E.launch({});',
         ];
         // Imports must be top-level. Each driver gets each launch style in its own lexical namespace.
         files["apps/fabrika/e2e.ts"] = launches[0] ?? "";
@@ -117,6 +130,9 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
         files["apps/fabrika/src/testing/electron-launch.ts"] = `${launches[0]}\nimport colors from "@radix-ui/colors";`;
         files["apps/fabrika/src/testing/electron-hook.cjs"] =
           `const {BrowserWindow: W} = require("electron"); const ${name} = new W(); ${calls}`;
+        // A reassignment to a page or locator drops native status.
+        files["apps/fabrika/src/testing/dropped.ts"] =
+          `import {BrowserWindow as W} from "electron"; let ${name} = new W(); ${name} = page.locator("input"); ${call("focus")}\nlet other = W.fromId(1); other = page; other.focus();`;
         files["apps/fabrika/src/main.ts"] =
           `import {BrowserWindow as W} from "electron"; const ${name} = new W(); ${calls}`;
         files["apps/fabrika/ruler-e2e.ts"] =
@@ -128,12 +144,13 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
         const fires = lint(files);
 
         for (let i = 0; i < forms.length; i++) {
-          expect(fires(Code, `apps/fabrika/src/testing/case-${i}.ts`)).toHaveLength(10);
+          expect(fires(Code, `apps/fabrika/src/testing/case-${i}.ts`)).toHaveLength(12);
         }
 
+        expect(fires(Code, "apps/fabrika/src/testing/dropped.ts")).toEqual([]);
         expect(fires(Code, "apps/fabrika/e2e.ts")).toHaveLength(1);
         expect(fires(Code, "apps/fabrika/lane-e2e.ts")).toHaveLength(1);
-        expect(fires(Code, "apps/fabrika/summon-e2e.ts")).toHaveLength(4);
+        expect(fires(Code, "apps/fabrika/summon-e2e.ts")).toHaveLength(6);
 
         for (const path of [
           "src/testing/electron-launch.ts",

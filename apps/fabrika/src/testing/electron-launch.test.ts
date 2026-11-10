@@ -3,7 +3,13 @@ import { isAbsolute, dirname } from "node:path";
 import { Arbitrary, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { createElectronRunner, electronHookArgs, Report, type WindowReport } from "./electron-launch.ts";
+import {
+  closeElectronApp,
+  createElectronRunner,
+  electronHookArgs,
+  Report,
+  type WindowReport,
+} from "./electron-launch.ts";
 
 const options = { seed: 119120, numRuns: 50 };
 
@@ -91,11 +97,20 @@ describe("Electron window law", () => {
         fc.record({
           extra: fc.dictionary(fc.stringMatching(/^[A-Z]{1,12}$/), fc.string()),
           home: fc.stringMatching(/^[a-z]{1,12}$/),
+          // fast-check: edge cases -- the caller's HOME is absent or conflicting.
+          callerHome: fc.option(fc.stringMatching(/^\/[a-z]{1,12}$/), { nil: undefined }),
           cwd: fc.option(fc.stringMatching(/^[a-z]{1,12}$/), { nil: undefined }),
           count: fc.integer({ min: 2, max: 5 }),
         }),
-        async ({ extra, home, cwd, count }) => {
-          const env = { ...extra, FABRIKA_FOREGROUND: "1", FABRIKA_HOME: "wrong", FAKE_AGENT: "yes" };
+        async ({ extra, home, callerHome, cwd, count }) => {
+          const { HOME: _drop, ...rest } = extra;
+          const env = {
+            ...rest,
+            ...(callerHome === undefined ? {} : { HOME: callerHome }),
+            FABRIKA_FOREGROUND: "1",
+            FABRIKA_HOME: "wrong",
+            FAKE_AGENT: "yes",
+          };
           const before = { ...env };
           const f = fixture();
           await f.runE2e(async () => {
@@ -114,18 +129,69 @@ describe("Electron window law", () => {
             expect(call.args[2]).toMatch(/\/apps\/fabrika$/);
             expect(call.args.every((a) => a === "-r" || isAbsolute(a))).toBe(true);
             expect(call.env).toMatchObject({
-              ...extra,
+              ...rest,
+              HOME: home,
               FABRIKA_HOME: home,
               FAKE_AGENT: "yes",
               FABRIKA_E2E_ID: expect.any(String),
             });
             expect(call.env.FABRIKA_FOREGROUND).toBeUndefined();
             expect(call.env.NODE_OPTIONS).toBe(extra.NODE_OPTIONS);
+            expect(call.env.HOME).toBe(home);
             expect(dirname(call.env.FABRIKA_E2E_REPORT ?? "")).toBe(home);
             expect(call.cwd).toBe(cwd);
           }
         },
       ),
+      options,
+    );
+  });
+
+  it("treats an app that already closed as closed, and still fails any other close failure", async () => {
+    // fast-check: edge cases -- arbitrary failure text stands in for non-closed close errors.
+    await fc.assert(
+      fc.asyncProperty(fc.string(), fc.integer({ min: 1, max: 4 }), async (text, repeats) => {
+        let closed = false;
+        const app = {
+          // Playwright 1.64.1: process() reads a disposed object after close and throws.
+          process: () => {
+            if (closed) {
+              throw new TypeError("Cannot read properties of undefined (reading '_object')");
+            }
+
+            return {};
+          },
+          close: async () => {
+            closed = true;
+          },
+        };
+        const runner = createElectronRunner({
+          id: () => "closed",
+          executable: () => "/fake/electron",
+          launch: async () => app,
+          inspect: async () => ({ report: safe("closed", false), live: [1] }),
+          close: closeElectronApp,
+          read: async () => JSON.stringify(safe("closed", true)),
+        });
+        await expect(
+          runner.runE2e(async () => {
+            const launched = await runner.launchElectron({ home: "home", env: {} });
+
+            for (let i = 0; i < repeats; i++) {
+              await launched.close();
+            }
+          }),
+        ).resolves.toBeUndefined();
+
+        const failure = new Error(text);
+        await expect(
+          closeElectronApp({
+            close: async () => {
+              throw failure;
+            },
+          }),
+        ).rejects.toBe(failure);
+      }),
       options,
     );
   });
