@@ -971,9 +971,11 @@ const viewLaws: Readonly<Record<string, ViewLaw>> = {
       const rows = viewRows(records).filter((r) => r.result !== "patch");
       const want = [
         ...(v.whole === null ? [] : [`whole ${v.whole.pid} ${v.whole.rev}`]),
-        ...v.asked.map((pid) => `asked ${pid}`),
+        ...v.asked.map((pid) => `asked ${pid} ${Math.max(0, prev.client.views[pid]?.rev ?? 0)}`),
       ].sort();
-      const got = rows.map((r) => (r.result === "whole" ? `whole ${r.pid} ${r.rev}` : `asked ${r.pid}`)).sort();
+      const got = rows
+        .map((r) => (r.result === "whole" ? `whole ${r.pid} ${r.rev}` : `asked ${r.pid} ${r.rev}`))
+        .sort();
 
       if (JSON.stringify(got) !== JSON.stringify(want)) {
         return `${msg.type} ${JSON.stringify(msg["note"] ?? msg["value"] ?? null)} kept ${JSON.stringify(got)}, the client did ${JSON.stringify(want)}`;
@@ -1721,5 +1723,46 @@ describe("window machine: saved state", () => {
       }),
       { seed: SEED, numRuns: 100 },
     );
+  });
+});
+
+// Mutation round (ticket 286, seed 119120): the window's wire schemas were never decoded by any
+// law, so a schema line could change unseen. These vectors decode the Msgs the browser file feeds
+// the machine, through the machine's own `msg` schema.
+describe("window machine: format of the Msgs", () => {
+  const msgSchema = async (): Promise<Schema.Codec<unknown, unknown>> =>
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the machine's `msg` is the schema of every Msg it reads; the cast names that
+    ((await machine()) as unknown as { msg: Schema.Codec<unknown, unknown> }).msg;
+  const accepts = async (msg: unknown): Promise<boolean> =>
+    Result.isSuccess(Schema.decodeUnknownResult(await msgSchema())(msg));
+
+  it("format: a key's identity Msg is `identity` with found created, reused or replaced, and nothing else", async () => {
+    // reason: the browser's key read emits it (main.tsx), and the key row's result comes from found.
+    for (const found of ["created", "reused", "replaced"]) {
+      expect(await accepts({ type: "identity", found }), found).toBe(true);
+    }
+
+    expect(await accepts({ type: "identity", found: "other" })).toBe(false);
+    expect(await accepts({ type: "", found: "created" })).toBe(false);
+  });
+
+  it("format: the link outcome Msgs `admitted` and `stalled` carry the dial and the measured ms", async () => {
+    // reason: the connect rows copy ms from these (A8); a Msg without it is not one the machine reads.
+    expect(await accepts({ type: "admitted", dial: 1, ping: 0, ms: 12.5 })).toBe(true);
+    expect(await accepts({ type: "stalled", dial: 1, ms: 0 })).toBe(true);
+    expect(await accepts({ type: "admitted", dial: 1, ping: 0 })).toBe(false);
+    expect(await accepts({ type: "stalled", dial: 1 })).toBe(false);
+    expect(await accepts({ type: "stalled", dial: 1, ms: -1 })).toBe(false);
+  });
+
+  it("format: a send's ok value is a Sent answer plus the handler's ms, and needs the ms", async () => {
+    // reason: the reply row's ms is read from it (A8); decoded through the `send` Cmd's own ok schema.
+    const { send } = await import("./machine.ts");
+    const ok = (value: unknown) => Result.isSuccess(Schema.decodeUnknownResult(send.schema.ok)(value));
+    expect(ok({ _tag: "accepted", rev: 1, pos: 1, ms: 3 })).toBe(true);
+    expect(ok({ _tag: "refused", reason: "bad_msg", ms: 3 })).toBe(true);
+    expect(ok({ _tag: "accepted", rev: 1, pos: 1 })).toBe(false);
+    expect(ok({ _tag: "refused", reason: "bad_msg" })).toBe(false);
+    expect(ok({ _tag: "accepted", ms: 3 })).toBe(false);
   });
 });
