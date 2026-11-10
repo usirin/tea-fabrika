@@ -1097,7 +1097,7 @@ describe("floors", () => {
   it("scenario: on the real rule file only downward imports between rooms pass", () => {
     const run = runTool(realTree, REAL);
     expect(run.edges).toEqual(expectedEdges(REAL));
-    expect(run.edges).toContain("next-node -> next-workers [sideways]");
+    expect(run.edges).not.toContain("next-node -> next-workers [sideways]");
     expect(run.edges).toContain("next-processes -> next-presence [sideways]");
     expect(run.edges).toContain("next-transport -> next-ledger [sideways]");
     expect(run.edges).not.toContain("next-runtime -> next-ledger [upward]");
@@ -1122,7 +1122,7 @@ describe("floors", () => {
   // is the one place that says which room is on which floor.
   it("pinned: the rooms are on the floors the plan gives them", () => {
     expect(Object.fromEntries(floorsByName(REAL))).toEqual({
-      "next-node": 8,
+      "next-node": 9,
       "next-workers": 8,
       "next-libfabrika-entry": 7,
       "next-door": 6,
