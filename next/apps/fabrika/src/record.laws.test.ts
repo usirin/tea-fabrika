@@ -2,12 +2,14 @@
 // Plants: omit the shell's cap; map the callee's bad_row to unreachable.
 import { DatabaseSync } from "node:sqlite";
 import { beforeAll, afterAll, describe, expect, it } from "@effect/vitest";
+import { Written } from "@kampus/libfabrika/data";
+import { Chain, Content, partName, SinkError, SpanRow } from "@kampus/libfabrika/data";
+import { nodeSql } from "@kampus/libfabrika/sqlite";
+import type { RecordShape } from "@kampus/libfabrika/workers/objects";
+import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { Effect, Exit, Result, Schema, Scope } from "effect";
-import { Written } from "../data/records.ts";
-import { nodeSql } from "../data/sqlite.ts";
-import { Chain, Content, partName, SinkError, SpanRow } from "../data/trace.ts";
-import type { RecordShape } from "./objects.ts";
-import { recordWrite, recordRead, recordContent, recordDelete } from "./record.ts";
+
+import { recordWire } from "./record-wire.test-support.ts";
 
 type Rows = Parameters<typeof recordWrite>[4];
 type Deletion = Parameters<typeof recordDelete>[5];
@@ -82,7 +84,6 @@ for (const kind of ["node", "wire"] as const) {
         return;
       }
 
-      const { recordWire } = await import("../../../../apps/fabrika/src/record-wire.test-support.ts");
       const urls = new Map<number, string>();
 
       for (const cap of [1, 1_000_000_000]) {
