@@ -53,13 +53,15 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
-**Tier 1, dated 2026-11-09.** 18 of [its 38 rows](./tier-1.md#the-pull-requests-one-at-a-time)
+**Tier 1, dated 2026-11-09.** 19 of [its 38 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, so `next/` is on main now: the exams (P1, P2, P30, P32, P35), the spikes and the
-sheet's design pass (P3 to P5), the design package (P31), and the layers from P6 to P12, with
-P33, P34 and P37. The local stage, P12, landed today as
+sheet's design pass (P3 to P5), the design package (P31), and the layers from P6 to P12 and P16,
+with P33, P34 and P37. The local stage, P12, landed today as
 [PR 530](https://github.com/usirin/tea-fabrika/pull/530). P17a, half of the chaos row, landed too
-([PR 537](https://github.com/usirin/tea-fabrika/pull/537)). → next: P16, one built file, is open
-as [PR 536](https://github.com/usirin/tea-fabrika/pull/536); P13, P15, P17b, P18 to P20, P23 to
+([PR 537](https://github.com/usirin/tea-fabrika/pull/537)). P16, one built file, is built as
+[PR 687](https://github.com/usirin/tea-fabrika/pull/687): each program and its window scripts ride
+inside the brain, and the local bar did not get worse ([experiment 241](../../experiments/241-one-file-build.md)).
+→ next: P13, P15, P17b, P18 to P20, P23 to
 P25, P27a and P36 have tests on their branches and wait for builds; P28's tests are in, and its
 build waits on P19, P21 and P26.
 P34c, new today ([0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)),
