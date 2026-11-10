@@ -1,16 +1,17 @@
 // P12, next/. Unit checks own the outbox and memory sampling. Child cleanup uses the real dev.ts.
 import {spawn, execFileSync, type ChildProcess} from "node:child_process";
 import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
-import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {NodeServices} from "@effect/platform-node";
 import {describe, expect, it, afterEach} from "@effect/vitest";
 import {Effect} from "effect";
+import {heldPort} from "./port.test-support.ts";
 
 const homes: Array<string> = [];
 const children: Array<ChildProcess> = [];
 const groups: Array<number> = [];
+const ports: Array<Effect.Effect<void>> = [];
 
 const home = () => {
 	const h = mkdtempSync(join(tmpdir(), "p12-l-"));
@@ -50,6 +51,11 @@ afterEach(async () => {
 	for (const h of homes.splice(0)) {
 		rmSync(h, {recursive: true, force: true});
 	}
+
+	// Last, so the pair stays held until the stage that used its port is gone.
+	for (const release of ports.splice(0)) {
+		await Effect.runPromise(release);
+	}
 });
 
 const tree = (parent: number) => {
@@ -75,18 +81,8 @@ const tree = (parent: number) => {
 const launch = async (startupGate = false) => {
 	readFileSync(resolve(import.meta.dirname, "../dev.ts"), "utf8");
 	const folder = home();
-	const listener = createServer();
-	await new Promise<void>((done, fail) => {
-		listener.once("error", fail);
-		listener.listen(0, "127.0.0.1", done);
-	});
-	const at = listener.address();
-
-	if (at === null || typeof at === "string") {
-		throw new Error("no TCP port");
-	}
-
-	await new Promise<void>((done) => listener.close(() => done()));
+	const at = await Effect.runPromise(heldPort());
+	ports.push(at.release);
 	const env: NodeJS.ProcessEnv = {...process.env, FABRIKA_HOME: folder, DO_NOT_TRACK: "1"};
 	delete env.TYPESAFE_API_KEY;
 	delete env.FABRIKA_FOREGROUND;
