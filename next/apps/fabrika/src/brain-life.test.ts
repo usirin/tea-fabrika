@@ -1,6 +1,6 @@
 // P12, next/. Unit checks own the outbox and memory sampling. Child cleanup uses the real dev.ts.
 import {spawn, execFileSync, type ChildProcess} from "node:child_process";
-import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {NodeServices} from "@effect/platform-node";
@@ -312,6 +312,64 @@ describe("P12 local brain life", () => {
 		} catch (cause) {
 			throw new Error(`P12 replacement/brake failure\n${details()}`, {cause});
 		}
+	});
+	// scenario: the watcher and workerd are real, and only the running stage shows who serves.
+	// A watch event is not a change: the same bytes keep the workerd, new bytes replace it.
+	it("scenario: watcher plant: serve again on every watch event, changed or not", async () => {
+		const s = await launch();
+		const first = await workerd(s);
+		const main = join(s.folder, "build", "brain.mjs");
+		const lines = (text: string) => s.output().split(text).length - 1;
+		// Wait on the stage's own output, by event. An absent rebuild has no line of its own, so
+		// the watcher says when it skips one.
+		const said = (done: () => boolean) =>
+			new Promise<void>((resolve, fail) => {
+				const check = () => {
+					if (done()) {
+						resolve();
+					}
+				};
+				s.child.stdout!.on("data", check);
+				s.child.stderr!.on("data", check);
+				s.child.once("exit", () => fail(new Error(`P12 dev.ts exited\n${s.output()}`)));
+				check();
+			});
+		const original = readFileSync(main);
+		// Swap the whole file in by rename, so the watcher never reads half of one.
+		const put = (bytes: Uint8Array) => {
+			writeFileSync(join(s.folder, "brain.next"), bytes);
+			renameSync(join(s.folder, "brain.next"), main);
+		};
+		// Node's watcher on macOS drops most writes (16 rewrites gave 1 to 3 events), and nothing
+		// says when one was dropped. So put the same file again until the watcher answers. The gap
+		// is longer than the watcher's 200 ms debounce, so each put is an event of its own. On
+		// Linux the first put answers.
+		const until = async (answered: () => boolean, bytes: Uint8Array) => {
+			while (!answered()) {
+				put(bytes);
+				await Promise.race([said(answered), new Promise((done) => setTimeout(done, 500))]);
+			}
+		};
+		const skipped = lines("Bundle unchanged");
+		const rebuilt = lines("Rebuilding");
+		await until(
+			() => lines("Bundle unchanged") > skipped || lines("Rebuilding") > rebuilt,
+			original,
+		);
+		expect(lines("Rebuilding"), s.output()).toBe(rebuilt);
+		expect(await workerd(s), s.output()).toBe(first);
+		const updated = lines("Updated in");
+		await until(
+			() => lines("Updated in") > updated,
+			Buffer.concat([original, Buffer.from("\n// P12 watcher law: new bytes\n")]),
+		);
+
+		while (living(first)) {
+			await pause();
+		}
+
+		// `workerd` returns a pid only after HTTP answers from it.
+		expect(await workerd(s, first), s.output()).not.toBe(first);
 	});
 	it.each(["SIGTERM", "SIGKILL"] as const)(
 		"scenario: group cleanup plant: killing only Node leaves a listener after %s",

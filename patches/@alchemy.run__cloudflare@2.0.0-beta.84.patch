@@ -1,8 +1,8 @@
 diff --git a/lib/Workers/Sources/shared.js b/lib/Workers/Sources/shared.js
-index fe5b925cdc0b3ee2efd7302d4ac5fca2c6c8f65b..006f3d5ea5b7f1d0e8854a57e99b4ebbebfb0399 100644
+index fe5b925cdc0b3ee2efd7302d4ac5fca2c6c8f65b..f44c4613c87affdbcc582c3455a1401591fd7b5b 100644
 --- a/lib/Workers/Sources/shared.js
 +++ b/lib/Workers/Sources/shared.js
-@@ -76,8 +76,20 @@ export const watchBundleDirectory = (options) => Stream.unwrap(Effect.gen(functi
+@@ -76,8 +76,23 @@ export const watchBundleDirectory = (options) => Stream.unwrap(Effect.gen(functi
          _tag: "Success",
          output,
      })), Effect.catch((error) => Effect.succeed({ _tag: "Error", error })));
@@ -15,7 +15,10 @@ index fe5b925cdc0b3ee2efd7302d4ac5fca2c6c8f65b..006f3d5ea5b7f1d0e8854a57e99b4ebb
 +    // just before the watch began. Read first, and pass on only a bundle whose hash differs.
 +    Stream.mapEffect(() => read), Stream.flatMap((event) => {
 +        if (event._tag === "Success" && event.output.hash === served) {
-+            return Stream.empty;
++            // One line per skipped event, so a reader of the output can tell it from no event.
++            return Stream.drain(
++              Stream.fromEffect(Effect.log("Bundle unchanged after a watch event, not serving again")),
++            );
 +        }
 +        served = event._tag === "Success" ? event.output.hash : undefined;
 +        return Stream.make({ _tag: "Start" }, event);
@@ -27,7 +30,7 @@ index fe5b925cdc0b3ee2efd7302d4ac5fca2c6c8f65b..006f3d5ea5b7f1d0e8854a57e99b4ebb
  //# sourceMappingURL=shared.js.map
 \ No newline at end of file
 diff --git a/src/Workers/Sources/shared.ts b/src/Workers/Sources/shared.ts
-index e2bcbf92d457e941be805aa1c09ded1a3f6a1bfd..b0bd6d23c61f9a3731529b829a3d8753eb8b9f45 100644
+index e2bcbf92d457e941be805aa1c09ded1a3f6a1bfd..091183aaf120961fb161322f1e41e7fba17ec004 100644
 --- a/src/Workers/Sources/shared.ts
 +++ b/src/Workers/Sources/shared.ts
 @@ -111,6 +111,7 @@ export const watchBundleDirectory = <R>(options: {
@@ -38,7 +41,7 @@ index e2bcbf92d457e941be805aa1c09ded1a3f6a1bfd..b0bd6d23c61f9a3731529b829a3d8753
        const rebuilds = fs.watch(root).pipe(
          Stream.filter(
            (event) =>
-@@ -119,13 +120,25 @@ export const watchBundleDirectory = <R>(options: {
+@@ -119,13 +120,28 @@ export const watchBundleDirectory = <R>(options: {
          ),
          options.ignore ? Stream.filter((event) => !options.ignore!(event.path)) : (self) => self,
          Stream.debounce("200 millis"),
@@ -52,7 +55,10 @@ index e2bcbf92d457e941be805aa1c09ded1a3f6a1bfd..b0bd6d23c61f9a3731529b829a3d8753
 +        Stream.mapEffect(() => read),
 +        Stream.flatMap((event) => {
 +          if (event._tag === "Success" && event.output.hash === served) {
-+            return Stream.empty;
++            // One line per skipped event, so a reader of the output can tell it from no event.
++            return Stream.drain(
++              Stream.fromEffect(Effect.log("Bundle unchanged after a watch event, not serving again")),
++            );
 +          }
 +          served = event._tag === "Success" ? event.output.hash : undefined;
 +          return Stream.make({ _tag: "Start" } as Bundle.BundleWatchEvent, event);
