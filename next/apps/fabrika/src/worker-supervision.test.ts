@@ -239,7 +239,10 @@ const wire = async (stage: Stage, key: Key, tab: string) => {
 };
 
 const facts = async (stage: Stage, stream: string) =>
-	((await stage.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => row.body);
+	((await stage.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
+		...row.body,
+		_tag: row._tag,
+	}));
 const restarts = async (stage: Stage, name: string) =>
 	(await facts(stage, `processes/${name}`)).filter((fact) => fact._tag === "restarted");
 const livePid = async (stage: Stage, name: string): Promise<string | undefined> =>
@@ -318,6 +321,8 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 						m: "poison",
 						build: fixture.hash,
 						errors: ["TypeError", "TypeError"],
+						// The brain writes the row; `asked` keeps the key that asked for it (process-manager.ts).
+						asked: expect.stringMatching(/^SHA256:/),
 					},
 				]);
 				expect(await facts(stage, `${first}/dead`)).toEqual([]);
@@ -370,13 +375,13 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 	}, 180_000);
 
 	// scenario: ticket 402 tests the complete trusted Process RPC chain and its saved request.
-	it("scenario: ticket 402 plant (omit one handoff, init in the loader box, repeat the start): trusted restart through the Process binding starts fresh once per request ID", async () => {
+	it("scenario: ticket 402 plant (omit one handoff, init in the loader box, repeat the start): trusted restart through the Process binding starts the new init once per request ID", async () => {
 		await world(async (stage, key, fixture) => {
 			const name = "restart:1";
 			const first = await fixture.start(name);
 			const c = await wire(stage, key, "restart");
 			try {
-				// Change the model, so a fresh init is visible.
+				// Change the model, so the re-folded state is visible.
 				await healthy(c, first, "before-restart");
 				expect(await c.call("view.open", {pid: first})).toMatchObject({
 					result: {view: {count: 1}},
@@ -396,9 +401,10 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 					() => livePid(stage, name),
 					(pid) => pid === second,
 				);
-				// Fresh init state, then a healthy letter is accepted on the new ID.
+				// The new init re-folds the accepted letter (P34, runner-supervision.test.ts), then a
+				// healthy letter is accepted on the new ID.
 				expect(await c.call("view.open", {pid: second})).toMatchObject({
-					result: {view: {count: 0}},
+					result: {view: {count: 1}},
 				});
 				await healthy(c, second, "after-restart");
 				// Repeating the request ID makes no second replacement.
@@ -408,7 +414,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 				expect(await restarts(stage, name)).toHaveLength(1);
 				expect(await livePid(stage, name)).toBe(second);
 				expect(await c.call("view.open", {pid: second})).toMatchObject({
-					result: {view: {count: 1}},
+					result: {view: {count: 2}},
 				});
 			} finally {
 				c.close();

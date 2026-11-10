@@ -792,6 +792,8 @@ const runnerWorld = (
 	const spans: Array<Tracer.Span> = [];
 	const flushes: Array<ReadonlyArray<string>> = [];
 	const fault = {at: "none"};
+	/** The process a checked write's session was delivered to; a successor writes under its own ID. */
+	const writer = {process: PROCESS};
 	const owner = Writer.cases.person.make({key: a.key, for: PERSON});
 	const base = Layer.mergeAll(
 		Ledger.sql(data.sql, {reader: "runner-test"}).pipe(Layer.provide(quiet)),
@@ -825,7 +827,7 @@ const runnerWorld = (
 				commit: Effect.fnUntraced(function* (
 					...[id, session, stream, fact]: Parameters<typeof CheckedWriter.Service.commit>
 				) {
-					const receipt = yield* sessions.receipt(id, session.parent, PROCESS, fact._tag);
+					const receipt = yield* sessions.receipt(id, session.parent, writer.process, fact._tag);
 					if (fault.at === "write_storage") return yield* new LedgerError({why: "storage"});
 					if (fault.at === "write_refused") return Appended.cases.refused.make({why: "seen_ahead"});
 					return yield* ledger.append(
@@ -870,6 +872,11 @@ const runnerWorld = (
 	);
 	// Ticket 402: every runner is supervised. The real manager keeps its process table in its own
 	// ledger and its first start names PROCESS; receipts live beside ProcessStore.
+	// P34: a successor gets a new process ID, so the world's generator never repeats one.
+	let ids = 0;
+	const idFor = (n: number) =>
+		n === 0 ? PROCESS : `process_01jc9q4w7zfm8s5r2t6v0x${String(n).padStart(4, "0")}`;
+	const nextId = Effect.sync(() => idFor(ids++));
 	const manager = Layer.effectDiscard(
 		ProcessManager.use((m) =>
 			m.start(
@@ -897,7 +904,7 @@ const runnerWorld = (
 					recipient: Recipient.cases.client.make({client: "brain", session: PROCESS}),
 					by: "brain",
 				},
-				Effect.succeed(PROCESS),
+				nextId,
 			),
 		),
 		Layer.provide(LedgerTransaction.layer(processes.sql).pipe(Layer.provide(quiet))),
@@ -967,7 +974,10 @@ const runnerWorld = (
 		spans,
 		flushes,
 		fault,
+		writer,
 		input,
+		/** The ID the next start will get. */
+		upcoming: () => idFor(ids),
 		close: () => {
 			for (const d of [data, state, sessions, sink]) d.db.close();
 		},
@@ -1098,13 +1108,28 @@ describe("T285, runner tracing keep-laws", () => {
 				fc.array(action, {minLength: 1, maxLength: 12}),
 				async (ctx, signer, a, calls) => {
 					const w = runnerWorld(a, signer);
+					// Still a property, on a test clock. P34 (ticket 402): a step_throw ends the process and its
+					// successor starts only after the backoff (defaultPolicy: 100 ms doubling to 800 ms), so
+					// time moves TICK ms per op. Ops inside the wait answer ProgramDown{why: "saved_letter"};
+					// the first op after it runs on the successor under a new process ID.
+					const TICK = 50;
+					let now = 1_000_000;
+					let pid = PROCESS;
+					const pids = [PROCESS];
+					let until: number | null = null;
+					let crashes = 0;
+					let unloaded = false;
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const runner = yield* ProgramRunner;
 								const sessions = yield* SessionManager;
 								const records = yield* RecordManager;
+								const manager = yield* ProcessManager;
 								for (const [index, call] of calls.entries()) {
+									now += TICK;
+									const waiting = until !== null && now < until;
+									const starting = until !== null && !waiting;
 									w.fault.at = call.op;
 									const n = index + 1;
 									const writing = ["own", "caused", "write_refused", "write_storage"].includes(
@@ -1120,12 +1145,15 @@ describe("T285, runner tracing keep-laws", () => {
 												? {type: "unknown", value: call.value}
 												: {type: "work", value: call.value};
 									const input = w.input(n, m);
+									// The letter is delivered to the process that will step it: the successor, when this op starts it.
+									const target = starting ? w.upcoming() : pid;
+									w.writer.process = target;
 									if (writing && call.op !== "own") {
 										yield* sessions.record({
 											id: input.envelope.id,
 											by: input.envelope.by,
 											client: a.key,
-											process: PROCESS,
+											process: target,
 											name: "write",
 											personOnly: false,
 											digest: JSON.stringify(m),
@@ -1133,7 +1161,7 @@ describe("T285, runner tracing keep-laws", () => {
 											span: signer,
 											arrivedAt: n,
 										});
-										yield* sessions.delivered(input.envelope.id, PROCESS);
+										yield* sessions.delivered(input.envelope.id, target);
 									}
 									const op =
 										call.op === "open" || call.op === "bad_client"
@@ -1150,25 +1178,47 @@ describe("T285, runner tracing keep-laws", () => {
 									const before = w.spans.length;
 									const flushes = w.flushes.length;
 									const exit = yield* Effect.exit(request(body));
-									const ok = ![
-										"bad_client",
-										"bad_input",
-										"step_throw",
-										"write_storage",
-										"append_storage",
-									].includes(call.op);
+									const ok =
+										!waiting &&
+										![
+											"bad_client",
+											"bad_input",
+											"step_throw",
+											"write_storage",
+											"append_storage",
+										].includes(call.op);
 									expect(
 										Exit.isSuccess(exit),
 										`${call.op}: ${Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "success"}`,
 									).toBe(ok);
+									// Inside the backoff wait the successor is not started: every op that reaches the
+									// process answers down. An undecodable input is refused before that, as always.
+									const malformed = call.op === "bad_input";
+									if (waiting)
+										expect(
+											Exit.isFailure(exit) ? Cause.squash(exit.cause) : null,
+											call.op,
+										).toMatchObject(
+											malformed
+												? {_tag: "RunnerError", why: call.op}
+												: {_tag: "ProgramDown", why: "saved_letter"},
+										);
 									expect(w.flushes.length, call.op).toBe(flushes + 1);
 									const spans = w.spans.slice(before);
+									// The first op after the wait starts the successor under it; its spans are checked
+									// below, the op's own spans stay as before.
+									const recovering = spans.filter(
+										(s) => s.name === "runner.recover" || s.name === "runner.restart",
+									);
 									const expected = [
 										`runner.${op}`,
-										...(writing || handling ? ["runner.cmd"] : []),
-										...(writing ? ["runner.write"] : []),
+										...(waiting ? [] : writing || handling ? ["runner.cmd"] : []),
+										...(waiting ? [] : writing ? ["runner.write"] : []),
+										...(!waiting && call.op === "step_throw" ? ["runner.throw"] : []),
 									];
-									const selected = spans.filter((s) => s.name.startsWith("runner."));
+									const selected = spans.filter(
+										(s) => s.name.startsWith("runner.") && !recovering.includes(s),
+									);
 									expect(
 										selected.map((s) => s.name),
 										call.op,
@@ -1177,14 +1227,55 @@ describe("T285, runner tracing keep-laws", () => {
 									const operation = selected[0]!;
 									ended(operation, ok);
 									child(operation, root);
-									expect(tags(operation)).toEqual({
-										"fab.process": PROCESS,
+									const live = (yield* manager.info).find((row) => row.name === a.name)?.process;
+									// The op's own span opens on the ID the call reached, before any successor starts.
+									const reached = pid;
+									if (starting) {
+										// A new live process ID, started once, after the process that threw.
+										expect(
+											recovering.map((s) => s.name),
+											call.op,
+										).toEqual(["runner.recover", "runner.restart"]);
+										child(recovering[0]!, operation);
+										child(recovering[1]!, recovering[0]!);
+										expect(live, call.op).toBeDefined();
+										expect(pids, call.op).not.toContain(live);
+										pid = live!;
+										pids.push(pid);
+										until = null;
+									} else expect(recovering, call.op).toEqual([]);
+									if (!waiting && call.op === "step_throw") {
+										// The throw ends the process: a runner.throw span under runner.step, no live ID
+										// until the successor starts after its backoff.
+										const thrown = selected.at(-1)!;
+										expect(thrown.status._tag, thrown.name).toBe("Ended");
+										child(thrown, operation);
+										expect(tags(thrown)["fab.process"]).toBe(pid);
+										expect(live, call.op).toBeUndefined();
+										crashes += 1;
+										until = now + Math.min(100 * 2 ** (crashes - 1), 800);
+									} else if (!waiting) expect(live, call.op).toBe(pid);
+									const {
+										"fab.mailbox.letters": letters,
+										"fab.mailbox.skipped": skipped,
+										...own
+									} = tags(operation);
+									// A successor's first load reads the accepted letters under the op that does it.
+									if (starting) unloaded = true;
+									if (unloaded) {
+										expect(Number.isInteger(letters ?? 0), call.op).toBe(true);
+										expect(Number.isInteger(skipped ?? 0), call.op).toBe(true);
+									} else expect([letters, skipped], call.op).toEqual([undefined, undefined]);
+									// An undecodable input is refused before the successor loads.
+									if (call.op !== "bad_input") unloaded = false;
+									expect(own).toEqual({
+										"fab.process": reached,
 										"fab.runner.name": a.name,
 										...(op === "step" && call.op !== "bad_input"
 											? {"fab.runner.letter": input.id}
 											: {}),
 									});
-									if (writing || handling) {
+									if (!waiting && (writing || handling)) {
 										const cmd = selected[1]!;
 										const letter = (yield* Stream.runCollect(
 											(yield* Ledger).read(`${a.name}/inbox`, 0),
@@ -1192,9 +1283,9 @@ describe("T285, runner tracing keep-laws", () => {
 										ended(cmd, !["handler_fail", "handler_die", "write_storage"].includes(call.op));
 										child(cmd, operation);
 										expect(tags(cmd)).toEqual({
-											"fab.process": PROCESS,
+											"fab.process": pid,
 											"fab.runner.cmd": writing ? "write" : "work",
-											"fab.runner.id": `${PROCESS}/${letter.pos}/0`,
+											"fab.runner.id": `${pid}/${letter.pos}/0`,
 										});
 										if (writing) {
 											const write = selected[2]!;
@@ -1210,18 +1301,23 @@ describe("T285, runner tracing keep-laws", () => {
 													})),
 												).toEqual([{...signer, attributes: {}}]);
 											expect(tags(write)).toEqual({
-												"fab.process": PROCESS,
+												"fab.process": pid,
 												"fab.runner.write": tags(cmd)["fab.runner.id"],
 												"fab.runner.stream": stream,
 											});
 										}
 									}
-									const rows = (yield* Stream.runCollect(
-										records.read(Chain.cases.job.make({process: PROCESS})),
-									)).filter((s) => s.name.startsWith("runner."));
+									// Each life's spans are its own job's records.
+									const rows = [];
+									for (const id of pids)
+										rows.push(
+											...(yield* Stream.runCollect(
+												records.read(Chain.cases.job.make({process: id})),
+											)).filter((s) => s.name.startsWith("runner.")),
+										);
 									const all = w.spans.filter((s) => s.name.startsWith("runner."));
 									expect(rows.map((s) => s.spanId).sort()).toEqual(all.map((s) => s.spanId).sort());
-									for (const span of selected) {
+									for (const span of [...selected, ...recovering]) {
 										const row = rows.find((s) => s.spanId === span.spanId)!;
 										expect(row).toMatchObject({
 											name: span.name,
@@ -1236,7 +1332,14 @@ describe("T285, runner tracing keep-laws", () => {
 										expect(row.ok).toBe(Exit.isSuccess(status.exit));
 									}
 								}
-							}).pipe(Effect.withParentSpan(Tracer.externalSpan(ctx)), Effect.provide(w.layer)),
+							}).pipe(
+								Effect.withParentSpan(Tracer.externalSpan(ctx)),
+								Effect.provide(w.layer),
+								Effect.provideService(
+									Clock.Clock,
+									clock(() => now),
+								),
+							),
 						);
 					} finally {
 						w.close();

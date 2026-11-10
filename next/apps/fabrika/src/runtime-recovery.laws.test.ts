@@ -706,7 +706,7 @@ const runFlow = async (flow: RecoveryFlow) => {
 		route("process.send", {pid, letter, m: {type}, sentAt: SENT, seen: 0});
 	const restarts = async () =>
 		(await w.project.read(`processes/${NAME}`, 0, "audit"))
-			.map((row) => row.body)
+			.map((row) => ({...Object(row.body), _tag: row._tag}))
 			.filter((body) => Schema.is(Schema.Struct({_tag: Schema.Literal("restarted")}))(body));
 	const live = async () => (await w.project.info()).find((row) => row.name === NAME)?.process;
 	const deadRows = async (pids: ReadonlyArray<string>) =>
@@ -746,7 +746,7 @@ const runFlow = async (flow: RecoveryFlow) => {
 		]);
 	const dead = k === limit ? [chain.at(-2)!] : [];
 	const deadFacts = () =>
-		deadRows(chain).then((rows) => rows.map((row) => Reflect.get(Object(row), "body")));
+		deadRows(chain).then((rows) => rows.map((row) => ({...Object(row.body), _tag: row._tag})));
 	expect(await deadFacts()).toEqual(
 		dead.map((process) => ({
 			_tag: "dead",
@@ -758,6 +758,8 @@ const runFlow = async (flow: RecoveryFlow) => {
 			m: letter,
 			build: "poison-a",
 			errors: Array.from({length: limit}, () => "TypeError"),
+			// The brain writes the row; `asked` keeps the key that asked for it (process-manager.ts).
+			asked: expect.stringMatching(/^SHA256:/),
 		})),
 	);
 	if (k === limit)
@@ -840,8 +842,11 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
 				expect(rows).toHaveLength(before + 1);
 				expect(rows.at(-1)).toMatchObject({after: current, name: NAME});
 				const next = await until("restarted process live", live, (pid) => pid !== current);
+				expect(rows.at(-1)).toMatchObject({process: next});
+				// The restart starts the new init and re-folds the accepted letters (P34, as
+				// runner-supervision.test.ts requires): the healthy letters, never the throws.
 				expect(await route("view.open", {pid: next})).toMatchObject({
-					answer: {_tag: "ok", result: {view: {count: 0}}},
+					answer: {_tag: "ok", result: {view: {count: flow.healthy}}},
 				});
 				expect(w.newCalls()).toBeGreaterThan(0);
 				expect(w.lostDone()).toBe(lost.at <= w.newCalls());
