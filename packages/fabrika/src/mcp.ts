@@ -8,12 +8,12 @@
 //   yield* serveAgent(socket, {programsFor, person: "owner", tiles});
 //   // In the command an MCP client starts:
 //   yield* bridge(NodeSocket.makeNet({path}), "claude", POLICY);   dials again when the host ends
-export {BridgeStopped, bridge} from "./mcp/bridge.ts";
-export {type Answer, type Drive, driveFor, type InTile} from "./mcp/drive.ts";
-export {AGENTS_PROTOCOL, AgentName, Handshake, HostAnswer} from "./mcp/handshake.ts";
-export {JOB, JobAnswer, KeptLines, LAST_MAX} from "./mcp/job.ts";
-export {LineAnswer, LineAsk, LineRefused} from "./mcp/line.ts";
-export {RestartAnswer, RestartRefused} from "./mcp/restart.ts";
-export {type AgentOptions, serveAgent} from "./mcp/serve.ts";
-export {EXIT_WITHIN, StopAnswer, StopRefused, Why} from "./mcp/stop.ts";
-export {type Call, callOf, RUNS, type Tool, toolNameOf, toolsOf} from "./mcp/tools.ts";
+export { BridgeStopped, bridge } from "./mcp/bridge.ts";
+export { type Answer, type Drive, driveFor, type InTile } from "./mcp/drive.ts";
+export { AGENTS_PROTOCOL, AgentName, Handshake, HostAnswer } from "./mcp/handshake.ts";
+export { JOB, JobAnswer, KeptLines, LAST_MAX } from "./mcp/job.ts";
+export { LineAnswer, LineAsk, LineRefused } from "./mcp/line.ts";
+export { RestartAnswer, RestartRefused } from "./mcp/restart.ts";
+export { type AgentOptions, serveAgent } from "./mcp/serve.ts";
+export { EXIT_WITHIN, StopAnswer, StopRefused, Why } from "./mcp/stop.ts";
+export { type Call, callOf, RUNS, type Tool, toolNameOf, toolsOf } from "./mcp/tools.ts";

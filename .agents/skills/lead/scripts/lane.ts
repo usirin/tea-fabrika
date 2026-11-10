@@ -1,7 +1,7 @@
 // lane.ts: pure rules about one lane that drive.ts and gc.ts share. Today's lead tooling, run on our
 // own laptop; it is not product.
 
-import {dirname, matchesGlob} from "node:path";
+import { dirname, matchesGlob } from "node:path";
 
 /** The lane's backup branch: `<branch>-wip`, and a branch that already ends in -wip as it is. */
 export const wipOf = (branch: string): string => `${branch.replace(/(-wip)+$/, "")}-wip`;
@@ -14,12 +14,12 @@ export const wipOf = (branch: string): string => `${branch.replace(/(-wip)+$/, "
  * `pushed` lists the tips that exist; `isAncestor(a, b)` says whether b holds a.
  */
 export const startHead = (
-	pushed: readonly string[],
-	saved: string | undefined,
-	isAncestor: (a: string, b: string) => boolean,
+  pushed: readonly string[],
+  saved: string | undefined,
+  isAncestor: (a: string, b: string) => boolean,
 ): string | undefined => {
-	const newest = pushed.find((p) => pushed.every((q) => isAncestor(q, p))) ?? pushed[0];
-	return newest && !(saved && isAncestor(newest, saved)) ? newest : saved;
+  const newest = pushed.find((p) => pushed.every((q) => isAncestor(q, p))) ?? pushed[0];
+  return newest && !(saved && isAncestor(newest, saved)) ? newest : saved;
 };
 
 /**
@@ -31,43 +31,43 @@ export const startHead = (
  * root came from a step off the lane, and `fresh` is found again.
  */
 export const laneRoot = (
-	saved: string | undefined,
-	fresh: string,
-	base: string,
-	isAncestor: (a: string, b: string) => boolean,
+  saved: string | undefined,
+  fresh: string,
+  base: string,
+  isAncestor: (a: string, b: string) => boolean,
 ): string => (saved && !isAncestor(saved, fresh) && isAncestor(saved, base) ? saved : fresh);
 
 /** The step a git note names, or none when it does not read. */
 export const stepOf = (note: string): string[] => {
-	let n: unknown;
+  let n: unknown;
 
-	try {
-		n = JSON.parse(note);
-	} catch {
-		return [];
-	}
+  try {
+    n = JSON.parse(note);
+  } catch {
+    return [];
+  }
 
-	const step = n !== null && typeof n === "object" ? (n as {step?: unknown}).step : undefined;
-	return typeof step === "string" ? [step] : [];
+  const step = n !== null && typeof n === "object" ? (n as { step?: unknown }).step : undefined;
+  return typeof step === "string" ? [step] : [];
 };
 
 const stuckIn = (out: string) =>
-	out.split("\n").flatMap((line) => {
-		let a: unknown;
+  out.split("\n").flatMap((line) => {
+    let a: unknown;
 
-		try {
-			a = JSON.parse(line);
-		} catch {
-			return [];
-		}
+    try {
+      a = JSON.parse(line);
+    } catch {
+      return [];
+    }
 
-		if (a === null || typeof a !== "object") {
-			return [];
-		}
+    if (a === null || typeof a !== "object") {
+      return [];
+    }
 
-		const {_tag, why, step} = a as {_tag?: unknown; why?: unknown; step?: unknown};
-		return _tag === "stuck" ? [{line, why, step}] : [];
-	});
+    const { _tag, why, step } = a as { _tag?: unknown; why?: unknown; step?: unknown };
+    return _tag === "stuck" ? [{ line, why, step }] : [];
+  });
 
 /**
  * The commits check's stuck answers that hold the step back. A stale link counts only for a step
@@ -77,12 +77,9 @@ const stuckIn = (out: string) =>
  * to the caller, which reads the exit code too.
  */
 export const laneStuck = (out: string, laneSteps: ReadonlySet<string>): string[] =>
-	stuckIn(out)
-		.filter(
-			({why, step}) =>
-				!(why === "stale_link" && !(typeof step === "string" && laneSteps.has(step))),
-		)
-		.map((a) => a.line);
+  stuckIn(out)
+    .filter(({ why, step }) => !(why === "stale_link" && !(typeof step === "string" && laneSteps.has(step))))
+    .map((a) => a.line);
 
 /**
  * Each stuck answer that holds the step, as `<rule> <commit> [step <s>] [paths]`: the rule
@@ -90,100 +87,100 @@ export const laneStuck = (out: string, laneSteps: ReadonlySet<string>): string[]
  * the right place (ticket 429: 18 fetches on 2026-11-09 said only "commits check failed").
  */
 export const heldRules = (out: string, laneSteps: ReadonlySet<string>): string[] =>
-	laneStuck(out, laneSteps).map((line) => {
-		const a = JSON.parse(line) as {why?: unknown; sha?: unknown; step?: unknown; paths?: unknown};
-		const paths = Array.isArray(a.paths) ? a.paths.slice(0, 3).map(String) : [];
-		return [
-			typeof a.why === "string" ? a.why : "stuck",
-			typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
-			typeof a.step === "string" ? `step ${a.step}` : "",
-			...paths,
-		]
-			.filter(Boolean)
-			.join(" ");
-	});
+  laneStuck(out, laneSteps).map((line) => {
+    const a = JSON.parse(line) as { why?: unknown; sha?: unknown; step?: unknown; paths?: unknown };
+    const paths = Array.isArray(a.paths) ? a.paths.slice(0, 3).map(String) : [];
+    return [
+      typeof a.why === "string" ? a.why : "stuck",
+      typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
+      typeof a.step === "string" ? `step ${a.step}` : "",
+      ...paths,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  });
 
 /** Whether the commits check's exit holds the step: 0 never; 1 unless it gave stuck answers and
  * every one was waived; any other exit always. */
 export const checkHolds = (code: number, out: string, laneSteps: ReadonlySet<string>): boolean =>
-	code !== 0 && !(code === 1 && stuckIn(out).length > 0 && laneStuck(out, laneSteps).length === 0);
+  code !== 0 && !(code === 1 && stuckIn(out).length > 0 && laneStuck(out, laneSteps).length === 0);
 
 /** The `packages:` globs of a pnpm-workspace.yaml: the block's `- glob` lines, comments dropped. */
 export const workspaceGlobs = (yaml: string): string[] => {
-	const lines = yaml.split("\n");
-	const start = lines.findIndex((l) => /^packages:\s*(#.*)?$/.test(l));
+  const lines = yaml.split("\n");
+  const start = lines.findIndex((l) => /^packages:\s*(#.*)?$/.test(l));
 
-	if (start < 0) {
-		return [];
-	}
+  if (start < 0) {
+    return [];
+  }
 
-	const globs: string[] = [];
+  const globs: string[] = [];
 
-	for (const line of lines.slice(start + 1)) {
-		if (/^\s*(#.*)?$/.test(line)) {
-			continue;
-		}
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s*(#.*)?$/.test(line)) {
+      continue;
+    }
 
-		const m = /^\s+-\s+['"]?([^'"#\s]+)['"]?\s*(#.*)?$/.exec(line);
+    const m = /^\s+-\s+['"]?([^'"#\s]+)['"]?\s*(#.*)?$/.exec(line);
 
-		if (m === null) {
-			break;
-		}
+    if (m === null) {
+      break;
+    }
 
-		globs.push(m[1] ?? "");
-	}
+    globs.push(m[1] ?? "");
+  }
 
-	return globs;
+  return globs;
 };
 
 /** Whether a folder is a workspace package: the root, or one the globs take and no `!` glob drops. */
 const member = (dir: string, globs: readonly string[]) =>
-	dir === "." ||
-	(globs.some((g) => !g.startsWith("!") && matchesGlob(dir, g)) &&
-		!globs.some((g) => g.startsWith("!") && matchesGlob(dir, g.slice(1))));
+  dir === "." ||
+  (globs.some((g) => !g.startsWith("!") && matchesGlob(dir, g)) &&
+    !globs.some((g) => g.startsWith("!") && matchesGlob(dir, g.slice(1))));
 
 /** The package.json fields pnpm-lock.yaml follows. Scripts, exports and the rest do not move it. */
 const LOCKED = [
-	"name",
-	"dependencies",
-	"devDependencies",
-	"optionalDependencies",
-	"peerDependencies",
-	"peerDependenciesMeta",
-	"dependenciesMeta",
-	"pnpm",
+  "name",
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+  "peerDependenciesMeta",
+  "dependenciesMeta",
+  "pnpm",
 ] as const;
 
 /** Keys sorted all the way down, so a reorder is not a change. */
 const canon = (v: unknown): string =>
-	Array.isArray(v)
-		? `[${v.map(canon).join(",")}]`
-		: v !== null && typeof v === "object"
-			? `{${Object.keys(v)
-					.toSorted()
-					.map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`)
-					.join(",")}}`
-			: JSON.stringify(v);
+  Array.isArray(v)
+    ? `[${v.map(canon).join(",")}]`
+    : v !== null && typeof v === "object"
+      ? `{${Object.keys(v)
+          .toSorted()
+          .map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`)
+          .join(",")}}`
+      : JSON.stringify(v);
 
 const lockedPart = (text: string): string | null => {
-	try {
-		const json: unknown = JSON.parse(text);
+  try {
+    const json: unknown = JSON.parse(text);
 
-		if (json === null || typeof json !== "object") {
-			return null;
-		}
+    if (json === null || typeof json !== "object") {
+      return null;
+    }
 
-		return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
-	} catch {
-		return null;
-	}
+    return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
+  } catch {
+    return null;
+  }
 };
 
 /** One manifest a step's commits touched, as the base and the head hold it (`null`: absent). */
 export type Manifest = {
-	readonly path: string;
-	readonly before: string | null;
-	readonly after: string | null;
+  readonly path: string;
+  readonly before: string | null;
+  readonly after: string | null;
 };
 
 /**
@@ -195,36 +192,36 @@ export type Manifest = {
  * workspace (a fixture's) has no lockfile entry and never counts.
  */
 export const lockfileBehind = (
-	changed: readonly Manifest[],
-	globs: readonly string[],
-	lockTouched: boolean,
+  changed: readonly Manifest[],
+  globs: readonly string[],
+  lockTouched: boolean,
 ): string[] =>
-	lockTouched
-		? []
-		: changed
-				.filter(({path, before, after}) => {
-					if (before === after) {
-						return false;
-					}
+  lockTouched
+    ? []
+    : changed
+        .filter(({ path, before, after }) => {
+          if (before === after) {
+            return false;
+          }
 
-					if (path === "pnpm-workspace.yaml") {
-						return true;
-					}
+          if (path === "pnpm-workspace.yaml") {
+            return true;
+          }
 
-					if (path !== "package.json" && !path.endsWith("/package.json")) {
-						return false;
-					}
+          if (path !== "package.json" && !path.endsWith("/package.json")) {
+            return false;
+          }
 
-					if (!member(dirname(path), globs)) {
-						return false;
-					}
+          if (!member(dirname(path), globs)) {
+            return false;
+          }
 
-					if (before === null || after === null) {
-						return true;
-					}
+          if (before === null || after === null) {
+            return true;
+          }
 
-					const was = lockedPart(before);
-					const is = lockedPart(after);
-					return was === null || is === null || was !== is;
-				})
-				.map((m) => m.path);
+          const was = lockedPart(before);
+          const is = lockedPart(after);
+          return was === null || is === null || was !== is;
+        })
+        .map((m) => m.path);

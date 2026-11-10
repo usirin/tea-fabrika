@@ -1,5 +1,5 @@
-import {Exit, Schema} from "effect";
-import {type Span, SpanId, TraceId} from "./traces.ts";
+import { Exit, Schema } from "effect";
+import { type Span, SpanId, TraceId } from "./traces.ts";
 
 // OTLP over HTTP, its JSON form: what an OpenTelemetry exporter posts to `/v1/traces`
 // (opentelemetry.io/docs/specs/otlp/#otlphttp), read into the rows a job's record keeps, by
@@ -15,44 +15,42 @@ import {type Span, SpanId, TraceId} from "./traces.ts";
 
 /** OTLP's AnyValue: one of these keys is set. */
 const AnyValue = Schema.Struct({
-	stringValue: Schema.optional(Schema.String),
-	boolValue: Schema.optional(Schema.Boolean),
-	intValue: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
-	doubleValue: Schema.optional(Schema.Number),
-	arrayValue: Schema.optional(Schema.Unknown),
-	kvlistValue: Schema.optional(Schema.Unknown),
-	bytesValue: Schema.optional(Schema.String),
+  stringValue: Schema.optional(Schema.String),
+  boolValue: Schema.optional(Schema.Boolean),
+  intValue: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
+  doubleValue: Schema.optional(Schema.Number),
+  arrayValue: Schema.optional(Schema.Unknown),
+  kvlistValue: Schema.optional(Schema.Unknown),
+  bytesValue: Schema.optional(Schema.String),
 });
 
-const KeyValue = Schema.Struct({key: Schema.String, value: Schema.optional(AnyValue)});
+const KeyValue = Schema.Struct({ key: Schema.String, value: Schema.optional(AnyValue) });
 const Attributes = Schema.optional(Schema.Array(KeyValue));
 const Nanos = Schema.Union([Schema.String.check(Schema.isPattern(/^[0-9]{1,20}$/)), Schema.Finite]);
 
 const OtlpSpan = Schema.Struct({
-	traceId: Schema.String,
-	spanId: Schema.String,
-	parentSpanId: Schema.optional(Schema.String),
-	name: Schema.String,
-	startTimeUnixNano: Nanos,
-	endTimeUnixNano: Nanos,
-	attributes: Attributes,
-	events: Schema.optional(
-		Schema.Array(Schema.Struct({timeUnixNano: Nanos, name: Schema.String, attributes: Attributes})),
-	),
-	status: Schema.optional(Schema.Struct({code: Schema.optional(Schema.Int)})),
+  traceId: Schema.String,
+  spanId: Schema.String,
+  parentSpanId: Schema.optional(Schema.String),
+  name: Schema.String,
+  startTimeUnixNano: Nanos,
+  endTimeUnixNano: Nanos,
+  attributes: Attributes,
+  events: Schema.optional(
+    Schema.Array(Schema.Struct({ timeUnixNano: Nanos, name: Schema.String, attributes: Attributes })),
+  ),
+  status: Schema.optional(Schema.Struct({ code: Schema.optional(Schema.Int) })),
 });
 
 const TracesRequest = Schema.Struct({
-	resourceSpans: Schema.optional(
-		Schema.Array(
-			Schema.Struct({
-				resource: Schema.optional(Schema.Struct({attributes: Attributes})),
-				scopeSpans: Schema.optional(
-					Schema.Array(Schema.Struct({spans: Schema.optional(Schema.Array(OtlpSpan))})),
-				),
-			}),
-		),
-	),
+  resourceSpans: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        resource: Schema.optional(Schema.Struct({ attributes: Attributes })),
+        scopeSpans: Schema.optional(Schema.Array(Schema.Struct({ spans: Schema.optional(Schema.Array(OtlpSpan)) }))),
+      }),
+    ),
+  ),
 });
 
 /** The most spans one request may hold, and the most text a tag's value may: the record is forever. */
@@ -65,8 +63,8 @@ const MAX_TAG = 1024;
  * table, not on the span (./job-rules.ts), so they are cut at `MAX_CONTENT`, not `MAX_TAG`.
  */
 export const CONTENT = {
-	input: "langfuse.observation.input",
-	output: "langfuse.observation.output",
+  input: "langfuse.observation.input",
+  output: "langfuse.observation.output",
 } as const;
 
 /**
@@ -83,41 +81,41 @@ const isContent = (key: string) => key === CONTENT.input || key === CONTENT.outp
 
 /** A tag's value as a record keeps it: text cut at its key's most, content's or any tag's. */
 export const cutTag = (key: string, t: Tag): Tag => {
-	const most = isContent(key) ? MAX_CONTENT : MAX_TAG;
-	return typeof t === "string" && t.length > most ? `${t.slice(0, most)}…` : t;
+  const most = isContent(key) ? MAX_CONTENT : MAX_TAG;
+  return typeof t === "string" && t.length > most ? `${t.slice(0, most)}…` : t;
 };
 
 const tagOf = (v: typeof AnyValue.Type | undefined): Tag | undefined => {
-	if (v === undefined) {
-		return undefined;
-	}
+  if (v === undefined) {
+    return undefined;
+  }
 
-	return (
-		v.stringValue ??
-		v.boolValue ??
-		(v.intValue === undefined ? undefined : Number(v.intValue)) ??
-		v.doubleValue ??
-		(v.arrayValue === undefined ? undefined : JSON.stringify(v.arrayValue))
-	);
+  return (
+    v.stringValue ??
+    v.boolValue ??
+    (v.intValue === undefined ? undefined : Number(v.intValue)) ??
+    v.doubleValue ??
+    (v.arrayValue === undefined ? undefined : JSON.stringify(v.arrayValue))
+  );
 };
 
 const tagsOf = (kvs: readonly (typeof KeyValue.Type)[] | undefined): Record<string, Tag> => {
-	const out: Record<string, Tag> = {};
+  const out: Record<string, Tag> = {};
 
-	for (const kv of kvs ?? []) {
-		const t = tagOf(kv.value);
+  for (const kv of kvs ?? []) {
+    const t = tagOf(kv.value);
 
-		if (t !== undefined) {
-			out[kv.key] = cutTag(kv.key, t);
-		}
-	}
+    if (t !== undefined) {
+      out[kv.key] = cutTag(kv.key, t);
+    }
+  }
 
-	return out;
+  return out;
 };
 
 /** Unix ms from OTLP's nanoseconds, to the microsecond: a string keeps every digit until here. */
 const msOf = (nanos: string | number): number =>
-	typeof nanos === "number" ? nanos / 1e6 : Number(BigInt(nanos) / 1000n) / 1000;
+  typeof nanos === "number" ? nanos / 1e6 : Number(BigInt(nanos) / 1000n) / 1000;
 
 const isTrace = Schema.is(TraceId);
 const isSpan = Schema.is(SpanId);
@@ -128,66 +126,66 @@ export type SpanRow = Omit<Span, "by">;
 
 /** The spans of one OTLP request, by trace id, or why it is refused. */
 export const spansOf = (
-	body: unknown,
+  body: unknown,
 ):
-	| {readonly ok: true; readonly traces: ReadonlyMap<string, readonly SpanRow[]>}
-	| {readonly ok: false; readonly why: string} => {
-	const exit = decode(body);
+  | { readonly ok: true; readonly traces: ReadonlyMap<string, readonly SpanRow[]> }
+  | { readonly ok: false; readonly why: string } => {
+  const exit = decode(body);
 
-	if (Exit.isFailure(exit)) {
-		return {ok: false, why: "not an OTLP traces request"};
-	}
+  if (Exit.isFailure(exit)) {
+    return { ok: false, why: "not an OTLP traces request" };
+  }
 
-	const traces = new Map<string, SpanRow[]>();
-	let count = 0;
+  const traces = new Map<string, SpanRow[]>();
+  let count = 0;
 
-	for (const rs of exit.value.resourceSpans ?? []) {
-		const resource = tagsOf(rs.resource?.attributes);
+  for (const rs of exit.value.resourceSpans ?? []) {
+    const resource = tagsOf(rs.resource?.attributes);
 
-		for (const ss of rs.scopeSpans ?? []) {
-			for (const s of ss.spans ?? []) {
-				count += 1;
+    for (const ss of rs.scopeSpans ?? []) {
+      for (const s of ss.spans ?? []) {
+        count += 1;
 
-				if (count > MAX_SPANS) {
-					return {ok: false, why: `more than ${MAX_SPANS} spans`};
-				}
+        if (count > MAX_SPANS) {
+          return { ok: false, why: `more than ${MAX_SPANS} spans` };
+        }
 
-				const trace = s.traceId.toLowerCase();
-				const span = s.spanId.toLowerCase();
-				const parent = (s.parentSpanId ?? "").toLowerCase();
+        const trace = s.traceId.toLowerCase();
+        const span = s.spanId.toLowerCase();
+        const parent = (s.parentSpanId ?? "").toLowerCase();
 
-				if (!isTrace(trace) || !isSpan(span) || (parent !== "" && !isSpan(parent))) {
-					return {ok: false, why: "a span's ids are not hex of OpenTelemetry's lengths"};
-				}
+        if (!isTrace(trace) || !isSpan(span) || (parent !== "" && !isSpan(parent))) {
+          return { ok: false, why: "a span's ids are not hex of OpenTelemetry's lengths" };
+        }
 
-				const tags = tagsOf(s.attributes);
-				const service = tags["service.name"] ?? resource["service.name"];
-				const code = s.status?.code ?? 0;
-				const row: SpanRow = {
-					span,
-					parent: parent === "" ? null : parent,
-					name: s.name,
-					service: typeof service === "string" ? service : "unknown",
-					start: msOf(s.startTimeUnixNano),
-					end: msOf(s.endTimeUnixNano),
-					status: code === 2 ? "error" : code === 1 ? "ok" : "unset",
-					tags,
-					events: (s.events ?? []).map((e) => ({
-						name: e.name,
-						at: msOf(e.timeUnixNano),
-						tags: tagsOf(e.attributes),
-					})),
-				};
-				const list = traces.get(trace);
+        const tags = tagsOf(s.attributes);
+        const service = tags["service.name"] ?? resource["service.name"];
+        const code = s.status?.code ?? 0;
+        const row: SpanRow = {
+          span,
+          parent: parent === "" ? null : parent,
+          name: s.name,
+          service: typeof service === "string" ? service : "unknown",
+          start: msOf(s.startTimeUnixNano),
+          end: msOf(s.endTimeUnixNano),
+          status: code === 2 ? "error" : code === 1 ? "ok" : "unset",
+          tags,
+          events: (s.events ?? []).map((e) => ({
+            name: e.name,
+            at: msOf(e.timeUnixNano),
+            tags: tagsOf(e.attributes),
+          })),
+        };
+        const list = traces.get(trace);
 
-				if (list === undefined) {
-					traces.set(trace, [row]);
-				} else {
-					list.push(row);
-				}
-			}
-		}
-	}
+        if (list === undefined) {
+          traces.set(trace, [row]);
+        } else {
+          list.push(row);
+        }
+      }
+    }
+  }
 
-	return {ok: true, traces};
+  return { ok: true, traces };
 };

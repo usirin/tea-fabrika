@@ -27,202 +27,192 @@
 //
 // FABRIKA_HOME is always given, as for the host (host/main.ts): this never guesses a home, so a
 // test's home is never the owner's. The owner names theirs.
-import {NodeRuntime, NodeServices, NodeSocket} from "@effect/platform-node";
-import {writerText} from "@kampus/fabrika-old";
-import {BridgeStopped, bridge} from "@kampus/fabrika-old/mcp";
-import {From} from "@kampus/pipeline/tickets/ticket";
-import {Config, Console, Effect, Logger, Option, Schema} from "effect";
-import {Argument, Command, Flag} from "effect/cli";
-import {addressOf, connectAndRestart, invite, members} from "./host/connection.ts";
-import {dryRun, MoveStopped, move, reportOf} from "./host/move.ts";
-import {type Post, post} from "./host/post.ts";
-import {pathsOf, reach} from "./host/socket.ts";
-import {POLICY} from "./reconnect.ts";
+import { NodeRuntime, NodeServices, NodeSocket } from "@effect/platform-node";
+import { writerText } from "@kampus/fabrika-old";
+import { BridgeStopped, bridge } from "@kampus/fabrika-old/mcp";
+import { From } from "@kampus/pipeline/tickets/ticket";
+import { Config, Console, Effect, Logger, Option, Schema } from "effect";
+import { Argument, Command, Flag } from "effect/cli";
+import { addressOf, connectAndRestart, invite, members } from "./host/connection.ts";
+import { dryRun, MoveStopped, move, reportOf } from "./host/move.ts";
+import { type Post, post } from "./host/post.ts";
+import { pathsOf, reach } from "./host/socket.ts";
+import { POLICY } from "./reconnect.ts";
 
 const home = Flag.String("home").pipe(
-	Flag.withDescription("the app's home: FABRIKA_HOME"),
-	Flag.withFallbackConfig(Config.String("FABRIKA_HOME")),
+  Flag.withDescription("the app's home: FABRIKA_HOME"),
+  Flag.withFallbackConfig(Config.String("FABRIKA_HOME")),
 );
 
 const connectCmd = Command.make(
-	"connect",
-	{
-		home,
-		address: Argument.String("address").pipe(
-			Argument.withDescription("the ledger's address: the server's URL, then the project"),
-		),
-		login: Flag.String("login").pipe(Flag.withDescription("your GitHub login")),
-		key: Flag.String("key").pipe(Flag.withDescription("your SSH key file, Ed25519, no passphrase")),
-	},
-	(a) =>
-		Effect.gen(function* () {
-			const {who, host} = yield* connectAndRestart(a.home, {
-				address: a.address,
-				login: a.login,
-				key: a.key,
-			});
-			const as = `connected as ${writerText(who)}`;
+  "connect",
+  {
+    home,
+    address: Argument.String("address").pipe(
+      Argument.withDescription("the ledger's address: the server's URL, then the project"),
+    ),
+    login: Flag.String("login").pipe(Flag.withDescription("your GitHub login")),
+    key: Flag.String("key").pipe(Flag.withDescription("your SSH key file, Ed25519, no passphrase")),
+  },
+  (a) =>
+    Effect.gen(function* () {
+      const { who, host } = yield* connectAndRestart(a.home, {
+        address: a.address,
+        login: a.login,
+        key: a.key,
+      });
+      const as = `connected as ${writerText(who)}`;
 
-			if (host === "stopped") {
-				yield* Effect.logInfo(
-					`${as}; the host stopped, and an open app starts it again on this ledger. Running jobs stopped too: attach %n brings each back`,
-				);
-			} else if (host === "none") {
-				yield* Effect.logInfo(`${as}; the app uses it when it starts`);
-			} else {
-				yield* Effect.logWarning(
-					`${as}, but the running host did not stop (${host.why}): quit the app and stop its host to use it`,
-				);
-			}
-		}),
+      if (host === "stopped") {
+        yield* Effect.logInfo(
+          `${as}; the host stopped, and an open app starts it again on this ledger. Running jobs stopped too: attach %n brings each back`,
+        );
+      } else if (host === "none") {
+        yield* Effect.logInfo(`${as}; the app uses it when it starts`);
+      } else {
+        yield* Effect.logWarning(
+          `${as}, but the running host did not stop (${host.why}): quit the app and stop its host to use it`,
+        );
+      }
+    }),
 );
 
 const inviteCmd = Command.make(
-	"invite",
-	{home, login: Argument.String("login").pipe(Argument.withDescription("their GitHub login"))},
-	(a) =>
-		Effect.gen(function* () {
-			const m = yield* invite(a.home, a.login);
-			yield* Effect.logInfo(`invited ${m.name} (${m.id}): they get in at their first login`);
-		}),
+  "invite",
+  { home, login: Argument.String("login").pipe(Argument.withDescription("their GitHub login")) },
+  (a) =>
+    Effect.gen(function* () {
+      const m = yield* invite(a.home, a.login);
+      yield* Effect.logInfo(`invited ${m.name} (${m.id}): they get in at their first login`);
+    }),
 );
 
-const membersCmd = Command.make("members", {home}, (a) =>
-	Effect.gen(function* () {
-		const m = yield* members(a.home);
+const membersCmd = Command.make("members", { home }, (a) =>
+  Effect.gen(function* () {
+    const m = yield* members(a.home);
 
-		for (const p of m.members) {
-			yield* Effect.logInfo(`member   ${p.name} (${p.id})`);
-		}
+    for (const p of m.members) {
+      yield* Effect.logInfo(`member   ${p.name} (${p.id})`);
+    }
 
-		for (const p of m.invited) {
-			yield* Effect.logInfo(`invited  ${p.name} (${p.id})`);
-		}
-	}),
+    for (const p of m.invited) {
+      yield* Effect.logInfo(`invited  ${p.name} (${p.id})`);
+    }
+  }),
 );
 
 const moveCmd = Command.make(
-	"move",
-	{
-		home,
-		from: Flag.String("from").pipe(Flag.withDescription("the laptop's ledger file, read only")),
-		to: Flag.String("to").pipe(
-			Flag.withDescription("the new ledger's address: the server's URL, then the project"),
-		),
-		login: Flag.optional(Flag.String("login")).pipe(Flag.withDescription("your GitHub login")),
-		key: Flag.optional(Flag.String("key")).pipe(
-			Flag.withDescription("your SSH key file, Ed25519, no passphrase"),
-		),
-		// Left out, it is a real move: a boolean flag without a default is a required one.
-		dryRun: Flag.Boolean("dry-run").pipe(
-			Flag.withDefault(false),
-			Flag.withDescription("print the counts and the hash, and write nothing anywhere"),
-		),
-		founder: Flag.optional(Flag.String("founder")).pipe(
-			Flag.withDescription("with --dry-run: your id on the ledger, github:<n>, for the hash"),
-		),
-	},
-	(a) =>
-		Effect.gen(function* () {
-			yield* addressOf(a.to);
+  "move",
+  {
+    home,
+    from: Flag.String("from").pipe(Flag.withDescription("the laptop's ledger file, read only")),
+    to: Flag.String("to").pipe(Flag.withDescription("the new ledger's address: the server's URL, then the project")),
+    login: Flag.optional(Flag.String("login")).pipe(Flag.withDescription("your GitHub login")),
+    key: Flag.optional(Flag.String("key")).pipe(Flag.withDescription("your SSH key file, Ed25519, no passphrase")),
+    // Left out, it is a real move: a boolean flag without a default is a required one.
+    dryRun: Flag.Boolean("dry-run").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription("print the counts and the hash, and write nothing anywhere"),
+    ),
+    founder: Flag.optional(Flag.String("founder")).pipe(
+      Flag.withDescription("with --dry-run: your id on the ledger, github:<n>, for the hash"),
+    ),
+  },
+  (a) =>
+    Effect.gen(function* () {
+      yield* addressOf(a.to);
 
-			if (a.dryRun) {
-				if (Option.isNone(a.founder)) {
-					return yield* new MoveStopped({
-						why: "a dry run names your id, --founder github:<n>, so its hash is the move's",
-					});
-				}
+      if (a.dryRun) {
+        if (Option.isNone(a.founder)) {
+          return yield* new MoveStopped({
+            why: "a dry run names your id, --founder github:<n>, so its hash is the move's",
+          });
+        }
 
-				const r = yield* dryRun({home: a.home, from: a.from, founder: a.founder.value});
+        const r = yield* dryRun({ home: a.home, from: a.from, founder: a.founder.value });
 
-				for (const line of reportOf(r.plan, r.hash)) {
-					yield* Effect.logInfo(line);
-				}
+        for (const line of reportOf(r.plan, r.hash)) {
+          yield* Effect.logInfo(line);
+        }
 
-				if (Option.isSome(r.running)) {
-					yield* Effect.logInfo(`${r.running.value}: stop it before the move`);
-				}
+        if (Option.isSome(r.running)) {
+          yield* Effect.logInfo(`${r.running.value}: stop it before the move`);
+        }
 
-				return;
-			}
+        return;
+      }
 
-			if (Option.isNone(a.login) || Option.isNone(a.key)) {
-				return yield* new MoveStopped({why: "a move logs in: --login and --key"});
-			}
+      if (Option.isNone(a.login) || Option.isNone(a.key)) {
+        return yield* new MoveStopped({ why: "a move logs in: --login and --key" });
+      }
 
-			const done = yield* move({
-				home: a.home,
-				from: a.from,
-				to: a.to,
-				login: a.login.value,
-				key: a.key.value,
-			});
+      const done = yield* move({
+        home: a.home,
+        from: a.from,
+        to: a.to,
+        login: a.login.value,
+        key: a.key.value,
+      });
 
-			for (const line of reportOf(done.plan, done.hash)) {
-				yield* Effect.logInfo(line);
-			}
+      for (const line of reportOf(done.plan, done.hash)) {
+        yield* Effect.logInfo(line);
+      }
 
-			yield* Effect.logInfo(
-				`moved and sealed; ${a.from} stays as it was; start the app again to use ${a.to}`,
-			);
-		}),
+      yield* Effect.logInfo(`moved and sealed; ${a.from} stays as it was; start the app again to use ${a.to}`);
+    }),
 );
 
-const as = Flag.String("as").pipe(
-	Flag.withDescription("the agent's name: it writes as agent:<name>, for you"),
-);
+const as = Flag.String("as").pipe(Flag.withDescription("the agent's name: it writes as agent:<name>, for you"));
 
 const body = Flag.FileText("body-file").pipe(Flag.withDescription("the text, in a file"));
 const ticket = Argument.Int("ticket").pipe(Argument.withDescription("the ticket's number"));
 
 const from = Flag.optional(
-	Flag.String("from").pipe(
-		Flag.withSchema(Schema.fromJsonString(From)),
-		Flag.withDescription(
-			'where it came from, as JSON: {"_tag":"pr","url":...,"step":...}, {"_tag":"run","ticket":...,"run":...} or {"_tag":"walk","url":...}',
-		),
-	),
+  Flag.String("from").pipe(
+    Flag.withSchema(Schema.fromJsonString(From)),
+    Flag.withDescription(
+      'where it came from, as JSON: {"_tag":"pr","url":...,"step":...}, {"_tag":"run","ticket":...,"run":...} or {"_tag":"walk","url":...}',
+    ),
+  ),
 );
 
 /** One post, then the tickets after it. */
-const posting = (a: {readonly home: string; readonly as: string}, writes: ReadonlyArray<Post>) =>
-	Effect.gen(function* () {
-		for (const line of yield* post(a.home, a.as, writes)) {
-			yield* Effect.logInfo(line);
-		}
-	});
+const posting = (a: { readonly home: string; readonly as: string }, writes: ReadonlyArray<Post>) =>
+  Effect.gen(function* () {
+    for (const line of yield* post(a.home, a.as, writes)) {
+      yield* Effect.logInfo(line);
+    }
+  });
 
 const postCmd = Command.make("post").pipe(
-	Command.withSubcommands([
-		Command.make(
-			"file",
-			{
-				home,
-				as,
-				body,
-				from,
-				title: Argument.String("title").pipe(Argument.withDescription("its title")),
-			},
-			(a) =>
-				posting(a, [
-					{
-						type: "file",
-						value: {
-							title: a.title,
-							body: a.body.trim(),
-							...Option.match(a.from, {onNone: () => ({}), onSome: (f) => ({from: f})}),
-						},
-					},
-				]),
-		),
-		Command.make("comment", {home, as, body, ticket}, (a) =>
-			posting(a, [{type: "comment", value: {ticket: a.ticket, body: a.body.trim()}}]),
-		),
-		Command.make("close", {home, as, ticket}, (a) =>
-			posting(a, [{type: "close", value: {ticket: a.ticket}}]),
-		),
-		Command.make("list", {home, as}, (a) => posting(a, [])),
-	]),
+  Command.withSubcommands([
+    Command.make(
+      "file",
+      {
+        home,
+        as,
+        body,
+        from,
+        title: Argument.String("title").pipe(Argument.withDescription("its title")),
+      },
+      (a) =>
+        posting(a, [
+          {
+            type: "file",
+            value: {
+              title: a.title,
+              body: a.body.trim(),
+              ...Option.match(a.from, { onNone: () => ({}), onSome: (f) => ({ from: f }) }),
+            },
+          },
+        ]),
+    ),
+    Command.make("comment", { home, as, body, ticket }, (a) =>
+      posting(a, [{ type: "comment", value: { ticket: a.ticket, body: a.body.trim() } }]),
+    ),
+    Command.make("close", { home, as, ticket }, (a) => posting(a, [{ type: "close", value: { ticket: a.ticket } }])),
+    Command.make("list", { home, as }, (a) => posting(a, [])),
+  ]),
 );
 
 /**
@@ -232,39 +222,37 @@ const postCmd = Command.make("post").pipe(
  * window waits for one (`POLICY`), so a restart from the window or `fabrika connect` does not
  * take the agent's tools with it.
  */
-const mcpCmd = Command.make("mcp", {home, as}, (a) =>
-	Effect.gen(function* () {
-		const {mcp} = yield* pathsOf(a.home);
+const mcpCmd = Command.make("mcp", { home, as }, (a) =>
+  Effect.gen(function* () {
+    const { mcp } = yield* pathsOf(a.home);
 
-		if ((yield* reach(mcp)) !== "live") {
-			return yield* new BridgeStopped({
-				why: `no fabrika host serves agents on ${a.home}: open the app on it`,
-			});
-		}
+    if ((yield* reach(mcp)) !== "live") {
+      return yield* new BridgeStopped({
+        why: `no fabrika host serves agents on ${a.home}: open the app on it`,
+      });
+    }
 
-		yield* bridge(NodeSocket.makeNet({path: mcp}), a.as, POLICY);
-	}).pipe(
-		Effect.scoped,
-		Effect.catch((e) =>
-			Console.error(`fabrika mcp: ${e._tag === "BridgeStopped" ? e.why : String(e)}`).pipe(
-				Effect.andThen(
-					Effect.sync(() => {
-						process.exitCode = 1;
-					}),
-				),
-			),
-		),
-		// The bridge is over, but Node's stdin still holds the process open while the client keeps
-		// its end: let go of it, so the client sees this process end. Node, at this command's edge.
-		Effect.ensuring(Effect.sync(() => process.stdin.destroy())),
-		Effect.provideService(Logger.LogToStderr, true),
-	),
+    yield* bridge(NodeSocket.makeNet({ path: mcp }), a.as, POLICY);
+  }).pipe(
+    Effect.scoped,
+    Effect.catch((e) =>
+      Console.error(`fabrika mcp: ${e._tag === "BridgeStopped" ? e.why : String(e)}`).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            process.exitCode = 1;
+          }),
+        ),
+      ),
+    ),
+    // The bridge is over, but Node's stdin still holds the process open while the client keeps
+    // its end: let go of it, so the client sees this process end. Node, at this command's edge.
+    Effect.ensuring(Effect.sync(() => process.stdin.destroy())),
+    Effect.provideService(Logger.LogToStderr, true),
+  ),
 );
 
 const fabrika = Command.make("fabrika").pipe(
-	Command.withSubcommands([connectCmd, inviteCmd, membersCmd, moveCmd, postCmd, mcpCmd]),
+  Command.withSubcommands([connectCmd, inviteCmd, membersCmd, moveCmd, postCmd, mcpCmd]),
 );
 
-NodeRuntime.runMain(
-	Command.run(fabrika, {version: "0.0.0"}).pipe(Effect.provide(NodeServices.layer)),
-);
+NodeRuntime.runMain(Command.run(fabrika, { version: "0.0.0" }).pipe(Effect.provide(NodeServices.layer)));

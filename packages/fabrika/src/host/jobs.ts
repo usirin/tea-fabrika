@@ -1,7 +1,7 @@
-import {defineMachine} from "@demlik/tea";
-import {Effect, Schema, SchemaTransformation} from "effect";
-import {runTraceId} from "../program/trace-id.ts";
-import {type JobEnd, JobStop} from "./traces.ts";
+import { defineMachine } from "@demlik/tea";
+import { Effect, Schema, SchemaTransformation } from "effect";
+import { runTraceId } from "../program/trace-id.ts";
+import { type JobEnd, JobStop } from "./traces.ts";
 
 // A host's job table (./host-jobs.ts opens it; tsh shows it). It holds what a
 // job is (its line, and for each program in it the program's name, its flags,
@@ -30,13 +30,13 @@ import {type JobEnd, JobStop} from "./traces.ts";
 
 /** One program of a job. `flags` as the program took them. */
 export const StageRecord = Schema.Struct({
-	program: Schema.String,
-	flags: Schema.Record(Schema.String, Schema.Unknown),
-	/** The run's id: its run in storage, the same at every start of the job. */
-	run: Schema.String,
-	/** Into the next stage of the job. `null` for the last. */
-	wire: Schema.NullOr(Schema.Struct({output: Schema.String, input: Schema.String})),
-	ended: Schema.Boolean,
+  program: Schema.String,
+  flags: Schema.Record(Schema.String, Schema.Unknown),
+  /** The run's id: its run in storage, the same at every start of the job. */
+  run: Schema.String,
+  /** Into the next stage of the job. `null` for the last. */
+  wire: Schema.NullOr(Schema.Struct({ output: Schema.String, input: Schema.String })),
+  ended: Schema.Boolean,
 });
 export type StageRecord = typeof StageRecord.Type;
 
@@ -53,25 +53,25 @@ export const Owner = Schema.NullOr(Schema.String);
 export type Owner = typeof Owner.Type;
 
 export const Job = Schema.Struct({
-	/** The job's number, `%n` on a line: the table's `next` when it began, so never one another job had. */
-	n: Schema.Int,
-	text: Schema.String,
-	stages: Schema.NonEmptyArray(StageRecord),
-	state: JobState,
-	/** Started with `&`: the prompt came back while it ran. */
-	background: Schema.Boolean,
-	/**
-	 * The tsh that began it, or last attached it. A table kept before jobs had an owner reads back
-	 * with `null`: whose it was is not known.
-	 */
-	owner: Owner.pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
-	/**
-	 * Who started it, as a writer's text: `agent:claude for:github:7`, `user:owner`. Set at `began`,
-	 * never changed. `null`: not known, as a table kept before jobs had one, or a tsh with no writer.
-	 */
-	by: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
-	/** Who asked it to stop, and why (`null`: none given). Set once, as the stop is asked. */
-	stop: Schema.NullOr(JobStop).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  /** The job's number, `%n` on a line: the table's `next` when it began, so never one another job had. */
+  n: Schema.Int,
+  text: Schema.String,
+  stages: Schema.NonEmptyArray(StageRecord),
+  state: JobState,
+  /** Started with `&`: the prompt came back while it ran. */
+  background: Schema.Boolean,
+  /**
+   * The tsh that began it, or last attached it. A table kept before jobs had an owner reads back
+   * with `null`: whose it was is not known.
+   */
+  owner: Owner.pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  /**
+   * Who started it, as a writer's text: `agent:claude for:github:7`, `user:owner`. Set at `began`,
+   * never changed. `null`: not known, as a table kept before jobs had one, or a tsh with no writer.
+   */
+  by: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  /** Who asked it to stop, and why (`null`: none given). Set once, as the stop is asked. */
+  stop: Schema.NullOr(JobStop).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 });
 export type Job = typeof Job.Type;
 
@@ -79,13 +79,13 @@ export type Job = typeof Job.Type;
 const after = (jobs: readonly Job[]): number => Math.max(0, ...jobs.map((job) => job.n)) + 1;
 
 const Table = Schema.Struct({
-	// Each job as decoded already: the outer `jobs` read every owner, or its `null`.
-	jobs: Schema.Array(Schema.toType(Job)),
-	/**
-	 * The number the next job gets. It only grows, so a number is never given twice, as WezTerm's
-	 * and tmux's ids are not: a `%2` a person read an hour ago names the same job or none.
-	 */
-	next: Schema.Int,
+  // Each job as decoded already: the outer `jobs` read every owner, or its `null`.
+  jobs: Schema.Array(Schema.toType(Job)),
+  /**
+   * The number the next job gets. It only grows, so a number is never given twice, as WezTerm's
+   * and tmux's ids are not: a `%2` a person read an hour ago names the same job or none.
+   */
+  next: Schema.Int,
 });
 
 /**
@@ -94,152 +94,142 @@ const Table = Schema.Struct({
  * that had ended before then are not known, so one of those may come again, once.
  */
 export const Jobs = Schema.Struct({
-	jobs: Schema.Array(Job),
-	next: Schema.optionalKey(Schema.Int),
+  jobs: Schema.Array(Job),
+  next: Schema.optionalKey(Schema.Int),
 }).pipe(
-	Schema.decodeTo(
-		Table,
-		SchemaTransformation.transform({
-			decode: ({jobs, next}) => ({jobs, next: next ?? after(jobs)}),
-			encode: (table) => table,
-		}),
-	),
+  Schema.decodeTo(
+    Table,
+    SchemaTransformation.transform({
+      decode: ({ jobs, next }) => ({ jobs, next: next ?? after(jobs) }),
+      encode: (table) => table,
+    }),
+  ),
 );
 export type Jobs = typeof Jobs.Type;
 
 export type JobsMsg =
-	| {
-			readonly type: "began";
-			readonly text: string;
-			readonly stages: readonly [StageRecord, ...StageRecord[]];
-			readonly background: boolean;
-			readonly owner: Owner;
-			/** Who began it: the tsh's writer. The job keeps it for life. */
-			readonly by: string | null;
-	  }
-	/** `how`: how that program's run ended, which the job's record keeps (./records.ts). */
-	| {readonly type: "stage_ended"; readonly run: string; readonly how: JobEnd}
-	/** `n`: one job, whose start again did not go; `null`: every job. */
-	| {readonly type: "detached"; readonly n: number | null}
-	/** Started again by `owner`'s tsh: the job is that tsh's from now on, wherever it began. */
-	| {
-			readonly type: "attached";
-			readonly n: number;
-			readonly background: boolean;
-			readonly owner: Owner;
-	  }
-	/** A running job tsh now waits for, as bash's `fg`: the prompt waits for its end. */
-	| {readonly type: "foreground"; readonly n: number}
-	/** A detached job its owner stopped: it will not be started again. */
-	| {readonly type: "dropped"; readonly n: number}
-	/** `by` asked job n to stop, and why: said before its runs are stopped. Only the first is kept. */
-	| {
-			readonly type: "stopping";
-			readonly n: number;
-			readonly by: string;
-			readonly why: string | null;
-	  };
+  | {
+      readonly type: "began";
+      readonly text: string;
+      readonly stages: readonly [StageRecord, ...StageRecord[]];
+      readonly background: boolean;
+      readonly owner: Owner;
+      /** Who began it: the tsh's writer. The job keeps it for life. */
+      readonly by: string | null;
+    }
+  /** `how`: how that program's run ended, which the job's record keeps (./records.ts). */
+  | { readonly type: "stage_ended"; readonly run: string; readonly how: JobEnd }
+  /** `n`: one job, whose start again did not go; `null`: every job. */
+  | { readonly type: "detached"; readonly n: number | null }
+  /** Started again by `owner`'s tsh: the job is that tsh's from now on, wherever it began. */
+  | {
+      readonly type: "attached";
+      readonly n: number;
+      readonly background: boolean;
+      readonly owner: Owner;
+    }
+  /** A running job tsh now waits for, as bash's `fg`: the prompt waits for its end. */
+  | { readonly type: "foreground"; readonly n: number }
+  /** A detached job its owner stopped: it will not be started again. */
+  | { readonly type: "dropped"; readonly n: number }
+  /** `by` asked job n to stop, and why: said before its runs are stopped. Only the first is kept. */
+  | {
+      readonly type: "stopping";
+      readonly n: number;
+      readonly by: string;
+      readonly why: string | null;
+    };
 
-export const EMPTY: Jobs = {jobs: [], next: 1};
+export const EMPTY: Jobs = { jobs: [], next: 1 };
 
 const step = (s: Jobs): [Jobs, []] => [s, []];
 
 /** Each stage changed, and still at least one. */
-const eachStage = (
-	stages: Job["stages"],
-	change: (stage: StageRecord) => StageRecord,
-): Job["stages"] => {
-	const [first, ...rest] = stages;
-	return [change(first), ...rest.map(change)];
+const eachStage = (stages: Job["stages"], change: (stage: StageRecord) => StageRecord): Job["stages"] => {
+  const [first, ...rest] = stages;
+  return [change(first), ...rest.map(change)];
 };
 
 export const jobsMachine = defineMachine({
-	types: {model: {} as Jobs, msg: {} as JobsMsg, ctx: undefined},
-	cmds: [],
-	init: (loaded) => [loaded ?? EMPTY, []],
-	update: {
-		began: (s, m) =>
-			step({
-				jobs: [
-					...s.jobs,
-					{
-						n: s.next,
-						text: m.text,
-						stages: m.stages,
-						state: "running",
-						background: m.background,
-						owner: m.owner,
-						by: m.by,
-						stop: null,
-					},
-				],
-				next: s.next + 1,
-			}),
-		stage_ended: (s, m) =>
-			step({
-				...s,
-				jobs: s.jobs.flatMap((job) => {
-					// A detached job's runs ended with the tsh that started them: it stays, to be started again.
-					if (job.state !== "running" || !job.stages.some((st) => st.run === m.run)) {
-						return [job];
-					}
+  types: { model: {} as Jobs, msg: {} as JobsMsg, ctx: undefined },
+  cmds: [],
+  init: (loaded) => [loaded ?? EMPTY, []],
+  update: {
+    began: (s, m) =>
+      step({
+        jobs: [
+          ...s.jobs,
+          {
+            n: s.next,
+            text: m.text,
+            stages: m.stages,
+            state: "running",
+            background: m.background,
+            owner: m.owner,
+            by: m.by,
+            stop: null,
+          },
+        ],
+        next: s.next + 1,
+      }),
+    stage_ended: (s, m) =>
+      step({
+        ...s,
+        jobs: s.jobs.flatMap((job) => {
+          // A detached job's runs ended with the tsh that started them: it stays, to be started again.
+          if (job.state !== "running" || !job.stages.some((st) => st.run === m.run)) {
+            return [job];
+          }
 
-					const stages = eachStage(job.stages, (st) =>
-						st.run === m.run ? {...st, ended: true} : st,
-					);
-					return stages.every((st) => st.ended) ? [] : [{...job, stages}];
-				}),
-			}),
-		detached: (s, m) =>
-			step({
-				...s,
-				jobs: s.jobs.map((job) =>
-					m.n === null || job.n === m.n ? {...job, state: "detached" as const} : job,
-				),
-			}),
-		attached: (s, m) =>
-			step({
-				...s,
-				jobs: s.jobs.map((job) =>
-					job.n === m.n && job.state === "detached"
-						? {
-								...job,
-								state: "running" as const,
-								background: m.background,
-								owner: m.owner,
-								stages: eachStage(job.stages, (st) => ({...st, ended: false})),
-							}
-						: job,
-				),
-			}),
-		foreground: (s, m) =>
-			step({
-				...s,
-				jobs: s.jobs.map((job) =>
-					job.n === m.n && job.state === "running" ? {...job, background: false} : job,
-				),
-			}),
-		dropped: (s, m) =>
-			step({...s, jobs: s.jobs.filter((job) => job.n !== m.n || job.state !== "detached")}),
-		stopping: (s, m) =>
-			step({
-				...s,
-				jobs: s.jobs.map((job) =>
-					job.n === m.n && job.stop === null ? {...job, stop: {by: m.by, why: m.why}} : job,
-				),
-			}),
-	},
+          const stages = eachStage(job.stages, (st) => (st.run === m.run ? { ...st, ended: true } : st));
+          return stages.every((st) => st.ended) ? [] : [{ ...job, stages }];
+        }),
+      }),
+    detached: (s, m) =>
+      step({
+        ...s,
+        jobs: s.jobs.map((job) => (m.n === null || job.n === m.n ? { ...job, state: "detached" as const } : job)),
+      }),
+    attached: (s, m) =>
+      step({
+        ...s,
+        jobs: s.jobs.map((job) =>
+          job.n === m.n && job.state === "detached"
+            ? {
+                ...job,
+                state: "running" as const,
+                background: m.background,
+                owner: m.owner,
+                stages: eachStage(job.stages, (st) => ({ ...st, ended: false })),
+              }
+            : job,
+        ),
+      }),
+    foreground: (s, m) =>
+      step({
+        ...s,
+        jobs: s.jobs.map((job) => (job.n === m.n && job.state === "running" ? { ...job, background: false } : job)),
+      }),
+    dropped: (s, m) => step({ ...s, jobs: s.jobs.filter((job) => job.n !== m.n || job.state !== "detached") }),
+    stopping: (s, m) =>
+      step({
+        ...s,
+        jobs: s.jobs.map((job) =>
+          job.n === m.n && job.stop === null ? { ...job, stop: { by: m.by, why: m.why } } : job,
+        ),
+      }),
+  },
 });
 
 /** The table's status line: `2 jobs: 1 running, 1 detached`. */
 export const tableLine = (s: Jobs): string => {
-	if (s.jobs.length === 0) {
-		return "no jobs";
-	}
+  if (s.jobs.length === 0) {
+    return "no jobs";
+  }
 
-	const running = s.jobs.filter((job) => job.state === "running").length;
-	const detached = s.jobs.length - running;
-	return `${s.jobs.length} job${s.jobs.length === 1 ? "" : "s"}: ${running} running, ${detached} detached`;
+  const running = s.jobs.filter((job) => job.state === "running").length;
+  const detached = s.jobs.length - running;
+  return `${s.jobs.length} job${s.jobs.length === 1 ? "" : "s"}: ${running} running, ${detached} detached`;
 };
 
 /**
@@ -250,7 +240,7 @@ export const tableLine = (s: Jobs): string => {
  *   ownedBy({jobs: [t1's %1, t2's %2], next: 3}, null)   // [%1, %2]
  */
 export const ownedBy = (jobs: Jobs, owner: Owner): readonly Job[] =>
-	owner === null ? jobs.jobs : jobs.jobs.filter((job) => job.owner === owner);
+  owner === null ? jobs.jobs : jobs.jobs.filter((job) => job.owner === owner);
 
 /**
  * The jobs from before a tsh started that it says are waiting: the detached ones it owns, and
@@ -258,20 +248,17 @@ export const ownedBy = (jobs: Jobs, owner: Owner): readonly Job[] =>
  * tsh's are not said: in the app, a tile is not told of a job it never ran.
  */
 export const earlierFor = (jobs: Jobs, owner: Owner): readonly Job[] =>
-	jobs.jobs.filter(
-		(job) =>
-			job.state === "detached" && (owner === null || job.owner === null || job.owner === owner),
-	);
+  jobs.jobs.filter((job) => job.state === "detached" && (owner === null || job.owner === null || job.owner === owner));
 
 /** The job a word names: `%n`, `n`, or the run id of any of its programs. */
 export function jobNamed(jobs: Jobs, word: string): Job | undefined {
-	const n = /^%?(\d+)$/.exec(word)?.[1];
+  const n = /^%?(\d+)$/.exec(word)?.[1];
 
-	if (n !== undefined) {
-		return jobs.jobs.find((job) => job.n === Number(n));
-	}
+  if (n !== undefined) {
+    return jobs.jobs.find((job) => job.n === Number(n));
+  }
 
-	return jobs.jobs.find((job) => job.stages.some((st) => st.run === word));
+  return jobs.jobs.find((job) => job.stages.some((st) => st.run === word));
 }
 
 /** A job's trace id: its first run's (`runTraceId`). Its `JobRecord` is kept under it. */

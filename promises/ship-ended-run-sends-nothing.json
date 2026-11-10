@@ -1,35 +1,35 @@
 {
-	"promise": "Once a ship run has ended, it sends nothing more: no read, no enqueue, no merge.",
-	"harm": "A run that already said done or stuck could read again and merge a pull request a second time, after nobody is watching it.",
-	"tool": "search",
-	"check": "node packages/pipeline/src/laws/promise-check.ts ship \"an ended run sends nothing\"",
-	"plant": {
-		"name": "actsAfterTheEnd",
-		"what": "A restart after the end reads again, as if the run were still going."
-	},
-	"covers": [
-		"packages/pipeline/src/stages/ship/machine.ts#createShip",
-		"packages/pipeline/src/stages/ship/machine.ts#over",
-		"packages/pipeline/src/stages/ship/machine.ts#stay",
-		"packages/pipeline/src/stages/ship/machine.ts#revived",
-		"packages/pipeline/src/stages/ship/machine.ts#ship"
-	],
-	"exam": [
-		"packages/pipeline/src/laws/ship.ts",
-		"packages/pipeline/src/laws/explore.ts",
-		"packages/pipeline/src/laws/promise-check.ts"
-	],
-	"confirmed": {
-		"commit": "6580740b1eb60ed8ea1d4e0fbd215aa38b26b712",
-		"prints": {
-			"packages/pipeline/src/stages/ship/machine.ts#createShip": "1caff7852ecf9b60",
-			"packages/pipeline/src/stages/ship/machine.ts#over": "8ea1c0fc023805f3",
-			"packages/pipeline/src/stages/ship/machine.ts#stay": "f927f87947d01074",
-			"packages/pipeline/src/stages/ship/machine.ts#revived": "f5d708113bd4a8ac",
-			"packages/pipeline/src/stages/ship/machine.ts#ship": "e253baae3b116105",
-			"packages/pipeline/src/laws/ship.ts": "74e3746e8283ca5a",
-			"packages/pipeline/src/laws/explore.ts": "8251bd007f30b2a3",
-			"packages/pipeline/src/laws/promise-check.ts": "520a80b55a40e82c"
-		}
-	}
+  "promise": "Once a ship run has ended, it sends nothing more: no read, no enqueue, no merge.",
+  "harm": "A run that already said done or stuck could read again and merge a pull request a second time, after nobody is watching it.",
+  "tool": "search",
+  "check": "node packages/pipeline/src/laws/promise-check.ts ship \"an ended run sends nothing\"",
+  "plant": {
+    "name": "actsAfterTheEnd",
+    "what": "A restart after the end reads again, as if the run were still going."
+  },
+  "covers": [
+    "packages/pipeline/src/stages/ship/machine.ts#createShip",
+    "packages/pipeline/src/stages/ship/machine.ts#over",
+    "packages/pipeline/src/stages/ship/machine.ts#stay",
+    "packages/pipeline/src/stages/ship/machine.ts#revived",
+    "packages/pipeline/src/stages/ship/machine.ts#ship"
+  ],
+  "exam": [
+    "packages/pipeline/src/laws/ship.ts",
+    "packages/pipeline/src/laws/explore.ts",
+    "packages/pipeline/src/laws/promise-check.ts"
+  ],
+  "confirmed": {
+    "commit": "d1663e5066ad915d56582fe9497ffefa4680955d",
+    "prints": {
+      "packages/pipeline/src/stages/ship/machine.ts#createShip": "fcc3ac4e2bdf816f",
+      "packages/pipeline/src/stages/ship/machine.ts#over": "d52ddccfb5653caa",
+      "packages/pipeline/src/stages/ship/machine.ts#stay": "f927f87947d01074",
+      "packages/pipeline/src/stages/ship/machine.ts#revived": "a813804b3f2f4463",
+      "packages/pipeline/src/stages/ship/machine.ts#ship": "e253baae3b116105",
+      "packages/pipeline/src/laws/ship.ts": "41e40218154363d4",
+      "packages/pipeline/src/laws/explore.ts": "6cb61418cb179f6b",
+      "packages/pipeline/src/laws/promise-check.ts": "3c4985bfc23c502a"
+    }
+  }
 }

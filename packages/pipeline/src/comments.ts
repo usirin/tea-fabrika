@@ -18,7 +18,7 @@ const MARKED = /<!--[\s\S]*?-->/;
  * it would go to the Judge as the owner's answer.
  */
 const FABRIKA_RECORD =
-	/^\s*(?:lane-(?:claim|adopt|record)|build-(?:claim|claim-override|adopt|deviations)|decision-ruling):/;
+  /^\s*(?:lane-(?:claim|adopt|record)|build-(?:claim|claim-override|adopt|deviations)|decision-ruling):/;
 
 /** Whether a comment is a machine's, and so nobody's reply. */
 export const isMachines = (body: string): boolean => MARKED.test(body) || FABRIKA_RECORD.test(body);
