@@ -8,12 +8,14 @@ tea-fabrika is built to fix what goes wrong in fabrika. This folder is the
 half that records what goes wrong (and right) in today's fabrika when it drives live lanes,
 and which part of tea-fabrika would change it.
 
-Two files, one record per line, so a script can read them:
+Three files, one record per line, so a script can read them:
 
 - `notes.jsonl`: one observation each. Something broke, cost too much, needed
   a person, or worked well.
 - `runs.jsonl`: one agent run each. Which role, which lane, how it ended, and
   what it cost.
+- `findings.jsonl`: one finding each, from this repo's own work. Something an agent
+  found outside its task, and later a person's rating of it.
 
 ## What CI checks
 
@@ -134,6 +136,47 @@ Two things in that last row are put right by hand before it goes in
 writes a sentence in `note`, so the sentence moves to a note and the row
 points at it.
 
+## A finding
+
+An agent that finds work outside its task writes one row here and keeps going. It does not fix it,
+file a ticket, or only mention it in its report
+([0035](../.decisions/0035-outside-work-becomes-finding-rows.md)). These rows are about this repo's
+own work, in either version. They move into `next/`'s ledger when it holds findings (Tier 6), so
+the keys follow the proposed shape in
+[every finding is rated](../docs/direction/every-finding-is-rated.md).
+
+A row needs proof to be written at all: `location`, `proof` and `cost`. Never write a security hole
+here. Rows are only added, never edited or deleted.
+
+| Field | What it holds |
+|---|---|
+| `_tag` | `finding` |
+| `id` | `<date>-f<nn>`, in the order written |
+| `date` | the day it was found, `YYYY-MM-DD` |
+| `by` | the step or job the agent was running: `plan`, `tests`, `build`, `mutation`, `review`, `lead`, or the job's own name |
+| `model` | the model as spawned, or `null` when not known |
+| `rule` | one of `bug`, `dead_code`, `duplicate`, `missing_test`, `flaky_test`, `doc_drift`, `rule_break`; the decision says what each is. A finding that fits none is not written: say so in the report |
+| `location` | where it is, as `{path, line}`: a repo-relative path and a line at `head`. For something missing, the line of the code it is about |
+| `says` | what is wrong, in a sentence |
+| `proof` | how it fails or how you know: the command and what it printed, or the two lines that disagree. Reading one function is not proof |
+| `cost` | what it costs if left |
+| `head` | the commit it was seen on, the full sha |
+| `ticket`, `pr` | the work it was found during, as `<owner>/<repo>#n`, or `null`, written as on a run |
+
+A rating is a row of its own, written by a person's tool: by hand, or by the lead session writing
+down the owner's call, until a window exists. The agent that found a row never rates it, and no
+agent rates. A row never rated counts as noise once the pull request it was found during ships;
+nothing is written for that.
+
+| Field | What it holds |
+|---|---|
+| `_tag` | `rated` |
+| `finding` | the `id` of the finding row |
+| `says` | `fix` or `noise` |
+| `by` | who rated, as a role: `owner` |
+| `date` | the day it was rated |
+| `ticket` | for a `fix`, the tracker ticket it became, as `<owner>/<repo>#n`; `null` for `noise` |
+
 ## What the numbers are for
 
 The first questions to ask of these files:
@@ -144,6 +187,8 @@ The first questions to ask of these files:
 2. How often does a lane stop for a person, and how many of those stops did a
    person really need?
 3. Which primitive comes up most in the fixes? That says what to build next.
+4. For each `by` and each `rule` in `findings.jsonl`: how often was it noise? That sets
+   how high the bar for writing a finding is.
 
 ## Adding to it
 

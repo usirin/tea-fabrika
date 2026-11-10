@@ -25,6 +25,9 @@ note and where the change follows or breaks it. Block only on a broken decision 
 Other actionable findings become tracker tickets. Every agent may file; it claims no work.
 Use an existing ticket when possible. If filing fails, give lead the exact pending payload.
 
+Changed 2026-11-09: those other findings are now finding rows, not tickets
+([0035](../../.decisions/0035-outside-work-becomes-finding-rows.md)). The rest of this note stands.
+
 The answer starts with `merge-ready; tickets: <m>` or `changes: <n>; tickets: <m>`.
 Count blocking classes as `n`, and distinct confirmed linked tickets as `m`. Give all findings
 at once, grouped by class, most serious first. Pending filings do not count or start another review.

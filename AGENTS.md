@@ -25,6 +25,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up, with the next free number, plus one row in the index. A write-up quotes the numbers it uses inline. Raw results and assets (saved answers, shots, inputs, every timing of a run) go to the owner's private archive, not into git: a script writes them under `runs/` or to a path a flag names. A script is not kept on main: keep it on its own branch and name that branch in the write-up ([0027](./.decisions/0027-experiment-results-live-in-a-private-archive.md)). A write-up nothing cites leaves once its lesson is in `.decisions/`, `.patterns/` or `docs/direction/`. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
+| Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding), the fields and the closed `rule` list | One row in `field/findings.jsonl`, with proof, then keep going. Never fix it, file a ticket for it, or only mention it in your report; a person rates it, and a `fix` becomes a ticket ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)). Never a security hole. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
 | Build the new version | [Two versions, side by side](#two-versions-side-by-side), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts`. |
 | Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`), with the list in the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
@@ -224,6 +225,12 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.
+  Before you write Effect code, read `node_modules/effect/AGENTS.md` in full. It ships inside the
+  installed package (`effect` 4.1.2 today, 433 lines), so it always matches the lockfile. Where
+  it and a decision here differ, the decision wins
+  ([0023](./.decisions/0023-next-follows-effects-code-style.md) lists the differences). Effect's
+  maintainer briefs agents the same way
+  ([tim-smart/clanka's AGENTS.md](https://github.com/tim-smart/clanka/blob/master/AGENTS.md)).
 - **Judge a design by its properties, never its size.** Never pick between designs by how many
   lines or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails
   (owner, 2026-11-07, field note 2026-11-07-13). Size a design once it is picked.
@@ -349,6 +356,24 @@ patched in by the same command), so an Effect made and dropped fails it. `pnpm l
 `pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
 Exact npm versions only, never a range: `pnpm lint` fails on one ([exact versions](./docs/direction/pin-exact-versions.md)).
+
+Run the narrowest check that still covers the change, as Effect's own repo asks of its agents
+([Effect-TS/effect-smol's AGENTS.md](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md), "Validation").
+This table adds no rule: each row is a rule stated on this page, and `pnpm format` comes first in
+every row.
+
+| What changed | What to run here |
+|---|---|
+| Only Markdown that no program or skill reads, or `field/*.jsonl` rows | `pnpm lint`. CI skips `check`, `test`, `next` and `e2e` for them, and its `field` job checks the added rows |
+| Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
+| A skill script, or Markdown that a program or skill reads | as code, below |
+| Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
+| A dependency's version | as code; `pnpm lint` fails on a range |
+| A script under `experiments/` | `pnpm lint`, and run the changed script once yourself: it is outside the typecheck |
+| A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
+| A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](#changing-the-product)) |
+
+A report says which of these ran, and which could not run and why.
 
 `pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does
 not name yet (`pnpm lint:dead` runs that part alone). With code-graph 0.12.0,
