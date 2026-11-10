@@ -260,7 +260,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
     // Worker is implemented by overloads, and its provider registration is still independent evidence.
     return found || registered(file, symbol);
   });
-  const scan = (file: string, body: string): Array<Finding> => {
+  const scan = (file: string, body: string, contract?: string): Array<Finding> => {
     const ast = tree(file, body),
       found: Array<Finding> = [];
     const cloud = new Set<string>(),
@@ -436,7 +436,38 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
               }
             }
 
-            for (const hosted of new Set(objects.values())) {
+            let hostedNames: Array<string> = [];
+
+            try {
+              if (contract === undefined) {
+                throw new Error("missing host contract");
+              }
+
+              const contracts: Array<Tree> = [];
+              nodes(tree("objects.ts", contract), (declaration) => {
+                if (declaration.type === "ClassDeclaration" && declaration.id?.name === "Brain") {
+                  contracts.push(declaration.superClass?.callee?.typeArguments?.params?.[2]);
+                }
+              });
+
+              if (contracts.length !== 1 || !contracts[0]) {
+                throw new Error("missing Brain contract");
+              }
+
+              const shape = contracts[0];
+              const types = shape.type === "TSUnionType" ? shape.types : [shape];
+              hostedNames = types.map((type: Tree) => {
+                if (type.type !== "TSTypeReference" || type.typeName?.type !== "Identifier" || type.typeArguments) {
+                  throw new Error("unsupported host contract");
+                }
+
+                return type.typeName.name;
+              });
+            } catch {
+              report(env, "unsupported-case: cannot read host contract");
+            }
+
+            for (const hosted of hostedNames) {
               if (objects.get(hosted) !== hosted) {
                 report(env, `unsupported-case: missing class-name binding ${hosted}`);
               }
@@ -566,7 +597,11 @@ export const scanner = Effect.gen(function* () {
 const lint = Effect.fnUntraced(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   const scan = yield* scanner;
-  const findings = scan(file, yield* fs.readFileString(file));
+  const path = yield* Path.Path;
+  const contract = yield* fs
+    .readFileString(path.resolve(import.meta.dirname, "../../../../packages/libfabrika/src/workers/objects.ts"))
+    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+  const findings = scan(file, yield* fs.readFileString(file), contract);
 
   for (const f of findings) {
     yield* Console.error(`${f.file}:${f.line} ${f.reason}`);

@@ -9,7 +9,9 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { scanner } from "./twin.ts";
 
-const scan = await Effect.runPromise(scanner.pipe(Effect.provide(NodeServices.layer)));
+const check = await Effect.runPromise(scanner.pipe(Effect.provide(NodeServices.layer)));
+const contract = 'export class Brain extends Cloudflare.Worker<Brain, {}, RecordPart>()("Brain") {}';
+const scan = (file: string, body: string) => check(file, body, contract);
 
 const stack = resolve(import.meta.dirname, "../../alchemy.run.ts");
 const actual = () => readFileSync(stack, "utf8");
@@ -202,7 +204,7 @@ describe("P12 local twin lint", () => {
     expect(scan(stack, body).some((f) => f.reason.startsWith("unsupported-case:"))).toBe(true);
   });
   law("the actual stack has no findings, with no second resource list", ({ name }) => {
-    expect(scan(stack, `${actual()}\nconst checkedName = ${JSON.stringify(name)};`)).toEqual([]);
+    expect(scan(stack, `${text()}\nconst checkedName = ${JSON.stringify(name)};`)).toEqual([]);
   });
   // T502: the installed scanner is extended, not a second parser. Cases: aliases, quoted keys,
   // wrong target, omitted key, and a matching key in another Worker. Plant: remove RecordPart:.
@@ -211,6 +213,15 @@ describe("P12 local twin lint", () => {
       `import * as ${alias} from "@alchemy.run/cloudflare";
        ${alias}.Workers.Worker("Brain", {main:"brain.mjs", env:{${bindings}}}); ${other}`;
     const binding = `${alias}.DurableObject("RecordPart")`;
+    expect(scan("binding.ts", source(`PROJECT:${alias}.DurableObject("Project"), RecordPart:${binding}`))).toEqual([]);
+
+    for (const broken of [undefined, "", "export class Brain {}", contract.replace("RecordPart", "Unknown[]")]) {
+      expect(
+        check("binding.ts", source(`RECORD:${binding}`), broken).some(
+          (f) => f.reason === "unsupported-case: cannot read host contract",
+        ),
+      ).toBe(true);
+    }
 
     for (const key of ["RecordPart", '"RecordPart"']) {
       expect(scan("binding.ts", source(`RECORD:${binding}, ${key}:${binding}`))).toEqual([]);

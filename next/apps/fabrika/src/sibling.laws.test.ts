@@ -25,6 +25,7 @@ it("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call lookup plant
               const port = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
               process.env.T502_PORT = String(port.port);
               symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+              writeFileSync(join(home, "package.json"), JSON.stringify({ type: "module" }));
               const file = join(home, "objects.ts");
               writeFileSync(
                 file,

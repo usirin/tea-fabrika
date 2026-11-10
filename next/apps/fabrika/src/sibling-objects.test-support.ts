@@ -1,6 +1,6 @@
 // T502 PR 2, next/. Test fixtures only; both namespaces are taken in Layer init.
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { Config, Effect, Layer } from "effect";
+import { Cause, Effect, Layer } from "effect";
 import { HttpServerResponse } from "effect/http";
 
 interface Reply {
@@ -17,8 +17,8 @@ interface PongShape {
   readonly back: (n: number) => Effect.Effect<Reply>;
 }
 
-export class Ping extends Cloudflare.DurableObject<Ping, PingShape>()("Ping") {}
-export class Pong extends Cloudflare.DurableObject<Pong, PongShape>()("Pong") {}
+class Ping extends Cloudflare.DurableObject<Ping, PingShape>()("Ping") {}
+class Pong extends Cloudflare.DurableObject<Pong, PongShape>()("Pong") {}
 export class Host extends Cloudflare.Worker<Host, Record<never, never>, Ping | Pong>()("SiblingHost") {}
 
 const PingLive = Ping.make(
@@ -48,20 +48,20 @@ const PongLive = Pong.make(
 );
 
 export default Host.make(
-  Config.number("T502_PORT").pipe(
-    Effect.map((port) => ({
-      main: import.meta.url,
-      dev: { host: "127.0.0.1", port, strictPort: true },
-      compatibility: { date: "2026-10-12" },
-    })),
-  ),
+  {
+    main: import.meta.url,
+    dev: { host: "127.0.0.1", port: Number(process.env.T502_PORT), strictPort: true },
+    compatibility: { date: "2026-10-12" },
+  },
   Effect.gen(function* () {
     const pings = yield* Ping.from(Host);
     return {
       fetch: Effect.gen(function* () {
         const reply = yield* pings.getByName("one").hit(0);
         return yield* HttpServerResponse.json(reply);
-      }),
+      }).pipe(
+        Effect.catchCause((cause) => Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 }))),
+      ),
     };
   }).pipe(Effect.provide(Layer.mergeAll(PingLive, PongLive))),
 );
