@@ -165,14 +165,19 @@ const world = async (trace = TRACE, build = "counter-b") => {
       build: "brain-test",
     }),
     PROCESS: {
+      // Ticket 402 keys a Process object by its registered name, so the stub key may be a
+      // name: descriptors are keyed by their own process ID, and delivery names that ID.
       getByName: (name: string) => {
-        const [, pid] = JSON.parse(name) as [string, string];
+        const [, storageKey] = JSON.parse(name) as [string, string];
+        const owned = () =>
+          descriptors.get(storageKey) ?? [...descriptors.values()].findLast((d) => d.name === storageKey);
         return {
           configure: async (descriptor: Descriptor) => {
-            descriptors.set(pid, descriptor);
+            descriptors.set(descriptor.id, descriptor);
             configured.push(descriptor);
           },
-          msg: (input: Incoming) => onMessage(pid, input),
+          descriptor: async () => owned(),
+          msg: (input: Incoming) => onMessage(owned()?.id ?? storageKey, input),
         };
       },
     },
