@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, globSync } from "node:fs";
+import { matchesGlob } from "node:path";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
-import { lintWorkflow as lint } from "./workflow-lint.ts";
+import { lintWorkflow as lint, LANE_FILTER, LANE_GLOB, inLaneStep } from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
 // also receives every listed plant, one at a time, so an unrelated error cannot mask it.
@@ -54,6 +55,8 @@ const valid = (label: string, extra: string) => ({
       strategy: { matrix: { shard: [1, 2, 3, 4, 5, 6] } },
       steps: [
         {
+          name: "test",
+          if: "!cancelled()",
           run: [
             'if [ -n "$BASE" ]; then',
             'pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude \'next/**\' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts',
@@ -63,7 +66,9 @@ const valid = (label: string, extra: string) => ({
             "else",
             "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'",
             "fi",
-          ].join("\n"),
+          ]
+            .map((line) => (line.startsWith("pnpm exec vitest run") ? `${line} --exclude '${LANE_GLOB}'` : line))
+            .join("\n"),
         },
       ],
     },
@@ -121,6 +126,18 @@ const wiring = fc
   .tuple(name, name, fc.boolean(), fc.constantFrom("", " ", "  ", "\t", "\n"))
   .map(([label, extra, whitespace, gap]) => {
     const clean = valid(label, extra);
+    clean.jobs.test.steps.unshift({
+      name: "lane tests, one file at a time",
+      if: "",
+      run: [
+        'if [ -n "$BASE" ]; then',
+        `pnpm exec vitest run ${LANE_FILTER} --changed "$BASE" --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
+        "else",
+        `pnpm exec vitest run ${LANE_FILTER} --shard "$SHARD" --maxWorkers=1 --passWithNoTests --exclude 'next/**'`,
+        "fi",
+      ].join("\n"),
+    });
+    clean.jobs.test.steps.push({ name: "shard times", if: "!cancelled()", run: "node .github/ci/shard-times.ts" });
 
     if (whitespace) {
       clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/6`;
@@ -155,6 +172,45 @@ it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run
 });
 
 const plants: [string, (workflow: Workflow) => void][] = [
+  [
+    "L1: main loses lane exclude",
+    (w) => {
+      const step = w.jobs.test.steps[1]!;
+      const lines = step.run.split("\n");
+      lines[6] = lines[6]!.replace(` --exclude '${LANE_GLOB}'`, "");
+      step.run = lines.join("\n");
+    },
+  ],
+  [
+    "L2: two lane workers",
+    (w) => {
+      w.jobs.test.steps[0]!.run = w.jobs.test.steps[0]!.run.replace("--maxWorkers=1", "--maxWorkers=2");
+    },
+  ],
+  [
+    "L3: failure skips rest",
+    (w) => {
+      w.jobs.test.steps[1]!.if = "";
+    },
+  ],
+  [
+    "L3: rest before lanes",
+    (w) => {
+      w.jobs.test.steps.reverse();
+    },
+  ],
+  [
+    "L3: failure skips advice",
+    (w) => {
+      w.jobs.test.steps[2]!.if = "";
+    },
+  ],
+  [
+    "L4: nonexistent lane filter",
+    (w) => {
+      w.jobs.test.steps[0]!.run = w.jobs.test.steps[0]!.run.replaceAll(LANE_FILTER, "missing/lane.");
+    },
+  ],
   ...extraCommands.map((step): [string, (w: Workflow) => void] => [
     `review2 extra command: ${step.run}`,
     (w) => {
@@ -459,10 +515,10 @@ const plants: [string, (workflow: Workflow) => void][] = [
   ...[0, 1, 2].map((branch): [string, (w: Workflow) => void] => [
     `exclusion branch ${branch}`,
     (w) => {
-      const lines = w.jobs.test.steps[0]!.run.split("\n");
+      const lines = w.jobs.test.steps[1]!.run.split("\n");
       const line = [1, 3, 6][branch]!;
       lines[line] = lines[line]!.replace(" --exclude 'next/**'", "");
-      w.jobs.test.steps[0]!.run = lines.join("\n");
+      w.jobs.test.steps[1]!.run = lines.join("\n");
     },
   ]),
   // T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
@@ -481,13 +537,13 @@ const plants: [string, (workflow: Workflow) => void][] = [
   [
     "duplicate forced tests",
     (w) => {
-      w.jobs.test.steps[0]!.run = w.jobs.test.steps[0]!.run.replace(" --exclude apps/fabrika/src/bundles.test.ts", "");
+      w.jobs.test.steps[1]!.run = w.jobs.test.steps[1]!.run.replace(" --exclude apps/fabrika/src/bundles.test.ts", "");
     },
   ],
   [
     "forced tests on all shards",
     (w) => {
-      w.jobs.test.steps[0]!.run = w.jobs.test.steps[0]!.run.replace(
+      w.jobs.test.steps[1]!.run = w.jobs.test.steps[1]!.run.replace(
         `if [ "\${{ matrix.shard }}" = 1 ]; then`,
         "if true; then",
       );
@@ -532,4 +588,33 @@ it("names the next command whose step or condition is wrong", () => {
 it("format: the checked-in workflow passes the same wiring lint", () => {
   // A fixed file read is a format check. Structural decisions live in the linter.
   expect(lint(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"))).toEqual([]);
+});
+
+it("L5: lane selection and rest exclusion agree on today's test paths", () => {
+  // Vitest includes .test.ts only; next/ is excluded by both commands.
+  // Plant: lane*.test.ts also excludes lane-fixture.test.ts.
+  const real = globSync(["packages/**/*.test.ts", "apps/**/*.test.ts", ".github/**/*.test.ts"]);
+  const made = fc
+    .stringMatching(/^[a-z][a-z.-]{0,30}$/)
+    .chain((name) =>
+      fc.constantFrom(
+        `${LANE_FILTER}${name}.test.ts`,
+        `packages/pipeline/src/stages/pipeline/lane-${name}.test.ts`,
+        `stages/lane/${name}.test.ts`,
+        `packages/pipeline/src/stages/pipeline/${name}.test.ts`,
+      ),
+    );
+  fc.assert(
+    fc.property(fc.oneof(fc.constantFrom(...real), made), (path) => {
+      expect(inLaneStep(path), path).toBe(matchesGlob(path, LANE_GLOB));
+    }),
+    {
+      ...options,
+      examples: [
+        ["packages/pipeline/src/stages/pipeline/lane-fixture.test.ts"],
+        [`${LANE_FILTER}x.y.test.ts`],
+        ["stages/lane/lane.test.ts"],
+      ],
+    },
+  );
 });
