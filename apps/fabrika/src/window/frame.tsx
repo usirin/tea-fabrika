@@ -33,7 +33,6 @@ import {
 	hostWord,
 	INFO,
 	infoFor,
-	isLoadWord,
 	type JobItem,
 	jobItem,
 	jobsList,
@@ -94,6 +93,11 @@ export interface FrameProps {
 	/** One of a run's own inputs, as its window would send it: `{type: "query", value: {ticket: 2}}`. */
 	readonly toRun: (run: string, msg: unknown) => void;
 	readonly step: (m: FrameMsg) => void;
+	/**
+	 * The theme's load word (theme.ts, `themeWord`), or `null` for a clean load. It is the load
+	 * report's, not the frame's: no note timer clears it, and a later report replaces it.
+	 */
+	readonly loaded?: string | null;
 }
 
 /** ` · `, between two words of the frame. */
@@ -938,8 +942,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 	const right = (): ReactNode => {
 		if (question !== null) return <span className="quiet">y closes · n keeps it</span>;
 		if (armed) return <span className="quiet">esc cancels</span>;
-		if (frame.note !== null && !isLoadWord(frame.note))
-			return <span className="note">{frame.note}</span>;
+		if (frame.note !== null) return <span className="note">{frame.note}</span>;
 		const keys = keyFor(props, "keys");
 		const info = keyFor(props, "info");
 		const quiet = quietOf(frame);
@@ -968,9 +971,9 @@ export function BottomLine(props: FrameProps): ReactNode {
 					</>
 				)}
 				{/* The theme's load word, beside keys and info for as long as its report stands. */}
-				{isLoadWord(frame.note) && (
+				{props.loaded != null && (
 					<>
-						<span className="note">{frame.note}</span>
+						<span className="note">{props.loaded}</span>
 						<Sep />
 					</>
 				)}

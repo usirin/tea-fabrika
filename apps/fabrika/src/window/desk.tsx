@@ -132,7 +132,7 @@ const store: {
 	frame: Frame;
 	/** What the window shows of the link, as the app said last. */
 	link: LinkNow;
-	/** The theme's load word the bottom line said last (theme.ts, `themeWord`): said once. */
+	/** The last load report's word (theme.ts, `themeWord`), beside keys and info while it stands. */
 	themeSaid: string | null;
 	readonly views: Map<string, ToWindow>;
 	readonly listeners: Set<() => void>;
@@ -527,8 +527,7 @@ const heard = (raw: unknown) => {
 			const word = themeWord(m.report, m.policy);
 			if (word === store.themeSaid) return;
 			store.themeSaid = word;
-			if (word !== null) frameStep({type: "say", note: word});
-			return;
+			return changed();
 		}
 		case "desk":
 			// A host of this build sends its theme right after the desk; an older one may send none.
@@ -964,6 +963,7 @@ function App(): ReactNode {
 		toApp,
 		toRun,
 		step: frameStep,
+		loaded: store.themeSaid,
 	};
 	const bare = store.frame.bare;
 	const zoomed = ws?.layout.zoomed ?? null;
