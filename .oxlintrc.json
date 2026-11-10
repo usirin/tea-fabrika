@@ -395,6 +395,32 @@
   },
   "overrides": [
     {
+      // L5 plant: import homedir or restore filesystem home resolution.
+      "files": ["scripts/vitest.setup.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              { "name": "node:os", "importNames": ["homedir"] },
+              { "name": "os", "importNames": ["homedir"] }
+            ]
+          }
+        ],
+        "eslint/no-restricted-syntax": [
+          "error",
+          {
+            "selector": "CallExpression[callee.name=/^(homedir|lstat|realpath|readlink)(Sync)?$/]",
+            "message": "L5: never inspect inherited homes"
+          },
+          {
+            "selector": "CallExpression[callee.property.name=/^(homedir|lstat|realpath|readlink)(Sync)?$/]",
+            "message": "L5: never inspect inherited homes"
+          }
+        ]
+      }
+    },
+    {
       "files": ["apps/fabrika/src/host/settings.laws.test.ts"],
       "rules": {
         "eslint/no-restricted-imports": [

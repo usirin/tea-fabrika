@@ -1,8 +1,18 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  readdirSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, matchesGlob, resolve } from "node:path";
+import { dirname, join, matchesGlob, resolve, relative, isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -29,6 +39,7 @@ if (process.env.TEST_SETUP === '1') {
   for (const file of [value.test.setupFiles ?? []].flat()) await import(new URL(file, process.env.TEST_SETUP_ROOT ?? ${JSON.stringify(pathToFileURL(`${root}/`).href)}));
 }
 console.log(JSON.stringify({workers: value.test.maxWorkers, home: process.env.FABRIKA_HOME ?? null,
+  personHome: process.env.HOME ?? null,
   testTimeout: value.test.testTimeout, hookTimeout: value.test.hookTimeout,
   shared,
   sharedTimeouts: [shared?.test?.testTimeout, shared?.test?.hookTimeout],
@@ -49,6 +60,20 @@ const probe = (cwd: string, args: string[], env: Record<string, string | undefin
       ...env,
     },
   });
+
+const freshHomes = (stdout: string, temp: string, inherited: string[]) => {
+  const got = JSON.parse(stdout);
+  expect(got.home).not.toBe(got.personHome);
+  for (const path of [got.home, got.personHome]) {
+    expect(typeof path).toBe("string");
+    const child = relative(temp, path);
+    expect(child.length).toBeGreaterThan(0);
+    expect(child.startsWith("..") || isAbsolute(child)).toBe(false);
+    expect(inherited).not.toContain(path);
+    expect(readdirSync(path)).toEqual([]);
+  }
+  expect(Buffer.byteLength(join(got.home, "host", "sock"))).toBeLessThan(103);
+};
 
 describe("T325 K9 machine caps, today's tooling", () => {
   // pinned: T377, string-only imports left testConfig without a real consumer.
@@ -580,7 +605,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
   });
 
   // Plants: leave FABRIKA_HOME unset; compare the spelling without resolving a symlink.
-  it("gives unset test homes a short temp folder and refuses direct or linked real homes", () => {
+  it("L2 replaces direct or linked real homes with fresh homes", () => {
     fc.assert(
       fc.property(fc.record({ link: fc.boolean(), suffix: fc.stringMatching(/^[a-z]{1,6}$/) }), ({ link, suffix }) => {
         const dir = mkdtempSync(join(tmpdir(), "fh-"));
@@ -609,18 +634,18 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
             ...env,
             FABRIKA_HOME: link ? alias : real,
           });
-          expect(bad.status, "test setup accepted the real home").not.toBe(0);
-          expect(bad.stderr).toContain("FABRIKA_HOME");
+          expect(bad.status, bad.stderr).toBe(0);
+          freshHomes(bad.stdout, dir, [home, real, alias]);
         } finally {
           rmSync(dir, { recursive: true, force: true });
         }
       }),
-      options,
+      { seed: 119120, numRuns: 4 },
     );
   });
 
   // Plant: compare only the supplied spelling and accept a symlink into the real home.
-  it("refuses every spelling of the real home while preserving an explicit temp home", () => {
+  it("L2 replaces every spelling and explicit temp homes", () => {
     fc.assert(
       fc.property(fc.stringMatching(/^[a-z]{2,8}$/), (suffix) => {
         const dir = mkdtempSync(join(tmpdir(), "fh-link-"));
@@ -639,22 +664,89 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
             FABRIKA_HOME: safe,
           });
           expect(accepted.status, accepted.stderr).toBe(0);
-          expect(JSON.parse(accepted.stdout).home).toBe(safe);
+          freshHomes(accepted.stdout, dir, [home, safe]);
 
           for (const path of [real, alias, join(real, "..", ".fabrika")]) {
             const refused = probe(root, ["run", "scripts/caps.test.ts"], {
               ...env,
               FABRIKA_HOME: path,
             });
-            expect(refused.status, "setup accepted the real home").not.toBe(0);
-            expect(refused.stderr).toContain("FABRIKA_HOME");
+            expect(refused.status, refused.stderr).toBe(0);
+            freshHomes(refused.stdout, dir, [home, path]);
           }
         } finally {
           rmSync(dir, { recursive: true, force: true });
         }
       }),
-      options,
+      { seed: 119120, numRuns: 4 },
     );
+  });
+
+  // L1 plant: keep an inherited folder, including its old state.
+  it("L1 replaces arbitrary inherited homes with empty short temp homes", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          home: fc.option(fc.constantFrom("dirty", "alias", "dot", "outside"), { nil: undefined }),
+          app: fc.option(fc.constantFrom("dirty", "alias", "dot", "outside"), { nil: undefined }),
+          length: fc.integer({ min: 1, max: 120 }),
+        }),
+        ({ home, app, length }) => {
+          const dir = mkdtempSync(join(tmpdir(), "law-"));
+          try {
+            const dirty = join(dir, ".fabrika");
+            mkdirSync(dirty);
+            writeFileSync(join(dirty, "old"), "old state");
+            mkdirSync(join(dir, "real"));
+            symlinkSync(dirty, join(dir, "alias"));
+            const paths = {
+              dirty,
+              alias: join(dir, "alias"),
+              dot: dir + "/real/../.fabrika",
+              outside: join(dir, "outside"),
+            };
+            const temp = join(dir, "t".repeat(length));
+            mkdirSync(temp);
+            const ran = probe(root, ["run", "scripts/caps.test.ts"], {
+              TEST_SETUP: "1",
+              TMPDIR: temp,
+              HOME: home === undefined ? undefined : paths[home],
+              FABRIKA_HOME: app === undefined ? undefined : paths[app],
+            });
+            expect(ran.status, ran.stderr).toBe(0);
+            freshHomes(
+              ran.stdout,
+              Buffer.byteLength(join(temp, "fh-XXXXXX", "host", "sock")) < 103 ? temp : "/tmp",
+              Object.values(paths),
+            );
+          } finally {
+            rmSync(dir, { recursive: true, force: true });
+          }
+        },
+      ),
+      { seed: 119120, numRuns: 12 },
+    );
+  });
+
+  // scenario: the locked home from ticket 574. Plant: read homedir()/.fabrika.
+  it("L3 ignores a locked inherited home", () => {
+    const dir = mkdtempSync(join(tmpdir(), "locked-"));
+    const home = join(dir, "person");
+    mkdirSync(join(home, ".fabrika"), { recursive: true });
+    chmodSync(home, 0);
+    try {
+      const ran = probe(root, ["run", "scripts/caps.test.ts"], {
+        TEST_SETUP: "1",
+        HOME: home,
+        FABRIKA_HOME: undefined,
+        TMPDIR: dir,
+      });
+      expect(ran.status, ran.stderr).toBe(0);
+      freshHomes(ran.stdout, dir, [home]);
+    } finally {
+      chmodSync(home, 0o700);
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   // Plant: release the lock while the compiler is still alive. The compiler and pnpm below are
