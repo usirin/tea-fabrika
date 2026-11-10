@@ -18,9 +18,10 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
+import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./ledger.ts";
 import type { Line } from "./log.ts";
-import { Referee, type Sql } from "./referee.ts";
+import { Referee } from "./referee.ts";
 import { nodeSql } from "./sqlite.ts";
 
 // Every ledger is a fresh node:sqlite file in one temp folder, removed after.

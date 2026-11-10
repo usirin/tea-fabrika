@@ -1,8 +1,9 @@
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { LedgerError } from "../data/ledger.ts";
-import { type InputId, ParentText } from "../data/log.ts";
-import { type Sql } from "../data/referee.ts";
-import { ProcessId } from "../data/trace.ts";
+import { type InputId } from "../data/log.ts";
+import { ProcessId } from "../ProcessId.ts";
+import { ParentText } from "../Rev.ts";
+import { type Sql } from "../Sql.ts";
 import { inRunnerSpace, inSignalSpace } from "./process.ts";
 
 export const Writer = Schema.TaggedUnion({

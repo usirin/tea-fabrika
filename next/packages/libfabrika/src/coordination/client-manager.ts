@@ -8,8 +8,9 @@
 // `ignored used`, never "you are in".
 import { Context, Effect, Layer, Result, Schema, Stream } from "effect";
 import { Ledger, LedgerError } from "../data/ledger.ts";
-import { Appended, type Entry, fromHere, lineFor, Rev, valueFor } from "../data/log.ts";
+import { Appended, type Entry, fromHere, lineFor, valueFor } from "../data/log.ts";
 import { short } from "../data/trace.ts";
+import { Rev } from "../Rev.ts";
 import type { From } from "./mailbox.ts";
 import {
   allows,

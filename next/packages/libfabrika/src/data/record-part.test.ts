@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import * as fc from "fast-check";
-import type { Sql } from "./referee.ts";
+import type { Sql } from "../Sql.ts";
 import { nodeSql } from "./sqlite.ts";
 import type { SpanRow } from "./trace.ts";
 

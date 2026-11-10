@@ -3,8 +3,9 @@
 // records to the process's stream, and nothing else. Tables come with the first call.
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { Ledger, LedgerError } from "../data/ledger.ts";
-import { lineFor, Rev } from "../data/log.ts";
-import { type Sql } from "../data/referee.ts";
+import { lineFor } from "../data/log.ts";
+import { Rev } from "../Rev.ts";
+import { type Sql } from "../Sql.ts";
 import { type From } from "./mailbox.ts";
 import { Activity } from "./process.ts";
 

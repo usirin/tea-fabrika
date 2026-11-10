@@ -36,11 +36,11 @@ import { LedgerTransaction } from "../data/ledger-transaction.ts";
 import { Doorbell, Ledger, LedgerError } from "../data/ledger.ts";
 import { Appended, type Entry, InputId, lineFor } from "../data/log.ts";
 import { RecordManager } from "../data/records.ts";
-import { type Sql } from "../data/referee.ts";
 import { SpanSink } from "../data/sink.ts";
 import { nodeSql } from "../data/sqlite.ts";
 import { type SpanRow } from "../data/trace.ts";
 import { processId, processIds } from "../id.test-support.ts";
+import type { Sql } from "../Sql.ts";
 import { type Update as WatcherUpdate } from "./entry.ts";
 import { Input, Program } from "./program.ts";
 

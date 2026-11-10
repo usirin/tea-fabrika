@@ -1,7 +1,7 @@
 ---
 id: 0036
 title: A flaky test is fixed the day it is seen, never rerun until green and left
-status: accepted
+status: amended-in-part by [0052](0052-tests-never-depend-on-the-machine.md)
 date: 2026-11-09
 tags: [flaky, tests, ci, rerun, checks, findings]
 ---
@@ -78,6 +78,8 @@ day is cheaper than a quarantine list somebody has to keep.
   never widens a timeout, adds a retry around the assertion or skips the test.
 - **One exception: a cause proven to be outside our code.** Then a wait, a retry or a skip may
   stay, and the write-up says what the cause is and how it was proven.
+  The machine a test runs on is never that cause
+  ([0052](0052-tests-never-depend-on-the-machine.md)).
 - **The fix shows its proof:** the test run many times in a row with the count in the pull request,
   and the other tests that share the cause, fixed there or listed on a ticket.
 - **The finding row is still written.** `flaky_test` stays in 0035's list, so the count per source

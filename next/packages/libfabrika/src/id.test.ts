@@ -8,7 +8,7 @@ import * as Data from "@kampus/libfabrika/data";
 import { Arbitrary, Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
-import { ProcessId } from "./data/trace.ts";
+import { ProcessId } from "./ProcessId.ts";
 
 const seed = 119120;
 const options = { seed, numRuns: 100 };

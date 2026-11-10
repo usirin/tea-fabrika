@@ -75,7 +75,12 @@
     },
     {
       "name": "next-id",
-      "paths": ["next/packages/libfabrika/src/id.ts"]
+      "paths": [
+        "next/packages/libfabrika/src/id.ts",
+        "next/packages/libfabrika/src/ProcessId.ts",
+        "next/packages/libfabrika/src/Sql.ts",
+        "next/packages/libfabrika/src/Rev.ts"
+      ]
     },
     {
       "name": "apps",

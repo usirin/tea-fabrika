@@ -69,6 +69,12 @@ turns P34 into OTP's top-level supervisor; its plan is drafted and waits on the 
 *2026-11-10:* P34 now runs on the Worker path too (ticket 402,
 [PR 760](https://github.com/usirin/tea-fabrika/pull/760)): the local stage saves delivery counts,
 writes `dead` and restarts a crashed program, which PR 535 had proved on Node only.
+*2026-11-10:* libfabrika's files move into rooms (ticket 477,
+[0043](../../.decisions/0043-rooms-on-floors.md) and [0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).
+PR 0's exam landed ([PR 732](https://github.com/usirin/tea-fabrika/pull/732)), and PR 1 gives the shared names
+`ProcessId`, `Sql` and `Rev` files of their own ([PR 773](https://github.com/usirin/tea-fabrika/pull/773)).
+→ next: one move PR (every file to its room, then floors and fronts, then 0051's renames), then
+the runner and gateway splits side by side, then the error PRs.
 Its first open question is answered
 ([0018](../../.decisions/0018-one-application-per-program.md)): each program is its own OTP
 application, so one program past its restart limit stops alone. Isolation gets hard walls
