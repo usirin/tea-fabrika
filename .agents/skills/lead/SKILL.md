@@ -75,6 +75,7 @@ Any other actionable finding is one finding row with proof: never a ticket, a fi
 mention, and never a security hole.
 Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl
 unchanged. Do not start another review round for it.
+End with exactly one answer: line, as the last line.
 Keep the four reason labels in the review skill. A missed case in a named class checks the law;
 it does not reopen every test's merits.
 
@@ -189,6 +190,9 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   commit, so the lead knows which step to send it to. A build that
   answers `done` with no commit is done only with a `laws: green <paths>` line (every law already
   green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
+  It takes exactly one `answer:` line outside a code fence: none, two or more, or one that names no
+  verb is `stuck:no_answer`. So is a review's `done` without a merge-ready first line, or with a
+  `changes: <n>` line, n above 0 (ticket 557).
 - A box has no network, so it cannot refresh `pnpm-lock.yaml`. When a step's commits change a
   locked field of a workspace `package.json` (its name or dependencies) or `pnpm-workspace.yaml`
   and leave the lockfile alone, drive answers `ask` (`lockfile`, exit 20) whatever the step said,
