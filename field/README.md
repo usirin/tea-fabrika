@@ -145,6 +145,10 @@ own work, in either version. They move into `next/`'s ledger when it holds findi
 the keys follow the proposed shape in
 [every finding is rated](../docs/direction/every-finding-is-rated.md).
 
+A `flaky_test` is the one exception: it also gets a tracker ticket and a fix the same day, and
+its row does not wait for a rating
+([0036](../.decisions/0036-a-flaky-test-is-fixed.md)).
+
 A row needs proof to be written at all: `location`, `proof` and `cost`. Never write a security hole
 here. Rows are only added, never edited or deleted.
 

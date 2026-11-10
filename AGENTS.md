@@ -157,6 +157,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
   returns nothing, and reads one part through a selector, as in
   `useRuntime(run, (m) => m.views[id])`. No stand-in hook.
+- **In `next/`, every state machine is explicit.** A stored value that changes and decides what is
+  legal next is control state. It gets one named type with its transitions in one place, never
+  flags, a position in code or an order two parties assume. A plan asks of new code: what are its
+  states? ([0037](./.decisions/0037-implicit-state-machines-made-explicit.md)).
 - **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
   Effect does it: `Lease.of(...)` under `import * as Lease`
   ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
@@ -374,6 +378,9 @@ every row.
 | A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](#changing-the-product)) |
 
 A report says which of these ran, and which could not run and why.
+
+A flaky test is fixed the day it is seen, by removing its cause; nobody reruns it until green and moves on
+([0036](./.decisions/0036-a-flaky-test-is-fixed.md)).
 
 `pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does
 not name yet (`pnpm lint:dead` runs that part alone). With code-graph 0.12.0,
