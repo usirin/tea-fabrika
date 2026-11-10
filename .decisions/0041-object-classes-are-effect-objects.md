@@ -26,7 +26,8 @@ Alchemy ships an Effect model for the class itself. kamp-us/phoenix moved to it 
 took the modular form in
 [0032](https://github.com/kamp-us/phoenix/blob/main/.decisions/0032-alchemy-beta45-and-dev-model.md),
 and found the sibling rule in
-[0033](https://github.com/kamp-us/phoenix/blob/main/.decisions/0033-mutual-do-layer-cycle-per-call-resolution.md).
+[0033](https://github.com/kamp-us/phoenix/blob/main/.decisions/0033-mutual-do-layer-cycle-per-call-resolution.md)
+(that rule failed when run here and is replaced, see [Amendments](#amendments)).
 Its [pattern doc](https://github.com/kamp-us/phoenix/blob/main/.patterns/alchemy-durable-objects.md)
 shows the shape as it runs there.
 
@@ -103,11 +104,15 @@ caller's stub answers with an Effect, and Alchemy's bridge is the one place a Pr
   (`Cloudflare.DurableObjectState`, the environment) and returns the methods of a service from
   `next/packages/libfabrika/src/workers/`. It decides nothing. A law still runs that service on
   Node, so the mutation step still reaches it.
-- **Sibling objects are resolved per call.** An object that calls another resolves that other's
-  namespace inside the method that needs it, never in `.make()`'s outer Effect. In phoenix, an
-  eager pair ran the build out of memory on the inline form, and on the modular form two Layers
-  that each need the other do not compose (its 0033). Our four objects call each other, so the
-  rule applies here.
+- **A sibling object is taken in the Layer's init with `Sibling.from(Host)`.** An object that
+  calls another takes that other's namespace once, in `.make()`'s outer Effect, by the host
+  Worker's class, and its methods use that value. It is never looked up per call. The host Worker
+  class names the objects it hosts. Our four objects call each other, so the rule applies here.
+  *Replaced on 2026-11-10, see [Amendments](#amendments). It said: sibling objects are resolved
+  per call. An object that calls another resolves that other's namespace inside the method that
+  needs it, never in `.make()`'s outer Effect. In phoenix, an eager pair ran the build out of
+  memory on the inline form, and on the modular form two Layers that each need the other do not
+  compose (its 0033).*
 - **A gap in Alchemy is patched locally,** with `pnpm patch`, and the upstream issue is filed the
   same day. It is never a reason to go back to a plain class.
 
@@ -150,7 +155,8 @@ source shows a name exists. It does not show that it works for our objects.
 **Unknown, settled by ticket 502's spike on beta.84:**
 
 - Whether Alchemy's own bundling can carry our compiler plugin and program table.
-- How a per-call sibling lookup types and resolves in beta.84.
+- How a per-call sibling lookup types and resolves in beta.84. *Answered: it does not resolve,
+  see [Amendments](#amendments).*
 - Whether our alarm use holds: the bridge runs its own alarm callbacks before the `alarm` slot.
 - Whether the Gateway's hibernation laws hold: each event gets a new wrapper around the raw socket.
 - Whether a failed call between objects shows in the stub's error type. At run time it is an
@@ -166,3 +172,42 @@ schema; and merging objects into one, as phoenix later did. No table under
 *Pointer, 2026-11-09:* [0042](0042-platform-pieces-go-through-alchemy.md) extends this file to
 every platform piece, `Control`, the `WorkerEntrypoint` class and the Worker's default `fetch`
 included. Every rule above still holds.
+
+## Amendments
+
+- 2026-11-10: **a sibling object is taken in the Layer's init with `Sibling.from(Host)`, Alchemy's
+  documented way. It is not resolved per call.** Tracker ticket 530.
+
+  ```ts
+  // The shape that ran, on throwaway probe objects. Not product code.
+  // 1. The host Worker class names the objects it hosts.
+  export class Spike extends Cloudflare.Worker<Spike, {}, Ping | Pong>()("Spike") {}
+
+  export const PingLive = Ping.make(
+  	Effect.gen(function* () {
+  		const pongs = yield* Pong.from(Spike); // 2. init: the sibling's namespace, once, by its host
+  		return Effect.gen(function* () {
+  			return {
+  				hit: (n: number) => pongs.getByName("one").back(n + 1), // 3. a method needs nothing
+  			};
+  		});
+  	}),
+  );
+  ```
+
+  - **Where the old rule came from.** The per-call rule was phoenix's 0033, taken here by reading.
+    Its commit checked only health and registration, not a call between two objects. That is the
+    binding constraint above, met late: a claim comes from a run on the installed version.
+  - **What ran here.** On `@alchemy.run/cloudflare` 2.0.0-beta.84 and beta.85, unpatched, in local
+    workerd, with our `bundle: false` build and with Alchemy's own bundling: a bare `yield* Pong`
+    inside a method failed every time with `Service not found: Pong`. With `Pong.from(Spike)` in
+    init, `Ping.hit -> Pong.back -> Ping.leaf` returned
+    `{"path":["ping.hit","pong.back","ping.leaf"],"n":3}` every time
+    ([experiment 248, Correction](../experiments/248-effect-object-spike.md#correction-2026-11-10)).
+  - **Why it composes.** `Sibling.from(Host)` needs only `Worker`, never the sibling's Layer, so
+    two Layers that take each other make no cycle. The source says so in `DurableObject.ts`, under
+    "Using `.from(Self)` Inside the Host".
+  - **No patch and no upstream issue.** Experiment 248 first called the failed per-call lookup an
+    Alchemy bug and patched it. It is not a bug we can show: the documented way works.
+  - **Not run:** a real deploy, where the host Worker binds its own objects by its own name, and a
+    type check of the new shape.
