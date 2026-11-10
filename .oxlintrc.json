@@ -395,6 +395,43 @@
   },
   "overrides": [
     {
+      // L5 plant: import homedir or a filesystem namespace to inspect inherited homes.
+      "files": ["scripts/vitest.setup.ts", "scripts/testhome.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "node:os",
+                "importNames": ["homedir"]
+              },
+              {
+                "name": "os",
+                "importNames": ["homedir"]
+              },
+              {
+                "name": "node:fs",
+                "importNames": ["lstat", "lstatSync", "realpath", "realpathSync", "readlink", "readlinkSync"]
+              },
+              {
+                "name": "fs",
+                "importNames": ["lstat", "lstatSync", "realpath", "realpathSync", "readlink", "readlinkSync"]
+              },
+              {
+                "name": "node:fs/promises",
+                "importNames": ["lstat", "realpath", "readlink"]
+              },
+              {
+                "name": "fs/promises",
+                "importNames": ["lstat", "realpath", "readlink"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["apps/fabrika/src/host/settings.laws.test.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
