@@ -12,7 +12,9 @@ const checked = {
 	bs: true,
 	counter: 0,
 };
+
 const text = fc.string();
+
 const checkedArb = fc.record({
 	origin: text,
 	rp: text,
@@ -20,13 +22,16 @@ const checkedArb = fc.record({
 	bs: fc.boolean(),
 	counter: fc.nat(),
 });
+
 const commonArb = fc.record({id: text, for: text, to: text, sentAt: text});
+
 const commonExample = {
 	id: "change",
 	for: "person-a",
 	to: "project-a",
 	sentAt: "2026-11-08T04:00:00.000Z",
 };
+
 describe("P10 passkey records", () => {
 	it("p42: added-key records retain command and handwritten observations", () => {
 		fc.assert(

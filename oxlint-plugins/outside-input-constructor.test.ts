@@ -3,6 +3,7 @@ import {plant} from "../next/apps/fabrika/src/exam/plant.ts";
 
 const code = "fabrika(outside-input-constructor)";
 const file = "next/packages/libfabrika/src/data/id.ts";
+
 describe("P17a, outside input has typed failures", () => {
 	it("plants schema aliases and destructured decoder aliases in the door", async () => {
 		const door = "next/packages/libfabrika/src/door/door.ts";
@@ -96,7 +97,11 @@ describe("P17a, outside input has typed failures", () => {
 			...files,
 			[other]: "declare const raw: unknown, Row: any; Row.make(raw);",
 		});
-		for (const path of Object.keys(files)) expect(linted(code, path)).toEqual([1]);
+
+		for (const path of Object.keys(files)) {
+			expect(linted(code, path)).toEqual([1]);
+		}
+
 		expect(linted(code, other)).toEqual([]);
 	});
 });

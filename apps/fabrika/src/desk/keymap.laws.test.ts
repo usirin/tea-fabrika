@@ -21,6 +21,7 @@ const lineCount = (text: string) => text.split("\n").length;
 
 /** Some words the file knows, and two it does not. */
 const word = fc.constantFrom(...Does.literals, "tezgah.zom", "desk.split");
+
 /** Keys as the file writes them: good ones, and a few the load refuses. */
 const spelled = fc.constantFrom(
 	"<prefix>z",
@@ -49,11 +50,14 @@ const spelled = fc.constantFrom(
 	"z",
 	"",
 );
+
 const quoted = (s: string) => JSON.stringify(s);
+
 const value = fc.oneof(
 	spelled.map(quoted),
 	fc.array(spelled, {maxLength: 3}).map((keys) => `[${keys.map(quoted).join(", ")}]`),
 );
+
 const line = fc.oneof(
 	{arbitrary: fc.tuple(word, value).map(([w, v]) => `${w} = ${v}`), weight: 6},
 	{
@@ -70,6 +74,7 @@ const line = fc.oneof(
 	},
 	{arbitrary: fc.constantFrom("", "# a comment"), weight: 1},
 );
+
 /** A file of the file's own words: it often reads, and is often refused. */
 const keysFile = fc.array(line, {maxLength: 8}).map((lines) => lines.join("\n"));
 const mac = fc.boolean();
@@ -102,11 +107,14 @@ const BARE = new Set([
 const placeOf = (keys: Keys) => {
 	const alone = new Map<string, string[]>();
 	const after = new Map<string, string[]>();
-	for (const row of keys.rows)
+
+	for (const row of keys.rows) {
 		for (const key of row.keys) {
 			const place = key._tag === "alone" ? alone : after;
 			place.set(key.key, [...(place.get(key.key) ?? []), row.does]);
 		}
+	}
+
 	return {alone, after};
 };
 
@@ -120,7 +128,11 @@ describe("the file's laws", () => {
 		fc.assert(
 			fc.property(text, mac, (t, onMac) => {
 				const answer = decodeKeys(t, onMac);
-				if (Result.isSuccess(answer)) return answer.success.rows.length === defaults.rows.length;
+
+				if (Result.isSuccess(answer)) {
+					return answer.success.rows.length === defaults.rows.length;
+				}
+
 				const {line: at, why} = answer.failure;
 				return Number.isInteger(at) && at >= 1 && at <= lineCount(t) && why.length > 0;
 			}),
@@ -213,16 +225,28 @@ describe("today's PR 1 spelling and escape laws", () => {
 				const text = `tezgah.zoom = ${JSON.stringify(`<prefix>${spelling}`)}`;
 				const decoded = decodeKeys(text, false);
 				expect(Result.isSuccess(decoded), text).toBe(true);
-				if (Result.isFailure(decoded)) return;
+
+				if (Result.isFailure(decoded)) {
+					return;
+				}
+
 				const binding = decoded.success.rows.find((row) => row.does === "tezgah.zoom")?.keys[0];
 				expect(binding).toBeDefined();
-				if (binding === undefined) return;
+
+				if (binding === undefined) {
+					return;
+				}
+
 				const again = decodeKeys(
 					`tezgah.zoom = ${JSON.stringify(`<prefix>${spell(binding.key)}`)}`,
 					false,
 				);
 				expect(Result.isSuccess(again)).toBe(true);
-				if (Result.isSuccess(again)) expect(again.success.rows).toEqual(decoded.success.rows);
+
+				if (Result.isSuccess(again)) {
+					expect(again.success.rows).toEqual(decoded.success.rows);
+				}
+
 				expect(
 					matchPress(
 						{key, code: "", shift, meta, ctrl, alt: false, composing: false, altGraph: false},
@@ -231,9 +255,18 @@ describe("today's PR 1 spelling and escape laws", () => {
 					),
 				).toEqual(binding);
 				const cap = capOf(binding.key);
-				if (spelling.includes("shift")) expect(cap).toContain("⇧");
-				if (spelling === "|") expect(cap).toBe("|");
-				if (spelling === "İ" || spelling === "🦊") expect(cap).toBe(key);
+
+				if (spelling.includes("shift")) {
+					expect(cap).toContain("⇧");
+				}
+
+				if (spelling === "|") {
+					expect(cap).toBe("|");
+				}
+
+				if (spelling === "İ" || spelling === "🦊") {
+					expect(cap).toBe(key);
+				}
 			}),
 			{seed: 119120, numRuns: 100},
 		);
@@ -265,10 +298,18 @@ describe("today's PR 1 spelling and escape laws", () => {
 						`tezgah.zoom = ${JSON.stringify(`<prefix>${spelling}`)}`,
 						false,
 					);
-					if (Result.isFailure(decoded)) return;
+
+					if (Result.isFailure(decoded)) {
+						return;
+					}
+
 					const binding = decoded.success.rows.find((row) => row.does === "tezgah.zoom")?.keys[0];
 					expect(binding).toBeDefined();
-					if (binding === undefined) return;
+
+					if (binding === undefined) {
+						return;
+					}
+
 					const key =
 						shift && /^[a-z]$/.test(baseKey.key) ? baseKey.key.toUpperCase() : baseKey.key;
 					expect(
@@ -283,11 +324,16 @@ describe("today's PR 1 spelling and escape laws", () => {
 						false,
 					);
 					expect(Result.isSuccess(roundtrip)).toBe(true);
-					if (Result.isSuccess(roundtrip))
+
+					if (Result.isSuccess(roundtrip)) {
 						expect(roundtrip.success.rows).toEqual(decoded.success.rows);
+					}
+
 					expect(capOf(binding.key)).not.toContain("<");
-					if (shift && (/^(F\d+|Arrow|Enter|Escape)/.test(baseKey.key) || ctrl || alt || meta))
+
+					if (shift && (/^(F\d+|Arrow|Enter|Escape)/.test(baseKey.key) || ctrl || alt || meta)) {
 						expect(capOf(binding.key)).toContain("⇧");
+					}
 				},
 			),
 			{seed: 119120, numRuns: 150},
@@ -300,11 +346,19 @@ describe("today's PR 1 spelling and escape laws", () => {
 		const emptied = focusWords.map((does) => `${does} = []`);
 		const no = decodeKeys(emptied.join("\n"), true);
 		expect(Result.isFailure(no)).toBe(true);
-		if (Result.isFailure(no)) expect(no.failure.why).toMatch(/focus|way out|terminal/i);
+
+		if (Result.isFailure(no)) {
+			expect(no.failure.why).toMatch(/focus|way out|terminal/i);
+		}
+
 		fc.assert(
 			fc.property(fc.subarray(focusWords), (removed) => {
 				const read = decodeKeys(removed.map((does) => `${does} = []`).join("\n"), true);
-				if (Result.isFailure(read)) return;
+
+				if (Result.isFailure(read)) {
+					return;
+				}
+
 				const focus = read.success.rows.filter((row) => row.does.startsWith('tezgah."focus --to '));
 				expect(
 					focus.some((row) =>
@@ -339,8 +393,11 @@ const pressed = fc.array(
 
 const deskAfter = (keys: readonly string[]): Desk => {
 	let s: Desk = deskMachine.init(null, undefined)[0];
-	for (const [at, key] of keys.entries())
+
+	for (const [at, key] of keys.entries()) {
 		s = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, {type: "key", key, at})[0];
+	}
+
 	return s;
 };
 
@@ -349,7 +406,11 @@ describe("the desk's laws for a swapped table (p9)", () => {
 		fc.assert(
 			fc.property(pressed, table, (keys, swapped) => {
 				const s = deskAfter(keys);
-				if (s.at !== "open") return true;
+
+				if (s.at !== "open") {
+					return true;
+				}
+
 				const [next, cmds] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, {
 					type: "keys",
 					keys: swapped,
@@ -369,12 +430,20 @@ describe("the desk's laws for a swapped table (p9)", () => {
 		fc.assert(
 			fc.property(pressed, table, (keys, swapped) => {
 				const s = deskAfter(keys);
-				if (s.at !== "open") return true;
+
+				if (s.at !== "open") {
+					return true;
+				}
+
 				const [next] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, {
 					type: "keys",
 					keys: swapped,
 				});
-				if (next.at !== "open" || next.ask !== null) return true;
+
+				if (next.at !== "open" || next.ask !== null) {
+					return true;
+				}
+
 				const takes = takenNow(next, 0);
 				const alone = swapped.rows.flatMap((r) =>
 					r.does.startsWith("tezgah.")

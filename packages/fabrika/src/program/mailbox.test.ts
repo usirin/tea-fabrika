@@ -23,6 +23,7 @@ import {memoryStorage} from "./storage.ts";
 // bound. The flood laws on the one bound are in ./inputs-over-time.test.ts.
 
 const numbers = (count: number) => Array.from({length: count}, (_, i) => i);
+
 const turns = (n: number) =>
 	Effect.forEach(numbers(n), () => Effect.yieldNow, {discard: true, concurrency: 1});
 
@@ -34,8 +35,10 @@ interface Step {
 	readonly slow: number;
 	readonly pause: boolean;
 }
+
 const Told = Schema.Struct({n: Schema.Int, slow: Schema.Int});
 type Told = typeof Told.Type;
+
 const steps = fc.array(
 	fc.record({
 		to: fc.constantFrom<"a" | "b">("a", "b"),
@@ -64,11 +67,19 @@ const servedOrder = (list: readonly Step[]) =>
 	Effect.gen(function* () {
 		const got: number[] = [];
 		const started = yield* start(served(got), {});
-		if (started.kind !== "running") return null;
+
+		if (started.kind !== "running") {
+			return null;
+		}
+
 		for (const [n, step] of list.entries()) {
 			yield* tell(started.run, step.to, {n, slow: step.slow});
-			if (step.pause) yield* turns(4);
+
+			if (step.pause) {
+				yield* turns(4);
+			}
 		}
+
 		started.close("a");
 		started.close("b");
 		yield* started.run.ended;
@@ -90,10 +101,15 @@ const mergedOrder = (list: readonly Step[]) =>
 			),
 			Effect.forkChild,
 		);
+
 		for (const [n, step] of list.entries()) {
 			yield* Queue.offer(step.to === "a" ? a : b, {n, slow: step.slow});
-			if (step.pause) yield* turns(4);
+
+			if (step.pause) {
+				yield* turns(4);
+			}
 		}
+
 		yield* Queue.end(a);
 		yield* Queue.end(b);
 		yield* Fiber.join(loop);
@@ -117,10 +133,17 @@ describe("a tell to a, then to b, is handled a then b", () => {
 		const cases = numbers(10).flatMap((seed) => fc.sample(steps, {seed: seed + 1, numRuns: 100}));
 		let merged = 0;
 		let mailbox = 0;
+
 		for (const list of cases) {
-			if (!kept(await Effect.runPromise(mergedOrder(list)), list)) merged += 1;
-			if (!kept(await Effect.runPromise(servedOrder(list)), list)) mailbox += 1;
+			if (!kept(await Effect.runPromise(mergedOrder(list)), list)) {
+				merged += 1;
+			}
+
+			if (!kept(await Effect.runPromise(servedOrder(list)), list)) {
+				mailbox += 1;
+			}
 		}
+
 		console.log("order over seeded runs", {runs: cases.length, merged, mailbox});
 		expect(mailbox).toBe(0);
 		expect(merged).toBeGreaterThan(0);
@@ -161,11 +184,19 @@ describe("a control input, handled beside the order", () => {
 			const release = yield* Deferred.make<void>();
 			const heard: string[] = [];
 			const started = yield* start(lanes(release, heard), {});
-			if (started.kind !== "running") return yield* Effect.die("not started");
+
+			if (started.kind !== "running") {
+				return yield* Effect.die("not started");
+			}
+
 			yield* tell(started.run, "line", 1);
 			yield* tell(started.run, "signal", "interrupt");
+
 			// The line is not let go until after this: the signal is heard first, or never.
-			while (heard.length === 0) yield* Effect.sleep("1 millis");
+			while (heard.length === 0) {
+				yield* Effect.sleep("1 millis");
+			}
+
 			const during = [...heard];
 			yield* Deferred.succeed(release, undefined);
 			started.close("line");
@@ -181,14 +212,29 @@ describe("a control input, handled beside the order", () => {
 			const release = yield* Deferred.make<void>();
 			const heard: string[] = [];
 			const started = yield* start(lanes(release, heard, 4), {});
-			if (started.kind !== "running") return yield* Effect.die("not started");
+
+			if (started.kind !== "running") {
+				return yield* Effect.die("not started");
+			}
+
 			// One in hand, four waiting: the mailbox is full.
 			yield* tell(started.run, "line", 0);
-			while (started.run.mailbox().length > 0) yield* Effect.sleep("1 millis");
-			for (const n of numbers(4)) yield* tell(started.run, "line", n + 1);
+
+			while (started.run.mailbox().length > 0) {
+				yield* Effect.sleep("1 millis");
+			}
+
+			for (const n of numbers(4)) {
+				yield* tell(started.run, "line", n + 1);
+			}
+
 			const line = yield* Effect.flip(tell(started.run, "line", 5));
 			const signal = yield* tell(started.run, "signal", "interrupt");
-			while (heard.length === 0) yield* Effect.sleep("1 millis");
+
+			while (heard.length === 0) {
+				yield* Effect.sleep("1 millis");
+			}
+
 			const during = [...heard];
 			yield* Deferred.succeed(release, undefined);
 			started.close("line");
@@ -211,10 +257,21 @@ describe("a control input, handled beside the order", () => {
 					main: ({serve}) => serve({line: () => Effect.never, signal: () => Effect.void}),
 				});
 				const started = yield* start(plain, {});
-				if (started.kind !== "running") return yield* Effect.die("not started");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("not started");
+				}
+
 				yield* tell(started.run, "line", 0);
-				while (started.run.mailbox().length > 0) yield* Effect.sleep("1 millis");
-				for (const n of numbers(4)) yield* tell(started.run, "line", n + 1);
+
+				while (started.run.mailbox().length > 0) {
+					yield* Effect.sleep("1 millis");
+				}
+
+				for (const n of numbers(4)) {
+					yield* tell(started.run, "line", n + 1);
+				}
+
 				const signal = yield* Effect.flip(tell(started.run, "signal", "interrupt"));
 				expect(signal).toMatchObject({_tag: "MailboxFull", input: "signal", capacity: 4});
 			}).pipe(Effect.scoped),
@@ -245,7 +302,11 @@ describe("a control input, handled beside the order", () => {
 						}),
 				});
 				const started = yield* start(slow, {});
-				if (started.kind !== "running") return yield* Effect.die("not started");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("not started");
+				}
+
 				const words = yield* Effect.forEach(
 					numbers(16),
 					() => tell(started.run, "signal", "interrupt"),
@@ -260,11 +321,19 @@ describe("a control input, handled beside the order", () => {
 					const {signal} = started.run.mailbox().inputs;
 					return signal.length === 0 && signal.waiting === 1;
 				};
-				while (!settled()) yield* Effect.sleep("1 millis");
+
+				while (!settled()) {
+					yield* Effect.sleep("1 millis");
+				}
+
 				const asleep = started.run.mailbox();
 				yield* Deferred.succeed(go, undefined);
 				const word = yield* Fiber.join(waiting);
-				while (handled < 17) yield* Effect.sleep("1 millis");
+
+				while (handled < 17) {
+					yield* Effect.sleep("1 millis");
+				}
+
 				started.close("signal");
 				const ended = yield* started.run.ended;
 				expect([...new Set(words)]).toEqual(["queued"]);
@@ -296,7 +365,11 @@ describe("a control input, handled beside the order", () => {
 					}),
 			});
 			const started = yield* start(broken, {});
-			if (started.kind !== "running") return yield* Effect.die("not started");
+
+			if (started.kind !== "running") {
+				return yield* Effect.die("not started");
+			}
+
 			yield* tell(started.run, "line", 1);
 			yield* tell(started.run, "signal", "interrupt");
 			const ended = yield* started.run.ended;
@@ -325,8 +398,15 @@ describe("serving ends", () => {
 			Effect.gen(function* () {
 				const said: number[] = [];
 				const started = yield* start(first, {}, {said: (n) => said.push(n)});
-				if (started.kind !== "running") return null;
-				for (const n of numbers(5)) yield* tell(started.run, n % 2 === 0 ? "b" : "a", n);
+
+				if (started.kind !== "running") {
+					return null;
+				}
+
+				for (const n of numbers(5)) {
+					yield* tell(started.run, n % 2 === 0 ? "b" : "a", n);
+				}
+
 				return {ended: yield* started.run.ended, said};
 			}).pipe(Effect.scoped),
 		);
@@ -354,7 +434,11 @@ describe("serving ends", () => {
 			Effect.gen(function* () {
 				const heard: string[] = [];
 				const started = yield* start(twice, {}, {said: (s) => heard.push(s)});
-				if (started.kind !== "running") return null;
+
+				if (started.kind !== "running") {
+					return null;
+				}
+
 				yield* tell(started.run, "prompt", "p1");
 				yield* tell(started.run, "note", "n1");
 				started.close("prompt");
@@ -383,14 +467,26 @@ describe("serving ends", () => {
 				const heard: string[] = [];
 				// The first start: one job, then the starter closes jobs, and the run ends on it.
 				const one = yield* start(restored, {}, {said: (s) => heard.push(s)}, keeping);
-				if (one.kind !== "running") return null;
+
+				if (one.kind !== "running") {
+					return null;
+				}
+
 				yield* tell(one.run, "jobs", "j1");
-				while (heard.length < 1) yield* Effect.sleep("1 millis");
+
+				while (heard.length < 1) {
+					yield* Effect.sleep("1 millis");
+				}
+
 				one.close("jobs");
 				const first = yield* one.run.ended;
 				// The next start under the same id: jobs is closed from its first instant.
 				const two = yield* start(restored, {}, {said: (s) => heard.push(s)}, keeping);
-				if (two.kind !== "running") return null;
+
+				if (two.kind !== "running") {
+					return null;
+				}
+
 				const told = yield* tell(two.run, "jobs", "j2");
 				return {first: first.kind, told, second: yield* two.run.ended, heard};
 			}).pipe(Effect.scoped),
@@ -463,10 +559,18 @@ describe("pipes into the one mailbox", () => {
 						),
 				});
 				const target = yield* start(keeper, {});
-				if (target.kind !== "running") return yield* Effect.die("not started");
+
+				if (target.kind !== "running") {
+					return yield* Effect.die("not started");
+				}
+
 				yield* tell(target.run, "note", "before");
 				const source = yield* pipe({program: counts, flags: {}}, "n", target, "n");
-				if (source.kind !== "running") return yield* Effect.die("not piped");
+
+				if (source.kind !== "running") {
+					return yield* Effect.die("not piped");
+				}
+
 				const from = yield* source.run.ended;
 				const to = yield* target.run.ended;
 				expect({from, to}).toEqual({
@@ -509,15 +613,28 @@ describe("pipes into the one mailbox", () => {
 						),
 				});
 				const target = yield* start(sink, {});
-				if (target.kind !== "running") return yield* Effect.die("not started");
+
+				if (target.kind !== "running") {
+					return yield* Effect.die("not started");
+				}
+
 				const source = yield* pipe({program: relay, flags: {}}, "n", target, "n");
-				if (source.kind !== "running") return yield* Effect.die("not piped");
+
+				if (source.kind !== "running") {
+					return yield* Effect.die("not piped");
+				}
+
 				for (const n of numbers(5)) {
 					yield* tell(source.run, "n", n);
+
 					// The relay's send lands in the sink's mailbox before the next note is told.
-					while (target.run.mailbox().inputs.n.length < n + 1) yield* Effect.sleep("1 millis");
+					while (target.run.mailbox().inputs.n.length < n + 1) {
+						yield* Effect.sleep("1 millis");
+					}
+
 					yield* tell(target.run, "note", `note ${n}`);
 				}
+
 				source.close("n");
 				yield* Deferred.succeed(go, undefined);
 				yield* target.run.ended;

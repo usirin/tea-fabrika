@@ -33,6 +33,7 @@ const ticket = fc.stringMatching(/^[0-9]{1,12}$/);
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,24}$/);
 const filename = fc.stringMatching(/^[a-z][a-z0-9_-]{0,16}$/);
 const role = fc.constantFrom(...ROLES);
+
 const anyNote = fc.record({
 	_tag: fc.constant("attested" as const),
 	step: role,
@@ -43,6 +44,7 @@ const anyNote = fc.record({
 	key: fc.string(),
 	sig: fc.string(),
 });
+
 const anyLink = fc.record({
 	_tag: fc.constant("attested" as const),
 	step: fc.constantFrom(...ROLES, "person" as const),
@@ -62,7 +64,9 @@ const anyLink = fc.record({
 	squash: sha,
 	keys: sha,
 });
+
 const signed = (note: Note, signer: Role | null = note.step) => ({note, signer});
+
 const commit = (n: Note, paths: string[] = []): Commit => ({
 	sha: n.to,
 	tree: n.to,
@@ -70,6 +74,7 @@ const commit = (n: Note, paths: string[] = []): Commit => ({
 	paths,
 	signed: signed(n),
 });
+
 const pr = (commits: Commit[], more: Partial<PullRequest> = {}): PullRequest => ({
 	head: "head",
 	containsBase: true,
@@ -78,6 +83,7 @@ const pr = (commits: Commit[], more: Partial<PullRequest> = {}): PullRequest => 
 	notes: commits.flatMap((c) => (c.signed === null ? [] : [c.signed])),
 	...more,
 });
+
 const EXAM = examMatcher([
 	{glob: "exam-paths.json", reason: ""},
 	{glob: "boundary-rules.json", reason: ""},
@@ -86,15 +92,19 @@ const EXAM = examMatcher([
 	{glob: "next/**/*.test.ts", reason: ""},
 	{glob: "fixtures/next/**", reason: ""},
 ]);
+
 const answers = (p: PullRequest) => check(p, EXAM).answers;
 const DONE = {_tag: "done" as const};
+
 const stuck = (reason: string, sha: string, more: object = {}) => ({
 	_tag: "stuck",
 	reason,
 	sha,
 	...more,
 });
+
 const ask = (paths: string[]): Answer => ({_tag: "ask", who: "owner", for: "exam_read", paths});
+
 const examPaths = fc
 	.uniqueArray(filename, {minLength: 1, maxLength: 8})
 	.map((names) => names.map((name) => `next/${name}.test.ts`));
@@ -152,8 +162,9 @@ describe("decoders", () => {
 					JSON.stringify({...n, from: n.from.slice(0, length)}),
 					JSON.stringify({...n, to: `${n.to}\n${text}`}),
 					JSON.stringify({...n, sig: undefined}),
-				])
+				]) {
 					expect(decodeNote(bad)).toEqual(Option.none());
+				}
 			}),
 			runs,
 		);
@@ -198,8 +209,10 @@ const key = fc
 		maxLength: 43,
 	})
 	.map((chars) => `AAAAC3NzaC1lZDI1NTE5AAAAI${chars.join("")}`);
+
 const line = (principal: string, key: string, ns = "fabrika-step") =>
 	`${principal} namespaces="${ns}" ssh-ed25519 ${key}`;
+
 const keyFile = fc
 	.tuple(
 		fc.uniqueArray(key, {minLength: 6, maxLength: 12}),
@@ -262,6 +275,7 @@ describe("keysProblem (p87, p87b)", () => {
 					`${person}D`,
 					`build oops${JSON.stringify(text)}`,
 				];
+
 				for (const bad of badLines) {
 					const lines = [...file.lines];
 					lines.splice(at % lines.length, 0, bad);
@@ -292,7 +306,10 @@ describe("keysProblem (p87, p87b)", () => {
 						[...steps, person, line(`person:${bad}`, file.keys[4]!, "git")].join("\n"),
 					),
 				];
-				for (const text of files) expect(keysProblem(text)).toEqual(expect.stringMatching(/\S/));
+
+				for (const text of files) {
+					expect(keysProblem(text)).toEqual(expect.stringMatching(/\S/));
+				}
 			}),
 			runs,
 		);
@@ -309,6 +326,7 @@ describe("exam paths and scope", () => {
 				fc.integer({min: 0, max: 32}),
 				(name, dirs, control) => {
 					const folder = dirs.length === 0 ? "" : `${dirs.join("/")}/`;
+
 					for (const path of [
 						"exam-paths.json",
 						"boundary-rules.json",
@@ -318,8 +336,10 @@ describe("exam paths and scope", () => {
 						`next/${folder}.${name}/${name}.test.ts`,
 						`fixtures/next/${folder}${name}`,
 						`docs/${name}${String.fromCharCode(control === 32 ? 127 : control)}.md`,
-					])
+					]) {
 						expect(EXAM(path)).toBe(true);
+					}
+
 					for (const path of [
 						`next/${folder}${name}.ts`,
 						`next/${name}.test.tsx`,
@@ -328,8 +348,9 @@ describe("exam paths and scope", () => {
 						`fixtures/nextx/${name}`,
 						"exam-pathsxjson",
 						`docs/${name}.md`,
-					])
+					]) {
 						expect(EXAM(path)).toBe(false);
+					}
 				},
 			),
 			runs,
@@ -367,6 +388,7 @@ describe("exam paths and scope", () => {
 					);
 					expect(list.every((row) => row.reason.length > 0)).toBe(true);
 					const isExam = examMatcher(list);
+
 					for (const path of [
 						`next/apps/fabrika/src/exam/${name}.ts`,
 						`next/${name}.test.ts`,
@@ -375,8 +397,9 @@ describe("exam paths and scope", () => {
 						`fixtures/next/${name}`,
 						"allowed_signers",
 						"exam-paths.json",
-					])
+					]) {
 						expect(isExam(path)).toBe(true);
+					}
 				},
 			),
 			runs,
@@ -425,14 +448,17 @@ describe("check (p83 to p86)", () => {
 				const n = notes[0]!;
 				const c = commit(n, paths);
 				const wrongRole = ROLES.find((step) => step !== n.step)!;
+
 				for (const bad of [
 					{...c, signed: null},
 					{...c, signed: signed(n, null)},
 					{...c, signed: signed(n, wrongRole)},
 					{...c, signed: signed({...n, from: n.to})},
 					{...c, signed: signed({...n, to: n.from})},
-				])
+				]) {
 					expect(answers(pr([bad], {changed: []}))).toEqual([stuck("unsigned_commit", c.sha)]);
+				}
+
 				const unsigned = notes.map((n) => ({...commit(n), signed: null}));
 				expect(answers(pr(unsigned))).toEqual(unsigned.map((c) => stuck("unsigned_commit", c.sha)));
 			}),
@@ -455,6 +481,7 @@ describe("check (p83 to p86)", () => {
 		fc.assert(
 			fc.property(anyNote, examPaths, filename, (n, paths, name) => {
 				const sorted = [...paths].sort();
+
 				for (const step of ROLES) {
 					const c = commit({...n, step}, [`next/${name}.ts`, ...paths]);
 					expect(answers(pr([c]))).toEqual(
@@ -526,10 +553,13 @@ describe("newest links (p89)", () => {
 				const c = commit(n);
 				const newer = signed({...n, to: trees[2]!, version: n.version + 1});
 				const tie = signed({...n, to: trees[2]!});
-				for (const extra of [newer, tie])
+
+				for (const extra of [newer, tie]) {
 					expect(answers(pr([c], {notes: [signed(n), extra]}))).toEqual([
 						stuck("stale_link", c.sha, {step}),
 					]);
+				}
+
 				const older = commit({...notes[1]!, step, version: n.version});
 				const newest = commit({...n, version: n.version + 1});
 				expect(answers(pr([newest, older]))).toEqual([
@@ -596,6 +626,7 @@ const logged = (n: Note, base: string, squash: string): Logged => ({
 	},
 	signer: n.step,
 });
+
 const chainData = fc
 	.tuple(route, fc.uniqueArray(sha, {minLength: 3, maxLength: 3}))
 	.filter(([r, ids]) => !r.trees.includes(ids[2]!))
@@ -661,10 +692,13 @@ describe("chain (p86 and p89 after merge)", () => {
 						...d.rows,
 					],
 				];
-				for (const rows of bad)
+
+				for (const rows of bad) {
 					expect(chain(d.squash, rows, d.trees, d.placed)).toEqual([
 						stuck("broken_chain", d.squash),
 					]);
+				}
+
 				for (const missing of [d.base, d.squash]) {
 					const trees = new Map(d.trees);
 					trees.delete(missing);
@@ -713,10 +747,12 @@ describe("chain (p86 and p89 after merge)", () => {
 				for (const placed of [
 					{...d.placed, onMain: false},
 					{...d.placed, before: new Set<string>()},
-				])
+				]) {
 					expect(chain(d.squash, d.rows, d.trees, placed)).toEqual([
 						stuck("broken_chain", d.squash),
 					]);
+				}
+
 				const rows = d.rows.map((r, i) =>
 					i === at % d.rows.length ? {...r, link: {...r.link, base: d.other}} : r,
 				);
@@ -734,11 +770,13 @@ describe("chain (p86 and p89 after merge)", () => {
 				expect(chain(d.squash, [...d.rows, extra], d.trees, d.placed)).toEqual([
 					stuck("stale_link", d.squash, {step: n.step}),
 				]);
+
 				for (const noise of [
 					{...extra, signer: null},
 					{...extra, link: {...extra.link, ticket: `${n.ticket}0`}},
-				])
+				]) {
 					expect(chain(d.squash, [noise, ...d.rows], d.trees, d.placed)).toEqual([DONE]);
+				}
 			}),
 			runs,
 		);
@@ -807,6 +845,10 @@ describe("trusted config files", () => {
 				{ "glob": "next/**/*.test.ts", "why": "next/'s tests" },
 				{ "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
 				{ "glob": "next/packages/libfabrika/src/id.test-support.ts", "why": "the generated ID fixtures" },
+				{
+					"glob": "next/apps/fabrika/src/port.test-support.ts",
+					"why": "the port a stage test hands to dev.ts"
+				},
 				{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
 				{ "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
 				{ "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },

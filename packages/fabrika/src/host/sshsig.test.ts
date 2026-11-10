@@ -5,7 +5,9 @@ import {keyFileOf, keyFileText, keyLineOf, keyOnly, parse, sign, verify} from ".
 // away. Only its public half is here. `ssh-keygen -Y verify` said: Good "fabrika-ledger" signature.
 const OPENSSH_KEY =
 	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIETuSGZxryszIPBvnpi+QdpZR0FTah8q8SCLcnheuzi8 test key";
+
 const OPENSSH_MESSAGE = "fabrika ledger login\nledger: http://127.0.0.1/demo\n";
+
 const OPENSSH_SIGNATURE = `-----BEGIN SSH SIGNATURE-----
 U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgRO5IZnGvKzMg8G+emL5B2llHQV
 NqHyrxIItyeF67OLwAAAAOZmFicmlrYS1sZWRnZXIAAAAAAAAABnNoYTUxMgAAAFMAAAAL
@@ -119,7 +121,11 @@ describe("an OpenSSH key file", () => {
 		])) as CryptoKeyPair;
 		const raw = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
 		const read = await keyFileOf(await keyFileText(pair, "alice@laptop"));
-		if (!read.ok) throw new Error(read.why);
+
+		if (!read.ok) {
+			throw new Error(read.why);
+		}
+
 		const back = new Uint8Array(await crypto.subtle.exportKey("raw", read.pair.publicKey));
 		expect(keyLineOf(back)).toBe(keyLineOf(raw));
 		const sig = await sign("hello", NS, read.pair.privateKey, back);

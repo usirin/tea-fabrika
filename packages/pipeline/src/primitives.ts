@@ -47,6 +47,7 @@ export const gather = <
 export type Intended<I> = I & {readonly intent: string};
 
 type Struct = Schema.Struct<Schema.Struct.Fields>;
+
 type ActSpec<In, O, T extends readonly string[]> = {
 	readonly input: In;
 	readonly ok: Plain<O>;
@@ -104,7 +105,11 @@ export function act(
 	spec: ActSpec<(Struct & Plain<CmdInput>) | z.ZodObject, unknown, readonly string[]>,
 ) {
 	const {input, ok, err} = spec;
-	if (!Schema.isSchema(input)) return actZod(name, {input, ok, err});
+
+	if (!Schema.isSchema(input)) {
+		return actZod(name, {input, ok, err});
+	}
+
 	const withIntent = {input: intended(input), ok, err};
 	// zod: the second branch, for an Effect `input` beside a zod `ok`.
 	return isEffectSpec(withIntent) ? Cmd.make(name, withIntent) : zodCmd(name, withIntent);
@@ -214,7 +219,11 @@ export function createJudge<const N extends string, const C extends string>(conf
 					onFailure: (failure) => jevCallThrew(failure.cause),
 				}),
 			);
-			if (outcome._tag === "Err") return yield* Effect.fail({_tag: "judge_failed" as const});
+
+			if (outcome._tag === "Err") {
+				return yield* Effect.fail({_tag: "judge_failed" as const});
+			}
+
 			const {choice, confidence} = outcome.value.answers.answer;
 			return {choice: choice as C, confidence};
 		});
@@ -259,7 +268,11 @@ export function createYesNoJudge<const N extends string>(config: {
 					onFailure: (failure) => jevCallThrew(failure.cause),
 				}),
 			);
-			if (outcome._tag === "Err") return yield* Effect.fail({_tag: "judge_failed" as const});
+
+			if (outcome._tag === "Err") {
+				return yield* Effect.fail({_tag: "judge_failed" as const});
+			}
+
 			return {yes: outcome.value.answers.answer.noul};
 		});
 

@@ -26,12 +26,18 @@ export const leaderOf = (name: string): Effect.Effect<string, never, Ledger> =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		let at = name;
+
 		for (let depth = 0; depth < DEEPEST; depth++) {
 			const info = yield* ledger
 				.processInfo(at)
 				.pipe(Effect.retry(Schedule.spaced(Duration.millis(100))), Effect.orDie);
-			if (info === null || info.parent === null) return at;
+
+			if (info === null || info.parent === null) {
+				return at;
+			}
+
 			at = info.parent;
 		}
+
 		return yield* Effect.die(new Error(`${name} has more than ${DEEPEST} parents`));
 	});

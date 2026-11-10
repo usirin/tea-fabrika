@@ -3,6 +3,7 @@ import "../../lead/scripts/leakgrep.sh?raw";
 import "./exam.py?raw";
 import "../../plan/scripts/plancheck.sh?raw";
 import "../../lead/scripts/box.sh?raw";
+import "../../lead/scripts/keepruns.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../lead/scripts/drive.ts?raw";
 import "../../lead/scripts/fieldrow.py?raw";
@@ -40,8 +41,10 @@ const root = resolve(import.meta.dirname, "../../../..");
 const script = join(import.meta.dirname, "stepcommit.sh");
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
 const options = {seed: 321, numRuns: 3, endOnFailure: true};
+
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	const errors: Error[] = [];
+
 	for (const value of values) {
 		try {
 			check(value);
@@ -54,31 +57,41 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
 			);
 		}
 	}
-	if (errors.length) throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
+
+	if (errors.length) {
+		throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
+	}
 };
+
 type Owner = "tests" | "build" | "lead" | "mutation";
+
 /** gh's answer to stepcommit's open-PR query. */
 const open = (nodes: unknown[], totalCount = nodes.length) => ({
 	data: {repository: {pullRequests: {totalCount, nodes}}},
 });
+
 const put = (path: string, value: string) => {
 	mkdirSync(dirname(path), {recursive: true});
 	writeFileSync(path, value);
 };
+
 const withRepo = (owners: Array<[string, string]>, f: (r: Repo) => void) => {
 	const r = new Repo(owners);
+
 	try {
 		f(r);
 	} finally {
 		rmSync(r.dir, {recursive: true, force: true});
 	}
 };
+
 class Repo {
 	readonly dir = mkdtempSync(join(tmpdir(), "sc321-"));
 	readonly boxes = join(this.dir, "boxes");
 	readonly repo = join(this.boxes, "one");
 	readonly env: NodeJS.ProcessEnv;
 	readonly base: string;
+
 	constructor(owners: Array<[string, string]>) {
 		const bin = join(this.dir, "bin");
 		mkdirSync(this.repo, {recursive: true});
@@ -132,14 +145,17 @@ process.stdout.write(prs);
 		);
 		put(join(this.repo, "exam-paths.json"), readFileSync(join(root, "exam-paths.json"), "utf8"));
 		put(join(this.repo, ".oxfmtrc.json"), '{"useTabs":true,"printWidth":100}\n');
+
 		for (const path of [
 			"src/owned.ts",
 			"src/owned.tsx",
 			"src/foreign.ts",
 			"src/old.ts",
 			".agents/skills/lead/scripts/fixture.test.ts",
-		])
+		]) {
 			put(join(this.repo, path), 'export const value = "before";\n');
+		}
+
 		this.git("add", "--all");
 		this.git("commit", "-q", "-m", "base");
 		this.base = this.git("rev-parse", "HEAD").trim();
@@ -155,6 +171,7 @@ process.stdout.write(prs);
 			`ticket: 321\nbranch: fabrikalfa/one\nbase: ${this.base}\nplan: ${plan}\nplan-sha256: ${hash}\n`,
 		);
 	}
+
 	call(cmd: string, args: string[]) {
 		const r = spawnSync(cmd, args, {
 			cwd: this.repo,
@@ -165,11 +182,13 @@ process.stdout.write(prs);
 		expect(r.error).toBeUndefined();
 		return {code: r.status, text: r.stdout + r.stderr, stdout: r.stdout};
 	}
+
 	git(...args: string[]) {
 		const r = this.call("/usr/bin/git", args);
 		expect(r.code, r.text).toBe(0);
 		return r.stdout;
 	}
+
 	commit(step: Owner, paths: string[], only = false) {
 		return this.call("sh", [
 			script,
@@ -180,9 +199,11 @@ process.stdout.write(prs);
 			...paths,
 		]);
 	}
+
 	changed(path: string, text = 'export const value = "changed";\n') {
 		put(join(this.repo, path), text);
 	}
+
 	signs(): string[][] {
 		return existsSync(join(this.dir, "calls"))
 			? readFileSync(join(this.dir, "calls"), "utf8")
@@ -192,12 +213,14 @@ process.stdout.write(prs);
 					.filter((a: string[]) => a[0] === "commits")
 			: [];
 	}
+
 	asked(): boolean {
 		return (
 			existsSync(join(this.dir, "calls")) &&
 			readFileSync(join(this.dir, "calls"), "utf8").includes('["gh",')
 		);
 	}
+
 	/** An open PR on `branch` whose one commit carries a note for `ticket`. */
 	openPr(branch: string, ticket: string) {
 		this.git(
@@ -233,12 +256,20 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 			withRepo([["src/owned.ts", "tests"]], (r) => {
 				const facts = readFileSync(join(r.boxes, "state/one.box"), "utf8");
 				const stale = facts.replace(/plan-sha256: .*/, `plan-sha256: ${"0".repeat(64)}`);
-				for (const name of ["a", "b", "c", "zz"]) put(join(r.boxes, `state/${name}.box`), stale);
-				if (kind !== "own") rmSync(join(r.boxes, "state/one.box"));
+
+				for (const name of ["a", "b", "c", "zz"]) {
+					put(join(r.boxes, `state/${name}.box`), stale);
+				}
+
+				if (kind !== "own") {
+					rmSync(join(r.boxes, "state/one.box"));
+				}
+
 				if (kind === "live-other") {
 					mkdirSync(join(r.boxes, "live"));
 					put(join(r.boxes, "state/live.box"), facts);
 				}
+
 				r.changed("src/owned.ts");
 				const got = r.commit("tests", ["src/owned.ts"]);
 				// stale-only: no live box on the branch, so there is no plan to check, as outside a box.
@@ -304,6 +335,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 								r.changed(path);
 								const got = r.commit(step, [(dot ? "./" : "") + path]);
 								expect(got.code).not.toBeNull();
+
 								if (kind === "owned") {
 									expect(got.code, got.text).toBe(0);
 									expect(r.git("show", "--format=", "--name-only", "HEAD").trim()).toBe(path);
@@ -348,6 +380,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 								r.changed(kind === "escape" ? "src/foreign.ts" : path);
 								const got = r.commit(step, [path]);
 								expect(got.code).not.toBeNull();
+
 								if (kind === "under" || kind === "deeper") {
 									expect(got.code, got.text).toBe(0);
 									expect(r.git("show", "--format=", "--name-only", "HEAD").trim()).toBe(path);
@@ -425,6 +458,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 						);
 						const got = r.commit("tests", ["src/owned.ts"]);
 						expect(got.code, got.text).toBe(formatted ? 0 : 1);
+
 						if (!formatted) {
 							expect(got.text).toMatch(/not_formatted|format/);
 							expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
@@ -481,8 +515,10 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 					(r) => {
 						r.changed("src/owned.ts");
 						let paths = ["src/owned.ts", "src/foreign.ts"];
-						if (kind === "mixed") r.changed("src/foreign.ts");
-						else if (kind === "delete") {
+
+						if (kind === "mixed") {
+							r.changed("src/foreign.ts");
+						} else if (kind === "delete") {
 							rmSync(join(r.repo, "src/old.ts"));
 							paths = ["src/old.ts"];
 						} else {
@@ -491,6 +527,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 							r.git("restore", "--staged", "--", from, "src/new.ts");
 							paths = [from, "src/new.ts"];
 						}
+
 						const got = r.commit("build", paths);
 						expect(got.code, got.text).not.toBe(0);
 						expect(got.text).toMatch(/not_owner|owner|exam/);
@@ -531,6 +568,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 								);
 								const got = r.commit("build", [kind === "folder" ? "src" : path], only);
 								expect(got.code).not.toBeNull();
+
 								if (kind === "owned") {
 									expect(got.code, got.text).toBe(0);
 									expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
@@ -594,10 +632,15 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
 					same: "fabrikalfa/one",
 					"own-wip": "fabrikalfa/one-wip",
 				};
-				if (where !== "none") r.openPr(head[where], ticket);
+
+				if (where !== "none") {
+					r.openPr(head[where], ticket);
+				}
+
 				r.changed("src/owned.ts");
 				const got = r.commit(step, ["src/owned.ts"], only);
 				const refused = step === "lead" && !only && where === "other" && ticket === "321";
+
 				if (refused) {
 					expect(got.code, got.text).toBe(5);
 					expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/lane");
@@ -609,6 +652,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
 					expect(got.code, got.text).toBe(0);
 					expect(r.signs()).toHaveLength(only ? 0 : 1);
 				}
+
 				expect(r.asked()).toBe(step === "lead" && !only);
 			}),
 		);

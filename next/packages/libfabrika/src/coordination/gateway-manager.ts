@@ -11,11 +11,13 @@ const Connection = Schema.Struct({
 	at: Schema.Int,
 });
 type Connection = typeof Connection.Type;
+
 const Online = Schema.Struct({
 	...Connection.fields,
 	state: Schema.Literals(["online", "away", "unknown"]),
 });
 type Online = typeof Online.Type;
+
 type Adapter<P, A> = {
 	readonly probe: (
 		gateway: string,
@@ -23,6 +25,7 @@ type Adapter<P, A> = {
 	) => Effect.Effect<number | null, LedgerError, P>;
 	readonly admitted: (key: string) => Effect.Effect<boolean, LedgerError, A>;
 };
+
 const decodeConnection = Schema.decodeUnknownSync(Connection);
 
 // T6's 30-second ping tolerates a missing reply before the 75-second away boundary.
@@ -102,12 +105,15 @@ export class GatewayManager extends Context.Service<
 					}),
 					online: Effect.fn("gateway.online")(function* (key: string) {
 						yield* Effect.annotateCurrentSpan(short({"fab.gateway.key": key}));
+
 						if (
 							!(yield* Effect.suspend(() => adapter.admitted(key)).pipe(
 								Effect.provideContext(context),
 							))
-						)
+						) {
 							return [];
+						}
+
 						const connections = yield* stored(() =>
 							sql
 								.exec(`SELECT * FROM process_gateways WHERE "key" = ? ORDER BY client`, key)

@@ -9,9 +9,13 @@ import type {Sql} from "./referee.ts";
 import {nodeSql} from "./sqlite.ts";
 
 const opened: Array<DatabaseSync> = [];
+
 afterEach(() => {
-	for (const db of opened.splice(0)) db.close();
+	for (const db of opened.splice(0)) {
+		db.close();
+	}
 });
+
 const line = (n: number): Line => ({
 	by: "SHA256:brain",
 	for: "person-a",
@@ -23,6 +27,7 @@ const line = (n: number): Line => ({
 	_tag: "fact",
 	body: {n},
 });
+
 const setup = (
 	ring: (to: string, stream: string, rev: number) => Effect.Effect<void, LedgerError> = () =>
 		Effect.void,
@@ -35,12 +40,19 @@ const setup = (
 		...backend,
 		exec: (query, ...params) => {
 			if (/^\s*INSERT\s+INTO\s+entries\b/i.test(query)) {
-				if (fault.after === 0) throw new Error("planted SQLITE_FULL");
-				if (fault.after !== null) fault.after--;
+				if (fault.after === 0) {
+					throw new Error("planted SQLITE_FULL");
+				}
+
+				if (fault.after !== null) {
+					fault.after--;
+				}
+
 				const rows = backend.exec(query, ...params);
 				fault.passed++;
 				return rows;
 			}
+
 			return backend.exec(query, ...params);
 		},
 	};
@@ -151,6 +163,7 @@ describe("p79, LedgerTransaction", () => {
 			),
 		{arbitrary: {seed: 119120, runs: 12}},
 	);
+
 	for (const reason of ["id_reused", "seen_ahead", "bad_trace"] as const) {
 		it.effect.prop(
 			`plant, keep the first append on ${reason}: refusal aborts the entire turn`,
@@ -187,6 +200,7 @@ describe("p79, LedgerTransaction", () => {
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
 	}
+
 	it.effect(
 		"plant, reappend on retry: the original placings return without new rows or rings",
 		() => {
@@ -280,7 +294,9 @@ describe("p79, LedgerTransaction", () => {
 		return Effect.gen(function* () {
 			const tx = yield* LedgerTransaction;
 			yield* tx.transact((turn) => {
-				for (let n = 1; n <= 260; n++) turn.append("a", `m${n}`, line(n));
+				for (let n = 1; n <= 260; n++) {
+					turn.append("a", `m${n}`, line(n));
+				}
 			});
 			expect(yield* tx.transact((turn) => [...turn.read("a", 0)].map((row) => row.rev))).toEqual(
 				Array.from({length: 260}, (_, i) => i + 1),

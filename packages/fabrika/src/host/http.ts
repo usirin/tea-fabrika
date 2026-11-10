@@ -104,6 +104,7 @@ const doorbell = (
 				});
 				const pull = yield* Socket.readerString(socket);
 				yield* Queue.offer(out, undefined);
+
 				for (;;) {
 					yield* pull;
 					yield* Queue.offer(out, undefined);
@@ -153,8 +154,11 @@ export const layerHttp = (o: HttpOptions) =>
 						first.status === 401 && renew !== null
 							? yield* send(method, args, yield* renew(token))
 							: first;
-					if (res.status < 200 || res.status >= 300)
+
+					if (res.status < 200 || res.status >= 300) {
 						return yield* Effect.fail(new Error(`the ledger answered ${res.status}: ${res.text}`));
+					}
+
 					return yield* Effect.try(() => JSON.parse(res.text) as unknown);
 				}).pipe(
 					Effect.mapError(
@@ -218,8 +222,11 @@ export const recordsHttp = (o: HttpOptions): Effect.Effect<RecordCalls, never, S
 					first.status === 401 && renew !== null
 						? yield* send(trace, call, yield* renew(token))
 						: first;
-				if (res.status < 200 || res.status >= 300)
+
+				if (res.status < 200 || res.status >= 300) {
 					return yield* Effect.fail(new Error(`the record answered ${res.status}: ${res.text}`));
+				}
+
 				return yield* Effect.try(() => JSON.parse(res.text) as unknown);
 			}).pipe(
 				Effect.mapError(
@@ -286,10 +293,12 @@ export const doorOf = (o: {readonly url: string; readonly ledger: string}) => {
 			const req = token === undefined ? base : HttpClientRequest.bearerToken(base, token);
 			const res = yield* http.execute(req);
 			const json: unknown = yield* res.json;
+
 			if (res.status < 200 || res.status >= 300) {
 				const why = (json as {error?: unknown})?.error;
 				return yield* new DoorRefused({status: res.status, why: String(why ?? "")});
 			}
+
 			return yield* Schema.decodeUnknownEffect(schema)(json);
 		}).pipe(
 			Effect.scoped,
@@ -397,8 +406,14 @@ export const renewing = (
 			SynchronizedRef.modifyEffect(
 				held,
 				(h): Effect.Effect<readonly [Exit.Exit<Redacted.Redacted<string>, DoorRefused>, Held]> => {
-					if (h.kind === "refused") return Effect.succeed([Exit.fail(h.refused), h]);
-					if (h.session.token !== stale) return Effect.succeed([Exit.succeed(h.session.token), h]);
+					if (h.kind === "refused") {
+						return Effect.succeed([Exit.fail(h.refused), h]);
+					}
+
+					if (h.session.token !== stale) {
+						return Effect.succeed([Exit.succeed(h.session.token), h]);
+					}
+
 					return login.pipe(
 						Effect.map((s) => [Exit.succeed(s.token), {kind: "live", session: s}] as const),
 						Effect.catch((e) => {
@@ -411,7 +426,11 @@ export const renewing = (
 		const ahead = Effect.gen(function* () {
 			for (;;) {
 				const h = yield* SynchronizedRef.get(held);
-				if (h.kind === "refused") return;
+
+				if (h.kind === "refused") {
+					return;
+				}
+
 				const left = h.session.expires - (yield* Clock.currentTimeMillis);
 				yield* Effect.sleep(Math.max(LEAST_MS, left - Math.min(EARLY_MS, left / 2)));
 				yield* Effect.ignore(renew(h.session.token));

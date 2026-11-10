@@ -9,15 +9,18 @@ import {programs} from "./table.ts";
 export interface Env extends Bindings {
 	readonly STAGE: string;
 }
+
 export const settings = Effect.fn("stage.settings")(function* (env: Env) {
 	return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(env.STAGE).pipe(
 		Effect.mapError(() => new LedgerError({reason: "bad_row"})),
 	);
 });
+
 export const gatewayRuntime = (ctx: DurableObjectState, env: Env) =>
 	ManagedRuntime.make(
 		Layer.unwrap(settings(env).pipe(Effect.map((config) => gatewayLayer(ctx, env, config)))),
 	);
+
 export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
 	ManagedRuntime.make(
 		Layer.unwrap(

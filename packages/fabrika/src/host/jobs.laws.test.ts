@@ -24,6 +24,7 @@ type Machine = typeof jobsMachine;
 type Msg = MsgOf<Machine>;
 
 const run = fc.constantFrom("r1", "r2", "r3", "r4", "r5", "r6");
+
 const stage: fc.Arbitrary<StageRecord> = fc.record({
 	program: fc.constantFrom("counter", "seq", "say"),
 	flags: fc.constant({}),
@@ -31,6 +32,7 @@ const stage: fc.Arbitrary<StageRecord> = fc.record({
 	wire: fc.constant(null),
 	ended: fc.constant(false),
 });
+
 const n = fc.integer({min: 1, max: 4});
 /** Two tiles' tsh, and a tsh with no name. */
 const owner = fc.constantFrom("t1", "t2", null);
@@ -62,11 +64,13 @@ const table: MsgArbitraryTable<Msg> = {
 		why: fc.constantFrom("wrong ticket", null),
 	}),
 };
+
 /** Long lists, so jobs pile up, leave and come back. Not tea's `arbMsgSequence`: its lists come out about ten long. */
 const lists = fc.array(arbMsg(table, {weights: {began: 3, stage_ended: 4, detached: 1}}), {
 	maxLength: 40,
 	size: "max",
 });
+
 const OPTS = {numRuns: 400, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
 
@@ -89,6 +93,7 @@ const everyStep = (name: string, holds: (step: JobStep) => boolean): Law => ({
 
 const byNumber = (s: Jobs, at: number): Job | undefined => s.jobs.find((job) => job.n === at);
 const live = (job: Job): boolean => job.stages.some((st) => !st.ended);
+
 /** Would this run's end end the job: it is in the job, and every other program has ended? */
 const lastOf = (job: Job, run: string): boolean =>
 	job.stages.some((st) => st.run === run) && job.stages.every((st) => st.ended || st.run === run);
@@ -136,7 +141,10 @@ const numbersOnce = everyStep(
 const numbered = everyStep(
 	"a line that begins is a new job at the end, running, numbered the table's next, and next goes up by one; nothing else changes, and no other Msg moves next",
 	({prev, msg, next}) => {
-		if (msg.type !== "began") return next.next === prev.next;
+		if (msg.type !== "began") {
+			return next.next === prev.next;
+		}
+
 		const made: Job = {
 			n: prev.next,
 			text: msg.text,
@@ -167,11 +175,19 @@ const neverReused: Law = {
 				fc.property(lists, (list) => {
 					const {states, steps} = foldEvents(machine, ctx, loaded, list);
 					const had = new Set((states[0]?.jobs ?? []).map((job) => job.n));
+
 					for (const {msg, next} of steps) {
 						const made = msg.type === "began" ? next.jobs.at(-1) : undefined;
-						if (made !== undefined && had.has(made.n)) return false;
-						for (const job of next.jobs) had.add(job.n);
+
+						if (made !== undefined && had.has(made.n)) {
+							return false;
+						}
+
+						for (const job of next.jobs) {
+							had.add(job.n);
+						}
 					}
+
 					return true;
 				}),
 				OPTS,
@@ -211,8 +227,15 @@ const backgroundByAsk = everyStep(
 	({prev, msg, next}) =>
 		prev.jobs.every((job) => {
 			const now = byNumber(next, job.n);
-			if (now === undefined || now.background === job.background) return true;
-			if (msg.type === "attached") return msg.n === job.n && now.background === msg.background;
+
+			if (now === undefined || now.background === job.background) {
+				return true;
+			}
+
+			if (msg.type === "attached") {
+				return msg.n === job.n && now.background === msg.background;
+			}
+
 			return msg.type === "foreground" && msg.n === job.n && !now.background;
 		}),
 );
@@ -222,7 +245,11 @@ const ownerByAsk = everyStep(
 	({prev, msg, next}) =>
 		prev.jobs.every((job) => {
 			const now = byNumber(next, job.n);
-			if (now === undefined || now.owner === job.owner) return true;
+
+			if (now === undefined || now.owner === job.owner) {
+				return true;
+			}
+
 			return (
 				msg.type === "attached" &&
 				msg.n === job.n &&
@@ -245,9 +272,16 @@ const fgWaits = everyStep(
 const attachRuns = everyStep(
 	"attach on a detached job runs it again: same number, line and runs, every program running",
 	({prev, msg, next}) => {
-		if (msg.type !== "attached") return true;
+		if (msg.type !== "attached") {
+			return true;
+		}
+
 		const was = byNumber(prev, msg.n);
-		if (was?.state !== "detached") return true;
+
+		if (was?.state !== "detached") {
+			return true;
+		}
+
 		const now = byNumber(next, msg.n);
 		return (
 			now !== undefined &&
@@ -282,8 +316,10 @@ const keptComesBack: Law = {
 	name: "a tsh started again finds every job the last one kept, as it was",
 	check: (machine) => {
 		const [s] = machine.init(KEPT, undefined);
-		if (JSON.stringify(s) !== JSON.stringify(KEPT))
+
+		if (JSON.stringify(s) !== JSON.stringify(KEPT)) {
 			throw new Error(`came back as ${JSON.stringify(s)}`);
+		}
 	},
 };
 
@@ -317,12 +353,14 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = jobsMachine.update;
+
 /** The stages, with the programs of this run marked ended. */
 const endedIn = (stages: Job["stages"], at: string): Job["stages"] => {
 	const mark = (st: StageRecord): StageRecord => (st.run === at ? {...st, ended: true} : st);
 	const [first, ...rest] = stages;
 	return [mark(first), ...rest.map(mark)];
 };
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...jobsMachine,
@@ -335,7 +373,11 @@ const PLANTS = {
 		began: (s, m) => {
 			const [next] = real.began(s, m);
 			const made = next.jobs.at(-1);
-			if (made === undefined) return [next, []];
+
+			if (made === undefined) {
+				return [next, []];
+			}
+
 			return [{...next, jobs: [...s.jobs, {...made, n: s.jobs.length + 1}]}, []];
 		},
 	}),
@@ -347,10 +389,18 @@ const PLANTS = {
 		began: (s, m) => {
 			const [next] = real.began(s, m);
 			const made = next.jobs.at(-1);
-			if (made === undefined) return [next, []];
+
+			if (made === undefined) {
+				return [next, []];
+			}
+
 			const taken = new Set(s.jobs.map((job) => job.n));
 			let free = 1;
-			while (taken.has(free)) free += 1;
+
+			while (taken.has(free)) {
+				free += 1;
+			}
+
 			return [{jobs: [...s.jobs, {...made, n: free}], next: free + 1}, []];
 		},
 	}),
@@ -517,6 +567,7 @@ const flagged: fc.Arbitrary<StageRecord> = fc.record({
 	}),
 	ended: fc.boolean(),
 });
+
 const keptTable: MsgArbitraryTable<Msg> = {
 	...table,
 	began: arbRecordMsg("began", {
@@ -529,6 +580,7 @@ const keptTable: MsgArbitraryTable<Msg> = {
 		by: writer,
 	}),
 };
+
 const keptLists = fc.array(arbMsg(keptTable, {weights: {began: 3, stage_ended: 4, detached: 1}}), {
 	maxLength: 40,
 	size: "max",
@@ -540,6 +592,7 @@ const keepsEvery = (machine: Machine, loaded: Jobs | null, runs = 150) =>
 		fc.asyncProperty(keptLists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open(TABLE.run, null));
 			const store = handle.store(TABLE.machine, TABLE.key, Jobs);
+
 			for (const jobs of foldEvents(machine, ctx, loaded, list).states) {
 				await store.save(jobs);
 				expect(store.migrate(await store.load())).toEqual(jobs);

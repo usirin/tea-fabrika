@@ -46,6 +46,7 @@ const SENT = "2026-11-07T21:10:01.204Z";
 // hash of the code that wrote the line, both handed in by the wiring (log.ts, `Line`).
 const FOUNDER_BY = "SHA256:founder-mac";
 const FOUNDER_BUILD = "b-5e9c2a0";
+
 const FOUNDER = {
 	name: NAME,
 	keys: ["pA"],
@@ -54,29 +55,39 @@ const FOUNDER = {
 	by: FOUNDER_BY,
 	build: FOUNDER_BUILD,
 } as const;
+
 const FOUNDED: MemberEvent = {_tag: "founded", id: P, name: NAME, keys: ["pA"], window: "wA"};
 
 // Every ledger is a fresh node:sqlite file in one temp folder, removed after.
 const folder = mkdtempSync(join(tmpdir(), "p9-clients-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
+
 const fresh = (): Sql => {
 	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
 	opened.push(db);
 	return nodeSql(db);
 };
+
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
 const onSql = (sql: Sql) => Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(quiet));
+
 /** A ClientManager and the Ledger beneath it, so a test can read what was written. */
 const clientsOn = (
 	ledger: Layer.Layer<Ledger>,
 	founder: Parameters<typeof ClientManager.layer>[0] = FOUNDER,
 ) => ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
+
 const founderArb: fc.Arbitrary<Parameters<typeof ClientManager.layer>[0]> = fc.record({
 	name: fc.string(),
 	keys: fc.uniqueArray(fc.string(), {minLength: 1, maxLength: 5}),
@@ -85,7 +96,9 @@ const founderArb: fc.Arbitrary<Parameters<typeof ClientManager.layer>[0]> = fc.r
 	by: fc.string({minLength: 1}),
 	build: fc.string({minLength: 1}),
 });
+
 const leaf = fc.string().map((s) => `tab:${s}`);
+
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
 	examples: NoInfer<A>[],
@@ -118,9 +131,12 @@ const from = (over: Partial<From> = {}): From => ({
 	build: "b-7c1d073",
 	...over,
 });
+
 const entries = Ledger.use((ledger) => Stream.runCollect(ledger.read(MEMBERS, 0)));
+
 const write = (event: MemberEvent, over: Partial<From> = {}) =>
 	ClientManager.use((clients) => clients.write(event, from(over)));
+
 const members = ClientManager.use((clients) => clients.members);
 
 // ---- Events. Signatures are not checked here, so `signed` is opaque text naming its signer ----
@@ -133,7 +149,9 @@ const SAW = {
 	check: "touch",
 	has: [],
 } as const;
+
 const TOOK = {label: "Mac A", where: "Istanbul", how: "panel", check: "touch"} as const;
+
 const addSaw = (how: "sheet" | "recovery" | "device", old: "lost" | "kept" | null = null) => ({
 	how,
 	check: "touch" as const,
@@ -143,11 +161,13 @@ const addSaw = (how: "sheet" | "recovery" | "device", old: "lost" | "kept" | nul
 	kept: how === "sheet" ? ("print" as const) : null,
 	old,
 });
+
 const signed = (signer: string) => ({
 	text: `signed by ${signer}`,
 	armored: "-----SSHSIG-----",
 	signer,
 });
+
 let made = 0;
 const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
 
@@ -168,11 +188,13 @@ const granted = (
 	},
 	signed: signed(signer),
 });
+
 const revoked = (signer: string, key: string): MemberEvent => ({
 	_tag: "revoked",
 	revoke: {id: nextId("revoke"), key, for: P, to: TO, saw: TOOK, sentAt: SENT},
 	signed: signed(signer),
 });
+
 const addedDevice = (
 	signer: string,
 	key: string,
@@ -191,6 +213,7 @@ const addedDevice = (
 	},
 	signed: signed(signer),
 });
+
 const addedSheet = (signer: string, key: string): MemberEvent => ({
 	_tag: "added",
 	add: {
@@ -204,6 +227,7 @@ const addedSheet = (signer: string, key: string): MemberEvent => ({
 	},
 	signed: signed(signer),
 });
+
 const denied = (key: string, by: string): MemberEvent => ({
 	_tag: "denied",
 	id: nextId("deny"),
@@ -211,6 +235,7 @@ const denied = (key: string, by: string): MemberEvent => ({
 	saw: SAW,
 	by,
 });
+
 /** The id an event is appended under: its own, and `founded` for the founding. */
 const eventId = (event: MemberEvent): string => {
 	switch (event._tag) {
@@ -249,7 +274,11 @@ describe("p96 and p97, replay and write answers", () => {
 				});
 				const loaded = yield* Effect.exit(members);
 				expect(loaded._tag, "unknown member events are skipped").toBe("Success");
-				if (loaded._tag === "Success") expect(view(loaded.value)).toEqual(view(before));
+
+				if (loaded._tag === "Success") {
+					expect(view(loaded.value)).toEqual(view(before));
+				}
+
 				expect(yield* write(granted("pA", key))).toMatchObject({_tag: "applied"});
 				expect((yield* entries).at(-1)?.seen).toBe(2);
 			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
@@ -270,8 +299,10 @@ describe("p96 and p97, replay and write answers", () => {
 					const answer = yield* write(granted(signer, key));
 					const span = spans.filter((s) => s.name === "members.write").at(-1)!;
 					expect(span.attributes.get("fab.members.answer")).toBe(answer._tag);
-					if (answer._tag === "refused")
+
+					if (answer._tag === "refused") {
 						expect(span.attributes.get("fab.members.reason")).toBe(answer.reason);
+					}
 				}
 			}).pipe(Effect.provide(clientsOn(onSql(fresh()))), Effect.withTracer(tracer));
 		}),
@@ -296,7 +327,11 @@ const racing = (
 				append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
 					Effect.suspend(() => {
 						const before = id === hook.id ? hook.before : null;
-						if (before === null) return real.append(stream, id, line);
+
+						if (before === null) {
+							return real.append(stream, id, line);
+						}
+
 						hook.before = null;
 						return Effect.andThen(before, real.append(stream, id, line));
 					}),
@@ -484,6 +519,7 @@ describe("p96, the traced history from the plan", () => {
 				];
 				const kept: Array<MemberEvent> = [FOUNDED];
 				yield* members; // founded first, so each step below counts only its own entry
+
 				for (const [event, answer] of steps) {
 					const before = (yield* entries).length;
 					const got = yield* write(event);
@@ -491,8 +527,12 @@ describe("p96, the traced history from the plan", () => {
 					const after = yield* entries;
 					const wrote = got._tag === "applied" && got.rev > before;
 					expect(after.length, event._tag).toBe(before + (wrote ? 1 : 0));
-					if (wrote) kept.push(event);
+
+					if (wrote) {
+						kept.push(event);
+					}
 				}
+
 				const m = yield* members;
 				expect(view(m)).toEqual(view(foldMembers(kept)));
 				expect([...m.spent]).toEqual(["r1"]);
@@ -589,10 +629,12 @@ describe("p96, why a write is refused", () => {
 			Effect.gen(function* () {
 				yield* members; // founded first, so the count below is only the refused events
 				const before = (yield* entries).length;
+
 				for (const event of [granted("wA", key), revoked("pA", "pA"), granted("x1", key)]) {
 					const answer = yield* write(event);
 					expect(answer._tag, event._tag).toBe("refused");
 				}
+
 				expect((yield* entries).length).toBe(before);
 				expect(view(yield* members)).toEqual(view(foldMembers([FOUNDED])));
 				expect((yield* write(denied(key, "SHA256:menu")))._tag).not.toBe("ignored");
@@ -688,12 +730,15 @@ const WINDOWS = ["wA", "wB", "wC"] as const;
 const LEAVES = ["t1", "t2", "g1"] as const;
 const SHEETS = ["r1", "r2"] as const;
 const ALL: ReadonlyArray<string> = [...PERSONS, ...WINDOWS, ...LEAVES, ...SHEETS, "x1"];
+
 const signer = fc.oneof(
 	{weight: 5, arbitrary: fc.constantFrom(...PERSONS)},
 	{weight: 2, arbitrary: fc.constantFrom(...SHEETS)},
 	{weight: 2, arbitrary: fc.constantFrom(...WINDOWS, ...LEAVES, "x1")},
 );
+
 const anyKey = fc.constantFrom(...ALL);
+
 const event: fc.Arbitrary<() => MemberEvent> = fc.oneof(
 	{
 		weight: 5,
@@ -745,6 +790,7 @@ describe("p96, write tells the truth over any history", () => {
 					Effect.gen(function* () {
 						const kept: Array<MemberEvent> = [FOUNDED];
 						yield* members;
+
 						for (const make of makes) {
 							const next = make();
 							const before = yield* entries;
@@ -755,20 +801,28 @@ describe("p96, write tells the truth over any history", () => {
 								JSON.stringify(view(foldMembers([...kept, next]))) !==
 								JSON.stringify(view(foldMembers(kept)));
 							expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
-							if (changes)
+
+							if (changes) {
 								expect(answer, next._tag).toEqual({_tag: "applied", rev: expect.any(Number)});
+							}
+
 							if (answer._tag === "refused") {
 								refused++;
 								expect(after.length, next._tag).toBe(before.length);
 								expect(changes, next._tag).toBe(false);
 							}
+
 							if (answer._tag === "applied") {
 								applied++;
 								const placed = after.find((e) => e.rev === answer.rev);
 								expect(placed?.id, next._tag).toBe(eventId(next));
-								if (answer.rev > head) kept.push(next);
+
+								if (answer.rev > head) {
+									kept.push(next);
+								}
 							}
 						}
+
 						expect(view(yield* members)).toEqual(view(foldMembers(kept)));
 					}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
 				),

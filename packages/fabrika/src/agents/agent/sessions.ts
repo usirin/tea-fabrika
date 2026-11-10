@@ -17,7 +17,9 @@ export const memorySessions = (): Sessions & {readonly all: () => ReadonlyMap<st
 		get: (session) => Effect.sync(() => map.get(session) ?? null),
 		put: (session, provider, own) =>
 			Effect.sync(() => {
-				if (!map.has(session)) map.set(session, {provider, own});
+				if (!map.has(session)) {
+					map.set(session, {provider, own});
+				}
 			}),
 		all: () => map,
 	};
@@ -44,7 +46,11 @@ export const fileSessions = (dir: string) =>
 			put: (session, provider, own) =>
 				Effect.gen(function* () {
 					const file = fileOf(session);
-					if (yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false))) return;
+
+					if (yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false))) {
+						return;
+					}
+
 					yield* fs.writeFileString(file, JSON.stringify({provider, own})).pipe(Effect.orDie);
 				}),
 		};

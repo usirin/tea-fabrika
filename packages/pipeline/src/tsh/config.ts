@@ -127,6 +127,7 @@ export interface ConfigInvalid {
 	readonly _tag: "config_invalid";
 	readonly why: string;
 }
+
 const invalid = (why: string): ConfigInvalid => ({_tag: "config_invalid", why});
 
 /** A file's text as a config: parsed, held to the schema, its paths taken from `folder`. */
@@ -142,14 +143,21 @@ export const configFrom = (
 			catch: (error) =>
 				invalid(error instanceof TomlError ? `not TOML: ${error.message}` : String(error)),
 		});
-		if (MOVED.some((key) => Object.hasOwn(raw, key)))
+
+		if (MOVED.some((key) => Object.hasOwn(raw, key))) {
 			return yield* Effect.fail(
 				invalid(
 					`add-on packs moved to ${SETTINGS_FILE}, in the repository fabrika works on: move the packs line and each [pack."<name>"] table there`,
 				),
 			);
-		for (const [key, why] of Object.entries(GONE))
-			if (Object.hasOwn(raw, key)) return yield* Effect.fail(invalid(`${key}: ${why}`));
+		}
+
+		for (const [key, why] of Object.entries(GONE)) {
+			if (Object.hasOwn(raw, key)) {
+				return yield* Effect.fail(invalid(`${key}: ${why}`));
+			}
+		}
+
 		const file = yield* Schema.decodeUnknownEffect(File)(raw, {onExcessProperty: "error"}).pipe(
 			Effect.mapError((error) => invalid(error.message)),
 		);
@@ -220,8 +228,11 @@ export const ledgerFile = (
 ): Effect.Effect<string, never, Digest.Digest | Path.Path> =>
 	Effect.gen(function* () {
 		const path = yield* Path.Path;
-		if (where.from === "repo" && where.target.url !== null)
+
+		if (where.from === "repo" && where.target.url !== null) {
 			return path.join(home, "ledgers", "github", `${where.target.name}.sqlite`);
+		}
+
 		const folder = path.resolve(where.from === "repo" ? where.target.clone : where.folder);
 		const digest = yield* Digest.Digest;
 		const hex = yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(folder));
@@ -238,7 +249,11 @@ export const readConfig = (
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const there = yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false));
-		if (!there) return defaultConfig(places.home);
+
+		if (!there) {
+			return defaultConfig(places.home);
+		}
+
 		const text = yield* fs
 			.readFileString(file)
 			.pipe(Effect.mapError((error) => invalid(`cannot read ${file}: ${error.message}`)));

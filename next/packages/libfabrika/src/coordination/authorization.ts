@@ -22,13 +22,25 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
 		const result = yield* transaction.transact(
 			(turn): Result.Result<Appended, LedgerError | NotGranted> => {
 				const events: MemberEvent[] = [];
+
 				for (const row of turn.read("door/members", 0)) {
-					if (!known.has(row._tag)) continue;
+					if (!known.has(row._tag)) {
+						continue;
+					}
+
 					const event = decodeEvent(valueFor(row));
-					if (Result.isFailure(event)) return Result.fail(new LedgerError({reason: "bad_row"}));
+
+					if (Result.isFailure(event)) {
+						return Result.fail(new LedgerError({reason: "bad_row"}));
+					}
+
 					events.push(event.success);
 				}
-				if ("reason" in admitted(foldMembers(events), key)) return Result.fail(new NotGranted({}));
+
+				if ("reason" in admitted(foldMembers(events), key)) {
+					return Result.fail(new NotGranted({}));
+				}
+
 				return Result.succeed(
 					Appended.cases.placed.make(turn.append(write.stream, write.id, write.line)),
 				);

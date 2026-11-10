@@ -50,13 +50,16 @@ const FORMATTER = {
 };
 
 const EXAM = "src/lower.test.ts";
+
 const SPACES =
 	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n  expect(lower("AB")).toBe("ab");\n});\n';
+
 /** What the formatter makes of `SPACES`. */
 const TABS =
 	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n\texpect(lower("AB")).toBe("ab");\n});\n';
 
 const ROUND_2_TEST = "p1: folds ß to ss";
+
 /** Round 2: a review finding, a new test that is red on round 1's head, and the builder's fix. */
 const FINDING = {
 	kind: "review-code",
@@ -67,6 +70,7 @@ const FINDING = {
 	wants: "ß folds to ss.",
 	seen: "read",
 };
+
 const FOLDS = {
 	path: "src/lower.ts",
 	text: 'export function lower(name: string): string {\n\treturn name.trim().toLowerCase().replaceAll("ß", "ss");\n}\n',
@@ -140,11 +144,17 @@ const answering = (picks: Readonly<Record<string, string>>) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const done = new Set<string>();
+
 		for (;;) {
 			const ticket = yield* read;
+
 			for (const entry of ticket.timeline) {
 				const fact = entry.fact;
-				if (fact.type !== "asked" || done.has(fact.ask)) continue;
+
+				if (fact.type !== "asked" || done.has(fact.ask)) {
+					continue;
+				}
+
 				done.add(fact.ask);
 				yield* ledger.send(streams(nameOf(NUMBER)).inbox, `answer-${fact.ask}`, {
 					kind: "answered",
@@ -158,6 +168,7 @@ const answering = (picks: Readonly<Record<string, string>>) =>
 					},
 				});
 			}
+
 			yield* Effect.sleep("50 millis");
 		}
 	});
@@ -189,12 +200,17 @@ describe("an exam file that fails the format check before a build round", () => 
 				mainFiles: [FORMATTER],
 			});
 			writeFileSync(join(dir, "script.json"), JSON.stringify(FAKE));
-			for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
+
+			for (const [key, value] of Object.entries(fakeEnv(dir))) {
+				vi.stubEnv(key, value);
+			}
+
 			const lines: string[] = [];
 			let named = false;
 			const say = (said: string) =>
 				Effect.sync(() => {
 					lines.push(said);
+
 					if (!named && said.startsWith("build: done")) {
 						named = true;
 						nameFormatter(seed);
@@ -214,7 +230,9 @@ describe("an exam file that fails the format check before a build round", () => 
 						),
 					);
 					yield* Effect.gen(function* () {
-						while (!over()) yield* Effect.sleep("50 millis");
+						while (!over()) {
+							yield* Effect.sleep("50 millis");
+						}
 					}).pipe(Effect.timeoutOption(Duration.seconds(240)));
 					yield* Fiber.interrupt(running);
 					return (yield* read).timeline;
@@ -250,8 +268,10 @@ describe("an exam file that fails the format check before a build round", () => 
 
 /** The test the fake's mutants answer writes, as fixtures/pipeline-lane/codex.mjs names it. */
 const ANSWER = "src/lower-spaces.test.ts";
+
 const ANSWER_SPACES =
 	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("cuts spaces", () => {\n  expect(lower(" Ab ")).toBe("ab");\n});\n';
+
 /** What the formatter makes of `ANSWER_SPACES`. */
 const ANSWER_TABS = ANSWER_SPACES.replace("\n  expect", "\n\texpect");
 
@@ -309,7 +329,11 @@ describe("a test the mutants' writer adds that fails the format check", () => {
 					answers: {mutants: [{with: {files: [{path: ANSWER, text: ANSWER_SPACES}]}}]},
 				}),
 			);
-			for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
+
+			for (const [key, value] of Object.entries(fakeEnv(dir))) {
+				vi.stubEnv(key, value);
+			}
+
 			const lines: string[] = [];
 			const say = (said: string) => Effect.sync(() => void lines.push(said));
 			const log = join(dir, "codex.log");
@@ -327,7 +351,9 @@ describe("a test the mutants' writer adds that fails the format check", () => {
 						),
 					);
 					yield* Effect.gen(function* () {
-						while (!over()) yield* Effect.sleep("50 millis");
+						while (!over()) {
+							yield* Effect.sleep("50 millis");
+						}
 					}).pipe(Effect.timeoutOption(Duration.seconds(240)));
 					yield* Fiber.interrupt(running);
 				}).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),

@@ -41,6 +41,7 @@ const FORMATTER = {
 		"",
 	].join("\n"),
 };
+
 /** Formats the files it is given, then fails, as oxfmt does when one of them does not parse. */
 const FAILS = {
 	path: "fails.mjs",
@@ -53,6 +54,7 @@ const FAILS = {
 		"",
 	].join("\n"),
 };
+
 /** Fails with blank error output and 1,000 characters, padded with blanks, on its other output. */
 const LONG = {
 	path: "long.mjs",
@@ -129,9 +131,11 @@ const comments = Effect.gen(function* () {
 });
 
 let dir: string;
+
 beforeEach(() => {
 	dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-fmt-")));
 });
+
 afterEach(() => rmSync(dir, {recursive: true, force: true}));
 
 /** A toy lane: its home, and `run` named as main's formatter, or none. */
@@ -141,7 +145,11 @@ const lane = (run: readonly string[] | null) => {
 		nodeModules: join(dir, "no-modules"),
 		mainFiles: [FORMATTER, FAILS, LONG],
 	});
-	if (run !== null) nameFormatter(seed, run);
+
+	if (run !== null) {
+		nameFormatter(seed, run);
+	}
+
 	const work = laneWork.pipe(
 		Layer.provide(Layer.succeed(LaneHome, {home, checkout: seed, briefs: "", person: "owner"})),
 	);

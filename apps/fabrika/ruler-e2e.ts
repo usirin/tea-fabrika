@@ -27,6 +27,7 @@ import {readToPage, readToWindow} from "./src/messages.ts";
 
 const DIST = join(import.meta.dirname, "dist");
 const ORIGIN = "http://fabrika.test";
+
 const TYPES: Readonly<Record<string, string>> = {
 	html: "text/html",
 	js: "text/javascript",
@@ -49,6 +50,7 @@ const LENGTHS = [
 	47 * MIN + 14 * SEC,
 	2 * HOUR + 10 * MIN,
 ] as const;
+
 const WIDTHS = Array.from({length: (1600 - 60) / 20 + 1}, (_, k) => 60 + k * 20);
 /** The least room between two labels shown side by side, in px. */
 const ROOM = 4;
@@ -61,11 +63,18 @@ const viewOf = (length: number) => {
 		open: ["job"],
 		chosen: null,
 	});
-	if (shown.shows !== "job" || shown.read !== "read" || shown.length !== length)
+
+	if (shown.shows !== "job" || shown.read !== "read" || shown.length !== length) {
 		throw new Error(`the tally record does not read as a ${length} ms axis`);
+	}
+
 	const view = {type: "view", program: "trace", data: Schema.encodeSync(TraceShown)(shown)};
 	const read = readToWindow(view);
-	if (read.kind === "refused") throw new Error(`the view does not read: ${read.why}`);
+
+	if (read.kind === "refused") {
+		throw new Error(`the view does not read: ${read.why}`);
+	}
+
 	return view;
 };
 
@@ -90,7 +99,11 @@ const desk = (() => {
 		takes: {all: false, keys: ["<c-b>"]},
 	};
 	const read = readToPage(msg);
-	if (read.kind === "refused") throw new Error(`the desk does not read: ${read.why}`);
+
+	if (read.kind === "refused") {
+		throw new Error(`the desk does not read: ${read.why}`);
+	}
+
 	return msg;
 })();
 
@@ -102,8 +115,13 @@ const bridge = (arg: {desk: unknown; view: unknown}) => {
 			send: () => {},
 			forget: () => {},
 			onMessage: (port: string, fn: (raw: unknown) => void) => {
-				if (port === "desk") send(fn, arg.desk);
-				if (port === "run:1") send(fn, arg.view);
+				if (port === "desk") {
+					send(fn, arg.desk);
+				}
+
+				if (port === "run:1") {
+					send(fn, arg.view);
+				}
 			},
 		},
 	});
@@ -113,6 +131,7 @@ type Label = {readonly text: string; readonly left: number; readonly right: numb
 
 const failures: string[] = [];
 const browser = await chromium.launch({headless: true});
+
 try {
 	for (const length of LENGTHS) {
 		const context = await browser.newContext({
@@ -125,7 +144,11 @@ try {
 		await page.route(`${ORIGIN}/**`, async (route) => {
 			const file = new URL(route.request().url()).pathname.slice(1);
 			const type = TYPES[file.split(".").at(-1) ?? ""];
-			if (type === undefined || file.includes("/")) return route.fulfill({status: 404});
+
+			if (type === undefined || file.includes("/")) {
+				return route.fulfill({status: 404});
+			}
+
 			return route.fulfill({contentType: type, body: await readFile(join(DIST, file))});
 		});
 		await page.route(/^(?!http:\/\/fabrika\.test\/)/, (route) => route.abort());
@@ -133,15 +156,23 @@ try {
 		await page.goto(`${ORIGIN}/desk.html`);
 		await page.waitForSelector(".trace-view .wf-head .wf-ruler .wf-tick");
 		await page.evaluate(() => document.fonts.ready);
+
 		for (const width of WIDTHS) {
 			const labels: readonly Label[] = await page.evaluate((w) => {
 				const ruler = document.querySelector<HTMLElement>(".trace-view .wf-head .wf-ruler");
-				if (ruler === null) throw new Error("no ruler");
+
+				if (ruler === null) {
+					throw new Error("no ruler");
+				}
+
 				ruler.style.inlineSize = `${w}px`;
 				ruler.style.minInlineSize = `${w}px`;
 				ruler.style.maxInlineSize = `${w}px`;
-				if (Math.round(ruler.getBoundingClientRect().width) !== w)
+
+				if (Math.round(ruler.getBoundingClientRect().width) !== w) {
 					throw new Error(`the ruler took ${ruler.getBoundingClientRect().width}px, not ${w}px`);
+				}
+
 				return [...ruler.querySelectorAll<HTMLElement>(".wf-tick")]
 					.filter((tick) => {
 						const style = getComputedStyle(tick);
@@ -160,22 +191,30 @@ try {
 					.toSorted((a, b) => a.left - b.left);
 			}, width);
 			const at = `${length} ms at ${width}px [${labels.map((l) => l.text).join(", ")}]`;
+
 			// P4: no two labels meet.
 			for (const [i, next] of labels.slice(1).entries()) {
 				const prev = labels[i];
-				if (prev !== undefined && next.left - prev.right < ROOM)
+
+				if (prev !== undefined && next.left - prev.right < ROOM) {
 					failures.push(
 						`P4 ${at}: "${prev.text}" and "${next.text}" are ${(next.left - prev.right).toFixed(1)}px apart`,
 					);
+				}
 			}
+
 			// P5: under 120px one label with its unit; from 120px "0" and one more.
 			if (width < 120) {
 				const [one] = labels;
-				if (labels.length !== 1 || one === undefined || !UNIT.test(one.text))
+
+				if (labels.length !== 1 || one === undefined || !UNIT.test(one.text)) {
 					failures.push(`P5 ${at}: under 120px, want exactly one label with its unit`);
-			} else if (labels[0]?.text !== "0" || labels.length < 2)
+				}
+			} else if (labels[0]?.text !== "0" || labels.length < 2) {
 				failures.push(`P5 ${at}: from 120px, want "0" and at least one other label`);
+			}
 		}
+
 		await context.close();
 	}
 } finally {
@@ -186,4 +225,6 @@ if (failures.length > 0) {
 	console.error(failures.join("\n"));
 	console.error(`${failures.length} ruler checks failed`);
 	process.exitCode = 1;
-} else console.log(`ruler: ${LENGTHS.length} lengths x ${WIDTHS.length} widths, no labels meet`);
+} else {
+	console.log(`ruler: ${LENGTHS.length} lengths x ${WIDTHS.length} widths, no labels meet`);
+}

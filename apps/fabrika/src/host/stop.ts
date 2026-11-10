@@ -45,19 +45,32 @@ export const stopHost = (home: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const paths = yield* pathsOf(home);
-		if ((yield* reach(paths.sock)) !== "live") return "none" as const;
+
+		if ((yield* reach(paths.sock)) !== "live") {
+			return "none" as const;
+		}
+
 		const text = yield* fs.readFileString(paths.pid).pipe(Effect.orElseSucceed(() => ""));
 		const pid = Number(text.trim());
-		if (!Number.isSafeInteger(pid) || pid <= 1)
+
+		if (!Number.isSafeInteger(pid) || pid <= 1) {
 			return yield* new NotStopped({why: `${paths.pid} names no host's pid`});
-		if (pid === process.pid)
+		}
+
+		if (pid === process.pid) {
 			return yield* new NotStopped({why: `${paths.pid} names this process, not a host`});
+		}
+
 		const told = yield* send(pid, "SIGTERM").pipe(
 			Effect.mapError(
 				(code) => new NotStopped({why: `the host's pid ${pid} could not be told to stop: ${code}`}),
 			),
 		);
-		if (told === "gone") return "stopped" as const;
+
+		if (told === "gone") {
+			return "stopped" as const;
+		}
+
 		yield* send(pid, 0).pipe(
 			Effect.orElseSucceed(() => "sent" as const),
 			Effect.repeat({schedule: Schedule.spaced("50 millis"), until: (r) => r === "gone"}),

@@ -41,9 +41,18 @@ const DAY = 24 * HOUR;
 
 /** How long, in a few characters: `0.8 ms`, `12 ms`, `3.4 s`, `2m 05s`. */
 export const took = (ms: number): string => {
-	if (ms < 10) return `${Math.round(ms * 10) / 10} ms`;
-	if (ms < 1000) return `${Math.round(ms)} ms`;
-	if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+	if (ms < 10) {
+		return `${Math.round(ms * 10) / 10} ms`;
+	}
+
+	if (ms < 1000) {
+		return `${Math.round(ms)} ms`;
+	}
+
+	if (ms < 60_000) {
+		return `${(ms / 1000).toFixed(1)} s`;
+	}
+
 	const s = Math.round(ms / 1000);
 	return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 };
@@ -53,28 +62,43 @@ const soFar = (ms: number): string => (ms < 60_000 ? `${Math.floor(ms / 1000)} s
 
 /** A long gap, in its two largest units: `18 h 30 min`, `2 d 4 h`. Under an hour, as `took`. */
 const gap = (ms: number): string => {
-	if (ms < HOUR) return took(ms);
+	if (ms < HOUR) {
+		return took(ms);
+	}
+
 	if (ms < DAY) {
 		const m = Math.round(ms / MIN);
 		return m % 60 === 0 ? `${m / 60} h` : `${Math.floor(m / 60)} h ${m % 60} min`;
 	}
+
 	const h = Math.round(ms / HOUR);
 	return h % 24 === 0 ? `${h / 24} d` : `${Math.floor(h / 24)} d ${h % 24} h`;
 };
 
 /** A tick's label, in the ruler's own round units: `0`, `500 ms`, `1.5 s`, `5 min`, `1 h 30 min`. */
 const tickLabel = (ms: number): string => {
-	if (ms === 0) return "0";
-	if (ms < SEC) return `${ms} ms`;
-	if (ms < MIN) return `${ms / SEC} s`;
+	if (ms === 0) {
+		return "0";
+	}
+
+	if (ms < SEC) {
+		return `${ms} ms`;
+	}
+
+	if (ms < MIN) {
+		return `${ms / SEC} s`;
+	}
+
 	if (ms < HOUR) {
 		const s = (ms % MIN) / SEC;
 		return s === 0 ? `${ms / MIN} min` : `${Math.floor(ms / MIN)} min ${s} s`;
 	}
+
 	if (ms < DAY) {
 		const m = (ms % HOUR) / MIN;
 		return m === 0 ? `${ms / HOUR} h` : `${Math.floor(ms / HOUR)} h ${m} min`;
 	}
+
 	return `${Math.round((ms / DAY) * 10) / 10} d`;
 };
 
@@ -93,15 +117,27 @@ const hhmmss = (at: number): string =>
 
 /** A count of tokens, short: `870`, `12k`, `1.2M`. */
 const count = (n: number): string => {
-	if (n < 1000) return String(n);
-	if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+	if (n < 1000) {
+		return String(n);
+	}
+
+	if (n < 1_000_000) {
+		return `${Math.round(n / 1000)}k`;
+	}
+
 	return `${Math.round(n / 100_000) / 10}M`;
 };
 
 /** A known price, never `$0.00`: under a cent says so, and a known nothing is "no charge". */
 const dollars = (usd: number): string => {
-	if (usd === 0) return "no charge";
-	if (usd < 0.005) return "under $0.01";
+	if (usd === 0) {
+		return "no charge";
+	}
+
+	if (usd < 0.005) {
+		return "under $0.01";
+	}
+
 	return `$${usd.toFixed(2)}`;
 };
 
@@ -147,7 +183,8 @@ function Ruler({length}: {readonly length: number}) {
 
 function Bar({row, shown}: {readonly row: Row; readonly shown: Shown}) {
 	const colour = row.wrong ? "var(--stuck)" : colourOf(shown, row.service);
-	if (row.kind === "step")
+
+	if (row.kind === "step") {
 		return (
 			<span
 				className="wf-mark"
@@ -155,6 +192,8 @@ function Bar({row, shown}: {readonly row: Row; readonly shown: Shown}) {
 				aria-hidden="true"
 			/>
 		);
+	}
+
 	const width = Math.max(0, row.to - row.from);
 	return (
 		<>
@@ -221,7 +260,10 @@ function Pre({label, value}: {readonly label: string; readonly value: unknown}) 
 }
 
 function Tags({tags}: {readonly tags: readonly (readonly [string, string])[]}) {
-	if (tags.length === 0) return <p className="faint">No tags.</p>;
+	if (tags.length === 0) {
+		return <p className="faint">No tags.</p>;
+	}
+
 	return (
 		<table className="wf-tags">
 			<tbody>
@@ -565,6 +607,7 @@ const onTreeKey = (
 	const all = rowsIn(e.currentTarget.closest("[role=treegrid]"));
 	const here = all.indexOf(e.currentTarget);
 	const go = (i: number) => all[Math.max(0, Math.min(all.length - 1, i))]?.focus();
+
 	switch (e.key) {
 		case "ArrowDown":
 			go(here + 1);
@@ -579,16 +622,25 @@ const onTreeKey = (
 			go(all.length - 1);
 			break;
 		case "ArrowRight":
-			if (row.opens && !row.open) toggle(row.key);
-			else if (row.open) go(here + 1);
+			if (row.opens && !row.open) {
+				toggle(row.key);
+			} else if (row.open) {
+				go(here + 1);
+			}
+
 			break;
 		case "ArrowLeft": {
-			if (row.open && row.opens) toggle(row.key);
-			else {
+			if (row.open && row.opens) {
+				toggle(row.key);
+			} else {
 				const at = rows.findIndex((r) => r.key === row.key);
 				const parent = rows.slice(0, at).findLast((r) => r.depth < row.depth);
-				if (parent !== undefined) go(rows.indexOf(parent));
+
+				if (parent !== undefined) {
+					go(rows.indexOf(parent));
+				}
 			}
+
 			break;
 		}
 		case "Enter":
@@ -598,13 +650,17 @@ const onTreeKey = (
 		default:
 			return;
 	}
+
 	e.preventDefault();
 };
 
 type Send = WindowProps<typeof trace>["send"];
 
 export function TraceWindow({view, send}: WindowProps<typeof trace>) {
-	if (view.shows === "ticket") return <TicketWindow view={view} send={send} />;
+	if (view.shows === "ticket") {
+		return <TicketWindow view={view} send={send} />;
+	}
+
 	return <JobWindow view={view} send={send} />;
 }
 
@@ -616,11 +672,16 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 	const press = (row: Row) => {
 		if (row.opens) {
 			toggle(row.key);
-			if (chosen !== row.key) choose(row.key);
-		} else choose(chosen === row.key ? null : row.key);
+
+			if (chosen !== row.key) {
+				choose(row.key);
+			}
+		} else {
+			choose(chosen === row.key ? null : row.key);
+		}
 	};
 
-	if (view.read !== "read")
+	if (view.read !== "read") {
 		return (
 			<section className="view trace-view" aria-label="trace">
 				<p className="empty">
@@ -632,9 +693,10 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 				</p>
 			</section>
 		);
+	}
 
 	// Read, and nobody wrote it: no job, no span, no step. Said in words, not drawn as a job of 0 ms.
-	if (view.job === null && view.spans === 0 && view.steps === 0)
+	if (view.job === null && view.spans === 0 && view.steps === 0) {
 		return (
 			<section className="view trace-view" aria-label="trace">
 				<p className="empty">
@@ -643,17 +705,19 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 				</p>
 			</section>
 		);
+	}
 
 	// A job begun with nothing in it yet: the word and the time in the head and one plain line under
 	// it, as Linear's empty states are. An axis or a bar would be a finished run that never was. A
 	// job with only its line's span in has something to draw: its row, running to now.
-	if (view.running !== null && view.empty)
+	if (view.running !== null && view.empty) {
 		return (
 			<section className="view trace-view" aria-label={`trace of ${view.title}`}>
 				<Head view={view} drawn={false} />
 				<p className="empty">Nothing in the record yet. Spans and steps show here as they come.</p>
 			</section>
 		);
+	}
 
 	const focusable = chosen ?? view.rows[0]?.key ?? null;
 	return (
@@ -787,7 +851,10 @@ const summaryWords = (s: TicketShown["summary"]): readonly string[] => [
  * 7), or why there is none. The words wrap under the dollars when the tile is narrow.
  */
 function LanePrice({summary}: {readonly summary: LaneShown["summary"]}) {
-	if (summary.usd === null) return summary.unknown === 0 ? null : "no list price";
+	if (summary.usd === null) {
+		return summary.unknown === 0 ? null : "no list price";
+	}
+
 	return (
 		<>
 			<span className="tv-usd">{dollars(summary.usd)}</span>{" "}
@@ -912,6 +979,7 @@ const rowParts = (
 	readonly state: State | "span" | "wrong";
 } => {
 	const length = row.to - row.from;
+
 	switch (row.kind) {
 		case "step":
 			return {
@@ -969,7 +1037,8 @@ const rowParts = (
 
 function TicketWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 	const {ticket} = view;
-	if (view.read !== "read" || ticket === null)
+
+	if (view.read !== "read" || ticket === null) {
 		return (
 			<section className="view trace-view" aria-label={view.title}>
 				<p className="empty">
@@ -979,6 +1048,8 @@ function TicketWindow({view, send}: {readonly view: Shown; readonly send: Send})
 				</p>
 			</section>
 		);
+	}
+
 	const chosen = view.chosen?.key ?? null;
 	const toggle = (row: string) => send({type: "toggle", value: {row}});
 	const choose = (row: string | null) => send({type: "choose", value: {row}});
@@ -987,15 +1058,28 @@ function TicketWindow({view, send}: {readonly view: Shown; readonly send: Send})
 	/** A lane folds; a step or a span opens and shows its detail; a wait shows its detail. */
 	const press = (line: Line) => {
 		if (line.kind === "lane") {
-			if (line.lane.opens) toggle(line.lane.key);
+			if (line.lane.opens) {
+				toggle(line.lane.key);
+			}
+
 			return;
 		}
+
 		const {row} = line;
-		if (row.kind === "calls") return toggle(row.key);
+
+		if (row.kind === "calls") {
+			return toggle(row.key);
+		}
+
 		if ((row.kind === "step" || row.kind === "span") && row.opens) {
 			toggle(row.key);
-			if (chosen !== row.key) choose(row.key);
-		} else choose(chosen === row.key ? null : row.key);
+
+			if (chosen !== row.key) {
+				choose(row.key);
+			}
+		} else {
+			choose(chosen === row.key ? null : row.key);
+		}
 	};
 	const focusable = chosen ?? lines[0]?.tree.key ?? null;
 	const rowProps = (line: Line, label: string) => ({
@@ -1109,6 +1193,7 @@ function TicketWindow({view, send}: {readonly view: Shown; readonly send: Send})
 										</Fragment>
 									);
 								}
+
 								const {row, lane} = line;
 								const parts = rowParts(row);
 								return (

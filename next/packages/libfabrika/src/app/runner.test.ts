@@ -59,12 +59,16 @@ const OTHER_TRACE = "0bf92f3577b34da6a3ce929d0e0e4736";
 const SPAN = "00f067aa0ba902b7";
 const BUILD = "p11-build-a";
 const NAME = "queue:1";
+
 const writer = (as: "person" | "agent" = "person") =>
 	Writer.cases[as].make({key: `SHA256:${as}`, for: PERSON});
+
 const owner = Writer.cases.agent.make({key: "SHA256:owner", for: PERSON});
+
 // Trusted, repeatable UUIDv7 fixtures. The schema checks the same brand as the real door.
 const inputId = (n: number) =>
 	Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
+
 const from = (over: Partial<From> = {}): From => ({
 	by: "SHA256:person",
 	for: PERSON,
@@ -82,6 +86,7 @@ const Request = Schema.Struct({
 	tag: Schema.String,
 });
 type Request = typeof Request.Type;
+
 const Model = Schema.Struct({
 	count: Schema.Int,
 	replies: Schema.Int,
@@ -92,6 +97,7 @@ const Model = Schema.Struct({
 	wake: Schema.NullOr(Schema.Number),
 });
 type Model = typeof Model.Type;
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("add"), n: Schema.Int}),
 	Schema.Struct({
@@ -113,22 +119,28 @@ const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number}),
 	Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}),
 ]);
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["not_delivered", "spent", "person_only", "ended", "not_granted", "bad_cmd"],
 });
+
 const work = Cmd.make("work", {
 	input: Schema.Struct({n: Schema.Int}),
 	ok: Schema.Int,
 	err: ["disk"],
 });
+
 class DiskError extends Schema.TaggedError<DiskError>()("disk", {}) {}
+
 class WorkValue extends Schema.Class<WorkValue>("WorkValue")({
 	n: Schema.Int,
 	extra: Schema.optionalKey(Schema.String),
 }) {}
+
 const fire = Cmd.make("fire", {input: Schema.Struct({}), ok: Schema.Null, err: ["bad_cmd"]});
+
 const initial: Model = {
 	count: 0,
 	replies: 0,
@@ -138,6 +150,7 @@ const initial: Model = {
 	wake: null,
 	note: "private model body P11",
 };
+
 const command = (r: Request) =>
 	write({
 		stream: "facts",
@@ -146,12 +159,14 @@ const command = (r: Request) =>
 				? {_tag: "own", event: {_tag: r.tag, token: r.token}}
 				: {_tag: "caused", parent: r.parent, event: {_tag: r.tag, token: r.token}},
 	});
+
 const nextWrite = (s: Model): readonly [Model, ReadonlyArray<ReturnType<typeof write>>] => {
 	const [next, ...queue] = s.queue;
 	return next === undefined
 		? [{...s, busy: false}, []]
 		: [{...s, queue, busy: true}, [command(next)]];
 };
+
 const machine = Machine.make({
 	model: Model,
 	msg: Msg,
@@ -186,9 +201,11 @@ const machine = Machine.make({
 		],
 	},
 });
+
 const SavedEvent = Schema.TaggedStruct("saved", {token: Schema.String});
 const Answered = Schema.TaggedStruct("answered", {token: Schema.String});
 const Polled = Schema.TaggedStruct("polled", {token: Schema.String});
+
 const authoring = (name = "queue") => ({
 	name,
 	machine,
@@ -223,6 +240,7 @@ const authoring = (name = "queue") => ({
 	},
 	wake: (s: Model) => s.wake,
 });
+
 type Incoming = {
 	readonly id: string;
 	readonly envelope: Envelope<unknown>;
@@ -230,7 +248,9 @@ type Incoming = {
 	readonly seen: number;
 	readonly span: {readonly traceId: string; readonly spanId: string};
 };
+
 type Failure = {readonly _tag: string; readonly reason: string} | NotGranted;
+
 type Sent =
 	| {readonly _tag: "accepted"; readonly rev: number; readonly pos: number}
 	| {
@@ -239,15 +259,19 @@ type Sent =
 			readonly now?: number;
 			readonly most?: number;
 	  };
+
 type Opened = {readonly rev: number; readonly view: Model};
+
 type Runner = {
 	readonly open: (client: string) => Effect.Effect<Opened, Failure>;
 	readonly msg: (i: Incoming) => Effect.Effect<Sent, Failure>;
 	readonly due: (at: number) => Effect.Effect<void, Failure>;
 };
+
 // Decode this test program's view at its client, so changing the public View to unknown
 // cannot force the builder to edit these laws.
 class ViewedRunner extends Context.Service<ViewedRunner, Runner>()("test/P11ViewedRunner") {}
+
 type Update =
 	| {readonly type: "whole"; readonly rev: number; readonly view: Model}
 	| {
@@ -263,11 +287,19 @@ type Update =
 
 const folder = mkdtempSync(join(tmpdir(), "p11-runner-"));
 const databases: DatabaseSync[] = [];
+
 afterAll(() => {
-	for (const db of databases) if (db.isOpen) db.close();
+	for (const db of databases) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
+
 let files = 0;
+
 const connect = (path: string) => {
 	const db = new DatabaseSync(path);
 	// Match the product's Node span queue settings in src/node/stage-recording.ts.
@@ -275,6 +307,7 @@ const connect = (path: string) => {
 	databases.push(db);
 	return db;
 };
+
 const disk = () => {
 	const path = join(folder, `${++files}.db`);
 	let db = connect(path);
@@ -286,6 +319,7 @@ const disk = () => {
 				fault.once = false;
 				throw new Error("SQLITE_FULL");
 			}
+
 			return inner.exec(q, ...values);
 		},
 		transaction: (f) => inner.transaction(f),
@@ -302,12 +336,16 @@ const disk = () => {
 		},
 	};
 };
+
 const read = (stream: string) => Ledger.use((l) => Stream.runCollect(l.read(stream, 0)));
+
 const body = (row: Entry) =>
 	Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(row.body);
+
 const inbox = read(`${NAME}/inbox`);
 const events = read("facts");
 const steps = read(PROCESS).pipe(Effect.map((rows) => rows.filter((r) => r._tag === "stepped")));
+
 const resultLetters = inbox.pipe(
 	Effect.map((rows) =>
 		rows.filter((r) => {
@@ -318,6 +356,7 @@ const resultLetters = inbox.pipe(
 		}),
 	),
 );
+
 const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 	effect.pipe(
 		Effect.exit,
@@ -334,6 +373,7 @@ type ActivityStorage = {
 	readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError>;
 	readonly sync: () => Effect.Effect<void, LedgerError>;
 };
+
 const activityStorage = () => {
 	let durable: unknown = Activity.cases.idle.make({process: PROCESS});
 	let pending = durable;
@@ -464,10 +504,12 @@ const world = async (
 							const request = yield* SignRequest;
 							signCalls.push({id: request.id, parent, process: pid, kind});
 							const session = yield* actual.signer(parent, pid, kind);
+
 							if (fault.sign) {
 								fault.sign = false;
 								return yield* new LedgerError({reason: "unreachable"});
 							}
+
 							return session;
 						}),
 				};
@@ -488,7 +530,11 @@ const world = async (
 	const records = RecordManager.sql(
 		(name) => {
 			const existing = recordDisks.get(name);
-			if (existing !== undefined) return existing.sql;
+
+			if (existing !== undefined) {
+				return existing.sql;
+			}
+
 			const made = disk();
 			recordDisks.set(name, made);
 			return made.sql;
@@ -513,6 +559,7 @@ const world = async (
 									fault.answer = false;
 									return Effect.fail(new LedgerError({reason: "unreachable"}));
 								}
+
 								return Effect.succeed(answer);
 							}),
 						),
@@ -534,6 +581,7 @@ const world = async (
 									fault.record = false;
 									return Effect.fail(new LedgerError({reason: "unreachable"}));
 								}
+
 								return Effect.succeed(answer);
 							}),
 						),
@@ -587,15 +635,35 @@ const world = async (
 										JSON.stringify(row.body).includes(`"at":${cmd.n}`),
 								),
 							).toBe(true);
-							if (fault.pause) yield* Deferred.await(gate);
-							if (fault.work === "declared") return Outcome.err({_tag: "disk"});
-							if (fault.work === "tagged") return Outcome.err(new DiskError({}));
-							if (fault.work === "class")
+
+							if (fault.pause) {
+								yield* Deferred.await(gate);
+							}
+
+							if (fault.work === "declared") {
+								return Outcome.err({_tag: "disk"});
+							}
+
+							if (fault.work === "tagged") {
+								return Outcome.err(new DiskError({}));
+							}
+
+							if (fault.work === "class") {
 								return Outcome.ok(new WorkValue({n: cmd.n, extra: "outside the Cmd schema"}));
-							if (fault.work === "non_json") return Outcome.ok(() => cmd.n);
-							if (fault.work === "undeclared") return Outcome.err({_tag: "other"});
-							if (fault.work === "throw")
+							}
+
+							if (fault.work === "non_json") {
+								return Outcome.ok(() => cmd.n);
+							}
+
+							if (fault.work === "undeclared") {
+								return Outcome.err({_tag: "other"});
+							}
+
+							if (fault.work === "throw") {
 								return yield* Effect.die(new Error("private handler detail"));
+							}
+
 							return Outcome.ok(fault.work === "malformed" ? "wrong" : cmd.n);
 						}),
 					fire: () =>
@@ -629,7 +697,10 @@ const world = async (
 					const recording = yield* Recording;
 					return {
 						flush: Effect.gen(function* () {
-							if (fault.flush) return yield* new LedgerError({reason: "storage"});
+							if (fault.flush) {
+								return yield* new LedgerError({reason: "storage"});
+							}
+
 							return yield* recording.flush;
 						}),
 					};
@@ -648,7 +719,11 @@ const world = async (
 									fault.append = "";
 									return yield* new LedgerError({reason: "unreachable"});
 								}
-								if (fault.append === "refused") return {_tag: "refused", reason: "seen_ahead"};
+
+								if (fault.append === "refused") {
+									return {_tag: "refused", reason: "seen_ahead"};
+								}
+
 								const answer = yield* mailbox.send(
 									NAME,
 									i.id,
@@ -662,10 +737,12 @@ const world = async (
 										seen: i.seen,
 									}),
 								);
+
 								if (fault.append === "after") {
 									fault.append = "";
 									return yield* new LedgerError({reason: "unreachable"});
 								}
+
 								return answer;
 							}),
 						commit: (
@@ -677,8 +754,11 @@ const world = async (
 							Effect.gen(function* () {
 								calls.push({kind: event._tag, id, parent: session.parent});
 								const checked = yield* s.receipt(id, session.parent, process, event._tag);
-								if (fault.commitReason !== "")
+
+								if (fault.commitReason !== "") {
 									return {_tag: "refused", reason: fault.commitReason} as const;
+								}
+
 								const answer = yield* ledger.append(
 									stream,
 									id,
@@ -692,10 +772,12 @@ const world = async (
 										event,
 									),
 								);
+
 								if (fault.commit) {
 									fault.commit = false;
 									return yield* new LedgerError({reason: "unreachable"});
 								}
+
 								return answer;
 							}),
 						own: (id: string, stream: string, event: {_tag: string}) =>
@@ -769,7 +851,10 @@ const world = async (
 			ledgerDisk.reopen();
 			authority.reopen();
 			sink.reopen();
-			for (const part of recordDisks.values()) part.reopen();
+
+			for (const part of recordDisks.values()) {
+				part.reopen();
+			}
 		},
 	};
 };
@@ -843,14 +928,22 @@ describe("p14 turns and watcher revisions", () => {
 		await Effect.runPromise(
 			Effect.gen(function* () {
 				const r: Runner = yield* w.ProgramRunner;
-				for (let n = 0; n < 1024; n++) yield* r.open(`client-${n}`);
+
+				for (let n = 0; n < 1024; n++) {
+					yield* r.open(`client-${n}`);
+				}
+
 				// Refresh the first client, so insertion order alone picks the wrong eviction.
 				yield* r.open("client-0");
 				expect(yield* r.open("client-1024")).toEqual({rev: 0, view: initial});
 				yield* r.msg(w.input(1, {type: "add", n: 1}));
 				expect(w.published.get("client-1")).toEqual([{type: "whole", rev: 0, view: initial}]);
+
 				for (let n = 0; n <= 1024; n++) {
-					if (n === 1) continue;
+					if (n === 1) {
+						continue;
+					}
+
 					expect(w.published.get(`client-${n}`)?.at(-1)).toMatchObject({
 						type: "patch",
 						base: 0,
@@ -877,10 +970,12 @@ describe("p14 turns and watcher revisions", () => {
 				).toEqual(Array.from({length: 24}, (_, i) => i + 1));
 				expect(yield* inbox).toHaveLength(24);
 				expect((yield* r.open("inspect")).view.count).toBe(24);
-				for (const client of ["a", "b"])
+
+				for (const client of ["a", "b"]) {
 					expect(w.published.get(client)?.map((u) => u.rev)).toEqual(
 						Array.from({length: 25}, (_, i) => i),
 					);
+				}
 			}).pipe(Effect.provide(w.layer())),
 		);
 	});
@@ -909,7 +1004,7 @@ describe("p22 refusal and p25 thrown steps", () => {
 			{type: "add", n: 1001},
 			{_tag: "refused", reason: "limit", now: 0, most: 1000},
 		],
-	] as const)
+	] as const) {
 		it.effect.prop(
 			`plant, append before refusal: ${label} changes no history, view or Cmd`,
 			{
@@ -941,6 +1036,8 @@ describe("p22 refusal and p25 thrown steps", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
+	}
+
 	it.effect.prop(
 		"plant, turn throw into refusal: a fresh throw leaves no accepted input, result or Cmd",
 		{generated: Schema.String},
@@ -987,14 +1084,19 @@ describe("p22 refusal and p25 thrown steps", () => {
 							Effect.gen(function* () {
 								const m = yield* Mailbox;
 								const placed: Array<{id: string; rev: number; pos: number}> = [];
+
 								for (const [id, value] of [
 									["good-a", 1],
 									["bad", poison],
 									["good-b", 2],
 								] as const) {
 									const sent = yield* m.send(NAME, id, {type: "add", n: value}, from());
-									if (sent._tag === "placed") placed.push({id, rev: sent.rev, pos: sent.pos});
+
+									if (sent._tag === "placed") {
+										placed.push({id, rev: sent.rev, pos: sent.pos});
+									}
 								}
+
 								// These letters were accepted before the saved model. Only accepted poison is down.
 								yield* ProcessStore.use((s) =>
 									s.save(
@@ -1043,7 +1145,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 			{type: "work_err", error: {_tag: "bad_cmd"}, reason: "bad_cmd"},
 			["bad_cmd"],
 		],
-	] as const)
+	] as const) {
 		it.effect.prop(
 			`plant, save raw ${mode} handler answer: encode it or save bad_cmd, then step once`,
 			{generated: Schema.Int},
@@ -1077,18 +1179,21 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 									expect(answers[0]?.body).toMatchObject({
 										m: mode === "class" ? {...answer, value: {n: value}} : answer,
 									});
+
 									if (mode === "tagged") {
 										const saved = Schema.decodeUnknownSync(
 											Schema.Struct({m: Schema.Struct({error: DiskError})}),
 										)(answers[0]!.body);
 										expect(saved.m.error).toBeInstanceOf(DiskError);
 									}
+
 									if (mode === "class") {
 										const saved = Schema.decodeUnknownSync(
 											Schema.Struct({m: Schema.Struct({value: WorkValue})}),
 										)(answers[0]!.body);
 										expect(saved.m.value).toEqual(new WorkValue({n: value}));
 									}
+
 									expect((yield* r.open("answered")).view).toMatchObject({replies: 1, failures});
 									expect((yield* ProcessStore.use((s) => s.load))?.cmds).toEqual([]);
 								}).pipe(Effect.provide(w.layer())),
@@ -1107,6 +1212,8 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
+	}
+
 	it("plant, fire before append: a real handler sees its saved input before it runs", async () => {
 		const w = await world();
 		await Effect.runPromise(
@@ -1119,7 +1226,8 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 			}).pipe(Effect.provide(w.layer())),
 		);
 	});
-	for (const at of ["before", "refused"] as const)
+
+	for (const at of ["before", "refused"] as const) {
 		it(`plant, dispatch after ${at} append: no handler, patch or alarm escapes`, async () => {
 			const w = await world();
 			w.fault.append = at;
@@ -1139,12 +1247,14 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 				}).pipe(Effect.provide(w.layer())),
 			);
 		});
+	}
+
 	for (const [mode, reason] of [
 		["declared", "disk"],
 		["undeclared", "bad_cmd"],
 		["throw", "handler_failed"],
 		["malformed", "bad_cmd"],
-	] as const)
+	] as const) {
 		it.effect.prop(
 			`plant, drop ${mode} result: one saved failure with reason reaches update once`,
 			{generated: Schema.Int},
@@ -1179,7 +1289,9 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
-	for (const name of ["queue", "chaos"])
+	}
+
+	for (const name of ["queue", "chaos"]) {
 		it.effect.prop(
 			`plant, dispatch fire by name alone: fire in ${name} respects its owning program`,
 			{generated: Schema.NonEmptyString},
@@ -1208,6 +1320,8 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
+	}
+
 	it("plant, execute folded Cmds: wake rebuilds state from inbox without calling handlers", async () => {
 		const w = await world();
 		await Effect.runPromise(
@@ -1216,12 +1330,14 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 					m.send(NAME, "prior-work", {type: "work", n: 27}, from()),
 				);
 				expect(sent._tag).toBe("placed");
-				if (sent._tag === "placed")
+
+				if (sent._tag === "placed") {
 					yield* ProcessStore.use((s) =>
 						s.save({saved: {v: 1, build: BUILD, model: initial, after: 0}, turn: null, cmds: []}, [
 							{id: "prior-work", rev: sent.rev, pos: sent.pos},
 						]),
 					);
+				}
 			}).pipe(
 				Effect.provide(
 					Layer.mergeAll(Mailbox.layer, ProcessStore.layer(w.store.sql, {process: PROCESS})).pipe(
@@ -1346,7 +1462,8 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 			),
 		{arbitrary: {seed: 119120, runs: 12}},
 	);
-	for (const as of ["person", "agent"] as const)
+
+	for (const as of ["person", "agent"] as const) {
 		it(`p69 plant, admit person-only mail: mail from ${as} cannot use a person-only port`, async () => {
 			const w = await world();
 			Object.assign(
@@ -1373,6 +1490,8 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 				}).pipe(Effect.provide(w.layer())),
 			);
 		});
+	}
+
 	it("plant, trust every process-prefixed mail id: a forged Cmd reply is refused", async () => {
 		const w = await world();
 		const id = `${PROCESS}/1/0`;
@@ -1391,7 +1510,8 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 			}).pipe(Effect.provide(w.layer())),
 		);
 	});
-	for (const parent of [null, inputId(1), inputId(99), `in-${DOOR}-1`, `in-${DOOR}-99`])
+
+	for (const parent of [null, inputId(1), inputId(99), `in-${DOOR}-1`, `in-${DOOR}-99`]) {
 		it(`p69 plant, silently strip client parent ${parent}: refuse it before stepping or appending`, async () => {
 			const w = await world();
 			await Effect.runPromise(
@@ -1405,6 +1525,8 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 				}).pipe(Effect.provide(w.layer())),
 			);
 		});
+	}
+
 	it.effect.prop(
 		"p69 plant, trust a client parent: an agent cannot borrow an unspent person approval in the same process",
 		{generated: Schema.String},
@@ -1565,6 +1687,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 							Effect.gen(function* () {
 								const r: Runner = yield* w.ProgramRunner;
 								const expected: Array<{token: string; by: string; parent: string | null}> = [];
+
 								for (const [index, asPerson] of senders.entries()) {
 									const token = `request-${index}`;
 									const as = asPerson ? "person" : "agent";
@@ -1573,6 +1696,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 									yield* w.deliver(m, "comment");
 									yield* r.msg(m);
 								}
+
 								const own = w.input(99, {type: "background", token: "own", tag: "polled"});
 								yield* r.msg(own);
 								expected.push({token: "own", by: owner.key, parent: null});
@@ -1590,6 +1714,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 			),
 		{arbitrary: {seed: 119120, runs: 12}},
 	);
+
 	for (const [scenario, reason, as, inputName, parentProcess] of [
 		["undelivered", "not_delivered", "person", "approve", PROCESS],
 		["another process", "not_delivered", "person", "approve", REPLACEMENT],
@@ -1597,7 +1722,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 		["agent comment", "person_only", "agent", "comment", PROCESS],
 		["agent approval", "person_only", "agent", "approve", PROCESS],
 		["ended process", "ended", "person", "approve", PROCESS],
-	] as const)
+	] as const) {
 		it.effect.prop(
 			`plant, fall back to owner: ${scenario} writes nothing and records ${reason}`,
 			{generated: Request.fields.token},
@@ -1612,8 +1737,15 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 								Effect.gen(function* () {
 									const r: Runner = yield* w.ProgramRunner;
 									const s = yield* SessionManager;
-									if (scenario !== "undelivered") yield* w.deliver(i, inputName, parentProcess);
-									if (scenario === "ended process") yield* s.end(PROCESS);
+
+									if (scenario !== "undelivered") {
+										yield* w.deliver(i, inputName, parentProcess);
+									}
+
+									if (scenario === "ended process") {
+										yield* s.end(PROCESS);
+									}
+
 									yield* r.msg(i);
 									expect(yield* events).toEqual([]);
 									expect(w.calls.filter((c) => c.parent === null)).toEqual([]);
@@ -1627,6 +1759,8 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
+	}
+
 	it.effect.prop(
 		"plant, spend by Cmd position: a second answered with the same parent is refused",
 		{generated: Request.fields.token},
@@ -1695,7 +1829,8 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 			),
 		{arbitrary: {seed: 119120, runs: 12}},
 	);
-	for (const lost of ["sign", "commit"] as const)
+
+	for (const lost of ["sign", "commit"] as const) {
 		it.effect.prop(
 			`plant, new write id after lost ${lost} reply: retry uses the saved receipt and places once`,
 			{generated: Request.fields.token},
@@ -1736,6 +1871,8 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
+	}
+
 	it.effect.prop(
 		"plant, sender table in runner memory: a queued parent survives a same-process storage wake",
 		{generated: Request.fields.token},
@@ -1838,7 +1975,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
 			at: 42,
 		},
 		{type: "timer", at: 42},
-	])
+	]) {
 		it.effect.prop(
 			`plant, accept a client answer: fresh ${msg.type} cannot settle work or fire the timer`,
 			{generated: Schema.Record(Schema.String, Schema.Json)},
@@ -1867,6 +2004,8 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
+	}
+
 	it("plant, fold every inbox row: unaccepted mail goes through the fresh refusal", async () => {
 		const w = await world();
 		await Effect.runPromise(
@@ -1884,12 +2023,13 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
 			}).pipe(Effect.provide(w.layer())),
 		);
 	});
+
 	for (const [label, m] of [
 		["bad input", {type: "add", n: "bad"}],
 		["malformed value", null],
 		["forged settled reply", {type: "work_ok", cmd: work({n: 1}), value: 1, at: 42}],
 		["throwing fresh input", {type: "throw"}],
-	] as const)
+	] as const) {
 		it(`plant, treat other mail as accepted: receive is total for ${label}`, async () => {
 			const w = await world();
 			await Effect.runPromise(
@@ -1899,14 +2039,19 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
 					const r = yield* w.ProgramRunner;
 					const received = yield* Effect.exit(r.open("mail"));
 					expect(received._tag, "other mail cannot fail the process").toBe("Success");
-					if (Exit.isSuccess(received))
+
+					if (Exit.isSuccess(received)) {
 						expect(received.value.view).toMatchObject({count: 0, replies: 0});
+					}
+
 					expect(yield* r.msg(w.input(1, {type: "add", n: 2}))).toMatchObject({_tag: "accepted"});
 					expect((yield* r.open("still-live")).view).toMatchObject({count: 2, replies: 0});
 					expect(yield* inbox).toHaveLength(2);
 				}).pipe(Effect.provide(w.layer())),
 			);
 		});
+	}
+
 	it.effect.prop(
 		"plant, fold DOWN as a saved Msg: a real P33 signal cannot mark its recipient down",
 		{generated: Down.fields.reason},
@@ -1933,7 +2078,11 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
 								expect(opened._tag, "DOWN is fresh mail, never a corrupt accepted letter").toBe(
 									"Success",
 								);
-								if (Exit.isSuccess(opened)) expect(opened.value.view).toMatchObject({count: 0});
+
+								if (Exit.isSuccess(opened)) {
+									expect(opened.value.view).toMatchObject({count: 0});
+								}
+
 								expect(yield* r.msg(w.input(1, {type: "add", n: 1}))).toMatchObject({
 									_tag: "accepted",
 								});
@@ -1946,6 +2095,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
 			),
 		{arbitrary: {seed: 119120, runs: 12}},
 	);
+
 	for (const id of [`${PROCESS}/1/0/answer`, `${PROCESS}/due/42`]) {
 		it.effect.prop(
 			`plant, leave ${id} public: mail cannot squat on a runner-owned id`,
@@ -2019,8 +2169,8 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
 });
 
 describe("P11 review: write boundaries, ports, and watcher bounds", () => {
-	for (const stream of ["processes", "processes/other:1", "other:1/inbox", "client:other/inbox"])
-		for (const signing of ["own", "caused"] as const)
+	for (const stream of ["processes", "processes/other:1", "other:1/inbox", "client:other/inbox"]) {
+		for (const signing of ["own", "caused"] as const) {
 			it.effect.prop(
 				`plant, trust a valid event on ${stream}: ${signing} write is refused before commit`,
 				{generated: Request.fields.token},
@@ -2078,7 +2228,10 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
 					),
 				{arbitrary: {seed: 119120, runs: 12}},
 			);
-	for (const reason of ["seen_ahead", "id_reused"] as const)
+		}
+	}
+
+	for (const reason of ["seen_ahead", "id_reused"] as const) {
 		it.effect.prop(
 			`plant, replace refused commit reason with bad_cmd: ${reason} survives in the saved answer`,
 			{generated: Appended.cases.refused.fields.reason},
@@ -2123,7 +2276,9 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
-	for (const port of ["read", "personOnly"] as const)
+	}
+
+	for (const port of ["read", "personOnly"] as const) {
 		it(`plant, treat port policy as documentation: ${port} port cannot accept an agent write`, async () => {
 			const w = await world();
 			Object.assign(
@@ -2155,6 +2310,8 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
 				}).pipe(Effect.provide(w.layer())),
 			);
 		});
+	}
+
 	it("plant, accept unlimited client text: a 257-character id is refused before registering a watcher", async () => {
 		const w = await world();
 		const over = "c".repeat(257);
@@ -2178,8 +2335,15 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
 			Effect.gen(function* () {
 				const r = yield* w.ProgramRunner;
 				yield* r.open("repeat");
-				for (let n = 0; n <= most; n++) yield* r.open("repeat");
-				for (let n = 0; n <= most; n++) yield* Effect.exit(r.open(`client-${n}`));
+
+				for (let n = 0; n <= most; n++) {
+					yield* r.open("repeat");
+				}
+
+				for (let n = 0; n <= most; n++) {
+					yield* Effect.exit(r.open(`client-${n}`));
+				}
+
 				w.published.clear();
 				yield* r.msg(w.input(1, {type: "add", n: 1}));
 				expect(
@@ -2193,13 +2357,20 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
 });
 
 describe("P11 recovery gaps and durable installation", () => {
-	for (const cut of ["after append", "after stepped", "before checkpoint"] as const)
-		for (const wake of [false, true])
+	for (const cut of ["after append", "after stepped", "before checkpoint"] as const) {
+		for (const wake of [false, true]) {
 			it(`p35 plant, save only mine: ${cut}, ${wake ? "wake" : "same runner"} keeps a Cmd visibly unanswered`, async () => {
 				const w = await world();
 				const i = w.input(1, {type: "work", n: 71});
-				if (cut === "after append") w.fault.append = "after";
-				if (cut === "after stepped") w.fault.record = true;
+
+				if (cut === "after append") {
+					w.fault.append = "after";
+				}
+
+				if (cut === "after stepped") {
+					w.fault.record = true;
+				}
+
 				if (cut === "before checkpoint") {
 					w.store.fault.once = true;
 					w.store.fault.query = (q) =>
@@ -2211,6 +2382,7 @@ describe("P11 recovery gaps and durable installation", () => {
 								.get()?.n,
 						) > 0;
 				}
+
 				const inspect = Effect.gen(function* () {
 					const r = yield* w.ProgramRunner;
 					yield* r.open("inspect-gap");
@@ -2224,14 +2396,21 @@ describe("P11 recovery gaps and durable installation", () => {
 					Effect.gen(function* () {
 						const r = yield* w.ProgramRunner;
 						expect(yield* failure(r.msg(i))).toMatchObject({_tag: "LedgerError"});
-						if (!wake) yield* inspect;
+
+						if (!wake) {
+							yield* inspect;
+						}
 					}).pipe(Effect.provide(w.layer())),
 				);
+
 				if (wake) {
 					w.reopen();
 					await Effect.runPromise(inspect.pipe(Effect.provide(w.layer())));
 				}
 			});
+		}
+	}
+
 	it.effect.prop(
 		"p35 plant, retire only options.done: folding a saved write answer prevents another commit",
 		{generated: Request.fields.token},
@@ -2388,18 +2567,29 @@ describe("P11 recovery gaps and durable installation", () => {
 			),
 		{arbitrary: {seed: 119120, runs: 12}},
 	);
+
 	for (const cut of [
 		"before append",
 		"after append",
 		"after stepped",
 		"before checkpoint",
-	] as const)
+	] as const) {
 		it(`plant, trust a prepared model: recovery ${cut} saves one accepted input at its original placing`, async () => {
 			const w = await world();
 			const i = w.input(1, {type: "add", n: 7});
-			if (cut === "before append") w.fault.append = "before";
-			if (cut === "after append") w.fault.append = "after";
-			if (cut === "after stepped") w.fault.record = true;
+
+			if (cut === "before append") {
+				w.fault.append = "before";
+			}
+
+			if (cut === "after append") {
+				w.fault.append = "after";
+			}
+
+			if (cut === "after stepped") {
+				w.fault.record = true;
+			}
+
 			if (cut === "before checkpoint") {
 				w.store.fault.once = true;
 				w.store.fault.query = (q) =>
@@ -2414,6 +2604,7 @@ describe("P11 recovery gaps and durable installation", () => {
 							.get()?.n,
 					) > 0;
 			}
+
 			await Effect.runPromise(
 				Effect.gen(function* () {
 					const r: Runner = yield* w.ProgramRunner;
@@ -2438,6 +2629,8 @@ describe("P11 recovery gaps and durable installation", () => {
 				}).pipe(Effect.provide(w.layer())),
 			);
 		});
+	}
+
 	it("plant, check refusal before duplicate id: resend returns the original placing despite later state", async () => {
 		const w = await world();
 		const i = w.input(1, {type: "add", n: 800});
@@ -2543,7 +2736,8 @@ describe("P11 recovery gaps and durable installation", () => {
 			),
 		{arbitrary: {seed: 119120, runs: 12}},
 	);
-	for (const tag of ["granted", "started", "stepped", "state.upgraded"])
+
+	for (const tag of ["granted", "started", "stepped", "state.upgraded"]) {
 		it.effect.prop(
 			`plant, trust a forbidden declaration: programs cannot emit ${tag} even if declared`,
 			{generated: Request.fields.token},
@@ -2584,6 +2778,8 @@ describe("P11 recovery gaps and durable installation", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
+	}
+
 	it.effect.prop(
 		"S3 plant, overwrite before decoding: a rejected saved model keeps its old SQL value",
 		{generated: Schema.Int.check(Schema.isGreaterThan(1))},
@@ -2666,14 +2862,17 @@ describe("P11 monitoring, content and storage failures", () => {
 				yield* r.msg(i);
 				yield* r.due(50);
 				const rows: ReadonlyArray<SpanRow> = yield* recorded();
+
 				for (const name of [
 					"runner.open",
 					"runner.step",
 					"runner.cmd",
 					"runner.write",
 					"runner.due",
-				])
+				]) {
 					expect(rows.some((row) => row.name === name)).toBe(true);
+				}
+
 				const linked = rows.filter((row) => row.name === "runner.write");
 				expect(rows.find((row) => row.name === "runner.cmd")?.attributes).toMatchObject({
 					"fab.process": PROCESS,
@@ -2749,10 +2948,12 @@ describe("P11 monitoring, content and storage failures", () => {
 									})),
 								);
 								const health = JSON.stringify(w.sink.db().prepare("SELECT * FROM health").all());
+
 								for (const secret of [marker, signature, "private model body P11"]) {
 									expect(tags).not.toContain(secret);
 									expect(health).not.toContain(secret);
 								}
+
 								const failed = rows.filter((row) => !row.ok);
 								expect(failed.length).toBeGreaterThan(0);
 								expect(failed.some((row) => typeof row.attributes["error.type"] === "string")).toBe(
@@ -2800,7 +3001,8 @@ describe("P11 monitoring, content and storage failures", () => {
 			}).pipe(Effect.provide(w.layer())),
 		);
 	});
-	for (const piece of ["process store", "sink"] as const)
+
+	for (const piece of ["process store", "sink"] as const) {
 		it.effect.prop(
 			`plant, swallow ${piece} storage failure: no success or later handler dispatch`,
 			{generated: Schema.Int},
@@ -2810,6 +3012,7 @@ describe("P11 monitoring, content and storage failures", () => {
 					(value) =>
 						Effect.promise(async () => {
 							const w = await world();
+
 							if (piece === "sink") {
 								w.sink.fault.once = true;
 								w.sink.fault.query = (q) => /^\s*(INSERT|UPDATE|REPLACE)/i.test(q);
@@ -2817,6 +3020,7 @@ describe("P11 monitoring, content and storage failures", () => {
 								w.store.fault.once = true;
 								w.store.fault.query = (q) => /^\s*(INSERT|UPDATE|REPLACE)/i.test(q);
 							}
+
 							await Effect.runPromise(
 								Effect.gen(function* () {
 									const r: Runner = yield* w.ProgramRunner;
@@ -2843,4 +3047,5 @@ describe("P11 monitoring, content and storage failures", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
+	}
 });

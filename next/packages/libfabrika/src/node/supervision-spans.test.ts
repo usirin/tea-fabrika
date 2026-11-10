@@ -48,6 +48,7 @@ const policy = {
 	periodMs: 5000,
 	backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5000},
 };
+
 const NAME = "counter:1";
 const PRIVATE = "private failure text P34";
 const owner = Writer.cases.person.make({key: "SHA256:caller", for: from().for});
@@ -56,10 +57,12 @@ type Model = typeof Model.Type;
 const Msg = Schema.Struct({type: Schema.Literal("poison")});
 // Only the platform base class and the RPC transport are supplied. Box methods are real.
 vi.mock("cloudflare:workers", () => ({WorkerEntrypoint: class {}}));
+
 const runnerLayer: (
 	p: Descriptor,
 	options: {policy: typeof policy; recovery: {sql: Sql; name: string; capacity: number}},
 ) => ReturnType<typeof ProgramRunner.layer> = ProgramRunner.layer;
+
 const world = (
 	thrown: unknown,
 	adapter: "node" | "worker" = "node",
@@ -72,10 +75,12 @@ const world = (
 	const parts = new Map<string, ReturnType<typeof storage>>();
 	const records = RecordManager.sql((name) => {
 		let part = parts.get(name);
+
 		if (part === undefined) {
 			part = storage();
 			parts.set(name, part);
 		}
+
 		return part.sql;
 	}, 1024 ** 3);
 	const machine = Machine.make({
@@ -185,12 +190,17 @@ const world = (
 			ledger.reopen();
 			state.reopen();
 			sink.reopen();
-			for (const p of parts.values()) p.reopen();
+
+			for (const p of parts.values()) {
+				p.reopen();
+			}
 		},
 	};
 };
+
 const recorded = (process: string) =>
 	RecordManager.use((r) => Stream.runCollect(r.read({_tag: "job", process})));
+
 const recoverySpans = (w: ReturnType<typeof world>, process: string) =>
 	Effect.gen(function* () {
 		const until = w.alarms.at(-1);
@@ -200,6 +210,7 @@ const recoverySpans = (w: ReturnType<typeof world>, process: string) =>
 		yield* Effect.gen(function* () {
 			yield* ProgramRunner.use((r) => r.due(until!));
 			const rows = yield* recorded(process);
+
 			for (const name of ["runner.recover", "runner.restart"]) {
 				const row = rows.find((r) => r.name === name);
 				expect(row, name).toBeDefined();
@@ -244,6 +255,7 @@ const failure = fc
 									: message;
 		return {value, private: [message, ...(value instanceof Error ? [value.stack!] : [])]};
 	});
+
 const generatedThrow = fc.oneof(
 	failure,
 	fc
@@ -257,7 +269,7 @@ const generatedThrow = fc.oneof(
 		.map((value) => ({value, private: [] as string[]})),
 );
 
-for (const adapter of ["node", "worker"] as const)
+for (const adapter of ["node", "worker"] as const) {
 	it(`${adapter}: generated throw content is deletable; classes alone stay in receipts, dead events and health`, async () => {
 		await fc.assert(
 			fc.asyncProperty(generatedThrow, (sample) =>
@@ -278,11 +290,14 @@ for (const adapter of ["node", "worker"] as const)
 								Option.isSome(c) && c.value._tag === "kept" ? [c.value] : [],
 							);
 							expect(kept.length).toBeGreaterThan(0);
-							for (const text of sample.private)
+
+							for (const text of sample.private) {
 								expect(
 									kept.some((c) => c.message.includes(text)),
 									"original message and stack must reach P37",
 								).toBe(true);
+							}
+
 							const receipt = yield* RecoveryStore.use((s) => s.receipt(w.input.id)).pipe(
 								Effect.provide(RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3})),
 							);
@@ -305,7 +320,8 @@ for (const adapter of ["node", "worker"] as const)
 							expect(dead.map((row) => row.body)).toEqual([
 								expect.objectContaining({errors: [name], tries: 1}),
 							]);
-							for (const text of sample.private)
+
+							for (const text of sample.private) {
 								for (const permanent of [
 									rows,
 									receipt,
@@ -313,10 +329,13 @@ for (const adapter of ["node", "worker"] as const)
 									dead,
 									health,
 									w.sink.sql.exec("SELECT * FROM summary"),
-								])
+								]) {
 									expect(JSON.stringify(permanent)).not.toContain(
 										JSON.stringify(text).slice(1, -1),
 									);
+								}
+							}
+
 							for (const content of kept) {
 								yield* r.deleteContent(chain, content.spanId, {
 									by: owner.key,
@@ -326,11 +345,15 @@ for (const adapter of ["node", "worker"] as const)
 									_tag: "deleted",
 								});
 							}
+
 							const after = yield* Effect.forEach(rows, (row) => r.content(chain, row.spanId), {
 								concurrency: 1,
 							});
-							for (const text of sample.private)
+
+							for (const text of sample.private) {
 								expect(JSON.stringify(after)).not.toContain(JSON.stringify(text).slice(1, -1));
+							}
+
 							expect(yield* recorded(A)).toEqual(rows);
 							expect(w.sink.sql.exec("SELECT * FROM health")).toEqual(health);
 							expect(
@@ -349,6 +372,7 @@ for (const adapter of ["node", "worker"] as const)
 			{seed: 119120, numRuns: 40},
 		);
 	});
+}
 
 describe("P34 supervision recording", () => {
 	for (const [value, name] of [
@@ -357,7 +381,7 @@ describe("P34 supervision recording", () => {
 		[PRIVATE, "string"],
 		[17, "number"],
 		[null, "null"],
-	] as const)
+	] as const) {
 		it.effect(
 			`recording plant, wrapper-only class: observed ${name} reaches its process JobRecord before failure returns`,
 			() =>
@@ -383,6 +407,7 @@ describe("P34 supervision recording", () => {
 					}).pipe(Effect.provide(w.layer()));
 				}),
 		);
+	}
 
 	it.effect.prop(
 		"content plant, message in errors/reason/health: only deletable content holds failure text and stack",
@@ -418,13 +443,16 @@ describe("P34 supervision recording", () => {
 							expect(JSON.stringify(w.sink.sql.exec("SELECT * FROM health"))).not.toContain(secret);
 							expect(JSON.stringify(yield* read(`processes/${NAME}`))).not.toContain(secret);
 							expect(JSON.stringify(yield* read(`${A}/dead`))).not.toContain(secret);
+
 							for (const output of [
 								rows,
 								w.sink.sql.exec("SELECT * FROM health"),
 								yield* read(`processes/${NAME}`),
 								yield* read(`${A}/dead`),
-							])
+							]) {
 								expect(JSON.stringify(output)).not.toContain(JSON.stringify(secret).slice(1, -1));
+							}
+
 							const span = rows[at]!;
 							yield* r.deleteContent({_tag: "job", process: A}, span.spanId, {
 								by: owner.key,
@@ -447,14 +475,21 @@ describe("P34 supervision recording", () => {
 			Effect.gen(function* () {
 				const w = world(new TypeError(PRIVATE));
 				yield* w.boot;
+
 				for (const [n, process] of [A, B, W].entries()) {
 					yield* Effect.gen(function* () {
 						yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
 						const rows = yield* recorded(process);
 						expect(rows.filter((row) => row.name === "runner.throw")).toHaveLength(1);
-						if (n === 2) expect(rows.some((row) => row.name === "runner.dead")).toBe(true);
+
+						if (n === 2) {
+							expect(rows.some((row) => row.name === "runner.dead")).toBe(true);
+						}
 					}).pipe(Effect.provide(w.layer()));
-					if (n < 2) yield* recoverySpans(w, process);
+
+					if (n < 2) {
+						yield* recoverySpans(w, process);
+					}
 				}
 			}),
 	);

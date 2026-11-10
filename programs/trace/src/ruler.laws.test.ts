@@ -43,12 +43,14 @@ describe("the ruler's ticks (L7, L8)", () => {
 			fc.property(lengths, (length) => {
 				const ticks = ticksOf(length);
 				expect(ticks[0]).toEqual({t: 0, rank: 0});
+
 				for (const tick of ticks) {
 					expect(Number.isInteger(tick.t)).toBe(true);
 					expect(tick.t).toBeGreaterThanOrEqual(0);
 					expect(tick.t).toBeLessThanOrEqual(length);
 					expect([0, 1, 2, 3]).toContain(tick.rank);
 				}
+
 				const ts = ticks.map((t) => t.t);
 				expect(ts).toEqual(ts.toSorted((a, b) => a - b));
 				expect(new Set(ts).size).toBe(ts.length);
@@ -92,16 +94,22 @@ describe("the ruler's ticks (L7, L8)", () => {
 			fc.property(lengths, (length) => {
 				const ticks = ticksOf(length);
 				const steps: number[] = [];
+
 				for (const rank of [0, 1, 2, 3] as const) {
 					const ts = upTo(ticks, rank);
 					const step = ts.length > 1 ? (ts[1] ?? 0) - (ts[0] ?? 0) : null;
-					if (step === null) continue;
+
+					if (step === null) {
+						continue;
+					}
+
 					expect(step).toBeGreaterThan(0);
 					// Every multiple of the step up to the end, and nothing else.
 					const want = Array.from({length: Math.floor(length / step) + 1}, (_, k) => k * step);
 					expect(ts).toEqual(want);
 					steps.push(step);
 				}
+
 				// Each coarser step is a whole number of the next finer one.
 				const remainders = steps.slice(1).map((step, i) => (steps[i] ?? step) % step);
 				expect(remainders.every((r) => r === 0)).toBe(true);
@@ -137,7 +145,11 @@ describe("the ruler's coarsest rank (P1, P3)", () => {
 				expect(zero[0]).toBe(0);
 				const step0 = zero[1];
 				const step1 = one[1];
-				if (step0 === undefined || step1 === undefined) return;
+
+				if (step0 === undefined || step1 === undefined) {
+					return;
+				}
+
 				expect(step0 % step1).toBe(0);
 			}),
 			OPTS,
@@ -151,7 +163,11 @@ describe("the ruler's coarsest rank (P1, P3)", () => {
 				expect(zero[0]).toBe(0);
 				expect(zero.length).toBeLessThanOrEqual(2);
 				const second = zero[1];
-				if (second === undefined) return;
+
+				if (second === undefined) {
+					return;
+				}
+
 				expect(second).toBeGreaterThanOrEqual(length / 2);
 				expect(second).toBeLessThanOrEqual(length);
 			}),
@@ -165,10 +181,12 @@ describe("the ruler's coarsest rank (P1, P3)", () => {
 				const ticks = ticksOf(length);
 				const zero = upTo(ticks, 0);
 				const pastZero = upTo(ticks, 1).filter((t) => t > 0);
+
 				if (pastZero.length === 0) {
 					expect(zero).toEqual([0]);
 					return;
 				}
+
 				const halfOn = pastZero.filter((t) => t >= length / 2);
 				expect(halfOn.length).toBeGreaterThan(0);
 				expect(zero).toEqual([0, Math.max(...halfOn)]);

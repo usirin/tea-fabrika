@@ -11,6 +11,7 @@ import {scriptReads} from "./script-reads.mjs";
 // Review plant: an import inside a comment or a fixture string counts as declared.
 // Mutation round 2 plants: omit the TypeScript loader; count dynamic imports as declarations.
 const refs = fc.array(fc.nat({max: 19}), {maxLength: 3});
+
 const model = fc.record({
 	skills: fc.array(fc.array(refs, {minLength: 1, maxLength: 5}), {minLength: 1, maxLength: 4}),
 	tests: fc.array(fc.record({refs, declared: fc.array(fc.boolean(), {maxLength: 3})}), {
@@ -21,6 +22,7 @@ const model = fc.record({
 	fixtureForm: fc.integer({min: 0, max: 4}),
 	syntaxForm: fc.integer({min: 0, max: 2}),
 });
+
 const forms = (path: string, form: number) => {
 	const name = posix.basename(path);
 	return [
@@ -30,6 +32,7 @@ const forms = (path: string, form: number) => {
 		`../../${path.split("/").slice(2).join("/")}`,
 	][form]!;
 };
+
 const imports = (path: string, form: number, n: number) =>
 	[
 		`import value${n} from "${path}?raw";`,
@@ -40,12 +43,14 @@ const imports = (path: string, form: number, n: number) =>
 		`const value${n} = import("${path}");`,
 		`const value${n} = await import('${path}?raw');`,
 	][form]!;
+
 const syntax = (form: number, n: number) =>
 	[
 		"",
 		`const count${n}: number = ${n};`,
 		`interface Sample${n} { value: number }\nconst sample${n}: Sample${n} = { value: ${n} };`,
 	][form]!;
+
 const fixtures = (statement: string, form: number) =>
 	[
 		`// ${statement.replaceAll("\n", "\n// ")}`,
@@ -56,7 +61,7 @@ const fixtures = (statement: string, form: number) =>
 	][form]!;
 
 it("reports exactly undeclared direct and transitive script reads", () => {
-	for (const addFixtures of [false, true])
+	for (const addFixtures of [false, true]) {
 		fc.assert(
 			fc.property(model, ({skills, tests, form, importForm, fixtureForm, syntaxForm}) => {
 				const files = skills.flatMap((scripts, s) =>
@@ -108,20 +113,33 @@ it("reports exactly undeclared direct and transitive script reads", () => {
 						].join("\n"),
 					);
 					const reached = new Set(roots);
-					for (const n of reached) for (const edge of edges[n]!) reached.add(edge);
+
+					for (const n of reached) {
+						for (const edge of edges[n]!) {
+							reached.add(edge);
+						}
+					}
+
 					reachable.set(path, reached);
-					for (const n of reached)
-						if (!declared.has(n)) expected.push({test: path, path: files[n]!.path});
+
+					for (const n of reached) {
+						if (!declared.has(n)) {
+							expected.push({test: path, path: files[n]!.path});
+						}
+					}
 				});
 				const got = scriptReads(addFixtures ? withFixtures : tree);
 				const sort = (rows: {test: string; path: string}[]) =>
 					rows.map(({test, path}) => `${test}:${path}`).sort();
 				expect(sort(got)).toEqual(sort(expected));
+
 				for (const row of got) {
 					const via = files.findIndex((f) => f.path === row.via);
 					const target = files.findIndex((f) => f.path === row.path);
-					if (via < 0) expect(row.via).toBe(row.test);
-					else {
+
+					if (via < 0) {
+						expect(row.via).toBe(row.test);
+					} else {
 						expect(reachable.get(row.test)!.has(via)).toBe(true);
 						expect(edges[via]).toContain(target);
 					}
@@ -129,4 +147,5 @@ it("reports exactly undeclared direct and transitive script reads", () => {
 			}),
 			{seed: 119120, numRuns: 100},
 		);
+	}
 });

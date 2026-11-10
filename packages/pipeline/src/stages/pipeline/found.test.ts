@@ -32,6 +32,7 @@ const QUESTION = {
 	lean: "The app's own.",
 	why: "One.",
 };
+
 const PLAN = Schema.decodeUnknownSync(HeldDraft)({
 	summary: "One form.",
 	stories: [{id: "reader", who: "a reader", want: "one form", why: "names match"}],
@@ -118,6 +119,7 @@ const mentions = (text: string) => text.match(/(?<!\w)@[a-z0-9][\w/-]*/gi) ?? []
 const references = (text: string) => text.match(/#\d+|\bgh-\d+|\/(?:issues|pull)\/\d+/gi) ?? [];
 const P1 = make(PropertyId)("p1");
 const Q1 = make(QuestionId)("q1");
+
 const FOUND: Finding = {
 	id: "f1",
 	state: "open",
@@ -186,7 +188,10 @@ describe("agent words a person or a pull request reads", () => {
 		});
 
 		it("reaches a pull request with no reference or mention outside a code span, if it is let through", () => {
-			if (refused().length > 0) return;
+			if (refused().length > 0) {
+				return;
+			}
+
 			const [line = ""] = ruleChangeLines([
 				{path: PATH, change: "add a rule", why: "it needs one"},
 			]);

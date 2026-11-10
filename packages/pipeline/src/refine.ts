@@ -179,10 +179,21 @@ export function createRefine<const N extends string, B, D, V, R = never>(
 	/** The checker answered: stopped if the use says so, done when nothing is wrong, back to the writer while tries are left, stopped otherwise. */
 	function checked(s: Checking, verdict: V): Step {
 		const reason = stopOf(s.draft, verdict, s.brief);
-		if (reason !== null) return stopped(s, reason);
+
+		if (reason !== null) {
+			return stopped(s, reason);
+		}
+
 		const problems = config.problemsOf(s.draft, verdict, s.brief);
-		if (problems.length === 0) return done(s, verdict);
-		if (s.tries >= s.limit) return [{...s, phase: "out_of_tries", problems}, []];
+
+		if (problems.length === 0) {
+			return done(s, verdict);
+		}
+
+		if (s.tries >= s.limit) {
+			return [{...s, phase: "out_of_tries", problems}, []];
+		}
+
 		return writing({...run(s), tries: s.tries + 1}, feedback(problems));
 	}
 
@@ -195,7 +206,10 @@ export function createRefine<const N extends string, B, D, V, R = never>(
 			case "stopped":
 				return a.kind === "retry" ? checking(s) : stay(s);
 			case "out_of_tries":
-				if (a.kind === "accept") return done(s, null);
+				if (a.kind === "accept") {
+					return done(s, null);
+				}
+
 				return a.kind === "more" && a.tries >= 1
 					? writing({...run(s), tries: s.tries + 1, limit: s.limit + a.tries}, feedback(s.problems))
 					: stay(s);
@@ -237,7 +251,10 @@ export function createRefine<const N extends string, B, D, V, R = never>(
 
 	const update = {
 		start: (s: State, m: Start): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const tries = Math.max(1, m.tries ?? 1);
 			return writing(
 				{brief: m.brief, session: m.session, tries, limit: Math.max(tries, m.limit)},

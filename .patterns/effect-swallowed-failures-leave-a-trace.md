@@ -57,9 +57,14 @@ clanka, an agent by an Effect core maintainer, takes the log form: where it skip
 `Effect.logWarning("MCP server failed")` with the server and error as log annotations
 ([`McpServers.ts:523-526`](https://github.com/Effectful-Tech/clanka/blob/44eb97a4eff8ae00bcf18750b387fe5a98cd191c/src/McpServers.ts#L523-L526)).
 
-Not decided: whether `next/` records with spans only, or with spans plus log lines. `next/` has 0
-`Effect.log` in product code, and no decision says "spans only". Until one does, the span form above
-is the one in use, and ticket 444 asks the owner first.
+Both forms are in use: `next/` records with spans plus log lines
+([0024](../.decisions/0024-next-records-with-spans-and-log-lines.md)). Effect's default
+`tracerLogger` writes a log line onto the span it runs in, as an event, and the span sink keeps that
+event in the row (`next/packages/libfabrika/src/data/sink.ts`, `ended`). So a log line sits inside
+an `Effect.fn` body or a `withSpan`; outside one it reaches only the console (ticket 453, a lint rule,
+advice first). A log with a cause adds `effect.cause`, the error's text and stack, as an event tag;
+until ticket 454 settles what the sink keeps of it, prefer the span form when the error's text could
+carry content.
 
 ## Where it applies
 
@@ -89,7 +94,8 @@ nothing anywhere says so.
 
 ## Decision
 
-[A function that returns an Effect is written with `Effect.fn`](../docs/direction/effect-fn-for-traced-functions.md);
+[0024: `next/` records with spans plus log lines](../.decisions/0024-next-records-with-spans-and-log-lines.md);
+[a function that returns an Effect is written with `Effect.fn`](../docs/direction/effect-fn-for-traced-functions.md);
 the owner's "record wide, read later" (AGENTS.md). Credit: kamp-us/phoenix's
 [backend-exception-translation.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.patterns/backend-exception-translation.md)
 ("a swallowed refusal still logs its cause") and its live publisher's

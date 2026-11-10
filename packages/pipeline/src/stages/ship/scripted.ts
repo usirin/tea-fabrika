@@ -18,12 +18,14 @@ type Criteria = NonNullable<ShipFacts["criteria"]>;
 type Verdict = ShipFacts["verdicts"][number];
 
 export const C1: Criteria[number] = {id: criterionId("c1"), version: 1, text: "every window opens"};
+
 /** Said again once since the plan: only a verdict on its version 2 counts. */
 export const C2: Criteria[number] = {
 	id: criterionId("c2"),
 	version: 2,
 	text: "the door locks, from inside too",
 };
+
 export const CRITERIA: Criteria = [C1, C2];
 
 /** One review's row on `c` at `head`: a pass on its current version unless told otherwise. */
@@ -56,7 +58,11 @@ export function readyAt(pr: string, head: string): ReadyToMerge {
 		...provenAt(head),
 		checks: {head, state: "green"},
 	});
-	if (!("ready" in r)) throw new Error(`the scripted verdicts do not prove ${pr} at ${head}`);
+
+	if (!("ready" in r)) {
+		throw new Error(`the scripted verdicts do not prove ${pr} at ${head}`);
+	}
+
 	return r.ready;
 }
 

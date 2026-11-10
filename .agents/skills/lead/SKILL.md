@@ -99,8 +99,8 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   memory. A PR still merges only after every step ran, each by its own agent (plan, tests, build,
   mutation, one review saying merge-ready), with CI green and the leak grep clean. No step is ever
   skipped. Only a new design call or an exam read that does not meet the bar (step 9) comes back to
-  the lead. A drive script (tracker ticket 341) will chain the mechanical steps in code and start an
-  agent only where judgment is needed. *It said (owner, 2026-11-08): one driver per ticket, start
+  the lead. `chain.ts` (tracker ticket 341) chains the mechanical steps in code and starts an
+  agent only where judgment is needed ([below](#run-a-whole-lane-with-chaints)). *It said (owner, 2026-11-08): one driver per ticket, start
   to finish. One driver ran for 11 hours, which was wasteful.*
 - **A step agent never writes another step's code or tests** (owner, 2026-11-08). The agent
   that hands work along fetches, reads the report, and runs what a Codex box cannot: e2e runs and
@@ -118,8 +118,9 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh new <name> <base> <branch> --ticket <n> --plan <path> [--root <sha>]` | check the start and save its facts (the lane root that build order and the commits check read from), then clone and install |
 | `box.sh run <name> <prompt> <out> --step <step>` | run Codex, save redacted output and the run row |
 | `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
-| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone, then every clean, idle linked worktree whose lane's pull request merged or closed; it prints each keep with its reason, and drive runs it at start and names those keeps when it still refuses on disk. Cleanup is the tooling's job: never ask the owner to free disk (owner, 2026-11-09) |
+| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone, then every clean, idle linked worktree whose lane's pull request merged or closed, found by its branch, by a remote branch at its HEAD or by the PR's head commit; before any folder goes, `keepruns.sh` moves its `runs/` (raw samples, never in git) into the main checkout's `runs/<folder>/`, and a folder it cannot move is kept, as in `box.sh rm` and `catchup.sh`; it prints each keep with its reason, and drive runs it at start and names those keeps when it still refuses on disk. Cleanup is the tooling's job: never ask the owner to free disk (owner, 2026-11-09) |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
+| `chain.ts <lane> <lane-brief.md>` | the whole lane end to end, with no lead agent holding it: tests, build, mutation, review through `drive.ts`, then the PR and `catchup.sh`; a short judgment agent only on an ask or a stuck ([below](#run-a-whole-lane-with-chaints)) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
@@ -202,6 +203,62 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   newest link is in its chain. After a lead merge of main it starts at the merge-base with
   `origin/main` instead, so main's own commits are not judged as the lane's. A tests, build or mutation step waits while `pgrep -x tsgo` finds
   one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
+
+## Run a whole lane with chain.ts
+
+A lead agent used to sit for hours on one lane, starting each step and reading its answer. That
+loop is code now (owner, 2026-11-09; tracker ticket 341). `chain.ts` is a tea machine on the
+Effect engine whose Cmds run `drive.ts` for each step, read its one JSON line, and pick the next
+move; a fresh Claude agent is started only where judgment is needed, and it is gone after one
+answer. Start it in the background and read the last line only:
+
+```sh
+node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
+	[--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] \
+	[--claude tests,build] [--electron tests,build] [--model sonnet|opus] [--start <step>] &
+```
+
+- **The lane brief** is one Markdown file. Its text before the first `## ` heading goes to every
+  step (the ticket, its version, the approved plan, the decided notes). Then one section per step,
+  `## tests`, `## build`, `## mutation` and `## review`, written as a step brief is written today
+  (the review one keeps the template above, minus the two head lines), and `## pr`: the pull
+  request's description, its first line the title, with the `fabrika close ticket <N>` line when
+  the PR finishes the ticket. Every section is required. Each step's brief is the shared head, its
+  section, and the lane's facts the chain fills in: the round, where the step starts, each step's
+  head so far, what the last step said, `Reviewed head` and `Parent base` for a review, `T=` and
+  `BUILD=` for a mutation. The chain saves each one as `BOXES/<lane>-chain<round>-<step>-brief.md`.
+- **The moves:** tests done leads to build, build to mutation, mutation (done or skip) to review,
+  and a merge-ready review pushes the branch as the bot, opens the PR (or finds the open one) with a
+  steps-and-dollars table in its body, and runs `catchup.sh`. A `send` goes to the step it names,
+  with the sender's word in that step's brief. A send to plan parks: only the lead approves a plan.
+  A lockfile ask parks with drive's own instructions. Any other refusal parks.
+- **Retries and limits** (decided with the clanka walk, 2026-11-09): a step drive refused for a full
+  laptop (`refused:agent_cap`, `refused:low_disk`) is retried on one named Effect `Schedule`,
+  `slotSchedule`, and running out is a typed `RetriesExhausted`, reported as stuck with the schedule's
+  name. Every limit is a `Context.Reference` with a default the environment may override:
+  `WaitMinutes` 5 (`CHAIN_WAIT_MINUTES`), `MaxWaits` 6 (`CHAIN_WAITS`), `MaxStucks` 3
+  (`CHAIN_STUCKS`), `MaxSteps` 16 (`CHAIN_STEPS`). Proven against the real `drive.ts` on 2026-11-09
+  with the disk under the 20 GB floor: the step was tried, retried on the schedule, and the lane
+  ended `stuck` with `RetriesExhausted` and drive's reason, exit 30.
+- **Judgment** (an `ask:lead:question`, or a `stuck`): the chain starts `claude -p` in the main
+  checkout, read-only (`Read,Glob,Grep`, under the same sandbox profile as a Claude plan step), with
+  the lane's state file and the step's report. It answers one line: `answer: send <step> <note>`
+  runs that step again with the note in its brief; `answer: park <why>` ends the lane for the lead.
+  Its field row goes to `BOXES/<lane>-rows.jsonl` like a step's. Three stucks in a row on one
+  step park without asking. Mutation always runs on Claude; `--claude` names other steps that need
+  Claude (Electron or socket work), `--electron` the ones that run the app.
+- **Where it ends:** one JSON line, `outcome` `done` (landed, exit 0), `ask` (parked, exit 20,
+  the why in `reason`) or `stuck` (exit 30). `state/<lane>.md` gets a `chain:` line for every move,
+  so the status page reads the lane as before. `state/<lane>-chain.json` is the chain record, a
+  Schema value (`ChainRecord`): one `StepRecord` per round, written before the step starts and again
+  when it ends (drive's line, the judgment's answer), plus the PR number and when it landed, so a
+  resume needs nothing in memory. The step state file, boxes, rows and exit codes are drive's own,
+  unchanged. The chain holds every right (the bot's push, the PR, catch-up); a box and the judgment
+  agent hold only their model login ([0028](../../../.decisions/0028-the-parent-holds-every-right.md)),
+  and the steps run the unmodified harness through `drive.ts`.
+- **Watching:** `tail -f BOXES/state/<lane>.md`. To stop a lane, stop the chain process: the
+  running step's process group goes with it, and drive records that step as stuck. Start the chain
+  again with `--start <step>` to go on from there.
 
 ## Pushes and protected refs
 

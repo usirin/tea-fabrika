@@ -52,7 +52,10 @@ const cut = (row: string) => (row.length > WIDTH ? `${row.slice(0, WIDTH - 1)}â€
  * stdin's lines: only the full mailbox shows.
  */
 export function fullRows(job: Job, live: ReadonlyMap<string, AnyRunning>): readonly string[] {
-	if (job.state === "detached") return [];
+	if (job.state === "detached") {
+		return [];
+	}
+
 	const rows = job.stages.flatMap((stage, i) => {
 		const mailbox: Mailbox | undefined = live.get(stage.run)?.run.mailbox();
 		const full = Object.entries(mailbox?.inputs ?? {}).filter(([, queue]) => queue.waiting > 0);
@@ -74,15 +77,26 @@ export function fullRows(job: Job, live: ReadonlyMap<string, AnyRunning>): reado
 
 /** The rows under one job, from the handles of its runs this tsh holds. */
 export function copyRows(job: Job, live: ReadonlyMap<string, AnyRunning>): readonly string[] {
-	if (job.state === "detached") return [];
+	if (job.state === "detached") {
+		return [];
+	}
+
 	const many = job.stages.length > 1;
 	const machines = job.stages.flatMap((stage) => {
 		const running = live.get(stage.run);
-		if (running === undefined) return [];
+
+		if (running === undefined) {
+			return [];
+		}
+
 		const names = Object.keys(running.run.program.machines);
 		return names.flatMap((name) => {
 			const view = running.run.machines[name];
-			if (view === undefined) return [];
+
+			if (view === undefined) {
+				return [];
+			}
+
 			const tag = [many ? stage.program : null, names.length > 1 ? name : null]
 				.filter((t) => t !== null)
 				.join(" ");

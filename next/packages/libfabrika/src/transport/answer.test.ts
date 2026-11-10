@@ -8,11 +8,13 @@ import * as T from "./index.ts";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 class Offline extends Schema.TaggedError<Offline>()("Offline", {}) {}
+
 type Route = (
 	method: string,
 	params: unknown,
 	who: typeof T.Who.Type,
 ) => Effect.Effect<typeof T.Answer.Type, Offline>;
+
 const online = () =>
 	T.Attached.cases.online.make({
 		client: "c1",
@@ -22,7 +24,9 @@ const online = () =>
 		watching: false,
 		busy: false,
 	});
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 // Method names the door and the ledger answer today, and two near misses of door.knock.
 const METHODS = [
 	"door.knock",
@@ -42,6 +46,7 @@ const METHODS = [
 	"Door.knock",
 	"door.knock ",
 ] as const;
+
 const unauthenticated = fc.oneof(
 	fc.record({client: fc.string(), nonce: fc.string()}).map((a) => T.Attached.cases.new.make(a)),
 	fc
@@ -64,7 +69,9 @@ const unauthenticated = fc.oneof(
 		})
 		.map((a) => T.Attached.cases.waiting.make(a)),
 );
+
 const admit = () => Effect.die("online routing must not repeat hello admission");
+
 const frame = (over: Record<string, unknown> = {}) =>
 	JSON.stringify({
 		jsonrpc: "2.0",
@@ -73,6 +80,7 @@ const frame = (over: Record<string, unknown> = {}) =>
 		params: {stream: "x", after: 0},
 		...over,
 	});
+
 describe("P10 JSON-RPC", () => {
 	it.effect("p23: numeric reply id zero is preserved, not mistaken for a notification", () =>
 		Effect.gen(function* () {
@@ -82,7 +90,8 @@ describe("P10 JSON-RPC", () => {
 			expect(JSON.parse(result.send!)).toEqual({jsonrpc: "2.0", id: 0, result: null});
 		}),
 	);
-	for (const mode of ["ok", "refused"] as const)
+
+	for (const mode of ["ok", "refused"] as const) {
 		it.effect.prop(
 			`p23: ${mode} has one matching reply`,
 			{generated: T.Answer.cases.refused},
@@ -108,7 +117,9 @@ describe("P10 JSON-RPC", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
-	for (const mode of ["failure", "defect"] as const)
+	}
+
+	for (const mode of ["failure", "defect"] as const) {
 		it.effect(`p23: ${mode} sends nothing and permits a real retry`, () =>
 			Effect.gen(function* () {
 				const attached = online();
@@ -125,19 +136,23 @@ describe("P10 JSON-RPC", () => {
 				expect(route).toHaveBeenCalledTimes(2);
 			}),
 		);
+	}
+
 	for (const text of [
 		"{",
 		"null",
 		"[]",
 		JSON.stringify({jsonrpc: "2.0", id: "r1", result: 7}),
 		JSON.stringify({jsonrpc: "2.0", method: "news", params: {}}),
-	])
+	]) {
 		it.effect(`p23: no reply for junk, response or notification ${text}`, () =>
 			Effect.gen(function* () {
 				const route = vi.fn(() => Effect.succeed(T.Answer.cases.ok.make({result: null})));
 				expect((yield* T.answerFrame(text, online(), admit, route)).send).toBeNull();
 			}),
 		);
+	}
+
 	// d2/p23: a connection that is not online never reaches a route. Every request gets one
 	// no_hello error with its own id, and the attachment stays as it was. The one way through
 	// is a waiting client's door.knock: its handler runs once with the params, and its answer is
@@ -166,6 +181,7 @@ describe("P10 JSON-RPC", () => {
 							expect(result.send).not.toBeNull();
 							expect(result.attached).toEqual(attached);
 							const wire = <A>(value: A): A => JSON.parse(JSON.stringify(value));
+
 							if (attached._tag === "waiting" && method === "door.knock") {
 								expect(route.mock.calls).toEqual([["door.knock", wire(params)]]);
 								expect(JSON.parse(result.send!)).toEqual({
@@ -212,7 +228,8 @@ describe("P10 JSON-RPC", () => {
 			{seed: SEED, endOnFailure: true, numRuns: 100},
 		);
 	});
-	for (const id of ["r1", 0])
+
+	for (const id of ["r1", 0]) {
 		it.effect(`p23: parked wait retains reply id ${id} and cursor, with no unresolved work`, () =>
 			Effect.gen(function* () {
 				const result = yield* T.answerFrame(frame({id}), online(), admit, () =>
@@ -224,6 +241,8 @@ describe("P10 JSON-RPC", () => {
 				expect(JSON.parse(JSON.stringify(result.attached))).toEqual(result.attached);
 			}),
 		);
+	}
+
 	it.effect("p82: additive request fields leave the reply id and checked writer alone", () =>
 		Effect.gen(function* () {
 			const route = vi.fn((_method: string, _params: unknown, _who: typeof T.Who.Type) =>

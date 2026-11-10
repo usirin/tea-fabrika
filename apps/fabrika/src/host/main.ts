@@ -58,8 +58,10 @@ const pullRequests = Layer.provide(
 const repoTree = Layer.provide(gitHubRepoTree(GITHUB), gitHubCodeTree({}));
 
 const main = Effect.gen(function* () {
-	if (home === undefined || home === "")
+	if (home === undefined || home === "") {
 		return yield* Effect.die("fabrika host: FABRIKA_HOME is not set; the host starts on no home");
+	}
+
 	process.umask(0o077);
 	const paths = yield* pathsOf(home);
 	// The log is in the host's folder, so the folder is there before the log opens.

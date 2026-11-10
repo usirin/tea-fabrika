@@ -21,7 +21,11 @@ export const workerLoader = (
 ) => ({
 	load: Effect.fn("loader.load")(function* (name: string, process: string) {
 		const code = Object.hasOwn(programs, name) ? programs[name] : undefined;
-		if (code === undefined) return yield* new ProgramDown({reason: "no_program"});
+
+		if (code === undefined) {
+			return yield* new ProgramDown({reason: "no_program"});
+		}
+
 		const worker = loader.get(`${code.hash}/${process}`, () => ({
 			compatibilityDate: "2026-10-12",
 			// Worker Loader reads an ES module only from a ".js" name; ".mjs" fails to load.

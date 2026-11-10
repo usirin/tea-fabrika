@@ -14,6 +14,7 @@ describe("a rejected WebCrypto Promise", () => {
 				(value) =>
 					Effect.promise(async () => {
 						const spy = vi.spyOn(crypto.subtle, "digest").mockRejectedValue(value);
+
 						try {
 							const error = await Effect.runPromise(Effect.flip(sha256(new Uint8Array([1]))));
 							assert.strictEqual(error._tag, "SinkError");

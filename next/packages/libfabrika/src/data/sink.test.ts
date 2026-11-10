@@ -42,8 +42,14 @@ type Row = typeof SpanRow.Type;
 const root = mkdtempSync(join(tmpdir(), "p37-sink-"));
 const opened: Array<DatabaseSync> = [];
 let homes = 0;
+
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(root, {recursive: true, force: true});
 });
 
@@ -60,7 +66,11 @@ const home = () => {
 	const sqls = new Map<string, Sql>();
 	const part = (name: string): Sql => {
 		const known = sqls.get(name);
-		if (known !== undefined) return known;
+
+		if (known !== undefined) {
+			return known;
+		}
+
 		const made = open(`${name.replaceAll("/", "_")}.db`);
 		parts.set(name, made);
 		const sql = nodeSql(made);
@@ -86,13 +96,16 @@ const world = (
 ) => Layer.mergeAll(SpanSink.layer(sql, {object: OBJECT}), records, archive);
 
 const flush = SpanSink.use((sink) => sink.flush);
+
 const recorded = (chain: ChainValue) =>
 	RecordManager.use((records) => Stream.runCollect(records.read(chain)));
+
 const traced = <A, E, R>(
 	name: string,
 	attributes: Record<string, unknown>,
 	body: Effect.Effect<A, E, R>,
 ) => body.pipe(Effect.withSpan(name, {attributes}));
+
 const step = (name: string, attributes: Record<string, unknown> = {}) =>
 	traced(name, attributes, Effect.void);
 
@@ -103,14 +116,17 @@ const count = (db: DatabaseSync, table: string, where = "1"): number =>
 const places = (db: DatabaseSync, marker: string): Array<string> => {
 	const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all();
 	const found = new Set<string>();
+
 	for (const {name} of tables) {
 		for (const row of db.prepare(`SELECT * FROM "${String(name)}"`).all()) {
 			for (const [column, value] of Object.entries(row)) {
-				if (typeof value === "string" && value.includes(marker))
+				if (typeof value === "string" && value.includes(marker)) {
 					found.add(`${String(name)}.${column}`);
+				}
 			}
 		}
 	}
+
 	return [...found].sort();
 };
 
@@ -120,7 +136,9 @@ const full = () =>
 		errcode: 13,
 		errstr: "database or disk is full",
 	});
+
 const WRITE = /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i;
+
 /** A Sql over a real one that throws SQLITE_FULL on its next `armed` writes, as a full disk would. */
 const filling = (inner: Sql) => {
 	let armed = 0;
@@ -131,6 +149,7 @@ const filling = (inner: Sql) => {
 				armed -= 1;
 				throw full();
 			}
+
 			return inner.exec(query, ...params);
 		},
 		transaction: (work) => {
@@ -138,7 +157,9 @@ const filling = (inner: Sql) => {
 				armed -= 1;
 				throw full();
 			}
+
 			inside = true;
+
 			try {
 				return inner.transaction(work);
 			} finally {
@@ -151,12 +172,16 @@ const filling = (inner: Sql) => {
 };
 
 const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");
+
 /** R2 in memory, as its binding behaves: `put` fails when the body does not match its SHA-256. */
 const bucket = () => {
 	const files = new Map<string, Uint8Array>();
 	const calls: BucketCalls = {
 		put: (key, body, sha256) => {
-			if (hex(body) !== sha256) return Promise.reject(new Error("checksum mismatch"));
+			if (hex(body) !== sha256) {
+				return Promise.reject(new Error("checksum mismatch"));
+			}
+
 			files.set(key, body.slice());
 			return Promise.resolve();
 		},
@@ -198,7 +223,7 @@ describe("T246, P37 decodes TypeID process ids", () => {
 		["leading space", ` ${P1}`],
 		["trailing space", `${P1} `],
 		["trailing newline", `${P1}\n`],
-	] as const)
+	] as const) {
 		it.effect.prop(
 			`a stored process with ${label} fails bad_row, keeps its row, and sends nothing`,
 			{
@@ -239,6 +264,7 @@ describe("T246, P37 decodes TypeID process ids", () => {
 				),
 			{arbitrary: {seed: 119120, runs: 12}},
 		);
+	}
 });
 
 describe("p98, a span that ends is never dropped", () => {
@@ -380,18 +406,23 @@ describe("p98, a span that ends is never dropped", () => {
 							String(x.attributes["fab.object"]).localeCompare(String(y.attributes["fab.object"])),
 						),
 				).toEqual([{attributes: {"fab.object": OBJECT}}, {attributes: {"fab.object": P2}}]);
-				for (const row of outside)
+
+				for (const row of outside) {
 					expect(row.attributes, "the object is the resource's, not a span tag").not.toHaveProperty(
 						"fab.object",
 					);
+				}
+
 				for (const [process, object] of [
 					[P1, OBJECT],
 					[P2, P2],
 				] as const) {
 					const rows = yield* recorded(job(process));
 					expect(rows).toHaveLength(2);
-					for (const row of rows)
+
+					for (const row of rows) {
 						expect(row.resource).toEqual({attributes: {"fab.object": object}});
+					}
 				}
 			}).pipe(Effect.provide(Layer.merge(RecordManager.memory(BIG), Archive.memory)));
 		},
@@ -450,7 +481,10 @@ describe("p98, a span that ends is never dropped", () => {
 				(value) => {
 					const {db, sql} = home();
 					return Effect.gen(function* () {
-						for (let n = 0; n < 4; n++) yield* step("runner.step", {"fab.process": P1, "fab.n": n});
+						for (let n = 0; n < 4; n++) {
+							yield* step("runner.step", {"fab.process": P1, "fab.n": n});
+						}
+
 						const real = yield* RecordManager;
 						const down = {
 							...real,
@@ -497,10 +531,13 @@ describe("p98, a span that ends is never dropped", () => {
 		const {db, sql} = home();
 		return Effect.gen(function* () {
 			for (let batch = 0; batch < 3; batch++) {
-				for (let n = 0; n < 30; n++)
+				for (let n = 0; n < 30; n++) {
 					yield* step("runner.step", {"fab.process": P1, "fab.n": batch * 30 + n});
+				}
+
 				expect(yield* flush).toEqual({sent: 30});
 			}
+
 			const rows = yield* recorded(job(P1));
 			expect(rows.map((r) => r.attributes["fab.n"])).toEqual(Array.from({length: 90}, (_, n) => n));
 			const part = db.prepare(`SELECT max(part) AS part FROM parts`).get()?.["part"];
@@ -551,9 +588,17 @@ describe("p98, a span that ends is never dropped", () => {
 					return Effect.gen(function* () {
 						yield* step(value, {});
 						arm(Number.POSITIVE_INFINITY);
-						for (let n = 0; n < 5; n++) yield* step("runner.step", {"fab.n": n});
+
+						for (let n = 0; n < 5; n++) {
+							yield* step("runner.step", {"fab.n": n});
+						}
+
 						expect((yield* Effect.flip(flush)).held).toBe(5);
-						for (let n = 5; n < 8; n++) yield* step("runner.step", {"fab.n": n});
+
+						for (let n = 5; n < 8; n++) {
+							yield* step("runner.step", {"fab.n": n});
+						}
+
 						const error = yield* Effect.flip(flush);
 						expect(error.reason).toBe("storage");
 						expect(error.held).toBe(8);
@@ -585,8 +630,11 @@ describe("p98, a span that ends is never dropped", () => {
 						const pages = Number(db.prepare("PRAGMA page_count").get()?.["page_count"]);
 						db.exec(`PRAGMA max_page_count = ${pages}`);
 						const made = value;
-						for (let n = 0; n < made; n++)
+
+						for (let n = 0; n < made; n++) {
 							yield* step("runner.step", {"fab.n": n, "fab.pad": "p".repeat(100)});
+						}
+
 						const error = yield* Effect.flip(flush);
 						expect(error.reason).toBe("storage");
 						expect(error.held).toBeGreaterThan(0);
@@ -711,6 +759,7 @@ const SECRET = "sk-p99-secret";
 const NOTE = "note-body-p99";
 const NOTE_TWO = "note-two-p99";
 const a = (n: number) => "a".repeat(n);
+
 class NoteError extends Error {
 	override readonly name = "NoteError";
 }
@@ -762,12 +811,14 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 				expect(rows.find((x) => x.name === "ledger.call")?.attributes["error.type"]).toBe(
 					"NoteError",
 				);
+
 				for (const x of rows) {
 					for (const value of Object.values(x.attributes)) {
 						expect(String(value)).not.toContain(NOTE);
 						expect(String(value)).not.toContain(NOTE_TWO);
 					}
 				}
+
 				const content = yield* RecordManager.use((records) =>
 					records.content(job(P1), failed?.spanId ?? ""),
 				);
@@ -780,6 +831,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 				yield* step("runner.step", {});
 				yield* flush;
 				expect(r2.files.size, "the day was archived").toBeGreaterThan(0);
+
 				for (const body of r2.files.values()) {
 					const text = new TextDecoder().decode(body);
 					expect(text).not.toContain(SECRET);
@@ -788,11 +840,13 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 				}
 
 				expect(places(h.db, NOTE), "the object keeps no message after flush").toEqual([]);
+
 				for (const [name, db] of h.parts) {
 					for (const place of [...places(db, NOTE), ...places(db, NOTE_TWO)]) {
 						expect(place.startsWith("content."), `${name}: ${place}`).toBe(true);
 					}
 				}
+
 				expect(h.bytes(SECRET), "no file holds the Redacted text, in any byte").toEqual([]);
 			}).pipe(
 				Effect.provide(world(h.sql, RecordManager.sql(h.part, BIG), Archive.bucket(r2.calls))),
@@ -823,24 +877,31 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 						const [row] = yield* recorded(job(P1));
 						const kept = row?.attributes ?? {};
 						let dropped = 0;
+
 						for (const [k, v] of Object.entries(tags)) {
 							if (typeof v === "string") {
-								if (v.length <= 128) expect(kept[k]).toBe(v);
-								else {
+								if (v.length <= 128) {
+									expect(kept[k]).toBe(v);
+								} else {
 									expect(v.startsWith(String(kept[k]))).toBe(true);
 									expect(String(kept[k]).length).toBeLessThanOrEqual(128);
 									expect(kept[`${k}.length`]).toBe(v.length);
 								}
-							} else if (typeof v === "number" || typeof v === "boolean") expect(kept[k]).toBe(v);
-							else if (Redacted.isRedacted(v)) expect(kept[k]).toBe("<redacted>");
-							else {
+							} else if (typeof v === "number" || typeof v === "boolean") {
+								expect(kept[k]).toBe(v);
+							} else if (Redacted.isRedacted(v)) {
+								expect(kept[k]).toBe("<redacted>");
+							} else {
 								expect(k in kept, `${k} is dropped`).toBe(false);
 								dropped += 1;
 							}
 						}
+
 						expect(kept["fab.sink.dropped"] ?? 0).toBe(dropped);
+
 						for (const v of Object.values(kept)) {
 							expect(["string", "number", "boolean"]).toContain(typeof v);
+
 							if (typeof v === "string") {
 								expect(v.length).toBeLessThanOrEqual(128);
 								expect(v).not.toContain(SECRET);

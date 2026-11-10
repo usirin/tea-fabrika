@@ -121,7 +121,11 @@ describe("the fake row", () => {
 			);
 		const first = await run(turn(REPLACE, null));
 		const opened = [...first].find((r) => r._tag === "opened");
-		if (opened?._tag !== "opened") throw new Error("the fake opened no session");
+
+		if (opened?._tag !== "opened") {
+			throw new Error("the fake opened no session");
+		}
+
 		await run(turn(APPEND, opened.own));
 		const noted = readFileSync(join(folder, ".fake-acp", "log"), "utf8")
 			.split("\n")

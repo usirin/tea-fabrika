@@ -54,11 +54,13 @@ export class LedgerUnreachable extends Schema.TaggedError<LedgerUnreachable>()(
 	"LedgerUnreachable",
 	{method: Schema.String, message: Schema.String},
 ) {}
+
 /** EventStoreDB's WrongExpectedVersion: the stream ends at `rev`, not where the write said. */
 export class Stale extends Schema.TaggedError<Stale>()("Stale", {
 	stream: Schema.String,
 	rev: Schema.Number,
 }) {}
+
 /**
  * Kafka's ProducerFenced: the fence is not the newest claim of a name that may write this stream
  * (a newer claim took it, or it exited). Stop writing. Time alone never fences (151).
@@ -66,34 +68,41 @@ export class Stale extends Schema.TaggedError<Stale>()("Stale", {
 export class Fenced extends Schema.TaggedError<Fenced>()("Fenced", {stream: Schema.String}) {}
 /** EventStoreDB's AccessDenied: a registered name's stream with no fence; a name inside another. */
 export class Denied extends Schema.TaggedError<Denied>()("Denied", {stream: Schema.String}) {}
+
 /** Kafka's UNKNOWN_TOPIC_OR_PARTITION, OTP's `noproc`: nobody registered this name. */
 export class UnknownName extends Schema.TaggedError<UnknownName>()("UnknownName", {
 	stream: Schema.String,
 }) {}
+
 /** etcd's lock is held: someone else has a live lease on the name until `expiresAt`. */
 export class Held extends Schema.TaggedError<Held>()("Held", {
 	name: Schema.String,
 	holder: Schema.String,
 	expiresAt: Schema.Number,
 }) {}
+
 /** etcd's lease not found: a newer claim took the name, or it exited. A lease past its end is not lost. */
 export class LeaseLost extends Schema.TaggedError<LeaseLost>()("LeaseLost", {
 	name: Schema.String,
 }) {}
+
 /** The lease is live, but someone cancelled the work: stop. */
 export class Cancelled extends Schema.TaggedError<Cancelled>()("Cancelled", {
 	name: Schema.String,
 }) {}
+
 /** The name's program exited (at `pos`) and waits for its parent to restart it: no claim lands. */
 export class Down extends Schema.TaggedError<Down>()("Down", {
 	name: Schema.String,
 	pos: Schema.Number,
 }) {}
+
 /** OTP's `noproc` for a link: there is no running process under `name` to link to. */
 export class NoProc extends Schema.TaggedError<NoProc>()("NoProc", {name: Schema.String}) {}
 
 /** 102: a limit's kind. `children` refuses a start; the others end a run. */
 export const LimitKind = Schema.Literals(["usd", "tokens", "wall", "children"]);
+
 /** 102: a limit hit: its kind, whose limit (`at`), what was used (with what was asked) and its max. */
 export const Over = Schema.Struct({
 	kind: LimitKind,
@@ -102,6 +111,7 @@ export const Over = Schema.Struct({
 	max: Schema.Number,
 });
 export type Over = typeof Over.Type;
+
 /**
  * 102: a limit says no (OTP's `{error, max_children}`, Kubernetes' `exceeded quota`). For
  * `children`, nothing ended. For any other kind the run under `over.at` has ended, `limit:<kind>`.
@@ -120,6 +130,7 @@ export const Appended = Schema.Struct({
 	dup: Schema.Boolean,
 });
 export type Appended = typeof Appended.Type;
+
 /** A registration. `created: false`: it was registered already, and nothing was written. */
 export const Registered = Schema.Struct({
 	created: Schema.Boolean,
@@ -127,6 +138,7 @@ export const Registered = Schema.Struct({
 	rev: Schema.Number,
 });
 export type Registered = typeof Registered.Type;
+
 /**
  * A won claim: the fence every write under the name must carry, the lease's end, and the name's
  * incarnation (its run number: a restart starts a new one, a takeover keeps it).
@@ -138,6 +150,7 @@ export const Claimed = Schema.Struct({
 	incarnation: Schema.Number,
 });
 export type Claimed = typeof Claimed.Type;
+
 /** An exit that landed: its `exited` event. `dup`: it had landed already under this fence. */
 export const Exited = Schema.Struct({
 	pos: Schema.Number,
@@ -151,6 +164,7 @@ export type Monitored = typeof Monitored.Type;
 /** A start: the child's incarnation now; `started: false`: it was up already. */
 export const Started = Schema.Struct({incarnation: Schema.Number, started: Schema.Boolean});
 export type Started = typeof Started.Type;
+
 export const Process = Schema.Struct({
 	name: Schema.String,
 	parent: Schema.NullOr(Schema.String),
@@ -158,6 +172,7 @@ export const Process = Schema.Struct({
 	down: Schema.Number,
 	trapExit: Schema.Boolean,
 });
+
 /** 102: a name's limits, each left out for none: what a child spec carries. */
 export const LimitsSchema = Schema.Struct({
 	usd: Schema.optionalKey(Schema.Number),
@@ -165,9 +180,11 @@ export const LimitsSchema = Schema.Struct({
 	wallMs: Schema.optionalKey(Schema.Number),
 	children: Schema.optionalKey(Schema.Number),
 });
+
 /** 102: a charge that landed; `over`: the limit it crossed, whose run has ended now. */
 export const Charged = Schema.Struct({dup: Schema.Boolean, over: Schema.NullOr(Over)});
 export type Charged = typeof Charged.Type;
+
 /** 102: where a name stands: its limits, its subtree's spend (holds in), the names under it. */
 export const UsageSchema = Schema.Struct({
 	name: Schema.String,
@@ -211,6 +228,7 @@ export interface NewEvent {
 
 /** A mailbox address: the one stream under a registered name anyone may append to. */
 export type Inbox = string & {readonly kind: "inbox"};
+
 /** An address read from a message (a reply-to) becomes an `Inbox` only if it is one. */
 export const inboxOf = (stream: string): Inbox | null =>
 	stream.endsWith("/inbox") && stream.length > "/inbox".length ? (stream as Inbox) : null;
@@ -247,6 +265,7 @@ export const DownMessage = Schema.Struct({
 	at: Schema.Number,
 });
 export type DownMessage = typeof DownMessage.Type;
+
 /**
  * How a run ended, as a DOWN or an EXIT says it (100 adds `killed`: its parent killed it; 102 the
  * limits: its own limit ended it, as Kubernetes says `OOMKilled`). Only the ledger ends a run for a
@@ -261,6 +280,7 @@ export const EndReason = Schema.Literals([
 	"limit:tokens",
 	"limit:wall",
 ]);
+
 /**
  * The data of the ledger's `EXIT` message to a name that traps exits (OTP's `{'EXIT', From,
  * Reason}`): a linked name's exit, or (100) its parent's `shutdown` signal. `to`: the incarnation
@@ -275,6 +295,7 @@ export const ExitMessage = Schema.Struct({
 	to: Schema.Number,
 });
 export type ExitMessage = typeof ExitMessage.Type;
+
 /** The data of a `dead_letter` event: the inbox rev set aside. */
 export const DeadLetter = Schema.Struct({
 	rev: Schema.Number,
@@ -283,6 +304,7 @@ export const DeadLetter = Schema.Struct({
 	at: Schema.Number,
 });
 export type DeadLetter = typeof DeadLetter.Type;
+
 /** 102: the data of a `limit` event in `<name>/dead`: the run a limit ended, and whose limit it was. */
 export const LimitRecord = Schema.Struct({
 	limit: LimitKind,
@@ -488,13 +510,15 @@ export interface Raw {
 const claimed =
 	(name: string) =>
 	(r: ClaimResult): Effect.Effect<Claimed, Held | Stale | Denied | UnknownName | Down> => {
-		if (r.ok)
+		if (r.ok) {
 			return Effect.succeed({
 				fence: r.fence,
 				rev: r.rev,
 				expiresAt: r.expiresAt,
 				incarnation: r.incarnation,
 			});
+		}
+
 		switch (r.why) {
 			case "down":
 				return Effect.fail(new Down({name, pos: r.pos}));
@@ -689,16 +713,20 @@ export const fromRaw = (raw: Raw): Ledger["Service"] => {
 /** The rules' answers, as they cross a wire (HTTP, a worker thread): decoded, never cast. */
 const Refused = <W extends string>(why: W) =>
 	Schema.Struct({ok: Schema.Literal(false), why: Schema.Literal(why)});
+
 const Written = Schema.Array(
 	Schema.Struct({stream: Schema.String, rev: Schema.Number, pos: Schema.Number}),
 );
+
 const Flag = Schema.Union([Schema.Struct({ok: Schema.Literal(true)}), Refused("fenced")]);
+
 const OverWire = Schema.Struct({
 	ok: Schema.Literal(false),
 	why: Schema.Literal("limit"),
 	over: Over,
 	written: Written,
 });
+
 export const Wire = {
 	register: Schema.Union([
 		Schema.Struct({

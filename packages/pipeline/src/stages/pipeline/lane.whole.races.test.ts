@@ -167,7 +167,10 @@ describe("a lane, whole", () => {
 			fake: {pushesAt: {review: {0: {branch: "main", ...ELSEWHERE}}}},
 			// Red once: at the first head with main in it, the route's read's. Every other run is real.
 			checksSay: (head, _nth, where) => {
-				if (saidRed || !takesMainIn(where, head)) return null;
+				if (saidRed || !takesMainIn(where, head)) {
+					return null;
+				}
+
 				saidRed = true;
 				return {
 					head,

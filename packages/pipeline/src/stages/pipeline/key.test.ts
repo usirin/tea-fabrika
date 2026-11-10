@@ -29,12 +29,20 @@ const inputs: fc.Arbitrary<Inputs> = fc.record({
 /** One field of `inputs`, changed to another value of its own kind. */
 const changed = (was: Inputs, field: keyof Inputs): Inputs => {
 	const value = was[field];
+
 	if (field === "step") {
 		const at = STEPS.indexOf(was.step);
 		return {...was, step: STEPS[(at + 1) % STEPS.length] ?? "triage"};
 	}
-	if (typeof value === "number") return {...was, [field]: value + 1};
-	if (typeof value === "string") return {...was, [field]: `${value}-changed`};
+
+	if (typeof value === "number") {
+		return {...was, [field]: value + 1};
+	}
+
+	if (typeof value === "string") {
+		return {...was, [field]: `${value}-changed`};
+	}
+
 	return {...was, [field]: field === "plan" ? 1 : "set"};
 };
 

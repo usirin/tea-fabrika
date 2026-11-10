@@ -17,9 +17,17 @@ const list = programList(SMALL);
 
 const checked = (line: string) => {
 	const parsed = parse(line);
-	if (parsed.kind !== "parsed") throw new Error(`parse refused: ${parsed.why}`);
+
+	if (parsed.kind !== "parsed") {
+		throw new Error(`parse refused: ${parsed.why}`);
+	}
+
 	const [first] = parsed.statements;
-	if (first?.kind !== "run") throw new Error("not a run");
+
+	if (first?.kind !== "run") {
+		throw new Error("not a run");
+	}
+
 	return check(first.pipeline, list, line);
 };
 
@@ -71,6 +79,7 @@ const sink = defineProgram({
 	outputs: {},
 	main: ({serve}) => serve({any: () => Effect.void}),
 });
+
 const both = defineProgram({
 	name: "both",
 	description: "Takes a number, or anything else.",
@@ -78,6 +87,7 @@ const both = defineProgram({
 	outputs: {},
 	main: () => Effect.void,
 });
+
 const twice = defineProgram({
 	name: "twice",
 	description: "Two inputs that take anything.",
@@ -85,6 +95,7 @@ const twice = defineProgram({
 	outputs: {},
 	main: () => Effect.void,
 });
+
 const withAny = programList([
 	...SMALL,
 	listed(sink, Layer.empty),
@@ -95,9 +106,17 @@ const withAny = programList([
 /** The wire of a line's first stage, or why it was refused. */
 const wired = (line: string) => {
 	const parsed = parse(line);
-	if (parsed.kind !== "parsed") throw new Error(`parse refused: ${parsed.why}`);
+
+	if (parsed.kind !== "parsed") {
+		throw new Error(`parse refused: ${parsed.why}`);
+	}
+
 	const [first] = parsed.statements;
-	if (first?.kind !== "run") throw new Error("not a run");
+
+	if (first?.kind !== "run") {
+		throw new Error("not a run");
+	}
+
 	const c = check(first.pipeline, withAny, line);
 	return c.kind === "line" ? c.line.stages[0].wire : c.kind === "refused" ? c.why : c.kind;
 };

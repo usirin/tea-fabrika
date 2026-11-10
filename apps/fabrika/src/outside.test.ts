@@ -80,6 +80,7 @@ describe("a URL a page asks to open", () => {
 
 	it("is refused from any page but the desk of the app's own files", () => {
 		const from = ["https://example.com/", "fabrika://app/desk.js", "file:///desk.html", ""];
+
 		for (const page of from) {
 			const {opened, outs} = ask(["https://example.com/a"], page);
 			expect(opened).toEqual([]);

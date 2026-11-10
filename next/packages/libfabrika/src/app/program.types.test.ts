@@ -7,15 +7,18 @@ import * as fc from "fast-check";
 import {expectTypeOf} from "vitest";
 
 const Model = Schema.Struct({count: Schema.Int});
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("add"), n: Schema.Int}),
 	Schema.Struct({type: Schema.Literal("reset")}),
 ]);
+
 const save = Cmd.make("save", {
 	input: Schema.Struct({count: Schema.Int}),
 	ok: Schema.Struct({stored: Schema.Int}),
 	err: ["disk"],
 });
+
 const machine = Machine.make({
 	model: Model,
 	msg: Msg,
@@ -28,6 +31,7 @@ const machine = Machine.make({
 		save_err: (s) => [s, []],
 	},
 });
+
 const fields = {
 	name: "scratch",
 	machine,
@@ -236,4 +240,5 @@ function authoringTypeErrors() {
 	const reply: typeof machine.msg.Type = save.ok(save({count: 1}), {stored: 1}, 1);
 	return reply;
 }
+
 void authoringTypeErrors;

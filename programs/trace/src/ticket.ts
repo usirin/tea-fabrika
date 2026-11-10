@@ -74,17 +74,32 @@ const STOPS: ReadonlySet<string> = new Set(["started", "ended", "asked", "answer
  * claude billed. A step with no model is code. A step not ended has no price yet.
  */
 const priceOf = (model: string | null, harness: string | null, ended: Ended | null): Price => {
-	if (model === null) return {kind: "none"};
-	if (ended === null) return {kind: "pending"};
-	if (typeof ended.listUsd === "number") return {kind: "usd", usd: ended.listUsd};
+	if (model === null) {
+		return {kind: "none"};
+	}
+
+	if (ended === null) {
+		return {kind: "pending"};
+	}
+
+	if (typeof ended.listUsd === "number") {
+		return {kind: "usd", usd: ended.listUsd};
+	}
+
 	const derived = listUsdOf(model, {
 		input: ended.input,
 		cached: ended.cached ?? 0,
 		output: ended.output,
 	});
-	if (derived !== null) return {kind: "usd", usd: derived};
-	if (harness === "claude" && typeof ended.billed === "number")
+
+	if (derived !== null) {
+		return {kind: "usd", usd: derived};
+	}
+
+	if (harness === "claude" && typeof ended.billed === "number") {
 		return {kind: "usd", usd: ended.billed};
+	}
+
 	return {kind: "unknown"};
 };
 
@@ -110,33 +125,45 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
 		string,
 		{readonly at: number; readonly pick: string; readonly by: string}
 	>();
+
 	for (const e of seen) {
-		if (e.fact.type === "ended" && !ends.has(e.fact.run))
+		if (e.fact.type === "ended" && !ends.has(e.fact.run)) {
 			ends.set(e.fact.run, {at: e.at, fact: e.fact});
-		if (e.fact.type === "answered" && !answers.has(e.fact.ask))
+		}
+
+		if (e.fact.type === "answered" && !answers.has(e.fact.ask)) {
 			answers.set(e.fact.ask, {at: e.at, pick: e.fact.pick, by: e.by.id});
+		}
 	}
 
 	const lanes: Building[] = [];
 	const byTrace = new Map<string, Building>();
 	let restart: {readonly at: number; readonly from: string} | null = null;
 	let running: Building | null = null;
+
 	for (const e of seen) {
 		const {fact} = e;
-		if (fact.type === "restarted") restart = {at: e.at, from: fact.from};
+
+		if (fact.type === "restarted") {
+			restart = {at: e.at, from: fact.from};
+		}
+
 		if (fact.type === "started") {
 			const trace = fact.trace ?? "";
 			let lane = byTrace.get(trace);
+
 			if (lane === undefined) {
 				lane = {trace, restart, starts: [], rows: []};
 				restart = null;
 				lanes.push(lane);
 				byTrace.set(trace, lane);
 			}
+
 			lane.starts.push(e.at);
 			lane.rows.push({kind: "step", started: fact, at: e.at});
 			running = lane;
 		}
+
 		if (fact.type === "asked") {
 			const named = fact.trace === undefined ? undefined : byTrace.get(fact.trace);
 			(named ?? running)?.rows.push({kind: "wait", asked: fact, at: e.at});
@@ -161,6 +188,7 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
 					by: answer?.by ?? null,
 				};
 			}
+
 			const {started} = row;
 			const end = ends.get(started.run) ?? null;
 			const model = started.model ?? end?.fact.model ?? null;
@@ -223,28 +251,52 @@ const indexSpans = (spans: readonly Span[]): SpanIndex => {
 	const tagged = new Map<string, Span>();
 	const untagged: Span[] = [];
 	const children = new Map<string, Span[]>();
+
 	for (const s of spans) {
 		const run = s.tags[RUN_TAG];
+
 		if (typeof run === "string") {
-			if (!tagged.has(run)) tagged.set(run, s);
-		} else if (run === undefined && s.name === STEP_SPAN) untagged.push(s);
-		if (s.parent === null) continue;
+			if (!tagged.has(run)) {
+				tagged.set(run, s);
+			}
+		} else if (run === undefined && s.name === STEP_SPAN) {
+			untagged.push(s);
+		}
+
+		if (s.parent === null) {
+			continue;
+		}
+
 		const list = children.get(s.parent);
-		if (list === undefined) children.set(s.parent, [s]);
-		else list.push(s);
+
+		if (list === undefined) {
+			children.set(s.parent, [s]);
+		} else {
+			list.push(s);
+		}
 	}
+
 	const path = new Set<string>();
 	const walk = (id: string, out: Span[]) => {
 		path.add(id);
+
 		for (const child of children.get(id) ?? []) {
 			out.push(child);
-			if (!path.has(child.span)) walk(child.span, out);
+
+			if (!path.has(child.span)) {
+				walk(child.span, out);
+			}
 		}
+
 		path.delete(id);
 	};
 	const under = new Map<string, readonly Span[]>();
+
 	for (const root of [...tagged.values(), ...untagged]) {
-		if (under.has(root.span)) continue;
+		if (under.has(root.span)) {
+			continue;
+		}
+
 		const out: Span[] = [];
 		walk(root.span, out);
 		under.set(
@@ -252,6 +304,7 @@ const indexSpans = (spans: readonly Span[]): SpanIndex => {
 			out.sort((a, b) => a.start - b.start),
 		);
 	}
+
 	return {tagged, untagged, under};
 };
 
@@ -276,21 +329,27 @@ export const childrenOf = (
 	to: number,
 ): readonly Span[] => {
 	let index = indexes.get(record.spans);
+
 	if (index === undefined) {
 		index = indexSpans(record.spans);
 		indexes.set(record.spans, index);
 	}
+
 	let root = index.tagged.get(run);
+
 	if (root === undefined) {
 		let most = 0;
+
 		for (const s of index.untagged) {
 			const shared = overlap(s.start, s.end, from, to);
+
 			if (shared > most) {
 				root = s;
 				most = shared;
 			}
 		}
 	}
+
 	return root === undefined ? [] : (index.under.get(root.span) ?? []);
 };
 

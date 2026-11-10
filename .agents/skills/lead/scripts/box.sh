@@ -16,7 +16,7 @@ fi
 if [ "${1:-}" = rm ]; then
 	name=${2:-}
 	[ "$#" = 2 ] || { echo "usage: box.sh rm <name>" >&2; exit 2; }
-	python3 - "$name" <<'PY'
+	python3 - "$name" "$(cd "$(dirname "$0")" && pwd -P)" <<'PY'
 from pathlib import Path
 import os
 import re
@@ -281,6 +281,12 @@ try:
         if any(tip not in reachable for tip in tips):
             keep("tip not retained in MAIN")
 
+    # Raw samples live under runs/, never in git: move them to MAIN before the folder goes.
+    moved = subprocess.run(["sh", str(Path(sys.argv[2]) / "keepruns.sh"), str(work)], capture_output=True, text=True)
+    if moved.stdout.strip():
+        print(moved.stdout.rstrip())
+    if moved.returncode:
+        keep("could not keep its runs/")
     try:
         protect_main_storage()
         shutil.rmtree(work)

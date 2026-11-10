@@ -12,9 +12,11 @@ const runs = {seed: 119120, numRuns: 12};
 const unicodeKey = fc
 	.array(fc.integer({min: 0, max: 0x10ffff}), {maxLength: 24})
 	.map((points) => String.fromCodePoint(...points));
+
 const identifier = fc
 	.array(fc.constantFrom("a", "Z", "_", "$", "0", "é", "λ", "中"), {maxLength: 12})
 	.map((letters) => `key${letters.join("")}`);
+
 const escaped = (key: string) =>
 	`"${Array.from({length: key.length}, (_, i) => `\\u${key.charCodeAt(i).toString(16).padStart(4, "0")}`).join("")}"`;
 
@@ -27,6 +29,7 @@ const parameterModifiers = [
 	"protected readonly",
 	"private readonly",
 ];
+
 const declarations = (key: string, i: number) => [
 	`const a${i} = {${key}: 1};`,
 	`const b${i} = {${key}() {}};`,
@@ -69,6 +72,7 @@ it("rejects exactly why across generated Unicode keys and every declaration form
 				const keys = ["why", key, neighbor, "whyNot", "Why", "reason"];
 				const lines: string[] = [];
 				const expected: number[] = [];
+
 				for (const [i, name] of keys.entries()) {
 					const spellings = [
 						JSON.stringify(name),
@@ -76,15 +80,22 @@ it("rejects exactly why across generated Unicode keys and every declaration form
 						`[${JSON.stringify(name)}]`,
 						`[\`${escaped(name).slice(1, -1)}\`]`,
 					];
-					if (/^[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*$/u.test(name))
+
+					if (/^[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*$/u.test(name)) {
 						spellings.push(name);
+					}
+
 					for (const [j, spelling] of spellings.entries()) {
 						for (const source of declarations(spelling, i * 5 + j)) {
 							lines.push(source);
-							if (name === "why") expected.push(lines.length);
+
+							if (name === "why") {
+								expected.push(lines.length);
+							}
 						}
 					}
 				}
+
 				lines.push("const why = 1; const shorthand = {why};", `const neighbor = {${neighbor}};`);
 				expected.push(lines.length - 1);
 				const result = await plant({[PATH]: lines.join("\n")});
@@ -115,10 +126,12 @@ it("real config keeps generated next paths and tests covered and today's paths o
 				const result = await plant(
 					Object.fromEntries(paths.map((path) => [path, declarations(key, 0).join("\n")])),
 				);
-				for (const [i, path] of paths.entries())
+
+				for (const [i, path] of paths.entries()) {
 					expect(result(CODE, path)).toEqual(
 						i < 3 ? declarations(key, 0).map((_, n) => n + 1) : [],
 					);
+				}
 			},
 		),
 		runs,

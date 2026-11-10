@@ -30,6 +30,7 @@ const ctx = stubCtxThrowingProxy<undefined>();
 const URL = "https://github.com/o/r/issues/1";
 const KEY = "plan/o-r-1";
 const SETTINGS: Settings = {model: "m", effort: "low", budget: 1};
+
 const ticket = (patch: Partial<PlanTicket> = {}): PlanTicket => ({
 	url: URL,
 	number: 1,
@@ -39,13 +40,19 @@ const ticket = (patch: Partial<PlanTicket> = {}): PlanTicket => ({
 	at: "h0",
 	...patch,
 });
+
 const DRAFTS: readonly PlanDraft[] = plans86b().flatMap((p) => (p.plan === null ? [] : [p.plan]));
 const [first] = DRAFTS;
-if (first === undefined) throw new Error("experiment 86b has no plans");
+
+if (first === undefined) {
+	throw new Error("experiment 86b has no plans");
+}
+
 /** A draft the Check sends back: the planner tries again, in the same conversation. */
 const UNCHECKED: PlanDraft = {...first, summary: ""};
 /** Every run id the refine loop gives: two tries, before and after one restart. */
 const id = fc.constantFrom(`${KEY}/1`, `${KEY}/2`, `${KEY}/again/1/1`, `${KEY}/again/1/2`);
+
 const spend = fc.record({
 	costUsd: fc.integer({min: 0, max: 3}),
 	tokens: fc.nat({max: 9000}),
@@ -53,6 +60,7 @@ const spend = fc.record({
 	turns: fc.nat({max: 9}),
 	minutes: fc.nat({max: 9}),
 });
+
 const UNKNOWN = {_tag: "unknown"} as const;
 const reads = readTicket({ticket: URL});
 
@@ -95,8 +103,10 @@ const table: MsgArbitraryTable<Msg> = {
 		spend,
 	}),
 };
+
 /** Weighted to the answers that move a plan on, so every phase is reached. */
 const WEIGHTS = {plan_ticket_ok: 4, plan_facts_ok: 3, plan_finished: 6};
+
 /** A plan begins as its parent begins it, with `start`; the rest comes in any order. */
 const lists = fc
 	.tuple(table.start, fc.array(arbMsg(table, {weights: WEIGHTS}), {maxLength: 30, size: "max"}))
@@ -111,6 +121,7 @@ const keepsEvery = (machine: Machine, runs = 150, saved = new Set<string>()) =>
 		fc.asyncProperty(lists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("plan:r1", null));
 			const store = handle.store("plan", KEY, planKind.state);
+
 			for (const s of foldEvents(machine, ctx, null, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);

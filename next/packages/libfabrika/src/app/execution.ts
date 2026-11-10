@@ -5,6 +5,7 @@ import {type Input, ProgramDown, stepper, Step, type Stepper} from "./program.ts
 import {Saved} from "./state.ts";
 
 const Upgraded = Schema.Struct({saved: Saved, ran: Schema.Array(Schema.String)});
+
 const Outcome = Schema.TaggedUnion({
 	Ok: {value: Schema.Unknown, at: Schema.Number},
 	Err: {
@@ -18,16 +19,19 @@ const Outcome = Schema.TaggedUnion({
 		at: Schema.Number,
 	},
 });
+
 const Typed = Schema.Struct({type: Schema.String});
 
 // Match P37's deletable failure-content ceiling, half a Durable Object row.
 const MOST_CONTENT = 1_000_000;
+
 /** Program failures are checked RPC data; a rejected call is a transport failure. */
 const Failure = {
 	reason: ProgramDown.fields.reason,
 	error: Schema.String,
 	content: Schema.String.check(Schema.isMaxLength(MOST_CONTENT)),
 };
+
 export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", Failure);
 
 export const executionFailure = (error: ProgramDown) =>
@@ -101,14 +105,21 @@ const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> =>
 
 /** A Cmd answer as its schema encodes it, as JSON; a schema that is not a codec answers nothing. */
 const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
-	if (!isCodec(schema)) throw new ProgramDown({reason: "step"});
+	if (!isCodec(schema)) {
+		throw new ProgramDown({reason: "step"});
+	}
+
 	return Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value));
 };
 
 /** True when `m` names a write port and decodes against that port's schema. */
 const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean => {
 	const typed = Schema.decodeUnknownOption(Typed)(m);
-	if (Option.isNone(typed) || !Object.hasOwn(inputs, typed.value.type)) return false;
+
+	if (Option.isNone(typed) || !Object.hasOwn(inputs, typed.value.type)) {
+		return false;
+	}
+
 	const port = inputs[typed.value.type];
 	return (
 		port !== undefined &&
@@ -120,17 +131,28 @@ const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean =>
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {
 	const type = Schema.decodeUnknownSync(Typed)(cmd).type;
 	const def = defs.find((d) => d.cmdType === type);
-	if (def === undefined) throw new ProgramDown({reason: "step"});
+
+	if (def === undefined) {
+		throw new ProgramDown({reason: "step"});
+	}
+
 	const outcome = Schema.decodeUnknownSync(Outcome)(raw);
-	if (outcome._tag === "Ok")
+
+	if (outcome._tag === "Ok") {
 		return Schema.decodeUnknownSync(Schema.Json)({
 			type: def.okType,
 			cmd,
 			value: encodeAnswer(def.schema.ok, outcome.value),
 			at: outcome.at,
 		});
+	}
+
 	const tag = outcome.error._tag;
-	if (!def.errTags.includes(tag)) throw new ProgramDown({reason: "step"});
+
+	if (!def.errTags.includes(tag)) {
+		throw new ProgramDown({reason: "step"});
+	}
+
 	return Schema.decodeUnknownSync(Schema.Json)({
 		type: def.errType,
 		cmd,
@@ -210,7 +232,11 @@ class ExecutionClient extends Context.Service<
 			},
 			check: (kind, event) => {
 				const check = rpc.check;
-				if (check === undefined) return Effect.fail(new ProgramDown({reason: "load"}));
+
+				if (check === undefined) {
+					return Effect.fail(new ProgramDown({reason: "load"}));
+				}
+
 				const fail = (cause: unknown) => new ProgramDown({reason: "step", source: "rpc", cause});
 				const args: Parameters<typeof check> = [kind, event];
 				// Reflect.apply keeps this without reading a remote method named call off the stub.
@@ -219,7 +245,11 @@ class ExecutionClient extends Context.Service<
 			},
 			admit: (m) => {
 				const admit = rpc.admit;
-				if (admit === undefined) return Effect.fail(new ProgramDown({reason: "load"}));
+
+				if (admit === undefined) {
+					return Effect.fail(new ProgramDown({reason: "load"}));
+				}
+
 				const fail = (cause: unknown) => new ProgramDown({reason: "step", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader admit RPC enters Effect
 				return Effect.tryPromise({try: () => Reflect.apply(admit, rpc, [m]), catch: fail});
@@ -238,7 +268,11 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
 		work.pipe(
 			Effect.flatMap((raw) => {
 				const failed = Schema.decodeUnknownResult(ExecutionFailure)(raw);
-				if (Result.isSuccess(failed)) return Effect.fail(programFailure(failed.success));
+
+				if (Result.isSuccess(failed)) {
+					return Effect.fail(programFailure(failed.success));
+				}
+
 				const decoded = Schema.decodeUnknownResult(schema)(raw);
 				return Result.isSuccess(decoded)
 					? Effect.succeed(decoded.success)

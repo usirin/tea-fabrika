@@ -11,14 +11,18 @@ import {asks} from "./edges.ts";
 
 const PRODUCT = "next/packages/libfabrika/src/data/project.ts";
 const OTHER = "next/packages/libfabrika/src/data/ledger.ts";
+
 const EDGE =
 	"// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object answers a Promise";
+
 const RUN_EDGE =
 	"// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the platform calls it";
+
 const CALL = "export const a = Effect.tryPromise(() => p);";
 const PRELUDE = 'import {Effect} from "effect";\ndeclare const p: Promise<number>;';
 
 const file = (...lines: ReadonlyArray<string>) => [PRELUDE, ...lines, ""].join("\n");
+
 const run = (base: Record<string, string>, head: Record<string, string>) =>
 	Effect.runSync(asks(new Map(Object.entries(base)), new Map(Object.entries(head))));
 
@@ -113,7 +117,11 @@ describe("edges.ts, as CI runs it", () => {
 			["-c", "user.name=exam", "-c", "user.email=exam@example.com", ...args],
 			{cwd: repo, encoding: "utf8", env: quiet},
 		);
-		if (out.status !== 0) throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+
+		if (out.status !== 0) {
+			throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+		}
+
 		return out.stdout.trim();
 	};
 	const put = (path: string, text: string) => {

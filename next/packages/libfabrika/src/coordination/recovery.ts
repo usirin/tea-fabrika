@@ -16,22 +16,31 @@ export const Policy = Schema.Struct({
 	backoff: Schema.Struct({minMs: Count, maxMs: Count, resetAfterMs: Count}),
 }).check(
 	Schema.makeFilter((p) => {
-		if (p.intensity < p.maxDeliveries || p.backoff.minMs > p.backoff.maxMs)
+		if (p.intensity < p.maxDeliveries || p.backoff.minMs > p.backoff.maxMs) {
 			return "invalid restart policy";
+		}
+
 		// The first intensity waits must fit in one window, or the brake cannot trip.
 		let total = 0;
 		let wait = p.backoff.minMs;
+
 		for (let n = 0; n < p.intensity; n++) {
 			total += wait;
-			if (total >= p.periodMs) return "restart waits exceed the window";
+
+			if (total >= p.periodMs) {
+				return "restart waits exceed the window";
+			}
+
 			wait = Math.min(wait * 2, p.backoff.maxMs);
 		}
+
 		return true;
 	}),
 );
 export type Policy = typeof Policy.Type;
 
 const AttemptFields = {process: ProcessId, letter: Text, build: Text, seq: Count};
+
 export const Failure = Schema.TaggedUnion({
 	fresh: {...AttemptFields, error: Text},
 	saved: {...AttemptFields, error: Text},
@@ -54,11 +63,13 @@ const Action = Schema.Struct({
 	after: Schema.optionalKey(ProcessId),
 	until: Schema.optionalKey(Millis),
 });
+
 const Attempt = Schema.Struct({
 	...AttemptFields,
 	phase: Schema.Literals(["fresh", "saved"]),
 	at: Millis,
 });
+
 const Observation = Schema.Struct({
 	seq: Count,
 	process: ProcessId,
@@ -67,6 +78,7 @@ const Observation = Schema.Struct({
 	error: Schema.optionalKey(Text),
 	at: Millis,
 });
+
 export const Receipt = Schema.Struct({
 	letter: Text,
 	input: Schema.Json,

@@ -74,30 +74,39 @@ class StepSpan implements Tracer.Span {
 	get name(): string {
 		return this.#span.name;
 	}
+
 	get spanId(): string {
 		return this.#span.spanId;
 	}
+
 	get traceId(): string {
 		return this.#span.traceId;
 	}
+
 	get parent(): Option.Option<Tracer.AnySpan> {
 		return this.#span.parent;
 	}
+
 	get annotations() {
 		return this.#span.annotations;
 	}
+
 	get status(): Tracer.SpanStatus {
 		return this.#span.status;
 	}
+
 	get attributes(): ReadonlyMap<string, unknown> {
 		return this.#span.attributes;
 	}
+
 	get links(): ReadonlyArray<Tracer.SpanLink> {
 		return this.#span.links;
 	}
+
 	get sampled(): boolean {
 		return this.#span.sampled;
 	}
+
 	get kind(): Tracer.SpanKind {
 		return this.#span.kind;
 	}
@@ -113,14 +122,22 @@ class StepSpan implements Tracer.Span {
 
 	attribute(key: string, value: unknown): void {
 		this.#span.attribute(key, value);
-		if (key !== TAG.step || this.#began) return;
+
+		if (key !== TAG.step || this.#began) {
+			return;
+		}
+
 		this.#began = true;
 		this.#say("step_began", this.#where());
 	}
 
 	end(endTime: bigint, exit: Parameters<Tracer.Span["end"]>[1]): void {
 		this.#span.end(endTime, exit);
-		if (!this.#began) return;
+
+		if (!this.#began) {
+			return;
+		}
+
 		const outcome = this.#span.attributes.get(TAG.outcome);
 		this.#say("step_ended", {...this.#where(), ...(outcome === undefined ? {} : {outcome})});
 	}

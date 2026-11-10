@@ -7,6 +7,7 @@ type Client<S> = {
 		? (...args: A) => Effect.Effect<Awaited<B>, LedgerError>
 		: never;
 };
+
 const unreachable = () => new LedgerError({reason: "unreachable"});
 
 export class ProjectClient extends Context.Service<

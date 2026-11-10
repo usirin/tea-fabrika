@@ -26,32 +26,45 @@ const ENV: NodeJS.ProcessEnv = {
 	GIT_COMMITTER_NAME: "step",
 	GIT_COMMITTER_EMAIL: "step@fabrika.test",
 };
+
 delete ENV.GITHUB_STEP_SUMMARY;
 delete ENV.GITHUB_ACTIONS;
 
 const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV) => {
 	const ran = spawnSync(cmd, args, {cwd, env, input, encoding: "utf8"});
-	if (ran.status !== 0) throw new Error(`${cmd} ${args.join(" ")}: ${ran.stderr}`);
+
+	if (ran.status !== 0) {
+		throw new Error(`${cmd} ${args.join(" ")}: ${ran.stderr}`);
+	}
+
 	return ran.stdout;
 };
 
 const KEYS = join(TOP, "keys");
 mkdirSync(KEYS, {mode: 0o700});
 type Who = Role | "stranger";
-for (const who of ["tests", "build", "lead", "stranger", "person"])
+
+for (const who of ["tests", "build", "lead", "stranger", "person"]) {
 	sh(KEYS, "ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", who, "-f", join(KEYS, who)]);
+}
+
 sh(KEYS, "ssh-keygen", ["-q", "-t", "ecdsa", "-N", "", "-C", "ecdsa", "-f", join(KEYS, "ecdsa")]);
+
 const pub = (who: string) =>
 	readFileSync(join(KEYS, `${who}.pub`), "utf8")
 		.split(" ")
 		.slice(0, 2)
 		.join(" ");
+
 /** A key's fingerprint, as `ssh-keygen -l` prints it and a note's `key` holds it. */
 const fingerprint = (who: string) =>
 	sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${who}.pub`)]).split(" ")[1]!;
+
 const keyLine = (role: string, who: string) => `${role} namespaces="fabrika-step" ${pub(who)}`;
+
 const stepKeys = (build = "build") =>
 	`${[keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")].join("\n")}\n`;
+
 const GOOD_KEYS = stepKeys();
 const personLine = (id: string, who = "person") => `person:${id} namespaces="git" ${pub(who)}`;
 const PERSON_KEYS = `${GOOD_KEYS}${personLine("github:42")}\n`;
@@ -73,7 +86,11 @@ class Repo {
 		this.dir = at ?? join(TOP, `r${count}`);
 		mkdirSync(this.dir);
 		this.git("init", "-q", "-b", "main", `--object-format=${format}`);
-		if (keys !== null) this.write("allowed_signers", keys);
+
+		if (keys !== null) {
+			this.write("allowed_signers", keys);
+		}
+
 		this.write("exam-paths.json", EXAM_LIST);
 		this.write("README.md", initial);
 		this.write("boundary-rules.json", "[]\n");
@@ -171,12 +188,14 @@ const DONE = {_tag: "done"};
 const runs = {seed: 119120, numRuns: 5};
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,20}$/);
 const name = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
+
 const stuck = (reason: string, sha: string, more: object = {}) => ({
 	_tag: "stuck",
 	reason,
 	sha,
 	...more,
 });
+
 const ask = (...paths: string[]) => ({_tag: "ask", who: "owner", for: "exam_read", paths});
 
 const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {
@@ -1134,10 +1153,12 @@ describe("sign", () => {
 /** A squash on main of the branch, and its links logged in field/runs.jsonl in a later commit. */
 const squashed = (r: Repo, notes: Array<{note: object; commit: string}>, moveMain = false) => {
 	r.git("checkout", "-q", "main");
+
 	if (moveMain) {
 		r.write("docs/other.md", "o\n");
 		r.commit("main moves");
 	}
+
 	r.git("merge", "--squash", "-q", "pr");
 	const squash = r.commit("squash");
 	const rows = notes.map(
@@ -1162,6 +1183,7 @@ const squashed = (r: Repo, notes: Array<{note: object; commit: string}>, moveMai
 	);
 	return {squash, rows};
 };
+
 const log = (r: Repo, rows: object[]) => {
 	r.write("field/runs.jsonl", `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
 	return r.commit("log");
@@ -1213,6 +1235,7 @@ describe("person commits between step links (p86b)", () => {
 				.trim();
 		const {squash, rows} = squashed(r, [{note: middle, commit: person}]);
 		const row = rows[0]!.attested[0]!;
+
 		switch (plant) {
 			case "the wrong key":
 				row.key = fingerprint("tests");
@@ -1243,6 +1266,7 @@ describe("person commits between step links (p86b)", () => {
 				break;
 			}
 		}
+
 		log(r, rows);
 		const out = r.run(["chain", "--squash", squash]);
 		expect(out.answers).toEqual([stuck("broken_chain", squash)]);
@@ -1323,7 +1347,11 @@ describe("person commits between step links (p86b)", () => {
 			const r = new Repo(PERSON_KEYS);
 			const tests = r.change("a.ts");
 			const first = r.sign("tests");
-			if (change === "file change") r.write("next/packages/x/src/person.ts", "person\n");
+
+			if (change === "file change") {
+				r.write("next/packages/x/src/person.ts", "person\n");
+			}
+
 			const person = r.gitSigned();
 			expect(verifyCommit(r, person)).toBe(0);
 			const middle = personLink(r, person);
@@ -1427,10 +1455,17 @@ describe("chain after the merge (p86 and p89)", () => {
 			fc.property(fc.nat(rows.length - 1), change, (at, how) => {
 				const bad = structuredClone(rows);
 				const link: Record<string, unknown> = bad[at]!.attested[0]!;
+
 				if (how._tag === "cause") {
-					if (!how.keepParent) delete link.parent;
+					if (!how.keepParent) {
+						delete link.parent;
+					}
+
 					link.cause = how.cause;
-				} else delete link[how.field];
+				} else {
+					delete link[how.field];
+				}
+
 				log(r, bad);
 				const out = r.run(["chain", "--squash", squash]);
 				expect(out.code).toBe(2);

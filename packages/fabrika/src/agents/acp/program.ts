@@ -111,6 +111,7 @@ export interface AcpRefused {
 	readonly _tag: "acp_refused";
 	readonly message: string;
 }
+
 const refused = (message: string) => Effect.fail<AcpRefused>({_tag: "acp_refused", message});
 
 /** What the pump reads: the harness's own sends, and a mark to wait until all before it is folded. */
@@ -124,20 +125,39 @@ const folderOf = (given: string, kind: "scratch" | "repo") =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
-		if (!path.isAbsolute(given)) return yield* refused(`--folder must be an absolute path`);
+
+		if (!path.isAbsolute(given)) {
+			return yield* refused(`--folder must be an absolute path`);
+		}
+
 		const real = yield* fs.realPath(given).pipe(Effect.orElseSucceed(() => null));
-		if (real === null) return yield* refused(`--folder ${given} is not there`);
+
+		if (real === null) {
+			return yield* refused(`--folder ${given} is not there`);
+		}
+
 		const gitIn = (at: string) =>
 			fs.exists(path.join(at, ".git")).pipe(Effect.orElseSucceed(() => false));
-		if (kind === "repo")
+
+		if (kind === "repo") {
 			return (yield* gitIn(real))
 				? real
 				: yield* refused(`--folder ${given} is not a git repository's top folder`);
+		}
+
 		let at = real;
+
 		for (;;) {
-			if (yield* gitIn(at)) return yield* refused(`--folder ${given} is inside a git repository`);
+			if (yield* gitIn(at)) {
+				return yield* refused(`--folder ${given} is inside a git repository`);
+			}
+
 			const up = path.dirname(at);
-			if (up === at) return real;
+
+			if (up === at) {
+				return real;
+			}
+
 			at = up;
 		}
 	});
@@ -272,24 +292,34 @@ const acpIn = (place: "scratch" | "repo") =>
 							: flags.mode === "workspace-write"
 								? {name: "codex", access: "write"}
 								: null;
-				if (row === null)
+
+				if (row === null) {
 					return yield* refused(
 						`codex runs only in ${CODEX_MODES.join(" or ")}, not ${flags.mode ?? "a mode left out"}`,
 					);
+				}
+
 				const harness = harnessOf(row, folder, flags.budget ?? null);
-				if (!(yield* fs.exists(harness.script).pipe(Effect.orElseSucceed(() => false))))
+
+				if (!(yield* fs.exists(harness.script).pipe(Effect.orElseSucceed(() => false)))) {
 					return yield* refused(
 						`${flags.agent} is not installed: pnpm --dir adapters install --ignore-workspace --frozen-lockfile`,
 					);
-				if (harness.prepare !== undefined) yield* harness.prepare.pipe(Effect.catch(refused));
+				}
+
+				if (harness.prepare !== undefined) {
+					yield* harness.prepare.pipe(Effect.catch(refused));
+				}
 
 				// One session per run, started with no Msg: a new one begins empty, a kept one as it was left.
 				const kept = yield* machines.session.get("session").start();
 				const was = kept.getState();
-				if (was.agent !== null && was.agent !== flags.agent)
+
+				if (was.agent !== null && was.agent !== flags.agent) {
 					return yield* refused(
 						`this run's session is on ${was.agent}: it cannot move to ${flags.agent}`,
 					);
+				}
 
 				const booting = yield* runTraced(
 					"transcript",
@@ -322,7 +352,9 @@ const acpIn = (place: "scratch" | "repo") =>
 				let turn: {readonly events: AcpEvents; readonly spans: AgentSpans<null> | null} | null =
 					null;
 				const draw = (events: readonly AgentEvent<null>[]) => {
-					for (const event of events) turn?.spans?.onEvent(event);
+					for (const event of events) {
+						turn?.spans?.onEvent(event);
+					}
 				};
 				let loading = false;
 				let replayed = 0;
@@ -352,7 +384,11 @@ const acpIn = (place: "scratch" | "repo") =>
 				const asked = (ask: PendingAsk) =>
 					Effect.gen(function* () {
 						yield* fold({type: "asked", ask: askOf(ask)});
-						if (flags.permissions !== "ask") return yield* answer(ask, false);
+
+						if (flags.permissions !== "ask") {
+							return yield* answer(ask, false);
+						}
+
 						pending.set(ask.id, ask);
 						yield* send("ask", shown(ask, "waiting"));
 					});
@@ -362,23 +398,40 @@ const acpIn = (place: "scratch" | "repo") =>
 					const now = yield* Clock.currentTimeMillis;
 					let seen: Seen[] = [];
 					const flush = Effect.suspend(() => {
-						if (seen.length === 0) return Effect.void;
+						if (seen.length === 0) {
+							return Effect.void;
+						}
+
 						const events = seen;
 						seen = [];
 						return fold({type: "seen", events});
 					});
+
 					for (const item of batch) {
 						if (item.kind === "update") {
 							const event = seenOf(item.update);
 							seen.push(event);
-							if (loading) replayed += 1;
-							if (turn !== null) draw(turn.events.seen(event, now));
+
+							if (loading) {
+								replayed += 1;
+							}
+
+							if (turn !== null) {
+								draw(turn.events.seen(event, now));
+							}
+
 							continue;
 						}
+
 						yield* flush;
-						if (item.kind === "ask") yield* asked(item.ask);
-						else yield* Deferred.succeed(item.done, undefined);
+
+						if (item.kind === "ask") {
+							yield* asked(item.ask);
+						} else {
+							yield* Deferred.succeed(item.done, undefined);
+						}
 					}
+
 					yield* flush;
 				});
 				yield* Effect.forkScoped(Effect.forever(pump));
@@ -403,13 +456,24 @@ const acpIn = (place: "scratch" | "repo") =>
 				const ms = (yield* Clock.currentTimeMillis) - t0;
 				yield* sync;
 				loading = false;
-				if (how === "new")
+
+				if (how === "new") {
 					yield* kept.dispatch({type: "opened", agent: flags.agent, id: opened.id});
+				}
+
 				// Set again at every start: a harness may not keep them with the session.
-				if (flags.model !== undefined) opened = yield* c.configure(opened, "model", flags.model);
-				if (flags.effort !== undefined)
+				if (flags.model !== undefined) {
+					opened = yield* c.configure(opened, "model", flags.model);
+				}
+
+				if (flags.effort !== undefined) {
 					opened = yield* c.configure(opened, "thought_level", flags.effort);
-				if (flags.mode !== undefined) opened = yield* c.configure(opened, "mode", flags.mode);
+				}
+
+				if (flags.mode !== undefined) {
+					opened = yield* c.configure(opened, "mode", flags.mode);
+				}
+
 				const mode = currentOf(opened, "mode") ?? opened.mode;
 				const offered = (category: string) => {
 					const option = opened.config.find((o) => o.category === category);
@@ -438,7 +502,11 @@ const acpIn = (place: "scratch" | "repo") =>
 				const setting = (category: "model" | "thought_level", value: string) =>
 					Effect.gen(function* () {
 						const set = yield* c.configure(opened, category, value).pipe(Effect.result);
-						if (set._tag === "Success") opened = set.success;
+
+						if (set._tag === "Success") {
+							opened = set.success;
+						}
+
 						model = currentOf(opened, "model");
 						yield* send("settings", {model, effort: currentOf(opened, "thought_level")});
 					});
@@ -447,7 +515,11 @@ const acpIn = (place: "scratch" | "repo") =>
 				const byId = (ask: string) => pending.get(ask);
 				// ---------------------------------------------------------------- the turns, one after another
 				const todo = yield* Queue.unbounded<Waiting | null>();
-				for (const waiting of was.waiting) Queue.offerUnsafe(todo, waiting);
+
+				for (const waiting of was.waiting) {
+					Queue.offerUnsafe(todo, waiting);
+				}
+
 				// Every handler is quick: a prompt only joins the turns waiting, so an answer or a cancel
 				// told while a turn runs is handled at once, in the order told.
 				const handlers = {
@@ -468,8 +540,12 @@ const acpIn = (place: "scratch" | "repo") =>
 					},
 					cancel: () =>
 						Effect.gen(function* () {
-							if (turn === null) return;
+							if (turn === null) {
+								return;
+							}
+
 							yield* fold({type: "cancelling"});
+
 							// ACP: a client that cancels answers every ask still open with `cancelled`.
 							for (const ask of [...pending.values()]) {
 								pending.delete(ask.id);
@@ -477,6 +553,7 @@ const acpIn = (place: "scratch" | "repo") =>
 								yield* fold({type: "answered", ask: ask.id, answer: "cancelled"});
 								yield* send("ask", shown(ask, "cancelled"));
 							}
+
 							yield* c.cancel(id).pipe(Effect.ignore);
 						}),
 					model: (value: string) => setting("model", value),
@@ -493,7 +570,10 @@ const acpIn = (place: "scratch" | "repo") =>
 				const runTurn = (w: Waiting) =>
 					Effect.gen(function* () {
 						// A resumed prompt keeps its original number; it is never told a second time.
-						if (was.waiting.some((waiting) => waiting.n === w.n)) yield* send("told", {turn: w.n});
+						if (was.waiting.some((waiting) => waiting.n === w.n)) {
+							yield* send("told", {turn: w.n});
+						}
+
 						const start = yield* Clock.currentTimeMillis;
 						turn = {
 							events: acpEvents(`${id}#${w.n}`),
@@ -518,7 +598,11 @@ const acpIn = (place: "scratch" | "repo") =>
 						yield* kept.dispatch({type: "ended", n: w.n});
 						const s = view.getState();
 						const said = saidIn(s, w.n);
-						if (said !== "") yield* send("said", said);
+
+						if (said !== "") {
+							yield* send("said", said);
+						}
+
 						yield* send("result", {
 							turn: w.n,
 							stop: ended.stop,
@@ -533,7 +617,11 @@ const acpIn = (place: "scratch" | "repo") =>
 
 				for (;;) {
 					const next = yield* Queue.take(todo);
-					if (next === null) return;
+
+					if (next === null) {
+						return;
+					}
+
 					yield* runTurn(next);
 				}
 			}).pipe(Effect.scoped),

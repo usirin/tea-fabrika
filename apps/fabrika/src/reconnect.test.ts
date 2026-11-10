@@ -25,21 +25,27 @@ const start = (): Reconnect => reconnectMachine.init(null, undefined)[0];
 const fold = (msgs: readonly Msg[], from: Reconnect = start()) => {
 	let s = from;
 	const steps: (readonly ReconnectCmd[])[] = [];
+
 	for (const msg of msgs) {
 		const [next, cmds] = applyCell<Reconnect, Msg, ReconnectCmd>(reconnectMachine, s, msg);
 		s = next;
 		steps.push(cmds);
 	}
+
 	return {s, steps};
 };
 
 const ENDED = "The link to the host ended: the other side closed.";
 const up = (at = 0) => attach.ok(attach({}), {kind: "up"}, at);
+
 const lost = (at: number) =>
 	attach.ok(attach({}), {kind: "lost", why: "The host did not answer."}, at);
+
 const ended = (at: number): Msg => ({type: "ended", why: ENDED, at});
+
 const version = (theirs: number, ours: number) =>
 	attach.ok(attach({}), {kind: "version", theirs, ours}, 0);
+
 const restarted = (tried: Tried, at = 0) => restart.ok(restart({}), tried, at);
 const picked = (attempt: number, ms: number) => jitter.ok(jitter({attempt}), ms);
 const due = (attempt: number): Msg => ({type: "due", attempt});

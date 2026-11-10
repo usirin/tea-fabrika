@@ -16,6 +16,7 @@ vi.mock("effect", async (original) => {
 	const actual = await original<typeof import("effect")>();
 	return {...actual, Effect: {...actual.Effect}};
 });
+
 const config = {
 	name: "parse-test",
 	person: "person-test",
@@ -24,8 +25,10 @@ const config = {
 	port: 18787,
 	build: "test",
 };
+
 const malformed = (schema: Schema.Top) =>
 	fc.jsonValue().filter((value) => !Schema.is(schema)(value));
+
 // Keep parser checks independent of the bearer migration. The separate [secrets] type and
 // flow laws require Redacted; this fixture also reaches HEAD's parser using its old signature.
 const parserControl = (request: Request, env: Env) =>
@@ -37,7 +40,11 @@ const parserControl = (request: Request, env: Env) =>
 			{},
 		]);
 		const response = yield* secure;
-		if (response.status !== 403) return response;
+
+		if (response.status !== 403) {
+			return response;
+		}
+
 		const legacy: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [
 			request,
 			env,
@@ -46,6 +53,7 @@ const parserControl = (request: Request, env: Env) =>
 		]);
 		return yield* legacy;
 	});
+
 const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
 	expect(Exit.isFailure(exit)).toBe(true);
 	const cause = Exit.isFailure(exit) ? exit.cause : Cause.die("unexpected success");
@@ -56,6 +64,7 @@ const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
 		value: {_tag: tag, reason: "bad_row"},
 	});
 };
+
 const world = () => {
 	const db = new DatabaseSync(":memory:"),
 		sql = nodeSql(db);
@@ -135,7 +144,7 @@ const world = () => {
 	};
 };
 
-for (const source of ["attachment", "tags", "name"] as const)
+for (const source of ["attachment", "tags", "name"] as const) {
 	it(`Gateway startup returns a typed error for malformed saved ${source}`, async () => {
 		const schema = {
 			attachment: Attached,
@@ -147,6 +156,7 @@ for (const source of ["attachment", "tags", "name"] as const)
 				const w = world();
 				({attachment: w.attached, tags: w.tags, name: w.name})[source](raw);
 				const runtime = gatewayRuntime(w.ctx, w.env, config);
+
 				try {
 					typed(await runtime.runPromiseExit(GatewayService));
 				} finally {
@@ -157,13 +167,15 @@ for (const source of ["attachment", "tags", "name"] as const)
 			{seed: 119120, numRuns: 20, examples: [[null], [{}], [17]]},
 		);
 	});
+}
 
-for (const method of ["message", "close", "ring", "probe", "notify"] as const)
+for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
 	it(`Gateway ${method} returns a typed error for a damaged attachment after startup`, async () => {
 		await fc.assert(
 			fc.asyncProperty(malformed(Attached), async (raw) => {
 				const w = world(),
 					runtime = gatewayRuntime(w.ctx, w.env, config);
+
 				try {
 					const gateway = await runtime.runPromise(GatewayService);
 					w.attached(raw);
@@ -188,6 +200,7 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const)
 			{seed: 119120, numRuns: 20, examples: [[null], [{}]]},
 		);
 	});
+}
 
 it("Gateway ready RPC decoding fails in the typed channel before the wait refusal is sent", async () => {
 	await fc.assert(
@@ -207,6 +220,7 @@ it("Gateway ready RPC decoding fails in the typed channel before the wait refusa
 					),
 				),
 			);
+
 			try {
 				const gateway = await runtime.runPromise(GatewayService);
 				w.route.mockResolvedValue({_tag: "ok", result: raw});
@@ -258,6 +272,7 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
 					),
 				),
 			);
+
 			try {
 				const request = new Request("http://local/", {
 					method: "POST",
@@ -286,7 +301,7 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
 	);
 });
 
-for (const field of ["put key", "put checksum", "head key"] as const)
+for (const field of ["put key", "put checksum", "head key"] as const) {
 	it(`control checks outside ${field} as text instead of coercing it or throwing`, async () => {
 		const input: fc.Arbitrary<unknown> = fc.oneof(
 			malformed(Schema.String),
@@ -308,13 +323,21 @@ for (const field of ["put key", "put checksum", "head key"] as const)
 						),
 					),
 				);
+
 				try {
 					const args: Array<unknown> =
 						field === "head key"
 							? [raw]
 							: ["key", [], createHash("sha256").update("").digest("hex")];
-					if (field === "put key") args[0] = raw;
-					if (field === "put checksum") args[2] = raw;
+
+					if (field === "put key") {
+						args[0] = raw;
+					}
+
+					if (field === "put checksum") {
+						args[2] = raw;
+					}
+
 					const request = new Request("http://local/", {
 						method: "POST",
 						headers: {authorization: "Bearer test"},
@@ -341,15 +364,18 @@ for (const field of ["put key", "put checksum", "head key"] as const)
 			{seed: 119120, numRuns: 20, examples: [[{toString: 0}], [null], [17]]},
 		);
 	});
+}
 
 const objectName = Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String]));
-for (const service of ["process", "record"] as const)
+
+for (const service of ["process", "record"] as const) {
 	it(`${service} object names return typed parse failures for malformed saved names`, async () => {
 		await fc.assert(
 			fc.asyncProperty(malformed(objectName), async (raw) => {
 				const w = world();
 				w.name(raw);
 				const runtime = processRuntime(w.ctx, w.env, {});
+
 				try {
 					const exit =
 						service === "process"
@@ -364,6 +390,7 @@ for (const service of ["process", "record"] as const)
 			{seed: 119120, numRuns: 20, examples: [[null], ["{"], ['["project"]'], ['["project",17]']]},
 		);
 	});
+}
 
 it("processDescriptor checks the saved value before returning it to a caller", async () => {
 	const descriptor = Schema.Struct({
@@ -378,6 +405,7 @@ it("processDescriptor checks the saved value before returning it to a caller", a
 			const w = world();
 			const get = vi.fn(async () => raw);
 			Object.assign(w.ctx.storage, {get});
+
 			try {
 				typed(await Effect.runPromiseExit(processDescriptor(w.ctx)));
 			} finally {
@@ -393,6 +421,7 @@ it("Gateway close checks saved tags again after startup", async () => {
 		fc.asyncProperty(malformed(Schema.String), async (raw) => {
 			const w = world(),
 				runtime = gatewayRuntime(w.ctx, w.env, config);
+
 			try {
 				const gateway = await runtime.runPromise(GatewayService);
 				w.tags([raw, "tab", "key"]);
@@ -422,6 +451,7 @@ it("Gateway rejects missing or malformed URL segments with a typed error", async
 					1 = {};
 				},
 			);
+
 			try {
 				const gateway = await runtime.runPromise(GatewayService);
 				typed(

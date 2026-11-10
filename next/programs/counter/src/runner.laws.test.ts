@@ -15,15 +15,23 @@ import * as fc from "fast-check";
 const PROCESS: string = Effect.runSync(
 	Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer)),
 );
+
 const NAME = "counter:1";
 const LIBRARY = "@kampus/libfabrika"; // Missing P11 exports must not prevent collecting the laws.
 const SEED = 119120;
 const folder = mkdtempSync(join(tmpdir(), "p11-counter-"));
 const opened: DatabaseSync[] = [];
+
 afterAll(() => {
-	for (const db of opened) if (db.isOpen) db.close();
+	for (const db of opened) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
+
 type Update =
 	| {type: "whole"; rev: number; view: unknown}
 	| {
@@ -32,27 +40,42 @@ type Update =
 			rev: number;
 			patch: ReadonlyArray<{op: string; path: string; value?: unknown}>;
 	  };
+
 type Runner = {
 	readonly open: (client: string) => Effect.Effect<{rev: number; view: unknown}, unknown>;
 	readonly msg: (input: unknown) => Effect.Effect<{_tag: string; reason?: string}, unknown>;
 };
+
 const reconstruct = (before: unknown, change: Update): unknown => {
-	if (change.type === "whole") return structuredClone(change.view);
+	if (change.type === "whole") {
+		return structuredClone(change.view);
+	}
+
 	let root = structuredClone(before);
+
 	for (const p of change.patch) {
 		if (p.path === "") {
 			root = structuredClone(p.value);
 			continue;
 		}
+
 		const keys = p.path
 			.slice(1)
 			.split("/")
 			.map((k) => k.replaceAll("~1", "/").replaceAll("~0", "~"));
 		let target = root;
-		for (const key of keys.slice(0, -1)) target = Reflect.get(Object(target), key);
-		if (p.op === "remove") Reflect.deleteProperty(Object(target), keys.at(-1)!);
-		else Reflect.set(Object(target), keys.at(-1)!, structuredClone(p.value));
+
+		for (const key of keys.slice(0, -1)) {
+			target = Reflect.get(Object(target), key);
+		}
+
+		if (p.op === "remove") {
+			Reflect.deleteProperty(Object(target), keys.at(-1)!);
+		} else {
+			Reflect.set(Object(target), keys.at(-1)!, structuredClone(p.value));
+		}
 	}
+
 	return root;
 };
 
@@ -103,6 +126,7 @@ describe("p22 real counter in the runner", () => {
 							expect(healthy.stepper.init({count})).toMatchObject({_tag: "stepped", view: {count}});
 							const result = yield* Effect.result(loader.load(name));
 							expect(Result.isFailure(result)).toBe(true);
+
 							if (Result.isFailure(result)) {
 								expect(Schema.is(ProgramDown)(result.failure)).toBe(true);
 								expect(result.failure.reason).toBe("load");
@@ -179,8 +203,12 @@ describe("p22 real counter in the runner", () => {
 			Effect.gen(function* () {
 				const r: Runner = yield* A.ProgramRunner;
 				yield* r.open("a");
+
 				for (let n = 1; n <= 12; n++) {
-					if (n === 5) yield* r.open("b");
+					if (n === 5) {
+						yield* r.open("b");
+					}
+
 					yield* r.msg({
 						id: `counter-${n}`,
 						envelope: {
@@ -193,9 +221,12 @@ describe("p22 real counter in the runner", () => {
 						seen: 0,
 						span: {traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7"},
 					});
-					for (const state of seen.values())
+
+					for (const state of seen.values()) {
 						expect(Schema.decodeUnknownSync(expected)(state.view)).toEqual({count: n});
+					}
 				}
+
 				expect((yield* r.open("inspect")).view).toEqual({count: 12});
 				expect(yield* Stream.runCollect((yield* Mailbox).receive(NAME, 0))).toHaveLength(12);
 			}).pipe(Effect.provide(layer())),

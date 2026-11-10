@@ -21,6 +21,7 @@ steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow
 		/\s+/,
 	),
 );
+
 // Includes deprecated names, which remain system colors rather than design tokens.
 const system = new Set(
 	`accentcolor accentcolortext activetext buttonborder buttonface buttontext canvas
@@ -30,8 +31,10 @@ buttonshadow captiontext inactiveborder inactivecaption inactivecaptiontext info
 menu menutext scrollbar threeddarkshadow threedface threedhighlight threedlightshadow threedshadow
 window windowframe windowtext`.split(/\s+/),
 );
+
 const functions =
 	/^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color|color-mix|device-cmyk|light-dark)$/i;
+
 const pipeTokens = new Set([
 	"--tile-wash",
 	"--tile-wash-on",
@@ -39,6 +42,7 @@ const pipeTokens = new Set([
 	"--tile-edge-on",
 	"--tile-edge-loud",
 ]);
+
 const colorProperty =
 	/^(?:color|.+-color|background(?:-.+)?|border(?:-.+)?|outline(?:-.+)?|(?:box|text)-shadow|fill|stroke(?:-.+)?|column-rule|text-(?:decoration|emphasis|stroke))$/i;
 
@@ -47,14 +51,19 @@ const colorFunction =
 
 export default plugin("no-raw-color", (root, fire) => {
 	root.walkDecls((decl) => {
-		if (generated(decl)) return;
+		if (generated(decl)) {
+			return;
+		}
+
 		if (
 			file(decl) === WINDOW &&
 			pipeTokens.has(decl.prop) &&
 			decl.parent?.type === "rule" &&
 			/^\[data-pipe=(?:"[^"]+"|'[^']+')\]$/.test(decl.parent.selector)
-		)
+		) {
 			return;
+		}
+
 		const named =
 			decl.prop.startsWith("--") ||
 			colorProperty.test(decl.prop.replace(/^-(?:webkit|moz|ms|o)-/i, ""));
@@ -63,21 +72,36 @@ export default plugin("no-raw-color", (root, fire) => {
 		const check = (nodes: valueParser.Node[], names: boolean) =>
 			valueParser.walk(nodes, (node) => {
 				if (node.type === "function") {
-					if (node.value.toLowerCase() === "url") return false;
+					if (node.value.toLowerCase() === "url") {
+						return false;
+					}
+
 					// light-dark selects values; its token-only form is fine.
-					if (functions.test(node.value) && node.value.toLowerCase() !== "light-dark") raw = true;
+					if (functions.test(node.value) && node.value.toLowerCase() !== "light-dark") {
+						raw = true;
+					}
+
 					check(node.nodes, names || colorFunction.test(node.value));
 					return false;
 				}
-				if (node.type !== "word") return;
+
+				if (node.type !== "word") {
+					return;
+				}
+
 				const word = node.value.toLowerCase();
+
 				if (
 					/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(word) ||
 					(names && (colors.has(word) || (system.has(word) && !forced)))
-				)
+				) {
 					raw = true;
+				}
 			});
 		check(valueParser(decl.value).nodes, named);
-		if (raw) fire(decl, "Read a design token instead of a raw color");
+
+		if (raw) {
+			fire(decl, "Read a design token instead of a raw color");
+		}
 	});
 });

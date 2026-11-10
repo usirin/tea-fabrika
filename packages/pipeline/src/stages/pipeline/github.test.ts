@@ -51,6 +51,7 @@ const FACTS: PrFacts = {
 	comments: [],
 	main: {tested: "m", tip: "m"},
 };
+
 const PULL: Pull = {
 	id: "https://github.invalid/o/r/pull/9",
 	kind: "lane",
@@ -63,6 +64,7 @@ const PULL: Pull = {
 	body: "b",
 	verdicts: [],
 };
+
 const PASSED: Pull = {...PULL, verdicts: [{kind: "review-code", verdict: "pass"}]};
 
 describe("what GitHub says, under the lane's own facts", () => {
@@ -292,9 +294,12 @@ describe("the url a window shows", () => {
 // ---------------------------------------------------------------- over the stand-in `gh`
 
 const MODULES = fileURLToPath(new URL("../../../node_modules", import.meta.url));
+
 const FIXTURE = (name: string) =>
 	readFileSync(new URL(`../../../../../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
+
 const NUMBER = 7;
+
 const IDENTITY = {
 	GIT_AUTHOR_NAME: "fixture",
 	GIT_AUTHOR_EMAIL: "fixture@fabrika.invalid",
@@ -310,7 +315,10 @@ describe("the GitHub host, over a stand-in gh", () => {
 	const dirs: string[] = [];
 	afterEach(() => {
 		vi.unstubAllEnvs();
-		for (const dir of dirs.splice(0)) rmSync(dir, {recursive: true, force: true});
+
+		for (const dir of dirs.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	/** The toy repository, a stand-in `gh` first on the path, and no login in reach. */
@@ -324,8 +332,11 @@ describe("the GitHub host, over a stand-in gh", () => {
 			...(github === undefined ? {} : {github}),
 		});
 		const fake = makeFakeGh({dir, remote: home.remote, story});
-		for (const [key, value] of Object.entries({...fakeEnv(dir), ...fake.env}))
+
+		for (const [key, value] of Object.entries({...fakeEnv(dir), ...fake.env})) {
 			vi.stubEnv(key, value);
+		}
+
 		return {...home, fake};
 	};
 
@@ -539,7 +550,11 @@ describe("the GitHub host, over a stand-in gh", () => {
 						);
 					}),
 				);
-				if (got._tag === "Success") throw new Error(`took ${got.success} for a pull request`);
+
+				if (got._tag === "Success") {
+					throw new Error(`took ${got.success} for a pull request`);
+				}
+
 				expect(got.failure.says).toContain("gh pr create");
 				expect(got.failure.says).toContain(createSays.trim());
 			},
@@ -754,7 +769,11 @@ describe("the GitHub host, over a stand-in gh", () => {
 					const waited = yield* host
 						.checksSettled(pr, head, [])
 						.pipe(Stream.take(1), Stream.runDrain, Effect.timeoutOption("20 seconds"));
-					if (Option.isNone(waited)) return "the wait never ended";
+
+					if (Option.isNone(waited)) {
+						return "the wait never ended";
+					}
+
 					return (yield* host.prFacts(pr)).checks;
 				}),
 			);
@@ -794,7 +813,9 @@ describe("the GitHub host, over a stand-in gh", () => {
 describe("the local host, when a pull's head moves", () => {
 	const dirs: string[] = [];
 	afterEach(() => {
-		for (const dir of dirs.splice(0)) rmSync(dir, {recursive: true, force: true});
+		for (const dir of dirs.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	const X = (text: string) => [{path: "src/x.ts", text}];

@@ -34,6 +34,7 @@ import {type Handle, StateRefused, type Storage, storageOf} from "./storage.ts";
 // ---------------------------------------------------------------- the toy
 
 const Item = Schema.Struct({name: Schema.String, n: Schema.Int});
+
 /** The tray's state, and the schema it is kept and read back through. */
 const Tray = Schema.Union([
 	Schema.Struct({phase: Schema.Literal("empty")}),
@@ -73,7 +74,10 @@ const tray = defineMachine({
 			[],
 		],
 		take: (s) => {
-			if (s.phase === "empty") return [s, []];
+			if (s.phase === "empty") {
+				return [s, []];
+			}
+
 			const [next, ...rest] = s.items;
 			return [
 				next === undefined ? {phase: "empty"} : {...s, top: next, items: rest, left: s.top.name},
@@ -102,6 +106,7 @@ const place = () => {
 
 /** Every key and its bytes, as they stand. */
 const snapshot = (bytes: ReadonlyMap<string, string>) => new Map(bytes);
+
 /** The bytes of one machine run: its two slots. */
 const runBytes = (bytes: ReadonlyMap<string, string>, run: string, machine: string, id: string) =>
 	[...bytes].filter(([key]) =>
@@ -112,6 +117,7 @@ const runBytes = (bytes: ReadonlyMap<string, string>, run: string, machine: stri
 
 const go = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
 const exitOf = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(Effect.exit(effect));
+
 /** What a promise came to: its value, or the message it failed with. */
 const settled = <A>(promise: Promise<A>) =>
 	promise.then(
@@ -121,6 +127,7 @@ const settled = <A>(promise: Promise<A>) =>
 			why: error instanceof Error ? error.message : String(error),
 		}),
 	);
+
 const isRefusal = (
 	migrated: unknown,
 ): migrated is {readonly _tag: "refusal"; readonly reason: string} =>
@@ -133,6 +140,7 @@ const isRefusal = (
 const name = fc.constantFrom("cup", "jar", "", "lid e", "é");
 const item = fc.record({name, n: fc.integer({min: -1000, max: 1000})});
 const key = fc.constantFrom("a", "b", "k e", "");
+
 const tray$: fc.Arbitrary<Tray> = fc.oneof(
 	fc.constant({phase: "empty"} as const),
 	fc.record({
@@ -143,10 +151,12 @@ const tray$: fc.Arbitrary<Tray> = fc.oneof(
 		left: fc.option(name, {nil: null}),
 	}),
 );
+
 const older$: fc.Arbitrary<OlderTray> = fc.record({
 	phase: fc.constant("holding" as const),
 	count: fc.integer({min: 0, max: 9}),
 });
+
 /** A key the tray's schema names nowhere, and what it holds. */
 const excess = fc.record({
 	key: fc.constantFrom("extra", "count", "try"),
@@ -162,11 +172,21 @@ const withExcess = (
 	at: number,
 	extra: {readonly key: string; readonly value: unknown},
 ) => {
-	if (t.phase === "empty") return {...t, [extra.key]: extra.value};
+	if (t.phase === "empty") {
+		return {...t, [extra.key]: extra.value};
+	}
+
 	const places = 2 + t.items.length;
 	const where = at % places;
-	if (where === 0) return {...t, [extra.key]: extra.value};
-	if (where === 1) return {...t, top: {...t.top, [extra.key]: extra.value}};
+
+	if (where === 0) {
+		return {...t, [extra.key]: extra.value};
+	}
+
+	if (where === 1) {
+		return {...t, top: {...t.top, [extra.key]: extra.value}};
+	}
+
 	return {
 		...t,
 		items: t.items.map((it, i) => (i === where - 2 ? {...it, [extra.key]: extra.value} : it)),
@@ -192,7 +212,11 @@ describe("a save is encoded by its schema, strictly", () => {
 				async (before, base, at, extra, id) => {
 					const {bytes, open} = place();
 					const handle = await go(open().open(RUN, null));
-					if (before !== null) await handle.store(MACHINE, "t", Tray).save(before);
+
+					if (before !== null) {
+						await handle.store(MACHINE, "t", Tray).save(before);
+					}
+
 					const was = snapshot(bytes);
 					const loose = withExcess(base, at, extra) as Tray;
 					const saved = await settled(handle.store(MACHINE, id, Tray).save(loose));
@@ -256,6 +280,7 @@ describe("read, migrate and list agree on every stored value", () => {
 
 				// What was kept is what was saved, read back as JSON.
 				expect(kept).toEqual(JSON.parse(JSON.stringify(raw)));
+
 				if (kept === null) {
 					// JSON null is "nothing kept" to all three.
 					seen.nothing += 1;
@@ -266,7 +291,9 @@ describe("read, migrate and list agree on every stored value", () => {
 					});
 					return;
 				}
+
 				const decoded = decodeTray(kept);
+
 				if (Exit.isSuccess(decoded)) {
 					seen.kept += 1;
 					expect(migrated).toEqual(decoded.value);
@@ -274,6 +301,7 @@ describe("read, migrate and list agree on every stored value", () => {
 					expect(listed).toEqual([{kind: "kept", id: "x", state: decoded.value}]);
 					return;
 				}
+
 				seen.refused += 1;
 				expect(isRefusal(migrated)).toBe(true);
 				expect(Exit.isFailure(read)).toBe(true);
@@ -311,6 +339,7 @@ type Write =
 
 const id$ = fc.constantFrom("a", "b", "c/1", "d e", "é", "older");
 const machine$ = fc.constantFrom(MACHINE, MACHINE, MACHINE, "other");
+
 const write$: fc.Arbitrary<Write> = fc.oneof(
 	{
 		weight: 3,
@@ -345,14 +374,27 @@ describe("list shows every run", () => {
 				const storage = open();
 				const handle = await go(storage.open(RUN, null));
 				const model = new Map<string, Write>();
+
 				for (const w of writes) {
-					if (w.do === "clear") await go(handle.clear(w.machine, w.id));
-					else if (w.do === "save") await handle.store(w.machine, w.id, Tray).save(w.state);
-					else await handle.store(w.machine, w.id, OlderTray).save(w.state);
-					if (w.machine !== MACHINE) continue;
-					if (w.do === "clear") model.delete(w.id);
-					else model.set(w.id, w);
+					if (w.do === "clear") {
+						await go(handle.clear(w.machine, w.id));
+					} else if (w.do === "save") {
+						await handle.store(w.machine, w.id, Tray).save(w.state);
+					} else {
+						await handle.store(w.machine, w.id, OlderTray).save(w.state);
+					}
+
+					if (w.machine !== MACHINE) {
+						continue;
+					}
+
+					if (w.do === "clear") {
+						model.delete(w.id);
+					} else {
+						model.set(w.id, w);
+					}
 				}
+
 				const reader: Handle = restart ? await go(open().open(RUN, null)) : handle;
 				const listed = await go(reader.list(MACHINE, Tray));
 				const want = [...model.values()].map((w) =>
@@ -363,8 +405,10 @@ describe("list shows every run", () => {
 				const byId = (a: {readonly id: string}, b: {readonly id: string}) =>
 					a.id.localeCompare(b.id);
 				expect([...listed].sort(byId)).toEqual(want.sort(byId));
-				if (listed.some((l) => l.kind === "kept") && listed.some((l) => l.kind === "refused"))
+
+				if (listed.some((l) => l.kind === "kept") && listed.some((l) => l.kind === "refused")) {
 					mixed += 1;
+				}
 			}),
 			OPTS,
 		);
@@ -391,6 +435,7 @@ type Later =
 	| {readonly do: "end"};
 
 const other$ = fc.constantFrom("a", "b");
+
 const later$: fc.Arbitrary<Later> = fc.oneof(
 	fc.constantFrom<Later>(
 		{do: "reopen"},
@@ -431,7 +476,11 @@ const trays = defineProgram({
 		Effect.gen(function* () {
 			const old = yield* machines.tray.get("old").start({type: "take"}).pipe(Effect.exit);
 			const failure = Exit.isFailure(old) ? Cause.squash(old.cause) : null;
-			if (!(failure instanceof StateRefused)) return yield* Effect.die("the older tray started");
+
+			if (!(failure instanceof StateRefused)) {
+				return yield* Effect.die("the older tray started");
+			}
+
 			const fresh = yield* machines.tray.get("a").start({type: "put", name: "cup", n: 1});
 			yield* fresh.dispatch({type: "take"}).pipe(Effect.orDie);
 		}).pipe(Effect.scoped),
@@ -454,6 +503,7 @@ describe("refused bytes are never booted and never written over", () => {
 
 				for (const step of steps) {
 					tried.add(step.do);
+
 					switch (step.do) {
 						case "reopen":
 							handle = await go(storage.open(RUN, null));
@@ -523,10 +573,12 @@ describe("refused bytes are never booted and never written over", () => {
 							await go(handle.end("ended"));
 							break;
 					}
+
 					expect(runBytes(bytes, RUN, MACHINE, "old")).toEqual(planted);
 					// Booted from nothing, or from a tray this code saved: never from older code's bytes.
 					expect(booted.filter((b) => b !== null && Exit.isFailure(decodeTray(b)))).toEqual([]);
 				}
+
 				const last = await go(open().open(RUN, null));
 				expect(last.found.machines).toContainEqual({machine: MACHINE, id: "old"});
 				expect(await go(last.read(MACHINE, "old", OlderTray))).toEqual(old);
@@ -577,14 +629,17 @@ describe("refused bytes are never booted and never written over", () => {
 // ---------------------------------------------------------------- law: every reachable state is kept
 
 type Msg = MsgOf<typeof tray>;
+
 const table: MsgArbitraryTable<Msg> = {
 	put: arbRecordMsg("put", {name, n: fc.integer({min: -1000, max: 1000})}),
 	take: fc.constant({type: "take"} as const),
 	note: arbRecordMsg("note", {key, text: name}),
 };
+
 const lists = arbMsgSequence(arbMsg(table), {maxLength: 30});
 
 const ctx = stubCtxThrowingProxy<undefined>();
+
 /** Every state `machine` reaches from its init, by any list of Msgs, saves and loads back equal. */
 const keepsEvery = (machine: typeof tray) =>
 	fc.assert(
@@ -592,6 +647,7 @@ const keepsEvery = (machine: typeof tray) =>
 			const {states} = foldEvents(machine, ctx, null, msgs);
 			const handle = await go(place().open().open(RUN, null));
 			const store = handle.store(MACHINE, "t", Tray);
+
 			for (const state of states) {
 				await store.save(state);
 				expect(store.migrate(await store.load())).toEqual(state);

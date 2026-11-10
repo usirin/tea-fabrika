@@ -9,9 +9,13 @@ import {pathsOf} from "./host/socket.ts";
 import {startHost} from "./start-host.ts";
 
 const made: string[] = [];
+
 afterEach(() => {
 	vi.unstubAllEnvs();
-	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});
+
+	for (const folder of made.splice(0)) {
+		rmSync(folder, {recursive: true, force: true});
+	}
 });
 
 // T237 review 2, finding 3. Today's app opened from the Dock has no shell's FABRIKA_REPO.

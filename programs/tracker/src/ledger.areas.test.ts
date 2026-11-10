@@ -45,7 +45,11 @@ const rowsOn = (ledger: Ledgers) =>
 const entriesOf = (rows: readonly Row[]): readonly AreaEntry[] =>
 	rows.map((row) => {
 		const by = writerOf(row.writer);
-		if (by === null) throw new Error(`row ${row.pos} has no writer`);
+
+		if (by === null) {
+			throw new Error(`row ${row.pos} has no writer`);
+		}
+
 		return {pos: row.pos, by, at: row.at, fact: JSON.parse(row.data)};
 	});
 
@@ -65,14 +69,21 @@ const interleaved = (raw: Ledgers, at: number, other: Effect.Effect<unknown>) =>
 	let calls = 0;
 	let ran = false;
 	const before = Effect.suspend(() => {
-		if (ran || calls++ !== at) return Effect.void;
+		if (ran || calls++ !== at) {
+			return Effect.void;
+		}
+
 		ran = true;
 		return Effect.asVoid(other);
 	});
 	const ledger = new Proxy(raw, {
 		get(target, key, receiver) {
 			const value: unknown = Reflect.get(target, key, receiver);
-			if (typeof value !== "function" || key === "watch") return value;
+
+			if (typeof value !== "function" || key === "watch") {
+				return value;
+			}
+
 			return (...args: unknown[]) =>
 				Effect.andThen(
 					before,
@@ -156,8 +167,10 @@ describe("an area write from a person", () => {
 		const ledger = memoryService();
 		const rows = await Effect.runPromise(
 			Effect.gen(function* () {
-				for (const [i, name] of ["pipeline", "app", "desk"].entries())
+				for (const [i, name] of ["pipeline", "app", "desk"].entries()) {
 					yield* saved(ledger, OWNER, `w${i}`, make(name));
+				}
+
 				return yield* rowsOn(ledger);
 			}),
 		);
@@ -271,12 +284,15 @@ describe("a load of many areas", () => {
 		const read = await Effect.runPromise(
 			Effect.gen(function* () {
 				yield* ledger.register(AREAS, "user:github:7");
-				for (let n = 1; n <= 501; n++)
+
+				for (let n = 1; n <= 501; n++) {
 					yield* ledger.send(INBOX, `w${n}`, {
 						kind: "area_made",
 						writer: "user:github:7",
 						data: {_tag: "area_made", area: n, name: `area ${n}`},
 					});
+				}
+
 				const rows = yield* rowsOn(ledger);
 				return {load: yield* loaded(ledger), last: rows.at(-1)?.pos};
 			}),
@@ -366,8 +382,12 @@ describe("two people make an area at once (a4)", () => {
 			const rows = await Effect.runPromise(
 				Effect.gen(function* () {
 					yield* saved(ledger, OWNER, "a1", make("pipeline"));
+
 					// The save made fewer calls than `at`: the other one comes after it, then.
-					if (!ran()) yield* other;
+					if (!ran()) {
+						yield* other;
+					}
+
 					return yield* rowsOn(raw);
 				}),
 			);
@@ -385,8 +405,15 @@ describe("an area save the ledger will not take", () => {
 		const ledger = new Proxy(raw, {
 			get(target, key, receiver) {
 				const value: unknown = Reflect.get(target, key, receiver);
-				if (typeof value !== "function") return value;
-				if (key !== "append") return (...args: unknown[]) => value.apply(target, args);
+
+				if (typeof value !== "function") {
+					return value;
+				}
+
+				if (key !== "append") {
+					return (...args: unknown[]) => value.apply(target, args);
+				}
+
 				return () =>
 					Effect.suspend(() => {
 						appends++;

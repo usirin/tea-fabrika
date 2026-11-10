@@ -111,10 +111,20 @@ export const runHost = (options: {
 			Effect.gen(function* () {
 				yield* holdLock(paths.lock, paths.dir);
 				const found = yield* reach(paths.sock);
-				if (found === "live") return yield* new HostAnswers({sock: paths.sock});
-				if (found === "stale") yield* fs.remove(paths.sock);
+
+				if (found === "live") {
+					return yield* new HostAnswers({sock: paths.sock});
+				}
+
+				if (found === "stale") {
+					yield* fs.remove(paths.sock);
+				}
+
 				// No host answers, and this one holds the lock: an agents' socket here was left by one that is gone.
-				if (yield* fs.exists(paths.mcp)) yield* fs.remove(paths.mcp);
+				if (yield* fs.exists(paths.mcp)) {
+					yield* fs.remove(paths.mcp);
+				}
+
 				const made = yield* NodeSocketServer.make({path: paths.sock}).pipe(Scope.provide(outer));
 				yield* fs.chmod(paths.sock, 0o600);
 				// Every home's agents' socket (host/agents.ts).

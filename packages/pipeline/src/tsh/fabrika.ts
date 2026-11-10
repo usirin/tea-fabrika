@@ -70,6 +70,7 @@ const passing = (brief: Brief): Form => ({
 });
 
 const scripted = createReviewProgram();
+
 /** review, with a scripted reviewer that passes every criterion. Everything else is the review program's own. */
 export const reviewScripted = defineProgram({
 	...scripted,
@@ -124,8 +125,11 @@ const gitHubReads = (
 	counted: Counted | undefined,
 ): Layer.Layer<CodeHost> => {
 	const accounts = {own: config.own, reviewers: config.reviewers};
-	if (setup === null)
+
+	if (setup === null) {
 		return gitHubCodeHost(counted === undefined ? accounts : {...accounts, checks: counted});
+	}
+
 	const github = setup.github.value;
 	const base = gitHubCodeHost({
 		...accounts,
@@ -133,7 +137,11 @@ const gitHubReads = (
 		declared: {approval: setup.approval.value},
 	});
 	const [first, ...rest] = setup.run.value;
-	if (first === undefined) return base;
+
+	if (first === undefined) {
+		return base;
+	}
+
 	const settings = {
 		work: config.work,
 		install: setup.install.value,

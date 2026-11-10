@@ -185,7 +185,11 @@ const toTheEnd = (ships: RefsOf<ReturnType<typeof shipKind>>, id: string, pr: st
 	Effect.gen(function* () {
 		const runtime = yield* ships.get(id).start({type: "start", pr});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the run stopped in ${end.phase}`);
+		}
+
 		return end;
 	}).pipe(Effect.scoped);
 
@@ -261,8 +265,9 @@ export const createShipProgram = (machine = ship) =>
 						? {id: `pr/${value}`, pr: value, kept: false}
 						: {id: keyOf(value), pr: value.pr, kept: true};
 				const found = (pr: string) => look(pr).pipe(Effect.flatMap((f) => send("found", f)));
+
 				// Read mode keeps nothing, so it has nothing to forget, and a value is taken once handed on.
-				if (flags.mode === "read")
+				if (flags.mode === "read") {
 					return yield* serve(
 						{
 							pr: ({value, ack}) => ack.pipe(Effect.andThen(found(toItem(value).pr))),
@@ -271,6 +276,7 @@ export const createShipProgram = (machine = ship) =>
 						},
 						{until: ["pr"]},
 					);
+				}
 
 				// Each pull request goes on the kept queue first, so a start after a kill carries every one
 				// told and not finished, in order (../queue.ts). An ask again under an id already answered

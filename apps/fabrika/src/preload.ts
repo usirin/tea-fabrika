@@ -23,7 +23,11 @@ const lines = new Map<string, Line>();
 
 const lineOf = (name: string): Line => {
 	const known = lines.get(name);
-	if (known !== undefined) return known;
+
+	if (known !== undefined) {
+		return known;
+	}
+
 	const line: Line = {port: null, waiting: [], heard: [], listener: null};
 	lines.set(name, line);
 	return line;
@@ -31,35 +35,60 @@ const lineOf = (name: string): Line => {
 
 ipcRenderer.on(PORT_CHANNEL, (event, name: unknown) => {
 	const [given] = event.ports;
-	if (given === undefined || !isPortName(name)) return;
+
+	if (given === undefined || !isPortName(name)) {
+		return;
+	}
+
 	const line = lineOf(name);
 	// A port handed again for a name, after the page was loaded again: the old one goes.
 	line.port?.close();
 	line.port = given;
 	given.onmessage = (e: MessageEvent) => {
-		if (line.listener === null) line.heard.push(e.data);
-		else line.listener(e.data);
+		if (line.listener === null) {
+			line.heard.push(e.data);
+		} else {
+			line.listener(e.data);
+		}
 	};
-	for (const m of line.waiting.splice(0)) given.postMessage(m);
+
+	for (const m of line.waiting.splice(0)) {
+		given.postMessage(m);
+	}
 });
+
 ipcRenderer.send(PORT_CHANNEL);
 
 const bridge: Bridge = {
 	send: (to, m) => {
-		if (!isPortName(to)) return;
+		if (!isPortName(to)) {
+			return;
+		}
+
 		const line = lineOf(to);
-		if (line.port === null) line.waiting.push(m);
-		else line.port.postMessage(m);
+
+		if (line.port === null) {
+			line.waiting.push(m);
+		} else {
+			line.port.postMessage(m);
+		}
 	},
 	onMessage: (from, listener) => {
-		if (!isPortName(from)) return;
+		if (!isPortName(from)) {
+			return;
+		}
+
 		const line = lineOf(from);
 		line.listener = listener;
-		for (const m of line.heard.splice(0)) listener(m);
+
+		for (const m of line.heard.splice(0)) {
+			listener(m);
+		}
 	},
 	forget: (name) => {
 		lines.get(name)?.port?.close();
 		lines.delete(name);
 	},
 };
+
 contextBridge.exposeInMainWorld("fabrika", bridge);

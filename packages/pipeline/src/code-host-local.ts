@@ -83,10 +83,12 @@ export const bookTarget = (plan: PlanId): string => `${plan}/book`;
 /** The plan and task a target names, or `plan` for the whole book. `null`: it names none. */
 export function taskOf(target: string): {readonly plan: PlanId; readonly task: Owner} | null {
 	const book = /^(.+)\/book$/.exec(target);
+
 	if (book !== null) {
 		const plan = readPlanId(book[1] ?? "");
 		return plan === null ? null : {plan, task: PLAN};
 	}
+
 	const found = /^(.+)\/tasks\/([^/]+)$/.exec(target);
 	const plan = readPlanId(found?.[1] ?? "");
 	const task = readTaskId(found?.[2] ?? "");
@@ -132,7 +134,11 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 			Effect.map(Effect.provideService(readFacts, Ledger, ledger), (entries) => {
 				const state = foldLedger(entries);
 				const track = state.plans.get(task.plan);
-				if (track === undefined) return {criteria: null, ticket: "none" as const};
+
+				if (track === undefined) {
+					return {criteria: null, ticket: "none" as const};
+				}
+
 				const current =
 					task.task === PLAN ? currentOf(track.book) : criteriaOf(state, task.plan, task.task);
 				const criteria = current.map((c): Criterion => ({
@@ -153,8 +159,12 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 		const change = (target: string, asked: string | null): Effect.Effect<Change, Failed> =>
 			Effect.gen(function* () {
 				const task = taskOf(target);
+
 				// A commit that starts with `-` would be read by git as a flag.
-				if (task === null || asked?.startsWith("-")) return yield* failed;
+				if (task === null || asked?.startsWith("-")) {
+					return yield* failed;
+				}
+
 				const head = yield* commitOf(settings.repo, asked ?? "HEAD");
 				const from = (yield* git(["merge-base", settings.base, head]).pipe(
 					Effect.flatMap(ok),
@@ -247,7 +257,10 @@ const services = (settings: LocalSettings, ref: Ref.Ref<Runs>) =>
 		const settle = (head: string) =>
 			lock.withPermits(1)(
 				Effect.gen(function* () {
-					if (lastAt(yield* Ref.get(ref), head) !== null) return;
+					if (lastAt(yield* Ref.get(ref), head) !== null) {
+						return;
+					}
+
 					const ran = yield* runAt(head);
 					yield* Ref.update(ref, (runs) => apply(runs, {type: "ran", ...ran}));
 				}),

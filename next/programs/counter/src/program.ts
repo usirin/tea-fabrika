@@ -5,6 +5,7 @@ import {Program} from "@kampus/libfabrika";
 import {Schema} from "effect";
 
 const Model = Schema.Struct({count: Schema.Int});
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("inc")}),
 	Schema.Struct({type: Schema.Literal("dec")}),

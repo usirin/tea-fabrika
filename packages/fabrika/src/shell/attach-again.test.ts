@@ -26,6 +26,7 @@ const call = Cmd.make("toy_call", {
 	ok: Schema.String,
 	err: ["unknown"],
 });
+
 type CallCmd = ReturnType<typeof call>;
 
 const Work = Schema.Union([
@@ -56,6 +57,7 @@ const work = defineMachine({
 
 /** What every life of the fake job did, and how its call answers in this life. */
 const world = {calls: 0, mains: 0, answer: "hang" as "hang" | "at once"};
+
 const reset = (answer: typeof world.answer) => {
 	world.calls = 0;
 	world.mains = 0;
@@ -118,7 +120,11 @@ const session = (storage: Storage) =>
 			{printed: printed.hear, ready: ready.hear},
 			{id: `tsh:attach-again-${runs}`, storage},
 		).pipe(Effect.provideService(Programs, LIST), Effect.provideService(HostJobs, jobs));
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		const line = (text: string) =>
 			Effect.gen(function* () {
@@ -134,7 +140,9 @@ const session = (storage: Storage) =>
 /** Wait until `ok` holds, a few seconds at most. */
 const until = (what: string, ok: () => boolean) =>
 	Effect.gen(function* () {
-		while (!ok()) yield* Effect.sleep(Duration.millis(5));
+		while (!ok()) {
+			yield* Effect.sleep(Duration.millis(5));
+		}
 	}).pipe(
 		Effect.timeoutOrElse({duration: "5 seconds", orElse: () => Effect.die(`never: ${what}`)}),
 	);
@@ -153,11 +161,14 @@ const firstLife = (storage: Storage, program: string) =>
 		const said = yield* line(`${program} &`);
 		const id = said[0]?.split(" ")[1] ?? "";
 		yield* until("the first call", () => world.calls === 1);
-		if (world.answer === "at once")
+
+		if (world.answer === "at once") {
 			yield* until(
 				"the call's answer, kept",
 				() => Effect.runSync(keptOf(storage, id).pipe(Effect.orDie))?.phase === "done",
 			);
+		}
+
 		yield* started.stop;
 		return id;
 	}).pipe(Effect.scoped);

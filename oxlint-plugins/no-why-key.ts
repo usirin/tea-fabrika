@@ -13,15 +13,19 @@ export const noWhyKey: CreateRule = {
 						: computed && key.type === "TemplateLiteral" && key.expressions.length === 0
 							? key.quasis[0]?.value.cooked
 							: null;
-			if (name === "why")
+
+			if (name === "why") {
 				context.report({
 					node: key,
 					message: "Use reason for this key in next/; why was renamed in the glossary.",
 				});
+			}
 		};
 		return {
 			Property(node) {
-				if (node.parent.type === "ObjectExpression") check(node.key, node.computed);
+				if (node.parent.type === "ObjectExpression") {
+					check(node.key, node.computed);
+				}
 			},
 			PropertyDefinition: (node) => check(node.key, node.computed),
 			AccessorProperty: (node) => check(node.key, node.computed),

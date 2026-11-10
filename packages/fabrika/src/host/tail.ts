@@ -23,6 +23,7 @@ export interface Meter {
 	bytes: number;
 	rings: number;
 }
+
 export const meter = (): Meter => ({reads: 0, events: 0, bytes: 0, rings: 0});
 
 export interface TailOptions {
@@ -56,18 +57,25 @@ export const tail = (ledger: Ledger["Service"], o: TailOptions): Stream.Stream<R
 				ledger
 					.readStream(o.stream, rev, page)
 					.pipe(Effect.retry(Schedule.spaced(Duration.millis(100))), Effect.orDie);
+
 			for (;;) {
 				const rows = yield* readFrom(cursor);
 				m.reads++;
 				m.events += rows.length;
 				m.bytes += JSON.stringify(rows).length;
+
 				for (const r of rows) {
-					if (r.rev !== cursor + 1)
+					if (r.rev !== cursor + 1) {
 						return yield* Effect.die(`tail of ${o.stream}: rev ${r.rev} after ${cursor}`);
+					}
+
 					cursor = r.rev;
 					yield* Queue.offer(out, r);
 				}
-				if (rows.length < page) yield* Queue.take(bell).pipe(Effect.timeoutOption(safety));
+
+				if (rows.length < page) {
+					yield* Queue.take(bell).pipe(Effect.timeoutOption(safety));
+				}
 			}
 		}),
 	);

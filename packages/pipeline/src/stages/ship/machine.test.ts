@@ -54,20 +54,24 @@ const clear: ShipFacts = {
 	main: ON_TIP,
 	...provenAt("abc1234"),
 };
+
 /** Facts with `patch`. The verdict rows follow the head unless the patch says otherwise. */
 const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({
 	...clear,
 	...provenAt(patch.head ?? clear.head),
 	...patch,
 });
+
 /** The code review, with this verdict at the head. */
 const code = (verdict: "failed" | "missing"): ShipFacts["reviews"] => [
 	{kind: "review-code", verdict},
 ];
+
 const pending = (head = "abc1234") => facts({head, checks: "pending"});
 const red = (head = "abc1234") => facts({head, checks: "red"});
 
 type Fails = "fails";
+
 interface Script {
 	/** Each read's answer, in order. */
 	readonly facts: readonly (ShipFacts | Fails)[];
@@ -85,10 +89,15 @@ interface Script {
 }
 
 const broke = Effect.fail({_tag: "unknown" as const});
+
 /** The next answer of a script. A Cmd or a wait no script names fails the test. */
 function next<A>(answers: A[], what: string): A {
 	const answer = answers.shift();
-	if (answer === undefined) throw new Error(`${what} came, and no script names it`);
+
+	if (answer === undefined) {
+		throw new Error(`${what} came, and no script names it`);
+	}
+
 	return answer;
 }
 
@@ -142,8 +151,11 @@ async function drive(script: Script, machine = patient) {
 				ship_finish: (cmd: ReturnType<typeof finish>) =>
 					Effect.suspend(() => {
 						sent.push(cmd);
-						if (script.finish === undefined)
+
+						if (script.finish === undefined) {
 							return Effect.die(new Error("a finish was sent, and no script names it"));
+						}
+
 						return script.finish === "fails" ? broke : Effect.succeed(null);
 					}),
 			},
@@ -158,7 +170,11 @@ async function drive(script: Script, machine = patient) {
 				},
 				ship_queue: (sub: QueueSub): Stream.Stream<ShipMsg> => {
 					listened.push(sub.deps);
-					if (script.queue === undefined) return Stream.never;
+
+					if (script.queue === undefined) {
+						return Stream.never;
+					}
+
 					// Landed: the queue names the commit it made on the base branch, which is not the head.
 					const left: ShipMsg =
 						script.queue === "landed"
@@ -174,36 +190,46 @@ async function drive(script: Script, machine = patient) {
 		return yield* runtime.done();
 	});
 	const end = await Effect.runPromise(program.pipe(Effect.scoped));
-	if (end.phase !== "over") throw new Error(`the run did not end: ${end.phase}`);
+
+	if (end.phase !== "over") {
+		throw new Error(`the run did not end: ${end.phase}`);
+	}
+
 	const left = {reads, reruns, settles, enqueues, merges};
 	return {outcome: end.outcome, sent, types: sent.map((cmd) => cmd.type), waitedOn, listened, left};
 }
+
 /** Every scripted answer was used: the machine asked for nothing less than the script says. */
 const NOTHING_LEFT = {reads: [], reruns: [], settles: [], enqueues: [], merges: []};
 
 const READ = {type: "ship_facts", pr: PR};
+
 const rerunOf = (head: string) => ({
 	type: "ship_rerun_checks",
 	pr: PR,
 	head,
 	intent: `ship/${PR}/rerun/${head}`,
 });
+
 /** The writes carry the proof, and nothing else names the pull request or the head. */
 const enqueueOf = (head: string) => ({
 	type: "ship_enqueue",
 	ready: readyAt(PR, head),
 	intent: `ship/${PR}/enqueue/${head}`,
 });
+
 const mergeOf = (head: string) => ({
 	type: "ship_merge",
 	ready: readyAt(PR, head),
 	intent: `ship/${PR}/merge/${head}`,
 });
+
 const finishOf = (head: string) => ({
 	type: "ship_finish",
 	pr: PR,
 	intent: `ship/${PR}/finish/${head}`,
 });
+
 const AT = {pr: PR, head: "abc1234"};
 /** A wait on checks that were not run again. */
 const WAIT = {...AT, after: []};
@@ -757,6 +783,7 @@ const STATES = {
 } as const satisfies {readonly [P in Ship["phase"]]: Extract<Ship, {phase: P}>};
 
 const failure = {_tag: "unknown"};
+
 /** Every Msg the machine has a cell for, and the one phase that listens to it. */
 const MSGS: readonly {readonly msg: AnyMsg; readonly heardIn: Ship["phase"]}[] = [
 	{msg: {type: "start", pr: PR}, heardIn: "idle"},
@@ -790,13 +817,16 @@ const MSGS: readonly {readonly msg: AnyMsg; readonly heardIn: Ship["phase"]}[] =
 describe("a Msg that arrives in the wrong phase", () => {
 	it("changes nothing and sends nothing, in every phase but its own", () => {
 		let checked = 0;
+
 		for (const {msg, heardIn} of MSGS) {
 			for (const state of Object.values(STATES)) {
 				const [after, cmds] = step(state, msg);
+
 				if (state.phase === heardIn) {
 					expect(after, `${msg.type} in ${state.phase}`).not.toBe(state);
 					continue;
 				}
+
 				expect(after, `${msg.type} in ${state.phase}`).toBe(state);
 				expect(cmds).toEqual([]);
 				checked += 1;
@@ -1006,6 +1036,7 @@ describe("after a restart", () => {
 			const [back] = patient.init(kept, undefined);
 			expect(back).toEqual(state);
 		}
+
 		const [back] = patient.init(JSON.parse(JSON.stringify(STATES.enqueueing)), undefined);
 		expect(step(back, {type: "resume"})).toEqual([STATES.enqueueing, [enqueueCmd]]);
 	});

@@ -10,6 +10,7 @@ const SEED = 119120;
 // Defer export lookup so the red base's missing exports do not prevent law collection.
 const LIBRARY = "@kampus/libfabrika";
 const TESTING = "@kampus/libfabrika/testing";
+
 const msgs = fc.array(fc.constantFrom({type: "inc"}, {type: "dec"}, {type: "reset"}), {
 	maxLength: 30,
 });
@@ -102,8 +103,11 @@ describe("P11 real counter laws", () => {
 						);
 						const boot = p.init(null);
 						expect(boot).toMatchObject({_tag: "stepped", view: {count: 0}, cmds: []});
-						for (const type of ["inc", "dec", "reset"] as const)
+
+						for (const type of ["inc", "dec", "reset"] as const) {
 							expect(counter.refuse({count: value}, {type})).toBeNull();
+						}
+
 						expect(p.step({count: value}, {type: "inc", value: "wrong"})).toMatchObject({
 							_tag: "stepped",
 							view: {count: value + 1},

@@ -40,6 +40,7 @@ export const STEPS = [
 	"push",
 	"merge",
 ] as const;
+
 export const LaneStep = Schema.Literals(STEPS);
 export type LaneStep = typeof LaneStep.Type;
 
@@ -128,6 +129,7 @@ export type Move = typeof Move.Type;
 
 const next: Move = {_tag: "next"};
 export const run = (step: LaneStep): Move => ({_tag: "run", step});
+
 /** Back to `step` with what it must fix. `rounds`, the default, counts a round, as a build round does. */
 export const back = (step: LaneStep, why: With, bound: "rounds" | "once" = "rounds"): Move => ({
 	_tag: "back",
@@ -135,6 +137,7 @@ export const back = (step: LaneStep, why: With, bound: "rounds" | "once" = "roun
 	with: why,
 	bound,
 });
+
 export const fresh = (step: LaneStep): Move => ({_tag: "fresh", step});
 export const once: Move = {_tag: "once"};
 const wait = (service: Service): Move => ({_tag: "wait", in: service});
@@ -163,6 +166,7 @@ const MADE = {
 	review: ["ask:owner:unseen", "ask:owner:decision"],
 	merge: ["stuck:merged_elsewhere"],
 } as const;
+
 type MadeAt<S extends keyof typeof MADE> = (typeof MADE)[S][number];
 
 /** Every outcome name each step can hand the lane. */

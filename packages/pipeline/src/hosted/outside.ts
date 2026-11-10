@@ -31,6 +31,7 @@ export interface Repo {
 	readonly owner: string;
 	readonly name: string;
 }
+
 export const repoText = (r: Repo) => `${r.owner}/${r.name}`;
 
 /** What an enqueue answers, as `CodeHostWrites` says it. */
@@ -105,6 +106,7 @@ export const marked = (text: string, key: string) => `${text}\n\n${markerOf(key)
 
 /** Every git call: no prompt, no hook of the repo's, no pager. */
 export const GIT_FIRST = ["-c", "core.hooksPath=/dev/null", "-c", "core.pager=cat"];
+
 const ok = (exited: Exited): Effect.Effect<string, Failed> =>
 	exited.code === 0 ? Effect.succeed(exited.out) : failed;
 
@@ -129,6 +131,7 @@ export const gitOn = (env: Readonly<Record<string, string>>) =>
 			okLow: (args: readonly string[]) => gitLow(args).pipe(Effect.flatMap(ok)),
 		};
 	});
+
 export type Git = Effect.Success<ReturnType<typeof gitOn>>;
 
 /** The branch's commit at `remote`, by `git ls-remote`. */
@@ -164,6 +167,7 @@ export const pushWith =
 const PullRequest = Schema.Struct({html_url: Schema.String, number: Schema.Finite});
 const PullRequests = Schema.Array(PullRequest);
 const Comments = Schema.Array(Schema.Struct({body: Schema.String}));
+
 const LandingAnswer = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -176,6 +180,7 @@ const LandingAnswer = Schema.Struct({
 		}),
 	}),
 });
+
 const LANDING = `
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
@@ -219,7 +224,11 @@ export const gitHubOutside = (repos: readonly string[]): Layer.Layer<Outside> =>
 				hasComment: (pr, key) =>
 					Effect.gen(function* () {
 						const at = prOf(pr);
-						if (at === null) return yield* failed;
+
+						if (at === null) {
+							return yield* failed;
+						}
+
 						const there = yield* answerOf(gh, Comments, [
 							"api",
 							`repos/${at.owner}/${at.name}/issues/${at.number}/comments?per_page=100`,
@@ -229,7 +238,11 @@ export const gitHubOutside = (repos: readonly string[]): Layer.Layer<Outside> =>
 				landing: (pr, head) =>
 					Effect.gen(function* () {
 						const at = prOf(pr);
-						if (at === null) return yield* failed;
+
+						if (at === null) {
+							return yield* failed;
+						}
+
 						const answer = yield* answerOf(gh, LandingAnswer, [
 							"api",
 							"graphql",
@@ -243,16 +256,26 @@ export const gitHubOutside = (repos: readonly string[]): Layer.Layer<Outside> =>
 							`number=${at.number}`,
 						]);
 						const p = answer.data.repository.pullRequest;
-						if (p.state === "MERGED" && p.mergeCommit !== null)
+
+						if (p.state === "MERGED" && p.mergeCommit !== null) {
 							return {at: "merged", commit: p.mergeCommit.oid} as const;
-						if (p.mergeQueueEntry !== null && p.headRefOid === head) return {at: "queued"} as const;
+						}
+
+						if (p.mergeQueueEntry !== null && p.headRefOid === head) {
+							return {at: "queued"} as const;
+						}
+
 						return {at: "none"} as const;
 					}),
 				push: (key, at) => (allowed(at.repo) ? push(key, at) : failed),
 				open: (key, at) =>
 					Effect.gen(function* () {
 						const text = yield* useKey(key);
-						if (!allowed(at.repo)) return yield* failed;
+
+						if (!allowed(at.repo)) {
+							return yield* failed;
+						}
+
 						const made = yield* answerOf(gh, PullRequest, [
 							"api",
 							"--method",
@@ -273,7 +296,11 @@ export const gitHubOutside = (repos: readonly string[]): Layer.Layer<Outside> =>
 					Effect.gen(function* () {
 						const text = yield* useKey(key);
 						const at = prRepo(pr);
-						if (at === null) return yield* failed;
+
+						if (at === null) {
+							return yield* failed;
+						}
+
 						yield* gh([
 							"api",
 							"--method",

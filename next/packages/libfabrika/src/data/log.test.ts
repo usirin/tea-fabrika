@@ -31,8 +31,10 @@ const READER = "gateway:t1";
 // T246's approved addendum: a parent names the door's process, then its input counter.
 const PARENT = /^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/;
 const PROCESS = Effect.runSync(processId);
+
 const parents = (count: number): ReadonlyArray<string> =>
 	fc.sample(fc.stringMatching(PARENT), {seed: SEED, numRuns: count});
+
 const [goodParent = "", otherParent = ""] = parents(2);
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
@@ -64,13 +66,20 @@ const badParents = (good: string): ReadonlyArray<string> => [
 const folder = mkdtempSync(join(tmpdir(), "p6-log-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
+
 const fresh = (): Sql => {
 	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
 	opened.push(db);
 	return nodeSql(db);
 };
+
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -89,8 +98,10 @@ const full: Line = {
 	_tag: "saved",
 	body: {note: "n-7f3a", base: 3},
 };
+
 /** The same line as plain JSON, the way it comes in across an object call. */
 const json = (): Record<string, unknown> => JSON.parse(JSON.stringify(full));
+
 const without = (key: string): Record<string, unknown> =>
 	Object.fromEntries(Object.entries(json()).filter(([k]) => k !== key));
 

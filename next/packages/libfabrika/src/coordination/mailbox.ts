@@ -55,9 +55,16 @@ const inbox = (name: string): string => `${name}/inbox`;
 
 /** A `send` entry as its History; any other case is none, and kept in the log (T4). */
 const history = Effect.fnUntraced(function* (entry: Entry) {
-	if (entry._tag !== SEND) return Option.none<History>();
+	if (entry._tag !== SEND) {
+		return Option.none<History>();
+	}
+
 	const sent = decodeSent(entry.body);
-	if (Option.isNone(sent)) return yield* new LedgerError({reason: "bad_row"});
+
+	if (Option.isNone(sent)) {
+		return yield* new LedgerError({reason: "bad_row"});
+	}
+
 	return Option.some<History>({
 		id: entry.id,
 		m: sent.value.m,
@@ -129,8 +136,12 @@ export class Mailbox extends Context.Service<
 						return ledger.read(inbox(name), after).pipe(
 							Stream.mapEffect((entry) =>
 								Effect.map(history(entry), (found) => {
-									if (Option.isSome(found)) count.letters++;
-									else count.skipped++;
+									if (Option.isSome(found)) {
+										count.letters++;
+									} else {
+										count.skipped++;
+									}
+
 									return Option.toArray(found);
 								}),
 							),
@@ -165,11 +176,18 @@ export class Mailbox extends Context.Service<
 							runner,
 							(r) => r.name === to && id.startsWith(`${r.process}/`) && inRunnerSpace(id),
 						);
-						if (brainOnly({stream: inbox(to), id: own ? "" : id, tag: SEND}))
+
+						if (brainOnly({stream: inbox(to), id: own ? "" : id, tag: SEND})) {
 							return Appended.cases.refused.make({reason: "forbidden"});
+						}
+
 						const json = decodeJson(m);
+
 						// The ledger's own answer for a body that is not JSON, without the trip.
-						if (Option.isNone(json)) return Appended.cases.refused.make({reason: "bad_line"});
+						if (Option.isNone(json)) {
+							return Appended.cases.refused.make({reason: "bad_line"});
+						}
+
 						return yield* ledger.append(inbox(to), id, lineFor(from, Send.make({m: json.value})));
 					},
 					Effect.tap((answer) => answered(tag, answer)),

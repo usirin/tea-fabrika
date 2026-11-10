@@ -14,6 +14,7 @@ type Code<A extends ReadonlyArray<unknown>, R> = {call(...args: A): R}["call"];
 type Declared = Schema.Codec<unknown, unknown>;
 const isDeclared = (u: unknown): u is Declared => Schema.isSchema(u);
 const isCode = <F>(u: unknown): u is F => typeof u === "function";
+
 const code = <F>(expected: string) =>
 	Schema.declare((u: unknown): u is F => isCode<F>(u), {expected});
 
@@ -23,6 +24,7 @@ type Steps = {
 	readonly cmds?: ReadonlyArray<AnyCmdDef>;
 	readonly init: Code<[loaded: unknown, ctx: unknown], readonly [unknown, ReadonlyArray<unknown>]>;
 };
+
 const isSteps = (u: unknown): u is Steps =>
 	typeof u === "object" &&
 	u !== null &&
@@ -73,6 +75,7 @@ const InputSchema = Schema.TaggedUnion({
 		personOnly: Schema.optionalKey(Schema.Never),
 	},
 });
+
 export type Input = typeof InputSchema.Type;
 
 type ReadPort<Q extends Declared, A> = Omit<
@@ -86,12 +89,14 @@ type ReadPort<Q extends Declared, A> = Omit<
 
 const readInput = InputSchema.cases.read.make;
 const writeInput = InputSchema.cases.write.make;
+
 const readPort = <
 	Q extends Declared,
 	A extends (view: never, input: NoInfer<Q["Type"]>) => unknown,
 >(
 	spec: Omit<ReadPort<Q, A>, "_tag">,
 ): ReadPort<Q, A> => ({...readInput(spec), schema: spec.schema, answer: spec.answer});
+
 const writePort = <Q extends Declared>(
 	spec: Omit<typeof InputSchema.cases.write.Type, "_tag" | "schema"> & {readonly schema: Q},
 ) => ({...writeInput(spec), schema: spec.schema});
@@ -108,11 +113,14 @@ type InputConstructors = Omit<typeof InputSchema, "cases"> & {
 const readCase = Schema.make<InputConstructors["cases"]["read"]>(InputSchema.cases.read.ast, {
 	fields: InputSchema.cases.read.fields,
 });
+
 const writeCase = Schema.make<InputConstructors["cases"]["write"]>(InputSchema.cases.write.ast, {
 	fields: InputSchema.cases.write.fields,
 });
+
 Object.defineProperty(readCase, "make", {value: readPort});
 Object.defineProperty(writeCase, "make", {value: writePort});
+
 export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
 	...InputSchema,
 	cases: {read: readCase, write: writeCase},
@@ -142,10 +150,12 @@ const Declaration = Schema.Struct({
 });
 
 type Typed = {readonly type: string};
+
 type ProgramMachine = Steps & {
 	readonly model: Schema.Schema<unknown>;
 	readonly msg: Schema.Schema<Typed>;
 };
+
 type Description =
 	| string
 	| {
@@ -154,6 +164,7 @@ type Description =
 			readonly schema?: never;
 			readonly answer?: never;
 	  };
+
 type Port<M extends Typed, K, P> = P extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
 	readonly schema: infer Q extends Declared;
 }
@@ -163,14 +174,17 @@ type Port<M extends Typed, K, P> = P extends Pick<typeof InputSchema.cases.read.
 	: K extends M["type"]
 		? Description
 		: never;
+
 type Ports<M extends Typed, I> = {
 	readonly [K in keyof I]: Port<M, K, I[K]>;
 };
+
 type ReadView<P> = P extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
 	readonly answer: (view: infer V, ...args: never[]) => unknown;
 }
 	? (view: V) => void
 	: never;
+
 // Check the selector's result after inferring ports. Checking read answers against V first
 // makes a nested Input constructor fix V to Json before the selector can infer it.
 type ViewFor<I> = {
@@ -178,6 +192,7 @@ type ViewFor<I> = {
 }[keyof I] extends (view: infer V) => void
 	? V
 	: unknown;
+
 type Policies<W> = {
 	readonly [K in keyof W]: {
 		readonly schema: Schema.Codec<
@@ -187,6 +202,7 @@ type Policies<W> = {
 		readonly personOnly: boolean;
 	};
 };
+
 type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W> = {
 	readonly name: string;
 	readonly maxDeliveries?: number;
@@ -203,10 +219,12 @@ type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W> = {
 	readonly writes: W & Policies<W>;
 	readonly wake: (model: NoInfer<T["model"]["Type"]>) => number | null;
 };
+
 type FilledPort<T extends ProgramMachine, P> =
 	P extends Pick<typeof InputSchema.cases.read.Type, "_tag">
 		? P
 		: Omit<typeof InputSchema.cases.write.Type, "schema"> & {readonly schema: T["msg"] & Declared};
+
 type FilledPorts<T extends ProgramMachine, I> = {
 	readonly [K in keyof I]: FilledPort<T, I[K]>;
 };
@@ -258,8 +276,10 @@ const Authoring = Schema.Struct({
 	writes: Declaration.fields.writes,
 	wake: Declaration.fields.wake,
 });
+
 const decodeDeclaration = Schema.decodeUnknownResult(Declaration);
 const decodeAuthoring = Schema.decodeUnknownResult(Authoring);
+
 const construct = (raw: unknown) =>
 	Result.flatMap(decodeAuthoring(raw), (spec) =>
 		decodeDeclaration({
@@ -306,9 +326,14 @@ const make = <
 	spec: Spec<T, V, I, O, W>,
 ): Program<T, V, I, O, W> => {
 	const checked = construct(spec);
-	if (Result.isFailure(checked)) throw checked.failure;
+
+	if (Result.isFailure(checked)) {
+		throw checked.failure;
+	}
+
 	return Schema.decodeUnknownSync(typedProgram(spec))(checked.success);
 };
+
 const makeEffect = Effect.fn("program.make")(function* <
 	T extends ProgramMachine,
 	V extends Schema.Json,
@@ -317,7 +342,11 @@ const makeEffect = Effect.fn("program.make")(function* <
 	W extends Readonly<Record<string, EventPolicy>>,
 >(spec: Spec<T, V, I, O, W>): Effect.fn.Return<Program<T, V, I, O, W>, SchemaIssue.Issue> {
 	const checked = construct(spec);
-	if (Result.isFailure(checked)) return yield* Effect.fail(checked.failure.issue);
+
+	if (Result.isFailure(checked)) {
+		return yield* Effect.fail(checked.failure.issue);
+	}
+
 	return yield* Schema.decodeUnknownEffect(typedProgram(spec))(checked.success).pipe(
 		Effect.mapError((error) => error.issue),
 	);
@@ -358,7 +387,10 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
 	cause: Schema.optionalKey(Schema.Unknown),
 }) {
 	get errorClass(): string {
-		if (this.error !== undefined) return this.error;
+		if (this.error !== undefined) {
+			return this.error;
+		}
+
 		const original = Object.hasOwn(this, "cause") ? this.cause : this;
 		return original instanceof Error
 			? original.constructor.name
@@ -380,10 +412,13 @@ export type Stepper = {
 
 const decodeRefusal = Schema.decodeUnknownResult(Schema.NullOr(Refusal));
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
+
 const isTyped = (u: unknown): u is Typed =>
 	typeof u === "object" && u !== null && "type" in u && typeof u.type === "string";
+
 const decodeTyped = (u: unknown): Option.Option<Typed> =>
 	isTyped(u) ? Option.some(u) : Option.none();
+
 const decodeWake = Schema.decodeUnknownResult(Schema.NullOr(Schema.Number));
 
 /** Runs `f`, turning any throw into ProgramDown with `reason`. */
@@ -392,7 +427,11 @@ const guard = <A>(reason: ProgramDown["reason"], f: () => A): A => {
 		try: f,
 		catch: (cause) => (cause instanceof ProgramDown ? cause : new ProgramDown({reason, cause})),
 	});
-	if (Result.isFailure(done)) throw done.failure;
+
+	if (Result.isFailure(done)) {
+		throw done.failure;
+	}
+
 	return done.success;
 };
 
@@ -404,14 +443,29 @@ const accepts = (schema: unknown, value: unknown): boolean =>
 /** A settled Cmd Msg (`<name>_ok` or `<name>_err`) of a declared Cmd, checked by its schemas. */
 const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<boolean> => {
 	const typed = decodeTyped(msg);
-	if (Option.isNone(typed)) return Option.none();
+
+	if (Option.isNone(typed)) {
+		return Option.none();
+	}
+
 	const type = typed.value.type;
 	const def = defs.find((d) => d.okType === type || d.errType === type);
-	if (def === undefined || typeof msg !== "object" || msg === null) return Option.none();
+
+	if (def === undefined || typeof msg !== "object" || msg === null) {
+		return Option.none();
+	}
+
 	const cmd = "cmd" in msg ? msg.cmd : undefined;
 	const sameCmd = Option.exists(decodeTyped(cmd), (c) => c.type === def.cmdType);
-	if (!sameCmd || !("at" in msg) || typeof msg.at !== "number") return Option.some(false);
-	if (type === def.okType) return Option.some("value" in msg && accepts(def.schema.ok, msg.value));
+
+	if (!sameCmd || !("at" in msg) || typeof msg.at !== "number") {
+		return Option.some(false);
+	}
+
+	if (type === def.okType) {
+		return Option.some("value" in msg && accepts(def.schema.ok, msg.value));
+	}
+
 	const error = "error" in msg ? msg.error : undefined;
 	return Option.some(
 		typeof error === "object" &&
@@ -423,7 +477,11 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
 
 export const stepper = (declared: unknown): Result.Result<Stepper, Schema.SchemaError> => {
 	const loaded = decodeDeclaration(declared);
-	if (Result.isFailure(loaded)) return Result.fail(loaded.failure);
+
+	if (Result.isFailure(loaded)) {
+		return Result.fail(loaded.failure);
+	}
+
 	const program = loaded.success;
 	const machine = program.machine;
 	const defs = machine.cmds ?? [];
@@ -436,26 +494,36 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 	/** A model as the program's own value, or ProgramDown with `reason`. */
 	const model = (raw: unknown, reason: ProgramDown["reason"]): unknown => {
 		const decoded = decodeModel(raw);
-		if (Result.isFailure(decoded)) throw new ProgramDown({reason});
+
+		if (Result.isFailure(decoded)) {
+			throw new ProgramDown({reason});
+		}
+
 		return decoded.success;
 	};
 
 	/** A Msg as the machine takes it: a settled Cmd Msg, or one the program's Msg schema decodes. */
 	const message = (raw: unknown, saved: boolean): Option.Option<Typed> => {
 		const typed = decodeTyped(raw);
+
 		if (
 			!saved &&
 			Option.exists(
 				typed,
 				(m) => m.type === "timer" || defs.some((d) => d.okType === m.type || d.errType === m.type),
 			)
-		)
+		) {
 			return Option.none();
+		}
+
 		if (saved) {
 			const result = settled(defs, raw);
-			if (Option.isSome(result))
+
+			if (Option.isSome(result)) {
 				return result.value && isTyped(raw) ? Option.some(raw) : Option.none();
+			}
 		}
+
 		const decoded = decodeMsg(raw);
 		return Result.isSuccess(decoded) && isTyped(decoded.success)
 			? Option.some(decoded.success)
@@ -465,9 +533,17 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 	/** A Cmd the machine returned: a declared one must match its input schema. */
 	const cmdOk = (cmd: unknown): boolean => {
 		const typed = decodeTyped(cmd);
-		if (Option.isNone(typed)) return false;
+
+		if (Option.isNone(typed)) {
+			return false;
+		}
+
 		const def = defs.find((d) => d.cmdType === typed.value.type);
-		if (def === undefined) return true;
+
+		if (def === undefined) {
+			return true;
+		}
+
 		const schemas: object = def.schema;
 		return "input" in schemas && accepts(schemas.input, cmd);
 	};
@@ -482,16 +558,23 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 		const view = guard(reason, () => encodeView(program.view.select(next)));
 		const wake = guard(reason, () => decodeWake(program.wake(next)));
 		const json = cmds.map((cmd) => (cmdOk(cmd) ? decodeJson(cmd) : Result.fail(null)));
+
 		if (
 			Result.isFailure(encoded) ||
 			Result.isFailure(view) ||
 			Result.isFailure(wake) ||
 			json.some(Result.isFailure)
-		)
+		) {
 			throw new ProgramDown({reason});
+		}
+
 		const model = decodeJson(encoded.success);
 		const shown = decodeJson(view.success);
-		if (Result.isFailure(model) || Result.isFailure(shown)) throw new ProgramDown({reason});
+
+		if (Result.isFailure(model) || Result.isFailure(shown)) {
+			throw new ProgramDown({reason});
+		}
+
 		return Step.cases.stepped.make({
 			model: model.success,
 			view: shown.success,
@@ -510,22 +593,39 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 		step: (raw, msg) => {
 			const now = model(raw, "saved_state");
 			const m = message(msg, false);
-			if (Option.isNone(m) || !cells.has(m.value.type))
+
+			if (Option.isNone(m) || !cells.has(m.value.type)) {
 				return Step.cases.refused.make({reason: "bad_msg"});
+			}
+
 			const refusal = guard("step", () => decodeRefusal(program.refuse(now, m.value)));
-			if (Result.isFailure(refusal)) throw new ProgramDown({reason: "step"});
-			if (refusal.success !== null) return Step.cases.refused.make(refusal.success);
+
+			if (Result.isFailure(refusal)) {
+				throw new ProgramDown({reason: "step"});
+			}
+
+			if (refusal.success !== null) {
+				return Step.cases.refused.make(refusal.success);
+			}
+
 			const [next, cmds] = guard("step", () => applyCell(machine, now, m.value));
 			return prepare(next, cmds, "step");
 		},
 		fold: (raw, msg) => {
 			const now = model(raw, "saved_state");
 			const typed = decodeTyped(msg);
+
 			// tea drops a Msg whose cell is gone by its turn; a saved one is dropped the same way.
-			if (Option.isSome(typed) && !cells.has(typed.value.type))
+			if (Option.isSome(typed) && !cells.has(typed.value.type)) {
 				return prepare(now, [], "saved_letter");
+			}
+
 			const m = message(msg, true);
-			if (Option.isNone(m)) throw new ProgramDown({reason: "saved_letter"});
+
+			if (Option.isNone(m)) {
+				throw new ProgramDown({reason: "saved_letter"});
+			}
+
 			const [next, cmds] = guard("saved_letter", () => applyCell(machine, now, m.value));
 			return prepare(next, cmds, "saved_letter");
 		},

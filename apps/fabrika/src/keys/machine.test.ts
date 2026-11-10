@@ -6,9 +6,12 @@ import {type Editor, type EditorCmd, type EditorMsg, editorMachine, matching} fr
 
 // Today's version. The new editor's public machine is the builder's contract.
 const start = () => editorMachine.init(defaults, undefined)[0];
+
 const step = (model: Editor, msg: EditorMsg) =>
 	applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, model, msg);
+
 const select = () => step(start(), {type: "select", does: "tezgah.zoom"})[0];
+
 const press = (key: string, mods = {}) => ({
 	key,
 	code: "",
@@ -24,11 +27,17 @@ const press = (key: string, mods = {}) => ({
 describe("today's keys editor", () => {
 	it("K1: searches names, file words, tsh words and key spellings, including unbound rows", () => {
 		const read = decodeKeys('tezgah.fold = []\ntezgah.zoom = "<prefix>m"', true);
-		if (Result.isFailure(read)) throw new Error(read.failure.why);
-		for (const query of ["zoom", "tezgah.zoom", "<prefix>m", "ctrl+b m"])
+
+		if (Result.isFailure(read)) {
+			throw new Error(read.failure.why);
+		}
+
+		for (const query of ["zoom", "tezgah.zoom", "<prefix>m", "ctrl+b m"]) {
 			expect(matching(read.success, query).map((row: {does: string}) => row.does)).toContain(
 				"tezgah.zoom",
 			);
+		}
+
 		expect(matching(read.success, "close-tile").map((row: {does: string}) => row.does)).toContain(
 			"tezgah.close",
 		);
@@ -52,6 +61,7 @@ describe("today's keys editor", () => {
 				expect.objectContaining({type: "edit", edit: {_tag: "bind", does: "tezgah.zoom", keys}}),
 			);
 		}
+
 		expect(step(select(), {type: "unbind"})[1]).toContainEqual(
 			expect.objectContaining({type: "edit", edit: {_tag: "bind", does: "tezgah.zoom", keys: []}}),
 		);
@@ -86,8 +96,13 @@ describe("today's keys editor", () => {
 
 	it("K14: live keys retain Undo only for its saved version", () => {
 		const read = decodeKeys('prefix = "ctrl+a"', true);
-		if (Result.isFailure(read)) throw new Error(read.failure.why);
+
+		if (Result.isFailure(read)) {
+			throw new Error(read.failure.why);
+		}
+
 		const model = {...select(), undo: "saved-version"};
+
 		for (const version of [{}, {version: "saved-version"}]) {
 			const [next, out] = step(model, {type: "keys", keys: read.success, ...version});
 			expect(next.keys).toEqual(read.success);
@@ -95,6 +110,7 @@ describe("today's keys editor", () => {
 			expect(next.error).toBeNull();
 			expect(out).toEqual([]);
 		}
+
 		const [newer, out] = step(model, {type: "keys", keys: read.success, version: "newer"});
 		expect(newer.keys).toEqual(read.success);
 		expect(newer.undo).toBeNull();
@@ -105,7 +121,11 @@ describe("today's keys editor", () => {
 	it("K11: only a matching save failure ends the save; opening failures are shown too", () => {
 		const [saving, cmds] = step(select(), {type: "unbind"});
 		const request = cmds[0]?.request;
-		if (request === undefined) throw new Error("no save request");
+
+		if (request === undefined) {
+			throw new Error("no save request");
+		}
+
 		expect(step(saving, {type: "failed", request: "older", why: "old failure"})).toEqual([
 			saving,
 			[],
@@ -124,11 +144,19 @@ describe("today's keys editor", () => {
 	});
 	it("K14: a second save's broadcast landing before its answer never says Undo is gone", () => {
 		const read = decodeKeys('tezgah.zoom = "<prefix>u"', true);
-		if (Result.isFailure(read)) throw new Error(read.failure.why);
+
+		if (Result.isFailure(read)) {
+			throw new Error(read.failure.why);
+		}
+
 		const saved = {...select(), undo: "first"};
 		const [saving, cmds] = step(saved, {type: "unbind"});
 		const request = cmds[0]?.request;
-		if (request === undefined) throw new Error("no save request");
+
+		if (request === undefined) {
+			throw new Error("no save request");
+		}
+
 		const [heard] = step(saving, {type: "keys", keys: read.success, version: "second"});
 		expect(heard.error).toBeNull();
 		expect(heard.undo).toBeNull();

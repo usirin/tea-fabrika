@@ -26,6 +26,7 @@ const keepsEvery = (machine: typeof ship, runs = 150, saved = new Set<string>())
 		fc.asyncProperty(msgs, async (list: readonly AnyShipMsg[]) => {
 			const handle = await Effect.runPromise(memoryStorage().open("ship:r1", null));
 			const store = handle.store("ship", PR, State);
+
 			for (const s of foldEvents(machine, ctx, null, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);

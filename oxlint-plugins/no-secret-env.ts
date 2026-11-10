@@ -42,6 +42,7 @@ import {below, dotted, grouped, isWritten, type Node, quoted} from "./match.ts";
 
 const SECRET =
 	/^(?:.*_)?(?:(?:API|PRIVATE|SECRET|ACCESS|SIGNING)_?KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTH|CREDENTIALS?)(?:_.*)?$/;
+
 const NOT_SECRET = /^.*_(?:HASH|SOCK)$/;
 const isSecret = (name: string): boolean => SECRET.test(name) && !NOT_SECRET.test(name);
 
@@ -53,13 +54,24 @@ export const noSecretEnv: CreateRule = {
 		const source = context.sourceCode;
 		/** `!x`, `delete x`, `x === undefined` and the like: an answer of yes or no, or a removal. */
 		const onlyAsksIfSet = (node: Node & {readonly parent: Node}): boolean => {
-			if (grouped(source, node) > 0) return false;
+			if (grouped(source, node) > 0) {
+				return false;
+			}
+
 			const {parent} = node;
+
 			if (parent.type === "UnaryExpression") {
 				return parent.operator === "!" || parent.operator === "delete";
 			}
-			if (parent.type !== "BinaryExpression") return false;
-			if (parent.operator !== "===" && parent.operator !== "!==") return false;
+
+			if (parent.type !== "BinaryExpression") {
+				return false;
+			}
+
+			if (parent.operator !== "===" && parent.operator !== "!==") {
+				return false;
+			}
+
 			const other = parent.left === node ? parent.right : parent.left;
 			return (
 				other.type === "Identifier" && other.name === "undefined" && grouped(source, other) === 0
@@ -68,19 +80,31 @@ export const noSecretEnv: CreateRule = {
 		return {
 			MemberExpression(node) {
 				const isEnv = dotted(node.object) === "process.env";
-				if (!isEnv || isWritten(node)) return;
+
+				if (!isEnv || isWritten(node)) {
+					return;
+				}
+
 				let name: string | null = null;
+
 				if (!node.computed && !node.optional && node.property.type === "Identifier") {
 					name = node.property.name;
 				} else if (node.computed) {
 					const raw = quoted(node.property);
 					name = raw === null ? null : raw.slice(1, -1);
 				}
-				if (name === null || !isSecret(name) || onlyAsksIfSet(node)) return;
+
+				if (name === null || !isSecret(name) || onlyAsksIfSet(node)) {
+					return;
+				}
+
 				context.report({node, message: READ});
 			},
 			VariableDeclarator(node) {
-				if (node.init == null) return;
+				if (node.init == null) {
+					return;
+				}
+
 				const secret = [...below(node.id)].some(
 					(part) =>
 						part.type === "Property" &&
@@ -88,9 +112,17 @@ export const noSecretEnv: CreateRule = {
 						part.parent.type === "ObjectPattern" &&
 						isSecret(source.getText(part)),
 				);
-				if (!secret) return;
+
+				if (!secret) {
+					return;
+				}
+
 				const reads = [...below(node.init)].some((part) => dotted(part) === "process.env");
-				if (!reads) return;
+
+				if (!reads) {
+					return;
+				}
+
 				context.report({
 					node: node.id,
 					message:

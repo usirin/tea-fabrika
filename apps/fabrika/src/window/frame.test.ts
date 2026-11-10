@@ -63,14 +63,25 @@ import {capOf} from "./pop.ts";
 
 const fold = (msgs: readonly DeskMsg[]): Open => {
 	let s: Desk = deskMachine.init(null, undefined)[0];
-	for (const m of msgs) s = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, m)[0];
-	if (s.at !== "open") throw new Error("the desk is over");
+
+	for (const m of msgs) {
+		s = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, m)[0];
+	}
+
+	if (s.at !== "open") {
+		throw new Error("the desk is over");
+	}
+
 	return s;
 };
 
 it("K18: moved keys update palette search, prefix hints, keycaps and spoken words", () => {
 	const read = decodeKeys('prefix = "ctrl+a"\ntezgah.zoom = "<prefix>shift+f6"', true);
-	if (Result.isFailure(read)) throw new Error(read.failure.why);
+
+	if (Result.isFailure(read)) {
+		throw new Error(read.failure.why);
+	}
+
 	const commands = commandsOf(read.success, 1);
 	const zoom = commands.find((command) => command.runs === "tezgah.zoom");
 	expect(zoom?.key).toMatch(/C-a.*(?:Shift|S-).*F6/i);
@@ -82,19 +93,27 @@ it("K18: moved keys update palette search, prefix hints, keycaps and spoken word
 	expect(capOf("<s-m-w>")).toBe("⇧⌘W");
 	expect(JSON.stringify(zoom)).not.toContain("C-b z");
 });
+
 /** The default prefix, as keyName spells it. */
 const PREFIX = "<c-b>";
+
 /** The keybindings file's table, one line per argument; a refusal fails the test. */
 const table = (...lines: readonly string[]): Keys => {
 	const answer = decodeKeys(lines.join("\n"), true);
-	if (Result.isFailure(answer)) throw new Error(`refused: ${answer.failure.why}`);
+
+	if (Result.isFailure(answer)) {
+		throw new Error(`refused: ${answer.failure.why}`);
+	}
+
 	return answer.success;
 };
+
 const SHAPES = new Map([
 	["tracker", {takes: [], sends: ["ticket"]}],
 	["ticket", {takes: ["ticket"], sends: ["ticket"]}],
 	["trace", {takes: ["ticket"], sends: []}],
 ]);
+
 /** `tracker | ticket | trace` typed in t1, its windows in t2 and t3, t2 focused, showing #7. */
 const lined = fold([
 	{
@@ -108,6 +127,7 @@ const lined = fold([
 	},
 	{type: "click", tile: "t2"},
 ]);
+
 const SHOWN = new Map([["ticket:1", 7]]);
 
 const now = (over: Partial<AsksNow> = {}): AsksNow => ({
@@ -117,6 +137,7 @@ const now = (over: Partial<AsksNow> = {}): AsksNow => ({
 	why: null,
 	...over,
 });
+
 const ask = (over: Partial<Ask> = {}): Ask => ({
 	key: "7/a-1",
 	ticket: 7,
@@ -539,15 +560,28 @@ describe("keys while something lies over the desk", () => {
 	const palette: Frame["over"] = {kind: "palette", title: "commands", query: "", at: 0};
 
 	it("sends every key to the desk when nothing is open", () => {
-		for (const key of ["<arrowdown>", "a", "<c-b>"])
+		for (const key of ["<arrowdown>", "a", "<c-b>"]) {
 			expect(keyGoesTo({kind: "none"}, key, PREFIX, quiet)).toBe("desk");
+		}
 	});
 
 	it("never lets an arrow, Enter or a letter reach a tile while a popover is open", () => {
 		const jobs: Frame["over"] = {kind: "jobs"};
-		for (const over of [asks, jobs, palette, {kind: "item", what: "host"} as const])
-			for (const key of ["<arrowdown>", "<arrowup>", "<arrowleft>", "<enter>", "h", "j", "x", " "])
+
+		for (const over of [asks, jobs, palette, {kind: "item", what: "host"} as const]) {
+			for (const key of [
+				"<arrowdown>",
+				"<arrowup>",
+				"<arrowleft>",
+				"<enter>",
+				"h",
+				"j",
+				"x",
+				" ",
+			]) {
 				expect(keyGoesTo(over, key, PREFIX, quiet)).toBe("over");
+			}
+		}
 	});
 
 	it("lets Ctrl-B and the key after it reach the desk over a menu, so C-b a closes it", () => {
@@ -911,7 +945,11 @@ describe("info mode", () => {
 			.filter((b) => /\binfo( off)?$/.test(b.name));
 		expect(items).toHaveLength(1);
 		const [item] = items;
-		if (item === undefined) throw new Error("no info item");
+
+		if (item === undefined) {
+			throw new Error("no info item");
+		}
+
 		return item;
 	};
 	/**
@@ -924,15 +962,30 @@ describe("info mode", () => {
 			[];
 		const walk = (node: unknown): void => {
 			if (Array.isArray(node)) {
-				for (const kid of node) walk(kid);
+				for (const kid of node) {
+					walk(kid);
+				}
+
 				return;
 			}
-			if (!isValidElement(node)) return;
+
+			if (!isValidElement(node)) {
+				return;
+			}
+
 			const given = node.props;
-			if (typeof given !== "object" || given === null) return;
-			if ("name" in given && "quiet" in given && "onClick" in given)
+
+			if (typeof given !== "object" || given === null) {
+				return;
+			}
+
+			if ("name" in given && "quiet" in given && "onClick" in given) {
 				items.push({name: given.name, quiet: given.quiet, onClick: given.onClick});
-			if ("children" in given) walk(given.children);
+			}
+
+			if ("children" in given) {
+				walk(given.children);
+			}
 		};
 		function Read(): ReactNode {
 			const line = BottomLine({...props(frame), step});
@@ -1079,11 +1132,13 @@ describe("info mode", () => {
 
 	it("says where focus is on the left while it is off, and INFO only while it is on", () => {
 		const here = hereWord(fold([]), SHAPES, SHOWN);
+
 		for (const frame of [FRAME, off]) {
 			expect(line(frame)).not.toContain('class="info"');
 			expect(line(frame)).toContain('class="here"');
 			expect(side(frame, "left")).toBe(here);
 		}
+
 		expect(line(on)).toContain('class="info"');
 		expect(line(on)).not.toContain('class="here"');
 	});
@@ -1092,7 +1147,11 @@ describe("info mode", () => {
 	it("turns on from its item's click, explaining the item", () => {
 		const stepped: FrameMsg[] = [];
 		const [info] = itemsOf(FRAME, (m) => stepped.push(m));
-		if (typeof info?.onClick !== "function") throw new Error("the info item has no click");
+
+		if (typeof info?.onClick !== "function") {
+			throw new Error("the info item has no click");
+		}
+
 		info.onClick();
 		expect(stepped).toEqual([{type: "info", focus: INFO.info}]);
 	});
@@ -1104,7 +1163,11 @@ describe("info mode", () => {
 		expect(button).toContain('aria-controls="pop-palette"');
 		const stepped: FrameMsg[] = [];
 		const key = itemsOf(FRAME, (m) => stepped.push(m))[1];
-		if (typeof key?.onClick !== "function") throw new Error("keys has no click handler");
+
+		if (typeof key?.onClick !== "function") {
+			throw new Error("keys has no click handler");
+		}
+
 		key.onClick();
 		expect(stepped).toEqual([{type: "show", what: "keys"}]);
 	});
@@ -1143,6 +1206,7 @@ describe("info mode", () => {
 	// The same frame back means the frame did not take it, and the key goes on.
 	it("lets the desk cancel its prefix or its question with Escape before info mode goes", () => {
 		const asks = frameUpdate(on, {type: "show", what: "asks"});
+
 		for (const desk of [
 			{armed: true, asking: false},
 			{armed: false, asking: true},
@@ -1209,6 +1273,7 @@ describe("info mode's words, from the keys file (p10)", () => {
 
 	it("names your prefix, and never Ctrl-B, once the prefix is ctrl+a", () => {
 		const said = infoFor(table('prefix = "ctrl+a"'));
+
 		for (const part of NAMING) {
 			expect(said[part], part).toContain(keyWord("<c-a>"));
 			expect(said[part], part).not.toContain(keyWord(PREFIX));
@@ -1233,7 +1298,11 @@ describe("info mode's words, from the keys file (p10)", () => {
 
 	it("says each part in words with the defaults, as today's info mode does", () => {
 		const said = infoFor(defaults);
-		for (const part of NAMING) expect(said[part], part).toContain(keyWord(PREFIX));
+
+		for (const part of NAMING) {
+			expect(said[part], part).toContain(keyWord(PREFIX));
+		}
+
 		expect(Object.values(said).every((text) => text.length > 0)).toBe(true);
 	});
 });

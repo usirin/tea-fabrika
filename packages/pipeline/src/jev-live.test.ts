@@ -39,7 +39,11 @@ const calls = (n: number) =>
 	Effect.gen(function* () {
 		const jev = yield* Jev;
 		const exits = [];
-		for (let i = 0; i < n; i++) exits.push(yield* Effect.exit(jev.call(request)));
+
+		for (let i = 0; i < n; i++) {
+			exits.push(yield* Effect.exit(jev.call(request)));
+		}
+
 		return {exits, spent: yield* (yield* JevReceipts).spent};
 	});
 

@@ -43,6 +43,7 @@ const table: MsgArbitraryTable<Msg> = {
 	told: arbRecordMsg("told", {active}),
 	ended: fc.constant({type: "ended"} as const),
 };
+
 const lists = arbMsgSequence(arbMsg(table), {maxLength: 30});
 /** Seed 119120: the shared one (AGENTS.md). */
 const OPTS = {numRuns: 300, seed: 119120};
@@ -131,6 +132,7 @@ const keepsTheFirst: TurnMachine = {
 	...turnState,
 	update: {...turnState.update, told: (s, m) => [{active: s.active ?? m.active}, []]},
 };
+
 const neverEnds: TurnMachine = {...turnState, update: {...turnState.update, ended: (s) => [s, []]}};
 const startsBusy: TurnMachine = {...turnState, init: (loaded) => [loaded ?? KEPT, []]};
 const forgetsTheKept: TurnMachine = {...turnState, init: () => [{active: null}, []]};
@@ -159,6 +161,7 @@ const keepsEvery = (machine: TurnMachine, runs = 150) =>
 		fc.asyncProperty(lists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("turn:r1", null));
 			const store = handle.store("turn", "turn", State);
+
 			for (const state of foldEvents(machine, ctx, null, list).states) {
 				await store.save(state);
 				expect(store.migrate(await store.load())).toEqual(state);

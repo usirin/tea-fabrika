@@ -23,17 +23,29 @@ export type ProgramList = ReadonlyMap<string, Entry>;
  */
 export function programList(entries: readonly Entry[]): ProgramList {
 	const list = new Map<string, Entry>();
+
 	for (const entry of entries) {
 		const {name} = entry.program;
-		if ((BUILTINS as readonly string[]).includes(name))
+
+		if ((BUILTINS as readonly string[]).includes(name)) {
 			throw new Error(`a program cannot be named ${name}: that is a tsh built-in`);
-		if (list.has(name)) throw new Error(`two programs are named ${name}`);
-		if (!/^[a-z][a-z0-9-]*$/.test(name))
+		}
+
+		if (list.has(name)) {
+			throw new Error(`two programs are named ${name}`);
+		}
+
+		if (!/^[a-z][a-z0-9-]*$/.test(name)) {
 			throw new Error(`a program on a tsh line is named in small letters, digits and -: ${name}`);
-		if (Object.hasOwn(entry.program.flags, "help"))
+		}
+
+		if (Object.hasOwn(entry.program.flags, "help")) {
 			throw new Error(`${name} cannot have a flag named help: --help shows every program's help`);
+		}
+
 		list.set(name, entry);
 	}
+
 	return list;
 }
 

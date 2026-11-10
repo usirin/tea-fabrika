@@ -29,6 +29,7 @@ export const landingOf = (f: Pick<ShipFacts, "ticket">): Landing =>
 
 /** A criterion whose row at this head failed: the builder has work. */
 const notMet = (r: Refusal) => r.why === "not_met";
+
 /** A criterion with no row on its current words at this head: a review is owed. */
 const unjudged = (r: Refusal) =>
 	r.why === "no_verdict" || r.why === "other_head" || r.why === "old_version";
@@ -78,26 +79,79 @@ export function shipGate(pr: string, f: ShipFacts): ShipGate {
 					checks: {head: f.head, state: f.checks},
 				});
 	const refused = readiness !== null && "refused" in readiness ? readiness.refused : [];
-	if (f.state === "merged") return stop(landedAs(f)); // already merged: say which kind of landing it was
-	if (f.state !== "open") return stop({kind: "skip", why: f.state}); // closed or a draft, on purpose
-	if (!f.ours) return stop({kind: "skip", why: "not_ours"});
-	if (f.mergeable === "conflicts") return stop({kind: "send", to: "builder", why: "conflicts"});
-	if (reviews === "failed") return stop({kind: "send", to: "builder", why: "review_failed"});
-	if (reviews === "missing") return stop({kind: "send", to: "reviewer", why: "no_review"});
-	if (reviews === "unknown") return stop({kind: "stuck", why: "reviews_unknown"}); // one passing review is never taken for all
-	if (readiness === null) return stop({kind: "stuck", why: "criteria_unknown"}); // nothing to prove it ready by
-	if (refused.some(notMet)) return stop({kind: "send", to: "builder", why: "review_failed"});
-	if (refused.some(unjudged)) return stop({kind: "send", to: "reviewer", why: "no_review"}); // a new head, or new words
-	if (f.checks === "red") return stop({kind: "send", to: "builder", why: "checks_red"}); // the machine runs them again once first
-	if (f.comments.some((c) => c.by === "person"))
+
+	if (f.state === "merged") {
+		return stop(landedAs(f));
+	} // already merged: say which kind of landing it was
+
+	if (f.state !== "open") {
+		return stop({kind: "skip", why: f.state});
+	} // closed or a draft, on purpose
+
+	if (!f.ours) {
+		return stop({kind: "skip", why: "not_ours"});
+	}
+
+	if (f.mergeable === "conflicts") {
+		return stop({kind: "send", to: "builder", why: "conflicts"});
+	}
+
+	if (reviews === "failed") {
+		return stop({kind: "send", to: "builder", why: "review_failed"});
+	}
+
+	if (reviews === "missing") {
+		return stop({kind: "send", to: "reviewer", why: "no_review"});
+	}
+
+	if (reviews === "unknown") {
+		return stop({kind: "stuck", why: "reviews_unknown"});
+	} // one passing review is never taken for all
+
+	if (readiness === null) {
+		return stop({kind: "stuck", why: "criteria_unknown"});
+	} // nothing to prove it ready by
+
+	if (refused.some(notMet)) {
+		return stop({kind: "send", to: "builder", why: "review_failed"});
+	}
+
+	if (refused.some(unjudged)) {
+		return stop({kind: "send", to: "reviewer", why: "no_review"});
+	} // a new head, or new words
+
+	if (f.checks === "red") {
+		return stop({kind: "send", to: "builder", why: "checks_red"});
+	} // the machine runs them again once first
+
+	if (f.comments.some((c) => c.by === "person")) {
 		return stop({kind: "ask", who: "commenter", for: "comment"});
-	if (f.comments.length > 0) return stop({kind: "send", to: "builder", why: "bot_comment"});
+	}
+
+	if (f.comments.length > 0) {
+		return stop({kind: "send", to: "builder", why: "bot_comment"});
+	}
+
 	const approval = BY_APPROVAL[f.approval];
-	if (approval !== null) return stop(approval);
+
+	if (approval !== null) {
+		return stop(approval);
+	}
+
 	const checks = BY_CHECKS[f.checks];
-	if (checks === "wait") return {answer: "wait_for_checks", head: f.head};
-	if (checks !== "on") return stop(checks);
-	if (f.mergeable === "unknown") return stop({kind: "stuck", why: "merge_unknown"});
+
+	if (checks === "wait") {
+		return {answer: "wait_for_checks", head: f.head};
+	}
+
+	if (checks !== "on") {
+		return stop(checks);
+	}
+
+	if (f.mergeable === "unknown") {
+		return stop({kind: "stuck", why: "merge_unknown"});
+	}
+
 	// Every line above is clear, so the checks are green here: only the proof says go.
 	return "ready" in readiness
 		? {answer: "go", ready: readiness.ready, landing: landingOf(f)}

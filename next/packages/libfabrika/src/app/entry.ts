@@ -86,8 +86,10 @@ export class ProgramLoader extends Context.Service<
 				const context = yield* Effect.context<R>();
 				return {
 					load: Effect.fn("loader.load")(function* (name: string, build = "node") {
-						if (!Object.hasOwn(programs, name))
+						if (!Object.hasOwn(programs, name)) {
 							return yield* new ProgramDown({reason: "no_program"});
+						}
+
 						const loaded = yield* Effect.fromResult(stepper(programs[name])).pipe(
 							Effect.mapError(() => new ProgramDown({reason: "load"})),
 						);
@@ -117,8 +119,11 @@ export class ProgramLoader extends Context.Service<
 							handler: (cmd: string) => {
 								const owner = CHAOS_ONLY[cmd];
 								const run = Object.hasOwn(handlers, cmd) ? handlers[cmd] : undefined;
-								if (run === undefined || (owner !== undefined && owner !== name))
+
+								if (run === undefined || (owner !== undefined && owner !== name)) {
 									return Option.none();
+								}
+
 								return Option.some((value: unknown) =>
 									run(value).pipe(Effect.provideContext(context)),
 								);

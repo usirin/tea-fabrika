@@ -35,6 +35,7 @@ const scalar = Schema.Union([
 	Schema.Finite,
 	Schema.String.check(Schema.isMaxLength(10)),
 ]);
+
 const json = (depth: number): Schema.Codec<Schema.Json> =>
 	depth === 0
 		? scalar
@@ -56,12 +57,15 @@ const examples =
 			discard: true,
 			concurrency: 1,
 		});
+
 const nameInput = Start.cases.first.fields.name.check(
 	Schema.isPattern(/^[a-z][a-z0-9._:-]{0,30}$/),
 );
+
 const validName = Arbitrary.schema(nameInput).pipe(
 	Arbitrary.filter((name) => !["door", "processes"].includes(name) && !name.startsWith("client:")),
 );
+
 const textInput = Schema.NonEmptyString.check(Schema.isMaxLength(40));
 // Cover complete names 1..31, processes/ plus 0..50 characters, refs and
 // caller keys 1..40. Fixed-depth JSON below keeps width/string length 10.
@@ -70,6 +74,7 @@ const options = {arbitrary: {seed: 119120, runs: 20, size: 60}};
 const POLICY = {reason: "crashed", crashes: 1, until: 0};
 const toW = Recipient.cases.process.make({process: W});
 const brainSide = (process: string) => process === "processes" || process.startsWith("processes/");
+
 const seed = (store: Storage, name = "counter:1") =>
 	Effect.gen(function* () {
 		const processes = yield* ProcessManager;
@@ -79,20 +84,25 @@ const seed = (store: Storage, name = "counter:1") =>
 			from(),
 		);
 	}).pipe(Effect.provide(manager(store, brain(), ids(A, W).next)));
+
 const monitor = (store: Storage, ref = "watch:1", target = A, by = BRAIN) =>
 	ProcessManager.use((p) => p.monitor(ref, target, from({by}))).pipe(
 		Effect.provide(manager(store, watcher(W))),
 	);
+
 const cancel = (store: Storage, ref = "watch:1", by = BRAIN) =>
 	ProcessManager.use((p) => p.demonitor(ref, from({by}))).pipe(
 		Effect.provide(manager(store, watcher(W))),
 	);
+
 const exit = (store: Storage, process = A, by = BRAIN) =>
 	ProcessManager.use((p) => p.exit(process, "crashed", from({by}))).pipe(
 		Effect.provide(manager(store)),
 	);
+
 const fresh = (store: Storage, after = 0) =>
 	receive(W, after).pipe(Effect.provide(manager(store, watcher(W))));
+
 /** Another writer's raw row: what a client could hold on a stream it may write. */
 const plant = (
 	store: Storage,
@@ -103,6 +113,7 @@ const plant = (
 	Ledger.use((ledger) => ledger.append(stream, id, lineFor(from({by: CLIENT}), event))).pipe(
 		Effect.provide(manager(store)),
 	);
+
 const downs = (letters: ReadonlyArray<{readonly m: unknown; readonly by: string}>) =>
 	letters.flatMap((letter) => {
 		const down = Schema.decodeUnknownOption(Down)(letter.m);
@@ -177,8 +188,11 @@ describe("P33, every process event lives on a stream only the brain may write", 
 					const store = storage();
 					yield* seed(store);
 					yield* monitor(store);
-					for (const {stream, id} of planted)
+
+					for (const {stream, id} of planted) {
 						expect((yield* plant(store, stream, id, {_tag: "note", n: 1}))._tag).toBe("placed");
+					}
+
 					yield* exit(store);
 					expect(downs(yield* fresh(store))).toEqual([
 						Down.make({ref: "watch:1", process: A, reason: "crashed", to: toW}),
@@ -227,7 +241,11 @@ describe("P33, every process event lives on a stream only the brain may write", 
 				const before = store.rows();
 				const answer = yield* Effect.result(processes.start(first("different", tail), from()));
 				expect(Result.isFailure(answer)).toBe(true);
-				if (Result.isFailure(answer)) expect(answer.failure.reason).toBe("name_taken");
+
+				if (Result.isFailure(answer)) {
+					expect(answer.failure.reason).toBe("name_taken");
+				}
+
 				expect(store.rows()).toEqual(before);
 				expect(next.calls()).toBe(1);
 			}).pipe(Effect.provide(manager(store, brain(), next.next)));
@@ -252,7 +270,11 @@ describe("P33, every process event lives on a stream only the brain may write", 
 					Effect.result(p.start(first("loser", name), from())),
 				);
 				expect(Result.isFailure(answer)).toBe(true);
-				if (Result.isFailure(answer)) expect(answer.failure.reason).toBe("name_taken");
+
+				if (Result.isFailure(answer)) {
+					expect(answer.failure.reason).toBe("name_taken");
+				}
+
 				expect(store.rows()).toEqual(winner);
 			}).pipe(Effect.provide(manager(store, brain(), next)));
 		},
@@ -314,12 +336,14 @@ describe("P33, signal ids belong to the brain alone", () => {
 				yield* plant(store, "watcher:1/inbox", signal.id, {_tag: "send", m: "taken"});
 				const exited = yield* Effect.result(exit(store));
 				const owed = downs(yield* fresh(store));
-				if (Result.isSuccess(exited))
+
+				if (Result.isSuccess(exited)) {
 					expect(owed).toEqual([Down.make({ref, process: A, reason: "crashed", to: toW})]);
-				else
+				} else {
 					expect(
 						yield* ProcessManager.use((p) => p.isLive(A)).pipe(Effect.provide(manager(store))),
 					).toBe(true);
+				}
 			}),
 		),
 		options,
@@ -372,6 +396,7 @@ describe("P33, an inbox read is total", () => {
 				const store = storage();
 				yield* seed(store);
 				const want: Array<string> = [];
+
 				for (const [n, body] of bodies.entries()) {
 					const placed = yield* Ledger.use((ledger) =>
 						ledger.append("watcher:1/inbox", `junk:${n}`, {
@@ -380,8 +405,12 @@ describe("P33, an inbox read is total", () => {
 							body: body as Schema.Json,
 						}),
 					).pipe(Effect.provide(manager(store)));
-					if (placed._tag === "placed" && hasM(body)) want.push(JSON.stringify(body.m));
+
+					if (placed._tag === "placed" && hasM(body)) {
+						want.push(JSON.stringify(body.m));
+					}
 				}
+
 				const letters = yield* fresh(store);
 				expect(letters.map((letter) => JSON.stringify(letter.m))).toEqual(want);
 				const last = store.rows().at(-1)!.rev;
@@ -399,6 +428,7 @@ describe("P33, every brain-written line records who asked", () => {
 		store.rows().filter((row) => !before.some((old) => old.rev === row.rev));
 	const asks = (rows: ReadonlyArray<Entry>, key: string) => {
 		expect(rows.length).toBeGreaterThan(0);
+
 		for (const row of rows) {
 			expect(row.by).toBe(BRAIN);
 			expect((row.body as {readonly asked?: unknown}).asked).toBe(key);
@@ -462,7 +492,10 @@ describe("P33, every brain-written line records who asked", () => {
 					),
 				);
 				expect(Result.isSuccess(started)).toBe(true);
-				if (Result.isSuccess(started)) expect(started.success.process).toBe(A);
+
+				if (Result.isSuccess(started)) {
+					expect(started.success.process).toBe(A);
+				}
 			});
 		}),
 		options,
@@ -480,7 +513,11 @@ describe("P33, a process name never meets a door stream", () => {
 					ProcessManager.use((p) => p.start(first("start:door", name), from())),
 				);
 				expect(Result.isFailure(answer)).toBe(true);
-				if (Result.isFailure(answer)) expect(answer.failure.reason).toBe("bad_name");
+
+				if (Result.isFailure(answer)) {
+					expect(answer.failure.reason).toBe("bad_name");
+				}
+
 				expect(store.rows()).toEqual([]);
 			}).pipe(Effect.provide(manager(store, brain(), ids(X).next)));
 		}),

@@ -122,11 +122,14 @@ const fromRepo = (
 		const there = yield* fs
 			.exists(path.join(clone, ".git"))
 			.pipe(Effect.orElseSucceed(() => false));
+
 		if (!there) {
-			if (target.url === null)
+			if (target.url === null) {
 				return yield* Effect.fail(
 					invalid(`${SETTINGS_FILE}: no clone of ${name} at ${clone} to read it from`),
 				);
+			}
+
 			yield* fs
 				.makeDirectory(path.dirname(clone), {recursive: true})
 				.pipe(Effect.mapError((error) => invalid(`${SETTINGS_FILE}: ${error.message}`)));
@@ -136,6 +139,7 @@ const fromRepo = (
 				{env},
 			).pipe(Effect.flatMap(said("clone")));
 		}
+
 		yield* runLow("git", [...GIT_FIRST, "-C", clone, "fetch", "--quiet", "--prune", "origin"], {
 			env,
 		}).pipe(Effect.flatMap(said("fetch")));
@@ -164,7 +168,11 @@ const fromRepo = (
 			);
 		const listed = yield* present(SETTINGS_PATHS);
 		const refused = settingsRefusal(listed);
-		if (refused !== null) return yield* Effect.fail(invalid(`${name}@${branch}: ${refused}`));
+
+		if (refused !== null) {
+			return yield* Effect.fail(invalid(`${name}@${branch}: ${refused}`));
+		}
+
 		const found = listed.has(SETTINGS_FILE);
 		const settings = found
 			? yield* settingsFrom(yield* blob(SETTINGS_FILE)).pipe(
@@ -174,14 +182,20 @@ const fromRepo = (
 		const files = yield* present(ASKED);
 		const folder = settings.review?.rubrics;
 		const rubrics: Record<string, string> = {};
+
 		if (folder !== undefined) {
 			const inFolder = RUBRIC_FILES.map((file) => `${folder.replace(/\/+$/, "")}/${file}`);
 			const there = yield* present(inFolder);
+
 			for (const [i, file] of RUBRIC_FILES.entries()) {
 				const at = inFolder[i] as string;
-				if (there.has(at)) rubrics[file] = yield* blob(at);
+
+				if (there.has(at)) {
+					rubrics[file] = yield* blob(at);
+				}
 			}
 		}
+
 		return {
 			settings,
 			source: {from: "repo", name, branch, commit, found},
@@ -198,17 +212,33 @@ const fromFolder = (
 		const path = yield* Path.Path;
 		const file = path.join(folder, SETTINGS_FILE);
 		const listed = new Set<string>();
-		for (const asked of SETTINGS_PATHS)
-			if (yield* thereAt(path.join(folder, asked))) listed.add(asked);
+
+		for (const asked of SETTINGS_PATHS) {
+			if (yield* thereAt(path.join(folder, asked))) {
+				listed.add(asked);
+			}
+		}
+
 		const refused = settingsRefusal(listed);
-		if (refused !== null) return yield* Effect.fail(invalid(`${folder}: ${refused}`));
+
+		if (refused !== null) {
+			return yield* Effect.fail(invalid(`${folder}: ${refused}`));
+		}
+
 		const found = listed.has(SETTINGS_FILE);
 		const settings = yield* readSettings(file);
 		const files = new Set<string>();
-		for (const asked of ASKED) if (yield* thereAt(path.join(folder, asked))) files.add(asked);
+
+		for (const asked of ASKED) {
+			if (yield* thereAt(path.join(folder, asked))) {
+				files.add(asked);
+			}
+		}
+
 		const rubrics: Record<string, string> = {};
 		const named = settings.review?.rubrics;
-		if (named !== undefined)
+
+		if (named !== undefined) {
 			for (const name of RUBRIC_FILES) {
 				const at = path.join(folder, named, name);
 				const text = yield* fs.readFileString(at).pipe(
@@ -218,8 +248,13 @@ const fromFolder = (
 					),
 					Effect.mapError((error) => invalid(`cannot read ${at}: ${error.message}`)),
 				);
-				if (text !== null) rubrics[name] = text;
+
+				if (text !== null) {
+					rubrics[name] = text;
+				}
 			}
+		}
+
 		return {settings, source: {from: "folder", file, found}, holds: {files, rubrics}};
 	});
 

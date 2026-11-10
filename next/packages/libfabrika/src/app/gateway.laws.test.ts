@@ -9,6 +9,7 @@ import {nodeSql} from "../data/sqlite.ts";
 import {Answer, Attached} from "../transport/wire.ts";
 
 const SEED = 119120;
+
 const generated = fc.record({
 	id: fc.oneof(fc.string(), fc.integer()),
 	after: fc.nat({max: 120}),
@@ -20,6 +21,7 @@ const generated = fc.record({
 		maxLength: 12,
 	}),
 });
+
 const chosen = {
 	id: 1,
 	after: 100,
@@ -28,6 +30,7 @@ const chosen = {
 	ping: 42,
 	ids: Array.from({length: 12}, (_, n) => `${n}${"x".repeat(2000)}`),
 };
+
 const law = (
 	name: string,
 	check: (input: ReturnType<typeof generated.generate>["value"]) => Effect.Effect<void, unknown>,
@@ -46,12 +49,14 @@ const law = (
 			},
 		);
 	});
+
 type Connection = {
 	frame: (text: string) => Effect.Effect<void, unknown>;
 	ring: (stream: string, rev: number) => Effect.Effect<void>;
 	wake: () => Effect.Effect<void>;
 	probe: (session: string) => Effect.Effect<number | null>;
 };
+
 const online = () =>
 	Attached.cases.online.make({
 		client: "gateway/session-1",
@@ -106,6 +111,7 @@ const setup = Effect.fnUntraced(function* (
 		},
 	};
 });
+
 const request = (id: string | number, stream = "counter:1/inbox", after = 0) =>
 	JSON.stringify({jsonrpc: "2.0", id, method: "ledger.wait", params: {stream, after}});
 
@@ -130,6 +136,7 @@ describe("P12 Gateway attachment laws", () => {
 	law("each saved wait receives the first later revision on its stream", ({after}) =>
 		Effect.gen(function* () {
 			const db = new DatabaseSync(":memory:");
+
 			try {
 				const sql = nodeSql(db);
 				let ring: Connection["ring"] = () => Effect.void;
@@ -144,6 +151,7 @@ describe("P12 Gateway attachment laws", () => {
 					ring = f.c.ring;
 					yield* f.c.frame(request("early", "events", 0));
 					yield* f.c.frame(request("later", "events", after));
+
 					for (let n = 1; n <= after + 1; n++) {
 						yield* ledger.append(
 							"events",
@@ -162,6 +170,7 @@ describe("P12 Gateway attachment laws", () => {
 							),
 						);
 					}
+
 					expect(f.frames).toEqual([
 						{jsonrpc: "2.0", id: "early", result: {rev: 1}},
 						{jsonrpc: "2.0", id: "later", result: {rev: after + 1}},
@@ -302,16 +311,22 @@ describe("P12 Gateway attachment laws", () => {
 		Effect.gen(function* () {
 			for (const ids of [Array.from({length: 65}, (_, n) => String(n)), longIds]) {
 				const f = yield* setup(() => Effect.succeed({_tag: "parked"} as const));
+
 				for (const id of ids) {
 					yield* f.c.frame(request(id));
 					expect(new TextEncoder().encode(JSON.stringify(f.saved())).length).toBeLessThanOrEqual(
 						16384,
 					);
 				}
+
 				expect(f.frames.some((frame) => JSON.stringify(frame).includes("too_many_waits"))).toBe(
 					true,
 				);
-				if (ids.length === 65) expect(f.frames).toHaveLength(1);
+
+				if (ids.length === 65) {
+					expect(f.frames).toHaveLength(1);
+				}
+
 				const a = f.saved();
 				expect(a._tag === "online" && a.waits.length <= 64).toBe(true);
 			}

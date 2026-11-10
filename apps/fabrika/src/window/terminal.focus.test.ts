@@ -9,23 +9,30 @@ class Element extends EventTarget {
 	parentElement: Element | null = null;
 	readonly children: Element[] = [];
 	setAttribute() {}
+
 	append(...kids: Element[]) {
 		for (const kid of kids) {
 			kid.parentElement = this;
 			this.children.push(kid);
 		}
 	}
+
 	contains(at: unknown): boolean {
 		return at === this || this.children.some((kid) => kid.contains(at));
 	}
+
 	remove() {
 		this.parentElement = null;
 	}
+
 	focus() {
 		page.activeElement = this;
 	}
+
 	blur() {
-		if (page.activeElement === this) page.activeElement = body;
+		if (page.activeElement === this) {
+			page.activeElement = body;
+		}
 	}
 }
 
@@ -35,8 +42,11 @@ const page = {createElement: element, activeElement: body as Element | null, bod
 // One callback per turn: advancing all zero-delay timers together hides the stolen focus.
 const timers: (() => void)[] = [];
 const tick = () => timers.shift()?.();
+
 const settle = () => {
-	while (timers.length > 0) tick();
+	while (timers.length > 0) {
+		tick();
+	}
 };
 
 class FakeTerminal {
@@ -46,10 +56,15 @@ class FakeTerminal {
 	rows = 24;
 	readonly buffer = {active: {length: 0, cursorY: 0, getLine: () => undefined}};
 	private data: (data: string) => void = () => {};
+
 	private key = (event: Event) => {
-		if ("key" in event && typeof event.key === "string") this.data(event.key);
+		if ("key" in event && typeof event.key === "string") {
+			this.data(event.key);
+		}
 	};
+
 	loadAddon() {}
+
 	/** As 0.4.0's open(): it ends by focusing itself, now and after a zero timeout. */
 	open(parent: Element) {
 		this.opened = true;
@@ -57,16 +72,23 @@ class FakeTerminal {
 		parent.addEventListener("keydown", this.key);
 		this.focus();
 	}
+
 	focus() {
-		if (!this.opened || this.element === undefined) return;
+		if (!this.opened || this.element === undefined) {
+			return;
+		}
+
 		this.element.focus();
 		setTimeout(() => this.element?.focus(), 0);
 	}
+
 	onData(fn: (data: string) => void) {
 		this.data = fn;
 	}
+
 	onResize() {}
 	write() {}
+
 	dispose() {
 		this.element?.removeEventListener("keydown", this.key);
 		this.element = undefined;
@@ -87,7 +109,10 @@ let light = false;
 
 const switchLook = () => {
 	light = !light;
-	for (const change of changes) change();
+
+	for (const change of changes) {
+		change();
+	}
 };
 
 beforeEach(() => {
@@ -144,6 +169,7 @@ describe("a look change with nothing focused", () => {
 		const input = element();
 		input.focus();
 		expect(page.activeElement).toBe(input);
+
 		while (timers.length > 0) {
 			tick();
 			expect(page.activeElement).toBe(input);
@@ -180,11 +206,13 @@ describe("a look change with the right tile focused", () => {
 		sent.length = 0;
 		switchLook();
 		let turns = 0;
+
 		do {
 			if (timers.length > 0) {
 				tick();
 				turns += 1;
 			}
+
 			type();
 			expect
 				.soft(delivered(), `keys after timer ${turns}`)
@@ -202,6 +230,7 @@ describe("a look change with the right tile focused", () => {
 			expect.soft(right.contains(page.activeElement), `right after timer ${turns}`).toBe(true);
 		};
 		staysRight();
+
 		while (timers.length > 0) {
 			tick();
 			turns += 1;
@@ -223,6 +252,7 @@ describe("a look change with the right tile focused", () => {
 			sent.length = 0;
 		};
 		staysLeft();
+
 		while (timers.length > 0) {
 			tick();
 			staysLeft();

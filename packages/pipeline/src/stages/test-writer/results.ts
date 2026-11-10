@@ -49,16 +49,28 @@ export const resultsOf = (
 ): readonly {readonly property: string; readonly result: Result}[] =>
 	tests.flatMap((test): readonly {readonly property: string; readonly result: Result}[] => {
 		const file = report.testResults.find((r) => r.name.endsWith(test.file));
-		if (file === undefined) return [];
+
+		if (file === undefined) {
+			return [];
+		}
+
 		const found = file.assertionResults.find(
 			(a) =>
 				a.title === test.name || a.fullName === test.name || a.fullName?.endsWith(` ${test.name}`),
 		);
+
 		if (found !== undefined) {
-			if (found.status === "passed") return [{property: test.property, result: "green"}];
-			if (found.status === "failed") return [{property: test.property, result: "red"}];
+			if (found.status === "passed") {
+				return [{property: test.property, result: "green"}];
+			}
+
+			if (found.status === "failed") {
+				return [{property: test.property, result: "red"}];
+			}
+
 			return [];
 		}
+
 		return file.assertionResults.length === 0 && WAITS_ON_CODE.test(file.message ?? "")
 			? [{property: test.property, result: "red"}]
 			: [];
@@ -100,10 +112,13 @@ export const failuresOf = (
 	report.testResults.flatMap((file) => {
 		const path = file.name.startsWith(`${root}/`) ? file.name.slice(root.length + 1) : file.name;
 		const failed = file.assertionResults.filter((a) => a.status === "failed");
-		if (failed.length > 0)
+
+		if (failed.length > 0) {
 			return failed.map((a) => ({
 				name: oneLine([path, ...(a.ancestorTitles ?? []), a.title].join(" > ")),
 				error: firstLine(a.failureMessages?.[0]),
 			}));
+		}
+
 		return file.status === "failed" ? [{name: oneLine(path), error: firstLine(file.message)}] : [];
 	});

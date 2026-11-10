@@ -29,11 +29,13 @@ const NAME = "reply:1";
 const owner = Writer.cases.person.make({key: "SHA256:fixture", for: "person-test"});
 const Model = Schema.Struct({replies: Schema.Int, reason: Schema.NullOr(Schema.String)});
 const Msg = Schema.Struct({type: Schema.Literal("work"), n: Schema.Int});
+
 const work = Cmd.make("work", {
 	input: Schema.Struct({n: Schema.Int}),
 	ok: Schema.Int,
 	err: ["disk"],
 });
+
 const program = {
 	name: "reply",
 	machine: Machine.make({
@@ -56,6 +58,7 @@ const program = {
 	writes: {},
 	wake: () => null,
 } as const;
+
 const input = fc.record({n: fc.integer(), letter: fc.uuid()});
 // Final review's lost-reply probe, kept beside generated inputs.
 const lostReply = {n: 7, letter: "00000000-0000-1000-8000-000000000007"};
@@ -71,6 +74,7 @@ const replyCase = (
 			Effect.provide(Id.Generator.layer),
 		);
 		const db = new DatabaseSync(":memory:");
+
 		try {
 			const sql = nodeSql(db);
 			const checkpoint = () =>
@@ -108,9 +112,15 @@ const replyCase = (
 				reply: async (cmd, outcome) => {
 					before = checkpoint();
 					replyCalls++;
-					if (mode === "rpc" && replyCalls === 1)
+
+					if (mode === "rpc" && replyCalls === 1) {
 						return Effect.runPromise(Effect.fail(new Error("reply RPC lost")));
-					if (mode === "decode" && replyCalls === 1) return undefined;
+					}
+
+					if (mode === "decode" && replyCalls === 1) {
+						return undefined;
+					}
+
 					return box.reply(cmd, outcome);
 				},
 			});
@@ -175,6 +185,7 @@ const replyCase = (
 				});
 				const result = yield* Effect.exit(runner.msg(incoming));
 				const rows = yield* Stream.runCollect(ledger.read(`${NAME}/inbox`, 0));
+
 				if (mode === "rpc" || mode === "decode") {
 					// Review 3's lost-reply bug: never invent work_err/bad_cmd for transport failure.
 					expect({exit: result._tag, rows: rows.length, checkpoint: checkpoint()}).toEqual({
@@ -182,12 +193,15 @@ const replyCase = (
 						rows: 1,
 						checkpoint: before,
 					});
-					if (Exit.isFailure(result))
+
+					if (Exit.isFailure(result)) {
 						expect(Cause.squash(result.cause)).toMatchObject({
 							_tag: "ProgramDown",
 							reason: "step",
 							source: mode,
 						});
+					}
+
 					expect(yield* store.load).toMatchObject({
 						saved: {model: {replies: 0, reason: null}},
 						cmds: [{id: `${PID}/1/0`, state: "dispatched", cmd: work({n})}],
@@ -214,6 +228,7 @@ const replyCase = (
 					expect(yield* runner.msg(incoming)).toMatchObject({_tag: "accepted", pos: 1});
 					expect(yield* Stream.runCollect(ledger.read(`${NAME}/inbox`, 0))).toHaveLength(2);
 				}
+
 				expect(handlerCalls).toBe(1);
 				expect(replyCalls).toBe(1);
 			}).pipe(Effect.provide(layer));
@@ -223,15 +238,17 @@ const replyCase = (
 	});
 
 describe("P12 Cmd reply failure versus refusal", () => {
-	for (const source of ["rpc", "decode"] as const)
+	for (const source of ["rpc", "decode"] as const) {
 		it(`workerExecution.reply ${source} failure leaves the Cmd dispatched and checkpoint unchanged`, async () => {
 			await fc.assert(
 				fc.asyncProperty(input, ({n, letter}) => Effect.runPromise(replyCase(source, n, letter))),
 				{seed: SEED, examples: [[lostReply]]},
 			);
 		});
-	for (const mode of ["checked", "refused"] as const)
-		for (const adapter of ["node", "worker"] as const)
+	}
+
+	for (const mode of ["checked", "refused"] as const) {
+		for (const adapter of ["node", "worker"] as const) {
 			it(`${adapter} ${mode} program refusal saves its answer and completes the Cmd once`, async () => {
 				await fc.assert(
 					fc.asyncProperty(input, ({n, letter}) =>
@@ -240,4 +257,6 @@ describe("P12 Cmd reply failure versus refusal", () => {
 					{seed: SEED, examples: [[lostReply]]},
 				);
 			});
+		}
+	}
 });

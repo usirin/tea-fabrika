@@ -59,13 +59,16 @@ const Loose = Schema.Struct({
 	parent: Schema.NullOr(Schema.String),
 	traceId: Schema.String,
 });
+
 const strict = {onExcessProperty: "error"} as const;
 const decodeLoose = Schema.decodeUnknownResult(Loose, strict);
 const isParent = Schema.is(Schema.NullOr(ParentText));
 const decodeLine = Schema.decodeUnknownResult(Line, strict);
+
 const decodeId = Schema.decodeUnknownResult(
 	Schema.Struct({stream: Entry.fields.stream, id: Entry.fields.id}),
 );
+
 const decodeRow = Schema.decodeUnknownSync(Row);
 const decodeRing = Schema.decodeUnknownSync(Ring);
 const decodeHead = Schema.decodeUnknownSync(Head);
@@ -73,6 +76,7 @@ const decodeLast = Schema.decodeUnknownSync(Last);
 const decodeLag = Schema.decodeUnknownSync(Lag);
 
 const encoder = new TextEncoder();
+
 const bytes = (texts: ReadonlyArray<string | null>): number =>
 	texts.reduce((n, text) => n + (text === null ? 0 : encoder.encode(text).length), 0);
 
@@ -80,12 +84,26 @@ type Reason = (typeof Appended.cases.refused.Type)["reason"];
 
 /** The line, checked: shape (p92), parent (p68), trace (p68b) and row size (flag 13). */
 const check = (stream: string, id: string, input: unknown): Result.Result<Line, Reason> => {
-	if (Result.isFailure(decodeId({stream, id}))) return Result.fail("bad_line");
+	if (Result.isFailure(decodeId({stream, id}))) {
+		return Result.fail("bad_line");
+	}
+
 	const loose = decodeLoose(input);
-	if (Result.isFailure(loose)) return Result.fail("bad_line");
-	if (!isParent(loose.success.parent)) return Result.fail("bad_parent");
+
+	if (Result.isFailure(loose)) {
+		return Result.fail("bad_line");
+	}
+
+	if (!isParent(loose.success.parent)) {
+		return Result.fail("bad_parent");
+	}
+
 	const line = decodeLine(loose.success);
-	if (Result.isFailure(line)) return Result.fail("bad_trace");
+
+	if (Result.isFailure(line)) {
+		return Result.fail("bad_trace");
+	}
+
 	const {by, sentAt, parent, traceId, build, body} = line.success;
 	const texts = [
 		stream,
@@ -137,7 +155,10 @@ class Threw extends Schema.TaggedError<Threw>()("Threw", {error: Schema.Unknown}
 
 /** SQLite's own error code, as node:sqlite gives it (`errcode`), or the platform's `code`. */
 const errorCode = (error: unknown): Option.Option<string | number> => {
-	if (typeof error !== "object" || error === null) return Option.none();
+	if (typeof error !== "object" || error === null) {
+		return Option.none();
+	}
+
 	const code = "errcode" in error ? error.errcode : "code" in error ? error.code : undefined;
 	return typeof code === "number" || typeof code === "string" ? Option.some(code) : Option.none();
 };
@@ -159,17 +180,23 @@ export const ledgerStore = (
 				try: () => {
 					if (!ready) {
 						sql.transaction(() => {
-							for (const query of TABLES) sql.exec(query);
+							for (const query of TABLES) {
+								sql.exec(query);
+							}
 						});
 						ready = true;
 					}
+
 					return sql.transaction(() => work(() => clock.currentTimeMillisUnsafe()));
 				},
 				catch: (error) => new Threw({error}),
 			}),
 		).pipe(
 			Effect.catch(({error}) => {
-				if (error instanceof LedgerError) return Effect.fail(error);
+				if (error instanceof LedgerError) {
+					return Effect.fail(error);
+				}
+
 				const reason = Schema.isSchemaError(error) ? "bad_row" : "storage";
 				const failure = new LedgerError({
 					reason,
@@ -211,7 +238,11 @@ export const ledgerStore = (
 		);
 		const head = Option.match(last, {onNone: () => 0, onSome: (row) => row.rev});
 		const answered = decide(line, first, head);
-		if (Option.isSome(answered)) return answered.value;
+
+		if (Option.isSome(answered)) {
+			return answered.value;
+		}
+
 		const rev = head + 1;
 		const pos =
 			decodeLast(
@@ -280,7 +311,11 @@ export const ledgerStore = (
 			[OPERATION]: "send",
 		});
 		const checked = check(stream, id, input);
-		if (Result.isFailure(checked)) return yield* refused(checked.failure);
+
+		if (Result.isFailure(checked)) {
+			return yield* refused(checked.failure);
+		}
+
 		const line = checked.success;
 		yield* Effect.annotateCurrentSpan(short({[tag("tag")]: line._tag, [tag("by")]: line.by}));
 		const placing = yield* atomic((now) => place(stream, id, line, now));
@@ -355,7 +390,11 @@ export const ledgerStore = (
 		});
 		return yield* atomic(() => {
 			const {head, lag} = behind(stream, after);
-			if (head > after) return {head, lag, waited: Waited.cases.ready.make({rev: head})};
+
+			if (head > after) {
+				return {head, lag, waited: Waited.cases.ready.make({rev: head})};
+			}
+
 			sql.exec(
 				`INSERT INTO rings ("to", stream, after) VALUES (?, ?, ?)
 				ON CONFLICT ("to", stream) DO UPDATE SET after = min(after, excluded.after)`,
@@ -380,7 +419,9 @@ export const ledgerStore = (
 		const rings: Array<{stream: string; rev: Rev; waiter: Ring}> = [];
 		let open = true;
 		const ensureOpen = () => {
-			if (!open) throw new LedgerError({reason: "storage", message: "ledger turn has ended"});
+			if (!open) {
+				throw new LedgerError({reason: "storage", message: "ledger turn has ended"});
+			}
 		};
 		const turn: LedgerTurn = {
 			read: (stream, after) => {
@@ -392,14 +433,27 @@ export const ledgerStore = (
 			append: (stream, id, input) => {
 				ensureOpen();
 				const checked = check(stream, id, input);
-				if (Result.isFailure(checked)) throw new LedgerError({reason: "refused"});
+
+				if (Result.isFailure(checked)) {
+					throw new LedgerError({reason: "refused"});
+				}
+
 				const placing = place(stream, id, checked.success, now);
-				if (placing._tag === "refused") throw new LedgerError({reason: "refused"});
-				if (placing._tag === "placed")
-					for (const waiter of placing.rings) rings.push({stream, rev: placing.rev, waiter});
+
+				if (placing._tag === "refused") {
+					throw new LedgerError({reason: "refused"});
+				}
+
+				if (placing._tag === "placed") {
+					for (const waiter of placing.rings) {
+						rings.push({stream, rev: placing.rev, waiter});
+					}
+				}
+
 				return {rev: placing.rev, pos: placing.pos};
 			},
 		};
+
 		try {
 			return {value: step(turn), rings};
 		} finally {

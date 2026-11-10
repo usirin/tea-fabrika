@@ -32,30 +32,41 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const folder = mkdtempSync(join(tmpdir(), "p6-spans-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
+
 const freshDb = (): DatabaseSync => {
 	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
 	opened.push(db);
 	return db;
 };
+
 const fresh = (): Sql => nodeSql(freshDb());
+
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
 const READER = "gateway:t1";
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+
 /** A doorbell whose delivery to `fails` fails, as a gateway that went away would. */
 const failing = (fails: string) =>
 	Layer.succeed(Doorbell, {
 		ring: (to) =>
 			to === fails ? Effect.fail(new LedgerError({reason: "unreachable"})) : Effect.void,
 	});
+
 const onSql = (sql: Sql, doorbell: Layer.Layer<Doorbell> = quiet) =>
 	Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(doorbell));
 
 const BODY = "body-marker-7c1d";
 const SENT = "sent-marker-2026-11-07T21:10:01.204Z";
+
 const line = (over: Partial<Line> = {}): Line => ({
 	by: "SHA256:writer-a",
 	for: "owner",
@@ -103,6 +114,7 @@ const letters = fc.constantFrom("a", "b", "7", ":", "-", "_", "é");
 const shortText = fc.string({unit: letters, minLength: 1, maxLength: MOST});
 const longText = fc.string({unit: letters, minLength: MOST + 1, maxLength: 4096});
 const anyText = fc.oneof({arbitrary: longText, weight: 3}, {arbitrary: shortText, weight: 1});
+
 /**
  * A tag that took text from the caller: as it was when it fits, else cut to at most 128 characters
  * with the full length kept beside it as a number, `<key>.length`.
@@ -112,6 +124,7 @@ const heldShort = (span: Record<string, unknown>, key: string, full: string) => 
 		expect(span[key], key).toBe(full);
 		return;
 	}
+
 	expect(typeof span[key], key).toBe("string");
 	expect(String(span[key]).length, key).toBeLessThanOrEqual(MOST);
 	expect(span[`${key}.length`], `${key}.length`).toBe(full.length);
@@ -240,10 +253,12 @@ describe("p95, every call is one span, names and numbers only", () => {
 		const {tracer, tags} = capture();
 		return Effect.gen(function* () {
 			const ledger = yield* Ledger;
+
 			for (const n of [1, 2, 3]) {
 				yield* ledger.append("a", `a-${n}`, line());
 				yield* ledger.append("b", `b-${n}`, line());
 			}
+
 			// a holds revs 1, 3 and 5. Past rev 1 sit two of them; the log's head is five past it.
 			yield* Stream.runCollect(ledger.read("a", 1));
 			yield* ledger.wait("a", 1);
@@ -274,7 +289,11 @@ describe("p95, every call is one span, names and numbers only", () => {
 		const {tracer, tags} = capture();
 		return Effect.gen(function* () {
 			const ledger = yield* Ledger;
-			for (let n = 1; n <= 300; n++) yield* ledger.append("a", `w-${n}`, line());
+
+			for (let n = 1; n <= 300; n++) {
+				yield* ledger.append("a", `w-${n}`, line());
+			}
+
 			yield* Stream.runCollect(ledger.read("a", 100));
 			expect(tags("ledger.read").map((t) => t[tag("rows")])).toEqual([200]);
 			yield* Stream.runCollect(ledger.read("a", 0));
@@ -412,6 +431,7 @@ describe("p95, every call is one span, names and numbers only", () => {
 				yield* ledger.wait(stream, 0);
 				const calls = callTags("ledger.call");
 				expect(calls).toHaveLength(3);
+
 				for (const call of calls) {
 					heldShort(call, STREAM, stream);
 					heldShort(call, tag("reader"), reader);
@@ -595,8 +615,12 @@ describe("p95, every call is one span, names and numbers only", () => {
 						rang.push(to);
 					});
 				}
+
 				// "inside": a sync throw inside the ring's Effect. "outside": a throw before any Effect.
-				if (how === "outside") throw new BellBroke("message-marker");
+				if (how === "outside") {
+					throw new BellBroke("message-marker");
+				}
+
 				return Effect.sync(() => {
 					throw new BellBroke("message-marker");
 				});
