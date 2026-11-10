@@ -19,6 +19,8 @@
 // Every keep is printed with its reason, so a box that never goes is seen (field note
 // 2026-11-09-254: gc's own git status reset the idle clock, so for a day no box was ever removed).
 //
+// Last, mutbox.ts removes what the mutation container left in Docker (0045).
+//
 // It never runs a command inside a box: it reads the box's git data with hooks off, and fetches
 // from it into the main checkout, as `box.sh fetch` does. One line per box removed, then a total.
 
@@ -600,6 +602,17 @@ const main = () => {
     trees += 1;
     freed += mb;
     console.log(`${dry ? "would remove" : "removed"} worktree ${path}: ${verdict.reason}, ${mb} MB`);
+  }
+
+  // The mutation container's leftovers (0045): a container a dead run left, and images over a
+  // week old. mutbox.ts knows which are safe to remove, and keeps a live run's.
+  if (!dry) {
+    const swept = spawnSync(
+      process.execPath,
+      [join(import.meta.dirname, "mutbox.ts"), "gc", "--lock", join(env.BOXES, "state", "docker.lock")],
+      { encoding: "utf8" },
+    );
+    process.stdout.write(swept.stdout ?? "");
   }
 
   console.log(
