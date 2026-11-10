@@ -708,6 +708,8 @@ describe("the verdicts at a head", () => {
 
 	it("holds none when no verdict binds to this head, however many passed before", () => {
 		expect(at([])).toEqual({});
+		// The marker's dash is stored data. Kept as written, so a reformat never reads this old line as new text.
+		// oxfmt-ignore
 		expect(
 			at([said("review-code: PASS @ 122533139cb89aad3d7b542a65ff652721edd156 — ok", 1)]),
 		).toEqual({});

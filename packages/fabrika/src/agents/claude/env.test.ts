@@ -8,7 +8,7 @@ import {agentEnv, hostEnv, runEnv, shellEnv, toolHome} from "./env.ts";
 /** A parent with what a machine has set: the plain names, a login, an ssh agent, and keys nobody named. */
 const PARENT = {
 	PATH: "/bin",
-	HOME: "/home/someone",
+	HOME: "/people/someone",
 	TMPDIR: "/tmp/someone",
 	LANG: "en_US.UTF-8",
 	USER: "someone",
@@ -19,7 +19,7 @@ const PARENT = {
 	EDITOR: "vi",
 };
 
-const RUN = {PATH: "/bin", HOME: "/home/someone", TMPDIR: "/tmp/someone", LANG: "en_US.UTF-8"};
+const RUN = {PATH: "/bin", HOME: "/people/someone", TMPDIR: "/tmp/someone", LANG: "en_US.UTF-8"};
 
 describe("the environment a started process is handed", () => {
 	it("is what a program needs to run, for code a ticket or an agent wrote", () => {
@@ -27,18 +27,18 @@ describe("the environment a started process is handed", () => {
 	});
 
 	it("keeps where a version manager holds the real tools, so its shim works under another home", () => {
-		const parent = {...PARENT, VOLTA_HOME: "/home/someone/.volta"};
-		expect(runEnv(parent)).toEqual({...RUN, VOLTA_HOME: "/home/someone/.volta"});
-		expect(toolHome(parent)).toEqual({VOLTA_HOME: "/home/someone/.volta"});
+		const parent = {...PARENT, VOLTA_HOME: "/people/someone/.volta"};
+		expect(runEnv(parent)).toEqual({...RUN, VOLTA_HOME: "/people/someone/.volta"});
+		expect(toolHome(parent)).toEqual({VOLTA_HOME: "/people/someone/.volta"});
 		expect(toolHome(PARENT)).toEqual({});
 	});
 
 	// A shim with no home for its tools looks along the PATH for the real one, finds itself, and waits
 	// on the child it starts. So a Volta folder on the PATH always brings its home, set or not.
 	it.each<[string, string, string]>([
-		["first", "/home/someone/.volta/bin:/bin", "/home/someone/.volta"],
+		["first", "/people/someone/.volta/bin:/bin", "/people/someone/.volta"],
 		["in the middle", "/bin:/elsewhere/.volta/bin:/usr/bin", "/elsewhere/.volta"],
-		["last, with a slash at its end", "/bin:/home/someone/.volta/bin/", "/home/someone/.volta"],
+		["last, with a slash at its end", "/bin:/people/someone/.volta/bin/", "/people/someone/.volta"],
 	])("finds Volta's home from the PATH when none is set and its folder is %s", (_, path, home) => {
 		const parent = {...PARENT, PATH: path};
 		expect(toolHome(parent)).toEqual({VOLTA_HOME: home});

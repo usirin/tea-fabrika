@@ -442,6 +442,8 @@ export function findingsIn(body: string): readonly FindingText[] {
 
 		const row =
 			/^\s*\|/.test(line) && /\|\s*(?:\*\*)?\[?(?:FAIL|unmet|not met)\]?(?:\*\*)?\s*\|/i.test(line);
+		// The marker's dash is stored data. Kept as written, so a reformat never reads this old line as new text.
+		// oxfmt-ignore
 		const item =
 			/^\s*(?:[-*]|\d+[.)])\s/.test(line) && /(?:\[FAIL\]|\*\*FAIL\*\*|—\s*FAIL\b)/.test(line);
 

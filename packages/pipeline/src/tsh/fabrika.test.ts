@@ -19,7 +19,7 @@ import {fabrikaEntries} from "./fabrika.ts";
 
 const PR = "https://github.com/example/repo/pull/7";
 const NOTHING_SAID: Local = {model: null, effort: null, budget: null, rubrics: null};
-const PLACES = {shipped: "/fabrika/rubrics", repo: "/home/rubrics/c0ffee"};
+const PLACES = {shipped: "/fabrika/rubrics", repo: "/repo/rubrics/c0ffee"};
 
 let dir: string;
 const path = process.env.PATH;
