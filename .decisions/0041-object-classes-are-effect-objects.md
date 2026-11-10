@@ -162,3 +162,7 @@ source shows a name exists. It does not show that it works for our objects.
 whether calls between objects use the plain typed stub or `Cloudflare.RpcDurableObject` with a
 schema; and merging objects into one, as phoenix later did. No table under
 `docs/direction/follows/` covers this, so none changes.
+
+*Pointer, 2026-11-09:* [0042](0042-platform-pieces-go-through-alchemy.md) extends this file to
+every platform piece, `Control`, the `WorkerEntrypoint` class and the Worker's default `fetch`
+included. Every rule above still holds.

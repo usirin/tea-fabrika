@@ -37,7 +37,12 @@ a one-line handoff into Effect.** Everything that decides anything is plain code
 behind a service.
 
 - **What stays in the class** (from 2026-11-09, in its `.make()` Layer):
-  - its storage handle, its WebSocket, its alarm, its Worker Loader;
+  - its storage handle, its WebSocket, its alarm, its Worker Loader. *From 2026-11-09
+    ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md)): each of these comes
+    from Alchemy's Effect service for it, such as `Cloudflare.DurableObjectState` and
+    `Cloudflare.WorkerLoader`, never as a raw platform type. The services below take those, so
+    they still run on Node in tests. Not built yet: today's services take the raw
+    `DurableObjectState`;*
   - the one line that hands a method to the service. *Changed 2026-11-09 (0041): the line
     returns the service's Effect, and Alchemy's bridge runs it. It said: the one line that runs
     an Effect ([no Promises](./no-promises.md) names this edge).*
