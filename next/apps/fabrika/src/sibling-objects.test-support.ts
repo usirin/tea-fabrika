@@ -47,6 +47,7 @@ const PongLive = Pong.make(
   }),
 );
 
+// oxlint-disable-next-line import/no-default-export -- edge: Alchemy runs this Worker from main: import.meta.url, and workerd loads a Worker by its default export (0058)
 export default Host.make(
   {
     main: import.meta.url,

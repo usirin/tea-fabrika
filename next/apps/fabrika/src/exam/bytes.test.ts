@@ -247,7 +247,7 @@ const windowBuild = Effect.fnUntraced(function* (window: string) {
   yield* fs.makeDirectory(pkg, { recursive: true });
   yield* fs.makeDirectory(sdk, { recursive: true });
 
-  for (const name of ["effect", "@demlik", "@kampus"]) {
+  for (const name of ["effect", "@demlik", "@kampus", "@alchemy.run"]) {
     yield* fs.symlink(path.join(app, "node_modules", name), path.join(home, "node_modules", name));
   }
 
