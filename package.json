@@ -40,6 +40,7 @@
   "devDependencies": {
     "@demlik/structure-sweep": "catalog:",
     "@effect/tsgo": "catalog:",
+    "@tea-fabrika/agents": "workspace:*",
     "@types/node": "catalog:",
     "esbuild": "catalog:",
     "fast-check": "catalog:",

@@ -20,7 +20,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 1. **Read** `AGENTS.md`'s mutation rules.
 2. **Read the fast check's report.** `drive.ts` ran it before you started, in a container with its
    own network ([0045](../../../.decisions/0045-test-steps-run-in-containers.md)), with
-   [the command below](#the-command). Your prompt names its report, `mutbox.json`. Never run
+   [the command below](#the-command). Your prompt holds its report, `mutbox.json`, whole. Never run
    Stryker yourself, and start nothing that listens on a port. `run.sh` and `sample.ts` hold file
    selection, the seed, sample cap and round settings. Ask before you scale up.
 3. **Sort each survivor:** real (a law should catch it), equivalent (no behavior changes) or
@@ -83,6 +83,17 @@ It prints one JSON line and writes it to `<out>/mutbox.json`: `done`, `skip` (no
   (`left`) separate from selected mutants not tested before the cap.
 - **A dry run is not proof.** Ignored or uncovered mutants alone are not proof either. At least
   one mutant needs a real test result. Record the dry-run log and the actual result counts.
+
+## Outside your task
+
+Something wrong that your task does not cover is one finding row with proof, then keep going:
+never a fix, a ticket or only a mention, and never a security hole.
+[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+counts as proof.
+
+A survivor is this step's own answer and stays in its report, never a finding row. Outside
+means anything else you meet that is wrong.
+Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
 
 ## Go easy on the machine
 
