@@ -1,6 +1,6 @@
-import {spawn} from "node:child_process";
-import {fileURLToPath} from "node:url";
-import type {SpawnedProcess, SpawnOptions} from "@anthropic-ai/claude-agent-sdk";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
 
 // Where the Agent SDK would start `claude`, start the guard (./guard.ts), and
 // let it start `claude`. The SDK talks to `claude` over its stdin and stdout
@@ -27,50 +27,42 @@ export const lockOf = (tree: string) => `${tree.replace(/\/+$/, "")}.lock`;
 export const WAIT_SECONDS = 30;
 
 export interface Guarded {
-	/** For the SDK's `spawnClaudeCodeProcess`. */
-	readonly spawn: (options: SpawnOptions) => SpawnedProcess;
-	/** Why the guard refused to start the builder, in its words; `null` when it did not. */
-	readonly refused: () => string | null;
+  /** For the SDK's `spawnClaudeCodeProcess`. */
+  readonly spawn: (options: SpawnOptions) => SpawnedProcess;
+  /** Why the guard refused to start the builder, in its words; `null` when it did not. */
+  readonly refused: () => string | null;
 }
 
 /** A guard for one builder run in the copy whose lock file is `lock`. */
 export const guarded = (lock: string, wait: number = WAIT_SECONDS): Guarded => {
-	let said = "";
-	return {
-		spawn: (options) => {
-			const child = spawn(
-				process.execPath,
-				[
-					"--disable-warning=ExperimentalWarning",
-					GUARD,
-					lock,
-					String(wait),
-					"--",
-					options.command,
-					...options.args,
-				],
-				{
-					...(options.cwd === undefined ? {} : {cwd: options.cwd}),
-					env: options.env,
-					stdio: ["pipe", "pipe", "pipe", "pipe"],
-					detached: true,
-					signal: options.signal,
-				},
-			);
-			// Read to its end, or a full pipe would stop `claude`; the tail is kept for `refused`.
-			child.stderr?.on("data", (chunk: Buffer) => {
-				said = (said + chunk.toString("utf8")).slice(-4_000);
-			});
-			// The SDK reads `exit` and `error`; an error on the lifeline is the guard's to read.
-			child.stdio[3]?.on("error", () => undefined);
-			return child as SpawnedProcess;
-		},
-		refused: () =>
-			said
-				.split("\n")
-				.reverse()
-				.find((line) => line.startsWith("held:"))
-				?.slice("held:".length)
-				.trim() ?? null,
-	};
+  let said = "";
+  return {
+    spawn: (options) => {
+      const child = spawn(
+        process.execPath,
+        ["--disable-warning=ExperimentalWarning", GUARD, lock, String(wait), "--", options.command, ...options.args],
+        {
+          ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+          env: options.env,
+          stdio: ["pipe", "pipe", "pipe", "pipe"],
+          detached: true,
+          signal: options.signal,
+        },
+      );
+      // Read to its end, or a full pipe would stop `claude`; the tail is kept for `refused`.
+      child.stderr?.on("data", (chunk: Buffer) => {
+        said = (said + chunk.toString("utf8")).slice(-4_000);
+      });
+      // The SDK reads `exit` and `error`; an error on the lifeline is the guard's to read.
+      child.stdio[3]?.on("error", () => undefined);
+      return child as SpawnedProcess;
+    },
+    refused: () =>
+      said
+        .split("\n")
+        .reverse()
+        .find((line) => line.startsWith("held:"))
+        ?.slice("held:".length)
+        .trim() ?? null,
+  };
 };

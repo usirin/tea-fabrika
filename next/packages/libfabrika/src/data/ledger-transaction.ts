@@ -1,28 +1,24 @@
-import {Context, Effect, Layer} from "effect";
-import {ledgerStore} from "./ledger-store.ts";
-import {Doorbell, type LedgerError} from "./ledger.ts";
-import {type Entry, type Line, type Rev} from "./log.ts";
-import type {Sql} from "./referee.ts";
+import { Context, Effect, Layer } from "effect";
+import { ledgerStore } from "./ledger-store.ts";
+import { Doorbell, type LedgerError } from "./ledger.ts";
+import { type Entry, type Line, type Rev } from "./log.ts";
+import type { Sql } from "./referee.ts";
 
 /** Available only inside the synchronous callback. Refusal aborts the whole turn. */
 export interface LedgerTurn {
-	readonly read: (stream: string, after: Rev) => Iterable<Entry>;
-	readonly append: (
-		stream: string,
-		id: string,
-		line: Line,
-	) => {readonly rev: Rev; readonly pos: Rev};
+  readonly read: (stream: string, after: Rev) => Iterable<Entry>;
+  readonly append: (stream: string, id: string, line: Line) => { readonly rev: Rev; readonly pos: Rev };
 }
 
 export class LedgerTransaction extends Context.Service<
-	LedgerTransaction,
-	{readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>}
+  LedgerTransaction,
+  { readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError> }
 >()("@kampus/libfabrika/LedgerTransaction") {
-	static readonly layer = (sql: Sql): Layer.Layer<LedgerTransaction, never, Doorbell> =>
-		Layer.effect(
-			LedgerTransaction,
-			Effect.gen(function* () {
-				return {transact: ledgerStore(sql, yield* Doorbell).transact};
-			}),
-		);
+  static readonly layer = (sql: Sql): Layer.Layer<LedgerTransaction, never, Doorbell> =>
+    Layer.effect(
+      LedgerTransaction,
+      Effect.gen(function* () {
+        return { transact: ledgerStore(sql, yield* Doorbell).transact };
+      }),
+    );
 }

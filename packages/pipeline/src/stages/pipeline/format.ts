@@ -1,8 +1,8 @@
-import {Effect} from "effect";
-import {FILES, SETTINGS_FILE} from "../../settings.ts";
-import {saidOf} from "../../tickets/ticket.ts";
-import {Tickets} from "../../tickets/tickets.ts";
-import {LaneWork} from "./work.ts";
+import { Effect } from "effect";
+import { FILES, SETTINGS_FILE } from "../../settings.ts";
+import { saidOf } from "../../tickets/ticket.ts";
+import { Tickets } from "../../tickets/tickets.ts";
+import { LaneWork } from "./work.ts";
 
 // The exam's own format commit. Today's version. Self-fix PR 1.
 //
@@ -28,10 +28,10 @@ export const NO_FORMATTER = `This repository names no formatter, so code commits
  *   it failed            what it wrote is committed, and the ticket says what it said
  */
 export const formatExam = (number: number, tree: string, exam: readonly string[]) =>
-	formatAt(number, tree, exam, {
-		what: "the tests",
-		message: `format the tests for ticket ${number}`,
-	});
+  formatAt(number, tree, exam, {
+    what: "the tests",
+    message: `format the tests for ticket ${number}`,
+  });
 
 /**
  * Files as `tree`'s head holds them, through the repository's formatter, and a code commit of what
@@ -39,43 +39,41 @@ export const formatExam = (number: number, tree: string, exam: readonly string[]
  * The exam's rule files go through it too (self-fix PR 10).
  */
 export const formatAt = (
-	number: number,
-	tree: string,
-	exam: readonly string[],
-	words: {readonly what: string; readonly message: string},
+  number: number,
+  tree: string,
+  exam: readonly string[],
+  words: { readonly what: string; readonly message: string },
 ) =>
-	Effect.gen(function* () {
-		const work = yield* LaneWork;
-		const tickets = yield* Tickets;
+  Effect.gen(function* () {
+    const work = yield* LaneWork;
+    const tickets = yield* Tickets;
 
-		if ((yield* work.settings).format === undefined) {
-			yield* tickets
-				.talk(number, "format-none", {type: "commented", body: NO_FORMATTER})
-				.pipe(Effect.ignore);
-			return null;
-		}
+    if ((yield* work.settings).format === undefined) {
+      yield* tickets.talk(number, "format-none", { type: "commented", body: NO_FORMATTER }).pipe(Effect.ignore);
+      return null;
+    }
 
-		const head = yield* work.head(tree);
-		const files = (yield* Effect.forEach(
-			exam,
-			(path) => Effect.map(work.show(head, path), (text) => (text === null ? [] : [{path, text}])),
-			{concurrency: 1},
-		)).flat();
-		const paths = files.map((file) => file.path);
-		yield* work.write(tree, files);
-		const formatted = yield* work.format(tree, paths);
+    const head = yield* work.head(tree);
+    const files = (yield* Effect.forEach(
+      exam,
+      (path) => Effect.map(work.show(head, path), (text) => (text === null ? [] : [{ path, text }])),
+      { concurrency: 1 },
+    )).flat();
+    const paths = files.map((file) => file.path);
+    yield* work.write(tree, files);
+    const formatted = yield* work.format(tree, paths);
 
-		if (formatted._tag === "failed") {
-			yield* tickets
-				.talk(number, `format-exam-failed/${head}`, {
-					type: "commented",
-					body: saidOf(
-						`The formatter failed on ${words.what}, so what it could not format is kept as written. ${formatted.says}`,
-					),
-				})
-				.pipe(Effect.ignore);
-		}
+    if (formatted._tag === "failed") {
+      yield* tickets
+        .talk(number, `format-exam-failed/${head}`, {
+          type: "commented",
+          body: saidOf(
+            `The formatter failed on ${words.what}, so what it could not format is kept as written. ${formatted.says}`,
+          ),
+        })
+        .pipe(Effect.ignore);
+    }
 
-		const after = yield* work.commitOnly(tree, paths, words.message);
-		return after === head ? null : after;
-	});
+    const after = yield* work.commitOnly(tree, paths, words.message);
+    return after === head ? null : after;
+  });

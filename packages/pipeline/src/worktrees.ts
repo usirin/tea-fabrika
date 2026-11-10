@@ -1,12 +1,12 @@
-import {Context, type Effect} from "effect";
+import { Context, type Effect } from "effect";
 
 /** One write, named by its intent: a second write with the same intent answers as the first did. */
 interface Intended {
-	readonly intent: string;
+  readonly intent: string;
 }
 
 /** Could not read or write at all. The machine stops; nothing is guessed. */
-type Unknown = {readonly _tag: "unknown"};
+type Unknown = { readonly _tag: "unknown" };
 
 /**
  * The working copies a lane's shells work in, made and removed by the
@@ -22,10 +22,10 @@ type Unknown = {readonly _tag: "unknown"};
  * which runs an issue's tests in a folder it is handed.
  */
 export class Worktrees extends Context.Service<
-	Worktrees,
-	{
-		/** Check out the repo's default branch, as it is now, in a new tree. */
-		readonly make: (request: {readonly name: string} & Intended) => Effect.Effect<void, Unknown>;
-		readonly remove: (request: {readonly name: string} & Intended) => Effect.Effect<void, Unknown>;
-	}
+  Worktrees,
+  {
+    /** Check out the repo's default branch, as it is now, in a new tree. */
+    readonly make: (request: { readonly name: string } & Intended) => Effect.Effect<void, Unknown>;
+    readonly remove: (request: { readonly name: string } & Intended) => Effect.Effect<void, Unknown>;
+  }
 >()("Worktrees") {}

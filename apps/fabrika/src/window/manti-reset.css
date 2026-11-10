@@ -12,41 +12,41 @@
 :where(:not([data-scope], [data-scope] *)),
 :where(:not([data-scope], [data-scope] *))::before,
 :where(:not([data-scope], [data-scope] *))::after {
-	box-sizing: revert;
-	margin: revert;
+  box-sizing: revert;
+  margin: revert;
 }
 
 :where(img, picture, video, canvas, svg):where(:not([data-scope], [data-scope] *)) {
-	display: revert;
-	max-width: revert;
+  display: revert;
+  max-width: revert;
 }
 
 :where(button, input, textarea, select):where(:not([data-scope], [data-scope] *)) {
-	font: revert;
-	color: revert;
+  font: revert;
+  color: revert;
 }
 
 :where(button):where(:not([data-scope], [data-scope] *)) {
-	background: revert;
-	border: revert;
+  background: revert;
+  border: revert;
 }
 
 :where(h1, h2, h3, h4, h5, h6):where(:not([data-scope], [data-scope] *)) {
-	font-size: revert;
-	font-weight: revert;
+  font-size: revert;
+  font-weight: revert;
 }
 
 :where(a):where(:not([data-scope], [data-scope] *)) {
-	color: revert;
-	text-decoration: revert;
+  color: revert;
+  text-decoration: revert;
 }
 
 :where(html) {
-	tab-size: revert;
+  tab-size: revert;
 }
 
 /* The body takes the root's font and line height, as before, not Manti's base for it. */
 :where(body) {
-	font: inherit;
-	text-rendering: revert;
+  font: inherit;
+  text-rendering: revert;
 }

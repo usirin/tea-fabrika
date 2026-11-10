@@ -33,66 +33,62 @@
 //
 // A genuinely intentional branch-guarded assertion is exempted per-line with a
 // `// oxlint-disable-next-line fabrika/no-expect-in-if -- <reason>`, never a blanket exemption.
-import type {CreateRule, ESTree} from "@oxlint/plugins";
-import {ancestors, grouped, type Node, plainCall} from "./match.ts";
+import type { CreateRule, ESTree } from "@oxlint/plugins";
+import { ancestors, grouped, type Node, plainCall } from "./match.ts";
 
 const isFunction = (node: Node): boolean =>
-	node.type === "ArrowFunctionExpression" ||
-	node.type === "FunctionExpression" ||
-	node.type === "FunctionDeclaration";
+  node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression" || node.type === "FunctionDeclaration";
 
 export const noExpectInIf: CreateRule = {
-	create(context) {
-		const provenBodies = new Set<Node>();
-		const guarded: {readonly node: ESTree.CallExpression; readonly body: Node | null}[] = [];
-		return {
-			CallExpression(node) {
-				const name = plainCall(node);
-				const isExpect = name === "expect";
-				const counts =
-					isExpect ||
-					name === "expect.assertions" ||
-					(name === "expect.hasAssertions" && node.arguments.length === 0);
+  create(context) {
+    const provenBodies = new Set<Node>();
+    const guarded: { readonly node: ESTree.CallExpression; readonly body: Node | null }[] = [];
+    return {
+      CallExpression(node) {
+        const name = plainCall(node);
+        const isExpect = name === "expect";
+        const counts =
+          isExpect || name === "expect.assertions" || (name === "expect.hasAssertions" && node.arguments.length === 0);
 
-				if (!counts) {
-					return;
-				}
+        if (!counts) {
+          return;
+        }
 
-				const plainly = grouped(context.sourceCode, node.callee) === 0;
-				const bodies: Node[] = [];
-				let inIf = false;
+        const plainly = grouped(context.sourceCode, node.callee) === 0;
+        const bodies: Node[] = [];
+        let inIf = false;
 
-				for (const up of ancestors(node)) {
-					if (up.type === "IfStatement") {
-						inIf = true;
-					}
+        for (const up of ancestors(node)) {
+          if (up.type === "IfStatement") {
+            inIf = true;
+          }
 
-					if (up.type === "BlockStatement" && isFunction(up.parent)) {
-						bodies.push(up);
-					}
-				}
+          if (up.type === "BlockStatement" && isFunction(up.parent)) {
+            bodies.push(up);
+          }
+        }
 
-				if (!inIf && plainly) {
-					for (const body of bodies) {
-						provenBodies.add(body);
-					}
-				} else if (inIf && isExpect) {
-					guarded.push({node, body: bodies[0] ?? null});
-				}
-			},
-			"Program:exit"() {
-				for (const {node, body} of guarded) {
-					if (body === null || provenBodies.has(body)) {
-						continue;
-					}
+        if (!inIf && plainly) {
+          for (const body of bodies) {
+            provenBodies.add(body);
+          }
+        } else if (inIf && isExpect) {
+          guarded.push({ node, body: bodies[0] ?? null });
+        }
+      },
+      "Program:exit"() {
+        for (const { node, body } of guarded) {
+          if (body === null || provenBodies.has(body)) {
+            continue;
+          }
 
-					context.report({
-						node,
-						message:
-							"This test's ONLY assertion is nested inside an `if`: it runs only on a branch that may never be taken, so the test passes while asserting nothing (the silent-pass shape). Fix: make an assertion unconditional (assert the branch was reached, then its consequence), or pin the count with `expect.assertions(n)` / `expect.hasAssertions()`. Exception: // oxlint-disable-next-line fabrika/no-expect-in-if -- <reason>.",
-					});
-				}
-			},
-		};
-	},
+          context.report({
+            node,
+            message:
+              "This test's ONLY assertion is nested inside an `if`: it runs only on a branch that may never be taken, so the test passes while asserting nothing (the silent-pass shape). Fix: make an assertion unconditional (assert the branch was reached, then its consequence), or pin the count with `expect.assertions(n)` / `expect.hasAssertions()`. Exception: // oxlint-disable-next-line fabrika/no-expect-in-if -- <reason>.",
+          });
+        }
+      },
+    };
+  },
 };

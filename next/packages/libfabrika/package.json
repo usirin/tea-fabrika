@@ -1,49 +1,49 @@
 {
-	"name": "@kampus/libfabrika",
-	"version": "0.0.0",
-	"private": true,
-	"type": "module",
-	"description": "The new fabrika's library: its transport's SSHSIG (Tier 1, P7), its data layer, the ledger (P6), its coordination: the mailbox, starts and who belongs (P9), and its app layer: programs and the runner (P11).",
-	"sideEffects": false,
-	"exports": {
-		".": "./src/index.ts",
-		"./coordination": "./src/coordination/index.ts",
-		"./data": "./src/data/index.ts",
-		"./door": "./src/door/index.ts",
-		"./sqlite": "./src/data/sqlite.ts",
-		"./box": "./src/workers/box.ts",
-		"./workers": "./src/workers/index.ts",
-		"./workers/bindings": "./src/workers/bindings.ts",
-		"./workers/control": "./src/workers/control.ts",
-		"./workers/gateway": "./src/workers/gateway.ts",
-		"./workers/record": "./src/workers/record.ts",
-		"./workers/runtime": "./src/workers/runtime.ts",
-		"./node/build": "./src/node/build.ts",
-		"./node/local-stage": "./src/node/local-stage.ts",
-		"./node/stage": "./src/node/stage.ts",
-		"./node/stage-recording": "./src/node/stage-recording.ts",
-		"./brain-life": "./src/app/brain-life.ts",
-		"./brain-event": "./src/app/brain-event.ts",
-		"./testing": "./src/testing.ts",
-		"./transport": "./src/transport/index.ts",
-		"./transport/gateway": "./src/transport/gateway.ts"
-	},
-	"scripts": {
-		"typecheck": "tsc --noEmit -p ."
-	},
-	"dependencies": {
-		"@alchemy.run/cloudflare-runtime": "2.0.0-beta.84",
-		"@demlik/tea": "catalog:",
-		"effect": "catalog:",
-		"rolldown": "catalog:"
-	},
-	"devDependencies": {
-		"@cloudflare/workers-types": "5.20261027.1",
-		"@effect/platform-node": "catalog:",
-		"@effect/vitest": "catalog:",
-		"@types/node": "catalog:",
-		"fast-check": "catalog:",
-		"typescript": "catalog:",
-		"vitest": "catalog:"
-	}
+  "name": "@kampus/libfabrika",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The new fabrika's library: its transport's SSHSIG (Tier 1, P7), its data layer, the ledger (P6), its coordination: the mailbox, starts and who belongs (P9), and its app layer: programs and the runner (P11).",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./coordination": "./src/coordination/index.ts",
+    "./data": "./src/data/index.ts",
+    "./door": "./src/door/index.ts",
+    "./sqlite": "./src/data/sqlite.ts",
+    "./box": "./src/workers/box.ts",
+    "./workers": "./src/workers/index.ts",
+    "./workers/bindings": "./src/workers/bindings.ts",
+    "./workers/control": "./src/workers/control.ts",
+    "./workers/gateway": "./src/workers/gateway.ts",
+    "./workers/record": "./src/workers/record.ts",
+    "./workers/runtime": "./src/workers/runtime.ts",
+    "./node/build": "./src/node/build.ts",
+    "./node/local-stage": "./src/node/local-stage.ts",
+    "./node/stage": "./src/node/stage.ts",
+    "./node/stage-recording": "./src/node/stage-recording.ts",
+    "./brain-life": "./src/app/brain-life.ts",
+    "./brain-event": "./src/app/brain-event.ts",
+    "./testing": "./src/testing.ts",
+    "./transport": "./src/transport/index.ts",
+    "./transport/gateway": "./src/transport/gateway.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@alchemy.run/cloudflare-runtime": "2.0.0-beta.84",
+    "@demlik/tea": "catalog:",
+    "effect": "catalog:",
+    "rolldown": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261027.1",
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
 }

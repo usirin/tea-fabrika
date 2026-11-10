@@ -21,22 +21,22 @@
 
 /** Where a token stands on the line: its first character, and one past its last. */
 export interface At {
-	readonly start: number;
-	readonly end: number;
+  readonly start: number;
+  readonly end: number;
 }
 
 type Op = "|" | "&" | ";" | "$(" | ")" | "&&" | "||";
 
 export type Token =
-	| (At & {readonly kind: "word"; readonly text: string})
-	| (At & {readonly kind: "op"; readonly op: Op});
+  | (At & { readonly kind: "word"; readonly text: string })
+  | (At & { readonly kind: "op"; readonly op: Op });
 
 interface Words {
-	readonly tokens: readonly Token[];
-	/** A quote was opened and not closed: the last word is still being typed. */
-	readonly open: boolean;
-	/** The cursor, at the end of the line, is on a new, empty word: after a space or an operator, or on an empty line. */
-	readonly trailing: boolean;
+  readonly tokens: readonly Token[];
+  /** A quote was opened and not closed: the last word is still being typed. */
+  readonly open: boolean;
+  /** The cursor, at the end of the line, is on a new, empty word: after a space or an operator, or on an empty line. */
+  readonly trailing: boolean;
 }
 
 const SPACE = new Set([" ", "\t"]);
@@ -44,107 +44,107 @@ const OPS = new Set(["|", "&", ";", ")", "\n"]);
 
 /** Cut a line into words and operators. It never refuses: what does not make sense is the grammar's to say. */
 export function words(line: string): Words {
-	const tokens: Token[] = [];
-	let at = 0;
-	let open = false;
+  const tokens: Token[] = [];
+  let at = 0;
+  let open = false;
 
-	while (at < line.length) {
-		const c = line.charAt(at);
+  while (at < line.length) {
+    const c = line.charAt(at);
 
-		if (SPACE.has(c)) {
-			at += 1;
-			continue;
-		}
+    if (SPACE.has(c)) {
+      at += 1;
+      continue;
+    }
 
-		if (c === "#") {
-			// A comment runs to the end of the line, and the line goes on after it.
-			const end = line.indexOf("\n", at);
-			at = end === -1 ? line.length : end;
-			continue;
-		}
+    if (c === "#") {
+      // A comment runs to the end of the line, and the line goes on after it.
+      const end = line.indexOf("\n", at);
+      at = end === -1 ? line.length : end;
+      continue;
+    }
 
-		if (c === "$" && line.charAt(at + 1) === "(") {
-			tokens.push({kind: "op", op: "$(", start: at, end: at + 2});
-			at += 2;
-			continue;
-		}
+    if (c === "$" && line.charAt(at + 1) === "(") {
+      tokens.push({ kind: "op", op: "$(", start: at, end: at + 2 });
+      at += 2;
+      continue;
+    }
 
-		if ((c === "&" || c === "|") && line.charAt(at + 1) === c) {
-			tokens.push({kind: "op", op: c === "&" ? "&&" : "||", start: at, end: at + 2});
-			at += 2;
-			continue;
-		}
+    if ((c === "&" || c === "|") && line.charAt(at + 1) === c) {
+      tokens.push({ kind: "op", op: c === "&" ? "&&" : "||", start: at, end: at + 2 });
+      at += 2;
+      continue;
+    }
 
-		if (OPS.has(c)) {
-			tokens.push({kind: "op", op: c === "\n" ? ";" : (c as Op), start: at, end: at + 1});
-			at += 1;
-			continue;
-		}
+    if (OPS.has(c)) {
+      tokens.push({ kind: "op", op: c === "\n" ? ";" : (c as Op), start: at, end: at + 1 });
+      at += 1;
+      continue;
+    }
 
-		const start = at;
-		let text = "";
-		let quote: "'" | '"' | null = null;
+    const start = at;
+    let text = "";
+    let quote: "'" | '"' | null = null;
 
-		while (at < line.length) {
-			const ch = line.charAt(at);
+    while (at < line.length) {
+      const ch = line.charAt(at);
 
-			if (quote === "'") {
-				if (ch === "'") {
-					quote = null;
-				} else {
-					text += ch;
-				}
+      if (quote === "'") {
+        if (ch === "'") {
+          quote = null;
+        } else {
+          text += ch;
+        }
 
-				at += 1;
-				continue;
-			}
+        at += 1;
+        continue;
+      }
 
-			if (quote === '"') {
-				if (ch === '"') {
-					quote = null;
-				} else if (ch === "\\" && (line.charAt(at + 1) === '"' || line.charAt(at + 1) === "\\")) {
-					text += line.charAt(at + 1);
-					at += 1;
-				} else {
-					text += ch;
-				}
+      if (quote === '"') {
+        if (ch === '"') {
+          quote = null;
+        } else if (ch === "\\" && (line.charAt(at + 1) === '"' || line.charAt(at + 1) === "\\")) {
+          text += line.charAt(at + 1);
+          at += 1;
+        } else {
+          text += ch;
+        }
 
-				at += 1;
-				continue;
-			}
+        at += 1;
+        continue;
+      }
 
-			if (ch === "'" || ch === '"') {
-				quote = ch;
-				at += 1;
-				continue;
-			}
+      if (ch === "'" || ch === '"') {
+        quote = ch;
+        at += 1;
+        continue;
+      }
 
-			if (ch === "\\") {
-				// A `\` at the very end escapes nothing yet: it is still being typed.
-				if (at + 1 < line.length) {
-					text += line.charAt(at + 1);
-				}
+      if (ch === "\\") {
+        // A `\` at the very end escapes nothing yet: it is still being typed.
+        if (at + 1 < line.length) {
+          text += line.charAt(at + 1);
+        }
 
-				at += 2;
-				continue;
-			}
+        at += 2;
+        continue;
+      }
 
-			if (SPACE.has(ch) || OPS.has(ch) || (ch === "$" && line.charAt(at + 1) === "(")) {
-				break;
-			}
+      if (SPACE.has(ch) || OPS.has(ch) || (ch === "$" && line.charAt(at + 1) === "(")) {
+        break;
+      }
 
-			text += ch;
-			at += 1;
-		}
+      text += ch;
+      at += 1;
+    }
 
-		open = quote !== null;
-		tokens.push({kind: "word", text, start, end: Math.min(at, line.length)});
-	}
+    open = quote !== null;
+    tokens.push({ kind: "word", text, start, end: Math.min(at, line.length) });
+  }
 
-	const last = tokens.at(-1);
-	return {
-		tokens,
-		open,
-		trailing: last === undefined || last.kind === "op" || (!open && last.end < line.length),
-	};
+  const last = tokens.at(-1);
+  return {
+    tokens,
+    open,
+    trailing: last === undefined || last.kind === "op" || (!open && last.end < line.length),
+  };
 }
