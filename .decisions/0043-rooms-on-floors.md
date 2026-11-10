@@ -25,8 +25,10 @@ flowchart TD
   transport --> shared
 ```
 
-An arrow points down a floor: the room above may import the room below, and every room below that
-one. The door reaches every room, and it is the only room that imports `transport/`.
+An arrow points down a floor, from a room to one it imports today. A floor only forbids: no import
+goes up, and none goes sideways. Which lower rooms a room may import is the exam's table
+([Amendments](#amendments)). The door reaches every room, and it is the only room that imports
+`transport/`.
 
 ```text
 next/packages/libfabrika/src/
@@ -266,6 +268,17 @@ The rules:
     ([0016](0016-tier-1-supervision-is-otps-top-level-supervisor.md)).
   - **The exam's runtime row,** above.
   - The app's layout (`next/apps/fabrika`), as in 0032.
+
+## Amendments
+
+- 2026-11-10: **a floor is a limit, not a grant.** Rule 3 forbids an import that goes up or
+  sideways. It does not allow every import that goes down. The exam's table
+  (`next/apps/fabrika/src/exam/layers.test.ts`) still says which lower rooms each room may import,
+  written by room, and it keeps every limit it has today: only the door imports `transport/`, for
+  example, though `transport/` is below every room. The one row that gets wider is the runtime row
+  above, which the owner rules on. Replacing the table with the floors alone would widen more rows.
+  That is a further loosening and is not decided. This record first said a room may import every
+  room below it; that sentence was wrong and is replaced.
 
 ## Records
 
