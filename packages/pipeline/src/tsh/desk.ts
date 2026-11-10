@@ -104,7 +104,10 @@ const folderName = (name: string) => name.split("/").at(-1) ?? name;
 /** Close every input of a run and wait, up to a limit, for it to end. */
 const drain = (running: Wired["core"], limit: Duration.Input) =>
 	Effect.gen(function* () {
-		for (const input of Object.keys(running.run.program.inputs)) running.close(input);
+		for (const input of Object.keys(running.run.program.inputs)) {
+			running.close(input);
+		}
+
 		yield* running.run.ended.pipe(Effect.timeout(limit), Effect.ignore);
 	});
 
@@ -126,9 +129,17 @@ export function deskSession(
 	const close = Effect.gen(function* () {
 		const was = now;
 		now = null;
-		if (was === null) return;
+
+		if (was === null) {
+			return;
+		}
+
 		yield* drain(was.wired.core, "2 seconds");
-		for (const p of was.wired.packs) yield* drain(p.running, "5 seconds");
+
+		for (const p of was.wired.packs) {
+			yield* drain(p.running, "5 seconds");
+		}
+
 		yield* Scope.close(was.scope, Exit.void);
 	});
 
@@ -136,7 +147,11 @@ export function deskSession(
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			const home = demo ? `${places.home}/desk-demo` : `${places.home}/packs`;
-			if (demo) yield* fs.remove(home, {recursive: true, force: true}).pipe(Effect.ignore);
+
+			if (demo) {
+				yield* fs.remove(home, {recursive: true, force: true}).pipe(Effect.ignore);
+			}
+
 			const packs = yield* loadPacks(settings.packs, places.folder).pipe(Effect.mapError(fromPack));
 			const own: Settings["pack"] = demo ? {} : settings.pack;
 			const placesOf = (name: string) => ({
@@ -151,6 +166,7 @@ export function deskSession(
 					asks = said.asks;
 					Deferred.doneUnsafe(first, Effect.void);
 				}
+
 				PubSub.publishUnsafe(heard, said);
 			};
 			const scope = yield* Scope.make();
@@ -165,9 +181,17 @@ export function deskSession(
 					places: placesOf,
 					// The core's outputs come untyped through the wiring: each is checked against its schema.
 					core: (out, value) => {
-						if (out === "waiting" && isWaiting(value)) hear({on: "waiting", asks: value.asks});
-						if (out === "settled" && isSettled(value)) hear({on: "settled", settled: value});
-						if (out === "refused" && isRefused(value)) hear({on: "refused", refused: value});
+						if (out === "waiting" && isWaiting(value)) {
+							hear({on: "waiting", asks: value.asks});
+						}
+
+						if (out === "settled" && isSettled(value)) {
+							hear({on: "settled", settled: value});
+						}
+
+						if (out === "refused" && isRefused(value)) {
+							hear({on: "refused", refused: value});
+						}
 					},
 					unread: (refused) => hear({on: "refused", refused}),
 				},
@@ -195,7 +219,10 @@ export function deskSession(
 	return {
 		open: (demo) =>
 			Effect.gen(function* () {
-				if (now !== null && !demo) return now;
+				if (now !== null && !demo) {
+					return now;
+				}
+
 				yield* close;
 				now = yield* begin(demo);
 				return now;
@@ -306,7 +333,12 @@ const tellPlanned = (running: Running, planned: Planned) =>
 	Effect.gen(function* () {
 		const said = yield* PubSub.subscribe(running.heard);
 		yield* running.wired.core.run.tell("planned", planned);
-		for (;;) if ((yield* PubSub.take(said)).on === "waiting") return;
+
+		for (;;) {
+			if ((yield* PubSub.take(said)).on === "waiting") {
+				return;
+			}
+		}
 	}).pipe(Effect.scoped, Effect.timeoutOrElse({duration: "10 seconds", orElse: () => Effect.void}));
 
 export const deskProgram = defineProgram({
@@ -342,15 +374,21 @@ export const deskDemoProgram = defineProgram({
 const reply = (running: Running, id: string, text: string) =>
 	Effect.gen(function* () {
 		const reader = readerOf(running.wired);
-		if (reader === null)
+
+		if (reader === null) {
 			return yield* Effect.fail(
 				refusedWith("no pack in fabrika.toml reads typed replies: add one to its packs line"),
 			);
+		}
+
 		const ask = running.asks().find((a) => a.id === id);
-		if (ask === undefined)
+
+		if (ask === undefined) {
 			return yield* Effect.fail(
 				refusedWith(`nothing waits on the owner under ${id}: desk lists what does`),
 			);
+		}
+
 		const fits = `Replies that fit a ${ask.for} ask: ${reader.pack.shell.replies(ask).join(" | ")}`;
 		const said = yield* PubSub.subscribe(running.heard);
 		/** The next thing heard that `test` takes. */
@@ -358,7 +396,10 @@ const reply = (running: Running, id: string, text: string) =>
 			Effect.gen(function* () {
 				for (;;) {
 					const h = yield* PubSub.take(said);
-					if (test(h)) return h;
+
+					if (test(h)) {
+						return h;
+					}
 				}
 			});
 		yield* reader.running.run
@@ -377,12 +418,20 @@ const reply = (running: Running, id: string, text: string) =>
 				(h.on === "settled" && h.settled.ask.id === ask.id) ||
 				(h.on === "refused" && h.refused.id === ask.id),
 		);
-		if (heard.on === "refused")
+
+		if (heard.on === "refused") {
 			return yield* Effect.fail(refusedWith(`${heard.refused.why}. ${fits}`));
-		if (heard.on !== "settled") return yield* Effect.die(new Error("not an outcome"));
+		}
+
+		if (heard.on !== "settled") {
+			return yield* Effect.die(new Error("not an outcome"));
+		}
+
 		// The core says the shorter list right after it takes the answer.
-		if (running.asks().some((a) => a.id === ask.id))
+		if (running.asks().some((a) => a.id === ask.id)) {
 			yield* next((h) => h.on === "waiting" && !h.asks.some((a) => a.id === ask.id));
+		}
+
 		return heard.settled;
 	}).pipe(
 		Effect.scoped,

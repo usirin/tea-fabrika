@@ -123,7 +123,11 @@ describe("Tickets", () => {
 				const tickets = yield* Tickets;
 				const watching = yield* Watcher;
 				const steps = [queued, failure, queued, success, failure];
-				for (const [i, fact] of steps.entries()) yield* watching.write(1, `watch/${i + 1}`, fact);
+
+				for (const [i, fact] of steps.entries()) {
+					yield* watching.write(1, `watch/${i + 1}`, fact);
+				}
+
 				const ticket = yield* tickets.read(1);
 				return ticket.timeline.flatMap((e) =>
 					e.fact.type === "pr" ? e.fact.checks.map((c) => c.conclusion ?? c.status) : [],

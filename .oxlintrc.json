@@ -52,6 +52,8 @@
 		// docs/direction/oxlint-and-oxfmt.md). `pnpm format` adds them.
 		"fabrika/padding-line-between-statements": "error",
 
+		// Braces on every if, else, for, while and do, even on one line (owner, 2026-11-09).
+		"eslint/curly": ["error", "all"],
 		"eslint/eqeqeq": ["error", "always", { "null": "ignore" }],
 		"eslint/no-fallthrough": ["error", { "allowEmptyCase": true }],
 		"eslint/no-labels": ["error", { "allowLoop": true, "allowSwitch": true }],

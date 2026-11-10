@@ -34,7 +34,11 @@ const DOT = "•";
 const pipeOf = (node: LayoutNode): Line | null => {
 	const lines = [...tiles(node)].map((tile) => lineOf(tile));
 	const [first] = lines;
-	if (first == null || lines.some((line) => line?.id !== first.id)) return null;
+
+	if (first == null || lines.some((line) => line?.id !== first.id)) {
+		return null;
+	}
+
 	return first;
 };
 
@@ -80,9 +84,18 @@ const stateOf = (props: {
 	readonly closing: boolean;
 	readonly zoomed: boolean;
 }): {readonly words: string; readonly asking: boolean} | null => {
-	if (props.asking !== null) return {words: props.asking, asking: true};
-	if (props.closing) return {words: "closing", asking: false};
-	if (props.zoomed) return {words: "zoomed", asking: false};
+	if (props.asking !== null) {
+		return {words: props.asking, asking: true};
+	}
+
+	if (props.closing) {
+		return {words: "closing", asking: false};
+	}
+
+	if (props.zoomed) {
+		return {words: "zoomed", asking: false};
+	}
+
 	return null;
 };
 
@@ -129,7 +142,9 @@ export function Tile(props: {
 				data-info={infoFor(props.keys).titlebar}
 				onPointerDown={noFocus}
 				onDoubleClick={() => {
-					if (folds) toHost({type: "fold", tile: tile.id});
+					if (folds) {
+						toHost({type: "fold", tile: tile.id});
+					}
 				}}
 			>
 				<Slot line={line} />

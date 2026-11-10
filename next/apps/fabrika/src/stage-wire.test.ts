@@ -77,7 +77,11 @@ const unusedPort = () =>
 		listener.once("error", fail);
 		listener.listen(0, "127.0.0.1", () => {
 			const at = listener.address();
-			if (at === null || typeof at === "string") return fail(new Error("no TCP port"));
+
+			if (at === null || typeof at === "string") {
+				return fail(new Error("no TCP port"));
+			}
+
 			listener.close(() => done(at.port));
 		});
 	});
@@ -99,13 +103,22 @@ const homes: Array<string> = [];
 const sockets: Array<WebSocket> = [];
 
 afterEach(async () => {
-	for (const ws of sockets.splice(0)) ws.close();
+	for (const ws of sockets.splice(0)) {
+		ws.close();
+	}
+
 	for (const child of children.splice(0)) {
-		if (child.exitCode !== null || child.signalCode !== null) continue;
+		if (child.exitCode !== null || child.signalCode !== null) {
+			continue;
+		}
+
 		child.kill("SIGTERM");
 		await new Promise<void>((done) => child.once("exit", () => done()));
 	}
-	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
+
+	for (const h of homes.splice(0)) {
+		rmSync(h, {recursive: true, force: true});
+	}
 });
 
 const stage = async (saved?: {key: ReturnType<typeof identity>; home: string; port: number}) => {
@@ -144,30 +157,44 @@ const stage = async (saved?: {key: ReturnType<typeof identity>; home: string; po
 	child.stderr!.on("data", (b: Buffer) => {
 		output += b.toString();
 	});
+
 	for (;;) {
-		if (child.exitCode !== null) throw new Error(`P12 dev.ts did not start: ${output}`);
+		if (child.exitCode !== null) {
+			throw new Error(`P12 dev.ts did not start: ${output}`);
+		}
+
 		try {
 			// The page is served while startup is still flushing the lifecycle outbox.
 			// dev.ts emits ready only after that flush. Read history after its ready message.
-			if (output.includes(`{"ready":${JSON.stringify(url)},"build":`) && (await fetch(url)).ok)
+			if (output.includes(`{"ready":${JSON.stringify(url)},"build":`) && (await fetch(url)).ok) {
 				break;
+			}
 		} catch {
 			/* Listener is not ready. */
 		}
+
 		await pause();
 	}
+
 	return {key, url, home, child, port, output: () => output};
 };
 
 // Read only the named public metadata tables. Never inspect general storage or key rows.
 const savedRows = (home: string, table: "door_bindings" | "stage_clients") => {
 	const rows: Array<Record<string, unknown>> = [];
+
 	for (const entry of readdirSync(home, {recursive: true, withFileTypes: true})) {
-		if (!entry.isFile() || !/\.(sqlite|db)$/.test(entry.name)) continue;
+		if (!entry.isFile() || !/\.(sqlite|db)$/.test(entry.name)) {
+			continue;
+		}
+
 		const db = new DatabaseSync(join(entry.parentPath, entry.name), {readOnly: true});
+
 		try {
-			if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table))
+			if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)) {
 				continue;
+			}
+
 			rows.push(
 				...db
 					.prepare(
@@ -181,6 +208,7 @@ const savedRows = (home: string, table: "door_bindings" | "stage_clients") => {
 			db.close();
 		}
 	}
+
 	return rows;
 };
 
@@ -225,9 +253,15 @@ class Client {
 	async next(test: (f: Frame | string) => boolean): Promise<any> {
 		for (;;) {
 			const at = this.frames.findIndex(test);
-			if (at >= 0) return this.frames.splice(at, 1)[0];
-			if (this.closed || this.ws.readyState === WebSocket.CLOSED)
+
+			if (at >= 0) {
+				return this.frames.splice(at, 1)[0];
+			}
+
+			if (this.closed || this.ws.readyState === WebSocket.CLOSED) {
 				throw new Error("wire closed before answer");
+			}
+
 			await pause();
 		}
 	}
@@ -263,10 +297,15 @@ class Client {
 
 	async call(method: string, params: unknown): Promise<Frame> {
 		const id = ++this.serial;
+
 		while (this.ws.readyState === WebSocket.CONNECTING) {
-			if (this.closed) throw new Error("wire closed before open");
+			if (this.closed) {
+				throw new Error("wire closed before open");
+			}
+
 			await pause();
 		}
+
 		this.ws.send(JSON.stringify({jsonrpc: "2.0", id, method, params}));
 		return this.next((f) => typeof f !== "string" && f.id === id);
 	}
@@ -393,7 +432,11 @@ describe("P12 real dev.ts wire", () => {
 			c = await connected(s),
 			pid = await counter(c);
 		const accepted: Array<{rev: number; pos: number}> = [];
-		for (let n = 0; n < PAGE + 3; n++) accepted.push(placing(await send(c, pid, `page-${n}`)));
+
+		for (let n = 0; n < PAGE + 3; n++) {
+			accepted.push(placing(await send(c, pid, `page-${n}`)));
+		}
+
 		const first = await read(c, "counter:1/inbox");
 		expect(first).toHaveLength(PAGE);
 		const second = await read(c, "counter:1/inbox", first.at(-1)!.rev);
@@ -436,16 +479,24 @@ describe("P12 real dev.ts wire", () => {
 		const placed = replies.map(placing).sort((x, y) => x.pos - y.pos);
 		expect(placed.map((p) => p.pos)).toEqual(Array.from({length: 12}, (_, n) => n + 1));
 		let count = 0;
+
 		for (let pos = 1; pos <= 12; pos++) {
 			const news = await a.next((f) => typeof f !== "string" && f.method === "view.patch");
 			expect(news.params).toMatchObject({base: pos - 1, rev: pos});
+
 			for (const p of news.params.patch) {
-				if (p.path === "/count") count = p.value;
-				else if (p.path === "") count = p.value.count;
-				else throw new Error("unexpected counter patch");
+				if (p.path === "/count") {
+					count = p.value;
+				} else if (p.path === "") {
+					count = p.value.count;
+				} else {
+					throw new Error("unexpected counter patch");
+				}
 			}
+
 			expect(count).toBe(pos);
 		}
+
 		expect((await view(b, pid)).view.count).toBe(12);
 		expect(await read(a, "counter:1/inbox")).toHaveLength(12);
 	});
@@ -547,6 +598,7 @@ describe("P12 real dev.ts wire", () => {
 		);
 		const missing = await c.call("view.open", {pid});
 		expect(missing.error).toBeDefined();
+
 		for (const method of ["project.sign", "project.append", "process.start", "signer.sign"]) {
 			const response = await c.call(method, {
 				process: "counter:1",
@@ -559,10 +611,12 @@ describe("P12 real dev.ts wire", () => {
 	it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the stage child fails", async () => {
 		const s = await stage();
 		const ready = `${JSON.stringify({ready: s.url}).slice(0, -1)},"build":`;
+
 		for (let n = 0; !s.output().includes(ready); n++) {
 			expect(n, `no ready line on dev.ts stdout: ${s.output()}`).toBeLessThan(500);
 			await pause();
 		}
+
 		// Only POST /grant and GET /grant/client/KEY reach the grant routes; the rest get the page.
 		expect(await (await fetch(s.url)).text()).toBe("fabrika");
 		const posted = await fetch(`${s.url}/elsewhere`, {method: "POST", body: "{}"});
@@ -618,11 +672,17 @@ describe("P12 real dev.ts wire", () => {
 			"\n",
 		);
 		const descendants = new Set([s.child.pid!]);
-		for (let round = 0; round < rows.length; round++)
+
+		for (let round = 0; round < rows.length; round++) {
 			for (const row of rows) {
 				const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
-				if (m && descendants.has(Number(m[2]))) descendants.add(Number(m[1]));
+
+				if (m && descendants.has(Number(m[2]))) {
+					descendants.add(Number(m[1]));
+				}
 			}
+		}
+
 		const workerd = rows
 			.filter((row) => /\/workerd(?:\s|$)/.test(row))
 			.map((row) => Number(row.trim().split(/\s+/)[0]))
@@ -631,6 +691,7 @@ describe("P12 real dev.ts wire", () => {
 		process.kill(workerd[0]!, "SIGKILL");
 		await Promise.all(pending);
 		let resumed: Client | undefined;
+
 		for (;;) {
 			try {
 				resumed = await connected(s, "after-crash");
@@ -639,25 +700,36 @@ describe("P12 real dev.ts wire", () => {
 				await pause();
 			}
 		}
+
 		for (let n = 0; n < 20; n++) {
 			const id = `kill-${n}`,
 				now = placing(await send(resumed, pid, id));
-			if (accepted.has(id)) expect(now).toEqual(accepted.get(id));
+
+			if (accepted.has(id)) {
+				expect(now).toEqual(accepted.get(id));
+			}
 		}
+
 		const inbox = await read(resumed, "counter:1/inbox");
 		expect(inbox).toHaveLength(20);
 		expect(new Set(inbox.map((r) => r.id)).size).toBe(20);
 		expect((await view(resumed, pid)).view.count).toBe(20);
 		expect(await counter(resumed)).toBe(pid);
 		let starts: Entry[] = [];
+
 		// Replacement events arrive on the outbox's periodic flush, after traffic can recover.
 		// The enclosing test's existing timeout bounds this wait.
 		for (;;) {
 			signal.throwIfAborted();
 			starts = (await read(resumed, "door/brain")).filter((r) => r._tag === "started");
-			if (starts.some((row) => (row.body as {after: string | null}).after === firstStart)) break;
+
+			if (starts.some((row) => (row.body as {after: string | null}).after === firstStart)) {
+				break;
+			}
+
 			await pause();
 		}
+
 		expect(starts).toHaveLength(2);
 		expect(starts[1]!.body).toMatchObject({
 			after: firstStart,

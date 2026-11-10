@@ -12,7 +12,9 @@ import {codexEnv} from "./harness.ts";
 const made: string[] = [];
 
 afterAll(() => {
-	for (const path of made) rmSync(path, {recursive: true, force: true});
+	for (const path of made) {
+		rmSync(path, {recursive: true, force: true});
+	}
 });
 
 const madeHome = () => {

@@ -119,14 +119,18 @@ export const toolNamesOf = (program: string, inputs: Inputs): readonly string[] 
 /** Every tool of a program list: `runs` first, then each program's, in the list's order. */
 export const toolsOf = (list: ProgramList): readonly Tool[] => {
 	const tools: Tool[] = [RUNS_TOOL];
-	for (const [name, entry] of list)
-		for (const {input, declared, json} of toolInputsOf(entry.program.inputs))
+
+	for (const [name, entry] of list) {
+		for (const {input, declared, json} of toolInputsOf(entry.program.inputs)) {
 			tools.push({
 				name: toolNameOf(name, input),
 				description: `${declared.description} Sent to ${name}'s input ${input}, in your own run of ${name}, started on first use. ${name}: ${entry.program.description}`,
 				inputSchema: wrap(json),
 				...(declared.writes ? {} : {annotations: {readOnlyHint: true}}),
 			});
+		}
+	}
+
 	return tools;
 };
 
@@ -147,23 +151,34 @@ export type Call =
 
 /** Read a call by the list's own schemas: the tool must be one of `toolsOf(list)`, its value must fit. */
 export const callOf = (list: ProgramList, name: string, args: unknown): Call => {
-	if (name === RUNS) return {kind: "runs"};
-	if (name === JOB)
+	if (name === RUNS) {
+		return {kind: "runs"};
+	}
+
+	if (name === JOB) {
 		return jobAsk.check(args)
 			? {kind: "job", ask: args}
 			: {kind: "refused", why: `${JOB} does not fit: ${jobAsk.problem(args)}`};
-	if (name === STOP)
+	}
+
+	if (name === STOP) {
 		return stopAsk.check(args)
 			? {kind: "stop", ask: args}
 			: {kind: "refused", why: `${STOP} does not fit: ${stopAsk.problem(args)}`};
-	if (name === RESTART)
+	}
+
+	if (name === RESTART) {
 		return restartAsk.check(args)
 			? {kind: "restart", ask: args}
 			: {kind: "refused", why: `${RESTART} does not fit: ${restartAsk.problem(args)}`};
-	if (name === LINE)
+	}
+
+	if (name === LINE) {
 		return lineAsk.check(args)
 			? {kind: "line", ask: args}
 			: {kind: "refused", why: `${LINE} does not fit: ${lineAsk.problem(args)}`};
+	}
+
 	const at = name.indexOf("_");
 	const program = name.slice(0, at);
 	const input = name.slice(at + 1);
@@ -172,12 +187,21 @@ export const callOf = (list: ProgramList, name: string, args: unknown): Call => 
 		entry === undefined
 			? undefined
 			: toolInputsOf(entry.program.inputs).find((t) => t.input === input);
-	if (found === undefined) return {kind: "refused", why: `there is no tool ${name}`};
-	if (typeof args !== "object" || args === null || !Object.hasOwn(args, "value"))
+
+	if (found === undefined) {
+		return {kind: "refused", why: `there is no tool ${name}`};
+	}
+
+	if (typeof args !== "object" || args === null || !Object.hasOwn(args, "value")) {
 		return {kind: "refused", why: `${name} takes {value: ...}`};
+	}
+
 	const value: unknown = Reflect.get(args, "value");
 	const why = found.declared.shape.problem(value);
-	if (why !== undefined)
+
+	if (why !== undefined) {
 		return {kind: "refused", why: `${program}'s ${input} does not fit: ${why}`};
+	}
+
 	return {kind: "input", program, input, value};
 };

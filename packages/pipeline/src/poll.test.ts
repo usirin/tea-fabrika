@@ -46,7 +46,11 @@ function round(s: State, value: Checks) {
 	const [reading, reads] = fire(s);
 	expect(reads).toEqual([{type: "checks_read", key: "pr-74", tick: s.tick, pr: 74}]);
 	const [read] = reads;
-	if (read === undefined) throw new Error("a waiting poll reads on its tick");
+
+	if (read === undefined) {
+		throw new Error("a waiting poll reads on its tick");
+	}
+
 	return ci.answered(reading, read, value);
 }
 
@@ -92,7 +96,11 @@ describe("poll: a fact only on change", () => {
 	it("a failed read waits for the next tick and keeps what it last reported", () => {
 		const [s1] = round(ci.start("pr-74", {pr: 74}, pace), {state: "pending", head: "a1"});
 		const [reading, [read]] = fire(s1);
-		if (read === undefined) throw new Error("a waiting poll reads on its tick");
+
+		if (read === undefined) {
+			throw new Error("a waiting poll reads on its tick");
+		}
+
 		const after = ci.failed(reading, read);
 
 		expect(after).toMatchObject({phase: "waiting", tick: 2, last: "pending"});
@@ -107,7 +115,11 @@ describe("poll: a fact only on change", () => {
 		const again = ci.inFlight(loaded);
 
 		expect(again).toEqual({type: "checks_read", key: "pr-74", tick: 1, pr: 74});
-		if (again === null) throw new Error("a read is out");
+
+		if (again === null) {
+			throw new Error("a read is out");
+		}
+
 		expect(ci.answered(loaded, again, {state: "pending", head: "a1"})[1]).toBeNull();
 		expect(ci.answered(loaded, again, {state: "red", head: "a1"})[1]).toMatchObject({
 			tick: 1,
@@ -147,7 +159,11 @@ describe("poll: a read that never answers does not stop it", () => {
 	it("a late answer for a read given up is ignored; the current read's answer still counts", () => {
 		const [s1] = round(ci.start("pr-74", {pr: 74}, pace), {state: "pending", head: "a1"});
 		const [stuck, [late]] = fire(s1);
-		if (late === undefined) throw new Error("a waiting poll reads on its tick");
+
+		if (late === undefined) {
+			throw new Error("a waiting poll reads on its tick");
+		}
+
 		const [gaveUp] = fire(stuck);
 
 		// Late while waiting: nothing changes, and no change is reported.
@@ -156,7 +172,11 @@ describe("poll: a read that never answers does not stop it", () => {
 
 		// Late while the next read is out: still nothing, and that read is still out.
 		const [reading, [current]] = fire(gaveUp);
-		if (current === undefined) throw new Error("a waiting poll reads on its tick");
+
+		if (current === undefined) {
+			throw new Error("a waiting poll reads on its tick");
+		}
+
 		expect(ci.answered(reading, late, {state: "red", head: "a1"})).toEqual([reading, null]);
 		expect(ci.failed(reading, late)).toEqual(reading);
 

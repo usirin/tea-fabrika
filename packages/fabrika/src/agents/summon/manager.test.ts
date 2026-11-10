@@ -71,9 +71,13 @@ const hosted = <A, E>(
 const until = (what: string, check: () => boolean, seconds = 15) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < seconds * 50; i += 1) {
-			if (check()) return;
+			if (check()) {
+				return;
+			}
+
 			yield* Effect.sleep(Duration.millis(20));
 		}
+
 		return yield* Effect.die(`waited ${seconds} seconds for ${what}`);
 	});
 
@@ -167,8 +171,11 @@ describe("S-4: a setting word not in the harness's lists is refused with that li
 					return {why, after, again};
 				}),
 			);
-			for (const word of ["ultra", "fake-small", "fake-large", "low", "medium", "high"])
+
+			for (const word of ["ultra", "fake-small", "fake-large", "low", "medium", "high"]) {
 				expect(seen.why).toContain(word);
+			}
+
 			expect(seen.after).toEqual([]);
 			expect(seen.again.name).toBe("x");
 			expect(seen.again.model.resolved).toBe("fake-small");
@@ -330,12 +337,21 @@ describe("the ask: each edit waits for the person", () => {
 					yield* until("the ask", () => t.got.some((n) => n._tag === "ask"));
 					const ask = t.got.find((n) => n._tag === "ask");
 					let asking: readonly string[] = [];
+
 					for (let i = 0; i < 100 && asking[0] !== "asking"; i += 1) {
 						asking = (yield* manager.list).map((s) => s.state);
-						if (asking[0] !== "asking") yield* Effect.sleep(Duration.millis(20));
+
+						if (asking[0] !== "asking") {
+							yield* Effect.sleep(Duration.millis(20));
+						}
 					}
+
 					const before = existsSync(join(folder, "written.txt"));
-					if (ask?._tag !== "ask") return yield* Effect.die("no ask");
+
+					if (ask?._tag !== "ask") {
+						return yield* Effect.die("no ask");
+					}
+
 					// The plan's ask_answered records `by`: the manager is told who answered.
 					yield* manager.answer("scout", ask.ask, true, PERSON);
 					yield* Fiber.join(t.fiber).pipe(Effect.timeout(Duration.seconds(10)));
@@ -374,11 +390,17 @@ describe("S-9: names are kept across a host restart", () => {
 					const manager = yield* SummonManager;
 					// Reopened in the background at start: wait for it, as `agents` would show it.
 					let listed: readonly {readonly name: string; readonly state: string}[] = [];
+
 					for (let i = 0; i < 750; i += 1) {
 						listed = yield* manager.list;
-						if (listed.some((s) => s.name === "scout" && s.state === "idle")) break;
+
+						if (listed.some((s) => s.name === "scout" && s.state === "idle")) {
+							break;
+						}
+
 						yield* Effect.sleep(Duration.millis(20));
 					}
+
 					const exit = yield* Effect.exit(turned("scout", "again"));
 					return {listed, exit};
 				}),
@@ -404,10 +426,12 @@ describe("S-9: names are kept across a host restart", () => {
 /** One log line's `key=value` fields, as `Logger.formatSimple` writes them, quotes taken off. */
 const fieldsOf = (line: string): Record<string, string> => {
 	const out: Record<string, string> = {};
+
 	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
 		const [, key = "", raw = ""] = m;
 		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
 	}
+
 	return out;
 };
 
@@ -447,7 +471,11 @@ describe("the host log records who answered and what a turn cost", () => {
 					const t = yield* turning("scout", "write it");
 					yield* until("the ask", () => t.got.some((n) => n._tag === "ask"));
 					const ask = t.got.find((n) => n._tag === "ask");
-					if (ask?._tag !== "ask") return yield* Effect.die("no ask");
+
+					if (ask?._tag !== "ask") {
+						return yield* Effect.die("no ask");
+					}
+
 					yield* manager.answer("scout", ask.ask, true, PERSON);
 					yield* Fiber.join(t.fiber).pipe(Effect.timeout(Duration.seconds(10)));
 				}),

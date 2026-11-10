@@ -7,6 +7,7 @@ import {sha256} from "./archive.ts";
 describe("a rejected WebCrypto Promise", () => {
 	it("scenario: archive sha256 fails with SinkError storage when digest rejects", async () => {
 		const spy = vi.spyOn(crypto.subtle, "digest").mockRejectedValue(new Error("no"));
+
 		try {
 			const error = await Effect.runPromise(Effect.flip(sha256(new Uint8Array([1]))));
 			assert.strictEqual(error._tag, "SinkError");

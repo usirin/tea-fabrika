@@ -406,10 +406,15 @@ const tracesOn = (calls: RecordCalls, changes: Changes): Traces["Service"] => {
 			const raw = yield* calls(id, {op: "read"}).pipe(Effect.flatMap(decodeAs(RecordRead, "read")));
 			const storage = jobStorage(calls, id);
 			const runs: RunRecord[] = [];
+
 			for (const run of raw.runs) {
 				const record = yield* storage.record(run);
-				if (record !== null) runs.push(record);
+
+				if (record !== null) {
+					runs.push(record);
+				}
 			}
+
 			return {
 				trace: id,
 				job: raw.job,

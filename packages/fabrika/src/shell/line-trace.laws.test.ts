@@ -47,8 +47,15 @@ const session = (lines: readonly Line[]) =>
 				{printed: printed.hear, ready: ready.hear},
 				{id: TSH, storage},
 			).pipe(Effect.provideService(Programs, SMALL_LIST), Effect.provideService(HostJobs, jobs));
-			if (started.kind !== "running") return yield* Effect.die("tsh did not start");
-			for (const l of lines) yield* tell(started.run, "line", textOf(l));
+
+			if (started.kind !== "running") {
+				return yield* Effect.die("tsh did not start");
+			}
+
+			for (const l of lines) {
+				yield* tell(started.run, "line", textOf(l));
+			}
+
 			const all = yield* ready.upTo(lines.length);
 			started.close("line");
 			yield* started.run.ended;
@@ -60,6 +67,7 @@ const session = (lines: readonly Line[]) =>
 const oneTracePerLine = (lines: readonly Line[], spans: readonly ReadableSpan[]) => {
 	const roots = spans.filter((s) => s.attributes[ATTR.line] !== undefined);
 	const lineTraces = new Set<string>();
+
 	for (const root of roots) {
 		const trace = traceOf(root);
 		const runs = spans.filter(
@@ -67,11 +75,22 @@ const oneTracePerLine = (lines: readonly Line[], spans: readonly ReadableSpan[])
 		);
 		const first = runs.find((s) => s.attributes[ATTR.program] === "seq");
 		const stages = String(root.attributes[ATTR.line]).split(" | ").length;
-		if (first === undefined || runs.length !== stages) return false;
-		if (trace !== runTraceId(String(first.attributes[ATTR.run]))) return false;
-		if (runs.some((s) => traceOf(s) !== trace)) return false;
+
+		if (first === undefined || runs.length !== stages) {
+			return false;
+		}
+
+		if (trace !== runTraceId(String(first.attributes[ATTR.run]))) {
+			return false;
+		}
+
+		if (runs.some((s) => traceOf(s) !== trace)) {
+			return false;
+		}
+
 		lineTraces.add(trace);
 	}
+
 	const known = new Set([...lineTraces, runTraceId(TSH)]);
 	return (
 		roots.length === lines.length &&

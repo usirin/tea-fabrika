@@ -76,6 +76,7 @@ export function IconOf(props: {readonly icon: Icon}): ReactNode {
 			{extra}
 		</svg>
 	);
+
 	switch (props.icon) {
 		case "ask":
 			return ring(<circle cx="8" cy="8" r="2.75" fill="currentColor" />);
@@ -138,14 +139,24 @@ const useOverlay = (
 		return () => {
 			const now = document.activeElement;
 			const lost = now === null || now === document.body || el?.contains(now) === true;
-			if (lost && before instanceof HTMLElement && before.isConnected) before.focus();
+
+			if (lost && before instanceof HTMLElement && before.isConnected) {
+				before.focus();
+			}
 		};
 	}, [box]);
 	useEffect(() => {
 		const down = (e: PointerEvent) => {
 			const t = e.target;
-			if (!(t instanceof Element) || box.current?.contains(t) === true) return;
-			if (t.closest(`[aria-controls="${id}"]`) !== null) return;
+
+			if (!(t instanceof Element) || box.current?.contains(t) === true) {
+				return;
+			}
+
+			if (t.closest(`[aria-controls="${id}"]`) !== null) {
+				return;
+			}
+
 			onClose();
 		};
 		document.addEventListener("pointerdown", down, true);
@@ -218,7 +229,9 @@ export function Menu(props: MenuProps): ReactNode {
 		document.getElementById(domId(stop))?.scrollIntoView({block: "nearest"});
 	});
 	useLayoutEffect(() => {
-		if (activeId !== undefined) showActive(activeId);
+		if (activeId !== undefined) {
+			showActive(activeId);
+		}
 	}, [activeId]);
 	const run = (did: MenuDo) => {
 		switch (did.do) {
@@ -231,7 +244,11 @@ export function Menu(props: MenuProps): ReactNode {
 				return props.onSecond(did.row);
 			case "fold": {
 				const next = new Set(folded);
-				if (!next.delete(did.section)) next.add(did.section);
+
+				if (!next.delete(did.section)) {
+					next.add(did.section);
+				}
+
 				return setFolded(next);
 			}
 			case "close":
@@ -243,7 +260,11 @@ export function Menu(props: MenuProps): ReactNode {
 			key: e.key,
 			mods: e.ctrlKey || e.altKey || e.metaKey,
 		});
-		if (did === null) return;
+
+		if (did === null) {
+			return;
+		}
+
 		e.preventDefault();
 		run(did);
 	};
@@ -253,8 +274,9 @@ export function Menu(props: MenuProps): ReactNode {
 			{props.count !== null && <span className="n">{props.count}</span>}
 		</div>
 	);
+
 	// Nothing to pick: a dialog that says so in one calm line, never a menu with no items.
-	if (stops.length === 0)
+	if (stops.length === 0) {
 		return (
 			<div
 				ref={box}
@@ -272,6 +294,8 @@ export function Menu(props: MenuProps): ReactNode {
 				</div>
 			</div>
 		);
+	}
+
 	const [first] = props.sections;
 	return (
 		<div
@@ -374,7 +398,11 @@ function EmptyLine(props: {readonly empty: Empty}): ReactNode {
 /** A row's words: the typed pieces in mono (`<code>`), the rest in the UI's own font. */
 export function WordsOf(props: {readonly words: Words}): ReactNode {
 	const {words} = props;
-	if (typeof words === "string") return words;
+
+	if (typeof words === "string") {
+		return words;
+	}
+
 	// A row's pieces never move: their place is their key.
 	return words.map((p, k) =>
 		p.typed ? <code key={k}>{p.text}</code> : <span key={k}>{p.text}</span>,
@@ -558,10 +586,16 @@ export function Palette(props: PaletteProps): ReactNode {
 					spellCheck={false}
 					onChange={(e) => props.onQuery(e.currentTarget.value)}
 					onKeyDown={(e) => {
-						if (e.key === "ArrowDown") props.onMove(1);
-						else if (e.key === "ArrowUp") props.onMove(-1);
-						else if (e.key === "Enter") props.onRun(props.at);
-						else if (e.key !== "Tab") return;
+						if (e.key === "ArrowDown") {
+							props.onMove(1);
+						} else if (e.key === "ArrowUp") {
+							props.onMove(-1);
+						} else if (e.key === "Enter") {
+							props.onRun(props.at);
+						} else if (e.key !== "Tab") {
+							return;
+						}
+
 						e.preventDefault();
 					}}
 				/>
@@ -591,7 +625,9 @@ export function Palette(props: PaletteProps): ReactNode {
 										aria-selected={n === props.at}
 										onPointerDown={(e) => e.preventDefault()}
 										onPointerMove={() => {
-											if (n !== props.at) props.onMove(n - props.at);
+											if (n !== props.at) {
+												props.onMove(n - props.at);
+											}
 										}}
 										onClick={() => props.onRun(n)}
 									>
@@ -685,25 +721,39 @@ export const useTip = (tip: Tip, quiet: boolean) => {
 	const hide = () => {
 		clearTimeout(timer.current);
 		setAt((was) => {
-			if (was !== null) lastGone = Date.now();
+			if (was !== null) {
+				lastGone = Date.now();
+			}
+
 			return null;
 		});
 	};
 	useEffect(() => {
-		if (quiet) hide();
+		if (quiet) {
+			hide();
+		}
 	}, [quiet]);
 	useEffect(() => () => clearTimeout(timer.current), []);
 	useEffect(() => {
-		if (at === null) return;
+		if (at === null) {
+			return;
+		}
+
 		const key = (e: globalThis.KeyboardEvent) => {
-			if (e.key === "Escape") hide();
+			if (e.key === "Escape") {
+				hide();
+			}
 		};
 		window.addEventListener("keydown", key, true);
 		return () => window.removeEventListener("keydown", key, true);
 	}, [at]);
 	const show = (el: Element, wait: number) => {
 		clearTimeout(timer.current);
-		if (quiet) return;
+
+		if (quiet) {
+			return;
+		}
+
 		timer.current = setTimeout(() => setAt(el.getBoundingClientRect()), wait);
 	};
 	return {
@@ -714,7 +764,9 @@ export const useTip = (tip: Tip, quiet: boolean) => {
 			onPointerLeave: hide,
 			onPointerDownCapture: hide,
 			onFocus: (e: {readonly currentTarget: Element}) => {
-				if (e.currentTarget.matches(":focus-visible")) show(e.currentTarget, 0);
+				if (e.currentTarget.matches(":focus-visible")) {
+					show(e.currentTarget, 0);
+				}
 			},
 			onBlur: hide,
 		},

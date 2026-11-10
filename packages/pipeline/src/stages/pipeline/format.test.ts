@@ -145,7 +145,11 @@ const lane = (run: readonly string[] | null) => {
 		nodeModules: join(dir, "no-modules"),
 		mainFiles: [FORMATTER, FAILS, LONG],
 	});
-	if (run !== null) nameFormatter(seed, run);
+
+	if (run !== null) {
+		nameFormatter(seed, run);
+	}
+
 	const work = laneWork.pipe(
 		Layer.provide(Layer.succeed(LaneHome, {home, checkout: seed, briefs: "", person: "owner"})),
 	);

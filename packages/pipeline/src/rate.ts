@@ -92,7 +92,11 @@ function count(
 ): Says | null {
 	// A person may change their mind: the last rating holds.
 	const last = rated.findLast((r) => r.rating.finding === finding.id);
-	if (last !== undefined) return last.rating.says;
+
+	if (last !== undefined) {
+		return last.rating.says;
+	}
+
 	return silence === "noise" && shipped.includes(finding.id) ? "noise" : null;
 }
 
@@ -125,6 +129,7 @@ export function tallyOf(
 	const seen = new Map(findings.map((f) => [f.id, f]));
 	const rated = userRatings(facts);
 	const tally = new Map<string, Tally>();
+
 	for (const finding of seen.values()) {
 		const t = tally.get(finding.rule) ?? none;
 		const counted = count(finding, rated, facts.shipped, silence(finding.rule));
@@ -133,6 +138,7 @@ export function tallyOf(
 			counted === null ? {...t, open: t.open + 1} : {...t, [counted]: t[counted] + 1},
 		);
 	}
+
 	return Object.fromEntries(tally);
 }
 

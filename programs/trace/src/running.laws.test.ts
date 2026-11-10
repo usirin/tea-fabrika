@@ -40,7 +40,10 @@ type JobMsg = Extract<Msg, {readonly type: "look" | "got" | "lost" | "toggle" | 
 
 /** The job view's record. These laws draw only the job view's Msgs, so a ticket view never shows. */
 const readOf = (s: Model): Read => {
-	if (s.shows.kind !== "job") throw new Error("a ticket view, from the job view's Msgs alone");
+	if (s.shows.kind !== "job") {
+		throw new Error("a ticket view, from the job view's Msgs alone");
+	}
+
 	return s.shows.read;
 };
 
@@ -223,7 +226,10 @@ const onlyTwoSubs = every(
 		const subs = machine.subs ?? [];
 		const on = (type: string) =>
 			subs.filter((sub) => {
-				if (sub.type !== type) return false;
+				if (sub.type !== type) {
+					return false;
+				}
+
 				const deps: unknown = sub.deps(next);
 				return deps !== null && deps !== undefined;
 			}).length;
@@ -245,7 +251,11 @@ const finalFromRecord = every(
 	"an ended job's final time comes from its record alone: no tick and no clock is in it",
 	({next}, {show}) => {
 		const record = shown(next);
-		if (record === null || record.job?.ended == null) return true;
+
+		if (record === null || record.job?.ended == null) {
+			return true;
+		}
+
 		const final = show(next);
 		return final.running === null && final.length === show(fresh(record)).length;
 	},
@@ -272,12 +282,15 @@ const emptyDrawsNothing = every(
 	"a running job with nothing in its record has one row, its own, with nothing to open or mark",
 	({next}, {show}) => {
 		const record = shown(next);
+
 		if (
 			record === null ||
 			!runs(next) ||
 			record.runs.length + record.spans.length + record.steps.length > 0
-		)
+		) {
 			return true;
+		}
+
 		const view = show(next);
 		const [only] = view.rows;
 		return (
@@ -505,7 +518,11 @@ const PLANTS: readonly (readonly [Law, string, World])[] = [
 		"an ended job's final time comes from its spans alone",
 		inView((s, view) => {
 			const record = shown(s);
-			if (record?.job?.ended == null || record.spans.length === 0) return view;
+
+			if (record?.job?.ended == null || record.spans.length === 0) {
+				return view;
+			}
+
 			const from = Math.min(...record.spans.map((span) => span.start));
 			const to = Math.max(...record.spans.map((span) => span.end));
 			return {...view, length: Math.max(1, to - from)};

@@ -156,7 +156,11 @@ describe("the review machine, one step at a time", () => {
 		expect(still.phase).toBe("judging");
 		const [over] = step(still, {type: fileNote.errType, cmd: second, error: {_tag: "unknown"}});
 		expect(over).toMatchObject({phase: "over", outcome: {kind: "done", part: false, head: HEAD}});
-		if (over.phase !== "over") throw new Error("not over");
+
+		if (over.phase !== "over") {
+			throw new Error("not over");
+		}
+
 		expect(over.report.notes.map((n) => [n.title, n.state])).toEqual([
 			[NOTE.title, "kept"],
 			[OTHER.title, "failed"],
@@ -207,7 +211,10 @@ describe("a form the Check refuses", () => {
 		const deps = runSub.deps(s);
 		expect(deps).toMatchObject({run: 2});
 		expect(deps?.note).toBe(sentBackForm(refused())(why as [string, ...string[]]));
-		for (const problem of why) expect(deps?.note).toContain(problem);
+
+		for (const problem of why) {
+			expect(deps?.note).toContain(problem);
+		}
 	});
 
 	it("a second refusal ends stuck on draft_failed, and the report keeps both forms' problems and both runs' cost", () => {
@@ -224,7 +231,11 @@ describe("a form the Check refuses", () => {
 			ran: paid(0.3),
 		});
 		expect(s).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "draft_failed"}});
-		if (s.phase !== "over") throw new Error("not over");
+
+		if (s.phase !== "over") {
+			throw new Error("not over");
+		}
+
 		expect(s.report.problems).toEqual(why);
 		expect(s.report.refusals).toEqual([why, why]);
 		expect(s.report.cost).toBeCloseTo(0.7);
@@ -250,7 +261,11 @@ describe("a form the Check refuses", () => {
 			ran: paid(0.5),
 		});
 		expect(s).toMatchObject({phase: "over", outcome: {kind: "done"}});
-		if (s.phase !== "over") throw new Error("not over");
+
+		if (s.phase !== "over") {
+			throw new Error("not over");
+		}
+
 		expect(s.report.refusals).toEqual([why]);
 		expect(s.report.cost).toBeCloseTo(0.9);
 		expect(problemsOf(s.report)).toEqual(why.map((p) => `form 1 refused: ${p}`));

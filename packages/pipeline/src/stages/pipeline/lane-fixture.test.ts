@@ -19,7 +19,9 @@ const MODULES = fileURLToPath(new URL("../../../node_modules", import.meta.url))
 describe("the toy lane, in a folder whose path has a space", () => {
 	const dirs: string[] = [];
 	afterEach(() => {
-		for (const dir of dirs.splice(0)) rmSync(dir, {recursive: true, force: true});
+		for (const dir of dirs.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	it("runs its own checks green, and its stand-in gh answers, as a lane under the app home would", () => {
@@ -34,6 +36,7 @@ describe("the toy lane, in a folder whose path has a space", () => {
 		const settings = Effect.runSync(settingsFrom(readFileSync(join(seed, SETTINGS_FILE), "utf8")));
 		const checks = settings.checks?.run ?? [];
 		expect(checks.map((check) => check.name)).toEqual(["test"]);
+
 		// Each throws on a non-zero exit, with what it printed.
 		for (const {run} of checks) {
 			const [program, ...args] = run;

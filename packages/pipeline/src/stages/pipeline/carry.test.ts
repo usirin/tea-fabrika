@@ -107,7 +107,9 @@ const README = [
 const dirs: string[] = [];
 
 afterEach(() => {
-	for (const dir of dirs.splice(0)) rmSync(dir, {recursive: true, force: true});
+	for (const dir of dirs.splice(0)) {
+		rmSync(dir, {recursive: true, force: true});
+	}
 });
 
 /** The lane's home over a toy repository, and git in the person's checkout of it, which pushes to the remote. */

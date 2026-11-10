@@ -126,18 +126,25 @@ export function readRun(
 	const missing: PropertyId[] = [];
 	const checked: Checked[] = [];
 	const found: Found[] = [];
+
 	for (const test of tests) {
 		const property = byId.get(test.property);
 		// The last result for a test holds, as a rerun would.
 		const result = results.findLast((r) => r.property === test.property)?.result;
+
 		if (property === undefined || result === undefined) {
 			missing.push(test.property);
 			continue;
 		}
+
 		checked.push({fact: "checked", property: property.id, ...at, tool: "test", result});
 		const control = controlOf(property, result);
-		if (control.kind !== "ok") found.push({property: property.id, for: surpriseOf[control.kind]});
+
+		if (control.kind !== "ok") {
+			found.push({property: property.id, for: surpriseOf[control.kind]});
+		}
 	}
+
 	const [first, ...rest] = missing;
 	return first === undefined
 		? {read: true, checked, found}

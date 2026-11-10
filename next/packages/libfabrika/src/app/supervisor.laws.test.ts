@@ -51,7 +51,10 @@ const ctx: Ctx = {policy, process: A, name: "counter:1", build: "build-a", at: 0
 
 /** The saved wait: a down's own `until`, else the pending start action's. */
 const savedWait = (model: Model): number | undefined => {
-	if (model.recovery._tag === "down") return model.recovery.until;
+	if (model.recovery._tag === "down") {
+		return model.recovery.until;
+	}
+
 	const pending = model.pending as {readonly type?: unknown; readonly until?: unknown} | null;
 	return pending?.type === "start" && typeof pending.until === "number" ? pending.until : undefined;
 };
@@ -65,6 +68,7 @@ const thrown = (seq: number, at: number, process = A): Msg => ({
 describe("P34 policy and saved supervision laws", () => {
 	it("p80 plant, clamp invalid policy: rejected settings leave the caller's bytes alone", async () => {
 		const s = await subject();
+
 		for (const invalid of [
 			{...policy, maxDeliveries: 0},
 			{...policy, maxDeliveries: 33},
@@ -80,6 +84,7 @@ describe("P34 policy and saved supervision laws", () => {
 			expect(() => Schema.decodeUnknownSync(s.Policy)(invalid)).toThrow();
 			expect(JSON.stringify(invalid)).toBe(bytes);
 		}
+
 		expect(Schema.decodeUnknownSync(s.Policy)(policy)).toEqual(policy);
 	});
 
@@ -100,6 +105,7 @@ describe("P34 policy and saved supervision laws", () => {
 					const accepted = Schema.decodeUnknownSync(s.Policy)(candidate);
 					let [model] = s.supervisor.init(null, {...ctx, policy: accepted});
 					let at = 0;
+
 					for (let n = 1; n <= intensity + 1; n++) {
 						[model] = applyCell(s.supervisor, model, {
 							...thrown(n, at),
@@ -115,6 +121,7 @@ describe("P34 policy and saved supervision laws", () => {
 						[model] = applyCell(s.supervisor, model, {type: "exited", at});
 						const until = savedWait(model);
 						expect(until).toBeTypeOf("number");
+
 						if (n === intensity + 1) {
 							expect(model.recovery._tag).toBe("down");
 							expect(until).toBeGreaterThan(accepted.periodMs);
@@ -143,7 +150,11 @@ describe("P34 policy and saved supervision laws", () => {
 			.map(({intensity, minMs, spread, slack}) => {
 				const maxMs = minMs + spread;
 				let total = 0;
-				for (let n = 0; n < intensity; n++) total += Math.min(minMs * 2 ** n, maxMs);
+
+				for (let n = 0; n < intensity; n++) {
+					total += Math.min(minMs * 2 ** n, maxMs);
+				}
+
 				return {
 					maxDeliveries: 1,
 					intensity,
@@ -167,6 +178,7 @@ describe("P34 policy and saved supervision laws", () => {
 					model = next;
 					return cmds;
 				};
+
 				for (const [index, crash] of plan.entries()) {
 					const n = index + 1;
 					at += crash.live;
@@ -184,6 +196,7 @@ describe("P34 policy and saved supervision laws", () => {
 						accepted.intensity;
 					const downs = exitedCmds.filter((cmd) => cmd.type === "down");
 					let until: number;
+
 					if (inBudget) {
 						expect(downs, `crash ${n} is inside the restart budget`).toEqual([]);
 						expect(model.recovery._tag).toBe("starting");
@@ -195,6 +208,7 @@ describe("P34 policy and saved supervision laws", () => {
 						until = savedWait(model)!;
 						expect(until).toBeGreaterThanOrEqual(earliest);
 					}
+
 					const dueCmds = [
 						...step({type: "due", at: until - 1}),
 						...step({type: "due", at: until}),
@@ -232,6 +246,7 @@ describe("P34 policy and saved supervision laws", () => {
 		const s = await subject();
 		let [model] = s.supervisor.init(null, ctx);
 		let at = 0;
+
 		for (const [n, wait] of [100, 200, 400, 800, 800].entries()) {
 			[model] = applyCell(s.supervisor, model, thrown(n + 1, at, n === 0 ? A : B));
 			expect(model.recovery._tag).toBe("ending");
@@ -283,23 +298,32 @@ describe("P34 policy and saved supervision laws", () => {
 			seed: SEED,
 			encode: (model) => model,
 			decode: (raw) => {
-				if (!Schema.is(Supervision)(raw)) throw new Error("invalid saved supervision");
+				if (!Schema.is(Supervision)(raw)) {
+					throw new Error("invalid saved supervision");
+				}
+
 				return raw;
 			},
 			equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
 		});
 		let [model] = s.supervisor.init(null, ctx);
 		let pending = 0;
+
 		for (const msg of msgs) {
 			[model] = applyCell(s.supervisor, model, msg);
-			if (model.pending !== null && model.pending !== undefined) pending++;
+
+			if (model.pending !== null && model.pending !== undefined) {
+				pending++;
+			}
 		}
+
 		expect(pending).toBeGreaterThan(0);
 	});
 
 	it("p80 plant, healthy reset never happens: a full healthy interval resets backoff only while live", async () => {
 		const s = await subject();
 		let [model] = s.supervisor.init(null, ctx);
+
 		for (const msg of [
 			thrown(1, 0),
 			{type: "exited", at: 0},
@@ -309,6 +333,7 @@ describe("P34 policy and saved supervision laws", () => {
 		]) {
 			[model] = applyCell(s.supervisor, model, msg);
 		}
+
 		[model] = applyCell(s.supervisor, model, thrown(2, 5101, B));
 		[model] = applyCell(s.supervisor, model, {type: "exited", at: 5101});
 		expect(model.recovery._tag).toBe("starting");

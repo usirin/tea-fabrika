@@ -18,11 +18,16 @@ const run = (files: Readonly<Record<string, string>>, untracked: readonly string
 	const tree = join(home, String(trees));
 	mkdirSync(tree);
 	spawnSync("git", ["init", "-q"], {cwd: tree});
+
 	for (const [path, text] of Object.entries(files)) {
 		mkdirSync(dirname(join(tree, path)), {recursive: true});
 		writeFileSync(join(tree, path), text);
-		if (!untracked.includes(path)) spawnSync("git", ["add", path], {cwd: tree});
+
+		if (!untracked.includes(path)) {
+			spawnSync("git", ["add", path], {cwd: tree});
+		}
 	}
+
 	const ran = spawnSync("node", [SCRIPT, tree], {encoding: "utf8"});
 	return {status: ran.status, said: ran.stdout + ran.stderr};
 };

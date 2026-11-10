@@ -52,7 +52,11 @@ const services = (ledger: Ledger["Service"], author: Writer) =>
 const session = (ledger: Ledger["Service"], id = "tracker:test", author: Writer = OWNER) =>
 	Effect.gen(function* () {
 		const started = yield* start(tracker, {}, {}, {id, storage: memoryStorage()});
-		if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("the tracker did not start");
+		}
+
 		const {run} = started;
 		/** Offered, as the app does: it waits for room, and never drops what a person did. */
 		const say = <K extends Name>(input: K, value: PayloadOf<Inputs[K]>): Effect.Effect<Word> =>
@@ -383,7 +387,11 @@ describe("the tracker", () => {
 					{ticket: (n) => sent.push(n)},
 					{id: "tracker:picks", storage: memoryStorage()},
 				);
-				if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("the tracker did not start");
+				}
+
 				const {run} = started;
 				yield* offer(run, "file", {title: "Login fails", body: ""});
 				yield* offer(run, "file", {title: "Docs typo", body: ""});
@@ -452,7 +460,11 @@ describe("the tracker's areas, through its inputs", () => {
 			Effect.gen(function* () {
 				const {run, say, until} = yield* session(ledger, "tracker:areas");
 				yield* until((s) => s.ready);
-				for (const title of lanes) yield* say("file", {title, body: ""});
+
+				for (const title of lanes) {
+					yield* say("file", {title, body: ""});
+				}
+
 				const shown = onboarding(yield* until((s) => (onboarding(s)?.length ?? 0) > 0));
 				const suggested = {_tag: "titles", word: "lane", tickets: 3} as const;
 				yield* say("make_area", {name: "lane", suggested});
@@ -494,7 +506,11 @@ describe("the tracker's areas, through its inputs", () => {
 			Effect.gen(function* () {
 				const {run, say, until} = yield* session(ledger, "tracker:skip");
 				yield* until((s) => s.ready);
-				for (const title of lanes) yield* say("file", {title, body: ""});
+
+				for (const title of lanes) {
+					yield* say("file", {title, body: ""});
+				}
+
 				yield* until((s) => (onboarding(s)?.length ?? 0) > 0);
 				yield* say("skip_onboarding", null);
 				const skipped = yield* state(run)((s) => s.skipped);

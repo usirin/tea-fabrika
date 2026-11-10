@@ -30,7 +30,9 @@ class Element extends EventTarget {
 	}
 
 	blur() {
-		if (page.activeElement === this) page.activeElement = body;
+		if (page.activeElement === this) {
+			page.activeElement = body;
+		}
 	}
 }
 
@@ -42,7 +44,9 @@ const timers: (() => void)[] = [];
 const tick = () => timers.shift()?.();
 
 const settle = () => {
-	while (timers.length > 0) tick();
+	while (timers.length > 0) {
+		tick();
+	}
 };
 
 class FakeTerminal {
@@ -54,7 +58,9 @@ class FakeTerminal {
 	private data: (data: string) => void = () => {};
 
 	private key = (event: Event) => {
-		if ("key" in event && typeof event.key === "string") this.data(event.key);
+		if ("key" in event && typeof event.key === "string") {
+			this.data(event.key);
+		}
 	};
 
 	loadAddon() {}
@@ -68,7 +74,10 @@ class FakeTerminal {
 	}
 
 	focus() {
-		if (!this.opened || this.element === undefined) return;
+		if (!this.opened || this.element === undefined) {
+			return;
+		}
+
 		this.element.focus();
 		setTimeout(() => this.element?.focus(), 0);
 	}
@@ -100,7 +109,10 @@ let light = false;
 
 const switchLook = () => {
 	light = !light;
-	for (const change of changes) change();
+
+	for (const change of changes) {
+		change();
+	}
 };
 
 beforeEach(() => {
@@ -157,6 +169,7 @@ describe("a look change with nothing focused", () => {
 		const input = element();
 		input.focus();
 		expect(page.activeElement).toBe(input);
+
 		while (timers.length > 0) {
 			tick();
 			expect(page.activeElement).toBe(input);
@@ -193,11 +206,13 @@ describe("a look change with the right tile focused", () => {
 		sent.length = 0;
 		switchLook();
 		let turns = 0;
+
 		do {
 			if (timers.length > 0) {
 				tick();
 				turns += 1;
 			}
+
 			type();
 			expect
 				.soft(delivered(), `keys after timer ${turns}`)
@@ -215,6 +230,7 @@ describe("a look change with the right tile focused", () => {
 			expect.soft(right.contains(page.activeElement), `right after timer ${turns}`).toBe(true);
 		};
 		staysRight();
+
 		while (timers.length > 0) {
 			tick();
 			turns += 1;
@@ -236,6 +252,7 @@ describe("a look change with the right tile focused", () => {
 			sent.length = 0;
 		};
 		staysLeft();
+
 		while (timers.length > 0) {
 			tick();
 			staysLeft();

@@ -30,7 +30,11 @@ const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({...clear, ...patc
 /** The proof the machine's read made, as the Cmd carries it. */
 const asked = (): ReadyToMerge => {
 	const gate = shipGate(PR, clear);
-	if (gate.answer !== "go") throw new Error("the clear facts go");
+
+	if (gate.answer !== "go") {
+		throw new Error("the clear facts go");
+	}
+
 	return gate.ready;
 };
 
@@ -43,7 +47,11 @@ describe("the door of a write: the facts read again decide, never the Cmd's", ()
 	it("a later passing row at the head: the proof written carries it, not the rows the Cmd had", () => {
 		const later = filed([...rowsAt("abc1234"), rowOn(C1, "abc1234", "pass")]);
 		const door = atTheDoor(asked(), facts({verdicts: later}));
-		if (!("write" in door)) throw new Error("it goes through");
+
+		if (!("write" in door)) {
+			throw new Error("it goes through");
+		}
+
 		expect(door.write.rows).not.toEqual(asked().rows);
 	});
 
@@ -60,10 +68,12 @@ describe("the door of a write: the facts read again decide, never the Cmd's", ()
 		{name: "a new open comment", patch: {comments: [{id: "c1", by: "person"}]}},
 		{name: "closed", patch: {state: "closed"}},
 	];
-	for (const {name, patch} of CHANGED)
+
+	for (const {name, patch} of CHANGED) {
 		it(`${name}: nothing is written, and the machine is told the read is stale`, () => {
 			expect(atTheDoor(asked(), facts(patch))).toEqual({stale: expect.any(String)});
 		});
+	}
 
 	it("a straight merge: only a head tested on the main tip goes through; three mains, three answers", () => {
 		const one = asked();

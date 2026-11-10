@@ -45,13 +45,14 @@ export function writesFor(ticket: SortTicket, a: SortAnswer): readonly SortWrite
 		body: `${head}\n\n${a.why.trim()}${ruling}`,
 	};
 	const labelled: SortWrite = {op: "label", ticket: ticket.url, label};
+
 	switch (a.answer) {
 		case "duplicate":
 			return [comment, labelled, {op: "close", ticket: ticket.url, reason: "duplicate"}];
 		case "no":
 			return [comment, labelled, {op: "close", ticket: ticket.url, reason: "not_planned"}];
 		case "yes":
-			if (a.next === "plan" && a.partOf !== null)
+			if (a.next === "plan" && a.partOf !== null) {
 				return [
 					comment,
 					labelled,
@@ -62,7 +63,9 @@ export function writesFor(ticket: SortTicket, a: SortAnswer): readonly SortWrite
 					},
 					{op: "fold", plan: issueUrl(ticket.url, a.partOf), ticket: ticket.url},
 				];
-			if (a.next === "ruling")
+			}
+
+			if (a.next === "ruling") {
 				return [
 					comment,
 					labelled,
@@ -74,6 +77,8 @@ export function writesFor(ticket: SortTicket, a: SortAnswer): readonly SortWrite
 						why: a.why.trim(),
 					},
 				];
+			}
+
 			return [comment, labelled];
 	}
 }
@@ -86,8 +91,14 @@ export function outcomeOf(a: SortAnswer): SortOutcome {
 		case "no":
 			return {kind: "done", part: false, closed: "no"};
 		case "yes":
-			if (a.next === "ruling") return {kind: "ask", who: "owner", for: "ruling"};
-			if (a.next === "research") return {kind: "send", to: "research", why: "yes"};
+			if (a.next === "ruling") {
+				return {kind: "ask", who: "owner", for: "ruling"};
+			}
+
+			if (a.next === "research") {
+				return {kind: "send", to: "research", why: "yes"};
+			}
+
 			return {kind: "send", to: "plan", why: a.partOf === null ? "yes" : "fold"};
 	}
 }

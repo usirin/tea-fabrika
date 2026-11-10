@@ -156,7 +156,10 @@ describe("the settings a lane works by", () => {
 
 	/** What a read that had to fail says. It read after all: the test fails, and says so. */
 	const refusal = <A>(got: Result.Result<A, {readonly says?: string}>) => {
-		if (got._tag === "Success") throw new Error("read, not refused");
+		if (got._tag === "Success") {
+			throw new Error("read, not refused");
+		}
+
 		return got.failure.says;
 	};
 
@@ -173,7 +176,11 @@ describe("the settings a lane works by", () => {
 			writeFileSync(join(seed, "fabrika.toml"), "");
 		});
 		const got = await settingsIn(home);
-		if (got._tag === "Success") throw new Error("read, not refused");
+
+		if (got._tag === "Success") {
+			throw new Error("read, not refused");
+		}
+
 		expect(got.failure.says).toContain(SETTINGS_MOVED);
 	});
 
@@ -183,7 +190,11 @@ describe("the settings a lane works by", () => {
 			rmSync(join(seed, ".fabrika"), {recursive: true});
 		});
 		const got = await settingsIn(home);
-		if (got._tag === "Success") throw new Error("read, not refused");
+
+		if (got._tag === "Success") {
+			throw new Error("read, not refused");
+		}
+
 		expect(got.failure.says).toContain(SETTINGS_MOVED);
 	});
 
@@ -212,7 +223,10 @@ describe("the settings a lane works by", () => {
 		const home = repository((seed) => {
 			writeFileSync(join(seed, "fabrika.toml"), "");
 			writeFileSync(join(seed, ".fabrika.jsonc"), "{}\n");
-			if (!keep) rmSync(join(seed, ".fabrika"), {recursive: true});
+
+			if (!keep) {
+				rmSync(join(seed, ".fabrika"), {recursive: true});
+			}
 		});
 		expect(refusal(await settingsIn(home))).toBe(SETTINGS_MOVED);
 	});
@@ -449,7 +463,11 @@ describe("the settings a lane works by", () => {
 
 		const copied = async (home: string, sha: string) => {
 			const got = await judgeCopy(home, sha);
-			if (got._tag === "Failure") throw new Error(`no copy: ${got.failure.says}`);
+
+			if (got._tag === "Failure") {
+				throw new Error(`no copy: ${got.failure.says}`);
+			}
+
 			return got.success;
 		};
 
@@ -475,6 +493,7 @@ describe("the settings a lane works by", () => {
 			const folder = await copied(home, sha);
 			expect(readFileSync(join(folder, "AGENTS.md"), "utf8")).toBe(MAIN);
 			expect(readFileSync(join(folder, ".claude/rules/kept.md"), "utf8")).toBe(MAIN);
+
 			for (const gone of [
 				"AGENTS.override.md",
 				"CLAUDE.md",
@@ -485,8 +504,10 @@ describe("the settings a lane works by", () => {
 				".claude/rules/new.md",
 				"src/CLAUDE.md",
 				"src/deep/.codex",
-			])
+			]) {
 				expect(existsSync(join(folder, gone)), gone).toBe(false);
+			}
+
 			// The rest is the head's.
 			expect(readFileSync(join(folder, "src/real.ts"), "utf8")).toContain("real");
 		});
@@ -591,8 +612,10 @@ describe("the settings a lane works by", () => {
 			const inSrc = readdirSync(join(folder, "src"));
 			expect(inSrc.filter((name) => name.includes(LONG_S))).toEqual([]);
 			expect(inSrc).toContain("real.ts");
-			for (const gone of ["AGENTS.override.md", ".mcp.json", ".agents", "src/AGENTS.md"])
+
+			for (const gone of ["AGENTS.override.md", ".mcp.json", ".agents", "src/AGENTS.md"]) {
 				expect(existsSync(join(folder, gone)), gone).toBe(false);
+			}
 		});
 	});
 
@@ -643,11 +666,18 @@ describe("the settings a lane works by", () => {
 
 				writeFileSync(flag, "");
 				const got = await asked(home, make, sha);
-				if (got._tag === "Failure") throw new Error(`no copy: ${got.failure.says}`);
+
+				if (got._tag === "Failure") {
+					throw new Error(`no copy: ${got.failure.says}`);
+				}
+
 				expect(timesIn(runs)).toBe(1);
 				expect(existsSync(join(got.success, "left-over"))).toBe(false);
 				expect(readFileSync(join(got.success, ".done"), "utf8")).toBe("a head's own\n");
-				if (make === "judgeCopy") expect(existsSync(join(got.success, "AGENTS.md"))).toBe(false);
+
+				if (make === "judgeCopy") {
+					expect(existsSync(join(got.success, "AGENTS.md"))).toBe(false);
+				}
 
 				// Made now: the mark is beside it, and nothing runs twice.
 				expect(existsSync(`${half}.done`)).toBe(true);
@@ -664,13 +694,20 @@ describe("the settings a lane works by", () => {
 				const shut = join(home, "work", place, sha, "cache");
 				put(shut, "left-over", "from the try that broke\n");
 				chmodSync(shut, 0o555);
+
 				try {
 					const got = await asked(home, make, sha);
-					if (got._tag === "Failure") throw new Error(`no copy: ${got.failure.says}`);
+
+					if (got._tag === "Failure") {
+						throw new Error(`no copy: ${got.failure.says}`);
+					}
+
 					expect(existsSync(join(got.success, "cache"))).toBe(false);
 					expect(existsSync(join(got.success, "src/slug.ts"))).toBe(true);
 				} finally {
-					if (existsSync(shut)) chmodSync(shut, 0o755);
+					if (existsSync(shut)) {
+						chmodSync(shut, 0o755);
+					}
 				}
 			},
 		);
@@ -716,7 +753,11 @@ describe("the settings a lane works by", () => {
 			const changed = await worked(home, (work) =>
 				Effect.gen(function* () {
 					const {tree} = yield* work.tree(1);
-					for (const {path, text} of FILES) put(tree, path, text);
+
+					for (const {path, text} of FILES) {
+						put(tree, path, text);
+					}
+
 					return yield* work.staged(tree, base);
 				}),
 			);

@@ -123,7 +123,10 @@ describe("explore", () => {
 
 	it("records a reducer that throws as a broken law", () => {
 		const throws: Update<Toy, ToyMsg, ToyCmd> = (s, m) => {
-			if (s.n === 1 && m.type === "go") throw new Error("one is too many");
+			if (s.n === 1 && m.type === "go") {
+				throw new Error("one is too many");
+			}
+
 			return toy(s, m);
 		};
 		const r = explore({init, update: throws, world: world(), laws: [], depth: 6});

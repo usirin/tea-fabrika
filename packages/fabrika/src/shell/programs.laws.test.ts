@@ -107,6 +107,7 @@ describe("forAgent, for any program list", () => {
 			fc.property(arbSpecs, (specs) => {
 				const list = listOf(specs);
 				const agents = forAgent(list);
+
 				for (const [name, entry] of list) {
 					const theirs = agents.get(name);
 					expect(theirs).toBeDefined();
@@ -115,6 +116,7 @@ describe("forAgent, for any program list", () => {
 					);
 					const got = Object.entries(theirs?.program.inputs ?? {});
 					expect(got.map(([input]) => input)).toEqual(kept.map(([input]) => input));
+
 					for (const [i, [input, declared]] of kept.entries()) {
 						expect(got[i]?.[0]).toBe(input);
 						// Whole: its shape, ack, control and hints as they were.
@@ -132,6 +134,7 @@ describe("forAgent, for any program list", () => {
 				const list = listOf(specs);
 				const agents = forAgent(list);
 				expect([...agents.keys()]).toEqual([...list.keys()]);
+
 				for (const [name, entry] of list) {
 					const theirs = agents.get(name)?.program;
 					expect(theirs?.name).toBe(entry.program.name);

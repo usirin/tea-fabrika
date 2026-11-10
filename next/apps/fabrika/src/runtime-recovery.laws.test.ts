@@ -124,7 +124,9 @@ const approvals = {
 const closers: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
-	for (const close of closers.splice(0).reverse()) await close();
+	for (const close of closers.splice(0).reverse()) {
+		await close();
+	}
 });
 
 const storage = (db: DatabaseSync) => {
@@ -208,6 +210,7 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 					JSON.parse(name),
 				);
 				let saved = processes.get(pid);
+
 				if (saved === undefined) {
 					const processDb = new DatabaseSync(":memory:");
 					// oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process reads
@@ -218,17 +221,22 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 					saved = {object: new Process(processCtx, env), db: processDb};
 					processes.set(pid, saved);
 				}
+
 				const object = saved.object;
 				return {
 					configure: async (descriptor: Descriptor) => {
 						attempts.push(structuredClone(descriptor));
 						entered.resolve();
-						if (attempts.length === 1 && fault === "failed")
+
+						if (attempts.length === 1 && fault === "failed") {
 							throw new Error("configure failed before save");
+						}
+
 						if (attempts.length === 1 && fault === "interrupted") {
 							await interrupted.promise;
 							return;
 						}
+
 						return object.configure(descriptor);
 					},
 					descriptor: object.descriptor.bind(object),
@@ -285,10 +293,12 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 	project = new Project(ctx, env);
 	closers.push(async () => {
 		interrupted.resolve();
+
 		for (const {object, db: processDb} of processes.values()) {
 			await object.runtime.dispose();
 			processDb.close();
 		}
+
 		await project.runtime.dispose();
 		db.close();
 	});
@@ -372,7 +382,7 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 };
 
 describe("P12 Project configure recovery", () => {
-	for (const fault of ["failed", "interrupted", "healthy"] as const)
+	for (const fault of ["failed", "interrupted", "healthy"] as const) {
 		it(`pinned: ${fault} configure restores the descriptor after an interrupted start`, async () => {
 			const w = world(fault);
 			const first = w.project.info().then(
@@ -380,7 +390,11 @@ describe("P12 Project configure recovery", () => {
 				(error: unknown) => ({error}),
 			);
 			await w.entered;
-			if (fault === "interrupted") await w.interrupt();
+
+			if (fault === "interrupted") {
+				await w.interrupt();
+			}
+
 			const result = await first;
 			expect("value" in result).toBe(fault === "healthy");
 			const descriptor = w.attempts[0]!;
@@ -392,7 +406,11 @@ describe("P12 Project configure recovery", () => {
 				{process: descriptor.id, name: "counter:1", program: "counter"},
 			]);
 			expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);
-			for (const attempt of w.attempts) expect(attempt).toEqual(descriptor);
+
+			for (const attempt of w.attempts) {
+				expect(attempt).toEqual(descriptor);
+			}
+
 			const process = w.process(descriptor.id).object;
 			expect(await process.descriptor()).toEqual(descriptor);
 			expect(await process.open("audit")).toMatchObject({rev: 0, view: {count: 0}});
@@ -413,16 +431,21 @@ describe("P12 Project configure recovery", () => {
 			await w.reopen();
 			expect(w.attempts).toEqual(attempts);
 		});
+	}
 });
 
 describe("P12 Process RPC refusal answers", () => {
-	for (const reason of ["person_only", "not_granted"] as const)
+	for (const reason of ["person_only", "not_granted"] as const) {
 		it(`pinned: ${reason} refusal survives the Process RPC adapter as a saved typed answer`, async () => {
 			const w = world();
 			await w.project.info();
 			const {process: pid} = await w.start(),
 				client = await w.admit();
-			if (reason === "not_granted") w.revokeBeforeCommit();
+
+			if (reason === "not_granted") {
+				w.revokeBeforeCommit();
+			}
+
 			const result = await w.project
 				.route(client, "process.send", {
 					pid,
@@ -462,4 +485,5 @@ describe("P12 Process RPC refusal answers", () => {
 			).toHaveLength(1);
 			expect(w.calls()).toEqual({signs: 1, commits: reason === "not_granted" ? 1 : 0});
 		});
+	}
 });

@@ -70,7 +70,11 @@ export function madeAs(
 ): {readonly entity: string} | {readonly value: true} | null {
 	const m = marks(ast);
 	const kind = m[ENTITY];
-	if (typeof kind === "string") return {entity: kind};
+
+	if (typeof kind === "string") {
+		return {entity: kind};
+	}
+
 	return m[VALUE] === true ? {value: true} : null;
 }
 

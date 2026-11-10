@@ -53,7 +53,11 @@ describe("the Check on the writer's draft", () => {
 
 	it("asks for one answer per Property of this plan, and a test in a file it wrote", () => {
 		const [one, two] = testsOf(GOOD.answers);
-		if (one === undefined || two === undefined) throw new Error("GOOD has two answers");
+
+		if (one === undefined || two === undefined) {
+			throw new Error("GOOD has two answers");
+		}
+
 		expect(check({...GOOD, answers: [one]})).toEqual([
 			"p2 has no answer. Write its test, or say why none can check it.",
 		]);

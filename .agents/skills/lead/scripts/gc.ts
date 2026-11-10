@@ -64,21 +64,45 @@ export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>):
 
 /** The Check, pure. */
 export const decide = (s: Seen): Verdict => {
-	if (s.git === null) return {_tag: "keep", reason: "not a git checkout"};
-	if (s.busy.length > 0)
+	if (s.git === null) {
+		return {_tag: "keep", reason: "not a git checkout"};
+	}
+
+	if (s.busy.length > 0) {
 		return {_tag: "keep", reason: `a process is working in it (pid ${s.busy.join(", ")})`};
-	if (s.idle < IDLE)
+	}
+
+	if (s.idle < IDLE) {
 		return {_tag: "keep", reason: `touched ${Math.round(s.idle / 60_000)} min ago`};
+	}
+
 	// A stuck box is kept for the lead to read, until its lane lands (0019).
-	if (s.stuck !== null && s.stuck < STUCK && !s.merged)
+	if (s.stuck !== null && s.stuck < STUCK && !s.merged) {
 		return {_tag: "keep", reason: `stuck, kept by drive ${Math.round(s.stuck / HOUR)} h ago`};
-	if (s.git.head === null) return {_tag: "keep", reason: "no HEAD commit"};
+	}
+
+	if (s.git.head === null) {
+		return {_tag: "keep", reason: "no HEAD commit"};
+	}
+
 	// A backup pushes HEAD only, so files never committed would go with the folder (field note
 	// 2026-11-09-42: a box removed with 10 uncommitted product files). The lead saves or drops them.
-	if (s.dirty === null) return {_tag: "keep", reason: "its files could not be read"};
-	if (s.dirty > 0) return {_tag: "keep", reason: `${s.dirty} uncommitted files`};
-	if (s.merged) return {_tag: "remove", reason: "merged"};
-	if (s.onRemote) return {_tag: "remove", reason: "on_remote"};
+	if (s.dirty === null) {
+		return {_tag: "keep", reason: "its files could not be read"};
+	}
+
+	if (s.dirty > 0) {
+		return {_tag: "keep", reason: `${s.dirty} uncommitted files`};
+	}
+
+	if (s.merged) {
+		return {_tag: "remove", reason: "merged"};
+	}
+
+	if (s.onRemote) {
+		return {_tag: "remove", reason: "on_remote"};
+	}
+
 	return {_tag: "backup", to: backupsOf(s.name, s.git.branch)};
 };
 
@@ -96,17 +120,42 @@ export type SeenWorktree = {
 /** A worktree goes once its lane landed, clean and idle. Its branch stays in the main checkout, so
  * only the folder goes; a worktree with no lane branch is someone's own and stays. */
 export const decideWorktree = (w: SeenWorktree): Verdict => {
-	if (w.locked) return {_tag: "keep", reason: "locked"};
-	if (w.busy.length > 0)
+	if (w.locked) {
+		return {_tag: "keep", reason: "locked"};
+	}
+
+	if (w.busy.length > 0) {
 		return {_tag: "keep", reason: `a process is working in it (pid ${w.busy.join(", ")})`};
-	if (w.idle < IDLE)
+	}
+
+	if (w.idle < IDLE) {
 		return {_tag: "keep", reason: `touched ${Math.round(w.idle / 60_000)} min ago`};
-	if (w.branch === null) return {_tag: "keep", reason: "no branch checked out"};
-	if (w.dirty === null) return {_tag: "keep", reason: "its files could not be read"};
-	if (w.dirty > 0) return {_tag: "keep", reason: `${w.dirty} uncommitted files`};
-	if (w.prs.includes("OPEN")) return {_tag: "keep", reason: "its pull request is open"};
-	if (w.prs.includes("MERGED")) return {_tag: "remove", reason: "merged"};
-	if (w.prs.includes("CLOSED")) return {_tag: "remove", reason: "closed"};
+	}
+
+	if (w.branch === null) {
+		return {_tag: "keep", reason: "no branch checked out"};
+	}
+
+	if (w.dirty === null) {
+		return {_tag: "keep", reason: "its files could not be read"};
+	}
+
+	if (w.dirty > 0) {
+		return {_tag: "keep", reason: `${w.dirty} uncommitted files`};
+	}
+
+	if (w.prs.includes("OPEN")) {
+		return {_tag: "keep", reason: "its pull request is open"};
+	}
+
+	if (w.prs.includes("MERGED")) {
+		return {_tag: "remove", reason: "merged"};
+	}
+
+	if (w.prs.includes("CLOSED")) {
+		return {_tag: "remove", reason: "closed"};
+	}
+
 	return {_tag: "keep", reason: "no pull request yet"};
 };
 
@@ -135,7 +184,11 @@ const loadEnv = (): Env => {
 		join(import.meta.dirname, "env.sh"),
 	]);
 	const [MAIN = "", BOXES = "", GH_REPO = ""] = r.out.split("\n");
-	if (r.code !== 0 || !MAIN || !BOXES) throw new Error(`env.sh failed: ${r.err}`);
+
+	if (r.code !== 0 || !MAIN || !BOXES) {
+		throw new Error(`env.sh failed: ${r.err}`);
+	}
+
 	return {MAIN, BOXES, GH_REPO};
 };
 
@@ -160,10 +213,21 @@ export const dirtyIn = (gitDir: string, box: string): number | null => {
 /** The folder a box's `.git` file points at, or the `.git` folder itself. */
 const gitDirOf = (box: string): string | null => {
 	const dot = join(box, ".git");
-	if (!existsSync(dot)) return null;
-	if (statSync(dot).isDirectory()) return dot;
+
+	if (!existsSync(dot)) {
+		return null;
+	}
+
+	if (statSync(dot).isDirectory()) {
+		return dot;
+	}
+
 	const m = /^gitdir:\s*(.+)$/m.exec(readFileSync(dot, "utf8"));
-	if (!m?.[1]) return null;
+
+	if (!m?.[1]) {
+		return null;
+	}
+
 	return isAbsolute(m[1].trim()) ? m[1].trim() : resolve(box, m[1].trim());
 };
 
@@ -172,7 +236,10 @@ const mtime = (path: string) => (existsSync(path) ? statSync(path).mtimeMs : 0);
 /** When the HEAD log's newest entry was written, from its own time stamp, in ms; 0 when none. Not
  * the file's mtime: git gc's reflog expiry rewrites every worktree's log and so changes that. */
 export const lastLogged = (log: string): number => {
-	if (!existsSync(log)) return 0;
+	if (!existsSync(log)) {
+		return 0;
+	}
+
 	const last = readFileSync(log, "utf8").trimEnd().split("\n").at(-1) ?? "";
 	const m = / (\d+) [+-]\d{4}\t/.exec(last);
 	return m?.[1] ? Number(m[1]) * 1000 : 0;
@@ -193,10 +260,15 @@ export const lastTouched = (box: string, gitDir: string | null): number =>
 const cwds = (): {readonly pid: number; readonly path: string}[] => {
 	const out: {pid: number; path: string}[] = [];
 	let pid = 0;
+
 	for (const l of sh("lsof", ["-a", "-d", "cwd", "-Fpn"]).out.split("\n")) {
-		if (l.startsWith("p")) pid = Number(l.slice(1));
-		else if (l.startsWith("n/")) out.push({pid, path: l.slice(1)});
+		if (l.startsWith("p")) {
+			pid = Number(l.slice(1));
+		} else if (l.startsWith("n/")) {
+			out.push({pid, path: l.slice(1)});
+		}
 	}
+
 	return out;
 };
 
@@ -210,22 +282,35 @@ const pidsIn = (busyIn: readonly {pid: number; path: string}[], dir: string) => 
 const keptByDrive = (boxes: string): Map<string, number> => {
 	const kept = new Map<string, number>();
 	const dir = join(boxes, "state");
-	if (!existsSync(dir)) return kept;
+
+	if (!existsSync(dir)) {
+		return kept;
+	}
+
 	for (const file of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
 		try {
 			const lane = JSON.parse(readFileSync(join(dir, file), "utf8")) as {
 				steps?: {box?: string; kept?: boolean; ended?: string}[];
 			};
-			for (const step of lane.steps ?? [])
-				if (step.kept && step.box) kept.set(step.box, Date.parse(step.ended ?? "") || Date.now());
+
+			for (const step of lane.steps ?? []) {
+				if (step.kept && step.box) {
+					kept.set(step.box, Date.parse(step.ended ?? "") || Date.now());
+				}
+			}
 		} catch {}
 	}
+
 	return kept;
 };
 
 const sizeMb = (paths: readonly string[]) => {
 	const there = paths.filter(existsSync);
-	if (there.length === 0) return 0;
+
+	if (there.length === 0) {
+		return 0;
+	}
+
 	const r = sh("du", ["-sk", ...there]);
 	return Math.round(
 		r.out
@@ -238,15 +323,19 @@ const sizeMb = (paths: readonly string[]) => {
 const main = () => {
 	const args = process.argv.slice(2);
 	const dry = args.includes("--dry-run");
+
 	if (args.some((a) => a !== "--dry-run")) {
 		console.error("usage: box.sh gc [--dry-run]");
 		process.exit(2);
 	}
+
 	const env = loadEnv();
+
 	if (!existsSync(env.BOXES)) {
 		console.log("gc: no boxes folder");
 		return;
 	}
+
 	const repo = (...a: string[]) => sh("git", ["-C", env.MAIN, ...SAFE, ...a]);
 	const common = resolve(env.MAIN, repo("rev-parse", "--git-common-dir").out.trim());
 	repo("fetch", "-q", "origin");
@@ -265,15 +354,20 @@ const main = () => {
 		"-q",
 		'.[] | "\\(.state) \\(.headRefName)"',
 	]);
+
 	if (listed.code !== 0) {
 		console.error(`gc: gh could not list pull requests: ${listed.err.trim()}`);
 		process.exit(1);
 	}
+
 	for (const line of listed.out.split("\n")) {
 		const [state, ref] = line.split(" ");
-		if ((state === "OPEN" || state === "MERGED" || state === "CLOSED") && ref)
+
+		if ((state === "OPEN" || state === "MERGED" || state === "CLOSED") && ref) {
 			prsOf.set(ref, [...(prsOf.get(ref) ?? []), state]);
+		}
 	}
+
 	const merged = new Set([...prsOf].filter(([, s]) => s.includes("MERGED")).map(([r]) => r));
 	const busyIn = cwds();
 	const kept = keptByDrive(env.BOXES);
@@ -285,6 +379,7 @@ const main = () => {
 		.filter((d) => d.isDirectory() && d.name !== "state" && !d.name.endsWith("-gitdata"))
 		.map((d) => d.name)
 		.sort();
+
 	for (const name of names) {
 		const box = join(env.BOXES, name);
 		const gitDir = gitDirOf(box);
@@ -315,12 +410,15 @@ const main = () => {
 			dirty: gitDir === null ? null : dirtyIn(gitDir, box),
 		};
 		const verdict = decide(seen);
+
 		if (verdict._tag === "keep") {
 			console.log(`keep ${name}: ${verdict.reason}`);
 			keptCount += 1;
 			continue;
 		}
+
 		let why: string = verdict._tag === "remove" ? verdict.reason : "";
+
 		// A merged lane's box may hold commits no remote has: keep its HEAD in the main checkout.
 		if (verdict._tag === "remove" && !onRemote && !dry) {
 			if (repo("fetch", "-q", "-f", box, `HEAD:refs/keep/box/${name}`).code !== 0) {
@@ -328,45 +426,65 @@ const main = () => {
 				keptCount += 1;
 				continue;
 			}
+
 			why += `, HEAD kept at refs/keep/box/${name}`;
 		}
+
 		if (verdict._tag === "backup") {
-			if (dry) why = `would back up to ${verdict.to[0]}`;
-			else {
+			if (dry) {
+				why = `would back up to ${verdict.to[0]}`;
+			} else {
 				// Fetch the box's HEAD and step notes into the main checkout, then push from there.
 				const ref = `refs/gc/${name}`;
+
 				if (repo("fetch", "-q", "-f", box, `HEAD:${ref}`).code !== 0) {
 					console.log(`keep ${name}: could not fetch its HEAD`);
 					keptCount += 1;
 					continue;
 				}
-				if (repo("fetch", "-q", "-f", box, `refs/notes/fabrika:refs/notes/box-${name}`).code === 0)
+
+				if (
+					repo("fetch", "-q", "-f", box, `refs/notes/fabrika:refs/notes/box-${name}`).code === 0
+				) {
 					repo("notes", "--ref=fabrika", "merge", "-q", "-s", "cat_sort_uniq", `box-${name}`);
+				}
+
 				const pushed = verdict.to.find(
 					(to) =>
 						sh("node", [join(import.meta.dirname, "botpush.mjs"), env.MAIN, to, ref]).code === 0,
 				);
 				repo("update-ref", "-d", ref);
+
 				if (pushed === undefined) {
 					console.log(`keep ${name}: backup push refused (${verdict.to.join(", ")})`);
 					keptCount += 1;
 					continue;
 				}
+
 				why = `backed up to ${pushed}`;
 			}
 		}
+
 		const twin = gitDir === join(env.BOXES, `${name}-gitdata`) ? [gitDir] : [];
 		const mb = sizeMb([box, ...twin]);
+
 		if (!dry) {
-			if (gitDir?.startsWith(`${join(common, "worktrees")}/`))
+			if (gitDir?.startsWith(`${join(common, "worktrees")}/`)) {
 				repo("worktree", "remove", "--force", "--force", box);
+			}
+
 			rmSync(box, {recursive: true, force: true});
-			for (const t of twin) rmSync(t, {recursive: true, force: true});
+
+			for (const t of twin) {
+				rmSync(t, {recursive: true, force: true});
+			}
 		}
+
 		removed += 1;
 		freed += mb;
 		console.log(`${dry ? "would remove" : "removed"} ${name}: ${why}, ${mb} MB`);
 	}
+
 	const state = join(env.BOXES, "state");
 	const left = new Set(
 		readdirSync(env.BOXES, {withFileTypes: true})
@@ -374,19 +492,31 @@ const main = () => {
 			.map((d) => d.name),
 	);
 	const dead = existsSync(state) ? deadFacts(readdirSync(state), left) : [];
+
 	for (const f of dead) {
-		if (!dry) rmSync(join(state, f), {force: true});
+		if (!dry) {
+			rmSync(join(state, f), {force: true});
+		}
+
 		console.log(`${dry ? "would remove" : "removed"} state/${f}: its box is gone`);
 	}
-	if (!dry) repo("worktree", "prune");
+
+	if (!dry) {
+		repo("worktree", "prune");
+	}
+
 	// Linked worktrees outside the boxes folder: a lead's or an agent's own checkout of a lane.
 	let trees = 0;
 	const blocks = repo("worktree", "list", "--porcelain").out.split("\n\n").filter(Boolean);
+
 	for (const block of blocks.slice(1)) {
 		const lines = block.split("\n");
 		const path = lines.find((l) => l.startsWith("worktree "))?.slice(9) ?? "";
-		if (!path || path === env.MAIN || path.startsWith(`${env.BOXES}/`) || !existsSync(path))
+
+		if (!path || path === env.MAIN || path.startsWith(`${env.BOXES}/`) || !existsSync(path)) {
 			continue;
+		}
+
 		const ref = lines.find((l) => l.startsWith("branch "))?.slice("branch refs/heads/".length);
 		const gitDir = gitDirOf(path);
 		const branch = ref ?? null;
@@ -398,27 +528,34 @@ const main = () => {
 			dirty: gitDir === null ? null : dirtyIn(gitDir, path),
 			prs: branch === null ? [] : (prsOf.get(branch.replace(/(-wip)+$/, "")) ?? []),
 		});
+
 		if (verdict._tag !== "remove") {
 			console.log(`keep worktree ${path}: ${verdict._tag === "keep" ? verdict.reason : ""}`);
 			keptCount += 1;
 			continue;
 		}
+
 		const mb = sizeMb([path]);
+
 		// Without --force: git itself refuses a worktree with changes, a second guard.
 		if (!dry && repo("worktree", "remove", path).code !== 0) {
 			console.log(`keep worktree ${path}: git worktree remove refused`);
 			keptCount += 1;
 			continue;
 		}
+
 		trees += 1;
 		freed += mb;
 		console.log(
 			`${dry ? "would remove" : "removed"} worktree ${path}: ${verdict.reason}, ${mb} MB`,
 		);
 	}
+
 	console.log(
 		`gc: ${dry ? "would remove" : "removed"} ${removed} boxes and ${trees} worktrees, ${freed} MB; kept ${keptCount}`,
 	);
 };
 
-if (import.meta.main) main();
+if (import.meta.main) {
+	main();
+}

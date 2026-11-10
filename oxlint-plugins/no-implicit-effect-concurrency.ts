@@ -40,11 +40,19 @@ export const noImplicitEffectConcurrency: CreateRule = {
 			CallExpression(node) {
 				const name = plainCall(node);
 				const what = name === null ? undefined : WHAT[name];
-				if (what === undefined) return;
+
+				if (what === undefined) {
+					return;
+				}
+
 				const names = context.sourceCode
 					.getTokens(node)
 					.some((token) => token.type === "Identifier" && token.value === "concurrency");
-				if (names) return;
+
+				if (names) {
+					return;
+				}
+
 				context.report({
 					node,
 					message: `${what}: with no explicit \`concurrency\` the serial-vs-parallel choice is invisible at the call site (.patterns/serial-read-baseline.md; #2567). Fix: pass \`{ concurrency: "unbounded" }\` (or \`<n>\`) to fan out, or \`{ concurrency: 1 }\` to keep it serial on purpose. Exception: // oxlint-disable-next-line fabrika/no-implicit-effect-concurrency -- <reason>.`,

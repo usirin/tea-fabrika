@@ -82,28 +82,50 @@ export function identifiersIn(
 	const users = (name: string) =>
 		PLAIN.has(name) || names.has(name.replace(/^\/+|\/+$/g, "")) || userShaped(name);
 	const found: string[] = [];
+
 	// A single plain word in backticks is a code name; one a user meets is fine.
 	for (const m of text.matchAll(/`([^`]*)`/g)) {
 		const inner = (m[1] ?? "").trim();
-		if (/^[a-z][a-z0-9-]*$/.test(inner) && !users(inner)) found.push(`${m[0]} (code in backticks)`);
-	}
-	const kept: string[] = [];
-	for (const raw of text.replace(/`([^`]*)`/g, " $1 ").split(/\s+/)) {
-		const token = strip(raw);
-		if (token === "" || users(token)) continue;
-		// Kept as written: `file(s)` stays a plural, not a call.
-		kept.push(raw);
-		if (token.includes("/") && !notAPath(token)) found.push(`${token} (a path)`);
-	}
-	const rest = kept.join(" ");
-	const files = [...rest.matchAll(FILE)].map((m) => m[0]).filter((file) => !users(file));
-	for (const file of files) found.push(`${file} (a file name)`);
-	const left = files.reduce((text, file) => text.replaceAll(file, " "), rest);
-	for (const [pattern, what] of SHAPES) {
-		for (const m of left.matchAll(pattern)) {
-			if (!users(m[0].replace(/\($/, ""))) found.push(`${m[0]} (${what})`);
+
+		if (/^[a-z][a-z0-9-]*$/.test(inner) && !users(inner)) {
+			found.push(`${m[0]} (code in backticks)`);
 		}
 	}
+
+	const kept: string[] = [];
+
+	for (const raw of text.replace(/`([^`]*)`/g, " $1 ").split(/\s+/)) {
+		const token = strip(raw);
+
+		if (token === "" || users(token)) {
+			continue;
+		}
+
+		// Kept as written: `file(s)` stays a plural, not a call.
+		kept.push(raw);
+
+		if (token.includes("/") && !notAPath(token)) {
+			found.push(`${token} (a path)`);
+		}
+	}
+
+	const rest = kept.join(" ");
+	const files = [...rest.matchAll(FILE)].map((m) => m[0]).filter((file) => !users(file));
+
+	for (const file of files) {
+		found.push(`${file} (a file name)`);
+	}
+
+	const left = files.reduce((text, file) => text.replaceAll(file, " "), rest);
+
+	for (const [pattern, what] of SHAPES) {
+		for (const m of left.matchAll(pattern)) {
+			if (!users(m[0].replace(/\($/, ""))) {
+				found.push(`${m[0]} (${what})`);
+			}
+		}
+	}
+
 	return [...new Set(found)];
 }
 
@@ -116,14 +138,25 @@ function shapeProblems(c: Criterion): readonly string[] {
 	const problems: string[] = [];
 	const when = c.when.trim();
 	const result = c.result.trim();
-	if (when === "") problems.push("its `when` is empty: say what someone does, or what happens");
-	if (result === "") problems.push("its `result` is empty: say what someone can observe");
-	if (/^when\b/i.test(when))
+
+	if (when === "") {
+		problems.push("its `when` is empty: say what someone does, or what happens");
+	}
+
+	if (result === "") {
+		problems.push("its `result` is empty: say what someone can observe");
+	}
+
+	if (/^when\b/i.test(when)) {
 		problems.push("its `when` starts with the word When; the sentence adds it, so leave it out");
-	if (STEP.test(result))
+	}
+
+	if (STEP.test(result)) {
 		problems.push(
 			"its `result` reads as a step to take, not a result someone sees: say what is true after",
 		);
+	}
+
 	return problems;
 }
 
@@ -146,11 +179,22 @@ const wordsOf = (text: string): readonly string[] =>
  */
 function joinsTwo(result: string): boolean {
 	const parts = result.split(/,\s+and\s/i);
-	if (parts.length === 1) return false;
-	if (parts.length > 2) return true;
+
+	if (parts.length === 1) {
+		return false;
+	}
+
+	if (parts.length > 2) {
+		return true;
+	}
+
 	const tail = (parts[1] ?? "").trim();
 	const opener = NARROW.exec(tail);
-	if (opener === null) return true;
+
+	if (opener === null) {
+		return true;
+	}
+
 	const said = new Set(wordsOf(parts[0] ?? ""));
 	// One file or three files: a plural names the same thing.
 	const named = (word: string) =>
@@ -162,14 +206,21 @@ function joinsTwo(result: string): boolean {
 export function claimProblems(c: Criterion): readonly string[] {
 	const problems = [...shapeProblems(c)];
 	const result = c.result.trim();
-	if (/[.!?]\s+\S/.test(c.when.trim()) || /[.!?]\s+\S/.test(result))
+
+	if (/[.!?]\s+\S/.test(c.when.trim()) || /[.!?]\s+\S/.test(result)) {
 		problems.push("it is more than one sentence: one criterion is one claim");
-	if (result.includes(";"))
+	}
+
+	if (result.includes(";")) {
 		problems.push("its `result` joins two results with ';': split it in two");
-	if (joinsTwo(result) || /\band also\b|\bas well as\b|\band then\b/i.test(result))
+	}
+
+	if (joinsTwo(result) || /\band also\b|\bas well as\b|\band then\b/i.test(result)) {
 		problems.push(
 			'its `result` joins two results: split it into two criteria. A last part that only narrows the result is one claim when it opens with "only", "no other" or "nothing else" and names nothing new: "runs once, and only once", "installs the package, and no other package"',
 		);
+	}
+
 	return problems;
 }
 
@@ -189,14 +240,17 @@ export function jobProblems(job: Job): readonly string[] {
 	const problems = [...shapeProblems(job)];
 	const fixture = job.fixture.trim();
 	const said = `${job.when} ${fixture}`;
-	if (fixture === "")
+
+	if (fixture === "") {
 		problems.push(
 			"its `fixture` is empty: say the realistic case the whole job runs on: more than two items, a second run, or a large input",
 		);
-	else if (!MANY.test(said) && !AGAIN.test(said))
+	} else if (!MANY.test(said) && !AGAIN.test(said)) {
 		problems.push(
 			"its fixture is the smallest case: make it realistic, with more than two items, a second run, or a large input",
 		);
+	}
+
 	return problems;
 }
 
@@ -214,16 +268,26 @@ function storyProblems(plan: PlanDraft): {readonly problems: string[]; readonly 
 	const ids = new Set<string>();
 	plan.stories.forEach((story, i) => {
 		const at = `Story ${i + 1} (${story.id === "" ? "no id" : `"${story.id}"`})`;
-		if (!/^[a-z0-9][\w-]*$/i.test(story.id))
+
+		if (!/^[a-z0-9][\w-]*$/i.test(story.id)) {
 			problems.push(`${at} needs a short id with no spaces, like s${i + 1}.`);
-		else if (ids.has(story.id)) problems.push(`${at} has the same id as an earlier story.`);
+		} else if (ids.has(story.id)) {
+			problems.push(`${at} has the same id as an earlier story.`);
+		}
+
 		ids.add(story.id);
-		for (const part of ["who", "want", "why"] as const)
-			if (story[part].trim() === "") problems.push(`${at}: its \`${part}\` is empty.`);
-		if (story.from !== undefined && !isTicketId(story.from))
+
+		for (const part of ["who", "want", "why"] as const) {
+			if (story[part].trim() === "") {
+				problems.push(`${at}: its \`${part}\` is empty.`);
+			}
+		}
+
+		if (story.from !== undefined && !isTicketId(story.from)) {
 			problems.push(
 				`${at}: its \`from\` says ${JSON.stringify(story.from)}. It must be a ticket id like owner/repo#12, or null for the ticket this plan is named by.`,
 			);
+		}
 	});
 	return {problems, ids};
 }
@@ -232,24 +296,35 @@ function storyProblems(plan: PlanDraft): {readonly problems: string[]; readonly 
 export const planProblems: Check<PlanDraft, Known> = (plan, known) => {
 	const names = new Set(known?.names ?? []);
 	const problems: string[] = [];
-	if (plan.summary.trim() === "") problems.push("The summary is empty.");
+
+	if (plan.summary.trim() === "") {
+		problems.push("The summary is empty.");
+	}
+
 	for (const change of plan.exam ?? []) {
-		if (/[\r\n]/.test(change.path))
+		if (/[\r\n]/.test(change.path)) {
 			problems.push(
 				`A rule change's path holds a line break: ${JSON.stringify(change.path)}. A path is one line.`,
 			);
+		}
+
 		// A pull request shows a path in a code span, and a backtick would end the span early.
-		if (change.path.includes("`"))
+		if (change.path.includes("`")) {
 			problems.push(
 				`A rule change's path holds a backtick: ${JSON.stringify(change.path)}. A path has none.`,
 			);
+		}
 	}
+
 	const stories = storyProblems(plan);
 	problems.push(...stories.problems);
 
 	const served = new Set<string>();
-	if (plan.tasks.length === 0)
+
+	if (plan.tasks.length === 0) {
 		problems.push("The plan has no task. Every ticket has at least one.");
+	}
+
 	// A task's criteria and the plan's own are held alike: the job first, then single claims.
 	const claims = (
 		at: string,
@@ -260,29 +335,47 @@ export const planProblems: Check<PlanDraft, Known> = (plan, known) => {
 			const which = job
 				? `${at}, its whole job ("${textOf(c)}")`
 				: `${at}, criterion ${i} ("${textOf(c)}")`;
-			for (const p of job ? jobProblems(owner.job) : claimProblems(c))
+
+			for (const p of job ? jobProblems(owner.job) : claimProblems(c)) {
 				problems.push(`${which}: ${p}.`);
+			}
+
 			const text = job ? `${c.when} ${c.result} ${owner.job.fixture}` : `${c.when} ${c.result}`;
 			const internal = identifiersIn(text, names);
-			if (internal.length > 0)
+
+			if (internal.length > 0) {
 				problems.push(
 					`${which} names code a user never meets: ${internal.join(", ")}. Name things the way a user meets them (a command, a flag, a config key, a published name), and put internal files and names in pointers.`,
 				);
-			if (c.check.what.trim() === "")
+			}
+
+			if (c.check.what.trim() === "") {
 				problems.push(`${which}: its check does not say what it does.`);
+			}
+
 			const unknown = c.serves.filter((id) => !stories.ids.has(id));
-			if (unknown.length > 0)
+
+			if (unknown.length > 0) {
 				problems.push(
 					`${which} serves ${unknown.map((id) => `"${id}"`).join(", ")}, which no story has: name the id of a story in the plan.`,
 				);
-			for (const id of c.serves) served.add(id);
+			}
+
+			for (const id of c.serves) {
+				served.add(id);
+			}
 		});
 	plan.tasks.forEach((task, t) => {
-		if (task.title.trim() === "") problems.push(`Task ${t + 1} has no title.`);
+		if (task.title.trim() === "") {
+			problems.push(`Task ${t + 1} has no title.`);
+		}
+
 		claims(`Task ${t + 1} ("${task.title}")`, task);
 	});
-	if (plan.goal !== undefined) claims("The plan's goal", plan.goal);
-	else if (plan.tasks.length > 1)
+
+	if (plan.goal !== undefined) {
+		claims("The plan's goal", plan.goal);
+	} else if (plan.tasks.length > 1) {
 		problems.push(
 			`The plan has more than one task but no \`goal\`: say what a user sees only when every task is in, as a job and criteria of the whole plan. ${
 				(plan.exam ?? []).length === 0
@@ -290,18 +383,26 @@ export const planProblems: Check<PlanDraft, Known> = (plan, known) => {
 					: "This plan makes two pull requests: the rule changes land first in their own, then all the tasks together in the other, and the last review judges the goal there."
 			}`,
 		);
+	}
+
 	plan.stories.forEach((story, i) => {
-		if (story.id !== "" && !served.has(story.id))
+		if (story.id !== "" && !served.has(story.id)) {
 			problems.push(
 				`Story ${i + 1} ("${story.id}") has no criterion: write one that serves it, or drop the story if nobody needs it.`,
 			);
+		}
 	});
 
 	plan.questions.forEach((q, i) => {
 		const at = `Open question ${i + 1} ("${q.ask}")`;
-		if (q.ask.trim() === "") problems.push(`Open question ${i + 1} asks nothing.`);
-		if (q.lean.trim() === "" || dodge.test(q.lean.trim()))
+
+		if (q.ask.trim() === "") {
+			problems.push(`Open question ${i + 1} asks nothing.`);
+		}
+
+		if (q.lean.trim() === "" || dodge.test(q.lean.trim())) {
 			problems.push(`${at} has no lean. Say which way you lean, and why.`);
+		}
 	});
 	return problems;
 };

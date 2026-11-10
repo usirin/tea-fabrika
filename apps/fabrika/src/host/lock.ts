@@ -63,17 +63,29 @@ const tryLock = (lock: string, dir: string) =>
 				() => Effect.succeed(false),
 			),
 		);
-		if (linked) return {at: "taken"} satisfies Try;
+
+		if (linked) {
+			return {at: "taken"} satisfies Try;
+		}
+
 		const text = yield* fs.readFileString(lock).pipe(
 			Effect.catchIf(
 				(e) => e.reason._tag === "NotFound",
 				() => Effect.succeed(null),
 			),
 		);
+
 		// Let go of between the link and the read.
-		if (text === null) return {at: "again"} satisfies Try;
+		if (text === null) {
+			return {at: "again"} satisfies Try;
+		}
+
 		const pid = Number.parseInt(text, 10);
-		if (Number.isInteger(pid) && (yield* alive(pid))) return {at: "held", pid} satisfies Try;
+
+		if (Number.isInteger(pid) && (yield* alive(pid))) {
+			return {at: "held", pid} satisfies Try;
+		}
+
 		// Its process is gone, or it is no lock this code wrote: no one will let go of it.
 		yield* fs.remove(lock).pipe(
 			Effect.catchIf(
@@ -88,12 +100,19 @@ const tryLock = (lock: string, dir: string) =>
 const takeLock = (lock: string, dir: string) =>
 	Effect.gen(function* () {
 		const until = (yield* Clock.currentTimeMillis) + LOCK_WITHIN_MS;
+
 		for (;;) {
 			const tried: Try = yield* tryLock(lock, dir);
-			if (tried.at === "taken") return;
+
+			if (tried.at === "taken") {
+				return;
+			}
+
 			if (tried.at === "held") {
-				if ((yield* Clock.currentTimeMillis) > until)
+				if ((yield* Clock.currentTimeMillis) > until) {
 					return yield* new Locked({lock, pid: tried.pid});
+				}
+
 				yield* Effect.sleep("20 millis");
 			}
 		}

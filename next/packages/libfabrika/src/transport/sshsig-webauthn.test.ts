@@ -79,7 +79,11 @@ const key = Effect.fn("test.key")(function* () {
 
 const integer = (raw: Uint8Array) => {
 	let at = 0;
-	while (raw[at] === 0) at++;
+
+	while (raw[at] === 0) {
+		at++;
+	}
+
 	const bytes = Buffer.from(raw.slice(at));
 	return bytes[0] !== undefined && bytes[0] >= 128
 		? Buffer.concat([Buffer.from([0]), bytes])
@@ -230,7 +234,10 @@ const signedArb = fc.record({body: bodyArb, signed: fc.constant<Signed | null>(n
 const recorded = {body: text, signed: {line, armored: realArmor}};
 
 const signed = Effect.fnUntraced(function* (a: {body: string; signed: Signed | null}) {
-	if (a.signed !== null) return a.signed;
+	if (a.signed !== null) {
+		return a.signed;
+	}
+
 	const k = yield* passkey();
 	return {line: k.line, armored: (yield* k.sign(a.body)).armored};
 });
@@ -245,7 +252,11 @@ describe("P10 WebAuthn SSHSIG", () => {
 				(line, prefix) => {
 					const bytes = Buffer.from(line.split(" ")[1]!, "base64");
 					let at = 0;
-					for (let i = 0; i < 2; i++) at += 4 + bytes.readUInt32BE(at);
+
+					for (let i = 0; i < 2; i++) {
+						at += 4 + bytes.readUInt32BE(at);
+					}
+
 					bytes[at + 4] = prefix;
 					expect(
 						Schema.is(T.PasskeyLine)(`${line.split(" ")[0]} ${bytes.toString("base64")}`),
@@ -432,6 +443,7 @@ describe("P10 WebAuthn SSHSIG", () => {
 	);
 	it("vector: independent control: OpenSSH verifies the same recorded assertion", () => {
 		const dir = mkdtempSync(join(tmpdir(), "p10-vector-"));
+
 		try {
 			writeFileSync(join(dir, "allowed_signers"), `spike ${line}\n`);
 			writeFileSync(join(dir, "assertion.sig"), realArmor);
@@ -617,24 +629,44 @@ describe("P10 WebAuthn SSHSIG", () => {
 				Effect.runPromise(
 					Effect.gen(function* () {
 						let bytes = blob();
-						if (kind === "version")
+
+						if (kind === "version") {
 							bytes.writeUInt32BE(change === 0 ? 2 : change === 1 ? 0 : change, 6);
-						if (kind === "key length") bytes.writeUInt32BE(0xffffffff - (change % 100), 10);
+						}
+
+						if (kind === "key length") {
+							bytes.writeUInt32BE(0xffffffff - (change % 100), 10);
+						}
+
 						if (kind === "hash") {
 							let at = 10;
-							for (let n = 0; n < 3; n++) at += 4 + bytes.readUInt32BE(at);
+
+							for (let n = 0; n < 3; n++) {
+								at += 4 + bytes.readUInt32BE(at);
+							}
+
 							bytes[at + 4 + 5] = change % 2 === 0 ? "3".charCodeAt(0) : "4".charCodeAt(0);
 						}
+
 						if (kind === "signature algorithm") {
 							let at = 10;
-							for (let n = 0; n < 4; n++) at += 4 + bytes.readUInt32BE(at);
+
+							for (let n = 0; n < 4; n++) {
+								at += 4 + bytes.readUInt32BE(at);
+							}
+
 							at += 4;
 							const size = bytes.readUInt32BE(at);
 							bytes[at + 4 + size - 1] = ("m".charCodeAt(0) + 1 + (change % 127)) % 256;
 						}
+
 						if (kind === "signature byte") {
 							let at = 10;
-							for (let n = 0; n < 4; n++) at += 4 + bytes.readUInt32BE(at);
+
+							for (let n = 0; n < 4; n++) {
+								at += 4 + bytes.readUInt32BE(at);
+							}
+
 							at += 4; // Outer signature string, then its algorithm and pair-of-mpints string.
 							at += 4 + bytes.readUInt32BE(at);
 							at += 4;
@@ -642,9 +674,15 @@ describe("P10 WebAuthn SSHSIG", () => {
 							const last = at + 4 + size - 1 - (change % size);
 							bytes[last] = bytes[last]! ^ (1 + (change % 255));
 						}
-						if (kind === "truncated") bytes = bytes.subarray(0, -(1 + (change % bytes.length)));
-						if (kind === "trailing")
+
+						if (kind === "truncated") {
+							bytes = bytes.subarray(0, -(1 + (change % bytes.length)));
+						}
+
+						if (kind === "trailing") {
 							bytes = Buffer.concat([bytes, Buffer.alloc(1 + (change % 100), change % 256)]);
+						}
+
 						expect(yield* check(armor(bytes))).toEqual(refused);
 					}),
 				),

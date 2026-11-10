@@ -26,6 +26,7 @@ export const noClockInView: CreateRule = {
 		return {
 			CallExpression(node) {
 				const name = plain(dotted(node.callee));
+
 				if (name !== null && (READS.has(name) || name === "Date")) {
 					context.report({node, message: MESSAGE});
 				}

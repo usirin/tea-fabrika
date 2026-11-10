@@ -8,13 +8,21 @@ import {words} from "./words.ts";
 
 const statements = (line: string): readonly Statement[] => {
 	const parsed = parse(line);
-	if (parsed.kind !== "parsed") throw new Error(`refused: ${parsed.why}`);
+
+	if (parsed.kind !== "parsed") {
+		throw new Error(`refused: ${parsed.why}`);
+	}
+
 	return parsed.statements;
 };
 
 const run = (line: string) => {
 	const [first] = statements(line);
-	if (first?.kind !== "run") throw new Error("not a run");
+
+	if (first?.kind !== "run") {
+		throw new Error("not a run");
+	}
+
 	return first;
 };
 
@@ -146,7 +154,11 @@ describe("the grammar", () => {
 	])("refuses %j at %i: %s", (line, at, why) => {
 		const parsed = parse(line);
 		expect(parsed.kind).toBe("refused");
-		if (parsed.kind !== "refused") return;
+
+		if (parsed.kind !== "refused") {
+			return;
+		}
+
 		expect(parsed.at).toBe(at);
 		expect(parsed.why).toContain(why);
 	});

@@ -75,7 +75,11 @@ const approvalRead = (approval: "codeowners" | "none" | null) =>
 			const setup = setupOf(settings, HOLDS_NOTHING, NOTHING_SAID, PLACES);
 			const entries = fabrikaEntries(defaultConfig(dir), undefined, undefined, undefined, setup);
 			const ship = entries.find((entry) => entry.program.name === "ship");
-			if (ship === undefined) return yield* Effect.die("ship is not listed");
+
+			if (ship === undefined) {
+				return yield* Effect.die("ship is not listed");
+			}
+
 			const called = yield* ship.call(
 				{mode: "read"},
 				{
@@ -85,7 +89,11 @@ const approvalRead = (approval: "codeowners" | "none" | null) =>
 					stopOn: Effect.never,
 				},
 			);
-			if (called.kind !== "called") return yield* Effect.die(called.why);
+
+			if (called.kind !== "called") {
+				return yield* Effect.die(called.why);
+			}
+
 			const found = called.heard.find((heard) => heard.name === "found");
 			return Schema.decodeUnknownSync(Look)(found?.value).facts?.approval;
 		}).pipe(Effect.scoped),

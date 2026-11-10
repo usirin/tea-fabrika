@@ -118,12 +118,17 @@ const str = (v: unknown, or = ""): string => (typeof v === "string" ? v : or);
 export const lineOf = (out: string, exit: number): Line | null => {
 	for (const raw of out.trim().split("\n").toReversed()) {
 		let d: unknown;
+
 		try {
 			d = JSON.parse(raw);
 		} catch {
 			continue;
 		}
-		if (d === null || typeof d !== "object" || !("outcome" in d)) continue;
+
+		if (d === null || typeof d !== "object" || !("outcome" in d)) {
+			continue;
+		}
+
 		const o = d as Record<string, unknown>;
 		return {
 			outcome: str(o.outcome),
@@ -134,6 +139,7 @@ export const lineOf = (out: string, exit: number): Line | null => {
 			exit: typeof o.exit === "number" ? o.exit : exit,
 		};
 	}
+
 	return null;
 };
 
@@ -161,6 +167,7 @@ const after: Record<StepName, StepName | null> = {
  */
 export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {
 	const [verb, to = "", why = ""] = line.outcome.split(":");
+
 	switch (verb) {
 		case "done": {
 			const next = after[step];
@@ -172,11 +179,16 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
 				? {_tag: "open"}
 				: {_tag: "step", step: after[step] ?? "review", note: ""};
 		case "send":
-			if (isStep(to))
+			if (isStep(to)) {
 				return {_tag: "step", step: to, note: `${step} answered ${line.outcome}: ${line.reason}`};
+			}
+
 			return {_tag: "park", reason: `${step} sent the lane to ${to}: ${line.reason}`};
 		case "ask":
-			if (why === "lockfile") return {_tag: "park", reason: line.reason};
+			if (why === "lockfile") {
+				return {_tag: "park", reason: line.reason};
+			}
+
 			return {_tag: "judge"};
 		case "refused":
 			return {_tag: "park", reason: `drive refused: ${line.outcome}: ${line.reason}`};
@@ -196,12 +208,21 @@ export type Judged = Extract<Move, {_tag: "step" | "park"}>;
 export const judgedOf = (text: string): Judged => {
 	for (const line of text.split("\n").toReversed()) {
 		const m = JUDGED.exec(line.trim());
-		if (m === null) continue;
+
+		if (m === null) {
+			continue;
+		}
+
 		const note = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
 		const to = m[2]?.toLowerCase() ?? "";
-		if (isStep(to)) return {_tag: "step", step: to, note: `the lead's judgment: ${note}`};
+
+		if (isStep(to)) {
+			return {_tag: "step", step: to, note: `the lead's judgment: ${note}`};
+		}
+
 		return {_tag: "park", reason: note || "the judgment agent parked the lane with no why"};
 	}
+
 	return {_tag: "park", reason: "the judgment agent gave no answer line"};
 };
 
@@ -213,17 +234,27 @@ export const sectionsOf = (text: string): {head: string; sections: Record<string
 	let name: string | null = null;
 	const head: string[] = [];
 	const bodies: Record<string, string[]> = {};
+
 	for (const line of text.split("\n")) {
 		const m = /^## (\S+)\s*$/.exec(line);
+
 		if (m) {
 			name = (m[1] ?? "").toLowerCase();
 			bodies[name] ??= [];
 			continue;
 		}
-		if (name === null) head.push(line);
-		else bodies[name]?.push(line);
+
+		if (name === null) {
+			head.push(line);
+		} else {
+			bodies[name]?.push(line);
+		}
 	}
-	for (const [k, v] of Object.entries(bodies)) sections[k] = v.join("\n").trim();
+
+	for (const [k, v] of Object.entries(bodies)) {
+		sections[k] = v.join("\n").trim();
+	}
+
 	return {head: head.join("\n").trim(), sections};
 };
 
@@ -253,15 +284,20 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
 		heads.length > 0 ? `Heads so far: ${heads.join(", ")}.` : "No step has committed yet.",
 		...(f.note ? [`Last round: ${f.note}`] : []),
 	];
-	if (step === "review")
+
+	if (step === "review") {
 		lines.push(
 			`Parent base: origin/main at ${f.root}`,
 			`Reviewed head: ${wipOf(f.branch)} at ${f.head}`,
 		);
-	if (step === "mutation")
+	}
+
+	if (step === "mutation") {
 		lines.push(
 			`T=${f.ticket}, BUILD=${short(f.heads.tests ?? f.root)}..${short(f.heads.build ?? f.head)} (this round's build commits).`,
 		);
+	}
+
 	return `${lines.join("\n")}\n`;
 };
 
@@ -370,8 +406,10 @@ const runStep = (lane: Lane, step: StepName, note: string): Step => {
 
 /** Take a move: a step, the judgment agent, the pull request or a park. */
 const take = (lane: Lane, step: StepName, line: Line, move: Move, max: number): Step => {
-	if (move._tag === "step" && lane.round >= max)
+	if (move._tag === "step" && lane.round >= max) {
 		return over(lane, {kind: "ask", reason: `${max} steps ran (MaxSteps); the lane parks`});
+	}
+
 	switch (move._tag) {
 		case "step":
 			return runStep(lane, move.step, move.note);
@@ -398,7 +436,10 @@ export const makeMachine = ({maxSteps, maxStucks}: Limits) =>
 		update: {
 			start: (s, m): Step => (s.phase === "idle" ? runStep(s.lane, m.step, "") : stay(s)),
 			step_run_ok: (s, m): Step => {
-				if (s.phase !== "stepping") return stay(s);
+				if (s.phase !== "stepping") {
+					return stay(s);
+				}
+
 				const line = m.value;
 				const [verb] = line.outcome.split(":");
 				const accepted = verb === "done" || verb === "send" || verb === "skip";
@@ -423,7 +464,10 @@ export const makeMachine = ({maxSteps, maxStucks}: Limits) =>
 						})
 					: stay(s),
 			judge_ok: (s, m): Step => {
-				if (s.phase !== "judging") return stay(s);
+				if (s.phase !== "judging") {
+					return stay(s);
+				}
+
 				const move = judgedOf(m.value.text);
 				return take(s.lane, s.step, s.line, move, maxSteps);
 			},
@@ -435,8 +479,14 @@ export const makeMachine = ({maxSteps, maxStucks}: Limits) =>
 						})
 					: stay(s),
 			pr_open_ok: (s, m): Step => {
-				if (s.phase !== "opening") return stay(s);
-				if (m.value.pr === null) return over(s.lane, {kind: "stuck", reason: m.value.detail});
+				if (s.phase !== "opening") {
+					return stay(s);
+				}
+
+				if (m.value.pr === null) {
+					return over(s.lane, {kind: "stuck", reason: m.value.detail});
+				}
+
 				return [
 					{phase: "landing", lane: s.lane, pr: m.value.pr},
 					[land({pr: m.value.pr, intent: intentOf("land", m.value.pr)})],
@@ -487,14 +537,21 @@ const spawnEffect = (
 		const chunks: Buffer[] = [];
 		child.stdout?.on("data", (c: Buffer) => chunks.push(c));
 		const stopAll = () => {
-			if (child.pid === undefined) return;
+			if (child.pid === undefined) {
+				return;
+			}
+
 			try {
 				process.kill(-child.pid, "SIGTERM");
 			} catch {}
 		};
 		child.on("exit", (code) => {
 			closeSync(err);
-			if (typeof input === "number") closeSync(input);
+
+			if (typeof input === "number") {
+				closeSync(input);
+			}
+
 			resume(Effect.succeed({code: code ?? -1, out: Buffer.concat(chunks).toString("utf8")}));
 		});
 		return Effect.sync(stopAll);
@@ -559,8 +616,13 @@ const handlers = (s: Setup) => {
 	};
 	const headsOf = () => {
 		const heads: Partial<Record<StepName, string>> = {};
-		for (const e of saved().steps)
-			if (isStep(e.step) && e.outcome === "done") heads[e.step] = e.head;
+
+		for (const e of saved().steps) {
+			if (isStep(e.step) && e.outcome === "done") {
+				heads[e.step] = e.head;
+			}
+		}
+
 		return heads;
 	};
 	return {
@@ -621,10 +683,12 @@ const handlers = (s: Setup) => {
 						exit: 30,
 					};
 					const check = slotRefusal(line.outcome);
+
 					if (check !== null) {
 						note(`drive refused ${cmd.step} (${check}); trying again in ${minutes} minutes`);
 						return yield* Effect.fail(new SlotRefused({check, reason: line.reason}));
 					}
+
 					return line;
 				});
 				const line = yield* once.pipe(
@@ -714,15 +778,18 @@ const handlers = (s: Setup) => {
 				);
 				writeFileSync(at(".jsonl"), ran.out);
 				let text = "";
+
 				for (const raw of ran.out.split("\n").toReversed()) {
 					try {
 						const d = JSON.parse(raw) as {type?: string; result?: string};
+
 						if (d.type === "result") {
 							text = d.result ?? "";
 							break;
 						}
 					} catch {}
 				}
+
 				writeFileSync(at(".md"), text);
 				const move = judgedOf(text);
 				// Its field row, beside the steps' rows (record wide).
@@ -740,13 +807,21 @@ const handlers = (s: Setup) => {
 					at(".jsonl"),
 					`chain.ts judgment for ${s.lane} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}`,
 				]);
-				if (row.code === 0) appendFileSync(join(env.BOXES, `${s.lane}-rows.jsonl`), row.out);
+
+				if (row.code === 0) {
+					appendFileSync(join(env.BOXES, `${s.lane}-rows.jsonl`), row.out);
+				}
+
 				const answer =
 					move._tag === "step" ? `send ${move.step}: ${move.note}` : `park: ${move.reason}`;
 				note(`judgment: ${answer}`);
 				const r = readRecord();
 				const last = r.steps.find((e) => e.round === cmd.round);
-				if (last) saveStep({...last, judged: {box, answer}});
+
+				if (last) {
+					saveStep({...last, judged: {box, answer}});
+				}
+
 				return {text};
 			}),
 		pr_open: (cmd: {head: string}) =>
@@ -755,8 +830,11 @@ const handlers = (s: Setup) => {
 					.split("\n")[0]
 					?.replace(/^#+\s*/, "")
 					.trim();
-				if (!title)
+
+				if (!title) {
 					return {pr: null, detail: "the lane brief has no `## pr` section with a title line"};
+				}
+
 				note(
 					`review said merge-ready at ${cmd.head.slice(0, 8)}; pushing ${s.branch} and opening the PR`,
 				);
@@ -765,8 +843,11 @@ const handlers = (s: Setup) => {
 					[join(HERE, "botpush.mjs"), env.MAIN, s.branch, cmd.head],
 					{errFile},
 				);
-				if (push.code !== 0)
+
+				if (push.code !== 0) {
 					return {pr: null, detail: `botpush ${s.branch} failed; see ${errFile}`};
+				}
+
 				const listed = sh("gh", [
 					"pr",
 					"list",
@@ -780,11 +861,13 @@ const handlers = (s: Setup) => {
 					".[0].number",
 				]);
 				const existing = Number(listed.out.trim());
+
 				if (listed.code === 0 && Number.isInteger(existing) && existing > 0) {
 					note(`PR ${existing} already open on ${s.branch}`);
 					writeRecord({...readRecord(), pr: existing});
 					return {pr: existing, detail: "existing"};
 				}
+
 				const body = [
 					(s.brief.sections.pr ?? "").split("\n").slice(1).join("\n").trim(),
 					"",
@@ -809,11 +892,14 @@ const handlers = (s: Setup) => {
 					bodyFile,
 				]);
 				const pr = Number(/\/pull\/(\d+)/.exec(made.out)?.[1]);
-				if (made.code !== 0 || !Number.isInteger(pr))
+
+				if (made.code !== 0 || !Number.isInteger(pr)) {
 					return {
 						pr: null,
 						detail: `gh pr create failed: ${made.out.trim().split("\n").at(-1) ?? ""}`,
 					};
+				}
+
 				note(`opened https://github.com/${env.GH_REPO}/pull/${pr}`);
 				writeRecord({...readRecord(), pr});
 				return {pr, detail: "opened"};
@@ -838,13 +924,19 @@ export const stepsTable = (
 	steps: readonly {step: string; outcome: string; box?: string; run?: string}[],
 ): string[] => {
 	const dollars = new Map<string, number>();
-	if (existsSync(rowsFile))
+
+	if (existsSync(rowsFile)) {
 		for (const raw of readFileSync(rowsFile, "utf8").split("\n")) {
 			try {
 				const r = JSON.parse(raw) as {run?: string; listUsd?: number};
-				if (r.run && typeof r.listUsd === "number") dollars.set(r.run, r.listUsd);
+
+				if (r.run && typeof r.listUsd === "number") {
+					dollars.set(r.run, r.listUsd);
+				}
 			} catch {}
 		}
+	}
+
 	const total = steps.reduce((sum, e) => sum + (dollars.get(e.run ?? "") ?? 0), 0);
 	return [
 		"| Step | Box | Outcome | List $ |",
@@ -875,37 +967,45 @@ const stepSet = (text: string | undefined): Set<StepName> =>
 export const chainMain = (args: string[], env: Env) =>
 	Effect.gen(function* () {
 		const [lane = "", briefPath = ""] = args;
+
 		if (!/^[a-z0-9][a-z0-9-]*$/.test(lane) || !existsSync(briefPath)) {
 			console.error(
 				"usage: node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <path>] [--claude tests,build] [--electron tests,build] [--model sonnet|opus] [--start tests|build|mutation|review]",
 			);
 			process.exit(2);
 		}
+
 		mkdirSync(join(env.BOXES, "state"), {recursive: true});
 		const statePath = join(env.BOXES, "state", `${lane}.json`);
 		const saved: {ticket?: string; branch?: string; plan?: string} = existsSync(statePath)
 			? JSON.parse(readFileSync(statePath, "utf8"))
 			: {};
 		const ticket = flag(args, "--ticket") ?? saved.ticket;
+
 		if (!ticket) {
 			console.error(`chain.ts: no ticket for lane ${lane} yet; pass --ticket`);
 			process.exit(2);
 		}
+
 		const branch = flag(args, "--branch") ?? saved.branch ?? `fabrikalfa/${lane}`;
 		const plan = flag(args, "--plan") ?? saved.plan ?? join(env.BOXES, `${lane}-PLAN.md`);
 		const start = flag(args, "--start") ?? "tests";
+
 		if (!isStep(start)) {
 			console.error(`chain.ts: --start takes one of ${STEPS.join(", ")}`);
 			process.exit(2);
 		}
+
 		const brief = sectionsOf(readFileSync(briefPath, "utf8"));
 		const missing = [...STEPS, "pr"].filter((k) => !brief.sections[k]);
+
 		if (missing.length > 0) {
 			console.error(
 				`chain.ts: the lane brief lacks sections: ${missing.map((m) => `## ${m}`).join(", ")}`,
 			);
 			process.exit(2);
 		}
+
 		const setup: Setup = {
 			env,
 			lane,
@@ -927,7 +1027,11 @@ export const chainMain = (args: string[], env: Env) =>
 		const runtime = yield* handle.ready;
 		yield* runtime.dispatch({type: "start", step: start});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`chain stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`chain stopped in ${end.phase}`);
+		}
+
 		console.log(
 			JSON.stringify({
 				outcome: end.end.kind,
@@ -971,4 +1075,6 @@ const main = () => {
 	});
 };
 
-if (import.meta.main) main();
+if (import.meta.main) {
+	main();
+}

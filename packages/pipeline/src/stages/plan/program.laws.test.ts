@@ -43,7 +43,11 @@ const ticket = (patch: Partial<PlanTicket> = {}): PlanTicket => ({
 
 const DRAFTS: readonly PlanDraft[] = plans86b().flatMap((p) => (p.plan === null ? [] : [p.plan]));
 const [first] = DRAFTS;
-if (first === undefined) throw new Error("experiment 86b has no plans");
+
+if (first === undefined) {
+	throw new Error("experiment 86b has no plans");
+}
+
 /** A draft the Check sends back: the planner tries again, in the same conversation. */
 const UNCHECKED: PlanDraft = {...first, summary: ""};
 /** Every run id the refine loop gives: two tries, before and after one restart. */
@@ -117,6 +121,7 @@ const keepsEvery = (machine: Machine, runs = 150, saved = new Set<string>()) =>
 		fc.asyncProperty(lists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("plan:r1", null));
 			const store = handle.store("plan", KEY, planKind.state);
+
 			for (const s of foldEvents(machine, ctx, null, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);

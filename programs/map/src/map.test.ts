@@ -131,7 +131,11 @@ const OWN_TYPES: Partial<Record<ProgramName, Readonly<Record<string, ShapeSchema
 
 const typeOf = (program: ProgramName, type: string): ShapeSchema<any> => {
 	const schema = OWN_TYPES[program]?.[type] ?? TYPES[type];
-	if (schema === undefined) throw new Error(`no schema for ${type}`);
+
+	if (schema === undefined) {
+		throw new Error(`no schema for ${type}`);
+	}
+
 	return schema;
 };
 
@@ -153,6 +157,7 @@ describe("the program map", () => {
 					...node.ins.map((p) => [p, real.inputs[p.name]] as const),
 					...node.outs.map((p) => [p, real.outputs[p.name]] as const),
 				];
+
 				for (const [port, declared] of ports) {
 					const schema = typeOf(node.name, port.type);
 					expect(

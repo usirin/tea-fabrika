@@ -42,17 +42,27 @@ const users = new Map<string, {id: number; keys: string[]}>();
 
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
-	if (url.host !== "api.github.com") return new Response("not here", {status: 502});
+
+	if (url.host !== "api.github.com") {
+		return new Response("not here", {status: 502});
+	}
+
 	const byId = /^\/user\/([0-9]+)$/.exec(url.pathname);
+
 	if (byId !== null) {
 		const found = [...users].find(([, u]) => u.id === Number(byId[1]));
 		return found === undefined
 			? Response.json({message: "Not Found"}, {status: 404})
 			: Response.json({id: found[1].id, login: found[0]});
 	}
+
 	const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
 	const u = m?.[1] === undefined ? undefined : users.get(decodeURIComponent(m[1]));
-	if (u === undefined) return Response.json({message: "Not Found"}, {status: 404});
+
+	if (u === undefined) {
+		return Response.json({message: "Not Found"}, {status: 404});
+	}
+
 	return m?.[2] === undefined
 		? Response.json({id: u.id, login: m?.[1]})
 		: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
@@ -97,9 +107,14 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 2000; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
@@ -113,10 +128,12 @@ const rowsOn = (home: string) =>
 /** One log line's `key=value` fields, as `Logger.formatSimple` writes them, quotes taken off. */
 const fieldsOf = (line: string): Record<string, string> => {
 	const out: Record<string, string> = {};
+
 	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
 		const [, key = "", raw = ""] = m;
 		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
 	}
+
 	return out;
 };
 
@@ -184,7 +201,10 @@ const hostAndAgent = (home: string, lines: string[]) =>
 		const topBar = until("the agent in the top bar", () => {
 			const last = got
 				.flatMap((m) => {
-					if (m.type !== "to" || m.port !== "desk") return [];
+					if (m.type !== "to" || m.port !== "desk") {
+						return [];
+					}
+
 					const read = readToPage(m.m);
 					return read.kind === "read" && read.msg.type === "host" ? [read.msg.now] : [];
 				})
@@ -221,11 +241,17 @@ describe("an agent on a home connected to a ledger server", () => {
 				);
 				// The tool answers once the write is queued: the row comes a moment later.
 				let after = before;
+
 				for (let i = 0; i < 200; i += 1) {
 					after = yield* rowsOn(home);
-					if (after.some((r) => r.data.includes("Filed by claude"))) break;
+
+					if (after.some((r) => r.data.includes("Filed by claude"))) {
+						break;
+					}
+
 					yield* Effect.sleep("25 millis");
 				}
+
 				const query = yield* Effect.promise(() =>
 					client.callTool({name: "tracker_query", arguments: {value: {status: "open"}}}),
 				);
@@ -248,8 +274,12 @@ describe("an agent on a home connected to a ledger server", () => {
 		const written = seen.after.slice(seen.before.length);
 		const ticket = written.filter((r) => r.data.includes("Filed by claude"));
 		expect(ticket.length).toBeGreaterThan(0);
+
 		// Every row the agent's call wrote is the agent's, for alice: none is alice's own.
-		for (const row of ticket) expect(row.writer).toBe("agent:claude for:github:7");
+		for (const row of ticket) {
+			expect(row.writer).toBe("agent:claude for:github:7");
+		}
+
 		expect(seen.query.isError).not.toBe(true);
 		expect(JSON.stringify(seen.query.content)).toContain("Filed by claude");
 		expect(seen.agents.names).toEqual(["claude"]);
@@ -298,7 +328,11 @@ describe("an agent on a home connected to a ledger server", () => {
 		expect(names).not.toContain("line");
 		expect(seen.line.isError).toBe(true);
 		expect(JSON.stringify(seen.line.content)).toMatch(/line/);
-		for (const tool of seen.tools) expect(tool.annotations?.readOnlyHint).toBe(true);
+
+		for (const tool of seen.tools) {
+			expect(tool.annotations?.readOnlyHint).toBe(true);
+		}
+
 		expect(seen.filed.isError).toBe(true);
 		expect(JSON.stringify(seen.filed.content)).toMatch(/tracker_file/);
 		expect(seen.after).toEqual(seen.before);

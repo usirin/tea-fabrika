@@ -76,9 +76,12 @@ const ASCTIME = new RegExp(
 const utc = (year: number, month: string, day: number, h: number, m: number, s: number) => {
 	const mon = MONTH.slice(1, -1).split("|").indexOf(month);
 	const date = new Date(Date.UTC(year, mon, day));
+
 	// 31 Feb is no day; a second of 60 is a leap second.
-	if (date.getUTCFullYear() !== year || date.getUTCDate() !== day || h > 23 || m > 59 || s > 60)
+	if (date.getUTCFullYear() !== year || date.getUTCDate() !== day || h > 23 || m > 59 || s > 60) {
 		return null;
+	}
+
 	return date.getTime() + ((h * 60 + m) * 60 + s) * 1000;
 };
 
@@ -89,11 +92,14 @@ const utc = (year: number, month: string, day: number, h: number, m: number, s: 
  */
 export const httpDate = (s: string, now: number): number | null => {
 	const imf = IMF.exec(s);
+
 	if (imf !== null) {
 		const [, d, mon = "", y, h, m, sec] = imf;
 		return utc(Number(y), mon, Number(d), Number(h), Number(m), Number(sec));
 	}
+
 	const old = RFC850.exec(s);
+
 	if (old !== null) {
 		const [, d, mon = "", yy, h, m, sec] = old;
 		const at = (year: number) => utc(year, mon, Number(d), Number(h), Number(m), Number(sec));
@@ -108,11 +114,14 @@ export const httpDate = (s: string, now: number): number | null => {
 		const past = t === null ? next - thisYear > 50 : t > line.getTime();
 		return past ? at(next - 100) : t;
 	}
+
 	const asc = ASCTIME.exec(s);
+
 	if (asc !== null) {
 		const [, mon = "", d = "", h, m, sec, y] = asc;
 		return utc(Number(y), mon, Number(d.trim()), Number(h), Number(m), Number(sec));
 	}
+
 	return null;
 };
 
@@ -128,7 +137,10 @@ export const limitWait = (
 	headers: Readonly<Record<string, string | undefined>>,
 	now: number,
 ): number | null => {
-	if (status !== 403 && status !== 429) return null;
+	if (status !== 403 && status !== 429) {
+		return null;
+	}
+
 	const after = headers["retry-after"]?.trim() ?? "";
 	const reset = headers["x-ratelimit-reset"]?.trim() ?? "";
 	const at = /^[0-9]+$/.test(after)
@@ -221,17 +233,30 @@ export const layerGitHub = (
 			): Effect.Effect<A | null, KeysUnreachable | Spent> =>
 				Effect.gen(function* () {
 					const until = yield* Ref.get(waitUntil);
-					if ((yield* Clock.currentTimeMillis) < until) return yield* new Spent({until, path});
+
+					if ((yield* Clock.currentTimeMillis) < until) {
+						return yield* new Spent({until, path});
+					}
+
 					let res = yield* send(path, o.token);
+
 					if (res.status === 401 && o.token !== undefined) {
 						yield* Effect.logWarning(TOKEN_REFUSED);
 						res = yield* send(path, undefined);
 					}
-					if (res.status === 404) return null;
+
+					if (res.status === 404) {
+						return null;
+					}
+
 					if (res.status < 200 || res.status >= 300) {
 						const now = yield* Clock.currentTimeMillis;
 						const wait = limitWait(res.status, res.headers, now);
-						if (wait !== null) yield* Ref.update(waitUntil, (u) => Math.max(u, now + wait));
+
+						if (wait !== null) {
+							yield* Ref.update(waitUntil, (u) => Math.max(u, now + wait));
+						}
+
 						// A limit hit reads as a limit, not as GitHub being down.
 						const left = res.headers["x-ratelimit-remaining"];
 						const limit =
@@ -242,6 +267,7 @@ export const layerGitHub = (
 							why: `GitHub answered ${res.status} for ${path}${limit}`,
 						});
 					}
+
 					return yield* HttpClientResponse.schemaBodyJson(schema)(res);
 				}).pipe(
 					Effect.mapError((e) =>
@@ -254,7 +280,10 @@ export const layerGitHub = (
 
 			const of = (login: string): Effect.Effect<Signers | null, KeysUnreachable | Spent> => {
 				// Not a login: nobody, and GitHub is not asked.
-				if (!isLogin(login)) return Effect.succeed(null);
+				if (!isLogin(login)) {
+					return Effect.succeed(null);
+				}
+
 				return Effect.all([get(`/users/${encodeURIComponent(login)}`, User), keysOf(login)], {
 					concurrency: 2,
 				}).pipe(
@@ -269,12 +298,21 @@ export const layerGitHub = (
 			const byId = (id: string): Effect.Effect<Signers | null, KeysUnreachable | Spent> => {
 				// Not GitHub's id: nobody, and GitHub is not asked.
 				const n = numberOf(id);
-				if (n === null) return Effect.succeed(null);
+
+				if (n === null) {
+					return Effect.succeed(null);
+				}
+
 				return get(`/user/${n}`, User).pipe(
 					Effect.flatMap((user) => {
-						if (user === null) return Effect.succeed(null);
-						if (user.id !== n || !isLogin(user.login))
+						if (user === null) {
+							return Effect.succeed(null);
+						}
+
+						if (user.id !== n || !isLogin(user.login)) {
 							return Effect.fail(new KeysUnreachable({why: `GitHub gave another user for ${id}`}));
+						}
+
 						// Renamed between the two calls: nobody by that login now. The next ask finds them.
 						return keysOf(user.login).pipe(
 							Effect.map((keys) =>
@@ -287,8 +325,11 @@ export const layerGitHub = (
 
 			const ms = Math.max(o.cacheMs ?? KEYS_CACHE_MS, 0);
 			const failMs = Math.max(o.failMs ?? KEYS_FAIL_MS, 0);
-			if (ms === 0 && failMs === 0)
+
+			if (ms === 0 && failMs === 0) {
 				return Keys.of({byId: (id) => outward(byId(id)), of: (name) => outward(of(name))});
+			}
+
 			// A time to live by how the question ended: zero keeps nothing. GitHub's own refusal is kept
 			// `failMs`. The wait's is kept no time: asking again during the wait costs no call, and at
 			// its end the question goes out.

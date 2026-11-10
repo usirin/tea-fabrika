@@ -33,7 +33,11 @@ const Manifest = Schema.Struct({
 /** The names a manifest publishes: the package, its subpaths, its commands. None for a private package. */
 function manifestNames(manifest: unknown): readonly string[] {
 	const read = Schema.decodeUnknownOption(Manifest)(manifest);
-	if (Option.isNone(read) || read.value.private === true) return [];
+
+	if (Option.isNone(read) || read.value.private === true) {
+		return [];
+	}
+
 	const {name, bin, exports} = read.value;
 	const commands =
 		bin === undefined
@@ -71,12 +75,26 @@ function namesInCode(code: string): readonly string[] {
 /** The names a user meets, over every published package. Sorted, each once. */
 export function userNames(packages: readonly Published[]): readonly string[] {
 	const names = new Set<string>();
+
 	for (const pkg of packages) {
 		const published = manifestNames(pkg.manifest);
-		if (published.length === 0) continue;
-		for (const name of published) names.add(name);
-		for (const page of pkg.docs)
-			for (const code of codeIn(page)) for (const n of namesInCode(code)) names.add(n);
+
+		if (published.length === 0) {
+			continue;
+		}
+
+		for (const name of published) {
+			names.add(name);
+		}
+
+		for (const page of pkg.docs) {
+			for (const code of codeIn(page)) {
+				for (const n of namesInCode(code)) {
+					names.add(n);
+				}
+			}
+		}
 	}
+
 	return [...names].sort();
 }

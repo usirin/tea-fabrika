@@ -101,7 +101,10 @@ const setup = Effect.fnUntraced(function* () {
 	} satisfies typeof Transport.Who.Type;
 	let used = false;
 	const consume = vi.fn(() => {
-		if (used) return false;
+		if (used) {
+			return false;
+		}
+
 		used = true;
 		return true;
 	});
@@ -169,7 +172,8 @@ describe("P10 hello", () => {
 			{seed: 119120, endOnFailure: true, numRuns: 40},
 		);
 	});
-	for (const binding of ["tab", "nonce"] as const)
+
+	for (const binding of ["tab", "nonce"] as const) {
 		it.effect(
 			`p26: an unsigned ${binding} claim cannot differ from the ${binding} bound by the proof`,
 			() =>
@@ -185,6 +189,8 @@ describe("P10 hello", () => {
 					expect(x.consume).not.toHaveBeenCalled();
 				}),
 		);
+	}
+
 	it.effect("p82: a client with an unknown OS can still initialize", () =>
 		Effect.gen(function* () {
 			const x = yield* setup();
@@ -224,7 +230,8 @@ describe("P10 hello", () => {
 			{seed: 119120, numRuns: 100},
 		);
 	});
-	for (const binding of ["nonce", "url", "tab", "name"] as const)
+
+	for (const binding of ["nonce", "url", "tab", "name"] as const) {
 		it.effect(`p26: changed trusted ${binding} refuses before admission`, () =>
 			Effect.gen(function* () {
 				const x = yield* setup();
@@ -239,6 +246,8 @@ describe("P10 hello", () => {
 				expect(x.consume).not.toHaveBeenCalled();
 			}),
 		);
+	}
+
 	it.effect("p26: a consumed nonce cannot initialize again", () =>
 		Effect.gen(function* () {
 			const x = yield* setup();
@@ -248,7 +257,8 @@ describe("P10 hello", () => {
 			expect((yield* repeated)._tag).toBe("refused");
 		}),
 	);
-	for (const kind of ["signature", "key", "version", "unknown"] as const)
+
+	for (const kind of ["signature", "key", "version", "unknown"] as const) {
 		it.effect(`p26/p82: ${kind} refusal has no nonce write or successful admission`, () =>
 			Effect.gen(function* () {
 				const x = yield* setup();
@@ -282,6 +292,8 @@ describe("P10 hello", () => {
 				expect(admit.mock.calls.length).toBe(kind === "unknown" ? 1 : 0);
 			}),
 		);
+	}
+
 	it.effect("p82/p66: additive hello fields are ignored, has/os preserved, ping clamped", () =>
 		Effect.gen(function* () {
 			const x = yield* setup();
@@ -295,6 +307,7 @@ describe("P10 hello", () => {
 			expect(result.hello).toMatchObject({os: "ios", has: ["verify", "seal"]});
 		}),
 	);
+
 	for (const [origin, host, accepted] of [
 		["https://fabrika.test", "127.0.0.1:8123", true],
 		[null, "127.0.0.1:8123", true],
@@ -303,7 +316,7 @@ describe("P10 hello", () => {
 		["https://fabrika.test@evil.test", "127.0.0.1:8123", false],
 		["not a URL", "127.0.0.1:8123", false],
 		["https://fabrika.test", "evil.test:8123", false],
-	] as const)
+	] as const) {
 		it(`p26 origin: ${origin} / ${host}`, () => {
 			expect(
 				Transport.sameOrigin({
@@ -315,4 +328,5 @@ describe("P10 hello", () => {
 				}),
 			).toBe(accepted);
 		});
+	}
 });

@@ -131,6 +131,7 @@ const keepsEvery = (machine: Count, msgs: fc.Arbitrary<readonly Msg[]>, runs = 1
 		fc.asyncProperty(msgs, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("tally:r1", null));
 			const store = handle.store("count", "total", State);
+
 			for (const total of foldEvents(machine, ctx, null, list).states) {
 				await store.save(total);
 				expect(store.migrate(await store.load())).toEqual(total);

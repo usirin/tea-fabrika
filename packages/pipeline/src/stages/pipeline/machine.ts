@@ -596,7 +596,11 @@ const routeOf = (step: LaneStep, name: string): Route | undefined => {
  */
 const inARow = (step: LaneStep, trail: Held["trail"], same: (route: Route) => boolean): boolean => {
 	const last = trail.at(-1);
-	if (last === undefined || last.step !== step) return false;
+
+	if (last === undefined || last.step !== step) {
+		return false;
+	}
+
 	const route = routeOf(step, last.said);
 	return route !== undefined && same(route);
 };
@@ -613,13 +617,20 @@ const backTo = (
 	round: number,
 	lane: {readonly sendBack?: boolean; readonly trail: Held["trail"]},
 ): Move => {
-	if (route.bound === "once")
+	if (route.bound === "once") {
 		return inARow(step, lane.trail, (r) => r._tag === "back" && r.bound === "once")
 			? {ask: "step"}
 			: {to: route.step};
-	if (route.step === "exam") return examBack(lane.trail);
-	if (route.step === "build" && route.with === "names" && lane.sendBack === false)
+	}
+
+	if (route.step === "exam") {
+		return examBack(lane.trail);
+	}
+
+	if (route.step === "build" && route.with === "names" && lane.sendBack === false) {
 		return {ask: "rounds_spent"};
+	}
+
 	return back(route.step, round, boundOf(lane.trail));
 };
 
@@ -642,11 +653,15 @@ export const after = (
 	const trail = lane.trail ?? [];
 	const name = nameOf(outcome);
 	const route = routeOf(step, name);
+
 	switch (route?._tag) {
 		// A name no step can say, read back from somewhere: the lane has no way to go. An ask the step
 		// has no row for is still its own question, as before the table.
 		case undefined:
-			if (outcome.kind === "ask") return {ask: "step"};
+			if (outcome.kind === "ask") {
+				return {ask: "step"};
+			}
+
 			return stuck(outcome.kind === "send" ? "sent_back" : "step_stuck");
 		case "next":
 			return NEXT[step];
@@ -656,7 +671,10 @@ export const after = (
 			return backTo(step, route, round, {...lane, trail});
 		case "fresh":
 			// `exam_review` takes main in itself, before its checks (./exam-pull.ts `examReady`).
-			if (EXAM_STEPS.has(route.step)) return {to: route.step};
+			if (EXAM_STEPS.has(route.step)) {
+				return {to: route.step};
+			}
+
 			// A clean read of main that the step still refuses the same way: once is enough.
 			return trail.at(-1)?.step === step && trail.at(-1)?.said === name
 				? stuck("step_stuck")
@@ -716,11 +734,22 @@ const PAUSES: Readonly<Record<AskFor, readonly string[]>> = {
  * of main or of the ticket, goes on at the step it reads for. Pure.
  */
 const resumeOfMove = (m: Move, step: LaneStep): Resume => {
-	if ("to" in m)
+	if ("to" in m) {
 		return {_tag: "run", step: m.to, ...(m.round === undefined ? {} : {round: "next"})};
-	if ("ask" in m) return {_tag: "ask", for: m.ask, step};
-	if ("fresh" in m) return {_tag: "run", step: m.fresh};
-	if ("host" in m) return {_tag: "run", step};
+	}
+
+	if ("ask" in m) {
+		return {_tag: "ask", for: m.ask, step};
+	}
+
+	if ("fresh" in m) {
+		return {_tag: "run", step: m.fresh};
+	}
+
+	if ("host" in m) {
+		return {_tag: "run", step};
+	}
+
 	return stopsAt(step, m.end);
 };
 
@@ -748,11 +777,14 @@ export const resumeOf = (question: Question, pick: string): Resume => {
 		...(next ? {round: "next" as const} : {}),
 	});
 	const again: Resume = {_tag: "ask", for: question.for, step};
-	if (pick === "go_on")
+
+	if (pick === "go_on") {
 		return resumeOfMove(
 			question.call === undefined ? NEXT[step] : after(step, question.call.after, 1),
 			step,
 		);
+	}
+
 	switch (question.for) {
 		case "approve":
 			return pick === "approve" ? run("exam") : run("plan");
@@ -896,7 +928,11 @@ const askWords = (step: LaneStep, outcome: Outcome): string =>
 /** How many findings a person let through, for the merge's question. None: nothing is said. Pure. */
 const throughCount = ({through}: Carry): string => {
 	const count = through?.findings.length ?? 0;
-	if (count === 0) return "";
+
+	if (count === 0) {
+		return "";
+	}
+
 	return `, ${count} ${count === 1 ? "finding" : "findings"} let through`;
 };
 
@@ -930,8 +966,10 @@ const examMergeAlso = ({plan}: Carry): readonly string[] => {
 
 /** The rounds' question, by the step that sent the work back and whether the rounds ran out. Pure. */
 const spentQuestion = (s: Held, step: LaneStep): string => {
-	if (EXAM_STEPS.has(step))
+	if (EXAM_STEPS.has(step)) {
 		return `The rule changes went to the exam writer ${examRounds(s.trail)} of ${boundOf(s.trail)} times, and ${step === "exam_merge" ? "the merge" : "the review or the checks"} still send them back. Should the exam writer go once more?`;
+	}
+
 	const still =
 		step === "review"
 			? "the review still sends the work back"
@@ -978,10 +1016,18 @@ const conflictWords = (files: readonly string[]): string =>
 
 /** Where the lane goes on a `go_on`, in words. Pure. */
 const goOnWords = (next: Move): string => {
-	if ("to" in next) return `The lane moves on to the ${STEP_WORDS[next.to]} step.`;
-	if ("fresh" in next)
+	if ("to" in next) {
+		return `The lane moves on to the ${STEP_WORDS[next.to]} step.`;
+	}
+
+	if ("fresh" in next) {
 		return `The lane takes main in, then moves on to the ${STEP_WORDS[next.fresh]} step.`;
-	if ("host" in next) return "The lane reads the ticket again, and ends or pauses by what it says.";
+	}
+
+	if ("host" in next) {
+		return "The lane reads the ticket again, and ends or pauses by what it says.";
+	}
+
 	return "ask" in next ? "The lane moves on, and asks you what comes next." : "The lane ends here.";
 };
 
@@ -1075,8 +1121,14 @@ const asking = (s: Held, question: Question): Step_ => {
  * every step after build needs. Red ones there are red; any other, or none, did not run. Pure.
  */
 const uncheckedAt = ({head, checked}: Carry): "checks_red" | "checks_not_run" | null => {
-	if (checked === undefined || checked.head !== head) return "checks_not_run";
-	if (checked.result === "green") return null;
+	if (checked === undefined || checked.head !== head) {
+		return "checks_not_run";
+	}
+
+	if (checked.result === "green") {
+		return null;
+	}
+
 	return checked.result === "red" ? "checks_red" : "checks_not_run";
 };
 
@@ -1104,10 +1156,15 @@ const runAt = (s: Held, step: LaneStep, round: number): Resume => ({
  */
 const examMergeFrom = (s: Held, round: number): Step_ | null => {
 	const pull = s.carry.examPull;
-	if (pull === undefined || pull.reviewed?.head !== pull.head)
+
+	if (pull === undefined || pull.reviewed?.head !== pull.head) {
 		return running(s, "exam_review", round);
-	if (pull.yes?.head !== pull.head)
+	}
+
+	if (pull.yes?.head !== pull.head) {
 		return asking(s, questionFor(s, "exam_merge", "exam_review", ""));
+	}
+
 	return null;
 };
 
@@ -1119,9 +1176,14 @@ const examMergeFrom = (s: Held, round: number): Step_ | null => {
  */
 const running = (s: Held, step: LaneStep, round = s.round, restarted = false): Step_ => {
 	const instead = step === "exam_merge" && !restarted ? examMergeFrom(s, round) : null;
-	if (instead !== null) return instead;
+
+	if (instead !== null) {
+		return instead;
+	}
+
 	const unchecked = AFTER_BUILD.has(step) ? uncheckedAt(s.carry) : null;
 	const last = s.trail.at(-1)?.step;
+
 	// A head after build no builder made: the mutants job's commit (experiment 193), or a person's
 	// head the merge took in (jidoka rows 62 and 63). Red: the builder gets the failing names, a round
 	// up, as after a build's own red (./routes.ts `back("build", "names")`). The mutants job's, not
@@ -1131,14 +1193,19 @@ const running = (s: Held, step: LaneStep, round = s.round, restarted = false): S
 		const red: Outcome = {kind: "send", to: "builder", why: "checks_red"};
 		return move(s, "build", after("build", red, s.round, s), nameOf(red), askWords("build", red));
 	}
-	if (last === "mutants" && unchecked === "checks_not_run" && !restarted)
+
+	if (last === "mutants" && unchecked === "checks_not_run" && !restarted) {
 		return refreshing(s, runAt(s, step, round));
-	if (unchecked !== null)
+	}
+
+	if (unchecked !== null) {
 		return releasing(s, {
 			outcome: {kind: "stuck", why: unchecked},
 			said: uncheckedWords(step, s.carry),
 			at: runAt(s, step, round),
 		});
+	}
+
 	const at: Held = {...s, count: s.count + 1, round};
 	const cmd = runStep({
 		number: s.number,
@@ -1177,8 +1244,14 @@ const freshAt = (
 	s: Extract<Lane, {phase: "refreshing"}>,
 	found: Extract<Fresh, {_tag: "fresh" | "merged"}>,
 ): Resume => {
-	if (found._tag === "fresh" || STEPS.indexOf(s.at.step) <= STEPS.indexOf("review")) return s.at;
-	if (found.review._tag !== "kept") return {_tag: "run", step: "review"};
+	if (found._tag === "fresh" || STEPS.indexOf(s.at.step) <= STEPS.indexOf("review")) {
+		return s.at;
+	}
+
+	if (found.review._tag !== "kept") {
+		return {_tag: "run", step: "review"};
+	}
+
 	return s.asked.routed === true ? s.at : {_tag: "run", step: "push"};
 };
 
@@ -1195,13 +1268,23 @@ const releasing = (s: Held, close: End | Stop): Step_ => {
 
 /** `said`: what the trail and the end say. `asks`: the question, if this move asks one. `call`: if that question is a call. */
 const move = (s: Held, step: LaneStep, m: Move, said: string, asks = said, call?: Call): Step_ => {
-	if ("to" in m) return running(s, m.to, m.round);
-	if ("ask" in m) return asking(s, questionFor(s, m.ask, step, asks, call));
-	if ("fresh" in m) return refreshing(s, {_tag: "run", step: m.fresh}, true);
+	if ("to" in m) {
+		return running(s, m.to, m.round);
+	}
+
+	if ("ask" in m) {
+		return asking(s, questionFor(s, m.ask, step, asks, call));
+	}
+
+	if ("fresh" in m) {
+		return refreshing(s, {_tag: "run", step: m.fresh}, true);
+	}
+
 	if ("host" in m) {
 		const asked = readFiled({number: s.number});
 		return [{...heldOf(s), phase: "reading", step, said, asked}, [asked]];
 	}
+
 	// A stop goes on at the step that stopped: the same line runs it again.
 	return isEnd(m.end)
 		? releasing(s, {outcome: m.end, said})
@@ -1216,10 +1299,15 @@ const askedAgain = (s: Held, kind: Exclude<AskFor, "step">, step: LaneStep): Que
 
 /** The lane goes on where `at` says: a step it runs, or a question it asks again. `restarted`: as `running`'s. */
 const goOn = (s: Held, at: Resume, restarted = false): Step_ => {
-	if (at._tag === "run")
+	if (at._tag === "run") {
 		return running(s, at.step, at.round === "next" ? s.round + 1 : s.round, restarted);
+	}
+
 	// A step's own question is asked by the step: it runs again, and asks again if it still has to.
-	if (at.for === "step") return running(s, at.step);
+	if (at.for === "step") {
+		return running(s, at.step);
+	}
+
 	return asking(s, askedAgain(s, at.for, at.step));
 };
 
@@ -1292,7 +1380,11 @@ const withFresh = (s: Held, carry: StepEnd["carry"] | undefined): Held =>
 export const saidYes = (carry: Carry): Carry => {
 	const pull = carry.examPull;
 	const reviewed = pull?.reviewed;
-	if (pull === undefined || reviewed === undefined || reviewed.head !== pull.head) return carry;
+
+	if (pull === undefined || reviewed === undefined || reviewed.head !== pull.head) {
+		return carry;
+	}
+
 	const {head, onto, base, diff} = reviewed;
 	return {...carry, examPull: {...pull, yes: {head, onto, base, diff}}};
 };
@@ -1307,6 +1399,7 @@ const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string, note: strin
 		),
 		trail: [...s.trail, {step: question.ask, said: pick}],
 	};
+
 	if (pick === "go_on") {
 		const on: Held = {...held, carry: letThrough(held.carry)};
 		const {call} = question;
@@ -1321,8 +1414,13 @@ const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string, note: strin
 					askWords(question.step, call.after),
 				);
 	}
+
 	const at = resumeOf(question, pick);
-	if (!PAUSES[question.for].includes(pick)) return goOn(held, at);
+
+	if (!PAUSES[question.for].includes(pick)) {
+		return goOn(held, at);
+	}
+
 	// A person's `no` or `stop` pauses the lane where the pick goes on, saved. A stop on the rounds
 	// says so: the lane is stuck on them, and no person's no to the change.
 	return releasing(held, {
@@ -1355,10 +1453,16 @@ const RUN_FAILED = nameOf({kind: "stuck", why: "run_failed"});
 
 /** The lane goes on from a release: an end keeps nothing, a stop keeps its `Held` and where it goes on. */
 const released = (s: Lane): Step_ => {
-	if (s.phase !== "releasing") return [s, []];
+	if (s.phase !== "releasing") {
+		return [s, []];
+	}
+
 	const over = {phase: "over" as const, number: s.number, trail: s.trail};
-	if ("at" in s)
+
+	if ("at" in s) {
 		return [{...over, outcome: s.outcome, said: s.said, at: s.at, held: heldOf(s)}, []];
+	}
+
 	return [{...over, outcome: s.outcome, said: s.said}, []];
 };
 
@@ -1370,16 +1474,21 @@ const released = (s: Lane): Step_ => {
  */
 const hostRead = (s: Extract<Lane, {phase: "reading"; step: LaneStep}>, filed: Filed): Step_ => {
 	const held = heldOf(s);
-	if (!filed.mine)
+
+	if (!filed.mine) {
 		return releasing(held, {
 			outcome: {kind: "stuck", why: "not_yours"},
 			said: `#${s.number} was not filed by you or an agent of yours`,
 		});
-	if (filed.state === "closed")
+	}
+
+	if (filed.state === "closed") {
 		return releasing(held, {
 			outcome: {kind: "skip", why: "closed"},
 			said: `#${s.number} is closed`,
 		});
+	}
+
 	return releasing(held, {
 		outcome: {kind: "ask", who: "owner", for: "paused"},
 		said: `${s.step}: ${s.said}, on an open ticket`,
@@ -1413,7 +1522,10 @@ export const lane = defineMachine({
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step_ => {
-			if (s.phase !== "idle") return [s, []];
+			if (s.phase !== "idle") {
+				return [s, []];
+			}
+
 			const asked = readFiled({number: m.number});
 			const sendBack = m.sendBack === undefined ? {} : {sendBack: m.sendBack};
 			return [{phase: "reading", number: m.number, lane: m.lane, ...sendBack, asked}, [asked]];
@@ -1421,7 +1533,10 @@ export const lane = defineMachine({
 		// The same line typed again: a stop claims the ticket again, then reads main fresh. An end, or a
 		// stop in `FINAL`, stays as it is. A stop saved before a stop kept its `Held` goes on from its fold.
 		restart: (s, m): Step_ => {
-			if (s.phase !== "over" || isEnd(s.outcome)) return [s, []];
+			if (s.phase !== "over" || isEnd(s.outcome)) {
+				return [s, []];
+			}
+
 			const held: Held | null =
 				"held" in s
 					? s.held
@@ -1429,7 +1544,11 @@ export const lane = defineMachine({
 						? null
 						: {number: s.number, lane: m.lane, ...m.folded.held};
 			const at = "at" in s ? s.at : m.folded?.at;
-			if (held === null || at === undefined) return [s, []];
+
+			if (held === null || at === undefined) {
+				return [s, []];
+			}
+
 			// Each restart counts, so two that stop before any step runs never share a claim or a read.
 			const count = held.count + 1;
 			const asked = claimLane({
@@ -1440,12 +1559,21 @@ export const lane = defineMachine({
 			return [{...held, count, at: goesOnFrom(at, s.outcome), phase: "restarting", asked}, [asked]];
 		},
 		resume: (s): Step_ => {
-			if (s.phase === "idle" || s.phase === "over") return [s, []];
+			if (s.phase === "idle" || s.phase === "over") {
+				return [s, []];
+			}
+
 			return [s, [s.asked as LaneCmd]];
 		},
 		lane_read_ok: (s, m): Step_ => {
-			if (s.phase !== "reading") return [s, []];
-			if ("step" in s) return hostRead(s, m.value);
+			if (s.phase !== "reading") {
+				return [s, []];
+			}
+
+			if ("step" in s) {
+				return hostRead(s, m.value);
+			}
+
 			const held: Held = {
 				number: s.number,
 				lane: s.lane,
@@ -1455,14 +1583,19 @@ export const lane = defineMachine({
 				carry: EMPTY,
 				trail: [],
 			};
-			if (!m.value.mine)
+
+			if (!m.value.mine) {
 				return ended(
 					s.number,
 					{kind: "stuck", why: "not_yours"},
 					`#${s.number} was not filed by you or an agent of yours`,
 				);
-			if (m.value.state === "closed")
+			}
+
+			if (m.value.state === "closed") {
 				return ended(s.number, {kind: "skip", why: "closed"}, `#${s.number} is closed`);
+			}
+
 			const asked = claimLane({
 				number: s.number,
 				lane: s.lane,
@@ -1494,7 +1627,10 @@ export const lane = defineMachine({
 						)
 					: [s, []],
 		lane_claim_ok: (s, m): Step_ => {
-			if (s.phase !== "restarting" && s.phase !== "claiming") return [s, []];
+			if (s.phase !== "restarting" && s.phase !== "claiming") {
+				return [s, []];
+			}
+
 			// Another lane holds the ticket: this one ends and names it, as operate does (jidoka row 3).
 			if (m.value !== s.lane) {
 				const outcome = {kind: "skip", why: "claimed"} as const;
@@ -1509,19 +1645,31 @@ export const lane = defineMachine({
 					[],
 				];
 			}
+
 			return s.phase === "restarting" ? refreshing(s, s.at) : running(heldOf(s), "triage");
 		},
 		lane_claim_err: (s): Step_ => {
 			const said = "the claim could not be made";
 			const failed = {kind: "stuck", why: "step_failed"} as const;
-			if (s.phase === "claiming") return stopped(s, failed, said, {_tag: "run", step: "triage"});
-			if (s.phase === "restarting") return stopped(s, failed, said, s.at);
+
+			if (s.phase === "claiming") {
+				return stopped(s, failed, said, {_tag: "run", step: "triage"});
+			}
+
+			if (s.phase === "restarting") {
+				return stopped(s, failed, said, s.at);
+			}
+
 			return [s, []];
 		},
 		lane_fresh_ok: (s, m): Step_ => {
-			if (s.phase !== "refreshing") return [s, []];
+			if (s.phase !== "refreshing") {
+				return [s, []];
+			}
+
 			const held = heldOf(s);
 			const found = m.value;
+
 			switch (found._tag) {
 				case "closed":
 					return releasing(held, {
@@ -1548,10 +1696,13 @@ export const lane = defineMachine({
 				case "merged": {
 					const on = withFresh(held, found.carry);
 					const at = freshAt(s, found);
+
 					// Code's checks at the head a step after the build goes on at are red: the builder gets
 					// them, a round up, as after a build's own red, or a person is asked past the bound.
-					if (!AFTER_BUILD.has(at.step) || uncheckedAt(on.carry) !== "checks_red")
+					if (!AFTER_BUILD.has(at.step) || uncheckedAt(on.carry) !== "checks_red") {
 						return goOn(on, at, true);
+					}
+
 					const red: Outcome = {kind: "send", to: "builder", why: "checks_red"};
 					return move(
 						on,
@@ -1573,7 +1724,10 @@ export const lane = defineMachine({
 					})
 				: [s, []],
 		lane_step_ok: (s, m): Step_ => {
-			if (s.phase !== "running") return [s, []];
+			if (s.phase !== "running") {
+				return [s, []];
+			}
+
 			const said = nameOf(m.value.outcome);
 			const held: Held = {
 				...heldOf(s),
@@ -1594,8 +1748,14 @@ export const lane = defineMachine({
 		},
 		// A step that could not run is run once more, as the same Act (P8). Twice: the lane stops there.
 		lane_step_err: (s): Step_ => {
-			if (s.phase !== "running") return [s, []];
-			if (s.again !== true) return [{...s, again: true}, [s.asked]];
+			if (s.phase !== "running") {
+				return [s, []];
+			}
+
+			if (s.again !== true) {
+				return [{...s, again: true}, [s.asked]];
+			}
+
 			return releasing(
 				{...heldOf(s), trail: [...s.trail, {step: s.step, said: RUN_FAILED}]},
 				{

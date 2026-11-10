@@ -29,19 +29,23 @@ export const connect = (path: string): {db: L.Db; close(): void} => {
 				.all(...bind)
 				.map((row) => {
 					const r: L.SqlRow = {};
-					for (const [k, v] of Object.entries(row))
+
+					for (const [k, v] of Object.entries(row)) {
 						r[k] =
 							typeof v === "bigint"
 								? Number(v)
 								: typeof v === "number" || typeof v === "string"
 									? v
 									: null;
+					}
+
 					return r;
 				}),
 		tx: (fn) => {
 			const name = `sp${depth}`;
 			raw.exec(depth === 0 ? "BEGIN IMMEDIATE" : `SAVEPOINT ${name}`);
 			depth++;
+
 			try {
 				const res = fn();
 				depth--;
@@ -69,6 +73,7 @@ export const readOnlyRows = (path: string, sql: string, ...bind: L.Value[]): L.S
 	url.searchParams.set("mode", "ro");
 	url.searchParams.set("immutable", "1");
 	const raw = new DatabaseSync(url, {readOnly: true});
+
 	try {
 		raw.exec("PRAGMA busy_timeout = 10000");
 		return raw
@@ -76,13 +81,16 @@ export const readOnlyRows = (path: string, sql: string, ...bind: L.Value[]): L.S
 			.all(...bind)
 			.map((row) => {
 				const r: L.SqlRow = {};
-				for (const [k, v] of Object.entries(row))
+
+				for (const [k, v] of Object.entries(row)) {
 					r[k] =
 						typeof v === "bigint"
 							? Number(v)
 							: typeof v === "number" || typeof v === "string"
 								? v
 								: null;
+				}
+
 				return r;
 			});
 	} finally {
@@ -131,12 +139,20 @@ const isReason = (v: unknown): v is L.ExitReason =>
 
 /** 102: an object of numbers under these keys only, as limits or a cost are; the rules judge the numbers. */
 const numbersOf = (v: unknown, keys: readonly string[]): Record<string, number> => {
-	if (typeof v !== "object" || v === null) throw new Error("not an object of numbers");
+	if (typeof v !== "object" || v === null) {
+		throw new Error("not an object of numbers");
+	}
+
 	const out: Record<string, number> = {};
+
 	for (const [k, x] of Object.entries(v)) {
-		if (!keys.includes(k) || typeof x !== "number") throw new Error(`bad ${k}`);
+		if (!keys.includes(k) || typeof x !== "number") {
+			throw new Error(`bad ${k}`);
+		}
+
 		out[k] = x;
 	}
+
 	return out;
 };
 
@@ -162,7 +178,11 @@ export const dispatch = (
 			return L.registerWith(rules)(db, now, str(a[0]), str(a[1]));
 		case "append": {
 			const event = a[2];
-			if (!isEvent(event)) throw new Error("append: not an event");
+
+			if (!isEvent(event)) {
+				throw new Error("append: not an event");
+			}
+
 			const fence = orNull(a[3]);
 			return L.appendWith(rules)(
 				db,
@@ -180,7 +200,10 @@ export const dispatch = (
 		case "cancel":
 			return L.cancel(db, now, str(a[0]), str(a[1]));
 		case "exit": {
-			if (!isReason(a[2])) throw new Error("exit: not a reason");
+			if (!isReason(a[2])) {
+				throw new Error("exit: not a reason");
+			}
+
 			const suspect = orNull(a[4]);
 			return L.exitWith(rules)(
 				db,
@@ -226,7 +249,11 @@ export const dispatch = (
 			return L.usageWith(rules)(db, str(a[0]));
 		case "exitChild": {
 			const signal = a[3];
-			if (signal !== "shutdown" && signal !== "kill") throw new Error("exitChild: not a signal");
+
+			if (signal !== "shutdown" && signal !== "kill") {
+				throw new Error("exitChild: not a signal");
+			}
+
 			return L.exitChildWith(rules)(
 				db,
 				now,

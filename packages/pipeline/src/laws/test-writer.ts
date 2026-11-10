@@ -156,32 +156,53 @@ export function testWriterLaws<S extends TestWriter>(): readonly Law<S, Msg, Tes
 			null,
 			(brief, {next, cmds}) => {
 				const now = briefOf(next) ?? brief;
+
 				for (const cmd of cmds) {
-					if (cmd.type !== "tests_commit") continue;
-					if (now === null) return broke("a commit with no brief");
+					if (cmd.type !== "tests_commit") {
+						continue;
+					}
+
+					if (now === null) {
+						return broke("a commit with no brief");
+					}
+
 					const draft = next.phase === "committing" ? next.written : null;
-					if (draft === null || problemsOf(draft, now).length > 0)
+
+					if (draft === null || problemsOf(draft, now).length > 0) {
 						return broke("committed a draft the Check fails");
+					}
 				}
+
 				return now;
 			},
 		),
 		law<S, Msg, TestWriterCmd>(
 			"done only with a commit, every result recorded and read back, and nothing to ask",
 			({prev, next}) => {
-				if (next.phase !== "over" || prev.phase === "over" || next.outcome.kind !== "done")
+				if (next.phase !== "over" || prev.phase === "over" || next.outcome.kind !== "done") {
 					return null;
+				}
+
 				const {report} = next;
-				if (report.commit === null) return "done with no commit";
-				if (report.found.length > 0) return `done with ${report.found.length} surprises`;
+
+				if (report.commit === null) {
+					return "done with no commit";
+				}
+
+				if (report.found.length > 0) {
+					return `done with ${report.found.length} surprises`;
+				}
+
 				return report.checked.length === ASK.properties.length
 					? null
 					: `done with ${report.checked.length} results of ${ASK.properties.length}`;
 			},
 		),
 		law<S, Msg, TestWriterCmd>("an ask names a surprise of that kind", ({prev, next}) => {
-			if (next.phase !== "over" || prev.phase === "over" || next.outcome.kind !== "ask")
+			if (next.phase !== "over" || prev.phase === "over" || next.outcome.kind !== "ask") {
 				return null;
+			}
+
 			const {outcome, report} = next;
 			return report.found.some((f) => f.for === outcome.for)
 				? null
@@ -220,7 +241,11 @@ export function testWriterLaws<S extends TestWriter>(): readonly Law<S, Msg, Tes
 					(msg.type === "tests_write_finished" || msg.type === "tests_write_failed") &&
 					structuralHash(prev) !== structuralHash(next);
 				const now = took ? spent + msg.spend.costUsd : spent;
-				if (next.phase !== "over" || prev.phase === "over") return now;
+
+				if (next.phase !== "over" || prev.phase === "over") {
+					return now;
+				}
+
 				return next.report.costUsd === now
 					? now
 					: broke(`${now} spent, and the report says ${next.report.costUsd}`);
@@ -230,8 +255,14 @@ export function testWriterLaws<S extends TestWriter>(): readonly Law<S, Msg, Tes
 		law<S, Msg, TestWriterCmd>(
 			"a run that fails keeps every row the writer said no test can check",
 			({prev, next}) => {
-				if (next.phase !== "over" || prev.phase === "over") return null;
-				if (next.outcome.kind !== "stuck" || next.outcome.why !== "run_failed") return null;
+				if (next.phase !== "over" || prev.phase === "over") {
+					return null;
+				}
+
+				if (next.outcome.kind !== "stuck" || next.outcome.why !== "run_failed") {
+					return null;
+				}
+
 				const said = (next.report.written?.answers ?? []).filter((a) => a.kind === "cannot");
 				const kept = next.report.found.filter((f) => f.for === "cannot_test");
 				return said.every((a) => kept.some((f) => f.property === a.property))
@@ -242,8 +273,14 @@ export function testWriterLaws<S extends TestWriter>(): readonly Law<S, Msg, Tes
 		law<S, Msg, TestWriterCmd>(
 			"a run that fails and says why keeps the cause, and one that says nothing keeps none",
 			({prev, msg, next}) => {
-				if (msg.type !== "tests_on_base_err" || prev.phase !== "running") return null;
-				if (next.phase !== "over") return "a failed run did not end the writer";
+				if (msg.type !== "tests_on_base_err" || prev.phase !== "running") {
+					return null;
+				}
+
+				if (next.phase !== "over") {
+					return "a failed run did not end the writer";
+				}
+
 				const kept = next.report.failure;
 				const gave = "why" in msg.error ? msg.error : null;
 				return structuralHash(kept) === structuralHash(gave)
@@ -303,6 +340,7 @@ export const takesAnyRun: Update<TestWriter, Msg, TestWriterCmd> = (s, m) => {
 		const id = runIdOf(s);
 		return id === null ? update(s, m) : update(s, {...m, id});
 	}
+
 	return update(s, m);
 };
 

@@ -78,7 +78,9 @@ describe("P10 signed text", () => {
 		expect(text).toBe(
 			`{"_tag":"enrolled","id":"a1","to":"project-a","for":"${PERSON}","key":"sk-key","window":"window","nonce":"n1"}\n`,
 		);
-		for (const name of ["id", "to", "for", "key", "window", "nonce"] as const)
+
+		for (const name of ["id", "to", "for", "key", "window", "nonce"] as const) {
 			expect(C.enrollmentText({...value, [name]: "changed"})).not.toBe(text);
+		}
 	});
 });

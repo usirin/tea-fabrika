@@ -115,10 +115,13 @@ const ONLY = taskId("t1");
 export function followed(book: Book, criteria: readonly Stated[]): Book {
 	const steps = criteria.reduce((b, c): Book => {
 		const entry = b.live.find((e) => e.id === c.id);
-		if (entry === undefined)
+
+		if (entry === undefined) {
 			return c.id === nextId(b) && c.version === 1
 				? apply(b, {type: "added", task: ONLY, text: c.text, by: "plan"})
 				: b;
+		}
+
 		const last = entry.wordings[entry.wordings.length - 1];
 		return last !== undefined && c.version === last.version + 1 && c.text !== last.text
 			? apply(b, {type: "reworded", id: c.id, text: c.text, by: "owner"})
@@ -171,10 +174,15 @@ export const ledgerRecord = Layer.effect(
 					const plan = planFor(state, ticket);
 					const book = plan === null ? null : bookOf(state, plan);
 					const task = plan === null ? null : firstTaskOf(state, plan);
-					if (plan === null || book === null || task === null) return;
+
+					if (plan === null || book === null || task === null) {
+						return;
+					}
+
 					const rows = kept(book, judgement);
+
 					// A round with no row kept still judges what earlier rounds found.
-					if (rows.length > 0 || judgement.found.length > 0 || book.live.some(byReview))
+					if (rows.length > 0 || judgement.found.length > 0 || book.live.some(byReview)) {
 						yield* sendFact(
 							{
 								type: "judged",
@@ -190,6 +198,7 @@ export const ledgerRecord = Layer.effect(
 							Effect.catchTag("Fenced", () => Effect.die("an unfenced send was fenced")),
 							Effect.provideService(Ledger, ledger),
 						);
+					}
 				}),
 		};
 	}),

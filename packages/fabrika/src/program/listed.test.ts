@@ -25,7 +25,10 @@ const count = defineProgram({
 	main: ({flags, send}) =>
 		Effect.gen(function* () {
 			const {from} = yield* Base;
-			for (let i = 0; i < flags.n; i++) yield* send("n", from + i);
+
+			for (let i = 0; i < flags.n; i++) {
+				yield* send("n", from + i);
+			}
 		}),
 });
 
@@ -80,7 +83,11 @@ const packed = () => {
 const host = (entries: ReadonlyMap<string, Entry>) => {
 	const of = (name: string) => {
 		const entry = entries.get(name);
-		if (entry === undefined) throw new Error(`no program ${name}`);
+
+		if (entry === undefined) {
+			throw new Error(`no program ${name}`);
+		}
+
 		return entry;
 	};
 	const keeping = (id: string) => ({id, storage: memoryStorage()});
@@ -93,9 +100,17 @@ const host = (entries: ReadonlyMap<string, Entry>) => {
 				{text: (value: unknown) => heard.push(value)},
 				keeping(`${id}:to`),
 			);
-			if (sink.kind !== "running") return {kind: "refused" as const, why: sink.why};
+
+			if (sink.kind !== "running") {
+				return {kind: "refused" as const, why: sink.why};
+			}
+
 			const source = yield* of(from).pipe(fromFlags, {}, keeping(`${id}:from`), "n", sink, "n");
-			if (source.kind !== "running") return {kind: "refused" as const, why: source.kind};
+
+			if (source.kind !== "running") {
+				return {kind: "refused" as const, why: source.kind};
+			}
+
 			const ended = yield* sink.run.ended;
 			return {kind: ended.kind, heard};
 		}).pipe(Effect.scoped);
@@ -115,8 +130,11 @@ describe("listed: a host that is not tsh", () => {
 				concurrency: 1,
 			}),
 		);
-		for (const run of runs)
+
+		for (const run of runs) {
 			expect(run).toEqual({kind: "ended", heard: ["#10", "#11", "#12", "#13", "#14"]});
+		}
+
 		// Made fresh for each run, inside the run's scope: three pipes, three of each.
 		expect(builds).toEqual({base: 3, prefix: 3});
 
@@ -147,7 +165,11 @@ describe("listed: a host that is not tsh", () => {
 		const answer = await Effect.runPromise(
 			Effect.gen(function* () {
 				const sink = yield* of("label").start({}, {}, keeping("sink"));
-				if (sink.kind !== "running") return sink.kind;
+
+				if (sink.kind !== "running") {
+					return sink.kind;
+				}
+
 				return (yield* of("count").pipe({n: 1}, {}, keeping("src"), "missing", sink, "n")).kind;
 			}).pipe(Effect.scoped),
 		);
@@ -220,7 +242,10 @@ const asks = defineProgram({
 describe("forAgent: an entry as an agent may start it", () => {
 	it("is the entry itself when its program has no input only a person tells", () => {
 		const {entries} = packed();
-		for (const entry of entries.values()) expect(entry.forAgent()).toBe(entry);
+
+		for (const entry of entries.values()) {
+			expect(entry.forAgent()).toBe(entry);
+		}
 	});
 
 	it("is made once for a program with one: the same entry on every ask, and not the person's", () => {

@@ -47,7 +47,10 @@ const isAnswer = (m: unknown): m is Answer =>
 
 /** The streams a call wrote: its first argument, or (99's calls, the alarm) the `written` it answers. */
 const writes = (method: string, args: readonly unknown[], answer: unknown): string[] => {
-	if (["register", "append", "claim", "cancel"].includes(method)) return [String(args[0])];
+	if (["register", "append", "claim", "cancel"].includes(method)) {
+		return [String(args[0])];
+	}
+
 	const list =
 		typeof answer === "object" && answer !== null && "written" in answer ? answer.written : answer;
 	return Array.isArray(list)
@@ -85,20 +88,31 @@ export const layerSqlite = (o: SqliteOptions) =>
 			const waiting = new Map<number, Deferred.Deferred<unknown, LedgerUnreachable>>();
 			// A thread that dies answers nothing again: every call waiting, and every call after, fails.
 			let dead: string | null = null;
+
 			for (const w of workers) {
 				// A thread can throw anything, not only an Error.
 				w.on("error", (e) => {
 					const message = e instanceof Error ? e.message : String(e);
 					dead = message;
-					for (const d of waiting.values())
+
+					for (const d of waiting.values()) {
 						Deferred.doneUnsafe(d, Effect.fail(new LedgerUnreachable({method: "sqlite", message})));
+					}
+
 					waiting.clear();
 				});
 				w.on("message", (m: unknown) => {
-					if (!isAnswer(m)) return;
+					if (!isAnswer(m)) {
+						return;
+					}
+
 					const d = waiting.get(m.id);
 					waiting.delete(m.id);
-					if (d === undefined) return;
+
+					if (d === undefined) {
+						return;
+					}
+
 					Deferred.doneUnsafe(
 						d,
 						m.error === undefined
@@ -107,10 +121,14 @@ export const layerSqlite = (o: SqliteOptions) =>
 					);
 				});
 			}
+
 			let next = 0;
 			return yield* served(o, (method, args) =>
 				Effect.gen(function* () {
-					if (dead !== null) return yield* new LedgerUnreachable({method: "sqlite", message: dead});
+					if (dead !== null) {
+						return yield* new LedgerUnreachable({method: "sqlite", message: dead});
+					}
+
 					const id = next++;
 					const d = yield* Deferred.make<unknown, LedgerUnreachable>();
 					waiting.set(id, d);

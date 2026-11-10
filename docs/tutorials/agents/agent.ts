@@ -26,11 +26,18 @@ const ask = async (guest: string): Promise<Written> => {
 			cwd: tmpdir(),
 		},
 	})) {
-		if (m.type !== "result") continue;
+		if (m.type !== "result") {
+			continue;
+		}
+
 		// A missing login comes back as a "success" with `is_error` set.
-		if (m.subtype !== "success" || m.is_error) throw new Error(`no line: ${m.subtype}`);
+		if (m.subtype !== "success" || m.is_error) {
+			throw new Error(`no line: ${m.subtype}`);
+		}
+
 		return {line: m.result.trim(), usd: m.total_cost_usd};
 	}
+
 	throw new Error("no result from the agent");
 };
 

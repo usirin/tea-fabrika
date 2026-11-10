@@ -250,16 +250,20 @@ describe("a lane's facts", () => {
 			{type: "answered", ask: "a-1", pick: "approve", note: "", text},
 			{type: "answered", ask: "a-1", pick: "approve", note: ""},
 		];
+
 		for (const fact of facts) {
 			const read = readRow(row({fact}));
 			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
 		}
+
 		const wrong = [
 			{type: "commented", body: "Skip.", asks: "merge"},
 			{type: "answered", ask: "a-1", pick: "approve", note: "", text: "sha256:short"},
 		];
-		for (const fact of wrong)
+
+		for (const fact of wrong) {
 			expect(readRow(row({data: JSON.stringify(fact), kind: fact.type})).kind).toBe("broken");
+		}
 	});
 
 	// Self-fix PR 3: the error text exists only while the tests run, so the step's end keeps the names.
@@ -357,6 +361,7 @@ describe("a lane's facts", () => {
 				);
 				expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
 			}
+
 			// Broken: a result that is not one of the three, a head that is not a sha, or 51 names.
 			const wrong = [
 				checked("skipped"),
@@ -366,8 +371,10 @@ describe("a lane's facts", () => {
 					Array.from({length: 51}, (_, i) => name(i)),
 				),
 			];
-			for (const fact of wrong)
+
+			for (const fact of wrong) {
 				expect(readRow(row({data: JSON.stringify(fact), kind: "checked"})).kind).toBe("broken");
+			}
 		});
 
 		// The PR 4 review, record wide: each command's exit code and how long it took, which exist
@@ -494,10 +501,12 @@ describe("what a lane records wide", () => {
 			{type: "commented", body: "Skip part 2.", asks: "changes", during: "r-build-1"},
 			{type: "commented", body: "Seen it."},
 		];
+
 		for (const fact of facts) {
 			const read = readRow(row({data: JSON.stringify(fact), kind: "commented"}));
 			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
 		}
+
 		const spaced = {type: "commented", body: "Skip.", during: "r build 1"};
 		expect(readRow(row({data: JSON.stringify(spaced), kind: "commented"})).kind).toBe("broken");
 	});
@@ -526,8 +535,10 @@ describe("what a lane records wide", () => {
 				const timeline: Entry[] = [filed];
 				const open: string[] = [];
 				let runs = 0;
+
 				for (const {kind, pick} of steps) {
 					const pos = timeline.length + 1;
+
 					if (kind === "start") {
 						runs += 1;
 						open.push(`r-build-${runs}`);
@@ -535,8 +546,11 @@ describe("what a lane records wide", () => {
 					} else if (kind === "end" && open.length > 0) {
 						const [run = ""] = open.splice(pick % open.length, 1);
 						timeline.push(end(pos, run));
-					} else timeline.push(said(pos));
+					} else {
+						timeline.push(said(pos));
+					}
 				}
+
 				expect(fold([], timeline).problems).toEqual([]);
 				// The model: the last start, unless an end after it names the same run.
 				const at = timeline.findLastIndex((e) => e.fact.type === "started");
@@ -637,8 +651,9 @@ describe("what a yes was given on", () => {
 	});
 
 	it("a carried yes is a fact of its own: from which head, to which, and why", () => {
-		for (const why of ["same_head", "replayed", "formatted", "glanced"])
+		for (const why of ["same_head", "replayed", "formatted", "glanced"]) {
 			kept({type: "carried", from: HEAD, to: "c".repeat(40), why}, "carried");
+		}
 	});
 
 	it("a carried yes is code's to write, never only a person's", () => {

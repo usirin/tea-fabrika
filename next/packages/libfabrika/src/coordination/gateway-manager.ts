@@ -105,12 +105,15 @@ export class GatewayManager extends Context.Service<
 					}),
 					online: Effect.fn("gateway.online")(function* (key: string) {
 						yield* Effect.annotateCurrentSpan(short({"fab.gateway.key": key}));
+
 						if (
 							!(yield* Effect.suspend(() => adapter.admitted(key)).pipe(
 								Effect.provideContext(context),
 							))
-						)
+						) {
 							return [];
+						}
+
 						const connections = yield* stored(() =>
 							sql
 								.exec(`SELECT * FROM process_gateways WHERE "key" = ? ORDER BY client`, key)

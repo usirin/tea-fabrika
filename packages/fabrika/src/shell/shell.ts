@@ -178,18 +178,24 @@ export const tsh = defineProgram({
 			// The host's jobs: its table, opened by the host, and the storage their runs keep in.
 			const {table, storage, kept, owner, by, restarted} = yield* HostJobs;
 			const scope = yield* Effect.scope;
-			if (!kept) yield* send("printed", {to: "err", text: TABLE_REFUSED});
+
+			if (!kept) {
+				yield* send("printed", {to: "err", text: TABLE_REFUSED});
+			}
+
 			yield* watch("jobs", TABLE.key, table);
 			// What the host found from before it started runs nowhere now: it waits to be attached.
 			// Only this tsh's own are said; `jobs` lists every one. A host restarted on purpose says
 			// who restarted it, as a stop says who stopped a job.
 			const waiting = earlierFor(table.getState(), owner);
 			const after = restarted === undefined ? "" : `, restarted by ${restarted.by}`;
-			if (waiting.length > 0)
+
+			if (waiting.length > 0) {
 				yield* send("printed", {
 					to: "err",
 					text: `tsh: ${waiting.length} job${waiting.length === 1 ? "" : "s"} from an earlier tsh${after}, not running: ${waiting.map((j) => `%${j.n}`).join(" ")}. attach %n starts one again; jobs lists them.`,
 				});
+			}
 
 			// Everything tsh says goes through one line, so a line's output is never passed by its `ready`.
 			const spoken = yield* Queue.unbounded<Spoken, Cause.Done>();
@@ -245,8 +251,12 @@ export const tsh = defineProgram({
 					Queue.offerUnsafe(spoken, {kind: "status", n, text});
 				},
 				ask: (n, a) => {
-					if (a === null) asking.delete(n);
-					else asking.set(n, a);
+					if (a === null) {
+						asking.delete(n);
+					} else {
+						asking.set(n, a);
+					}
+
 					Queue.offerUnsafe(spoken, {kind: "asked", n, text: a?.text ?? null});
 				},
 				announce: (n, text) => {
@@ -259,8 +269,13 @@ export const tsh = defineProgram({
 				Effect.gen(function* () {
 					const a = asking.get(n);
 					const running = a === undefined ? undefined : shell.live.get(a.run);
-					if (a === undefined || running === undefined) return;
+
+					if (a === undefined || running === undefined) {
+						return;
+					}
+
 					asking.delete(n);
+
 					// Who answered goes with the answer, for the record: only a person's tsh answers.
 					if (by === null) {
 						print(
@@ -270,10 +285,14 @@ export const tsh = defineProgram({
 						);
 						return;
 					}
+
 					const word = yield* running.run
 						.tell(a.input, {ask: a.id, allow, by})
 						.pipe(Effect.catchTag("MailboxFull", () => Effect.succeed("full")));
-					if (word !== "queued") print("err", `tsh: %${n} did not take the answer: ${word}`, n);
+
+					if (word !== "queued") {
+						print("err", `tsh: %${n} did not take the answer: ${word}`, n);
+					}
 				});
 
 			const oneLine = (
@@ -284,28 +303,50 @@ export const tsh = defineProgram({
 					const said = typeof line === "string" ? yield* Clock.currentTimeMillis : line.said;
 					return yield* Effect.gen(function* () {
 						const parsed = parse(text);
+
 						if (parsed.kind === "refused") {
-							for (const l of refusalLines(text, parsed)) print("err", l);
+							for (const l of refusalLines(text, parsed)) {
+								print("err", l);
+							}
+
 							return {status: 2, exit: false};
 						}
+
 						let said: Said = {status: 0, exit: false};
+
 						for (const st of parsed.statements) {
 							// `a && b`: b only if a ended well; `a || b`: b only if it did not. The status stays a's.
-							if (st.after === "&&" && said.status !== 0) continue;
-							if (st.after === "||" && said.status === 0) continue;
-							if (st.kind === "builtin") said = yield* runBuiltin(shell, st, text);
-							else if (st.kind === "said") said = yield* runSaid(shell, st);
-							else {
+							if (st.after === "&&" && said.status !== 0) {
+								continue;
+							}
+
+							if (st.after === "||" && said.status === 0) {
+								continue;
+							}
+
+							if (st.kind === "builtin") {
+								said = yield* runBuiltin(shell, st, text);
+							} else if (st.kind === "said") {
+								said = yield* runSaid(shell, st);
+							} else {
 								const checked = check(st.pipeline, list, text);
+
 								if (checked.kind === "refused") {
-									for (const l of refusalLines(text, checked)) print("err", l);
+									for (const l of refusalLines(text, checked)) {
+										print("err", l);
+									}
+
 									said = {status: checked.status, exit: false};
 								} else if (checked.kind === "help") {
 									const page =
 										checked.parts === null
 											? helpOf(checked.entry, list)
 											: partsHelp(checked.entry, checked.parts);
-									for (const l of page) print("out", l);
+
+									for (const l of page) {
+										print("out", l);
+									}
+
 									said = {status: 0, exit: false};
 								} else {
 									const done = yield* runLine(
@@ -318,8 +359,12 @@ export const tsh = defineProgram({
 									said = {status: done.status, exit: false};
 								}
 							}
-							if (said.exit) break;
+
+							if (said.exit) {
+								break;
+							}
 						}
+
 						return said;
 					}).pipe(Effect.annotateLogs({line: text, said}));
 				});
@@ -331,9 +376,17 @@ export const tsh = defineProgram({
 			 */
 			const besideLine = (text: string): Effect.Effect<Said> => {
 				const parsed = parse(text);
-				if (parsed.kind === "refused") return oneLine(text);
+
+				if (parsed.kind === "refused") {
+					return oneLine(text);
+				}
+
 				const first = parsed.statements.find((st) => st.kind !== "run" || !st.background);
-				if (first === undefined) return oneLine(text);
+
+				if (first === undefined) {
+					return oneLine(text);
+				}
+
 				print(
 					"err",
 					`tsh: ${first.text.trim()} must run in the foreground: a line told beside one runs only programs, each ending with &`,
@@ -391,13 +444,18 @@ export const tsh = defineProgram({
 			const left = table
 				.getState()
 				.jobs.filter((job) => job.state === "running" && shell.watched.has(job.stages[0].run));
-			if (left.length > 0)
+
+			if (left.length > 0) {
 				print(
 					"err",
 					`tsh: ${left.length} job${left.length === 1 ? "" : "s"} stop with tsh and stay in its table: ${left.map((j) => `%${j.n}`).join(" ")}. Start tsh again and attach them.`,
 				);
-			for (const job of left)
+			}
+
+			for (const job of left) {
 				yield* table.dispatch({type: "detached", n: job.n}).pipe(Effect.ignore);
+			}
+
 			Queue.endUnsafe(spoken);
 			yield* Fiber.join(speaker);
 		}).pipe(Effect.scoped),

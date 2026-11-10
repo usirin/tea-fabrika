@@ -46,8 +46,14 @@ const ON_PURPOSE = "On purpose: // oxlint-disable-next-line fabrika/no-project-s
 
 /** A key as written, with its quotes. A computed key has none: `[x]` is not `x`. */
 const written = (key: Node, computed: boolean): string | null => {
-	if (computed) return null;
-	if (key.type === "Identifier") return key.name;
+	if (computed) {
+		return null;
+	}
+
+	if (key.type === "Identifier") {
+		return key.name;
+	}
+
 	return quoted(key);
 };
 
@@ -56,6 +62,7 @@ const FLAG = /^["'](?:--project-config-root.*|--setting-sources=.+)/;
 /** A string that is a value, not a name: not a key, an import's source, a type or an attribute. */
 const isValue = (node: Node & {readonly parent: Node}): boolean => {
 	const {parent} = node;
+
 	switch (parent.type) {
 		case "Property":
 			return parent.computed || parent.key !== node;
@@ -94,35 +101,52 @@ export const noProjectSettings: CreateRule = {
 			node.type === "ArrayExpression" && node.elements.length === 0 && grouped(source, node) === 0;
 		return {
 			Property(node) {
-				if (node.parent.type !== "ObjectExpression") return;
-				if (node.method || node.kind !== "init") return;
+				if (node.parent.type !== "ObjectExpression") {
+					return;
+				}
+
+				if (node.method || node.kind !== "init") {
+					return;
+				}
+
 				if (node.shorthand) {
 					const name = written(node.key, false);
+
 					if (name === "settingSources" || name === "projectConfigRoot") {
 						context.report({
 							node,
 							message: `Where a Claude run's settings come from is said only by \`ownRules\` (@kampus/fabrika-old/agents/sandbox), or \`settingSources: []\`, written out. ${ON_PURPOSE}`,
 						});
 					}
+
 					return;
 				}
+
 				const name = written(node.key, node.computed);
-				if (name === null) return;
+
+				if (name === null) {
+					return;
+				}
+
 				const bare = name.replace(/^["']|["']$/g, "");
+
 				if (bare === "settingSources" && !isEmptyList(node.value)) {
 					context.report({
 						node: node.key,
 						message: `\`settingSources\` with a source in it can load the project's hooks, env and apiKeyHelper (experiment 155). Load a folder's rule files with \`...ownRules(...)\` from @kampus/fabrika-old/agents/sandbox, or no settings with \`settingSources: []\`. ${ON_PURPOSE}`,
 					});
 				}
+
 				if (bare === "projectConfigRoot") {
 					context.report({
 						node: node.key,
 						message: `\`projectConfigRoot\` is set only by \`ownRules\` (@kampus/fabrika-old/agents/sandbox), on the system's empty folder: pointed anywhere else, a run reads that folder's settings and hooks (experiment 155). ${ON_PURPOSE}`,
 					});
 				}
+
 				const isFlagKey =
 					name !== bare && (bare === "setting-sources" || bare === "project-config-root");
+
 				if (isFlagKey && !isEmptyString(source, node.value)) {
 					context.report({
 						node: node.key,
@@ -131,15 +155,23 @@ export const noProjectSettings: CreateRule = {
 				}
 			},
 			AssignmentExpression(node) {
-				if (node.operator !== "=" || node.left.type !== "MemberExpression") return;
-				if (node.left.computed || node.left.optional) return;
+				if (node.operator !== "=" || node.left.type !== "MemberExpression") {
+					return;
+				}
+
+				if (node.left.computed || node.left.optional) {
+					return;
+				}
+
 				const name = node.left.property.type === "Identifier" ? node.left.property.name : null;
+
 				if (name === "settingSources" && !isEmptyList(node.right)) {
 					context.report({
 						node,
 						message: `\`settingSources\` with a source in it can load the project's hooks, env and apiKeyHelper (experiment 155). Use \`...ownRules(...)\` from @kampus/fabrika-old/agents/sandbox, or \`settingSources: []\`. ${ON_PURPOSE}`,
 					});
 				}
+
 				if (name === "projectConfigRoot") {
 					context.report({
 						node,
@@ -156,8 +188,15 @@ export const noProjectSettings: CreateRule = {
 						grouped(source, element) === 0,
 				);
 				const flag = node.elements[at];
-				if (at === -1 || flag == null || at + 1 >= node.elements.length) return;
-				if (isEmptyString(source, node.elements[at + 1] ?? null)) return;
+
+				if (at === -1 || flag == null || at + 1 >= node.elements.length) {
+					return;
+				}
+
+				if (isEmptyString(source, node.elements[at + 1] ?? null)) {
+					return;
+				}
+
 				context.report({
 					node: flag,
 					message: `\`--setting-sources\` with a source in it can load the project's hooks, env and apiKeyHelper (experiment 155). Pass an empty string, or run through the Agent SDK with \`...ownRules(...)\`. ${ON_PURPOSE}`,
@@ -165,7 +204,11 @@ export const noProjectSettings: CreateRule = {
 			},
 			Literal(node) {
 				const raw = quoted(node);
-				if (raw === null || !FLAG.test(raw) || !isValue(node)) return;
+
+				if (raw === null || !FLAG.test(raw) || !isValue(node)) {
+					return;
+				}
+
 				context.report({
 					node,
 					message: `Where a Claude run's settings come from is said only by \`ownRules\` (@kampus/fabrika-old/agents/sandbox), not by a CLI flag (experiment 155). ${ON_PURPOSE}`,
