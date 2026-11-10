@@ -15,7 +15,16 @@ export const hash = Effect.fn("build.hash")((text: string) =>
 );
 
 export const bundle = Effect.fn("build.bundle")(function* (input: string, plugins: Array<Plugin>) {
-	const options = {input, plugins, platform: "browser" as const, external: ["cloudflare:workers"]};
+	// Spike (experiment 248): Alchemy's bridge imports node: modules, and its plan-only code is
+	// dropped by the same flag Alchemy's own bundler sets.
+	const options = {
+		input,
+		plugins,
+		platform: "browser" as const,
+		external: ["cloudflare:workers", /^node:/],
+		transform: {define: {"globalThis.__ALCHEMY_RUNTIME__": "true"}},
+		logLevel: "silent" as const,
+	};
 	const fail = (error: unknown) => new BuildError({reason: "bundle", message: String(error)});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown's build API returns a Promise
 	const built = yield* Effect.tryPromise({try: () => rolldown(options), catch: fail});
@@ -23,7 +32,12 @@ export const bundle = Effect.fn("build.bundle")(function* (input: string, plugin
 		Effect.succeed(built),
 		(b) => {
 			const fail = (error: unknown) => new BuildError({reason: "generate", message: String(error)});
-			const options = {format: "esm" as const, codeSplitting: false};
+			const options = {
+				format: "esm" as const,
+				codeSplitting: false,
+				entryFileNames: "brain.mjs",
+				chunkFileNames: "[name]-[hash].mjs",
+			};
 			// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown generates through a Promise
 			return Effect.tryPromise({try: () => b.generate(options), catch: fail});
 		},

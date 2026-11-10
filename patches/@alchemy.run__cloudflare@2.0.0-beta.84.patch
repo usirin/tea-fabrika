@@ -1,0 +1,80 @@
+diff --git a/lib/Workers/DurableObject.js b/lib/Workers/DurableObject.js
+index ed3b3b997855bb815d91b59b59b4ea9a934ef9ad..212d06ee29931674e88bf78979034d2e0c1140e6 100644
+--- a/lib/Workers/DurableObject.js
++++ b/lib/Workers/DurableObject.js
+@@ -13,6 +13,9 @@ import {} from "./WebSocket.js";
+ import { isWorker, Worker, WorkerEnvironment } from "./Worker.js";
+ export const isDurableObjectExport = (value) => typeof value === "object" && value?.kind === "durableObject";
+ const TypeId = "Cloudflare.DurableObject";
++// fabrika patch: every Durable Object class a Worker hosts, by class name, so a method can
++// resolve a sibling class per call (`yield* Sibling`) whatever order the Layers were built in.
++const hostedNamespaces = new WeakMap();
+ export const isDurableObjectLike = (value) => typeof value === "object" && value?.kind === TypeId;
+ const resolveTransferSourceRef = (source, depth = 0) => {
+     if (typeof source === "string") {
+@@ -1115,12 +1118,23 @@ export const DurableObject = taggedFunction(DurableObjectScope, function (...arg
+             // mock during plan time
+             fromDurableObjectState({ storage: {} }))), Effect.asVoid);
+         }
+-        yield* (yield* Worker).export(namespace, {
++        const host = yield* Worker;
++        const captured = yield* Effect.context();
++        const hosted = hostedNamespaces.get(host) ?? new Map();
++        hostedNamespaces.set(host, hosted);
++        hosted.set(namespace, self);
++        yield* host.export(namespace, {
+             kind: "durableObject",
+             // initialize the object's constructor (apply infra dependencies)
+             constructor,
+             // grab the object's infra dependencies so we can apply them when calling the instance's methods
+-            services: yield* Effect.context(),
++            get services() {
++                let services = captured;
++                for (const [name, sibling] of hosted) {
++                    services = Context.add(services, Context.Service(name), sibling);
++                }
++                return services;
++            },
+         });
+         return self;
+     });
+diff --git a/src/Workers/DurableObject.ts b/src/Workers/DurableObject.ts
+index bf0890a4969dac8ce12b50b211f47929b89fb610..2d8ddf3313e7d14541da24eef0842900f81b6772 100644
+--- a/src/Workers/DurableObject.ts
++++ b/src/Workers/DurableObject.ts
+@@ -48,6 +48,9 @@ export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
+ 
+ type TypeId = "Cloudflare.DurableObject";
+ const TypeId = "Cloudflare.DurableObject";
++// fabrika patch: every Durable Object class a Worker hosts, by class name, so a method can
++// resolve a sibling class per call (`yield* Sibling`) whatever order the Layers were built in.
++const hostedNamespaces = new WeakMap<object, Map<string, unknown>>();
+ 
+ export const isDurableObjectLike = (value: unknown): value is DurableObjectLike =>
+   typeof value === "object" && (value as any)?.kind === TypeId;
+@@ -1454,12 +1457,23 @@ export const DurableObject: DurableObjectClass = taggedFunction(
+           Effect.asVoid,
+         );
+       }
+-      yield* (yield* Worker).export(namespace, {
++      const host = yield* Worker;
++      const captured = yield* Effect.context<Effect.Services<typeof impl>>();
++      const hosted = hostedNamespaces.get(host) ?? new Map<string, unknown>();
++      hostedNamespaces.set(host, hosted);
++      hosted.set(namespace, self);
++      yield* host.export(namespace, {
+         kind: "durableObject",
+         // initialize the object's constructor (apply infra dependencies)
+         constructor,
+         // grab the object's infra dependencies so we can apply them when calling the instance's methods
+-        services: yield* Effect.context<Effect.Services<typeof impl>>(),
++        get services() {
++          let services = captured as Context.Context<never>;
++          for (const [name, sibling] of hosted) {
++            services = Context.add(services, Context.Service<any, any>(name), sibling);
++          }
++          return services;
++        },
+       } satisfies DurableObjectExport);
+       return self;
+     });

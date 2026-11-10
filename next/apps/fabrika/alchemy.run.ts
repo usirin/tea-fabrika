@@ -33,6 +33,8 @@ export const stack = (
 					PROCESS: Cloudflare.DurableObject("Process"),
 					GATEWAY: Cloudflare.DurableObject("Gateway"),
 					RECORD: Cloudflare.DurableObject("RecordPart"),
+					// Spike (experiment 248): Alchemy's runtime finds a hosted class at env[<class name>].
+					RecordPart: Cloudflare.DurableObject("RecordPart"),
 					LOADER: Cloudflare.WorkerLoader(),
 					HEALTH: health,
 					STAGE: SchemaEncode(settings),

@@ -85,10 +85,10 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 			},
 		},
 	]);
-	const brain = output.output
-		.filter((o) => o.type === "chunk")
-		.map((o) => o.code)
-		.join("\n");
+	// Spike (experiment 248): Alchemy's bridge brings a second chunk. Joined, the two declare the
+	// same names twice, so each chunk stays its own file beside brain.mjs.
+	const chunks = output.output.filter((o) => o.type === "chunk");
+	const brain = chunks.map((o) => o.code).join("\n");
 	const build = yield* hash(brain);
 
 	// Include modules discovered by Rolldown, then check the whole ledger for stale rows.
@@ -106,7 +106,9 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 		const pending = yield* fs.makeTempDirectory({directory, prefix: ".fabrika-build-"});
 		const backup = `${pending}.old`;
 		yield* Effect.gen(function* () {
-			yield* fs.writeFileString(path.join(pending, "brain.mjs"), brain);
+			for (const chunk of chunks) {
+				yield* fs.writeFileString(path.join(pending, chunk.fileName), chunk.code);
+			}
 
 			for (const [file, text] of files) {
 				yield* fs.writeFileString(

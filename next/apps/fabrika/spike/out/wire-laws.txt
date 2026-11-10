@@ -1,0 +1,7 @@
+ Test Files  2 passed (2)
+      Tests  12 passed (12)
+   Duration  38.15s (tests 96%, import 4%, transform 1%)
+TYPESAFE_API_KEY= nice -n 15 volta run --node 26.13.0 pnpm exec vitest run     24.75s user 4.93s system 76% cpu 38.609 total
+grep -E "✓|✗|×|❯ next|Test Files|Tests |Duration|FAIL|Error:"  0.02s user 0.03s system 0% cpu 38.611 total
+cut -c1-260  0.00s user 0.00s system 0% cpu 38.611 total
+  0.00s user 0.00s system 0% cpu 38.609 total

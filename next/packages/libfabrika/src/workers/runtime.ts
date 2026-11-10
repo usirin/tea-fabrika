@@ -1,3 +1,4 @@
+import {makeRpcStub} from "@alchemy.run/cloudflare/Bridge";
 import {
 	Context,
 	Effect,
@@ -140,8 +141,24 @@ export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(nam
 export const processStub = (env: Env, project: string, pid: string) =>
 	env.PROCESS.getByName(JSON.stringify([project, pid]));
 
-export const recordStub = (env: Env, project: string, name: string) =>
-	env.RECORD.getByName(JSON.stringify([project, name]));
+// Spike (experiment 248): RecordPart is an Effect object, so its answers come in Alchemy's
+// envelope. Alchemy's stub decodes it. Callers not ported yet keep their Promise contract here.
+export const recordStub = (env: Env, project: string, name: string): RecordBinding => {
+	const stub = makeRpcStub<{
+		readonly [K in "write" | "read" | "content" | "deleteContent"]: (
+			...args: ReadonlyArray<unknown>
+		) => Effect.Effect<unknown, unknown>;
+	}>(env.RECORD.getByName(JSON.stringify([project, name])));
+	// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: spike adapter for callers not ported yet
+	const call = (work: Effect.Effect<unknown, unknown>) => Effect.runPromise(work);
+	// oxlint-disable-next-line fabrika/no-type-assertions -- spike: the unported callers' binding type
+	return {
+		write: (...args: ReadonlyArray<unknown>) => call(stub.write(...args)),
+		read: (...args: ReadonlyArray<unknown>) => call(stub.read(...args)),
+		content: (...args: ReadonlyArray<unknown>) => call(stub.content(...args)),
+		deleteContent: (...args: ReadonlyArray<unknown>) => call(stub.deleteContent(...args)),
+	} as unknown as RecordBinding;
+};
 
 // Bindings have already entered Effect before the caller adds its RPC span.
 export const rpc = Effect.fn("runtime.rpc")(function* <A, E>(work: Effect.Effect<A, E>) {

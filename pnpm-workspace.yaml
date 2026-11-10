@@ -139,6 +139,7 @@ patchedDependencies:
   # demlik#905: a non-exported const beside an exported type of its name is not an unused export;
   # drop at the release that has the fix.
   '@demlik/code-graph@0.15.0': patches/@demlik__code-graph@0.15.0.patch
+  '@alchemy.run/cloudflare@2.0.0-beta.84': patches/@alchemy.run__cloudflare@2.0.0-beta.84.patch
 
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.24.0 || 0.25.0'

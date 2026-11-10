@@ -1,0 +1,23 @@
+{"probe":"deployed","value":{"variant":"bundled","ms":99}}
+{"probe":"sql","value":{"value":{"rows":1,"size":20480}}}
+{"probe":"txSync.ok","value":{"value":{"before":1,"after":3,"threw":null}}}
+{"probe":"txSync.fail","value":{"value":{"before":3,"after":3,"threw":"Error: refused"}}}
+{"probe":"txEffect.ok","value":{"value":{"before":3,"after":5,"threw":null}}}
+{"probe":"txEffect.fail","value":{"value":{"before":5,"after":5,"threw":"Cause([Fail(Boom)])"}}}
+{"probe":"alarm.before","value":{"value":{"fired":[],"armed":null,"tables":["t","sqlite_sequence","fired","mode"],"instance":"acac9180-49a7-4412-8b72-2a3e98352942"}}}
+{"probe":"alarm.arm","value":{"now":1794297051813,"armed":{"value":1794297052415}}}
+{"probe":"alarm.delete","value":{"value":null}}
+{"probe":"alarm.abort.arm","value":{"value":1794297052431}}
+{"probe":"alarm.plain.after","value":{"value":{"fired":[{"at":1794297052420,"mode":"plain","instance":"acac9180-49a7-4412-8b72-2a3e98352942","retry":0}],"armed":null,"tables":["t","sqlite_sequence","fired","mode","_cf_METADATA"],"instance":"acac9180-49a7-4412-8b72-2a3e98352942"}}}
+{"probe":"alarm.deleted.after","value":{"value":{"fired":[],"armed":null,"tables":["t","sqlite_sequence","fired","mode","_cf_METADATA"],"instance":"cd61e2bf-e2b8-44d4-8a9e-e603056d061c"}}}
+{"probe":"alarm.abort.after","value":{"value":{"fired":[{"at":1794297054552,"mode":"abort","instance":"451f3b05-c3ba-4972-9e21-69632986e7c5","retry":1}],"armed":null,"tables":["t","sqlite_sequence","fired","mode","_cf_METADATA"],"instance":"451f3b05-c3ba-4972-9e21-69632986e7c5"}}}
+{"probe":"ws.before","value":{"frames":[{"echo":"one","attached":{"client":"c1","n":1},"tags":["tab-a","session-1"],"instance":"a1e78825-f58c-4770-be83-a528a061f767"}],"look":{"value":{"instance":"a1e78825-f58c-4770-be83-a528a061f767","closed":0,"sockets":[{"attachment":{"client":"c1","n":1},"tags":["tab-a","session-1"]}]}}}}
+{"probe":"ws.autoresponse","value":"pong"}
+{"probe":"ws.after.message","value":{"echo":"two","attached":{"client":"c1","n":2},"tags":["tab-a","session-1"],"instance":"a01e822d-a00d-48b5-a27e-50a628d304a4"}}
+{"probe":"ws.ring","value":{"value":1}}
+{"probe":"ws.after","value":{"frames":[{"echo":"one","attached":{"client":"c1","n":1},"tags":["tab-a","session-1"],"instance":"a1e78825-f58c-4770-be83-a528a061f767"},"pong",{"echo":"two","attached":{"client":"c1","n":2},"tags":["tab-a","session-1"],"instance":"a01e822d-a00d-48b5-a27e-50a628d304a4"},{"ring":"hello","instance":"a01e822d-a00d-48b5-a27e-50a628d304a4"}],"look":{"value":{"instance":"a01e822d-a00d-48b5-a27e-50a628d304a4","closed":0,"sockets":[{"attachment":{"client":"c1","n":2},"tags":["tab-a","session-1"]}]}},"woke":true}}
+{"probe":"rpc.chain","value":{"value":{"path":["ping.hit","pong.back","ping.leaf"],"n":3}}}
+{"probe":"rpc.crossing","value":{"value":{"classInstance":"fail:RpcCallError:not Boom instance:RPC call to \"note\" failed: Could not serialize object of type \"Note\". This type does not support serialization.","encoded":{"decodedIsNote":true,"raw":{"text":"hello","n":1}},"nothing":{"isNull":true},"bytes":{"isBytes":true,"length":3},"typedFailure":"fail:Boom:Boom instance:","missingMethod":"fail:RpcCallError:not Boom instance:RPC call to \"nope\" failed: Method \"nope\" not found on Durable Object","defect":"fail:RpcCallError:not Boom instance:RPC call to \"crash\" failed: spike defect"}}}
+{"probe":"rpc.fail.at.worker","value":{"error":"Cause([Fail(Boom)])"}}
+{"probe":"rpc.missing.at.worker","value":{"error":"Cause([Fail(RpcCallError: RPC call to \"nope\" failed: Method \"nope\" not found on Durable Object (cause: Error: Method \"nope\" not found on Durable Object))])"}}
+{"probe":"plain","value":{"status":400,"text":""}}
