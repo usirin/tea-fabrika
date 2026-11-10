@@ -35,6 +35,7 @@
 		"effect": "catalog:"
 	},
 	"devDependencies": {
+		"@demlik/structure-sweep": "catalog:",
 		"@effect/tsgo": "catalog:",
 		"@types/node": "catalog:",
 		"esbuild": "catalog:",
