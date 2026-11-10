@@ -1,0 +1,68 @@
+{
+	"experiment": 245,
+	"date": "2026-11-09",
+	"base": "b865c421",
+	"about": "next/packages/libfabrika/src, non-test files",
+	"tools": {"structure-sweep": "0.3.9", "code-graph": "0.15.0", "model": "jev-1.13.0"},
+	"folders": {
+		"transport": {"lines": 1103, "exported": 34, "usedByAnotherFolder": 13},
+		"data": {"lines": 2365, "exported": 59, "usedByAnotherFolder": 32},
+		"coordination": {"lines": 3087, "exported": 80, "usedByAnotherFolder": 55, "passedThroughFromData": 11},
+		"app": {"lines": 3290, "exported": 44, "usedByAnotherFolder": 38},
+		"door": {"lines": 1938, "exported": 4, "usedByAnotherFolder": 2},
+		"node": {"lines": 705},
+		"workers": {"lines": 1909}
+	},
+	"subjects": {
+		"wire": {"files": 5, "lines": 548},
+		"keys": {"files": 3, "lines": 548},
+		"ledger": {"files": 7, "lines": 837},
+		"spanRecords": {"files": 6, "lines": 1490},
+		"processesAndMailbox": {"files": 5, "lines": 1274},
+		"membersAndSessions": {"files": 5, "lines": 1072},
+		"runnerStorage": {"files": 3, "lines": 537},
+		"presence": {"files": 1, "lines": 144},
+		"programContract": {"files": 5, "lines": 1297},
+		"runner": {"files": 2, "lines": 1900},
+		"brainLife": {"files": 2, "lines": 93}
+	},
+	"history": {
+		"from": "2026-11-06",
+		"to": "2026-11-09",
+		"nonMergeCommits": 121,
+		"coreFoldersWithTests": {"commits": 110, "one": 67, "two": 35, "threeOrFour": 8},
+		"coreFoldersNonTest": {"commits": 54, "one": 27, "two": 20, "three": 3, "four": 4},
+		"folderPairsWithoutSweeps": {"app+coordination": 14, "coordination+data": 10, "app+data": 4},
+		"filePairs": [
+			{"a": "app/runner.ts", "b": "coordination/index.ts", "together": 8, "rarer": 16},
+			{"a": "coordination/process-manager.ts", "b": "coordination/process.ts", "together": 8, "rarer": 10},
+			{"a": "app/runner.ts", "b": "coordination/process-store.ts", "together": 5, "rarer": 5},
+			{"a": "app/runner.ts", "b": "coordination/recovery.ts", "together": 3, "rarer": 3}
+		]
+	},
+	"score": {
+		"changeSets": 33,
+		"files": 59,
+		"assignments": [
+			{"name": "today's folders", "groups": 7, "precision": 62.6, "recall": 23.1, "f1": 33.8},
+			{"name": "0034's three contexts", "groups": 5, "precision": 49.4, "recall": 32.1, "f1": 38.9},
+			{"name": "today's folders, runner storage moved to app", "groups": 7, "precision": 64.8, "recall": 23.4, "f1": 34.4},
+			{"name": "option B", "groups": 9, "precision": 71.9, "recall": 18.9, "f1": 29.9},
+			{"name": "14 subjects", "groups": 14, "precision": 78.5, "recall": 13.0, "f1": 22.3}
+		],
+		"precisionByFolderToday": {"transport": 89.3, "app": 66.7, "data": 60.3, "coordination": 39.6}
+	},
+	"redactedSweep": {
+		"files": 66,
+		"agreeWithFolder": 53,
+		"movedToApp": {
+			"coordination/process-store.ts": 0.78,
+			"coordination/recovery-store.ts": 0.78,
+			"coordination/recovery.ts": 0.87
+		}
+	},
+	"codeGraph": {"longestFunction": {"file": "app/runner.ts", "name": "withLoader", "lines": 1492, "complexity": 205}},
+	"inputTokens": {"sweepTry": 12246, "sweep": 147242, "total": 159488},
+	"dollars": 0.007,
+	"price": "$0.042 per million input tokens, output free, TypeSafe models page, as read for experiment 244 on 2026-11-09"
+}
