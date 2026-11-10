@@ -351,13 +351,14 @@ it.effect.prop(
     Effect.gen(function* () {
       const w = yield* world();
       // The plant trusts an agent's signature on an added change, as if a person key had signed it.
+      // A failed test-key signature is a broken harness, so it dies instead of joining the Door's errors.
       const planted: GrantDoor = {
         grant: (input) =>
           Effect.gen(function* () {
             const { text } = Schema.decodeUnknownSync(Schema.Struct({ text: Schema.String }))(input);
             const change = Schema.decodeUnknownSync(Schema.fromJsonString(Change))(text);
             return change._tag === "added"
-              ? yield* w.door.grant({ text, armored: yield* w.root.sign(text) })
+              ? yield* w.door.grant({ text, armored: yield* Effect.orDie(w.root.sign(text)) })
               : yield* w.door.grant(input);
           }),
       };
