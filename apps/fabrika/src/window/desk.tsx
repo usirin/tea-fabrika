@@ -51,8 +51,9 @@ import {
   frameUpdate,
   keyGoesTo,
   type MidKey,
-  type Out,
+  deliver,
   passOn,
+  type Ports,
   type Shapes,
   ticketsShown,
 } from "./frame.ts";
@@ -352,15 +353,12 @@ const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "
 
 /**
  * Press a held key again, where focus is now: a character into a view's text box, as typing
- * does, or the key itself, which a tile's terminal reads as it reads the keyboard's.
+ * does, or the key itself, which a tile's terminal reads as it reads the keyboard's. No routing:
+ * `deliver` has decided who gets it. The e2e covers the `replaying` guard.
  */
 const pressAgain = (key: Key) => {
   const p = key.press;
   const target = document.activeElement ?? document.body;
-
-  if (keyForOver(key.name, target) === "moved in") {
-    return;
-  }
 
   replaying = true;
 
@@ -386,20 +384,10 @@ const pressAgain = (key: Key) => {
   replaying = false;
 };
 
-/**
- * Carry out one thing `passOn` answered. A key for the over goes through `pressAgain`'s focus
- * routing (`keyForOver`) like any held key. Answers whether it is the key pressed this instant.
- */
-const carryOut = (o: Out): boolean => {
-  if (o._tag === "press") {
-    toHost({ type: "press", id: o.id, key: o.key });
-  } else if (o._tag === "live") {
-    return true;
-  } else {
-    pressAgain(o.key);
-  }
-
-  return false;
+const ports: Ports = {
+  toHost: (id, key) => toHost({ type: "press", id, key }),
+  dispatch: pressAgain,
+  focusOver: () => focusOver(document.activeElement ?? document.body),
 };
 
 /** Step the hold by one Msg. Answers whether the key pressed this instant goes on as it is. */
@@ -410,7 +398,7 @@ const holdStep = (msg: HoldMsg): boolean => {
 
   frameInstall(frame);
 
-  return out.map(carryOut).includes(true);
+  return deliver(out, ports);
 };
 
 /** How long a note on the bottom line stays, as after the palette ran a command. */

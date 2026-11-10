@@ -1047,6 +1047,36 @@ export const passOn = (
   return { frame, out };
 };
 
+/** What the page can do for an `Out`: the host, the DOM, and the focus the over takes. */
+export interface Ports {
+  readonly toHost: (id: number, key: string) => void;
+  readonly dispatch: (key: HeldKey) => void;
+  readonly focusOver: () => "in" | "moved in";
+}
+
+/**
+ * Carry out `passOn`'s answer through the ports, in order, each once, and route no key again: a
+ * `replay` is dispatched, an `over` key is dispatched only if focus was already in the over.
+ * Answers whether the key pressed this instant goes on as it is.
+ */
+export const deliver = (out: readonly Out[], ports: Ports): boolean => {
+  let live = false;
+
+  for (const o of out) {
+    if (o._tag === "press") {
+      ports.toHost(o.id, o.key);
+    } else if (o._tag === "live") {
+      live = true;
+    } else if (o._tag === "replay") {
+      ports.dispatch(o.key);
+    } else if (ports.focusOver() === "in") {
+      ports.dispatch(o.key);
+    }
+  }
+
+  return live;
+};
+
 export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
   switch (m.type) {
     case "show":
