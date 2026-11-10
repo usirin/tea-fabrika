@@ -100,6 +100,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   files. A `node:` import stays only where Effect has nothing, marked as an edge with its reason
   (owner, 2026-11-09). The lint rule `fabrika/no-node-imports` comes with
   [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
+- **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
+  subject, with front files and an `internal/` no other room imports, and it re-exports no other
+  room's names. Its floor is one line in `layer-rules.json`: a room imports only from lower floors,
+  never from its own. A new file goes in its room now, before the move lands
+  ([0043](./.decisions/0043-rooms-on-floors.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
   `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge

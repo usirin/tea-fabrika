@@ -1,0 +1,280 @@
+---
+id: 0043
+title: libfabrika's src/ has one folder per subject, a room, and a layer is a floor, a line in the rule file that says who may import whom, never a folder
+status: accepted
+date: 2026-11-09
+tags: [layout, files, folders, rooms, floors, layers, internal, access, presence, telemetry, libfabrika, next]
+---
+
+# 0043: libfabrika's src/ has one folder per subject, a room, and a layer is a floor, a line in the rule file that says who may import whom, never a folder
+
+**What this decides:** in `next/packages/libfabrika/src`, a folder holds one subject and is called a
+room, and the order of imports between rooms is kept only in the rule file, where each room sits on
+a floor.
+
+```mermaid
+flowchart TD
+  door["door/"] --> runtime["runtime/"]
+  runtime --> access["access/"]
+  access --> processes["processes/"]
+  presence["presence/"] --> ledger["ledger/"]
+  processes --> ledger
+  ledger --> telemetry["telemetry/"]
+  door --> transport["transport/"]
+  telemetry --> shared["Id.ts and the shared names"]
+  transport --> shared
+```
+
+An arrow points down a floor: the room above may import the room below, and every room below that
+one. The door reaches every room, and it is the only room that imports `transport/`.
+
+```text
+next/packages/libfabrika/src/
+  door/        Door.ts + internal/
+  runtime/     Runner.ts + internal/         access/
+  processes/   (the mailbox lives inside)    presence/
+  ledger/                                    telemetry/
+  transport/
+  Id.ts and the shared names (ProcessId, Sql, LedgerError) beside it
+```
+
+All of this is about `next/`. Today's version is not touched.
+
+## Context
+
+Three records came before this one, all on 2026-11-09, and no file has moved for any of them:
+
+- [0032](0032-libraries-take-effects-file-layout.md) gave libraries Effect's file layout: one flat
+  `src/` of PascalCase modules.
+- [0034](0034-libfabrika-folders-are-bounded-contexts.md) replaced the flat `src/` with three
+  folders, `Clients/`, `Ledger/` and `Runtime/`, where the layer picked the folder.
+- [Experiment 245](../experiments/245-are-libfabrikas-layers-right.md) then read the imports. The
+  order of the layers is right. The folders are not: `coordination/` holds four subjects, `data/`
+  holds two, and 0034's `Ledger/` would hold 27 files and five subjects.
+
+The owner settled the layout the same day, "for now": a later tier may add rooms. This record
+**replaces 0034** and **amends 0032 in part** (what still holds is listed under Consequences).
+[0037](0037-implicit-state-machines-made-explicit.md) said the runner and the door are split first,
+riding with this layout, and [0038](0038-span-sink-measurements-and-metrics.md) said the folder for
+spans, measurements and metrics would be `telemetry/`. Tracker tickets 507 (this record) and 477
+(the move).
+
+The model is OTP's. An OTP application is a subject: "a component that can be started and stopped
+as a unit" ([applications](https://www.erlang.org/doc/system/applications.html)). The order between
+them is a separate fact. Parnas said the same in 1972: a clean order and a clean split are "two
+desirable but independent properties" (quoted in experiment 245).
+
+Every file name below was read on `origin/main` at `d7484976` for this record.
+
+## Decision
+
+**A folder in `libfabrika`'s `src/` is a room, one subject, and a layer is a floor: a line in the
+rule file that says which rooms a room may import.**
+
+**Before** (main today; 0034's three folders were never built):
+
+```text
+next/packages/libfabrika/src/
+  index.ts  id.ts  testing.ts
+  transport/     index.ts  answer.ts  binary.ts  gateway.ts  hello.ts  sshsig.ts  waiting.ts
+                 webauthn.ts  wire.ts
+  data/          index.ts  ledger.ts  ledger-store.ts  ledger-transaction.ts  log.ts  referee.ts
+                 sqlite.ts  worker-sql.ts
+                 archive.ts  health.ts  record-part.ts  records.ts  sink.ts  trace.ts
+  coordination/  index.ts  mailbox.ts  process.ts  process-manager.ts  process-mail.ts
+                 process-id.ts  gateway-manager.ts
+                 members.ts  client-manager.ts  authorization.ts  session-manager.ts  text.ts
+                 process-store.ts  recovery.ts  recovery-store.ts
+  app/           brain-event.ts  brain-life.ts  entry.ts  execution.ts  patch.ts  program.ts
+                 runner.ts  state.ts  supervisor.ts
+  door/          index.ts  door.ts  nonce.ts  store.ts
+  node/  workers/
+```
+
+**After** (this record; the move plan holds the row for every file):
+
+```text
+next/packages/libfabrika/src/
+  index.ts  Id.ts  Testing.ts  and one file per shared name (ProcessId, Sql, LedgerError)
+  transport/   answer, gateway, hello, sshsig, webauthn, wire                internal/ binary
+  telemetry/   archive, record-part, records, sink, trace                    internal/ health
+  ledger/      ledger, ledger-transaction, log, referee, sqlite, worker-sql  internal/ ledger-store
+  processes/   mailbox, process, process-manager, process-id                 internal/ process-mail
+  presence/    gateway-manager
+  access/      members, client-manager, authorization, session-manager, text
+  runtime/     app/'s nine files, process-store, recovery-store              internal/ recovery, supervisor
+  door/        door                                                          internal/ nonce, store, waiting
+  node/  workers/                                                            open, see below
+```
+
+The after tree keeps today's file names so the two trees compare. 0032's PascalCase names apply to
+each front file, and the plan picks them.
+
+The rule file, before and after:
+
+```json
+[
+  { "name": "next-door", "paths": ["next/packages/libfabrika/src/door"] },
+  { "name": "next-app", "paths": ["next/packages/libfabrika/src/app", "next/packages/libfabrika/src/testing.ts"] },
+  { "name": "next-coordination", "paths": ["next/packages/libfabrika/src/coordination"] },
+  { "name": "next-data", "paths": ["next/packages/libfabrika/src/data"] },
+  { "name": "next-transport", "paths": ["next/packages/libfabrika/src/transport"] }
+]
+```
+
+```json
+[
+  { "name": "next-door", "floor": 6, "paths": ["next/packages/libfabrika/src/door"] },
+  { "name": "next-runtime", "floor": 5, "paths": ["next/packages/libfabrika/src/runtime"] },
+  { "name": "next-access", "floor": 4, "paths": ["next/packages/libfabrika/src/access"] },
+  { "name": "next-processes", "floor": 3, "paths": ["next/packages/libfabrika/src/processes"] },
+  { "name": "next-presence", "floor": 3, "paths": ["next/packages/libfabrika/src/presence"] },
+  { "name": "next-ledger", "floor": 2, "paths": ["next/packages/libfabrika/src/ledger"] },
+  { "name": "next-telemetry", "floor": 1, "paths": ["next/packages/libfabrika/src/telemetry"] },
+  { "name": "next-transport", "floor": 1, "paths": ["next/packages/libfabrika/src/transport"] }
+]
+```
+
+The first block is `layer-rules.json` on main, cut to the five libfabrika rows. The second is a
+sketch: `floor` is not a key the installed `@demlik/code-graph@0.15.0` reads. Its row schema is
+strict and has `name`, `paths` and an `imports` list. How the one line per room reaches the tool is
+the plan's to build. What the reader should see move: a folder used to be a layer, and now a room
+names its floor in one line.
+
+The rules:
+
+1. **A folder is a room, a floor is a rule.** A room holds one subject. A floor says who may import
+   whom. Which floor a room is on is one line per room in the rule file, so moving a room to
+   another floor changes one line and no path.
+2. **The five layers stay the design's words.** Transport, data, coordination, app and desktop are
+   still how [the five layers](../docs/direction/a-local-first-sync-engine.md) tell the design.
+   They are no longer folder names, and "coordination" is no longer a folder at all.
+3. **A room imports only from lower floors.** Never from a higher floor, and never from another
+   room on its own floor (owner, 2026-11-09, the same day). If one room needs another on its
+   floor, the needed room moves down a floor in the rule file, in the open. `pnpm lint` checks
+   both: no upward import and no same-floor import.
+4. **The floors, bottom up, as the rule file starts:**
+
+   | Floor | Rooms |
+   |---|---|
+   | 6 | `door/` |
+   | 5 | `runtime/` |
+   | 4 | `access/` |
+   | 3 | `processes/`, `presence/` |
+   | 2 | `ledger/` |
+   | 1 | `transport/`, `telemetry/` |
+
+   The owner listed five floors, with `ledger/` beside `telemetry/` and `runtime/` beside
+   `access/`. Main's imports do not allow those two pairs under rule 3, so rule 3 was applied as
+   written and each needed room sits one floor lower:
+   - `data/ledger.ts` and `data/ledger-store.ts` import `short` and `errorClass` from
+     `data/trace.ts`. The ledger needs telemetry, so `telemetry/` is below `ledger/`.
+   - `app/runner.ts` and `app/entry.ts` read seven names of `coordination/session-manager.ts` and
+     `coordination/members.ts` through `coordination/index.ts` (`SessionManager`, `SignRequest`,
+     `Session`, `Writer`, `NotGranted`, `SigningRefused`, `MemberFact`). The runtime needs access,
+     so `access/` is below `runtime/`. It cannot join floor 3, because it imports `processes/`
+     (`mailbox.ts`, `process.ts`).
+5. **There is no `coordination/` folder.** Its files go to four rooms:
+   - `processes/`: `mailbox.ts`, `process.ts`, `process-manager.ts`, `process-mail.ts`,
+     `process-id.ts`. `mailbox.ts` and `process.ts` import each other, so they are one room, as in
+     OTP a process has a mailbox.
+   - `presence/`: `gateway-manager.ts` (join, leave, online or away). The industry's word:
+     [Phoenix Presence](https://hexdocs.pm/phoenix/Phoenix.Presence.html).
+   - `access/`: `members.ts`, `client-manager.ts`, `authorization.ts`, `session-manager.ts`. The
+     session manager records who an input is by and signs on their behalf.
+   - `runtime/`: `process-store.ts`, `recovery.ts`, `recovery-store.ts`. Only the runner's files
+     and the Workers wiring use them (experiment 245).
+   - `text.ts` imports only `members.ts`. The plan decides whether it moves to `access/` with it or
+     the read is cut.
+6. **"Members" becomes "access"** as the name of who is allowed in and what each key may do. It is
+   the industry's word for grants (access control), and Tier 3 has a role named member
+   ([tiers](../docs/plan/tiers.md#tier-3s-roles-owner-2026-11-07)), which would clash. `grant tree`,
+   `device` and the key words keep their names. The rename in code rides with the move.
+7. **`data/` splits in two.** `ledger/` holds the ledger only. `telemetry/` holds spans,
+   measurements and metrics; [0038](0038-span-sink-measurements-and-metrics.md)'s rename rides with
+   the move.
+8. **Every room has front files and an `internal/`.** One front file, or a few, in PascalCase as
+   0032 says. The rest is in the room's `internal/`.
+   - Nobody imports another room's `internal/`. 0032 kept `internal/` private to the package; this
+     makes it private to the room.
+   - No room re-exports another room's names. Today `coordination/index.ts` re-exports 11 names
+     that are not its own, 10 from `data/` and `InputId` from `id.ts`, so "the app layer never
+     imports data" is true only by the path of the import (experiment 245).
+   - `runtime/` imports `ledger/` and `telemetry/` openly where it needs them.
+9. **The runner and the door are split, move-only first.** `app/runner.ts` is 1,721 lines, 1,492 of
+   them one function. `door/door.ts` is 1,776 lines and does four jobs. Each becomes a front file
+   plus `internal/` files cut along its state machines
+   ([0037](0037-implicit-state-machines-made-explicit.md)). A sketch: `runtime/Runner.ts` with
+   `internal/supervision.ts`, `holder.ts`, `accept.ts` and `dispatch.ts`. The split moves lines and
+   changes none. The machine fixes come after, each its own pull request.
+   `transport/waiting.ts`, the door's waiting room, moves to `door/`: only `door/door.ts` uses it.
+10. **A room that needs "and" to describe it splits.** Rooms we expect later, as guesses: a job
+    queue (Tier 4), spend and limits (Tier 5), pipes between programs (Tier 2).
+
+**The exam's layer row: the owner rules on this row.** Rule 8 changes what
+`next/apps/fabrika/src/exam/layers.test.ts` checks, and one part of that is not decided here.
+
+- What gets stricter: the check reads real imports. A name passed through another room no longer
+  counts, and another room's `internal/` is refused. These are new laws and need no owner read.
+- What gets wider: the row `app: ["coordination", "id"]` becomes a runtime row that lists
+  `ledger` and `telemetry`. Today the app layer can reach only the 10 names the pass-through
+  hands it. After, it could import any front name of those two rooms, such as the `Ledger` service
+  itself. The planted break "app may not import data" goes.
+- **This is a real loosening of that one row,** so by AGENTS.md and
+  [0014](0014-the-lead-merges-when-every-step-passed.md) it waits on the owner. The stricter
+  reading does not cancel it: an import that fails today would pass.
+- The question, one yes or no: may the runtime row list `ledger` and `telemetry`? A no keeps the
+  limit by a lint rule that lets `runtime/` import only the names it reads today.
+
+**Binding constraints:**
+
+- A new file in `libfabrika` goes in its room from today, even before the move lands.
+- The move is `git mv` with import lines rewritten. A pull request that moves files changes no
+  line of logic.
+- No room is added to a floor that holds a room it imports.
+- The move still starts only after the Effect format sweep (0029, ticket 466) has merged.
+
+## Consequences
+
+- **0034 is superseded.** Its three folders are gone before they were built, and so is its rule
+  that the layer picks the folder.
+- **0032 is amended in part.** Replaced: "one flat `src/`", "no folders by area" for the rooms
+  named here, and "`internal/` is private to the package" (now to the room). Still holding, inside
+  each room: PascalCase front files, tests beside them, a variant as a prefixed sibling, a folder
+  only for a concept's parts, `internal/` in camelCase with `@internal`, the namespace `index.ts`
+  and no platform at the top level. No folders by kind stays too: no `services/`, `types/`,
+  `utils/` or `helpers/`.
+- **0034's binding constraint on the exam is where the open row comes from.** It said the exam's
+  table keeps "the app layer imports coordination, not data". This record does not remove that
+  law; the owner does, or does not.
+- **The path shows the subject and not the order.** A reader learns a room's floor from the rule
+  file or the lint error.
+- **The move plan is rewritten** for this layout. It was written for 0034 and no file had moved.
+- **The notes that cite a path keep it until the move.** `docs/direction/follows/otp.md`,
+  `.patterns/` and the plan rows cite files as they are on main; the pull request that moves a
+  file fixes its citations ([0017](0017-each-model-we-follow-has-one-table.md)).
+- **The cost** is six floors where the notes say five layers, and eight small folders, two of them
+  thin (`presence/` is one 144-line file).
+- Not decided here:
+  - **Whether `presence/` stays its own room.** It is one file today and could live in `door/`
+    until Tier 3. The owner accepted its own room for now.
+  - **Where the platform files go.** `workers/` and `node/` would move to platform packages
+    (`@kampus/libfabrika-workers`, `@kampus/libfabrika-node`), as 0034 already leaned. Until then
+    they stay where they are, above every room.
+  - **Which way supervision is fixed.** Its parts now sit in one room, `runtime/`. Whether the
+    supervisor learns of a death by letter, as OTP's does, is P34c's
+    ([0016](0016-tier-1-supervision-is-otps-top-level-supervisor.md)).
+  - **The exam's runtime row,** above.
+  - The app's layout (`next/apps/fabrika`), as in 0032.
+
+## Records
+
+- [`.glossary/TERMS.md`](../.glossary/TERMS.md), new rows: `floor` and `room (library)` (Shared
+  names), `access` (Clients), `presence` (Ledger), `telemetry` (Runtime). Changed: the `five layers`
+  row's Not column says a layer is no longer a folder. One context map line for `room`.
+- Not changed: `grant tree`, `device`, `person key`, `window key`, `recovery key` and `spent`.
+  Their rows still cite `Members`, `foldMembers` and `door/members`, which are code names on main.
+  They change with the code rename, in the move.
+- [We follow DDD](../docs/direction/we-follow-ddd.md) and
+  [the five layers](../docs/direction/a-local-first-sync-engine.md) each get a pointer here.
+  AGENTS.md gets one line.
