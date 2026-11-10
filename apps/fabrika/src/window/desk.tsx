@@ -46,6 +46,8 @@ import {
   FRAME,
   type Frame,
   type FrameMsg,
+  type Delivery,
+  frameKey,
   frameUpdate,
   keyGoesTo,
   type MidKey,
@@ -318,12 +320,19 @@ const focusOver = (target: EventTarget | null): "in" | "moved in" => {
  * as armed: `C-b J` typed fast still reaches the desk and closes the list.
  */
 const midKey = (): MidKey => {
-  const open = store.desk?.at === "open" ? store.desk : null;
-  return {
-    armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
-    asking: open?.ask != null,
-  };
+  const own = ownMidKey();
+  return { armed: own.armed || hold.waiting !== null, asking: own.asking };
 };
+
+/** The desk's own prefix and question, apart from the hold's outstanding key. */
+const ownMidKey = (): MidKey => {
+  const open = store.desk?.at === "open" ? store.desk : null;
+  return { armed: open?.prefix.armed ?? false, asking: open?.ask != null };
+};
+
+/** What the frame makes of a key (frame.ts, `frameKey`), with the desk's own prefix and question and the hold's wait. */
+const frameFor = (key: string, delivery: Delivery): Frame =>
+  frameKey(store.frame, key, ownMidKey(), hold.waiting !== null, delivery);
 
 /**
  * Who a key goes to, with what lies over the desk: the desk; the over, with focus in it; or the
@@ -386,7 +395,7 @@ const holdStep = (msg: HoldMsg): boolean => {
       toHost({ type: "press", id: c.id, key: c.key });
     } else if (!c.held) {
       live = true;
-    } else {
+    } else if (!frameInstall(frameFor(c.key.press.key, "passed"))) {
       pressAgain(c.key);
     }
   }
@@ -402,9 +411,10 @@ let noteTimer: ReturnType<typeof setTimeout> | undefined;
  * Step the frame's own state (frame.ts), and draw it. A note goes after a while. Answers whether
  * the frame changed: a key it did not change goes on.
  */
-const frameStep = (m: FrameMsg): boolean => {
-  const next = frameUpdate(store.frame, m);
+const frameStep = (m: FrameMsg): boolean => frameInstall(frameUpdate(store.frame, m));
 
+/** Install the frame a step answered, and draw it. Answers whether it differs from the one before. */
+const frameInstall = (next: Frame): boolean => {
   if (next === store.frame) {
     return false;
   }
@@ -755,7 +765,7 @@ const onKey = (e: KeyboardEvent) => {
     return;
   }
 
-  if (e.key === "Escape" && frameStep({ type: "escape", desk: midKey() })) {
+  if (e.key === "Escape" && frameInstall(frameFor(e.key, "fresh"))) {
     return swallow(e);
   }
 

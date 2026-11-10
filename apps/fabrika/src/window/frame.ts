@@ -938,6 +938,27 @@ const escaped = (f: Frame, desk: MidKey): Frame => {
 };
 
 /**
+ * How a key reaches the frame: `fresh`, pressed just now, or `passed`, released by the hold after
+ * the host's answer. It is call-local: a fresh key finds the host's outstanding key ahead of it, a
+ * passed one already had its turn.
+ */
+export type Delivery = "fresh" | "passed";
+
+/**
+ * What the frame makes of a key before any tile has it: the same frame when the key goes on, else
+ * the frame it changed, and the key is consumed. Only Escape is the frame's today, through
+ * `escaped`. `actual` is the desk's own prefix and question; `waiting` is the hold's outstanding
+ * key, which makes a fresh key queue behind it (the desk is mid-key) and never a passed one.
+ */
+export const frameKey = (f: Frame, key: string, actual: MidKey, waiting: boolean, delivery: Delivery): Frame =>
+  key === "Escape"
+    ? frameUpdate(f, {
+        type: "escape",
+        desk: delivery === "fresh" ? { armed: actual.armed || waiting, asking: actual.asking } : actual,
+      })
+    : f;
+
+/**
  * What a key after Ctrl-B shows: the asks list, the jobs list, every key, no bars, or an item's
  * lines. Info mode is a message of its own (`info`), since it needs what focus is on.
  */
