@@ -150,7 +150,9 @@ describe("box gc, today's tooling", () => {
 
 const prState = fc.constantFrom("OPEN" as const, "MERGED" as const, "CLOSED" as const);
 const worktree = fc.record({
-	branch: fc.option(fc.stringMatching(/^(fabrikalfa|umut)\/[a-z0-9-]{1,10}(-wip)?$/), {nil: null}),
+	branch: fc.option(fc.stringMatching(/^(fabrikalfa|person)\/[a-z0-9-]{1,10}(-wip)?$/), {
+		nil: null,
+	}),
 	locked: fc.boolean(),
 	busy: fc.array(fc.nat(), {maxLength: 2}),
 	idle: fc.integer({min: 0, max: 3 * STUCK}),
