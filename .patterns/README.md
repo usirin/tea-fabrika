@@ -31,11 +31,13 @@ A doc that already covers the shape is extended, never doubled.
 
 ## Index
 
-No docs yet. The first doc replaces this line with the table below and its own row. Once the table
-passes about a dozen rows, split it into sections by area.
+Once the table passes about a dozen rows, split it into sections by area.
 
-```markdown
 | Pattern | Where | Read when |
 |---|---|---|
-| [<name>.md](./<name>.md) | packages/pipeline | the moment a reader knows they need it |
-```
+| [effect-errors-keep-their-cause.md](./effect-errors-keep-their-cause.md) | next/ | Writing an error class, a `catch:` or `mapError`, or a handler for a failure |
+| [effect-tests-run-in-it-effect.md](./effect-tests-run-in-it-effect.md) | next/ tests | Writing a test whose body runs an Effect, or a law that depends on time |
+| [effect-services-and-layers.md](./effect-services-and-layers.md) | next/ | Adding a service, wiring a Layer, or giving an object class its runtime |
+| [effect-state-and-time.md](./effect-state-and-time.md) | next/ host code | Keeping state that changes between calls, adding a limit, reading the time, or writing a retry or a loop that repeats |
+| [effect-swallowed-failures-leave-a-trace.md](./effect-swallowed-failures-leave-a-trace.md) | next/ | Reaching for `Effect.ignore`, a catch-all, or a finalizer |
+| [doc-comments.md](./doc-comments.md) | next/packages | Adding or changing a public export of a library, or its module file |

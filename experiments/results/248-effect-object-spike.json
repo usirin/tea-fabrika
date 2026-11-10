@@ -1,0 +1,21 @@
+{
+  "experiment": 248,
+  "date": "2026-11-10",
+  "main": "d7484976",
+  "branch": "fabrikalfa/t502-spike",
+  "head": "f1a8d0d4",
+  "version": "next",
+  "alchemy": "2.0.0-beta.84",
+  "cost_usd": 0,
+  "tests_unchanged": { "wire": [12, 12], "more": [112, 112], "twin_findings": 0, "twin_findings_class_form_stack": 2 },
+  "built_bytes": { "main": { "brain.mjs": 1504676 }, "spike": { "brain.mjs": 1763313, "chunk": 1280099 } },
+  "build_ms": { "main": [278, 169, 224], "spike": [421, 392, 336] },
+  "stage_start_ms": { "main": [1839, 1242, 1242], "spike": [1395, 1416, 1303] },
+  "storage": { "transactionSync_rollback": { "before": 3, "after": 3 }, "effect_transaction_rollback": { "before": 5, "after": 5 } },
+  "alarm": { "set_ms": 600, "fired_after_due_ms": 4, "fired_count": 1, "abort_retry_count": 1, "alchemy_tables_made": 0 },
+  "hibernation": { "idle_ms": 12500, "new_instance": true, "attachment_n": [1, 2], "ring_reached": 1, "auto_response": "pong" },
+  "siblings": { "per_call_unpatched": "Service not found: Pong", "per_call_patched_path": ["ping.hit", "pong.back", "ping.leaf"], "eager_both": { "seconds": 2.33, "peak_rss_bytes": 368410624, "out_of_memory": false } },
+  "stub_error_type": { "declared": "Boom", "rpc_call_error_in_type": false, "seen_as_rpc_call_error": ["missing method", "callee defect", "DataCloneError"] },
+  "patch": { "file": "patches/@alchemy.run__cloudflare@2.0.0-beta.84.patch", "changed_lines": 40 },
+  "not_run": ["deploy", "binding props on a deployed Worker", "mutation step", "Process and Gateway wire laws on ported objects", "the service on Alchemy's state.storage"]
+}

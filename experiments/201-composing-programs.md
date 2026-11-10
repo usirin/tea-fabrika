@@ -62,18 +62,18 @@ state. The row type lived in `packages/pipeline`. Every pipe was checked with to
 
 ### The six compositions
 
-Shots are in [`201-composing-programs/shots/`](./201-composing-programs/shots/). A file starting
+Shots are in [`201-composing-programs/shots/`](https://github.com/usirin/tea-fabrika/tree/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/). A file starting
 `cap-` carries its tsh line as a caption above the states it shows.
 
 | Line | What each program owns | Shots |
 |---|---|---|
-| c1 `tracker --all \| outline` | tracker: states and words. outline: open, zoom, filter | [one tile](./201-composing-programs/shots/cap-c1-one.png), [1024x700](./201-composing-programs/shots/cap-c1-small.png), [`y`, only what waits](./201-composing-programs/shots/c1-only-one.png) |
-| c2 `notes \| outline` | notes: order and placing. A placed ticket shows only as "Ticket 141" | [one tile](./201-composing-programs/shots/cap-c2-one.png) |
-| c2b `tracker --all \| notes \| outline` | tickets grafted into notes; the rest under "Not placed yet" | [side by side](./201-composing-programs/shots/cap-c2b-side.png) |
-| c3 `tracker --all \| outline \| ticket` | ticket: the page and the answer | [side by side](./201-composing-programs/shots/cap-c3-side.png), [2x2](./201-composing-programs/shots/cap-c3-grid.png), [Enter on 117](./201-composing-programs/shots/c3-enter-117-side.png) |
-| c4 `asks \| board --by whose` | asks: what waits. board: columns, the done fold | [one tile](./201-composing-programs/shots/cap-c4-one.png) |
-| c5 `tracker --all \| board --by whose \| ticket` | as c4, with the tracker as source | [2x2](./201-composing-programs/shots/cap-c5-grid.png), [`d` in a quarter tile](./201-composing-programs/shots/c5-done-grid.png) |
-| c6 one desk: outline, board and one ticket tile | two lines into one ticket tile, wired by hand | [the desk](./201-composing-programs/shots/cap-c6-desk.png) |
+| c1 `tracker --all \| outline` | tracker: states and words. outline: open, zoom, filter | [one tile](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/cap-c1-one.png?raw=true), [1024x700](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/cap-c1-small.png?raw=true), [`y`, only what waits](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/c1-only-one.png?raw=true) |
+| c2 `notes \| outline` | notes: order and placing. A placed ticket shows only as "Ticket 141" | [one tile](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/cap-c2-one.png?raw=true) |
+| c2b `tracker --all \| notes \| outline` | tickets grafted into notes; the rest under "Not placed yet" | [side by side](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/cap-c2b-side.png?raw=true) |
+| c3 `tracker --all \| outline \| ticket` | ticket: the page and the answer | [side by side](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/cap-c3-side.png?raw=true), [2x2](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/cap-c3-grid.png?raw=true), [Enter on 117](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/c3-enter-117-side.png?raw=true) |
+| c4 `asks \| board --by whose` | asks: what waits. board: columns, the done fold | [one tile](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/cap-c4-one.png?raw=true) |
+| c5 `tracker --all \| board --by whose \| ticket` | as c4, with the tracker as source | [2x2](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/cap-c5-grid.png?raw=true), [`d` in a quarter tile](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/c5-done-grid.png?raw=true) |
+| c6 one desk: outline, board and one ticket tile | two lines into one ticket tile, wired by hand | [the desk](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/201-composing-programs/shots/cap-c6-desk.png?raw=true) |
 
 The keys pressed, as the host recorded them: c1, click and `→` on 117, `⌘.`, `Esc`, `y`. c3, `→` on
 117, then `Enter` (the ticket tile changed from 141 to 117), then `y`. c5, `Enter` (117 to 141),

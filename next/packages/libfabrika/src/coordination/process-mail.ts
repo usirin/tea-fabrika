@@ -1,9 +1,9 @@
-import {Option, Schema} from "effect";
-import type {Entry} from "../data/log.ts";
-import type {Letter} from "./mailbox.ts";
-import type {ProcessTable} from "./process.ts";
+import { Option, Schema } from "effect";
+import type { Entry } from "../data/log.ts";
+import type { Letter } from "./mailbox.ts";
+import type { ProcessTable } from "./process.ts";
 
-const Sent = Schema.Struct({m: Schema.Json});
+const Sent = Schema.Struct({ m: Schema.Json });
 const decodeSent = Schema.decodeUnknownOption(Sent);
 
 /**
@@ -12,27 +12,40 @@ const decodeSent = Schema.decodeUnknownOption(Sent);
  * mail unless the table calls it a signal.
  */
 export const processMail = (table: ProcessTable, process: string, entries: Iterable<Entry>) => {
-	const letters: Array<{letter: Letter; arrivedAt: number}> = [];
-	for (const entry of entries) {
-		if (entry._tag !== "send") continue;
-		const sent = decodeSent(entry.body);
-		if (Option.isNone(sent)) continue;
-		const {m} = sent.value;
-		if (table.deliver(entry, m, process) === "drop") continue;
-		letters.push({
-			letter: {
-				id: entry.id,
-				m,
-				by: entry.by,
-				for: entry.for,
-				sentAt: entry.sentAt,
-				parent: entry.parent,
-				traceId: entry.traceId,
-				rev: entry.rev,
-				pos: entry.pos,
-			},
-			arrivedAt: entry.arrivedAt,
-		});
-	}
-	return letters;
+  const letters: Array<{ letter: Letter; arrivedAt: number }> = [];
+
+  for (const entry of entries) {
+    if (entry._tag !== "send") {
+      continue;
+    }
+
+    const sent = decodeSent(entry.body);
+
+    if (Option.isNone(sent)) {
+      continue;
+    }
+
+    const { m } = sent.value;
+
+    if (table.deliver(entry, m, process) === "drop") {
+      continue;
+    }
+
+    letters.push({
+      letter: {
+        id: entry.id,
+        m,
+        by: entry.by,
+        for: entry.for,
+        sentAt: entry.sentAt,
+        parent: entry.parent,
+        traceId: entry.traceId,
+        rev: entry.rev,
+        pos: entry.pos,
+      },
+      arrivedAt: entry.arrivedAt,
+    });
+  }
+
+  return letters;
 };

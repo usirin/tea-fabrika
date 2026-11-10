@@ -1,17 +1,10 @@
-import {
-	type Appended,
-	type Fenced,
-	Ledger,
-	type Row,
-	streams,
-	type Writes,
-} from "@kampus/fabrika-old";
-import {memoryService} from "@kampus/fabrika-old/memory";
-import {Duration, Effect, Layer, Schema} from "effect";
-import {Row as BookRow} from "../criteria/book.ts";
-import {LaneId, Owner, PlanId, TaskId, TicketId} from "../ids.ts";
-import {Revision} from "../stages/plan/plan.ts";
-import {Answer, Attachment} from "./ask.ts";
+import { type Appended, type Fenced, Ledger, type Row, streams, type Writes } from "@kampus/fabrika-old";
+import { memoryService } from "@kampus/fabrika-old/memory";
+import { Duration, Effect, Layer, Schema } from "effect";
+import { Row as BookRow } from "../criteria/book.ts";
+import { LaneId, Owner, PlanId, TaskId, TicketId } from "../ids.ts";
+import { Revision } from "../stages/plan/plan.ts";
+import { Answer, Attachment } from "./ask.ts";
 
 // The pipeline's facts, kept on the one ledger a tea-host stands on (fabrika's host/ledger.ts): no
 // second store. The core's state is a fold over them (./rules.ts), so nothing is kept twice: what
@@ -54,80 +47,80 @@ import {Answer, Attachment} from "./ask.ts";
 // written.
 
 export const Fact = Schema.Union([
-	Schema.Struct({
-		type: Schema.Literal("planned"),
-		plan: PlanId,
-		tickets: Schema.Array(TicketId),
-		/** As written: a task or criterion with no id, or one the book does not hold, gets a new id. */
-		data: Revision,
-		problems: Schema.Array(Schema.String),
-	}),
-	/** A review round at one commit: its rows, and what it found that no criterion covers. The fold files both in the plan's book (`withRound`). */
-	Schema.Struct({
-		type: Schema.Literal("judged"),
-		plan: PlanId,
-		/** The task the round reviewed, or `plan`: the final round over the whole book. What it found goes under it. */
-		task: Owner,
-		head: Schema.String,
-		proof: Schema.String,
-		rows: Schema.Array(BookRow),
-		found: Schema.Array(Schema.String),
-	}),
-	Schema.Struct({
-		type: Schema.Literal("reviewed"),
-		plan: PlanId,
-		/** The task whose list the stall rule counts this in, or `plan`: the last reviews and ship runs of the plan's lane. */
-		task: Owner,
-		open: Schema.Int,
-	}),
-	Schema.Struct({
-		type: Schema.Literal("ruling_needed"),
-		ticket: TicketId,
-		ask: Schema.String,
-		options: Schema.Array(Schema.String),
-		why: Schema.String,
-	}),
-	/** Sort found `ticket` part of the open plan `plan`. */
-	Schema.Struct({type: Schema.Literal("folded"), plan: PlanId, ticket: TicketId}),
-	Schema.Struct({type: Schema.Literal("answered"), ...Answer.fields}),
-	Schema.Struct({
-		type: Schema.Literal("built"),
-		plan: PlanId,
-		task: TaskId,
-		/** The files the build changed. */
-		changes: Schema.Array(Schema.String),
-		/** How many listeners this build waits on before it ships: each clears it or raises a check. */
-		holds: Schema.Int,
-	}),
-	/** A listener that holds builds says this one needs nothing from it. */
-	Schema.Struct({
-		type: Schema.Literal("cleared"),
-		plan: PlanId,
-		task: TaskId,
-		build: Schema.Int,
-		by: Schema.String,
-	}),
-	/** A listener that holds builds asks the owner to look at this one. */
-	Schema.Struct({
-		type: Schema.Literal("check_raised"),
-		plan: PlanId,
-		task: TaskId,
-		build: Schema.Int,
-		by: Schema.String,
-		question: Schema.String,
-		attachments: Schema.Array(Attachment),
-	}),
-	/** The core sent a build to ship. */
-	Schema.Struct({
-		type: Schema.Literal("shipped"),
-		plan: PlanId,
-		task: TaskId,
-		build: Schema.Int,
-	}),
-	/** A lane began on a ticket. Its id is this fact's rev in the ticket's inbox, so two lanes never share one. */
-	Schema.Struct({type: Schema.Literal("lane"), ticket: TicketId}),
-	/** A lane let its ticket go, written under its lease just before it ended the lease. */
-	Schema.Struct({type: Schema.Literal("released"), ticket: TicketId, lane: LaneId}),
+  Schema.Struct({
+    type: Schema.Literal("planned"),
+    plan: PlanId,
+    tickets: Schema.Array(TicketId),
+    /** As written: a task or criterion with no id, or one the book does not hold, gets a new id. */
+    data: Revision,
+    problems: Schema.Array(Schema.String),
+  }),
+  /** A review round at one commit: its rows, and what it found that no criterion covers. The fold files both in the plan's book (`withRound`). */
+  Schema.Struct({
+    type: Schema.Literal("judged"),
+    plan: PlanId,
+    /** The task the round reviewed, or `plan`: the final round over the whole book. What it found goes under it. */
+    task: Owner,
+    head: Schema.String,
+    proof: Schema.String,
+    rows: Schema.Array(BookRow),
+    found: Schema.Array(Schema.String),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("reviewed"),
+    plan: PlanId,
+    /** The task whose list the stall rule counts this in, or `plan`: the last reviews and ship runs of the plan's lane. */
+    task: Owner,
+    open: Schema.Int,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("ruling_needed"),
+    ticket: TicketId,
+    ask: Schema.String,
+    options: Schema.Array(Schema.String),
+    why: Schema.String,
+  }),
+  /** Sort found `ticket` part of the open plan `plan`. */
+  Schema.Struct({ type: Schema.Literal("folded"), plan: PlanId, ticket: TicketId }),
+  Schema.Struct({ type: Schema.Literal("answered"), ...Answer.fields }),
+  Schema.Struct({
+    type: Schema.Literal("built"),
+    plan: PlanId,
+    task: TaskId,
+    /** The files the build changed. */
+    changes: Schema.Array(Schema.String),
+    /** How many listeners this build waits on before it ships: each clears it or raises a check. */
+    holds: Schema.Int,
+  }),
+  /** A listener that holds builds says this one needs nothing from it. */
+  Schema.Struct({
+    type: Schema.Literal("cleared"),
+    plan: PlanId,
+    task: TaskId,
+    build: Schema.Int,
+    by: Schema.String,
+  }),
+  /** A listener that holds builds asks the owner to look at this one. */
+  Schema.Struct({
+    type: Schema.Literal("check_raised"),
+    plan: PlanId,
+    task: TaskId,
+    build: Schema.Int,
+    by: Schema.String,
+    question: Schema.String,
+    attachments: Schema.Array(Attachment),
+  }),
+  /** The core sent a build to ship. */
+  Schema.Struct({
+    type: Schema.Literal("shipped"),
+    plan: PlanId,
+    task: TaskId,
+    build: Schema.Int,
+  }),
+  /** A lane began on a ticket. Its id is this fact's rev in the ticket's inbox, so two lanes never share one. */
+  Schema.Struct({ type: Schema.Literal("lane"), ticket: TicketId }),
+  /** A lane let its ticket go, written under its lease just before it ended the lease. */
+  Schema.Struct({ type: Schema.Literal("released"), ticket: TicketId, lane: LaneId }),
 ]);
 export type Fact = typeof Fact.Type;
 
@@ -138,26 +131,26 @@ export type Fact = typeof Fact.Type;
  * refuses it too. Today only the owner's answer is a person's.
  */
 const WRITTEN_BY = {
-	planned: "anyone",
-	judged: "anyone",
-	reviewed: "anyone",
-	ruling_needed: "anyone",
-	folded: "anyone",
-	answered: "person",
-	built: "anyone",
-	cleared: "anyone",
-	check_raised: "anyone",
-	shipped: "anyone",
-	lane: "anyone",
-	released: "anyone",
+  planned: "anyone",
+  judged: "anyone",
+  reviewed: "anyone",
+  ruling_needed: "anyone",
+  folded: "anyone",
+  answered: "person",
+  built: "anyone",
+  cleared: "anyone",
+  check_raised: "anyone",
+  shipped: "anyone",
+  lane: "anyone",
+  released: "anyone",
 } as const satisfies Writes<Fact["type"]>;
 
 const FACT_TYPES: ReadonlySet<string> = new Set(Object.keys(WRITTEN_BY));
 
 /** A fact with its place among the pipeline's facts, from 1. */
 export interface Entry {
-	readonly seq: number;
-	readonly fact: Fact;
+  readonly seq: number;
+  readonly fact: Fact;
 }
 
 /** Every pipeline name sits under this one, which is never registered: one prefix read finds all. */
@@ -172,30 +165,34 @@ const TICKET_ASK = /^ruling:([\w.-]+\/[\w.-]+#[1-9][0-9]*)$/;
 
 /** The name a fact lives under. `null`: an answer to an ask whose id names no plan and no ticket. */
 export const homeOf = (fact: Fact): string | null => {
-	switch (fact.type) {
-		case "ruling_needed":
-		case "lane":
-		case "released":
-			return ticketName(fact.ticket);
-		case "answered": {
-			const plan = PLAN_ASK.exec(fact.id)?.[1];
-			if (plan !== undefined) return `${ROOT}/plan/${plan}`;
-			const ticket = TICKET_ASK.exec(fact.id)?.[1];
-			return ticket === undefined ? null : `${ROOT}/ticket/${ticket}`;
-		}
-		default:
-			return planName(fact.plan);
-	}
+  switch (fact.type) {
+    case "ruling_needed":
+    case "lane":
+    case "released":
+      return ticketName(fact.ticket);
+    case "answered": {
+      const plan = PLAN_ASK.exec(fact.id)?.[1];
+
+      if (plan !== undefined) {
+        return `${ROOT}/plan/${plan}`;
+      }
+
+      const ticket = TICKET_ASK.exec(fact.id)?.[1];
+      return ticket === undefined ? null : `${ROOT}/ticket/${ticket}`;
+    }
+    default:
+      return planName(fact.plan);
+  }
 };
 
 /** The lease a name's holder writes under: the name, and the fence its claim gave. */
 export interface Hold {
-	readonly name: string;
-	readonly fence: number;
+  readonly name: string;
+  readonly fence: number;
 }
 
 /** The one ledger, the tea-host's: the pipeline keeps no second one. */
-export {Ledger} from "@kampus/fabrika-old";
+export { Ledger } from "@kampus/fabrika-old";
 
 const encode = Schema.encodeSync(Fact);
 const decode = Schema.decodeUnknownExit(Fact);
@@ -209,33 +206,43 @@ const parseJson = Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown)
  * with words the host does not read as a lost lease, so the host wrote a crash and the name went
  * down.
  */
-export const steady = <A, E extends {readonly _tag: string}, R>(
-	what: string,
-	e: Effect.Effect<A, E, R>,
-): Effect.Effect<A, Exclude<E, {readonly _tag: "LedgerUnreachable"}>, R> =>
-	Effect.gen(function* () {
-		for (let tries = 1; ; tries++) {
-			const r = yield* Effect.result(e);
-			if (r._tag === "Success") return r.success;
-			const x = r.failure;
-			if (x._tag !== "LedgerUnreachable")
-				return yield* Effect.fail(x as Exclude<E, {readonly _tag: "LedgerUnreachable"}>);
-			yield* askAgain(what, tries);
-		}
-	});
+export const steady = <A, E extends { readonly _tag: string }, R>(
+  what: string,
+  e: Effect.Effect<A, E, R>,
+): Effect.Effect<A, Exclude<E, { readonly _tag: "LedgerUnreachable" }>, R> =>
+  Effect.gen(function* () {
+    for (let tries = 1; ; tries++) {
+      const r = yield* Effect.result(e);
+
+      if (r._tag === "Success") {
+        return r.success;
+      }
+
+      const x = r.failure;
+
+      if (x._tag !== "LedgerUnreachable") {
+        return yield* Effect.fail(x as Exclude<E, { readonly _tag: "LedgerUnreachable" }>);
+      }
+
+      yield* askAgain(what, tries);
+    }
+  });
 
 /** The wait before the next try: 100 ms, doubling to a second. */
 const askAgain = (what: string, tries: number) =>
-	Effect.gen(function* () {
-		if (tries === 1) yield* Effect.logDebug(`${what}: the ledger does not answer; asking again`);
-		yield* Effect.sleep(Duration.millis(Math.min(1000, 50 * 2 ** Math.min(tries, 5))));
-	});
+  Effect.gen(function* () {
+    if (tries === 1) {
+      yield* Effect.logDebug(`${what}: the ledger does not answer; asking again`);
+    }
+
+    yield* Effect.sleep(Duration.millis(Math.min(1000, 50 * 2 ** Math.min(tries, 5))));
+  });
 
 /** A `Self` call's answer other than no word from the ledger. */
-type Heard<W> = Exclude<W, "unreachable" | {readonly how: "unreachable"}>;
+type Heard<W> = Exclude<W, "unreachable" | { readonly how: "unreachable" }>;
+
 const heard = <W>(w: W): w is Heard<W> =>
-	w !== "unreachable" &&
-	!(typeof w === "object" && w !== null && "how" in w && w.how === "unreachable");
+  w !== "unreachable" && !(typeof w === "object" && w !== null && "how" in w && w.how === "unreachable");
 
 /**
  * `steady` for the calls a program makes on `Self` (`trapExit`, `startChild`, `monitor`): those
@@ -246,35 +253,37 @@ const heard = <W>(w: W): w is Heard<W> =>
  * ran on without the trap.
  */
 export const steadyCall = <W>(what: string, call: Effect.Effect<W>): Effect.Effect<Heard<W>> =>
-	Effect.gen(function* () {
-		for (let tries = 1; ; tries++) {
-			const w = yield* call;
-			if (heard(w)) return w;
-			yield* askAgain(what, tries);
-		}
-	});
+  Effect.gen(function* () {
+    for (let tries = 1; ; tries++) {
+      const w = yield* call;
+
+      if (heard(w)) {
+        return w;
+      }
+
+      yield* askAgain(what, tries);
+    }
+  });
 
 const homeOrDie = (fact: Fact): Effect.Effect<string> => {
-	const home = homeOf(fact);
-	return home === null
-		? Effect.die(`a ${fact.type} fact with no home: ${JSON.stringify(fact)}`)
-		: Effect.succeed(home);
+  const home = homeOf(fact);
+  return home === null ? Effect.die(`a ${fact.type} fact with no home: ${JSON.stringify(fact)}`) : Effect.succeed(home);
 };
 
 /** Register `name`. Registered already, it is answered, and nothing is written. */
 export const ensureName = (name: string, by: string): Effect.Effect<void, never, Ledger> =>
-	Effect.gen(function* () {
-		const ledger = yield* Ledger;
-		yield* steady(`register ${name}`, ledger.register(name, by)).pipe(
-			Effect.catchTag("Denied", () => Effect.die(`${name} cannot be registered`)),
-		);
-	});
+  Effect.gen(function* () {
+    const ledger = yield* Ledger;
+    yield* steady(`register ${name}`, ledger.register(name, by)).pipe(
+      Effect.catchTag("Denied", () => Effect.die(`${name} cannot be registered`)),
+    );
+  });
 
 export interface WriteOptions {
-	/** The message id: the same fact sent again under it is answered, and not written twice. Default: a new one. */
-	readonly id?: string;
-	/** Who writes it, as the ledger records it. Default `pipeline`. */
-	readonly by?: string;
+  /** The message id: the same fact sent again under it is answered, and not written twice. Default: a new one. */
+  readonly id?: string;
+  /** Who writes it, as the ledger records it. Default `pipeline`. */
+  readonly by?: string;
 }
 
 /**
@@ -283,82 +292,100 @@ export interface WriteOptions {
  * newest: a lane whose ticket another lane claimed sends nothing (`Fenced`).
  */
 export const sendFact = (
-	fact: Fact,
-	o: WriteOptions & {readonly hold?: Hold} = {},
+  fact: Fact,
+  o: WriteOptions & { readonly hold?: Hold } = {},
 ): Effect.Effect<Appended, Fenced, Ledger> =>
-	Effect.gen(function* () {
-		const ledger = yield* Ledger;
-		const home = yield* homeOrDie(fact);
-		const id = o.id ?? crypto.randomUUID();
-		const by = o.by ?? "pipeline";
-		const event = {kind: fact.type, writer: by, data: encode(fact)};
-		const inbox = streams(home).inbox;
-		const send = steady(`send ${fact.type}`, ledger.send(inbox, id, event, o.hold?.fence));
-		return yield* send.pipe(
-			Effect.catchTag("UnknownName", () => ensureName(home, by).pipe(Effect.andThen(send))),
-			Effect.catchTag("UnknownName", () => Effect.die(`${home} was registered, then unknown`)),
-			Effect.catchTag("Denied", () => Effect.die(`${inbox} is not an open inbox`)),
-		);
-	});
+  Effect.gen(function* () {
+    const ledger = yield* Ledger;
+    const home = yield* homeOrDie(fact);
+    const id = o.id ?? crypto.randomUUID();
+    const by = o.by ?? "pipeline";
+    const event = { kind: fact.type, writer: by, data: encode(fact) };
+    const inbox = streams(home).inbox;
+    const send = steady(`send ${fact.type}`, ledger.send(inbox, id, event, o.hold?.fence));
+    return yield* send.pipe(
+      Effect.catchTag("UnknownName", () => ensureName(home, by).pipe(Effect.andThen(send))),
+      Effect.catchTag("UnknownName", () => Effect.die(`${home} was registered, then unknown`)),
+      Effect.catchTag("Denied", () => Effect.die(`${inbox} is not an open inbox`)),
+    );
+  });
 
 /**
  * Write a fact under a lease. At the lease's own name it goes in `<name>/facts`, which only the
  * holder writes; elsewhere in the fact's home inbox, fenced on the lease. Either way a lost lease
  * writes nothing: `Fenced`.
  */
-export const appendFact = (
-	fact: Fact,
-	hold: Hold,
-	o: WriteOptions = {},
-): Effect.Effect<Appended, Fenced, Ledger> =>
-	Effect.gen(function* () {
-		const home = yield* homeOrDie(fact);
-		if (home !== hold.name) return yield* sendFact(fact, {...o, hold});
-		const ledger = yield* Ledger;
-		const event = {
-			kind: fact.type,
-			writer: o.by ?? "pipeline",
-			data: encode(fact),
-			id: o.id ?? crypto.randomUUID(),
-		};
-		return yield* steady(
-			`append ${fact.type}`,
-			ledger.append(factsOf(home), "any", event, hold.fence),
-		).pipe(
-			Effect.catchTags({
-				Stale: () => Effect.die("an append at the end answered stale"),
-				Denied: () => Effect.die(`${factsOf(home)} refused its own lease`),
-				UnknownName: () => Effect.die(`${home} is held but not registered`),
-			}),
-		);
-	});
+export const appendFact = (fact: Fact, hold: Hold, o: WriteOptions = {}): Effect.Effect<Appended, Fenced, Ledger> =>
+  Effect.gen(function* () {
+    const home = yield* homeOrDie(fact);
+
+    if (home !== hold.name) {
+      return yield* sendFact(fact, { ...o, hold });
+    }
+
+    const ledger = yield* Ledger;
+    const event = {
+      kind: fact.type,
+      writer: o.by ?? "pipeline",
+      data: encode(fact),
+      id: o.id ?? crypto.randomUUID(),
+    };
+    return yield* steady(`append ${fact.type}`, ledger.append(factsOf(home), "any", event, hold.fence)).pipe(
+      Effect.catchTags({
+        Stale: () => Effect.die("an append at the end answered stale"),
+        Denied: () => Effect.die(`${factsOf(home)} refused its own lease`),
+        UnknownName: () => Effect.die(`${home} is held but not registered`),
+      }),
+    );
+  });
 
 /** The name a stream of facts belongs to, or null: the stream holds no facts. */
 const nameOfStream = (stream: string): string | null =>
-	stream.endsWith("/facts")
-		? stream.slice(0, -"/facts".length)
-		: stream.endsWith("/inbox")
-			? stream.slice(0, -"/inbox".length)
-			: null;
+  stream.endsWith("/facts")
+    ? stream.slice(0, -"/facts".length)
+    : stream.endsWith("/inbox")
+      ? stream.slice(0, -"/inbox".length)
+      : null;
 
 /**
  * One row of a fact stream, as a fact. A row that is not a fact, or a fact whose home is not the
  * name it was read from, is a broken ledger: it throws, with where and why.
  */
 export const factOfRow = (row: Row): Fact => {
-	const name = nameOfStream(row.stream);
-	const where = `the ledger at ${row.pos} (${row.stream})`;
-	if (name === null) throw new Error(`${where} holds no facts`);
-	if (!FACT_TYPES.has(row.kind)) throw new Error(`${where}: a ${row.kind} event is not a fact`);
-	const data = parseJson(row.data);
-	if (data._tag === "Failure") throw new Error(`${where}: its data is not JSON`);
-	const fact = decode(data.value);
-	if (fact._tag === "Failure") throw new Error(`${where}: not a ${row.kind} fact`);
-	if (fact.value.type !== row.kind)
-		throw new Error(`${where}: a ${fact.value.type} fact written as ${row.kind}`);
-	const home = homeOf(fact.value);
-	if (home !== name) throw new Error(`${where}: a fact of ${home ?? "no name"} read from ${name}`);
-	return fact.value;
+  const name = nameOfStream(row.stream);
+  const where = `the ledger at ${row.pos} (${row.stream})`;
+
+  if (name === null) {
+    throw new Error(`${where} holds no facts`);
+  }
+
+  if (!FACT_TYPES.has(row.kind)) {
+    throw new Error(`${where}: a ${row.kind} event is not a fact`);
+  }
+
+  const data = parseJson(row.data);
+
+  if (data._tag === "Failure") {
+    throw new Error(`${where}: its data is not JSON`);
+  }
+
+  const fact = decode(data.value);
+
+  if (fact._tag === "Failure") {
+    throw new Error(`${where}: not a ${row.kind} fact`);
+  }
+
+  if (fact.value.type !== row.kind) {
+    throw new Error(`${where}: a ${fact.value.type} fact written as ${row.kind}`);
+  }
+
+  const home = homeOf(fact.value);
+
+  if (home !== name) {
+    throw new Error(`${where}: a fact of ${home ?? "no name"} read from ${name}`);
+  }
+
+  return fact.value;
 };
 
 const PAGE = 1000;
@@ -368,19 +395,28 @@ const PAGE = 1000;
  * `factOfRow` ends the read with a defect: nothing is folded from a broken ledger.
  */
 export const readFacts: Effect.Effect<readonly Entry[], never, Ledger> = Effect.gen(function* () {
-	const ledger = yield* Ledger;
-	const out: Entry[] = [];
-	let from = 0;
-	for (;;) {
-		const page = yield* steady("read the facts", ledger.read(from, PAGE, ROOT));
-		for (const row of page) {
-			if (nameOfStream(row.stream) === null) continue;
-			// A throw here is a defect: the ledger is broken, and the read ends.
-			out.push({seq: out.length + 1, fact: yield* Effect.sync(() => factOfRow(row))});
-		}
-		if (page.length < PAGE) return out;
-		from = page.at(-1)?.pos ?? from;
-	}
+  const ledger = yield* Ledger;
+  const out: Entry[] = [];
+  let from = 0;
+
+  for (;;) {
+    const page = yield* steady("read the facts", ledger.read(from, PAGE, ROOT));
+
+    for (const row of page) {
+      if (nameOfStream(row.stream) === null) {
+        continue;
+      }
+
+      // A throw here is a defect: the ledger is broken, and the read ends.
+      out.push({ seq: out.length + 1, fact: yield* Effect.sync(() => factOfRow(row)) });
+    }
+
+    if (page.length < PAGE) {
+      return out;
+    }
+
+    from = page.at(-1)?.pos ?? from;
+  }
 });
 
 /**
@@ -389,17 +425,21 @@ export const readFacts: Effect.Effect<readonly Entry[], never, Ledger> = Effect.
  * leases' renewals (./claims.ts). `read` and `rows` read it as it is now.
  */
 export function memoryLedger(facts: readonly Fact[] = []) {
-	const service = memoryService();
-	const layer = Layer.succeed(Ledger, service);
-	const now = <A, E>(e: Effect.Effect<A, E, Ledger>) =>
-		Effect.runSync(Effect.orDie(Effect.provideService(e, Ledger, service)));
-	for (const fact of facts) now(sendFact(fact));
-	return {
-		layer,
-		service,
-		/** Every fact, oldest first, as `readFacts` reads them. */
-		read: (): readonly Entry[] => now(readFacts),
-		/** Every row under `pipeline/`: the ledger's own (registrations, claims) with the facts. */
-		rows: (): readonly Row[] => now(service.read(0, 1_000_000, ROOT)),
-	};
+  const service = memoryService();
+  const layer = Layer.succeed(Ledger, service);
+  const now = <A, E>(e: Effect.Effect<A, E, Ledger>) =>
+    Effect.runSync(Effect.orDie(Effect.provideService(e, Ledger, service)));
+
+  for (const fact of facts) {
+    now(sendFact(fact));
+  }
+
+  return {
+    layer,
+    service,
+    /** Every fact, oldest first, as `readFacts` reads them. */
+    read: (): readonly Entry[] => now(readFacts),
+    /** Every row under `pipeline/`: the ledger's own (registrations, claims) with the facts. */
+    rows: (): readonly Row[] => now(service.read(0, 1_000_000, ROOT)),
+  };
 }

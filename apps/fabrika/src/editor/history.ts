@@ -1,4 +1,4 @@
-import {Effect, FileSystem} from "effect";
+import { Effect, FileSystem } from "effect";
 
 // Where the line editor's history is kept between starts: a file of lines, oldest first, one
 // line each, as bash's ~/.bash_history. The editor holds the history (editor.ts) and asks for it
@@ -12,52 +12,46 @@ import {Effect, FileSystem} from "effect";
 // still starts. A save that fails is let go the same way, and said on the error log.
 
 export interface History {
-	/** The lines kept, oldest first. */
-	readonly load: Effect.Effect<readonly string[]>;
-	/** Keep these lines, in place of what was kept. */
-	readonly save: (lines: readonly string[]) => Effect.Effect<void>;
+  /** The lines kept, oldest first. */
+  readonly load: Effect.Effect<readonly string[]>;
+  /** Keep these lines, in place of what was kept. */
+  readonly save: (lines: readonly string[]) => Effect.Effect<void>;
 }
 
 /** A history in memory, for a test: it starts with `lines`. */
-export const memoryHistory = (
-	lines: readonly string[] = [],
-): History & {readonly kept: () => readonly string[]} => {
-	let kept = lines;
-	return {
-		load: Effect.sync(() => kept),
-		save: (next) =>
-			Effect.sync(() => {
-				kept = next;
-			}),
-		kept: () => kept,
-	};
+export const memoryHistory = (lines: readonly string[] = []): History & { readonly kept: () => readonly string[] } => {
+  let kept = lines;
+  return {
+    load: Effect.sync(() => kept),
+    save: (next) =>
+      Effect.sync(() => {
+        kept = next;
+      }),
+    kept: () => kept,
+  };
 };
 
 /** A history in the file at `path`, written whole on each save. */
 export const fileHistory = (path: string) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem.FileSystem;
-		const history: History = {
-			load: fs.readFileString(path).pipe(
-				Effect.map((text) => text.split("\n").filter((line) => line !== "")),
-				Effect.orElseSucceed((): readonly string[] => []),
-			),
-			save: (lines) =>
-				fs
-					.writeFileString(path, lines.map((line) => `${line}\n`).join(""))
-					.pipe(
-						Effect.catch((e) =>
-							Effect.logError(`fabrika: could not keep the history: ${e.message}`),
-						),
-					),
-		};
-		return history;
-	});
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const history: History = {
+      load: fs.readFileString(path).pipe(
+        Effect.map((text) => text.split("\n").filter((line) => line !== "")),
+        Effect.orElseSucceed((): readonly string[] => []),
+      ),
+      save: (lines) =>
+        fs
+          .writeFileString(path, lines.map((line) => `${line}\n`).join(""))
+          .pipe(Effect.catch((e) => Effect.logError(`fabrika: could not keep the history: ${e.message}`))),
+    };
+    return history;
+  });
 
 /** One history for every tile's editor: a save from one is told to each that follows it. */
 export interface SharedHistory extends History {
-	/** Hear each save from now on, the follower's own too. Answers how to stop hearing them. */
-	readonly follow: (heard: (lines: readonly string[]) => void) => () => void;
+  /** Hear each save from now on, the follower's own too. Answers how to stop hearing them. */
+  readonly follow: (heard: (lines: readonly string[]) => void) => () => void;
 }
 
 /**
@@ -72,22 +66,25 @@ export interface SharedHistory extends History {
  * one wins: one of the two lines is lost. A person types in one tile at a time, so this is let be.
  */
 export const sharedHistory = (kept: History) =>
-	Effect.gen(function* () {
-		let lines = yield* kept.load;
-		const followers = new Set<(lines: readonly string[]) => void>();
-		const history: SharedHistory = {
-			load: Effect.sync(() => lines),
-			save: (next) =>
-				Effect.sync(() => {
-					lines = next;
-					for (const heard of followers) heard(next);
-				}).pipe(Effect.andThen(kept.save(next))),
-			follow: (heard) => {
-				followers.add(heard);
-				return () => {
-					followers.delete(heard);
-				};
-			},
-		};
-		return history;
-	});
+  Effect.gen(function* () {
+    let lines = yield* kept.load;
+    const followers = new Set<(lines: readonly string[]) => void>();
+    const history: SharedHistory = {
+      load: Effect.sync(() => lines),
+      save: (next) =>
+        Effect.sync(() => {
+          lines = next;
+
+          for (const heard of followers) {
+            heard(next);
+          }
+        }).pipe(Effect.andThen(kept.save(next))),
+      follow: (heard) => {
+        followers.add(heard);
+        return () => {
+          followers.delete(heard);
+        };
+      },
+    };
+    return history;
+  });

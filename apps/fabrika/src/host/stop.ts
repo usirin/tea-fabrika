@@ -1,5 +1,5 @@
-import {Effect, FileSystem, Predicate, Schedule, Schema} from "effect";
-import {pathsOf, reach} from "./socket.ts";
+import { Effect, FileSystem, Predicate, Schedule, Schema } from "effect";
+import { pathsOf, reach } from "./socket.ts";
 
 // Stop the host on a home, by the pid in `<home>/host/pid`, and wait for it to exit: what the
 // window's "Stop the old host and start this one" does first (main.ts), before it attaches and so
@@ -24,7 +24,7 @@ import {pathsOf, reach} from "./socket.ts";
 
 /** The host could not be stopped, and why, in words for the window. */
 export class NotStopped extends Schema.TaggedError<NotStopped>()("NotStopped", {
-	why: Schema.String,
+  why: Schema.String,
 }) {}
 
 /** How long a host has to exit once told to. Its tiles stop in a few ms. */
@@ -34,38 +34,46 @@ const codeOf = (e: unknown) => (Predicate.hasProperty(e, "code") ? String(e.code
 
 /** Send `signal` to `pid`: sent, gone already, or why not. */
 const send = (pid: number, signal: NodeJS.Signals | 0) =>
-	Effect.try({try: () => process.kill(pid, signal), catch: codeOf}).pipe(
-		Effect.as("sent" as const),
-		Effect.catch((code) =>
-			code === "ESRCH" ? Effect.succeed("gone" as const) : Effect.fail(code),
-		),
-	);
+  Effect.try({ try: () => process.kill(pid, signal), catch: codeOf }).pipe(
+    Effect.as("sent" as const),
+    Effect.catch((code) => (code === "ESRCH" ? Effect.succeed("gone" as const) : Effect.fail(code))),
+  );
 
 export const stopHost = (home: string) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem.FileSystem;
-		const paths = yield* pathsOf(home);
-		if ((yield* reach(paths.sock)) !== "live") return "none" as const;
-		const text = yield* fs.readFileString(paths.pid).pipe(Effect.orElseSucceed(() => ""));
-		const pid = Number(text.trim());
-		if (!Number.isSafeInteger(pid) || pid <= 1)
-			return yield* new NotStopped({why: `${paths.pid} names no host's pid`});
-		if (pid === process.pid)
-			return yield* new NotStopped({why: `${paths.pid} names this process, not a host`});
-		const told = yield* send(pid, "SIGTERM").pipe(
-			Effect.mapError(
-				(code) => new NotStopped({why: `the host's pid ${pid} could not be told to stop: ${code}`}),
-			),
-		);
-		if (told === "gone") return "stopped" as const;
-		yield* send(pid, 0).pipe(
-			Effect.orElseSucceed(() => "sent" as const),
-			Effect.repeat({schedule: Schedule.spaced("50 millis"), until: (r) => r === "gone"}),
-			Effect.timeoutOrElse({
-				duration: EXIT_WITHIN,
-				orElse: () =>
-					Effect.fail(new NotStopped({why: `the host's pid ${pid} still runs ${EXIT_WITHIN} on`})),
-			}),
-		);
-		return "stopped" as const;
-	});
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const paths = yield* pathsOf(home);
+
+    if ((yield* reach(paths.sock)) !== "live") {
+      return "none" as const;
+    }
+
+    const text = yield* fs.readFileString(paths.pid).pipe(Effect.orElseSucceed(() => ""));
+    const pid = Number(text.trim());
+
+    if (!Number.isSafeInteger(pid) || pid <= 1) {
+      return yield* new NotStopped({ why: `${paths.pid} names no host's pid` });
+    }
+
+    if (pid === process.pid) {
+      return yield* new NotStopped({ why: `${paths.pid} names this process, not a host` });
+    }
+
+    const told = yield* send(pid, "SIGTERM").pipe(
+      Effect.mapError((code) => new NotStopped({ why: `the host's pid ${pid} could not be told to stop: ${code}` })),
+    );
+
+    if (told === "gone") {
+      return "stopped" as const;
+    }
+
+    yield* send(pid, 0).pipe(
+      Effect.orElseSucceed(() => "sent" as const),
+      Effect.repeat({ schedule: Schedule.spaced("50 millis"), until: (r) => r === "gone" }),
+      Effect.timeoutOrElse({
+        duration: EXIT_WITHIN,
+        orElse: () => Effect.fail(new NotStopped({ why: `the host's pid ${pid} still runs ${EXIT_WITHIN} on` })),
+      }),
+    );
+    return "stopped" as const;
+  });

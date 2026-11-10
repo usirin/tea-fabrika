@@ -1,8 +1,8 @@
-import type {Effect} from "effect";
-import {Schema} from "effect";
-import {sha256} from "../../tickets/approval.ts";
-import type {Hash} from "../../tickets/ticket.ts";
-import {LaneStep} from "./machine.ts";
+import type { Effect } from "effect";
+import { Schema } from "effect";
+import { sha256 } from "../../tickets/approval.ts";
+import type { Hash } from "../../tickets/ticket.ts";
+import { LaneStep } from "./machine.ts";
 
 // A step's input key (self-fix PR 5, P7): a hash of what the step read. The same inputs always give
 // the same key, and a change to any one of them gives another. Each `ended` fact keeps the key it ran
@@ -17,32 +17,30 @@ import {LaneStep} from "./machine.ts";
 
 /** What a step read, by name. `null`: the step read no such thing. */
 export const Inputs = Schema.Struct({
-	/** The step that ran. */
-	step: LaneStep,
-	/** The ticket's title and body, hashed as an approval hashes them. */
-	ticket: Schema.String,
-	/** The plan's version. */
-	plan: Schema.NullOr(Schema.Finite),
-	/** The commit the lane stood on. */
-	base: Schema.NullOr(Schema.String),
-	/** The test writer's commit. */
-	exam: Schema.NullOr(Schema.String),
-	/** The commit the step ran at. */
-	head: Schema.NullOr(Schema.String),
-	/** The brief's hash. */
-	brief: Schema.NullOr(Schema.String),
-	harness: Schema.NullOr(Schema.String),
-	model: Schema.NullOr(Schema.String),
-	effort: Schema.NullOr(Schema.String),
-	/** The repository's settings, hashed. */
-	settings: Schema.NullOr(Schema.String),
+  /** The step that ran. */
+  step: LaneStep,
+  /** The ticket's title and body, hashed as an approval hashes them. */
+  ticket: Schema.String,
+  /** The plan's version. */
+  plan: Schema.NullOr(Schema.Finite),
+  /** The commit the lane stood on. */
+  base: Schema.NullOr(Schema.String),
+  /** The test writer's commit. */
+  exam: Schema.NullOr(Schema.String),
+  /** The commit the step ran at. */
+  head: Schema.NullOr(Schema.String),
+  /** The brief's hash. */
+  brief: Schema.NullOr(Schema.String),
+  harness: Schema.NullOr(Schema.String),
+  model: Schema.NullOr(Schema.String),
+  effort: Schema.NullOr(Schema.String),
+  /** The repository's settings, hashed. */
+  settings: Schema.NullOr(Schema.String),
 });
 export type Inputs = typeof Inputs.Type;
 
-const FIELDS = Object.keys(Inputs.fields).filter(
-	(name): name is keyof Inputs => name in Inputs.fields,
-);
+const FIELDS = Object.keys(Inputs.fields).filter((name): name is keyof Inputs => name in Inputs.fields);
 
 /** The key of `inputs`: SHA-256 of their values, in the fields' order. */
 export const keyOf = (inputs: Inputs): Effect.Effect<Hash> =>
-	sha256(JSON.stringify(FIELDS.map((field) => inputs[field])));
+  sha256(JSON.stringify(FIELDS.map((field) => inputs[field])));

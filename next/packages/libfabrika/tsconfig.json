@@ -1,5 +1,9 @@
 {
-	"extends": "../../../tsconfig.base.json",
-	"compilerOptions": { "types": ["node", "@cloudflare/workers-types"] },
-	"include": ["src"]
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "@cloudflare/workers-types"],
+    // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
+    "erasableSyntaxOnly": true
+  },
+  "include": ["src"]
 }

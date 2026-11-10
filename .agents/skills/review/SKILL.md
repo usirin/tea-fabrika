@@ -50,20 +50,24 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      A scenario only supplements the property. Report a missing marker or flow law as a defect.
    - Screenshots in the program's `docs/` folder when the plan asks for them, at its layouts.
    - Anything else the brief names for this round, such as the mutation step's added laws.
-4. **Answer.** Start with merge-ready; tickets: <m> or changes: <n>; tickets: <m>.
-   n counts blocking classes. Each class lists every affected case. m counts distinct confirmed
-   tracker tickets linked in this answer.
+4. **Answer.** Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.
+   n counts blocking classes. Each class lists every affected case. m counts the finding rows in
+   this answer.
    Give every finding in that answer, grouped by class, most serious first.
    Name each checked decided note and say where the change follows or breaks it.
    Each blocker gives `file:line`, its source and the missed case. A demonstrated gap in a named
    class checks the law; it does not reopen every test's merits.
 
-   Other actionable findings become tracker tickets. Use tracker_query to find an existing
-   ticket, or tracker_file with value: {title, body, from: {_tag: "pr", url, step: "review"}}.
-   Record the returned ID.
-   Link each confirmed ticket in the answer. Filing claims no ticket and starts no build.
-   If filing fails, include the exact pending payload for lead to retry. Do not count it as filed
-   or start another review round for it.
+   Any other actionable finding is one finding row with proof: never a ticket, a fix or only a
+   mention, and never a security hole.
+   Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl
+   unchanged. Do not start another review round for it.
+   End with exactly one answer: line, as the last line.
+   Decision [0035](../../../.decisions/0035-outside-work-becomes-finding-rows.md) says why, and
+   [A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+   counts as proof. Other means it is wrong but blocks nothing by the rule in step 3, in this diff
+   or beside it. Reading one function is not proof: run it, or show the two lines that disagree.
+   With no proof, write nothing.
 
 ## Never
 

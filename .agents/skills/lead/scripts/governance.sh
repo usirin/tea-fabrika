@@ -24,11 +24,12 @@ def words(text):
 root, base = Path(sys.argv[1]), sys.argv[2]
 diff = subprocess.run(
     ["git", "-C", str(root), "diff", "--unified=0", f"{base}...HEAD"],
-    check=True, capture_output=True, text=True,
-).stdout
+    check=True, capture_output=True,
+).stdout.decode("utf-8", "replace")
 touched = set()
 changed = []
-for line in diff.splitlines():
+# A diff line is read the way git writes it: up to the newline.
+for line in diff.split("\n"):
     if line.startswith(("+++ b/", "--- a/")):
         path = line[6:]
         if path.startswith(".decisions/"):

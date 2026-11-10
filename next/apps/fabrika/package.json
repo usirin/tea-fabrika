@@ -1,36 +1,35 @@
 {
-	"name": "@kampus/fabrika",
-	"version": "0.0.0",
-	"private": true,
-	"type": "module",
-	"description": "The new fabrika's app: the local brain, object wiring and shared deploy stack.",
-	"sideEffects": false,
-	"scripts": {
-		"dev": "node dev.ts",
-		"build": "node build.ts",
-		"grant": "node grant.ts",
-		"typecheck": "tsc --noEmit -p ."
-	},
-	"dependencies": {
-		"@kampus/libfabrika": "workspace:*",
-		"@effect/platform-node": "catalog:",
-		"effect": "catalog:",
-		"oxc-parser": "catalog:",
-		"oxc-transform-react": "catalog:"
-	},
-	"devDependencies": {
-		"@cloudflare/workers-types": "5.20261027.1",
-		"@alchemy.run/cloudflare-runtime": "2.0.0-beta.84",
-		"@demlik/tea": "catalog:",
-		"@effect/vitest": "catalog:",
-		"@types/node": "catalog:",
-		"rolldown": "catalog:",
-		"fast-check": "catalog:",
-		"playwright": "catalog:",
-		"@kampus/counter": "workspace:*",
-		"@alchemy.run/cloudflare": "catalog:",
-		"alchemy": "catalog:",
-		"typescript": "catalog:",
-		"vitest": "catalog:"
-	}
+  "name": "@kampus/fabrika",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The new fabrika's app: the local brain, object wiring and shared deploy stack.",
+  "sideEffects": false,
+  "scripts": {
+    "dev": "node dev.ts",
+    "build": "node build.ts",
+    "grant": "node grant.ts",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@kampus/libfabrika": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:",
+    "oxc-parser": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261027.1",
+    "@alchemy.run/cloudflare-runtime": "2.0.0-beta.84",
+    "@demlik/tea": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "rolldown": "catalog:",
+    "fast-check": "catalog:",
+    "playwright": "catalog:",
+    "@kampus/counter": "workspace:*",
+    "@alchemy.run/cloudflare": "catalog:",
+    "alchemy": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
 }

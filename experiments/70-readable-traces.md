@@ -27,9 +27,9 @@ away.
 Jaeger 1.76, light and dark. The same trace, the absolute path cut to `~/…`
 for this page.
 
-![Before, light: one color, the whole line as the name, rows of chat and execute_tool](./70-before-light.png)
+![Before, light: one color, the whole line as the name, rows of chat and execute_tool](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/70-before-light.png?raw=true)
 
-![Before, dark: half the page dark, half light](./70-before-dark.png)
+![Before, dark: half the page dark, half light](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/70-before-dark.png?raw=true)
 
 ## After
 
@@ -45,14 +45,14 @@ TSH_WORK=<folder> TSH_OWN=<your login> TSH_TRACE=1 bin/tsh -c \
 20 spans, 5 services. The longer run in the before pictures had 148 spans,
 115 of them agent spans, and one service.
 
-![After, light: tsh, operate, build, review and ship each in their own color; one row per step](./70-after-operate-light.png)
+![After, light: tsh, operate, build, review and ship each in their own color; one row per step](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/70-after-operate-light.png?raw=true)
 
-![After, dark: the whole page is dark](./70-after-operate-dark.png)
+![After, dark: the whole page is dark](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/70-after-operate-dark.png?raw=true)
 
 The builder's row opened. Jaeger's GenAI tab reads the folded span: the
 agent, the model, the tokens.
 
-![The builder's row opened: builder · 12 turns, with its agent, model and tokens](./70-after-operate-builder.png)
+![The builder's row opened: builder · 12 turns, with its agent, model and tokens](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/70-after-operate-builder.png?raw=true)
 
 The tags on the stage spans, from the exported trace:
 
@@ -72,7 +72,7 @@ stuck on checks is red with `stuck:checks_stuck` as its message
 The read-only line on three demlik pull requests,
 `review-scripted pr=… pr=… pr=… | ship --mode read`:
 
-![After, a review and ship line: tsh, ship, review-scripted and review each in their own color](./70-after-review-light.png)
+![After, a review and ship line: tsh, ship, review-scripted and review each in their own color](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/70-after-review-light.png?raw=true)
 
 ## What changed
 
@@ -255,7 +255,7 @@ service `jaeger`. `service.telemetry.traces.level: none` in the config does
 not stop it on 2.21.0. The environment variable
 `OTEL_TRACES_SAMPLER=always_off` does, and `trace:up` sets it.
 
-![Jaeger 2.21.0, dark, the old trace: the theme is whole](./70-j2-before-dark.png)
+![Jaeger 2.21.0, dark, the old trace: the theme is whole](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/70-j2-before-dark.png?raw=true)
 
 ## Findings
 

@@ -38,3 +38,9 @@ at the bot push. Tracker ticket 396 carries the change.
   list. A name missing from that list gets through.
 - `leakgrep.test.ts` carries laws for both sides of the line, in the same pull request as the
   script change.
+
+## Amendments
+
+- 2026-11-09 (ticket 464): `/Users` and `/home` match in their real case only, so a lowercase API
+  path such as GitHub's `/users/<name>/keys` passes. The temp folders and `C:\Users` still match in
+  any case.

@@ -1,8 +1,8 @@
-import {Duration, Schema} from "effect";
-import {jsonSchemaOf} from "../program/shape.ts";
-import {isOneLine} from "../shell/one-line.ts";
-import {JobAnswer} from "./job.ts";
-import type {Tool} from "./tools.ts";
+import { Duration, Schema } from "effect";
+import { jsonSchemaOf } from "../program/shape.ts";
+import { isOneLine } from "../shell/one-line.ts";
+import { JobAnswer } from "./job.ts";
+import type { Tool } from "./tools.ts";
 
 // The `stop` tool, beside `runs` and `job`: an agent stops job n of the host's table, and must say
 // why (tracker 185b). The host keeps the agent as the one who stopped it, in the job's record and
@@ -38,15 +38,13 @@ export const EXIT_WITHIN = Duration.seconds(10);
  * newline or carriage return could start a line of its own there (../shell/one-line.ts).
  */
 export const Why = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(500),
-	Schema.makeFilter(
-		(why) => isOneLine(why) || "one line, with no newline, tab or other control character",
-	),
+  Schema.isMinLength(1),
+  Schema.isMaxLength(500),
+  Schema.makeFilter((why) => isOneLine(why) || "one line, with no newline, tab or other control character"),
 );
 
 /** What the tool takes: the job's number, `%n` on a line, and why. */
-export const StopAsk = Schema.Struct({n: Schema.Int, why: Why});
+export const StopAsk = Schema.Struct({ n: Schema.Int, why: Why });
 export type StopAsk = typeof StopAsk.Type;
 
 /**
@@ -55,25 +53,25 @@ export type StopAsk = typeof StopAsk.Type;
  * `asked`: it was asked, and had not ended `EXIT_WITHIN` on; the `job` tool reads it later.
  */
 export const StopAnswer = Schema.TaggedUnion({
-	stopped: {job: JobAnswer},
-	dropped: {n: Schema.Int, text: Schema.String},
-	asked: {n: Schema.Int},
+  stopped: { job: JobAnswer },
+  dropped: { n: Schema.Int, text: Schema.String },
+  asked: { n: Schema.Int },
 });
 export type StopAnswer = typeof StopAnswer.Type;
 
 /** The host would not stop the job, and why, in words for the agent: no job n, or one that ended. */
 export class StopRefused extends Schema.TaggedError<StopRefused>()("StopRefused", {
-	why: Schema.String,
+  why: Schema.String,
 }) {}
 
 export const STOP_TOOL: Tool = {
-	name: STOP,
-	description: `Stop one job of the host's table, by its number (%n on a line, as jobs and runs show it), the person's or yours. why: what made you stop it, 1 to 500 characters on one line; the tile it ran in shows it to the person, and the job's record keeps it. A detached job (from before the host started again) is dropped. Answers stopped, with the job as the job tool shows it; dropped; or asked, when it has not ended ${Duration.toSeconds(EXIT_WITHIN)} s on: read it with job.`,
-	inputSchema: {...jsonSchemaOf(StopAsk), type: "object"},
-	annotations: {
-		readOnlyHint: false,
-		destructiveHint: true,
-		idempotentHint: true,
-		openWorldHint: false,
-	},
+  name: STOP,
+  description: `Stop one job of the host's table, by its number (%n on a line, as jobs and runs show it), the person's or yours. why: what made you stop it, 1 to 500 characters on one line; the tile it ran in shows it to the person, and the job's record keeps it. A detached job (from before the host started again) is dropped. Answers stopped, with the job as the job tool shows it; dropped; or asked, when it has not ended ${Duration.toSeconds(EXIT_WITHIN)} s on: read it with job.`,
+  inputSchema: { ...jsonSchemaOf(StopAsk), type: "object" },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
 };

@@ -1,12 +1,12 @@
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
-import {Clock, Effect, Exit, Schedule, Schema, Scope} from "effect";
-import {BUILD} from "./build-id.ts";
-import {forgetNote, leaveNote, personOn} from "./host/restart.ts";
-import {pathsOf, reach} from "./host/socket.ts";
-import {stopHost} from "./host/stop.ts";
-import {type Down, foundOf, PROTOCOL, type Up} from "./link.ts";
-import type {Attached} from "./messages.ts";
-import {appWire, type Wire} from "./wire.ts";
+import { Clock, Effect, Exit, Schedule, Schema, Scope } from "effect";
+import { BUILD } from "./build-id.ts";
+import { forgetNote, leaveNote, personOn } from "./host/restart.ts";
+import { pathsOf, reach } from "./host/socket.ts";
+import { stopHost } from "./host/stop.ts";
+import { type Down, foundOf, PROTOCOL, type Up } from "./link.ts";
+import type { Attached } from "./messages.ts";
+import { appWire, type Wire } from "./wire.ts";
 
 // The app's side of attaching, as `tmux attach` is: connect to the host on the home's socket; if
 // none answers, start one, wait for its socket, then connect. Node is named only through
@@ -34,10 +34,10 @@ import {appWire, type Wire} from "./wire.ts";
 // that does not come up closes its own socket before it fails, so nothing of it is left open.
 
 /** No host could be started, or it did not listen in time. */
-export class NoHost extends Schema.TaggedError<NoHost>()("NoHost", {why: Schema.String}) {}
+export class NoHost extends Schema.TaggedError<NoHost>()("NoHost", { why: Schema.String }) {}
 
 /** A host answered on its socket, but said no hello in time. */
-export class NoHello extends Schema.TaggedError<NoHello>()("NoHello", {within: Schema.String}) {}
+export class NoHello extends Schema.TaggedError<NoHello>()("NoHello", { within: Schema.String }) {}
 
 /** How long a host just started has to listen on its socket. */
 const LISTEN_WITHIN = "10 seconds";
@@ -51,67 +51,68 @@ const HELLO_WITHIN = "10 seconds";
 
 /** How to attach: the home, where the host's lines go, and how a host is started. */
 interface AttachOptions<E, R> {
-	readonly home: string;
-	readonly deliver: (m: Down) => void;
-	/** Start a host on the home, detached. Answers an Effect done when that host exits. */
-	readonly start: Effect.Effect<Effect.Effect<unknown, unknown>, E, R>;
-	/** The link's version the app speaks, for a test of an old app. */
-	readonly ours?: number;
-	/** The app's build, to compare with the host's: `BUILD`, but in a test. */
-	readonly build?: string;
+  readonly home: string;
+  readonly deliver: (m: Down) => void;
+  /** Start a host on the home, detached. Answers an Effect done when that host exits. */
+  readonly start: Effect.Effect<Effect.Effect<unknown, unknown>, E, R>;
+  /** The link's version the app speaks, for a test of an old app. */
+  readonly ours?: number;
+  /** The app's build, to compare with the host's: `BUILD`, but in a test. */
+  readonly build?: string;
 }
 
 /** Attached: the link, and what the app found of the host's build. */
 interface Attachment {
-	readonly wire: Wire<Up>;
-	readonly found: Attached;
+  readonly wire: Wire<Up>;
+  readonly found: Attached;
 }
 
 export const attach = <E, R>(options: AttachOptions<E, R>) =>
-	Effect.gen(function* () {
-		const {home, deliver, start, ours = PROTOCOL, build = BUILD} = options;
-		const paths = yield* pathsOf(home);
-		if ((yield* reach(paths.sock)) !== "live") {
-			const exited = yield* start;
-			const listening = reach(paths.sock).pipe(
-				Effect.repeat({schedule: Schedule.spaced("50 millis"), until: (r) => r === "live"}),
-			);
-			yield* Effect.raceFirst(
-				listening.pipe(
-					Effect.timeoutOrElse({
-						duration: LISTEN_WITHIN,
-						orElse: () =>
-							Effect.fail(new NoHost({why: `the host did not listen within ${LISTEN_WITHIN}`})),
-					}),
-				),
-				// The host it started stopped. It may have stepped aside for a host another app started
-				// at the same moment (host/run.ts): then that one answers, and the app attaches to it.
-				exited.pipe(
-					Effect.ignore,
-					Effect.andThen(reach(paths.sock)),
-					Effect.flatMap((r) =>
-						r === "live"
-							? Effect.void
-							: Effect.fail(new NoHost({why: `the host stopped as it started: see ${paths.log}`})),
-					),
-				),
-			);
-		}
-		// The link runs in a scope of its own, inside the caller's: closed as soon as the try fails,
-		// so its socket is not left open until the caller's scope ends.
-		const link = yield* Scope.fork(yield* Effect.scope);
-		const socket = yield* NodeSocket.makeNet({path: paths.sock});
-		const wire = yield* appWire(socket, deliver, ours).pipe(Scope.provide(link));
-		const theirs = yield* wire.up.pipe(
-			Effect.timeoutOrElse({
-				duration: HELLO_WITHIN,
-				orElse: () => Effect.fail(new NoHello({within: HELLO_WITHIN})),
-			}),
-			Effect.onError((cause) => Scope.close(link, Exit.failCause(cause))),
-		);
-		const attached: Attachment = {wire, found: foundOf(theirs, build)};
-		return attached;
-	});
+  Effect.gen(function* () {
+    const { home, deliver, start, ours = PROTOCOL, build = BUILD } = options;
+    const paths = yield* pathsOf(home);
+
+    if ((yield* reach(paths.sock)) !== "live") {
+      const exited = yield* start;
+      const listening = reach(paths.sock).pipe(
+        Effect.repeat({ schedule: Schedule.spaced("50 millis"), until: (r) => r === "live" }),
+      );
+      yield* Effect.raceFirst(
+        listening.pipe(
+          Effect.timeoutOrElse({
+            duration: LISTEN_WITHIN,
+            orElse: () => Effect.fail(new NoHost({ why: `the host did not listen within ${LISTEN_WITHIN}` })),
+          }),
+        ),
+        // The host it started stopped. It may have stepped aside for a host another app started
+        // at the same moment (host/run.ts): then that one answers, and the app attaches to it.
+        exited.pipe(
+          Effect.ignore,
+          Effect.andThen(reach(paths.sock)),
+          Effect.flatMap((r) =>
+            r === "live"
+              ? Effect.void
+              : Effect.fail(new NoHost({ why: `the host stopped as it started: see ${paths.log}` })),
+          ),
+        ),
+      );
+    }
+
+    // The link runs in a scope of its own, inside the caller's: closed as soon as the try fails,
+    // so its socket is not left open until the caller's scope ends.
+    const link = yield* Scope.fork(yield* Effect.scope);
+    const socket = yield* NodeSocket.makeNet({ path: paths.sock });
+    const wire = yield* appWire(socket, deliver, ours).pipe(Scope.provide(link));
+    const theirs = yield* wire.up.pipe(
+      Effect.timeoutOrElse({
+        duration: HELLO_WITHIN,
+        orElse: () => Effect.fail(new NoHello({ within: HELLO_WITHIN })),
+      }),
+      Effect.onError((cause) => Scope.close(link, Exit.failCause(cause))),
+    );
+    const attached: Attachment = { wire, found: foundOf(theirs, build) };
+    return attached;
+  });
 
 /**
  * Stop the host on the home and wait for it to exit (host/stop.ts), then attach: no host answers
@@ -121,18 +122,20 @@ export const attach = <E, R>(options: AttachOptions<E, R>) =>
  * note back: no restart happened.
  */
 export const restart = <E, R>(options: AttachOptions<E, R>) =>
-	Effect.gen(function* () {
-		const paths = yield* pathsOf(options.home);
-		if ((yield* reach(paths.sock)) === "live") {
-			const by = yield* personOn(options.home);
-			const at = yield* Clock.currentTimeMillis;
-			if (by !== null)
-				yield* leaveNote(paths, {by, why: null, at}).pipe(
-					Effect.catch((e) =>
-						Effect.logWarning(`fabrika: the restart's note could not be left: ${e.message}`),
-					),
-				);
-		}
-		yield* stopHost(options.home).pipe(Effect.tapError(() => forgetNote(paths)));
-		return yield* attach(options);
-	});
+  Effect.gen(function* () {
+    const paths = yield* pathsOf(options.home);
+
+    if ((yield* reach(paths.sock)) === "live") {
+      const by = yield* personOn(options.home);
+      const at = yield* Clock.currentTimeMillis;
+
+      if (by !== null) {
+        yield* leaveNote(paths, { by, why: null, at }).pipe(
+          Effect.catch((e) => Effect.logWarning(`fabrika: the restart's note could not be left: ${e.message}`)),
+        );
+      }
+    }
+
+    yield* stopHost(options.home).pipe(Effect.tapError(() => forgetNote(paths)));
+    return yield* attach(options);
+  });

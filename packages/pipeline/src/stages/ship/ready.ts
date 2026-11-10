@@ -1,6 +1,6 @@
-import {Schema} from "effect";
-import {Stated, Verdict} from "../../criteria/book.ts";
-import type {CriterionId} from "../../ids.ts";
+import { Schema } from "effect";
+import { Stated, Verdict } from "../../criteria/book.ts";
+import type { CriterionId } from "../../ids.ts";
 
 // "Ready to merge" as a value that can only exist with its proof.
 //
@@ -31,12 +31,12 @@ export const Row = Verdict;
 export type Row = Verdict;
 
 /** A row that says pass. Only these go into a `ReadyToMerge`. */
-export type Met = Row & {readonly grade: "pass"};
+export type Met = Row & { readonly grade: "pass" };
 
 /** The checks, as read at one commit. */
 export const Checks = Schema.Struct({
-	head: Schema.String,
-	state: Schema.Literals(["green", "pending", "red", "stuck"]),
+  head: Schema.String,
+  state: Schema.Literals(["green", "pending", "red", "stuck"]),
 });
 export type Checks = typeof Checks.Type;
 
@@ -45,60 +45,62 @@ export type Checks = typeof Checks.Type;
  * at (a `carried` fact, from `carry`). A row judged at `from` counts at `to`, as if judged there.
  * The checks never carry. See docs/direction/a-yes-binds-to-the-diff.md.
  */
-export const Hop = Schema.Struct({from: Schema.String, to: Schema.String});
+export const Hop = Schema.Struct({ from: Schema.String, to: Schema.String });
 export type Hop = typeof Hop.Type;
 
 /** Whether a row judged at `judged` counts at `head`: judged there, or carried there by one hop. */
 const standsAt = (judged: string, head: string, carried: readonly Hop[]): boolean =>
-	judged === head || carried.some((h) => h.from === judged && h.to === head);
+  judged === head || carried.some((h) => h.from === judged && h.to === head);
 
 /** What `ReadyToMerge.of` needs. */
 export const Proof = Schema.Struct({
-	pr: Schema.String,
-	/** The head the merge would land. */
-	head: Schema.String,
-	/** The main commit the head was built and tested on: where it left the base branch. */
-	tested: Schema.String,
-	/** Every criterion the ledger holds now. Never empty: a ticket with none has nothing to prove. */
-	criteria: Schema.NonEmptyArray(Criterion),
-	/** The verdict rows the ledger kept, oldest first, any head, any version. */
-	verdicts: Schema.Array(Row),
-	/** The heads code carried to `head`, each from the one its rows were judged at. None: only rows at `head` count. */
-	carried: Schema.optionalKey(Schema.Array(Hop)),
-	checks: Checks,
+  pr: Schema.String,
+  /** The head the merge would land. */
+  head: Schema.String,
+  /** The main commit the head was built and tested on: where it left the base branch. */
+  tested: Schema.String,
+  /** Every criterion the ledger holds now. Never empty: a ticket with none has nothing to prove. */
+  criteria: Schema.NonEmptyArray(Criterion),
+  /** The verdict rows the ledger kept, oldest first, any head, any version. */
+  verdicts: Schema.Array(Row),
+  /** The heads code carried to `head`, each from the one its rows were judged at. None: only rows at `head` count. */
+  carried: Schema.optionalKey(Schema.Array(Hop)),
+  checks: Checks,
 });
 export type Proof = typeof Proof.Type;
 
 /** Why not, one per thing missing, each naming its criterion by id. */
 export type Refusal =
-	/** No row for it at all. */
-	| {readonly why: "no_verdict"; readonly id: CriterionId}
-	/** Its latest row on its current version at the head is a fail. */
-	| {readonly why: "not_met"; readonly id: CriterionId}
-	/** Rows for it, none at this head or carried to it: the head moved since. */
-	| {readonly why: "other_head"; readonly id: CriterionId; readonly head: string}
-	/** Rows for it at this head, none on its current version: it was said again since. */
-	| {readonly why: "old_version"; readonly id: CriterionId; readonly version: number}
-	| {readonly why: "checks"; readonly state: Checks["state"]; readonly head: string};
+  /** No row for it at all. */
+  | { readonly why: "no_verdict"; readonly id: CriterionId }
+  /** Its latest row on its current version at the head is a fail. */
+  | { readonly why: "not_met"; readonly id: CriterionId }
+  /** Rows for it, none at this head or carried to it: the head moved since. */
+  | { readonly why: "other_head"; readonly id: CriterionId; readonly head: string }
+  /** Rows for it at this head, none on its current version: it was said again since. */
+  | { readonly why: "old_version"; readonly id: CriterionId; readonly version: number }
+  | { readonly why: "checks"; readonly state: Checks["state"]; readonly head: string };
 
-export type Readiness =
-	| {readonly ready: ReadyToMerge}
-	| {readonly refused: readonly [Refusal, ...Refusal[]]};
+export type Readiness = { readonly ready: ReadyToMerge } | { readonly refused: readonly [Refusal, ...Refusal[]] };
 
 /** The passing row for one criterion at the head, judged there or carried there, or why there is none. */
 function rowFor(c: Criterion, p: Proof): Met | Refusal {
-	const mine = p.verdicts.filter((v) => v.criterion === c.id);
-	const here = mine.filter((v) => standsAt(v.head, p.head, p.carried ?? []));
-	const last = here.findLast((v) => v.version === c.version);
-	if (last === undefined) {
-		const older = here.at(-1);
-		if (older !== undefined) return {why: "old_version", id: c.id, version: older.version};
-		const other = mine.at(-1);
-		return other === undefined
-			? {why: "no_verdict", id: c.id}
-			: {why: "other_head", id: c.id, head: other.head};
-	}
-	return last.grade === "pass" ? {...last, grade: "pass"} : {why: "not_met", id: c.id};
+  const mine = p.verdicts.filter((v) => v.criterion === c.id);
+  const here = mine.filter((v) => standsAt(v.head, p.head, p.carried ?? []));
+  const last = here.findLast((v) => v.version === c.version);
+
+  if (last === undefined) {
+    const older = here.at(-1);
+
+    if (older !== undefined) {
+      return { why: "old_version", id: c.id, version: older.version };
+    }
+
+    const other = mine.at(-1);
+    return other === undefined ? { why: "no_verdict", id: c.id } : { why: "other_head", id: c.id, head: other.head };
+  }
+
+  return last.grade === "pass" ? { ...last, grade: "pass" } : { why: "not_met", id: c.id };
 }
 
 const isRefusal = (r: Met | Refusal): r is Refusal => "why" in r;
@@ -117,15 +119,15 @@ declare const proven: unique symbol;
  * criterion. `ReadyToMerge.of` is the way in; `revive` checks a kept one again.
  */
 export type ReadyToMerge = {
-	readonly pr: string;
-	readonly head: string;
-	/** The main commit `head` was built and tested on. */
-	readonly tested: string;
-	readonly criteria: readonly [Criterion, ...Criterion[]];
-	readonly rows: readonly [Met, ...Met[]];
-	/** The hops that carry a row judged at another head to `head`. Left out when every row was judged there. */
-	readonly carried?: readonly Hop[];
-	readonly [proven]: true;
+  readonly pr: string;
+  readonly head: string;
+  /** The main commit `head` was built and tested on. */
+  readonly tested: string;
+  readonly criteria: readonly [Criterion, ...Criterion[]];
+  readonly rows: readonly [Met, ...Met[]];
+  /** The hops that carry a row judged at another head to `head`. Left out when every row was judged there. */
+  readonly carried?: readonly Hop[];
+  readonly [proven]: true;
 };
 
 /** The second brand. Declared, never made, like the first. */
@@ -137,16 +139,17 @@ declare const onTip: unique symbol;
  * top of main, takes (`CodeHostWrites.merge`). Only `ReadyToMerge.onMain`
  * puts the brand on, and only when the two commits are the same.
  */
-export type OnMain = ReadyToMerge & {readonly [onTip]: true};
+export type OnMain = ReadyToMerge & { readonly [onTip]: true };
 
 const Shape = Schema.Struct({
-	pr: Schema.String,
-	head: Schema.String,
-	tested: Schema.String,
-	criteria: Schema.NonEmptyArray(Criterion),
-	rows: Schema.NonEmptyArray(Row),
-	carried: Schema.optionalKey(Schema.Array(Hop)),
+  pr: Schema.String,
+  head: Schema.String,
+  tested: Schema.String,
+  criteria: Schema.NonEmptyArray(Criterion),
+  rows: Schema.NonEmptyArray(Row),
+  carried: Schema.optionalKey(Schema.Array(Hop)),
 });
+
 const isShaped = Schema.is(Shape);
 
 /**
@@ -157,66 +160,83 @@ const isShaped = Schema.is(Shape);
  * a pass is `of`'s to judge, from every row the ledger kept.
  */
 function isReady(u: unknown): u is ReadyToMerge {
-	if (!isShaped(u) || u.rows.length !== u.criteria.length) return false;
-	return u.criteria.every((c, i) => {
-		const r = u.rows[i];
-		return (
-			r !== undefined &&
-			r.criterion === c.id &&
-			r.version === c.version &&
-			standsAt(r.head, u.head, u.carried ?? []) &&
-			r.grade === "pass"
-		);
-	});
+  if (!isShaped(u) || u.rows.length !== u.criteria.length) {
+    return false;
+  }
+
+  return u.criteria.every((c, i) => {
+    const r = u.rows[i];
+    return (
+      r !== undefined &&
+      r.criterion === c.id &&
+      r.version === c.version &&
+      standsAt(r.head, u.head, u.carried ?? []) &&
+      r.grade === "pass"
+    );
+  });
 }
 
 export const ReadyToMerge = {
-	/** Ready, or every reason it is not. Pure. */
-	of(p: Proof): Readiness {
-		const [c, ...cs] = p.criteria;
-		const first = rowFor(c, p);
-		const rest = cs.map((k) => rowFor(k, p));
-		const refused: Refusal[] = [first, ...rest].filter(isRefusal);
-		if (p.checks.head !== p.head || p.checks.state !== "green")
-			refused.push({why: "checks", state: p.checks.state, head: p.checks.head});
-		const [why, ...more] = refused;
-		if (why !== undefined) return {refused: [why, ...more]};
-		if (!isMet(first)) return {refused: [first]};
-		const rows: readonly [Met, ...Met[]] = [first, ...rest.filter(isMet)];
-		// Only the hops a row stands on go in, so the proof says what each review saw and how it got here.
-		const carried = (p.carried ?? []).filter(
-			(h, i, all) =>
-				h.to === p.head &&
-				rows.some((r) => r.head === h.from) &&
-				all.findIndex((o) => o.from === h.from && o.to === h.to) === i,
-		);
-		const made = {
-			pr: p.pr,
-			head: p.head,
-			tested: p.tested,
-			criteria: p.criteria,
-			rows,
-			...(carried.length > 0 ? {carried} : {}),
-		};
-		// Every row was found met above, so the check holds: this is how the brand goes on, with no cast.
-		if (!isReady(made)) throw new Error("ReadyToMerge.of made a value its own check refuses");
-		return {ready: made};
-	},
+  /** Ready, or every reason it is not. Pure. */
+  of(p: Proof): Readiness {
+    const [c, ...cs] = p.criteria;
+    const first = rowFor(c, p);
+    const rest = cs.map((k) => rowFor(k, p));
+    const refused: Refusal[] = [first, ...rest].filter(isRefusal);
 
-	/** One read back from a kept state: itself when it still proves every criterion, else `null`. */
-	revive(kept: unknown): ReadyToMerge | null {
-		return isReady(kept) ? kept : null;
-	},
+    if (p.checks.head !== p.head || p.checks.state !== "green") {
+      refused.push({ why: "checks", state: p.checks.state, head: p.checks.head });
+    }
 
-	/** The proof, when its head was tested on `tip`, the main commit as it is now; else `null`: main moved on since. */
-	onMain(ready: ReadyToMerge, tip: string): OnMain | null {
-		return isOnMain(ready, tip) ? ready : null;
-	},
+    const [why, ...more] = refused;
+
+    if (why !== undefined) {
+      return { refused: [why, ...more] };
+    }
+
+    if (!isMet(first)) {
+      return { refused: [first] };
+    }
+
+    const rows: readonly [Met, ...Met[]] = [first, ...rest.filter(isMet)];
+    // Only the hops a row stands on go in, so the proof says what each review saw and how it got here.
+    const carried = (p.carried ?? []).filter(
+      (h, i, all) =>
+        h.to === p.head &&
+        rows.some((r) => r.head === h.from) &&
+        all.findIndex((o) => o.from === h.from && o.to === h.to) === i,
+    );
+    const made = {
+      pr: p.pr,
+      head: p.head,
+      tested: p.tested,
+      criteria: p.criteria,
+      rows,
+      ...(carried.length > 0 ? { carried } : {}),
+    };
+
+    // Every row was found met above, so the check holds: this is how the brand goes on, with no cast.
+    if (!isReady(made)) {
+      throw new Error("ReadyToMerge.of made a value its own check refuses");
+    }
+
+    return { ready: made };
+  },
+
+  /** One read back from a kept state: itself when it still proves every criterion, else `null`. */
+  revive(kept: unknown): ReadyToMerge | null {
+    return isReady(kept) ? kept : null;
+  },
+
+  /** The proof, when its head was tested on `tip`, the main commit as it is now; else `null`: main moved on since. */
+  onMain(ready: ReadyToMerge, tip: string): OnMain | null {
+    return isOnMain(ready, tip) ? ready : null;
+  },
 };
 
 /** How the second brand goes on, with no cast: a proof whose tested main is the tip. */
 function isOnMain(ready: ReadyToMerge, tip: string): ready is OnMain {
-	return ready.tested === tip;
+  return ready.tested === tip;
 }
 
 export const readyToMerge = (p: Proof): Readiness => ReadyToMerge.of(p);
@@ -227,5 +247,5 @@ export const readyToMerge = (p: Proof): Readiness => ReadyToMerge.of(p);
  * sides are the same type, as a Cmd's must be.
  */
 export const Ready = Schema.declare(isReady, {
-	description: "a ReadyToMerge, made by ReadyToMerge.of",
+  description: "a ReadyToMerge, made by ReadyToMerge.of",
 });

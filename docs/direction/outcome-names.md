@@ -10,8 +10,8 @@ review, ship, the lane and the operate loop.*
 *2026-11-09: the reason part is renamed from why to `reason`, the industry's word (owner). In
 `next/` and in every doc from now on, the grammar reads `verb : who : reason`, and the data key is
 `reason`: `{ _tag: "send", to: "builder", reason: "checks_red" }`. Today's code, and this note's
-examples of it, keep `why` (and `kind`) until that code goes. Main's `next/` code is renamed by a
-sweep after PR 530 merges (ticket 337).*
+examples of it, keep `why` (and `kind`) until that code goes. Ticket 337's sweep renames `next/`'s code, and
+the lint rule `fabrika/no-why-key` keeps a `why` key from coming back there.*
 
 ```text
 passing it on:   verb : who : why        send:builder:checks_red

@@ -12,12 +12,12 @@
 // the repository's pick, `[ledger] at` in its fabrika.toml (`local`, this one, when left out),
 // printed at start (../setup.ts); never tsh.toml's, so two machines on one repository pick alike.
 
-import {Ledger} from "@kampus/fabrika-old";
+import { Ledger } from "@kampus/fabrika-old";
 // A ledger answers on a port: its door answers even a request with no credential.
-import {answers} from "@kampus/fabrika-old/http";
-import {layerLocal} from "@kampus/fabrika-old/local";
-import {layerSqlite} from "@kampus/fabrika-old/sqlite";
-import {Duration, Effect, Layer, Schedule, Schema} from "effect";
+import { answers } from "@kampus/fabrika-old/http";
+import { layerLocal } from "@kampus/fabrika-old/local";
+import { layerSqlite } from "@kampus/fabrika-old/sqlite";
+import { Duration, Effect, Layer, Schedule, Schema } from "effect";
 
 /**
  * The ledger's port for a data folder: the same folder, the same port, from 12000 to 31999.
@@ -28,23 +28,27 @@ import {Duration, Effect, Layer, Schedule, Schema} from "effect";
  * to 59999 until CI hit that, twice.
  */
 export const portOf = (persist: string): number => {
-	// FNV-1a, 32 bits: a fixed spread of folder names over the range, nothing secret.
-	let h = 0x811c9dc5;
-	for (let i = 0; i < persist.length; i++) h = Math.imul(h ^ persist.charCodeAt(i), 0x01000193);
-	return 12_000 + ((h >>> 0) % 20_000);
+  // FNV-1a, 32 bits: a fixed spread of folder names over the range, nothing secret.
+  let h = 0x811c9dc5;
+
+  for (let i = 0; i < persist.length; i++) {
+    h = Math.imul(h ^ persist.charCodeAt(i), 0x01000193);
+  }
+
+  return 12_000 + ((h >>> 0) % 20_000);
 };
 
 /** A ledger's name as the Durable Object's URL takes it: lower-case letters, digits and dashes. */
 export const ledgerNameOf = (text: string) =>
-	text
-		.toLowerCase()
-		.replace(/\.sqlite$/, "")
-		.replace(/[^a-z0-9-]+/g, "-")
-		.replace(/^-+|-+$/g, "");
+  text
+    .toLowerCase()
+    .replace(/\.sqlite$/, "")
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
 /** Another tsh holds this home's ledger, or it would not start. */
 export class NoLocalLedger extends Schema.TaggedError<NoLocalLedger>()("NoLocalLedger", {
-	message: Schema.String,
+  message: Schema.String,
 }) {}
 
 /**
@@ -52,33 +56,33 @@ export class NoLocalLedger extends Schema.TaggedError<NoLocalLedger>()("NoLocalL
  * by a tsh that was killed stops on its own within a second: it is waited out, up to `waitMs`.
  */
 export const localLedger = (o: {
-	readonly persist: string;
-	readonly ledger: string;
-	readonly port?: number;
-	readonly waitMs?: number;
+  readonly persist: string;
+  readonly ledger: string;
+  readonly port?: number;
+  readonly waitMs?: number;
 }): Layer.Layer<Ledger, unknown> => {
-	const port = o.port ?? portOf(o.persist);
-	const url = `http://127.0.0.1:${port}`;
-	const free = answers(url).pipe(
-		Effect.repeat({
-			until: (up) => !up,
-			schedule: Schedule.spaced(Duration.millis(200)),
-		}),
-		Effect.timeoutOrElse({
-			duration: Duration.millis(o.waitMs ?? 5_000),
-			orElse: () =>
-				Effect.fail(
-					new NoLocalLedger({
-						message: `another tsh is using the ledger in ${o.persist} (port ${port})`,
-					}),
-				),
-		}),
-	);
-	const started = Layer.effect(Ledger, Effect.service(Ledger)).pipe(
-		Layer.provide(layerLocal({persist: o.persist, ledger: o.ledger, port})),
-	);
-	return Layer.unwrap(free.pipe(Effect.as(started)));
+  const port = o.port ?? portOf(o.persist);
+  const url = `http://127.0.0.1:${port}`;
+  const free = answers(url).pipe(
+    Effect.repeat({
+      until: (up) => !up,
+      schedule: Schedule.spaced(Duration.millis(200)),
+    }),
+    Effect.timeoutOrElse({
+      duration: Duration.millis(o.waitMs ?? 5_000),
+      orElse: () =>
+        Effect.fail(
+          new NoLocalLedger({
+            message: `another tsh is using the ledger in ${o.persist} (port ${port})`,
+          }),
+        ),
+    }),
+  );
+  const started = Layer.effect(Ledger, Effect.service(Ledger)).pipe(
+    Layer.provide(layerLocal({ persist: o.persist, ledger: o.ledger, port })),
+  );
+  return Layer.unwrap(free.pipe(Effect.as(started)));
 };
 
 /** The way out: the same `Ledger` on a node:sqlite file. */
-export const sqliteLedger = (file: string) => layerSqlite({path: file});
+export const sqliteLedger = (file: string) => layerSqlite({ path: file });

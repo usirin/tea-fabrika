@@ -1,5 +1,5 @@
-import {Shell} from "@kampus/fabrika-old";
-import {cells, spot} from "./cells.ts";
+import { Shell } from "@kampus/fabrika-old";
+import { cells, spot } from "./cells.ts";
 
 // The bytes the line editor writes to the terminal: text, and a few VT100 cursor moves. Pure, so
 // the editor's tests read them back with a grid (./grid.ts), not by eye.
@@ -32,7 +32,7 @@ export const PROMPT = "tsh$ ";
 
 const CSI = "\x1b[";
 
-export {cells, spot};
+export { cells, spot };
 
 const up = (rows: number) => (rows > 0 ? `${CSI}${rows}A` : "");
 const right = (cols: number) => (cols > 0 ? `${CSI}${cols}C` : "");
@@ -46,10 +46,10 @@ export const back = (at: number, cols: number): string => `\r${up(Math.floor(at 
  * two when a U+FE0E after the cursor took a cell back from a wide emoji before it.
  */
 export const draw = (text: string, at: number, cols: number): string => {
-	const end = spot(text, cols);
-	const blanks = Math.max(1, at + 1 - end);
-	const rows = Math.floor((end + blanks - 1) / cols) - Math.floor(at / cols);
-	return `${CSI}J${text}${" ".repeat(blanks)}${up(rows)}\r${right(at % cols)}`;
+  const end = spot(text, cols);
+  const blanks = Math.max(1, at + 1 - end);
+  const rows = Math.floor((end + blanks - 1) / cols) - Math.floor(at / cols);
+  return `${CSI}J${text}${" ".repeat(blanks)}${up(rows)}\r${right(at % cols)}`;
 };
 
 /**
@@ -59,7 +59,7 @@ export const draw = (text: string, at: number, cols: number): string => {
  * path was tested with the guard (the laws in editor.laws.test.ts), so it stays.
  */
 export const fitsRow = (text: string, cols: number): boolean =>
-	cells(text) < cols && [...text].every((c) => (c.codePointAt(0) ?? 0) < 0x1100);
+  cells(text) < cols && [...text].every((c) => (c.codePointAt(0) ?? 0) < 0x1100);
 
 /**
  * Write `text` and a blank over the row the cursor is on, from its first cell, clearing the rest
@@ -79,14 +79,19 @@ export const NEWLINE = "\r\n";
  * in place. The cursor stays at its end.
  */
 export const statusRow = (text: string, cols: number): string => {
-	const room = Math.max(1, cols - 1);
-	const safe = shown(text).replaceAll(NEWLINE, " ");
-	let cut = "";
-	for (const c of safe) {
-		if (cells(cut + c) > room - 1 && cells(safe) > room) return `${CSI}90m${cut}…${CSI}39m`;
-		cut += c;
-	}
-	return `${CSI}90m${safe}${CSI}39m`;
+  const room = Math.max(1, cols - 1);
+  const safe = shown(text).replaceAll(NEWLINE, " ");
+  let cut = "";
+
+  for (const c of safe) {
+    if (cells(cut + c) > room - 1 && cells(safe) > room) {
+      return `${CSI}90m${cut}…${CSI}39m`;
+    }
+
+    cut += c;
+  }
+
+  return `${CSI}90m${safe}${CSI}39m`;
 };
 
 /** The terminal's bell. */
@@ -101,16 +106,29 @@ export const CLEAR_BELOW = `${CSI}J`;
  * stays a tab, and a new line becomes a new row.
  */
 export const shown = (text: string): string =>
-	[...text]
-		.map((c) => {
-			if (c === "\n") return NEWLINE;
-			if (c === "\t") return c;
-			const code = c.codePointAt(0) ?? 0;
-			if (code < 0x20 || code === 0x7f) return `^${String.fromCharCode(code ^ 0x40)}`;
-			if (code >= 0x80 && code <= 0x9f) return "\u{fffd}";
-			return c;
-		})
-		.join("");
+  [...text]
+    .map((c) => {
+      if (c === "\n") {
+        return NEWLINE;
+      }
+
+      if (c === "\t") {
+        return c;
+      }
+
+      const code = c.codePointAt(0) ?? 0;
+
+      if (code < 0x20 || code === 0x7f) {
+        return `^${String.fromCharCode(code ^ 0x40)}`;
+      }
+
+      if (code >= 0x80 && code <= 0x9f) {
+        return "\u{fffd}";
+      }
+
+      return c;
+    })
+    .join("");
 
 /**
  * A table's tones, named by the terminal's 16-color palette, never as 24-bit color: these bytes
@@ -122,11 +140,11 @@ export const shown = (text: string): string =>
  * half alpha, and reads under 3:1 in light.
  */
 const PALETTE: Shell.Palette = {
-	strong: "1",
-	muted: "90",
-	faint: "90",
-	accent: "34",
-	warning: "33",
+  strong: "1",
+  muted: "90",
+  faint: "90",
+  accent: "34",
+  warning: "33",
 };
 
 /**
@@ -135,28 +153,35 @@ const PALETTE: Shell.Palette = {
  * escapes in it are the colors put here.
  */
 export const table = (t: Shell.Table, cols: number): string =>
-	Shell.paint(
-		Shell.tableLines(t, cols).map((line) => line.map((s) => ({...s, text: shown(s.text)}))),
-		PALETTE,
-		NEWLINE,
-	);
+  Shell.paint(
+    Shell.tableLines(t, cols).map((line) => line.map((s) => ({ ...s, text: shown(s.text) }))),
+    PALETTE,
+    NEWLINE,
+  );
 
 /**
  * Candidates in columns, down then across, as readline lists them on a second Tab. Each row ends
  * with a new row.
  */
 export const columns = (items: readonly string[], cols: number): string => {
-	const width = Math.max(...items.map(cells)) + 2;
-	const across = Math.max(1, Math.floor(cols / width));
-	const down = Math.ceil(items.length / across);
-	const rows: string[] = [];
-	for (let r = 0; r < down; r += 1) {
-		const row: string[] = [];
-		for (let c = 0; c < across; c += 1) {
-			const item = items[c * down + r];
-			if (item !== undefined) row.push(item + " ".repeat(width - cells(item)));
-		}
-		rows.push(row.join("").trimEnd());
-	}
-	return rows.map((row) => `${row}${NEWLINE}`).join("");
+  const width = Math.max(...items.map(cells)) + 2;
+  const across = Math.max(1, Math.floor(cols / width));
+  const down = Math.ceil(items.length / across);
+  const rows: string[] = [];
+
+  for (let r = 0; r < down; r += 1) {
+    const row: string[] = [];
+
+    for (let c = 0; c < across; c += 1) {
+      const item = items[c * down + r];
+
+      if (item !== undefined) {
+        row.push(item + " ".repeat(width - cells(item)));
+      }
+    }
+
+    rows.push(row.join("").trimEnd());
+  }
+
+  return rows.map((row) => `${row}${NEWLINE}`).join("");
 };

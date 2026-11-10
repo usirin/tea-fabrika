@@ -1,33 +1,84 @@
 {
-	"compilerOptions": {
-		"target": "ES2023",
-		"module": "NodeNext",
-		"moduleResolution": "NodeNext",
-		"strict": true,
-		"noUncheckedIndexedAccess": true,
-		"exactOptionalPropertyTypes": true,
-		"allowImportingTsExtensions": true,
-		"noEmit": true,
-		"skipLibCheck": true,
-		"types": ["node"],
-		// Effect's own checks, run inside `tsc` by `@effect/tsgo` (the root `typecheck` patches
-		// it in first). Adopted here: `floatingEffect`, an Effect made as a statement and
-		// dropped, so it never runs. Effect's rules that already error by default stay on.
-		// Its warning-level rules below are not adopted yet: each fires on code that was here
-		// before this check, and taking one on is its own change.
-		"plugins": [
-			{
-				"name": "@effect/language-service",
-				"includeSuggestionsInTsc": false,
-				"diagnosticSeverity": {
-					"floatingEffect": "error",
-					"unstableApiUsage": "off",
-					"multipleEffectProvide": "off",
-					"promiseInEffectSuccess": "off",
-					"globalErrorInEffectCatch": "off",
-					"globalErrorInEffectFailure": "off"
-				}
-			}
-		]
-	}
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    // Effect's own checks, run inside `tsc` by `@effect/tsgo` (the root `typecheck` patches
+    // it in first). Adopted here: `floatingEffect`, an Effect made as a statement and
+    // dropped, so it never runs. Effect's rules that already error by default stay on, and
+    // so do its warning-level ones, since a warning fails `tsc` too. The four set "off" each
+    // fire on code that was here before this check, and taking one on is its own change.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "includeSuggestionsInTsc": false,
+        "diagnosticSeverity": {
+          "floatingEffect": "error",
+          "unstableApiUsage": "off",
+          "multipleEffectProvide": "off",
+          "promiseInEffectSuccess": "off",
+          "globalErrorInEffectCatch": "off",
+          "globalErrorInEffectFailure": "off",
+          // A suggestion or an off rule that fired 0 times on the whole tree when it went
+          // on (lint audit, 2026-11-09, ticket 438). Each blocks from here.
+          "acquireReleaseDisposable": "error",
+          "catchAllTagDispatchToCatchTag": "error",
+          "catchAllToMapError": "error",
+          "catchChainToFirstSuccessOf": "error",
+          "catchDieToOrDie": "error",
+          "catchIfTagToCatchTag": "error",
+          "catchRefailToTapError": "error",
+          "catchTagToCatchReason": "error",
+          "catchUnfailableEffect": "error",
+          "effectDoNotation": "error",
+          "effectMapFlatten": "error",
+          "effectMapVoid": "error",
+          "effectSleepZeroToYieldNow": "error",
+          "failCauseToConstructor": "error",
+          "flatMapIdentityToFlatten": "error",
+          "flatMapToMap": "error",
+          "globalRandomInEffect": "error",
+          "globalTimersInEffect": "error",
+          "leakingRequirements": "error",
+          "manualMetricTapToTrack": "error",
+          "mapSomeToAsSome": "error",
+          "matchEffectToMapBoth": "error",
+          "matchEffectToMatch": "error",
+          "missingEffectServiceDependency": "error",
+          "preferSchemaTaggedError": "error",
+          "preferSchemaTypeProperty": "error",
+          "redundantMapError": "error",
+          "redundantOrDie": "error",
+          "redundantSchemaTagIdentifier": "error",
+          "schemaUnionOfLiterals": "error",
+          "syncToSucceed": "error",
+          "timeoutCatchTagToTimeoutOrElse": "error",
+          "tryCatchInEffectGen": "error",
+          "unnecessaryPipe": "error",
+          "unnecessaryPipeChain": "error"
+        },
+        // `next/` product code takes two more: a plain `Error` in an Effect's error channel
+        // loses its tag. Its tests may still fail with one, to check the path.
+        "overrides": [
+          {
+            "include": ["next/**/*.ts", "next/**/*.tsx"],
+            "exclude": ["next/**/*.test.ts", "next/**/*.test.tsx"],
+            "options": {
+              "diagnosticSeverity": {
+                "globalErrorInEffectCatch": "error",
+                "globalErrorInEffectFailure": "error"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
 }

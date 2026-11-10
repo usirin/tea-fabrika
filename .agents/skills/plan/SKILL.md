@@ -16,6 +16,9 @@ the blank approval line.
    and any note `rg -n "<row or word>" docs` finds.
 2. **Read the code as built,** on main. Read the installed versions in `pnpm-lock.yaml` (Effect,
    `@demlik/tea`, vitest, any patch in `patches/`) and check every API against that version.
+   Before you propose a patch or change to a package (tea, demlik, Manti, Effect, Alchemy), read
+   its decisions, patterns and source, and name its answer or say you found none
+   ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md)).
 3. **Check what is settled** before you call anything open: `docs/direction/`, `experiments/`,
    `docs/plan/`, and the settled-search tool the brief names, if any. Read every hit.
 4. **Lead with the known way.** How the makers do it (Elm and Erlang/OTP first, then Effect and the
@@ -45,6 +48,18 @@ A question that only picks how the code does what a note already says is yours: 
 line, and name the note. That includes an item a row calls "a walk" or "the owner approves" when a
 decided note answers it. Before you put anything in open questions, ask: could the owner say no
 without contradicting a decision already made? If not, it is not a question.
+
+## Outside your task
+
+Something wrong that your task does not cover is one finding row with proof, then keep going:
+never a fix, a ticket or only a mention, and never a security hole.
+[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+counts as proof.
+
+Outside means the ticket does not ask for it and the plan does not need it. What the plan needs
+goes in the plan.
+Put the row in a last section of the plan, `## Findings`, as one JSON line in a fence. The lead
+adds it to `field/findings.jsonl` unchanged.
 
 ## Never
 

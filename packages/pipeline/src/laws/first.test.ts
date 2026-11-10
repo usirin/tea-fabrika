@@ -1,7 +1,7 @@
-import {describe, expect, it} from "vitest";
+import { describe, expect, it } from "vitest";
 import * as runs from "./check-runs.ts";
 import * as criteria from "./criteria.ts";
-import {explore, follow, type Law, pathText, type Update, type World} from "./explore.ts";
+import { explore, follow, type Law, pathText, type Update, type World } from "./explore.ts";
 import * as plan from "./plan.ts";
 import * as queue from "./queue.ts";
 import * as refine from "./refine.ts";
@@ -13,254 +13,237 @@ import * as transcript from "./transcript.ts";
 // and each break the laws found is pinned by its shortest sequence.
 
 /** Each broken law, by name, as its shortest breaking sequence. */
-const caught = <S, M extends {readonly type: string}, C>(
-	parts: {
-		readonly init: S;
-		readonly world: World<S, M, C>;
-		readonly laws: () => readonly Law<S, M, C>[];
-		readonly show: (m: M) => string;
-	},
-	update: Update<S, M, C>,
-	depth: number,
+const caught = <S, M extends { readonly type: string }, C>(
+  parts: {
+    readonly init: S;
+    readonly world: World<S, M, C>;
+    readonly laws: () => readonly Law<S, M, C>[];
+    readonly show: (m: M) => string;
+  },
+  update: Update<S, M, C>,
+  depth: number,
 ): Record<string, string> =>
-	Object.fromEntries(
-		explore({init: parts.init, update, world: parts.world, laws: parts.laws(), depth}).broken.map(
-			(b) => [b.law, pathText(b.path, parts.show)],
-		),
-	);
+  Object.fromEntries(
+    explore({ init: parts.init, update, world: parts.world, laws: parts.laws(), depth }).broken.map((b) => [
+      b.law,
+      pathText(b.path, parts.show),
+    ]),
+  );
 
 describe("queue", () => {
-	const parts = {
-		init: queue.queueInit,
-		world: queue.queueWorld(),
-		laws: queue.queueLaws,
-		show: queue.showQueueMsg,
-	};
+  const parts = {
+    init: queue.queueInit,
+    world: queue.queueWorld(),
+    laws: queue.queueLaws,
+    show: queue.showQueueMsg,
+  };
 
-	it("catches each planted mistake in a few messages", () => {
-		expect(caught(parts, queue.queuesTwice, 4)).toMatchObject({
-			"a value is on the queue once": "1. told a\n2. told a",
-		});
-		expect(caught(parts, queue.dropsTheWorked, 4)).toMatchObject({
-			"the value being worked stays first until its work ends": "1. told a\n2. dropped a",
-		});
-		expect(caught(parts, queue.jumpsTheQueue, 4)).toMatchObject({
-			"values are worked in the order told": "1. told a\n2. told b\n3. told c",
-		});
-		expect(caught(parts, queue.forgetsTheTidy, 4)).toMatchObject({
-			"work that ended is tidied before it is forgotten": "1. told a\n2. done a",
-		});
-	});
+  it("catches each planted mistake in a few messages", () => {
+    expect(caught(parts, queue.queuesTwice, 4)).toMatchObject({
+      "a value is on the queue once": "1. told a\n2. told a",
+    });
+    expect(caught(parts, queue.dropsTheWorked, 4)).toMatchObject({
+      "the value being worked stays first until its work ends": "1. told a\n2. dropped a",
+    });
+    expect(caught(parts, queue.jumpsTheQueue, 4)).toMatchObject({
+      "values are worked in the order told": "1. told a\n2. told b\n3. told c",
+    });
+    expect(caught(parts, queue.forgetsTheTidy, 4)).toMatchObject({
+      "work that ended is tidied before it is forgotten": "1. told a\n2. done a",
+    });
+  });
 });
 
 describe("acp session", () => {
-	const parts = {
-		init: session.sessionInit,
-		world: session.sessionWorld(),
-		laws: session.sessionLaws,
-		show: session.showSessionMsg,
-	};
+  const parts = {
+    init: session.sessionInit,
+    world: session.sessionWorld(),
+    laws: session.sessionLaws,
+    show: session.showSessionMsg,
+  };
 
-	it("regression: a second open never moves the session to another harness", () => {
-		const path = follow(
-			{init: parts.init, update: session.sessionStep, world: parts.world, laws: parts.laws()},
-			parts.show,
-			["opened s-1 on claude", "opened s-2 on codex"],
-		);
-		expect(path.broken).toEqual([]);
-		expect(path.state).toMatchObject({agent: "claude", id: "s-1"});
-	});
+  it("regression: a second open never moves the session to another harness", () => {
+    const path = follow(
+      { init: parts.init, update: session.sessionStep, world: parts.world, laws: parts.laws() },
+      parts.show,
+      ["opened s-1 on claude", "opened s-2 on codex"],
+    );
+    expect(path.broken).toEqual([]);
+    expect(path.state).toMatchObject({ agent: "claude", id: "s-1" });
+  });
 
-	it("catches a planted mistake in a few messages", () => {
-		expect(caught(parts, session.endsTheLast, 4)).toMatchObject({
-			"a turn ends only for the prompt whose turn is running":
-				"1. told a prompt\n2. told a prompt\n3. ended 2",
-		});
-	});
+  it("catches a planted mistake in a few messages", () => {
+    expect(caught(parts, session.endsTheLast, 4)).toMatchObject({
+      "a turn ends only for the prompt whose turn is running": "1. told a prompt\n2. told a prompt\n3. ended 2",
+    });
+  });
 });
 
 describe("acp transcript", () => {
-	const parts = {
-		init: transcript.transcriptInit,
-		world: transcript.transcriptWorld(),
-		laws: transcript.transcriptLaws,
-		show: transcript.showTranscriptMsg,
-	};
-	const walk = (lines: readonly string[]) =>
-		follow(
-			{init: parts.init, update: transcript.transcriptStep, world: parts.world, laws: parts.laws()},
-			parts.show,
-			lines,
-		);
+  const parts = {
+    init: transcript.transcriptInit,
+    world: transcript.transcriptWorld(),
+    laws: transcript.transcriptLaws,
+    show: transcript.showTranscriptMsg,
+  };
+  const walk = (lines: readonly string[]) =>
+    follow(
+      { init: parts.init, update: transcript.transcriptStep, world: parts.world, laws: parts.laws() },
+      parts.show,
+      lines,
+    );
 
-	it("regression: a finished tool call never shows as running again", () => {
-		const late = walk(["tool_update t1 completed", "tool t1 pending"]);
-		expect(late.broken).toEqual([]);
-		expect(late.state.tools).toMatchObject([{id: "t1", status: "completed"}]);
-		const stale = walk([
-			"tool t1 pending",
-			"tool_update t1 completed",
-			"tool_update t1 in_progress",
-		]);
-		expect(stale.broken).toEqual([]);
-		expect(stale.state.tools).toMatchObject([{id: "t1", status: "completed"}]);
-	});
+  it("regression: a finished tool call never shows as running again", () => {
+    const late = walk(["tool_update t1 completed", "tool t1 pending"]);
+    expect(late.broken).toEqual([]);
+    expect(late.state.tools).toMatchObject([{ id: "t1", status: "completed" }]);
+    const stale = walk(["tool t1 pending", "tool_update t1 completed", "tool_update t1 in_progress"]);
+    expect(stale.broken).toEqual([]);
+    expect(stale.state.tools).toMatchObject([{ id: "t1", status: "completed" }]);
+  });
 
-	it("catches each planted mistake in a few messages", () => {
-		expect(caught(parts, transcript.countsAStrayAnswer, 4)).toMatchObject({
-			"every ask is answered once: open, or counted once by how it was answered": "1. answered q1",
-		});
-		expect(caught(parts, transcript.overwritesTheLast, 4)).toMatchObject({
-			"what a person was shown is never taken back": '1. agent says "x"\n2. turn 1',
-		});
-	});
+  it("catches each planted mistake in a few messages", () => {
+    expect(caught(parts, transcript.countsAStrayAnswer, 4)).toMatchObject({
+      "every ask is answered once: open, or counted once by how it was answered": "1. answered q1",
+    });
+    expect(caught(parts, transcript.overwritesTheLast, 4)).toMatchObject({
+      "what a person was shown is never taken back": '1. agent says "x"\n2. turn 1',
+    });
+  });
 });
 
 describe("refine", () => {
-	const parts = {
-		init: refine.refineInit,
-		world: refine.refineWorld(),
-		laws: refine.refineLaws,
-		show: refine.showRefineMsg,
-	};
+  const parts = {
+    init: refine.refineInit,
+    world: refine.refineWorld(),
+    laws: refine.refineLaws,
+    show: refine.showRefineMsg,
+  };
 
-	it("regression: a late repeat of an earlier write's answer is not taken as the next try's draft", () => {
-		const path = follow(
-			{
-				init: parts.init,
-				update: refine.refineStep,
-				world: refine.refineWorld({echoes: true}),
-				laws: parts.laws(),
-			},
-			parts.show,
-			[
-				"start",
-				'"bad" for the write first asked',
-				'problems for the check of "bad"',
-				'"bad" for the write first asked',
-			],
-		);
-		expect(path.broken).toEqual([]);
-		// Still waiting on the second try's own answer.
-		expect(path.state).toMatchObject({phase: "writing", tries: 2});
-	});
+  it("regression: a late repeat of an earlier write's answer is not taken as the next try's draft", () => {
+    const path = follow(
+      {
+        init: parts.init,
+        update: refine.refineStep,
+        world: refine.refineWorld({ echoes: true }),
+        laws: parts.laws(),
+      },
+      parts.show,
+      [
+        "start",
+        '"bad" for the write first asked',
+        'problems for the check of "bad"',
+        '"bad" for the write first asked',
+      ],
+    );
+    expect(path.broken).toEqual([]);
+    // Still waiting on the second try's own answer.
+    expect(path.state).toMatchObject({ phase: "writing", tries: 2 });
+  });
 
-	it("catches each planted mistake in a few messages", () => {
-		expect(caught(parts, refine.passesUnchecked, 4)).toMatchObject({
-			"done with a verdict only when it found no problem, and without one only when the parent accepted":
-				'1. start\n2. "good" for the write first asked\n3. draft_check_err for the check of "good"',
-		});
-		expect(caught(parts, refine.retriesPastTheLimit, 7)).toMatchObject({
-			"tries never pass the limit":
-				'1. start\n2. "bad" for the write first asked\n3. problems for the check of "bad"\n4. "bad" for the write asked again\n5. problems for the check of "bad"\n6. parent: retry',
-		});
-		expect(caught(parts, refine.actsAfterTheEnd, 4)).toMatchObject({
-			"a done run sends nothing":
-				'1. start\n2. "good" for the write first asked\n3. passes for the check of "good"\n4. resume',
-		});
-	});
+  it("catches each planted mistake in a few messages", () => {
+    expect(caught(parts, refine.passesUnchecked, 4)).toMatchObject({
+      "done with a verdict only when it found no problem, and without one only when the parent accepted":
+        '1. start\n2. "good" for the write first asked\n3. draft_check_err for the check of "good"',
+    });
+    expect(caught(parts, refine.retriesPastTheLimit, 7)).toMatchObject({
+      "tries never pass the limit":
+        '1. start\n2. "bad" for the write first asked\n3. problems for the check of "bad"\n4. "bad" for the write asked again\n5. problems for the check of "bad"\n6. parent: retry',
+    });
+    expect(caught(parts, refine.actsAfterTheEnd, 4)).toMatchObject({
+      "a done run sends nothing":
+        '1. start\n2. "good" for the write first asked\n3. passes for the check of "good"\n4. resume',
+    });
+  });
 });
 
 describe("plan", () => {
-	const parts = {
-		init: plan.planInit,
-		world: plan.planWorld(),
-		laws: plan.planLaws,
-		show: plan.showPlanMsg,
-	};
-	const read = ["start", "ticket read: open", "plan_facts_ok"];
+  const parts = {
+    init: plan.planInit,
+    world: plan.planWorld(),
+    laws: plan.planLaws,
+    show: plan.showPlanMsg,
+  };
+  const read = ["start", "ticket read: open", "plan_facts_ok"];
 
-	it("catches each planted mistake in a few messages", () => {
-		expect(caught(parts, plan.doneWithQuestions, 6)).toMatchObject({
-			"done only with a plan the Check passes and nothing left to ask; asks only with questions": [
-				...read,
-				'run k/1: plan "open questions"',
-			]
-				.map((line, i) => `${i + 1}. ${line}`)
-				.join("\n"),
-		});
-		expect(caught(parts, plan.takesAnyRun, 6)).toMatchObject({
-			"a planner Msg counts only for the run asked for": [
-				...read,
-				"restart, then resume",
-				'run k/1: plan "good"',
-			]
-				.map((line, i) => `${i + 1}. ${line}`)
-				.join("\n"),
-		});
-		expect(caught(parts, plan.dropsAFailedSpend, 6)).toMatchObject({
-			"every dollar the planner spent is in the report": [...read, "run k/1 failed: boom"]
-				.map((line, i) => `${i + 1}. ${line}`)
-				.join("\n"),
-		});
-	});
+  it("catches each planted mistake in a few messages", () => {
+    expect(caught(parts, plan.doneWithQuestions, 6)).toMatchObject({
+      "done only with a plan the Check passes and nothing left to ask; asks only with questions": [
+        ...read,
+        'run k/1: plan "open questions"',
+      ]
+        .map((line, i) => `${i + 1}. ${line}`)
+        .join("\n"),
+    });
+    expect(caught(parts, plan.takesAnyRun, 6)).toMatchObject({
+      "a planner Msg counts only for the run asked for": [...read, "restart, then resume", 'run k/1: plan "good"']
+        .map((line, i) => `${i + 1}. ${line}`)
+        .join("\n"),
+    });
+    expect(caught(parts, plan.dropsAFailedSpend, 6)).toMatchObject({
+      "every dollar the planner spent is in the report": [...read, "run k/1 failed: boom"]
+        .map((line, i) => `${i + 1}. ${line}`)
+        .join("\n"),
+    });
+  });
 });
 
 describe("criteria book", () => {
-	const parts = {
-		init: criteria.criteriaInit,
-		world: criteria.criteriaWorld(),
-		laws: criteria.criteriaLaws,
-		show: criteria.showCriteriaMsg,
-	};
-	const lines = (...said: readonly string[]) =>
-		said.map((line, i) => `${i + 1}. ${line}`).join("\n");
+  const parts = {
+    init: criteria.criteriaInit,
+    world: criteria.criteriaWorld(),
+    laws: criteria.criteriaLaws,
+    show: criteria.showCriteriaMsg,
+  };
+  const lines = (...said: readonly string[]) => said.map((line, i) => `${i + 1}. ${line}`).join("\n");
 
-	it("catches each planted mistake in a few messages", () => {
-		expect(caught(parts, criteria.reusesIds, 4)).toMatchObject({
-			"an id is never given twice": lines('added "a" by plan', "removed c1", 'added "a" by plan'),
-		});
-		expect(caught(parts, criteria.keysVerdictsByPlace, 4)).toMatchObject({
-			"an added criterion never moves another criterion's verdict": lines(
-				'added "a" by plan',
-				"pass c1 v1 at A",
-				'added "a" by plan',
-			),
-		});
-		expect(caught(parts, criteria.rewordKeepsVersion, 4)).toMatchObject({
-			"a reworded criterion is open until judged at its new version": lines(
-				'added "a" by plan',
-				"pass c1 v1 at A",
-				'reworded c1 to "b"',
-			),
-			"every wording a criterion had is kept": lines('added "a" by plan', 'reworded c1 to "b"'),
-		});
-		expect(caught(parts, criteria.passCarriesOver, 4)).toMatchObject({
-			"a reworded criterion is open until judged at its new version": lines(
-				'added "a" by plan',
-				'reworded c1 to "b"',
-				"pass c1 v1 at A",
-			),
-		});
-		expect(caught(parts, criteria.rewordRevives, 4)).toMatchObject({
-			"a removed id never comes back": lines(
-				'added "a" by plan',
-				"removed c1",
-				'reworded c1 to "a"',
-			),
-		});
-	});
+  it("catches each planted mistake in a few messages", () => {
+    expect(caught(parts, criteria.reusesIds, 4)).toMatchObject({
+      "an id is never given twice": lines('added "a" by plan', "removed c1", 'added "a" by plan'),
+    });
+    expect(caught(parts, criteria.keysVerdictsByPlace, 4)).toMatchObject({
+      "an added criterion never moves another criterion's verdict": lines(
+        'added "a" by plan',
+        "pass c1 v1 at A",
+        'added "a" by plan',
+      ),
+    });
+    expect(caught(parts, criteria.rewordKeepsVersion, 4)).toMatchObject({
+      "a reworded criterion is open until judged at its new version": lines(
+        'added "a" by plan',
+        "pass c1 v1 at A",
+        'reworded c1 to "b"',
+      ),
+      "every wording a criterion had is kept": lines('added "a" by plan', 'reworded c1 to "b"'),
+    });
+    expect(caught(parts, criteria.passCarriesOver, 4)).toMatchObject({
+      "a reworded criterion is open until judged at its new version": lines(
+        'added "a" by plan',
+        'reworded c1 to "b"',
+        "pass c1 v1 at A",
+      ),
+    });
+    expect(caught(parts, criteria.rewordRevives, 4)).toMatchObject({
+      "a removed id never comes back": lines('added "a" by plan', "removed c1", 'reworded c1 to "a"'),
+    });
+  });
 });
 
 describe("local check runs", () => {
-	const parts = {
-		init: runs.runsInit,
-		world: runs.runsWorld(),
-		laws: runs.runsLaws,
-		show: runs.showRunsMsg,
-	};
-	const lines = (...said: readonly string[]) =>
-		said.map((line, i) => `${i + 1}. ${line}`).join("\n");
+  const parts = {
+    init: runs.runsInit,
+    world: runs.runsWorld(),
+    laws: runs.runsLaws,
+    show: runs.showRunsMsg,
+  };
+  const lines = (...said: readonly string[]) => said.map((line, i) => `${i + 1}. ${line}`).join("\n");
 
-	it("catches each planted mistake in a few messages", () => {
-		expect(caught(parts, runs.filesUnderTheAskedHead, 3)).toMatchObject({
-			"checks count only from a run at this exact head": lines("ran for A, at B: green"),
-		});
-		expect(caught(parts, runs.firstRunWins, 3)).toMatchObject({
-			"checks count only from a run at this exact head": lines(
-				"ran for A, at A: green",
-				"ran for A, at A: red",
-			),
-		});
-	});
+  it("catches each planted mistake in a few messages", () => {
+    expect(caught(parts, runs.filesUnderTheAskedHead, 3)).toMatchObject({
+      "checks count only from a run at this exact head": lines("ran for A, at B: green"),
+    });
+    expect(caught(parts, runs.firstRunWins, 3)).toMatchObject({
+      "checks count only from a run at this exact head": lines("ran for A, at A: green", "ran for A, at A: red"),
+    });
+  });
 });

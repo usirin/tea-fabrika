@@ -1,65 +1,78 @@
 [
-	{ "glob": "exam-paths.json", "why": "this list: dropping a row is changing the exam" },
-	{ "glob": "allowed_signers", "why": "the step keys: who may sign as which step (p87)" },
-	{ "glob": ".github/**", "why": "the workflows that run the checks" },
-	{
-		"glob": "next/apps/fabrika/src/exam/**",
-		"why": "the exam's own programs and tests, this check included"
-	},
-	{ "glob": "next/**/*.test.ts", "why": "next/'s tests" },
-	{ "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
-	{ "glob": "next/packages/libfabrika/src/id.test-support.ts", "why": "the generated ID fixtures" },
-	{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
-	{ "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
-	{ "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },
-	{
-		"glob": "apps/fabrika/src/**/*.test.ts",
-		"why": "today's app tests, including configurable keys"
-	},
-	{ "glob": "apps/fabrika/e2e.ts", "why": "today's app end-to-end runner and screenshot checks" },
-	{ "glob": "fixtures/keybindings/**", "why": "hand-written keybinding files used by the exam" },
-	{ "glob": ".oxlintrc.json", "why": "the lint rules" },
-	{ "glob": ".oxfmtrc.json", "why": "the format settings" },
-	{ "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
-	{ "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
-	{ "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
-	{
-		"glob": ".agents/skills/*/scripts/*.test.ts",
-		"why": "the step scripts' laws and planted breaks"
-	},
-	{
-		"glob": ".agents/skills/lead/scripts/skillscheck.sh",
-		"why": "the shared skills' source-and-link lint check"
-	},
-	{ "glob": ".agents/skills/lead/scripts/leakgrep.sh", "why": "the added-text check before push" },
-	{ "glob": "scripts/*.test.ts", "why": "today's tooling limits and script laws" },
-	{
-		"glob": ".agents/skills/lead/scripts/loosening.sh",
-		"why": "the check for removed, muted or narrowed laws"
-	},
-	{ "glob": "layer-rules.json", "why": "which way imports may point" },
-	{ "glob": "boundary-rules.json", "why": "which package may import which" },
-	{ "glob": "pnpm-workspace.yaml", "why": "the packages and the catalog's versions" },
-	{
-		"glob": "compiler-ledger.json",
-		"why": "the owner's ledger of functions left out of the React Compiler"
-	},
-	{ "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
-	{ "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
-	{ "glob": "tsconfig.base.json", "why": "the type checker's strictness" },
-	{ "glob": "patches/**", "why": "the Effect checks patched into tsgo" },
-	{
-		"glob": "packages/fabrika-design/tokens/**",
-		"why": "the token files: each step, its owner, what it sits on and its floor"
-	},
-	{ "glob": "packages/fabrika-design/src/build/schema.ts", "why": "what a token file may say" },
-	{
-		"glob": "packages/fabrika-design/src/build/contrast.ts",
-		"why": "the contrast checker the floors are judged by"
-	},
-	{ "glob": "packages/fabrika-design/src/**/*.test.ts", "why": "the design package's laws" },
-	{ "glob": "apps/fabrika/src/window/colors.test.ts", "why": "the app's color laws" },
-	{ "glob": "apps/fabrika/src/pipes.test.ts", "why": "the pipe color laws" },
-	{ "glob": "apps/fabrika/e2e.ts", "why": "today's app's keyboard focus laws and capture stages" },
-	{ "glob": "apps/fabrika/aria/**", "why": "the approved ARIA snapshots" }
+  { "glob": "exam-paths.json", "why": "this list: dropping a row is changing the exam" },
+  { "glob": "allowed_signers", "why": "the step keys: who may sign as which step (p87)" },
+  { "glob": ".github/**", "why": "the workflows that run the checks" },
+  {
+    "glob": "next/apps/fabrika/src/exam/**",
+    "why": "the exam's own programs and tests, this check included"
+  },
+  { "glob": "next/**/*.test.ts", "why": "next/'s tests" },
+  { "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
+  {
+    "glob": "next/**/tsconfig.json",
+    "why": "next/'s type checks, including Node's erasable syntax"
+  },
+  { "glob": "next/packages/libfabrika/src/compiler.ts", "why": "the shared Compiler check" },
+  { "glob": "next/packages/libfabrika/src/id.test-support.ts", "why": "the generated ID fixtures" },
+  {
+    "glob": "next/apps/fabrika/src/port.test-support.ts",
+    "why": "the port a stage test hands to dev.ts"
+  },
+  { "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
+  { "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
+  { "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },
+  {
+    "glob": "apps/fabrika/src/**/*.test.ts",
+    "why": "today's app tests, including configurable keys"
+  },
+  { "glob": "apps/fabrika/e2e.ts", "why": "today's app end-to-end runner and screenshot checks" },
+  { "glob": "fixtures/keybindings/**", "why": "hand-written keybinding files used by the exam" },
+  { "glob": ".oxlintrc.json", "why": "the lint rules" },
+  { "glob": ".oxfmtrc.json", "why": "the format settings" },
+  { "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
+  { "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
+  { "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
+  {
+    "glob": ".agents/skills/*/scripts/*.test.ts",
+    "why": "the step scripts' laws and planted breaks"
+  },
+  {
+    "glob": ".agents/skills/lead/scripts/catchup.test-support.ts",
+    "why": "the stubbed tools and Git fixture catchup.sh's laws share"
+  },
+  {
+    "glob": ".agents/skills/lead/scripts/skillscheck.sh",
+    "why": "the shared skills' source-and-link lint check"
+  },
+  { "glob": ".agents/skills/lead/scripts/leakgrep.sh", "why": "the added-text check before push" },
+  { "glob": "scripts/*.test.ts", "why": "today's tooling limits and script laws" },
+  {
+    "glob": ".agents/skills/lead/scripts/loosening.sh",
+    "why": "the check for removed, muted or narrowed laws"
+  },
+  { "glob": "layer-rules.json", "why": "which way imports may point" },
+  { "glob": "boundary-rules.json", "why": "which package may import which" },
+  { "glob": "pnpm-workspace.yaml", "why": "the packages and the catalog's versions" },
+  {
+    "glob": "compiler-ledger.json",
+    "why": "the owner's ledger of functions left out of the React Compiler"
+  },
+  { "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
+  { "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
+  { "glob": "tsconfig.base.json", "why": "the type checker's strictness" },
+  { "glob": "patches/**", "why": "the Effect checks patched into tsgo" },
+  {
+    "glob": "packages/fabrika-design/tokens/**",
+    "why": "the token files: each step, its owner, what it sits on and its floor"
+  },
+  { "glob": "packages/fabrika-design/src/build/schema.ts", "why": "what a token file may say" },
+  {
+    "glob": "packages/fabrika-design/src/build/contrast.ts",
+    "why": "the contrast checker the floors are judged by"
+  },
+  { "glob": "packages/fabrika-design/src/**/*.test.ts", "why": "the design package's laws" },
+  { "glob": "apps/fabrika/src/window/colors.test.ts", "why": "the app's color laws" },
+  { "glob": "apps/fabrika/src/pipes.test.ts", "why": "the pipe color laws" },
+  { "glob": "apps/fabrika/e2e.ts", "why": "today's app's keyboard focus laws and capture stages" },
+  { "glob": "apps/fabrika/aria/**", "why": "the approved ARIA snapshots" }
 ]

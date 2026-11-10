@@ -1,5 +1,5 @@
-import {Schema} from "effect";
-import {NO_RULE_IDS} from "./bar.ts";
+import { Schema } from "effect";
+import { NO_RULE_IDS } from "./bar.ts";
 
 // Sort's answer, as the sorter writes it (docs/direction/sort-answers-yes-or-no.md). One of:
 //
@@ -13,54 +13,65 @@ import {NO_RULE_IDS} from "./bar.ts";
 // needs: a no with no rule, a duplicate of nothing, or a ruling with no question cannot be written.
 
 const Why = Schema.String.annotate({
-	description: "One or two sentences on why this answer.",
+  description: "One or two sentences on why this answer.",
 });
 
 export const Duplicate = Schema.Struct({
-	answer: Schema.Literal("duplicate"),
-	/** The earlier ticket's number. */
-	of: Schema.Int,
-	why: Why,
+  answer: Schema.Literal("duplicate"),
+  /** The earlier ticket's number. */
+  of: Schema.Int,
+  why: Why,
 });
+
 export const No = Schema.Struct({
-	answer: Schema.Literal("no"),
-	rule: Schema.Literals(NO_RULE_IDS),
-	/** One line a reader can act on, starting with the rule's words. */
-	reason: Schema.String,
-	why: Why,
+  answer: Schema.Literal("no"),
+  rule: Schema.Literals(NO_RULE_IDS),
+  /** One line a reader can act on, starting with the rule's words. */
+  reason: Schema.String,
+  why: Why,
 });
+
 export const YesPlan = Schema.Struct({
-	answer: Schema.Literal("yes"),
-	next: Schema.Literal("plan"),
-	/** The number of the open plan this report is part of, or null: it starts a plan of its own. */
-	partOf: Schema.NullOr(Schema.Int),
-	why: Why,
+  answer: Schema.Literal("yes"),
+  next: Schema.Literal("plan"),
+  /** The number of the open plan this report is part of, or null: it starts a plan of its own. */
+  partOf: Schema.NullOr(Schema.Int),
+  why: Why,
 });
+
 export const YesRuling = Schema.Struct({
-	answer: Schema.Literal("yes"),
-	next: Schema.Literal("ruling"),
-	/** The question for the owner, in one or two sentences. */
-	ask: Schema.String,
-	options: Schema.Array(Schema.String),
-	why: Why,
+  answer: Schema.Literal("yes"),
+  next: Schema.Literal("ruling"),
+  /** The question for the owner, in one or two sentences. */
+  ask: Schema.String,
+  options: Schema.Array(Schema.String),
+  why: Why,
 });
+
 export const YesResearch = Schema.Struct({
-	answer: Schema.Literal("yes"),
-	next: Schema.Literal("research"),
-	why: Why,
+  answer: Schema.Literal("yes"),
+  next: Schema.Literal("research"),
+  why: Why,
 });
 
 export const SortAnswer = Schema.Union([Duplicate, No, YesPlan, YesRuling, YesResearch]);
 export type SortAnswer = typeof SortAnswer.Type;
 
 /** What the sorter hands back: one object, as the Agent SDK takes a schema, holding the answer. */
-export const SortReply = Schema.Struct({sort: SortAnswer});
+export const SortReply = Schema.Struct({ sort: SortAnswer });
 export type SortReply = typeof SortReply.Type;
 
 /** An answer in one word, as the tables read it: `duplicate`, `no`, `fold`, or the route of a yes. */
 export type Said = "duplicate" | "no" | "fold" | "plan" | "ruling" | "research";
+
 export const saidOf = (a: SortAnswer): Said => {
-	if (a.answer !== "yes") return a.answer;
-	if (a.next === "plan" && a.partOf !== null) return "fold";
-	return a.next;
+  if (a.answer !== "yes") {
+    return a.answer;
+  }
+
+  if (a.next === "plan" && a.partOf !== null) {
+    return "fold";
+  }
+
+  return a.next;
 };
