@@ -363,6 +363,13 @@ const refused = (r: {code: number | null; text: string}, why: RegExp) => {
 	expect(r.text).toMatch(why);
 	expect(r.text).not.toMatch(/usage:|Traceback|command not found|cannot open/);
 };
+/** A start check's no: exit 3 and one `refused <check>: <why>` line, which drive reads (ticket 428). */
+const checkRefused = (r: {code: number | null; text: string}, check: string, why = /.*/) => {
+	refused(r, why);
+	expect(r.code, r.text).toBe(3);
+	expect(r.text).toMatch(new RegExp(`^refused ${check}: .*$`, "m"));
+	expect(r.text).not.toMatch(/^stuck /m);
+};
 // Exercise every independent fault, even while the product still lacks several checks.
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	const errors: Error[] = [];
@@ -938,7 +945,16 @@ describe("T321 K2 box start, today's tooling", () => {
 								? b.new(sha, b.branch)
 								: b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
-						if (blocks.has(place)) refused(got, /shared_ticket 321 on fabrikalfa\/other/);
+						// A live branch is the check saying no; open PRs gh cannot read is a check that
+						// could not run, which stays stuck (ticket 428).
+						if (place === "gh-down") {
+							refused(
+								got,
+								/^stuck shared_ticket 321 on fabrikalfa\/other: open PRs cannot be read/m,
+							);
+							expect(got.code, got.text).toBe(1);
+						} else if (blocks.has(place))
+							checkRefused(got, "shared_ticket", /321 on fabrikalfa\/other/);
 						else expect(got.code, got.text).toBe(0);
 					}),
 				);
@@ -992,7 +1008,7 @@ describe("T321 K2 box start, today's tooling", () => {
 							...extra,
 						]);
 						if (root === "elsewhere") {
-							refused(got, /root is not an ancestor/);
+							checkRefused(got, "root_not_ancestor", /root is not an ancestor/);
 							return;
 						}
 						expect(got.code, got.text).toBe(0);
@@ -1009,10 +1025,12 @@ describe("T321 K2 box start, today's tooling", () => {
 
 	// Plant: accept any parent head, any role or any signer, rather than a verified build or lead link.
 	// layers and themes, 2026-11-09: a signed lead commit (a merge of main, a lockfile) was refused.
-	it("K2 accepts only origin/main or a verified parent build or lead head and records checked facts", () => {
+	// Plant: require main's tip, not any commit main holds. Eight of nine base_not_signed refusals on
+	// 2026-11-09 were a lane's plan base, an older main, after main moved on (ticket 428).
+	it("K2 accepts any commit origin/main holds or a verified parent build or lead head and records checked facts", () => {
 		fc.assert(
 			fc.property(word, (text) => {
-				each(["main", "build", "lead", "unsigned", "tests", "forged"], (kind) =>
+				each(["main", "older-main", "build", "lead", "unsigned", "tests", "forged"], (kind) =>
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/parent");
 						const parent = b.commit(b.main, "src/b.ts", `${text}\n`);
@@ -1029,20 +1047,26 @@ describe("T321 K2 box start, today's tooling", () => {
 								parent,
 							);
 						b.git(b.main, "checkout", "-q", "main");
-						const got = b.new(kind === "main" ? "origin/main" : parent);
+						// main moves on; box.sh new's own fetch of origin then sees the newer tip.
+						if (kind === "older-main") b.commit(b.main, "src/old.ts", `${text} newer\n`);
+						const onMain = kind === "main" || kind === "older-main";
+						const got = b.new(
+							kind === "main" ? "origin/main" : kind === "older-main" ? b.base : parent,
+						);
 						expect(got.code).not.toBeNull();
-						if (kind === "main" || kind === "build" || kind === "lead") {
+						if (onMain || kind === "build" || kind === "lead") {
 							expect(got.code, got.text).toBe(0);
 							expect(
 								existsSync(join(b.boxes, "state/new.box")),
 								"new must save its checked facts",
 							).toBe(true);
 							const state = readFileSync(join(b.boxes, "state/new.box"), "utf8");
-							expect(state).toContain(`base: ${kind === "main" ? b.base : parent}`);
+							expect(state).toContain(`base: ${onMain ? b.base : parent}`);
 							expect(state).toContain(`plan-sha256: ${hash(body())}`);
 							expect(state).toContain("ticket: 321");
-							if (kind !== "main") expect(state).toContain(`fabrikalfa/parent@${parent}`);
-						} else refused(got, /base_not_signed|base|build/);
+							if (onMain) expect(state).toContain("parent: none");
+							else expect(state).toContain(`fabrikalfa/parent@${parent}`);
+						} else checkRefused(got, "base_not_signed");
 					}),
 				);
 			}),
@@ -1066,7 +1090,8 @@ describe("T321 K2 box start, today's tooling", () => {
 						const got = b.new("origin/main", fault === "branch" ? "other/new" : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
 						if (fault === "renewed") expect(got.code, got.text).toBe(0);
-						else refused(got, /branch|prefix|plan|approval|hash|body/);
+						else if (fault === "branch") refused(got, /branch|prefix/);
+						else checkRefused(got, "plan_unapproved", /plan|approval|hash|body/);
 					}),
 				);
 			}),
@@ -1263,6 +1288,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 						"mutation",
 						"skip",
 						"lane-row",
+						"lane-row-skip",
 						"lane-row-stuck",
 					],
 					(kind) =>
@@ -1298,7 +1324,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										why: "recorded fixture result",
 									})}\n`,
 								);
-							if (kind === "lane-row" || kind === "lane-row-stuck") {
+							if (kind.startsWith("lane-row")) {
 								// Where drive writes a step's row: BOXES/<lane>-rows.jsonl, not the box's own.
 								appendFileSync(join(b.boxes, "state/one.box"), "lane: onelane\n");
 								write(
@@ -1308,7 +1334,8 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										ticket: "321",
 										role: "hand",
 										step: "mutation",
-										outcome: kind === "lane-row" ? "pass" : "stopped",
+										// drive writes `skip` for a mutation step that answered skip (ticket 423).
+										outcome: {"lane-row": "pass", "lane-row-skip": "skip"}[kind] ?? "stopped",
 										why: "drive.ts mutation fixture row",
 									})}\n`,
 								);
@@ -1318,9 +1345,17 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 								"mutation",
 								"skip",
 								"lane-row",
+								"lane-row-skip",
 								"lane-row-stuck",
 							].includes(kind);
-							const pass = ["tests", "since-root", "mutation", "skip", "lane-row"].includes(kind);
+							const pass = [
+								"tests",
+								"since-root",
+								"mutation",
+								"skip",
+								"lane-row",
+								"lane-row-skip",
+							].includes(kind);
 							const got = b.run(review ? "review" : "build");
 							expect(got.code).not.toBeNull();
 							if (pass) expect(got.code, got.text).toBe(0);

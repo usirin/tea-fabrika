@@ -268,10 +268,16 @@ afterAll(() => {
 	rmSync(folder, {recursive: true, force: true});
 });
 let files = 0;
+const connect = (path: string) => {
+	const db = new DatabaseSync(path);
+	// Match the product's Node span queue settings in src/node/stage-recording.ts.
+	db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+	databases.push(db);
+	return db;
+};
 const disk = () => {
 	const path = join(folder, `${++files}.db`);
-	let db = new DatabaseSync(path);
-	databases.push(db);
+	let db = connect(path);
 	let inner = nodeSql(db);
 	const fault = {query: (_q: string) => false, once: false};
 	const sql: Sql = {
@@ -291,8 +297,7 @@ const disk = () => {
 		db: () => db,
 		reopen: () => {
 			db.close();
-			db = new DatabaseSync(path);
-			databases.push(db);
+			db = connect(path);
 			inner = nodeSql(db);
 		},
 	};
