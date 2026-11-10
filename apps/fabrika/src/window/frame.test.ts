@@ -18,6 +18,7 @@ import {
   bottomLineShows,
   clockWord,
   commandsOf,
+  deliver,
   ENDED_SHOWN_MS,
   EXPLAIN_ON,
   FRAME,
@@ -43,7 +44,9 @@ import {
   middleFree,
   nowhereNote,
   opensOf,
+  type Out,
   passOn,
+  type Ports,
   prefixLine,
   questionWord,
   restartedWord,
@@ -1430,6 +1433,145 @@ describe("a held Escape reaches the frame (ticket 589)", () => {
     expect(passOn(on, taken.steps[1] ?? [], unarmed, true, { prefix: PREFIX }).out).toEqual([
       { _tag: "press", id: 0, key: "<c-b>" },
     ]);
+  });
+
+  // L5, at the page's boundary: `deliver` carries out what `passOn` answered, through ports the
+  // page passes in (desk.tsx), and never routes again against the frame holdStep installed. Fake
+  // ports record every call. The `replaying` guard that stops a dispatched key from entering the
+  // hold again stays DOM (desk.tsx, `onKey`); e2e.ts covers it.
+  type Call =
+    | { readonly to: "toHost"; readonly id: number; readonly key: string }
+    | { readonly to: "dispatch"; readonly key: Key }
+    | { readonly to: "focusOver" };
+
+  const fakePorts = (focus: readonly ("in" | "moved in")[]) => {
+    const calls: Call[] = [];
+    let at = 0;
+    const ports: Ports = {
+      toHost: (id, k) => calls.push({ to: "toHost", id, key: k }),
+      dispatch: (k) => calls.push({ to: "dispatch", key: k }),
+      focusOver: () => {
+        calls.push({ to: "focusOver" });
+        return focus[at++ % Math.max(focus.length, 1)] ?? "in";
+      },
+    };
+    return { calls, ports };
+  };
+
+  const heldKey = fc
+    .record({ name: fc.constantFrom("a", "x", "1", "ArrowLeft", "Tab", "<esc>") })
+    .map(({ name }) => key(name));
+  const focusIn = fc.constantFrom<"in" | "moved in">("in", "moved in");
+  const outs: fc.Arbitrary<Out> = fc.oneof(
+    fc.record({ _tag: fc.constant("press" as const), id: fc.nat(50), key: fc.constantFrom("<c-b>", "a", "i") }),
+    fc.record({ _tag: fc.constant("live" as const) }),
+    fc.record({ _tag: fc.constant("replay" as const), key: heldKey }),
+    fc.record({ _tag: fc.constant("over" as const), key: heldKey }),
+  );
+
+  // Plant: a second dispatch for a replay; or a replay sent through focus routing (focusOver called).
+  it("dispatches a replay exactly once and never asks focus routing", () => {
+    fc.assert(
+      fc.property(heldKey, fc.array(focusIn, { maxLength: 3 }), (k, focus) => {
+        const { calls, ports } = fakePorts(focus);
+        expect(deliver([{ _tag: "replay", key: k }], ports)).toBe(false);
+        expect(calls).toEqual([{ to: "dispatch", key: k }]);
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  // Plant: `over` sent as a replay (focusOver never called); "moved in" still dispatching.
+  it("asks focus routing once for an over key: in dispatches once, moved in drops it", () => {
+    fc.assert(
+      fc.property(heldKey, focusIn, (k, focus) => {
+        const { calls, ports } = fakePorts([focus]);
+        expect(deliver([{ _tag: "over", key: k }], ports)).toBe(false);
+        expect(calls).toEqual(
+          focus === "in" ? [{ to: "focusOver" }, { to: "dispatch", key: k }] : [{ to: "focusOver" }],
+        );
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  // Plant: `press` sent twice or with another id; `live` dispatching, or answering false.
+  it("sends a press to the host once with its id, and a live key goes on with nothing dispatched", () => {
+    fc.assert(
+      fc.property(fc.nat(50), fc.constantFrom("<c-b>", "a", "i"), (id, k) => {
+        const sent = fakePorts([]);
+        expect(deliver([{ _tag: "press", id, key: k }], sent.ports)).toBe(false);
+        expect(sent.calls).toEqual([{ to: "toHost", id, key: k }]);
+        const live = fakePorts([]);
+        expect(deliver([{ _tag: "live" }], live.ports)).toBe(true);
+        expect(live.calls).toEqual([]);
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  // Plant: reversing the order, dropping an entry, or running an entry twice. The oracle is written
+  // out from the Out list: its order, each once, `focusOver` results taken in turn.
+  it("calls the ports in the order of out, each exactly once", () => {
+    fc.assert(
+      fc.property(
+        fc.array(outs, { maxLength: 20 }),
+        fc.array(focusIn, { minLength: 20, maxLength: 20 }),
+        (out, focus) => {
+          const { calls, ports } = fakePorts(focus);
+          const expected: Call[] = [];
+          let at = 0;
+
+          for (const o of out) {
+            if (o._tag === "press") {
+              expected.push({ to: "toHost", id: o.id, key: o.key });
+            } else if (o._tag === "replay") {
+              expected.push({ to: "dispatch", key: o.key });
+            } else if (o._tag === "over") {
+              expected.push({ to: "focusOver" });
+
+              if (focus[at++] === "in") {
+                expected.push({ to: "dispatch", key: o.key });
+              }
+            }
+          }
+
+          expect(deliver(out, ports)).toBe(out.some((o) => o._tag === "live"));
+          expect(calls).toEqual(expected);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  // scenario: the reported case, composed end to end with the real hold, `passOn` and `deliver`.
+  // `C-b a` is out, an asks menu is up when `x` and Escape are released and focus is outside it.
+  // Escape closes the over; `x` goes to focus routing, which moves focus in and drops it, and
+  // nothing is dispatched to a tile. Plant: `x` dispatched (routed again against the final frame).
+  it("scenario: a held [x, Escape] with an asks menu up and focus outside drops x and closes the menu", () => {
+    const { hold, steps } = foldHold([
+      PREFIX_ONLY,
+      { type: "key", key: ctrlB },
+      ALL,
+      { type: "answer", id: 0, took: true },
+      { type: "key", key: key("a") },
+      PREFIX_ONLY,
+      { type: "key", key: key("x") },
+      { type: "key", key: escape },
+      { type: "answer", id: 1, took: true },
+    ]);
+    const cmds = steps.at(-1) ?? [];
+    expect(cmds).toEqual([
+      { type: "pass", key: key("x"), held: true },
+      { type: "pass", key: escape, held: true },
+    ]);
+    const asks = frameUpdate(FRAME, { type: "show", what: "asks" });
+    const done = settle(asks, hold, cmds, unarmed);
+    expect(done.out).toEqual([{ _tag: "over", key: key("x") }]);
+    expect(done.frame.over).toEqual({ kind: "none" });
+    const { calls, ports } = fakePorts(["moved in"]);
+    expect(deliver(done.out, ports)).toBe(false);
+    expect(calls).toEqual([{ to: "focusOver" }]);
   });
 
   // scenario: a key the host rejects goes on held, and a dropped link lets the queue go on; both
