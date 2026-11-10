@@ -28,7 +28,7 @@ import { lineFor } from "../data/log.ts";
 import { RecordManager } from "../data/records.ts";
 import { SpanSink } from "../data/sink.ts";
 import { nodeSql } from "../data/sqlite.ts";
-import { ProcessId } from "../data/trace.ts";
+import { ProcessId } from "../ProcessId.ts";
 import { Answer } from "../transport/index.ts";
 
 let Door: typeof import("@kampus/libfabrika/door").Door;

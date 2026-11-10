@@ -19,10 +19,11 @@ import { afterAll, describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { inputParents, processId } from "../id.test-support.ts";
+import type { Sql } from "../Sql.ts";
 import * as data from "./index.ts";
 import { Doorbell, Ledger } from "./ledger.ts";
 import type { Entry, InputId, Line } from "./log.ts";
-import { Referee, type Sql } from "./referee.ts";
+import { Referee } from "./referee.ts";
 import { nodeSql } from "./sqlite.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
