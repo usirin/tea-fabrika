@@ -66,6 +66,9 @@ P25, P27a and P36 have tests on their branches and wait for builds; P28's tests 
 build waits on P19, P21 and P26.
 P34c, new today ([0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)),
 turns P34 into OTP's top-level supervisor; its plan is drafted and waits on the owner's read.
+*2026-11-10:* P34 now runs on the Worker path too (ticket 402,
+[PR 760](https://github.com/usirin/tea-fabrika/pull/760)): the local stage saves delivery counts,
+writes `dead` and restarts a crashed program, which PR 535 had proved on Node only.
 Its first open question is answered
 ([0018](../../.decisions/0018-one-application-per-program.md)): each program is its own OTP
 application, so one program past its restart limit stops alone. Isolation gets hard walls
