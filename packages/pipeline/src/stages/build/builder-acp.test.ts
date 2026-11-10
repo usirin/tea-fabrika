@@ -52,9 +52,13 @@ const alive = (pid: number) => {
 
 const until = async (ok: () => boolean, ms: number) => {
 	for (const end = Date.now() + ms; Date.now() < end;) {
-		if (ok()) return true;
+		if (ok()) {
+			return true;
+		}
+
 		await new Promise((r) => setTimeout(r, 100));
 	}
+
 	return ok();
 };
 
@@ -66,11 +70,12 @@ const descendantsOf = (pid: number): number[] => {
 		.map((line) => line.trim().split(/\s+/).map(Number) as [number, number]);
 	const under: number[] = [];
 	const walk = (p: number) => {
-		for (const [child, parent] of rows)
+		for (const [child, parent] of rows) {
 			if (parent === p) {
 				under.push(child);
 				walk(child);
 			}
+		}
 	};
 	walk(pid);
 	return under;
@@ -99,6 +104,7 @@ describe("an ask, as the builder answers it", () => {
 			allow: true,
 			tool: "Write",
 		});
+
 		for (const [tool, input] of [
 			["Write", {file_path: "/etc/passwd", content: ""}],
 			["Read", {file_path: "/home/someone/.ssh/id_ed25519"}],
@@ -212,11 +218,14 @@ describe("the check hook, as the CLI runs it", () => {
 		const outs = calls.map((call) => hook(tree, JSON.stringify(call)));
 		expect(outs.map((o) => o.status)).toEqual([0, 0, 0]);
 		expect(outs[0]?.stdout).toBe("");
-		for (const o of outs.slice(1))
+
+		for (const o of outs.slice(1)) {
 			expect(JSON.parse(o.stdout).hookSpecificOutput).toMatchObject({
 				hookEventName: "PreToolUse",
 				permissionDecision: "deny",
 			});
+		}
+
 		const why = builderCheck(tree, [])("Bash", {command: "git push origin HEAD"});
 		expect(JSON.parse(outs[1]?.stdout ?? "").hookSpecificOutput.permissionDecisionReason).toBe(why);
 		const log = readFileSync(checksOf(tree), "utf8");
@@ -373,6 +382,7 @@ describe("whole turns on the fake agent", () => {
 			["-MFcntl=:flock", "-e", 'open(F, ">>", shift) or die; flock(F, LOCK_EX); sleep 30', lock],
 			{stdio: "ignore"},
 		);
+
 		// The holder is stopped whatever the test found.
 		try {
 			await new Promise((r) => setTimeout(r, 300));

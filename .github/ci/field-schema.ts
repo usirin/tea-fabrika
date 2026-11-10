@@ -86,15 +86,27 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
 		Finding.cases.error.make({file, line, field, reason});
 	const warning = (field: string, reason: string) =>
 		Finding.cases.warning.make({file, line, field, reason});
-	if (!isObject(value)) return [error("row", "expected a JSON object")];
+
+	if (!isObject(value)) {
+		return [error("row", "expected a JSON object")];
+	}
+
 	const schema = file === "field/notes.jsonl" ? Note : file === "field/runs.jsonl" ? Run : null;
-	if (schema === null) return [warning("row", "no detailed schema for this file")];
+
+	if (schema === null) {
+		return [warning("row", "no detailed schema for this file")];
+	}
+
 	const failures = Object.entries(schema.fields).flatMap(([field, rule]) =>
 		Schema.is(Schema.Struct({[field]: rule}))(value)
 			? []
 			: [error(field, "invalid or missing core field")],
 	);
-	if (failures.length > 0) return failures;
+
+	if (failures.length > 0) {
+		return failures;
+	}
+
 	const findings: Finding[] = [];
 	const note = file === "field/notes.jsonl";
 	const metadata = note
@@ -111,70 +123,103 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
 				"costUsd",
 				"billed",
 			];
-	for (const field of metadata)
-		if (!(field in value)) findings.push(warning(field, "README metadata is absent"));
-	for (const field of note ? ["stage", "kind"] : ["role", "outcome"]) {
-		if (!(words[field] ?? []).includes(String(value[field])))
-			findings.push(warning(field, "word outside README list"));
+
+	for (const field of metadata) {
+		if (!(field in value)) {
+			findings.push(warning(field, "README metadata is absent"));
+		}
 	}
-	if (Array.isArray(value["lanes"]) && value["lanes"].some((lane) => typeof lane !== "string"))
+
+	for (const field of note ? ["stage", "kind"] : ["role", "outcome"]) {
+		if (!(words[field] ?? []).includes(String(value[field]))) {
+			findings.push(warning(field, "word outside README list"));
+		}
+	}
+
+	if (Array.isArray(value["lanes"]) && value["lanes"].some((lane) => typeof lane !== "string")) {
 		findings.push(warning("lanes", "lane member is not text"));
+	}
+
 	const id = note ? "id" : "run";
-	if (typeof value[id] === "string" && !/^\d{4}-\d{2}-\d{2}-(?:r)?\d+(?:-c\d+)?$/.test(value[id]))
+
+	if (typeof value[id] === "string" && !/^\d{4}-\d{2}-\d{2}-(?:r)?\d+(?:-c\d+)?$/.test(value[id])) {
 		findings.push(warning(id, "unusual record id"));
+	}
+
 	const day = value["date"];
+
 	if (
 		typeof day === "string" &&
 		(!Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0, 10) !== day)
-	)
+	) {
 		findings.push(warning("date", "unusual calendar date"));
+	}
+
 	for (const field of ["started", "ended"]) {
 		const time = value[field];
+
 		if (
 			typeof time === "string" &&
 			(!/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(time) || !Number.isFinite(Date.parse(time)))
-		)
+		) {
 			findings.push(warning(field, "unusual timestamp"));
+		}
 	}
+
 	for (const field of ["ticket", "pr"]) {
 		const ref = value[field];
-		if (ref != null && (typeof ref !== "string" || !/^[^/\s]+\/[^#\s]+#\d+$/.test(ref)))
+
+		if (ref != null && (typeof ref !== "string" || !/^[^/\s]+\/[^#\s]+#\d+$/.test(ref))) {
 			findings.push(warning(field, "unusual reference"));
+		}
 	}
+
 	if (
 		typeof value["parent"] === "string" &&
 		!/^\d{4}-\d\d-\d\d-r\d+(?:-c\d+)?$/.test(value["parent"])
-	)
+	) {
 		findings.push(warning("parent", "unusual parent reference"));
+	}
+
 	if (
 		typeof value["started"] === "string" &&
 		typeof value["ended"] === "string" &&
 		Date.parse(value["ended"]) < Date.parse(value["started"])
-	)
+	) {
 		findings.push(warning("ended", "end precedes start"));
+	}
+
 	if (
 		typeof value["active"] === "number" &&
 		typeof value["minutes"] === "number" &&
 		value["active"] > value["minutes"]
-	)
+	) {
 		findings.push(warning("active", "active time exceeds wall time"));
+	}
+
 	if (
 		typeof value["cachedTokens"] === "number" &&
 		typeof value["inputTokens"] === "number" &&
 		value["cachedTokens"] > value["inputTokens"]
-	)
+	) {
 		findings.push(warning("cachedTokens", "cached count exceeds input count"));
+	}
+
 	if (
 		typeof value["billed"] === "number" &&
 		typeof value["inputTokens"] === "number" &&
 		typeof value["outputTokens"] === "number" &&
 		value["billed"] !== value["inputTokens"] + value["outputTokens"]
-	)
+	) {
 		findings.push(warning("billed", "billed count differs from input plus output"));
+	}
+
 	if (
 		Array.isArray(value["links"]) &&
 		value["links"].some((link) => typeof link === "string" && !/^https?:\/\/\S+$/.test(link))
-	)
+	) {
 		findings.push(warning("links", "unusual public URL"));
+	}
+
 	return findings;
 };

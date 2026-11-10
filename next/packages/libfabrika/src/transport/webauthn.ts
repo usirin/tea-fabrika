@@ -19,7 +19,11 @@ const keyParts = (blob: Uint8Array) =>
 
 export const passkeyBlob = (line: string): Option.Option<Bytes> => {
 	const [kind, base64] = line.split(/\s+/);
-	if (kind !== KEY || base64 === undefined) return Option.none();
+
+	if (kind !== KEY || base64 === undefined) {
+		return Option.none();
+	}
+
 	return Option.getSuccess(Base64.decode(base64)).pipe(
 		Option.map((bytes) => new Uint8Array(bytes)),
 		Option.filter((bytes) => Option.isSome(keyParts(bytes))),
@@ -45,10 +49,16 @@ const fixed = (n: Bytes): Option.Option<Bytes> => {
 		n.length > 33 ||
 		(n[0] ?? 128) >= 128 ||
 		(n.length > 1 && n[0] === 0 && (n[1] ?? 0) < 128)
-	)
+	) {
 		return Option.none();
+	}
+
 	const value = n[0] === 0 ? n.slice(1) : n;
-	if (value.length > 32 || value.every((b) => b === 0)) return Option.none();
+
+	if (value.length > 32 || value.every((b) => b === 0)) {
+		return Option.none();
+	}
+
 	const out = new Uint8Array(32);
 	out.set(value, 32 - value.length);
 	return Option.some(out);
@@ -97,7 +107,11 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
 		yield* holds(((flags & 128) !== 0) === extensions.length > 0);
 		return {...key, raw, flags, counter, origin, client, extensions};
 	});
-	if (Option.isNone(parsed)) return null;
+
+	if (Option.isNone(parsed)) {
+		return null;
+	}
+
 	const p = parsed.value;
 	return yield* Effect.try(() => ({
 		rp: text(p.rp),
@@ -112,8 +126,10 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
 					!policy.origins.includes(origin) ||
 					client.crossOrigin === true ||
 					client.challenge !== Base64Url.encode(challenge)
-				)
+				) {
 					return null;
+				}
+
 				const hash = new Uint8Array(yield* subtle("digest", "SHA-256", p.rp));
 				const clientHash = new Uint8Array(yield* subtle("digest", "SHA-256", p.client));
 				const auth = join(hash, new Uint8Array([p.flags]), u32(p.counter), p.extensions);
@@ -161,23 +177,33 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
 		const size = (yield* r.take(1))[0] ?? 0;
 		yield* holds(size === r.rest());
 		const ints: Bytes[] = [];
+
 		for (let n = 0; n < 2; n++) {
 			yield* holds((yield* r.take(1))[0] === 2);
 			const value = yield* r.take((yield* r.take(1))[0] ?? 0);
 			yield* fixed(value);
 			ints.push(value);
 		}
+
 		yield* holds(r.rest() === 0 && auth.length >= 37);
 		return {blob, key, ints};
 	});
-	if (Option.isNone(parsed)) return yield* new BadAssertion({});
+
+	if (Option.isNone(parsed)) {
+		return yield* new BadAssertion({});
+	}
+
 	const {blob, key, ints} = parsed.value;
 	const decoded = yield* Effect.try({
 		try: () => Schema.decodeUnknownSync(Client)(text(client)),
 		catch: () => new BadAssertion({}),
 	});
 	const rpHash = new Uint8Array(yield* subtle("digest", "SHA-256", key.rp));
-	if (!same(rpHash, auth.slice(0, 32))) return yield* new BadAssertion({});
+
+	if (!same(rpHash, auth.slice(0, 32))) {
+		return yield* new BadAssertion({});
+	}
+
 	const signature = join(
 		field(SIG),
 		field(join(...ints.map(field))),
@@ -198,7 +224,11 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
 		rp: text(key.rp),
 		origins: [decoded.origin],
 	});
-	if (checked === null) return yield* new BadAssertion({});
+
+	if (checked === null) {
+		return yield* new BadAssertion({});
+	}
+
 	return armor(
 		join(
 			utf8("SSHSIG"),

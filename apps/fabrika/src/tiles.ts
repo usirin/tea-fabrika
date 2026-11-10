@@ -194,16 +194,27 @@ export const startTiles = (options: {
 				const one = live.get(run);
 				return one === undefined ? [] : [{id: run, program: one.program}];
 			});
-			if (first !== undefined) edge.tell({type: "covered", tile, runs: [first, ...rest]});
+
+			if (first !== undefined) {
+				edge.tell({type: "covered", tile, runs: [first, ...rest]});
+			}
 		};
 
 		/** A run is over: its port goes and the desk is told, once, whoever saw it end first. */
 		const over = (run: string) => {
 			const one = live.get(run);
-			if (one === undefined) return;
+
+			if (one === undefined) {
+				return;
+			}
+
 			live.delete(run);
+
 			// A run of the background was never shown: there is no port and nothing covered.
-			if (one.placed === "background") return;
+			if (one.placed === "background") {
+				return;
+			}
+
 			edge.gone(`run:${run}`);
 			edge.tell({type: "over", run});
 		};
@@ -228,11 +239,18 @@ export const startTiles = (options: {
 						began: (run, program, placed, screen) => {
 							const one: Live = {tile, program, placed, screen};
 							live.set(run, one);
-							if (placed === "foreground") edge.view(run, screen);
+
+							if (placed === "foreground") {
+								edge.view(run, screen);
+							}
 						},
 						forward: (run) => {
 							const one = live.get(run);
-							if (one === undefined || one.placed === "foreground") return;
+
+							if (one === undefined || one.placed === "foreground") {
+								return;
+							}
+
 							one.placed = "foreground";
 							edge.view(run, one.screen);
 						},
@@ -254,7 +272,11 @@ export const startTiles = (options: {
 					Effect.andThen(
 						Effect.sync(() => {
 							const now = open.get(tile);
-							if (now !== undefined) now.state = "ended";
+
+							if (now !== undefined) {
+								now.state = "ended";
+							}
+
 							edge.tell({type: "ended", tile});
 						}),
 					),
@@ -269,8 +291,11 @@ export const startTiles = (options: {
 			open: (tile, agent) =>
 				Effect.gen(function* () {
 					const why = failed.get(tile);
-					if (agent !== undefined && why !== undefined)
+
+					if (agent !== undefined && why !== undefined) {
 						return edge.terminal(tile, blank(agent, why));
+					}
+
 					const host = open.get(tile)?.host ?? (yield* startOne(tile, agent ?? null));
 					edge.terminal(tile, host.terminal);
 				}).pipe(
@@ -287,21 +312,38 @@ export const startTiles = (options: {
 			close: (tile) =>
 				Effect.suspend(() => {
 					const one = open.get(tile);
-					if (one === undefined || one.state !== "open") return Effect.void;
+
+					if (one === undefined || one.state !== "open") {
+						return Effect.void;
+					}
+
 					one.state = "closing";
 					return one.host.close;
 				}),
 			stop: (tile) =>
 				Effect.gen(function* () {
 					// An agent's tile that never started goes with its port, and nothing else.
-					if (failed.delete(tile)) edge.gone(`tile:${tile}`);
+					if (failed.delete(tile)) {
+						edge.gone(`tile:${tile}`);
+					}
+
 					const one = open.get(tile);
-					if (one === undefined) return;
+
+					if (one === undefined) {
+						return;
+					}
+
 					open.delete(tile);
 					yield* Scope.close(one.scope, Exit.void);
+
 					// The scope closing interrupts the runs, and a run interrupted may end before its host
 					// says so. Every run of the tile is over now, said or not.
-					for (const [run, it] of [...live]) if (it.tile === tile) over(run);
+					for (const [run, it] of [...live]) {
+						if (it.tile === tile) {
+							over(run);
+						}
+					}
+
 					edge.gone(`tile:${tile}`);
 					// Its scope closed, so the jobs its tsh started are detached in the host's table now.
 					yield* one.host.drop;
@@ -316,19 +358,29 @@ export const startTiles = (options: {
 			line: (tile, text) =>
 				Effect.suspend(() => {
 					const why = failed.get(tile);
-					if (why !== undefined)
+
+					if (why !== undefined) {
 						return Effect.fail(new LineRefused({why: `${tile} could not start: ${why}`}));
+					}
+
 					const one = open.get(tile);
-					if (one === undefined)
+
+					if (one === undefined) {
 						return Effect.fail(new LineRefused({why: `${tile} is not open: no tsh runs there`}));
-					if (one.agent === null)
+					}
+
+					if (one.agent === null) {
 						return Effect.fail(
 							new LineRefused({
 								why: `${tile} is the person's tile: an agent's line runs only in its own`,
 							}),
 						);
-					if (one.state !== "open")
+					}
+
+					if (one.state !== "open") {
 						return Effect.fail(new LineRefused({why: `${tile} is closing: its tsh takes no line`}));
+					}
+
 					return one.host.line(text);
 				}),
 		};

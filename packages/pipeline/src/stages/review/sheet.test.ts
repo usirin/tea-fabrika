@@ -238,7 +238,11 @@ describe("a form made a sheet", () => {
 			findings: [FOUND, STANDING],
 			skipped: [{what: "the tests", why: "no shell"}],
 		});
-		if (made.answer !== "sheet") throw new Error("not a sheet");
+
+		if (made.answer !== "sheet") {
+			throw new Error("not a sheet");
+		}
+
 		expect(made.sheet).toEqual({
 			head: BRIEF.head,
 			// A checked pass keeps no limit: there is none it could hold.
@@ -253,7 +257,11 @@ describe("a form made a sheet", () => {
 
 	it("keeps a finding written twice once", () => {
 		const made = readForm(BRIEF, {...GOOD, findings: [FOUND, {...FOUND, proof: "said again"}]});
-		if (made.answer !== "sheet") throw new Error("not a sheet");
+
+		if (made.answer !== "sheet") {
+			throw new Error("not a sheet");
+		}
+
 		expect(made.sheet.findings).toHaveLength(1);
 		expect(made.sheet.findings[0]?.proof).toBe(FOUND.proof);
 	});

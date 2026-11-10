@@ -66,8 +66,9 @@ describe("what a tile shows, as a saved tree is read", () => {
 			{kind: "tsh", run: tracker},
 			{kind: "line", run: tracker, line: line("A")},
 			windowOf(line("A")),
-		])
+		]) {
 			expect(isLayoutTree(treeWith(shows)), JSON.stringify(shows)).toBe(true);
+		}
 	});
 
 	it("refuses a bad shows, run, kind or line, and never throws on one", () => {
@@ -86,6 +87,7 @@ describe("what a tile shows, as a saved tree is read", () => {
 			windowOf({...line("A"), id: 1}),
 			windowOf({...line("A"), from: null}),
 		];
+
 		for (const shows of bad) {
 			expect(isLayoutTree(treeWith(shows)), JSON.stringify(shows)).toBe(false);
 			expect(isKeptTree(treeWith(shows)), JSON.stringify(shows)).toBe(false);

@@ -27,10 +27,17 @@ const selection = (machine: Machine) =>
 		lists,
 		(steps, last) => {
 			let selected: number | null = null;
+
 			for (const {msg, next} of steps) {
-				if (msg.type === "open") selected = msg.ticket;
-				if (next.open !== selected) return false;
+				if (msg.type === "open") {
+					selected = msg.ticket;
+				}
+
+				if (next.open !== selected) {
+					return false;
+				}
 			}
+
 			return last.open === selected;
 		},
 		OPTS,

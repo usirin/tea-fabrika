@@ -212,22 +212,36 @@ const sent = (w: World, c: Exclude<Choice, {do: "wait"}>): readonly [Msg, World]
 	switch (c.do) {
 		case "answer": {
 			const [out, ...rest] = w.tries;
-			if (out === undefined) return null;
+
+			if (out === undefined) {
+				return null;
+			}
+
 			const after = {...w, tries: rest};
-			if (out === "attach")
+
+			if (out === "attach") {
 				return c.tried === null
 					? [{type: attach.errType, cmd: attach({}), error: malformed, at: w.now}, after]
 					: [attach.ok(attach({}), c.tried, w.now), after];
+			}
+
 			return c.tried === null
 				? [{type: restart.errType, cmd: restart({}), error: malformed, at: w.now}, after]
 				: [restart.ok(restart({}), c.tried, w.now), after];
 		}
 		case "pick": {
 			const [out, ...rest] = w.picks;
-			if (out === undefined) return null;
+
+			if (out === undefined) {
+				return null;
+			}
+
 			const after = {...w, picks: rest};
-			if (c.r === null)
+
+			if (c.r === null) {
 				return [{type: jitter.errType, cmd: out, error: malformed, at: w.now}, after];
+			}
+
 			const r = c.r;
 			// main.ts's own pick: backoffDelay(attempt, POLICY, Math.random).
 			const ms = backoffDelay(
@@ -238,7 +252,10 @@ const sent = (w: World, c: Exclude<Choice, {do: "wait"}>): readonly [Msg, World]
 			return [jitter.ok(out, ms, w.now), after];
 		}
 		case "fire": {
-			if (w.timer === null || w.timer.fired) return null;
+			if (w.timer === null || w.timer.fired) {
+				return null;
+			}
+
 			const now = w.now + w.timer.deps.ms;
 			return [w.timer.deps.msg, {...w, now, timer: {...w.timer, fired: true}}];
 		}
@@ -280,19 +297,26 @@ const simulate = (machine: Machine, choices: readonly Choice[]): Run => {
 	const moments: Moment[] = [];
 	let s = first;
 	let w = start;
+
 	for (const c of choices) {
 		if (c.do === "wait") {
 			w = {...w, now: w.now + c.ms};
 			continue;
 		}
+
 		const out = sent(w, c);
-		if (out === null) continue;
+
+		if (out === null) {
+			continue;
+		}
+
 		const [msg, after] = out;
 		const [next, made] = applyCell<Reconnect, Msg, ReconnectCmd>(machine, s, msg);
 		w = subscribed(machine, asked(after, made), next);
 		moments.push({step: {prev: s, msg, next, cmds: made}, world: w});
 		s = next;
 	}
+
 	return {first, start, moments};
 };
 
@@ -338,8 +362,9 @@ interface Law {
 const everyStep = (name: string, holds: (step: ReStep, machine: Machine) => boolean): Law => ({
 	name,
 	check: (machine) => {
-		for (const msgs of [lists, worldLists(machine)])
+		for (const msgs of [lists, worldLists(machine)]) {
 			propertyInvariant(machine, ctx, msgs, (step) => holds(step, machine), OPTS);
+		}
 	},
 });
 
@@ -350,8 +375,9 @@ const everyTrace = (
 ): Law => ({
 	name,
 	check: (machine) => {
-		for (const msgs of [lists, worldLists(machine)])
+		for (const msgs of [lists, worldLists(machine)]) {
 			propertyTrace(machine, ctx, msgs, (steps) => holds(steps, machine), OPTS);
+		}
 	},
 });
 
@@ -438,9 +464,19 @@ const outagesOf = (run: Run) => {
 	let ended: number | null = null;
 	return run.moments.map((m) => {
 		const {msg} = m.step;
-		if (msg.type === "ended" && m.step.prev.at === "up") [from, ended] = [msg.at, msg.at];
-		if (isAgain(m.step) || isRestart(m.step)) [from, ended] = [m.world.now, null];
-		if (isUp(m.step)) ended = null;
+
+		if (msg.type === "ended" && m.step.prev.at === "up") {
+			[from, ended] = [msg.at, msg.at];
+		}
+
+		if (isAgain(m.step) || isRestart(m.step)) {
+			[from, ended] = [m.world.now, null];
+		}
+
+		if (isUp(m.step)) {
+			ended = null;
+		}
+
 		return {m, from, ended};
 	});
 };
@@ -479,8 +515,11 @@ const restartOnlyAsked = everyStep(
 	"a restart is asked only by the person, on a host of another version or build, and that always restarts it",
 	({prev, msg, next, cmds}) => {
 		const restarts = cmds.filter((c) => c.type === "restart").length;
-		if (msg.type === "restart" && restartable(prev))
+
+		if (msg.type === "restart" && restartable(prev)) {
 			return next.at === "restarting" && same(cmds, [restart({})]);
+		}
+
 		return restarts === 0 && (next.at !== "restarting" || prev.at === "restarting");
 	},
 );
@@ -496,16 +535,33 @@ const staleChangesNothing = everyTrace(
 	(steps, machine) => {
 		// The pick out: the last one asked, until an answer for it comes.
 		let out: JitterCmd | null = null;
+
 		for (const {prev, msg, next, cmds} of steps) {
 			let stale = false;
-			if (msg.type === "due") stale = !same(msg, subsOf(machine, prev).timer?.msg ?? null);
+
+			if (msg.type === "due") {
+				stale = !same(msg, subsOf(machine, prev).timer?.msg ?? null);
+			}
+
 			if (msg.type === "jitter_ok" || msg.type === "jitter_err") {
 				stale = out === null || !same(msg.cmd, out);
-				if (!stale) out = null;
+
+				if (!stale) {
+					out = null;
+				}
 			}
-			if (stale && !(same(next, prev) && cmds.length === 0)) return false;
-			for (const c of cmds) if (c.type === "jitter") out = c;
+
+			if (stale && !(same(next, prev) && cmds.length === 0)) {
+				return false;
+			}
+
+			for (const c of cmds) {
+				if (c.type === "jitter") {
+					out = c;
+				}
+			}
 		}
+
 		return true;
 	},
 );
@@ -530,8 +586,11 @@ const refusedOnlyByHost = everyStep(
 			(prev.at === "restarting" && msg.type === "restart_ok")
 				? msg.value
 				: null;
-		if (answer?.kind === "version")
+
+		if (answer?.kind === "version") {
 			return next.at === "refused" && next.theirs === answer.theirs && next.ours === answer.ours;
+		}
+
 		return next.at !== "refused" || prev.at === "refused";
 	},
 );
@@ -569,13 +628,27 @@ const successResets = everyTrace(
 	"a success resets the count: the first failure after the app's start, a success or a restart waits the shortest (attempt 1)",
 	(steps) => {
 		let fresh = true;
+
 		for (const step of steps) {
-			if (isUp(step) || isRestart(step)) fresh = true;
-			if (isAgain(step)) fresh = false;
-			if (!isFailure(step)) continue;
-			if (fresh && !picksFor(step, 1)) return false;
+			if (isUp(step) || isRestart(step)) {
+				fresh = true;
+			}
+
+			if (isAgain(step)) {
+				fresh = false;
+			}
+
+			if (!isFailure(step)) {
+				continue;
+			}
+
+			if (fresh && !picksFor(step, 1)) {
+				return false;
+			}
+
 			fresh = false;
 		}
+
 		return true;
 	},
 );
@@ -584,16 +657,31 @@ const againStartsOver = everyTrace(
 	"Try again, while stopped, starts one try at once and a fresh count: the first failure after it waits the shortest",
 	(steps) => {
 		let fresh = false;
+
 		for (const step of steps) {
-			if (isUp(step) || isRestart(step)) fresh = false;
+			if (isUp(step) || isRestart(step)) {
+				fresh = false;
+			}
+
 			if (isAgain(step)) {
-				if (step.next.at !== "attaching" || !same(step.cmds, [attach({})])) return false;
+				if (step.next.at !== "attaching" || !same(step.cmds, [attach({})])) {
+					return false;
+				}
+
 				fresh = true;
 			}
-			if (!isFailure(step)) continue;
-			if (fresh && !picksFor(step, 1)) return false;
+
+			if (!isFailure(step)) {
+				continue;
+			}
+
+			if (fresh && !picksFor(step, 1)) {
+				return false;
+			}
+
 			fresh = false;
 		}
+
 		return true;
 	},
 );
@@ -602,13 +690,25 @@ const ladder = everyTrace(
 	"each failure in a row picks its wait one attempt higher, so the bound doubles up to 30 s",
 	(steps) => {
 		let last: number | null = null;
+
 		for (const step of steps) {
-			if (isUp(step) || isAgain(step) || isRestart(step)) last = null;
-			if (!isFailure(step)) continue;
+			if (isUp(step) || isAgain(step) || isRestart(step)) {
+				last = null;
+			}
+
+			if (!isFailure(step)) {
+				continue;
+			}
+
 			const [asked] = picksOf(step.cmds);
-			if (last !== null && step.next.at !== "stopped" && asked !== last + 1) return false;
+
+			if (last !== null && step.next.at !== "stopped" && asked !== last + 1) {
+				return false;
+			}
+
 			last = asked ?? null;
 		}
+
 		return true;
 	},
 );
@@ -619,6 +719,7 @@ const noteSays = everyTrace(
 		let first = true;
 		const says = (s: Reconnect) => {
 			const note = noteOf(s);
+
 			switch (s.at) {
 				case "up":
 					return same(note, s.found);
@@ -635,12 +736,22 @@ const noteSays = everyTrace(
 			}
 		};
 		const start = steps[0]?.prev;
-		if (start !== undefined && !says(start)) return false;
+
+		if (start !== undefined && !says(start)) {
+			return false;
+		}
+
 		for (const step of steps) {
 			// The app's first try lasts until the first Msg that changes anything.
-			if (!same(step.next, step.prev)) first = false;
-			if (!says(step.next)) return false;
+			if (!same(step.next, step.prev)) {
+				first = false;
+			}
+
+			if (!says(step.next)) {
+				return false;
+			}
 		}
+
 		return true;
 	},
 );

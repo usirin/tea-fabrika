@@ -185,22 +185,32 @@ export function buildLaws<S extends Build>(): readonly Law<S, Msg, BuildCmd>[] {
 						? step.msg.value.criteria
 						: read;
 				const now = criteriaIn(step.next);
-				if (now !== null && structuralHash(now) !== structuralHash(ticketRead))
+
+				if (now !== null && structuralHash(now) !== structuralHash(ticketRead)) {
 					return broke(
 						`after ${step.msg.type} the criteria are ${now.map((c) => c.id).join(", ") || "none"}, and the ticket's are ${(ticketRead ?? []).map((c) => c.id).join(", ")}`,
 					);
+				}
+
 				return ticketRead;
 			},
 		),
 		law<S, Msg, BuildCmd>("the pull request closes its own ticket and no other", (step) => {
 			for (const cmd of step.cmds) {
 				const closed = closedBy(cmd);
-				if (closed === null) continue;
+
+				if (closed === null) {
+					continue;
+				}
+
 				// The commit lands too: its message may close nothing, so the pull request's text alone says what closes.
 				const owed = cmd.type === "build_open" ? [`#${cmd.number}`] : [];
-				if (closed.named.join(" ") !== owed.join(" "))
+
+				if (closed.named.join(" ") !== owed.join(" ")) {
 					return `${closed.what} closes ${closed.named.join(", ") || "nothing"}, and it owes ${owed.join(", ") || "nothing"}`;
+				}
 			}
+
 			return null;
 		}),
 		law<S, Msg, BuildCmd>("an ended build sends nothing", (step: Step<S, Msg, BuildCmd>) =>
@@ -238,7 +248,11 @@ export function showBuildMsg(m: Msg): string {
 /** The builder's "left" list descopes the criteria it names. */
 export const leftDescopes: Update<Build, Msg, BuildCmd> = (s, m) => {
 	const [next, cmds] = buildUpdate(s, m);
-	if (m.type !== "build_built" || next.phase !== "pushing") return [next, cmds];
+
+	if (m.type !== "build_built" || next.phase !== "pushing") {
+		return [next, cmds];
+	}
+
 	const [first, ...rest] = next.criteria.filter(
 		(c) => !m.built.left.some((left) => left.includes(`criterion ${c.id}`)),
 	);

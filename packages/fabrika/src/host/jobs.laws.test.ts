@@ -141,7 +141,10 @@ const numbersOnce = everyStep(
 const numbered = everyStep(
 	"a line that begins is a new job at the end, running, numbered the table's next, and next goes up by one; nothing else changes, and no other Msg moves next",
 	({prev, msg, next}) => {
-		if (msg.type !== "began") return next.next === prev.next;
+		if (msg.type !== "began") {
+			return next.next === prev.next;
+		}
+
 		const made: Job = {
 			n: prev.next,
 			text: msg.text,
@@ -172,11 +175,19 @@ const neverReused: Law = {
 				fc.property(lists, (list) => {
 					const {states, steps} = foldEvents(machine, ctx, loaded, list);
 					const had = new Set((states[0]?.jobs ?? []).map((job) => job.n));
+
 					for (const {msg, next} of steps) {
 						const made = msg.type === "began" ? next.jobs.at(-1) : undefined;
-						if (made !== undefined && had.has(made.n)) return false;
-						for (const job of next.jobs) had.add(job.n);
+
+						if (made !== undefined && had.has(made.n)) {
+							return false;
+						}
+
+						for (const job of next.jobs) {
+							had.add(job.n);
+						}
 					}
+
 					return true;
 				}),
 				OPTS,
@@ -216,8 +227,15 @@ const backgroundByAsk = everyStep(
 	({prev, msg, next}) =>
 		prev.jobs.every((job) => {
 			const now = byNumber(next, job.n);
-			if (now === undefined || now.background === job.background) return true;
-			if (msg.type === "attached") return msg.n === job.n && now.background === msg.background;
+
+			if (now === undefined || now.background === job.background) {
+				return true;
+			}
+
+			if (msg.type === "attached") {
+				return msg.n === job.n && now.background === msg.background;
+			}
+
 			return msg.type === "foreground" && msg.n === job.n && !now.background;
 		}),
 );
@@ -227,7 +245,11 @@ const ownerByAsk = everyStep(
 	({prev, msg, next}) =>
 		prev.jobs.every((job) => {
 			const now = byNumber(next, job.n);
-			if (now === undefined || now.owner === job.owner) return true;
+
+			if (now === undefined || now.owner === job.owner) {
+				return true;
+			}
+
 			return (
 				msg.type === "attached" &&
 				msg.n === job.n &&
@@ -250,9 +272,16 @@ const fgWaits = everyStep(
 const attachRuns = everyStep(
 	"attach on a detached job runs it again: same number, line and runs, every program running",
 	({prev, msg, next}) => {
-		if (msg.type !== "attached") return true;
+		if (msg.type !== "attached") {
+			return true;
+		}
+
 		const was = byNumber(prev, msg.n);
-		if (was?.state !== "detached") return true;
+
+		if (was?.state !== "detached") {
+			return true;
+		}
+
 		const now = byNumber(next, msg.n);
 		return (
 			now !== undefined &&
@@ -287,8 +316,10 @@ const keptComesBack: Law = {
 	name: "a tsh started again finds every job the last one kept, as it was",
 	check: (machine) => {
 		const [s] = machine.init(KEPT, undefined);
-		if (JSON.stringify(s) !== JSON.stringify(KEPT))
+
+		if (JSON.stringify(s) !== JSON.stringify(KEPT)) {
 			throw new Error(`came back as ${JSON.stringify(s)}`);
+		}
 	},
 };
 
@@ -342,7 +373,11 @@ const PLANTS = {
 		began: (s, m) => {
 			const [next] = real.began(s, m);
 			const made = next.jobs.at(-1);
-			if (made === undefined) return [next, []];
+
+			if (made === undefined) {
+				return [next, []];
+			}
+
 			return [{...next, jobs: [...s.jobs, {...made, n: s.jobs.length + 1}]}, []];
 		},
 	}),
@@ -354,10 +389,18 @@ const PLANTS = {
 		began: (s, m) => {
 			const [next] = real.began(s, m);
 			const made = next.jobs.at(-1);
-			if (made === undefined) return [next, []];
+
+			if (made === undefined) {
+				return [next, []];
+			}
+
 			const taken = new Set(s.jobs.map((job) => job.n));
 			let free = 1;
-			while (taken.has(free)) free += 1;
+
+			while (taken.has(free)) {
+				free += 1;
+			}
+
 			return [{jobs: [...s.jobs, {...made, n: free}], next: free + 1}, []];
 		},
 	}),
@@ -549,6 +592,7 @@ const keepsEvery = (machine: Machine, loaded: Jobs | null, runs = 150) =>
 		fc.asyncProperty(keptLists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open(TABLE.run, null));
 			const store = handle.store(TABLE.machine, TABLE.key, Jobs);
+
 			for (const jobs of foldEvents(machine, ctx, loaded, list).states) {
 				await store.save(jobs);
 				expect(store.migrate(await store.load())).toEqual(jobs);

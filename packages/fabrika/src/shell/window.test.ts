@@ -81,7 +81,11 @@ const session = () =>
 			{printed: printed.hear, ready: ready.hear},
 			{id: "tsh:window", storage},
 		).pipe(Effect.provideService(HostJobs, jobs), Effect.provideService(Programs, list));
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		return {run: started.run, printed, ready};
 	});
 

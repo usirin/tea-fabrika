@@ -26,9 +26,18 @@ const run = (
 	});
 	const bytes = folded.cmds.flatMap((c) => (c.type === "write" ? [c.data] : [])).join("");
 	const asked = folded.cmds.flatMap((c) => {
-		if (c.type === "line") return [`line ${c.text}`];
-		if (c.type === "keep") return [`keep ${c.lines.join(",")}`];
-		if (c.type === "interrupt" || c.type === "close") return [c.type];
+		if (c.type === "line") {
+			return [`line ${c.text}`];
+		}
+
+		if (c.type === "keep") {
+			return [`keep ${c.lines.join(",")}`];
+		}
+
+		if (c.type === "interrupt" || c.type === "close") {
+			return [c.type];
+		}
+
 		return [];
 	});
 	return {...gridOf(bytes, cols), state: folded.state, asked, bytes};
@@ -412,14 +421,17 @@ describe("a redraw of a line that fits its row", () => {
 	/** The prompt line a state shows, and where its cursor is, as the editor works it out. */
 	const lineOf = (state: Editor, history: readonly string[], cols: number) => {
 		const {mode} = state;
+
 		if (mode.kind === "prompt") {
 			const left = PROMPT + mode.line.left;
 			return {text: left + mode.line.right, at: spot(left, cols)};
 		}
+
 		if (mode.kind === "search") {
 			const text = Shell.Search.shown([...history].reverse(), mode.search);
 			return {text, at: spot(text, cols)};
 		}
+
 		throw new Error(`no prompt line in ${mode.kind}`);
 	};
 
@@ -473,6 +485,7 @@ describe("a redraw of a line that fits its row", () => {
 			{msgs: [keys("seq"), {type: "printed", text: "one\ntwo"}, keys("\x7f")]},
 			{msgs: [keys("s\t\t"), keys("a")]},
 		];
+
 		for (const {msgs, history = []} of cases) {
 			const {wrote, now, old} = both(msgs, {history});
 			expect(wrote).not.toContain("\x1b[J");

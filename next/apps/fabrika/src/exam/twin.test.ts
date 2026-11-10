@@ -114,8 +114,9 @@ describe("P12 local twin lint", () => {
 		["tagged template", (r) => `${r}\`hidden\`;`],
 		["exported reference", (r, a) => `export const outside${a} = ${r};`],
 	];
-	for (const kind of ["remote", "resource"] as const)
-		for (const [form, plant] of forms)
+
+	for (const kind of ["remote", "resource"] as const) {
+		for (const [form, plant] of forms) {
 			law(`review 6: ${kind} ${form} fails closed beside the valid stack`, ({alias, name}) => {
 				const ref = kind === "remote" ? "Alchemy.remote" : "Cloudflare.Zone.Zone";
 				const args = kind === "remote" ? "" : `${JSON.stringify(name)}, {name: "test.invalid"}`;
@@ -127,6 +128,9 @@ describe("P12 local twin lint", () => {
 					),
 				).toBe(true);
 			});
+		}
+	}
+
 	for (const [form, plant] of [
 		["remote re-export", 'export {remote as outside} from "alchemy";'],
 		["resource re-export", 'export {Zone as outside} from "@alchemy.run/cloudflare";'],
@@ -147,10 +151,12 @@ describe("P12 local twin lint", () => {
 		["dynamic import", 'const outside = await import("alchemy"); outside.remote();'],
 		["require", 'const outside = require("alchemy"); outside.remote();'],
 		["alchemy subpath", 'import {remote as outside} from "alchemy/Remote"; outside();'],
-	] as const)
+	] as const) {
 		law(`review 6: ${form} is followed or fails closed`, () => {
 			expect(scan(stack, `${text()}\n${plant}`).length).toBeGreaterThan(0);
 		});
+	}
+
 	// Review 5: each plant used to hide beside a valid local stack with zero findings.
 	for (const wrap of [
 		"assertion",
@@ -158,7 +164,7 @@ describe("P12 local twin lint", () => {
 		"parentheses",
 		"satisfies",
 		"nested wrappers",
-	] as const)
+	] as const) {
 		law(`wrapped remote-only callee beside the valid stack: ${wrap}`, ({name}) => {
 			const resource = "Cloudflare.Zone.Zone";
 			const callee = {
@@ -177,7 +183,9 @@ describe("P12 local twin lint", () => {
 				true,
 			);
 		});
-	for (const wrap of ["plain", "assertion", "non-null", "parentheses"] as const)
+	}
+
+	for (const wrap of ["plain", "assertion", "non-null", "parentheses"] as const) {
 		law(`namespace remote alias beside the valid stack: ${wrap}`, ({alias, name}) => {
 			const callee = {
 				plain: "Alchemy.remote",
@@ -192,7 +200,9 @@ describe("P12 local twin lint", () => {
 			expect(findings.length).toBeGreaterThan(0);
 			expect(findings.some((f) => /remote|unsupported-case:/.test(f.reason))).toBe(true);
 		});
-	for (const reason of ["computed resource", "aliased resource"])
+	}
+
+	for (const reason of ["computed resource", "aliased resource"]) {
 		law(`named import plant beside the valid stack: ${reason}`, ({alias, name}) => {
 			const call =
 				reason === "computed resource"
@@ -203,6 +213,8 @@ describe("P12 local twin lint", () => {
 				expect.stringContaining(`unsupported-case: ${reason}`),
 			);
 		});
+	}
+
 	law(
 		"every named Cloudflare namespace is checked alongside valid local resources",
 		({alias, name}) => {
@@ -271,12 +283,14 @@ describe("P12 local twin lint", () => {
 				`import * as ${alias} from "@alchemy.run/cloudflare/Workers"; ${alias}.Worker(${JSON.stringify(name)}, {});`,
 				`import {remote as ${alias}} from "alchemy"; ${alias}();`,
 				"export const stack = {};",
-			])
+			]) {
 				expect(scan("plant.ts", body).length).toBeGreaterThan(0);
+			}
 		},
 	);
 	law("the command exits nonzero and counts every planted finding", ({alias, name}) => {
 		const home = mkdtempSync(join(tmpdir(), "p12-twin-"));
+
 		try {
 			const file = join(home, "alchemy.run.ts");
 			writeFileSync(

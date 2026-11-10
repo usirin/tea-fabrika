@@ -74,7 +74,10 @@ const tray = defineMachine({
 			[],
 		],
 		take: (s) => {
-			if (s.phase === "empty") return [s, []];
+			if (s.phase === "empty") {
+				return [s, []];
+			}
+
 			const [next, ...rest] = s.items;
 			return [
 				next === undefined ? {phase: "empty"} : {...s, top: next, items: rest, left: s.top.name},
@@ -169,11 +172,21 @@ const withExcess = (
 	at: number,
 	extra: {readonly key: string; readonly value: unknown},
 ) => {
-	if (t.phase === "empty") return {...t, [extra.key]: extra.value};
+	if (t.phase === "empty") {
+		return {...t, [extra.key]: extra.value};
+	}
+
 	const places = 2 + t.items.length;
 	const where = at % places;
-	if (where === 0) return {...t, [extra.key]: extra.value};
-	if (where === 1) return {...t, top: {...t.top, [extra.key]: extra.value}};
+
+	if (where === 0) {
+		return {...t, [extra.key]: extra.value};
+	}
+
+	if (where === 1) {
+		return {...t, top: {...t.top, [extra.key]: extra.value}};
+	}
+
 	return {
 		...t,
 		items: t.items.map((it, i) => (i === where - 2 ? {...it, [extra.key]: extra.value} : it)),
@@ -199,7 +212,11 @@ describe("a save is encoded by its schema, strictly", () => {
 				async (before, base, at, extra, id) => {
 					const {bytes, open} = place();
 					const handle = await go(open().open(RUN, null));
-					if (before !== null) await handle.store(MACHINE, "t", Tray).save(before);
+
+					if (before !== null) {
+						await handle.store(MACHINE, "t", Tray).save(before);
+					}
+
 					const was = snapshot(bytes);
 					const loose = withExcess(base, at, extra) as Tray;
 					const saved = await settled(handle.store(MACHINE, id, Tray).save(loose));
@@ -263,6 +280,7 @@ describe("read, migrate and list agree on every stored value", () => {
 
 				// What was kept is what was saved, read back as JSON.
 				expect(kept).toEqual(JSON.parse(JSON.stringify(raw)));
+
 				if (kept === null) {
 					// JSON null is "nothing kept" to all three.
 					seen.nothing += 1;
@@ -273,7 +291,9 @@ describe("read, migrate and list agree on every stored value", () => {
 					});
 					return;
 				}
+
 				const decoded = decodeTray(kept);
+
 				if (Exit.isSuccess(decoded)) {
 					seen.kept += 1;
 					expect(migrated).toEqual(decoded.value);
@@ -281,6 +301,7 @@ describe("read, migrate and list agree on every stored value", () => {
 					expect(listed).toEqual([{kind: "kept", id: "x", state: decoded.value}]);
 					return;
 				}
+
 				seen.refused += 1;
 				expect(isRefusal(migrated)).toBe(true);
 				expect(Exit.isFailure(read)).toBe(true);
@@ -353,14 +374,27 @@ describe("list shows every run", () => {
 				const storage = open();
 				const handle = await go(storage.open(RUN, null));
 				const model = new Map<string, Write>();
+
 				for (const w of writes) {
-					if (w.do === "clear") await go(handle.clear(w.machine, w.id));
-					else if (w.do === "save") await handle.store(w.machine, w.id, Tray).save(w.state);
-					else await handle.store(w.machine, w.id, OlderTray).save(w.state);
-					if (w.machine !== MACHINE) continue;
-					if (w.do === "clear") model.delete(w.id);
-					else model.set(w.id, w);
+					if (w.do === "clear") {
+						await go(handle.clear(w.machine, w.id));
+					} else if (w.do === "save") {
+						await handle.store(w.machine, w.id, Tray).save(w.state);
+					} else {
+						await handle.store(w.machine, w.id, OlderTray).save(w.state);
+					}
+
+					if (w.machine !== MACHINE) {
+						continue;
+					}
+
+					if (w.do === "clear") {
+						model.delete(w.id);
+					} else {
+						model.set(w.id, w);
+					}
 				}
+
 				const reader: Handle = restart ? await go(open().open(RUN, null)) : handle;
 				const listed = await go(reader.list(MACHINE, Tray));
 				const want = [...model.values()].map((w) =>
@@ -371,8 +405,10 @@ describe("list shows every run", () => {
 				const byId = (a: {readonly id: string}, b: {readonly id: string}) =>
 					a.id.localeCompare(b.id);
 				expect([...listed].sort(byId)).toEqual(want.sort(byId));
-				if (listed.some((l) => l.kind === "kept") && listed.some((l) => l.kind === "refused"))
+
+				if (listed.some((l) => l.kind === "kept") && listed.some((l) => l.kind === "refused")) {
 					mixed += 1;
+				}
 			}),
 			OPTS,
 		);
@@ -440,7 +476,11 @@ const trays = defineProgram({
 		Effect.gen(function* () {
 			const old = yield* machines.tray.get("old").start({type: "take"}).pipe(Effect.exit);
 			const failure = Exit.isFailure(old) ? Cause.squash(old.cause) : null;
-			if (!(failure instanceof StateRefused)) return yield* Effect.die("the older tray started");
+
+			if (!(failure instanceof StateRefused)) {
+				return yield* Effect.die("the older tray started");
+			}
+
 			const fresh = yield* machines.tray.get("a").start({type: "put", name: "cup", n: 1});
 			yield* fresh.dispatch({type: "take"}).pipe(Effect.orDie);
 		}).pipe(Effect.scoped),
@@ -463,6 +503,7 @@ describe("refused bytes are never booted and never written over", () => {
 
 				for (const step of steps) {
 					tried.add(step.do);
+
 					switch (step.do) {
 						case "reopen":
 							handle = await go(storage.open(RUN, null));
@@ -532,10 +573,12 @@ describe("refused bytes are never booted and never written over", () => {
 							await go(handle.end("ended"));
 							break;
 					}
+
 					expect(runBytes(bytes, RUN, MACHINE, "old")).toEqual(planted);
 					// Booted from nothing, or from a tray this code saved: never from older code's bytes.
 					expect(booted.filter((b) => b !== null && Exit.isFailure(decodeTray(b)))).toEqual([]);
 				}
+
 				const last = await go(open().open(RUN, null));
 				expect(last.found.machines).toContainEqual({machine: MACHINE, id: "old"});
 				expect(await go(last.read(MACHINE, "old", OlderTray))).toEqual(old);
@@ -604,6 +647,7 @@ const keepsEvery = (machine: typeof tray) =>
 			const {states} = foldEvents(machine, ctx, null, msgs);
 			const handle = await go(place().open().open(RUN, null));
 			const store = handle.store(MACHINE, "t", Tray);
+
 			for (const state of states) {
 				await store.save(state);
 				expect(store.migrate(await store.load())).toEqual(state);

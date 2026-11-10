@@ -74,13 +74,18 @@ function seeded(seed: number): () => number {
 
 /** At most `most` of `items`, drawn with `seed`, in their first order. All of them when they fit. Pure. */
 export function sampleOf<T>(items: readonly T[], seed: number, most: number): readonly T[] {
-	if (items.length <= most) return items;
+	if (items.length <= most) {
+		return items;
+	}
+
 	const at = items.map((_, i) => i);
 	const next = seeded(seed);
+
 	for (let i = at.length - 1; i > 0; i--) {
 		const j = Math.floor(next() * (i + 1));
 		[at[i], at[j]] = [at[j] ?? 0, at[i] ?? 0];
 	}
+
 	return at
 		.slice(0, most)
 		.sort((a, b) => a - b)
@@ -164,7 +169,11 @@ const UNCAUGHT = new Set(["Survived", "NoCoverage"]);
 /** The offset of a report position (from 1) in `text`. */
 function offsetOf(text: string, at: {readonly line: number; readonly column: number}): number {
 	let off = 0;
-	for (let l = 1; l < at.line; l++) off = text.indexOf("\n", off) + 1;
+
+	for (let l = 1; l < at.line; l++) {
+		off = text.indexOf("\n", off) + 1;
+	}
+
 	return off + at.column - 1;
 }
 
@@ -335,8 +344,11 @@ const services = (setup: StrykerSetup) =>
 						}),
 					);
 					const ran = yield* low(["node", stryker, "run", config], folder);
-					if (ran.code !== 0)
+
+					if (ran.code !== 0) {
 						return `${ran.out}${ran.err}`.includes(NO_TESTS) ? null : yield* couldNotRun;
+					}
+
 					const text = yield* fs.readFileString(report);
 					return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Report))(text);
 				}),
@@ -382,7 +394,11 @@ const services = (setup: StrykerSetup) =>
 					killed: 0,
 					survived: [],
 				};
-				if (picked.length === 0) return none;
+
+				if (picked.length === 0) {
+					return none;
+				}
+
 				const mutate =
 					picked.length === kept.length
 						? ask.spans.map((s) => `${s.file}:${s.from}-${s.to}`)
@@ -395,28 +411,40 @@ const services = (setup: StrykerSetup) =>
 				let killed = 0;
 				let compileErrors = 0;
 				const survived: Survived[] = [];
+
 				for (const [name, entry] of Object.entries(report.files)) {
 					const file = relative(folder, name);
+
 					for (const m of entry.mutants) {
 						const {line, column} = m.location.start;
 						const replacement = m.replacement ?? "";
 						const id = idOf({file, line, column, mutator: m.mutatorName, replacement});
-						if (!wanted.has(id)) continue;
-						if (KILLED.has(m.status)) killed++;
-						else if (!UNCAUGHT.has(m.status)) compileErrors++;
-						else {
+
+						if (!wanted.has(id)) {
+							continue;
+						}
+
+						if (KILLED.has(m.status)) {
+							killed++;
+						} else if (!UNCAUGHT.has(m.status)) {
+							compileErrors++;
+						} else {
 							const said = yield* takes(folder, file, m, clean);
-							if (!said.takes) compileErrors++;
-							else
+
+							if (!said.takes) {
+								compileErrors++;
+							} else {
 								survived.push({
 									mutant: id,
 									mutator: m.mutatorName,
 									original: said.original,
 									replacement,
 								});
+							}
 						}
 					}
 				}
+
 				return {...none, ran: picked.length, compileErrors, killed, survived};
 			}).pipe(Effect.catch(() => couldNotRun));
 
@@ -435,7 +463,11 @@ const services = (setup: StrykerSetup) =>
 					...string[],
 				];
 				const ran = yield* low(command, folder);
-				if (ran.code === 0) return {result: "green", failed: [], tail: ""} satisfies Tested;
+
+				if (ran.code === 0) {
+					return {result: "green", failed: [], tail: ""} satisfies Tested;
+				}
+
 				const failures = yield* fs.readFileString(out).pipe(
 					Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(TestsReport))),
 					Effect.map((report) => failuresOf(report, folder)),

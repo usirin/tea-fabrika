@@ -38,10 +38,23 @@ describe("the asks program", () => {
 		await run(
 			Effect.gen(function* () {
 				const started = yield* start(asksProgram, NOBODY_HOLDS, {});
-				if (started.kind !== "running") return yield* Effect.die(started.why);
-				for (const p of plans86b()) yield* tell(started.run, "planned", p);
-				for (const {ruling} of RULINGS) yield* tell(started.run, "ruling", ruling);
-				for (const name of INPUTS) started.close(name);
+
+				if (started.kind !== "running") {
+					return yield* Effect.die(started.why);
+				}
+
+				for (const p of plans86b()) {
+					yield* tell(started.run, "planned", p);
+				}
+
+				for (const {ruling} of RULINGS) {
+					yield* tell(started.run, "ruling", ruling);
+				}
+
+				for (const name of INPUTS) {
+					started.close(name);
+				}
+
 				expect((yield* started.run.ended).kind).toBe("ended");
 			}),
 			disk.layer,
@@ -58,9 +71,19 @@ describe("the asks program", () => {
 		await run(
 			Effect.gen(function* () {
 				const started = yield* start(asksProgram, NOBODY_HOLDS, {});
-				if (started.kind !== "running") return yield* Effect.die(started.why);
-				for (const p of plans86b()) yield* tell(started.run, "planned", p);
-				for (const name of INPUTS) started.close(name);
+
+				if (started.kind !== "running") {
+					return yield* Effect.die(started.why);
+				}
+
+				for (const p of plans86b()) {
+					yield* tell(started.run, "planned", p);
+				}
+
+				for (const name of INPUTS) {
+					started.close(name);
+				}
+
 				yield* started.run.ended;
 			}),
 			disk.layer,
@@ -69,7 +92,11 @@ describe("the asks program", () => {
 		await run(
 			Effect.gen(function* () {
 				const started = yield* start(asksProgram, NOBODY_HOLDS, {ask: asks.hear});
-				if (started.kind !== "running") return yield* Effect.die(started.why);
+
+				if (started.kind !== "running") {
+					return yield* Effect.die(started.why);
+				}
+
 				yield* asks.upTo(6);
 				yield* started.stop;
 			}),
@@ -97,7 +124,11 @@ describe("the asks program", () => {
 					settled: settled.hear,
 					refused: refused.hear,
 				});
-				if (started.kind !== "running") return yield* Effect.die(started.why);
+
+				if (started.kind !== "running") {
+					return yield* Effect.die(started.why);
+				}
+
 				yield* tell(started.run, "ruling", RULINGS[0]!.ruling);
 				const [ask] = yield* asks.upTo(1);
 				yield* tell(started.run, "answer", {id: ask!.id, answer: {kind: "approve"}});
@@ -129,7 +160,11 @@ describe("the asks program", () => {
 		await run(
 			Effect.gen(function* () {
 				const started = yield* start(asksProgram, NOBODY_HOLDS, {ask: asks.hear});
-				if (started.kind !== "running") return yield* Effect.die(started.why);
+
+				if (started.kind !== "running") {
+					return yield* Effect.die(started.why);
+				}
+
 				yield* tell(started.run, "planned", p565);
 				const [first] = yield* asks.upTo(1);
 				yield* tell(started.run, "answer", {id: first!.id, answer: {kind: "approve"}});
@@ -143,7 +178,11 @@ describe("the asks program", () => {
 			disk.layer,
 		);
 		const again = asks.values[1];
-		if (again?.for !== "plan") throw new Error("no second plan ask");
+
+		if (again?.for !== "plan") {
+			throw new Error("no second plan ask");
+		}
+
 		expect(again).toMatchObject({version: 2, since: {version: 1}});
 		expect(again.since?.data).toEqual(v1);
 		expect(again.data.tasks[0]!.criteria[0]).toMatchObject({
@@ -159,8 +198,15 @@ describe("the asks program", () => {
 		await run(
 			Effect.gen(function* () {
 				const started = yield* start(asksProgram, NOBODY_HOLDS, {waiting: waiting.hear});
-				if (started.kind !== "running") return yield* Effect.die(started.why);
-				if (first === undefined) return yield* Effect.die("no plans");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die(started.why);
+				}
+
+				if (first === undefined) {
+					return yield* Effect.die("no plans");
+				}
+
 				yield* waiting.upTo(1);
 				yield* tell(started.run, "planned", first);
 				yield* waiting.upTo(2);

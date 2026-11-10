@@ -137,16 +137,27 @@ const end = (s: Held, outcome: MutantsOutcome, report: Partial<AnswersReport> = 
 
 /** Step a kill check's answer, and end when every one is back. */
 const ranKill = (s: Answers, cmd: KillCmd, result: Result | null): Step => {
-	if (s.phase !== "killing") return stay(s);
+	if (s.phase !== "killing") {
+		return stay(s);
+	}
+
 	const killing = killRan(s.killing, cmd, result);
 	const outcome = outcomeOf(s.answered.answers, killing);
-	if (outcome === null) return [{...s, killing}, []];
+
+	if (outcome === null) {
+		return [{...s, killing}, []];
+	}
+
 	return end(s, outcome, {answered: s.answered, commit: s.commit});
 };
 
 const drafted = (s: Answers, m: Exclude<AnswersMsg, {type: "start" | "resume"}>): Step => {
-	if (s.phase !== "writing" || answering.runOf(s.refining)?.id !== m.id) return stay(s);
+	if (s.phase !== "writing" || answering.runOf(s.refining)?.id !== m.id) {
+		return stay(s);
+	}
+
 	const next = answering.update(s.refining, m);
+
 	switch (next.phase) {
 		case "drafting":
 			return [{...s, refining: next}, []];
@@ -167,7 +178,10 @@ const drafted = (s: Answers, m: Exclude<AnswersMsg, {type: "start" | "resume"}>)
 };
 
 export const answersSub = mutantsAnswer.sub((s: Answers): DraftRun | null => {
-	if (s.phase !== "writing") return null;
+	if (s.phase !== "writing") {
+		return null;
+	}
+
 	const run = answering.runOf(s.refining);
 	return run === null ? null : {...run, folder: s.ask.head};
 });
@@ -183,17 +197,29 @@ export const answers = defineMachine({
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const asked = readAnswersTaken({head: m.ask.head, includes: m.ask.includes});
 			return [{ask: m.ask, key: m.key, phase: "reading", asked}, [asked]];
 		},
 		resume: (s): Step => {
-			if (s.phase === "reading" || s.phase === "committing") return [s, [s.asked]];
-			if (s.phase === "killing") return [s, Object.values(s.killing).flatMap(kills.asked)];
+			if (s.phase === "reading" || s.phase === "committing") {
+				return [s, [s.asked]];
+			}
+
+			if (s.phase === "killing") {
+				return [s, Object.values(s.killing).flatMap(kills.asked)];
+			}
+
 			return stay(s);
 		},
 		answers_taken_ok: (s, m): Step => {
-			if (s.phase !== "reading") return stay(s);
+			if (s.phase !== "reading") {
+				return stay(s);
+			}
+
 			const filled = mutantsWriter.fill({
 				ticket: s.ask.ticket,
 				head: s.ask.head,
@@ -213,10 +239,17 @@ export const answers = defineMachine({
 		mutants_answer_finished: drafted,
 		mutants_answer_failed: drafted,
 		answers_commit_ok: (s, m): Step => {
-			if (s.phase !== "committing") return stay(s);
+			if (s.phase !== "committing") {
+				return stay(s);
+			}
+
 			const [killing, cmds] = startKills(m.value, s.answered.answers);
 			const outcome = outcomeOf(s.answered.answers, killing);
-			if (outcome !== null) return end(s, outcome, {answered: s.answered, commit: m.value});
+
+			if (outcome !== null) {
+				return end(s, outcome, {answered: s.answered, commit: m.value});
+			}
+
 			return [{...held(s), phase: "killing", answered: s.answered, commit: m.value, killing}, cmds];
 		},
 		answers_commit_err: (s): Step =>

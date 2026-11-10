@@ -35,42 +35,73 @@ export type Key =
 export function keysIn(raw: string): readonly string[] {
 	const keys: string[] = [];
 	const chars = [...raw];
+
 	for (let i = 0; i < chars.length; i += 1) {
 		const c = chars[i] as string;
+
 		if (c !== "\x1b" || i + 1 >= chars.length) {
 			keys.push(c);
 			continue;
 		}
+
 		const next = chars[i + 1];
+
 		if (next !== "[" && next !== "O") {
 			keys.push(c);
 			continue;
 		}
+
 		// ESC [ then parameters (digits, ;) then one final letter or ~.
 		let end = i + 2;
-		while (end < chars.length && /[0-9;]/.test(chars[end] as string)) end += 1;
+
+		while (end < chars.length && /[0-9;]/.test(chars[end] as string)) {
+			end += 1;
+		}
+
 		keys.push(chars.slice(i, end + 1).join(""));
 		i = end;
 	}
+
 	return keys;
 }
 
 /** One key, in raw mode, as what it does in a search. */
 export function keyOf(raw: string): Key {
-	if (raw === "\x12") return {kind: "again"};
-	if (raw === "\r" || raw === "\n") return {kind: "run"};
-	if (raw === "\x7f" || raw === "\b") return {kind: "back"};
-	if (raw === "\x1b" || raw === "\x07" || raw === "\x03") return {kind: "cancel"};
-	if (raw !== "" && [...raw].every((c) => c >= " " && c !== "\x7f"))
+	if (raw === "\x12") {
+		return {kind: "again"};
+	}
+
+	if (raw === "\r" || raw === "\n") {
+		return {kind: "run"};
+	}
+
+	if (raw === "\x7f" || raw === "\b") {
+		return {kind: "back"};
+	}
+
+	if (raw === "\x1b" || raw === "\x07" || raw === "\x03") {
+		return {kind: "cancel"};
+	}
+
+	if (raw !== "" && [...raw].every((c) => c >= " " && c !== "\x7f")) {
 		return {kind: "text", text: raw};
+	}
+
 	return {kind: "other", raw};
 }
 
 /** The newest line at or after `from` (newest first) that has `query` in it. */
 export function find(history: readonly string[], query: string, from: number): number {
-	if (query === "") return -1;
-	for (let i = Math.max(0, from); i < history.length; i += 1)
-		if (history[i]?.includes(query)) return i;
+	if (query === "") {
+		return -1;
+	}
+
+	for (let i = Math.max(0, from); i < history.length; i += 1) {
+		if (history[i]?.includes(query)) {
+			return i;
+		}
+	}
+
 	return -1;
 }
 
@@ -86,6 +117,7 @@ export type Stepped =
 
 export function step(history: readonly string[], search: Search, key: Key): Stepped {
 	const found = search.at === -1 ? null : (history[search.at] ?? null);
+
 	switch (key.kind) {
 		case "text": {
 			const query = search.query + key.text;

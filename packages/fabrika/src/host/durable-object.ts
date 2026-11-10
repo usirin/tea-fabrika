@@ -87,7 +87,11 @@ const keysOf = (env: Env): Layer.Layer<Keys> | null => {
 	};
 	const cacheMs = ms("KEYS_CACHE_MS", KEYS_CACHE_MS);
 	const failMs = ms("KEYS_FAIL_MS", KEYS_FAIL_MS);
-	if (env.KEYS !== "github" || cacheMs === null || failMs === null) return null;
+
+	if (env.KEYS !== "github" || cacheMs === null || failMs === null) {
+		return null;
+	}
+
 	const token =
 		typeof env.GITHUB_TOKEN === "string" && env.GITHUB_TOKEN !== ""
 			? {token: Redacted.make(env.GITHUB_TOKEN)}
@@ -147,38 +151,54 @@ export class Ledger extends DurableObject {
 
 	async register(name: string, writer: string) {
 		const res = L.register(this.db, Date.now(), name, writer);
-		if (res.ok && res.created) this.wake(name, res.rev, res.pos);
+
+		if (res.ok && res.created) {
+			this.wake(name, res.rev, res.pos);
+		}
+
 		return res;
 	}
 
 	async append(stream: string, expected: L.Expected, event: L.Event, fence?: number | null) {
 		const res = L.append(this.db, Date.now(), stream, expected, event, fence ?? null);
-		if (res.ok && !res.dup) this.wake(stream, res.rev, res.pos);
+
+		if (res.ok && !res.dup) {
+			this.wake(stream, res.rev, res.pos);
+		}
+
 		return res;
 	}
 
 	async claim(name: string, holder: string, expectedRev: number, ttlMs: number) {
 		const res = L.claim(this.db, Date.now(), name, holder, expectedRev, ttlMs, this.graceMs);
+
 		if (res.ok) {
 			this.wake(name, res.rev, res.fence);
 			await this.arm();
 		}
+
 		return res;
 	}
 
 	async renew(name: string, fence: number, ttlMs: number) {
 		const res = L.renew(this.db, Date.now(), name, fence, ttlMs, this.graceMs);
+
 		if (res.ok) {
 			// 151: a renew after the lease's `lease_expired` writes `lease_resumed`.
 			this.wakeAll(res.written);
 			await this.arm();
 		}
+
 		return res;
 	}
 
 	async cancel(name: string, writer: string) {
 		const res = L.cancel(this.db, Date.now(), name, writer);
-		if (res.ok) this.wake(name, res.rev, res.pos);
+
+		if (res.ok) {
+			this.wake(name, res.rev, res.pos);
+		}
+
 		return res;
 	}
 
@@ -195,14 +215,22 @@ export class Ledger extends DurableObject {
 	) {
 		const now = Date.now();
 		const res = L.exit(this.db, now, name, fence, reason, why, suspect, writer, this.maxDeliveries);
-		if (res.ok) this.wakeAll(res.written);
+
+		if (res.ok) {
+			this.wakeAll(res.written);
+		}
+
 		await this.arm();
 		return res;
 	}
 
 	async monitor(fence: number, ref: string, target: string) {
 		const res = L.monitor(this.db, Date.now(), fence, ref, target);
-		if (res.ok) this.wakeAll(res.written);
+
+		if (res.ok) {
+			this.wakeAll(res.written);
+		}
+
 		return res;
 	}
 
@@ -224,7 +252,11 @@ export class Ledger extends DurableObject {
 
 	async startChild(fence: number, child: string, after: number | null, limits?: L.Limits | null) {
 		const res = L.startChild(this.db, Date.now(), fence, child, after, limits ?? null);
-		if (res.ok || res.why === "limit") this.wakeAll(res.written);
+
+		if (res.ok || res.why === "limit") {
+			this.wakeAll(res.written);
+		}
+
 		await this.arm();
 		return res;
 	}
@@ -232,21 +264,33 @@ export class Ledger extends DurableObject {
 	/** 102: spend, counted up the tree; a limit it crosses ends a run, so the alarm may move. */
 	async hold(fence: number, id: string, cost: L.Cost) {
 		const res = L.hold(this.db, Date.now(), fence, id, cost);
-		if (res.ok || res.why === "limit") this.wakeAll(res.written);
+
+		if (res.ok || res.why === "limit") {
+			this.wakeAll(res.written);
+		}
+
 		await this.arm();
 		return res;
 	}
 
 	async charge(fence: number, id: string, cost: L.Cost) {
 		const res = L.charge(this.db, Date.now(), fence, id, cost);
-		if (res.ok) this.wakeAll(res.written);
+
+		if (res.ok) {
+			this.wakeAll(res.written);
+		}
+
 		await this.arm();
 		return res;
 	}
 
 	async setLimits(name: string, limits: L.Limits, writer: string) {
 		const res = L.setLimits(this.db, Date.now(), name, limits, writer);
-		if (res.ok) this.wakeAll(res.written);
+
+		if (res.ok) {
+			this.wakeAll(res.written);
+		}
+
 		await this.arm();
 		return res;
 	}
@@ -273,7 +317,11 @@ export class Ledger extends DurableObject {
 			why,
 			this.maxDeliveries,
 		);
-		if (res.ok) this.wakeAll(res.written);
+
+		if (res.ok) {
+			this.wakeAll(res.written);
+		}
+
 		await this.arm();
 		return res;
 	}
@@ -315,9 +363,16 @@ export class Ledger extends DurableObject {
 	 * Miniflare's caller as a proxy that costs a round trip for each field read.
 	 */
 	async call(method: string, args: unknown[]): Promise<string> {
-		if (!isWireMethod(method)) throw new Error(`no method ${method}`);
+		if (!isWireMethod(method)) {
+			throw new Error(`no method ${method}`);
+		}
+
 		const fn: unknown = Reflect.get(this, method);
-		if (typeof fn !== "function") throw new Error(`no method ${method}`);
+
+		if (typeof fn !== "function") {
+			throw new Error(`no method ${method}`);
+		}
+
 		return JSON.stringify((await Reflect.apply(fn, this, args)) ?? null);
 	}
 
@@ -349,8 +404,11 @@ export class Ledger extends DurableObject {
 		// The Worker picked this object by the name in the path (`objectOf`). When workerd says
 		// which name made this object, they must agree, or a grant for one would open another.
 		const named = this.ctx.id?.name;
-		if (named !== undefined && named !== ledger)
+
+		if (named !== undefined && named !== ledger) {
 			return new Response("not this ledger", {status: 404});
+		}
+
 		const address = this.door.address(url.origin, ledger);
 		const offered = (req.headers.get("sec-websocket-protocol") ?? "")
 			.split(",")
@@ -360,19 +418,47 @@ export class Ledger extends DurableObject {
 			offered.find((p) => p.startsWith("bearer."))?.slice("bearer.".length) ??
 			null;
 		const bearer = said === null ? null : Redacted.make(said);
-		if (method === "door") return this.doorStep(req, step, address, bearer);
+
+		if (method === "door") {
+			return this.doorStep(req, step, address, bearer);
+		}
+
 		const who = await this.door.who(bearer);
-		if (!who.ok) return refused(who);
-		if (method === "tail") return this.tail(req, url, offered);
-		if (method === "job") return this.job(req, ledger, step, who.value);
-		if (method === "v1" && step === "traces") return this.traces(req, ledger, who.value);
-		if (req.method !== "POST") return new Response("POST [args]", {status: 405});
+
+		if (!who.ok) {
+			return refused(who);
+		}
+
+		if (method === "tail") {
+			return this.tail(req, url, offered);
+		}
+
+		if (method === "job") {
+			return this.job(req, ledger, step, who.value);
+		}
+
+		if (method === "v1" && step === "traces") {
+			return this.traces(req, ledger, who.value);
+		}
+
+		if (req.method !== "POST") {
+			return new Response("POST [args]", {status: 405});
+		}
+
 		const body: unknown = await req.json().catch(() => null);
 		const args = trustedArgs(method, body, who.value);
-		if (!args.ok) return refused(args);
+
+		if (!args.ok) {
+			return refused(args);
+		}
+
 		// `trustedArgs` let through only a method in its table, each one a method of this class.
 		const call: unknown = Reflect.get(this, method);
-		if (typeof call !== "function") return new Response("no such method", {status: 404});
+
+		if (typeof call !== "function") {
+			return new Response("no such method", {status: 404});
+		}
+
 		try {
 			return Response.json(await Reflect.apply(call, this, args.value));
 		} catch (e) {
@@ -390,13 +476,31 @@ export class Ledger extends DurableObject {
 			string,
 			unknown
 		>;
-		if (step === "challenge") return answer(this.door.challenge(address));
-		if (step === "login") return session(await this.door.login(body));
-		if (step === "agent-login") return session(await this.door.agentLogin(address, body));
+
+		if (step === "challenge") {
+			return answer(this.door.challenge(address));
+		}
+
+		if (step === "login") {
+			return session(await this.door.login(body));
+		}
+
+		if (step === "agent-login") {
+			return session(await this.door.agentLogin(address, body));
+		}
+
 		const who = await this.door.who(bearer);
-		if (!who.ok) return refused(who);
+
+		if (!who.ok) {
+			return refused(who);
+		}
+
 		const me: Stamp = who.value;
-		if (step === "who") return Response.json({who: me});
+
+		if (step === "who") {
+			return Response.json({who: me});
+		}
+
 		if (step === "members") {
 			const m = this.door.members();
 			return Response.json({
@@ -404,11 +508,23 @@ export class Ledger extends DurableObject {
 				invited: [...m.invited].map(([id, name]) => ({id, name})),
 			});
 		}
-		if (step === "invite") return answer(await this.door.invite(me, body.name));
-		if (step === "remove") return answer(this.door.remove(me, body.id));
-		if (step === "agent") return session(await this.door.addAgent(me, body.name));
-		if (step === "move" || step === "import" || step === "seal")
+
+		if (step === "invite") {
+			return answer(await this.door.invite(me, body.name));
+		}
+
+		if (step === "remove") {
+			return answer(this.door.remove(me, body.id));
+		}
+
+		if (step === "agent") {
+			return session(await this.door.addAgent(me, body.name));
+		}
+
+		if (step === "move" || step === "import" || step === "seal") {
 			return this.moveStep(step, me, body);
+		}
+
 		return new Response("not found", {status: 404});
 	}
 
@@ -420,29 +536,49 @@ export class Ledger extends DurableObject {
 	 *   POST /<ledger>/door/seal {count, hash}      the check, and the ledger opens: the founder
 	 */
 	private async moveStep(step: string, me: Stamp, body: unknown) {
-		if (step === "move") return Response.json(moveProgress(this.db));
+		if (step === "move") {
+			return Response.json(moveProgress(this.db));
+		}
+
 		const res =
 			step === "import"
 				? importChunk(this.db, this.founder, me, body)
 				: await sealMove(this.db, this.founder, me, body, Date.now());
-		if (!res.ok) return refused(res);
+
+		if (!res.ok) {
+			return refused(res);
+		}
+
 		this.wakeAll(res.value.written);
 		return Response.json(res.value.progress);
 	}
 
 	/** One job's record, by its name: `<ledger>/<trace id>`, so each ledger's jobs are its own. */
 	private recordOf(ledger: string, trace: string): {name: string; stub: Stub} | null {
-		if (this.jobs === null) return null;
+		if (this.jobs === null) {
+			return null;
+		}
+
 		const name = `${ledger}/${trace}`;
 		return {name, stub: this.jobs.get(this.jobs.idFromName(name))};
 	}
 
 	/** `POST /<ledger>/job/<trace id>`: one call to one job's record, stamped with who sent it. */
 	private async job(req: Request, ledger: string, trace: string, me: Stamp) {
-		if (req.method !== "POST") return new Response("POST a call", {status: 405});
-		if (!TRACE_ID.test(trace)) return new Response("not a trace id", {status: 404});
+		if (req.method !== "POST") {
+			return new Response("POST a call", {status: 405});
+		}
+
+		if (!TRACE_ID.test(trace)) {
+			return new Response("not a trace id", {status: 404});
+		}
+
 		const record = this.recordOf(ledger, trace);
-		if (record === null) return new Response("this ledger keeps no job records", {status: 501});
+
+		if (record === null) {
+			return new Response("this ledger keeps no job records", {status: 501});
+		}
+
 		const body: unknown = await req.json().catch(() => null);
 		const text = await rpc(record.stub, "call")(record.name, body, stampText(me));
 		const answer = typeof text === "string" ? text : "null";
@@ -458,17 +594,32 @@ export class Ledger extends DurableObject {
 	 * record, stamped with who sent it. The protobuf form is refused (415) until it is read.
 	 */
 	private async traces(req: Request, ledger: string, me: Stamp) {
-		if (req.method !== "POST") return new Response("POST spans", {status: 405});
-		if (!(req.headers.get("content-type") ?? "").startsWith("application/json"))
+		if (req.method !== "POST") {
+			return new Response("POST spans", {status: 405});
+		}
+
+		if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) {
 			return new Response("only OTLP's JSON form is read", {status: 415});
+		}
+
 		const got = spansOf(await req.json().catch(() => null));
-		if (!got.ok) return Response.json({error: got.why}, {status: 400});
+
+		if (!got.ok) {
+			return Response.json({error: got.why}, {status: 400});
+		}
+
 		const by = stampText(me);
+
 		for (const [trace, rows] of got.traces) {
 			const record = this.recordOf(ledger, trace);
-			if (record === null) return new Response("this ledger keeps no job records", {status: 501});
+
+			if (record === null) {
+				return new Response("this ledger keeps no job records", {status: 501});
+			}
+
 			await rpc(record.stub, "spans")(record.name, rows, by);
 		}
+
 		// OTLP's answer: an ExportTraceServiceResponse, nothing refused.
 		return Response.json({});
 	}
@@ -479,8 +630,11 @@ export class Ledger extends DurableObject {
 			...url.searchParams.getAll("stream").map((s) => `s:${s}`),
 			...url.searchParams.getAll("prefix").map((p) => `p:${p}`),
 		];
-		if (req.headers.get("upgrade") !== "websocket" || tags.length === 0 || tags.length > MAX_TAGS)
+
+		if (req.headers.get("upgrade") !== "websocket" || tags.length === 0 || tags.length > MAX_TAGS) {
 			return new Response("a watcher names 1 to 10 streams or prefixes", {status: 400});
+		}
+
 		const pair = new WebSocketPair();
 		this.ctx.acceptWebSocket(pair[1], tags);
 		// Name the subprotocol the client offered, or it closes the socket; never echo the token.
@@ -505,17 +659,24 @@ export class Ledger extends DurableObject {
 	}
 
 	private wakeAll(written: readonly L.Written[]) {
-		for (const w of written) this.wake(w.stream, w.rev, w.pos);
+		for (const w of written) {
+			this.wake(w.stream, w.rev, w.pos);
+		}
 	}
 
 	/** Tell every watcher of this stream, or of a prefix it sits under, that it moved. */
 	private wake(stream: string, rev: number, pos: number) {
 		const note = JSON.stringify({stream, rev, pos});
 		const told = new Set<WorkerSocket>();
+
 		for (const tag of L.wakeTags(stream)) {
 			for (const ws of this.ctx.getWebSockets(tag)) {
-				if (told.has(ws)) continue;
+				if (told.has(ws)) {
+					continue;
+				}
+
 				told.add(ws);
+
 				try {
 					ws.send(note);
 				} catch {
@@ -529,8 +690,11 @@ export class Ledger extends DurableObject {
 	private async arm() {
 		const due = L.nextDue(this.db);
 		const now = await this.ctx.storage.getAlarm();
+
 		if (due === null) {
-			if (now !== null) await this.ctx.storage.deleteAlarm();
+			if (now !== null) {
+				await this.ctx.storage.deleteAlarm();
+			}
 		} else if (now !== due) {
 			await this.ctx.storage.setAlarm(due);
 		}
@@ -568,10 +732,12 @@ const session = (r: {ok: true; value: LoginAnswer} | {ok: false; status: number;
  * nobody is let in for is never held in memory.
  */
 const drained = async (req: Request, res: Response): Promise<Response> => {
-	if (req.body !== null && !req.bodyUsed)
+	if (req.body !== null && !req.bodyUsed) {
 		await req.body.pipeTo(new WritableStream()).catch(() => {
 			// The client went away mid-body: there is no connection left to keep.
 		});
+	}
+
 	return res;
 };
 
@@ -589,7 +755,11 @@ const objectOf = (url: URL): string | null => url.pathname.split("/")[1] || null
 export default {
 	async fetch(req: Request, env: Env): Promise<Response> {
 		const name = objectOf(new URL(req.url));
-		if (name === null) return drained(req, new Response("not found", {status: 404}));
+
+		if (name === null) {
+			return drained(req, new Response("not found", {status: 404}));
+		}
+
 		return env.LEDGER.get(env.LEDGER.idFromName(name)).fetch(req);
 	},
 };

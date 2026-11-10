@@ -27,7 +27,10 @@ for (let n = 2; n < process.argv.length; n++) {
 		value = process.argv[n + 1];
 	const flag = /^--(port|name|person|founder|window|parent)$/.test(word) && value !== undefined;
 	words.push(flag ? `${word}=${value}` : word);
-	if (flag) n++;
+
+	if (flag) {
+		n++;
+	}
 }
 
 process.env.DO_NOT_TRACK = "1";
@@ -36,8 +39,11 @@ const command = Command.make("dev", flags, (options) => {
 	const guard = Effect.forever(
 		Effect.gen(function* () {
 			const owner = Number(options.parent);
-			if (!Number.isSafeInteger(owner) || owner <= 1 || process.ppid !== owner)
+
+			if (!Number.isSafeInteger(owner) || owner <= 1 || process.ppid !== owner) {
 				return yield* new StageError({reason: "parent_gone"});
+			}
+
 			yield* Effect.sleep("250 millis");
 		}),
 	);
@@ -100,7 +106,10 @@ const command = Command.make("dev", flags, (options) => {
 					forceKillAfter: "3 seconds",
 				},
 			);
-			if ((yield* stage.exitCode) !== 0) return yield* new StageError({reason: "child_failed"});
+
+			if ((yield* stage.exitCode) !== 0) {
+				return yield* new StageError({reason: "child_failed"});
+			}
 		}),
 	);
 	return options.child ? child : parent;

@@ -125,7 +125,10 @@ const timelineOf = (s: Model): readonly Entry[] | null =>
 /** What each Sub entry of `type` asks for in `s`: its deps, each one that is on. */
 const depsOf = (type: string, s: Model): readonly unknown[] =>
 	(trace.subs ?? []).flatMap((sub): unknown[] => {
-		if (sub.type !== type) return [];
+		if (sub.type !== type) {
+			return [];
+		}
+
 		const deps: unknown = sub.deps(s);
 		return deps === null || deps === undefined ? [] : [deps];
 	});
@@ -133,10 +136,18 @@ const depsOf = (type: string, s: Model): readonly unknown[] =>
 /** The trace ids the `follow` entries ask for, as `{id}` or `{ids}`. */
 const followedIn = (s: Model): readonly string[] =>
 	depsOf("follow", s).flatMap((d): string[] => {
-		if (typeof d !== "object" || d === null) return [];
-		if ("id" in d && typeof d.id === "string") return [d.id];
-		if ("ids" in d && Array.isArray(d.ids))
+		if (typeof d !== "object" || d === null) {
+			return [];
+		}
+
+		if ("id" in d && typeof d.id === "string") {
+			return [d.id];
+		}
+
+		if ("ids" in d && Array.isArray(d.ids)) {
 			return d.ids.flatMap((i: unknown) => (typeof i === "string" ? [i] : []));
+		}
+
 		return [];
 	});
 
@@ -153,13 +164,21 @@ const atOf = (s: Model): number | null | undefined =>
 describe("the trace machine's ticket view (M1 to M4)", () => {
 	it("M1: ticket replaces what shows with that ticket's facts, read again, live, rows closed; the same number again changes nothing", () => {
 		every(({prev, msg, next}) => {
-			if (msg.type !== "ticket") return;
+			if (msg.type !== "ticket") {
+				return;
+			}
+
 			if (numberOf(prev) === msg.number) {
 				expect(next).toBe(prev);
 				return;
 			}
+
 			expect(next.shows.kind).toBe("ticket");
-			if (next.shows.kind !== "ticket") return;
+
+			if (next.shows.kind !== "ticket") {
+				return;
+			}
+
 			expect([next.shows.facts, next.shows.records, next.shows.at]).toEqual([
 				{at: "reading", number: msg.number},
 				[],
@@ -171,11 +190,15 @@ describe("the trace machine's ticket view (M1 to M4)", () => {
 
 	it("M2: facts for another ticket, or in the job view, are dropped; its own become what it read", () => {
 		every(({prev, msg, next}) => {
-			if (msg.type !== "facts") return;
+			if (msg.type !== "facts") {
+				return;
+			}
+
 			if (numberOf(prev) !== msg.number) {
 				expect(next).toBe(prev);
 				return;
 			}
+
 			expect(next.shows.kind === "ticket" && next.shows.facts).toEqual({
 				at: "read",
 				number: msg.number,
@@ -186,8 +209,14 @@ describe("the trace machine's ticket view (M1 to M4)", () => {
 
 	it("M2: in the ticket view, a record read for an id that is not one of its lanes is dropped", () => {
 		every(({prev, msg, next}) => {
-			if (msg.type !== "got" || prev.shows.kind !== "ticket") return;
-			if (lanesIn(timelineOf(prev) ?? []).includes(msg.trace.trace)) return;
+			if (msg.type !== "got" || prev.shows.kind !== "ticket") {
+				return;
+			}
+
+			if (lanesIn(timelineOf(prev) ?? []).includes(msg.trace.trace)) {
+				return;
+			}
+
 			expect(next).toBe(prev);
 		});
 	});
@@ -210,7 +239,10 @@ describe("the trace machine's ticket view (M1 to M4)", () => {
 
 	it("M3: in the ticket view it follows each lane's record once, every lane its facts name, and nothing else", () => {
 		every(({next}) => {
-			if (next.shows.kind !== "ticket") return;
+			if (next.shows.kind !== "ticket") {
+				return;
+			}
+
 			const followed = followedIn(next);
 			expect(followed.toSorted()).toEqual([...lanesIn(timelineOf(next) ?? [])].toSorted());
 		});
@@ -218,7 +250,10 @@ describe("the trace machine's ticket view (M1 to M4)", () => {
 
 	it("M3: in the ticket view the clock runs only while a lane is open and the playhead is live", () => {
 		every(({next}) => {
-			if (next.shows.kind !== "ticket") return;
+			if (next.shows.kind !== "ticket") {
+				return;
+			}
+
 			const on = next.shows.at === null && anyOpen(timelineOf(next) ?? []);
 			expect(depsOf("tick", next).length > 0).toBe(on);
 		});
@@ -226,7 +261,10 @@ describe("the trace machine's ticket view (M1 to M4)", () => {
 
 	it("M3: in the job view no facts are read and no lane is followed", () => {
 		every(({next}) => {
-			if (next.shows.kind !== "job") return;
+			if (next.shows.kind !== "job") {
+				return;
+			}
+
 			expect(depsOf("facts", next)).toEqual([]);
 			expect(followedIn(next).length).toBeLessThanOrEqual(1);
 		});
@@ -276,8 +314,11 @@ describe("the trace machine's ticket view (M1 to M4)", () => {
 		for (const timeline of TIMELINES) {
 			const stops = stopsOf(timeline);
 			const last = timeline.at(-1)?.at ?? 0;
-			for (const stop of stops)
+
+			for (const stop of stops) {
 				expect(atOf(showing(timeline, [{type: "seek", at: stop}]))).toBe(stop);
+			}
+
 			expect(atOf(showing(timeline, [{type: "seek", at: last + 1}]))).toBeNull();
 			expect(
 				atOf(
@@ -292,7 +333,10 @@ describe("the trace machine's ticket view (M1 to M4)", () => {
 
 	it("M4: seek and step change nothing in the job view", () => {
 		every(({prev, msg, next}) => {
-			if ((msg.type !== "seek" && msg.type !== "step") || prev.shows.kind !== "job") return;
+			if ((msg.type !== "seek" && msg.type !== "step") || prev.shows.kind !== "job") {
+				return;
+			}
+
 			expect(next).toEqual(prev);
 		});
 	});

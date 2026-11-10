@@ -41,7 +41,10 @@ describe("a lane, whole, on GitHub", () => {
 	});
 	afterEach(() => {
 		vi.unstubAllEnvs();
-		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+
+		for (const dir of made.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	it("goes from triage to merged on a person's yes, once the running check has ended", async () => {
@@ -73,8 +76,10 @@ describe("a lane, whole, on GitHub", () => {
 		);
 		expect(seenRunning).toBeGreaterThan(-1);
 		expect(seenRunning).toBeLessThan(firstWrite);
-		for (const call of ran.calls.filter((c) => WRITES.includes(c.kind)))
+
+		for (const call of ran.calls.filter((c) => WRITES.includes(c.kind))) {
 			expect(call.rollup).toBe("SUCCESS");
+		}
 
 		// The merge is bound to the head: the commit it makes names that head as a parent, and main
 		// only moves forward.
@@ -141,10 +146,12 @@ describe("a lane, whole, on GitHub", () => {
 		const head = remoteGit(ran.remote, "rev-parse", "refs/heads/lane/1");
 		const refused = ran.calls.filter((call) => call.kind === "merge_write");
 		expect(refused).toHaveLength(2);
+
 		for (const call of refused) {
 			expect(call).toMatchObject({refused: true});
 			expect(fieldsIn(call.args, "head")).toEqual([head]);
 		}
+
 		expect(ran.stages.filter((stage) => stage === "merge")).toHaveLength(2);
 		expect(ran.kinds).not.toContain("ref_move");
 		expect(onMain(ran.remote, "src/lower.ts")).toBeNull();

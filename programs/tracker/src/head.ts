@@ -119,10 +119,14 @@ const openRuns = (timeline: readonly Entry[]) => {
 export const headOf = (timeline: readonly Entry[], now: number): Head => {
 	const fresh = sinceReopen(timeline);
 	const merged = factsOf(fresh, "pr").findLast((p) => p.state === "merged");
-	if (merged !== undefined) return {_tag: "done", pr: merged.url};
+
+	if (merged !== undefined) {
+		return {_tag: "done", pr: merged.url};
+	}
 
 	const asks = openAsksOf(timeline);
 	const close = fresh.findLast((e) => e.fact.type === "closed");
+
 	if (close !== undefined) {
 		const answered = factsOf(timeline, "answered").length > 0;
 		return close.by.kind === "user" && answered && asks.length === 0
@@ -131,22 +135,35 @@ export const headOf = (timeline: readonly Entry[], now: number): Head => {
 	}
 
 	const [first, ...more] = asks;
-	if (first !== undefined) return {_tag: "asks", asks: [first, ...more]};
+
+	if (first !== undefined) {
+		return {_tag: "asks", asks: [first, ...more]};
+	}
 
 	const run = openRuns(timeline).at(-1);
-	if (run !== undefined)
+
+	if (run !== undefined) {
 		return {_tag: "running", run: run.run, stage: run.stage, task: run.task, since: run.at};
+	}
 
 	const endedAt = timeline.findLastIndex((e) => e.fact.type === "ended");
 	const ended = timeline[endedAt]?.fact;
 	const askedSince = timeline.slice(endedAt + 1).some((e) => e.fact.type === "asked");
-	if (ended?.type === "ended" && ended.outcome.kind === "stuck" && !askedSince)
+
+	if (ended?.type === "ended" && ended.outcome.kind === "stuck" && !askedSince) {
 		return {_tag: "stuck", stage: ended.stage, why: ended.outcome.why};
+	}
 
 	const last = timeline.findLast((e) => MOVES[e.fact.type])?.at ?? now;
-	if (now - last > HOUR) return {_tag: "idle", since: last};
 
-	if (ended?.type !== "ended") return {_tag: "next", stage: "triage"};
+	if (now - last > HOUR) {
+		return {_tag: "idle", since: last};
+	}
+
+	if (ended?.type !== "ended") {
+		return {_tag: "next", stage: "triage"};
+	}
+
 	return {_tag: "next", stage: ended.outcome.kind === "send" ? ended.outcome.to : null};
 };
 

@@ -42,7 +42,12 @@ const freshDb = (): DatabaseSync => {
 const fresh = (): Sql => nodeSql(freshDb());
 
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -118,6 +123,7 @@ const heldShort = (span: Record<string, unknown>, key: string, full: string) => 
 		expect(span[key], key).toBe(full);
 		return;
 	}
+
 	expect(typeof span[key], key).toBe("string");
 	expect(String(span[key]).length, key).toBeLessThanOrEqual(MOST);
 	expect(span[`${key}.length`], `${key}.length`).toBe(full.length);
@@ -237,10 +243,12 @@ describe("p95, every call is one span, names and numbers only", () => {
 		const {tracer, tags} = capture();
 		return Effect.gen(function* () {
 			const ledger = yield* Ledger;
+
 			for (const n of [1, 2, 3]) {
 				yield* ledger.append("a", `a-${n}`, line());
 				yield* ledger.append("b", `b-${n}`, line());
 			}
+
 			// a holds revs 1, 3 and 5. Past rev 1 sit two of them; the log's head is five past it.
 			yield* Stream.runCollect(ledger.read("a", 1));
 			yield* ledger.wait("a", 1);
@@ -271,7 +279,11 @@ describe("p95, every call is one span, names and numbers only", () => {
 		const {tracer, tags} = capture();
 		return Effect.gen(function* () {
 			const ledger = yield* Ledger;
-			for (let n = 1; n <= 300; n++) yield* ledger.append("a", `w-${n}`, line());
+
+			for (let n = 1; n <= 300; n++) {
+				yield* ledger.append("a", `w-${n}`, line());
+			}
+
 			yield* Stream.runCollect(ledger.read("a", 100));
 			expect(tags("ledger.read").map((t) => t[tag("rows")])).toEqual([200]);
 			yield* Stream.runCollect(ledger.read("a", 0));
@@ -409,6 +421,7 @@ describe("p95, every call is one span, names and numbers only", () => {
 				yield* ledger.wait(stream, 0);
 				const calls = callTags("ledger.call");
 				expect(calls).toHaveLength(3);
+
 				for (const call of calls) {
 					heldShort(call, STREAM, stream);
 					heldShort(call, tag("reader"), reader);
@@ -551,8 +564,12 @@ describe("p95, every call is one span, names and numbers only", () => {
 						rang.push(to);
 					});
 				}
+
 				// "inside": a sync throw inside the ring's Effect. "outside": a throw before any Effect.
-				if (how === "outside") throw new BellBroke("message-marker");
+				if (how === "outside") {
+					throw new BellBroke("message-marker");
+				}
+
 				return Effect.sync(() => {
 					throw new BellBroke("message-marker");
 				});

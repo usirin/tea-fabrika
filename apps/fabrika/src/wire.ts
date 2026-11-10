@@ -92,7 +92,10 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
 						);
 						break;
 					case "deliver":
-						if (line !== null) deliver(line);
+						if (line !== null) {
+							deliver(line);
+						}
+
 						break;
 					case "refuse":
 						Deferred.doneUnsafe(
@@ -112,7 +115,11 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
 			const [next, cmds] = applyCell<Link, LinkMsg, LinkCmd>(linkMachine, state, msg);
 			state = next;
 			perform(cmds, line);
-			if (next.at === "up") Deferred.doneUnsafe(up, Effect.succeed(theirs));
+
+			if (next.at === "up") {
+				Deferred.doneUnsafe(up, Effect.succeed(theirs));
+			}
+
 			if (next.at === "closed") {
 				Deferred.doneUnsafe(
 					up,
@@ -123,8 +130,11 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
 		};
 		const heard = (raw: unknown) => {
 			const got = read(raw);
-			if (got.kind === "read" && got.msg.type === "hello" && "build" in got.msg)
+
+			if (got.kind === "read" && got.msg.type === "hello" && "build" in got.msg) {
 				theirs = got.msg.build ?? null;
+			}
+
 			step(linkMsgOf(got), got.kind === "read" ? got.msg : null);
 		};
 

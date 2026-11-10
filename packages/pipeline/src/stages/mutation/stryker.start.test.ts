@@ -19,7 +19,10 @@ vi.mock("../../child.ts", () => ({
 	runChild: (_file: string, args: readonly string[], options: {cwd: string}) =>
 		Effect.tryPromise(async () => {
 			// What `nice` answers when it finds no program to run.
-			if (args.includes(MISSING)) return {code: 127, out: "", err: `nice: ${MISSING}: not found`};
+			if (args.includes(MISSING)) {
+				return {code: 127, out: "", err: `nice: ${MISSING}: not found`};
+			}
+
 			if (args.some((a) => a.endsWith("stryker.js"))) {
 				const config = JSON.parse(await readFile(args.at(-1) ?? "", "utf8"));
 				const source = await readFile(`${options.cwd}/clamp.ts`, "utf8");
@@ -34,6 +37,7 @@ vi.mock("../../child.ts", () => ({
 					JSON.stringify({files: {"clamp.ts": {source, mutants: [mutant]}}}),
 				);
 			}
+
 			return {code: 0, out: "", err: ""};
 		}),
 }));
@@ -52,8 +56,11 @@ const inCopy = <A, E>(
 				const fs = yield* FileSystem.FileSystem;
 				const path = yield* Path.Path;
 				const dir = yield* fs.makeTempDirectoryScoped({prefix: "mutation-start-"});
-				for (const name of yield* fs.readDirectory(FIXTURE))
+
+				for (const name of yield* fs.readDirectory(FIXTURE)) {
 					yield* fs.copyFile(path.join(FIXTURE, name), path.join(dir, name));
+				}
+
 				yield* fs.symlink(MODULES, path.join(dir, "node_modules"));
 				return yield* Effect.gen(function* () {
 					return yield* use(yield* MutationRunner);

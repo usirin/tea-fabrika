@@ -152,14 +152,26 @@ const priceFrom = (
 		readonly output: number;
 	},
 ): Price => {
-	if (runner === null) return {kind: "none"};
-	if (typeof ended.listUsd === "number") return {kind: "usd", usd: ended.listUsd};
+	if (runner === null) {
+		return {kind: "none"};
+	}
+
+	if (typeof ended.listUsd === "number") {
+		return {kind: "usd", usd: ended.listUsd};
+	}
+
 	// A model in the list-price table: its price comes back from the tokens, so a `null` written
 	// before its row landed loses nothing (plan, section 1).
 	const derived = listUsdOf(runner.model, ended);
-	if (derived !== null) return {kind: "usd", usd: derived};
-	if (runner.harness === "claude" && typeof ended.billed === "number")
+
+	if (derived !== null) {
+		return {kind: "usd", usd: derived};
+	}
+
+	if (runner.harness === "claude" && typeof ended.billed === "number") {
 		return {kind: "usd", usd: ended.billed};
+	}
+
 	return {kind: "unknown"};
 };
 
@@ -224,12 +236,25 @@ const storyOf = (shape: Shape): Story => {
 				},
 				step.gap,
 			);
+
 			for (const noise of step.noise) {
-				if (noise === "session") put(LANE_WRITER, {type: "session", run, id: `s-${run}`});
-				if (noise === "commented") put(person("owner"), {type: "commented", body: "Seen it."});
-				if (noise === "planned") put(LANE_WRITER, {type: "planned", version: 1, tasks: []});
-				if (noise === "pushed") put(LANE_WRITER, {type: "pushed", head: "abcdef0", commits: []});
+				if (noise === "session") {
+					put(LANE_WRITER, {type: "session", run, id: `s-${run}`});
+				}
+
+				if (noise === "commented") {
+					put(person("owner"), {type: "commented", body: "Seen it."});
+				}
+
+				if (noise === "planned") {
+					put(LANE_WRITER, {type: "planned", version: 1, tasks: []});
+				}
+
+				if (noise === "pushed") {
+					put(LANE_WRITER, {type: "pushed", head: "abcdef0", commits: []});
+				}
 			}
+
 			if (final && shape.last === "running") {
 				// No `ended`: a step with a model has no price yet. It is not `unknown`: that says the
 				// model has no list price, and astra has one (review B2). Code is still `none`.
@@ -237,6 +262,7 @@ const storyOf = (shape: Shape): Story => {
 				steps.push({run, stage: step.stage, from, to: null, ...who(runner), price});
 				return;
 			}
+
 			const cached = Math.floor((step.input * step.cachedShare) / 10);
 			const tokens = {input: step.input, cached, output: step.output};
 			const prices = {listUsd: step.listUsd, billed: step.billed, ...tokens};
@@ -278,7 +304,11 @@ const storyOf = (shape: Shape): Story => {
 				...who(runner),
 				price: priceFrom(runner, prices),
 			});
-			if (!asking) return;
+
+			if (!asking) {
+				return;
+			}
+
 			const shapeOfAsk: NonNullable<typeof step.ask> = step.ask ?? {
 				gap: 1_000,
 				trace: "own",
@@ -324,18 +354,24 @@ const storyOf = (shape: Shape): Story => {
 						by: shapeOfAsk.by,
 					};
 			const trueAsk: TrueAsk = {ask, what, at: askedAt, lane, answer};
+
 			if (lane === i) {
 				laneAsks.push(trueAsk);
-				if (answer !== null) later(answer.at);
+
+				if (answer !== null) {
+					later(answer.at);
+				}
 			} else {
 				// Its lane is an earlier one, already in the list: the answer moves that lane's end.
 				const earlier = lanes[lane];
-				if (earlier !== undefined)
+
+				if (earlier !== undefined) {
 					lanes[lane] = {
 						...earlier,
 						asks: [...earlier.asks, trueAsk],
 						to: answer === null ? earlier.to : Math.max(earlier.to ?? 0, answer.at),
 					};
+				}
 			}
 		});
 		const firstStart = steps[0]?.from ?? at;

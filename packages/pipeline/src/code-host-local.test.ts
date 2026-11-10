@@ -161,6 +161,7 @@ const write = (dir: string, files: Readonly<Record<string, string>>) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
+
 		for (const [name, text] of Object.entries(files)) {
 			yield* fs.makeDirectory(path.dirname(path.join(dir, name)), {recursive: true});
 			yield* fs.writeFileString(path.join(dir, name), text);
@@ -458,13 +459,19 @@ describe("the local code host", () => {
 					yield* sh(dir, "git", ["init", "-q", "-b", "main"]);
 					yield* commit(dir, {"README.txt": "words\n", ...base}, "base");
 					yield* sh(dir, "git", ["checkout", "-q", "-b", "plan/9"]);
-					for (const name of gone) yield* sh(dir, "git", ["rm", "-q", name]);
+
+					for (const name of gone) {
+						yield* sh(dir, "git", ["rm", "-q", name]);
+					}
+
 					const at = yield* commit(dir, {...CHANGE, ...head}, "head");
+
 					if (lost !== undefined) {
 						const side = lost.side === "base" ? "main" : at;
 						const sha = yield* sh(dir, "git", ["rev-parse", `${side}:${lost.path}`]);
 						yield* fs.remove(path.join(dir, ".git", "objects", sha.slice(0, 2), sha.slice(2)));
 					}
+
 					const settings: LocalSettings = {...SETTINGS(dir), base: "main"};
 					return yield* Effect.gen(function* () {
 						return yield* Effect.result((yield* CodeHost).change(TASK, at));

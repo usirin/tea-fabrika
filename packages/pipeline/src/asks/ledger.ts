@@ -179,7 +179,11 @@ export const homeOf = (fact: Fact): string | null => {
 			return ticketName(fact.ticket);
 		case "answered": {
 			const plan = PLAN_ASK.exec(fact.id)?.[1];
-			if (plan !== undefined) return `${ROOT}/plan/${plan}`;
+
+			if (plan !== undefined) {
+				return `${ROOT}/plan/${plan}`;
+			}
+
 			const ticket = TICKET_ASK.exec(fact.id)?.[1];
 			return ticket === undefined ? null : `${ROOT}/ticket/${ticket}`;
 		}
@@ -216,10 +220,17 @@ export const steady = <A, E extends {readonly _tag: string}, R>(
 	Effect.gen(function* () {
 		for (let tries = 1; ; tries++) {
 			const r = yield* Effect.result(e);
-			if (r._tag === "Success") return r.success;
+
+			if (r._tag === "Success") {
+				return r.success;
+			}
+
 			const x = r.failure;
-			if (x._tag !== "LedgerUnreachable")
+
+			if (x._tag !== "LedgerUnreachable") {
 				return yield* Effect.fail(x as Exclude<E, {readonly _tag: "LedgerUnreachable"}>);
+			}
+
 			yield* askAgain(what, tries);
 		}
 	});
@@ -227,7 +238,10 @@ export const steady = <A, E extends {readonly _tag: string}, R>(
 /** The wait before the next try: 100 ms, doubling to a second. */
 const askAgain = (what: string, tries: number) =>
 	Effect.gen(function* () {
-		if (tries === 1) yield* Effect.logDebug(`${what}: the ledger does not answer; asking again`);
+		if (tries === 1) {
+			yield* Effect.logDebug(`${what}: the ledger does not answer; asking again`);
+		}
+
 		yield* Effect.sleep(Duration.millis(Math.min(1000, 50 * 2 ** Math.min(tries, 5))));
 	});
 
@@ -250,7 +264,11 @@ export const steadyCall = <W>(what: string, call: Effect.Effect<W>): Effect.Effe
 	Effect.gen(function* () {
 		for (let tries = 1; ; tries++) {
 			const w = yield* call;
-			if (heard(w)) return w;
+
+			if (heard(w)) {
+				return w;
+			}
+
 			yield* askAgain(what, tries);
 		}
 	});
@@ -314,7 +332,11 @@ export const appendFact = (
 ): Effect.Effect<Appended, Fenced, Ledger> =>
 	Effect.gen(function* () {
 		const home = yield* homeOrDie(fact);
-		if (home !== hold.name) return yield* sendFact(fact, {...o, hold});
+
+		if (home !== hold.name) {
+			return yield* sendFact(fact, {...o, hold});
+		}
+
 		const ledger = yield* Ledger;
 		const event = {
 			kind: fact.type,
@@ -349,16 +371,37 @@ const nameOfStream = (stream: string): string | null =>
 export const factOfRow = (row: Row): Fact => {
 	const name = nameOfStream(row.stream);
 	const where = `the ledger at ${row.pos} (${row.stream})`;
-	if (name === null) throw new Error(`${where} holds no facts`);
-	if (!FACT_TYPES.has(row.kind)) throw new Error(`${where}: a ${row.kind} event is not a fact`);
+
+	if (name === null) {
+		throw new Error(`${where} holds no facts`);
+	}
+
+	if (!FACT_TYPES.has(row.kind)) {
+		throw new Error(`${where}: a ${row.kind} event is not a fact`);
+	}
+
 	const data = parseJson(row.data);
-	if (data._tag === "Failure") throw new Error(`${where}: its data is not JSON`);
+
+	if (data._tag === "Failure") {
+		throw new Error(`${where}: its data is not JSON`);
+	}
+
 	const fact = decode(data.value);
-	if (fact._tag === "Failure") throw new Error(`${where}: not a ${row.kind} fact`);
-	if (fact.value.type !== row.kind)
+
+	if (fact._tag === "Failure") {
+		throw new Error(`${where}: not a ${row.kind} fact`);
+	}
+
+	if (fact.value.type !== row.kind) {
 		throw new Error(`${where}: a ${fact.value.type} fact written as ${row.kind}`);
+	}
+
 	const home = homeOf(fact.value);
-	if (home !== name) throw new Error(`${where}: a fact of ${home ?? "no name"} read from ${name}`);
+
+	if (home !== name) {
+		throw new Error(`${where}: a fact of ${home ?? "no name"} read from ${name}`);
+	}
+
 	return fact.value;
 };
 
@@ -372,14 +415,23 @@ export const readFacts: Effect.Effect<readonly Entry[], never, Ledger> = Effect.
 	const ledger = yield* Ledger;
 	const out: Entry[] = [];
 	let from = 0;
+
 	for (;;) {
 		const page = yield* steady("read the facts", ledger.read(from, PAGE, ROOT));
+
 		for (const row of page) {
-			if (nameOfStream(row.stream) === null) continue;
+			if (nameOfStream(row.stream) === null) {
+				continue;
+			}
+
 			// A throw here is a defect: the ledger is broken, and the read ends.
 			out.push({seq: out.length + 1, fact: yield* Effect.sync(() => factOfRow(row))});
 		}
-		if (page.length < PAGE) return out;
+
+		if (page.length < PAGE) {
+			return out;
+		}
+
 		from = page.at(-1)?.pos ?? from;
 	}
 });
@@ -394,7 +446,11 @@ export function memoryLedger(facts: readonly Fact[] = []) {
 	const layer = Layer.succeed(Ledger, service);
 	const now = <A, E>(e: Effect.Effect<A, E, Ledger>) =>
 		Effect.runSync(Effect.orDie(Effect.provideService(e, Ledger, service)));
-	for (const fact of facts) now(sendFact(fact));
+
+	for (const fact of facts) {
+		now(sendFact(fact));
+	}
+
 	return {
 		layer,
 		service,

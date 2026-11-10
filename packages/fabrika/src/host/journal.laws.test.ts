@@ -27,7 +27,9 @@ const real: Mod = {journalStore: realJournal.journalStore};
 const madeDirs: string[] = [];
 
 afterAll(() => {
-	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
+	for (const d of madeDirs) {
+		rmSync(d, {recursive: true, force: true});
+	}
 });
 
 /** A copy of journal.ts with one mistake, imported from its own folder. Each edit matches once. */
@@ -36,7 +38,11 @@ async function plant(a: string, b: string): Promise<Mod> {
 	madeDirs.push(dir);
 	const text = readFileSync(join(import.meta.dirname, "journal.ts"), "utf8");
 	const count = text.split(a).length - 1;
-	if (count !== 1) throw new Error(`plant edit: "${a}" found ${count} times, want 1`);
+
+	if (count !== 1) {
+		throw new Error(`plant edit: "${a}" found ${count} times, want 1`);
+	}
+
 	writeFileSync(
 		join(dir, "journal.ts"),
 		text.replace(a, () => b),
@@ -79,11 +85,18 @@ const cut = (l: Ledger["Service"], net: {until: number; lands: boolean}): Ledger
 	...l,
 	append: (stream, expected, event, fence) =>
 		Effect.suspend(() => {
-			if (Date.now() >= net.until) return l.append(stream, expected, event, fence);
+			if (Date.now() >= net.until) {
+				return l.append(stream, expected, event, fence);
+			}
+
 			const lost = Effect.fail(
 				new LedgerUnreachable({method: "append", message: "the network is down"}),
 			);
-			if (!net.lands) return lost;
+
+			if (!net.lands) {
+				return lost;
+			}
+
 			net.lands = false;
 			return l.append(stream, expected, event, fence).pipe(Effect.ignore, Effect.andThen(lost));
 		}),
@@ -93,6 +106,7 @@ const runSaves = async (mod: Mod, saves: readonly Save[]): Promise<Run> => {
 	vi.useFakeTimers({toFake: ["setTimeout", "clearTimeout", "Date"], now: 0});
 	// The program's stop, as the host gives it: a save still waiting when the run ends stops here.
 	const stop = new AbortController();
+
 	try {
 		const l = memoryService();
 		await Effect.runPromise(l.register(NAME, "test"));
@@ -108,6 +122,7 @@ const runSaves = async (mod: Mod, saves: readonly Save[]): Promise<Run> => {
 		});
 		const done: Done[] = [];
 		let expected = 0;
+
 		for (const [i, save] of saves.entries()) {
 			const start = Date.now();
 			net.until = start + save.drop;
@@ -121,12 +136,20 @@ const runSaves = async (mod: Mod, saves: readonly Save[]): Promise<Run> => {
 					end = {ok: false, rev: null, at: Date.now() - start};
 				},
 			);
-			while (end === null && Date.now() - start <= save.drop + BACK_WITHIN)
+
+			while (end === null && Date.now() - start <= save.drop + BACK_WITHIN) {
 				await vi.advanceTimersByTimeAsync(Math.min(1000, Math.max(50, save.drop / 20)));
+			}
+
 			done.push({save, expected, end});
-			if (end === null || !(end as {ok: boolean}).ok) break;
+
+			if (end === null || !(end as {ok: boolean}).ok) {
+				break;
+			}
+
 			expected = (end as {rev: number}).rev;
 		}
+
 		const rows = await Effect.runPromise(l.readStream(STREAM));
 		return {done, ids: rows.map((r) => r.id)};
 	} finally {
@@ -145,7 +168,10 @@ const assertLaw = (law: Law, mod: Mod) =>
 	fc.assert(
 		fc.asyncProperty(law.saves, async (saves) => {
 			const why = law.check(await runSaves(mod, saves));
-			if (why !== null) throw new Error(why);
+
+			if (why !== null) {
+				throw new Error(why);
+			}
 		}),
 		{numRuns: 30, seed: 7},
 	);
@@ -171,12 +197,22 @@ const landsOnce: Law = {
 		{minLength: 1, maxLength: 4},
 	),
 	check: ({done, ids}) => {
-		for (const d of done)
-			if (d.end === null || !d.end.ok || d.end.rev !== d.expected + 1)
+		for (const d of done) {
+			if (d.end === null || !d.end.ok || d.end.rev !== d.expected + 1) {
 				return `a save at rev ${d.expected} in a ${d.save.drop} ms drop${d.save.lands ? ", its first try landed" : ""}: ${shown(d)}, wanted it to land at rev ${d.expected + 1}`;
+			}
+		}
+
 		const twice = ids.find((id, i) => ids.indexOf(id) !== i);
-		if (twice !== undefined) return `id ${twice} landed twice`;
-		if (ids.length !== done.length) return `${ids.length} rows for ${done.length} saves`;
+
+		if (twice !== undefined) {
+			return `id ${twice} landed twice`;
+		}
+
+		if (ids.length !== done.length) {
+			return `${ids.length} rows for ${done.length} saves`;
+		}
+
 		return null;
 	},
 };
@@ -195,9 +231,12 @@ const waitsOut: Law = {
 		{minLength: 1, maxLength: 2},
 	),
 	check: ({done}) => {
-		for (const d of done)
-			if (d.end === null || !d.end.ok || d.end.at > d.save.drop + BACK_WITHIN)
+		for (const d of done) {
+			if (d.end === null || !d.end.ok || d.end.at > d.save.drop + BACK_WITHIN) {
 				return `a save in a ${d.save.drop} ms drop ${shown(d)}: wanted it to land within ${BACK_WITHIN} ms of the network coming back`;
+			}
+		}
+
 		return null;
 	},
 };
@@ -248,18 +287,25 @@ describe("the journal's laws for a short drop (lane 18, part 2)", () => {
 
 	it("each law is seen to fail on a planted mistake, and only the laws it should", async () => {
 		const caught: Record<string, readonly string[]> = {};
+
 		for (const [name, make] of Object.entries(PLANTS)) {
 			const mod = await make();
 			const out: string[] = [];
+
 			for (const law of LAWS) {
 				const failed = await assertLaw(law, mod).then(
 					() => false,
 					() => true,
 				);
-				if (failed) out.push(law.name);
+
+				if (failed) {
+					out.push(law.name);
+				}
 			}
+
 			caught[name] = out;
 		}
+
 		// `waitsOut` was a known bug when this list was first written, so only `landsOnce` was run.
 		// Now both run, and both see each plant: a save that does not land breaks both.
 		expect(caught).toEqual({

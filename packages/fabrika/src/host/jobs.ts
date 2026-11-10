@@ -180,7 +180,10 @@ export const jobsMachine = defineMachine({
 				...s,
 				jobs: s.jobs.flatMap((job) => {
 					// A detached job's runs ended with the tsh that started them: it stays, to be started again.
-					if (job.state !== "running" || !job.stages.some((st) => st.run === m.run)) return [job];
+					if (job.state !== "running" || !job.stages.some((st) => st.run === m.run)) {
+						return [job];
+					}
+
 					const stages = eachStage(job.stages, (st) =>
 						st.run === m.run ? {...st, ended: true} : st,
 					);
@@ -230,7 +233,10 @@ export const jobsMachine = defineMachine({
 
 /** The table's status line: `2 jobs: 1 running, 1 detached`. */
 export const tableLine = (s: Jobs): string => {
-	if (s.jobs.length === 0) return "no jobs";
+	if (s.jobs.length === 0) {
+		return "no jobs";
+	}
+
 	const running = s.jobs.filter((job) => job.state === "running").length;
 	const detached = s.jobs.length - running;
 	return `${s.jobs.length} job${s.jobs.length === 1 ? "" : "s"}: ${running} running, ${detached} detached`;
@@ -260,7 +266,11 @@ export const earlierFor = (jobs: Jobs, owner: Owner): readonly Job[] =>
 /** The job a word names: `%n`, `n`, or the run id of any of its programs. */
 export function jobNamed(jobs: Jobs, word: string): Job | undefined {
 	const n = /^%?(\d+)$/.exec(word)?.[1];
-	if (n !== undefined) return jobs.jobs.find((job) => job.n === Number(n));
+
+	if (n !== undefined) {
+		return jobs.jobs.find((job) => job.n === Number(n));
+	}
+
 	return jobs.jobs.find((job) => job.stages.some((st) => st.run === word));
 }
 

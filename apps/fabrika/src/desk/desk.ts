@@ -339,9 +339,16 @@ export interface Takes {
  * over a program, or every key. The palette's key is the page's own, and never the desk's.
  */
 export const takenNow = (s: Desk, now: number): Takes => {
-	if (s.at === "over") return {all: false, keys: []};
+	if (s.at === "over") {
+		return {all: false, keys: []};
+	}
+
 	const armed = s.prefix.armed && (s.prefix.until === null || now <= s.prefix.until);
-	if (s.ask !== null || armed) return {all: true, keys: []};
+
+	if (s.ask !== null || armed) {
+		return {all: true, keys: []};
+	}
+
 	const keys = inUse(s);
 	const alone = keys.rows.flatMap((row) =>
 		row.does === "palette.open" ? [] : row.keys.flatMap((k) => (k._tag === "alone" ? [k.key] : [])),
@@ -358,7 +365,10 @@ const inUse = (s: Open): Keys => s.keys ?? defaults;
  * own (messages.ts, `keys`) and not again with every key.
  */
 export const forPage = (s: Desk): Desk => {
-	if (s.at === "over" || s.keys === undefined) return s;
+	if (s.at === "over" || s.keys === undefined) {
+		return s;
+	}
+
 	const {keys: _table, ...drawn} = s;
 	return drawn;
 };
@@ -486,15 +496,21 @@ const drop = (s: Open, ws: Workspace, doomed: readonly TileId[]): Desk => {
 	const agents = Object.fromEntries(
 		Object.entries(s.agents).filter(([, tile]) => !doomed.includes(tile)),
 	);
+
 	if (left.length === 0) {
 		const at = s.workspaces.findIndex((w) => w.id === ws.id);
 		const [first, ...rest] = s.workspaces.filter((w) => w.id !== ws.id);
-		if (first === undefined) return {at: "over"};
+
+		if (first === undefined) {
+			return {at: "over"};
+		}
+
 		const workspaces: Open["workspaces"] = [first, ...rest];
 		const active =
 			s.active !== ws.id ? s.active : (workspaces[Math.min(at, workspaces.length - 1)] ?? first).id;
 		return {...s, workspaces, active, jobs, closing, ask, agents};
 	}
+
 	const layout = doomed.reduce(remove, ws.layout);
 	const focused = left.includes(ws.focused) ? ws.focused : heirOf(all, openIn(layout), ws.focused);
 	return {...withWorkspace(s, {...ws, layout, focused}), jobs, closing, ask, agents};
@@ -511,7 +527,11 @@ const openIn = (layout: LayoutTree): readonly TileId[] =>
  */
 const folded = (s: Open, ws: Workspace, tile: TileId): Step => {
 	const layout = fold(ws.layout, tile);
-	if (layout === ws.layout) return [s, []];
+
+	if (layout === ws.layout) {
+		return [s, []];
+	}
+
 	const all = tilesOf(ws).map((t) => t.id);
 	const focused = ws.focused === tile ? heirOf(all, openIn(layout), tile) : ws.focused;
 	const next = {...withWorkspace(s, {...ws, layout, focused}), ask: null};
@@ -523,7 +543,11 @@ const unfolded = (s: Open, node: NodeId): Step => {
 	const ws = activeOf(s);
 	const layout = unfold(ws.layout, node);
 	const first = findChildTile(layout, node, "start");
-	if (layout === ws.layout || first === null) return [s, []];
+
+	if (layout === ws.layout || first === null) {
+		return [s, []];
+	}
+
 	const next = {...withWorkspace(s, {...ws, layout, focused: first.id}), ask: null};
 	return [next, keep(next)];
 };
@@ -539,7 +563,11 @@ const heirOf = (all: readonly TileId[], left: readonly TileId[], from: TileId): 
 /** The tile goes from the desk, and what still runs in it stops. The last tile empties the desk. */
 const goneTile = (s: Open, tile: TileId): Step => {
 	const ws = whereIs(s, tile);
-	if (ws === undefined) return [s, []];
+
+	if (ws === undefined) {
+		return [s, []];
+	}
+
 	const next = drop(s, ws, [tile]);
 	const own = stop({tile});
 	return next.at === "over" ? [next, [own, empty({})]] : [next, [own, ...keep(next)]];
@@ -562,9 +590,19 @@ export const questionOf = (s: Open, tile: TileId): string =>
 const yes = (s: Open, tile: TileId): Step => {
 	const ws = whereIs(s, tile);
 	const node = ws === undefined ? null : findTile(ws.layout, tile);
-	if (node === null) return [s, []];
-	if (node.shows.kind === "window") return windowYes(s, tile, node.shows.run.id);
-	if (s.closing.includes(tile) || !busy(s, node)) return goneTile(s, tile);
+
+	if (node === null) {
+		return [s, []];
+	}
+
+	if (node.shows.kind === "window") {
+		return windowYes(s, tile, node.shows.run.id);
+	}
+
+	if (s.closing.includes(tile) || !busy(s, node)) {
+		return goneTile(s, tile);
+	}
+
 	return [{...s, closing: [...s.closing, tile]}, [close({tile})]];
 };
 
@@ -576,7 +614,10 @@ const yes = (s: Open, tile: TileId): Step => {
  * input end.
  */
 const windowYes = (s: Open, tile: TileId, process: string): Step => {
-	if (!s.closing.includes(tile)) return [{...s, closing: [...s.closing, tile]}, [end({process})]];
+	if (!s.closing.includes(tile)) {
+		return [{...s, closing: [...s.closing, tile]}, [end({process})]];
+	}
+
 	const [next, cmds] = goneTile(s, tile);
 	return [next, [kill({process}), ...cmds]];
 };
@@ -584,17 +625,26 @@ const windowYes = (s: Open, tile: TileId, process: string): Step => {
 /** What a key after the prefix does. */
 const act = (s: Open, does: Does): Step => {
 	const ws = activeOf(s);
+
 	switch (does.kind) {
 		case "split": {
 			const ids = {tile: `t${s.next}`, container: `c${s.next}`};
 			const layout = split(unzoom(ws.layout), ws.focused, does.orientation, ids);
-			if (layout === ws.layout || findTile(layout, ids.tile) === null) return [s, []];
+
+			if (layout === ws.layout || findTile(layout, ids.tile) === null) {
+				return [s, []];
+			}
+
 			const next = {...withWorkspace(s, {...ws, layout, focused: ids.tile}), next: s.next + 1};
 			return [next, [open({tile: ids.tile}), ...keep(next)]];
 		}
 		case "focus": {
 			const to = findSibling(ws.layout, ws.focused, does.to);
-			if (to === null) return [s, []];
+
+			if (to === null) {
+				return [s, []];
+			}
+
 			// Focus moves out of a zoomed tile: the zoom goes, so the focused tile is always drawn.
 			const next = withWorkspace(s, {...ws, layout: unzoom(ws.layout), focused: to.id});
 			return [next, keep(next)];
@@ -609,19 +659,29 @@ const act = (s: Open, does: Does): Step => {
 		case "turn": {
 			// As tmux's next-layout, a turn undoes the zoom: a turn under it would not be seen.
 			const layout = turn(unzoom(ws.layout), ws.focused);
-			if (layout === ws.layout) return [s, []];
+
+			if (layout === ws.layout) {
+				return [s, []];
+			}
+
 			const next = withWorkspace(s, {...ws, layout});
 			return [next, keep(next)];
 		}
 		case "zoom": {
-			if (tilesOf(ws).length < 2) return [s, []];
+			if (tilesOf(ws).length < 2) {
+				return [s, []];
+			}
+
 			const layout = ws.layout.zoomed === null ? zoom(ws.layout, ws.focused) : unzoom(ws.layout);
 			const next = withWorkspace(s, {...ws, layout});
 			return [next, keep(next)];
 		}
 		case "close": {
 			// Always asked, as tmux's default binding: confirm-before, then kill-pane.
-			if (findTile(ws.layout, ws.focused) === null) return [s, []];
+			if (findTile(ws.layout, ws.focused) === null) {
+				return [s, []];
+			}
+
 			return [{...s, ask: ws.focused}, []];
 		}
 		case "new": {
@@ -636,7 +696,10 @@ const act = (s: Open, does: Does): Step => {
 			return [next, [open({tile: made.focused}), ...keep(next)]];
 		}
 		case "step": {
-			if (s.workspaces.length < 2) return [s, []];
+			if (s.workspaces.length < 2) {
+				return [s, []];
+			}
+
 			const at = s.workspaces.findIndex((w) => w.id === ws.id);
 			const by = does.to === "next" ? 1 : -1;
 			const n = s.workspaces.length;
@@ -659,11 +722,18 @@ const act = (s: Open, does: Does): Step => {
  * stays where it was, as tmux's `split-window -d`. A zoom stays too: the person's view is theirs.
  */
 const launched = (s: Open, agent: AgentName): Step => {
-	if (s.agents[agent] !== undefined || !isAgentName(agent)) return [s, []];
+	if (s.agents[agent] !== undefined || !isAgentName(agent)) {
+		return [s, []];
+	}
+
 	const ws = activeOf(s);
 	const ids = {tile: `t${s.next}`, container: `c${s.next}`};
 	const beside = split(ws.layout, ws.focused, "horizontal", ids);
-	if (findTile(beside, ids.tile) === null) return [s, []];
+
+	if (findTile(beside, ids.tile) === null) {
+		return [s, []];
+	}
+
 	const next: Open = {
 		...withWorkspace(s, {...ws, layout: fold(beside, ids.tile)}),
 		next: s.next + 1,
@@ -674,7 +744,10 @@ const launched = (s: Open, agent: AgentName): Step => {
 
 /** This workspace comes forward. One not there, or the one forward already, changes nothing. */
 const picked = (s: Open, id: string): Step => {
-	if (s.active === id || !s.workspaces.some((ws) => ws.id === id)) return [s, []];
+	if (s.active === id || !s.workspaces.some((ws) => ws.id === id)) {
+		return [s, []];
+	}
+
 	const next = {...s, active: id, ask: null};
 	return [next, keep(next)];
 };
@@ -686,8 +759,15 @@ const picked = (s: Open, id: string): Step => {
  */
 const went = (s: Open, tile: TileId): readonly [Open, readonly DeskCmd[]] => {
 	const ws = whereIs(s, tile);
-	if (ws === undefined) return [s, []];
-	if (s.active === ws.id && ws.focused === tile && s.ask === null) return [s, []];
+
+	if (ws === undefined) {
+		return [s, []];
+	}
+
+	if (s.active === ws.id && ws.focused === tile && s.ask === null) {
+		return [s, []];
+	}
+
 	const layout =
 		ws.layout.zoomed === null || ws.layout.zoomed === tile ? ws.layout : unzoom(ws.layout);
 	const next = {...withWorkspace(s, {...ws, layout, focused: tile}), active: ws.id, ask: null};
@@ -700,7 +780,11 @@ const went = (s: Open, tile: TileId): readonly [Open, readonly DeskCmd[]] => {
  */
 const ran = (s: Open, does: Command): Step => {
 	const binding = bindingFor(does);
-	if (binding === undefined) return [s, []];
+
+	if (binding === undefined) {
+		return [s, []];
+	}
+
 	return act({...s, prefix: DISARMED, ask: null}, binding.does);
 };
 
@@ -716,11 +800,20 @@ const swapped = (s: Open, keys: Keys): Step => [{...s, keys, prefix: DISARMED}, 
  * `tmux select-pane -t %9` says "can't find pane". Asked before the desk is told.
  */
 export const refusedOf = (s: Desk, tile: TileId, does: Does): string | null => {
-	if (s.at !== "open" || whereIs(s, tile) === undefined) return `${tile} is gone`;
-	if (does.kind === "go" && whereIs(s, does.tile) === undefined) return `no tile ${does.tile}`;
+	if (s.at !== "open" || whereIs(s, tile) === undefined) {
+		return `${tile} is gone`;
+	}
+
+	if (does.kind === "go" && whereIs(s, does.tile) === undefined) {
+		return `no tile ${does.tile}`;
+	}
+
 	const n = s.workspaces.length;
-	if (does.kind === "pick" && does.at > n)
+
+	if (does.kind === "pick" && does.at > n) {
 		return `no workspace ${does.at}: there ${n === 1 ? "is 1" : `are ${n}`}`;
+	}
+
 	return null;
 };
 
@@ -731,13 +824,23 @@ export const refusedOf = (s: Desk, tile: TileId, does: Does): string | null => {
  * straight.
  */
 const typed = (s: Open, tile: TileId, does: Does): Step => {
-	if (whereIs(s, tile) === undefined) return [s, []];
-	if (does.kind === "go") return went(s, does.tile);
+	if (whereIs(s, tile) === undefined) {
+		return [s, []];
+	}
+
+	if (does.kind === "go") {
+		return went(s, does.tile);
+	}
+
 	const [here, moved] = went(s, tile);
 	const ready =
 		here.prefix.armed || here.ask !== null ? {...here, prefix: DISARMED, ask: null} : here;
 	const [next, cmds] = act(ready, does);
-	if (next.at !== "open") return [next, cmds];
+
+	if (next.at !== "open") {
+		return [next, cmds];
+	}
+
 	// One save, of the desk after both: the move to the tile, and what the command changed.
 	const others = cmds.filter((c) => c.type !== "save");
 	const saved = moved.length > 0 || others.length !== cmds.length;
@@ -771,7 +874,10 @@ const CTRL_C = "\x03";
  * that letter's control code (Ctrl-B is 2), Ctrl-Space is 0. Any other prefix has no byte.
  */
 const byteOf = (prefix: string): string | null => {
-	if (prefix === "<c- >") return "\x00";
+	if (prefix === "<c- >") {
+		return "\x00";
+	}
+
 	const letter = /^<c-([a-z])>$/.exec(prefix)?.[1];
 	return letter === undefined ? null : String.fromCharCode(letter.charCodeAt(0) - 96);
 };
@@ -782,12 +888,15 @@ const byteOf = (prefix: string): string | null => {
  */
 const boundOn = (keys: Keys, key: Key) => {
 	const does = commandOn(keys, key);
-	if (does === "palette.open" && key._tag === "after_prefix")
+
+	if (does === "palette.open" && key._tag === "after_prefix") {
 		return {
 			does,
 			key,
 			binding: {does: {kind: "show" as const, what: "palette" as const}, repeats: false},
 		};
+	}
+
 	const binding = does === undefined ? undefined : bindingFor(does);
 	return does === undefined || binding === undefined ? null : {does, key, binding};
 };
@@ -802,14 +911,25 @@ const tshOf = (tile: TileNode): TileId =>
  */
 const unarmed = (s: Open, key: string): Routed => {
 	const keys = inUse(s);
-	if (key === keys.prefix) return desk([{...s, prefix: {armed: true, until: null}}, []]);
+
+	if (key === keys.prefix) {
+		return desk([{...s, prefix: {armed: true, until: null}}, []]);
+	}
+
 	const alone = boundOn(keys, Key.cases.alone.make({key}));
-	if (alone !== null) return desk(act(s, alone.binding.does), alone);
+
+	if (alone !== null) {
+		return desk(act(s, alone.binding.does), alone);
+	}
+
 	const tile = focusedOf(s);
+
 	// The program covers the terminal, so its tsh would never see Ctrl-C: the desk hands it on, to
 	// the tsh the line was typed in when the tile is one of its windows.
-	if (key === "<c-c>" && tile !== null && tile.shows.run !== null)
+	if (key === "<c-c>" && tile !== null && tile.shows.run !== null) {
 		return desk([s, [send({tile: tshOf(tile), data: CTRL_C})]]);
+	}
+
 	return {kind: "tile"};
 };
 
@@ -821,24 +941,36 @@ const unarmed = (s: Open, key: string): Routed => {
 export const route = (s: Open, key: string, at: number): Routed => {
 	if (s.ask !== null) {
 		// tmux's confirm-before: only y says yes; any other key says no.
-		if (key === "y") return desk(yes({...s, ask: null}, s.ask));
+		if (key === "y") {
+			return desk(yes({...s, ask: null}, s.ask));
+		}
+
 		return desk([{...s, ask: null}, []]);
 	}
+
 	const {prefix} = s;
-	if (!prefix.armed) return unarmed(s, key);
+
+	if (!prefix.armed) {
+		return unarmed(s, key);
+	}
+
 	const disarmed: Open = {...s, prefix: DISARMED};
 	const keys = inUse(s);
 	const bound = boundOn(keys, Key.cases.after_prefix.make({key}));
+
 	if (prefix.until !== null) {
 		// The repeat window: a repeatable key repeats; anything else, or a key after it, is the tile's.
-		if (at > prefix.until || bound === null || !bound.binding.repeats)
+		if (at > prefix.until || bound === null || !bound.binding.repeats) {
 			return unarmed(disarmed, key);
+		}
+
 		const [next, cmds] = act(disarmed, bound.binding.does);
 		return desk(
 			[next.at === "open" ? {...next, prefix: {armed: true, until: at + REPEAT_MS}} : next, cmds],
 			bound,
 		);
 	}
+
 	if (key === keys.prefix) {
 		// tmux's send-prefix: the prefix twice sends it on, to a tsh that is not covered.
 		const tile = focusedOf(s);
@@ -846,8 +978,12 @@ export const route = (s: Open, key: string, at: number): Routed => {
 		const to = tile !== null && tile.shows.run === null && data !== null;
 		return desk([disarmed, to ? [send({tile: tile.id, data})] : []]);
 	}
+
 	// A key with no binding after the prefix is swallowed, as tmux does.
-	if (bound === null) return desk([disarmed, []]);
+	if (bound === null) {
+		return desk([disarmed, []]);
+	}
+
 	const [next, cmds] = act(disarmed, bound.binding.does);
 	return desk(
 		[
@@ -880,8 +1016,15 @@ const onOpen =
 /** A tile of the active workspace gets focus; the question, if one was asked, is answered no. */
 const clicked = (s: Open, tile: TileId): Step => {
 	const ws = activeOf(s);
-	if (findTile(ws.layout, tile) === null) return [s, []];
-	if (ws.focused === tile && s.ask === null) return [s, []];
+
+	if (findTile(ws.layout, tile) === null) {
+		return [s, []];
+	}
+
+	if (ws.focused === tile && s.ask === null) {
+		return [s, []];
+	}
+
 	const layout =
 		ws.layout.zoomed === null || ws.layout.zoomed === tile ? ws.layout : unzoom(ws.layout);
 	const next = {...withWorkspace(s, {...ws, layout, focused: tile}), ask: null};
@@ -897,7 +1040,11 @@ const clicked = (s: Open, tile: TileId): Step => {
 const covered = (s: Open, tile: TileId, runs: readonly [Shown, ...Shown[]]): Step => {
 	const ws = whereIs(s, tile);
 	const node = ws === undefined ? null : findTile(ws.layout, tile);
-	if (ws === undefined || node === null || node.shows.kind === "window") return [s, []];
+
+	if (ws === undefined || node === null || node.shows.kind === "window") {
+		return [s, []];
+	}
+
 	const more = runs.length - 1;
 	// Colors and letters are counted per workspace (docs/direction/pipe-colors.md), so a repeat
 	// needs seven pipes in one.
@@ -909,15 +1056,23 @@ const covered = (s: Open, tile: TileId, runs: readonly [Shown, ...Shown[]]): Ste
 		ids: {tiles: Array.from({length: more}, (_, k) => `t${s.next + k}`), container: `c${s.next}`},
 		area: s.area,
 	});
-	if (layout === ws.layout) return [s, []];
+
+	if (layout === ws.layout) {
+		return [s, []];
+	}
+
 	// One run over a tsh changes nothing kept: a restore shows the tsh again. Over the tile a line
 	// was typed in (its line sent to the back), that line's windows lose the tile they give their
 	// space back to, and that is kept.
-	if (more === 0 && node.shows.kind === "tsh") return [withWorkspace(s, {...ws, layout}), []];
+	if (more === 0 && node.shows.kind === "tsh") {
+		return [withWorkspace(s, {...ws, layout}), []];
+	}
+
 	if (more === 0) {
 		const next = withWorkspace(s, {...ws, layout});
 		return [next, keep(next)];
 	}
+
 	const next = {...withWorkspace(s, {...ws, layout}), next: s.next + more};
 	return [next, keep(next)];
 };
@@ -929,16 +1084,30 @@ const covered = (s: Open, tile: TileId, runs: readonly [Shown, ...Shown[]]): Ste
 const over = (s: Open, run: string): Step => {
 	let next: Desk = s;
 	const cmds: DeskCmd[] = [];
+
 	for (const {tile} of showing(s, run)) {
-		if (next.at !== "open") break;
+		if (next.at !== "open") {
+			break;
+		}
+
 		const ws = whereIs(next, tile.id);
-		if (ws === undefined) continue;
+
+		if (ws === undefined) {
+			continue;
+		}
+
 		if (tile.shows.kind === "window") {
 			next = drop(next, ws, [tile.id]);
 			cmds.push(stop({tile: tile.id}));
-		} else next = withWorkspace(next, {...ws, layout: setShows(ws.layout, tile.id, TSH)});
+		} else {
+			next = withWorkspace(next, {...ws, layout: setShows(ws.layout, tile.id, TSH)});
+		}
 	}
-	if (next === s) return [s, []];
+
+	if (next === s) {
+		return [s, []];
+	}
+
 	return [next, [...cmds, ...(next.at === "over" ? [empty({})] : keep(next))]];
 };
 
@@ -952,13 +1121,15 @@ export const deskMachine = defineMachine({
 	types: {model: {} as Desk, msg: {} as DeskMsg},
 	cmds: [open, close, stop, send, save, empty, end, kill, show],
 	init: (loaded) => {
-		if (loaded !== null && loaded.at === "open")
+		if (loaded !== null && loaded.at === "open") {
 			return [
 				loaded,
 				loaded.workspaces.flatMap((ws) =>
 					tilesOf(ws).flatMap((t) => (t.shows.kind === "window" ? [] : [opening(loaded, t.id)])),
 				),
 			];
+		}
+
 		const s = fresh();
 		return [s, [open({tile: "t1"}), ...keep(s)]];
 	},
@@ -971,7 +1142,11 @@ export const deskMachine = defineMachine({
 		resize: onOpen((s, m) => {
 			const ws = activeOf(s);
 			const layout = resize(ws.layout, m.container, m.sizes);
-			if (layout === ws.layout) return [s, []];
+
+			if (layout === ws.layout) {
+				return [s, []];
+			}
+
 			const next = withWorkspace(s, {...ws, layout});
 			return [next, keep(next)];
 		}),
@@ -1040,11 +1215,16 @@ const agentsBack = (raw: unknown, workspaces: readonly Workspace[]): Open["agent
 	);
 	const named = new Set<TileId>();
 	const agents: Record<AgentName, TileId> = {};
+
 	for (const [name, tile] of Object.entries(kept)) {
-		if (!isAgentName(name) || !shells.has(tile) || named.has(tile)) continue;
+		if (!isAgentName(name) || !shells.has(tile) || named.has(tile)) {
+			continue;
+		}
+
 		named.add(tile);
 		agents[name] = tile;
 	}
+
 	return agents;
 };
 
@@ -1057,29 +1237,52 @@ const agentsBack = (raw: unknown, workspaces: readonly Workspace[]): Open["agent
  */
 export const restore = (raw: unknown): Open | null => {
 	const read = decodeSaved(raw);
-	if (read._tag === "None") return null;
+
+	if (read._tag === "None") {
+		return null;
+	}
+
 	const saved = read.value;
 	const seen = new Set<string>();
 	let top = 0;
 	const workspaces: Workspace[] = [];
+
 	for (const ws of saved.workspaces) {
-		if (checkTree(ws.layout).length > 0) return null;
+		if (checkTree(ws.layout).length > 0) {
+			return null;
+		}
+
 		const layout = quiet(ws.layout);
 		const left = [...tiles(layout.root)];
+
 		for (const t of left) {
 			const n = TILE_ID.exec(t.id);
-			if (n === null || seen.has(t.id)) return null;
+
+			if (n === null || seen.has(t.id)) {
+				return null;
+			}
+
 			seen.add(t.id);
 			top = Math.max(top, Number(n[1]));
 		}
+
 		const [first] = left;
-		if (first === undefined) continue;
+
+		if (first === undefined) {
+			continue;
+		}
+
 		const focused = left.some((t) => t.id === ws.focused) ? ws.focused : first.id;
 		const zoomed = layout.zoomed === focused ? layout : unzoom(layout);
 		workspaces.push({id: ws.id, layout: unfold(zoomed, focused), focused});
 	}
+
 	const [first, ...rest] = workspaces;
-	if (first === undefined) return null;
+
+	if (first === undefined) {
+		return null;
+	}
+
 	const active = workspaces.some((ws) => ws.id === saved.active) ? saved.active : first.id;
 	return {
 		at: "open",

@@ -51,8 +51,10 @@ const step = (s: Ship, msg: AnyMsg) => applyCell<Ship, AnyMsg, ShipCmd>(ship, s,
 const said = (name: string, attributes: Record<string, string>) =>
 	Effect.gen(function* () {
 		const span = yield* Effect.option(Effect.currentSpan);
-		if (span._tag === "Some")
+
+		if (span._tag === "Some") {
 			span.value.event(name, yield* nowNanos, {[ATTR.machine]: "ship", ...attributes});
+		}
 	});
 
 const folded = (type: string) => said(`msg ${type}`, {[ATTR.msg]: type});
@@ -71,9 +73,12 @@ export const look = (
 	return Effect.gen(function* () {
 		const [reading, [read]] = step({phase: "idle"}, {type: "start", pr});
 		yield* folded("start");
+
 		// The machine always starts with its read, so anything else is a bug here, not a failure to report.
-		if (read?.type !== "ship_facts")
+		if (read?.type !== "ship_facts") {
 			return yield* Effect.die(new Error("the ship machine did not start with its read"));
+		}
+
 		const answer = yield* shipReadInterpret.ship_facts(read).pipe(
 			Effect.onExit((exit) =>
 				Effect.annotateCurrentSpan(ATTR.cmdOutcome, exit._tag === "Success" ? "ok" : "failed"),
@@ -97,13 +102,20 @@ export const look = (
 		const [after, cmds] = step(reading, answer);
 		yield* folded(answer.type);
 		const [next] = cmds;
-		if (next !== undefined)
+
+		if (next !== undefined) {
 			yield* said(`would ${drawing.steps[next.type] ?? next.type}`, {
 				[ATTR.cmd]: next.type,
 				[ATTR.cmdOutcome]: "not_sent",
 			});
+		}
+
 		const outcome = after.phase === "over" ? after.outcome : null;
-		if (outcome !== null) yield* Effect.annotateCurrentSpan(ATTR.outcome, nameOf(outcome));
+
+		if (outcome !== null) {
+			yield* Effect.annotateCurrentSpan(ATTR.outcome, nameOf(outcome));
+		}
+
 		const found: Look = {
 			pr,
 			facts: answer.value ?? null,

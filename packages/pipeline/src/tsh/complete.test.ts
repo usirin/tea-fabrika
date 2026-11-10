@@ -137,9 +137,17 @@ describe("the command line", () => {
 		});
 		const config = {...defaultConfig("/tsh"), repo: {owner: "acme", name: "widgets"}};
 		const entry = programsOf(config, undefined, undefined, undefined, setup).get("deliver");
-		if (entry === undefined) throw new Error("deliver is not listed");
+
+		if (entry === undefined) {
+			throw new Error("deliver is not listed");
+		}
+
 		const read = readFlags(entry.program, {});
-		if (read.kind !== "given") throw new Error(read.why);
+
+		if (read.kind !== "given") {
+			throw new Error(read.why);
+		}
+
 		expect(read.flags.agents).toEqual({
 			build: {model: "claude-sonnet-5-5", effort: "low", budget: 0.4},
 			review: {model: "haiku", effort: "low", budget: 0.4},

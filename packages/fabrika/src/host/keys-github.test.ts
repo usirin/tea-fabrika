@@ -39,22 +39,36 @@ const fakeGitHub = () => {
 		state.asked.push(url.pathname);
 		const auth = req.headers.get("authorization");
 		state.auth.push(auth);
-		if (state.dead && auth !== null)
+
+		if (state.dead && auth !== null) {
 			return Response.json({message: "Bad credentials"}, {status: 401});
-		if (state.status !== 200)
+		}
+
+		if (state.status !== 200) {
 			return new Response("no", {status: state.status, headers: state.headers});
-		if (url.host !== "api.github.com") return Response.json({message: "Not Found"}, {status: 404});
+		}
+
+		if (url.host !== "api.github.com") {
+			return Response.json({message: "Not Found"}, {status: 404});
+		}
+
 		const byId = /^\/user\/([0-9]+)$/.exec(url.pathname);
+
 		if (byId !== null) {
 			const found = [...users].find(([, u]) => u.id === Number(byId[1]));
 			return found === undefined
 				? Response.json({message: "Not Found"}, {status: 404})
 				: Response.json({id: found[1].id, login: found[0]});
 		}
+
 		const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
 		const login = m?.[1] === undefined ? "" : decodeURIComponent(m[1]);
 		const u = users.get(login);
-		if (u === undefined) return Response.json({message: "Not Found"}, {status: 404});
+
+		if (u === undefined) {
+			return Response.json({message: "Not Found"}, {status: 404});
+		}
+
 		return m?.[2] === undefined
 			? Response.json({id: u.id, login})
 			: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
@@ -117,8 +131,10 @@ describe("GitHub's keys", () => {
 	it.effect("asks nothing for an id that is not GitHub's", () => {
 		const gh = fakeGitHub();
 		return Effect.gen(function* () {
-			for (const id of ["ledger:7", "github:", "github:07", "github:-1", "github:1e3", "7"])
+			for (const id of ["ledger:7", "github:", "github:07", "github:-1", "github:1e3", "7"]) {
 				expect(yield* byId(id)).toBeNull();
+			}
+
 			expect(gh.state.asked).toEqual([]);
 		}).pipe(Effect.provide(gh.layer({cacheMs: 0})));
 	});
@@ -135,8 +151,10 @@ describe("GitHub's keys", () => {
 	it.effect("asks nothing for a name that is no GitHub login", () => {
 		const gh = fakeGitHub();
 		return Effect.gen(function* () {
-			for (const name of ["-alice", "a--b", "a/b", "x".repeat(40), "github:7"])
+			for (const name of ["-alice", "a--b", "a/b", "x".repeat(40), "github:7"]) {
 				expect(yield* of(name)).toBeNull();
+			}
+
 			expect(gh.state.asked).toEqual([]);
 		}).pipe(Effect.provide(gh.layer({cacheMs: 0})));
 	});
@@ -192,6 +210,7 @@ describe("GitHub's keys", () => {
 					`GitHub answered ${status} for /user/7 (rate limit: 0 calls left)`,
 				);
 			}
+
 			gh.state.headers = {};
 			expect((yield* Effect.flip(byId("github:7"))).why).toBe("GitHub answered 429 for /user/7");
 		}).pipe(Effect.provide(gh.layer({cacheMs: 0, failMs: 0})));
@@ -303,6 +322,7 @@ describe("GitHub's keys", () => {
 				gh.state.headers = headers;
 				yield* Effect.flip(byId("github:7"));
 			}
+
 			gh.state.status = 200;
 			expect(yield* byId("github:7")).toMatchObject({id: "github:7"});
 			expect(gh.state.asked).toHaveLength(5);
@@ -466,8 +486,10 @@ describe("how long GitHub says to wait", () => {
 			"Sun, 09 Sep 2001 01:46:47 GMT",
 			"Sunday, 09-Sep-01 01:46:47 GMT",
 			"Sun Sep  9 01:46:47 2001",
-		])
+		]) {
 			expect(limitWait(429, {"retry-after": date}, now)).toBe(7000);
+		}
+
 		for (const date of [
 			"Sun, 9 Sep 2001 01:46:47 GMT",
 			"Sun, 09 Sep 2001 01:46:47 UTC",
@@ -476,8 +498,9 @@ describe("how long GitHub says to wait", () => {
 			"Sun, 09 Sep 2001 24:00:00 GMT",
 			"2001-09-09T01:46:47Z",
 			"Sun Sep 09 01:46:47 2001 GMT",
-		])
+		]) {
 			expect(limitWait(429, {"retry-after": date}, now)).toBe(null);
+		}
 	});
 	it("takes a two-digit year as the latest, never more than 50 years ahead", () => {
 		const at = Date.UTC(2026, 0, 1);

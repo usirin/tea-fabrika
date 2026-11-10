@@ -55,8 +55,15 @@ export function namesBrief(names: readonly string[], ticket: string): string {
 	const shown = names.filter((name) => used.has(name) && identifiersIn(name).length > 0);
 	const rule =
 		"A flag, a glob pattern or a package name is a user's whatever its shape. So is any name the published packages' manifests and docs show their users: the Check knows them all, and sends back only internal names.";
-	if (names.length === 0) return `None were gathered. ${rule}`;
-	if (shown.length === 0) return rule;
+
+	if (names.length === 0) {
+		return `None were gathered. ${rule}`;
+	}
+
+	if (shown.length === 0) {
+		return rule;
+	}
+
 	return [
 		`Of the names the ticket uses, these are ones the published packages show their users, so a criterion may use them: ${shown.join(" ")}`,
 		"",
@@ -239,7 +246,11 @@ export const livePlanner = (config: PlannerConfig) =>
 			const treeOf = (commit: string) =>
 				Effect.gen(function* () {
 					const kept = trees.get(commit);
-					if (kept !== undefined) return kept;
+
+					if (kept !== undefined) {
+						return kept;
+					}
+
 					const tree = yield* copyAt(config.repo, root, commit);
 					trees.set(commit, tree);
 					return tree;

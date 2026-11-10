@@ -83,7 +83,9 @@ const counted = (s: {readonly n: number; readonly done: boolean}) =>
 /** Until `ready` holds, a little at a time. */
 const until = (ready: () => boolean) =>
 	Effect.gen(function* () {
-		while (!ready()) yield* Effect.sleep(Duration.millis(2));
+		while (!ready()) {
+			yield* Effect.sleep(Duration.millis(2));
+		}
 	});
 
 const byId = (copies: readonly Copy[]) => [...copies].sort((x, y) => x.id.localeCompare(y.id));
@@ -96,13 +98,21 @@ describe("status lines: one row per copy", () => {
 				const {program, handles} = pair(counted);
 				const seen = yield* Effect.gen(function* () {
 					const started = yield* start(program, {}, {}, {id: "pair:t", storage: memoryStorage()});
-					if (started.kind !== "running") return yield* Effect.die("did not start");
+
+					if (started.kind !== "running") {
+						return yield* Effect.die("did not start");
+					}
+
 					const view = started.run.machines.step;
 					yield* until(() => handles.size === 2);
 					const both = byId(view.copies());
 					const a = handles.get("a");
 					const b = handles.get("b");
-					if (a === undefined || b === undefined) return yield* Effect.die("no handles");
+
+					if (a === undefined || b === undefined) {
+						return yield* Effect.die("no handles");
+					}
+
 					// `a` moves on; `b`, the stuck one, does not.
 					yield* a.dispatch({type: "step"});
 					yield* a.dispatch({type: "step"});
@@ -135,18 +145,29 @@ describe("status lines: one row per copy", () => {
 				const {program, handles} = pair(counted);
 				const sent = yield* Effect.gen(function* () {
 					const started = yield* start(program, {}, {}, {id: "pair:t", storage: memoryStorage()});
-					if (started.kind !== "running") return yield* Effect.die("did not start");
+
+					if (started.kind !== "running") {
+						return yield* Effect.die("did not start");
+					}
+
 					yield* until(() => handles.size === 2);
 					const a = handles.get("a");
-					if (a === undefined) return yield* Effect.die("no handle");
+
+					if (a === undefined) {
+						return yield* Effect.die("no handle");
+					}
+
 					const collected: (readonly Copy[])[] = [];
 					const listening = yield* started.run.machines.step.lines.pipe(
 						Stream.runForEach((copies) => Effect.sync(() => collected.push(copies))),
 						Effect.forkChild,
 					);
 					yield* until(() => collected.length === 1);
-					for (const type of ["again", "again", "step", "again", "step"] as const)
+
+					for (const type of ["again", "again", "step", "again", "step"] as const) {
 						yield* a.dispatch({type});
+					}
+
 					yield* until(() => collected.length === 3);
 					// Time for one more to come, if one were sent.
 					yield* Effect.sleep(Duration.millis(20));
@@ -163,7 +184,10 @@ describe("status lines: one row per copy", () => {
 
 	/** A line with a bug: it throws once the count is at 1. */
 	const buggy = (s: Toy) => {
-		if (s.n === 1) throw new Error("a bug in the line");
+		if (s.n === 1) {
+			throw new Error("a bug in the line");
+		}
+
 		return counted(s);
 	};
 
@@ -172,10 +196,18 @@ describe("status lines: one row per copy", () => {
 			const {program, handles} = pair(buggy);
 			const rows = yield* Effect.gen(function* () {
 				const started = yield* start(program, {}, {}, {id: "pair:t", storage: memoryStorage()});
-				if (started.kind !== "running") return yield* Effect.die("did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("did not start");
+				}
+
 				yield* until(() => handles.size === 2);
 				const a = handles.get("a");
-				if (a === undefined) return yield* Effect.die("no handle");
+
+				if (a === undefined) {
+					return yield* Effect.die("no handle");
+				}
+
 				yield* a.dispatch({type: "step"});
 				const broken = byId(started.run.machines.step.copies())[0]?.line;
 				yield* a.dispatch({type: "step"});
@@ -195,7 +227,11 @@ describe("status lines: one row per copy", () => {
 				const {program, handles} = pair(counted, ids);
 				const seen = yield* Effect.gen(function* () {
 					const started = yield* start(program, {}, {}, {id: "pair:t", storage: memoryStorage()});
-					if (started.kind !== "running") return yield* Effect.die("did not start");
+
+					if (started.kind !== "running") {
+						return yield* Effect.die("did not start");
+					}
+
 					const view = started.run.machines.step;
 					yield* until(() => handles.size === ids.length);
 					const closed = () =>
@@ -209,18 +245,34 @@ describe("status lines: one row per copy", () => {
 						(id) =>
 							Effect.gen(function* () {
 								const handle = handles.get(id);
-								if (handle === undefined) return yield* Effect.die(`no handle for ${id}`);
-								if (closing.includes(id)) return yield* handle.dispatch({type: "finish"});
+
+								if (handle === undefined) {
+									return yield* Effect.die(`no handle for ${id}`);
+								}
+
+								if (closing.includes(id)) {
+									return yield* handle.dispatch({type: "finish"});
+								}
+
 								let after = 0;
+
 								while (after < 20 && steps.get(id) !== 500) {
 									// A copy stopped under it ends its steps; the run's end below says why.
 									const refused = yield* handle.dispatch({type: "step"}).pipe(
 										Effect.as(false),
 										Effect.catchCause(() => Effect.succeed(true)),
 									);
-									if (refused) return;
+
+									if (refused) {
+										return;
+									}
+
 									steps.set(id, (steps.get(id) ?? 0) + 1);
-									if (closed()) after++;
+
+									if (closed()) {
+										after++;
+									}
+
 									yield* Effect.yieldNow;
 								}
 							}),

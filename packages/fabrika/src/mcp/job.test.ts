@@ -68,10 +68,18 @@ describe("a job's last lines", () => {
 					const got = lastLines(printed, last);
 					expect(got.length).toBeLessThanOrEqual(Math.min(last, printed.length));
 					expect(bytesOf(got)).toBeLessThanOrEqual(BYTES_MAX);
+
 					// Something of the newest line always shows: a job that printed shows it printed.
-					if (printed.length > 0) expect(got.length).toBeGreaterThanOrEqual(1);
-					for (const line of got) expect(line).not.toMatch(LONE_SURROGATE);
+					if (printed.length > 0) {
+						expect(got.length).toBeGreaterThanOrEqual(1);
+					}
+
+					for (const line of got) {
+						expect(line).not.toMatch(LONE_SURROGATE);
+					}
+
 					const from = printed.length - got.length;
+
 					if (got.length === 1) {
 						// Alone, the newest line may be cut at its end, as a terminal shows its start.
 						expect(printed[from]?.startsWith(got[0] ?? "")).toBe(true);
@@ -79,13 +87,15 @@ describe("a job's last lines", () => {
 						// Several: whole lines, the newest ones, as printed.
 						expect(got).toEqual(printed.slice(from));
 					}
+
 					// It stopped only where the next older line would not fit.
 					if (
 						got.length >= 1 &&
 						got.length < Math.min(last, printed.length) &&
 						got[0] === printed[from]
-					)
+					) {
 						expect(bytesOf([printed[from - 1] ?? "", ...got])).toBeGreaterThan(BYTES_MAX);
+					}
 				},
 			),
 			OPTS,

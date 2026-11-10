@@ -88,7 +88,12 @@ const fresh = (): Sql => {
 };
 
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -144,10 +149,15 @@ const holds = (span: Tracer.NativeSpan, value: unknown): boolean =>
 /** Whether `outer` is above `span`, walking its parents. */
 const within = (span: Tracer.NativeSpan, outer: Tracer.NativeSpan): boolean => {
 	let at: Option.Option<Tracer.AnySpan> = span.parent;
+
 	while (Option.isSome(at)) {
-		if (at.value.spanId === outer.spanId) return true;
+		if (at.value.spanId === outer.spanId) {
+			return true;
+		}
+
 		at = at.value._tag === "Span" ? at.value.parent : Option.none();
 	}
+
 	return false;
 };
 
@@ -242,7 +252,11 @@ const clean = (spans: ReadonlyArray<Tracer.NativeSpan>) => {
 	for (const span of spans) {
 		for (const [key, value] of Object.entries(tags(span))) {
 			const text = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
-			for (const mark of MARKS) expect(text.includes(mark), `${span.name} ${key}`).toBe(false);
+
+			for (const mark of MARKS) {
+				expect(text.includes(mark), `${span.name} ${key}`).toBe(false);
+			}
+
 			expect(
 				typeof value === "string" ? value.length : 0,
 				`${span.name} ${key}`,
@@ -265,7 +279,11 @@ describe("p97, mailbox spans", () => {
 				const sends = ended("mailbox.send");
 				expect(sends.length).toBe(2);
 				const [placed, refused] = sends;
-				if (placed === undefined || refused === undefined) return expect.unreachable();
+
+				if (placed === undefined || refused === undefined) {
+					return expect.unreachable();
+				}
+
 				expect(tagged(placed, "to")).toBe(name);
 				expect(tagged(refused, "to")).toBe(name);
 				expect(holds(placed, name) || holds(placed, `${name}/inbox`)).toBe(true);
@@ -304,7 +322,11 @@ describe("p97, mailbox spans", () => {
 				expect(letters.length).toBe(2);
 				const [receive, ...more] = ended("mailbox.receive");
 				expect(more).toEqual([]);
-				if (receive === undefined) return expect.unreachable();
+
+				if (receive === undefined) {
+					return expect.unreachable();
+				}
+
 				expect(holds(receive, name) || holds(receive, `${name}/inbox`)).toBe(true);
 				expect(tags(receive)["fab.mailbox.name"]).toBe(name);
 				expect(tagged(receive, "after")).toBe(0);
@@ -347,7 +369,11 @@ describe("p97, process spans", () => {
 					);
 					const [first, second, ...more] = ended("process.start");
 					expect(more).toEqual([]);
-					if (first === undefined || second === undefined) return expect.unreachable();
+
+					if (first === undefined || second === undefined) {
+						return expect.unreachable();
+					}
+
 					expect(holds(first, name)).toBe(true);
 					expect(tags(first)["fab.process"]).toBe(A);
 					expect(tagged(first, "program")).toBe(program);
@@ -379,13 +405,16 @@ describe("p97, member spans", () => {
 				const writes = ended("members.write");
 				expect(writes.length).toBe(4);
 				const [grant, refused, deny, revoke] = writes;
+
 				if (
 					grant === undefined ||
 					refused === undefined ||
 					deny === undefined ||
 					revoke === undefined
-				)
+				) {
 					return expect.unreachable();
+				}
+
 				expect(tagged(grant, "tag")).toBe("granted");
 				expect(tagged(grant, "answer")).toBe("applied");
 				expect(tagged(grant, "rev")).toBe(2);
@@ -400,7 +429,11 @@ describe("p97, member spans", () => {
 				const reads = ended("members.read");
 				expect(reads.length).toBe(before + 1);
 				const read = reads.at(-1);
-				if (read === undefined) return expect.unreachable();
+
+				if (read === undefined) {
+					return expect.unreachable();
+				}
+
 				const facts = yield* Stream.runCollect((yield* Ledger).read("door/members", 0));
 				expect(tagged(read, "facts")).toBe(facts.length);
 				expect(typeof tagged(read, "keys")).toBe("number");
@@ -439,7 +472,11 @@ describe("p97, member spans", () => {
 						append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
 							Effect.suspend(() => {
 								const before = id === target ? hook.before : null;
-								if (before === null) return real.append(stream, id, line);
+
+								if (before === null) {
+									return real.append(stream, id, line);
+								}
+
 								hook.before = null;
 								return Effect.andThen(before, real.append(stream, id, line));
 							}),
@@ -490,8 +527,11 @@ describe("p97, names and numbers only", () => {
 					from({seen: 1}),
 				);
 				yield* write(granted(long("k"), "t1"));
-				for (const name of ["mailbox.send", "mailbox.receive", "process.start", "members.write"])
+
+				for (const name of ["mailbox.send", "mailbox.receive", "process.start", "members.write"]) {
 					expect(ended(name).length, name).toBe(1);
+				}
+
 				clean(spans);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 		}),
@@ -512,7 +552,11 @@ describe("p97, the tags hold the right names and numbers", () => {
 				yield* write(fact);
 				yield* write(revoked("pA", key));
 				const [grant] = ended("members.write");
-				if (grant === undefined) return expect.unreachable();
+
+				if (grant === undefined) {
+					return expect.unreachable();
+				}
+
 				expect(tagged(grant, "key")).toBe(key);
 				expect(tagged(grant, "signer")).toBe("pA");
 				expect(tagged(grant, "id")).toBe(
@@ -520,7 +564,11 @@ describe("p97, the tags hold the right names and numbers", () => {
 				);
 				yield* clients.members;
 				const read = ended("members.read").at(-1);
-				if (read === undefined) return expect.unreachable();
+
+				if (read === undefined) {
+					return expect.unreachable();
+				}
+
 				// pA, wA and t1 are known; t1 is revoked, so two are live.
 				expect(tagged(read, "keys")).toBe(3);
 				expect(tagged(read, "live")).toBe(2);
@@ -540,7 +588,11 @@ describe("p97, the tags hold the right names and numbers", () => {
 				expect(ended("ledger.append").length).toBe(1); // the founding
 				yield* clients.members;
 				yield* clients.members;
-				for (let n = 2; n < count; n++) yield* clients.members;
+
+				for (let n = 2; n < count; n++) {
+					yield* clients.members;
+				}
+
 				expect(ended("ledger.append").length).toBe(1);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 		}),
@@ -570,7 +622,11 @@ describe("p97, the tags hold the right names and numbers", () => {
 					append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
 						Effect.suspend(() => {
 							const first = id === target ? before : null;
-							if (first === null) return real.append(stream, id, line);
+
+							if (first === null) {
+								return real.append(stream, id, line);
+							}
+
 							before = null;
 							return Effect.andThen(first, real.append(stream, id, line));
 						}),
@@ -580,7 +636,11 @@ describe("p97, the tags hold the right names and numbers", () => {
 				yield* write(sheet);
 				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
 				const ignored = ended("members.write").find((span) => tagged(span, "answer") === "ignored");
-				if (ignored === undefined) return expect.unreachable();
+
+				if (ignored === undefined) {
+					return expect.unreachable();
+				}
+
 				expect(tagged(ignored, "rev")).toBe(4);
 				expect(tagged(ignored, "why")).toBe("used");
 			}).pipe(
@@ -600,7 +660,11 @@ describe("p97, the tags hold the right names and numbers", () => {
 				const mailbox = yield* Mailbox;
 				yield* mailbox.send("notes:1", id, {value: M_MARK}, from());
 				const [send] = ended("mailbox.send");
-				if (send === undefined) return expect.unreachable();
+
+				if (send === undefined) {
+					return expect.unreachable();
+				}
+
 				expect(tags(send)["messaging.message.id"]).toBe(id);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 		}),
@@ -622,7 +686,11 @@ describe("p97, the tags hold the right names and numbers", () => {
 				const failed = yield* Effect.flip(mailbox.send(name, id, {}, from()));
 				expect(failed.why).toBe("storage");
 				const [send] = ended("mailbox.send");
-				if (send === undefined) return expect.unreachable();
+
+				if (send === undefined) {
+					return expect.unreachable();
+				}
+
 				expect(tagged(send, "why")).toBe("storage");
 			}).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provide(broken))), Effect.withTracer(tracer));
 		}),
@@ -659,7 +727,11 @@ describe("p97, the tags hold the right names and numbers", () => {
 				expect((yield* write(granted("pA", key)))._tag).toBe("applied");
 				const before = yield* clients.members;
 				const fact = granted("pA", key);
-				if (fact._tag !== "granted") return expect.unreachable();
+
+				if (fact._tag !== "granted") {
+					return expect.unreachable();
+				}
+
 				expect(yield* write({...fact, grant: {...fact.grant, as: "agent"}})).toEqual({
 					_tag: "refused",
 					why: "not_allowed",

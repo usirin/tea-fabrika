@@ -23,9 +23,17 @@ export function readMark(
 	text: string,
 ): {readonly id: CriterionId; readonly version: number; readonly words: string} | null {
 	const found = MARK.exec(text);
-	if (found === null) return null;
+
+	if (found === null) {
+		return null;
+	}
+
 	const id = decodeId(found[1]);
-	if (id._tag === "None") return null;
+
+	if (id._tag === "None") {
+		return null;
+	}
+
 	return {id: id.value, version: Number(found[2]), words: text.slice(found[0].length).trim()};
 }
 

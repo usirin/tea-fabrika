@@ -70,7 +70,12 @@ const fresh = (): Sql => {
 };
 
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -269,7 +274,11 @@ describe("p96 and p97, replay and write answers", () => {
 				});
 				const loaded = yield* Effect.exit(members);
 				expect(loaded._tag, "unknown member facts are skipped").toBe("Success");
-				if (loaded._tag === "Success") expect(view(loaded.value)).toEqual(view(before));
+
+				if (loaded._tag === "Success") {
+					expect(view(loaded.value)).toEqual(view(before));
+				}
+
 				expect(yield* write(granted("pA", key))).toMatchObject({_tag: "applied"});
 				expect((yield* entries).at(-1)?.seen).toBe(2);
 			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
@@ -290,8 +299,10 @@ describe("p96 and p97, replay and write answers", () => {
 					const answer = yield* write(granted(signer, key));
 					const span = spans.filter((s) => s.name === "members.write").at(-1)!;
 					expect(span.attributes.get("fab.members.answer")).toBe(answer._tag);
-					if (answer._tag === "refused")
+
+					if (answer._tag === "refused") {
 						expect(span.attributes.get("fab.members.why")).toBe(answer.why);
+					}
 				}
 			}).pipe(Effect.provide(clientsOn(onSql(fresh()))), Effect.withTracer(tracer));
 		}),
@@ -316,7 +327,11 @@ const racing = (
 				append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
 					Effect.suspend(() => {
 						const before = id === hook.id ? hook.before : null;
-						if (before === null) return real.append(stream, id, line);
+
+						if (before === null) {
+							return real.append(stream, id, line);
+						}
+
 						hook.before = null;
 						return Effect.andThen(before, real.append(stream, id, line));
 					}),
@@ -504,6 +519,7 @@ describe("p96, the traced history from the plan", () => {
 				];
 				const kept: Array<MemberFact> = [FOUNDED];
 				yield* members; // founded first, so each step below counts only its own entry
+
 				for (const [fact, answer] of steps) {
 					const before = (yield* entries).length;
 					const got = yield* write(fact);
@@ -511,8 +527,12 @@ describe("p96, the traced history from the plan", () => {
 					const after = yield* entries;
 					const wrote = got._tag === "applied" && got.rev > before;
 					expect(after.length, fact._tag).toBe(before + (wrote ? 1 : 0));
-					if (wrote) kept.push(fact);
+
+					if (wrote) {
+						kept.push(fact);
+					}
 				}
+
 				const m = yield* members;
 				expect(view(m)).toEqual(view(foldMembers(kept)));
 				expect([...m.spent]).toEqual(["r1"]);
@@ -609,10 +629,12 @@ describe("p96, why a write is refused", () => {
 			Effect.gen(function* () {
 				yield* members; // founded first, so the count below is only the refused facts
 				const before = (yield* entries).length;
+
 				for (const fact of [granted("wA", key), revoked("pA", "pA"), granted("x1", key)]) {
 					const answer = yield* write(fact);
 					expect(answer._tag, fact._tag).toBe("refused");
 				}
+
 				expect((yield* entries).length).toBe(before);
 				expect(view(yield* members)).toEqual(view(foldMembers([FOUNDED])));
 				expect((yield* write(denied(key, "SHA256:menu")))._tag).not.toBe("ignored");
@@ -768,6 +790,7 @@ describe("p96, write tells the truth over any history", () => {
 					Effect.gen(function* () {
 						const kept: Array<MemberFact> = [FOUNDED];
 						yield* members;
+
 						for (const make of makes) {
 							const next = make();
 							const before = yield* entries;
@@ -778,20 +801,28 @@ describe("p96, write tells the truth over any history", () => {
 								JSON.stringify(view(foldMembers([...kept, next]))) !==
 								JSON.stringify(view(foldMembers(kept)));
 							expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
-							if (changes)
+
+							if (changes) {
 								expect(answer, next._tag).toEqual({_tag: "applied", rev: expect.any(Number)});
+							}
+
 							if (answer._tag === "refused") {
 								refused++;
 								expect(after.length, next._tag).toBe(before.length);
 								expect(changes, next._tag).toBe(false);
 							}
+
 							if (answer._tag === "applied") {
 								applied++;
 								const placed = after.find((e) => e.rev === answer.rev);
 								expect(placed?.id, next._tag).toBe(factId(next));
-								if (answer.rev > head) kept.push(next);
+
+								if (answer.rev > head) {
+									kept.push(next);
+								}
 							}
 						}
+
 						expect(view(yield* members)).toEqual(view(foldMembers(kept)));
 					}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
 				),

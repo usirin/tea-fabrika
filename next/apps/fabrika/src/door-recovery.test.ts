@@ -37,7 +37,12 @@ const top = mkdtempSync(join(tmpdir(), "p34-door-"));
 const opened: DatabaseSync[] = [];
 
 afterAll(() => {
-	for (const db of opened) if (db.isOpen) db.close();
+	for (const db of opened) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(top, {recursive: true, force: true});
 });
 
@@ -168,7 +173,11 @@ const world = () => {
 		update: {
 			press: (s, m) => {
 				steps++;
-				if (m.poison && controls.throws) throw new TypeError("private door failure");
+
+				if (m.poison && controls.throws) {
+					throw new TypeError("private door failure");
+				}
+
 				return [{count: s.count + 1}, []];
 			},
 		},
@@ -195,10 +204,12 @@ const world = () => {
 		).pipe(Layer.provide(quiet));
 	const records = RecordManager.sql((name) => {
 		let p = partFiles.get(name);
+
 		if (p === undefined) {
 			p = disk();
 			partFiles.set(name, p);
 		}
+
 		return p.sql;
 	}, 1024 ** 3);
 	const manager = () =>
@@ -210,7 +221,11 @@ const world = () => {
 			},
 			Effect.sync(() => {
 				const next = [P1, P2, P3][ids++];
-				if (next === undefined) throw new Error("unexpected fourth successor");
+
+				if (next === undefined) {
+					throw new Error("unexpected fourth successor");
+				}
+
 				return next;
 			}),
 		).pipe(Layer.provideMerge(data()));
@@ -228,7 +243,10 @@ const world = () => {
 					return {
 						...real,
 						flush: Effect.suspend(() => {
-							if (!controls.cutFlush) return real.flush;
+							if (!controls.cutFlush) {
+								return real.flush;
+							}
+
 							controls.cutFlush = false;
 							controls.cuts++;
 							return Effect.fail(new SinkError({why: "storage", held: 0}));
@@ -289,6 +307,7 @@ const world = () => {
 				controls.cuts++;
 				throw new Error("lost recorded save");
 			}
+
 			if (
 				controls.cutRetryable &&
 				query.startsWith("UPDATE door_bindings") &&
@@ -298,6 +317,7 @@ const world = () => {
 				controls.retryableCuts++;
 				throw new Error("lost retryable save");
 			}
+
 			return project.sql.exec(query, ...args);
 		},
 	};
@@ -325,7 +345,11 @@ const world = () => {
 			meta?: {id: string; sentAt: string; seen: number},
 		) => {
 			deliveries.push({process: pid, parent: envelope.id, letter: meta?.id});
-			if (controls.failDelivery) return Effect.fail(new LedgerError({why: "unreachable"}));
+
+			if (controls.failDelivery) {
+				return Effect.fail(new LedgerError({why: "unreachable"}));
+			}
+
 			return A.ProgramRunner.use((r) =>
 				r.msg({
 					id: meta?.id ?? envelope.id,
@@ -388,7 +412,10 @@ const world = () => {
 		reopen: () => {
 			project.reopen();
 			process.reopen();
-			for (const p of partFiles.values()) p.reopen();
+
+			for (const p of partFiles.values()) {
+				p.reopen();
+			}
 		},
 	};
 };
@@ -458,9 +485,10 @@ describe("P34 door recovery", () => {
 								}).pipe(Effect.provide(w.layer()));
 								w.reopen();
 								w.controls.failDelivery = false;
+
 								// Acceptance can race the door's saved state. Use the real runner,
 								// keeping the unfinished door row, never fabricating a receipt.
-								if (holds)
+								if (holds) {
 									yield* A.ProgramRunner.use((r) =>
 										r.msg({
 											id: letter,
@@ -475,6 +503,8 @@ describe("P34 door recovery", () => {
 											span: {traceId: from().traceId, spanId: "00f067aa0ba902b7"},
 										}),
 									).pipe(Effect.provide(w.runner(P1)));
+								}
+
 								yield* A.ProgramRunner.use((r) =>
 									r.restart({id: `replace-${letter}`, build: "build-a"}),
 								).pipe(Effect.provide(w.runner(P1)));
@@ -492,18 +522,25 @@ describe("P34 door recovery", () => {
 									const before = yield* inbox;
 									expect(before).toHaveLength(holds ? 1 : 0);
 									let steps = w.steps();
+
 									for (let n = 0; n < resends; n++) {
 										expect(yield* d.route(client, "process.send", queued)).toMatchObject({
 											_tag: "ok",
 											result: {_tag: "accepted", pos: 1},
 										});
-										if (!holds && n === 0) steps = w.steps();
+
+										if (!holds && n === 0) {
+											steps = w.steps();
+										}
+
 										expect(w.steps(), "resends must not apply an accepted letter again").toBe(
 											steps,
 										);
 									}
+
 									const rows = yield* inbox;
 									expect(rows).toMatchObject([{id: letter, pos: 1}]);
+
 									if (holds) {
 										expect(rows).toEqual(before);
 										expect(binding()).toMatchObject({id: old, process: P1});
@@ -538,6 +575,7 @@ describe("P34 door recovery", () => {
 											{id: `write-${letter}`, parent: delivery.parent, by: w.window.fingerprint},
 										]);
 									}
+
 									expect(
 										yield* Effect.result(
 											d
@@ -742,6 +780,7 @@ describe("P34 door recovery", () => {
 			Effect.gen(function* () {
 				const w = world();
 				yield* w.boot;
+
 				for (let n = 0; n < 3; n++) {
 					yield* Effect.gen(function* () {
 						const client = yield* w.online();
@@ -751,8 +790,12 @@ describe("P34 door recovery", () => {
 						);
 					}).pipe(Effect.provide(w.layer()));
 					w.reopen();
-					if (n < 2) yield* recover(w);
+
+					if (n < 2) {
+						yield* recover(w);
+					}
 				}
+
 				yield* Effect.gen(function* () {
 					const client = yield* w.online();
 					const d = yield* Door;
@@ -807,7 +850,11 @@ describe("P34 door recovery", () => {
 					yield* Effect.exit(d.route(client, "process.send", request()));
 					const old = w.deliveries[0]!.parent;
 					const p = yield* C.ProcessManager;
-					if (yield* p.isLive(P1)) yield* p.exit(P1, "crashed", from());
+
+					if (yield* p.isLive(P1)) {
+						yield* p.exit(P1, "crashed", from());
+					}
+
 					yield* p.start(
 						C.Start.cases.again.make({
 							id: "replacement",

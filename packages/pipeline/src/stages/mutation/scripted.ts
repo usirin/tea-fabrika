@@ -138,7 +138,11 @@ function answer(cmd: MutationCmd, layer: Layer.Layer<MutationScope | MutationRun
 		}
 	};
 	const exit = Effect.runSyncExit(run().pipe(Effect.provide(layer)));
-	if (Exit.isSuccess(exit)) return {type: `${cmd.type}_ok`, cmd, value: exit.value};
+
+	if (Exit.isSuccess(exit)) {
+		return {type: `${cmd.type}_ok`, cmd, value: exit.value};
+	}
+
 	const error = Exit.findErrorOption(exit);
 	return {
 		type: `${cmd.type}_err`,
@@ -153,17 +157,28 @@ export function drive(script: Script, ask: MutationAsk = ASK) {
 	const cmds: MutationCmd[] = [];
 	let restarted = false;
 	let [s, out] = step({phase: "idle"}, {type: "start", ask});
+
 	for (let n = 0; n < 20 && s.phase !== "over"; n++) {
 		cmds.push(...out);
+
 		if (!restarted && script.restartAt === s.phase) {
 			restarted = true;
 			[s, out] = step(s, {type: "resume"});
 			continue;
 		}
+
 		const cmd = out[0];
-		if (cmd === undefined) throw new Error(`nothing in flight in ${s.phase}`);
+
+		if (cmd === undefined) {
+			throw new Error(`nothing in flight in ${s.phase}`);
+		}
+
 		[s, out] = step(s, answer(cmd, layer));
 	}
-	if (s.phase !== "over") throw new Error(`still ${s.phase}`);
+
+	if (s.phase !== "over") {
+		throw new Error(`still ${s.phase}`);
+	}
+
 	return {over: s, cmds};
 }

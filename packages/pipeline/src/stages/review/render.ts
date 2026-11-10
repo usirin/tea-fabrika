@@ -65,7 +65,11 @@ function findingLines(finding: Finding): string[] {
 function rowLines(row: Graded, criterion: Criterion | undefined): string[] {
 	const mark = markOf({id: row.id, version: criterion?.version ?? 1});
 	const head = `- ${mark} **${row.grade}**: ${flat(criterion?.text ?? "")}`;
-	if (row.grade === "unseen") return [head, `  - ${flat(row.says)}`];
+
+	if (row.grade === "unseen") {
+		return [head, `  - ${flat(row.says)}`];
+	}
+
 	const where = row.where.length === 0 ? "" : ` (${row.where.map(placeOf).join(", ")})`;
 	return [head, `  - ${flat(row.says)}${where}`];
 }

@@ -43,11 +43,17 @@ const start = (lock: string, wait: number, mode: "wait" | "end" = "wait"): Start
 	});
 	const line = async (word: string, ms = 15_000) => {
 		const until = Date.now() + ms;
+
 		while (Date.now() < until) {
 			const found = lines.find((l) => l.startsWith(`${word} `) || l === word);
-			if (found !== undefined) return found.split(" ");
+
+			if (found !== undefined) {
+				return found.split(" ");
+			}
+
 			await new Promise((r) => setTimeout(r, 25));
 		}
+
 		throw new Error(`no "${word}" line in ${ms}ms; saw: ${lines.join(" | ")}`);
 	};
 	return {proc, lines, line};
@@ -65,10 +71,15 @@ const alive = (pid: number) => {
 
 const until = async (check: () => boolean, ms: number) => {
 	const end = Date.now() + ms;
+
 	while (Date.now() < end) {
-		if (check()) return true;
+		if (check()) {
+			return true;
+		}
+
 		await new Promise((r) => setTimeout(r, 50));
 	}
+
 	return check();
 };
 
@@ -86,8 +97,15 @@ const parentOf = (pid: number) =>
 const lockIn = () => join(mkdtempSync(join(tmpdir(), "guard-")), "1.lock");
 
 afterEach(() => {
-	for (const p of started.splice(0)) p.kill("SIGKILL");
-	for (const pid of left.splice(0)) if (alive(pid)) process.kill(pid, "SIGKILL");
+	for (const p of started.splice(0)) {
+		p.kill("SIGKILL");
+	}
+
+	for (const pid of left.splice(0)) {
+		if (alive(pid)) {
+			process.kill(pid, "SIGKILL");
+		}
+	}
 });
 
 describe("the builder stops with its run", () => {
@@ -155,7 +173,11 @@ describe("one builder per working copy", () => {
 		const pids = await agentOf(a);
 		// Everything dies at once, guard included: no one cleans up.
 		const guard = parentOf(pids[0] ?? 0);
-		for (const pid of [guard, ...pids]) process.kill(pid, "SIGKILL");
+
+		for (const pid of [guard, ...pids]) {
+			process.kill(pid, "SIGKILL");
+		}
+
 		a.proc.kill("SIGKILL");
 
 		const b = start(lock, 1);

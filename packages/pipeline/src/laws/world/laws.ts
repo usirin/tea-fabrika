@@ -24,13 +24,17 @@ const laneName = (i: number) => `L${i + 1}`;
 export const oneLaneATicket: LanesLaw = {
 	name: "a ticket is never worked by two lanes at once",
 	check: (_prev, _move, next) => {
-		for (let i = 0; i < next.lanes.length; i++)
+		for (let i = 0; i < next.lanes.length; i++) {
 			for (let j = i + 1; j < next.lanes.length; j++) {
 				const a = next.lanes[i] as Lane;
 				const b = next.lanes[j] as Lane;
-				if (a.ticket === b.ticket && busy(a) && busy(b))
+
+				if (a.ticket === b.ticket && busy(a) && busy(b)) {
 					return `${laneName(i)} and ${laneName(j)} both work ${a.ticket}`;
+				}
 			}
+		}
+
 		return null;
 	},
 };
@@ -44,9 +48,12 @@ export const oneLaneATicket: LanesLaw = {
 export const testedWithMain: LanesLaw = {
 	name: "nothing lands on a main it was not tested with",
 	check: (_prev, move) => {
-		for (const l of move.note?.landings ?? [])
-			if (l.tested !== l.onto)
+		for (const l of move.note?.landings ?? []) {
+			if (l.tested !== l.onto) {
 				return `${l.head} lands on main ${l.onto}, but it was built and tested on main ${l.tested}`;
+			}
+		}
+
 		return null;
 	},
 };
@@ -55,9 +62,12 @@ export const testedWithMain: LanesLaw = {
 export const onlyPassedLands: LanesLaw = {
 	name: "only a head a review passed lands",
 	check: (_prev, move) => {
-		for (const l of move.note?.landings ?? [])
-			if (l.verdict !== "pass")
+		for (const l of move.note?.landings ?? []) {
+			if (l.verdict !== "pass") {
 				return `${l.head} lands with ${l.verdict === null ? "no verdict" : `a ${l.verdict}`} at that head`;
+			}
+		}
+
 		return null;
 	},
 };
@@ -78,18 +88,31 @@ export const asksReachTheOwner: LanesLaw = {
 		for (let i = 0; i < next.lanes.length; i++) {
 			const was = prev.lanes[i] as Lane;
 			const now = next.lanes[i] as Lane;
-			if (decided(was) || !decided(now)) continue;
-			if (now.loop.phase !== "releasing" && now.loop.phase !== "over") continue;
-			if (now.loop.outcome.kind !== "ask") continue;
+
+			if (decided(was) || !decided(now)) {
+				continue;
+			}
+
+			if (now.loop.phase !== "releasing" && now.loop.phase !== "over") {
+				continue;
+			}
+
+			if (now.loop.outcome.kind !== "ask") {
+				continue;
+			}
+
 			const desk = (next.tickets[now.ticket] as {desk: readonly Entry[]}).desk;
 			const plan = planOfName(now.ticket);
 			const round = desk.findLast((e) => e.fact.type === "reviewed" && e.fact.plan === plan);
 			const waiting = [...deskOf(desk).asks.values()].filter(
 				(a) => a.for === "stuck" && a.plan === plan && a.at === round?.seq,
 			);
-			if (waiting.length === 0)
+
+			if (waiting.length === 0) {
 				return `${laneName(i)} stops to ask the owner (${nameOf(now.loop.outcome)}), but the owner's list has nothing for ${now.ticket}`;
+			}
 		}
+
 		return null;
 	},
 };
@@ -135,8 +158,9 @@ export function deskWorld(
 		lanes: 1,
 		moves: (w) => {
 			const out: Move<Desk, typeof note>[] = [];
-			if (w.rounds < options.rounds)
-				for (const open of options.counts)
+
+			if (w.rounds < options.rounds) {
+				for (const open of options.counts) {
 					out.push({
 						label: `a review round leaves ${open} open`,
 						lane: 0,
@@ -146,8 +170,14 @@ export function deskWorld(
 						next: add(w, {type: "reviewed", plan: PLAN, task: TASK, open}, true),
 						note,
 					});
-			for (const ask of openAsks(fold(w.desk)))
-				for (const answer of [{kind: "keep_going" as const, rounds: 1}, {kind: "remove" as const}])
+				}
+			}
+
+			for (const ask of openAsks(fold(w.desk))) {
+				for (const answer of [
+					{kind: "keep_going" as const, rounds: 1},
+					{kind: "remove" as const},
+				]) {
 					out.push({
 						label: `the owner answers ${ask.id}: ${answer.kind}`,
 						lane: 0,
@@ -157,6 +187,9 @@ export function deskWorld(
 						next: add(w, {type: "answered", id: ask.id, answer}, false),
 						note,
 					});
+				}
+			}
+
 			return out;
 		},
 		key: (w) => JSON.stringify(w.desk.slice(PLANNED.length).map((e) => e.fact)),
@@ -174,9 +207,13 @@ export const askLeavesByAnAnswer: Safety<Desk, {fold: (e: readonly Entry[]) => F
 		const fold = move.note?.fold ?? foldLedger;
 		const after = new Set(openAsks(fold(next.desk)).map((a) => a.id));
 		const told = next.desk.at(-1)?.fact;
-		for (const ask of openAsks(fold(prev.desk)))
-			if (!after.has(ask.id) && !(told?.type === "answered" && told.id === ask.id))
+
+		for (const ask of openAsks(fold(prev.desk))) {
+			if (!after.has(ask.id) && !(told?.type === "answered" && told.id === ask.id)) {
 				return `${ask.id} left the owner's list with no answer to it`;
+			}
+		}
+
 		return null;
 	},
 };
@@ -216,7 +253,10 @@ export function dropsAnAskOnProgress(entries: readonly Entry[]): Folded {
 	const folded = foldLedger(entries);
 	const asks = new Map(
 		[...folded.asks].filter(([, ask]) => {
-			if (ask.for !== "stuck") return true;
+			if (ask.for !== "stuck") {
+				return true;
+			}
+
 			const last = ask.open.at(-1) ?? 0;
 			return !entries.some(
 				(e) => e.seq > ask.at && e.fact.type === "reviewed" && e.fact.open < last,

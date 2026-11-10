@@ -56,21 +56,33 @@ describe("a secret held as a Redacted", () => {
 			),
 		);
 		expect(lines).toHaveLength(4);
-		for (const line of lines) expect(line).not.toContain(TEXT);
+
+		for (const line of lines) {
+			expect(line).not.toContain(TEXT);
+		}
+
 		expect(lines.join("\n")).toContain("<redacted>");
 	});
 
 	it("leaves an Effect error, its message and its cause as <redacted>", async () => {
 		const exit = await Effect.runPromiseExit(Effect.fail(new Refused({token: secret, why: "no"})));
 		expect(Exit.isFailure(exit)).toBe(true);
-		if (Exit.isSuccess(exit)) return;
+
+		if (Exit.isSuccess(exit)) {
+			return;
+		}
+
 		const shown = [
 			Cause.pretty(exit.cause),
 			String(Cause.squash(exit.cause)),
 			JSON.stringify(Cause.squash(exit.cause)),
 			inspect(Cause.squash(exit.cause), {depth: 5}),
 		];
-		for (const s of shown) expect(s).not.toContain(TEXT);
+
+		for (const s of shown) {
+			expect(s).not.toContain(TEXT);
+		}
+
 		expect(shown.join("\n")).toContain("<redacted>");
 	});
 

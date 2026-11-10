@@ -30,7 +30,10 @@ export const same = (a: Uint8Array, b: Uint8Array): boolean =>
 export const reader = (bytes: Uint8Array) => {
 	let at = 0;
 	const take = (n: number): Option.Option<Bytes> => {
-		if (!Number.isSafeInteger(n) || n < 0 || at + n > bytes.length) return Option.none();
+		if (!Number.isSafeInteger(n) || n < 0 || at + n > bytes.length) {
+			return Option.none();
+		}
+
 		const out = new Uint8Array(bytes.slice(at, at + n));
 		at += n;
 		return Option.some(out);

@@ -153,13 +153,16 @@ const OVER_BUDGET = "error_max_budget_usd";
 /** The write at `at`, as the Act that sends it: its intent is the ticket, its place, and its op. */
 const writeAt = (s: Answered, writes: readonly SortWrite[], at: number): Step => {
 	const write = writes[at];
-	if (write === undefined)
+
+	if (write === undefined) {
 		return end(s, outcomeOf(s.answer), {
 			answer: s.answer,
 			wrote: writes,
 			tries: s.tries,
 			spend: s.spend,
 		});
+	}
+
 	const asked = writeOne({write, intent: intentOf("sort", s.ticket.url, at + 1, write.op)});
 	return [{...known(s), ...answered(s), phase: "writing", writes, wrote: at, asked}, [asked]];
 };
@@ -168,9 +171,13 @@ const answered = (s: Answered) => ({answer: s.answer, tries: s.tries, spend: s.s
 
 /** A sorter Msg, folded into the refine combo, and what it ends in. */
 function sorted(s: SortState, m: Extract<SortMsg, {type: "sort_finished" | "sort_failed"}>): Step {
-	if (s.phase !== "sorting" || refine.runOf(s.refining)?.id !== m.id) return stay(s);
+	if (s.phase !== "sorting" || refine.runOf(s.refining)?.id !== m.id) {
+		return stay(s);
+	}
+
 	const spend = add(s.spend, m.spend);
 	const next = refine.update(s.refining, m);
+
 	switch (next.phase) {
 		case "drafting":
 			return [{...s, refining: next, spend}, []];
@@ -216,7 +223,10 @@ function sorted(s: SortState, m: Extract<SortMsg, {type: "sort_finished" | "sort
 
 /** The sorter's run: on only while an answer is asked for. */
 export const runSub = listen("sort_run", (s: SortState) => {
-	if (s.phase !== "sorting") return null;
+	if (s.phase !== "sorting") {
+		return null;
+	}
+
 	const run = refine.runOf(s.refining);
 	return run === null ? null : {run, settings: s.settings};
 });
@@ -232,7 +242,10 @@ export const sort = defineMachine({
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const asked = readTicket({ticket: m.ask.ticket});
 			return [{ask: m.ask, settings: m.settings, key: m.key, phase: "reading", asked}, [asked]];
 		},
@@ -242,15 +255,24 @@ export const sort = defineMachine({
 		sort_ticket_ok: (s, m): Step => {
 			if (s.phase === "reading") {
 				const ticket = m.value;
-				if (ticket.state === "closed") return end(s, {kind: "skip", why: "closed"});
+
+				if (ticket.state === "closed") {
+					return end(s, {kind: "skip", why: "closed"});
+				}
+
 				const asked = readContext({ticket});
 				return [{...held(s), ticket, phase: "gathering", asked}, [asked]];
 			}
+
 			if (s.phase === "checking") {
 				const now = m.value;
 				const report = {answer: s.answer, tries: s.tries, spend: s.spend};
-				if (now.state === "closed") return end(s, {kind: "skip", why: "closed"}, report);
-				if (now.title !== s.ticket.title || now.body !== s.ticket.body)
+
+				if (now.state === "closed") {
+					return end(s, {kind: "skip", why: "closed"}, report);
+				}
+
+				if (now.title !== s.ticket.title || now.body !== s.ticket.body) {
 					return end(
 						s,
 						{kind: "stuck", why: "changed"},
@@ -259,8 +281,11 @@ export const sort = defineMachine({
 							problems: ["the ticket's words changed while it was sorted"],
 						},
 					);
+				}
+
 				return writeAt(s, writesFor(s.ticket, s.answer), 0);
 			}
+
 			return stay(s);
 		},
 		sort_ticket_err: (s): Step =>
@@ -271,7 +296,10 @@ export const sort = defineMachine({
 					: stay(s),
 
 		sort_context_ok: (s, m): Step => {
-			if (s.phase !== "gathering") return stay(s);
+			if (s.phase !== "gathering") {
+				return stay(s);
+			}
+
 			const context = m.value;
 			const brief: Brief = {ticket: s.ticket, context, note: s.settings.note};
 			const refining = refine.start(s.key, brief, s.ask.tries);
@@ -289,11 +317,17 @@ export const sort = defineMachine({
 		sort_failed: (s, m): Step => sorted(s, m),
 
 		sort_write_ok: (s, m): Step => {
-			if (s.phase !== "writing" || m.cmd.intent !== s.asked.intent) return stay(s);
+			if (s.phase !== "writing" || m.cmd.intent !== s.asked.intent) {
+				return stay(s);
+			}
+
 			return writeAt(s, s.writes, s.wrote + 1);
 		},
 		sort_write_err: (s, m): Step => {
-			if (s.phase !== "writing" || m.cmd.intent !== s.asked.intent) return stay(s);
+			if (s.phase !== "writing" || m.cmd.intent !== s.asked.intent) {
+				return stay(s);
+			}
+
 			return end(
 				s,
 				{kind: "stuck", why: "write_failed"},

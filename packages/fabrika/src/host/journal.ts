@@ -84,17 +84,22 @@ export const journalStore = <S>(
 				data: {fence: o.fence, state},
 				id: `${o.fence}:${expected}`,
 			};
+
 			for (let tries = 1; ; tries++) {
 				const sent = yield* ledger.append(o.stream, expected, event, o.fence).pipe(Effect.result);
+
 				if (sent._tag === "Success") {
 					note(true, sent.success.dup ? "answer lost, landed" : null, sent.success.rev);
 					return sent.success.rev;
 				}
+
 				const e = sent.failure;
+
 				if (e._tag === "Stale") {
 					note(false, "stale", e.rev);
 					return yield* Effect.fail(new StoreConflictError(expected, e.rev));
 				}
+
 				if (e._tag !== "LedgerUnreachable") {
 					note(
 						false,
@@ -103,9 +108,13 @@ export const journalStore = <S>(
 					);
 					return yield* Effect.fail(new StoreConflictError(expected, expected));
 				}
+
 				// No answer: the append may have landed. Its id makes sending it again safe. Said once,
 				// so the host knows the save waits.
-				if (tries === 1) note(false, "unreachable", null);
+				if (tries === 1) {
+					note(false, "unreachable", null);
+				}
+
 				yield* Effect.sleep(backoff(tries));
 			}
 		});
@@ -126,7 +135,10 @@ export const journalStore = <S>(
 		saveFenced: (state, expected) => promised(save(state, expected), o.signal),
 		save: () => Promise.reject(new Error("the journal saves only through saveFenced")),
 		migrate: (raw) => {
-			if (raw === null || raw === undefined) return null;
+			if (raw === null || raw === undefined) {
+				return null;
+			}
+
 			const exit = decode(raw);
 			return Exit.isSuccess(exit) ? exit.value : refuse("not a saved state");
 		},

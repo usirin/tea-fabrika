@@ -109,7 +109,10 @@ export const supervisor = Machine.make({
 			];
 		},
 		exited: (s, m) => {
-			if (s.recovery._tag !== "ending") return [s, []];
+			if (s.recovery._tag !== "ending") {
+				return [s, []];
+			}
+
 			const {failure, process} = s.recovery;
 			const crashes = s.crashes ?? 1;
 			const wait = Math.min(
@@ -118,11 +121,13 @@ export const supervisor = Machine.make({
 			);
 			const until = m.at + wait;
 			const why = crashWhy(failure);
+
 			// Inside the restart budget the successor waits its backoff, and nothing goes down.
 			if (canRestart(s.restarts, until, s.policy.periodMs, s.policy.intensity)) {
 				const pending = start({process, until});
 				return [{...s, recovery: again(s, process, why), pending}, [pending]];
 			}
+
 			// The brake: N crashes in T. Down waits until the window has room again.
 			const times = s.restarts
 				.filter((at) => at >= until - s.policy.periodMs)
@@ -140,7 +145,10 @@ export const supervisor = Machine.make({
 			];
 		},
 		due: (s, m) => {
-			if (s.recovery._tag !== "down" || m.at < s.recovery.until) return [s, []];
+			if (s.recovery._tag !== "down" || m.at < s.recovery.until) {
+				return [s, []];
+			}
+
 			const pending = start({process: s.recovery.process, until: s.recovery.until});
 			return [{...s, recovery: again(s, s.recovery.process, s.recovery.why), pending}, [pending]];
 		},

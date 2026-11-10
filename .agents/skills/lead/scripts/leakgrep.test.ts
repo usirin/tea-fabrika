@@ -17,6 +17,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 		fc.assert(
 			fc.property(fc.record({word, pluses: fc.integer({min: 2, max: 6})}), ({word, pluses}) => {
 				const dir = mkdtempSync(join(tmpdir(), "lg-plus-"));
+
 				try {
 					const repo = join(dir, "repo");
 					mkdirSync(repo);
@@ -31,6 +32,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 							encoding: "utf8",
 							env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
 						});
+
 					for (const leak of [
 						word,
 						"/" + "tmp/private-501",
@@ -43,21 +45,26 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 						);
 						expect(ran.status, "added content beginning with ++ was skipped").toBe(1);
 						expect(ran.stdout + ran.stderr).not.toContain(leak);
+
 						for (const space of ["", " "]) {
 							const minimal = run(`+${"+".repeat(pluses)}${space}${leak}\n`);
 							expect(minimal.status, "headerless ++ addition was skipped").toBe(1);
 						}
 					}
+
 					for (const prose of [
 						`<${url}>`,
 						`${url}.`,
 						`[repo](${url})`,
 						`${url}.git.`,
 						`<${url}/pull/545>.`,
-					])
+					]) {
 						expect(run(`+See ${prose}\n`).status, prose).toBe(0);
-					for (const unsafe of [`${url}.evil`, `${url}>${word}`, `${url}/${word}`])
+					}
+
+					for (const unsafe of [`${url}.evil`, `${url}>${word}`, `${url}/${word}`]) {
 						expect(run(`+${unsafe}\n`).status).toBe(1);
+					}
 				} finally {
 					rmSync(dir, {recursive: true, force: true});
 				}
@@ -71,6 +78,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 		fc.assert(
 			fc.property(word, (word) => {
 				const dir = mkdtempSync(join(tmpdir(), "lg-errors-"));
+
 				try {
 					const repo = join(dir, "repo"),
 						words = join(dir, "words"),
@@ -104,6 +112,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 						{args: ["--text", invalid]},
 						{args: ["--text", draft], cwd: dir},
 					];
+
 					for (const flow of cases) {
 						const ran = spawnSync("sh", [script, ...flow.args], {
 							cwd: flow.cwd ?? repo,
@@ -136,6 +145,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 				fc.record({word, suffix: fc.stringMatching(/^[a-z]{4,12}$/), crlf: fc.boolean()}),
 				({word, suffix, crlf}) => {
 					const dir = mkdtempSync(join(tmpdir(), "lg-"));
+
 					try {
 						const repo = join(dir, "repo");
 						mkdirSync(repo);
@@ -166,6 +176,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 							`https://claude.ai/` + `design/${suffix}`,
 						];
 						const eol = crlf ? "\r\n" : "\n";
+
 						for (const leak of leaks) {
 							const safe = `--- a/input${eol}+++ b/${word}${eol}@@ -1 +1 @@${eol}-${leak}${eol}+https://github.com/usirin/tea-fabrika/pull/532${eol}`;
 							const clean = run(safe);
@@ -177,13 +188,16 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 							expect(hit.stdout + hit.stderr).not.toContain(leak);
 							expect(hit.stdout + hit.stderr).not.toContain(word);
 						}
+
 						const publicUrl = "https://github.com/usirin/tea-fabrika";
+
 						for (const url of [
 							`${publicUrl.replace(/[^/]+$/, "other")}/${suffix}`,
 							`${publicUrl}-evil/${suffix}`,
 							`${publicUrl}/issues/${word}`,
-						])
+						]) {
 							expect(run(`+${url}\n`).status).toBe(1);
+						}
 					} finally {
 						rmSync(dir, {recursive: true, force: true});
 					}
@@ -198,6 +212,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 		fc.assert(
 			fc.property(fc.record({word, linked: fc.boolean()}), ({word, linked}) => {
 				const dir = mkdtempSync(join(tmpdir(), "lg-home-"));
+
 				try {
 					const repo = join(dir, "repo"),
 						home = join(dir, "home");
@@ -240,12 +255,14 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
 		fc.assert(
 			fc.property(word, (privateWord) => {
 				const dir = mkdtempSync(join(tmpdir(), "lg-missing-"));
+
 				try {
 					const repo = join(dir, "repo"),
 						home = join(dir, "home"),
 						draft = join(dir, "draft");
 					mkdirSync(home);
 					expect(spawnSync("git", ["init", "-q", repo]).status).toBe(0);
+
 					for (const override of [undefined, join(dir, privateWord, "missing")]) {
 						for (const textMode of [false, true]) {
 							for (const [text, kind] of [
@@ -274,7 +291,11 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
 									.split("\n")
 									.filter((line) => /word list.*missing/i.test(line));
 								expect(notice).toHaveLength(1);
-								if (kind) expect(ran.stderr).toContain(`leak ${kind}`);
+
+								if (kind) {
+									expect(ran.stderr).toContain(`leak ${kind}`);
+								}
+
 								expect(ran.stdout + ran.stderr).not.toContain(privateWord);
 								expect(ran.stdout + ran.stderr).not.toContain(dir);
 							}
@@ -295,6 +316,7 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
 		fc.assert(
 			fc.property(fc.stringMatching(/^[A-Za-z0-9]{160}$/), (payload) => {
 				const dir = mkdtempSync(join(tmpdir(), "lg-tokens-"));
+
 				try {
 					const repo = join(dir, "repo"),
 						words = join(dir, "words"),
@@ -310,6 +332,7 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
 							env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
 						});
 					};
+
 					for (const textMode of [false, true]) {
 						for (const [prefix, minimum] of [
 							["npm_", 36],
@@ -329,15 +352,19 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
 								expect(ran.stdout + ran.stderr).not.toContain(token);
 							}
 						}
+
 						// T325's 20-PR replay: a fake signer and both OpenSSH security-key type names.
 						for (const safe of [
 							"sk-key",
 							"sk-ecdsa-sha2-nistp256@openssh.com",
 							"sk-ssh-ed25519@openssh.com",
-						])
+						]) {
 							expect(run(`${safe} ${payload}`, textMode).status, safe).toBe(0);
-						for (const prefix of ["github_pat_", "sk-proj-"])
+						}
+
+						for (const prefix of ["github_pat_", "sk-proj-"]) {
 							expect(run(prefix + payload.replace(/.{8}/g, "$&_"), textMode).status).toBe(1);
+						}
 					}
 				} finally {
 					rmSync(dir, {recursive: true, force: true});
@@ -351,6 +378,7 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
 describe("T396 leakgrep plain /tmp paths, today's tooling (decision 0011)", () => {
 	const run = (text: string) => {
 		const dir = mkdtempSync(join(tmpdir(), "lg-tmp-"));
+
 		try {
 			const repo = join(dir, "repo"),
 				words = join(dir, "words");
@@ -380,11 +408,12 @@ describe("T396 leakgrep plain /tmp paths, today's tooling (decision 0011)", () =
 		"/private/" + "tmp/x",
 		"/" + "var/folders/ab/x",
 		"/" + "Users/x",
-	])
+	]) {
 		it(`pinned: ${leak.replace(/^\//, "")} is a machine path`, () => {
 			const ran = run(leak);
 			expect(ran.status).toBe(1);
 			expect(ran.stderr).toContain("leak machine_path");
 			expect(ran.stdout + ran.stderr).not.toContain(leak);
 		});
+	}
 });

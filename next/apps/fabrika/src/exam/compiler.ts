@@ -61,11 +61,20 @@ const lineAt = (text: string, at: number) => text.slice(0, at).split("\n").lengt
 
 /** Whether a function body opens with `"use no memo"`, among its other directives. */
 const saysNoMemo = (body: Tree): boolean => {
-	if (body?.type !== "BlockStatement") return false;
-	for (const s of body.body) {
-		if (s.type !== "ExpressionStatement" || typeof s.directive !== "string") return false;
-		if (s.directive === "use no memo" || s.directive === "use no forget") return true;
+	if (body?.type !== "BlockStatement") {
+		return false;
 	}
+
+	for (const s of body.body) {
+		if (s.type !== "ExpressionStatement" || typeof s.directive !== "string") {
+			return false;
+		}
+
+		if (s.directive === "use no memo" || s.directive === "use no forget") {
+			return true;
+		}
+	}
+
 	return false;
 };
 
@@ -83,17 +92,31 @@ const opensWithCache = (body: Tree): boolean => {
 const functions = (file: string, text: string): readonly Fn[] => {
 	const found: Fn[] = [];
 	const walk = (node: Tree, bound: string | null, depth: number, inJsx: {on: boolean}) => {
-		if (node === null || typeof node !== "object") return;
-		if (Array.isArray(node)) {
-			for (const n of node) walk(n, bound, depth, inJsx);
+		if (node === null || typeof node !== "object") {
 			return;
 		}
-		if (node.type === "JSXElement" || node.type === "JSXFragment") inJsx.on = true;
+
+		if (Array.isArray(node)) {
+			for (const n of node) {
+				walk(n, bound, depth, inJsx);
+			}
+
+			return;
+		}
+
+		if (node.type === "JSXElement" || node.type === "JSXFragment") {
+			inJsx.on = true;
+		}
+
 		if (FUNCTIONS.has(node.type)) {
 			const own = {on: false};
+
 			for (const [key, child] of Object.entries(node)) {
-				if (key !== "type") walk(child, null, depth + 1, own);
+				if (key !== "type") {
+					walk(child, null, depth + 1, own);
+				}
 			}
+
 			found.push({
 				name: node.id?.name ?? bound ?? "(anonymous)",
 				start: node.start,
@@ -106,12 +129,26 @@ const functions = (file: string, text: string): readonly Fn[] => {
 			});
 			return;
 		}
+
 		for (const [key, child] of Object.entries(node)) {
-			if (key === "type" || key === "start" || key === "end") continue;
+			if (key === "type" || key === "start" || key === "end") {
+				continue;
+			}
+
 			let name: string | null = null;
-			if (node.type === "VariableDeclarator" && key === "init") name = node.id?.name ?? null;
-			if (node.type === "Property" && key === "value") name = node.key?.name ?? null;
-			if (node.type === "CallExpression" && key === "arguments") name = bound;
+
+			if (node.type === "VariableDeclarator" && key === "init") {
+				name = node.id?.name ?? null;
+			}
+
+			if (node.type === "Property" && key === "value") {
+				name = node.key?.name ?? null;
+			}
+
+			if (node.type === "CallExpression" && key === "arguments") {
+				name = bound;
+			}
+
 			walk(child, name, depth, inJsx);
 		}
 	};
@@ -145,10 +182,18 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
 		const fn = outermost(source, at);
 		const name = fn?.name ?? "(module)";
 		said.add(name);
-		if (fn !== null && fn.memoOff && named(name)) return;
+
+		if (fn !== null && fn.memoOff && named(name)) {
+			return;
+		}
+
 		findings.push({file, fn: name, line: lineAt(text, at), why: e.message});
 	};
-	for (const e of out.errors) diagnose(e);
+
+	for (const e of out.errors) {
+		diagnose(e);
+	}
+
 	for (const fn of source) {
 		if (fn.memoOff && !named(fn.name)) {
 			findings.push({
@@ -158,6 +203,7 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
 				why: '"use no memo" with no row in compiler-ledger.json. A row is the owner\'s call, in a change of its own.',
 			});
 		}
+
 		if (fn.top && fn.jsx && /^[A-Z]/.test(fn.name) && !fn.memoOff && !compiled.has(fn.name)) {
 			if (!said.has(fn.name)) {
 				findings.push({
@@ -169,6 +215,7 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
 			}
 		}
 	}
+
 	for (const row of rows) {
 		if (!source.some((fn) => fn.name === row.fn && fn.memoOff)) {
 			findings.push({
@@ -179,6 +226,7 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
 			});
 		}
 	}
+
 	return findings;
 };
 
@@ -225,13 +273,26 @@ const lint = Effect.gen(function* () {
 		.filter((p) => !p.includes("node_modules") && !p.includes(".test."))
 		.sort();
 	const files = new Map<string, string>();
-	for (const path of paths) files.set(path, yield* read(path));
+
+	for (const path of paths) {
+		files.set(path, yield* read(path));
+	}
+
 	const findings = check(files, ledger);
-	for (const f of findings) yield* Console.error(`${f.file}:${f.line} ${f.fn}: ${f.why}`);
+
+	for (const f of findings) {
+		yield* Console.error(`${f.file}:${f.line} ${f.fn}: ${f.why}`);
+	}
+
 	yield* Console.log(
 		`lint:compiler: ${files.size} files, ${findings.length} findings, ${ledger.length} ledger rows`,
 	);
-	if (findings.length > 0) return yield* new Refused({findings: findings.length});
+
+	if (findings.length > 0) {
+		return yield* new Refused({findings: findings.length});
+	}
 });
 
-if (import.meta.main) NodeRuntime.runMain(lint.pipe(Effect.provide(NodeServices.layer)));
+if (import.meta.main) {
+	NodeRuntime.runMain(lint.pipe(Effect.provide(NodeServices.layer)));
+}

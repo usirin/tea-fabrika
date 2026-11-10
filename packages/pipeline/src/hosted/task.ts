@@ -82,14 +82,18 @@ const msgOf =
 	(at: {readonly task: TaskJob["task"]; readonly round: number; readonly run: number}) =>
 	(d: BuildDrafted): TaskMsg => {
 		const ran = ranOf(d);
+
 		if (d.answer === "built") {
 			const built = Schema.decodeUnknownOption(HeldBuilt)(d.built);
 			return Option.isSome(built)
 				? {type: "task_built", ...at, built: built.value, ran}
 				: {type: "task_failed", ...at, why: "misfit", error: null, ran};
 		}
-		if (d.answer === "broke")
+
+		if (d.answer === "broke") {
 			return {type: "task_failed", ...at, why: "broke", error: d.error, ran};
+		}
+
 		return {type: "task_failed", ...at, why: d.answer, error: null, ran};
 	};
 
@@ -127,9 +131,17 @@ const handlers = (o: {
 			const git = yield* gitOn(o.work.env);
 			const commitGit = yield* gitOn(commitEnv(o.work.env, job.at));
 			const asked = yield* ask(null, null);
-			if (asked.how !== "answered" || asked.answer.base !== cmd.base) return yield* failed;
+
+			if (asked.how !== "answered" || asked.answer.base !== cmd.base) {
+				return yield* failed;
+			}
+
 			const {patch} = asked.answer;
-			if (patch === "") return {head: cmd.base, changed: false};
+
+			if (patch === "") {
+				return {head: cmd.base, changed: false};
+			}
+
 			const remote = outside.remote(repo);
 			yield* copyAt(git, remote, tree, cmd.base);
 			const fs = yield* FileSystem.FileSystem;
@@ -163,9 +175,17 @@ const handlers = (o: {
 					Effect.gen(function* () {
 						// Compare-and-set: only from where the round read the branch.
 						const now = yield* outside.branchHead(repo, cmd.branch);
-						if (now === sha) return pushed;
+
+						if (now === sha) {
+							return pushed;
+						}
+
 						const fromMain = (yield* outside.branchHead(repo, "main")) === cmd.base;
-						if (!(now === cmd.base || (now === null && fromMain))) return yield* failed;
+
+						if (!(now === cmd.base || (now === null && fromMain))) {
+							return yield* failed;
+						}
+
 						yield* outside.push(k, {repo, tree, branch: cmd.branch, sha});
 						return pushed;
 					}),

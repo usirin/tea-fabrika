@@ -121,7 +121,11 @@ it("added rows preserve occurrence counts and head line numbers", () => {
 				const remaining = [...base];
 				const expected = head.flatMap((text, i) => {
 					const old = remaining.indexOf(text);
-					if (old < 0) return [{line: i + 1, text}];
+
+					if (old < 0) {
+						return [{line: i + 1, text}];
+					}
+
 					remaining.splice(old, 1);
 					return [];
 				});
@@ -167,6 +171,7 @@ it("a push keeps its two event trees and refuses failed diff, tree or blob reads
 				]);
 				expect(calls.some((args) => args[0] === "merge-base")).toBe(false);
 				const reads = calls.length;
+
 				for (let at = 0; at < reads; at++) {
 					let i = 0;
 					expect(() =>
@@ -218,6 +223,7 @@ it("a PR's field rows compare to the merge base while main moves ahead", () => {
 			fc.boolean(),
 			(fork, mine, theirs, dropFirst, notesToo) => {
 				const dir = mkdtempSync(join(tmpdir(), "ci-field-"));
+
 				try {
 					const git = gitIn(dir);
 					const commit = (files: Record<string, string>, message: string) => {
@@ -225,6 +231,7 @@ it("a PR's field rows compare to the merge base while main moves ahead", () => {
 							mkdirSync(dirname(join(dir, file)), {recursive: true});
 							writeFileSync(join(dir, file), body);
 						}
+
 						expect(git(["add", "-A"]).status).toBe(0);
 						expect(git(["commit", "-q", "--allow-empty", "-m", message]).status).toBe(0);
 						return git(["rev-parse", "HEAD"]).stdout.trim();
@@ -247,10 +254,12 @@ it("a PR's field rows compare to the merge base while main moves ahead", () => {
 					expect(files).toEqual(
 						mine.length > 0 ? [{file: runs, base: text(fork), head: text([...fork, ...mine])}] : [],
 					);
-					for (const input of files)
+
+					for (const input of files) {
 						expect(checker.selectAdded(input.base, input.head).map((added) => added.text)).toEqual(
 							mine,
 						);
+					}
 				} finally {
 					rmSync(dir, {recursive: true, force: true});
 				}
@@ -426,11 +435,13 @@ it("advice warns with exit zero; errors identify head lines without row content"
 				expect(
 					bad.findings.some((f) => f._tag === "error" && f.line === old + 1 && f.field === "what"),
 				).toBe(true);
+
 				for (const annotation of [...report.annotations, ...bad.annotations]) {
 					expect(annotation).not.toContain(marker);
 					expect(annotation).not.toContain(payload.length > 5 ? payload : marker);
 					expect(annotation).not.toMatch(/[\r\n]/);
 				}
+
 				const unknown = checker.checkFile(
 					"field/future.jsonl",
 					"",
@@ -438,8 +449,10 @@ it("advice warns with exit zero; errors identify head lines without row content"
 				);
 				expect(unknown.exitCode).toBe(0);
 				expect(unknown.findings.some((f) => f._tag === "warning")).toBe(true);
-				for (const text of ["null", "[]", '"text"', "1", "{", "\n"])
+
+				for (const text of ["null", "[]", '"text"', "1", "{", "\n"]) {
 					expect(checker.checkFile("field/future.jsonl", "", text).exitCode).not.toBe(0);
+				}
 			},
 		),
 		options,

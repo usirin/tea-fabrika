@@ -36,14 +36,16 @@ describe("ledger SQL stays behind its service", () => {
 							'sql.exec("SELECT * FROM stage_descriptors"); sql.exec("SELECT entries FROM directory");',
 					});
 					expect(findings(CODE, FILE)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+
 					for (const file of [
 						"next/packages/libfabrika/src/data/ledger-store.ts",
 						"next/packages/libfabrika/src/workers/runtime.test.ts",
 						"next/packages/libfabrika/src/coordination/process.test-support.ts",
 						"packages/today/runtime.ts",
 						"next/allowed.ts",
-					])
+					]) {
 						expect(findings(CODE, file)).toEqual([]);
+					}
 				},
 			),
 			{seed: 119120, numRuns: 20},

@@ -162,11 +162,13 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const drive = (machine: Machine, from: Tracker, msgs: readonly Msg[]) => {
 	let s = from;
 	const cmds: Cmd[] = [];
+
 	for (const msg of msgs) {
 		const [next, out] = applyCell<Tracker, Msg, Cmd>(machine, s, msg);
 		s = next;
 		cmds.push(...out);
 	}
+
 	return {s, cmds};
 };
 
@@ -177,19 +179,26 @@ const drive = (machine: Machine, from: Tracker, msgs: readonly Msg[]) => {
 const ledgerTakes = (machine: Machine, from: Tracker, n: number) => {
 	let s = from;
 	const cmds: Cmd[] = [];
+
 	for (let i = 0; i < n; i += 1) {
 		const front = s.saving[0];
-		if (front === undefined) break;
+
+		if (front === undefined) {
+			break;
+		}
+
 		const answer = save.ok(saveOf(front.id, front.write, 1), {ticket: 1}, 0);
 		const step = drive(machine, s, [answer]);
 		s = step.s;
 		cmds.push(...step.cmds);
 	}
+
 	for (const t of s.hinting) {
 		const step = drive(machine, s, [duplicates.ok(asked(t), {kind: "off"}, 0)]);
 		s = step.s;
 		cmds.push(...step.cmds);
 	}
+
 	return {s, cmds};
 };
 
@@ -212,7 +221,11 @@ const oneSaveOut = every(
 		const front = step.next.saving[0];
 		const newFront = front !== undefined && (step.prev.saving.length === 0 || answeredFront(step));
 		const sent = saves(step);
-		if (!newFront) return sent.length === 0;
+
+		if (!newFront) {
+			return sent.length === 0;
+		}
+
 		return sent.length === 1 && sent[0]?.id === front.id && same(sent[0]?.write, front.write);
 	},
 );
@@ -236,7 +249,11 @@ const oneReadOut = every(
 	"one read of the ledger is out at a time: a read goes only when none is out, or when the one out came back",
 	(step) => {
 		const sent = loads(step);
-		if (sent.length === 0) return true;
+
+		if (sent.length === 0) {
+			return true;
+		}
+
 		const free = step.prev.load === "idle" || isLoadAnswer(step.msg);
 		return sent.length === 1 && free && step.next.load === "busy";
 	},
@@ -276,7 +293,10 @@ const writeLands: Law = {
 			ctx,
 			lists,
 			(_, last) => {
-				if (last.quitting) return true;
+				if (last.quitting) {
+					return true;
+				}
+
 				const mine: Write = {kind: "file", title: "Mine", body: ""};
 				const asked = drive(machine, last, [{type: "write", id: "mine", write: mine}]);
 				const taken = ledgerTakes(machine, asked.s, asked.s.saving.length + 1);
@@ -295,6 +315,7 @@ const newsIsRead: Law = {
 			lists,
 			(_, last) => {
 				let s = last;
+
 				for (let i = 0; i < 3 && s.load !== "idle"; i += 1) {
 					const back = load.ok(
 						load({after: s.seen}),
@@ -303,6 +324,7 @@ const newsIsRead: Law = {
 					);
 					s = drive(machine, s, [back]).s;
 				}
+
 				const moved = drive(machine, s, [{type: "moved"}]);
 				return moved.cmds.some((c) => c.type === "load" && c.after === s.seen);
 			},
@@ -314,7 +336,11 @@ const hintsOnlyOwnFiling = every(
 	"a duplicate hint is asked for only when this tracker's own filing lands, once, for that ticket",
 	(step) => {
 		const asks = step.cmds.filter((c) => c.type === "duplicates");
-		if (asks.length === 0) return true;
+
+		if (asks.length === 0) {
+			return true;
+		}
+
 		const {prev, msg} = step;
 		const filing =
 			msg.type === "save_ok" && answeredFront(step) && prev.saving[0]?.write.kind === "file";
@@ -333,8 +359,15 @@ const hintsAtFloor = every(
 	`a hint is saved only from Jev's answer, at ${FLOOR} or more, at most three, each one Jev gave`,
 	({msg, cmds}) => {
 		const saved = cmds.filter((c) => c.type === "save_hints");
-		if (saved.length === 0) return true;
-		if (msg.type !== "duplicates_ok" || msg.value.kind !== "scored") return false;
+
+		if (saved.length === 0) {
+			return true;
+		}
+
+		if (msg.type !== "duplicates_ok" || msg.value.kind !== "scored") {
+			return false;
+		}
+
 		const given = msg.value.scores;
 		return saved.every(
 			(c) =>
@@ -421,7 +454,11 @@ const PLANTS = {
 	hintsEveryWrite: plant({
 		save_ok: (s, m) => {
 			const [next, cmds] = real.save_ok(s, m);
-			if (cmds.some((c) => c.type === "duplicates") || !("ticket" in m.value)) return [next, cmds];
+
+			if (cmds.some((c) => c.type === "duplicates") || !("ticket" in m.value)) {
+				return [next, cmds];
+			}
+
 			const t = m.value.ticket;
 			return [{...next, hinting: [...next.hinting, t]}, [...cmds, asked(t)]];
 		},
@@ -477,6 +514,7 @@ const keepsEvery = (machine: Machine, runs = 150) =>
 		fc.asyncProperty(lists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("tracker:r1", null));
 			const store = handle.store("tickets", "tickets", Tracker);
+
 			for (const s of foldEvents(machine, ctx, null, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);

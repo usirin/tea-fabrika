@@ -25,8 +25,11 @@ vi.mock("alchemy/Deploy", () => ({
 			const plugin = entries.find(
 				(entry) => typeof entry === "object" && entry !== null && "sockets" in entry,
 			);
-			if (typeof plugin !== "object" || plugin === null || !("start" in plugin))
+
+			if (typeof plugin !== "object" || plugin === null || !("start" in plugin)) {
 				return yield* Effect.die("test deployment has no control plugin");
+			}
+
 			const start = plugin.start as (ports: Record<string, number>) => Effect.Effect<unknown>;
 			const observe = Context.get(stack, RuntimeLifecycle);
 			observe({type: "start", worker: "fabrika", pid: 27001});
@@ -71,7 +74,10 @@ const home = () => {
 afterEach(() => {
 	vi.restoreAllMocks();
 	vi.unstubAllEnvs();
-	for (const folder of homes.splice(0)) rmSync(folder, {recursive: true, force: true});
+
+	for (const folder of homes.splice(0)) {
+		rmSync(folder, {recursive: true, force: true});
+	}
 });
 
 it("a later dev command links its first start to the last runtime in that home", async () => {
@@ -88,7 +94,11 @@ it("a later dev command links its first start to the last runtime in that home",
 						method: string;
 						args: Array<typeof BrainEvent.Type>;
 					};
-					if (call.method === "brain") events.push(call.args[0]!);
+
+					if (call.method === "brain") {
+						events.push(call.args[0]!);
+					}
+
 					return Response.json({value: call.method === "info" ? [] : null});
 				});
 				const config = {
@@ -99,6 +109,7 @@ it("a later dev command links its first start to the last runtime in that home",
 					window: null,
 					port: 18787,
 				};
+
 				for (const build of builds) {
 					await Effect.runPromise(
 						Effect.scoped(startStage({build, brain: "unused.mjs", programs: {}}, config)).pipe(
@@ -108,6 +119,7 @@ it("a later dev command links its first start to the last runtime in that home",
 						),
 					);
 				}
+
 				const starts = events.filter((event) => event._tag === "started");
 				expect(starts).toHaveLength(2);
 				expect(starts[1]).toMatchObject({after: starts[0]!.start, build: builds[1]});
@@ -131,11 +143,13 @@ it("stage readiness waits for the started event to reach the ledger", async () =
 					method: string;
 					args: Array<typeof BrainEvent.Type>;
 				};
+
 				if (call.method === "brain") {
 					events.push(call.args[0]!);
 					Effect.runSync(Deferred.succeed(reached, undefined));
 					await Effect.runPromise(Deferred.await(release));
 				}
+
 				return Response.json({value: call.method === "write" ? {_tag: "written"} : null});
 			});
 			const {startStage} = await import("./stage.ts");

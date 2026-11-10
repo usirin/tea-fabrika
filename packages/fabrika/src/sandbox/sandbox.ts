@@ -189,8 +189,11 @@ export const refuseKeys = (
 	keys: readonly string[],
 ): Effect.Effect<void, SandboxError> => {
 	const named = Object.keys(job.env).find(isGithubName);
-	if (named !== undefined)
+
+	if (named !== undefined) {
 		return Effect.fail(new SandboxError({why: "key_in_sandbox", what: named}));
+	}
+
 	const lent =
 		job.credential._tag === "codex"
 			? // oxlint-disable-next-line fabrika/no-redacted-value -- the lent auth.json stays in the host here; its text is searched for the keys
@@ -224,13 +227,18 @@ const workspaceOf = (job: Job) =>
 			tmp: path.join(root, "tmp"),
 			work: path.join(root, "work"),
 		};
-		for (const dir of [workspace.home, workspace.tmp, workspace.work]) yield* fs.makeDirectory(dir);
+
+		for (const dir of [workspace.home, workspace.tmp, workspace.work]) {
+			yield* fs.makeDirectory(dir);
+		}
+
 		if (job.credential._tag === "codex") {
 			yield* fs.makeDirectory(codexHome(workspace));
 			const file = path.join(codexHome(workspace), "auth.json");
 			// oxlint-disable-next-line fabrika/no-redacted-value -- the lent auth.json goes out here, into the box's home, mode 0600
 			yield* fs.writeFileString(file, Redacted.value(job.credential.auth), {mode: 0o600});
 		}
+
 		return workspace;
 	}).pipe(Effect.mapError(noStart("workspace")));
 

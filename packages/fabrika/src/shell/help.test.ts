@@ -20,7 +20,11 @@ const list = programList(SMALL);
 
 const page = (name: string) => {
 	const entry = list.get(name);
-	if (entry === undefined) throw new Error(name);
+
+	if (entry === undefined) {
+		throw new Error(name);
+	}
+
 	return helpOf(entry, list);
 };
 
@@ -38,12 +42,18 @@ const typed = (...lines: readonly string[]) =>
 				{printed: printed.hear, ready: ready.hear},
 				{id: "tsh:help", storage},
 			).pipe(Effect.provideService(Programs, list), Effect.provideService(HostJobs, jobs));
-			if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+			if (started.kind !== "running") {
+				return yield* Effect.die("tsh did not start");
+			}
+
 			const statuses: (number | undefined)[] = [];
+
 			for (const [i, line] of lines.entries()) {
 				expect(yield* tell(started.run, "line", line)).toBe("queued");
 				statuses.push((yield* ready.upTo(i + 1))[i]?.status);
 			}
+
 			return {statuses, said: printed.values.map((p) => p.text)};
 		}).pipe(Effect.scoped),
 	);

@@ -117,7 +117,10 @@ export const SETTINGS_PATHS = [SETTINGS_FILE, OLD_SETTINGS_FILE, JSONC_FILE] as 
  * `null`: it may. The one rule every reader goes by. Pure.
  */
 export const settingsRefusal = (there: ReadonlySet<string>): string | null => {
-	if (there.has(OLD_SETTINGS_FILE)) return SETTINGS_MOVED;
+	if (there.has(OLD_SETTINGS_FILE)) {
+		return SETTINGS_MOVED;
+	}
+
 	return there.has(JSONC_FILE) && !there.has(SETTINGS_FILE) ? JSONC_MOVED : null;
 };
 
@@ -351,7 +354,11 @@ export const settingsFrom = (text: string): Effect.Effect<Settings, SettingsInva
 			catch: (error) =>
 				invalid(error instanceof TomlError ? `not TOML: ${error.message}` : String(error)),
 		});
-		if (setsBuildGo(raw)) return yield* Effect.fail(invalid(BUILD_GO_GONE));
+
+		if (setsBuildGo(raw)) {
+			return yield* Effect.fail(invalid(BUILD_GO_GONE));
+		}
+
 		const settings = yield* Schema.decodeUnknownEffect(File)(raw, {
 			onExcessProperty: "error",
 		}).pipe(Effect.mapError((error) => invalid(whyOf(error.issue))));
@@ -360,7 +367,11 @@ export const settingsFrom = (text: string): Effect.Effect<Settings, SettingsInva
 			...unlisted.map((name) => `${keyOf(["pack", name])}: packs does not list it`),
 			...picksThatSayNothing(settings),
 		];
-		if (unsaid.length > 0) return yield* Effect.fail(invalid(unsaid.join("\n")));
+
+		if (unsaid.length > 0) {
+			return yield* Effect.fail(invalid(unsaid.join("\n")));
+		}
+
 		return settings;
 	});
 
@@ -422,7 +433,11 @@ export const readSettings = (
 ): Effect.Effect<Settings, SettingsInvalid, FileSystem.FileSystem> =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
-		if (!(yield* thereAt(file))) return DEFAULT_SETTINGS;
+
+		if (!(yield* thereAt(file))) {
+			return DEFAULT_SETTINGS;
+		}
+
 		const text = yield* fs
 			.readFileString(file)
 			.pipe(Effect.mapError((error) => invalid(`cannot read ${file}: ${error.message}`)));
@@ -443,11 +458,18 @@ export const repoOf = (
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		let at = path.resolve(folder);
+
 		for (;;) {
-			if (yield* fs.exists(path.join(at, ".git")).pipe(Effect.orElseSucceed(() => false)))
+			if (yield* fs.exists(path.join(at, ".git")).pipe(Effect.orElseSucceed(() => false))) {
 				return at;
+			}
+
 			const up = path.dirname(at);
-			if (up === at) return path.resolve(folder);
+
+			if (up === at) {
+				return path.resolve(folder);
+			}
+
 			at = up;
 		}
 	});

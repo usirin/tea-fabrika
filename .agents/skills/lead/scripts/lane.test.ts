@@ -40,7 +40,10 @@ describe("lane rules, today's tooling", () => {
 				const to = wipOf(lane);
 				expect(to).toMatch(/(?<!-wip)-wip$/);
 				expect(to.replace(/-wip$/, "")).toBe(b);
-				if (n === 1) expect(to).toBe(lane);
+
+				if (n === 1) {
+					expect(to).toBe(lane);
+				}
 			}),
 			options,
 		);

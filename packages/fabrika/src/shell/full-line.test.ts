@@ -42,7 +42,11 @@ const session = (go: Deferred.Deferred<void>, hold: Deferred.Deferred<void>) =>
 			{printed: printed.hear, ready: ready.hear},
 			{id: "tsh:full-line", storage},
 		).pipe(Effect.provideService(HostJobs, jobs), Effect.provideService(Programs, list));
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		const line = (text: string) =>
 			Effect.gen(function* () {
@@ -58,7 +62,11 @@ const session = (go: Deferred.Deferred<void>, hold: Deferred.Deferred<void>) =>
 			return Effect.gen(function* () {
 				for (;;) {
 					last = (yield* line("jobs")).out;
-					if (until(last)) return last;
+
+					if (until(last)) {
+						return last;
+					}
+
 					yield* Effect.sleep(Duration.millis(5));
 				}
 			}).pipe(
