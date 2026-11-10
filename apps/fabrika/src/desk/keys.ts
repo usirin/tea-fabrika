@@ -1,5 +1,5 @@
-import type {Does as Command, Key, Keys} from "./keymap.ts";
-import type {Direction, Orientation, TileId} from "./layout/index.ts";
+import type { Does as Command, Key, Keys } from "./keymap.ts";
+import type { Direction, Orientation, TileId } from "./layout/index.ts";
 
 // The desk's keys: what each command does, and the key after the prefix it ships on. tmux's
 // shape, and Tuval's table (kamp-us/phoenix, packages/tuval-ui/src/shell/keys/table.ts): with the
@@ -37,38 +37,28 @@ export const REPEAT_MS = 500;
  * bar's agents, sync or host. The desk only says so; the page draws it, as tmux's server runs
  * `list-keys` and the client that pressed shows it.
  */
-export const SHOWS = [
-	"asks",
-	"jobs",
-	"keys",
-	"info",
-	"bars",
-	"agents",
-	"sync",
-	"host",
-	"palette",
-] as const;
+export const SHOWS = ["asks", "jobs", "keys", "info", "bars", "agents", "sync", "host", "palette"] as const;
 
 export type Show = (typeof SHOWS)[number];
 
 /** What a key after the prefix does, or a tsh word does in the tile it was typed in. */
 export type Does =
-	| {readonly kind: "split"; readonly orientation: Orientation}
-	| {readonly kind: "focus"; readonly to: Direction}
-	| {readonly kind: "cycle"; readonly to: "next" | "previous"}
-	/** Focus this tile, wherever it is: a click on it in the top bar's line. No key does it. */
-	| {readonly kind: "go"; readonly tile: TileId}
-	/** Turn the container holding the focused tile: horizontal to vertical and back. */
-	| {readonly kind: "turn"}
-	/** Fold the focused tile into a strip; focus goes to the next open tile. */
-	| {readonly kind: "fold"}
-	| {readonly kind: "zoom"}
-	| {readonly kind: "close"}
-	| {readonly kind: "new"}
-	| {readonly kind: "step"; readonly to: "previous" | "next"}
-	/** The workspace in this place, from 1, as tmux's `select-window -t 1`. */
-	| {readonly kind: "pick"; readonly at: number}
-	| {readonly kind: "show"; readonly what: Show};
+  | { readonly kind: "split"; readonly orientation: Orientation }
+  | { readonly kind: "focus"; readonly to: Direction }
+  | { readonly kind: "cycle"; readonly to: "next" | "previous" }
+  /** Focus this tile, wherever it is: a click on it in the top bar's line. No key does it. */
+  | { readonly kind: "go"; readonly tile: TileId }
+  /** Turn the container holding the focused tile: horizontal to vertical and back. */
+  | { readonly kind: "turn" }
+  /** Fold the focused tile into a strip; focus goes to the next open tile. */
+  | { readonly kind: "fold" }
+  | { readonly kind: "zoom" }
+  | { readonly kind: "close" }
+  | { readonly kind: "new" }
+  | { readonly kind: "step"; readonly to: "previous" | "next" }
+  /** The workspace in this place, from 1, as tmux's `select-window -t 1`. */
+  | { readonly kind: "pick"; readonly at: number }
+  | { readonly kind: "show"; readonly what: Show };
 
 /**
  * One default binding: the key after the prefix it ships on, the command's word in the keys file,
@@ -77,84 +67,82 @@ export type Does =
  * arrow): the file and the palette list it once.
  */
 export interface Binding {
-	readonly key: string;
-	readonly command: Command;
-	readonly does: Does;
-	readonly repeats: boolean;
-	readonly name: string;
+  readonly key: string;
+  readonly command: Command;
+  readonly does: Does;
+  readonly repeats: boolean;
+  readonly name: string;
 }
 
 const once = (key: string, command: Command, name: string, does: Does): Binding => ({
-	key,
-	command,
-	does,
-	repeats: false,
-	name,
+  key,
+  command,
+  does,
+  repeats: false,
+  name,
 });
 
 /** `C-b 1` to `C-b 9`: the workspace in that place. */
 const PICKS = [
-	'tezgah."workspace --to 1"',
-	'tezgah."workspace --to 2"',
-	'tezgah."workspace --to 3"',
-	'tezgah."workspace --to 4"',
-	'tezgah."workspace --to 5"',
-	'tezgah."workspace --to 6"',
-	'tezgah."workspace --to 7"',
-	'tezgah."workspace --to 8"',
-	'tezgah."workspace --to 9"',
+  'tezgah."workspace --to 1"',
+  'tezgah."workspace --to 2"',
+  'tezgah."workspace --to 3"',
+  'tezgah."workspace --to 4"',
+  'tezgah."workspace --to 5"',
+  'tezgah."workspace --to 6"',
+  'tezgah."workspace --to 7"',
+  'tezgah."workspace --to 8"',
+  'tezgah."workspace --to 9"',
 ] as const satisfies readonly Command[];
 
 /** Every key the desk ships with after the prefix, today's table. */
 export const BINDINGS: readonly Binding[] = [
-	// `|` puts the two side by side: a row, "horizontal" in the tree. `-` puts one over the other.
-	once("|", "tezgah.split", "split", {kind: "split", orientation: "horizontal"}),
-	once("-", 'tezgah."split --to down"', "split down", {kind: "split", orientation: "vertical"}),
-	once("h", 'tezgah."focus --to left"', "focus left", {kind: "focus", to: "left"}),
-	once("j", 'tezgah."focus --to down"', "focus down", {kind: "focus", to: "down"}),
-	once("k", 'tezgah."focus --to up"', "focus up", {kind: "focus", to: "up"}),
-	once("l", 'tezgah."focus --to right"', "focus right", {kind: "focus", to: "right"}),
-	once("<arrowleft>", 'tezgah."focus --to left"', "focus left", {kind: "focus", to: "left"}),
-	once("<arrowdown>", 'tezgah."focus --to down"', "focus down", {kind: "focus", to: "down"}),
-	once("<arrowup>", 'tezgah."focus --to up"', "focus up", {kind: "focus", to: "up"}),
-	once("<arrowright>", 'tezgah."focus --to right"', "focus right", {kind: "focus", to: "right"}),
-	once("<f6>", 'tezgah."focus --to next"', "focus next", {kind: "cycle", to: "next"}),
-	once("<s-f6>", 'tezgah."focus --to previous"', "focus previous", {kind: "cycle", to: "previous"}),
-	// Space turns the container, as AeroSpace's `layout horizontal vertical`. `f` folds the tile.
-	once(" ", "tezgah.turn", "turn", {kind: "turn"}),
-	once("f", "tezgah.fold", "fold", {kind: "fold"}),
-	once("z", "tezgah.zoom", "zoom", {kind: "zoom"}),
-	once("x", "tezgah.close", "close", {kind: "close"}),
-	once("N", 'tezgah."workspace --to new"', "new", {kind: "new"}),
-	{
-		key: "<c-h>",
-		command: 'tezgah."workspace --to previous"',
-		does: {kind: "step", to: "previous"},
-		repeats: true,
-		name: "previous workspace",
-	},
-	{
-		key: "<c-l>",
-		command: 'tezgah."workspace --to next"',
-		does: {kind: "step", to: "next"},
-		repeats: true,
-		name: "next workspace",
-	},
-	...PICKS.map((command, i) =>
-		once(String(i + 1), command, `workspace ${i + 1}`, {kind: "pick", at: i + 1}),
-	),
-	// The frame's own: not a bare `?` or `i`, which would go into tsh.
-	once("a", "tezgah.asks", "asks", {kind: "show", what: "asks"}),
-	// `J`, as `N` and `B`: the bare `j` is focus down.
-	once("J", "tezgah.jobs", "jobs", {kind: "show", what: "jobs"}),
-	once("?", "keys.open", "keys", {kind: "show", what: "keys"}),
-	once("i", "tezgah.info", "info", {kind: "show", what: "info"}),
-	once("B", "tezgah.bars", "bars", {kind: "show", what: "bars"}),
-	// The top bar's agents, sync and host: capitals, as `N` and `B`. `h` is focus left, and `s`
-	// is tmux's session list, a key a tmux hand presses without looking.
-	once("A", "tezgah.agents", "agents", {kind: "show", what: "agents"}),
-	once("S", "tezgah.sync", "sync", {kind: "show", what: "sync"}),
-	once("H", "tezgah.host", "host", {kind: "show", what: "host"}),
+  // `|` puts the two side by side: a row, "horizontal" in the tree. `-` puts one over the other.
+  once("|", "tezgah.split", "split", { kind: "split", orientation: "horizontal" }),
+  once("-", 'tezgah."split --to down"', "split down", { kind: "split", orientation: "vertical" }),
+  once("h", 'tezgah."focus --to left"', "focus left", { kind: "focus", to: "left" }),
+  once("j", 'tezgah."focus --to down"', "focus down", { kind: "focus", to: "down" }),
+  once("k", 'tezgah."focus --to up"', "focus up", { kind: "focus", to: "up" }),
+  once("l", 'tezgah."focus --to right"', "focus right", { kind: "focus", to: "right" }),
+  once("<arrowleft>", 'tezgah."focus --to left"', "focus left", { kind: "focus", to: "left" }),
+  once("<arrowdown>", 'tezgah."focus --to down"', "focus down", { kind: "focus", to: "down" }),
+  once("<arrowup>", 'tezgah."focus --to up"', "focus up", { kind: "focus", to: "up" }),
+  once("<arrowright>", 'tezgah."focus --to right"', "focus right", { kind: "focus", to: "right" }),
+  once("<f6>", 'tezgah."focus --to next"', "focus next", { kind: "cycle", to: "next" }),
+  once("<s-f6>", 'tezgah."focus --to previous"', "focus previous", { kind: "cycle", to: "previous" }),
+  // Space turns the container, as AeroSpace's `layout horizontal vertical`. `f` folds the tile.
+  once(" ", "tezgah.turn", "turn", { kind: "turn" }),
+  once("f", "tezgah.fold", "fold", { kind: "fold" }),
+  once("z", "tezgah.zoom", "zoom", { kind: "zoom" }),
+  once("x", "tezgah.close", "close", { kind: "close" }),
+  once("N", 'tezgah."workspace --to new"', "new", { kind: "new" }),
+  {
+    key: "<c-h>",
+    command: 'tezgah."workspace --to previous"',
+    does: { kind: "step", to: "previous" },
+    repeats: true,
+    name: "previous workspace",
+  },
+  {
+    key: "<c-l>",
+    command: 'tezgah."workspace --to next"',
+    does: { kind: "step", to: "next" },
+    repeats: true,
+    name: "next workspace",
+  },
+  ...PICKS.map((command, i) => once(String(i + 1), command, `workspace ${i + 1}`, { kind: "pick", at: i + 1 })),
+  // The frame's own: not a bare `?` or `i`, which would go into tsh.
+  once("a", "tezgah.asks", "asks", { kind: "show", what: "asks" }),
+  // `J`, as `N` and `B`: the bare `j` is focus down.
+  once("J", "tezgah.jobs", "jobs", { kind: "show", what: "jobs" }),
+  once("?", "keys.open", "keys", { kind: "show", what: "keys" }),
+  once("i", "tezgah.info", "info", { kind: "show", what: "info" }),
+  once("B", "tezgah.bars", "bars", { kind: "show", what: "bars" }),
+  // The top bar's agents, sync and host: capitals, as `N` and `B`. `h` is focus left, and `s`
+  // is tmux's session list, a key a tmux hand presses without looking.
+  once("A", "tezgah.agents", "agents", { kind: "show", what: "agents" }),
+  once("S", "tezgah.sync", "sync", { kind: "show", what: "sync" }),
+  once("H", "tezgah.host", "host", { kind: "show", what: "host" }),
 ];
 
 /** What a key acts on: the focused tile, focus, the workspaces, or the window's frame. */
@@ -162,24 +150,24 @@ export type Group = "tile" | "focus" | "workspace" | "window";
 
 /** The group a binding is listed under, in the palette and the keys panel (window/frame.ts). */
 export const groupOf = (does: Does): Group => {
-	switch (does.kind) {
-		case "split":
-		case "turn":
-		case "fold":
-		case "zoom":
-		case "close":
-			return "tile";
-		case "focus":
-		case "cycle":
-		case "go":
-			return "focus";
-		case "new":
-		case "step":
-		case "pick":
-			return "workspace";
-		case "show":
-			return "window";
-	}
+  switch (does.kind) {
+    case "split":
+    case "turn":
+    case "fold":
+    case "zoom":
+    case "close":
+      return "tile";
+    case "focus":
+    case "cycle":
+    case "go":
+      return "focus";
+    case "new":
+    case "step":
+    case "pick":
+      return "workspace";
+    case "show":
+      return "window";
+  }
 };
 
 /**
@@ -189,56 +177,56 @@ export const groupOf = (does: Does): Group => {
  * summoned agent (`@scout ...`), a program of its own.
  */
 export const wordOf = (does: Does): string => {
-	switch (does.kind) {
-		case "split":
-			return does.orientation === "horizontal" ? "split" : "split --to down";
-		case "focus":
-			return `focus --to ${does.to}`;
-		case "cycle":
-			return `focus --to ${does.to}`;
-		case "go":
-			return `focus --to ${does.tile}`;
-		case "turn":
-			return "turn-container";
-		case "fold":
-		case "zoom":
-			return does.kind;
-		case "close":
-			return "close-tile";
-		case "new":
-			return "workspace --to new";
-		case "step":
-			return `workspace --to ${does.to}`;
-		case "pick":
-			return `workspace --to ${does.at}`;
-		case "show":
-			return does.what;
-	}
+  switch (does.kind) {
+    case "split":
+      return does.orientation === "horizontal" ? "split" : "split --to down";
+    case "focus":
+      return `focus --to ${does.to}`;
+    case "cycle":
+      return `focus --to ${does.to}`;
+    case "go":
+      return `focus --to ${does.tile}`;
+    case "turn":
+      return "turn-container";
+    case "fold":
+    case "zoom":
+      return does.kind;
+    case "close":
+      return "close-tile";
+    case "new":
+      return "workspace --to new";
+    case "step":
+      return `workspace --to ${does.to}`;
+    case "pick":
+      return `workspace --to ${does.at}`;
+    case "show":
+      return does.what;
+  }
 };
 
 /** A key press, as the page reads it off a keyboard event. */
 export interface Press {
-	readonly key: string;
-	readonly ctrl: boolean;
-	readonly alt: boolean;
-	readonly meta: boolean;
-	readonly code?: string;
-	readonly shift?: boolean;
-	readonly composing?: boolean;
-	readonly altGraph?: boolean;
+  readonly key: string;
+  readonly ctrl: boolean;
+  readonly alt: boolean;
+  readonly meta: boolean;
+  readonly code?: string;
+  readonly shift?: boolean;
+  readonly composing?: boolean;
+  readonly altGraph?: boolean;
 }
 
 const MODIFIERS = new Set([
-	"Shift",
-	"Control",
-	"Alt",
-	"Meta",
-	"CapsLock",
-	"Fn",
-	"Dead",
-	"Unidentified",
-	"Process",
-	"AltGraph",
+  "Shift",
+  "Control",
+  "Alt",
+  "Meta",
+  "CapsLock",
+  "Fn",
+  "Dead",
+  "Unidentified",
+  "Process",
+  "AltGraph",
 ]);
 
 /**
@@ -247,60 +235,60 @@ const MODIFIERS = new Set([
  * before the `|` it makes, and must not disarm the prefix.
  */
 export const keyName = (press: Press): string | null => {
-	if (press.composing || MODIFIERS.has(press.key) || press.key === "") {
-		return null;
-	}
+  if (press.composing || MODIFIERS.has(press.key) || press.key === "") {
+    return null;
+  }
 
-	const char = [...press.key].length === 1;
-	const modified = press.ctrl || press.alt || press.meta;
-	const shift = press.shift && (!char || modified);
+  const char = [...press.key].length === 1;
+  const modified = press.ctrl || press.alt || press.meta;
+  const shift = press.shift && (!char || modified);
 
-	if (!modified && !shift) {
-		return char ? press.key : `<${press.key.toLowerCase()}>`;
-	}
+  if (!modified && !shift) {
+    return char ? press.key : `<${press.key.toLowerCase()}>`;
+  }
 
-	const bare = char ? press.key.replace(/[A-Z]/g, (c) => c.toLowerCase()) : press.key.toLowerCase();
-	const mods = `${press.ctrl ? "c-" : ""}${press.alt ? "a-" : ""}${shift ? "s-" : ""}${press.meta ? "m-" : ""}`;
-	return `<${mods}${bare}>`;
+  const bare = char ? press.key.replace(/[A-Z]/g, (c) => c.toLowerCase()) : press.key.toLowerCase();
+  const mods = `${press.ctrl ? "c-" : ""}${press.alt ? "a-" : ""}${shift ? "s-" : ""}${press.meta ? "m-" : ""}`;
+  return `<${mods}${bare}>`;
 };
 
 /** Character matching comes before a Ctrl/Cmd fallback to a Latin key position. */
 export const matchPress = (press: Press, keys: readonly Key[], mac: boolean): Key | null => {
-	const name = keyName(press);
+  const name = keyName(press);
 
-	if (name === null) {
-		return null;
-	}
+  if (name === null) {
+    return null;
+  }
 
-	const exact = keys.find((key) => key.key === name);
+  const exact = keys.find((key) => key.key === name);
 
-	if (exact !== undefined) {
-		return exact;
-	}
+  if (exact !== undefined) {
+    return exact;
+  }
 
-	if (((press.alt && mac) || press.altGraph) && [...press.key].length === 1) {
-		const typed = keyName({...press, alt: false, ctrl: press.altGraph ? false : press.ctrl});
-		const folded = keys.find((key) => key.key === typed);
+  if (((press.alt && mac) || press.altGraph) && [...press.key].length === 1) {
+    const typed = keyName({ ...press, alt: false, ctrl: press.altGraph ? false : press.ctrl });
+    const folded = keys.find((key) => key.key === typed);
 
-		if (folded !== undefined) {
-			return folded;
-		}
-	}
+    if (folded !== undefined) {
+      return folded;
+    }
+  }
 
-	if (
-		(press.ctrl || press.meta) &&
-		!press.altGraph &&
-		[...press.key].some((char) => (char.codePointAt(0) ?? 0) > 127)
-	) {
-		const latin = /^Key([A-Z])$/.exec(press.code ?? "")?.[1];
+  if (
+    (press.ctrl || press.meta) &&
+    !press.altGraph &&
+    [...press.key].some((char) => (char.codePointAt(0) ?? 0) > 127)
+  ) {
+    const latin = /^Key([A-Z])$/.exec(press.code ?? "")?.[1];
 
-		if (latin !== undefined) {
-			const position = keyName({...press, key: latin.toLowerCase()});
-			return keys.find((key) => key.key === position) ?? null;
-		}
-	}
+    if (latin !== undefined) {
+      const position = keyName({ ...press, key: latin.toLowerCase() });
+      return keys.find((key) => key.key === position) ?? null;
+    }
+  }
 
-	return null;
+  return null;
 };
 
 /** Who a key belongs to: the system and its menu, the app (the desk or a tile), or nobody at all. */
@@ -312,13 +300,7 @@ type KeyOwner = "system" | "app" | "nobody";
  * "Keys that cannot be taken away"). The keys file refuses them (keymap.ts); `keyOwner` checks
  * them first all the same, so no table can give one to the app.
  */
-export const THE_MACS: ReadonlySet<string> = new Set([
-	"<m-q>",
-	"<m-h>",
-	"<m-tab>",
-	"<m- >",
-	"<a-m-escape>",
-]);
+export const THE_MACS: ReadonlySet<string> = new Set(["<m-q>", "<m-h>", "<m-tab>", "<m- >", "<a-m-escape>"]);
 
 /**
  * Who a key belongs to. On a Mac, Command is the system's and the menu's, as in Terminal: Cmd-Q
@@ -334,29 +316,26 @@ export const THE_MACS: ReadonlySet<string> = new Set([
  *   keyOwner({key: "w", ctrl: false, alt: false, meta: true}, false, defaults)   "app": not a Mac
  */
 export const keyOwner = (press: Press, mac: boolean, keys: Keys): KeyOwner => {
-	if (!mac || !press.meta) {
-		return "app";
-	}
+  if (!mac || !press.meta) {
+    return "app";
+  }
 
-	const name = keyName(press);
+  const name = keyName(press);
 
-	if (name === null || THE_MACS.has(name)) {
-		return "system";
-	}
+  if (name === null || THE_MACS.has(name)) {
+    return "system";
+  }
 
-	const bound =
-		matchPress(
-			press,
-			[
-				{_tag: "alone", key: keys.prefix},
-				...keys.rows.flatMap((row) => row.keys.filter((k) => k._tag === "alone")),
-			],
-			mac,
-		) !== null;
+  const bound =
+    matchPress(
+      press,
+      [{ _tag: "alone", key: keys.prefix }, ...keys.rows.flatMap((row) => row.keys.filter((k) => k._tag === "alone"))],
+      mac,
+    ) !== null;
 
-	if (bound) {
-		return "app";
-	}
+  if (bound) {
+    return "app";
+  }
 
-	return keys.ignore.includes(name) ? "nobody" : "system";
+  return keys.ignore.includes(name) ? "nobody" : "system";
 };

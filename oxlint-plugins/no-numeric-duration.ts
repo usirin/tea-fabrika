@@ -23,49 +23,49 @@
 //
 // A genuine exception is a per-line
 // `// oxlint-disable-next-line fabrika/no-numeric-duration -- <reason>`.
-import type {CreateRule} from "@oxlint/plugins";
-import {grouped, type Node, plainCall} from "./match.ts";
+import type { CreateRule } from "@oxlint/plugins";
+import { grouped, type Node, plainCall } from "./match.ts";
 
 /** For each API, by its number of arguments, which argument is the duration. */
 const POSITION: Readonly<Record<string, Readonly<Record<number, number>>>> = {
-	"Effect.sleep": {1: 0},
-	"Effect.timeout": {1: 0, 2: 1},
-	"Effect.delay": {1: 0, 2: 1},
-	"Schedule.spaced": {1: 0},
-	"Schedule.fixed": {1: 0},
-	"Schedule.windowed": {1: 0},
-	"Schedule.exponential": {1: 0, 2: 0},
+  "Effect.sleep": { 1: 0 },
+  "Effect.timeout": { 1: 0, 2: 1 },
+  "Effect.delay": { 1: 0, 2: 1 },
+  "Schedule.spaced": { 1: 0 },
+  "Schedule.fixed": { 1: 0 },
+  "Schedule.windowed": { 1: 0 },
+  "Schedule.exponential": { 1: 0, 2: 0 },
 };
 
 const isNumber = (node: Node): boolean => node.type === "Literal" && typeof node.value === "number";
 
 export const noNumericDuration: CreateRule = {
-	create(context) {
-		return {
-			CallExpression(node) {
-				const name = plainCall(node);
-				const where = name === null ? undefined : POSITION[name]?.[node.arguments.length];
+  create(context) {
+    return {
+      CallExpression(node) {
+        const name = plainCall(node);
+        const where = name === null ? undefined : POSITION[name]?.[node.arguments.length];
 
-				if (where === undefined) {
-					return;
-				}
+        if (where === undefined) {
+          return;
+        }
 
-				const duration = node.arguments[where];
+        const duration = node.arguments[where];
 
-				if (duration === undefined || !isNumber(duration)) {
-					return;
-				}
+        if (duration === undefined || !isNumber(duration)) {
+          return;
+        }
 
-				if (grouped(context.sourceCode, duration) > 0) {
-					return;
-				}
+        if (grouped(context.sourceCode, duration) > 0) {
+          return;
+        }
 
-				context.report({
-					node: duration,
-					message:
-						'Bare numeric duration is banned: a `number` is interpreted as milliseconds, so the unit is invisible at the call site (#3196). Fix: use `Duration.seconds(...)`/`Duration.millis(...)` or a unit-tagged string like `"5 seconds"`. Exception: // oxlint-disable-next-line fabrika/no-numeric-duration -- <reason>.',
-				});
-			},
-		};
-	},
+        context.report({
+          node: duration,
+          message:
+            'Bare numeric duration is banned: a `number` is interpreted as milliseconds, so the unit is invisible at the call site (#3196). Fix: use `Duration.seconds(...)`/`Duration.millis(...)` or a unit-tagged string like `"5 seconds"`. Exception: // oxlint-disable-next-line fabrika/no-numeric-duration -- <reason>.',
+        });
+      },
+    };
+  },
 };

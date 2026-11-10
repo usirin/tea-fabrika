@@ -1,38 +1,38 @@
-import {run} from "@demlik/tea/effect";
-import {backoffDelay, defaultRng} from "@demlik/tea/retry-backoff";
+import { run } from "@demlik/tea/effect";
+import { backoffDelay, defaultRng } from "@demlik/tea/retry-backoff";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
-import {followLook, frameColor} from "@kampus/fabrika-design";
-import {Cause, Effect, Exit, type FileSystem, Layer, Path, Scope, Stream} from "effect";
-import type {ChildProcessSpawner} from "effect/process";
+import { followLook, frameColor } from "@kampus/fabrika-design";
+import { Cause, Effect, Exit, type FileSystem, Layer, Path, Scope, Stream } from "effect";
+import type { ChildProcessSpawner } from "effect/process";
 import {
-	app,
-	BrowserWindow,
-	type IpcMainEvent,
-	ipcMain,
-	MessageChannelMain,
-	type MessagePortMain,
-	nativeTheme,
-	Notification,
-	protocol,
-	session,
-	shell,
+  app,
+  BrowserWindow,
+  type IpcMainEvent,
+  ipcMain,
+  MessageChannelMain,
+  type MessagePortMain,
+  nativeTheme,
+  Notification,
+  protocol,
+  session,
+  shell,
 } from "electron";
-import {type AsksNow, keysOf, newAsks, noticeOf} from "./asks.ts";
-import {attach, NoHello, NoHost, restart} from "./attach.ts";
-import {isPortName, PORT_CHANNEL} from "./bridge.ts";
-import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
-import {settingsFolder} from "./host/settings.ts";
-import {pathsOf} from "./host/socket.ts";
-import {NotStopped} from "./host/stop.ts";
-import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
-import type {Down, Up} from "./link.ts";
-import {type LinkNow, readAsks, readToApp, type ToPage} from "./messages.ts";
-import {Browser, NotOpened, openOutside} from "./outside.ts";
-import {noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
-import {startHost} from "./start-host.ts";
-import {Unattached, type Wire} from "./wire.ts";
+import { type AsksNow, keysOf, newAsks, noticeOf } from "./asks.ts";
+import { attach, NoHello, NoHost, restart } from "./attach.ts";
+import { isPortName, PORT_CHANNEL } from "./bridge.ts";
+import { answer, DESK, isDesk, isOurs, SCHEME } from "./files.ts";
+import { settingsFolder } from "./host/settings.ts";
+import { pathsOf } from "./host/socket.ts";
+import { NotStopped } from "./host/stop.ts";
+import { type Launch, launchOf, QUIET_SWITCHES } from "./launch.ts";
+import type { Down, Up } from "./link.ts";
+import { type LinkNow, readAsks, readToApp, type ToPage } from "./messages.ts";
+import { Browser, NotOpened, openOutside } from "./outside.ts";
+import { noteOf, POLICY, reconnectMachine, type Tried } from "./reconnect.ts";
+import { startHost } from "./start-host.ts";
+import { Unattached, type Wire } from "./wire.ts";
 
 // The Electron edge: the main process. It runs nothing of fabrika's own: every tile's tsh, every
 // program, the desk, the jobs and the ledger are in the host, a process of its own
@@ -121,33 +121,31 @@ const DIST = import.meta.dirname;
 const launch = launchOf(process.env);
 
 if (launch.kind !== "owner") {
-	app.setPath("userData", launch.home);
+  app.setPath("userData", launch.home);
 }
 
 // Before `ready`, so no Dock icon shows even for a moment, and Chromium starts with the switches.
 if (launch.kind === "quiet") {
-	if (process.platform === "darwin") {
-		app.setActivationPolicy("accessory");
-	}
+  if (process.platform === "darwin") {
+    app.setActivationPolicy("accessory");
+  }
 
-	for (const name of QUIET_SWITCHES) {
-		app.commandLine.appendSwitch(name);
-	}
+  for (const name of QUIET_SWITCHES) {
+    app.commandLine.appendSwitch(name);
+  }
 }
 
 // Before `ready`, as Electron asks: a standard, secure scheme, so the page's own files have
 // an origin of their own and run as on https.
-protocol.registerSchemesAsPrivileged([
-	{scheme: SCHEME, privileges: {standard: true, secure: true}},
-]);
+protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: true, secure: true } }]);
 
 /** The person's own browser: Electron hands the URL to the system, which opens its default one. */
 const browser = Browser.of({
-	open: (url) =>
-		Effect.tryPromise({
-			try: () => shell.openExternal(url),
-			catch: (cause) => new NotOpened({url, why: String(cause)}),
-		}),
+  open: (url) =>
+    Effect.tryPromise({
+      try: () => shell.openExternal(url),
+      catch: (cause) => new NotOpened({ url, why: String(cause) }),
+    }),
 });
 
 /**
@@ -155,31 +153,29 @@ const browser = Browser.of({
  * window is refused like any other, and its URL goes to the person's own browser, or is refused.
  */
 const guard = () => {
-	app.on("web-contents-created", (_event, contents) => {
-		contents.on("will-navigate", (e) => e.preventDefault());
-		contents.on("will-redirect", (e) => e.preventDefault());
-		contents.on("will-attach-webview", (e) => e.preventDefault());
-		contents.setWindowOpenHandler(({url}) => {
-			Effect.runFork(
-				openOutside({url, from: contents.getURL()}).pipe(
-					Effect.provideService(Browser, browser),
-					Effect.match({
-						onFailure: (e) => console.warn(`fabrika: the browser did not open ${e.url}: ${e.why}`),
-						onSuccess: (out) => {
-							if (out.kind === "refused") {
-								console.warn(`fabrika: refused to open ${url}: ${out.why}`);
-							}
-						},
-					}),
-				),
-			);
-			return {action: "deny"};
-		});
-	});
-	session.defaultSession.setPermissionRequestHandler((_contents, _permission, decide) =>
-		decide(false),
-	);
-	session.defaultSession.setPermissionCheckHandler(() => false);
+  app.on("web-contents-created", (_event, contents) => {
+    contents.on("will-navigate", (e) => e.preventDefault());
+    contents.on("will-redirect", (e) => e.preventDefault());
+    contents.on("will-attach-webview", (e) => e.preventDefault());
+    contents.setWindowOpenHandler(({ url }) => {
+      Effect.runFork(
+        openOutside({ url, from: contents.getURL() }).pipe(
+          Effect.provideService(Browser, browser),
+          Effect.match({
+            onFailure: (e) => console.warn(`fabrika: the browser did not open ${e.url}: ${e.why}`),
+            onSuccess: (out) => {
+              if (out.kind === "refused") {
+                console.warn(`fabrika: refused to open ${url}: ${out.why}`);
+              }
+            },
+          }),
+        ),
+      );
+      return { action: "deny" };
+    });
+  });
+  session.defaultSession.setPermissionRequestHandler((_contents, _permission, decide) => decide(false));
+  session.defaultSession.setPermissionCheckHandler(() => false);
 };
 
 /**
@@ -188,57 +184,55 @@ const guard = () => {
  * their space clear (window/frame.ts, `LIGHTS`). Other platforms keep the system's frame, as it is.
  */
 const FRAME =
-	process.platform === "darwin"
-		? ({titleBarStyle: "hiddenInset", trafficLightPosition: {x: 14, y: 11}} as const)
-		: {};
+  process.platform === "darwin"
+    ? ({ titleBarStyle: "hiddenInset", trafficLightPosition: { x: 14, y: 11 } } as const)
+    : {};
 
 /**
  * The one window, with the same safe settings the app's windows always had. Quiet, it is made
  * hidden and drawn anyway, then shown without taking focus.
  */
 const deskWindow = (preload: string, icon: string, launch: Launch) => {
-	const quiet = launch.kind === "quiet";
-	const window = new BrowserWindow({
-		width: 1200,
-		height: 760,
-		title: "fabrika",
-		icon,
-		// The desk's color in the system's look, so the window shows no other color before its page.
-		backgroundColor: frameColor(nativeTheme),
-		...FRAME,
-		show: !quiet,
-		paintWhenInitiallyHidden: true,
-		webPreferences: {
-			sandbox: true,
-			contextIsolation: true,
-			nodeIntegration: false,
-			webSecurity: true,
-			backgroundThrottling: !quiet,
-			preload,
-		},
-	});
-	followLook(nativeTheme, window);
+  const quiet = launch.kind === "quiet";
+  const window = new BrowserWindow({
+    width: 1200,
+    height: 760,
+    title: "fabrika",
+    icon,
+    // The desk's color in the system's look, so the window shows no other color before its page.
+    backgroundColor: frameColor(nativeTheme),
+    ...FRAME,
+    show: !quiet,
+    paintWhenInitiallyHidden: true,
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+      backgroundThrottling: !quiet,
+      preload,
+    },
+  });
+  followLook(nativeTheme, window);
 
-	if (quiet) {
-		window.showInactive();
-	}
+  if (quiet) {
+    window.showInactive();
+  }
 
-	window
-		.loadURL(DESK)
-		.catch((cause) => console.error(`fabrika: the window could not load ${DESK}`, cause));
-	return window;
+  window.loadURL(DESK).catch((cause) => console.error(`fabrika: the window could not load ${DESK}`, cause));
+  return window;
 };
 
 /** The sender is the window's own top frame, showing the desk page of our files: nothing else is answered. */
 const fromItsPage = (window: BrowserWindow, event: IpcMainEvent) => {
-	const frame = event.senderFrame;
-	return (
-		event.sender === window.webContents &&
-		frame !== null &&
-		frame.parent === null &&
-		isOurs(frame.url) &&
-		isDesk(frame.url)
-	);
+  const frame = event.senderFrame;
+  return (
+    event.sender === window.webContents &&
+    frame !== null &&
+    frame.parent === null &&
+    isOurs(frame.url) &&
+    isDesk(frame.url)
+  );
 };
 
 /** How deep a page's message may nest: deeper is refused, as no message of the app's is. */
@@ -249,27 +243,27 @@ const DEEPEST = 32;
  * (a Map, a cycle, a BigInt), and one of those must not end the link for every tile.
  */
 const plain = (v: unknown, depth = 0): boolean => {
-	if (depth > DEEPEST) {
-		return false;
-	}
+  if (depth > DEEPEST) {
+    return false;
+  }
 
-	if (v === null || typeof v === "string" || typeof v === "boolean") {
-		return true;
-	}
+  if (v === null || typeof v === "string" || typeof v === "boolean") {
+    return true;
+  }
 
-	if (typeof v === "number") {
-		return Number.isFinite(v);
-	}
+  if (typeof v === "number") {
+    return Number.isFinite(v);
+  }
 
-	if (Array.isArray(v)) {
-		return v.every((x) => plain(x, depth + 1));
-	}
+  if (Array.isArray(v)) {
+    return v.every((x) => plain(x, depth + 1));
+  }
 
-	if (typeof v !== "object" || Object.getPrototypeOf(v) !== Object.prototype) {
-		return false;
-	}
+  if (typeof v !== "object" || Object.getPrototypeOf(v) !== Object.prototype) {
+    return false;
+  }
 
-	return Object.values(v).every((x) => plain(x, depth + 1));
+  return Object.values(v).every((x) => plain(x, depth + 1));
 };
 
 /**
@@ -278,393 +272,382 @@ const plain = (v: unknown, depth = 0): boolean => {
  * next window's page is shown everything again by the host.
  */
 const portsFor = (current: () => BrowserWindow | null) => {
-	const ports = new Map<string, MessagePortMain>();
-	/** A fresh port named `name`: the page gets one end, and `heard` hears what comes on the other. */
-	const push = (name: string, heard: (raw: unknown) => void) => {
-		const window = current();
+  const ports = new Map<string, MessagePortMain>();
+  /** A fresh port named `name`: the page gets one end, and `heard` hears what comes on the other. */
+  const push = (name: string, heard: (raw: unknown) => void) => {
+    const window = current();
 
-		if (
-			!isPortName(name) ||
-			window === null ||
-			window.isDestroyed() ||
-			!isDesk(window.webContents.getURL())
-		) {
-			return;
-		}
+    if (!isPortName(name) || window === null || window.isDestroyed() || !isDesk(window.webContents.getURL())) {
+      return;
+    }
 
-		ports.get(name)?.close();
-		const {port1, port2} = new MessageChannelMain();
-		port1.on("message", (message) => heard(message.data));
-		port1.start();
-		ports.set(name, port1);
-		window.webContents.postMessage(PORT_CHANNEL, name, [port2]);
-	};
-	const post = (name: string, m: unknown) => ports.get(name)?.postMessage(m);
-	const gone = (name: string) => {
-		ports.get(name)?.close();
-		ports.delete(name);
-	};
-	/** The page was loaded again, or its window closed: every port it had is dead. */
-	const reset = () => {
-		for (const port of ports.values()) {
-			port.close();
-		}
+    ports.get(name)?.close();
+    const { port1, port2 } = new MessageChannelMain();
+    port1.on("message", (message) => heard(message.data));
+    port1.start();
+    ports.set(name, port1);
+    window.webContents.postMessage(PORT_CHANNEL, name, [port2]);
+  };
+  const post = (name: string, m: unknown) => ports.get(name)?.postMessage(m);
+  const gone = (name: string) => {
+    ports.get(name)?.close();
+    ports.delete(name);
+  };
+  /** The page was loaded again, or its window closed: every port it had is dead. */
+  const reset = () => {
+    for (const port of ports.values()) {
+      port.close();
+    }
 
-		ports.clear();
-	};
-	return {push, post, gone, reset};
+    ports.clear();
+  };
+  return { push, post, gone, reset };
 };
 
 /** What one try to attach came to, from why it failed, in words for the window. */
 const triedOf = (e: unknown): Tried => {
-	if (e instanceof NoHost) {
-		return {kind: "lost", why: `The host did not start: ${e.why}.`};
-	}
+  if (e instanceof NoHost) {
+    return { kind: "lost", why: `The host did not start: ${e.why}.` };
+  }
 
-	if (e instanceof NoHello) {
-		return {kind: "lost", why: `The host did not answer: it said no hello within ${e.within}.`};
-	}
+  if (e instanceof NoHello) {
+    return { kind: "lost", why: `The host did not answer: it said no hello within ${e.within}.` };
+  }
 
-	if (e instanceof NotStopped) {
-		return {kind: "lost", why: `The old host did not stop: ${e.why}.`};
-	}
+  if (e instanceof NotStopped) {
+    return { kind: "lost", why: `The old host did not stop: ${e.why}.` };
+  }
 
-	if (!(e instanceof Unattached)) {
-		return {kind: "lost", why: `The host could not be started: ${String(e)}.`};
-	}
+  if (!(e instanceof Unattached)) {
+    return { kind: "lost", why: `The host could not be started: ${String(e)}.` };
+  }
 
-	if (e.why.kind === "version") {
-		return {kind: "version", theirs: e.why.theirs, ours: e.why.ours};
-	}
+  if (e.why.kind === "version") {
+    return { kind: "version", theirs: e.why.theirs, ours: e.why.ours };
+  }
 
-	return {kind: "lost", why: `The host did not answer: ${e.why.what}.`};
+  return { kind: "lost", why: `The host did not answer: ${e.why.what}.` };
 };
 
 /** The link that is up now, and the scope it lives in: closed once the link ends. */
-type Held = {readonly wire: Wire<Up>; readonly scope: Scope.Closeable};
+type Held = { readonly wire: Wire<Up>; readonly scope: Scope.Closeable };
 
 /** Is what the window shows now the same as what it was told last? Each is plain data. */
 const same = (a: LinkNow | null, b: LinkNow | null) => JSON.stringify(a) === JSON.stringify(b);
 
 const main = Effect.gen(function* () {
-	yield* Effect.tryPromise({
-		try: () => app.whenReady(),
-		catch: (cause) => new Error("Electron did not get ready", {cause}),
-	});
-	guard();
-	const path = yield* Path.Path;
-	const icon = path.join(DIST, "icon.png");
+  yield* Effect.tryPromise({
+    try: () => app.whenReady(),
+    catch: (cause) => new Error("Electron did not get ready", { cause }),
+  });
+  guard();
+  const path = yield* Path.Path;
+  const icon = path.join(DIST, "icon.png");
 
-	// A quiet start has no Dock icon to set. An unpackaged app has no icon of its own otherwise.
-	if (launch.kind !== "quiet") {
-		app.dock?.setIcon(icon);
-	}
+  // A quiet start has no Dock icon to set. An unpackaged app has no icon of its own otherwise.
+  if (launch.kind !== "quiet") {
+    app.dock?.setIcon(icon);
+  }
 
-	// Asked for by our own page only: the scheme is registered for nothing else.
-	const files = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
-	protocol.handle(SCHEME, (request) => Effect.runPromiseWith(files)(answer(DIST, request.url)));
-	const home = app.getPath("userData");
+  // Asked for by our own page only: the scheme is registered for nothing else.
+  const files = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+  protocol.handle(SCHEME, (request) => Effect.runPromiseWith(files)(answer(DIST, request.url)));
+  const home = app.getPath("userData");
 
-	const scope = yield* Effect.scope;
-	const clock = yield* Effect.clockWith(Effect.succeed);
+  const scope = yield* Effect.scope;
+  const clock = yield* Effect.clockWith(Effect.succeed);
 
-	/** The desk's window now, or none: closed, and on macOS the app runs on in the dock. */
-	let current: BrowserWindow | null = null;
-	/** The current window's page said hello, and is to be shown the desk once the link is up. */
-	let paged = false;
-	/** The link while it is up. Down, the reconnect machine (reconnect.ts) says what is done. */
-	let held: Held | null = null;
-	/** What the window was told of the link last. */
-	let said: LinkNow | null = null;
-	const ports = portsFor(() => current);
+  /** The desk's window now, or none: closed, and on macOS the app runs on in the dock. */
+  let current: BrowserWindow | null = null;
+  /** The current window's page said hello, and is to be shown the desk once the link is up. */
+  let paged = false;
+  /** The link while it is up. Down, the reconnect machine (reconnect.ts) says what is done. */
+  let held: Held | null = null;
+  /** What the window was told of the link last. */
+  let said: LinkNow | null = null;
+  const ports = portsFor(() => current);
 
-	const toHost = (m: Up) => held?.wire.send(m);
-	/** What a port's page sends goes to the host, under the port's name. */
-	const onTo = (name: string) => (raw: unknown) => {
-		if (plain(raw)) {
-			toHost({type: "on", port: name, m: raw});
-		} else {
-			console.warn(`fabrika: refused a message on ${name} that is no plain JSON`);
-		}
-	};
-	/** A port whose messages go to the host, under its name. */
-	const relay = (name: string) => ports.push(name, onTo(name));
-	const toPage = (m: ToPage) => ports.post("desk", m);
-	/** The ask keys known since this link came up; `null` before its first count. */
-	let known: ReadonlySet<string> | null = null;
-	/** Notifications shown, held so their click is still heard. */
-	const notices = new Set<Notification>();
-	/**
-	 * The host's count of asks (asks.ts), read on its way to the page: the Dock's badge shows the
-	 * same number as the top bar. A new ask is told by the system's notification only when the
-	 * window is not in front, and never on a quiet start. Nothing is focused or opened by it; a
-	 * click on it brings the window and opens the asks list.
-	 */
-	const heardAsks = (now: AsksNow) => {
-		app.setBadgeCount(now.asks.length);
-		const fresh = newAsks(known, now);
-		known = keysOf(now);
-		const [first, ...rest] = fresh;
+  const toHost = (m: Up) => held?.wire.send(m);
+  /** What a port's page sends goes to the host, under the port's name. */
+  const onTo = (name: string) => (raw: unknown) => {
+    if (plain(raw)) {
+      toHost({ type: "on", port: name, m: raw });
+    } else {
+      console.warn(`fabrika: refused a message on ${name} that is no plain JSON`);
+    }
+  };
+  /** A port whose messages go to the host, under its name. */
+  const relay = (name: string) => ports.push(name, onTo(name));
+  const toPage = (m: ToPage) => ports.post("desk", m);
+  /** The ask keys known since this link came up; `null` before its first count. */
+  let known: ReadonlySet<string> | null = null;
+  /** Notifications shown, held so their click is still heard. */
+  const notices = new Set<Notification>();
+  /**
+   * The host's count of asks (asks.ts), read on its way to the page: the Dock's badge shows the
+   * same number as the top bar. A new ask is told by the system's notification only when the
+   * window is not in front, and never on a quiet start. Nothing is focused or opened by it; a
+   * click on it brings the window and opens the asks list.
+   */
+  const heardAsks = (now: AsksNow) => {
+    app.setBadgeCount(now.asks.length);
+    const fresh = newAsks(known, now);
+    known = keysOf(now);
+    const [first, ...rest] = fresh;
 
-		if (first === undefined || launch.kind === "quiet" || current?.isFocused() === true) {
-			return;
-		}
+    if (first === undefined || launch.kind === "quiet" || current?.isFocused() === true) {
+      return;
+    }
 
-		if (!Notification.isSupported()) {
-			return;
-		}
+    if (!Notification.isSupported()) {
+      return;
+    }
 
-		const notice = new Notification(noticeOf([first, ...rest]));
-		notices.add(notice);
-		notice.on("close", () => notices.delete(notice));
-		notice.on("click", () => {
-			notices.delete(notice);
-			showWindow();
-			toPage({type: "show", what: "asks"});
-		});
-		notice.show();
-	};
-	const fromHost = (m: Down) => {
-		switch (m.type) {
-			case "hello":
-				return;
-			// The desk's port is this process's own: it is made on the page's hello, for `down` too.
-			case "port":
-				if (m.port !== "desk") {
-					relay(m.port);
-				}
+    const notice = new Notification(noticeOf([first, ...rest]));
+    notices.add(notice);
+    notice.on("close", () => notices.delete(notice));
+    notice.on("click", () => {
+      notices.delete(notice);
+      showWindow();
+      toPage({ type: "show", what: "asks" });
+    });
+    notice.show();
+  };
+  const fromHost = (m: Down) => {
+    switch (m.type) {
+      case "hello":
+        return;
+      // The desk's port is this process's own: it is made on the page's hello, for `down` too.
+      case "port":
+        if (m.port !== "desk") {
+          relay(m.port);
+        }
 
-				return;
-			case "to": {
-				if (m.port === "desk") {
-					const asks = readAsks(m.m);
+        return;
+      case "to": {
+        if (m.port === "desk") {
+          const asks = readAsks(m.m);
 
-					if (asks.kind === "read") {
-						heardAsks(asks.msg.now);
-					}
-				}
+          if (asks.kind === "read") {
+            heardAsks(asks.msg.now);
+          }
+        }
 
-				return ports.post(m.port, m.m);
-			}
-			case "gone":
-				return ports.gone(m.port);
-			case "close":
-				return current?.close();
-		}
-	};
-	/** Start the host on this home: the app's own binary as Node, detached, let go (start-host.ts). */
-	const startOne = Effect.gen(function* () {
-		const paths = yield* pathsOf(home);
-		return yield* startHost({
-			binary: process.execPath,
-			entry: path.join(DIST, "host.mjs"),
-			home,
-			paths,
-			settings: settingsFolder(launch, app.getPath("home")),
-			repo: process.env.FABRIKA_REPO,
-		});
-	});
-	/**
-	 * One try to attach, in a scope of its own that lives as long as the link: reach the host, or
-	 * start one the same way the app's start does, so the kept desk comes back.
-	 */
-	const starting = yield* Effect.context<
-		ChildProcessSpawner.ChildProcessSpawner | Path.Path | FileSystem.FileSystem
-	>();
-	const tryWith = (how: typeof attach | typeof restart) =>
-		Effect.gen(function* () {
-			const link = yield* Scope.fork(scope);
-			const exit = yield* how({home, deliver: fromHost, start: startOne}).pipe(
-				Scope.provide(link),
-				Effect.provideContext(starting),
-				Effect.exit,
-			);
+        return ports.post(m.port, m.m);
+      }
+      case "gone":
+        return ports.gone(m.port);
+      case "close":
+        return current?.close();
+    }
+  };
+  /** Start the host on this home: the app's own binary as Node, detached, let go (start-host.ts). */
+  const startOne = Effect.gen(function* () {
+    const paths = yield* pathsOf(home);
+    return yield* startHost({
+      binary: process.execPath,
+      entry: path.join(DIST, "host.mjs"),
+      home,
+      paths,
+      settings: settingsFolder(launch, app.getPath("home")),
+      repo: process.env.FABRIKA_REPO,
+    });
+  });
+  /**
+   * One try to attach, in a scope of its own that lives as long as the link: reach the host, or
+   * start one the same way the app's start does, so the kept desk comes back.
+   */
+  const starting = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner | Path.Path | FileSystem.FileSystem>();
+  const tryWith = (how: typeof attach | typeof restart) =>
+    Effect.gen(function* () {
+      const link = yield* Scope.fork(scope);
+      const exit = yield* how({ home, deliver: fromHost, start: startOne }).pipe(
+        Scope.provide(link),
+        Effect.provideContext(starting),
+        Effect.exit,
+      );
 
-			if (Exit.isFailure(exit)) {
-				yield* Scope.close(link, exit);
-				return triedOf(Cause.squash(exit.cause));
-			}
+      if (Exit.isFailure(exit)) {
+        yield* Scope.close(link, exit);
+        return triedOf(Cause.squash(exit.cause));
+      }
 
-			held = {wire: exit.value.wire, scope: link};
-			// A new link's first count tells of no ask: those were known, or are old news.
-			known = null;
+      held = { wire: exit.value.wire, scope: link };
+      // A new link's first count tells of no ask: those were known, or are old news.
+      known = null;
 
-			if (paged) {
-				exit.value.wire.send({type: "page"});
-			}
+      if (paged) {
+        exit.value.wire.send({ type: "page" });
+      }
 
-			return exit.value.found satisfies Tried;
-		});
-	const tryAttach = tryWith(attach);
-	/** The person confirmed the restart: this app lets go of the old host's link first. */
-	const tryRestart = Effect.gen(function* () {
-		const link = held;
-		held = null;
+      return exit.value.found satisfies Tried;
+    });
+  const tryAttach = tryWith(attach);
+  /** The person confirmed the restart: this app lets go of the old host's link first. */
+  const tryRestart = Effect.gen(function* () {
+    const link = held;
+    held = null;
 
-		if (link !== null) {
-			yield* Scope.close(link.scope, Exit.void);
-		}
+    if (link !== null) {
+      yield* Scope.close(link.scope, Exit.void);
+    }
 
-		return yield* tryWith(restart);
-	});
-	/** The link that is up, until it ends: then its scope closes, and the machine is told why. */
-	const watch = Effect.gen(function* () {
-		const link = held;
-		const why = link === null ? "it was not there" : yield* link.wire.ended;
+    return yield* tryWith(restart);
+  });
+  /** The link that is up, until it ends: then its scope closes, and the machine is told why. */
+  const watch = Effect.gen(function* () {
+    const link = held;
+    const why = link === null ? "it was not there" : yield* link.wire.ended;
 
-		if (held === link) {
-			held = null;
-		}
+    if (held === link) {
+      held = null;
+    }
 
-		if (link !== null) {
-			yield* Scope.close(link.scope, Exit.void);
-		}
+    if (link !== null) {
+      yield* Scope.close(link.scope, Exit.void);
+    }
 
-		return {
-			type: "ended",
-			why: `The link to the host ended: ${why}.`,
-			at: clock.currentTimeMillisUnsafe(),
-		} as const;
-	});
-	const reconnect = yield* run(reconnectMachine, {
-		interpret: {
-			attach: () => tryAttach,
-			restart: () => tryRestart,
-			jitter: (c) => Effect.sync(() => backoffDelay(c.attempt, POLICY, defaultRng)),
-		},
-		subscribe: {link: () => Stream.fromEffect(watch)},
-		clock: () => clock.currentTimeMillisUnsafe(),
-	});
-	// The window hears of the link only when what it would say changes: not on every wait.
-	reconnect.observe((_, s) => {
-		const note = noteOf(s);
+    return {
+      type: "ended",
+      why: `The link to the host ended: ${why}.`,
+      at: clock.currentTimeMillisUnsafe(),
+    } as const;
+  });
+  const reconnect = yield* run(reconnectMachine, {
+    interpret: {
+      attach: () => tryAttach,
+      restart: () => tryRestart,
+      jitter: (c) => Effect.sync(() => backoffDelay(c.attempt, POLICY, defaultRng)),
+    },
+    subscribe: { link: () => Stream.fromEffect(watch) },
+    clock: () => clock.currentTimeMillisUnsafe(),
+  });
+  // The window hears of the link only when what it would say changes: not on every wait.
+  reconnect.observe((_, s) => {
+    const note = noteOf(s);
 
-		if (same(note, said)) {
-			return;
-		}
+    if (same(note, said)) {
+      return;
+    }
 
-		said = note;
+    said = note;
 
-		if (note !== null) {
-			toPage({type: "link", now: note});
-		}
-	});
-	/** The desk's port: Try again and the restart are the app's own, and the rest goes on to the host. */
-	const deskPort = () => {
-		const toDesk = onTo("desk");
-		ports.push("desk", (raw) => {
-			const own = readToApp(raw);
+    if (note !== null) {
+      toPage({ type: "link", now: note });
+    }
+  });
+  /** The desk's port: Try again and the restart are the app's own, and the rest goes on to the host. */
+  const deskPort = () => {
+    const toDesk = onTo("desk");
+    ports.push("desk", (raw) => {
+      const own = readToApp(raw);
 
-			if (own.kind === "read") {
-				Effect.runFork(reconnect.dispatch({type: own.msg.type}).pipe(Effect.ignore));
-			} else {
-				toDesk(raw);
-			}
-		});
-	};
+      if (own.kind === "read") {
+        Effect.runFork(reconnect.dispatch({ type: own.msg.type }).pipe(Effect.ignore));
+      } else {
+        toDesk(raw);
+      }
+    });
+  };
 
-	/**
-	 * The window there is, brought forward, or a new one: its page says hello as it loads. Quiet,
-	 * the window there is is only shown, never focused.
-	 */
-	const showWindow = () => {
-		if (current !== null) {
-			if (launch.kind === "quiet") {
-				return current.showInactive();
-			}
+  /**
+   * The window there is, brought forward, or a new one: its page says hello as it loads. Quiet,
+   * the window there is is only shown, never focused.
+   */
+  const showWindow = () => {
+    if (current !== null) {
+      if (launch.kind === "quiet") {
+        return current.showInactive();
+      }
 
-			if (current.isMinimized()) {
-				current.restore();
-			}
+      if (current.isMinimized()) {
+        current.restore();
+      }
 
-			current.focus();
-			return;
-		}
+      current.focus();
+      return;
+    }
 
-		const made = deskWindow(path.join(DIST, "preload.cjs"), icon, launch);
-		current = made;
-		made.once("closed", () => {
-			if (current !== made) {
-				return;
-			}
+    const made = deskWindow(path.join(DIST, "preload.cjs"), icon, launch);
+    current = made;
+    made.once("closed", () => {
+      if (current !== made) {
+        return;
+      }
 
-			current = null;
-			paged = false;
-			ports.reset();
-			// Nothing stops: the host only stops showing this page anything.
-			toHost({type: "away"});
-		});
-	};
+      current = null;
+      paged = false;
+      ports.reset();
+      // Nothing stops: the host only stops showing this page anything.
+      toHost({ type: "away" });
+    });
+  };
 
-	ipcMain.on(PORT_CHANNEL, (event) => {
-		if (current === null || !fromItsPage(current, event)) {
-			console.warn(
-				`fabrika: refused a hello from ${event.senderFrame?.url ?? "a frame that is gone"}`,
-			);
-			return;
-		}
+  ipcMain.on(PORT_CHANNEL, (event) => {
+    if (current === null || !fromItsPage(current, event)) {
+      console.warn(`fabrika: refused a hello from ${event.senderFrame?.url ?? "a frame that is gone"}`);
+      return;
+    }
 
-		// A hello is a page load: the ports of the page before are dead, and it is shown everything again.
-		ports.reset();
-		paged = true;
-		deskPort();
+    // A hello is a page load: the ports of the page before are dead, and it is shown everything again.
+    ports.reset();
+    paged = true;
+    deskPort();
 
-		// What the window shows of the link first, so a banner is there before the desk comes.
-		if (said !== null) {
-			toPage({type: "link", now: said});
-		}
+    // What the window shows of the link first, so a banner is there before the desk comes.
+    if (said !== null) {
+      toPage({ type: "link", now: said });
+    }
 
-		if (held !== null) {
-			held.wire.send({type: "page"});
-		}
-	});
-	app.on("second-instance", showWindow);
-	// The dock icon, on macOS: the window there is, or a new one on the same desk.
-	app.on("activate", showWindow);
-	// Electron's own pattern: on macOS the app stays with no window; elsewhere it quits.
-	app.on("window-all-closed", () => {
-		if (process.platform !== "darwin") {
-			app.quit();
-		}
-	});
-	showWindow();
-	// Until the app is asked to quit: Cmd-Q, or the last window closed off macOS. Then the scope
-	// closes and the link with it. The host runs on.
-	yield* Effect.callback<void>((resume) => {
-		const asked = (event: {preventDefault: () => void}) => {
-			event.preventDefault();
-			resume(Effect.void);
-		};
-		app.once("before-quit", asked);
-		return Effect.sync(() => app.off("before-quit", asked));
-	});
+    if (held !== null) {
+      held.wire.send({ type: "page" });
+    }
+  });
+  app.on("second-instance", showWindow);
+  // The dock icon, on macOS: the window there is, or a new one on the same desk.
+  app.on("activate", showWindow);
+  // Electron's own pattern: on macOS the app stays with no window; elsewhere it quits.
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit();
+    }
+  });
+  showWindow();
+  // Until the app is asked to quit: Cmd-Q, or the last window closed off macOS. Then the scope
+  // closes and the link with it. The host runs on.
+  yield* Effect.callback<void>((resume) => {
+    const asked = (event: { preventDefault: () => void }) => {
+      event.preventDefault();
+      resume(Effect.void);
+    };
+    app.once("before-quit", asked);
+    return Effect.sync(() => app.off("before-quit", asked));
+  });
 }).pipe(
-	Effect.scoped,
-	Effect.provide(
-		NodeChildProcessSpawner.layer.pipe(
-			Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-		),
-	),
+  Effect.scoped,
+  Effect.provide(
+    NodeChildProcessSpawner.layer.pipe(Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+  ),
 );
 
 if (!app.requestSingleInstanceLock()) {
-	app.quit();
+  app.quit();
 } else {
-	Effect.runFork(
-		main.pipe(
-			Effect.matchCause({
-				onFailure: (cause) => {
-					console.error(Cause.pretty(cause));
-					app.exit(1);
-				},
-				// Asked once already: this time nothing holds the quit back. Not from inside the
-				// `before-quit` that asked: the scope can close in the same turn, and a quit asked
-				// within that event is undone when the event's own preventDefault returns. The
-				// windows then close as if no quit was asked, and the app runs on. On the next turn.
-				onSuccess: () => {
-					setImmediate(() => app.quit());
-				},
-			}),
-		),
-	);
+  Effect.runFork(
+    main.pipe(
+      Effect.matchCause({
+        onFailure: (cause) => {
+          console.error(Cause.pretty(cause));
+          app.exit(1);
+        },
+        // Asked once already: this time nothing holds the quit back. Not from inside the
+        // `before-quit` that asked: the scope can close in the same turn, and a quit asked
+        // within that event is undone when the event's own preventDefault returns. The
+        // windows then close as if no quit was asked, and the app runs on. On the next turn.
+        onSuccess: () => {
+          setImmediate(() => app.quit());
+        },
+      }),
+    ),
+  );
 }

@@ -1,1 +1,1 @@
-export {doorNonce} from "@kampus/libfabrika/door";
+export { doorNonce } from "@kampus/libfabrika/door";

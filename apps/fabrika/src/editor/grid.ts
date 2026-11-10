@@ -1,4 +1,4 @@
-import {type Cell, type Pen, print} from "./cells.ts";
+import { type Cell, type Pen, print } from "./cells.ts";
 
 // A terminal's grid, for tests: what a run of bytes leaves on the screen, and where the cursor is.
 // It knows only what the line editor writes (./screen.ts): text with a VT100's wrap at the last
@@ -17,110 +17,107 @@ import {type Cell, type Pen, print} from "./cells.ts";
 // accent none, as it joins the cell before it.
 
 interface Grid {
-	/** Every row written, oldest first, with no trailing spaces. */
-	readonly rows: readonly string[];
-	/** Where the cursor is: a row of `rows`, and a column. */
-	readonly cursor: {readonly row: number; readonly col: number};
+  /** Every row written, oldest first, with no trailing spaces. */
+  readonly rows: readonly string[];
+  /** Where the cursor is: a row of `rows`, and a column. */
+  readonly cursor: { readonly row: number; readonly col: number };
 }
 
 /** A row as text: a blank cell is a space, and the second cell of a wide character is nothing. */
 const textOf = (row: readonly Cell[]): string =>
-	row
-		.map((c) =>
-			c.wide === "tail" ? "" : c.cps.length === 0 ? " " : String.fromCodePoint(...c.cps),
-		)
-		.join("")
-		.trimEnd();
+  row
+    .map((c) => (c.wide === "tail" ? "" : c.cps.length === 0 ? " " : String.fromCodePoint(...c.cps)))
+    .join("")
+    .trimEnd();
 
 export function gridOf(bytes: string, cols: number, height = 24): Grid {
-	const rows: Cell[][] = [[]];
-	let y = 0;
-	const rowAt = (r: number): Cell[] => {
-		while (rows.length <= r) {
-			rows.push([]);
-		}
+  const rows: Cell[][] = [[]];
+  let y = 0;
+  const rowAt = (r: number): Cell[] => {
+    while (rows.length <= r) {
+      rows.push([]);
+    }
 
-		return rows[r] ?? [];
-	};
-	// A character written in the last column leaves the cursor there, a wrap waiting: the next one
-	// goes on a new row.
-	const pen: Pen = {row: rowAt(0), x: 0, pending: false};
-	const top = () => Math.max(0, rows.length - height);
-	const moveTo = (r: number, x: number) => {
-		y = r;
-		pen.row = rowAt(r);
-		pen.x = x;
-		pen.pending = false;
-	};
-	const next = () => {
-		y += 1;
-		return rowAt(y);
-	};
-	const put = (c: string) => print(pen, c.codePointAt(0) ?? 0, cols, next);
-	const chars = [...bytes];
+    return rows[r] ?? [];
+  };
+  // A character written in the last column leaves the cursor there, a wrap waiting: the next one
+  // goes on a new row.
+  const pen: Pen = { row: rowAt(0), x: 0, pending: false };
+  const top = () => Math.max(0, rows.length - height);
+  const moveTo = (r: number, x: number) => {
+    y = r;
+    pen.row = rowAt(r);
+    pen.x = x;
+    pen.pending = false;
+  };
+  const next = () => {
+    y += 1;
+    return rowAt(y);
+  };
+  const put = (c: string) => print(pen, c.codePointAt(0) ?? 0, cols, next);
+  const chars = [...bytes];
 
-	for (let i = 0; i < chars.length; i += 1) {
-		const c = chars[i] ?? "";
+  for (let i = 0; i < chars.length; i += 1) {
+    const c = chars[i] ?? "";
 
-		if (c === "\r") {
-			moveTo(y, 0);
-		} else if (c === "\n") {
-			moveTo(y + 1, pen.x);
-		} else if (c === "\x07") {
-			// The bell: nothing on the screen.
-		} else if (c === "\x1b" && chars[i + 1] === "c") {
-			// A full reset: every row gone, scrollback too, the cursor home.
-			rows.length = 0;
-			moveTo(0, 0);
-			i += 1;
-		} else if (c === "\x1b" && chars[i + 1] === "[") {
-			let end = i + 2;
+    if (c === "\r") {
+      moveTo(y, 0);
+    } else if (c === "\n") {
+      moveTo(y + 1, pen.x);
+    } else if (c === "\x07") {
+      // The bell: nothing on the screen.
+    } else if (c === "\x1b" && chars[i + 1] === "c") {
+      // A full reset: every row gone, scrollback too, the cursor home.
+      rows.length = 0;
+      moveTo(0, 0);
+      i += 1;
+    } else if (c === "\x1b" && chars[i + 1] === "[") {
+      let end = i + 2;
 
-			while (end < chars.length && /[0-9;]/.test(chars[end] ?? "")) {
-				end += 1;
-			}
+      while (end < chars.length && /[0-9;]/.test(chars[end] ?? "")) {
+        end += 1;
+      }
 
-			const n = Number(chars.slice(i + 2, end).join("") || "0");
-			const final = chars[end];
-			const known =
-				["A", "C", "H", "K", "J", "m"].includes(final ?? "") && (final !== "K" || n === 0);
+      const n = Number(chars.slice(i + 2, end).join("") || "0");
+      const final = chars[end];
+      const known = ["A", "C", "H", "K", "J", "m"].includes(final ?? "") && (final !== "K" || n === 0);
 
-			if (!known) {
-				for (const d of ["^", "[", "[", ...chars.slice(i + 2, end + 1)]) {
-					put(d);
-				}
+      if (!known) {
+        for (const d of ["^", "[", "[", ...chars.slice(i + 2, end + 1)]) {
+          put(d);
+        }
 
-				i = end;
-				continue;
-			}
+        i = end;
+        continue;
+      }
 
-			i = end;
+      i = end;
 
-			if (final === "A") {
-				moveTo(Math.max(top(), y - Math.max(1, n)), pen.x);
-			} else if (final === "C") {
-				moveTo(y, Math.min(cols - 1, pen.x + Math.max(1, n)));
-			} else if (final === "H") {
-				moveTo(top(), 0);
-			} else if (final === "K") {
-				// To the end of the row, the cursor where it was.
-				pen.row.length = Math.min(pen.row.length, pen.x);
-				pen.pending = false;
-			} else if (final === "J" && n === 2) {
-				for (let r = top(); r < rows.length; r += 1) {
-					rowAt(r).length = 0;
-				}
+      if (final === "A") {
+        moveTo(Math.max(top(), y - Math.max(1, n)), pen.x);
+      } else if (final === "C") {
+        moveTo(y, Math.min(cols - 1, pen.x + Math.max(1, n)));
+      } else if (final === "H") {
+        moveTo(top(), 0);
+      } else if (final === "K") {
+        // To the end of the row, the cursor where it was.
+        pen.row.length = Math.min(pen.row.length, pen.x);
+        pen.pending = false;
+      } else if (final === "J" && n === 2) {
+        for (let r = top(); r < rows.length; r += 1) {
+          rowAt(r).length = 0;
+        }
 
-				pen.pending = false;
-			} else if (final === "J") {
-				pen.row.length = Math.min(pen.row.length, pen.x);
-				rows.length = y + 1;
-				pen.pending = false;
-			}
-		} else {
-			put(c);
-		}
-	}
+        pen.pending = false;
+      } else if (final === "J") {
+        pen.row.length = Math.min(pen.row.length, pen.x);
+        rows.length = y + 1;
+        pen.pending = false;
+      }
+    } else {
+      put(c);
+    }
+  }
 
-	return {rows: rows.map(textOf), cursor: {row: y, col: pen.x}};
+  return { rows: rows.map(textOf), cursor: { row: y, col: pen.x } };
 }

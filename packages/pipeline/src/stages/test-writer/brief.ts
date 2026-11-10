@@ -1,7 +1,7 @@
-import {Schema} from "effect";
-import {type BriefOf, defineBrief} from "../../brief.ts";
-import {Id} from "../../entity.ts";
-import {Survived} from "../mutation/mutant.ts";
+import { Schema } from "effect";
+import { type BriefOf, defineBrief } from "../../brief.ts";
+import { Id } from "../../entity.ts";
+import { Survived } from "../mutation/mutant.ts";
 
 // What the test writer is handed (docs/direction/the-test-writer.md): the
 // plan's Properties, the commit they are tested on, pointers to code, and the
@@ -23,82 +23,82 @@ export type PropertyId = typeof PropertyId.Type;
  * experiment 139, so this stage is never handed one.
  */
 export const Property = Schema.Struct({
-	id: PropertyId,
-	when: Schema.String,
-	result: Schema.String,
-	/** What goes wrong if it breaks. */
-	why: Schema.String,
-	/** `new`: its test must fail on the base. `existing`: its test must pass there. */
-	behavior: Schema.Literals(["new", "existing"]),
-	tool: Schema.Literal("test"),
-	/** The file and top-level name it checks. Empty for a `new` one: that code does not exist yet. */
-	code: Schema.Array(Schema.Struct({file: Schema.String, name: Schema.String})),
+  id: PropertyId,
+  when: Schema.String,
+  result: Schema.String,
+  /** What goes wrong if it breaks. */
+  why: Schema.String,
+  /** `new`: its test must fail on the base. `existing`: its test must pass there. */
+  behavior: Schema.Literals(["new", "existing"]),
+  tool: Schema.Literal("test"),
+  /** The file and top-level name it checks. Empty for a `new` one: that code does not exist yet. */
+  code: Schema.Array(Schema.Struct({ file: Schema.String, name: Schema.String })),
 });
 export type Property = typeof Property.Type;
 
 /** A place in the code worth reading, and why, from the plan or an earlier agent. */
-export const Pointer = Schema.Struct({at: Schema.String, why: Schema.String});
+export const Pointer = Schema.Struct({ at: Schema.String, why: Schema.String });
 export type Pointer = typeof Pointer.Type;
 
 export const writer = defineBrief({
-	role: "test_writer",
-	schema: Schema.Struct({
-		ticket: Schema.String,
-		plan: Schema.Struct({version: Schema.Finite, summary: Schema.String}),
-		/** The plan's base commit: the tests are written against it and run on it. */
-		base: Schema.String,
-		properties: Schema.Array(Property),
-		pointers: Schema.Array(Pointer),
-		/** The patterns a new file must match: `[test_writer] includes`, copied when the run was filed. */
-		includes: Schema.Array(Schema.String),
-		/** Files at the base that `includes` covers. They exist, so they are never written. */
-		taken: Schema.Array(Schema.String),
-		/**
-		 * A redo (self-fix PR 5): the test writer's own files a person sent back, which it may write again.
-		 * No other file that exists. Left out: a first writing, of new files only.
-		 */
-		rewrite: Schema.optionalKey(Schema.Array(Schema.String)),
-	}),
-	render: (b) =>
-		[
-			`# Tests for ${b.ticket}, plan version ${b.plan.version}`,
-			"",
-			b.plan.summary,
-			"",
-			`Write one test for each Property below, against commit ${b.base}.`,
-			"A `new` Property's test must fail on that commit: the feature is not there yet.",
-			"An `existing` Property's test must pass on it: that part already works.",
-			"If no test can check a Property, say so for it, and why.",
-			"",
-			"## Properties",
-			...b.properties.flatMap((p) => [
-				`- ${p.id} (${p.behavior}): when ${p.when}, ${p.result}.`,
-				`  Why it matters: ${p.why}`,
-				...p.code.map((c) => `  Checks \`${c.name}\` in \`${c.file}\``),
-			]),
-			"",
-			"## Where to look",
-			...(b.pointers.length === 0
-				? ["Nothing was pointed at. Read the code yourself."]
-				: b.pointers.map((p) => `- \`${p.at}\`: ${p.why}`)),
-			"",
-			"## What you may write",
-			...(b.rewrite === undefined
-				? [
-						"Only new files, and only where one of these patterns matches:",
-						...b.includes.map((i) => `- \`${i}\``),
-						"Never change a file that exists, product code or test.",
-					]
-				: [
-						"Write these files again, each whole:",
-						...b.rewrite.map((r) => `- \`${r}\``),
-						"Any other file you write is new, and only where one of these patterns matches:",
-						...b.includes.map((i) => `- \`${i}\``),
-					]),
-			...(b.taken.length === 0
-				? []
-				: ["These exist already, so they are never written:", ...b.taken.map((t) => `- \`${t}\``)]),
-		].join("\n"),
+  role: "test_writer",
+  schema: Schema.Struct({
+    ticket: Schema.String,
+    plan: Schema.Struct({ version: Schema.Finite, summary: Schema.String }),
+    /** The plan's base commit: the tests are written against it and run on it. */
+    base: Schema.String,
+    properties: Schema.Array(Property),
+    pointers: Schema.Array(Pointer),
+    /** The patterns a new file must match: `[test_writer] includes`, copied when the run was filed. */
+    includes: Schema.Array(Schema.String),
+    /** Files at the base that `includes` covers. They exist, so they are never written. */
+    taken: Schema.Array(Schema.String),
+    /**
+     * A redo (self-fix PR 5): the test writer's own files a person sent back, which it may write again.
+     * No other file that exists. Left out: a first writing, of new files only.
+     */
+    rewrite: Schema.optionalKey(Schema.Array(Schema.String)),
+  }),
+  render: (b) =>
+    [
+      `# Tests for ${b.ticket}, plan version ${b.plan.version}`,
+      "",
+      b.plan.summary,
+      "",
+      `Write one test for each Property below, against commit ${b.base}.`,
+      "A `new` Property's test must fail on that commit: the feature is not there yet.",
+      "An `existing` Property's test must pass on it: that part already works.",
+      "If no test can check a Property, say so for it, and why.",
+      "",
+      "## Properties",
+      ...b.properties.flatMap((p) => [
+        `- ${p.id} (${p.behavior}): when ${p.when}, ${p.result}.`,
+        `  Why it matters: ${p.why}`,
+        ...p.code.map((c) => `  Checks \`${c.name}\` in \`${c.file}\``),
+      ]),
+      "",
+      "## Where to look",
+      ...(b.pointers.length === 0
+        ? ["Nothing was pointed at. Read the code yourself."]
+        : b.pointers.map((p) => `- \`${p.at}\`: ${p.why}`)),
+      "",
+      "## What you may write",
+      ...(b.rewrite === undefined
+        ? [
+            "Only new files, and only where one of these patterns matches:",
+            ...b.includes.map((i) => `- \`${i}\``),
+            "Never change a file that exists, product code or test.",
+          ]
+        : [
+            "Write these files again, each whole:",
+            ...b.rewrite.map((r) => `- \`${r}\``),
+            "Any other file you write is new, and only where one of these patterns matches:",
+            ...b.includes.map((i) => `- \`${i}\``),
+          ]),
+      ...(b.taken.length === 0
+        ? []
+        : ["These exist already, so they are never written:", ...b.taken.map((t) => `- \`${t}\``)]),
+    ].join("\n"),
 });
 
 export type WriterBrief = BriefOf<typeof writer>;
@@ -108,40 +108,38 @@ export type WriterBrief = BriefOf<typeof writer>;
  * answer with a test, `cannot` or `noise` (docs/direction/the-test-writer.md).
  */
 export const mutantsWriter = defineBrief({
-	role: "test_writer",
-	schema: Schema.Struct({
-		ticket: Schema.String,
-		/** The build's head: the mutants were made on it, and the new tests run on it. */
-		head: Schema.String,
-		survived: Schema.Array(Survived),
-		includes: Schema.Array(Schema.String),
-		/** Files at the head that `includes` covers. They exist, so they are never written. */
-		taken: Schema.Array(Schema.String),
-	}),
-	render: (b) =>
-		[
-			`# Mutants that survived on ${b.ticket}, at commit ${b.head}`,
-			"",
-			"Mutation testing made small changes to the code. No test of the repository failed with",
-			"these in, so a real bug of the same kind would pass too. Answer each one:",
-			"- `test`: write a test that passes on the code as it is and fails with the mutant in.",
-			"- `cannot`: it changes nothing a test can see. Say why; the owner is asked.",
-			"- `noise`: a test could tell it apart, but would only lock a detail. Say why; the owner rates it.",
-			"Never put a mutant into the code, even to try it.",
-			"",
-			"## Mutants",
-			...b.survived.map(
-				(m) => `- ${m.mutant} (${m.mutator}): \`${m.original}\` made \`${m.replacement}\``,
-			),
-			"",
-			"## What you may write",
-			"Only new files, and only where one of these patterns matches:",
-			...b.includes.map((i) => `- \`${i}\``),
-			"Never change a file that exists, product code or test.",
-			...(b.taken.length === 0
-				? []
-				: ["These exist already, so they are never written:", ...b.taken.map((t) => `- \`${t}\``)]),
-		].join("\n"),
+  role: "test_writer",
+  schema: Schema.Struct({
+    ticket: Schema.String,
+    /** The build's head: the mutants were made on it, and the new tests run on it. */
+    head: Schema.String,
+    survived: Schema.Array(Survived),
+    includes: Schema.Array(Schema.String),
+    /** Files at the head that `includes` covers. They exist, so they are never written. */
+    taken: Schema.Array(Schema.String),
+  }),
+  render: (b) =>
+    [
+      `# Mutants that survived on ${b.ticket}, at commit ${b.head}`,
+      "",
+      "Mutation testing made small changes to the code. No test of the repository failed with",
+      "these in, so a real bug of the same kind would pass too. Answer each one:",
+      "- `test`: write a test that passes on the code as it is and fails with the mutant in.",
+      "- `cannot`: it changes nothing a test can see. Say why; the owner is asked.",
+      "- `noise`: a test could tell it apart, but would only lock a detail. Say why; the owner rates it.",
+      "Never put a mutant into the code, even to try it.",
+      "",
+      "## Mutants",
+      ...b.survived.map((m) => `- ${m.mutant} (${m.mutator}): \`${m.original}\` made \`${m.replacement}\``),
+      "",
+      "## What you may write",
+      "Only new files, and only where one of these patterns matches:",
+      ...b.includes.map((i) => `- \`${i}\``),
+      "Never change a file that exists, product code or test.",
+      ...(b.taken.length === 0
+        ? []
+        : ["These exist already, so they are never written:", ...b.taken.map((t) => `- \`${t}\``)]),
+    ].join("\n"),
 });
 
 export type MutantsBrief = BriefOf<typeof mutantsWriter>;

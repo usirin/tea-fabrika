@@ -1,24 +1,24 @@
 {
-	"libraryTypes": {
-		"design": { "imports": [], "pure": false },
-		"library": { "imports": ["design"], "pure": false },
-		"app": { "imports": ["library", "design"], "pure": false },
-		"next-library": { "imports": ["design"], "pure": false },
-		"next-tuval": { "imports": ["next-library", "design"], "pure": false },
-		"next-program": { "imports": ["next-library", "next-tuval", "design"], "pure": false },
-		"next-app": {
-			"imports": ["next-library", "next-tuval", "next-program", "design"],
-			"pure": false
-		}
-	},
-	"libraries": {
-		"packages/fabrika": "library",
-		"packages/fabrika-design": "design",
-		"packages/pipeline": "app",
-		"next/apps/fabrika": "next-app",
-		"next/packages/libfabrika": "next-library",
-		"next/programs/counter": "next-program"
-	},
-	"libraryRoots": ["next"],
-	"acrossDeployables": ["relative-import-crosses-workspace"]
+  "libraryTypes": {
+    "design": { "imports": [], "pure": false },
+    "library": { "imports": ["design"], "pure": false },
+    "app": { "imports": ["library", "design"], "pure": false },
+    "next-library": { "imports": ["design"], "pure": false },
+    "next-tuval": { "imports": ["next-library", "design"], "pure": false },
+    "next-program": { "imports": ["next-library", "next-tuval", "design"], "pure": false },
+    "next-app": {
+      "imports": ["next-library", "next-tuval", "next-program", "design"],
+      "pure": false
+    }
+  },
+  "libraries": {
+    "packages/fabrika": "library",
+    "packages/fabrika-design": "design",
+    "packages/pipeline": "app",
+    "next/apps/fabrika": "next-app",
+    "next/packages/libfabrika": "next-library",
+    "next/programs/counter": "next-program"
+  },
+  "libraryRoots": ["next"],
+  "acrossDeployables": ["relative-import-crosses-workspace"]
 }

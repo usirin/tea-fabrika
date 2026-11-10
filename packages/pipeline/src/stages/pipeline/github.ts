@@ -1,27 +1,27 @@
-import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Context, Effect, Layer, Option, Schema, Stream} from "effect";
-import type {Ledger} from "../../asks/ledger.ts";
-import {codeHostWritesOn} from "../../code-host-github-writes.ts";
-import {answerOf, codeHostOn, type Polling} from "../../code-host-github.ts";
-import type {LocalCheck} from "../../code-host-local.ts";
-import {CodeHost, CodeHostWrites} from "../../services.ts";
-import {Tickets} from "../../tickets/tickets.ts";
-import {ghOn, reviewWritesOn} from "../operate/writes.ts";
-import type {PrFacts} from "../ship/facts.ts";
+import { layer as nodeServices } from "@effect/platform-node/NodeServices";
+import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
+import type { Ledger } from "../../asks/ledger.ts";
+import { codeHostWritesOn } from "../../code-host-github-writes.ts";
+import { answerOf, codeHostOn, type Polling } from "../../code-host-github.ts";
+import type { LocalCheck } from "../../code-host-local.ts";
+import { CodeHost, CodeHostWrites } from "../../services.ts";
+import { Tickets } from "../../tickets/tickets.ts";
+import { ghOn, reviewWritesOn } from "../operate/writes.ts";
+import type { PrFacts } from "../ship/facts.ts";
 import {
-	carriedOf,
-	isExamTarget,
-	judgedAt,
-	laneBound,
-	laneLocalHost,
-	LanePulls,
-	type Pull,
-	pullFacts,
-	PullWire,
-	yesAt,
-	yesOf,
+  carriedOf,
+  isExamTarget,
+  judgedAt,
+  laneBound,
+  laneLocalHost,
+  LanePulls,
+  type Pull,
+  pullFacts,
+  PullWire,
+  yesAt,
+  yesOf,
 } from "./pulls.ts";
-import {LaneWork} from "./work.ts";
+import { LaneWork } from "./work.ts";
 
 // The lane's code host when the checkout's origin is on GitHub. Today's version. It has run only
 // over a stand-in `gh` (fixtures/pipeline-lane/gh.mjs), never against real GitHub. What differs from
@@ -41,8 +41,8 @@ import {LaneWork} from "./work.ts";
 // So a branch rule that wants a GitHub review still refuses the merge. Ship ends `stuck: merge_failed`
 // and never reads the refusal's words, so the ticket does not say which rule refused it.
 
-type Failed = {readonly _tag: "unknown"};
-const failed: Failed = {_tag: "unknown"};
+type Failed = { readonly _tag: "unknown" };
+const failed: Failed = { _tag: "unknown" };
 
 /** A review's target the local host reads: a plan's book, or an exam's side tree. Pure. */
 const onThisMachine = (target: string): boolean => target.endsWith("/book") || isExamTarget(target);
@@ -53,27 +53,27 @@ const onThisMachine = (target: string): boolean => target.endsWith("/book") || i
  * for. Pure.
  */
 export const laneFactsOver = (
-	facts: PrFacts,
-	pull: Pull,
-	repo: string,
-	yes: boolean,
-	judged = facts.head === pull.head,
-): PrFacts => ({...facts, ...pullFacts(pull, repo, yes, judged)});
+  facts: PrFacts,
+  pull: Pull,
+  repo: string,
+  yes: boolean,
+  judged = facts.head === pull.head,
+): PrFacts => ({ ...facts, ...pullFacts(pull, repo, yes, judged) });
 
 /** The real arguments of the one `gh` line that opens a pull request. Pure. */
-export const openArgs = (repo: string, pull: {branch: string; title: string; body: string}) => [
-	"pr",
-	"create",
-	"--repo",
-	repo,
-	"--base",
-	"main",
-	"--head",
-	pull.branch,
-	"--title",
-	pull.title,
-	"--body",
-	pull.body,
+export const openArgs = (repo: string, pull: { branch: string; title: string; body: string }) => [
+  "pr",
+  "create",
+  "--repo",
+  repo,
+  "--base",
+  "main",
+  "--head",
+  pull.branch,
+  "--title",
+  pull.title,
+  "--body",
+  pull.body,
 ];
 
 /** A pull request's whole url, and nothing around it. ASCII only, as GitHub's names are. */
@@ -85,33 +85,31 @@ const PULL_URL = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/\d+$/;
  * it printed anything else. Pure.
  */
 export const createdUrl = (repo: string, out: string): string | null => {
-	const last = out
-		.split("\n")
-		.filter((line) => line.trim() !== "")
-		.at(-1);
-	const named = last === undefined ? null : PULL_URL.exec(last);
-	return named?.[1]?.toLowerCase() === repo.toLowerCase() ? (last ?? null) : null;
+  const last = out
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .at(-1);
+  const named = last === undefined ? null : PULL_URL.exec(last);
+  return named?.[1]?.toLowerCase() === repo.toLowerCase() ? (last ?? null) : null;
 };
 
 /** `--head` cannot name an owner, so a fork's pull request on a branch of this name is listed too. */
-const OpenOnBranch = Schema.Array(
-	Schema.Struct({url: Schema.String, isCrossRepository: Schema.Boolean}),
-);
+const OpenOnBranch = Schema.Array(Schema.Struct({ url: Schema.String, isCrossRepository: Schema.Boolean }));
 
 /** The real arguments of the `gh` line that finds the open pull request on a branch. Pure. */
 const listArgs = (repo: string, branch: string) => [
-	"pr",
-	"list",
-	"--repo",
-	repo,
-	"--head",
-	branch,
-	"--base",
-	"main",
-	"--state",
-	"open",
-	"--json",
-	"url,isCrossRepository",
+  "pr",
+  "list",
+  "--repo",
+  repo,
+  "--head",
+  branch,
+  "--base",
+  "main",
+  "--state",
+  "open",
+  "--json",
+  "url,isCrossRepository",
 ];
 
 /**
@@ -119,137 +117,126 @@ const listArgs = (repo: string, branch: string) => [
  * how its waits ask, 30 seconds apart when left out; a test asks faster.
  */
 export const laneGitHubHost = (
-	repo: string,
-	checksOf: Effect.Effect<readonly LocalCheck[], Failed, LaneWork>,
-	polling: Polling = {},
-): Layer.Layer<
-	CodeHost | CodeHostWrites | PullWire,
-	never,
-	LaneWork | LanePulls | Tickets | Ledger
-> =>
-	Layer.effectContext(
-		Effect.gen(function* () {
-			const gh = yield* ghOn;
-			const work = yield* LaneWork;
-			const pulls = yield* LanePulls;
-			const tickets = yield* Tickets;
-			const bound = laneBound(work, tickets);
-			const local = yield* CodeHost;
-			const base = codeHostOn(gh, {...polling, own: [], reviewers: []});
-			const writes = codeHostWritesOn(gh);
-			// The file can change on main between two calls, so each call reads it.
-			const counted = work.settings.pipe(
-				Effect.map((settings) => settings.checks?.github ?? "every"),
-				Effect.mapError(() => failed),
-			);
-			/** The repo's own checks, for `none`. They ran at the head the lane pushed, and at no other. */
-			const ownChecks = (pr: string, pull: Pull, head: string) =>
-				head === pull.head
-					? Effect.map(local.prFacts(pr), (facts) => facts.checks)
-					: Effect.succeed<PrFacts["checks"]>("pending");
-			const host: CodeHost["Service"] = {
-				...base,
-				// The review comes before the push, so the changes the lane reads are a plan's book and an
-				// exam's side tree, both on this machine.
-				change: (target, head) =>
-					onThisMachine(target) ? local.change(target, head) : Effect.fail(failed),
-				checksSettled: (target, head, after) =>
-					onThisMachine(target)
-						? local.checksSettled(target, head, after)
-						: Stream.unwrap(
-								// A file that does not read waits on GitHub, the safe side: the read after it stops the run.
-								counted.pipe(
-									Effect.match({
-										onSuccess: (count) =>
-											count === "none"
-												? local.checksSettled(target, head, after)
-												: base.checksSettled(target, head, after),
-										onFailure: () => base.checksSettled(target, head, after),
-									}),
-								),
-							),
-				prFacts: (pr) =>
-					Effect.gen(function* () {
-						const facts = yield* base.prFacts(pr);
-						const pull = yield* pulls.find(pr);
+  repo: string,
+  checksOf: Effect.Effect<readonly LocalCheck[], Failed, LaneWork>,
+  polling: Polling = {},
+): Layer.Layer<CodeHost | CodeHostWrites | PullWire, never, LaneWork | LanePulls | Tickets | Ledger> =>
+  Layer.effectContext(
+    Effect.gen(function* () {
+      const gh = yield* ghOn;
+      const work = yield* LaneWork;
+      const pulls = yield* LanePulls;
+      const tickets = yield* Tickets;
+      const bound = laneBound(work, tickets);
+      const local = yield* CodeHost;
+      const base = codeHostOn(gh, { ...polling, own: [], reviewers: [] });
+      const writes = codeHostWritesOn(gh);
+      // The file can change on main between two calls, so each call reads it.
+      const counted = work.settings.pipe(
+        Effect.map((settings) => settings.checks?.github ?? "every"),
+        Effect.mapError(() => failed),
+      );
+      /** The repo's own checks, for `none`. They ran at the head the lane pushed, and at no other. */
+      const ownChecks = (pr: string, pull: Pull, head: string) =>
+        head === pull.head
+          ? Effect.map(local.prFacts(pr), (facts) => facts.checks)
+          : Effect.succeed<PrFacts["checks"]>("pending");
+      const host: CodeHost["Service"] = {
+        ...base,
+        // The review comes before the push, so the changes the lane reads are a plan's book and an
+        // exam's side tree, both on this machine.
+        change: (target, head) => (onThisMachine(target) ? local.change(target, head) : Effect.fail(failed)),
+        checksSettled: (target, head, after) =>
+          onThisMachine(target)
+            ? local.checksSettled(target, head, after)
+            : Stream.unwrap(
+                // A file that does not read waits on GitHub, the safe side: the read after it stops the run.
+                counted.pipe(
+                  Effect.match({
+                    onSuccess: (count) =>
+                      count === "none"
+                        ? local.checksSettled(target, head, after)
+                        : base.checksSettled(target, head, after),
+                    onFailure: () => base.checksSettled(target, head, after),
+                  }),
+                ),
+              ),
+        prFacts: (pr) =>
+          Effect.gen(function* () {
+            const facts = yield* base.prFacts(pr);
+            const pull = yield* pulls.find(pr);
 
-						// A merged row is not the branch's open pull request, so a new head there is a new one.
-						if (facts.state === "merged" && pull.state === "open") {
-							yield* pulls.merged(pr);
-						}
+            // A merged row is not the branch's open pull request, so a new head there is a new one.
+            if (facts.state === "merged" && pull.state === "open") {
+              yield* pulls.merged(pr);
+            }
 
-						const ticket = yield* tickets.read(pull.ticket).pipe(Effect.mapError(() => failed));
-						const yes = yield* bound(yesAt(pull.ticket, yesOf(ticket, pull), facts.head));
-						const judged = yield* bound(judgedAt(pull, facts.head));
-						// A head the posted verdicts were carried to names the hop, so ship counts their rows here.
-						const over = {
-							...laneFactsOver(facts, pull, repo, yes, Option.isSome(judged)),
-							...carriedOf(judged),
-						};
-						return (yield* counted) === "none"
-							? {...over, checks: yield* ownChecks(pr, pull, facts.head)}
-							: over;
-					}),
-			};
-			const review = reviewWritesOn(gh);
-			const wire: PullWire["Service"] = {
-				open: (pull) =>
-					Effect.gen(function* () {
-						// A kill after GitHub opened one and before the row was written: `gh pr create` refuses a
-						// second, so the one already there is the one.
-						const listed = yield* answerOf(gh, OpenOnBranch, listArgs(repo, pull.branch));
-						const own = listed.find((open) => !open.isCrossRepository);
+            const ticket = yield* tickets.read(pull.ticket).pipe(Effect.mapError(() => failed));
+            const yes = yield* bound(yesAt(pull.ticket, yesOf(ticket, pull), facts.head));
+            const judged = yield* bound(judgedAt(pull, facts.head));
+            // A head the posted verdicts were carried to names the hop, so ship counts their rows here.
+            const over = {
+              ...laneFactsOver(facts, pull, repo, yes, Option.isSome(judged)),
+              ...carriedOf(judged),
+            };
+            return (yield* counted) === "none" ? { ...over, checks: yield* ownChecks(pr, pull, facts.head) } : over;
+          }),
+      };
+      const review = reviewWritesOn(gh);
+      const wire: PullWire["Service"] = {
+        open: (pull) =>
+          Effect.gen(function* () {
+            // A kill after GitHub opened one and before the row was written: `gh pr create` refuses a
+            // second, so the one already there is the one.
+            const listed = yield* answerOf(gh, OpenOnBranch, listArgs(repo, pull.branch));
+            const own = listed.find((open) => !open.isCrossRepository);
 
-						if (own !== undefined) {
-							return own.url;
-						}
+            if (own !== undefined) {
+              return own.url;
+            }
 
-						const out = yield* gh(openArgs(repo, pull));
-						const url = createdUrl(repo, out);
+            const out = yield* gh(openArgs(repo, pull));
+            const url = createdUrl(repo, out);
 
-						if (url !== null) {
-							return url;
-						}
+            if (url !== null) {
+              return url;
+            }
 
-						return yield* Effect.fail({
-							...failed,
-							says: `gh pr create answered with no pull request in ${repo}: ${out.trim().slice(0, 200)}`,
-						});
-					}),
-				post: (pr, head, posts) =>
-					Effect.forEach(posts, (post) => review.post({pr, head, ...post}), {
-						concurrency: 1,
-						discard: true,
-					}),
-				// The lane's own branch only. An exam's stays, as it does today: nobody asked for that here.
-				gone: (pull) =>
-					pull.kind === "lane"
-						? gh(["api", "--method", "DELETE", `repos/${repo}/git/refs/heads/${pull.branch}`]).pipe(
-								Effect.asVoid,
-								Effect.mapError(() => failed),
-							)
-						: Effect.void,
-			};
-			return Context.make(CodeHost, host).pipe(
-				Context.add(CodeHostWrites, {
-					...writes,
-					// The lane knows it merged, whenever GitHub comes to mark it. A row that cannot be saved does
-					// not undo the merge, so its failure is not the merge's.
-					merge: (ready) =>
-						writes
-							.merge(ready)
-							.pipe(
-								Effect.tap((said) =>
-									said.reading === "merged" ? Effect.ignore(pulls.merged(ready.pr)) : Effect.void,
-								),
-							),
-					// GitHub's checks do not count under `none`, so there is nothing of theirs to run again.
-					rerunChecks: (pr, head) =>
-						Effect.flatMap(counted, (count) =>
-							count === "none" ? Effect.succeed([]) : writes.rerunChecks(pr, head),
-						),
-				}),
-				Context.add(PullWire, wire),
-			);
-		}).pipe(Effect.provide(laneLocalHost(checksOf)), Effect.provide(nodeServices)),
-	);
+            return yield* Effect.fail({
+              ...failed,
+              says: `gh pr create answered with no pull request in ${repo}: ${out.trim().slice(0, 200)}`,
+            });
+          }),
+        post: (pr, head, posts) =>
+          Effect.forEach(posts, (post) => review.post({ pr, head, ...post }), {
+            concurrency: 1,
+            discard: true,
+          }),
+        // The lane's own branch only. An exam's stays, as it does today: nobody asked for that here.
+        gone: (pull) =>
+          pull.kind === "lane"
+            ? gh(["api", "--method", "DELETE", `repos/${repo}/git/refs/heads/${pull.branch}`]).pipe(
+                Effect.asVoid,
+                Effect.mapError(() => failed),
+              )
+            : Effect.void,
+      };
+      return Context.make(CodeHost, host).pipe(
+        Context.add(CodeHostWrites, {
+          ...writes,
+          // The lane knows it merged, whenever GitHub comes to mark it. A row that cannot be saved does
+          // not undo the merge, so its failure is not the merge's.
+          merge: (ready) =>
+            writes
+              .merge(ready)
+              .pipe(
+                Effect.tap((said) => (said.reading === "merged" ? Effect.ignore(pulls.merged(ready.pr)) : Effect.void)),
+              ),
+          // GitHub's checks do not count under `none`, so there is nothing of theirs to run again.
+          rerunChecks: (pr, head) =>
+            Effect.flatMap(counted, (count) => (count === "none" ? Effect.succeed([]) : writes.rerunChecks(pr, head))),
+        }),
+        Context.add(PullWire, wire),
+      );
+    }).pipe(Effect.provide(laneLocalHost(checksOf)), Effect.provide(nodeServices)),
+  );
