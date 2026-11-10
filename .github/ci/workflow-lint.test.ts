@@ -28,6 +28,7 @@ const valid = (label: string, extra: string) => ({
 	jobs: {
 		changes: {
 			"runs-on": "ubuntu-latest",
+			"timeout-minutes": 5,
 			outputs: Object.fromEntries(
 				["check", "test", "next", "e2e", "field"].map((key) => [
 					key,
@@ -45,11 +46,13 @@ const valid = (label: string, extra: string) => ({
 		check: {
 			needs: "changes",
 			if: guard("check"),
+			"timeout-minutes": 10,
 			steps: [{run: "pnpm typecheck"}, {run: "pnpm lint"}, {run: "pnpm build"}],
 		},
 		test: {
 			needs: "changes",
 			if: guard("test"),
+			"timeout-minutes": 30,
 			strategy: {matrix: {shard: [1, 2, 3, 4, 5, 6]}},
 			steps: [
 				{
@@ -66,13 +69,20 @@ const valid = (label: string, extra: string) => ({
 				},
 			],
 		},
-		next: {needs: "changes", if: guard("next"), steps: [{run: "pnpm exec vitest run next/"}]},
+		next: {
+			needs: "changes",
+			if: guard("next"),
+			"timeout-minutes": 15,
+			steps: [{run: "pnpm exec vitest run next/"}],
+		},
 		e2e: {
 			needs: "changes",
 			if: guard("e2e"),
+			"timeout-minutes": 25,
 			steps: [{run: "pnpm --filter @kampus/fabrika-app-old e2e"}],
 		},
 		field: {
+			"timeout-minutes": 5,
 			steps: [
 				{uses: "actions/checkout@v7", with: {"fetch-depth": 0}},
 				diff,
@@ -214,6 +224,21 @@ const plants: [string, (workflow: Workflow) => void][] = [
 			w.jobs.test.steps[0]!.run = lines.join("\n");
 		},
 	]),
+	// T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
+	...(["changes", "field", "check", "test", "next", "e2e"] as const).map(
+		(job): [string, (w: Workflow) => void] => [
+			`${job} without a time limit`,
+			(w) => {
+				Object.assign(w.jobs[job], {"timeout-minutes": undefined});
+			},
+		],
+	),
+	[
+		"a time limit past the default",
+		(w) => {
+			w.jobs.test["timeout-minutes"] = 360;
+		},
+	],
 	[
 		"duplicate forced tests",
 		(w) => {
