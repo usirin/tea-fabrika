@@ -1,6 +1,6 @@
-import {Effect, Layer} from "effect";
-import {KeyValueStore} from "effect/persistence";
-import {type Storage, storageOf} from "./storage.ts";
+import { Effect, Layer } from "effect";
+import { KeyValueStore } from "effect/persistence";
+import { type Storage, storageOf } from "./storage.ts";
 
 // A disk that outlives the processes a test kills, for tests only. Each life
 // is one process: its own storage value over the shared disk. `kill` is
@@ -14,46 +14,44 @@ import {type Storage, storageOf} from "./storage.ts";
 // lands.
 
 export interface Life {
-	readonly storage: Storage;
-	/** The process is gone: none of its writes reaches the disk from here on. */
-	kill(): void;
+  readonly storage: Storage;
+  /** The process is gone: none of its writes reaches the disk from here on. */
+  kill(): void;
 }
 
 /** Runs before one write of a life reaches the disk. `key`: the key written; `null` for a clear. */
-export type BeforeWrite = (
-	key: string | null,
-) => Effect.Effect<void, KeyValueStore.KeyValueStoreError>;
+export type BeforeWrite = (key: string | null) => Effect.Effect<void, KeyValueStore.KeyValueStoreError>;
 
 /** A shared disk, and a way to start one process over it. */
-export function mortalDisk(): {readonly life: (before?: BeforeWrite) => Life} {
-	const disk = new Map<string, string>();
-	return {
-		life: (before = () => Effect.void) => {
-			let dead = false;
-			const write = (key: string | null, f: () => void) =>
-				before(key).pipe(
-					Effect.andThen(
-						Effect.sync(() => {
-							if (!dead) {
-								f();
-							}
-						}),
-					),
-				);
-			const store = KeyValueStore.makeStringOnly({
-				get: (key) => Effect.sync(() => disk.get(key)),
-				set: (key, value) => write(key, () => disk.set(key, value)),
-				remove: (key) => write(key, () => disk.delete(key)),
-				clear: write(null, () => disk.clear()),
-				size: Effect.sync(() => disk.size),
-				keys: Effect.sync(() => [...disk.keys()]),
-			});
-			return {
-				storage: storageOf(Layer.succeed(KeyValueStore.KeyValueStore, store)),
-				kill: () => {
-					dead = true;
-				},
-			};
-		},
-	};
+export function mortalDisk(): { readonly life: (before?: BeforeWrite) => Life } {
+  const disk = new Map<string, string>();
+  return {
+    life: (before = () => Effect.void) => {
+      let dead = false;
+      const write = (key: string | null, f: () => void) =>
+        before(key).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              if (!dead) {
+                f();
+              }
+            }),
+          ),
+        );
+      const store = KeyValueStore.makeStringOnly({
+        get: (key) => Effect.sync(() => disk.get(key)),
+        set: (key, value) => write(key, () => disk.set(key, value)),
+        remove: (key) => write(key, () => disk.delete(key)),
+        clear: write(null, () => disk.clear()),
+        size: Effect.sync(() => disk.size),
+        keys: Effect.sync(() => [...disk.keys()]),
+      });
+      return {
+        storage: storageOf(Layer.succeed(KeyValueStore.KeyValueStore, store)),
+        kill: () => {
+          dead = true;
+        },
+      };
+    },
+  };
 }

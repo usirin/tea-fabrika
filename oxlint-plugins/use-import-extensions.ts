@@ -19,64 +19,62 @@
 //
 // What it cannot see: a name built at run time (`import(name)`, or a template string), and an
 // `import("./thing")` written as a type, which Node never runs. It has no automatic fix.
-import {statSync} from "node:fs";
-import {dirname, extname, resolve} from "node:path";
-import type {CreateRule} from "@oxlint/plugins";
-import type {Node} from "./match.ts";
+import { statSync } from "node:fs";
+import { dirname, extname, resolve } from "node:path";
+import type { CreateRule } from "@oxlint/plugins";
+import type { Node } from "./match.ts";
 
 const RELATIVE = /^\.\.?(?:\/|$)/;
 const HAS_EXTENSION = /\/?[^/]*[^/.]\.[^/.]+$/;
 const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"];
 
-const isFile = (path: string): boolean =>
-	statSync(path, {throwIfNoEntry: false})?.isFile() === true;
+const isFile = (path: string): boolean => statSync(path, { throwIfNoEntry: false })?.isFile() === true;
 
-const isFolder = (path: string): boolean =>
-	statSync(path, {throwIfNoEntry: false})?.isDirectory() === true;
+const isFolder = (path: string): boolean => statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
 
 const namesItsFile = (from: string, written: string): boolean => {
-	const target = resolve(dirname(from), written);
+  const target = resolve(dirname(from), written);
 
-	if (isFile(target)) {
-		return true;
-	}
+  if (isFile(target)) {
+    return true;
+  }
 
-	if (isFolder(target) || !HAS_EXTENSION.test(written)) {
-		return false;
-	}
+  if (isFolder(target) || !HAS_EXTENSION.test(written)) {
+    return false;
+  }
 
-	const stem = target.slice(0, -extname(target).length);
-	return !EXTENSIONS.some((extension) => isFile(target + extension) || isFile(stem + extension));
+  const stem = target.slice(0, -extname(target).length);
+  return !EXTENSIONS.some((extension) => isFile(target + extension) || isFile(stem + extension));
 };
 
 export const useImportExtensions: CreateRule = {
-	create(context) {
-		const check = (source: Node | null | undefined) => {
-			if (source == null || source.type !== "Literal" || typeof source.value !== "string") {
-				return;
-			}
+  create(context) {
+    const check = (source: Node | null | undefined) => {
+      if (source == null || source.type !== "Literal" || typeof source.value !== "string") {
+        return;
+      }
 
-			if (!RELATIVE.test(source.value) || namesItsFile(context.filename, source.value)) {
-				return;
-			}
+      if (!RELATIVE.test(source.value) || namesItsFile(context.filename, source.value)) {
+        return;
+      }
 
-			context.report({
-				node: source,
-				message:
-					"A relative import names its file whole, extension included: Node runs the .ts files as they are and does not guess (`./thing.ts`, not `./thing`).",
-			});
-		};
-		return {
-			ImportDeclaration: (node) => check(node.source),
-			ExportNamedDeclaration: (node) => check(node.source),
-			ExportAllDeclaration: (node) => check(node.source),
-			ImportExpression: (node) => check(node.source),
-			TSExternalModuleReference: (node) => check(node.expression),
-			CallExpression(node) {
-				if (node.callee.type === "Identifier" && node.callee.name === "require") {
-					check(node.arguments[0]);
-				}
-			},
-		};
-	},
+      context.report({
+        node: source,
+        message:
+          "A relative import names its file whole, extension included: Node runs the .ts files as they are and does not guess (`./thing.ts`, not `./thing`).",
+      });
+    };
+    return {
+      ImportDeclaration: (node) => check(node.source),
+      ExportNamedDeclaration: (node) => check(node.source),
+      ExportAllDeclaration: (node) => check(node.source),
+      ImportExpression: (node) => check(node.source),
+      TSExternalModuleReference: (node) => check(node.expression),
+      CallExpression(node) {
+        if (node.callee.type === "Identifier" && node.callee.name === "require") {
+          check(node.arguments[0]);
+        }
+      },
+    };
+  },
 };

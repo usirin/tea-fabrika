@@ -4,6 +4,6 @@
 
 /** A GitHub issue's or pull request's url, as `#123`. Anything else: `null`. */
 export const refOf = (url: string): string | null => {
-	const found = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/(?:pull|issues)\/(\d+)/.exec(url);
-	return found === null ? null : `#${found[1]}`;
+  const found = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/(?:pull|issues)\/(\d+)/.exec(url);
+  return found === null ? null : `#${found[1]}`;
 };

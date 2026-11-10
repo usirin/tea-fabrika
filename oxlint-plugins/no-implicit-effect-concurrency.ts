@@ -25,39 +25,39 @@
 // A genuine intentionally-serial site is exempted per-line with a
 // `// oxlint-disable-next-line fabrika/no-implicit-effect-concurrency -- <reason>`, never a blanket
 // exemption.
-import type {CreateRule} from "@oxlint/plugins";
-import {plainCall} from "./match.ts";
+import type { CreateRule } from "@oxlint/plugins";
+import { plainCall } from "./match.ts";
 
 const WHAT: Readonly<Record<string, string>> = {
-	"Effect.all": "`Effect.all(...)` runs its effects SEQUENTIALLY by default",
-	"Effect.forEach": "`Effect.forEach(...)` runs SEQUENTIALLY by default",
-	"Effect.validate": "`Effect.validate(...)` runs SEQUENTIALLY by default",
+  "Effect.all": "`Effect.all(...)` runs its effects SEQUENTIALLY by default",
+  "Effect.forEach": "`Effect.forEach(...)` runs SEQUENTIALLY by default",
+  "Effect.validate": "`Effect.validate(...)` runs SEQUENTIALLY by default",
 };
 
 export const noImplicitEffectConcurrency: CreateRule = {
-	create(context) {
-		return {
-			CallExpression(node) {
-				const name = plainCall(node);
-				const what = name === null ? undefined : WHAT[name];
+  create(context) {
+    return {
+      CallExpression(node) {
+        const name = plainCall(node);
+        const what = name === null ? undefined : WHAT[name];
 
-				if (what === undefined) {
-					return;
-				}
+        if (what === undefined) {
+          return;
+        }
 
-				const names = context.sourceCode
-					.getTokens(node)
-					.some((token) => token.type === "Identifier" && token.value === "concurrency");
+        const names = context.sourceCode
+          .getTokens(node)
+          .some((token) => token.type === "Identifier" && token.value === "concurrency");
 
-				if (names) {
-					return;
-				}
+        if (names) {
+          return;
+        }
 
-				context.report({
-					node,
-					message: `${what}: with no explicit \`concurrency\` the serial-vs-parallel choice is invisible at the call site (.patterns/serial-read-baseline.md; #2567). Fix: pass \`{ concurrency: "unbounded" }\` (or \`<n>\`) to fan out, or \`{ concurrency: 1 }\` to keep it serial on purpose. Exception: // oxlint-disable-next-line fabrika/no-implicit-effect-concurrency -- <reason>.`,
-				});
-			},
-		};
-	},
+        context.report({
+          node,
+          message: `${what}: with no explicit \`concurrency\` the serial-vs-parallel choice is invisible at the call site (.patterns/serial-read-baseline.md; #2567). Fix: pass \`{ concurrency: "unbounded" }\` (or \`<n>\`) to fan out, or \`{ concurrency: 1 }\` to keep it serial on purpose. Exception: // oxlint-disable-next-line fabrika/no-implicit-effect-concurrency -- <reason>.`,
+        });
+      },
+    };
+  },
 };

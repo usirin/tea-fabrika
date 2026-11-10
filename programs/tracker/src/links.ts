@@ -24,9 +24,7 @@
 // so a long body costs about its length, whatever an agent wrote in it.
 
 /** A piece of a body: text as it was written, or a URL to link. */
-export type Piece =
-	| {readonly kind: "text"; readonly text: string}
-	| {readonly kind: "link"; readonly url: string};
+export type Piece = { readonly kind: "text"; readonly text: string } | { readonly kind: "link"; readonly url: string };
 
 /** Where a URL may start: http:// or https://, in any case, with no ASCII letter just before it. */
 const START = /(?<![a-z])https?:\/\//giu;
@@ -38,102 +36,102 @@ const ALNUM = /^[A-Za-z0-9]$/;
 
 /** The body cut into text and links. Joined back, the pieces are the body. */
 export const piecesOf = (body: string): readonly Piece[] => {
-	const pieces: Piece[] = [];
-	/** Where the text not placed yet starts. */
-	let placed = 0;
+  const pieces: Piece[] = [];
+  /** Where the text not placed yet starts. */
+  let placed = 0;
 
-	for (const start of body.matchAll(START)) {
-		const from = start.index;
+  for (const start of body.matchAll(START)) {
+    const from = start.index;
 
-		// A start inside a URL already linked, such as a redirect's ?to=https://...
-		if (from < placed) {
-			continue;
-		}
+    // A start inside a URL already linked, such as a redirect's ?to=https://...
+    if (from < placed) {
+      continue;
+    }
 
-		const to = urlEnd(body, from, from + start[0].length);
+    const to = urlEnd(body, from, from + start[0].length);
 
-		if (to === null) {
-			continue;
-		}
+    if (to === null) {
+      continue;
+    }
 
-		if (from > placed) {
-			pieces.push({kind: "text", text: body.slice(placed, from)});
-		}
+    if (from > placed) {
+      pieces.push({ kind: "text", text: body.slice(placed, from) });
+    }
 
-		pieces.push({kind: "link", url: body.slice(from, to)});
-		placed = to;
-	}
+    pieces.push({ kind: "link", url: body.slice(from, to) });
+    placed = to;
+  }
 
-	if (placed < body.length) {
-		pieces.push({kind: "text", text: body.slice(placed)});
-	}
+  if (placed < body.length) {
+    pieces.push({ kind: "text", text: body.slice(placed) });
+  }
 
-	return pieces;
+  return pieces;
 };
 
 /** Where the URL that starts at `from` ends, its host starting at `at`; or null, for no URL. */
 const urlEnd = (body: string, from: number, at: number): number | null => {
-	const host = /[\p{L}\p{N}\p{M}_.-]*/uy;
-	host.lastIndex = at;
-	const name = host.exec(body)?.[0] ?? "";
+  const host = /[\p{L}\p{N}\p{M}_.-]*/uy;
+  host.lastIndex = at;
+  const name = host.exec(body)?.[0] ?? "";
 
-	if (!isHost(name)) {
-		return null;
-	}
+  if (!isHost(name)) {
+    return null;
+  }
 
-	const stop = /[\s<>]/gu;
-	stop.lastIndex = at + name.length;
-	return trimmed(body, from, stop.exec(body)?.index ?? body.length);
+  const stop = /[\s<>]/gu;
+  stop.lastIndex = at + name.length;
+  return trimmed(body, from, stop.exec(body)?.index ?? body.length);
 };
 
 /** A host GitHub links: at least one letter or digit, and no _ in its last two parts. */
 const isHost = (host: string): boolean =>
-	/[\p{L}\p{N}]/u.test(host) &&
-	!host
-		.split(".")
-		.slice(-2)
-		.some((part) => part.includes("_"));
+  /[\p{L}\p{N}]/u.test(host) &&
+  !host
+    .split(".")
+    .slice(-2)
+    .some((part) => part.includes("_"));
 
 /** The end of the URL `body[from, to)`, once what GitHub leaves out at its end is left out. */
 const trimmed = (body: string, from: number, to: number): number => {
-	let opens = 0;
-	let closes = 0;
+  let opens = 0;
+  let closes = 0;
 
-	for (let i = from; i < to; i += 1) {
-		if (body[i] === "(") {
-			opens += 1;
-		} else if (body[i] === ")") {
-			closes += 1;
-		}
-	}
+  for (let i = from; i < to; i += 1) {
+    if (body[i] === "(") {
+      opens += 1;
+    } else if (body[i] === ")") {
+      closes += 1;
+    }
+  }
 
-	let end = to;
+  let end = to;
 
-	while (end > from) {
-		const last = body[end - 1] ?? "";
+  while (end > from) {
+    const last = body[end - 1] ?? "";
 
-		if (TRAILING.has(last)) {
-			end -= 1;
-		} else if (last === ";") {
-			end = entityAt(body, from, end) ?? end - 1;
-		} else if (last === ")" && closes > opens) {
-			end -= 1;
-			closes -= 1;
-		} else {
-			break;
-		}
-	}
+    if (TRAILING.has(last)) {
+      end -= 1;
+    } else if (last === ";") {
+      end = entityAt(body, from, end) ?? end - 1;
+    } else if (last === ")" && closes > opens) {
+      end -= 1;
+      closes -= 1;
+    } else {
+      break;
+    }
+  }
 
-	return end;
+  return end;
 };
 
 /** Where the &name; that ends at `end` starts, or null when `body[.., end)` ends in no such one. */
 const entityAt = (body: string, from: number, end: number): number | null => {
-	let at = end - 2;
+  let at = end - 2;
 
-	while (at > from && ALNUM.test(body[at] ?? "")) {
-		at -= 1;
-	}
+  while (at > from && ALNUM.test(body[at] ?? "")) {
+    at -= 1;
+  }
 
-	return at < end - 2 && body[at] === "&" ? at : null;
+  return at < end - 2 && body[at] === "&" ? at : null;
 };

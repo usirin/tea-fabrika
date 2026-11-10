@@ -1,17 +1,11 @@
-import {applyCell} from "@demlik/tea";
-import {Effect, Exit, Layer} from "effect";
-import type {Result} from "../../controls.ts";
-import {mutationInterpret} from "./handlers.ts";
-import {
-	MAX_MUTANTS,
-	type Mutation,
-	type MutationAsk,
-	type MutationCmd,
-	mutation,
-} from "./machine.ts";
-import {idOf, type Survived} from "./mutant.ts";
-import type {Scope} from "./scope.ts";
-import {MutationRunner, MutationScope, type Ran} from "./services.ts";
+import { applyCell } from "@demlik/tea";
+import { Effect, Exit, Layer } from "effect";
+import type { Result } from "../../controls.ts";
+import { mutationInterpret } from "./handlers.ts";
+import { MAX_MUTANTS, type Mutation, type MutationAsk, type MutationCmd, mutation } from "./machine.ts";
+import { idOf, type Survived } from "./mutant.ts";
+import type { Scope } from "./scope.ts";
+import { MutationRunner, MutationScope, type Ran } from "./services.ts";
 
 // The mutation step with no repository and no Stryker: fakes of its two
 // services say what each read and run answers. For tests. `drive` steps the
@@ -22,163 +16,156 @@ export const BASE = "b".repeat(40);
 export const HEAD = "h".repeat(40);
 
 export const ASK: MutationAsk = {
-	ticket: "acme/widgets#7",
-	base: BASE,
-	head: HEAD,
-	kept: [{file: "src/clamp.ts", name: "clamp"}],
-	exam: ["packages/pipeline/src/stages/mutation/ignorer.ts"],
-	allowed: [],
-	seed: 49,
-	most: MAX_MUTANTS,
+  ticket: "acme/widgets#7",
+  base: BASE,
+  head: HEAD,
+  kept: [{ file: "src/clamp.ts", name: "clamp" }],
+  exam: ["packages/pipeline/src/stages/mutation/ignorer.ts"],
+  allowed: [],
+  seed: 49,
+  most: MAX_MUTANTS,
 };
 
 /** The build added two lines of `clamp`, and its test file. The kept Property's code is lines 9 to 14. */
 export const SCOPE: Scope = {
-	diff: {
-		files: ["src/clamp.ts", "src/clamp.test.ts"],
-		added: [
-			{file: "src/clamp.ts", line: 12, text: "\tif (n > high) return high;"},
-			{file: "src/clamp.ts", line: 13, text: "\treturn n;"},
-			{file: "src/clamp.test.ts", line: 4, text: 'it("keeps a number inside", () => {'},
-		],
-	},
-	kept: [{file: "src/clamp.ts", from: 9, to: 14}],
-	exam: [],
+  diff: {
+    files: ["src/clamp.ts", "src/clamp.test.ts"],
+    added: [
+      { file: "src/clamp.ts", line: 12, text: "\tif (n > high) return high;" },
+      { file: "src/clamp.ts", line: 13, text: "\treturn n;" },
+      { file: "src/clamp.test.ts", line: 4, text: 'it("keeps a number inside", () => {' },
+    ],
+  },
+  kept: [{ file: "src/clamp.ts", from: 9, to: 14 }],
+  exam: [],
 };
 
 /** The planted weak test lets this mutant survive: nothing checks a number above `high`. */
 export const SURVIVED: Survived = {
-	mutant: idOf({
-		file: "src/clamp.ts",
-		line: 12,
-		column: 6,
-		mutator: "EqualityOperator",
-		replacement: "n >= high",
-	}),
-	mutator: "EqualityOperator",
-	original: "n > high",
-	replacement: "n >= high",
+  mutant: idOf({
+    file: "src/clamp.ts",
+    line: 12,
+    column: 6,
+    mutator: "EqualityOperator",
+    replacement: "n >= high",
+  }),
+  mutator: "EqualityOperator",
+  original: "n > high",
+  replacement: "n >= high",
 };
 
 export const KILLED_ALL: Ran = {
-	found: 12,
-	ran: 12,
-	ignored: 1,
-	compileErrors: 2,
-	killed: 10,
-	survived: [],
+  found: 12,
+  ran: 12,
+  ignored: 1,
+  compileErrors: 2,
+  killed: 10,
+  survived: [],
 };
 
-export const ONE_SURVIVED: Ran = {...KILLED_ALL, killed: 9, survived: [SURVIVED]};
+export const ONE_SURVIVED: Ran = { ...KILLED_ALL, killed: 9, survived: [SURVIVED] };
 
 /** One run of the repo's own tests: green or red, each failing test by name, and the output's last lines. */
 export interface Tested {
-	readonly result: Result;
-	readonly failed: readonly string[];
-	readonly tail: string;
+  readonly result: Result;
+  readonly failed: readonly string[];
+  readonly tail: string;
 }
 
-export const GREEN: Tested = {result: "green", failed: [], tail: ""};
+export const GREEN: Tested = { result: "green", failed: [], tail: "" };
 
 /** A failing test's name, as vitest's JSON report spells it: the file, each describe, the test. */
 export const FAILING = "src/clamp.test.ts > clamp > keeps a number above the high";
 
 /** The repo's own tests at the head, one of them failing. */
 export const RED: Tested = {
-	result: "red",
-	failed: [FAILING],
-	tail: "AssertionError: expected 12 to be 10",
+  result: "red",
+  failed: [FAILING],
+  tail: "AssertionError: expected 12 to be 10",
 };
 
 /** What each outside thing answers. `undefined` on a slot: the default, which goes well. */
 export interface Script {
-	readonly scope?: Scope | "fail";
-	readonly tests?: Tested | "fail";
-	readonly run?: Ran | "fail";
-	/** Restart the process once, at this phase, before answering what is in flight. */
-	readonly restartAt?: Mutation["phase"];
+  readonly scope?: Scope | "fail";
+  readonly tests?: Tested | "fail";
+  readonly run?: Ran | "fail";
+  /** Restart the process once, at this phase, before answering what is in flight. */
+  readonly restartAt?: Mutation["phase"];
 }
 
-const fail = Effect.fail({_tag: "could_not_run" as const});
+const fail = Effect.fail({ _tag: "could_not_run" as const });
 
 /** The two services, faked from a script. */
 export const fakes = (script: Script) =>
-	Layer.mergeAll(
-		Layer.succeed(MutationScope, {
-			read: () =>
-				script.scope === "fail"
-					? Effect.fail({_tag: "unknown" as const})
-					: Effect.succeed(script.scope ?? SCOPE),
-		}),
-		Layer.succeed(MutationRunner, {
-			tests: () => (script.tests === "fail" ? fail : Effect.succeed(script.tests ?? GREEN)),
-			run: () => (script.run === "fail" ? fail : Effect.succeed(script.run ?? KILLED_ALL)),
-		}),
-	);
+  Layer.mergeAll(
+    Layer.succeed(MutationScope, {
+      read: () =>
+        script.scope === "fail" ? Effect.fail({ _tag: "unknown" as const }) : Effect.succeed(script.scope ?? SCOPE),
+    }),
+    Layer.succeed(MutationRunner, {
+      tests: () => (script.tests === "fail" ? fail : Effect.succeed(script.tests ?? GREEN)),
+      run: () => (script.run === "fail" ? fail : Effect.succeed(script.run ?? KILLED_ALL)),
+    }),
+  );
 
-type AnyMsg = {readonly type: string; readonly [field: string]: unknown};
+type AnyMsg = { readonly type: string; readonly [field: string]: unknown };
 
-const step = (s: Mutation, msg: AnyMsg) =>
-	applyCell<Mutation, AnyMsg, MutationCmd>(mutation, s, msg);
+const step = (s: Mutation, msg: AnyMsg) => applyCell<Mutation, AnyMsg, MutationCmd>(mutation, s, msg);
 
 /** One Cmd, answered by its handler over the fakes, as the Msg the engine would send. */
 function answer(cmd: MutationCmd, layer: Layer.Layer<MutationScope | MutationRunner>): AnyMsg {
-	const run = (): Effect.Effect<
-		unknown,
-		{readonly _tag: string},
-		MutationScope | MutationRunner
-	> => {
-		switch (cmd.type) {
-			case "mutation_scope":
-				return mutationInterpret.mutation_scope(cmd);
-			case "mutation_tests":
-				return mutationInterpret.mutation_tests(cmd);
-			case "mutation_run":
-				return mutationInterpret.mutation_run(cmd);
-		}
-	};
-	const exit = Effect.runSyncExit(run().pipe(Effect.provide(layer)));
+  const run = (): Effect.Effect<unknown, { readonly _tag: string }, MutationScope | MutationRunner> => {
+    switch (cmd.type) {
+      case "mutation_scope":
+        return mutationInterpret.mutation_scope(cmd);
+      case "mutation_tests":
+        return mutationInterpret.mutation_tests(cmd);
+      case "mutation_run":
+        return mutationInterpret.mutation_run(cmd);
+    }
+  };
+  const exit = Effect.runSyncExit(run().pipe(Effect.provide(layer)));
 
-	if (Exit.isSuccess(exit)) {
-		return {type: `${cmd.type}_ok`, cmd, value: exit.value};
-	}
+  if (Exit.isSuccess(exit)) {
+    return { type: `${cmd.type}_ok`, cmd, value: exit.value };
+  }
 
-	const error = Exit.findErrorOption(exit);
-	return {
-		type: `${cmd.type}_err`,
-		cmd,
-		error: error._tag === "Some" ? error.value : {_tag: "unknown"},
-	};
+  const error = Exit.findErrorOption(exit);
+  return {
+    type: `${cmd.type}_err`,
+    cmd,
+    error: error._tag === "Some" ? error.value : { _tag: "unknown" },
+  };
 }
 
 /** Run the machine from `start` to `over`. Every Cmd sent, in order. */
 export function drive(script: Script, ask: MutationAsk = ASK) {
-	const layer = fakes(script);
-	const cmds: MutationCmd[] = [];
-	let restarted = false;
-	let [s, out] = step({phase: "idle"}, {type: "start", ask});
+  const layer = fakes(script);
+  const cmds: MutationCmd[] = [];
+  let restarted = false;
+  let [s, out] = step({ phase: "idle" }, { type: "start", ask });
 
-	for (let n = 0; n < 20 && s.phase !== "over"; n++) {
-		cmds.push(...out);
+  for (let n = 0; n < 20 && s.phase !== "over"; n++) {
+    cmds.push(...out);
 
-		if (!restarted && script.restartAt === s.phase) {
-			restarted = true;
-			[s, out] = step(s, {type: "resume"});
-			continue;
-		}
+    if (!restarted && script.restartAt === s.phase) {
+      restarted = true;
+      [s, out] = step(s, { type: "resume" });
+      continue;
+    }
 
-		const cmd = out[0];
+    const cmd = out[0];
 
-		if (cmd === undefined) {
-			throw new Error(`nothing in flight in ${s.phase}`);
-		}
+    if (cmd === undefined) {
+      throw new Error(`nothing in flight in ${s.phase}`);
+    }
 
-		[s, out] = step(s, answer(cmd, layer));
-	}
+    [s, out] = step(s, answer(cmd, layer));
+  }
 
-	if (s.phase !== "over") {
-		throw new Error(`still ${s.phase}`);
-	}
+  if (s.phase !== "over") {
+    throw new Error(`still ${s.phase}`);
+  }
 
-	return {over: s, cmds};
+  return { over: s, cmds };
 }

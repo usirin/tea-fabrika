@@ -7,13 +7,13 @@
 // `LEDGER_GITHUB_TOKEN`, when set, goes to the Worker as its `GITHUB_TOKEN` secret; the stack reads
 // it itself, as a `Redacted`. The account and its token come from Alchemy's own login, never from
 // this repo.
-import {decodeConfig} from "./src/config.ts";
-import {ledgerStack} from "./src/stack.ts";
+import { decodeConfig } from "./src/config.ts";
+import { ledgerStack } from "./src/stack.ts";
 
 const config = decodeConfig({
-	name: process.env.LEDGER_NAME,
-	founder: process.env.LEDGER_FOUNDER,
-	...(process.env.LEDGER_ORIGIN === undefined ? {} : {origin: process.env.LEDGER_ORIGIN}),
+  name: process.env.LEDGER_NAME,
+  founder: process.env.LEDGER_FOUNDER,
+  ...(process.env.LEDGER_ORIGIN === undefined ? {} : { origin: process.env.LEDGER_ORIGIN }),
 });
 
 export default ledgerStack(config);

@@ -13,44 +13,44 @@
 //
 // The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
 // change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
-import {NodeRuntime, NodeServices} from "@effect/platform-node";
-import {Console, Effect, FileSystem, Path, Schema} from "effect";
-import {parseSync} from "oxc-parser";
-import {type OxcError, transformSync} from "oxc-transform-react";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Console, Effect, FileSystem, Path, Schema } from "effect";
+import { parseSync } from "oxc-parser";
+import { type OxcError, transformSync } from "oxc-transform-react";
 
 /** A row of `compiler-ledger.json`: a function left out of the Compiler on purpose, and why. */
-export const Row = Schema.Struct({file: Schema.String, fn: Schema.String, why: Schema.String});
+export const Row = Schema.Struct({ file: Schema.String, fn: Schema.String, why: Schema.String });
 export type Row = typeof Row.Type;
 const Ledger = Schema.Array(Row);
 
 /** One thing the check refuses, at a function in a file. */
 interface Finding {
-	readonly file: string;
-	readonly fn: string;
-	readonly line: number;
-	readonly why: string;
+  readonly file: string;
+  readonly fn: string;
+  readonly line: number;
+  readonly why: string;
 }
 
 /** The one compile step: oxc's Rust port of the React Compiler, with its findings reported. */
 export const compile = (file: string, code: string) =>
-	transformSync(file, code, {
-		jsx: {runtime: "automatic"},
-		reactCompiler: {
-			panicThreshold: "none",
-			reportDiagnostics: true,
-			environment: {validateNoImpureFunctionsInRender: true},
-		},
-	});
+  transformSync(file, code, {
+    jsx: { runtime: "automatic" },
+    reactCompiler: {
+      panicThreshold: "none",
+      reportDiagnostics: true,
+      environment: { validateNoImpureFunctionsInRender: true },
+    },
+  });
 
 interface Fn {
-	readonly name: string;
-	readonly start: number;
-	readonly end: number;
-	readonly line: number;
-	readonly memoOff: boolean;
-	readonly jsx: boolean;
-	readonly top: boolean;
-	readonly cache: boolean;
+  readonly name: string;
+  readonly start: number;
+  readonly end: number;
+  readonly line: number;
+  readonly memoOff: boolean;
+  readonly jsx: boolean;
+  readonly top: boolean;
+  readonly cache: boolean;
 }
 
 // oxc-parser's tree, read loosely: the check only walks it.
@@ -61,28 +61,28 @@ const lineAt = (text: string, at: number) => text.slice(0, at).split("\n").lengt
 
 /** Whether a function body opens with `"use no memo"`, among its other directives. */
 const saysNoMemo = (body: Tree): boolean => {
-	if (body?.type !== "BlockStatement") {
-		return false;
-	}
+  if (body?.type !== "BlockStatement") {
+    return false;
+  }
 
-	for (const s of body.body) {
-		if (s.type !== "ExpressionStatement" || typeof s.directive !== "string") {
-			return false;
-		}
+  for (const s of body.body) {
+    if (s.type !== "ExpressionStatement" || typeof s.directive !== "string") {
+      return false;
+    }
 
-		if (s.directive === "use no memo" || s.directive === "use no forget") {
-			return true;
-		}
-	}
+    if (s.directive === "use no memo" || s.directive === "use no forget") {
+      return true;
+    }
+  }
 
-	return false;
+  return false;
 };
 
 /** Whether a function body opens with `const $ = _c(n)`: the Compiler's cache, so it compiled. */
 const opensWithCache = (body: Tree): boolean => {
-	const first = body?.type === "BlockStatement" ? body.body[0] : null;
-	const init = first?.type === "VariableDeclaration" ? first.declarations[0]?.init : null;
-	return init?.type === "CallExpression" && init.callee?.name === "_c";
+  const first = body?.type === "BlockStatement" ? body.body[0] : null;
+  const init = first?.type === "VariableDeclaration" ? first.declarations[0]?.init : null;
+  return init?.type === "CallExpression" && init.callee?.name === "_c";
 };
 
 /**
@@ -90,209 +90,203 @@ const opensWithCache = (body: Tree): boolean => {
  * wrapping call such as `memo(...)`.
  */
 const functions = (file: string, text: string): readonly Fn[] => {
-	const found: Fn[] = [];
-	const walk = (node: Tree, bound: string | null, depth: number, inJsx: {on: boolean}) => {
-		if (node === null || typeof node !== "object") {
-			return;
-		}
+  const found: Fn[] = [];
+  const walk = (node: Tree, bound: string | null, depth: number, inJsx: { on: boolean }) => {
+    if (node === null || typeof node !== "object") {
+      return;
+    }
 
-		if (Array.isArray(node)) {
-			for (const n of node) {
-				walk(n, bound, depth, inJsx);
-			}
+    if (Array.isArray(node)) {
+      for (const n of node) {
+        walk(n, bound, depth, inJsx);
+      }
 
-			return;
-		}
+      return;
+    }
 
-		if (node.type === "JSXElement" || node.type === "JSXFragment") {
-			inJsx.on = true;
-		}
+    if (node.type === "JSXElement" || node.type === "JSXFragment") {
+      inJsx.on = true;
+    }
 
-		if (FUNCTIONS.has(node.type)) {
-			const own = {on: false};
+    if (FUNCTIONS.has(node.type)) {
+      const own = { on: false };
 
-			for (const [key, child] of Object.entries(node)) {
-				if (key !== "type") {
-					walk(child, null, depth + 1, own);
-				}
-			}
+      for (const [key, child] of Object.entries(node)) {
+        if (key !== "type") {
+          walk(child, null, depth + 1, own);
+        }
+      }
 
-			found.push({
-				name: node.id?.name ?? bound ?? "(anonymous)",
-				start: node.start,
-				end: node.end,
-				line: lineAt(text, node.start),
-				memoOff: saysNoMemo(node.body),
-				jsx: own.on,
-				top: depth === 0,
-				cache: opensWithCache(node.body),
-			});
-			return;
-		}
+      found.push({
+        name: node.id?.name ?? bound ?? "(anonymous)",
+        start: node.start,
+        end: node.end,
+        line: lineAt(text, node.start),
+        memoOff: saysNoMemo(node.body),
+        jsx: own.on,
+        top: depth === 0,
+        cache: opensWithCache(node.body),
+      });
+      return;
+    }
 
-		for (const [key, child] of Object.entries(node)) {
-			if (key === "type" || key === "start" || key === "end") {
-				continue;
-			}
+    for (const [key, child] of Object.entries(node)) {
+      if (key === "type" || key === "start" || key === "end") {
+        continue;
+      }
 
-			let name: string | null = null;
+      let name: string | null = null;
 
-			if (node.type === "VariableDeclarator" && key === "init") {
-				name = node.id?.name ?? null;
-			}
+      if (node.type === "VariableDeclarator" && key === "init") {
+        name = node.id?.name ?? null;
+      }
 
-			if (node.type === "Property" && key === "value") {
-				name = node.key?.name ?? null;
-			}
+      if (node.type === "Property" && key === "value") {
+        name = node.key?.name ?? null;
+      }
 
-			if (node.type === "CallExpression" && key === "arguments") {
-				name = bound;
-			}
+      if (node.type === "CallExpression" && key === "arguments") {
+        name = bound;
+      }
 
-			walk(child, name, depth, inJsx);
-		}
-	};
-	walk(parseSync(file, text, {}).program, null, 0, {on: false});
-	return found;
+      walk(child, name, depth, inJsx);
+    }
+  };
+  walk(parseSync(file, text, {}).program, null, 0, { on: false });
+  return found;
 };
 
 /** oxc-transform-react 0.157.0 reports UTF-8 byte offsets; JavaScript strings count UTF-16 units. */
-const utf16 = (text: string, byte: number) =>
-	Buffer.from(text).subarray(0, byte).toString("utf8").length;
+const utf16 = (text: string, byte: number) => Buffer.from(text).subarray(0, byte).toString("utf8").length;
 
 /** The outermost function holding an offset: the Compiler compiles top-level components and hooks. */
 const outermost = (fns: readonly Fn[], at: number) =>
-	fns.filter((f) => f.start <= at && at < f.end).sort((a, b) => a.start - b.start)[0] ?? null;
+  fns.filter((f) => f.start <= at && at < f.end).sort((a, b) => a.start - b.start)[0] ?? null;
 
 /** What the check refuses in one file, given the ledger's rows for it. */
 const checkFile = (file: string, text: string, rows: readonly Row[]): readonly Finding[] => {
-	const findings: Finding[] = [];
-	const out = compile(file, text);
-	const source = functions(file, text);
-	const compiled = new Set(
-		functions(file.replace(/\.tsx$/, ".js"), out.code)
-			.filter((f) => f.cache)
-			.map((f) => f.name),
-	);
-	const named = (fn: string) => rows.some((r) => r.fn === fn);
-	const said = new Set<string>();
-	const diagnose = (e: OxcError) => {
-		const label = e.labels[0];
-		const at = label === undefined ? 0 : utf16(text, label.start);
-		const fn = outermost(source, at);
-		const name = fn?.name ?? "(module)";
-		said.add(name);
+  const findings: Finding[] = [];
+  const out = compile(file, text);
+  const source = functions(file, text);
+  const compiled = new Set(
+    functions(file.replace(/\.tsx$/, ".js"), out.code)
+      .filter((f) => f.cache)
+      .map((f) => f.name),
+  );
+  const named = (fn: string) => rows.some((r) => r.fn === fn);
+  const said = new Set<string>();
+  const diagnose = (e: OxcError) => {
+    const label = e.labels[0];
+    const at = label === undefined ? 0 : utf16(text, label.start);
+    const fn = outermost(source, at);
+    const name = fn?.name ?? "(module)";
+    said.add(name);
 
-		if (fn !== null && fn.memoOff && named(name)) {
-			return;
-		}
+    if (fn !== null && fn.memoOff && named(name)) {
+      return;
+    }
 
-		findings.push({file, fn: name, line: lineAt(text, at), why: e.message});
-	};
+    findings.push({ file, fn: name, line: lineAt(text, at), why: e.message });
+  };
 
-	for (const e of out.errors) {
-		diagnose(e);
-	}
+  for (const e of out.errors) {
+    diagnose(e);
+  }
 
-	for (const fn of source) {
-		if (fn.memoOff && !named(fn.name)) {
-			findings.push({
-				file,
-				fn: fn.name,
-				line: fn.line,
-				why: '"use no memo" with no row in compiler-ledger.json. A row is the owner\'s call, in a change of its own.',
-			});
-		}
+  for (const fn of source) {
+    if (fn.memoOff && !named(fn.name)) {
+      findings.push({
+        file,
+        fn: fn.name,
+        line: fn.line,
+        why: '"use no memo" with no row in compiler-ledger.json. A row is the owner\'s call, in a change of its own.',
+      });
+    }
 
-		if (fn.top && fn.jsx && /^[A-Z]/.test(fn.name) && !fn.memoOff && !compiled.has(fn.name)) {
-			if (!said.has(fn.name)) {
-				findings.push({
-					file,
-					fn: fn.name,
-					line: fn.line,
-					why: "draws JSX and did not compile, and the Compiler said nothing. Has its output changed shape?",
-				});
-			}
-		}
-	}
+    if (fn.top && fn.jsx && /^[A-Z]/.test(fn.name) && !fn.memoOff && !compiled.has(fn.name)) {
+      if (!said.has(fn.name)) {
+        findings.push({
+          file,
+          fn: fn.name,
+          line: fn.line,
+          why: "draws JSX and did not compile, and the Compiler said nothing. Has its output changed shape?",
+        });
+      }
+    }
+  }
 
-	for (const row of rows) {
-		if (!source.some((fn) => fn.name === row.fn && fn.memoOff)) {
-			findings.push({
-				file,
-				fn: row.fn,
-				line: 0,
-				why: 'a stale row in compiler-ledger.json: this function carries no "use no memo" now. Drop the row.',
-			});
-		}
-	}
+  for (const row of rows) {
+    if (!source.some((fn) => fn.name === row.fn && fn.memoOff)) {
+      findings.push({
+        file,
+        fn: row.fn,
+        line: 0,
+        why: 'a stale row in compiler-ledger.json: this function carries no "use no memo" now. Drop the row.',
+      });
+    }
+  }
 
-	return findings;
+  return findings;
 };
 
 /**
  * What the check refuses across files, each given as its path from the top of the repo and its
  * text. A ledger row whose file is not among them is stale too.
  */
-export const check = (
-	files: ReadonlyMap<string, string>,
-	ledger: readonly Row[],
-): readonly Finding[] => [
-	...[...files].flatMap(([file, text]) =>
-		checkFile(
-			file,
-			text,
-			ledger.filter((r) => r.file === file),
-		),
-	),
-	...ledger
-		.filter((r) => !files.has(r.file))
-		.map((r) => ({
-			file: r.file,
-			fn: r.fn,
-			line: 0,
-			why: "a stale row in compiler-ledger.json: its file is gone. Drop the row.",
-		})),
+export const check = (files: ReadonlyMap<string, string>, ledger: readonly Row[]): readonly Finding[] => [
+  ...[...files].flatMap(([file, text]) =>
+    checkFile(
+      file,
+      text,
+      ledger.filter((r) => r.file === file),
+    ),
+  ),
+  ...ledger
+    .filter((r) => !files.has(r.file))
+    .map((r) => ({
+      file: r.file,
+      fn: r.fn,
+      line: 0,
+      why: "a stale row in compiler-ledger.json: its file is gone. Drop the row.",
+    })),
 ];
 
-class Unread extends Schema.TaggedError<Unread>()("Unread", {path: Schema.String}) {}
-class Refused extends Schema.TaggedError<Refused>()("Refused", {findings: Schema.Number}) {}
+class Unread extends Schema.TaggedError<Unread>()("Unread", { path: Schema.String }) {}
+class Refused extends Schema.TaggedError<Refused>()("Refused", { findings: Schema.Number }) {}
 
 /** `pnpm lint:compiler`: every `.tsx` file in `next/`, tests left out, against the ledger. */
 const lint = Effect.gen(function* () {
-	const fs = yield* FileSystem.FileSystem;
-	const path = yield* Path.Path;
-	const root = path.resolve(import.meta.dirname, "../../../../..");
-	const read = (file: string) =>
-		fs.readFileString(path.join(root, file)).pipe(Effect.mapError(() => new Unread({path: file})));
-	const ledger = yield* read("compiler-ledger.json").pipe(
-		Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Ledger))),
-	);
-	const paths = (yield* fs.glob("next/**/*.tsx", {root, exclude: ["**/node_modules/**"]}))
-		.map((p) => path.relative(root, path.join(root, p)))
-		.filter((p) => !p.includes("node_modules") && !p.includes(".test."))
-		.sort();
-	const files = new Map<string, string>();
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const root = path.resolve(import.meta.dirname, "../../../../..");
+  const read = (file: string) =>
+    fs.readFileString(path.join(root, file)).pipe(Effect.mapError(() => new Unread({ path: file })));
+  const ledger = yield* read("compiler-ledger.json").pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Ledger))),
+  );
+  const paths = (yield* fs.glob("next/**/*.tsx", { root, exclude: ["**/node_modules/**"] }))
+    .map((p) => path.relative(root, path.join(root, p)))
+    .filter((p) => !p.includes("node_modules") && !p.includes(".test."))
+    .sort();
+  const files = new Map<string, string>();
 
-	for (const path of paths) {
-		files.set(path, yield* read(path));
-	}
+  for (const path of paths) {
+    files.set(path, yield* read(path));
+  }
 
-	const findings = check(files, ledger);
+  const findings = check(files, ledger);
 
-	for (const f of findings) {
-		yield* Console.error(`${f.file}:${f.line} ${f.fn}: ${f.why}`);
-	}
+  for (const f of findings) {
+    yield* Console.error(`${f.file}:${f.line} ${f.fn}: ${f.why}`);
+  }
 
-	yield* Console.log(
-		`lint:compiler: ${files.size} files, ${findings.length} findings, ${ledger.length} ledger rows`,
-	);
+  yield* Console.log(`lint:compiler: ${files.size} files, ${findings.length} findings, ${ledger.length} ledger rows`);
 
-	if (findings.length > 0) {
-		return yield* new Refused({findings: findings.length});
-	}
+  if (findings.length > 0) {
+    return yield* new Refused({ findings: findings.length });
+  }
 });
 
 if (import.meta.main) {
-	NodeRuntime.runMain(lint.pipe(Effect.provide(NodeServices.layer)));
+  NodeRuntime.runMain(lint.pipe(Effect.provide(NodeServices.layer)));
 }

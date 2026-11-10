@@ -1,37 +1,37 @@
 {
-	"name": "@tea-fabrika/trace",
-	"version": "0.0.0",
-	"private": true,
-	"type": "module",
-	"description": "A program with a window: one job's trace, read from its record, or one ticket's lanes, read from its facts. A job: a waterfall of spans nested by parent, one color per program, every grouped row opening down to one step. A ticket: each lane on its own axis, its steps and waits on a person, each step opening to its spans, and a replay to any fact.",
-	"exports": {
-		".": "./src/index.ts",
-		"./memory": "./src/memory.ts",
-		"./tally": "./src/tally.ts",
-		"./window": "./src/window.tsx"
-	},
-	"scripts": {
-		"typecheck": "tsc --noEmit -p ."
-	},
-	"dependencies": {
-		"@demlik/tea": "catalog:",
-		"@kampus/fabrika-old": "workspace:*",
-		"@kampus/pipeline": "workspace:*",
-		"@manti-ui/react": "catalog:",
-		"@tea-fabrika/tracker": "workspace:*",
-		"effect": "catalog:"
-	},
-	"peerDependencies": {
-		"react": "catalog:"
-	},
-	"devDependencies": {
-		"@types/node": "catalog:",
-		"@types/react": "catalog:",
-		"@types/react-dom": "catalog:",
-		"fast-check": "catalog:",
-		"react": "catalog:",
-		"react-dom": "catalog:",
-		"typescript": "catalog:",
-		"vitest": "catalog:"
-	}
+  "name": "@tea-fabrika/trace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A program with a window: one job's trace, read from its record, or one ticket's lanes, read from its facts. A job: a waterfall of spans nested by parent, one color per program, every grouped row opening down to one step. A ticket: each lane on its own axis, its steps and waits on a person, each step opening to its spans, and a replay to any fact.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./memory": "./src/memory.ts",
+    "./tally": "./src/tally.ts",
+    "./window": "./src/window.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@demlik/tea": "catalog:",
+    "@kampus/fabrika-old": "workspace:*",
+    "@kampus/pipeline": "workspace:*",
+    "@manti-ui/react": "catalog:",
+    "@tea-fabrika/tracker": "workspace:*",
+    "effect": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "fast-check": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
 }
