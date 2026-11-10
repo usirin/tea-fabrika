@@ -48,101 +48,6 @@
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "| { readonly _tag: \"step\"; readonly step: StepName; readonly note: string }"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "| { readonly _tag: \"judge\" }"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "| { readonly _tag: \"open\" }"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "| { readonly _tag: \"park\"; readonly reason: string };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return next === null ? { _tag: \"open\" } : { _tag: \"step\", step: next, note: \"\" };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return next === null ? { _tag: \"open\" } : { _tag: \"step\", step: next, note: \"\" };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return after[step] === null ? { _tag: \"open\" } : { _tag: \"step\", step: after[step] ?? \"review\", note: \"\" };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return after[step] === null ? { _tag: \"open\" } : { _tag: \"step\", step: after[step] ?? \"review\", note: \"\" };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"step\", step: to, note: `${step} answered ${line.outcome}: ${line.reason}` };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"park\", reason: `${step} sent the lane to ${to}: ${line.reason}` };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"park\", reason: line.reason };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"judge\" };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"park\", reason: `drive refused: ${line.outcome}: ${line.reason}` };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "? { _tag: \"park\", reason: `${step} stuck ${maxStucks} times in a row: ${line.reason}` }"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": ": { _tag: \"judge\" };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "export type Judged = Extract<Move, { _tag: \"step\" | \"park\" }>;"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"step\", step: to, note: `the lead's judgment: ${note}` };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"park\", reason: note || \"the judgment agent parked the lane with no why\" };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"park\", reason: \"the judgment agent gave no answer line\" };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
 			"code": "_tag: \"RetriesExhausted\" as const,"
 		},
 		{
@@ -163,17 +68,7 @@
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-node-imports)",
-			"code": "import { randomUUID } from \"node:crypto\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-imports)",
 			"code": "} from \"node:fs\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-node-imports)",
-			"code": "import { homedir } from \"node:os\";"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
@@ -222,28 +117,8 @@
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-effect-run-outside-edge)",
-			"code": "Effect.runPromise(Effect.scoped(program)).catch((e: unknown) => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-hand-tag)",
 			"code": "const note = JSON.parse(r.out) as { _tag?: string; step?: string; ticket?: string };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"made\" };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"refused\", check, detail: line[2] ?? \"\" };"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "return { _tag: \"failed\", detail: `box.sh new: ${tail(err)}` };"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
@@ -254,16 +129,6 @@
 			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-node-filesystem)",
 			"code": "import { join } from \"node:path\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-node-imports)",
-			"code": "import { spawn, spawnSync } from \"node:child_process\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-node-imports)",
-			"code": "import { randomUUID } from \"node:crypto\";"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
@@ -303,22 +168,12 @@
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-of)",
-			"code": "const billingOf = (events: string) => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-of)",
 			"code": "export const startedOf = (code: number, err: string): typeof Started.Type => {"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-of)",
 			"code": "const holderOf = (porcelain: string, branch: string): string | null => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-promises)",
-			"code": "Effect.runPromise(Effect.scoped(program)).catch((e: unknown) => {"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
@@ -444,6 +299,11 @@
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-node-filesystem)",
 			"code": "import { isAbsolute, join, resolve } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { spawnSync } from \"node:child_process\";"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",

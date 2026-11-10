@@ -24,38 +24,46 @@ import "../../plan/scripts/plancheck.sh?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
+import { Effect, Stream } from "effect";
 import fc from "fast-check";
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { NO_SPENT } from "./agents.ts";
 import {
-  claudeProfile,
-  claudeTail,
+  agentsDraft,
+  agentTail,
+  boxChanges,
+  changedFiles,
+  commitSubject,
+  type MutboxRun,
+  mutationDraft,
   mutboxAnswer,
   mutboxTail,
   relatedIn,
   commitsSaid,
+  decide,
   endName,
   freshBox,
   holdsElectron,
-  leftIn,
   machine,
   reportOf,
   rowOf,
   startedOf,
 } from "./drive.ts";
 
-// Today's tooling. The machine is pure and stepped by hand here; leftIn reads a real git box.
+// Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
 
 const ask = {
   lane: "l",
   step: "build" as const,
   agent: "codex" as const,
-  model: "",
-  session: "",
+  model: "gpt-6-astra",
+  effort: "medium",
   ticket: "1",
   plan: "p",
   branch: "fabrikalfa/l",
@@ -96,10 +104,11 @@ const recorded = (report: string, commits: number, held: readonly string[]) => {
     left: held,
     manifests: [],
     plancheck: null,
+    changed: 0,
     report,
     problem: null,
   };
-  const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask }, {
+  const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
     type: "step_read_ok",
     value,
   } as never);
@@ -152,7 +161,7 @@ describe("drive takes a skip answer, today's tooling", () => {
     "tests" | "build" | "mutation" | "review"
   >;
   const read = (step: "tests" | "build" | "mutation" | "review", report: string) =>
-    machine.update.step_read_ok({ phase: "reading", ask: { ...ask, step } }, {
+    machine.update.step_read_ok({ phase: "reading", ask: { ...ask, step }, answer: null, spent: NO_SPENT }, {
       type: "step_read_ok",
       value: {
         head: ask.base,
@@ -163,6 +172,7 @@ describe("drive takes a skip answer, today's tooling", () => {
         left: [],
         manifests: [],
         plancheck: null,
+        changed: 0,
         report,
         problem: null,
       },
@@ -282,21 +292,24 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   const chatter = fc.constantFrom("", "what I checked", "the answer is below", "it says answer: done in the brief");
 
   const ended = (step: Step, report: string) => {
-    const [state, cmds] = machine.update.step_read_ok({ phase: "reading", ask: { ...ask, step } }, {
-      type: "step_read_ok",
-      value: {
-        head: ask.base,
-        commits: 0,
-        unsigned: [],
-        exam: [],
-        leaks: [],
-        left: [],
-        manifests: [],
-        plancheck: null,
-        report,
-        problem: null,
-      },
-    } as never);
+    const [state, cmds] = machine.update.step_read_ok(
+      { phase: "reading", ask: { ...ask, step }, answer: null, spent: NO_SPENT },
+      {
+        type: "step_read_ok",
+        value: {
+          head: ask.base,
+          commits: 0,
+          unsigned: [],
+          exam: [],
+          leaks: [],
+          left: [],
+          manifests: [],
+          plancheck: null,
+          report,
+          problem: null,
+        },
+      } as never,
+    );
     expect(state.phase).toBe("recording");
     return cmds[0] as { outcome: string; exit: number; keep: boolean; reason: string };
   };
@@ -363,6 +376,33 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
           expect(cmd.outcome).toBe(closed && own.name !== null ? own.name : "stuck:no_answer");
         },
       ),
+      options,
+    );
+  });
+
+  // Plant: guard only the line answer's done, so a typed done skips the verdict check (PR 691's
+  // typed answer comes first).
+  it("a review's typed done is done only under a merge-ready verdict, whatever its answer lines say", () => {
+    fc.assert(
+      fc.property(verdict, lines, chatter, (first, said, between) => {
+        const texts = said.map(([l, w, f]) => `${w}${f(l.text)}${w}`);
+        const read = {
+          head: ask.base,
+          commits: 0,
+          unsigned: [],
+          exam: [],
+          leaks: [],
+          left: [],
+          manifests: [],
+          plancheck: null,
+          changed: 0,
+          report: written(first, texts, between),
+          problem: null,
+        };
+        const judged = decide({ ...ask, step: "review" }, read, { verb: "done", to: null, reason: "", laws: null });
+        const ready = /merge-ready/.test(first);
+        expect(nameOf(judged.outcome)).toBe(ready ? "done" : "stuck:no_answer");
+      }),
       options,
     );
   });
@@ -474,7 +514,7 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
     step: fc.option(fc.constantFrom("tests", "build", "lead"), { nil: undefined }),
   });
   const lane = new Set(["tests", "build"]);
-  const held = (a: { reason: string; step?: string }) =>
+  const held = (a: { reason: string; step: string | undefined }) =>
     !(a.reason === "stale_link" && !(a.step !== undefined && lane.has(a.step)));
 
   // Plants: print only the last lines of JSON; drop the commit; name a waived stale link.
@@ -502,7 +542,7 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
 
 describe("drive asks the lead for the lockfile, today's tooling", () => {
   const read = (report: string, manifests: readonly string[]) =>
-    machine.update.step_read_ok({ phase: "reading", ask }, {
+    machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
       type: "step_read_ok",
       value: {
         head: "c".repeat(40),
@@ -513,6 +553,7 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
         left: [],
         manifests,
         plancheck: null,
+        changed: 0,
         report,
         problem: null,
       },
@@ -557,58 +598,271 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
   });
 });
 
-describe("leftIn reads a real box, today's tooling", () => {
-  const root = mkdtempSync(join(tmpdir(), "drive-left-"));
-  afterAll(() => rmSync(root, { recursive: true, force: true }));
-  const git = (box: string, ...args: string[]) => spawnSync("git", ["-C", box, ...args], { encoding: "utf8" });
-  const fresh = (name: string) => {
-    const box = join(root, name);
-    spawnSync("git", ["init", "-q", "-b", "fabrikalfa/l", box]);
-    git(box, "config", "user.email", "t@example.com");
-    git(box, "config", "user.name", "t");
-    writeFileSync(join(box, "a.ts"), "1\n");
-    git(box, "add", "a.ts");
-    git(box, "commit", "-q", "-m", "base");
-    return box;
-  };
+describe("the box's changes are read from its status, today's tooling", () => {
+  it("each NUL-ended status entry is one file with its letters, so a deleted one is told apart", () => {
+    const out = " M a.ts\0?? b/c.ts\0 D gone.ts\0";
+    expect(changedFiles(out)).toEqual([
+      { xy: " M", path: "a.ts" },
+      { xy: "??", path: "b/c.ts" },
+      { xy: " D", path: "gone.ts" },
+    ]);
+    expect(changedFiles("")).toEqual([]);
+  });
 
-  // Plants: drop the status read; drop untracked files; drop commits on another branch.
-  it("counts edited and untracked files, and commits the step's branch lacks", () => {
-    const clean = fresh("clean");
-    expect(leftIn(clean, "fabrikalfa/l")).toEqual([]);
+  it("a review that left a changed file is stuck:review_committed, whatever it answered", () => {
+    fc.assert(
+      fc.property(answer, fc.integer({ min: 1, max: 9 }), (report, changed) => {
+        const read = {
+          head: ask.base,
+          commits: 0,
+          unsigned: [],
+          exam: [],
+          leaks: [],
+          left: [],
+          manifests: [],
+          plancheck: null,
+          changed,
+          report,
+          problem: null,
+        };
+        const j = decide({ ...ask, step: "review" }, read);
+        expect(nameOf(j.outcome)).toBe("stuck:review_committed");
+      }),
+      options,
+    );
+  });
 
-    const dirty = fresh("dirty");
-    writeFileSync(join(dirty, "a.ts"), "2\n");
-    writeFileSync(join(dirty, "new.ts"), "3\n");
-    expect(leftIn(dirty, "fabrikalfa/l")).toEqual(["2 uncommitted files"]);
-
-    const off = fresh("off");
-    git(off, "switch", "-q", "-c", "side");
-    writeFileSync(join(off, "b.ts"), "4\n");
-    git(off, "add", "b.ts");
-    git(off, "commit", "-q", "-m", "side");
-    expect(leftIn(off, "fabrikalfa/l")).toEqual(["1 commits off fabrikalfa/l"]);
-
-    // A clone's own main, ahead of the step's branch but on its remote, is not the box's work.
-    // themes build5, 2026-11-09: kept for "21 commits off" that were its local main.
-    const cloned = join(root, "cloned");
-    spawnSync("git", ["clone", "-q", "-b", "fabrikalfa/l", clean, cloned]);
-    git(clean, "switch", "-q", "-c", "main");
-    writeFileSync(join(clean, "m.ts"), "5\n");
-    git(clean, "add", "m.ts");
-    git(clean, "commit", "-q", "-m", "main moved");
-    git(clean, "switch", "-q", "fabrikalfa/l");
-    git(cloned, "fetch", "-q", "origin", "main:main");
-    expect(leftIn(cloned, "fabrikalfa/l")).toEqual([]);
-
-    // A branch the box does not have is a state drive cannot read, so the box stays.
-    expect(leftIn(clean, "fabrikalfa/missing")).toEqual(["a git state drive could not read"]);
-    expect(leftIn(join(root, "gone"), "fabrikalfa/l")).toEqual([]);
+  it("the typed answer wins over the report's answer line, and a build with no commit needs its laws", () => {
+    const read = {
+      head: ask.base,
+      commits: 0,
+      unsigned: [],
+      exam: [],
+      leaks: [],
+      left: [],
+      manifests: [],
+      plancheck: null,
+      changed: 0,
+      report: "answer: stuck no network",
+      problem: null,
+    };
+    expect(nameOf(decide(ask, read, { verb: "done", to: null, reason: "", laws: null }).outcome)).toBe(
+      "stuck:no_commit",
+    );
+    expect(decide(ask, read, { verb: "done", to: null, reason: "", laws: "a.test.ts" }).outcome).toEqual({
+      kind: "done",
+      part: false,
+      head: ask.base,
+    });
+    const sent = decide(ask, read, { verb: "send", to: "tests", reason: "a law", laws: null });
+    expect(nameOf(sent.outcome)).toBe("send:tests:step_said");
+    expect(sent.reason).toBe("a law");
+    expect(nameOf(decide(ask, read).outcome)).toBe("stuck:step_said");
   });
 });
 
+describe("T341 a step commit's subject says what the step did, today's tooling", () => {
+  const text = fc.stringMatching(/^[A-Za-z][A-Za-z0-9 ,.]{0,100}[a-z]$/);
+  const step = fc.constantFrom("tests", "build", "mutation") as fc.Arbitrary<"tests" | "build" | "mutation">;
+
+  // The dry run of 2026-11-10 (ticket 522): a report that was the JSON answer alone gave the
+  // subject "the step's work", which says nothing in the log.
+  // Plants: skip the answer's reason; take the JSON line as the subject; let the subject run long.
+  it("is the report's first prose line, else the answer's reason, on one line that names the ticket and step", () => {
+    fc.assert(
+      fc.property(text, text, step, fc.boolean(), (prose, reason, s, alone) => {
+        const answer = JSON.stringify({ verb: "done", to: null, reason, laws: null });
+        const subject = commitSubject(
+          { ticket: "7", step: s },
+          alone ? `${answer}\n` : `\n## ${prose}\n\nmore\n${answer}\n`,
+        );
+        expect(subject).toBe(`T7 ${s}: ${(alone ? reason : prose).slice(0, 72)}`);
+        expect(subject).not.toContain("\n");
+        expect(subject).not.toContain("{");
+      }),
+      options,
+    );
+  });
+
+  it("pinned: a report with no prose and no answer still gets a subject", () => {
+    // pinned: an agent that ended with nothing to say (the turn's report is empty).
+    expect(commitSubject({ ticket: "7", step: "build" }, "")).toBe("T7 build: the step's work");
+  });
+});
+
+describe("T341 drive reads what a box holds from outside it, today's tooling", () => {
+  const root = mkdtempSync(join(tmpdir(), "drive-box-"));
+  const env = { BOXES: root };
+  const git = (...args: string[]) =>
+    spawnSync(
+      "git",
+      [
+        `--git-dir=${join(root, "b-gitdata")}`,
+        `--work-tree=${join(root, "b")}`,
+        "-c",
+        "user.email=t@example.com",
+        "-c",
+        "user.name=t",
+        ...args,
+      ],
+      { encoding: "utf8" },
+    );
+
+  // scenario: a real box with its git data beside it, as box.sh new makes one. The agent cannot
+  // commit any more, so the files it left are all the work a box holds, and each must be named for
+  // collect to copy it. It takes over from the removed "counts edited and untracked files, and
+  // commits the step's branch lacks", which read a real box the same way.
+  // Plants: drop --untracked-files=all; read through the box's own `.git` file; call a box whose
+  // data is gone a box with no changes.
+  it("scenario: every edited, deleted and new file is named, a new folder file by file, whatever the box's `.git` file says", () => {
+    const box = join(root, "b");
+    spawnSync("git", ["init", "-q", "--separate-git-dir", join(root, "b-gitdata"), box]);
+    writeFileSync(join(box, "a.ts"), "1\n");
+    writeFileSync(join(box, "gone.ts"), "1\n");
+    git("add", "a.ts", "gone.ts");
+    git("commit", "-q", "-m", "base");
+    expect(boxChanges(env, "b")).toMatchObject({ code: 0, changes: [] });
+
+    writeFileSync(join(box, "a.ts"), "2\n");
+    rmSync(join(box, "gone.ts"));
+    mkdirSync(join(box, "new", "deep"), { recursive: true });
+    writeFileSync(join(box, "new", "deep", "c.ts"), "3\n");
+    writeFileSync(join(box, "new", "d.ts"), "4\n");
+    // The agent can rewrite this file; drive reads the data folder by name and never follows it.
+    writeFileSync(join(box, ".git"), `gitdir: ${join(root, "nowhere")}\n`);
+    const read = boxChanges(env, "b");
+    expect(read.code).toBe(0);
+    expect(read.changes.toSorted((x, y) => x.path.localeCompare(y.path))).toEqual([
+      { xy: " M", path: "a.ts" },
+      { xy: " D", path: "gone.ts" },
+      { xy: "??", path: "new/d.ts" },
+      { xy: "??", path: "new/deep/c.ts" },
+    ]);
+
+    // A box whose data cannot be read is a failed read, which drive keeps as stuck.
+    const lost = boxChanges(env, "no-such-box");
+    expect(lost.code).not.toBe(0);
+    expect(lost.changes).toEqual([]);
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe("T341 a step's agent runs in its own box, on the row its step allows, today's tooling", () => {
+  const dir = mkdtempSync(join(tmpdir(), "drive-row-"));
+  const env = {
+    MAIN: join(dir, "main"),
+    BOXES: join(dir, "boxes"),
+    GH_REPO: "",
+    CODEX_MODEL: "",
+    CODEX_EFFORT: "",
+  };
+  const prompt = join(dir, "prompt.md");
+  writeFileSync(prompt, "do the step\nRELATED=a.test.ts\n");
+  // A mutation step's container run, already done: it left its report and said so.
+  const boxed: MutboxRun = (args) =>
+    Effect.sync(() => {
+      const out = args[args.indexOf("--out") + 1] ?? "";
+      mkdirSync(out, { recursive: true });
+      writeFileSync(join(out, "mutbox.json"), "{}\n");
+      return { code: 0, out: JSON.stringify({ outcome: "done", reason: "", detail: "" }) };
+    });
+  const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
+    "plan" | "tests" | "build" | "mutation" | "review"
+  >;
+  const agent = fc.constantFrom("codex", "claude") as fc.Arbitrary<"codex" | "claude">;
+  const lane = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+  const drafted = (step: "plan" | "tests" | "build" | "mutation" | "review", who: "codex" | "claude", box: string) =>
+    Effect.gen(function* () {
+      const rows = {
+        codex: Agent.fakeAdapter(() => Agent.saying("done")),
+        "codex-read": Agent.fakeAdapter(() => Agent.saying("done")),
+        claude: Agent.fakeAdapter(() => Agent.saying("done")),
+      };
+      const agents = Agent.makeAgents({
+        adapters: rows,
+        sessions: Agent.memorySessions(),
+        reaper: Agent.noReaper,
+      });
+      const sub = {
+        deps: {
+          ...ask,
+          step,
+          agent: who,
+          box,
+          prompt,
+          events: join(dir, "events.jsonl"),
+          report: join(dir, "report.md"),
+        },
+      };
+      yield* Stream.runDrain(agentsDraft(env, agents, boxed)(sub as never));
+      return rows;
+    });
+
+  // The harness closes everything beside the folder a turn names (packages/fabrika/src/agents/acp/
+  // harness.test.ts, "the folder's siblings closed"), so the folder drive names is what keeps an
+  // agent out of BOXES/state, the lock, the step keys and the other boxes. These take over from the
+  // removed "never lets the box write the lock or anything else in BOXES/state" and "pinned: the
+  // profile allows writes only to the box, its git data and the caches", which read drive's own
+  // sandbox profile; drive has none now.
+  // Plants: run every step in BOXES; run a plan in a box; run a review on the row that writes.
+  it("a plan reads the main checkout and every other step works in its own box, never in a folder above it", () =>
+    fc.assert(
+      fc.asyncProperty(steps, agent, lane, fc.integer({ min: 1, max: 99 }), (step, who, name, n) =>
+        drafted(step, who, `${name}-${step}${n}`).pipe(
+          Effect.tap((rows) =>
+            Effect.sync(() => {
+              const started = Object.values(rows).flatMap((row) => row.seen.started);
+              expect(started.length).toBe(1);
+              const folder = started[0]?.folder ?? "";
+              expect(folder).toBe(step === "plan" ? env.MAIN : join(env.BOXES, `${name}-${step}${n}`));
+              expect(env.BOXES.startsWith(folder)).toBe(false);
+              expect(folder.startsWith(join(env.BOXES, "state"))).toBe(false);
+            }),
+          ),
+          Effect.asVoid,
+          Effect.runPromise,
+        ),
+      ),
+      options,
+    ));
+
+  it("on Codex a plan and a review start on the row that only reads, and a Claude step never starts on a Codex row", () =>
+    fc.assert(
+      fc.asyncProperty(steps, agent, lane, (step, who, name) =>
+        drafted(step, who, `${name}-${step}1`).pipe(
+          Effect.tap((rows) =>
+            Effect.sync(() => {
+              const count = (row: keyof typeof rows) => rows[row].seen.started.length;
+
+              if (step === "plan" || step === "review") {
+                expect(count("codex")).toBe(0);
+              }
+
+              expect(count("claude")).toBe(who === "claude" ? 1 : 0);
+              expect(count("codex") + count("codex-read")).toBe(who === "codex" ? 1 : 0);
+            }),
+          ),
+          Effect.asVoid,
+          Effect.runPromise,
+        ),
+      ),
+      options,
+    ));
+});
+
 describe("T383 drive never passes off an older run's report, today's tooling", () => {
-  const suffixes = ["", "-gitdata", "-prompt.md", ".md", ".jsonl", ".err", ".log", "-plan.md", "-plan.jsonl"];
+  const suffixes = [
+    "",
+    "-gitdata",
+    "-mutbox",
+    "-prompt.md",
+    ".md",
+    ".jsonl",
+    ".err",
+    ".log",
+    "-plan.md",
+    "-plan.jsonl",
+  ];
   // Plants: check only the box folder and prompt, as before; skip a free number; start below n.
   // p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
   // 2026-11-08, written for another head, as the step's report (field note 2026-11-09-205).
@@ -679,10 +933,11 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
           left: [],
           manifests: [],
           plancheck: null,
+          changed: 0,
           report,
           problem: null,
         };
-        const [read] = machine.update.step_read_ok({ phase: "reading", ask }, {
+        const [read] = machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
           type: "step_read_ok",
           value,
         } as never);
@@ -716,7 +971,6 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
   >;
-  const name = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
 
   it("holds it for mutation always, and for any other step only when started with --electron", () => {
     fc.assert(
@@ -730,32 +984,11 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
   it("tells the agent the lock is held exactly when drive holds it", () => {
     fc.assert(
       fc.property(steps, fc.boolean(), (step, flagged) => {
-        const told = claudeTail({ step, ticket: "1" }, flagged).includes("state/electron.lock");
+        const told = agentTail({ step, ticket: "1" }, flagged).includes("state/electron.lock");
         expect(told).toBe(holdsElectron(step, flagged));
       }),
       options,
     );
-  });
-
-  it("never lets the box write the lock or anything else in BOXES/state", () => {
-    fc.assert(
-      fc.property(steps, name, (step, box) => {
-        const profile = claudeProfile("/h", "/h/boxes", box, step);
-        expect(profile).not.toContain("/h/boxes/state");
-        expect(profile).not.toContain("electron");
-      }),
-      options,
-    );
-  });
-
-  it("pinned: the profile allows writes only to the box, its git data and the caches", () => {
-    // pinned: ticket 382 widens nothing. A change here is a change to what the box can reach.
-    expect(claudeProfile("/h", "/h/boxes", "l-build1", "build")).toBe(`(version 1)
-(allow default)
-(deny file-read* file-write* (subpath "/h/.fabrika/step-keys") (literal "/h/.fabrika/leak-words") (subpath "/h/.codex"))
-(deny file-write* (subpath "/h"))
-(allow file-write* (subpath "/h/boxes/l-build1") (subpath "/h/boxes/l-build1-gitdata") (subpath "/h/.claude") (subpath "/h/.cache") (subpath "/h/.local") (subpath "/h/.npm") (subpath "/h/Library") (regex #"^/h/\\.claude\\.json"))
-`);
   });
 
   it("scenario: --electron on a Codex box is refused before anything starts", () => {
@@ -824,6 +1057,246 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
       options,
     );
   });
+
+  const dir = mkdtempSync(join(tmpdir(), "drive-mutation-"));
+  const env = { MAIN: join(dir, "main"), BOXES: join(dir, "boxes"), GH_REPO: "", CODEX_MODEL: "", CODEX_EFFORT: "" };
+  const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
+  const box = fc.stringMatching(/^[a-z0-9]{1,8}-mutation[1-9]$/);
+  const text = fc.stringMatching(/^[A-Za-z0-9 _.,:-]{0,40}$/);
+  const line = (outcome: string, reason: string, detail: string) => JSON.stringify({ outcome, reason, detail });
+  // One mutation draft against a prompt file and a stand-in for mutbox.ts: what the turn ended as,
+  // the agents it started, the command lines mutbox got and the report file the step left.
+  const drafted = (
+    mutbox: MutboxRun,
+    name: string,
+    brief: string,
+    heads = { base: "b".repeat(40), root: "a".repeat(40) },
+  ) =>
+    Effect.gen(function* () {
+      const row = Agent.fakeAdapter(() => Agent.saying("done"));
+      const agents = Agent.makeAgents({
+        adapters: { codex: row, "codex-read": row, claude: row },
+        sessions: Agent.memorySessions(),
+        reaper: Agent.noReaper,
+      });
+      const calls: ReadonlyArray<string>[] = [];
+      const prompt = join(dir, `${name}-prompt.md`);
+      const report = join(dir, `${name}.md`);
+      mkdirSync(env.BOXES, { recursive: true });
+      writeFileSync(prompt, brief);
+      rmSync(report, { force: true });
+      const turned = yield* mutationDraft((args) => {
+        calls.push(args);
+        return mutbox(args);
+      })(env, agents, {
+        ...ask,
+        ...heads,
+        step: "mutation",
+        agent: "claude",
+        box: name,
+        prompt,
+        report,
+        events: join(dir, `${name}.jsonl`),
+      });
+      return {
+        turned,
+        started: row.seen.started,
+        calls,
+        report: existsSync(report) ? readFileSync(report, "utf8") : null,
+        saved: readFileSync(prompt, "utf8"),
+      };
+    });
+  // What the reads find after such a step: the box untouched, no commit, no report of an agent's.
+  const readNothing = {
+    head: ask.base,
+    commits: 0,
+    unsigned: [],
+    exam: [],
+    leaks: [],
+    left: [],
+    manifests: [],
+    plancheck: null,
+    changed: 0,
+    report: "",
+    problem: null,
+  };
+  const written = (out: string, summary: string) => {
+    mkdirSync(out, { recursive: true });
+    writeFileSync(join(out, "mutbox.json"), summary);
+  };
+
+  // Decision 0045: Docker missing, a second Docker box or a failed run ends the step stuck, and the
+  // sample never runs anywhere else. The report file is what the chain's judgment reads.
+  // Plants: start the agent after a stuck run; trust exit 0 over a stuck line; read a run that
+  // printed nothing as done; drop mutbox's own reason.
+  it("a run that exits 30, says stuck or says nothing ends the step stuck with its reason, and no agent starts", () =>
+    fc.assert(
+      fc.asyncProperty(
+        box,
+        fc.constantFrom("docker_down", "docker_busy", "baseline_failed", "time_limit"),
+        text,
+        fc.constantFrom("line", "exit", "silent"),
+        fc.constantFrom(0, 1, 30, 137),
+        (name, reason, detail, how, exit) => {
+          const said =
+            how === "line"
+              ? { code: exit, out: `noise\n${line("stuck", reason, detail)}\n` }
+              : how === "exit"
+                ? { code: 30, out: `${line("done", "", "")}\n` }
+                : { code: exit, out: "not a line" };
+          return drafted(
+            (args) =>
+              Effect.sync(() => {
+                // Even with a report on disk, a stuck run hands nothing to an agent.
+                written(args[args.indexOf("--out") + 1] ?? "", "{}\n");
+                return said;
+              }),
+            name,
+            "Use the mutation skill.\nRELATED=a.test.ts\n",
+          ).pipe(
+            Effect.tap((ran) =>
+              Effect.sync(() => {
+                expect(ran.started).toEqual([]);
+                expect(ran.calls.length).toBe(1);
+                expect(ran.turned._tag).toBe("ended");
+
+                if (ran.turned._tag !== "ended") {
+                  return;
+                }
+
+                expect(ran.turned.stop).toBe("end_turn");
+                expect(ran.turned.spent).toEqual(NO_SPENT);
+                expect(ran.turned.answer?.verb).toBe("stuck");
+                expect(ran.turned.answer?.reason).toContain("mutbox");
+                expect(ran.report).toContain(ran.turned.answer?.reason ?? "no reason");
+
+                if (how === "line") {
+                  expect(ran.turned.answer?.reason).toContain(reason);
+                  expect(ran.turned.answer?.reason).toContain(detail);
+                }
+
+                expect(nameOf(decide({ ...ask, step: "mutation" }, readNothing, ran.turned.answer).outcome)).toBe(
+                  "stuck:step_said",
+                );
+              }),
+            ),
+            Effect.asVoid,
+            Effect.runPromise,
+          );
+        },
+      ),
+      options,
+    ));
+
+  // `prepare` refuses such a brief first (the scenario below); the draft holds the same line, so a
+  // brief changed after the start still cannot run the whole suite or start an agent with no report.
+  // Plants: run mutbox with an empty --related; start the agent anyway.
+  it("a brief with no RELATED= line of its own runs no container and starts no agent", () =>
+    fc.assert(
+      fc.asyncProperty(box, paths, fc.constantFrom("", "Set RELATED=", "RELATED: "), (name, tests, before) =>
+        drafted(
+          () => Effect.succeed({ code: 0, out: line("done", "", "") }),
+          name,
+          `Use the mutation skill.\n${before === "" ? "" : `${before}${tests.join(",")} first.\n`}`,
+        ).pipe(
+          Effect.tap((ran) =>
+            Effect.sync(() => {
+              expect(ran.calls).toEqual([]);
+              expect(ran.started).toEqual([]);
+              expect(ran.turned._tag === "ended" ? ran.turned.answer?.verb : null).toBe("stuck");
+              expect(ran.report).toContain("RELATED=<paths>");
+            }),
+          ),
+          Effect.asVoid,
+          Effect.runPromise,
+        ),
+      ),
+      options,
+    ));
+
+  // The agent's box reads nothing outside itself, so the report must ride in the prompt, whole.
+  // Plants: hand the agent only the report's path; cut the report; lose the brief; run mutbox on
+  // another commit or with other tests; leave the skip note out.
+  it("a done or skip run starts one agent in the box, with the brief and the whole mutbox.json text in its prompt", () =>
+    fc.assert(
+      fc.asyncProperty(
+        box,
+        paths,
+        sha,
+        sha,
+        fc.dictionary(fc.stringMatching(/^[a-z]{1,8}$/), text, { minKeys: 1, maxKeys: 6 }),
+        fc.boolean(),
+        (name, tests, base, root, summary, skip) => {
+          const report = `${JSON.stringify({ outcome: skip ? "skip" : "done", ...summary })}\n`;
+          const brief = `Use the mutation skill.\nRELATED=${tests.join(",")}\nSeed 119120.\n`;
+          return drafted(
+            (args) =>
+              Effect.sync(() => {
+                written(args[args.indexOf("--out") + 1] ?? "", report);
+                return { code: skip ? 40 : 0, out: `${line(skip ? "skip" : "done", "", "")}\n` };
+              }),
+            name,
+            brief,
+            { base, root },
+          ).pipe(
+            Effect.tap((ran) =>
+              Effect.sync(() => {
+                const out = join(env.BOXES, `${name}-mutbox`);
+                expect(ran.calls).toEqual([
+                  [
+                    "run",
+                    "--checkout",
+                    env.MAIN,
+                    "--ticket",
+                    ask.ticket,
+                    "--build",
+                    base,
+                    "--base",
+                    root,
+                    "--related",
+                    tests.join(","),
+                    "--out",
+                    out,
+                    "--lock",
+                    join(env.BOXES, "state", "docker.lock"),
+                  ],
+                ]);
+                expect(ran.started.length).toBe(1);
+                expect(ran.started[0]?.folder).toBe(join(env.BOXES, name));
+                const prompt = ran.started[0]?.prompt ?? "";
+                expect(prompt).toContain(brief);
+                expect(prompt).toContain(report);
+                expect(prompt).toContain("Do not run Stryker");
+                expect(prompt.includes("answer: skip")).toBe(skip);
+                expect(prompt.indexOf(brief)).toBeLessThan(prompt.indexOf(report));
+                // What the agent was asked is kept: the saved prompt file holds the report too.
+                expect(ran.saved).toContain(report);
+                expect(prompt).toContain(ran.saved);
+                expect(ran.turned._tag).toBe("ended");
+              }),
+            ),
+            Effect.asVoid,
+            Effect.runPromise,
+          );
+        },
+      ),
+      options,
+    ));
+
+  // scenario: a run that says done but left no report gives the agent nothing to read.
+  // Plant: start the agent with an empty report.
+  it("scenario: a done run with no mutbox.json is stuck, and no agent starts", () =>
+    drafted(() => Effect.succeed({ code: 0, out: line("done", "", "") }), "gone-mutation1", "RELATED=a.test.ts\n").pipe(
+      Effect.tap((ran) =>
+        Effect.sync(() => {
+          expect(ran.started).toEqual([]);
+          expect(ran.turned._tag === "ended" ? ran.turned.answer?.verb : null).toBe("stuck");
+          expect(ran.report).toContain("no report");
+        }),
+      ),
+      Effect.asVoid,
+      Effect.runPromise,
+    ));
 
   // scenario: the real command line, since the refusal happens before any pure function.
   // Plant: start the agent when the brief names no related tests.

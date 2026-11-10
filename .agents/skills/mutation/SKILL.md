@@ -20,7 +20,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 1. **Read** `AGENTS.md`'s mutation rules.
 2. **Read the fast check's report.** `drive.ts` ran it before you started, in a container with its
    own network ([0045](../../../.decisions/0045-test-steps-run-in-containers.md)), with
-   [the command below](#the-command). Your prompt names its report, `mutbox.json`. Never run
+   [the command below](#the-command). Your prompt holds its report, `mutbox.json`, whole. Never run
    Stryker yourself, and start nothing that listens on a port. `run.sh` and `sample.ts` hold file
    selection, the seed, sample cap and round settings. Ask before you scale up.
 3. **Sort each survivor:** real (a law should catch it), equivalent (no behavior changes) or
