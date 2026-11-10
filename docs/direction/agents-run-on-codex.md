@@ -48,10 +48,14 @@ const DEFAULTS = {
   the subscription's quota.* The call, with the brief on stdin:
 
   ```sh
-  codex exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh \
+  codex exec -m gpt-6-astra -c model_reasoning_effort=medium \
     -s workspace-write -C <dir> --json -o <last.md> -
   # -p is a profile in codex, not a prompt
   ```
+
+  *Changed 2026-11-09 (owner, [0022](../../.decisions/0022-codex-steps-run-on-astra-at-medium.md)):
+  the default is now `gpt-6-astra` at effort `medium`, set in the lead's `env.sh`; it was
+  `gpt-6.1-sol` at `xhigh`, and the call above first said so.*
 
 - **How a Codex step commits** (owner, 2026-11-08, from P10 on). Codex's `workspace-write`
   sandbox keeps `.git` read-only, even with `--add-dir`. So each step gets its own clone whose
