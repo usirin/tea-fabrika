@@ -1,14 +1,15 @@
 // T502 PR 2, next/. One set of laws, two drivers. Lead runs the wire group outside the box.
 // Plants: omit the shell's cap; map the callee's bad_row to unreachable.
 import { DatabaseSync } from "node:sqlite";
-import { beforeAll, afterAll, describe, expect, it } from "@effect/vitest";
+import { expect, it, layer } from "@effect/vitest";
 import { Written } from "@kampus/libfabrika/data";
 import type { SinkError } from "@kampus/libfabrika/data";
 import { Chain, Content, partName, SpanRow } from "@kampus/libfabrika/data";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
-import { Effect, Exit, Option, Result, Schema, Scope } from "effect";
+import type { Scope } from "effect";
+import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -22,14 +23,17 @@ type Part = {
   deleteContent: (chain: Chain, at: number, id: string, by: Deletion) => ReturnType<typeof recordDelete>;
 };
 
-type Driver = (name: string, cap: number) => Part;
+type Driver = (name: string, cap: number) => Effect.Effect<Part, never, Scope.Scope>;
 const Page = Schema.Struct({ spans: Schema.Array(SpanRow), after: Schema.Int, rolled: Schema.Boolean });
 const Lookup = Schema.TaggedUnion({ found: { content: Schema.NullOr(Content) }, absent: { rolled: Schema.Boolean } });
-const opened: DatabaseSync[] = [];
 
-const node: Driver = (name, cap) => {
-  const db = new DatabaseSync(":memory:");
-  opened.push(db);
+class Wire extends Context.Service<Wire, { readonly driver: Driver }>()("t502/RecordLaws.Wire") {}
+
+const node: Driver = Effect.fnUntraced(function* (name: string, cap: number) {
+  const db = yield* Effect.acquireRelease(
+    Effect.sync(() => new DatabaseSync(":memory:")),
+    (db) => Effect.sync(() => db.close()),
+  );
   const sql = nodeSql(db);
   // Only the state handles read by the four exported services; real SQLite, no fake queries.
   // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the platform handles the real record service reads
@@ -51,7 +55,7 @@ const node: Driver = (name, cap) => {
     content: (chain: Chain, at: number, id: string) => recordContent(state, cap, chain, at, id),
     deleteContent: (chain: Chain, at: number, id: string, by: Deletion) => recordDelete(state, cap, chain, at, id, by),
   } satisfies RecordShape;
-};
+});
 
 const Input = Schema.Struct({
   job: Schema.Boolean,
@@ -94,55 +98,45 @@ const cap = 64 * 1024;
 const options = { arbitrary: { seed: 119120, runs: 30 } };
 let sequence = 0;
 
-afterAll(() => {
-  for (const db of opened) {
-    db.close();
-  }
-});
+const NodeLive = Layer.succeed(Wire, { driver: node });
 
-for (const kind of ["node", "wire"] as const) {
-  describe(`RecordPart ${kind}`, () => {
-    let driver: Driver = node;
-    const scopes: Scope.Closeable[] = [];
-    beforeAll(async () => {
-      if (kind === "node") {
-        return;
+// The wire stage is acquired by the layer, so the file's layer scope releases it.
+const WireLive = Layer.effect(
+  Wire,
+  Effect.gen(function* () {
+    const stage = yield* recordWire(cap);
+    const driver: Driver = Effect.fnUntraced(function* (name: string) {
+      const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])))(
+        name,
+      );
+      const [project, part] = Option.getOrElse(decoded, () => ["invalid-name", name]);
+      const stub = stage.record(project, part);
+      const { write, read, content, deleteContent } = stub;
+
+      if (write === undefined || read === undefined || content === undefined || deleteContent === undefined) {
+        return yield* Effect.die(new Error("record binding is missing a method"));
       }
 
-      const scope = Effect.runSync(Scope.make());
-      scopes.push(scope);
-      const stage = await Effect.runPromise(recordWire(cap).pipe(Scope.provide(scope)));
-
-      driver = (name) => {
-        const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])))(
-          name,
+      const call = <A>(schema: Schema.Codec<A>, invoke: () => Promise<unknown>) =>
+        recordCall(invoke).pipe(
+          Effect.flatMap((value) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.orDie)),
         );
-        const [project, part] = Option.getOrElse(decoded, () => ["invalid-name", name]);
-        const stub = stage.record(project, part);
-        const { write, read, content, deleteContent } = stub;
-
-        if (write === undefined || read === undefined || content === undefined || deleteContent === undefined) {
-          throw new Error("record binding is missing a method");
-        }
-
-        const call = <A>(schema: Schema.Codec<A>, invoke: () => Promise<unknown>) =>
-          recordCall(invoke).pipe(
-            Effect.flatMap((value) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.orDie)),
-          );
-        return {
-          write: (chain, at, rows) => call(Written, () => write(chain, at, rows)),
-          read: (chain, at, after) => call(Page, () => read(chain, at, after)),
-          content: (chain, at, id) => call(Lookup, () => content(chain, at, id)),
-          deleteContent: (chain, at, id, by) => call(Lookup, () => deleteContent(chain, at, id, by)),
-        } satisfies Part;
-      };
+      return {
+        write: (chain, at, rows) => call(Written, () => write(chain, at, rows)),
+        read: (chain, at, after) => call(Page, () => read(chain, at, after)),
+        content: (chain, at, id) => call(Lookup, () => content(chain, at, id)),
+        deleteContent: (chain, at, id, by) => call(Lookup, () => deleteContent(chain, at, id, by)),
+      } satisfies Part;
     });
-    afterAll(async () => {
-      for (const scope of scopes.reverse()) {
-        await Effect.runPromise(Scope.close(scope, Exit.void));
-      }
-    });
+    return { driver };
+  }),
+);
 
+for (const [kind, live] of [
+  ["node", NodeLive],
+  ["wire", WireLive],
+] as const) {
+  layer(live)(`RecordPart ${kind}`, (it) => {
     it.effect.prop(
       "rows, retry, cursor, content and deletion agree with SQLite",
       { input: Input },
@@ -153,8 +147,9 @@ for (const kind of ["node", "wire"] as const) {
             ? Chain.cases.job.make({ process: `process_01m6v5270hf3c8x2q7w9z4k5${String(input.at).padStart(2, "0")}` })
             : Chain.cases.spans.make({});
           const name = JSON.stringify([`law-${sequence++}`, partName(chain, input.at)]);
-          const actual = driver(name, cap),
-            oracle = node(name, cap);
+          const { driver } = yield* Wire;
+          const actual = yield* driver(name, cap),
+            oracle = yield* node(name, cap);
           const rows = input.rows.map((r, index) => ({ ...r, span: { ...r.span, spanId: String(index) } }));
           const exercise = (part: Part) =>
             Effect.gen(function* () {
@@ -208,8 +203,9 @@ for (const kind of ["node", "wire"] as const) {
               const page = yield* part.read(chain, input.at, 0);
               return { written, page };
             });
-          const actual = yield* exercise(driver(name, cap));
-          expect(actual).toEqual(yield* exercise(node(name, cap)));
+          const { driver } = yield* Wire;
+          const actual = yield* exercise(yield* driver(name, cap));
+          expect(actual).toEqual(yield* exercise(yield* node(name, cap)));
           expect(actual.written).toEqual({
             _tag: "rolled",
             next: partName(chain, input.at + 1),
@@ -229,7 +225,8 @@ for (const kind of ["node", "wire"] as const) {
       { text: Schema.String },
       ({ text }) =>
         Effect.gen(function* () {
-          const part = driver(`not-json:${text}`, cap);
+          const { driver } = yield* Wire;
+          const part = yield* driver(`not-json:${text}`, cap);
           const chain = Chain.cases.spans.make({});
 
           const calls: ReadonlyArray<Effect.Effect<unknown, SinkError>> = [
@@ -262,8 +259,8 @@ it.effect.prop(
       const input = wellFormed(generated);
       const chain = Chain.cases.spans.make({});
       const name = JSON.stringify([`cap-${sequence++}`, partName(chain, input.at)]);
-      const part = node(name, 1);
-      const expected = yield* node(name, 1).write(chain, input.at, input.rows);
+      const part = yield* node(name, 1);
+      const expected = yield* (yield* node(name, 1)).write(chain, input.at, input.rows);
       expect(yield* part.write(chain, input.at, input.rows)).toEqual(expected);
       expect(expected).toEqual({ _tag: "rolled", next: partName(chain, input.at + 1), had: [] });
       expect(yield* part.read(chain, input.at, 0)).toEqual({ spans: [], after: 0, rolled: true });
