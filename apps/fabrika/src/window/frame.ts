@@ -740,7 +740,7 @@ type Over =
  * What the one palette lists: the commands (Cmd-K), every key (C-b ?), or the projects (Cmd-O,
  * the top bar's project button). Each replaces the last in the same palette, so two never stack.
  */
-export type PaletteSource =
+type PaletteSource =
 	| {readonly _tag: "commands"}
 	| {readonly _tag: "keys"}
 	| {readonly _tag: "projects"};
@@ -750,7 +750,7 @@ export type PaletteSource =
  * (`at`); projects by id (`selected`), so a query or a late list never moves the pick to another
  * project. `rows` are the projects the app last sent, all of them; the query narrows what shows.
  */
-export interface Palette {
+interface Palette {
 	readonly kind: "palette";
 	readonly source: PaletteSource;
 	readonly query: string;
