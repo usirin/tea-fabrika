@@ -179,6 +179,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   legal next is control state. It gets one named type with its transitions in one place, never
   flags, a position in code or an order two parties assume. A plan asks of new code: what are its
   states? ([0037](./.decisions/0037-implicit-state-machines-made-explicit.md)).
+- **In `next/`, every state machine is a tea machine, and a file exports at most one.** No plain
+  union with a transition function. The machine's Model, Msg and update live in that file, with no
+  input or output code, and nothing outside it edits the Model by hand: it sends a Msg. A small
+  private helper machine may share its parent's file
+  ([0045](./.decisions/0045-one-tea-machine-per-file.md)).
 - **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
   Effect does it: `Lease.of(...)` under `import * as Lease`
   ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
@@ -493,6 +498,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
   `BrowserWindow` gets `setOpacity(0)`, `setIgnoreMouseEvents(true)` and a position in the work
   area's corner. Never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
+- A step that needs ports, sockets or its own processes runs in a container with its own network
+  (`--network none` while test code runs), never behind a hole in the laptop sandbox: no
+  `allowLocalBinding`, no unix-socket allowance, no patch of the tool. No key, login or home folder
+  goes in. Docker not running ends the step `stuck`
+  ([0045](./.decisions/0045-test-steps-run-in-containers.md)).
 
 ### Tool facts that cost us time
 
