@@ -10,7 +10,10 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
 /**
  * Seconds per file from the repo root: medians of today's test-file times in CI runs
  * 42579837468, 42573088027 and 42571265116, rounded to one decimal.
- * box, stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
+ * The 18 lane rows use PR 757 runs 42850162592, 42853075395 and 42855774180,
+ * one file at a time. The 12 refreshed rows use main runs 42803733957, 42807559589
+ * and 42801440878.
+ * stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
  * next/ medians use main runs 42717511599, 42716453289 and 42715921306, rounded to one decimal.
  * A file not measured counts 1 s.
  */
@@ -416,24 +419,24 @@ export const measured: Record<string, number> = {
   "packages/pipeline/src/stages/pipeline/hosts.test.ts": 3.0,
   "packages/pipeline/src/stages/pipeline/key.test.ts": 0.1,
   "packages/pipeline/src/stages/pipeline/lane-fixture.test.ts": 0.7,
-  [`${LANE}.asked.test.ts`]: 136.9,
-  [`${LANE}.decided.let-through.test.ts`]: 110.8,
-  [`${LANE}.decided.test.ts`]: 113.5,
-  [`${LANE}.decided.words.test.ts`]: 69.0,
-  [`${LANE}.exam-pull.person-pushes.test.ts`]: 91.0,
-  [`${LANE}.exam-pull.redo-on-main.test.ts`]: 106.3,
-  [`${LANE}.exam-pull.test.ts`]: 114.1,
-  [`${LANE}.exam-side-tree.test.ts`]: 18.3,
-  [`${LANE}.github.heads.test.ts`]: 139.6,
-  [`${LANE}.github.test.ts`]: 120.1,
-  [`${LANE}.leaves-behind.test.ts`]: 48.2,
-  [`${LANE}.might-answer.test.ts`]: 129.8,
-  [`${LANE}.rubrics.test.ts`]: 50.1,
-  [`${LANE}.test-writer.test.ts`]: 88.0,
-  [`${LANE}.typed-again.merge-and-old-saves.test.ts`]: 102.9,
-  [`${LANE}.typed-again.test.ts`]: 112.2,
-  [`${LANE}.whole.races.test.ts`]: 59.8,
-  [`${LANE}.whole.test.ts`]: 142.7,
+  [`${LANE}.asked.test.ts`]: 114.4,
+  [`${LANE}.decided.let-through.test.ts`]: 92.0,
+  [`${LANE}.decided.test.ts`]: 107.8,
+  [`${LANE}.decided.words.test.ts`]: 53.0,
+  [`${LANE}.exam-pull.person-pushes.test.ts`]: 67.3,
+  [`${LANE}.exam-pull.redo-on-main.test.ts`]: 89.5,
+  [`${LANE}.exam-pull.test.ts`]: 83.0,
+  [`${LANE}.exam-side-tree.test.ts`]: 17.5,
+  [`${LANE}.github.heads.test.ts`]: 99.4,
+  [`${LANE}.github.test.ts`]: 81.9,
+  [`${LANE}.leaves-behind.test.ts`]: 47.3,
+  [`${LANE}.might-answer.test.ts`]: 104.4,
+  [`${LANE}.rubrics.test.ts`]: 40.4,
+  [`${LANE}.test-writer.test.ts`]: 73.8,
+  [`${LANE}.typed-again.merge-and-old-saves.test.ts`]: 84.3,
+  [`${LANE}.typed-again.test.ts`]: 93.1,
+  [`${LANE}.whole.races.test.ts`]: 43.5,
+  [`${LANE}.whole.test.ts`]: 83.4,
   "packages/pipeline/src/stages/pipeline/machine.laws.test.ts": 0.7,
   "packages/pipeline/src/stages/pipeline/machine.test.ts": 0.0,
   "packages/pipeline/src/stages/pipeline/program.format.test.ts": 20.8,
