@@ -222,7 +222,11 @@ describe("P12 saved mail recovery", () => {
 });
 
 // Ticket 402: the runner's own id_reused refusal, on both paths that know a letter.
-const Reuse = Schema.Struct({ type: Schema.Literals(["inc", "boom"]), n: Schema.Int });
+const Reuse = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("inc"), n: Schema.Int }),
+  Schema.Struct({ type: Schema.Literal("boom"), n: Schema.Int }),
+]);
+
 const ReuseModel = Schema.Struct({ count: Schema.Int });
 
 const reuseProgram = {
@@ -309,25 +313,28 @@ describe("P34 id reuse at the runner", () => {
                     Layer.succeed(Alarm, { set: () => Effect.void }),
                     Layer.succeed(WatcherManager, { publish: () => Effect.void }),
                     Layer.succeed(Recording, { flush: Effect.void }),
-                    Layer.succeed(CheckedWriter, {
-                      sign: () => Effect.die("no write declared"),
-                      // The door's append: a fresh letter is saved in the inbox before it is stepped.
-                      append: (i) =>
-                        Effect.gen(function* () {
-                          const mailbox = yield* Mailbox;
-                          return yield* mailbox.send("counter:1", i.id, i.envelope.input, {
-                            by: i.envelope.by.key,
-                            for: "person-test",
-                            sentAt: i.sentAt,
-                            seen: 0,
-                            parent: i.envelope.id,
-                            traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-                            build: "test",
-                          });
-                        }),
-                      commit: () => Effect.die("no write declared"),
-                      own: () => Effect.die("no write declared"),
-                    }),
+                    Layer.effect(
+                      CheckedWriter,
+                      Effect.gen(function* () {
+                        const mailbox = yield* Mailbox;
+                        return CheckedWriter.of({
+                          sign: () => Effect.die("no write declared"),
+                          // The door's append: a fresh letter is saved in the inbox before it is stepped.
+                          append: (i) =>
+                            mailbox.send("counter:1", i.id, i.envelope.input, {
+                              by: i.envelope.by.key,
+                              for: "person-test",
+                              sentAt: i.sentAt,
+                              seen: 0,
+                              parent: i.envelope.id,
+                              traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+                              build: "test",
+                            }),
+                          commit: () => Effect.die("no write declared"),
+                          own: () => Effect.die("no write declared"),
+                        });
+                      }),
+                    ).pipe(Layer.provide(Mailbox.layer)),
                   ).pipe(Layer.provideMerge(base));
                   const manager = Layer.effectDiscard(
                     ProcessManager.use((m) =>
