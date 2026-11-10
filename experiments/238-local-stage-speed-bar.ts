@@ -1,4 +1,5 @@
 // Experiment 238: the local stage's first speed bar (P12, ticket 270, `next/`).
+// Experiment 241 added a lost-link reading, the brain digest and a `bar` mode.
 // The real stage only: `next/apps/fabrika/dev.ts`, which builds the brain, deploys it at Alchemy's
 // local stage and serves it from workerd. No Miniflare stand-in, no network, no key, no model.
 //
@@ -237,6 +238,8 @@ class Client {
 	readonly arrived: Array<{frame: Frame; at: number}> = [];
 	private serial = 0;
 	private closed = false;
+	/** When the socket closed, by `now()`: the client noticing a lost link. */
+	closedAt: number | undefined;
 	readonly ws: WebSocket;
 	readonly base: string;
 	readonly key: Key;
@@ -249,7 +252,10 @@ class Client {
 			`${base.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
 		);
 		this.ws.addEventListener("error", () => (this.closed = true));
-		this.ws.addEventListener("close", () => (this.closed = true));
+		this.ws.addEventListener("close", () => {
+			this.closed = true;
+			this.closedAt ??= now();
+		});
 		this.ws.addEventListener("message", ({data}) => {
 			const frame = data === "pong" ? "pong" : JSON.parse(String(data));
 			if (typeof frame !== "string" && frame.method === "view.patch")
@@ -419,6 +425,14 @@ const stageRun = async (label: string, n: number) => {
 			await pause(10);
 		}
 		reading.startMs = now() - t0;
+		// Experiment 241: which built bytes served this run, and the sitting's fixed facts.
+		const brainFile = join(home, "build", "brain.mjs");
+		reading.brain = existsSync(brainFile)
+			? createHash("sha256").update(readFileSync(brainFile)).digest("hex")
+			: "";
+		reading.session = process.env.EXP241_SESSION ?? "unnamed";
+		reading.settings = "dev.ts --port <free> --name x232; one person, founder and window key";
+		reading.chaos = false;
 		while (readyLine === undefined && now() - t0 < 10_000) await pause(5);
 		reading.readyLineMs = readyLine ?? null;
 
@@ -474,9 +488,13 @@ const stageRun = async (label: string, n: number) => {
 			.map((r) => r.rss / 1024);
 
 		// Replacement: SIGKILL workerd; time until the same address answers again (Alchemy's restart).
-		for (const c of clients.splice(0)) c.close();
+		// Lost link noticed (experiment 241): one wire stays open through the kill, and the time
+		// until its socket closes is how long a client takes to notice the link is gone.
+		const [watcher, ...rest] = clients.splice(0);
+		for (const c of rest) c.close();
 		t = now();
 		process.kill(old.pid, "SIGKILL");
+		const killedAt = t;
 		let served = false;
 		while (now() - t < 60_000) {
 			try {
@@ -491,6 +509,11 @@ const stageRun = async (label: string, n: number) => {
 			await pause(5);
 		}
 		if (!served) missing.replace = "address did not answer within 60 s";
+		while (watcher !== undefined && watcher.closedAt === undefined && now() - killedAt < 10_000)
+			await pause(1);
+		if (watcher?.closedAt === undefined) missing.lostLink = "no open wire closed within 10 s";
+		reading.lostLinkMs = watcher?.closedAt === undefined ? null : watcher.closedAt - killedAt;
+		watcher?.close();
 		reading.replaceMs = served ? now() - t : null;
 
 		// Reconnect: a fresh wire (open, challenge, signed hello) once the address answers again.
@@ -762,6 +785,59 @@ if (mode === "stage") {
 } else if (mode === "sink") {
 	const sink = await sinkRuns(Number(label ?? 5));
 	save({...data, sink: [...(data.sink ?? []), ...sink]});
+} else if (mode === "bar") {
+	// Experiment 241: P16's T10 bar file from a base and a head raw file, with caps set by
+	// ticket-115's rule from the base medians. A guess, sourced in experiments/241's write-up.
+	const [baseFile, headFile, out] = [label, times, process.argv[5]];
+	if (!baseFile || !headFile || !out) throw new Error("bar <base raw> <head raw> <out>");
+	const runsOf = (file: string) => (JSON.parse(readFileSync(file, "utf8")) as Raw).runs;
+	const base = runsOf(baseFile),
+		head = runsOf(headFile);
+	const sample = (r: any) => ({
+		session: r.session,
+		settings: r.settings,
+		chaos: r.chaos,
+		brain: r.brain,
+		load: r.load,
+		missing: r.missing,
+		...(r.error === undefined ? {} : {error: String(r.error)}),
+		startMs: r.startMs,
+		sendMs: r.sendMs,
+		publishMs: r.publishMs,
+		replaceMs: r.replaceMs,
+		reconnectMs: r.reconnectMs,
+		lostLinkMs: r.lostLinkMs,
+		workerdRssMb: r.workerdRssMb,
+	});
+	const mid = (v: Array<number>) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)]!;
+	const m = (f: (r: any) => number) => mid(base.map(f));
+	// Small numbers get three times the base median; fixed waits (restart, reconnect, startup) and
+	// memory get 30% over it, as ticket-115 set PR 223's caps.
+	const caps = {
+		acceptedSend: 3 * m((r) => mid(r.sendMs.slice(1))),
+		publication: 3 * m((r) => mid(r.publishMs)),
+		lostLink: 3 * m((r) => r.lostLinkMs),
+		restart: 1.3 * m((r) => r.replaceMs),
+		reconnect: 1.3 * m((r) => r.reconnectMs),
+		startup: 1.3 * m((r) => r.startMs),
+		rss: 1.3 * m((r) => r.workerdRssMb),
+	};
+	const sizes = JSON.parse(process.env.EXP241_SIZES ?? "{}");
+	writeFileSync(
+		out,
+		JSON.stringify(
+			{
+				driver: "experiments/238-local-stage-speed-bar.ts",
+				capsFrom: "experiments/241: ticket-115's rule on this sitting's 4 base runs (a guess)",
+				caps,
+				base: base.map(sample),
+				head: head.map(sample),
+				sizes,
+			},
+			null,
+			1,
+		),
+	);
 } else if (mode === "summary") {
 	writeSummary(data);
 } else throw new Error("mode: stage <label> <count> | compiler <count> | sink <count> | summary");
