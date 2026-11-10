@@ -116,7 +116,7 @@ type Options = {
     readonly export: string;
   }[];
   readonly files: readonly string[];
-  readonly ledger?: readonly { readonly file: string; readonly fn: string; readonly why: string }[];
+  readonly ledger?: readonly { readonly file: string; readonly fn: string; readonly reason: string }[];
   readonly chaos: boolean;
 };
 
@@ -481,7 +481,7 @@ describe("P16 assets and Compiler", () => {
                     ? `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`
                     : `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`;
             const path = "programs/compiler/window.tsx",
-              ledger = kind === "stale" ? [{ file: path, fn: name, why: "planted stale row" }] : [];
+              ledger = kind === "stale" ? [{ file: path, fn: name, reason: "planted stale row" }] : [];
             expect(check(new Map([[path, source]]), ledger).length).toBeGreaterThan(0);
             writeFileSync(f.file, source);
             const result = await Effect.runPromise(
@@ -513,7 +513,7 @@ describe("P16 assets and Compiler", () => {
         }
 
         expect(
-          check(new Map([["next/view.tsx", clean]]), [{ file: "next/view.tsx", fn: name, why: "plant" }]).length,
+          check(new Map([["next/view.tsx", clean]]), [{ file: "next/view.tsx", fn: name, reason: "plant" }]).length,
         ).toBeGreaterThan(0);
       }),
       { ...runs, numRuns: 12 },

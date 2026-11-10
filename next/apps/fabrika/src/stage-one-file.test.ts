@@ -433,7 +433,7 @@ describe("P16 stack and sealed loader", () => {
           const refused = await Effect.runPromise(Effect.result(loader.load(`missing-${missing}`, process)));
           expect(refused).toMatchObject({
             _tag: "Failure",
-            failure: { _tag: "ProgramDown", why: "no_program" },
+            failure: { _tag: "ProgramDown", reason: "no_program" },
           });
           expect(calls).toHaveLength(1);
           const config = calls[0]!.config;

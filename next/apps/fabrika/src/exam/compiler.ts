@@ -31,7 +31,7 @@ const lint = Effect.gen(function* () {
   const findings = check(files, ledger);
 
   for (const f of findings) {
-    yield* Console.error(`${f.file}:${f.line} ${f.fn}: ${f.why}`);
+    yield* Console.error(`${f.file}:${f.line} ${f.fn}: ${f.reason}`);
   }
 
   yield* Console.log(`lint:compiler: ${files.size} files, ${findings.length} findings, ${ledger.length} ledger rows`);
