@@ -395,6 +395,24 @@
   },
   "overrides": [
     {
+      // T502: object names must not load their implementations. Type imports erase at build time.
+      "files": ["next/packages/libfabrika/src/workers/objects.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**", "!alchemy", "!alchemy/**", "!@alchemy.run", "!@alchemy.run/**"],
+                "allowTypeImports": true,
+                "message": "Object contracts import only Alchemy values and erased types."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // Test files only: an `expect` that sits only inside an `if` may never run.
       // `!` is allowed here: a test that hits a missing value fails on its own.
       "files": ["**/*.test.ts"],

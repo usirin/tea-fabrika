@@ -12,7 +12,13 @@ import { scanner } from "./twin.ts";
 const scan = await Effect.runPromise(scanner.pipe(Effect.provide(NodeServices.layer)));
 
 const stack = resolve(import.meta.dirname, "../../alchemy.run.ts");
-const text = () => readFileSync(stack, "utf8");
+const actual = () => readFileSync(stack, "utf8");
+
+// Unrelated plants start with valid class-name bindings, including before the T502 build.
+const text = () =>
+  actual().replace(/(\w+): Cloudflare\.DurableObject\("(\w+)"\),/g, (line, key, hosted) =>
+    key === hosted ? line : `${line}\n${hosted}: Cloudflare.DurableObject("${hosted}"),`,
+  );
 
 const generated = fc.record({
   alias: fc
@@ -196,7 +202,29 @@ describe("P12 local twin lint", () => {
     expect(scan(stack, body).some((f) => f.reason.startsWith("unsupported-case:"))).toBe(true);
   });
   law("the actual stack has no findings, with no second resource list", ({ name }) => {
-    expect(scan(stack, `${text()}\nconst checkedName = ${JSON.stringify(name)};`)).toEqual([]);
+    expect(scan(stack, `${actual()}\nconst checkedName = ${JSON.stringify(name)};`)).toEqual([]);
+  });
+  // T502: the installed scanner is extended, not a second parser. Cases: aliases, quoted keys,
+  // wrong target, omitted key, and a matching key in another Worker. Plant: remove RecordPart:.
+  law("every hosted object has its own class-name binding in the same Worker", ({ alias }) => {
+    const source = (bindings: string, other = "") =>
+      `import * as ${alias} from "@alchemy.run/cloudflare";
+       ${alias}.Workers.Worker("Brain", {main:"brain.mjs", env:{${bindings}}}); ${other}`;
+    const binding = `${alias}.DurableObject("RecordPart")`;
+
+    for (const key of ["RecordPart", '"RecordPart"']) {
+      expect(scan("binding.ts", source(`RECORD:${binding}, ${key}:${binding}`))).toEqual([]);
+    }
+
+    for (const [bindings, other] of [
+      [`RECORD:${binding}`, ""],
+      [`RECORD:${binding}, RecordPart:${alias}.DurableObject("Other")`, ""],
+      [`RECORD:${binding}`, `${alias}.Workers.Worker("Other", {main:"other.mjs", env:{RecordPart:${binding}}});`],
+    ]) {
+      expect(scan("binding.ts", source(bindings!, other)).some((f) => f.reason.includes("class-name binding"))).toBe(
+        true,
+      );
+    }
   });
   law("plant: a remote-only resource and remote override both fail", ({ alias, name }) => {
     const body = [

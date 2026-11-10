@@ -397,6 +397,54 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       checkRoot(node.callee);
 
+      if (["Worker", "Workers.Worker"].includes(parts.join("."))) {
+        const props = unwrap(node.arguments[1]);
+        const key = (p: Tree) => (p?.computed ? null : (p?.key?.name ?? p?.key?.value));
+        const env = props?.properties?.find((p: Tree) => key(p) === "env");
+
+        if (env !== undefined) {
+          const bindings = unwrap(env.value);
+
+          if (bindings?.type !== "ObjectExpression") {
+            report(env, "unsupported-case: class-name bindings are not a literal object");
+          } else {
+            const objects = new Map<string, string>();
+
+            for (const binding of bindings.properties) {
+              if (binding.type !== "Property" || key(binding) === null) {
+                report(binding, "unsupported-case: indirect class-name binding");
+                continue;
+              }
+
+              const value = unwrap(binding.value);
+              const called = member(value?.callee)?.split(".") ?? [];
+              const first = called[0];
+              const imported = first === undefined ? undefined : named.get(first);
+              const target = first && cloud.has(first) ? called.slice(1).join(".") : imported;
+
+              if (
+                value?.type === "CallExpression" &&
+                ["DurableObject", "Workers.DurableObject"].includes(target ?? "")
+              ) {
+                const name = value.arguments[0];
+
+                if (name?.type !== "Literal" || typeof name.value !== "string") {
+                  report(binding, "unsupported-case: dynamic class-name binding");
+                } else {
+                  objects.set(String(key(binding)), name.value);
+                }
+              }
+            }
+
+            for (const hosted of new Set(objects.values())) {
+              if (objects.get(hosted) !== hosted) {
+                report(env, `unsupported-case: missing class-name binding ${hosted}`);
+              }
+            }
+          }
+        }
+      }
+
       if (["providers", "localState"].includes(parts.join("."))) {
         return;
       }
