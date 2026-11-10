@@ -314,6 +314,7 @@ export class Control extends WorkerEntrypoint<Env, { token: string }> {
   }
 }
 
+// oxlint-disable-next-line import/no-default-export -- edge: Cloudflare loads a Worker from its default export
 export default {
   fetch(request: Request, env: Env) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Worker fetch returns a Promise
