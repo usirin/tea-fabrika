@@ -233,10 +233,9 @@ const world = async (
 	}
 };
 
-// Test-only objects expose storage inspection and platform abort on the private control socket.
-// Each exported object builds the product object the stack hosts from the handles workerd gives
-// its constructor, and puts the test methods in front of the product's own. The Gateway, runner,
-// Project and transport behavior stays in the product object. No HTTP route or extra target is installed in a product build.
+// Test-only subclasses expose storage inspection and platform abort on the private control
+// socket. The production Gateway, runner, Project and transport behavior stays in the base.
+// No HTTP route or extra target is installed in a product build.
 const instrumentBrain = async (brain: string, home: string) => {
 	const entry = join(home, "exam-entry.mjs");
 	writeFileSync(
@@ -245,51 +244,28 @@ const instrumentBrain = async (brain: string, home: string) => {
 import * as Brain from ${JSON.stringify(brain)};
 export default Brain.default;
 export const RecordPart = Brain.RecordPart;
-// The product object keeps its own native instance, which workerd needs for RPC. Only the
-// prototype under it changes: the test methods sit first, the product's methods follow.
-const around = (Product, ctx, env, extra) => {
-  const product = new Product(ctx, env);
-  Object.setPrototypeOf(product, Object.assign(Object.create(Product.prototype), extra(product, Product.prototype)));
-  return product;
-};
-export class Gateway {
-  constructor(ctx, env) {
-    const incarnation = crypto.randomUUID();
-    return around(Brain.Gateway, ctx, env, () => ({
-      testState: () => ({incarnation, sockets: ctx.getWebSockets().map(ws=>({attachment:ws.deserializeAttachment(),tags:ctx.getTags(ws)}))}),
-      testAbort: () => ctx.abort("exam abort"),
-    }));
-  }
+export class Gateway extends Brain.Gateway {
+  incarnation = crypto.randomUUID();
+  testState() { return {incarnation:this.incarnation, sockets:this.ctx.getWebSockets().map(ws=>({attachment:ws.deserializeAttachment(),tags:this.ctx.getTags(ws)}))}; }
+  testAbort() { this.ctx.abort("exam abort"); }
 }
-export class Process {
-  constructor(ctx, env) {
-    return around(Brain.Process, ctx, env, (product, base) => ({
-      testHold: async () => { await ctx.storage.put("exam.hold",true); await ctx.storage.put("exam.entered",false); },
-      testEntered: () => ctx.storage.get("exam.entered"),
-      testRelease: () => ctx.storage.put("exam.hold",false),
-      msg: async (input) => { if (await ctx.storage.get("exam.hold")) {await ctx.storage.put("exam.entered",true); await new Promise(()=>{});} return base.msg.call(product, input); },
-    }));
-  }
+export class Process extends Brain.Process {
+  async testHold() { await this.ctx.storage.put("exam.hold",true); await this.ctx.storage.put("exam.entered",false); }
+  testEntered() { return this.ctx.storage.get("exam.entered"); }
+  testRelease() { return this.ctx.storage.put("exam.hold",false); }
+  async msg(input) { if (await this.ctx.storage.get("exam.hold")) {await this.ctx.storage.put("exam.entered",true); await new Promise(()=>{});} return super.msg(input); }
 }
-export class Project {
-  constructor(ctx, env) {
-    return around(Brain.Project, ctx, env, () => ({
-      testGateway: (name,method,args) => env.GATEWAY.getByName(name)[method](...args),
-      testWaits: (reader,stream) => Array.from(ctx.storage.sql.exec('SELECT "to",stream,after FROM rings WHERE "to"=? AND stream=?',reader,stream)),
-    }));
-  }
+export class Project extends Brain.Project {
+  testGateway(name,method,args) { return this.env.GATEWAY.getByName(name)[method](...args); }
+  testWaits(reader,stream) { return Array.from(this.ctx.storage.sql.exec('SELECT "to",stream,after FROM rings WHERE "to"=? AND stream=?',reader,stream)); }
 }
-export class Control {
-  constructor(ctx, env) {
-    return around(Brain.Control, ctx, env, (product, base) => ({
-      fetch: async (request) => {
-        if (request.headers.get("authorization") !== "Bearer "+ctx.props.token) return base.fetch.call(product, request);
-        const q = await request.clone().json();
-        if (!q.method.startsWith("test")) return base.fetch.call(product, request);
-        const stub = q.target === "project" ? env.PROJECT.getByName(q.project) : env.PROCESS.getByName(JSON.stringify([q.project,q.name]));
-        try {return Response.json({value: await stub[q.method](...q.args) ?? null});} catch {return Response.json({error:{reason:"unreachable"}});}
-      },
-    }));
+export class Control extends Brain.Control {
+  async fetch(request) {
+    if (request.headers.get("authorization") !== "Bearer "+this.ctx.props.token) return super.fetch(request);
+    const q = await request.clone().json();
+    if (!q.method.startsWith("test")) return super.fetch(request);
+    const stub = q.target === "project" ? this.env.PROJECT.getByName(q.project) : this.env.PROCESS.getByName(JSON.stringify([q.project,q.name]));
+    try {return Response.json({value: await stub[q.method](...q.args) ?? null});} catch {return Response.json({error:{reason:"unreachable"}});}
   }
 }`,
 	);
