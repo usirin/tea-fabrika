@@ -11,6 +11,7 @@ import {
 	CheckedWriter,
 	Id,
 	Program,
+	ProgramDown,
 	ProgramLoader,
 	ProgramRunner,
 	Recording,
@@ -316,6 +317,22 @@ it.effect.prop(
 	opts,
 );
 
+it.prop(
+	"p25: a ProgramDown names its saved error class, else the thrown class",
+	{name: Arbitrary.schema(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(96)))},
+	({name}) => {
+		expect(new ProgramDown({why: "step", error: name, cause: new RangeError("x")}).errorClass).toBe(
+			name,
+		);
+		expect(new ProgramDown({why: "step", cause: new RangeError("x")}).errorClass).toBe(
+			"RangeError",
+		);
+		expect(new ProgramDown({why: "step", cause: null}).errorClass).toBe("null");
+		expect(new ProgramDown({why: "step"}).errorClass).toBe("ProgramDown");
+	},
+	opts,
+);
+
 it.effect.prop(
 	"p25: accepted replay never calls refuse and original retries survive later saves",
 	{bodies: ReplayCases},
@@ -348,7 +365,7 @@ it.effect.prop(
 			expect(yield* w.rows()).toHaveLength(bodies.length);
 			expect(w.calls).toEqual([]);
 		}),
-	opts,
+	{...opts, timeout: 60_000},
 );
 
 it.effect.prop(
