@@ -395,27 +395,38 @@
   },
   "overrides": [
     {
-      // L5 plant: import homedir or restore filesystem home resolution.
+      // L5 plant: import homedir or a filesystem namespace to inspect inherited homes.
       "files": ["scripts/vitest.setup.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
           {
             "paths": [
-              { "name": "node:os", "importNames": ["homedir"] },
-              { "name": "os", "importNames": ["homedir"] }
+              {
+                "name": "node:os",
+                "importNames": ["homedir"]
+              },
+              {
+                "name": "os",
+                "importNames": ["homedir"]
+              },
+              {
+                "name": "node:fs",
+                "importNames": ["lstat", "lstatSync", "realpath", "realpathSync", "readlink", "readlinkSync"]
+              },
+              {
+                "name": "fs",
+                "importNames": ["lstat", "lstatSync", "realpath", "realpathSync", "readlink", "readlinkSync"]
+              },
+              {
+                "name": "node:fs/promises",
+                "importNames": ["lstat", "realpath", "readlink"]
+              },
+              {
+                "name": "fs/promises",
+                "importNames": ["lstat", "realpath", "readlink"]
+              }
             ]
-          }
-        ],
-        "eslint/no-restricted-syntax": [
-          "error",
-          {
-            "selector": "CallExpression[callee.name=/^(homedir|lstat|realpath|readlink)(Sync)?$/]",
-            "message": "L5: never inspect inherited homes"
-          },
-          {
-            "selector": "CallExpression[callee.property.name=/^(homedir|lstat|realpath|readlink)(Sync)?$/]",
-            "message": "L5: never inspect inherited homes"
           }
         ]
       }

@@ -64,6 +64,7 @@ const probe = (cwd: string, args: string[], env: Record<string, string | undefin
 const freshHomes = (stdout: string, temp: string, inherited: string[]) => {
   const got = JSON.parse(stdout);
   expect(got.home).not.toBe(got.personHome);
+
   for (const path of [got.home, got.personHome]) {
     expect(typeof path).toBe("string");
     const child = relative(temp, path);
@@ -72,6 +73,7 @@ const freshHomes = (stdout: string, temp: string, inherited: string[]) => {
     expect(inherited).not.toContain(path);
     expect(readdirSync(path)).toEqual([]);
   }
+
   expect(Buffer.byteLength(join(got.home, "host", "sock"))).toBeLessThan(103);
 };
 
@@ -666,7 +668,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
           expect(accepted.status, accepted.stderr).toBe(0);
           freshHomes(accepted.stdout, dir, [home, safe]);
 
-          for (const path of [real, alias, join(real, "..", ".fabrika")]) {
+          for (const path of [real, alias, `${real}/../.fabrika`]) {
             const refused = probe(root, ["run", "scripts/caps.test.ts"], {
               ...env,
               FABRIKA_HOME: path,
@@ -693,6 +695,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
         }),
         ({ home, app, length }) => {
           const dir = mkdtempSync(join(tmpdir(), "law-"));
+
           try {
             const dirty = join(dir, ".fabrika");
             mkdirSync(dirty);
@@ -702,7 +705,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
             const paths = {
               dirty,
               alias: join(dir, "alias"),
-              dot: dir + "/real/../.fabrika",
+              dot: `${dir}/real/../.fabrika`,
               outside: join(dir, "outside"),
             };
             const temp = join(dir, "t".repeat(length));
@@ -734,6 +737,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
     const home = join(dir, "person");
     mkdirSync(join(home, ".fabrika"), { recursive: true });
     chmodSync(home, 0);
+
     try {
       const ran = probe(root, ["run", "scripts/caps.test.ts"], {
         TEST_SETUP: "1",

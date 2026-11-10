@@ -11,13 +11,16 @@ it("scenario: L4 worker sees an isolated home and no XDG folders", () => {
     const child = relative(tmpdir(), homedir());
     expect(child.length).toBeGreaterThan(0);
     expect(child.startsWith("..") || isAbsolute(child)).toBe(false);
+
     for (const key of ["XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"]) {
       expect(process.env[key]).toBeUndefined();
     }
+
     expect(process.env.VOLTA_HOME).toBe(process.env.TEST_VOLTA_HOME);
     expect(process.env.PNPM_HOME).toBe(process.env.TEST_PNPM_HOME);
     return;
   }
+
   const ran = spawnSync(
     "nice",
     [
