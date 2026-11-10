@@ -1,33 +1,33 @@
-import {chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
-import {tmpdir} from "node:os";
-import {join} from "node:path";
-import {run} from "@demlik/tea/effect";
-import {Effect, Layer, Stream} from "effect";
-import {afterEach, describe, expect, expectTypeOf, it} from "vitest";
-import type {readChange, reviewKindsOf} from "./code-host-github.ts";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { run } from "@demlik/tea/effect";
+import { Effect, Layer, Stream } from "effect";
+import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
+import type { readChange, reviewKindsOf } from "./code-host-github.ts";
 import {
-	type Accounts,
-	type Declared,
-	codeHostOn,
-	type Gh,
-	gitHubCodeTree,
-	kindsNeeded,
-	prOf,
-	readPrFacts,
-	readPullRequests,
-	rulesOfBoth,
-	textKindOf,
-	ticketIn,
-	ticketOf,
-	verdictsAt,
+  type Accounts,
+  type Declared,
+  codeHostOn,
+  type Gh,
+  gitHubCodeTree,
+  kindsNeeded,
+  prOf,
+  readPrFacts,
+  readPullRequests,
+  rulesOfBoth,
+  textKindOf,
+  ticketIn,
+  ticketOf,
+  verdictsAt,
 } from "./code-host-github.ts";
-import {type CriteriaRecord, memoryRecord} from "./criteria/record.ts";
-import {CodeHost, CodeTree} from "./services.ts";
-import type {PrFacts, ReviewKind} from "./stages/ship/facts.ts";
-import {shipReadInterpret} from "./stages/ship/handlers.ts";
-import {look} from "./stages/ship/look.ts";
-import {readShipFacts, type ShipMsg, ship} from "./stages/ship/machine.ts";
-import {recordOf} from "./stages/ship/scripted.ts";
+import { type CriteriaRecord, memoryRecord } from "./criteria/record.ts";
+import { CodeHost, CodeTree } from "./services.ts";
+import type { PrFacts, ReviewKind } from "./stages/ship/facts.ts";
+import { shipReadInterpret } from "./stages/ship/handlers.ts";
+import { look } from "./stages/ship/look.ts";
+import { readShipFacts, type ShipMsg, ship } from "./stages/ship/machine.ts";
+import { recordOf } from "./stages/ship/scripted.ts";
 
 // `CodeHost` on GitHub, against recorded answers of `gh api graphql`. The
 // files under `fixtures/code-host/` were made from real public pull requests
@@ -45,23 +45,23 @@ import {recordOf} from "./stages/ship/scripted.ts";
 const PR = "https://github.com/example/repo/pull/7";
 /** The repo's two owners. Both open pull requests, and both post review verdicts. */
 const OWNERS = ["repo-owner", "second-owner"];
-const WHO: Accounts = {own: OWNERS, reviewers: OWNERS};
+const WHO: Accounts = { own: OWNERS, reviewers: OWNERS };
 
 const recorded = (name: string): string =>
-	readFileSync(new URL(`../../../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
+  readFileSync(new URL(`../../../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
 
 type Answers = {
-	readonly pr: string | "breaks";
-	readonly team?: string | "breaks";
-	readonly base?: string;
-	/** What the compare of the base branch with the head answers, as `--jq` leaves it. Left out: `MAIN`. */
-	readonly main?: string | "breaks";
+  readonly pr: string | "breaks";
+  readonly team?: string | "breaks";
+  readonly base?: string;
+  /** What the compare of the base branch with the head answers, as `--jq` leaves it. Left out: `MAIN`. */
+  readonly main?: string | "breaks";
 };
 
 /** Main where the head left it, and still there. */
 const MAIN = {
-	tested: "4ab1d3f0c2e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9",
-	tip: "4ab1d3f0c2e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9",
+  tested: "4ab1d3f0c2e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9",
+  tip: "4ab1d3f0c2e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9",
 };
 
 /**
@@ -70,69 +70,68 @@ const MAIN = {
  * own head), the pull request, a team's members, and where main is.
  */
 function fakeGh(answers: Answers) {
-	const calls: (readonly string[])[] = [];
-	const gh: Gh = (args) => {
-		calls.push(args);
+  const calls: (readonly string[])[] = [];
+  const gh: Gh = (args) => {
+    calls.push(args);
 
-		if (args[1]?.includes("/compare/")) {
-			const main = answers.main ?? JSON.stringify(MAIN);
-			return main === "breaks" ? Effect.fail({_tag: "unknown" as const}) : Effect.succeed(main);
-		}
+    if (args[1]?.includes("/compare/")) {
+      const main = answers.main ?? JSON.stringify(MAIN);
+      return main === "breaks" ? Effect.fail({ _tag: "unknown" as const }) : Effect.succeed(main);
+    }
 
-		const has = (field: string) => args.some((arg) => arg.startsWith(`${field}=`));
-		const answer = has("team") ? (answers.team ?? recorded("team")) : answers.pr;
+    const has = (field: string) => args.some((arg) => arg.startsWith(`${field}=`));
+    const answer = has("team") ? (answers.team ?? recorded("team")) : answers.pr;
 
-		if (answer === "breaks") {
-			return Effect.fail({_tag: "unknown" as const});
-		}
+    if (answer === "breaks") {
+      return Effect.fail({ _tag: "unknown" as const });
+    }
 
-		if (has("team") || has("codeowners")) {
-			return Effect.succeed(answer);
-		}
+    if (has("team") || has("codeowners")) {
+      return Effect.succeed(answer);
+    }
 
-		// The first call. An answer that is not the recorded shape is handed on as it is, to fail where it would.
-		return Effect.try({
-			try: (): unknown => JSON.parse(answer).data.repository.pullRequest.headRefOid,
-			catch: () => answer,
-		}).pipe(
-			Effect.match({
-				onFailure: (asItIs) => asItIs,
-				onSuccess: (head) =>
-					JSON.stringify({
-						data: {
-							repository: {pullRequest: {headRefOid: head, baseRefName: answers.base ?? "main"}},
-						},
-					}),
-			}),
-		);
-	};
-	return {gh, calls};
+    // The first call. An answer that is not the recorded shape is handed on as it is, to fail where it would.
+    return Effect.try({
+      try: (): unknown => JSON.parse(answer).data.repository.pullRequest.headRefOid,
+      catch: () => answer,
+    }).pipe(
+      Effect.match({
+        onFailure: (asItIs) => asItIs,
+        onSuccess: (head) =>
+          JSON.stringify({
+            data: {
+              repository: { pullRequest: { headRefOid: head, baseRefName: answers.base ?? "main" } },
+            },
+          }),
+      }),
+    );
+  };
+  return { gh, calls };
 }
 
 const factsOn = (pr: string, who = WHO, team?: string | "breaks") =>
-	Effect.runPromise(readPrFacts(fakeGh(team === undefined ? {pr} : {pr, team}).gh, who)(PR));
+  Effect.runPromise(readPrFacts(fakeGh(team === undefined ? { pr } : { pr, team }).gh, who)(PR));
 
-const failureOn = (pr: string | "breaks") =>
-	Effect.runPromise(Effect.flip(readPrFacts(fakeGh({pr}).gh, WHO)(PR)));
+const failureOn = (pr: string | "breaks") => Effect.runPromise(Effect.flip(readPrFacts(fakeGh({ pr }).gh, WHO)(PR)));
 
 /**
  * A `CodeHost` that only reads facts: its two waits never say anything. With
  * it, a criteria record: by default one that holds no ticket.
  */
 const hostOf = (
-	prFacts: (pr: string) => Effect.Effect<PrFacts, {readonly _tag: "unknown"}>,
-	record: Layer.Layer<CriteriaRecord> = memoryRecord().layer,
+  prFacts: (pr: string) => Effect.Effect<PrFacts, { readonly _tag: "unknown" }>,
+  record: Layer.Layer<CriteriaRecord> = memoryRecord().layer,
 ) =>
-	Layer.mergeAll(
-		Layer.succeed(CodeHost, {
-			pullRequests: () => Effect.succeed([]),
-			prFacts,
-			change: () => Effect.fail({_tag: "unknown" as const}),
-			checksSettled: () => Stream.never,
-			leftQueue: () => Stream.never,
-		}),
-		record,
-	);
+  Layer.mergeAll(
+    Layer.succeed(CodeHost, {
+      pullRequests: () => Effect.succeed([]),
+      prFacts,
+      change: () => Effect.fail({ _tag: "unknown" as const }),
+      checksSettled: () => Stream.never,
+      leftQueue: () => Stream.never,
+    }),
+    record,
+  );
 
 /**
  * The whole way: the service on a recorded answer, the real handler, the real
@@ -141,1152 +140,1075 @@ const hostOf = (
  * (`unknown`).
  */
 const lookOn = (pr: string | "breaks", record: "proven" | "unproven" | "unknown" = "proven") => {
-	const read = readPrFacts(fakeGh({pr}).gh, WHO);
-	const recordFor = (facts: PrFacts) =>
-		facts.ticket === "none" || record === "unknown"
-			? memoryRecord().layer
-			: record === "proven"
-				? recordOf(facts.ticket.id, facts.head).layer
-				: recordOf(facts.ticket.id).layer;
-	return Effect.runPromise(
-		read(PR).pipe(
-			Effect.match({onFailure: () => memoryRecord().layer, onSuccess: recordFor}),
-			Effect.flatMap((held) => look(PR).pipe(Effect.provide(hostOf(read, held)))),
-		),
-	);
+  const read = readPrFacts(fakeGh({ pr }).gh, WHO);
+  const recordFor = (facts: PrFacts) =>
+    facts.ticket === "none" || record === "unknown"
+      ? memoryRecord().layer
+      : record === "proven"
+        ? recordOf(facts.ticket.id, facts.head).layer
+        : recordOf(facts.ticket.id).layer;
+  return Effect.runPromise(
+    read(PR).pipe(
+      Effect.match({ onFailure: () => memoryRecord().layer, onSuccess: recordFor }),
+      Effect.flatMap((held) => look(PR).pipe(Effect.provide(hostOf(read, held)))),
+    ),
+  );
 };
 
 /** A recorded answer with something changed: `repo` holds the three files, `pr` the pull request. */
-function changed(
-	name: string,
-	change: (pr: Record<string, any>, repo: Record<string, any>) => void,
-): string {
-	const answer = JSON.parse(recorded(name));
-	change(answer.data.repository.pullRequest, answer.data.repository);
-	return JSON.stringify(answer);
+function changed(name: string, change: (pr: Record<string, any>, repo: Record<string, any>) => void): string {
+  const answer = JSON.parse(recorded(name));
+  change(answer.data.repository.pullRequest, answer.data.repository);
+  return JSON.stringify(answer);
 }
 
 function changedTeam(change: (members: Record<string, any>) => void): string {
-	const answer = JSON.parse(recorded("team"));
-	change(answer.data.organization.team.members);
-	return JSON.stringify(answer);
+  const answer = JSON.parse(recorded("team"));
+  change(answer.data.organization.team.members);
+  return JSON.stringify(answer);
 }
 
 const kinds = (list: Readonly<Record<string, ReviewKind["verdict"]>>) =>
-	Object.entries(list).map(([kind, verdict]) => ({kind, verdict}));
+  Object.entries(list).map(([kind, verdict]) => ({ kind, verdict }));
 
 describe("the facts of a recorded pull request", () => {
-	it.each<[string, Omit<PrFacts, "reviews" | "main"> & {reviews: unknown}]>([
-		[
-			"merged",
-			{
-				head: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
-				state: "merged",
-				ours: true,
-				ticket: {id: "example/repo#559", link: "closes_it"},
-				approval: "not_needed",
-				reviews: kinds({"review-doc": "passed"}),
-				checks: "green",
-				mergeable: "unknown",
-				comments: [],
-			},
-		],
-		[
-			// It changed a workflow file, and the other owner approved its head.
-			"merged-approved",
-			{
-				head: "7779cf9be905f5c1b0c51a991f3a1a199e78b96e",
-				state: "merged",
-				ours: true,
-				ticket: {id: "example/repo#623", link: "closes_it"},
-				approval: "given",
-				reviews: kinds({"review-code": "passed", governance: "passed"}),
-				checks: "green",
-				mergeable: "unknown",
-				comments: [],
-			},
-		],
-		[
-			// Two kinds of review needed, both passed, no protected file.
-			"open-clean",
-			{
-				head: "9eb6b52c75d64b555547780717bd43a2460bb658",
-				state: "open",
-				ours: true,
-				ticket: {id: "example/repo#590", link: "closes_it"},
-				approval: "not_needed",
-				reviews: kinds({"review-code": "passed", "review-doc": "passed"}),
-				checks: "green",
-				mergeable: "clean",
-				comments: [],
-			},
-		],
-		[
-			// Every review passed. It changed a workflow file and no owner has approved.
-			"open-awaiting-approval",
-			{
-				head: "7c80607bd0e3131830e7e6afab7844125185e2f6",
-				state: "open",
-				ours: true,
-				ticket: {id: "example/repo#10406", link: "closes_it"},
-				approval: "missing",
-				reviews: kinds({"review-code": "passed", "review-doc": "passed", governance: "passed"}),
-				checks: "green",
-				mergeable: "clean",
-				comments: [],
-			},
-		],
-		[
-			// Code and doc passed. It changed a rendered page, and the rendered review never ran.
-			"open-review-never-ran",
-			{
-				head: "b496d5ebe7c743ab98b757de97c39b9a6b5918cf",
-				state: "open",
-				ours: true,
-				ticket: {id: "example/repo#9412", link: "closes_it"},
-				approval: "not_needed",
-				reviews: kinds({
-					"review-code": "passed",
-					"review-doc": "passed",
-					"review-ui": "missing",
-				}),
-				checks: "green",
-				mergeable: "clean",
-				comments: [],
-			},
-		],
-		[
-			"open-failing-check",
-			{
-				head: "adb3f8c461aa4bc426f75babac55a2f086b98ea8",
-				state: "open",
-				ours: false,
-				ticket: "none",
-				approval: "missing",
-				reviews: kinds({"review-code": "failed", "review-doc": "failed", governance: "failed"}),
-				checks: "red",
-				mergeable: "conflicts",
-				comments: [],
-			},
-		],
-		[
-			"open-person-comment",
-			{
-				head: "9eb6b52c75d64b555547780717bd43a2460bb658",
-				state: "open",
-				ours: true,
-				ticket: {id: "example/repo#590", link: "closes_it"},
-				approval: "not_needed",
-				reviews: kinds({"review-code": "passed", "review-doc": "passed"}),
-				checks: "green",
-				mergeable: "clean",
-				comments: [{id: "PRRT_kwDOSZAM-86kfkii", by: "person"}],
-			},
-		],
-		[
-			// Its reviews passed on an earlier commit. None binds to this head.
-			"closed",
-			{
-				head: "3d93d35ce997fb9577b64e1a1ea17a1ef0c7da07",
-				state: "closed",
-				ours: true,
-				ticket: {id: "example/repo#10023", link: "part_of_it"},
-				approval: "missing",
-				reviews: kinds({
-					"review-code": "missing",
-					"review-doc": "missing",
-					governance: "missing",
-				}),
-				checks: "red",
-				mergeable: "unknown",
-				comments: [],
-			},
-		],
-		[
-			"draft",
-			{
-				head: "54be530c5780736291d670523162274e723ec8b6",
-				state: "draft",
-				ours: true,
-				ticket: {id: "example/repo#10364", link: "closes_it"},
-				approval: "not_needed",
-				reviews: kinds({
-					"review-code": "passed",
-					"review-skill": "passed",
-					governance: "passed",
-				}),
-				checks: "green",
-				mergeable: "conflicts",
-				comments: [],
-			},
-		],
-	])("%s", async (name, facts) => {
-		expect(await factsOn(recorded(name))).toEqual({...facts, main: MAIN});
-	});
+  it.each<[string, Omit<PrFacts, "reviews" | "main"> & { reviews: unknown }]>([
+    [
+      "merged",
+      {
+        head: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
+        state: "merged",
+        ours: true,
+        ticket: { id: "example/repo#559", link: "closes_it" },
+        approval: "not_needed",
+        reviews: kinds({ "review-doc": "passed" }),
+        checks: "green",
+        mergeable: "unknown",
+        comments: [],
+      },
+    ],
+    [
+      // It changed a workflow file, and the other owner approved its head.
+      "merged-approved",
+      {
+        head: "7779cf9be905f5c1b0c51a991f3a1a199e78b96e",
+        state: "merged",
+        ours: true,
+        ticket: { id: "example/repo#623", link: "closes_it" },
+        approval: "given",
+        reviews: kinds({ "review-code": "passed", governance: "passed" }),
+        checks: "green",
+        mergeable: "unknown",
+        comments: [],
+      },
+    ],
+    [
+      // Two kinds of review needed, both passed, no protected file.
+      "open-clean",
+      {
+        head: "9eb6b52c75d64b555547780717bd43a2460bb658",
+        state: "open",
+        ours: true,
+        ticket: { id: "example/repo#590", link: "closes_it" },
+        approval: "not_needed",
+        reviews: kinds({ "review-code": "passed", "review-doc": "passed" }),
+        checks: "green",
+        mergeable: "clean",
+        comments: [],
+      },
+    ],
+    [
+      // Every review passed. It changed a workflow file and no owner has approved.
+      "open-awaiting-approval",
+      {
+        head: "7c80607bd0e3131830e7e6afab7844125185e2f6",
+        state: "open",
+        ours: true,
+        ticket: { id: "example/repo#10406", link: "closes_it" },
+        approval: "missing",
+        reviews: kinds({ "review-code": "passed", "review-doc": "passed", governance: "passed" }),
+        checks: "green",
+        mergeable: "clean",
+        comments: [],
+      },
+    ],
+    [
+      // Code and doc passed. It changed a rendered page, and the rendered review never ran.
+      "open-review-never-ran",
+      {
+        head: "b496d5ebe7c743ab98b757de97c39b9a6b5918cf",
+        state: "open",
+        ours: true,
+        ticket: { id: "example/repo#9412", link: "closes_it" },
+        approval: "not_needed",
+        reviews: kinds({
+          "review-code": "passed",
+          "review-doc": "passed",
+          "review-ui": "missing",
+        }),
+        checks: "green",
+        mergeable: "clean",
+        comments: [],
+      },
+    ],
+    [
+      "open-failing-check",
+      {
+        head: "adb3f8c461aa4bc426f75babac55a2f086b98ea8",
+        state: "open",
+        ours: false,
+        ticket: "none",
+        approval: "missing",
+        reviews: kinds({ "review-code": "failed", "review-doc": "failed", governance: "failed" }),
+        checks: "red",
+        mergeable: "conflicts",
+        comments: [],
+      },
+    ],
+    [
+      "open-person-comment",
+      {
+        head: "9eb6b52c75d64b555547780717bd43a2460bb658",
+        state: "open",
+        ours: true,
+        ticket: { id: "example/repo#590", link: "closes_it" },
+        approval: "not_needed",
+        reviews: kinds({ "review-code": "passed", "review-doc": "passed" }),
+        checks: "green",
+        mergeable: "clean",
+        comments: [{ id: "PRRT_kwDOSZAM-86kfkii", by: "person" }],
+      },
+    ],
+    [
+      // Its reviews passed on an earlier commit. None binds to this head.
+      "closed",
+      {
+        head: "3d93d35ce997fb9577b64e1a1ea17a1ef0c7da07",
+        state: "closed",
+        ours: true,
+        ticket: { id: "example/repo#10023", link: "part_of_it" },
+        approval: "missing",
+        reviews: kinds({
+          "review-code": "missing",
+          "review-doc": "missing",
+          governance: "missing",
+        }),
+        checks: "red",
+        mergeable: "unknown",
+        comments: [],
+      },
+    ],
+    [
+      "draft",
+      {
+        head: "54be530c5780736291d670523162274e723ec8b6",
+        state: "draft",
+        ours: true,
+        ticket: { id: "example/repo#10364", link: "closes_it" },
+        approval: "not_needed",
+        reviews: kinds({
+          "review-code": "passed",
+          "review-skill": "passed",
+          governance: "passed",
+        }),
+        checks: "green",
+        mergeable: "conflicts",
+        comments: [],
+      },
+    ],
+  ])("%s", async (name, facts) => {
+    expect(await factsOn(recorded(name))).toEqual({ ...facts, main: MAIN });
+  });
 
-	it("asks GitHub where the pull request stands, then for the pull request with the base's files beside it, then where main is, and only reads", async () => {
-		const {gh, calls} = fakeGh({pr: recorded("merged"), base: "trunk"});
-		await Effect.runPromise(readPrFacts(gh, WHO)("https://github.com/example/repo/pull/7"));
+  it("asks GitHub where the pull request stands, then for the pull request with the base's files beside it, then where main is, and only reads", async () => {
+    const { gh, calls } = fakeGh({ pr: recorded("merged"), base: "trunk" });
+    await Effect.runPromise(readPrFacts(gh, WHO)("https://github.com/example/repo/pull/7"));
 
-		// No protected file changed, so no team is read.
-		expect(calls).toHaveLength(3);
-		const [where, whole, main] = calls as [readonly string[], readonly string[], readonly string[]];
-		// The base branch by name, the head by its commit: the merge base and the tip, and nothing else kept.
-		expect(main).toEqual([
-			"api",
-			"repos/example/repo/compare/trunk...b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
-			"--jq",
-			"{tested: .merge_base_commit.sha, tip: .base_commit.sha}",
-		]);
-		expect(where.slice(0, 8)).toEqual([
-			"api",
-			"graphql",
-			"-f",
-			"owner=example",
-			"-f",
-			"name=repo",
-			"-F",
-			"number=7",
-		]);
-		expect(whole).toContain("codeowners=trunk:.github/CODEOWNERS");
-		expect(whole).toContain("baseConfig=trunk:.fabrika/fabrika.toml");
-		expect(whole).toContain(
-			"headConfig=b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf:.fabrika/fabrika.toml",
-		);
-		expect(whole).not.toContain(".fabrika.jsonc");
-		expect(calls.flat().join(" ")).not.toMatch(/mutation/i);
-	});
+    // No protected file changed, so no team is read.
+    expect(calls).toHaveLength(3);
+    const [where, whole, main] = calls as [readonly string[], readonly string[], readonly string[]];
+    // The base branch by name, the head by its commit: the merge base and the tip, and nothing else kept.
+    expect(main).toEqual([
+      "api",
+      "repos/example/repo/compare/trunk...b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
+      "--jq",
+      "{tested: .merge_base_commit.sha, tip: .base_commit.sha}",
+    ]);
+    expect(where.slice(0, 8)).toEqual(["api", "graphql", "-f", "owner=example", "-f", "name=repo", "-F", "number=7"]);
+    expect(whole).toContain("codeowners=trunk:.github/CODEOWNERS");
+    expect(whole).toContain("baseConfig=trunk:.fabrika/fabrika.toml");
+    expect(whole).toContain("headConfig=b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf:.fabrika/fabrika.toml");
+    expect(whole).not.toContain(".fabrika.jsonc");
+    expect(calls.flat().join(" ")).not.toMatch(/mutation/i);
+  });
 
-	it("reads the owning team only when a protected file changed", async () => {
-		const {gh, calls} = fakeGh({pr: recorded("open-awaiting-approval")});
-		await Effect.runPromise(readPrFacts(gh, WHO)(PR));
+  it("reads the owning team only when a protected file changed", async () => {
+    const { gh, calls } = fakeGh({ pr: recorded("open-awaiting-approval") });
+    await Effect.runPromise(readPrFacts(gh, WHO)(PR));
 
-		expect(calls).toHaveLength(4);
-		expect(calls[2]).toEqual(expect.arrayContaining(["org=example-org", "team=control-plane"]));
-	});
+    expect(calls).toHaveLength(4);
+    expect(calls[2]).toEqual(expect.arrayContaining(["org=example-org", "team=control-plane"]));
+  });
 
-	it("main moved on since the head left it: the facts say both commits; a compare that breaks or does not fit is a read that breaks", async () => {
-		const behind = {tested: MAIN.tested, tip: "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432"};
-		const read = (main: string | "breaks") =>
-			Effect.runPromise(
-				Effect.result(readPrFacts(fakeGh({pr: recorded("open-clean"), main}).gh, WHO)(PR)),
-			);
-		const [moved, broke, misfit] = [
-			await read(JSON.stringify(behind)),
-			await read("breaks"),
-			await read(JSON.stringify({tip: behind.tip})),
-		];
-		expect(moved._tag === "Success" && moved.success.main).toEqual(behind);
-		expect([broke._tag, misfit._tag]).toEqual(["Failure", "Failure"]);
-	});
+  it("main moved on since the head left it: the facts say both commits; a compare that breaks or does not fit is a read that breaks", async () => {
+    const behind = { tested: MAIN.tested, tip: "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432" };
+    const read = (main: string | "breaks") =>
+      Effect.runPromise(Effect.result(readPrFacts(fakeGh({ pr: recorded("open-clean"), main }).gh, WHO)(PR)));
+    const [moved, broke, misfit] = [
+      await read(JSON.stringify(behind)),
+      await read("breaks"),
+      await read(JSON.stringify({ tip: behind.tip })),
+    ];
+    expect(moved._tag === "Success" && moved.success.main).toEqual(behind);
+    expect([broke._tag, misfit._tag]).toEqual(["Failure", "Failure"]);
+  });
 });
 
 describe("what the machine answers on each", () => {
-	it.each([
-		[
-			"merged",
-			{
-				kind: "done",
-				part: false,
-				commit: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
-				cleanup: "not_run",
-			},
-		],
-		[
-			"merged-approved",
-			{
-				kind: "done",
-				part: false,
-				commit: "7779cf9be905f5c1b0c51a991f3a1a199e78b96e",
-				cleanup: "not_run",
-			},
-		],
-		["open-awaiting-approval", {kind: "ask", who: "owner", for: "approval"}],
-		["open-review-never-ran", {kind: "send", to: "reviewer", why: "no_review"}],
-		// Red, conflicting and failed review: "not ours" is the first line it trips.
-		["open-failing-check", {kind: "skip", why: "not_ours"}],
-		["open-person-comment", {kind: "ask", who: "commenter", for: "comment"}],
-		["closed", {kind: "skip", why: "closed"}],
-		["draft", {kind: "skip", why: "draft"}],
-	])("%s", async (name, outcome) => {
-		const found = await lookOn(recorded(name));
+  it.each([
+    [
+      "merged",
+      {
+        kind: "done",
+        part: false,
+        commit: "b22ac7cd48f740d4eb54f7c2ec1d4c5e7e85b0bf",
+        cleanup: "not_run",
+      },
+    ],
+    [
+      "merged-approved",
+      {
+        kind: "done",
+        part: false,
+        commit: "7779cf9be905f5c1b0c51a991f3a1a199e78b96e",
+        cleanup: "not_run",
+      },
+    ],
+    ["open-awaiting-approval", { kind: "ask", who: "owner", for: "approval" }],
+    ["open-review-never-ran", { kind: "send", to: "reviewer", why: "no_review" }],
+    // Red, conflicting and failed review: "not ours" is the first line it trips.
+    ["open-failing-check", { kind: "skip", why: "not_ours" }],
+    ["open-person-comment", { kind: "ask", who: "commenter", for: "comment" }],
+    ["closed", { kind: "skip", why: "closed" }],
+    ["draft", { kind: "skip", why: "draft" }],
+  ])("%s", async (name, outcome) => {
+    const found = await lookOn(recorded(name));
 
-		expect(found.outcome).toEqual(outcome);
-		expect(found.wouldSend).toBeNull();
-		expect(found.facts).not.toBeNull();
-	});
+    expect(found.outcome).toEqual(outcome);
+    expect(found.wouldSend).toBeNull();
+    expect(found.facts).not.toBeNull();
+  });
 
-	it("the clean one would be queued, and nothing is sent", async () => {
-		const found = await lookOn(recorded("open-clean"));
-		const head = "9eb6b52c75d64b555547780717bd43a2460bb658";
+  it("the clean one would be queued, and nothing is sent", async () => {
+    const found = await lookOn(recorded("open-clean"));
+    const head = "9eb6b52c75d64b555547780717bd43a2460bb658";
 
-		expect(found.outcome).toBeNull();
-		expect(found.wouldSend).toEqual({
-			type: "ship_enqueue",
-			pr: PR,
-			head,
-			intent: `ship/${PR}/enqueue/${head}`,
-		});
-	});
+    expect(found.outcome).toBeNull();
+    expect(found.wouldSend).toEqual({
+      type: "ship_enqueue",
+      pr: PR,
+      head,
+      intent: `ship/${PR}/enqueue/${head}`,
+    });
+  });
 
-	it("with no passing row kept for its ticket, the clean one goes back to the reviewer", async () => {
-		const found = await lookOn(recorded("open-clean"), "unproven");
+  it("with no passing row kept for its ticket, the clean one goes back to the reviewer", async () => {
+    const found = await lookOn(recorded("open-clean"), "unproven");
 
-		expect(found.outcome).toEqual({kind: "send", to: "reviewer", why: "no_review"});
-		expect(found.wouldSend).toBeNull();
-	});
+    expect(found.outcome).toEqual({ kind: "send", to: "reviewer", why: "no_review" });
+    expect(found.wouldSend).toBeNull();
+  });
 
-	it("with no criteria held for its ticket, the clean one is stuck rather than merged", async () => {
-		const found = await lookOn(recorded("open-clean"), "unknown");
+  it("with no criteria held for its ticket, the clean one is stuck rather than merged", async () => {
+    const found = await lookOn(recorded("open-clean"), "unknown");
 
-		expect(found.outcome).toEqual({kind: "stuck", why: "criteria_unknown"});
-		expect(found.wouldSend).toBeNull();
-	});
+    expect(found.outcome).toEqual({ kind: "stuck", why: "criteria_unknown" });
+    expect(found.wouldSend).toBeNull();
+  });
 
-	it("with its checks still running, the clean one would be waited on, and nothing is sent", async () => {
-		const found = await lookOn(
-			changed(
-				"open-clean",
-				(pr) => (pr.commits.nodes[0].commit.statusCheckRollup = {state: "PENDING"}),
-			),
-		);
+  it("with its checks still running, the clean one would be waited on, and nothing is sent", async () => {
+    const found = await lookOn(
+      changed("open-clean", (pr) => (pr.commits.nodes[0].commit.statusCheckRollup = { state: "PENDING" })),
+    );
 
-		expect(found).toMatchObject({outcome: null, wouldSend: null, wouldWaitFor: "checks"});
-	});
+    expect(found).toMatchObject({ outcome: null, wouldSend: null, wouldWaitFor: "checks" });
+  });
 
-	it("with red checks, the clean one would have them run again, and that write is not sent either", async () => {
-		const found = await lookOn(
-			changed(
-				"open-clean",
-				(pr) => (pr.commits.nodes[0].commit.statusCheckRollup = {state: "FAILURE"}),
-			),
-		);
-		const head = "9eb6b52c75d64b555547780717bd43a2460bb658";
+  it("with red checks, the clean one would have them run again, and that write is not sent either", async () => {
+    const found = await lookOn(
+      changed("open-clean", (pr) => (pr.commits.nodes[0].commit.statusCheckRollup = { state: "FAILURE" })),
+    );
+    const head = "9eb6b52c75d64b555547780717bd43a2460bb658";
 
-		expect(found.outcome).toBeNull();
-		expect(found.wouldSend).toEqual({
-			type: "ship_rerun_checks",
-			pr: PR,
-			head,
-			intent: `ship/${PR}/rerun/${head}`,
-		});
-		expect(found.wouldWaitFor).toBeNull();
-	});
+    expect(found.outcome).toBeNull();
+    expect(found.wouldSend).toEqual({
+      type: "ship_rerun_checks",
+      pr: PR,
+      head,
+      intent: `ship/${PR}/rerun/${head}`,
+    });
+    expect(found.wouldWaitFor).toBeNull();
+  });
 
-	it("the one awaiting approval would be queued once the other owner approves its head", async () => {
-		const approve = (commit: string, login = "second-owner") =>
-			changed(
-				"open-awaiting-approval",
-				(pr) =>
-					(pr.reviews.nodes = [
-						{state: "APPROVED", author: {__typename: "User", login}, commit: {oid: commit}},
-					]),
-			);
-		const head = "7c80607bd0e3131830e7e6afab7844125185e2f6";
-		const asks = {kind: "ask", who: "owner", for: "approval"};
+  it("the one awaiting approval would be queued once the other owner approves its head", async () => {
+    const approve = (commit: string, login = "second-owner") =>
+      changed(
+        "open-awaiting-approval",
+        (pr) =>
+          (pr.reviews.nodes = [{ state: "APPROVED", author: { __typename: "User", login }, commit: { oid: commit } }]),
+      );
+    const head = "7c80607bd0e3131830e7e6afab7844125185e2f6";
+    const asks = { kind: "ask", who: "owner", for: "approval" };
 
-		expect((await lookOn(approve(head))).wouldSend).toMatchObject({type: "ship_enqueue", head});
-		// An approval of an earlier commit, or the author's own, or a stranger's, is not one.
-		expect((await lookOn(approve("122533139cb89aad3d7b542a65ff652721edd156"))).outcome).toEqual(
-			asks,
-		);
-		expect((await lookOn(approve(head, "repo-owner"))).outcome).toEqual(asks);
-		expect((await lookOn(approve(head, "someone-else"))).outcome).toEqual(asks);
-	});
+    expect((await lookOn(approve(head))).wouldSend).toMatchObject({ type: "ship_enqueue", head });
+    // An approval of an earlier commit, or the author's own, or a stranger's, is not one.
+    expect((await lookOn(approve("122533139cb89aad3d7b542a65ff652721edd156"))).outcome).toEqual(asks);
+    expect((await lookOn(approve(head, "repo-owner"))).outcome).toEqual(asks);
+    expect((await lookOn(approve(head, "someone-else"))).outcome).toEqual(asks);
+  });
 });
 
 describe("the reviews a pull request needs", () => {
-	const dropVerdict = (kind: string) => (pr: Record<string, any>) =>
-		(pr.comments.nodes = pr.comments.nodes.filter(
-			(c: {body: string}) => !c.body.startsWith(`${kind}:`),
-		));
+  const dropVerdict = (kind: string) => (pr: Record<string, any>) =>
+    (pr.comments.nodes = pr.comments.nodes.filter((c: { body: string }) => !c.body.startsWith(`${kind}:`)));
 
-	it("two needed and both passed is passed", async () => {
-		const facts = await factsOn(recorded("open-clean"));
+  it("two needed and both passed is passed", async () => {
+    const facts = await factsOn(recorded("open-clean"));
 
-		expect(facts.reviews).toEqual(kinds({"review-code": "passed", "review-doc": "passed"}));
-	});
+    expect(facts.reviews).toEqual(kinds({ "review-code": "passed", "review-doc": "passed" }));
+  });
 
-	it("two needed, one passed and one never ran, is missing, and the machine sends it back to the reviewer", async () => {
-		const answer = changed("open-clean", dropVerdict("review-doc"));
+  it("two needed, one passed and one never ran, is missing, and the machine sends it back to the reviewer", async () => {
+    const answer = changed("open-clean", dropVerdict("review-doc"));
 
-		expect(await factsOn(answer)).toMatchObject({
-			reviews: kinds({"review-code": "passed", "review-doc": "missing"}),
-		});
-		expect((await lookOn(answer)).outcome).toEqual({
-			kind: "send",
-			to: "reviewer",
-			why: "no_review",
-		});
-	});
+    expect(await factsOn(answer)).toMatchObject({
+      reviews: kinds({ "review-code": "passed", "review-doc": "missing" }),
+    });
+    expect((await lookOn(answer)).outcome).toEqual({
+      kind: "send",
+      to: "reviewer",
+      why: "no_review",
+    });
+  });
 
-	it("two needed and one failed is failed, and the machine sends it back to the builder", async () => {
-		const answer = changed("open-clean", (pr) => {
-			pr.comments.nodes[1].body =
-				"review-doc: FAIL @ 9eb6b52c75d64b555547780717bd43a2460bb658 — a claim outruns the code";
-		});
+  it("two needed and one failed is failed, and the machine sends it back to the builder", async () => {
+    const answer = changed("open-clean", (pr) => {
+      pr.comments.nodes[1].body =
+        "review-doc: FAIL @ 9eb6b52c75d64b555547780717bd43a2460bb658 — a claim outruns the code";
+    });
 
-		expect(await factsOn(answer)).toMatchObject({
-			reviews: kinds({"review-code": "passed", "review-doc": "failed"}),
-		});
-		expect((await lookOn(answer)).outcome).toEqual({
-			kind: "send",
-			to: "builder",
-			why: "review_failed",
-		});
-	});
+    expect(await factsOn(answer)).toMatchObject({
+      reviews: kinds({ "review-code": "passed", "review-doc": "failed" }),
+    });
+    expect((await lookOn(answer)).outcome).toEqual({
+      kind: "send",
+      to: "builder",
+      why: "review_failed",
+    });
+  });
 
-	it("a failing verdict of a kind it does not need still fails it", async () => {
-		const answer = changed("open-clean", (pr) =>
-			pr.comments.nodes.push({
-				createdAt: "2026-10-09T07:20:00Z",
-				body: "governance: FAIL @ 9eb6b52c75d64b555547780717bd43a2460bb658 — weakens a rule",
-				author: {__typename: "User", login: "repo-owner"},
-			}),
-		);
+  it("a failing verdict of a kind it does not need still fails it", async () => {
+    const answer = changed("open-clean", (pr) =>
+      pr.comments.nodes.push({
+        createdAt: "2026-10-09T07:20:00Z",
+        body: "governance: FAIL @ 9eb6b52c75d64b555547780717bd43a2460bb658 — weakens a rule",
+        author: { __typename: "User", login: "repo-owner" },
+      }),
+    );
 
-		expect(await factsOn(answer)).toMatchObject({
-			reviews: kinds({"review-code": "passed", "review-doc": "passed", governance: "failed"}),
-		});
-	});
+    expect(await factsOn(answer)).toMatchObject({
+      reviews: kinds({ "review-code": "passed", "review-doc": "passed", governance: "failed" }),
+    });
+  });
 
-	it("a change under a governed folder needs the governance review, by the head's rules alone", async () => {
-		const answer = changed(
-			"open-clean",
-			(_pr, repo) =>
-				(repo.headConfig.text = '[review]\ngoverned = [".fabrika/", "packages/tea/docs/"]\n'),
-		);
+  it("a change under a governed folder needs the governance review, by the head's rules alone", async () => {
+    const answer = changed(
+      "open-clean",
+      (_pr, repo) => (repo.headConfig.text = '[review]\ngoverned = [".fabrika/", "packages/tea/docs/"]\n'),
+    );
 
-		expect((await factsOn(answer)).reviews).toEqual(
-			kinds({"review-code": "passed", "review-doc": "passed", governance: "missing"}),
-		);
-	});
+    expect((await factsOn(answer)).reviews).toEqual(
+      kinds({ "review-code": "passed", "review-doc": "passed", governance: "missing" }),
+    );
+  });
 
-	describe("a change cannot take itself out of a review", () => {
-		const GOVERNS = '[review]\ngoverned = ["packages/tea/docs/"]\n';
-		const OWED = kinds({"review-code": "passed", "review-doc": "passed", governance: "missing"});
+  describe("a change cannot take itself out of a review", () => {
+    const GOVERNS = '[review]\ngoverned = ["packages/tea/docs/"]\n';
+    const OWED = kinds({ "review-code": "passed", "review-doc": "passed", governance: "missing" });
 
-		it.each<[string, {readonly text: string} | null]>([
-			["empties governed", {text: "[review]\ngoverned = []\n"}],
-			["removes [review]", {text: "[build]\ninstall = []\n"}],
-			["removes the file", null],
-		])("a head that %s still owes the governance review the base asks for", async (_name, head) => {
-			const answer = changed("open-clean", (_pr, repo) => {
-				repo.baseConfig.text = GOVERNS;
-				repo.headConfig = head;
-			});
+    it.each<[string, { readonly text: string } | null]>([
+      ["empties governed", { text: "[review]\ngoverned = []\n" }],
+      ["removes [review]", { text: "[build]\ninstall = []\n" }],
+      ["removes the file", null],
+    ])("a head that %s still owes the governance review the base asks for", async (_name, head) => {
+      const answer = changed("open-clean", (_pr, repo) => {
+        repo.baseConfig.text = GOVERNS;
+        repo.headConfig = head;
+      });
 
-			expect((await factsOn(answer)).reviews).toEqual(OWED);
-		});
-	});
+      expect((await factsOn(answer)).reviews).toEqual(OWED);
+    });
+  });
 
-	describe("a side with no file, or no rules, is known: it just names none", () => {
-		const TEXT_ONLY = kinds({"review-code": "passed", "review-doc": "passed"});
+  describe("a side with no file, or no rules, is known: it just names none", () => {
+    const TEXT_ONLY = kinds({ "review-code": "passed", "review-doc": "passed" });
 
-		it.each<[string, Parameters<typeof changed>[1]]>([
-			["no file at the base", (_pr, repo) => (repo.baseConfig = null)],
-			["no file at the head", (_pr, repo) => (repo.headConfig = null)],
-			[
-				"no file on either side",
-				(_pr, repo) => {
-					repo.baseConfig = null;
-					repo.headConfig = null;
-				},
-			],
-			["an empty file", (_pr, repo) => (repo.headConfig.text = "")],
-			["no [review]", (_pr, repo) => (repo.baseConfig.text = "[ship]\napproval = 'none'\n")],
-			[
-				"an unknown table elsewhere",
-				(_pr, repo) => (repo.baseConfig.text = "[failure]\nfloor = 1\n"),
-			],
-		])("%s", async (_name, change) => {
-			expect((await factsOn(changed("open-clean", change))).reviews).toEqual(TEXT_ONLY);
-		});
-	});
+    it.each<[string, Parameters<typeof changed>[1]]>([
+      ["no file at the base", (_pr, repo) => (repo.baseConfig = null)],
+      ["no file at the head", (_pr, repo) => (repo.headConfig = null)],
+      [
+        "no file on either side",
+        (_pr, repo) => {
+          repo.baseConfig = null;
+          repo.headConfig = null;
+        },
+      ],
+      ["an empty file", (_pr, repo) => (repo.headConfig.text = "")],
+      ["no [review]", (_pr, repo) => (repo.baseConfig.text = "[ship]\napproval = 'none'\n")],
+      ["an unknown table elsewhere", (_pr, repo) => (repo.baseConfig.text = "[failure]\nfloor = 1\n")],
+    ])("%s", async (_name, change) => {
+      expect((await factsOn(changed("open-clean", change))).reviews).toEqual(TEXT_ONLY);
+    });
+  });
 
-	it.each<[string, (pr: Record<string, any>, repo: Record<string, any>) => void]>([
-		["the base's config is not TOML", (_pr, repo) => (repo.baseConfig.text = "[review\n")],
-		["the head's config is not TOML", (_pr, repo) => (repo.headConfig.text = "[review\n")],
-		[
-			"the config's governed folders are not a list of texts",
-			(_pr, repo) => (repo.baseConfig.text = '[review]\ngoverned = "all"\n'),
-		],
-		[
-			"the config's rendered folders are not a list of texts",
-			(_pr, repo) => (repo.headConfig.text = "[review]\nui = [3]\n"),
-		],
-		["more files changed than one call holds", (pr) => (pr.files.pageInfo.hasNextPage = true)],
-		["no file changed", (pr) => (pr.files.nodes = [])],
-	])("is unknown when %s, and the machine cannot tell", async (_name, change) => {
-		const answer = changed("open-clean", change);
+  it.each<[string, (pr: Record<string, any>, repo: Record<string, any>) => void]>([
+    ["the base's config is not TOML", (_pr, repo) => (repo.baseConfig.text = "[review\n")],
+    ["the head's config is not TOML", (_pr, repo) => (repo.headConfig.text = "[review\n")],
+    [
+      "the config's governed folders are not a list of texts",
+      (_pr, repo) => (repo.baseConfig.text = '[review]\ngoverned = "all"\n'),
+    ],
+    [
+      "the config's rendered folders are not a list of texts",
+      (_pr, repo) => (repo.headConfig.text = "[review]\nui = [3]\n"),
+    ],
+    ["more files changed than one call holds", (pr) => (pr.files.pageInfo.hasNextPage = true)],
+    ["no file changed", (pr) => (pr.files.nodes = [])],
+  ])("is unknown when %s, and the machine cannot tell", async (_name, change) => {
+    const answer = changed("open-clean", change);
 
-		expect(await factsOn(answer)).toMatchObject({reviews: null});
-		expect((await lookOn(answer)).outcome).toEqual({kind: "stuck", why: "reviews_unknown"});
-	});
+    expect(await factsOn(answer)).toMatchObject({ reviews: null });
+    expect((await lookOn(answer)).outcome).toEqual({ kind: "stuck", why: "reviews_unknown" });
+  });
 
-	it("does not count a verdict posted by an account whose verdicts do not count", async () => {
-		const facts = await factsOn(recorded("open-clean"), {own: OWNERS, reviewers: ["repo-owner"]});
+  it("does not count a verdict posted by an account whose verdicts do not count", async () => {
+    const facts = await factsOn(recorded("open-clean"), { own: OWNERS, reviewers: ["repo-owner"] });
 
-		expect(facts.ours).toBe(true);
-		expect(facts).toMatchObject({
-			reviews: kinds({"review-code": "missing", "review-doc": "missing"}),
-		});
-	});
+    expect(facts.ours).toBe(true);
+    expect(facts).toMatchObject({
+      reviews: kinds({ "review-code": "missing", "review-doc": "missing" }),
+    });
+  });
 
-	it("works out the kinds from the files, the way today's fabrika does", () => {
-		const rules = {governed: [".decisions/", ".github/", ".fabrika/"], ui: ["apps/web/src/"]};
+  it("works out the kinds from the files, the way today's fabrika does", () => {
+    const rules = { governed: [".decisions/", ".github/", ".fabrika/"], ui: ["apps/web/src/"] };
 
-		expect(kindsNeeded(["src/a.ts"], rules)).toEqual(["review-code"]);
-		expect(kindsNeeded(["docs/a.md"], rules)).toEqual(["review-doc"]);
-		expect(
-			kindsNeeded(
-				["skills/x/SKILL.md", ".claude/agents/a.md", "claude-plugins/p/contract.md"],
-				rules,
-			),
-		).toEqual(["review-skill"]);
-		expect(kindsNeeded(["apps/web/src/App.tsx"], rules)).toEqual(["review-code", "review-ui"]);
-		// A test beside a rendered page is not rendered work.
-		expect(kindsNeeded(["apps/web/src/App.test.tsx"], rules)).toEqual(["review-code"]);
-		expect(kindsNeeded([".decisions/0001-x.md"], rules)).toEqual(["review-doc", "governance"]);
-		expect(kindsNeeded([".fabrika/fabrika.toml"], rules)).toEqual(["review-code", "governance"]);
-	});
+    expect(kindsNeeded(["src/a.ts"], rules)).toEqual(["review-code"]);
+    expect(kindsNeeded(["docs/a.md"], rules)).toEqual(["review-doc"]);
+    expect(kindsNeeded(["skills/x/SKILL.md", ".claude/agents/a.md", "claude-plugins/p/contract.md"], rules)).toEqual([
+      "review-skill",
+    ]);
+    expect(kindsNeeded(["apps/web/src/App.tsx"], rules)).toEqual(["review-code", "review-ui"]);
+    // A test beside a rendered page is not rendered work.
+    expect(kindsNeeded(["apps/web/src/App.test.tsx"], rules)).toEqual(["review-code"]);
+    expect(kindsNeeded([".decisions/0001-x.md"], rules)).toEqual(["review-doc", "governance"]);
+    expect(kindsNeeded([".fabrika/fabrika.toml"], rules)).toEqual(["review-code", "governance"]);
+  });
 });
 
 describe("the rules of a change's two sides", () => {
-	const A = '[review]\ngoverned = ["a/"]\nui = ["web-a/"]\n';
-	const B = '[review]\ngoverned = ["b/"]\nui = ["web-b/"]\n';
-	const sorted = (rules: ReturnType<typeof rulesOfBoth>) =>
-		rules === null ? null : {governed: [...rules.governed].sort(), ui: [...rules.ui].sort()};
+  const A = '[review]\ngoverned = ["a/"]\nui = ["web-a/"]\n';
+  const B = '[review]\ngoverned = ["b/"]\nui = ["web-b/"]\n';
+  const sorted = (rules: ReturnType<typeof rulesOfBoth>) =>
+    rules === null ? null : { governed: [...rules.governed].sort(), ui: [...rules.ui].sort() };
 
-	it("is what both say, together", () => {
-		expect(sorted(rulesOfBoth([A, B]))).toEqual({governed: ["a/", "b/"], ui: ["web-a/", "web-b/"]});
-	});
+  it("is what both say, together", () => {
+    expect(sorted(rulesOfBoth([A, B]))).toEqual({ governed: ["a/", "b/"], ui: ["web-a/", "web-b/"] });
+  });
 
-	it("a head that empties a list takes nothing from the base's", () => {
-		expect(sorted(rulesOfBoth([A, "[review]\ngoverned = []\nui = []\n"]))).toEqual({
-			governed: ["a/"],
-			ui: ["web-a/"],
-		});
-	});
+  it("a head that empties a list takes nothing from the base's", () => {
+    expect(sorted(rulesOfBoth([A, "[review]\ngoverned = []\nui = []\n"]))).toEqual({
+      governed: ["a/"],
+      ui: ["web-a/"],
+    });
+  });
 
-	it("a side with no file adds nothing, and takes nothing away", () => {
-		expect(sorted(rulesOfBoth([A, null]))).toEqual({governed: ["a/"], ui: ["web-a/"]});
-		expect(sorted(rulesOfBoth([null, B]))).toEqual({governed: ["b/"], ui: ["web-b/"]});
-	});
+  it("a side with no file adds nothing, and takes nothing away", () => {
+    expect(sorted(rulesOfBoth([A, null]))).toEqual({ governed: ["a/"], ui: ["web-a/"] });
+    expect(sorted(rulesOfBoth([null, B]))).toEqual({ governed: ["b/"], ui: ["web-b/"] });
+  });
 
-	it("no file on either side: no rules, and known", () => {
-		expect(rulesOfBoth([null, null])).toEqual({governed: [], ui: []});
-	});
+  it("no file on either side: no rules, and known", () => {
+    expect(rulesOfBoth([null, null])).toEqual({ governed: [], ui: [] });
+  });
 
-	it.each<[string, readonly (string | null)[]]>([
-		["the base does not read", ["[review\n", B]],
-		["the head does not read", [A, "[review\n"]],
-		["a side with no file does not save the other", [null, "[review\n"]],
-		["a list of the wrong type", [A, '[review]\nui = "all"\n']],
-	])("%s: the whole answer is not known", (_name, configs) => {
-		expect(rulesOfBoth(configs)).toBeNull();
-	});
+  it.each<[string, readonly (string | null)[]]>([
+    ["the base does not read", ["[review\n", B]],
+    ["the head does not read", [A, "[review\n"]],
+    ["a side with no file does not save the other", [null, "[review\n"]],
+    ["a list of the wrong type", [A, '[review]\nui = "all"\n']],
+  ])("%s: the whole answer is not known", (_name, configs) => {
+    expect(rulesOfBoth(configs)).toBeNull();
+  });
 
-	it("has no second source of rules to fall back on: what the sides say is all there is", () => {
-		expectTypeOf(rulesOfBoth).parameters.toEqualTypeOf<[readonly (string | null)[]]>();
-		expectTypeOf<Parameters<typeof reviewKindsOf>["length"]>().toEqualTypeOf<3>();
-		expectTypeOf<Parameters<typeof readChange>["length"]>().toEqualTypeOf<1 | 2>();
-		expectTypeOf<Declared>().toEqualTypeOf<{readonly approval?: "codeowners" | "none"}>();
-	});
+  it("has no second source of rules to fall back on: what the sides say is all there is", () => {
+    expectTypeOf(rulesOfBoth).parameters.toEqualTypeOf<[readonly (string | null)[]]>();
+    expectTypeOf<Parameters<typeof reviewKindsOf>["length"]>().toEqualTypeOf<3>();
+    expectTypeOf<Parameters<typeof readChange>["length"]>().toEqualTypeOf<1 | 2>();
+    expectTypeOf<Declared>().toEqualTypeOf<{ readonly approval?: "codeowners" | "none" }>();
+  });
 });
 
 describe("the verdicts at a head", () => {
-	const HEAD = "7c80607bd0e3131830e7e6afab7844125185e2f6";
-	const owner = {__typename: "User", login: "repo-owner"};
-	const said = (body: string, minute: number, author: typeof owner | null = owner) => ({
-		createdAt: `2026-10-05T10:${String(minute).padStart(2, "0")}:00Z`,
-		body,
-		author,
-	});
-	const at = (comments: ReturnType<typeof said>[], reviewers = ["repo-owner"]) =>
-		Object.fromEntries(verdictsAt(HEAD, comments, reviewers));
+  const HEAD = "7c80607bd0e3131830e7e6afab7844125185e2f6";
+  const owner = { __typename: "User", login: "repo-owner" };
+  const said = (body: string, minute: number, author: typeof owner | null = owner) => ({
+    createdAt: `2026-10-05T10:${String(minute).padStart(2, "0")}:00Z`,
+    body,
+    author,
+  });
+  const at = (comments: ReturnType<typeof said>[], reviewers = ["repo-owner"]) =>
+    Object.fromEntries(verdictsAt(HEAD, comments, reviewers));
 
-	it("holds none when no verdict binds to this head, however many passed before", () => {
-		expect(at([])).toEqual({});
-		// The marker's dash is stored data. Kept as written, so a reformat never reads this old line as new text.
-		// oxfmt-ignore
-		expect(
+  it("holds none when no verdict binds to this head, however many passed before", () => {
+    expect(at([])).toEqual({});
+    // The marker's dash is stored data. Kept as written, so a reformat never reads this old line as new text.
+    // oxfmt-ignore
+    expect(
 			at([said("review-code: PASS @ 122533139cb89aad3d7b542a65ff652721edd156 — ok", 1)]),
 		).toEqual({});
-		expect(at([said("Looks good to me.", 1)])).toEqual({});
-	});
+    expect(at([said("Looks good to me.", 1)])).toEqual({});
+  });
 
-	it("takes the last verdict of one kind at the same head", () => {
-		const first = said(`review-code: FAIL @ ${HEAD} — red`, 1);
-		const second = said(`review-code: PASS @ ${HEAD} — green after a re-run`, 2);
+  it("takes the last verdict of one kind at the same head", () => {
+    const first = said(`review-code: FAIL @ ${HEAD} — red`, 1);
+    const second = said(`review-code: PASS @ ${HEAD} — green after a re-run`, 2);
 
-		expect(at([first, second])).toEqual({"review-code": "PASS"});
-		expect(at([second, first])).toEqual({"review-code": "PASS"});
-	});
+    expect(at([first, second])).toEqual({ "review-code": "PASS" });
+    expect(at([second, first])).toEqual({ "review-code": "PASS" });
+  });
 
-	it("does not count a verdict from any other account, or from one that is gone", () => {
-		expect(
-			at([
-				said(`review-code: PASS @ ${HEAD} — trust me`, 1, {
-					__typename: "User",
-					login: "someone-else",
-				}),
-			]),
-		).toEqual({});
-		expect(at([said(`review-code: PASS @ ${HEAD} — ok`, 1, null)])).toEqual({});
-	});
+  it("does not count a verdict from any other account, or from one that is gone", () => {
+    expect(
+      at([
+        said(`review-code: PASS @ ${HEAD} — trust me`, 1, {
+          __typename: "User",
+          login: "someone-else",
+        }),
+      ]),
+    ).toEqual({});
+    expect(at([said(`review-code: PASS @ ${HEAD} — ok`, 1, null)])).toEqual({});
+  });
 
-	it("reads an old verdict's short commit, and an account in any case", () => {
-		expect(at([said("review-code: PASS @ 7c80607bd0 — ok", 1)], ["Repo-Owner"])).toEqual({
-			"review-code": "PASS",
-		});
-	});
+  it("reads an old verdict's short commit, and an account in any case", () => {
+    expect(at([said("review-code: PASS @ 7c80607bd0 — ok", 1)], ["Repo-Owner"])).toEqual({
+      "review-code": "PASS",
+    });
+  });
 });
 
 describe("the owner's approval", () => {
-	const head = "7c80607bd0e3131830e7e6afab7844125185e2f6";
-	const approval = async (
-		change: (pr: Record<string, any>, repo: Record<string, any>) => void,
-		team?: string | "breaks",
-	) => (await factsOn(changed("open-awaiting-approval", change), WHO, team)).approval;
-	const oneOwner = changedTeam((members) => (members.nodes = [{login: "repo-owner"}]));
-	const says =
-		(body: string, login = "repo-owner") =>
-		(pr: Record<string, any>) =>
-			pr.comments.nodes.push({
-				createdAt: "2026-10-05T11:00:00Z",
-				body,
-				author: {__typename: "User", login},
-			});
+  const head = "7c80607bd0e3131830e7e6afab7844125185e2f6";
+  const approval = async (
+    change: (pr: Record<string, any>, repo: Record<string, any>) => void,
+    team?: string | "breaks",
+  ) => (await factsOn(changed("open-awaiting-approval", change), WHO, team)).approval;
+  const oneOwner = changedTeam((members) => (members.nodes = [{ login: "repo-owner" }]));
+  const says =
+    (body: string, login = "repo-owner") =>
+    (pr: Record<string, any>) =>
+      pr.comments.nodes.push({
+        createdAt: "2026-10-05T11:00:00Z",
+        body,
+        author: { __typename: "User", login },
+      });
 
-	it("is not needed when no changed file has an owner", async () => {
-		expect(await approval((pr) => (pr.files.nodes = [{path: "apps/web/src/App.tsx"}]))).toBe(
-			"not_needed",
-		);
-		// A row with no owner takes a file out of a folder that has one.
-		expect(
-			await approval(
-				(_pr, repo) => (repo.codeowners.text += "/.github/workflows/pr-cleanup.yml\n"),
-			),
-		).toBe("not_needed");
-	});
+  it("is not needed when no changed file has an owner", async () => {
+    expect(await approval((pr) => (pr.files.nodes = [{ path: "apps/web/src/App.tsx" }]))).toBe("not_needed");
+    // A row with no owner takes a file out of a folder that has one.
+    expect(await approval((_pr, repo) => (repo.codeowners.text += "/.github/workflows/pr-cleanup.yml\n"))).toBe(
+      "not_needed",
+    );
+  });
 
-	it("is missing when a protected file changed and no owner approved this head", async () => {
-		expect(await approval(() => {})).toBe("missing");
-	});
+  it("is missing when a protected file changed and no owner approved this head", async () => {
+    expect(await approval(() => {})).toBe("missing");
+  });
 
-	it("an owner named by account, not by team, approves without any team being read", async () => {
-		const {gh, calls} = fakeGh({
-			pr: changed("open-awaiting-approval", (pr, repo) => {
-				repo.codeowners.text = "/.github/ @second-owner @repo-owner\n";
-				pr.reviews.nodes = [
-					{
-						state: "APPROVED",
-						author: {__typename: "User", login: "Second-Owner"},
-						commit: {oid: head},
-					},
-				];
-			}),
-		});
+  it("an owner named by account, not by team, approves without any team being read", async () => {
+    const { gh, calls } = fakeGh({
+      pr: changed("open-awaiting-approval", (pr, repo) => {
+        repo.codeowners.text = "/.github/ @second-owner @repo-owner\n";
+        pr.reviews.nodes = [
+          {
+            state: "APPROVED",
+            author: { __typename: "User", login: "Second-Owner" },
+            commit: { oid: head },
+          },
+        ];
+      }),
+    });
 
-		expect((await Effect.runPromise(readPrFacts(gh, WHO)(PR))).approval).toBe("given");
-		// Where it stands, the pull request, and main: no team.
-		expect(calls).toHaveLength(3);
-		expect(calls.flat().join(" ")).not.toMatch(/team=/);
-	});
+    expect((await Effect.runPromise(readPrFacts(gh, WHO)(PR))).approval).toBe("given");
+    // Where it stands, the pull request, and main: no team.
+    expect(calls).toHaveLength(3);
+    expect(calls.flat().join(" ")).not.toMatch(/team=/);
+  });
 
-	it("a repo's one owner approves their own pull request with the comment that names the commit", async () => {
-		expect(await approval(() => {}, oneOwner)).toBe("missing");
-		expect(await approval(says(`control-plane-self-approval @ ${head}`), oneOwner)).toBe("given");
-		expect(await approval(says("control-plane-self-approval @ 7c80607bd0"), oneOwner)).toBe(
-			"given",
-		);
-		// For another commit, or said by someone who is not the owner: not an approval.
-		expect(
-			await approval(
-				says("control-plane-self-approval @ 122533139cb89aad3d7b542a65ff652721edd156"),
-				oneOwner,
-			),
-		).toBe("missing");
-		expect(
-			await approval(says(`control-plane-self-approval @ ${head}`, "someone-else"), oneOwner),
-		).toBe("missing");
-		// With two owners the comment is not enough: the other owner has to review.
-		expect(await approval(says(`control-plane-self-approval @ ${head}`))).toBe("missing");
-	});
+  it("a repo's one owner approves their own pull request with the comment that names the commit", async () => {
+    expect(await approval(() => {}, oneOwner)).toBe("missing");
+    expect(await approval(says(`control-plane-self-approval @ ${head}`), oneOwner)).toBe("given");
+    expect(await approval(says("control-plane-self-approval @ 7c80607bd0"), oneOwner)).toBe("given");
+    // For another commit, or said by someone who is not the owner: not an approval.
+    expect(
+      await approval(says("control-plane-self-approval @ 122533139cb89aad3d7b542a65ff652721edd156"), oneOwner),
+    ).toBe("missing");
+    expect(await approval(says(`control-plane-self-approval @ ${head}`, "someone-else"), oneOwner)).toBe("missing");
+    // With two owners the comment is not enough: the other owner has to review.
+    expect(await approval(says(`control-plane-self-approval @ ${head}`))).toBe("missing");
+  });
 
-	it.each<
-		[
-			string,
-			(pr: Record<string, any>, repo: Record<string, any>) => void,
-			string | "breaks" | undefined,
-		]
-	>([
-		["the repo has no CODEOWNERS", (_pr, repo) => (repo.codeowners = null), undefined],
-		["the owning team cannot be read", () => {}, "breaks"],
-		["the owning team is not there", () => {}, '{"data":{"organization":{"team":null}}}'],
-		[
-			"the team has more members than one call holds",
-			() => {},
-			changedTeam((members) => (members.pageInfo.hasNextPage = true)),
-		],
-		[
-			"more files changed than one call holds, and none read is protected",
-			(pr) => {
-				pr.files.pageInfo.hasNextPage = true;
-				pr.files.nodes = [{path: "a.ts"}];
-			},
-			undefined,
-		],
-	])("is unknown when %s, and nobody is asked", async (_name, change, team) => {
-		expect(await approval(change, team)).toBe("unknown");
-	});
+  it.each<[string, (pr: Record<string, any>, repo: Record<string, any>) => void, string | "breaks" | undefined]>([
+    ["the repo has no CODEOWNERS", (_pr, repo) => (repo.codeowners = null), undefined],
+    ["the owning team cannot be read", () => {}, "breaks"],
+    ["the owning team is not there", () => {}, '{"data":{"organization":{"team":null}}}'],
+    [
+      "the team has more members than one call holds",
+      () => {},
+      changedTeam((members) => (members.pageInfo.hasNextPage = true)),
+    ],
+    [
+      "more files changed than one call holds, and none read is protected",
+      (pr) => {
+        pr.files.pageInfo.hasNextPage = true;
+        pr.files.nodes = [{ path: "a.ts" }];
+      },
+      undefined,
+    ],
+  ])("is unknown when %s, and nobody is asked", async (_name, change, team) => {
+    expect(await approval(change, team)).toBe("unknown");
+  });
 
-	describe("with what the repository declared in fabrika.toml", () => {
-		const declaredOn = (pr: string, declared: Declared) =>
-			Effect.runPromise(readPrFacts(fakeGh({pr}).gh, WHO, declared)(PR));
-		const noOwners = changed("open-awaiting-approval", (_pr, repo) => (repo.codeowners = null));
+  describe("with what the repository declared in fabrika.toml", () => {
+    const declaredOn = (pr: string, declared: Declared) =>
+      Effect.runPromise(readPrFacts(fakeGh({ pr }).gh, WHO, declared)(PR));
+    const noOwners = changed("open-awaiting-approval", (_pr, repo) => (repo.codeowners = null));
 
-		it("no CODEOWNERS and approval none: no approval is needed", async () => {
-			expect((await declaredOn(noOwners, {approval: "none"})).approval).toBe("not_needed");
-		});
+    it("no CODEOWNERS and approval none: no approval is needed", async () => {
+      expect((await declaredOn(noOwners, { approval: "none" })).approval).toBe("not_needed");
+    });
 
-		it("no CODEOWNERS and approval codeowners: still unknown, so ship stops", async () => {
-			expect((await declaredOn(noOwners, {approval: "codeowners"})).approval).toBe("unknown");
-		});
+    it("no CODEOWNERS and approval codeowners: still unknown, so ship stops", async () => {
+      expect((await declaredOn(noOwners, { approval: "codeowners" })).approval).toBe("unknown");
+    });
 
-		it("a CODEOWNERS file at the base binds, whatever was declared", async () => {
-			const owned = changed("open-awaiting-approval", () => {});
-			expect((await declaredOn(owned, {approval: "none"})).approval).toBe("missing");
-		});
+    it("a CODEOWNERS file at the base binds, whatever was declared", async () => {
+      const owned = changed("open-awaiting-approval", () => {});
+      expect((await declaredOn(owned, { approval: "none" })).approval).toBe("missing");
+    });
 
-		it("the code host hands on what was declared to its read of a pull request", async () => {
-			const read = (config: Accounts & {readonly declared?: Declared}) =>
-				Effect.runPromise(codeHostOn(fakeGh({pr: noOwners}).gh, config).prFacts(PR));
-			expect((await read({...WHO, declared: {approval: "none"}})).approval).toBe("not_needed");
-			expect((await read(WHO)).approval).toBe("unknown");
-		});
-	});
+    it("the code host hands on what was declared to its read of a pull request", async () => {
+      const read = (config: Accounts & { readonly declared?: Declared }) =>
+        Effect.runPromise(codeHostOn(fakeGh({ pr: noOwners }).gh, config).prFacts(PR));
+      expect((await read({ ...WHO, declared: { approval: "none" } })).approval).toBe("not_needed");
+      expect((await read(WHO)).approval).toBe("unknown");
+    });
+  });
 
-	it("on unknown, the machine cannot tell rather than asking an owner", async () => {
-		const found = await lookOn(
-			changed("open-awaiting-approval", (_pr, repo) => (repo.codeowners = null)),
-		);
+  it("on unknown, the machine cannot tell rather than asking an owner", async () => {
+    const found = await lookOn(changed("open-awaiting-approval", (_pr, repo) => (repo.codeowners = null)));
 
-		expect(found.outcome).toEqual({kind: "stuck", why: "approval_unknown"});
-	});
+    expect(found.outcome).toEqual({ kind: "stuck", why: "approval_unknown" });
+  });
 });
 
 describe("an answer that cannot be read is the Cmd's err, never a throw", () => {
-	const unknown = {_tag: "unknown"};
+  const unknown = { _tag: "unknown" };
 
-	it.each<[string, string | "breaks"]>([
-		["the call breaks", "breaks"],
-		["not JSON", "gh: not logged in"],
-		["JSON of another shape", '{"data":{"repository":{"pullRequest":null}}}'],
-		["a field is missing", changed("merged", (pr) => delete pr.mergeable)],
-		["a state GitHub does not have", changed("merged", (pr) => (pr.state = "LOCKED"))],
-		[
-			"checks of a commit that is not the head",
-			changed(
-				"merged",
-				(pr) => (pr.commits.nodes[0].commit.oid = "0000000000000000000000000000000000000000"),
-			),
-		],
-		["no commit at all", changed("merged", (pr) => (pr.commits.nodes = []))],
-		[
-			"more review threads than one call holds",
-			changed("merged", (pr) => (pr.reviewThreads.pageInfo.hasNextPage = true)),
-		],
-	])("%s", async (_name, answer) => {
-		expect(await failureOn(answer)).toEqual(unknown);
-		// And through the handler and the machine: one typed ending.
-		const found = await lookOn(answer);
-		expect(found).toMatchObject({
-			facts: null,
-			outcome: {kind: "stuck", why: "read_failed"},
-			wouldSend: null,
-		});
-	});
+  it.each<[string, string | "breaks"]>([
+    ["the call breaks", "breaks"],
+    ["not JSON", "gh: not logged in"],
+    ["JSON of another shape", '{"data":{"repository":{"pullRequest":null}}}'],
+    ["a field is missing", changed("merged", (pr) => delete pr.mergeable)],
+    ["a state GitHub does not have", changed("merged", (pr) => (pr.state = "LOCKED"))],
+    [
+      "checks of a commit that is not the head",
+      changed("merged", (pr) => (pr.commits.nodes[0].commit.oid = "0000000000000000000000000000000000000000")),
+    ],
+    ["no commit at all", changed("merged", (pr) => (pr.commits.nodes = []))],
+    [
+      "more review threads than one call holds",
+      changed("merged", (pr) => (pr.reviewThreads.pageInfo.hasNextPage = true)),
+    ],
+  ])("%s", async (_name, answer) => {
+    expect(await failureOn(answer)).toEqual(unknown);
+    // And through the handler and the machine: one typed ending.
+    const found = await lookOn(answer);
+    expect(found).toMatchObject({
+      facts: null,
+      outcome: { kind: "stuck", why: "read_failed" },
+      wouldSend: null,
+    });
+  });
 
-	it("a head that moved between the two calls is a failed read, not two commits read as one", async () => {
-		const moved = JSON.stringify({
-			data: {
-				repository: {
-					pullRequest: {
-						headRefOid: "0000000000000000000000000000000000000000",
-						baseRefName: "main",
-					},
-				},
-			},
-		});
-		const gh: Gh = (args) =>
-			Effect.succeed(
-				args.some((arg) => arg.startsWith("codeowners=")) ? recorded("merged") : moved,
-			);
+  it("a head that moved between the two calls is a failed read, not two commits read as one", async () => {
+    const moved = JSON.stringify({
+      data: {
+        repository: {
+          pullRequest: {
+            headRefOid: "0000000000000000000000000000000000000000",
+            baseRefName: "main",
+          },
+        },
+      },
+    });
+    const gh: Gh = (args) =>
+      Effect.succeed(args.some((arg) => arg.startsWith("codeowners=")) ? recorded("merged") : moved);
 
-		expect(await Effect.runPromise(Effect.flip(readPrFacts(gh, WHO)(PR)))).toEqual(unknown);
-	});
+    expect(await Effect.runPromise(Effect.flip(readPrFacts(gh, WHO)(PR)))).toEqual(unknown);
+  });
 
-	it("a URL that is not a pull request's is refused before any call", async () => {
-		const {gh, calls} = fakeGh({pr: recorded("merged")});
+  it("a URL that is not a pull request's is refused before any call", async () => {
+    const { gh, calls } = fakeGh({ pr: recorded("merged") });
 
-		expect(
-			await Effect.runPromise(
-				Effect.flip(readPrFacts(gh, WHO)("https://github.com/example/repo/issues/7")),
-			),
-		).toEqual(unknown);
-		expect(calls).toEqual([]);
-		expect(prOf("https://github.com/example/repo/pull/7")).toEqual({
-			owner: "example",
-			name: "repo",
-			number: 7,
-		});
-	});
+    expect(
+      await Effect.runPromise(Effect.flip(readPrFacts(gh, WHO)("https://github.com/example/repo/issues/7"))),
+    ).toEqual(unknown);
+    expect(calls).toEqual([]);
+    expect(prOf("https://github.com/example/repo/pull/7")).toEqual({
+      owner: "example",
+      name: "repo",
+      number: 7,
+    });
+  });
 
-	it("the handler hands the service's failure on as it is", async () => {
-		const host = hostOf(() => Effect.fail({_tag: "unknown" as const}));
-		const failure = await Effect.runPromise(
-			Effect.flip(shipReadInterpret.ship_facts(readShipFacts({pr: PR}))).pipe(Effect.provide(host)),
-		);
+  it("the handler hands the service's failure on as it is", async () => {
+    const host = hostOf(() => Effect.fail({ _tag: "unknown" as const }));
+    const failure = await Effect.runPromise(
+      Effect.flip(shipReadInterpret.ship_facts(readShipFacts({ pr: PR }))).pipe(Effect.provide(host)),
+    );
 
-		expect(failure).toEqual(unknown);
-	});
+    expect(failure).toEqual(unknown);
+  });
 
-	it("on the engine, the machine ends as cannot tell and sends nothing else", async () => {
-		const never = () => Effect.die("a write was sent");
-		const program = Effect.gen(function* () {
-			const handle = yield* run(ship, {
-				ctx: undefined,
-				interpret: {
-					...shipReadInterpret,
-					ship_rerun_checks: never,
-					ship_enqueue: never,
-					ship_merge: never,
-					ship_finish: never,
-				},
-				subscribe: {
-					ship_checks: (): Stream.Stream<ShipMsg> => Stream.never,
-					ship_queue: (): Stream.Stream<ShipMsg> => Stream.never,
-				},
-				terminal: (s) => s.phase === "over",
-			});
-			const runtime = yield* handle.ready;
-			yield* runtime.dispatch({type: "start", pr: PR});
-			return yield* runtime.done();
-		});
-		const host = hostOf(readPrFacts(fakeGh({pr: "not json"}).gh, WHO));
-		const end = await Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(host)));
+  it("on the engine, the machine ends as cannot tell and sends nothing else", async () => {
+    const never = () => Effect.die("a write was sent");
+    const program = Effect.gen(function* () {
+      const handle = yield* run(ship, {
+        ctx: undefined,
+        interpret: {
+          ...shipReadInterpret,
+          ship_rerun_checks: never,
+          ship_enqueue: never,
+          ship_merge: never,
+          ship_finish: never,
+        },
+        subscribe: {
+          ship_checks: (): Stream.Stream<ShipMsg> => Stream.never,
+          ship_queue: (): Stream.Stream<ShipMsg> => Stream.never,
+        },
+        terminal: (s) => s.phase === "over",
+      });
+      const runtime = yield* handle.ready;
+      yield* runtime.dispatch({ type: "start", pr: PR });
+      return yield* runtime.done();
+    });
+    const host = hostOf(readPrFacts(fakeGh({ pr: "not json" }).gh, WHO));
+    const end = await Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(host)));
 
-		expect(end).toMatchObject({
-			phase: "over",
-			pr: PR,
-			outcome: {kind: "stuck", why: "read_failed"},
-		});
-	});
+    expect(end).toMatchObject({
+      phase: "over",
+      pr: PR,
+      outcome: { kind: "stuck", why: "read_failed" },
+    });
+  });
 });
 
 describe("the ticket a body serves", () => {
-	const closes = (id: string) => ({id, link: "closes_it" as const});
-	const partOf = (id: string) => ({id, link: "part_of_it" as const});
-	it.each<[string, PrFacts["ticket"]]>([
-		["Fixes #12", closes("example/repo#12")],
-		["closes #12", closes("example/repo#12")],
-		["Resolved: #12", closes("example/repo#12")],
-		["Fixes example/repo#12", closes("example/repo#12")],
-		["Fixes https://github.com/example/repo/issues/12", closes("example/repo#12")],
-		// Another repo's ticket keeps its own repo.
-		["Fixes other/place#12", closes("other/place#12")],
-		["Part of #12", partOf("example/repo#12")],
-		["part of example/repo#12", partOf("example/repo#12")],
-		// A closing word wins: the pull request closes one ticket and is part of another.
-		["Part of #12\n\nFixes #13", closes("example/repo#13")],
-		// A mention serves no ticket.
-		["Refs #12", "none"],
-		["Re: #12, see also #13", "none"],
-		["This fixes the prefix. No ticket.", "none"],
-		["", "none"],
-	])("%j is %j", (body, ticket) => {
-		expect(ticketOf(body, {owner: "example", name: "repo"})).toEqual(ticket);
-	});
+  const closes = (id: string) => ({ id, link: "closes_it" as const });
+  const partOf = (id: string) => ({ id, link: "part_of_it" as const });
+  it.each<[string, PrFacts["ticket"]]>([
+    ["Fixes #12", closes("example/repo#12")],
+    ["closes #12", closes("example/repo#12")],
+    ["Resolved: #12", closes("example/repo#12")],
+    ["Fixes example/repo#12", closes("example/repo#12")],
+    ["Fixes https://github.com/example/repo/issues/12", closes("example/repo#12")],
+    // Another repo's ticket keeps its own repo.
+    ["Fixes other/place#12", closes("other/place#12")],
+    ["Part of #12", partOf("example/repo#12")],
+    ["part of example/repo#12", partOf("example/repo#12")],
+    // A closing word wins: the pull request closes one ticket and is part of another.
+    ["Part of #12\n\nFixes #13", closes("example/repo#13")],
+    // A mention serves no ticket.
+    ["Refs #12", "none"],
+    ["Re: #12, see also #13", "none"],
+    ["This fixes the prefix. No ticket.", "none"],
+    ["", "none"],
+  ])("%j is %j", (body, ticket) => {
+    expect(ticketOf(body, { owner: "example", name: "repo" })).toEqual(ticket);
+  });
 
-	it.each<[string, ReturnType<typeof ticketIn>]>([
-		["Fixes #12", {link: "closes_it", owner: null, name: null, number: 12}],
-		["Fixes example/repo#12", {link: "closes_it", owner: "example", name: "repo", number: 12}],
-		[
-			"Closes https://github.com/other-org/the.repo/issues/7",
-			{link: "closes_it", owner: "other-org", name: "the.repo", number: 7},
-		],
-		["Part of #12", {link: "part_of_it", owner: null, name: null, number: 12}],
-		// The closing line names the ticket, wherever it stands in the text.
-		["Part of #12\n\nFixes #13", {link: "closes_it", owner: null, name: null, number: 13}],
-		// The first closing line wins.
-		["Fixes #13\nFixes #14", {link: "closes_it", owner: null, name: null, number: 13}],
-		["Refs #12", null],
-	])("%j names %j", (body, ticket) => {
-		expect(ticketIn(body)).toEqual(ticket);
-	});
+  it.each<[string, ReturnType<typeof ticketIn>]>([
+    ["Fixes #12", { link: "closes_it", owner: null, name: null, number: 12 }],
+    ["Fixes example/repo#12", { link: "closes_it", owner: "example", name: "repo", number: 12 }],
+    [
+      "Closes https://github.com/other-org/the.repo/issues/7",
+      { link: "closes_it", owner: "other-org", name: "the.repo", number: 7 },
+    ],
+    ["Part of #12", { link: "part_of_it", owner: null, name: null, number: 12 }],
+    // The closing line names the ticket, wherever it stands in the text.
+    ["Part of #12\n\nFixes #13", { link: "closes_it", owner: null, name: null, number: 13 }],
+    // The first closing line wins.
+    ["Fixes #13\nFixes #14", { link: "closes_it", owner: null, name: null, number: 13 }],
+    ["Refs #12", null],
+  ])("%j names %j", (body, ticket) => {
+    expect(ticketIn(body)).toEqual(ticket);
+  });
 });
 
 describe("the text review that reads one file", () => {
-	it.each([
-		["src/a.ts", "review-code"],
-		["package.json", "review-code"],
-		[".github/workflows/build.yaml", "review-code"],
-		["docs/a.md", "review-doc"],
-		[".changeset/a-change.md", "review-doc"],
-		["skills/x/SKILL.md", "review-skill"],
-		["SKILL.md", "review-skill"],
-		[".claude/agents/a.md", "review-skill"],
-		["claude-plugins/p/src/tool.ts", "review-skill"],
-	] as const)("%s is read by %s", (path, kind) => {
-		expect(textKindOf(path)).toBe(kind);
-	});
+  it.each([
+    ["src/a.ts", "review-code"],
+    ["package.json", "review-code"],
+    [".github/workflows/build.yaml", "review-code"],
+    ["docs/a.md", "review-doc"],
+    [".changeset/a-change.md", "review-doc"],
+    ["skills/x/SKILL.md", "review-skill"],
+    ["SKILL.md", "review-skill"],
+    [".claude/agents/a.md", "review-skill"],
+    ["claude-plugins/p/src/tool.ts", "review-skill"],
+  ] as const)("%s is read by %s", (path, kind) => {
+    expect(textKindOf(path)).toBe(kind);
+  });
 });
 
 describe("the other facts, one at a time", () => {
-	const thread = (pr: Record<string, any>, comments: {body: string; author: unknown}[]) =>
-		(pr.reviewThreads.nodes = [{id: "t1", isResolved: false, comments: {nodes: comments}}]);
-	const bot = {__typename: "Bot", login: "scan-bot"};
-	const user = {__typename: "User", login: "a-reviewer"};
+  const thread = (pr: Record<string, any>, comments: { body: string; author: unknown }[]) =>
+    (pr.reviewThreads.nodes = [{ id: "t1", isResolved: false, comments: { nodes: comments } }]);
+  const bot = { __typename: "Bot", login: "scan-bot" };
+  const user = { __typename: "User", login: "a-reviewer" };
 
-	it("an unresolved thread only a bot wrote is the bot's", async () => {
-		const facts = await factsOn(
-			changed("open-clean", (pr) => thread(pr, [{body: "Unused variable.", author: bot}])),
-		);
+  it("an unresolved thread only a bot wrote is the bot's", async () => {
+    const facts = await factsOn(changed("open-clean", (pr) => thread(pr, [{ body: "Unused variable.", author: bot }])));
 
-		expect(facts.comments).toEqual([{id: "t1", by: "bot"}]);
-	});
+    expect(facts.comments).toEqual([{ id: "t1", by: "bot" }]);
+  });
 
-	it("a comment with a machine's hidden mark is not a person's, whoever's account posted it", async () => {
-		const marked = {body: "A finding.\n\n<!-- tea-fabrika review/1 -->", author: user};
+  it("a comment with a machine's hidden mark is not a person's, whoever's account posted it", async () => {
+    const marked = { body: "A finding.\n\n<!-- tea-fabrika review/1 -->", author: user };
 
-		expect((await factsOn(changed("open-clean", (pr) => thread(pr, [marked])))).comments).toEqual([
-			{id: "t1", by: "bot"},
-		]);
-		expect(
-			(
-				await factsOn(
-					changed("open-clean", (pr) => thread(pr, [marked, {body: "I disagree.", author: user}])),
-				)
-			).comments,
-		).toEqual([{id: "t1", by: "person"}]);
-	});
+    expect((await factsOn(changed("open-clean", (pr) => thread(pr, [marked])))).comments).toEqual([
+      { id: "t1", by: "bot" },
+    ]);
+    expect(
+      (await factsOn(changed("open-clean", (pr) => thread(pr, [marked, { body: "I disagree.", author: user }]))))
+        .comments,
+    ).toEqual([{ id: "t1", by: "person" }]);
+  });
 
-	it("a comment from an account that is gone counts as a person's", async () => {
-		const facts = await factsOn(
-			changed("open-clean", (pr) => thread(pr, [{body: "Why this way?", author: null}])),
-		);
+  it("a comment from an account that is gone counts as a person's", async () => {
+    const facts = await factsOn(changed("open-clean", (pr) => thread(pr, [{ body: "Why this way?", author: null }])));
 
-		expect(facts.comments).toEqual([{id: "t1", by: "person"}]);
-	});
+    expect(facts.comments).toEqual([{ id: "t1", by: "person" }]);
+  });
 
-	it("no check on the head reads as pending, never as green", async () => {
-		const facts = await factsOn(
-			changed("open-clean", (pr) => (pr.commits.nodes[0].commit.statusCheckRollup = null)),
-		);
+  it("no check on the head reads as pending, never as green", async () => {
+    const facts = await factsOn(changed("open-clean", (pr) => (pr.commits.nodes[0].commit.statusCheckRollup = null)));
 
-		expect(facts.checks).toBe("pending");
-	});
+    expect(facts.checks).toBe("pending");
+  });
 
-	it("a check that errored is red, and one still expected is pending", async () => {
-		const withState = (state: string) =>
-			factsOn(
-				changed("open-clean", (pr) => (pr.commits.nodes[0].commit.statusCheckRollup = {state})),
-			);
+  it("a check that errored is red, and one still expected is pending", async () => {
+    const withState = (state: string) =>
+      factsOn(changed("open-clean", (pr) => (pr.commits.nodes[0].commit.statusCheckRollup = { state })));
 
-		expect((await withState("ERROR")).checks).toBe("red");
-		expect((await withState("EXPECTED")).checks).toBe("pending");
-	});
+    expect((await withState("ERROR")).checks).toBe("red");
+    expect((await withState("EXPECTED")).checks).toBe("pending");
+  });
 
-	it("an author that is gone, or not one of the repo's own, is not ours", async () => {
-		expect((await factsOn(changed("open-clean", (pr) => (pr.author = null)))).ours).toBe(false);
-		expect(
-			(await factsOn(recorded("open-clean"), {own: ["repo-owner"], reviewers: OWNERS})).ours,
-		).toBe(false);
-	});
+  it("an author that is gone, or not one of the repo's own, is not ours", async () => {
+    expect((await factsOn(changed("open-clean", (pr) => (pr.author = null)))).ours).toBe(false);
+    expect((await factsOn(recorded("open-clean"), { own: ["repo-owner"], reviewers: OWNERS })).ours).toBe(false);
+  });
 });
 
 describe("a repository's open pull requests", () => {
-	const listed = [
-		{
-			number: 9,
-			title: "Draw the list calmer",
-			html_url: "https://github.com/example/repo/pull/9",
-			draft: true,
-			updated_at: "2026-10-20T10:00:00Z",
-			user: {login: "someone"},
-		},
-		{
-			number: 7,
-			title: "Fix the login loop",
-			html_url: "https://github.com/example/repo/pull/7",
-			updated_at: "not a time",
-		},
-	];
-	const on = (answer: string | "breaks") => {
-		const calls: (readonly string[])[] = [];
-		const gh: Gh = (args) => {
-			calls.push(args);
-			return answer === "breaks" ? Effect.fail({_tag: "unknown" as const}) : Effect.succeed(answer);
-		};
-		return {gh, calls};
-	};
+  const listed = [
+    {
+      number: 9,
+      title: "Draw the list calmer",
+      html_url: "https://github.com/example/repo/pull/9",
+      draft: true,
+      updated_at: "2026-10-20T10:00:00Z",
+      user: { login: "someone" },
+    },
+    {
+      number: 7,
+      title: "Fix the login loop",
+      html_url: "https://github.com/example/repo/pull/7",
+      updated_at: "not a time",
+    },
+  ];
+  const on = (answer: string | "breaks") => {
+    const calls: (readonly string[])[] = [];
+    const gh: Gh = (args) => {
+      calls.push(args);
+      return answer === "breaks" ? Effect.fail({ _tag: "unknown" as const }) : Effect.succeed(answer);
+    };
+    return { gh, calls };
+  };
 
-	it("are one REST call, read to number, title, link, draft and time, and nothing else", async () => {
-		const {gh, calls} = on(JSON.stringify(listed));
-		const prs = await Effect.runPromise(readPullRequests(gh)("https://github.com/example/repo"));
+  it("are one REST call, read to number, title, link, draft and time, and nothing else", async () => {
+    const { gh, calls } = on(JSON.stringify(listed));
+    const prs = await Effect.runPromise(readPullRequests(gh)("https://github.com/example/repo"));
 
-		expect(calls).toEqual([["api", "repos/example/repo/pulls?state=open&per_page=100"]]);
-		expect(prs).toEqual([
-			{
-				number: 9,
-				title: "Draw the list calmer",
-				url: "https://github.com/example/repo/pull/9",
-				draft: true,
-				at: Date.parse("2026-10-20T10:00:00Z"),
-			},
-			{
-				number: 7,
-				title: "Fix the login loop",
-				url: "https://github.com/example/repo/pull/7",
-				draft: false,
-				at: 0,
-			},
-		]);
-	});
+    expect(calls).toEqual([["api", "repos/example/repo/pulls?state=open&per_page=100"]]);
+    expect(prs).toEqual([
+      {
+        number: 9,
+        title: "Draw the list calmer",
+        url: "https://github.com/example/repo/pull/9",
+        draft: true,
+        at: Date.parse("2026-10-20T10:00:00Z"),
+      },
+      {
+        number: 7,
+        title: "Fix the login loop",
+        url: "https://github.com/example/repo/pull/7",
+        draft: false,
+        at: 0,
+      },
+    ]);
+  });
 
-	it.each([
-		["a repository that is not a GitHub link", "https://example.com/a/b", "[]"],
-		["gh failing", "https://github.com/example/repo", "breaks"],
-		["an answer that is not JSON", "https://github.com/example/repo", "nope"],
-		[
-			"a link that is not GitHub's",
-			"https://github.com/example/repo",
-			JSON.stringify([{...listed[1], html_url: "https://elsewhere.example/pull/7"}]),
-		],
-	])("fail as unknown on %s, never a throw", async (_, repo, answer) => {
-		const {gh} = on(answer);
-		const failed = await Effect.runPromise(Effect.flip(readPullRequests(gh)(repo)));
+  it.each([
+    ["a repository that is not a GitHub link", "https://example.com/a/b", "[]"],
+    ["gh failing", "https://github.com/example/repo", "breaks"],
+    ["an answer that is not JSON", "https://github.com/example/repo", "nope"],
+    [
+      "a link that is not GitHub's",
+      "https://github.com/example/repo",
+      JSON.stringify([{ ...listed[1], html_url: "https://elsewhere.example/pull/7" }]),
+    ],
+  ])("fail as unknown on %s, never a throw", async (_, repo, answer) => {
+    const { gh } = on(answer);
+    const failed = await Effect.runPromise(Effect.flip(readPullRequests(gh)(repo)));
 
-		expect(failed).toEqual({_tag: "unknown"});
-	});
+    expect(failed).toEqual({ _tag: "unknown" });
+  });
 });
 
 // Areas PR 1, round 2: `CodeTree` on GitHub, the onboarding step's folders. A `gh` stood in on
 // disk, as `gitHubCodeTree` runs one by its path: it keeps each call's arguments and answers one
 // recorded GraphQL text, or fails.
 describe("the folders under a repository's paths", () => {
-	const made: string[] = [];
-	afterEach(() => {
-		for (const dir of made.splice(0)) {
-			rmSync(dir, {recursive: true, force: true});
-		}
-	});
+  const made: string[] = [];
+  afterEach(() => {
+    for (const dir of made.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 
-	/** A `gh` that answers `answer`, or exits 1 when it is `"breaks"`, and the calls it got. */
-	const fakeGhOnDisk = (answer: unknown) => {
-		const dir = mkdtempSync(join(tmpdir(), "gh-"));
-		made.push(dir);
-		writeFileSync(join(dir, "answer.json"), JSON.stringify(answer));
-		writeFileSync(
-			join(dir, "gh"),
-			[
-				"#!/bin/sh",
-				`for arg in "$@"; do printf '%s\\n' "$arg" >> "${dir}/calls"; done`,
-				`printf -- '--\\n' >> "${dir}/calls"`,
-				answer === "breaks" ? "exit 1" : `exec cat "${dir}/answer.json"`,
-				"",
-			].join("\n"),
-		);
-		chmodSync(join(dir, "gh"), 0o755);
-		const calls = () =>
-			existsSync(join(dir, "calls"))
-				? readFileSync(join(dir, "calls"), "utf8")
-						.split("--\n")
-						.filter((c) => c !== "")
-						.map((c) => c.split("\n").filter((a) => a !== ""))
-				: [];
-		return {gh: join(dir, "gh"), calls};
-	};
-	const foldersOn = (gh: string, repo: string, under: readonly string[]) =>
-		Effect.gen(function* () {
-			const tree = yield* CodeTree;
-			return yield* tree.folders(repo, under);
-		}).pipe(Effect.provide(gitHubCodeTree({gh})));
+  /** A `gh` that answers `answer`, or exits 1 when it is `"breaks"`, and the calls it got. */
+  const fakeGhOnDisk = (answer: unknown) => {
+    const dir = mkdtempSync(join(tmpdir(), "gh-"));
+    made.push(dir);
+    writeFileSync(join(dir, "answer.json"), JSON.stringify(answer));
+    writeFileSync(
+      join(dir, "gh"),
+      [
+        "#!/bin/sh",
+        `for arg in "$@"; do printf '%s\\n' "$arg" >> "${dir}/calls"; done`,
+        `printf -- '--\\n' >> "${dir}/calls"`,
+        answer === "breaks" ? "exit 1" : `exec cat "${dir}/answer.json"`,
+        "",
+      ].join("\n"),
+    );
+    chmodSync(join(dir, "gh"), 0o755);
+    const calls = () =>
+      existsSync(join(dir, "calls"))
+        ? readFileSync(join(dir, "calls"), "utf8")
+            .split("--\n")
+            .filter((c) => c !== "")
+            .map((c) => c.split("\n").filter((a) => a !== ""))
+        : [];
+    return { gh: join(dir, "gh"), calls };
+  };
+  const foldersOn = (gh: string, repo: string, under: readonly string[]) =>
+    Effect.gen(function* () {
+      const tree = yield* CodeTree;
+      return yield* tree.folders(repo, under);
+    }).pipe(Effect.provide(gitHubCodeTree({ gh })));
 
-	const REPO = "https://github.com/example/repo";
-	const TREES = {
-		data: {
-			repository: {
-				f0: {
-					entries: [
-						{name: "tracker", type: "tree"},
-						{name: "README.md", type: "blob"},
-						{name: "map", type: "tree"},
-					],
-				},
-				f1: null,
-				f2: {entries: [{name: "fabrika", type: "tree"}]},
-			},
-		},
-	};
+  const REPO = "https://github.com/example/repo";
+  const TREES = {
+    data: {
+      repository: {
+        f0: {
+          entries: [
+            { name: "tracker", type: "tree" },
+            { name: "README.md", type: "blob" },
+            { name: "map", type: "tree" },
+          ],
+        },
+        f1: null,
+        f2: { entries: [{ name: "fabrika", type: "tree" }] },
+      },
+    },
+  };
 
-	it("are one GraphQL call, one alias per path, and only the folders come back, by path from the root", async () => {
-		const {gh, calls} = fakeGhOnDisk(TREES);
-		const got = await Effect.runPromise(foldersOn(gh, REPO, ["programs", "packages", "apps"]));
-		expect(got).toEqual(["programs/tracker", "programs/map", "apps/fabrika"]);
-		const [call, ...more] = calls();
-		expect(more).toEqual([]);
-		expect(call?.slice(0, 6)).toEqual(["api", "graphql", "-f", "owner=example", "-f", "name=repo"]);
-		const query = call?.find((a) => a.startsWith("query=")) ?? "";
-		expect(query).toContain('f0: object(expression: "HEAD:programs")');
-		expect(query).toContain('f1: object(expression: "HEAD:packages")');
-		expect(query).toContain('f2: object(expression: "HEAD:apps")');
-	});
+  it("are one GraphQL call, one alias per path, and only the folders come back, by path from the root", async () => {
+    const { gh, calls } = fakeGhOnDisk(TREES);
+    const got = await Effect.runPromise(foldersOn(gh, REPO, ["programs", "packages", "apps"]));
+    expect(got).toEqual(["programs/tracker", "programs/map", "apps/fabrika"]);
+    const [call, ...more] = calls();
+    expect(more).toEqual([]);
+    expect(call?.slice(0, 6)).toEqual(["api", "graphql", "-f", "owner=example", "-f", "name=repo"]);
+    const query = call?.find((a) => a.startsWith("query=")) ?? "";
+    expect(query).toContain('f0: object(expression: "HEAD:programs")');
+    expect(query).toContain('f1: object(expression: "HEAD:packages")');
+    expect(query).toContain('f2: object(expression: "HEAD:apps")');
+  });
 
-	it("asks nothing for no paths, and gives none", async () => {
-		const {gh, calls} = fakeGhOnDisk(TREES);
-		expect(await Effect.runPromise(foldersOn(gh, REPO, []))).toEqual([]);
-		expect(calls()).toEqual([]);
-	});
+  it("asks nothing for no paths, and gives none", async () => {
+    const { gh, calls } = fakeGhOnDisk(TREES);
+    expect(await Effect.runPromise(foldersOn(gh, REPO, []))).toEqual([]);
+    expect(calls()).toEqual([]);
+  });
 
-	it.each([
-		["a path that climbs out", REPO, ["../secrets"]],
-		// Round 4, the review's finding 6: a `.` or `..` part anywhere, and an empty part.
-		["a path that climbs out in the middle", REPO, ["a/../b"]],
-		["a bare climb", REPO, [".."]],
-		["a path that starts with a dot part", REPO, ["./a"]],
-		["a path with an empty part", REPO, ["a//b"]],
-		["a path with a quote", REPO, ['apps" } } evil']],
-		["a path from the root", REPO, ["/apps"]],
-		["a path with a space", REPO, ["my apps"]],
-		["a repository that is not a GitHub link", "https://example.com/a/b", ["apps"]],
-	])("fails on %s, and asks nothing", async (_, repo, under) => {
-		const {gh, calls} = fakeGhOnDisk(TREES);
-		expect(await Effect.runPromise(Effect.flip(foldersOn(gh, repo, under)))).toEqual({
-			_tag: "unknown",
-		});
-		expect(calls()).toEqual([]);
-	});
+  it.each([
+    ["a path that climbs out", REPO, ["../secrets"]],
+    // Round 4, the review's finding 6: a `.` or `..` part anywhere, and an empty part.
+    ["a path that climbs out in the middle", REPO, ["a/../b"]],
+    ["a bare climb", REPO, [".."]],
+    ["a path that starts with a dot part", REPO, ["./a"]],
+    ["a path with an empty part", REPO, ["a//b"]],
+    ["a path with a quote", REPO, ['apps" } } evil']],
+    ["a path from the root", REPO, ["/apps"]],
+    ["a path with a space", REPO, ["my apps"]],
+    ["a repository that is not a GitHub link", "https://example.com/a/b", ["apps"]],
+  ])("fails on %s, and asks nothing", async (_, repo, under) => {
+    const { gh, calls } = fakeGhOnDisk(TREES);
+    expect(await Effect.runPromise(Effect.flip(foldersOn(gh, repo, under)))).toEqual({
+      _tag: "unknown",
+    });
+    expect(calls()).toEqual([]);
+  });
 
-	it("asks for a folder whose name starts with a dot, such as `.github`", async () => {
-		const {gh, calls} = fakeGhOnDisk(TREES);
-		expect(await Effect.runPromise(foldersOn(gh, REPO, [".github"]))).toEqual([
-			".github/tracker",
-			".github/map",
-		]);
-		const query = calls()[0]?.find((a) => a.startsWith("query=")) ?? "";
-		expect(query).toContain('f0: object(expression: "HEAD:.github")');
-	});
+  it("asks for a folder whose name starts with a dot, such as `.github`", async () => {
+    const { gh, calls } = fakeGhOnDisk(TREES);
+    expect(await Effect.runPromise(foldersOn(gh, REPO, [".github"]))).toEqual([".github/tracker", ".github/map"]);
+    const query = calls()[0]?.find((a) => a.startsWith("query=")) ?? "";
+    expect(query).toContain('f0: object(expression: "HEAD:.github")');
+  });
 
-	it.each([
-		["gh fails", "breaks"],
-		["the answer is not the shape", {data: {nothing: true}}],
-	])("fails when %s", async (_, answer) => {
-		const {gh} = fakeGhOnDisk(answer);
-		expect(await Effect.runPromise(Effect.flip(foldersOn(gh, REPO, ["apps"])))).toEqual({
-			_tag: "unknown",
-		});
-	});
+  it.each([
+    ["gh fails", "breaks"],
+    ["the answer is not the shape", { data: { nothing: true } }],
+  ])("fails when %s", async (_, answer) => {
+    const { gh } = fakeGhOnDisk(answer);
+    expect(await Effect.runPromise(Effect.flip(foldersOn(gh, REPO, ["apps"])))).toEqual({
+      _tag: "unknown",
+    });
+  });
 });

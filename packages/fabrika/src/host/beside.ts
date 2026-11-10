@@ -4,8 +4,8 @@
 // path takes the extension of the module asking for it.
 //
 // Node at the edge: a file path from a URL.
-import {fileURLToPath} from "node:url";
+import { fileURLToPath } from "node:url";
 
 /** The path of `name` (no extension) beside the module whose `import.meta.url` is `from`. */
 export const beside = (from: string, name: string): string =>
-	fileURLToPath(new URL(`./${name}${from.slice(from.lastIndexOf("."))}`, from));
+  fileURLToPath(new URL(`./${name}${from.slice(from.lastIndexOf("."))}`, from));

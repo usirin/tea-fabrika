@@ -13,46 +13,45 @@
 // One edge, by its whole path from the top of the repo: the log, which stores any fact and knows no
 // cases, so its `Line` holds `_tag` as an open string. A second edge goes back to the owner.
 // `.oxlintrc.json` turns it on in `next/**` and leaves tests out: a test feeds raw frames.
-import type {CreateRule} from "@oxlint/plugins";
-import {type Node, pathIn} from "./match.ts";
+import type { CreateRule } from "@oxlint/plugins";
+import { type Node, pathIn } from "./match.ts";
 
 const EDGE = "next/packages/libfabrika/src/data/log.ts";
 
 const isTag = (key: Node): boolean =>
-	(key.type === "Identifier" && key.name === "_tag") ||
-	(key.type === "Literal" && key.value === "_tag");
+  (key.type === "Identifier" && key.name === "_tag") || (key.type === "Literal" && key.value === "_tag");
 
 export const noHandTag: CreateRule = {
-	create(context) {
-		if (pathIn(context) === EDGE) {
-			return {};
-		}
+  create(context) {
+    if (pathIn(context) === EDGE) {
+      return {};
+    }
 
-		const check = (node: Node, key: Node, computed: boolean) => {
-			if (computed || !isTag(key)) {
-				return;
-			}
+    const check = (node: Node, key: Node, computed: boolean) => {
+      if (computed || !isTag(key)) {
+        return;
+      }
 
-			context.report({
-				node,
-				message:
-					"A hand-written `_tag`: Effect Schema writes it. Use `Schema.TaggedUnion`, `Schema.TaggedStruct` or `Schema.TaggedError`, and make a value with its maker (`X.cases.a.make(...)`).",
-			});
-		};
-		return {
-			Property(node) {
-				const {parent} = node as Node & {readonly parent: Node};
+      context.report({
+        node,
+        message:
+          "A hand-written `_tag`: Effect Schema writes it. Use `Schema.TaggedUnion`, `Schema.TaggedStruct` or `Schema.TaggedError`, and make a value with its maker (`X.cases.a.make(...)`).",
+      });
+    };
+    return {
+      Property(node) {
+        const { parent } = node as Node & { readonly parent: Node };
 
-				if (parent.type === "ObjectExpression") {
-					check(node, node.key, node.computed);
-				}
-			},
-			PropertyDefinition(node) {
-				check(node, node.key, node.computed);
-			},
-			TSPropertySignature(node) {
-				check(node, node.key, node.computed);
-			},
-		};
-	},
+        if (parent.type === "ObjectExpression") {
+          check(node, node.key, node.computed);
+        }
+      },
+      PropertyDefinition(node) {
+        check(node, node.key, node.computed);
+      },
+      TSPropertySignature(node) {
+        check(node, node.key, node.computed);
+      },
+    };
+  },
 };

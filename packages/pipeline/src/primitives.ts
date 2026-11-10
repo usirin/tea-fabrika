@@ -1,10 +1,10 @@
-import type {CmdDef, CmdInput, DepKeyedSub, Sub, TaggedError} from "@demlik/tea";
-import {Cmd} from "@demlik/tea/effect";
-import {decodeJevReply, jevCallThrew, jevQuestions} from "@demlik/tea/jev";
-import {Effect, Schema} from "effect";
-import {z} from "zod";
-import {isEffectSpec, type Plain, type Spec, zodCmd} from "./schema.ts";
-import {Jev} from "./services.ts";
+import type { CmdDef, CmdInput, DepKeyedSub, Sub, TaggedError } from "@demlik/tea";
+import { Cmd } from "@demlik/tea/effect";
+import { decodeJevReply, jevCallThrew, jevQuestions } from "@demlik/tea/jev";
+import { Effect, Schema } from "effect";
+import { z } from "zod";
+import { isEffectSpec, type Plain, type Spec, zodCmd } from "./schema.ts";
+import { Jev } from "./services.ts";
 
 // The six moves every step of a pipeline is made of, each one an Elm thing:
 //
@@ -31,27 +31,22 @@ import {Jev} from "./services.ts";
  * Gather: code reads the world and answers with typed data. It changes
  * nothing, so a restart that finds one in flight simply asks it again.
  */
-export const gather = <
-	const N extends string,
-	I extends CmdInput,
-	O,
-	const T extends readonly string[],
->(
-	name: N,
-	spec: Spec<I, O, T>,
+export const gather = <const N extends string, I extends CmdInput, O, const T extends readonly string[]>(
+  name: N,
+  spec: Spec<I, O, T>,
 ) =>
-	// zod: the second branch.
-	isEffectSpec(spec) ? Cmd.make(name, spec) : zodCmd(name, spec);
+  // zod: the second branch.
+  isEffectSpec(spec) ? Cmd.make(name, spec) : zodCmd(name, spec);
 
 /** What an Act carries besides its own input: the name of the one write it stands for. */
-export type Intended<I> = I & {readonly intent: string};
+export type Intended<I> = I & { readonly intent: string };
 
 type Struct = Schema.Struct<Schema.Struct.Fields>;
 
 type ActSpec<In, O, T extends readonly string[]> = {
-	readonly input: In;
-	readonly ok: Plain<O>;
-	readonly err: T;
+  readonly input: In;
+  readonly ok: Plain<O>;
+  readonly err: T;
 };
 
 /**
@@ -60,19 +55,14 @@ type ActSpec<In, O, T extends readonly string[]> = {
  * follow through a struct whose fields it does not know yet.
  */
 const intended = <I>(input: Struct & Plain<I>) =>
-	// oxlint-disable-next-line fabrika/no-type-assertions -- TypeScript cannot follow `fieldsAssign` through a struct whose fields it does not know yet, and refuses a single cast; the cast says what was built
-	Schema.fieldsAssign({intent: Schema.String})(input) as unknown as Plain<Intended<I>>;
+  // oxlint-disable-next-line fabrika/no-type-assertions -- TypeScript cannot follow `fieldsAssign` through a struct whose fields it does not know yet, and refuses a single cast; the cast says what was built
+  Schema.fieldsAssign({ intent: Schema.String })(input) as unknown as Plain<Intended<I>>;
 
 /** zod: Act over a zod object, as it was. */
-const actZod = <
-	const N extends string,
-	S extends z.ZodRawShape,
-	O,
-	const T extends readonly string[],
->(
-	name: N,
-	spec: ActSpec<z.ZodObject<S>, O, T>,
-) => zodCmd(name, {input: spec.input.extend({intent: z.string()}), ok: spec.ok, err: spec.err});
+const actZod = <const N extends string, S extends z.ZodRawShape, O, const T extends readonly string[]>(
+  name: N,
+  spec: ActSpec<z.ZodObject<S>, O, T>,
+) => zodCmd(name, { input: spec.input.extend({ intent: z.string() }), ok: spec.ok, err: spec.err });
 
 /**
  * Act: code writes the world. The Cmd carries an `intent`, a name for this one
@@ -84,35 +74,25 @@ const actZod = <
  *
  * `input` is a struct, so the `intent` field has somewhere to go.
  */
-export function act<
-	const N extends string,
-	I extends CmdInput,
-	O,
-	const T extends readonly string[],
->(
-	name: N,
-	spec: ActSpec<Struct & Plain<I>, O, T>,
+export function act<const N extends string, I extends CmdInput, O, const T extends readonly string[]>(
+  name: N,
+  spec: ActSpec<Struct & Plain<I>, O, T>,
 ): CmdDef<N, Intended<I>, O, TaggedError<T[number]>>;
 // zod: this signature, and the second branch below.
-export function act<
-	const N extends string,
-	S extends z.ZodRawShape,
-	O,
-	const T extends readonly string[],
->(name: N, spec: ActSpec<z.ZodObject<S>, O, T>): ReturnType<typeof actZod<N, S, O, T>>;
-export function act(
-	name: string,
-	spec: ActSpec<(Struct & Plain<CmdInput>) | z.ZodObject, unknown, readonly string[]>,
-) {
-	const {input, ok, err} = spec;
+export function act<const N extends string, S extends z.ZodRawShape, O, const T extends readonly string[]>(
+  name: N,
+  spec: ActSpec<z.ZodObject<S>, O, T>,
+): ReturnType<typeof actZod<N, S, O, T>>;
+export function act(name: string, spec: ActSpec<(Struct & Plain<CmdInput>) | z.ZodObject, unknown, readonly string[]>) {
+  const { input, ok, err } = spec;
 
-	if (!Schema.isSchema(input)) {
-		return actZod(name, {input, ok, err});
-	}
+  if (!Schema.isSchema(input)) {
+    return actZod(name, { input, ok, err });
+  }
 
-	const withIntent = {input: intended(input), ok, err};
-	// zod: the second branch, for an Effect `input` beside a zod `ok`.
-	return isEffectSpec(withIntent) ? Cmd.make(name, withIntent) : zodCmd(name, withIntent);
+  const withIntent = { input: intended(input), ok, err };
+  // zod: the second branch, for an Effect `input` beside a zod `ok`.
+  return isEffectSpec(withIntent) ? Cmd.make(name, withIntent) : zodCmd(name, withIntent);
 }
 
 /**
@@ -131,15 +111,15 @@ export const intentOf = (...parts: readonly (string | number)[]): string => part
  *   keptCmd(readTicket, At)   // {type: "ticket_read", ticket: string}
  */
 export const keptCmd = <const N extends string, F extends Schema.Struct.Fields>(
-	def: {readonly cmdType: N},
-	input: Schema.Struct<F>,
-) => Schema.Struct({...input.fields, type: Schema.Literal(def.cmdType)});
+  def: { readonly cmdType: N },
+  input: Schema.Struct<F>,
+) => Schema.Struct({ ...input.fields, type: Schema.Literal(def.cmdType) });
 
 /** `keptCmd` for an Act: its input as given, with the `intent` the move adds. */
 export const keptAct = <const N extends string, F extends Schema.Struct.Fields>(
-	def: {readonly cmdType: N},
-	input: Schema.Struct<F>,
-) => Schema.Struct({...input.fields, intent: Schema.String, type: Schema.Literal(def.cmdType)});
+  def: { readonly cmdType: N },
+  input: Schema.Struct<F>,
+) => Schema.Struct({ ...input.fields, intent: Schema.String, type: Schema.Literal(def.cmdType) });
 
 /**
  * Listen: things that arrive on their own (a CI result, a reply, the clock).
@@ -147,10 +127,8 @@ export const keptAct = <const N extends string, F extends Schema.Struct.Fields>(
  * as `deps` is not null; leaving the phase stops it. The runner turns what
  * arrives into typed Msgs, and the model never reads raw text.
  */
-export const listen = <S, T extends string, D>(
-	type: T,
-	deps: (state: S) => D | null,
-): DepKeyedSub<S, Sub<T, D>> => ({type, deps}) as DepKeyedSub<S, Sub<T, D>>;
+export const listen = <S, T extends string, D>(type: T, deps: (state: S) => D | null): DepKeyedSub<S, Sub<T, D>> =>
+  ({ type, deps }) as DepKeyedSub<S, Sub<T, D>>;
 
 /**
  * Check, the pure form: what is wrong with an output, as sentences the
@@ -165,20 +143,20 @@ export type Check<O, B> = (output: O, brief: B) => readonly string[];
  * nothing, so it is a Gather whose answer is a verdict.
  */
 export const checkRun = <const N extends string, I extends CmdInput, V>(
-	name: N,
-	spec: {readonly input: Plain<I>; readonly verdict: Plain<V>},
-) => gather(name, {input: spec.input, ok: spec.verdict, err: ["could_not_run"]});
+  name: N,
+  spec: { readonly input: Plain<I>; readonly verdict: Plain<V> },
+) => gather(name, { input: spec.input, ok: spec.verdict, err: ["could_not_run"] });
 
 /** Jev's answer to a Judge, before the floor. */
 export interface Judged<C extends string> {
-	readonly choice: C;
-	readonly confidence: number;
+  readonly choice: C;
+  readonly confidence: number;
 }
 
 /** A Judge's answer after the floor: sure of one choice, or unsure, which goes to a person. */
 export type Ruled<C extends string> =
-	| {readonly sure: true; readonly choice: C; readonly confidence: number}
-	| {readonly sure: false; readonly best: C; readonly confidence: number};
+  | { readonly sure: true; readonly choice: C; readonly confidence: number }
+  | { readonly sure: false; readonly best: C; readonly confidence: number };
 
 /**
  * Judge: Jev answers one narrow question with fixed choices and a confidence.
@@ -187,48 +165,48 @@ export type Ruled<C extends string> =
  * the floor is "unsure", which a parent sends to `ask`.
  */
 export function createJudge<const N extends string, const C extends string>(config: {
-	readonly name: N;
-	readonly instructions: string;
-	readonly choices: Readonly<Record<C, string>>;
+  readonly name: N;
+  readonly instructions: string;
+  readonly choices: Readonly<Record<C, string>>;
 }) {
-	const choices = Object.keys(config.choices) as [C, ...C[]];
-	const questions = jevQuestions({
-		answer: {type: "choice", instructions: config.instructions, criteria: config.choices},
-	});
-	const ask = Cmd.make(`${config.name}_judge`, {
-		/** The texts Jev reads, by name; the instructions refer to them in backticks. */
-		input: Schema.Struct({key: Schema.String, texts: Schema.Record(Schema.String, Schema.String)}),
-		/** `Finite`, as zod's `number` was: a confidence is never NaN or infinite. */
-		ok: Schema.Struct({choice: Schema.Literals(choices), confidence: Schema.Finite}),
-		err: ["judge_failed"],
-	});
+  const choices = Object.keys(config.choices) as [C, ...C[]];
+  const questions = jevQuestions({
+    answer: { type: "choice", instructions: config.instructions, criteria: config.choices },
+  });
+  const ask = Cmd.make(`${config.name}_judge`, {
+    /** The texts Jev reads, by name; the instructions refer to them in backticks. */
+    input: Schema.Struct({ key: Schema.String, texts: Schema.Record(Schema.String, Schema.String) }),
+    /** `Finite`, as zod's `number` was: a confidence is never NaN or infinite. */
+    ok: Schema.Struct({ choice: Schema.Literals(choices), confidence: Schema.Finite }),
+    err: ["judge_failed"],
+  });
 
-	const rule = (judged: Judged<C>, floor: number): Ruled<C> =>
-		judged.confidence >= floor
-			? {sure: true, choice: judged.choice, confidence: judged.confidence}
-			: {sure: false, best: judged.choice, confidence: judged.confidence};
+  const rule = (judged: Judged<C>, floor: number): Ruled<C> =>
+    judged.confidence >= floor
+      ? { sure: true, choice: judged.choice, confidence: judged.confidence }
+      : { sure: false, best: judged.choice, confidence: judged.confidence };
 
-	/** The handler, over the `Jev` service: one call, the reply read against the question. */
-	const handle = (model: string) => (cmd: ReturnType<typeof ask>) =>
-		Effect.gen(function* () {
-			const jev = yield* Jev;
-			const request = {state: cmd.texts, model, questions};
-			const outcome = yield* jev.call(request).pipe(
-				Effect.match({
-					onSuccess: (reply) => decodeJevReply(request, reply),
-					onFailure: (failure) => jevCallThrew(failure.cause),
-				}),
-			);
+  /** The handler, over the `Jev` service: one call, the reply read against the question. */
+  const handle = (model: string) => (cmd: ReturnType<typeof ask>) =>
+    Effect.gen(function* () {
+      const jev = yield* Jev;
+      const request = { state: cmd.texts, model, questions };
+      const outcome = yield* jev.call(request).pipe(
+        Effect.match({
+          onSuccess: (reply) => decodeJevReply(request, reply),
+          onFailure: (failure) => jevCallThrew(failure.cause),
+        }),
+      );
 
-			if (outcome._tag === "Err") {
-				return yield* Effect.fail({_tag: "judge_failed" as const});
-			}
+      if (outcome._tag === "Err") {
+        return yield* Effect.fail({ _tag: "judge_failed" as const });
+      }
 
-			const {choice, confidence} = outcome.value.answers.answer;
-			return {choice: choice as C, confidence};
-		});
+      const { choice, confidence } = outcome.value.answers.answer;
+      return { choice: choice as C, confidence };
+    });
 
-	return {name: config.name, choices, criteria: config.choices, ask, rule, handle};
+  return { name: config.name, choices, criteria: config.choices, ask, rule, handle };
 }
 
 /**
@@ -241,43 +219,43 @@ export function createJudge<const N extends string, const C extends string>(conf
  *   same.rule(0.83, 0.7)   // {sure: true, yes: 0.83}
  */
 export function createYesNoJudge<const N extends string>(config: {
-	readonly name: N;
-	readonly instructions: string;
-	readonly criteria: {readonly true: string; readonly false: string};
+  readonly name: N;
+  readonly instructions: string;
+  readonly criteria: { readonly true: string; readonly false: string };
 }) {
-	const questions = jevQuestions({
-		answer: {type: "noul", instructions: config.instructions, criteria: config.criteria},
-	});
-	const ask = Cmd.make(`${config.name}_judge`, {
-		/** The texts Jev reads, by name; the instructions refer to them in backticks. */
-		input: Schema.Struct({key: Schema.String, texts: Schema.Record(Schema.String, Schema.String)}),
-		ok: Schema.Struct({yes: Schema.Finite}),
-		err: ["judge_failed"],
-	});
+  const questions = jevQuestions({
+    answer: { type: "noul", instructions: config.instructions, criteria: config.criteria },
+  });
+  const ask = Cmd.make(`${config.name}_judge`, {
+    /** The texts Jev reads, by name; the instructions refer to them in backticks. */
+    input: Schema.Struct({ key: Schema.String, texts: Schema.Record(Schema.String, Schema.String) }),
+    ok: Schema.Struct({ yes: Schema.Finite }),
+    err: ["judge_failed"],
+  });
 
-	const rule = (yes: number, floor: number) => ({sure: yes >= floor, yes});
+  const rule = (yes: number, floor: number) => ({ sure: yes >= floor, yes });
 
-	/** One call over the `Jev` service: the texts and the question, the reply read against it. */
-	const judge = (model: string, texts: Readonly<Record<string, string>>) =>
-		Effect.gen(function* () {
-			const jev = yield* Jev;
-			const request = {state: texts, model, questions};
-			const outcome = yield* jev.call(request).pipe(
-				Effect.match({
-					onSuccess: (reply) => decodeJevReply(request, reply),
-					onFailure: (failure) => jevCallThrew(failure.cause),
-				}),
-			);
+  /** One call over the `Jev` service: the texts and the question, the reply read against it. */
+  const judge = (model: string, texts: Readonly<Record<string, string>>) =>
+    Effect.gen(function* () {
+      const jev = yield* Jev;
+      const request = { state: texts, model, questions };
+      const outcome = yield* jev.call(request).pipe(
+        Effect.match({
+          onSuccess: (reply) => decodeJevReply(request, reply),
+          onFailure: (failure) => jevCallThrew(failure.cause),
+        }),
+      );
 
-			if (outcome._tag === "Err") {
-				return yield* Effect.fail({_tag: "judge_failed" as const});
-			}
+      if (outcome._tag === "Err") {
+        return yield* Effect.fail({ _tag: "judge_failed" as const });
+      }
 
-			return {yes: outcome.value.answers.answer.noul};
-		});
+      return { yes: outcome.value.answers.answer.noul };
+    });
 
-	/** The handler for `ask`. */
-	const handle = (model: string) => (cmd: ReturnType<typeof ask>) => judge(model, cmd.texts);
+  /** The handler for `ask`. */
+  const handle = (model: string) => (cmd: ReturnType<typeof ask>) => judge(model, cmd.texts);
 
-	return {name: config.name, questions, ask, rule, judge, handle};
+  return { name: config.name, questions, ask, rule, judge, handle };
 }

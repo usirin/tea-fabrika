@@ -28,48 +28,47 @@
 //
 // Test and support files that bridge Node or test types to runtime surfaces carry a justified
 // `// oxlint-disable-next-line fabrika/no-type-assertions -- <reason>`.
-import type {CreateRule, ESTree} from "@oxlint/plugins";
-import {grouped} from "./match.ts";
+import type { CreateRule, ESTree } from "@oxlint/plugins";
+import { grouped } from "./match.ts";
 
 export const noTypeAssertions: CreateRule = {
-	create(context) {
-		const source = context.sourceCode;
-		/** The type right after `as`, with no parentheses of its own: `as (any)` is not `as any`. */
-		const asKeyword = (node: ESTree.TSAsExpression, kind: string): boolean =>
-			node.typeAnnotation.type === kind &&
-			source.getTokenBefore(node.typeAnnotation)?.value === "as";
-		return {
-			TSAsExpression(node) {
-				const inner = node.expression;
+  create(context) {
+    const source = context.sourceCode;
+    /** The type right after `as`, with no parentheses of its own: `as (any)` is not `as any`. */
+    const asKeyword = (node: ESTree.TSAsExpression, kind: string): boolean =>
+      node.typeAnnotation.type === kind && source.getTokenBefore(node.typeAnnotation)?.value === "as";
+    return {
+      TSAsExpression(node) {
+        const inner = node.expression;
 
-				if (inner.type === "TSAsExpression" && grouped(source, inner) <= 1) {
-					const message = asKeyword(inner, "TSUnknownKeyword")
-						? "Type assertions are forbidden: `as unknown as` blinds the compiler. Decode at boundaries with Schema.decodeUnknown, or type the value properly."
-						: asKeyword(inner, "TSNeverKeyword")
-							? "Type assertions are forbidden: `as never as T` launders a value past the compiler. Construct/type the value properly instead."
-							: null;
+        if (inner.type === "TSAsExpression" && grouped(source, inner) <= 1) {
+          const message = asKeyword(inner, "TSUnknownKeyword")
+            ? "Type assertions are forbidden: `as unknown as` blinds the compiler. Decode at boundaries with Schema.decodeUnknown, or type the value properly."
+            : asKeyword(inner, "TSNeverKeyword")
+              ? "Type assertions are forbidden: `as never as T` launders a value past the compiler. Construct/type the value properly instead."
+              : null;
 
-					if (message !== null) {
-						context.report({node: inner.expression, message});
-						return;
-					}
-				}
+          if (message !== null) {
+            context.report({ node: inner.expression, message });
+            return;
+          }
+        }
 
-				if (asKeyword(node, "TSAnyKeyword")) {
-					context.report({
-						node,
-						message:
-							"`as any` is forbidden: it disables type checking. Type the value properly (e.g. `as React.CSSProperties` for CSS-var keys).",
-					});
-				}
-			},
-			TSTypeAssertion(node) {
-				context.report({
-					node,
-					message:
-						"Angle-bracket type assertions (`<T>x`) are forbidden: same erasure as `x as T`. Decode at boundaries with Schema.decodeUnknown, or type the value properly.",
-				});
-			},
-		};
-	},
+        if (asKeyword(node, "TSAnyKeyword")) {
+          context.report({
+            node,
+            message:
+              "`as any` is forbidden: it disables type checking. Type the value properly (e.g. `as React.CSSProperties` for CSS-var keys).",
+          });
+        }
+      },
+      TSTypeAssertion(node) {
+        context.report({
+          node,
+          message:
+            "Angle-bracket type assertions (`<T>x`) are forbidden: same erasure as `x as T`. Decode at boundaries with Schema.decodeUnknown, or type the value properly.",
+        });
+      },
+    };
+  },
 };

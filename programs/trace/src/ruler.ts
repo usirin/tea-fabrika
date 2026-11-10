@@ -27,49 +27,48 @@ const DAY = 24 * HOUR;
 
 /** The round steps, in ms, smallest first. */
 const ROUND: readonly number[] = [
-	1,
-	2,
-	5,
-	10,
-	20,
-	50,
-	100,
-	200,
-	500,
-	...[1, 2, 5, 10, 15, 30].map((n) => n * SEC),
-	...[1, 2, 5, 10, 15, 30].map((n) => n * MIN),
-	...[1, 2, 3, 6, 12].map((n) => n * HOUR),
-	DAY,
+  1,
+  2,
+  5,
+  10,
+  20,
+  50,
+  100,
+  200,
+  500,
+  ...[1, 2, 5, 10, 15, 30].map((n) => n * SEC),
+  ...[1, 2, 5, 10, 15, 30].map((n) => n * MIN),
+  ...[1, 2, 3, 6, 12].map((n) => n * HOUR),
+  DAY,
 ];
 
 /** One tick: its time from the axis start, in ms, and the coarsest rank it belongs to. */
-export type Tick = {readonly t: number; readonly rank: 0 | 1 | 2 | 3};
+export type Tick = { readonly t: number; readonly rank: 0 | 1 | 2 | 3 };
 
 /** How many ticks a step gives over an axis: one at 0 and one at each whole step after. */
 const countOf = (length: number, step: number): number => Math.floor(length / step) + 1;
 
 /** The smallest round step that divides `coarser` and gives at most `most` ticks. */
 const finest = (length: number, coarser: number, most: number): number =>
-	ROUND.find((step) => coarser % step === 0 && countOf(length, step) <= most) ?? coarser;
+  ROUND.find((step) => coarser % step === 0 && countOf(length, step) <= most) ?? coarser;
 
 /** The coarsest step: a round one with at most 4 ticks, else whole days. */
 const coarsest = (length: number): number =>
-	ROUND.find((step) => countOf(length, step) <= 4) ?? DAY * Math.ceil(length / (3 * DAY));
+  ROUND.find((step) => countOf(length, step) <= 4) ?? DAY * Math.ceil(length / (3 * DAY));
 
 /** The ticks of an axis `length` ms long, each at its coarsest rank, in time order. */
 export const ticksOf = (length: number): readonly Tick[] => {
-	if (!(length > 0)) {
-		return [{t: 0, rank: 0}];
-	}
+  if (!(length > 0)) {
+    return [{ t: 0, rank: 0 }];
+  }
 
-	const one = coarsest(length);
-	const last = Math.floor(length / one) * one;
-	const two = finest(length, one, 8);
-	const three = finest(length, two, 16);
-	const rankOf = (t: number): Tick["rank"] =>
-		t === 0 || t === last ? 0 : t % one === 0 ? 1 : t % two === 0 ? 2 : 3;
-	return Array.from({length: countOf(length, three)}, (_, k) => {
-		const t = k * three;
-		return {t, rank: rankOf(t)};
-	});
+  const one = coarsest(length);
+  const last = Math.floor(length / one) * one;
+  const two = finest(length, one, 8);
+  const three = finest(length, two, 16);
+  const rankOf = (t: number): Tick["rank"] => (t === 0 || t === last ? 0 : t % one === 0 ? 1 : t % two === 0 ? 2 : 3);
+  return Array.from({ length: countOf(length, three) }, (_, k) => {
+    const t = k * three;
+    return { t, rank: rankOf(t) };
+  });
 };

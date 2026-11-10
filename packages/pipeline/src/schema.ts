@@ -1,7 +1,7 @@
-import {Cmd, type CmdInput} from "@demlik/tea";
-import type {CheckingSchema} from "@demlik/tea/effect";
-import {Option, Schema, SchemaGetter} from "effect";
-import type {z} from "zod";
+import { Cmd, type CmdInput } from "@demlik/tea";
+import type { CheckingSchema } from "@demlik/tea/effect";
+import { Option, Schema, SchemaGetter } from "effect";
+import type { z } from "zod";
 
 // Schemas here are Effect Schema (docs/direction/data-first-markdown-is-a-view.md).
 // A Cmd from Effect schemas is tea's own `Cmd.make` from `@demlik/tea/effect`,
@@ -30,41 +30,35 @@ import type {z} from "zod";
  * where outside data does come in: a handler, or a Draft's output.
  */
 export type Plain<T> =
-	| CheckingSchema<T>
-	// zod: a schema of the code not yet moved, as it was.
-	| z.ZodType<T>;
+  | CheckingSchema<T>
+  // zod: a schema of the code not yet moved, as it was.
+  | z.ZodType<T>;
 
 /** A Cmd's spec as a move takes it. */
 export interface Spec<I, O, T extends readonly string[]> {
-	readonly input: Plain<I>;
-	readonly ok: Plain<O>;
-	readonly err: T;
+  readonly input: Plain<I>;
+  readonly ok: Plain<O>;
+  readonly err: T;
 }
 
 /** zod: no slot holds zod, so the spec goes to tea's Effect `Cmd.make` as it is. */
 export const isEffectSpec = <I, O, T extends readonly string[]>(
-	spec: Spec<I, O, T>,
-): spec is {readonly input: CheckingSchema<I>; readonly ok: CheckingSchema<O>; readonly err: T} =>
-	Schema.isSchema(spec.input) && Schema.isSchema(spec.ok);
+  spec: Spec<I, O, T>,
+): spec is { readonly input: CheckingSchema<I>; readonly ok: CheckingSchema<O>; readonly err: T } =>
+  Schema.isSchema(spec.input) && Schema.isSchema(spec.ok);
 
 /** zod: the schema as the core `Cmd.define` takes it. A zod schema already is a Standard Schema. */
-const standard = <T>(schema: Plain<T>) =>
-	Schema.isSchema(schema) ? Schema.toStandardSchemaV1(schema) : schema;
+const standard = <T>(schema: Plain<T>) => (Schema.isSchema(schema) ? Schema.toStandardSchemaV1(schema) : schema);
 
 /**
  * zod: a Cmd with a zod slot. tea's Effect `Cmd.make` refuses zod, so this
  * wraps any Effect slot and hands the spec to the core `Cmd.define`. The Cmd
  * it gives back is the one tea's Effect `Cmd.make` gives for the same types.
  */
-export const zodCmd = <
-	const N extends string,
-	I extends CmdInput,
-	O,
-	const T extends readonly string[],
->(
-	name: N,
-	spec: Spec<I, O, T>,
-) => Cmd.define(name, {input: standard(spec.input), ok: standard(spec.ok), err: spec.err});
+export const zodCmd = <const N extends string, I extends CmdInput, O, const T extends readonly string[]>(
+  name: N,
+  spec: Spec<I, O, T>,
+) => Cmd.define(name, { input: standard(spec.input), ok: standard(spec.ok), err: spec.err });
 
 /**
  * A key an agent's answer says "nothing" in by `null`, and the code reads as absent.
@@ -75,9 +69,9 @@ export const zodCmd = <
  * What holds or saves an answer holds its type side, `Schema.toType(schema)`.
  */
 export const maybe = <T, E>(schema: Schema.Codec<T, E>) =>
-	Schema.NullOr(schema).pipe(
-		Schema.decodeTo(Schema.optionalKey(Schema.toType(schema)), {
-			decode: SchemaGetter.transformOptional(Option.filter((given) => given !== null)),
-			encode: SchemaGetter.transformOptional((given) => Option.orElseSome(given, () => null)),
-		}),
-	);
+  Schema.NullOr(schema).pipe(
+    Schema.decodeTo(Schema.optionalKey(Schema.toType(schema)), {
+      decode: SchemaGetter.transformOptional(Option.filter((given) => given !== null)),
+      encode: SchemaGetter.transformOptional((given) => Option.orElseSome(given, () => null)),
+    }),
+  );
