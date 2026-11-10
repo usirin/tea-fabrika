@@ -258,6 +258,10 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
 - **What holds it.** `stuck` has a required `resume`, and a stuck `over` has a required `Held`:
   a stop without them is not a value. A law: the fold of the lane's facts equals its saved `Held`
   at every point a lane can stop, so a lost save can be rebuilt (PR 289's PR 5 has it).
+- **Requirement: nothing stale** (owner, 2026-11-09). Once the work is saved, the pipeline removes
+  every workspace its steps ran in (a box, a worktree, a container) when the lane lands, as code with
+  a law, and frees disk itself before it refuses a step; it never asks a person to clean up
+  ([0019](../../.decisions/0019-nothing-stale.md)).
 
 ### P7: a step is idempotent, keyed by its inputs
 

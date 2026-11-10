@@ -1,12 +1,12 @@
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
-import {gitHubCodeHost, gitHubCodeTree} from "@kampus/pipeline/code-host-github";
-import {GITHUB, gitHubPullRequests, gitHubRepoTree} from "@tea-fabrika/tracker/github";
-import {Effect, FileSystem, Layer, Logger, Runtime} from "effect";
-import {hostJev} from "./jev.ts";
-import {runHost} from "./run.ts";
-import {pathsOf} from "./socket.ts";
+import { gitHubCodeHost, gitHubCodeTree } from "@kampus/pipeline/code-host-github";
+import { GITHUB, gitHubPullRequests, gitHubRepoTree } from "@tea-fabrika/tracker/github";
+import { Effect, FileSystem, Layer, Logger, Runtime } from "effect";
+import { hostJev } from "./jev.ts";
+import { runHost } from "./run.ts";
+import { pathsOf } from "./socket.ts";
 
 // The host process: the entry of dist/host.mjs. It holds every tile's tsh, every program, the
 // line editor's history, one job table for every tile, the ledger and the desk, and it outlives the app, as
@@ -46,10 +46,7 @@ const home = process.env.FABRIKA_HOME;
  * person's own `gh` login. The connected repositories are the integration's own list (`GITHUB`).
  * The host holds the login; no page sees it.
  */
-const pullRequests = Layer.provide(
-	gitHubPullRequests(GITHUB),
-	gitHubCodeHost({own: [], reviewers: []}),
-);
+const pullRequests = Layer.provide(gitHubPullRequests(GITHUB), gitHubCodeHost({ own: [], reviewers: [] }));
 
 /**
  * The connected repositories' top folders, for the tracker's first-areas suggestions: one GitHub
@@ -58,35 +55,34 @@ const pullRequests = Layer.provide(
 const repoTree = Layer.provide(gitHubRepoTree(GITHUB), gitHubCodeTree({}));
 
 const main = Effect.gen(function* () {
-	if (home === undefined || home === "")
-		return yield* Effect.die("fabrika host: FABRIKA_HOME is not set; the host starts on no home");
-	process.umask(0o077);
-	const paths = yield* pathsOf(home);
-	// The log is in the host's folder, so the folder is there before the log opens.
-	const fs = yield* FileSystem.FileSystem;
-	yield* fs.makeDirectory(paths.dir, {recursive: true, mode: 0o700});
-	const toFile = yield* Logger.toFile(Logger.formatSimple, paths.log, {flag: "a"});
-	// The keys file's folder, as the app said; `mod` in it is Cmd on a Mac (host/settings.ts).
-	const settings = process.env.FABRIKA_SETTINGS;
-	// The person's git repository, where the agents they summon work.
-	const repo = process.env.FABRIKA_REPO;
-	return yield* runHost({
-		home,
-		pid: process.pid,
-		settings: settings === undefined || settings === "" ? undefined : settings,
-		mac: process.platform === "darwin",
-		repo: repo === undefined || repo === "" ? undefined : repo,
-	}).pipe(
-		// Jev, for the tracker's duplicate hint, only when the home holds a key (jev.ts).
-		Effect.provide(Layer.merge(Logger.layer([toFile]), hostJev(home))),
-	);
-}).pipe(
-	Effect.scoped,
-	Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pullRequests, repoTree)),
-);
+  if (home === undefined || home === "") {
+    return yield* Effect.die("fabrika host: FABRIKA_HOME is not set; the host starts on no home");
+  }
+
+  process.umask(0o077);
+  const paths = yield* pathsOf(home);
+  // The log is in the host's folder, so the folder is there before the log opens.
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.makeDirectory(paths.dir, { recursive: true, mode: 0o700 });
+  const toFile = yield* Logger.toFile(Logger.formatSimple, paths.log, { flag: "a" });
+  // The keys file's folder, as the app said; `mod` in it is Cmd on a Mac (host/settings.ts).
+  const settings = process.env.FABRIKA_SETTINGS;
+  // The person's git repository, where the agents they summon work.
+  const repo = process.env.FABRIKA_REPO;
+  return yield* runHost({
+    home,
+    pid: process.pid,
+    settings: settings === undefined || settings === "" ? undefined : settings,
+    mac: process.platform === "darwin",
+    repo: repo === undefined || repo === "" ? undefined : repo,
+  }).pipe(
+    // Jev, for the tracker's duplicate hint, only when the home holds a key (jev.ts).
+    Effect.provide(Layer.merge(Logger.layer([toFile]), hostJev(home))),
+  );
+}).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pullRequests, repoTree)));
 
 // An agent's restart ends the host with a success (host/serve.ts): it exits then, as on SIGTERM,
 // and nothing left open can keep the process alive with no socket.
 NodeRuntime.runMain(main, {
-	teardown: (exit) => Runtime.defaultTeardown(exit, (code) => process.exit(code)),
+  teardown: (exit) => Runtime.defaultTeardown(exit, (code) => process.exit(code)),
 });

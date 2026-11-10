@@ -1,7 +1,7 @@
-import {spawn} from "node:child_process";
-import {closeSync, mkdirSync, openSync} from "node:fs";
-import {Deferred, Effect, Schema} from "effect";
-import type {HostPaths} from "./host/socket.ts";
+import { spawn } from "node:child_process";
+import { closeSync, mkdirSync, openSync } from "node:fs";
+import { Deferred, Effect, Schema } from "effect";
+import type { HostPaths } from "./host/socket.ts";
 
 // The app starts its host: `binary` run as Node on `entry` (`ELECTRON_RUN_AS_NODE`, host/main.ts
 // says why), detached, with no stdin or stdout, and let go (`unref`), so quitting the app leaves
@@ -19,24 +19,24 @@ import type {HostPaths} from "./host/socket.ts";
 
 /** How the app starts a host on `home`. */
 interface HostStart {
-	/** The binary to run as Node: the app's own Electron binary, or Node in a test. */
-	readonly binary: string;
-	/** The host's bundle, host.mjs. */
-	readonly entry: string;
-	readonly home: string;
-	readonly paths: HostPaths;
-	/** The selected repository where summoned agents work. */
-	readonly repo?: string | undefined;
-	/**
-	 * The person's settings folder, which holds keybindings.toml (host/settings.ts,
-	 * `settingsFolder`), passed as `FABRIKA_SETTINGS`. Not said: the host reads the home's own.
-	 */
-	readonly settings?: string | undefined;
+  /** The binary to run as Node: the app's own Electron binary, or Node in a test. */
+  readonly binary: string;
+  /** The host's bundle, host.mjs. */
+  readonly entry: string;
+  readonly home: string;
+  readonly paths: HostPaths;
+  /** The selected repository where summoned agents work. */
+  readonly repo?: string | undefined;
+  /**
+   * The person's settings folder, which holds keybindings.toml (host/settings.ts,
+   * `settingsFolder`), passed as `FABRIKA_SETTINGS`. Not said: the host reads the home's own.
+   */
+  readonly settings?: string | undefined;
 }
 
 /** The host could not be started at all, and why in words. */
 class StartFailed extends Schema.TaggedError<StartFailed>()("StartFailed", {
-	why: Schema.String,
+  why: Schema.String,
 }) {}
 
 /**
@@ -45,31 +45,32 @@ class StartFailed extends Schema.TaggedError<StartFailed>()("StartFailed", {
  * its copy.
  */
 export const startHost = (s: HostStart): Effect.Effect<Effect.Effect<number | null>, StartFailed> =>
-	Effect.try({
-		try: () => {
-			mkdirSync(s.paths.dir, {recursive: true, mode: 0o700});
-			const log = openSync(s.paths.log, "a", 0o600);
-			try {
-				const child = spawn(s.binary, [s.entry], {
-					env: {
-						...process.env,
-						ELECTRON_RUN_AS_NODE: "1",
-						FABRIKA_HOME: s.home,
-						...(s.repo === undefined ? {} : {FABRIKA_REPO: s.repo}),
-						...(s.settings === undefined ? {} : {FABRIKA_SETTINGS: s.settings}),
-					},
-					detached: true,
-					stdio: ["ignore", "ignore", log],
-				});
-				// Listened to now, as it starts, so an exit before anyone awaits it is not missed.
-				const exited = Deferred.makeUnsafe<number | null>();
-				child.once("exit", (code) => Deferred.doneUnsafe(exited, Effect.succeed(code)));
-				child.once("error", () => Deferred.doneUnsafe(exited, Effect.succeed(null)));
-				child.unref();
-				return Deferred.await(exited);
-			} finally {
-				closeSync(log);
-			}
-		},
-		catch: (cause) => new StartFailed({why: `the host could not be started: ${cause}`}),
-	});
+  Effect.try({
+    try: () => {
+      mkdirSync(s.paths.dir, { recursive: true, mode: 0o700 });
+      const log = openSync(s.paths.log, "a", 0o600);
+
+      try {
+        const child = spawn(s.binary, [s.entry], {
+          env: {
+            ...process.env,
+            ELECTRON_RUN_AS_NODE: "1",
+            FABRIKA_HOME: s.home,
+            ...(s.repo === undefined ? {} : { FABRIKA_REPO: s.repo }),
+            ...(s.settings === undefined ? {} : { FABRIKA_SETTINGS: s.settings }),
+          },
+          detached: true,
+          stdio: ["ignore", "ignore", log],
+        });
+        // Listened to now, as it starts, so an exit before anyone awaits it is not missed.
+        const exited = Deferred.makeUnsafe<number | null>();
+        child.once("exit", (code) => Deferred.doneUnsafe(exited, Effect.succeed(code)));
+        child.once("error", () => Deferred.doneUnsafe(exited, Effect.succeed(null)));
+        child.unref();
+        return Deferred.await(exited);
+      } finally {
+        closeSync(log);
+      }
+    },
+    catch: (cause) => new StartFailed({ why: `the host could not be started: ${cause}` }),
+  });

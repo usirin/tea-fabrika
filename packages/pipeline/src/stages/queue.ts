@@ -1,7 +1,7 @@
-import {defineMachine} from "@demlik/tea";
-import {type Delivery, kind, type RefsOf} from "@kampus/fabrika-old";
-import {Effect, Exit, Queue, Schema, Scope} from "effect";
-import {queueLine} from "./status.ts";
+import { defineMachine } from "@demlik/tea";
+import { type Delivery, kind, type RefsOf } from "@kampus/fabrika-old";
+import { Effect, Exit, Queue, Schema, Scope } from "effect";
+import { queueLine } from "./status.ts";
 
 // The values a stage is told and has not finished, kept: the rule that what
 // must outlive a restart lives in a machine, for the work a stage was told.
@@ -38,39 +38,36 @@ import {queueLine} from "./status.ts";
  * through. A queue kept before `clearing` was there reads with none owed.
  */
 export const Waiting = Schema.Struct({
-	items: Schema.Array(Schema.String),
-	/** Worked, and still to be tidied after (`after`). */
-	clearing: Schema.Array(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  items: Schema.Array(Schema.String),
+  /** Worked, and still to be tidied after (`after`). */
+  clearing: Schema.Array(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
 });
 export type Waiting = typeof Waiting.Type;
 
 type QueueMsg =
-	| {readonly type: "told"; readonly item: string}
-	| {readonly type: "done"; readonly item: string}
-	| {readonly type: "cleared"; readonly item: string}
-	| {readonly type: "dropped"; readonly item: string};
+  | { readonly type: "told"; readonly item: string }
+  | { readonly type: "done"; readonly item: string }
+  | { readonly type: "cleared"; readonly item: string }
+  | { readonly type: "dropped"; readonly item: string };
 
 export const queue = defineMachine({
-	types: {model: {} as Waiting, msg: {} as QueueMsg, ctx: undefined},
-	cmds: [],
-	// A queue kept before `clearing` was there has nothing owed.
-	init: (loaded) => [{items: loaded?.items ?? [], clearing: loaded?.clearing ?? []}, []],
-	update: {
-		told: (s, m) => [s.items.includes(m.item) ? s : {...s, items: [...s.items, m.item]}, []],
-		done: (s, m) => [
-			{
-				items: s.items.filter((item) => item !== m.item),
-				clearing: s.clearing.includes(m.item) ? s.clearing : [...s.clearing, m.item],
-			},
-			[],
-		],
-		cleared: (s, m) => [{...s, clearing: s.clearing.filter((item) => item !== m.item)}, []],
-		// Off the queue, unworked, by `drop`: never the one being worked.
-		dropped: (s, m) => [
-			s.items[0] === m.item ? s : {...s, items: s.items.filter((item) => item !== m.item)},
-			[],
-		],
-	},
+  types: { model: {} as Waiting, msg: {} as QueueMsg, ctx: undefined },
+  cmds: [],
+  // A queue kept before `clearing` was there has nothing owed.
+  init: (loaded) => [{ items: loaded?.items ?? [], clearing: loaded?.clearing ?? [] }, []],
+  update: {
+    told: (s, m) => [s.items.includes(m.item) ? s : { ...s, items: [...s.items, m.item] }, []],
+    done: (s, m) => [
+      {
+        items: s.items.filter((item) => item !== m.item),
+        clearing: s.clearing.includes(m.item) ? s.clearing : [...s.clearing, m.item],
+      },
+      [],
+    ],
+    cleared: (s, m) => [{ ...s, clearing: s.clearing.filter((item) => item !== m.item) }, []],
+    // Off the queue, unworked, by `drop`: never the one being worked.
+    dropped: (s, m) => [s.items[0] === m.item ? s : { ...s, items: s.items.filter((item) => item !== m.item) }, []],
+  },
 });
 
 /**
@@ -78,13 +75,13 @@ export const queue = defineMachine({
  * its work is carried on by `workQueue` itself, every start.
  */
 export const queueKind = kind({
-	machine: queue,
-	state: Waiting,
-	parent: "main",
-	options: () => ({ctx: undefined}),
-	drawing: () => ({name: "queue", steps: {}, tags: (s) => ({waiting: s.items.length})}),
-	// `#2 now, 1 waiting`.
-	status: queueLine,
+  machine: queue,
+  state: Waiting,
+  parent: "main",
+  options: () => ({ ctx: undefined }),
+  drawing: () => ({ name: "queue", steps: {}, tags: (s) => ({ waiting: s.items.length }) }),
+  // `#2 now, 1 waiting`.
+  status: queueLine,
 });
 
 /** The one queue of a run: there is one per program, under this id. */
@@ -102,69 +99,76 @@ const ID = "queue";
  * has left the queue; run again at the next start when a kill cut it off.
  */
 export const workQueue = <E1, R1, E2, R2>(
-	queues: RefsOf<typeof queueKind>,
-	work: (item: string) => Effect.Effect<void, E1, R1>,
-	after: (item: string) => Effect.Effect<void, E2, R2>,
+  queues: RefsOf<typeof queueKind>,
+  work: (item: string) => Effect.Effect<void, E1, R1>,
+  after: (item: string) => Effect.Effect<void, E2, R2>,
 ) =>
-	Effect.gen(function* () {
-		// The live queue's own scope, inside the caller's: `drained` closes it before it drops the
-		// queue from storage, so no save of the live queue comes after the drop.
-		const live = yield* Scope.fork(yield* Effect.scope);
-		const waiting = yield* queues.get(ID).start().pipe(Scope.provide(live));
-		const tidy = (item: string) =>
-			after(item).pipe(Effect.andThen(waiting.dispatch({type: "cleared", item})));
-		// What a killed start owed first.
-		for (const item of waiting.getState().clearing) yield* tidy(item);
-		// A nudge to the worker: a value was queued, or the serving ended. Extra nudges are harmless.
-		const nudge = yield* Queue.unbounded<void>();
-		let reading = true;
-		const worker = Effect.gen(function* () {
-			while (true) {
-				const [first] = waiting.getState().items;
-				if (first !== undefined) {
-					yield* work(first);
-					yield* waiting.dispatch({type: "done", item: first});
-					yield* tidy(first);
-				} else if (reading) yield* Queue.take(nudge);
-				else return;
-			}
-		});
-		return {
-			/**
-			 * Put one value on the queue, and ack it once it is kept: the handler of an input
-			 * declared `{ack: "manual"}`. Only a delivery: an input a kept queue reads must ack, so a
-			 * pipe into it keeps each value until the queue has it, and forgetting that does not compile.
-			 */
-			told: ({value, ack}: Delivery<string>) =>
-				// `dispatch` returns once the new state is saved: only then is the value the queue's.
-				waiting
-					.dispatch({type: "told", item: value})
-					.pipe(Effect.andThen(ack), Effect.andThen(Queue.offer(nudge, undefined))),
-			/**
-			 * Run `serving` (the program's `serve`, its handlers telling `told`) with the worker
-			 * beside it. Once it returns, every value told is worked, the queue is dropped from
-			 * storage, and this returns. A work that fails fails this at once, and stops `serving`.
-			 */
-			drained: <E, R>(serving: Effect.Effect<void, E, R>) =>
-				Effect.all(
-					[
-						serving.pipe(
-							Effect.ensuring(
-								Effect.sync(() => {
-									reading = false;
-								}).pipe(Effect.andThen(Queue.offer(nudge, undefined))),
-							),
-						),
-						worker,
-					],
-					{concurrency: "unbounded", discard: true},
-				).pipe(
-					// Served to its end, and every value worked: nothing is left to keep.
-					Effect.andThen(Scope.close(live, Exit.void)),
-					Effect.andThen(queues.get(ID).clear),
-				),
-		};
-	});
+  Effect.gen(function* () {
+    // The live queue's own scope, inside the caller's: `drained` closes it before it drops the
+    // queue from storage, so no save of the live queue comes after the drop.
+    const live = yield* Scope.fork(yield* Effect.scope);
+    const waiting = yield* queues.get(ID).start().pipe(Scope.provide(live));
+    const tidy = (item: string) => after(item).pipe(Effect.andThen(waiting.dispatch({ type: "cleared", item })));
+
+    // What a killed start owed first.
+    for (const item of waiting.getState().clearing) {
+      yield* tidy(item);
+    }
+
+    // A nudge to the worker: a value was queued, or the serving ended. Extra nudges are harmless.
+    const nudge = yield* Queue.unbounded<void>();
+    let reading = true;
+    const worker = Effect.gen(function* () {
+      while (true) {
+        const [first] = waiting.getState().items;
+
+        if (first !== undefined) {
+          yield* work(first);
+          yield* waiting.dispatch({ type: "done", item: first });
+          yield* tidy(first);
+        } else if (reading) {
+          yield* Queue.take(nudge);
+        } else {
+          return;
+        }
+      }
+    });
+    return {
+      /**
+       * Put one value on the queue, and ack it once it is kept: the handler of an input
+       * declared `{ack: "manual"}`. Only a delivery: an input a kept queue reads must ack, so a
+       * pipe into it keeps each value until the queue has it, and forgetting that does not compile.
+       */
+      told: ({ value, ack }: Delivery<string>) =>
+        // `dispatch` returns once the new state is saved: only then is the value the queue's.
+        waiting
+          .dispatch({ type: "told", item: value })
+          .pipe(Effect.andThen(ack), Effect.andThen(Queue.offer(nudge, undefined))),
+      /**
+       * Run `serving` (the program's `serve`, its handlers telling `told`) with the worker
+       * beside it. Once it returns, every value told is worked, the queue is dropped from
+       * storage, and this returns. A work that fails fails this at once, and stops `serving`.
+       */
+      drained: <E, R>(serving: Effect.Effect<void, E, R>) =>
+        Effect.all(
+          [
+            serving.pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  reading = false;
+                }).pipe(Effect.andThen(Queue.offer(nudge, undefined))),
+              ),
+            ),
+            worker,
+          ],
+          { concurrency: "unbounded", discard: true },
+        ).pipe(
+          // Served to its end, and every value worked: nothing is left to keep.
+          Effect.andThen(Scope.close(live, Exit.void)),
+          Effect.andThen(queues.get(ID).clear),
+        ),
+    };
+  });
 
 /**
  * Take each value `matches` picks off the queue, before what its work kept is
@@ -173,16 +177,21 @@ export const workQueue = <E1, R1, E2, R2>(
  * the one live queue `workQueue` works (a ref's `start` with no Msg).
  */
 export const drop = (queues: RefsOf<typeof queueKind>, matches: (item: string) => boolean) =>
-	Effect.gen(function* () {
-		const waiting = yield* queues.get(ID).start();
-		for (const item of waiting.getState().items.filter(matches))
-			yield* waiting.dispatch({type: "dropped", item});
-		yield* Effect.callback<void>((resume) => {
-			const gone = () => {
-				if (!waiting.getState().items.some(matches)) resume(Effect.void);
-			};
-			const off = waiting.subscribe(gone);
-			gone();
-			return Effect.sync(off);
-		});
-	}).pipe(Effect.scoped);
+  Effect.gen(function* () {
+    const waiting = yield* queues.get(ID).start();
+
+    for (const item of waiting.getState().items.filter(matches)) {
+      yield* waiting.dispatch({ type: "dropped", item });
+    }
+
+    yield* Effect.callback<void>((resume) => {
+      const gone = () => {
+        if (!waiting.getState().items.some(matches)) {
+          resume(Effect.void);
+        }
+      };
+      const off = waiting.subscribe(gone);
+      gone();
+      return Effect.sync(off);
+    });
+  }).pipe(Effect.scoped);

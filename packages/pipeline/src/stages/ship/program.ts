@@ -1,21 +1,13 @@
-import {
-	defineProgram,
-	flag,
-	input,
-	kind,
-	output,
-	type RefsOf,
-	type Send,
-} from "@kampus/fabrika-old";
-import {Effect, Exit, Schema} from "effect";
-import {nameOf} from "../outcome.ts";
-import {drop, queueKind, workQueue} from "../queue.ts";
-import {shipLine} from "../status.ts";
-import {prName, shipDrawing} from "../traced.ts";
-import {shipReadInterpret, shipSubscribe, shipWriteInterpret} from "./handlers.ts";
-import {Look, look} from "./look.ts";
-import {Ship, ship} from "./machine.ts";
-import {SHIP_NAMES, ShipOutcome} from "./outcome.ts";
+import { defineProgram, flag, input, kind, output, type RefsOf, type Send } from "@kampus/fabrika-old";
+import { Effect, Exit, Schema } from "effect";
+import { nameOf } from "../outcome.ts";
+import { drop, queueKind, workQueue } from "../queue.ts";
+import { shipLine } from "../status.ts";
+import { prName, shipDrawing } from "../traced.ts";
+import { shipReadInterpret, shipSubscribe, shipWriteInterpret } from "./handlers.ts";
+import { Look, look } from "./look.ts";
+import { Ship, ship } from "./machine.ts";
+import { SHIP_NAMES, ShipOutcome } from "./outcome.ts";
 
 // The ship program: the thing you start to ship pull requests. It is started
 // once, with its mode as a flag, and then told pull requests for as long as it
@@ -78,23 +70,22 @@ import {SHIP_NAMES, ShipOutcome} from "./outcome.ts";
 
 /** A pull request's address. The same pattern the command line took before it was a program. */
 export const PullRequestUrl = Schema.String.check(
-	Schema.isPattern(/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+/, {
-		message:
-			"not a pull request url: it looks like https://github.com/<owner>/<repo>/pull/<number>",
-	}),
-).annotate({description: "https://github.com/<owner>/<repo>/pull/<number>"});
+  Schema.isPattern(/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+/, {
+    message: "not a pull request url: it looks like https://github.com/<owner>/<repo>/pull/<number>",
+  }),
+).annotate({ description: "https://github.com/<owner>/<repo>/pull/<number>" });
 
 /** One whole commit: forty hex digits. A short one could name two. */
 export const Commit = Schema.String.check(
-	Schema.isPattern(/^[0-9a-f]{40}$/, {message: "not a whole commit: it is forty hex digits"}),
-).annotate({description: "a whole commit, forty hex digits"});
+  Schema.isPattern(/^[0-9a-f]{40}$/, { message: "not a whole commit: it is forty hex digits" }),
+).annotate({ description: "a whole commit, forty hex digits" });
 
 /**
  * A pull request at the head a review passed: what review's `passed` sends
  * and ship's `pr` takes. It cannot be made without its head, so what flows
  * down `review | ship` always carries its id (see {@link keyOf}).
  */
-export const Passed = Schema.Struct({pr: PullRequestUrl, head: Commit});
+export const Passed = Schema.Struct({ pr: PullRequestUrl, head: Commit });
 export type Passed = typeof Passed.Type;
 
 /**
@@ -102,34 +93,34 @@ export type Passed = typeof Passed.Type;
  * commit of it. Its idempotency key: the same head told again is the same
  * work; a new head is new work.
  */
-export const keyOf = ({pr, head}: Passed): string => `pr/${pr}/commits/${head}`;
+export const keyOf = ({ pr, head }: Passed): string => `pr/${pr}/commits/${head}`;
 
 /** What `pr` takes: a bare url, as a person tells it, or a pull request at a reviewed head, as a pipe gives it. */
 const Told = Schema.Union([PullRequestUrl, Passed]);
 
 /** How one pull request ended, in write mode. `name`: how the outcome is spelled, beside the data it is made from. */
 export const Shipped = Schema.Struct({
-	pr: Schema.String,
-	outcome: ShipOutcome,
-	name: Schema.Literals(SHIP_NAMES),
+  pr: Schema.String,
+  outcome: ShipOutcome,
+  name: Schema.Literals(SHIP_NAMES),
 });
 export type Shipped = typeof Shipped.Type;
 
 /** One ask: a pull request, and the id its answer comes back under. The asker picks the id and asks again under it after a restart. */
-export const Ask = Schema.Struct({id: Schema.String, pr: PullRequestUrl});
+export const Ask = Schema.Struct({ id: Schema.String, pr: PullRequestUrl });
 export type Ask = typeof Ask.Type;
 
 /** The answer to one ask: how its pull request ended, under the ask's id. */
 export const Answer = Schema.Struct({
-	id: Schema.String,
-	pr: Schema.String,
-	outcome: ShipOutcome,
-	name: Schema.Literals(SHIP_NAMES),
+  id: Schema.String,
+  pr: Schema.String,
+  outcome: ShipOutcome,
+  name: Schema.Literals(SHIP_NAMES),
 });
 export type Answer = typeof Answer.Type;
 
 /** An asker that has the answer to its ask in its own saved state: what ship kept to answer it again may go. */
-export const Forget = Schema.Struct({id: Schema.String});
+export const Forget = Schema.Struct({ id: Schema.String });
 export type Forget = typeof Forget.Type;
 
 /** The pull request a kept run is on. `null`: it never started. */
@@ -142,24 +133,24 @@ const prOf = (s: Ship): string | null => (s.phase === "idle" ? null : s.pr);
  * nothing of its own to remove.
  */
 export const shipKind = (machine = ship) =>
-	kind({
-		machine,
-		state: Ship,
-		parent: "main",
-		options: () => ({
-			ctx: undefined,
-			interpret: {...shipReadInterpret, ...shipWriteInterpret()},
-			subscribe: shipSubscribe,
-			terminal: (s: Ship) => s.phase === "over",
-		}),
-		recovered: (s) => (s.phase === "idle" ? null : {type: "resume"}),
-		drawing: ({id, kept, start}) => {
-			const pr = (kept === null ? null : prOf(kept)) ?? (start?.type === "start" ? start.pr : id);
-			return shipDrawing(prName(pr), pr);
-		},
-		// One line per pull request: `#8: in the merge queue`, `#8: merged`.
-		status: shipLine,
-	});
+  kind({
+    machine,
+    state: Ship,
+    parent: "main",
+    options: () => ({
+      ctx: undefined,
+      interpret: { ...shipReadInterpret, ...shipWriteInterpret() },
+      subscribe: shipSubscribe,
+      terminal: (s: Ship) => s.phase === "over",
+    }),
+    recovered: (s) => (s.phase === "idle" ? null : { type: "resume" }),
+    drawing: ({ id, kept, start }) => {
+      const pr = (kept === null ? null : prOf(kept)) ?? (start?.type === "start" ? start.pr : id);
+      return shipDrawing(prName(pr), pr);
+    },
+    // One line per pull request: `#8: in the merge queue`, `#8: merged`.
+    status: shipLine,
+  });
 
 /**
  * One pull request on ship's kept queue, as JSON: the id its run is kept
@@ -168,7 +159,7 @@ export const shipKind = (machine = ship) =>
  * can ask again, the second so a repeat of it is caught by its id. A bare one
  * is dropped once it is over.
  */
-const Item = Schema.Struct({id: Schema.String, pr: Schema.String, kept: Schema.Boolean});
+const Item = Schema.Struct({ id: Schema.String, pr: Schema.String, kept: Schema.Boolean });
 type Item = typeof Item.Type;
 const ItemJson = Schema.fromJsonString(Item);
 const itemOf = Schema.decodeUnknownEffect(ItemJson);
@@ -182,140 +173,133 @@ const textOf = Schema.encodeSync(ItemJson);
  * nothing runs again.
  */
 const toTheEnd = (ships: RefsOf<ReturnType<typeof shipKind>>, id: string, pr: string) =>
-	Effect.gen(function* () {
-		const runtime = yield* ships.get(id).start({type: "start", pr});
-		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
-		return end;
-	}).pipe(Effect.scoped);
+  Effect.gen(function* () {
+    const runtime = yield* ships.get(id).start({ type: "start", pr });
+    const end = yield* runtime.done();
+
+    if (end.phase !== "over") {
+      return yield* Effect.die(`the run stopped in ${end.phase}`);
+    }
+
+    return end;
+  }).pipe(Effect.scoped);
 
 const OUTPUTS = {
-	found: output(
-		Look,
-		"Read mode, once per pull request: the facts read, the machine's answer, and the write it would send next. Nothing was sent.",
-	),
-	outcome: output(Shipped, "Write mode, once per pull request: how it ended."),
-	answer: output(
-		Answer,
-		"Write mode, once per ask, and again for each ask again: how its pull request ended, under the ask's id.",
-	),
-	forgot: output(
-		Forget,
-		"Write mode, once per forget: what was kept under that id is gone, and the drop is kept.",
-	),
+  found: output(
+    Look,
+    "Read mode, once per pull request: the facts read, the machine's answer, and the write it would send next. Nothing was sent.",
+  ),
+  outcome: output(Shipped, "Write mode, once per pull request: how it ended."),
+  answer: output(
+    Answer,
+    "Write mode, once per ask, and again for each ask again: how its pull request ended, under the ask's id.",
+  ),
+  forgot: output(Forget, "Write mode, once per forget: what was kept under that id is gone, and the drop is kept."),
 };
 
 /** One machine run to its end, and both words about it. */
-const shipped = (
-	ships: RefsOf<ReturnType<typeof shipKind>>,
-	item: Item,
-	send: Send<typeof OUTPUTS>,
-) =>
-	toTheEnd(ships, item.id, item.pr).pipe(
-		Effect.flatMap(({outcome}) => {
-			const said = {pr: item.pr, outcome, name: nameOf(outcome)};
-			return send("outcome", said).pipe(Effect.andThen(send("answer", {id: item.id, ...said})));
-		}),
-	);
+const shipped = (ships: RefsOf<ReturnType<typeof shipKind>>, item: Item, send: Send<typeof OUTPUTS>) =>
+  toTheEnd(ships, item.id, item.pr).pipe(
+    Effect.flatMap(({ outcome }) => {
+      const said = { pr: item.pr, outcome, name: nameOf(outcome) };
+      return send("outcome", said).pipe(Effect.andThen(send("answer", { id: item.id, ...said })));
+    }),
+  );
 
 /**
  * The ship program over a given ship machine. `machine`: one with other
  * limits, for a test.
  */
 export const createShipProgram = (machine = ship) =>
-	defineProgram({
-		name: "ship",
-		description:
-			"Puts pull requests in the merge queue, or merges them when the repository has no queue, one after another, as it is told them, and says how each one ended. In read mode it changes nothing, and says what it would do.",
-		flags: {
-			mode: flag(
-				Schema.Literals(["read", "write"]),
-				"read: change nothing, say what the machine would send. write: run it to its end; it may put each pull request in the merge queue, or merge it where there is no queue, and start its red checks again.",
-			),
-		},
-		inputs: {
-			pr: input(
-				Told,
-				"A pull request to ship, told any time. A bare url ships each time it is told. One at a head (review's `passed`) ships once at that head: told again, it is answered from what was kept; a new head is new work. Acked once kept.",
-				{ack: "manual"},
-			),
-			ask: input(
-				Ask,
-				"A pull request to ship, with the id its answer comes back under on `answer`. Asked again under an id already answered, it answers again from what it kept, and ships nothing twice.",
-			),
-			forget: input(
-				Forget,
-				"An id whose answer the asker now keeps itself: what ship kept to answer that ask again is dropped. Tell it once the answer is in the asker's own saved state. Until then the answer is kept, however long.",
-			),
-		},
-		outputs: OUTPUTS,
-		machines: {queue: queueKind, ship: shipKind(machine)},
-		main: ({flags, serve, send, machines}) =>
-			Effect.gen(function* () {
-				// `pr` is the run's lifeline, as stdin is: when it closes, the run finishes what it holds
-				// and ends, and an ask not yet handed on goes unanswered. Its asker hears the run end.
-				// A bare pull request has no id to catch a repeat by, so its run is dropped once it is over.
-				// One at a head is kept under the url of that commit, so the same head told again is caught.
-				const toItem = (value: typeof Told.Type): Item =>
-					typeof value === "string"
-						? {id: `pr/${value}`, pr: value, kept: false}
-						: {id: keyOf(value), pr: value.pr, kept: true};
-				const found = (pr: string) => look(pr).pipe(Effect.flatMap((f) => send("found", f)));
-				// Read mode keeps nothing, so it has nothing to forget, and a value is taken once handed on.
-				if (flags.mode === "read")
-					return yield* serve(
-						{
-							pr: ({value, ack}) => ack.pipe(Effect.andThen(found(toItem(value).pr))),
-							ask: ({pr}) => found(pr),
-							forget: () => Effect.void,
-						},
-						{until: ["pr"]},
-					);
+  defineProgram({
+    name: "ship",
+    description:
+      "Puts pull requests in the merge queue, or merges them when the repository has no queue, one after another, as it is told them, and says how each one ended. In read mode it changes nothing, and says what it would do.",
+    flags: {
+      mode: flag(
+        Schema.Literals(["read", "write"]),
+        "read: change nothing, say what the machine would send. write: run it to its end; it may put each pull request in the merge queue, or merge it where there is no queue, and start its red checks again.",
+      ),
+    },
+    inputs: {
+      pr: input(
+        Told,
+        "A pull request to ship, told any time. A bare url ships each time it is told. One at a head (review's `passed`) ships once at that head: told again, it is answered from what was kept; a new head is new work. Acked once kept.",
+        { ack: "manual" },
+      ),
+      ask: input(
+        Ask,
+        "A pull request to ship, with the id its answer comes back under on `answer`. Asked again under an id already answered, it answers again from what it kept, and ships nothing twice.",
+      ),
+      forget: input(
+        Forget,
+        "An id whose answer the asker now keeps itself: what ship kept to answer that ask again is dropped. Tell it once the answer is in the asker's own saved state. Until then the answer is kept, however long.",
+      ),
+    },
+    outputs: OUTPUTS,
+    machines: { queue: queueKind, ship: shipKind(machine) },
+    main: ({ flags, serve, send, machines }) =>
+      Effect.gen(function* () {
+        // `pr` is the run's lifeline, as stdin is: when it closes, the run finishes what it holds
+        // and ends, and an ask not yet handed on goes unanswered. Its asker hears the run end.
+        // A bare pull request has no id to catch a repeat by, so its run is dropped once it is over.
+        // One at a head is kept under the url of that commit, so the same head told again is caught.
+        const toItem = (value: typeof Told.Type): Item =>
+          typeof value === "string"
+            ? { id: `pr/${value}`, pr: value, kept: false }
+            : { id: keyOf(value), pr: value.pr, kept: true };
+        const found = (pr: string) => look(pr).pipe(Effect.flatMap((f) => send("found", f)));
 
-				// Each pull request goes on the kept queue first, so a start after a kill carries every one
-				// told and not finished, in order (../queue.ts). An ask again under an id already answered
-				// starts a run kept over: it is answered from what was kept, and nothing ships twice.
-				const queue = yield* workQueue(
-					machines.queue,
-					(text) =>
-						itemOf(text).pipe(
-							Effect.orDie,
-							Effect.flatMap((item) => shipped(machines.ship, item, send)),
-						),
-					(text) =>
-						itemOf(text).pipe(
-							Effect.orDie,
-							Effect.flatMap((item) =>
-								item.kept ? Effect.void : machines.ship.get(item.id).clear,
-							),
-						),
-				);
-				yield* queue.drained(
-					serve(
-						{
-							pr: ({value, ack}) => queue.told({value: textOf(toItem(value)), ack}),
-							// An ask is told by its asker, who asks again under its id: it waits on no ack.
-							ask: ({id, pr}) =>
-								queue.told({value: textOf({id, pr, kept: true}), ack: Effect.void}),
-							// A forget is handled in its turn, after an ask told before it, never before it, and
-							// it is not forked: its handler waits only on the queue's saves, never on another
-							// asker's pull request in the merge queue. Only an answered ask is forgotten, so no
-							// run still going is dropped. An answered ask a kill left on the queue is taken off
-							// it first, so its work does not start again on the run dropped under it.
-							forget: ({id}) =>
-								drop(machines.queue, (text) => {
-									const item = readItem(text);
-									return Exit.isSuccess(item) && item.value.kept && item.value.id === id;
-								}).pipe(
-									Effect.andThen(machines.ship.get(id).clear),
-									Effect.andThen(send("forgot", {id})),
-								),
-						},
-						{until: ["pr"]},
-					),
-				);
-			}).pipe(Effect.scoped),
-	});
+        // Read mode keeps nothing, so it has nothing to forget, and a value is taken once handed on.
+        if (flags.mode === "read") {
+          return yield* serve(
+            {
+              pr: ({ value, ack }) => ack.pipe(Effect.andThen(found(toItem(value).pr))),
+              ask: ({ pr }) => found(pr),
+              forget: () => Effect.void,
+            },
+            { until: ["pr"] },
+          );
+        }
+
+        // Each pull request goes on the kept queue first, so a start after a kill carries every one
+        // told and not finished, in order (../queue.ts). An ask again under an id already answered
+        // starts a run kept over: it is answered from what was kept, and nothing ships twice.
+        const queue = yield* workQueue(
+          machines.queue,
+          (text) =>
+            itemOf(text).pipe(
+              Effect.orDie,
+              Effect.flatMap((item) => shipped(machines.ship, item, send)),
+            ),
+          (text) =>
+            itemOf(text).pipe(
+              Effect.orDie,
+              Effect.flatMap((item) => (item.kept ? Effect.void : machines.ship.get(item.id).clear)),
+            ),
+        );
+        yield* queue.drained(
+          serve(
+            {
+              pr: ({ value, ack }) => queue.told({ value: textOf(toItem(value)), ack }),
+              // An ask is told by its asker, who asks again under its id: it waits on no ack.
+              ask: ({ id, pr }) => queue.told({ value: textOf({ id, pr, kept: true }), ack: Effect.void }),
+              // A forget is handled in its turn, after an ask told before it, never before it, and
+              // it is not forked: its handler waits only on the queue's saves, never on another
+              // asker's pull request in the merge queue. Only an answered ask is forgotten, so no
+              // run still going is dropped. An answered ask a kill left on the queue is taken off
+              // it first, so its work does not start again on the run dropped under it.
+              forget: ({ id }) =>
+                drop(machines.queue, (text) => {
+                  const item = readItem(text);
+                  return Exit.isSuccess(item) && item.value.kept && item.value.id === id;
+                }).pipe(Effect.andThen(machines.ship.get(id).clear), Effect.andThen(send("forgot", { id }))),
+            },
+            { until: ["pr"] },
+          ),
+        );
+      }).pipe(Effect.scoped),
+  });
 
 /** The ship program, on a ship machine with every setting at its default. */
 export const shipProgram = createShipProgram();

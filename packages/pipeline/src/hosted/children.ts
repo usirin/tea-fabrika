@@ -4,8 +4,8 @@
 // the parent reads that stream and serves each name it finds there, once. Whichever host then holds
 // a child's lease runs it, as for any registered name.
 
-import {Ledger} from "@kampus/fabrika-old";
-import {Duration, Effect, Schedule, type Scope} from "effect";
+import { Ledger } from "@kampus/fabrika-old";
+import { Duration, Effect, Schedule, type Scope } from "effect";
 
 /** The stream a parent names its children in, one row per child, the row's id the child's name. */
 export const childrenOf = (parent: string) => `${parent}/children`;
@@ -17,24 +17,27 @@ const EVERY = Schedule.spaced(Duration.millis(200));
  * it serves one child's name (and its agent's, if it has one) in the scope it is given.
  */
 export const serveChildren = <R>(
-	parent: string,
-	serve: (child: string) => Effect.Effect<void, never, Scope.Scope | R>,
+  parent: string,
+  serve: (child: string) => Effect.Effect<void, never, Scope.Scope | R>,
 ) =>
-	Effect.gen(function* () {
-		const ledger = yield* Ledger;
-		const served = new Set<string>();
-		let rev = 0;
-		const once = Effect.gen(function* () {
-			const rows = yield* ledger
-				.readStream(childrenOf(parent), rev)
-				.pipe(Effect.orElseSucceed(() => []));
-			for (const row of rows) {
-				rev = Math.max(rev, row.rev);
-				const child = row.id;
-				if (child === undefined || child === null || served.has(child)) continue;
-				served.add(child);
-				yield* serve(child);
-			}
-		});
-		yield* once.pipe(Effect.repeat({schedule: EVERY}), Effect.forkScoped);
-	});
+  Effect.gen(function* () {
+    const ledger = yield* Ledger;
+    const served = new Set<string>();
+    let rev = 0;
+    const once = Effect.gen(function* () {
+      const rows = yield* ledger.readStream(childrenOf(parent), rev).pipe(Effect.orElseSucceed(() => []));
+
+      for (const row of rows) {
+        rev = Math.max(rev, row.rev);
+        const child = row.id;
+
+        if (child === undefined || child === null || served.has(child)) {
+          continue;
+        }
+
+        served.add(child);
+        yield* serve(child);
+      }
+    });
+    yield* once.pipe(Effect.repeat({ schedule: EVERY }), Effect.forkScoped);
+  });

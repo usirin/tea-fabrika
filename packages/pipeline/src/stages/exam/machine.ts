@@ -1,11 +1,11 @@
-import {defineMachine, type Sub} from "@demlik/tea";
-import type {DraftRun} from "@kampus/fabrika-old/agents/claude";
-import {createDraft, type DraftMsg} from "@kampus/fabrika-old/agents/claude";
-import {Schema} from "effect";
-import {type CheckChange, checkChange, matcherFor} from "../../codeowners.ts";
-import {createRefineLoop, type Refining, refiningOf} from "../../combos.ts";
-import {act, type Check, intentOf, keptAct} from "../../primitives.ts";
-import {outcomesOf} from "../outcome.ts";
+import { defineMachine, type Sub } from "@demlik/tea";
+import type { DraftRun } from "@kampus/fabrika-old/agents/claude";
+import { createDraft, type DraftMsg } from "@kampus/fabrika-old/agents/claude";
+import { Schema } from "effect";
+import { type CheckChange, checkChange, matcherFor } from "../../codeowners.ts";
+import { createRefineLoop, type Refining, refiningOf } from "../../combos.ts";
+import { act, type Check, intentOf, keptAct } from "../../primitives.ts";
+import { outcomesOf } from "../outcome.ts";
 
 // The exam step (docs/direction/nobody-writes-their-own-exam.md): before any test or code, the
 // rule changes a plan lists land in a pull request of their own, written by an agent that builds
@@ -20,12 +20,13 @@ import {outcomesOf} from "../outcome.ts";
 //   start {changes: [{path: ".oxlintrc.json", ...}]}    -> writing -> landing -> over, ask:owner
 
 const outcomes = outcomesOf({
-	done: {},
-	send: {},
-	ask: {owner: ["check_change"]},
-	skip: ["no_rules_change"],
-	stuck: ["draft_failed", "unchecked", "land_failed"],
+  done: {},
+  send: {},
+  ask: { owner: ["check_change"] },
+  skip: ["no_rules_change"],
+  stuck: ["draft_failed", "unchecked", "land_failed"],
 });
+
 export const ExamOutcome = outcomes.schema;
 export type ExamOutcome = typeof ExamOutcome.Type;
 /** Every name the exam can end with, as the other stages export theirs. */
@@ -36,30 +37,30 @@ export const EXAM_NAMES = outcomes.names;
  * what the mutation step leaves out. Each a pattern the way a CODEOWNERS row reads.
  */
 export const RULES: readonly string[] = [
-	"**/*.laws.test.ts",
-	".oxlintrc.json",
-	".oxfmtrc.json",
-	"oxlint-plugins/**",
-	".github/workflows/**",
-	".github/CODEOWNERS",
-	"CODEOWNERS",
-	"layer-rules.json",
-	"unreachable-ledger.json",
-	"**/ignorer.ts",
-	"stryker*.json",
+  "**/*.laws.test.ts",
+  ".oxlintrc.json",
+  ".oxfmtrc.json",
+  "oxlint-plugins/**",
+  ".github/workflows/**",
+  ".github/CODEOWNERS",
+  "CODEOWNERS",
+  "layer-rules.json",
+  "unreachable-ledger.json",
+  "**/ignorer.ts",
+  "stryker*.json",
 ];
 
 /** The paths a set of rule patterns covers. Pure. */
 export const ruleFiles = (paths: readonly string[], rules: readonly string[] = RULES) => {
-	const matchers = rules.map(matcherFor);
-	return paths.filter((path) => matchers.some((m) => m.test(path)));
+  const matchers = rules.map(matcherFor);
+  return paths.filter((path) => matchers.some((m) => m.test(path)));
 };
 
 /** One rule change the plan lists. */
 export const ExamChange = Schema.Struct({
-	path: Schema.String,
-	change: Schema.String,
-	why: Schema.String,
+  path: Schema.String,
+  change: Schema.String,
+  why: Schema.String,
 });
 export type ExamChange = typeof ExamChange.Type;
 
@@ -71,237 +72,246 @@ export const RedoOn = Schema.Literal("main");
 export type RedoOn = typeof RedoOn.Type;
 
 export const ExamAsk = Schema.Struct({
-	ticket: Schema.String,
-	number: Schema.Finite,
-	base: Schema.String,
-	changes: Schema.Array(ExamChange),
-	tries: Schema.Finite,
-	/**
-	 * A redo (self-fix PR 10): the exam's pull request at `head` was sent back, and `why` says what
-	 * for, a line each: the review's findings, the checks' failing names or the files that conflict.
-	 * `base` is then a copy of that head, or of main when `on` says so. Left out: the first writing,
-	 * from main.
-	 */
-	redo: Schema.optionalKey(
-		Schema.Struct({
-			head: Schema.String,
-			why: Schema.Array(Schema.String),
-			on: Schema.optionalKey(RedoOn),
-		}),
-	),
+  ticket: Schema.String,
+  number: Schema.Finite,
+  base: Schema.String,
+  changes: Schema.Array(ExamChange),
+  tries: Schema.Finite,
+  /**
+   * A redo (self-fix PR 10): the exam's pull request at `head` was sent back, and `why` says what
+   * for, a line each: the review's findings, the checks' failing names or the files that conflict.
+   * `base` is then a copy of that head, or of main when `on` says so. Left out: the first writing,
+   * from main.
+   */
+  redo: Schema.optionalKey(
+    Schema.Struct({
+      head: Schema.String,
+      why: Schema.Array(Schema.String),
+      on: Schema.optionalKey(RedoOn),
+    }),
+  ),
 });
 export type ExamAsk = typeof ExamAsk.Type;
 
-const ExamFile = Schema.Struct({path: Schema.String, text: Schema.String});
+const ExamFile = Schema.Struct({ path: Schema.String, text: Schema.String });
 /** What the agent hands back: each listed file, whole. */
-export const ExamWritten = Schema.Struct({files: Schema.Array(ExamFile)});
+export const ExamWritten = Schema.Struct({ files: Schema.Array(ExamFile) });
 export type ExamWritten = typeof ExamWritten.Type;
 
 const ExamBrief = Schema.Struct({
-	ticket: Schema.String,
-	changes: Schema.Array(ExamChange),
-	/** What a redo was sent back for. Left out: the first writing. */
-	why: Schema.optionalKey(Schema.Array(Schema.String)),
-	/** Where the redo is written: main, or left out for the pull request's head. */
-	on: Schema.optionalKey(RedoOn),
+  ticket: Schema.String,
+  changes: Schema.Array(ExamChange),
+  /** What a redo was sent back for. Left out: the first writing. */
+  why: Schema.optionalKey(Schema.Array(Schema.String)),
+  /** Where the redo is written: main, or left out for the pull request's head. */
+  on: Schema.optionalKey(RedoOn),
 });
 type ExamBrief = typeof ExamBrief.Type;
 
 /** The Check: every listed file, and nothing else. None is a pass. */
 export const examProblems: Check<ExamWritten, ExamBrief> = (written, brief) => {
-	const asked = new Set(brief.changes.map((c) => c.path));
-	const wrote = new Set(written.files.map((f) => f.path));
-	return [
-		...written.files.flatMap((f) =>
-			asked.has(f.path) ? [] : [`\`${f.path}\` is not a change this plan lists.`],
-		),
-		...brief.changes.flatMap((c) =>
-			wrote.has(c.path) ? [] : [`\`${c.path}\` is listed, and you did not hand it back.`],
-		),
-	];
+  const asked = new Set(brief.changes.map((c) => c.path));
+  const wrote = new Set(written.files.map((f) => f.path));
+  return [
+    ...written.files.flatMap((f) => (asked.has(f.path) ? [] : [`\`${f.path}\` is not a change this plan lists.`])),
+    ...brief.changes.flatMap((c) =>
+      wrote.has(c.path) ? [] : [`\`${c.path}\` is listed, and you did not hand it back.`],
+    ),
+  ];
 };
 
 /** The writer's first prompt: each change, and on a redo what it was sent back for. Pure. */
 const promptOf = (brief: ExamBrief): string =>
-	[
-		...brief.changes.map((c) => `${c.path}: ${c.change} (${c.why})`),
-		...(brief.why === undefined
-			? []
-			: [
-					"",
-					brief.on === "main"
-						? "Main changed these files, and it does not merge into the pull request. You are on main now, so write each change again on main's version:"
-						: "These files are on the pull request already. It was sent back for this, so fix it in the same files:",
-					...brief.why.map((line) => `- ${line}`),
-				]),
-	].join("\n");
+  [
+    ...brief.changes.map((c) => `${c.path}: ${c.change} (${c.why})`),
+    ...(brief.why === undefined
+      ? []
+      : [
+          "",
+          brief.on === "main"
+            ? "Main changed these files, and it does not merge into the pull request. You are on main now, so write each change again on main's version:"
+            : "These files are on the pull request already. It was sent back for this, so fix it in the same files:",
+          ...brief.why.map((line) => `- ${line}`),
+        ]),
+  ].join("\n");
 
-export const examWrite = createDraft({name: "exam_write", output: ExamWritten});
+export const examWrite = createDraft({ name: "exam_write", output: ExamWritten });
 
 const refine = createRefineLoop({
-	draft: examWrite,
-	check: examProblems,
-	prompt: (brief, note) => note ?? promptOf(brief),
-	agent: null,
-	folder: null,
+  draft: examWrite,
+  check: examProblems,
+  prompt: (brief, note) => note ?? promptOf(brief),
+  agent: null,
+  folder: null,
 });
 
 const LandIn = Schema.Struct({
-	ticket: Schema.String,
-	number: Schema.Finite,
-	base: Schema.String,
-	files: Schema.Array(ExamFile),
-	/** What the plan says of each, for the pull request's text. Left out: a land saved before this key still reads. */
-	changes: Schema.optionalKey(Schema.Array(ExamChange)),
+  ticket: Schema.String,
+  number: Schema.Finite,
+  base: Schema.String,
+  files: Schema.Array(ExamFile),
+  /** What the plan says of each, for the pull request's text. Left out: a land saved before this key still reads. */
+  changes: Schema.optionalKey(Schema.Array(ExamChange)),
 });
+
 /** The pull request the rule changes are on, and its head. */
-export const Landed = Schema.Struct({pr: Schema.String, head: Schema.String});
+export const Landed = Schema.Struct({ pr: Schema.String, head: Schema.String });
 export type Landed = typeof Landed.Type;
 
 export const landExam = act("exam_land", {
-	input: LandIn,
-	ok: Landed,
-	err: ["unknown"],
+  input: LandIn,
+  ok: Landed,
+  err: ["unknown"],
 });
 
 export const ExamReport = Schema.Struct({
-	pr: Schema.NullOr(Schema.String),
-	head: Schema.NullOr(Schema.String),
-	files: Schema.Array(Schema.String),
-	problems: Schema.Array(Schema.String),
+  pr: Schema.NullOr(Schema.String),
+  head: Schema.NullOr(Schema.String),
+  files: Schema.Array(Schema.String),
+  problems: Schema.Array(Schema.String),
 });
 export type ExamReport = typeof ExamReport.Type;
 
-const Held = Schema.Struct({ask: ExamAsk, key: Schema.String});
+const Held = Schema.Struct({ ask: ExamAsk, key: Schema.String });
 type Held = typeof Held.Type;
 
 export const Exam = Schema.Union([
-	Schema.Struct({phase: Schema.Literal("idle")}),
-	Schema.Struct({
-		...Held.fields,
-		phase: Schema.Literal("writing"),
-		guard: Schema.Array(Schema.String),
-		refining: refiningOf(ExamBrief, ExamWritten),
-	}),
-	Schema.Struct({
-		...Held.fields,
-		phase: Schema.Literal("landing"),
-		guard: Schema.Array(Schema.String),
-		asked: keptAct(landExam, LandIn),
-	}),
-	Schema.Struct({
-		...Held.fields,
-		phase: Schema.Literal("over"),
-		outcome: ExamOutcome,
-		report: ExamReport,
-	}),
+  Schema.Struct({ phase: Schema.Literal("idle") }),
+  Schema.Struct({
+    ...Held.fields,
+    phase: Schema.Literal("writing"),
+    guard: Schema.Array(Schema.String),
+    refining: refiningOf(ExamBrief, ExamWritten),
+  }),
+  Schema.Struct({
+    ...Held.fields,
+    phase: Schema.Literal("landing"),
+    guard: Schema.Array(Schema.String),
+    asked: keptAct(landExam, LandIn),
+  }),
+  Schema.Struct({
+    ...Held.fields,
+    phase: Schema.Literal("over"),
+    outcome: ExamOutcome,
+    report: ExamReport,
+  }),
 ]);
 export type Exam = typeof Exam.Type;
 
 export type ExamMsg =
-	| {readonly type: "start"; readonly ask: ExamAsk; readonly key: string}
-	| {readonly type: "resume"}
-	| DraftMsg<"exam_write", ExamWritten>;
+  | { readonly type: "start"; readonly ask: ExamAsk; readonly key: string }
+  | { readonly type: "resume" }
+  | DraftMsg<"exam_write", ExamWritten>;
+
 export type ExamCmd = ReturnType<typeof landExam>;
 
 type Step = readonly [Exam, readonly ExamCmd[]];
 const stay = (s: Exam): Step => [s, []];
-const held = (s: Held): Held => ({ask: s.ask, key: s.key});
+const held = (s: Held): Held => ({ ask: s.ask, key: s.key });
 
 const end = (s: Held, outcome: ExamOutcome, report: Partial<ExamReport> = {}): Step => [
-	{
-		...held(s),
-		phase: "over",
-		outcome,
-		report: {pr: null, head: null, files: [], problems: [], ...report},
-	},
-	[],
+  {
+    ...held(s),
+    phase: "over",
+    outcome,
+    report: { pr: null, head: null, files: [], problems: [], ...report },
+  },
+  [],
 ];
 
 const writing = (s: Held, guard: CheckChange): Step => {
-	const {redo} = s.ask;
-	const brief: ExamBrief = {
-		ticket: s.ask.ticket,
-		changes: s.ask.changes,
-		...(redo === undefined ? {} : {why: redo.why}),
-		...(redo?.on === undefined ? {} : {on: redo.on}),
-	};
-	return [
-		{
-			...held(s),
-			phase: "writing",
-			guard: guard.files,
-			refining: refine.start(s.key, brief, s.ask.tries) as Refining<ExamBrief, ExamWritten>,
-		},
-		[],
-	];
+  const { redo } = s.ask;
+  const brief: ExamBrief = {
+    ticket: s.ask.ticket,
+    changes: s.ask.changes,
+    ...(redo === undefined ? {} : { why: redo.why }),
+    ...(redo?.on === undefined ? {} : { on: redo.on }),
+  };
+  return [
+    {
+      ...held(s),
+      phase: "writing",
+      guard: guard.files,
+      refining: refine.start(s.key, brief, s.ask.tries) as Refining<ExamBrief, ExamWritten>,
+    },
+    [],
+  ];
 };
 
 export const examSub = examWrite.sub((s: Exam): DraftRun | null => {
-	if (s.phase !== "writing") return null;
-	const run = refine.runOf(s.refining);
-	return run === null ? null : {...run, folder: s.ask.base};
+  if (s.phase !== "writing") {
+    return null;
+  }
+
+  const run = refine.runOf(s.refining);
+  return run === null ? null : { ...run, folder: s.ask.base };
 });
 
-const drafted = (s: Exam, m: Exclude<ExamMsg, {type: "start" | "resume"}>): Step => {
-	if (s.phase !== "writing" || refine.runOf(s.refining)?.id !== m.id) return stay(s);
-	const next = refine.update(s.refining, m);
-	switch (next.phase) {
-		case "drafting":
-			return [{...s, refining: next}, []];
-		case "done": {
-			const {ticket, number, base, changes} = s.ask;
-			const asked = landExam({
-				ticket,
-				number,
-				base,
-				files: next.output.files,
-				changes,
-				// A redo lands again: its own intent, by the head it was sent back from.
-				intent:
-					s.ask.redo === undefined
-						? intentOf("exam", ticket, "land")
-						: intentOf("exam", ticket, "land", s.ask.redo.head),
-			});
-			return [{...held(s), phase: "landing", guard: s.guard, asked}, [asked]];
-		}
-		case "out_of_tries":
-			return end(s, {kind: "stuck", why: "unchecked"}, {problems: next.problems});
-		case "failed":
-			return end(s, {kind: "stuck", why: "draft_failed"}, {problems: [next.error]});
-	}
+const drafted = (s: Exam, m: Exclude<ExamMsg, { type: "start" | "resume" }>): Step => {
+  if (s.phase !== "writing" || refine.runOf(s.refining)?.id !== m.id) {
+    return stay(s);
+  }
+
+  const next = refine.update(s.refining, m);
+
+  switch (next.phase) {
+    case "drafting":
+      return [{ ...s, refining: next }, []];
+    case "done": {
+      const { ticket, number, base, changes } = s.ask;
+      const asked = landExam({
+        ticket,
+        number,
+        base,
+        files: next.output.files,
+        changes,
+        // A redo lands again: its own intent, by the head it was sent back from.
+        intent:
+          s.ask.redo === undefined
+            ? intentOf("exam", ticket, "land")
+            : intentOf("exam", ticket, "land", s.ask.redo.head),
+      });
+      return [{ ...held(s), phase: "landing", guard: s.guard, asked }, [asked]];
+    }
+    case "out_of_tries":
+      return end(s, { kind: "stuck", why: "unchecked" }, { problems: next.problems });
+    case "failed":
+      return end(s, { kind: "stuck", why: "draft_failed" }, { problems: [next.error] });
+  }
 };
 
 export const exam = defineMachine({
-	types: {
-		model: {} as Exam,
-		msg: {} as ExamMsg,
-		sub: {} as Sub<"exam_write", DraftRun>,
-		ctx: undefined,
-	},
-	cmds: [landExam],
-	init: (loaded) => [loaded ?? {phase: "idle"}, []],
-	update: {
-		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
-			const at = {ask: m.ask, key: m.key};
-			const guard = checkChange(m.ask.changes.map((c) => c.path));
-			return guard === null ? end(at, {kind: "skip", why: "no_rules_change"}) : writing(at, guard);
-		},
-		resume: (s): Step => (s.phase === "landing" ? [s, [s.asked]] : stay(s)),
-		exam_write_tool: (s): Step => stay(s),
-		exam_write_finished: drafted,
-		exam_write_failed: drafted,
-		exam_land_ok: (s, m): Step =>
-			s.phase === "landing"
-				? end(
-						s,
-						{kind: "ask", who: "owner", for: "check_change"},
-						{pr: m.value.pr, head: m.value.head, files: s.guard},
-					)
-				: stay(s),
-		exam_land_err: (s): Step =>
-			s.phase === "landing" ? end(s, {kind: "stuck", why: "land_failed"}) : stay(s),
-	},
-	subs: [examSub],
+  types: {
+    model: {} as Exam,
+    msg: {} as ExamMsg,
+    sub: {} as Sub<"exam_write", DraftRun>,
+    ctx: undefined,
+  },
+  cmds: [landExam],
+  init: (loaded) => [loaded ?? { phase: "idle" }, []],
+  update: {
+    start: (s, m): Step => {
+      if (s.phase !== "idle") {
+        return stay(s);
+      }
+
+      const at = { ask: m.ask, key: m.key };
+      const guard = checkChange(m.ask.changes.map((c) => c.path));
+      return guard === null ? end(at, { kind: "skip", why: "no_rules_change" }) : writing(at, guard);
+    },
+    resume: (s): Step => (s.phase === "landing" ? [s, [s.asked]] : stay(s)),
+    exam_write_tool: (s): Step => stay(s),
+    exam_write_finished: drafted,
+    exam_write_failed: drafted,
+    exam_land_ok: (s, m): Step =>
+      s.phase === "landing"
+        ? end(
+            s,
+            { kind: "ask", who: "owner", for: "check_change" },
+            { pr: m.value.pr, head: m.value.head, files: s.guard },
+          )
+        : stay(s),
+    exam_land_err: (s): Step => (s.phase === "landing" ? end(s, { kind: "stuck", why: "land_failed" }) : stay(s)),
+  },
+  subs: [examSub],
 });

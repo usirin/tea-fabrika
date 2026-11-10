@@ -1,5 +1,5 @@
-import {Schema} from "effect";
-import {isAgentName} from "../host/door.ts";
+import { Schema } from "effect";
+import { isAgentName } from "../host/door.ts";
 
 // The first line on the host's agents' socket, before any MCP message: who the agent is. The
 // rest of the socket is MCP, framed as its stdio binding frames it (spec 2026-07-28, "Transports":
@@ -17,23 +17,21 @@ export const AGENTS_PROTOCOL = 1;
 
 /** An agent's name, as the door takes one: small letters, digits, dots, dashes, underscores. */
 export const AgentName = Schema.String.check(
-	Schema.makeFilter(
-		(s) => isAgentName(s) || "an agent's name: small letters, digits, dots, dashes, underscores",
-	),
+  Schema.makeFilter((s) => isAgentName(s) || "an agent's name: small letters, digits, dots, dashes, underscores"),
 );
 
 /** What the bridge says first. */
 export const Handshake = Schema.Struct({
-	type: Schema.Literal("handshake"),
-	version: Schema.Int,
-	agent: AgentName,
+  type: Schema.Literal("handshake"),
+  version: Schema.Int,
+  agent: AgentName,
 });
 export type Handshake = typeof Handshake.Type;
 
 /** What the host answers. */
 export const HostAnswer = Schema.Union([
-	Schema.Struct({type: Schema.Literal("handshake"), version: Schema.Int}),
-	Schema.Struct({type: Schema.Literal("refused"), why: Schema.String}),
+  Schema.Struct({ type: Schema.Literal("handshake"), version: Schema.Int }),
+  Schema.Struct({ type: Schema.Literal("refused"), why: Schema.String }),
 ]);
 export type HostAnswer = typeof HostAnswer.Type;
 

@@ -1,7 +1,7 @@
-import {nameOf} from "../outcome.ts";
-import type {Main, ShipFacts} from "./facts.ts";
-import {shipGate} from "./gate.ts";
-import {type OnMain, ReadyToMerge} from "./ready.ts";
+import { nameOf } from "../outcome.ts";
+import type { Main, ShipFacts } from "./facts.ts";
+import { shipGate } from "./gate.ts";
+import { type OnMain, ReadyToMerge } from "./ready.ts";
 
 // The door of a write: what ship checks between its Cmd and the code host
 // (docs/direction/read-fresh-run-alone.md). The machine's read and its write
@@ -22,13 +22,10 @@ import {type OnMain, ReadyToMerge} from "./ready.ts";
 // Pure, so the world model of experiment 91 answers its writes with it too.
 
 /** What the door lets through: the proof made from the fresh read, or why the read the Cmd came from no longer holds. */
-export type Door = {readonly write: ReadyToMerge} | {readonly stale: string};
+export type Door = { readonly write: ReadyToMerge } | { readonly stale: string };
 
 /** The same for a straight merge: a proof tested on the main tip, or why not. `behind`: main moved on since the head left it. */
-export type MergeDoor =
-	| {readonly write: OnMain}
-	| {readonly stale: string}
-	| {readonly behind: Main};
+export type MergeDoor = { readonly write: OnMain } | { readonly stale: string } | { readonly behind: Main };
 
 /**
  * The write the machine asked for, against the facts as they are now. It goes
@@ -36,17 +33,18 @@ export type MergeDoor =
  * the one the gate made from these facts, from every row the record holds now.
  */
 export function atTheDoor(asked: ReadyToMerge, fresh: ShipFacts): Door {
-	const gate = shipGate(asked.pr, fresh);
-	switch (gate.answer) {
-		case "stop":
-			return {stale: nameOf(gate.outcome)};
-		case "wait_for_checks":
-			return {stale: `the checks at ${gate.head} are running`};
-		case "go":
-			return gate.ready.head === asked.head
-				? {write: gate.ready}
-				: {stale: `the head is ${gate.ready.head}, not ${asked.head}`};
-	}
+  const gate = shipGate(asked.pr, fresh);
+
+  switch (gate.answer) {
+    case "stop":
+      return { stale: nameOf(gate.outcome) };
+    case "wait_for_checks":
+      return { stale: `the checks at ${gate.head} are running` };
+    case "go":
+      return gate.ready.head === asked.head
+        ? { write: gate.ready }
+        : { stale: `the head is ${gate.ready.head}, not ${asked.head}` };
+  }
 }
 
 /**
@@ -56,8 +54,12 @@ export function atTheDoor(asked: ReadyToMerge, fresh: ShipFacts): Door {
  * take main in and be tested again.
  */
 export function atTheMergeDoor(asked: ReadyToMerge, fresh: ShipFacts): MergeDoor {
-	const door = atTheDoor(asked, fresh);
-	if ("stale" in door) return door;
-	const onMain = ReadyToMerge.onMain(door.write, fresh.main.tip);
-	return onMain === null ? {behind: fresh.main} : {write: onMain};
+  const door = atTheDoor(asked, fresh);
+
+  if ("stale" in door) {
+    return door;
+  }
+
+  const onMain = ReadyToMerge.onMain(door.write, fresh.main.tip);
+  return onMain === null ? { behind: fresh.main } : { write: onMain };
 }

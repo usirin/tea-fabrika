@@ -1,22 +1,13 @@
-import {createHash} from "node:crypto";
-import {existsSync, readdirSync, realpathSync} from "node:fs";
-import {userInfo} from "node:os";
-import {basename, dirname, isAbsolute, join} from "node:path";
-import {fileURLToPath} from "node:url";
-import {Effect, FileSystem, Option} from "effect";
-import type {SystemPrompt} from "../agent/turn.ts";
-import {agentEnv, type Env, runEnv, toolHome} from "../claude/env.ts";
-import {
-	fencedEnv,
-	filesOf,
-	gitOf,
-	inside,
-	LOGIN_FILES,
-	opens,
-	TOOLS,
-	toolchain,
-} from "../claude/sandbox.ts";
-import type {Spawnable} from "./client.ts";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
+import { userInfo } from "node:os";
+import { basename, dirname, isAbsolute, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Effect, FileSystem, Option } from "effect";
+import type { SystemPrompt } from "../agent/turn.ts";
+import { agentEnv, type Env, runEnv, toolHome } from "../claude/env.ts";
+import { fencedEnv, filesOf, gitOf, inside, LOGIN_FILES, opens, TOOLS, toolchain } from "../claude/sandbox.ts";
+import type { Spawnable } from "./client.ts";
 
 // The harnesses `acp --agent` can start, and how each is contained. Swapping
 // the harness is this table and nothing else: the client, the fold and the
@@ -95,25 +86,25 @@ export const AGENTS = ["claude", "codex", "fake"] as const;
 export type AgentName = (typeof AGENTS)[number];
 
 interface Started extends Spawnable {
-	/** `_meta` for session/new, load and resume. */
-	readonly meta: Readonly<Record<string, unknown>> | undefined;
-	/** The script the command runs: it must be there. */
-	readonly script: string;
-	/** What must be made before the command starts, when the harness needs anything. */
-	readonly prepare?: Effect.Effect<void, string, FileSystem.FileSystem>;
+  /** `_meta` for session/new, load and resume. */
+  readonly meta: Readonly<Record<string, unknown>> | undefined;
+  /** The script the command runs: it must be there. */
+  readonly script: string;
+  /** What must be made before the command starts, when the harness needs anything. */
+  readonly prepare?: Effect.Effect<void, string, FileSystem.FileSystem>;
 }
 
 /** A row, ready to start. Codex's keeps the access it was made with, so its config can be made again (`withSystem`). */
 export type Harness =
-	| (Started & {readonly name: "claude" | "fake"})
-	| (Started & {readonly name: "codex"; readonly access: FolderAccess});
+  | (Started & { readonly name: "claude" | "fake" })
+  | (Started & { readonly name: "codex"; readonly access: FolderAccess });
 
 /**
  * A row of the table, as a caller asks for it. Codex's names what its folder
  * allows, with no default: a turn that only reads cannot get a writable
  * folder because its author forgot to say.
  */
-export type Row = "claude" | "fake" | {readonly name: "codex"; readonly access: FolderAccess};
+export type Row = "claude" | "fake" | { readonly name: "codex"; readonly access: FolderAccess };
 
 /** The row's name. */
 export const rowName = (row: Row): AgentName => (typeof row === "string" ? row : row.name);
@@ -124,17 +115,24 @@ export const rowName = (row: Row): AgentName => (typeof row === "string" ? row :
  * from the checkout's root, the folder above with `pnpm-workspace.yaml`.
  */
 const HERE = (() => {
-	const here = fileURLToPath(new URL(".", import.meta.url));
-	if (existsSync(join(here, "fake-agent.ts"))) return here;
-	for (let up = here; dirname(up) !== up; up = dirname(up))
-		if (existsSync(join(up, "pnpm-workspace.yaml")))
-			return join(up, "packages", "fabrika", "src", "agents", "acp");
-	return here;
+  const here = fileURLToPath(new URL(".", import.meta.url));
+
+  if (existsSync(join(here, "fake-agent.ts"))) {
+    return here;
+  }
+
+  for (let up = here; dirname(up) !== up; up = dirname(up)) {
+    if (existsSync(join(up, "pnpm-workspace.yaml"))) {
+      return join(up, "packages", "fabrika", "src", "agents", "acp");
+    }
+  }
+
+  return here;
 })();
 
 const at = (path: string) => {
-	const whole = join(HERE, path);
-	return path.endsWith("/") && !whole.endsWith("/") ? `${whole}/` : whole;
+  const whole = join(HERE, path);
+  return path.endsWith("/") && !whole.endsWith("/") ? `${whole}/` : whole;
 };
 
 /** Where the pinned adapters are installed: `pnpm --dir adapters install --ignore-workspace --frozen-lockfile`. */
@@ -152,7 +150,7 @@ const CODEX_HOMES = ".cache/tea-fabrika/codex";
  * where the agent's commands can neither read nor write (`codexConfig`).
  */
 export const codexHomeOf = (folder: string, parent: Env = process.env) =>
-	`${parent.HOME ?? ""}/${CODEX_HOMES}/${createHash("sha256").update(folder).digest("hex").slice(0, 16)}`;
+  `${parent.HOME ?? ""}/${CODEX_HOMES}/${createHash("sha256").update(folder).digest("hex").slice(0, 16)}`;
 
 /** The modes a contained Codex may run in. `agent` lets a model answer the asks; full access has no sandbox. */
 export const CODEX_MODES = ["read-only", "workspace-write"] as const;
@@ -162,14 +160,14 @@ export type FolderAccess = "write" | "read";
 
 /** The mode a Codex row starts in, by its access. */
 const MODE_OF = {
-	write: "workspace-write",
-	read: "read-only",
+  write: "workspace-write",
+  read: "read-only",
 } as const satisfies Record<FolderAccess, (typeof CODEX_MODES)[number]>;
 
 /** One thing in a folder, by name. A link is told apart, so it is never followed. */
 export interface Entry {
-	readonly name: string;
-	readonly link: boolean;
+  readonly name: string;
+  readonly link: boolean;
 }
 
 /** What a folder holds, or `null` when it cannot be read. */
@@ -177,25 +175,25 @@ export type Listing = (folder: string) => readonly Entry[] | null;
 
 /** What the fence asks of the machine it is made on. All of it comes in here, so `homeFence` is pure. */
 export interface Disk {
-	readonly list: Listing;
-	/** A path with every link followed and its spelling made plain, or `null` when it is not there. */
-	readonly real: (path: string) => string | null;
-	/** How many first characters of a name the box's patterns may close by. 0 lists every entry. */
-	readonly depth: number;
-	/** The account's own home, as the system has it and whatever `HOME` says. `null` when it does not say. */
-	readonly account: string | null;
+  readonly list: Listing;
+  /** A path with every link followed and its spelling made plain, or `null` when it is not there. */
+  readonly real: (path: string) => string | null;
+  /** How many first characters of a name the box's patterns may close by. 0 lists every entry. */
+  readonly depth: number;
+  /** The account's own home, as the system has it and whatever `HOME` says. `null` when it does not say. */
+  readonly account: string | null;
 }
 
 /** The real disk, as a `Listing`. A read that fails is `null`. */
 export const listFolder: Listing = (folder) =>
-	Option.getOrNull(
-		Option.liftThrowable(() =>
-			readdirSync(folder, {withFileTypes: true}).map((entry) => ({
-				name: entry.name,
-				link: entry.isSymbolicLink(),
-			})),
-		)(),
-	);
+  Option.getOrNull(
+    Option.liftThrowable(() =>
+      readdirSync(folder, { withFileTypes: true }).map((entry) => ({
+        name: entry.name,
+        link: entry.isSymbolicLink(),
+      })),
+    )(),
+  );
 
 /**
  * How far to trust patterns on a system. Only a Mac's Seatbelt has been tested with them. Nothing
@@ -206,10 +204,10 @@ export const depthFor = (platform: string) => (platform === "darwin" ? 2 : 0);
 
 /** This machine, as a `Disk`: the one place the fence touches it. */
 export const localDisk: Disk = {
-	list: listFolder,
-	real: (path) => Option.getOrNull(Option.liftThrowable(() => realpathSync.native(path))()),
-	depth: depthFor(process.platform),
-	account: Option.getOrNull(Option.liftThrowable(() => userInfo().homedir)()),
+  list: listFolder,
+  real: (path) => Option.getOrNull(Option.liftThrowable(() => realpathSync.native(path))()),
+  depth: depthFor(process.platform),
+  account: Option.getOrNull(Option.liftThrowable(() => userInfo().homedir)()),
 };
 
 /** Under home, where a login is kept, and where each Codex home is made, some of them after the fence is. */
@@ -225,13 +223,17 @@ const PROTECTED_FILES = [".fabrika", ".envrc", ".husky", ".claude", ".github/wor
 const plain = (path: string) => path.replace(/(?<=.)\/+$/, "");
 
 const lines = <Rule>(paths: readonly string[], rule: Rule): Record<string, Rule> =>
-	Object.fromEntries(paths.map((path) => [path, rule]));
+  Object.fromEntries(paths.map((path) => [path, rule]));
 
 /** Where a path really is, as far as it is there: a login may not be there yet, under a link that is. */
 const realSoFar = (path: string, real: Disk["real"]): string => {
-	const there = real(path);
-	if (there !== null) return there;
-	return dirname(path) === path ? path : join(realSoFar(dirname(path), real), basename(path));
+  const there = real(path);
+
+  if (there !== null) {
+    return there;
+  }
+
+  return dirname(path) === path ? path : join(realSoFar(dirname(path), real), basename(path));
 };
 
 /**
@@ -245,12 +247,10 @@ const ODD = /[*?[\]"]|(?![\u0080-\u009f])\p{Cc}/u;
  * inside a pattern (a brace, a backslash), each stand in brackets. A control character and a quote
  * cannot, so `?` takes their place: it matches that one byte, and may close a name beside it too.
  */
-const pattern = (path: string) =>
-	path.replace(/[*?[\]{}\\]/g, "[$&]").replace(/"|(?![\u0080-\u009f])\p{Cc}/gu, "?");
+const pattern = (path: string) => path.replace(/[*?[\]{}\\]/g, "[$&]").replace(/"|(?![\u0080-\u009f])\p{Cc}/gu, "?");
 
 /** The keys that close a path. A pattern closes one name and not what is in it, so an odd path takes two. */
-const closing = (path: string): readonly string[] =>
-	ODD.test(path) ? [pattern(path), `${pattern(path)}/**`] : [path];
+const closing = (path: string): readonly string[] => (ODD.test(path) ? [pattern(path), `${pattern(path)}/**`] : [path]);
 
 /**
  * What may stand in a pattern: a class and `?` work by byte, so nothing of more than one byte, and
@@ -273,46 +273,53 @@ const PATTERN_FOLDER = /^[A-Za-z0-9._ /-]*$/;
  * a character, and a kept name's start is written in lower case and still closes an entry in either.
  */
 const closingAllBut = (
-	dir: string,
-	kept: readonly string[],
-	names: readonly string[],
-	depth: number,
+  dir: string,
+  kept: readonly string[],
+  names: readonly string[],
+  depth: number,
 ): readonly string[] => {
-	const keys = (key: string) => [key, `${key}/**`];
-	const fold = (text: string) => text.toLowerCase();
-	const listed = (start: string) =>
-		names
-			.filter((name) => fold(name).startsWith(start) && !kept.includes(name))
-			.flatMap((name) => closing(`${dir}/${name}`));
-	/** `start` has no case, and `here` are the kept names that start with it, in any case. */
-	const walk = (start: string, here: readonly string[]): readonly string[] => {
-		const longer = here.filter((name) => name.length > start.length);
-		if (longer.length === 0) return keys(`${dir}/${start}?*`);
-		if (start.length >= depth) return listed(start);
-		const next = [...new Set(longer.map((name) => fold(name.charAt(start.length))))].sort();
-		const isKept = here.some((name) => fold(name) === start);
-		const set = [
-			...next.filter((c) => c !== "-").flatMap((c) => [...new Set([c, c.toUpperCase()])]),
-			// A class matches a slash too: `w[!x]*` would close what is in a kept `w`.
-			...(isKept ? ["/"] : []),
-			// A dash in a class stands for itself only at its end.
-			...next.filter((c) => c === "-"),
-		];
-		// The start is an entry of its own, unless it is kept or names none: a key for `.` or `..`
-		// breaks the box's profile.
-		const hasOwnLine = !isKept && !["", ".", ".."].includes(start);
-		return [
-			...keys(`${dir}/${start}[!${set.join("")}]*`),
-			...(hasOwnLine ? keys(`${dir}/${start}`) : []),
-			...next.flatMap((c) =>
-				walk(
-					`${start}${c}`,
-					longer.filter((name) => fold(name).startsWith(`${start}${c}`)),
-				),
-			),
-		];
-	};
-	return depth === 0 ? listed("") : walk("", kept);
+  const keys = (key: string) => [key, `${key}/**`];
+  const fold = (text: string) => text.toLowerCase();
+  const listed = (start: string) =>
+    names
+      .filter((name) => fold(name).startsWith(start) && !kept.includes(name))
+      .flatMap((name) => closing(`${dir}/${name}`));
+  /** `start` has no case, and `here` are the kept names that start with it, in any case. */
+  const walk = (start: string, here: readonly string[]): readonly string[] => {
+    const longer = here.filter((name) => name.length > start.length);
+
+    if (longer.length === 0) {
+      return keys(`${dir}/${start}?*`);
+    }
+
+    if (start.length >= depth) {
+      return listed(start);
+    }
+
+    const next = [...new Set(longer.map((name) => fold(name.charAt(start.length))))].sort();
+    const isKept = here.some((name) => fold(name) === start);
+    const set = [
+      ...next.filter((c) => c !== "-").flatMap((c) => [...new Set([c, c.toUpperCase()])]),
+      // A class matches a slash too: `w[!x]*` would close what is in a kept `w`.
+      ...(isKept ? ["/"] : []),
+      // A dash in a class stands for itself only at its end.
+      ...next.filter((c) => c === "-"),
+    ];
+    // The start is an entry of its own, unless it is kept or names none: a key for `.` or `..`
+    // breaks the box's profile.
+    const hasOwnLine = !isKept && !["", ".", ".."].includes(start);
+    return [
+      ...keys(`${dir}/${start}[!${set.join("")}]*`),
+      ...(hasOwnLine ? keys(`${dir}/${start}`) : []),
+      ...next.flatMap((c) =>
+        walk(
+          `${start}${c}`,
+          longer.filter((name) => fold(name).startsWith(`${start}${c}`)),
+        ),
+      ),
+    ];
+  };
+  return depth === 0 ? listed("") : walk("", kept);
 };
 
 /**
@@ -367,83 +374,84 @@ const closingAllBut = (
  * docs/direction/codex-box-home-listing.md.
  */
 export const homeFence = (
-	home: string,
-	reads: readonly string[],
-	folder: string,
-	access: FolderAccess,
-	disk: Disk,
-	logins: readonly string[] = [],
+  home: string,
+  reads: readonly string[],
+  folder: string,
+  access: FolderAccess,
+  disk: Disk,
+  logins: readonly string[] = [],
 ): Record<string, FolderAccess | "deny"> => {
-	const realHome = (path: string) => disk.real(plain(path)) ?? plain(path);
-	const root = realHome(home);
-	const account = disk.account === null ? root : realHome(disk.account);
-	const homes = account === root ? [root] : [root, account];
-	const targets = (under: string, paths: readonly string[]) =>
-		paths.map((path) => realSoFar(`${under}/${path}`, disk.real));
-	const loginTargets = homes.flatMap((under) => targets(under, LOGINS));
-	const opensNothing = (path: string) =>
-		homes.some((under) => opens(path, under, LOGINS)) ||
-		loginTargets.some((target) => inside(target, path));
-	const realLine = (path: string) => {
-		const there = disk.real(plain(path));
-		return there === null || opensNothing(there) ? [] : [there];
-	};
-	const tools = reads.flatMap(realLine);
-	const own = realLine(folder);
-	const opened = [...tools, ...own];
-	const holdsOpened = (path: string) => opened.some((open) => open.startsWith(`${path}/`));
-	const nameable = (path: string) => !ODD.test(path);
-	const beside = (dir: string): readonly string[] => {
-		const entries = disk.list(dir);
-		if (entries === null) return closing(dir);
-		const ways = entries.filter(({name, link}) => {
-			const path = `${dir}/${name}`;
-			return !link && (opened.includes(path) || holdsOpened(path));
-		});
-		const kept = ways.map(({name}) => name);
-		const plainEnough =
-			PATTERN_FOLDER.test(dir) &&
-			kept.every((name) => IN_A_PATTERN.test(name.slice(0, disk.depth)));
-		return [
-			...closingAllBut(
-				dir,
-				kept,
-				entries.map(({name}) => name),
-				plainEnough ? disk.depth : 0,
-			),
-			...kept
-				.map((name) => `${dir}/${name}`)
-				.filter((path) => !opened.includes(path))
-				.flatMap(beside),
-		];
-	};
-	const loginLines = (under: string) =>
-		[...ALWAYS_CLOSED.map((path) => `${under}/${path}`), ...targets(under, ALWAYS_CLOSED)]
-			.filter((path) => !holdsOpened(path))
-			.flatMap(closing);
-	return {
-		...lines(
-			homes.flatMap((under) => (holdsOpened(under) ? beside(under) : closing(under))),
-			"deny",
-		),
-		...lines(tools.filter(nameable), "read"),
-		...lines(own.filter(nameable), access),
-		// Last, so a login stays closed even if something asks to open it. One that holds an opened
-		// folder is not closed whole, for the same reason as home: the walk closed what is in it. The
-		// account's home, closed whole, needs no line for what is in it.
-		...lines(
-			[
-				...loginLines(root),
-				...(account !== root && holdsOpened(account) ? loginLines(account) : []),
-				...logins
-					.flatMap((login) => [login, realSoFar(login, disk.real)])
-					// Codex refuses a whole table with a key that is not absolute.
-					.filter(isAbsolute)
-					.flatMap(closing),
-			],
-			"deny",
-		),
-	};
+  const realHome = (path: string) => disk.real(plain(path)) ?? plain(path);
+  const root = realHome(home);
+  const account = disk.account === null ? root : realHome(disk.account);
+  const homes = account === root ? [root] : [root, account];
+  const targets = (under: string, paths: readonly string[]) =>
+    paths.map((path) => realSoFar(`${under}/${path}`, disk.real));
+  const loginTargets = homes.flatMap((under) => targets(under, LOGINS));
+  const opensNothing = (path: string) =>
+    homes.some((under) => opens(path, under, LOGINS)) || loginTargets.some((target) => inside(target, path));
+  const realLine = (path: string) => {
+    const there = disk.real(plain(path));
+    return there === null || opensNothing(there) ? [] : [there];
+  };
+  const tools = reads.flatMap(realLine);
+  const own = realLine(folder);
+  const opened = [...tools, ...own];
+  const holdsOpened = (path: string) => opened.some((open) => open.startsWith(`${path}/`));
+  const nameable = (path: string) => !ODD.test(path);
+  const beside = (dir: string): readonly string[] => {
+    const entries = disk.list(dir);
+
+    if (entries === null) {
+      return closing(dir);
+    }
+
+    const ways = entries.filter(({ name, link }) => {
+      const path = `${dir}/${name}`;
+      return !link && (opened.includes(path) || holdsOpened(path));
+    });
+    const kept = ways.map(({ name }) => name);
+    const plainEnough = PATTERN_FOLDER.test(dir) && kept.every((name) => IN_A_PATTERN.test(name.slice(0, disk.depth)));
+    return [
+      ...closingAllBut(
+        dir,
+        kept,
+        entries.map(({ name }) => name),
+        plainEnough ? disk.depth : 0,
+      ),
+      ...kept
+        .map((name) => `${dir}/${name}`)
+        .filter((path) => !opened.includes(path))
+        .flatMap(beside),
+    ];
+  };
+  const loginLines = (under: string) =>
+    [...ALWAYS_CLOSED.map((path) => `${under}/${path}`), ...targets(under, ALWAYS_CLOSED)]
+      .filter((path) => !holdsOpened(path))
+      .flatMap(closing);
+  return {
+    ...lines(
+      homes.flatMap((under) => (holdsOpened(under) ? beside(under) : closing(under))),
+      "deny",
+    ),
+    ...lines(tools.filter(nameable), "read"),
+    ...lines(own.filter(nameable), access),
+    // Last, so a login stays closed even if something asks to open it. One that holds an opened
+    // folder is not closed whole, for the same reason as home: the walk closed what is in it. The
+    // account's home, closed whole, needs no line for what is in it.
+    ...lines(
+      [
+        ...loginLines(root),
+        ...(account !== root && holdsOpened(account) ? loginLines(account) : []),
+        ...logins
+          .flatMap((login) => [login, realSoFar(login, disk.real)])
+          // Codex refuses a whole table with a key that is not absolute.
+          .filter(isAbsolute)
+          .flatMap(closing),
+      ],
+      "deny",
+    ),
+  };
 };
 
 /**
@@ -465,14 +473,14 @@ const PATTERN_BYTES = 59_000;
 
 /** What a table takes of the box's compiled pattern: each key's bytes, less what it shares with the key before it, sorted. */
 const patternBytes = (keys: readonly string[]): number =>
-	keys
-		.map((key) => Buffer.from(key))
-		.sort(Buffer.compare)
-		.reduce((total, key, n, sorted) => {
-			const before = sorted[n - 1] ?? Buffer.alloc(0);
-			const shared = key.findIndex((byte, at) => byte !== before[at]);
-			return total + 7 + (shared === -1 ? 0 : key.length - shared);
-		}, 0);
+  keys
+    .map((key) => Buffer.from(key))
+    .sort(Buffer.compare)
+    .reduce((total, key, n, sorted) => {
+      const before = sorted[n - 1] ?? Buffer.alloc(0);
+      const shared = key.findIndex((byte, at) => byte !== before[at]);
+      return total + 7 + (shared === -1 ? 0 : key.length - shared);
+    }, 0);
 
 /**
  * The profile also has to fit in a command's arguments, 1 MiB (exit 1, "Argument list too long"). Only
@@ -483,19 +491,22 @@ const PROFILE_BYTES = 900_000;
 
 /** What a table takes of the box's profile. A plain key costs next to nothing. */
 const profileBytes = (keys: readonly string[]): number =>
-	keys
-		.filter((key) => /[*?[\]]/.test(key))
-		.reduce((total, key) => total + 5 * Buffer.byteLength(key) + 130 * key.split("/").length, 0);
+  keys
+    .filter((key) => /[*?[\]]/.test(key))
+    .reduce((total, key) => total + 5 * Buffer.byteLength(key) + 130 * key.split("/").length, 0);
 
 /** What to say when a table is more than the box can take, or `null` when it fits. Counts only: it names no entry. */
 export const fenceTooBig = (table: Readonly<Record<string, unknown>>): string | null => {
-	const keys = Object.keys(table);
-	const count = keys.length;
-	if (count > FENCE_LIMIT)
-		return `Codex's box would need ${count} lines to close what is beside the opened folders, and it takes at most ${FENCE_LIMIT}. Nothing was started. Use a folder with fewer names beside it.`;
-	return patternBytes(keys) > PATTERN_BYTES || profileBytes(keys) > PROFILE_BYTES
-		? `Codex's box would need ${count} lines to close what is beside the opened folders, and those are too long or too deep for it. Nothing was started. Use a folder nearer the top of home, with fewer long names beside it.`
-		: null;
+  const keys = Object.keys(table);
+  const count = keys.length;
+
+  if (count > FENCE_LIMIT) {
+    return `Codex's box would need ${count} lines to close what is beside the opened folders, and it takes at most ${FENCE_LIMIT}. Nothing was started. Use a folder with fewer names beside it.`;
+  }
+
+  return patternBytes(keys) > PATTERN_BYTES || profileBytes(keys) > PROFILE_BYTES
+    ? `Codex's box would need ${count} lines to close what is beside the opened folders, and those are too long or too deep for it. Nothing was started. Use a folder nearer the top of home, with fewer long names beside it.`
+    : null;
 };
 
 /**
@@ -507,66 +518,65 @@ export const fenceTooBig = (table: Readonly<Record<string, unknown>>): string | 
  * changes nothing (`access: "read"`). There is no default: every caller says.
  */
 export const codexConfig = (
-	folder: string,
-	tools: readonly string[],
-	home: string,
-	access: FolderAccess,
-	/** How home is read and links are followed, for what the profile opens and closes (`homeFence`). */
-	disk: Disk,
-	/** Core variables only, plus these, fenced: the PATH and where a version manager holds the tools (`shellSet`). */
-	set: Readonly<Record<string, string>> = {},
-	/** Logins a variable moved, by their paths: closed wherever they are (`homeFence`). */
-	logins: readonly string[] = [],
+  folder: string,
+  tools: readonly string[],
+  home: string,
+  access: FolderAccess,
+  /** How home is read and links are followed, for what the profile opens and closes (`homeFence`). */
+  disk: Disk,
+  /** Core variables only, plus these, fenced: the PATH and where a version manager holds the tools (`shellSet`). */
+  set: Readonly<Record<string, string>> = {},
+  /** Logins a variable moved, by their paths: closed wherever they are (`homeFence`). */
+  logins: readonly string[] = [],
 ) => ({
-	// Only core variables reach a command, and Codex puts a folder in its own home, which the box
-	// closes, first on the PATH it hands on. A lookup ends with EPERM at the first closed folder, and
-	// git stops on a user config it may not read. So a command gets the fence's PATH, git and npm
-	// settings by name, as the Claude row's do (`fencedEnv`): its PATH keeps only folders the box opens.
-	shell_environment_policy: {inherit: "core", set: fencedEnv(set, tools)},
-	allow_login_shell: false,
-	web_search: "disabled",
-	default_permissions: "fenced",
-	permissions: {
-		fenced: {
-			// `:workspace` makes the working folder writable whatever the folder's own line says
-			// (experiment 163, part 3), so a read turn starts from `:read-only`.
-			extends: access === "write" ? ":workspace" : ":read-only",
-			filesystem: {
-				...homeFence(home, [...tools, ADAPTERS.replace(/\/$/, "")], folder, access, disk, logins),
-				...lines(
-					HIDDEN_FILES.map((path) => `/${path}`),
-					"deny" as const,
-				),
-			},
-		},
-	},
-	// Codex's own features that reach past the folder, on by default in a fresh home (listed at codex
-	// 0.159.3; at 0.165.0 all of them are still there and on).
-	features: {
-		apps: false,
-		plugins: false,
-		remote_plugin: false,
-		browser_use: false,
-		browser_use_external: false,
-		in_app_browser: false,
-		computer_use: false,
-		image_generation: false,
-		multi_agent: false,
-		tool_suggest: false,
-		skill_mcp_dependency_install: false,
-		goals: false,
-	},
+  // Only core variables reach a command, and Codex puts a folder in its own home, which the box
+  // closes, first on the PATH it hands on. A lookup ends with EPERM at the first closed folder, and
+  // git stops on a user config it may not read. So a command gets the fence's PATH, git and npm
+  // settings by name, as the Claude row's do (`fencedEnv`): its PATH keeps only folders the box opens.
+  shell_environment_policy: { inherit: "core", set: fencedEnv(set, tools) },
+  allow_login_shell: false,
+  web_search: "disabled",
+  default_permissions: "fenced",
+  permissions: {
+    fenced: {
+      // `:workspace` makes the working folder writable whatever the folder's own line says
+      // (experiment 163, part 3), so a read turn starts from `:read-only`.
+      extends: access === "write" ? ":workspace" : ":read-only",
+      filesystem: {
+        ...homeFence(home, [...tools, ADAPTERS.replace(/\/$/, "")], folder, access, disk, logins),
+        ...lines(
+          HIDDEN_FILES.map((path) => `/${path}`),
+          "deny" as const,
+        ),
+      },
+    },
+  },
+  // Codex's own features that reach past the folder, on by default in a fresh home (listed at codex
+  // 0.159.3; at 0.165.0 all of them are still there and on).
+  features: {
+    apps: false,
+    plugins: false,
+    remote_plugin: false,
+    browser_use: false,
+    browser_use_external: false,
+    in_app_browser: false,
+    computer_use: false,
+    image_generation: false,
+    multi_agent: false,
+    tool_suggest: false,
+    skill_mcp_dependency_install: false,
+    goals: false,
+  },
 });
 
 /** What a command in Codex's box gets beyond the core variables, before the fence (`codexConfig`). */
 export const shellSet = (parent: Env): Record<string, string> => ({
-	...toolHome(parent),
-	...(parent.PATH === undefined ? {} : {PATH: parent.PATH}),
+  ...toolHome(parent),
+  ...(parent.PATH === undefined ? {} : { PATH: parent.PATH }),
 });
 
 /** The owner's login file, by where Codex keeps it. Only ever linked to. */
-export const codexLogin = (parent: Env) =>
-	`${parent.CODEX_HOME ?? `${parent.HOME ?? ""}/.codex`}/auth.json`;
+export const codexLogin = (parent: Env) => `${parent.CODEX_HOME ?? `${parent.HOME ?? ""}/.codex`}/auth.json`;
 
 /**
  * Whether a Codex login is the plan's and holds no API key, by two of its
@@ -575,23 +585,31 @@ export const codexLogin = (parent: Env) =>
  * issue 40871). Only the answer leaves here, never a value of the file.
  */
 export const planLogin = (text: string): "plan" | "not_json" | "not_plan" | "has_key" => {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(text);
-	} catch {
-		return "not_json";
-	}
-	if (typeof parsed !== "object" || parsed === null) return "not_json";
-	const {auth_mode: mode, OPENAI_API_KEY: key} = parsed as Record<string, unknown>;
-	if (mode !== "chatgpt") return "not_plan";
-	return key === undefined || key === null || key === "" ? "plan" : "has_key";
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return "not_json";
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    return "not_json";
+  }
+
+  const { auth_mode: mode, OPENAI_API_KEY: key } = parsed as Record<string, unknown>;
+
+  if (mode !== "chatgpt") {
+    return "not_plan";
+  }
+
+  return key === undefined || key === null || key === "" ? "plan" : "has_key";
 };
 
 const PLAN_REFUSED = {
-	not_json: "the codex login file is not one codex wrote: run `codex login`",
-	not_plan: "the codex login is not a ChatGPT plan login: this row runs only on the plan",
-	has_key:
-		"the codex login holds an API key: a plan run could be billed to it; run `codex logout` and `codex login`",
+  not_json: "the codex login file is not one codex wrote: run `codex login`",
+  not_plan: "the codex login is not a ChatGPT plan login: this row runs only on the plan",
+  has_key: "the codex login holds an API key: a plan run could be billed to it; run `codex logout` and `codex login`",
 } as const;
 
 /**
@@ -600,44 +618,58 @@ const PLAN_REFUSED = {
  * or when the login is not the plan's or holds a key (`planLogin`).
  */
 export const codexHome = (home: string, login: string) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem.FileSystem;
-		const link = `${home}/auth.json`;
-		const there = yield* fs.exists(login).pipe(Effect.orElseSucceed(() => false));
-		if (!there)
-			return yield* Effect.fail("codex is not signed in on this machine: run `codex login`");
-		const plan = planLogin(yield* fs.readFileString(login).pipe(Effect.orElseSucceed(() => "")));
-		if (plan !== "plan") return yield* Effect.fail(PLAN_REFUSED[plan]);
-		yield* fs.makeDirectory(home, {recursive: true, mode: 0o700}).pipe(Effect.mapError(String));
-		const linked = yield* fs.readLink(link).pipe(Effect.option);
-		if (linked._tag === "Some") {
-			if (linked.value === login) return;
-			return yield* Effect.fail(`${link} links somewhere else`);
-		}
-		if (yield* fs.exists(link).pipe(Effect.orElseSucceed(() => false)))
-			return yield* Effect.fail(`${link} is a file, not a link to the login`);
-		yield* fs.symlink(login, link).pipe(Effect.mapError(String));
-	});
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const link = `${home}/auth.json`;
+    const there = yield* fs.exists(login).pipe(Effect.orElseSucceed(() => false));
+
+    if (!there) {
+      return yield* Effect.fail("codex is not signed in on this machine: run `codex login`");
+    }
+
+    const plan = planLogin(yield* fs.readFileString(login).pipe(Effect.orElseSucceed(() => "")));
+
+    if (plan !== "plan") {
+      return yield* Effect.fail(PLAN_REFUSED[plan]);
+    }
+
+    yield* fs.makeDirectory(home, { recursive: true, mode: 0o700 }).pipe(Effect.mapError(String));
+    const linked = yield* fs.readLink(link).pipe(Effect.option);
+
+    if (linked._tag === "Some") {
+      if (linked.value === login) {
+        return;
+      }
+
+      return yield* Effect.fail(`${link} links somewhere else`);
+    }
+
+    if (yield* fs.exists(link).pipe(Effect.orElseSucceed(() => false))) {
+      return yield* Effect.fail(`${link} is a file, not a link to the login`);
+    }
+
+    yield* fs.symlink(login, link).pipe(Effect.mapError(String));
+  });
 
 /** The config a Codex row's session starts from, for its folder and its home. */
 const rowConfig = (parent: Env, folder: string, access: FolderAccess, tools: readonly string[]) =>
-	codexConfig(
-		folder,
-		[...tools, ...gitOf(folder)],
-		parent.HOME ?? codexHomeOf(folder, parent),
-		access,
-		localDisk,
-		shellSet(parent),
-		[codexLogin(parent)],
-	);
+  codexConfig(
+    folder,
+    [...tools, ...gitOf(folder)],
+    parent.HOME ?? codexHomeOf(folder, parent),
+    access,
+    localDisk,
+    shellSet(parent),
+    [codexLogin(parent)],
+  );
 
 /** Fails, saying why, when the row's table is more than the box can take. */
 const fenceFits = (parent: Env, folder: string, access: FolderAccess) =>
-	Effect.suspend(() => {
-		const config = rowConfig(parent, folder, access, toolchain(parent));
-		const tooBig = fenceTooBig(config.permissions.fenced.filesystem);
-		return tooBig === null ? Effect.void : Effect.fail(tooBig);
-	});
+  Effect.suspend(() => {
+    const config = rowConfig(parent, folder, access, toolchain(parent));
+    const tooBig = fenceTooBig(config.permissions.fenced.filesystem);
+    return tooBig === null ? Effect.void : Effect.fail(tooBig);
+  });
 
 /**
  * The Codex adapter's whole environment: a program's, its home, its mode and config, both by
@@ -645,26 +677,26 @@ const fenceFits = (parent: Env, folder: string, access: FolderAccess) =>
  * (`codexConfig`).
  */
 export const codexEnv = (
-	parent: Env,
-	folder: string,
-	access: FolderAccess,
-	tools: readonly string[] = toolchain(parent),
-	/** More config on top, as a turn's system prompt (`codexSystem`). */
-	more: Readonly<Record<string, unknown>> = {},
+  parent: Env,
+  folder: string,
+  access: FolderAccess,
+  tools: readonly string[] = toolchain(parent),
+  /** More config on top, as a turn's system prompt (`codexSystem`). */
+  more: Readonly<Record<string, unknown>> = {},
 ): Record<string, string> => {
-	const home = codexHomeOf(folder, parent);
-	return {
-		...runEnv(parent),
-		...(parent.USER === undefined ? {} : {USER: parent.USER}),
-		HOME: home,
-		CODEX_HOME: home,
-		NO_BROWSER: "1",
-		INITIAL_AGENT_MODE: MODE_OF[access],
-		CODEX_CONFIG: JSON.stringify({
-			...rowConfig(parent, folder, access, tools),
-			...more,
-		}),
-	};
+  const home = codexHomeOf(folder, parent);
+  return {
+    ...runEnv(parent),
+    ...(parent.USER === undefined ? {} : { USER: parent.USER }),
+    HOME: home,
+    CODEX_HOME: home,
+    NO_BROWSER: "1",
+    INITIAL_AGENT_MODE: MODE_OF[access],
+    CODEX_CONFIG: JSON.stringify({
+      ...rowConfig(parent, folder, access, tools),
+      ...more,
+    }),
+  };
 };
 
 // ---------------------------------------------------------------- a turn's system prompt, in each maker's way
@@ -682,9 +714,9 @@ export const codexEnv = (
  * Codex exec takes the turn's on every turn already.
  */
 export const claudeSystem = (system: SystemPrompt) =>
-	system._tag === "append"
-		? ({type: "preset", preset: "claude_code", append: system.text, snapshot: false} as const)
-		: ({type: "custom", prompt: system.text, snapshot: false} as const);
+  system._tag === "append"
+    ? ({ type: "preset", preset: "claude_code", append: system.text, snapshot: false } as const)
+    : ({ type: "custom", prompt: system.text, snapshot: false } as const);
 
 /**
  * Codex's config for a turn's system prompt, and the file it names, if any.
@@ -700,15 +732,18 @@ export const claudeSystem = (system: SystemPrompt) =>
  * so no session can change another's prompt.
  */
 export const codexSystem = (
-	system: SystemPrompt,
-	home: string,
+  system: SystemPrompt,
+  home: string,
 ): {
-	readonly config: Readonly<Record<string, string>>;
-	readonly file: {readonly path: string; readonly text: string} | null;
+  readonly config: Readonly<Record<string, string>>;
+  readonly file: { readonly path: string; readonly text: string } | null;
 } => {
-	if (system._tag === "append") return {config: {developer_instructions: system.text}, file: null};
-	const path = `${home}/system-${createHash("sha256").update(system.text).digest("hex").slice(0, 16)}.md`;
-	return {config: {model_instructions_file: path}, file: {path, text: system.text}};
+  if (system._tag === "append") {
+    return { config: { developer_instructions: system.text }, file: null };
+  }
+
+  const path = `${home}/system-${createHash("sha256").update(system.text).digest("hex").slice(0, 16)}.md`;
+  return { config: { model_instructions_file: path }, file: { path, text: system.text } };
 };
 
 /**
@@ -717,15 +752,18 @@ export const codexSystem = (
  * reading the name sees the whole text or no file, never half of it.
  */
 export const writeSystem = (file: ReturnType<typeof codexSystem>["file"]) =>
-	Effect.gen(function* () {
-		if (file === null) return;
-		const fs = yield* FileSystem.FileSystem;
-		const dir = file.path.slice(0, file.path.lastIndexOf("/"));
-		const fresh = yield* fs.makeTempFile({directory: dir, prefix: ".system-"});
-		yield* fs.writeFileString(fresh, file.text, {mode: 0o600});
-		yield* fs.chmod(fresh, 0o600);
-		yield* fs.rename(fresh, file.path);
-	}).pipe(Effect.mapError(String));
+  Effect.gen(function* () {
+    if (file === null) {
+      return;
+    }
+
+    const fs = yield* FileSystem.FileSystem;
+    const dir = file.path.slice(0, file.path.lastIndexOf("/"));
+    const fresh = yield* fs.makeTempFile({ directory: dir, prefix: ".system-" });
+    yield* fs.writeFileString(fresh, file.text, { mode: 0o600 });
+    yield* fs.chmod(fresh, 0o600);
+    yield* fs.rename(fresh, file.path);
+  }).pipe(Effect.mapError(String));
 
 /**
  * A row, told a turn's system prompt. ACP has no system prompt field, so each
@@ -735,112 +773,109 @@ export const writeSystem = (file: ReturnType<typeof codexSystem>["file"]) =>
  * and the fake in `_meta.system`, which it notes in its log.
  */
 export const withSystem = (
-	harness: Harness,
-	system: SystemPrompt,
-	folder: string,
-	parent: Env = process.env,
+  harness: Harness,
+  system: SystemPrompt,
+  folder: string,
+  parent: Env = process.env,
 ): Harness => {
-	switch (harness.name) {
-		case "claude":
-			return harness;
-		case "codex": {
-			const {config, file} = codexSystem(system, codexHomeOf(folder, parent));
-			const prepare = harness.prepare ?? Effect.void;
-			return {
-				...harness,
-				env: codexEnv(parent, folder, harness.access, toolchain(parent), config),
-				prepare: Effect.andThen(prepare, writeSystem(file)),
-			};
-		}
-		case "fake":
-			return {...harness, meta: {...harness.meta, system}};
-	}
+  switch (harness.name) {
+    case "claude":
+      return harness;
+    case "codex": {
+      const { config, file } = codexSystem(system, codexHomeOf(folder, parent));
+      const prepare = harness.prepare ?? Effect.void;
+      return {
+        ...harness,
+        env: codexEnv(parent, folder, harness.access, toolchain(parent), config),
+        prepare: Effect.andThen(prepare, writeSystem(file)),
+      };
+    }
+    case "fake":
+      return { ...harness, meta: { ...harness.meta, system } };
+  }
 };
 
 /** The Agent SDK options the Claude adapter is handed, the builder's own less what is a function. */
 export const claudeOptions = (folder: string, budget: number | null) => {
-	const files = filesOf(folder);
-	return {
-		settingSources: [],
-		strictMcpConfig: true,
-		mcpServers: {},
-		settings: {
-			disableClaudeAiConnectors: true,
-			permissions: {deny: HIDDEN_FILES.map((path) => `Read(${path})`)},
-		},
-		allowDangerouslySkipPermissions: false,
-		tools: [...TOOLS],
-		sandbox: {
-			enabled: true,
-			failIfUnavailable: true,
-			autoAllowBashIfSandboxed: true,
-			allowUnsandboxedCommands: false,
-			network: {allowedDomains: [], strictAllowlist: true},
-			filesystem: {...files, denyRead: [...files.denyRead, ...HIDDEN_FILES]},
-		},
-		...(budget === null ? {} : {maxBudgetUsd: budget}),
-	};
+  const files = filesOf(folder);
+  return {
+    settingSources: [],
+    strictMcpConfig: true,
+    mcpServers: {},
+    settings: {
+      disableClaudeAiConnectors: true,
+      permissions: { deny: HIDDEN_FILES.map((path) => `Read(${path})`) },
+    },
+    allowDangerouslySkipPermissions: false,
+    tools: [...TOOLS],
+    sandbox: {
+      enabled: true,
+      failIfUnavailable: true,
+      autoAllowBashIfSandboxed: true,
+      allowUnsandboxedCommands: false,
+      network: { allowedDomains: [], strictAllowlist: true },
+      filesystem: { ...files, denyRead: [...files.denyRead, ...HIDDEN_FILES] },
+    },
+    ...(budget === null ? {} : { maxBudgetUsd: budget }),
+  };
 };
 
 /** A plain ACP session cannot plant commands in the person's repository for later execution. */
 const claudeRepoOptions = (folder: string, budget: number | null) => {
-	const base = claudeOptions(folder, budget);
-	return {
-		...base,
-		settings: {
-			...base.settings,
-			permissions: {
-				deny: [
-					...base.settings.permissions.deny,
-					...PROTECTED_FILES.flatMap((path) => [`Edit(${path})`, `Edit(${path}/**)`]),
-				],
-			},
-		},
-		sandbox: {
-			...base.sandbox,
-			filesystem: {
-				...base.sandbox.filesystem,
-				denyWrite: PROTECTED_FILES.map((path) => join(folder, path)),
-			},
-		},
-	};
+  const base = claudeOptions(folder, budget);
+  return {
+    ...base,
+    settings: {
+      ...base.settings,
+      permissions: {
+        deny: [
+          ...base.settings.permissions.deny,
+          ...PROTECTED_FILES.flatMap((path) => [`Edit(${path})`, `Edit(${path}/**)`]),
+        ],
+      },
+    },
+    sandbox: {
+      ...base.sandbox,
+      filesystem: {
+        ...base.sandbox.filesystem,
+        denyWrite: PROTECTED_FILES.map((path) => join(folder, path)),
+      },
+    },
+  };
 };
 
 /** Node, warnings about its own experimental parts off: they go to stderr, which nobody reads. */
 const node = (script: string): Pick<Spawnable, "command" | "args"> => ({
-	command: process.execPath,
-	args: ["--disable-warning=ExperimentalWarning", script],
+  command: process.execPath,
+  args: ["--disable-warning=ExperimentalWarning", script],
 });
 
-export function harnessOf(
-	row: Row,
-	folder: string,
-	budget: number | null,
-	parent: Env = process.env,
-): Harness {
-	if (typeof row !== "string")
-		return {
-			name: row.name,
-			access: row.access,
-			...node(CODEX),
-			env: codexEnv(parent, folder, row.access),
-			script: CODEX,
-			meta: undefined,
-			prepare: Effect.andThen(
-				fenceFits(parent, folder, row.access),
-				codexHome(codexHomeOf(folder, parent), codexLogin(parent)),
-			),
-		};
-	switch (row) {
-		case "claude":
-			return {
-				name: row,
-				...node(CLAUDE),
-				env: fencedEnv(agentEnv(parent)),
-				script: CLAUDE,
-				meta: {claudeCode: {options: claudeRepoOptions(folder, budget)}},
-			};
-		case "fake":
-			return {name: row, ...node(FAKE), env: runEnv(parent), script: FAKE, meta: undefined};
-	}
+export function harnessOf(row: Row, folder: string, budget: number | null, parent: Env = process.env): Harness {
+  if (typeof row !== "string") {
+    return {
+      name: row.name,
+      access: row.access,
+      ...node(CODEX),
+      env: codexEnv(parent, folder, row.access),
+      script: CODEX,
+      meta: undefined,
+      prepare: Effect.andThen(
+        fenceFits(parent, folder, row.access),
+        codexHome(codexHomeOf(folder, parent), codexLogin(parent)),
+      ),
+    };
+  }
+
+  switch (row) {
+    case "claude":
+      return {
+        name: row,
+        ...node(CLAUDE),
+        env: fencedEnv(agentEnv(parent)),
+        script: CLAUDE,
+        meta: { claudeCode: { options: claudeRepoOptions(folder, budget) } },
+      };
+    case "fake":
+      return { name: row, ...node(FAKE), env: runEnv(parent), script: FAKE, meta: undefined };
+  }
 }

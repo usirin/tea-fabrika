@@ -13,15 +13,19 @@
 
 /** One start of the app: whose it is, and so how it shows itself. */
 export type Launch =
-	| {readonly kind: "owner"}
-	| {readonly kind: "quiet"; readonly home: string}
-	| {readonly kind: "foreground"; readonly home: string};
+  | { readonly kind: "owner" }
+  | { readonly kind: "quiet"; readonly home: string }
+  | { readonly kind: "foreground"; readonly home: string };
 
 /** The launch the environment asks for. An empty FABRIKA_HOME is no home, as before. */
 export const launchOf = (env: Readonly<Record<string, string | undefined>>): Launch => {
-	const home = env.FABRIKA_HOME;
-	if (home === undefined || home === "") return {kind: "owner"};
-	return env.FABRIKA_FOREGROUND === "1" ? {kind: "foreground", home} : {kind: "quiet", home};
+  const home = env.FABRIKA_HOME;
+
+  if (home === undefined || home === "") {
+    return { kind: "owner" };
+  }
+
+  return env.FABRIKA_FOREGROUND === "1" ? { kind: "foreground", home } : { kind: "quiet", home };
 };
 
 /**
@@ -29,7 +33,7 @@ export const launchOf = (env: Readonly<Record<string, string | undefined>>): Lau
  * drawing and keeps its timers, because an agent reads its frames and types into it.
  */
 export const QUIET_SWITCHES = [
-	"disable-backgrounding-occluded-windows",
-	"disable-renderer-backgrounding",
-	"disable-background-timer-throttling",
+  "disable-backgrounding-occluded-windows",
+  "disable-renderer-backgrounding",
+  "disable-background-timer-throttling",
 ] as const;

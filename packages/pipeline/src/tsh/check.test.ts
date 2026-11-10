@@ -1,7 +1,7 @@
-import {readFlags, Shell} from "@kampus/fabrika-old";
-import {describe, expect, it} from "vitest";
-import {defaultConfig} from "./config.ts";
-import {programsOf} from "./fabrika-list.ts";
+import { readFlags, Shell } from "@kampus/fabrika-old";
+import { describe, expect, it } from "vitest";
+import { defaultConfig } from "./config.ts";
+import { programsOf } from "./fabrika-list.ts";
 
 // A parsed line checked against the program list, before anything runs:
 // every name, every value and every pipe. The list is the one the launcher
@@ -9,251 +9,305 @@ import {programsOf} from "./fabrika-list.ts";
 // is read as a value, which names no program of this package's, is the
 // shell's own test (`@kampus/fabrika-old`'s shell/decode.test.ts).
 
-const {check, helpOf, parse, partsHelp, shapeLines, typeOf} = Shell;
+const { check, helpOf, parse, partsHelp, shapeLines, typeOf } = Shell;
 const list = programsOf(defaultConfig("/tsh"));
 
 const checked = (line: string): Shell.Checked => {
-	const parsed = parse(line);
-	if (parsed.kind !== "parsed") throw new Error(`parse refused: ${parsed.why}`);
-	const [first] = parsed.statements;
-	if (first?.kind !== "run") throw new Error("not a run");
-	return check(first.pipeline, list, line);
+  const parsed = parse(line);
+
+  if (parsed.kind !== "parsed") {
+    throw new Error(`parse refused: ${parsed.why}`);
+  }
+
+  const [first] = parsed.statements;
+
+  if (first?.kind !== "run") {
+    throw new Error("not a run");
+  }
+
+  return check(first.pipeline, list, line);
 };
+
 const refusal = (line: string) => {
-	const c = checked(line);
-	if (c.kind !== "refused") throw new Error(`not refused: ${line}`);
-	return c;
+  const c = checked(line);
+
+  if (c.kind !== "refused") {
+    throw new Error(`not refused: ${line}`);
+  }
+
+  return c;
 };
+
 const PR = "https://github.com/example/repo/pull/7";
 const REVIEW = "review-scripted --rubrics r --model opus --effort medium --budget 1";
 
 describe("check: the user's job", () => {
-	it("passes review | ship and wires review's passed into ship's pr, every value read in its own shape", () => {
-		const c = checked(`${REVIEW} pr=${PR} | ship --mode read`);
-		if (c.kind !== "line") throw new Error(c.kind);
-		const [review, ship] = c.line.stages;
-		expect(review.wire).toEqual({output: "passed", input: "pr"});
-		expect(ship?.fed).toBe("pr");
-		expect(review.flags.find((f) => f.name === "budget")?.source).toEqual({
-			kind: "value",
-			value: 1,
-		});
-		expect(review.told).toEqual([{name: "pr", source: {kind: "value", value: PR}}]);
-	});
+  it("passes review | ship and wires review's passed into ship's pr, every value read in its own shape", () => {
+    const c = checked(`${REVIEW} pr=${PR} | ship --mode read`);
 
-	it("refuses a pipe that does not fit before anything runs, at the |, with both sides' shapes", () => {
-		const r = refusal("seq --to 3 | upper");
-		expect(r.at).toBe(11);
-		expect(r.why).toBe(
-			"does not fit: seq's outputs (n: integer) fit no input of upper (text: string). Nothing was started",
-		);
-		expect(refusal("seq --to 2 | ship --mode read").why).toContain("fit no input of ship");
-	});
+    if (c.kind !== "line") {
+      throw new Error(c.kind);
+    }
+
+    const [review, ship] = c.line.stages;
+    expect(review.wire).toEqual({ output: "passed", input: "pr" });
+    expect(ship?.fed).toBe("pr");
+    expect(review.flags.find((f) => f.name === "budget")?.source).toEqual({
+      kind: "value",
+      value: 1,
+    });
+    expect(review.told).toEqual([{ name: "pr", source: { kind: "value", value: PR } }]);
+  });
+
+  it("refuses a pipe that does not fit before anything runs, at the |, with both sides' shapes", () => {
+    const r = refusal("seq --to 3 | upper");
+    expect(r.at).toBe(11);
+    expect(r.why).toBe(
+      "does not fit: seq's outputs (n: integer) fit no input of upper (text: string). Nothing was started",
+    );
+    expect(refusal("seq --to 2 | ship --mode read").why).toContain("fit no input of ship");
+  });
 });
 
 describe("check: names and values", () => {
-	it.each([
-		["shp --mode read", 0, "no program named shp", "ship", 127],
-		["sqe --to 3", 0, "no program named sqe", "seq", 127],
-		["ship --mdoe read", 5, "ship has no flag --mdoe", "--mode", 2],
-		["ship --mode red", 12, '--mode does not take "red"', "read", 2],
-		[`ship --mode read pt=${PR}`, 17, "ship has no input named pt", "pr", 2],
-		["ship pr=x --mode read", 8, 'pr does not take "x": not a pull request url', undefined, 2],
-		["seq", 3, "seq needs --to: The last number it sends.", undefined, 2],
-		["seq --to 1 --to 2", 11, "--to is given twice", undefined, 2],
-		["seq --to -1", 9, '--to does not take "-1"', undefined, 2],
-		["double n=$(seq --to 2) | double n=1", 32, "n is fed by the pipe", undefined, 2],
-		["seq --to 2 >m | double", 11, "seq has no output named m", "n", 2],
-		["seq --to 2 >n", 11, ">n names the output a pipe or a $( ) takes", undefined, 2],
-		["double <n", 7, "<n names the input a pipe feeds", undefined, 2],
-		["ship --help >fond", 12, "ship has no flag, input or output named >fond", ">found", 2],
-		["ship --hepl x", 5, "ship has no flag --hepl", "--help", 2],
-		["double n=$(seq --help)", 15, "--help shows a program's help and runs nothing", undefined, 2],
-	])("refuses %j at %i: %s", (line, at, why, guess, status) => {
-		const r = refusal(line);
-		expect(r.at).toBe(at);
-		expect(r.why).toContain(why);
-		expect(r.didYouMean).toBe(guess);
-		expect(r.status).toBe(status);
-	});
+  it.each([
+    ["shp --mode read", 0, "no program named shp", "ship", 127],
+    ["sqe --to 3", 0, "no program named sqe", "seq", 127],
+    ["ship --mdoe read", 5, "ship has no flag --mdoe", "--mode", 2],
+    ["ship --mode red", 12, '--mode does not take "red"', "read", 2],
+    [`ship --mode read pt=${PR}`, 17, "ship has no input named pt", "pr", 2],
+    ["ship pr=x --mode read", 8, 'pr does not take "x": not a pull request url', undefined, 2],
+    ["seq", 3, "seq needs --to: The last number it sends.", undefined, 2],
+    ["seq --to 1 --to 2", 11, "--to is given twice", undefined, 2],
+    ["seq --to -1", 9, '--to does not take "-1"', undefined, 2],
+    ["double n=$(seq --to 2) | double n=1", 32, "n is fed by the pipe", undefined, 2],
+    ["seq --to 2 >m | double", 11, "seq has no output named m", "n", 2],
+    ["seq --to 2 >n", 11, ">n names the output a pipe or a $( ) takes", undefined, 2],
+    ["double <n", 7, "<n names the input a pipe feeds", undefined, 2],
+    ["ship --help >fond", 12, "ship has no flag, input or output named >fond", ">found", 2],
+    ["ship --hepl x", 5, "ship has no flag --hepl", "--help", 2],
+    ["double n=$(seq --help)", 15, "--help shows a program's help and runs nothing", undefined, 2],
+  ])("refuses %j at %i: %s", (line, at, why, guess, status) => {
+    const r = refusal(line);
+    expect(r.at).toBe(at);
+    expect(r.why).toContain(why);
+    expect(r.didYouMean).toBe(guess);
+    expect(r.status).toBe(status);
+  });
 
-	it("checks a $( ) like a pipe: its last output must fit the flag or input it gives", () => {
-		const c = checked("double n=$(seq --to 2 | double)");
-		expect(c.kind === "line" && c.line.stages[0].told[0]?.source.kind).toBe("sub");
-		expect(refusal("seq --to $(say --text 3)").why).toContain(
-			"no output of say (said: string) fits --to (integer >= 0)",
-		);
-	});
+  it("checks a $( ) like a pipe: its last output must fit the flag or input it gives", () => {
+    const c = checked("double n=$(seq --to 2 | double)");
+    expect(c.kind === "line" && c.line.stages[0].told[0]?.source.kind).toBe("sub");
+    expect(refusal("seq --to $(say --text 3)").why).toContain(
+      "no output of say (said: string) fits --to (integer >= 0)",
+    );
+  });
 
-	it("names the part a --help asks for", () => {
-		const c = checked("double --help n");
-		expect(c.kind === "help" && c.parts).toEqual([
-			{kind: "input", name: "n"},
-			{kind: "output", name: "n"},
-		]);
-	});
+  it("names the part a --help asks for", () => {
+    const c = checked("double --help n");
+    expect(c.kind === "help" && c.parts).toEqual([
+      { kind: "input", name: "n" },
+      { kind: "output", name: "n" },
+    ]);
+  });
 
-	it("answers --help or -h anywhere in a line, as GNU's --help does: nothing else is checked", () => {
-		for (const line of [
-			"ship --mode read --help",
-			"ship --mode --help",
-			"ship -h",
-			"seq --to 3 | ship --mode red -h",
-			"ship --mode red bogus --help",
-		]) {
-			const c = checked(line);
-			expect(c.kind === "help" && c.entry.program.name, line).toBe("ship");
-		}
-		expect(refusal("shp --help").why).toBe("no program named shp");
-	});
+  it("answers --help or -h anywhere in a line, as GNU's --help does: nothing else is checked", () => {
+    for (const line of [
+      "ship --mode read --help",
+      "ship --mode --help",
+      "ship -h",
+      "seq --to 3 | ship --mode red -h",
+      "ship --mode red bogus --help",
+    ]) {
+      const c = checked(line);
+      expect(c.kind === "help" && c.entry.program.name, line).toBe("ship");
+    }
+
+    expect(refusal("shp --help").why).toBe("no program named shp");
+  });
 });
 
 describe("--help", () => {
-	const lines = (name: string) => {
-		const entry = list.get(name);
-		if (entry === undefined) throw new Error(name);
-		return helpOf(entry, list);
-	};
+  const lines = (name: string) => {
+    const entry = list.get(name);
 
-	it("leads with the usage, then sections; every line fits 80 columns but a default too long to cut", () => {
-		for (const name of ["ship", "review-scripted", "seq"]) {
-			const page = lines(name);
-			expect(page[0], name).toMatch(new RegExp(`^Usage: ${name}`));
-			for (const line of page)
-				if (!line.includes("(default:")) expect(line.length, line).toBeLessThanOrEqual(80);
-			expect(page).toContain("Flags:");
-		}
-		const ship = lines("ship");
-		expect(ship.slice(0, 3)).toEqual([
-			"Usage: ship [--mode MODE] [pr=PR] [ask=ASK] [forget=FORGET]",
-			"       ... | ship",
-			"       ship | ...",
-		]);
-		expect(ship.find((l) => l.startsWith("  >outcome"))).toContain("{pr, outcome, name}");
-		expect(ship).toContain(
-			"  --help                    This help (or -h). One part whole: --help --mode",
-		);
-		// The rare part goes last: machines, after every section a person runs it by.
-		expect(ship.indexOf("Machines:")).toBeGreaterThan(ship.indexOf("Example pipes:"));
-		expect(lines("seq")[0]).toBe("Usage: seq --to TO");
-	});
+    if (entry === undefined) {
+      throw new Error(name);
+    }
 
-	it("shows pipes that fit, from the programs listed, the richest shape first", () => {
-		const ship = lines("ship");
-		const at = ship.indexOf("Example pipes:");
-		expect(ship[at + 1]).toBe("  review-scripted | ship");
-		expect(lines("seq")).toContain("  seq --to TO | double");
-		// With no list, no pipes.
-		const entry = list.get("ship");
-		if (entry === undefined) throw new Error("ship");
-		expect(helpOf(entry)).not.toContain("Example pipes:");
-	});
+    return helpOf(entry, list);
+  };
 
-	it("prints one part whole, one field a line", () => {
-		const entry = list.get("ship");
-		if (entry === undefined) throw new Error("ship");
-		const whole = partsHelp(entry, [{kind: "output", name: "outcome"}]);
-		expect(whole[0]).toBe("ship >outcome  (an output of ship)");
-		expect(whole).toContain('        cleanup: "done" | "failed" | "not_run"');
-		expect(whole.length).toBeGreaterThan(20);
-	});
+  it("leads with the usage, then sections; every line fits 80 columns but a default too long to cut", () => {
+    for (const name of ["ship", "review-scripted", "seq"]) {
+      const page = lines(name);
+      expect(page[0], name).toMatch(new RegExp(`^Usage: ${name}`));
 
-	it("short forms cut long lists and name a union by its tag", () => {
-		const json = list.get("ship")?.program.outputs.outcome.shape.json ?? {};
-		expect(typeOf(json)).toBe("{pr, outcome, name}");
-		const outcome = (json.properties as Record<string, Record<string, unknown>>).outcome;
-		expect(typeOf(outcome)).toBe("one of 7 by kind: done, send, ask, … (5 kinds)");
-		expect(typeOf({type: "integer", minimum: 0})).toBe("integer >= 0");
-		expect(shapeLines({type: "object", properties: {}})).toEqual(["{}"]);
-	});
+      for (const line of page) {
+        if (!line.includes("(default:")) {
+          expect(line.length, line).toBeLessThanOrEqual(80);
+        }
+      }
+
+      expect(page).toContain("Flags:");
+    }
+
+    const ship = lines("ship");
+    expect(ship.slice(0, 3)).toEqual([
+      "Usage: ship [--mode MODE] [pr=PR] [ask=ASK] [forget=FORGET]",
+      "       ... | ship",
+      "       ship | ...",
+    ]);
+    expect(ship.find((l) => l.startsWith("  >outcome"))).toContain("{pr, outcome, name}");
+    expect(ship).toContain("  --help                    This help (or -h). One part whole: --help --mode");
+    // The rare part goes last: machines, after every section a person runs it by.
+    expect(ship.indexOf("Machines:")).toBeGreaterThan(ship.indexOf("Example pipes:"));
+    expect(lines("seq")[0]).toBe("Usage: seq --to TO");
+  });
+
+  it("shows pipes that fit, from the programs listed, the richest shape first", () => {
+    const ship = lines("ship");
+    const at = ship.indexOf("Example pipes:");
+    expect(ship[at + 1]).toBe("  review-scripted | ship");
+    expect(lines("seq")).toContain("  seq --to TO | double");
+    // With no list, no pipes.
+    const entry = list.get("ship");
+
+    if (entry === undefined) {
+      throw new Error("ship");
+    }
+
+    expect(helpOf(entry)).not.toContain("Example pipes:");
+  });
+
+  it("prints one part whole, one field a line", () => {
+    const entry = list.get("ship");
+
+    if (entry === undefined) {
+      throw new Error("ship");
+    }
+
+    const whole = partsHelp(entry, [{ kind: "output", name: "outcome" }]);
+    expect(whole[0]).toBe("ship >outcome  (an output of ship)");
+    expect(whole).toContain('        cleanup: "done" | "failed" | "not_run"');
+    expect(whole.length).toBeGreaterThan(20);
+  });
+
+  it("short forms cut long lists and name a union by its tag", () => {
+    const json = list.get("ship")?.program.outputs.outcome.shape.json ?? {};
+    expect(typeOf(json)).toBe("{pr, outcome, name}");
+    const outcome = (json.properties as Record<string, Record<string, unknown>>).outcome;
+    expect(typeOf(outcome)).toBe("one of 7 by kind: done, send, ask, … (5 kinds)");
+    expect(typeOf({ type: "integer", minimum: 0 })).toBe("integer >= 0");
+    expect(shapeLines({ type: "object", properties: {} })).toEqual(["{}"]);
+  });
 });
 
 describe("check: build, operate and ship take any repository's ticket or pull request", () => {
-	// Listed with every config, the default one too. Checking a line still calls nothing.
-	const checkedIn = checked;
-	const OPERATE = "operate --rubrics r --model opus --effort medium --budget 1 --ship write";
+  // Listed with every config, the default one too. Checking a line still calls nothing.
+  const checkedIn = checked;
+  const OPERATE = "operate --rubrics r --model opus --effort medium --budget 1 --ship write";
 
-	it.each([
-		[`${OPERATE} ticket=https://github.com/acme/widgets/issues/670`],
-		[
-			"build --model opus --effort medium --budget 1 ticket=https://github.com/other/thing/issues/3",
-		],
-		["ship --mode write pr=https://github.com/acme/widgets/pull/691"],
-		[`ship --mode write ask='{"id":"a","pr":"https://github.com/acme/widgets/pull/691"}'`],
-	])("passes: %s", (line) => {
-		expect(checkedIn(line).kind).toBe("line");
-	});
+  it.each([
+    [`${OPERATE} ticket=https://github.com/acme/widgets/issues/670`],
+    ["build --model opus --effort medium --budget 1 ticket=https://github.com/other/thing/issues/3"],
+    ["ship --mode write pr=https://github.com/acme/widgets/pull/691"],
+    [`ship --mode write ask='{"id":"a","pr":"https://github.com/acme/widgets/pull/691"}'`],
+  ])("passes: %s", (line) => {
+    expect(checkedIn(line).kind).toBe("line");
+  });
 
-	it.each([
-		[`${OPERATE} ticket=https://github.com/acme/widgets/pull/670`],
-		[`${OPERATE} ticket=https://github.com/acme/widgets/issues/670?x`],
-	])("a url that is not a ticket is refused before anything starts: %s", (line) => {
-		const r = checkedIn(line);
-		if (r.kind !== "refused") throw new Error(r.kind);
-		expect(r.why).toContain("not a ticket url");
-		expect(r.status).toBe(2);
-	});
+  it.each([
+    [`${OPERATE} ticket=https://github.com/acme/widgets/pull/670`],
+    [`${OPERATE} ticket=https://github.com/acme/widgets/issues/670?x`],
+  ])("a url that is not a ticket is refused before anything starts: %s", (line) => {
+    const r = checkedIn(line);
+
+    if (r.kind !== "refused") {
+      throw new Error(r.kind);
+    }
+
+    expect(r.why).toContain("not a ticket url");
+    expect(r.status).toBe(2);
+  });
 });
 
 describe("check: the config fills the flags a line leaves out", () => {
-	const TICKET = "https://github.com/acme/widgets/issues/700";
-	const ours = programsOf({...defaultConfig("/tsh"), model: "sonnet", ship: "write"});
-	/** The flags a program starts with from `given`, its defaults filled. */
-	const startedWith = (name: string, given: Readonly<Record<string, unknown>>) => {
-		const entry = ours.get(name);
-		if (entry === undefined) throw new Error(name);
-		const read = readFlags(entry.program, given);
-		if (read.kind !== "given") throw new Error(read.why);
-		return read.flags;
-	};
+  const TICKET = "https://github.com/acme/widgets/issues/700";
+  const ours = programsOf({ ...defaultConfig("/tsh"), model: "sonnet", ship: "write" });
+  /** The flags a program starts with from `given`, its defaults filled. */
+  const startedWith = (name: string, given: Readonly<Record<string, unknown>>) => {
+    const entry = ours.get(name);
 
-	it("operate ticket=<url> is a whole line, and runs with the config's values", () => {
-		const c = checked(`operate ticket=${TICKET}`);
-		if (c.kind !== "line") throw new Error(c.kind === "refused" ? c.why : c.kind);
-		expect(c.line.stages[0].flags).toEqual([]);
-		expect(startedWith("operate", {})).toEqual({
-			rubrics: "/tsh/rubrics",
-			model: "sonnet",
-			effort: "medium",
-			budget: 2,
-			ship: "write",
-			// No run's picks handed in: no step has its own settings, so each runs on the shared ones.
-			agents: {},
-		});
-	});
+    if (entry === undefined) {
+      throw new Error(name);
+    }
 
-	it("a flag on the line wins over the config", () => {
-		expect(startedWith("operate", {model: "haiku", ship: "read"})).toMatchObject({
-			model: "haiku",
-			ship: "read",
-		});
-		expect(startedWith("ship", {})).toEqual({mode: "write"});
-		expect(startedWith("build", {budget: 1})).toMatchObject({model: "sonnet", budget: 1});
-	});
+    const read = readFlags(entry.program, given);
 
-	it("every program fabrika lists needs no flag on the line", () => {
-		for (const line of [
-			`build ticket=${TICKET}`,
-			"ship pr=https://github.com/acme/widgets/pull/7",
-			"review-scripted pr=https://github.com/acme/widgets/pull/7",
-		])
-			expect(checked(line).kind, line).toBe("line");
-	});
+    if (read.kind !== "given") {
+      throw new Error(read.why);
+    }
 
-	it("--help shows each default, and a flag with one is not asked for in the usage", () => {
-		const entry = ours.get("operate");
-		if (entry === undefined) throw new Error("operate");
-		const page = helpOf(entry);
-		/** One flag's row, its wrapped lines joined. */
-		const row = (flag: string) => {
-			const at = page.findIndex((l) => l.startsWith(`  --${flag} `));
-			const end = page.findIndex((l, i) => i > at && !l.startsWith("    "));
-			return page.slice(at, end).join(" ").replace(/\s+/g, " ");
-		};
-		expect(row("model")).toContain('(default: "sonnet")');
-		expect(row("ship")).toContain('(default: "write")');
-		expect(page[0]).toContain("[--model MODEL]");
-		// No cap on build rounds: the stall rule stops a loop.
-		expect(page.find((l) => l.startsWith("  --rounds"))).toBeUndefined();
-	});
+    return read.flags;
+  };
+
+  it("operate ticket=<url> is a whole line, and runs with the config's values", () => {
+    const c = checked(`operate ticket=${TICKET}`);
+
+    if (c.kind !== "line") {
+      throw new Error(c.kind === "refused" ? c.why : c.kind);
+    }
+
+    expect(c.line.stages[0].flags).toEqual([]);
+    expect(startedWith("operate", {})).toEqual({
+      rubrics: "/tsh/rubrics",
+      model: "sonnet",
+      effort: "medium",
+      budget: 2,
+      ship: "write",
+      // No run's picks handed in: no step has its own settings, so each runs on the shared ones.
+      agents: {},
+    });
+  });
+
+  it("a flag on the line wins over the config", () => {
+    expect(startedWith("operate", { model: "haiku", ship: "read" })).toMatchObject({
+      model: "haiku",
+      ship: "read",
+    });
+    expect(startedWith("ship", {})).toEqual({ mode: "write" });
+    expect(startedWith("build", { budget: 1 })).toMatchObject({ model: "sonnet", budget: 1 });
+  });
+
+  it("every program fabrika lists needs no flag on the line", () => {
+    for (const line of [
+      `build ticket=${TICKET}`,
+      "ship pr=https://github.com/acme/widgets/pull/7",
+      "review-scripted pr=https://github.com/acme/widgets/pull/7",
+    ]) {
+      expect(checked(line).kind, line).toBe("line");
+    }
+  });
+
+  it("--help shows each default, and a flag with one is not asked for in the usage", () => {
+    const entry = ours.get("operate");
+
+    if (entry === undefined) {
+      throw new Error("operate");
+    }
+
+    const page = helpOf(entry);
+    /** One flag's row, its wrapped lines joined. */
+    const row = (flag: string) => {
+      const at = page.findIndex((l) => l.startsWith(`  --${flag} `));
+      const end = page.findIndex((l, i) => i > at && !l.startsWith("    "));
+      return page.slice(at, end).join(" ").replace(/\s+/g, " ");
+    };
+    expect(row("model")).toContain('(default: "sonnet")');
+    expect(row("ship")).toContain('(default: "write")');
+    expect(page[0]).toContain("[--model MODEL]");
+    // No cap on build rounds: the stall rule stops a loop.
+    expect(page.find((l) => l.startsWith("  --rounds"))).toBeUndefined();
+  });
 });

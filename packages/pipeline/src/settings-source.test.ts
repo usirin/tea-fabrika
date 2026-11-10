@@ -1,18 +1,12 @@
-import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
-import {Effect, FileSystem, Path} from "effect";
-import type {ChildProcessSpawner} from "effect/process";
-import {describe, expect, it} from "vitest";
-import {runChild} from "./child.ts";
-import {
-	type Loaded,
-	loadSettings,
-	type Source,
-	sourceLine,
-	type Target,
-} from "./settings-source.ts";
-import {DEFAULT_SETTINGS, JSONC_MOVED, SETTINGS_FILE, SETTINGS_MOVED} from "./settings.ts";
-import {HOLDS_NOTHING} from "./setup.ts";
+import { layer as nodeServices } from "@effect/platform-node/NodeServices";
+import { runEnv } from "@kampus/fabrika-old/agents/sandbox";
+import { Effect, FileSystem, Path } from "effect";
+import type { ChildProcessSpawner } from "effect/process";
+import { describe, expect, it } from "vitest";
+import { runChild } from "./child.ts";
+import { type Loaded, loadSettings, type Source, sourceLine, type Target } from "./settings-source.ts";
+import { DEFAULT_SETTINGS, JSONC_MOVED, SETTINGS_FILE, SETTINGS_MOVED } from "./settings.ts";
+import { HOLDS_NOTHING } from "./setup.ts";
 
 // Where .fabrika/fabrika.toml is read from
 // (docs/direction/one-fabrika-toml-per-repo.md): a target repository's default
@@ -27,39 +21,40 @@ const JSONC = ".fabrika.jsonc";
 
 /** A refusal is one line, and it ends in what to do. What leads it names the place it read. */
 const expectOneLine = (why: string, line: string) => {
-	expect(why).not.toContain("\n");
-	expect(why.slice(-line.length)).toBe(line);
+  expect(why).not.toContain("\n");
+  expect(why.slice(-line.length)).toBe(line);
 };
 
 type Services = FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner;
 
 /** For the fixture's own commits: no hook, no signing, no config of the machine's. */
 const FIXTURE_ENV = {
-	...runEnv(),
-	GIT_CONFIG_GLOBAL: "/dev/null",
-	GIT_CONFIG_NOSYSTEM: "1",
-	GIT_AUTHOR_NAME: "owner",
-	GIT_AUTHOR_EMAIL: "owner@example.com",
-	GIT_COMMITTER_NAME: "owner",
-	GIT_COMMITTER_EMAIL: "owner@example.com",
+  ...runEnv(),
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_AUTHOR_NAME: "owner",
+  GIT_AUTHOR_EMAIL: "owner@example.com",
+  GIT_COMMITTER_NAME: "owner",
+  GIT_COMMITTER_EMAIL: "owner@example.com",
 };
+
 const sh = (cwd: string, args: readonly string[]) =>
-	runChild("git", args, {cwd, env: FIXTURE_ENV}).pipe(
-		Effect.flatMap((ran) =>
-			ran.code === 0
-				? Effect.succeed(ran.out.trim())
-				: Effect.die(new Error(`git ${args.join(" ")} failed: ${ran.err}`)),
-		),
-	);
+  runChild("git", args, { cwd, env: FIXTURE_ENV }).pipe(
+    Effect.flatMap((ran) =>
+      ran.code === 0
+        ? Effect.succeed(ran.out.trim())
+        : Effect.die(new Error(`git ${args.join(" ")} failed: ${ran.err}`)),
+    ),
+  );
 
 /** Run `effect` in a fresh folder of its own, on the real file system and git. */
 const inFolder = <A, E>(effect: (folder: string) => Effect.Effect<A, E, Services>) =>
-	Effect.runPromise(
-		Effect.gen(function* () {
-			const fs = yield* FileSystem.FileSystem;
-			return yield* effect(yield* fs.makeTempDirectoryScoped());
-		}).pipe(Effect.scoped, Effect.provide(nodeServices)),
-	);
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* effect(yield* fs.makeTempDirectoryScoped());
+    }).pipe(Effect.scoped, Effect.provide(nodeServices)),
+  );
 
 /**
  * A target: a bare origin with `main` as its default branch, and a working
@@ -67,391 +62,391 @@ const inFolder = <A, E>(effect: (folder: string) => Effect.Effect<A, E, Services
  * pushes it, answering the commit.
  */
 const origin = (folder: string) =>
-	Effect.gen(function* () {
-		const fs = yield* FileSystem.FileSystem;
-		const path = yield* Path.Path;
-		const bare = path.join(folder, "origin.git");
-		const owner = path.join(folder, "owner");
-		yield* sh(folder, ["init", "-q", "--bare", "-b", "main", bare]);
-		yield* sh(folder, ["init", "-q", "-b", "main", owner]);
-		yield* sh(owner, ["remote", "add", "origin", bare]);
-		const put = (branch: string, files: Readonly<Record<string, string>>) =>
-			Effect.gen(function* () {
-				yield* sh(owner, ["checkout", "-q", "-B", branch]);
-				for (const [name, text] of Object.entries(files)) {
-					yield* fs.makeDirectory(path.dirname(path.join(owner, name)), {recursive: true});
-					yield* fs.writeFileString(path.join(owner, name), text);
-				}
-				yield* sh(owner, ["add", "-A"]);
-				yield* sh(owner, ["commit", "-q", "--no-verify", "--allow-empty", "-m", branch]);
-				yield* sh(owner, ["push", "-q", "--no-verify", "-f", "origin", `${branch}:${branch}`]);
-				return yield* sh(owner, ["rev-parse", "HEAD"]);
-			});
-		const target: Target = {name: "acme/widgets", clone: path.join(folder, "clone"), url: bare};
-		return {target, put};
-	});
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const bare = path.join(folder, "origin.git");
+    const owner = path.join(folder, "owner");
+    yield* sh(folder, ["init", "-q", "--bare", "-b", "main", bare]);
+    yield* sh(folder, ["init", "-q", "-b", "main", owner]);
+    yield* sh(owner, ["remote", "add", "origin", bare]);
+    const put = (branch: string, files: Readonly<Record<string, string>>) =>
+      Effect.gen(function* () {
+        yield* sh(owner, ["checkout", "-q", "-B", branch]);
 
-const load = (target: Target) => loadSettings({from: "repo", target});
+        for (const [name, text] of Object.entries(files)) {
+          yield* fs.makeDirectory(path.dirname(path.join(owner, name)), { recursive: true });
+          yield* fs.writeFileString(path.join(owner, name), text);
+        }
+
+        yield* sh(owner, ["add", "-A"]);
+        yield* sh(owner, ["commit", "-q", "--no-verify", "--allow-empty", "-m", branch]);
+        yield* sh(owner, ["push", "-q", "--no-verify", "-f", "origin", `${branch}:${branch}`]);
+        return yield* sh(owner, ["rev-parse", "HEAD"]);
+      });
+    const target: Target = { name: "acme/widgets", clone: path.join(folder, "clone"), url: bare };
+    return { target, put };
+  });
+
+const load = (target: Target) => loadSettings({ from: "repo", target });
 
 describe("fabrika.toml from a target repository", () => {
-	it("is read as committed on its default branch, in a clone made with no checkout", async () => {
-		const got = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				const commit = yield* put("main", {
-					[SETTINGS_FILE]: 'packs = ["@acme/desk"]\n\n[pack."@acme/desk"]\ndir = "desk"\n',
-					"README.md": "widgets\n",
-				});
-				const loaded = yield* load(target);
-				// No checkout: the clone's folder holds no file of the repository's.
-				const fs = yield* FileSystem.FileSystem;
-				const files = (yield* fs.readDirectory(target.clone)).filter((name) => name !== ".git");
-				return {loaded, commit, files};
-			}),
-		);
-		expect(got.loaded.settings).toEqual({
-			packs: ["@acme/desk"],
-			pack: {"@acme/desk": {dir: "desk"}},
-		});
-		expect(got.loaded.source).toEqual({
-			from: "repo",
-			name: "acme/widgets",
-			branch: "main",
-			commit: got.commit,
-			found: true,
-		});
-		expect(got.files).toEqual([]);
-	});
+  it("is read as committed on its default branch, in a clone made with no checkout", async () => {
+    const got = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        const commit = yield* put("main", {
+          [SETTINGS_FILE]: 'packs = ["@acme/desk"]\n\n[pack."@acme/desk"]\ndir = "desk"\n',
+          "README.md": "widgets\n",
+        });
+        const loaded = yield* load(target);
+        // No checkout: the clone's folder holds no file of the repository's.
+        const fs = yield* FileSystem.FileSystem;
+        const files = (yield* fs.readDirectory(target.clone)).filter((name) => name !== ".git");
+        return { loaded, commit, files };
+      }),
+    );
+    expect(got.loaded.settings).toEqual({
+      packs: ["@acme/desk"],
+      pack: { "@acme/desk": { dir: "desk" } },
+    });
+    expect(got.loaded.source).toEqual({
+      from: "repo",
+      name: "acme/widgets",
+      branch: "main",
+      commit: got.commit,
+      found: true,
+    });
+    expect(got.files).toEqual([]);
+  });
 
-	it("reads what the repository holds at the same commit: the files each default is worked out from, and its own rubrics", async () => {
-		const got = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				yield* put("main", {
-					[SETTINGS_FILE]: '[review]\nrubrics = "rubrics"\n',
-					"package-lock.json": "{}\n",
-					CODEOWNERS: "* @acme/owners\n",
-					"AGENTS.md": "# rules\n",
-				});
-				const fs = yield* FileSystem.FileSystem;
-				yield* fs.makeDirectory(`${folder}/owner/rubrics`, {recursive: true});
-				yield* put("main", {"rubrics/code.md": "# our code rubric\n"});
-				return yield* load(target);
-			}),
-		);
-		expect([...got.holds.files].sort()).toEqual(["AGENTS.md", "CODEOWNERS", "package-lock.json"]);
-		expect(got.holds.rubrics).toEqual({"code.md": "# our code rubric\n"});
-	});
+  it("reads what the repository holds at the same commit: the files each default is worked out from, and its own rubrics", async () => {
+    const got = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        yield* put("main", {
+          [SETTINGS_FILE]: '[review]\nrubrics = "rubrics"\n',
+          "package-lock.json": "{}\n",
+          CODEOWNERS: "* @acme/owners\n",
+          "AGENTS.md": "# rules\n",
+        });
+        const fs = yield* FileSystem.FileSystem;
+        yield* fs.makeDirectory(`${folder}/owner/rubrics`, { recursive: true });
+        yield* put("main", { "rubrics/code.md": "# our code rubric\n" });
+        return yield* load(target);
+      }),
+    );
+    expect([...got.holds.files].sort()).toEqual(["AGENTS.md", "CODEOWNERS", "package-lock.json"]);
+    expect(got.holds.rubrics).toEqual({ "code.md": "# our code rubric\n" });
+  });
 
-	it("a lane's branch and a file left in the clone are not read; a new commit on main is", async () => {
-		const got = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const fs = yield* FileSystem.FileSystem;
-				const path = yield* Path.Path;
-				const {target, put} = yield* origin(folder);
-				yield* put("main", {[SETTINGS_FILE]: 'packs = ["@acme/desk"]\n'});
-				const first = yield* load(target);
-				// A lane's own branch changes the file, and so does a file left in the clone's folder.
-				yield* put("build/7", {[SETTINGS_FILE]: 'packs = ["@acme/lane-made"]\n'});
-				yield* fs.makeDirectory(path.dirname(path.join(target.clone, SETTINGS_FILE)), {
-					recursive: true,
-				});
-				yield* fs.writeFileString(
-					path.join(target.clone, SETTINGS_FILE),
-					'packs = ["@acme/uncommitted"]\n',
-				);
-				const second = yield* load(target);
-				// The owner lands a change on main: the next start reads it.
-				yield* sh(path.join(folder, "owner"), ["checkout", "-q", "main"]);
-				const landed = yield* put("main", {[SETTINGS_FILE]: 'packs = ["@acme/landed"]\n'});
-				const third = yield* load(target);
-				return {first, second, third, landed};
-			}),
-		);
-		expect(got.first.settings.packs).toEqual(["@acme/desk"]);
-		expect(got.second.settings.packs).toEqual(["@acme/desk"]);
-		expect(got.second.source).toEqual(got.first.source);
-		expect(got.third.settings.packs).toEqual(["@acme/landed"]);
-		expect(got.third.source).toMatchObject({branch: "main", commit: got.landed});
-	});
+  it("a lane's branch and a file left in the clone are not read; a new commit on main is", async () => {
+    const got = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { target, put } = yield* origin(folder);
+        yield* put("main", { [SETTINGS_FILE]: 'packs = ["@acme/desk"]\n' });
+        const first = yield* load(target);
+        // A lane's own branch changes the file, and so does a file left in the clone's folder.
+        yield* put("build/7", { [SETTINGS_FILE]: 'packs = ["@acme/lane-made"]\n' });
+        yield* fs.makeDirectory(path.dirname(path.join(target.clone, SETTINGS_FILE)), {
+          recursive: true,
+        });
+        yield* fs.writeFileString(path.join(target.clone, SETTINGS_FILE), 'packs = ["@acme/uncommitted"]\n');
+        const second = yield* load(target);
+        // The owner lands a change on main: the next start reads it.
+        yield* sh(path.join(folder, "owner"), ["checkout", "-q", "main"]);
+        const landed = yield* put("main", { [SETTINGS_FILE]: 'packs = ["@acme/landed"]\n' });
+        const third = yield* load(target);
+        return { first, second, third, landed };
+      }),
+    );
+    expect(got.first.settings.packs).toEqual(["@acme/desk"]);
+    expect(got.second.settings.packs).toEqual(["@acme/desk"]);
+    expect(got.second.source).toEqual(got.first.source);
+    expect(got.third.settings.packs).toEqual(["@acme/landed"]);
+    expect(got.third.source).toMatchObject({ branch: "main", commit: got.landed });
+  });
 
-	it("no fabrika.toml on the default branch: every default, and the source says it is not there", async () => {
-		const got = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				yield* put("main", {"README.md": "widgets\n"});
-				yield* put("build/7", {[SETTINGS_FILE]: 'packs = ["@acme/lane-made"]\n'});
-				return yield* load(target);
-			}),
-		);
-		expect(got.settings).toEqual(DEFAULT_SETTINGS);
-		expect(got.source).toMatchObject({from: "repo", found: false});
-	});
+  it("no fabrika.toml on the default branch: every default, and the source says it is not there", async () => {
+    const got = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        yield* put("main", { "README.md": "widgets\n" });
+        yield* put("build/7", { [SETTINGS_FILE]: 'packs = ["@acme/lane-made"]\n' });
+        return yield* load(target);
+      }),
+    );
+    expect(got.settings).toEqual(DEFAULT_SETTINGS);
+    expect(got.source).toMatchObject({ from: "repo", found: false });
+  });
 
-	it("a committed file that does not fit stops the read, naming the repository, branch and file", async () => {
-		const why = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				yield* put("main", {[SETTINGS_FILE]: "packs = 1\n"});
-				return (yield* Effect.flip(load(target))).why;
-			}),
-		);
-		expect(why).toMatch(/^acme\/widgets@main:\.fabrika\/fabrika\.toml: packs: /);
-	});
+  it("a committed file that does not fit stops the read, naming the repository, branch and file", async () => {
+    const why = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        yield* put("main", { [SETTINGS_FILE]: "packs = 1\n" });
+        return (yield* Effect.flip(load(target))).why;
+      }),
+    );
+    expect(why).toMatch(/^acme\/widgets@main:\.fabrika\/fabrika\.toml: packs: /);
+  });
 
-	it("a file left at the root with none in the folder is refused, never read as every default", async () => {
-		const why = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				yield* put("main", {[LEFTOVER]: 'packs = ["@acme/desk"]\n'});
-				return (yield* Effect.flip(load(target))).why;
-			}),
-		);
-		expect(why).toContain(SETTINGS_MOVED);
-		expect(why).not.toContain("\n");
-	});
+  it("a file left at the root with none in the folder is refused, never read as every default", async () => {
+    const why = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        yield* put("main", { [LEFTOVER]: 'packs = ["@acme/desk"]\n' });
+        return (yield* Effect.flip(load(target))).why;
+      }),
+    );
+    expect(why).toContain(SETTINGS_MOVED);
+    expect(why).not.toContain("\n");
+  });
 
-	it("a file left at the root beside the new one is refused too: two spellings must not coexist", async () => {
-		const why = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				yield* put("main", {
-					[LEFTOVER]: 'packs = ["@acme/old"]\n',
-					[SETTINGS_FILE]: 'packs = ["@acme/new"]\n',
-				});
-				return (yield* Effect.flip(load(target))).why;
-			}),
-		);
-		expect(why).toContain(SETTINGS_MOVED);
-	});
+  it("a file left at the root beside the new one is refused too: two spellings must not coexist", async () => {
+    const why = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        yield* put("main", {
+          [LEFTOVER]: 'packs = ["@acme/old"]\n',
+          [SETTINGS_FILE]: 'packs = ["@acme/new"]\n',
+        });
+        return (yield* Effect.flip(load(target))).why;
+      }),
+    );
+    expect(why).toContain(SETTINGS_MOVED);
+  });
 
-	it("a file left at the root of a lane's branch is not read: only the default branch counts", async () => {
-		const got = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				yield* put("main", {[SETTINGS_FILE]: 'packs = ["@acme/desk"]\n'});
-				yield* put("build/7", {[LEFTOVER]: 'packs = ["@acme/lane-made"]\n'});
-				return yield* load(target);
-			}),
-		);
-		expect(got.settings.packs).toEqual(["@acme/desk"]);
-	});
+  it("a file left at the root of a lane's branch is not read: only the default branch counts", async () => {
+    const got = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        yield* put("main", { [SETTINGS_FILE]: 'packs = ["@acme/desk"]\n' });
+        yield* put("build/7", { [LEFTOVER]: 'packs = ["@acme/lane-made"]\n' });
+        return yield* load(target);
+      }),
+    );
+    expect(got.settings.packs).toEqual(["@acme/desk"]);
+  });
 
-	it("a .fabrika.jsonc beside the new file is not refused and not read: it may be another tool's, and it is asked about", async () => {
-		const got = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				yield* put("main", {
-					[SETTINGS_FILE]: '[review]\ngoverned = [".github/"]\n',
-					[JSONC]: '{ "governedRoots": ["elsewhere/"] }\n',
-				});
-				return yield* load(target);
-			}),
-		);
-		expect(got.settings.review?.governed).toEqual([".github/"]);
-		expect(got.holds.files.has(JSONC)).toBe(true);
-	});
+  it("a .fabrika.jsonc beside the new file is not refused and not read: it may be another tool's, and it is asked about", async () => {
+    const got = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        yield* put("main", {
+          [SETTINGS_FILE]: '[review]\ngoverned = [".github/"]\n',
+          [JSONC]: '{ "governedRoots": ["elsewhere/"] }\n',
+        });
+        return yield* load(target);
+      }),
+    );
+    expect(got.settings.review?.governed).toEqual([".github/"]);
+    expect(got.holds.files.has(JSONC)).toBe(true);
+  });
 
-	it("only a .fabrika.jsonc at main is refused: its governed folders would read as none", async () => {
-		const why = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				yield* put("main", {[JSONC]: '{ "governedRoots": ["elsewhere/"] }\n'});
-				return (yield* Effect.flip(load(target))).why;
-			}),
-		);
-		expectOneLine(why, JSONC_MOVED);
-	});
+  it("only a .fabrika.jsonc at main is refused: its governed folders would read as none", async () => {
+    const why = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        yield* put("main", { [JSONC]: '{ "governedRoots": ["elsewhere/"] }\n' });
+        return (yield* Effect.flip(load(target))).why;
+      }),
+    );
+    expectOneLine(why, JSONC_MOVED);
+  });
 
-	it.each<[string, Readonly<Record<string, string>>]>([
-		["with only a .fabrika.jsonc", {[LEFTOVER]: "", [JSONC]: "{}\n"}],
-		["with both others", {[LEFTOVER]: "", [JSONC]: "{}\n", [SETTINGS_FILE]: ""}],
-	])("a file left at the root %s says to move that one", async (_name, files) => {
-		const why = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				yield* put("main", files);
-				return (yield* Effect.flip(load(target))).why;
-			}),
-		);
-		expectOneLine(why, SETTINGS_MOVED);
-	});
+  it.each<[string, Readonly<Record<string, string>>]>([
+    ["with only a .fabrika.jsonc", { [LEFTOVER]: "", [JSONC]: "{}\n" }],
+    ["with both others", { [LEFTOVER]: "", [JSONC]: "{}\n", [SETTINGS_FILE]: "" }],
+  ])("a file left at the root %s says to move that one", async (_name, files) => {
+    const why = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        yield* put("main", files);
+        return (yield* Effect.flip(load(target))).why;
+      }),
+    );
+    expectOneLine(why, SETTINGS_MOVED);
+  });
 
-	it("a .fabrika.jsonc on a lane's branch only is not refused: only the default branch counts", async () => {
-		const got = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const {target, put} = yield* origin(folder);
-				yield* put("main", {"README.md": "widgets\n"});
-				yield* put("build/7", {[JSONC]: "{}\n"});
-				return yield* load(target);
-			}),
-		);
-		expect(got.settings).toEqual(DEFAULT_SETTINGS);
-		expect(got.source).toMatchObject({from: "repo", found: false});
-	});
+  it("a .fabrika.jsonc on a lane's branch only is not refused: only the default branch counts", async () => {
+    const got = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const { target, put } = yield* origin(folder);
+        yield* put("main", { "README.md": "widgets\n" });
+        yield* put("build/7", { [JSONC]: "{}\n" });
+        return yield* load(target);
+      }),
+    );
+    expect(got.settings).toEqual(DEFAULT_SETTINGS);
+    expect(got.source).toMatchObject({ from: "repo", found: false });
+  });
 
-	it("a clone named with nowhere to clone it from, and not there: refused, never every default", async () => {
-		const why = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const path = yield* Path.Path;
-				const clone = path.join(folder, "missing");
-				return (yield* Effect.flip(load({name: clone, clone, url: null}))).why;
-			}),
-		);
-		expect(why).toContain("fabrika.toml: no clone of ");
-	});
+  it("a clone named with nowhere to clone it from, and not there: refused, never every default", async () => {
+    const why = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const clone = path.join(folder, "missing");
+        return (yield* Effect.flip(load({ name: clone, clone, url: null }))).why;
+      }),
+    );
+    expect(why).toContain("fabrika.toml: no clone of ");
+  });
 });
 
 describe("fabrika.toml with no target repository", () => {
-	it("is read from the folder tsh starts in", async () => {
-		const got = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const fs = yield* FileSystem.FileSystem;
-				const path = yield* Path.Path;
-				const file = path.join(folder, SETTINGS_FILE);
-				const missing = yield* loadSettings({from: "folder", folder});
-				yield* fs.makeDirectory(path.dirname(file), {recursive: true});
-				yield* fs.writeFileString(file, 'packs = ["@acme/desk"]\n');
-				const there = yield* loadSettings({from: "folder", folder});
-				return {missing, there, file};
-			}),
-		);
-		expect(got.missing).toEqual<Loaded>({
-			settings: DEFAULT_SETTINGS,
-			source: {from: "folder", file: got.file, found: false},
-			holds: HOLDS_NOTHING,
-		});
-		expect(got.there).toEqual<Loaded>({
-			settings: {packs: ["@acme/desk"], pack: {}},
-			source: {from: "folder", file: got.file, found: true},
-			holds: HOLDS_NOTHING,
-		});
-	});
+  it("is read from the folder tsh starts in", async () => {
+    const got = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const file = path.join(folder, SETTINGS_FILE);
+        const missing = yield* loadSettings({ from: "folder", folder });
+        yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+        yield* fs.writeFileString(file, 'packs = ["@acme/desk"]\n');
+        const there = yield* loadSettings({ from: "folder", folder });
+        return { missing, there, file };
+      }),
+    );
+    expect(got.missing).toEqual<Loaded>({
+      settings: DEFAULT_SETTINGS,
+      source: { from: "folder", file: got.file, found: false },
+      holds: HOLDS_NOTHING,
+    });
+    expect(got.there).toEqual<Loaded>({
+      settings: { packs: ["@acme/desk"], pack: {} },
+      source: { from: "folder", file: got.file, found: true },
+      holds: HOLDS_NOTHING,
+    });
+  });
 
-	/** The folder with `files` written in it: why it is refused. */
-	const refused = (files: readonly string[]) =>
-		inFolder((folder) =>
-			Effect.gen(function* () {
-				const fs = yield* FileSystem.FileSystem;
-				const path = yield* Path.Path;
-				for (const name of files) {
-					yield* fs.makeDirectory(path.dirname(path.join(folder, name)), {recursive: true});
-					yield* fs.writeFileString(path.join(folder, name), 'packs = ["@acme/desk"]\n');
-				}
-				return (yield* Effect.flip(loadSettings({from: "folder", folder}))).why;
-			}),
-		);
+  /** The folder with `files` written in it: why it is refused. */
+  const refused = (files: readonly string[]) =>
+    inFolder((folder) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
 
-	// Not there and cannot read are two answers, as in ./git-read.ts. A root user reads a shut folder.
-	describe.skipIf(process.getuid?.() === 0)("a read that broke is not no file", () => {
-		/** Why the read stops with `shut` closed to everyone, `files` written first. Opened again after, so the folder can go. */
-		const stoppedBy = (shut: string, files: Readonly<Record<string, string>>) =>
-			inFolder((folder) =>
-				Effect.gen(function* () {
-					const fs = yield* FileSystem.FileSystem;
-					const path = yield* Path.Path;
-					for (const [name, text] of Object.entries(files)) {
-						yield* fs.makeDirectory(path.dirname(path.join(folder, name)), {recursive: true});
-						yield* fs.writeFileString(path.join(folder, name), text);
-					}
-					const at = path.join(folder, shut);
-					const mode = (yield* fs.stat(at)).mode;
-					yield* fs.chmod(at, 0o000);
-					return yield* Effect.flip(loadSettings({from: "folder", folder})).pipe(
-						Effect.ensuring(Effect.orDie(fs.chmod(at, mode))),
-					);
-				}),
-			);
+        for (const name of files) {
+          yield* fs.makeDirectory(path.dirname(path.join(folder, name)), { recursive: true });
+          yield* fs.writeFileString(path.join(folder, name), 'packs = ["@acme/desk"]\n');
+        }
 
-		it("the settings' folder shut: refused, never every default", async () => {
-			const got = await stoppedBy(".fabrika", {[SETTINGS_FILE]: 'packs = ["@acme/desk"]\n'});
-			expect(got.why).toContain("cannot read");
-			expect(got.why).toContain(SETTINGS_FILE);
-		});
+        return (yield* Effect.flip(loadSettings({ from: "folder", folder }))).why;
+      }),
+    );
 
-		it("a folder one of the asked files is in shut: refused, never read as not there", async () => {
-			const got = await stoppedBy(".github", {".github/CODEOWNERS": "* @acme/owners\n"});
-			expect(got.why).toContain("cannot read");
-			expect(got.why).toContain(".github/CODEOWNERS");
-		});
+  // Not there and cannot read are two answers, as in ./git-read.ts. A root user reads a shut folder.
+  describe.skipIf(process.getuid?.() === 0)("a read that broke is not no file", () => {
+    /** Why the read stops with `shut` closed to everyone, `files` written first. Opened again after, so the folder can go. */
+    const stoppedBy = (shut: string, files: Readonly<Record<string, string>>) =>
+      inFolder((folder) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
 
-		it("a named rubric shut: refused, never read as no rubric", async () => {
-			const got = await stoppedBy("rubrics/code.md", {
-				[SETTINGS_FILE]: '[review]\nrubrics = "rubrics"\n',
-				"rubrics/code.md": "# our code rubric\n",
-			});
-			expect(got.why).toContain("cannot read");
-			expect(got.why).toContain("code.md");
-		});
-	});
+          for (const [name, text] of Object.entries(files)) {
+            yield* fs.makeDirectory(path.dirname(path.join(folder, name)), { recursive: true });
+            yield* fs.writeFileString(path.join(folder, name), text);
+          }
 
-	it("a file named .fabrika, where the folder would be: the settings are not there, as at a commit", async () => {
-		const got = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const fs = yield* FileSystem.FileSystem;
-				yield* fs.writeFileString(`${folder}/.fabrika`, "not a folder\n");
-				return yield* loadSettings({from: "folder", folder});
-			}),
-		);
-		expect(got.settings).toEqual(DEFAULT_SETTINGS);
-		expect(got.source).toMatchObject({from: "folder", found: false});
-	});
+          const at = path.join(folder, shut);
+          const mode = (yield* fs.stat(at)).mode;
+          yield* fs.chmod(at, 0o000);
+          return yield* Effect.flip(loadSettings({ from: "folder", folder })).pipe(
+            Effect.ensuring(Effect.orDie(fs.chmod(at, mode))),
+          );
+        }),
+      );
 
-	it("a file left at the root with none in the folder is refused, never read as every default", async () => {
-		const why = await refused([LEFTOVER]);
-		expect(why).toContain(SETTINGS_MOVED);
-		expect(why).not.toContain("\n");
-	});
+    it("the settings' folder shut: refused, never every default", async () => {
+      const got = await stoppedBy(".fabrika", { [SETTINGS_FILE]: 'packs = ["@acme/desk"]\n' });
+      expect(got.why).toContain("cannot read");
+      expect(got.why).toContain(SETTINGS_FILE);
+    });
 
-	it("a file left at the root beside the new one is refused too", async () => {
-		expect(await refused([LEFTOVER, SETTINGS_FILE])).toContain(SETTINGS_MOVED);
-	});
+    it("a folder one of the asked files is in shut: refused, never read as not there", async () => {
+      const got = await stoppedBy(".github", { ".github/CODEOWNERS": "* @acme/owners\n" });
+      expect(got.why).toContain("cannot read");
+      expect(got.why).toContain(".github/CODEOWNERS");
+    });
 
-	it("a .fabrika.jsonc beside the new file is not refused, and it is asked about", async () => {
-		const got = await inFolder((folder) =>
-			Effect.gen(function* () {
-				const fs = yield* FileSystem.FileSystem;
-				const path = yield* Path.Path;
-				yield* fs.makeDirectory(path.join(folder, ".fabrika"));
-				yield* fs.writeFileString(path.join(folder, SETTINGS_FILE), 'packs = ["@acme/desk"]\n');
-				yield* fs.writeFileString(path.join(folder, JSONC), "{}\n");
-				return yield* loadSettings({from: "folder", folder});
-			}),
-		);
-		expect(got.settings.packs).toEqual(["@acme/desk"]);
-		expect(got.holds.files.has(JSONC)).toBe(true);
-	});
+    it("a named rubric shut: refused, never read as no rubric", async () => {
+      const got = await stoppedBy("rubrics/code.md", {
+        [SETTINGS_FILE]: '[review]\nrubrics = "rubrics"\n',
+        "rubrics/code.md": "# our code rubric\n",
+      });
+      expect(got.why).toContain("cannot read");
+      expect(got.why).toContain("code.md");
+    });
+  });
 
-	it("only a .fabrika.jsonc in the folder is refused: its governed folders would read as none", async () => {
-		expectOneLine(await refused([JSONC]), JSONC_MOVED);
-	});
+  it("a file named .fabrika, where the folder would be: the settings are not there, as at a commit", async () => {
+    const got = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        yield* fs.writeFileString(`${folder}/.fabrika`, "not a folder\n");
+        return yield* loadSettings({ from: "folder", folder });
+      }),
+    );
+    expect(got.settings).toEqual(DEFAULT_SETTINGS);
+    expect(got.source).toMatchObject({ from: "folder", found: false });
+  });
 
-	it.each<[string, readonly string[]]>([
-		["with only a .fabrika.jsonc", [LEFTOVER, JSONC]],
-		["with both others", [LEFTOVER, JSONC, SETTINGS_FILE]],
-	])("a file left at the root %s says to move that one", async (_name, files) => {
-		expectOneLine(await refused(files), SETTINGS_MOVED);
-	});
+  it("a file left at the root with none in the folder is refused, never read as every default", async () => {
+    const why = await refused([LEFTOVER]);
+    expect(why).toContain(SETTINGS_MOVED);
+    expect(why).not.toContain("\n");
+  });
+
+  it("a file left at the root beside the new one is refused too", async () => {
+    expect(await refused([LEFTOVER, SETTINGS_FILE])).toContain(SETTINGS_MOVED);
+  });
+
+  it("a .fabrika.jsonc beside the new file is not refused, and it is asked about", async () => {
+    const got = await inFolder((folder) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* fs.makeDirectory(path.join(folder, ".fabrika"));
+        yield* fs.writeFileString(path.join(folder, SETTINGS_FILE), 'packs = ["@acme/desk"]\n');
+        yield* fs.writeFileString(path.join(folder, JSONC), "{}\n");
+        return yield* loadSettings({ from: "folder", folder });
+      }),
+    );
+    expect(got.settings.packs).toEqual(["@acme/desk"]);
+    expect(got.holds.files.has(JSONC)).toBe(true);
+  });
+
+  it("only a .fabrika.jsonc in the folder is refused: its governed folders would read as none", async () => {
+    expectOneLine(await refused([JSONC]), JSONC_MOVED);
+  });
+
+  it.each<[string, readonly string[]]>([
+    ["with only a .fabrika.jsonc", [LEFTOVER, JSONC]],
+    ["with both others", [LEFTOVER, JSONC, SETTINGS_FILE]],
+  ])("a file left at the root %s says to move that one", async (_name, files) => {
+    expectOneLine(await refused(files), SETTINGS_MOVED);
+  });
 });
 
 describe("the line tsh prints at start", () => {
-	const commit = "0123456789abcdef0123456789abcdef01234567";
-	const FILE = "/w/.fabrika/fabrika.toml";
-	it.each<[Source, string]>([
-		[
-			{from: "repo", name: "acme/widgets", branch: "main", commit, found: true},
-			".fabrika/fabrika.toml: acme/widgets@main (0123456)",
-		],
-		[
-			{from: "repo", name: "acme/widgets", branch: "main", commit, found: false},
-			".fabrika/fabrika.toml: acme/widgets@main (0123456), not there: every default",
-		],
-		[{from: "folder", file: FILE, found: true}, `.fabrika/fabrika.toml: ${FILE}`],
-		[
-			{from: "folder", file: FILE, found: false},
-			`.fabrika/fabrika.toml: ${FILE}, not there: every default`,
-		],
-	])("%j prints %s", (source, line) => {
-		expect(sourceLine(source)).toBe(line);
-	});
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const FILE = "/w/.fabrika/fabrika.toml";
+  it.each<[Source, string]>([
+    [
+      { from: "repo", name: "acme/widgets", branch: "main", commit, found: true },
+      ".fabrika/fabrika.toml: acme/widgets@main (0123456)",
+    ],
+    [
+      { from: "repo", name: "acme/widgets", branch: "main", commit, found: false },
+      ".fabrika/fabrika.toml: acme/widgets@main (0123456), not there: every default",
+    ],
+    [{ from: "folder", file: FILE, found: true }, `.fabrika/fabrika.toml: ${FILE}`],
+    [{ from: "folder", file: FILE, found: false }, `.fabrika/fabrika.toml: ${FILE}, not there: every default`],
+  ])("%j prints %s", (source, line) => {
+    expect(sourceLine(source)).toBe(line);
+  });
 });

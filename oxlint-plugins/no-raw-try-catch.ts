@@ -21,36 +21,35 @@
 // mostly plain Node calls at the edge, in functions with no Effect in them. A blocking check must
 // have about 0 such fires; advice may have up to 10% (Sadowski et al., CACM 2018). Narrowing it is
 // a later change with its own count.
-import type {CreateRule} from "@oxlint/plugins";
-import type {Node} from "./match.ts";
+import type { CreateRule } from "@oxlint/plugins";
+import type { Node } from "./match.ts";
 
 const isEffect = (text: unknown): boolean =>
-	typeof text === "string" && (text === "effect" || text.startsWith("effect/"));
+  typeof text === "string" && (text === "effect" || text.startsWith("effect/"));
 
 const named = (specifier: Node): boolean =>
-	specifier.type === "ImportSpecifier" &&
-	specifier.imported.type === "Literal" &&
-	isEffect(specifier.imported.value);
+  specifier.type === "ImportSpecifier" && specifier.imported.type === "Literal" && isEffect(specifier.imported.value);
 
 export const noRawTryCatch: CreateRule = {
-	create(context) {
-		let imports = false;
-		return {
-			Program(program) {
-				imports = program.body.some(
-					(item) =>
-						item.type === "ImportDeclaration" &&
-						(isEffect(item.source.value) || item.specifiers.some(named)),
-				);
-			},
-			TryStatement(node) {
-				if (!imports || node.handler === null || node.finalizer !== null) return;
-				context.report({
-					node,
-					message:
-						"Advice, does not block: raw `try/catch` is discouraged in an effect-importing file: real Effect code models failure in the `E` channel, not a native throw (#2736). Fix: use `Effect.try({ try, catch })` (sync) or `Effect.tryPromise({ try, catch })` (async), mapping the cause into a `Schema.TaggedErrorClass`: copy `packages/fabrika-cli/src/ui/http.ts` (or `packages/fate-effect`). Exception (e.g. a pre-runtime bootstrap guard): // oxlint-disable-next-line fabrika/no-raw-try-catch -- <reason>.",
-				});
-			},
-		};
-	},
+  create(context) {
+    let imports = false;
+    return {
+      Program(program) {
+        imports = program.body.some(
+          (item) => item.type === "ImportDeclaration" && (isEffect(item.source.value) || item.specifiers.some(named)),
+        );
+      },
+      TryStatement(node) {
+        if (!imports || node.handler === null || node.finalizer !== null) {
+          return;
+        }
+
+        context.report({
+          node,
+          message:
+            "Advice, does not block: raw `try/catch` is discouraged in an effect-importing file: real Effect code models failure in the `E` channel, not a native throw (#2736). Fix: use `Effect.try({ try, catch })` (sync) or `Effect.tryPromise({ try, catch })` (async), mapping the cause into a `Schema.TaggedErrorClass`: copy `packages/fabrika-cli/src/ui/http.ts` (or `packages/fate-effect`). Exception (e.g. a pre-runtime bootstrap guard): // oxlint-disable-next-line fabrika/no-raw-try-catch -- <reason>.",
+        });
+      },
+    };
+  },
 };

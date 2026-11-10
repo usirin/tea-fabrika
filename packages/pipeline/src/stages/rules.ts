@@ -1,4 +1,4 @@
-import {Schema} from "effect";
+import { Schema } from "effect";
 
 // The repository's own rules for agents: its top `CLAUDE.md` and `AGENTS.md`,
 // as they stand on the base branch. Code reads them (a Gather, beside the
@@ -30,7 +30,7 @@ export const RULE_FILES = ["CLAUDE.md", "AGENTS.md"] as const;
 export type RuleFile = (typeof RULE_FILES)[number];
 
 /** One rules file, as it stands on the base branch. */
-export const RepoRule = Schema.Struct({file: Schema.Literals(RULE_FILES), text: Schema.String});
+export const RepoRule = Schema.Struct({ file: Schema.Literals(RULE_FILES), text: Schema.String });
 export type RepoRule = typeof RepoRule.Type;
 
 /** The most characters of one file handed on. More is cut, and the cut is said. */
@@ -42,35 +42,33 @@ export const RULES_FIELDS = `claudeMd: object(expression: $claudeMd) { ... on Bl
 
 /** The variables the fields above take, for a base branch. */
 export const rulesAt = (base: string) => ({
-	claudeMd: `${base}:CLAUDE.md`,
-	agentsMd: `${base}:AGENTS.md`,
+  claudeMd: `${base}:CLAUDE.md`,
+  agentsMd: `${base}:AGENTS.md`,
 });
 
 /** One file's text from a GraphQL answer: `null` or no text when it is not there. */
-export const RuleBlob = Schema.NullOr(
-	Schema.Struct({text: Schema.optional(Schema.NullOr(Schema.String))}),
-);
+export const RuleBlob = Schema.NullOr(Schema.Struct({ text: Schema.optional(Schema.NullOr(Schema.String)) }));
 type RuleBlob = typeof RuleBlob.Type;
 
 /** The files that are there and say something, in order, each cut at {@link MOST_RULE_CHARS}. */
-export function repoRulesOf(found: {
-	readonly claudeMd: RuleBlob;
-	readonly agentsMd: RuleBlob;
-}): readonly RepoRule[] {
-	const texts: readonly [RuleFile, string | null | undefined][] = [
-		["CLAUDE.md", found.claudeMd?.text],
-		["AGENTS.md", found.agentsMd?.text],
-	];
-	return texts.flatMap(([file, text]) => {
-		if (text === null || text === undefined || text.trim() === "") return [];
-		return [
-			{
-				file,
-				text:
-					text.length <= MOST_RULE_CHARS
-						? text
-						: `${text.slice(0, MOST_RULE_CHARS)}\n\n[cut here: the file goes on past ${MOST_RULE_CHARS} characters]`,
-			},
-		];
-	});
+export function repoRulesOf(found: { readonly claudeMd: RuleBlob; readonly agentsMd: RuleBlob }): readonly RepoRule[] {
+  const texts: readonly [RuleFile, string | null | undefined][] = [
+    ["CLAUDE.md", found.claudeMd?.text],
+    ["AGENTS.md", found.agentsMd?.text],
+  ];
+  return texts.flatMap(([file, text]) => {
+    if (text === null || text === undefined || text.trim() === "") {
+      return [];
+    }
+
+    return [
+      {
+        file,
+        text:
+          text.length <= MOST_RULE_CHARS
+            ? text
+            : `${text.slice(0, MOST_RULE_CHARS)}\n\n[cut here: the file goes on past ${MOST_RULE_CHARS} characters]`,
+      },
+    ];
+  });
 }
