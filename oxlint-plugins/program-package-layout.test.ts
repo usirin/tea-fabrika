@@ -15,6 +15,14 @@ import {describe, expect, it} from "vitest";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const runs = {seed: 119120, numRuns: 8};
+
+// fast-check 4.10.2 counts `examples` inside `numRuns`: they run first, and the run stops at
+// `numRuns`. P16b's layout law, with 7 examples and `numRuns: 8`, ran 1 generated input, and with
+// 11 it would have dropped 3 examples. So a law's generated runs go on top of its examples.
+const withExamples = <P extends {readonly numRuns: number; readonly examples: readonly unknown[]}>(
+	parameters: P,
+): P => ({...parameters, numRuns: parameters.numRuns + parameters.examples.length});
+
 const name = fc.integer({min: 0, max: 100000}).map((n) => `program${n}`);
 
 const run = (name: string, exports: unknown, sources: Readonly<Record<string, string>>) => {
@@ -131,11 +139,11 @@ describe("fabrika/program-package-layout", () => {
 					}
 				},
 			),
-			{
+			withExamples({
 				...runs,
 				// Review round 5: a types export pulled program.d.ts into the runtime graph.
 				examples: [["program0", ["import", "default"], ".d.ts"]],
-			},
+			}),
 		);
 	});
 	it("plants: Worker entries, hidden windows, missing files and a missing pure entry are refused", () => {
@@ -245,13 +253,63 @@ describe("fabrika/program-package-layout", () => {
 			pure: [],
 		},
 		{text: (c) => `const ${c} = {queue() {}}; export {${c} as default};`, defines: true, pure: []},
+		// Review 3 of P16b: a spread default carries the handler object it spreads (13 to 15).
+		{
+			text: (c) => `const ${c} = {fetch() { return new Response(""); }}; export default {...${c}};`,
+			defines: true,
+			pure: [],
+		},
+		{
+			text: (c) => `export default {...{scheduled() {}}, ${c}: 1};`,
+			defines: true,
+			pure: [],
+		},
+		{
+			text: (c) =>
+				`const ${c} = {email() {}}; const app = {...(${c} as ExportedHandler)} satisfies ExportedHandler; export default app;`,
+			defines: true,
+			pure: [],
+		},
+		// The rest of the handler forms syntax can see: an arrow property, a string key, a computed
+		// literal key, a default class, `<T>x`, and `x!` around parentheses (16 to 21).
+		{
+			text: (c) => `export default {fetch: async () => new Response("${c}")};`,
+			defines: true,
+			pure: [],
+		},
+		{text: (c) => `export default {"tail"() {}, ${c}: 1};`, defines: true, pure: []},
+		{text: (c) => `export default {["queue"]() {}, ${c}: 1};`, defines: true, pure: []},
+		{text: (c) => `export default class ${c} extends WorkerEntrypoint {}`, defines: true, pure: []},
+		{
+			text: (c) => `export default <ExportedHandler>{fetch() { return new Response("${c}"); }};`,
+			defines: true,
+			pure: [],
+		},
+		{
+			text: (c) => `export default ({fetch() { return new Response("${c}"); }})!;`,
+			defines: true,
+			pure: [],
+		},
 	];
 	// How the Worker file is reached from its export: itself, a `.ts` link, or a link written
 	// without an extension, which TypeScript resolves.
 	const links = ["same file", ".ts", "no extension"] as const;
 	// How the package exports the Worker file: its own key, a pattern key, or a runtime condition
-	// of '.' beside the pure program.
-	const entries = ["key", "pattern", "key pattern", "condition"] as const;
+	// of '.' beside the pure program. Review 3 of P16b: a fallback array on a key, inside a
+	// condition, or under a runtime condition of '.'; a pattern whose target has no `*`; and a
+	// pattern that a null target shuts off for the Worker file, which then exports nothing.
+	const entries = [
+		"key",
+		"pattern",
+		"key pattern",
+		"condition",
+		"array key",
+		"array condition",
+		"array dot",
+		"fixed pattern",
+		"null pattern",
+	] as const;
+	const box = /\/(?:worker|workers|workerd|box|brain)(?:\/|$)/;
 	it("plants: a Worker entry or a window behind any other export key is refused, by what it loads", () => {
 		fc.assert(
 			fc.property(
@@ -262,7 +320,7 @@ describe("fabrika/program-package-layout", () => {
 				fc.nat({max: shapes.length - 1}),
 				fc.constantFrom(...links),
 				fc.constantFrom(...entries),
-				fc.constantFrom("workerd", "worker", "browser", "import", "node"),
+				fc.constantFrom("workerd", "worker", "browser", "import", "node", "default"),
 				(
 					name,
 					[workerKey, windowKey, helperKey],
@@ -289,6 +347,13 @@ describe("fabrika/program-package-layout", () => {
 										[`${workerPath}.impl.ts`]: text,
 									}),
 						},
+						// The pure program sits beside the Worker file under '.', on the other condition.
+						beside = condition === "default" ? "import" : "default",
+						// The Worker file's subpaths under "./*", which "null pattern" shuts off.
+						shut = [
+							`./${workerPath.slice("src/".length)}`,
+							...(link === "same file" ? [] : [`./${workerPath.slice("src/".length)}.impl`]),
+						],
 						// The export that carries the Worker file, and the key its finding names.
 						[shown, exported]: [string, Record<string, unknown>] =
 							entry === "key"
@@ -297,18 +362,49 @@ describe("fabrika/program-package-layout", () => {
 									? ["./*", {"./*": "./src/*.ts"}]
 									: entry === "key pattern"
 										? [`${workerKey}/*`, {[`${workerKey}/*`]: "./src/*.ts"}]
-										: [".", {".": {[condition]: worker, default: "./src/program.ts"}}],
+										: entry === "condition"
+											? [".", {".": {[condition]: worker, [beside]: "./src/program.ts"}}]
+											: entry === "array key"
+												? [workerKey, {[workerKey]: [worker]}]
+												: entry === "array condition"
+													? [workerKey, {[workerKey]: {[condition]: [worker]}}]
+													: entry === "array dot"
+														? [".", {".": {[condition]: [worker], [beside]: "./src/program.ts"}}]
+														: entry === "fixed pattern"
+															? [`${workerKey}/*`, {[`${workerKey}/*`]: worker}]
+															: [
+																	"./*",
+																	{
+																		"./*": "./src/*.ts",
+																		...Object.fromEntries(shut.map((key) => [key, null])),
+																	},
+																],
+						// A window behind an array target is the same window.
+						arrays = entry.startsWith("array"),
+						target = (path: string) => (arrays ? [path] : path),
 						workerMessage = `A program package has no Worker entry. libfabrika builds its box; '${shown}' is one.`,
 						windowMessage = `The window is exported at './window', never at '${windowKey}'.`,
 						unexported =
 							"Export the real window at './window'. A program without a window needs no stub.",
 						// Under '.', the file is pure code too: a Worker class or handler names '.', and a
-						// Worker runtime import is reported on its own line.
+						// Worker runtime import is reported on its own line. A null target exports nothing,
+						// though a key named for libfabrika's box is refused by its name alone.
 						expected =
-							entry === "condition"
+							entry === "condition" || entry === "array dot"
 								? [...(shapes[shape]!.defines ? [workerMessage] : []), ...shapes[shape]!.pure]
-								: [workerMessage],
-						base = {".": "./src/program.ts", "./window": view, [helperKey]: `./${helperPath}.ts`},
+								: entry === "null pattern"
+									? shut
+											.filter((key) => box.test(key))
+											.map(
+												(key) =>
+													`A program package has no Worker entry. libfabrika builds its box; '${key}' is one.`,
+											)
+									: [workerMessage],
+						base = {
+							".": target("./src/program.ts"),
+							"./window": target(view),
+							[helperKey]: `./${helperPath}.ts`,
+						},
 						messages = (exports: unknown) =>
 							run(name, exports, files)
 								.map((d) => d.message)
@@ -317,16 +413,16 @@ describe("fabrika/program-package-layout", () => {
 					expect(messages(base)).toEqual([]);
 					expect(messages({...base, ...exported})).toEqual([...expected].sort());
 					const {"./window": _, ...moved} = base;
-					expect(messages({...moved, [windowKey]: view})).toEqual([windowMessage]);
+					expect(messages({...moved, [windowKey]: target(view)})).toEqual([windowMessage]);
 					// A window file nobody exports, at any path, still needs './window'.
 					expect(messages(moved)).toEqual([unexported]);
 					// The review's package: a Worker entry and the window both behind other keys.
-					expect(messages({...moved, ...exported, [windowKey]: view})).toEqual(
+					expect(messages({...moved, ...exported, [windowKey]: target(view)})).toEqual(
 						[...expected, windowMessage].sort(),
 					);
 				},
 			),
-			{
+			withExamples({
 				...runs,
 				examples: [
 					// Review 1 of P16b: "./server" loading a WorkerEntrypoint class and "./ui" loading a
@@ -411,8 +507,95 @@ describe("fabrika/program-package-layout", () => {
 						"key",
 						"workerd",
 					],
+					// pinned: review 3 of P16b, "./server": ["./src/server.ts"] with a WorkerEntrypoint
+					// class in server.ts gave no finding, and a window behind an array target was told
+					// to move to './window' instead of named at its key.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"Server",
+						0,
+						"same file",
+						"array key",
+						"workerd",
+					],
+					// pinned: review 3 of P16b, "./server": {"default": ["./src/server.ts"]} gave no finding.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"Server",
+						0,
+						"same file",
+						"array condition",
+						"default",
+					],
+					// pinned: review 3 of P16b, ".": {"workerd": ["./src/worker.ts"], "default":
+					// "./src/program.ts"} gave no finding for the Worker in worker.ts.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/worker", "src/ui", "src/lib"],
+						"Worker",
+						0,
+						"same file",
+						"array dot",
+						"workerd",
+					],
+					// pinned: review 3 of P16b, `const h = {fetch() {}}; export default {...h};` behind
+					// "./server" gave no finding.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"h",
+						13,
+						"same file",
+						"key",
+						"workerd",
+					],
 				],
-			},
+			}),
+		);
+	});
+	// Node's sugar: an exports value that is a string, an array or an object of conditions is '.'.
+	it("plants: '.' written as the whole exports value is '.', and a Worker entry there is refused", () => {
+		fc.assert(
+			fc.property(
+				name,
+				fc.nat({max: shapes.length - 1}),
+				fc.constantFrom("string", "array", "conditions", "array conditions"),
+				fc.constantFrom("workerd", "worker", "browser", "import", "node"),
+				(name, shape, form, condition) => {
+					const files = {
+							"src/program.ts": "export const program = 1;",
+							"src/worker.ts": shapes[shape]!.text("Worker"),
+						},
+						as = (path: string) =>
+							form === "string"
+								? path
+								: form === "array"
+									? [path]
+									: form === "conditions"
+										? {[condition]: path, default: "./src/program.ts"}
+										: {[condition]: [path], default: ["./src/program.ts"]},
+						messages = (exports: unknown) =>
+							run(name, exports, files)
+								.map((d) => d.message)
+								.sort();
+					expect(messages(as("./src/program.ts"))).toEqual([]);
+					expect(messages(as("./src/worker.ts"))).toEqual(
+						[
+							...(shapes[shape]!.defines
+								? ["A program package has no Worker entry. libfabrika builds its box; '.' is one."]
+								: []),
+							...shapes[shape]!.pure,
+						].sort(),
+					);
+				},
+			),
+			runs,
 		);
 	});
 	it("plants: Worker runtime imports, re-exports and dynamic imports in the pure graph are refused", () => {

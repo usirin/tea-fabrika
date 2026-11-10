@@ -15,6 +15,7 @@
 		"@types/node": "catalog:",
 		"fast-check": "catalog:",
 		"oxc-parser": "catalog:",
+		"oxc-resolver": "catalog:",
 		"postcss-value-parser": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:",
