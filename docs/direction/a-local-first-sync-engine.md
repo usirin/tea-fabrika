@@ -12,6 +12,7 @@
   that sync by gossip, [why the design already allows it](#why-the-design-already-allows-it)
   and [open](#open). [The hard part](#the-hard-part-a-claim)'s leases were decided
   central first, as layer 3's C3. The first pass's W3C `traceparent` stays proposed.
+- **Renamed 2026-11-10 for `next/`:** the per-client gateway object is now a connection, and the door is the gateway ([0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).
 
 *Written 2026-11-05: this header said the whole note was "a vision ... not planned,
 not sized", which was wrong for the parts above since 2026-10-19 and 2026-10-31.* It
