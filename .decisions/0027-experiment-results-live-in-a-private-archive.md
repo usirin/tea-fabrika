@@ -48,7 +48,9 @@ write-up quotes the numbers it uses inline (owner, 2026-11-09).**
 
 - `AGENTS.md`'s experiments row and `experiments/README.md` say the new rule. The old one ("saved
   answers go in `experiments/results/`, which keeps a small summary") is gone.
-- `node-kinds.json` went with the saved builder output it named; `pnpm lint:dead` runs without it.
+- `node-kinds.json` loses its one entry, the saved builder output under `results/`. Deleting the
+  empty file means changing `package.json`'s `lint:dead`, an exam path, so that waits for its own
+  change.
 - A write-up that cites a moved path in prose, not a link, is read through `git show
   423fb9cf:<path>` or the archive.
 - Not decided here: when the first write-ups leave, and how a write-up's lesson is checked as
