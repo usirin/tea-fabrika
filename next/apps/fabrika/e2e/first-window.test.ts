@@ -485,9 +485,9 @@ describe("[secrets] private key data and control credentials stay out of every o
 // tab shows, the ledger, span and health rows the stage keeps on disk, the saved test reports and
 // what a screenshot shows; the pure halves are door-spans.test.ts's and node/keybindings.test.ts's
 // [secrets] properties. The secrets are the person's throwaway private key body, the stage's control
-// bearer (read from the stage's own files under its test home, or the workerd command line), and a
-// made-up pass the person pasted into the key file by mistake. The plant puts one secret into each
-// output and the same check must name it.
+// bearer (read from the workerd config the stage served, which Alchemy also writes to the stage's
+// `config` folder), and a made-up pass the person pasted into the key file by mistake. The plant
+// puts one secret into each output and the same check must name it.
 describe("[secrets] the client queue, settings errors, ledger, spans, health, reports and visible text hold no secret", () => {
   const forms = (s: string): ReadonlyArray<string> => [
     s,
@@ -535,9 +535,12 @@ describe("[secrets] the client queue, settings errors, ledger, spans, health, re
         }
       })
       .join("\n");
-  /** The stage's control bearer, from the files Alchemy keeps under the test home. */
-  const bearer = (home: string): string => {
-    for (const f of files(home)) {
+  /** The stage's control bearer. `node/stage.ts` makes it in memory and hands it to workerd only as
+   *  the control entrypoint's props, in the config Alchemy writes to workerd's stdin: it is in no
+   *  file, argument or environment of the stage. Alchemy writes that config to `stage.config` too
+   *  (`WORKERD_DUMP_CONFIG`, p14.test-support.ts), so it is read there. Never printed. */
+  const bearer = (config: string): string => {
+    for (const f of files(config)) {
       const found = text(f).match(/\\?"token\\?"\s*:\s*\\?"([A-Za-z0-9_-]{43})\\?"/);
 
       if (found?.[1] !== undefined) {
@@ -545,7 +548,7 @@ describe("[secrets] the client queue, settings errors, ledger, spans, health, re
       }
     }
 
-    throw new Error("the control bearer is not in the stage home's files; read it where Alchemy keeps workerd's props");
+    throw new Error("the control bearer is not in the workerd config the stage served");
   };
   const idb = (page: import("playwright").Page): Promise<string> =>
     page.evaluate(async () => {
@@ -589,7 +592,7 @@ describe("[secrets] the client queue, settings errors, ledger, spans, health, re
     const body = readFileSync(stage.key, "utf8")
       .split("\n")
       .filter((l) => l.length > 20 && !l.startsWith("-----"));
-    const secrets = [...body, bearer(stage.home), pass];
+    const secrets = [...body, bearer(stage.config), pass];
     process.stdout.write(`${summary()}\n`);
     const reports = files(resolve(APP, "../../../runs/p14")).map(text).join("\n");
     const outputs = {

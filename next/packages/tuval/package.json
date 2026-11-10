@@ -7,7 +7,6 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./page": "./src/window/page.ts",
     "./style.css": "./src/window/style.css",
     "./browser": "./src/browser/index.ts"
   },

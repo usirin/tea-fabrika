@@ -88,6 +88,10 @@ export interface Stage {
   readonly url: string;
   readonly home: string;
   readonly key: string;
+  /** Where Alchemy writes each workerd config it serves (its `WORKERD_DUMP_CONFIG`), inside `home`.
+   *  The stage makes its control bearer in memory and hands it to workerd only in that config, over
+   *  workerd's stdin, so this is the one place a test can read it. A test reads it and never prints it. */
+  readonly config: string;
   readonly output: () => string;
   /** Every process under the stage's parent, as `{pid, command}`. */
   readonly processes: () => ReadonlyArray<{ readonly pid: number; readonly command: string }>;
@@ -112,7 +116,8 @@ export const startStage = async (name: string, shared?: { home: string; port: nu
 
   const founder = readFileSync(`${key}.pub`, "utf8").trim();
   const url = `http://127.0.0.1:${port}`;
-  const env = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };
+  const config = join(home, "workerd-config");
+  const env = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1", WORKERD_DUMP_CONFIG: config };
 
   for (const secret of ["TYPESAFE_API_KEY", "FABRIKA_FOREGROUND", "CLOUDFLARE_API_TOKEN"]) {
     delete env[secret];
@@ -175,6 +180,7 @@ export const startStage = async (name: string, shared?: { home: string; port: nu
     url,
     home,
     key,
+    config,
     output: () => output,
     processes,
     parent: () => child?.pid ?? -1,

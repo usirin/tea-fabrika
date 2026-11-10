@@ -505,19 +505,32 @@ describe("a key edit saved while the brain restarts reaches the window, five tim
     it(`scenario: counter.inc rebound to ${key} while workerd restarts takes effect after it (run ${n + 1} of 5)`, async () => {
       const a = await window();
       const base = await first(a.tab);
+      const dead = workerd(stage);
       // edge: kills workerd by signal, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
-      stage.kill(workerd(stage), "SIGKILL");
+      stage.kill(dead, "SIGKILL");
       writeFileSync(join(stage.home, "keybindings.toml"), `[keys]\n"counter.inc" = [${JSON.stringify(key)}]\n`);
+      // Right after the kill the frame can still say online, on the dial that just died, so an
+      // online check alone can pass before the restart began (run 4 of the lead's 2026-11-10 run).
+      // The restart is seen first: a workerd other than the killed one runs under the stage.
+      await until(
+        "a new workerd under the stage",
+        () =>
+          // edge: finds workerd with `ps` under the stage, since Alchemy's runtime has no form to list or crash it from outside, not reported, 0042 amendment 2026-11-09
+          stage.processes().some((p) => /workerd/.test(p.command) && p.pid !== dead) ? true : undefined,
+        100_000,
+      );
       await until(
         "the frame to be online again",
         async () => (/^online/i.test(await connection(a.tab.page)) ? true : undefined),
         100_000,
       );
-      // Give the tile focus without pressing anything, then press the new key, once per try.
+      // Give the tile focus without pressing anything, then press the new key, once per try, for
+      // up to a minute: the edit reaches the tab after the brain takes it and the tab reads it.
       const tile = a.tab.page.getByRole("region", { name: /^counter/i }).first();
+      const stop = Date.now() + 60_000;
       let took = false;
 
-      for (let tries = 0; tries < 15 && !took; tries++) {
+      while (!took && Date.now() < stop) {
         await tile.getByRole("button", { name: "Take one away" }).focus();
         await a.tab.page.keyboard.press(key);
 

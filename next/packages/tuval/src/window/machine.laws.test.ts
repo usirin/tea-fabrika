@@ -7,19 +7,30 @@
 // - `windowMachineFor(checks)` (A7): the file's one export of a machine, a factory. `checks` is
 //   libfabrika's `ClientChecks`, `{decode?: (pid) => (view) => unknown}`, passed through to the
 //   client. The machine it returns is a tea machine; its ctx is `{layout}`, a `Layout` (desktop/layout.ts). Its model
-//   holds `link` (a `Link`, transport/link.ts), `client` (an app/client.ts `Client`: `pending`,
-//   `written`, `views`) and `opened`, the pids opened on this dial.
+//   holds `link` (a `Link`, transport/link.ts) and `client` (an app/client.ts `Client`: `pending`,
+//   `written`, `seen`, `views`).
 // - Msgs, by `type`: every `linkMachine` Msg, unchanged, steps the link; `press {pid, m}` reserves a
-//   numbered slot and asks the Cmd `now {n}`; `view {pid, note}` is a view notification; and the
-//   settle Msgs tea mints for the Cmds `now {n}`, `send {pid, letter, n}` (process.send) and
-//   `open {pid, dial}` (view.open): `<cmd>_ok {cmd, value}` and `<cmd>_err {cmd, error}`. `now`'s ok
-//   value is `{letter, sentAt}`, `send`'s is a `Sent`, `open`'s is `{rev, view}`.
+//   numbered slot and asks the Cmd `now {n}`; `view {pid, note}` is a view notification; the settle
+//   Msgs tea mints for the Cmd `now {n}`, `now_ok {cmd, value}` and `now_err {cmd, error}`, with
+//   `{letter, sentAt}` as its value; and the answers to the three brain calls, below.
+// - The three brain calls are Subs, not Cmds (A12; tea's run loop folds nothing while a Cmd is
+//   unanswered, ADR 0018): `send` (process.send), `open` (view.open) and `knock` (door.knock). The
+//   window asks no Cmd of those types. Each is declared in the machine's `subs` as tea 0.25.0 takes
+//   them, `{type, deps(state)}`, and each live Sub is one call, named by its id, `subIdOf(type,
+//   deps)`: a `send` Sub's deps are one letter's call, `{pid, letter, n, m, sentAt, seen, dial}` and
+//   its `traceId` when it has one; an `open` Sub's are `{pid, dial}`; a `knock` Sub's hold its
+//   `dial`. A call starts when its Sub's id goes live, in the order of the `subs` entries, and ends
+//   when it goes off. The Sub runner answers each call it started once, with the Msg
+//   `<type>_ok {cmd, value}` or `<type>_err {cmd, error}` whose `cmd` is the Sub's deps (`send`'s
+//   value is a `Sent` plus the handler's `ms`, `open`'s is `{rev, view}`); a call whose Sub ended is
+//   dropped, and its answer never comes. The laws below draw the answers that way.
 // - A window that was just granted (`granted` while it waited, on its dial) asks the Cmd `persist {}`
 //   once, when it next goes online; `persist_ok` carries a boolean, `persist_err` a failure. A window
 //   that was never in a grant wait, and a reconnect, ask it never. Either answer leaves the link as it was.
 // - Going online (`admitted` on the current dial) asks `open` once per distinct pid of the layout
-//   and `send` for every letter that is ready, in slot order, each once. Not online asks no `send`.
-//   Leaving online forgets what was opened and sent, so the next dial starts over.
+//   and `send` for every letter that is ready, in slot order, each once: each a call it starts.
+//   Not online starts no `send` and keeps no `send` or `open` live. Leaving online forgets what was
+//   opened and sent, so the next dial starts over.
 // - `client` moves only by the machine `clientMachineFor(checks)` makes (app/client.ts, plan A5 and
 //   A7), with the window's own `checks`, stepped by hand as the link is: `press` steps it with
 //   `press {pid, m}`, `now_ok` with `dated {n, ...value}`, `send_ok` with `reply {letter, answer}`,
@@ -29,14 +40,14 @@
 //   views.
 // - Records (A8), each a `{type: "record", record}` Cmd holding a `ClientRecord` with no field its
 //   schema lacks. The window reads no clock: a link outcome Msg (`admitted`, `not_granted`,
-//   `closed`, `stalled`) carries `ms`, put there by the handler that dialed, and `send`'s ok value
+//   `closed`, `stalled`) carries `ms`, put there by the handler that dialed, and `send_ok`'s value
 //   carries `ms` beside the `Sent` answer's fields. A link outcome keeps one `connect` row; a
 //   settled letter one `reply` row; a whole view installed a `view {result: "whole"}` row, an ask
 //   a `view {result: "asked"}` row, and a run of patches one `view {result: "patch", patches}` row
 //   when it ends.
 import { createHash, generateKeyPairSync } from "node:crypto";
-import { applyCell } from "@demlik/tea";
-import { arbGuidedSequence, propertyTrace } from "@demlik/tea/pbt";
+import { acceptedTypes, applyCell, subIdOf } from "@demlik/tea";
+import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { ClientRecord } from "@kampus/libfabrika";
 import { Effect, Layer, Queue, Result, Schema, Stream } from "effect";
@@ -59,18 +70,23 @@ type Model = {
   readonly client: {
     readonly pending: ReadonlyArray<Pending>;
     readonly written: number;
+    /** The highest ledger revision the client read: the client's own, not the window's. */
+    readonly seen: number;
     readonly views: Readonly<Record<string, { readonly rev: number }>>;
   };
-  readonly opened: ReadonlyArray<string>;
 };
 
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
 type Msg = { readonly type: string; readonly [key: string]: unknown };
 type Tree = unknown;
 
+/** One entry of a machine's `subs`, as tea 0.25.0 reads it. */
+type SubEntry = { readonly type: string; readonly deps: (s: Model) => unknown };
+
 interface Machine {
   readonly init: (loaded: unknown, ctx: object) => readonly [Model, ReadonlyArray<Cmd>];
   readonly model: unknown;
+  readonly subs?: ReadonlyArray<SubEntry>;
 }
 
 /** What a client checks a view with (A7): each program's own decoder, by pid. */
@@ -287,28 +303,158 @@ const cells = (pids: ReadonlyArray<string>, tuning: Tuning = {}) => {
           ? { type: "open_ok", cmd, value: { rev: v.rev, view: { count: v.count } } }
           : { type: "open_err", cmd, error: { _tag: "unreachable" } },
     },
+    knock: {
+      draw: fc.boolean(),
+      make: (cmd: Cmd, ok: boolean): Msg =>
+        ok ? { type: "knock_ok", cmd, value: null } : { type: "knock_err", cmd, error: { _tag: "closed" } },
+    },
   };
   return { outside, answers };
 };
 
-const lists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded?: Model) =>
-  arbGuidedSequence(m as never, { layout } as never, cells(pids) as never, {
-    maxLength: 70,
-    ...(loaded === undefined ? {} : { loaded: loaded as never }),
+/** The window's brain calls (A12): each is a Sub of one of these types, never a Cmd. */
+const CALLS: ReadonlySet<string> = new Set(["send", "open", "knock"]);
+
+/** A brain call in flight: a live Sub of a call type, by its tea id, with its deps. */
+type Call = { readonly type: string; readonly id: string; readonly deps: Readonly<Record<string, unknown>> };
+
+/** The calls live in `s`: the machine's call Subs whose deps are on, in the order of its `subs`
+ *  entries, which is the order tea starts them in. Two entries with one id are one Sub. */
+const callsIn = (m: Machine, s: Model): ReadonlyArray<Call> => {
+  const live = new Map<string, Call>();
+
+  for (const entry of m.subs ?? []) {
+    if (!CALLS.has(entry.type)) {
+      continue;
+    }
+
+    const deps = entry.deps(s);
+
+    if (deps !== null && deps !== undefined) {
+      const id = String(subIdOf(entry.type, deps));
+      live.set(id, { type: entry.type, id, deps: deps as Record<string, unknown> });
+    }
+  }
+
+  return [...live.values()];
+};
+
+/** The calls a step starts: live after it, not before it. Each reads as a Cmd would, `{type,
+ *  ...deps}`, so a law counts and orders them as it did the Cmds. */
+const startedIn = (m: Machine, prev: Model, next: Model): ReadonlyArray<Cmd> => {
+  const was = new Set(callsIn(m, prev).map((c) => c.id));
+  return callsIn(m, next)
+    .filter((c) => !was.has(c.id))
+    .map((c) => ({ ...c.deps, type: c.type }));
+};
+
+/** A guided list, as tea's `arbGuidedSequence` draws one (an outside Msg at weight 1, an answer at
+ *  weight 2, the answer picked among those waiting, and an outside Msg in its place when none
+ *  waits, so a list keeps its length), with one change: a brain call is answered as its Sub runner
+ *  answers it. Each call a Sub starts waits for one answer, `make(deps, value)`;
+ *  a call whose Sub ended before its answer was drawn is dropped and never answered; a Sub that
+ *  stays live after its answer is not answered again. Other Cmds (`now`, `persist`) wait as tea's
+ *  do. A brain call asked as a Cmd waits for nothing: no runner answers it. */
+const guided = (
+  m: Machine,
+  layout: Tree,
+  cellsFor: ReturnType<typeof cells>,
+  opts: { readonly maxLength: number; readonly loaded?: Model },
+): fc.Arbitrary<ReadonlyArray<Msg>> => {
+  const outside = Object.values(cellsFor.outside) as ReadonlyArray<fc.Arbitrary<Msg>>;
+  const answers = Object.entries(cellsFor.answers) as ReadonlyArray<
+    readonly [string, { readonly draw: fc.Arbitrary<unknown>; readonly make: (cmd: Cmd, v: never) => Msg }]
+  >;
+  const at = new Map(answers.map(([type], n) => [type, n]));
+  type Waiting = { readonly type: string; readonly cmd: Cmd; readonly sub: string | null };
+  const events = fc.array(
+    fc.oneof(
+      { weight: 1, arbitrary: fc.oneof(...outside).map((msg) => ({ outside: msg }) as const) },
+      {
+        weight: 2,
+        arbitrary: fc
+          .tuple(fc.nat(1_000), fc.tuple(...answers.map(([, a]) => a.draw)), fc.oneof(...outside))
+          .map(([pick, values, otherwise]) => ({ pick, values, otherwise }) as const),
+      },
+    ),
+    { maxLength: opts.maxLength, size: "max" },
+  );
+  return events.map((drawn) => {
+    const ctx = { layout };
+    const msgs: Array<Msg> = [];
+    let [state, cmds] = m.init(opts.loaded ?? null, ctx);
+    let waiting: Array<Waiting> = [];
+    let live = new Map<string, Call>();
+    /** The calls and Cmds a step leaves waiting for an answer. */
+    const settle = (next: Model, asked: ReadonlyArray<Cmd>): void => {
+      const now = new Map(callsIn(m, next).map((c) => [c.id, c]));
+      waiting = waiting.filter((w) => w.sub === null || now.has(w.sub));
+
+      for (const [id, c] of now) {
+        if (!live.has(id) && at.has(c.type)) {
+          waiting.push({ type: c.type, cmd: c.deps as Cmd, sub: id });
+        }
+      }
+
+      for (const c of asked) {
+        if (!CALLS.has(c.type) && at.has(c.type)) {
+          waiting.push({ type: c.type, cmd: c, sub: null });
+        }
+      }
+
+      live = now;
+    };
+    settle(state, cmds);
+
+    for (const event of drawn) {
+      let msg: Msg;
+
+      if ("outside" in event) {
+        msg = event.outside;
+      } else if (waiting.length === 0) {
+        msg = event.otherwise;
+      } else {
+        const w = waiting[event.pick % waiting.length] as Waiting;
+        const n = at.get(w.type) as number;
+        msg = (answers[n] as (typeof answers)[number])[1].make(w.cmd, event.values[n] as never);
+        waiting = waiting.filter((x) => x !== w);
+      }
+
+      if (!acceptedTypes(m as never, state as never).includes(msg.type)) {
+        continue;
+      }
+
+      msgs.push(msg);
+
+      try {
+        const out: readonly [Model, ReadonlyArray<Cmd>] = applyCell(m as never, state as never, msg as never) as never;
+        [state, cmds] = out;
+      } catch {
+        return msgs;
+      }
+
+      settle(state, cmds);
+    }
+
+    return msgs;
   });
+};
+
+const lists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded?: Model) =>
+  guided(m, layout, cells(pids), { maxLength: 70, ...(loaded === undefined ? {} : { loaded }) });
 
 /** Lists for the hang law: the brain's ping interval drawn on each admission. */
 const pingLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
-  arbGuidedSequence(m as never, { layout } as never, cells(pids, { pings: true }) as never, { maxLength: 70 });
+  guided(m, layout, cells(pids, { pings: true }), { maxLength: 70 });
 
 /** Lists for the connect law: every outcome, a removed key and Ask again included. */
 const linkLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
-  arbGuidedSequence(m as never, { layout } as never, cells(pids, { removal: true }) as never, { maxLength: 70 });
+  guided(m, layout, cells(pids, { removal: true }), { maxLength: 70 });
 
 /** Lists for the view laws: longer, with notes that continue the shown revision, so patch runs
  *  of one, two and more form and end by a whole view, an ask and the link leaving online. */
 const viewLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
-  arbGuidedSequence(m as never, { layout } as never, cells(pids, { runs: true }) as never, { maxLength: 120 });
+  guided(m, layout, cells(pids, { runs: true }), { maxLength: 120 });
 
 /** A new grant, as the browser meets it on its first dial: told `not_granted`, granted while it
  *  waits, then admitted. */
@@ -325,7 +471,7 @@ const after = (m: Machine, layout: Tree, list: ReadonlyArray<Msg>): { state: Mod
     m as never,
     { layout } as never,
     fc.constant(list) as never,
-    ((steps: ReadonlyArray<Step>, final: Model) => {
+    ((steps: ReadonlyArray<Folded>, final: Model) => {
       out = { state: final, cmds: steps.at(-1)?.cmds ?? [] };
       return null;
     }) as never,
@@ -364,6 +510,24 @@ type Step = {
   readonly msg: Msg;
   readonly next: Model;
   readonly cmds: ReadonlyArray<Cmd>;
+  /** The brain calls the step started (A12), each read as `{type, ...deps}`. */
+  readonly calls: ReadonlyArray<Cmd>;
+  /** The brain calls live after the step. */
+  readonly live: ReadonlyArray<Call>;
+};
+
+/** What the real runner hands a law: a step before its calls are read. */
+type Folded = Omit<Step, "calls" | "live">;
+
+/** A run's steps as the real runner folded them, each with the calls it started and left live. */
+const traced = (m: Machine, steps: ReadonlyArray<Folded>): ReadonlyArray<Step> =>
+  steps.map((s) => ({ ...s, calls: startedIn(m, s.prev, s.next), live: callsIn(m, s.next) }));
+
+/** A brain call the step asked as a Cmd, which A12 moves to a Sub: tea's loop would fold nothing
+ *  until it settled. */
+const askedCall = ({ msg, cmds }: Step): string | null => {
+  const c = cmds.find((x) => CALLS.has(x.type));
+  return c === undefined ? null : `${msg.type} asked a ${c.type} Cmd; a brain call is a Sub (A12)`;
 };
 
 type Law = (steps: ReadonlyArray<Step>, tiles: ReadonlyArray<string>) => string | null;
@@ -494,12 +658,22 @@ const laws: Readonly<Record<string, Law>> = {
   "p2: what waited goes out: online sends every ready letter once in order, offline sends nothing": (steps) => {
     let sentThisDial = new Set<string>();
 
-    for (const { prev, msg, next, cmds } of steps) {
-      const sends = kinds(cmds, "send");
+    for (const step of steps) {
+      const { prev, msg, next, calls } = step;
+      const sends = kinds(calls, "send");
+      const asked = askedCall(step);
+
+      if (asked !== null) {
+        return asked;
+      }
 
       if (!online(next)) {
         if (sends.length > 0) {
           return `${msg.type} sent ${sends.length} letter(s) while ${next.link._tag}`;
+        }
+
+        if (step.live.some((c) => c.type === "send")) {
+          return `a send is still live after ${msg.type} took the link to ${next.link._tag}`;
         }
 
         sentThisDial = new Set();
@@ -549,11 +723,26 @@ const laws: Readonly<Record<string, Law>> = {
     return null;
   },
   // p4: every distinct pid in the layout is opened once per dial; a new dial opens again.
+  // A12: an open is a call its Sub starts, on the dial that is online; none outlives it. Going
+  // online starts one per distinct pid, and the dial opens again only for a view the client could
+  // not use.
   "p4: every distinct pid of the layout opens once per dial, and a new dial opens again": (steps, tiles) => {
     const distinct = [...new Set(tiles)].sort();
 
-    for (const { prev, msg, next, cmds } of steps) {
-      const opens = kinds(cmds, "open");
+    for (const step of steps) {
+      const { prev, msg, next, calls } = step;
+      const opens = kinds(calls, "open");
+      const asked = askedCall(step);
+
+      if (asked !== null) {
+        return asked;
+      }
+
+      for (const o of opens) {
+        if (!online(next) || o["dial"] !== next.link["dial"]) {
+          return `${msg.type} opened ${String(o["pid"])} on dial ${String(o["dial"])} while ${next.link._tag} on ${String(next.link["dial"])}`;
+        }
+      }
 
       if (online(next) && !online(prev)) {
         const pids = opens.map((o) => String(o["pid"])).sort();
@@ -561,18 +750,10 @@ const laws: Readonly<Record<string, Law>> = {
         if (JSON.stringify(pids) !== JSON.stringify(distinct)) {
           return `going online opened ${JSON.stringify(pids)}, not each of ${JSON.stringify(distinct)} once`;
         }
-
-        if ([...next.opened].sort().join() !== distinct.join()) {
-          return `opened is ${JSON.stringify(next.opened)} after going online`;
-        }
-
-        if (new Set(next.opened).size !== next.opened.length) {
-          return "opened holds a repeat";
-        }
       }
 
-      if (!online(next) && next.opened.length > 0) {
-        return `opened keeps ${JSON.stringify(next.opened)} while ${next.link._tag}`;
+      if (!online(next) && step.live.some((c) => c.type === "open")) {
+        return `an open is still live after ${msg.type} took the link to ${next.link._tag}`;
       }
 
       if (msg.type === "press" && opens.length > 0) {
@@ -670,13 +851,13 @@ const laws: Readonly<Record<string, Law>> = {
     return null;
   },
   // A letter's settlement is recorded with the answer's result and every `send` of that letter
-  // asked so far, across dials: once, in the step whose answer settles it. No other step keeps an
+  // started so far, across dials: once, in the step whose answer settles it. No other step keeps an
   // accepted or refused reply, so a duplicate or stale answer adds no second sample, and every
   // reply row names the letter its step answered.
   [REPLY_RECORD]: (steps) => {
     const sends = new Map<string, number>();
 
-    for (const { prev, msg, next, cmds } of steps) {
+    for (const { prev, msg, next, cmds, calls } of steps) {
       const records = recordsIn(cmds);
 
       if (typeof records === "string") {
@@ -731,7 +912,7 @@ const laws: Readonly<Record<string, Law>> = {
         }
       }
 
-      for (const s of kinds(cmds, "send")) {
+      for (const s of kinds(calls, "send")) {
         const l = String(s["letter"]);
         sends.set(l, (sends.get(l) ?? 0) + 1);
       }
@@ -777,7 +958,7 @@ const laws: Readonly<Record<string, Law>> = {
   "now: a press captures what it showed, and reversed or failed answers still send in slot order": (steps) => {
     const shown = new Map<number, { viewRev: number }>();
 
-    for (const { prev, msg, next, cmds } of steps) {
+    for (const { prev, msg, next, cmds, calls } of steps) {
       if (msg.type === "press") {
         const pid = String(msg["pid"]);
         const slot = next.client.written - 1;
@@ -796,7 +977,7 @@ const laws: Readonly<Record<string, Law>> = {
         }
       }
 
-      const slots = kinds(cmds, "send").map((s) => next.client.pending.find((p) => p.letter === s["letter"])?.n ?? -1);
+      const slots = kinds(calls, "send").map((s) => next.client.pending.find((p) => p.letter === s["letter"])?.n ?? -1);
       const firstDating = next.client.pending.find((p) => p._tag === "dating")?.n ?? Number.POSITIVE_INFINITY;
 
       for (const n of slots) {
@@ -837,13 +1018,10 @@ const clientMachineFor = async (checks: Checks): Promise<ClientMachine> => {
  *  their lists, whose good-thing reach a wider draw thins. */
 const readLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => {
   const { outside, answers } = cells(pids);
-  return arbGuidedSequence(
-    m as never,
-    { layout } as never,
-    {
-      outside: { ...outside, seen: fc.record({ type: fc.constant("seen"), rev: fc.nat(20) }) },
-      answers,
-    } as never,
+  return guided(
+    m,
+    layout,
+    { outside: { ...outside, seen: fc.record({ type: fc.constant("seen"), rev: fc.nat(20) }) }, answers } as never,
     { maxLength: 70 },
   );
 };
@@ -877,7 +1055,7 @@ const clientMsg = (prev: Model, msg: Msg): Msg | null => {
 const held = (c: Model["client"]): string =>
   JSON.stringify({
     written: c.written,
-    seen: (c as { readonly seen?: unknown }).seen,
+    seen: c.seen,
     pending: c.pending,
     views: c.views,
   });
@@ -885,7 +1063,7 @@ const held = (c: Model["client"]): string =>
 /** The window's client is the client machine's own fold of what the window was told. */
 const clientFold =
   (cm: ClientMachine) =>
-  (steps: ReadonlyArray<Step>): string | null => {
+  (steps: ReadonlyArray<Folded>): string | null => {
     let client = cm.init(null, {})[0];
 
     for (const { prev, msg, next } of steps) {
@@ -968,7 +1146,7 @@ const viewed =
 const viewRows = (records: ReadonlyArray<ClientRecord>): ReadonlyArray<ViewRow> =>
   records.filter((r): r is ViewRow => r._tag === "view");
 
-type ViewLaw = (cm: ClientMachine) => (steps: ReadonlyArray<Step>) => string | null;
+type ViewLaw = (cm: ClientMachine) => (steps: ReadonlyArray<Folded>) => string | null;
 
 const viewLaws: Readonly<Record<string, ViewLaw>> = {
   // The whole and asked rows of a step are exactly what the client installed and asked, with the
@@ -1067,7 +1245,7 @@ const fold = async (
   over?: (m: Machine) => Machine,
 ): Promise<void> => {
   const used = over === undefined ? m : over(m);
-  const law = ((steps: ReadonlyArray<Step>) => laws[name]?.(steps, tiles) ?? null) as never;
+  const law = ((steps: ReadonlyArray<Folded>) => laws[name]?.(traced(used, steps), tiles) ?? null) as never;
   propertyTrace(used as never, { layout } as never, lists(m, layout, tiles) as never, law, opts);
 
   // The persist laws also run on lists that each reach a new grant, so its answer is always met.
@@ -1115,10 +1293,10 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
         m as never,
         { layout } as never,
         lists(m, layout, tiles) as never,
-        ((steps: ReadonlyArray<Step>) => {
+        ((folded: ReadonlyArray<Folded>) => {
           let dials = 0;
 
-          for (const { prev, msg, next, cmds } of steps) {
+          for (const { prev, msg, next, cmds, calls } of traced(m, folded)) {
             if (msg.type === "press") {
               seen.pressed++;
             }
@@ -1136,11 +1314,11 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
               dials++;
 
               if (dials > 1) {
-                seen.reopened += kinds(cmds, "open").length > 0 ? 1 : 0;
+                seen.reopened += kinds(calls, "open").length > 0 ? 1 : 0;
               }
             }
 
-            seen.sent += kinds(cmds, "send").length;
+            seen.sent += kinds(calls, "send").length;
             seen.persisted += kinds(cmds, "persist").length;
 
             if (msg.type === "send_ok" && next.client.pending.length < prev.client.pending.length) {
@@ -1169,10 +1347,10 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
           m as never,
           { layout } as never,
           list as never,
-          ((steps: ReadonlyArray<Step>) => {
+          ((folded: ReadonlyArray<Folded>) => {
             const sends = new Map<string, number>();
 
-            for (const { prev, msg, next, cmds } of steps) {
+            for (const { prev, msg, next, calls } of traced(m, folded)) {
               const letter = (msg["cmd"] as { letter?: string } | undefined)?.letter;
 
               if (
@@ -1193,7 +1371,7 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
                 seen.failed++;
               }
 
-              for (const s of kinds(cmds, "send")) {
+              for (const s of kinds(calls, "send")) {
                 const l = String(s["letter"]);
                 sends.set(l, (sends.get(l) ?? 0) + 1);
               }
@@ -1225,7 +1403,7 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
       m as never,
       { layout } as never,
       lists(m, layout, tiles) as never,
-      ((steps: ReadonlyArray<Step>) => {
+      ((steps: ReadonlyArray<Folded>) => {
         let link = linkMachine.init(null, {})[0];
 
         for (const { msg, next } of steps) {
@@ -1277,12 +1455,14 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 });
 
 // Review 1, A (p17 and p5): a brain call in flight never holds the window. The brain hangs: no
-// answer comes to any Cmd the window asked (`send`, `open`, the link's `knock` and `ping`), and the
-// only Msgs that still arrive are the window's own timer Sub's (tea's built-in `timer`, deps read
-// from the machine as its runtime reads them). From any state the generated runs reach, an online
-// link leaves `online` within the detection bound, BEAT + BEAT = 10 s (`transport/link.ts`), and a
-// grant wait keeps knocking without ever being admitted. No pending letter is lost while it hangs.
-// The browser half, where a handler that waits on the brain would hold tea's serial loop, is
+// answer comes to any call the window made (its `send`, `open` and `knock` Subs, A12) or to the
+// link's `ping`, and the only Msgs that still arrive are the window's own timer Sub's (tea's
+// built-in `timer`, deps read from the machine as its runtime reads them). tea's run loop runs a
+// step's Cmds one at a time and folds nothing until each settles (tea's ADR 0018), so a brain call
+// asked as a Cmd and left unanswered holds every Msg behind it, the timers' included: the window
+// sits still. From any state the generated runs reach, an online link leaves `online` within the
+// detection bound, BEAT + BEAT = 10 s (`transport/link.ts`), and a grant wait keeps knocking
+// without ever being admitted. No pending letter is lost while it hangs. The browser half is
 // `e2e/window-recovery.test.ts`'s "a brain call in flight" cases.
 const DETECTION = 10_000;
 
@@ -1345,7 +1525,15 @@ const clock = () => {
 const letters = (s: Model): string =>
   JSON.stringify(s.client.pending.map((p) => [p.n, p.letter ?? null]).sort((a, b) => Number(a[0]) - Number(b[0])));
 
-/** What a hang from `start` did: null when the law holds, else why it does not. */
+/** The label of a brain call asked as a Cmd, which holds tea's loop until it settles. */
+const asCmd = (type: string): string => `${type} Cmd`;
+
+/** The brain calls asked as Cmds in `flight`: tea folds nothing while one is unanswered. */
+const holding = (flight: ReadonlySet<string>): ReadonlyArray<string> =>
+  [...flight].filter((k) => k.endsWith(" Cmd")).sort();
+
+/** What a hang from `start` did: null when the law holds, else why it does not. `inFlight` names
+ *  the calls unanswered at the start: a call Sub by its type, a call asked as a Cmd by `asCmd`. */
 const hang = (
   m: Machine,
   layout: Tree,
@@ -1363,9 +1551,20 @@ const hang = (
   let s = start;
   let waited = 0;
   const flight = new Set(inFlight);
+  const knocks = new Set(
+    callsIn(m, start)
+      .filter((c) => c.type === "knock")
+      .map((c) => c.id),
+  );
   const tick = clock();
 
   for (let n = 0; n < 12; n++) {
+    const held = holding(flight);
+
+    if (held.length > 0) {
+      return `tea folds nothing while ${held.join(", ")} is unanswered (ADR 0018): the window sits still in ${s.link._tag}`;
+    }
+
     const next = tick(timers(s));
 
     if (next === null) {
@@ -1376,7 +1575,17 @@ const hang = (
     const [after, cmds] = step(s, next.msg, { layout });
 
     for (const c of cmds) {
+      if (CALLS.has(c.type)) {
+        flight.add(asCmd(c.type));
+      }
+    }
+
+    for (const c of callsIn(m, after)) {
       flight.add(c.type);
+
+      if (c.type === "knock") {
+        knocks.add(c.id);
+      }
     }
 
     if (letters(after) !== letters(s)) {
@@ -1401,12 +1610,46 @@ const hang = (
     return `the link is still online after ${waited} ms of hang with ${[...flight].join(", ")} in flight`;
   }
 
-  if (flight.has("knock")) {
+  // A knock is a call its Sub starts; a grant wait that knocked again started a second one.
+  if (knocks.size > 1) {
     seen["a grant wait kept knocking with a knock in flight"] = 1;
   }
 
   return null;
 };
+
+/** The hang law over a run: from each state it reaches, a hang with what is in flight there. The
+ *  calls in flight are each live call Sub (its answer may have come, and its runner still holds
+ *  nothing), and each brain call asked as a Cmd that no `<type>_ok` or `<type>_err` has answered
+ *  yet, by the Cmd it carries. */
+const hangLaw =
+  (m: Machine, layout: Tree, seen: Record<string, number>) =>
+  (steps: ReadonlyArray<Folded>): string | null => {
+    const asked = new Map<string, string>();
+
+    for (const { msg, next, cmds } of steps) {
+      const answered = (msg["cmd"] as object | undefined) && JSON.stringify(msg["cmd"]);
+
+      if (answered !== undefined) {
+        asked.delete(answered);
+      }
+
+      for (const c of cmds) {
+        if (CALLS.has(c.type)) {
+          asked.set(JSON.stringify(c), asCmd(c.type));
+        }
+      }
+
+      const flight = new Set([...asked.values(), ...callsIn(m, next).map((c) => c.type)]);
+      const why = hang(m, layout, next, flight, seen);
+
+      if (why !== null) {
+        return why;
+      }
+    }
+
+    return null;
+  };
 
 describe("window machine: a brain call in flight holds no timer (review 1, A)", () => {
   for (const [label, layout, tiles] of LAYOUTS) {
@@ -1417,34 +1660,7 @@ describe("window machine: a brain call in flight holds no timer (review 1, A)", 
         m as never,
         { layout } as never,
         pingLists(m, layout, tiles) as never,
-        ((steps: ReadonlyArray<Step>) => {
-          // The calls asked and not yet answered, by their Cmd: each `<type>_ok` or `<type>_err` Msg
-          // answers the Cmd it carries.
-          const asked = new Map<string, string>();
-
-          for (const { msg, next, cmds } of steps) {
-            const answered = (msg["cmd"] as object | undefined) && JSON.stringify(msg["cmd"]);
-
-            if (answered !== undefined) {
-              asked.delete(answered);
-            }
-
-            for (const c of cmds) {
-              if (c.type === "send" || c.type === "open" || c.type === "knock") {
-                asked.set(JSON.stringify(c), c.type);
-              }
-            }
-
-            // A call from an older dial is not this link's: only the online link's calls count.
-            const why = hang(m, layout, next, new Set(asked.values()), seen);
-
-            if (why !== null) {
-              return why;
-            }
-          }
-
-          return null;
-        }) as never,
+        hangLaw(m, layout, seen) as never,
         opts as never,
       );
 
@@ -1483,7 +1699,7 @@ describe("window machine: a brain call in flight holds no timer (review 1, A)", 
         planted as never,
         { layout } as never,
         pingLists(real, layout, tiles) as never,
-        ((steps: ReadonlyArray<Step>) => {
+        ((steps: ReadonlyArray<Folded>) => {
           for (const { next } of steps) {
             const why = hang(planted, layout, next, new Set(["send"]), {});
 
@@ -1515,6 +1731,38 @@ describe("window machine: a brain call in flight holds no timer (review 1, A)", 
         return t !== null && online(s) ? { ...t, ms: t.ms * 3 } : t;
       }),
     ));
+  it("a send asked as a Cmd, which tea's loop waits on, is caught (hang, A12)", async () => {
+    const real = await machine();
+    const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
+    type Update = (state: Model, msg: Msg, ctx: object) => readonly [Model, ReadonlyArray<Cmd>];
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
+    const update = (real as unknown as { update: Record<string, Update> }).update;
+    // The window also asks a send as a Cmd each time it comes online, as it did before A12.
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the plant keeps the real machine and wraps its update; the cast names it a Machine again
+    const planted = {
+      ...real,
+      update: Object.fromEntries(
+        Object.entries(update).map(([type, f]) => [
+          type,
+          (state: Model, msg: Msg, ctx: object) => {
+            const [m, c] = f(state, msg, ctx);
+            return !online(state) && online(m)
+              ? [m, [...c, { type: "send", pid: A, letter: "x", n: 0, dial: m.link["dial"] }]]
+              : [m, c];
+          },
+        ]),
+      ),
+    } as unknown as Machine;
+    expect(() =>
+      propertyTrace(
+        planted as never,
+        { layout } as never,
+        pingLists(real, layout, tiles) as never,
+        hangLaw(planted, layout, {}) as never,
+        opts as never,
+      ),
+    ).toThrow(/tea folds nothing while .*send Cmd/);
+  });
   it("a grant wait that goes quiet once it knocked is caught (hang)", async () => {
     const m = await machine();
     const [, layout] = LAYOUTS[0] as (typeof LAYOUTS)[number];
@@ -1572,7 +1820,7 @@ describe("window machine: the view records, with each set of checks, on every fi
           m as never,
           { layout } as never,
           list as never,
-          ((steps: ReadonlyArray<Step>) => {
+          ((steps: ReadonlyArray<Folded>) => {
             const runs = new Map<string, number>();
             const end = (pid: string, how: "endedByWhole" | "endedByAsk" | "endedOffline"): void => {
               const n = runs.get(pid) ?? 0;
@@ -1656,10 +1904,36 @@ describe("window machine plants: each break is caught by the law that names it",
       ),
     } as unknown as Machine;
   };
-  const expectCaught = async (name: string, change: Parameters<typeof broken>[1], layoutAt = 2): Promise<void> => {
+  /** How many Subs of each call type a plant can hold: past what a generated list reaches. */
+  const SLOTS = 32;
+  /** The machine with its brain call Subs replaced by `over` of the real ones, in the order `over`
+   *  gives (tea keys a Sub by its type and deps, so the slot a call sits in does not matter). */
+  const rewired = (real: Machine, over: (calls: ReadonlyArray<Call>, s: Model) => ReadonlyArray<Call>): Machine =>
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the plant keeps the real machine and swaps its call Subs; the cast names it a Machine again
+    ({
+      ...real,
+      subs: [
+        ...(real.subs ?? []).filter((e) => !CALLS.has(e.type)),
+        ...[...CALLS].flatMap((type) =>
+          Array.from({ length: SLOTS }, (_, i) => ({
+            type,
+            deps: (s: Model) => over(callsIn(real, s), s).filter((c) => c.type === type)[i]?.deps ?? null,
+          })),
+        ),
+      ],
+    }) as unknown as Machine;
+  /** A call a plant adds, as `rewired` takes it. */
+  const call = (type: string, deps: Readonly<Record<string, unknown>>): Call => ({ type, id: "", deps });
+  const keep = ([m, c]: readonly [Model, ReadonlyArray<Cmd>]): readonly [Model, ReadonlyArray<Cmd>] => [m, c];
+  const expectCaught = async (
+    name: string,
+    change: Parameters<typeof broken>[1],
+    layoutAt = 2,
+    over?: Parameters<typeof rewired>[1],
+  ): Promise<void> => {
     const real = await machine();
     const [, layout, tiles] = LAYOUTS[layoutAt] as (typeof LAYOUTS)[number];
-    const planted = broken(real, change);
+    const planted = over === undefined ? broken(real, change) : rewired(broken(real, change), over);
     expect(() => {
       propertyTrace(
         planted as never,
@@ -1670,7 +1944,7 @@ describe("window machine plants: each break is caught by the law that names it",
           : LINK_LAWS.has(name)
             ? linkLists(real, layout, tiles)
             : lists(real, layout, tiles)) as never,
-        ((steps: ReadonlyArray<Step>) => laws[name]?.(steps, tiles) ?? null) as never,
+        ((steps: ReadonlyArray<Folded>) => laws[name]?.(traced(planted, steps), tiles) ?? null) as never,
         opts as never,
       );
     }).toThrow();
@@ -1763,39 +2037,75 @@ describe("window machine plants: each break is caught by the law that names it",
       ),
     ).toThrow();
   });
+  // A12: the p2 and p4 plants change which call Subs are live, as the build's Subs would.
   it("sending while offline is caught (p2)", () =>
     expectCaught(
       "p2: what waited goes out: online sends every ready letter once in order, offline sends nothing",
-      ([m, c], _s, msg) =>
-        msg.type === "press" && m.link._tag !== "online"
-          ? [m, [...c, { type: "send", pid: "process_a", letter: "x", n: 0 }]]
-          : [m, c],
+      keep,
+      2,
+      (calls, s) => {
+        const ready = s.client.pending.find((p) => p.letter !== undefined);
+        return online(s) || ready === undefined
+          ? calls
+          : [...calls, call("send", { pid: ready.pid, letter: ready.letter, n: ready.n, dial: 0 })];
+      },
     ));
   it("skipping the resend on coming online is caught (p2)", () =>
     expectCaught(
       "p2: what waited goes out: online sends every ready letter once in order, offline sends nothing",
-      ([m, c], _s, msg) => (msg.type === "admitted" ? [m, c.filter((x) => x.type !== "send")] : [m, c]),
+      // The letters ready when the link came online are kept on the model, and never go out.
+      ([m, c], s) =>
+        !online(s) && online(m)
+          ? [{ ...m, waited: s.client.pending.flatMap((p) => (p.letter === undefined ? [] : [p.letter])) } as Model, c]
+          : [m, c],
+      2,
+      (calls, s) => {
+        const waited = (s as { readonly waited?: ReadonlyArray<string> }).waited ?? [];
+        return calls.filter((x) => !(x.type === "send" && waited.includes(String(x.deps["letter"]))));
+      },
     ));
   it("reversing two letters is caught (p2 and now)", () =>
     expectCaught(
       "p2: what waited goes out: online sends every ready letter once in order, offline sends nothing",
-      ([m, c]) => [
-        m,
-        [...c].sort((x, y) => (x.type === "send" && y.type === "send" ? Number(y["n"]) - Number(x["n"]) : 0)),
-      ],
+      keep,
+      2,
+      (calls) => [...calls.filter((x) => x.type !== "send"), ...calls.filter((x) => x.type === "send").reverse()],
+    ));
+  it("asking a send as a Cmd beside its Sub is caught (p2, A12)", () =>
+    expectCaught(
+      "p2: what waited goes out: online sends every ready letter once in order, offline sends nothing",
+      ([m, c], s) =>
+        !online(s) && online(m)
+          ? [m, [...c, { type: "send", pid: A, letter: "x", n: 0, dial: m.link["dial"] }]]
+          : [m, c],
     ));
   it("keeping opened after a reconnect is caught (p4)", () =>
     expectCaught(
       "p4: every distinct pid of the layout opens once per dial, and a new dial opens again",
-      ([m, c], s, msg) =>
-        msg.type === "admitted" && s.opened.length > 0
-          ? [{ ...m }, c.filter((x) => x.type !== "open")]
-          : [{ ...m, opened: s.opened.length > 0 ? s.opened : m.opened }, c],
+      // The first dial that came online is kept on the model; a later dial opens nothing again.
+      ([m, c], s) =>
+        !online(s) && online(m) && (s as { readonly first?: unknown }).first === undefined
+          ? [{ ...m, first: m.link["dial"] } as Model, c]
+          : [m, c],
+      2,
+      (calls, s) => {
+        const first = (s as { readonly first?: unknown }).first;
+        return calls.filter((x) => !(x.type === "open" && first !== undefined && x.deps["dial"] !== first));
+      },
     ));
   it("opening a view when a press is made is caught (p4)", () =>
     expectCaught(
       "p4: every distinct pid of the layout opens once per dial, and a new dial opens again",
-      ([m, c], _s, msg) => (msg.type === "press" ? [m, [...c, { type: "open", pid: "process_a", dial: 1 }]] : [m, c]),
+      keep,
+      2,
+      (calls, s) =>
+        online(s) && s.client.written > 0
+          ? [...calls, call("open", { pid: A, dial: s.link["dial"], press: s.client.written })]
+          : calls,
+    ));
+  it("asking an open as a Cmd beside its Sub is caught (p4, A12)", () =>
+    expectCaught("p4: every distinct pid of the layout opens once per dial, and a new dial opens again", ([m, c], s) =>
+      !online(s) && online(m) ? [m, [...c, { type: "open", pid: A, dial: m.link["dial"] }]] : [m, c],
     ));
   it("re-reading the displayed revision after the Cmd is caught (now)", () =>
     expectCaught(
@@ -2037,15 +2347,17 @@ describe("window machine: format of the Msgs", () => {
     expect(await accepts({ type: "stalled", dial: 1, ms: -1 })).toBe(false);
   });
 
-  it("format: a send's ok value is a Sent answer plus the handler's ms, and needs the ms", async () => {
-    // reason: the reply row's ms is read from it (A8); decoded through the `send` Cmd's own ok schema.
-    const { send } = await import("./machine.ts");
-    const ok = (value: unknown) => Result.isSuccess(Schema.decodeUnknownResult(send.schema.ok)(value));
-    expect(ok({ _tag: "accepted", rev: 1, pos: 1, ms: 3 })).toBe(true);
-    expect(ok({ _tag: "refused", reason: "bad_msg", ms: 3 })).toBe(true);
-    expect(ok({ _tag: "accepted", rev: 1, pos: 1 })).toBe(false);
-    expect(ok({ _tag: "refused", reason: "bad_msg" })).toBe(false);
-    expect(ok({ _tag: "accepted", ms: 3 })).toBe(false);
+  it("format: a send Sub's answer, send_ok, carries a Sent answer plus the handler's ms, and needs the ms", async () => {
+    // reason: the reply row's ms is read from it (A8). A12: `send` is a Sub, and its runner hands
+    // the window `send_ok {cmd, value}` with the Sub's deps as `cmd`, so the value is decoded as
+    // part of that Msg, through the machine's own `msg` schema.
+    const cmd = { pid: A, letter: "letter_a", n: 0, m: { type: "inc" }, sentAt, seen: 0, dial: 1 };
+    const ok = (value: unknown) => accepts({ type: "send_ok", cmd, value });
+    expect(await ok({ _tag: "accepted", rev: 1, pos: 1, ms: 3 })).toBe(true);
+    expect(await ok({ _tag: "refused", reason: "bad_msg", ms: 3 })).toBe(true);
+    expect(await ok({ _tag: "accepted", rev: 1, pos: 1 })).toBe(false);
+    expect(await ok({ _tag: "refused", reason: "bad_msg" })).toBe(false);
+    expect(await ok({ _tag: "accepted", ms: 3 })).toBe(false);
   });
 });
 
