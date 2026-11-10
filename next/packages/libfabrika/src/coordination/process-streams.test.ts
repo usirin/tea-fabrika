@@ -1,4 +1,4 @@
-// P33 review round 2, one rule instead of single guarded ids: every fact the brain writes about a
+// P33 review round 2, one rule instead of single guarded ids: every event the brain writes about a
 // process lives on a stream only the brain may write, and reading an inbox never throws.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Result, Schema } from "effect";
@@ -24,7 +24,7 @@ import {
   watcher,
   X,
 } from "./process.test-support.ts";
-import { brainOnly, Down, ProcessFact, Recipient, Start } from "./process.ts";
+import { brainOnly, Down, ProcessEvent, Recipient, Start } from "./process.ts";
 
 // Match fc.jsonValue({maxDepth: depth}): finite numbers, strings/keys of
 // length 0..10, and arrays/objects of width 0..10. No required object keys.
@@ -62,7 +62,7 @@ const textInput = Schema.NonEmptyString.check(Schema.isMaxLength(40));
 // caller keys 1..40. Fixed-depth JSON below keeps width/string length 10.
 const options = { arbitrary: { seed: 119120, runs: 20, size: 60 } };
 
-const POLICY = { why: "crashed", crashes: 1, until: 0 };
+const POLICY = { reason: "crashed", crashes: 1, until: 0 };
 const toW = Recipient.cases.process.make({ process: W });
 const brainSide = (process: string) => process === "processes" || process.startsWith("processes/");
 
@@ -85,8 +85,8 @@ const exit = (store: Storage, process = A, by = BRAIN) =>
 const fresh = (store: Storage, after = 0) => receive(W, after).pipe(Effect.provide(manager(store, watcher(W))));
 
 /** Another writer's raw row: what a client could hold on a stream it may write. */
-const plant = (store: Storage, stream: string, id: string, fact: { readonly _tag: string } & Schema.JsonObject) =>
-  Ledger.use((ledger) => ledger.append(stream, id, lineFor(from({ by: CLIENT }), fact))).pipe(
+const plant = (store: Storage, stream: string, id: string, event: { readonly _tag: string } & Schema.JsonObject) =>
+  Ledger.use((ledger) => ledger.append(stream, id, lineFor(from({ by: CLIENT }), event))).pipe(
     Effect.provide(manager(store)),
   );
 
@@ -96,9 +96,9 @@ const downs = (letters: ReadonlyArray<{ readonly m: unknown; readonly by: string
     return letter.by === BRAIN && down._tag === "Some" ? [down.value] : [];
   });
 
-describe("P33, every process fact lives on a stream only the brain may write", () => {
+describe("P33, every process event lives on a stream only the brain may write", () => {
   it.effect.prop(
-    "lifecycle facts are written under processes/, never on the name's own stream",
+    "lifecycle events are written under processes/, never on the name's own stream",
     [
       Arbitrary.schema(nameInput).pipe(
         Arbitrary.filter((name) => !["processes", "door", "watcher:1"].includes(name) && !name.startsWith("client:")),
@@ -119,9 +119,9 @@ describe("P33, every process fact lives on a stream only the brain may write", (
           }),
         ).pipe(Effect.provide(manager(store, brain(), ids(B).next)));
         const rows = store.rows();
-        const facts = rows.filter((row) => Object.hasOwn(ProcessFact.cases, row._tag));
-        expect(new Set(facts.map((row) => row._tag))).toEqual(new Set(Object.keys(ProcessFact.cases)));
-        expect(facts.filter((row) => !brainSide(row.stream))).toEqual([]);
+        const events = rows.filter((row) => Object.hasOwn(ProcessEvent.cases, row._tag));
+        expect(new Set(events.map((row) => row._tag))).toEqual(new Set(Object.keys(ProcessEvent.cases)));
+        expect(events.filter((row) => !brainSide(row.stream))).toEqual([]);
         // The start request's own id is a lifecycle line too.
         expect(rows.find((row) => row.id === "start:counter:1")?.stream).toSatisfy(brainSide);
         expect(rows.filter((row) => row.stream === name || row.stream === "watcher:1")).toEqual([]);
@@ -156,7 +156,7 @@ describe("P33, every process fact lives on a stream only the brain may write", (
 
           yield* exit(store);
           expect(downs(yield* fresh(store))).toEqual([
-            Down.make({ ref: "watch:1", process: A, why: "crashed", to: toW }),
+            Down.make({ ref: "watch:1", process: A, reason: "crashed", to: toW }),
           ]);
           const next = yield* ProcessManager.use((p) =>
             Effect.gen(function* () {
@@ -183,7 +183,7 @@ describe("P33, every process fact lives on a stream only the brain may write", (
     options,
   );
   it.prop(
-    "the bare processes stream reserves ordinary non-fact writes",
+    "the bare processes stream reserves ordinary non-event writes",
     [Schema.String, Schema.String],
     ([id, tag]) => {
       expect(brainOnly({ stream: "processes", id, tag })).toBe(true);
@@ -204,7 +204,7 @@ describe("P33, every process fact lives on a stream only the brain may write", (
         expect(Result.isFailure(answer)).toBe(true);
 
         if (Result.isFailure(answer)) {
-          expect(answer.failure.why).toBe("name_taken");
+          expect(answer.failure.reason).toBe("name_taken");
         }
 
         expect(store.rows()).toEqual(before);
@@ -231,7 +231,7 @@ describe("P33, every process fact lives on a stream only the brain may write", (
         expect(Result.isFailure(answer)).toBe(true);
 
         if (Result.isFailure(answer)) {
-          expect(answer.failure.why).toBe("name_taken");
+          expect(answer.failure.reason).toBe("name_taken");
         }
 
         expect(store.rows()).toEqual(winner);
@@ -262,7 +262,7 @@ describe("P33, signal ids belong to the brain alone", () => {
         return Effect.gen(function* () {
           yield* seed(store);
           const before = store.rows();
-          const m = Down.make({ ref: "watch:1", process: A, why: "crashed", to: toW });
+          const m = Down.make({ ref: "watch:1", process: A, reason: "crashed", to: toW });
           const answer = yield* Mailbox.use((mailbox) => mailbox.send("watcher:1", id, m, from()));
           expect(answer._tag).toBe("refused");
           expect(store.rows()).toEqual(before);
@@ -295,7 +295,7 @@ describe("P33, signal ids belong to the brain alone", () => {
         const owed = downs(yield* fresh(store));
 
         if (Result.isSuccess(exited)) {
-          expect(owed).toEqual([Down.make({ ref, process: A, why: "crashed", to: toW })]);
+          expect(owed).toEqual([Down.make({ ref, process: A, reason: "crashed", to: toW })]);
         } else {
           expect(yield* ProcessManager.use((p) => p.isLive(A)).pipe(Effect.provide(manager(store)))).toBe(true);
         }
@@ -315,7 +315,7 @@ describe("P33, signal ids belong to the brain alone", () => {
         yield* cancel(store, ref);
         expect(downs(yield* fresh(store))).toEqual([]);
         yield* monitor(store, ref);
-        expect(downs(yield* fresh(store))).toEqual([Down.make({ ref, process: A, why: "noproc", to: toW })]);
+        expect(downs(yield* fresh(store))).toEqual([Down.make({ ref, process: A, reason: "noproc", to: toW })]);
         const inbox = store.rows().filter((row) => row.stream === "watcher:1/inbox");
         expect(new Set(inbox.map((row) => row.id)).size).toBe(2);
       });
@@ -461,7 +461,7 @@ describe("P33, a process name never meets a door stream", () => {
         expect(Result.isFailure(answer)).toBe(true);
 
         if (Result.isFailure(answer)) {
-          expect(answer.failure.why).toBe("bad_name");
+          expect(answer.failure.reason).toBe("bad_name");
         }
 
         expect(store.rows()).toEqual([]);

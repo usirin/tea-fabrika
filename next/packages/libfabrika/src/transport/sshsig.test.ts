@@ -5,7 +5,7 @@
 // The shape these tests hold the module to:
 // - `checkSshsig({text, armored, space, signers})` never fails and never dies. It answers
 //   `{signer}`, the entry of `signers` that matched, as given, or the one refusal
-//   `{why: "bad_signature"}`, whatever the cause (p27: "refused with the same answer").
+//   `{reason: "bad_signature"}`, whatever the cause (p27: "refused with the same answer").
 // - `KeyLine` is a schema that decodes one `ssh-ed25519 <base64> [comment]` line. `writeSshsig`
 //   takes only a decoded one, so a bad line never reaches it, and it fails only with `sign`'s error.
 //
@@ -21,7 +21,7 @@ import * as fc from "fast-check";
 import { checkSshsig, KeyLine, writeSshsig } from "./sshsig.ts";
 
 const SPACE = "fabrika-client";
-const refused = { why: "bad_signature" };
+const refused = { reason: "bad_signature" };
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const runs = { seed: SEED, numRuns: 40 };
 const bodyArb = fc.string({ unit: "binary" });

@@ -85,11 +85,11 @@ export class ProgramLoader extends Context.Service<
         return {
           load: Effect.fn("loader.load")(function* (name: string, build = "node") {
             if (!Object.hasOwn(programs, name)) {
-              return yield* new ProgramDown({ why: "no_program" });
+              return yield* new ProgramDown({ reason: "no_program" });
             }
 
             const loaded = yield* Effect.fromResult(stepper(programs[name])).pipe(
-              Effect.mapError(() => new ProgramDown({ why: "load" })),
+              Effect.mapError(() => new ProgramDown({ reason: "load" })),
             );
             return {
               stepper: loaded,
@@ -126,11 +126,11 @@ export class ProgramLoader extends Context.Service<
     );
 }
 
-/** A fact as it travels in a checked write: JSON with its case. */
-export type Fact = Schema.JsonObject & Tagged;
+/** An event as it travels in a checked write: JSON with its case. */
+export type Event = Schema.JsonObject & Tagged;
 
 /** The door's checked edges (P10). `append` saves a delivered input in the inbox. `commit` writes a
- *  fact under a signed session, and `own` under the process owner; both recheck admission. */
+ *  event under a signed session, and `own` under the process owner; both recheck admission. */
 export class CheckedWriter extends Context.Service<
   CheckedWriter,
   {
@@ -144,9 +144,9 @@ export class CheckedWriter extends Context.Service<
       id: string,
       session: Session,
       stream: string,
-      fact: Fact,
+      event: Event,
     ) => Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted>;
-    readonly own: (id: string, stream: string, fact: Fact) => Effect.Effect<Appended, LedgerError | SigningRefused>;
+    readonly own: (id: string, stream: string, event: Event) => Effect.Effect<Appended, LedgerError | SigningRefused>;
   }
 >()("@kampus/libfabrika/CheckedWriter") {}
 

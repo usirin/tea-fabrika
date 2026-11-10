@@ -32,7 +32,7 @@ import {
 import { Ledger, LedgerError } from "../data/ledger.ts";
 import { InputId, lineFor } from "../data/log.ts";
 import { type Sql } from "../data/referee.ts";
-import { Alarm, CheckedWriter, type Fact, type Incoming, ProgramLoader, Recording, WatcherManager } from "./entry.ts";
+import { Alarm, CheckedWriter, type Event, type Incoming, ProgramLoader, Recording, WatcherManager } from "./entry.ts";
 import { type Descriptor, ProgramRunner } from "./runner.ts";
 
 const NAME = "counter:1";
@@ -120,7 +120,7 @@ const world = Effect.fnUntraced(function* () {
                   write: {
                     _tag: "caused",
                     parent: s.queue,
-                    fact: { _tag: "saved", count: s.count + m.n },
+                    event: { _tag: "saved", count: s.count + m.n },
                   },
                 }),
               ],
@@ -168,7 +168,7 @@ const world = Effect.fnUntraced(function* () {
       data(ledger.sql),
       SessionManager.layer(authority.sql, () => Effect.succeed(owner), {
         input: () => false,
-        fact: () => false,
+        event: () => false,
       }),
     );
   const manager = () => ProcessManager.layer(brain(), next.next).pipe(Layer.provideMerge(base()));
@@ -196,7 +196,7 @@ const world = Effect.fnUntraced(function* () {
 
             controls.hits.push(cut);
             controls.cut = "";
-            return Effect.fail(new LedgerError({ why: "unreachable" }));
+            return Effect.fail(new LedgerError({ reason: "unreachable" }));
           }),
       },
     ).pipe(
@@ -224,21 +224,21 @@ const world = Effect.fnUntraced(function* () {
               const p = yield* ProcessManager;
               return {
                 append: (i: Incoming) => m.send(NAME, i.id, i.envelope.input, from({ parent: i.envelope.id })),
-                commit: (id: string, session: Session, stream: string, fact: Fact) =>
+                commit: (id: string, session: Session, stream: string, event: Event) =>
                   Effect.gen(function* () {
                     controls.commits++;
                     const current = (yield* p.info)[0]!.process;
-                    const signed = yield* sessions.receipt(id, session.parent, current, fact._tag);
+                    const signed = yield* sessions.receipt(id, session.parent, current, event._tag);
                     return yield* ledger.append(
                       stream,
                       id,
-                      lineFor(from({ by: signed.by.key, parent: signed.parent }), fact),
+                      lineFor(from({ by: signed.by.key, parent: signed.parent }), event),
                     );
                   }),
-                own: (id: string, stream: string, fact: Fact) =>
+                own: (id: string, stream: string, event: Event) =>
                   Effect.sync(() => {
                     controls.owns++;
-                  }).pipe(Effect.andThen(ledger.append(stream, id, lineFor(from({ by: owner.key }), fact)))),
+                  }).pipe(Effect.andThen(ledger.append(stream, id, lineFor(from({ by: owner.key }), event)))),
               };
             }),
           ).pipe(Layer.provide(Layer.mergeAll(Mailbox.layer, ProcessManager.layer(brain(), next.next)))),
@@ -251,7 +251,7 @@ const world = Effect.fnUntraced(function* () {
           }),
           Layer.succeed(Recording, {
             flush: Effect.suspend(() =>
-              controls.flush ? Effect.fail(new LedgerError({ why: "storage" })) : Effect.void,
+              controls.flush ? Effect.fail(new LedgerError({ reason: "storage" })) : Effect.void,
             ),
           }),
           ProcessManager.layer(brain(), next.next),
@@ -300,111 +300,125 @@ describe("P34 interrupted recovery", () => {
     "after_start",
     "after_checkpoint",
   ]) {
-    it.effect(`failure gaps plant, clear before answer: ${cut} resumes one durable action`, () =>
-      Effect.gen(function* () {
-        const w = yield* world();
-        yield* w.boot;
-        w.controls.cut = cut;
+    it.effect.prop(
+      `failure gaps plant, clear before answer: ${cut} resumes one durable action`,
+      { generated: Schema.Int },
+      ({ generated }) =>
+        Effect.forEach(
+          [7, generated],
+          (value) =>
+            Effect.gen(function* () {
+              const w = yield* world();
+              yield* w.boot;
+              w.controls.cut = cut;
 
-        if (cut === "after_down") {
-          w.controls.saved = true;
-          // Accepted before the saved model, as P11 marks one: sent and indexed as placed.
-          yield* Effect.gen(function* () {
-            const sent = yield* Mailbox.use((m) => m.send(NAME, "saved", { type: "add", n: 7 }, from()));
+              if (cut === "after_down") {
+                w.controls.saved = true;
+                // Accepted before the saved model, as P11 marks one: sent and indexed as placed.
+                yield* Effect.gen(function* () {
+                  const sent = yield* Mailbox.use((m) => m.send(NAME, "saved", { type: "add", n: value }, from()));
 
-            if (sent._tag === "placed") {
-              yield* ProcessStore.use((s) =>
-                s.save(
-                  {
-                    saved: {
-                      v: 1,
-                      build: "build-a",
-                      model: { count: 0, replies: 0, queue: null },
-                      after: 0,
-                    },
-                    turn: null,
-                    cmds: [],
-                  },
-                  [{ id: "saved", rev: sent.rev, pos: sent.pos }],
-                ),
-              );
-            }
-          }).pipe(Effect.provide(w.layer()));
-          yield* ProgramRunner.use((r) => Effect.exit(r.open("wake"))).pipe(Effect.provide(w.layer()));
+                  if (sent._tag === "placed") {
+                    yield* ProcessStore.use((s) =>
+                      s.save(
+                        {
+                          saved: {
+                            v: 1,
+                            build: "build-a",
+                            model: { count: 0, replies: 0, queue: null },
+                            after: 0,
+                          },
+                          turn: null,
+                          cmds: [],
+                        },
+                        [{ id: "saved", rev: sent.rev, pos: sent.pos }],
+                      ),
+                    );
+                  }
+                }).pipe(Effect.provide(w.layer()));
+                yield* ProgramRunner.use((r) => Effect.exit(r.open("wake"))).pipe(Effect.provide(w.layer()));
 
-          // P34 amendment: down is written only when the brake trips, so each successor
-          // folds the same saved letter and crashes again until the restart budget is spent.
-          for (let n = 0; n < 8 && w.controls.hits.length === 0; n++) {
-            const deadline = w.alarms.at(-1);
+                // P34 amendment: down is written only when the brake trips, so each successor
+                // folds the same saved letter and crashes again until the restart budget is spent.
+                for (let n = 0; n < 8 && w.controls.hits.length === 0; n++) {
+                  const deadline = w.alarms.at(-1);
 
-            if (typeof deadline !== "number") {
-              break;
-            }
+                  if (typeof deadline !== "number") {
+                    break;
+                  }
 
-            yield* TestClock.setTime(deadline);
-            yield* ProgramRunner.use((r) => Effect.exit(r.due(deadline))).pipe(Effect.provide(w.layer()));
-          }
-        } else if (cut === "after_checkpoint") {
-          yield* Effect.gen(function* () {
-            const r = yield* ProgramRunner;
-            yield* r.msg(w.input("good", { type: "add", n: 7 }));
-            yield* Effect.exit(restart(r, "handoff", "build-b"));
-          }).pipe(Effect.provide(w.layer()));
-        } else {
-          for (let n = 0; n < 3 && w.controls.hits.length === 0; n++) {
-            yield* ProgramRunner.use((r) => Effect.exit(r.msg(w.input("poison")))).pipe(Effect.provide(w.layer()));
-            const deadline = w.alarms.at(-1);
+                  yield* TestClock.setTime(deadline);
+                  yield* ProgramRunner.use((r) => Effect.exit(r.due(deadline))).pipe(Effect.provide(w.layer()));
+                }
+              } else if (cut === "after_checkpoint") {
+                yield* Effect.gen(function* () {
+                  const r = yield* ProgramRunner;
+                  yield* r.msg(w.input("good", { type: "add", n: value }));
+                  yield* Effect.exit(restart(r, "handoff", "build-b"));
+                }).pipe(Effect.provide(w.layer()));
+              } else {
+                for (let n = 0; n < 3 && w.controls.hits.length === 0; n++) {
+                  yield* ProgramRunner.use((r) => Effect.exit(r.msg(w.input("poison")))).pipe(
+                    Effect.provide(w.layer()),
+                  );
+                  const deadline = w.alarms.at(-1);
 
-            if (typeof deadline === "number") {
-              yield* TestClock.setTime(deadline);
-              yield* ProgramRunner.use((r) => Effect.exit(r.due(deadline))).pipe(Effect.provide(w.layer()));
-            }
-          }
-        }
+                  if (typeof deadline === "number") {
+                    yield* TestClock.setTime(deadline);
+                    yield* ProgramRunner.use((r) => Effect.exit(r.due(deadline))).pipe(Effect.provide(w.layer()));
+                  }
+                }
+              }
 
-        expect(w.controls.hits, "the real recovery path must reach the injected cut").toEqual([cut]);
-        w.reopen();
-        yield* Effect.gen(function* () {
-          const r = yield* ProgramRunner;
+              expect(w.controls.hits, "the real recovery path must reach the injected cut").toEqual([cut]);
+              w.reopen();
+              yield* Effect.gen(function* () {
+                const r = yield* ProgramRunner;
 
-          for (let n = 0; n < 2; n++) {
-            const at = w.alarms.at(-1);
+                for (let n = 0; n < 2; n++) {
+                  const at = w.alarms.at(-1);
 
-            if (typeof at !== "number") {
-              break;
-            }
+                  if (typeof at !== "number") {
+                    break;
+                  }
 
-            yield* TestClock.setTime(at);
-            yield* Effect.exit(r.due(at));
-          }
+                  yield* TestClock.setTime(at);
+                  yield* Effect.exit(r.due(at));
+                }
 
-          const rows = yield* lives;
-          const exits = rows.filter((row) => row._tag === "exited");
-          expect(new Set(exits.map((row) => exitBody(row.body).process)).size).toBe(exits.length);
-          const restarts = rows.filter((row) => row._tag === "restarted");
-          expect(new Set(restarts.map((row) => restartBody(row.body).after)).size).toBe(restarts.length);
+                const rows = yield* lives;
+                const exits = rows.filter((row) => row._tag === "exited");
+                expect(new Set(exits.map((row) => exitBody(row.body).process)).size).toBe(exits.length);
+                const restarts = rows.filter((row) => row._tag === "restarted");
+                expect(new Set(restarts.map((row) => restartBody(row.body).after)).size).toBe(restarts.length);
 
-          if (cut === "after_start") {
-            expect(restarts).toHaveLength(1);
-          }
+                if (cut === "after_start") {
+                  expect(restarts).toHaveLength(1);
+                }
 
-          if (cut === "after_checkpoint") {
-            expect((yield* r.open("new")).view).toMatchObject({ count: 7 });
-            expect((yield* inbox).map((row) => row.id)).toEqual(["good"]);
-          }
+                if (cut === "after_checkpoint") {
+                  expect((yield* r.open("new")).view).toMatchObject({ count: value });
+                  expect((yield* inbox).map((row) => row.id)).toEqual(["good"]);
+                }
 
-          if (cut === "after_dead") {
-            const records = yield* Effect.forEach([A, B, W, X], (p) => read(`${p}/dead`), {
-              concurrency: 1,
-            });
-            expect(records.flat()).toMatchObject([
-              { body: { tries: 3, errors: ["TypeError", "TypeError", "TypeError"] } },
-            ]);
-            expect(yield* r.msg(w.input("poison"))).toMatchObject({ _tag: "refused", why: "dead" });
-            expect(w.controls.steps).toBe(3);
-          }
-        }).pipe(Effect.provide(w.layer()));
-      }),
+                if (cut === "after_dead") {
+                  const records = yield* Effect.forEach([A, B, W, X], (p) => read(`${p}/dead`), {
+                    concurrency: 1,
+                  });
+                  expect(records.flat()).toMatchObject([
+                    { body: { tries: 3, errors: ["TypeError", "TypeError", "TypeError"] } },
+                  ]);
+                  expect(yield* r.msg(w.input("poison"))).toMatchObject({
+                    _tag: "refused",
+                    reason: "dead",
+                  });
+                  expect(w.controls.steps).toBe(3);
+                }
+              }).pipe(Effect.provide(w.layer()));
+            }),
+          { discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
     );
   }
 
@@ -472,42 +486,49 @@ describe("P34 interrupted recovery", () => {
     }),
   );
 
-  it.effect(
+  it.effect.prop(
     "p69 plant, copy old receipts or fall back to own: a saved queued parent cannot authorize the successor's write",
-    () =>
-      Effect.gen(function* () {
-        const w = yield* world();
-        yield* w.boot;
-        yield* Effect.gen(function* () {
-          const r = yield* ProgramRunner;
-          const sessions = yield* SessionManager;
-          const input = w.input("queued", { type: "queue" });
-          yield* sessions.record({
-            id: input.envelope.id,
-            by: owner,
-            client: "caller",
-            process: A,
-            name: "queue",
-            personOnly: false,
-            digest: JSON.stringify(input.envelope.input),
-            traceId: from().traceId,
-            span: input.span,
-            arrivedAt: 0,
-          });
-          yield* sessions.delivered(input.envelope.id, A);
-          yield* r.msg(input);
-          yield* restart(r, "queued-replacement", "build-b");
-          expect(yield* r.msg(w.input("release", { type: "add", n: 1 }))).toMatchObject({
-            _tag: "accepted",
-          });
-          expect(yield* read("facts")).toEqual([]);
-          expect(w.controls.owns).toBe(0);
-          expect(w.controls.commits).toBe(0);
-          expect((yield* inbox).filter((row) => JSON.stringify(row.body).includes('"type":"write_err"'))).toMatchObject(
-            [{ body: { m: { why: "not_delivered" } } }],
-          );
-        }).pipe(Effect.provide(w.layer()));
-      }),
+    { generated: Schema.Int },
+    ({ generated }) =>
+      Effect.forEach(
+        [1, generated],
+        (value) =>
+          Effect.gen(function* () {
+            const w = yield* world();
+            yield* w.boot;
+            yield* Effect.gen(function* () {
+              const r = yield* ProgramRunner;
+              const sessions = yield* SessionManager;
+              const input = w.input("queued", { type: "queue" });
+              yield* sessions.record({
+                id: input.envelope.id,
+                by: owner,
+                client: "caller",
+                process: A,
+                name: "queue",
+                personOnly: false,
+                digest: JSON.stringify(input.envelope.input),
+                traceId: from().traceId,
+                span: input.span,
+                arrivedAt: 0,
+              });
+              yield* sessions.delivered(input.envelope.id, A);
+              yield* r.msg(input);
+              yield* restart(r, "queued-replacement", "build-b");
+              expect(yield* r.msg(w.input("release", { type: "add", n: value }))).toMatchObject({
+                _tag: "accepted",
+              });
+              expect(yield* read("facts")).toEqual([]);
+              expect(w.controls.owns).toBe(0);
+              expect(w.controls.commits).toBe(0);
+              expect(
+                (yield* inbox).filter((row) => JSON.stringify(row.body).includes('"type":"write_err"')),
+              ).toMatchObject([{ body: { m: { reason: "not_delivered" } } }]);
+            }).pipe(Effect.provide(w.layer()));
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
   );
 
   for (const part of ["save", "flush"] as const) {
@@ -534,12 +555,13 @@ describe("P34 interrupted recovery", () => {
   // Set P34_STAGE_DRIVER to that module's file URL on the lead's machine. Its open function
   // installs P34's trusted failure hook, never a public fault endpoint. waitForRecovery waits
   // for the real object's alarm; evict reconstructs the actual object with its durable storage.
+  // scenario: the optional P12 driver runs real object alarms and reconstruction on the local stage.
   it.skipIf(!process.env.P34_STAGE_DRIVER)(
-    "p80 real stage: durable poison, down resends and duplicate alarms survive object reconstruction",
+    "scenario: p80 real stage: durable poison, down resends and duplicate alarms survive object reconstruction",
     async () => {
       type Status = { process: string; state: string; until: number | null };
       type Stage = {
-        send: (id: string, m: unknown) => Effect.Effect<{ _tag: string; why?: string }, unknown>;
+        send: (id: string, m: unknown) => Effect.Effect<{ _tag: string; reason?: string }, unknown>;
         status: Effect.Effect<Status, unknown>;
         evict: Effect.Effect<void, unknown>;
         waitForRecovery: Effect.Effect<void, unknown>;
@@ -563,10 +585,10 @@ describe("P34 interrupted recovery", () => {
               for (let n = 1; n <= 3; n++) {
                 const answer = yield* Effect.exit(s.send("poison", original));
                 expect(answer).toMatchObject(
-                  n < 3 ? { _tag: "Failure" } : { _tag: "Success", value: { _tag: "refused", why: "dead" } },
+                  n < 3 ? { _tag: "Failure" } : { _tag: "Success", value: { _tag: "refused", reason: "dead" } },
                 );
                 const down = yield* s.status;
-                // P34 amendment: three crashes stay inside the restart budget, so no down fact.
+                // P34 amendment: three crashes stay inside the restart budget, so no down event.
                 expect(down.state).toBe("ended");
                 yield* Effect.exit(s.send("poison", original));
                 expect(yield* s.status).toEqual(down);
@@ -582,7 +604,7 @@ describe("P34 interrupted recovery", () => {
 
               expect(yield* s.send("poison", original)).toMatchObject({
                 _tag: "refused",
-                why: "dead",
+                reason: "dead",
               });
               expect(yield* s.executions).toBe(3);
               expect(yield* s.dead).toMatchObject([

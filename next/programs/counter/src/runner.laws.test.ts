@@ -43,7 +43,7 @@ type Update =
 
 type Runner = {
   readonly open: (client: string) => Effect.Effect<{ rev: number; view: unknown }, unknown>;
-  readonly msg: (input: unknown) => Effect.Effect<{ _tag: string; why?: string }, unknown>;
+  readonly msg: (input: unknown) => Effect.Effect<{ _tag: string; reason?: string }, unknown>;
 };
 
 const reconstruct = (before: unknown, change: Update): unknown => {
@@ -118,7 +118,7 @@ describe("p22 real counter in the runner", () => {
 
               if (Result.isFailure(result)) {
                 expect(Schema.is(ProgramDown)(result.failure)).toBe(true);
-                expect(result.failure.why).toBe("load");
+                expect(result.failure.reason).toBe("load");
               }
             }).pipe(Effect.provide(ProgramLoader.layer({ counter, [name]: broken }, {}))),
           );
@@ -233,14 +233,27 @@ describe("p22 real counter in the runner", () => {
       }).pipe(Effect.provide(layer())),
     );
   });
-  it("plant, guess a program: the in-process loader returns no_program", async () => {
-    const { counter } = await import("./program.ts");
-    const { ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const loader = yield* ProgramLoader;
-        expect(yield* Effect.flip(loader.load("missing"))).toMatchObject({ why: "no_program" });
-      }).pipe(Effect.provide(ProgramLoader.layer({ counter }, {}))),
-    );
-  });
+  it.effect.prop(
+    "plant, guess a program: the in-process loader returns no_program",
+    { generated: Schema.String.check(Schema.makeFilter((name) => name !== "counter")) },
+    ({ generated }) =>
+      Effect.forEach(
+        ["missing", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const { counter } = await import("./program.ts");
+            const { ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const loader = yield* ProgramLoader;
+                expect(yield* Effect.flip(loader.load(value))).toMatchObject({
+                  reason: "no_program",
+                });
+              }).pipe(Effect.provide(ProgramLoader.layer({ counter }, {}))),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 });

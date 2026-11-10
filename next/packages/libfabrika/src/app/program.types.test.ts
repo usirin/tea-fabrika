@@ -123,14 +123,15 @@ function authoringTypeErrors() {
   Program.make({
     ...fields,
     view: (m) => m,
-    refuse: (m, msg) => (msg.type === "add" && m.count + msg.n > 10 ? { why: "limit", now: m.count, most: 10 } : null),
+    refuse: (m, msg) =>
+      msg.type === "add" && m.count + msg.n > 10 ? { reason: "limit", now: m.count, most: 10 } : null,
   });
   // @ts-expect-error Refusal parameters cannot replace the machine's fresh Msg.
   Program.make({ ...fields, view: (m) => m, refuse: (_m, _msg: { type: "other" }) => null });
   // @ts-expect-error Refusal parameters cannot replace the machine's model.
   Program.make({ ...fields, view: (m) => m, refuse: (_m: { other: number }) => null });
-  // @ts-expect-error A refusal's why is text.
-  Program.make({ ...fields, view: (m) => m, refuse: () => ({ why: 3 }) });
+  // @ts-expect-error A refusal's reason is text.
+  Program.make({ ...fields, view: (m) => m, refuse: () => ({ reason: 3 }) });
   // @ts-expect-error Refusal is synchronous.
   Program.make({ ...fields, view: (m) => m, refuse: () => Promise.resolve(null) });
 
@@ -202,24 +203,24 @@ function authoringTypeErrors() {
     writes: { saved: { schema: Schema.TaggedStruct("saved", { count: Schema.Int }), personOnly: true } },
   });
   const wrongTag = { schema: Schema.TaggedStruct("answered", {}), personOnly: false };
-  // @ts-expect-error A fact's tag must match its policy key.
+  // @ts-expect-error An event's tag must match its policy key.
   Program.make({ ...base, writes: { saved: wrongTag } });
   const noTag = { schema: Schema.Struct({ count: Schema.Int }), personOnly: false };
-  // @ts-expect-error A fact needs its tag.
+  // @ts-expect-error An event needs its tag.
   Program.make({ ...base, writes: { saved: noTag } });
   const noPolicy = { schema: Schema.TaggedStruct("saved", {}) };
-  // @ts-expect-error A fact policy needs personOnly.
+  // @ts-expect-error An event policy needs personOnly.
   Program.make({ ...base, writes: { saved: noPolicy } });
   Program.make({ ...fields, view: (m) => m, outputs: { count: Schema.Int } });
   // @ts-expect-error An output needs a schema.
   Program.make({ ...fields, view: (m) => m, outputs: { count: 3 } });
-  Write.cases.own.make({ fact: { _tag: "saved" } });
+  Write.cases.own.make({ event: { _tag: "saved" } });
   Write.cases.caused.make({
     parent: Schema.decodeUnknownSync(Write.cases.caused.fields.parent)("in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-1"),
-    fact: { _tag: "saved" },
+    event: { _tag: "saved" },
   });
   // @ts-expect-error A caused write must name its parent.
-  Write.cases.caused.make({ fact: { _tag: "saved" } });
+  Write.cases.caused.make({ event: { _tag: "saved" } });
 
   expectTypeOf(machine.model).toEqualTypeOf<Schema.Schema<typeof Model.Type>>();
   // @ts-expect-error Schema fields on the tea machine are readonly.

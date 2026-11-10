@@ -61,7 +61,7 @@ const history = Effect.fnUntraced(function* (entry: Entry) {
   const sent = decodeSent(entry.body);
 
   if (Option.isNone(sent)) {
-    return yield* new LedgerError({ why: "bad_row" });
+    return yield* new LedgerError({ reason: "bad_row" });
   }
 
   return Option.some<History>({
@@ -92,15 +92,15 @@ export const answered = Effect.fnUntraced(function* (word: (name: string) => str
         [word("rev")]: rev,
         [word("pos")]: pos,
       }),
-      refused: ({ why }) => ({ [word("answer")]: "refused", [word("why")]: why }),
+      refused: ({ reason }) => ({ [word("answer")]: "refused", [word("reason")]: reason }),
     }),
   );
 });
 
-/** Tags a failure's why on the current span. */
+/** Tags a failure's reason on the current span. */
 export const failed = (word: (name: string) => string) =>
   Effect.fnUntraced(function* (error: LedgerError) {
-    yield* Effect.annotateCurrentSpan(word("why"), error.why);
+    yield* Effect.annotateCurrentSpan(word("reason"), error.reason);
   });
 
 export class Mailbox extends Context.Service<
@@ -168,14 +168,14 @@ export class Mailbox extends Context.Service<
             );
 
             if (brainOnly({ stream: inbox(to), id: own ? "" : id, tag: SEND })) {
-              return Appended.cases.refused.make({ why: "forbidden" });
+              return Appended.cases.refused.make({ reason: "forbidden" });
             }
 
             const json = decodeJson(m);
 
             // The ledger's own answer for a body that is not JSON, without the trip.
             if (Option.isNone(json)) {
-              return Appended.cases.refused.make({ why: "bad_line" });
+              return Appended.cases.refused.make({ reason: "bad_line" });
             }
 
             return yield* ledger.append(inbox(to), id, lineFor(from, Send.make({ m: json.value })));
