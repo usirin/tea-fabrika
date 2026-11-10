@@ -269,7 +269,7 @@ const answerFor = (kind: string): Answer =>
   kind === "accepted"
     ? { _tag: "accepted", rev: 1, pos: 1 }
     : kind === "refused"
-      ? { _tag: "refused", why: "bad_msg" }
+      ? { _tag: "refused", reason: "bad_msg" }
       : { _tag: kind };
 
 /**
@@ -998,7 +998,7 @@ describe("[secrets] client records carry ids, numbers and fixed words only", () 
           : shape === "string"
             ? secret
             : shape === "nested"
-              ? { why: { inner: [error] } }
+              ? { reason: { inner: [error] } }
               : error;
   };
   it("a failure's record keeps none of the secret in any form, and decodes as a ClientRecord", async () => {
@@ -1021,7 +1021,7 @@ describe("[secrets] client records carry ids, numbers and fixed words only", () 
     const api = await windowing();
     const leaky = (e: unknown) => ({
       ...(api.failureRecord(e) as object),
-      why: String((e as { message?: unknown })?.message ?? e),
+      reason: String((e as { message?: unknown })?.message ?? e),
     });
     const caught = (f: { secret: string; shape: string; name: string }) =>
       SECRET_FORMS(f.secret).some((form) => JSON.stringify(leaky(make(f))).includes(form));
