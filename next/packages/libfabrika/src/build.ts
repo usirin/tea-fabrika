@@ -1,8 +1,8 @@
-import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
 // The one-file build (Tier 1, P12 and P16): every selected program as a sealed Worker Loader module,
 // every window script, chunk and stylesheet, and the brain that carries them all as text. Nothing
 // is published until every bundle and the Compiler check pass; a failure keeps the last good file.
 // Disk and paths go through Effect's FileSystem and Path, which the caller provides.
+import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
 import { Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "./app/built.ts";

@@ -13,4 +13,4 @@ export { Referee, type Sql, type SqlValue } from "./referee.ts";
 export { SinkError, SpanSink } from "./sink.ts";
 export { Archived, Chain, Content, Health, ProcessId, Rolled, Size, SpanRow, Summary, Tag, short } from "./trace.ts";
 
-export { partName } from "./records.ts";
+export { partName } from "./trace.ts";

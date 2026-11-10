@@ -14,7 +14,6 @@ import {
   signingReply,
   commitReply,
 } from "@kampus/libfabrika/workers/runtime";
-// edge: bundle: false hands Alchemy the platform base class; not reported, 0042 amendment 2026-11-09
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Effect, Redacted } from "effect";
 import { assets, programs } from "virtual:fabrika-built";
@@ -241,7 +240,8 @@ export class Gateway extends DurableObject<Env> {
 }
 
 const Bridge = makeDurableObjectBridge(DurableObject, {
-  entrypoint: objects,
+  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
+  entrypoint: objects as unknown as Effect.Effect<Record<string, unknown>>,
   stack: { name: "fabrika", stage: "local" },
 });
 
