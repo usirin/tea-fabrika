@@ -150,7 +150,7 @@ type Live = {
 /** A failed Cmd's settled Msg error: its case is its why. */
 const failure = (why: string) => Schema.TaggedStruct(why, {}).make({});
 
-type RunnerOptions = {
+export type RunnerOptions = {
 	/** The trusted wiring's policy. Without `maxDeliveries`, a letter is tried 3 times. */
 	readonly policy?: Omit<Policy, "maxDeliveries"> & {readonly maxDeliveries?: number};
 	readonly recovery: {readonly sql: Sql; readonly name: string; readonly capacity: number};
@@ -175,11 +175,18 @@ export class ProgramRunner extends Context.Service<
 	/** Load in process, keeping the pure stepper available to callers of ProgramLoader. */
 	static readonly layer = (
 		initial: Descriptor,
-		options?: RunnerOptions,
+		options: RunnerOptions,
 	): Layer.Layer<
 		ProgramRunner,
 		never,
-		ProgramLoader | ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording
+		| ProgramLoader
+		| ProcessStore
+		| ProcessManager
+		| Mailbox
+		| CheckedWriter
+		| WatcherManager
+		| Alarm
+		| Recording
 	> =>
 		Layer.unwrap(
 			Effect.map(ProgramLoader, (loader) => ProgramRunner.withLoader(initial, loader, options)),
@@ -194,11 +201,11 @@ export class ProgramRunner extends Context.Service<
 				build?: string,
 			) => Effect.Effect<Omit<Loaded, "stepper">, ProgramDown>;
 		},
-		options?: RunnerOptions,
+		options: RunnerOptions,
 	): Layer.Layer<
 		ProgramRunner,
 		never,
-		ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording
+		ProcessStore | ProcessManager | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording
 	> =>
 		Layer.effect(
 			ProgramRunner,
@@ -206,13 +213,10 @@ export class ProgramRunner extends Context.Service<
 				const rootStore = yield* ProcessStore;
 				let store = rootStore;
 				let process = initial;
-				const manager = yield* Effect.serviceOption(ProcessManager);
-				const recovery =
-					options === undefined
-						? null
-						: yield* RecoveryStore.pipe(
-								Effect.provide(RecoveryStore.layer(options.recovery.sql, options.recovery)),
-							);
+				const manager = yield* ProcessManager;
+				const recovery = yield* RecoveryStore.pipe(
+					Effect.provide(RecoveryStore.layer(options.recovery.sql, options.recovery)),
+				);
 				let supervision: Supervision | null = null;
 				let woke = false;
 				const mailbox = yield* Mailbox;
@@ -246,13 +250,10 @@ export class ProgramRunner extends Context.Service<
 					} satisfies From;
 				});
 
-				const fault = (cut: string) => options?.fault?.(cut) ?? Effect.void;
-				const coordinator = Effect.gen(function* () {
-					if (Option.isNone(manager)) return yield* new LedgerError({why: "unreachable"});
-					return manager.value;
-				});
+				const fault = (cut: string) => options.fault?.(cut) ?? Effect.void;
+				const coordinator = Effect.succeed(manager);
 				const saveRecovery = Effect.fnUntraced(function* (next: Supervision) {
-					if (recovery !== null) yield* recovery.save(next);
+					yield* recovery.save(next);
 					supervision = next;
 				});
 				const currentRecovery = Effect.suspend(() =>
@@ -473,6 +474,9 @@ export class ProgramRunner extends Context.Service<
 					}
 				});
 				const continueRecovery = Effect.fnUntraced(function* () {
+					// A live process with nothing pending keeps its alarm: re-arming a past program wake on
+					// every call would fire it again.
+					const working = supervision !== null && supervision.pending !== null;
 					yield* resume().pipe(
 						Effect.onError(() =>
 							Effect.gen(function* () {
@@ -482,7 +486,7 @@ export class ProgramRunner extends Context.Service<
 							}),
 						),
 					);
-					yield* setAlarm();
+					if (working || supervision?.recovery._tag !== "live") yield* setAlarm();
 				});
 				const observed = Effect.fnUntraced(function* (
 					failure: Failure,
@@ -552,13 +556,12 @@ export class ProgramRunner extends Context.Service<
 					yield* continueRecovery();
 				});
 				const ensure = Effect.fnUntraced(function* (time?: number) {
-					if (recovery === null) return;
 					const p = yield* coordinator;
 					const status = yield* p.status(initial.name);
 					if (supervision === null) {
 						const policy = yield* Effect.try({
 							try: () => {
-								const wiring = options?.policy ?? defaultPolicy;
+								const wiring = options.policy ?? defaultPolicy;
 								return Schema.decodeUnknownSync(Policy)({
 									...wiring,
 									maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
@@ -642,7 +645,7 @@ export class ProgramRunner extends Context.Service<
 						const healthy = moved(latest, {type: "healthy", at: status.at});
 						if (healthy !== latest) yield* saveRecovery(healthy);
 					}
-					yield* setAlarm();
+					if (latest.recovery._tag !== "live") yield* setAlarm();
 				});
 
 				const step = Effect.fnUntraced(function* (
@@ -694,6 +697,9 @@ export class ProgramRunner extends Context.Service<
 									: original === null
 										? "null"
 										: typeof original;
+						const down =
+							wrapped instanceof ProgramDown ? wrapped : new ProgramDown({why, cause: original});
+						// The step's own failure is the answer; a later recovery write's failure never replaces it.
 						yield* observed(
 							(why === "step" ? Failure.cases.fresh : Failure.cases.saved).make({
 								...attempt,
@@ -701,10 +707,8 @@ export class ProgramRunner extends Context.Service<
 							}),
 							attempt.at,
 							original,
-						);
-						return yield* wrapped instanceof ProgramDown
-							? wrapped
-							: new ProgramDown({why, cause: original});
+						).pipe(Effect.catch(() => Effect.fail(down)));
+						return yield* down;
 					}
 					if (supervision !== null) yield* saveRecovery({...supervision, attempt: null});
 					return yield* result.pipe(
@@ -837,8 +841,8 @@ export class ProgramRunner extends Context.Service<
 					const prepared = Schema.decodeUnknownOption(Turn)(saved?.turn);
 					// The raw inbox keeps canceled signals; the manager filters them for this process.
 					const signals = new Set(
-						Option.isSome(manager) && letters.some((letter) => inSignalSpace(letter.id))
-							? (yield* Stream.runCollect(manager.value.receive(process.id, state.after))).map(
+						letters.some((letter) => inSignalSpace(letter.id))
+							? (yield* Stream.runCollect(manager.receive(process.id, state.after))).map(
 									(letter) => letter.id,
 								)
 							: [],
@@ -1161,15 +1165,15 @@ export class ProgramRunner extends Context.Service<
 				/** One public call: its span, saved writes and recovery under the permit, its Cmds, then
 				 *  the flush, on success and failure. */
 				const call = (name: string) => {
-					const operation = Effect.fn(name, {
-						attributes: {[PROCESS]: process.id, [tag("name")]: process.name},
-					})(function* <A>(
+					const operation = Effect.fn(name)(function* <A>(
 						turn: Effect.Effect<
 							{readonly answer: A; readonly jobs: ReadonlyArray<Dispatched>},
 							RunnerFailure
 						>,
 						time?: number,
 					) {
+						// The process this call starts on: a successor's calls carry its own ID.
+						yield* Effect.annotateCurrentSpan({[PROCESS]: process.id, [tag("name")]: process.name});
 						const {answer, jobs} = yield* permit.withPermit(
 							Effect.gen(function* () {
 								// The platform consumes the alarm before due enters this wrapper.
@@ -1229,6 +1233,19 @@ export class ProgramRunner extends Context.Service<
 									Effect.mapError(() => new RunnerError({why: "bad_input"})),
 								);
 								yield* Effect.annotateCurrentSpan(tag("letter"), input.id);
+								// An accepted letter answers its first placing, before any receipt check. Its
+								// clocks may differ on a resend; the input it asked may not.
+								const placed =
+									(yield* store.placed(input.id)) ?? (yield* store.placedByAny(input.id));
+								if (placed !== null) {
+									const letter = yield* Stream.runHead(mailbox.read(process.name, placed.rev - 1));
+									const asked = JSON.stringify(input.envelope.input);
+									if (
+										Option.exists(letter, (l) => l.id === input.id && JSON.stringify(l.m) !== asked)
+									)
+										return {answer: Sent.cases.refused.make({why: "id_reused"}), jobs: []};
+									return yield* accept(yield* ready(), input);
+								}
 								const receipt = supervision?.receipts.find((r) => r.letter === input.id);
 								if (receipt !== undefined) {
 									const digest =
@@ -1276,7 +1293,6 @@ export class ProgramRunner extends Context.Service<
 					restart: (request: {readonly id: string; readonly build: string}) =>
 						restart(
 							Effect.gen(function* () {
-								if (recovery === null) return yield* new LedgerError({why: "unreachable"});
 								const s = yield* currentRecovery;
 								const prior = s.requests?.find((r) => r.id === request.id);
 								if (prior !== undefined) {

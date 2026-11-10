@@ -3,7 +3,8 @@ import type {BrainEvent} from "../app/brain-event.ts";
 import type {Incoming} from "../app/entry.ts";
 import type {Descriptor, ProgramRunner} from "../app/runner.ts";
 import type {Activity, From, GatewayManager, ProcessManager, Start} from "../coordination/index.ts";
-import {Session, SigningRefused} from "../coordination/index.ts";
+import {ProcessError, Session, SigningRefused} from "../coordination/index.ts";
+import type {Letter} from "../coordination/mailbox.ts";
 import {Appended, type LedgerCalls, type RecordCalls} from "../data/index.ts";
 import type {Answer, checkHello} from "../transport/index.ts";
 
@@ -19,6 +20,15 @@ const refusals = {
 };
 export const SigningReply = Schema.TaggedUnion({ok: {value: Session}, ...refusals});
 export const CommitReply = Schema.TaggedUnion({ok: {value: Appended}, ...refusals});
+/** A Project process call's answer: its value, or its checked refusal as data across the RPC. The
+ *  value's own type comes from the call; the schema checks the refusal. */
+export const ProcessReplies = Schema.TaggedUnion({
+	ok: {value: Schema.Unknown},
+	ProcessError: {why: ProcessError.fields.why},
+});
+export type ProcessReply<A> =
+	| (Omit<typeof ProcessReplies.cases.ok.Type, "value"> & {readonly value: A})
+	| typeof ProcessReplies.cases.ProcessError.Type;
 export interface DoorCalls {
 	readonly connect: () => Effect.Effect<ConnectionId>;
 	readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
@@ -78,6 +88,10 @@ type DoorService = DoorCalls;
 type Processes = (typeof ProcessManager)["Service"];
 type Gateways = (typeof GatewayManager)["Service"];
 type Runner = (typeof ProgramRunner)["Service"];
+/** One ProcessManager call over Project RPC: a refusal comes back as reply data. */
+type ProcessCall<F> = F extends (...args: infer A) => Effect.Effect<infer B, unknown>
+	? RemoteCall<(...args: A) => Effect.Effect<ProcessReply<B>>>
+	: never;
 
 export type ProjectBinding = Rpc.DurableObjectBranded &
 	LedgerCalls &
@@ -121,9 +135,23 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 		>;
 		publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<void>>;
 		brain: RemoteCall<(event: typeof BrainEvent.Type) => Effect.Effect<Appended>>;
+		/** The registered name whose Process object holds this process ID's storage. */
+		processObject: RemoteCall<(pid: string) => Effect.Effect<string>>;
+		processStart: ProcessCall<(request: Start, from: From) => ReturnType<Processes["start"]>>;
+		processExit: ProcessCall<Processes["exit"]>;
+		processStatus: ProcessCall<Processes["status"]>;
+		processResolve: ProcessCall<Processes["resolve"]>;
+		processDead: ProcessCall<Processes["dead"]>;
+		processIsLive: RemoteCall<Processes["isLive"]>;
+		processMonitor: ProcessCall<Processes["monitor"]>;
+		processDemonitor: ProcessCall<Processes["demonitor"]>;
+		processDown: ProcessCall<Processes["down"]>;
+		processReceive: ProcessCall<
+			(process: string, after: number) => Effect.Effect<ReadonlyArray<Letter>, ProcessError>
+		>;
 	};
 export type ProcessBinding = Rpc.DurableObjectBranded &
-	Remote<Pick<Runner, "msg" | "open" | "due">> & {
+	Remote<Pick<Runner, "msg" | "open" | "due" | "restart">> & {
 		configure: RemoteCall<(descriptor: Descriptor) => Effect.Effect<void>>;
 		descriptor: RemoteCall<() => Effect.Effect<Descriptor>>;
 		activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;

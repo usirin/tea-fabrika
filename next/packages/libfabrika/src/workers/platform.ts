@@ -87,6 +87,39 @@ export class ProjectClient extends Context.Service<
 			wait: (...args) =>
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Project wait RPC enters Effect
 				Effect.tryPromise({try: () => stub.wait(...args), catch: unreachable}),
+			processObject: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processObject RPC enters Effect
+				Effect.tryPromise({try: () => stub.processObject(...args), catch: unreachable}),
+			processStart: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processStart RPC enters Effect
+				Effect.tryPromise({try: () => stub.processStart(...args), catch: unreachable}),
+			processExit: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processExit RPC enters Effect
+				Effect.tryPromise({try: () => stub.processExit(...args), catch: unreachable}),
+			processStatus: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processStatus RPC enters Effect
+				Effect.tryPromise({try: () => stub.processStatus(...args), catch: unreachable}),
+			processResolve: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processResolve RPC enters Effect
+				Effect.tryPromise({try: () => stub.processResolve(...args), catch: unreachable}),
+			processDead: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processDead RPC enters Effect
+				Effect.tryPromise({try: () => stub.processDead(...args), catch: unreachable}),
+			processIsLive: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processIsLive RPC enters Effect
+				Effect.tryPromise({try: () => stub.processIsLive(...args), catch: unreachable}),
+			processMonitor: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processMonitor RPC enters Effect
+				Effect.tryPromise({try: () => stub.processMonitor(...args), catch: unreachable}),
+			processDemonitor: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processDemonitor RPC enters Effect
+				Effect.tryPromise({try: () => stub.processDemonitor(...args), catch: unreachable}),
+			processDown: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processDown RPC enters Effect
+				Effect.tryPromise({try: () => stub.processDown(...args), catch: unreachable}),
+			processReceive: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project processReceive RPC enters Effect
+				Effect.tryPromise({try: () => stub.processReceive(...args), catch: unreachable}),
 		};
 	}
 }
@@ -112,6 +145,9 @@ export class ProcessClient extends Context.Service<
 			due: (...args) =>
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Process due RPC enters Effect
 				Effect.tryPromise({try: () => stub.due(...args), catch: unreachable}),
+			restart: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Process restart RPC enters Effect
+				Effect.tryPromise({try: () => stub.restart(...args), catch: unreachable}),
 			activity: (...args) =>
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Process activity RPC enters Effect
 				Effect.tryPromise({try: () => stub.activity(...args), catch: unreachable}),

@@ -138,6 +138,50 @@ export class Project extends DurableObject<Env> {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
 		return this.runtime.runPromise(ProjectService.use((p) => p.brain(event)));
 	}
+	processObject(pid: string) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processObject(pid)));
+	}
+	processStart(request: Start, from: From) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processStart(request, from)));
+	}
+	processExit(pid: string, reason: string, from: From) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processExit(pid, reason, from)));
+	}
+	processStatus(name: string) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processStatus(name)));
+	}
+	processResolve(pid: string) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processResolve(pid)));
+	}
+	processDead(pid: string, dead: Parameters<ContextProject["processDead"]>[1], from: From) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processDead(pid, dead, from)));
+	}
+	processIsLive(pid: string) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processIsLive(pid)));
+	}
+	processMonitor(ref: string, pid: string, from: From) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processMonitor(ref, pid, from)));
+	}
+	processDemonitor(ref: string, from: From) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processDemonitor(ref, from)));
+	}
+	processDown(pid: string, policy: Parameters<ContextProject["processDown"]>[1], from: From) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processDown(pid, policy, from)));
+	}
+	processReceive(pid: string, after: number) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.processReceive(pid, after)));
+	}
 }
 type ContextProject = (typeof ProjectService)["Service"];
 
@@ -162,6 +206,10 @@ export class Process extends DurableObject<Env> {
 	due(at: number) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
 		return this.runtime.runPromise(ProcessService.use((p) => p.due(at)));
+	}
+	restart(request: {id: string; build: string}) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProcessService.use((p) => p.restart(request)));
 	}
 	alarm() {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the platform alarm enters the runner
