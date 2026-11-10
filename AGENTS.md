@@ -169,7 +169,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   never from its own. A room offers Effect services in its own types and errors, plus the shared
   names beside `Id.ts`: a lower room's error is translated at the service, with its cause kept, and
   `runtime/` never imports `ledger/`. A new file goes in its room now, before the move lands
-  ([0043](./.decisions/0043-rooms-on-floors.md)).
+  ([0043](./.decisions/0043-rooms-on-floors.md)). Test files keep the floors too, with no
+  exemption: a room whose laws need a real database writes them as a suite, read through its
+  module as `SinkTest.suite(nodeSql)`, and the room that owns the driver runs it; a helper two
+  rooms share sits on a floor both may import
+  ([0062](./.decisions/0062-test-files-keep-the-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
