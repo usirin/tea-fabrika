@@ -104,7 +104,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   alike: no `cloudflare:*`, `miniflare`, `workerd`, `wrangler` or `@cloudflare/*` import, no raw
   platform type, and nothing that starts or talks to the local runtime except through Alchemy. A
   gap is patched locally with its upstream issue filed the same day; a direct use stays only as a
-  marked edge with the issue link. Today's direct uses move with their ports, and the lint rule is
+  marked edge with the issue link. The six gaps 0042 lists are patched without an issue (its
+  amendment, 2026-11-09). Today's direct uses move with their ports, and the lint rule is
   ticket 506 ([0042](./.decisions/0042-platform-pieces-go-through-alchemy.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
