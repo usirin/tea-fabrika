@@ -73,9 +73,11 @@ export const RecordPartLive = RecordPart.make(
     const env = yield* Cloudflare.WorkerEnvironment;
     const config = yield* Schema.decodeUnknownEffect(
       Schema.fromJsonString(
-        Schema.Struct({ limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Number })) }),
+        Schema.Struct({
+          limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
+        }),
       ),
-    )(env.STAGE).pipe(Effect.catch(() => Effect.succeed({ limits: undefined })));
+    )(env.STAGE).pipe(Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })));
     // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw storage until PR 8; not reported, 0042 amendment 2026-11-09
     const raw = state.raw as unknown as DurableObjectState;
     const cap = config.limits?.recordBytes;
