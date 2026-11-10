@@ -1,0 +1,27 @@
+{
+  "experiment": 246,
+  "date": "2026-11-09",
+  "main": "b865c421",
+  "version": "next",
+  "cost_usd": 0,
+  "files": { "swept": 85, "read": 21, "by_search": 64 },
+  "signs": { "let": 56, "boolean": 56, "schema_boolean": 24, "tea_imports": 8 },
+  "found": { "implicit": 13, "explicit": 12, "position_already_right": 5, "not_a_machine": 22 },
+  "allowed_vs_real": {
+    "table_latch": [2, 2],
+    "supervision_record": [24, 8],
+    "process_life_twice": [12, 5],
+    "brain_stage": [32, 6],
+    "connection_handshake": [36, 4],
+    "input_envelope": [60, 8],
+    "runner_holder": [48, 8],
+    "delivery_receipt": [16, 4],
+    "member_key": [8, 4],
+    "membership_change": [4, 3],
+    "span_sink_hold": [4, 3]
+  },
+  "probe": {
+    "sink_latch": { "tables_after_first_failed_write": 0, "tables_after_three_more_spans": 0, "held_at_flush": 4 },
+    "supervision_wrong_pairs_decoded": 3
+  }
+}
