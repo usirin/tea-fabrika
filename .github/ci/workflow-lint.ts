@@ -17,8 +17,20 @@ const commands = (job: Record<string, unknown>) =>
 		typeof step["run"] === "string" ? step["run"].split("\n").map((line) => line.trim()) : [],
 	);
 
-const compact = (value: unknown) =>
-	typeof value === "string" ? value.replace(/\s+/g, "").replace(/^\$\{\{|\}\}$/g, "") : "";
+const compact = (value: unknown) => {
+	if (typeof value !== "string") {
+		return "";
+	}
+
+	const trimmed = value.trim();
+	const expression =
+		trimmed.startsWith("${{") && trimmed.endsWith("}}") ? trimmed.slice(3, -2).trim() : trimmed;
+	// Keep quoted strings and names intact. Only operator spacing cannot change meaning.
+	return expression.replace(
+		/'(?:[^']|'')*'|\s*(==|!=|&&|\|\|)\s*/g,
+		(match, operator: string | undefined) => operator ?? match,
+	);
+};
 
 const env = {
 	BASE: `\${{ github.event.pull_request.base.sha || github.event.before }}`,
@@ -198,11 +210,56 @@ export const lintWorkflow = (text: string): string[] => {
 			`if [ "\${{ matrix.shard }}" = 1 ]; then`, "forced tests run once on shard 1");
 	require(scripts.includes('if [ -n "$BASE" ]; then') &&
 		scripts.includes("else"), "PR and main branches remain separate");
-	const next = commands(map(jobs["next"])).filter((line) =>
-		line.startsWith("pnpm exec vitest run"),
+	const nextJob = map(jobs["next"]),
+		strategy = map(nextJob["strategy"]),
+		matrix = map(strategy["matrix"]),
+		nextSteps = steps(nextJob);
+	require(!("name" in nextJob), "next keeps the default matrix check names");
+	require(JSON.stringify(matrix["shard"]) === "[1,2,3,4,5,6]" &&
+		Object.keys(matrix).length === 1, "next has exactly six shards and no other matrix entries");
+	require(strategy["fail-fast"] === false, "next lets every shard finish");
+	// Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
+	const allowed = [
+		"pnpm install --frozen-lockfile",
+		'pnpm exec vitest run next/ --shard "$SHARD"',
+		"pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+		"node next/apps/fabrika/e2e.ts",
+		'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
+	];
+	const nextRuns = nextSteps.filter((s) => "run" in s).map((s) => s["run"]);
+	require(nextRuns.length === allowed.length &&
+		allowed.every(
+			(command) => nextRuns.filter((run) => run === command).length === 1,
+		), "next runs exactly its install and four approved commands once each");
+	const testStep = nextSteps.find(
+		(s) => s["run"] === 'pnpm exec vitest run next/ --shard "$SHARD"',
 	);
-	require(next.length === 1 &&
-		next[0] === "pnpm exec vitest run next/", "next runs all its own tests without exclusions");
+	require(testStep !== undefined, "next runs all its own tests with --shard and no exclusions");
+	const shard = map(testStep?.["env"])["SHARD"];
+	require(testStep !== undefined &&
+		!("if" in testStep) &&
+		typeof shard === "string" &&
+		/^\$\{\{\s*matrix\.shard\s*\}\}\/6$/.test(
+			shard,
+		), "next passes its six-shard expression without an extra test guard");
+
+	for (const [command, condition] of [
+		[
+			"pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+			"matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
+		],
+		["node next/apps/fabrika/e2e.ts", "matrix.shard == 1"],
+		[
+			'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
+			"matrix.shard == 1 && github.event_name == 'pull_request'",
+		],
+	] as const) {
+		const matches = nextSteps.filter((s) => s["run"] === command);
+		require(matches.length === 1 &&
+			compact(matches[0]?.["if"]) ===
+				compact(condition), `next runs ${command} once on shard 1 with its original condition`);
+	}
+
 	return errors;
 };
 

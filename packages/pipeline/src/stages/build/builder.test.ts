@@ -14,7 +14,7 @@ const TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"];
 const C1 = criterionId("c1");
 
 const TREE = "/work/trees/1";
-const TEMP = ["/private/tmp"];
+const TEMP = ["/work/temp"];
 
 const refused = (tool: string, input: Record<string, unknown>) =>
 	builderRefusal(TREE, TEMP, tool, input);
@@ -23,7 +23,7 @@ describe("the builder's rule", () => {
 	it("reads stay in the working copy and the temp folder", () => {
 		expect(refused("Read", {file_path: `${TREE}/src/a.ts`})).toBeNull();
 		expect(refused("Read", {file_path: "src/a.ts"})).toBeNull();
-		expect(refused("Grep", {path: "/private/tmp/out"})).toBeNull();
+		expect(refused("Grep", {path: "/work/temp/out"})).toBeNull();
 		expect(refused("Read", {file_path: "/srv/elsewhere/.config/gh/hosts.yml"})).toContain(
 			"outside your working copy",
 		);

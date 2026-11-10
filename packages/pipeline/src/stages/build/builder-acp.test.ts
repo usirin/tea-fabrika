@@ -107,7 +107,7 @@ describe("an ask, as the builder answers it", () => {
 
 		for (const [tool, input] of [
 			["Write", {file_path: "/etc/passwd", content: ""}],
-			["Read", {file_path: "/home/someone/.ssh/id_ed25519"}],
+			["Read", {file_path: "/srv/elsewhere/.ssh/id_ed25519"}],
 			["Bash", {command: "git push origin HEAD"}],
 			["Bash", {command: "ls", dangerouslyDisableSandbox: true}],
 			["Bash", {command: "curl https://example.com"}],
