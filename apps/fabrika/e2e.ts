@@ -2684,17 +2684,21 @@ const keysLook = async () => {
 				/macOS owns|Quit the app/.test(await editor.innerText()),
 			);
 			await snap("not-ours");
-			await close();
+			// A new table puts an armed prefix down (desk/desk.ts, `swapped`), and the host hears a
+			// save some time after it is written. So the file is written with the editor still open,
+			// and no prefix is pressed before the editor shows the new table: the host steps the desk
+			// first and sends the page its table after (host/serve.ts, `swap`).
 			await writeFile(file, `${good}\npalette.open = "<prefix>p"\n`);
-			await page.keyboard.press("Control+a");
-			await page.keyboard.press("?");
-			await editor.waitFor();
 			await search.fill("palette.open");
 			await until(
 				"prefix palette binding applied",
 				() => editor.innerText(),
 				(text) => /(?:⌃A|C-a|ctrl\+a)\s*then\s*p/i.test(text),
 			);
+			await close();
+			await page.keyboard.press("Control+a");
+			await page.keyboard.press("?");
+			await editor.waitFor();
 			await close();
 			await page.keyboard.press("Control+a");
 			await page.keyboard.press("p");
