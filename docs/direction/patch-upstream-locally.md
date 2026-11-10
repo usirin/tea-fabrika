@@ -1,6 +1,8 @@
 # Patch upstream locally, and never wait for a release
 
-**Decided 2026-11-07 (owner).** Both versions.
+**Decided 2026-11-07 (owner).** Both versions. Amended in part by
+[0054](../../.decisions/0054-read-upstream-before-patching-it.md): read the package's decisions,
+patterns and source first, and patch only a gap or bug that read proved.
 
 ```sh
 # Our work needs a change in a package we do not own. Do all three, the same day:
