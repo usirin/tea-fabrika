@@ -38,7 +38,7 @@ const text = fc
 
 const graph = fc.record({ text, chaos: fc.boolean(), count: fc.integer({ min: 1, max: 3 }) });
 const runs = { seed: 119120, numRuns: 3 };
-// Three real clean-build samples took 5.6 s under load. Allow 10 s per generated sample.
+// A clean build measured 0.12 to 0.3 s on a laptop; 10 s per generated sample is the budget.
 const buildTimeout = (samples = runs.numRuns) => samples * 10_000;
 type Selection = { readonly name: string; readonly package: string; readonly export: string };
 
@@ -153,9 +153,11 @@ const strings = (source: string) => {
 
 const embedded = (brain: string, sources: readonly string[]) => {
   assert(sources.length > 0);
+  // Plants: normalize embedded newlines, or build this Set from sources instead of brain.
+  const found = new Set(strings(brain));
 
   for (const source of sources) {
-    assert(strings(brain).includes(source), "compiled text changed or executed");
+    assert(found.has(source), "compiled text changed or executed");
   }
 };
 
@@ -228,6 +230,13 @@ afterEach(() => {
 });
 
 describe("P16 p33 one-file build", () => {
+  it("scenario: latin1 preserves an invalid UTF-8 byte difference that utf8 hides", () => {
+    // Plant: substitute utf8 for latin1; replacement characters hide this byte difference.
+    const first = Buffer.from([0x61, 0xff, 0x62]);
+    const second = Buffer.from([0x61, 0xfe, 0x62]);
+    expect(second.toString("utf8")).toBe(first.toString("utf8"));
+    expect(second.toString("latin1")).not.toBe(first.toString("latin1"));
+  });
   it(
     "text embedding: generated compiled bytes survive exactly and outer import is inert",
     { timeout: buildTimeout() },
@@ -270,7 +279,10 @@ describe("P16 p33 one-file build", () => {
         vi.setSystemTime(new Date("2031-01-01"));
         const b = fixture(text, count),
           second = await build({ ...b.options, chaos });
-        expect(readFileSync(second.brain)).toEqual(readFileSync(first.brain));
+        // Plants: publish a clock-dependent comment, or flip one byte of the second brain.
+        expect(readFileSync(second.brain, "latin1"), "two clean builds write the same bytes").toBe(
+          readFileSync(first.brain, "latin1"),
+        );
 
         for (const f of [a, b]) {
           expect(readFileSync(first.brain, "utf8")).not.toContain(f.home);
