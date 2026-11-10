@@ -10,9 +10,12 @@ import { heldPort } from "./port.test-support.ts";
 
 const Failure = Schema.Struct({ reason: Schema.String });
 
-export const recordCall = (invoke: () => Promise<unknown>): Effect.Effect<unknown, SinkError> =>
+export const recordCall = Effect.fnUntraced(function* (invoke: () => Promise<unknown>) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: the local stage record proxy exposes Promise-returning stub calls
-  Effect.tryPromise({ try: invoke, catch: (cause: unknown) => Schema.decodeUnknownSync(Failure)(cause) }).pipe(
+  return yield* Effect.tryPromise({
+    try: invoke,
+    catch: (cause: unknown) => Schema.decodeUnknownSync(Failure)(cause),
+  }).pipe(
     // Mapping every reach failure to unreachable still fails the bad_row law.
     Effect.catch((error) =>
       error.reason === "unreachable" || error.reason === "bad_row" || error.reason === "storage"
@@ -20,6 +23,7 @@ export const recordCall = (invoke: () => Promise<unknown>): Effect.Effect<unknow
         : Effect.die(error),
     ),
   );
+});
 
 export const recordWire = Effect.fnUntraced(
   function* (cap: number) {
