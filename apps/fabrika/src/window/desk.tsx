@@ -62,7 +62,7 @@ import {
 } from "./frame.ts";
 import {Band, BottomArea, type FrameProps, Over, TopBar} from "./frame.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
-import {markReady, startTheme} from "./theme-start.ts";
+import {cachedTheme, markReady, startTheme} from "./theme-start.ts";
 import {applyAppearance, themeWord} from "./theme.ts";
 import {Strip, Tile} from "./tile.tsx";
 import {WINDOWS} from "./windows.tsx";
@@ -466,6 +466,10 @@ const startAppearance = () => {
 		applyAppearance({_tag: "forced", on: true});
 		appearanceReady();
 	}
+	// The cached theme is the latest choice until the host's comes: a terminal made now draws it,
+	// and leaving forced colors goes back to it, not to fabrika's.
+	const cached = cachedTheme(localStorage);
+	if (cached !== null) applyAppearance({_tag: "cached", value: cached});
 	forced.addEventListener("change", (e) => applyAppearance({_tag: "forced", on: e.matches}));
 };
 
@@ -520,7 +524,7 @@ const heard = (raw: unknown) => {
 		case "theme": {
 			applyAppearance({_tag: "theme", value: m.value, version: m.version, policy: m.policy});
 			appearanceReady();
-			const word = themeWord(m.report);
+			const word = themeWord(m.report, m.policy);
 			if (word === store.themeSaid) return;
 			store.themeSaid = word;
 			if (word !== null) frameStep({type: "say", note: word});

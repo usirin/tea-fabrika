@@ -1,7 +1,7 @@
 import {applyCell, defineMachine, noop} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {fabrika, fabrikaLight} from "@kampus/fabrika-design";
-import {check} from "@kampus/fabrika-design/contrast";
+import {check, ratio} from "@kampus/fabrika-design/contrast";
 import type {GlobalColors} from "@kampus/fabrika-design/theme-contract";
 import {repair} from "@kampus/fabrika-design/theme-contract";
 import {Schema} from "effect";
@@ -17,11 +17,13 @@ import {CACHE, paint} from "./theme-start.ts";
 //   applyAppearance({_tag: "theme", value, version})   the host's next value: painted, cached
 //   applyAppearance({_tag: "forced", on: true})        system colors: nothing set on the root,
 //                                                      a canvas reads Canvas and CanvasText
+//   applyAppearance({_tag: "cached", value})           the start's cached theme, until the host's
 //   readColors()      {colors, terminal}: what a canvas draws now
 //   onTheme(hear)     hear() once per applied change; the answer unsubscribes
-//   correctCell(fg, bg)  a drawn terminal cell's text, moved the least lightness that passes
-//                     both text floors under the person's theme-fix and theme-contrast
-//   themeWord(report) the one quiet word for the bottom line, or null for a clean load
+//   correctCell(fg, bg, system)  a drawn terminal cell's text, moved the least lightness that
+//                     passes both text floors under the person's theme-fix and theme-contrast;
+//                     under forced colors, the system's text or background, whichever reads
+//   themeWord(report, policy)  the one quiet word for the bottom line, or null for a clean load
 //
 // A named theme's look wins over the OS: while one is applied, a look change moves nothing.
 
@@ -33,7 +35,12 @@ export type Appearance =
 			readonly version: string;
 			readonly policy?: ThemePolicy | undefined;
 	  }
-	| {readonly _tag: "forced"; readonly on: boolean};
+	| {readonly _tag: "forced"; readonly on: boolean}
+	/**
+	 * The last applied theme from the page's cache (theme-start.ts), before the host's first value:
+	 * the latest choice the page knows, so leaving forced colors goes back to it, not to fabrika's.
+	 */
+	| {readonly _tag: "cached"; readonly value: AppliedTheme};
 
 /** The applied theme and the system's override. */
 export interface Look {
@@ -78,6 +85,15 @@ export const lookMachine = defineMachine({
 			if (next._tag === "forced") {
 				const theme = next.on ? null : s.theme;
 				return [{...s, forced: next.on}, [paintCmd({theme}), notifyCmd({})]];
+			}
+			// The cache is for paint only: the host's value, once it came, wins, and it is not
+			// cached again.
+			if (next._tag === "cached") {
+				if (s.theme !== null) return [s, []];
+				return [
+					{...s, theme: next.value},
+					[...(s.forced ? [] : [paintCmd({theme: next.value})]), notifyCmd({})],
+				];
 			}
 			const look: Look = {
 				...s,
@@ -196,13 +212,33 @@ export const readColors = (): {
 /** The text floor a drawn cell is held to: WCAG 4.5 (or the person's higher setting) and Lc 60. */
 const CELL = [{token: "text-primary", on: "terminal.background", floor: {wcag: 4.5, apca: 60}}];
 
+/** The system's two terminal colors under forced colors, as the canvas draws them (`#rrggbb`). */
+export interface SystemCell {
+	readonly text: string;
+	readonly back: string;
+}
+
 /**
  * A drawn cell's text, as ghostty-web's patched `correctForeground` asks after inverse, selection
  * and faint fixed its colors: unchanged when it reads, else the shared checker's least lightness
- * move, or past the cap that look's built-in text. `fix = "off"` and forced colors draw as given.
+ * move, or past the cap that look's built-in text. `fix = "off"` draws as given.
+ *
+ * Under forced colors a terminal reads the system's colors, as the CSS does (plan, "What the window
+ * gets"): every cell's text is the system's, its text color or its background color, whichever
+ * reads on the cell's drawn background. A program's own RGB, a faint cell or a palette entry never
+ * draws a third color then. `system` is that pair as the terminal drew it; without it, as given.
+ *
+ *   correctCell("#d0d0d0", "#ffffff", {text: "#000000", back: "#ffffff"})   "#000000"
+ *   correctCell("#d0d0d0", "#000000", {text: "#000000", back: "#ffffff"})   "#ffffff"
  */
-export const correctCell = (fg: string, bg: string): string => {
-	if (look.forced || look.policy.fix === "off") return fg;
+export const correctCell = (fg: string, bg: string, system?: SystemCell): string => {
+	if (look.forced)
+		return system === undefined
+			? fg
+			: ratio(system.text, bg) >= ratio(system.back, bg)
+				? system.text
+				: system.back;
+	if (look.policy.fix === "off") return fg;
 	const key = `${fg} ${bg}`;
 	const known = corrected.get(key);
 	if (known !== undefined) return known;
@@ -220,19 +256,25 @@ export const correctCell = (fg: string, bg: string): string => {
 /**
  * The one quiet word the bottom line says once for a load (themes.md point 4): what moved, what
  * took fabrika's own past the cap, what still fails, and a file that did not apply. Names and
- * counts only: no color value, no path.
+ * counts only: no color value, no path. Under `theme-fix = "off"` nothing moved and nothing took
+ * fabrika's (the report's changes are what nudge would do), so it says what would.
  *
  *   theme "dusk": 2 colors moved, 1 uses fabrika's
+ *   theme "dusk": 2 colors would move, 1 would use fabrika's, 9 pairs fail    (off)
  *   theme "nord": not applied, using fabrika
  */
-export const themeWord = (report: ThemeReport): string | null => {
+export const themeWord = (report: ThemeReport, policy?: ThemePolicy): string | null => {
+	const off = policy?.fix === "off";
 	const moved = new Set(report.changes.flatMap((c) => (c._tag === "moved" ? [c.token] : []))).size;
 	const builtins = new Set(report.changes.flatMap((c) => (c._tag === "builtin" ? [c.token] : [])))
 		.size;
 	const failing = new Set(report.failures.map((f) => `${f.token} ${f.on}`)).size;
+	const colors = moved === 1 ? "color" : "colors";
 	const parts = [
-		...(moved === 0 ? [] : [`${moved} ${moved === 1 ? "color" : "colors"} moved`]),
-		...(builtins === 0 ? [] : [`${builtins} ${builtins === 1 ? "uses" : "use"} fabrika's`]),
+		...(moved === 0 ? [] : [`${moved} ${colors} ${off ? "would move" : "moved"}`]),
+		...(builtins === 0
+			? []
+			: [`${builtins} ${off ? "would use" : builtins === 1 ? "uses" : "use"} fabrika's`]),
 		...(failing === 0 ? [] : [`${failing} ${failing === 1 ? "pair fails" : "pairs fail"}`]),
 		...(report.diagnostics.length === 0
 			? []

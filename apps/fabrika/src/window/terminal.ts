@@ -30,9 +30,10 @@ import {correctCell, onTheme, readColors, themeApplied} from "./theme.ts";
 const LIGHT = "(prefers-color-scheme: light)";
 
 /**
- * A CSS system color as the canvas draws it, `rgb(r, g, b)`: under forced colors the window's
- * appearance gives the terminal `Canvas` and `CanvasText` (theme.ts), and ghostty-web reads only
- * hex and rgb() colors. A probe element asks the page what the system's color is now.
+ * A CSS system color as the canvas draws it, `#rrggbb`: under forced colors the window's
+ * appearance gives the terminal `Canvas` and `CanvasText` (theme.ts), ghostty-web reads only hex
+ * and rgb() colors, and the shared checker reads hex. A probe element asks the page what the
+ * system's color is now; the page answers `rgb(r, g, b)`.
  */
 const drawable = (color: string): string => {
 	if (color.startsWith("#") || document.body === undefined || document.body === null) return color;
@@ -41,25 +42,40 @@ const drawable = (color: string): string => {
 	document.body.append(probe);
 	const rgb = getComputedStyle(probe).color;
 	probe.remove();
-	return rgb;
+	const channels = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(rgb);
+	if (channels === null) return rgb;
+	return `#${channels
+		.slice(1, 4)
+		.map((n) => Number(n).toString(16).padStart(2, "0"))
+		.join("")}`;
 };
 
 /**
  * The applied theme's terminal colors (theme.ts): the host's theme, fabrika's own in the system's
  * look until it comes, or the system's colors under forced colors. Read when a terminal is made:
- * ghostty-web 0.4 cannot change a terminal's colors once it is open.
+ * ghostty-web 0.4 cannot change a terminal's colors once it is open. `system` is the drawn text
+ * and background pair a forced-colors cell takes its text from.
  */
 const themeNow = () => {
 	const {terminal} = readColors();
-	return terminalTheme({
-		terminal: {
-			foreground: drawable(terminal.foreground),
-			background: drawable(terminal.background),
-			cursor: drawable(terminal.cursor),
-			selection: drawable(terminal.selection),
-			palette: terminal.palette.map(drawable),
-		},
-	});
+	const foreground = drawable(terminal.foreground);
+	const background = drawable(terminal.background);
+	return {
+		theme: terminalTheme({
+			terminal: {
+				foreground,
+				background,
+				cursor: drawable(terminal.cursor),
+				selection: drawable(terminal.selection),
+				palette: terminal.palette.map(drawable),
+			},
+		}),
+		// Before the page has a body, a system color cannot be read: the cells draw as given.
+		system:
+			foreground.startsWith("#") && background.startsWith("#")
+				? {text: foreground, back: background}
+				: undefined,
+	};
 };
 /**
  * The most bytes a tile keeps to write again when its look changes, as experiment 177's spike kept
@@ -179,6 +195,7 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	};
 
 	const make = () => {
+		const {theme, system} = themeNow();
 		const made = new Terminal({
 			ghostty,
 			fontSize: 13,
@@ -187,11 +204,11 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 			// option turns blinking on in ghostty-web 0.4.0; a program's escape codes cannot.
 			cursorBlink: false,
 			scrollback: 1000,
-			theme: themeNow(),
+			theme,
 			// The patched renderer's hook (patches/ghostty-web@0.4.0.patch): each cell's text, once
-			// its drawn colors are known, held to both text floors under the person's policy. The
-			// palette and the bytes stay as they are.
-			correctForeground: correctCell,
+			// its drawn colors are known, held to both text floors under the person's policy, or the
+			// system's text under forced colors. The palette and the bytes stay as they are.
+			correctForeground: (fg: string, bg: string) => correctCell(fg, bg, system),
 		});
 		const fit = new FitAddon();
 		made.loadAddon(fit);

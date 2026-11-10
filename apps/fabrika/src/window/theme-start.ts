@@ -38,20 +38,31 @@ export const markReady = (): void => {
 
 const decode = Schema.decodeUnknownExit(Schema.fromJsonString(AppliedTheme));
 
+/**
+ * The cached theme, if it is a complete applied theme; a cache that is not is removed. Read under
+ * forced colors too: it is the latest choice the page knows until the host's value comes, and
+ * leaving forced colors goes back to it (theme.ts, `{_tag: "cached"}`).
+ */
+export const cachedTheme = (
+	storage: Pick<Storage, "getItem" | "removeItem">,
+): AppliedTheme | null => {
+	const cached = storage.getItem(CACHE);
+	if (cached === null) return null;
+	const read = decode(cached, {onExcessProperty: "error"});
+	if (Exit.isSuccess(read)) return read.value;
+	storage.removeItem(CACHE);
+	return null;
+};
+
 /** Paint the cached theme before the first draw. True when one was painted. */
 export const startTheme = (
 	storage: Pick<Storage, "getItem" | "setItem" | "removeItem">,
 	forced: boolean,
 ): boolean => {
 	if (forced) return false;
-	const cached = storage.getItem(CACHE);
+	const cached = cachedTheme(storage);
 	if (cached === null) return false;
-	const read = decode(cached, {onExcessProperty: "error"});
-	if (Exit.isFailure(read)) {
-		storage.removeItem(CACHE);
-		return false;
-	}
-	paint(read.value);
+	paint(cached);
 	markReady();
 	return true;
 };
