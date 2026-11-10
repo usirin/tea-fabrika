@@ -1,12 +1,12 @@
 ---
 id: 0046
-title: In next/, every state machine is a tea machine and a file exports at most one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
+title: In next/, every state machine is a tea machine and a file exports at most one, or one factory of one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
 status: accepted
 date: 2026-11-09
 tags: [state-machine, tea, file-layout, lint, properties, elm, next]
 ---
 
-# 0046: In next/, every state machine is a tea machine and a file exports at most one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
+# 0046: In next/, every state machine is a tea machine and a file exports at most one, or one factory of one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
 
 **What this decides:** in `next/`, every state machine is written as a tea machine, and each tea
 machine has a file that holds its Model, its Msg and its update and nothing that does input or
@@ -189,6 +189,8 @@ machine (`app/runner.ts:271-272`).
 - **A new state is not forced through every handler by the compiler** (2026-11-10, the amendment
   below). A handler that picks the next state with a plain conditional still compiles when the
   Model gains a case. The machine's property tests carry that check.
+- **The lint rule must accept two forms** (2026-11-10, the factory amendment below): one exported
+  `Machine.make` call, or one exported function that returns one. Tracker ticket 509 carries that.
 - Not decided here: the folder a machine's file sits in ([0043](0043-rooms-on-floors.md) does), the names of the new
   Msgs and cases, the order the 13 machines are done in, and today's version, which this record does
   not touch.
@@ -215,11 +217,43 @@ machine (`app/runner.ts:271-272`).
   - **What it does not cover.** Only the transition code inside `update`. `Match` and `.match`
     anywhere else are untouched.
 
+- 2026-11-10: **a file may export a machine factory in place of a machine:** one function that
+  takes a config and returns one tea machine. It is for a machine that needs something from its
+  caller that a Msg cannot carry, such as each program's own schema checks. Tracker ticket 534.
+
+  ```ts
+  // A sketch. One file, one export: the factory. The names are examples.
+  export const clientMachineFor = (checks: Checks) =>
+    Machine.make({model: Client, msg: Msg, cmds: [] /* init, and an update that reads `checks` */});
+  ```
+
+  - **One machine or one factory, never both.** A file exports one machine, or one factory of one
+    machine. A factory never returns more than one machine.
+  - **Rule 2 holds as written.** The factory's Model, Msg and update live in that file, with no
+    input or output code, and nothing outside the file builds or edits the Model by hand. The
+    config is read by the update; it is not a way to pass in a service, storage or a clock.
+  - **The known way.** Elm's reusable-view pattern: the caller passes a config value, and the
+    functions in it stay out of the `Model` and the `Msg`. The elm-sortable-table README says this
+    under [Usage Rules](https://github.com/evancz/elm-sortable-table#usage-rules) ("never put
+    functions in your `Model` or `Msg` types", read at its source on 2026-11-10). Two things about
+    this source, said plainly: the package is deprecated and not published for Elm 0.19 and above,
+    and its config holds `view` functions. A config that an `update` reads is our use of the same
+    idea, not something that README shows.
+  - **First user.** Lane P14's `clientMachineFor(checks)`, tracker ticket 286. It is on that lane's
+    branch, not on main, and the pushed branch did not hold that name yet when this was written.
+  - **The cost.** The lint rule for this record (tracker ticket 509) must accept both forms
+    (Consequences). One machine per call is not something a count of exports proves, so ticket 509
+    says whether the rule can check it or review does.
+  - **The word** is the industry's "factory": a function that makes a value. A row for
+    `machine factory` is in the glossary (Records).
+
 ## Records
 
 - [0037](0037-implicit-state-machines-made-explicit.md): status `amended-in-part`, and a one-line
   pointer.
 - [`.glossary/TERMS.md`](../.glossary/TERMS.md): no word is coined. The rows `explicit machine` and
   `machine` (Runtime) lose the plain form.
+- [`.glossary/TERMS.md`](../.glossary/TERMS.md), 2026-11-10: the row `machine factory` (Runtime), for
+  the factory amendment.
 - AGENTS.md: one line. [Experiment 246](../experiments/246-implicit-state-machines-in-next.md): one
   dated note.

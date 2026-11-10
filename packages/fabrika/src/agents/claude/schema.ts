@@ -1,6 +1,6 @@
-import {Option, Schema} from "effect";
-import {z} from "zod";
-import {jsonSchemaOf} from "../../program/shape.ts";
+import { Option, Schema } from "effect";
+import { z } from "zod";
+import { jsonSchemaOf } from "../../program/shape.ts";
 
 // The schema a Draft's answer is read by (./draft.ts): how the agent's JSON
 // becomes a typed value, and the JSON Schema the Agent SDK is handed for it.
@@ -14,9 +14,9 @@ import {jsonSchemaOf} from "../../program/shape.ts";
  * sides may differ.
  */
 export type Reads<T> =
-	| Schema.Codec<T, unknown>
-	// zod
-	| z.ZodType<T>;
+  | Schema.Codec<T, unknown>
+  // zod
+  | z.ZodType<T>;
 
 /**
  * Read an outside JSON value against a schema: the typed value, or none when
@@ -25,33 +25,31 @@ export type Reads<T> =
  * tea's check it is synchronous: a schema that needs a Promise throws.
  */
 export const reader = <T>(schema: Reads<T>): ((value: unknown) => Option.Option<T>) => {
-	if (Schema.isSchema(schema)) {
-		return Schema.decodeUnknownOption(Schema.toCodecJson(schema));
-	}
+  if (Schema.isSchema(schema)) {
+    return Schema.decodeUnknownOption(Schema.toCodecJson(schema));
+  }
 
-	// zod
-	return (value) => {
-		const read = schema.safeParse(value);
-		return read.success ? Option.some(read.data) : Option.none();
-	};
+  // zod
+  return (value) => {
+    const read = schema.safeParse(value);
+    return read.success ? Option.some(read.data) : Option.none();
+  };
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
-	value !== null && typeof value === "object" && !Array.isArray(value);
+  value !== null && typeof value === "object" && !Array.isArray(value);
 
 /**
  * A JSON Schema with every `prefixItems` taken out where each of its entries
  * is the array's `items`: a non-empty list, not a tuple. A real tuple keeps it.
  */
 function withoutSamePrefix(node: Record<string, unknown>): Record<string, unknown> {
-	const walk = (value: unknown): unknown =>
-		Array.isArray(value) ? value.map(walk) : isObject(value) ? withoutSamePrefix(value) : value;
-	const {prefixItems, ...rest} = node;
-	const same =
-		Array.isArray(prefixItems) &&
-		prefixItems.every((p) => JSON.stringify(p) === JSON.stringify(node.items));
-	const kept = prefixItems === undefined || same ? rest : node;
-	return Object.fromEntries(Object.entries(kept).map(([key, value]) => [key, walk(value)]));
+  const walk = (value: unknown): unknown =>
+    Array.isArray(value) ? value.map(walk) : isObject(value) ? withoutSamePrefix(value) : value;
+  const { prefixItems, ...rest } = node;
+  const same = Array.isArray(prefixItems) && prefixItems.every((p) => JSON.stringify(p) === JSON.stringify(node.items));
+  const kept = prefixItems === undefined || same ? rest : node;
+  return Object.fromEntries(Object.entries(kept).map(([key, value]) => [key, walk(value)]));
 }
 
 /**
@@ -68,12 +66,12 @@ function withoutSamePrefix(node: Record<string, unknown>): Record<string, unknow
  * as the rest, and `minItems: 1` already says it, so the keyword is dropped.
  */
 export const jsonSchema = (schema: Reads<unknown>): Record<string, unknown> => {
-	// Effect: tea-program's, so a program's listing and a Draft's schema read alike.
-	if (Schema.isSchema(schema)) {
-		return withoutSamePrefix(jsonSchemaOf(schema));
-	}
+  // Effect: tea-program's, so a program's listing and a Draft's schema read alike.
+  if (Schema.isSchema(schema)) {
+    return withoutSamePrefix(jsonSchemaOf(schema));
+  }
 
-	// zod
-	const {$schema: _, ...rest} = z.toJSONSchema(schema) as Record<string, unknown>;
-	return rest;
+  // zod
+  const { $schema: _, ...rest } = z.toJSONSchema(schema) as Record<string, unknown>;
+  return rest;
 };

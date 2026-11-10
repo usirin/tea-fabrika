@@ -17,26 +17,24 @@ export const PORT_CHANNEL = "fabrika:port";
 
 /** A port's name: the desk's, a tile's, or a run's. Nothing else is handed a port. */
 export const isPortName = (name: unknown): name is string =>
-	typeof name === "string" &&
-	(name === "desk" ||
-		/^tile:t[0-9]{1,9}$/.test(name) ||
-		/^run:[A-Za-z0-9_-]{1,64}:[0-9a-f]{1,16}$/.test(name));
+  typeof name === "string" &&
+  (name === "desk" || /^tile:t[0-9]{1,9}$/.test(name) || /^run:[A-Za-z0-9_-]{1,64}:[0-9a-f]{1,16}$/.test(name));
 
 export interface Bridge {
-	/** Send a message on the port named `to`. It is read in main, and refused if it does not read. */
-	readonly send: (to: string, m: unknown) => void;
-	/**
-	 * Hear each message on the port named `from`, in order, with this listener alone. What came
-	 * before is handed to it first: a terminal's bytes are a stream, and none may be lost. Read
-	 * each before using it.
-	 */
-	readonly onMessage: (from: string, listener: (m: unknown) => void) => void;
-	/** Done with the port named `name`: it closes, and what waited on it goes. */
-	readonly forget: (name: string) => void;
+  /** Send a message on the port named `to`. It is read in main, and refused if it does not read. */
+  readonly send: (to: string, m: unknown) => void;
+  /**
+   * Hear each message on the port named `from`, in order, with this listener alone. What came
+   * before is handed to it first: a terminal's bytes are a stream, and none may be lost. Read
+   * each before using it.
+   */
+  readonly onMessage: (from: string, listener: (m: unknown) => void) => void;
+  /** Done with the port named `name`: it closes, and what waited on it goes. */
+  readonly forget: (name: string) => void;
 }
 
 declare global {
-	interface Window {
-		readonly fabrika: Bridge;
-	}
+  interface Window {
+    readonly fabrika: Bridge;
+  }
 }

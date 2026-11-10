@@ -10,8 +10,8 @@
 // - Ports come in pairs. The test keeps a listener on the even one for as long as it uses the odd
 //   one. Another test process that wants the pair fails to bind the even one and moves on. The
 //   kernel is the lock: it holds across processes and lets go when a process dies.
-import {createServer, type Server} from "node:net";
-import {Effect} from "effect";
+import { createServer, type Server } from "node:net";
+import { Effect } from "effect";
 
 const FIRST = 20000;
 const PAIRS = 6000;
@@ -22,39 +22,39 @@ const PAIRS = 6000;
 let cursor = process.pid % PAIRS;
 
 const listen = (port: number) =>
-	Effect.callback<Server | null>((resume) => {
-		const server = createServer();
-		server.once("error", () => resume(Effect.succeed(null)));
-		server.listen({port, host: "127.0.0.1", exclusive: true}, () => resume(Effect.succeed(server)));
-	});
+  Effect.callback<Server | null>((resume) => {
+    const server = createServer();
+    server.once("error", () => resume(Effect.succeed(null)));
+    server.listen({ port, host: "127.0.0.1", exclusive: true }, () => resume(Effect.succeed(server)));
+  });
 
 const close = (server: Server) =>
-	Effect.callback<void>((resume) => {
-		server.close(() => resume(Effect.void));
-	});
+  Effect.callback<void>((resume) => {
+    server.close(() => resume(Effect.void));
+  });
 
 /** A port nobody else is given until `release` runs. Run `release` after the port's user is gone. */
 export const heldPort = Effect.fn("port.heldPort")(function* () {
-	for (let n = 0; n < PAIRS; n++) {
-		const lock = FIRST + 2 * (cursor % PAIRS);
-		cursor++;
-		const held = yield* listen(lock);
+  for (let n = 0; n < PAIRS; n++) {
+    const lock = FIRST + 2 * (cursor % PAIRS);
+    cursor++;
+    const held = yield* listen(lock);
 
-		if (held === null) {
-			continue;
-		}
+    if (held === null) {
+      continue;
+    }
 
-		// Something outside these tests may sit on the odd port. Look once, while holding the pair.
-		const free = yield* listen(lock + 1);
+    // Something outside these tests may sit on the odd port. Look once, while holding the pair.
+    const free = yield* listen(lock + 1);
 
-		if (free === null) {
-			yield* close(held);
-			continue;
-		}
+    if (free === null) {
+      yield* close(held);
+      continue;
+    }
 
-		yield* close(free);
-		return {port: lock + 1, release: close(held)};
-	}
+    yield* close(free);
+    return { port: lock + 1, release: close(held) };
+  }
 
-	return yield* Effect.die(new Error("no free test port pair"));
+  return yield* Effect.die(new Error("no free test port pair"));
 });

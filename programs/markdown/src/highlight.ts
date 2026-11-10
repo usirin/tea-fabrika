@@ -17,10 +17,10 @@ import type * as Pierre from "@pierre/highlights";
 
 /** A run of code in one color. `color` null: the page's own ink. */
 export interface Span {
-	readonly text: string;
-	readonly color: string | null;
-	readonly italic: boolean;
-	readonly bold: boolean;
+  readonly text: string;
+  readonly color: string | null;
+  readonly italic: boolean;
+  readonly bold: boolean;
 }
 
 type Line = readonly Span[];
@@ -47,30 +47,30 @@ const PLAIN = new Set(["plain", "plaintext", "text", "txt"]);
 
 /** Whether a block's language could have colors: it names one, and not plain text. */
 export const wantsColors = (lang: string | null): lang is string =>
-	lang !== null && lang !== "" && !PLAIN.has(lang.toLowerCase());
+  lang !== null && lang !== "" && !PLAIN.has(lang.toLowerCase());
 
 /** The colors, from the highlighter and one theme. The theme's own ink is left to the page. */
 export const colorsOf =
-	(highlights: Highlights, theme: Pierre.Theme): Colors =>
-	(code, lang) => {
-		if (!wantsColors(lang) || !highlights.isSupportedLanguage(lang)) {
-			return null;
-		}
+  (highlights: Highlights, theme: Pierre.Theme): Colors =>
+  (code, lang) => {
+    if (!wantsColors(lang) || !highlights.isSupportedLanguage(lang)) {
+      return null;
+    }
 
-		const {tokens, fg} = highlights.codeToTokens(code, {
-			lang,
-			theme,
-			tokenizeMaxLineLength: LONGEST,
-		});
-		return tokens.map((line) =>
-			line.map((token) => ({
-				text: token.content,
-				color: token.color === undefined || token.color === fg ? null : token.color,
-				italic: ((token.fontStyle ?? 0) & ITALIC) !== 0,
-				bold: ((token.fontStyle ?? 0) & BOLD) !== 0,
-			})),
-		);
-	};
+    const { tokens, fg } = highlights.codeToTokens(code, {
+      lang,
+      theme,
+      tokenizeMaxLineLength: LONGEST,
+    });
+    return tokens.map((line) =>
+      line.map((token) => ({
+        text: token.content,
+        color: token.color === undefined || token.color === fg ? null : token.color,
+        italic: ((token.fontStyle ?? 0) & ITALIC) !== 0,
+        bold: ((token.fontStyle ?? 0) & BOLD) !== 0,
+      })),
+    );
+  };
 
 // One highlighter for the page, as the WebAssembly is one module: a store the window reads with
 // React's `useSyncExternalStore`, so the window itself holds no state. `loading` is null until a
@@ -85,10 +85,10 @@ export const colorsNow = (): Colors | null => colors;
 
 /** Calls `listener` when the colors load. Returns the call that stops it. */
 export const onColors = (listener: () => void): (() => void) => {
-	listeners.add(listener);
-	return () => {
-		listeners.delete(listener);
-	};
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 };
 
 /**
@@ -97,23 +97,20 @@ export const onColors = (listener: () => void): (() => void) => {
  * and every color in it reads at 6.7:1 or more on the code block's ground.
  */
 export const loadColors = (): Promise<Colors | null> => {
-	loading ??= Promise.all([
-		import("@pierre/highlights"),
-		import("@pierre/highlights/themes/github-dark-dimmed"),
-	]).then(
-		([highlights, theme]) => {
-			colors = colorsOf(highlights, theme.default);
+  loading ??= Promise.all([import("@pierre/highlights"), import("@pierre/highlights/themes/github-dark-dimmed")]).then(
+    ([highlights, theme]) => {
+      colors = colorsOf(highlights, theme.default);
 
-			for (const listener of listeners) {
-				listener();
-			}
+      for (const listener of listeners) {
+        listener();
+      }
 
-			return colors;
-		},
-		(cause: unknown) => {
-			console.warn("markdown: code stays plain, the highlighter did not load", cause);
-			return null;
-		},
-	);
-	return loading;
+      return colors;
+    },
+    (cause: unknown) => {
+      console.warn("markdown: code stays plain, the highlighter did not load", cause);
+      return null;
+    },
+  );
+  return loading;
 };

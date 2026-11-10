@@ -1,7 +1,7 @@
-import {Schema} from "effect";
-import {jsonSchemaOf} from "../program/shape.ts";
-import {Why} from "./stop.ts";
-import type {Tool} from "./tools.ts";
+import { Schema } from "effect";
+import { jsonSchemaOf } from "../program/shape.ts";
+import { Why } from "./stop.ts";
+import type { Tool } from "./tools.ts";
 
 // The `restart` tool, beside `runs`, `job` and `stop`: an agent restarts the host, and must say why
 // (tracker 185b, PR 5). The host answers first, then ends as SIGTERM ends it: every tile's tsh
@@ -24,29 +24,29 @@ import type {Tool} from "./tools.ts";
 export const RESTART = "restart";
 
 /** What the tool takes: why, in the agent's words, on one line (./stop.ts's `Why`). */
-export const RestartAsk = Schema.Struct({why: Why});
+export const RestartAsk = Schema.Struct({ why: Why });
 export type RestartAsk = typeof RestartAsk.Type;
 
 /** The host will end now, and these jobs wait, detached, for the next host. */
 export const RestartAnswer = Schema.TaggedStruct("restarting", {
-	detached: Schema.Array(Schema.Int),
+  detached: Schema.Array(Schema.Int),
 });
 export type RestartAnswer = typeof RestartAnswer.Type;
 
 /** The host would not restart, and why, in words for the agent: no app is attached to start the next. */
 export class RestartRefused extends Schema.TaggedError<RestartRefused>()("RestartRefused", {
-	why: Schema.String,
+  why: Schema.String,
 }) {}
 
 export const RESTART_TOOL: Tool = {
-	name: RESTART,
-	description:
-		"Restart the host: it ends now, and the app the person has open starts a new host of its own build, so the host picks up a new build. Every job stays in the table, detached, as the job tool then shows it. why: what made you restart it, 1 to 500 characters on one line; the person's top bar and tiles show it once. Refused when no app is attached, since nothing would start the new host. Answers restarting, with the jobs left detached. While the host is down, a call is answered with an error that says so: call again.",
-	inputSchema: {...jsonSchemaOf(RestartAsk), type: "object"},
-	annotations: {
-		readOnlyHint: false,
-		destructiveHint: true,
-		idempotentHint: false,
-		openWorldHint: false,
-	},
+  name: RESTART,
+  description:
+    "Restart the host: it ends now, and the app the person has open starts a new host of its own build, so the host picks up a new build. Every job stays in the table, detached, as the job tool then shows it. why: what made you restart it, 1 to 500 characters on one line; the person's top bar and tiles show it once. Refused when no app is attached, since nothing would start the new host. Answers restarting, with the jobs left detached. While the host is down, a call is answered with an error that says so: call again.",
+  inputSchema: { ...jsonSchemaOf(RestartAsk), type: "object" },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
 };

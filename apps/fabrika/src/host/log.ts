@@ -1,4 +1,4 @@
-import {Effect, Layer, type Option, Tracer} from "effect";
+import { Effect, Layer, type Option, Tracer } from "effect";
 
 // The host's wide log, beyond what each part says of itself: one `key=value` line as a lane step
 // begins and one as it ends, read off the step's own span; and one when the host's thread is
@@ -20,7 +20,7 @@ import {Effect, Layer, type Option, Tracer} from "effect";
 // is one second's delay.
 
 /** The span tags a lane step carries (packages/pipeline, stages/traced.ts `LANE`, and `tea.outcome`). */
-const TAG = {run: "tea.lane.run", step: "tea.lane.step", outcome: "tea.outcome"} as const;
+const TAG = { run: "tea.lane.run", step: "tea.lane.step", outcome: "tea.outcome" } as const;
 
 /**
  * A second's p99 past this is a lag line, in seconds: 0.05 s, 50 ms. A long task is one over
@@ -35,120 +35,120 @@ const seconds = (ns: number): number => Math.round(ns / 1e3) / 1e6;
 
 /** A delay histogram, as Node's `monitorEventLoopDelay` gives one: nanoseconds, and a reset. */
 interface DelayHistogram {
-	readonly percentile: (p: number) => number;
-	readonly max: number;
-	readonly reset: () => void;
+  readonly percentile: (p: number) => number;
+  readonly max: number;
+  readonly reset: () => void;
 }
 
 /** Read one second's delay, start the next second fresh, and say a lag line if its p99 passed `LAG_P99`. */
 export const sampleLag = (histogram: DelayHistogram) =>
-	Effect.suspend(() => {
-		const p99 = seconds(histogram.percentile(99));
-		const max = seconds(histogram.max);
-		histogram.reset();
-		return p99 <= LAG_P99
-			? Effect.void
-			: Effect.logWarning("lag").pipe(
-					Effect.annotateLogs({
-						"nodejs.eventloop.delay.p99": p99,
-						"nodejs.eventloop.delay.max": max,
-					}),
-				);
-	});
+  Effect.suspend(() => {
+    const p99 = seconds(histogram.percentile(99));
+    const max = seconds(histogram.max);
+    histogram.reset();
+    return p99 <= LAG_P99
+      ? Effect.void
+      : Effect.logWarning("lag").pipe(
+          Effect.annotateLogs({
+            "nodejs.eventloop.delay.p99": p99,
+            "nodejs.eventloop.delay.max": max,
+          }),
+        );
+  });
 
 /** One INFO line, its message and its fields. */
 type Say = (message: string, fields: Readonly<Record<string, unknown>>) => void;
 
 /** A span, as the tracer under it made it, that says a lane step's begin and end as its tags come. */
 class StepSpan implements Tracer.Span {
-	readonly _tag = "Span";
-	readonly #span: Tracer.Span;
-	readonly #say: Say;
-	#began = false;
+  readonly _tag = "Span";
+  readonly #span: Tracer.Span;
+  readonly #say: Say;
+  #began = false;
 
-	constructor(span: Tracer.Span, say: Say) {
-		this.#span = span;
-		this.#say = say;
-	}
+  constructor(span: Tracer.Span, say: Say) {
+    this.#span = span;
+    this.#say = say;
+  }
 
-	get name(): string {
-		return this.#span.name;
-	}
+  get name(): string {
+    return this.#span.name;
+  }
 
-	get spanId(): string {
-		return this.#span.spanId;
-	}
+  get spanId(): string {
+    return this.#span.spanId;
+  }
 
-	get traceId(): string {
-		return this.#span.traceId;
-	}
+  get traceId(): string {
+    return this.#span.traceId;
+  }
 
-	get parent(): Option.Option<Tracer.AnySpan> {
-		return this.#span.parent;
-	}
+  get parent(): Option.Option<Tracer.AnySpan> {
+    return this.#span.parent;
+  }
 
-	get annotations() {
-		return this.#span.annotations;
-	}
+  get annotations() {
+    return this.#span.annotations;
+  }
 
-	get status(): Tracer.SpanStatus {
-		return this.#span.status;
-	}
+  get status(): Tracer.SpanStatus {
+    return this.#span.status;
+  }
 
-	get attributes(): ReadonlyMap<string, unknown> {
-		return this.#span.attributes;
-	}
+  get attributes(): ReadonlyMap<string, unknown> {
+    return this.#span.attributes;
+  }
 
-	get links(): ReadonlyArray<Tracer.SpanLink> {
-		return this.#span.links;
-	}
+  get links(): ReadonlyArray<Tracer.SpanLink> {
+    return this.#span.links;
+  }
 
-	get sampled(): boolean {
-		return this.#span.sampled;
-	}
+  get sampled(): boolean {
+    return this.#span.sampled;
+  }
 
-	get kind(): Tracer.SpanKind {
-		return this.#span.kind;
-	}
+  get kind(): Tracer.SpanKind {
+    return this.#span.kind;
+  }
 
-	/** Its run and step, as tagged so far: a run comes with its step. */
-	#where(): Record<string, unknown> {
-		const run = this.#span.attributes.get(TAG.run);
-		return {
-			...(run === undefined ? {} : {run}),
-			step: this.#span.attributes.get(TAG.step),
-		};
-	}
+  /** Its run and step, as tagged so far: a run comes with its step. */
+  #where(): Record<string, unknown> {
+    const run = this.#span.attributes.get(TAG.run);
+    return {
+      ...(run === undefined ? {} : { run }),
+      step: this.#span.attributes.get(TAG.step),
+    };
+  }
 
-	attribute(key: string, value: unknown): void {
-		this.#span.attribute(key, value);
+  attribute(key: string, value: unknown): void {
+    this.#span.attribute(key, value);
 
-		if (key !== TAG.step || this.#began) {
-			return;
-		}
+    if (key !== TAG.step || this.#began) {
+      return;
+    }
 
-		this.#began = true;
-		this.#say("step_began", this.#where());
-	}
+    this.#began = true;
+    this.#say("step_began", this.#where());
+  }
 
-	end(endTime: bigint, exit: Parameters<Tracer.Span["end"]>[1]): void {
-		this.#span.end(endTime, exit);
+  end(endTime: bigint, exit: Parameters<Tracer.Span["end"]>[1]): void {
+    this.#span.end(endTime, exit);
 
-		if (!this.#began) {
-			return;
-		}
+    if (!this.#began) {
+      return;
+    }
 
-		const outcome = this.#span.attributes.get(TAG.outcome);
-		this.#say("step_ended", {...this.#where(), ...(outcome === undefined ? {} : {outcome})});
-	}
+    const outcome = this.#span.attributes.get(TAG.outcome);
+    this.#say("step_ended", { ...this.#where(), ...(outcome === undefined ? {} : { outcome }) });
+  }
 
-	event(name: string, startTime: bigint, attributes?: Record<string, unknown>): void {
-		this.#span.event(name, startTime, attributes);
-	}
+  event(name: string, startTime: bigint, attributes?: Record<string, unknown>): void {
+    this.#span.event(name, startTime, attributes);
+  }
 
-	addLinks(links: ReadonlyArray<Tracer.SpanLink>): void {
-		this.#span.addLinks(links);
-	}
+  addLinks(links: ReadonlyArray<Tracer.SpanLink>): void {
+    this.#span.addLinks(links);
+  }
 }
 
 /**
@@ -157,16 +157,16 @@ class StepSpan implements Tracer.Span {
  * it over `recordTracing`.
  */
 export const logSteps: Layer.Layer<never> = Layer.effect(
-	Tracer.Tracer,
-	Effect.gen(function* () {
-		const under = yield* Effect.tracer;
-		const services = yield* Effect.context<never>();
-		const say: Say = (message, fields) => {
-			Effect.runForkWith(services)(Effect.logInfo(message).pipe(Effect.annotateLogs(fields)));
-		};
-		return Tracer.make({
-			span: (options) => new StepSpan(under.span(options), say),
-			...(under.context === undefined ? {} : {context: under.context}),
-		});
-	}),
+  Tracer.Tracer,
+  Effect.gen(function* () {
+    const under = yield* Effect.tracer;
+    const services = yield* Effect.context<never>();
+    const say: Say = (message, fields) => {
+      Effect.runForkWith(services)(Effect.logInfo(message).pipe(Effect.annotateLogs(fields)));
+    };
+    return Tracer.make({
+      span: (options) => new StepSpan(under.span(options), say),
+      ...(under.context === undefined ? {} : { context: under.context }),
+    });
+  }),
 );

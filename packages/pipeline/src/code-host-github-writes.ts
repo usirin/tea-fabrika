@@ -1,8 +1,8 @@
-import {Effect, Layer, Schema} from "effect";
-import {answerOf, ask, type Gh, prOf} from "./code-host-github.ts";
-import {CodeHostWrites} from "./services.ts";
-import {sh} from "./sh.ts";
-import type {Merged, Rerun} from "./stages/ship/facts.ts";
+import { Effect, Layer, Schema } from "effect";
+import { answerOf, ask, type Gh, prOf } from "./code-host-github.ts";
+import { CodeHostWrites } from "./services.ts";
+import { sh } from "./sh.ts";
+import type { Merged, Rerun } from "./stages/ship/facts.ts";
 
 // `CodeHostWrites` on GitHub: the three things the ship machine changes on a
 // pull request. Every call here that writes is listed, whole, below. There is
@@ -21,7 +21,7 @@ import type {Merged, Rerun} from "./stages/ship/facts.ts";
 // "merge when ready", deleting a branch, an owner's bypass of the branch
 // rules, a label, a comment.
 
-const failed = Effect.fail({_tag: "unknown" as const});
+const failed = Effect.fail({ _tag: "unknown" as const });
 
 // ---------------------------------------------------------------- enqueue
 
@@ -34,18 +34,18 @@ query($owner: String!, $name: String!, $number: Int!) {
 }`;
 
 const Stands = Schema.Struct({
-	data: Schema.Struct({
-		repository: Schema.Struct({
-			pullRequest: Schema.Struct({
-				id: Schema.String,
-				state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
-				headRefOid: Schema.String,
-				mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
-				isInMergeQueue: Schema.Boolean,
-				isMergeQueueEnabled: Schema.Boolean,
-			}),
-		}),
-	}),
+  data: Schema.Struct({
+    repository: Schema.Struct({
+      pullRequest: Schema.Struct({
+        id: Schema.String,
+        state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+        headRefOid: Schema.String,
+        mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
+        isInMergeQueue: Schema.Boolean,
+        isMergeQueueEnabled: Schema.Boolean,
+      }),
+    }),
+  }),
 });
 
 type Standing = (typeof Stands.Type)["data"]["repository"]["pullRequest"];
@@ -62,22 +62,22 @@ mutation($pull: ID!, $head: GitObjectID!) {
 }`;
 
 const Enqueued = Schema.Struct({
-	data: Schema.Struct({
-		enqueuePullRequest: Schema.Struct({mergeQueueEntry: Schema.Struct({id: Schema.String})}),
-	}),
+  data: Schema.Struct({
+    enqueuePullRequest: Schema.Struct({ mergeQueueEntry: Schema.Struct({ id: Schema.String }) }),
+  }),
 });
 
 /** What a reading of the pull request already answers. `null`: nothing yet. */
 const answered = (pr: Standing, head: string): "queued" | "head_moved" | "conflicts" | null =>
-	// Another head, merged or not, is not this write's: the machine reads again.
-	pr.headRefOid !== head
-		? "head_moved"
-		: // Merged, or in the queue already: an enqueue sent a second time finds its own first write.
-			pr.state === "MERGED" || pr.isInMergeQueue
-			? "queued"
-			: pr.mergeable === "CONFLICTING"
-				? "conflicts"
-				: null;
+  // Another head, merged or not, is not this write's: the machine reads again.
+  pr.headRefOid !== head
+    ? "head_moved"
+    : // Merged, or in the queue already: an enqueue sent a second time finds its own first write.
+      pr.state === "MERGED" || pr.isInMergeQueue
+      ? "queued"
+      : pr.mergeable === "CONFLICTING"
+        ? "conflicts"
+        : null;
 
 /**
  * Put `head` in the merge queue of its pull request.
@@ -88,49 +88,44 @@ const answered = (pr: Standing, head: string): "queued" | "head_moved" | "confli
  * never guessed from the refusal's words.
  */
 export const enqueueOn =
-	(gh: Gh) =>
-	(
-		url: string,
-		head: string,
-	): Effect.Effect<
-		"queued" | "head_moved" | "conflicts" | "no_queue",
-		{readonly _tag: "unknown"}
-	> =>
-		Effect.gen(function* () {
-			const at = prOf(url);
+  (gh: Gh) =>
+  (
+    url: string,
+    head: string,
+  ): Effect.Effect<"queued" | "head_moved" | "conflicts" | "no_queue", { readonly _tag: "unknown" }> =>
+    Effect.gen(function* () {
+      const at = prOf(url);
 
-			if (at === null) {
-				return yield* failed;
-			}
+      if (at === null) {
+        return yield* failed;
+      }
 
-			const stands = ask(gh, Stands, ENQUEUE_READ, at).pipe(
-				Effect.map((answer) => answer.data.repository.pullRequest),
-			);
-			const before = yield* stands;
-			const already = answered(before, head);
+      const stands = ask(gh, Stands, ENQUEUE_READ, at).pipe(Effect.map((answer) => answer.data.repository.pullRequest));
+      const before = yield* stands;
+      const already = answered(before, head);
 
-			if (already !== null) {
-				return already;
-			}
+      if (already !== null) {
+        return already;
+      }
 
-			if (before.state !== "OPEN") {
-				return yield* failed;
-			}
+      if (before.state !== "OPEN") {
+        return yield* failed;
+      }
 
-			if (!before.isMergeQueueEnabled) {
-				return "no_queue";
-			}
+      if (!before.isMergeQueueEnabled) {
+        return "no_queue";
+      }
 
-			const queued = yield* ask(gh, Enqueued, ENQUEUE_WRITE, {pull: before.id, head}).pipe(
-				Effect.match({onSuccess: () => true, onFailure: () => false}),
-			);
+      const queued = yield* ask(gh, Enqueued, ENQUEUE_WRITE, { pull: before.id, head }).pipe(
+        Effect.match({ onSuccess: () => true, onFailure: () => false }),
+      );
 
-			if (queued) {
-				return "queued";
-			}
+      if (queued) {
+        return "queued";
+      }
 
-			return answered(yield* stands, head) ?? (yield* failed);
-		});
+      return answered(yield* stands, head) ?? (yield* failed);
+    });
 
 // ---------------------------------------------------------------- merge
 
@@ -144,21 +139,21 @@ query($owner: String!, $name: String!, $number: Int!) {
 }`;
 
 const MergeStands = Schema.Struct({
-	data: Schema.Struct({
-		repository: Schema.Struct({
-			squashMergeAllowed: Schema.Boolean,
-			mergeCommitAllowed: Schema.Boolean,
-			rebaseMergeAllowed: Schema.Boolean,
-			pullRequest: Schema.Struct({
-				id: Schema.String,
-				baseRefName: Schema.String,
-				state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
-				headRefOid: Schema.String,
-				mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
-				mergeCommit: Schema.NullOr(Schema.Struct({oid: Schema.String})),
-			}),
-		}),
-	}),
+  data: Schema.Struct({
+    repository: Schema.Struct({
+      squashMergeAllowed: Schema.Boolean,
+      mergeCommitAllowed: Schema.Boolean,
+      rebaseMergeAllowed: Schema.Boolean,
+      pullRequest: Schema.Struct({
+        id: Schema.String,
+        baseRefName: Schema.String,
+        state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+        headRefOid: Schema.String,
+        mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
+        mergeCommit: Schema.NullOr(Schema.Struct({ oid: Schema.String })),
+      }),
+    }),
+  }),
 });
 
 type MergeStanding = (typeof MergeStands.Type)["data"]["repository"];
@@ -176,40 +171,34 @@ mutation($pull: ID!, $head: GitObjectID!, $method: PullRequestMergeMethod!) {
 }`;
 
 const MergedNow = Schema.Struct({
-	data: Schema.Struct({
-		mergePullRequest: Schema.Struct({
-			pullRequest: Schema.Struct({mergeCommit: Schema.Struct({oid: Schema.String})}),
-		}),
-	}),
+  data: Schema.Struct({
+    mergePullRequest: Schema.Struct({
+      pullRequest: Schema.Struct({ mergeCommit: Schema.Struct({ oid: Schema.String }) }),
+    }),
+  }),
 });
 
 /** What a reading already answers. `null`: nothing yet. */
-const mergeAnswered = ({pullRequest: pr}: MergeStanding, head: string): Merged | null =>
-	// Merged already, at this head: a merge sent a second time finds its own first write. At another
-	// head it is no write of this one: the machine reads again, and finds what merged.
-	pr.state === "MERGED" && pr.mergeCommit !== null
-		? pr.headRefOid === head
-			? {reading: "merged", commit: pr.mergeCommit.oid}
-			: {reading: "head_moved"}
-		: pr.state !== "OPEN"
-			? null
-			: pr.headRefOid !== head
-				? {reading: "head_moved"}
-				: pr.mergeable === "CONFLICTING"
-					? {reading: "conflicts"}
-					: null;
+const mergeAnswered = ({ pullRequest: pr }: MergeStanding, head: string): Merged | null =>
+  // Merged already, at this head: a merge sent a second time finds its own first write. At another
+  // head it is no write of this one: the machine reads again, and finds what merged.
+  pr.state === "MERGED" && pr.mergeCommit !== null
+    ? pr.headRefOid === head
+      ? { reading: "merged", commit: pr.mergeCommit.oid }
+      : { reading: "head_moved" }
+    : pr.state !== "OPEN"
+      ? null
+      : pr.headRefOid !== head
+        ? { reading: "head_moved" }
+        : pr.mergeable === "CONFLICTING"
+          ? { reading: "conflicts" }
+          : null;
 
 /** The first merge method the repository allows. `null`: it allows none. */
 const methodOf = (repo: MergeStanding): "SQUASH" | "MERGE" | "REBASE" | null =>
-	repo.squashMergeAllowed
-		? "SQUASH"
-		: repo.mergeCommitAllowed
-			? "MERGE"
-			: repo.rebaseMergeAllowed
-				? "REBASE"
-				: null;
+  repo.squashMergeAllowed ? "SQUASH" : repo.mergeCommitAllowed ? "MERGE" : repo.rebaseMergeAllowed ? "REBASE" : null;
 
-const Branch = Schema.Struct({protected: Schema.Boolean});
+const Branch = Schema.Struct({ protected: Schema.Boolean });
 
 /**
  * The rules GitHub holds for one branch: its rulesets' rules, the
@@ -224,22 +213,22 @@ const RULES_READ = `query($owner: String!, $name: String!, $ref: String!) {
 }`;
 
 const RefRules = Schema.Struct({
-	data: Schema.Struct({
-		repository: Schema.Struct({
-			ref: Schema.NullOr(
-				Schema.Struct({
-					branchProtectionRule: Schema.NullOr(Schema.Struct({id: Schema.String})),
-					rules: Schema.Struct({totalCount: Schema.Number}),
-				}),
-			),
-		}),
-	}),
+  data: Schema.Struct({
+    repository: Schema.Struct({
+      ref: Schema.NullOr(
+        Schema.Struct({
+          branchProtectionRule: Schema.NullOr(Schema.Struct({ id: Schema.String })),
+          rules: Schema.Struct({ totalCount: Schema.Number }),
+        }),
+      ),
+    }),
+  }),
 });
 
-const GitCommit = Schema.Struct({sha: Schema.String, tree: Schema.Struct({sha: Schema.String})});
-const MadeCommit = Schema.Struct({sha: Schema.String});
-const GitRef = Schema.Struct({object: Schema.Struct({sha: Schema.String})});
-const Compared = Schema.Struct({status: Schema.String});
+const GitCommit = Schema.Struct({ sha: Schema.String, tree: Schema.Struct({ sha: Schema.String }) });
+const MadeCommit = Schema.Struct({ sha: Schema.String });
+const GitRef = Schema.Struct({ object: Schema.Struct({ sha: Schema.String }) });
+const Compared = Schema.Struct({ status: Schema.String });
 
 /**
  * Merge `head` onto the base branch only while the base is still `tested`:
@@ -255,83 +244,83 @@ const Compared = Schema.Struct({status: Schema.String});
  * GitHub's own merge, which does not pin the base. `null`: not here.
  */
 const pinnedMerge = (
-	gh: Gh,
-	at: {readonly owner: string; readonly name: string; readonly number: number},
-	base: string,
-	head: string,
-	tested: string,
-): Effect.Effect<Merged | null, {readonly _tag: "unknown"}> =>
-	Effect.gen(function* () {
-		const repo = `repos/${at.owner}/${at.name}`;
-		const branch = yield* answerOf(gh, Branch, ["api", `${repo}/branches/${base}`]);
-		const {ref} = (yield* answerOf(gh, RefRules, [
-			"api",
-			"graphql",
-			"-f",
-			`query=${RULES_READ}`,
-			"-f",
-			`owner=${at.owner}`,
-			"-f",
-			`name=${at.name}`,
-			"-f",
-			`ref=refs/heads/${base}`,
-		])).data.repository;
+  gh: Gh,
+  at: { readonly owner: string; readonly name: string; readonly number: number },
+  base: string,
+  head: string,
+  tested: string,
+): Effect.Effect<Merged | null, { readonly _tag: "unknown" }> =>
+  Effect.gen(function* () {
+    const repo = `repos/${at.owner}/${at.name}`;
+    const branch = yield* answerOf(gh, Branch, ["api", `${repo}/branches/${base}`]);
+    const { ref } = (yield* answerOf(gh, RefRules, [
+      "api",
+      "graphql",
+      "-f",
+      `query=${RULES_READ}`,
+      "-f",
+      `owner=${at.owner}`,
+      "-f",
+      `name=${at.name}`,
+      "-f",
+      `ref=refs/heads/${base}`,
+    ])).data.repository;
 
-		// No such branch, as GraphQL reads it: nothing to pin to.
-		if (ref === null) {
-			return null;
-		}
+    // No such branch, as GraphQL reads it: nothing to pin to.
+    if (ref === null) {
+      return null;
+    }
 
-		if (branch.protected || ref.branchProtectionRule !== null || ref.rules.totalCount > 0) {
-			return null;
-		}
+    if (branch.protected || ref.branchProtectionRule !== null || ref.rules.totalCount > 0) {
+      return null;
+    }
 
-		const {tree} = yield* answerOf(gh, GitCommit, ["api", `${repo}/git/commits/${head}`]);
-		const made = yield* answerOf(gh, MadeCommit, [
-			"api",
-			"--method",
-			"POST",
-			`${repo}/git/commits`,
-			"-f",
-			`message=Merge pull request #${at.number}`,
-			"-f",
-			`tree=${tree.sha}`,
-			"-f",
-			`parents[]=${tested}`,
-			"-f",
-			`parents[]=${head}`,
-		]);
-		const moved = yield* gh([
-			"api",
-			"--method",
-			"PATCH",
-			`${repo}/git/refs/heads/${base}`,
-			"-f",
-			`sha=${made.sha}`,
-			"-F",
-			"force=false",
-		]).pipe(Effect.match({onSuccess: () => true, onFailure: () => false}));
+    const { tree } = yield* answerOf(gh, GitCommit, ["api", `${repo}/git/commits/${head}`]);
+    const made = yield* answerOf(gh, MadeCommit, [
+      "api",
+      "--method",
+      "POST",
+      `${repo}/git/commits`,
+      "-f",
+      `message=Merge pull request #${at.number}`,
+      "-f",
+      `tree=${tree.sha}`,
+      "-f",
+      `parents[]=${tested}`,
+      "-f",
+      `parents[]=${head}`,
+    ]);
+    const moved = yield* gh([
+      "api",
+      "--method",
+      "PATCH",
+      `${repo}/git/refs/heads/${base}`,
+      "-f",
+      `sha=${made.sha}`,
+      "-F",
+      "force=false",
+    ]).pipe(Effect.match({ onSuccess: () => true, onFailure: () => false }));
 
-		if (moved) {
-			return {reading: "merged", commit: made.sha} as const;
-		}
+    if (moved) {
+      return { reading: "merged", commit: made.sha } as const;
+    }
 
-		// Refused, or its answer lost: why is read from the branch, never from the refusal's words.
-		const tip = (yield* answerOf(gh, GitRef, ["api", `${repo}/git/ref/heads/${base}`])).object.sha;
+    // Refused, or its answer lost: why is read from the branch, never from the refusal's words.
+    const tip = (yield* answerOf(gh, GitRef, ["api", `${repo}/git/ref/heads/${base}`])).object.sha;
 
-		if (tip === made.sha) {
-			return {reading: "merged", commit: made.sha} as const;
-		}
+    if (tip === made.sha) {
+      return { reading: "merged", commit: made.sha } as const;
+    }
 
-		// The head is in the base already: an earlier send of this merge landed.
-		const held = yield* answerOf(gh, Compared, ["api", `${repo}/compare/${tip}...${head}`]);
+    // The head is in the base already: an earlier send of this merge landed.
+    const held = yield* answerOf(gh, Compared, ["api", `${repo}/compare/${tip}...${head}`]);
 
-		if (held.status === "behind" || held.status === "identical") {
-			return {reading: "merged", commit: tip} as const;
-		}
+    if (held.status === "behind" || held.status === "identical") {
+      return { reading: "merged", commit: tip } as const;
+    }
 
-		return tip === tested ? yield* failed : ({reading: "behind"} as const);
-	});
+    return tip === tested ? yield* failed : ({ reading: "behind" } as const);
+  });
 
 /**
  * Merge `head` of its pull request straight in, on a repository with no merge
@@ -346,75 +335,69 @@ const pinnedMerge = (
  * checks the head and not the base.
  */
 export const mergeOn =
-	(gh: Gh) =>
-	(url: string, head: string, tested?: string): Effect.Effect<Merged, {readonly _tag: "unknown"}> =>
-		Effect.gen(function* () {
-			const at = prOf(url);
+  (gh: Gh) =>
+  (url: string, head: string, tested?: string): Effect.Effect<Merged, { readonly _tag: "unknown" }> =>
+    Effect.gen(function* () {
+      const at = prOf(url);
 
-			if (at === null) {
-				return yield* failed;
-			}
+      if (at === null) {
+        return yield* failed;
+      }
 
-			const stands = ask(gh, MergeStands, MERGE_READ, at).pipe(
-				Effect.map((answer) => answer.data.repository),
-			);
-			const before = yield* stands;
-			const already = mergeAnswered(before, head);
+      const stands = ask(gh, MergeStands, MERGE_READ, at).pipe(Effect.map((answer) => answer.data.repository));
+      const before = yield* stands;
+      const already = mergeAnswered(before, head);
 
-			if (already !== null) {
-				return already;
-			}
+      if (already !== null) {
+        return already;
+      }
 
-			if (
-				tested !== undefined &&
-				before.pullRequest.state === "OPEN" &&
-				before.mergeCommitAllowed
-			) {
-				const pinned = yield* pinnedMerge(gh, at, before.pullRequest.baseRefName, head, tested);
+      if (tested !== undefined && before.pullRequest.state === "OPEN" && before.mergeCommitAllowed) {
+        const pinned = yield* pinnedMerge(gh, at, before.pullRequest.baseRefName, head, tested);
 
-				if (pinned !== null) {
-					return pinned;
-				}
-			}
+        if (pinned !== null) {
+          return pinned;
+        }
+      }
 
-			const method = methodOf(before);
+      const method = methodOf(before);
 
-			if (before.pullRequest.state !== "OPEN" || method === null) {
-				return yield* failed;
-			}
+      if (before.pullRequest.state !== "OPEN" || method === null) {
+        return yield* failed;
+      }
 
-			const commit = yield* ask(gh, MergedNow, MERGE_WRITE, {
-				pull: before.pullRequest.id,
-				head,
-				method,
-			}).pipe(
-				Effect.match({
-					onSuccess: (answer) => answer.data.mergePullRequest.pullRequest.mergeCommit.oid,
-					onFailure: () => null,
-				}),
-			);
+      const commit = yield* ask(gh, MergedNow, MERGE_WRITE, {
+        pull: before.pullRequest.id,
+        head,
+        method,
+      }).pipe(
+        Effect.match({
+          onSuccess: (answer) => answer.data.mergePullRequest.pullRequest.mergeCommit.oid,
+          onFailure: () => null,
+        }),
+      );
 
-			if (commit !== null) {
-				return {reading: "merged", commit} as const;
-			}
+      if (commit !== null) {
+        return { reading: "merged", commit } as const;
+      }
 
-			return mergeAnswered(yield* stands, head) ?? (yield* failed);
-		});
+      return mergeAnswered(yield* stands, head) ?? (yield* failed);
+    });
 
 // ---------------------------------------------------------------- re-run
 
 /** The runs of one commit, as GitHub's REST API answers. */
 const Runs = Schema.Struct({
-	total_count: Schema.Number,
-	workflow_runs: Schema.Array(
-		Schema.Struct({
-			id: Schema.Number,
-			head_sha: Schema.String,
-			status: Schema.String,
-			conclusion: Schema.NullOr(Schema.String),
-			run_attempt: Schema.Number,
-		}),
-	),
+  total_count: Schema.Number,
+  workflow_runs: Schema.Array(
+    Schema.Struct({
+      id: Schema.Number,
+      head_sha: Schema.String,
+      status: Schema.String,
+      conclusion: Schema.NullOr(Schema.String),
+      run_attempt: Schema.Number,
+    }),
+  ),
 });
 
 /**
@@ -426,61 +409,58 @@ const Runs = Schema.Struct({
  * cannot be re-run from here.
  */
 export const rerunChecksOn =
-	(gh: Gh) =>
-	(url: string, head: string): Effect.Effect<readonly Rerun[], {readonly _tag: "unknown"}> =>
-		Effect.gen(function* () {
-			const at = prOf(url);
+  (gh: Gh) =>
+  (url: string, head: string): Effect.Effect<readonly Rerun[], { readonly _tag: "unknown" }> =>
+    Effect.gen(function* () {
+      const at = prOf(url);
 
-			if (at === null) {
-				return yield* failed;
-			}
+      if (at === null) {
+        return yield* failed;
+      }
 
-			const repo = `repos/${at.owner}/${at.name}`;
-			// `head_sha` is matched as written, so `head` is the whole commit id.
-			const runs = yield* answerOf(gh, Runs, [
-				"api",
-				`${repo}/actions/runs?head_sha=${head}&per_page=100`,
-			]);
+      const repo = `repos/${at.owner}/${at.name}`;
+      // `head_sha` is matched as written, so `head` is the whole commit id.
+      const runs = yield* answerOf(gh, Runs, ["api", `${repo}/actions/runs?head_sha=${head}&per_page=100`]);
 
-			if (runs.total_count > runs.workflow_runs.length) {
-				return yield* failed;
-			}
+      if (runs.total_count > runs.workflow_runs.length) {
+        return yield* failed;
+      }
 
-			const red = runs.workflow_runs.filter(
-				(r) =>
-					r.head_sha === head &&
-					r.status === "completed" &&
-					(r.conclusion === "failure" || r.conclusion === "timed_out"),
-			);
+      const red = runs.workflow_runs.filter(
+        (r) =>
+          r.head_sha === head &&
+          r.status === "completed" &&
+          (r.conclusion === "failure" || r.conclusion === "timed_out"),
+      );
 
-			if (red.length === 0) {
-				return yield* failed;
-			}
+      if (red.length === 0) {
+        return yield* failed;
+      }
 
-			for (const run of red) {
-				yield* gh(["api", "--method", "POST", `${repo}/actions/runs/${run.id}/rerun-failed-jobs`]);
-			}
+      for (const run of red) {
+        yield* gh(["api", "--method", "POST", `${repo}/actions/runs/${run.id}/rerun-failed-jobs`]);
+      }
 
-			return red.map((run) => ({run: run.id, attempt: run.run_attempt}));
-		});
+      return red.map((run) => ({ run: run.id, attempt: run.run_attempt }));
+    });
 
 /** The writes over one `gh`. */
 export const codeHostWritesOn = (gh: Gh): CodeHostWrites["Service"] => {
-	const enqueue = enqueueOn(gh);
-	const merge = mergeOn(gh);
-	return {
-		// The proof names the pull request and the head; nothing else reaches the write.
-		enqueue: (ready) => enqueue(ready.pr, ready.head),
-		// Only a proof tested on the main tip, read just before by the merge door (stages/ship/door.ts),
-		// and pinned to that main where GitHub lets it be.
-		merge: (onMain) => merge(onMain.pr, onMain.head, onMain.tested),
-		rerunChecks: rerunChecksOn(gh),
-	};
+  const enqueue = enqueueOn(gh);
+  const merge = mergeOn(gh);
+  return {
+    // The proof names the pull request and the head; nothing else reaches the write.
+    enqueue: (ready) => enqueue(ready.pr, ready.head),
+    // Only a proof tested on the main tip, read just before by the merge door (stages/ship/door.ts),
+    // and pinned to that main where GitHub lets it be.
+    merge: (onMain) => merge(onMain.pr, onMain.head, onMain.tested),
+    rerunChecks: rerunChecksOn(gh),
+  };
 };
 
 /** `CodeHostWrites` on GitHub. `gh`: the GitHub CLI to run, for a test that stands one in. */
-export const gitHubCodeHostWrites = (config: {readonly gh?: string} = {}) =>
-	Layer.succeed(
-		CodeHostWrites,
-		codeHostWritesOn((args) => sh(config.gh ?? "gh", args)),
-	);
+export const gitHubCodeHostWrites = (config: { readonly gh?: string } = {}) =>
+  Layer.succeed(
+    CodeHostWrites,
+    codeHostWritesOn((args) => sh(config.gh ?? "gh", args)),
+  );

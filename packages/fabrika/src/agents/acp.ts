@@ -10,4 +10,4 @@ export * from "./acp/program.ts";
 export * from "./acp/session.ts";
 export * from "./acp/spans.ts";
 export * from "./acp/transcript.ts";
-export {psReaper} from "./agent/reap.ts";
+export { psReaper } from "./agent/reap.ts";

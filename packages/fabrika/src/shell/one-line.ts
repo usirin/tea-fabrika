@@ -11,10 +11,10 @@
  * does to a title, and any other control character a replacement character.
  */
 export const oneLine = (text: string): string =>
-	text
-		.replace(/\s+/g, " ")
-		.trim()
-		.replace(/\p{Cc}/gu, "\u{fffd}");
+  text
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\p{Cc}/gu, "\u{fffd}");
 
 /**
  * The text holds no control character (newlines, carriage returns and tabs among them) and no

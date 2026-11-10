@@ -173,6 +173,9 @@ schema; and merging objects into one, as phoenix later did. No table under
 every platform piece, `Control`, the `WorkerEntrypoint` class and the Worker's default `fetch`
 included. Every rule above still holds.
 
+*Pointer, 2026-11-10:* `Control` and the default `fetch` are now decided for the brain, and so is
+the stack's `bundle: false`: see the second line under [Amendments](#amendments).
+
 ## Amendments
 
 - 2026-11-10: **a sibling object is taken in the Layer's init with `Sibling.from(Host)`, Alchemy's
@@ -211,3 +214,54 @@ included. Every rule above still holds.
     Alchemy bug and patched it. It is not a bug we can show: the documented way works.
   - **Not run:** a real deploy, where the host Worker binds its own objects by its own name, and a
     type check of the new shape.
+- 2026-11-10: **the port ends with no plain platform class in the brain, and with Alchemy bundling
+  it.** The owner decided this on 2026-11-10. Tracker ticket 533. Tickets 526 and 527 are folded
+  into the port (tracker ticket 502) as its last two pull requests, PR 7 and PR 8.
+
+  ```ts
+  // A sketch, not run. The names are from @alchemy.run/cloudflare 2.0.0-beta.84, Workers/Worker.ts.
+  export default Brain.make(
+    { main: import.meta.url },
+    Effect.gen(function* () {
+      const ctx = yield* Cloudflare.WorkerExecutionContext; // init
+      return {
+        fetch: Effect.gen(function* () {
+          const props = yield* ctx.props; // an empty object for a request from outside
+          // ... the door, or the control branch when the caller's binding carried a token
+        }),
+      };
+    }),
+  );
+  ```
+
+  - **PR 7: the Worker's default `fetch` and `Control` move into the Effect Worker.** `fetch` is
+    an Effect that the Worker's `.make()` returns. `Control` stops being a named
+    `WorkerEntrypoint` class. It is a second `fetch` that reads a token from `ctx.props`, and an
+    Effect Worker reads those with `yield* ctx.props` on `Cloudflare.WorkerExecutionContext`. So
+    it becomes a branch of the one Effect `fetch`, or a small Effect Worker of its own. The plan
+    picks, after a spike of both in local workerd.
+  - **Then the stack drops `bundle: false`.** Once no plain class is left, Alchemy bundles the
+    brain. `brain.ts`'s `cloudflare:workers` import and the hand-written bridge lines go. The
+    `bundle: false` build with a hand-exported bridge class is a staging step of the port, not
+    where it ends.
+  - **PR 8: the object services read storage through Alchemy's `state.storage`,** with its Effect
+    `transaction`, not through `state.raw`.
+  - **Why.** Alchemy has an Effect form for each of these. What the port's earlier plan called
+    gaps were our staging choices: they kept each pull request small, and they were never a limit
+    of the library.
+  - **What was read, in beta.84's source.** `Workers/Worker.ts`: "Effect Workers" and "Worker
+    Layer" show `fetch` as an Effect returned from the implementation, and "Self Entrypoints &
+    ctx.props" shows `yield* ctx.props`. `Workers/WorkerEntrypoint.ts`: a binding with no
+    entrypoint name targets the default export and can carry `props`. `Workers/DurableObjectStorage.ts`:
+    `transaction` takes an Effect, and a typed failure, a defect or an interruption rolls it back.
+    It runs the platform's `transaction`, not `transactionSync`.
+  - **Not run, so not known.** Nobody here has run an Effect `fetch` or `ctx.props` this way.
+    Alchemy's source says `props` on a service binding are delivered locally and dropped on a real
+    deploy for now (the `props` option's comment in `Workers/WorkerEntrypoint.ts`). Whether
+    Alchemy's bundler can carry our React Compiler plugin and the program table is still the
+    first unknown above. The ledger's laws have not run on the Effect `transaction`, and
+    `state.storage`'s methods need Alchemy's `RuntimeContext`, which a law on Node has to supply.
+    Each gets a spike before its pull request. The binding constraint above holds: a claim comes
+    from a run.
+  - **Not covered:** `ProgramBox`, the `WorkerEntrypoint` class a loaded program exports
+    (`workers/box.ts`). It is not in the brain's own module, and it keeps its own ticket.

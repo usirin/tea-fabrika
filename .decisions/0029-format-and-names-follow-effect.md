@@ -88,3 +88,8 @@ Binding constraints:
 ## Records
 
 - `.glossary/TERMS.md`: the `Manager (service)` row becomes a plural service name row.
+
+## Amendments
+
+- 2026-11-09: `func-style: declaration` stays off; arrow consts are fine, as Effect writes them
+  (7,693 hits when tried; owner's call). The format sweep, ticket 466, changed no lint rule.

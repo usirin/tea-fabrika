@@ -1,13 +1,13 @@
-import {defineMachine, type Sub} from "@demlik/tea";
-import {Schema} from "effect";
-import {Owner, PLAN, PlanId, TaskId, TicketId} from "../../ids.ts";
-import {act, gather, intentOf, listen} from "../../primitives.ts";
-import {inert} from "../build/body.ts";
-import {Item} from "../build/ticket.ts";
-import {Settings} from "../review/reviewer.ts";
-import {issueOf} from "../task/view.ts";
-import type {LaneOutcome} from "./outcome.ts";
-import {type LaneAt, LaneView, next, START} from "./view.ts";
+import { defineMachine, type Sub } from "@demlik/tea";
+import { Schema } from "effect";
+import { Owner, PLAN, PlanId, TaskId, TicketId } from "../../ids.ts";
+import { act, gather, intentOf, listen } from "../../primitives.ts";
+import { inert } from "../build/body.ts";
+import { Item } from "../build/ticket.ts";
+import { Settings } from "../review/reviewer.ts";
+import { issueOf } from "../task/view.ts";
+import type { LaneOutcome } from "./outcome.ts";
+import { type LaneAt, LaneView, next, START } from "./view.ts";
 
 // A plan's lane: the parent that takes an approved plan to one pull request
 // (docs/direction/a-project-is-a-parent-plan.md; done-is-per-criterion.md, "One PR per plan").
@@ -40,27 +40,27 @@ export const LANE_STEPS = ["plan", "build", "review"] as const;
 export type LaneStep = (typeof LANE_STEPS)[number];
 
 export const LaneJob = Schema.Struct({
-	plan: PlanId,
-	/** The settings an agent child is started with when `agents` names none for its step. */
-	settings: Settings,
-	/**
-	 * The planner's, the builder's and the reviewer's own settings, as a repository's
-	 * `[agents.<step>]` picked them (as operate's `LoopSettings.agents`). A step left out runs on
-	 * `settings`; a lane cast before this key ran every step on them.
-	 */
-	agents: Schema.optionalKey(
-		Schema.Struct({
-			plan: Schema.optionalKey(Settings),
-			build: Schema.optionalKey(Settings),
-			review: Schema.optionalKey(Settings),
-		}),
-	),
-	/** One child's dollar cap. */
-	usd: Schema.Finite,
-	/** The rubric folder reviews read. */
-	rubrics: Schema.String,
-	/** The first commit date, in seconds: each child's is this plus a number from its name. */
-	at: Schema.Finite,
+  plan: PlanId,
+  /** The settings an agent child is started with when `agents` names none for its step. */
+  settings: Settings,
+  /**
+   * The planner's, the builder's and the reviewer's own settings, as a repository's
+   * `[agents.<step>]` picked them (as operate's `LoopSettings.agents`). A step left out runs on
+   * `settings`; a lane cast before this key ran every step on them.
+   */
+  agents: Schema.optionalKey(
+    Schema.Struct({
+      plan: Schema.optionalKey(Settings),
+      build: Schema.optionalKey(Settings),
+      review: Schema.optionalKey(Settings),
+    }),
+  ),
+  /** One child's dollar cap. */
+  usd: Schema.Finite,
+  /** The rubric folder reviews read. */
+  rubrics: Schema.String,
+  /** The first commit date, in seconds: each child's is this plus a number from its name. */
+  at: Schema.Finite,
 });
 export type LaneJob = typeof LaneJob.Type;
 
@@ -69,124 +69,123 @@ export type ChildKind = (typeof CHILDREN)[number];
 
 /** Where a lane is in one piece of work. */
 export const Flow = Schema.Union([
-	Schema.Struct({
-		flow: Schema.Literal("round"),
-		task: TaskId,
-		round: Schema.Finite,
-		open: Schema.Array(Item),
-		step: Schema.Literals(["catchup", "build", "review"]),
-		head: Schema.NullOr(Schema.String),
-	}),
-	Schema.Struct({
-		flow: Schema.Literal("final"),
-		round: Schema.Finite,
-		step: Schema.Literals(["catchup", "review"]),
-		head: Schema.NullOr(Schema.String),
-	}),
-	Schema.Struct({flow: Schema.Literal("drop"), task: TaskId}),
-	Schema.Struct({flow: Schema.Literal("ship"), run: Schema.Finite, pr: Schema.String}),
-	/** Plan version `version`, with the tickets folded in since the last. */
-	Schema.Struct({
-		flow: Schema.Literal("plan"),
-		version: Schema.Finite,
-		folds: Schema.Array(TicketId),
-	}),
+  Schema.Struct({
+    flow: Schema.Literal("round"),
+    task: TaskId,
+    round: Schema.Finite,
+    open: Schema.Array(Item),
+    step: Schema.Literals(["catchup", "build", "review"]),
+    head: Schema.NullOr(Schema.String),
+  }),
+  Schema.Struct({
+    flow: Schema.Literal("final"),
+    round: Schema.Finite,
+    step: Schema.Literals(["catchup", "review"]),
+    head: Schema.NullOr(Schema.String),
+  }),
+  Schema.Struct({ flow: Schema.Literal("drop"), task: TaskId }),
+  Schema.Struct({ flow: Schema.Literal("ship"), run: Schema.Finite, pr: Schema.String }),
+  /** Plan version `version`, with the tickets folded in since the last. */
+  Schema.Struct({
+    flow: Schema.Literal("plan"),
+    version: Schema.Finite,
+    folds: Schema.Array(TicketId),
+  }),
 ]);
 export type Flow = typeof Flow.Type;
 
 /** A child's name: the lane's, then where in the plan it works. The last part is its kind. */
 export function childOf(lane: string, f: Flow): string {
-	switch (f.flow) {
-		case "round":
-			return `${lane}:${f.task}:r${f.round}:${f.step}`;
-		case "final":
-			return `${lane}:final:r${f.round}:${f.step}`;
-		case "drop":
-			return `${lane}:${f.task}:drop:catchup`;
-		case "ship":
-			return `${lane}:s${f.run}:ship`;
-		case "plan":
-			return `${lane}:v${f.version}:plan`;
-	}
+  switch (f.flow) {
+    case "round":
+      return `${lane}:${f.task}:r${f.round}:${f.step}`;
+    case "final":
+      return `${lane}:final:r${f.round}:${f.step}`;
+    case "drop":
+      return `${lane}:${f.task}:drop:catchup`;
+    case "ship":
+      return `${lane}:s${f.run}:ship`;
+    case "plan":
+      return `${lane}:v${f.version}:plan`;
+  }
 }
 
 /** A child's kind, from its name. `null`: not a child's name. */
 export const kindOf = (child: string): ChildKind | null => {
-	const last = child.slice(child.lastIndexOf(":") + 1);
-	return (CHILDREN as readonly string[]).includes(last) ? (last as ChildKind) : null;
+  const last = child.slice(child.lastIndexOf(":") + 1);
+  return (CHILDREN as readonly string[]).includes(last) ? (last as ChildKind) : null;
 };
 
 /** A number from a child's name, the same on every host: its commits' date is the lane's plus it. */
 export const offsetOf = (child: string): number => {
-	let h = 0x811c9dc5;
+  let h = 0x811c9dc5;
 
-	for (let k = 0; k < child.length; k++) {
-		h ^= child.charCodeAt(k);
-		h = Math.imul(h, 0x01000193) >>> 0;
-	}
+  for (let k = 0; k < child.length; k++) {
+    h ^= child.charCodeAt(k);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
 
-	return h % 100_000;
+  return h % 100_000;
 };
 
 /** The settings one step's agent runs on: its own when the job names one, else the shared ones. Pure. */
-export const agentFor = (job: LaneJob, step: LaneStep): Settings =>
-	job.agents?.[step] ?? job.settings;
+export const agentFor = (job: LaneJob, step: LaneStep): Settings => job.agents?.[step] ?? job.settings;
 
 /** The job a child is started on. Pure. */
 export function jobFor(lane: string, job: LaneJob, f: Flow): unknown {
-	const child = childOf(lane, f);
-	const at = job.at + offsetOf(child);
-	const agent = (step: LaneStep) => ({settings: agentFor(job, step), usd: job.usd});
+  const child = childOf(lane, f);
+  const at = job.at + offsetOf(child);
+  const agent = (step: LaneStep) => ({ settings: agentFor(job, step), usd: job.usd });
 
-	switch (f.flow) {
-		case "drop":
-			return {plan: job.plan, drop: f.task, ...agent("build"), at};
-		case "ship":
-			return {pr: f.pr};
-		case "plan":
-			return {ticket: issueOf(job.plan), tries: 2, ...agent("plan")};
-		case "round":
-			if (f.step === "catchup") {
-				return {plan: job.plan, drop: null, ...agent("build"), at};
-			}
+  switch (f.flow) {
+    case "drop":
+      return { plan: job.plan, drop: f.task, ...agent("build"), at };
+    case "ship":
+      return { pr: f.pr };
+    case "plan":
+      return { ticket: issueOf(job.plan), tries: 2, ...agent("plan") };
+    case "round":
+      if (f.step === "catchup") {
+        return { plan: job.plan, drop: null, ...agent("build"), at };
+      }
 
-			if (f.step === "build") {
-				return {plan: job.plan, task: f.task, round: f.round, open: f.open, ...agent("build"), at};
-			}
+      if (f.step === "build") {
+        return { plan: job.plan, task: f.task, round: f.round, open: f.open, ...agent("build"), at };
+      }
 
-			return {plan: job.plan, task: f.task, head: f.head, rubrics: job.rubrics, ...agent("review")};
-		case "final":
-			if (f.step === "catchup") {
-				return {plan: job.plan, drop: null, ...agent("build"), at};
-			}
+      return { plan: job.plan, task: f.task, head: f.head, rubrics: job.rubrics, ...agent("review") };
+    case "final":
+      if (f.step === "catchup") {
+        return { plan: job.plan, drop: null, ...agent("build"), at };
+      }
 
-			return {plan: job.plan, task: "plan", head: f.head, rubrics: job.rubrics, ...agent("review")};
-	}
+      return { plan: job.plan, task: "plan", head: f.head, rubrics: job.rubrics, ...agent("review") };
+  }
 }
 
 /** How a child ended, as the lane reads its outcome row. */
 export const ChildEnd = Schema.Struct({
-	outcome: Schema.Struct({kind: Schema.String, why: Schema.optionalKey(Schema.String)}),
-	head: Schema.optionalKey(Schema.NullOr(Schema.String)),
-	open: Schema.optionalKey(Schema.Array(Item)),
+  outcome: Schema.Struct({ kind: Schema.String, why: Schema.optionalKey(Schema.String) }),
+  head: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  open: Schema.optionalKey(Schema.Array(Item)),
 });
 export type ChildEnd = typeof ChildEnd.Type;
 
 export const readLane = gather("lane_read", {
-	input: Schema.Struct({plan: PlanId, pr: Schema.NullOr(Schema.String)}),
-	ok: LaneView,
-	err: Unknown,
+  input: Schema.Struct({ plan: PlanId, pr: Schema.NullOr(Schema.String) }),
+  ok: LaneView,
+  err: Unknown,
 });
 
 export const startChild = act("lane_start", {
-	input: Schema.Struct({
-		child: Schema.String,
-		/** The child's dollar cap, on its spec. `null`: none (it runs no agent). */
-		usd: Schema.NullOr(Schema.Finite),
-		job: Schema.Unknown,
-	}),
-	ok: Schema.Struct({started: Schema.Boolean}),
-	err: Unknown,
+  input: Schema.Struct({
+    child: Schema.String,
+    /** The child's dollar cap, on its spec. `null`: none (it runs no agent). */
+    usd: Schema.NullOr(Schema.Finite),
+    job: Schema.Unknown,
+  }),
+  ok: Schema.Struct({ started: Schema.Boolean }),
+  err: Unknown,
 });
 
 /**
@@ -195,27 +194,27 @@ export const startChild = act("lane_start", {
  * is counted once.
  */
 export const noteRound = act("lane_note", {
-	input: Schema.Struct({plan: PlanId, task: Owner, child: Schema.String, open: Schema.Int}),
-	ok: Schema.Struct({}),
-	err: Unknown,
+  input: Schema.Struct({ plan: PlanId, task: Owner, child: Schema.String, open: Schema.Int }),
+  ok: Schema.Struct({}),
+  err: Unknown,
 });
 
 export const openPr = act("lane_open", {
-	input: Schema.Struct({
-		plan: PlanId,
-		head: Schema.String,
-		title: Schema.String,
-		body: Schema.String,
-	}),
-	ok: Schema.Struct({url: Schema.String}),
-	err: Unknown,
+  input: Schema.Struct({
+    plan: PlanId,
+    head: Schema.String,
+    title: Schema.String,
+    body: Schema.String,
+  }),
+  ok: Schema.Struct({ url: Schema.String }),
+  err: Unknown,
 });
 
 /** The plan child's draft as the plan's next version, its ids kept where its words were, for the owner. */
 export const notePlan = act("lane_planned", {
-	input: Schema.Struct({plan: PlanId, child: Schema.String, folds: Schema.Array(TicketId)}),
-	ok: Schema.Struct({}),
-	err: ["unknown", "no_plan"],
+  input: Schema.Struct({ plan: PlanId, child: Schema.String, folds: Schema.Array(TicketId) }),
+  ok: Schema.Struct({}),
+  err: ["unknown", "no_plan"],
 });
 
 type ReadCmd = ReturnType<typeof readLane>;
@@ -225,90 +224,86 @@ type OpenCmd = ReturnType<typeof openPr>;
 type PlannedCmd = ReturnType<typeof notePlan>;
 export type LaneCmd = ReadCmd | StartCmd | NoteCmd | OpenCmd | PlannedCmd;
 
-export type ChildSub = Sub<"lane_child", {readonly child: string}>;
-export type OwnerSub = Sub<"lane_owner", {readonly plan: PlanId; readonly asks: readonly string[]}>;
+export type ChildSub = Sub<"lane_child", { readonly child: string }>;
+export type OwnerSub = Sub<"lane_owner", { readonly plan: PlanId; readonly asks: readonly string[] }>;
 export type LaneSub = ChildSub | OwnerSub;
 
 export const LaneReport = Schema.Struct({
-	rounds: Schema.Record(Schema.String, Schema.Finite),
-	finals: Schema.Finite,
-	pr: Schema.NullOr(Schema.String),
-	/** What stopped it, in words. */
-	problems: Schema.Array(Schema.String),
+  rounds: Schema.Record(Schema.String, Schema.Finite),
+  finals: Schema.Finite,
+  pr: Schema.NullOr(Schema.String),
+  /** What stopped it, in words. */
+  problems: Schema.Array(Schema.String),
 });
 export type LaneReport = typeof LaneReport.Type;
 
 type Held = {
-	readonly lane: string;
-	readonly job: LaneJob;
-	readonly at: LaneAt;
-	/** The plan's pull request, once opened. */
-	readonly pr: string | null;
+  readonly lane: string;
+  readonly job: LaneJob;
+  readonly at: LaneAt;
+  /** The plan's pull request, once opened. */
+  readonly pr: string | null;
 };
 
 export type Lane =
-	| {readonly phase: "idle"}
-	| (Held & {readonly phase: "reading"; readonly asked: ReadCmd})
-	| (Held & {readonly phase: "waiting"; readonly asks: readonly string[]})
-	| (Held & {readonly phase: "starting"; readonly flow: Flow; readonly asked: StartCmd})
-	| (Held & {readonly phase: "running"; readonly flow: Flow; readonly child: string})
-	| (Held & {readonly phase: "noting"; readonly asked: NoteCmd})
-	| (Held & {readonly phase: "planning"; readonly asked: PlannedCmd})
-	| (Held & {readonly phase: "opening"; readonly asked: OpenCmd})
-	| (Held & {readonly phase: "over"; readonly outcome: LaneOutcome; readonly report: LaneReport});
+  | { readonly phase: "idle" }
+  | (Held & { readonly phase: "reading"; readonly asked: ReadCmd })
+  | (Held & { readonly phase: "waiting"; readonly asks: readonly string[] })
+  | (Held & { readonly phase: "starting"; readonly flow: Flow; readonly asked: StartCmd })
+  | (Held & { readonly phase: "running"; readonly flow: Flow; readonly child: string })
+  | (Held & { readonly phase: "noting"; readonly asked: NoteCmd })
+  | (Held & { readonly phase: "planning"; readonly asked: PlannedCmd })
+  | (Held & { readonly phase: "opening"; readonly asked: OpenCmd })
+  | (Held & { readonly phase: "over"; readonly outcome: LaneOutcome; readonly report: LaneReport });
 
 export type LaneMsg =
-	| {readonly type: "start"; readonly lane: string; readonly job: LaneJob}
-	| {readonly type: "resume"}
-	| {readonly type: "child_over"; readonly child: string; readonly end: ChildEnd}
-	| {readonly type: "owner_moved"};
+  | { readonly type: "start"; readonly lane: string; readonly job: LaneJob }
+  | { readonly type: "resume" }
+  | { readonly type: "child_over"; readonly child: string; readonly end: ChildEnd }
+  | { readonly type: "owner_moved" };
 
 type Step = readonly [Lane, readonly LaneCmd[]];
 const stay = (s: Lane): Step => [s, []];
-const held = (s: Held): Held => ({lane: s.lane, job: s.job, at: s.at, pr: s.pr});
+const held = (s: Held): Held => ({ lane: s.lane, job: s.job, at: s.at, pr: s.pr });
 
 const read = (s: Held): Step => {
-	const asked = readLane({plan: s.job.plan, pr: s.pr});
-	return [{...held(s), phase: "reading", asked}, [asked]];
+  const asked = readLane({ plan: s.job.plan, pr: s.pr });
+  return [{ ...held(s), phase: "reading", asked }, [asked]];
 };
 
 const over = (s: Held, outcome: LaneOutcome, problems: readonly string[] = []): Step => [
-	{
-		...held(s),
-		phase: "over",
-		outcome,
-		report: {rounds: s.at.rounds, finals: s.at.finals, pr: s.pr, problems},
-	},
-	[],
+  {
+    ...held(s),
+    phase: "over",
+    outcome,
+    report: { rounds: s.at.rounds, finals: s.at.finals, pr: s.pr, problems },
+  },
+  [],
 ];
 
 /** Start the child a flow is at. */
 const start = (s: Held, flow: Flow): Step => {
-	const child = childOf(s.lane, flow);
-	const asked = startChild({
-		child,
-		usd: flow.flow === "ship" ? null : s.job.usd,
-		job: jobFor(s.lane, s.job, flow),
-		intent: intentOf("lane", child),
-	});
-	return [{...held(s), phase: "starting", flow, asked}, [asked]];
+  const child = childOf(s.lane, flow);
+  const asked = startChild({
+    child,
+    usd: flow.flow === "ship" ? null : s.job.usd,
+    job: jobFor(s.lane, s.job, flow),
+    intent: intentOf("lane", child),
+  });
+  return [{ ...held(s), phase: "starting", flow, asked }, [asked]];
 };
 
 const stuckOf = (f: Flow) => {
-	switch (f.flow) {
-		case "drop":
-			return "catchup_failed";
-		case "ship":
-			return "ship_failed";
-		case "plan":
-			return "plan_failed";
-		default:
-			return f.step === "catchup"
-				? "catchup_failed"
-				: f.step === "build"
-					? "build_failed"
-					: "review_failed";
-	}
+  switch (f.flow) {
+    case "drop":
+      return "catchup_failed";
+    case "ship":
+      return "ship_failed";
+    case "plan":
+      return "plan_failed";
+    default:
+      return f.step === "catchup" ? "catchup_failed" : f.step === "build" ? "build_failed" : "review_failed";
+  }
 };
 
 /**
@@ -317,201 +312,185 @@ const stuckOf = (f: Flow) => {
  * from a "Fixes #2" a planner wrote. Pure.
  */
 export const prBody = (v: LaneView): string =>
-	[
-		inert(v.summary.trim()),
-		"",
-		...v.tickets.map((t) => `Closes #${t.slice(t.indexOf("#") + 1)}`),
-	].join("\n");
+  [inert(v.summary.trim()), "", ...v.tickets.map((t) => `Closes #${t.slice(t.indexOf("#") + 1)}`)].join("\n");
 
 /** How many a review left open, as the stall rule counts them. */
-const openCount = (end: ChildEnd) =>
-	end.outcome.kind === "done" ? 0 : Math.max(1, end.open?.length ?? 1);
+const openCount = (end: ChildEnd) => (end.outcome.kind === "done" ? 0 : Math.max(1, end.open?.length ?? 1));
 
 /** Count a child's end for the stall rule, in the list `task` names, then read again. */
 const note = (s: Held, task: Owner, f: Flow, open: number): Step => {
-	const child = childOf(s.lane, f);
-	const asked = noteRound({
-		plan: s.job.plan,
-		task,
-		child,
-		open,
-		intent: intentOf("lane", child, "reviewed"),
-	});
-	return [{...held(s), phase: "noting", asked}, [asked]];
+  const child = childOf(s.lane, f);
+  const asked = noteRound({
+    plan: s.job.plan,
+    task,
+    child,
+    open,
+    intent: intentOf("lane", child, "reviewed"),
+  });
+  return [{ ...held(s), phase: "noting", asked }, [asked]];
 };
 
-export const childSub = listen("lane_child", (s: Lane) =>
-	s.phase === "running" ? {child: s.child} : null,
-);
+export const childSub = listen("lane_child", (s: Lane) => (s.phase === "running" ? { child: s.child } : null));
 
 export const ownerSub = listen("lane_owner", (s: Lane) =>
-	s.phase === "waiting" ? {plan: s.job.plan, asks: s.asks} : null,
+  s.phase === "waiting" ? { plan: s.job.plan, asks: s.asks } : null,
 );
 
 /** What the lane does on a child's end. */
 function afterChild(s: Held, f: Flow, end: ChildEnd): Step {
-	const kind = end.outcome.kind;
-	const why = end.outcome.why ?? kind;
-	// A review that could not see a criterion met (`unseen`) judged the work, not itself: a round
-	// with work left open, which the stall rule counts and takes to the owner, a task's or a last
-	// review's alike. Any other stuck child stops the lane.
-	const unseen =
-		(f.flow === "round" || f.flow === "final") &&
-		f.step === "review" &&
-		kind === "stuck" &&
-		why === "unseen";
+  const kind = end.outcome.kind;
+  const why = end.outcome.why ?? kind;
+  // A review that could not see a criterion met (`unseen`) judged the work, not itself: a round
+  // with work left open, which the stall rule counts and takes to the owner, a task's or a last
+  // review's alike. Any other stuck child stops the lane.
+  const unseen =
+    (f.flow === "round" || f.flow === "final") && f.step === "review" && kind === "stuck" && why === "unseen";
 
-	if (kind === "stuck" && !unseen) {
-		return over(s, {kind: "stuck", why: stuckOf(f)}, [`${childOf(s.lane, f)}: ${why}`]);
-	}
+  if (kind === "stuck" && !unseen) {
+    return over(s, { kind: "stuck", why: stuckOf(f) }, [`${childOf(s.lane, f)}: ${why}`]);
+  }
 
-	const head = (now: string | null) => (kind === "done" ? (end.head ?? now) : now);
+  const head = (now: string | null) => (kind === "done" ? (end.head ?? now) : now);
 
-	switch (f.flow) {
-		case "drop":
-			return read({...s, at: {...s.at, dropped: [...s.at.dropped, f.task]}});
-		// A ship run that did not merge leaves one thing open, the pull request, as in the one-ticket
-		// loop (../operate/stop.ts, `shipItems`): run after run of it stops shrinking, and asks.
-		case "ship":
-			return kind === "done" ? read(s) : note(s, PLAN, f, 1);
-		case "plan": {
-			const asked = notePlan({
-				plan: s.job.plan,
-				child: childOf(s.lane, f),
-				folds: f.folds,
-				intent: intentOf("lane", childOf(s.lane, f), "planned"),
-			});
-			return [{...held(s), phase: "planning", asked}, [asked]];
-		}
-		// A last review that passed is no count of its own: the ship run after it is, as a round
-		// that passed and was sent back by the ship counts in the one-ticket loop. So a ship sent back
-		// for main moving on, then a passing last review, then the same again, still asks.
-		case "final":
-			if (f.step === "catchup") {
-				return start(s, {...f, step: "review", head: head(f.head)});
-			}
+  switch (f.flow) {
+    case "drop":
+      return read({ ...s, at: { ...s.at, dropped: [...s.at.dropped, f.task] } });
+    // A ship run that did not merge leaves one thing open, the pull request, as in the one-ticket
+    // loop (../operate/stop.ts, `shipItems`): run after run of it stops shrinking, and asks.
+    case "ship":
+      return kind === "done" ? read(s) : note(s, PLAN, f, 1);
+    case "plan": {
+      const asked = notePlan({
+        plan: s.job.plan,
+        child: childOf(s.lane, f),
+        folds: f.folds,
+        intent: intentOf("lane", childOf(s.lane, f), "planned"),
+      });
+      return [{ ...held(s), phase: "planning", asked }, [asked]];
+    }
+    // A last review that passed is no count of its own: the ship run after it is, as a round
+    // that passed and was sent back by the ship counts in the one-ticket loop. So a ship sent back
+    // for main moving on, then a passing last review, then the same again, still asks.
+    case "final":
+      if (f.step === "catchup") {
+        return start(s, { ...f, step: "review", head: head(f.head) });
+      }
 
-			return kind === "done" ? read(s) : note(s, PLAN, f, openCount(end));
-		case "round":
-			if (f.step === "catchup") {
-				return start(s, {...f, step: "build", head: head(f.head)});
-			}
+      return kind === "done" ? read(s) : note(s, PLAN, f, openCount(end));
+    case "round":
+      if (f.step === "catchup") {
+        return start(s, { ...f, step: "build", head: head(f.head) });
+      }
 
-			if (f.step === "build") {
-				return kind === "done" ? start(s, {...f, step: "review", head: head(f.head)}) : read(s);
-			}
+      if (f.step === "build") {
+        return kind === "done" ? start(s, { ...f, step: "review", head: head(f.head) }) : read(s);
+      }
 
-			if (kind === "skip") {
-				return over(s, {kind: "stuck", why: "review_failed"}, [why]);
-			}
+      if (kind === "skip") {
+        return over(s, { kind: "stuck", why: "review_failed" }, [why]);
+      }
 
-			return note(s, f.task, f, openCount(end));
-	}
+      return note(s, f.task, f, openCount(end));
+  }
 }
 
 export const lane = defineMachine({
-	types: {model: {} as Lane, msg: {} as LaneMsg, sub: {} as LaneSub, ctx: undefined},
-	cmds: [readLane, startChild, noteRound, openPr, notePlan],
-	init: (loaded) => [loaded ?? {phase: "idle"}, []],
-	subs: [childSub, ownerSub],
-	update: {
-		start: (s, m): Step =>
-			s.phase === "idle" ? read({lane: m.lane, job: m.job, at: START, pr: null}) : stay(s),
-		resume: (s): Step =>
-			s.phase === "reading" ||
-			s.phase === "starting" ||
-			s.phase === "noting" ||
-			s.phase === "planning" ||
-			s.phase === "opening"
-				? [s, [s.asked]]
-				: stay(s),
-		lane_read_ok: (s, m): Step => {
-			if (s.phase !== "reading") {
-				return stay(s);
-			}
+  types: { model: {} as Lane, msg: {} as LaneMsg, sub: {} as LaneSub, ctx: undefined },
+  cmds: [readLane, startChild, noteRound, openPr, notePlan],
+  init: (loaded) => [loaded ?? { phase: "idle" }, []],
+  subs: [childSub, ownerSub],
+  update: {
+    start: (s, m): Step => (s.phase === "idle" ? read({ lane: m.lane, job: m.job, at: START, pr: null }) : stay(s)),
+    resume: (s): Step =>
+      s.phase === "reading" ||
+      s.phase === "starting" ||
+      s.phase === "noting" ||
+      s.phase === "planning" ||
+      s.phase === "opening"
+        ? [s, [s.asked]]
+        : stay(s),
+    lane_read_ok: (s, m): Step => {
+      if (s.phase !== "reading") {
+        return stay(s);
+      }
 
-			const v = m.value;
-			const n = next(s.at, v);
+      const v = m.value;
+      const n = next(s.at, v);
 
-			switch (n.go) {
-				case "done":
-					return over(s, {kind: "done", part: false, pr: n.pr, head: n.head});
-				case "skip":
-					return over(s, {kind: "skip", why: n.why});
-				case "stuck":
-					return over(s, {kind: "stuck", why: n.why});
-				case "wait":
-					return [{...held(s), phase: "waiting", asks: n.asks}, []];
-				case "plan":
-					return start(s, {flow: "plan", version: n.version, folds: n.folds});
-				case "drop":
-					return start(s, {flow: "drop", task: n.task});
-				case "round": {
-					const at = {
-						...s.at,
-						rounds: {...s.at.rounds, [n.task]: n.round},
-						fixedAt: n.fix ? s.at.finals : s.at.fixedAt,
-					};
-					return start(
-						{...s, at},
-						{
-							flow: "round",
-							task: n.task,
-							round: n.round,
-							open: n.open,
-							step: "catchup",
-							head: v.head,
-						},
-					);
-				}
-				case "final":
-					return start(
-						{...s, at: {...s.at, finals: n.round}},
-						{flow: "final", round: n.round, step: "catchup", head: v.head},
-					);
-				case "ship":
-					return start({...s, at: {...s.at, ships: n.run}}, {flow: "ship", run: n.run, pr: n.pr});
-				case "open": {
-					// `met` is never true without a head.
-					const head = v.head ?? "";
-					const asked = openPr({
-						plan: s.job.plan,
-						head,
-						title: v.title,
-						body: prBody(v),
-						intent: intentOf("lane", s.lane, "open"),
-					});
-					return [{...held(s), phase: "opening", asked}, [asked]];
-				}
-			}
-		},
-		lane_read_err: (s): Step =>
-			s.phase === "reading" ? over(s, {kind: "stuck", why: "read_failed"}) : stay(s),
-		lane_start_ok: (s): Step =>
-			s.phase === "starting"
-				? [{...held(s), phase: "running", flow: s.flow, child: childOf(s.lane, s.flow)}, []]
-				: stay(s),
-		lane_start_err: (s): Step =>
-			s.phase === "starting"
-				? over(s, {kind: "stuck", why: stuckOf(s.flow)}, [
-						`${childOf(s.lane, s.flow)} did not start`,
-					])
-				: stay(s),
-		child_over: (s, m): Step =>
-			s.phase === "running" && m.child === s.child ? afterChild(held(s), s.flow, m.end) : stay(s),
-		lane_planned_ok: (s): Step => (s.phase === "planning" ? read(s) : stay(s)),
-		lane_planned_err: (s, m): Step =>
-			s.phase === "planning"
-				? over(s, {kind: "stuck", why: "plan_failed"}, [
-						m.error._tag === "no_plan" ? "planning again gave no plan" : "the plan was not kept",
-					])
-				: stay(s),
-		lane_note_ok: (s): Step => (s.phase === "noting" ? read(s) : stay(s)),
-		lane_note_err: (s): Step =>
-			s.phase === "noting" ? over(s, {kind: "stuck", why: "read_failed"}) : stay(s),
-		lane_open_ok: (s, m): Step => (s.phase === "opening" ? read({...s, pr: m.value.url}) : stay(s)),
-		lane_open_err: (s): Step =>
-			s.phase === "opening" ? over(s, {kind: "stuck", why: "open_failed"}) : stay(s),
-		owner_moved: (s): Step => (s.phase === "waiting" ? read(s) : stay(s)),
-	},
+      switch (n.go) {
+        case "done":
+          return over(s, { kind: "done", part: false, pr: n.pr, head: n.head });
+        case "skip":
+          return over(s, { kind: "skip", why: n.why });
+        case "stuck":
+          return over(s, { kind: "stuck", why: n.why });
+        case "wait":
+          return [{ ...held(s), phase: "waiting", asks: n.asks }, []];
+        case "plan":
+          return start(s, { flow: "plan", version: n.version, folds: n.folds });
+        case "drop":
+          return start(s, { flow: "drop", task: n.task });
+        case "round": {
+          const at = {
+            ...s.at,
+            rounds: { ...s.at.rounds, [n.task]: n.round },
+            fixedAt: n.fix ? s.at.finals : s.at.fixedAt,
+          };
+          return start(
+            { ...s, at },
+            {
+              flow: "round",
+              task: n.task,
+              round: n.round,
+              open: n.open,
+              step: "catchup",
+              head: v.head,
+            },
+          );
+        }
+        case "final":
+          return start(
+            { ...s, at: { ...s.at, finals: n.round } },
+            { flow: "final", round: n.round, step: "catchup", head: v.head },
+          );
+        case "ship":
+          return start({ ...s, at: { ...s.at, ships: n.run } }, { flow: "ship", run: n.run, pr: n.pr });
+        case "open": {
+          // `met` is never true without a head.
+          const head = v.head ?? "";
+          const asked = openPr({
+            plan: s.job.plan,
+            head,
+            title: v.title,
+            body: prBody(v),
+            intent: intentOf("lane", s.lane, "open"),
+          });
+          return [{ ...held(s), phase: "opening", asked }, [asked]];
+        }
+      }
+    },
+    lane_read_err: (s): Step => (s.phase === "reading" ? over(s, { kind: "stuck", why: "read_failed" }) : stay(s)),
+    lane_start_ok: (s): Step =>
+      s.phase === "starting"
+        ? [{ ...held(s), phase: "running", flow: s.flow, child: childOf(s.lane, s.flow) }, []]
+        : stay(s),
+    lane_start_err: (s): Step =>
+      s.phase === "starting"
+        ? over(s, { kind: "stuck", why: stuckOf(s.flow) }, [`${childOf(s.lane, s.flow)} did not start`])
+        : stay(s),
+    child_over: (s, m): Step =>
+      s.phase === "running" && m.child === s.child ? afterChild(held(s), s.flow, m.end) : stay(s),
+    lane_planned_ok: (s): Step => (s.phase === "planning" ? read(s) : stay(s)),
+    lane_planned_err: (s, m): Step =>
+      s.phase === "planning"
+        ? over(s, { kind: "stuck", why: "plan_failed" }, [
+            m.error._tag === "no_plan" ? "planning again gave no plan" : "the plan was not kept",
+          ])
+        : stay(s),
+    lane_note_ok: (s): Step => (s.phase === "noting" ? read(s) : stay(s)),
+    lane_note_err: (s): Step => (s.phase === "noting" ? over(s, { kind: "stuck", why: "read_failed" }) : stay(s)),
+    lane_open_ok: (s, m): Step => (s.phase === "opening" ? read({ ...s, pr: m.value.url }) : stay(s)),
+    lane_open_err: (s): Step => (s.phase === "opening" ? over(s, { kind: "stuck", why: "open_failed" }) : stay(s)),
+    owner_moved: (s): Step => (s.phase === "waiting" ? read(s) : stay(s)),
+  },
 });
