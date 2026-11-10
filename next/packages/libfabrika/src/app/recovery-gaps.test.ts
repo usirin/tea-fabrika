@@ -31,7 +31,7 @@ import {
 } from "../coordination/process.test-support.ts";
 import { Ledger, LedgerError } from "../data/ledger.ts";
 import { InputId, lineFor } from "../data/log.ts";
-import { type Sql } from "../data/referee.ts";
+import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Event, type Incoming, ProgramLoader, Recording, WatcherManager } from "./entry.ts";
 import { type Descriptor, ProgramRunner } from "./runner.ts";
 

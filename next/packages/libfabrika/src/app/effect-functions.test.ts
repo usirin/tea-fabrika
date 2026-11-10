@@ -18,10 +18,10 @@ import { LedgerTransaction } from "../data/ledger-transaction.ts";
 import { Doorbell, Ledger, LedgerError } from "../data/ledger.ts";
 import { Appended, fromHere, type Line, lineFor } from "../data/log.ts";
 import { RecordManager } from "../data/records.ts";
-import { type Sql } from "../data/referee.ts";
 import { SpanSink } from "../data/sink.ts";
 import { nodeSql } from "../data/sqlite.ts";
 import { Chain } from "../data/trace.ts";
+import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "./entry.ts";
 import { ProgramRunner } from "./runner.ts";
 

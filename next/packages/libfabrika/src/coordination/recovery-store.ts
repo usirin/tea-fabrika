@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import { LedgerError } from "../data/ledger.ts";
-import { type Sql } from "../data/referee.ts";
+import { type Sql } from "../Sql.ts";
 import { Receipt, Supervision } from "./recovery.ts";
 
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Supervision));
