@@ -9,7 +9,12 @@
 	// Each rule is named here, so a new oxlint release adds none on its own.
 	"categories": { "correctness": "off" },
 	"options": { "reportUnusedDisableDirectives": "error" },
-	"ignorePatterns": ["**/fixtures/**", "**/experiments/results/**", "unreachable-ledger.json"],
+	"ignorePatterns": [
+		"**/fixtures/**",
+		"**/experiments/results/**",
+		"unreachable-ledger.json",
+		"agents-ledger.json"
+	],
 	"rules": {
 		// "warn" here only advises: lint.ts prints these two and does not fail on them. They were
 		// wrong too often to block (experiment 125). Any other warning fails.
@@ -342,7 +347,27 @@
 			// 223's tree were read by hand (oxlint-plugins/README.md). An edge is one line under an edge
 			// comment, which `edge-comment` holds to its shape (P35). No override below turns the two
 			// edge rules off for a `next/` file that is not a test, and `edge-comment.test.ts` checks it.
+			// The `.agents/` override below repeats this rule block: change both together
+			// (`edge-comment.test.ts` checks they are equal).
 			"files": ["next/**"],
+			"rules": {
+				"fabrika/no-promises": "error",
+				"fabrika/no-ledger-sql": "error",
+				"fabrika/no-node-filesystem": "error",
+				"fabrika/no-node-imports": "error",
+				"fabrika/no-effect-run-outside-edge": "error",
+				"fabrika/edge-comment": "error",
+				"fabrika/effect-functions": "error",
+				"fabrika/no-of": "error",
+				"fabrika/no-hand-tag": "error",
+				"fabrika/one-store-hook": "error"
+			}
+		},
+		{
+			// Lead tooling under `.agents/` is held to `next/`'s rules, since agents read it and copy its
+			// habits (0033). What it broke on the day it joined is in `agents-ledger.json`, which only
+			// shrinks. This rule block is the `next/**` block above, repeated: change both together.
+			"files": [".agents/**/*.ts", ".agents/**/*.mjs"],
 			"rules": {
 				"fabrika/no-promises": "error",
 				"fabrika/no-ledger-sql": "error",
@@ -387,6 +412,16 @@
 				"react/display-name": "off",
 				"react/purity": "off",
 				"fabrika/no-clock-in-view": "off"
+			}
+		},
+		{
+			// `.agents/` tests keep the edge rules on: only `next/`'s tests may turn one off
+			// (`edge-comment.test.ts`). The rest is left out as for `next/`'s tests above.
+			"files": [".agents/**/*.test.ts"],
+			"rules": {
+				"fabrika/effect-functions": "off",
+				"fabrika/no-hand-tag": "off",
+				"fabrika/one-store-hook": "off"
 			}
 		}
 	]

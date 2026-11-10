@@ -1,7 +1,7 @@
 ---
 id: 0023
 title: next/ follows the Effect codebase's code style and doc comments as strictly as it can, and each kept difference names its reason
-status: amended-in-part by [0021](0021-a-blank-line-between-top-level-statements.md), [0029](0029-format-and-names-follow-effect.md), [0032](0032-libraries-take-effects-file-layout.md)
+status: amended-in-part by [0021](0021-a-blank-line-between-top-level-statements.md), [0029](0029-format-and-names-follow-effect.md), [0032](0032-libraries-take-effects-file-layout.md), [0039](0039-keep-semicolons-and-es5-commas.md)
 date: 2026-11-09
 tags: [style, format, lint, doc-comments, jsdoc, effect, next, readability, open-source]
 ---
@@ -37,7 +37,7 @@ import * as core from "./internal/core.ts"
 export interface Deferred<in out A, in out E = never> extends Deferred.Variance<A, E>, Pipeable {
 ```
 
-*[0029](0029-format-and-names-follow-effect.md) settles indent, line width, semicolons, trailing commas, spaces in braces, the generator star, bare `of` and plural service names; the rest of this file still holds.*
+*[0029](0029-format-and-names-follow-effect.md) settles indent, line width, semicolons, trailing commas, spaces in braces, the generator star, bare `of` and plural service names; the rest of this file still holds. [0039](0039-keep-semicolons-and-es5-commas.md) then keeps semicolons and trailing commas.*
 
 ## Context
 
@@ -87,8 +87,8 @@ stays only with a written reason in this file.**
 |---|---|---|---|---|
 | Indent | 2 spaces (`dprint.json` `indentWidth: 2`) | tabs | [oxlint and oxfmt](../docs/direction/oxlint-and-oxfmt.md), 2026-10-31 | open: owner picks |
 | Line width | 120 | 100 | the same note | open: owner picks |
-| Semicolons | none (`semiColons: "asi"`) | always (oxfmt's default, kept from Biome) | the same note ("keeps the old settings") | open: owner picks |
-| Trailing commas | never (`trailingCommas: "never"`) | always (`trailingComma: "all"`) | the same note | open: owner picks |
+| Semicolons | none (`semiColons: "asi"`) | always (oxfmt's default, kept from Biome) | the same note ("keeps the old settings") | differs: the owner's reading taste ([0039](0039-keep-semicolons-and-es5-commas.md)) |
+| Trailing commas | never (`trailingCommas: "never"`) | always (`trailingComma: "all"`) | the same note | differs: the owner's reading taste ([0039](0039-keep-semicolons-and-es5-commas.md)) |
 | Spaces in braces | `import { dual } from` (dprint default) | `import {dual} from` (`bracketSpacing: false`) | the same note | open: owner picks |
 | Generator star | `function*() {` (dprint) | `function* () {` (oxfmt prints it, no setting) | the formatter choice, same note | open: owner picks, only by changing formatter |
 | Formatter | dprint | oxfmt | the same note | kept: the note settled oxfmt; it can print every setting above except the star |

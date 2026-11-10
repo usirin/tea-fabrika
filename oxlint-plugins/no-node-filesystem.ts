@@ -1,6 +1,6 @@
 // next/ product code uses Effect's replaceable FileSystem and Path services.
 import type {CreateRule} from "@oxlint/plugins";
-import {pathIn, type Node} from "./match.ts";
+import {heldToNext, pathIn, type Node} from "./match.ts";
 
 const native = /^(?:node:)?(?:fs(?:\/promises)?|path(?:\/(?:posix|win32))?)$/;
 
@@ -9,7 +9,7 @@ export const noNodeFilesystem: CreateRule = {
 		const file = pathIn(context);
 
 		if (
-			!file.startsWith("next/") ||
+			!heldToNext(file) ||
 			/\/(?:exam|e2e)\//.test(file) ||
 			/\.(?:test|test-support|d)\.tsx?$/.test(file)
 		) {

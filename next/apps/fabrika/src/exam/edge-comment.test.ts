@@ -181,4 +181,19 @@ describe(".oxlintrc.json", () => {
 
 		expect(config.ignorePatterns.filter((p) => p.startsWith("next"))).toEqual([]);
 	});
+
+	// pinned: `.agents/` is held to next/'s rules by a second override that repeats the `next/**`
+	// rule block (0033), since the law above wants that override's files to be exactly `next/**`.
+	// Two copies drift, so the copies must stay equal.
+	it("pinned: the .agents/ override repeats the next/** rule block exactly (0033)", () => {
+		const next = config.overrides.filter((o) => o.files.length === 1 && o.files[0] === "next/**");
+		const agents = config.overrides.filter(
+			(o) =>
+				o.files.some((f) => f.startsWith(".agents/")) && !o.files.some((f) => f.includes(".test.")),
+		);
+
+		expect([next.length, agents.length]).toEqual([1, 1]);
+		expect(agents[0]?.files).toEqual([".agents/**/*.ts", ".agents/**/*.mjs"]);
+		expect(agents[0]?.rules).toEqual(next[0]?.rules);
+	});
 });

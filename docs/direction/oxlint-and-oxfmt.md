@@ -70,7 +70,9 @@ export const noNumericDuration: CreateRule = {
 - **Oxfmt keeps the old settings:** tabs, 100 columns, no bracket spacing, imports sorted. It leaves
   Markdown, YAML and fixtures alone, as Biome did. *Superseded 2026-11-09 for indent, width,
   semicolons, trailing commas and bracket spacing: the format follows Effect's settings
-  ([0029](../../.decisions/0029-format-and-names-follow-effect.md)). Oxfmt and the import sort stay.*
+  ([0029](../../.decisions/0029-format-and-names-follow-effect.md)), except that semicolons and
+  trailing commas stay
+  ([0039](../../.decisions/0039-keep-semicolons-and-es5-commas.md)). Oxfmt and the import sort stay.*
 
 ## Why it can be trusted
 

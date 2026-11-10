@@ -100,6 +100,12 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   files. A `node:` import stays only where Effect has nothing, marked as an edge with its reason
   (owner, 2026-11-09). The lint rule `fabrika/no-node-imports` comes with
   [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
+- **In `next/`, use the platform through Alchemy, never directly,** in the cloud and on the laptop
+  alike: no `cloudflare:*`, `miniflare`, `workerd`, `wrangler` or `@cloudflare/*` import, no raw
+  platform type, and nothing that starts or talks to the local runtime except through Alchemy. A
+  gap is patched locally with its upstream issue filed the same day; a direct use stays only as a
+  marked edge with the issue link. Today's direct uses move with their ports, and the lint rule is
+  ticket 506 ([0042](./.decisions/0042-platform-pieces-go-through-alchemy.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
   `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
@@ -128,7 +134,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
   they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
   agent changes them directly, keeps each change small, and merges on green CI with a clean leak
-  grep. Product code (`next/` and today's app) keeps its steps.
+  grep. Fast-tracked is not loose: agents read `.agents/` and copy its habits, so its code follows
+  `next/`'s conventions and lint rules, edge comments included. What it broke on the day it joined
+  is in `agents-ledger.json`, which only shrinks; a shell or Python script moves to TypeScript and
+  Effect when it is next touched ([0033](./.decisions/0033-agents-code-follows-next-rules.md)).
+  Product code (`next/` and today's app) keeps its steps.
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
   part is small, never absent. A rule that code already checks leaves a skill's prose; a rule
@@ -210,6 +220,11 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   it, before you give a lean; a guess comes after, marked as a guess. If the plain way
   clashes with a stated goal, say so in one line, and let the owner pick. Never hide it
   behind a custom design.
+- **Try an existing tool before you hand-write one.** A plan or pull request that adds a check, a
+  script or a tool names the widely used tools it looked at, with a link each, and uses one or
+  says what it cannot do, with proof. "We could write it quickly" is not a reason. A hand-written
+  check lists its edge cases before the code, each with a test
+  ([0040](./.decisions/0040-existing-tools-before-hand-written.md)).
 - **Name the Elm answer first.** `@demlik/tea` is the Elm architecture in
   TypeScript. Parents are written by hand and step their children. Exceptions
   are named in [`docs/direction/elm-first.md`](./docs/direction/elm-first.md)
@@ -398,9 +413,10 @@ pnpm format     # oxfmt and oxlint: format, sort imports and apply safe fixes, i
 ```
 
 Run `pnpm format` first, so a diff holds only what was meant. The format settings
-are in `.oxfmtrc.json`, Effect's own from ticket 466's sweep: 2 spaces, 120 columns, no
-semicolons, no trailing commas, spaces inside braces
-([0029](./.decisions/0029-format-and-names-follow-effect.md)). The lint rules are in `.oxlintrc.json`:
+are in `.oxfmtrc.json`, from ticket 466's sweep: 2 spaces, 120 columns and spaces inside braces,
+as Effect has them ([0029](./.decisions/0029-format-and-names-follow-effect.md)), with semicolons
+and trailing commas, function parameters and call arguments included
+([0039](./.decisions/0039-keep-semicolons-and-es5-commas.md)). The lint rules are in `.oxlintrc.json`:
 the rules of the pipeline this repo rebuilds, with its custom rules in
 `oxlint-plugins/`. Why these two tools:
 [oxlint and oxfmt](./docs/direction/oxlint-and-oxfmt.md). Never switch a rule off

@@ -99,6 +99,13 @@ export const pathIn = (context: Context): string => {
 	return context.filename.startsWith(from) ? context.filename.slice(from.length) : context.filename;
 };
 
+/**
+ * Whether a file is held to `next/`'s rules: `next/` itself, and the lead tooling under `.agents/`,
+ * which agents read and copy (0033).
+ */
+export const heldToNext = (file: string): boolean =>
+	file.startsWith("next/") || file.startsWith(".agents/");
+
 /** The local names a file imports from Effect: `Effect` in `import {Effect} from "effect"`. */
 export const effectNames = (program: ESTree.Program): ReadonlySet<string> => {
 	const names = new Set<string>();
