@@ -1,7 +1,7 @@
 // next/ uses Effect's platform. A native import needs a reason on its source line.
 import {builtinModules} from "node:module";
 import type {CreateRule} from "@oxlint/plugins";
-import {pathIn, type Node} from "./match.ts";
+import {heldToNext, pathIn, type Node} from "./match.ts";
 
 const builtins = new Set(builtinModules);
 
@@ -43,11 +43,7 @@ export const noNodeImports: CreateRule = {
 	create(context) {
 		const file = pathIn(context);
 
-		if (
-			!file.startsWith("next/") ||
-			/\/e2e\//.test(file) ||
-			/\.(?:test|test-support)\.tsx?$/.test(file)
-		) {
+		if (!heldToNext(file) || /\/e2e\//.test(file) || /\.(?:test|test-support)\.tsx?$/.test(file)) {
 			return {};
 		}
 

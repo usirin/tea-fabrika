@@ -3,6 +3,7 @@ import "../../lead/scripts/leakgrep.sh?raw";
 import "./exam.py?raw";
 import "../../plan/scripts/plancheck.sh?raw";
 import "../../lead/scripts/box.sh?raw";
+import "../../lead/scripts/keepruns.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../lead/scripts/drive.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.

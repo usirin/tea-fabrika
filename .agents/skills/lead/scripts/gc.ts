@@ -13,6 +13,9 @@
 //                         linked worktree of the main checkout outside the boxes folder whose
 //                         lane landed (decideWorktree): its branch stays in the main checkout
 //
+// Before any folder goes, keepruns.sh moves its runs/ (raw samples, never in git) into the main
+// checkout's runs/<folder>/; when that fails, the folder is kept.
+//
 // Every keep is printed with its reason, so a box that never goes is seen (field note
 // 2026-11-09-254: gc's own git status reset the idle clock, so for a day no box was ever removed).
 //
@@ -113,9 +116,29 @@ export type SeenWorktree = {
 	readonly busy: readonly number[];
 	readonly idle: number;
 	readonly dirty: number | null;
-	/** The pull requests of its branch, minus -wip: what state each is in. */
-	readonly prs: readonly ("OPEN" | "MERGED" | "CLOSED")[];
+	/** The pull requests holding its work (worktreePrs): what state each is in. */
+	readonly prs: readonly PrState[];
 };
+
+export type PrState = "OPEN" | "MERGED" | "CLOSED";
+
+/** The pull requests holding a worktree's work: those of its own branch (minus -wip), of every
+ * remote branch whose tip is its HEAD, and every one whose head commit is its HEAD. A lead's
+ * worktree is often pushed under another name (botpush to fabrikalfa/<lane>), so its own branch
+ * name alone missed a merged lane and gc kept it for good (2026-11-09: PR 623's worktree). */
+export const worktreePrs = (
+	w: {
+		readonly branch: string | null;
+		readonly head: string | null;
+		readonly tips: readonly string[];
+	},
+	byRef: ReadonlyMap<string, readonly PrState[]>,
+	byHead: ReadonlyMap<string, readonly PrState[]>,
+): PrState[] => [
+	...(w.branch === null ? [] : (byRef.get(w.branch.replace(/(-wip)+$/, "")) ?? [])),
+	...w.tips.flatMap((t) => byRef.get(t.replace(/(-wip)+$/, "")) ?? []),
+	...(w.head === null ? [] : (byHead.get(w.head) ?? [])),
+];
 
 /** A worktree goes once its lane landed, clean and idle. Its branch stays in the main checkout, so
  * only the folder goes; a worktree with no lane branch is someone's own and stays. */
@@ -320,6 +343,17 @@ const sizeMb = (paths: readonly string[]) => {
 	);
 };
 
+/** Move a folder's runs/ into the main checkout's runs/ before it is removed; false: keep it. */
+const keepRuns = (dir: string): boolean => {
+	const r = sh("sh", [join(import.meta.dirname, "keepruns.sh"), dir]);
+
+	if (r.out.trim()) {
+		console.log(r.out.trim());
+	}
+
+	return r.code === 0;
+};
+
 const main = () => {
 	const args = process.argv.slice(2);
 	const dry = args.includes("--dry-run");
@@ -339,7 +373,8 @@ const main = () => {
 	const repo = (...a: string[]) => sh("git", ["-C", env.MAIN, ...SAFE, ...a]);
 	const common = resolve(env.MAIN, repo("rev-parse", "--git-common-dir").out.trim());
 	repo("fetch", "-q", "origin");
-	const prsOf = new Map<string, ("OPEN" | "MERGED" | "CLOSED")[]>();
+	const prsOf = new Map<string, PrState[]>();
+	const prsAt = new Map<string, PrState[]>();
 	const listed = sh("gh", [
 		"pr",
 		"list",
@@ -350,9 +385,9 @@ const main = () => {
 		"--limit",
 		"5000",
 		"--json",
-		"headRefName,state",
+		"headRefName,headRefOid,state",
 		"-q",
-		'.[] | "\\(.state) \\(.headRefName)"',
+		'.[] | "\\(.state) \\(.headRefName) \\(.headRefOid)"',
 	]);
 
 	if (listed.code !== 0) {
@@ -361,10 +396,18 @@ const main = () => {
 	}
 
 	for (const line of listed.out.split("\n")) {
-		const [state, ref] = line.split(" ");
+		const [state, ref, oid] = line.split(" ");
 
-		if ((state === "OPEN" || state === "MERGED" || state === "CLOSED") && ref) {
+		if (state !== "OPEN" && state !== "MERGED" && state !== "CLOSED") {
+			continue;
+		}
+
+		if (ref) {
 			prsOf.set(ref, [...(prsOf.get(ref) ?? []), state]);
+		}
+
+		if (oid) {
+			prsAt.set(oid, [...(prsAt.get(oid) ?? []), state]);
 		}
 	}
 
@@ -468,6 +511,12 @@ const main = () => {
 		const twin = gitDir === join(env.BOXES, `${name}-gitdata`) ? [gitDir] : [];
 		const mb = sizeMb([box, ...twin]);
 
+		if (!dry && !keepRuns(box)) {
+			console.log(`keep ${name}: could not keep its runs/`);
+			keptCount += 1;
+			continue;
+		}
+
 		if (!dry) {
 			if (gitDir?.startsWith(`${join(common, "worktrees")}/`)) {
 				repo("worktree", "remove", "--force", "--force", box);
@@ -520,13 +569,26 @@ const main = () => {
 		const ref = lines.find((l) => l.startsWith("branch "))?.slice("branch refs/heads/".length);
 		const gitDir = gitDirOf(path);
 		const branch = ref ?? null;
+		const head = lines.find((l) => l.startsWith("HEAD "))?.slice(5) ?? null;
+		const tips =
+			head === null
+				? []
+				: repo(
+						"for-each-ref",
+						"--points-at",
+						head,
+						"--format=%(refname:lstrip=3)",
+						"refs/remotes/origin",
+					)
+						.out.split("\n")
+						.filter(Boolean);
 		const verdict = decideWorktree({
 			branch,
 			locked: lines.some((l) => l === "locked" || l.startsWith("locked ")),
 			busy: pidsIn(busyIn, path),
 			idle: now - lastTouched(path, gitDir),
 			dirty: gitDir === null ? null : dirtyIn(gitDir, path),
-			prs: branch === null ? [] : (prsOf.get(branch.replace(/(-wip)+$/, "")) ?? []),
+			prs: worktreePrs({branch, head, tips}, prsOf, prsAt),
 		});
 
 		if (verdict._tag !== "remove") {
@@ -536,6 +598,12 @@ const main = () => {
 		}
 
 		const mb = sizeMb([path]);
+
+		if (!dry && !keepRuns(path)) {
+			console.log(`keep worktree ${path}: could not keep its runs/`);
+			keptCount += 1;
+			continue;
+		}
 
 		// Without --force: git itself refuses a worktree with changes, a second guard.
 		if (!dry && repo("worktree", "remove", path).code !== 0) {

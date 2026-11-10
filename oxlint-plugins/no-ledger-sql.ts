@@ -1,6 +1,6 @@
 // next/: the ledger's entries and rings belong to the ledger service, including reads.
 import type {CreateRule} from "@oxlint/plugins";
-import {pathIn, type Node} from "./match.ts";
+import {heldToNext, pathIn, type Node} from "./match.ts";
 
 const OWNERS = new Set([
 	"next/packages/libfabrika/src/data/ledger-store.ts",
@@ -18,11 +18,7 @@ export const noLedgerSql: CreateRule = {
 	create(context) {
 		const file = pathIn(context);
 
-		if (
-			!file.startsWith("next/") ||
-			OWNERS.has(file) ||
-			/\.(?:test|test-support|d)\.tsx?$/.test(file)
-		) {
+		if (!heldToNext(file) || OWNERS.has(file) || /\.(?:test|test-support|d)\.tsx?$/.test(file)) {
 			return {};
 		}
 

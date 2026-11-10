@@ -77,7 +77,7 @@ Open these. Each type-checks as written (`tsc -p experiments/235-program-shape`,
 - [`mistakes.ts`](./235-program-shape/mistakes.ts): each mistake the owner named, made on purpose in
   each shape. `@ts-expect-error` marks one tsc stops; tsc fails the file if it compiles after all.
 - [`235-program-shape.ts`](./235-program-shape.ts) and its answers,
-  [`results/235-program-shape.json`](./results/235-program-shape.json).
+  [`results/235-program-shape.json`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/235-program-shape.json).
 
 The job is today's `programs/ticket` (show a ticket, comment, answer a person only, close, reopen,
 refuse a write to a ticket never shown, send the shown ticket down a pipe), rethought for `next/`:

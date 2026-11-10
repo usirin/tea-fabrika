@@ -6,7 +6,6 @@ import {spawn, execFileSync, type ChildProcess} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
 import {mkdtempSync, readdirSync, readFileSync, rmSync} from "node:fs";
 import {request} from "node:http";
-import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {DatabaseSync} from "node:sqlite";
@@ -14,6 +13,7 @@ import {Id} from "@kampus/libfabrika";
 import {Entry, PAGE} from "@kampus/libfabrika/data";
 import {Effect, Schema} from "effect";
 import {afterEach, describe, expect, it} from "vitest";
+import {heldPort} from "./port.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -71,21 +71,6 @@ const identity = () => {
 
 const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
 
-const unusedPort = () =>
-	new Promise<number>((done, fail) => {
-		const listener = createServer();
-		listener.once("error", fail);
-		listener.listen(0, "127.0.0.1", () => {
-			const at = listener.address();
-
-			if (at === null || typeof at === "string") {
-				return fail(new Error("no TCP port"));
-			}
-
-			listener.close(() => done(at.port));
-		});
-	});
-
 // Node's fetch drops a custom Host header (a forbidden header in the Fetch spec), so the
 // wrong-host check sends its request with node:http, which sends the header as given.
 const statusWithHost = (url: string, host: string) =>
@@ -100,6 +85,7 @@ const statusWithHost = (url: string, host: string) =>
 
 const children: Array<ChildProcess> = [];
 const homes: Array<string> = [];
+const ports: Array<Effect.Effect<void>> = [];
 const sockets: Array<WebSocket> = [];
 
 afterEach(async () => {
@@ -119,7 +105,18 @@ afterEach(async () => {
 	for (const h of homes.splice(0)) {
 		rmSync(h, {recursive: true, force: true});
 	}
+
+	// Last, so the pair stays held until every stage that used its port is gone.
+	for (const release of ports.splice(0)) {
+		await Effect.runPromise(release);
+	}
 });
+
+const unusedPort = async () => {
+	const held = await Effect.runPromise(heldPort());
+	ports.push(held.release);
+	return held.port;
+};
 
 const stage = async (saved?: {key: ReturnType<typeof identity>; home: string; port: number}) => {
 	readFileSync(join(APP, "dev.ts"), "utf8");

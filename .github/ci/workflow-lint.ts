@@ -73,6 +73,12 @@ export const lintWorkflow = (text: string): string[] => {
 			), `${name} must run after classifier failure and skip only its false flag`);
 	}
 
+	// A job with no limit runs for GitHub's 360 minute default when a step hangs (ticket 496).
+	for (const [name, job] of Object.entries(jobs)) {
+		const limit = map(job)["timeout-minutes"];
+		require(typeof limit === "number" && limit > 0 && limit < 360, `${name} sets timeout-minutes`);
+	}
+
 	const changes = map(jobs["changes"]),
 		outputs = map(changes["outputs"]);
 	require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
