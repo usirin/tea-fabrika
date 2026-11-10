@@ -29,12 +29,16 @@ describe("posting a verdict", () => {
 			"api repos/acme/widgets/issues/9/comments?per_page=100",
 			"api --method POST repos/acme/widgets/issues/9/comments",
 		]);
+		// The marker's dash is stored data. Kept as written, so a reformat never reads this old line as new text.
+		// oxfmt-ignore
 		expect(calls[1]?.at(-1)).toMatch(
 			/^body=review-code: PASS @ a{40} — 1 of 1 criteria met\n\nthe review$/,
 		);
 	});
 
 	it("does not post a verdict that is already there", async () => {
+		// The marker's dash is stored data. Kept as written, so a reformat never reads this old line as new text.
+		// oxfmt-ignore
 		const there = JSON.stringify([
 			{body: `review-code: PASS @ ${"a".repeat(40)} — 1 of 1 criteria met\n\nold`},
 		]);
