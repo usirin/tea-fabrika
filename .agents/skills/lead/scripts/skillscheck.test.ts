@@ -2,6 +2,7 @@ import "./skillscheck.sh?raw";
 import "./leakgrep.sh?raw";
 import "./loosening.sh?raw";
 import "./box.sh?raw";
+import "./keepruns.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
 import "./fieldrow.py?raw";
@@ -97,11 +98,16 @@ const tree = (dir: string, whitespace = " ", omit?: [string, string, number], ou
 					.map((s) => s.split(" ").join(whitespace))
 					.join("\n")}\n`,
 		);
-		if (outside && omit) chunks.push(`## Unrelated\n${sections[omit[0]]![omit[1]]![omit[2]]}\n`);
+
+		if (outside && omit) {
+			chunks.push(`## Unrelated\n${sections[omit[0]]![omit[1]]![omit[2]]}\n`);
+		}
+
 		mkdirSync(join(dir, file, ".."), {recursive: true});
 		// A skill file also holds slice 1a's clauses, so both checks read one whole tree.
 		const own = file === "AGENTS.md" ? "" : `\n${mainText(file.split("/")[2]!)}`;
 		writeFileSync(join(dir, file), chunks.join("\n") + own);
+
 		if (file !== "AGENTS.md") {
 			const skill = file.split("/")[2]!;
 			mkdirSync(join(dir, ".claude/skills"), {recursive: true});
@@ -110,6 +116,7 @@ const tree = (dir: string, whitespace = " ", omit?: [string, string, number], ou
 			symlinkSync(`../../.agents/skills/${skill}`, alias);
 		}
 	}
+
 	// The other clause sources hold only the slice 1a and 1b clauses.
 	for (const skill of new Set(allClauses.map(([s]) => s).filter((s) => s !== "lead"))) {
 		mkdirSync(join(dir, ".agents/skills", skill), {recursive: true});
@@ -136,9 +143,11 @@ describe("skillscheck, today's tooling", () => {
 		fc.assert(
 			fc.property(fc.constantFrom(" ", "\n  ", "\t"), (space) => {
 				const dir = mkdtempSync(join(tmpdir(), "hit-routing-"));
+
 				try {
 					tree(dir, space);
 					expect(run(dir).status).toBe(0);
+
 					for (const file of [".agents/skills/lead/SKILL.md", "AGENTS.md"]) {
 						for (const substitute of [
 							"The lead records both outputs in the PR. Any hit waits on the owner.",
@@ -181,24 +190,31 @@ describe("skillscheck, today's tooling", () => {
 					// Each input also checks every refusal alone, so another bad alias cannot hide it.
 					for (const chosen of [[...generated], ...states.map((s) => [s])]) {
 						const dir = mkdtempSync(join(tmpdir(), space ? "skill tree " : "skill-tree-"));
+
 						try {
 							tree(dir);
 							const sources = join(dir, ".agents/skills");
 							const aliases = join(dir, ".claude/skills");
 							mkdirSync(sources, {recursive: true});
 							mkdirSync(aliases, {recursive: true});
+
 							for (const n of names) {
 								mkdirSync(join(sources, n), {recursive: true});
-								if (!["review", "lead", "plan"].includes(n))
+
+								if (!["review", "lead", "plan"].includes(n)) {
 									writeFileSync(join(sources, n, "SKILL.md"), skillText(n));
+								}
 							}
+
 							const actual: State[] = [];
+
 							for (const [i, n] of names.entries()) {
 								const state = chosen[i] ?? "relative";
 								actual.push(state);
 								const source = join(sources, n),
 									alias = join(aliases, n);
 								rmSync(alias, {recursive: true, force: true});
+
 								switch (state) {
 									case "relative":
 										symlinkSync(relative(aliases, source), alias);
@@ -225,6 +241,7 @@ describe("skillscheck, today's tooling", () => {
 										break;
 								}
 							}
+
 							// Source folders without SKILL.md and unrelated Claude-only skills are ignored.
 							mkdirSync(join(sources, "_not-a-skill"));
 							mkdirSync(join(aliases, "_claude-only"));
@@ -241,13 +258,22 @@ describe("skillscheck, today's tooling", () => {
 								s === "relative" || s === "absolute" ? [] : [names[i]!],
 							);
 							expect(ran.status, ran.stdout + ran.stderr).toBe(bad.length ? 1 : 0);
-							for (const n of bad) expect(ran.stderr).toContain(`.claude/skills/${n}:`);
-							if (!bad.length)
+
+							for (const n of bad) {
+								expect(ran.stderr).toContain(`.claude/skills/${n}:`);
+							}
+
+							if (!bad.length) {
 								expect(ran.stdout).toContain(
 									`${new Set([...names, "review", ...allClauses.map(([s]) => s)]).size} shared skills`,
 								);
-							if (bad.length) refused++;
-							else clean++;
+							}
+
+							if (bad.length) {
+								refused++;
+							} else {
+								clean++;
+							}
 						} finally {
 							rmSync(dir, {recursive: true, force: true});
 						}
@@ -273,14 +299,16 @@ describe("skillscheck, today's tooling", () => {
 				}),
 				({space, noise}) => {
 					const dir = mkdtempSync(join(tmpdir(), "clauses-"));
+
 					try {
 						tree(dir, space);
 						mkdirSync(join(dir, ".claude/skills", noise), {recursive: true});
 						writeFileSync(join(dir, ".claude/skills", noise, "SKILL.md"), `# ${noise}\n`);
 						expect(run(dir).status).toBe(0);
 						accepted++;
+
 						for (const [file, groups] of Object.entries(sections)) {
-							for (const [heading, clauses] of Object.entries(groups))
+							for (const [heading, clauses] of Object.entries(groups)) {
 								for (const [i, clause] of clauses.entries()) {
 									for (const outside of [false, true]) {
 										tree(dir, space, [file, heading, i], outside);
@@ -290,6 +318,8 @@ describe("skillscheck, today's tooling", () => {
 										refused++;
 									}
 								}
+							}
+
 							tree(dir, space);
 							rmSync(join(dir, file));
 							expect(run(dir).stderr).toContain(`${file}: missing required file`);
@@ -314,6 +344,7 @@ describe("skillscheck, today's tooling", () => {
 				fc.record({cap: fc.integer({min: 1, max: 80}), space: fc.constantFrom(" ", "\n  ")}),
 				({cap, space}) => {
 					const dir = mkdtempSync(join(tmpdir(), "restrictions-"));
+
 					try {
 						for (const phrase of [
 							"Only defects a real run could hit.",
@@ -402,10 +433,15 @@ const allClauses = [...clauses, ...slice1bClauses];
 
 const mainText = (skill: string, omit = -1, wrap = " ") => {
 	const sections = new Map<string, string[]>();
+
 	for (const [i, [source, section, , text]] of allClauses.entries()) {
-		if (source !== skill || i === omit) continue;
+		if (source !== skill || i === omit) {
+			continue;
+		}
+
 		sections.set(section, [...(sections.get(section) ?? []), text.split(" ").join(wrap)]);
 	}
+
 	return `# ${skill}\n${[...sections].map(([section, texts]) => `${section ? `## ${section}\n` : ""}${texts.join("\n\n")}`).join("\n\n")}\n`;
 };
 
@@ -420,9 +456,11 @@ const skillText = (skill: string, omit = -1, wrap = " ") =>
 
 const clauseTree = (f: (dir: string) => void, program = script) => {
 	const dir = mkdtempSync(join(tmpdir(), "clauses-"));
+
 	try {
 		// T318's files (review, AGENTS.md) come from its own tree.
 		tree(dir);
+
 		// Every clause source exists, so one table covers both slices (1b review round 2, finding 5).
 		for (const n of new Set(allClauses.map(([skill]) => skill))) {
 			mkdirSync(join(dir, ".agents/skills", n), {recursive: true});
@@ -431,6 +469,7 @@ const clauseTree = (f: (dir: string) => void, program = script) => {
 			rmSync(alias, {recursive: true, force: true});
 			symlinkSync(`../../.agents/skills/${n}`, alias);
 		}
+
 		f(dir);
 		const ran = spawnSync("sh", [program, dir], {encoding: "utf8", timeout: 5_000});
 		expect(ran.error).toBeUndefined();
@@ -473,16 +512,27 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
 					for (const [i, [skill, section, check, text]] of clauses.entries()) {
 						const got = clauseTree((dir) => {
 							let content = skillText(skill, i, wrap);
-							if (where === "wrong-section" && section) content += `\n## Elsewhere\n${text}\n`;
-							if (where === "fenced")
+
+							if (where === "wrong-section" && section) {
+								content += `\n## Elsewhere\n${text}\n`;
+							}
+
+							if (where === "fenced") {
 								content += `\n## ${section || "Example"}\n~~~md\n${text}\n~~~\n`;
+							}
+
 							writeFileSync(join(dir, ".agents/skills", skill, "SKILL.md"), content);
-							if (where === "removed") rmSync(join(dir, ".agents/skills", skill, "SKILL.md"));
-							if (where === "wrong-skill")
+
+							if (where === "removed") {
+								rmSync(join(dir, ".agents/skills", skill, "SKILL.md"));
+							}
+
+							if (where === "wrong-skill") {
 								writeFileSync(
 									join(dir, ".agents/skills", skill === "plan" ? "lead" : "plan", "SKILL.md"),
 									`${skillText(skill === "plan" ? "lead" : "plan")}\n${text}\n`,
 								);
+							}
 						});
 						expect(got.code, `${check}: ${got.text}`).toBe(1);
 						expect(got.text).toContain(`${skill}/SKILL.md: ${check}`);
@@ -496,8 +546,10 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
 	// scenario: each exact hand plant runs once on a disposable copy, which is then deleted.
 	it("scenario: kills the retired-clause and wrong-section plants", () => {
 		const dir = mkdtempSync(join(tmpdir(), "clause-plants-"));
+
 		try {
 			const source = readFileSync(script, "utf8");
+
 			for (const [plant, before, after] of [
 				["retired clause", "bad = []", 'bad = ["retired mechanical prose required"]'],
 				["wrong section", '.get(section, "")', '.get("", "")'],
@@ -506,11 +558,12 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
 				const planted = join(dir, "skillscheck.sh");
 				writeFileSync(planted, source.replace(before, after));
 				const got = clauseTree((tree) => {
-					if (plant === "wrong section")
+					if (plant === "wrong section") {
 						writeFileSync(
 							join(tree, ".agents/skills/lead/SKILL.md"),
 							`${skillText("lead", 0)}\n## Elsewhere\n${clauses[0][3]}\n`,
 						);
+					}
 				}, planted);
 				expect(got.code).toBe(plant === "retired clause" ? 1 : 0);
 				// The law expects the opposite result for this same input.
@@ -535,6 +588,7 @@ describe("T325 slice 1b required clauses, today's tooling", () => {
 				}),
 				({width, indent, fenced}) => {
 					const dir = mkdtempSync(join(tmpdir(), "clauses-"));
+
 					try {
 						// T318's files (review, AGENTS.md) come from its own tree.
 						tree(dir);
@@ -546,21 +600,29 @@ describe("T325 slice 1b required clauses, today's tooling", () => {
 								.split(" ")
 								.map((w, i) => `${i && i % width === 0 ? `\n${indent}` : i ? " " : ""}${w}`)
 								.join("");
+
 						for (const skill of new Set(allClauses.map(([s]) => s))) {
 							const source = join(sources, skill);
 							mkdirSync(source, {recursive: true});
 							rmSync(join(aliases, skill), {recursive: true, force: true});
 							symlinkSync(relative(aliases, source), join(aliases, skill));
 							const sections = new Map<string, string[]>();
+
 							for (const [s, heading, , clause] of allClauses) {
-								if (s !== skill) continue;
+								if (s !== skill) {
+									continue;
+								}
+
 								sections.set(heading, [...(sections.get(heading) ?? []), wrap(clause)]);
 							}
+
 							const text = `${[...t318Text(skill), ""].join("\n")}# ${skill}\n${[...sections].map(([heading, texts]) => `${heading ? `## ${heading}\n` : ""}${texts.join("\n\n")}`).join("\n\n")}\n`;
 							writeFileSync(join(source, "SKILL.md"), text);
 						}
+
 						const run = () => spawnSync("sh", [script, dir], {encoding: "utf8", timeout: 5_000});
 						expect(run().status).toBe(0);
+
 						for (const [skill, heading, , clause] of slice1bClauses) {
 							const file = join(sources, skill, "SKILL.md"),
 								text = readFileSync(file, "utf8");

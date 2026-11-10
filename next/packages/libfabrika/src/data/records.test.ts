@@ -42,7 +42,12 @@ const opened: Array<DatabaseSync> = [];
 let homes = 0;
 
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -53,7 +58,11 @@ const home = () => {
 	const asked: Array<string> = [];
 	const db = (name: string): DatabaseSync => {
 		const known = dbs.get(name);
-		if (known !== undefined) return known;
+
+		if (known !== undefined) {
+			return known;
+		}
+
 		const made = new DatabaseSync(join(folder, `${prefix}-${name.replaceAll("/", "_")}.db`));
 		opened.push(made);
 		dbs.set(name, made);
@@ -63,7 +72,11 @@ const home = () => {
 	const open = (name: string): Sql => {
 		asked.push(name);
 		const known = sqls.get(name);
-		if (known !== undefined) return known;
+
+		if (known !== undefined) {
+			return known;
+		}
+
 		const made = nodeSql(db(name));
 		sqls.set(name, made);
 		return made;
@@ -118,14 +131,20 @@ const send = (
 		const records = yield* RecordManager;
 		let at = from;
 		let left = rows;
+
 		for (let hops = 0; hops < 64; hops++) {
 			const answer = yield* records.write(chain, at, left);
-			if (answer._tag === "written") return at;
+
+			if (answer._tag === "written") {
+				return at;
+			}
+
 			const had = new Set(answer.had);
 			left = left.filter((r) => !had.has(r.span.spanId));
 			at += 1;
 			expect(answer.next).toBe(chain._tag === "job" ? `job/${chain.process}/${at}` : `spans/${at}`);
 		}
+
 		return yield* Effect.die(new Error("more than 64 rolls for one batch"));
 	});
 
@@ -160,16 +179,19 @@ describe.each(backends)(
 				return Effect.gen(function* () {
 					let at = 0;
 					const used = new Set<number>();
+
 					for (let n = 0; n < 80; n++) {
 						at = yield* send(job, at, [kept(row(id(n), FILL))]);
 						used.add(at);
 					}
+
 					expect(
 						used.size,
 						"80 rows of about 2 KB under a 64 KB cap need more than one part",
 					).toBeGreaterThan(1);
 					const all = yield* read(job);
 					expect(all.map((r) => r.spanId)).toEqual(Array.from({length: 80}, (_, n) => id(n)));
+
 					if (parts !== undefined) {
 						for (const p of [...used].sort((x, y) => x - y).slice(0, -1)) {
 							const rolled = parts.rows(part(p), "rolled");
@@ -194,10 +216,14 @@ describe.each(backends)(
 					const records = yield* RecordManager;
 					let n = 0;
 					let answer = yield* records.write(job, 0, [kept(row(id(n++), FILL))]);
-					while (answer._tag === "written" && n < 200)
+
+					while (answer._tag === "written" && n < 200) {
 						answer = yield* records.write(job, 0, [kept(row(id(n++), FILL))]);
+					}
+
 					expect(answer).toEqual({_tag: "rolled", next: part(1), had: []});
 					const held = n - 1;
+
 					for (let again = 0; again < 3; again++) {
 						expect(yield* records.write(job, 0, [kept(row(id(1000 + again)))])).toEqual({
 							_tag: "rolled",
@@ -205,10 +231,12 @@ describe.each(backends)(
 							had: [],
 						});
 					}
+
 					if (parts !== undefined) {
 						expect(parts.rows(part(0), "spans")).toHaveLength(held);
 						expect(parts.rows(part(0), "rolled")).toHaveLength(1);
 					}
+
 					yield* send(job, 1, [
 						kept(row(id(n - 1))),
 						kept(row(id(1000))),
@@ -237,6 +265,7 @@ describe.each(backends)(
 					const again = [...first.slice(30), kept(row(id(40)))];
 					const answer = yield* records.write(job, 0, again);
 					expect(answer._tag).toBe("rolled");
+
 					if (answer._tag === "rolled") {
 						expect([...answer.had].sort()).toEqual(
 							first
@@ -245,6 +274,7 @@ describe.each(backends)(
 								.sort(),
 						);
 					}
+
 					yield* send(job, 0, again);
 					const all = (yield* read(job)).map((r) => r.spanId);
 					expect(all).toEqual(Array.from({length: 41}, (_, n) => id(n)));
@@ -257,12 +287,14 @@ describe.each(backends)(
 			return Effect.gen(function* () {
 				const records = yield* RecordManager;
 				const made = 1201;
+
 				for (let from = 0; from < made; from += 100) {
 					const batch = Array.from({length: Math.min(100, made - from)}, (_, n) =>
 						kept(row(id(from + n))),
 					);
 					expect(yield* records.write(job, 0, batch)).toEqual({_tag: "written"});
 				}
+
 				expect((yield* read(job)).map((r) => r.spanId)).toEqual(
 					Array.from({length: made}, (_, n) => id(n)),
 				);
@@ -274,12 +306,17 @@ describe.each(backends)(
 			return Effect.gen(function* () {
 				expect(yield* read(spans)).toEqual([]);
 				let at = 0;
-				for (let n = 0; n < 60; n++) at = yield* send(spans, at, [kept(row(id(n), FILL))]);
+
+				for (let n = 0; n < 60; n++) {
+					at = yield* send(spans, at, [kept(row(id(n), FILL))]);
+				}
+
 				expect(at).toBeGreaterThan(0);
 				expect((yield* read(spans)).map((r) => r.spanId)).toEqual(
 					Array.from({length: 60}, (_, n) => id(n)),
 				);
 				expect(yield* read(job)).toEqual([]);
+
 				if (parts !== undefined) {
 					expect(
 						parts.asked
@@ -379,6 +416,7 @@ describe.each(backends)(
 					expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
 
 					expect(yield* read(job)).toEqual(before);
+
 					if (parts !== undefined) {
 						expect(parts.rows(part(0), "spans")).toEqual(rawBefore);
 						const content = JSON.stringify(parts.rows(part(0), "content"));
@@ -420,7 +458,11 @@ describe.each(backends)(
 				const records = yield* RecordManager;
 				yield* records.write(job, 0, [kept({...row(id(0)), ok: false}, MESSAGE)]);
 				let at = 0;
-				for (let n = 1; n < 60; n++) at = yield* send(job, at, [kept(row(id(n), FILL))]);
+
+				for (let n = 1; n < 60; n++) {
+					at = yield* send(job, at, [kept(row(id(n), FILL))]);
+				}
+
 				expect(at, "the chain rolled past part 0").toBeGreaterThan(0);
 				yield* TestClock.setTime(T);
 				yield* records.deleteContent(job, id(0), {by: "owner", why: "private"});
@@ -496,6 +538,7 @@ describe("RecordManager.remote, the record object's stub", () => {
 				stub(() => Promise.resolve({spans: [{...row(id(0)), events}], after: 1, rolled: false}));
 			const good = yield* read(job).pipe(Effect.provide(RecordManager.remote(page([event]).make)));
 			expect(good.map((r) => r.events)).toEqual([[event]]);
+
 			for (const broken of [{}, {...event, name: 7}, {...event, attributes: {"fab.n": {}}}]) {
 				const bad = yield* Effect.flip(
 					read(job).pipe(Effect.provide(RecordManager.remote(page([broken]).make))),

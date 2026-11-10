@@ -67,6 +67,7 @@ describe("a lane, whole", () => {
 			"mutants",
 			"review",
 		]);
+
 		for (const run of runs) {
 			expect(run.args).toContain("gpt-6-astra");
 			expect(run.keys).toEqual([]);
@@ -81,11 +82,19 @@ describe("a lane, whole", () => {
 		// P1: every ask carries the trace id its lane's `started` facts carry, the one before it.
 		let lastTrace: string | undefined;
 		const pairs: [string | undefined, string | undefined][] = [];
+
 		for (const e of ran.entries) {
-			if (e.fact.type === "started") lastTrace = e.fact.trace;
-			if (e.fact.type === "asked") pairs.push([e.fact.trace, lastTrace]);
+			if (e.fact.type === "started") {
+				lastTrace = e.fact.trace;
+			}
+
+			if (e.fact.type === "asked") {
+				pairs.push([e.fact.trace, lastTrace]);
+			}
 		}
+
 		expect(pairs.length).toBeGreaterThan(0);
+
 		for (const [asked, started] of pairs) {
 			expect(started).toMatch(/^[0-9a-f]{32}$/);
 			expect(asked).toBe(started);
@@ -101,8 +110,12 @@ describe("a lane, whole", () => {
 		);
 		const stepSpans = ran.spans.filter((s) => s.name === "run a step");
 		let agentSteps = 0;
+
 		for (const e of ran.entries) {
-			if (e.fact.type !== "ended") continue;
+			if (e.fact.type !== "ended") {
+				continue;
+			}
+
 			const ended = e.fact;
 			const mine = stepSpans.filter((s) => s.attributes[LANE.run] === ended.run);
 			expect(mine, ended.run).toHaveLength(1);
@@ -110,8 +123,12 @@ describe("a lane, whole", () => {
 			expect(tags[LANE.step]).toBe(ended.stage);
 			expect(tags[ATTR.outcome]).toBe(outcomeName(ended.outcome));
 			const model = startedBy.get(ended.run)?.model;
+
 			// A code step names no model, and no tokens or price are said for it here.
-			if (model === undefined) continue;
+			if (model === undefined) {
+				continue;
+			}
+
 			agentSteps++;
 			// Known as L6 knows it: a list price, else what claude billed. Else none is written.
 			const known =
@@ -120,13 +137,19 @@ describe("a lane, whole", () => {
 					: startedBy.get(ended.run)?.harness === "claude" && typeof ended.billed === "number"
 						? ended.billed
 						: null;
-			if (known === null) expect(tags[ATTR.costUsd], ended.run).toBeUndefined();
-			else expect(tags[ATTR.costUsd], ended.run).toBeCloseTo(known, 4);
+
+			if (known === null) {
+				expect(tags[ATTR.costUsd], ended.run).toBeUndefined();
+			} else {
+				expect(tags[ATTR.costUsd], ended.run).toBeCloseTo(known, 4);
+			}
+
 			expect(tags["gen_ai.request.model"]).toBe(model);
 			expect(tags["gen_ai.usage.input_tokens"]).toBe(ended.input);
 			expect(tags["gen_ai.usage.output_tokens"]).toBe(ended.output);
 			expect(tags["gen_ai.usage.cache_read.input_tokens"]).toBe(ended.cached ?? 0);
 		}
+
 		// Astra's steps were seen, each at its list price once the table has it.
 		expect(agentSteps).toBeGreaterThan(0);
 
@@ -137,6 +160,7 @@ describe("a lane, whole", () => {
 			e.fact.type === "answered" ? [{fact: e.fact, by: e.by.id}] : [],
 		);
 		expect(answers.length).toBeGreaterThan(0);
+
 		for (const {fact, by} of answers) {
 			const heard = waitSpans.filter(
 				(s) => s.attributes[LANE.ask] === fact.ask && s.attributes[LANE.pick] !== undefined,
@@ -148,6 +172,7 @@ describe("a lane, whole", () => {
 			expect(heard[0]?.attributes[LANE.pick]).toBe(fact.pick);
 			expect(heard[0]?.attributes[LANE.by]).toBe(by);
 		}
+
 		// The note is a value a person typed: no wait span, or event on one, holds it.
 		const values = waitSpans.flatMap((s) => [
 			...Object.values(s.attributes),
@@ -231,13 +256,19 @@ describe("a lane, whole", () => {
 		// `checked` at each head the builder left.
 		const reds = ran.facts.filter((f) => f.type === "ended" && f.stage === "build");
 		expect(reds).toHaveLength(3);
+
 		for (const end of reds) {
 			expect(end.outcome).toEqual({kind: "send", to: "builder", why: "checks_red"});
 			expect(end.failed).toEqual([NAME]);
 		}
+
 		const checked = ran.facts.filter((f) => f.type === "checked");
 		expect(checked).toHaveLength(3);
-		for (const fact of checked) expect(fact).toMatchObject({result: "red", failed: [NAME]});
+
+		for (const fact of checked) {
+			expect(fact).toMatchObject({result: "red", failed: [NAME]});
+		}
+
 		expect(new Set(checked.map((f) => f.head)).size).toBe(3);
 		// A comment lists it, with the first line of its error.
 		const comments = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
@@ -365,21 +396,31 @@ describe("a lane, whole", () => {
 		const fifty = failed.slice(0, 50);
 		const checked = ran.facts.filter((f) => f.type === "checked");
 		expect(checked).toHaveLength(3);
-		for (const fact of checked) expect(fact.failed).toEqual(fifty);
+
+		for (const fact of checked) {
+			expect(fact.failed).toEqual(fifty);
+		}
+
 		const builds = ran.facts.filter((f) => f.type === "ended" && f.stage === "build");
-		for (const end of builds) expect(end.failed).toEqual(fifty);
+
+		for (const end of builds) {
+			expect(end.failed).toEqual(fifty);
+		}
+
 		// One comment per red head, from code's checks: each name as a code span, and the rest counted.
 		const red = ran.facts
 			.filter((f) => f.type === "commented")
 			.map((f) => String(f.body))
 			.filter((body) => body.includes("The repository's own tests fail at this head:"));
 		expect(red).toHaveLength(3);
+
 		for (const body of red) {
 			expect(body).toContain(`\`${name(49)}\``);
 			expect(body).not.toContain(`\`${name(50)}\``);
 			expect(body).toContain("And 1 more.");
 			expect(body).toContain("expected 1 to be 2");
 		}
+
 		expect(ran.lines.at(-1)).toContain("ended: stuck:rounds_spent");
 	});
 

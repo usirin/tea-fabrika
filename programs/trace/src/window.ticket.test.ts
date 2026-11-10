@@ -57,11 +57,17 @@ const writings = (usd: number): readonly string[] => [
 describe("the ticket view's window: dollars only in the summaries (decision 7)", () => {
 	it("shows every lane open, and no step row's price in dollars", () => {
 		const {text} = textOf(shown117());
+
 		// Every lane is drawn open: its steps' stages are on the page.
-		for (const stage of ["sort", "plan", "exam", "build"]) expect(text).toContain(stage);
-		for (const usd of STEP_PRICES)
-			for (const w of writings(usd))
+		for (const stage of ["sort", "plan", "exam", "build"]) {
+			expect(text).toContain(stage);
+		}
+
+		for (const usd of STEP_PRICES) {
+			for (const w of writings(usd)) {
 				expect(text).not.toMatch(new RegExp(`\\$\\s?${w.replace(".", "\\.")}(?!\\d)`));
+			}
+		}
 	});
 
 	it("says dollars at most once per lane and once for the ticket, each labeled at list price", () => {

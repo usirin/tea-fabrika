@@ -158,6 +158,7 @@ describe("one-store-hook", async () => {
 	// plant indexes named findings only; oxlint's plugin crashes have no rule code.
 	it("does not crash on non-call statements or calls of returned functions", () => {
 		const at = realpathSync(mkdtempSync(join(tmpdir(), "exam-")));
+
 		try {
 			copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
 			symlinkSync(join(ROOT, "oxlint-plugins"), join(at, "oxlint-plugins"));

@@ -56,7 +56,11 @@ const session = (
 ) =>
 	Effect.gen(function* () {
 		const started = yield* start(tracker, {}, {}, {id, storage: memoryStorage()});
-		if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("the tracker did not start");
+		}
+
 		const {run} = started;
 		const say: Say = (input, value): Effect.Effect<Word> => offer(run, input, value);
 		const until = (ok: (shown: Shown) => boolean) =>

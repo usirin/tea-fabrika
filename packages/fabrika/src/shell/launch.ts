@@ -42,21 +42,42 @@ export function sourceOf(
 	stdinIsTerminal: boolean,
 ): Source | {readonly kind: "usage"; readonly why: string} {
 	const [first, second, ...rest] = argv;
-	if (first === undefined) return stdinIsTerminal ? {kind: "terminal"} : {kind: "stdin"};
+
+	if (first === undefined) {
+		return stdinIsTerminal ? {kind: "terminal"} : {kind: "stdin"};
+	}
+
 	if (first === "-c") {
-		if (second === undefined) return {kind: "usage", why: "-c needs the lines to run"};
-		if (rest.length > 0) return {kind: "usage", why: "-c takes one text: quote it"};
+		if (second === undefined) {
+			return {kind: "usage", why: "-c needs the lines to run"};
+		}
+
+		if (rest.length > 0) {
+			return {kind: "usage", why: "-c takes one text: quote it"};
+		}
+
 		return {kind: "text", text: second};
 	}
-	if (first.startsWith("-")) return {kind: "usage", why: `no option ${first}`};
-	if (second !== undefined) return {kind: "usage", why: "one script file at a time"};
+
+	if (first.startsWith("-")) {
+		return {kind: "usage", why: `no option ${first}`};
+	}
+
+	if (second !== undefined) {
+		return {kind: "usage", why: "one script file at a time"};
+	}
+
 	return {kind: "file", path: first};
 }
 
 /** A text's lines, as tsh is told them: one per line, the last one's newline not making an empty one. */
 export function linesOf(text: string): readonly string[] {
 	const lines = text.split(/\r?\n/);
-	if (lines.at(-1) === "") lines.pop();
+
+	if (lines.at(-1) === "") {
+		lines.pop();
+	}
+
 	return lines;
 }
 

@@ -113,7 +113,10 @@ function answer(cmd: TestWriterCmd, script: Script, wrote: readonly Checked[]): 
 		case "tests_commit":
 			return script.commit === "fail" ? err(cmd) : ok(cmd, script.commit ?? COMMIT);
 		case "tests_on_base": {
-			if (script.run === "fail") return err(cmd, script.failure);
+			if (script.run === "fail") {
+				return err(cmd, script.failure);
+			}
+
 			const run = script.run ?? {p1: "red", p2: "green"};
 			return ok(
 				cmd,
@@ -138,24 +141,40 @@ export function drive(script: Script, ask: TestsAsk = ASK) {
 	let wrote: readonly Checked[] = [];
 	let [s, out] = step({phase: "idle"}, {type: "start", ask, key: "k"});
 	let drafts = 0;
+
 	for (let n = 0; n < 50 && s.phase !== "over"; n++) {
 		cmds.push(...out);
+
 		if (!restarted && script.restartAt === s.phase) {
 			restarted = true;
 			[s, out] = step(s, {type: "resume"});
 			continue;
 		}
+
 		const cmd = out[0];
+
 		if (cmd !== undefined) {
-			if (cmd.type === "tests_record") wrote = cmd.checked;
+			if (cmd.type === "tests_record") {
+				wrote = cmd.checked;
+			}
+
 			[s, out] = step(s, answer(cmd, script, wrote));
 			continue;
 		}
+
 		const run = runSub.deps(s);
-		if (run === null || run === undefined) throw new Error(`nothing in flight in ${s.phase}`);
+
+		if (run === null || run === undefined) {
+			throw new Error(`nothing in flight in ${s.phase}`);
+		}
+
 		prompts.push(run.prompt);
 		const said = script.drafts[drafts++];
-		if (said === undefined) throw new Error("the script has no more drafts");
+
+		if (said === undefined) {
+			throw new Error("the script has no more drafts");
+		}
+
 		const msg =
 			said !== null && "error" in said
 				? {type: "tests_write_failed", key: run.key, id: run.id, error: said.error, spend: noSpend}
@@ -169,6 +188,10 @@ export function drive(script: Script, ask: TestsAsk = ASK) {
 					};
 		[s, out] = step(s, msg);
 	}
-	if (s.phase !== "over") throw new Error(`still ${s.phase}`);
+
+	if (s.phase !== "over") {
+		throw new Error(`still ${s.phase}`);
+	}
+
 	return {over: s, cmds, prompts};
 }

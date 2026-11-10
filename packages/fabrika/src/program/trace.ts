@@ -107,10 +107,15 @@ export const jobTraceId: Effect.Effect<string | null> = Effect.map(
 	Effect.option(Effect.currentParentSpan),
 	(found) => {
 		let at: Tracer.AnySpan | undefined = Option.getOrUndefined(found);
+
 		for (let depth = 0; at !== undefined && depth < 64; depth++) {
-			if (TRACE_ID.test(at.traceId)) return at.traceId;
+			if (TRACE_ID.test(at.traceId)) {
+				return at.traceId;
+			}
+
 			at = at._tag === "Span" ? Option.getOrUndefined(at.parent) : undefined;
 		}
+
 		return null;
 	},
 );
@@ -126,7 +131,10 @@ export const currentService = Effect.map(Effect.spanAnnotations, (annotations) =
 
 /** How a Cmd's cell ended, as `tea.cmd.outcome` says it. */
 const outcomeOf = (exit: Exit.Exit<unknown, unknown>): string => {
-	if (Exit.isSuccess(exit)) return "ok";
+	if (Exit.isSuccess(exit)) {
+		return "ok";
+	}
+
 	return Exit.hasInterrupts(exit) ? "interrupted" : "failed";
 };
 
@@ -243,8 +251,9 @@ export const runTraced = <
 		const booting = yield* run(machine, traced);
 		const clock = yield* Clock.Clock;
 		const tag = (state: S) => {
-			for (const [key, value] of Object.entries(drawing.tags?.(state) ?? {}))
+			for (const [key, value] of Object.entries(drawing.tags?.(state) ?? {})) {
 				span.attribute(key, value);
+			}
 		};
 		const offBoot = booting.onBoot(tag);
 		const off = booting.observe((msg, state) => {

@@ -18,10 +18,13 @@ export const checkTracked = (root = process.cwd()) => {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	const result = checkTracked();
-	if (!result.ok)
+
+	if (!result.ok) {
 		console.error(
 			"gitignore: Git failed or .gitignore hides tracked files:",
 			result.files.map((file) => JSON.stringify(file)).join(", "),
 		);
+	}
+
 	process.exitCode = result.ok ? 0 : 2;
 }

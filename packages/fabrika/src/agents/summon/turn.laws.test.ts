@@ -161,6 +161,7 @@ const keepsEvery = (machine: TurnMachine, runs = 150) =>
 		fc.asyncProperty(lists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("turn:r1", null));
 			const store = handle.store("turn", "turn", State);
+
 			for (const state of foldEvents(machine, ctx, null, list).states) {
 				await store.save(state);
 				expect(store.migrate(await store.load())).toEqual(state);

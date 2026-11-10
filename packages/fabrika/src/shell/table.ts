@@ -121,7 +121,11 @@ export function tableOf<T>(
  */
 const cellsOf = (c: string): number => {
 	const cp = c.codePointAt(0) ?? 0;
-	if ((cp >= 0x300 && cp <= 0x36f) || cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f)) return 0;
+
+	if ((cp >= 0x300 && cp <= 0x36f) || cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f)) {
+		return 0;
+	}
+
 	const wide =
 		(cp >= 0x1100 && cp <= 0x115f) ||
 		(cp >= 0x2e80 && cp <= 0xa4cf) ||
@@ -140,15 +144,24 @@ export const widthOf = (text: string): number => [...text].reduce((sum, c) => su
 
 /** A text cut to `width` cells, with … last when it is cut. */
 const cut = (text: string, width: number): string => {
-	if (widthOf(text) <= width) return text;
+	if (widthOf(text) <= width) {
+		return text;
+	}
+
 	let kept = "";
 	let used = 0;
+
 	for (const c of text) {
 		const w = cellsOf(c);
-		if (used + w > width - 1) break;
+
+		if (used + w > width - 1) {
+			break;
+		}
+
 		kept += c;
 		used += w;
 	}
+
 	return `${kept}…`;
 };
 
@@ -164,7 +177,11 @@ const span = (text: string, tone: Span["tone"] = "plain"): Span => ({text, tone}
 export function tableLines(table: Table, width: number): readonly Line[] {
 	const count = [String(table.total), ...(table.note === null ? [] : [table.note])].join(" · ");
 	const title: Line = [span(table.title, "strong"), span(`  ${count}`, "muted")];
-	if (table.rows.length === 0) return [[], title, []];
+
+	if (table.rows.length === 0) {
+		return [[], title, []];
+	}
+
 	const natural = table.columns.map((c, i) =>
 		Math.max(widthOf(c.header), ...table.rows.map((row) => widthOf(row[i]?.text ?? ""))),
 	);
@@ -225,31 +242,43 @@ const wrapped = (words: readonly Word[], width: number): readonly Line[] => {
 	const lines: Span[][] = [];
 	let line: Span[] = [];
 	let used = 0;
+
 	for (const word of words) {
 		const w = word.spans.reduce((sum, s) => sum + widthOf(s.text), 0);
+
 		if (line.length > 0 && used + word.gap.length + w > width) {
 			lines.push(line);
 			line = [];
 			used = 0;
 		}
+
 		if (line.length > 0) {
 			line.push(span(word.gap));
 			used += word.gap.length;
 		}
+
 		line.push(...word.spans);
 		used += w;
 	}
+
 	return line.length === 0 ? lines : [...lines, line];
 };
 
 /** A line with each run of spans in one tone made one span, and nothing empty. */
 const joined = (line: Line): Line =>
 	line.reduce<Span[]>((acc, s) => {
-		if (s.text === "") return acc;
+		if (s.text === "") {
+			return acc;
+		}
+
 		const before = acc.at(-1);
-		if (before !== undefined && before.tone === s.tone)
+
+		if (before !== undefined && before.tone === s.tone) {
 			acc[acc.length - 1] = span(before.text + s.text, s.tone);
-		else acc.push(s);
+		} else {
+			acc.push(s);
+		}
+
 		return acc;
 	}, []);
 

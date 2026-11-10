@@ -260,7 +260,10 @@ const landingHead = (s: Going): string => s.ready.head;
  * run stops. A kept proof that was edited never reaches a write.
  */
 function revived(s: Ship): Ship {
-	if (s.phase !== "enqueueing" && s.phase !== "merging" && s.phase !== "queued") return s;
+	if (s.phase !== "enqueueing" && s.phase !== "merging" && s.phase !== "queued") {
+		return s;
+	}
+
 	const proofs = s.phase === "queued" ? [s.ready] : [s.ready, s.asked.ready];
 	return proofs.every((p) => ReadyToMerge.revive(p) !== null)
 		? s
@@ -348,8 +351,12 @@ export function createShip(config: ShipConfig = {}) {
 			resume: (s): Step => ("asked" in s ? [s, [s.asked]] : stay(s)),
 
 			ship_facts_ok: (s, m): Step => {
-				if (s.phase !== "reading") return stay(s);
+				if (s.phase !== "reading") {
+					return stay(s);
+				}
+
 				const gate = shipGate(s.pr, m.value);
+
 				switch (gate.answer) {
 					case "go": {
 						// The only way to an enqueue: the gate's proof, carried on as it was made.
@@ -362,9 +369,12 @@ export function createShip(config: ShipConfig = {}) {
 					case "stop": {
 						const {outcome} = gate;
 						const {head} = m.value;
+
 						// Red checks are run again once before the builder is called. Once for each head: a new head starts over.
-						if (nameOf(outcome) !== "send:builder:checks_red" || s.rerunFor === head)
+						if (nameOf(outcome) !== "send:builder:checks_red" || s.rerunFor === head) {
 							return over(s, outcome);
+						}
+
 						const asked = rerunChecks({
 							pr: s.pr,
 							head,
@@ -396,7 +406,10 @@ export function createShip(config: ShipConfig = {}) {
 
 			ship_enqueue_ok: (s, m): Step => {
 				// An answer to an enqueue of another head is an old one: a Cmd sent twice answers twice.
-				if (s.phase !== "enqueueing" || m.cmd.intent !== s.asked.intent) return stay(s);
+				if (s.phase !== "enqueueing" || m.cmd.intent !== s.asked.intent) {
+					return stay(s);
+				}
+
 				switch (m.value) {
 					case "queued":
 						return [
@@ -425,7 +438,10 @@ export function createShip(config: ShipConfig = {}) {
 					: stay(s),
 
 			ship_merge_ok: (s, m): Step => {
-				if (s.phase !== "merging" || m.cmd.intent !== s.asked.intent) return stay(s);
+				if (s.phase !== "merging" || m.cmd.intent !== s.asked.intent) {
+					return stay(s);
+				}
+
 				switch (m.value.reading) {
 					case "merged":
 						return landedAs(s, m.value.commit);
@@ -446,8 +462,14 @@ export function createShip(config: ShipConfig = {}) {
 					: stay(s),
 
 			ship_queue: (s, m): Step => {
-				if (s.phase !== "queued" || !isHere({...s, head: landingHead(s)}, m)) return stay(s);
-				if (m.reading === "ejected") return over(s, {kind: "send", to: "builder", why: "ejected"});
+				if (s.phase !== "queued" || !isHere({...s, head: landingHead(s)}, m)) {
+					return stay(s);
+				}
+
+				if (m.reading === "ejected") {
+					return over(s, {kind: "send", to: "builder", why: "ejected"});
+				}
+
 				// The commit is the one the queue's Listen names, on the base branch: never the head taken for it.
 				return landedAs(s, m.commit);
 			},

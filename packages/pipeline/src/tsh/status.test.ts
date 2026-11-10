@@ -32,7 +32,11 @@ const session = (list: ProgramList) =>
 			{printed: printed.hear, ready: ready.hear},
 			{id: "tsh:status", storage},
 		).pipe(Effect.provideService(Programs, list), Effect.provideService(HostJobs, jobs));
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		const line = (text: string) =>
 			Effect.gen(function* () {
@@ -55,7 +59,11 @@ const session = (list: ProgramList) =>
 					const out = (yield* line("jobs")).out.filter(
 						(row) => row.startsWith("      ") || /^\[\d+\] (running|detached) /.test(row),
 					);
-					if (out.some((row) => row.includes(text))) return out;
+
+					if (out.some((row) => row.includes(text))) {
+						return out;
+					}
+
 					yield* Effect.sleep(Duration.millis(5));
 				}
 			});
@@ -90,9 +98,12 @@ const recordedGitHub = () => {
 			repo.pullRequest.state = "OPEN";
 			repo.pullRequest.isDraft = pr === url(2);
 			repo.pullRequest.headRefOid = HEADS.final;
-			if (pr === url(3) && running)
-				for (const check of repo.commit.statusCheckRollup.contexts.nodes)
+
+			if (pr === url(3) && running) {
+				for (const check of repo.commit.statusCheckRollup.contexts.nodes) {
 					Object.assign(check, {status: "IN_PROGRESS", conclusion: null});
+				}
+			}
 		});
 	const host = Layer.succeed(CodeHost, {
 		pullRequests: () => Effect.succeed([]),
@@ -168,7 +179,11 @@ describe("status lines: --help", () => {
 		const list = programList([...SMALL, ...fabrikaEntries(defaultConfig("/tsh"))]);
 		const page = (name: string) => {
 			const entry = list.get(name);
-			if (entry === undefined) throw new Error(name);
+
+			if (entry === undefined) {
+				throw new Error(name);
+			}
+
 			return helpOf(entry);
 		};
 		expect(page("review-scripted").slice(-3)).toEqual([

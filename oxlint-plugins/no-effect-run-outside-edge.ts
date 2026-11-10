@@ -48,7 +48,11 @@ export const noEffectRunOutsideEdge: CreateRule = {
 							  callee.property.type === "Identifier"
 							? callee.property.name
 							: null;
-				if (name === null || !RUNS.has(name)) return;
+
+				if (name === null || !RUNS.has(name)) {
+					return;
+				}
+
 				context.report({
 					node,
 					message: `\`${name}\` runs an Effect (docs/direction/no-promises.md). Hand the Effect back to your caller. Where the platform demands it, mark that one line with \`// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: <why>\`, which the owner reads.`,

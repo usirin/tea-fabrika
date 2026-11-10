@@ -179,13 +179,19 @@ export const laneNow = Layer.sync(LaneNow, () => {
 		Effect.suspend(() => {
 			const held = session;
 			const id = given ?? held?.id ?? null;
-			if (held === null || id === null) return Effect.void;
+
+			if (held === null || id === null) {
+				return Effect.void;
+			}
+
 			const trying = {write: held.write, id};
 			session = trying;
 			return held.write(id).pipe(
 				Effect.tap(() =>
 					Effect.sync(() => {
-						if (session === trying) session = null;
+						if (session === trying) {
+							session = null;
+						}
 					}),
 				),
 			);
@@ -452,12 +458,24 @@ type WholeEnd<A> =
 const endOf = <A>(
 	heard: Result.Result<Option.Option<Agent.Heard<A>>, Agent.AgentFailed>,
 ): WholeEnd<A> => {
-	if (Result.isFailure(heard)) return {kind: "broke", error: heard.failure.message};
-	if (Option.isNone(heard.success) || heard.success.value._tag !== "ended")
+	if (Result.isFailure(heard)) {
+		return {kind: "broke", error: heard.failure.message};
+	}
+
+	if (Option.isNone(heard.success) || heard.success.value._tag !== "ended") {
 		return {kind: "broke", error: "the agent said nothing"};
+	}
+
 	const ended = heard.success.value;
-	if (ended.stop === "over_budget") return {kind: "over_budget"};
-	if (ended.stop !== "end_turn") return {kind: "broke", error: ended.stop};
+
+	if (ended.stop === "over_budget") {
+		return {kind: "over_budget"};
+	}
+
+	if (ended.stop !== "end_turn") {
+		return {kind: "broke", error: ended.stop};
+	}
+
 	return ended.answer === null ? {kind: "misfit"} : {kind: "answer", answer: ended.answer};
 };
 
@@ -535,8 +553,15 @@ export const laneBuilder = Layer.effect(
 					Effect.provideService(LaneAgents, home),
 					Effect.map((heard): BuildDrafted => {
 						const end = endOf(heard);
-						if (end.kind === "answer") return {answer: "built", built: end.answer, ...noRun};
-						if (end.kind === "broke") return {answer: "broke", error: end.error, ...noRun};
+
+						if (end.kind === "answer") {
+							return {answer: "built", built: end.answer, ...noRun};
+						}
+
+						if (end.kind === "broke") {
+							return {answer: "broke", error: end.error, ...noRun};
+						}
+
 						return {answer: end.kind, ...noRun};
 					}),
 				),

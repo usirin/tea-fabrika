@@ -79,11 +79,14 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
 				const processes = yield* ProcessManager;
 				yield* processes.start(makeFirst(), from());
 				yield* processes.exit(A, why, from());
+
 				for (const process of [A, B]) {
 					const result = yield* Effect.exit(Stream.runCollect(processes.receive(process, 0)));
 					expect(result._tag, "fresh receive refuses a life that is not live").toBe("Failure");
-					if (result._tag === "Failure")
+
+					if (result._tag === "Failure") {
 						expect(Cause.squash(result.cause)).toMatchObject({_tag: "ProcessError", why: "ended"});
+					}
 				}
 			}).pipe(Effect.provide(manager(store)));
 		}),
@@ -167,6 +170,7 @@ describe("p21, CoordinationLayer", () => {
 			);
 		}),
 	);
+
 	for (const why of ["storage", "unreachable"] as const) {
 		it.effect(`plant, fail at layer build: ${why} stays a per-call failure`, () =>
 			check(fc.jsonValue(), [1], (m) => {

@@ -121,7 +121,11 @@ export const agentTrace = <R>(
 	Effect.gen(function* () {
 		const tracer = yield* Effect.serviceOption(OtelTracer.OtelTracer);
 		const current = yield* Effect.option(OtelTracer.currentOtelSpan);
-		if (Option.isNone(tracer) || Option.isNone(current)) return null;
+
+		if (Option.isNone(tracer) || Option.isNone(current)) {
+			return null;
+		}
+
 		const parent = trace.setSpan(ROOT_CONTEXT, current.value);
 		const traceId = current.value.spanContext().traceId;
 		return agentSpans<R>({
@@ -160,18 +164,27 @@ const untraced: SdkTrace = {runner: sdkRunner, end: () => undefined};
 export const sdkTrace = (name: string, runId: string): Effect.Effect<SdkTrace> =>
 	Effect.gen(function* () {
 		const spans = yield* agentTrace<null>(name);
-		if (spans === null) return untraced;
+
+		if (spans === null) {
+			return untraced;
+		}
+
 		const clock = yield* Clock.Clock;
 		const fold = sdkEvents(runId);
 		const draw = (events: readonly AgentEvent<null>[]) => {
-			for (const event of events) spans.onEvent(event);
+			for (const event of events) {
+				spans.onEvent(event);
+			}
 		};
 		return {
 			runner: (draft, options, more = {}) =>
 				sdkRunner(draft, (run) => ({...options(run), includePartialMessages: true}), {
 					...more,
 					seen: (run, message) => {
-						if (message.type !== "stream_event") more.seen?.(run, message);
+						if (message.type !== "stream_event") {
+							more.seen?.(run, message);
+						}
+
 						draw(fold.seen(message, clock.currentTimeMillisUnsafe()));
 					},
 				}),

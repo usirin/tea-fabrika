@@ -43,7 +43,11 @@ const rows = (list: Readonly<Partial<Record<Kind, Verdict>>>): ShipFacts["review
 		kind: kind as Kind,
 		verdict: verdict as Verdict,
 	}));
-	if (first === undefined) throw new Error("a review row is owed");
+
+	if (first === undefined) {
+		throw new Error("a review row is owed");
+	}
+
 	return [first, ...rest];
 };
 
@@ -151,8 +155,11 @@ const LINES: readonly {
 /** Two lines tripped at once. `null`: both set the same fact to different values, so they cannot hold together. */
 function both(a: Partial<ShipFacts>, b: Partial<ShipFacts>): Partial<ShipFacts> | null {
 	for (const key of Object.keys(a) as (keyof ShipFacts)[]) {
-		if (key !== "comments" && key in b && a[key] !== b[key]) return null;
+		if (key !== "comments" && key in b && a[key] !== b[key]) {
+			return null;
+		}
 	}
+
 	return {...a, ...b, comments: [...(a.comments ?? []), ...(b.comments ?? [])]};
 }
 
@@ -238,12 +245,13 @@ describe("the ship gate, when the head moved and the rows were carried", () => {
 			[],
 			[{from: "0ld0000", to: "fff0000"}],
 			[{from: "abc1234", to: "0ld0000"}],
-		])
+		]) {
 			expect(outcomeOf({verdicts: OTHER_HEAD, carried})).toEqual({
 				kind: "send",
 				to: "reviewer",
 				why: "no_review",
 			});
+		}
 	});
 
 	it("a carried fail is still a fail, and a carried row on old words is still old", () => {
@@ -279,7 +287,11 @@ describe("the order of the lines", () => {
 		LINES.forEach((first, i) => {
 			for (const later of LINES.slice(i + 1)) {
 				const patch = both(first.patch, later.patch);
-				if (patch === null) continue;
+
+				if (patch === null) {
+					continue;
+				}
+
 				expect(outcomeOf(patch), `${first.name} + ${later.name}`).toEqual(first.outcome);
 				checked.push(`${first.name} > ${later.name}`);
 			}
@@ -505,14 +517,15 @@ describe("every answer of the gate, over every set of facts", () => {
 		{ticket: CLOSES, criteria: CRITERIA, verdicts: OTHER_HEAD},
 	];
 	const every: ShipFacts[] = [];
-	for (const state of ShipFacts.fields.state.literals)
-		for (const ours of [true, false])
-			for (const serves of SERVES)
-				for (const approval of ShipFacts.fields.approval.literals)
-					for (const reviews of ROWS)
-						for (const checks of ShipFacts.fields.checks.literals)
-							for (const mergeable of ShipFacts.fields.mergeable.literals)
-								for (const comments of [[], [person], [bot], [bot, person]])
+
+	for (const state of ShipFacts.fields.state.literals) {
+		for (const ours of [true, false]) {
+			for (const serves of SERVES) {
+				for (const approval of ShipFacts.fields.approval.literals) {
+					for (const reviews of ROWS) {
+						for (const checks of ShipFacts.fields.checks.literals) {
+							for (const mergeable of ShipFacts.fields.mergeable.literals) {
+								for (const comments of [[], [person], [bot], [bot, person]]) {
 									every.push({
 										head: "abc1234",
 										state,
@@ -525,6 +538,15 @@ describe("every answer of the gate, over every set of facts", () => {
 										comments,
 										main: ON_TIP,
 									});
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	const decode = Schema.decodeUnknownSync(ShipOutcome);
 
 	it("the facts themselves decode with the ShipFacts schema", () => {
@@ -537,9 +559,14 @@ describe("every answer of the gate, over every set of facts", () => {
 
 	it("every outcome decodes with the ShipOutcome schema", () => {
 		const names = new Set<ShipName>();
+
 		for (const f of every) {
 			const gate = shipGate(f);
-			if (gate.answer !== "stop") continue;
+
+			if (gate.answer !== "stop") {
+				continue;
+			}
+
 			expect(decode(gate.outcome)).toEqual(gate.outcome);
 			names.add(nameOf(gate.outcome));
 		}
@@ -569,7 +596,11 @@ describe("every answer of the gate, over every set of facts", () => {
 	it("go means every line passed, and its landing agrees with landedAs", () => {
 		for (const f of every) {
 			const gate = shipGate(f);
-			if (gate.answer !== "go") continue;
+
+			if (gate.answer !== "go") {
+				continue;
+			}
+
 			expect(f).toMatchObject({
 				state: "open",
 				ours: true,
@@ -582,7 +613,8 @@ describe("every answer of the gate, over every set of facts", () => {
 			// Its proof is at the head, with a passing row per criterion on its current version.
 			expect(gate.ready.head).toBe(f.head);
 			expect(gate.ready.criteria).toEqual(f.criteria);
-			for (const c of f.criteria ?? [])
+
+			for (const c of f.criteria ?? []) {
 				expect(gate.ready.rows).toContainEqual(
 					expect.objectContaining({
 						criterion: c.id,
@@ -591,15 +623,22 @@ describe("every answer of the gate, over every set of facts", () => {
 						grade: "pass",
 					}),
 				);
+			}
+
 			expect(landedAs(f)).toMatchObject({kind: "done", part: gate.landing === "part"});
 		}
 	});
 
 	it("wait means the checks are still running and nothing before that line is in the way", () => {
 		let waits = 0;
+
 		for (const f of every) {
 			const gate = shipGate(f);
-			if (gate.answer !== "wait_for_checks") continue;
+
+			if (gate.answer !== "wait_for_checks") {
+				continue;
+			}
+
 			expect(f).toMatchObject({
 				state: "open",
 				ours: true,

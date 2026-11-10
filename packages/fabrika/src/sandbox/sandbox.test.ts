@@ -68,13 +68,20 @@ const run = (kind: keyof typeof SANDBOXES, job: Job) =>
 
 const refusal = async (kind: keyof typeof SANDBOXES, job: Job) => {
 	const exit = await run(kind, job);
-	if (Exit.isSuccess(exit)) throw new Error("the sandbox started");
+
+	if (Exit.isSuccess(exit)) {
+		throw new Error("the sandbox started");
+	}
+
 	const failed = exit.cause.reasons.find((r) => r._tag === "Fail");
 	return (failed as {error: SandboxError} | undefined)?.error;
 };
 
 const osRuns = Exit.isSuccess(await run("os", sh("exit 0")));
-if (process.env.CI !== undefined && !osRuns) throw new Error("sandbox-runtime cannot start on CI");
+
+if (process.env.CI !== undefined && !osRuns) {
+	throw new Error("sandbox-runtime cannot start on CI");
+}
 
 describe("the sandbox's environment", () => {
 	const workspace: Workspace = {root: "/b", home: "/b/home", tmp: "/b/tmp", work: "/b/work"};
@@ -131,7 +138,11 @@ describe.each(["none", "os"] as const)("the %s sandbox", (kind) => {
 
 	it.skipIf(!ready)("is handed no key the host holds, under any name", async () => {
 		const exit = await run(kind, sh("env"));
-		if (!Exit.isSuccess(exit)) throw new Error("did not start");
+
+		if (!Exit.isSuccess(exit)) {
+			throw new Error("did not start");
+		}
+
 		// The whole answer, so a sandbox that fails says why.
 		expect(exit.value).toMatchObject({code: 0, err: ""});
 		expect(exit.value.out).not.toContain(KEY);
@@ -175,7 +186,11 @@ describe.each(["none", "os"] as const)("the %s sandbox", (kind) => {
 					credential: {_tag: "codex", auth: Redacted.make('{"lent": true}')},
 				}),
 			);
-			if (!Exit.isSuccess(exit)) throw new Error("did not start");
+
+			if (!Exit.isSuccess(exit)) {
+				throw new Error("did not start");
+			}
+
 			const [auth, home = ""] = exit.value.out.trim().split("\n");
 			expect(auth).toBe('{"lent": true}');
 			expect(existsSync(home)).toBe(false);
@@ -194,7 +209,11 @@ describe.skipIf(!osRuns)("the os sandbox's fence", () => {
 				mount: {_tag: "worktree", folder: copy},
 			}),
 		);
-		if (!Exit.isSuccess(exit)) throw new Error("did not start");
+
+		if (!Exit.isSuccess(exit)) {
+			throw new Error("did not start");
+		}
+
 		expect(exit.value.out).toBe("the code\n");
 		// Seatbelt says "not permitted"; bubblewrap hides the folder, so "no such file".
 		expect(exit.value.err).toMatch(/not permitted|denied|no such file/i);
@@ -213,7 +232,11 @@ describe.skipIf(!osRuns)("the os sandbox's fence", () => {
 				mount: {_tag: "worktree", folder: copy},
 			}),
 		);
-		if (!Exit.isSuccess(exit)) throw new Error("did not start");
+
+		if (!Exit.isSuccess(exit)) {
+			throw new Error("did not start");
+		}
+
 		expect(exit.value.err).toBe("");
 		expect(exit.value.out).toBe("made\n");
 		expect(exit.value.code).toBe(0);
@@ -226,7 +249,11 @@ describe.skipIf(!osRuns)("the os sandbox's fence", () => {
 			"os",
 			sh("cat code.txt; echo changed > code.txt", {mount: {_tag: "commit", folder: copy}}),
 		);
-		if (!Exit.isSuccess(exit)) throw new Error("did not start");
+
+		if (!Exit.isSuccess(exit)) {
+			throw new Error("did not start");
+		}
+
 		expect(exit.value.out).toBe("the commit\n");
 		expect(readFileSync(join(copy, "code.txt"), "utf8")).toBe("the commit\n");
 	});
@@ -236,7 +263,11 @@ describe.skipIf(!osRuns)("the os sandbox's fence", () => {
 	it.skipIf(!file.startsWith(homedir()))("mounting nothing, reads no file under home", async () => {
 		expect(existsSync(file)).toBe(true);
 		const exit = await run("os", sh(`cat ${file}`));
-		if (!Exit.isSuccess(exit)) throw new Error("did not start");
+
+		if (!Exit.isSuccess(exit)) {
+			throw new Error("did not start");
+		}
+
 		expect(exit.value.out).toBe("");
 		expect(exit.value.code).not.toBe(0);
 	});

@@ -101,36 +101,54 @@ const oneLine = (text: string) => text.trim() !== "" && !text.trim().includes("\
 export const sortProblems = (reply: SortReply, brief: Brief): readonly string[] => {
 	const a: SortAnswer = reply.sort;
 	const problems: string[] = [];
-	if (a.why.trim() === "") problems.push("`why` is empty: say in a sentence why you answered so.");
+
+	if (a.why.trim() === "") {
+		problems.push("`why` is empty: say in a sentence why you answered so.");
+	}
+
 	switch (a.answer) {
 		case "duplicate": {
-			if (a.of === brief.ticket.number)
+			if (a.of === brief.ticket.number) {
 				problems.push(`#${a.of} is this ticket itself: a duplicate names another ticket.`);
-			else if (!brief.context.earlier.some((e) => e.number === a.of))
+			} else if (!brief.context.earlier.some((e) => e.number === a.of)) {
 				problems.push(`#${a.of} is not one of the repo's tickets listed: name one that is.`);
+			}
+
 			break;
 		}
 		case "no": {
 			const lead = leadOf(a.rule);
-			if (!oneLine(a.reason)) problems.push("`reason` must be one line.");
-			else if (!a.reason.trim().toLowerCase().startsWith(lead.toLowerCase()))
+
+			if (!oneLine(a.reason)) {
+				problems.push("`reason` must be one line.");
+			} else if (!a.reason.trim().toLowerCase().startsWith(lead.toLowerCase())) {
 				problems.push(`a no by \`${a.rule}\` starts its reason with "${lead}:".`);
+			}
+
 			break;
 		}
 		case "yes": {
 			if (a.next === "plan" && a.partOf !== null) {
-				if (!brief.context.plans.some((p) => p.number === a.partOf))
+				if (!brief.context.plans.some((p) => p.number === a.partOf)) {
 					problems.push(
 						`plan #${a.partOf} is not one of the open plans listed: name one that is, or give \`partOf: null\`.`,
 					);
+				}
 			}
+
 			if (a.next === "ruling") {
-				if (a.ask.trim() === "") problems.push("a ruling says what is asked in `ask`.");
-				if (a.options.filter((o) => o.trim() !== "").length < 2)
+				if (a.ask.trim() === "") {
+					problems.push("a ruling says what is asked in `ask`.");
+				}
+
+				if (a.options.filter((o) => o.trim() !== "").length < 2) {
 					problems.push("a ruling gives at least two `options`.");
+				}
 			}
+
 			break;
 		}
 	}
+
 	return problems;
 };

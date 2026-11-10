@@ -377,10 +377,12 @@ type Reviewing = Extract<Review, {phase: "reviewing"}>;
  */
 function judged(s: Reviewing, form: Form, ran: Ran): Step {
 	const made = readForm(s.brief, form);
+
 	if (made.answer === "problems") {
 		const refusals: Refusals = [...s.refusals, made.problems];
 		const tried = nextTry(made.problems, s.tries, s.limit, sentBackForm(form));
-		if (tried.go === "again")
+
+		if (tried.go === "again") {
 			return [
 				{
 					...s,
@@ -392,6 +394,8 @@ function judged(s: Reviewing, form: Form, ran: Ran): Step {
 				},
 				[],
 			];
+		}
+
 		return end(
 			s,
 			{kind: "stuck", why: "draft_failed"},
@@ -399,6 +403,7 @@ function judged(s: Reviewing, form: Form, ran: Ran): Step {
 			s.notes,
 		);
 	}
+
 	const base = afterRuns(s, ran);
 	const verdicts = verdictsOf(s.brief.kinds, made.sheet);
 	const against = made.sheet.findings.filter(isAgainstDecision);
@@ -419,11 +424,18 @@ function judged(s: Reviewing, form: Form, ran: Ran): Step {
 
 /** Settle the note whose Act this answers, and end when the run is over and none is left on its way. */
 function settled(s: Review, intent: string, state: "kept" | "failed"): Step {
-	if (s.phase !== "reviewing" && s.phase !== "judging") return stay(s);
+	if (s.phase !== "reviewing" && s.phase !== "judging") {
+		return stay(s);
+	}
+
 	const notes = s.notes.map((n): Noted =>
 		n.state === "asked" && n.asked.intent === intent ? {id: n.id, note: n.note, state} : n,
 	);
-	if (s.phase === "reviewing") return [{...s, notes}, []];
+
+	if (s.phase === "reviewing") {
+		return [{...s, notes}, []];
+	}
+
 	return end(s, s.outcome, s.judgement, notes);
 }
 
@@ -480,12 +492,22 @@ export function createReview(config: ReviewConfig = {}) {
 					? read({ask: m.ask, settings: m.settings, waits, limit, waited: 0})
 					: stay(s),
 			resume: (s): Step => {
-				if (s.phase === "gathering") return [s, [s.asked]];
-				if (s.phase === "judging") return [s, asked(s.notes)];
-				if (s.phase !== "reviewing") return stay(s);
+				if (s.phase === "gathering") {
+					return [s, [s.asked]];
+				}
+
+				if (s.phase === "judging") {
+					return [s, asked(s.notes)];
+				}
+
+				if (s.phase !== "reviewing") {
+					return stay(s);
+				}
+
 				// The run that was on is gone with the process. Start it again, once; its notes so far are kept.
 				const cuts = s.cuts + 1;
-				if (cuts >= MAX_RUNS)
+
+				if (cuts >= MAX_RUNS) {
 					return end(
 						s,
 						{kind: "stuck", why: "over_budget"},
@@ -495,13 +517,19 @@ export function createReview(config: ReviewConfig = {}) {
 						},
 						s.notes,
 					);
+				}
+
 				return [{...s, run: s.run + 1, cuts}, asked(s.notes)];
 			},
 
 			review_pack_ok: (s, m): Step => {
-				if (s.phase !== "gathering") return stay(s);
+				if (s.phase !== "gathering") {
+					return stay(s);
+				}
+
 				const pack = m.value;
 				const gate = reviewGate(pack);
+
 				switch (gate.answer) {
 					case "stop":
 						return end(s, gate.outcome, {...empty(pack.head, pack.replay), left: pack.kinds ?? []});
@@ -546,9 +574,16 @@ export function createReview(config: ReviewConfig = {}) {
 
 			// A note is kept once, by its id, and filed by an Act whose intent is in the state before it goes.
 			review_note: (s, m): Step => {
-				if (!isRun(s, m)) return stay(s);
+				if (!isRun(s, m)) {
+					return stay(s);
+				}
+
 				const id = noteIdOf(m.note);
-				if (s.notes.some((n) => n.id === id)) return stay(s);
+
+				if (s.notes.some((n) => n.id === id)) {
+					return stay(s);
+				}
+
 				const cmd = fileNote({
 					pr: s.brief.pr,
 					id,
@@ -559,15 +594,21 @@ export function createReview(config: ReviewConfig = {}) {
 			},
 			review_reviewed: (s, m): Step => (isRun(s, m) ? judged(s, m.form, m.ran) : stay(s)),
 			review_failed: (s, m): Step => {
-				if (!isRun(s, m)) return stay(s);
+				if (!isRun(s, m)) {
+					return stay(s);
+				}
+
 				const base = afterRuns(s, m.ran);
-				if (m.why === "over_budget")
+
+				if (m.why === "over_budget") {
 					return end(
 						s,
 						{kind: "stuck", why: "over_budget"},
 						{...base, problems: [`the reviewer reached its limit of ${s.settings.budget} dollars`]},
 						s.notes,
 					);
+				}
+
 				const problem =
 					m.why === "misfit"
 						? "what the reviewer handed back does not read as a form"

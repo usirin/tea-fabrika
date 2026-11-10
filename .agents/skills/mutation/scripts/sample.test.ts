@@ -34,7 +34,11 @@ const position = (a: Position, b: Position) => a.line - b.line || a.column - b.c
 const parseRange = (range: string) => {
 	const match = /^(.*?):(\d+)(?::(\d+))?-(\d+)(?::(\d+))?$/.exec(range);
 	expect(match, `invalid Stryker range: ${range}`).not.toBeNull();
-	if (!match) throw new Error("invalid range");
+
+	if (!match) {
+		throw new Error("invalid range");
+	}
+
 	const [, file, startLine, startColumn, endLine, endColumn] = match;
 	return {
 		file,
@@ -77,7 +81,11 @@ const checkReport = (
 	expect(report.left).toBeGreaterThanOrEqual(0);
 	expect(selected.every((c) => isChanged(c, changed))).toBe(true);
 	expect(new Set(report.ranges).size).toBe(report.ranges.length);
-	for (const range of report.ranges) expect(selected.some((c) => enclosed(range, c))).toBe(true);
+
+	for (const range of report.ranges) {
+		expect(selected.some((c) => enclosed(range, c))).toBe(true);
+	}
+
 	return selected;
 };
 
@@ -126,6 +134,7 @@ describe("mutation sampling, today's tooling", () => {
 				({file, startLine, lineSpan, startColumn, columnSpan}) => {
 					const endLine = startLine + lineSpan;
 					const endColumn = startColumn + columnSpan;
+
 					for (const from of [startColumn, undefined]) {
 						for (const to of [endColumn, undefined]) {
 							const range = `${file}:${startLine}${from === undefined ? "" : `:${from}`}-${endLine}${to === undefined ? "" : `:${to}`}`;
@@ -167,7 +176,10 @@ describe("mutation sampling, today's tooling", () => {
 					}),
 				).toEqual(report);
 				expect(input).toEqual(before);
-				if (max === 0 || !changed.length) expect(report.ranges).toEqual([]);
+
+				if (max === 0 || !changed.length) {
+					expect(report.ranges).toEqual([]);
+				}
 			}),
 			options,
 		);
@@ -229,9 +241,16 @@ describe("mutation sampling, today's tooling", () => {
 					const selected = checkReport(report, candidates, changed, seed, max);
 					const least = Math.min(...widths);
 					const cost = widths.filter((w) => w === least).length;
-					if (max < cost) expect(selected).toHaveLength(0);
-					else expect(selected.length).toBeGreaterThanOrEqual(cost);
-					if (max >= widths.length) expect(selected).toHaveLength(widths.length);
+
+					if (max < cost) {
+						expect(selected).toHaveLength(0);
+					} else {
+						expect(selected.length).toBeGreaterThanOrEqual(cost);
+					}
+
+					if (max >= widths.length) {
+						expect(selected).toHaveLength(widths.length);
+					}
 				},
 			),
 			options,

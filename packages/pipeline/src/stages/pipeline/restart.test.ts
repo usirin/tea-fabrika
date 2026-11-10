@@ -45,7 +45,11 @@ const TIMELINE = (() => {
 	const facts: (readonly [unknown, Readonly<Record<string, unknown>>])[] = [];
 	const ran = (stage: string, run: string, outcome: unknown, between: readonly unknown[] = []) => {
 		facts.push([LANE, {type: "started", run, stage, task: null, log: null}]);
-		for (const fact of between) facts.push([LANE, fact as Readonly<Record<string, unknown>>]);
+
+		for (const fact of between) {
+			facts.push([LANE, fact as Readonly<Record<string, unknown>>]);
+		}
+
 		facts.push([LANE, {type: "ended", run, stage, outcome, usd: 0, input: 0, output: 0, turns: 1}]);
 	};
 	facts.push([OWNER, {type: "filed", title: "Read names in one form", body: "Lower case."}]);
@@ -136,7 +140,11 @@ describe("the fold of a lane's facts", () => {
 
 	it("a second answer to a question already answered changes nothing: the first is the one the lane took", () => {
 		const last = TIMELINE.at(-1);
-		if (last === undefined) throw new Error("the timeline is empty");
+
+		if (last === undefined) {
+			throw new Error("the timeline is empty");
+		}
+
 		const late = decodeEntry({
 			...last,
 			pos: last.pos + 1,
@@ -282,19 +290,38 @@ describe("a lane saved before its stop kept a Held, sent `restart` with its fold
 		const queue: Msg[] = [{type: "restart", folded, lane: ID}];
 		const sent: LaneCmd[] = [];
 		let s: Lane = LEGACY;
+
 		for (let i = 0; i < 20; i++) {
 			const msg = queue.shift();
-			if (msg === undefined) break;
+
+			if (msg === undefined) {
+				break;
+			}
+
 			const {state, cmds} = foldUpdates<Lane, Msg, LaneCmd>(lane, s, [msg]);
 			s = state;
+
 			for (const cmd of cmds) {
 				sent.push(cmd);
-				if (cmd.type === "lane_step" || cmd.type === "lane_ask") return {s, sent, first: cmd};
-				if (cmd.type === "lane_read") queue.push(readFiled.ok(cmd, {state: "open", mine: true}, 0));
-				if (cmd.type === "lane_claim") queue.push(claimLane.ok(cmd, ID, 0));
-				if (cmd.type === "lane_fresh") queue.push(freshMain.ok(cmd, {_tag: "fresh", carry: {}}, 0));
+
+				if (cmd.type === "lane_step" || cmd.type === "lane_ask") {
+					return {s, sent, first: cmd};
+				}
+
+				if (cmd.type === "lane_read") {
+					queue.push(readFiled.ok(cmd, {state: "open", mine: true}, 0));
+				}
+
+				if (cmd.type === "lane_claim") {
+					queue.push(claimLane.ok(cmd, ID, 0));
+				}
+
+				if (cmd.type === "lane_fresh") {
+					queue.push(freshMain.ok(cmd, {_tag: "fresh", carry: {}}, 0));
+				}
 			}
 		}
+
 		return {s, sent, first: undefined};
 	};
 

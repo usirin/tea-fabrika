@@ -1,5 +1,22 @@
 import "./keepruns.sh?raw";
 import "./env.sh?raw";
+import "./fieldrow.py?raw";
+import "./box.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./gc.ts?raw";
+import "./redact.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./botpush.mjs?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./lane.ts?raw";
+import "./leakgrep.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./drive.ts?raw";
+import "./clauderow.py?raw";
+import "./runplan.sh?raw";
+import "../../plan/scripts/plancheck.sh?raw";
+import "../../step-commit/scripts/exam.py?raw";
+import "../../step-commit/scripts/stepcommit.sh?raw";
 import {spawnSync} from "node:child_process";
 import {
 	existsSync,
@@ -26,11 +43,19 @@ const filesIn = (root: string): Record<string, string> => {
 	const visit = (dir: string) => {
 		for (const name of readdirSync(dir)) {
 			const path = join(dir, name);
-			if (lstatSync(path).isDirectory()) visit(path);
-			else out[relative(root, path)] = readFileSync(path, "utf8");
+
+			if (lstatSync(path).isDirectory()) {
+				visit(path);
+			} else {
+				out[relative(root, path)] = readFileSync(path, "utf8");
+			}
 		}
 	};
-	if (existsSync(root)) visit(root);
+
+	if (existsSync(root)) {
+		visit(root);
+	}
+
 	return out;
 };
 
@@ -44,13 +69,14 @@ const write = (root: string, files: Record<string, string>) => {
 const tree = fc.dictionary(
 	fc
 		.array(fc.stringMatching(/^[a-z]{1,6}$/), {minLength: 1, maxLength: 3})
-		.map((parts) => parts.join("/") + ".json"),
+		.map((parts) => `${parts.join("/")}.json`),
 	fc.stringMatching(/^[a-z0-9 ]{0,12}$/),
 	{maxKeys: 5},
 );
 
 const withHome = (body: (main: string, dir: string) => void) => {
 	const root = mkdtempSync(join(tmpdir(), "keepruns-"));
+
 	try {
 		const main = join(root, "main");
 		mkdirSync(main);
@@ -100,11 +126,16 @@ describe("keepruns.sh, today's tooling", () => {
 						});
 						const got = run(main, folder);
 						expect(got.code, got.err).toBe(0);
-						for (const [at, files] of before) expect(filesIn(at)).toEqual(files);
+
+						for (const [at, files] of before) {
+							expect(filesIn(at)).toEqual(files);
+						}
+
 						if (Object.keys(runs).length === 0) {
 							expect(got.out).toBe("");
 							return;
 						}
+
 						const dest = join(main, "runs", taken.length === 0 ? name : `${name}-${taken.length}`);
 						expect(got.out).toBe(`kept runs of ${name} at runs/${dest.split("/").at(-1)}`);
 						expect(filesIn(dest)).toEqual(runs);

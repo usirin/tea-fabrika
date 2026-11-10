@@ -60,7 +60,11 @@ it("T237-R2-5: withdrawing queued B twice keeps one prompt for A and routes y to
 				Effect.provideService(HostJobs, {...jobs, owner: "t1", by: "user:owner"}),
 				Effect.provideService(Programs, programList([listed(story, Layer.empty)])),
 			);
-			if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+			if (started.kind !== "running") {
+				return yield* Effect.die("tsh did not start");
+			}
+
 			yield* tell(started.run, "line", "ask-story");
 			yield* status.upTo(1);
 			expect(ready.values).toEqual([]);

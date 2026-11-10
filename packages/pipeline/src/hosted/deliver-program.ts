@@ -87,7 +87,11 @@ export const deliverProgram = defineProgram({
 			plan: (url) =>
 				Effect.gen(function* () {
 					const ticket = readTicketId(url);
-					if (ticket === null) return yield* Effect.die(`not a ticket: ${url}`);
+
+					if (ticket === null) {
+						return yield* Effect.die(`not a ticket: ${url}`);
+					}
+
 					const plan = planOf(ticket);
 					// This start's own name on the ledger: a shell started again is a new holder, and
 					// takes each name over once the old hold has run out.

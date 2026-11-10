@@ -102,6 +102,7 @@ describe("P33, signal ids, ownership and delivery", () => {
 				const to = Recipient.cases.process.make({process});
 				const id = signalId(to, ref, round);
 				expect(JSON.parse(id)[0], "signal id protocol starts with DOWN").toBe("DOWN");
+
 				for (const spaces of [" ", "\t", "\n"]) {
 					const spaced = `${spaces}[${spaces}${id.slice(1)}`;
 					expect(inSignalSpace(spaced), "JSON whitespace does not release a signal id").toBe(true);
@@ -133,11 +134,12 @@ describe("P33, signal ids, ownership and delivery", () => {
 					expect(result._tag, "only the brain's existing signal counts").toBe(
 						own ? "Success" : "Failure",
 					);
-					if (own)
+
+					if (own) {
 						expect(store.rows().filter((row) => row.id === id)).toEqual(
 							before.filter((row) => row.id === id),
 						);
-					else {
+					} else {
 						expect(result).toMatchObject({_tag: "Failure", failure: {why: "refused"}});
 						expect(store.rows()).toEqual(before);
 					}
@@ -151,11 +153,13 @@ describe("P33, signal ids, ownership and delivery", () => {
 			return Effect.gen(function* () {
 				yield* seed(store);
 				const table = new ProcessTable(store.rows(), from().by);
-				for (const ref of ["", long])
+
+				for (const ref of ["", long]) {
 					expect(table.monitor(ref, A, Recipient.cases.process.make({process: W}))).toMatchObject({
 						_tag: "Failure",
 						failure: {why: "bad_text"},
 					});
+				}
 			});
 		}),
 	);
@@ -187,7 +191,7 @@ describe("P33, signal ids, ownership and delivery", () => {
 });
 
 describe("p79, addressed and independent monitors", () => {
-	for (const ended of [false, true])
+	for (const ended of [false, true]) {
 		it.effect(`an ${ended ? "ended" : "absent"} watcher cannot create a monitor`, () => {
 			return check(text, ["late-watch"], (ref) => {
 				const store = storage();
@@ -196,12 +200,15 @@ describe("p79, addressed and independent monitors", () => {
 						yield* seed(store);
 						yield* exit(store, W);
 					}
+
 					const before = store.rows();
 					expect((yield* Effect.flip(monitor(store, ref))).why).toBe("ended");
 					expect(store.rows()).toEqual(before);
 				});
 			});
 		});
+	}
+
 	it.effect(
 		"plant, omit to or collapse monitors: each reference gets one stable addressed DOWN",
 		() =>
@@ -273,6 +280,7 @@ describe("p79, addressed and independent monitors", () => {
 				});
 			}),
 	);
+
 	for (const ended of [false, true]) {
 		it.effect(
 			`plant, wait forever: monitoring an ${ended ? "ended" : "absent"} ID queues noproc before returning`,
@@ -281,7 +289,11 @@ describe("p79, addressed and independent monitors", () => {
 					const store = storage();
 					return Effect.gen(function* () {
 						yield* seed(store);
-						if (ended) yield* exit(store);
+
+						if (ended) {
+							yield* exit(store);
+						}
+
 						const target = ended ? A : B;
 						yield* monitor(store, ref, target);
 						expect(signals(store)).toHaveLength(1);
@@ -302,6 +314,7 @@ describe("p79, addressed and independent monitors", () => {
 				}),
 		);
 	}
+
 	it.effect(
 		"plant, address only a client name: a window monitor records the exact connection session",
 		() =>
@@ -401,11 +414,19 @@ describe("p79, cancellation, replay and stale delivery", () => {
 						yield* seed(store);
 						yield* monitor(store, canceled!);
 						yield* monitor(store, kept!);
-						if (queued) yield* exit(store);
+
+						if (queued) {
+							yield* exit(store);
+						}
+
 						yield* cancel(store, canceled!);
 						yield* cancel(store, canceled!);
 						store.reopen();
-						if (!queued) yield* exit(store);
+
+						if (!queued) {
+							yield* exit(store);
+						}
+
 						const delivered = yield* fresh(store);
 						expect(delivered.map((letter) => Schema.decodeUnknownSync(Down)(letter.m).ref)).toEqual(
 							[kept],
@@ -422,6 +443,7 @@ describe("p79, cancellation, replay and stale delivery", () => {
 				}),
 		);
 	}
+
 	it.effect("plant, resolve a name at delivery: an old DOWN never retargets a replacement", () => {
 		return check(refs, [["old-target", "new-target"]], ([oldRef, newRef]) => {
 			const store = storage();
@@ -671,7 +693,11 @@ describe("P33, a client's inbox is not a process's inbox", () => {
 					p.start(first(`start:${name}`, name, {program: "notes", hash: "build-a"}), from()),
 				).pipe(Effect.provide(manager(store, brain(), ids(B).next))),
 			);
-			if (placed._tag === "Failure") return false;
+
+			if (placed._tag === "Failure") {
+				return false;
+			}
+
 			yield* ProcessManager.use((p) => p.monitor("watch:notes", A, from())).pipe(
 				Effect.provide(manager(store, watcher(B))),
 			);
@@ -720,7 +746,10 @@ describe("P33, a client's inbox is not a process's inbox", () => {
 			const store = storage();
 			return Effect.gen(function* () {
 				// Refusing the name or giving it another inbox both keep the two apart.
-				if (!(yield* twin(store, `client:${name}`, name))) return;
+				if (!(yield* twin(store, `client:${name}`, name))) {
+					return;
+				}
+
 				const downs = signals(store);
 				const forProcess = downs.filter((down) => down.m.to._tag === "process");
 				const forClient = downs.filter((down) => down.m.to._tag === "client");

@@ -35,7 +35,10 @@ export const acpEvents = (runId: string): AcpEvents => {
 	const head = (at: number) => ({runId, at});
 
 	const settle = (id: string, failed: boolean, at: number): AgentEvent<null>[] => {
-		if (!open.has(id)) return [];
+		if (!open.has(id)) {
+			return [];
+		}
+
 		open.delete(id);
 		return failed
 			? [
@@ -51,8 +54,12 @@ export const acpEvents = (runId: string): AcpEvents => {
 	};
 
 	const seen = (event: Seen, at: number): AgentEvent<null>[] => {
-		if (event.kind !== "tool" && event.kind !== "tool_update") return [];
+		if (event.kind !== "tool" && event.kind !== "tool_update") {
+			return [];
+		}
+
 		const started: AgentEvent<null>[] = [];
+
 		if (!names.has(event.id)) {
 			const name = event.name ?? "unknown";
 			names.set(event.id, name);
@@ -60,6 +67,7 @@ export const acpEvents = (runId: string): AcpEvents => {
 			calls.push({callId: event.id, name, args: {}});
 			started.push({...head(at), type: "ToolStarted", callId: event.id, name, args: {}});
 		}
+
 		const ended =
 			event.status === "completed" || event.status === "failed"
 				? settle(event.id, event.status === "failed", at)

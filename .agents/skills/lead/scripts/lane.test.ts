@@ -1,4 +1,5 @@
 import "./box.sh?raw";
+import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
@@ -40,7 +41,10 @@ describe("lane rules, today's tooling", () => {
 				const to = wipOf(lane);
 				expect(to).toMatch(/(?<!-wip)-wip$/);
 				expect(to.replace(/-wip$/, "")).toBe(b);
-				if (n === 1) expect(to).toBe(lane);
+
+				if (n === 1) {
+					expect(to).toBe(lane);
+				}
 			}),
 			options,
 		);

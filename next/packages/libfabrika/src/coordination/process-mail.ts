@@ -13,12 +13,24 @@ const decodeSent = Schema.decodeUnknownOption(Sent);
  */
 export const processMail = (table: ProcessTable, process: string, entries: Iterable<Entry>) => {
 	const letters: Array<{letter: Letter; arrivedAt: number}> = [];
+
 	for (const entry of entries) {
-		if (entry._tag !== "send") continue;
+		if (entry._tag !== "send") {
+			continue;
+		}
+
 		const sent = decodeSent(entry.body);
-		if (Option.isNone(sent)) continue;
+
+		if (Option.isNone(sent)) {
+			continue;
+		}
+
 		const {m} = sent.value;
-		if (table.deliver(entry, m, process) === "drop") continue;
+
+		if (table.deliver(entry, m, process) === "drop") {
+			continue;
+		}
+
 		letters.push({
 			letter: {
 				id: entry.id,
@@ -34,5 +46,6 @@ export const processMail = (table: ProcessTable, process: string, entries: Itera
 			arrivedAt: entry.arrivedAt,
 		});
 	}
+
 	return letters;
 };

@@ -47,71 +47,100 @@ export function words(line: string): Words {
 	const tokens: Token[] = [];
 	let at = 0;
 	let open = false;
+
 	while (at < line.length) {
 		const c = line.charAt(at);
+
 		if (SPACE.has(c)) {
 			at += 1;
 			continue;
 		}
+
 		if (c === "#") {
 			// A comment runs to the end of the line, and the line goes on after it.
 			const end = line.indexOf("\n", at);
 			at = end === -1 ? line.length : end;
 			continue;
 		}
+
 		if (c === "$" && line.charAt(at + 1) === "(") {
 			tokens.push({kind: "op", op: "$(", start: at, end: at + 2});
 			at += 2;
 			continue;
 		}
+
 		if ((c === "&" || c === "|") && line.charAt(at + 1) === c) {
 			tokens.push({kind: "op", op: c === "&" ? "&&" : "||", start: at, end: at + 2});
 			at += 2;
 			continue;
 		}
+
 		if (OPS.has(c)) {
 			tokens.push({kind: "op", op: c === "\n" ? ";" : (c as Op), start: at, end: at + 1});
 			at += 1;
 			continue;
 		}
+
 		const start = at;
 		let text = "";
 		let quote: "'" | '"' | null = null;
+
 		while (at < line.length) {
 			const ch = line.charAt(at);
+
 			if (quote === "'") {
-				if (ch === "'") quote = null;
-				else text += ch;
+				if (ch === "'") {
+					quote = null;
+				} else {
+					text += ch;
+				}
+
 				at += 1;
 				continue;
 			}
+
 			if (quote === '"') {
-				if (ch === '"') quote = null;
-				else if (ch === "\\" && (line.charAt(at + 1) === '"' || line.charAt(at + 1) === "\\")) {
+				if (ch === '"') {
+					quote = null;
+				} else if (ch === "\\" && (line.charAt(at + 1) === '"' || line.charAt(at + 1) === "\\")) {
 					text += line.charAt(at + 1);
 					at += 1;
-				} else text += ch;
+				} else {
+					text += ch;
+				}
+
 				at += 1;
 				continue;
 			}
+
 			if (ch === "'" || ch === '"') {
 				quote = ch;
 				at += 1;
 				continue;
 			}
+
 			if (ch === "\\") {
 				// A `\` at the very end escapes nothing yet: it is still being typed.
-				if (at + 1 < line.length) text += line.charAt(at + 1);
+				if (at + 1 < line.length) {
+					text += line.charAt(at + 1);
+				}
+
 				at += 2;
 				continue;
 			}
-			if (SPACE.has(ch) || OPS.has(ch) || (ch === "$" && line.charAt(at + 1) === "(")) break;
+
+			if (SPACE.has(ch) || OPS.has(ch) || (ch === "$" && line.charAt(at + 1) === "(")) {
+				break;
+			}
+
 			text += ch;
 			at += 1;
 		}
+
 		open = quote !== null;
 		tokens.push({kind: "word", text, start, end: Math.min(at, line.length)});
 	}
+
 	const last = tokens.at(-1);
 	return {
 		tokens,

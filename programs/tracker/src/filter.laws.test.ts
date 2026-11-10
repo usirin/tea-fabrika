@@ -224,8 +224,14 @@ const every = (name: string, law: (step: TrackerStep) => boolean): Law => ({
 const filterOnly = every(
 	"show and find set the filter, ask for nothing, and change nothing else",
 	({prev, msg, next, cmds}) => {
-		if (msg.type === "show") return cmds.length === 0 && same(next, {...prev, show: msg.show});
-		if (msg.type === "find") return cmds.length === 0 && same(next, {...prev, find: msg.text});
+		if (msg.type === "show") {
+			return cmds.length === 0 && same(next, {...prev, show: msg.show});
+		}
+
+		if (msg.type === "find") {
+			return cmds.length === 0 && same(next, {...prev, find: msg.text});
+		}
+
 		return true;
 	},
 );
@@ -235,8 +241,11 @@ const oneReadOut = every(
 	(step) => {
 		const {prev, msg, next} = step;
 		const sent = asked(step);
-		if (prev.pullRequests.ask === "busy" && next.pullRequests.ask === "idle")
+
+		if (prev.pullRequests.ask === "busy" && next.pullRequests.ask === "idle") {
 			return isPullRequestsAnswer(msg);
+		}
+
 		const went = prev.pullRequests.ask === "idle" && next.pullRequests.ask === "busy";
 		return went ? sent.length === 1 : sent.length === 0;
 	},
@@ -245,12 +254,17 @@ const oneReadOut = every(
 const refreshReads = every(
 	"a refresh asks for one pull requests read when none is out and it is not quitting, and else does nothing",
 	({prev, msg, next, cmds}) => {
-		if (msg.type !== "refresh") return true;
-		if (prev.pullRequests.ask === "idle" && !prev.quitting)
+		if (msg.type !== "refresh") {
+			return true;
+		}
+
+		if (prev.pullRequests.ask === "idle" && !prev.quitting) {
 			return (
 				same(cmds, [pullRequests({})]) &&
 				same(next, {...prev, pullRequests: {...prev.pullRequests, ask: "busy"}})
 			);
+		}
+
 		return cmds.length === 0 && same(next, prev);
 	},
 );
@@ -289,7 +303,11 @@ const waitIsOn: Law = {
 	check: (machine) => {
 		const on = (s: Tracker) => {
 			const sub = machine.subs?.find((u) => u.type === "pull_requests_wait");
-			if (sub === undefined) throw new Error("the machine has no pull_requests_wait Sub");
+
+			if (sub === undefined) {
+				throw new Error("the machine has no pull_requests_wait Sub");
+			}
+
 			const deps = sub.deps(s);
 			return deps !== null && deps !== undefined;
 		};
@@ -311,7 +329,11 @@ const ticketsFit = every(
 	"the list shows only tickets whose state fits show and whose title matches the search",
 	({next}) => {
 		const page = listOf(next);
-		if (page === null) return true;
+
+		if (page === null) {
+			return true;
+		}
+
 		return page.tickets.every((t) => fitsShow(next.show, t) && matches(next.find, t.title));
 	},
 );
@@ -320,7 +342,11 @@ const ticketsAll = every(
 	"the list shows every ticket that fits the filter, newest first, as its summary",
 	({next}) => {
 		const page = listOf(next);
-		if (page === null) return true;
+
+		if (page === null) {
+			return true;
+		}
+
 		const wanted = next.tickets
 			.filter((t) => fits(next, t))
 			.map((t) => ({...summaryOf(t), head: headOf(t.timeline, next.now)}))
@@ -333,7 +359,11 @@ const pullRequestsShown = every(
 	"the list shows the pull requests read whose title matches, in the order read, and none under closed",
 	({next}) => {
 		const page = listOf(next);
-		if (page === null) return true;
+
+		if (page === null) {
+			return true;
+		}
+
 		const read = next.pullRequests.list ?? [];
 		const wanted = next.show === "closed" ? [] : read.filter((p) => matches(next.find, p.title));
 		return same(page.pullRequests, wanted);
@@ -344,7 +374,11 @@ const countsMatch = every(
 	"the counts say how many tickets with a matching title are open and closed, and how many pull requests read match, whatever show is",
 	({next}) => {
 		const page = listOf(next);
-		if (page === null) return true;
+
+		if (page === null) {
+			return true;
+		}
+
 		const found = next.tickets.filter((t) => matches(next.find, t.title));
 		return same(page.counts, {
 			open: found.filter((t) => t.state === "open").length,

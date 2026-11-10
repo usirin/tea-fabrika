@@ -172,8 +172,12 @@ export const laneGitHubHost = (
 					Effect.gen(function* () {
 						const facts = yield* base.prFacts(pr);
 						const pull = yield* pulls.find(pr);
+
 						// A merged row is not the branch's open pull request, so a new head there is a new one.
-						if (facts.state === "merged" && pull.state === "open") yield* pulls.merged(pr);
+						if (facts.state === "merged" && pull.state === "open") {
+							yield* pulls.merged(pr);
+						}
+
 						const ticket = yield* tickets.read(pull.ticket).pipe(Effect.mapError(() => failed));
 						const yes = yield* bound(yesAt(pull.ticket, yesOf(ticket, pull), facts.head));
 						const judged = yield* bound(judgedAt(pull, facts.head));
@@ -195,10 +199,18 @@ export const laneGitHubHost = (
 						// second, so the one already there is the one.
 						const listed = yield* answerOf(gh, OpenOnBranch, listArgs(repo, pull.branch));
 						const own = listed.find((open) => !open.isCrossRepository);
-						if (own !== undefined) return own.url;
+
+						if (own !== undefined) {
+							return own.url;
+						}
+
 						const out = yield* gh(openArgs(repo, pull));
 						const url = createdUrl(repo, out);
-						if (url !== null) return url;
+
+						if (url !== null) {
+							return url;
+						}
+
 						return yield* Effect.fail({
 							...failed,
 							says: `gh pr create answered with no pull request in ${repo}: ${out.trim().slice(0, 200)}`,

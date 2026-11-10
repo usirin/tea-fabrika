@@ -184,8 +184,14 @@ const checkedValue = Effect.fnUntraced(function* <A>(
 		| typeof SigningReply.cases.SigningRefused.Type
 		| typeof SigningReply.cases.NotGranted.Type,
 ) {
-	if (reply._tag === "SigningRefused") return yield* new SigningRefused({why: reply.why});
-	if (reply._tag === "NotGranted") return yield* new NotGranted({});
+	if (reply._tag === "SigningRefused") {
+		return yield* new SigningRefused({why: reply.why});
+	}
+
+	if (reply._tag === "NotGranted") {
+		return yield* new NotGranted({});
+	}
+
 	return reply.value;
 });
 
@@ -225,7 +231,11 @@ export const checkedPut = Effect.fnUntraced(function* (
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
 	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", copy), catch: fail});
 	const digest = yield* work;
-	if (hex(digest) !== sha256.toLowerCase()) return yield* new LedgerError({why: "bad_row"});
+
+	if (hex(digest) !== sha256.toLowerCase()) {
+		return yield* new LedgerError({why: "bad_row"});
+	}
+
 	yield* BucketClient.make(bucket).put(key, copy, sha256);
 });
 
@@ -267,7 +277,11 @@ export const recordingLayer = (sql: Sql, env: Env, project: string, object: stri
 const fingerprint = Effect.fnUntraced(function* (value: string) {
 	const ssh = value.startsWith("ssh-");
 	const blob = ssh ? Base64.decode(value.trim().split(/\s+/)[1] ?? "") : Base64Url.decode(value);
-	if (Result.isFailure(blob)) return yield* new LedgerError({why: "bad_row"});
+
+	if (Result.isFailure(blob)) {
+		return yield* new LedgerError({why: "bad_row"});
+	}
+
 	const bytes = blob.success.slice(-32);
 	const fail = () => new LedgerError({why: "crypto"});
 	// SSH Ed25519 blobs end with the 32 public bytes. P10 uses this same key fingerprint.
@@ -320,7 +334,11 @@ const projectLogic = Effect.fn("project.init")(function* (
 		ring: Effect.fnUntraced(function* (to, stream, rev) {
 			const send = ring(to, stream, rev);
 			const pending = yield* notifications;
-			if (pending === null) return yield* send;
+
+			if (pending === null) {
+				return yield* send;
+			}
+
 			const context = yield* Effect.context<never>();
 			pending.push(send.pipe(Effect.provideContext(context)));
 		}),
@@ -352,14 +370,23 @@ const projectLogic = Effect.fn("project.init")(function* (
 	sql.exec(
 		"CREATE TABLE IF NOT EXISTS stage_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
 	);
-	if (!sql.exec("PRAGMA table_info(stage_descriptors)").some((column) => column.name === "pending"))
+
+	if (
+		!sql.exec("PRAGMA table_info(stage_descriptors)").some((column) => column.name === "pending")
+	) {
 		sql.exec("ALTER TABLE stage_descriptors ADD COLUMN pending INTEGER NOT NULL DEFAULT 0");
+	}
+
 	const configure = Effect.fnUntraced(function* (pid: string) {
 		const [saved] = sql.exec(
 			"SELECT value FROM stage_descriptors WHERE process=? AND pending=1",
 			pid,
 		);
-		if (saved === undefined) return;
+
+		if (saved === undefined) {
+			return;
+		}
+
 		const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
 			saved.value,
 		).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
@@ -376,9 +403,11 @@ const projectLogic = Effect.fn("project.init")(function* (
 				.filter(([, p]) => p.personOnly)
 				.map(([name]) => name),
 		});
+
 	for (const process of yield* processes.info) {
 		const program = yield* loader.load(process.program, process.process);
 		remember(process.process, program.declaration);
+
 		if (
 			sql.exec("SELECT process FROM stage_descriptors WHERE process=?", process.process).length ===
 			0
@@ -392,21 +421,33 @@ const projectLogic = Effect.fn("project.init")(function* (
 				JSON.stringify(descriptor),
 			);
 		}
+
 		yield* configure(process.process);
 	}
+
 	const policy = Effect.fnUntraced(function* (pid: string) {
 		const process = (yield* processes.info).find((row) => row.process === pid);
-		if (process === undefined) return yield* new LedgerError({why: "refused"});
+
+		if (process === undefined) {
+			return yield* new LedgerError({why: "refused"});
+		}
+
 		const policy = policies.get(pid);
-		if (policy === undefined) return yield* new LedgerError({why: "bad_row"});
+
+		if (policy === undefined) {
+			return yield* new LedgerError({why: "bad_row"});
+		}
+
 		return policy;
 	});
 	const notify = Effect.fnUntraced(function* (client: string, news: unknown) {
 		const [row] = sql.exec("SELECT gateway FROM stage_clients WHERE client=?", client);
-		if (row !== undefined)
+
+		if (row !== undefined) {
 			yield* rpc(
 				GatewayClient.make(env.GATEWAY.getByName(String(row.gateway))).notify(client, news),
 			);
+		}
 	});
 	sql.exec(
 		"CREATE TABLE IF NOT EXISTS stage_clients (client TEXT PRIMARY KEY, gateway TEXT NOT NULL, session TEXT NOT NULL)",
@@ -446,7 +487,10 @@ const projectLogic = Effect.fn("project.init")(function* (
 								[...m.keys.keys()],
 								(raw) =>
 									Effect.gen(function* () {
-										if ("why" in admitted(m, raw)) return false;
+										if ("why" in admitted(m, raw)) {
+											return false;
+										}
+
 										return raw === key || (yield* fingerprint(raw)) === key;
 									}),
 								{concurrency: 1},
@@ -464,8 +508,10 @@ const projectLogic = Effect.fn("project.init")(function* (
 		);
 	});
 	const start = Effect.fnUntraced(function* (request: Start, origin: From) {
-		if (!Object.hasOwn(programs, request.code.program))
+		if (!Object.hasOwn(programs, request.code.program)) {
 			return yield* new LedgerError({why: "refused"});
+		}
+
 		const program = yield* loader.load(request.code.program, `project:${name}/${request.name}`);
 		const result = yield* write(
 			Effect.gen(function* () {
@@ -519,14 +565,23 @@ const projectLogic = Effect.fn("project.init")(function* (
 		stream: string,
 		event: unknown,
 	) {
-		if (!(yield* processes.isLive(pid))) return yield* new LedgerError({why: "refused"});
-		if (stream.startsWith("door/") || stream.startsWith("processes"))
+		if (!(yield* processes.isLive(pid))) {
 			return yield* new LedgerError({why: "refused"});
+		}
+
+		if (stream.startsWith("door/") || stream.startsWith("processes")) {
+			return yield* new LedgerError({why: "refused"});
+		}
+
 		const body = yield* Schema.decodeUnknownEffect(Event)(event).pipe(
 			Effect.mapError(() => new LedgerError({why: "bad_row"})),
 		);
 		const [saved] = sql.exec("SELECT value FROM stage_descriptors WHERE process=?", pid);
-		if (saved === undefined) return yield* new LedgerError({why: "bad_row"});
+
+		if (saved === undefined) {
+			return yield* new LedgerError({why: "bad_row"});
+		}
+
 		const descriptor = yield* Schema.decodeUnknownEffect(
 			Schema.fromJsonString(Schema.Struct({owner: Writer, build: Schema.String})),
 		)(saved.value).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
@@ -606,10 +661,17 @@ const projectLogic = Effect.fn("project.init")(function* (
 		inbox: (pid: string, input: Incoming) =>
 			wrapped(
 				Effect.gen(function* () {
-					if (!(yield* processes.isLive(pid))) return yield* new LedgerError({why: "refused"});
+					if (!(yield* processes.isLive(pid))) {
+						return yield* new LedgerError({why: "refused"});
+					}
+
 					yield* door.checkDelivery(pid, input);
 					const row = (yield* processes.info).find((r) => r.process === pid);
-					if (row === undefined) return yield* new LedgerError({why: "refused"});
+
+					if (row === undefined) {
+						return yield* new LedgerError({why: "refused"});
+					}
+
 					return yield* ledger.append(
 						`${row.name}/inbox`,
 						input.id,

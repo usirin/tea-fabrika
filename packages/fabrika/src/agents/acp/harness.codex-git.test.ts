@@ -16,7 +16,9 @@ const boxHome = realpathSync(mkdtempSync(join(tmpdir(), "codex-box-")));
 const made: string[] = [boxHome];
 
 afterAll(() => {
-	for (const path of made) rmSync(path, {recursive: true, force: true});
+	for (const path of made) {
+		rmSync(path, {recursive: true, force: true});
+	}
 });
 
 const boxEnv = codexEnvOf(process.env, boxHome);

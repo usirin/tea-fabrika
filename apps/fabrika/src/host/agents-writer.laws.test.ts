@@ -36,17 +36,27 @@ const users = new Map<string, {id: number; keys: string[]}>();
 
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
-	if (url.host !== "api.github.com") return new Response("not here", {status: 502});
+
+	if (url.host !== "api.github.com") {
+		return new Response("not here", {status: 502});
+	}
+
 	const byId = /^\/user\/([0-9]+)$/.exec(url.pathname);
+
 	if (byId !== null) {
 		const found = [...users].find(([, u]) => u.id === Number(byId[1]));
 		return found === undefined
 			? Response.json({message: "Not Found"}, {status: 404})
 			: Response.json({id: found[1].id, login: found[0]});
 	}
+
 	const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
 	const u = m?.[1] === undefined ? undefined : users.get(decodeURIComponent(m[1]));
-	if (u === undefined) return Response.json({message: "Not Found"}, {status: 404});
+
+	if (u === undefined) {
+		return Response.json({message: "Not Found"}, {status: 404});
+	}
+
 	return m?.[2] === undefined
 		? Response.json({id: u.id, login: m?.[1]})
 		: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
@@ -129,8 +139,14 @@ const callFor = (
 	what: "file" | "comment" | "line",
 	mark: string,
 ): readonly [tool: string, args: Record<string, unknown>] => {
-	if (what === "file") return ["tracker_file", {value: {title: mark, body: ""}}];
-	if (what === "comment") return ["tracker_comment", {value: {ticket: 1, body: mark}}];
+	if (what === "file") {
+		return ["tracker_file", {value: {title: mark, body: ""}}];
+	}
+
+	if (what === "comment") {
+		return ["tracker_comment", {value: {ticket: 1, body: mark}}];
+	}
+
 	return ["line", {line: `tracker file='{"title":"${mark}","body":""}' &`}];
 };
 
@@ -174,9 +190,14 @@ describe("law: no write from the agents' socket is the person's", () => {
 					for (let i = 0; i < 400; i += 1) {
 						const all = await rows();
 						const found = marks.map((m) => all.filter((r) => r.data.includes(m)));
-						if (found.every((f) => f.length > 0)) return found;
+
+						if (found.every((f) => f.length > 0)) {
+							return found;
+						}
+
 						await new Promise((done) => setTimeout(done, 25));
 					}
+
 					return null;
 				};
 
@@ -185,12 +206,16 @@ describe("law: no write from the agents' socket is the person's", () => {
 					calls.claude("tracker_file", {value: {title: "base-ticket", body: ""}}),
 				);
 				const failures: string[] = [];
-				if (base.error) failures.push(`claude could not file ticket 1: ${base.text}`);
-				else if ((yield* Effect.promise(() => landed(["base-ticket"]))) === null)
+
+				if (base.error) {
+					failures.push(`claude could not file ticket 1: ${base.text}`);
+				} else if ((yield* Effect.promise(() => landed(["base-ticket"]))) === null) {
 					failures.push("ticket 1 never landed");
+				}
 
 				let count = 0;
-				if (failures.length === 0)
+
+				if (failures.length === 0) {
 					yield* Effect.promise(() =>
 						fc.assert(
 							fc.asyncProperty(fc.array(write, {minLength: 1, maxLength: 4}), async (writes) => {
@@ -198,28 +223,37 @@ describe("law: no write from the agents' socket is the person's", () => {
 									count += 1;
 									return {...w, mark: `mark-${count}-${w.who}`};
 								});
+
 								for (const w of asked) {
 									const answer = await calls[w.who](...callFor(w.what, w.mark));
+
 									if (answer.error) {
 										failures.push(`${w.who} ${w.what} was refused: ${answer.text}`);
 										return false;
 									}
 								}
+
 								const found = await landed(asked.map((w) => w.mark));
+
 								if (found === null) {
 									failures.push(`not every write landed: ${asked.map((w) => w.mark).join(", ")}`);
 									return false;
 								}
+
 								asked.forEach((w, i) => {
-									for (const row of found[i] ?? [])
-										if (row.writer !== `agent:${w.who} for:github:7`)
+									for (const row of found[i] ?? []) {
+										if (row.writer !== `agent:${w.who} for:github:7`) {
 											failures.push(`${w.mark} was written as ${row.writer}`);
+										}
+									}
 								});
 								return failures.length === 0;
 							}),
 							{numRuns: 8, seed: 119120, endOnFailure: true},
 						),
 					).pipe(Effect.ignore);
+				}
+
 				// Across every run: no row that holds an agent's mark is alice's own, or nobody's.
 				const all = yield* Effect.promise(rows);
 				const marked = all.filter(
@@ -233,11 +267,16 @@ describe("law: no write from the agents' socket is the person's", () => {
 		expect(seen.failures).toEqual([]);
 		expect(seen.count).toBeGreaterThan(0);
 		expect(seen.writers).toContain("agent:claude for:github:7");
-		for (const writer of seen.writers)
+
+		for (const writer of seen.writers) {
 			expect(["agent:claude for:github:7", "agent:lead for:github:7"]).toContain(writer);
+		}
+
 		// Seed 119120 draws lines from its second run on, so a job began, and each one is an agent's.
 		expect(seen.jobs.length).toBeGreaterThan(0);
-		for (const writer of seen.jobs)
+
+		for (const writer of seen.jobs) {
 			expect(["agent:claude for:github:7", "agent:lead for:github:7"]).toContain(writer);
+		}
 	});
 });

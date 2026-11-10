@@ -117,12 +117,18 @@ export function agree<S, M, C>(
 		key: "",
 		step: (step) => {
 			const got = read(step);
-			if (got === null) return watch;
+
+			if (got === null) {
+				return watch;
+			}
+
 			const before = first.get(got.key);
+
 			if (before === undefined) {
 				first.set(got.key, {value: got.value, seen: got.seen});
 				return watch;
 			}
+
 			return before.value === got.value
 				? watch
 				: broke(`${got.seen} ended ${got.value}; ${before.seen} ended ${before.value}`);
@@ -244,6 +250,7 @@ interface Move<M, C> {
 /** Every move the world may make from one node. */
 function movesFrom<S, M, C>(world: World<S, M, C>, node: Node<S, M, C>): readonly Move<M, C>[] {
 	const moves: Move<M, C>[] = [];
+
 	for (const msg of world.outside(node.state)) {
 		const restart = world.restart?.(msg) ?? false;
 		moves.push({
@@ -253,11 +260,17 @@ function movesFrom<S, M, C>(world: World<S, M, C>, node: Node<S, M, C>): readonl
 			echo: false,
 		});
 	}
+
 	node.flight.forEach((f, at) => {
-		if (at > 0 && node.flight[at - 1]?.key === f.key) return; // the same Cmd twice: one set of answers
+		if (at > 0 && node.flight[at - 1]?.key === f.key) {
+			return;
+		} // the same Cmd twice: one set of answers
+
 		const rest = [...node.flight.slice(0, at), ...node.flight.slice(at + 1)];
-		for (const msg of world.answers(f.cmd))
+
+		for (const msg of world.answers(f.cmd)) {
 			moves.push({msg, flight: rest, echoes: node.echoes, echo: true});
+		}
 	});
 	node.echoes.forEach((msg, at) => {
 		const rest = [...node.echoes.slice(0, at), ...node.echoes.slice(at + 1)];
@@ -286,18 +299,27 @@ function take<S, M, C>(
 	move: Move<M, C>,
 ): Taken<S, M, C> {
 	let result: readonly [S, readonly C[]];
+
 	try {
 		result = search.update(node.state, move.msg);
 	} catch (error) {
 		return {node: null, broke: [{law: "update throws", why: describe(error)}]};
 	}
+
 	const [state, cmds] = result;
 	const step: Step<S, M, C> = {prev: node.state, msg: move.msg, next: state, cmds};
 	const broke: {law: string; why: string}[] = [];
 	const watches = node.watches.map((watch, at) => {
-		if (watch === null) return null;
+		if (watch === null) {
+			return null;
+		}
+
 		const looked = watch.step(step);
-		if (!(looked instanceof Broke)) return looked;
+
+		if (!(looked instanceof Broke)) {
+			return looked;
+		}
+
 		broke.push({law: search.laws[at]?.name ?? `law ${at}`, why: looked.why});
 		return null;
 	});
@@ -343,20 +365,33 @@ export function follow<S, M, C>(
 	let node = startOf(search);
 	const path: M[] = [];
 	const broken: Found<M>[] = [];
+
 	for (const line of lines) {
 		const moves = movesFrom(search.world, node);
 		const move = moves.find((m) => show(m.msg) === line);
-		if (move === undefined)
+
+		if (move === undefined) {
 			throw new Error(
 				`no move "${line}" after ${path.length} step(s); the world offers: ${[...new Set(moves.map((m) => show(m.msg)))].join(" | ")}`,
 			);
+		}
+
 		path.push(move.msg);
 		const taken = take(search, node, move);
-		for (const b of taken.broke)
-			if (!broken.some((x) => x.law === b.law)) broken.push({...b, path: [...path]});
-		if (taken.node === null) break;
+
+		for (const b of taken.broke) {
+			if (!broken.some((x) => x.law === b.law)) {
+				broken.push({...b, path: [...path]});
+			}
+		}
+
+		if (taken.node === null) {
+			break;
+		}
+
 		node = taken.node;
 	}
+
 	return {state: node.state, broken, path};
 }
 
@@ -375,10 +410,12 @@ export function explore<S, M extends {readonly type: string}, C>(
 	const pathTo = (key: string, last: M): M[] => {
 		const path: M[] = [last];
 		let at = from.get(key);
+
 		while (at !== undefined && at.msg !== null && at.before !== null) {
 			path.push(at.msg);
 			at = from.get(at.before);
 		}
+
 		return path.reverse();
 	};
 
@@ -391,26 +428,42 @@ export function explore<S, M extends {readonly type: string}, C>(
 
 	for (let depth = 0; depth < search.depth && frontier.length > 0 && !capped; depth++) {
 		const next: Node<S, M, C>[] = [];
+
 		for (const node of frontier) {
 			const moves = movesFrom(search.world, node);
 			widest = Math.max(widest, moves.length);
+
 			for (const move of moves) {
 				steps++;
 				sent.add(move.msg.type);
 				const taken = take(search, node, move);
-				for (const b of taken.broke)
-					if (!broken.has(b.law)) broken.set(b.law, {...b, path: pathTo(node.key, move.msg)});
+
+				for (const b of taken.broke) {
+					if (!broken.has(b.law)) {
+						broken.set(b.law, {...b, path: pathTo(node.key, move.msg)});
+					}
+				}
+
 				const after = taken.node;
-				if (after === null || from.has(after.key)) continue;
+
+				if (after === null || from.has(after.key)) {
+					continue;
+				}
+
 				from.set(after.key, {before: node.key, msg: move.msg});
 				next.push(after);
+
 				if (from.size >= most) {
 					capped = true;
 					break;
 				}
 			}
-			if (capped) break;
+
+			if (capped) {
+				break;
+			}
 		}
+
 		layers.push(next.length);
 		frontier = next;
 	}

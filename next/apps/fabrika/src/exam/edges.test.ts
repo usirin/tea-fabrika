@@ -96,7 +96,11 @@ describe("edges.ts, as CI runs it", () => {
 			["-c", "user.name=exam", "-c", "user.email=exam@example.com", ...args],
 			{cwd: repo, encoding: "utf8", env: quiet},
 		);
-		if (out.status !== 0) throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+
+		if (out.status !== 0) {
+			throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+		}
+
 		return out.stdout.trim();
 	};
 	const put = (path: string, text: string) => {

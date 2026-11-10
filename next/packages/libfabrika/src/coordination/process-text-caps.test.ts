@@ -82,8 +82,11 @@ const refusedWritingNothing = <A, E>(store: Storage, call: Effect.Effect<A, E>) 
 		const before = store.rows();
 		const answer = yield* Effect.exit(call);
 		expect(Exit.isFailure(answer)).toBe(true);
-		if (Exit.isFailure(answer))
+
+		if (Exit.isFailure(answer)) {
 			expect(JSON.stringify(answer.cause)).toContain('"_tag":"ProcessError"');
+		}
+
 		expect(store.rows()).toEqual(before);
 	});
 
@@ -165,7 +168,8 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 			value: (t) => ({_tag: "started", process: A, name: t, program: "p", hash: "h"}),
 		},
 	];
-	for (const {name, schema, value} of cases)
+
+	for (const {name, schema, value} of cases) {
 		it.prop(
 			`${name}: ${CAP} characters decode, ${CAP + 1} do not`,
 			[acceptedText, overText],
@@ -177,6 +181,8 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 			},
 			schemaOptions,
 		);
+	}
+
 	// A dead letter keeps one error class per try, so its list is capped too: 32 entries at most.
 	const dead = (errors: ReadonlyArray<string>) => ({
 		_tag: "dead",
@@ -227,7 +233,8 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 		},
 		schemaOptions,
 	);
-	for (const key of ["program", "name"] as const)
+
+	for (const key of ["program", "name"] as const) {
 		it(`T319 plant, omit the ${key} cap: a dead letter accepts ${CAP} characters and refuses longer text`, () => {
 			fc.assert(
 				fc.property(
@@ -243,6 +250,7 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 				{seed: 119120},
 			);
 		});
+	}
 });
 
 describe("P33 rule 1, an over-cap text is refused as a typed error and writes nothing", () => {
@@ -336,7 +344,8 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 			raw({_tag: "first", id: "start:long", name: "counter:2", code: {...CODE, hash: over}}),
 		],
 	];
-	for (const [field, original] of starts)
+
+	for (const [field, original] of starts) {
 		it.effect.prop(
 			`a start whose ${field} has ${CAP + 1} characters`,
 			[overText],
@@ -359,6 +368,8 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 			}),
 			options,
 		);
+	}
+
 	it.effect.prop(
 		`a restart whose why has ${CAP + 1} characters`,
 		[overText],
@@ -411,11 +422,17 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
 				// Find the limit by calling the monitor, so raising its cap cannot hide a lost DOWN.
 				let low = 1;
 				let high = 2_100_000;
+
 				while (high - low > 1) {
 					const mid = Math.floor((low + high) / 2);
-					if (yield* accepts(at(mid))) low = mid;
-					else high = mid;
+
+					if (yield* accepts(at(mid))) {
+						low = mid;
+					} else {
+						high = mid;
+					}
 				}
+
 				yield* delivered(at(low), "crashed");
 				yield* examples([[at(CAP), at(CAP, '"')]], (ref: string, why: string) =>
 					Effect.gen(function* () {
@@ -462,10 +479,12 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
 			Effect.gen(function* () {
 				const store = storage();
 				yield* seed(store);
+
 				if (text.length > CAP) {
 					yield* refusedWritingNothing(store, monitor(store, text));
 					return;
 				}
+
 				yield* monitor(store, text);
 				yield* exit(store);
 				expect(downs(yield* fresh(store))).toEqual([

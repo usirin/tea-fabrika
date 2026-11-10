@@ -20,17 +20,29 @@ const OPTS = {numRuns: 300, seed: 119120};
 /** The one statement of a line that parsed. */
 const only = (line: string): Statement => {
 	const parsed = parse(line);
-	if (parsed.kind !== "parsed") throw new Error(`refused at ${parsed.at}: ${parsed.why}`);
+
+	if (parsed.kind !== "parsed") {
+		throw new Error(`refused at ${parsed.at}: ${parsed.why}`);
+	}
+
 	expect(parsed.statements).toHaveLength(1);
 	const [first] = parsed.statements;
-	if (first === undefined) throw new Error("no statement");
+
+	if (first === undefined) {
+		throw new Error("no statement");
+	}
+
 	return first;
 };
 
 /** The said statement of a line, or a failure that names what it was read as. */
 const said = (line: string) => {
 	const st = only(line);
-	if (st.kind !== "said") throw new Error(`read as ${st.kind}, not said`);
+
+	if (st.kind !== "said") {
+		throw new Error(`read as ${st.kind}, not said`);
+	}
+
 	return st;
 };
 
@@ -117,7 +129,11 @@ describe("summon, dismiss and agents are tsh's built-ins", () => {
 	it("reads each as a built-in with plain words, as today's built-ins are", () => {
 		const summon = only("summon fake fake-large high as scout");
 		expect(summon).toMatchObject({kind: "builtin", name: "summon", background: false});
-		if (summon.kind !== "builtin") throw new Error("not a built-in");
+
+		if (summon.kind !== "builtin") {
+			throw new Error("not a built-in");
+		}
+
 		expect(summon.args.map((a) => a.name)).toEqual(["fake", "fake-large", "high", "as", "scout"]);
 		expect(only("dismiss scout")).toMatchObject({kind: "builtin", name: "dismiss"});
 		expect(only("agents")).toMatchObject({kind: "builtin", name: "agents"});

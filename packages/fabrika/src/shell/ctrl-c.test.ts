@@ -64,17 +64,23 @@ const ctrlC = (piled: number) =>
 			Effect.provideService(HostJobs, jobs),
 			Effect.provideService(Programs, programList([listed(win, Layer.empty)])),
 		);
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		yield* tell(started.run, "line", "win");
 		// Open: the line handler now waits on win.
 		yield* printed.upTo(1);
 		const words: Record<string, number> = {};
+
 		for (let i = 0; i < piled; i++) {
 			const word = yield* tell(started.run, "line", "jobs").pipe(
 				Effect.catchTag("MailboxFull", (full) => Effect.succeed(full._tag)),
 			);
 			words[word] = (words[word] ?? 0) + 1;
 		}
+
 		const behind = started.run.mailbox();
 		const signal = yield* tell(started.run, "signal", "interrupt");
 		const [first] = yield* ready.upTo(1);

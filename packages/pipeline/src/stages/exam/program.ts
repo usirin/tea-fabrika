@@ -86,7 +86,11 @@ export const examToTheEnd = (
 			.get(id)
 			.start({type: "start", ask, key: id}, {conflict: "use_existing"});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the exam step stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the exam step stopped in ${end.phase}`);
+		}
+
 		return end;
 	}).pipe(Effect.scoped);
 

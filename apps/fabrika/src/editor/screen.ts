@@ -82,10 +82,15 @@ export const statusRow = (text: string, cols: number): string => {
 	const room = Math.max(1, cols - 1);
 	const safe = shown(text).replaceAll(NEWLINE, " ");
 	let cut = "";
+
 	for (const c of safe) {
-		if (cells(cut + c) > room - 1 && cells(safe) > room) return `${CSI}90m${cut}…${CSI}39m`;
+		if (cells(cut + c) > room - 1 && cells(safe) > room) {
+			return `${CSI}90m${cut}…${CSI}39m`;
+		}
+
 		cut += c;
 	}
+
 	return `${CSI}90m${safe}${CSI}39m`;
 };
 
@@ -103,11 +108,24 @@ export const CLEAR_BELOW = `${CSI}J`;
 export const shown = (text: string): string =>
 	[...text]
 		.map((c) => {
-			if (c === "\n") return NEWLINE;
-			if (c === "\t") return c;
+			if (c === "\n") {
+				return NEWLINE;
+			}
+
+			if (c === "\t") {
+				return c;
+			}
+
 			const code = c.codePointAt(0) ?? 0;
-			if (code < 0x20 || code === 0x7f) return `^${String.fromCharCode(code ^ 0x40)}`;
-			if (code >= 0x80 && code <= 0x9f) return "\u{fffd}";
+
+			if (code < 0x20 || code === 0x7f) {
+				return `^${String.fromCharCode(code ^ 0x40)}`;
+			}
+
+			if (code >= 0x80 && code <= 0x9f) {
+				return "\u{fffd}";
+			}
+
 			return c;
 		})
 		.join("");
@@ -150,13 +168,20 @@ export const columns = (items: readonly string[], cols: number): string => {
 	const across = Math.max(1, Math.floor(cols / width));
 	const down = Math.ceil(items.length / across);
 	const rows: string[] = [];
+
 	for (let r = 0; r < down; r += 1) {
 		const row: string[] = [];
+
 		for (let c = 0; c < across; c += 1) {
 			const item = items[c * down + r];
-			if (item !== undefined) row.push(item + " ".repeat(width - cells(item)));
+
+			if (item !== undefined) {
+				row.push(item + " ".repeat(width - cells(item)));
+			}
 		}
+
 		rows.push(row.join("").trimEnd());
 	}
+
 	return rows.map((row) => `${row}${NEWLINE}`).join("");
 };

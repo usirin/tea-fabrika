@@ -80,7 +80,10 @@ export const sharedHistory = (kept: History) =>
 			save: (next) =>
 				Effect.sync(() => {
 					lines = next;
-					for (const heard of followers) heard(next);
+
+					for (const heard of followers) {
+						heard(next);
+					}
 				}).pipe(Effect.andThen(kept.save(next))),
 			follow: (heard) => {
 				followers.add(heard);

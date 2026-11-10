@@ -114,10 +114,12 @@ const settle = (sock: string, pidFile: string, hosts: ReadonlyArray<ChildProcess
 		});
 		const deadline = Date.now() + SETTLE_MS;
 		let seen = yield* look;
+
 		while (Date.now() < deadline && !(seen.running <= 1 && seen.sock === "live")) {
 			yield* Effect.sleep("50 millis");
 			seen = yield* look;
 		}
+
 		return seen;
 	});
 
@@ -130,7 +132,11 @@ const staleSocket = (home: string, sock: string) =>
 		const scope = yield* Scope.make();
 		const host = yield* hostProcess(home).pipe(Scope.provide(scope));
 		const up = yield* answersWithin(sock, 10_000);
-		if (!up) return yield* Effect.die("the host to crash did not listen");
+
+		if (!up) {
+			return yield* Effect.die("the host to crash did not listen");
+		}
+
 		yield* host.kill({killSignal: "SIGKILL"});
 		yield* host.exitCode.pipe(Effect.ignore);
 		yield* Scope.close(scope, Exit.void);
@@ -141,10 +147,15 @@ const staleSocket = (home: string, sock: string) =>
 const hostsAtOnce = (stale: boolean) =>
 	Effect.gen(function* () {
 		const {home, paths} = yield* freshHome;
+
 		if (stale) {
 			const before = yield* staleSocket(home, paths.sock);
-			if (before !== "stale") return yield* Effect.die(`the crashed host's socket was ${before}`);
+
+			if (before !== "stale") {
+				return yield* Effect.die(`the crashed host's socket was ${before}`);
+			}
 		}
+
 		const hosts = yield* Effect.all(
 			Array.from({length: N}, () => hostProcess(home)),
 			{concurrency: "unbounded"},
@@ -192,7 +203,10 @@ describe("one host per home", () => {
 		expect(seen.map(({started: _, ...rest}) => rest)).toEqual(
 			seen.map(() => ({up: N, ...ONE_HOST})),
 		);
-		for (const round of seen) expect(round.started).toBeGreaterThanOrEqual(1);
+
+		for (const round of seen) {
+			expect(round.started).toBeGreaterThanOrEqual(1);
+		}
 	});
 
 	it("more hosts started while one serves leave its socket, its app and its pid alone", async () => {
@@ -200,8 +214,11 @@ describe("one host per home", () => {
 			Effect.gen(function* () {
 				const {home, paths} = yield* freshHome;
 				const first = yield* hostProcess(home);
-				if (!(yield* answersWithin(paths.sock, 10_000)))
+
+				if (!(yield* answersWithin(paths.sock, 10_000))) {
 					return yield* Effect.die("the first host did not listen");
+				}
+
 				const pid = String(first.pid);
 				const starts: ChildProcessHandle[] = [];
 				const start = Effect.gen(function* () {
@@ -211,6 +228,7 @@ describe("one host per home", () => {
 				});
 				const app = yield* attach({home, deliver: () => {}, start});
 				const after = [];
+
 				for (let i = 0; i < 4; i += 1) {
 					// Three more at once, each round, and each must exit on its own.
 					const more = yield* Effect.all(
@@ -240,6 +258,7 @@ describe("one host per home", () => {
 						pid: (yield* pidIn(paths.pid)) === pid,
 					});
 				}
+
 				return {after, starts: starts.length};
 			}),
 		);

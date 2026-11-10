@@ -104,14 +104,21 @@ export const ticket = defineProgram({
 			let now: number | null = null;
 			const show = (n: number) =>
 				Effect.gen(function* () {
-					if (n === now) return;
+					if (n === now) {
+						return;
+					}
+
 					now = n;
 					shown.add(n);
 					yield* runtime.dispatch({type: "open", ticket: n}).pipe(Effect.orDie);
 					// Down a pipe whose reader has gone, this send fails and the ticket ends.
 					yield* send("ticket", n);
 				});
-			if (flags.ticket !== undefined) yield* show(flags.ticket);
+
+			if (flags.ticket !== undefined) {
+				yield* show(flags.ticket);
+			}
+
 			const write = (w: TicketWrite) =>
 				writeOf(shown, w) === null
 					? Effect.logWarning(`ticket: a write to #${w.ticket}, never shown here, is dropped`)

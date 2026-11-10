@@ -58,11 +58,13 @@ const watch: Plugin = {
 	setup(b) {
 		b.onResolve({filter: /.*/}, (args) => {
 			const rule = FORBIDDEN.find((f) => f.test(args.path));
+
 			if (rule !== undefined) {
 				hits.push({rule: rule.name, spec: args.path, importer: args.importer});
 				// Kept out of the bundle, so one run lists every hit, not only the first.
 				return {path: args.path, external: true};
 			}
+
 			return undefined;
 		});
 	},
@@ -79,9 +81,13 @@ const result = await build({
 	plugins: [watch],
 });
 
-for (const [file, input] of Object.entries(result.metafile.inputs))
-	for (const imported of input.imports)
-		if (!importedBy.has(imported.path)) importedBy.set(imported.path, file);
+for (const [file, input] of Object.entries(result.metafile.inputs)) {
+	for (const imported of input.imports) {
+		if (!importedBy.has(imported.path)) {
+			importedBy.set(imported.path, file);
+		}
+	}
+}
 
 const show = (file: string) => relative(process.cwd(), file) || file;
 
@@ -89,10 +95,12 @@ const chain = (file: string): string[] => {
 	const seen: string[] = [];
 	// The metafile names files from the working directory; esbuild's importer is absolute.
 	let at: string | undefined = relative(process.cwd(), file);
+
 	while (at !== undefined && !seen.includes(at)) {
 		seen.push(at);
 		at = importedBy.get(at);
 	}
+
 	return seen.map(show);
 };
 
@@ -119,7 +127,10 @@ console.log(
 const seenSpecs = new Set<string>();
 
 for (const hit of hits) {
-	if (seenSpecs.has(hit.spec)) continue;
+	if (seenSpecs.has(hit.spec)) {
+		continue;
+	}
+
 	seenSpecs.add(hit.spec);
 	console.log(`  ${hit.spec}  <-  ${chain(hit.importer).join("  <-  ")}`);
 }

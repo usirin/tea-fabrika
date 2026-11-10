@@ -161,6 +161,7 @@ export const turnProgram = defineProgram({
 												})
 												.pipe(Effect.orDie);
 										}
+
 										yield* send("told", {name, turn: news.turn});
 									});
 								case "status":

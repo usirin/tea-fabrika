@@ -136,7 +136,11 @@ const toTheEnd = (
 	Effect.gen(function* () {
 		const runtime = yield* reviews.get(id).start({type: "start", ask, settings});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the run stopped in ${end.phase}`);
+		}
+
 		return end;
 	}).pipe(Effect.scoped);
 
@@ -165,8 +169,14 @@ type Outputs = typeof OUTPUTS;
  * review. Pure.
  */
 export function judgementOf(report: Report, pr: string): Judgement | null {
-	if (report.ticket === null || report.head === null || report.replay) return null;
-	if (report.rows.length === 0) return null;
+	if (report.ticket === null || report.head === null || report.replay) {
+		return null;
+	}
+
+	if (report.rows.length === 0) {
+		return null;
+	}
+
 	const criteria = report.criteria.flatMap((c) =>
 		c.from === "ticket" ? [{id: c.id, version: c.version, text: c.text}] : [],
 	);
@@ -185,7 +195,11 @@ export const keepRows = (report: Report, pr: string) =>
 	Effect.gen(function* () {
 		const judgement = judgementOf(report, pr);
 		const ticket = report.ticket === null ? null : readTicketId(report.ticket);
-		if (judgement === null || ticket === null) return;
+
+		if (judgement === null || ticket === null) {
+			return;
+		}
+
 		yield* (yield* CriteriaRecord).judged(ticket, judgement).pipe(Effect.ignore);
 	});
 
@@ -201,9 +215,16 @@ const reviewed = (
 		const {outcome, report} = yield* toTheEnd(reviews, id, ask, settings);
 		yield* keepRows(report, ask.pr);
 		yield* send("verdict", {pr: ask.pr, outcome, name: nameOf(outcome), ...report});
-		if (outcome.kind !== "done" || report.replay) return;
+
+		if (outcome.kind !== "done" || report.replay) {
+			return;
+		}
+
 		// A pass is always at a head: the machine ends `done` only from a review of one.
-		if (report.head === null) return yield* Effect.die(`${ask.pr} passed at no head`);
+		if (report.head === null) {
+			return yield* Effect.die(`${ask.pr} passed at no head`);
+		}
+
 		yield* send("passed", {pr: ask.pr, head: report.head});
 	});
 

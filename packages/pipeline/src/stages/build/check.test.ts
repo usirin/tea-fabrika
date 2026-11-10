@@ -75,11 +75,12 @@ describe("what the sandbox lets the builder's commands read", () => {
 	});
 
 	it("no folder that would open home or a login file is let in", () => {
-		for (const login of [".ssh", ".config/gh", ".aws", ".netrc"].map((f) => join(home, f)))
+		for (const login of [".ssh", ".config/gh", ".aws", ".netrc"].map((f) => join(home, f))) {
 			for (const open of files.allowRead) {
 				expect(login.startsWith(`${open}/`)).toBe(false);
 				expect(open.startsWith(`${login}/`) || open === login).toBe(false);
 			}
+		}
 	});
 
 	it("a worktree's copy opens the clone's git folder it shares, and nothing above it", () => {

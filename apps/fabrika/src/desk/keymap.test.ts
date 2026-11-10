@@ -17,15 +17,22 @@ const file = (...lines: readonly string[]): string => lines.join("\n");
 /** What the file reads to, on a Mac unless said; a refusal fails the test with its line. */
 const read = (text: string, mac = true): Keys => {
 	const answer = decodeKeys(text, mac);
-	if (Result.isFailure(answer))
+
+	if (Result.isFailure(answer)) {
 		throw new Error(`refused at line ${answer.failure.line}: ${answer.failure.why}`);
+	}
+
 	return answer.success;
 };
 
 /** Why the file is refused, and on which line; a file that reads fails the test. */
 const refused = (text: string, mac = true) => {
 	const answer = decodeKeys(text, mac);
-	if (Result.isSuccess(answer)) throw new Error("the file read; it should have been refused");
+
+	if (Result.isSuccess(answer)) {
+		throw new Error("the file read; it should have been refused");
+	}
+
 	return answer.failure;
 };
 
@@ -76,14 +83,20 @@ describe("the defaults, with no file (p1)", () => {
 
 	it("bind every key today's table binds, after the prefix, one command per name", () => {
 		const words = new Map<string, string>();
+
 		for (const [key, name] of TODAY) {
 			const does = commandOn(defaults, after(key));
 			expect(does, `C-b ${key}`).toBeDefined();
 			// h and the left arrow are one command, as they are one name today.
 			const seen = words.get(name);
-			if (seen !== undefined) expect(does, `C-b ${key}`).toBe(seen);
-			else if (does !== undefined) words.set(name, does);
+
+			if (seen !== undefined) {
+				expect(does, `C-b ${key}`).toBe(seen);
+			} else if (does !== undefined) {
+				words.set(name, does);
+			}
 		}
+
 		expect(new Set(words.values()).size).toBe(new Set(TODAY.map(([, name]) => name)).size);
 	});
 

@@ -34,10 +34,13 @@ const missing = scriptReads(
 	new Map(scripts.map((path) => [path, readFileSync(join(ROOT, path), "utf8")])),
 );
 
-for (const row of missing)
+for (const row of missing) {
 	console.error(`${row.test}: declare ${row.path}?raw, read through ${row.via}`);
+}
 
-if (missing.length) process.exit(1);
+if (missing.length) {
+	process.exit(1);
+}
 
 // A `.gitignore` hides a file from oxlint and oxfmt, and neither can be told to stop without also
 // walking into `node_modules`. Git keeps a tracked file tracked under a new `.gitignore`, so one line
@@ -96,6 +99,10 @@ const where = ({filename, labels}: Diagnostic) => {
 
 const blocks = diagnostics.filter((d) => !ADVICE.has(d.code ?? ""));
 const advises = diagnostics.filter((d) => ADVICE.has(d.code ?? ""));
-for (const d of [...advises, ...blocks]) console.log(`${where(d)} ${d.code ?? ""} ${d.message}`);
+
+for (const d of [...advises, ...blocks]) {
+	console.log(`${where(d)} ${d.code ?? ""} ${d.message}`);
+}
+
 console.log(`oxlint: ${blocks.length} blocking, ${advises.length} advice`);
 process.exit(blocks.length === 0 ? 0 : 1);

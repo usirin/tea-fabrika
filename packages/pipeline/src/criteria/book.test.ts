@@ -48,8 +48,10 @@ describe("a criterion's id", () => {
 			"c2",
 			"c3",
 		]);
-		for (const bad of ["", "c0", "c01", "t1.c2", "3", "C3", "c-1"])
+
+		for (const bad of ["", "c0", "c01", "t1.c2", "3", "C3", "c-1"]) {
 			expect(Schema.decodeUnknownOption(CriterionId)(bad)._tag).toBe("None");
+		}
 	});
 
 	it("is the same on every replay of the same events", () => {
@@ -88,7 +90,11 @@ describe("a criterion's id", () => {
 		const was = states(before);
 		const now = states(after);
 		expect(Object.keys(was)).toHaveLength(10);
-		for (const [id, state] of Object.entries(was)) expect(now[id]).toBe(state);
+
+		for (const [id, state] of Object.entries(was)) {
+			expect(now[id]).toBe(state);
+		}
+
 		expect([now.c11, now.c12, now.c13]).toEqual(["open@v1", "open@v1", "open@v1"]);
 	});
 });

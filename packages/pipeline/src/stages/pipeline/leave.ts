@@ -36,7 +36,11 @@ export const leaveBehind = (number: number, outcome: LaneOutcome | undefined) =>
 			{concurrency: 1},
 		);
 		const left = [...branches.flat(), ...(yield* work.leave(number, {trees: done}))];
-		if (left.length === 0) return;
+
+		if (left.length === 0) {
+			return;
+		}
+
 		yield* tickets
 			.talk(number, `r-left-behind-${number}`, {
 				type: "commented",

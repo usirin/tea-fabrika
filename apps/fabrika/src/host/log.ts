@@ -122,14 +122,22 @@ class StepSpan implements Tracer.Span {
 
 	attribute(key: string, value: unknown): void {
 		this.#span.attribute(key, value);
-		if (key !== TAG.step || this.#began) return;
+
+		if (key !== TAG.step || this.#began) {
+			return;
+		}
+
 		this.#began = true;
 		this.#say("step_began", this.#where());
 	}
 
 	end(endTime: bigint, exit: Parameters<Tracer.Span["end"]>[1]): void {
 		this.#span.end(endTime, exit);
-		if (!this.#began) return;
+
+		if (!this.#began) {
+			return;
+		}
+
 		const outcome = this.#span.attributes.get(TAG.outcome);
 		this.#say("step_ended", {...this.#where(), ...(outcome === undefined ? {} : {outcome})});
 	}

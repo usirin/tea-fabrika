@@ -47,12 +47,14 @@ export const formatAt = (
 	Effect.gen(function* () {
 		const work = yield* LaneWork;
 		const tickets = yield* Tickets;
+
 		if ((yield* work.settings).format === undefined) {
 			yield* tickets
 				.talk(number, "format-none", {type: "commented", body: NO_FORMATTER})
 				.pipe(Effect.ignore);
 			return null;
 		}
+
 		const head = yield* work.head(tree);
 		const files = (yield* Effect.forEach(
 			exam,
@@ -62,7 +64,8 @@ export const formatAt = (
 		const paths = files.map((file) => file.path);
 		yield* work.write(tree, files);
 		const formatted = yield* work.format(tree, paths);
-		if (formatted._tag === "failed")
+
+		if (formatted._tag === "failed") {
 			yield* tickets
 				.talk(number, `format-exam-failed/${head}`, {
 					type: "commented",
@@ -71,6 +74,8 @@ export const formatAt = (
 					),
 				})
 				.pipe(Effect.ignore);
+		}
+
 		const after = yield* work.commitOnly(tree, paths, words.message);
 		return after === head ? null : after;
 	});

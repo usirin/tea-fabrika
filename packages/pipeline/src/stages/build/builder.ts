@@ -80,20 +80,24 @@ const FOLLOW =
 
 /** The prompt's part on the repository's rules. Pure. */
 function rulesPart(brief: BuildBrief, shown: RulesShown): readonly string[] {
-	if (shown === "loaded")
+	if (shown === "loaded") {
 		return [
 			"# The repository's own rules",
 			"",
 			`The repository's rule files for agents (CLAUDE.md and AGENTS.md, and those in subfolders, where the nearest one wins) are loaded for you as you work, the way Claude Code reads them. Where there are none, follow the shape of the code around your change. ${FOLLOW}`,
 			"",
 		];
-	if (brief.rules.length === 0)
+	}
+
+	if (brief.rules.length === 0) {
 		return [
 			"# The repository's own rules",
 			"",
 			"None: the repository keeps no CLAUDE.md or AGENTS.md on its main branch. Follow the shape of the code around your change.",
 			"",
 		];
+	}
+
 	return [
 		"# The repository's own rules",
 		"",
@@ -204,14 +208,21 @@ export const builderOptions = (
 ): Options => {
 	const temp = temps();
 	const own: HookCallback = async (input) => {
-		if (input.hook_event_name !== "PreToolUse") return {};
+		if (input.hook_event_name !== "PreToolUse") {
+			return {};
+		}
+
 		const why = builderRefusal(
 			tree,
 			temp,
 			input.tool_name,
 			(input.tool_input ?? {}) as Record<string, unknown>,
 		);
-		if (why === null) return {};
+
+		if (why === null) {
+			return {};
+		}
+
 		refused(input.tool_name, why);
 		return {
 			hookSpecificOutput: {
@@ -329,20 +340,31 @@ export const draftLive = (
 		const all = yield* Stream.runCollect(msgs.pipe(Stream.takeUntil((msg) => !is.tool(msg)))).pipe(
 			Effect.ensuring(Effect.sync(traced.end)),
 		);
-		for (const msg of all) if (is.tool(msg)) tools.push(msg.tool);
+
+		for (const msg of all) {
+			if (is.tool(msg)) {
+				tools.push(msg.tool);
+			}
+		}
+
 		const end = [...all].at(-1);
-		if (end === undefined || is.tool(end))
+
+		if (end === undefined || is.tool(end)) {
 			return {
 				answer: "broke",
 				error: "the run ended with no result",
 				...ran(noSpend),
 			} satisfies BuildDrafted;
-		if (is.failed(end))
+		}
+
+		if (is.failed(end)) {
 			return (
 				end.error.startsWith(OVER_BUDGET)
 					? {answer: "over_budget", ...ran(end.spend)}
 					: {answer: "broke", error: guard.refused() ?? end.error, ...ran(end.spend)}
 			) satisfies BuildDrafted;
+		}
+
 		return (
 			end.output === null
 				? {answer: "misfit", ...ran(end.spend)}

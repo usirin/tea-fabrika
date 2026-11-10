@@ -246,7 +246,11 @@ export class RunRecord extends Schema.Opaque<RunRecord>()(
 		key: string | null,
 	): {readonly key: string; readonly value: number} | null {
 		const named = key === null ? undefined : run.metrics[key];
-		if (key !== null && named !== undefined) return {key, value: named};
+
+		if (key !== null && named !== undefined) {
+			return {key, value: named};
+		}
+
 		const first = Object.entries(run.metrics)[0];
 		return first === undefined ? null : {key: first[0], value: first[1]};
 	}
@@ -322,7 +326,11 @@ export class Experiment extends Schema.Opaque<Experiment>()(
 	/** The latest run in a few words: `170-1 finished, agreed 0.9`; empty with no run. */
 	static latest(row: Experiment): string {
 		const l = row.latest;
-		if (l === null) return "";
+
+		if (l === null) {
+			return "";
+		}
+
 		const headline = l.headline === null ? "" : `, ${l.headline.key} ${l.headline.value}`;
 		return `${l.label} ${l.status}${headline}`;
 	}
@@ -579,16 +587,31 @@ export type Read =
 /** Read one row. A row in an experiment's inbox must hold a fact, by a user or an agent. */
 export function readRow(row: Row): Read {
 	const experiment = INBOX.exec(row.stream)?.[1];
-	if (experiment === undefined) return {kind: "other"};
+
+	if (experiment === undefined) {
+		return {kind: "other"};
+	}
+
 	const broken = (why: string): Read => ({
 		kind: "broken",
 		why: `row ${row.pos} on ${experiment}: ${why}`,
 	});
 	const by = writerOf(row.writer);
-	if (by === null) return broken(`its writer "${row.writer}" is neither a user nor an agent`);
+
+	if (by === null) {
+		return broken(`its writer "${row.writer}" is neither a user nor an agent`);
+	}
+
 	const fact = Option.getOrNull(decodeFact(row.data));
-	if (fact === null) return broken("its data is not a fact");
-	if (fact.type !== row.kind) return broken(`a ${fact.type} fact kept as ${row.kind}`);
+
+	if (fact === null) {
+		return broken("its data is not a fact");
+	}
+
+	if (fact.type !== row.kind) {
+		return broken(`a ${fact.type} fact kept as ${row.kind}`);
+	}
+
 	return {kind: "entry", entry: {pos: row.pos, experiment, by, at: row.at, fact}};
 }
 
@@ -606,26 +629,49 @@ export interface Folded {
 
 /** Why a run fact does not fit the runs before it, or `null` when it fits. */
 const misfit = (kept: Kept, fact: Fact): string | null => {
-	if (fact.type === "created" || fact.type === "written") return null;
+	if (fact.type === "created" || fact.type === "written") {
+		return null;
+	}
+
 	if (fact.type === "started") {
 		const id = runIdOf(kept.page.n, fact.key);
 		const taken = kept.page.runs.find((r) => r.run === id);
-		if (taken === undefined) return null;
+
+		if (taken === undefined) {
+			return null;
+		}
+
 		// One key always makes one id, so a run with this id and another key is two keys whose
 		// hashes share 12 hex characters: the later start is refused, never merged into the run.
 		return taken.key === fact.key
 			? `run key ${fact.key} started a second time`
 			: `run key ${fact.key} makes the id ${id}, which run key ${taken.key} has`;
 	}
+
 	const run = kept.page.runs.find((r) => r.run === fact.run);
-	if (run === undefined) return `run ${fact.run} ${fact.type}, but it never started`;
-	if (run.status !== "running") return `run ${fact.run} ${fact.type} after it ended`;
-	if (fact.type === "ended") return null;
+
+	if (run === undefined) {
+		return `run ${fact.run} ${fact.type}, but it never started`;
+	}
+
+	if (run.status !== "running") {
+		return `run ${fact.run} ${fact.type} after it ended`;
+	}
+
+	if (fact.type === "ended") {
+		return null;
+	}
+
 	const {what} = fact;
-	if (what.kind === "metric" && what.key in run.metrics)
+
+	if (what.kind === "metric" && what.key in run.metrics) {
 		return `run ${fact.run} logged ${what.key} a second time`;
-	if (what.kind === "case" && kept.cases.some((c) => c.run === fact.run && c.item === what.item))
+	}
+
+	if (what.kind === "case" && kept.cases.some((c) => c.run === fact.run && c.item === what.item)) {
 		return `run ${fact.run} logged case ${what.item} a second time`;
+	}
+
 	return null;
 };
 
@@ -654,13 +700,23 @@ const withRun = (kept: Kept, run: RunId, change: (r: RunRecord) => RunRecord): K
 const step = (kept: Kept | undefined, entry: Entry): Kept | string => {
 	const {fact} = entry;
 	const where = `row ${entry.pos} on ${entry.experiment}`;
-	if (fact.type === "created")
+
+	if (fact.type === "created") {
 		return kept === undefined
 			? {page: {n: entry.experiment, title: fact.title, writeUp: null, runs: []}, cases: []}
 			: `${where}: created a second time`;
-	if (kept === undefined) return `${where}: ${fact.type}, but the experiment was never created`;
+	}
+
+	if (kept === undefined) {
+		return `${where}: ${fact.type}, but the experiment was never created`;
+	}
+
 	const wrong = misfit(kept, fact);
-	if (wrong !== null) return `${where}: ${wrong}`;
+
+	if (wrong !== null) {
+		return `${where}: ${wrong}`;
+	}
+
 	switch (fact.type) {
 		case "written": {
 			// The newest write-up is the one that counts, as a new version of a document does.
@@ -699,6 +755,7 @@ const step = (kept: Kept | undefined, entry: Entry): Kept | string => {
 			}));
 		case "logged": {
 			const {what} = fact;
+
 			switch (what.kind) {
 				case "metric":
 					return withRun(kept, fact.run, (r) => ({
@@ -731,11 +788,17 @@ export const byNumber = (a: string, b: string): number =>
 export function fold(entries: readonly Entry[], from: readonly Kept[] = []): Folded {
 	const kept = new Map(from.map((k) => [k.page.n, k]));
 	const problems: string[] = [];
+
 	for (const entry of entries) {
 		const next = step(kept.get(entry.experiment), entry);
-		if (typeof next === "string") problems.push(next);
-		else kept.set(entry.experiment, next);
+
+		if (typeof next === "string") {
+			problems.push(next);
+		} else {
+			kept.set(entry.experiment, next);
+		}
 	}
+
 	return {
 		experiments: [...kept.values()].sort((a, b) => byNumber(a.page.n, b.page.n)),
 		problems,

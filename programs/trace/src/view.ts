@@ -353,8 +353,14 @@ const at = (doc: unknown, path: string): unknown =>
 /** What changed from `before` to `after`, each op with the value it replaced or removed. */
 export const changesOf = (before: unknown, after: unknown): readonly Change[] =>
 	jsonPatchOf(before as Json, after as Json).map((op): Change => {
-		if (op.op === "add") return {op: "add", path: op.path, after: op.value};
-		if (op.op === "remove") return {op: "remove", path: op.path, before: at(before, op.path)};
+		if (op.op === "add") {
+			return {op: "add", path: op.path, after: op.value};
+		}
+
+		if (op.op === "remove") {
+			return {op: "remove", path: op.path, before: at(before, op.path)};
+		}
+
 		return {op: "replace", path: op.path, before: at(before, op.path), after: op.value};
 	});
 
@@ -383,7 +389,12 @@ const flatten = (root: Node, open: ReadonlySet<string>, zero: number): Row[] => 
 			size: n.children.length,
 			dots: n.events.map((e) => ({name: e.name, at: e.at - zero})),
 		});
-		if (isOpen) for (const c of n.children) walk(c, depth + 1);
+
+		if (isOpen) {
+			for (const c of n.children) {
+				walk(c, depth + 1);
+			}
+		}
 	};
 	walk(root, 0);
 	return out;
@@ -437,6 +448,7 @@ const detailOf = (
 		record === undefined ? null : {run: record.run, status: record.status, flags: record.flags};
 	const job = node.kind === "job" ? trace.job : null;
 	const of = node.of;
+
 	switch (of.kind) {
 		case "span":
 			return spanDetail(node.key, of.span, run, job, zero);
@@ -520,12 +532,18 @@ const pricedOf = (row: StepRow, lane: Lane): typeof Priced.Type =>
 
 /** A lane's state and its words: live, else as its last row was left, else as its last step ended. */
 const laneState = (lane: Lane): {readonly state: State; readonly outcome: string} => {
-	if (lane.open)
+	if (lane.open) {
 		return lane.rows.some((r) => r.kind === "wait" && r.pick === null)
 			? {state: "waiting", outcome: "waiting on a person"}
 			: {state: "running", outcome: "running"};
+	}
+
 	const left = lane.rows.at(-1);
-	if (left?.kind === "wait" && left.pick === null) return {state: "cut", outcome: "never answered"};
+
+	if (left?.kind === "wait" && left.pick === null) {
+		return {state: "cut", outcome: "never answered"};
+	}
+
 	const last = lane.rows.findLast((r): r is StepRow => r.kind === "step");
 	return last === undefined ? {state: "done", outcome: "done"} : stepShown(last, lane);
 };
@@ -548,15 +566,22 @@ const spanRowsOf = (
 	// The top spans: no parent, or a parent that is not under the step.
 	const top: Span[] = [];
 	const byParent = new Map<string, Span[]>();
+
 	for (const s of under) {
 		if (s.parent === null || !ids.has(s.parent)) {
 			top.push(s);
 			continue;
 		}
+
 		const list = byParent.get(s.parent);
-		if (list === undefined) byParent.set(s.parent, [s]);
-		else list.push(s);
+
+		if (list === undefined) {
+			byParent.set(s.parent, [s]);
+		} else {
+			list.push(s);
+		}
 	}
+
 	const out: TicketRow[] = [];
 	const spanRow = (s: Span, d: number) => {
 		const kids = byParent.get(s.span) ?? [];
@@ -574,21 +599,35 @@ const spanRowsOf = (
 			opens: kids.length > 0,
 			open: isOpen,
 		});
-		if (isOpen) level(kids, d + 1, s.span);
+
+		if (isOpen) {
+			level(kids, d + 1, s.span);
+		}
 	};
 	const level = (spans: readonly Span[], d: number, parent: string | null) => {
 		const calls = spans.filter(isCall);
-		for (const s of spans) if (!isCall(s) || parent === null) spanRow(s, d);
-		if (parent === null || calls.length === 0) return;
+
+		for (const s of spans) {
+			if (!isCall(s) || parent === null) {
+				spanRow(s, d);
+			}
+		}
+
+		if (parent === null || calls.length === 0) {
+			return;
+		}
+
 		const key = `calls:${parent}`;
 		const isOpen = open.has(key);
 		// A loop, not `Math.min(...)`: a spread puts every call on the stack.
 		let first = Infinity;
 		let last = -Infinity;
+
 		for (const c of calls) {
 			first = Math.min(first, c.start);
 			last = Math.max(last, c.end);
 		}
+
 		out.push({
 			kind: "calls",
 			key,
@@ -598,7 +637,12 @@ const spanRowsOf = (
 			to: last - zero,
 			open: isOpen,
 		});
-		if (isOpen) for (const c of calls) spanRow(c, d + 1);
+
+		if (isOpen) {
+			for (const c of calls) {
+				spanRow(c, d + 1);
+			}
+		}
 	};
 	// The top spans hang off the step's own span: their calls fold under it.
 	level(top, depth, top[0]?.parent ?? null);
@@ -635,7 +679,8 @@ const lanesShown = (
 		const zero = lane.from;
 		const before = lanes[i - 1];
 		const rows: TicketRow[] = [];
-		if (isOpen)
+
+		if (isOpen) {
 			for (const row of lane.rows) {
 				if (row.kind === "wait") {
 					rows.push({
@@ -650,6 +695,7 @@ const lanesShown = (
 					});
 					continue;
 				}
+
 				const under = record === null ? [] : childrenOf(record, row.run, row.from, row.to);
 				const stepKey = `run:${row.run}`;
 				const stepOpen = under.length > 0 && open.has(stepKey);
@@ -670,8 +716,13 @@ const lanesShown = (
 					opens: under.length > 0,
 					open: stepOpen,
 				});
-				if (stepOpen) rows.push(...spanRowsOf(under, open, zero, 2));
+
+				if (stepOpen) {
+					rows.push(...spanRowsOf(under, open, zero, 2));
+				}
 			}
+		}
+
 		return {
 			key,
 			trace: lane.trace,
@@ -710,9 +761,10 @@ const ticketDetail = (
 ): Detail | null => {
 	const [kind, ...rest] = chosen.split(":");
 	const id = rest.join(":");
-	for (const lane of lanes)
+
+	for (const lane of lanes) {
 		for (const row of lane.rows) {
-			if (kind === "run" && row.kind === "step" && row.run === id)
+			if (kind === "run" && row.kind === "step" && row.run === id) {
 				return {
 					kind: "run",
 					key: chosen,
@@ -729,7 +781,9 @@ const ticketDetail = (
 							: {input: row.ended.input, cached: row.ended.cached ?? 0, output: row.ended.output},
 					priced: pricedOf(row, lane),
 				};
-			if (kind === "ask" && row.kind === "wait" && row.ask === id)
+			}
+
+			if (kind === "ask" && row.kind === "wait" && row.ask === id) {
 				return {
 					kind: "ask",
 					key: chosen,
@@ -741,20 +795,39 @@ const ticketDetail = (
 					by: row.by,
 					state: waitState(row, lane),
 				};
+			}
 		}
-	if (kind !== "span") return null;
+	}
+
+	if (kind !== "span") {
+		return null;
+	}
+
 	for (const lane of lanes) {
 		const read = recordOf(shows, lane.trace);
-		if (read?.at !== "read") continue;
+
+		if (read?.at !== "read") {
+			continue;
+		}
+
 		const span = read.trace.spans.find((sp) => sp.span === id);
-		if (span !== undefined) return spanDetail(chosen, span, null, null, lane.from);
+
+		if (span !== undefined) {
+			return spanDetail(chosen, span, null, null, lane.from);
+		}
 	}
+
 	return null;
 };
 
 /** The ticket's title, as it was filed. */
 const titleOf = (timeline: readonly Entry[], number: number): string => {
-	for (const e of timeline) if (e.fact.type === "filed") return e.fact.title;
+	for (const e of timeline) {
+		if (e.fact.type === "filed") {
+			return e.fact.title;
+		}
+	}
+
 	return `ticket ${number}`;
 };
 
@@ -765,8 +838,15 @@ const ticketShownOf = (
 ): Shown => {
 	const {facts} = shows;
 	const base = {...waiting, shows: "ticket", id: null, title: `ticket ${facts.number}`} as const;
-	if (facts.at === "reading") return {...base, read: "reading"};
-	if (facts.at === "unread") return {...base, read: "unread", why: facts.why};
+
+	if (facts.at === "reading") {
+		return {...base, read: "reading"};
+	}
+
+	if (facts.at === "unread") {
+		return {...base, read: "unread", why: facts.why};
+	}
+
 	const {timeline} = facts;
 	// Live, an open row runs to the latest tick, or to the newest fact before the first tick.
 	const newest = timeline.at(-1)?.at ?? 0;
@@ -795,8 +875,12 @@ const ticketShownOf = (
 
 /** What the window is shown, from the machine's state alone. */
 export const shownOf = (s: Model): Shown => {
-	if (s.shows.kind === "ticket") return ticketShownOf(s, s.shows);
+	if (s.shows.kind === "ticket") {
+		return ticketShownOf(s, s.shows);
+	}
+
 	const read = s.shows.read;
+
 	switch (read.at) {
 		case "waiting":
 			return {read: "waiting", id: null, ...waiting};

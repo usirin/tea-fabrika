@@ -33,7 +33,10 @@ const seed = (ledger: Ledger["Service"]) =>
 			data: {type: "filed", title: SEVEN_TITLE, body: SEVEN_BODY},
 		});
 		const tickets = yield* Tickets;
-		for (const e of SEVEN.slice(1)) yield* tickets.write(7, `w/${e.pos}`, e.fact as CodeFact);
+
+		for (const e of SEVEN.slice(1)) {
+			yield* tickets.write(7, `w/${e.pos}`, e.fact as CodeFact);
+		}
 	}).pipe(Effect.provide(ticketsOnLedger(LANE)), Effect.provide(Layer.succeed(Ledger, ledger)));
 
 /** A ticket filed by the owner with nothing after it. */
@@ -57,7 +60,11 @@ const session = (ledger: Ledger["Service"], flags: {readonly ticket?: number} = 
 			{ticket: (n) => sent.push(n)},
 			{id: "ticket:test", storage: memoryStorage()},
 		);
-		if (started.kind !== "running") return yield* Effect.die("the ticket program did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("the ticket program did not start");
+		}
+
 		const {run} = started;
 		const say = <K extends keyof Inputs & string>(
 			input: K,

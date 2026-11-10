@@ -203,14 +203,21 @@ class Change {
 
 	/** Adds a key, unless it is already there: a key's rank and place never change. */
 	add(key: string, rank: Rank, under: string | null): this {
-		if (!this.keys.has(key)) this.keys.set(key, {rank, live: true, under});
+		if (!this.keys.has(key)) {
+			this.keys.set(key, {rank, live: true, under});
+		}
+
 		return this;
 	}
 
 	/** Stops a key forever. */
 	stop(key: string): this {
 		const known = this.keys.get(key);
-		if (known !== undefined) this.keys.set(key, {...known, live: false});
+
+		if (known !== undefined) {
+			this.keys.set(key, {...known, live: false});
+		}
+
 		return this;
 	}
 
@@ -229,18 +236,38 @@ const refuse = (why: Why): Result.Result<Folded, Why> => Result.fail(why);
 const standing = (folded: Folded, signer: string, person: string): Result.Result<Rank, Why> => {
 	const {members, replaced} = folded;
 	const known = members.keys.get(signer);
-	if (person !== members.person || known === undefined) return Result.fail("not_member");
-	if (members.spent.has(signer)) return Result.fail("used");
-	if (replaced.has(signer)) return Result.fail("replaced");
-	if (!known.live) return Result.fail("revoked");
+
+	if (person !== members.person || known === undefined) {
+		return Result.fail("not_member");
+	}
+
+	if (members.spent.has(signer)) {
+		return Result.fail("used");
+	}
+
+	if (replaced.has(signer)) {
+		return Result.fail("replaced");
+	}
+
+	if (!known.live) {
+		return Result.fail("revoked");
+	}
+
 	return Result.succeed(known.rank);
 };
 
 /** Whether a key may join as `rank`: new, or already there, live and of that rank. */
 const joins = (folded: Folded, key: string, rank: Rank): Result.Result<void, Why> => {
 	const known = folded.members.keys.get(key);
-	if (known === undefined) return Result.succeed(undefined);
-	if (!known.live) return Result.fail("revoked");
+
+	if (known === undefined) {
+		return Result.succeed(undefined);
+	}
+
+	if (!known.live) {
+		return Result.fail("revoked");
+	}
+
 	return known.rank === rank ? Result.succeed(undefined) : Result.fail("not_allowed");
 };
 
@@ -250,40 +277,71 @@ const joins = (folded: Folded, key: string, rank: Rank): Result.Result<void, Why
  */
 export const allows = (folded: Folded, fact: MemberFact): Result.Result<Folded, Why> => {
 	const id = factId(fact);
+
 	// The same fact again changes nothing, wherever it comes.
-	if (folded.ids.has(id)) return Result.succeed(folded);
+	if (folded.ids.has(id)) {
+		return Result.succeed(folded);
+	}
+
 	const founded = folded.members.person !== "";
 	return MemberFact.match(fact, {
 		founded: ({id: person, name, keys, window}) => {
-			if (founded) return refuse("not_allowed");
+			if (founded) {
+				return refuse("not_allowed");
+			}
+
 			const change = new Change(folded);
-			for (const key of keys) change.add(key, "person", null);
+
+			for (const key of keys) {
+				change.add(key, "person", null);
+			}
+
 			const [first] = keys;
-			if (window !== null && first !== undefined) change.add(window, "window", first);
+
+			if (window !== null && first !== undefined) {
+				change.add(window, "window", first);
+			}
+
 			return Result.succeed(change.done(id, {...folded.members, person, name}));
 		},
 		denied: () => (founded ? Result.succeed(new Change(folded).done(id)) : refuse("not_member")),
 		granted: ({grant, signed}) =>
 			Result.flatMap(standing(folded, signed.signer, grant.for), (rank) => {
-				if (rank !== "person") return refuse("not_allowed");
+				if (rank !== "person") {
+					return refuse("not_allowed");
+				}
+
 				return Result.map(joins(folded, grant.key, grant.as), () =>
 					new Change(folded).add(grant.key, grant.as, signed.signer).done(id),
 				);
 			}),
 		revoked: ({revoke, signed}) =>
 			Result.flatMap(standing(folded, signed.signer, revoke.for), (rank) => {
-				if (rank !== "person" || revoke.key === signed.signer) return refuse("not_allowed");
+				if (rank !== "person" || revoke.key === signed.signer) {
+					return refuse("not_allowed");
+				}
+
 				const known = folded.members.keys.get(revoke.key);
-				if (known === undefined) return refuse("not_member");
-				if (!known.live) return refuse("revoked");
+
+				if (known === undefined) {
+					return refuse("not_member");
+				}
+
+				if (!known.live) {
+					return refuse("revoked");
+				}
+
 				return Result.succeed(new Change(folded).stop(revoke.key).done(id));
 			}),
 		added: ({add, signed}) =>
 			Result.flatMap(standing(folded, signed.signer, add.for), (rank) => {
 				const signer = signed.signer;
 				const bySheet = rank === "recovery";
-				if (rank !== "person" && !(bySheet && add.adds._tag === "person"))
+
+				if (rank !== "person" && !(bySheet && add.adds._tag === "person")) {
 					return refuse("not_allowed");
+				}
+
 				const joined = Adds.match(add.adds, {
 					person: ({key, window}) =>
 						Result.map(joins(folded, key, "person"), () =>
@@ -292,23 +350,32 @@ export const allows = (folded: Folded, fact: MemberFact): Result.Result<Folded, 
 					recovery: ({key}) =>
 						Result.map(joins(folded, key, "recovery"), () => {
 							const change = new Change(folded).add(key, "recovery", null);
+
 							// One live sheet: a new one ends every other, whatever `drops` says (flag 7).
 							for (const [other, k] of folded.members.keys) {
 								const live = k.live && !folded.members.spent.has(other);
+
 								if (k.rank === "recovery" && other !== key && live) {
 									change.stop(other);
 									change.replaced.add(other);
 								}
 							}
+
 							return change;
 						}),
 				});
 				return Result.map(joined, (change) => {
-					for (const key of add.drops) if (key !== signer) change.stop(key);
+					for (const key of add.drops) {
+						if (key !== signer) {
+							change.stop(key);
+						}
+					}
+
 					if (bySheet) {
 						change.stop(signer);
 						change.spent.add(signer);
 					}
+
 					return change.done(id);
 				});
 			}),
@@ -323,12 +390,18 @@ export const foldMembers = (facts: ReadonlyArray<MemberFact>): Members =>
 /** Every key above `key` live, walking `under` to a root. A loop counts as not live. */
 const chainLive = (members: Members, key: string): boolean => {
 	const passed = new Set<string>();
+
 	for (let at = members.keys.get(key)?.under ?? null; at !== null;) {
 		const above = members.keys.get(at);
-		if (above === undefined || !above.live || passed.has(at)) return false;
+
+		if (above === undefined || !above.live || passed.has(at)) {
+			return false;
+		}
+
 		passed.add(at);
 		at = above.under;
 	}
+
 	return true;
 };
 
@@ -341,7 +414,14 @@ export const admitted = (
 	| {readonly key: string; readonly person: string; readonly as: "window" | "agent"}
 	| {readonly why: "not_granted"} => {
 	const known = members.keys.get(key);
-	if (known === undefined || !known.live || !chainLive(members, key)) return {why: "not_granted"};
-	if (known.rank !== "window" && known.rank !== "agent") return {why: "not_granted"};
+
+	if (known === undefined || !known.live || !chainLive(members, key)) {
+		return {why: "not_granted"};
+	}
+
+	if (known.rank !== "window" && known.rank !== "agent") {
+		return {why: "not_granted"};
+	}
+
 	return {key, person: members.person, as: known.rank};
 };

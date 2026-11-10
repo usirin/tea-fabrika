@@ -26,7 +26,11 @@ type Inputs = (typeof trace)["inputs"];
 /** The key of the row named `name` in a record's tree. */
 const keyOf = (record: JobTrace, name: string): string => {
 	const found = nodesOf(treeOf(record)).find((n) => n.name === name);
-	if (found === undefined) throw new Error(`no row ${name}`);
+
+	if (found === undefined) {
+		throw new Error(`no row ${name}`);
+	}
+
 	return found.key;
 };
 
@@ -42,7 +46,11 @@ const session = (
 			{},
 			{id: "trace:test", storage: memoryStorage()},
 		);
-		if (started.kind !== "running") return yield* Effect.die("the trace program did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("the trace program did not start");
+		}
+
 		const {run} = started;
 		const say = <K extends keyof Inputs & string>(
 			input: K,
@@ -267,7 +275,11 @@ describe("the trace program", () => {
 			chosen: tally,
 		}).chosen;
 		expect(chosen?.kind).toBe("span");
-		if (chosen?.kind !== "span") return;
+
+		if (chosen?.kind !== "span") {
+			return;
+		}
+
 		expect([chosen.service, chosen.at, chosen.took, chosen.status]).toEqual(["tally", 1, 12, "ok"]);
 		expect(chosen.tags).toContainEqual(["tea.run.id", "tally-5d02c7a1"]);
 		expect(chosen.events.map((e) => e.name)).toEqual([

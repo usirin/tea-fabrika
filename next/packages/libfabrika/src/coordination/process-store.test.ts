@@ -38,7 +38,12 @@ const folder = mkdtempSync(join(tmpdir(), "p11-store-"));
 const opened: DatabaseSync[] = [];
 
 afterAll(() => {
-	for (const db of opened) if (db.isOpen) db.close();
+	for (const db of opened) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -55,7 +60,11 @@ const database = () => {
 		transaction: (f) =>
 			backend.transaction(() => {
 				const answer = f();
-				if (fail) throw new Error("SQLITE_FULL at commit");
+
+				if (fail) {
+					throw new Error("SQLITE_FULL at commit");
+				}
+
 				return answer;
 			}),
 		size: () => backend.size(),
@@ -307,13 +316,15 @@ describe("P11 process storage", () => {
 						build: "build-b",
 					}),
 				).toMatchObject({ran});
+
 				for (const raw of [
 					{_tag: "granted"},
 					{_tag: "started"},
 					{_tag: "stepped", input, pos: -pos - 1, build: "build-a"},
 					{_tag: "stepped", input, pos: -1, build: "build-a"},
-				])
+				]) {
 					expect(() => decode(raw)).toThrow();
+				}
 			}
 		},
 		{arbitrary: {seed: 119120, runs: 100, size: 12}},

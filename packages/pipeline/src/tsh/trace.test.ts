@@ -64,7 +64,11 @@ const session = (list: ProgramList, storage: Storage) =>
 			Effect.provideService(HostJobs, jobs),
 			Effect.provideService(Shorten, refOf),
 		);
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		const line = (text: string) =>
 			Effect.gen(function* () {
@@ -79,8 +83,9 @@ const session = (list: ProgramList, storage: Storage) =>
 			});
 		const heard = (text: string) =>
 			Effect.gen(function* () {
-				while (!printed.values.some((p) => p.text.includes(text)))
+				while (!printed.values.some((p) => p.text.includes(text))) {
 					yield* Effect.sleep(Duration.millis(5));
+				}
 			});
 		return {started, line, heard};
 	});
@@ -207,7 +212,11 @@ describe("tracing: the user's job", () => {
 		const roots = spans.filter((s) => s.attributes["tsh.line"] !== undefined);
 		expect(roots).toHaveLength(1);
 		const [root] = roots;
-		if (root === undefined) throw new Error("no line span");
+
+		if (root === undefined) {
+			throw new Error("no line span");
+		}
+
 		expect(root.attributes["tsh.line"]).toBe(text);
 		expect(root.parentSpanContext).toBeUndefined();
 		const trace = root.spanContext().traceId;
@@ -224,7 +233,11 @@ describe("tracing: the user's job", () => {
 		]);
 		const review = runsUnder.find((s) => serviceOf(s) === "review-scripted");
 		const ship = runsUnder.find((s) => serviceOf(s) === "ship");
-		if (review === undefined || ship === undefined) throw new Error("no run spans");
+
+		if (review === undefined || ship === undefined) {
+			throw new Error("no run spans");
+		}
+
 		expect(review.attributes["tea.run.id"]).toMatch(/^review-scripted:/);
 		expect(review.links.map((l) => [l.context.spanId, l.attributes?.["tea.pipe.output"]])).toEqual([
 			[idOf(ship), "passed"],
@@ -243,13 +256,19 @@ describe("tracing: the user's job", () => {
 		// tags: the pull request, the commit, how it ended. Beside them, the queue they are worked off.
 		const reviewed = childrenOf(inLine, review).filter((s) => s.name !== "queue");
 		expect(reviewed.map(prOf).toSorted()).toEqual(["1", "2", "3"]);
+
 		for (const machine of reviewed) {
 			expect(names(machine)[0]).toBe("msg start");
 			expect(machine.attributes["tea.pr"]).toBe(url(Number(prOf(machine))));
 			expect(machine.attributes["tea.outcome"]).toBeTypeOf("string");
 		}
+
 		const draft = reviewed.find((s) => prOf(s) === "2");
-		if (draft === undefined) throw new Error("no draft's span");
+
+		if (draft === undefined) {
+			throw new Error("no draft's span");
+		}
+
 		expect(draft.attributes["tea.outcome"]).toBe("skip:draft");
 		expect(red(draft)).toBe(false);
 
@@ -258,7 +277,11 @@ describe("tracing: the user's job", () => {
 		const shipped = childrenOf(inLine, ship);
 		expect(shipped.map(prOf).toSorted()).toEqual(["1", "3"]);
 		const [going, stuck] = ["1", "3"].map((n) => shipped.find((s) => prOf(s) === n));
-		if (going === undefined || stuck === undefined) throw new Error("no ship spans");
+
+		if (going === undefined || stuck === undefined) {
+			throw new Error("no ship spans");
+		}
+
 		expect(names(going)).toContain("would add to merge queue");
 		expect(going.status.code).not.toBe(SpanStatusCode.ERROR);
 		expect(stuck.status).toEqual({code: SpanStatusCode.ERROR, message: "stuck:checks_stuck"});
@@ -338,7 +361,11 @@ describe("tracing: a kept job", () => {
 		// The trace is the run's, by its id: the same in both tsh, though nothing else is shared.
 		const [started] = typed(first.spans, "tally &");
 		const [attached] = typed(second.spans, `attach ${run} &`);
-		if (started === undefined || attached === undefined) throw new Error("no line spans");
+
+		if (started === undefined || attached === undefined) {
+			throw new Error("no line spans");
+		}
+
 		expect([started.name, attached.name]).toEqual(["tally", "attach tally"]);
 		expect(traceOf([started, attached])).toEqual([runTraceId(run), runTraceId(run)]);
 		expect(traceOf(named(first.spans, "run"))).toEqual([runTraceId(run)]);

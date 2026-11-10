@@ -70,15 +70,26 @@ export function fileProblems(
 	const taken = new Set(brief.taken.filter((path) => rewrite?.has(path) !== true));
 	const seen = new Set<string>();
 	return files.flatMap((f) => {
-		if (outside(f.path)) return [`\`${f.path}\` is not a plain path inside the repository.`];
-		if (seen.has(f.path)) return [`\`${f.path}\` is written twice. Hand each file back once.`];
+		if (outside(f.path)) {
+			return [`\`${f.path}\` is not a plain path inside the repository.`];
+		}
+
+		if (seen.has(f.path)) {
+			return [`\`${f.path}\` is written twice. Hand each file back once.`];
+		}
+
 		seen.add(f.path);
-		if (taken.has(f.path))
+
+		if (taken.has(f.path)) {
 			return [`\`${f.path}\` exists already. Never change a file that exists: add a new one.`];
-		if (!included(f.path))
+		}
+
+		if (!included(f.path)) {
 			return [
 				`\`${f.path}\` is outside what you may write. A new file must match one of: ${brief.includes.join(", ")}.`,
 			];
+		}
+
 		return [];
 	});
 }
@@ -89,14 +100,24 @@ function answerProblems(written: Written, brief: WriterBrief): readonly string[]
 	const count = new Map<string, number>();
 	const each = written.answers.flatMap((a) => {
 		count.set(a.property, (count.get(a.property) ?? 0) + 1);
-		if (!asked.has(a.property)) return [`${a.property} is not a Property of this plan.`];
-		if (a.kind === "test" && !paths.has(a.file))
+
+		if (!asked.has(a.property)) {
+			return [`${a.property} is not a Property of this plan.`];
+		}
+
+		if (a.kind === "test" && !paths.has(a.file)) {
 			return [`${a.property}'s test is in \`${a.file}\`, which is not among the files you wrote.`];
+		}
+
 		return [];
 	});
 	const once = brief.properties.flatMap((p) => {
 		const n = count.get(p.id) ?? 0;
-		if (n === 0) return [`${p.id} has no answer. Write its test, or say why none can check it.`];
+
+		if (n === 0) {
+			return [`${p.id} has no answer. Write its test, or say why none can check it.`];
+		}
+
 		return n > 1 ? [`${p.id} has ${n} answers. Give it one.`] : [];
 	});
 	return [...each, ...once];

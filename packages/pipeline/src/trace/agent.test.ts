@@ -42,7 +42,11 @@ const traced = async (raw: boolean) => {
 	await Effect.runPromise(
 		Effect.gen(function* () {
 			const trace = yield* agentTrace("reviewer");
-			if (trace === null) return yield* Effect.die("no agent trace with tracing on");
+
+			if (trace === null) {
+				return yield* Effect.die("no agent trace with tracing on");
+			}
+
 			const agent = defineAgent({model: scripted(), tools: [lookUp], instructions: "Answer."});
 			yield* Effect.tryPromise({
 				try: () => agent.run("a secret question", {onEvent: trace.onEvent}),
@@ -67,15 +71,21 @@ describe("the agent bridge", () => {
 		const [agent] = byName("invoke_agent reviewer");
 		const chats = byName("chat");
 		const [tool] = byName("execute_tool look_up");
-		if (sub === undefined || machine === undefined || agent === undefined || tool === undefined)
+
+		if (sub === undefined || machine === undefined || agent === undefined || tool === undefined) {
 			throw new Error(`missing spans: ${spans.map((s) => s.name).join(", ")}`);
+		}
 
 		// One trace, and the tree: machine > sub > agent > (chat, tool, chat).
 		expect(new Set(spans.map((s) => s.spanContext().traceId)).size).toBe(1);
 		expect(parentOf(sub)).toBe(machine.spanContext().spanId);
 		expect(parentOf(agent)).toBe(sub.spanContext().spanId);
 		expect(chats).toHaveLength(2);
-		for (const child of [...chats, tool]) expect(parentOf(child)).toBe(agent.spanContext().spanId);
+
+		for (const child of [...chats, tool]) {
+			expect(parentOf(child)).toBe(agent.spanContext().spanId);
+		}
+
 		expect(tool.attributes["gen_ai.tool.name"]).toBe("look_up");
 
 		// Nothing the agent read or wrote is exported: the masks replace it.
@@ -89,7 +99,11 @@ describe("the agent bridge", () => {
 		const spans = await traced(false);
 		expect(spans.map((s) => s.name)).toEqual(["sub review_run · 2 turns", "machine review"]);
 		const [sub, machine] = spans;
-		if (sub === undefined || machine === undefined) throw new Error("missing spans");
+
+		if (sub === undefined || machine === undefined) {
+			throw new Error("missing spans");
+		}
+
 		expect(parentOf(sub)).toBe(machine.spanContext().spanId);
 		// Each turn and each tool call is an event on it, in the order they started.
 		expect(sub.events.map((e) => e.name)).toEqual(["turn 1", "look_up", "turn 2"]);

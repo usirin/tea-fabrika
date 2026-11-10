@@ -30,16 +30,20 @@ const INJECTED = "T237-injected-command";
 const made: string[] = [];
 
 afterEach(() => {
-	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});
+	for (const folder of made.splice(0)) {
+		rmSync(folder, {recursive: true, force: true});
+	}
 });
 
 const fixture = () => {
 	const folder = realpathSync(mkdtempSync(join(tmpdir(), "harness-write-")));
 	made.push(folder);
+
 	for (const path of [...REFUSED, "src/change.ts"]) {
 		mkdirSync(dirname(join(folder, path)), {recursive: true});
 		writeFileSync(join(folder, path), ORIGINAL);
 	}
+
 	const h = harnessOf("claude", folder, null);
 	const options = (h.meta as {claudeCode: {options: Options}}).claudeCode.options;
 	return {folder, options};
@@ -49,10 +53,15 @@ const fixture = () => {
 const covers = (folder: string, pattern: string, path: string) => {
 	const glob = pattern.startsWith("//") ? pattern.slice(1) : pattern.replace(/^\.\//, "");
 	let name = resolve(folder, path);
+
 	while (name !== folder) {
-		if (matchesGlob(isAbsolute(glob) ? name : relative(folder, name), glob)) return true;
+		if (matchesGlob(isAbsolute(glob) ? name : relative(folder, name), glob)) {
+			return true;
+		}
+
 		name = dirname(name);
 	}
+
 	return false;
 };
 
