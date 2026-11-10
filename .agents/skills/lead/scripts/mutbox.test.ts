@@ -639,6 +639,34 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(install.summary).toMatchObject({ outcome: "stuck", reason: "install_failed" });
   });
 
+  // Plants: call any untested sample a skip; call a mix, an empty report or a capped run static.
+  it("scenario: a sample of only static mutants, which ignoreStatic leaves Ignored, is a skip", () => {
+    const sample = JSON.stringify({ seed: 119120, ranges: ["src/a.ts:1:0-1:4"], total: 2, selected: 2, left: 0 });
+    const ran = (statuses: string[], exit = 0) => {
+      const report = JSON.stringify({
+        files: { "src/a.ts": { mutants: statuses.map((status, n) => mutant(status, n + 1)) } },
+      });
+      return run({
+        run: `mkdir -p "$OUT/b"\necho ${exit} > "$OUT/b/exit"\necho '${sample}' > "$OUT/b/sample.json"\necho '${report}' > "$OUT/b/report.json"\nexit ${exit}\n`,
+      });
+    };
+
+    const fixed = ran(["Ignored", "Ignored"]);
+    expect(fixed.code, fixed.text).toBe(40);
+    expect(fixed.summary).toMatchObject({ outcome: "skip", reason: "static_only" });
+    expect(fixed.summary.detail).toContain("Ignored 2");
+
+    for (const statuses of [["Ignored", "NoCoverage"], []]) {
+      const mixed = ran(statuses);
+      expect(mixed.code, mixed.text).toBe(30);
+      expect(mixed.summary).toMatchObject({ outcome: "stuck", reason: "no_tested_mutant" });
+    }
+
+    const capped = ran(["Ignored"], 124);
+    expect(capped.code, capped.text).not.toBe(40);
+    expect(capped.summary.reason).not.toBe("static_only");
+  });
+
   // Plant: drop the events fallback, so a capped run reports nothing.
   it("when the five minutes ran out, what Stryker kept in its events is the report", () => {
     const tested = (n: number, status: string) => JSON.stringify({ ...mutant(status, n), fileName: "/repo/src/a.ts" });
