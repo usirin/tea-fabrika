@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index b81bf353943b40291ef6810324da31fb49234092..e52a3fef6f4ef34a549813afeb743273ea34b448 100755
+index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af9682ac527aa 100755
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -728,6 +728,35 @@ function inRepoFile(realRoot, resolved) {
@@ -53,7 +53,19 @@ index b81bf353943b40291ef6810324da31fb49234092..e52a3fef6f4ef34a549813afeb743273
    };
  }
  
-@@ -6501,7 +6536,15 @@ function discoverInFile2(unit) {
+@@ -2124,7 +2159,10 @@ var LayerSchema = z9.object({
+   name: z9.string().min(1),
+   paths: z9.array(z9.string().min(1)).min(1),
+   // Absent: anything below may be imported. Present: only these, so `[]` leaves only the layer itself.
+-  imports: z9.array(z9.string().min(1)).optional()
++  imports: z9.array(z9.string().min(1)).optional(),
++  // Patched (kamp-us/demlik#913, https://github.com/kamp-us/demlik/issues/913): an optional floor.
++  // Rows on one floor share a rank, and an import between two such rows is a break.
++  floor: z9.number().int().optional()
+ }).strict();
+ function importsIssue(layers) {
+   const ranks = new Map(layers.map((layer, rank) => [layer.name, rank]));
+@@ -6501,7 +6539,15 @@ function discoverInFile2(unit) {
    const { syntax, file } = unit;
    const found = syntax.program.body.flatMap((statement) => declaredIn(syntax, statement));
    if (found.length === 0) return [];
@@ -70,3 +82,40 @@ index b81bf353943b40291ef6810324da31fb49234092..e52a3fef6f4ef34a549813afeb743273
    const locals = localExportNames(syntax);
    const isTest = isTestFile(file);
    return withOrdinals(file, found).map(({ found: f, id, joinKey: joinKey2 }) => ({
+@@ -11035,7 +11081,9 @@ function compile(layer, pattern) {
+ }
+ function compileMatchers(layers) {
+   const matchers = [];
+-  layers.forEach((layer, rank) => {
++  layers.forEach((layer, index) => {
++    // Patched (kamp-us/demlik#913): a row with a `floor` takes the rank of the first row on its floor.
++    const rank = layer.floor === void 0 ? index : layers.findIndex((l) => l.floor === layer.floor);
+     const imports = layer.imports === void 0 ? null : new Set(layer.imports);
+     for (const pattern of layer.paths) {
+       matchers.push(compile({ name: layer.name, rank, imports }, pattern));
+@@ -11052,7 +11100,7 @@ function layerOf(repoRelPath, matchers) {
+   if (winner === void 0) return null;
+   for (const rival of matchers.slice(at + 1)) {
+     if (compareSpecificity(winner.specificity, rival.specificity) !== 0) break;
+-    if (rival.layer.rank !== winner.layer.rank && rival.regex.test(repoRelPath)) {
++    if (rival.layer.name !== winner.layer.name && rival.regex.test(repoRelPath)) {
+       throw new LayerTieError(repoRelPath, [winner.pattern, rival.pattern]);
+     }
+   }
+@@ -11065,6 +11113,7 @@ function directionOf(from, to) {
+ }
+ function ruleBroken(from, to) {
+   if (from.rank > to.rank) return "upward";
++  if (from.rank === to.rank && from.name !== to.name) return "sideways";
+   if (from.rank === to.rank || from.imports === null || from.imports.has(to.name)) return null;
+   return "outside-imports";
+ }
+@@ -11143,7 +11192,7 @@ function analyzeLayers(loaded, repoRoot, rules) {
+   }
+   return {
+     layers: rules.layers.map((l) => l.name),
+-    importsDeclared: rules.layers.some((l) => l.imports !== void 0),
++    importsDeclared: rules.layers.some((l) => l.imports !== void 0 || l.floor !== void 0),
+     filesScanned: loaded.sourceFiles.length,
+     census,
+     violations: sortEdges(violations),
