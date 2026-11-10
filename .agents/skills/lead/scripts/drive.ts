@@ -445,7 +445,19 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
 };
 
 /** Every file drive keeps for one box, by suffix. A box name is fresh only when none exists. */
-const BOX_FILES = ["", "-gitdata", "-view", "-prompt.md", ".md", ".jsonl", ".err", ".log", "-plan.md", "-plan.jsonl"];
+const BOX_FILES = [
+  "",
+  "-gitdata",
+  "-view",
+  "-mutbox",
+  "-prompt.md",
+  ".md",
+  ".jsonl",
+  ".err",
+  ".log",
+  "-plan.md",
+  "-plan.jsonl",
+];
 
 /**
  * The first box `<lane>-<step><n>`, from `n` up, that no file of an older run holds. A refused run
@@ -1404,7 +1416,10 @@ export const mutationDraft =
         return yield* stop(`mutbox: no report at ${report}`);
       }
 
-      return yield* turn(env, agents, ask, `${prompt}${mutboxTail(report, answer.outcome === "skip")}\n${text}`);
+      // The prompt file is the record of what the agent was asked, so it gets the report too.
+      const whole = `${prompt}${mutboxTail(report, answer.outcome === "skip")}\n${text}`;
+      yield* fs.writeFileString(ask.prompt, whole).pipe(Effect.ignore);
+      return yield* turn(env, agents, ask, whole);
     }).pipe(Effect.provide(nodeServices));
 
 /**

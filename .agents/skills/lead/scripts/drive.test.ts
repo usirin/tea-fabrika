@@ -673,7 +673,18 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
 });
 
 describe("T383 drive never passes off an older run's report, today's tooling", () => {
-  const suffixes = ["", "-gitdata", "-prompt.md", ".md", ".jsonl", ".err", ".log", "-plan.md", "-plan.jsonl"];
+  const suffixes = [
+    "",
+    "-gitdata",
+    "-mutbox",
+    "-prompt.md",
+    ".md",
+    ".jsonl",
+    ".err",
+    ".log",
+    "-plan.md",
+    "-plan.jsonl",
+  ];
   // Plants: check only the box folder and prompt, as before; skip a free number; start below n.
   // p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
   // 2026-11-08, written for another head, as the step's report (field note 2026-11-09-205).
@@ -914,6 +925,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         started: row.seen.started,
         calls,
         report: existsSync(report) ? readFileSync(report, "utf8") : null,
+        saved: readFileSync(prompt, "utf8"),
       };
     });
   // What the reads find after such a step: the box untouched, no commit, no report of an agent's.
@@ -1079,6 +1091,9 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
                 expect(prompt).toContain("Do not run Stryker");
                 expect(prompt.includes("answer: skip")).toBe(skip);
                 expect(prompt.indexOf(brief)).toBeLessThan(prompt.indexOf(report));
+                // What the agent was asked is kept: the saved prompt file holds the report too.
+                expect(ran.saved).toContain(report);
+                expect(prompt).toContain(ran.saved);
                 expect(ran.turned._tag).toBe("ended");
               }),
             ),
