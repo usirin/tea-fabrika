@@ -3,10 +3,34 @@ import {LedgerError} from "../data/index.ts";
 import {GatewayClient, ProjectClient} from "./platform.ts";
 import {projectStub, rpc, type BrainOptions, type Env} from "./runtime.ts";
 
+/** A window file as served: its body, its hash for the ETag and its content type (`app/built.ts`'s Asset). */
+type Served = {readonly hash: string; readonly type: string; readonly body: string};
+
+/** Answer a request from the brain's embedded window files. Nothing else is read: an unknown route is 404. */
+export const serveAsset = Effect.fn("brain.asset")(function* (
+	assets: Readonly<Record<string, Served>>,
+	request: Request,
+) {
+	const route = new URL(request.url).pathname;
+	const asset = Object.hasOwn(assets, route) ? assets[route] : undefined;
+	yield* Effect.annotateCurrentSpan({
+		"asset.found": asset !== undefined,
+		"http.method": request.method,
+	});
+	if (asset === undefined) return new Response("Not found", {status: 404});
+	if (request.method !== "GET" && request.method !== "HEAD")
+		return new Response("Method not allowed", {status: 405, headers: {allow: "GET, HEAD"}});
+	return new Response(request.method === "HEAD" ? null : asset.body, {
+		headers: {"content-type": asset.type, etag: `"${asset.hash}"`},
+	});
+});
+
+/** The brain's request handling. `assets` is the embedded window table the brain file carries. */
 export const fetch = Effect.fn("workers.fetch")(function* (
 	request: Request,
 	env: Env,
 	config: BrainOptions,
+	assets?: Readonly<Record<string, Served>>,
 ) {
 	const url = new URL(request.url),
 		origin = `http://127.0.0.1:${config.port}`;
@@ -29,5 +53,12 @@ export const fetch = Effect.fn("workers.fetch")(function* (
 		});
 		return Response.json(yield* rpc(project.target(target, url.searchParams.get("code") ?? "")));
 	}
+	// A window file is read by GET or HEAD from the embedded table; an unknown file is 404.
+	if (
+		assets !== undefined &&
+		url.pathname !== "/" &&
+		(request.method === "GET" || request.method === "HEAD")
+	)
+		return yield* serveAsset(assets, request);
 	return new Response("fabrika", {headers: {"content-type": "text/plain"}});
 });

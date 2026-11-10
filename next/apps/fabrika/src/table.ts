@@ -1,4 +1,7 @@
-import type {ProgramSource} from "@kampus/libfabrika/workers";
+import type {Selection} from "@kampus/libfabrika/build";
 
-// Rolldown replaces this module with the checked program bundles.
-export const programs: Readonly<Record<string, ProgramSource>> = {};
+// The programs this app runs. Each package's pure `.` entry holds the declaration; a window, when a
+// program has one, stays on its package's `./window`. The build embeds both in the brain file.
+export const programs: ReadonlyArray<Selection> = [
+	{name: "counter", package: "@kampus/counter", export: "counter"},
+];

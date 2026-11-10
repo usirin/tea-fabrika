@@ -2,9 +2,9 @@ import {LedgerError} from "@kampus/libfabrika/data";
 import {gatewayLayer} from "@kampus/libfabrika/workers/gateway";
 import {projectLayer, type Env as Bindings} from "@kampus/libfabrika/workers/runtime";
 import {Effect, Layer, ManagedRuntime, Schema} from "effect";
+import {programs} from "virtual:fabrika-built";
 import {Door} from "./door.ts";
 import {Settings} from "./settings.ts";
-import {programs} from "./table.ts";
 
 export interface Env extends Bindings {
 	readonly STAGE: string;
