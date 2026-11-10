@@ -925,7 +925,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 					[
 						[
 							1,
-							'{"_tag":"stuck","why":"unsigned_commit","sha":"one"}\n{"_tag":"stuck","why":"stale_link","sha":"two"}\n',
+							'{"_tag":"stuck","reason":"unsigned_commit","sha":"one"}\n{"_tag":"stuck","reason":"stale_link","sha":"two"}\n',
 							false,
 						],
 						[2, "", false],
@@ -1285,7 +1285,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 	it("K1 scenario: a stale link only for a step the lane has not signed does not stop the fetch", () => {
 		each(["lead", "tests"] as const, (step) =>
 			fixture((b) => {
-				const stale = JSON.stringify({_tag: "stuck", why: "stale_link", sha: "head", step});
+				const stale = JSON.stringify({_tag: "stuck", reason: "stale_link", sha: "head", step});
 				const ask = JSON.stringify({_tag: "ask", who: "owner", for: "exam_read", paths: []});
 				b.setup({
 					operations: [{path: "src/a.ts", text: "run\n"}],
@@ -1347,11 +1347,11 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 		// A stale link holds only for a step the lane signed (tests, here); others are waived.
 		const answer = fc
 			.record({
-				why: rule,
+				reason: rule,
 				sha: fc.stringMatching(/^[0-9a-f]{40}$/),
 				step: fc.option(fc.constantFrom("tests", "build"), {nil: undefined}),
 			})
-			.map((a) => (a.why === "stale_link" ? {...a, step: "tests" as const} : a));
+			.map((a) => (a.reason === "stale_link" ? {...a, step: "tests" as const} : a));
 		fc.assert(
 			fc.property(fc.array(answer, {minLength: 1, maxLength: 7}), (answers) =>
 				fixture((b) => {
@@ -1364,7 +1364,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 					const got = b.fetch();
 					expect(got.code, got.text).toBe(1);
 					const said = answers.map(
-						(a) => `${a.why} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`,
+						(a) => `${a.reason} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`,
 					);
 					const more = said.length > 5 ? `; and ${said.length - 5} more` : "";
 					expect(got.text.trim().split("\n").at(-1)).toBe(
@@ -1394,7 +1394,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 		fixture((b) => {
 			b.setup({
 				operations: [{path: "src/a.ts", text: "answer\n"}],
-				check: {status: 1, text: '{"_tag":"stuck","why":"fixture_reason"}\nnot json\nnull\n'},
+				check: {status: 1, text: '{"_tag":"stuck","reason":"fixture_reason"}\nnot json\nnull\n'},
 			});
 			expect(b.run().code).toBe(0);
 			const got = b.fetch();

@@ -482,11 +482,6 @@
 		},
 		{
 			"file": ".agents/skills/lead/scripts/lane.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "const {_tag, why, step} = a as {_tag?: unknown; why?: unknown; step?: unknown};"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/lane.ts",
 			"rule": "fabrika(no-node-filesystem)",
 			"code": "import {dirname, matchesGlob} from \"node:path\";"
 		},
@@ -769,6 +764,66 @@
 			"file": ".agents/skills/mutation/scripts/run.test.ts",
 			"rule": "fabrika(no-promises)",
 			"code": "await new Promise((resolve) => setTimeout(resolve, 10));"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "exam.push({glob: \"src/a.ts\", why: \"this fixture's signed tests change\"});"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "why: \"recorded fixture result\","
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "why: \"drive.ts mutation fixture row\","
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "expect(s.outcome).toEqual({kind: \"skip\", why: \"step_said\"});"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "outcome: {kind: \"stuck\", why},"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "outcome: {kind: \"send\", to: \"tests\", why: \"exam_paths\"},"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "outcome: {kind: \"send\", to: \"plan\", why: \"plancheck\"},"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "return {outcome: {kind: \"send\", to, why: \"step_said\"}, reason: said.reason};"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "return {outcome: {kind: \"skip\", why: \"step_said\"}, reason: said.reason};"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "const outcome: Outcome = {kind: \"stuck\", why: \"record_failed\"};"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "outcome: {kind: \"stuck\", why: \"record_failed\"},"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "why: ok ? e.reason : `${e.reason} (${notes.join(\"; \")})`,"
 		}
 	]
 }
