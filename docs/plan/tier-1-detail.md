@@ -966,7 +966,7 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
 | Objects sleep alone after about 10 s; wake 100 to 300 ms | exp 144 | p41's numbers |
 | Redeploy: a busy object keeps old code up to 5 min | exp 144 | `code` fact on each hello; the versions from the note's T4 refuse a mismatch |
 | Isolate cold load on Cloudflare | never measured | p41 records it first time |
-| `limits: {cpuMs}` is enforced there, not locally | exp 173, [docs](https://developers.cloudflare.com/dynamic-workers/usage/limits/) | not set in this pass: no measured number |
+| `limits: {cpuMs}` is enforced there, not locally | exp 173, [docs](https://developers.cloudflare.com/dynamic-workers/usage/limits/) | not set in this pass: no measured number. *Amended 2026-11-09 (owner, [0020](../../.decisions/0020-programs-get-hard-walls.md)): P34c measures a step's CPU and sets it, with a local step watchdog, a guess until measured.* |
 | Real alarms, at-least-once | Cloudflare docs | p35, p39 |
 | `kill -9` does not exist | | fault table above |
 
@@ -2485,7 +2485,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - Windows and Linux `PersonCheck` versions. `saw.check` covers them, and `check` gains a word.
 - Phone as approver. `signed.signer` and `saw.where` are kept now; nothing lost.
 - QR. `saw.how` gains a word; nothing lost.
-- Packs, `limits: {cpuMs}` and signing each letter, as a proposal: they matter once other people's programs and more than two people arrive. `by` comes from the checked key; nothing lost.
+- Packs, `limits: {cpuMs}` and signing each letter, as a proposal: they matter once other people's programs and more than two people arrive. `by` comes from the checked key; nothing lost. *Amended 2026-11-09 (owner, [0020](../../.decisions/0020-programs-get-hard-walls.md)): `limits: {cpuMs}` moves into Tier 1, in P34c.*
 - Live co-editing, any CRDT, and pages that run code in a box, for notes, as a proposal. The raw text and every version are kept; nothing lost.
 
 Their open questions wait with them.
