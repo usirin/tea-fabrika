@@ -84,3 +84,9 @@ one (owner, 2026-11-10).**
   the translation into fabrika's programs, tea machines and ledger facts; and about six
   principles. Ticket 574 is the running example, and the loop starts at "decide what to work on
   next". Those two were the lead's leans, and the owner did not object to them.
+- 2026-11-10 (ticket 645): the owner read the study's first draft (draft PR 797) and turned down
+  its lens, because it answered from how human teams work. The study's sources are the people and
+  companies at the front of agent-run software work today: teams where agents do most of the work
+  and people direct and check it. How human teams work is background only, used where one of those
+  teams says it kept or dropped a practice. The draft's principles are not decided. The study is
+  redone on these sources before any walk, and PR 797 stays a draft until then.
