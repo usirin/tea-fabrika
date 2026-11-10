@@ -17,7 +17,7 @@ trusting any line that says an agent could not see a file.
   the five harness packages were removed. They are all on the branch
   `fabrikalfa/archive-2026-11-09`, and a write-up that names a script means that copy.
 - Results and assets are not kept on main either
-  ([0025](../.decisions/0025-experiment-results-live-in-a-private-archive.md)). On 2026-11-09
+  ([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)). On 2026-11-09
   every file here that was not a top-level write-up (`results/`, the `NN-name/` folders,
   `failures/`, shots, JSON and patches: 610 files, about 40 MB) moved to the owner's private
   archive, at the same paths. Git history holds every one too: a path a write-up names under

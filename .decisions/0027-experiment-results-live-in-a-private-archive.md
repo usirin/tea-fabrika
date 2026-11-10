@@ -1,12 +1,12 @@
 ---
-id: 0025
+id: 0027
 title: Experiment results and assets live in the owner's private archive, and write-ups quote their numbers inline
 status: accepted
 date: 2026-11-09
 tags: [experiments, results, archive, repo, cleanup]
 ---
 
-# 0025: Experiment results and assets live in the owner's private archive, and write-ups quote their numbers inline
+# 0027: Experiment results and assets live in the owner's private archive, and write-ups quote their numbers inline
 
 **What this decides:** `experiments/` on main keeps only the write-ups and their index; every raw
 result and asset lives in the owner's private archive, and git history keeps them too.
