@@ -35,6 +35,7 @@ const scalar = Schema.Union([
 	Schema.Finite,
 	Schema.String.check(Schema.isMaxLength(10)),
 ]);
+
 const json = (depth: number): Schema.Codec<Schema.Json> =>
 	depth === 0
 		? scalar
@@ -56,12 +57,15 @@ const examples =
 			discard: true,
 			concurrency: 1,
 		});
+
 const nameInput = Start.cases.first.fields.name.check(
 	Schema.isPattern(/^[a-z][a-z0-9._:-]{0,30}$/),
 );
+
 const validName = Arbitrary.schema(nameInput).pipe(
 	Arbitrary.filter((name) => !["door", "processes"].includes(name) && !name.startsWith("client:")),
 );
+
 const textInput = Schema.NonEmptyString.check(Schema.isMaxLength(40));
 // Cover complete names 1..31, processes/ plus 0..50 characters, refs and
 // caller keys 1..40. Fixed-depth JSON below keeps width/string length 10.
@@ -70,6 +74,7 @@ const options = {arbitrary: {seed: 119120, runs: 20, size: 60}};
 const POLICY = {why: "crashed", crashes: 1, until: 0};
 const toW = Recipient.cases.process.make({process: W});
 const brainSide = (process: string) => process === "processes" || process.startsWith("processes/");
+
 const seed = (store: Storage, name = "counter:1") =>
 	Effect.gen(function* () {
 		const processes = yield* ProcessManager;
@@ -79,20 +84,25 @@ const seed = (store: Storage, name = "counter:1") =>
 			from(),
 		);
 	}).pipe(Effect.provide(manager(store, brain(), ids(A, W).next)));
+
 const monitor = (store: Storage, ref = "watch:1", target = A, by = BRAIN) =>
 	ProcessManager.use((p) => p.monitor(ref, target, from({by}))).pipe(
 		Effect.provide(manager(store, watcher(W))),
 	);
+
 const cancel = (store: Storage, ref = "watch:1", by = BRAIN) =>
 	ProcessManager.use((p) => p.demonitor(ref, from({by}))).pipe(
 		Effect.provide(manager(store, watcher(W))),
 	);
+
 const exit = (store: Storage, process = A, by = BRAIN) =>
 	ProcessManager.use((p) => p.exit(process, "crashed", from({by}))).pipe(
 		Effect.provide(manager(store)),
 	);
+
 const fresh = (store: Storage, after = 0) =>
 	receive(W, after).pipe(Effect.provide(manager(store, watcher(W))));
+
 /** Another writer's raw row: what a client could hold on a stream it may write. */
 const plant = (
 	store: Storage,
@@ -103,6 +113,7 @@ const plant = (
 	Ledger.use((ledger) => ledger.append(stream, id, lineFor(from({by: CLIENT}), fact))).pipe(
 		Effect.provide(manager(store)),
 	);
+
 const downs = (letters: ReadonlyArray<{readonly m: unknown; readonly by: string}>) =>
 	letters.flatMap((letter) => {
 		const down = Schema.decodeUnknownOption(Down)(letter.m);

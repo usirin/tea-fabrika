@@ -146,8 +146,10 @@ const moveCmd = Command.make(
 const as = Flag.String("as").pipe(
 	Flag.withDescription("the agent's name: it writes as agent:<name>, for you"),
 );
+
 const body = Flag.FileText("body-file").pipe(Flag.withDescription("the text, in a file"));
 const ticket = Argument.Int("ticket").pipe(Argument.withDescription("the ticket's number"));
+
 const from = Flag.optional(
 	Flag.String("from").pipe(
 		Flag.withSchema(Schema.fromJsonString(From)),

@@ -33,6 +33,7 @@ import {tableOf} from "./table.ts";
 //   agents                  each summoned agent: its name, harness, model, effort and what it does now
 
 type BuiltinStatement = Extract<Statement, {readonly kind: "builtin"}>;
+
 export interface Said {
 	readonly status: number;
 	/** `exit` was said: tsh reads no more lines. */

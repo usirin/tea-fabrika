@@ -45,6 +45,7 @@ const MERGE = "d694f6b710c8688176ae7ec31983eaaddb79973a";
 const unknown = {_tag: "unknown"};
 
 type Answer = string | "breaks";
+
 /** A `gh` that answers each call from `answer`, and keeps every call. */
 function scripted(answer: (args: readonly string[], nth: number) => Answer) {
 	const calls: (readonly string[])[] = [];
@@ -55,6 +56,7 @@ function scripted(answer: (args: readonly string[], nth: number) => Answer) {
 	};
 	return {gh, calls};
 }
+
 /** A `gh` that answers the calls in order. One call too many fails the test. */
 function inOrder(...answers: Answer[]) {
 	return scripted((_args, nth) => {
@@ -64,11 +66,13 @@ function inOrder(...answers: Answer[]) {
 		return out;
 	});
 }
+
 /** A call that changes something: a GraphQL mutation, or a REST call that is not a read. */
 const isWrite = (args: readonly string[]) =>
 	args.includes("--method") ||
 	args.includes("-X") ||
 	args.some((arg) => /^query=\s*mutation/.test(arg));
+
 const queryOf = (args: readonly string[]) => args.find((arg) => arg.startsWith("query=")) ?? "";
 
 // ---------------------------------------------------------------- enqueue
@@ -96,8 +100,10 @@ const stands = (
 			},
 		},
 	});
+
 const ENQUEUED = JSON.stringify({data: {enqueuePullRequest: {mergeQueueEntry: {id: "MQE_1"}}}});
 const READ_CALL = ["api", "graphql", ...AT, "-f", `query=${ENQUEUE_READ}`];
+
 const WRITE_CALL = [
 	"api",
 	"graphql",
@@ -108,6 +114,7 @@ const WRITE_CALL = [
 	"-f",
 	`query=${ENQUEUE_WRITE}`,
 ];
+
 const enqueued = (gh: Gh, pr = PR) => Effect.runPromise(enqueueOn(gh)(pr, HEAD));
 const refused = (gh: Gh, pr = PR) => Effect.runPromise(Effect.flip(enqueueOn(gh)(pr, HEAD)));
 
@@ -246,10 +253,13 @@ const allows = (
 			},
 		},
 	});
+
 const MERGED_NOW = JSON.stringify({
 	data: {mergePullRequest: {pullRequest: {mergeCommit: {oid: MERGE}}}},
 });
+
 const MERGE_READ_CALL = ["api", "graphql", ...AT, "-f", `query=${MERGE_READ}`];
+
 const mergeCall = (method: string) => [
 	"api",
 	"graphql",
@@ -262,6 +272,7 @@ const mergeCall = (method: string) => [
 	"-f",
 	`query=${MERGE_WRITE}`,
 ];
+
 const merged = (gh: Gh, pr = PR) => Effect.runPromise(mergeOn(gh)(pr, HEAD));
 const notMerged = (gh: Gh, pr = PR) => Effect.runPromise(Effect.flip(mergeOn(gh)(pr, HEAD)));
 const LANDED_AS = {reading: "merged", commit: MERGE};
@@ -485,15 +496,19 @@ const run = (
 	run_attempt: 1,
 	...more,
 });
+
 const runs = (list: ReturnType<typeof run>[], total = list.length) =>
 	JSON.stringify({total_count: total, workflow_runs: list});
+
 const RUNS_CALL = ["api", `repos/example/repo/actions/runs?head_sha=${HEAD}&per_page=100`];
+
 const rerunCall = (id: number) => [
 	"api",
 	"--method",
 	"POST",
 	`repos/example/repo/actions/runs/${id}/rerun-failed-jobs`,
 ];
+
 const reran = (gh: Gh) => Effect.runPromise(rerunChecksOn(gh)(PR, HEAD));
 const notReran = (gh: Gh) => Effect.runPromise(Effect.flip(rerunChecksOn(gh)(PR, HEAD)));
 
@@ -557,11 +572,13 @@ describe("re-run of red checks", () => {
 /** One event of GitHub's record: the pull request went into the queue, or came out of it for `reason`. */
 type Recorded = NonNullable<QueueRead["events"]>[number];
 const added = (createdAt: string): Recorded => ({__typename: "AddedToMergeQueueEvent", createdAt});
+
 const removed = (createdAt: string, reason: string | null): Recorded => ({
 	__typename: "RemovedFromMergeQueueEvent",
 	createdAt,
 	reason,
 });
+
 /** An earlier trip through the queue, thrown out for a conflict: twenty minutes before ours. */
 const EARLIER = [added("2026-09-06T04:05:26Z"), removed("2026-09-06T04:08:57Z", "merge_conflict")];
 /** Our enqueue, as GitHub records it. */
@@ -585,6 +602,7 @@ const queueNow = (
 			},
 		},
 	});
+
 const OUT = {isInMergeQueue: false};
 const MERGED = queueNow({state: "MERGED", isInMergeQueue: false, mergeCommit: {oid: MERGE}});
 const asksRecord = (args: readonly string[]) => queryOf(args).includes("timelineItems");
@@ -597,6 +615,7 @@ async function waited(answers: Answer[], limits: {outPolls?: number; outMs?: num
 	const host = codeHostOn(gh, {own: [], reviewers: [], pollMs: 1, ...limits});
 	return {said: await Effect.runPromise(Stream.runCollect(host.leftQueue(PR, HEAD))), calls};
 }
+
 /**
  * The same wait over a GitHub whose record cannot be read: the call that asks
  * for it breaks, and the plain read answers from `answers`, in order.
@@ -868,7 +887,9 @@ const checksNow = (state: string | null, head = HEAD) =>
 			},
 		},
 	});
+
 const runNow = (run_attempt: number, status: string) => JSON.stringify({status, run_attempt});
+
 const settledNow = (after: readonly {run: number; attempt: number}[], ...answers: Answer[]) => {
 	const {gh, calls} = inOrder(...answers);
 	return Effect.runPromise(checksSettledNow(gh, PR, HEAD, after)).then((settled) => ({
@@ -1019,11 +1040,13 @@ describe("the handlers and the Listens", () => {
 
 const recorded = (name: string): string =>
 	readFileSync(new URL(`../../../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
+
 const WHO = {own: ["repo-owner", "second-owner"], reviewers: ["repo-owner", "second-owner"]};
 const plan = (write: boolean): Plan => ({prs: [PR], mode: write ? "write" : "read", ...WHO});
 
 /** What one pull request's run sends: what it found, or how it ended. */
 type Heard = {readonly mode: "read"; readonly found: Look} | ({readonly mode: "write"} & Shipped);
+
 /** Start the ship program on a plan of one pull request, and keep what it sends. `machine`: a ship machine with other limits. */
 async function alone(p: Plan, parts: Parts, machine?: ReturnType<typeof createShip>) {
 	const heard: Heard[] = [];
@@ -1070,6 +1093,7 @@ function github(change: (args: readonly string[], nth: number) => Answer | null 
 		throw new Error(`a call the script does not know: ${args.join(" ").slice(0, 120)}`);
 	});
 }
+
 /** The ticket the recorded pull request closes, held as proven at `HEAD` unless told otherwise. */
 const partsOn = (gh: Gh, made: string[] = [], proven: readonly string[] = [HEAD]): Parts => ({
 	reads: () => {

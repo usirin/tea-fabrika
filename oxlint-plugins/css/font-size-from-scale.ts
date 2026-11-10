@@ -12,9 +12,12 @@ const pixels = (nodes: valueParser.Node[]) => {
 };
 
 const sizeKeyword = /^(?:xx?-small|small|medium|large|xx?-large|xxx-large|smaller|larger|math)$/i;
+
 const length =
 	/^(?:px|em|rem|ex|rex|cap|rcap|ch|rch|ic|ric|lh|rlh|vw|vh|vi|vb|vmin|vmax|[sld]v(?:w|h|i|b|min|max)|cq(?:w|h|i|b|min|max)|cm|mm|q|in|pt|pc|%)$/i;
+
 const angle = /^(?:deg|grad|rad|turn)$/i;
+
 const hasUnit = (nodes: valueParser.Node[], units: RegExp) => {
 	let found = false;
 	valueParser.walk(nodes, (node) => {

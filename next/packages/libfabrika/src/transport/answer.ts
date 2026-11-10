@@ -12,6 +12,7 @@ const Request = Schema.fromJsonString(
 );
 
 type Online = typeof Attached.cases.online.Type;
+
 type Frame<A extends typeof Attached.Type, E, R, E2, R2> = [
 	text: string,
 	attached: A,
@@ -22,9 +23,11 @@ type Frame<A extends typeof Attached.Type, E, R, E2, R2> = [
 		...who: A extends Online ? [who: typeof Who.Type] : []
 	) => Effect.Effect<typeof Answer.Type, E, R>,
 ];
+
 type Incoming<E, R, E2, R2> =
 	| Frame<Online, E, R, E2, R2>
 	| Frame<Exclude<typeof Attached.Type, Online>, E, R, E2, R2>;
+
 const isOnline = <E, R, E2, R2>(
 	frame: Incoming<E, R, E2, R2>,
 ): frame is Frame<Online, E, R, E2, R2> => frame[1]._tag === "online";

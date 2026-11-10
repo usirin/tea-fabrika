@@ -77,11 +77,13 @@ type MadeAtBuild =
 	| "stuck:rounds_spent" // program.ts:686
 	| "ask:owner:no_change" // program.ts:684, a call whose `after` is done
 	| "ask:owner:still_red"; // program.ts:689
+
 type MadeAtExamReview =
 	| "stuck:head_moved" // program.ts:872
 	| "send:builder:conflicts" // program.ts:877
 	| "stuck:checks_not_run" // program.ts:888
 	| "send:builder:checks_red"; // program.ts:894
+
 type MadeAtReview = "ask:owner:unseen" | "ask:owner:decision"; // program.ts:1327, :1345
 type MadeAtMerge = "stuck:merged_elsewhere"; // program.ts:1412
 

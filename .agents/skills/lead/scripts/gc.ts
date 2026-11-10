@@ -123,6 +123,7 @@ const sh = (cmd: string, args: readonly string[], cwd?: string) => {
 	});
 	return {code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? ""};
 };
+
 const SAFE = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
 
 type Env = {readonly MAIN: string; readonly BOXES: string; readonly GH_REPO: string};
@@ -198,6 +199,7 @@ const cwds = (): {readonly pid: number; readonly path: string}[] => {
 	}
 	return out;
 };
+
 const pidsIn = (busyIn: readonly {pid: number; path: string}[], dir: string) => [
 	...new Set(
 		busyIn.filter((c) => c.path === dir || c.path.startsWith(`${dir}/`)).map((c) => c.pid),

@@ -33,10 +33,12 @@ import {ledgerOptions} from "./worker-options.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "tea-host-laws-"));
 let mf: Miniflare;
+
 beforeAll(async () => {
 	mf = new Miniflare(ledgerOptions({persist: false, direct: 0}));
 	await mf.ready;
 });
+
 afterAll(async () => {
 	await mf.dispose();
 	rmSync(dir, {recursive: true, force: true});
@@ -44,11 +46,13 @@ afterAll(async () => {
 
 /** The clock the test owns. A minute before it warns that nothing moves it, as a law may not. */
 const owned = TestClock.layer({warningDelay: Duration.minutes(1)});
+
 /** The suite on `layer`, on the ledger's own clock. */
 const lawsOn = (layer: Layer.Layer<Ledger, unknown>) =>
 	Effect.runPromise(
 		runLaws({alarm: true, graceMs: 1000}).pipe(Effect.provide(layer), Effect.scoped),
 	);
+
 /** The suite on `layer` built under the test's clock, so the ledger and the laws share it. */
 const lawsOnOwnedClock = (layer: Layer.Layer<Ledger, unknown>) =>
 	Effect.runPromise(
@@ -58,6 +62,7 @@ const lawsOnOwnedClock = (layer: Layer.Layer<Ledger, unknown>) =>
 			Effect.provide(owned),
 		),
 	);
+
 /**
  * Known bugs: laws the real ledger breaks, each kept with the exact WRONG it gives, so the suite
  * stays green while the law fails for its reason, and turns red the day the fix lands: then its

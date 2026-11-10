@@ -37,6 +37,7 @@ import {
 
 // Today's tooling. The machine is pure and stepped by hand here; leftIn reads a real git box.
 const options = {seed: 119120, numRuns: 300};
+
 const ask = {
 	lane: "l",
 	step: "build" as const,
@@ -57,6 +58,7 @@ const ask = {
 	minutes: 60,
 	started: 0,
 };
+
 const answer = fc.constantFrom(
 	"answer: done laws: green",
 	"answer: send tests a law looks wrong",
@@ -66,6 +68,7 @@ const answer = fc.constantFrom(
 	"answer: stuck no network",
 	"no answer at all",
 );
+
 const left = fc.array(fc.constantFrom("10 uncommitted files", "2 commits off fabrikalfa/l"), {
 	maxLength: 2,
 });

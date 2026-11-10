@@ -98,6 +98,7 @@ const Usage = Schema.Struct({
 	cached_input_tokens: Schema.optional(Schema.Number),
 	output_tokens: Schema.Number,
 });
+
 const Item = Schema.Struct({
 	id: Schema.String,
 	type: Schema.String,
@@ -107,6 +108,7 @@ const Item = Schema.Struct({
 	aggregated_output: Schema.optional(Schema.String),
 	status: Schema.optional(Schema.String),
 });
+
 /** The events of `codex exec --json` this adapter reads. Others are let through as nothing. */
 const Event = Schema.Union([
 	Schema.Struct({type: Schema.Literal("thread.started"), thread_id: Schema.String}),
@@ -115,6 +117,7 @@ const Event = Schema.Union([
 	Schema.Struct({type: Schema.Literal("turn.failed"), error: Schema.optional(Schema.Unknown)}),
 	Schema.Struct({type: Schema.Literal("error"), message: Schema.optional(Schema.String)}),
 ]);
+
 const readEvent = Schema.decodeUnknownOption(Schema.fromJsonString(Event));
 
 /** One line of Codex's stream, as raw updates. Pure. A failure is its message. */

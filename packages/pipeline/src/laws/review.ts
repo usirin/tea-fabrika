@@ -43,6 +43,7 @@ export const HEADS = ["A", "B"] as const;
 const SETTINGS: Settings = {model: "m", effort: "low", budget: 1};
 /** A criterion's id from its number in this world's two. */
 const id = (n: number): CriterionId => criterionId(`c${n}`);
+
 const CRITERIA: readonly Criterion[] = [
 	{id: id(1), version: 1, text: "every window opens", checked: false, evidence: null},
 	// Said again once since the plan: its verdict must name version 2.
@@ -71,6 +72,7 @@ const packAt = (head: string, checks: Pack["checks"]["state"], deviations: Devia
 });
 
 const pass = (n: number): Row => ({id: id(n), grade: "pass", where: [], says: "seen", limit: null});
+
 const passOf = (row: Row): Row => ({
 	id: row.id,
 	grade: "pass",
@@ -78,6 +80,7 @@ const passOf = (row: Row): Row => ({
 	says: "seen",
 	limit: null,
 });
+
 const finding = (n: number) => ({
 	kind: "review-code" as const,
 	from: {source: "criterion" as const, id: id(n)},
@@ -174,6 +177,7 @@ export function reviewWorld(options: ReviewWorldOptions = {}): World<Review, Msg
 }
 
 type Ended = Extract<Review, {phase: "judging" | "over"}>;
+
 /** The step on which the review's outcome is decided, and that outcome's state. */
 const decided = (step: Step<Review, Msg, ReviewCmd>): Ended | null =>
 	(step.next.phase === "judging" || step.next.phase === "over") &&
@@ -181,6 +185,7 @@ const decided = (step: Step<Review, Msg, ReviewCmd>): Ended | null =>
 	step.prev.phase !== "over"
 		? step.next
 		: null;
+
 const criteriaOfEnd = (s: Ended) => (s.phase === "over" ? s.report.criteria : s.judgement.criteria);
 const headOfEnd = (s: Ended) => (s.phase === "over" ? s.report.head : s.judgement.head);
 

@@ -9,6 +9,7 @@ import {C1, C2, CRITERIA, filed, metAt, ON_TIP, rowOn, rowsAt, TICKET} from "./s
 // again, and what goes through.
 
 const PR = "https://github.com/example/repo/pull/7";
+
 const clear: ShipFacts = {
 	head: "abc1234",
 	state: "open",
@@ -23,6 +24,7 @@ const clear: ShipFacts = {
 	criteria: CRITERIA,
 	verdicts: metAt("abc1234"),
 };
+
 const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({...clear, ...patch});
 
 /** The proof the machine's read made, as the Cmd carries it. */

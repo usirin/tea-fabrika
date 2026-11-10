@@ -3,6 +3,7 @@ import {expect, it} from "vitest";
 import {plant} from "../next/apps/fabrika/src/exam/plant.ts";
 
 const CODE = "fabrika(no-node-imports)";
+
 it("every native import form needs a nonempty reason on its own line, in product and exam code", async () => {
 	await fc.assert(
 		fc.asyncProperty(

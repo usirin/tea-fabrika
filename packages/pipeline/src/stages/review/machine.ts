@@ -47,6 +47,7 @@ const PackIn = Schema.Struct({
 	head: Schema.NullOr(Schema.String),
 	rubrics: Schema.String,
 });
+
 const NoteIn = Schema.Struct({pr: Schema.String, id: Schema.String, note: Note});
 
 /** Read everything the reviewer needs, at the commit asked for. `head: null`: the head now. */
@@ -68,6 +69,7 @@ type NoteCmd = ReturnType<typeof fileNote>;
 export type ReviewCmd = PackCmd | NoteCmd;
 
 type AtHead = {readonly pr: string; readonly head: string};
+
 /**
  * One reviewer run. It is on while the machine is reviewing, and its runner
  * starts the agent. `run` numbers the runs of one review, so a run started
@@ -84,6 +86,7 @@ export type RunSub = Sub<
 		readonly note: string | null;
 	}
 >;
+
 /** The required checks of one head. The runner says when none is still running, once. */
 export type ChecksSub = Sub<"review_checks", AtHead>;
 
@@ -180,6 +183,7 @@ export const Report = Schema.Struct({
 	runs: Schema.Finite,
 });
 export type Report = typeof Report.Type;
+
 /**
  * Every problem a report holds, once each, as a reader is shown it: each
  * refused form's problems, by the form's number, then why the review
@@ -256,6 +260,7 @@ export type Review = typeof Review.Type;
 export type Failed = "broke" | "misfit" | "over_budget";
 
 type FromRun = AtHead & {readonly run: number};
+
 export type ReviewMsg =
 	| {readonly type: "start"; readonly ask: Ask; readonly settings: Settings}
 	/** Sent once after booting from saved state: re-issue whatever was in flight. */
@@ -282,12 +287,14 @@ export type ReviewMsg =
 type Step = readonly [Review, readonly ReviewCmd[]];
 
 const stay = (s: Review): Step => [s, []];
+
 const held = (s: Held): Held => ({
 	ask: s.ask,
 	settings: s.settings,
 	waits: s.waits,
 	limit: s.limit,
 });
+
 /** A judgement before any reviewer ran. */
 const empty = (head: string | null, replay: boolean): Judgement => ({
 	head,
@@ -304,6 +311,7 @@ const empty = (head: string | null, replay: boolean): Judgement => ({
 	cost: 0,
 	runs: 0,
 });
+
 /**
  * A judgement once a reviewer has run: every end from `reviewing` starts
  * here, so none can leave out the forms refused before it or what they cost.
@@ -333,8 +341,10 @@ export const sentBackForm =
 			"",
 			fenced(JSON.stringify(form, null, 2), "json"),
 		].join("\n");
+
 const kept = (notes: readonly Noted[]): readonly Kept[] =>
 	notes.flatMap((n) => (n.state === "asked" ? [] : [{id: n.id, ...n.note, state: n.state}]));
+
 const asked = (notes: readonly Noted[]): readonly NoteCmd[] =>
 	notes.flatMap((n) => (n.state === "asked" ? [n.asked] : []));
 
@@ -430,10 +440,12 @@ export const runSub = listen("review_run", (s: Review) =>
 			}
 		: null,
 );
+
 /** The Listen on the checks: on only while they run. */
 export const checksSub = listen("review_checks", (s: Review) =>
 	s.phase === "waiting" ? {pr: s.ask.pr, head: s.head} : null,
 );
+
 /** The clock beside it. Its Msg names the wait it was set for, so each wait sets a new clock. */
 export const checksClock = listen("timer", (s: Review) =>
 	s.phase === "waiting"

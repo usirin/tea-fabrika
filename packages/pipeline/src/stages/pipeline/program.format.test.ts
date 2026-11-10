@@ -50,13 +50,16 @@ const FORMATTER = {
 };
 
 const EXAM = "src/lower.test.ts";
+
 const SPACES =
 	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n  expect(lower("AB")).toBe("ab");\n});\n';
+
 /** What the formatter makes of `SPACES`. */
 const TABS =
 	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n\texpect(lower("AB")).toBe("ab");\n});\n';
 
 const ROUND_2_TEST = "p1: folds ß to ss";
+
 /** Round 2: a review finding, a new test that is red on round 1's head, and the builder's fix. */
 const FINDING = {
 	kind: "review-code",
@@ -67,6 +70,7 @@ const FINDING = {
 	wants: "ß folds to ss.",
 	seen: "read",
 };
+
 const FOLDS = {
 	path: "src/lower.ts",
 	text: 'export function lower(name: string): string {\n\treturn name.trim().toLowerCase().replaceAll("ß", "ss");\n}\n',
@@ -250,8 +254,10 @@ describe("an exam file that fails the format check before a build round", () => 
 
 /** The test the fake's mutants answer writes, as fixtures/pipeline-lane/codex.mjs names it. */
 const ANSWER = "src/lower-spaces.test.ts";
+
 const ANSWER_SPACES =
 	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("cuts spaces", () => {\n  expect(lower(" Ab ")).toBe("ab");\n});\n';
+
 /** What the formatter makes of `ANSWER_SPACES`. */
 const ANSWER_TABS = ANSWER_SPACES.replace("\n  expect", "\n\texpect");
 

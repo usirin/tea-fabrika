@@ -4,8 +4,10 @@ import {ancestors, dotted, pathIn, type Node} from "./match.ts";
 
 const scoped =
 	/^next\/packages\/libfabrika\/src\/(?:data\/(?:id|log)|coordination\/authorization|door\/(?:door|store|nonce)|app\/(?:nemesis|chaos-state|runner|entry))\.ts$/;
+
 const outside = /^(?:raw|wire|saved|row|params|input|body|bytes|stored|persisted)(?:[A-Z_].*)?$/;
 const sync = /(?:^|\.)(?:decodeSync|decodeUnknownSync)$/;
+
 // Existing response and reducer constructors are outside this change. These are the saved/input
 // schemas P17 changes. Its new modules and every named decode function are checked in full.
 const inputs = new Set([
@@ -20,6 +22,7 @@ const inputs = new Set([
 	"Enrolled",
 	"Incoming",
 ]);
+
 const declarations = new Set(["Program", "Machine", "Cmd"]);
 
 export const outsideInputConstructor: CreateRule = {

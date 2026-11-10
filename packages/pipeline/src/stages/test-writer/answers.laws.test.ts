@@ -36,6 +36,7 @@ const KILL = kills.run({
 	side: "bad",
 	on: {commit: "c1", file: "a.test.ts", test: "t", mutant: null},
 });
+
 const finished = {key: fc.constant("k"), id: fc.constant("x"), spend: fc.constant(noSpend)};
 
 const arbs: MsgArbitraryTable<Msg> = {
@@ -77,6 +78,7 @@ const WALK: readonly Msg[] = [
 		session: "s",
 	},
 ];
+
 const lists = fc
 	.tuple(fc.subarray([...WALK]), fc.array(arbMsg(arbs), {minLength: 1, maxLength: 40, size: "max"}))
 	.map(([walk, rest]) => [...walk, ...rest]);

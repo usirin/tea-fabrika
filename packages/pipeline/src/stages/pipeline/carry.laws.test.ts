@@ -35,6 +35,7 @@ const NAMES = ["add", "sub", "div", "greet", "server", "build"] as const;
 const CODE_INDENTS = ["\t", "  ", "    "] as const;
 const YAML_INDENTS = ["  ", "    ", "   "] as const;
 type Lines = (i: string) => string[];
+
 const CODE: readonly Lines[] = [
 	(i) => [`${i}return a + b;`],
 	(i) => [`${i}const s = "hello " + a;`],
@@ -43,6 +44,7 @@ const CODE: readonly Lines[] = [
 	(i) => [`${i}let n = 0;`],
 	(i) => [`${i}return a;`],
 ];
+
 const YAML: readonly Lines[] = [
 	(i) => [`${i}port: 8080`],
 	(i) => [`${i}debug: false`],
@@ -51,6 +53,7 @@ const YAML: readonly Lines[] = [
 	(i) => [`${i}retries: 3`],
 	(i) => [`${i}host: "x y"`],
 ];
+
 /** Lines a PR or main may add, in the indent of the line they go under. */
 const NEW_CODE: readonly ((i: string) => string)[] = [
 	(i) => `${i}check(a);`,
@@ -59,6 +62,7 @@ const NEW_CODE: readonly ((i: string) => string)[] = [
 	() => "}",
 	() => "",
 ];
+
 const NEW_YAML: readonly ((i: string) => string)[] = [
 	(i) => `${i}retries: 3`,
 	(i) => `${i}name: "app one"`,
@@ -72,6 +76,7 @@ const NEW_YAML: readonly ((i: string) => string)[] = [
  * line, `between` and `trailing` do not. A mut that does not fit its line adds a comment.
  */
 type Mut = "word" | "number" | "append" | "reindent" | "inString" | "between" | "trailing";
+
 const MUTS: readonly Mut[] = [
 	"word",
 	"number",
@@ -81,6 +86,7 @@ const MUTS: readonly Mut[] = [
 	"between",
 	"trailing",
 ];
+
 const WS_ONLY: ReadonlySet<Mut> = new Set(["reindent", "inString", "between", "trailing"]);
 
 const lead = (t: string) => /^\s*/.exec(t)?.[0] ?? "";
@@ -161,6 +167,7 @@ type BlockSpec = {kind: Kind; name: number; indent: number; body: number[]};
 type OpSpec = {op: "change" | "delete" | "insert"; at: number; mut: Mut; lines: number[]};
 type MainSpec = OpSpec & {aim: "far" | "touch" | "any"; keep: "pr" | "main" | "both"};
 type How = "same" | "split" | "tweak" | "extra" | "move" | "drop";
+
 type Spec = {
 	blocks: BlockSpec[];
 	pr: OpSpec[];
@@ -175,6 +182,7 @@ const opArb = fc.record({
 	mut: fc.constantFrom(...MUTS),
 	lines: fc.array(fc.nat({max: 4}), {minLength: 1, maxLength: 2}),
 });
+
 const mainArb = fc.record({
 	op: fc.constantFrom("change", "delete", "insert"),
 	at: fc.nat({max: 999}),
@@ -183,6 +191,7 @@ const mainArb = fc.record({
 	aim: fc.constantFrom("far", "touch", "any"),
 	keep: fc.constantFrom("pr", "main", "both"),
 });
+
 const blocksArb: fc.Arbitrary<BlockSpec[]> = fc.array(
 	fc.record({
 		kind: fc.constantFrom("code", "yaml"),
@@ -192,6 +201,7 @@ const blocksArb: fc.Arbitrary<BlockSpec[]> = fc.array(
 	}),
 	{minLength: 2, maxLength: 5},
 );
+
 const specArb: fc.Arbitrary<Spec> = fc.record({
 	blocks: blocksArb,
 	pr: fc.array(opArb, {minLength: 1, maxLength: 3}),
@@ -331,7 +341,9 @@ const remakeOps = (
 
 const norm = (ls: readonly Line[]) =>
 	ls.map((l) => l.text.replace(/\s+/g, "")).filter((t) => t !== "");
+
 const strings = (t: string) => (t.match(/"[^"]*"/g) ?? []).join("|");
+
 const sameText = (x: readonly Line[], y: readonly Line[]) =>
 	x.length === y.length && x.every((l, k) => l.text === y[k]?.text);
 
@@ -393,6 +405,7 @@ const replayOver = (
 };
 
 type Label = "keep" | "drop" | "skip";
+
 type Built = {
 	base: Line[];
 	a: Line[];
@@ -489,6 +502,7 @@ const MOVED_LINE: Spec = {
 		main: [],
 	},
 };
+
 const YAML_REINDENT: Spec = {
 	blocks: [
 		{kind: "yaml", name: 1, indent: 0, body: [0, 1]},

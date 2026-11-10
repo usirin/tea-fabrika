@@ -29,11 +29,13 @@ const NAME = "reply:1";
 const owner = Writer.cases.person.make({key: "SHA256:fixture", for: "person-test"});
 const Model = Schema.Struct({replies: Schema.Int, reason: Schema.NullOr(Schema.String)});
 const Msg = Schema.Struct({type: Schema.Literal("work"), n: Schema.Int});
+
 const work = Cmd.make("work", {
 	input: Schema.Struct({n: Schema.Int}),
 	ok: Schema.Int,
 	err: ["disk"],
 });
+
 const program = {
 	name: "reply",
 	machine: Machine.make({
@@ -56,6 +58,7 @@ const program = {
 	writes: {},
 	wake: () => null,
 } as const;
+
 const input = fc.record({n: fc.integer(), letter: fc.uuid()});
 // Final review's lost-reply probe, kept beside generated inputs.
 const lostReply = {n: 7, letter: "00000000-0000-1000-8000-000000000007"};

@@ -93,6 +93,7 @@ const checkSecretTypes = (project: Project, root: string) => {
 };
 
 const root = resolve(import.meta.dirname, "../../../../..");
+
 // Pin the P12 source-read gap found in the whole-change sweep, on the actual workspace types.
 it("pinned: [secrets] P12 source-read gap, actual sources keep secret values Redacted from the read", () => {
 	const api = new API({cwd: root});
@@ -120,6 +121,7 @@ it("pinned: [secrets] P12 source-read gap, actual sources keep secret values Red
 		api.close();
 	}
 });
+
 it("[secrets] source type plants catch plain entropy, Authorization and binding reads, including renamed wrappers", () => {
 	fc.assert(
 		fc.property(fc.stringMatching(/^[a-z][a-z0-9]{0,10}$/), (suffix) => {

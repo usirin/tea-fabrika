@@ -105,6 +105,7 @@ export type Next = typeof Next.Type;
 
 const end = (outcome: LoopOutcome, said?: string): Next =>
 	said === undefined ? {go: "end", outcome} : {go: "end", outcome, said};
+
 const where = (place: Place) =>
 	`${place.file}:${place.first === place.last ? place.first : `${place.first}-${place.last}`}`;
 

@@ -54,6 +54,7 @@ const said = (name: string, attributes: Record<string, string>) =>
 		if (span._tag === "Some")
 			span.value.event(name, yield* nowNanos, {[ATTR.machine]: "ship", ...attributes});
 	});
+
 const folded = (type: string) => said(`msg ${type}`, {[ATTR.msg]: type});
 
 /**

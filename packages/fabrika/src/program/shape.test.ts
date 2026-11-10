@@ -9,6 +9,7 @@ const PR = Schema.Struct({
 	pr: Schema.String.check(Schema.isPattern(/^#\d+$/)),
 	head: Schema.String.check(Schema.isPattern(/^[0-9a-f]{7}$/)),
 });
+
 /** What a ship says about one pull request, cut down. */
 const Outcome = Schema.Struct({
 	pr: Schema.String,

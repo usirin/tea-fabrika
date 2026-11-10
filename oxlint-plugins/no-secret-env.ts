@@ -42,6 +42,7 @@ import {below, dotted, grouped, isWritten, type Node, quoted} from "./match.ts";
 
 const SECRET =
 	/^(?:.*_)?(?:(?:API|PRIVATE|SECRET|ACCESS|SIGNING)_?KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTH|CREDENTIALS?)(?:_.*)?$/;
+
 const NOT_SECRET = /^.*_(?:HASH|SOCK)$/;
 const isSecret = (name: string): boolean => SECRET.test(name) && !NOT_SECRET.test(name);
 

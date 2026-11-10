@@ -6,6 +6,7 @@ import {SecureRandom} from "effect/crypto";
 import {ChildProcess} from "effect/process";
 
 class GrantError extends Schema.TaggedError<GrantError>()("GrantError", {reason: Schema.String}) {}
+
 const Target = Schema.NullOr(
 	Schema.Struct({
 		key: Schema.String,
@@ -15,6 +16,7 @@ const Target = Schema.NullOr(
 		label: Schema.String,
 	}),
 );
+
 const grant = Command.make(
 	"grant",
 	{
@@ -108,6 +110,7 @@ const grant = Command.make(
 		yield* Console.log(`Granted ${fingerprint} to ${target.for}`);
 	}),
 );
+
 NodeRuntime.runMain(
 	Command.runWith(grant, {version: "0.0.0", renderErrors: false})(process.argv.slice(2)).pipe(
 		Effect.catchTag("ShowHelp", () => Effect.fail(new GrantError({reason: "bad_args"}))),

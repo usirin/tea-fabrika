@@ -26,11 +26,13 @@ import {type Handle, memoryStorage, StateRefused, type Storage} from "./storage.
 
 // An Act, in tea's own words: a Cmd that carries the name of its one write.
 const WriteIn = Schema.Struct({n: Schema.Finite, intent: Schema.String});
+
 const write = Cmd.define("job_write", {
 	input: Schema.toStandardSchemaV1(WriteIn),
 	ok: Schema.toStandardSchemaV1(Schema.String),
 	err: ["unknown"] as const,
 });
+
 type WriteCmd = ReturnType<typeof write>;
 
 /** The toy's state, and the schema it is kept and read back through. */
@@ -46,10 +48,12 @@ const Job = Schema.Union([
 type Job = typeof Job.Type;
 /** The toy's state as older code kept it: its work counted in `try`, not `run`. */
 const OlderJob = Schema.Struct({phase: Schema.Literal("working"), try: Schema.Finite});
+
 type JobMsg =
 	| {readonly type: "start"; readonly by: string}
 	| {readonly type: "resume"}
 	| {readonly type: "job_done"; readonly run: number};
+
 type WorkSub = Sub<"job_work", {readonly run: number}>;
 type Step = readonly [Job, readonly WriteCmd[]];
 
@@ -111,6 +115,7 @@ const world = () => {
 		},
 	};
 };
+
 type World = ReturnType<typeof world>;
 
 /** The toy as a kind: each kept phase `recovered` was asked about is noted in `asked`. */

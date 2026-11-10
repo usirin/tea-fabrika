@@ -11,6 +11,7 @@ import {factOf, summaryOf} from "./ticket.ts";
 // What a person's write puts on the ledger, and a ticket as the list sums it up.
 
 const owner = {kind: "user", id: "owner"} as const;
+
 const entry = (pos: number, fact: Fact): Entry => ({
 	pos,
 	ticket: 1,

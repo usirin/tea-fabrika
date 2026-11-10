@@ -25,6 +25,7 @@ const scalar = Schema.Union([
 	Schema.Finite,
 	Schema.String.check(Schema.isMaxLength(10)),
 ]);
+
 const json = (depth: number): Schema.Codec<Schema.Json> =>
 	depth === 0
 		? scalar
@@ -42,6 +43,7 @@ const PROCESS = Effect.runSync(processId);
 const SPAN = "00f067aa0ba902b7";
 const START = Effect.runSync(processId);
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const sample = {
 	PROCESS,
 	OTHER_PROCESS,
@@ -54,6 +56,7 @@ const sample = {
 	id: "write-a",
 	kinds: ["saved", "commented"],
 };
+
 // T540 regression: write-b collided with the refusal law's fixed second id.
 // The retry/wake law also checks that two write-b calls return the same receipt.
 const sessionExamples = [sample, {...sample, id: "write-b"}];
@@ -61,6 +64,7 @@ const sessionExamples = [sample, {...sample, id: "write-b"}];
 // the old 1..40 suffix, not just one suffix character at the default size.
 // It also covers write- plus every 1..20-character suffix in the id tuple.
 const sessionOptions = {arbitrary: {seed: 119120, runs: 20, size: 54}};
+
 // Id.Process generates its whole UUIDv7 space, including both version chars and all eight variants.
 const sessionSchema = Schema.Struct({
 	PROCESS: Id.Process,
@@ -89,6 +93,7 @@ const sessionSchema = Schema.Struct({
 		Schema.makeFilter((kinds) => new Set(kinds).size === kinds.length),
 	),
 });
+
 const sessionArb = Arbitrary.schema(sessionSchema).pipe(
 	Arbitrary.filter((value) => value.PROCESS !== value.OTHER_PROCESS),
 );
@@ -96,16 +101,20 @@ const sessionArb = Arbitrary.schema(sessionSchema).pipe(
 const folder = mkdtempSync(join(tmpdir(), "p10-session-"));
 const opened: Array<DatabaseSync> = [];
 let count = 0;
+
 const database = (file = join(folder, `${++count}.db`)) => {
 	const db = new DatabaseSync(file);
 	opened.push(db);
 	return {db, sql: nodeSql(db), file};
 };
+
 afterAll(() => {
 	for (const db of opened) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
 });
+
 const inputId = Brand.nominal<InputId>(); // Test plays the trusted door, never a public decoder.
+
 const setup = ({
 	PROCESS,
 	OTHER_PROCESS,
@@ -172,7 +181,9 @@ const setup = ({
 		kinds,
 	};
 };
+
 const {parent, saved, signer, authority} = setup(sample);
+
 const authorityProperty = (
 	name: string,
 	law: (context: ReturnType<typeof setup>) => Effect.Effect<void, unknown>,
@@ -187,6 +198,7 @@ const authorityProperty = (
 			}),
 		sessionOptions,
 	);
+
 const snapshot = (db: DatabaseSync) =>
 	JSON.stringify(
 		db

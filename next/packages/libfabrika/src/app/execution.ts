@@ -5,6 +5,7 @@ import {type Input, ProgramDown, stepper, Step, type Stepper} from "./program.ts
 import {Saved} from "./state.ts";
 
 const Upgraded = Schema.Struct({saved: Saved, ran: Schema.Array(Schema.String)});
+
 const Outcome = Schema.TaggedUnion({
 	Ok: {value: Schema.Unknown, at: Schema.Number},
 	Err: {
@@ -18,16 +19,19 @@ const Outcome = Schema.TaggedUnion({
 		at: Schema.Number,
 	},
 });
+
 const Typed = Schema.Struct({type: Schema.String});
 
 // Match P37's deletable failure-content ceiling, half a Durable Object row.
 const MOST_CONTENT = 1_000_000;
+
 /** Program failures are checked RPC data; a rejected call is a transport failure. */
 const Failure = {
 	reason: ProgramDown.fields.why,
 	error: Schema.String,
 	content: Schema.String.check(Schema.isMaxLength(MOST_CONTENT)),
 };
+
 export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", Failure);
 
 export const executionFailure = (error: ProgramDown) =>

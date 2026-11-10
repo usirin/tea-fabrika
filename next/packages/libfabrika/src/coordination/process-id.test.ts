@@ -13,16 +13,20 @@ const Time = Schema.Int.check(Schema.isBetween({minimum: 0, maximum: maxClock - 
 const Count = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 512}));
 const Calls = Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 16}));
 const Many = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 1024}));
+
 const BeforeEpoch = Schema.Int.check(
 	Schema.isBetween({minimum: 1, maximum: Number.MAX_SAFE_INTEGER}),
 );
+
 const Rollback = Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 1_000_000_000}));
 const options = {arbitrary: {seed: 119120, runs: 40}};
+
 const decode = (id: string): Uint8Array => {
 	const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 	const value = [...id.slice(8)].reduce((n, c) => (n << 5n) | BigInt(alphabet.indexOf(c)), 0n);
 	return Uint8Array.from({length: 16}, (_, i) => Number((value >> BigInt((15 - i) * 8)) & 255n));
 };
+
 const timestamp = (id: string): number =>
 	[...decode(id).slice(0, 6)].reduce((n, b) => n * 256 + b, 0);
 

@@ -23,6 +23,7 @@ const RUNNER = join(ROOT, "oxlint-plugins/stylelint.ts");
 const FIXTURES = join(import.meta.dirname, "css/fixtures");
 const WINDOW = "apps/fabrika/src/window/window.css";
 const TOKENS = "packages/fabrika-design/src/tokens.css";
+
 const RULES = [
 	{law: 21, name: "token-exists", lines: [1, 2, 3, 4]},
 	{
@@ -35,7 +36,9 @@ const RULES = [
 	{law: 25, name: "motion-under-guard", lines: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]},
 	{law: 26, name: "font-size-from-scale", lines: [1, 2, 3, 4, 5, 6, 7]},
 ] as const;
+
 const temps: string[] = [];
+
 afterAll(() => {
 	for (const path of temps) rmSync(path, {recursive: true, force: true});
 });
@@ -45,22 +48,26 @@ const temp = () => {
 	temps.push(path);
 	return path;
 };
+
 const write = (root: string, path: string, text: string) => {
 	const target = join(root, path);
 	mkdirSync(dirname(target), {recursive: true});
 	writeFileSync(target, text);
 	return target;
 };
+
 const rootConfig = async (): Promise<stylelint.Config> => {
 	assert(existsSync(CONFIG), "Today's lint has no root CSS config. PR 3 must install it.");
 	const module: {default: stylelint.Config} = await import(pathToFileURL(CONFIG).href);
 	return module.default;
 };
+
 const fixture = (side: "bad" | "good", name: string) => {
 	const file = join(FIXTURES, side, `${name}.css`);
 	assert(existsSync(file), `Law fixture deleted: ${relative(ROOT, file)}`);
 	return file;
 };
+
 const lint = async (file: string, codeFilename?: string) => {
 	await rootConfig();
 	const report = await stylelint.lint({
@@ -222,6 +229,7 @@ const settingsProblems = (config: stylelint.Config | undefined, base: stylelint.
 	}
 	return problems;
 };
+
 const warningPaths = (value: unknown, path = "config"): string[] => {
 	if (value === null || typeof value !== "object") return [];
 	return Object.entries(value).flatMap(([key, item]) => [
@@ -231,6 +239,7 @@ const warningPaths = (value: unknown, path = "config"): string[] => {
 		...warningPaths(item, `${path}.${key}`),
 	]);
 };
+
 const configPlant = (body: string) => {
 	const root = temp();
 	const file = write(
@@ -333,6 +342,7 @@ export default {...base, rules: Object.fromEntries(Object.entries(base.rules).ma
 	);
 	return repo;
 };
+
 const track = (repo: string, files: Record<string, string>) => {
 	for (const [path, contents] of Object.entries(files)) write(repo, path, contents);
 	const added = spawnSync("git", ["add", "--", ...Object.keys(files)], {
@@ -341,6 +351,7 @@ const track = (repo: string, files: Record<string, string>) => {
 	});
 	expect(added.status, added.stderr).toBe(0);
 };
+
 const run = (repo: string) => {
 	const result = spawnSync(process.execPath, ["oxlint-plugins/stylelint.ts"], {
 		cwd: repo,

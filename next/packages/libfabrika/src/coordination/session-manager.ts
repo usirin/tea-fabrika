@@ -10,13 +10,16 @@ export const Writer = Schema.TaggedUnion({
 	agent: {key: Schema.String, for: Schema.String},
 });
 export type Writer = typeof Writer.Type;
+
 export interface Envelope<A> {
 	readonly id: InputId;
 	readonly by: Writer;
 	readonly arrivedAt: number;
 	readonly input: A;
 }
+
 const Span = Schema.Struct({traceId: Schema.String, spanId: Schema.String});
+
 export const Session = Schema.Struct({
 	by: Writer,
 	parent: ParentText,
@@ -24,10 +27,13 @@ export const Session = Schema.Struct({
 	span: Span,
 });
 export type Session = typeof Session.Type;
+
 export class SigningRefused extends Schema.TaggedError<SigningRefused>()("SigningRefused", {
 	why: Schema.Literals(["not_delivered", "spent", "person_only", "ended", "signal"]),
 }) {}
+
 export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {}) {}
+
 export class SignRequest extends Context.Service<SignRequest, {readonly id: string}>()(
 	"@kampus/libfabrika/SignRequest",
 ) {}
@@ -46,6 +52,7 @@ const InputRecord = Schema.Struct({
 });
 type InputRecord = typeof InputRecord.Type;
 const State = Schema.TaggedUnion({recorded: {}, delivered: {}});
+
 export class SavedInput extends Schema.Opaque<SavedInput>()(
 	Schema.Struct({
 		input: InputRecord,
@@ -65,6 +72,7 @@ export class SavedInput extends Schema.Opaque<SavedInput>()(
 		return Result.succeed(Session.make({by: a.by, parent: a.id, traceId: a.traceId, span: a.span}));
 	}
 }
+
 const encode = Schema.encodeSync(Schema.fromJsonString(SavedInput));
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(SavedInput));
 const encodeSession = Schema.encodeSync(Schema.fromJsonString(Session));

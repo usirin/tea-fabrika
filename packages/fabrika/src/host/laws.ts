@@ -53,6 +53,7 @@ export interface Time {
 	/** `e` on the live clock, for a law whose waits are about this machine, not the ledger (T). */
 	readonly live: <A, E, R>(e: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
 }
+
 /** What asking the ledger its time can fail with: its `register` and `readLast`. */
 type LedgerError = Denied | LedgerUnreachable;
 
@@ -69,6 +70,7 @@ const testTime = (clock: TestClock.TestClock): Time => ({
 
 /** Probes of the ledger's clock before `past` gives up and lets the law's next step judge. */
 const PROBES = 100;
+
 /**
  * The ledger keeps its own clock: a law asks it the time. The ledger stamps each event it writes
  * with its now (`at`), so one fresh name registered and read back is its clock's answer.
@@ -108,6 +110,7 @@ const factOf = (l: Service, time: Time, stream: string, kind: string) =>
 		}
 		return null;
 	});
+
 /** The `lease_expired` the alarm writes for a lease, from its `end` (the time it wrote) on. */
 const expired = (l: Service, time: Time, name: string, end: number) =>
 	Effect.andThen(time.past(end), factOf(l, time, name, "lease_expired"));
@@ -147,6 +150,7 @@ const WORDS: Record<string, string> = {
 	OverLimit: "limit",
 	LedgerUnreachable: "unreachable",
 };
+
 const okWord = (a: unknown) =>
 	typeof a === "object" && a !== null && "dup" in a && a.dup === true
 		? "dup"
@@ -158,6 +162,7 @@ const okWord = (a: unknown) =>
 
 /** What a call answered, as one word, and its value when it succeeded. */
 type Said<A> = {readonly word: string; readonly value: A | null};
+
 /** One call's answer as a word: `ok`, `dup`, `existing`, or the refusal's (`stale`, `fenced`, ...). */
 export const say = <A, E extends {readonly _tag: string}>(e: Effect.Effect<A, E>) =>
 	Effect.map(Effect.result(e), (r): Said<A> =>
@@ -176,6 +181,7 @@ type Step = {
 	readonly want: string;
 	readonly late?: true;
 };
+
 const verdict = (law: string, all: readonly Step[]): LawResult => {
 	const list = all.filter((s) => s.late === undefined);
 	const late = all.filter((s) => s.late !== undefined).map((s) => s.what);
@@ -191,6 +197,7 @@ const verdict = (law: string, all: readonly Step[]): LawResult => {
 					}`,
 	};
 };
+
 /** A law's steps, and `step`: run one call, record its word against the one wanted. */
 const steps = () => {
 	const list: Step[] = [];
@@ -208,6 +215,7 @@ const steps = () => {
 	};
 	return {list, step, count};
 };
+
 /** The steps of a law about time, on `time`, and `inTime`. */
 const timedSteps = (time: Time) => {
 	const s = steps();
@@ -231,6 +239,7 @@ const tally = (words: readonly string[]) => {
 	for (const w of words) t[w] = (t[w] ?? 0) + 1;
 	return t;
 };
+
 const show = (t: Record<string, number>) =>
 	Object.entries(t)
 		.map(([k, v]) => `${k} ${v}`)
@@ -238,8 +247,10 @@ const show = (t: Record<string, number>) =>
 
 const note = (writer: string, id?: string): NewEvent =>
 	id === undefined ? {kind: "note", writer} : {kind: "note", writer, id};
+
 const all = <A, E>(xs: readonly Effect.Effect<A, E>[]) =>
 	Effect.all(xs, {concurrency: "unbounded"});
+
 const failed = (law: string, why: string): LawResult => ({law, pass: false, numbers: why});
 
 /** Register each name; the claims after it go at the registration's rev. */
@@ -1072,8 +1083,10 @@ export const law25ExitChild = (l: Service) =>
 
 const dollars = (l: Service, name: string) =>
 	Effect.map(l.usage(name), (u) => (u === null ? "none" : String(u.used.usd)));
+
 const endOf = (l: Service, name: string) =>
 	Effect.map(dataOf(l, name, "exited"), (xs) => String(xs.at(-1)?.reason ?? "up"));
+
 const limitRecords = (l: Service, name: string) =>
 	Effect.map(dataOf(l, streams(name).dead, "limit"), (xs) => xs.length);
 

@@ -16,6 +16,7 @@ vi.mock("effect", async (original) => {
 	const actual = await original<typeof import("effect")>();
 	return {...actual, Effect: {...actual.Effect}};
 });
+
 const config = {
 	name: "parse-test",
 	person: "person-test",
@@ -24,8 +25,10 @@ const config = {
 	port: 18787,
 	build: "test",
 };
+
 const malformed = (schema: Schema.Top) =>
 	fc.jsonValue().filter((value) => !Schema.is(schema)(value));
+
 // Keep parser checks independent of the bearer migration. The separate [secrets] type and
 // flow laws require Redacted; this fixture also reaches HEAD's parser using its old signature.
 const parserControl = (request: Request, env: Env) =>
@@ -46,6 +49,7 @@ const parserControl = (request: Request, env: Env) =>
 		]);
 		return yield* legacy;
 	});
+
 const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
 	expect(Exit.isFailure(exit)).toBe(true);
 	const cause = Exit.isFailure(exit) ? exit.cause : Cause.die("unexpected success");
@@ -56,6 +60,7 @@ const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
 		value: {_tag: tag, why: "bad_row"},
 	});
 };
+
 const world = () => {
 	const db = new DatabaseSync(":memory:"),
 		sql = nodeSql(db);
@@ -343,6 +348,7 @@ for (const field of ["put key", "put checksum", "head key"] as const)
 	});
 
 const objectName = Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String]));
+
 for (const service of ["process", "record"] as const)
 	it(`${service} object names return typed parse failures for malformed saved names`, async () => {
 		await fc.assert(

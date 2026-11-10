@@ -35,6 +35,7 @@ const claim = (when: string, result: string) => ({
 	check: {how: "test" as const, what: "a test runs it"},
 	serves: ["mover"] as const,
 });
+
 const job = (when: string, result: string) => ({
 	...claim(when, result),
 	fixture: "three files in two packages, moved twice",
@@ -73,6 +74,7 @@ const DRAFT: PlanDraft = {
 };
 
 const ledger = (facts: readonly Fact[]): Entry[] => facts.map((fact, i) => ({seq: i + 1, fact}));
+
 const planned = (tickets = [TICKET]): Fact => ({
 	type: "planned",
 	plan: PLAN,
@@ -80,11 +82,13 @@ const planned = (tickets = [TICKET]): Fact => ({
 	data: revisionOfDraft(DRAFT)!,
 	problems: [],
 });
+
 const approve = (version: number): Fact => ({
 	type: "answered",
 	id: planAskId(PLAN, version),
 	answer: {kind: "approve"},
 });
+
 const judged = (
 	task: "t1" | "t2" | "plan",
 	head: string,
@@ -325,6 +329,7 @@ describe("the lane's view, from the facts", () => {
 
 type AnyMsg = {readonly type: string; readonly [field: string]: unknown};
 const step = (s: Lane, msg: AnyMsg) => applyCell<Lane, AnyMsg, LaneCmd>(lane, s, msg);
+
 const JOB: LaneJob = {
 	plan: PLAN,
 	settings: {model: "haiku", effort: "low", budget: 1},

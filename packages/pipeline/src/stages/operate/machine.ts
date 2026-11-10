@@ -70,6 +70,7 @@ export type LoopSettings = typeof LoopSettings.Type;
 
 /** A ticket, and the lane that claims or lets it go. */
 const LaneIn = Schema.Struct({ticket: Schema.String, lane: LaneId});
+
 const BuildIn = Schema.Struct({
 	ticket: Schema.String,
 	/** The lane that holds the ticket: the handler builds only while it still does. */
@@ -79,6 +80,7 @@ const BuildIn = Schema.Struct({
 	open: Schema.Array(Item),
 	settings: Settings,
 });
+
 const ReviewIn = Schema.Struct({
 	ticket: Schema.String,
 	pr: Schema.String,
@@ -114,6 +116,7 @@ export const Post = Schema.Struct({
 export type Post = typeof Post.Type;
 
 const PostIn = Schema.Struct({pr: Schema.String, head: Schema.String, posts: Schema.Array(Post)});
+
 const ShipIn = Schema.Struct({
 	ticket: Schema.String,
 	/** The lane that holds the ticket: the handler ships only while it still does. */
@@ -152,6 +155,7 @@ const Held = Schema.Struct({
 type Held = typeof Held.Type;
 const At = Schema.Struct({...Held.fields, round: Schema.Finite});
 type At = typeof At.Type;
+
 const Ended = Schema.Struct({
 	outcome: LoopOutcome,
 	/** The last stage outcome the loop read before it ended, by name, or why no stage could be run. */
@@ -215,6 +219,7 @@ export type LoopMsg =
 
 type Step = readonly [Loop, readonly LoopCmd[]];
 const stay = (s: Loop): Step => [s, []];
+
 const held = (s: Held): Held => ({
 	ticket: s.ticket,
 	number: s.number,
@@ -222,7 +227,9 @@ const held = (s: Held): Held => ({
 	settings: s.settings,
 	rounds: s.rounds,
 });
+
 const intent = (s: At, stage: string) => intentOf("loop", s.ticket, s.round, stage);
+
 /** The agent one step runs: its own, when the loop was given one, else the loop's shared one. */
 const agent = (s: Held, step: "build" | "review"): Settings =>
 	s.settings.agents?.[step] ?? {

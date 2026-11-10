@@ -10,6 +10,7 @@ import {type FrameProps, Over, TopBar} from "./frame.tsx";
 import type {PaletteProps} from "./pop.tsx";
 
 const palette = vi.hoisted(() => ({props: null as PaletteProps | null}));
+
 vi.mock("./pop.tsx", async (original) => {
 	const real = await original<typeof import("./pop.tsx")>();
 	return {
@@ -27,8 +28,10 @@ const fold = (...msgs: DeskMsg[]): Open => {
 	if (desk.at !== "open") throw new Error("desk ended");
 	return desk;
 };
+
 const host = {pid: 42, since: 0, build: "current", ledger: {kind: "own"}, agents: []} as const;
 const asks: AsksNow = {asks: [], later: [], reach: "ok", why: null};
+
 const props = (over: Partial<FrameProps> = {}): FrameProps => ({
 	desk: fold(),
 	frame: FRAME,
@@ -46,6 +49,7 @@ const props = (over: Partial<FrameProps> = {}): FrameProps => ({
 	step: () => {},
 	...over,
 });
+
 const show = (over: Partial<FrameProps>) => renderToStaticMarkup(createElement(Over, props(over)));
 
 describe("today's frame display laws", () => {

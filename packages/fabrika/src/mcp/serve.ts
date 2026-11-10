@@ -124,6 +124,7 @@ const Initialize = Schema.Struct({
 	method: Schema.Literal("initialize"),
 	params: Schema.Struct({clientInfo: Schema.Struct({name: Schema.String, version: Schema.String})}),
 });
+
 const decodeInitialize = Schema.decodeUnknownOption(Initialize);
 
 /**

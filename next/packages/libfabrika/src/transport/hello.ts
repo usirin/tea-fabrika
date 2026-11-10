@@ -44,7 +44,9 @@ const CheckedHello = Schema.TaggedUnion({
 	online: {who: Who, version: Schema.Int, ping: Schema.Number, hello: Hello},
 	refused: {why: Schema.String, fingerprint: Schema.optionalKey(Schema.String)},
 });
+
 const no = (why: string) => CheckedHello.cases.refused.make({why});
+
 const pingMs = (text: string, min: number, max: number): number => {
 	const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(text);
 	const scale = new Map([

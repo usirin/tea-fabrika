@@ -93,10 +93,12 @@ export interface Script {
 }
 
 type AnyMsg = {readonly type: string; readonly [field: string]: unknown};
+
 const step = (s: TestWriter, msg: AnyMsg) =>
 	applyCell<TestWriter, AnyMsg, TestWriterCmd>(testWriter, s, msg);
 
 const ok = (cmd: TestWriterCmd, value: unknown): AnyMsg => ({type: `${cmd.type}_ok`, cmd, value});
+
 const err = (cmd: TestWriterCmd, failure?: Readonly<Record<string, unknown>>): AnyMsg => ({
 	type: `${cmd.type}_err`,
 	cmd,

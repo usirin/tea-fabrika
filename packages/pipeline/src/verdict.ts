@@ -18,6 +18,7 @@ export const NAMESPACES = [
 	"review-ui",
 	"governance",
 ] as const;
+
 export type Namespace = (typeof NAMESPACES)[number];
 
 /** The first line of a verdict. */
@@ -218,11 +219,14 @@ function sectionsOf(body: string): Section[] {
 /** The reviewer saying a point does not block: a note, a nit, or a thing filed for later. Read on a heading or an item's opening words. */
 const SOFT =
 	/non[- ]?blocking|not[- ]blocking|not a blocker|do(?:es)? not block|doesn't block|not (?:a |part of (?:the|this) )?(?:finding|fail)|\bno finding\b|\bnotes?\b|\bnoted\b|\bnits?\b|\bcraft\b|\badvisory\b|\bobservations?\b|filed separately|\bout of scope\b|\bnot graded\b|for the record/i;
+
 /** A heading that opens the reviewer's findings. */
 const FINDING_TITLE =
 	/\bfindings?\b|\bblock(?:er|ers|ing|s)?\b|\bwhy\b.*\bfails?\b|\bthe (?:defect|gap|miss|problem|contradiction)\b|\bwhat (?:fails|is wrong|is missing|blocks)\b/i;
+
 /** A heading that opens a list of findings, not one. */
 const PLURAL = /\bfindings\b|\bblockers\b|\bdefects\b|\bgaps\b|\bproblems\b/i;
+
 /** A heading about an earlier round's findings, or the fix: not a finding of this verdict. */
 const NOT_OURS =
 	/round[- ]\d+(?:'s)? findings?|findings? (?:from|of) round|earlier findings?|prior findings?|\brepair\b|\bremedy\b|\bfix\b|what i (?:read|checked|ran)/i;
@@ -237,6 +241,7 @@ const plain = (text: string) =>
 		.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
 		.replace(/\s+/g, " ")
 		.trim();
+
 const titleOf = (text: string) => {
 	const first = plain(text.split("\n").find((line) => line.trim() !== "") ?? "");
 	return first.length > 200 ? `${first.slice(0, 197)}...` : first;

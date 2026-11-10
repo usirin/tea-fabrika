@@ -210,7 +210,9 @@ export const layerLanes = (o: LanesOptions = {}) =>
 	);
 
 export const claim = (ticket: TicketId, lane: LaneId) => Lanes.use((l) => l.claim(ticket, lane));
+
 export const release = (ticket: TicketId, lane: LaneId) =>
 	Lanes.use((l) => l.release(ticket, lane));
+
 export const holding = (ticket: TicketId, lane: LaneId) =>
 	Lanes.use((l) => l.holding(ticket, lane));

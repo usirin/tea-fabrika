@@ -60,6 +60,7 @@ import {keyOnly, verify} from "./sshsig.ts";
 export type Stamp =
 	| {readonly kind: "user"; readonly id: string}
 	| {readonly kind: "agent"; readonly id: string; readonly for: string};
+
 type Person = Extract<Stamp, {kind: "user"}>;
 
 /** A writer's text in a row: `user:<id>`, or `agent:<id> for:<person>` (writer.ts reads it). */
@@ -124,6 +125,7 @@ export const PERSON_KINDS = [
 	"area_renamed",
 	"area_merged",
 ] as const;
+
 export type PersonKind = (typeof PERSON_KINDS)[number];
 
 export const isPersonKind = (kind: string): kind is PersonKind =>
@@ -238,12 +240,14 @@ export type Members = {
 };
 
 const PersonId = Schema.String.check(Schema.isPattern(PERSON_ID));
+
 /** A member fact's data: `{id, name}`, and `{id}` for `removed`. */
 const readCame = Schema.decodeUnknownOption(
 	Schema.fromJsonString(
 		Schema.Struct({id: PersonId, name: Schema.String.check(Schema.isPattern(NAME))}),
 	),
 );
+
 const readRemoved = Schema.decodeUnknownOption(
 	Schema.fromJsonString(Schema.Struct({id: PersonId})),
 );

@@ -21,17 +21,21 @@ import {
 // tested on were recorded from a real pull request (see `scripted.ts`).
 
 const ticket = (n: number) => recorded(`tickets/${n}.md`);
+
 const changeAt = (which: Which, answers: Answers = {}, head: string | null = HEADS[which]) => {
 	const {gh, calls} = recordedGh(which, answers);
 	return {read: Effect.runPromise(Effect.result(readChange(gh)(PR, head))), calls};
 };
+
 const change = async (which: Which, answers: Answers = {}, head: string | null = HEADS[which]) => {
 	const result = await changeAt(which, answers, head).read;
 	if (result._tag === "Failure") throw new Error("the read failed");
 	return result.success;
 };
+
 const failure = async (which: Which, answers: Answers = {}, head: string | null = HEADS[which]) =>
 	(await changeAt(which, answers, head).read)._tag;
+
 const body = (text: string) =>
 	changed(recorded("change-final.json"), (repo) => {
 		repo.pullRequest.body = text;

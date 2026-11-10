@@ -3,6 +3,7 @@ import * as fc from "fast-check";
 import * as Id from "./id.ts";
 
 const maxClock = 2 ** 48 - 1;
+
 export const processClocks = Arbitrary.schema(
 	Schema.Union([
 		Schema.Literals([0, maxClock]),

@@ -108,6 +108,7 @@ export const targetOf = (job: Pick<LocalReviewJob, "plan" | "task">) =>
 	job.task === PLAN ? bookTarget(job.plan) : taskTarget(job.plan, job.task);
 
 const decodeJob = Schema.decodeUnknownExit(Schema.fromJsonString(LocalReviewJob));
+
 const jobOf = (self: Self["Service"]) =>
 	self.reads.readStream(self.inbox).pipe(
 		Effect.orElseSucceed(() => []),

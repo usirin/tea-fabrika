@@ -7,6 +7,7 @@ type Patch = {
 	readonly path: string;
 	readonly value?: unknown;
 };
+
 const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
 	let root = structuredClone(before);
 	for (const patch of patches) {

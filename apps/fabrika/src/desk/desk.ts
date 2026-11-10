@@ -366,17 +366,20 @@ export const forPage = (s: Desk): Desk => {
 export const open = Cmd.make("open", {input: Opening, ok: Done, err: []});
 export const close = Cmd.make("close", {input: Tile, ok: Done, err: []});
 export const stop = Cmd.make("stop", {input: Tile, ok: Done, err: []});
+
 export const send = Cmd.make("send", {
 	input: Schema.Struct({tile: TileIdSchema, data: Schema.String}),
 	ok: Done,
 	err: [],
 });
+
 export const save = Cmd.make("save", {input: Schema.Struct({desk: Saved}), ok: Done, err: []});
 export const empty = Cmd.make("empty", {input: Schema.Struct({}), ok: Done, err: []});
 /** One process, a window of a line: by its id. */
 const Process = Schema.Struct({process: Schema.String});
 export const end = Cmd.make("end", {input: Process, ok: Done, err: []});
 export const kill = Cmd.make("kill", {input: Process, ok: Done, err: []});
+
 /** The frame shows something, on the page whose key asked: no tile and no layout changes. */
 export const show = Cmd.make("show", {
 	input: Schema.Struct({what: Schema.Literals([...SHOWS, "focus-next", "focus-previous"])}),
@@ -1012,6 +1015,7 @@ export const deskMachine = defineMachine({
 });
 
 const TILE_ID = /^t([0-9]{1,9})$/;
+
 /**
  * A kept desk as it reads back: as `Saved`, with a letter given to any line kept without one. Its
  * agents are read on their own (`agentsBack`), so a desk kept before agents had tiles, or with a
@@ -1020,6 +1024,7 @@ const TILE_ID = /^t([0-9]{1,9})$/;
 const decodeSaved = Schema.decodeUnknownOption(
 	savedWith(KeptLayoutSchema, Schema.optionalKey(Schema.Unknown)),
 );
+
 const decodeAgents = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.String));
 
 /**

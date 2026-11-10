@@ -8,10 +8,12 @@ const Request = Schema.Struct({
 	method: Schema.String,
 	params: Schema.Unknown,
 });
+
 const Read = Schema.Struct({
 	stream: Schema.String,
 	after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
+
 type Options<E, ReadError> = {
 	readonly reader: string;
 	readonly session: string;

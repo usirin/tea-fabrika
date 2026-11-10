@@ -120,11 +120,13 @@ const DIST = import.meta.dirname;
 
 const launch = launchOf(process.env);
 if (launch.kind !== "owner") app.setPath("userData", launch.home);
+
 // Before `ready`, so no Dock icon shows even for a moment, and Chromium starts with the switches.
 if (launch.kind === "quiet") {
 	if (process.platform === "darwin") app.setActivationPolicy("accessory");
 	for (const name of QUIET_SWITCHES) app.commandLine.appendSwitch(name);
 }
+
 // Before `ready`, as Electron asks: a standard, secure scheme, so the page's own files have
 // an origin of their own and run as on https.
 protocol.registerSchemesAsPrivileged([

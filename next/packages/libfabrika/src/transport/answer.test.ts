@@ -8,11 +8,13 @@ import * as T from "./index.ts";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 class Offline extends Schema.TaggedError<Offline>()("Offline", {}) {}
+
 type Route = (
 	method: string,
 	params: unknown,
 	who: typeof T.Who.Type,
 ) => Effect.Effect<typeof T.Answer.Type, Offline>;
+
 const online = () =>
 	T.Attached.cases.online.make({
 		client: "c1",
@@ -22,7 +24,9 @@ const online = () =>
 		watching: false,
 		busy: false,
 	});
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 // Method names the door and the ledger answer today, and two near misses of door.knock.
 const METHODS = [
 	"door.knock",
@@ -42,6 +46,7 @@ const METHODS = [
 	"Door.knock",
 	"door.knock ",
 ] as const;
+
 const unauthenticated = fc.oneof(
 	fc.record({client: fc.string(), nonce: fc.string()}).map((a) => T.Attached.cases.new.make(a)),
 	fc
@@ -64,7 +69,9 @@ const unauthenticated = fc.oneof(
 		})
 		.map((a) => T.Attached.cases.waiting.make(a)),
 );
+
 const admit = () => Effect.die("online routing must not repeat hello admission");
+
 const frame = (over: Record<string, unknown> = {}) =>
 	JSON.stringify({
 		jsonrpc: "2.0",
@@ -73,6 +80,7 @@ const frame = (over: Record<string, unknown> = {}) =>
 		params: {stream: "x", after: 0},
 		...over,
 	});
+
 describe("P10 JSON-RPC", () => {
 	it.effect("p23: numeric reply id zero is preserved, not mistaken for a notification", () =>
 		Effect.gen(function* () {

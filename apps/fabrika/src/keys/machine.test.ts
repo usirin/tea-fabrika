@@ -6,9 +6,12 @@ import {type Editor, type EditorCmd, type EditorMsg, editorMachine, matching} fr
 
 // Today's version. The new editor's public machine is the builder's contract.
 const start = () => editorMachine.init(defaults, undefined)[0];
+
 const step = (model: Editor, msg: EditorMsg) =>
 	applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, model, msg);
+
 const select = () => step(start(), {type: "select", does: "tezgah.zoom"})[0];
+
 const press = (key: string, mods = {}) => ({
 	key,
 	code: "",

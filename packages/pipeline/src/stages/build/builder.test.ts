@@ -15,6 +15,7 @@ const C1 = criterionId("c1");
 
 const TREE = "/work/trees/1";
 const TEMP = ["/private/tmp"];
+
 const refused = (tool: string, input: Record<string, unknown>) =>
 	builderRefusal(TREE, TEMP, tool, input);
 

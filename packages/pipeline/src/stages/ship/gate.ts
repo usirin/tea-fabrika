@@ -29,6 +29,7 @@ export const landingOf = (f: Pick<ShipFacts, "ticket">): Landing =>
 
 /** A criterion whose row at this head failed: the builder has work. */
 const notMet = (r: Refusal) => r.why === "not_met";
+
 /** A criterion with no row on its current words at this head: a review is owed. */
 const unjudged = (r: Refusal) =>
 	r.why === "no_verdict" || r.why === "other_head" || r.why === "old_version";

@@ -34,12 +34,14 @@ import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
 const script = process.env.T318_SKILLSCHECK_SCRIPT ?? join(import.meta.dirname, "skillscheck.sh");
+
 // These fixtures are independent of the checker: deleting a checker clause must fail a law.
 const exam = [
 	"Every new or changed law is a property, or an example labeled vector, format, pinned or scenario with its reason.",
 	"Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.",
 	"The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
 ];
+
 const check = [
 	"Sweep, do not sample. For each law in the plan's table, list every way in: each public call, each cut point, and each saved or binding state. Check each one.",
 	"A finding names its class and every case of it.",
@@ -48,6 +50,7 @@ const check = [
 	"Read every decided note the PR builds, following the plan's references and the change itself.",
 	"Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law. Each blocker cites that source and shows the missed case.",
 ];
+
 const answer = [
 	"Start with merge-ready; tickets: <m> or changes: <n>; tickets: <m>.",
 	"n counts blocking classes. Each class lists every affected case. m counts distinct confirmed tracker tickets linked in this answer.",
@@ -56,6 +59,7 @@ const answer = [
 	'Use tracker_query to find an existing ticket, or tracker_file with value: {title, body, from: {_tag: "pr", url, step: "review"}}. Record the returned ID.',
 	"If filing fails, include the exact pending payload for lead to retry. Do not count it as filed or start another review round for it.",
 ];
+
 const sections: Record<string, Record<string, string[]>> = {
 	".agents/skills/review/SKILL.md": {"3. **Check:**": check, "4. **Answer**": answer},
 	".agents/skills/lead/SKILL.md": {
@@ -83,6 +87,7 @@ const sections: Record<string, Record<string, string[]>> = {
 		"- **Every pull request, next/ or today's, goes through the pipeline's steps:**": exam,
 	},
 };
+
 const tree = (dir: string, whitespace = " ", omit?: [string, string, number], outside = false) => {
 	for (const [file, groups] of Object.entries(sections)) {
 		const chunks = Object.entries(groups).map(
@@ -113,12 +118,14 @@ const tree = (dir: string, whitespace = " ", omit?: [string, string, number], ou
 		symlinkSync(`../../.agents/skills/${skill}`, join(dir, ".claude/skills", skill));
 	}
 };
+
 const run = (dir: string) =>
 	spawnSync("sh", [script, dir], {
 		encoding: "utf8",
 		timeout: 5_000,
 		env: {...process.env, TYPESAFE_API_KEY: undefined},
 	});
+
 const name = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/);
 const states = ["relative", "absolute", "missing", "copy", "dangling", "wrong", "cycle"] as const;
 type State = (typeof states)[number];
@@ -364,6 +371,7 @@ const clauses = [
 		"plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments.",
 	],
 ] as const;
+
 const slice1bClauses = [
 	["lead", "Scripts", "K6", "leakgrep.sh checks added text; private words stay outside the repo."],
 	["plan", "Scripts", "K6", "leakgrep.sh checks added text; private words stay outside the repo."],
@@ -389,7 +397,9 @@ const slice1bClauses = [
 		"For a new property, use `@effect/vitest`'s `it.prop` or `it.effect.prop` with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases.",
 	],
 ] as const;
+
 const allClauses = [...clauses, ...slice1bClauses];
+
 const mainText = (skill: string, omit = -1, wrap = " ") => {
 	const sections = new Map<string, string[]>();
 	for (const [i, [source, section, , text]] of allClauses.entries()) {
@@ -398,13 +408,16 @@ const mainText = (skill: string, omit = -1, wrap = " ") => {
 	}
 	return `# ${skill}\n${[...sections].map(([section, texts]) => `${section ? `## ${section}\n` : ""}${texts.join("\n\n")}`).join("\n\n")}\n`;
 };
+
 // A skill file also holds T318's sections, so both checks read one whole tree.
 const t318Text = (skill: string) =>
 	Object.entries(sections[`.agents/skills/${skill}/SKILL.md`] ?? {}).map(
 		([heading, texts]) => `${heading}\n${texts.join("\n")}\n`,
 	);
+
 const skillText = (skill: string, omit = -1, wrap = " ") =>
 	[...t318Text(skill), mainText(skill, omit, wrap)].join("\n");
+
 const clauseTree = (f: (dir: string) => void, program = script) => {
 	const dir = mkdtempSync(join(tmpdir(), "clauses-"));
 	try {

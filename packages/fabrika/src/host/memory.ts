@@ -59,6 +59,7 @@ export interface MemoryOptions {
 }
 
 type LeaseRow = {holder: string; expiresAt: number; fence: number; stop: boolean};
+
 /** The process behind a name: `rules.ts`'s `names` row. `down` is the `exited` event's pos; 0: up. */
 type Proc = {
 	pos: number;
@@ -77,7 +78,9 @@ type Proc = {
 	used: {usd: number; tokens: number};
 	limited: LimitKind | null;
 };
+
 type Monitor = {watcher: string; ref: string; target: string; incarnation: number};
+
 type Ending = {
 	reason: EndReason;
 	why: string;

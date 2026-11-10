@@ -31,6 +31,7 @@ const NEXT = resolve(import.meta.dirname, "../../../..");
 const GROUPS = ["packages", "programs", "apps"] as const; // pnpm-workspace.yaml's next/ globs
 
 const Names = Schema.optional(Schema.Record(Schema.String, Schema.String));
+
 const Manifest = Schema.Struct({
 	name: Schema.String,
 	version: Schema.optional(Schema.String),
@@ -43,11 +44,13 @@ const Manifest = Schema.Struct({
 	peerDependencies: Names,
 	optionalDependencies: Names,
 });
+
 type Package = {
 	readonly dir: string;
 	readonly group: (typeof GROUPS)[number];
 	readonly manifest: typeof Manifest.Type;
 };
+
 const readManifest = Schema.decodeUnknownSync(Manifest);
 
 /** Every package under `next`: a child folder of a group that holds a `package.json`. */
@@ -84,12 +87,15 @@ const IMPORTS = [
 	/^[ \t]*import\s*["']([^"']+)["']/gm,
 	/\bimport\(\s*["']([^"']+)["']\s*\)/g,
 ];
+
 const importsIn = (text: string): ReadonlyArray<string> =>
 	IMPORTS.flatMap((pattern) =>
 		[...text.matchAll(pattern)].flatMap((m) => (m[1] === undefined ? [] : [m[1]])),
 	);
+
 const importsInFile = (file: string): ReadonlyArray<string> =>
 	importsIn(readFileSync(file, "utf8"));
+
 const isRelative = (spec: string): boolean => spec.startsWith(".");
 
 /** `@kampus/libfabrika/transport` is `{name: "@kampus/libfabrika", subpath: "./transport"}`. */
@@ -141,6 +147,7 @@ const shown = (from: string, file: string): string => relative(from, file).split
 
 // Planted trees: each scan is seen to fire on a planted break before it is trusted on `next/`.
 const planted: Array<string> = [];
+
 const plant = (files: Readonly<Record<string, string | object>>): string => {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
 	planted.push(root);
@@ -150,10 +157,13 @@ const plant = (files: Readonly<Record<string, string | object>>): string => {
 	}
 	return root;
 };
+
 afterAll(() => {
 	for (const root of planted.splice(0)) rmSync(root, {recursive: true, force: true});
 });
+
 const lines = (...each: ReadonlyArray<string>): string => `${each.join("\n")}\n`;
+
 /** A `package.json` the way p65 wants one; `extra` overrides or adds fields. */
 const manifest = (name: string, extra: object = {}): object => ({
 	name,
@@ -258,6 +268,7 @@ const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
 	"@kampus/tuval": ["."],
 	"@kampus/notes": ["."],
 };
+
 const browserEntries = (
 	packages: ReadonlyArray<Package>,
 ): ReadonlyArray<{readonly label: string; readonly file: string}> =>

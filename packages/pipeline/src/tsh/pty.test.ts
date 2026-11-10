@@ -14,12 +14,15 @@ import {describe, expect, it} from "vitest";
 const run = promisify(execFile);
 const TSH = fileURLToPath(new URL("../../bin/tsh", import.meta.url));
 const PTY = fileURLToPath(new URL("./pty/", import.meta.url));
+
 const EXPECT = ["/usr/bin/expect", "/usr/local/bin/expect", "/opt/homebrew/bin/expect"].find(
 	existsSync,
 );
+
 const ZSH = ["/bin/zsh", "/usr/bin/zsh"].find(existsSync);
 
 const home = () => mkdtempSync(join(tmpdir(), "tsh-home-"));
+
 /** Run a shell line with tsh on its PATH-less name `tsh`, answering its output and status. */
 const shell = async (sh: string, line: string, env: Record<string, string> = {}) => {
 	const result = await run(sh, ["-c", line], {

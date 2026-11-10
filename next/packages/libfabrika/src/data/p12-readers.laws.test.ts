@@ -24,6 +24,7 @@ const span: SpanRow = {
 	resource: {attributes: {"fab.object": "parse-test"}},
 	ok: true,
 };
+
 const typed = (exit: Exit.Exit<unknown, unknown>) => {
 	expect(Exit.isFailure(exit)).toBe(true);
 	const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
@@ -34,6 +35,7 @@ const typed = (exit: Exit.Exit<unknown, unknown>) => {
 		value: {_tag: "SinkError", why: "bad_row"},
 	});
 };
+
 for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as const)
 	it(`record ${reader} decoder refuses malformed disk rows with a typed failure`, async () => {
 		await fc.assert(

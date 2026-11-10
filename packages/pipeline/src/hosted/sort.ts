@@ -57,6 +57,7 @@ const Run = Schema.Struct({
 	agent: Schema.NullOr(Schema.String),
 	folder: Schema.NullOr(Schema.String),
 });
+
 const SortAskBody = Schema.Struct({run: Run, settings: Settings});
 const readAsk = Schema.decodeUnknownExit(SortAskBody);
 

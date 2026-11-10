@@ -14,6 +14,7 @@ const msgs: fc.Arbitrary<TrackerMsg> = fc.oneof(
 	arbRecordMsg("tick", {now: fc.nat()}),
 	arbConstantMsg("moved"),
 );
+
 const lists = fc.array(msgs, {maxLength: 40});
 const OPTS = {numRuns: 300, seed: 117};
 const ctx = stubCtxThrowingProxy<undefined>();

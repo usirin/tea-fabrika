@@ -205,6 +205,7 @@ export const verify = async (
 const KEY_BEGIN = "-----BEGIN OPENSSH PRIVATE KEY-----";
 const KEY_END = "-----END OPENSSH PRIVATE KEY-----";
 const KEY_MAGIC = "openssh-key-v1\0";
+
 /** PKCS #8's wrapping of an Ed25519 seed (RFC 8410): this, then the 32 bytes. */
 const PKCS8_ED25519 = Uint8Array.of(
 	0x30,

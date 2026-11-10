@@ -10,9 +10,11 @@ import {processId} from "../id.test-support.ts";
 import {Mailbox, type From} from "./mailbox.ts";
 
 const opened: DatabaseSync[] = [];
+
 afterAll(() => {
 	for (const db of opened) db.close();
 });
+
 const from: From = {
 	by: "SHA256:sender",
 	for: "person",
@@ -22,6 +24,7 @@ const from: From = {
 	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	build: "build-original",
 };
+
 const world = () => {
 	const db = new DatabaseSync(":memory:");
 	opened.push(db);
@@ -33,6 +36,7 @@ const world = () => {
 		),
 	);
 };
+
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
 	examples: A[],
@@ -54,6 +58,7 @@ const check = <A, E, R>(
 			),
 		);
 	});
+
 const metadata = fc.record({build: fc.string({minLength: 1}), sentAt: fc.string()});
 
 describe("P11 richer mailbox history", () => {

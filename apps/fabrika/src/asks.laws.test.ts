@@ -51,6 +51,7 @@ const run = fc.constantFrom("r-1", "r-2");
 /** One fact, by whoever may write it. Facts out of order are the fold's problems, not a throw. */
 type Written = readonly [Entry["by"], Fact];
 const by = (who: Entry["by"], f: Fact): Written => [who, f];
+
 const fact: fc.Arbitrary<Written> = fc.oneof(
 	{
 		arbitrary: fc
@@ -91,6 +92,7 @@ const fact: fc.Arbitrary<Written> = fc.oneof(
 	},
 	{arbitrary: fc.constant(by(owner, {type: "closed"})), weight: 1},
 );
+
 /** A read's rows: facts on a few tickets, a minute apart from the hour before noon. */
 const entries = fc.array(fc.tuple(ticket, fact), {maxLength: 8}).map((rows) =>
 	rows.map(([n, [by, f]], i): Entry => ({
@@ -101,6 +103,7 @@ const entries = fc.array(fc.tuple(ticket, fact), {maxLength: 8}).map((rows) =>
 		fact: f,
 	})),
 );
+
 /** Keys that wait, and one that never does. */
 const key = fc.constantFrom("1/a-1", "1/a-2", "2/a-1", "2/stuck/r-1", "3/stuck/r-2", "9/a-9");
 
@@ -119,6 +122,7 @@ const table: MsgArbitraryTable<Msg> = {
 		.map(([es, last]) => load.ok(load({after: 0}), {entries: es, last}, 0)),
 	load_err: fc.constant({type: load.errType, cmd: load({after: 0}), error: malformed, at: 0}),
 };
+
 const weights = {load_ok: 4, moved: 3, later: 2, back: 2, seen: 2};
 const lists = fc.array(arbMsg(table, {weights}), {maxLength: 30, size: "max"});
 
@@ -134,6 +138,7 @@ const everyStep = (name: string, holds: (step: AsksStep, machine: Machine) => bo
 	name,
 	check: (machine) => propertyInvariant(machine, ctx, lists, (step) => holds(step, machine), OPTS),
 });
+
 const everyTrace = (
 	name: string,
 	holds: (steps: readonly AsksStep[], machine: Machine) => boolean,
@@ -143,9 +148,12 @@ const everyTrace = (
 });
 
 const keys = (asks: readonly {readonly key: string}[]) => asks.map((a) => a.key).sort();
+
 const same = (a: readonly string[], b: readonly string[]) =>
 	a.length === b.length && a.every((k, i) => k === b[i]);
+
 const isAnswer = (msg: Msg) => msg.type === "load_ok" || msg.type === "load_err";
+
 const pollOf = (machine: Machine, s: Asks) =>
 	machine.subs?.find((sub) => sub.type === "poll")?.deps(s) ?? null;
 
@@ -267,6 +275,7 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = asksMachine.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...asksMachine,

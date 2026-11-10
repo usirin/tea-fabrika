@@ -72,9 +72,11 @@ type Monitors = Monitor.Monitors;
  * No word from the ledger is not a lost lease.
  */
 export const GRACE_MS = 600_000;
+
 /** Was "at its own lease's end the program stops" (experiment 98), until lane 18's part 2. */
 export const LEASE_LAW =
 	"no word from the ledger is not a lost lease: the program stops at its lease's end plus 10 minutes, or at once on a newer claim or a lost renew";
+
 /** `graceMs` is the name experiment 149 gave the grace; today's host has no such setting yet. */
 const TUNING = {renewEveryMs: 300, retryMs: 50, graceMs: GRACE_MS};
 const SETTINGS: HostSettings = TUNING;
@@ -86,6 +88,7 @@ export interface HostView {
 	readonly renewing: (s: Host) => boolean;
 	readonly leaseClock: (s: Host) => {readonly fence: number; readonly until: number} | null;
 }
+
 const VIEW: HostView = {
 	program: programOf,
 	renewing: (s) => renewClockOf(s, SETTINGS.renewEveryMs) !== null,
@@ -101,6 +104,7 @@ const EXIT_POS = 5;
 const RESTART_POS = [4, 7] as const;
 /** A claim's incarnation: a takeover of the same run, or a new run after a restart. */
 const INCARNATIONS = [1, 2] as const;
+
 const ENDS: readonly ProgramEnd[] = [
 	{how: "ended"},
 	{how: "crashed", why: "boom", suspect: 9},
@@ -525,9 +529,11 @@ export interface Caller {
 	readonly last: Outcome<number, string>;
 	readonly called: readonly string[];
 }
+
 export type CallerMsg =
 	| {readonly type: "call"; readonly id: string; readonly req: number}
 	| CallMsg<string>;
+
 type CallerCmd = CallCmd<number>;
 
 const CALL_SETTINGS = {timeoutMs: 100, retryMs: 20};
@@ -645,6 +651,7 @@ export const showCallerMsg = (m: CallerMsg): string => {
 };
 
 type CallerStep = Update<Caller, CallerMsg, CallerCmd>;
+
 const around =
 	(f: (s: Caller, m: CallerMsg) => ReturnType<CallerStep> | null): CallerStep =>
 	(s, m) =>
@@ -753,6 +760,7 @@ export const CALLER_PLANTED: readonly {
 
 const SUP = "s";
 const SUP_BACKOFF = {minMs: 10, maxMs: 40, resetAfterMs: 1000};
+
 const supSpec = (strategy: Strategy): SupervisorSpec => ({
 	strategy,
 	intensity: 1,
@@ -765,11 +773,14 @@ const supSpec = (strategy: Strategy): SupervisorSpec => ({
 		{name: "t", restart: "temporary", shutdown: "infinity"},
 	],
 });
+
 const STRATEGIES: readonly Strategy[] = ["one_for_one", "one_for_all", "rest_for_one"];
 type SupStep = Update<SupervisorState, SupervisorMsg, never>;
+
 const supOf =
 	(spec: SupervisorSpec): SupStep =>
 	(s, m) => [superviseWith(SUP, spec)(s, m), []];
+
 const caller = (id: string) => ({id, replyTo: "h"});
 type Reason = Extract<SupervisorMsg, {readonly type: "exit"}>["reason"];
 
@@ -904,21 +915,26 @@ export function supervisorWorld(): World<SupervisorState, SupervisorMsg, never> 
 }
 
 const childOf = (s: SupervisorState, name: string) => s.children.find((c) => c.name === name);
+
 /** The restart type the spec gives a child (the laws' truth, not the state's); `d` is added permanent. */
 const specRestart = (name: string) =>
 	supSpec("one_for_one").children.find((c) => c.name === name)?.restart ?? "permanent";
+
 const startOf = (s: SupervisorState, name: string) => {
 	const run = childOf(s, name)?.run;
 	return run?.is === "starting" ? run : undefined;
 };
+
 /** A start `next` has and `prev` did not (or had for another run). */
 const newStart = (prev: SupervisorState, next: SupervisorState, name: string) => {
 	const a = startOf(prev, name);
 	const b = startOf(next, name);
 	return b !== undefined && (a === undefined || a.after !== b.after) ? b : undefined;
 };
+
 const windowOf = (spec: SupervisorSpec, s: SupervisorState, at: number) =>
 	s.restarts.filter((t) => t > at - spec.periodMs);
+
 /** An EXIT of a running child the reducer must act on: past the cursor, for this run, not stale. */
 const freshExit = (s: SupervisorState, m: SupervisorMsg) => {
 	if (m.type !== "exit" || m.rev <= s.cursor || m.to !== s.incarnation || s.phase !== "running")
@@ -927,12 +943,14 @@ const freshExit = (s: SupervisorState, m: SupervisorMsg) => {
 	if (c === undefined || c.run.is !== "up" || m.incarnation < c.incarnation) return null;
 	return {c, m};
 };
+
 const freshParent = (s: SupervisorState, m: SupervisorMsg) =>
 	m.type === "exit" &&
 	m.rev > s.cursor &&
 	m.to === s.incarnation &&
 	s.phase === "running" &&
 	m.from === s.parent;
+
 /** A restart this step made: which child, the exit it answers, and how long that run lived. */
 const restartOf = (prev: SupervisorState, msg: SupervisorMsg, next: SupervisorState) => {
 	if (msg.type === "begin" || next.restarted <= prev.restarted) return null;
@@ -947,6 +965,7 @@ const restartOf = (prev: SupervisorState, msg: SupervisorMsg, next: SupervisorSt
 	}
 	return null;
 };
+
 /** The siblings a strategy restarts with `name`, by the order in `s`. */
 const groupOf = (strategy: Strategy, s: SupervisorState, name: string) => {
 	const at = s.children.findIndex((c) => c.name === name);
@@ -956,10 +975,12 @@ const groupOf = (strategy: Strategy, s: SupervisorState, name: string) => {
 			? s.children.slice(at + 1).map((c) => c.name)
 			: [];
 };
+
 const sameExceptCursor = (a: SupervisorState, b: SupervisorState) =>
 	JSON.stringify({...a, cursor: 0}) === JSON.stringify({...b, cursor: 0});
 
 type SupLaw = Law<SupervisorState, SupervisorMsg, never>;
+
 const l = (name: string, check: Parameters<typeof law<SupervisorState, SupervisorMsg, never>>[1]) =>
 	law<SupervisorState, SupervisorMsg, never>(name, check);
 
@@ -1226,11 +1247,14 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 }
 
 const sup1 = superviseWith(SUP, supSpec("one_for_one"));
+
 const aroundSup =
 	(f: (s: SupervisorState, m: SupervisorMsg) => SupervisorState | null): SupStep =>
 	(s, m) => [f(s, m) ?? sup1(s, m), []];
+
 const withSpec = (change: Partial<SupervisorSpec>): SupStep =>
 	supOf({...supSpec("one_for_one"), ...change});
+
 const mapChildren = (s: SupervisorState, f: (c: Child) => Child): SupervisorState => ({
 	...s,
 	children: s.children.map(f),
@@ -1502,14 +1526,17 @@ export interface Watcher {
 	readonly monitors: Monitors;
 	readonly last: MonitorOutcome;
 }
+
 type WatcherStep = Update<Watcher, MonitorMsg, MonitorCmd>;
 /** 100's re-arm backoff: 50, 100, 200, 200, ... ms while a name stays down. */
 const WATCH_RETRY = {retryMs: 50, maxRetryMs: 200};
 const monitorsUpdate = monitorUpdate(WATCH_RETRY);
+
 export const watcherStep: WatcherStep = (s, m) => {
 	const r = monitorsUpdate(s.monitors, m);
 	return [{monitors: r.monitors, last: r.outcome}, r.cmds];
 };
+
 const watcherInit: Watcher = {monitors: noMonitors, last: null};
 
 export function watcherWorld(): World<Watcher, MonitorMsg, MonitorCmd> {
@@ -1575,6 +1602,7 @@ const provedBy = (s: Watcher, m: MonitorMsg) => {
 
 /** Per target: the incarnation watching began after, and the last one proved ended. */
 type Proved = Readonly<Record<string, {readonly start: number; readonly to: number}>>;
+
 const prove = (proved: Proved, p: ReturnType<typeof provedBy>): Proved => {
 	if (p === null) return proved;
 	const was = proved[p.target];

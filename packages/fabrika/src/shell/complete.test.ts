@@ -17,6 +17,7 @@ import {NO_TALK, type Talk} from "./summon.ts";
 // something else.
 
 const list = programList(SMALL);
+
 const TALLY: Jobs = {
 	next: 2,
 	jobs: [
@@ -32,6 +33,7 @@ const TALLY: Jobs = {
 		},
 	],
 };
+
 const candidates = (line: string, jobs: Jobs = EMPTY) => complete(line, list, jobs).candidates;
 
 /** Where the checker refuses the line, or `null` when it does not. */

@@ -39,11 +39,13 @@ type Fg =
 	| {readonly _tag: "default"}
 	| {readonly _tag: "index"; readonly n: number}
 	| {readonly _tag: "rgb"; readonly hex: string};
+
 interface Pen {
 	readonly fg: Fg;
 	readonly bold: boolean;
 	readonly faint: boolean;
 }
+
 const PLAIN: Pen = {fg: {_tag: "default"}, bold: false, faint: false};
 
 const hex2 = (n: number) => n.toString(16).padStart(2, "0");

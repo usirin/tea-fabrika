@@ -41,6 +41,7 @@ export interface SqliteOptions {
 }
 
 type Answer = {readonly id: number; readonly ok?: unknown; readonly error?: string};
+
 const isAnswer = (m: unknown): m is Answer =>
 	typeof m === "object" && m !== null && "id" in m && typeof m.id === "number";
 

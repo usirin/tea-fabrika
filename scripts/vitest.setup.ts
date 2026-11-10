@@ -25,6 +25,8 @@ function temporaryHome(): string {
 const home = process.env.FABRIKA_HOME || temporaryHome();
 const target = physical(resolve(home));
 const real = physical(join(homedir(), ".fabrika"));
+
 if (target === real || target.startsWith(`${real}${sep}`))
 	throw new Error("FABRIKA_HOME must use a test folder outside the real app home");
+
 process.env.FABRIKA_HOME = home;

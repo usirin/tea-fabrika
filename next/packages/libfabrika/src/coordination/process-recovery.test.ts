@@ -28,6 +28,7 @@ import {
 	watcher,
 } from "./process.test-support.ts";
 import {brainOnly, canRestart, Dead, ProcessFact, Start} from "./process.ts";
+
 const deadInput = {
 	tries: 3,
 	limit: 3,
@@ -35,15 +36,18 @@ const deadInput = {
 	build: "build-a",
 	errors: ["TypeError", "RangeError", "TypeError"],
 };
+
 // Keep the older authority law exercising an already-tagged caller, which is still valid input.
 const dead = Dead.make({process: A, program: "counter", name: "counter:1", ...deadInput});
 
 const processId = fcProcessIds;
 const text = fc.string({minLength: 1, maxLength: 256});
 const name = fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/);
+
 const input = fc
 	.record({m: text, build: text, errors: fc.array(text, {minLength: 1, maxLength: 32})})
 	.map((value) => ({...value, tries: value.errors.length, limit: value.errors.length}));
+
 const invalidInputs = fc
 	.tuple(
 		input,
@@ -64,6 +68,7 @@ const invalidInputs = fc
 		{...value, tries: count},
 		{...value, limit: count},
 	]);
+
 // Two programs with different registered names; either may restart several times.
 const history = fc.record({
 	programs: fc.uniqueArray(text, {minLength: 2, maxLength: 2}),
@@ -75,7 +80,9 @@ const history = fc.record({
 	repeat: fc.boolean(),
 	input,
 });
+
 type History = typeof history extends fc.Arbitrary<infer Value> ? Value : never;
+
 const seeded = Effect.fnUntraced(function* (h: History) {
 	const disk = storage();
 	const next = ids(...h.processes);

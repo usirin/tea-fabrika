@@ -40,6 +40,7 @@ const owner = Writer.cases.person.make({key: "SHA256:fixture", for: from().for})
 const Model = Schema.Struct({count: Schema.Int});
 const Msg = Schema.Struct({type: Schema.Literal("add"), n: Schema.Int});
 type Move = "rpc" | "decode" | "throw";
+
 const thrown = fc.oneof(
 	fc
 		.tuple(
@@ -64,6 +65,7 @@ const thrown = fc.oneof(
 	fc.constant(Symbol("made-up-throw")),
 	fc.func(fc.jsonValue()),
 );
+
 const failureClass = (value: unknown) =>
 	value instanceof Error ? value.constructor.name : value === null ? "null" : typeof value;
 
@@ -208,6 +210,7 @@ const world = (adapter: "node" | "worker", limit: number, failure: unknown) => {
 		read: (stream: string) => read(stream).pipe(Effect.provide(data(ledger.sql))),
 	};
 };
+
 const incoming = (letter: string, n: number): Incoming =>
 	Incoming.make({
 		id: letter,
@@ -221,6 +224,7 @@ const incoming = (letter: string, n: number): Incoming =>
 		seen: 0,
 		span: {traceId: from().traceId, spanId: "00f067aa0ba902b7"},
 	});
+
 const sequence = fc.record({
 	limit: fc.integer({min: 1, max: 4}),
 	moves: fc.array(fc.constantFrom<Move>("rpc", "decode", "throw"), {minLength: 1, maxLength: 8}),

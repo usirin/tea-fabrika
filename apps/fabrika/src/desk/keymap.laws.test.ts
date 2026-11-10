@@ -21,6 +21,7 @@ const lineCount = (text: string) => text.split("\n").length;
 
 /** Some words the file knows, and two it does not. */
 const word = fc.constantFrom(...Does.literals, "tezgah.zom", "desk.split");
+
 /** Keys as the file writes them: good ones, and a few the load refuses. */
 const spelled = fc.constantFrom(
 	"<prefix>z",
@@ -49,11 +50,14 @@ const spelled = fc.constantFrom(
 	"z",
 	"",
 );
+
 const quoted = (s: string) => JSON.stringify(s);
+
 const value = fc.oneof(
 	spelled.map(quoted),
 	fc.array(spelled, {maxLength: 3}).map((keys) => `[${keys.map(quoted).join(", ")}]`),
 );
+
 const line = fc.oneof(
 	{arbitrary: fc.tuple(word, value).map(([w, v]) => `${w} = ${v}`), weight: 6},
 	{
@@ -70,6 +74,7 @@ const line = fc.oneof(
 	},
 	{arbitrary: fc.constantFrom("", "# a comment"), weight: 1},
 );
+
 /** A file of the file's own words: it often reads, and is often refused. */
 const keysFile = fc.array(line, {maxLength: 8}).map((lines) => lines.join("\n"));
 const mac = fc.boolean();

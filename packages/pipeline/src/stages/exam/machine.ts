@@ -26,6 +26,7 @@ const outcomes = outcomesOf({
 	skip: ["no_rules_change"],
 	stuck: ["draft_failed", "unchecked", "land_failed"],
 });
+
 export const ExamOutcome = outcomes.schema;
 export type ExamOutcome = typeof ExamOutcome.Type;
 /** Every name the exam can end with, as the other stages export theirs. */
@@ -154,6 +155,7 @@ const LandIn = Schema.Struct({
 	/** What the plan says of each, for the pull request's text. Left out: a land saved before this key still reads. */
 	changes: Schema.optionalKey(Schema.Array(ExamChange)),
 });
+
 /** The pull request the rule changes are on, and its head. */
 export const Landed = Schema.Struct({pr: Schema.String, head: Schema.String});
 export type Landed = typeof Landed.Type;
@@ -202,6 +204,7 @@ export type ExamMsg =
 	| {readonly type: "start"; readonly ask: ExamAsk; readonly key: string}
 	| {readonly type: "resume"}
 	| DraftMsg<"exam_write", ExamWritten>;
+
 export type ExamCmd = ReturnType<typeof landExam>;
 
 type Step = readonly [Exam, readonly ExamCmd[]];

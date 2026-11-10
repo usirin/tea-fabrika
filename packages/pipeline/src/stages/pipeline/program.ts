@@ -141,6 +141,7 @@ const OUTPUTS = {
 		"Once: how the lane ended, and why.",
 	),
 };
+
 type Outputs = typeof OUTPUTS;
 
 const buildChild = {...buildStage, parent: "lane" as const};
@@ -230,6 +231,7 @@ const headOf = (timeline: readonly Entry[], stage: string): string | null => {
 	}
 	return null;
 };
+
 const ExamHead = Schema.Struct({head: Schema.String});
 
 /**
