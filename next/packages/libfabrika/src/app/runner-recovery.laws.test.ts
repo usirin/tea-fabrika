@@ -8,6 +8,7 @@ import { Mailbox, ProcessManager, ProcessStore, RecoveryStore, Writer } from "..
 import { Owner, Recipient, Start } from "../coordination/process.ts";
 import { Archive, Doorbell, Ledger, RecordManager, SpanSink } from "../data/index.ts";
 import { LedgerTransaction } from "../data/ledger-transaction.ts";
+import { InputId } from "../data/log.ts";
 import { nodeSql } from "../data/sqlite.ts";
 import { processId } from "../id.test-support.ts";
 import { Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager } from "./entry.ts";
@@ -215,6 +216,198 @@ describe("P12 saved mail recovery", () => {
           ),
         ),
         { seed: 119120, numRuns: 25, examples: [[1, "saved-letter"]] },
+      );
+    });
+  }
+});
+
+// Ticket 402: the runner's own id_reused refusal, on both paths that know a letter.
+const Reuse = Schema.Struct({ type: Schema.Literals(["inc", "boom"]), n: Schema.Int });
+const ReuseModel = Schema.Struct({ count: Schema.Int });
+
+const reuseProgram = {
+  ...program,
+  machine: Machine.make({
+    model: ReuseModel,
+    msg: Reuse,
+    cmds: [],
+    init: (saved) => [saved ?? { count: 0 }, []],
+    update: {
+      inc: (s, m) => [{ count: s.count + m.n }, []],
+      boom: () => {
+        throw new RangeError("poison");
+      },
+    },
+  }),
+  state: { v: 1, schema: ReuseModel, upgrades: [] },
+  msg: Reuse,
+  view: { data: ReuseModel, select: (s: typeof ReuseModel.Type) => s },
+  inputs: {
+    inc: { _tag: "write", schema: Reuse, description: "Increment", personOnly: false },
+    boom: { _tag: "write", schema: Reuse, description: "Throw", personOnly: false },
+  },
+} as const;
+
+describe("P34 id reuse at the runner", () => {
+  for (const path of ["placed", "receipt"] as const) {
+    it(`a ${path} letter resent with a different input is refused id_reused and steps nothing`, async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1 }),
+          fc.integer({ min: 0, max: 1000 }),
+          fc.integer({ min: 0, max: 1000 }),
+          (id, first, other) =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                const db = new DatabaseSync(":memory:");
+                const managerDb = new DatabaseSync(":memory:");
+
+                try {
+                  const sql = nodeSql(db),
+                    pure = yield* Effect.fromResult(stepper(reuseProgram));
+                  let steps = 0;
+                  const execution = workerExecution({
+                    init: async (saved) => pure.init(saved),
+                    admit: async () => true,
+                    step: async (model, msg) => {
+                      steps++;
+                      return pure.step(model, msg);
+                    },
+                    fold: async (model, msg) => pure.fold(model, msg),
+                    upgrade: async (saved) => ({ saved, ran: [] }),
+                    reply: async () => null,
+                  });
+                  const base = Layer.mergeAll(
+                    Ledger.sql(sql, { reader: PID }).pipe(
+                      Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+                    ),
+                    RecordManager.memory(1_000_000_000),
+                    Archive.memory,
+                    SpanSink.layer(sql, { object: PID }),
+                  );
+                  const dependencies = Layer.mergeAll(
+                    Mailbox.layer,
+                    ProcessStore.layer(sql, { process: PID }),
+                    Layer.succeed(ProgramLoader, {
+                      load: () =>
+                        Effect.succeed({
+                          stepper: pure,
+                          execution,
+                          declaration: {
+                            name: "counter",
+                            v: 1,
+                            inputs: {
+                              inc: { write: true, personOnly: false },
+                              boom: { write: true, personOnly: false },
+                            },
+                            writes: {},
+                            cmds: [],
+                          },
+                          handler: () => Option.none(),
+                        }),
+                    }),
+                    Layer.succeed(Alarm, { set: () => Effect.void }),
+                    Layer.succeed(WatcherManager, { publish: () => Effect.void }),
+                    Layer.succeed(Recording, { flush: Effect.void }),
+                    Layer.succeed(CheckedWriter, {
+                      sign: () => Effect.die("no write declared"),
+                      // The door's append: a fresh letter is saved in the inbox before it is stepped.
+                      append: (i) =>
+                        Effect.gen(function* () {
+                          const mailbox = yield* Mailbox;
+                          return yield* mailbox.send("counter:1", i.id, i.envelope.input, {
+                            by: i.envelope.by.key,
+                            for: "person-test",
+                            sentAt: i.sentAt,
+                            seen: 0,
+                            parent: i.envelope.id,
+                            traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+                            build: "test",
+                          });
+                        }),
+                      commit: () => Effect.die("no write declared"),
+                      own: () => Effect.die("no write declared"),
+                    }),
+                  ).pipe(Layer.provideMerge(base));
+                  const manager = Layer.effectDiscard(
+                    ProcessManager.use((m) =>
+                      m.start(
+                        Start.cases.first.make({
+                          id: "boot:counter:1",
+                          name: "counter:1",
+                          code: { program: "counter", hash: "test" },
+                        }),
+                        {
+                          by: "SHA256:brain",
+                          for: "brain",
+                          sentAt: "2026-11-08T00:00:00Z",
+                          seen: 0,
+                          parent: null,
+                          traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+                          build: "test",
+                        },
+                      ),
+                    ).pipe(Effect.orDie),
+                  ).pipe(
+                    Layer.provideMerge(
+                      ProcessManager.layer(
+                        {
+                          by: "SHA256:brain",
+                          owner: Owner.cases.brain.make({}),
+                          recipient: Recipient.cases.client.make({ client: "brain", session: PID }),
+                        },
+                        Effect.succeed(PID),
+                      ),
+                    ),
+                    Layer.provide(
+                      LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+                        Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+                      ),
+                    ),
+                  );
+                  const layer = ProgramRunner.layer(
+                    {
+                      id: PID,
+                      name: "counter:1",
+                      program: "counter",
+                      build: "test",
+                      owner: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
+                    },
+                    { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 } },
+                  ).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
+                  const letter = (type: "inc" | "boom", n: number) => ({
+                    id,
+                    envelope: {
+                      id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
+                      by: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
+                      arrivedAt: 0,
+                      input: { type, n },
+                    },
+                    sentAt: "2026-11-08T00:00:00Z",
+                    seen: 0,
+                    span: { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" },
+                  });
+                  const type = path === "placed" ? "inc" : "boom";
+                  yield* Effect.gen(function* () {
+                    const runner = yield* ProgramRunner;
+                    const sent = yield* Effect.exit(runner.msg(letter(type, first)));
+                    expect(Exit.isFailure(sent), "only a throwing letter fails its send").toBe(type === "boom");
+                    const before = steps;
+                    const changed = other === first ? other + 1 : other;
+                    expect(yield* runner.msg(letter(type, changed))).toMatchObject({
+                      _tag: "refused",
+                      reason: "id_reused",
+                    });
+                    expect(steps, "a refused reuse steps nothing").toBe(before);
+                  }).pipe(Effect.provide(layer));
+                } finally {
+                  db.close();
+                  managerDb.close();
+                }
+              }),
+            ),
+        ),
+        { seed: 119120, numRuns: 25, examples: [["letter", 1, 2]] },
       );
     });
   }
