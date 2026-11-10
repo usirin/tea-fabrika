@@ -27,9 +27,9 @@ released fix. No model, no key, no deploy, $0.
 The saved browser runs use headless Chromium **153.0.8010.12**, React and React DOM
 **19.3.1**, Effect **4.1.1**, and `babel-plugin-react-compiler` **1.0.0**.
 Every saved Chromium row has **20 repetitions**. The scripts and exact dependencies
-are in [`202-tea-react/`](./202-tea-react/), with the probe's dependency lockfile.
+are in [`202-tea-react/`](https://github.com/usirin/tea-fabrika/tree/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/202-tea-react/), with the probe's dependency lockfile.
 The original result files are copied
-unchanged to [`results/202-tea-react/`](./results/202-tea-react/).
+unchanged to [`results/202-tea-react/`](https://github.com/usirin/tea-fabrika/tree/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/202-tea-react/).
 
 Context: [demlik PR 774](https://github.com/kamp-us/demlik/pull/774) is the
 Strict Mode fix; [demlik issue 852](https://github.com/kamp-us/demlik/issues/852)
@@ -58,7 +58,7 @@ function Counter() {
 <StrictMode><Activity mode={mode}><Counter /></Activity></StrictMode>;
 ```
 
-**Result.** In [`p1-p4-chromium.jsonl`](./results/202-tea-react/p1-p4-chromium.jsonl):
+**Result.** In [`p1-p4-chromium.jsonl`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/202-tea-react/p1-p4-chromium.jsonl):
 
 | Mount | Saved answer | Repetitions |
 |---|---|---|
@@ -87,7 +87,7 @@ await Effect.runPromise(rt.dispatch({type: "inc"})); // Now the count changes.
 ```
 
 **Result.** All 20 repetitions in
-[`p1-p4-chromium.jsonl`](./results/202-tea-react/p1-p4-chromium.jsonl) first draw `0`,
+[`p1-p4-chromium.jsonl`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/202-tea-react/p1-p4-chromium.jsonl) first draw `0`,
 stay at `0` after the hook's dispatch, then redraw `1` after the harness runs the
 dispatch Effect itself. Reading and subscribing work; the click does nothing.
 
@@ -100,7 +100,7 @@ declare const rt: EffectRuntime<{count: number}, {type: "inc"}>;
 export const tryIt = () => useRuntime(rt); // TS2345
 ```
 
-[`p2-types.txt`](./results/202-tea-react/p2-types.txt) says `EffectRuntime` is not
+[`p2-types.txt`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/202-tea-react/p2-types.txt) says `EffectRuntime` is not
 assignable to `BootedRunHandle`: `ready` is an Effect where the hook's type expects
 a Promise. The installed JavaScript returns `[state, runtime.dispatch]` without
 running what `dispatch` returns. The JavaScript probe bypasses the type rejection
@@ -134,7 +134,7 @@ const COMPILER = {
 
 **Result.** The harness increments both sources, then reads both spans. In all
 20 repetitions of each row in
-[`p1-p4-chromium.jsonl`](./results/202-tea-react/p1-p4-chromium.jsonl):
+[`p1-p4-chromium.jsonl`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/202-tea-react/p1-p4-chromium.jsonl):
 
 | Build | Wanted | Observed |
 |---|---|---|
@@ -173,7 +173,7 @@ const state = useSyncExternalStore(
 
 **Result.** Both Activity and Strict Mode + Activity return
 `1, show 2, starts 1, run stopped` in all 20 repetitions in
-[`p1-p4-chromium.jsonl`](./results/202-tea-react/p1-p4-chromium.jsonl).
+[`p1-p4-chromium.jsonl`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/202-tea-react/p1-p4-chromium.jsonl).
 The harness records the holder's start count and attempts a dispatch on its
 runtime after unmount. That dispatch fails, which the probe labels `run stopped`.
 
@@ -195,7 +195,7 @@ const b = Effect.runFork(rt.dispatch({type: "inc"}).pipe(
 ));
 ```
 
-**Result.** [`p5-errors.txt`](./results/202-tea-react/p5-errors.txt), a Node probe:
+**Result.** [`p5-errors.txt`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/202-tea-react/p5-errors.txt), a Node probe:
 
 ```text
 A: plain runFork after stop ->
@@ -228,7 +228,7 @@ const returned = send({type: "inc"}); // undefined; the loop folds the message.
 // back to its dispatch and reports a rejected Promise.
 ```
 
-**Result.** In [`p6-chromium.jsonl`](./results/202-tea-react/p6-chromium.jsonl),
+**Result.** In [`p6-chromium.jsonl`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/202-tea-react/p6-chromium.jsonl),
 all 20 repetitions of each row give:
 
 | Case | Observed |

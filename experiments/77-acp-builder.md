@@ -195,9 +195,9 @@ Tokens are not counted the same way. On ACP almost all input is cache reads
 probes that made ACP about 10 times dearer ($0.012 against $0.001 a case).
 On a real build it is about a third.
 
-![ACP run in Jaeger: build, round 1, builder, builder acp with 1 turn, push, open](./77-acp-jaeger.png)
+![ACP run in Jaeger: build, round 1, builder, builder acp with 1 turn, push, open](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/77-acp-jaeger.png?raw=true)
 
-![SDK run in Jaeger: the same rows, builder with 3 turns](./77-sdk-jaeger.png)
+![SDK run in Jaeger: the same rows, builder with 3 turns](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/77-sdk-jaeger.png?raw=true)
 
 The two traces have the same shape. The ACP builder shows one turn, as ACP
 counts prompts. The SDK one shows the model's own turns.
