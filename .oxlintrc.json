@@ -569,7 +569,21 @@
             "src": "next/packages/libfabrika/src",
             "rooms": ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "door"],
             "folders": ["node", "workers", "data", "coordination", "app"],
-            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "id", "testing"],
+            "files": [
+              "index",
+              "Id",
+              "Testing",
+              "ProcessId",
+              "Sql",
+              "Rev",
+              "id",
+              "testing",
+              "build",
+              "compiler",
+              "build-modules",
+              "build-assets",
+              "build-one-file"
+            ],
             "values": ["ProcessId", "Sql", "Rev"]
           }
         ],
