@@ -1068,12 +1068,19 @@ interface Receipt {
 	readonly replied: Deferred.Deferred<void>;
 }
 
-/** A control input's own line: its values, and one token per value told and not yet handled. */
+/** A control input's own line: its values, how many are told and not yet handled, and who waits. */
 interface Control {
 	readonly values: Queue.Queue<Delivery<unknown>>;
-	readonly tokens: Queue.Queue<true>;
-	/** Writers waiting for a token. */
-	waiting: number;
+	/** Values told and not yet handled, `CONTROL` at most. */
+	taken: number;
+	/** Writers waiting for room, first come first in: one is let in by the handler that frees it. */
+	readonly waiters: ControlWaiter[];
+}
+
+/** One writer waiting for room on a control input's line. */
+interface ControlWaiter {
+	readonly told: Delivery<unknown>;
+	readonly done: Deferred.Deferred<Word>;
 }
 
 const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends Kinds, E, R>(
@@ -1144,7 +1151,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// `MailboxFull`, and an offer waits in `queue`, first come first in. A close told while
 		// writers wait goes behind them in `queue`, so what they hold is handed on before it.
 		// A control input's values go on its own line instead, beside the order, bounded by
-		// `CONTROL` tokens, each given back once its handler ends.
+		// `CONTROL` values told and not yet handled, each room given back once its handler ends.
 		const letters = yield* Queue.unbounded<Letter>();
 		let held = 0;
 		const queue: Waiter[] = [];
@@ -1153,8 +1160,8 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			if (declared.control)
 				controls.set(name, {
 					values: yield* Queue.unbounded<Delivery<unknown>>(),
-					tokens: yield* Queue.bounded<true>(CONTROL),
-					waiting: 0,
+					taken: 0,
+					waiters: [],
 				});
 		/** Each input's values told and not yet taken by `serve`: what `mailbox()` shows and the end counts as unread. */
 		const count = new Map<string, number>();
@@ -1204,8 +1211,9 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				if (waiter.done !== undefined) Deferred.doneUnsafe(waiter.done, Effect.succeed("stopped"));
 			Queue.shutdownUnsafe(letters);
 			for (const control of controls.values()) {
+				for (const waiter of control.waiters.splice(0))
+					Deferred.doneUnsafe(waiter.done, Effect.succeed("stopped"));
 				Queue.shutdownUnsafe(control.values);
-				Queue.shutdownUnsafe(control.tokens);
 			}
 			for (const view of views.values())
 				Effect.runSync(SubscriptionRef.update(view, (shown) => ({...shown, over: true})));
@@ -1356,6 +1364,23 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			),
 		);
 
+		/** Put a value on a control input's line now. The caller checked there is room. */
+		const enter = (control: Control, name: string, told: Delivery<unknown>) => {
+			control.taken += 1;
+			counted(name, 1);
+			Queue.offerUnsafe(control.values, told);
+			admit(told);
+			return queued(name);
+		};
+		/** A control value's handler ended: its room goes to the first writer waiting, put in here. */
+		const release = (control: Control, name: string) => {
+			control.taken -= 1;
+			if (!open) return;
+			const first = control.waiters.shift();
+			if (first === undefined) return;
+			Deferred.doneUnsafe(first.done, Effect.succeed(enter(control, name, first.told)));
+		};
+
 		/** Why a value told to `name` cannot go in now, or `undefined`: it can. */
 		const refused = (name: string, value: unknown): Exclude<Word, "queued"> | undefined => {
 			const declared: Input<unknown> | undefined = program.inputs[name];
@@ -1372,12 +1397,9 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				if (no !== undefined) return Effect.succeed(no);
 				const control = controls.get(name);
 				if (control !== undefined) {
-					if (!Queue.offerUnsafe(control.tokens, true))
+					if (control.taken >= CONTROL)
 						return Effect.fail(new MailboxFull({input: name, capacity: CONTROL}));
-					counted(name, 1);
-					Queue.offerUnsafe(control.values, told);
-					admit(told);
-					return Effect.succeed(queued(name));
+					return Effect.succeed(enter(control, name, told));
 				}
 				// Nobody passes a writer already waiting.
 				if (queue.length > 0 || held >= program.capacity)
@@ -1392,21 +1414,16 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				if (no !== undefined) return Effect.succeed(no);
 				const control = controls.get(name);
 				if (control !== undefined) {
-					control.waiting += 1;
-					// Only the wait for a token may be given up: one taken goes in, in the same turn.
-					return Effect.uninterruptibleMask((restore) =>
-						restore(Queue.offer(control.tokens, true)).pipe(
-							Effect.ensuring(
-								Effect.sync(() => {
-									control.waiting -= 1;
-								}),
-							),
-							Effect.map((taken): Word => {
-								if (!taken || !open) return "stopped";
-								counted(name, 1);
-								Queue.offerUnsafe(control.values, told);
-								admit(told);
-								return queued(name);
+					if (control.taken < CONTROL) return Effect.succeed(enter(control, name, told));
+					const waiter: ControlWaiter = {told, done: Deferred.makeUnsafe<Word>()};
+					control.waiters.push(waiter);
+					// Let in by the handler that frees its room, not by this caller waking: given up
+					// before that, it leaves its place and nothing of it goes in.
+					return Deferred.await(waiter.done).pipe(
+						Effect.onInterrupt(() =>
+							Effect.sync(() => {
+								const at = control.waiters.indexOf(waiter);
+								if (at !== -1) control.waiters.splice(at, 1);
 							}),
 						),
 					);
@@ -1517,9 +1534,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 								Effect.asVoid,
 								// Its handler's exit, not its fiber's launch, answers the ask that told it.
 								Effect.ensuring(
-									Effect.sync(() => Queue.takeUnsafe(control.tokens)).pipe(
-										Effect.andThen(reply(told)),
-									),
+									Effect.sync(() => release(control, name)).pipe(Effect.andThen(reply(told))),
 								),
 								Effect.catchCause((cause) => Deferred.failCause(failed, cause)),
 							),
@@ -1682,7 +1697,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 							name,
 							{
 								length: count.get(name) ?? 0,
-								waiting: controls.get(name)?.waiting ?? waiting.get(name) ?? 0,
+								waiting: controls.get(name)?.waiters.length ?? waiting.get(name) ?? 0,
 							},
 						]),
 					) as Mailbox<I>["inputs"],

@@ -1,4 +1,4 @@
-import {Clock, Duration, Effect, Option, Scope, Semaphore} from "effect";
+import {Clock, Deferred, Duration, Effect, Option, Scope, Semaphore} from "effect";
 import type {AnyRunning} from "../program/listed.ts";
 import type {AnyRun} from "../program/program.ts";
 import {viewOf} from "../program/program.ts";
@@ -140,12 +140,35 @@ export const driveFor = (options: {
 		const scope = yield* Effect.scope;
 		const one = yield* Semaphore.make(1);
 		const mine = new Map<string, AnyRunning>();
+		/** A start still going on, kept past a call's deadline so the next call waits on the same one. */
+		const starting = new Map<string, Deferred.Deferred<Option.Option<AnyRunning>>>();
 
-		/** The agent's run of `program`: the one that runs, or a fresh one. */
-		const runOf = (program: string) =>
+		/**
+		 * The agent's run of `program`, waited on for at most `within`: the one that runs, a start
+		 * still going on, or a fresh one. `None` outside: the deadline came first. The start goes on in
+		 * the connection's scope, and the run it makes is kept for the next call.
+		 */
+		const runOf = (program: string, within: Duration.Duration) =>
 			Effect.gen(function* () {
 				const running = mine.get(program);
-				if (running !== undefined) return Option.some(running);
+				if (running !== undefined) return Option.some(Option.some(running));
+				const going = starting.get(program);
+				const started = going ?? (yield* Deferred.make<Option.Option<AnyRunning>>());
+				if (going === undefined) {
+					// Set before the fork, so a start that ends at once never leaves a stale entry behind.
+					starting.set(program, started);
+					yield* begin(program).pipe(
+						Deferred.into(started),
+						Effect.ensuring(Effect.sync(() => starting.delete(program))),
+						Effect.forkIn(scope),
+					);
+				}
+				return yield* Deferred.await(started).pipe(Effect.timeoutOption(within));
+			});
+
+		/** A fresh run of `program`, or `None`: no such program, or it did not start with no flags. */
+		const begin = (program: string) =>
+			Effect.gen(function* () {
 				const entry = list.get(program);
 				if (entry === undefined) return Option.none();
 				const id = `${program}:agent:${crypto.randomUUID().slice(0, 8)}`;
@@ -253,7 +276,9 @@ export const driveFor = (options: {
 				// The permit is the scope's from the moment it is taken, so a deadline at that instant leaks none.
 				const permit = yield* one.takeScoped(1).pipe(Effect.timeoutOption(CAP));
 				if (Option.isNone(permit)) return notQueued;
-				const running = yield* runOf(c.program);
+				const started = yield* runOf(c.program, yield* left);
+				if (Option.isNone(started)) return notQueued;
+				const running = started.value;
 				if (Option.isNone(running))
 					return {
 						kind: "refused",
