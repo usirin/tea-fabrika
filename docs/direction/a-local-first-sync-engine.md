@@ -491,12 +491,23 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   brake it writes `down` with its `until`, and tries again then; nothing
   escalates to a parent. Strategies, restart types and escalation wait for
   Tier 4 ([Tier 1's slice](../plan/tier-1.md)). The decision above stands.
+  *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):*
+  Tier 1's supervision is OTP's top-level supervisor. One root per brain, its children the
+  brain's named programs, `one_for_one`, child specs with OTP's restart types, and OTP's
+  intensity and period (1 in 5 s) unless a reason is written. A restart is at once: no
+  Kubernetes-style backoff. Past intensity the root stops its children and itself; the brain marks
+  the name `failed`, logs it and asks the person, and only a person restarts it. The `down {until}`
+  retry above goes. P34c builds it. Sibling strategies, nested trees and links still wait for Tier 4.
 - **C5, which OTP calls stay:** coordination sits where OTP sits, so it
   follows OTP: registry, mailbox, links, monitors, trap exit, supervisors. A
   difference from OTP needs a written reason. A check that ours matches OTP is
   still owed, since experiment 99 came before experiment 107.
   *Done 2026-11-09 for Tier 1's slice: [experiment 239](../../experiments/239-supervision-vs-otp.md),
   with tickets 404 to 406 for what it found.*
+  *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):*
+  each difference from OTP's supervisor is written with its reason in two places, here and in the
+  opening table of P34c's plan. A reason comes from Durable Objects or from
+  [a browser is always a client](./a-browser-is-always-a-client.md); code already written is not one.
 - **The desk keeps its name;** workspaces are the numbered layouts inside it.
 - **Limits** (money, turns, seconds, tokens) moved up to the app layer as
   `LimitManager` (A2).
@@ -529,6 +540,10 @@ found them with no written reason; these are the reasons. Paths are under
   action before it acts, so an eviction at any point resumes from what was saved. Its backoff and
   `down` deadlines sit on the object's one alarm (`app/runner.ts:292`). A supervisor elsewhere
   would keep that state one hop away from the step. C4 says why there is one child.
+  *Walked back 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):*
+  the supervisor becomes one root per brain, in the project object beside the process tree, so a
+  restart is counted in the same transaction as the `exited` and `started` facts it causes. The
+  receipts and dead letters stay in the program's object. P34c writes the new reason.
 - **`demonitor` always flushes.** OTP keeps a queued `DOWN` unless the caller asks for `flush`
   ([`demonitor/2`](https://www.erlang.org/doc/apps/erts/erlang.html#demonitor/2)). Here a
   canceled watch's `DOWN` is dropped every time (`coordination/process.ts:423-429`): once the
