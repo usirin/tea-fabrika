@@ -4,8 +4,8 @@ import { Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { Ledger } from "../data/ledger.ts";
 import { lineFor } from "../data/log.ts";
-import { ProcessId } from "../data/trace.ts";
 import { fcProcessIds } from "../id.test-support.ts";
+import { ProcessId } from "../ProcessId.ts";
 import { ProcessIdGenerator } from "./process-id.ts";
 import { ProcessManager } from "./process-manager.ts";
 import {

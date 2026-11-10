@@ -28,9 +28,9 @@ import { Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../id.test-support.ts";
+import type { Sql } from "../Sql.ts";
 import { Archive, type BucketCalls } from "./archive.ts";
 import { RecordManager } from "./records.ts";
-import type { Sql } from "./referee.ts";
 import { SinkError, SpanSink } from "./sink.ts";
 import { nodeSql } from "./sqlite.ts";
 

@@ -32,7 +32,7 @@ const methods = {
     "brain",
     "settings",
   ]),
-  process: new Set(["msg", "open", "due", "abort", "activity", "recover", "savedAlarm"]),
+  process: new Set(["msg", "open", "due", "restart", "abort", "activity", "recover", "savedAlarm"]),
   record: new Set(["write", "read", "content", "deleteContent"]),
 };
 
@@ -89,11 +89,14 @@ const dispatch = Effect.fnUntraced(function* (
     return yield* Effect.fail({ reason: "reserved" });
   }
 
+  // A process ID reaches the object its registered name owns; the Project refuses an unknown ID.
   const client =
     target === "project"
       ? ProjectClient.make(projectStub(env, project))
       : target === "process"
-        ? ProcessClient.make(processStub(env, project, name))
+        ? ProcessClient.make(
+            processStub(env, project, yield* rpc(ProjectClient.make(projectStub(env, project)).processObject(name))),
+          )
         : RecordClient.make(recordStub(env, project, name));
   // Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
   const answer: Effect.Effect<unknown, unknown> = Reflect.apply(Reflect.get(client, method), client, args);

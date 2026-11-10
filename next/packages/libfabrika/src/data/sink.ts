@@ -7,10 +7,10 @@
 // held in memory and tried again at each later `end`, and the next `flush` fails the step with
 // `storage`: let it crash. The sink's own calls end no span.
 import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Result, Schema, Tracer } from "effect";
+import type { Sql } from "../Sql.ts";
 import type { Archive } from "./archive.ts";
 import { archiveDays, HEALTH_TABLES, hourStart, readSummaries, rollup, writeHealth, writeSize } from "./health.ts";
 import { RecordManager } from "./records.ts";
-import type { Sql } from "./referee.ts";
 import {
   Chain,
   chainName,

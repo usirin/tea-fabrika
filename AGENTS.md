@@ -231,6 +231,10 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   summary. A settled note is evidence, not a tiebreaker: nothing from before experiment
   107 (the first run on a repo other than demlik) is trusted without a test, and in a
   redesign every serious branch goes on the table, with what it would undo.
+- **A stated principle covers every case it fits.** When an owner ruling gives a principle, such as
+  [0043](./.decisions/0043-rooms-on-floors.md)'s "the floor above never sees what is two floors
+  down", apply it to each case it decides, not only the one it came with. Only a case it truly
+  cannot decide becomes a question.
 - **Lead with the known way.** Look up how the makers and the industry do it, and cite
   it, before you give a lean; a guess comes after, marked as a guess. If the plain way
   clashes with a stated goal, say so in one line, and let the owner pick. Never hide it
@@ -255,7 +259,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Never wait on upstream.** When our work needs a change in a package we do not own (tea,
   Manti, Effect, any other), patch it locally with `pnpm patch`, file the upstream issue the same
   day, and keep building. The bump that takes the release deletes the patch
-  ([patch upstream locally](./docs/direction/patch-upstream-locally.md)).
+  ([patch upstream locally](./docs/direction/patch-upstream-locally.md)). First read the
+  package's decisions, patterns and source and build on its answer; patch only a gap or bug that
+  read proved ([0054](./.decisions/0054-read-upstream-before-patching-it.md)).
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.

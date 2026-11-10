@@ -128,7 +128,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
-| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head, look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge` |
+| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head, look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge`; a green PR whose freshmain lint passed lands even when gh refuses it as behind main, through the REST merge with `sha` as the pin ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)) |
 | `freshmain.ts <pr> <tip>` | run by `catchup.sh` just before the squash, in its checkout: fetch main, and when it moved after the checks, run `pnpm lint` on the head merged with it; a red lint, a conflict or a failed fetch refuses the merge, and the lane merges main and pushes. No flag skips it, and the tests are not run again (ticket 552) |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
@@ -210,7 +210,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   check takes in place of a mutation row), 2 usage, 3 refused before any agent ran, printed as
   `refused:<check>`: `agent_cap` (8 agents running: Codex boxes plus Claude steps drive started),
   `low_disk` (under 20 GB free after `box.sh gc`), `branch_checked_out` (the lane's branch checked
-  out in a worktree, which the end-of-step fetch could not update), or a `box.sh new` start check
+  out in a worktree, which the end-of-step fetch could not update), `docker_busy` (a mutation step
+  while another run holds the one Docker box), or a `box.sh new` start check
   (`plan_unapproved`, `base_not_signed`, `shared_ticket`, `root_not_ancestor`). A refusal is not a
   step outcome, so the stuck count holds only steps an agent ran. It never retries. A stuck step keeps its
   box. A box's number is the first that no older run's files hold, and the line's `report` is `null`
@@ -313,6 +314,15 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
 Keep the bot's explicit atomic push of notes plus branch. On a person's branch, notes-only as the
 bot and branch-only as the person are two intended writes. A refusal stops the step.
 
+When the session's permission check refuses a step agent its lead sign (`pnpm commits sign --step
+lead` through the repo's scripts), its normal push (`botpush.mjs`, or a plain non-force push of its
+own branch), or its merge of a passing test-only fix or a rows-only PR, the lead session runs that
+same command itself, without asking the owner again
+([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md)). Only the script reads the key.
+Report every other refused action to the owner with the exact command and worktree; never route
+around it. A rows-only PR merges with `catchup.sh` on green CI with a clean leak grep; a test-only
+fix still runs every step first.
+
 `Cannot update this protected ref.` alone does not prove a push failed. Read the command's exit
 status and the rule suite's overall result and named ref. In
 [rule suite 4984058968](https://api.github.com/repos/usirin/tea-fabrika/rulesets/rule-suites/4984058968),
@@ -335,6 +345,9 @@ visible, and never weaken the rules to hide this message.
    using the draft check's digest, then run `plancheck.sh --approved <plan>`. Any body edit,
    including an amendment, needs the same read and checks again. A new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
+   A plan that patches or changes a package (tea, demlik, Manti, Effect, Alchemy) names what it
+   read of that package's decisions, patterns and source; else send it back
+   ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md)).
 4. **Start the lane** on a `fabrikalfa/<name>` branch through `drive.ts`, never `box.sh new` by
    hand. Use `origin/main` for an independent ticket. A stacked child starts at the parent's signed build head, before the
    parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
@@ -349,6 +362,8 @@ visible, and never weaken the rules to hide this message.
    one `field/runs.jsonl` row (`fieldrow.py` for Codex, `clauderow.py` for a Claude agent, a
    driver included, once it has finished), and one `field/notes.jsonl` note for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
+   A test that breaks on one machine or in a box leans on that machine: send it to tests to remove
+   the dependency, never to catch the error ([0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md)).
    Step-commit checks file owners.
    Each correction the owner makes, and each slip of the lead's own, gets a note too, with the code
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
@@ -474,6 +489,10 @@ owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on gr
   leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their steps.
 - **Search before you ask.** Before the lead or any step asks the owner or writes a plan, it
   searches `.decisions/`, `.glossary/` and `docs/direction/` for the topic.
+- **Ask in plain words, from the code.** Before a question to the owner, read the code it is about
+  and that package's decisions, as [0054](../../../.decisions/0054-read-upstream-before-patching-it.md)
+  asks of upstream. Then say what the code does, what breaks, each option with its cost, and your
+  lean with how sure you are. An abstract question comes back to be asked again.
 - **Read what a diff touches.** Before a review and before a merge, run
   `sh .agents/skills/lead/scripts/governance.sh` on the branch. It lists the decision files the
   diff's words touch. The review step and the lead read each one and say whether the diff walks it

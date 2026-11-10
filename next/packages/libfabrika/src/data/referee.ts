@@ -1,17 +1,11 @@
 import { Context, Effect, Layer } from "effect";
+import type { Rev } from "../Rev.ts";
+import type { Sql } from "../Sql.ts";
 import { ledgerStore } from "./ledger-store.ts";
 import { Doorbell, type LedgerError } from "./ledger.ts";
-import type { Appended, Entry, Rev, Waited } from "./log.ts";
+import type { Appended, Entry, Waited } from "./log.ts";
 
 export { STREAM, tag } from "./ledger-store.ts";
-export type SqlValue = string | number | null;
-
-/** workerd's SQLite and node:sqlite supply the same synchronous operations. */
-export interface Sql {
-  readonly exec: (query: string, ...params: ReadonlyArray<SqlValue>) => ReadonlyArray<Record<string, SqlValue>>;
-  readonly transaction: <A>(step: () => A) => A;
-  readonly size: () => number;
-}
 
 export class Referee extends Context.Service<
   Referee,

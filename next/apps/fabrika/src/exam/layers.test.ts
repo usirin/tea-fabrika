@@ -6,6 +6,11 @@
 // A folder of the same package is named by its folder, another package by its import name, so the
 // exports map carries the rule across. `next/apps/*` has no row: it is the wiring. A program's
 // files that its `.` export reaches are what the box loads; the rest of the program is its window.
+//
+// A library file's part is read from the rule file's rows (`layer-rules.json`), the list `pnpm
+// lint:layers` reads too, so the exam keeps no second list of the library's paths (ticket 477, PR
+// 0). `rows.ts` picks the row the way code-graph does, and `rowParts` maps a row to its part. A
+// library file under `src/` that no row claims fails: it cannot pass by having no row.
 import {
   existsSync,
   mkdirSync,
@@ -20,7 +25,9 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { Schema } from "effect";
+import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
+import { type Row, rowsAt } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 
@@ -219,10 +226,42 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
   "program-window": [LIBRARY, TUVAL], // `./window`: public names only
 };
 
-/** The folders under `src/` of the two library packages, each a part above. */
+/** The folders under `src/` of tuval, each a part above. The library's come from the rule file. */
 const FOLDERS: Readonly<Record<string, ReadonlyArray<string>>> = {
-  [LIBRARY]: ["transport", "data", "coordination", "app", "mcp", "door", "node", "workers"],
   [TUVAL]: ["desktop", "window", "dom", "browser", "electron", "headless"],
+};
+
+/** The part each of the library's rows in the rule file is, in the table above. */
+const rowParts: Readonly<Record<string, string>> = {
+  "next-id": "id",
+  "next-id-test-support": "id-test-support",
+  "next-libfabrika-entry": "libfabrika-entry",
+  "next-transport": "transport",
+  "next-data": "data",
+  "next-coordination": "coordination",
+  "next-app": "app",
+  "next-mcp": "mcp",
+  "next-door": "door",
+  "next-node": "node",
+  "next-workers": "workers",
+};
+
+const RuleFile = Schema.Struct({
+  layers: Schema.Array(Schema.Struct({ name: Schema.String, paths: Schema.Array(Schema.String) })),
+});
+
+/** The rule file's rows, as `pnpm lint:layers` reads them. Their paths start at the top of the repo. */
+const REAL: ReadonlyArray<Row> = Schema.decodeUnknownSync(RuleFile)(
+  JSON.parse(readFileSync(resolve(NEXT, "../layer-rules.json"), "utf8")),
+).layers;
+
+/** A file's path as the rule file names it: `next` stands for the repo's `next/` folder. */
+const ruled = (next: string, file: string): string => `next/${shown(next, file)}`;
+
+/** The library part of a file, when exactly one row claims it and that row is a library part. */
+const libraryPart = (rows: ReadonlyArray<Row>, next: string, file: string): string | null => {
+  const [row, ...more] = rowsAt(rows, ruled(next, file));
+  return row === undefined || more.length > 0 ? null : (rowParts[row] ?? null);
 };
 
 /** The files a program's `.` export reaches by relative imports: what the box loads. */
@@ -265,27 +304,19 @@ const folderAt = (pkg: Package, file: string): string | null => {
 };
 
 /** The part a file of `pkg` belongs to, or null when the table has no row for it. */
-const partAt = (pkg: Package, box: ReadonlySet<string>, file: string): string | null => {
+const partAt = (
+  rows: ReadonlyArray<Row>,
+  next: string,
+  pkg: Package,
+  box: ReadonlySet<string>,
+  file: string,
+): string | null => {
   if (pkg.group === "programs") {
     return box.has(file) ? "program" : "program-window";
   }
 
   if (pkg.manifest.name === LIBRARY) {
-    if (file === join(pkg.dir, "src/id.ts")) {
-      return "id";
-    }
-
-    if (file === join(pkg.dir, "src/id.test-support.ts")) {
-      return "id-test-support";
-    }
-
-    if (file === join(pkg.dir, "src/testing.ts")) {
-      return "app";
-    }
-
-    if (file === join(pkg.dir, "src/index.ts")) {
-      return "libfabrika-entry";
-    }
+    return libraryPart(rows, next, file);
   }
 
   const folder = folderAt(pkg, file);
@@ -293,7 +324,7 @@ const partAt = (pkg: Package, box: ReadonlySet<string>, file: string): string | 
 };
 
 /** Every import in `next` that breaks the table, or that the library makes upward. */
-const faults = (next: string): ReadonlyArray<string> => {
+const faults = (next: string, rows: ReadonlyArray<Row> = REAL): ReadonlyArray<string> => {
   const packages = packagesIn(next);
   const above = new Set(
     packages.filter((pkg) => pkg.group !== "packages" || pkg.manifest.name === TUVAL).map((pkg) => pkg.manifest.name),
@@ -328,7 +359,17 @@ const faults = (next: string): ReadonlyArray<string> => {
       return [...found, `${where}: the folder "${folder}" has no row in the exam's table`];
     }
 
-    const part = partAt(pkg, pkg.group === "programs" ? boxFor(pkg) : new Set(), file);
+    const part = partAt(rows, next, pkg, pkg.group === "programs" ? boxFor(pkg) : new Set(), file);
+
+    // A library file under `src/` needs exactly one row, and that row must be a part of the table.
+    if (part === null && pkg.manifest.name === LIBRARY && file.startsWith(`${join(pkg.dir, "src")}${sep}`)) {
+      const claimed = rowsAt(rows, ruled(next, file));
+      const what =
+        folder !== null && claimed.length === 0
+          ? `the folder "${folder}" has no row in the exam's table`
+          : `the rule file's rows that claim it are [${claimed.join(", ")}], and a library file needs exactly one that is a part`;
+      return [...found, `${where}: ${what}`];
+    }
 
     if (part === null) {
       return found;
@@ -348,7 +389,7 @@ const faults = (next: string): ReadonlyArray<string> => {
           continue;
         } // leaving the package: deps.test.ts
 
-        const there = partAt(pkg, new Set(), target) ?? "an entry file";
+        const there = partAt(rows, next, pkg, new Set(), target) ?? "an entry file";
 
         if (there !== part && !may.includes(there)) {
           found.push(`${where} imports "${spec}": ${part} may not import ${there}`);
@@ -471,6 +512,320 @@ describe("planted breaks", () => {
         'programs/notes/src/root.ts imports "@kampus/tuval": program may not import it',
         'programs/notes/src/tile.ts imports "@kampus/libfabrika/transport": program-window may not import it',
       ].sort(),
+    );
+  });
+});
+
+// Ticket 477, PR 0: the laws of the row reader. Fixed seed, as the lead scripts' laws use.
+const options = { seed: 119120, numRuns: 500 };
+
+describe("the rule file's rows give a file its part", () => {
+  // The tool's rule, written a second way, by segments and with no regex over the whole path, so
+  // the reader is checked against the rule and not against itself.
+  const one = (segment: string, name: string): boolean => {
+    const [head = "", ...rest] = segment.split("*");
+
+    if (rest.length === 0) {
+      return head === name;
+    }
+
+    let at = head.length;
+
+    if (!name.startsWith(head)) {
+      return false;
+    }
+
+    for (const piece of rest.slice(0, -1)) {
+      const next = name.indexOf(piece, at);
+
+      if (next < 0) {
+        return false;
+      }
+
+      at = next + piece.length;
+    }
+
+    const tail = rest.at(-1) ?? "";
+    return name.length - tail.length >= at && name.endsWith(tail) && name.length > 0;
+  };
+  const claims = (pattern: ReadonlyArray<string>, path: ReadonlyArray<string>): boolean => {
+    const [segment, ...rest] = pattern;
+
+    if (segment === undefined) {
+      return true;
+    }
+
+    if (segment === "**") {
+      return claims(rest, path) || (path.length > 0 && claims(pattern, path.slice(1)));
+    }
+
+    const [name, ...below] = path;
+    return name !== undefined && one(segment, name) && claims(rest, below);
+  };
+  const weight = (pattern: string): number => {
+    const segments = pattern.split("/");
+    const count = (keep: (segment: string) => boolean) => segments.filter(keep).length;
+    // Three numbers compared in order. Each is under 1,000 here, so one number holds them.
+    return (
+      count((s) => s !== "**") * 1_000_000 +
+      count((s) => !s.includes("*")) * 1_000 +
+      [...pattern].filter((c) => c !== "*" && c !== "/").length
+    );
+  };
+  const expected = (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<string> => {
+    const found = rows.flatMap((row) =>
+      row.paths
+        .filter((pattern) => claims(pattern.split("/"), path.split("/")))
+        .map((pattern) => ({ name: row.name, weight: weight(pattern) })),
+    );
+    const top = Math.max(...found.map((f) => f.weight));
+    return [...new Set(found.filter((f) => f.weight === top).map((f) => f.name))].sort();
+  };
+
+  const folder = fc.constantFrom("src", "app", "data", "door", "runtime", "internal");
+  const file = fc.constantFrom("Log.ts", "log.ts", "index.ts", "ProcessStore.ts", "Log.test.ts");
+  const segment = fc.oneof(
+    { arbitrary: folder, weight: 6 },
+    { arbitrary: fc.constantFrom("*", "**", "d*", "*a", "*t*"), weight: 2 },
+  );
+  const pattern = fc
+    .tuple(
+      fc.array(segment, { minLength: 1, maxLength: 4 }),
+      fc.option(fc.oneof(file, fc.constantFrom("*.ts", "ProcessStore*", "*.test.ts")), {
+        nil: undefined,
+      }),
+    )
+    .map(([folders, last]) => [...folders, ...(last === undefined ? [] : [last])].join("/"));
+  const rows: fc.Arbitrary<ReadonlyArray<Row>> = fc
+    .array(fc.array(pattern, { minLength: 1, maxLength: 3 }), { minLength: 1, maxLength: 6 })
+    .map((each) => each.map((paths, n) => ({ name: `row-${n}`, paths })));
+  const path = fc
+    .tuple(fc.array(folder, { minLength: 1, maxLength: 4 }), file)
+    .map(([folders, last]) => [...folders, last].join("/"));
+
+  // Plant: pick the first row whose pattern matches, in the rule file's order, and not the most
+  // specific. Then `src/runtime/ProcessStore*` in a later row loses to `src/runtime` in an earlier
+  // one, and a file the plan keeps in coordination reads as app.
+  it("the rows for a file are the ones code-graph's rule gives, for any rows and any path", () => {
+    fc.assert(
+      fc.property(fc.tuple(rows, path), ([given, at]) => {
+        expect([...rowsAt(given, at)].sort()).toEqual(expected(given, at));
+      }),
+      {
+        ...options,
+        numRuns: 3000,
+        examples: [
+          // pinned: the plan's own case (ticket 477, PR 5). The longer pattern is in the later row.
+          [
+            [
+              [
+                { name: "row-0", paths: ["src/runtime"] },
+                { name: "row-1", paths: ["src/runtime/ProcessStore*"] },
+              ],
+              "src/runtime/ProcessStore.ts",
+            ],
+          ],
+        ],
+      },
+    );
+  });
+
+  // Plant: the same as above. The order of the rows, and of the paths in a row, changes nothing.
+  it("the answer does not depend on the order of the rows", () => {
+    fc.assert(
+      fc.property(
+        fc
+          .tuple(rows, path)
+          .chain(([given, at]) =>
+            fc.tuple(fc.constant(given), fc.shuffledSubarray([...given], { minLength: given.length }), fc.constant(at)),
+          ),
+        ([given, shuffled, at]) => {
+          expect([...rowsAt(shuffled, at)].sort()).toEqual([...rowsAt(given, at)].sort());
+        },
+      ),
+      options,
+    );
+  });
+
+  // vector: answers of code-graph 0.15.0 on the real rule file, worked out from its built source
+  // (`src/layers/classify.ts`), since `pnpm lint:layers` runs that tool on these same rows and the
+  // exam must name the same row. A file pattern beats its folder, a deeper folder beats a higher
+  // one, and a folder claims only at a `/`.
+  it("vector: the real rule file gives the rows code-graph gives", () => {
+    expect(rowsAt(REAL, "packages/fabrika/src/agents/claude.ts")).toEqual(["fabrika-entry"]);
+    expect(rowsAt(REAL, "packages/fabrika/src/agents/claude/rules.ts")).toEqual(["fabrika-agents"]);
+    expect(rowsAt(REAL, "packages/pipeline/src/laws/explore.ts")).toEqual(["own-search"]);
+    expect(rowsAt(REAL, "packages/pipeline/src/laws/walk.ts")).toEqual(["pipeline"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/testing.ts")).toEqual(["next-app"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/app/runner.ts")).toEqual(["next-app"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/apple/runner.ts")).toEqual([]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/testing.tsx")).toEqual([]);
+  });
+});
+
+describe("every library file has exactly one row", () => {
+  const under = "next/packages/libfabrika/src/";
+  /** The library's folders the real rule file names: every row's folder pattern under `src/`. */
+  const folders = REAL.flatMap((row) => row.paths)
+    .filter((pattern) => pattern.startsWith(under) && !pattern.endsWith(".ts"))
+    .map((pattern) => pattern.slice(under.length));
+  const tops = ["id", "testing", "index"];
+  const name = fc.stringMatching(/^[A-Za-z][A-Za-z0-9-]{0,8}$/);
+  // A Mac's disk ignores case, so a made-up name may not differ from a real one by case alone.
+  const unlisted = (taken: ReadonlyArray<string>) => name.filter((n) => !taken.includes(n.toLowerCase()));
+
+  // Plant: let a library file with no row pass, as the reader did before for a file at the top of
+  // `src/` (it answered "an entry file" and checked nothing). Then `src/sync/Merge.ts` and a new
+  // top file import anything.
+  it("a file in a row's folder has one row; a file no row claims fails, wherever it is", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...folders),
+        fc.constantFrom("", "internal/"),
+        name,
+        unlisted(folders),
+        unlisted(tops),
+        (folder, inner, file, stray, loose) => {
+          const src = "packages/libfabrika/src";
+          const tree = plant({
+            "packages/libfabrika/package.json": manifest(LIBRARY),
+            [`${src}/${folder}/${inner}${file}.ts`]: lines("export const a = 1;"),
+            [`${src}/${stray}/${inner}${file}.ts`]: lines("export const a = 1;"),
+            [`${src}/${stray}/${file}.test.ts`]: lines("export const a = 1;"),
+            [`${src}/${loose}.ts`]: lines("export const a = 1;"),
+            [`${src}/${loose}.test.ts`]: lines("export const a = 1;"),
+          });
+
+          expect(rowsAt(REAL, `next/${src}/${folder}/${inner}${file}.ts`)).toHaveLength(1);
+          // Which files fail, not what the message says.
+          expect(faults(tree).map((fault) => fault.split(/:| imports /)[0])).toEqual(
+            [`${src}/${stray}/${inner}${file}.ts`, `${src}/${loose}.ts`].sort(),
+          );
+        },
+      ),
+      {
+        ...options,
+        numRuns: 60,
+        // pinned: the plan's plant (ticket 477), a new folder with no row, and a new top file.
+        examples: [["data", "", "Merge", "sync", "Loose"]],
+      },
+    );
+  });
+
+  // scenario: two rows that claim one file equally, since code-graph stops on that file and names
+  // no row, and the exam must not pick one for it.
+  it("scenario: a file two rows claim equally fails", () => {
+    const tree = plant({
+      "packages/libfabrika/package.json": manifest(LIBRARY),
+      "packages/libfabrika/src/data/log.ts": lines("export const a = 1;"),
+    });
+    const twice = [...REAL, { name: "next-app", paths: ["next/packages/libfabrika/src/data"] }];
+    expect(faults(tree)).toEqual([]);
+    expect(faults(tree, twice)).toHaveLength(1);
+  });
+});
+
+describe("planted breaks in the room folders", () => {
+  const src = "next/packages/libfabrika/src";
+  const add = (name: string, paths: ReadonlyArray<string>) => (row: Row) =>
+    row.name === name ? { name, paths: [...row.paths, ...paths.map((p) => `${src}/${p}`)] } : row;
+  // The rule file as the move leaves it before the floors (the plan's config table, PRs 1 to 5):
+  // each old row gains its rooms' paths, and three patterns keep three runtime files in coordination.
+  const rooms = (runtime: "next-app" | "next-coordination"): ReadonlyArray<Row> =>
+    REAL.map(add("next-id", ["Id.ts", "ProcessId.ts", "Sql.ts", "Rev.ts"]))
+      .map(add("next-data", ["telemetry", "ledger"]))
+      .map(
+        add("next-coordination", [
+          "processes",
+          "presence",
+          "access",
+          "runtime/ProcessStore*",
+          "runtime/RecoveryStore*",
+          "runtime/internal/recovery.ts",
+        ]),
+      )
+      .map(add(runtime, ["runtime"]))
+      .map(add("next-app", ["Testing.ts"]));
+  const tree = plant({
+    "packages/libfabrika/package.json": manifest(LIBRARY),
+    "packages/libfabrika/src/Id.ts": lines("export const id = 1;"),
+    "packages/libfabrika/src/telemetry/Sink.ts": lines('import {id} from "../Id.ts";'),
+    "packages/libfabrika/src/ledger/Log.ts": lines('import {sink} from "../telemetry/Sink.ts";'),
+    "packages/libfabrika/src/ledger/Ledger.ts": lines('import {mailbox} from "../processes/Mailbox.ts";'),
+    "packages/libfabrika/src/transport/Wire.ts": lines('import {log} from "../ledger/Log.ts";'),
+    "packages/libfabrika/src/processes/Mailbox.ts": lines(
+      'import {log} from "../ledger/Log.ts";',
+      'import {Door} from "../door/Door.ts";',
+    ),
+    "packages/libfabrika/src/access/Members.ts": lines(
+      'import {mailbox} from "../processes/Mailbox.ts";',
+      'import {run} from "../runtime/Runner.ts";',
+    ),
+    "packages/libfabrika/src/runtime/Runner.ts": lines(
+      'import {mailbox} from "../processes/Mailbox.ts";',
+      'import {store} from "./ProcessStore.ts";',
+      'import {log} from "../ledger/Log.ts";',
+      'import {wire} from "../transport/Wire.ts";',
+    ),
+    "packages/libfabrika/src/runtime/ProcessStore.ts": lines('import {log} from "../ledger/Log.ts";'),
+    "packages/libfabrika/src/runtime/RecoveryStore.ts": lines('import {log} from "../ledger/Log.ts";'),
+    "packages/libfabrika/src/runtime/internal/recovery.ts": lines('import {log} from "../../ledger/Log.ts";'),
+    "packages/libfabrika/src/runtime/internal/supervisor.ts": lines('import {log} from "../../ledger/Log.ts";'),
+    "packages/libfabrika/src/door/Door.ts": lines(
+      'import {run} from "../runtime/Runner.ts";',
+      'import {members} from "../access/Members.ts";',
+      'import {log} from "../ledger/Log.ts";',
+      'import {wire} from "../transport/Wire.ts";',
+    ),
+    "packages/libfabrika/src/door/internal/waiting.ts": lines('import {wire} from "../../transport/Wire.ts";'),
+  });
+
+  // scenario: each line is one named wall of today's table, met in a room folder, since the move
+  // (PRs 2 to 5) must leave every wall standing: the ledger may not import processes, transport may
+  // not import the ledger, processes and access may not import the door or the runtime, and the
+  // runtime may not import the ledger or transport. Three runtime files stay coordination by
+  // pattern, so their ledger imports pass until PR 12 cuts them.
+  // Plant: map `runtime` to the coordination part (`rooms("next-coordination")`). Then the runner's
+  // ledger import passes.
+  it("scenario: every upward or skipped-part import fires in the room folders, and nothing else", () => {
+    const at = (file: string) => `packages/libfabrika/src/${file}`;
+    expect([...faults(tree, rooms("next-app"))].sort()).toEqual(
+      [
+        `${at("ledger/Ledger.ts")} imports "../processes/Mailbox.ts": data may not import coordination`,
+        `${at("transport/Wire.ts")} imports "../ledger/Log.ts": transport may not import data`,
+        `${at("processes/Mailbox.ts")} imports "../door/Door.ts": coordination may not import door`,
+        `${at("access/Members.ts")} imports "../runtime/Runner.ts": coordination may not import app`,
+        `${at("runtime/Runner.ts")} imports "../ledger/Log.ts": app may not import data`,
+        `${at("runtime/Runner.ts")} imports "../transport/Wire.ts": app may not import transport`,
+        `${at("runtime/internal/supervisor.ts")} imports "../../ledger/Log.ts": app may not import data`,
+      ].sort(),
+    );
+  });
+
+  // scenario: the room folders have no row on main yet, since no file has moved. Until a move PR
+  // adds the paths, a file planted in a room fails for having no row, so a move cannot land ahead
+  // of its rule file change.
+  it("scenario: on main's rule file a room folder has no row", () => {
+    const at = (file: string) => `packages/libfabrika/src/${file}`;
+    const unclaimed = faults(tree)
+      .filter((fault) => !fault.includes(" imports "))
+      .map((fault) => fault.split(": ")[0]);
+    expect(unclaimed.sort()).toEqual(
+      [
+        "Id.ts",
+        "telemetry/Sink.ts",
+        "ledger/Log.ts",
+        "ledger/Ledger.ts",
+        "processes/Mailbox.ts",
+        "access/Members.ts",
+        "runtime/Runner.ts",
+        "runtime/ProcessStore.ts",
+        "runtime/RecoveryStore.ts",
+        "runtime/internal/recovery.ts",
+        "runtime/internal/supervisor.ts",
+      ]
+        .map(at)
+        .sort(),
     );
   });
 });

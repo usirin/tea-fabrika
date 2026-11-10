@@ -19,8 +19,9 @@
 
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
-import { acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
+import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
 import { Effect, FileSystem, Result, Schema, Stream } from "effect";
+import { ChildProcess } from "effect/process";
 
 export const PROVIDERS = ["codex", "codex-read", "claude"] as const;
 export type Provider = (typeof PROVIDERS)[number];
@@ -105,9 +106,78 @@ export interface TurnAsk<A> {
   readonly report: string;
 }
 
+/** The adapter scripts the provider table starts, under `ADAPTERS` (harness.ts). */
+export const ADAPTER_SCRIPTS = [
+  "@agentclientprotocol/codex-acp/dist/index.js",
+  "@agentclientprotocol/claude-agent-acp/dist/index.js",
+] as const;
+
+/** The pinned adapters could not be installed: the step's agent cannot start. */
+export class AdaptersMissing extends Schema.TaggedError<AdaptersMissing>()("AdaptersMissing", {
+  missing: Schema.Array(Schema.String),
+  said: Schema.String,
+}) {}
+
+/** How the install ran: its exit code and its last lines. */
+export type Install = (folder: string) => Effect.Effect<{ readonly code: number; readonly said: string }>;
+
+/** The documented install (adapters/package.json): pinned, apart from the workspace, from its lockfile. */
+const pnpmInstall: Install = (folder) =>
+  Effect.gen(function* () {
+    const ran = yield* ChildProcess.make(
+      "pnpm",
+      ["--dir", folder, "install", "--ignore-workspace", "--frozen-lockfile", "--silent"],
+      { extendEnv: true, stdin: "ignore" },
+    );
+    const [out, err, code] = yield* Effect.all(
+      [
+        ran.stdout.pipe(Stream.decodeText(), Stream.mkString),
+        ran.stderr.pipe(Stream.decodeText(), Stream.mkString),
+        ran.exitCode,
+      ],
+      { concurrency: 3 },
+    );
+    return { code: Number(code), said: `${out}${err}`.trim().split("\n").slice(-5).join(" | ") };
+  }).pipe(
+    Effect.scoped,
+    Effect.catch(() => Effect.succeed({ code: 127, said: "pnpm could not start" })),
+    Effect.provide(nodeServices),
+  );
+
+/**
+ * The adapters the agents start, installed when the checkout this runs from has none. A fresh
+ * worktree's `pnpm install` leaves them out (they sit apart from the workspace), and a step started
+ * there ended `ACP connection closed ... Cannot find module` once its box was made (layout-tests3-p16
+ * and t411-mutation3, 2026-11-10; ticket 565). Installed once, then checked again: still missing is
+ * `AdaptersMissing` with the install's own words, before any box exists.
+ */
+export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnpmInstall) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = modules.replace(/\/$/, "");
+    const missing = Effect.filter(ADAPTER_SCRIPTS, (s) =>
+      fs.exists(`${root}/${s}`).pipe(
+        Effect.map((here) => !here),
+        Effect.orElseSucceed(() => true),
+      ),
+    );
+
+    if ((yield* missing).length === 0) {
+      return;
+    }
+
+    const ran = yield* install(root.replace(/\/node_modules$/, ""));
+    const still = yield* missing;
+
+    if (still.length > 0) {
+      return yield* new AdaptersMissing({ missing: still, said: `install exit ${ran.code}: ${ran.said}` });
+    }
+  }).pipe(Effect.provide(nodeServices));
+
 /** The provider table on the ACP rows, the session map and the reaper. One per process. */
 export const makeStepAgents = (sessionsDir: string) =>
   Effect.gen(function* () {
+    yield* adaptersReady();
     const sessions = yield* Agent.fileSessions(sessionsDir);
     const adapters = {
       codex: yield* acpAdapter({ name: "codex", access: "write" }),

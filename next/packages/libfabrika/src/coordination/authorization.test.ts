@@ -14,9 +14,9 @@ import { LedgerTransaction, type LedgerTurn } from "../data/ledger-transaction.t
 import { Doorbell, Ledger } from "../data/ledger.ts";
 import { type Line, lineFor } from "../data/log.ts";
 import { RecordManager } from "../data/records.ts";
-import type { Sql } from "../data/referee.ts";
 import { SpanSink } from "../data/sink.ts";
 import { nodeSql } from "../data/sqlite.ts";
+import type { Sql } from "../Sql.ts";
 import { ClientManager } from "./client-manager.ts";
 import { MemberEvent } from "./members.ts";
 

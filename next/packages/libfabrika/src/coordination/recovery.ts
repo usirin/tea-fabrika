@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Line } from "../data/log.ts";
-import { ProcessId } from "../data/trace.ts";
+import { ProcessId } from "../ProcessId.ts";
 import { Start } from "./process.ts";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));

@@ -27,12 +27,13 @@ import { Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer } 
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId, processIds } from "../id.test-support.ts";
+import { ProcessId } from "../ProcessId.ts";
+import type { Sql } from "../Sql.ts";
 import { Archive, type BucketCalls } from "./archive.ts";
 import { RecordManager } from "./records.ts";
-import type { Sql } from "./referee.ts";
 import { SinkError, SpanSink } from "./sink.ts";
 import { nodeSql } from "./sqlite.ts";
-import { type Chain, ProcessId, type SpanRow } from "./trace.ts";
+import { type Chain, type SpanRow } from "./trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
