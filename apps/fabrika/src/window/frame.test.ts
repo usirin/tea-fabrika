@@ -43,6 +43,7 @@ import {
   middleFree,
   nowhereNote,
   opensOf,
+  passOn,
   prefixLine,
   questionWord,
   restartedWord,
@@ -1302,31 +1303,13 @@ describe("a held Escape reaches the frame (ticket 589)", () => {
   };
 
   /**
-   * What the page does with the Cmds of one step, as holdStep does (desk.tsx): the hold's final
-   * model is installed first, then each key passed on goes through the frame decision, and goes to
-   * the tile only when the frame leaves it.
+   * What the page does with the Cmds of one step: `passOn` (frame.ts) is the whole loop holdStep
+   * runs over them, with the hold's final model already installed (`waiting` is that model's), and
+   * desk.tsx only carries out what it answers.
    */
-  const settle = (frame: Frame, hold: Hold, cmds: readonly HoldCmd[], actual: MidKey) => {
-    const tile: string[] = [];
-    let now = frame;
-
-    for (const c of cmds) {
-      if (c.type !== "pass") {
-        continue;
-      }
-
-      const next = frameKey(now, c.key.press.key, actual, hold.waiting !== null, c.held ? "passed" : "fresh");
-
-      if (next !== now) {
-        now = next;
-        continue;
-      }
-
-      tile.push(c.key.press.key);
-    }
-
-    return { frame: now, tile };
-  };
+  const PREFIX = "<c-b>";
+  const settle = (frame: Frame, hold: Hold, cmds: readonly HoldCmd[], actual: MidKey) =>
+    passOn(frame, cmds, actual, hold.waiting !== null, { prefix: PREFIX });
 
   /** C-b i: the prefix is acknowledged, `i` is sent, and the host's desk comes back unarmed. */
   const INFO_ON_PENDING: readonly HoldMsg[] = [
@@ -1350,7 +1333,7 @@ describe("a held Escape reaches the frame (ticket 589)", () => {
     expect(steps.at(-1)).toEqual([{ type: "pass", key: escape, held: true }]);
     const out = settle(on, hold, steps.at(-1) ?? [], unarmed);
     expect(out.frame.info).toEqual({ kind: "off" });
-    expect(out.tile).toEqual([]);
+    expect(out.out).toEqual([]);
   });
 
   // scenario: Escape, then a key the host takes, in one release: the hold's final model is waiting
@@ -1367,7 +1350,8 @@ describe("a held Escape reaches the frame (ticket 589)", () => {
     expect(hold.waiting).not.toBeNull();
     const out = settle(on, hold, cmds, unarmed);
     expect(out.frame.info).toEqual({ kind: "off" });
-    expect(out.tile).toEqual([]);
+    // The Escape is consumed; the key after it goes to the host, with the id the hold gave it.
+    expect(out.out).toEqual([{ _tag: "press", id: hold.waiting?.id, key: "<c-b>" }]);
   });
 
   const frames = fc.record({ info: fc.boolean(), over: fc.boolean() }).map(({ info, over }) => {
@@ -1405,9 +1389,17 @@ describe("a held Escape reaches the frame (ticket 589)", () => {
 
   const others = fc.array(fc.constantFrom("a", "b", "1", "ArrowLeft", "Tab"), { minLength: 1, maxLength: 30 });
 
-  it("leaves every other held key to the tile, once each and in order, never to the frame", () => {
+  // L5, through `passOn`: every held key the frame leaves comes out exactly once, in the order the
+  // hold released it: `over` when the over takes it (keyGoesTo), else `replay`. Nothing comes out
+  // that sends a key back into the hold (`press`, or `live`, the key pressed now), and the frame
+  // stays the same one. The oracle is keyGoesTo's rule written out: with an over up and the desk
+  // not mid-key (and the key not the prefix), the over takes the key.
+  // The guard that stops the page's own `replaying` press from entering the hold again is DOM
+  // (desk.tsx, `onKey`); e2e.ts covers it. A second `pressAgain` is what `replay` appearing twice
+  // here, and a routing change is what `over` turning into `replay`, would show.
+  it("leaves every other held key to its owner, once each and in order, never back into the hold", () => {
     fc.assert(
-      fc.property(frames, others, fc.boolean(), (f, names, armed) => {
+      fc.property(frames, others, fc.boolean(), fc.boolean(), fc.boolean(), (f, names, armed, asking, waiting) => {
         const { hold, steps } = foldHold([
           PREFIX_ONLY,
           { type: "key", key: ctrlB },
@@ -1416,13 +1408,28 @@ describe("a held Escape reaches the frame (ticket 589)", () => {
         ]);
         const cmds = steps.at(-1) ?? [];
         expect(cmds.map((c) => (c.type === "pass" ? c.key.name : c.type))).toEqual(names);
-        const actual = { armed, asking: false };
-        const out = settle(f, hold, cmds, actual);
-        expect(out.frame).toBe(f);
-        expect(out.tile).toEqual(names);
+        const done = passOn(f, cmds, { armed, asking }, waiting, { prefix: PREFIX });
+        const overTakes = f.over.kind !== "none" && !(armed || asking || waiting);
+        expect(done.frame).toBe(f);
+        expect(done.out).toEqual(names.map((n) => ({ _tag: overTakes ? "over" : "replay", key: key(n) })));
+        expect(hold.waiting).toBeNull();
       }),
       { numRuns: 200 },
     );
+  });
+
+  // scenario: the key pressed now that the hold lets go on is `live`, not a replay; a key the
+  // host takes is a `press`, and neither is a key sent back into the hold.
+  it("scenario: a fresh key goes on live, and a taken key goes to the host", () => {
+    const fresh = foldHold([{ type: "key", key: key("a") }]);
+    expect(passOn(on, fresh.steps[0] ?? [], unarmed, false, { prefix: PREFIX })).toEqual({
+      frame: on,
+      out: [{ _tag: "live" }],
+    });
+    const taken = foldHold([PREFIX_ONLY, { type: "key", key: ctrlB }]);
+    expect(passOn(on, taken.steps[1] ?? [], unarmed, true, { prefix: PREFIX }).out).toEqual([
+      { _tag: "press", id: 0, key: "<c-b>" },
+    ]);
   });
 
   // scenario: a key the host rejects goes on held, and a dropped link lets the queue go on; both
@@ -1445,8 +1452,11 @@ describe("a held Escape reaches the frame (ticket 589)", () => {
     expect(dropped.hold.up).toBe(false);
     const out = settle(on, dropped.hold, released, unarmed);
     expect(out.frame.info).toEqual({ kind: "off" });
-    expect(out.tile).toEqual([]);
+    expect(out.out).toEqual([]);
     // With an over up, the same Escape closes only it.
-    expect(settle(withAsks, dropped.hold, released, unarmed).frame.info).toEqual({ kind: "on", explained: null });
+    const over = settle(withAsks, dropped.hold, released, unarmed);
+    expect(over.frame.info).toEqual({ kind: "on", explained: null });
+    expect(over.frame.over).toEqual({ kind: "none" });
+    expect(over.out).toEqual([]);
   });
 });
