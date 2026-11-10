@@ -32,10 +32,12 @@ const TABLES = [
 ];
 
 /** Span tag keys: OpenTelemetry's messaging names where they fit, `fab.ledger.*` for the rest. */
+/** @internal */
 export const STREAM = "messaging.destination.name";
 const ID = "messaging.message.id";
 const OPERATION = "messaging.operation.type";
 const ERROR = "error.type";
+/** @internal */
 export const tag = (name: string): string => `fab.ledger.${name}`;
 
 /** A waiter to ring, as the rings table holds it. */
@@ -151,6 +153,7 @@ const errorCode = (error: unknown): Option.Option<string | number> => {
   return typeof code === "number" || typeof code === "string" ? Option.some(code) : Option.none();
 };
 
+/** @internal */
 export const ledgerStore = (
   sql: Sql,
   doorbell: (typeof Doorbell)["Service"],

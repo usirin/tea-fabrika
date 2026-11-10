@@ -16,8 +16,10 @@ const DAY = 24 * HOUR;
 /** How long raw rows stay local: "about two weeks" (owner, 2026-11-07), read as 336 hours. */
 const KEEP = 336 * HOUR;
 
+/** @internal */
 export const hourStart = (at: number): number => Math.floor(at / HOUR) * HOUR;
 
+/** @internal */
 export const HEALTH_TABLES = [
   `CREATE TABLE IF NOT EXISTS health (
 		piece TEXT NOT NULL, at INTEGER NOT NULL, ms REAL NOT NULL, ok INTEGER NOT NULL, error TEXT,
@@ -71,6 +73,7 @@ const toHealth = (row: unknown): Health => {
   return { ...rest, ok: ok === 1 };
 };
 
+/** @internal */
 export const writeHealth = (sql: Sql, { piece, at, ms, ok, error, lag, spanId }: Health): void =>
   void sql.exec(
     `INSERT INTO health (piece, at, ms, ok, error, lag, "spanId") VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -110,6 +113,7 @@ const summarize = (hour: number, rows: ReadonlyArray<Health>): Array<Summary> =>
 };
 
 /** Rolls up every closed hour before `now` that has health rows and no summary yet. */
+/** @internal */
 export const rollup = (sql: Sql, now: number): void => {
   const hours = sql
     .exec(
@@ -143,6 +147,7 @@ export const rollup = (sql: Sql, now: number): void => {
 };
 
 /** A size row from `Sql.size()`, unless this hour already has one. */
+/** @internal */
 export const writeSize = (sql: Sql, now: number): void => {
   const start = hourStart(now);
   const [had] = sql.exec(`SELECT count(*) AS n FROM sizes WHERE at >= ? AND at < ?`, start, start + HOUR);
@@ -155,6 +160,7 @@ export const writeSize = (sql: Sql, now: number): void => {
 };
 
 /** The summaries whose hour is in `[from, to)`, oldest first. */
+/** @internal */
 export const readSummaries = (sql: Sql, from: number, to: number): Array<Summary> =>
   sql.exec(`SELECT * FROM summary WHERE hour >= ? AND hour < ? ORDER BY hour, piece`, from, to).map((row) => {
     const { p50, p95, max, ...rest } = decodeSummary(row);
@@ -284,6 +290,7 @@ const archivePart = Effect.fnUntraced(function* (sql: Sql, archive: (typeof Arch
 /** Archives each due day's next part. A failed put or a mismatch deletes nothing, writes its
  *  `sink.archive` row and is tried again at the next flush, so a day here never fails the step:
  *  nothing is lost. An unnamed `Effect.fn`: the sink's own work ends no span. */
+/** @internal */
 export const archiveDays = Effect.fn(
   function* (sql: Sql, object: string, now: number) {
     const archive = yield* Archive;

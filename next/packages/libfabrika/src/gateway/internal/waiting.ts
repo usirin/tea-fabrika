@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 
+/** @internal */
 export const Row = Schema.Struct({
   key: Schema.String,
   label: Schema.String,
@@ -13,6 +14,7 @@ export const Row = Schema.Struct({
   as: Schema.Literals(["window", "agent"]),
 });
 
+/** @internal */
 export class Waiting extends Schema.Opaque<Waiting>()(
   Schema.Struct({
     rows: Schema.Array(Row),

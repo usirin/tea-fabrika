@@ -11,6 +11,7 @@ const decodeSent = Schema.decodeUnknownOption(Sent);
  * fails on what another writer put in the inbox: a `send` with no `m` is skipped, and any `m` is
  * mail unless the table calls it a signal.
  */
+/** @internal */
 export const processMail = (table: ProcessTable, process: string, entries: Iterable<Entry>) => {
   const letters: Array<{ letter: Letter; arrivedAt: number }> = [];
 

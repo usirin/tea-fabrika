@@ -7,8 +7,10 @@ const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 const Millis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Text = Schema.NonEmptyString;
 /** How many times one letter is tried before it moves to the dead letters: 1 to 32. */
+/** @internal */
 export const Deliveries = Count.check(Schema.isLessThanOrEqualTo(32));
 
+/** @internal */
 export const Policy = Schema.Struct({
   maxDeliveries: Deliveries,
   intensity: Count,
@@ -37,17 +39,21 @@ export const Policy = Schema.Struct({
     return true;
   }),
 );
+/** @internal */
 export type Policy = typeof Policy.Type;
 
 const AttemptFields = { process: ProcessId, letter: Text, build: Text, seq: Count };
 
+/** @internal */
 export const Failure = Schema.TaggedUnion({
   fresh: { ...AttemptFields, error: Text },
   saved: { ...AttemptFields, error: Text },
   interrupted: AttemptFields,
 });
+/** @internal */
 export type Failure = typeof Failure.Type;
 
+/** @internal */
 export const Recovery = Schema.TaggedUnion({
   live: { process: ProcessId },
   ending: { process: ProcessId, failure: Failure },
@@ -79,6 +85,7 @@ const Observation = Schema.Struct({
   at: Millis,
 });
 
+/** @internal */
 export const Receipt = Schema.Struct({
   letter: Text,
   input: Schema.Json,
@@ -95,6 +102,7 @@ export const Receipt = Schema.Struct({
   ),
 );
 
+/** @internal */
 export const Supervision = Schema.Struct({
   v: Schema.Literal(1),
   name: Text,
@@ -114,4 +122,5 @@ export const Supervision = Schema.Struct({
   restart: Schema.optionalKey(Schema.Struct({ id: Text, build: Text })),
   requests: Schema.optionalKey(Schema.Array(Schema.Struct({ id: Text, build: Text, process: ProcessId }))),
 });
+/** @internal */
 export type Supervision = typeof Supervision.Type;

@@ -3,8 +3,10 @@ import { Schema } from "effect";
 import { canRestart, Start } from "../../processes/Process.ts";
 import { Failure, Policy, Recovery, Supervision } from "./recovery.ts";
 
+/** @internal */
 export { Policy };
 
+/** @internal */
 export const defaultPolicy: Policy = {
   maxDeliveries: 3,
   intensity: 5,
@@ -20,6 +22,7 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("healthy"), at: Schema.Number }),
 ]);
 
+/** @internal */
 export type SupervisorMsg = typeof Msg.Type;
 
 type Ctx = {
@@ -66,6 +69,7 @@ const again = (s: Supervision, after: string, reason: string) =>
     }),
   });
 
+/** @internal */
 export const supervisor = Machine.make({
   model: Supervision,
   msg: Msg,

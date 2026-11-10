@@ -1,9 +1,12 @@
 import { Effect, Option, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 
+/** @internal */
 export type Bytes = Uint8Array<ArrayBuffer>;
+/** @internal */
 export const utf8 = (text: string): Bytes => new TextEncoder().encode(text);
 
+/** @internal */
 export const join = (...parts: ReadonlyArray<Uint8Array>): Bytes => {
   const out = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
   parts.reduce((at, part) => {
@@ -13,19 +16,23 @@ export const join = (...parts: ReadonlyArray<Uint8Array>): Bytes => {
   return out;
 };
 
+/** @internal */
 export const u32 = (n: number): Bytes => {
   const out = new Uint8Array(4);
   new DataView(out.buffer).setUint32(0, n);
   return out;
 };
 
+/** @internal */
 export const field = (value: Uint8Array | string): Bytes => {
   const bytes = typeof value === "string" ? utf8(value) : value;
   return join(u32(bytes.length), bytes);
 };
 
+/** @internal */
 export const same = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
 
+/** @internal */
 export const reader = (bytes: Uint8Array) => {
   let at = 0;
   const take = (n: number): Option.Option<Bytes> => {
@@ -46,8 +53,10 @@ export const reader = (bytes: Uint8Array) => {
   };
 };
 
+/** @internal */
 export const holds = (ok: boolean): Option.Option<true> => (ok ? Option.some(true) : Option.none());
 
+/** @internal */
 export const armor = (blob: Uint8Array): string => {
   const body = Base64.encode(blob);
   const rows = Array.from({ length: Math.ceil(body.length / 70) }, (_, i) => body.slice(i * 70, (i + 1) * 70));
@@ -63,6 +72,7 @@ type CryptoApi = {
   [M in CryptoMethod]: (...args: CryptoArgs[M]) => Promise<CryptoResult[M]>;
 };
 
+/** @internal */
 export const subtle = Effect.fn("transport.crypto")(function* <M extends CryptoMethod>(
   method: M,
   ...args: CryptoArgs[M]

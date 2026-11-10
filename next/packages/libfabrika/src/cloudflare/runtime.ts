@@ -51,6 +51,7 @@ import { workerSql } from "../ledger/CloudflareSql.ts";
 import { remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
+// oxlint-disable-next-line no-restricted-imports -- edge: removed by kind 2 of this PR
 import { defaultPolicy } from "../runtime/internal/supervisor.ts";
 import type { Descriptor, Sent } from "../runtime/Runner.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
