@@ -14,7 +14,8 @@
 // once its frame is handed to the socket, never waiting for the brain, since tea's loop folds
 // nothing while a Cmd is unanswered. Its answer is the socket Sub's Msg, matched by the write's
 // JSON-RPC id and dial against the calls in flight; an answer that matches none does nothing. A
-// dial's end drops its calls; their letters stay in the client and go again by the rules above.
+// dial's end drops its calls; their letters stay in the client and go again by the rules above. A
+// view notice that installs a pid's view drops that pid's open, so its late answer is stale (A14).
 //
 // What it records (plan A8), each through the `record` Cmd: the key a dial found, one `connect` row
 // per link outcome with the `ms` its Msg carries, a press before its letter goes, a `reply` row when
@@ -712,9 +713,18 @@ export const windowMachineFor = (checks: WindowChecks) => {
       ping_ok: (s) => [s, []],
       ping_err: (s) => [s, []],
       // A view notification. The client's ask for a whole view becomes a fresh open when the
-      // pid is open on this dial; otherwise the next dial's open brings one.
+      // pid is open on this dial; otherwise the next dial's open brings one. A notice that installs
+      // a view ends its pid's open in flight: the brain publishes the open's whole before it
+      // answers, so that answer is never newer and would only roll the view back (A14).
       view: (s, m) => {
-        const [next, rows, asks] = noticed(s, step, m.pid, m.note);
+        const [noticedModel, rows, asks] = noticed(s, step, m.pid, m.note);
+        const next =
+          noticedModel.client.views[m.pid] === s.client.views[m.pid]
+            ? noticedModel
+            : {
+                ...noticedModel,
+                flight: noticedModel.flight.filter((f) => f.call._tag !== "open" || f.call.pid !== m.pid),
+              };
 
         if (asks.length === 0 || s.link._tag !== "online" || !s.opened.includes(m.pid)) {
           return [next, rows];
