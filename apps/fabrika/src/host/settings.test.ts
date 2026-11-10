@@ -12,7 +12,7 @@ import {
 	Stream,
 } from "effect";
 import {describe, expect, it} from "vitest";
-import {settingsFile, settingsFolder} from "./settings.ts";
+import {settingsFolder, settingsSaves} from "./settings.ts";
 
 // The one reader of the person's settings folder, shared by keybindings.toml and, later,
 // fabrika.toml's theme (plan for ticket 174, "one reader of ~/.fabrika/"). Today's version. Each
@@ -43,7 +43,7 @@ type Answer = {readonly _tag: string} & Record<string, unknown>;
 const watching = (folder: string, name: string) =>
 	Effect.gen(function* () {
 		const got: Answer[] = [];
-		yield* settingsFile(folder, name, decode).pipe(
+		yield* settingsSaves(folder, name, decode).pipe(
 			Stream.runForEach((answer) => Effect.sync(() => got.push(answer))),
 			Effect.forkScoped,
 		);
@@ -97,7 +97,7 @@ describe("a settings file", () => {
 							}),
 						),
 				});
-				return yield* settingsFile(dir, "keybindings.toml", decode).pipe(
+				return yield* settingsSaves(dir, "keybindings.toml", decode).pipe(
 					Stream.take(1),
 					Stream.runCollect,
 					Effect.provideService(FileSystem.FileSystem, broken),
@@ -220,7 +220,7 @@ describe("a settings file, when the folder cannot be watched", () => {
 				const {fs, dir} = yield* folder;
 				yield* fs.writeFileString(join(dir, "keybindings.toml"), "ctrl+a");
 				const broken = yield* watchFails;
-				return yield* settingsFile(dir, "keybindings.toml", decode).pipe(
+				return yield* settingsSaves(dir, "keybindings.toml", decode).pipe(
 					Stream.runCollect,
 					Effect.provideService(FileSystem.FileSystem, broken),
 					Effect.timeout("3 seconds"),
@@ -236,7 +236,7 @@ describe("a settings file, when the folder cannot be watched", () => {
 				const {fs, dir} = yield* folder;
 				// A file where the folder should be: no folder can be made there.
 				yield* fs.writeFileString(join(dir, "not-a-folder"), "");
-				return yield* settingsFile(join(dir, "not-a-folder"), "keybindings.toml", decode).pipe(
+				return yield* settingsSaves(join(dir, "not-a-folder"), "keybindings.toml", decode).pipe(
 					Stream.runCollect,
 					Effect.timeout("3 seconds"),
 				);
@@ -247,7 +247,10 @@ describe("a settings file, when the folder cannot be watched", () => {
 });
 
 describe("a settings file, saved with the same text", () => {
-	it("answers once, not again for each save", async () => {
+	// scenario: settingsSaves answers for each save burst, even when the text is what the last answer
+	// said. The keybindings reader writes the file itself, so a later save by another process that puts
+	// the text back is news to it, though not to the watch (host/keybindings.ts).
+	it("answers for each save burst, the same text included", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const {fs, dir} = yield* folder;
@@ -256,18 +259,19 @@ describe("a settings file, saved with the same text", () => {
 				yield* until("the first answer", () => got.length > 0);
 				yield* fs.writeFileString(path, "one");
 				yield* until("one", () => last(got)?.value === "one");
-				// The same text saved again, then a new one, so the test knows the second was heard.
+				const before = got.length;
+				// The same text saved again: it still answers, once for the burst.
 				yield* fs.writeFileString(path, "one");
+				yield* until("an answer to the same text", () => got.length > before);
+				// A settle with no save: nothing more comes.
 				yield* Effect.sleep("200 millis");
-				yield* fs.writeFileString(path, "two");
-				yield* until("two", () => last(got)?.value === "two");
 				return [...got];
 			}),
 		);
 		expect(seen).toEqual([
 			{_tag: "none"},
 			{_tag: "read", value: "one"},
-			{_tag: "read", value: "two"},
+			{_tag: "read", value: "one"},
 		]);
 	});
 });

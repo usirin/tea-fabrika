@@ -42,7 +42,7 @@ export const repo = (folder: string, name: string) => {
 	writeFileSync(join(root, "b.txt"), "fixture\n");
 	return root;
 };
-export const platform = NodeChildProcessSpawner.layer.pipe(
+const platform = NodeChildProcessSpawner.layer.pipe(
 	Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 );
 export const go = <A, E>(body: Effect.Effect<A, E, Layer.Success<typeof platform> | Scope.Scope>) =>
