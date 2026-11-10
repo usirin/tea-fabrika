@@ -1,12 +1,12 @@
 ---
-id: 0043
+id: 0044
 title: In next/, every state machine is a tea machine and a file exports at most one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
 status: accepted
 date: 2026-11-09
 tags: [state-machine, tea, file-layout, lint, properties, elm, next]
 ---
 
-# 0043: In next/, every state machine is a tea machine and a file exports at most one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
+# 0044: In next/, every state machine is a tea machine and a file exports at most one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
 
 **What this decides:** in `next/`, every state machine is written as a tea machine, and each tea
 machine has a file that holds its Model, its Msg and its update and nothing that does input or
@@ -98,11 +98,10 @@ Why:
     of a File, was not watched for this record; what is said of it here is secondary, from the
     guide's own summary.
 
-It sits beside two layout records. [0034](0034-libfabrika-folders-are-bounded-contexts.md) gives
-each bounded context an `internal/` folder and already places `internal/supervisor.ts` there. A
-newer layout decision is in flight (tracker ticket 507) and may replace 0034; under either, the
-runner's and the door's machines land as `internal/` files, as 0037's consequences say. This record
-says what one such file holds. It does not say which folder.
+It sits beside the layout record. [0043](0043-rooms-on-floors.md) gives every room of `libfabrika`
+front files and an `internal/`, and splits the runner and the door into a front file plus
+`internal/` files cut along their state machines (its rules 8 and 9). This record says what one
+such file holds. It does not say which room or folder.
 
 ## Decision
 
@@ -140,7 +139,7 @@ Rule 2, the file:
 experiment 246's proposal):
 
 ```ts
-// A sketch. One file, for example the context's internal/supervisor.ts: the whole machine.
+// A sketch. One file, for example runtime/internal/supervisor.ts: the whole machine.
 export const Supervision = Schema.Struct({/* the Model, with `pending` folded into the cases */});
 const Msg = Schema.Union([/* threw, exited, due, started, healthy, exit_written, down_written */]);
 export const supervisor = Machine.make({model: Supervision, msg: Msg, cmds: [exit, down, start] /* init, update */});
@@ -187,7 +186,7 @@ machine (`app/runner.ts:271-272`).
   - So the reading says it works. Nobody has run one inside `sql.transaction`, and nobody has
     checked that `data/` may import tea under the layer rules. The first small machine built this
     way settles both. This is about how such a machine is called, not whether it is a tea machine.
-- Not decided here: the folder a machine's file sits in (0034 and ticket 507), the names of the new
+- Not decided here: the folder a machine's file sits in ([0043](0043-rooms-on-floors.md) does), the names of the new
   Msgs and cases, the order the 13 machines are done in, and today's version, which this record does
   not touch.
 
