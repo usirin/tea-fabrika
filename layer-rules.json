@@ -6,7 +6,12 @@
     },
     {
       "name": "next-node",
-      "paths": ["next/packages/libfabrika/src/node"]
+      "paths": [
+        "next/packages/libfabrika/src/node",
+        "next/packages/libfabrika/src/build.ts",
+        "next/packages/libfabrika/src/compiler.ts",
+        "next/packages/libfabrika/src/build-modules.d.ts"
+      ]
     },
     {
       "name": "next-workers",
@@ -70,7 +75,12 @@
     },
     {
       "name": "next-id",
-      "paths": ["next/packages/libfabrika/src/id.ts"]
+      "paths": [
+        "next/packages/libfabrika/src/id.ts",
+        "next/packages/libfabrika/src/ProcessId.ts",
+        "next/packages/libfabrika/src/Sql.ts",
+        "next/packages/libfabrika/src/Rev.ts"
+      ]
     },
     {
       "name": "apps",

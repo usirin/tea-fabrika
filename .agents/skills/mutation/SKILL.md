@@ -20,7 +20,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 1. **Read** `AGENTS.md`'s mutation rules.
 2. **Read the fast check's report.** `drive.ts` ran it before you started, in a container with its
    own network ([0045](../../../.decisions/0045-test-steps-run-in-containers.md)), with
-   [the command below](#the-command). Your prompt names its report, `mutbox.json`. Never run
+   [the command below](#the-command). Your prompt holds its report, `mutbox.json`, whole. Never run
    Stryker yourself, and start nothing that listens on a port. `run.sh` and `sample.ts` hold file
    selection, the seed, sample cap and round settings. Ask before you scale up.
 3. **Sort each survivor:** real (a law should catch it), equivalent (no behavior changes) or
@@ -48,6 +48,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 The settings are [the decided fast check](../../../docs/direction/fast-and-daily-mutation.md#the-fast-check-decided-2026-11-01)
 on StrykerJS 10.1.1 (read `pnpm-lock.yaml` first; a newer Stryker may rename an option).
 `--ticket` is the ticket, `--build` the build commit, `--base` the commit whose tests are arm a.
+With a base, the sample is the pull request's own lines, `base..build`, so a tip that merged main
+samples the lane and not main (ticket 568); with none, it is the build commit against its parent.
 `--related` is the explicit related-test paths, separated by commas; in a brief that is one line,
 `RELATED=<paths>`, which `drive.ts` reads. Ticket 520's proof uses
 `.agents/skills/mutation/scripts/sample.test.ts`, the new TypeScript sampler's adjacent laws.

@@ -75,6 +75,7 @@ Any other actionable finding is one finding row with proof: never a ticket, a fi
 mention, and never a security hole.
 Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl
 unchanged. Do not start another review round for it.
+End with exactly one answer: line, as the last line.
 Keep the four reason labels in the review skill. A missed case in a named class checks the law;
 it does not reopen every test's merits.
 
@@ -127,7 +128,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
-| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head, look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge` |
+| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head, look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge`; a green PR whose freshmain lint passed lands even when gh refuses it as behind main, through the REST merge with `sha` as the pin ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)) |
 | `freshmain.ts <pr> <tip>` | run by `catchup.sh` just before the squash, in its checkout: fetch main, and when it moved after the checks, run `pnpm lint` on the head merged with it; a red lint, a conflict or a failed fetch refuses the merge, and the lane merges main and pushes. No flag skips it, and the tests are not run again (ticket 552) |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
@@ -158,10 +159,12 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
   work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
 - A mutation step's Stryker run happens first, in a container (`mutbox.ts`, 0045): drive runs it on
-  the step's start head with the tests the brief names on one line, `RELATED=<paths>` (or
-  `--related`), and with the lane's root as arm a. A brief with neither is a usage error. A run
-  that is stuck (Docker not running, another Docker box, a test that fails there) ends the step
-  `stuck:mutbox` with no agent. Then the agent reads `BOXES/<box>-mutbox/mutbox.json`. Mutation's
+  the step's start head with the tests the brief names on one line, `RELATED=<paths>`, and with
+  the lane's root as arm a. A brief without that line is a usage error. A run that is stuck
+  (Docker not running, another Docker box, a test that fails there) ends the step
+  `stuck:step_said` with no agent, its reason starting `mutbox:`, and the box is kept. Else the
+  agent gets the text of `BOXES/<box>-mutbox/mutbox.json` in its prompt, whole, since its box
+  reads nothing outside itself. Mutation's
   agent is `--agent claude` only, since a law it adds may start Electron. Start any
   other Claude step whose laws or shots run the app with `--electron`. The box cannot write
   `BOXES/state/electron.lock`, so drive takes it outside the box before the agent starts and holds
@@ -187,6 +190,9 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   commit, so the lead knows which step to send it to. A build that
   answers `done` with no commit is done only with a `laws: green <paths>` line (every law already
   green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
+  It takes exactly one `answer:` line outside a code fence: none, two or more, or one that names no
+  verb is `stuck:no_answer`. So is a review's `done` without a merge-ready first line, or with a
+  `changes: <n>` line, n above 0 (ticket 557).
 - A box has no network, so it cannot refresh `pnpm-lock.yaml`. When a step's commits change a
   locked field of a workspace `package.json` (its name or dependencies) or `pnpm-workspace.yaml`
   and leave the lockfile alone, drive answers `ask` (`lockfile`, exit 20) whatever the step said,
@@ -204,7 +210,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   check takes in place of a mutation row), 2 usage, 3 refused before any agent ran, printed as
   `refused:<check>`: `agent_cap` (8 agents running: Codex boxes plus Claude steps drive started),
   `low_disk` (under 20 GB free after `box.sh gc`), `branch_checked_out` (the lane's branch checked
-  out in a worktree, which the end-of-step fetch could not update), or a `box.sh new` start check
+  out in a worktree, which the end-of-step fetch could not update), `docker_busy` (a mutation step
+  while another run holds the one Docker box), or a `box.sh new` start check
   (`plan_unapproved`, `base_not_signed`, `shared_ticket`, `root_not_ancestor`). A refusal is not a
   step outcome, so the stuck count holds only steps an agent ran. It never retries. A stuck step keeps its
   box. A box's number is the first that no older run's files hold, and the line's `report` is `null`
@@ -217,9 +224,39 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 
 A lead agent used to sit for hours on one lane, starting each step and reading its answer. That
 loop is code now (owner, 2026-11-09; tracker ticket 341). `chain.ts` is a tea machine on the
-Effect engine whose Cmds run `drive.ts` for each step, read its one JSON line, and pick the next
-move; a fresh Claude agent is started only where judgment is needed, and it is gone after one
-answer. Start it in the background and read the last line only:
+Effect engine whose Cmds run `drive.ts`'s pieces in process for each step (`prepare`, then
+`driveStep`), read the step's one line, and pick the next move; a fresh read-only agent is started
+only where judgment is needed, and it is gone after one answer. Every agent, a step's and the
+judgment's, runs through today's fabrika agents package (`Agent`, `@kampus/fabrika-old`) on its ACP
+rows, the same harness rows `summon` starts (`scripts/agents.ts`, owner, 2026-11-09): Codex writes
+its box or only reads it (plan, review), Claude runs in its own OS sandbox. The box's git data is
+outside the box, so the agent commits nothing: it leaves its changes in the tree, and drive copies
+them into a worktree of the main checkout and signs them as one step commit (0028). A box reads
+nothing beside itself, so drive puts the approved plan's text in the step's prompt, and gives the
+box a git view to read: a hard-linked mirror of the main checkout's git data, `BOXES/<box>-view`,
+which the harness opens read-only and drive removes when the step ends (`git diff`, `log` and
+`show` work; nothing git keeps can be written). A brief names no file outside the box. The step
+answers with one JSON object (verb, to, reason, laws), read by the agents package's schema.
+
+Measured on the first real lane (t411, 2026-11-09): neither row lets a command listen on a port or
+a unix socket (`EPERM`), and no row is opened for it (0045). The mutation step's Stryker run goes
+in a container first (ticket 483); a tests or build law that binds a port still cannot run on
+these rows. On the read-only Codex row, a command that writes
+is refused and that ends the turn `cancelled` with no answer (ticket 484), so drive tells a review
+to run no writing command.
+
+Measured on a throwaway lane (ticket 522, 2026-11-10, $0.10 at list price): a tests step's one new
+file was collected and signed as one step commit, a review on the read-only Codex row read it with
+`git diff` and said merge-ready, the chain found the lane's open pull request, and `catchup.sh`
+merged main in, signed it as lead and pushed. A command that fails does not end a turn; only a
+refused ask does. The merge itself was not run: the `commits` check runs only for a pull request
+into main, so catch-up on a scratch base waits for it until its hour is up.
+
+The mutation step has one wiring spot: `MUTATION_AGENT` and `mutationDraft` in `drive.ts`, under
+the heading `MUTATION WIRING`. `mutationDraft` runs `mutbox.ts` (ticket 483) and then the agent's
+one turn; nothing else in `drive.ts` or `chain.ts` knows the step is different.
+
+Start it in the background and read the last line only:
 
 ```sh
 node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
@@ -249,10 +286,10 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   (`CHAIN_STUCKS`), `MaxSteps` 16 (`CHAIN_STEPS`). Proven against the real `drive.ts` on 2026-11-09
   with the disk under the 20 GB floor: the step was tried, retried on the schedule, and the lane
   ended `stuck` with `RetriesExhausted` and drive's reason, exit 30.
-- **Judgment** (an `ask:lead:question`, or a `stuck`): the chain starts `claude -p` in the main
-  checkout, read-only (`Read,Glob,Grep`, under the same sandbox profile as a Claude plan step), with
-  the lane's state file and the step's report. It answers one line: `answer: send <step> <note>`
-  runs that step again with the note in its brief; `answer: park <why>` ends the lane for the lead.
+- **Judgment** (an `ask:lead:question`, or a `stuck`): the chain runs one turn in the main
+  checkout on the agents package's read-only Codex row, which cannot change the checkout, with the
+  lane's state file and the step's report in its prompt. It answers one JSON object: `send` with a step and a note runs that step again
+  with the note in its brief; `park` with why ends the lane for the lead.
   Its field row goes to `BOXES/<lane>-rows.jsonl` like a step's. Three stucks in a row on one
   step park without asking. Mutation's agent always runs on Claude, after its container run, and
   the `## mutation` section carries the `RELATED=<paths>` line; `--claude` names other steps that
@@ -268,7 +305,9 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   and the steps run the unmodified harness through `drive.ts`.
 - **Watching:** `tail -f BOXES/state/<lane>.md`. To stop a lane, stop the chain process: the
   running step's process group goes with it, and drive records that step as stuck. Start the chain
-  again with `--start <step>` to go on from there.
+  again with `--start <step>` to go on from there: its rounds count on from the ones the chain
+  record holds, so no earlier round's record, brief or judgment file is written over. Read the
+  line's own `exit`, never the shell's: `volta run` answers 126 for any exit that is not 0.
 
 ## Pushes and protected refs
 

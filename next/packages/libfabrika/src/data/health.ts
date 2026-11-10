@@ -7,8 +7,8 @@
 // the size inside a span's `end`, and the archive inside `flush`. No alarm, no timer. Each archive
 // try writes its own health row, `sink.archive`, good or failed, so a day that cannot leave is seen.
 import { Clock, Effect, Option, Result, Schema } from "effect";
+import type { Sql } from "../Sql.ts";
 import { Archive, sha256 } from "./archive.ts";
-import type { Sql } from "./referee.ts";
 import { type Health, type SinkError, Summary, sinkError } from "./trace.ts";
 
 const HOUR = 3_600_000;

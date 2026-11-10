@@ -180,8 +180,8 @@ catalogs:
       specifier: 0.15.0
       version: 0.15.0
     '@demlik/structure-sweep':
-      specifier: 0.3.9
-      version: 0.3.9
+      specifier: 0.4.1
+      version: 0.4.1
     '@demlik/tea':
       specifier: 0.25.0
       version: 0.25.0
@@ -379,10 +379,13 @@ importers:
     devDependencies:
       '@demlik/structure-sweep':
         specifier: 'catalog:'
-        version: 0.3.9(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+        version: 0.4.1(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.63.0
+      '@tea-fabrika/agents':
+        specifier: workspace:*
+        version: link:.agents
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -407,6 +410,8 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+
+  .agents: {}
 
   .github/ci:
     dependencies:
@@ -1871,26 +1876,26 @@ packages:
     peerDependencies:
       postcss-selector-parser: ^7.1.1
 
+  '@demlik/code-graph@0.13.0':
+    resolution: {integrity: sha512-c5CbR/xBG7cMSi0q+0XKlRCNoNUbyFssXmphryPSEOSNlzfk+n92aSrEV5vUbJ0L+1YGZ0/Oe+kUOOWnff2WsQ==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   '@demlik/code-graph@0.15.0':
     resolution: {integrity: sha512-jj+rxrbaWu0SvnvJ64psn1lqgTGEKFJFRcBPfwdobsEt8uSPyA0M8x56qH5/vXLQI3EHZfqp9m0lNXrfMb8i8g==}
     engines: {node: '>=20'}
     hasBin: true
 
-  '@demlik/code-graph@0.9.0':
-    resolution: {integrity: sha512-drLMnK2bYUWdLQ43V4FVNdcTuJjkcNxOBBQvPYu42lZxBsUqQ9dm7cOtHoLDImINLuMfky/aY/DFAnFYy+PurQ==}
+  '@demlik/structure-sweep@0.4.1':
+    resolution: {integrity: sha512-TKAvDnLs3g5vAYfgbwu8lZESvfFz/3WfBbWzNWU6/5sKNuuxChyLYMkmZVAqhU9EvDAhANJb5tx11o0NB50iCw==}
     engines: {node: '>=20'}
     hasBin: true
 
-  '@demlik/structure-sweep@0.3.9':
-    resolution: {integrity: sha512-qon+vaxD03CP+YcayST9RHOYUhvDV4hIVHgRvprbGW+RfrXDzz1pW8FN6XeJi+vEPYax6eACsIHX5CmcaMqv4g==}
-    engines: {node: '>=20'}
-    hasBin: true
-
-  '@demlik/tea@0.21.0':
-    resolution: {integrity: sha512-ZamRlryCtVKasbD0XOCe/iedJ/N4DSP0TnS0PtfppzV8AQKjgQy+rRt8aiqybSXQ+2mzBU/KIyJ3oF1FxUxDkA==}
+  '@demlik/tea@0.23.0':
+    resolution: {integrity: sha512-RoL0oIEb7CCmvUnPcd9gMi+dpiNKBdxJlUQDKYUo2sGR37EWek2jrrS49HzgHLcSxgPpbLcQWawQBuN2JDyvWw==}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
-      effect: ^4.0.0-rc.0
+      effect: ~4.1.1
       fast-check: ^3 || ^4
       react: ^18 || ^19
       react-dom: ^18 || ^19
@@ -6410,6 +6415,17 @@ snapshots:
     dependencies:
       postcss-selector-parser: 7.1.7
 
+  '@demlik/code-graph@0.13.0':
+    dependencies:
+      '@typescript/native-preview': 7.0.0-dev.20260707.2
+      chalk: 5.6.2
+      commander: 11.1.0
+      jsonc-parser: 3.3.1
+      oxc-parser: 0.151.0
+      oxc-resolver: 11.24.2
+      smol-toml: 1.9.0
+      zod: 4.0.0
+
   '@demlik/code-graph@0.15.0(patch_hash=327c1b18f1f541ef6d69cb38b361a79f6019380cf78f69482f35c7b3916bcf83)':
     dependencies:
       '@typescript/native-preview': 7.0.0-dev.20260707.2
@@ -6423,25 +6439,16 @@ snapshots:
       yaml: 2.9.0
       zod: 4.0.0
 
-  '@demlik/code-graph@0.9.0':
+  '@demlik/structure-sweep@0.4.1(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
     dependencies:
-      '@typescript/native-preview': 7.0.0-dev.20260707.2
-      chalk: 5.6.2
-      commander: 11.1.0
-      jsonc-parser: 3.3.1
+      '@demlik/code-graph': 0.13.0
+      '@demlik/tea': 0.23.0(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       oxc-parser: 0.151.0
       oxc-resolver: 11.24.2
-      smol-toml: 1.9.1
-      zod: 4.0.0
-
-  '@demlik/structure-sweep@0.3.9(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
-    dependencies:
-      '@demlik/code-graph': 0.9.0
-      '@demlik/tea': 0.21.0(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
-      oxc-parser: 0.151.0
-      oxc-resolver: 11.24.2
-      smol-toml: 1.9.1
+      smol-toml: 1.9.0
+      tinyglobby: 0.2.17
       ts-morph: 28.0.0
+      yaml: 2.9.0
       zod: 4.0.0
     transitivePeerDependencies:
       - '@opentelemetry/api'
@@ -6452,7 +6459,7 @@ snapshots:
       - vitest
       - ws
 
-  '@demlik/tea@0.21.0(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
+  '@demlik/tea@0.23.0(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
     dependencies:
       '@standard-schema/spec': 1.1.0
     optionalDependencies:

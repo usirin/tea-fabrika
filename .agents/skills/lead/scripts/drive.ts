@@ -1,31 +1,33 @@
-// drive.ts: run one step end to end in plain code, on a Codex box or a Claude agent, so no agent
-// waits on it. Today's lead tooling, run on our own laptop; it is not product. Run it in the
-// background and read the last line only: one JSON object with the outcome, the new head and the
-// report's path.
+// drive.ts: run one step end to end in plain code, in a box, so no agent waits on it. Today's
+// lead tooling, run on our own laptop; it is not product. Run it in the background and read the
+// last line only: one JSON object with the outcome, the new head and the report's path.
 //
 //   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude]
 //                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
 //                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
-//                 [--related <test paths>]
 //
-// Claude runs `claude -p` in the same kind of box, under sandbox-exec: it cannot read the step keys,
-// the leak words or Codex's login, and it writes only its box. It commits with plain git; drive
-// then signs its work as one commit through stepcommit, with main's own signer. A mutation step's
-// Stryker run happens before its agent starts, in a container with its own network (mutbox.ts,
-// decision 0045): drive runs it on the lane's build commit with the tests a `RELATED=` line of the
-// brief (or --related) names, and the agent only reads the report. A run that is stuck there ends
-// the step stuck, with no agent; it is never run on the host. Mutation's agent is Claude only, one
-// Electron step at a time. The box cannot
-// write state/electron.lock, so drive holds it for the whole step, outside the box: for mutation,
-// and for a Claude step started with --electron (a step whose laws or shots run the app).
+// The agent runs through today's fabrika agents package on its ACP rows (./agents.ts): Codex or
+// Claude Code, unchanged, in the harness's own containment, with only its model login
+// (.decisions/0026, 0028). The box's git data sits outside the box, where the harness lets no
+// command write it, so the agent commits nothing: it reads git through a view (`gitView`), leaves
+// its changes in the tree, and drive copies them into a fresh worktree of the main checkout and
+// commits them as one signed step commit through stepcommit, with main's own signer. A mutation
+// step's Stryker run happens before its agent starts, in a container with its own network
+// (mutbox.ts, decision 0045): drive runs it on the step's start head with the tests a `RELATED=`
+// line of the brief names, and the agent only reads the report, which rides in its prompt. A run
+// that is stuck there ends the step stuck, with no agent; it is never run on the host. Mutation's
+// agent is Claude only, one Electron step at a time. The box cannot write state/electron.lock, so
+// drive holds it for the whole step, outside the box: for mutation, and for a Claude step started
+// with --electron (a step whose laws or shots run the app). The chain runs these same pieces in
+// process (`prepare`, `driveStep`); the command below is for one step by hand.
 //
-// The step is a tea machine on the Effect engine, made of the pipeline's moves:
+// The step is a tea machine on the Effect engine:
 //
 //   (before)           box.sh gc, then a refusal when the data volume has under 20 GB free, or
 //                      when a worktree of the main checkout holds the lane's branch
 //   starting   Act     box.sh new, at the lane's head
-//   drafting   Draft   a Sub: Codex (box.sh run) or Claude (claude -p) in the box, waited on
-//   reading    Gather  fetch (and sign Claude's work), then the commits, their step notes, exam
+//   drafting   Sub     one turn of the agent in the box (`runTurn`), waited on; its typed answer
+//   reading    Gather  collect the tree and sign it, then the commits, their step notes, exam
 //                      paths, leaks and the report
 //   (update)   Check   pure: what the step answered and what the reads found make one outcome
 //                      (a manifest the lockfile must follow, changed with the lockfile left alone,
@@ -40,41 +42,64 @@
 // Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (a question for
 // the lead, in `reason`), 30 stuck, 40 skip (nothing here for the step, such as a mutation step
 // whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start, before
-// any agent ran: `refused:<check>`, one of agent_cap (8 agents running: Codex boxes plus Claude
-// steps drive started), low_disk (under 20 GB free after box.sh gc), branch_checked_out (the lane's
-// branch checked out in a worktree, which the fetch could not update), or a box.sh new start check
+// any agent ran: `refused:<check>`, one of agent_cap (8 agents running: the ACP harnesses drive
+// started), low_disk (under 20 GB free after box.sh gc), branch_checked_out (the lane's
+// branch checked out in a worktree, which the fetch could not update), docker_busy (a mutation step
+// while another run holds the one Docker box), or a box.sh new start check
 // (plan_unapproved, base_not_signed, shared_ticket, root_not_ancestor). It never retries. A stuck step
 // keeps its box for the lead to look at, and so does any step whose box still holds uncommitted
 // files or commits off its branch. DRIVE_MINUTES (default 60) is how long the agent may run
 // before it is stopped and the step is stuck.
 
-import { spawn, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
-  closeSync,
+  chmodSync,
+  copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
-  openSync,
   readFileSync,
+  readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { defineMachine, type Sub } from "@demlik/tea";
-import { run } from "@demlik/tea/effect";
-import { act, gather, intentOf, listen } from "@kampus/pipeline/primitives";
+import { defineMachine, type DepKeyedSub, type Sub } from "@demlik/tea";
+import { Cmd, run } from "@demlik/tea/effect";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Effect, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Schema, Stream } from "effect";
+import { ChildProcess } from "effect/process";
+import {
+  type Agents,
+  Answer,
+  Ended,
+  makeStepAgents,
+  NO_SPENT,
+  type Provider,
+  runTurn,
+  Spent,
+  stepRow,
+  type Turned,
+} from "./agents.ts";
 import { checkHolds, heldRules, laneRoot, lockfileBehind, startHead, stepOf, wipOf, workspaceGlobs } from "./lane.ts";
 
 const HERE = import.meta.dirname;
-const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
-type StepName = (typeof STEPS)[number];
+export const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
+export type StepName = (typeof STEPS)[number];
 const AGENTS = ["codex", "claude"] as const;
+export type AgentName = (typeof AGENTS)[number];
+
+/** The provider row a step's agent runs on: Codex only reads for a plan or a review. */
+export const stepProvider = (agent: AgentName, step: StepName): Provider =>
+  agent === "claude" ? "claude" : step === "plan" || step === "review" ? "codex-read" : "codex";
 
 // ---------------------------------------------------------------- the outcome
 
@@ -114,7 +139,7 @@ type Outcome = typeof drive.schema.Type;
  */
 const BOX_CHECKS = ["plan_unapproved", "base_not_signed", "shared_ticket", "root_not_ancestor"] as const;
 
-const CHECKS = [...BOX_CHECKS, "agent_cap", "low_disk", "branch_checked_out"] as const;
+const CHECKS = [...BOX_CHECKS, "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const;
 type Check = (typeof CHECKS)[number];
 type Refused = { readonly kind: "refused"; readonly check: Check };
 /** How a drive ends: the step's outcome, or a start check that refused before the step ran. */
@@ -150,9 +175,9 @@ const Ask = Schema.Struct({
   lane: Schema.String,
   step: Schema.Literals(STEPS),
   agent: Schema.Literals(AGENTS),
-  /** Claude's model and session; Codex reads CODEX_MODEL and leaves both empty. */
+  /** The model as the harness names it, and its effort where the harness offers one. */
   model: Schema.String,
-  session: Schema.String,
+  effort: Schema.NullOr(Schema.String),
   ticket: Schema.String,
   /** The approved plan box.sh checks at every start and step. */
   plan: Schema.String,
@@ -188,6 +213,8 @@ const Read = Schema.Struct({
   manifests: Schema.Array(Schema.String),
   /** What `plancheck --draft` said when it failed; `null` when it passed or did not run. */
   plancheck: Schema.NullOr(Schema.String),
+  /** Files the agent left changed in the box's tree: a review may leave none. */
+  changed: Schema.Number,
   report: Schema.String,
   problem: Schema.NullOr(Schema.String),
 });
@@ -202,10 +229,10 @@ const Started = Schema.TaggedUnion({
   failed: { detail: Schema.String },
 });
 
-const boxNew = act("box_new", { input: Ask, ok: Started, err: ["unknown"] });
-const stepRead = gather("step_read", { input: Ask, ok: Read, err: ["unknown"] });
+const boxNew = Cmd.make("box_new", { input: Ask, ok: Started, err: ["unknown"] });
+const stepRead = Cmd.make("step_read", { input: Ask, ok: Read, err: ["unknown"] });
 
-const backupPush = act("backup_push", {
+const backupPush = Cmd.make("backup_push", {
   input: Schema.Struct({ ask: Ask, head: Schema.String }),
   ok: Done,
   err: ["unknown"],
@@ -218,9 +245,11 @@ const Entry = Schema.Struct({
   head: Schema.String,
   exit: Schema.Number,
   keep: Schema.Boolean,
+  /** What the agent's turn spent, for the field row. */
+  spent: Spent,
 });
 
-const record = act("record", { input: Entry, ok: Done, err: ["unknown"] });
+const record = Cmd.make("record", { input: Entry, ok: Done, err: ["unknown"] });
 
 type Cmds =
   | ReturnType<typeof boxNew>
@@ -229,12 +258,18 @@ type Cmds =
   | ReturnType<typeof record>;
 
 type DraftSub = Sub<"draft", Ask>;
-type Drafted = { readonly type: "drafted"; readonly code: number | null; readonly timedOut: boolean };
+/** The agent's turn, as it ended (./agents.ts). */
+type Drafted = { readonly type: "drafted"; readonly turned: Turned<Answer> };
 
 type Model =
   | { readonly phase: "idle" }
   | { readonly phase: "starting" | "drafting"; readonly ask: Ask }
-  | { readonly phase: "reading"; readonly ask: Ask }
+  | {
+      readonly phase: "reading";
+      readonly ask: Ask;
+      readonly answer: Answer | null;
+      readonly spent: Spent;
+    }
   | {
       readonly phase: "pushing";
       readonly ask: Ask;
@@ -242,6 +277,7 @@ type Model =
       readonly reason: string;
       readonly head: string;
       readonly left: readonly string[];
+      readonly spent: Spent;
     }
   | {
       readonly phase: "recording" | "over";
@@ -250,6 +286,7 @@ type Model =
       readonly reason: string;
       readonly head: string;
       readonly kept: boolean;
+      readonly spent: Spent;
     };
 
 type Msg = { readonly type: "start"; readonly ask: Ask } | Drafted;
@@ -258,34 +295,60 @@ type Msg = { readonly type: "start"; readonly ask: Ask } | Drafted;
 
 const ANSWER = /^[`*\s]*answer:\s*(done|send\s+(tests|build|plan)|ask|skip|stuck)\b[`*\s]*(.*)$/i;
 
-/** What the step said on its last `answer:` line; a review's verdict line counts without one. */
-const answerOf = (step: StepName, report: string) => {
-  const lines = report
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
+/**
+ * How a report's answer reads. Only `one` is the step's own word. `none`, `many` and `unread` are
+ * all stuck:no_answer: a report with two answers that disagree was once taken as its last one
+ * (p16b review7, 2026-11-10, ticket 557).
+ */
+const Said = Schema.TaggedUnion({
+  none: {},
+  many: { count: Schema.Number },
+  unread: {},
+  one: { verb: Schema.String, to: Schema.String, reason: Schema.String },
+});
 
-  for (const line of lines.toReversed()) {
-    const m = ANSWER.exec(line);
+const FENCE = /^(`{3,}|~{3,})/;
 
-    if (m) {
-      const verb = (m[1] ?? "").split(/\s+/)[0]?.toLowerCase() ?? "";
-      const reason = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
-      return { verb, to: m[2]?.toLowerCase() ?? "", reason };
+/** The report's lines outside its code fences, trimmed, the empty ones dropped. A plan quotes code
+ * with an `answer:` field, and a fence left open hides the rest. */
+const outsideFences = (report: string) => {
+  const lines: string[] = [];
+  let fenced = false;
+
+  for (const line of report.split("\n").map((l) => l.trim())) {
+    if (FENCE.test(line)) {
+      fenced = !fenced;
+    } else if (!fenced && line !== "") {
+      lines.push(line);
     }
   }
 
-  const first = (lines[0] ?? "").replace(/^[`*#\s]+/, "");
+  return lines;
+};
 
-  if (step === "review" && /^merge-ready/i.test(first)) {
-    return { verb: "done", to: "", reason: "merge-ready" };
+/** What the step said: its one `answer:` line. None, two or more, or one with no verb is not an answer. */
+const readAnswer = (report: string): typeof Said.Type => {
+  const lines = outsideFences(report).filter((l) => /^[`*\s]*answer:/i.test(l));
+
+  if (lines.length !== 1) {
+    return lines.length === 0 ? Said.cases.none.make({}) : Said.cases.many.make({ count: lines.length });
   }
 
-  if (step === "review" && /^changes/i.test(first)) {
-    return { verb: "send", to: "build", reason: first };
+  const m = ANSWER.exec(lines[0] ?? "");
+
+  if (m === null) {
+    return Said.cases.unread.make({});
   }
 
-  return null;
+  const verb = (m[1] ?? "").split(/\s+/)[0]?.toLowerCase() ?? "";
+  const reason = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
+  return Said.cases.one.make({ verb, to: m[2]?.toLowerCase() ?? "", reason });
+};
+
+/** A review is merge-ready only when its first line says so and no line says `changes: <n>`, n above 0. */
+const mergeReady = (report: string) => {
+  const lines = outsideFences(report).map((l) => l.replace(/^[`*#\s]+/, ""));
+  return /^merge-ready\b/i.test(lines[0] ?? "") && !lines.some((l) => /^changes:\s*0*[1-9]/i.test(l));
 };
 
 const GREEN = /^[`* \t]*laws:[ \t]*green\b[`* \t:]*(.*)$/im;
@@ -310,14 +373,26 @@ const stuck = (why: Extract<Outcome, { kind: "stuck" }>["why"], text: string): J
   reason: text,
 });
 
-/** The Check, pure: what the reads found wins over what the step said. */
-const decide = (ask: Ask, read: Read): Judged => {
+/** What the typed answer says, as the one answer `readAnswer` reads; `null` when the agent gave none. */
+export const answerWords = (answer: Answer | null) =>
+  answer === null ? null : Said.cases.one.make({ verb: answer.verb, to: answer.to ?? "", reason: answer.reason });
+
+/**
+ * The Check, pure: what the reads found wins over what the step said. The step's word is its typed
+ * answer (./agents.ts), or, for a report with none, its one `answer:` line. A review's `done`,
+ * typed or not, also needs a merge-ready verdict line.
+ */
+export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judged => {
   if (read.head === null) {
     return stuck("fetch_failed", read.problem ?? "fetch failed");
   }
 
   if (read.problem !== null) {
     return stuck("read_failed", read.problem);
+  }
+
+  if (ask.step === "review" && read.changed > 0) {
+    return stuck("review_committed", `the review left ${read.changed} files changed in its box`);
   }
 
   if (ask.step === "review" && read.head !== ask.base) {
@@ -359,16 +434,24 @@ const decide = (ask: Ask, read: Read): Judged => {
     };
   }
 
-  const said = answerOf(ask.step, read.report);
+  const said = answerWords(answer) ?? readAnswer(read.report);
 
-  if (said === null) {
+  if (said._tag === "none") {
     return stuck("no_answer", "no answer line in the report");
+  }
+
+  if (said._tag === "many") {
+    return stuck("no_answer", `${said.count} answer lines in the report, and drive takes exactly one`);
+  }
+
+  if (said._tag === "unread") {
+    return stuck("no_answer", "the answer line names no verb drive knows");
   }
 
   switch (said.verb) {
     case "done":
       if (ask.step === "build" && read.commits === 0) {
-        const green = greenOf(read.report);
+        const green = answer?.laws ?? greenOf(read.report);
 
         if (green === null) {
           return stuck("no_commit", "answered done with no commit");
@@ -382,6 +465,10 @@ const decide = (ask: Ask, read: Read): Judged => {
 
       if (ask.step === "tests" && read.commits === 0) {
         return stuck("no_commit", "answered done with no commit");
+      }
+
+      if (ask.step === "review" && !mergeReady(read.report)) {
+        return stuck("no_answer", "answered done under a verdict that is not merge-ready");
       }
 
       return { outcome: { kind: "done", part: false, head: read.head }, reason: said.reason };
@@ -399,7 +486,19 @@ const decide = (ask: Ask, read: Read): Judged => {
 };
 
 /** Every file drive keeps for one box, by suffix. A box name is fresh only when none exists. */
-const BOX_FILES = ["", "-gitdata", "-prompt.md", ".md", ".jsonl", ".err", ".log", "-plan.md", "-plan.jsonl"];
+const BOX_FILES = [
+  "",
+  "-gitdata",
+  "-view",
+  "-mutbox",
+  "-prompt.md",
+  ".md",
+  ".jsonl",
+  ".err",
+  ".log",
+  "-plan.md",
+  "-plan.jsonl",
+];
 
 /**
  * The first box `<lane>-<step><n>`, from `n` up, that no file of an older run holds. A refused run
@@ -430,7 +529,7 @@ const stay = (s: Model): Step => [s, []];
 
 /** A stuck box stays for the lead to look at, and so does one holding work no branch has, whatever
  * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). */
-const recordIt = (ask: Ask, j: Ended, head: string, left: readonly string[] = []): Step => {
+const recordIt = (ask: Ask, j: Ended, head: string, spent: Spent, left: readonly string[] = []): Step => {
   const kept = j.outcome.kind === "stuck" || left.length > 0;
   const reason = left.length > 0 ? `${j.reason} (box kept: ${left.join(", ")})` : j.reason;
   const entry = record({
@@ -440,12 +539,16 @@ const recordIt = (ask: Ask, j: Ended, head: string, left: readonly string[] = []
     head,
     exit: exitOf(j.outcome),
     keep: kept,
-    intent: intentOf("record", ask.box),
+    spent,
   });
-  return [{ phase: "recording", ask, outcome: j.outcome, reason, head, kept }, [entry]];
+  return [{ phase: "recording", ask, outcome: j.outcome, reason, head, kept, spent }, [entry]];
 };
 
-const draft = listen("draft", (s: Model) => (s.phase === "drafting" ? s.ask : null));
+/** The Draft: the agent's one turn, a Sub keyed on the Ask while the step drafts. */
+const draft: DepKeyedSub<Model, DraftSub> = {
+  type: "draft",
+  deps: (s: Model) => (s.phase === "drafting" ? s.ask : null),
+} as DepKeyedSub<Model, DraftSub>;
 
 export const machine = defineMachine({
   types: { model: {} as Model, msg: {} as Msg, sub: {} as DraftSub, ctx: undefined },
@@ -462,8 +565,7 @@ export const machine = defineMachine({
         return [{ phase: "drafting", ask: m.ask }, []];
       }
 
-      const asked = boxNew({ ...m.ask, intent: intentOf("box_new", m.ask.box) });
-      return [{ phase: "starting", ask: m.ask }, [asked]];
+      return [{ phase: "starting", ask: m.ask }, [boxNew(m.ask)]];
     },
     box_new_ok: (s, m): Step => {
       if (s.phase !== "starting") {
@@ -477,63 +579,77 @@ export const machine = defineMachine({
           s.ask,
           { outcome: { kind: "refused", check: started.check }, reason: started.detail },
           s.ask.base,
+          NO_SPENT,
         );
       }
 
       if (started._tag === "failed") {
-        return recordIt(s.ask, stuck("box_failed", started.detail), s.ask.base);
+        return recordIt(s.ask, stuck("box_failed", started.detail), s.ask.base, NO_SPENT);
       }
 
       return [{ phase: "drafting", ask: s.ask }, []];
     },
     box_new_err: (s): Step =>
-      s.phase === "starting" ? recordIt(s.ask, stuck("box_failed", "box.sh new threw"), s.ask.base) : stay(s),
+      s.phase === "starting" ? recordIt(s.ask, stuck("box_failed", "box.sh new threw"), s.ask.base, NO_SPENT) : stay(s),
     drafted: (s, m): Step => {
       if (s.phase !== "drafting") {
         return stay(s);
       }
 
-      if (m.timedOut) {
-        return recordIt(s.ask, stuck("timeout", `stopped after ${s.ask.minutes} minutes`), s.ask.base);
+      const t = m.turned;
+
+      if (t._tag === "failed") {
+        return recordIt(
+          s.ask,
+          stuck("agent_failed", `${s.ask.agent} ${t.reason}: ${t.message}; see ${s.ask.events}`),
+          s.ask.base,
+          t.spent,
+        );
       }
 
-      if (m.code !== 0) {
-        return recordIt(s.ask, stuck("agent_failed", `${s.ask.agent} exited ${m.code}; see ${s.ask.err}`), s.ask.base);
+      if (t.stop === "over_time") {
+        return recordIt(s.ask, stuck("timeout", `stopped after ${s.ask.minutes} minutes`), s.ask.base, t.spent);
       }
 
-      return [{ phase: "reading", ask: s.ask }, [stepRead(s.ask)]];
+      if (t.stop !== "end_turn") {
+        return recordIt(s.ask, stuck("agent_failed", `${s.ask.agent} stopped: ${t.stop}`), s.ask.base, t.spent);
+      }
+
+      return [{ phase: "reading", ask: s.ask, answer: t.answer, spent: t.spent }, [stepRead(s.ask)]];
     },
     step_read_ok: (s, m): Step => {
       if (s.phase !== "reading") {
         return stay(s);
       }
 
-      const j = decide(s.ask, m.value);
+      const j = decide(s.ask, m.value, s.answer);
       const head = m.value.head ?? s.ask.base;
 
       if (j.outcome.kind !== "stuck" && m.value.commits > 0) {
-        const asked = backupPush({ ask: s.ask, head, intent: intentOf("push", s.ask.box) });
-        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left };
+        const asked = backupPush({ ask: s.ask, head });
+        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left, spent: s.spent };
         return [{ phase: "pushing", ask: s.ask, ...pushing }, [asked]];
       }
 
-      return recordIt(s.ask, j, head, m.value.left);
+      return recordIt(s.ask, j, head, s.spent, m.value.left);
     },
     step_read_err: (s): Step =>
-      s.phase === "reading" ? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base) : stay(s),
+      s.phase === "reading"
+        ? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base, s.spent)
+        : stay(s),
     backup_push_ok: (s, m): Step => {
       if (s.phase !== "pushing") {
         return stay(s);
       }
 
       if (!m.value.ok) {
-        return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.left);
+        return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.spent, s.left);
       }
 
-      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.left);
+      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.spent, s.left);
     },
     backup_push_err: (s): Step =>
-      s.phase === "pushing" ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.left) : stay(s),
+      s.phase === "pushing" ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.spent, s.left) : stay(s),
     record_ok: (s, m): Step => {
       if (s.phase !== "recording") {
         return stay(s);
@@ -564,7 +680,14 @@ export const machine = defineMachine({
 
 // ---------------------------------------------------------------- the world
 
-export type Env = { readonly MAIN: string; readonly BOXES: string; readonly GH_REPO: string };
+export type Env = {
+  readonly MAIN: string;
+  readonly BOXES: string;
+  readonly GH_REPO: string;
+  /** The model a Codex box runs and its effort (env.sh, decision 0022). */
+  readonly CODEX_MODEL: string;
+  readonly CODEX_EFFORT: string;
+};
 
 export const sh = (cmd: string, args: readonly string[], cwd?: string) => {
   const r = spawnSync(cmd, args, { cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
@@ -581,14 +704,18 @@ const writtenReport = (ask: Ask) => {
 
 /** The paths env.sh gives every lead script. */
 export const loadEnv = (): Env => {
-  const r = sh("sh", ["-c", '. "$0" && printf "%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO"', join(HERE, "env.sh")]);
-  const [MAIN = "", BOXES = "", GH_REPO = ""] = r.out.split("\n");
+  const r = sh("sh", [
+    "-c",
+    '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$CODEX_MODEL" "$CODEX_EFFORT"',
+    join(HERE, "env.sh"),
+  ]);
+  const [MAIN = "", BOXES = "", GH_REPO = "", CODEX_MODEL = "", CODEX_EFFORT = ""] = r.out.split("\n");
 
   if (r.code !== 0 || !MAIN) {
     throw new Error(`env.sh failed: ${r.err}`);
   }
 
-  return { MAIN, BOXES, GH_REPO };
+  return { MAIN, BOXES, GH_REPO, CODEX_MODEL, CODEX_EFFORT };
 };
 
 // Shapes that leak on any machine: home and temp folders, key prefixes, private keys, em dashes.
@@ -691,35 +818,161 @@ const SAFE_GIT = {
   GIT_CONFIG_VALUE_1: "false",
 };
 
+/** Git on the box's own data from outside it: by the data folder, never through the `.git` file
+ * the agent could rewrite, with no hooks and no fsmonitor, so nothing it wrote runs as drive. */
+const boxGit = (env: Pick<Env, "BOXES">, box: string, ...args: string[]) => {
+  const r = spawnSync(
+    "git",
+    [
+      `--git-dir=${join(env.BOXES, `${box}-gitdata`)}`,
+      `--work-tree=${join(env.BOXES, box)}`,
+      "-c",
+      "status.renames=false",
+      ...args,
+    ],
+    { encoding: "utf8", env: SAFE_GIT },
+  );
+  return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
+};
+
 /**
- * Claude commits with plain git and holds no key. Its commits are fetched to a side ref; their
- * tree goes into a fresh worktree of the main checkout at the base; stepcommit commits it as the
- * bot and signs it as the step, with main's own signer (never the box's, which Claude could edit).
- * The branch then points at that one signed commit.
+ * Git the agent can read. The box's own git data sits beside the box, where the harness closes
+ * everything, and it borrows its objects from the main checkout, closed too. So the agent gets a
+ * view: a mirror of the main checkout's git data (hard links, no copy), holding the box as a linked
+ * worktree at the step's base. The harness opens a worktree's git folder to read only
+ * (`gitOf` in packages/fabrika/src/agents/claude/sandbox.ts), so `git diff`, `log` and `show` work
+ * in the box and nothing git keeps can be written. drive never reads the view or the box's `.git`
+ * file: it reads the box's own data (`boxGit`). Returns what failed, or `null`.
  */
-const signClaude = (env: Env, ask: Ask) => {
+const gitView = (env: Env, ask: Ask): string | null => {
+  const work = join(env.BOXES, ask.box);
+  const view = join(env.BOXES, `${ask.box}-view`);
+  const own = join(view, "worktrees", ask.box);
+  const clone = sh("git", ["clone", "-q", "--mirror", "--local", env.MAIN, view]);
+
+  if (clone.code !== 0) {
+    return `git view: ${tail(clone.err)}`;
+  }
+
+  mkdirSync(own, { recursive: true });
+  writeFileSync(join(own, "commondir"), "../..\n");
+  writeFileSync(join(own, "gitdir"), `${join(work, ".git")}\n`);
+  writeFileSync(join(own, "HEAD"), `${ask.base}\n`);
+  copyFileSync(join(env.BOXES, `${ask.box}-gitdata`, "index"), join(own, "index"));
+  writeFileSync(join(work, ".git"), `gitdir: ${own}\n`);
+  return null;
+};
+
+/** The view goes when the step ends, and a box that stays gets its own `.git` line back. */
+const dropView = (env: Env, box: string) => {
+  const work = join(env.BOXES, box);
+  rmSync(join(env.BOXES, `${box}-view`), { recursive: true, force: true });
+
+  if (box !== "" && existsSync(join(env.BOXES, `${box}-gitdata`)) && existsSync(work)) {
+    writeFileSync(join(work, ".git"), `gitdir: ${join(env.BOXES, `${box}-gitdata`)}\n`);
+  }
+};
+
+/** One file the agent left changed. `from` is set only for a case-only rename: its old name. */
+export type Change = { readonly xy: string; readonly path: string; readonly from?: string };
+
+/** Each file the agent left changed in the box's tree, by its status letters. */
+export const changedFiles = (porcelain: string): Change[] =>
+  porcelain
+    .split("\0")
+    .filter(Boolean)
+    .map((e) => ({ xy: e.slice(0, 2), path: e.slice(3) }));
+
+/**
+ * Case-only renames, which `git status` cannot see on a disk that ignores case: a tracked `id.ts`
+ * the agent renamed to `Id.ts` reads as a modified `id.ts`, or as nothing when its text is the
+ * same (ticket 573). The disk's own name, from `realpath`, says it moved. Each answer is the
+ * tracked name and the name on disk. A deleted file, a folder whose case changed and a disk that
+ * keeps case all give none: git already sees those, or (a folder) this does not handle them.
+ */
+export const caseRenames = (box: string, tracked: readonly string[]): { from: string; path: string }[] => {
+  const top = realpathSync.native(box);
+  const out: { from: string; path: string }[] = [];
+
+  for (const from of tracked) {
+    const at = join(box, from);
+
+    if (!existsSync(at)) {
+      continue;
+    }
+
+    const path = realpathSync.native(at).slice(top.length + 1);
+
+    if (
+      path !== from &&
+      path.toLowerCase() === from.toLowerCase() &&
+      path.split("/").slice(0, -1).join("/") === from.split("/").slice(0, -1).join("/")
+    ) {
+      out.push({ from, path });
+    }
+  }
+
+  return out;
+};
+
+/**
+ * What the agent left in the box's tree, read from outside the box: every edited, deleted and new
+ * file by its own name, a new folder file by file. The agent cannot commit, so this is all the
+ * work a box holds. A box whose data cannot be read answers a non-zero `code`, never "no changes".
+ */
+export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
+  const status = boxGit(env, box, "status", "--porcelain=v1", "-z", "--untracked-files=all");
+
+  if (status.code !== 0) {
+    return { ...status, changes: [] as Change[] };
+  }
+
+  const listed = boxGit(env, box, "ls-files", "--cached", "-z");
+
+  if (listed.code !== 0) {
+    return { ...listed, changes: [] as Change[] };
+  }
+
+  const moved = caseRenames(join(env.BOXES, box), listed.out.split("\0").filter(Boolean));
+  const old = new Set(moved.map((m) => m.from));
+  const changes: Change[] = [
+    ...changedFiles(status.out).filter((c) => !old.has(c.path)),
+    ...moved.map((m) => ({ xy: "R ", ...m })),
+  ];
+  return { ...status, changes };
+};
+
+/**
+ * The step commit's subject: the report's first line of prose, else the `reason` of its JSON answer
+ * (a report can be the answer alone), else a plain stand-in. One line, cut to fit.
+ */
+export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string): string => {
+  const lines = report.split("\n").map((l) => l.replace(/^[#*`\s]+|[*`\s]+$/g, ""));
+  const prose = lines.find((l) => l.length > 0 && !l.startsWith("{"));
+  const reason = lines
+    .filter((l) => l.startsWith("{"))
+    .map((l) => /"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(l)?.[1]?.replace(/\\(.)/g, "$1").trim())
+    .find((w) => w !== undefined && w.length > 0);
+  return `T${ask.ticket} ${ask.step}: ${(prose ?? reason ?? "the step's work").slice(0, 72)}`;
+};
+
+/**
+ * The agent holds no key and cannot reach the box's git data, so it commits nothing. Its changes
+ * are read from the tree and copied into a fresh worktree of the main checkout at the base;
+ * stepcommit commits them as the bot and signs them as the step, with main's own signer. The
+ * branch then points at that one signed commit, or stays at the base when nothing changed.
+ */
+const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   const git = (...args: string[]) => {
     const r = spawnSync("git", ["-C", env.MAIN, ...args], { encoding: "utf8", env: SAFE_GIT });
     return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
   };
-  const side = `refs/drive/${ask.box}`;
-  const f = git("fetch", "-q", "-f", join(env.BOXES, ask.box), `refs/heads/${ask.branch}:${side}`);
 
-  if (f.code !== 0) {
-    return f;
-  }
-
-  const made = git("rev-parse", side).out.trim();
-  git("update-ref", "-d", side);
-  const paths = git("diff", "--name-only", "--no-renames", ask.base, made).out.split("\n").filter(Boolean);
-
-  if (paths.length === 0) {
+  if (changes.length === 0) {
     return git("update-ref", `refs/heads/${ask.branch}`, ask.base);
   }
 
-  const said = git("log", "-1", "--format=%s", made).out.trim();
-  const prefix = `T${ask.ticket} ${ask.step}:`;
-  const subject = said.startsWith(prefix) ? said : `${prefix} ${said || "the step's work"}`;
+  const subject = commitSubject(ask, readFileSync(ask.report, "utf8"));
   const wt = join(env.BOXES, `${ask.box}-sign`);
   const add = git("worktree", "add", "-q", "--detach", wt, ask.base);
 
@@ -728,15 +981,43 @@ const signClaude = (env: Env, ask: Ask) => {
   }
 
   try {
-    const restore = sh("git", ["-C", wt, "restore", `--source=${made}`, "--worktree", "--", "."]);
+    const box = join(env.BOXES, ask.box);
 
-    if (restore.code !== 0) {
-      return restore;
+    for (const { xy, path, from: old } of changes) {
+      const to = join(wt, path);
+      rmSync(to, { force: true, recursive: true });
+
+      // A case-only rename: the old name's file goes, so the copy below writes the new name on
+      // disk, and stepcommit drops the old index entry.
+      if (old !== undefined) {
+        rmSync(join(wt, old), { force: true });
+      }
+
+      if (xy.includes("D")) {
+        continue;
+      }
+
+      const from = join(box, path);
+      const stat = lstatSync(from);
+      mkdirSync(join(to, ".."), { recursive: true });
+
+      if (stat.isSymbolicLink()) {
+        symlinkSync(readlinkSync(from), to);
+      } else {
+        copyFileSync(from, to);
+        chmodSync(to, stat.mode & 0o777);
+      }
     }
 
     const r = spawnSync(
       "sh",
-      [join(HERE, "../../step-commit/scripts/stepcommit.sh"), ask.step, ask.ticket, subject, ...paths],
+      [
+        join(HERE, "../../step-commit/scripts/stepcommit.sh"),
+        ask.step,
+        ask.ticket,
+        subject,
+        ...changes.map((c) => c.path),
+      ],
       {
         cwd: wt,
         encoding: "utf8",
@@ -763,49 +1044,6 @@ const signClaude = (env: Env, ask: Ask) => {
   }
 };
 
-/** How a Claude run was paid, from its init line: no API key means the subscription. */
-const billingOf = (events: string) => {
-  const first = readFileSync(events, "utf8").split("\n", 1)[0] ?? "";
-
-  try {
-    return (JSON.parse(first) as { apiKeySource?: string }).apiKeySource === "none" ? "subscription" : "key";
-  } catch {
-    return "subscription";
-  }
-};
-
-/**
- * Work a box holds that no branch has: uncommitted or untracked files, and commits on its HEAD or
- * other branches that neither the step's branch nor a remote branch has. Read with no hooks and no fsmonitor, so nothing the
- * agent wrote runs as drive. A box git cannot read counts as holding work.
- */
-export const leftIn = (box: string, branch: string): string[] => {
-  if (!existsSync(box)) {
-    return [];
-  }
-
-  const git = (...args: string[]) => {
-    const r = spawnSync("git", ["-C", box, ...args], { encoding: "utf8", env: SAFE_GIT });
-    return { code: r.status ?? -1, out: r.stdout ?? "" };
-  };
-  // No rename pairs, so each NUL-ended entry is one file.
-  const status = git("-c", "status.renames=false", "status", "--porcelain=v1", "-z", "--untracked-files=all");
-  // A clone's own `main` (or any branch a remote already holds) is not the box's work (themes
-  // build5, 2026-11-09: a box kept for "21 commits off" that were only its local main).
-  const off = git("rev-list", "--count", "HEAD", "--branches", "--not", `refs/heads/${branch}`, "--remotes");
-
-  if (status.code !== 0 || off.code !== 0) {
-    return ["a git state drive could not read"];
-  }
-
-  const files = status.out.split("\0").filter(Boolean).length;
-  const commits = Number(off.out.trim());
-  return [
-    ...(files > 0 ? [`${files} uncommitted files`] : []),
-    ...(commits > 0 ? [`${commits} commits off ${branch}`] : []),
-  ];
-};
-
 /** Why the commits check held the step: each rule and commit, else its exit and last lines. */
 export const commitsSaid = (
   check: { code: number; out: string; err: string },
@@ -823,7 +1061,7 @@ export const commitsSaid = (
  */
 export const startedOf = (code: number, err: string): typeof Started.Type => {
   if (code === 0) {
-    return { _tag: "made" };
+    return Started.cases.made.make({});
   }
 
   const line = err
@@ -834,10 +1072,10 @@ export const startedOf = (code: number, err: string): typeof Started.Type => {
   const check = BOX_CHECKS.find((c) => c === line?.[1]);
 
   if (code === 3 && line && check) {
-    return { _tag: "refused", check, detail: line[2] ?? "" };
+    return Started.cases.refused.make({ check, detail: line[2] ?? "" });
   }
 
-  return { _tag: "failed", detail: `box.sh new: ${tail(err)}` };
+  return Started.cases.failed.make({ detail: `box.sh new: ${tail(err)}` });
 };
 
 const handlers = (env: Env) => {
@@ -861,21 +1099,28 @@ const handlers = (env: Env) => {
           cmd.lane,
         );
         writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
-        return startedOf(r.code, r.err);
+        const started = startedOf(r.code, r.err);
+
+        if (started._tag !== "made") {
+          return started;
+        }
+
+        const problem = gitView(env, cmd);
+        return problem === null ? started : Started.cases.failed.make({ detail: problem });
       }),
     step_read: (ask: Ask) =>
       Effect.sync((): Read => {
         const written = writtenReport(ask);
         const report = written === null ? "" : readFileSync(written, "utf8");
-        const left = ask.step === "plan" ? [] : leftIn(join(env.BOXES, ask.box), ask.branch);
         const empty = {
           commits: 0,
           unsigned: [],
           exam: [],
           leaks: [],
-          left,
+          left: [] as string[],
           manifests: [],
           plancheck: null,
+          changed: 0,
           report,
         };
 
@@ -889,29 +1134,35 @@ const handlers = (env: Env) => {
           };
         }
 
-        // A review commits nothing: its branch lands on a side ref and the lane's branch is left alone.
-        const ref = ask.step === "review" ? `refs/drive/${ask.box}` : `refs/heads/${ask.branch}`;
-        const f =
-          ask.step === "review"
-            ? git("fetch", "-q", "-f", join(env.BOXES, ask.box), `refs/heads/${ask.branch}:${ref}`)
-            : ask.agent === "claude"
-              ? signClaude(env, ask)
-              : box("fetch", ask.box, ask.branch, "--sign", ask.step, "--ticket", ask.ticket);
+        // What the agent left in the tree, read from outside the box. A review leaves nothing, so
+        // its branch stays at the base and nothing is committed.
+        const status = boxChanges(env, ask.box);
+
+        if (status.code !== 0) {
+          return { ...empty, head: null, problem: `box status: ${tail(status.err)}` };
+        }
+
+        const { changes } = status;
+        empty.changed = changes.length;
+        // Work the box holds that no branch has: what the agent changed, until it is collected.
+        const held = changes.length > 0 ? [`${changes.length} uncommitted files`] : [];
+        const ref = `refs/heads/${ask.branch}`;
+        const f = ask.step === "review" ? { code: 0, err: "" } : collect(env, ask, changes);
 
         if (f.code !== 0) {
           return {
             ...empty,
             head: null,
-            problem: `fetch: ${tail(f.err)}`,
+            left: held,
+            problem: `collect: ${tail(f.err)}`,
           };
         }
 
-        const head = git("rev-parse", ref).out.trim();
-
         if (ask.step === "review") {
-          git("update-ref", "-d", ref);
+          empty.left = held;
         }
 
+        const head = ask.step === "review" ? ask.base : git("rev-parse", ref).out.trim();
         const failed = (what: string, r: { code: number; err: string }) => ({
           ...empty,
           head,
@@ -992,9 +1243,10 @@ const handlers = (env: Env) => {
           unsigned,
           exam,
           leaks: leaksIn(diff.out, env.GH_REPO),
-          left,
+          left: empty.left,
           manifests,
           plancheck: null,
+          changed: changes.length,
           report,
           problem: null,
         };
@@ -1012,46 +1264,35 @@ const handlers = (env: Env) => {
         const { ask } = e;
         const notes: string[] = [];
         const ended = new Date().toISOString();
+        dropView(env, ask.box);
 
-        // The field row, held beside the boxes until a field PR lands it.
+        // The saved files are scrubbed first (redact.sh prints only a count), then the field row,
+        // held beside the boxes until a field PR lands it.
         if (existsSync(ask.events)) {
-          const row = rowOf(e.outcome);
-          const why = `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}. ${e.reason}`;
-          const r =
-            ask.agent === "claude"
-              ? sh("python3", [
-                  "-I",
-                  join(HERE, "clauderow.py"),
-                  "--run",
-                  ask.run,
-                  "--ticket",
-                  ask.ticket,
-                  "--outcome",
-                  row,
-                  "--step",
-                  ask.step,
-                  "--billing",
-                  billingOf(ask.events),
-                  ask.events,
-                  why,
-                ])
-              : sh("python3", [
-                  "-I",
-                  join(HERE, "fieldrow.py"),
-                  "--step",
-                  ask.step,
-                  ask.events,
-                  ask.run,
-                  ask.ticket,
-                  row,
-                  why,
-                ]);
+          const scrubbed = sh("sh", [join(HERE, "redact.sh"), ask.report, ask.events]);
+          const redacted = scrubbed.code === 0 ? Number(scrubbed.out.trim()) : null;
 
-          if (r.code === 0) {
-            appendFileSync(join(env.BOXES, `${ask.lane}-rows.jsonl`), r.out);
-          } else {
-            notes.push(`no field row: ${tail(r.err, 1)}`);
+          if (scrubbed.code !== 0) {
+            notes.push(`redact.sh failed: ${tail(scrubbed.err, 1)}`);
           }
+
+          appendFileSync(
+            join(env.BOXES, `${ask.lane}-rows.jsonl`),
+            stepRow({
+              run: ask.run,
+              ticket: ask.ticket,
+              step: ask.step,
+              provider: stepProvider(ask.agent, ask.step),
+              model: ask.model,
+              effort: ask.effort,
+              outcome: rowOf(e.outcome),
+              reason: `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}. ${e.reason}`,
+              started: new Date(ask.started),
+              ended: new Date(ended),
+              spent: e.spent,
+              redacted: Number.isFinite(redacted) ? redacted : null,
+            }),
+          );
         }
 
         const ok = notes.length === 0;
@@ -1105,160 +1346,214 @@ const handlers = (env: Env) => {
   };
 };
 
-// The tools each Claude step gets. `--tools` is what limits it; `--allowedTools` only pre-approves.
-const CLAUDE_TOOLS: Record<StepName, string> = {
-  plan: "Read,Glob,Grep",
-  review: "Read,Glob,Grep,Bash",
-  tests: "Read,Edit,Write,Glob,Grep,Bash",
-  build: "Read,Edit,Write,Glob,Grep,Bash",
-  mutation: "Read,Edit,Write,Glob,Grep,Bash",
+/** What a step is told on top of the brief: its skill, and that drive commits its work. */
+export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) => {
+  const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts in a box. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
+  const commit =
+    ask.step === "plan"
+      ? "Change no file. Your final message is the plan.\n"
+      : ask.step === "review"
+        ? "Change no file: a review that leaves a changed file is stuck. git reads work in your box (diff, log, show). Run no command that writes, not even a scratch copy or a temp file: your box refuses it, and a refused command ends your turn with no answer.\n"
+        : "git only reads in your box (status, diff, log, show): its data is outside, where the box lets nothing write. Do not try to stage, stash, check out or commit, run stepcommit or pnpm commits sign; you hold no step key. Leave every change in the tree, and drive.ts commits and signs all of it as one step commit when you answer. Never push.\n";
+  const lock = holdsElectron(ask.step, electron)
+    ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
+    : "";
+  return `\n\n---\n${skill}${commit}${lock}`;
 };
 
 /**
- * Claude's walls, written beside the box: a sandbox-exec profile the OS enforces on Claude and
- * every command it starts (no reading the step keys, leak words or Codex's login; writes only in
- * its box and the caches it needs), and settings that say the same to Claude's own tools.
+ * The approved plan, whole, for a step in a box. The harness closes home around the box (Claude's
+ * sandbox, Codex's fence), so a step cannot read a plan kept beside the boxes: it rides in the
+ * prompt. A plan step writes the plan, and a missing file is box.sh new's refusal to make.
  */
-export const claudeProfile = (home: string, boxes: string, box: string, step: StepName) => {
-  const work = join(boxes, box);
-  const writable = step === "plan" ? [] : [work, join(boxes, `${box}-gitdata`)];
-  const allow = [...writable, ".claude", ".cache", ".local", ".npm", "Library"].map(
-    (p) => `(subpath "${p.startsWith("/") ? p : join(home, p)}")`,
-  );
-  return `(version 1)
-(allow default)
-(deny file-read* file-write* (subpath "${home}/.fabrika/step-keys") (literal "${home}/.fabrika/leak-words") (subpath "${home}/.codex"))
-(deny file-write* (subpath "${home}"))
-(allow file-write* ${allow.join(" ")} (regex #"^${home}/\\.claude\\.json"))
-`;
-};
+export const planTail = (step: StepName, path: string, text: string | null) =>
+  step === "plan" || text === null
+    ? ""
+    : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 
-const claudeArgs = (env: Env, ask: Ask) => {
-  const home = homedir();
-  const work = join(env.BOXES, ask.box);
-  const profile = claudeProfile(home, env.BOXES, ask.box, ask.step);
-  const sb = join(env.BOXES, `${ask.box}.sb`);
-  writeFileSync(sb, profile);
-  // The file's name is how the cap counts Claude steps drive started (pgrep -f).
-  const settings = join(env.BOXES, `${ask.box}.drive-claude-settings.json`);
-  const deny = ["Read(~/.fabrika/**)", "Read(~/.codex/**)", "Bash(security *)", "Bash(*/security *)"];
-  writeFileSync(settings, JSON.stringify({ permissions: { deny } }));
-  const tools = CLAUDE_TOOLS[ask.step];
-  return {
-    cwd: ask.step === "plan" ? env.MAIN : work,
-    args: [
-      "-n",
-      "15",
-      "sandbox-exec",
-      "-f",
-      sb,
-      "claude",
-      "-p",
-      "--session-id",
-      ask.session,
-      "--model",
-      ask.model,
-      "--tools",
-      tools,
-      "--allowedTools",
-      tools,
-      // No setting source: a box's project settings are the agent's own hooks (experiment 155).
-      "--setting-sources",
-      "",
-      "--strict-mcp-config",
-      "--settings",
-      settings,
-      "--output-format",
-      "stream-json",
-      "--verbose",
-    ],
-  };
-};
-
-/** Claude's report is the `result` of its last stream-json line. */
-const saveClaudeReport = (ask: Ask) => {
-  const lines = existsSync(ask.events) ? readFileSync(ask.events, "utf8").split("\n") : [];
-
-  for (const line of lines.toReversed()) {
-    try {
-      const d = JSON.parse(line) as { type?: string; result?: string };
-
-      if (d.type === "result") {
-        return writeFileSync(ask.report, d.result ?? "");
-      }
-    } catch {}
+/**
+ * The lane's newest mutation report, whole, for a review: the review reads it (the review skill,
+ * "anything the brief names"), and its box reads nothing outside itself. Briefs named
+ * `../<lane>-mutationN.md`, so two Codex reviews ended stuck after half a minute and a Claude
+ * review said done without it (p34w-review1 and 2, layout-review2, 2026-11-10; ticket 569).
+ */
+export const mutationTail = (step: StepName, steps: Lane["steps"], read: (path: string) => string | null): string => {
+  if (step !== "review") {
+    return "";
   }
+
+  const last = steps.findLast((s) => s.step === "mutation" && typeof s.report === "string");
+  const text = last?.report ? read(last.report) : null;
+  return text === null || !last?.report
+    ? "\n\n---\nThis lane has no mutation report drive can read; say so in your review, and do not look for one outside your box.\n"
+    : `\n\n---\nThe lane's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 };
 
-/** The Draft: Codex or Claude in the box (or the read-only plan writer), as a Sub that answers once. */
-const draftRunner = (env: Env) => (sub: DraftSub) =>
-  Stream.fromEffect(
-    Effect.callback<Drafted>((resume) => {
-      const ask = sub.deps;
-      const claude = ask.agent === "claude";
-      const out = openSync(ask.step === "plan" && !claude ? ask.err : ask.events, "a");
-      const err = openSync(ask.err, "a");
-      const input = claude ? openSync(ask.prompt, "r") : "ignore";
-      const how = claude
-        ? { cmd: "nice", ...claudeArgs(env, ask) }
-        : {
-            cmd: "sh",
-            cwd: undefined,
-            args:
-              ask.step === "plan"
-                ? [join(HERE, "runplan.sh"), ask.box, ask.prompt]
-                : [join(HERE, "box.sh"), "run", ask.box, ask.prompt, ask.report, "--step", ask.step],
-          };
-      // Its own process group, so a stop reaches every command the agent started too.
-      const child = spawn(how.cmd, how.args, {
-        cwd: how.cwd,
-        stdio: [input, out, err],
-        detached: true,
-      });
-      let timedOut = false;
-      let force: ReturnType<typeof setTimeout> | undefined;
-      const stopAll = () => {
-        const group = child.pid === undefined ? undefined : -child.pid;
+/** How a step's draft runs: what the step is asked, in; how its turn ended, out. */
+type DraftRun = (env: Env, agents: Agents, ask: Ask) => Effect.Effect<Turned<Answer>>;
 
-        if (group === undefined) {
-          return;
-        }
+/** One turn of the agent in the box (a plan reads the main checkout), on the prompt given. */
+const turn = (env: Env, agents: Agents, ask: Ask, prompt: string) =>
+  runTurn(agents, {
+    provider: stepProvider(ask.agent, ask.step),
+    session: ask.box,
+    folder: ask.step === "plan" ? env.MAIN : join(env.BOXES, ask.box),
+    prompt,
+    system: `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts; answer with the JSON object the prompt asks for.`,
+    answer: Answer,
+    model: ask.model,
+    effort: ask.effort,
+    minutes: ask.minutes,
+    events: ask.events,
+    report: ask.report,
+  });
 
-        try {
-          process.kill(group, "SIGTERM");
-          force = setTimeout(() => {
-            try {
-              process.kill(group, "SIGKILL");
-            } catch {}
-          }, 10_000);
-        } catch {}
-      };
-      const timer = setTimeout(() => {
-        timedOut = true;
-        stopAll();
-      }, ask.minutes * 60_000);
-      child.on("exit", (code) => {
-        clearTimeout(timer);
-        clearTimeout(force);
-        closeSync(out);
-        closeSync(err);
+/** Any step but mutation: one turn on the prompt file, the brief with drive's tail. */
+const turnDraft: DraftRun = (env, agents, ask) => turn(env, agents, ask, readFileSync(ask.prompt, "utf8"));
 
-        if (typeof input === "number") {
-          closeSync(input);
-        }
+// ---------------------------------------------------------------- MUTATION WIRING (ticket 483)
+//
+// The one place that says how the mutation step runs. Everything else here and in the chain
+// treats mutation as any step: the box, the git view, collect, the checks and the field row.
+//
+//   MUTATION_AGENT   who the chain starts it as, and the only agent `prepare` takes for it.
+//   mutationDraft    how its draft runs: first the Stryker sample, in a container with its own
+//                    network (mutbox.ts, decision 0045), on the step's start head with the tests
+//                    the brief's `RELATED=` line names and the lane's root as arm a. Then one
+//                    agent turn that reads the report. A run that ended stuck (Docker down, a
+//                    second Docker box, a failed baseline) is a stuck step with no agent started.
+//
+// The agent's box reads nothing outside itself, so the report (`BOXES/<box>-mutbox/mutbox.json`)
+// rides in its prompt, whole. This file opens no socket and allows none; that is the container's
+// side.
+export const MUTATION_AGENT: AgentName = "claude";
 
-        if (claude) {
-          saveClaudeReport(ask);
-        }
+/** The related test paths a mutation brief names, on a line of its own: `RELATED=a.test.ts,b.test.ts`. */
+export const relatedIn = (brief: string): string | undefined => /^RELATED=(\S.*)$/m.exec(brief)?.[1]?.trim();
 
-        resume(Effect.succeed({ type: "drafted", code, timedOut }));
-      });
-      return Effect.sync(() => {
-        clearTimeout(timer);
-        stopAll();
-      });
-    }),
+const MutboxLine = Schema.fromJsonString(
+  Schema.Struct({
+    outcome: Schema.Literals(["done", "skip", "stuck"]),
+    reason: Schema.String,
+    detail: Schema.String,
+  }),
+);
+
+/** What mutbox.ts answered, from its last line: its outcome and why. Anything else is stuck. */
+export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuck"; reason: string } => {
+  const line = Schema.decodeUnknownOption(MutboxLine)(stdout.trim().split("\n").at(-1) ?? "");
+  return line._tag === "Some"
+    ? {
+        outcome: line.value.outcome,
+        reason: [line.value.reason, line.value.detail].filter(Boolean).join(": "),
+      }
+    : { outcome: "stuck", reason: "mutbox.ts gave no answer" };
+};
+
+/** What a mutation agent is told about the run that already happened in the container. */
+export const mutboxTail = (report: string, skip: boolean) =>
+  `\n\n---\nThe Stryker run for this step already happened, in a container with its own network (decision 0045). Its report, the JSON file the lead keeps at ${report}, follows this note, whole, since your box reads nothing outside itself: the sample, the counts, each survivor with its file and line, the tests left out or skipped with the reason, and \`narrowing\`, the mutants arm a (the base's tests) kills and arm b (this branch's) lets live. Do not run Stryker, the mutation command or the sampler yourself, and start nothing that listens on a port. Read the report and do the skill's steps 3 to 6 from it.\n${skip ? "The sampler selected no mutation range, so commit nothing and end with `answer: skip <why>`.\n" : ""}`;
+
+/** mutbox.ts's command line for one step: the build is the step's start head, arm a the lane's root. */
+export const mutboxArgs = (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: string): Array<string> => [
+  "run",
+  "--checkout",
+  env.MAIN,
+  "--ticket",
+  ask.ticket,
+  "--build",
+  ask.base,
+  "--base",
+  ask.root,
+  "--related",
+  related,
+  "--out",
+  join(env.BOXES, `${ask.box}-mutbox`),
+  "--lock",
+  dockerLock(env),
+];
+
+/** The one Docker box's lock, as mutbox.ts takes it and drive's start check reads it. */
+export const dockerLock = (env: Pick<Env, "BOXES">) => join(env.BOXES, "state", "docker.lock");
+
+/** How mutbox.ts ran: its exit code and what it printed. */
+export type MutboxRun = (args: ReadonlyArray<string>) => Effect.Effect<{ readonly code: number; readonly out: string }>;
+
+/** The real run: mutbox.ts as a child process, its own log on our stderr. One that cannot start answers 127. */
+const runMutbox: MutboxRun = (args) =>
+  Effect.gen(function* () {
+    const ran = yield* ChildProcess.make(process.execPath, [join(HERE, "mutbox.ts"), ...args], {
+      extendEnv: true,
+      stdin: "ignore",
+      stderr: "inherit",
+    });
+    const [out, code] = yield* Effect.all([ran.stdout.pipe(Stream.decodeText(), Stream.mkString), ran.exitCode], {
+      concurrency: 2,
+    });
+    return { code: Number(code), out };
+  }).pipe(
+    Effect.scoped,
+    Effect.catch(() => Effect.succeed({ code: 127, out: "" })),
+    Effect.provide(nodeServices),
   );
+
+/** A step that ended stuck before any agent started: the same shape an agent's own stuck answer has. */
+const stuckBefore = (reason: string): Turned<Answer> => ({
+  ...Ended.make({ stop: "end_turn", spent: NO_SPENT, said: reason }),
+  answer: Answer.make({ verb: "stuck", to: null, reason, laws: null }),
+});
+
+/**
+ * The mutation step's draft. mutbox.ts runs first; its exit 30, a stuck line, no line at all or a
+ * report that cannot be read ends the step stuck with mutbox's own reason, and no agent starts.
+ * Otherwise the agent gets the prompt file, `mutboxTail` and the report's text.
+ */
+export const mutationDraft =
+  (mutbox: MutboxRun): DraftRun =>
+  (env, agents, ask) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const stop = (reason: string) =>
+        fs.writeFileString(ask.report, `${reason}\n`).pipe(Effect.ignore, Effect.as(stuckBefore(reason)));
+      const prompt = yield* fs.readFileString(ask.prompt).pipe(Effect.orElseSucceed(() => ""));
+      const related = relatedIn(prompt);
+
+      if (related === undefined) {
+        return yield* stop("mutbox: the brief names no related tests on a RELATED=<paths> line");
+      }
+
+      const ran = yield* mutbox(mutboxArgs(env, ask, related));
+      const answer = mutboxAnswer(ran.out);
+
+      if (ran.code === 30 || answer.outcome === "stuck") {
+        return yield* stop(`mutbox: ${answer.outcome === "stuck" ? answer.reason : "exit 30"}`);
+      }
+
+      const report = join(env.BOXES, `${ask.box}-mutbox`, "mutbox.json");
+      const text = yield* fs.readFileString(report).pipe(Effect.orElseSucceed(() => ""));
+
+      if (text.trim() === "") {
+        return yield* stop(`mutbox: no report at ${report}`);
+      }
+
+      // The prompt file is the record of what the agent was asked, so it gets the report too.
+      const whole = `${prompt}${mutboxTail(report, answer.outcome === "skip")}\n${text}`;
+      yield* fs.writeFileString(ask.prompt, whole).pipe(Effect.ignore);
+      return yield* turn(env, agents, ask, whole);
+    }).pipe(Effect.provide(nodeServices));
+
+/**
+ * The Draft, as a Sub that answers once. The prompt file is the brief with drive's tail; the
+ * system prompt names the step.
+ */
+export const agentsDraft =
+  (env: Env, agents: Agents, mutbox: MutboxRun = runMutbox) =>
+  (sub: DraftSub) =>
+    Stream.fromEffect(
+      (sub.deps.step === "mutation" ? mutationDraft(mutbox) : turnDraft)(env, agents, sub.deps).pipe(
+        Effect.map((turned) => ({ type: "drafted", turned }) satisfies Drafted),
+      ),
+    );
 
 type Lane = {
   readonly lane: string;
@@ -1267,7 +1562,7 @@ type Lane = {
   readonly branch?: string;
   readonly root?: string;
   readonly head?: string;
-  readonly steps: readonly { readonly step: string }[];
+  readonly steps: readonly { readonly step: string; readonly report?: string | null }[];
 };
 
 // ---------------------------------------------------------------- the command
@@ -1275,16 +1570,13 @@ type Lane = {
 const TAIL = `
 
 ---
-drive.ts reads your report. End it with exactly one of these lines, as its last line:
-answer: done
-answer: send tests <why>
-answer: send build <why>
-answer: ask <the one question for the lead>
-answer: skip <why there is nothing here for this step>
-answer: stuck <why>
-
-A build that needs no commit, because every law is already green at its start, puts this line
-just before \`answer: done\`: laws: green <the narrow test paths you ran>
+drive.ts reads your report, then one JSON object at its very end (its schema follows this prompt):
+  verb: done | send | ask | skip | stuck
+  to:   tests | build | plan when the verb is send, else null
+  reason: one or two sentences: what to tell the next step, the one question for the lead, why there is
+        nothing here for this step, or why you are stuck
+  laws: for a build that needed no change, because every law is already green at its start, the
+        narrow test paths you ran; else null
 `;
 
 const MIN_FREE_GB = 20;
@@ -1314,56 +1606,36 @@ const holderOf = (porcelain: string, branch: string): string | null => {
 };
 
 /**
+ * The live process holding the one Docker box's lock (mutbox.ts writes its pid there), or `null`
+ * when the lock is absent, unreadable or left by a dead run, which mutbox.ts itself takes over. A
+ * mutation step started while another box ran got mutbox's docker_busy only after its box was made,
+ * as a stuck step (layout-mutation3, 2026-11-10; ticket 566).
+ */
+export const dockerHolder = (lock: string | null, alive: (pid: number) => boolean): number | null => {
+  const pid = Number(lock?.trim());
+  return lock !== null && Number.isInteger(pid) && pid > 0 && alive(pid) ? pid : null;
+};
+
+const isAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM: the process exists and is someone else's.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/**
  * Whether drive holds `BOXES/state/electron.lock` for the whole step. The box cannot write the
  * lock (its sandbox writes only the box and caches), so drive takes it outside, before the agent
  * starts: always for mutation, and for any Claude step started with `--electron`.
  */
 export const holdsElectron = (step: StepName, flagged: boolean) => step === "mutation" || flagged;
 
-/** The related test paths a mutation brief names, on a line of its own: `RELATED=a.test.ts,b.test.ts`. */
-export const relatedIn = (brief: string): string | undefined => /^RELATED=(\S.*)$/m.exec(brief)?.[1]?.trim();
-
-const MutboxLine = Schema.fromJsonString(
-  Schema.Struct({
-    outcome: Schema.Literals(["done", "skip", "stuck"]),
-    reason: Schema.String,
-    detail: Schema.String,
-  }),
-);
-
-/** What mutbox.ts answered, from its last line: its outcome and why. Anything else is stuck. */
-export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuck"; reason: string } => {
-  const line = Schema.decodeUnknownOption(MutboxLine)(stdout.trim().split("\n").at(-1) ?? "");
-  return line._tag === "Some"
-    ? {
-        outcome: line.value.outcome,
-        reason: [line.value.reason, line.value.detail].filter(Boolean).join(": "),
-      }
-    : { outcome: "stuck", reason: "mutbox.ts gave no answer" };
-};
-
-/** What a mutation agent is told about the run that already happened in the container. */
-export const mutboxTail = (report: string, skip: boolean) =>
-  `\n\n---\nThe Stryker run for this step already happened, in a container with its own network (decision 0045). Its report is the JSON file ${report}: the sample, the counts, each survivor with its file and line, the tests left out or skipped with the reason, and \`narrowing\`, the mutants arm a (the base's tests) kills and arm b (this branch's) lets live. Do not run Stryker, the mutation command or the sampler yourself, and start nothing that listens on a port. Read the report and do the skill's steps 3 to 6 from it.\n${skip ? "The sampler selected no mutation range, so commit nothing and end with `answer: skip <why>`.\n" : ""}`;
-
-/** What a Claude step is told on top of the brief: its skill, and how its work is committed. */
-export const claudeTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) => {
-  const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
-  const commit =
-    ask.step === "plan"
-      ? "Change no file. Your final message is the plan.\n"
-      : ask.step === "review"
-        ? "Commit nothing and change no file.\n"
-        : `Commit your work here with plain git: \`git add <paths>\`, then \`git commit -m "T${ask.ticket} ${ask.step}: <subject>"\`. Do not run stepcommit or pnpm commits sign: you hold no step key, and drive.ts signs your commits as one commit after you answer. Never push, never rewrite history.\n`;
-  const lock = holdsElectron(ask.step, electron)
-    ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
-    : "";
-  return `\n\n---\n${skill}${commit}${lock}`;
-};
-
 const usage = () => {
   console.error(
-    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only] [--related <test paths>]",
+    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
   );
   process.exit(2);
 };
@@ -1382,92 +1654,118 @@ const alive = (pid: number) => {
   }
 };
 
+/** Takes the lock file for this pid; `false` when another process holds it. */
+const lockTaken = (lock: string): boolean => {
+  try {
+    writeFileSync(lock, String(process.pid), { flag: "wx" });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /** One Electron step at a time: a lock file holding the owner's pid, taken over when it is dead. */
 const takeElectron = (env: Env) =>
   Effect.gen(function* () {
     const lock = join(env.BOXES, "state", "electron.lock");
 
     for (;;) {
-      try {
-        writeFileSync(lock, String(process.pid), { flag: "wx" });
+      if (lockTaken(lock)) {
         process.on("exit", () => rmSync(lock, { force: true }));
         return;
-      } catch {
-        const owner = Number(readFileSync(lock, "utf8").trim());
+      }
 
-        if (alive(owner)) {
-          yield* Effect.sleep("20 seconds");
-        } else {
-          rmSync(lock, { force: true });
-        }
+      const owner = Number(readFileSync(lock, "utf8").trim());
+
+      if (alive(owner)) {
+        yield* Effect.sleep("20 seconds");
+      } else {
+        rmSync(lock, { force: true });
       }
     }
   });
 
-const main = () => {
-  const args = process.argv.slice(2);
-  const [lane = "", step = "", brief = ""] = args;
-  const agent = flag(args, "--agent") ?? "codex";
+/** What one step is asked for, as the command line or the chain gives it. */
+export interface StepArgs {
+  readonly lane: string;
+  readonly step: StepName;
+  readonly brief: string;
+  readonly agent: AgentName;
+  /** Claude's model; a Codex box runs env.sh's CODEX_MODEL. */
+  readonly model?: string | undefined;
+  readonly electron: boolean;
+  readonly ticket?: string | undefined;
+  readonly branch?: string | undefined;
+  readonly plan?: string | undefined;
+  readonly from?: string | undefined;
+}
 
-  if (
-    !/^[a-z0-9][a-z0-9-]*$/.test(lane) ||
-    !(STEPS as readonly string[]).includes(step) ||
-    !(AGENTS as readonly string[]).includes(agent) ||
-    !existsSync(brief)
-  ) {
-    usage();
+/**
+ * How `prepare` ended: the step ready to run, or a no before any agent ran, a usage error (exit 2)
+ * or a start check's refusal (exit 3).
+ */
+export const Start = Schema.TaggedUnion({
+  prepared: { ask: Ask, electron: Schema.Boolean },
+  refused: { outcome: Schema.String, reason: Schema.String, exit: Schema.Number },
+});
+
+export type Prepared = typeof Start.cases.prepared.Type;
+export type Refusal = typeof Start.cases.refused.Type;
+const refusal = Start.cases.refused.make;
+
+const usageError = (reason: string): Refusal => refusal({ outcome: "usage", reason, exit: 2 });
+
+/**
+ * Everything before the agent: the usage checks, the base and the lane's root, a fresh box name,
+ * the agent cap, the disk, the lane's branch not held by a worktree, and the prompt file. Pure
+ * reads of the main checkout and the laptop; nothing it does needs undoing.
+ */
+export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
+  const { lane, step, agent, electron } = p;
+
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(lane) || !existsSync(p.brief)) {
+    return usageError("a lane name and a brief file are required");
   }
 
-  if (step === "mutation" && agent !== "claude") {
-    console.error("drive.ts: a mutation step's agent may start Electron; run it with --agent claude");
-    process.exit(2);
+  if (step === "mutation" && agent !== MUTATION_AGENT) {
+    return usageError(`a mutation step's agent may start Electron; run it with --agent ${MUTATION_AGENT}`);
   }
 
-  const related = flag(args, "--related") ?? relatedIn(readFileSync(brief, "utf8"));
-
-  if (step === "mutation" && related === undefined) {
-    console.error(
-      "drive.ts: a mutation step needs its related tests: --related <paths>, or a line RELATED=<paths> in the brief (its Stryker run goes in a container, decision 0045)",
+  if (step === "mutation" && relatedIn(readFileSync(p.brief, "utf8")) === undefined) {
+    return usageError(
+      "a mutation step needs its related tests: a line RELATED=<paths> in the brief (its Stryker run goes in a container, decision 0045)",
     );
-    process.exit(2);
   }
-
-  const electron = args.includes("--electron");
 
   if (electron && agent !== "claude") {
-    console.error("drive.ts: --electron is for --agent claude; a Codex box cannot start Electron");
-    process.exit(2);
+    return usageError("--electron is for --agent claude; a Codex box cannot start Electron");
   }
 
-  if (agent === "codex" && flag(args, "--model") !== undefined) {
-    console.error("drive.ts: --model is for --agent claude; a Codex box reads CODEX_MODEL");
-    process.exit(2);
+  if (agent === "codex" && p.model !== undefined) {
+    return usageError("--model is for --agent claude; a Codex box reads CODEX_MODEL");
   }
 
-  const env = loadEnv();
   mkdirSync(join(env.BOXES, "state"), { recursive: true });
   const statePath = join(env.BOXES, "state", `${lane}.json`);
   const saved: Lane | null = existsSync(statePath) ? (JSON.parse(readFileSync(statePath, "utf8")) as Lane) : null;
-  const ticket = flag(args, "--ticket") ?? saved?.ticket;
+  const ticket = p.ticket ?? saved?.ticket;
 
   if (!ticket) {
-    console.error(`drive.ts: no ticket for lane ${lane} yet; pass --ticket`);
-    process.exit(2);
+    return usageError(`no ticket for lane ${lane} yet; pass --ticket`);
   }
 
-  const branch = flag(args, "--branch") ?? saved?.branch ?? `fabrikalfa/${lane}`;
-  const plan = flag(args, "--plan") ?? saved?.plan ?? join(env.BOXES, `${lane}-PLAN.md`);
+  const branch = p.branch ?? saved?.branch ?? `fabrikalfa/${lane}`;
+  const plan = p.plan ?? saved?.plan ?? join(env.BOXES, `${lane}-PLAN.md`);
 
   if (!branch.startsWith("fabrikalfa/")) {
-    usage();
+    return usageError("the branch is fabrikalfa/<name>");
   }
 
   sh("git", ["-C", env.MAIN, "fetch", "-q", "origin"]);
 
   // A plan writer reads the main checkout as it stands, so its base is that checkout's HEAD.
-  if (step === "plan" && flag(args, "--from") !== undefined) {
-    console.error("drive.ts: a plan reads the main checkout; it takes no --from");
-    process.exit(2);
+  if (step === "plan" && p.from !== undefined) {
+    return usageError("a plan reads the main checkout; it takes no --from");
   }
 
   // With no --from, a lane whose branch or -wip backup is on origin continues from the newest
@@ -1481,12 +1779,11 @@ const main = () => {
   const isAncestor = (a: string, b: string) =>
     sh("git", ["-C", env.MAIN, "merge-base", "--is-ancestor", a, b]).code === 0;
   const lastHead = startHead(pushed, saved?.head, isAncestor);
-  const from = step === "plan" ? "HEAD" : (flag(args, "--from") ?? lastHead ?? "origin/main");
+  const from = step === "plan" ? "HEAD" : (p.from ?? lastHead ?? "origin/main");
   const base = sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `${from}^{commit}`]).out.trim();
 
   if (!base) {
-    console.error(`drive.ts: ${from} is not a commit in the main checkout`);
-    process.exit(2);
+    return usageError(`${from} is not a commit in the main checkout`);
   }
 
   // The lane's root: where its base left main, moved up past a caught-up main (lane.ts).
@@ -1498,53 +1795,45 @@ const main = () => {
   );
 
   if (!root) {
-    console.error(`drive.ts: ${base.slice(0, 8)} shares no history with origin/main`);
-    process.exit(2);
+    return usageError(`${base.slice(0, 8)} shares no history with origin/main`);
   }
 
-  const s = step as StepName;
-  const box = freshBox(lane, s, (saved?.steps.filter((e) => e.step === s).length ?? 0) + 1, (name) =>
+  const box = freshBox(lane, step, (saved?.steps.filter((e) => e.step === step).length ?? 0) + 1, (name) =>
     existsSync(join(env.BOXES, name)),
   );
-  const n = Number(box.slice(`${lane}-${s}`.length));
+  const n = Number(box.slice(`${lane}-${step}`.length));
   const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
   const claude = agent === "claude";
   const ask: Ask = {
     lane,
-    step: s,
-    agent: claude ? "claude" : "codex",
-    model: claude ? (flag(args, "--model") ?? "sonnet") : "",
-    session: claude ? randomUUID() : "",
+    step,
+    agent,
+    model: claude ? (p.model ?? "sonnet") : env.CODEX_MODEL,
+    effort: claude ? null : env.CODEX_EFFORT,
     ticket,
     plan,
     branch,
     base,
     root,
     box,
-    run: `t${ticket}-${s}${n === 1 ? "" : n}`,
+    run: `t${ticket}-${step}${n === 1 ? "" : n}`,
     prompt: at("-prompt.md"),
-    report: s === "plan" ? at("-plan.md") : at(".md"),
-    events: s === "plan" ? at("-plan.jsonl") : at(".jsonl"),
+    report: step === "plan" ? at("-plan.md") : at(".md"),
+    events: step === "plan" ? at("-plan.jsonl") : at(".jsonl"),
     err: at(".err"),
     minutes: Number(process.env.DRIVE_MINUTES ?? 60),
     started: Date.now(),
   };
+  // The agents running now: the ACP harnesses drive starts (and a Codex exec a hand started).
   const count = (pattern: string) => sh("pgrep", ["-f", pattern]).out.split("\n").filter(Boolean).length;
-  const agents = count("^codex exec") + count("drive-claude-settings");
-
-  if (args.includes("--plan-only")) {
-    console.log(JSON.stringify({ outcome: "plan-only", ...ask, agents, electron: holdsElectron(s, electron) }));
-    return;
-  }
+  const agents = count("codex-acp/dist/index.js") + count("claude-agent-acp/dist/index.js") + count("^codex exec");
 
   if (agents >= 8) {
-    console.log(
-      JSON.stringify({
-        outcome: endName({ kind: "refused", check: "agent_cap" }),
-        reason: `${agents} agents running (Codex boxes and drive's Claude steps); the cap is 8`,
-      }),
-    );
-    process.exit(3);
+    return refusal({
+      outcome: endName({ kind: "refused", check: "agent_cap" }),
+      reason: `${agents} agents running (the ACP harnesses drive started); the cap is 8`,
+      exit: 3,
+    });
   }
 
   // Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk,
@@ -1560,110 +1849,103 @@ const main = () => {
   if (free === null || free < MIN_FREE_GB) {
     const said = free === null ? "df could not read the free space" : `${free} GB free`;
     const keeps = (gc.stdout ?? "").split("\n").filter((l) => l.startsWith("keep "));
-    console.log(
-      JSON.stringify({
-        outcome: endName({ kind: "refused", check: "low_disk" }),
-        reason: `${said} on the boxes' volume after box.sh gc; drive needs ${MIN_FREE_GB}; gc kept ${keeps.length}: ${keeps.map((l) => l.slice(5)).join("; ") || "nothing"}`,
-      }),
-    );
-    process.exit(3);
+    return refusal({
+      outcome: endName({ kind: "refused", check: "low_disk" }),
+      reason: `${said} on the boxes' volume after box.sh gc; drive needs ${MIN_FREE_GB}; gc kept ${keeps.length}: ${keeps.map((l) => l.slice(5)).join("; ") || "nothing"}`,
+      exit: 3,
+    });
   }
 
-  // A plan reads the main checkout and a review fetches to a side ref; every other step fetches the
+  // A plan reads the main checkout and a review changes nothing; every other step moves the
   // lane's branch at the end. Refuse now, not after the agent ran (themes tests, 2026-11-09).
-  if (s !== "plan" && s !== "review") {
+  if (step !== "plan" && step !== "review") {
     const list = sh("git", ["-C", env.MAIN, "worktree", "list", "--porcelain"]);
     const holder = list.code === 0 ? holderOf(list.out, branch) : "";
 
     if (holder !== null) {
-      const said =
-        list.code === 0
-          ? `${branch} is checked out in ${holder}; detach it there (git switch --detach) first`
-          : `git worktree list failed: ${tail(list.err)}`;
-      const check = list.code === 0 ? "branch_checked_out" : null;
-      console.log(
-        JSON.stringify({
-          outcome: check ? endName({ kind: "refused", check }) : "stuck:worktree_unreadable",
-          reason: said,
-        }),
-      );
-      process.exit(check ? 3 : 30);
+      return list.code === 0
+        ? refusal({
+            outcome: endName({ kind: "refused", check: "branch_checked_out" }),
+            reason: `${branch} is checked out in ${holder}; detach it there (git switch --detach) first`,
+            exit: 3,
+          })
+        : refusal({
+            outcome: "stuck:worktree_unreadable",
+            reason: `git worktree list failed: ${tail(list.err)}`,
+            exit: 30,
+          });
+    }
+  }
+
+  // One Docker box at a time (0012): a mutation step's Stryker run needs it, so a box held by
+  // another run is a start check's no, before box.sh new, never a stuck step.
+  if (step === "mutation") {
+    const lock = dockerLock(env);
+    const holder = dockerHolder(existsSync(lock) ? readFileSync(lock, "utf8") : null, isAlive);
+
+    if (holder !== null) {
+      return refusal({
+        outcome: endName({ kind: "refused", check: "docker_busy" }),
+        reason: `another Docker box is running (pid ${holder}); one at a time`,
+        exit: 3,
+      });
     }
   }
 
   const verdict =
-    s === "review" ? "Keep your verdict line, merge-ready or changes: <n>, as the report's first line.\n" : "";
-  // A mutation step's Stryker run: in a container with its own network, before any agent starts
-  // (0045). Docker missing, a second Docker box or a failed run is stuck. It never runs here.
-  let boxed = "";
-
-  if (s === "mutation") {
-    const out = at("-mutbox");
-    const ran = spawnSync(
-      process.execPath,
-      [
-        join(HERE, "mutbox.ts"),
-        "run",
-        "--checkout",
-        env.MAIN,
-        "--ticket",
-        ticket,
-        "--build",
-        base,
-        "--base",
-        root,
-        "--related",
-        related ?? "",
-        "--out",
-        out,
-        "--lock",
-        join(env.BOXES, "state", "docker.lock"),
-      ],
-      { stdio: ["ignore", "pipe", 2], encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-    );
-    const answer = mutboxAnswer(ran.stdout ?? "");
-
-    if (answer.outcome === "stuck") {
-      console.log(
-        JSON.stringify({
-          outcome: "stuck:mutbox",
-          lane,
-          step: s,
-          box,
-          reason: answer.reason,
-          report: join(out, "mutbox.json"),
-          kept: false,
-          exit: 30,
-        }),
-      );
-      process.exit(30);
-    }
-
-    boxed = mutboxTail(join(out, "mutbox.json"), answer.outcome === "skip");
-  }
-
+    step === "review" ? "Keep your verdict line, merge-ready or changes: <n>, as the report's first line.\n" : "";
   writeFileSync(
     ask.prompt,
-    readFileSync(brief, "utf8") + boxed + (claude ? claudeTail(ask, electron) : "") + TAIL + verdict,
+    readFileSync(p.brief, "utf8") +
+      planTail(step, plan, existsSync(plan) ? readFileSync(plan, "utf8") : null) +
+      mutationTail(step, saved?.steps ?? [], (path) => (existsSync(path) ? readFileSync(path, "utf8") : null)) +
+      agentTail(ask, electron) +
+      TAIL +
+      verdict,
   );
+  return Start.cases.prepared.make({ ask, electron });
+};
 
+/** drive's one line: how the step ended, as the chain and a reader of the log take it. */
+export interface DriveLine {
+  readonly outcome: string;
+  readonly lane: string;
+  readonly step: StepName;
+  readonly agent: AgentName;
+  readonly box: string;
+  readonly from: string;
+  readonly head: string;
+  readonly reason: string;
+  readonly report: string | null;
+  readonly kept: boolean;
+  readonly exit: number;
+  readonly model: string;
+}
+
+/**
+ * Run one prepared step to its end: the Electron lock and the one-typecheck wait, then the
+ * machine, its Cmds in the main checkout and its one agent turn in the box. Never throws: a
+ * crash is a `stuck:crash` line, with the box kept.
+ */
+export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<DriveLine> => {
+  const { ask } = p;
+  const lock = join(env.BOXES, "state", "electron.lock");
   const program = Effect.gen(function* () {
-    if (holdsElectron(s, electron)) {
+    if (holdsElectron(ask.step, p.electron)) {
       yield* takeElectron(env);
     }
 
     // One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
-    if (s === "tests" || s === "build" || s === "mutation") {
+    if (ask.step === "tests" || ask.step === "build" || ask.step === "mutation") {
       while (sh("pgrep", ["-x", "tsgo"]).code === 0) {
         yield* Effect.sleep("20 seconds");
       }
     }
 
-    const h = handlers(env);
     const handle = yield* run(machine, {
       ctx: undefined,
-      interpret: h,
-      subscribe: { draft: draftRunner(env) },
+      interpret: handlers(env),
+      subscribe: { draft: agentsDraft(env, agents) },
       terminal: (m) => m.phase === "over",
     });
     const runtime = yield* handle.ready;
@@ -1674,37 +1956,123 @@ const main = () => {
       return yield* Effect.die(`drive stopped in ${end.phase}`);
     }
 
-    const line = {
+    return {
       outcome: endName(end.outcome),
-      lane,
-      step: s,
+      lane: ask.lane,
+      step: ask.step,
       agent: ask.agent,
-      box,
-      from: base,
+      box: ask.box,
+      from: ask.base,
       head: end.head,
       reason: end.reason,
       report: writtenReport(ask),
       kept: end.kept,
       exit: exitOf(end.outcome),
-      ...(claude ? { model: ask.model, session: ask.session } : {}),
-    };
-    console.log(JSON.stringify(line));
-    process.exitCode = line.exit;
-  });
-  Effect.runPromise(Effect.scoped(program)).catch((e: unknown) => {
-    console.log(
-      JSON.stringify({
+      model: ask.model,
+    } satisfies DriveLine;
+  }).pipe(
+    Effect.scoped,
+    Effect.ensuring(
+      Effect.sync(() => {
+        if (holdsElectron(ask.step, p.electron)) {
+          rmSync(lock, { force: true });
+        }
+      }),
+    ),
+  );
+  return program.pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed({
         outcome: "stuck:crash",
-        lane,
-        step: s,
-        box,
-        reason: String(e),
+        lane: ask.lane,
+        step: ask.step,
+        agent: ask.agent,
+        box: ask.box,
+        from: ask.base,
+        head: ask.base,
+        reason: Cause.pretty(cause),
+        report: writtenReport(ask),
         kept: true,
         exit: 30,
+        model: ask.model,
+      } satisfies DriveLine),
+    ),
+  );
+};
+
+const main = () => {
+  const args = process.argv.slice(2);
+  const [lane = "", step = "", brief = ""] = args;
+  const agent = flag(args, "--agent") ?? "codex";
+
+  if (
+    !(STEPS as readonly string[]).includes(step) ||
+    !(AGENTS as readonly string[]).includes(agent) ||
+    !existsSync(brief)
+  ) {
+    usage();
+  }
+
+  const env = loadEnv();
+  const prepared = prepare(env, {
+    lane,
+    step: step as StepName,
+    brief,
+    agent: agent as AgentName,
+    model: flag(args, "--model"),
+    electron: args.includes("--electron"),
+    ticket: flag(args, "--ticket"),
+    branch: flag(args, "--branch"),
+    plan: flag(args, "--plan"),
+    from: flag(args, "--from"),
+  });
+
+  if (prepared._tag === "refused") {
+    if (prepared.exit === 2) {
+      console.error(`drive.ts: ${prepared.reason}`);
+      process.exit(2);
+    }
+
+    console.log(JSON.stringify({ outcome: prepared.outcome, reason: prepared.reason }));
+    process.exit(prepared.exit);
+  }
+
+  if (args.includes("--plan-only")) {
+    console.log(
+      JSON.stringify({
+        outcome: "plan-only",
+        ...prepared.ask,
+        electron: holdsElectron(prepared.ask.step, prepared.electron),
       }),
     );
-    process.exitCode = 30;
-  });
+    return;
+  }
+
+  const program = Effect.gen(function* () {
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
+    const line = yield* driveStep(env, agents, prepared);
+    console.log(JSON.stringify(line));
+    process.exitCode = line.exit;
+  }).pipe(
+    // A crash is still one JSON line, and the box is kept for the lead to read.
+    Effect.catchCause((cause) =>
+      Effect.sync(() => {
+        console.log(
+          JSON.stringify({
+            outcome: "stuck:crash",
+            lane,
+            step,
+            box: prepared.ask.box,
+            reason: Cause.pretty(cause),
+            kept: true,
+            exit: 30,
+          }),
+        );
+        process.exitCode = 30;
+      }),
+    ),
+  );
+  NodeRuntime.runMain(program);
 };
 
 if (import.meta.main) {

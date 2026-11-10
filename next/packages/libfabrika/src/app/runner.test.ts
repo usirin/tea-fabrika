@@ -30,16 +30,17 @@ import * as fc from "fast-check";
 import { type Envelope, type NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import { Mailbox, type From } from "../coordination/mailbox.ts";
 import { ProcessStore } from "../coordination/process-store.ts";
-import { Activity, Down, Recipient, recoverActivity, signalId } from "../coordination/process.ts";
+import { Activity, Down, Owner, Recipient, recoverActivity, signalId, Start } from "../coordination/process.ts";
 import { Archive } from "../data/archive.ts";
+import { LedgerTransaction } from "../data/ledger-transaction.ts";
 import { Doorbell, Ledger, LedgerError } from "../data/ledger.ts";
 import { Appended, type Entry, InputId, lineFor } from "../data/log.ts";
 import { RecordManager } from "../data/records.ts";
-import { type Sql } from "../data/referee.ts";
 import { SpanSink } from "../data/sink.ts";
 import { nodeSql } from "../data/sqlite.ts";
 import { type SpanRow } from "../data/trace.ts";
 import { processId, processIds } from "../id.test-support.ts";
+import type { Sql } from "../Sql.ts";
 import { type Update as WatcherUpdate } from "./entry.ts";
 import { Input, Program } from "./program.ts";
 
@@ -406,7 +407,9 @@ const world = async (
   const { ProgramRunner } = await import("./runner.ts");
   const { ProgramLoader, CheckedWriter, WatcherManager, Alarm, Recording } = await import("./entry.ts");
   const { ProcessStore } = await import("../coordination/process-store.ts");
+  const coordination = await import("../coordination/index.ts");
   const store = disk();
+  const managerDisk = disk();
   const ledgerDisk = disk();
   const authority = disk();
   const sink = disk();
@@ -757,17 +760,63 @@ const world = async (
         }),
       ).pipe(Layer.provide(mail())),
     );
+  // Ticket 402: every runner is supervised. The real manager keeps this world's process table in
+  // its own ledger, its first start names this world's process, and receipts live beside
+  // ProcessStore.
+  let pids = 0;
+  const nextPid = Effect.suspend(() => (pids++ === 0 ? Effect.succeed(process) : processId));
+  const manager = () => {
+    const { ProcessManager } = coordination;
+    const managed = ProcessManager.layer(
+      {
+        by: "SHA256:brain",
+        owner: Owner.cases.brain.make({}),
+        recipient: Recipient.cases.client.make({ client: "brain", session: DOOR }),
+      },
+      nextPid,
+    ).pipe(
+      // The manager's own ledger: its process facts never land on the streams these laws read.
+      Layer.provide(
+        Layer.mergeAll(
+          Ledger.sql(managerDisk.sql, { reader: "p11-manager" }),
+          LedgerTransaction.layer(managerDisk.sql),
+        ).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+      ),
+    );
+    const boot = Layer.effectDiscard(
+      ProcessManager.use((m) =>
+        m.status(NAME).pipe(
+          Effect.catch(() =>
+            m.start(
+              Start.cases.first.make({
+                id: `boot:${NAME}`,
+                name: NAME,
+                code: { program: p.name, hash: options.build ?? BUILD },
+              }),
+              from(),
+            ),
+          ),
+        ),
+      ).pipe(Effect.orDie),
+    );
+    return boot.pipe(Layer.provideMerge(managed));
+  };
   // One built layer shares a runner/permit across concurrent inputs. Rebuilding it is a wake.
   const runner = () =>
-    ProgramRunner.layer({
-      id: process,
-      name: NAME,
-      program: p.name,
-      build: options.build ?? BUILD,
-      owner: checkedOwner,
-    }).pipe(
+    ProgramRunner.layer(
+      {
+        id: process,
+        name: NAME,
+        program: p.name,
+        build: options.build ?? BUILD,
+        owner: checkedOwner,
+      },
+      { recovery: { sql: store.sql, name: NAME, capacity: 1024 ** 3 } },
+    ).pipe(
       Layer.provideMerge(
-        Layer.mergeAll(wiring(), processStore()).pipe(Layer.provideMerge(mail().pipe(Layer.provideMerge(base())))),
+        Layer.mergeAll(wiring(), processStore(), manager()).pipe(
+          Layer.provideMerge(mail().pipe(Layer.provideMerge(base()))),
+        ),
       ),
     );
   const layer = () =>
@@ -810,6 +859,7 @@ const world = async (
     fireCalls: () => fireCalls,
     reopen: () => {
       store.reopen();
+      managerDisk.reopen();
       ledgerDisk.reopen();
       authority.reopen();
       sink.reopen();

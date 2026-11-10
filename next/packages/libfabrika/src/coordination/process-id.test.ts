@@ -3,9 +3,9 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Cause, Clock, Effect, Exit, Option, Schema, Tracer } from "effect";
 import { TestClock } from "effect/testing";
-import { ProcessId } from "../data/trace.ts";
 import { processClocks } from "../id.test-support.ts";
 import * as Id from "../id.ts";
+import { ProcessId } from "../ProcessId.ts";
 import * as Coordination from "./index.ts";
 
 const maxClock = 2 ** 48 - 1;

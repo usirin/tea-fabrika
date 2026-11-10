@@ -39,6 +39,10 @@
 //  14. the sampler selects no range                skip
 //  15. a related test fails before any mutant      stuck baseline_failed, naming the tests
 //  16. no mutant got a real test result            stuck no_tested_mutant (a dry run is not proof)
+//  17. every sampled mutant is static, so Ignored   skip static_only, with the count: with
+//      (ignoreStatic stays on), and the run ended  ignoreStatic on, no test can judge it; a
+//      with none unreached                          mix with any other status, none at all, or a
+//                                                   capped run is still 16
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
@@ -348,6 +352,22 @@ export const judge = (seen: {
       outcome: "stuck",
       reason: "run_failed",
       detail: `run.sh exited ${seen.b.exit} in the container; see box/b/run.txt and box/b/log.txt`,
+    };
+  }
+
+  const ignored = seen.b.counts["Ignored"] ?? 0;
+
+  if (
+    seen.b.exit === 0 &&
+    seen.b.tested === 0 &&
+    seen.b.unreached === 0 &&
+    ignored > 0 &&
+    Object.keys(seen.b.counts).every((status) => status === "Ignored")
+  ) {
+    return {
+      outcome: "skip",
+      reason: "static_only",
+      detail: `every sampled mutant is static and Stryker ignored it (Ignored ${ignored}): with ignoreStatic on, no test can judge them`,
     };
   }
 

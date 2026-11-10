@@ -13,6 +13,8 @@ import "./box.sh?raw";
 import "./keepruns.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./agents.ts?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 import "./env.sh?raw";
@@ -59,6 +61,7 @@ const answer = [
   "Name each checked decided note and say where the change follows or breaks it.",
   "Any other actionable finding is one finding row with proof: never a ticket, a fix or only a mention, and never a security hole.",
   "Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl unchanged. Do not start another review round for it.",
+  "End with exactly one answer: line, as the last line.",
 ];
 
 const sections: Record<string, Record<string, string[]>> = {

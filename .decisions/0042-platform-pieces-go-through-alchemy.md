@@ -1,7 +1,7 @@
 ---
 id: 0042
 title: In next/, everything from Cloudflare Workers and the local runtime (Miniflare, workerd, the local stage) is used through Alchemy, never directly
-status: accepted
+status: amended-in-part by [0050](0050-a-ledger-step-is-a-plain-function.md), [0054](0054-read-upstream-before-patching-it.md)
 date: 2026-11-09
 tags: [alchemy, cloudflare, workers, miniflare, workerd, local-stage, bindings, effect, lint, next]
 ---
@@ -95,6 +95,8 @@ boots one).**
   reason to file issues, not to hand-write the piece. The local stage already does this: its
   lifecycle hook is a patch, with
   [alchemy issue 3184](https://github.com/alchemy-run/alchemy/issues/3184).
+  A patch comes only after reading Alchemy's docs and source for its own answer
+  ([0054](0054-read-upstream-before-patching-it.md)).
 - **The six gaps listed below are the exception: they are patched, and not reported as a batch**
   ([Amendments](#amendments), 2026-11-09). A gap found later keeps the rule above.
 - **If a gap cannot be patched in reasonable size, the direct use stays,** marked as an edge with
@@ -241,6 +243,8 @@ imports (4).
     `Workers/DurableObjectStorage.ts`. The form is `state.storage.transaction`, which takes an
     Effect and rolls back on a typed failure, a defect or an interruption. It runs the platform's
     `transaction`, not `transactionSync`. The object services move to it in the port's PR 8.
+    What runs inside it is a plain step, `Effect.sync(step)`, never an Effect body
+    ([0050](0050-a-ledger-step-is-a-plain-function.md)); the rest of this bullet holds.
   - **Read, not run.** Each form is a name in beta.84's source. The binding constraint above
     holds, and 0041's amendment lists what is not known: an Effect `fetch` and `ctx.props` have
     not run here, `props` on a service binding are dropped on a real deploy for now, and the

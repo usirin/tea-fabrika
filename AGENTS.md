@@ -255,7 +255,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Never wait on upstream.** When our work needs a change in a package we do not own (tea,
   Manti, Effect, any other), patch it locally with `pnpm patch`, file the upstream issue the same
   day, and keep building. The bump that takes the release deletes the patch
-  ([patch upstream locally](./docs/direction/patch-upstream-locally.md)).
+  ([patch upstream locally](./docs/direction/patch-upstream-locally.md)). First read the
+  package's decisions, patterns and source and build on its answer; patch only a gap or bug that
+  read proved ([0054](./.decisions/0054-read-upstream-before-patching-it.md)).
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.

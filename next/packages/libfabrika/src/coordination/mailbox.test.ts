@@ -18,9 +18,9 @@ import { Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../data/ledger.ts";
 import type { Line } from "../data/log.ts";
-import type { Sql } from "../data/referee.ts";
 import { nodeSql } from "../data/sqlite.ts";
 import { processId, processIds } from "../id.test-support.ts";
+import type { Sql } from "../Sql.ts";
 import { type From, type Letter, Mailbox, RunnerMail } from "./mailbox.ts";
 import { brainOnly, inRunnerSpace } from "./process.ts";
 

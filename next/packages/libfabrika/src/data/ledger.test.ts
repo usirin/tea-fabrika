@@ -23,9 +23,9 @@ import { Duration, Effect, Layer, ManagedRuntime, References, Schema, Stream, Tr
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../id.test-support.ts";
+import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./ledger.ts";
 import type { Line } from "./log.ts";
-import type { Sql } from "./referee.ts";
 import { nodeSql } from "./sqlite.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats

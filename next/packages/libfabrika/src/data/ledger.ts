@@ -2,8 +2,10 @@
 // the project object it is the referee on that object's SQLite (`Ledger.sql`); in any other object
 // it is the project's stub (`Ledger.remote`). Tier 1, P6 (laws p18 to p20, p94 and p95).
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
-import { Appended, Entry, type Line, PAGE, type Rev, Waited } from "./log.ts";
-import { Referee, type Sql, STREAM, tag } from "./referee.ts";
+import type { Rev } from "../Rev.ts";
+import type { Sql } from "../Sql.ts";
+import { Appended, Entry, type Line, PAGE, Waited } from "./log.ts";
+import { Referee, STREAM, tag } from "./referee.ts";
 import { short } from "./trace.ts";
 
 export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {

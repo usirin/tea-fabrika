@@ -1,7 +1,8 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import { LedgerError } from "../data/ledger.ts";
-import type { Sql } from "../data/referee.ts";
-import { ProcessId, short } from "../data/trace.ts";
+import { short } from "../data/trace.ts";
+import { ProcessId } from "../ProcessId.ts";
+import type { Sql } from "../Sql.ts";
 
 const Connection = Schema.Struct({
   key: Schema.NonEmptyString,

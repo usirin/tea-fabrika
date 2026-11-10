@@ -271,8 +271,8 @@ export class Control extends Brain.Control {
     if (request.headers.get("authorization") !== "Bearer "+this.ctx.props.token) return super.fetch(request);
     const q = await request.clone().json();
     if (!q.method.startsWith("test")) return super.fetch(request);
-    const stub = q.target === "project" ? this.env.PROJECT.getByName(q.project) : this.env.PROCESS.getByName(JSON.stringify([q.project,q.name]));
-    try {return Response.json({value: await stub[q.method](...q.args) ?? null});} catch {return Response.json({error:{reason:"unreachable"}});}
+    try {const stub = q.target === "project" ? this.env.PROJECT.getByName(q.project) : this.env.PROCESS.getByName(JSON.stringify([q.project, await this.env.PROJECT.getByName(q.project).processObject(q.name)]));
+      return Response.json({value: await stub[q.method](...q.args) ?? null});} catch {return Response.json({error:{reason:"unreachable"}});}
   }
 }`,
   );

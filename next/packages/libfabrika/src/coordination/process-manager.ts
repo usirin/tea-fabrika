@@ -1,8 +1,9 @@
 import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
 import { LedgerTransaction, type LedgerTurn } from "../data/ledger-transaction.ts";
 import { type Ledger, type LedgerError } from "../data/ledger.ts";
-import { lineFor, type Rev } from "../data/log.ts";
+import { lineFor } from "../data/log.ts";
 import { short } from "../data/trace.ts";
+import type { Rev } from "../Rev.ts";
 import { type From, type Letter, Mailbox } from "./mailbox.ts";
 import { processMail } from "./process-mail.ts";
 import {
@@ -374,6 +375,22 @@ export class ProcessManager extends Context.Service<
       }),
     );
 }
+
+/**
+ * The manager's calls as plain Effects, for a manager another object owns, such as the Worker's
+ * Project. A receive collects its letters so the call can cross an RPC; the Stream is rebuilt here.
+ * Refusals keep their ProcessError; a transport failure stays the caller's LedgerError.
+ */
+export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "receive"> & {
+  readonly receive: (process: string, after: Rev) => Effect.Effect<ReadonlyArray<Letter>, Failure>;
+};
+
+export const remoteProcessManager = (calls: ProcessCalls): Layer.Layer<ProcessManager> =>
+  Layer.succeed(ProcessManager, {
+    ...calls,
+    receive: (process, after) =>
+      Stream.unwrap(Effect.map(calls.receive(process, after), (letters) => Stream.fromIterable(letters))),
+  });
 
 export const CoordinationLayer = (
   caller: Wiring,
