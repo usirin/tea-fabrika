@@ -18,6 +18,15 @@ const identifier = fc
 const escaped = (key: string) =>
 	`"${Array.from({length: key.length}, (_, i) => `\\u${key.charCodeAt(i).toString(16).padStart(4, "0")}`).join("")}"`;
 
+const parameterModifiers = [
+	"public",
+	"protected",
+	"private",
+	"readonly",
+	"public readonly",
+	"protected readonly",
+	"private readonly",
+];
 const declarations = (key: string, i: number) => [
 	`const a${i} = {${key}: 1};`,
 	`const b${i} = {${key}() {}};`,
@@ -30,6 +39,9 @@ const declarations = (key: string, i: number) => [
 	`class I${i} {set ${key}(value: number) {}}`,
 	`abstract class R${i} {abstract ${key}: number;}`,
 	`abstract class S${i} {abstract ${key}(): void;}`,
+	`class T${i} {accessor ${key} = 1;}`,
+	`class U${i} {static accessor ${key} = 1;}`,
+	`abstract class V${i} {abstract accessor ${key}: number;}`,
 	`type J${i} = {readonly ${key}?: number};`,
 	`type K${i} = {${key}(): void};`,
 	`interface L${i} {readonly ${key}: number}`,
@@ -38,6 +50,13 @@ const declarations = (key: string, i: number) => [
 	`const o${i} = Schema.TaggedStruct("o", {${key}: Schema.String});`,
 	`const p${i} = Schema.TaggedUnion({saved: {${key}: Schema.String}});`,
 	`class Q${i} extends Schema.TaggedError<Q${i}>()("q", {${key}: Schema.String}) {}`,
+	// A constructor property needs a binding identifier, unlike other class keys.
+	...(/^[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*$/u.test(key)
+		? parameterModifiers.flatMap((modifier, n) => [
+				`class P${i}_${n} {constructor(${modifier} ${key}: number) {}}`,
+				`class D${i}_${n} {constructor(${modifier} ${key}: number = 1) {}}`,
+			])
+		: []),
 ];
 
 it("rejects exactly why across generated Unicode keys and every declaration form", async () => {
@@ -51,11 +70,16 @@ it("rejects exactly why across generated Unicode keys and every declaration form
 				const lines: string[] = [];
 				const expected: number[] = [];
 				for (const [i, name] of keys.entries()) {
-					const spellings = [JSON.stringify(name), escaped(name), `[${JSON.stringify(name)}]`];
+					const spellings = [
+						JSON.stringify(name),
+						escaped(name),
+						`[${JSON.stringify(name)}]`,
+						`[\`${escaped(name).slice(1, -1)}\`]`,
+					];
 					if (/^[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*$/u.test(name))
 						spellings.push(name);
 					for (const [j, spelling] of spellings.entries()) {
-						for (const source of declarations(spelling, i * 4 + j)) {
+						for (const source of declarations(spelling, i * 5 + j)) {
 							lines.push(source);
 							if (name === "why") expected.push(lines.length);
 						}
@@ -89,10 +113,12 @@ it("real config keeps generated next paths and tests covered and today's paths o
 					`programs/tracker/src/${name}.${extension}`,
 				];
 				const result = await plant(
-					Object.fromEntries(paths.map((path) => [path, `const a = {${key}: 1};`])),
+					Object.fromEntries(paths.map((path) => [path, declarations(key, 0).join("\n")])),
 				);
 				for (const [i, path] of paths.entries())
-					expect(result(CODE, path)).toEqual(i < 3 ? [1] : []);
+					expect(result(CODE, path)).toEqual(
+						i < 3 ? declarations(key, 0).map((_, n) => n + 1) : [],
+					);
 			},
 		),
 		runs,
@@ -113,6 +139,9 @@ it("generated values, dynamic keys, local names, reads and neighboring names pas
 					'const d = a.why; const e = a["why"]; const f = "why" in a;',
 					"const {why: borrowed} = a; const {why: renamed = why} = a;",
 					"function read({why}: {reason: string}) {return why;}",
+					// A plain constructor parameter is a local; no modifier makes it a class key.
+					"class Plain {constructor(why: string) {}}",
+					`class Local {constructor(why: string = ${JSON.stringify(value)}) {}}`,
 					'const g: A["why"] = borrowed; a.why = why;',
 					"// why is an ordinary English word here",
 				].join("\n");

@@ -110,20 +110,21 @@ const request = (id: string | number, stream = "counter:1/inbox", after = 0) =>
 	JSON.stringify({jsonrpc: "2.0", id, method: "ledger.wait", params: {stream, after}});
 
 describe("P12 Gateway attachment laws", () => {
-	// A failure's own reason is read back, so a reason other than the unreachable fallback must
-	// reach the JSON-RPC error's code, message and data unchanged.
-	law("a failed wait registration answers once and removes the saved request", ({id, after}) =>
+	// Cross each generated request with the schema's full finite reason domain, including
+	// unreachable from the original law, so no fallback can hide a lost reason.
+	law("a failed wait registration answers once and removes the saved request", ({id}) =>
 		Effect.gen(function* () {
-			const reason = after % 2 === 0 ? "bad_row" : "storage";
-			const f = yield* setup(() => Effect.fail(new LedgerError({reason})));
-			// Inspect state even when the event fails, so an escaped failure cannot hide the lost reply.
-			yield* Effect.exit(f.c.frame(request(id)));
-			expect
-				.soft(f.frames)
-				.toEqual([{jsonrpc: "2.0", id, error: {code: -32000, message: reason, data: {reason}}}]);
-			expect(f.saved()).toMatchObject({waits: []});
-			yield* f.c.ring("counter:1/inbox", 1);
-			expect(f.frames).toHaveLength(1);
+			for (const reason of LedgerError.fields.reason.literals) {
+				const f = yield* setup(() => Effect.fail(new LedgerError({reason})));
+				// Inspect state even when the event fails, so an escaped failure cannot hide the lost reply.
+				yield* Effect.exit(f.c.frame(request(id)));
+				expect
+					.soft(f.frames)
+					.toEqual([{jsonrpc: "2.0", id, error: {code: -32000, message: reason, data: {reason}}}]);
+				expect(f.saved()).toMatchObject({waits: []});
+				yield* f.c.ring("counter:1/inbox", 1);
+				expect(f.frames).toHaveLength(1);
+			}
 		}),
 	);
 	law("each saved wait receives the first later revision on its stream", ({after}) =>

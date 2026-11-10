@@ -11,7 +11,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, beforeEach, describe, expect, it, vi} from "@effect/vitest";
-import {Id} from "@kampus/libfabrika";
+import {Id, Sent} from "@kampus/libfabrika";
 import * as C from "@kampus/libfabrika/coordination";
 import {
 	Archive,
@@ -299,7 +299,7 @@ const world = Effect.fnUntraced(function* (
 		notify: (_client: string, _news: unknown): Effect.Effect<void, LedgerError> => Effect.void,
 		next: () => C.ProcessIdGenerator.use((g) => g.next),
 		// What the injected program answers a delivered letter with, as the runner's Sent does.
-		answer: undefined as {readonly _tag: "refused"; readonly reason: string} | undefined,
+		answer: undefined as typeof Sent.cases.refused.Type | undefined,
 	};
 	const deliver = (process: string, envelope: Envelope, trace: {traceId: string; spanId: string}) =>
 		Effect.gen(function* () {
@@ -1998,33 +1998,54 @@ describe("P10 inputs, retries and signer", () => {
 				}).pipe(w.provide);
 			}),
 	);
-	// scenario: two program answers cover both branches of the dead-letter rule.
-	for (const [reason, answered] of [
-		["dead", {_tag: "refused", reason: "dead"}],
-		["full", {_tag: "refused", reason: "full"}],
-	] as const)
-		it.effect(
-			`scenario: a ${reason} refusal from the program ${reason === "dead" ? "stops the outbox with its bare reason" : "keeps its full reply"}`,
-			() =>
-				Effect.gen(function* () {
-					const w = yield* world();
-					yield* Effect.gen(function* () {
-						const d = yield* Door;
-						const {client} = yield* online(d, w);
-						w.controls.answer = answered;
-						const reply = yield* d.route(client, "process.send", request(`answer-${reason}`));
-						expect(reply).toEqual(
-							reason === "dead"
-								? {_tag: "refused", reason: "dead"}
-								: {_tag: "ok", result: answered},
-						);
-						// The saved answer is replayed the same way for the same letter.
-						expect(yield* d.route(client, "process.send", request(`answer-${reason}`))).toEqual(
-							reply,
-						);
-					}).pipe(w.provide);
-				}),
-		);
+	// Delivery returns Schema.Json, so non-finite numbers are not valid program replies.
+	// Cross Sent's generated refusals with all four field-presence cases; dead and full from
+	// review 1 stay in every run, alongside arbitrary reasons from the existing schema.
+	it.effect.prop(
+		"program refusals preserve their full reply on delivery and settled replay, except dead",
+		{
+			refusal: Sent.cases.refused.check(Schema.makeFilter(Schema.is(Schema.Json))),
+			now: Schema.Finite,
+			most: Schema.Finite,
+		},
+		({refusal, now, most}) =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					let n = 0;
+					for (const reason of new Set([refusal.reason, "dead", "full"]))
+						for (const hasNow of [false, true])
+							for (const hasMost of [false, true]) {
+								const answered = Sent.cases.refused.make({
+									reason,
+									...(hasNow ? {now: refusal.now ?? now} : {}),
+									...(hasMost ? {most: refusal.most ?? most} : {}),
+								});
+								w.controls.answer = answered;
+								const params = request(`answer-${n++}`);
+								const expected =
+									reason === "dead"
+										? {_tag: "refused", reason: "dead"}
+										: {_tag: "ok", result: answered};
+								// These are JSON replies: -0 and 0 have the same wire representation.
+								const wire = (value: unknown) => JSON.parse(JSON.stringify(value));
+								expect(wire(yield* d.route(client, "process.send", params))).toEqual(
+									wire(expected),
+								);
+								const delivered = w.deliveries.length;
+								// A settled retry must use the saved result rather than call the program again.
+								w.controls.answer = Sent.cases.refused.make({reason: "changed-after-settle"});
+								expect(wire(yield* d.route(client, "process.send", params))).toEqual(
+									wire(expected),
+								);
+								expect(w.deliveries).toHaveLength(delivered);
+							}
+				}).pipe(w.provide);
+			}),
+		{arbitrary: {seed: SEED, runs: 20}},
+	);
 	it.effect(
 		"question 16: authority is saved before delivery, and a failed delivery retries the same parent",
 		() =>

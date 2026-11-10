@@ -24,9 +24,17 @@ export const noWhyKey: CreateRule = {
 				if (node.parent.type === "ObjectExpression") check(node.key, node.computed);
 			},
 			PropertyDefinition: (node) => check(node.key, node.computed),
+			AccessorProperty: (node) => check(node.key, node.computed),
 			MethodDefinition: (node) => check(node.key, node.computed),
 			TSAbstractPropertyDefinition: (node) => check(node.key, node.computed),
+			TSAbstractAccessorProperty: (node) => check(node.key, node.computed),
 			TSAbstractMethodDefinition: (node) => check(node.key, node.computed),
+			TSParameterProperty(node) {
+				check(
+					node.parameter.type === "AssignmentPattern" ? node.parameter.left : node.parameter,
+					false,
+				);
+			},
 			TSPropertySignature: (node) => check(node.key, node.computed),
 			TSMethodSignature: (node) => check(node.key, node.computed),
 		};
