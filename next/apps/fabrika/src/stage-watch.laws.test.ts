@@ -1,45 +1,38 @@
 // T421, next/. The dev stage serves a prebuilt brain, and Alchemy watches its folder to restart
 // workerd on a change. On macOS a watch also gets events from before it started (the build
 // folder's own creation, up to seconds late), so an event alone is no proof of a change.
+// The law hands the watcher its file events itself: the real macOS ones come when they like.
 import {createHash} from "node:crypto";
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
-import {tmpdir} from "node:os";
-import {join} from "node:path";
 import {watchBundleDirectory} from "@alchemy.run/cloudflare/Workers/Sources/shared";
 import {NodeServices} from "@effect/platform-node";
-import {Deferred, Effect, Queue, Stream} from "effect";
-import {afterEach, describe, expect, it} from "vitest";
-
-const homes: Array<string> = [];
-
-afterEach(() => {
-	for (const home of homes.splice(0)) {
-		rmSync(home, {recursive: true, force: true});
-	}
-});
+import {Deferred, Effect, FileSystem, Layer, Queue, Stream} from "effect";
+import {describe, expect, it} from "vitest";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
 describe("T421 the dev stage's watch on the build folder", () => {
-	it("scenario: a file event that changes no byte restarts nothing; changed bytes restart once", () => {
-		const home = mkdtempSync(join(tmpdir(), "t421-"));
-		homes.push(home);
-		const main = join(home, "brain.mjs");
-		writeFileSync(main, "export default 1");
-		return Effect.runPromise(
+	it("scenario: a file event that changes no byte restarts nothing; changed bytes restart once", () =>
+		Effect.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
+					const events = yield* Queue.unbounded<FileSystem.WatchEvent>();
 					const reads = yield* Queue.unbounded<string>();
 					const changed = yield* Deferred.make<void>();
 					const seen: Array<string> = [];
+					let content = "export default 1";
 					const read = Effect.sync(() => {
-						const content = readFileSync(main, "utf8");
-						const hash = sha(content);
-						Queue.offerUnsafe(reads, hash);
-						const file = {path: "brain.mjs", content, hash};
-						return {files: [file] as [typeof file], hash};
+						const file = {path: "brain.mjs", content, hash: sha(content)};
+						Queue.offerUnsafe(reads, file.hash);
+						return {files: [file] as [typeof file], hash: file.hash};
 					});
-					yield* watchBundleDirectory({main, read}).pipe(
+					const watched = Layer.effect(
+						FileSystem.FileSystem,
+						Effect.map(FileSystem.FileSystem, (fs) => ({
+							...fs,
+							watch: () => Stream.fromQueue(events),
+						})),
+					).pipe(Layer.provide(NodeServices.layer));
+					yield* watchBundleDirectory({main: "/build/brain.mjs", read}).pipe(
 						Stream.runForEach((event) =>
 							Effect.gen(function* () {
 								seen.push(event._tag === "Success" ? `Success ${event.output.hash}` : event._tag);
@@ -49,13 +42,16 @@ describe("T421 the dev stage's watch on the build folder", () => {
 								}
 							}),
 						),
+						Effect.provide(watched),
 						Effect.forkScoped,
 					);
 					// The first read is the serve. Each later read is the watch answering a file event.
 					yield* Queue.take(reads);
-					writeFileSync(main, "export default 1");
+					// macOS's late event: the folder itself, with every byte as it was.
+					yield* Queue.offer(events, {_tag: "Update", path: "/build"});
 					yield* Queue.take(reads);
-					writeFileSync(main, "export default 2");
+					content = "export default 2";
+					yield* Queue.offer(events, {_tag: "Update", path: "/build/brain.mjs"});
 					yield* Deferred.await(changed);
 					expect(seen).toEqual([
 						`Success ${sha("export default 1")}`,
@@ -63,7 +59,6 @@ describe("T421 the dev stage's watch on the build folder", () => {
 						`Success ${sha("export default 2")}`,
 					]);
 				}),
-			).pipe(Effect.provide(NodeServices.layer)),
-		);
-	});
+			),
+		));
 });
