@@ -1,4 +1,4 @@
-import {Schema} from "effect";
+import { Schema } from "effect";
 
 // Brief: one schema per role, filled by code, and turned into the agent's
 // first message by a render function (docs/direction/new-combos.md). The
@@ -27,17 +27,17 @@ import {Schema} from "effect";
 export type BriefSchema<T> = Schema.Codec<T, T>;
 
 /** `I`, with every field `T` has no slot for typed `never`: an extra field does not compile. */
-export type Only<T, I> = I & {readonly [K in Exclude<keyof I, keyof T>]: never};
+export type Only<T, I> = I & { readonly [K in Exclude<keyof I, keyof T>]: never };
 
 export interface Brief<R extends string, T> {
-	readonly role: R;
-	readonly schema: BriefSchema<T>;
-	/** Check a filled brief against the role's schema; an extra field anywhere throws. */
-	readonly fill: <I extends T>(brief: Only<T, I>) => T;
-	/** The agent's first message, made from the brief. */
-	readonly render: (brief: T) => string;
-	/** A refine loop's prompt: the brief on the first try, the Check's note after it, in the same conversation. */
-	readonly prompt: (brief: T, note: string | null) => string;
+  readonly role: R;
+  readonly schema: BriefSchema<T>;
+  /** Check a filled brief against the role's schema; an extra field anywhere throws. */
+  readonly fill: <I extends T>(brief: Only<T, I>) => T;
+  /** The agent's first message, made from the brief. */
+  readonly render: (brief: T) => string;
+  /** A refine loop's prompt: the brief on the first try, the Check's note after it, in the same conversation. */
+  readonly prompt: (brief: T, note: string | null) => string;
 }
 
 /** The brief a {@link Brief} fills. */
@@ -45,17 +45,17 @@ export type BriefOf<B> = B extends Brief<string, infer T> ? T : never;
 
 /** Define one role's brief: its name, its schema, and how it reads as a message. */
 export function defineBrief<const R extends string, T>(config: {
-	readonly role: R;
-	readonly schema: BriefSchema<T>;
-	readonly render: (brief: T) => string;
+  readonly role: R;
+  readonly schema: BriefSchema<T>;
+  readonly render: (brief: T) => string;
 }): Brief<R, T> {
-	const decode = Schema.decodeUnknownSync(config.schema, {onExcessProperty: "error"});
-	const {role, schema, render} = config;
-	return {
-		role,
-		schema,
-		fill: (brief) => decode(brief),
-		render,
-		prompt: (brief, note) => (note === null ? render(brief) : note),
-	};
+  const decode = Schema.decodeUnknownSync(config.schema, { onExcessProperty: "error" });
+  const { role, schema, render } = config;
+  return {
+    role,
+    schema,
+    fill: (brief) => decode(brief),
+    render,
+    prompt: (brief, note) => (note === null ? render(brief) : note),
+  };
 }

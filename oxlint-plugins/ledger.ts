@@ -8,9 +8,9 @@
 
 /** One finding, or one ledger entry: the same three keys. */
 export interface Finding {
-	readonly file: string;
-	readonly rule: string;
-	readonly code: string;
+  readonly file: string;
+  readonly rule: string;
+  readonly code: string;
 }
 
 /** Where a ledger entry may point: only the lead tooling, never `next/` or anywhere else. */
@@ -21,9 +21,9 @@ export const fingerprint = (line: string): string => line.trim().replace(/\s+/g,
 
 /** The ledger entries outside `.agents/`: each one is refused, not read. */
 export const outside = (entries: readonly Finding[]): readonly Finding[] =>
-	entries.filter((entry) => !entry.file.startsWith(LEDGER_ROOT));
+  entries.filter((entry) => !entry.file.startsWith(LEDGER_ROOT));
 
-const key = ({file, rule, code}: Finding) => JSON.stringify([file, rule, code]);
+const key = ({ file, rule, code }: Finding) => JSON.stringify([file, rule, code]);
 
 /**
  * Splits the findings into those the ledger names and those that block, and keeps the entries a
@@ -31,35 +31,35 @@ const key = ({file, rule, code}: Finding) => JSON.stringify([file, rule, code]);
  * need two entries.
  */
 export const settle = (
-	entries: readonly Finding[],
-	findings: readonly Finding[],
+  entries: readonly Finding[],
+  findings: readonly Finding[],
 ): {
-	readonly waived: readonly Finding[];
-	readonly blocks: readonly Finding[];
-	readonly kept: readonly Finding[];
+  readonly waived: readonly Finding[];
+  readonly blocks: readonly Finding[];
+  readonly kept: readonly Finding[];
 } => {
-	const open = new Map<string, number[]>();
+  const open = new Map<string, number[]>();
 
-	for (const [i, entry] of entries.entries()) {
-		if (entry.file.startsWith(LEDGER_ROOT)) {
-			open.set(key(entry), [...(open.get(key(entry)) ?? []), i]);
-		}
-	}
+  for (const [i, entry] of entries.entries()) {
+    if (entry.file.startsWith(LEDGER_ROOT)) {
+      open.set(key(entry), [...(open.get(key(entry)) ?? []), i]);
+    }
+  }
 
-	const used = new Set<number>();
-	const waived: Finding[] = [];
-	const blocks: Finding[] = [];
+  const used = new Set<number>();
+  const waived: Finding[] = [];
+  const blocks: Finding[] = [];
 
-	for (const finding of findings) {
-		const i = open.get(key(finding))?.shift();
+  for (const finding of findings) {
+    const i = open.get(key(finding))?.shift();
 
-		if (i === undefined) {
-			blocks.push(finding);
-		} else {
-			used.add(i);
-			waived.push(finding);
-		}
-	}
+    if (i === undefined) {
+      blocks.push(finding);
+    } else {
+      used.add(i);
+      waived.push(finding);
+    }
+  }
 
-	return {waived, blocks, kept: entries.filter((_, i) => used.has(i))};
+  return { waived, blocks, kept: entries.filter((_, i) => used.has(i)) };
 };

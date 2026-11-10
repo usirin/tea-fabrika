@@ -1,8 +1,8 @@
-import {defineMachine, noop} from "@demlik/tea";
-import {Cmd} from "@demlik/tea/effect";
-import {Schema} from "effect";
-import {isPortName} from "./bridge.ts";
-import {type Attached, type Read, reader} from "./messages.ts";
+import { defineMachine, noop } from "@demlik/tea";
+import { Cmd } from "@demlik/tea/effect";
+import { Schema } from "effect";
+import { isPortName } from "./bridge.ts";
+import { type Attached, type Read, reader } from "./messages.ts";
 
 // The link between the host and the app, as tmux's socket is between its server and a client:
 // what goes over it, and the handshake that starts it. No platform here: the host's server
@@ -40,11 +40,9 @@ import {type Attached, type Read, reader} from "./messages.ts";
 export const PROTOCOL = 2;
 
 /** A port's name, as the page's bridge takes it (bridge.ts). */
-const Port = Schema.String.check(
-	Schema.makeFilter((name) => isPortName(name) || "not a port's name"),
-);
+const Port = Schema.String.check(Schema.makeFilter((name) => isPortName(name) || "not a port's name"));
 
-const Hello = Schema.Struct({type: Schema.Literal("hello"), version: Schema.Int});
+const Hello = Schema.Struct({ type: Schema.Literal("hello"), version: Schema.Int });
 
 /**
  * The host's hello names its build too (build-id.ts), so the app can tell a host that runs older
@@ -55,34 +53,34 @@ const Hello = Schema.Struct({type: Schema.Literal("hello"), version: Schema.Int}
  *   host  {"type":"hello","version":1,"build":"3f9a0c21b7d4"}
  */
 const HostHello = Schema.Struct({
-	type: Schema.Literal("hello"),
-	version: Schema.Int,
-	build: Schema.optionalKey(Schema.String),
+  type: Schema.Literal("hello"),
+  version: Schema.Int,
+  build: Schema.optionalKey(Schema.String),
 });
 
 /** What the app tells the host. */
 export const Up = Schema.Union([
-	Hello,
-	/** A page loaded, or loaded again: every port it had is dead, and it is to be shown everything. */
-	Schema.Struct({type: Schema.Literal("page")}),
-	/** The page went: the window closed. Nothing more is shown until the next `page`. */
-	Schema.Struct({type: Schema.Literal("away")}),
-	/** The page sent `m` on the port named `port`: for that tile, that run, or the desk alone. */
-	Schema.Struct({type: Schema.Literal("on"), port: Port, m: Schema.Unknown}),
+  Hello,
+  /** A page loaded, or loaded again: every port it had is dead, and it is to be shown everything. */
+  Schema.Struct({ type: Schema.Literal("page") }),
+  /** The page went: the window closed. Nothing more is shown until the next `page`. */
+  Schema.Struct({ type: Schema.Literal("away") }),
+  /** The page sent `m` on the port named `port`: for that tile, that run, or the desk alone. */
+  Schema.Struct({ type: Schema.Literal("on"), port: Port, m: Schema.Unknown }),
 ]);
 export type Up = typeof Up.Type;
 
 /** What the host tells the app. */
 export const Down = Schema.Union([
-	HostHello,
-	/** Give the page a fresh port of this name; one there already closes. */
-	Schema.Struct({type: Schema.Literal("port"), port: Port}),
-	/** Send `m` to the page on the port of this name. */
-	Schema.Struct({type: Schema.Literal("to"), port: Port, m: Schema.Unknown}),
-	/** The port of this name goes: its tile closed, or its run ended. */
-	Schema.Struct({type: Schema.Literal("gone"), port: Port}),
-	/** The last tile closed: the window closes, as closing the last tab does in Terminal. */
-	Schema.Struct({type: Schema.Literal("close")}),
+  HostHello,
+  /** Give the page a fresh port of this name; one there already closes. */
+  Schema.Struct({ type: Schema.Literal("port"), port: Port }),
+  /** Send `m` to the page on the port of this name. */
+  Schema.Struct({ type: Schema.Literal("to"), port: Port, m: Schema.Unknown }),
+  /** The port of this name goes: its tile closed, or its run ended. */
+  Schema.Struct({ type: Schema.Literal("gone"), port: Port }),
+  /** The last tile closed: the window closes, as closing the last tab does in Terminal. */
+  Schema.Struct({ type: Schema.Literal("close") }),
 ]);
 export type Down = typeof Down.Type;
 
@@ -96,8 +94,8 @@ type Side = "host" | "app";
 
 /** What the link is started with: its side, and the version it speaks. */
 export interface LinkCtx {
-	readonly side: Side;
-	readonly ours: number;
+  readonly side: Side;
+  readonly ours: number;
 }
 
 /**
@@ -105,134 +103,131 @@ export interface LinkCtx {
  * keeps its side and the version it speaks, from `init`'s `LinkCtx`.
  */
 export type Link = LinkCtx &
-	(
-		| {readonly at: "hello"}
-		| {readonly at: "up"}
-		| {readonly at: "refused"; readonly theirs: number}
-		| {readonly at: "closed"; readonly why: string}
-	);
+  (
+    | { readonly at: "hello" }
+    | { readonly at: "up" }
+    | { readonly at: "refused"; readonly theirs: number }
+    | { readonly at: "closed"; readonly why: string }
+  );
 
 export type LinkMsg =
-	/** The other side's hello, with the version it speaks. */
-	| {readonly type: "hello"; readonly version: number}
-	/** Any other line of the other side, read by its schema already. */
-	| {readonly type: "line"; readonly m: unknown}
-	/** A line that did not read. */
-	| {readonly type: "bad"; readonly why: string}
-	/** The socket ended, from either side. */
-	| {readonly type: "ended"; readonly why: string};
+  /** The other side's hello, with the version it speaks. */
+  | { readonly type: "hello"; readonly version: number }
+  /** Any other line of the other side, read by its schema already. */
+  | { readonly type: "line"; readonly m: unknown }
+  /** A line that did not read. */
+  | { readonly type: "bad"; readonly why: string }
+  /** The socket ended, from either side. */
+  | { readonly type: "ended"; readonly why: string };
 
 const Done = Schema.Null;
 
 /** Say our hello, with the version we speak. */
 export const greet = Cmd.make("greet", {
-	input: Schema.Struct({version: Schema.Int}),
-	ok: Done,
-	err: [],
+  input: Schema.Struct({ version: Schema.Int }),
+  ok: Done,
+  err: [],
 });
 
 /** Hand the line on: to the host's clients, or to the app's relay. */
 export const deliver = Cmd.make("deliver", {
-	input: Schema.Struct({m: Schema.Unknown}),
-	ok: Done,
-	err: [],
+  input: Schema.Struct({ m: Schema.Unknown }),
+  ok: Done,
+  err: [],
 });
 
 /** The other side speaks another version: say so plainly. */
 export const refuse = Cmd.make("refuse", {
-	input: Schema.Struct({theirs: Schema.Int, ours: Schema.Int}),
-	ok: Done,
-	err: [],
+  input: Schema.Struct({ theirs: Schema.Int, ours: Schema.Int }),
+  ok: Done,
+  err: [],
 });
 
 /** Close the socket. */
 export const drop = Cmd.make("drop", {
-	input: Schema.Struct({why: Schema.String}),
-	ok: Done,
-	err: [],
+  input: Schema.Struct({ why: Schema.String }),
+  ok: Done,
+  err: [],
 });
 
 export type LinkCmd =
-	| ReturnType<typeof greet>
-	| ReturnType<typeof deliver>
-	| ReturnType<typeof refuse>
-	| ReturnType<typeof drop>;
+  | ReturnType<typeof greet>
+  | ReturnType<typeof deliver>
+  | ReturnType<typeof refuse>
+  | ReturnType<typeof drop>;
 
 type Step = readonly [Link, readonly LinkCmd[]];
 
-const ctxOf = (s: Link): LinkCtx => ({side: s.side, ours: s.ours});
+const ctxOf = (s: Link): LinkCtx => ({ side: s.side, ours: s.ours });
 
-const closed = (s: Link, why: string): Step => [{...ctxOf(s), at: "closed", why}, [drop({why})]];
+const closed = (s: Link, why: string): Step => [{ ...ctxOf(s), at: "closed", why }, [drop({ why })]];
 
 /** Whatever comes once the link is refused or closed changes nothing, and says nothing. */
 const over = (s: Link): boolean => s.at === "refused" || s.at === "closed";
 
 export const linkMachine = defineMachine({
-	types: {model: {} as Link, msg: {} as LinkMsg, ctx: {} as LinkCtx},
-	cmds: [greet, deliver, refuse, drop],
-	init: (_loaded, ctx) => [
-		{...ctx, at: "hello"},
-		ctx.side === "app" ? [greet({version: ctx.ours})] : [],
-	],
-	update: {
-		hello: (s, m) => {
-			if (over(s)) {
-				return [s, []];
-			}
+  types: { model: {} as Link, msg: {} as LinkMsg, ctx: {} as LinkCtx },
+  cmds: [greet, deliver, refuse, drop],
+  init: (_loaded, ctx) => [{ ...ctx, at: "hello" }, ctx.side === "app" ? [greet({ version: ctx.ours })] : []],
+  update: {
+    hello: (s, m) => {
+      if (over(s)) {
+        return [s, []];
+      }
 
-			if (s.at === "up") {
-				return closed(s, "a second hello");
-			}
+      if (s.at === "up") {
+        return closed(s, "a second hello");
+      }
 
-			const back = s.side === "host" ? [greet({version: s.ours})] : [];
+      const back = s.side === "host" ? [greet({ version: s.ours })] : [];
 
-			if (m.version === s.ours) {
-				return [{...ctxOf(s), at: "up"}, back];
-			}
+      if (m.version === s.ours) {
+        return [{ ...ctxOf(s), at: "up" }, back];
+      }
 
-			const why = `the other side speaks version ${m.version}, this one ${s.ours}`;
-			return [
-				{...ctxOf(s), at: "refused", theirs: m.version},
-				[...back, refuse({theirs: m.version, ours: s.ours}), drop({why})],
-			];
-		},
-		line: (s, m) => {
-			if (over(s)) {
-				return [s, []];
-			}
+      const why = `the other side speaks version ${m.version}, this one ${s.ours}`;
+      return [
+        { ...ctxOf(s), at: "refused", theirs: m.version },
+        [...back, refuse({ theirs: m.version, ours: s.ours }), drop({ why })],
+      ];
+    },
+    line: (s, m) => {
+      if (over(s)) {
+        return [s, []];
+      }
 
-			if (s.at === "hello") {
-				return closed(s, "a line before the hello");
-			}
+      if (s.at === "hello") {
+        return closed(s, "a line before the hello");
+      }
 
-			return [s, [deliver({m: m.m})]];
-		},
-		bad: (s, m) => (over(s) ? [s, []] : closed(s, `a line that does not read: ${m.why}`)),
-		ended: (s, m) => (over(s) ? [s, []] : [{...ctxOf(s), at: "closed", why: m.why}, []]),
-		greet_ok: noop,
-		greet_err: noop,
-		deliver_ok: noop,
-		deliver_err: noop,
-		refuse_ok: noop,
-		refuse_err: noop,
-		drop_ok: noop,
-		drop_err: noop,
-	},
+      return [s, [deliver({ m: m.m })]];
+    },
+    bad: (s, m) => (over(s) ? [s, []] : closed(s, `a line that does not read: ${m.why}`)),
+    ended: (s, m) => (over(s) ? [s, []] : [{ ...ctxOf(s), at: "closed", why: m.why }, []]),
+    greet_ok: noop,
+    greet_err: noop,
+    deliver_ok: noop,
+    deliver_err: noop,
+    refuse_ok: noop,
+    refuse_err: noop,
+    drop_ok: noop,
+    drop_err: noop,
+  },
 });
 
 /** A line off the wire, read already, as the link machine hears it: a hello, another line, or one that does not read. */
 export const linkMsgOf = (got: Read<Up | Down>): LinkMsg => {
-	if (got.kind === "refused") {
-		return {type: "bad", why: got.why};
-	}
+  if (got.kind === "refused") {
+    return { type: "bad", why: got.why };
+  }
 
-	const msg = got.msg;
+  const msg = got.msg;
 
-	if (msg.type === "hello") {
-		return {type: "hello", version: msg.version};
-	}
+  if (msg.type === "hello") {
+    return { type: "hello", version: msg.version };
+  }
 
-	return {type: "line", m: msg};
+  return { type: "line", m: msg };
 };
 
 /**
@@ -243,4 +238,4 @@ export const linkMsgOf = (got: Read<Up | Down>): LinkMsg => {
  *   foundOf(null, "3f9a0c21b7d4")             {kind: "build", theirs: null, ours: "3f9a0c21b7d4"}
  */
 export const foundOf = (theirs: string | null, ours: string): Attached =>
-	theirs === ours ? {kind: "up"} : {kind: "build", theirs, ours};
+  theirs === ours ? { kind: "up" } : { kind: "build", theirs, ours };
