@@ -35,7 +35,7 @@ const lease = Lease.of(input)
 class Leases extends Context.Service<Leases>()("Leases", { ... }) {}
 ```
 
-*[0039](0039-keep-semicolons-and-es5-commas.md) brings back semicolons, and trailing commas in objects and arrays; the rest of this file still holds.*
+*[0039](0039-keep-semicolons-and-es5-commas.md) brings back semicolons and trailing commas; the rest of this file still holds.*
 
 ## Context
 
