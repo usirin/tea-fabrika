@@ -14,13 +14,7 @@ const contract = 'export class Brain extends Cloudflare.Worker<Brain, {}, Record
 const scan = (file: string, body: string) => check(file, body, contract);
 
 const stack = resolve(import.meta.dirname, "../../alchemy.run.ts");
-const actual = () => readFileSync(stack, "utf8");
-
-// Unrelated plants start with valid class-name bindings, including before the T502 build.
-const text = () =>
-  actual().replace(/(\w+): Cloudflare\.DurableObject\("(\w+)"\),/g, (line, key, hosted) =>
-    key === hosted ? line : `${line}\n${hosted}: Cloudflare.DurableObject("${hosted}"),`,
-  );
+const text = () => readFileSync(stack, "utf8");
 
 const generated = fc.record({
   alias: fc
