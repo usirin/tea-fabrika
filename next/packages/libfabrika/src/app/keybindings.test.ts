@@ -7,7 +7,7 @@
 //   modifiers (and `shift+` for a named key) and a key: one typed character exactly as typed (`+`,
 //   `A`), or a lowercase name (`enter`, `tab`, `escape`, `space`, `arrowup`...). Several chords
 //   separated by a space are a sequence: the first arms a prefix, the next completes it.
-// - `parseKeys(text, commands)`: an Effect `Result` of the rows, or `{line, why}` with `why` one of
+// - `parseKeys(text, commands)`: an Effect `Result` of the rows, or `{line, reason}` with `reason` one of
 //   `syntax`, `unknown_command`, `unknown_key`, `clash` (one chord for two commands). Its text is
 //   the person's `keybindings.toml`: a `[keys]` table of `"command" = ["chord", ...]` (a string
 //   alone is one chord, `[]` unbinds).
@@ -17,7 +17,7 @@
 //   `prefix` or `none`. An event is `{key, shift, ctrl, alt, meta, composing, editable}`.
 // - `hintFor(table, command)`: the first chord's text, or null: the same table the match reads.
 // - `reload(last, defaults, commands, source)`: `source` is `{_tag: "text", text}` or `{_tag:
-//   "failed", why}`; answers `{table, armed, error}`. A bad or failed source keeps `last` and
+//   "failed", reason}`; answers `{table, armed, error}`. A bad or failed source keeps `last` and
 //   gives `error`; a good one gives the new table, no error, and `armed` null (an edit clears a prefix).
 import {describe, expect, it} from "@effect/vitest";
 import {Result} from "effect";
@@ -36,7 +36,7 @@ const COMMANDS = [
 ] as const;
 
 type Rows = Readonly<Record<string, ReadonlyArray<string>>>;
-type Problem = {readonly line: number; readonly why: string};
+type Problem = {readonly line: number; readonly reason: string};
 type Table = {readonly rows: Rows};
 type Armed = object;
 
@@ -68,7 +68,7 @@ interface KeysApi {
 		last: Table,
 		defaults: Rows,
 		commands: ReadonlyArray<string>,
-		source: {_tag: string; text?: string; why?: string},
+		source: {_tag: string; text?: string; reason?: string},
 	) => {readonly table: Table; readonly armed: Armed | null; readonly error: Problem | null};
 }
 
@@ -109,13 +109,16 @@ const rowsArb: fc.Arbitrary<Rows> = fc
 		const accepted: Array<string> = [];
 
 		for (const [command, keys] of entries) {
-			if (command in rows) {continue;}
+			if (command in rows) {
+				continue;
+			}
 
 			const mine: Array<string> = [];
 
 			for (const k of keys) {
-				if (accepted.some((a) => a === k || a.startsWith(`${k} `) || k.startsWith(`${a} `)))
-					{continue;}
+				if (accepted.some((a) => a === k || a.startsWith(`${k} `) || k.startsWith(`${a} `))) {
+					continue;
+				}
 
 				accepted.push(k);
 				mine.push(k);
@@ -167,7 +170,9 @@ const press = (a: KeysApi, t: Table, text: string): Out => {
 	let armed: Armed | null = null;
 	let out: Out = {_tag: "none"};
 
-	for (const c of text.split(" ")) {({armed, out} = a.matchKey(t, armed, eventFor(c)));}
+	for (const c of text.split(" ")) {
+		({armed, out} = a.matchKey(t, armed, eventFor(c)));
+	}
 
 	return out;
 };
@@ -179,7 +184,9 @@ const laws: Readonly<Record<string, Law>> = {
 		const back = a.parseKeys(toml(rows), COMMANDS);
 		expect(Result.isSuccess(back)).toBe(true);
 
-		if (Result.isSuccess(back)) {expect(back.success).toEqual(rows);}
+		if (Result.isSuccess(back)) {
+			expect(back.success).toEqual(rows);
+		}
 	},
 	"matching, hints and unbinding read one table": (a, rows, defaults) => {
 		const t = a.buildTable(defaults, rows);
@@ -188,16 +195,21 @@ const laws: Readonly<Record<string, Law>> = {
 			const keys = rows[command] ?? defaults[command] ?? [];
 			expect(a.hintFor(t, command)).toBe(keys[0] ?? null);
 
-			for (const k of keys)
-				{expect(press(a, t, k), `${command} on ${k}`).toEqual({_tag: "command", command});}
+			for (const k of keys) {
+				expect(press(a, t, k), `${command} on ${k}`).toEqual({_tag: "command", command});
+			}
 		}
 
 		for (const [command, keys] of Object.entries(defaults)) {
-			if (rows[command]?.length === 0)
-				{for (const k of keys) {
+			if (rows[command]?.length === 0) {
+				for (const k of keys) {
 					const owner = Object.entries(rows).find(([, r]) => r.includes(k));
-					if (owner === undefined) expect(press(a, t, k)._tag, `${command} unbound`).toBe("none");
-				}}
+
+					if (owner === undefined) {
+						expect(press(a, t, k)._tag, `${command} unbound`).toBe("none");
+					}
+				}
+			}
 		}
 	},
 	"a bad file keeps the last good table and names its line; a failed read keeps it too": (
@@ -213,15 +225,15 @@ const laws: Readonly<Record<string, Law>> = {
 			["syntax", `[keys]\n"counter.inc" ~ nope\n`],
 		];
 
-		for (const [why, text] of cases) {
+		for (const [reason, text] of cases) {
 			const out = a.reload(good, defaults, COMMANDS, {_tag: "text", text});
 			expect(out.table).toBe(good);
-			expect(out.error?.why).toBe(why);
+			expect(out.error?.reason).toBe(reason);
 			expect(out.error?.line).toBeGreaterThanOrEqual(1);
 			expect(out.armed).toBeNull();
 		}
 
-		const failed = a.reload(good, defaults, COMMANDS, {_tag: "failed", why: "EACCES"});
+		const failed = a.reload(good, defaults, COMMANDS, {_tag: "failed", reason: "EACCES"});
 		expect(failed.table).toBe(good);
 		expect(failed.error).not.toBeNull();
 		const edited = a.reload(good, defaults, COMMANDS, {_tag: "text", text: toml(rows)});
@@ -322,23 +334,32 @@ describe("key tables: one table for binding, unbinding, matching, hints and live
 			fc.property(rowsArb, defaultsArb, (rows, defaults) => {
 				const t = a.buildTable(defaults, rows);
 
-				if (Object.values(rows).some((r) => r.length === 0)) {seen.empty++;}
+				if (Object.values(rows).some((r) => r.length === 0)) {
+					seen.empty++;
+				}
 
-				if (Object.values(rows).flat().length >= 3) {seen.many++;}
+				if (Object.values(rows).flat().length >= 3) {
+					seen.many++;
+				}
 
 				if (
 					Object.values(rows)
 						.flat()
 						.some((k) => k.includes(" "))
-				)
-					{seen.sequence++;}
+				) {
+					seen.sequence++;
+				}
 
-				if (a.hintFor(t, "counter.inc") !== "+") {seen.rebound++;}
+				if (a.hintFor(t, "counter.inc") !== "+") {
+					seen.rebound++;
+				}
 			}),
 			opts,
 		);
 
-		for (const [name, n] of Object.entries(seen)) {expect(n, name).toBeGreaterThan(0);}
+		for (const [name, n] of Object.entries(seen)) {
+			expect(n, name).toBeGreaterThan(0);
+		}
 	});
 
 	// Plants (keys): hard-code +; steal editable text; drop Shift; install a bad file. Each wraps the

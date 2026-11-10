@@ -104,7 +104,9 @@ const world = () => {
 const run = <A, E>(work: Effect.Effect<A, E>) => Effect.runPromiseExit(work);
 
 const must = <A, E>(exit: Exit.Exit<A, E>): A => {
-	if (Exit.isSuccess(exit)) {return exit.value;}
+	if (Exit.isSuccess(exit)) {
+		return exit.value;
+	}
 
 	throw new Error(Cause.pretty(exit.cause));
 };

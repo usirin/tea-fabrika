@@ -42,6 +42,8 @@ const METHODS = [
 	"process.start",
 	"process.exit",
 	"spans.read",
+	// P14: a browser's record call before its hello is answered no_hello like every other method.
+	"client.record",
 	"session.end",
 	"Door.knock",
 	"door.knock ",

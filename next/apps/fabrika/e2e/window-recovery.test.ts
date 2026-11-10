@@ -34,12 +34,16 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-	for (const close of closers.splice(0)) {await close().catch(() => undefined);}
+	for (const close of closers.splice(0)) {
+		await close().catch(() => undefined);
+	}
 
 	await stage?.stop();
 	process.stdout.write(`${summary()}\n`);
 
-	if (stage !== undefined) {cleanup(stage.home);}
+	if (stage !== undefined) {
+		cleanup(stage.home);
+	}
 });
 
 /** A separately granted browser context with one tab on the stage. */
@@ -85,14 +89,16 @@ describe("two windows mirror, press by press, and every press is measured", () =
 	it("scenario: a press shows in its own tab and the other window, five times", async () => {
 		const a = await window();
 		const b = await window();
+		// Every case on this stage presses counter:1, so each counts from the value it starts at.
+		const base = await first(a.tab);
 
 		for (let n = 1; n <= 5; n++) {
 			await timed("same-tab click", async () => {
 				await press(a.tab.page, "Add one", 0);
-				await settled(a.tab, n);
+				await settled(a.tab, base + n);
 			});
 			accepted++;
-			await timed("other-tab click", () => settled(b.tab, n));
+			await timed("other-tab click", () => settled(b.tab, base + n));
 			expect(await counts(b.tab.page)).toEqual(await counts(a.tab.page));
 		}
 
@@ -138,10 +144,14 @@ describe("an offline press lands once", () => {
 			/offline|reconnecting/i.test(await connection(a.tab.page)) ? true : undefined,
 		);
 
-		for (let n = 0; n < 3; n++) {await press(a.tab.page, "Add one", 0);}
+		for (let n = 0; n < 3; n++) {
+			await press(a.tab.page, "Add one", 0);
+		}
 
 		accepted += 3;
-		await expect(a.tab.page.getByTestId("queue")).toHaveText(/3/);
+		await expect
+			.poll(() => a.tab.page.getByTestId("queue").innerText(), {timeout: 30_000})
+			.toMatch(/3/);
 		expect(await first(b.tab), "nothing reached the other window yet").toBe(base);
 		await a.context.setOffline(false);
 		await settled(a.tab, base + 3);
@@ -164,13 +174,14 @@ type Kill = {
 const workerd = (s: Stage) => {
 	const found = s.processes().find((p) => /workerd/.test(p.command));
 
-	if (found === undefined)
-		{throw new Error(
+	if (found === undefined) {
+		throw new Error(
 			`no workerd under the stage: ${s
 				.processes()
 				.map((p) => p.command.slice(0, 60))
 				.join(" | ")}`,
-		);}
+		);
+	}
 
 	return found.pid;
 };
@@ -263,14 +274,18 @@ const recover = async (
 
 describe("every named kill recovers, five times each", () => {
 	for (const kill of KILLS) {
-		for (let n = 1; n <= 5; n++) {it(`scenario: ${kill.name} (run ${n} of 5)`, () => survive(kill));}
+		for (let n = 1; n <= 5; n++) {
+			it(`scenario: ${kill.name} (run ${n} of 5)`, () => survive(kill));
+		}
 	}
 });
 
 describe("the whole recovery sequence, five times", () => {
 	for (let n = 1; n <= 5; n++) {
 		it(`scenario: every kill in turn on one stage life (run ${n} of 5)`, async () => {
-			for (const kill of KILLS) {await survive(kill);}
+			for (const kill of KILLS) {
+				await survive(kill);
+			}
 		});
 	}
 });

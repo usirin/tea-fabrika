@@ -605,7 +605,7 @@ describe("P12 real dev.ts wire", () => {
 			expect(response.error?.data?.why).toBe("unknown_method");
 		}
 	});
-	it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the stage child fails", async () => {
+	it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the stage child fails; GET / serves the window page", async () => {
 		const s = await stage();
 		const ready = `${JSON.stringify({ready: s.url}).slice(0, -1)},"build":`;
 
@@ -614,8 +614,12 @@ describe("P12 real dev.ts wire", () => {
 			await pause();
 		}
 
-		// Only POST /grant and GET /grant/client/KEY reach the grant routes; the rest get the page.
-		expect(await (await fetch(s.url)).text()).toBe("fabrika");
+		// Only POST /grant and GET /grant/client/KEY reach the grant routes. GET / is the window page
+		// (P14), after the Host and Origin checks the unauthenticated scenario holds on this same URL.
+		const page = await fetch(s.url);
+		expect(page.status).toBe(200);
+		expect(page.headers.get("content-type")).toMatch(/^text\/html/);
+		expect(await page.text(), "the page loads the brain's own script").toContain("/window.js");
 		const posted = await fetch(`${s.url}/elsewhere`, {method: "POST", body: "{}"});
 		expect(await posted.text()).toBe("fabrika");
 		const home = mkdtempSync(join(tmpdir(), "p12-w-"));

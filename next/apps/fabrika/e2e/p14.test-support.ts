@@ -53,9 +53,13 @@ export const until = async <T>(
 		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		const got = await Promise.resolve(read()).catch(() => undefined);
 
-		if (got !== undefined) {return got;}
+		if (got !== undefined) {
+			return got;
+		}
 
-		if (Date.now() > stop) {throw new Error(`timed out after ${ms} ms waiting for ${what}`);}
+		if (Date.now() > stop) {
+			throw new Error(`timed out after ${ms} ms waiting for ${what}`);
+		}
 
 		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		await pause(50);
@@ -70,7 +74,9 @@ const freePort = (): Promise<number> =>
 		server.listen(0, "127.0.0.1", () => {
 			const at = server.address();
 
-			if (at === null || typeof at === "string") {return fail(new Error("no TCP port"));}
+			if (at === null || typeof at === "string") {
+				return fail(new Error("no TCP port"));
+			}
 
 			server.close(() => done(at.port));
 		});
@@ -101,15 +107,17 @@ export const startStage = async (
 	const port = shared?.port ?? (await freePort());
 	const key = join(home, "person");
 
-	if (shared === undefined)
-		{execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]);}
+	if (shared === undefined) {
+		execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]);
+	}
 
 	const founder = readFileSync(`${key}.pub`, "utf8").trim();
 	const url = `http://127.0.0.1:${port}`;
 	const env = {...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1"};
 
-	for (const secret of ["TYPESAFE_API_KEY", "FABRIKA_FOREGROUND", "CLOUDFLARE_API_TOKEN"])
-		{delete env[secret];}
+	for (const secret of ["TYPESAFE_API_KEY", "FABRIKA_FOREGROUND", "CLOUDFLARE_API_TOKEN"]) {
+		delete env[secret];
+	}
 
 	let child: ChildProcess | undefined;
 	let output = "";
@@ -138,7 +146,9 @@ export const startStage = async (
 			"the stage to answer",
 			// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 			async () => {
-				if (mine.exitCode !== null) {throw new Error(`dev.ts exited: ${output}`);}
+				if (mine.exitCode !== null) {
+					throw new Error(`dev.ts exited: ${output}`);
+				}
 
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 				return (await fetch(url)).ok ? true : undefined;
@@ -159,11 +169,12 @@ export const startStage = async (
 				for (let grew = true; grew;) {
 					grew = false;
 
-					for (const q of all)
-						{if (mine.has(q.ppid) && !mine.has(q.pid)) {
+					for (const q of all) {
+						if (mine.has(q.ppid) && !mine.has(q.pid)) {
 							mine.add(q.pid);
 							grew = true;
-						}}
+						}
+					}
 				}
 
 				return mine.has(p.pid);
@@ -183,7 +194,9 @@ export const startStage = async (
 		stop: async () => {
 			const mine = child;
 
-			if (mine === undefined || mine.exitCode !== null) {return;}
+			if (mine === undefined || mine.exitCode !== null) {
+				return;
+			}
 
 			mine.kill("SIGTERM");
 			// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
@@ -341,7 +354,9 @@ export const revoke = async (stage: Stage, granted: Granted): Promise<void> => {
 		body: JSON.stringify({text, armored}),
 	});
 
-	if (!response.ok) {throw new Error(`revoke refused: ${response.status}`);}
+	if (!response.ok) {
+		throw new Error(`revoke refused: ${response.status}`);
+	}
 };
 
 // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
@@ -426,7 +441,9 @@ export const ledgerRows = (
 				.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'")
 				.get();
 
-			if (has === undefined) {continue;}
+			if (has === undefined) {
+				continue;
+			}
 
 			for (const r of db
 				.prepare("SELECT stream, id, _tag AS tag, body FROM entries ORDER BY rev")
@@ -449,5 +466,7 @@ export const ledgerRows = (
 };
 
 export const cleanup = (...homes: ReadonlyArray<string>): void => {
-	for (const h of homes) {rmSync(h, {recursive: true, force: true});}
+	for (const h of homes) {
+		rmSync(h, {recursive: true, force: true});
+	}
 };

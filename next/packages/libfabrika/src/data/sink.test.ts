@@ -998,15 +998,20 @@ describe("P14: client samples are checked, durable before they are acknowledged,
 						const a = yield* ingest([...junk, ...good]);
 						expect([...a.acknowledged].sort()).toEqual([...unique].sort());
 
-						for (const g of first)
-							{expect(stored(db, g.id), `${g.id} is in unsent when ingest returns`).toBe(1);}
+						for (const g of first) {
+							expect(stored(db, g.id), `${g.id} is in unsent when ingest returns`).toBe(1);
+						}
 
 						const again = yield* ingest([...good, ...junk]);
 						expect([...again.acknowledged].sort()).toEqual([...unique].sort());
 
-						for (const g of first) {expect(stored(db, g.id), `${g.id} after a retry`).toBe(1);}
+						for (const g of first) {
+							expect(stored(db, g.id), `${g.id} after a retry`).toBe(1);
+						}
 
-						for (const j of ["sbad0001", "sbad0002", "sbad0003"]) {expect(stored(db, j)).toBe(0);}
+						for (const j of ["sbad0001", "sbad0002", "sbad0003"]) {
+							expect(stored(db, j)).toBe(0);
+						}
 					}).pipe(Effect.provide(world(sql))),
 				);
 			}),
@@ -1052,13 +1057,17 @@ describe("P14: client samples are checked, durable before they are acknowledged,
 						const failed = yield* ingest(good);
 						expect(failed.acknowledged, "nothing is acknowledged that did not land").toEqual([]);
 
-						for (const id of unique) {expect(stored(db, id)).toBe(0);}
+						for (const id of unique) {
+							expect(stored(db, id)).toBe(0);
+						}
 
 						arm(0);
 						const ok = yield* ingest(good);
 						expect([...ok.acknowledged].sort()).toEqual([...unique].sort());
 
-						for (const id of unique) {expect(stored(db, id), `${id} lands once`).toBe(1);}
+						for (const id of unique) {
+							expect(stored(db, id), `${id} lands once`).toBe(1);
+						}
 					}).pipe(Effect.provide(world(sql))),
 				);
 			}),

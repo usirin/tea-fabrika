@@ -21,6 +21,7 @@
 import {applyCell} from "@demlik/tea";
 import {arbGuidedSequence, propertyTrace} from "@demlik/tea/pbt";
 import {describe, expect, it} from "@effect/vitest";
+import {Schema} from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -95,7 +96,7 @@ const sentAt = "2026-11-09T00:00:00.000Z";
 const word = fc.constantFrom("a", "b", "SHA256:x");
 
 /** The Msgs nothing sends a Cmd for, and the answers to the Cmds the window asks. */
-const lists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => {
+const cells = (pids: ReadonlyArray<string>) => {
 	const pid = fc.constantFrom(...pids);
 	const body = fc.constantFrom({type: "inc"}, {type: "dec"}, {type: "reset"});
 	const outside = {
@@ -168,9 +169,66 @@ const lists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => {
 					: {type: "open_err", cmd, error: {_tag: "unreachable"}},
 		},
 	};
-	return arbGuidedSequence(m as never, {layout} as never, {outside, answers} as never, {
+	return {outside, answers};
+};
+
+const lists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded?: Model) =>
+	arbGuidedSequence(m as never, {layout} as never, cells(pids) as never, {
 		maxLength: 70,
+		...(loaded === undefined ? {} : {loaded: loaded as never}),
 	});
+
+/** A new grant, as the browser meets it on its first dial: told `not_granted`, granted while it
+ *  waits, then admitted. */
+const GRANT: ReadonlyArray<Msg> = [
+	{type: "not_granted", dial: 1, fingerprint: "SHA256:x", code: "a", until: 1000},
+	{type: "granted", dial: 1},
+	{type: "admitted", dial: 1, ping: 0},
+];
+
+/** The window's state at the end of `list` and the Cmds its last step asked, folded by the real runner. */
+const after = (
+	m: Machine,
+	layout: Tree,
+	list: ReadonlyArray<Msg>,
+): {state: Model; cmds: ReadonlyArray<Cmd>} => {
+	let out: {state: Model; cmds: ReadonlyArray<Cmd>} | undefined;
+	propertyTrace(
+		m as never,
+		{layout} as never,
+		fc.constant(list) as never,
+		((steps: ReadonlyArray<Step>, final: Model) => {
+			out = {state: final, cmds: steps.at(-1)?.cmds ?? []};
+			return null;
+		}) as never,
+		{numRuns: 1},
+	);
+
+	if (out === undefined) {
+		throw new Error("the fold of a fixed list never ran");
+	}
+
+	return out;
+};
+
+/** Lists where every run reaches a new grant going online, then the persistence answer, then a
+ *  guided tail drawn from the state the real fold reached. Blind lists reach a new grant going
+ *  online about once in 250 runs (build round 1), so a plant on the answer went uncaught. When the
+ *  window asks no persistence, no answer follows and the persist law names that. */
+const grantedLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => {
+	const opened = after(m, layout, GRANT);
+	const asked = opened.cmds.find((c) => c.type === "persist");
+	const persist = cells(pids).answers.persist;
+	const variants = (["true", "false", "error"] as const).map((v) => {
+		const list = asked === undefined ? GRANT : [...GRANT, persist.make(asked, v)];
+		return {list, state: after(m, layout, list).state};
+	});
+
+	return fc
+		.constantFrom(...variants)
+		.chain(({list, state}) =>
+			lists(m, layout, pids, state).map((tail) => [...list, ...(tail as ReadonlyArray<Msg>)]),
+		);
 };
 
 type Step = {
@@ -186,6 +244,9 @@ const online = (m: Model): boolean => m.link._tag === "online";
 const kinds = (cmds: ReadonlyArray<Cmd>, type: string): ReadonlyArray<Cmd> =>
 	cmds.filter((c) => c.type === type);
 
+const PERSIST =
+	"persist: asked once per new grant, never on a reconnect, and an answer leaves the window online";
+
 /** The laws, each a check over a run's steps, so a plant can run the same one. */
 const laws: Readonly<Record<string, Law>> = {
 	// p1: a letter leaves only on its matching terminal answer; written grows per press; ids never repeat.
@@ -200,28 +261,37 @@ const laws: Readonly<Record<string, Law>> = {
 			} else if (msg.type === "now_ok") {
 				const n = (msg["cmd"] as {n: number}).n;
 
-				if (model.has(n) && model.get(n) === null)
-					{model.set(n, (msg["value"] as {letter: string}).letter);}
+				if (model.has(n) && model.get(n) === null) {
+					model.set(n, (msg["value"] as {letter: string}).letter);
+				}
 			} else if (msg.type === "send_ok") {
 				const letter = (msg["cmd"] as {letter: string}).letter;
 				const value = msg["value"] as {_tag: string};
 
 				if (value._tag === "accepted" || value._tag === "refused") {
-					for (const [n, l] of model) {if (l === letter) model.delete(n);}
+					for (const [n, l] of model) {
+						if (l === letter) {
+							model.delete(n);
+						}
+					}
 				}
 			}
 
 			const slots = next.client.pending.map((p) => p.n).sort((x, y) => x - y);
 
-			if (JSON.stringify(slots) !== JSON.stringify([...model.keys()].sort((x, y) => x - y)))
-				{return `slots ${JSON.stringify(slots)} are not the model's ${JSON.stringify([...model.keys()])}`;}
+			if (JSON.stringify(slots) !== JSON.stringify([...model.keys()].sort((x, y) => x - y))) {
+				return `slots ${JSON.stringify(slots)} are not the model's ${JSON.stringify([...model.keys()])}`;
+			}
 
-			for (const p of next.client.pending)
-				{if (model.get(p.n) !== (p.letter ?? null))
-					return `slot ${p.n} holds ${String(p.letter)}, its first letter was ${String(model.get(p.n))}`;}
+			for (const p of next.client.pending) {
+				if (model.get(p.n) !== (p.letter ?? null)) {
+					return `slot ${p.n} holds ${String(p.letter)}, its first letter was ${String(model.get(p.n))}`;
+				}
+			}
 
-			if (next.client.written !== presses)
-				{return `written ${next.client.written} after ${presses} presses`;}
+			if (next.client.written !== presses) {
+				return `written ${next.client.written} after ${presses} presses`;
+			}
 
 			void prev;
 		}
@@ -237,23 +307,28 @@ const laws: Readonly<Record<string, Law>> = {
 				const sends = kinds(cmds, "send");
 
 				if (!online(next)) {
-					if (sends.length > 0)
-						{return `${msg.type} sent ${sends.length} letter(s) while ${next.link._tag}`;}
+					if (sends.length > 0) {
+						return `${msg.type} sent ${sends.length} letter(s) while ${next.link._tag}`;
+					}
 
 					sentThisDial = new Set();
 					continue;
 				}
 
-				if (!online(prev)) {sentThisDial = new Set();}
+				if (!online(prev)) {
+					sentThisDial = new Set();
+				}
 
 				const letters = sends.map((s) => String(s["letter"]));
 
-				if (new Set(letters).size !== letters.length)
-					{return `${msg.type} sent a letter twice in one step`;}
+				if (new Set(letters).size !== letters.length) {
+					return `${msg.type} sent a letter twice in one step`;
+				}
 
 				for (const l of letters) {
-					if (sentThisDial.has(l) && !(msg.type === "send_err"))
-						{return `${l} went out twice on one dial`;}
+					if (sentThisDial.has(l) && !(msg.type === "send_err")) {
+						return `${l} went out twice on one dial`;
+					}
 
 					sentThisDial.add(l);
 				}
@@ -262,8 +337,9 @@ const laws: Readonly<Record<string, Law>> = {
 					next.client.pending.find((p) => p.letter === l)?.n ?? Number.NaN;
 				const order = letters.map(slotFor);
 
-				if (JSON.stringify(order) !== JSON.stringify([...order].sort((x, y) => x - y)))
-					{return `letters went out out of order: ${JSON.stringify(order)}`;}
+				if (JSON.stringify(order) !== JSON.stringify([...order].sort((x, y) => x - y))) {
+					return `letters went out out of order: ${JSON.stringify(order)}`;
+				}
 
 				if (!online(prev)) {
 					// Going online: every ready letter ahead of the first slot still waiting for its time goes out.
@@ -273,12 +349,14 @@ const laws: Readonly<Record<string, Law>> = {
 						.filter((p) => p._tag === "ready" && p.n < firstDating)
 						.map((p) => p.letter);
 
-					if (JSON.stringify(letters) !== JSON.stringify(ready))
-						{return `going online sent ${JSON.stringify(letters)}, the ready letters were ${JSON.stringify(ready)}`;}
+					if (JSON.stringify(letters) !== JSON.stringify(ready)) {
+						return `going online sent ${JSON.stringify(letters)}, the ready letters were ${JSON.stringify(ready)}`;
+					}
 				}
 
-				if (msg.type === "send_err")
-					{sentThisDial.delete(String((msg["cmd"] as {letter: string}).letter));}
+				if (msg.type === "send_err") {
+					sentThisDial.delete(String((msg["cmd"] as {letter: string}).letter));
+				}
 			}
 
 			return null;
@@ -296,66 +374,82 @@ const laws: Readonly<Record<string, Law>> = {
 			if (online(next) && !online(prev)) {
 				const pids = opens.map((o) => String(o["pid"])).sort();
 
-				if (JSON.stringify(pids) !== JSON.stringify(distinct))
-					{return `going online opened ${JSON.stringify(pids)}, not each of ${JSON.stringify(distinct)} once`;}
+				if (JSON.stringify(pids) !== JSON.stringify(distinct)) {
+					return `going online opened ${JSON.stringify(pids)}, not each of ${JSON.stringify(distinct)} once`;
+				}
 
-				if ([...next.opened].sort().join() !== distinct.join())
-					{return `opened is ${JSON.stringify(next.opened)} after going online`;}
+				if ([...next.opened].sort().join() !== distinct.join()) {
+					return `opened is ${JSON.stringify(next.opened)} after going online`;
+				}
 
-				if (new Set(next.opened).size !== next.opened.length) {return "opened holds a repeat";}
+				if (new Set(next.opened).size !== next.opened.length) {
+					return "opened holds a repeat";
+				}
 			}
 
-			if (!online(next) && next.opened.length > 0)
-				{return `opened keeps ${JSON.stringify(next.opened)} while ${next.link._tag}`;}
+			if (!online(next) && next.opened.length > 0) {
+				return `opened keeps ${JSON.stringify(next.opened)} while ${next.link._tag}`;
+			}
 
-			if (msg.type === "press" && opens.length > 0) {return "a press opened a view";}
+			if (msg.type === "press" && opens.length > 0) {
+				return "a press opened a view";
+			}
 
-			if (online(prev) && online(next) && msg.type !== "view" && opens.length > 0)
-				{return `${msg.type} opened again on the same dial`;}
+			if (online(prev) && online(next) && msg.type !== "view" && opens.length > 0) {
+				return `${msg.type} opened again on the same dial`;
+			}
 		}
 
 		return null;
 	},
 	// Persistence is asked once after a new grant, never on a reconnect, and its answer never moves the link.
-	"persist: asked once per new grant, never on a reconnect, and an answer leaves the window online":
-		(steps) => {
-			let fresh = false;
+	[PERSIST]: (steps) => {
+		let fresh = false;
 
-			for (const {prev, msg, next, cmds} of steps) {
-				if (
-					msg.type === "granted" &&
-					prev.link._tag === "waiting_grant" &&
-					prev.link["dial"] === msg["dial"]
-				)
-					{fresh = true;}
-
-				const asked = kinds(cmds, "persist").length;
-
-				if (asked > 1) {return "persistence asked twice in one step";}
-
-				if (asked === 1 && !(fresh && online(next) && !online(prev)))
-					{return `persistence asked on ${msg.type} with no new grant just admitted`;}
-
-				if (asked === 0 && fresh && online(next) && !online(prev))
-					{return "a new grant went online and never asked for persistence";}
-
-				if (asked === 1) {fresh = false;}
-
-				if (
-					(msg.type === "persist_ok" || msg.type === "persist_err") &&
-					JSON.stringify(next.link) !== JSON.stringify(prev.link)
-				)
-					{return `${msg.type} moved the link`;}
-
-				if (
-					(msg.type === "persist_ok" || msg.type === "persist_err") &&
-					next.client.pending.length !== prev.client.pending.length
-				)
-					{return `${msg.type} changed the queue`;}
+		for (const {prev, msg, next, cmds} of steps) {
+			if (
+				msg.type === "granted" &&
+				prev.link._tag === "waiting_grant" &&
+				prev.link["dial"] === msg["dial"]
+			) {
+				fresh = true;
 			}
 
-			return null;
-		},
+			const asked = kinds(cmds, "persist").length;
+
+			if (asked > 1) {
+				return "persistence asked twice in one step";
+			}
+
+			if (asked === 1 && !(fresh && online(next) && !online(prev))) {
+				return `persistence asked on ${msg.type} with no new grant just admitted`;
+			}
+
+			if (asked === 0 && fresh && online(next) && !online(prev)) {
+				return "a new grant went online and never asked for persistence";
+			}
+
+			if (asked === 1) {
+				fresh = false;
+			}
+
+			if (
+				(msg.type === "persist_ok" || msg.type === "persist_err") &&
+				JSON.stringify(next.link) !== JSON.stringify(prev.link)
+			) {
+				return `${msg.type} moved the link`;
+			}
+
+			if (
+				(msg.type === "persist_ok" || msg.type === "persist_err") &&
+				next.client.pending.length !== prev.client.pending.length
+			) {
+				return `${msg.type} changed the queue`;
+			}
+		}
+
+		return null;
+	},
 	// now: a press keeps what was shown when it was pressed; answers in any order send in slot order.
 	"now: a press captures what it showed, and reversed or failed answers still send in slot order": (
 		steps,
@@ -368,14 +462,17 @@ const laws: Readonly<Record<string, Law>> = {
 				const slot = next.client.written - 1;
 				shown.set(slot, {viewRev: prev.client.views[pid]?.rev ?? 0});
 
-				if (kinds(cmds, "now").length !== 1) {return "a press asks for its time once";}
+				if (kinds(cmds, "now").length !== 1) {
+					return "a press asks for its time once";
+				}
 			}
 
 			for (const p of next.client.pending) {
 				const was = shown.get(p.n);
 
-				if (was !== undefined && p.viewRev !== was.viewRev)
-					{return `slot ${p.n} re-read the shown revision: ${p.viewRev}, it was pressed at ${was.viewRev}`;}
+				if (was !== undefined && p.viewRev !== was.viewRev) {
+					return `slot ${p.n} re-read the shown revision: ${p.viewRev}, it was pressed at ${was.viewRev}`;
+				}
 			}
 
 			const slots = kinds(cmds, "send").map(
@@ -384,17 +481,22 @@ const laws: Readonly<Record<string, Law>> = {
 			const firstDating =
 				next.client.pending.find((p) => p._tag === "dating")?.n ?? Number.POSITIVE_INFINITY;
 
-			for (const n of slots)
-				{if (n > firstDating) return `slot ${n} went out before slot ${firstDating} had its letter`;}
+			for (const n of slots) {
+				if (n > firstDating) {
+					return `slot ${n} went out before slot ${firstDating} had its letter`;
+				}
+			}
 
-			if (msg.type === "now_err" && next.client.written !== prev.client.written)
-				{return "a failed now made a second press";}
+			if (msg.type === "now_err" && next.client.written !== prev.client.written) {
+				return "a failed now made a second press";
+			}
 
 			if (
 				msg.type === "now_err" &&
 				!next.client.pending.some((p) => p.n === (msg["cmd"] as {n: number}).n)
-			)
-				{return "a failed now lost the press";}
+			) {
+				return "a failed now lost the press";
+			}
 		}
 
 		return null;
@@ -409,13 +511,19 @@ const fold = async (
 	over?: (m: Machine) => Machine,
 ): Promise<void> => {
 	const used = over === undefined ? m : over(m);
-	propertyTrace(
-		used as never,
-		{layout} as never,
-		lists(m, layout, tiles) as never,
-		((steps: ReadonlyArray<Step>) => laws[name]?.(steps, tiles) ?? null) as never,
-		opts,
-	);
+	const law = ((steps: ReadonlyArray<Step>) => laws[name]?.(steps, tiles) ?? null) as never;
+	propertyTrace(used as never, {layout} as never, lists(m, layout, tiles) as never, law, opts);
+
+	// The persist law also runs on lists that each reach a new grant, so its answer is always met.
+	if (name === PERSIST) {
+		propertyTrace(
+			used as never,
+			{layout} as never,
+			grantedLists(m, layout, tiles) as never,
+			law,
+			opts,
+		);
+	}
 };
 
 describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
@@ -428,8 +536,9 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 	it("the layout's tiles are what opens: tilesIn names the pids this law expects", async () => {
 		const {tilesIn} = await layoutApi();
 
-		for (const [, layout, tiles] of LAYOUTS)
-			{expect([...new Set(tilesIn(layout).map((t) => t.pid))].sort()).toEqual([...tiles].sort());}
+		for (const [, layout, tiles] of LAYOUTS) {
+			expect([...new Set(tilesIn(layout).map((t) => t.pid))].sort()).toEqual([...tiles].sort());
+		}
 	});
 
 	it("good thing: the runs press, date, go online, send, settle, reconnect and open again, and persist", async () => {
@@ -454,24 +563,33 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 					let dials = 0;
 
 					for (const {prev, msg, next, cmds} of steps) {
-						if (msg.type === "press") {seen.pressed++;}
+						if (msg.type === "press") {
+							seen.pressed++;
+						}
 
-						if (msg.type === "now_ok") {seen.dated++;}
+						if (msg.type === "now_ok") {
+							seen.dated++;
+						}
 
-						if (msg.type === "now_err") {seen.failedNow++;}
+						if (msg.type === "now_err") {
+							seen.failedNow++;
+						}
 
 						if (online(next) && !online(prev)) {
 							seen.online++;
 							dials++;
 
-							if (dials > 1) {seen.reopened += kinds(cmds, "open").length > 0 ? 1 : 0;}
+							if (dials > 1) {
+								seen.reopened += kinds(cmds, "open").length > 0 ? 1 : 0;
+							}
 						}
 
 						seen.sent += kinds(cmds, "send").length;
 						seen.persisted += kinds(cmds, "persist").length;
 
-						if (msg.type === "send_ok" && next.client.pending.length < prev.client.pending.length)
-							{seen.settled++;}
+						if (msg.type === "send_ok" && next.client.pending.length < prev.client.pending.length) {
+							seen.settled++;
+						}
 					}
 
 					return null;
@@ -480,14 +598,21 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 			);
 		}
 
-		for (const [name, n] of Object.entries(seen)) {expect(n, name).toBeGreaterThan(0);}
+		for (const [name, n] of Object.entries(seen)) {
+			expect(n, name).toBeGreaterThan(0);
+		}
 	});
 
 	it("the parent steps the link and the client by hand: its link is the link machine's own fold", async () => {
 		const m = await machine();
 		// oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
 		const {linkMachine} = (await import("@kampus/libfabrika/transport")) as unknown as {
-			linkMachine: Machine;
+			linkMachine: {
+				readonly init: (
+					loaded: unknown,
+					ctx: object,
+				) => readonly [Model["link"], ReadonlyArray<Cmd>];
+			};
 		};
 		expect(linkMachine, "the library's transport exports linkMachine").toBeDefined();
 		const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
@@ -496,7 +621,7 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 			{layout} as never,
 			lists(m, layout, tiles) as never,
 			((steps: ReadonlyArray<Step>) => {
-				let link = linkMachine.init(null, {})[0] as Model["link"];
+				let link = linkMachine.init(null, {})[0];
 
 				for (const {msg, next} of steps) {
 					const own = [
@@ -513,10 +638,13 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 						"ask_again",
 					].includes(msg.type);
 
-					if (own) {link = applyCell(linkMachine as never, link as never, msg as never)[0] as never;}
+					if (own) {
+						link = applyCell(linkMachine as never, link as never, msg as never)[0] as never;
+					}
 
-					if (JSON.stringify(next.link) !== JSON.stringify(link))
-						{return `${msg.type}: the window's link is ${JSON.stringify(next.link)}, the link machine's is ${JSON.stringify(link)}`;}
+					if (JSON.stringify(next.link) !== JSON.stringify(link)) {
+						return `${msg.type}: the window's link is ${JSON.stringify(next.link)}, the link machine's is ${JSON.stringify(link)}`;
+					}
 				}
 
 				return null;
@@ -560,11 +688,15 @@ describe("window machine plants: each break is caught by the law that names it",
 	): Promise<void> => {
 		const real = await machine();
 		const [, layout, tiles] = LAYOUTS[layoutAt] as (typeof LAYOUTS)[number];
+		const planted = broken(real, change);
 		expect(() => {
 			propertyTrace(
-				broken(real, change) as never,
+				planted as never,
 				{layout} as never,
-				lists(real, layout, tiles) as never,
+				// A persist plant breaks the answer, so its lists always reach a new grant (folded by the planted machine).
+				(name === PERSIST
+					? grantedLists(planted, layout, tiles)
+					: lists(real, layout, tiles)) as never,
 				((steps: ReadonlyArray<Step>) => laws[name]?.(steps, tiles) ?? null) as never,
 				opts as never,
 			);
@@ -651,20 +783,12 @@ describe("window machine plants: each break is caught by the law that names it",
 					: [m, c],
 		));
 	it("asking for persistence on every reconnect is caught (persist)", () =>
-		expectCaught(
-			"persist: asked once per new grant, never on a reconnect, and an answer leaves the window online",
-			([m, c], _s, msg) =>
-				msg.type === "admitted" && m.link._tag === "online"
-					? [m, [...c, {type: "persist"}]]
-					: [m, c],
+		expectCaught(PERSIST, ([m, c], _s, msg) =>
+			msg.type === "admitted" && m.link._tag === "online" ? [m, [...c, {type: "persist"}]] : [m, c],
 		));
 	it("taking the granted window offline when persistence is refused is caught (persist)", () =>
-		expectCaught(
-			"persist: asked once per new grant, never on a reconnect, and an answer leaves the window online",
-			([m, c], _s, msg) =>
-				msg.type === "persist_ok"
-					? [{...m, link: {_tag: "retrying", dial: 1, tries: 1}}, c]
-					: [m, c],
+		expectCaught(PERSIST, ([m, c], _s, msg) =>
+			msg.type === "persist_ok" ? [{...m, link: {_tag: "retrying", dial: 1, tries: 1}}, c] : [m, c],
 		));
 	it("a failed now that drops the press is caught (now)", () =>
 		expectCaught(
@@ -679,7 +803,6 @@ describe("window machine: saved state", () => {
 		const m = await machine();
 		const {syncTest} = await import("@kampus/libfabrika/testing");
 		const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
-		const Schema = (await import("effect")).Schema;
 		// oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
 		const model = (m as unknown as {model: Schema.Codec<unknown, unknown>}).model;
 		fc.assert(

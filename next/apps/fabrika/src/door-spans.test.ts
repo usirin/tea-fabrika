@@ -2,7 +2,7 @@
 // Plants: widen initialize, rename a span, lose its parent/link/tags, or recover inside it.
 import {createHash, createPrivateKey, createPublicKey, sign} from "node:crypto";
 import {DatabaseSync} from "node:sqlite";
-import {Id} from "@kampus/libfabrika";
+import {ClientRecord, Id} from "@kampus/libfabrika";
 import {ClientManager, grantText, Saw} from "@kampus/libfabrika/coordination";
 import {
 	Archive,
@@ -16,7 +16,7 @@ import {
 	SpanSink,
 } from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
-import {Cause, Effect, Exit, Layer, Option, Schema, Stream, Tracer} from "effect";
+import {Arbitrary, Cause, Effect, Exit, Layer, Option, Schema, Stream, Tracer} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {Door} from "./door.ts";
@@ -105,7 +105,10 @@ const key = (seed: Uint8Array, salt: number) => {
 	};
 };
 
-const fixture = Effect.fnUntraced(function* (a: Sample) {
+type Sql = ReturnType<typeof nodeSql>;
+
+/** `sink` wraps the Sql the span sink writes to (P14's failed-write laws); the door's own store is untouched. */
+const fixture = Effect.fnUntraced(function* (a: Sample, sink: (sql: Sql) => Sql = (sql) => sql) {
 	const databases: Array<DatabaseSync> = [];
 	const open = () => {
 		const db = new DatabaseSync(":memory:");
@@ -208,7 +211,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 				Id.Generator.layer,
 				records,
 				Archive.memory,
-				SpanSink.layer(sql, {object: PROCESS}),
+				SpanSink.layer(sink(sql), {object: PROCESS}),
 			),
 		),
 	);
@@ -558,6 +561,329 @@ describe("door partial spans, next/ tracing keep-laws", () => {
 					),
 			),
 			CHECK,
+		);
+	});
+});
+
+// P14 (ticket 286), the door's half of the plan's law "Browser records survive failed delivery until
+// durable acknowledgement, retain safe measurements and are idempotent" ("What P14 records"). Written
+// before the door's `client.record` route. The shape these laws hold it to:
+// - `route(client, "client.record", {rows})`, `rows` an array of `ClientRow` (app/client.ts), answers
+//   `ok {acknowledged}`: the ids of the rows that are durably in the span sink when it returns, each
+//   valid id once, in any order. A row that does not decode as a `ClientRow` is neither acknowledged
+//   nor kept. A sink write that fails acknowledges nothing; the same rows sent again land once.
+// - The writer and person kept with each sample come from the connection's admission. A writer,
+//   person or chain the caller names, on the call or on a row, is never kept.
+// - A connection that is not admitted is refused and nothing is kept. One with no hello never
+//   reaches the door: the transport answers `no_hello` (transport/answer.test.ts, d2).
+// Nothing here is a state machine (0037's T2): the rows and acknowledged ids are plain data, and
+// admission is the door's existing state.
+const LIAR = "person_01m6v5270hf3c8x2q7w9z4k5mp";
+const RECORDS = {seed: 119120, numRuns: 25, endOnFailure: true};
+/** Sink statements that read or write the client samples' table, which a failed write refuses. */
+const SAMPLES = /^\s*(?:INSERT|SELECT|UPDATE|DELETE|REPLACE)\b[^;]*\bsamples\b/i;
+
+/** The sink's Sql with its sample writes refused while `on`, as a full disk would refuse them. */
+const refusing = () => {
+	let on = false;
+	const wrap = (inner: Sql): Sql => ({
+		transaction: (work) => inner.transaction(work),
+		size: () => inner.size(),
+		exec: (query, ...params) => {
+			if (on && SAMPLES.test(query)) {
+				throw Object.assign(new Error("database or disk is full"), {
+					code: "ERR_SQLITE_ERROR",
+					errcode: 13,
+				});
+			}
+
+			return inner.exec(query, ...params);
+		},
+	});
+	return {wrap, set: (value: boolean) => (on = value)};
+};
+
+const recordCase = fc.record({
+	a: sample,
+	ids: fc
+		.uniqueArray(fc.stringMatching(/^[0-9a-f]{8}$/), {minLength: 1, maxLength: 8})
+		.map((xs) => xs.map((x) => `row_${x}`)),
+	repeats: fc.array(fc.nat(), {maxLength: 4}),
+	junk: fc.uniqueArray(
+		fc.constantFrom<unknown>(
+			null,
+			"text",
+			7,
+			{id: "junk_0001"},
+			{
+				id: "junk_0002",
+				tab: "tab_p14",
+				build: "test-build",
+				sentAt: SENT,
+				record: {_tag: "no_such_op"},
+			},
+		),
+		{maxLength: 3},
+	),
+	fail: fc.boolean(),
+	lie: fc.boolean(),
+	bodies: fc.integer(),
+});
+
+type Answer = {readonly _tag: string; readonly result?: unknown};
+
+type Seen = {
+	readonly first: Answer;
+	readonly second: Answer;
+	/** For each id, how many kept span records hold it after the first call and after the retry. */
+	readonly afterFirst: Readonly<Record<string, number>>;
+	readonly afterSecond: Readonly<Record<string, number>>;
+	/** Every kept span record that holds one of the ids, as JSON. */
+	readonly kept: ReadonlyArray<string>;
+};
+
+const acknowledged = (answer: Answer): ReadonlyArray<string> => {
+	const result = answer.result as {acknowledged?: unknown} | null | undefined;
+	return answer._tag === "ok" && Array.isArray(result?.acknowledged)
+		? result.acknowledged.map(String)
+		: [];
+};
+
+const sameSet = (x: ReadonlyArray<string>, y: ReadonlyArray<string>) =>
+	JSON.stringify([...new Set(x)].sort()) === JSON.stringify([...new Set(y)].sort()) &&
+	x.length === new Set(x).size;
+
+/** The law over one call and its retry, as a check a plant can run on made-up observations. */
+const judge = (
+	seen: Seen,
+	c: {
+		readonly ids: ReadonlyArray<string>;
+		readonly junk: ReadonlyArray<string>;
+		readonly fail: boolean;
+		readonly lie: boolean;
+		readonly writer: ReadonlyArray<string>;
+		readonly person: string;
+		readonly liar: ReadonlyArray<string>;
+	},
+): string | null => {
+	const first = acknowledged(seen.first),
+		second = acknowledged(seen.second);
+
+	if (c.fail) {
+		if (first.length > 0) {
+			return `a failed write acknowledged ${JSON.stringify(first)}`;
+		}
+	} else if (!c.lie && !sameSet(first, c.ids)) {
+		return `acknowledged ${JSON.stringify(first)}, the valid rows were ${JSON.stringify(c.ids)}`;
+	}
+
+	for (const id of first) {
+		if ((seen.afterFirst[id] ?? 0) !== 1) {
+			return `${id} was acknowledged with ${seen.afterFirst[id] ?? 0} kept samples`;
+		}
+	}
+
+	if (!c.lie && !sameSet(second, c.ids)) {
+		return `the retry acknowledged ${JSON.stringify(second)}, the valid rows were ${JSON.stringify(c.ids)}`;
+	}
+
+	for (const id of second) {
+		if ((seen.afterSecond[id] ?? 0) !== 1) {
+			return `${id} after the retry has ${seen.afterSecond[id] ?? 0} kept samples`;
+		}
+	}
+
+	for (const id of c.junk) {
+		if ([...first, ...second].includes(id) || (seen.afterSecond[id] ?? 0) > 0) {
+			return `the bad row ${id} was acknowledged or kept`;
+		}
+	}
+
+	for (const text of seen.kept) {
+		if (c.liar.some((l) => text.includes(l))) {
+			return "a kept sample names the writer the caller gave";
+		}
+
+		if (!c.lie && !(text.includes(c.person) && c.writer.some((w) => text.includes(w)))) {
+			return "a kept sample does not name the admitted writer and person";
+		}
+	}
+
+	return null;
+};
+
+const keptFor = Effect.fnUntraced(function* (ids: ReadonlyArray<string>) {
+	yield* (yield* SpanSink).flush;
+	const rows = yield* Stream.runCollect((yield* RecordManager).read(Chain.cases.spans.make({})));
+	const texts = [...rows].map((r) => JSON.stringify(r));
+	return {
+		counts: Object.fromEntries(ids.map((id) => [id, texts.filter((t) => t.includes(id)).length])),
+		kept: texts.filter((t) => ids.some((id) => t.includes(id))),
+	};
+});
+
+describe("P14: client.record keeps a window's rows durably, once, under its admitted writer", () => {
+	it("acknowledged only once durable, never on a failed write, once however often retried, and the writer is the admission's", async () => {
+		await fc.assert(
+			fc.asyncProperty(recordCase, async ({a, ids, repeats, junk, fail, lie, bodies}) =>
+				Effect.runPromise(
+					Effect.scoped(
+						Effect.gen(function* () {
+							const sink = refusing();
+							const w = yield* fixture(a, sink.wrap);
+							yield* Effect.gen(function* () {
+								const d = yield* Door;
+								const client = yield* online(d, w, a);
+								// Schema-generated record bodies (Effect's Arbitrary over the real ClientRecord).
+								const records = yield* Arbitrary.sampleEffect(Arbitrary.schema(ClientRecord), {
+									count: ids.length,
+									seed: bodies,
+								});
+								const rows = ids.map((id, i) => ({
+									id,
+									tab: "tab_p14",
+									build: "test-build",
+									sentAt: SENT,
+									record: records[i],
+								}));
+								const said = {
+									by: {key: w.stranger.fingerprint, for: LIAR},
+									person: LIAR,
+									writer: w.stranger.raw,
+								};
+								const batch = [...rows, ...repeats.map((n) => rows[n % rows.length]!), ...junk].map(
+									(r) => (lie && typeof r === "object" && r !== null ? {...r, ...said} : r),
+								);
+								const params = lie
+									? {rows: batch, ...said, chain: {_tag: "job", process: PROCESS}}
+									: {rows: batch};
+								const junkIds = ["junk_0001", "junk_0002"];
+								const all = [...ids, ...junkIds];
+								sink.set(fail);
+								const first = yield* d.route(client, "client.record", params);
+								sink.set(false);
+								const one = yield* keptFor(all);
+								const second = yield* d.route(client, "client.record", params);
+								const two = yield* keptFor(all);
+								const verdict = judge(
+									{first, second, afterFirst: one.counts, afterSecond: two.counts, kept: two.kept},
+									{
+										ids,
+										junk: junkIds,
+										fail,
+										lie,
+										writer: [w.window.fingerprint, w.window.raw],
+										person: PERSON,
+										liar: [LIAR, w.stranger.fingerprint, w.stranger.raw],
+									},
+								);
+								expect(verdict).toBeNull();
+							}).pipe(Effect.provide(w.layer));
+						}),
+					),
+				),
+			),
+			RECORDS,
+		);
+	});
+
+	it("a connection that is not admitted is refused and keeps nothing", async () => {
+		await fc.assert(
+			fc.asyncProperty(recordCase, async ({a, ids}) =>
+				Effect.runPromise(
+					Effect.scoped(
+						Effect.gen(function* () {
+							const w = yield* fixture(a);
+							yield* Effect.gen(function* () {
+								const d = yield* Door;
+								const bare = yield* d.connect();
+								const stranger = yield* hello(d, w.stranger, a.text);
+								yield* d.initialize(stranger.client, stranger.input, stranger.trusted);
+								const rows = ids.map((id) => ({
+									id,
+									tab: "tab_p14",
+									build: "test-build",
+									sentAt: SENT,
+									record: {_tag: "persist", result: "granted"},
+								}));
+
+								for (const client of [bare, stranger.client]) {
+									const answer = yield* d.route(client, "client.record", {rows});
+									expect(answer._tag, "an unadmitted client.record is refused").toBe("refused");
+								}
+
+								expect((yield* keptFor(ids)).kept).toEqual([]);
+							}).pipe(Effect.provide(w.layer));
+						}),
+					),
+				),
+			),
+			RECORDS,
+		);
+	});
+
+	// Plants: acknowledge before storage, trust the caller's writer, lose a retry. Each is a made-up
+	// observation of a door that does it; the same check must name it. A door that does it right passes.
+	it("plants: acknowledging before storage, keeping the caller's writer and losing a retry are each caught", () => {
+		fc.assert(
+			fc.property(
+				fc.uniqueArray(fc.stringMatching(/^row_[0-9a-f]{8}$/), {minLength: 1, maxLength: 6}),
+				(ids) => {
+					const c = {
+						ids,
+						junk: ["junk_0001"],
+						fail: false,
+						lie: false,
+						writer: ["SHA256:window"],
+						person: PERSON,
+						liar: [LIAR],
+					};
+					const ok = {_tag: "ok", result: {acknowledged: ids}};
+					const once = Object.fromEntries(ids.map((id) => [id, 1]));
+					const none = Object.fromEntries(ids.map((id) => [id, 0]));
+					const kept = ids.map((id) => JSON.stringify({id, by: "SHA256:window", for: PERSON}));
+					const right = {first: ok, second: ok, afterFirst: once, afterSecond: once, kept};
+					expect(judge(right, c), "a door that does it right").toBeNull();
+					expect(
+						judge(
+							{...right, first: {_tag: "ok", result: {acknowledged: []}}, afterFirst: none},
+							{...c, fail: true},
+						),
+						"a failed write that acknowledges nothing, then a retry that lands",
+					).toBeNull();
+					expect(
+						judge({...right, afterFirst: none}, c),
+						"acknowledged before storage",
+					).not.toBeNull();
+					expect(
+						judge(
+							{
+								...right,
+								kept: ids.map((id) => JSON.stringify({id, by: "SHA256:window", for: LIAR})),
+							},
+							c,
+						),
+						"the caller's writer kept",
+					).not.toBeNull();
+					expect(
+						judge(
+							{
+								...right,
+								first: {_tag: "ok", result: {acknowledged: []}},
+								afterFirst: none,
+								afterSecond: none,
+							},
+							{...c, fail: true},
+						),
+						"a retry after a failed write that keeps nothing",
+					).not.toBeNull();
+					expect(
+						judge({...right, afterSecond: Object.fromEntries(ids.map((id) => [id, 2]))}, c),
+						"a retry kept twice",
+					).not.toBeNull();
+				},
+			),
+			{seed: 119120, numRuns: 100},
 		);
 	});
 });

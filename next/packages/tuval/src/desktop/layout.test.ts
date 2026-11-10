@@ -78,7 +78,9 @@ const sizes = fc.record({w: fc.integer({min: 1, max: 2400}), h: fc.integer({min:
 
 const deepFreeze = <T>(value: T): T => {
 	if (typeof value === "object" && value !== null) {
-		for (const v of Object.values(value)) {deepFreeze(v);}
+		for (const v of Object.values(value)) {
+			deepFreeze(v);
+		}
 
 		Object.freeze(value);
 	}
@@ -119,8 +121,11 @@ const checks: Readonly<Record<string, Check>> = {
 			expect(r.y + r.h).toBeLessThanOrEqual(size.h + 1e-6);
 		}
 
-		for (const [i, p] of out.shown.entries())
-			{for (const q of out.shown.slice(i + 1)) expect(overlap(p, q)).toBe(false);}
+		for (const [i, p] of out.shown.entries()) {
+			for (const q of out.shown.slice(i + 1)) {
+				expect(overlap(p, q)).toBe(false);
+			}
+		}
 	},
 	"the input tree is never changed": (a, tree, size, focused) => {
 		const frozen = deepFreeze(structuredClone(tree));
@@ -218,18 +223,28 @@ describe("layout: the fixed layout folds locally", () => {
 				const n = a.tilesIn(tree).length;
 				const out = a.fold(tree, size, null);
 
-				if (n === 1) {seen.lone++;}
+				if (n === 1) {
+					seen.lone++;
+				}
 
-				if (n >= 3) {seen.many++;}
+				if (n >= 3) {
+					seen.many++;
+				}
 
-				if (out.folded.length > 0) {seen.folds++;}
+				if (out.folded.length > 0) {
+					seen.folds++;
+				}
 
-				if (n > 1 && out.folded.length === 0) {seen.fits++;}
+				if (n > 1 && out.folded.length === 0) {
+					seen.fits++;
+				}
 			}),
 			opts,
 		);
 
-		for (const [name, count] of Object.entries(seen)) {expect(count, name).toBeGreaterThan(0);}
+		for (const [name, count] of Object.entries(seen)) {
+			expect(count, name).toBeGreaterThan(0);
+		}
 	});
 
 	// Plants (layout): change the shared tree; lose a folded tile; give another tab this tab's size.
@@ -255,7 +270,9 @@ describe("layout: the fixed layout folds locally", () => {
 		const broken: LayoutApi = {
 			...real,
 			fold: (t, s, f) => {
-				if (t._tag === "split") {(t as {a: Tree}).a = t.b;}
+				if (t._tag === "split") {
+					(t as {a: Tree}).a = t.b;
+				}
 
 				return real.fold(t, s, f);
 			},

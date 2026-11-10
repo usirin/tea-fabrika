@@ -8,6 +8,8 @@
 // Every test here is a scenario: real WebCrypto, IndexedDB, grant signing, reload and a 4003 close
 // cannot be had without the built tab and OS processes.
 import {readFileSync} from "node:fs";
+import {ClientRow} from "@kampus/libfabrika";
+import {Schema} from "effect";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {
 	cleanup,
@@ -34,11 +36,15 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-	for (const close of profiles.splice(0)) {await close().catch(() => undefined);}
+	for (const close of profiles.splice(0)) {
+		await close().catch(() => undefined);
+	}
 
 	await stage?.stop();
 
-	if (stage !== undefined) {cleanup(stage.home);}
+	if (stage !== undefined) {
+		cleanup(stage.home);
+	}
 });
 
 const profile = async (dir?: string) => {
@@ -48,6 +54,20 @@ const profile = async (dir?: string) => {
 };
 
 const waiting = (page: import("playwright").Page) => page.getByTestId("grant-code").first();
+const isClientRow = Schema.is(ClientRow);
+
+/** Presses each tile's real "Back to zero" until every count reads 0. A repeated counter is reset once. */
+const zero = async (page: import("playwright").Page): Promise<void> => {
+	for (let i = 0; i < (await counts(page)).length; i++) {
+		if ((await counts(page))[i] !== 0) {
+			await press(page, "Back to zero", i);
+			await until(`tile ${i} to read 0`, async () =>
+				(await counts(page))[i] === 0 ? true : undefined,
+			);
+		}
+	}
+};
+
 const counters = (page: import("playwright").Page) => page.getByRole("region", {name: /^counter/i});
 
 describe("check 1 and p29: one code, a real grant, entry without a reload, a stable key", () => {
@@ -67,7 +87,7 @@ describe("check 1 and p29: one code, a real grant, entry without a reload, a sta
 		// A signer the person never trusted is refused, and the tabs stay waiting.
 		const stranger = otherKey(stage.home, "stranger");
 		await expect(runGrant(stage, w1.fingerprint, w1.code, stranger)).rejects.toThrow();
-		await expect(waiting(one.page)).toBeVisible();
+		expect(await waiting(one.page).isVisible(), "the tab still waits").toBe(true);
 
 		// The real command grants both tabs at once, with no reload.
 		let navigations = 0;
@@ -82,7 +102,7 @@ describe("check 1 and p29: one code, a real grant, entry without a reload, a sta
 		// A reload shows no approval screen and keeps the same key.
 		await one.page.reload();
 		await counters(one.page).first().waitFor({timeout: 30_000});
-		await expect(waiting(one.page)).toHaveCount(0);
+		expect(await waiting(one.page).count(), "no approval screen after a reload").toBe(0);
 
 		// The removed key: a close 4003 shows the words and stops reconnecting with that key.
 		await revoke(stage, granted);
@@ -145,7 +165,9 @@ describe("check 1 and p29: one code, a real grant, entry without a reload, a sta
 							(v): v is CryptoKeyPair => typeof v === "object" && v !== null && "privateKey" in v,
 						);
 
-						if (pair === undefined) {continue;}
+						if (pair === undefined) {
+							continue;
+						}
 
 						const refuse = (work: () => Promise<unknown>) =>
 							work().then(
@@ -181,7 +203,7 @@ describe("check 1 and p29: one code, a real grant, entry without a reload, a sta
 		const second = await profile(dir);
 		const again = await second.tab(stage.url);
 		await counters(again.page).first().waitFor({timeout: 30_000});
-		await expect(waiting(again.page)).toHaveCount(0);
+		expect(await waiting(again.page).count(), "no approval after a browser restart").toBe(0);
 		void granted;
 	});
 
@@ -210,7 +232,7 @@ describe("check 1 and p29: one code, a real grant, entry without a reload, a sta
 			}),
 		);
 		expect(stored).not.toMatch(/PRIVATE|pkcs8|"d":/);
-		await expect(waiting(tab.page)).toHaveCount(0);
+		expect(await waiting(tab.page).count(), "a blocked tab shows no grant code").toBe(0);
 	});
 });
 
@@ -221,24 +243,154 @@ describe("Strict Mode and the selector hook", () => {
 		await grant(stage, tab);
 		const sockets = tab.urls.filter((u) => u.startsWith("ws")).length;
 		expect(sockets, "Strict Mode starts one socket, not two").toBe(1);
+		// The stage is shared by this file's cases, so the counts start where an earlier case left them.
+		const [one = 0, two = 0] = await counts(tab.page);
 		await press(tab.page, "Add one", 0);
 		await press(tab.page, "Add one", 0);
 		await press(tab.page, "Take one away", 1);
 		await until("the counts to settle", async () =>
-			(await counts(tab.page)).join() === "2,-1" ? true : undefined,
+			(await counts(tab.page)).join() === `${one + 2},${two - 1}` ? true : undefined,
 		);
 		await press(tab.page, "Back to zero", 0);
 		await until("the reset", async () =>
-			(await counts(tab.page)).join() === "0,-1" ? true : undefined,
+			(await counts(tab.page)).join() === `0,${two - 1}` ? true : undefined,
 		);
 
-		for (const n of await counts(tab.page)) {expect(Number.isInteger(n)).toBe(true);}
+		for (const n of await counts(tab.page)) {
+			expect(Number.isInteger(n)).toBe(true);
+		}
 
 		expect(
 			tab.console.filter((l) => /^(error|warning|pageerror)/.test(l)),
 			"no console failure",
 		).toEqual([]);
 		expect(tab.urls.filter((u) => u.startsWith("ws")).length).toBe(1);
+	});
+});
+
+// P14, the tab's half of the plan's law "Browser records survive failed delivery until durable
+// acknowledgement, retain safe measurements and are idempotent" (its door half is in
+// src/door-spans.test.ts). The shape this holds the page to: the browser adapter keeps each
+// unacknowledged `ClientRow` (app/client.ts) in IndexedDB, the press row before its letter is sent,
+// and deletes a row only when `client.record` acknowledges its id. The test reads every IndexedDB
+// store read-only and keeps the values that decode as a `ClientRow`; it assumes no database or
+// store name. The queue is plain data, not a machine (0037's T2): no stored value decides which
+// add, send or acknowledgement is legal next.
+describe("browser records: the tab keeps its rows until the door acknowledges them", () => {
+	/** Every value in every IndexedDB store of the page that decodes as a ClientRow, read only. */
+	const queued = async (page: import("playwright").Page): Promise<ReadonlyArray<ClientRow>> => {
+		const values = await page.evaluate(async () => {
+			const found: Array<unknown> = [];
+
+			for (const info of await indexedDB.databases()) {
+				const db = await new Promise<IDBDatabase>((done, fail) => {
+					const open = indexedDB.open(info.name ?? "");
+					open.onsuccess = () => done(open.result);
+					open.onerror = () => fail(open.error);
+				});
+
+				for (const store of Array.from(db.objectStoreNames)) {
+					const rows = await new Promise<Array<unknown>>((done, fail) => {
+						const all = db.transaction(store).objectStore(store).getAll();
+						all.onsuccess = () => done(all.result);
+						all.onerror = () => fail(all.error);
+					});
+
+					for (const row of rows) {
+						for (const v of [
+							row,
+							...(typeof row === "object" && row !== null ? Object.values(row) : []),
+						]) {
+							if (typeof v === "object" && v !== null && "id" in v && "record" in v) {
+								found.push(JSON.parse(JSON.stringify(v)));
+							}
+						}
+					}
+				}
+
+				db.close();
+			}
+
+			return found;
+		});
+		return values.filter(isClientRow);
+	};
+	const pressRows = (rows: ReadonlyArray<ClientRow>) =>
+		rows.filter((r) => r.record._tag === "press");
+
+	// Plant: a ClientRow put into a throwaway database must be found by the same read.
+	it("scenario: the read finds a row planted in any IndexedDB store", async () => {
+		const p = await profile();
+		const tab = await p.tab(stage.url);
+		const planted: ClientRow = {
+			id: "row_planted",
+			tab: "tab_planted",
+			build: "test",
+			sentAt: "2026-11-10T00:00:00.000Z",
+			record: {_tag: "persist", result: "granted"},
+		};
+		await tab.page.evaluate(
+			(row) =>
+				new Promise<void>((done, fail) => {
+					const open = indexedDB.open("p14-plant");
+					open.onupgradeneeded = () => open.result.createObjectStore("rows", {keyPath: "id"});
+					open.onsuccess = () => {
+						const tx = open.result.transaction("rows", "readwrite");
+						tx.objectStore("rows").put(row);
+						tx.oncomplete = () => {
+							open.result.close();
+							done();
+						};
+						tx.onerror = () => fail(tx.error);
+					};
+					open.onerror = () => fail(open.error);
+				}),
+			planted,
+		);
+		expect((await queued(tab.page)).map((r) => r.id)).toContain("row_planted");
+	});
+
+	it("scenario: a press made while the stage is down stays queued through the outage and a closed browser, and leaves once delivered", async () => {
+		const dir = `${stage.home}/profile-records`;
+		const first = await profile(dir);
+		const tab = await first.tab(stage.url);
+		await grant(stage, tab);
+		await stage.stop();
+		let held: ReadonlyArray<string> = [];
+
+		// The stage is shared by this file's cases, so it starts again however this part ends.
+		try {
+			await until("the frame to say so", async () =>
+				/offline|reconnecting/i.test(await connection(tab.page)) ? true : undefined,
+			);
+			await press(tab.page, "Add one", 0);
+			held = await until("the press row to be stored", async () => {
+				const rows = pressRows(await queued(tab.page));
+				return rows.length > 0 ? rows.map((r) => r.id) : undefined;
+			});
+			// Failed delivery: the rows stay while the brain is down. Plant: drop a row on a failed send.
+			await new Promise((done) => setTimeout(done, 3_000));
+			expect(
+				(await queued(tab.page)).map((r) => r.id),
+				"the outage drops no row",
+			).toEqual(expect.arrayContaining(held));
+			await first.close();
+		} finally {
+			await stage.start();
+		}
+		// A new browser on the same profile delivers what the closed one kept, and deletes each row
+		// only once it is acknowledged.
+		const second = await profile(dir);
+		const again = await second.tab(stage.url);
+		await counters(again.page).first().waitFor({timeout: 30_000});
+		await until(
+			"the kept rows to be delivered and acknowledged",
+			async () => {
+				const ids = (await queued(again.page)).map((r) => r.id);
+				return held.every((id) => !ids.includes(id)) ? true : undefined;
+			},
+			60_000,
+		);
 	});
 });
 
@@ -316,6 +468,8 @@ describe("shots: the built page at five arrangements", () => {
 			await shot(tab.page, "frame", "waiting", name);
 			await grant(stage, tab);
 			expect(await counts(tab.page)).toHaveLength(query === "one" ? 1 : query === "grid" ? 4 : 2);
+			// The shot is "granted with the counter at zero"; earlier cases on this stage moved the counts.
+			await zero(tab.page);
 			await shot(tab.page, "counter", "granted", name);
 			await press(tab.page, "Add one", 0);
 			await until("the press", async () => ((await counts(tab.page))[0] === 1 ? true : undefined));
@@ -343,10 +497,15 @@ describe("shots: the built page at five arrangements", () => {
 
 			for (const button of await tab.page
 				.getByRole("button", {name: /Add one|Take one away|Back to zero/})
-				.all())
-				{await expect(button).toBeVisible();}
+				.all()) {
+				expect(await button.isVisible(), `${JSON.stringify(media)}: a button is visible`).toBe(
+					true,
+				);
+			}
 
-			await expect(tab.page.getByTestId("count").first()).toBeVisible();
+			expect(await tab.page.getByTestId("count").first().isVisible(), "the count is visible").toBe(
+				true,
+			);
 			await shot(tab.page, "frame", `${Object.keys(media)[0]}`, "one");
 		}
 	});
@@ -354,13 +513,17 @@ describe("shots: the built page at five arrangements", () => {
 		const p = await profile();
 		const tab = await p.tab(stage.url);
 		await grant(stage, tab);
+		// The stage is shared by this file's cases, so the press is counted from where it starts.
+		const start = (await counts(tab.page))[0] ?? Number.NaN;
 		await press(tab.page, "Add one", 0);
-		await until("the press", async () => ((await counts(tab.page))[0] === 1 ? true : undefined));
+		await until("the press", async () =>
+			(await counts(tab.page))[0] === start + 1 ? true : undefined,
+		);
 		await stage.stop();
 		await until("the frame to say so", async () =>
 			/offline|reconnecting/i.test(await connection(tab.page)) ? true : undefined,
 		);
-		expect((await counts(tab.page))[0], "the last checked count stays visible").toBe(1);
+		expect((await counts(tab.page))[0], "the last checked count stays visible").toBe(start + 1);
 		await shot(tab.page, "frame", "disconnected", "one");
 		await stage.start();
 		await until(

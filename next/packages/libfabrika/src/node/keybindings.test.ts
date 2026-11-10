@@ -5,8 +5,8 @@
 // - `watchKeys({file, commands, defaults, publish, status})`: an Effect needing `FileSystem` and a
 //   `Scope`. It reads the file once before it returns, then watches it for the life of the scope.
 // - Each good read calls `publish({rows, source: "file"})` with the rows `parseKeys` made, then
-//   `status({error: null})`. A bad file or a failed read calls `status({error: {line, why}})` and
-//   publishes nothing. A failed watcher calls `status({error: {why: "watch", ...}})`.
+//   `status({error: null})`. A bad file or a failed read calls `status({error: {line, reason}})` and
+//   publishes nothing. A failed watcher calls `status({error: {reason: "watch", ...}})`.
 // - Closing the scope stops the watcher: no read, publish or status happens after it.
 import {describe, expect, it} from "@effect/vitest";
 import {Effect, FileSystem, Queue, Ref, Scope, Stream} from "effect";
@@ -16,7 +16,7 @@ const SEED = 119120;
 const LOAD = "./keybindings.ts";
 const COMMANDS = ["counter.inc", "counter.dec", "counter.reset"] as const;
 
-type Status = {readonly error: {readonly line: number; readonly why: string} | null};
+type Status = {readonly error: {readonly line: number; readonly reason: string} | null};
 
 type Watch = (o: {
 	file: string;
@@ -85,22 +85,30 @@ const play = (watch: Watch, list: ReadonlyArray<Step>, closeAfter: number = list
 		const model: Array<unknown> = [{"counter.inc": ["a"]}];
 
 		for (const [n, step] of list.entries()) {
-			if (n === closeAfter) {yield* Scope.close(scope, {_tag: "Success", value: undefined} as never);}
+			if (n === closeAfter) {
+				yield* Scope.close(scope, {_tag: "Success", value: undefined} as never);
+			}
 
 			if (step._tag === "good") {
 				yield* Ref.set(content, text(step.keys));
 
-				if (n < closeAfter) {model.push({"counter.inc": step.keys});}
-			} else if (step._tag === "bad") {yield* Ref.set(content, `[keys]\n"no.such" = ["a"]\n`);}
-			else if (step._tag === "unreadable") {yield* Ref.set(content, "unreadable");}
+				if (n < closeAfter) {
+					model.push({"counter.inc": step.keys});
+				}
+			} else if (step._tag === "bad") {
+				yield* Ref.set(content, `[keys]\n"no.such" = ["a"]\n`);
+			} else if (step._tag === "unreadable") {
+				yield* Ref.set(content, "unreadable");
+			}
 
 			yield* Queue.offer(events, step._tag === "watcher_fails" ? "fail" : "change");
 			yield* Effect.yieldNow;
 			yield* Effect.yieldNow;
 		}
 
-		if (closeAfter >= list.length)
-			{yield* Scope.close(scope, {_tag: "Success", value: undefined} as never);}
+		if (closeAfter >= list.length) {
+			yield* Scope.close(scope, {_tag: "Success", value: undefined} as never);
+		}
 
 		return {
 			published: yield* Ref.get(published),
@@ -117,7 +125,9 @@ const lawOne = (watch: Watch, list: ReadonlyArray<Step>) =>
 		for (const s of list) {
 			trimmed.push(s);
 
-			if (s._tag === "watcher_fails") {break;} // a failed watcher is the end of that watch
+			if (s._tag === "watcher_fails") {
+				break;
+			} // a failed watcher is the end of that watch
 		}
 
 		const out = yield* play(watch, trimmed);
@@ -125,9 +135,13 @@ const lawOne = (watch: Watch, list: ReadonlyArray<Step>) =>
 		const last = out.statuses.at(-1);
 		const final = trimmed.filter((s) => s._tag !== "watcher_fails").at(-1);
 
-		if (trimmed.at(-1)?._tag === "watcher_fails") {expect(last?.error?.why).toBe("watch");}
-		else if (final?._tag === "good" || final === undefined) {expect(last?.error).toBeNull();}
-		else {expect(last?.error).not.toBeNull();}
+		if (trimmed.at(-1)?._tag === "watcher_fails") {
+			expect(last?.error?.reason).toBe("watch");
+		} else if (final?._tag === "good" || final === undefined) {
+			expect(last?.error).toBeNull();
+		} else {
+			expect(last?.error).not.toBeNull();
+		}
 	});
 
 const lawTwo = (watch: Watch, list: ReadonlyArray<Step>, at: number) =>

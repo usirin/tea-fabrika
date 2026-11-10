@@ -44,8 +44,19 @@ const home = () => {
 	return h;
 };
 
-const generated = fc.record({name: fc.stringMatching(/^[a-z][a-z0-9]{0,12}$/), label: fc.string()});
-const chosen = {name: "view", label: "view-built"};
+// `mark` is a non-empty word no bundle holds by chance, for a law that looks for it in a script;
+// `label` stays any string, for the law that reads it back from the compiled module.
+const generated = fc.record({
+	name: fc.stringMatching(/^[a-z][a-z0-9]{0,12}$/),
+	label: fc.string(),
+	mark: fc.stringMatching(/^[a-z0-9]{8,16}$/).map((s) => `p14-rebuild-mark-${s}`),
+});
+
+const chosen = {name: "view", label: "view-built", mark: "p14-rebuild-mark-chosen"};
+
+/** A module specifier naming a `node:` module: a static import or re-export, a dynamic import or a
+ *  require. An object key such as React DOM's minified `{node:n}` is not one. */
+const NODE_SPECIFIER = /\b(?:from|import|require)\s*\(?\s*["'`]node:/;
 
 const law = (
 	name: string,
@@ -141,7 +152,7 @@ describe("P12 Rolldown build", () => {
 		},
 	);
 	law(
-		"default discovery publishes a view and custom modules export program",
+		"default discovery publishes one view module beside the tab's window.js, and custom modules export program",
 		async ({name, label}) => {
 			const {build} = await import("./build.ts");
 			const parent = home(),
@@ -166,7 +177,11 @@ describe("P12 Rolldown build", () => {
 					),
 				);
 				expect(built.programs.counter?.hash).toMatch(/^[a-f0-9]{64}$/);
-				const views = readdirSync(out).filter((file) => file.endsWith(".js"));
+				// `out` holds one `<hash>.js` per discovered view and P14's `window.js`; `brain.mjs` and
+				// `page.html` are not `.js`.
+				const scripts = readdirSync(out).filter((file) => file.endsWith(".js"));
+				const views = scripts.filter((file) => file !== "window.js");
+				expect(scripts).toContain("window.js");
 				expect(views).toHaveLength(1);
 				const compiled = await import(pathToFileURL(join(out, views[0]!)).href);
 				expect(compiled.label).toBe(label);
@@ -295,8 +310,9 @@ describe("P14 browser build", () => {
 		};
 		expect(built.style.map((s) => s.source)).toEqual(sources);
 
-		for (const s of built.style)
-			{expect(s.css.length, `${s.source} css is not empty`).toBeGreaterThan(0);}
+		for (const s of built.style) {
+			expect(s.css.length, `${s.source} css is not empty`).toBeGreaterThan(0);
+		}
 
 		const at = built.style.map((s) => built.page.indexOf(s.css));
 		expect(
@@ -311,8 +327,39 @@ describe("P14 browser build", () => {
 		// A self-contained browser script: no bare or platform import left, no Node, Worker or MCP name.
 		expect(built.script).not.toMatch(/(?:^|\n)\s*import\s[^;]*from\s*["'](?!\.|\/|https?:)/);
 
-		for (const word of ["node:", "cloudflare:", "@modelcontextprotocol", 'require("react'])
-			{expect(built.script).not.toContain(word);}
+		expect(built.script, "no node: module is imported or required").not.toMatch(NODE_SPECIFIER);
+
+		for (const word of ["cloudflare:", "@modelcontextprotocol", 'require("react']) {
+			expect(built.script).not.toContain(word);
+		}
+	});
+
+	// Plant for the check above: each way a script names a node: module is caught, and a minified
+	// object key `node:` is not.
+	it("the node: check catches every specifier form and passes an object key", () => {
+		fc.assert(
+			fc.property(
+				fc.stringMatching(/^[a-z_]{1,12}$/),
+				fc.constantFrom("'", '"', "`"),
+				fc.constantFrom(" ", "", "\n  "),
+				(module, q, gap) => {
+					const forms = [
+						`import x from${gap}${q}node:${module}${q};`,
+						`import${gap}${q}node:${module}${q};`,
+						`export {x} from${gap}${q}node:${module}${q};`,
+						`const m = import(${gap}${q}node:${module}${q});`,
+						`const m = require(${gap}${q}node:${module}${q});`,
+					];
+
+					for (const form of forms) {
+						expect(`a();${form}b();`, form).toMatch(NODE_SPECIFIER);
+					}
+
+					expect(`var o={node:${module},offset:1};f({node:n});`).not.toMatch(NODE_SPECIFIER);
+				},
+			),
+			{seed: 119120, numRuns: 200},
+		);
 	});
 
 	for (const [plant, source] of plants) {
@@ -356,18 +403,18 @@ describe("P14 browser build", () => {
 	);
 	law(
 		"a good rebuild replaces every file at once and the build hash follows the script",
-		async ({name, label}) => {
+		async ({name, mark}) => {
 			const {build} = await import("./build.ts");
 			const {entry, file, out} = fixture(name, clean);
 			const options = {out, files: [], ledger: [], browser: entry};
 			// oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
 			const first = (await runNode(build(options))) as unknown as {script: string};
-			writeFileSync(file, `export const Tip = () => <b>{${JSON.stringify(label)}}</b>;`);
+			writeFileSync(file, `export const Tip = () => <b>{${JSON.stringify(mark)}}</b>;`);
 			// oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
 			const second = (await runNode(build(options))) as unknown as {script: string};
 			expect(readFileSync(join(out, "window.js"), "utf8")).toBe(second.script);
-			expect(second.script).toContain(label);
-			expect(first.script).not.toContain(label);
+			expect(second.script).toContain(mark);
+			expect(first.script).not.toContain(mark);
 		},
 	);
 });
