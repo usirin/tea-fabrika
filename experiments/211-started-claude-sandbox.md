@@ -210,7 +210,9 @@ as a hook, the start check, and asks refused.
   agent hours. How sure: 75%. The doubt is the local sockets: if many of this repo's tests need one,
   A's "runs the checks" is half true. One `pnpm test` under these settings counts them. If the count
   is high, open `allowLocalBinding` and Unix sockets under the temp folders only, never the host's
-  own socket.
+  own socket. *Walked back 2026-11-09 by
+  [0045](../.decisions/0045-test-steps-run-in-containers.md): a step that needs a socket runs in a
+  container with its own network, and the sandbox is not opened.*
 - **Keep B as the next slice,** if a week of use shows the person wants claude's work as a branch.
   How sure: 60%; only use says.
 - **Leave C out.** It breaks the daily moment for safety A already has. How sure: 80%.

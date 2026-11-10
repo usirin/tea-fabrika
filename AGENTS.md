@@ -100,6 +100,13 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   files. A `node:` import stays only where Effect has nothing, marked as an edge with its reason
   (owner, 2026-11-09). The lint rule `fabrika/no-node-imports` comes with
   [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
+- **In `next/`, use the platform through Alchemy, never directly,** in the cloud and on the laptop
+  alike: no `cloudflare:*`, `miniflare`, `workerd`, `wrangler` or `@cloudflare/*` import, no raw
+  platform type, and nothing that starts or talks to the local runtime except through Alchemy. A
+  gap is patched locally with its upstream issue filed the same day; a direct use stays only as a
+  marked edge with the issue link. The six gaps 0042 lists are patched without an issue (its
+  amendment, 2026-11-09). Today's direct uses move with their ports, and the lint rule is
+  ticket 506 ([0042](./.decisions/0042-platform-pieces-go-through-alchemy.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
   `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
@@ -128,7 +135,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
   they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
   agent changes them directly, keeps each change small, and merges on green CI with a clean leak
-  grep. Product code (`next/` and today's app) keeps its steps.
+  grep. Fast-tracked is not loose: agents read `.agents/` and copy its habits, so its code follows
+  `next/`'s conventions and lint rules, edge comments included. What it broke on the day it joined
+  is in `agents-ledger.json`, which only shrinks; a shell or Python script moves to TypeScript and
+  Effect when it is next touched ([0033](./.decisions/0033-agents-code-follows-next-rules.md)).
+  Product code (`next/` and today's app) keeps its steps.
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
   part is small, never absent. A rule that code already checks leaves a skill's prose; a rule
@@ -152,6 +163,13 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   narrower. A change that loosens or removes a law still waits on the owner
   ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
+- **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
+  subject, with front files and an `internal/` no other room imports, and it re-exports no other
+  room's names. Its floor is one line in `layer-rules.json`: a room imports only from lower floors,
+  never from its own. A room offers Effect services in its own types and errors, plus the shared
+  names beside `Id.ts`: a lower room's error is translated at the service, with its cause kept, and
+  `runtime/` never imports `ledger/`. A new file goes in its room now, before the move lands
+  ([0043](./.decisions/0043-rooms-on-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
@@ -161,6 +179,12 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   legal next is control state. It gets one named type with its transitions in one place, never
   flags, a position in code or an order two parties assume. A plan asks of new code: what are its
   states? ([0037](./.decisions/0037-implicit-state-machines-made-explicit.md)).
+- **In `next/`, every state machine is a tea machine, and a file exports at most one.** No plain
+  union with a transition function. The machine's Model, Msg and update live in that file, with no
+  input or output code, and nothing outside it edits the Model by hand: it sends a Msg. A small
+  private helper machine may share its parent's file. An `update` handler picks the next state with
+  a plain conditional on `_tag`, not `Match` or `.match`
+  ([0046](./.decisions/0046-one-tea-machine-per-file.md)).
 - **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
   Effect does it: `Lease.of(...)` under `import * as Lease`
   ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
@@ -210,6 +234,11 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   it, before you give a lean; a guess comes after, marked as a guess. If the plain way
   clashes with a stated goal, say so in one line, and let the owner pick. Never hide it
   behind a custom design.
+- **Try an existing tool before you hand-write one.** A plan or pull request that adds a check, a
+  script or a tool names the widely used tools it looked at, with a link each, and uses one or
+  says what it cannot do, with proof. "We could write it quickly" is not a reason. A hand-written
+  check lists its edge cases before the code, each with a test
+  ([0040](./.decisions/0040-existing-tools-before-hand-written.md)).
 - **Name the Elm answer first.** `@demlik/tea` is the Elm architecture in
   TypeScript. Parents are written by hand and step their children. Exceptions
   are named in [`docs/direction/elm-first.md`](./docs/direction/elm-first.md)
@@ -398,9 +427,10 @@ pnpm format     # oxfmt and oxlint: format, sort imports and apply safe fixes, i
 ```
 
 Run `pnpm format` first, so a diff holds only what was meant. The format settings
-are in `.oxfmtrc.json`, Effect's own from ticket 466's sweep: 2 spaces, 120 columns, no
-semicolons, no trailing commas, spaces inside braces
-([0029](./.decisions/0029-format-and-names-follow-effect.md)). The lint rules are in `.oxlintrc.json`:
+are in `.oxfmtrc.json`, from ticket 466's sweep: 2 spaces, 120 columns and spaces inside braces,
+as Effect has them ([0029](./.decisions/0029-format-and-names-follow-effect.md)), with semicolons
+and trailing commas, function parameters and call arguments included
+([0039](./.decisions/0039-keep-semicolons-and-es5-commas.md)). The lint rules are in `.oxlintrc.json`:
 the rules of the pipeline this repo rebuilds, with its custom rules in
 `oxlint-plugins/`. Why these two tools:
 [oxlint and oxfmt](./docs/direction/oxlint-and-oxfmt.md). Never switch a rule off
@@ -469,6 +499,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
   `BrowserWindow` gets `setOpacity(0)`, `setIgnoreMouseEvents(true)` and a position in the work
   area's corner. Never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
+- A step that needs ports, sockets or its own processes runs in a container with its own network
+  (`--network none` while test code runs), never behind a hole in the laptop sandbox: no
+  `allowLocalBinding`, no unix-socket allowance, no patch of the tool. No key, login or home folder
+  goes in. Docker not running ends the step `stuck`
+  ([0045](./.decisions/0045-test-steps-run-in-containers.md)).
 
 ### Tool facts that cost us time
 
