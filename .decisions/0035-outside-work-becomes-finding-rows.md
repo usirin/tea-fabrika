@@ -1,7 +1,7 @@
 ---
 id: 0035
 title: An agent that finds work outside its task writes one finding row and keeps going, never a fix, a ticket or only a mention
-status: accepted
+status: amended-in-part by [0036](0036-a-flaky-test-is-fixed.md)
 date: 2026-11-09
 tags: [findings, field, agents, tickets, rating, noise, review]
 ---
@@ -88,6 +88,9 @@ it, does not file a ticket, and does not only mention it in its report.**
   | `flaky_test` | a test that passes on some runs and fails on others |
   | `doc_drift` | a doc and the source disagree |
   | `rule_break` | code that breaks AGENTS.md, a decision or a pattern doc |
+
+  A `flaky_test` row does not wait for its rating: the test is fixed that day, with a ticket
+  ([0036](0036-a-flaky-test-is-fixed.md)). The rest of this file still holds for it.
 
   A finding that fits none is not forced into one. The agent says so in one line of its report, and
   a new rule is added here by amendment.

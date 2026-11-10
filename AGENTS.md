@@ -375,6 +375,9 @@ every row.
 
 A report says which of these ran, and which could not run and why.
 
+A flaky test is fixed the day it is seen, by removing its cause; nobody reruns it until green and moves on
+([0036](./.decisions/0036-a-flaky-test-is-fixed.md)).
+
 `pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does
 not name yet (`pnpm lint:dead` runs that part alone). With code-graph 0.12.0,
 about 0% of what it finds is wrong: 4 findings, all right
