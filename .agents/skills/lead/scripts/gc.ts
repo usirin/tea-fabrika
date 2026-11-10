@@ -1,14 +1,19 @@
 // gc.ts: `box.sh gc [--dry-run]`. Remove the boxes whose work is safe somewhere else, so dead boxes
 // never fill the disk again. Today's lead tooling, run on our own laptop; it is not product.
 //
-//   a box is kept while   a process has its cwd there, or its git index changed in the last 2 h
-//                         (or its git data or folder did, so a box being made is safe),
+//   a box is kept while   a process has its cwd there, or its git index, HEAD log or folder changed
+//                         in the last 2 h (lastTouched; gc's own reads write none of them),
 //                         or drive kept it stuck less than 24 h ago, or it holds uncommitted
 //                         or untracked files (a backup saves only HEAD, so they would be lost)
 //   else it is removed    when its branch (minus -wip) has a merged pull request, or its HEAD is
 //                         on a remote branch; else its HEAD is pushed as the bot to <branch>-wip
 //                         first (fabrikalfa/<box>-wip when that is refused), and kept if both fail
-//   then                  every state/<box>.box whose box folder is gone is removed too
+//   then                  every state/<box>.box whose box folder is gone is removed too, and every
+//                         linked worktree of the main checkout outside the boxes folder whose
+//                         lane landed (decideWorktree): its branch stays in the main checkout
+//
+// Every keep is printed with its reason, so a box that never goes is seen (field note
+// 2026-11-09-254: gc's own git status reset the idle clock, so for a day no box was ever removed).
 //
 // It never runs a command inside a box: it reads the box's git data with hooks off, and fetches
 // from it into the main checkout, as `box.sh fetch` does. One line per box removed, then a total.
@@ -27,8 +32,9 @@ export type Seen = {
 	readonly name: string;
 	/** `null`: no `.git` here, so it is not a box (a log folder, a half-made box). */
 	readonly git: {readonly head: string | null; readonly branch: string | null} | null;
-	readonly busy: boolean;
-	/** Milliseconds since the git index (or the git data, when there is no index) last changed. */
+	/** The processes whose working folder is in the box. */
+	readonly busy: readonly number[];
+	/** Milliseconds since lastTouched. */
 	readonly idle: number;
 	/** Milliseconds since drive kept this box stuck; `null` when drive did not keep it. */
 	readonly stuck: number | null;
@@ -58,7 +64,8 @@ export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>):
 /** The Check, pure. */
 export const decide = (s: Seen): Verdict => {
 	if (s.git === null) return {_tag: "keep", reason: "not a git checkout"};
-	if (s.busy) return {_tag: "keep", reason: "a process is working in it"};
+	if (s.busy.length > 0)
+		return {_tag: "keep", reason: `a process is working in it (pid ${s.busy.join(", ")})`};
 	if (s.idle < IDLE)
 		return {_tag: "keep", reason: `touched ${Math.round(s.idle / 60_000)} min ago`};
 	if (s.stuck !== null && s.stuck < STUCK)
@@ -73,10 +80,45 @@ export const decide = (s: Seen): Verdict => {
 	return {_tag: "backup", to: backupsOf(s.name, s.git.branch)};
 };
 
+/** What gc saw of one linked worktree of the main checkout, outside the boxes folder. */
+export type SeenWorktree = {
+	readonly branch: string | null;
+	readonly locked: boolean;
+	readonly busy: readonly number[];
+	readonly idle: number;
+	readonly dirty: number | null;
+	/** The pull requests of its branch, minus -wip: what state each is in. */
+	readonly prs: readonly ("OPEN" | "MERGED" | "CLOSED")[];
+};
+
+/** A worktree goes once its lane landed, clean and idle. Its branch stays in the main checkout, so
+ * only the folder goes; a worktree with no lane branch is someone's own and stays. */
+export const decideWorktree = (w: SeenWorktree): Verdict => {
+	if (w.locked) return {_tag: "keep", reason: "locked"};
+	if (w.busy.length > 0)
+		return {_tag: "keep", reason: `a process is working in it (pid ${w.busy.join(", ")})`};
+	if (w.idle < IDLE)
+		return {_tag: "keep", reason: `touched ${Math.round(w.idle / 60_000)} min ago`};
+	if (w.branch === null) return {_tag: "keep", reason: "no branch checked out"};
+	if (w.dirty === null) return {_tag: "keep", reason: "its files could not be read"};
+	if (w.dirty > 0) return {_tag: "keep", reason: `${w.dirty} uncommitted files`};
+	if (w.prs.includes("OPEN")) return {_tag: "keep", reason: "its pull request is open"};
+	if (w.prs.includes("MERGED")) return {_tag: "remove", reason: "merged"};
+	if (w.prs.includes("CLOSED")) return {_tag: "remove", reason: "closed"};
+	return {_tag: "keep", reason: "no pull request yet"};
+};
+
 // ---------------------------------------------------------------- the world
 
+// GIT_OPTIONAL_LOCKS=0: git status then never refreshes the index or makes index.lock, so a read
+// leaves every mtime lastTouched reads as it was.
 const sh = (cmd: string, args: readonly string[], cwd?: string) => {
-	const r = spawnSync(cmd, args, {cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
+	const r = spawnSync(cmd, args, {
+		cwd,
+		encoding: "utf8",
+		maxBuffer: 64 * 1024 * 1024,
+		env: {...process.env, GIT_OPTIONAL_LOCKS: "0"},
+	});
 	return {code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? ""};
 };
 const SAFE = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
@@ -124,12 +166,32 @@ const gitDirOf = (box: string): string | null => {
 
 const mtime = (path: string) => (existsSync(path) ? statSync(path).mtimeMs : 0);
 
-/** Every working folder some process sits in, from one lsof call. */
-const cwds = (): string[] =>
-	sh("lsof", ["-a", "-d", "cwd", "-Fn"])
-		.out.split("\n")
-		.filter((l) => l.startsWith("n/"))
-		.map((l) => l.slice(1));
+/** When work last happened in a box: the newest of its folder (a box being made), its index (an
+ * add, a checkout) and its HEAD log (a commit, a reset). Never the git data folder itself: any
+ * git command's lock files change that. */
+export const lastTouched = (box: string, gitDir: string | null): number =>
+	Math.max(
+		mtime(box),
+		gitDir === null
+			? 0
+			: Math.max(mtime(join(gitDir, "index")), mtime(join(gitDir, "logs", "HEAD"))),
+	);
+
+/** Every working folder some process sits in, with its pid, from one lsof call. */
+const cwds = (): {readonly pid: number; readonly path: string}[] => {
+	const out: {pid: number; path: string}[] = [];
+	let pid = 0;
+	for (const l of sh("lsof", ["-a", "-d", "cwd", "-Fpn"]).out.split("\n")) {
+		if (l.startsWith("p")) pid = Number(l.slice(1));
+		else if (l.startsWith("n/")) out.push({pid, path: l.slice(1)});
+	}
+	return out;
+};
+const pidsIn = (busyIn: readonly {pid: number; path: string}[], dir: string) => [
+	...new Set(
+		busyIn.filter((c) => c.path === dir || c.path.startsWith(`${dir}/`)).map((c) => c.pid),
+	),
+];
 
 /** Box name to when drive kept it stuck, from `state/<lane>.json`. */
 const keptByDrive = (boxes: string): Map<string, number> => {
@@ -175,23 +237,31 @@ const main = () => {
 	const repo = (...a: string[]) => sh("git", ["-C", env.MAIN, ...SAFE, ...a]);
 	const common = resolve(env.MAIN, repo("rev-parse", "--git-common-dir").out.trim());
 	repo("fetch", "-q", "origin");
-	const merged = new Set(
-		sh("gh", [
-			"pr",
-			"list",
-			"-R",
-			env.GH_REPO,
-			"--state",
-			"merged",
-			"--limit",
-			"1000",
-			"--json",
-			"headRefName",
-			"-q",
-			".[].headRefName",
-		]).out.split("\n"),
-	);
-	merged.delete("");
+	const prsOf = new Map<string, ("OPEN" | "MERGED" | "CLOSED")[]>();
+	const listed = sh("gh", [
+		"pr",
+		"list",
+		"-R",
+		env.GH_REPO,
+		"--state",
+		"all",
+		"--limit",
+		"5000",
+		"--json",
+		"headRefName,state",
+		"-q",
+		'.[] | "\\(.state) \\(.headRefName)"',
+	]);
+	if (listed.code !== 0) {
+		console.error(`gc: gh could not list pull requests: ${listed.err.trim()}`);
+		process.exit(1);
+	}
+	for (const line of listed.out.split("\n")) {
+		const [state, ref] = line.split(" ");
+		if ((state === "OPEN" || state === "MERGED" || state === "CLOSED") && ref)
+			prsOf.set(ref, [...(prsOf.get(ref) ?? []), state]);
+	}
+	const merged = new Set([...prsOf].filter(([, s]) => s.includes("MERGED")).map(([r]) => r));
 	const busyIn = cwds();
 	const kept = keptByDrive(env.BOXES);
 	const now = Date.now();
@@ -224,11 +294,8 @@ const main = () => {
 		const seen: Seen = {
 			name,
 			git,
-			busy: busyIn.some((p) => p === box || p.startsWith(`${box}/`)),
-			// The newest of the index, the git data and the box folder, so a box still being made counts.
-			idle:
-				now -
-				Math.max(mtime(box), gitDir ? Math.max(mtime(gitDir), mtime(join(gitDir, "index"))) : 0),
+			busy: pidsIn(busyIn, box),
+			idle: now - lastTouched(box, gitDir),
 			stuck: kept.has(name) ? now - (kept.get(name) ?? now) : null,
 			merged: branch !== null && merged.has(branch),
 			onRemote,
@@ -236,10 +303,20 @@ const main = () => {
 		};
 		const verdict = decide(seen);
 		if (verdict._tag === "keep") {
+			console.log(`keep ${name}: ${verdict.reason}`);
 			keptCount += 1;
 			continue;
 		}
 		let why: string = verdict._tag === "remove" ? verdict.reason : "";
+		// A merged lane's box may hold commits no remote has: keep its HEAD in the main checkout.
+		if (verdict._tag === "remove" && !onRemote && !dry) {
+			if (repo("fetch", "-q", "-f", box, `HEAD:refs/keep/box/${name}`).code !== 0) {
+				console.log(`keep ${name}: could not save its HEAD`);
+				keptCount += 1;
+				continue;
+			}
+			why += `, HEAD kept at refs/keep/box/${name}`;
+		}
 		if (verdict._tag === "backup") {
 			if (dry) why = `would back up to ${verdict.to[0]}`;
 			else {
@@ -289,8 +366,45 @@ const main = () => {
 		console.log(`${dry ? "would remove" : "removed"} state/${f}: its box is gone`);
 	}
 	if (!dry) repo("worktree", "prune");
+	// Linked worktrees outside the boxes folder: a lead's or an agent's own checkout of a lane.
+	let trees = 0;
+	const blocks = repo("worktree", "list", "--porcelain").out.split("\n\n").filter(Boolean);
+	for (const block of blocks.slice(1)) {
+		const lines = block.split("\n");
+		const path = lines.find((l) => l.startsWith("worktree "))?.slice(9) ?? "";
+		if (!path || path === env.MAIN || path.startsWith(`${env.BOXES}/`) || !existsSync(path))
+			continue;
+		const ref = lines.find((l) => l.startsWith("branch "))?.slice("branch refs/heads/".length);
+		const gitDir = gitDirOf(path);
+		const branch = ref ?? null;
+		const verdict = decideWorktree({
+			branch,
+			locked: lines.some((l) => l === "locked" || l.startsWith("locked ")),
+			busy: pidsIn(busyIn, path),
+			idle: now - lastTouched(path, gitDir),
+			dirty: gitDir === null ? null : dirtyIn(gitDir, path),
+			prs: branch === null ? [] : (prsOf.get(branch.replace(/(-wip)+$/, "")) ?? []),
+		});
+		if (verdict._tag !== "remove") {
+			console.log(`keep worktree ${path}: ${verdict._tag === "keep" ? verdict.reason : ""}`);
+			keptCount += 1;
+			continue;
+		}
+		const mb = sizeMb([path]);
+		// Without --force: git itself refuses a worktree with changes, a second guard.
+		if (!dry && repo("worktree", "remove", path).code !== 0) {
+			console.log(`keep worktree ${path}: git worktree remove refused`);
+			keptCount += 1;
+			continue;
+		}
+		trees += 1;
+		freed += mb;
+		console.log(
+			`${dry ? "would remove" : "removed"} worktree ${path}: ${verdict.reason}, ${mb} MB`,
+		);
+	}
 	console.log(
-		`gc: ${dry ? "would remove" : "removed"} ${removed} boxes, ${freed} MB; kept ${keptCount}`,
+		`gc: ${dry ? "would remove" : "removed"} ${removed} boxes and ${trees} worktrees, ${freed} MB; kept ${keptCount}`,
 	);
 };
 

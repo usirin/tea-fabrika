@@ -1322,15 +1322,22 @@ const main = () => {
 		);
 		process.exit(3);
 	}
-	// Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk.
-	spawnSync("sh", [join(HERE, "box.sh"), "gc"], {stdio: ["ignore", 2, 2]});
+	// Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk,
+	// naming what gc kept and why, so the lead fixes the cause and never asks the owner for space.
+	const gc = spawnSync("sh", [join(HERE, "box.sh"), "gc"], {
+		stdio: ["ignore", "pipe", 2],
+		encoding: "utf8",
+		maxBuffer: 16 * 1024 * 1024,
+	});
+	process.stderr.write(gc.stdout ?? "");
 	const free = freeGb(env.BOXES);
 	if (free === null || free < MIN_FREE_GB) {
 		const said = free === null ? "df could not read the free space" : `${free} GB free`;
+		const keeps = (gc.stdout ?? "").split("\n").filter((l) => l.startsWith("keep "));
 		console.log(
 			JSON.stringify({
 				outcome: "refused",
-				reason: `${said} on the boxes' volume; drive needs ${MIN_FREE_GB}`,
+				reason: `${said} on the boxes' volume after box.sh gc; drive needs ${MIN_FREE_GB}; gc kept ${keeps.length}: ${keeps.map((l) => l.slice(5)).join("; ") || "nothing"}`,
 			}),
 		);
 		process.exit(3);
