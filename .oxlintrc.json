@@ -396,7 +396,7 @@
   "overrides": [
     {
       // L5 plant: import homedir or a filesystem namespace to inspect inherited homes.
-      "files": ["scripts/vitest.setup.ts"],
+      "files": ["scripts/vitest.setup.ts", "scripts/testhome.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
