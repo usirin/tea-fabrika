@@ -32,10 +32,23 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
+import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {join, relative} from "node:path";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
+
+// Read with the CI package's installed YAML parser.
+const {parse} = createRequire(new URL("../../../../.github/ci/package.json", import.meta.url))(
+	"yaml",
+) as {parse: (text: string) => {jobs: {next: {strategy: {matrix: {shard: number[]}}}}}};
+
+const workflow = parse(
+	readFileSync(join(import.meta.dirname, "../../../../.github/workflows/check.yaml"), "utf8"),
+);
+const nextNames: string[] = workflow.jobs.next.strategy.matrix.shard.map(
+	(index: number) => `next (${index})`,
+);
 
 const script = join(import.meta.dirname, "box.sh");
 const storageFiles = (root: string) => {
@@ -168,7 +181,8 @@ if (cmd === "gh") {
   else if (args[0] === "pr" && args[1] === "merge") process.exit(0);
   else if (args[0] === "run") console.log("commits\\tcheck\\t2026-11-08T00:00:00Z commits: 1 commits, ticket 318");
   else if (args[1].includes("check_name=")) console.log("github-actions");
-  else if (args[1].includes("check-runs?")) console.log(["check", "e2e", "next", "commits"].map(n => n + "\\tcompleted\\tsuccess").join("\\n"));
+  // Cleanup laws supply all matrix members and a completed skip while the waiter changes.
+  else if (args[1].includes("check-runs?")) console.log(["check", "e2e", "commits", ...${JSON.stringify(nextNames)}].map(n => n + "\\tcompleted\\tsuccess").concat("next\\tcompleted\\tskipped").join("\\n"));
   else if (args[1].includes("actions/runs?")) console.log("71\\tpull_request_target\\tcompleted\\tsuccess\\t81");
   else process.exit(1);
 } else if (cmd === "git") {

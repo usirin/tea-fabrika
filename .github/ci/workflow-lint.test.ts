@@ -62,7 +62,29 @@ const valid = (label: string, extra: string) => ({
 				},
 			],
 		},
-		next: {needs: "changes", if: guard("next"), steps: [{run: "pnpm exec vitest run next/"}]},
+		next: {
+			needs: "changes",
+			if: guard("next"),
+			strategy: {"fail-fast": false, matrix: {shard: [1, 2, 3, 4, 5, 6]}},
+			steps: [
+				{
+					run: 'pnpm exec vitest run next/ --shard "$SHARD"',
+					env: {SHARD: `\${{ matrix.shard }}/6`},
+				},
+				{
+					name: "chromium",
+					if: "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
+					run: "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+				},
+				{run: "node next/apps/fabrika/e2e.ts", if: "matrix.shard == 1"},
+				{
+					name: "edges",
+					if: "matrix.shard == 1 && github.event_name == 'pull_request'",
+					env: {BASE: `\${{ github.event.pull_request.base.sha }}`},
+					run: 'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
+				},
+			],
+		},
 		e2e: {
 			needs: "changes",
 			if: guard("e2e"),
@@ -85,6 +107,118 @@ const valid = (label: string, extra: string) => ({
 });
 type Workflow = ReturnType<typeof valid>;
 const plants: [string, (workflow: Workflow) => void][] = [
+	[
+		"next missing shard",
+		(w) => {
+			w.jobs.next.strategy.matrix.shard.pop();
+		},
+	],
+	[
+		"next wrong denominator",
+		(w) => {
+			w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.shard }}/3`;
+		},
+	],
+	[
+		"next fail fast",
+		(w) => {
+			w.jobs.next.strategy["fail-fast"] = true;
+		},
+	],
+	[
+		"next extra axis",
+		(w) => {
+			Object.assign(w.jobs.next.strategy.matrix, {os: ["ubuntu"]});
+		},
+	],
+	[
+		"next include",
+		(w) => {
+			Object.assign(w.jobs.next.strategy.matrix, {include: [{shard: 7}]});
+		},
+	],
+	[
+		"next exclude",
+		(w) => {
+			Object.assign(w.jobs.next.strategy.matrix, {exclude: [{shard: 6}]});
+		},
+	],
+	[
+		"next custom name",
+		(w) => {
+			Object.assign(w.jobs.next, {name: "next"});
+		},
+	],
+	[
+		"next duplicate command",
+		(w) => {
+			w.jobs.next.steps.push({...w.jobs.next.steps[0]!});
+		},
+	],
+	...[" --changed main", " --passWithNoTests", " file.test.ts"].map(
+		(suffix): [string, (w: Workflow) => void] => [
+			suffix,
+			(w) => {
+				w.jobs.next.steps[0]!.run += suffix;
+			},
+		],
+	),
+	[
+		"next no shard flag",
+		(w) => {
+			w.jobs.next.steps[0]!.run = "pnpm exec vitest run next/";
+		},
+	],
+	[
+		"next guarded test",
+		(w) => {
+			Object.assign(w.jobs.next.steps[0]!, {if: "false"});
+		},
+	],
+	[
+		"next classifier failure skips",
+		(w) => {
+			w.jobs.next.if = "needs.changes.outputs.next == 'true'";
+		},
+	],
+	...[1, 2, 3].flatMap((index): [string, (w: Workflow) => void][] => [
+		[
+			`next missing step ${index}`,
+			(w) => {
+				w.jobs.next.steps.splice(index, 1);
+			},
+		],
+		[
+			`next duplicate step ${index}`,
+			(w) => {
+				w.jobs.next.steps.push({...w.jobs.next.steps[index]!});
+			},
+		],
+		[
+			`next false step ${index}`,
+			(w) => {
+				w.jobs.next.steps[index]!.if = "false";
+			},
+		],
+	]),
+	[
+		"next e2e everywhere",
+		(w) => {
+			w.jobs.next.steps[2]!.if = "true";
+		},
+	],
+	[
+		"next chromium without file guard",
+		(w) => {
+			w.jobs.next.steps[1]!.if = "matrix.shard == 1";
+		},
+	],
+	[
+		"next edges without event guard",
+		(w) => {
+			w.jobs.next.steps[3]!.if = "matrix.shard == 1";
+		},
+	],
 	[
 		"scan skips after failure",
 		(w) => {
@@ -230,8 +364,13 @@ const plants: [string, (workflow: Workflow) => void][] = [
 
 it("accepts generated valid wiring and rejects every isolated wiring plant", () => {
 	fc.assert(
-		fc.property(name, name, (label, extra) => {
+		fc.property(name, name, fc.boolean(), (label, extra, whitespace) => {
 			const clean = valid(label, extra);
+			if (whitespace) {
+				clean.jobs.next.steps[0]!.env!.SHARD = `\${{matrix.shard}}/6`;
+				for (const step of clean.jobs.next.steps.slice(1))
+					step.if = `\${{ ${step.if?.replaceAll(" && ", "  &&  ")} }}`;
+			}
 			expect(lint(JSON.stringify(clean))).toEqual([]);
 			for (const [plant, mutate] of plants) {
 				const broken = structuredClone(clean);

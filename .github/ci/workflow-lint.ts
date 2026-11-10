@@ -157,11 +157,41 @@ export const lintWorkflow = (text: string): string[] => {
 			`if [ "\${{ matrix.shard }}" = 1 ]; then`, "forced tests run once on shard 1");
 	require(scripts.includes('if [ -n "$BASE" ]; then') &&
 		scripts.includes("else"), "PR and main branches remain separate");
-	const next = commands(map(jobs["next"])).filter((line) =>
-		line.startsWith("pnpm exec vitest run"),
-	);
+	const nextJob = map(jobs["next"]),
+		strategy = map(nextJob["strategy"]),
+		matrix = map(strategy["matrix"]),
+		nextSteps = steps(nextJob);
+	require(!("name" in nextJob), "next keeps the default matrix check names");
+	require(JSON.stringify(matrix["shard"]) === "[1,2,3,4,5,6]" &&
+		Object.keys(matrix).length === 1, "next has exactly six shards and no other matrix entries");
+	require(strategy["fail-fast"] === false, "next lets every shard finish");
+	const next = commands(nextJob).filter((line) => line.startsWith("pnpm exec vitest run"));
 	require(next.length === 1 &&
-		next[0] === "pnpm exec vitest run next/", "next runs all its own tests without exclusions");
+		next[0] ===
+			'pnpm exec vitest run next/ --shard "$SHARD"', "next runs all its own tests with --shard and no exclusions");
+	const testStep = nextSteps.find((s) => s["run"] === next[0]);
+	require(testStep !== undefined &&
+		!("if" in testStep) &&
+		compact(map(testStep["env"])["SHARD"]) ===
+			compact(
+				`\${{ matrix.shard }}/6`,
+			), "next passes its six-shard expression without an extra test guard");
+	for (const [command, condition] of [
+		[
+			"pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+			"matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
+		],
+		["node next/apps/fabrika/e2e.ts", "matrix.shard == 1"],
+		[
+			'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
+			"matrix.shard == 1 && github.event_name == 'pull_request'",
+		],
+	]) {
+		const matches = nextSteps.filter((s) => s["run"] === command);
+		require(matches.length === 1 &&
+			compact(matches[0]?.["if"]) ===
+				compact(condition), `next runs ${command} once on shard 1 with its original condition`);
+	}
 	return errors;
 };
 

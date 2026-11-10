@@ -33,14 +33,29 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
+import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {basename, join, relative} from "node:path";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
+// YAML belongs to the CI workspace package, not the lead scripts' package.
+const {parse} = createRequire(new URL("../../../../.github/ci/package.json", import.meta.url))(
+	"yaml",
+) as {parse: (text: string) => {jobs: {next: {strategy: {matrix: {shard: number[]}}}}}};
+
 // Today's tooling. GitHub, signing and pushes are stubbed. Cleanup uses disposable local Git.
 const script = join(import.meta.dirname, "catchup.sh");
 const tip = "0123456789abcdef0123456789abcdef01234567";
+const workflow = parse(
+	readFileSync(join(import.meta.dirname, "../../../../.github/workflows/check.yaml"), "utf8"),
+);
+const nextNames: string[] = workflow.jobs.next.strategy.matrix.shard.map(
+	(index: number) => `next (${index})`,
+);
+type Check = {name: string; status: string; conclusion: string};
+const success = (name: string): Check => ({name, status: "completed", conclusion: "success"});
+const matrixChecks = ["check", "e2e", "commits", ...nextNames].map(success);
 const storageFiles = (root: string) => {
 	const files: Record<string, string> = {};
 	const visit = (path: string, name: string) => {
@@ -60,6 +75,7 @@ const reads = ["head", "checks", "trust", "apps", "logs"] as const;
 const options = {seed: 520, numRuns: 12};
 type Call = {cmd: string; args: string[]; key?: string};
 type Setup = {
+	checks?: Check[];
 	repo?: string;
 	failures: number[];
 	pending: number;
@@ -146,9 +162,13 @@ if (cmd === "gh") {
     die("This pull request is part of a stack and must be merged using the asynchronous merge REST API");
   if (key === "checks") {
     const pending = n - setup.failures[index] < setup.pending;
-    for (const name of ["check", "e2e", "next", "commits"]) {
+    if (setup.checks) {
+      for (const check of setup.checks) console.log(check.name + "\t" + check.status + "\t" + check.conclusion);
+    } else for (const name of ["check", "e2e", "commits", ...${JSON.stringify(nextNames)}, "next"]) {
       const red = setup.answer === "red" && name === "check";
-      console.log(name + "\t" + (pending ? "in_progress\t" : "completed\t" + (red ? "failure" : "success")));
+      // Existing non-waiter laws also provide a skipped bare job while the waiter changes.
+      // T376's isolated laws below never add this compatibility check to a matrix answer.
+      console.log(name + "\t" + (pending ? "in_progress\t" : "completed\t" + (red ? "failure" : name === "next" ? "skipped" : "success")));
     }
   }
   if (key === "trust") {
@@ -571,6 +591,104 @@ const assertHead = (calls: Call[]) => {
 };
 
 describe("catchup, today's tooling", () => {
+	// T376: generated check-run data comes from GitHub, without a domain Schema.
+	// Plants: require bare next, match a name prefix, or accept five green machines.
+	it("T376 accepts a complete green matrix or a lone completed skipped next job in any order", () => {
+		fc.assert(
+			fc.property(
+				fc.shuffledSubarray(matrixChecks, {
+					minLength: matrixChecks.length,
+					maxLength: matrixChecks.length,
+				}),
+				(checks) => {
+					for (const list of [
+						checks,
+						[
+							...checks.filter((check) => !nextNames.includes(check.name)),
+							{name: "next", status: "completed", conclusion: "skipped"},
+						],
+					]) {
+						const got = run({...green, checks: list, clock: [0, 1, 3601]});
+						expect(got.code, got.text).toBe(0);
+						expect(merges(got.calls)).toHaveLength(1);
+						assertHead(got.calls);
+					}
+				},
+			),
+			{seed: 119120, numRuns: 12},
+		);
+	});
+	it("T376 every missing, pending, failed or canceled shard blocks even beside a bare next", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					order: fc.shuffledSubarray(matrixChecks, {
+						minLength: matrixChecks.length,
+						maxLength: matrixChecks.length,
+					}),
+					bare: fc.constantFrom("success", "skipped"),
+				}),
+				({order, bare}) => {
+					for (const name of nextNames)
+						for (const fault of [
+							"missing",
+							"in_progress",
+							"failure",
+							"cancelled",
+							"prefix",
+						] as const) {
+							const checks = order.flatMap((check): Check[] =>
+								check.name !== name
+									? [check]
+									: fault === "missing"
+										? []
+										: [
+												{
+													...check,
+													name: fault === "prefix" ? `${name} extra` : name,
+													status: fault === "in_progress" ? "in_progress" : "completed",
+													conclusion:
+														fault === "failure" || fault === "cancelled" ? fault : "success",
+												},
+											],
+							);
+							checks.push({name: "next", status: "completed", conclusion: bare});
+							const got = run({...green, checks, clock: [0, 1, 3601]});
+							expect(got.code, `${name}: ${fault}\n${got.text}`).toBe(1);
+							expect(merges(got.calls)).toHaveLength(0);
+							assertHead(got.calls);
+						}
+				},
+			),
+			{seed: 119120, numRuns: 2},
+		);
+	});
+	it("T376 bare success and unfinished bare skips cannot stand in for the matrix", () => {
+		fc.assert(
+			fc.property(
+				fc.shuffledSubarray(matrixChecks, {
+					minLength: matrixChecks.length,
+					maxLength: matrixChecks.length,
+				}),
+				(order) => {
+					for (const check of [
+						success("next"),
+						{name: "next", status: "in_progress", conclusion: "skipped"},
+					]) {
+						const got = run({
+							...green,
+							checks: [...order.filter((row) => !nextNames.includes(row.name)), check],
+							clock: [0, 1, 3601],
+						});
+						expect(got.code, got.text).toBe(1);
+						expect(merges(got.calls)).toHaveLength(0);
+						assertHead(got.calls);
+					}
+				},
+			),
+			{seed: 119120, numRuns: 2},
+		);
+	});
 	// Plant: review3's guard walks selected roots only and compares only the work folder.
 	// Generate storage in both the work folder and the admin directory Git also removes.
 	it.each(
