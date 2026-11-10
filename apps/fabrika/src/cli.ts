@@ -62,15 +62,18 @@ const connectCmd = Command.make(
 				key: a.key,
 			});
 			const as = `connected as ${writerText(who)}`;
-			if (host === "stopped")
+
+			if (host === "stopped") {
 				yield* Effect.logInfo(
 					`${as}; the host stopped, and an open app starts it again on this ledger. Running jobs stopped too: attach %n brings each back`,
 				);
-			else if (host === "none") yield* Effect.logInfo(`${as}; the app uses it when it starts`);
-			else
+			} else if (host === "none") {
+				yield* Effect.logInfo(`${as}; the app uses it when it starts`);
+			} else {
 				yield* Effect.logWarning(
 					`${as}, but the running host did not stop (${host.why}): quit the app and stop its host to use it`,
 				);
+			}
 		}),
 );
 
@@ -87,8 +90,14 @@ const inviteCmd = Command.make(
 const membersCmd = Command.make("members", {home}, (a) =>
 	Effect.gen(function* () {
 		const m = yield* members(a.home);
-		for (const p of m.members) yield* Effect.logInfo(`member   ${p.name} (${p.id})`);
-		for (const p of m.invited) yield* Effect.logInfo(`invited  ${p.name} (${p.id})`);
+
+		for (const p of m.members) {
+			yield* Effect.logInfo(`member   ${p.name} (${p.id})`);
+		}
+
+		for (const p of m.invited) {
+			yield* Effect.logInfo(`invited  ${p.name} (${p.id})`);
+		}
 	}),
 );
 
@@ -116,19 +125,31 @@ const moveCmd = Command.make(
 	(a) =>
 		Effect.gen(function* () {
 			yield* addressOf(a.to);
+
 			if (a.dryRun) {
-				if (Option.isNone(a.founder))
+				if (Option.isNone(a.founder)) {
 					return yield* new MoveStopped({
 						why: "a dry run names your id, --founder github:<n>, so its hash is the move's",
 					});
+				}
+
 				const r = yield* dryRun({home: a.home, from: a.from, founder: a.founder.value});
-				for (const line of reportOf(r.plan, r.hash)) yield* Effect.logInfo(line);
-				if (Option.isSome(r.running))
+
+				for (const line of reportOf(r.plan, r.hash)) {
+					yield* Effect.logInfo(line);
+				}
+
+				if (Option.isSome(r.running)) {
 					yield* Effect.logInfo(`${r.running.value}: stop it before the move`);
+				}
+
 				return;
 			}
-			if (Option.isNone(a.login) || Option.isNone(a.key))
+
+			if (Option.isNone(a.login) || Option.isNone(a.key)) {
 				return yield* new MoveStopped({why: "a move logs in: --login and --key"});
+			}
+
 			const done = yield* move({
 				home: a.home,
 				from: a.from,
@@ -136,7 +157,11 @@ const moveCmd = Command.make(
 				login: a.login.value,
 				key: a.key.value,
 			});
-			for (const line of reportOf(done.plan, done.hash)) yield* Effect.logInfo(line);
+
+			for (const line of reportOf(done.plan, done.hash)) {
+				yield* Effect.logInfo(line);
+			}
+
 			yield* Effect.logInfo(
 				`moved and sealed; ${a.from} stays as it was; start the app again to use ${a.to}`,
 			);
@@ -162,7 +187,9 @@ const from = Flag.optional(
 /** One post, then the tickets after it. */
 const posting = (a: {readonly home: string; readonly as: string}, writes: ReadonlyArray<Post>) =>
 	Effect.gen(function* () {
-		for (const line of yield* post(a.home, a.as, writes)) yield* Effect.logInfo(line);
+		for (const line of yield* post(a.home, a.as, writes)) {
+			yield* Effect.logInfo(line);
+		}
 	});
 
 const postCmd = Command.make("post").pipe(
@@ -208,10 +235,13 @@ const postCmd = Command.make("post").pipe(
 const mcpCmd = Command.make("mcp", {home, as}, (a) =>
 	Effect.gen(function* () {
 		const {mcp} = yield* pathsOf(a.home);
-		if ((yield* reach(mcp)) !== "live")
+
+		if ((yield* reach(mcp)) !== "live") {
 			return yield* new BridgeStopped({
 				why: `no fabrika host serves agents on ${a.home}: open the app on it`,
 			});
+		}
+
 		yield* bridge(NodeSocket.makeNet({path: mcp}), a.as, POLICY);
 	}).pipe(
 		Effect.scoped,

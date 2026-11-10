@@ -326,7 +326,11 @@ const make = <
 	spec: Spec<T, V, I, O, W>,
 ): Program<T, V, I, O, W> => {
 	const checked = construct(spec);
-	if (Result.isFailure(checked)) throw checked.failure;
+
+	if (Result.isFailure(checked)) {
+		throw checked.failure;
+	}
+
 	return Schema.decodeUnknownSync(typedProgram(spec))(checked.success);
 };
 
@@ -338,7 +342,11 @@ const makeEffect = Effect.fn("program.make")(function* <
 	W extends Readonly<Record<string, FactPolicy>>,
 >(spec: Spec<T, V, I, O, W>): Effect.fn.Return<Program<T, V, I, O, W>, SchemaIssue.Issue> {
 	const checked = construct(spec);
-	if (Result.isFailure(checked)) return yield* Effect.fail(checked.failure.issue);
+
+	if (Result.isFailure(checked)) {
+		return yield* Effect.fail(checked.failure.issue);
+	}
+
 	return yield* Schema.decodeUnknownEffect(typedProgram(spec))(checked.success).pipe(
 		Effect.mapError((error) => error.issue),
 	);
@@ -379,7 +387,10 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
 	cause: Schema.optionalKey(Schema.Unknown),
 }) {
 	get errorClass(): string {
-		if (this.error !== undefined) return this.error;
+		if (this.error !== undefined) {
+			return this.error;
+		}
+
 		const original = Object.hasOwn(this, "cause") ? this.cause : this;
 		return original instanceof Error
 			? original.constructor.name
@@ -416,7 +427,11 @@ const guard = <A>(why: ProgramDown["why"], f: () => A): A => {
 		try: f,
 		catch: (cause) => (cause instanceof ProgramDown ? cause : new ProgramDown({why, cause})),
 	});
-	if (Result.isFailure(done)) throw done.failure;
+
+	if (Result.isFailure(done)) {
+		throw done.failure;
+	}
+
 	return done.success;
 };
 
@@ -428,14 +443,29 @@ const accepts = (schema: unknown, value: unknown): boolean =>
 /** A settled Cmd Msg (`<name>_ok` or `<name>_err`) of a declared Cmd, checked by its schemas. */
 const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<boolean> => {
 	const typed = decodeTyped(msg);
-	if (Option.isNone(typed)) return Option.none();
+
+	if (Option.isNone(typed)) {
+		return Option.none();
+	}
+
 	const type = typed.value.type;
 	const def = defs.find((d) => d.okType === type || d.errType === type);
-	if (def === undefined || typeof msg !== "object" || msg === null) return Option.none();
+
+	if (def === undefined || typeof msg !== "object" || msg === null) {
+		return Option.none();
+	}
+
 	const cmd = "cmd" in msg ? msg.cmd : undefined;
 	const sameCmd = Option.exists(decodeTyped(cmd), (c) => c.type === def.cmdType);
-	if (!sameCmd || !("at" in msg) || typeof msg.at !== "number") return Option.some(false);
-	if (type === def.okType) return Option.some("value" in msg && accepts(def.schema.ok, msg.value));
+
+	if (!sameCmd || !("at" in msg) || typeof msg.at !== "number") {
+		return Option.some(false);
+	}
+
+	if (type === def.okType) {
+		return Option.some("value" in msg && accepts(def.schema.ok, msg.value));
+	}
+
 	const error = "error" in msg ? msg.error : undefined;
 	return Option.some(
 		typeof error === "object" &&
@@ -447,7 +477,11 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
 
 export const stepper = (declared: unknown): Result.Result<Stepper, Schema.SchemaError> => {
 	const loaded = decodeDeclaration(declared);
-	if (Result.isFailure(loaded)) return Result.fail(loaded.failure);
+
+	if (Result.isFailure(loaded)) {
+		return Result.fail(loaded.failure);
+	}
+
 	const program = loaded.success;
 	const machine = program.machine;
 	const defs = machine.cmds ?? [];
@@ -460,26 +494,36 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 	/** A model as the program's own value, or ProgramDown with `why`. */
 	const model = (raw: unknown, why: ProgramDown["why"]): unknown => {
 		const decoded = decodeModel(raw);
-		if (Result.isFailure(decoded)) throw new ProgramDown({why});
+
+		if (Result.isFailure(decoded)) {
+			throw new ProgramDown({why});
+		}
+
 		return decoded.success;
 	};
 
 	/** A Msg as the machine takes it: a settled Cmd Msg, or one the program's Msg schema decodes. */
 	const message = (raw: unknown, saved: boolean): Option.Option<Typed> => {
 		const typed = decodeTyped(raw);
+
 		if (
 			!saved &&
 			Option.exists(
 				typed,
 				(m) => m.type === "timer" || defs.some((d) => d.okType === m.type || d.errType === m.type),
 			)
-		)
+		) {
 			return Option.none();
+		}
+
 		if (saved) {
 			const result = settled(defs, raw);
-			if (Option.isSome(result))
+
+			if (Option.isSome(result)) {
 				return result.value && isTyped(raw) ? Option.some(raw) : Option.none();
+			}
 		}
+
 		const decoded = decodeMsg(raw);
 		return Result.isSuccess(decoded) && isTyped(decoded.success)
 			? Option.some(decoded.success)
@@ -489,9 +533,17 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 	/** A Cmd the machine returned: a declared one must match its input schema. */
 	const cmdOk = (cmd: unknown): boolean => {
 		const typed = decodeTyped(cmd);
-		if (Option.isNone(typed)) return false;
+
+		if (Option.isNone(typed)) {
+			return false;
+		}
+
 		const def = defs.find((d) => d.cmdType === typed.value.type);
-		if (def === undefined) return true;
+
+		if (def === undefined) {
+			return true;
+		}
+
 		const schemas: object = def.schema;
 		return "input" in schemas && accepts(schemas.input, cmd);
 	};
@@ -502,16 +554,23 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 		const view = guard(why, () => encodeView(program.view.select(next)));
 		const wake = guard(why, () => decodeWake(program.wake(next)));
 		const json = cmds.map((cmd) => (cmdOk(cmd) ? decodeJson(cmd) : Result.fail(null)));
+
 		if (
 			Result.isFailure(encoded) ||
 			Result.isFailure(view) ||
 			Result.isFailure(wake) ||
 			json.some(Result.isFailure)
-		)
+		) {
 			throw new ProgramDown({why});
+		}
+
 		const model = decodeJson(encoded.success);
 		const shown = decodeJson(view.success);
-		if (Result.isFailure(model) || Result.isFailure(shown)) throw new ProgramDown({why});
+
+		if (Result.isFailure(model) || Result.isFailure(shown)) {
+			throw new ProgramDown({why});
+		}
+
 		return Step.cases.stepped.make({
 			model: model.success,
 			view: shown.success,
@@ -530,22 +589,39 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 		step: (raw, msg) => {
 			const now = model(raw, "saved_state");
 			const m = message(msg, false);
-			if (Option.isNone(m) || !cells.has(m.value.type))
+
+			if (Option.isNone(m) || !cells.has(m.value.type)) {
 				return Step.cases.refused.make({why: "bad_msg"});
+			}
+
 			const refusal = guard("step", () => decodeRefusal(program.refuse(now, m.value)));
-			if (Result.isFailure(refusal)) throw new ProgramDown({why: "step"});
-			if (refusal.success !== null) return Step.cases.refused.make(refusal.success);
+
+			if (Result.isFailure(refusal)) {
+				throw new ProgramDown({why: "step"});
+			}
+
+			if (refusal.success !== null) {
+				return Step.cases.refused.make(refusal.success);
+			}
+
 			const [next, cmds] = guard("step", () => applyCell(machine, now, m.value));
 			return prepare(next, cmds, "step");
 		},
 		fold: (raw, msg) => {
 			const now = model(raw, "saved_state");
 			const typed = decodeTyped(msg);
+
 			// tea drops a Msg whose cell is gone by its turn; a saved one is dropped the same way.
-			if (Option.isSome(typed) && !cells.has(typed.value.type))
+			if (Option.isSome(typed) && !cells.has(typed.value.type)) {
 				return prepare(now, [], "saved_letter");
+			}
+
 			const m = message(msg, true);
-			if (Option.isNone(m)) throw new ProgramDown({why: "saved_letter"});
+
+			if (Option.isNone(m)) {
+				throw new ProgramDown({why: "saved_letter"});
+			}
+
 			const [next, cmds] = guard("saved_letter", () => applyCell(machine, now, m.value));
 			return prepare(next, cmds, "saved_letter");
 		},

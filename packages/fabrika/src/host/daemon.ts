@@ -63,5 +63,7 @@ process.on("SIGTERM", stop);
 const owner = process.ppid;
 
 setInterval(() => {
-	if (process.ppid !== owner) stop();
+	if (process.ppid !== owner) {
+		stop();
+	}
 }, 250).unref();

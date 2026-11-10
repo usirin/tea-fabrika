@@ -133,7 +133,11 @@ const key = Effect.fn("test.key")(function* () {
 
 const integer = (raw: Uint8Array) => {
 	let at = 0;
-	while (raw[at] === 0) at++;
+
+	while (raw[at] === 0) {
+		at++;
+	}
+
 	const bytes = Buffer.from(raw.slice(at));
 	return bytes[0] !== undefined && bytes[0] >= 128
 		? Buffer.concat([Buffer.from([0]), bytes])
@@ -245,7 +249,12 @@ const top = mkdtempSync(join(tmpdir(), "p10-door-"));
 const opened: Array<DatabaseSync> = [];
 
 afterAll(() => {
-	for (const db of opened) if (db.isOpen) db.close();
+	for (const db of opened) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(top, {recursive: true, force: true});
 });
 
@@ -308,10 +317,12 @@ const world = Effect.fnUntraced(function* (
 	const partFiles = new Map<string, DatabaseSync>();
 	const part = (name: string) => {
 		let p = partFiles.get(name);
+
 		if (!p) {
 			p = open(join(dir, `${name.replaceAll("/", "_")}.db`));
 			partFiles.set(name, p);
 		}
+
 		return nodeSql(p);
 	};
 	const deliveries: Array<Delivery> = [],
@@ -326,13 +337,17 @@ const world = Effect.fnUntraced(function* (
 			const delivery = {process, envelope, trace};
 			deliveries.push(delivery);
 			yield* controls.deliver(delivery);
+
 			if (
 				Schema.is(Input.cases.keys)(envelope.input) ||
 				Schema.is(Schema.toType(Input.cases.secret))(envelope.input)
-			)
+			) {
 				return;
+			}
+
 			// This is the injected P11 handoff, not a P10 runner. Exercise real P9 dedupe for JSON input.
 			const value = Schema.decodeUnknownOption(Schema.Json)(envelope.input);
+
 			if (Option.isSome(value)) {
 				const mailbox = yield* C.Mailbox;
 				const placing = yield* mailbox.send(process, envelope.id, value.value, {
@@ -344,7 +359,10 @@ const world = Effect.fnUntraced(function* (
 					traceId: trace.traceId,
 					build: "test-build",
 				});
-				if (placing._tag === "refused") return yield* new LedgerError({why: "refused"});
+
+				if (placing._tag === "refused") {
+					return yield* new LedgerError({why: "refused"});
+				}
 			}
 		});
 	const settings = {
@@ -522,6 +540,7 @@ const failSessionRecord = (inner: ReturnType<typeof nodeSql>) => {
 				armed = false;
 				throw new Error("SQLITE_FULL");
 			}
+
 			return inner.exec(...args);
 		},
 	};
@@ -658,6 +677,7 @@ describe("P10 review regressions", () => {
 								const owner = yield* online(d, w);
 								const keys = [w.otherWindow, w.agent, w.otherRoot, w.sheet] as const;
 								const clients = new Map<string, Effect.Success<ReturnType<typeof d.connect>>>();
+
 								for (const {who, tab, pass} of knocks) {
 									const k = keys[who]!;
 									const name = `${who}-${tab}`;
@@ -671,10 +691,12 @@ describe("P10 review regressions", () => {
 										client,
 										pass === undefined ? {label} : {label, pass},
 									);
+
 									if (!kept.includes(name)) {
 										expect(reply).toEqual({_tag: "refused", why: "not_waiting"});
 										continue;
 									}
+
 									const rows = (yield* d.watch(owner.client)).rows;
 									// One row per key: a second tab of a key joins that key's row, never a new one.
 									expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
@@ -735,6 +757,7 @@ describe("P10 review regressions", () => {
 									array[0] = random;
 									return array;
 								}
+
 								return original(array);
 							});
 							const reply = yield* d
@@ -829,7 +852,8 @@ describe("P10 review regressions", () => {
 				}).pipe(w.provide),
 		},
 	];
-	for (const edge of edges)
+
+	for (const edge of edges) {
 		it(`a WebCrypto ${edge.name} failure, of any value, is refused with crypto and delivers nothing`, async () => {
 			await fc.assert(
 				fc.asyncProperty(
@@ -865,6 +889,7 @@ describe("P10 review regressions", () => {
 				runs(15),
 			);
 		});
+	}
 
 	it.effect(
 		"review 3.1: a full spent-receipt store writes nothing and keeps live nonces spent",
@@ -974,14 +999,18 @@ describe("P10 review regressions", () => {
 					expect((yield* d.knock(pending.client, {label: "Pending"}))._tag).toBe("ok");
 					const before = (yield* d.watch(client)).rows;
 					expect(before).toHaveLength(1);
-					for (let i = 0; i <= w.settings.waiting.most; i++) yield* d.challenge(yield* d.connect());
+
+					for (let i = 0; i <= w.settings.waiting.most; i++) {
+						yield* d.challenge(yield* d.connect());
+					}
+
 					expect((yield* d.knock(pending.client, {label: "Pending"}))._tag).toBe("ok");
 					expect((yield* d.watch(client)).rows).toEqual(before);
 				}).pipe(w.provide);
 			}),
 	);
 
-	for (const attack of ["challenge only", "bad signature"] as const)
+	for (const attack of ["challenge only", "bad signature"] as const) {
 		it.effect(`review 2.1: a stranger flood with ${attack} makes no storage writes`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -989,10 +1018,12 @@ describe("P10 review regressions", () => {
 					const d = yield* Door;
 					yield* online(d, w);
 					const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
+
 					for (let i = 0; i <= w.settings.waiting.most; i++) {
 						const client = yield* d.connect();
 						const nonce = yield* d.challenge(client);
-						if (attack === "bad signature")
+
+						if (attack === "bad signature") {
 							expect(
 								yield* d.initialize(
 									client,
@@ -1011,13 +1042,16 @@ describe("P10 review regressions", () => {
 									{url: URL, tab: client, name: w.otherWindow.fingerprint},
 								),
 							).toMatchObject({_tag: "refused", why: "bad_signature"});
+						}
 					}
+
 					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
 				}).pipe(w.provide);
 			}),
 		);
+	}
 
-	for (const source of ["forged", "another door key"] as const)
+	for (const source of ["forged", "another door key"] as const) {
 		it.effect(`p26: a nonce from ${source} is refused before any write`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -1064,6 +1098,7 @@ describe("P10 review regressions", () => {
 				}).pipe(w.provide);
 			}),
 		);
+	}
 
 	it.effect("review 2.4: a closed online connection retires its client and key rows", () =>
 		Effect.gen(function* () {
@@ -1100,7 +1135,7 @@ describe("P10 review regressions", () => {
 		["ledger.wait", {stream: "empty", after: 0}, "parked"],
 		["spans.read", {chain: Chain.cases.job.make({process: PROCESS}), after: 0}, "ok"],
 		["unknown.method", {}, "refused"],
-	] as const)
+	] as const) {
 		it.effect(
 			`review 2: an agent can repeat ${method} beyond inputCap without exhausting authority`,
 			() =>
@@ -1115,19 +1150,26 @@ describe("P10 review regressions", () => {
 							() => Effect.exit(d.route(reader.client, method, params)),
 							{concurrency: 1},
 						);
-						for (const attempt of attempts)
+
+						for (const attempt of attempts) {
 							expect(attempt).toMatchObject({_tag: "Success", value: {_tag: answer}});
+						}
+
 						expect(w.sql.exec("SELECT count(*) total FROM door_bindings")[0]?.total).toBe(0);
-						for (let i = 0; i < w.settings.inputCap; i++)
+
+						for (let i = 0; i < w.settings.inputCap; i++) {
 							expect(
 								(yield* d.route(client, "process.send", request(`after-reads-${i}`)))._tag,
 							).toBe("ok");
+						}
+
 						expect((yield* d.route(reader.client, method, params))._tag).toBe(answer);
 					}).pipe(w.provide);
 				}),
 		);
+	}
 
-	for (const limit of ["cap", "expiry"] as const)
+	for (const limit of ["cap", "expiry"] as const) {
 		it.effect(`review 2: restarted connections and their keys obey the waiting ${limit}`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -1142,14 +1184,17 @@ describe("P10 review regressions", () => {
 						);
 					const before = count();
 					const total = limit === "cap" ? w.settings.waiting.most * 2 + 1 : w.settings.waiting.most;
+
 					for (let i = 0; i < total; i++) {
 						const stranger = yield* online(d, w, `stranger-${i}`);
 						yield* d.challenge(stranger.client);
 					}
+
 					if (limit === "expiry") {
 						yield* TestClock.adjust(w.settings.waiting.ttl);
 						yield* d.watch(client);
 					}
+
 					expect(count() - before).toBeLessThanOrEqual(
 						limit === "cap" ? 2 * w.settings.waiting.most : 0,
 					);
@@ -1159,6 +1204,7 @@ describe("P10 review regressions", () => {
 				}).pipe(w.provide);
 			}),
 		);
+	}
 
 	it.effect("review 5: an added Ed25519 person cannot carry an unverified passkey block", () =>
 		Effect.gen(function* () {
@@ -1239,6 +1285,7 @@ describe("P10 door admission and waiting", () => {
 					yield* d.watch(client);
 					const before = rawRows(w.db, "door/inputs");
 					const healthBefore = w.db.prepare("SELECT count(*) n FROM health").get()?.n;
+
 					for (const [index, k] of pending.entries()) {
 						yield* TestClock.setTime(1000 + index);
 						const pendingClient = yield* d.connect(),
@@ -1263,6 +1310,7 @@ describe("P10 door admission and waiting", () => {
 						);
 						yield* d.knock(pendingClient, {label: "Pending"});
 					}
+
 					expect(rawRows(w.db, "door/inputs")).toEqual(before);
 					expect(w.db.prepare("SELECT count(*) n FROM health").get()?.n).toBe(healthBefore);
 					const rows = (yield* d.watch(client)).rows;
@@ -1310,7 +1358,8 @@ describe("P10 door admission and waiting", () => {
 				}).pipe(w.provide);
 			}),
 	);
-	for (const kind of ["unknown", "bad signature", "no version", "wrong name"] as const)
+
+	for (const kind of ["unknown", "bad signature", "no version", "wrong name"] as const) {
 		it.effect(`p26: ${kind} on an empty project cannot found or grow the sink`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -1361,6 +1410,8 @@ describe("P10 door admission and waiting", () => {
 				}).pipe(w.provide);
 			}),
 		);
+	}
+
 	it.effect(
 		"p43: waiting tabs, cap, expiry and watcher registration survive reopening SQLite",
 		() =>
@@ -1374,6 +1425,7 @@ describe("P10 door admission and waiting", () => {
 					yield* d.watch(client);
 					const t1 = yield* d.connect(),
 						t2 = yield* d.connect();
+
 					for (const [pendingClient, tab] of [
 						[t1, "t1"],
 						[t2, "t2"],
@@ -1399,6 +1451,7 @@ describe("P10 door admission and waiting", () => {
 						);
 						yield* d.knock(pendingClient, {label: "Pending"});
 					}
+
 					const waiting = yield* d.watch(client);
 					expect(waiting.rows).toHaveLength(1);
 					expect(waiting.rows[0]).toMatchObject({tabs: 2, has: ["verify"]});
@@ -1523,6 +1576,7 @@ describe("P10 signed membership changes", () => {
 										armed = false;
 										yield* intervene;
 									}
+
 									return yield* real.append(...args);
 								}),
 						})),
@@ -1616,12 +1670,14 @@ describe("P10 signed membership changes", () => {
 					_tag: "refused",
 					why: "person_only",
 				});
+
 				for (const params of [
 					{key: w.otherWindow.raw},
 					{key: w.otherWindow.raw, saw: SAW, by: "forged"},
 				]) {
 					expect(yield* d.deny(client, params)).toMatchObject({_tag: "refused", why: "bad_input"});
 				}
+
 				const answer = yield* d.route(client, "door.deny", {key: w.otherWindow.raw, saw: SAW});
 				expect(answer).toMatchObject({_tag: "ok", result: {_tag: "applied"}});
 				const last = (yield* entries("door/members")).at(-1)!;
@@ -1634,7 +1690,8 @@ describe("P10 signed membership changes", () => {
 			}).pipe(w.provide);
 		}),
 	);
-	for (const kind of ["granted", "revoked", "added"] as const)
+
+	for (const kind of ["granted", "revoked", "added"] as const) {
 		it.effect(`p27: ${kind} wrong-to never calls ClientManager.write or founds`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -1698,7 +1755,9 @@ describe("P10 signed membership changes", () => {
 				);
 			}),
 		);
-	for (const signer of ["window", "agent", "otherRoot"] as const)
+	}
+
+	for (const signer of ["window", "agent", "otherRoot"] as const) {
 		it.effect(`question 19: ${signer} cannot promote itself from platform or capabilities`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -1729,6 +1788,8 @@ describe("P10 signed membership changes", () => {
 				}).pipe(w.provide);
 			}),
 		);
+	}
+
 	it.effect(
 		"p42: original additive signed text re-verifies; exact resend reuses first placing",
 		() =>
@@ -1763,7 +1824,8 @@ describe("P10 signed membership changes", () => {
 				}).pipe(w.provide);
 			}),
 	);
-	for (const mutation of ["text", "namespace", "person"] as const)
+
+	for (const mutation of ["text", "namespace", "person"] as const) {
 		it.effect(`p27: a ${mutation} mismatch writes no membership fact`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -1788,6 +1850,7 @@ describe("P10 signed membership changes", () => {
 				}).pipe(w.provide);
 			}),
 		);
+	}
 });
 
 describe("P10 inputs, retries and signer", () => {
@@ -1808,6 +1871,7 @@ describe("P10 inputs, retries and signer", () => {
 				const rows = (yield* stamped()).slice(before);
 				expect(rows).toHaveLength(3);
 				expect(new Set(rows.map((r) => r.id)).size).toBe(3);
+
 				for (const [index, method] of ["ledger.read", "ledger.wait", "unknown.method"].entries()) {
 					expect(rows[index]?._tag).toBe(index === 2 ? "refused" : "received");
 					expect(rows[index]?.by).toBe(w.window.fingerprint);
@@ -1854,16 +1918,22 @@ describe("P10 inputs, retries and signer", () => {
 											...turn,
 											append: (stream, id, line) => {
 												const placing = turn.append(stream, id, line);
-												if (stream === "door/inputs") appended = true;
+
+												if (stream === "door/inputs") {
+													appended = true;
+												}
+
 												return placing;
 											},
 										}),
 									);
+
 									// Lose the answer only after the real input transaction commits.
 									if (lose && appended) {
 										lose = false;
 										return yield* new LedgerError({why: "unreachable"});
 									}
+
 									return placing;
 								}),
 						})),
@@ -1927,8 +1997,9 @@ describe("P10 inputs, retries and signer", () => {
 			}).pipe(w.provide);
 		}),
 	);
-	for (const field of ["id", "by", "for", "arrivedAt"] as const)
-		for (const where of ["outer", "wrapper"] as const)
+
+	for (const field of ["id", "by", "for", "arrivedAt"] as const) {
+		for (const where of ["outer", "wrapper"] as const) {
 			it.effect(
 				`p67 spoof: ${where} ${field} is refused before decoding, with the real sender recorded`,
 				() =>
@@ -1953,6 +2024,9 @@ describe("P10 inputs, retries and signer", () => {
 						}).pipe(w.provide);
 					}),
 			);
+		}
+	}
+
 	it.effect("p67: logical retries retain parent/trace and have one real mailbox placing", () =>
 		Effect.gen(function* () {
 			const w = yield* world();
@@ -1986,7 +2060,8 @@ describe("P10 inputs, retries and signer", () => {
 				const starts = [START, START, OTHER_PROCESS];
 				w.controls.next = () => Effect.succeed(starts.shift()!);
 				const ids: Array<string> = [];
-				for (let i = 0; i < 2; i++)
+
+				for (let i = 0; i < 2; i++) {
 					yield* Effect.gen(function* () {
 						const d = yield* Door;
 						const {client} = yield* online(d, w);
@@ -1998,8 +2073,14 @@ describe("P10 inputs, retries and signer", () => {
 						expect(recorded).toContain(i === 0 ? START : OTHER_PROCESS);
 						expect(recorded).toContain(1);
 					}).pipe(w.provide);
+				}
+
 				expect(new Set(ids).size).toBe(2);
-				for (const id of ids) expect(id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+
+				for (const id of ids) {
+					expect(id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+				}
+
 				expect(
 					w.sql.exec("SELECT id FROM door_starts ORDER BY rowid").map((row) => row.id),
 				).toEqual([START, OTHER_PROCESS]);
@@ -2042,6 +2123,7 @@ describe("P10 inputs, retries and signer", () => {
 								d.signer(envelope.id, PROCESS, "saved"),
 							);
 							expect(session.by.key).toBe(w.window.fingerprint);
+
 							if (first) {
 								first = false;
 								return yield* new LedgerError({why: "unreachable"});
@@ -2055,13 +2137,14 @@ describe("P10 inputs, retries and signer", () => {
 				}).pipe(w.provide);
 			}),
 	);
+
 	for (const method of [
 		"signer",
 		"session.signer",
 		"ledger.append",
 		"process.exit",
 		"door.founded",
-	])
+	]) {
 		it.effect(`explicit method table: public ${method} cannot bypass authority`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -2080,6 +2163,7 @@ describe("P10 inputs, retries and signer", () => {
 				}).pipe(w.provide);
 			}),
 		);
+	}
 });
 
 describe("P10 passkey roots and recovery", () => {
@@ -2101,6 +2185,7 @@ describe("P10 passkey roots and recovery", () => {
 					sentAt: SENT,
 				});
 				const before = yield* entries("door/members");
+
 				for (const over of [{flags: 25}, {origin: "https://other.test"}]) {
 					const proof = yield* sk.sign(text, over);
 					expect(yield* d.grant({text, armored: proof.armored})).toMatchObject({
@@ -2109,6 +2194,7 @@ describe("P10 passkey roots and recovery", () => {
 					});
 					expect(yield* entries("door/members")).toEqual(before);
 				}
+
 				const proof = yield* sk.sign(text, {counter: 7});
 				expect((yield* d.grant({text, armored: proof.armored}))._tag).toBe("applied");
 				const rows = yield* entries("door/members");
@@ -2172,7 +2258,8 @@ describe("P10 passkey roots and recovery", () => {
 						(yield* d.route(cleared.client, "ledger.read", {stream: "x", after: 0}))._tag,
 					).toBe("refused");
 					const facts = yield* entries("door/members");
-					for (const id of ["cleared-storage", "remove-fresh"])
+
+					for (const id of ["cleared-storage", "remove-fresh"]) {
 						expect(facts.find((row) => row.id === id)?.body).toMatchObject({
 							signed: {
 								passkey: {
@@ -2184,13 +2271,16 @@ describe("P10 passkey roots and recovery", () => {
 								},
 							},
 						});
+					}
+
 					expect(facts.find((row) => row.id === p.add.id)?.body).toMatchObject({
 						add: {adds: {passkey: {proof: p.proof.armored, nonce: p.nonce, be: true, bs: true}}},
 					});
 				}).pipe(w.provide);
 			}),
 	);
-	for (const name of ["key", "window", "for", "to", "id", "nonce"] as const)
+
+	for (const name of ["key", "window", "for", "to", "id", "nonce"] as const) {
 		it.effect(`question 19 enrollment: changing ${name} cannot reuse a proof`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -2223,13 +2313,15 @@ describe("P10 passkey roots and recovery", () => {
 				}).pipe(w.provide);
 			}),
 		);
+	}
+
 	for (const missing of [
 		"proof",
 		"verification",
 		"backup metadata",
 		"backup state",
 		"origin",
-	] as const)
+	] as const) {
 		it.effect(
 			`question 19: missing or inconsistent ${missing} cannot create an SK person root`,
 			() =>
@@ -2267,6 +2359,8 @@ describe("P10 passkey roots and recovery", () => {
 					}).pipe(w.provide);
 				}),
 		);
+	}
+
 	it.effect(
 		"question 19 recovery: a sheet adds one passkey device; a spent sheet's exact resend is idempotent",
 		() =>
@@ -2317,10 +2411,13 @@ describe("P10 revocation and append", () => {
 					expect((yield* d.grant({text, armored: yield* w.otherRoot.sign(text)}))._tag).toBe(
 						"applied",
 					);
-					for (const revoked of [client, agent.client])
+
+					for (const revoked of [client, agent.client]) {
 						expect((yield* d.route(revoked, "ledger.read", {stream: "x", after: 0}))._tag).toBe(
 							"refused",
 						);
+					}
+
 					expect(
 						(yield* Effect.flip(writeId("after-revoke", d.signer(parent, PROCESS, "saved"))))._tag,
 					).toBe("NotGranted");
@@ -2386,6 +2483,7 @@ describe("P10 revocation and append", () => {
 					stream: "target",
 					fact: {_tag: "saved", value: 1},
 				};
+
 				for (const change of [
 					{id: "other"},
 					{process: OTHER_PROCESS},
@@ -2395,6 +2493,7 @@ describe("P10 revocation and append", () => {
 					const failure = yield* Effect.flip(d.append({...append, ...change}));
 					expect(failure._tag).toBe("SigningRefused");
 				}
+
 				expect(yield* entries("target")).toEqual([]);
 				const placing = yield* d.append(append);
 				expect(placing._tag).toBe("placed");
@@ -2427,14 +2526,18 @@ describe("P33 the door never writes process lifecycle facts", () => {
 	it.effect("the door refuses any append to the processes stream", () =>
 		refusedAppend("saved", "processes"),
 	);
-	for (const stream of ["processes/counter:1", "processes/counter:1/inbox", "processes/a/b"])
+
+	for (const stream of ["processes/counter:1", "processes/counter:1/inbox", "processes/a/b"]) {
 		it.effect(`the door refuses any append under processes/, here ${stream}`, () =>
 			refusedAppend("saved", stream),
 		);
-	for (const kind of Object.keys(C.ProcessFact.cases))
+	}
+
+	for (const kind of Object.keys(C.ProcessFact.cases)) {
 		it.effect(`the door refuses a fact tagged ${kind} on any stream, from any receipt holder`, () =>
 			refusedAppend(kind, "tickets"),
 		);
+	}
 });
 
 describe("P33 signal ids belong to the brain", () => {
@@ -2473,7 +2576,8 @@ describe("P33 signal ids belong to the brain", () => {
 		JSON.stringify(["DOWN", "any", "spelling"]),
 		JSON.stringify(["DOWN"]),
 	];
-	for (const id of signalSpace)
+
+	for (const id of signalSpace) {
 		it.effect(`a receipt holder's append under signal id ${id} is refused`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -2507,6 +2611,8 @@ describe("P33 signal ids belong to the brain", () => {
 				}).pipe(w.provide);
 			}),
 		);
+	}
+
 	it.effect("a client cannot take a DOWN's id first; the real exit then writes its DOWN", () =>
 		Effect.gen(function* () {
 			const w = yield* world();
@@ -2600,6 +2706,7 @@ describe("P33 signal ids belong to the brain", () => {
 					{_tag: "send", junk: [1, {m: 2}]},
 					{_tag: "send", m: "hello"},
 				];
+
 				for (const [n, fact] of sends.entries()) {
 					// Each receipt signs its own writes, so each append rides a fresh input.
 					yield* d.route(client, "process.send", request(`press-${n}`));
@@ -2616,6 +2723,7 @@ describe("P33 signal ids belong to the brain", () => {
 					});
 					expect(placing._tag).toBe("placed");
 				}
+
 				// Pinned: a send with no m is skipped; any m is plain mail.
 				const watcher = processes(w, C.Owner.cases.process.make({process: TARGET}), brainSeat);
 				const letters = yield* C.ProcessManager.use((p) =>
@@ -2730,6 +2838,7 @@ describe("P10 span reader and recording", () => {
 					const {client} = yield* online(d, w);
 					const records = yield* RecordManager;
 					const chain = Chain.cases.spans.make({});
+
 					for (let n = 0; n < 270; n++) {
 						const span = SpanRow.make({
 							traceId: TRACE,
@@ -2747,9 +2856,12 @@ describe("P10 span reader and recording", () => {
 						});
 						let part = 0;
 						let result = yield* records.write(chain, part, [{span, content: null}]);
-						while (result._tag === "rolled")
+
+						while (result._tag === "rolled") {
 							result = yield* records.write(chain, ++part, [{span, content: null}]);
+						}
 					}
+
 					const baseline = yield* Stream.runCollect(records.read(chain));
 					expect(w.partCount()).toBeGreaterThan(1);
 					const first = yield* d.route(client, "spans.read", {chain, after: 0});
@@ -2917,6 +3029,7 @@ describe("P10 span reader and recording", () => {
 											// oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- LedgerTransaction catches this synchronous callback's throw as a typed failure.
 											throw new LedgerError({why: "storage"});
 										}
+
 										return turn.append(stream, id, line);
 									},
 								}),
@@ -2982,6 +3095,7 @@ describe("P10 span reader and recording", () => {
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
 					const {client} = yield* online(d, w);
+
 					for (const [index, marker] of [
 						"raw-key-marker",
 						"terminal-byte-marker",
@@ -2994,6 +3108,7 @@ describe("P10 span reader and recording", () => {
 						);
 						expect(result._tag).toBe("ok");
 					}
+
 					yield* d.route(client, "process.send", {...request("spoof"), by: "forged-sender-marker"});
 					const secret = yield* d.route(
 						client,
@@ -3022,25 +3137,32 @@ describe("P10 span reader and recording", () => {
 					expect(inputRows.length).toBeGreaterThan(0);
 					expect(spans.length).toBeGreaterThan(0);
 					expect(archives.length).toBeGreaterThan(0);
+
 					for (const marker of [
 						"raw-key-marker",
 						"terminal-byte-marker",
 						"signature-marker",
 						"forged-sender-marker",
 						"nested-redacted-marker",
-					])
+					]) {
 						expect(visible).not.toContain(marker);
-					for (const bytes of w.bytes())
+					}
+
+					for (const bytes of w.bytes()) {
 						expect(bytes.includes("nested-redacted-marker")).toBe(false);
+					}
+
 					// Raw input bodies have no allowed durable home here: the test handoff skips raw keys.
-					for (const bytes of w.bytes())
+					for (const bytes of w.bytes()) {
 						for (const marker of [
 							"raw-key-marker",
 							"terminal-byte-marker",
 							"signature-marker",
 							"forged-sender-marker",
-						])
+						]) {
 							expect(bytes.includes(marker)).toBe(false);
+						}
+					}
 				}).pipe(
 					Effect.provide(
 						Door.layer(w.settings).pipe(Layer.provideMerge(Layer.mergeAll(w.env, archive, logger))),
@@ -3051,8 +3173,8 @@ describe("P10 span reader and recording", () => {
 });
 
 describe("P10 refusal records and checked writes", () => {
-	for (const interruption of ["replaced", "stranger flood"] as const)
-		for (const known of [true, false])
+	for (const interruption of ["replaced", "stranger flood"] as const) {
+		for (const known of [true, false]) {
 			it.effect(
 				`p26: ${known ? "member" : "unknown key"} admission ${interruption === "replaced" ? "refuses a replaced challenge" : "survives a stranger flood"}`,
 				() =>
@@ -3067,7 +3189,11 @@ describe("P10 refusal records and checked writes", () => {
 									Stream.unwrap(
 										Effect.sync(() => {
 											const before = stream === "door/members" ? replace : null;
-											if (before === null) return real.read(stream, after);
+
+											if (before === null) {
+												return real.read(stream, after);
+											}
+
 											replace = null;
 											return Stream.concat(
 												Stream.fromEffect(before).pipe(Stream.drain),
@@ -3127,8 +3253,11 @@ describe("P10 refusal records and checked writes", () => {
 						);
 					}),
 			);
-	for (const interruption of ["replaced", "stranger flood"] as const)
-		for (const known of [true, false])
+		}
+	}
+
+	for (const interruption of ["replaced", "stranger flood"] as const) {
+		for (const known of [true, false]) {
 			it.effect(
 				`p26: ${known ? "member" : "unknown key"} proof ${interruption === "replaced" ? "refuses a replaced challenge" : "survives a stranger flood"}`,
 				() =>
@@ -3164,6 +3293,7 @@ describe("P10 refusal records and checked writes", () => {
 									}),
 								),
 							);
+
 							try {
 								const first = yield* Effect.forkChild(
 									d.initialize(client, hello, {
@@ -3173,10 +3303,15 @@ describe("P10 refusal records and checked writes", () => {
 									}),
 								);
 								yield* Deferred.await(entered);
-								if (interruption === "replaced") yield* d.challenge(client);
-								else
-									for (let i = 0; i <= w.settings.waiting.most; i++)
+
+								if (interruption === "replaced") {
+									yield* d.challenge(client);
+								} else {
+									for (let i = 0; i <= w.settings.waiting.most; i++) {
 										yield* d.challenge(yield* d.connect());
+									}
+								}
+
 								yield* Deferred.succeed(release, undefined);
 								const result = yield* Fiber.join(first);
 								expect(result).toMatchObject(
@@ -3199,7 +3334,10 @@ describe("P10 refusal records and checked writes", () => {
 						}).pipe(w.provide);
 					}),
 			);
-	for (const retry of ["same receipt", "different armor", "replaced enrollment"] as const)
+		}
+	}
+
+	for (const retry of ["same receipt", "different armor", "replaced enrollment"] as const) {
 		it.effect(`p42: a queued change rechecks ${retry} after the preceding write`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -3212,8 +3350,11 @@ describe("P10 refusal records and checked writes", () => {
 					...w.sql,
 					exec: (...args: Parameters<typeof w.sql.exec>) => {
 						const answer = w.sql.exec(...args);
-						if (args[0] === "SELECT value FROM door_state WHERE name=?" && args[1] === watching)
+
+						if (args[0] === "SELECT value FROM door_state WHERE name=?" && args[1] === watching) {
 							queueMicrotask(() => Deferred.doneUnsafe(checked, Effect.void));
+						}
+
 						return answer;
 					},
 				};
@@ -3229,6 +3370,7 @@ describe("P10 refusal records and checked writes", () => {
 										yield* Deferred.succeed(entered, undefined);
 										yield* Deferred.await(release);
 									}
+
 									return yield* real.write(...args);
 								}),
 						})),
@@ -3260,17 +3402,24 @@ describe("P10 refusal records and checked writes", () => {
 						),
 					);
 					yield* Deferred.await(checked);
-					if (p !== null) yield* d.enrollment(p.binding);
+
+					if (p !== null) {
+						yield* d.enrollment(p.binding);
+					}
+
 					yield* Deferred.succeed(release, undefined);
 					const answer = yield* Fiber.join(first);
 					expect(answer._tag).toBe("applied");
 					const result = yield* Fiber.join(second);
-					if (retry === "same receipt") expect(result).toEqual(answer);
-					else
+
+					if (retry === "same receipt") {
+						expect(result).toEqual(answer);
+					} else {
 						expect(result).toMatchObject({
 							_tag: "refused",
 							why: p === null ? "id_reused" : "bad_enrollment",
 						});
+					}
 				}).pipe(
 					Effect.provide(
 						Door.layer({...w.settings, sql}).pipe(Layer.provideMerge(Layer.merge(w.env, clients))),
@@ -3278,6 +3427,8 @@ describe("P10 refusal records and checked writes", () => {
 				);
 			}),
 		);
+	}
+
 	it.effect("p42: an unfinished membership write cannot change its signed bytes on retry", () =>
 		Effect.gen(function* () {
 			const w = yield* world();
@@ -3292,6 +3443,7 @@ describe("P10 refusal records and checked writes", () => {
 								fail = false;
 								return Effect.fail(new LedgerError({why: "unreachable"}));
 							}
+
 							return real.write(...args);
 						},
 					})),
@@ -3327,13 +3479,14 @@ describe("P10 refusal records and checked writes", () => {
 			);
 		}),
 	);
+
 	for (const [method, params] of [
 		["process.send", undefined],
 		["process.send", null],
 		["process.send", request("bad-message", 42)],
 		["ledger.read", {stream: "empty", after: -1}],
 		["ledger.wait", {stream: "empty"}],
-	] as const)
+	] as const) {
 		it.effect(`p67: malformed ${method} ${JSON.stringify(params)} is recorded as refused`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
@@ -3352,6 +3505,8 @@ describe("P10 refusal records and checked writes", () => {
 				}).pipe(w.provide);
 			}),
 		);
+	}
+
 	it.effect("p67: a person's approval keeps its safe body and can sign its answer", () =>
 		Effect.gen(function* () {
 			const w = yield* world();
@@ -3364,6 +3519,7 @@ describe("P10 refusal records and checked writes", () => {
 				const parent = w.deliveries[0]!.envelope.id;
 				const session = yield* writeId("answer", d.signer(parent, PROCESS, "answered"));
 				expect(session.by.key).toBe(w.window.fingerprint);
+
 				for (const [stream, fact] of [
 					["door/members", {_tag: "answered"}],
 					["tickets", null],
@@ -3375,6 +3531,7 @@ describe("P10 refusal records and checked writes", () => {
 						),
 					).toMatchObject({_tag: "SigningRefused", why: "not_delivered"});
 				}
+
 				expect(
 					(yield* d.append({
 						id: "answer",

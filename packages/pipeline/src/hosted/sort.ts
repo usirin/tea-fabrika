@@ -102,8 +102,11 @@ export const sortTurn =
 	(ask: AgentAsk): Effect.Effect<Turn, never, Sorter> =>
 		Effect.gen(function* () {
 			const read = readAsk(ask.brief);
-			if (Exit.isFailure(read))
+
+			if (Exit.isFailure(read)) {
 				return yield* Effect.die(`a sort ask that does not read: ${ask.id}`);
+			}
+
 			const msgs = Array.from(
 				yield* (yield* Sorter).run(read.value.run, read.value.settings).pipe(
 					Stream.takeUntil((m) => m.type !== "sort_tool"),
@@ -160,7 +163,11 @@ export const sortWritesOf = (
 				});
 			case "ruling": {
 				const ticket = readTicketId(write.ticket);
-				if (ticket === null) return Effect.fail({_tag: "unknown" as const});
+
+				if (ticket === null) {
+					return Effect.fail({_tag: "unknown" as const});
+				}
+
 				return fact("ruling", write.ticket, {
 					type: "ruling_needed",
 					ticket,
@@ -172,7 +179,11 @@ export const sortWritesOf = (
 			case "fold": {
 				const plan = readTicketId(write.plan);
 				const ticket = readTicketId(write.ticket);
-				if (plan === null || ticket === null) return Effect.fail({_tag: "unknown" as const});
+
+				if (plan === null || ticket === null) {
+					return Effect.fail({_tag: "unknown" as const});
+				}
+
 				return fact("fold", `${write.plan}:${write.ticket}`, {
 					type: "folded",
 					plan: planOf(plan),

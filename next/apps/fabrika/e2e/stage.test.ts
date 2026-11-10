@@ -29,13 +29,20 @@ const children: Array<ChildProcess> = [],
 const pause = () => new Promise<void>((done) => setTimeout(done, 25));
 
 afterEach(async () => {
-	for (const b of browsers.splice(0)) await b.close();
-	for (const c of children.splice(0))
+	for (const b of browsers.splice(0)) {
+		await b.close();
+	}
+
+	for (const c of children.splice(0)) {
 		if (c.exitCode === null && c.signalCode === null) {
 			c.kill("SIGTERM");
 			await new Promise<void>((done) => c.once("exit", () => done()));
 		}
-	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
+	}
+
+	for (const h of homes.splice(0)) {
+		rmSync(h, {recursive: true, force: true});
+	}
 });
 
 const start = async () => {
@@ -52,7 +59,11 @@ const start = async () => {
 		server.listen(0, "127.0.0.1", done);
 	});
 	const at = server.address();
-	if (at === null || typeof at === "string") throw new Error("no TCP port");
+
+	if (at === null || typeof at === "string") {
+		throw new Error("no TCP port");
+	}
+
 	await new Promise<void>((done) => server.close(() => done()));
 	const url = `http://127.0.0.1:${at.port}`;
 	const env = {...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1"};
@@ -84,15 +95,23 @@ const start = async () => {
 	child.stderr!.on("data", (b: Buffer) => {
 		output += b.toString();
 	});
+
 	for (;;) {
-		if (child.exitCode !== null) throw new Error(`P12 dev.ts did not start: ${output}`);
+		if (child.exitCode !== null) {
+			throw new Error(`P12 dev.ts did not start: ${output}`);
+		}
+
 		try {
-			if ((await fetch(url)).ok) break;
+			if ((await fetch(url)).ok) {
+				break;
+			}
 		} catch {
 			/* Not listening yet. */
 		}
+
 		await pause();
 	}
+
 	const browser = await chromium.launch({headless: true});
 	browsers.push(browser);
 	const context = await browser.newContext();
@@ -109,10 +128,12 @@ const driver = async (page: Page, url: string, tab: string) => {
 			const concat = (...parts: Array<Uint8Array>) => {
 				const result = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
 				let at = 0;
+
 				for (const part of parts) {
 					result.set(part, at);
 					at += part.length;
 				}
+
 				return result;
 			};
 			const field = (data: string | Uint8Array) => {
@@ -133,6 +154,7 @@ const driver = async (page: Page, url: string, tab: string) => {
 				get.onsuccess = () => done(get.result);
 				get.onerror = () => fail(get.error);
 			});
+
 			if (!pair) {
 				pair = await crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]);
 				await new Promise<void>((done, fail) => {
@@ -142,6 +164,7 @@ const driver = async (page: Page, url: string, tab: string) => {
 					tx.onerror = () => fail(tx.error);
 				});
 			}
+
 			db.close();
 			const publicBytes = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
 			const raw = b64(publicBytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
@@ -207,7 +230,10 @@ const driver = async (page: Page, url: string, tab: string) => {
 					connections++;
 					socket.onerror = () => fail(new Error("WebSocket failed"));
 					socket.onclose = () => {
-						for (const reply of pending.values()) reply({closed: true});
+						for (const reply of pending.values()) {
+							reply({closed: true});
+						}
+
 						pending.clear();
 					};
 					socket.onmessage = async ({data}) => {
@@ -215,11 +241,18 @@ const driver = async (page: Page, url: string, tab: string) => {
 							frames.push("pong");
 							return;
 						}
+
 						const frame = JSON.parse(String(data));
 						frames.push(frame);
-						if (frame.method === "challenge") done(await hello(frame.params.nonce));
-						if (frame.method === "client.granted")
+
+						if (frame.method === "challenge") {
+							done(await hello(frame.params.nonce));
+						}
+
+						if (frame.method === "client.granted") {
 							frames.push({method: "reinitialized", result: await hello(frame.params.nonce)});
+						}
+
 						if (typeof frame.id === "number") {
 							pending.get(frame.id)?.(frame);
 							pending.delete(frame.id);
@@ -281,6 +314,7 @@ describe("P12 real browser protocol", () => {
 			{env: s.env, cwd: APP, encoding: "utf8"},
 		);
 		expect(output).not.toContain("PRIVATE KEY");
+
 		for (const page of [a, b]) {
 			await page.waitForFunction(() =>
 				window.p12.frames.some((f: any) => f.method === "reinitialized"),
@@ -289,6 +323,7 @@ describe("P12 real browser protocol", () => {
 			expect(reinitialized.result.error).toBeUndefined();
 			expect(await page.evaluate(() => window.p12.connections())).toBe(1);
 		}
+
 		const processes = await rpc(a, "ledger.read", {stream: "processes/counter:1", after: 0});
 		const pid = processes.result.entries.find(
 			(r: any) => r._tag === "started" && r.body.name === "counter:1",

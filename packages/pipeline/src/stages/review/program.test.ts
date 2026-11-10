@@ -185,17 +185,29 @@ const reviewAll = (
 				{verdict: verdicts.hear, passed: passed.hear, note: notes.hear},
 				kept("review:test"),
 			);
-			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
+
+			if (started.kind !== "running") {
+				return yield* Effect.die(`did not start: ${started.why}`);
+			}
+
 			const {run, close} = started;
 			const watching = yield* run.machines.review.changes.pipe(
 				Stream.filter((state) => state !== null),
 				Stream.runCollect,
 				Effect.forkChild,
 			);
-			for (const url of urls) yield* tell(run, "pr", url);
+
+			for (const url of urls) {
+				yield* tell(run, "pr", url);
+			}
+
 			close("pr");
 			const ended = yield* run.ended;
-			if (ended.kind !== "ended") return yield* Effect.die(`it ended ${ended.kind}`);
+
+			if (ended.kind !== "ended") {
+				return yield* Effect.die(`it ended ${ended.kind}`);
+			}
+
 			const states = [...(yield* Fiber.join(watching))] as Review[];
 			return {
 				verdicts: verdicts.values,
@@ -269,7 +281,11 @@ const FOUR = new Map<string, {which: Which; answer: (brief: Brief) => Drafted; n
 function fourWorlds() {
 	const of = (pr: string) => {
 		const world = FOUR.get(pr);
-		if (world === undefined) throw new Error(`no world for ${pr}`);
+
+		if (world === undefined) {
+			throw new Error(`no world for ${pr}`);
+		}
+
 		return world;
 	};
 	const shipReads: string[] = [];
@@ -328,7 +344,11 @@ describe("upstream | review | ship: the user's job", () => {
 						{found: found.hear},
 						kept("ship:test"),
 					);
-					if (ship.kind !== "running") return yield* Effect.die("ship did not start");
+
+					if (ship.kind !== "running") {
+						return yield* Effect.die("ship did not start");
+					}
+
 					const review = yield* pipe(
 						{
 							program: reviewProgram,
@@ -340,14 +360,21 @@ describe("upstream | review | ship: the user's job", () => {
 						ship,
 						"pr",
 					);
-					if (review.kind !== "running") return yield* Effect.die("review did not start");
+
+					if (review.kind !== "running") {
+						return yield* Effect.die("review did not start");
+					}
+
 					const watching = yield* review.run.machines.review.changes.pipe(
 						Stream.filter((state) => state !== null),
 						Stream.runCollect,
 						Effect.forkChild,
 					);
 					const up = yield* pipe({program: upstream, flags: {}}, "pr", review, "pr");
-					if (up.kind !== "running") return yield* Effect.die("upstream did not start");
+
+					if (up.kind !== "running") {
+						return yield* Effect.die("upstream did not start");
+					}
 
 					const told = yield* Effect.forEach([11, 12, 13, 14], (n) => tell(up.run, "pr", url(n)), {
 						concurrency: 1,
@@ -374,6 +401,7 @@ describe("upstream | review | ship: the user's job", () => {
 		};
 
 		const runs = [await once(), await once(), await once()];
+
 		for (const seen of runs) {
 			expect(seen.told).toEqual(["queued", "queued", "queued", "queued"]);
 			// Upstream's end closed review's input; review's end closed ship's. Nobody stopped anything.
@@ -410,7 +438,10 @@ describe("upstream | review | ship: the user's job", () => {
 				{id: expect.stringMatching(/^note-[0-9a-f]{8}$/), ...NOTE, state: "kept"},
 			]);
 			expect(seen.notes).toEqual([{pr: url(11), id: seen.verdicts[0]?.notes[0]?.id, ...NOTE}]);
-			for (const v of seen.verdicts.slice(1)) expect(v.notes).toEqual([]);
+
+			for (const v of seen.verdicts.slice(1)) {
+				expect(v.notes).toEqual([]);
+			}
 
 			// Each criterion is met or open, nothing else.
 			expect(seen.verdicts[0]?.criteria.map((c) => c.state)).toEqual([
@@ -426,6 +457,7 @@ describe("upstream | review | ship: the user's job", () => {
 					.map((c) => (c.from === "ticket" ? c.id : c.from)),
 			).toEqual(["c4"]);
 		}
+
 		const plain = (seen: (typeof runs)[number]) =>
 			JSON.stringify({...seen, states: seen.states.length});
 		expect(plain(runs[1] as (typeof runs)[number])).toEqual(
@@ -440,7 +472,11 @@ describe("upstream | review | ship: the user's job", () => {
 		const answer = await Effect.runPromise(
 			Effect.gen(function* () {
 				const ship = yield* start(shipProgram, {mode: "read"}, {}, kept("ship:test"));
-				if (ship.kind !== "running") return yield* Effect.die("ship did not start");
+
+				if (ship.kind !== "running") {
+					return yield* Effect.die("ship did not start");
+				}
+
 				const misfit = yield* pipe(
 					{program: reviewProgram, flags: FLAGS, keeping: kept("review:test")},
 					"verdict",
@@ -520,7 +556,11 @@ describe("the review program, one pull request at a time", () => {
 					{note: notes.hear, verdict: verdicts.hear},
 					kept("review:test"),
 				);
-				if (started.kind !== "running") return yield* Effect.die("did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("did not start");
+				}
+
 				const {run, close} = started;
 				yield* tell(run, "pr", `${PR}/commits/${HEADS.final}`);
 				close("pr");
@@ -665,8 +705,9 @@ describe("the review program, one pull request at a time", () => {
 
 	it("waits while a required check runs, reads again when it settles, and goes on", async () => {
 		const running = changed(recorded("change-final.json"), (repo) => {
-			for (const check of repo.commit.statusCheckRollup.contexts.nodes)
+			for (const check of repo.commit.statusCheckRollup.contexts.nodes) {
 				Object.assign(check, {status: "IN_PROGRESS", conclusion: null});
+			}
 		});
 		const pending = codeHostOn(recordedGh("final", {change: running}).gh, {own: [], reviewers: []});
 		const green = codeHostOn(recordedGh("final").gh, {own: [], reviewers: []});
@@ -687,8 +728,9 @@ describe("the review program, one pull request at a time", () => {
 
 	it("is stuck when a required check runs past the machine's limit, with no agent started", async () => {
 		const running = changed(recorded("change-final.json"), (repo) => {
-			for (const check of repo.commit.statusCheckRollup.contexts.nodes)
+			for (const check of repo.commit.statusCheckRollup.contexts.nodes) {
 				Object.assign(check, {status: "IN_PROGRESS", conclusion: null});
+			}
 		});
 		const {gh} = recordedGh("final", {change: running});
 		const host = Layer.succeed(CodeHost, {
@@ -710,6 +752,7 @@ describe("the review program, one pull request at a time", () => {
 		const {seen, calls} = reviewOn("final", drafts(passing), {script: {notes: () => [NOTE]}});
 		await seen;
 		expect(calls).toHaveLength(5);
+
 		for (const call of calls) {
 			expect(call[0]).toBe("api");
 			expect(call.some((arg) => ["-X", "--method", "--input"].includes(arg))).toBe(false);
@@ -756,7 +799,11 @@ describe("killed (kill -9) while the reviewer works, and started again", () => {
 					{note: notes.hear, verdict: verdicts.hear},
 					{id: "review:mortal", storage: life.storage},
 				);
-				if (started.kind !== "running") return yield* Effect.die("did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("did not start");
+				}
+
 				return yield* body(started, {notes, verdicts});
 			}).pipe(
 				Effect.scoped,
@@ -839,7 +886,9 @@ interface World {
  */
 const worldOf = (log: string[], alive: () => boolean, world: World) => {
 	const note = (line: string) => {
-		if (alive()) log.push(line);
+		if (alive()) {
+			log.push(line);
+		}
 	};
 	const host = Layer.succeed(CodeHost, {
 		pullRequests: () => Effect.succeed([]),
@@ -930,19 +979,28 @@ const lifeOn = (disk: ReturnType<typeof mortalDisk>, log: string[], options: Lif
 					{mode: "write"},
 					{
 						outcome: (o) => {
-							if (!dead) shipped.push(o.pr);
+							if (!dead) {
+								shipped.push(o.pr);
+							}
 						},
 					},
 					{id: "ship:kill", storage: shipLife.storage},
 				);
-				if (ship.kind !== "running") return yield* Effect.die("ship did not start");
+
+				if (ship.kind !== "running") {
+					return yield* Effect.die("ship did not start");
+				}
+
 				const review = yield* pipe(
 					{
 						program: reviewProgram,
 						flags: FLAGS,
 						listeners: {
 							verdict: (v) => {
-								if (dead) return;
+								if (dead) {
+									return;
+								}
+
 								verdicts.hear(v);
 								options.onVerdict?.(v, kill);
 							},
@@ -953,7 +1011,11 @@ const lifeOn = (disk: ReturnType<typeof mortalDisk>, log: string[], options: Lif
 					ship,
 					"pr",
 				);
-				if (review.kind !== "running") return yield* Effect.die("review did not start");
+
+				if (review.kind !== "running") {
+					return yield* Effect.die("review did not start");
+				}
+
 				yield* body({review, ship, verdicts, kill});
 			}).pipe(
 				Effect.scoped,
@@ -971,7 +1033,9 @@ const lifeOn = (disk: ReturnType<typeof mortalDisk>, log: string[], options: Lif
 /** Until `ready` holds, a little at a time. */
 const until = (ready: () => boolean) =>
 	Effect.gen(function* () {
-		while (!ready()) yield* Effect.sleep("5 millis");
+		while (!ready()) {
+			yield* Effect.sleep("5 millis");
+		}
 	});
 
 /** The ids of the machine runs of `machine` a run's index lists. */
@@ -990,7 +1054,10 @@ describe("review | ship, killed (kill -9) twice and started again: the user's jo
 		const one = lifeOn(disk, log, {onVerdict: (_, kill) => kill()});
 		const first = await one.go(({review, verdicts}) =>
 			Effect.gen(function* () {
-				for (const pr of THREE) yield* tell(review.run, "pr", pr);
+				for (const pr of THREE) {
+					yield* tell(review.run, "pr", pr);
+				}
+
 				yield* verdicts.upTo(1);
 			}),
 		);
@@ -1003,7 +1070,9 @@ describe("review | ship, killed (kill -9) twice and started again: the user's jo
 			held: new Set([url(14)]),
 			hold: (pr) => (pr === url(15) ? Deferred.await(queued) : Effect.void),
 			onVerdict: (v, kill) => {
-				if (v.pr === url(15)) kill();
+				if (v.pr === url(15)) {
+					kill();
+				}
 			},
 		});
 		const second = await two.go(({ship, verdicts}) =>
@@ -1032,8 +1101,11 @@ describe("review | ship, killed (kill -9) twice and started again: the user's jo
 			{kind: "ended", unread: {}},
 			{kind: "ended", unread: {}},
 		]);
-		for (const pr of THREE)
+
+		for (const pr of THREE) {
 			expect([times(`review ${pr}`), times(`enqueue ${pr}`)], pr).toEqual([1, 1]);
+		}
+
 		expect({first, second, third}).toEqual({
 			first: [],
 			second: [url(11)],
@@ -1100,12 +1172,17 @@ describe("review | ship: review says `passed` again after ship has finished that
 			reviewWrites: (key) =>
 				key?.includes("/machine/queue/") === true ? slow.before() : Effect.void,
 			onVerdict: (v) => {
-				if (v.pr === url(14)) slow.arm();
+				if (v.pr === url(14)) {
+					slow.arm();
+				}
 			},
 		});
 		const first = await one.go(({review, ship, kill}) =>
 			Effect.gen(function* () {
-				for (const pr of THREE) yield* tell(review.run, "pr", pr);
+				for (const pr of THREE) {
+					yield* tell(review.run, "pr", pr);
+				}
+
 				// Ship has finished #14 and taken it off its queue: the bad moment. Before the fix, ship had
 				// dropped #14's run here too, so nothing it kept could tell a repeat of #14.
 				yield* until(() => {
@@ -1149,7 +1226,10 @@ describe("review | ship: review says `passed` again after ship has finished that
 		let from = 0;
 		await one.go(({review, ship}) =>
 			Effect.gen(function* () {
-				for (const pr of THREE) yield* tell(review.run, "pr", pr);
+				for (const pr of THREE) {
+					yield* tell(review.run, "pr", pr);
+				}
+
 				yield* until(() => {
 					const waiting = ship.run.machines.queue.state();
 					return (
@@ -1200,7 +1280,10 @@ describe("review | ship: the other side of the same moment, a pull request lost 
 			// #14 is reviewed only once ship has finished #11, so what waits is #14 and nothing else.
 			hold: (pr) => (pr === url(14) ? Deferred.await(idle) : Effect.void),
 			onVerdict: (v, kill) => {
-				if (v.pr === url(14)) armed = true;
+				if (v.pr === url(14)) {
+					armed = true;
+				}
+
 				// Review's save that #14 ended has landed, since it went on to #15: kill.
 				if (v.pr === url(15)) {
 					kill();
@@ -1210,7 +1293,10 @@ describe("review | ship: the other side of the same moment, a pull request lost 
 		});
 		await one.go(({review, ship, verdicts}) =>
 			Effect.gen(function* () {
-				for (const pr of THREE) yield* tell(review.run, "pr", pr);
+				for (const pr of THREE) {
+					yield* tell(review.run, "pr", pr);
+				}
+
 				yield* until(() => {
 					const waiting = ship.run.machines.queue.state();
 					return (
@@ -1255,10 +1341,17 @@ describe("review | ship, killed at every write in turn (experiment 75d): the use
 
 	/** A write's key, said short: whose it is, and what. */
 	const labelOf = (key: string | null) => {
-		if (key === null) return "clear";
+		if (key === null) {
+			return "clear";
+		}
+
 		const [, run, what, machine, id] = key.split("/").map(decodeURIComponent);
 		const who = run?.split(":")[0] ?? "?";
-		if (what === "record") return `${who} record`;
+
+		if (what === "record") {
+			return `${who} record`;
+		}
+
 		const pr = /pull\/(\d+)/.exec(id ?? "")?.[1];
 		return `${who} ${machine}${pr === undefined ? "" : ` #${pr}`}`;
 	};
@@ -1278,7 +1371,10 @@ describe("review | ship, killed at every write in turn (experiment 75d): the use
 		const zero = lifeOn(disk, [], {apart, reading: Effect.never});
 		await zero.go(({review}) =>
 			Effect.gen(function* () {
-				for (const pr of THREE) yield* tell(review.run, "pr", pr);
+				for (const pr of THREE) {
+					yield* tell(review.run, "pr", pr);
+				}
+
 				review.close("pr");
 				yield* until(() => review.run.machines.queue.state()?.items.length === THREE.length);
 			}),
@@ -1300,9 +1396,16 @@ describe("review | ship, killed at every write in turn (experiment 75d): the use
 				// Its first write since its enqueue, which was the last thing to happen in the world.
 				const first =
 					pr !== undefined && log.at(-1) === `enqueue ${pr}` && wroteAt.get(pr) !== log.length;
-				if (pr !== undefined) wroteAt.set(pr, log.length);
+
+				if (pr !== undefined) {
+					wroteAt.set(pr, log.length);
+				}
+
 				if (writes.length === k) {
-					if (first) window = pr ?? null;
+					if (first) {
+						window = pr ?? null;
+					}
+
 					life?.kill();
 					Deferred.doneUnsafe(killed, Effect.void);
 				}
@@ -1348,14 +1451,19 @@ describe("review | ship, killed at every write in turn (experiment 75d): the use
 			expect(whole.enqueued).toEqual([1, 1, 1]);
 			const rows: string[] = [];
 			const wrong: string[] = [];
+
 			for (let k = 1; k <= whole.writes.length; k++) {
 				const seen = await sweep(k, apart);
 				const row = `${String(k).padStart(3)}  ${seen.killedAt.padEnd(22)}  ${seen.enqueued.join(" ")}${seen.window === null ? "" : "  act window"}`;
 				rows.push(row);
 				// Once each, never 0; twice only for the one whose enqueue the kill came right after.
 				const owed = THREE.map((pr) => (pr === seen.window ? 2 : 1));
-				if (seen.enqueued.join() !== owed.join() || seen.ends.length !== 2) wrong.push(row);
+
+				if (seen.enqueued.join() !== owed.join() || seen.ends.length !== 2) {
+					wrong.push(row);
+				}
 			}
+
 			console.log(
 				[
 					`kill before write  (${apart ? "apart" : "one storage"})  enqueued #11 #14 #15`,
@@ -1415,7 +1523,11 @@ describe("the command line", () => {
 		["a budget of nothing", [PR], ["--budget", "0"], "budget"],
 	])("answers bad_shape, before any service is made, for %s", async (_name, urls, more, name) => {
 		const plan = planOf([...urls, "--rubrics", "r", "--repo", "c", ...more]);
-		if (plan === null) throw new Error("not read");
+
+		if (plan === null) {
+			throw new Error("not read");
+		}
+
 		expect(checked(plan)).toMatchObject({kind: "bad_shape", name});
 		const made: string[] = [];
 		const answer = await Effect.runPromise(
@@ -1447,7 +1559,11 @@ describe("the command line", () => {
 			"--repo",
 			"c",
 		]);
-		if (plan === null) throw new Error("not read");
+
+		if (plan === null) {
+			throw new Error("not read");
+		}
+
 		const names: string[] = [];
 		const recordings = {first: recordedGh("first").gh, final: recordedGh("final").gh};
 		const host = Layer.succeed(CodeHost, {

@@ -39,19 +39,27 @@ export const settle = (
 	readonly kept: readonly Finding[];
 } => {
 	const open = new Map<string, number[]>();
-	for (const [i, entry] of entries.entries())
-		if (entry.file.startsWith(LEDGER_ROOT))
+
+	for (const [i, entry] of entries.entries()) {
+		if (entry.file.startsWith(LEDGER_ROOT)) {
 			open.set(key(entry), [...(open.get(key(entry)) ?? []), i]);
+		}
+	}
+
 	const used = new Set<number>();
 	const waived: Finding[] = [];
 	const blocks: Finding[] = [];
+
 	for (const finding of findings) {
 		const i = open.get(key(finding))?.shift();
-		if (i === undefined) blocks.push(finding);
-		else {
+
+		if (i === undefined) {
+			blocks.push(finding);
+		} else {
 			used.add(i);
 			waived.push(finding);
 		}
 	}
+
 	return {waived, blocks, kept: entries.filter((_, i) => used.has(i))};
 };

@@ -20,7 +20,11 @@ const methodOf =
 	(o: object, name: string) =>
 	(...args: readonly unknown[]): unknown => {
 		const fn: unknown = Reflect.get(o, name);
-		if (typeof fn !== "function") throw new Error(`no method ${name}`);
+
+		if (typeof fn !== "function") {
+			throw new Error(`no method ${name}`);
+		}
+
 		return Reflect.apply(fn, o, args);
 	};
 
@@ -33,8 +37,11 @@ const recordStub = async (
 	const ns: object = await mf.getDurableObjectNamespace("JOB_RECORD");
 	const name = `${ledger}/${trace}`;
 	const stub: unknown = methodOf(ns, "get")(methodOf(ns, "idFromName")(name));
-	if (typeof stub !== "object" || stub === null)
+
+	if (typeof stub !== "object" || stub === null) {
 		throw new Error("the JOB_RECORD binding gave no object");
+	}
+
 	return {name, stub};
 };
 
@@ -79,9 +86,11 @@ export const layerInside = (mf: Pick<Miniflare, "getDurableObjectNamespace">, le
 			// used are found by name, and each answer is checked.
 			const ns: object = yield* Effect.promise(() => mf.getDurableObjectNamespace("LEDGER"));
 			const stub: unknown = methodOf(ns, "get")(methodOf(ns, "idFromName")(ledger));
+
 			if (typeof stub !== "object" || stub === null) {
 				return yield* Effect.die(new Error("the LEDGER binding gave no object"));
 			}
+
 			const unreachable = (method: string) => (e: unknown) =>
 				new LedgerUnreachable({method, message: e instanceof Error ? e.message : String(e)});
 			const call: WireCall = (method, args) =>

@@ -85,7 +85,11 @@ export interface Entry {
  */
 const withoutPersonOnly = (program: AnyProgram): AnyProgram => {
 	const inputs = Object.entries<Inputs[string]>(program.inputs);
-	if (!inputs.some(([, declared]) => declared.personOnly)) return program;
+
+	if (!inputs.some(([, declared]) => declared.personOnly)) {
+		return program;
+	}
+
 	// `...program` carries its own `view` key, so the narrowed copy keeps the window.
 	return defineProgram({
 		...program,
@@ -126,7 +130,10 @@ export function listed<
 	const entry: Entry = {
 		program,
 		forAgent: () => {
-			if (agents !== undefined) return agents;
+			if (agents !== undefined) {
+				return agents;
+			}
+
 			const narrowed = withoutPersonOnly(program);
 			agents = narrowed === program ? entry : listed(narrowed, services as Layer.Layer<any>);
 			return agents;

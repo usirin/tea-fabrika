@@ -143,7 +143,9 @@ function Fenced({block}: {readonly block: Code}) {
 	const colors = useSyncExternalStore(onColors, colorsNow, colorsNow);
 	const wants = wantsColors(block.lang);
 	useEffect(() => {
-		if (wants) void loadColors();
+		if (wants) {
+			void loadColors();
+		}
 	}, [wants]);
 	return <CodeBlock block={block} colors={wants ? colors : null} />;
 }
@@ -232,6 +234,7 @@ const scrollOf = (key: string, page: HTMLElement): ScrollToOptions | null => {
 	const line = 40;
 	// A page less one line for the keys' line, and one kept on screen, as less keeps one.
 	const screen = page.clientHeight - 2 * line;
+
 	switch (key) {
 		case "j":
 		case "ArrowDown":
@@ -263,14 +266,22 @@ export function MarkdownWindow({view, send}: WindowProps<typeof markdown>) {
 	// The page takes the keys as it opens, as less does: q works without a click first.
 	useEffect(() => page.current?.focus(), []);
 	const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
-		if (e.metaKey || e.ctrlKey || e.altKey) return;
+		if (e.metaKey || e.ctrlKey || e.altKey) {
+			return;
+		}
+
 		if (e.key === "q") {
 			e.preventDefault();
 			send({type: "quit", value: {}});
 			return;
 		}
+
 		const to = scrollOf(e.key, e.currentTarget);
-		if (to === null) return;
+
+		if (to === null) {
+			return;
+		}
+
 		e.preventDefault();
 		e.currentTarget.scrollTo(to);
 	};

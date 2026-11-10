@@ -224,7 +224,11 @@ export const gitHubOutside = (repos: readonly string[]): Layer.Layer<Outside> =>
 				hasComment: (pr, key) =>
 					Effect.gen(function* () {
 						const at = prOf(pr);
-						if (at === null) return yield* failed;
+
+						if (at === null) {
+							return yield* failed;
+						}
+
 						const there = yield* answerOf(gh, Comments, [
 							"api",
 							`repos/${at.owner}/${at.name}/issues/${at.number}/comments?per_page=100`,
@@ -234,7 +238,11 @@ export const gitHubOutside = (repos: readonly string[]): Layer.Layer<Outside> =>
 				landing: (pr, head) =>
 					Effect.gen(function* () {
 						const at = prOf(pr);
-						if (at === null) return yield* failed;
+
+						if (at === null) {
+							return yield* failed;
+						}
+
 						const answer = yield* answerOf(gh, LandingAnswer, [
 							"api",
 							"graphql",
@@ -248,16 +256,26 @@ export const gitHubOutside = (repos: readonly string[]): Layer.Layer<Outside> =>
 							`number=${at.number}`,
 						]);
 						const p = answer.data.repository.pullRequest;
-						if (p.state === "MERGED" && p.mergeCommit !== null)
+
+						if (p.state === "MERGED" && p.mergeCommit !== null) {
 							return {at: "merged", commit: p.mergeCommit.oid} as const;
-						if (p.mergeQueueEntry !== null && p.headRefOid === head) return {at: "queued"} as const;
+						}
+
+						if (p.mergeQueueEntry !== null && p.headRefOid === head) {
+							return {at: "queued"} as const;
+						}
+
 						return {at: "none"} as const;
 					}),
 				push: (key, at) => (allowed(at.repo) ? push(key, at) : failed),
 				open: (key, at) =>
 					Effect.gen(function* () {
 						const text = yield* useKey(key);
-						if (!allowed(at.repo)) return yield* failed;
+
+						if (!allowed(at.repo)) {
+							return yield* failed;
+						}
+
 						const made = yield* answerOf(gh, PullRequest, [
 							"api",
 							"--method",
@@ -278,7 +296,11 @@ export const gitHubOutside = (repos: readonly string[]): Layer.Layer<Outside> =>
 					Effect.gen(function* () {
 						const text = yield* useKey(key);
 						const at = prRepo(pr);
-						if (at === null) return yield* failed;
+
+						if (at === null) {
+							return yield* failed;
+						}
+
 						yield* gh([
 							"api",
 							"--method",

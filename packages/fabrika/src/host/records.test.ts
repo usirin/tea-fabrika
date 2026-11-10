@@ -51,12 +51,20 @@ const recordAfter = (at: string, msgs: readonly JobsMsg[]) =>
 		const records = yield* sqliteRecords({dir: at, by: PERSON});
 		const jobs = keepJobs(yield* openJobs(memoryStorage()), records, "laptop");
 		let trace: string | null = null;
+
 		for (const msg of msgs) {
 			yield* jobs.table.dispatch(msg);
 			const first = jobs.table.getState().jobs[0];
-			if (trace === null && first !== undefined) trace = traceIdOf(first);
+
+			if (trace === null && first !== undefined) {
+				trace = traceIdOf(first);
+			}
 		}
-		if (trace === null) return yield* Effect.die("no job began");
+
+		if (trace === null) {
+			return yield* Effect.die("no job began");
+		}
+
 		const read = yield* Effect.gen(function* () {
 			return yield* (yield* Traces).read(trace ?? "");
 		}).pipe(Effect.provide(layerRecordTraces(records)));

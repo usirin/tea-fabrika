@@ -11,8 +11,10 @@ const moduleURL = new URL("./fetch.ts", import.meta.url).href;
 const load = async (): Promise<Fetch> => {
 	const module: {fetch?: Fetch} = await import(/* @vite-ignore */ moduleURL).catch(
 		(error: unknown) => {
-			if (error instanceof Error && "code" in error && error.code === "ERR_MODULE_NOT_FOUND")
+			if (error instanceof Error && "code" in error && error.code === "ERR_MODULE_NOT_FOUND") {
 				return {};
+			}
+
 			throw error;
 		},
 	);
@@ -20,7 +22,11 @@ const load = async (): Promise<Fetch> => {
 		module.fetch,
 		"P12 requires the public fetch function in libfabrika/workers/fetch.ts",
 	).toBeTypeOf("function");
-	if (module.fetch === undefined) throw new Error("Missing public fetch function");
+
+	if (module.fetch === undefined) {
+		throw new Error("Missing public fetch function");
+	}
+
 	return module.fetch;
 };
 
@@ -145,6 +151,7 @@ describe("P12 public Worker fetch", () => {
 		"wrong hosts refuse every route before RPC or body work",
 		async ({port, name, body}, fetch) => {
 			const w = world(port, name);
+
 			for (const host of [
 				`localhost:${port}`,
 				`127.0.0.1:${port === 65535 ? port - 1 : port + 1}`,
@@ -158,23 +165,27 @@ describe("P12 public Worker fetch", () => {
 					expect(result.status).toBe(421);
 				}
 			}
+
 			expect(w.calls).toEqual([]);
 		},
 	);
 	law("foreign origins refuse every route before RPC", async ({port, name, body}, fetch) => {
 		const w = world(port, name);
+
 		for (const origin of [
 			`https://127.0.0.1:${port}`,
 			`http://localhost:${port}`,
 			"null",
 			"https://other.invalid",
-		])
+		]) {
 			for (const path of ["/client/a", "/grant", "/grant/client/a", "/"]) {
 				const result = await Effect.runPromise(
 					fetch(w.request(path, "POST", origin, undefined, body), w.env, w.config),
 				);
 				expect(result.status).toBe(403);
 			}
+		}
+
 		expect(w.calls).toEqual([]);
 	});
 	law(
@@ -220,6 +231,7 @@ describe("P12 public Worker fetch", () => {
 		"unmatched routes and grant methods return the text response without RPC",
 		async ({port, name}, fetch) => {
 			const w = world(port, name);
+
 			for (const [path, method] of [
 				["/", "GET"],
 				["/other", "POST"],
@@ -232,6 +244,7 @@ describe("P12 public Worker fetch", () => {
 				expect(result.headers.get("content-type")).toContain("text/plain");
 				expect(await result.text()).toBe("fabrika");
 			}
+
 			expect(w.calls).toEqual([]);
 		},
 	);

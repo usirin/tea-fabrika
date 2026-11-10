@@ -392,10 +392,12 @@ const folds = new WeakMap<readonly Entry[], ReturnType<typeof foldLedger>>();
 /** The desk, folded: what waits on the owner. Kept per list, since a list never changes. */
 export const deskOf = (desk: readonly Entry[]) => {
 	let folded = folds.get(desk);
+
 	if (folded === undefined) {
 		folded = foldLedger(desk);
 		folds.set(desk, folded);
 	}
+
 	return folded;
 };
 
@@ -461,7 +463,10 @@ class Turn {
 	 * list, or, for a passed round, what its ship left (`shipItems`).
 	 */
 	tellDesk(open: number): void {
-		if (!this.o.desk) return;
+		if (!this.o.desk) {
+			return;
+		}
+
 		this.tick = withFact(this.tick, {
 			type: "reviewed",
 			plan: planOfName(this.lane.ticket),
@@ -474,7 +479,10 @@ class Turn {
 	toLoop(msg: AnyLoopMsg): void {
 		const [loop, cmds] = this.o.steps.loop(this.lane.loop, msg);
 		this.lane = {...this.lane, loop};
-		for (const cmd of cmds) this.route(cmd);
+
+		for (const cmd of cmds) {
+			this.route(cmd);
+		}
 	}
 
 	route(cmd: LoopCmd): void {
@@ -482,6 +490,7 @@ class Turn {
 			this.fly(cmd);
 			return;
 		}
+
 		// The program's door: a build or a ship runs only while the lane holds its ticket.
 		if (
 			(cmd.type === "loop_build" || cmd.type === "loop_ship") &&
@@ -493,12 +502,15 @@ class Turn {
 			);
 			return;
 		}
+
 		const child = this.lane.child;
+
 		// The same Act sent again (a restart): its stage's machine is kept under the intent, and resumes.
 		if (child !== null && child.asked.intent === cmd.intent) {
 			this.toChild({type: "resume"});
 			return;
 		}
+
 		switch (cmd.type) {
 			case "loop_build":
 				this.lane = {...this.lane, child: {stage: "build", asked: cmd, m: {phase: "idle"}}};
@@ -527,13 +539,24 @@ class Turn {
 	/** The current stage takes a Msg. When it ends, its outcome answers the loop's Act, as the program's handler does. */
 	toChild(msg: AnyBuildMsg | AnyReviewMsg | AnyShipMsg): void {
 		const child = this.lane.child;
-		if (child === null) return;
+
+		if (child === null) {
+			return;
+		}
+
 		switch (child.stage) {
 			case "build": {
 				const [m, cmds] = this.o.steps.build(child.m, msg as AnyBuildMsg);
 				this.lane = {...this.lane, child: {...child, m}};
-				for (const c of cmds) this.fly(c);
-				if (m.phase !== "over") return;
+
+				for (const c of cmds) {
+					this.fly(c);
+				}
+
+				if (m.phase !== "over") {
+					return;
+				}
+
 				this.lane = {...this.lane, child: null};
 				this.toLoop(
 					runBuild.ok(
@@ -547,8 +570,15 @@ class Turn {
 			case "review": {
 				const [m, cmds] = this.o.steps.review(child.m, msg as AnyReviewMsg);
 				this.lane = {...this.lane, child: {...child, m}};
-				for (const c of cmds) this.fly(c);
-				if (m.phase !== "over") return;
+
+				for (const c of cmds) {
+					this.fly(c);
+				}
+
+				if (m.phase !== "over") {
+					return;
+				}
+
 				this.lane = {...this.lane, child: null};
 				const reviewed: Reviewed = {
 					pr: child.asked.pr,
@@ -558,16 +588,27 @@ class Turn {
 				};
 				// Its verdict rows go to the ticket's record before the loop hears of it, as the program does.
 				this.tick = {...this.tick, record: keepRows(this.tick.record, m.report, child.asked.pr)};
+
 				// A passed round is told once its ship has ended: a ship may send it back, and leave one open.
-				if (m.outcome.kind !== "done") this.tellDesk(openItems(reviewed).length);
+				if (m.outcome.kind !== "done") {
+					this.tellDesk(openItems(reviewed).length);
+				}
+
 				this.toLoop(runReview.ok(child.asked, reviewed, 0));
 				return;
 			}
 			case "ship": {
 				const [m, cmds] = this.o.steps.ship(child.m, msg as AnyShipMsg);
 				this.lane = {...this.lane, child: {...child, m}};
-				for (const c of cmds) this.fly(c);
-				if (m.phase !== "over") return;
+
+				for (const c of cmds) {
+					this.fly(c);
+				}
+
+				if (m.phase !== "over") {
+					return;
+				}
+
 				this.lane = {...this.lane, child: null};
 				const shipped = {outcome: m.outcome, said: nameOf(m.outcome)};
 				this.tellDesk(shipItems(shipped).length);
@@ -581,8 +622,12 @@ class Turn {
 	answer(cmd: AnyCmd, msg: AnyLoopMsg | AnyBuildMsg | AnyReviewMsg | AnyShipMsg): void {
 		const at = this.lane.flight.findIndex((f) => f.cmd === cmd);
 		this.lane = {...this.lane, flight: this.lane.flight.filter((_, i) => i !== at)};
-		if (answeredByTheWorld(cmd)) this.toLoop(msg as AnyLoopMsg);
-		else this.toChild(msg as AnyBuildMsg | AnyReviewMsg | AnyShipMsg);
+
+		if (answeredByTheWorld(cmd)) {
+			this.toLoop(msg as AnyLoopMsg);
+		} else {
+			this.toChild(msg as AnyBuildMsg | AnyReviewMsg | AnyShipMsg);
+		}
 	}
 
 	setPr(pr: Pr): void {
@@ -719,6 +764,7 @@ function answersOf(
 			: onMain
 				? atTheMergeDoor(ready, factsOf(lane.ticket, pr, tick.record, main))
 				: doorOf(ready);
+
 	switch (cmd.type) {
 		case "build_ticket":
 			return [
@@ -741,13 +787,16 @@ function answersOf(
 		}
 		case "build_push": {
 			const from = cmd.copied.base;
+
 			// Never forced: a branch that moved since the copy refuses the push.
-			if (pr !== null && pr.head !== from)
+			if (pr !== null && pr.head !== from) {
 				return [
 					choice(`push refused: the branch is at ${pr.head}`, [t], (turn) =>
 						turn.answer(cmd, pushBranch.err(cmd, UNKNOWN, 0)),
 					),
 				];
+			}
+
 			const n = (pr?.n ?? 0) + 1;
 			const head = `${lane.ticket}.c${n}`;
 			const pushed: Pr = {
@@ -789,7 +838,10 @@ function answersOf(
 		case "build_open":
 			return [
 				choice("opens the pull request", [t], (turn) => {
-					if (turn.tick.pr !== null) turn.setPr({...turn.tick.pr, opened: true});
+					if (turn.tick.pr !== null) {
+						turn.setPr({...turn.tick.pr, opened: true});
+					}
+
 					turn.answer(cmd, openPr.ok(cmd, prUrl(lane.ticket), 0));
 				}),
 				...failing("opening it", (turn) => turn.answer(cmd, openPr.err(cmd, UNKNOWN, 0))),
@@ -820,7 +872,8 @@ function answersOf(
 					[t],
 					(turn) => {
 						const now = turn.tick.pr;
-						if (now !== null)
+
+						if (now !== null) {
 							turn.setPr({
 								...now,
 								verdicts: [
@@ -828,6 +881,8 @@ function answersOf(
 									...cmd.posts.map((p) => ({head: cmd.head, verdict: p.verdict})),
 								],
 							});
+						}
+
 						turn.answer(cmd, postVerdicts.ok(cmd, "posted", 0));
 					},
 				),
@@ -837,24 +892,31 @@ function answersOf(
 			const failed = failing("the claim", (turn) =>
 				turn.answer(cmd, claimTicket.err(cmd, UNKNOWN, 0)),
 			);
-			if (o.claim === "none")
+
+			if (o.claim === "none") {
 				return [
 					choice(`takes ${lane.ticket} with no claim`, [], (turn) =>
 						turn.answer(cmd, claimTicket.ok(cmd, me, 0)),
 					),
 					...failed,
 				];
+			}
+
 			if (o.claim === "read_then_write") {
 				if (!lane.seen) {
 					const holder = tick.holder;
 					return [
 						choice(`reads the claim on ${lane.ticket}: ${holder ?? "free"}`, [t], (turn) => {
-							if (holder === null) turn.lane = {...turn.lane, seen: true};
-							else turn.answer(cmd, claimTicket.ok(cmd, holder, 0));
+							if (holder === null) {
+								turn.lane = {...turn.lane, seen: true};
+							} else {
+								turn.answer(cmd, claimTicket.ok(cmd, holder, 0));
+							}
 						}),
 						...failed,
 					];
 				}
+
 				return [
 					choice(`writes its claim on ${lane.ticket}`, [t], (turn) => {
 						// Written blind, past the read: a lease held by then stays with its holder.
@@ -864,6 +926,7 @@ function answersOf(
 					}),
 				];
 			}
+
 			// The ledger's claim, one compare-and-set: free, or held by this lane, it is this lane's.
 			const holder = tick.holder ?? me;
 			return [
@@ -882,7 +945,10 @@ function answersOf(
 			return [
 				choice(`lets ${lane.ticket} go`, [t], (turn) => {
 					// Only the lane that holds the lease ends it; from any other, nothing changes.
-					if (turn.tick.holder === me) turn.tick = {...turn.tick, holder: null};
+					if (turn.tick.holder === me) {
+						turn.tick = {...turn.tick, holder: null};
+					}
+
 					turn.answer(cmd, releaseTicket.ok(cmd, "released", 0));
 				}),
 				...failing("letting go", (turn) => turn.answer(cmd, releaseTicket.err(cmd, UNKNOWN, 0))),
@@ -913,7 +979,11 @@ function answersOf(
 			return [
 				choice(`runs the checks again at ${cmd.head}`, [t], (turn) => {
 					const now = turn.tick.pr;
-					if (now !== null && now.head === cmd.head) turn.setPr({...now, checks: "pending"});
+
+					if (now !== null && now.head === cmd.head) {
+						turn.setPr({...now, checks: "pending"});
+					}
+
 					turn.answer(cmd, rerunChecks.ok(cmd, [{run: 1, attempt: 1}], 0));
 				}),
 				...failing("the re-run", (turn) => turn.answer(cmd, rerunChecks.err(cmd, UNKNOWN, 0))),
@@ -921,12 +991,15 @@ function answersOf(
 		case "ship_enqueue": {
 			// The door reads the facts again; GitHub is asked to queue only the head they still prove.
 			const door = o.door === "none" ? {write: cmd.ready} : doorOf(cmd.ready);
-			if ("stale" in door)
+
+			if ("stale" in door) {
 				return [
 					choice(`enqueue ${cmd.ready.head}: stale, ${door.stale}`, [t], (turn) =>
 						turn.answer(cmd, enqueue.ok(cmd, "stale", 0)),
 					),
 				];
+			}
+
 			const {head} = door.write;
 			const answer = !o.queue
 				? ("no_queue" as const)
@@ -936,7 +1009,11 @@ function answersOf(
 			return [
 				choice(`enqueue ${head}: ${answer}`, [t], (turn) => {
 					const now = turn.tick.pr;
-					if (answer === "queued" && now !== null) turn.setPr({...now, queued: head});
+
+					if (answer === "queued" && now !== null) {
+						turn.setPr({...now, queued: head});
+					}
+
 					turn.answer(cmd, enqueue.ok(cmd, answer, 0));
 				}),
 				...failing("the enqueue", (turn) => turn.answer(cmd, enqueue.err(cmd, UNKNOWN, 0))),
@@ -946,13 +1023,16 @@ function answersOf(
 			// The door reads the facts again, and merges only a head tested on the main tip.
 			const door =
 				o.door === "none" ? {write: cmd.ready} : mergeDoorOf(cmd.ready, o.door === "real");
-			if ("stale" in door)
+
+			if ("stale" in door) {
 				return [
 					choice(`merge ${cmd.ready.head}: stale, ${door.stale}`, [t], (turn) =>
 						turn.answer(cmd, merge.ok(cmd, {reading: "stale"}, 0)),
 					),
 				];
-			if ("behind" in door)
+			}
+
+			if ("behind" in door) {
 				return [
 					choice(
 						`merge ${cmd.ready.head}: behind, tested on ${door.behind.tested}, main is ${door.behind.tip}`,
@@ -960,25 +1040,34 @@ function answersOf(
 						(turn) => turn.answer(cmd, merge.ok(cmd, {reading: "behind"}, 0)),
 					),
 				];
+			}
+
 			const {head} = door.write;
-			if (pr === null || pr.head !== head)
+
+			if (pr === null || pr.head !== head) {
 				return [
 					choice(`merge ${head}: head moved`, [t], (turn) =>
 						turn.answer(cmd, merge.ok(cmd, {reading: "head_moved"}, 0)),
 					),
 				];
-			if (pr.merged)
+			}
+
+			if (pr.merged) {
 				return [
 					choice(`merge ${head}: refused, it is merged already`, [t], (turn) =>
 						turn.answer(cmd, merge.err(cmd, UNKNOWN, 0)),
 					),
 				];
-			if (o.upToDate && pr.base !== main)
+			}
+
+			if (o.upToDate && pr.base !== main) {
 				return [
 					choice(`merge ${head}: refused, the branch is behind main`, [t, "main"], (turn) =>
 						turn.answer(cmd, merge.err(cmd, UNKNOWN, 0)),
 					),
 				];
+			}
+
 			return [
 				choice(`merges ${head} straight onto main ${main}`, [t, "main"], (turn) => {
 					const now = turn.tick.pr ?? pr;
@@ -1004,6 +1093,7 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 	const own = lanePart(at);
 	const tick = w.tickets[lane.ticket] as Tick;
 	const out: Choice[] = [];
+
 	if (lane.loop.phase === "idle") {
 		// The program gives the loop a lane of its own; the loop claims the ticket first.
 		out.push({
@@ -1021,15 +1111,22 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 		});
 		return out;
 	}
-	if (lane.loop.phase === "over") return out;
+
+	if (lane.loop.phase === "over") {
+		return out;
+	}
 
 	lane.flight.forEach((f, i) => {
-		if (i > 0 && lane.flight[i - 1]?.key === f.key) return; // the same Cmd twice: one set of answers
+		if (i > 0 && lane.flight[i - 1]?.key === f.key) {
+			return;
+		} // the same Cmd twice: one set of answers
+
 		out.push(...answersOf(o, lane, f.cmd, f.key, at, tick, w.main));
 	});
 
 	const child = lane.child;
 	const pr = tick.pr;
+
 	if (child?.stage === "build" && child.m.phase === "building") {
 		const s = child.m;
 		out.push({
@@ -1047,6 +1144,7 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 				}),
 		});
 	}
+
 	if (child?.stage === "review" && child.m.phase === "reviewing") {
 		const s = child.m;
 		const round = child.asked.round;
@@ -1056,7 +1154,8 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 				: round > o.fails
 					? o.forms.filter((name) => name === "pass")
 					: o.forms;
-		for (const name of forms)
+
+		for (const name of forms) {
 			out.push({
 				label: `${me} reviewer hands back "${name}" at ${s.brief.head}`,
 				touches: [own, t],
@@ -1071,17 +1170,22 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 						ran: noRun,
 					}),
 			});
+		}
 	}
+
 	if (child?.stage === "review" && child.m.phase === "waiting") {
 		const s = child.m;
-		if (pr !== null && pr.head === s.head && pr.checks !== "pending")
+
+		if (pr !== null && pr.head === s.head && pr.checks !== "pending") {
 			out.push({
 				label: `${me} hears the checks settled at ${s.head}`,
 				touches: [own, t],
 				fair: `${me}:listen`,
 				go: (turn) => turn.toChild({type: "review_checks", pr: s.ask.pr, head: s.head}),
 			});
-		if (o.clocks)
+		}
+
+		if (o.clocks) {
 			out.push({
 				label: `${me} review's clock runs out, wait ${s.waited}`,
 				touches: [own, t],
@@ -1089,17 +1193,22 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 				go: (turn) =>
 					turn.toChild({type: "review_checks_overdue", pr: s.ask.pr, head: s.head, wait: s.waited}),
 			});
+		}
 	}
+
 	if (child?.stage === "ship" && child.m.phase === "waiting") {
 		const s = child.m;
-		if (pr !== null && pr.head === s.head && pr.checks !== "pending")
+
+		if (pr !== null && pr.head === s.head && pr.checks !== "pending") {
 			out.push({
 				label: `${me} hears the checks settled at ${s.head}`,
 				touches: [own, t],
 				fair: `${me}:listen`,
 				go: (turn) => turn.toChild({type: "ship_checks", pr: s.pr, head: s.head}),
 			});
-		if (o.clocks)
+		}
+
+		if (o.clocks) {
 			out.push({
 				label: `${me} ship's clock runs out, wait ${s.waited}`,
 				touches: [own, t],
@@ -1107,7 +1216,9 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 				go: (turn) =>
 					turn.toChild({type: "ship_checks_overdue", pr: s.pr, head: s.head, wait: s.waited}),
 			});
+		}
 	}
+
 	if (child?.stage === "ship" && child.m.phase === "queued" && o.clocks) {
 		const s = child.m;
 		out.push({
@@ -1117,7 +1228,8 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 			go: (turn) => turn.toChild({type: "ship_queue_overdue", pr: s.pr, head: s.ready.head}),
 		});
 	}
-	if (lane.restarts < o.restarts)
+
+	if (lane.restarts < o.restarts) {
 		out.push({
 			label: `${me} dies and starts again`,
 			touches: [own, t],
@@ -1129,6 +1241,8 @@ function laneChoices(o: Required<LanesOptions>, w: Lanes, at: number): Choice[] 
 				turn.toLoop({type: "resume"});
 			},
 		});
+	}
+
 	return out;
 }
 
@@ -1154,11 +1268,13 @@ const PERMS: Readonly<Record<number, readonly (readonly number[])[]>> = {
 export function digest(text: string): string {
 	let h1 = 0xdeadbeef;
 	let h2 = 0x41c6ce57;
+
 	for (let i = 0; i < text.length; i++) {
 		const c = text.charCodeAt(i);
 		h1 = Math.imul(h1 ^ c, 2654435761);
 		h2 = Math.imul(h2 ^ c, 1597334677);
 	}
+
 	h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
 	h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
 	return (h1 >>> 0).toString(16).padStart(8, "0") + (h2 >>> 0).toString(16).padStart(8, "0");
@@ -1184,7 +1300,11 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 		steps: REAL,
 		...options,
 	};
-	if (o.lanes < 1 || o.lanes > 3) throw new Error("one to three lanes");
+
+	if (o.lanes < 1 || o.lanes > 3) {
+		throw new Error("one to three lanes");
+	}
+
 	const names = Array.from({length: o.lanes}, (_, i) => (o.tickets === "own" ? `T${i + 1}` : "T1"));
 	const tickets = [...new Set(names)];
 	/** The one lane on a ticket, or -1 when several are. */
@@ -1252,6 +1372,7 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 				push(at, choice, next, landings);
 			}
 		});
+
 		// The world on each ticket: CI, the merge queue, the owner at the desk.
 		for (const ticket of tickets) {
 			const tick = w.tickets[ticket] as Tick;
@@ -1266,8 +1387,9 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 				push(owner, choice, after.next, after.landings);
 			};
 			const pr = tick.pr;
+
 			if (pr !== null && !pr.merged) {
-				if (pr.checks === "pending")
+				if (pr.checks === "pending") {
 					for (const checks of o.red ? (["green", "red"] as const) : (["green"] as const)) {
 						const choice: Choice = {
 							label: `${ticket} CI ${checks} at ${pr.head}`,
@@ -1280,7 +1402,7 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 							landings: [],
 						}));
 					}
-				else if (o.flaky)
+				} else if (o.flaky) {
 					world(
 						{
 							label: `${ticket} CI runs again at ${pr.head}`,
@@ -1296,9 +1418,12 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 							landings: [],
 						}),
 					);
+				}
+
 				if (pr.queued !== null && pr.queued === pr.head) {
 					// The queue tests the head on top of main as it is now, and lands it; the Listen tells every ship waiting on it.
 					const outcomes = o.eject ? (["landed", "ejected"] as const) : (["landed"] as const);
+
 					for (const reading of outcomes) {
 						const waiting = lanesOn.filter((i) => {
 							const c = (w.lanes[i] as Lane).child;
@@ -1319,6 +1444,7 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 							let now = tick;
 							const landings: Landing[] = [];
 							const head = pr.head;
+
 							if (reading === "landed") {
 								const turn = new Turn(
 									o,
@@ -1331,7 +1457,10 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 								landings.push(...turn.landings);
 								main = turn.main;
 								now = turn.tick;
-							} else now = {...now, pr: {...pr, queued: null}};
+							} else {
+								now = {...now, pr: {...pr, queued: null}};
+							}
+
 							for (const i of waiting) {
 								const turn = new Turn(o, i, lanes[i] as Lane, now, main);
 								turn.toChild(
@@ -1349,6 +1478,7 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 								now = turn.tick;
 								main = turn.main;
 							}
+
 							return {
 								next: {...w0, lanes, main, tickets: {...w0.tickets, [ticket]: now}},
 								landings,
@@ -1357,10 +1487,17 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 					}
 				}
 			}
+
 			// The owner may answer what waits on them, or never.
 			for (const ask of openAsks(deskOf(tick.desk))) {
-				if (ask.for !== "stuck") continue;
-				for (const answer of [{kind: "keep_going" as const, rounds: 1}, {kind: "remove" as const}])
+				if (ask.for !== "stuck") {
+					continue;
+				}
+
+				for (const answer of [
+					{kind: "keep_going" as const, rounds: 1},
+					{kind: "remove" as const},
+				]) {
 					world(
 						{
 							label: `${ticket} owner answers ${ask.id}: ${answer.kind}`,
@@ -1385,9 +1522,11 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 							landings: [],
 						}),
 					);
+				}
 			}
 		}
-		if (w.outsider > 0)
+
+		if (w.outsider > 0) {
 			out.push({
 				label: `someone else merges onto main ${w.main}`,
 				lane: -1,
@@ -1396,6 +1535,8 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 				rare: false,
 				next: {...w, main: w.main + 1, outsider: w.outsider - 1},
 			});
+		}
+
 		return out;
 	};
 
@@ -1405,21 +1546,29 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 	const renamer = (perm: readonly number[]) => (text: string) =>
 		text.replace(/\b([TL])([1-9])\b/g, (whole, kind: string, d: string) => {
 			const i = Number(d) - 1;
-			if (kind === "T" && o.tickets === "same") return whole;
+
+			if (kind === "T" && o.tickets === "same") {
+				return whole;
+			}
+
 			return `${kind}${(perm[i] ?? i) + 1}`;
 		});
 	const renames = perms.map(renamer);
 	const partKey = (part: object, p: number): string => {
 		let row = cache.get(part);
+
 		if (row === undefined) {
 			row = [];
 			cache.set(part, row);
 		}
+
 		let k = row[p];
+
 		if (k === undefined) {
 			k = digest((renames[p] as (s: string) => string)(structuralHash(part)));
 			row[p] = k;
 		}
+
 		return k;
 	};
 	const keyUnder = (w: Lanes, p: number): string => {
@@ -1442,10 +1591,15 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 		key: (w) => keyUnder(w, 0),
 		canon: (w) => {
 			let best = keyUnder(w, 0);
+
 			for (let p = 1; p < perms.length; p++) {
 				const k = keyUnder(w, p);
-				if (k < best) best = k;
+
+				if (k < best) {
+					best = k;
+				}
 			}
+
 			return best;
 		},
 		mine: (lane, part) =>
@@ -1456,7 +1610,11 @@ export function lanesWorld(options: LanesOptions): System<Lanes, Note> {
 		// reduced step touches.
 		face: (w, lane) => {
 			const l = w.lanes[lane] as Lane;
-			if (ownerOf(l.ticket) === lane) return "";
+
+			if (ownerOf(l.ticket) === lane) {
+				return "";
+			}
+
 			return `${busy(l) ? "busy" : "free"}|${l.loop.phase === "over" ? nameOf(l.loop.outcome) : ""}`;
 		},
 		ended: (w, lane) => (w.lanes[lane] as Lane).loop.phase === "over",

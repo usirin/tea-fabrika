@@ -326,8 +326,11 @@ export const openedTools = (tools: Tools) =>
 	(Object.keys(OPENED) as ToolName[]).map((name) =>
 		tool(name, OPENED[name].says, shapeOf(name), async (args) => {
 			const input = Schema.decodeUnknownOption(OPENED[name].input)(args);
-			if (Option.isNone(input))
+
+			if (Option.isNone(input)) {
 				return {...said("Refused: that input does not fit the tool's shape."), isError: true};
+			}
+
 			const heard = await Effect.runPromise(tools[name](input.value));
 			return heard === "taken"
 				? said("Taken. It is kept apart from your review.")
@@ -404,14 +407,19 @@ export const reviewerOptions = (
  */
 export async function removeLinks(folder: string): Promise<number> {
 	let removed = 0;
+
 	// Walked by hand, one folder at a time: a link to a folder is a link here, never a folder to go into.
 	for (const entry of await readdir(folder, {withFileTypes: true})) {
 		const path = join(folder, entry.name);
+
 		if (entry.isSymbolicLink()) {
 			await unlink(path);
 			removed += 1;
-		} else if (entry.isDirectory()) removed += await removeLinks(path);
+		} else if (entry.isDirectory()) {
+			removed += await removeLinks(path);
+		}
 	}
+
 	return removed;
 }
 
@@ -424,11 +432,13 @@ export async function removeLinks(folder: string): Promise<number> {
 const codeAt = (repo: string, head: string) =>
 	Effect.gen(function* () {
 		const has = yield* Effect.option(sh("git", ["-C", repo, "cat-file", "-e", `${head}^{commit}`]));
+
 		if (Option.isNone(has)) {
 			return yield* Effect.fail(
 				`the clone does not hold commit ${head}. Fetch it into that clone first (for a pull request: git fetch origin pull/<number>/head), then run again. This run fetches nothing.`,
 			);
 		}
+
 		const root = yield* Effect.acquireRelease(
 			// The real path: on some systems the temp folder is a link, and the Check judges paths as written.
 			Effect.tryPromise({
@@ -503,20 +513,31 @@ const draftLive = (
 			const all = yield* Stream.runCollect(
 				msgs.pipe(Stream.takeUntil((msg) => !is.tool(msg))),
 			).pipe(Effect.ensuring(Effect.sync(traced.end)));
-			for (const msg of all) if (is.tool(msg)) tools.push(msg.tool);
+
+			for (const msg of all) {
+				if (is.tool(msg)) {
+					tools.push(msg.tool);
+				}
+			}
+
 			const end = [...all].at(-1);
-			if (end === undefined || is.tool(end))
+
+			if (end === undefined || is.tool(end)) {
 				return {
 					answer: "broke",
 					error: "the run ended with no result",
 					...ran(noSpend),
 				} satisfies Drafted;
-			if (is.failed(end))
+			}
+
+			if (is.failed(end)) {
 				return (
 					end.error.startsWith(OVER_BUDGET)
 						? {answer: "over_budget", ...ran(end.spend)}
 						: {answer: "broke", error: end.error, ...ran(end.spend)}
 				) satisfies Drafted;
+			}
+
 			return (
 				end.output === null
 					? {answer: "misfit", ...ran(end.spend)}

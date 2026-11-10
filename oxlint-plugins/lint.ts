@@ -35,10 +35,13 @@ const missing = scriptReads(
 	new Map(scripts.map((path) => [path, readFileSync(join(ROOT, path), "utf8")])),
 );
 
-for (const row of missing)
+for (const row of missing) {
 	console.error(`${row.test}: declare ${row.path}?raw, read through ${row.via}`);
+}
 
-if (missing.length) process.exit(1);
+if (missing.length) {
+	process.exit(1);
+}
 
 // A `.gitignore` hides a file from oxlint and oxfmt, and neither can be told to stop without also
 // walking into `node_modules`. Git keeps a tracked file tracked under a new `.gitignore`, so one line
@@ -104,21 +107,25 @@ const ledger: {readonly entries: readonly Finding[]} = existsSync(LEDGER)
 
 const {entries} = ledger;
 
-for (const entry of outside(entries))
+for (const entry of outside(entries)) {
 	console.error(
 		`agents-ledger.json: ${entry.file} is outside ${LEDGER_ROOT}, and only .agents/ has a ledger`,
 	);
+}
 
 const lines = new Map<string, readonly string[]>();
 
 /** A finding as the ledger keys it: its file from the repo's top, its rule and its line of code. */
 const finding = (d: Diagnostic): Finding => {
 	const file = relative(ROOT, resolve(process.cwd(), d.filename ?? ""));
-	if (!lines.has(file))
+
+	if (!lines.has(file)) {
 		lines.set(
 			file,
 			existsSync(join(ROOT, file)) ? readFileSync(join(ROOT, file), "utf8").split("\n") : [],
 		);
+	}
+
 	const line = d.labels?.[0]?.span.line;
 	return {
 		file,
@@ -138,7 +145,10 @@ const blocks = found.filter((_, i) => {
 });
 
 const advises = diagnostics.filter((d) => ADVICE.has(d.code ?? ""));
-for (const d of [...advises, ...blocks]) console.log(`${where(d)} ${d.code ?? ""} ${d.message}`);
+
+for (const d of [...advises, ...blocks]) {
+	console.log(`${where(d)} ${d.code ?? ""} ${d.message}`);
+}
 
 // Only a run over the whole repo sees every finding, so only it prunes. A run on a folder or a file
 // leaves the ledger as it is.

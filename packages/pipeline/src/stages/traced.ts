@@ -31,7 +31,11 @@ export const prName = (pr: string): string => `pr ${refOf(pr) ?? ""}`.trim();
 /** The attributes of a span about one pull request. A url that is not one gives none. */
 export const prAttributes = (url: string): Readonly<Record<string, string>> => {
 	const found = /^(https:\/\/github\.com\/[^/\s]+\/[^/\s]+)\/pull\/(\d+)/.exec(url);
-	if (found === null) return {};
+
+	if (found === null) {
+		return {};
+	}
+
 	const [, repo = "", number = ""] = found;
 	return {"vcs.repository.url.full": repo, "vcs.change.id": number, [ATTR.pr]: url};
 };
@@ -216,7 +220,10 @@ export const loopDrawing = (ticket: string): DrawingOf<typeof loop> => ({
 		loop_release: "let the ticket go",
 	},
 	tags: (s) => {
-		if (s.phase === "idle") return {};
+		if (s.phase === "idle") {
+			return {};
+		}
+
 		const spent = s.rounds.reduce((sum, round) => sum + round.spend, 0);
 		const ended = s.phase === "over" || s.phase === "releasing";
 		const pr = ended ? s.rounds.at(-1)?.pr : "pr" in s ? s.pr : undefined;

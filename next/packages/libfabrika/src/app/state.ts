@@ -31,25 +31,51 @@ export class Saved extends Schema.Opaque<Saved>()(Row) {
 		build: string,
 	): {readonly saved: Saved; readonly ran: ReadonlyArray<string>} {
 		const row = decodeRow(raw);
-		if (Result.isFailure(row) || row.success.v > state.v) throw down();
+
+		if (Result.isFailure(row) || row.success.v > state.v) {
+			throw down();
+		}
+
 		const froms = state.upgrades.map((u) => u.from);
-		if (new Set(froms).size !== froms.length) throw down();
+
+		if (new Set(froms).size !== froms.length) {
+			throw down();
+		}
+
 		let model: unknown = structuredClone(row.success.model);
 		const ran: Array<string> = [];
+
 		for (let v = row.success.v; v < state.v; v++) {
 			const upgrade = state.upgrades.find((u) => u.from === v);
-			if (upgrade === undefined) throw down();
+
+			if (upgrade === undefined) {
+				throw down();
+			}
+
 			const input = structuredClone(model);
 			const next = Result.try({try: () => upgrade.run(input), catch: down});
-			if (Result.isFailure(next)) throw next.failure;
+
+			if (Result.isFailure(next)) {
+				throw next.failure;
+			}
+
 			model = next.success;
 			ran.push(upgrade.name);
 		}
+
 		const decoded = Schema.decodeUnknownResult(state.schema)(model);
-		if (Result.isFailure(decoded)) throw down();
+
+		if (Result.isFailure(decoded)) {
+			throw down();
+		}
+
 		const encoded = Schema.encodeUnknownResult(state.schema)(decoded.success);
 		const json = Result.isSuccess(encoded) ? decodeJson(encoded.success) : Result.fail(null);
-		if (Result.isFailure(json)) throw down();
+
+		if (Result.isFailure(json)) {
+			throw down();
+		}
+
 		return {
 			saved: Saved.make({v: state.v, build, model: json.success, after: row.success.after}),
 			ran,

@@ -65,7 +65,11 @@ export const poetProgram = defineProgram({
 							guest: e.body.guest,
 							line: w.line,
 						});
-						if (sent.how !== "sent") return yield* Effect.interrupt;
+
+						if (sent.how !== "sent") {
+							return yield* Effect.interrupt;
+						}
+
 						yield* machine.dispatch({type: "written", rev: e.rev, usd: w.usd});
 					}),
 			});

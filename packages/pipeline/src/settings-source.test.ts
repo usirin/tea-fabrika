@@ -79,10 +79,12 @@ const origin = (folder: string) =>
 		const put = (branch: string, files: Readonly<Record<string, string>>) =>
 			Effect.gen(function* () {
 				yield* sh(owner, ["checkout", "-q", "-B", branch]);
+
 				for (const [name, text] of Object.entries(files)) {
 					yield* fs.makeDirectory(path.dirname(path.join(owner, name)), {recursive: true});
 					yield* fs.writeFileString(path.join(owner, name), text);
 				}
+
 				yield* sh(owner, ["add", "-A"]);
 				yield* sh(owner, ["commit", "-q", "--no-verify", "--allow-empty", "-m", branch]);
 				yield* sh(owner, ["push", "-q", "--no-verify", "-f", "origin", `${branch}:${branch}`]);
@@ -335,10 +337,12 @@ describe("fabrika.toml with no target repository", () => {
 			Effect.gen(function* () {
 				const fs = yield* FileSystem.FileSystem;
 				const path = yield* Path.Path;
+
 				for (const name of files) {
 					yield* fs.makeDirectory(path.dirname(path.join(folder, name)), {recursive: true});
 					yield* fs.writeFileString(path.join(folder, name), 'packs = ["@acme/desk"]\n');
 				}
+
 				return (yield* Effect.flip(loadSettings({from: "folder", folder}))).why;
 			}),
 		);
@@ -351,10 +355,12 @@ describe("fabrika.toml with no target repository", () => {
 				Effect.gen(function* () {
 					const fs = yield* FileSystem.FileSystem;
 					const path = yield* Path.Path;
+
 					for (const [name, text] of Object.entries(files)) {
 						yield* fs.makeDirectory(path.dirname(path.join(folder, name)), {recursive: true});
 						yield* fs.writeFileString(path.join(folder, name), text);
 					}
+
 					const at = path.join(folder, shut);
 					const mode = (yield* fs.stat(at)).mode;
 					yield* fs.chmod(at, 0o000);

@@ -42,15 +42,19 @@ describe("the environment a started process is handed", () => {
 	])("finds Volta's home from the PATH when none is set and its folder is %s", (_, path, home) => {
 		const parent = {...PARENT, PATH: path};
 		expect(toolHome(parent)).toEqual({VOLTA_HOME: home});
-		for (const env of [runEnv(parent), agentEnv(parent), shellEnv(parent), hostEnv(parent)])
+
+		for (const env of [runEnv(parent), agentEnv(parent), shellEnv(parent), hostEnv(parent)]) {
 			expect(env.VOLTA_HOME).toBe(home);
+		}
 	});
 
 	it("takes the home that is set over the PATH, and does not read a longer name as Volta's", () => {
 		const set = {...PARENT, PATH: "/a/.volta/bin", VOLTA_HOME: "/set/volta"};
 		expect(toolHome(set)).toEqual({VOLTA_HOME: "/set/volta"});
-		for (const path of ["/a/.volta/bin2", "/a/not.volta/bin", "/a/.volta/bin/more", ".volta/bin"])
+
+		for (const path of ["/a/.volta/bin2", "/a/not.volta/bin", "/a/.volta/bin/more", ".volta/bin"]) {
 			expect(toolHome({...PARENT, PATH: path})).toEqual({});
+		}
 	});
 
 	it("adds the agent's own login for an agent, wherever that login is kept", () => {
@@ -124,6 +128,7 @@ describe("the environment a started process is handed", () => {
 
 		// The same child, handed everything, does see it: the test can tell the two apart.
 		expect(names(parent)).toContain("TEA_FABRIKA_MARKER");
+
 		for (const env of [runEnv(parent), agentEnv(parent), shellEnv(parent)]) {
 			expect(names(env)).toContain("PATH");
 			expect(names(env)).not.toContain("TEA_FABRIKA_MARKER");

@@ -34,7 +34,9 @@ export function mortalDisk(): {readonly life: (before?: BeforeWrite) => Life} {
 				before(key).pipe(
 					Effect.andThen(
 						Effect.sync(() => {
-							if (!dead) f();
+							if (!dead) {
+								f();
+							}
 						}),
 					),
 				);

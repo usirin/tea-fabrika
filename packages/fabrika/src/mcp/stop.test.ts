@@ -113,6 +113,7 @@ describe("a stop call, read", () => {
 			expect(call.kind, JSON.stringify(why)).toBe("refused");
 			expect(call.kind === "refused" ? call.why : "").toMatch(/\bwhy\b/);
 		}
+
 		// Plain words in any script still fit.
 		expect(callOf(LIST, STOP, {n: 3, why: "yanlış bilet: PR 7"}).kind).toBe("stop");
 	});

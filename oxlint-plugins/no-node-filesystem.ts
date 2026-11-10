@@ -7,12 +7,15 @@ const native = /^(?:node:)?(?:fs(?:\/promises)?|path(?:\/(?:posix|win32))?)$/;
 export const noNodeFilesystem: CreateRule = {
 	create(context) {
 		const file = pathIn(context);
+
 		if (
 			!heldToNext(file) ||
 			/\/(?:exam|e2e)\//.test(file) ||
 			/\.(?:test|test-support|d)\.tsx?$/.test(file)
-		)
+		) {
 			return {};
+		}
+
 		const check = (node: Node, source: Node | null | undefined) => {
 			const value =
 				source?.type === "Literal"
@@ -30,12 +33,14 @@ export const noNodeFilesystem: CreateRule = {
 							comment.loc.start.line === source.loc.start.line &&
 							/^\s*edge:\s*\S/.test(comment.value),
 					);
-			if (typeof value === "string" && native.test(value) && !edge)
+
+			if (typeof value === "string" && native.test(value) && !edge) {
 				context.report({
 					node,
 					message:
 						"Use Effect FileSystem and Path in next/ product code (docs/direction/build-on-effect.md).",
 				});
+			}
 		};
 		return {
 			ImportDeclaration: (node) => check(node, node.source),
@@ -43,12 +48,14 @@ export const noNodeFilesystem: CreateRule = {
 			ExportAllDeclaration: (node) => check(node, node.source),
 			ImportExpression: (node) => check(node, node.source),
 			CallExpression(node) {
-				if (node.callee.type === "Identifier" && node.callee.name === "require")
+				if (node.callee.type === "Identifier" && node.callee.name === "require") {
 					check(node, node.arguments[0]);
+				}
 			},
 			TSImportEqualsDeclaration(node) {
-				if (node.moduleReference.type === "TSExternalModuleReference")
+				if (node.moduleReference.type === "TSExternalModuleReference") {
 					check(node, node.moduleReference.expression);
+				}
 			},
 		};
 	},

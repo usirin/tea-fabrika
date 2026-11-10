@@ -80,22 +80,42 @@ export interface Opening {
  */
 export function openLine(tree: LayoutTree, at: TileId, opening: Opening): LayoutTree {
 	const tile = findTile(tree, at);
-	if (tile === null || tile.shows.kind === "window") return tree;
+
+	if (tile === null || tile.shows.kind === "window") {
+		return tree;
+	}
+
 	const [first, ...rest] = opening.runs;
-	if (rest.length === 0) return setShows(tree, at, {kind: "tsh", run: first});
+
+	if (rest.length === 0) {
+		return setShows(tree, at, {kind: "tsh", run: first});
+	}
+
 	const line: Line = {id: first.id, from: at, tint: opening.tint, letter: opening.letter};
 	const others: TileNode[] = [];
+
 	for (const [i, run] of rest.entries()) {
 		const id = opening.ids.tiles[i];
-		if (id === undefined) return tree;
+
+		if (id === undefined) {
+			return tree;
+		}
+
 		others.push(createTile(id, {kind: "window", run, line}));
 	}
+
 	const head: TileNode = {...tile, folded: false, shows: {kind: "line", run: first, line}};
 	const base = unzoom(tree);
 	const placed = spread(base, at, opening.orientation, [head, ...others], opening.ids.container);
-	if (placed === base) return tree;
-	if (opening.area === null || fits(placed, opening.area, [at, ...others.map((t) => t.id)]))
+
+	if (placed === base) {
+		return tree;
+	}
+
+	if (opening.area === null || fits(placed, opening.area, [at, ...others.map((t) => t.id)])) {
 		return placed;
+	}
+
 	return others.reduce((layout, t) => fold(layout, t.id), placed);
 }
 
@@ -116,9 +136,13 @@ export function extents(tree: LayoutTree, area: Area): ReadonlyMap<TileId, Area>
 	const out = new Map<TileId, Area>();
 	const walk = (node: LayoutNode, size: Area): void => {
 		if (node.tag === "tile") {
-			if (!node.folded) out.set(node.id, size);
+			if (!node.folded) {
+				out.set(node.id, size);
+			}
+
 			return;
 		}
+
 		lay(node, size, walk);
 	};
 	walk(tree.root, area);
@@ -139,6 +163,7 @@ function lay(
 		along - strips * STRIP[container.orientation] - Math.max(0, open.length - 1) * BORDER,
 	);
 	const shares = openShares(container);
+
 	for (const child of open) {
 		const part = left * (shares[child.id] ?? 0);
 		walk(child, row ? {width: part, height: size.height} : {width: size.width, height: part});
@@ -161,9 +186,15 @@ export const quiet = (tree: LayoutTree): LayoutTree => {
 /** The lines shown in these trees, by id. */
 export const linesIn = (trees: readonly LayoutTree[]): ReadonlyMap<string, Line> => {
 	const lines = new Map<string, Line>();
-	for (const tree of trees)
-		for (const tile of tiles(tree.root))
-			if (tile.shows.kind !== "tsh") lines.set(tile.shows.line.id, tile.shows.line);
+
+	for (const tree of trees) {
+		for (const tile of tiles(tree.root)) {
+			if (tile.shows.kind !== "tsh") {
+				lines.set(tile.shows.line.id, tile.shows.line);
+			}
+		}
+	}
+
 	return lines;
 };
 
@@ -184,7 +215,11 @@ const letterAt = (n: number): string =>
 /** The first letter not in `taken`. Letters never run out, so none is ever given twice. */
 const firstFree = (taken: ReadonlySet<string>): string => {
 	let n = 0;
-	while (taken.has(letterAt(n))) n += 1;
+
+	while (taken.has(letterAt(n))) {
+		n += 1;
+	}
+
 	return letterAt(n);
 };
 
@@ -207,9 +242,11 @@ export const freeLetter = (trees: readonly LayoutTree[]): string =>
 export const withLetters = (kept: LayoutTree<KeptLine>): LayoutTree => {
 	const taken = new Set<string>();
 	const note = (node: LayoutNode<KeptLine>): void => {
-		if (node.tag === "container") node.children.forEach(note);
-		else if (node.shows.kind !== "tsh" && node.shows.line.letter !== undefined)
+		if (node.tag === "container") {
+			node.children.forEach(note);
+		} else if (node.shows.kind !== "tsh" && node.shows.line.letter !== undefined) {
 			taken.add(node.shows.line.letter);
+		}
 	};
 	note(kept.root);
 	const given = new Map<string, string>();

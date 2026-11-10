@@ -54,7 +54,10 @@ const countOf = Effect.map(savedState("counter:1", Count), (s) => s.state?.count
 const until = (done: Effect.Effect<boolean, unknown, Ledger>, ms = 10_000) =>
 	Effect.gen(function* () {
 		const t0 = Date.now();
-		while (!(yield* done) && Date.now() - t0 < ms) yield* sleep(20);
+
+		while (!(yield* done) && Date.now() - t0 < ms) {
+			yield* sleep(20);
+		}
 	});
 
 describe("serve", () => {
@@ -65,23 +68,40 @@ describe("serve", () => {
 				const ledger = yield* Ledger;
 				yield* ledger.register("counter:1", "test");
 				const hosts = ["a", "b"].map((h) => ({h, scope: Effect.runSync(Scope.make())}));
-				for (const {h, scope} of hosts)
+
+				for (const {h, scope} of hosts) {
 					yield* serve({
 						name: "counter:1",
 						holder: h,
 						program: counterProgram,
 						listen: (e) => events.push(e),
 					}).pipe(Scope.provide(scope));
-				for (let i = 0; i < 50; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
+				}
+
+				for (let i = 0; i < 50; i++) {
+					yield* cast("counter:1", `m${i}`, {}, "sender");
+				}
+
 				yield* until(Effect.map(countOf, (n) => n === 50));
 				const first = yield* whereis("counter:1");
 				const owner = hosts.find((x) => x.h === first.holder);
-				if (owner !== undefined) yield* Scope.close(owner.scope, Exit.void);
-				for (let i = 50; i < 100; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
+
+				if (owner !== undefined) {
+					yield* Scope.close(owner.scope, Exit.void);
+				}
+
+				for (let i = 50; i < 100; i++) {
+					yield* cast("counter:1", `m${i}`, {}, "sender");
+				}
+
 				yield* until(Effect.map(countOf, (n) => n === 100));
 				const second = yield* whereis("counter:1");
 				const n = yield* countOf;
-				for (const {scope} of hosts) yield* Scope.close(scope, Exit.void);
+
+				for (const {scope} of hosts) {
+					yield* Scope.close(scope, Exit.void);
+				}
+
 				return {first, second, n};
 			}).pipe(Effect.provide(layerMemory())),
 		);
@@ -143,7 +163,8 @@ describe("serve", () => {
 /** `ledger` behind a link that can drop: while `link.down`, every call goes unanswered. */
 const behind = (ledger: Ledger["Service"], link: {down: boolean}): Ledger["Service"] => {
 	const wrapped: Record<string, unknown> = {};
-	for (const [key, call] of Object.entries(ledger))
+
+	for (const [key, call] of Object.entries(ledger)) {
 		wrapped[key] =
 			key === "watch"
 				? call
@@ -153,6 +174,8 @@ const behind = (ledger: Ledger["Service"], link: {down: boolean}): Ledger["Servi
 								? Effect.fail(new LedgerUnreachable({method: key, message: "the link is down"}))
 								: (call as (...a: unknown[]) => Effect.Effect<unknown>)(...args),
 						);
+	}
+
 	return wrapped as Ledger["Service"];
 };
 
@@ -183,12 +206,20 @@ describe("serve, cut off from the ledger", () => {
 				const ledger = yield* Ledger;
 				yield* ledger.register("counter:1", "test");
 				const scope = yield* serveCounter("a", link, events);
-				for (let i = 0; i < 10; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
+
+				for (let i = 0; i < 10; i++) {
+					yield* cast("counter:1", `m${i}`, {}, "sender");
+				}
+
 				yield* until(Effect.map(countOf, (n) => n === 10));
 				link.down = true;
 				yield* sleep(1_500);
 				link.down = false;
-				for (let i = 10; i < 20; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
+
+				for (let i = 10; i < 20; i++) {
+					yield* cast("counter:1", `m${i}`, {}, "sender");
+				}
+
 				yield* until(Effect.map(countOf, (n) => n === 20));
 				// The next renewal says it is back, and the count can get there first.
 				const kindsNow = ledger
@@ -220,13 +251,21 @@ describe("serve, cut off from the ledger", () => {
 				const ledger = yield* Ledger;
 				yield* ledger.register("counter:1", "test");
 				const a = yield* serveCounter("a", cut, events);
-				for (let i = 0; i < 10; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
+
+				for (let i = 0; i < 10; i++) {
+					yield* cast("counter:1", `m${i}`, {}, "sender");
+				}
+
 				yield* until(Effect.map(countOf, (n) => n === 10));
 				cut.down = true;
 				// The lease runs out; b takes the name while a cannot hear it.
 				const b = yield* serveCounter("b", open, events);
 				yield* until(Effect.map(whereis("counter:1"), (w) => w.holder === "b"));
-				for (let i = 10; i < 20; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
+
+				for (let i = 10; i < 20; i++) {
+					yield* cast("counter:1", `m${i}`, {}, "sender");
+				}
+
 				yield* until(Effect.map(countOf, (n) => n === 20));
 				cut.down = false;
 				yield* sleep(1_000);

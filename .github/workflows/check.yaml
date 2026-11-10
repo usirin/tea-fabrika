@@ -15,12 +15,18 @@ concurrency:
   group: check-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Every job has a time limit, so a stuck step fails instead of holding a pull request for the 360
+# minute default (pull request 696, ticket 496). The four set with ticket 496 are about twice the
+# slowest of that job's last 20 green runs on 2026-11-10 UTC, and at least 5: changes 39 s,
+# field 43 s, check 166 s, test 944 s. next (674 s) and e2e (333 s) had theirs before.
+# workflow-lint.ts fails a job without one.
 jobs:
   # Today's CI, both versions. One no-install classifier holds every path rule.
   # Safe Markdown and direct field JSONL skip the heavy jobs; unknown paths and main run all.
   # These small checks still run when pnpm setup and the heavy jobs skip.
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       check: ${{ steps.diff.outputs.check }}
       test: ${{ steps.diff.outputs.test }}
@@ -47,6 +53,7 @@ jobs:
   # The proof PR measures this path's cold install and cache cost.
   field:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
         with:
@@ -81,6 +88,7 @@ jobs:
           (needs.changes.result != 'success' ||
            needs.changes.outputs.check != 'false') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -203,6 +211,7 @@ jobs:
           (needs.changes.result != 'success' ||
            needs.changes.outputs.test != 'false') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -228,9 +237,27 @@ jobs:
       # The os sandbox (packages/fabrika/src/sandbox/os.ts) is sandbox-runtime, which on
       # Linux needs bubblewrap, socat and ripgrep, and user namespaces that Ubuntu
       # 24.04 restricts by default (its README says so). On CI its tests never skip.
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends expect zsh bubblewrap socat ripgrep
+      # The image has none of the five (image 20261101.360 installs all of them new).
+      # The runner's Azure mirror sometimes stops answering, and apt then waits with no end: 32 min
+      # on pull request 696, with the image's own apt limits set (Acquire::Retries 1, a 15 s
+      # timeout; actions/runner-images issue 14594). So each apt command gets a wall-clock limit
+      # and three tries; the cause is outside this repo (decision 0036). In 432 green jobs the
+      # step took at most 246 s; in the six slowest, `update` fetched in at most 16 s and `install`
+      # in at most 237 s.
+      - name: apt packages
+        timeout-minutes: 12
+        run: |
+          bounded() {
+            limit=$1
+            shift
+            for try in 1 2 3; do
+              sudo timeout --kill-after=10 "$limit" apt-get "$@" && return 0
+              echo "::warning::apt-get $1 failed or passed ${limit} s, try $try of 3"
+            done
+            return 1
+          }
+          bounded 60 update
+          bounded 300 install -y --no-install-recommends expect zsh bubblewrap socat ripgrep
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - run: pnpm install --frozen-lockfile

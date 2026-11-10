@@ -1,1 +1,0 @@
-A plain note in packages/x. It holds no code word.

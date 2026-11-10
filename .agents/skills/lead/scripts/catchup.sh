@@ -93,8 +93,9 @@ close_named() {
 # sweep <mode> <pr> <branch> <tip> <checkout> <box.sh>: `checkout` removes this run's own
 # checkout, forced, unless it holds MAIN's Git storage; `landed` keeps the checked head and removes
 # the branch's boxes and its one driver worktree, each only when that is safe.
+# Before either removal, keepruns.sh moves the folder's runs/ into MAIN's runs/<name>/.
 sweep() {
-python3 - "$@" <<'PY'
+KEEPRUNS="$LEAD/keepruns.sh" python3 - "$@" <<'PY'
 from pathlib import Path
 import os
 import re
@@ -105,6 +106,13 @@ import sys
 mode, pr, branch, tip, checkout, box_script = sys.argv[1:]
 main = Path(os.environ["MAIN"]).resolve()
 boxes = Path(os.environ["BOXES"]).resolve()
+
+def keep_runs(path):
+    # Raw samples live under runs/, never in git: move them to MAIN before the folder goes.
+    result = subprocess.run(["sh", os.environ["KEEPRUNS"], str(path)], capture_output=True, text=True)
+    if result.stdout.strip():
+        print(result.stdout.rstrip(), flush=True)
+    return result.returncode == 0
 
 def kept(item, why):
     # Paths from Git may contain newlines. Keep each result on one line.
@@ -230,6 +238,8 @@ try:
             kept(label, "checked head not retained")
         elif any(field.split(" ", 1)[0] in ("locked", "prunable") for field in fields):
             kept(label, "locked or unreadable worktree")
+        elif not keep_runs(path):
+            kept(label, "could not keep its runs/")
         elif git("worktree", "remove", str(path)).returncode:
             kept(label, "worktree removal refused or failed")
 
@@ -243,6 +253,9 @@ try:
         reason = storage_reason(path, False)
         if reason:
             kept(f"worktree {path.name}", reason)
+            return
+        if not keep_runs(path):
+            kept(f"worktree {path.name}", "could not keep its runs/")
             return
         git("worktree", "remove", "--force", "--force", str(path))
         if os.path.lexists(path):

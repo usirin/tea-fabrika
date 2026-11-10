@@ -21,17 +21,27 @@ const users = new Map<string, {id: number; keys: string[]}>();
 
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
-	if (url.host !== "api.github.com") return new Response("not here", {status: 502});
+
+	if (url.host !== "api.github.com") {
+		return new Response("not here", {status: 502});
+	}
+
 	const byId = /^\/user\/([0-9]+)$/.exec(url.pathname);
+
 	if (byId !== null) {
 		const found = [...users].find(([, u]) => u.id === Number(byId[1]));
 		return found === undefined
 			? Response.json({message: "Not Found"}, {status: 404})
 			: Response.json({id: found[1].id, login: found[0]});
 	}
+
 	const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
 	const u = m?.[1] === undefined ? undefined : users.get(decodeURIComponent(m[1]));
-	if (u === undefined) return Response.json({message: "Not Found"}, {status: 404});
+
+	if (u === undefined) {
+		return Response.json({message: "Not Found"}, {status: 404});
+	}
+
 	return m?.[2] === undefined
 		? Response.json({id: u.id, login: m?.[1]})
 		: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
@@ -55,7 +65,11 @@ const keyFor = async (login: string, id: number) => {
 
 beforeAll(async () => {
 	root = mkdtempSync(join(tmpdir(), "fabrika-post-"));
-	for (const name of ["alice", "bob"]) mkdirSync(join(root, name, "home"), {recursive: true});
+
+	for (const name of ["alice", "bob"]) {
+		mkdirSync(join(root, name, "home"), {recursive: true});
+	}
+
 	await keyFor("alice", 7);
 	await keyFor("bob", 8);
 	const twin = await Effect.runPromise(
@@ -84,9 +98,17 @@ const entriesAt = (home: string, n: number) =>
 		const started = yield* start(tracker, {}, {}, {id: "read", storage: memoryStorage()}).pipe(
 			Effect.provideContext(services),
 		);
-		if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("the tracker did not start");
+		}
+
 		const view = viewOf(tracker);
-		if (view === undefined) return yield* Effect.die("the tracker has no view");
+
+		if (view === undefined) {
+			return yield* Effect.die("the tracker has no view");
+		}
+
 		yield* offer(started.run, "query", {ticket: n});
 		const shown = yield* started.run.machines.tickets.changes.pipe(
 			Stream.filter((s) => s !== null),

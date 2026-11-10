@@ -188,8 +188,11 @@ describe("P33, every process fact lives on a stream only the brain may write", (
 					const store = storage();
 					yield* seed(store);
 					yield* monitor(store);
-					for (const {stream, id} of planted)
+
+					for (const {stream, id} of planted) {
 						expect((yield* plant(store, stream, id, {_tag: "note", n: 1}))._tag).toBe("placed");
+					}
+
 					yield* exit(store);
 					expect(downs(yield* fresh(store))).toEqual([
 						Down.make({ref: "watch:1", process: A, why: "crashed", to: toW}),
@@ -238,7 +241,11 @@ describe("P33, every process fact lives on a stream only the brain may write", (
 				const before = store.rows();
 				const answer = yield* Effect.result(processes.start(first("different", tail), from()));
 				expect(Result.isFailure(answer)).toBe(true);
-				if (Result.isFailure(answer)) expect(answer.failure.why).toBe("name_taken");
+
+				if (Result.isFailure(answer)) {
+					expect(answer.failure.why).toBe("name_taken");
+				}
+
 				expect(store.rows()).toEqual(before);
 				expect(next.calls()).toBe(1);
 			}).pipe(Effect.provide(manager(store, brain(), next.next)));
@@ -263,7 +270,11 @@ describe("P33, every process fact lives on a stream only the brain may write", (
 					Effect.result(p.start(first("loser", name), from())),
 				);
 				expect(Result.isFailure(answer)).toBe(true);
-				if (Result.isFailure(answer)) expect(answer.failure.why).toBe("name_taken");
+
+				if (Result.isFailure(answer)) {
+					expect(answer.failure.why).toBe("name_taken");
+				}
+
 				expect(store.rows()).toEqual(winner);
 			}).pipe(Effect.provide(manager(store, brain(), next)));
 		},
@@ -325,12 +336,14 @@ describe("P33, signal ids belong to the brain alone", () => {
 				yield* plant(store, "watcher:1/inbox", signal.id, {_tag: "send", m: "taken"});
 				const exited = yield* Effect.result(exit(store));
 				const owed = downs(yield* fresh(store));
-				if (Result.isSuccess(exited))
+
+				if (Result.isSuccess(exited)) {
 					expect(owed).toEqual([Down.make({ref, process: A, why: "crashed", to: toW})]);
-				else
+				} else {
 					expect(
 						yield* ProcessManager.use((p) => p.isLive(A)).pipe(Effect.provide(manager(store))),
 					).toBe(true);
+				}
 			}),
 		),
 		options,
@@ -383,6 +396,7 @@ describe("P33, an inbox read is total", () => {
 				const store = storage();
 				yield* seed(store);
 				const want: Array<string> = [];
+
 				for (const [n, body] of bodies.entries()) {
 					const placed = yield* Ledger.use((ledger) =>
 						ledger.append("watcher:1/inbox", `junk:${n}`, {
@@ -391,8 +405,12 @@ describe("P33, an inbox read is total", () => {
 							body: body as Schema.Json,
 						}),
 					).pipe(Effect.provide(manager(store)));
-					if (placed._tag === "placed" && hasM(body)) want.push(JSON.stringify(body.m));
+
+					if (placed._tag === "placed" && hasM(body)) {
+						want.push(JSON.stringify(body.m));
+					}
 				}
+
 				const letters = yield* fresh(store);
 				expect(letters.map((letter) => JSON.stringify(letter.m))).toEqual(want);
 				const last = store.rows().at(-1)!.rev;
@@ -410,6 +428,7 @@ describe("P33, every brain-written line records who asked", () => {
 		store.rows().filter((row) => !before.some((old) => old.rev === row.rev));
 	const asks = (rows: ReadonlyArray<Entry>, key: string) => {
 		expect(rows.length).toBeGreaterThan(0);
+
 		for (const row of rows) {
 			expect(row.by).toBe(BRAIN);
 			expect((row.body as {readonly asked?: unknown}).asked).toBe(key);
@@ -473,7 +492,10 @@ describe("P33, every brain-written line records who asked", () => {
 					),
 				);
 				expect(Result.isSuccess(started)).toBe(true);
-				if (Result.isSuccess(started)) expect(started.success.process).toBe(A);
+
+				if (Result.isSuccess(started)) {
+					expect(started.success.process).toBe(A);
+				}
 			});
 		}),
 		options,
@@ -491,7 +513,11 @@ describe("P33, a process name never meets a door stream", () => {
 					ProcessManager.use((p) => p.start(first("start:door", name), from())),
 				);
 				expect(Result.isFailure(answer)).toBe(true);
-				if (Result.isFailure(answer)) expect(answer.failure.why).toBe("bad_name");
+
+				if (Result.isFailure(answer)) {
+					expect(answer.failure.why).toBe("bad_name");
+				}
+
 				expect(store.rows()).toEqual([]);
 			}).pipe(Effect.provide(manager(store, brain(), ids(X).next)));
 		}),

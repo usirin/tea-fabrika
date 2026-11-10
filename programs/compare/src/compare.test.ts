@@ -13,6 +13,7 @@ const onLedger = <A, E>(use: Effect.Effect<A, E, Experiments>) =>
 		Effect.gen(function* () {
 			const experiments = yield* Experiments;
 			yield* experiments.create("170", "The experiments program");
+
 			for (const [i, scores] of [
 				[1, 0, 1],
 				[1, 1, 1],
@@ -31,6 +32,7 @@ const onLedger = <A, E>(use: Effect.Effect<A, E, Experiments>) =>
 				]);
 				yield* experiments.end(run, {status: "finished", usd: null, tokens: null});
 			}
+
 			yield* experiments.create("171", "One run only");
 			yield* experiments.start("171", {key: "test-1", params: {}, tags: {}, job: null});
 			return yield* use;
@@ -46,7 +48,11 @@ const onLedger = <A, E>(use: Effect.Effect<A, E, Experiments>) =>
 describe("compare", () => {
 	it("compares the last two runs when none is named", async () => {
 		const called = await onLedger(call(compare, {n: "170", a: undefined, b: undefined}));
-		if (called.kind !== "called") throw new Error(called.why);
+
+		if (called.kind !== "called") {
+			throw new Error(called.why);
+		}
+
 		const [comparison, markdown] = called.heard;
 		expect(comparison?.name === "comparison" && comparison.value).toMatchObject({
 			a: {run: runIdOf("170", "test-2"), label: "170-2"},
@@ -62,7 +68,11 @@ describe("compare", () => {
 		["ids", runIdOf("170", "test-1"), runIdOf("170", "test-3")],
 	] as const)("compares the two runs it is given by their %s", async (_, a, b) => {
 		const called = await onLedger(call(compare, {n: "170", a, b}));
-		if (called.kind !== "called") throw new Error(called.why);
+
+		if (called.kind !== "called") {
+			throw new Error(called.why);
+		}
+
 		const comparison = called.heard.find((h) => h.name === "comparison");
 		expect(comparison?.name === "comparison" && comparison.value.cases.map((c) => c.item)).toEqual([
 			"t-1",
@@ -72,7 +82,11 @@ describe("compare", () => {
 
 	it("fails when the experiment has fewer than two runs", async () => {
 		const called = await onLedger(call(compare, {n: "171", a: undefined, b: undefined}));
-		if (called.kind !== "called" || called.ended.kind !== "failed") throw new Error("it ended");
+
+		if (called.kind !== "called" || called.ended.kind !== "failed") {
+			throw new Error("it ended");
+		}
+
 		expect(Option.getOrUndefined(Cause.findErrorOption(called.ended.cause))).toMatchObject({
 			why: "no_run",
 			says: "compare needs two runs of 171, and 171 has 1",

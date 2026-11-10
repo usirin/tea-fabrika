@@ -98,7 +98,7 @@
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (why === \"lockfile\") return {_tag: \"park\", reason: line.reason};"
+			"code": "return {_tag: \"park\", reason: line.reason};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
@@ -128,7 +128,7 @@
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (isStep(to)) return {_tag: \"step\", step: to, note: `the lead's judgment: ${note}`};"
+			"code": "return {_tag: \"step\", step: to, note: `the lead's judgment: ${note}`};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
@@ -233,12 +233,12 @@
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (code === 0) return {_tag: \"made\"};"
+			"code": "return {_tag: \"made\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (code === 3 && line && check) return {_tag: \"refused\", check, detail: line[2] ?? \"\"};"
+			"code": "return {_tag: \"refused\", check, detail: line[2] ?? \"\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
@@ -343,7 +343,7 @@
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (s.git === null) return {_tag: \"keep\", reason: \"not a git checkout\"};"
+			"code": "return {_tag: \"keep\", reason: \"not a git checkout\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
@@ -363,27 +363,27 @@
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (s.git.head === null) return {_tag: \"keep\", reason: \"no HEAD commit\"};"
+			"code": "return {_tag: \"keep\", reason: \"no HEAD commit\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (s.dirty === null) return {_tag: \"keep\", reason: \"its files could not be read\"};"
+			"code": "return {_tag: \"keep\", reason: \"its files could not be read\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (s.dirty > 0) return {_tag: \"keep\", reason: `${s.dirty} uncommitted files`};"
+			"code": "return {_tag: \"keep\", reason: `${s.dirty} uncommitted files`};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (s.merged) return {_tag: \"remove\", reason: \"merged\"};"
+			"code": "return {_tag: \"remove\", reason: \"merged\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (s.onRemote) return {_tag: \"remove\", reason: \"on_remote\"};"
+			"code": "return {_tag: \"remove\", reason: \"on_remote\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
@@ -393,7 +393,7 @@
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (w.locked) return {_tag: \"keep\", reason: \"locked\"};"
+			"code": "return {_tag: \"keep\", reason: \"locked\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
@@ -408,32 +408,32 @@
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (w.branch === null) return {_tag: \"keep\", reason: \"no branch checked out\"};"
+			"code": "return {_tag: \"keep\", reason: \"no branch checked out\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (w.dirty === null) return {_tag: \"keep\", reason: \"its files could not be read\"};"
+			"code": "return {_tag: \"keep\", reason: \"its files could not be read\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (w.dirty > 0) return {_tag: \"keep\", reason: `${w.dirty} uncommitted files`};"
+			"code": "return {_tag: \"keep\", reason: `${w.dirty} uncommitted files`};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (w.prs.includes(\"OPEN\")) return {_tag: \"keep\", reason: \"its pull request is open\"};"
+			"code": "return {_tag: \"keep\", reason: \"its pull request is open\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (w.prs.includes(\"MERGED\")) return {_tag: \"remove\", reason: \"merged\"};"
+			"code": "return {_tag: \"remove\", reason: \"merged\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-hand-tag)",
-			"code": "if (w.prs.includes(\"CLOSED\")) return {_tag: \"remove\", reason: \"closed\"};"
+			"code": "return {_tag: \"remove\", reason: \"closed\"};"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
@@ -478,7 +478,7 @@
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-of)",
-			"code": "const prsOf = new Map<string, (\"OPEN\" | \"MERGED\" | \"CLOSED\")[]>();"
+			"code": "const prsOf = new Map<string, PrState[]>();"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/lane.ts",

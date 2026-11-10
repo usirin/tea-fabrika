@@ -115,7 +115,7 @@ const where = (place: Place) =>
  * sends back before any reviewer reads the change.
  */
 export function openItems(reviewed: Pick<Reviewed, "outcome" | "criteria">): readonly Item[] {
-	if (reviewed.outcome.kind === "send" && reviewed.outcome.why === "checks_red")
+	if (reviewed.outcome.kind === "send" && reviewed.outcome.why === "checks_red") {
 		return [
 			{
 				criterion: null,
@@ -125,6 +125,8 @@ export function openItems(reviewed: Pick<Reviewed, "outcome" | "criteria">): rea
 				wants: ["The repository's typecheck, lint and tests all pass."],
 			},
 		];
+	}
+
 	return reviewed.criteria
 		.filter((criterion) => criterion.state === "open")
 		.map((criterion) => ({
@@ -139,6 +141,7 @@ export function openItems(reviewed: Pick<Reviewed, "outcome" | "criteria">): rea
 /** After a build: review it, or stop. */
 export function afterBuild(round: number, built: BuildEnd): Next {
 	const {outcome} = built;
+
 	switch (outcome.kind) {
 		case "done":
 			return !outcome.changed && round > 1
@@ -180,6 +183,7 @@ export function afterReview(
 	items: readonly Item[],
 ): Next {
 	const {outcome} = reviewed;
+
 	switch (outcome.kind) {
 		case "done": {
 			const built = rounds.at(-1)?.head ?? null;
@@ -207,7 +211,11 @@ export function afterReview(
  */
 export function shipItems(shipped: ShipEnd): readonly Item[] {
 	const {outcome} = shipped;
-	if (outcome?.kind !== "send" || outcome.to !== "builder") return [];
+
+	if (outcome?.kind !== "send" || outcome.to !== "builder") {
+		return [];
+	}
+
 	return [
 		{
 			criterion: null,
@@ -229,7 +237,11 @@ export function shipItems(shipped: ShipEnd): readonly Item[] {
  */
 export function afterShip(pr: string, rounds: readonly Round[], shipped: ShipEnd): Next {
 	const {outcome} = shipped;
-	if (outcome === null) return end({kind: "ask", who: "owner", for: "ship"});
+
+	if (outcome === null) {
+		return end({kind: "ask", who: "owner", for: "ship"});
+	}
+
 	switch (outcome.kind) {
 		case "done":
 			return end({
@@ -240,7 +252,10 @@ export function afterShip(pr: string, rounds: readonly Round[], shipped: ShipEnd
 				rounds: rounds.at(-1)?.n ?? rounds.length,
 			});
 		case "send":
-			if (outcome.to !== "builder") return end({kind: "ask", who: "owner", for: "ship"});
+			if (outcome.to !== "builder") {
+				return end({kind: "ask", who: "owner", for: "ship"});
+			}
+
 			return again(rounds, shipItems(shipped));
 		case "ask":
 			return end({kind: "ask", who: "owner", for: "ship"});

@@ -20,11 +20,13 @@ const paths = Effect.runSync(Path.Path.pipe(Effect.provide(NodePath.layer)));
 const typed = (files: Readonly<Record<string, string>>, workers = false) => {
 	const root = mkdtempSync(join(tmpdir(), "p12-types-"));
 	const api = new API({cwd: root});
+
 	try {
 		for (const [file, body] of Object.entries(files)) {
 			mkdirSync(dirname(join(root, file)), {recursive: true});
 			writeFileSync(join(root, file), body);
 		}
+
 		const config = join(root, "tsconfig.json");
 		writeFileSync(
 			config,
@@ -60,6 +62,7 @@ const typed = (files: Readonly<Record<string, string>>, workers = false) => {
 			}),
 		);
 		const snapshot = api.updateSnapshot({openProjects: [config]});
+
 		try {
 			const project = snapshot.getProject(config)!;
 			expect(project.program.getSemanticDiagnostics()).toEqual([]);

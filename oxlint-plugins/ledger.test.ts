@@ -31,7 +31,10 @@ describe("agents-ledger.json, 0033", () => {
 		fc.assert(
 			fc.property(fc.array(finding), fc.array(finding), (entries, findings) => {
 				const {waived} = settle(entries, findings);
-				for (const f of waived) expect(count(waived, f)).toBeLessThanOrEqual(count(entries, f));
+
+				for (const f of waived) {
+					expect(count(waived, f)).toBeLessThanOrEqual(count(entries, f));
+				}
 			}),
 			options,
 		);
@@ -54,9 +57,15 @@ describe("agents-ledger.json, 0033", () => {
 		fc.assert(
 			fc.property(fc.array(finding), fc.array(finding), (entries, findings) => {
 				const {waived, blocks} = settle(entries, findings);
-				for (const f of waived) expect(f.file.startsWith(".agents/")).toBe(true);
-				for (const f of findings.filter((f) => !f.file.startsWith(".agents/")))
+
+				for (const f of waived) {
+					expect(f.file.startsWith(".agents/")).toBe(true);
+				}
+
+				for (const f of findings.filter((f) => !f.file.startsWith(".agents/"))) {
 					expect(blocks).toContain(f);
+				}
+
 				expect(outside(entries)).toEqual(entries.filter((e) => !e.file.startsWith(".agents/")));
 			}),
 			options,

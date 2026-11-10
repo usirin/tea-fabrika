@@ -3,7 +3,7 @@
 This is reading, plus one local test. Read 2026-11-06 from primary sources: docs sources, code,
 design docs, and GitHub's API on this repo, read only. The local test is
 [`221-stacks-carry.sh`](./221-stacks-carry.sh), its output in
-[`results/221-stacks-carry.txt`](./results/221-stacks-carry.txt). No repo was created on GitHub,
+[`results/221-stacks-carry.txt`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/221-stacks-carry.txt). No repo was created on GitHub,
 no model ran, $0 (three research subagents, their tokens not logged). "Guess" marks what no source
 says.
 

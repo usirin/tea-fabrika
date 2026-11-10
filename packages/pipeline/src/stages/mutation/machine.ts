@@ -168,7 +168,10 @@ export const mutation = defineMachine({
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const {base, head, kept, exam} = m.ask;
 			const asked = readScope({base, head, kept, exam});
 			return [{ask: m.ask, phase: "reading", asked}, [asked]];
@@ -179,17 +182,27 @@ export const mutation = defineMachine({
 				: stay(s),
 
 		mutation_scope_ok: (s, m): Step => {
-			if (s.phase !== "reading") return stay(s);
+			if (s.phase !== "reading") {
+				return stay(s);
+			}
+
 			const spans = spansOf(m.value);
 			const changes = unapproved(changesOf(m.value, s.ask.exam), s.ask.allowed);
-			if (changes.length > 0)
+
+			if (changes.length > 0) {
 				return end(s, {kind: "ask", who: "owner", for: "check_change"}, {changes, spans});
-			if (spans.length === 0) return end(s, {kind: "skip", why: "no_lines"});
+			}
+
+			if (spans.length === 0) {
+				return end(s, {kind: "skip", why: "no_lines"});
+			}
+
 			if (greenAt(s.ask) !== null) {
 				const {head, seed, most} = s.ask;
 				const asked = runMutants({head, spans, seed, most});
 				return [{ask: s.ask, spans, phase: "mutating", asked}, [asked]];
 			}
+
 			const asked = runTests({head: s.ask.head});
 			return [{ask: s.ask, spans, phase: "testing", asked}, [asked]];
 		},
@@ -197,14 +210,20 @@ export const mutation = defineMachine({
 			s.phase === "reading" ? end(s, {kind: "stuck", why: "read_failed"}) : stay(s),
 
 		mutation_tests_ok: (s, m): Step => {
-			if (s.phase !== "testing") return stay(s);
+			if (s.phase !== "testing") {
+				return stay(s);
+			}
+
 			const {result, failed, tail} = m.value;
-			if (result === "red")
+
+			if (result === "red") {
 				return end(
 					s,
 					{kind: "send", to: "builder", why: "tests_red"},
 					{spans: s.spans, failed, tail},
 				);
+			}
+
 			const {head, seed, most} = s.ask;
 			const asked = runMutants({head, spans: s.spans, seed, most});
 			return [{...scoped(s), phase: "mutating", asked}, [asked]];

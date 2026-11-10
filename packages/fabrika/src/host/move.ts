@@ -113,10 +113,17 @@ export const writerFor = (by: By, founder: string): string =>
  *   anything else                 null: another person, the ledger's own words, a host's holder
  */
 export const byOf = (writer: string, founder: string): By | null => {
-	if (writer === "user:owner" || writer === `user:${founder}`) return {kind: "founder"};
+	if (writer === "user:owner" || writer === `user:${founder}`) {
+		return {kind: "founder"};
+	}
+
 	const m = /^agent:(\S+?)(?: for:(\S+))?$/.exec(writer);
 	const id = m?.[1];
-	if (id === undefined || !isAgentName(id)) return null;
+
+	if (id === undefined || !isAgentName(id)) {
+		return null;
+	}
+
 	return m?.[2] === undefined || m[2] === founder ? {kind: "agent", id} : null;
 };
 
@@ -171,19 +178,30 @@ export const planOf = (rows: readonly SqlRow[], founder: string): Plan => {
 	const writers = new Map<string, {to: string; events: number}>();
 	const unmappable: string[] = [];
 	const refused: string[] = [];
+
 	for (const r of rows) {
 		const writer = s(r.writer);
 		const by = byOf(writer, founder);
+
 		if (by === null) {
-			if (!unmappable.includes(writer)) unmappable.push(writer);
+			if (!unmappable.includes(writer)) {
+				unmappable.push(writer);
+			}
+
 			continue;
 		}
+
 		const kind = s(r.kind);
 		const where = `${s(r.stream)} rev ${n(r.rev)}`;
-		if (by.kind === "agent" && isPersonKind(kind))
+
+		if (by.kind === "agent" && isPersonKind(kind)) {
 			refused.push(`${where}: ${kind} by agent ${by.id}, and only a person writes it`);
-		if (kind !== "registered" && LEDGER_KINDS.includes(kind))
+		}
+
+		if (kind !== "registered" && LEDGER_KINDS.includes(kind)) {
 			refused.push(`${where}: ${kind} is the ledger's own word`);
+		}
+
 		const to = writerFor(by, founder);
 		const w = writers.get(writer) ?? {to, events: 0};
 		writers.set(writer, {to, events: w.events + 1});
@@ -199,6 +217,7 @@ export const planOf = (rows: readonly SqlRow[], founder: string): Plan => {
 			by,
 		});
 	}
+
 	return {
 		founder,
 		events,
@@ -229,7 +248,9 @@ const MIGRATION = [
 /** The import's table, made once. The ledger's object calls it as it starts. */
 export const migrateMove = (db: Db): void =>
 	db.tx(() => {
-		for (const stmt of MIGRATION) db.all(stmt);
+		for (const stmt of MIGRATION) {
+			db.all(stmt);
+		}
 	});
 
 const OUTSIDE_DOOR = "stream != 'door' AND substr(stream, 1, 5) != 'door/'";
@@ -254,15 +275,23 @@ const progressOf = (db: Db): {last: number; count: number} => {
  */
 export const moveStateOf = (db: Db): MoveState => {
 	const sealed = readStream(db, MOVE).find((r) => r.kind === "sealed");
+
 	if (sealed !== undefined) {
 		const hash = Option.getOrNull(readSealed(s(sealed.data)));
 		return {kind: "open", by: "seal", hash: hash?.hash ?? null};
 	}
-	if (readStream(db, MEMBERS).some((r) => r.kind !== "founded"))
+
+	if (readStream(db, MEMBERS).some((r) => r.kind !== "founded")) {
 		return {kind: "open", by: "invite", hash: null};
+	}
+
 	const {count} = progressOf(db);
 	const outside = n(db.all(`SELECT count(*) AS c FROM events WHERE ${OUTSIDE_DOOR}`)[0]?.c);
-	if (outside > count) return {kind: "open", by: "write", hash: null};
+
+	if (outside > count) {
+		return {kind: "open", by: "write", hash: null};
+	}
+
 	return count > 0 ? {kind: "importing"} : {kind: "fresh"};
 };
 
@@ -281,9 +310,14 @@ const refuse = (status: number, why: string): Refused => ({ok: false, status, wh
 
 /** Only the founder, as a person, and only while the window is not open. */
 const mayImport = (db: Db, founder: string | null, who: Stamp): Refused | null => {
-	if (founder === null) return refuse(404, "only a shared ledger takes an import");
-	if (who.kind !== "user" || who.id !== founder)
+	if (founder === null) {
+		return refuse(404, "only a shared ledger takes an import");
+	}
+
+	if (who.kind !== "user" || who.id !== founder) {
 		return refuse(403, "only the ledger's founder imports, as a person");
+	}
+
 	const state = moveStateOf(db);
 	return state.kind === "open"
 		? refuse(409, `the import window is closed: the ledger opened by ${state.by}`)
@@ -312,29 +346,54 @@ export const importChunk = (
 	body: unknown,
 ): Answer<{readonly progress: Progress; readonly written: readonly Written[]}> => {
 	const chunk = decodeChunk(body);
-	if (Option.isNone(chunk)) return refuse(400, "not a chunk of moved events");
+
+	if (Option.isNone(chunk)) {
+		return refuse(400, "not a chunk of moved events");
+	}
+
 	// oxlint-disable-next-line fabrika/no-raw-try-catch -- a throw inside `db.tx` is how SQLite and the Durable Object roll the whole chunk back; it is caught right here and never leaves this function.
 	try {
 		return db.tx(() => {
 			const no = mayImport(db, founder, who);
-			if (no !== null) throw new Stop(no);
+
+			if (no !== null) {
+				throw new Stop(no);
+			}
+
 			const f = founder ?? "";
 			const written: Written[] = [];
 			let {last} = progressOf(db);
 			let before = 0;
+
 			for (const e of chunk.value.events) {
-				if (e.from <= before) throw new Stop(refuse(400, "a chunk's events rise by their pos"));
+				if (e.from <= before) {
+					throw new Stop(refuse(400, "a chunk's events rise by their pos"));
+				}
+
 				before = e.from;
+
 				if (e.from <= last) {
 					const landed = db.all("SELECT 1 FROM door_imported WHERE source = ?", e.from)[0];
-					if (landed === undefined)
+
+					if (landed === undefined) {
 						throw new Stop(refuse(409, `pos ${e.from} comes after pos ${last}, which landed`));
+					}
+
 					continue;
 				}
-				if (isDoorStream(e.stream)) throw new Stop(refuse(403, "only the door writes under door/"));
-				if (e.by.kind === "agent" && isPersonKind(e.kind))
+
+				if (isDoorStream(e.stream)) {
+					throw new Stop(refuse(403, "only the door writes under door/"));
+				}
+
+				if (e.by.kind === "agent" && isPersonKind(e.kind)) {
 					throw new Stop(refuse(403, `only a person writes ${e.kind}`));
-				if (!isJson(e.data)) throw new Stop(refuse(400, `pos ${e.from}: its data is not JSON`));
+				}
+
+				if (!isJson(e.data)) {
+					throw new Stop(refuse(400, `pos ${e.from}: its data is not JSON`));
+				}
+
 				const res = importEvent(db, {
 					stream: e.stream,
 					rev: e.rev,
@@ -344,15 +403,23 @@ export const importChunk = (
 					data: e.data,
 					id: e.id,
 				});
-				if (!res.ok) throw new Stop(refuse(409, `pos ${e.from}: ${res.why}`));
+
+				if (!res.ok) {
+					throw new Stop(refuse(409, `pos ${e.from}: ${res.why}`));
+				}
+
 				db.all("INSERT INTO door_imported (source, pos) VALUES (?, ?)", e.from, res.pos);
 				written.push({stream: e.stream, rev: e.rev, pos: res.pos});
 				last = e.from;
 			}
+
 			return {ok: true as const, value: {progress: moveProgress(db), written}};
 		});
 	} catch (e) {
-		if (e instanceof Stop) return e.refused;
+		if (e instanceof Stop) {
+			return e.refused;
+		}
+
 		throw e;
 	}
 };
@@ -389,33 +456,53 @@ export const sealMove = async (
 	now: number,
 ): Promise<Answer<{readonly progress: Progress; readonly written: readonly Written[]}>> => {
 	const seal = decodeSeal(body);
-	if (Option.isNone(seal)) return refuse(400, "a seal is {count, hash}");
+
+	if (Option.isNone(seal)) {
+		return refuse(400, "a seal is {count, hash}");
+	}
+
 	const want = seal.value;
 	const state = moveStateOf(db);
+
 	if (
 		state.kind === "open" &&
 		state.by === "seal" &&
 		state.hash === want.hash &&
 		who.kind === "user" &&
 		who.id === founder
-	)
+	) {
 		return {ok: true, value: {progress: moveProgress(db), written: []}};
+	}
+
 	const no = mayImport(db, founder, who);
-	if (no !== null) return no;
+
+	if (no !== null) {
+		return no;
+	}
+
 	const before = progressOf(db);
 	const hash = await hashLines(landed(db));
 	// The hash took a turn of the event loop: anything that came in meanwhile is checked again here.
 	return db.tx(() => {
 		const again = mayImport(db, founder, who);
-		if (again !== null) return again;
+
+		if (again !== null) {
+			return again;
+		}
+
 		const after = progressOf(db);
-		if (after.count !== before.count || after.last !== before.last)
+
+		if (after.count !== before.count || after.last !== before.last) {
 			return refuse(409, "the import moved while the seal was checked: seal again");
-		if (after.count !== want.count || hash !== want.hash)
+		}
+
+		if (after.count !== want.count || hash !== want.hash) {
 			return refuse(
 				409,
 				`the seal does not match: this ledger holds ${after.count} moved events, hash ${hash}`,
 			);
+		}
+
 		const res = writeUnguarded(db, now, MOVE, "any", {
 			kind: "sealed",
 			writer: stampText(who),

@@ -61,7 +61,11 @@ describe("P12 stage machine laws", () => {
 				const [online] = applyCell(brainLife, initial, msgs[0]);
 				expect(online).toMatchObject({_tag: "online", start, build});
 				const [stopping] = applyCell(brainLife, online, {type: "stop"});
-				for (const msg of msgs) expect(applyCell(brainLife, stopping, msg)[0]).toEqual(stopping);
+
+				for (const msg of msgs) {
+					expect(applyCell(brainLife, stopping, msg)[0]).toEqual(stopping);
+				}
+
 				const [stopped] = applyCell(brainLife, stopping, {type: "stopped"});
 				expect(stopped).toMatchObject({_tag: "stopped"});
 			}),

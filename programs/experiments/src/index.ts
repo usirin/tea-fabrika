@@ -27,9 +27,15 @@ import {Clock, Effect, Schema} from "effect";
 /** A run that is not over, or did not end well: said in the runs cell, where a person looks. */
 const runsCell = (row: Experiment) => {
 	const status = row.latest?.status;
-	if (status === "running") return {text: `running ${row.runs}`, tone: "accent"} as const;
-	if (status === "failed" || status === "killed")
+
+	if (status === "running") {
+		return {text: `running ${row.runs}`, tone: "accent"} as const;
+	}
+
+	if (status === "failed" || status === "killed") {
 		return {text: `${status} ${row.runs}`, tone: "warning"} as const;
+	}
+
 	return row.runs === 0 ? ({text: "0", tone: "faint"} as const) : String(row.runs);
 };
 
@@ -67,7 +73,11 @@ export const experiments = defineProgram({
 	main: ({send}) =>
 		Effect.gen(function* () {
 			const rows = (yield* (yield* Experiments).list()).toReversed();
-			for (const row of rows) yield* send("row", row);
+
+			for (const row of rows) {
+				yield* send("row", row);
+			}
+
 			yield* send("markdown", Experiment.toMarkdown(rows, dayOf(yield* Clock.currentTimeMillis)));
 		}),
 });

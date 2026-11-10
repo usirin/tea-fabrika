@@ -128,7 +128,11 @@ const trying = (retry: RetryState, why: string | null): Step => [
 /** A try failed, or the link ended: wait and try again, or stop after five minutes of it. */
 const failed = (retry: RetryState, why: string, at: number): Step => {
 	const next = recordFailure(retry, why, at);
-	if (!shouldRetry(next, POLICY, at)) return [{at: "stopped", why}, []];
+
+	if (!shouldRetry(next, POLICY, at)) {
+		return [{at: "stopped", why}, []];
+	}
+
 	return [{at: "waiting", retry: next, why, wait: null}, [jitter({attempt: next.attempt})]];
 };
 

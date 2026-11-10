@@ -30,8 +30,10 @@ describe("the step briefs on disk", () => {
 	it.each(FILES)("%s declares every slot its text uses", (file) => {
 		const brief = parseBrief(file, readFileSync(`${FOLDER}${file}`, "utf8"));
 		expect(brief.body.length).toBeGreaterThan(0);
-		for (const [, slot] of brief.body.matchAll(/\{([a-z_]+)\}/g))
+
+		for (const [, slot] of brief.body.matchAll(/\{([a-z_]+)\}/g)) {
 			expect(brief.slots).toContain(slot);
+		}
 	});
 
 	it("a slot is used, but for a note, which comes back as a turn of its own", () => {

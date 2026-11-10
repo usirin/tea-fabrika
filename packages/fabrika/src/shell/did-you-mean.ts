@@ -11,11 +11,16 @@ const boundFor = (typed: string): number => (typed.length <= 3 ? 1 : 2);
  * as a typing slip is (`sqe` is one edit from `seq`). Past `limit`, `limit + 1`.
  */
 function distance(a: string, b: string, limit: number): number {
-	if (Math.abs(a.length - b.length) > limit) return limit + 1;
+	if (Math.abs(a.length - b.length) > limit) {
+		return limit + 1;
+	}
+
 	let before: number[] = [];
 	let previous = Array.from({length: b.length + 1}, (_, i) => i);
+
 	for (let row = 1; row <= a.length; row++) {
 		const current = [row];
+
 		for (let col = 1; col <= b.length; col++) {
 			let value = Math.min(
 				(current[col - 1] ?? 0) + 1,
@@ -27,12 +32,18 @@ function distance(a: string, b: string, limit: number): number {
 				col > 1 &&
 				a.charAt(row - 1) === b.charAt(col - 2) &&
 				a.charAt(row - 2) === b.charAt(col - 1);
-			if (swapped) value = Math.min(value, (before[col - 2] ?? 0) + 1);
+
+			if (swapped) {
+				value = Math.min(value, (before[col - 2] ?? 0) + 1);
+			}
+
 			current.push(value);
 		}
+
 		before = previous;
 		previous = current;
 	}
+
 	const found = previous[b.length] ?? limit + 1;
 	return found > limit ? limit + 1 : found;
 }
@@ -42,13 +53,19 @@ export function didYouMean(typed: string, known: Iterable<string>): string | und
 	const limit = boundFor(typed);
 	let best: string | undefined;
 	let bestDistance = limit + 1;
+
 	for (const name of known) {
-		if (name === typed) continue;
+		if (name === typed) {
+			continue;
+		}
+
 		const d = distance(typed, name, limit);
+
 		if (d < bestDistance) {
 			best = name;
 			bestDistance = d;
 		}
 	}
+
 	return best;
 }

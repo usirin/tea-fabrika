@@ -23,7 +23,11 @@ const personWith = (text: string | null) =>
 			const fs = yield* FileSystem.FileSystem;
 			const path = yield* Path.Path;
 			const home = yield* fs.makeTempDirectoryScoped({prefix: "pr-"});
-			if (text !== null) yield* fs.writeFileString(path.join(home, "ledger.json"), text);
+
+			if (text !== null) {
+				yield* fs.writeFileString(path.join(home, "ledger.json"), text);
+			}
+
 			return yield* personOn(home);
 		}),
 	);
@@ -47,7 +51,8 @@ describe("the person a restart from the window names", () => {
 			JSON.stringify({login: ""}),
 			JSON.stringify({url: "https://ledger.example"}),
 			"not json",
-		])
+		]) {
 			expect(await personWith(text), text).toBeNull();
+		}
 	});
 });

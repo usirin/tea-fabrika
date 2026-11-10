@@ -60,7 +60,11 @@ const traceWith = (names: readonly string[]): Model => {
 	const nodes = nodesOf(treeOf(TALLY_TRACE));
 	const keys = names.map((name) => {
 		const found = nodes.find((n) => n.name === name);
-		if (found === undefined) throw new Error(`the tally trace has no row ${name}`);
+
+		if (found === undefined) {
+			throw new Error(`the tally trace has no row ${name}`);
+		}
+
 		return found.key;
 	});
 	return {
@@ -105,7 +109,10 @@ const views = {
 
 for (const view of Object.values(views)) {
 	const read = readToWindow(view);
-	if (read.kind === "refused") throw new Error(`a view does not read: ${read.why}`);
+
+	if (read.kind === "refused") {
+		throw new Error(`a view does not read: ${read.why}`);
+	}
 }
 
 /** The run, and so the view, each tile shows. t4 and t5 both show the trace, opened two ways. */
@@ -126,8 +133,11 @@ const tilesOf = (names: readonly Tile[], folded: readonly Tile[]) =>
 /** The ticket beside a column of the map over the ticket's trace. */
 const column = (...folded: readonly Tile[]) => {
 	const [ticket, map, lanes] = tilesOf(["t1", "t2", "t3"], folded);
-	if (ticket === undefined || map === undefined || lanes === undefined)
+
+	if (ticket === undefined || map === undefined || lanes === undefined) {
 		throw new Error("three tiles");
+	}
+
 	return createContainer(
 		"c1",
 		"horizontal",
@@ -158,7 +168,11 @@ const deskWith = (root: ContainerNode, focused: string) => {
 		takes: {all: false, keys: ["<c-b>"]},
 	};
 	const read = readToPage(msg);
-	if (read.kind === "refused") throw new Error(`the desk does not read: ${read.why}`);
+
+	if (read.kind === "refused") {
+		throw new Error(`the desk does not read: ${read.why}`);
+	}
+
 	return msg;
 };
 
@@ -183,7 +197,11 @@ const deskAfter = (msgs: readonly DeskMsg[]) => {
 	);
 	const msg = {type: "desk", desk, takes: {all: false, keys: ["<c-b>"]}};
 	const read = readToPage(JSON.parse(JSON.stringify(msg)));
-	if (read.kind === "refused") throw new Error(`the desk does not read: ${read.why}`);
+
+	if (read.kind === "refused") {
+		throw new Error(`the desk does not read: ${read.why}`);
+	}
+
 	return msg;
 };
 
@@ -238,9 +256,15 @@ const bridge = (arg: {desk: unknown; views: Readonly<Record<string, unknown>>}) 
 			send: () => {},
 			forget: () => {},
 			onMessage: (port: string, fn: (raw: unknown) => void) => {
-				if (port === "desk") send(fn, arg.desk);
+				if (port === "desk") {
+					send(fn, arg.desk);
+				}
+
 				const view = port.startsWith("run:") ? arg.views[port.slice(4)] : undefined;
-				if (view !== undefined) send(fn, view);
+
+				if (view !== undefined) {
+					send(fn, view);
+				}
 			},
 		},
 	});
@@ -262,7 +286,11 @@ try {
 		await page.route(`${ORIGIN}/**`, async (route) => {
 			const file = new URL(route.request().url()).pathname.slice(1);
 			const type = TYPES[file.split(".").at(-1) ?? ""];
-			if (type === undefined || file.includes("/")) return route.fulfill({status: 404});
+
+			if (type === undefined || file.includes("/")) {
+				return route.fulfill({status: 404});
+			}
+
 			return route.fulfill({contentType: type, body: await readFile(join(DIST, file))});
 		});
 		await page.route(/^(?!http:\/\/fabrika\.test\/)/, (route) => route.abort());

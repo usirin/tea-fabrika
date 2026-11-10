@@ -135,8 +135,10 @@ describe("a stopped lane, typed again", () => {
 			(f) => f.type === "ended" && JSON.stringify(f.outcome).includes('"kind":"done"'),
 		);
 		expect(done.length).toBeGreaterThan(0);
-		for (const end of done)
+
+		for (const end of done) {
 			expect(String(end.key), String(end.stage)).toMatch(/^sha256:[0-9a-f]{64}$/);
+		}
 	});
 
 	it("a lane saved before this change, with no `Held`: the fold gives the carry from its facts, and it goes on at mutation with no done step again", async () => {
@@ -408,6 +410,7 @@ describe("a stopped lane, typed again", () => {
 		const ends = ran.facts.flatMap((f, at) =>
 			f.type === "ended" && f.key !== undefined ? [{f, at}] : [],
 		);
+
 		for (const {f} of ends) {
 			expect(f.inputs, `${String(f.stage)}'s end keeps no inputs`).toBeDefined();
 			const inputs = Schema.decodeUnknownSync(Inputs)(f.inputs);
@@ -416,6 +419,7 @@ describe("a stopped lane, typed again", () => {
 			const paths = Object.values(inputs).filter((v) => typeof v === "string" && v.includes("/"));
 			expect(paths, String(f.stage)).toEqual([]);
 		}
+
 		// A build's `exam` is the commit the test writer's last end left before it.
 		const builds = ends.filter(({f}) => f.stage === "build");
 		expect(builds, said).toHaveLength(2);

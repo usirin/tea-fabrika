@@ -53,11 +53,22 @@ const refused = (why: string) => ({kind: "refused", why}) as const;
  * one of its inputs and whose `value` fits that input's shape. Nothing is told here.
  */
 export function readInput<P extends AnyProgram>(program: P, raw: unknown): ReadInput<P> {
-	if (!sent.check(raw)) return refused(sent.problem(raw) ?? "not an input message");
+	if (!sent.check(raw)) {
+		return refused(sent.problem(raw) ?? "not an input message");
+	}
+
 	const declared = Object.hasOwn(program.inputs, raw.type) ? program.inputs[raw.type] : undefined;
-	if (declared === undefined) return refused(`${program.name} has no input ${raw.type}`);
+
+	if (declared === undefined) {
+		return refused(`${program.name} has no input ${raw.type}`);
+	}
+
 	const why = declared.shape.problem(raw.value);
-	if (why !== undefined) return refused(`${program.name}'s ${raw.type} does not fit: ${why}`);
+
+	if (why !== undefined) {
+		return refused(`${program.name}'s ${raw.type} does not fit: ${why}`);
+	}
+
 	// Checked just above against the input's own shape; the types cannot follow a name read at run time.
 	const msg = {type: raw.type, value: raw.value} as InputMsgOf<P>;
 	return {kind: "read", msg};

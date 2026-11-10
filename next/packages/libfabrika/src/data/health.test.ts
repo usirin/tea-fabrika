@@ -47,7 +47,12 @@ const fresh = () => {
 };
 
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -71,7 +76,11 @@ const bucket = (lie = false) => {
 	const calls: BucketCalls = {
 		put: (key, body, sha256) => {
 			puts.push(key);
-			if (hex(body) !== sha256) return Promise.reject(new Error("checksum mismatch"));
+
+			if (hex(body) !== sha256) {
+				return Promise.reject(new Error("checksum mismatch"));
+			}
+
 			stored.set(key, body.slice());
 			return Promise.resolve();
 		},
@@ -143,8 +152,11 @@ const raw = (row: Record<string, unknown>): Raw => ({
 /** The rollup the summaries must match, worked out from the raw spans. */
 const rollup = (spans: ReadonlyArray<Raw & {readonly lag: number | null}>) => {
 	const groups = new Map<string, Array<Raw & {readonly lag: number | null}>>();
-	for (const s of spans)
+
+	for (const s of spans) {
 		groups.set(`${s.piece} ${s.hour}`, [...(groups.get(`${s.piece} ${s.hour}`) ?? []), s]);
+	}
+
 	return [...groups.values()]
 		.map((group) => {
 			const ms = group.map((s) => s.ms).sort((x, y) => x - y);
@@ -202,10 +214,15 @@ describe("p101, health in two levels", () => {
 					Effect.gen(function* () {
 						const spans: Array<Raw & {lag: number | null}> = [];
 						let t = D;
+
 						for (const s of made) {
 							let start = t + s.gap;
+
 							// A span stays inside one hour, so its hour is plain.
-							if (hourStart(start) !== hourStart(start + s.ms)) start = hourStart(start) + H;
+							if (hourStart(start) !== hourStart(start + s.ms)) {
+								start = hourStart(start) + H;
+							}
+
 							const attributes: Record<string, unknown> = {
 								...(s.lag === undefined ? {} : {"fab.ledger.lag": s.lag}),
 								...(s.doorLag === undefined ? {} : {"fab.door.lag": s.doorLag}),
@@ -225,6 +242,7 @@ describe("p101, health in two levels", () => {
 							});
 							t = start + s.ms;
 						}
+
 						// A span in a later hour; its own hour stays open, so no summary has it.
 						yield* span("closing", hourStart(t) + 2 * H + 1);
 						expect([...(yield* summaries)].sort(bySummary)).toEqual(rollup(spans));
@@ -286,22 +304,32 @@ describe("p101, health in two levels", () => {
 		};
 		return Effect.gen(function* () {
 			for (let hour = 0; hour < 3; hour++) {
-				for (let n = 0; n < 20; n++) yield* span("runner.step", D + hour * H + n * 60_000, 1);
+				for (let n = 0; n < 20; n++) {
+					yield* span("runner.step", D + hour * H + n * 60_000, 1);
+				}
 			}
+
 			const rows = db.prepare(`SELECT at, bytes FROM sizes`).all();
 			const perHour = new Map<number, number>();
-			for (const row of rows)
+
+			for (const row of rows) {
 				perHour.set(
 					hourStart(Number(row["at"])),
 					(perHour.get(hourStart(Number(row["at"]))) ?? 0) + 1,
 				);
+			}
+
 			expect(
 				[...perHour.values()].every((n) => n === 1),
 				"never two in one hour",
 			).toBe(true);
 			expect(perHour.get(D + H)).toBe(1);
 			expect(perHour.get(D + 2 * H)).toBe(1);
-			for (const row of rows) expect(read).toContain(Number(row["bytes"]));
+
+			for (const row of rows) {
+				expect(read).toContain(Number(row["bytes"]));
+			}
+
 			const before = count(db, "sizes");
 			yield* TestClock.setTime(D + 8 * H);
 			yield* flush;
@@ -336,8 +364,14 @@ describe("p101, a size row per hour across processes", () => {
 /** The plan's traced day: 8 spans on 2026-10-23, one on the next day that rolls them up, and the
  *  clock 337 hours past that day's end, where one more span ends. */
 const oldDay = Effect.gen(function* () {
-	for (let n = 0; n < 5; n++) yield* span("runner.step", D + 10 * H + n * 60_000, 3 + n, n !== 2);
-	for (let n = 0; n < 3; n++) yield* span("ledger.call", D + 23 * H + n * 60_000, 1);
+	for (let n = 0; n < 5; n++) {
+		yield* span("runner.step", D + 10 * H + n * 60_000, 3 + n, n !== 2);
+	}
+
+	for (let n = 0; n < 3; n++) {
+		yield* span("ledger.call", D + 23 * H + n * 60_000, 1);
+	}
+
 	yield* span("runner.step", D + DAY + H, 1);
 	yield* span("runner.step", D + DAY + KEEP + H, 1);
 });
@@ -358,7 +392,8 @@ describe("p101, no raw row is ever lost", () => {
 				expect([...r2.stored.keys()]).toEqual([key]);
 				const lines = r2.lines(key);
 				expect(lines).toHaveLength(8);
-				for (const line of lines)
+
+				for (const line of lines) {
 					expect(Object.keys(line).sort()).toEqual([
 						"at",
 						"error",
@@ -368,6 +403,8 @@ describe("p101, no raw row is ever lost", () => {
 						"piece",
 						"spanId",
 					]);
+				}
+
 				expect(lines.map((line) => [line["piece"], line["ms"], line["ok"]]).sort()).toEqual(
 					[
 						["ledger.call", 1, true],
@@ -405,7 +442,10 @@ describe("p101, no raw row is ever lost", () => {
 		const {db, sql} = fresh();
 		const r2 = bucket();
 		return Effect.gen(function* () {
-			for (let n = 0; n < 3; n++) yield* span("runner.step", D + 10 * H + n, 1);
+			for (let n = 0; n < 3; n++) {
+				yield* span("runner.step", D + 10 * H + n, 1);
+			}
+
 			yield* span("runner.step", D + DAY + H, 1);
 			yield* span("runner.step", D + 300 * H, 1);
 			yield* flush;
@@ -421,7 +461,10 @@ describe("p101, no raw row is ever lost", () => {
 			const {db, sql} = fresh();
 			const r2 = bucket();
 			return Effect.gen(function* () {
-				for (let n = 0; n < 3; n++) yield* span("runner.step", D + 10 * H + n, 1);
+				for (let n = 0; n < 3; n++) {
+					yield* span("runner.step", D + 10 * H + n, 1);
+				}
+
 				// Asleep for 400 hours, then a flush with no span: nothing rolled hour 10 up.
 				yield* TestClock.setTime(D + 400 * H);
 				yield* flush;
@@ -496,14 +539,18 @@ describe("p101, no raw row is ever lost", () => {
 									.all()
 									.map((row) => `${row["piece"]} ${row["hour"]}`),
 							);
-							for (const r of archived)
+
+							for (const r of archived) {
 								expect(pairs, "summarized before it left").toContain(`${r.piece} ${r.hour}`);
+							}
+
 							for (const k of r2.stored.keys()) {
 								const day = Date.parse(`${k.slice(-16, -6)}T00:00:00Z`);
 								expect(now - day, `${k} left before it was 336 hours old`).toBeGreaterThanOrEqual(
 									KEEP,
 								);
 							}
+
 							expect(new Set(r2.puts).size, "a day is archived once").toBe(r2.puts.length);
 							const counts = {
 								summary: count(db, "summary"),
@@ -523,15 +570,22 @@ describe("p101, no raw row is ever lost", () => {
 								t = start + ms;
 								check(t);
 							});
+
 						for (const s of made) {
 							let start = t + s.gap;
-							if (hourStart(start) !== hourStart(start + s.ms)) start = hourStart(start) + H;
+
+							if (hourStart(start) !== hourStart(start + s.ms)) {
+								start = hourStart(start) + H;
+							}
+
 							yield* end(s.piece, start, s.ms, s.ok);
+
 							if (s.flush) {
 								yield* flush;
 								check(t);
 							}
 						}
+
 						// Far past every day so far: each of them leaves, and only the last day stays.
 						const last = hourStart(t) + KEEP + 2 * DAY;
 						yield* end("closing", last, 1, true);
@@ -579,6 +633,7 @@ describe("p101, an archive that fails is never silent", () => {
 					[Archive.bucket(blind), "mismatch"],
 				] as const;
 				const seen: Array<Record<string, unknown>> = [];
+
 				for (const [archive, error] of tries) {
 					const exit = yield* Effect.exit(flush.pipe(Effect.provide(archive)));
 					expect(exit._tag, "a day that cannot leave never fails the step").toBe("Success");
@@ -587,6 +642,7 @@ describe("p101, an archive that fails is never silent", () => {
 					expect(count(db, "health", inDay(D)), "the day's rows stay").toBe(8);
 					expect(count(db, "archived")).toBe(0);
 				}
+
 				yield* flush;
 				expect(count(db, "archived")).toBe(1);
 				expect(count(db, "health", inDay(D))).toBe(0);

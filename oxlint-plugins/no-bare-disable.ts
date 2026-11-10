@@ -26,9 +26,17 @@ const START = {line: 1, column: 0};
 
 const problem = (comment: string): string | null => {
 	const found = DISABLE.exec(comment);
-	if (found === null) return null;
+
+	if (found === null) {
+		return null;
+	}
+
 	const [, tool = "", rest = ""] = found;
-	if (tool === "eslint") return "says `eslint-disable`. Write `oxlint-disable`, the one spelling";
+
+	if (tool === "eslint") {
+		return "says `eslint-disable`. Write `oxlint-disable`, the one spelling";
+	}
+
 	return NAMED_WITH_WHY.test(rest) ? null : "needs its rules and a reason";
 };
 
@@ -37,7 +45,11 @@ export const noBareDisable: CreateRule = {
 		Program() {
 			for (const comment of context.sourceCode.getAllComments()) {
 				const wrong = problem(comment.value);
-				if (wrong === null) continue;
+
+				if (wrong === null) {
+					continue;
+				}
+
 				context.report({
 					loc: {start: START, end: START},
 					message: `The ignore comment on line ${context.sourceCode.getLocFromIndex(comment.range[0]).line} ${wrong}: \`// oxlint-disable-next-line <rule> -- <why>\`.`,

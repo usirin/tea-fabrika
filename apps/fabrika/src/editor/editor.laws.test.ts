@@ -89,6 +89,7 @@ const variantOf = (machine: Machine, fits: Screen["fitsRow"] = screen.fitsRow): 
 const editorWith = async (patch: Partial<Screen>): Promise<Machine> => {
 	vi.resetModules();
 	vi.doMock("./screen.ts", async (real) => ({...(await real<Screen>()), ...patch}));
+
 	try {
 		return (await import("./editor.ts")).editor;
 	} finally {
@@ -184,11 +185,14 @@ beforeAll(async () => {
 	ghostty = freshGhostty();
 	real = variantOf(await editorWith({}));
 	old = variantOf(await editorWith({fitsRow: () => false}), () => false);
-	for (const [name, {patch}] of Object.entries(PLANTS))
+
+	for (const [name, {patch}] of Object.entries(PLANTS)) {
 		planted.set(
 			name,
 			variantOf(await editorWith(patch), "fitsRow" in patch ? patch.fitsRow : screen.fitsRow),
 		);
+	}
+
 	planted.set(RESIZE_FORGOTTEN, {
 		...real,
 		step: (s, m) => {
@@ -219,7 +223,11 @@ const HEIGHT = 24;
 
 const trimmed = (rows: readonly string[]): readonly string[] => {
 	const r = [...rows];
-	while (r.length > 0 && r[r.length - 1] === "") r.pop();
+
+	while (r.length > 0 && r[r.length - 1] === "") {
+		r.pop();
+	}
+
 	return r;
 };
 
@@ -230,7 +238,9 @@ const gridTerm = (cols: number): Term => {
 			bytes += b;
 		},
 		resize: (to) => {
-			if (to !== cols) throw new Error("test setup: the test grid keeps one width");
+			if (to !== cols) {
+				throw new Error("test setup: the test grid keeps one width");
+			}
 		},
 		seen: () => {
 			const {rows, cursor} = gridOf(bytes, cols, HEIGHT);
@@ -258,7 +268,10 @@ let memory: {readonly ghostty: Ghostty; made: number} | null = null;
 
 /** A new terminal, in a memory that has room for it. */
 const newTerminal = (cols: number): GhosttyTerminal => {
-	if (memory === null || memory.made >= PER_MEMORY) memory = {ghostty: freshGhostty(), made: 0};
+	if (memory === null || memory.made >= PER_MEMORY) {
+		memory = {ghostty: freshGhostty(), made: 0};
+	}
+
 	memory.made += 1;
 	return memory.ghostty.createTerminal(cols, HEIGHT);
 };
@@ -273,22 +286,33 @@ const ghosttyTerm = (cols: number): Term => {
 	return {
 		// ghostty-web 0.4.0 throws on an empty write: its zero-byte buffer sits past the end of memory.
 		write: (b) => {
-			if (b !== "") t.write(b);
+			if (b !== "") {
+				t.write(b);
+			}
 		},
 		resize: (to) => {
-			if (to !== t.cols) t.resize(to, HEIGHT);
+			if (to !== t.cols) {
+				t.resize(to, HEIGHT);
+			}
 		},
 		seen: () => {
 			const rows: string[] = [];
+
 			for (let y = 0; y < HEIGHT; y += 1) {
 				let text = "";
+
 				for (const c of t.getLine(y) ?? []) {
 					// The second cell of a wide character is empty and has no width of its own.
-					if (c.codepoint === 0) text += c.width === 0 ? "" : " ";
-					else text += String.fromCodePoint(c.codepoint) + "+".repeat(c.grapheme_len);
+					if (c.codepoint === 0) {
+						text += c.width === 0 ? "" : " ";
+					} else {
+						text += String.fromCodePoint(c.codepoint) + "+".repeat(c.grapheme_len);
+					}
 				}
+
 				rows.push(text.trimEnd());
 			}
+
 			const {x, y} = t.getCursor();
 			return {rows: trimmed(rows), cursor: {row: y, col: x}};
 		},
@@ -481,14 +505,23 @@ const walk = (
 ): string | null => {
 	let [s, out] = v.start({programs, history: c.history});
 	term?.write(out);
+
 	for (const msg of [{type: "size", cols: c.cols} as const, ...c.msgs]) {
 		const before = s;
 		[s, out] = v.step(s, msg);
-		if (msg.type === "size") term?.resize(Math.max(1, msg.cols));
+
+		if (msg.type === "size") {
+			term?.resize(Math.max(1, msg.cols));
+		}
+
 		term?.write(out);
 		const why = visit({msg, before, after: s, out});
-		if (why !== null) return why;
+
+		if (why !== null) {
+			return why;
+		}
 	}
+
 	return null;
 };
 
@@ -506,14 +539,17 @@ const screenAfter = (v: Variant, c: Case): Seen => {
 /** What the prompt line shows, and the part of it before the cursor, worked out apart from the editor. */
 const lineOf = (s: Editor): {readonly text: string; readonly before: string} | null => {
 	const {mode} = s;
+
 	if (mode.kind === "prompt") {
 		const before = screen.PROMPT + mode.line.left;
 		return {text: before + mode.line.right, before};
 	}
+
 	if (mode.kind === "search") {
 		const text = Shell.Search.shown([...s.history].reverse(), mode.search);
 		return {text, before: text};
 	}
+
 	return null;
 };
 
@@ -581,15 +617,27 @@ const lawOf = <C>(
 		const r = fc.check(
 			fc.property(cases, (c) => {
 				const found = check(v, c);
-				if (found !== null) why = found;
+
+				if (found !== null) {
+					why = found;
+				}
+
 				return found === null;
 			}),
 			{seed: 101, numRuns: runs, endOnFailure: quick},
 		);
-		if (!r.failed || r.counterexample === null) return null;
+
+		if (!r.failed || r.counterexample === null) {
+			return null;
+		}
+
 		const [c] = r.counterexample;
+
 		// The terminals keep no state between cases: the counterexample fails again on its own.
-		if (check(v, c) === null) throw new Error(`${name}: a case failed once and then held`);
+		if (check(v, c) === null) {
+			throw new Error(`${name}: a case failed once and then held`);
+		}
+
 		return {c, why: why || String(r.errorInstance)};
 	},
 });
@@ -626,15 +674,29 @@ const sameScreen = (kind: Kind, cases: fc.Arbitrary<Case>) =>
 const rowPathWhenSafe = lawOf(N.rowPath, everything([...NARROW, ...WIDE], true), (v, c) =>
 	walk(v, c, null, (m) => {
 		const {out, pure} = oldRedraw(m);
-		if (!pure) return null;
+
+		if (!pure) {
+			return null;
+		}
+
 		const was = lineOf(m.before);
 		const now = lineOf(m.after);
-		if (was === null || now === null) return null;
+
+		if (was === null || now === null) {
+			return null;
+		}
+
 		const fits = (t: string) => screen.cells(t) < m.before.cols && narrow(t);
 		const safe = !m.before.resized && fits(was.text) && fits(now.text);
-		if (safe && m.out.includes(`${CSI}J`)) return `after ${shown(m)}: fits, but cleared below`;
-		if (!safe && m.out !== out)
+
+		if (safe && m.out.includes(`${CSI}J`)) {
+			return `after ${shown(m)}: fits, but cleared below`;
+		}
+
+		if (!safe && m.out !== out) {
 			return `after ${shown(m)}: does not surely fit, but wrote ${JSON.stringify(m.out)}`;
+		}
+
 		return null;
 	}),
 );
@@ -653,8 +715,13 @@ const noLeftovers = (name: string, kind: Kind, cases: fc.Arbitrary<Case>) =>
 				cols = Math.max(1, m.msg.cols);
 				return null;
 			}
+
 			const now = lineOf(m.after);
-			if (now === null) return null;
+
+			if (now === null) {
+				return null;
+			}
+
 			const seen = t.seen();
 			const want = freshly(kind, cols, now.text, now.before);
 			return same(seen, want)
@@ -673,13 +740,19 @@ const afterResize = lawOf(N.resize, editsAndResizes([...NARROW, ...WIDE]), (v, c
 			changed ||= Math.max(1, m.msg.cols) !== m.before.cols;
 			return null;
 		}
+
 		const {out, pure} = oldRedraw(m);
+
 		if (!pure) {
 			// Two redraws in one message (a search left with a key that edits): not checked, but
 			// the first of them was the full one.
-			if (out.includes(`${CSI}J`)) changed = false;
+			if (out.includes(`${CSI}J`)) {
+				changed = false;
+			}
+
 			return null;
 		}
+
 		const first = changed;
 		changed = false;
 		return first && m.out !== out
@@ -707,7 +780,11 @@ const fitsOnGhostty = lawOf(
 	}),
 	(v, {cols, text}) => {
 		const line = screen.PROMPT + text;
-		if (!v.fits(line, cols)) return null;
+
+		if (!v.fits(line, cols)) {
+			return null;
+		}
+
 		const width = widthOn(line);
 		return width < cols
 			? null
@@ -724,8 +801,12 @@ const unknownAt = (out: string): number => {
 		const rest = out.slice(i);
 		// A cursor move, or a table's colors (SGR).
 		const move = rest.startsWith(CSI) && /^(\d*[AC]|[\d;]*m)/.test(rest.slice(CSI.length));
-		if (!move && !KNOWN.some((k) => rest.startsWith(k))) return i;
+
+		if (!move && !KNOWN.some((k) => rest.startsWith(k))) {
+			return i;
+		}
 	}
+
 	return -1;
 };
 
@@ -738,7 +819,11 @@ const knownSequences = lawOf(N.sequences, everything(NARROW, false), (v, c) => {
 	const t = gridTerm(c.cols);
 	const why = walk(v, c, t, (m) => {
 		const at = unknownAt(m.out);
-		if (at !== -1) return `after ${shown(m)}: ${JSON.stringify(m.out.slice(at, at + 8))}`;
+
+		if (at !== -1) {
+			return `after ${shown(m)}: ${JSON.stringify(m.out.slice(at, at + 8))}`;
+		}
+
 		const seen = t.seen();
 		return seen.rows.some((r) => r.includes("^[[") || r.includes("\x1b"))
 			? `after ${shown(m)}: ${showSeen(seen)}`
@@ -761,20 +846,26 @@ const LAWS: readonly Law[] = [
 ];
 
 describe("the line editor's redraw, as laws", () => {
-	for (const law of LAWS)
+	for (const law of LAWS) {
 		it(law.name, () => {
 			expect(law.broken(real, false)).toBeNull();
 		});
+	}
 });
 
 describe("characters that are not one cell", () => {
 	it("ghostty gives no printable code point below U+1100 two cells, the guard's premise", () => {
 		const widths = new Map<number, number>();
+
 		for (let cp = 0x20; cp < 0x1100; cp += 1) {
-			if (cp === 0x7f || (cp >= 0x80 && cp <= 0x9f)) continue;
+			if (cp === 0x7f || (cp >= 0x80 && cp <= 0x9f)) {
+				continue;
+			}
+
 			const w = widthOn(`ab${String.fromCodePoint(cp)}`) - 2;
 			widths.set(w, (widths.get(w) ?? 0) + 1);
 		}
+
 		expect(widths.get(2) ?? 0).toBe(0);
 		// Combining marks and the like: no cell at all, and `cells` counts none.
 		expect(widths.get(0)).toBeGreaterThan(0);
@@ -829,7 +920,11 @@ describe("every plant", () => {
 
 	it.each(names)("is caught by the laws it is planted for: %s", (name) => {
 		const v = planted.get(name);
-		if (v === undefined) throw new Error(`test setup: no plant "${name}"`);
+
+		if (v === undefined) {
+			throw new Error(`test setup: no plant "${name}"`);
+		}
+
 		const laws = target(name).map((n) => LAWS.find((l) => l.name === n));
 		expect(laws.includes(undefined)).toBe(false);
 		const held = laws.filter((l) => l !== undefined && l.broken(v, true) === null);
@@ -1002,11 +1097,13 @@ const bytes = (cmds: readonly Cmd[]) => cmds.flatMap((c) => (c.type === "write" 
 const press = (machine: Machine, from: Editor, ...msgs: readonly Msg[]) => {
 	let s = from;
 	const cmds: Cmd[] = [];
+
 	for (const msg of msgs) {
 		const [next, out] = applyCell<Editor, Msg, Cmd>(machine, s, msg);
 		s = next;
 		cmds.push(...out);
 	}
+
 	return {s, cmds};
 };
 
@@ -1047,10 +1144,18 @@ const screenShowsLine: MachineLaw = {
 				return steps.every((step) => {
 					written.push(...bytes(step.cmds));
 					const {mode} = step.next;
-					if (mode.kind !== "prompt") return true;
+
+					if (mode.kind !== "prompt") {
+						return true;
+					}
+
 					const text = PROMPT + mode.line.left + mode.line.right;
+
 					// One row only: the grid trims each row's end, so a wrapped line loses its spaces.
-					if (cells(text) >= COLS) return true;
+					if (cells(text) >= COLS) {
+						return true;
+					}
+
 					const grid = gridOf(written.join(""), COLS);
 					return (
 						grid.rows[grid.cursor.row] === text.trimEnd() &&
@@ -1066,7 +1171,11 @@ const oneLineAtATime = every(
 	"at most one line goes to tsh in a step, never a blank one or one with a control character, and the editor then waits for tsh",
 	({next, cmds}) => {
 		const sent = lines(cmds);
-		if (sent.length === 0) return true;
+
+		if (sent.length === 0) {
+			return true;
+		}
+
 		const [text = ""] = sent;
 		return (
 			sent.length === 1 &&
@@ -1088,10 +1197,17 @@ const keysWait = every(
 const interruptReaches = every(
 	"Ctrl-C while tsh runs a line reaches tsh at once, and drops what was typed ahead before it",
 	({prev, msg, next, cmds}) => {
-		if (prev.mode.kind !== "busy" || msg.type !== "keys") return true;
+		if (prev.mode.kind !== "busy" || msg.type !== "keys") {
+			return true;
+		}
+
 		const typed = keysIn(msg.data);
 		const at = typed.lastIndexOf("\x03");
-		if (at < 0) return true;
+
+		if (at < 0) {
+			return true;
+		}
+
 		const ahead = next.mode.kind === "busy" ? next.mode.ahead : [];
 		return (
 			cmds.some((c) => c.type === "interrupt") &&
@@ -1126,7 +1242,10 @@ const historyKept = every(
 const enterRuns = fromTheEnd(
 	"Enter at the prompt hands tsh the whole line, wherever the cursor is in it",
 	(machine, last) => {
-		if (last.mode.kind !== "prompt") return true;
+		if (last.mode.kind !== "prompt") {
+			return true;
+		}
+
 		const {left, right} = last.mode.line;
 		const {cmds} = press(machine, last, keys("ls\r"));
 		return lines(cmds).join("\n") === `${left}ls${right}`;
@@ -1136,7 +1255,10 @@ const enterRuns = fromTheEnd(
 const readyBringsPrompt = fromTheEnd(
 	"tsh being done brings the prompt back, or runs the next line typed ahead",
 	(machine, last) => {
-		if (last.mode.kind !== "busy") return true;
+		if (last.mode.kind !== "busy") {
+			return true;
+		}
+
 		const {s, cmds} = press(machine, last, {type: "ready"});
 		return s.mode.kind === "prompt" || s.mode.kind === "search" || lines(cmds).length === 1;
 	},
@@ -1145,7 +1267,10 @@ const readyBringsPrompt = fromTheEnd(
 const ctrlDEnds = fromTheEnd(
 	"Ctrl-D on an empty prompt ends tsh's input, and the editor with it",
 	(machine, last) => {
-		if (last.mode.kind !== "prompt") return true;
+		if (last.mode.kind !== "prompt") {
+			return true;
+		}
+
 		// Ctrl-A then Ctrl-K: the whole line is cut, so the prompt is empty.
 		const {s, cmds} = press(machine, last, keys("\x01\x0b"), keys("\x04"));
 		return s.mode.kind === "ended" && cmds.some((c) => c.type === "close");

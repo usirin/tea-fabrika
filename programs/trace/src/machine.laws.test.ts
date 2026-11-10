@@ -45,7 +45,10 @@ interface Flat {
 }
 
 const flat = (s: Model): Flat => {
-	if (s.shows.kind !== "job") throw new Error("a ticket view, from the job view's Msgs alone");
+	if (s.shows.kind !== "job") {
+		throw new Error("a ticket view, from the job view's Msgs alone");
+	}
+
 	return {read: s.shows.read, open: s.open, chosen: s.chosen};
 };
 
@@ -138,7 +141,10 @@ const every = (name: string, law: (step: FlatStep, machine: Machine) => boolean)
  */
 const depsOf = (machine: Machine, type: string, state: Flat): readonly unknown[] =>
 	(machine.subs ?? []).flatMap((sub): unknown[] => {
-		if (sub.type !== type) return [];
+		if (sub.type !== type) {
+			return [];
+		}
+
 		const deps: unknown = sub.deps(unflat(state));
 		return deps === null || deps === undefined ? [] : [deps];
 	});
@@ -149,7 +155,10 @@ const SUB_TYPES: ReadonlySet<string> = new Set(["follow", "tick", "facts"]);
 const openAreGroups = every(
 	"only a row that groups others is ever open, and only in a record that was read",
 	({next}) => {
-		if (next.read.at !== "read") return next.open.length === 0;
+		if (next.read.at !== "read") {
+			return next.open.length === 0;
+		}
+
 		const groups = groupsOf(treeOf(next.read.trace));
 		return next.open.every((k) => groups.has(k)) && new Set(next.open).size === next.open.length;
 	},
@@ -189,9 +198,18 @@ const ticksWhileItRuns = every(
 const holdsTimeWhileItRuns = every(
 	"it holds the time only while the job runs, and a tick moves it to the later time, never back",
 	({prev, msg, next}) => {
-		if (next.read.at !== "read") return true;
-		if (!isRunning(next.read.trace)) return next.read.now === null;
-		if (msg.type !== "tick") return true;
+		if (next.read.at !== "read") {
+			return true;
+		}
+
+		if (!isRunning(next.read.trace)) {
+			return next.read.now === null;
+		}
+
+		if (msg.type !== "tick") {
+			return true;
+		}
+
 		const before = prev.read.at === "read" ? prev.read.now : null;
 		return next.read.now === Math.max(before ?? msg.now, msg.now);
 	},
@@ -206,8 +224,10 @@ const lookAgainIsNothing = every(
 const againKeepsRows = every(
 	"a newer read of the record shown keeps the rows open and the detail chosen, where they still are",
 	({prev, msg, next}) => {
-		if (msg.type !== "got" || prev.read.at !== "read" || idOf(prev.read) !== msg.trace.trace)
+		if (msg.type !== "got" || prev.read.at !== "read" || idOf(prev.read) !== msg.trace.trace) {
 			return true;
+		}
+
 		const tree = treeOf(msg.trace);
 		const groups = groupsOf(tree);
 		// A record with nothing under its job had no row to keep: the next opens as a first read.
@@ -229,7 +249,11 @@ const newestWins: Law = {
 			(steps, last) => {
 				const looked = steps.findLast((s) => s.msg.type === "look")?.msg;
 				const held = idOf(flat(last).read);
-				if (looked?.type !== "look") return held === null;
+
+				if (looked?.type !== "look") {
+					return held === null;
+				}
+
 				return held === looked.id;
 			},
 			OPTS,
@@ -245,7 +269,11 @@ const twiceIsNothing: Law = {
 			fc.tuple(lists, row).map(([msgs, r]): Msg[] => [...msgs, {type: "toggle", row: r}]),
 			(steps, last) => {
 				const step = steps.at(-1);
-				if (step?.msg.type !== "toggle") return true;
+
+				if (step?.msg.type !== "toggle") {
+					return true;
+				}
+
 				const [again] = applyCell<Model, Msg, never>(machine, last, step.msg);
 				const was = new Set(step.prev.open);
 				return again.open.length === was.size && again.open.every((k) => was.has(k));
@@ -368,7 +396,11 @@ const PLANTS = {
 	staysClosed: plant({
 		got: (s, m) => {
 			const [next, cmds] = realGot(s, m);
-			if (s.read.at !== "read" || idOf(s.read) !== m.trace.trace) return [next, cmds];
+
+			if (s.read.at !== "read" || idOf(s.read) !== m.trace.trace) {
+				return [next, cmds];
+			}
+
 			const groups = groupsOf(treeOf(m.trace));
 			return [{...next, open: s.open.filter((k) => groups.has(k))}, cmds];
 		},

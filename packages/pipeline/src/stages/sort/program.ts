@@ -55,7 +55,11 @@ export const sortToTheEnd = (
 			.get(id)
 			.start({type: "start", ask, settings, key: id}, {conflict: "use_existing"});
 		const end: SortState = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the triage stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the triage stopped in ${end.phase}`);
+		}
+
 		return end;
 	}).pipe(Effect.scoped);
 

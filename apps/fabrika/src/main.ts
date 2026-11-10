@@ -119,12 +119,20 @@ import {Unattached, type Wire} from "./wire.ts";
 const DIST = import.meta.dirname;
 
 const launch = launchOf(process.env);
-if (launch.kind !== "owner") app.setPath("userData", launch.home);
+
+if (launch.kind !== "owner") {
+	app.setPath("userData", launch.home);
+}
 
 // Before `ready`, so no Dock icon shows even for a moment, and Chromium starts with the switches.
 if (launch.kind === "quiet") {
-	if (process.platform === "darwin") app.setActivationPolicy("accessory");
-	for (const name of QUIET_SWITCHES) app.commandLine.appendSwitch(name);
+	if (process.platform === "darwin") {
+		app.setActivationPolicy("accessory");
+	}
+
+	for (const name of QUIET_SWITCHES) {
+		app.commandLine.appendSwitch(name);
+	}
 }
 
 // Before `ready`, as Electron asks: a standard, secure scheme, so the page's own files have
@@ -158,8 +166,9 @@ const guard = () => {
 					Effect.match({
 						onFailure: (e) => console.warn(`fabrika: the browser did not open ${e.url}: ${e.why}`),
 						onSuccess: (out) => {
-							if (out.kind === "refused")
+							if (out.kind === "refused") {
 								console.warn(`fabrika: refused to open ${url}: ${out.why}`);
+							}
 						},
 					}),
 				),
@@ -209,7 +218,11 @@ const deskWindow = (preload: string, icon: string, launch: Launch) => {
 		},
 	});
 	followLook(nativeTheme, window);
-	if (quiet) window.showInactive();
+
+	if (quiet) {
+		window.showInactive();
+	}
+
 	window
 		.loadURL(DESK)
 		.catch((cause) => console.error(`fabrika: the window could not load ${DESK}`, cause));
@@ -236,11 +249,26 @@ const DEEPEST = 32;
  * (a Map, a cycle, a BigInt), and one of those must not end the link for every tile.
  */
 const plain = (v: unknown, depth = 0): boolean => {
-	if (depth > DEEPEST) return false;
-	if (v === null || typeof v === "string" || typeof v === "boolean") return true;
-	if (typeof v === "number") return Number.isFinite(v);
-	if (Array.isArray(v)) return v.every((x) => plain(x, depth + 1));
-	if (typeof v !== "object" || Object.getPrototypeOf(v) !== Object.prototype) return false;
+	if (depth > DEEPEST) {
+		return false;
+	}
+
+	if (v === null || typeof v === "string" || typeof v === "boolean") {
+		return true;
+	}
+
+	if (typeof v === "number") {
+		return Number.isFinite(v);
+	}
+
+	if (Array.isArray(v)) {
+		return v.every((x) => plain(x, depth + 1));
+	}
+
+	if (typeof v !== "object" || Object.getPrototypeOf(v) !== Object.prototype) {
+		return false;
+	}
+
 	return Object.values(v).every((x) => plain(x, depth + 1));
 };
 
@@ -254,13 +282,16 @@ const portsFor = (current: () => BrowserWindow | null) => {
 	/** A fresh port named `name`: the page gets one end, and `heard` hears what comes on the other. */
 	const push = (name: string, heard: (raw: unknown) => void) => {
 		const window = current();
+
 		if (
 			!isPortName(name) ||
 			window === null ||
 			window.isDestroyed() ||
 			!isDesk(window.webContents.getURL())
-		)
+		) {
 			return;
+		}
+
 		ports.get(name)?.close();
 		const {port1, port2} = new MessageChannelMain();
 		port1.on("message", (message) => heard(message.data));
@@ -275,7 +306,10 @@ const portsFor = (current: () => BrowserWindow | null) => {
 	};
 	/** The page was loaded again, or its window closed: every port it had is dead. */
 	const reset = () => {
-		for (const port of ports.values()) port.close();
+		for (const port of ports.values()) {
+			port.close();
+		}
+
 		ports.clear();
 	};
 	return {push, post, gone, reset};
@@ -283,13 +317,26 @@ const portsFor = (current: () => BrowserWindow | null) => {
 
 /** What one try to attach came to, from why it failed, in words for the window. */
 const triedOf = (e: unknown): Tried => {
-	if (e instanceof NoHost) return {kind: "lost", why: `The host did not start: ${e.why}.`};
-	if (e instanceof NoHello)
+	if (e instanceof NoHost) {
+		return {kind: "lost", why: `The host did not start: ${e.why}.`};
+	}
+
+	if (e instanceof NoHello) {
 		return {kind: "lost", why: `The host did not answer: it said no hello within ${e.within}.`};
-	if (e instanceof NotStopped) return {kind: "lost", why: `The old host did not stop: ${e.why}.`};
-	if (!(e instanceof Unattached))
+	}
+
+	if (e instanceof NotStopped) {
+		return {kind: "lost", why: `The old host did not stop: ${e.why}.`};
+	}
+
+	if (!(e instanceof Unattached)) {
 		return {kind: "lost", why: `The host could not be started: ${String(e)}.`};
-	if (e.why.kind === "version") return {kind: "version", theirs: e.why.theirs, ours: e.why.ours};
+	}
+
+	if (e.why.kind === "version") {
+		return {kind: "version", theirs: e.why.theirs, ours: e.why.ours};
+	}
+
 	return {kind: "lost", why: `The host did not answer: ${e.why.what}.`};
 };
 
@@ -307,8 +354,12 @@ const main = Effect.gen(function* () {
 	guard();
 	const path = yield* Path.Path;
 	const icon = path.join(DIST, "icon.png");
+
 	// A quiet start has no Dock icon to set. An unpackaged app has no icon of its own otherwise.
-	if (launch.kind !== "quiet") app.dock?.setIcon(icon);
+	if (launch.kind !== "quiet") {
+		app.dock?.setIcon(icon);
+	}
+
 	// Asked for by our own page only: the scheme is registered for nothing else.
 	const files = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 	protocol.handle(SCHEME, (request) => Effect.runPromiseWith(files)(answer(DIST, request.url)));
@@ -330,8 +381,11 @@ const main = Effect.gen(function* () {
 	const toHost = (m: Up) => held?.wire.send(m);
 	/** What a port's page sends goes to the host, under the port's name. */
 	const onTo = (name: string) => (raw: unknown) => {
-		if (plain(raw)) toHost({type: "on", port: name, m: raw});
-		else console.warn(`fabrika: refused a message on ${name} that is no plain JSON`);
+		if (plain(raw)) {
+			toHost({type: "on", port: name, m: raw});
+		} else {
+			console.warn(`fabrika: refused a message on ${name} that is no plain JSON`);
+		}
 	};
 	/** A port whose messages go to the host, under its name. */
 	const relay = (name: string) => ports.push(name, onTo(name));
@@ -351,8 +405,15 @@ const main = Effect.gen(function* () {
 		const fresh = newAsks(known, now);
 		known = keysOf(now);
 		const [first, ...rest] = fresh;
-		if (first === undefined || launch.kind === "quiet" || current?.isFocused() === true) return;
-		if (!Notification.isSupported()) return;
+
+		if (first === undefined || launch.kind === "quiet" || current?.isFocused() === true) {
+			return;
+		}
+
+		if (!Notification.isSupported()) {
+			return;
+		}
+
 		const notice = new Notification(noticeOf([first, ...rest]));
 		notices.add(notice);
 		notice.on("close", () => notices.delete(notice));
@@ -369,13 +430,20 @@ const main = Effect.gen(function* () {
 				return;
 			// The desk's port is this process's own: it is made on the page's hello, for `down` too.
 			case "port":
-				if (m.port !== "desk") relay(m.port);
+				if (m.port !== "desk") {
+					relay(m.port);
+				}
+
 				return;
 			case "to": {
 				if (m.port === "desk") {
 					const asks = readAsks(m.m);
-					if (asks.kind === "read") heardAsks(asks.msg.now);
+
+					if (asks.kind === "read") {
+						heardAsks(asks.msg.now);
+					}
 				}
+
 				return ports.post(m.port, m.m);
 			}
 			case "gone":
@@ -411,14 +479,20 @@ const main = Effect.gen(function* () {
 				Effect.provideContext(starting),
 				Effect.exit,
 			);
+
 			if (Exit.isFailure(exit)) {
 				yield* Scope.close(link, exit);
 				return triedOf(Cause.squash(exit.cause));
 			}
+
 			held = {wire: exit.value.wire, scope: link};
 			// A new link's first count tells of no ask: those were known, or are old news.
 			known = null;
-			if (paged) exit.value.wire.send({type: "page"});
+
+			if (paged) {
+				exit.value.wire.send({type: "page"});
+			}
+
 			return exit.value.found satisfies Tried;
 		});
 	const tryAttach = tryWith(attach);
@@ -426,15 +500,26 @@ const main = Effect.gen(function* () {
 	const tryRestart = Effect.gen(function* () {
 		const link = held;
 		held = null;
-		if (link !== null) yield* Scope.close(link.scope, Exit.void);
+
+		if (link !== null) {
+			yield* Scope.close(link.scope, Exit.void);
+		}
+
 		return yield* tryWith(restart);
 	});
 	/** The link that is up, until it ends: then its scope closes, and the machine is told why. */
 	const watch = Effect.gen(function* () {
 		const link = held;
 		const why = link === null ? "it was not there" : yield* link.wire.ended;
-		if (held === link) held = null;
-		if (link !== null) yield* Scope.close(link.scope, Exit.void);
+
+		if (held === link) {
+			held = null;
+		}
+
+		if (link !== null) {
+			yield* Scope.close(link.scope, Exit.void);
+		}
+
 		return {
 			type: "ended",
 			why: `The link to the host ended: ${why}.`,
@@ -453,18 +538,28 @@ const main = Effect.gen(function* () {
 	// The window hears of the link only when what it would say changes: not on every wait.
 	reconnect.observe((_, s) => {
 		const note = noteOf(s);
-		if (same(note, said)) return;
+
+		if (same(note, said)) {
+			return;
+		}
+
 		said = note;
-		if (note !== null) toPage({type: "link", now: note});
+
+		if (note !== null) {
+			toPage({type: "link", now: note});
+		}
 	});
 	/** The desk's port: Try again and the restart are the app's own, and the rest goes on to the host. */
 	const deskPort = () => {
 		const toDesk = onTo("desk");
 		ports.push("desk", (raw) => {
 			const own = readToApp(raw);
-			if (own.kind === "read")
+
+			if (own.kind === "read") {
 				Effect.runFork(reconnect.dispatch({type: own.msg.type}).pipe(Effect.ignore));
-			else toDesk(raw);
+			} else {
+				toDesk(raw);
+			}
 		});
 	};
 
@@ -474,15 +569,25 @@ const main = Effect.gen(function* () {
 	 */
 	const showWindow = () => {
 		if (current !== null) {
-			if (launch.kind === "quiet") return current.showInactive();
-			if (current.isMinimized()) current.restore();
+			if (launch.kind === "quiet") {
+				return current.showInactive();
+			}
+
+			if (current.isMinimized()) {
+				current.restore();
+			}
+
 			current.focus();
 			return;
 		}
+
 		const made = deskWindow(path.join(DIST, "preload.cjs"), icon, launch);
 		current = made;
 		made.once("closed", () => {
-			if (current !== made) return;
+			if (current !== made) {
+				return;
+			}
+
 			current = null;
 			paged = false;
 			ports.reset();
@@ -498,20 +603,29 @@ const main = Effect.gen(function* () {
 			);
 			return;
 		}
+
 		// A hello is a page load: the ports of the page before are dead, and it is shown everything again.
 		ports.reset();
 		paged = true;
 		deskPort();
+
 		// What the window shows of the link first, so a banner is there before the desk comes.
-		if (said !== null) toPage({type: "link", now: said});
-		if (held !== null) held.wire.send({type: "page"});
+		if (said !== null) {
+			toPage({type: "link", now: said});
+		}
+
+		if (held !== null) {
+			held.wire.send({type: "page"});
+		}
 	});
 	app.on("second-instance", showWindow);
 	// The dock icon, on macOS: the window there is, or a new one on the same desk.
 	app.on("activate", showWindow);
 	// Electron's own pattern: on macOS the app stays with no window; elsewhere it quits.
 	app.on("window-all-closed", () => {
-		if (process.platform !== "darwin") app.quit();
+		if (process.platform !== "darwin") {
+			app.quit();
+		}
 	});
 	showWindow();
 	// Until the app is asked to quit: Cmd-Q, or the last window closed off macOS. Then the scope
@@ -533,8 +647,9 @@ const main = Effect.gen(function* () {
 	),
 );
 
-if (!app.requestSingleInstanceLock()) app.quit();
-else
+if (!app.requestSingleInstanceLock()) {
+	app.quit();
+} else {
 	Effect.runFork(
 		main.pipe(
 			Effect.matchCause({
@@ -552,3 +667,4 @@ else
 			}),
 		),
 	);
+}

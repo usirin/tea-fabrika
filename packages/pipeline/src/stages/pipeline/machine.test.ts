@@ -55,7 +55,11 @@ const questionFor = (rules: readonly string[]) => {
 		carry: {rules},
 	});
 	const approve = approveCmds.find((cmd: LaneCmd) => cmd.type === "lane_ask");
-	if (approve?.type !== "lane_ask") throw new Error("the plan's yes was not asked");
+
+	if (approve?.type !== "lane_ask") {
+		throw new Error("the plan's yes was not asked");
+	}
+
 	const [examining] = lane.update.lane_answered(approving, {
 		type: "lane_answered",
 		ask: approve.ask,
@@ -71,7 +75,11 @@ const questionFor = (rules: readonly string[]) => {
 		carry: {examPull: {head: EXAM_HEAD, reviewed: REVIEWED_AT(EXAM_HEAD)}},
 	});
 	const asked = cmds.find((cmd: LaneCmd) => cmd.type === "lane_ask");
-	if (asked?.type !== "lane_ask") throw new Error("the rule change's merge was not asked");
+
+	if (asked?.type !== "lane_ask") {
+		throw new Error("the rule change's merge was not asked");
+	}
+
 	return asked;
 };
 
@@ -128,7 +136,10 @@ const MARKED = {kind: "ask", who: "owner", for: "decision"} as const;
 const ended = (s: Lane, end: StepEnd) => lane.update.lane_step_ok(s, runStep.ok(RUN, end, 0));
 
 const asking = (s: Lane) => {
-	if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, and asks nothing`);
+	if (s.phase !== "asking") {
+		throw new Error(`the lane is ${s.phase}, and asks nothing`);
+	}
+
 	return s;
 };
 
@@ -255,7 +266,11 @@ describe("every question has its own id", () => {
 			ask: two.question.ask,
 			pick: "again",
 		});
-		if (again.phase !== "running") throw new Error(again.phase);
+
+		if (again.phase !== "running") {
+			throw new Error(again.phase);
+		}
+
 		const [step] = cmds.filter((c: LaneCmd) => c.type === "lane_step");
 		expect(step?.count).toBe(again.count);
 		expect(step?.intent).toBe(`lane/7/${again.count}/review`);
@@ -319,7 +334,11 @@ describe("a lane saved while asking", () => {
 	// P27: the pick is gone from a new question, and a lane already holding it ends the way it did.
 	it("offering go_on on an unseen review goes to the push with no verdict to post, as it did", () => {
 		const [next] = goOn(savedAsking(UNSEEN_REVIEW, CHECKED));
-		if (next.phase !== "running") throw new Error(next.phase);
+
+		if (next.phase !== "running") {
+			throw new Error(next.phase);
+		}
+
 		expect(next.step).toBe("push");
 		expect(next.carry.posts).toEqual([]);
 	});
@@ -327,7 +346,11 @@ describe("a lane saved while asking", () => {
 	// P28: the same, for a builder that changed nothing.
 	it("offering go_on after a builder that changed nothing goes on to the mutation step, as it did", () => {
 		const [next] = goOn(savedAsking(NO_CHANGE, CHECKED));
-		if (next.phase !== "running") throw new Error(next.phase);
+
+		if (next.phase !== "running") {
+			throw new Error(next.phase);
+		}
+
 		expect(next.step).toBe("mutation");
 	});
 
@@ -341,7 +364,11 @@ describe("a lane saved while asking", () => {
 		(_, question) => {
 			const [next, cmds] = goOn(savedAsking(question));
 			expect(cmds.filter((c: LaneCmd) => c.type === "lane_step")).toEqual([]);
-			if (next.phase !== "releasing") throw new Error(next.phase);
+
+			if (next.phase !== "releasing") {
+				throw new Error(next.phase);
+			}
+
 			expect(nameOf(next.outcome)).toBe("stuck:checks_not_run");
 		},
 	);
@@ -351,7 +378,11 @@ describe("a review that could not see", () => {
 	const unseenAsked = () => {
 		const [next, cmds] = ended(atReview(), {outcome: UNSEEN, carry: {}});
 		const [asked] = cmds.filter((c: LaneCmd) => c.type === "lane_ask");
-		if (asked === undefined) throw new Error("nothing was asked");
+
+		if (asked === undefined) {
+			throw new Error("nothing was asked");
+		}
+
 		return {question: asking(next).question, asked};
 	};
 
@@ -426,7 +457,10 @@ describe("a head whose tests fail goes back to the builder", () => {
 	const RED_END: StepEnd = {outcome: RED, carry: {open: [FAILED]}};
 
 	const running = (s: Lane) => {
-		if (s.phase !== "running") throw new Error(`the lane is ${s.phase}, and runs nothing`);
+		if (s.phase !== "running") {
+			throw new Error(`the lane is ${s.phase}, and runs nothing`);
+		}
+
 		return s;
 	};
 	const stepsIn = (cmds: readonly LaneCmd[]) =>
@@ -436,29 +470,41 @@ describe("a head whose tests fail goes back to the builder", () => {
 	const redRounds = (times: number, more: {readonly sendBack?: boolean} = {}) => {
 		const [build] = ended(atWriter(more), DONE);
 		let [s, cmds] = ended(build, BUILT);
+
 		for (let i = 1; i <= times; i++) {
 			[s, cmds] = ended(s, RED_END);
-			if (i < times && s.phase === "running" && s.step === "build") [s, cmds] = ended(s, BUILT);
+
+			if (i < times && s.phase === "running" && s.step === "build") {
+				[s, cmds] = ended(s, BUILT);
+			}
 		}
+
 		return {s, cmds};
 	};
 
 	/** From the first review: it sends the work back each round, and every step between ends well. */
 	const reviewRounds = () => {
 		let [s, cmds] = ended(atReview(), {outcome: REVIEW_BACK, carry: {}});
+
 		// Bounded, so a lane that never asks fails the test and does not hang it.
-		for (let i = 0; i < 4 * MAX_ROUNDS && s.phase === "running"; i++)
+		for (let i = 0; i < 4 * MAX_ROUNDS && s.phase === "running"; i++) {
 			[s, cmds] = ended(
 				s,
 				s.step === "review" ? {outcome: REVIEW_BACK, carry: {}} : s.step === "build" ? BUILT : DONE,
 			);
+		}
+
 		return {s, cmds};
 	};
 
 	/** The `what` of the one question in `cmds`. */
 	const whatIn = (cmds: readonly LaneCmd[]) => {
 		const asked = cmds.find((c: LaneCmd) => c.type === "lane_ask");
-		if (asked?.type !== "lane_ask") throw new Error("nothing was asked");
+
+		if (asked?.type !== "lane_ask") {
+			throw new Error("nothing was asked");
+		}
+
 		return asked.what;
 	};
 
@@ -506,7 +552,11 @@ describe("a head whose tests fail goes back to the builder", () => {
 		expect(question.picks).toEqual(["again", "stop"]);
 		expect(asking(s).round).toBe(MAX_ROUNDS);
 		const asked = cmds.find((c: LaneCmd) => c.type === "lane_ask");
-		if (asked?.type !== "lane_ask") throw new Error("nothing was asked");
+
+		if (asked?.type !== "lane_ask") {
+			throw new Error("nothing was asked");
+		}
+
 		const words = [asked.what, ...(asked.also ?? []), ...(asked.does ?? [])].join("\n");
 		expect(words).toContain(NAME);
 		expect(asked.does ?? []).toHaveLength(2);
@@ -580,7 +630,11 @@ describe("a head whose tests fail goes back to the builder", () => {
 	it("`again` says the build follows only when the step it runs is not the build", () => {
 		const againIn = (cmds: readonly LaneCmd[]) => {
 			const asked = cmds.find((c: LaneCmd) => c.type === "lane_ask");
-			if (asked?.type !== "lane_ask") throw new Error("nothing was asked");
+
+			if (asked?.type !== "lane_ask") {
+				throw new Error("nothing was asked");
+			}
+
 			return (asked.does ?? []).find((line) => line.startsWith("`again`")) ?? "";
 		};
 		const review = againIn(reviewRounds().cmds);
@@ -594,14 +648,22 @@ describe("a head whose tests fail goes back to the builder", () => {
 	it("the `asked` head goes on a merge's question only, never on the rounds' question", () => {
 		const {cmds} = redRounds(MAX_ROUNDS);
 		const spent = cmds.find((c: LaneCmd) => c.type === "lane_ask");
-		if (spent?.type !== "lane_ask") throw new Error("nothing was asked");
+
+		if (spent?.type !== "lane_ask") {
+			throw new Error("nothing was asked");
+		}
+
 		// The lane holds a head here, the build's, and the rounds' question still names none.
 		expect("head" in spent).toBe(false);
 		const [push] = ended(atReview(), DONE);
 		expect(running(push).step).toBe("push");
 		const [, merging] = ended(push, DONE);
 		const merge = merging.find((c: LaneCmd) => c.type === "lane_ask");
-		if (merge?.type !== "lane_ask") throw new Error("the merge was not asked");
+
+		if (merge?.type !== "lane_ask") {
+			throw new Error("the merge was not asked");
+		}
+
 		expect(merge.ask).toMatch(/^a-merge-/);
 		expect(merge.head).toBe(HEAD);
 		expect(questionFor([".oxlintrc.json"]).head).toBe(EXAM_HEAD);
@@ -647,7 +709,10 @@ describe("code's checks after the build", () => {
 	const AFTER_BUILD: readonly string[] = ["mutation", "mutants", "review", "push", "merge"];
 
 	const running = (s: Lane) => {
-		if (s.phase !== "running") throw new Error(`the lane is ${s.phase}, and runs nothing`);
+		if (s.phase !== "running") {
+			throw new Error(`the lane is ${s.phase}, and runs nothing`);
+		}
+
 		return s;
 	};
 	const stepsIn = (cmds: readonly LaneCmd[]) =>
@@ -657,7 +722,11 @@ describe("code's checks after the build", () => {
 	/** The lane as its first build ends on `end`. */
 	const firstBuildEnds = (end: StepEnd, more: {readonly sendBack?: boolean} = {}) => {
 		const [build] = ended(atWriter(more), DONE);
-		if (running(build).step !== "build") throw new Error("the build did not run");
+
+		if (running(build).step !== "build") {
+			throw new Error("the build did not run");
+		}
+
 		return ended(build, end);
 	};
 
@@ -695,13 +764,20 @@ describe("code's checks after the build", () => {
 
 	it("red checks every round: a person is asked `rounds_spent`, and the question names what is red", () => {
 		let [s, cmds] = firstBuildEnds(RED_BUILD);
+
 		// Bounded, so a lane that never asks fails the test and does not hang it.
-		for (let i = 0; i < 2 * MAX_ROUNDS && s.phase === "running"; i++)
+		for (let i = 0; i < 2 * MAX_ROUNDS && s.phase === "running"; i++) {
 			[s, cmds] = ended(s, RED_BUILD);
+		}
+
 		expect(asking(s).question.for).toBe("rounds_spent");
 		expect(asking(s).round).toBe(MAX_ROUNDS);
 		const asked = cmds.find((c: LaneCmd) => c.type === "lane_ask");
-		if (asked?.type !== "lane_ask") throw new Error("nothing was asked");
+
+		if (asked?.type !== "lane_ask") {
+			throw new Error("nothing was asked");
+		}
+
 		expect([asked.what, ...(asked.also ?? [])].join("\n")).toContain(NAME);
 	});
 
@@ -827,11 +903,13 @@ describe("the exam's rounds and ship's sends, by step", () => {
 	};
 
 	it("a send ship can end with, from a step that cannot say it, has no route: stuck:sent_back", () => {
-		for (const name of Object.keys(EXAM_MERGE_SENDS))
-			for (const step of ["push", "plan"] as const)
+		for (const name of Object.keys(EXAM_MERGE_SENDS)) {
+			for (const step of ["push", "plan"] as const) {
 				expect(after(step, sendOf(name), 1), `${name} from ${step}`).toEqual({
 					end: {kind: "stuck", why: "sent_back"},
 				});
+			}
+		}
 	});
 
 	// Self-fix PR 11, jidoka rows 62 and 63: each send ship ends with at merge goes to the step that
@@ -850,8 +928,10 @@ describe("the exam's rounds and ship's sends, by step", () => {
 			// Row 63: the review again, in the same round.
 			"send:reviewer:no_review": {to: "review"},
 		};
+
 		// The record's type holds every send, so a new one does not compile until it is here.
-		for (const [name, move] of Object.entries(AT_MERGE))
+		for (const [name, move] of Object.entries(AT_MERGE)) {
 			expect(after("merge", sendOf(name), 1), name).toEqual(move);
+		}
 	});
 });

@@ -44,8 +44,13 @@ export const migrateJob = (db: Db) => {
 		started REAL NOT NULL, how TEXT, ended REAL, ended_by TEXT, why TEXT)`);
 	// A record made before tracker 185 has neither column: added once, its row kept with nulls.
 	const columns = new Set(db.all(`PRAGMA table_info(job)`).map((c) => String(c.name)));
-	for (const column of ["ended_by", "why"])
-		if (!columns.has(column)) db.all(`ALTER TABLE job ADD COLUMN ${column} TEXT`);
+
+	for (const column of ["ended_by", "why"]) {
+		if (!columns.has(column)) {
+			db.all(`ALTER TABLE job ADD COLUMN ${column} TEXT`);
+		}
+	}
+
 	db.all(`CREATE TABLE IF NOT EXISTS state (
 		key TEXT PRIMARY KEY, value TEXT, by TEXT NOT NULL, at REAL NOT NULL)`);
 	db.all(`CREATE TABLE IF NOT EXISTS steps (
@@ -97,6 +102,7 @@ const plain = (value: unknown): Json => JSON.parse(JSON.stringify(value ?? null)
 const stepsOf = (rows: readonly SqlRow[]): Step[] => {
 	const out: Step[] = [];
 	const now = new Map<string, Json>();
+
 	for (const r of rows) {
 		const key = headKey(String(r.run), String(r.machine), String(r.id));
 		const body = JSON.parse(String(r.body)) as unknown;
@@ -114,6 +120,7 @@ const stepsOf = (rows: readonly SqlRow[]): Step[] => {
 			by: String(r.by),
 		});
 	}
+
 	return out;
 };
 
@@ -125,7 +132,11 @@ const headOf = (db: Db, run: string, machine: string, id: string) => {
 		machine,
 		id,
 	)[0];
-	if (from === undefined) return null;
+
+	if (from === undefined) {
+		return null;
+	}
+
 	const rows = db.all(
 		`SELECT * FROM steps WHERE run = ? AND machine = ? AND id = ? AND n >= ? ORDER BY n`,
 		run,
@@ -134,7 +145,11 @@ const headOf = (db: Db, run: string, machine: string, id: string) => {
 		num(from, "n"),
 	);
 	const last = stepsOf(rows).at(-1);
-	if (last === undefined) return null;
+
+	if (last === undefined) {
+		return null;
+	}
+
 	const patches = rows.filter((r) => r.kind === "patch");
 	const chain = patches.reduce((sum, r) => sum + String(r.body).length, 0);
 	return {n: last.n, state: last.state as Json, since: patches.length, chain};
@@ -151,7 +166,11 @@ const runsOf = (db: Db): string[] =>
 
 const jobOf = (db: Db): Job | null => {
 	const r = db.all(`SELECT * FROM job`)[0];
-	if (r === undefined) return null;
+
+	if (r === undefined) {
+		return null;
+	}
+
 	const how = text(r, "how");
 	return {
 		n: num(r, "n"),
@@ -215,7 +234,8 @@ export const keepSpans = (db: Db, spans: readonly Omit<Span, "by">[], by: string
 				JSON.stringify(s.events),
 				by,
 			);
-			if (content !== null)
+
+			if (content !== null) {
 				db.all(
 					`INSERT OR IGNORE INTO content (span, input, output, by) VALUES (?, ?, ?, ?)`,
 					s.span,
@@ -223,7 +243,9 @@ export const keepSpans = (db: Db, spans: readonly Omit<Span, "by">[], by: string
 					content.output,
 					by,
 				);
+			}
 		}
+
 		return {kept: spans.length};
 	});
 
@@ -248,7 +270,10 @@ const isPerson = (by: string) => writerOf(by)?.kind === "user";
  *   named("agent:claude for:github:7", "user:github:7")   // "agent:claude for:github:7"
  */
 const named = (by: string, claimed: string | undefined): string => {
-	if (claimed === undefined || claimed === by) return by;
+	if (claimed === undefined || claimed === by) {
+		return by;
+	}
+
 	const sender = writerOf(by);
 	const writer = writerOf(claimed);
 	return sender?.kind === "user" && writer !== null && "for" in writer && writer.for === sender.id
@@ -379,7 +404,10 @@ export const callJob = (
 					content: contentOf(db),
 				} satisfies RecordRead;
 			case "deleteContent":
-				if (!isPerson(by)) return {error: `only a person deletes content, and ${by} is not one`};
+				if (!isPerson(by)) {
+					return {error: `only a person deletes content, and ${by} is not one`};
+				}
+
 				// A span that carried none gets the row too: what a person deleted, and why, is kept.
 				db.all(
 					`INSERT INTO content (span, input, output, by, deleted_by, deleted_at, why)

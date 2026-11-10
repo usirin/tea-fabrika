@@ -27,7 +27,11 @@ describe("experiments", () => {
 				),
 			),
 		);
-		if (called.kind !== "called") throw new Error(called.why);
+
+		if (called.kind !== "called") {
+			throw new Error(called.why);
+		}
+
 		expect(called.ended.kind).toBe("ended");
 		expect(
 			called.heard.map((h) => (h.name === "row" ? [h.value.n, h.value.runs] : h.name)),

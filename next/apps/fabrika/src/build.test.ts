@@ -33,7 +33,9 @@ const discovery = (files: Array<string>) =>
 	);
 
 afterEach(() => {
-	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
+	for (const h of homes.splice(0)) {
+		rmSync(h, {recursive: true, force: true});
+	}
 });
 
 const home = () => {
@@ -55,7 +57,9 @@ const law = (
 				try {
 					await check(input);
 				} finally {
-					for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
+					for (const h of homes.splice(0)) {
+						rmSync(h, {recursive: true, force: true});
+					}
 				}
 			}),
 			{seed: 119120, numRuns: 3, examples: [[chosen]]},
@@ -86,7 +90,7 @@ const plants = [
 ] as const;
 
 describe("P12 Rolldown build", () => {
-	for (const [plant, source] of plants)
+	for (const [plant, source] of plants) {
 		law(`every reachable TSX input passes the Compiler check: ${plant}`, async ({name}) => {
 			const {build} = await import("./build.ts");
 			const folder = home(),
@@ -114,6 +118,8 @@ describe("P12 Rolldown build", () => {
 			expect(Exit.isFailure(failed), "reachable input is checked even with files: []").toBe(true);
 			expect(snapshot(out)).toEqual(before);
 		});
+	}
+
 	law(
 		"Compiler ledger rows use the same repo-relative paths as discovered inputs",
 		async ({name}) => {
@@ -150,6 +156,7 @@ describe("P12 Rolldown build", () => {
 				`export {counter as program} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))};`,
 			);
 			chmodSync(parent, 0o500);
+
 			try {
 				const built = await runNode(
 					build({out, programs: {counter: program}}).pipe(
@@ -181,6 +188,7 @@ describe("P12 Rolldown build", () => {
 			expect(good).toMatchObject({build: expect.any(String)});
 			const before = snapshot(out);
 			expect(before.length).toBeGreaterThan(0);
+
 			for (const [name, source] of plants) {
 				writeFileSync(file, source);
 				const failed = await runNode(Effect.exit(build(options)));
@@ -199,6 +207,7 @@ describe("P12 Rolldown build", () => {
 			writeFileSync(file, clean);
 			await runNode(build({out, files: [file], ledger: []}));
 			const before = snapshot(out);
+
 			for (const stale of [file, join(h, "gone.tsx")]) {
 				const result = await runNode(
 					Effect.exit(
@@ -232,6 +241,7 @@ describe("P12 Rolldown build", () => {
 				platform: "browser",
 				external: ["cloudflare:workers"],
 			});
+
 			try {
 				const generated = await bundle.generate({format: "esm"});
 				expect(
@@ -240,6 +250,7 @@ describe("P12 Rolldown build", () => {
 			} finally {
 				await bundle.close();
 			}
+
 			expect(built.build.length).toBeGreaterThan(0);
 		},
 	);

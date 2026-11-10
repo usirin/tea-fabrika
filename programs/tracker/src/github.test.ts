@@ -38,12 +38,15 @@ const read = (times: number, layer: Layer.Layer<CodeTree>, repos = [A, B]) =>
 		Effect.gen(function* () {
 			const tree = yield* RepoTree;
 			const out: ({readonly ok: readonly string[]} | {readonly err: unknown})[] = [];
-			for (let i = 0; i < times; i++)
+
+			for (let i = 0; i < times; i++) {
 				out.push(
 					yield* tree.folders.pipe(
 						Effect.match({onSuccess: (ok) => ({ok}), onFailure: (err) => ({err})}),
 					),
 				);
+			}
+
 			return out;
 		}).pipe(
 			Effect.provide(
