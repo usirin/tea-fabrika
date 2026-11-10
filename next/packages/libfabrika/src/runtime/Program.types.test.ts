@@ -1,10 +1,11 @@
 // T280, next/: authoring depends on libfabrika and tea alone. tsc checks the uncalled cases.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { expect, it } from "@effect/vitest";
-import { Input, Program, ProgramLoader, Write } from "@kampus/libfabrika";
 import { Effect, Schema, type SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
+import { ProgramLoader } from "./Entry.ts";
+import { Input, Program, Write } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int });
 
