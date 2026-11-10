@@ -22,6 +22,13 @@ import {afterAll, describe, expect, it} from "vitest";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 
+// P14, p65's one exception (docs/direction/fabrika-design-package.md): today's app and next/ share
+// one design package, and only that package may sit outside next/. The exception is its exact name
+// and its exports map, read from where it lives. Any other outside workspace package, a deep
+// import into the design package, and today's old packages still fault.
+const DESIGN = "@kampus/fabrika-design";
+const DESIGN_DIR = resolve(NEXT, "../packages/fabrika-design");
+
 // The reader. Each exam file stands alone and carries its own copy, since a shared helper file
 // would export names only tests call, which `pnpm lint:dead` refuses. An import is found by reading
 // text: a line that starts with `import` or `export` and names a `from`, a line that is only
@@ -191,7 +198,7 @@ const manifestFaults = (next: string): ReadonlyArray<string> => {
 			...(m.scripts?.["typecheck"] === undefined ? [`${where}: no typecheck script`] : []),
 			...[...listed(m)].flatMap(([name, range]) => [
 				...(name.endsWith("-old") ? [`${where}: depends on ${name}, today's version`] : []),
-				...(range.startsWith("workspace:") && !ours.has(name)
+				...(range.startsWith("workspace:") && !ours.has(name) && name !== DESIGN
 					? [`${where}: depends on ${name}, a workspace package outside next/`]
 					: []),
 			]),
@@ -203,9 +210,14 @@ const manifestFaults = (next: string): ReadonlyArray<string> => {
 const EXAM = /^apps\/fabrika\/(?:e2e\.ts$|e2e\/|src\/exam\/)/;
 
 /** Every import that walks out: unlisted, outside an exports map, out of its package, or no package at all. */
-const importFaults = (next: string): ReadonlyArray<string> => {
+const importFaults = (
+	next: string,
+	design: Package | undefined = designAt(DESIGN_DIR),
+): ReadonlyArray<string> => {
 	const packages = packagesIn(next);
-	const byName = new Map(packages.map((pkg) => [pkg.manifest.name, pkg]));
+	const byName = new Map(
+		[...packages, ...(design === undefined ? [] : [design])].map((pkg) => [pkg.manifest.name, pkg]),
+	);
 	return codeFiles(next).flatMap((file) => {
 		const where = shown(next, file);
 		const pkg = ownerAt(packages, file);
@@ -237,6 +249,16 @@ const importFaults = (next: string): ReadonlyArray<string> => {
 	});
 };
 
+/** The design package, read from `dir`, the one package outside next/ that a part may list. */
+const designAt = (dir: string): Package | undefined =>
+	existsSync(join(dir, "package.json"))
+		? {
+				dir,
+				group: "packages",
+				manifest: readManifest(JSON.parse(readFileSync(join(dir, "package.json"), "utf8"))),
+			}
+		: undefined;
+
 /** What a top level bundled for a browser must not reach. */
 const FORBIDDEN: ReadonlyArray<{readonly name: string; readonly test: (spec: string) => boolean}> =
 	[
@@ -255,7 +277,7 @@ const FORBIDDEN: ReadonlyArray<{readonly name: string; readonly test: (spec: str
  *  the menu bar and the door share (Tier 1, P9). Every program's `/window` comes on top. */
 const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
 	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination", "./door"],
-	"@kampus/tuval": ["."],
+	"@kampus/tuval": [".", "./page", "./browser"],
 	"@kampus/notes": ["."],
 };
 const browserEntries = (
@@ -490,5 +512,70 @@ describe("planted breaks", () => {
 				'@kampus/chaos/window reaches electron: "electron" from programs/chaos/src/index.ts',
 			].sort(),
 		);
+	});
+});
+
+describe("P14: the design package is the one allowed outside package", () => {
+	const designFiles = {
+		"design/package.json": manifest(DESIGN, {
+			exports: {
+				".": "./src/index.ts",
+				"./tokens.css": "./src/tokens.css",
+				"./package.json": "./package.json",
+			},
+		}),
+	};
+	const tree = plant({
+		...designFiles,
+		"packages/tuval/package.json": manifest("@kampus/tuval", {
+			dependencies: {[DESIGN]: "workspace:*"},
+		}),
+		"packages/tuval/src/index.ts": lines(
+			'import {color} from "@kampus/fabrika-design";',
+			'import "@kampus/fabrika-design/tokens.css";',
+		),
+		"packages/tuval/src/deep.ts": lines(
+			'import "@kampus/fabrika-design/src/tokens.css";',
+			'import {color} from "../../../design/src/index.ts";',
+		),
+		"programs/counter/package.json": manifest("@kampus/counter"),
+		"programs/counter/src/index.ts": lines('import {color} from "@kampus/fabrika-design";'),
+		"programs/notes/package.json": manifest("@kampus/notes", {
+			dependencies: {"@kampus/pipeline": "workspace:*", [DESIGN]: "workspace:*"},
+		}),
+		"programs/notes/src/index.ts": lines("export const notes = 1;"),
+	});
+	const design = designAt(join(tree, "design"));
+
+	it("lets a manifest list the design package and no other outside workspace package", () => {
+		expect(manifestFaults(tree)).toEqual([
+			"programs/notes/package.json: depends on @kampus/pipeline, a workspace package outside next/",
+		]);
+	});
+
+	it("finds the real design package where it lives", () => {
+		expect(designAt(DESIGN_DIR)?.manifest.name).toBe(DESIGN);
+	});
+
+	it("lets a listed public import through, and refuses a deep, relative or unlisted one", () => {
+		expect([...importFaults(tree, design)].sort()).toEqual(
+			[
+				'packages/tuval/src/deep.ts imports "@kampus/fabrika-design/src/tokens.css": ./src/tokens.css is not in @kampus/fabrika-design\'s exports',
+				'packages/tuval/src/deep.ts imports "../../../design/src/index.ts": a relative path out of its package',
+				'programs/counter/src/index.ts imports "@kampus/fabrika-design": @kampus/fabrika-design is not in its package.json',
+			].sort(),
+		);
+	});
+
+	it("does not take a made-up outside package for the design package", () => {
+		const other = plant({
+			"packages/tuval/package.json": manifest("@kampus/tuval", {
+				dependencies: {"@kampus/fabrika-design-copy": "workspace:*"},
+			}),
+			"packages/tuval/src/index.ts": lines('import {x} from "@kampus/fabrika-design-copy";'),
+		});
+		expect(manifestFaults(other)).toEqual([
+			"packages/tuval/package.json: depends on @kampus/fabrika-design-copy, a workspace package outside next/",
+		]);
 	});
 });

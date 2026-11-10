@@ -171,6 +171,9 @@ const manifest = (name: string, extra: object = {}): object => ({
 
 const LIBRARY = "@kampus/libfabrika";
 const TUVAL = "@kampus/tuval";
+// P14, p65's one outside package (docs/direction/fabrika-design-package.md): the window imports the
+// design package's public names, its root and its stylesheet, and nothing deeper.
+const DESIGN = "@kampus/fabrika-design";
 
 /** What each part may import beyond itself: the detail's table, as it stands. */
 const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
@@ -186,7 +189,7 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 	door: ["app", "coordination", "data", "transport", "id"], // P17a: the library's door composes all four
 	mcp: ["app", "transport", "id"], // the named exception: the bridge is a client, as a window is
 	desktop: [LIBRARY], // the app layer's names, nothing lower
-	window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
+	window: ["desktop", LIBRARY, `${LIBRARY}/transport`, DESIGN, `${DESIGN}/tokens.css`], // a window is a client (the note's T3); P14: and it takes the design's public names
 	dom: ["desktop"],
 	browser: ["dom", "desktop", `${LIBRARY}/transport`], // its key signs transport's helloText
 	electron: ["dom", "desktop", `${LIBRARY}/transport`, `${LIBRARY}/coordination`], // the menu bar signs what the door takes
@@ -397,6 +400,41 @@ describe("planted breaks", () => {
 				'packages/tuval/src/headless/run.ts imports "../window/main.ts": headless may not import window',
 				'programs/notes/src/root.ts imports "@kampus/tuval": program may not import it',
 				'programs/notes/src/tile.ts imports "@kampus/libfabrika/transport": program-window may not import it',
+			].sort(),
+		);
+	});
+});
+
+describe("P14: the window's design imports", () => {
+	const tree = plant({
+		"packages/tuval/package.json": manifest(TUVAL),
+		"packages/tuval/src/window/main.tsx": lines(
+			'import {color} from "@kampus/fabrika-design";',
+			'import "@kampus/fabrika-design/tokens.css";',
+			'import {Layout} from "../desktop/layout.ts";',
+		),
+		"packages/tuval/src/window/deep.tsx": lines(
+			'import "@kampus/fabrika-design/src/tokens.css";',
+			'import {theme} from "@kampus/fabrika-design/tokens";',
+		),
+		"packages/tuval/src/desktop/layout.ts": lines('import {color} from "@kampus/fabrika-design";'),
+		"packages/tuval/src/desktop/other.ts": lines('import {pipe} from "@kampus/pipeline";'),
+		"packages/tuval/src/browser/key.ts": lines('import {color} from "@kampus/fabrika-design";'),
+		"packages/libfabrika/package.json": manifest(LIBRARY),
+		"packages/libfabrika/src/transport/wire.ts": lines(
+			'import {color} from "@kampus/fabrika-design";',
+		),
+	});
+
+	it("takes the design's public names in the window and refuses a deep import and the other parts", () => {
+		expect([...faults(tree)].sort()).toEqual(
+			[
+				'packages/tuval/src/window/deep.tsx imports "@kampus/fabrika-design/src/tokens.css": window may not import it',
+				'packages/tuval/src/window/deep.tsx imports "@kampus/fabrika-design/tokens": window may not import it',
+				'packages/tuval/src/desktop/layout.ts imports "@kampus/fabrika-design": desktop may not import it',
+				'packages/tuval/src/desktop/other.ts imports "@kampus/pipeline": desktop may not import it',
+				'packages/tuval/src/browser/key.ts imports "@kampus/fabrika-design": browser may not import it',
+				'packages/libfabrika/src/transport/wire.ts imports "@kampus/fabrika-design": transport may not import it',
 			].sort(),
 		);
 	});

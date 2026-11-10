@@ -880,3 +880,122 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 		},
 	);
 });
+
+// P14 (ticket 286), the plan's "Browser records": checked client samples through the sink's own queue
+// and health path. Written before `SpanSink.ingest`. The shape these laws hold it to:
+// - `ingest(samples)` answers `{acknowledged}`: the ids of the samples that are durably in `unsent`
+//   when it returns. A sample is `{id, name, ms, tags}`: `id` and `name` text, `ms` a finite number,
+//   `tags` words, numbers and booleans only. Anything else is rejected: not acknowledged, not stored.
+// - The same id again is one row (a retry is safe), and still acknowledged.
+// - The caller never says who wrote it: a `chain`, `by` or `process` on a sample is not read, and the
+//   row lands under the server's own `spans` chain.
+// - A write that meets SQLITE_FULL is not acknowledged; the same samples sent again are, and land once.
+describe("P14: client samples are checked, durable before they are acknowledged, and idempotent", () => {
+	const word = fc.stringMatching(/^[a-z][a-z0-9.]{0,11}$/);
+	const sample = fc.record({
+		id: fc.stringMatching(/^s[0-9a-f]{8}$/),
+		name: word,
+		ms: fc.double({min: 0, max: 60_000, noNaN: true}),
+		tags: fc.dictionary(word, fc.oneof(word, fc.integer(), fc.boolean()), {maxKeys: 3}),
+	});
+	const batch = fc.array(sample, {minLength: 1, maxLength: 12});
+	const bad = fc.constantFrom<unknown>(
+		{name: "x", ms: 1, tags: {}},
+		{id: 7, name: "x", ms: 1, tags: {}},
+		{id: "sbad0001", name: "x", ms: Number.NaN, tags: {}},
+		{id: "sbad0002", name: "x", ms: 1, tags: {deep: {nested: 1}}},
+		{id: "sbad0003", name: 5, ms: 1, tags: {}},
+		null,
+		"text",
+	);
+	const ingest = (samples: ReadonlyArray<unknown>) =>
+		Effect.promise(
+			async () =>
+				// oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
+				(await import("./sink.ts")) as unknown as {
+					SpanSink: {
+						use: (
+							f: (s: {
+								ingest: (
+									x: ReadonlyArray<unknown>,
+								) => Effect.Effect<{acknowledged: ReadonlyArray<string>}>;
+							}) => Effect.Effect<{acknowledged: ReadonlyArray<string>}>,
+						) => Effect.Effect<{acknowledged: ReadonlyArray<string>}>;
+					};
+				},
+		).pipe(Effect.flatMap(({SpanSink: sink}) => sink.use((s) => s.ingest(samples))));
+	const stored = (db: DatabaseSync, id: string): number =>
+		count(db, "unsent", `row LIKE '%${id}%'`);
+
+	it("durable before acknowledged, once however often it is sent, and bad samples are refused", async () => {
+		await fc.assert(
+			fc.asyncProperty(batch, fc.array(bad, {maxLength: 4}), async (good, junk) => {
+				const {db, sql} = home();
+				const unique = [...new Set(good.map((g) => g.id))];
+				const first = good.filter((g, i) => good.findIndex((x) => x.id === g.id) === i);
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const a = yield* ingest([...junk, ...good]);
+						expect([...a.acknowledged].sort()).toEqual([...unique].sort());
+						for (const g of first)
+							expect(stored(db, g.id), `${g.id} is in unsent when ingest returns`).toBe(1);
+						const again = yield* ingest([...good, ...junk]);
+						expect([...again.acknowledged].sort()).toEqual([...unique].sort());
+						for (const g of first) expect(stored(db, g.id), `${g.id} after a retry`).toBe(1);
+						for (const j of ["sbad0001", "sbad0002", "sbad0003"]) expect(stored(db, j)).toBe(0);
+					}).pipe(Effect.provide(world(sql))),
+				);
+			}),
+			{seed: SEED, numRuns: 60},
+		);
+	});
+
+	it("the caller's writer is never trusted: a named chain, by or process lands under spans", async () => {
+		await fc.assert(
+			fc.asyncProperty(batch, async (good) => {
+				const {sql} = home();
+				const lying = good.map((g) => ({
+					...g,
+					chain: job(P2),
+					by: {key: "k", for: P2},
+					process: P2,
+				}));
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						yield* ingest(lying);
+						yield* flush;
+						expect(yield* recorded(job(P2))).toEqual([]);
+						expect((yield* recorded(spans)).length).toBeGreaterThanOrEqual(
+							new Set(good.map((g) => g.id)).size,
+						);
+					}).pipe(Effect.provide(world(sql))),
+				);
+			}),
+			{seed: SEED, numRuns: 40},
+		);
+	});
+
+	it("a failed write is not acknowledged, and the same samples sent again land once", async () => {
+		await fc.assert(
+			fc.asyncProperty(batch, async (good) => {
+				const {db, sql: real} = home();
+				const {sql, arm} = filling(real);
+				const unique = [...new Set(good.map((g) => g.id))];
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						yield* ingest([{id: "swarm001", name: "warm", ms: 1, tags: {}}]);
+						arm(Number.POSITIVE_INFINITY);
+						const failed = yield* ingest(good);
+						expect(failed.acknowledged, "nothing is acknowledged that did not land").toEqual([]);
+						for (const id of unique) expect(stored(db, id)).toBe(0);
+						arm(0);
+						const ok = yield* ingest(good);
+						expect([...ok.acknowledged].sort()).toEqual([...unique].sort());
+						for (const id of unique) expect(stored(db, id), `${id} lands once`).toBe(1);
+					}).pipe(Effect.provide(world(sql))),
+				);
+			}),
+			{seed: SEED, numRuns: 40},
+		);
+	});
+});

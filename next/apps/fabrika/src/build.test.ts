@@ -235,3 +235,115 @@ describe("P12 Rolldown build", () => {
 		},
 	);
 });
+
+// P14 (ticket 286), the plan's "Build, screens and styles". Written before the browser half of
+// `build.ts`. The shape these laws hold it to:
+// - `build({out, browser})`: `browser` is the entry module to bundle for the tab, default
+//   `src/entry/browser.tsx`. It goes through the same Compiler plugin and the same ledger check.
+// - The result gains `page` (the HTML), `script` (the browser bundle as text) and `style`, the CSS
+//   collected in order, each `{source: "manti" | "tokens" | "tuval", css}`.
+// - `out` gains `window.js` (the script) and `page.html` (the page). The page holds every style text
+//   in that order and loads `/window.js`; the script imports nothing from outside itself.
+// - A failure of any kind (a Compiler finding, a bundle error) publishes nothing: every byte of the
+//   last good `out`, `brain.mjs` and the browser files included, stays as it was.
+describe("P14 browser build", () => {
+	const fixture = (name: string, view: string) => {
+		const folder = home();
+		mkdirSync(join(folder, "node_modules"));
+		symlinkSync(
+			resolve(
+				import.meta.dirname,
+				"../../../../node_modules/.pnpm/react@19.3.1/node_modules/react",
+			),
+			join(folder, "node_modules/react"),
+		);
+		const entry = join(folder, "entry.tsx");
+		writeFileSync(join(folder, `${name}.tsx`), view);
+		writeFileSync(entry, `import {Tip} from "./${name}.tsx"; export const mounted = Tip;`);
+		return {folder, entry, file: join(folder, `${name}.tsx`), out: join(folder, "dist")};
+	};
+	const sources = ["manti", "tokens", "tuval"];
+
+	it("publishes the page, the script and the brain together, with the styles in order", async () => {
+		const {build} = await import("./build.ts");
+		const out = join(home(), "dist");
+		// oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
+		const built = (await runNode(build({out}))) as unknown as {
+			page: string;
+			script: string;
+			style: ReadonlyArray<{source: string; css: string}>;
+		};
+		expect(built.style.map((s) => s.source)).toEqual(sources);
+		for (const s of built.style)
+			expect(s.css.length, `${s.source} css is not empty`).toBeGreaterThan(0);
+		const at = built.style.map((s) => built.page.indexOf(s.css));
+		expect(
+			at.every((n) => n >= 0),
+			"the page holds every style text",
+		).toBe(true);
+		expect(at).toEqual([...at].sort((a, b) => a - b));
+		expect(built.page).toContain("/window.js");
+		expect(readFileSync(join(out, "window.js"), "utf8")).toBe(built.script);
+		expect(readFileSync(join(out, "page.html"), "utf8")).toBe(built.page);
+		expect(readdirSync(out)).toContain("brain.mjs");
+		// A self-contained browser script: no bare or platform import left, no Node, Worker or MCP name.
+		expect(built.script).not.toMatch(/(?:^|\n)\s*import\s[^;]*from\s*["'](?!\.|\/|https?:)/);
+		for (const word of ["node:", "cloudflare:", "@modelcontextprotocol", 'require("react'])
+			expect(built.script).not.toContain(word);
+	});
+
+	for (const [plant, source] of plants) {
+		law(
+			`a Compiler finding in the browser entry's views publishes nothing: ${plant}`,
+			async ({name}) => {
+				const {build} = await import("./build.ts");
+				const {folder, entry, file, out} = fixture(name, clean);
+				const options = {out, files: [], ledger: [], browser: entry};
+				await runNode(build(options));
+				const before = snapshot(out);
+				expect(before.map(([n]) => n)).toEqual(
+					expect.arrayContaining(["window.js", "page.html", "brain.mjs"]),
+				);
+				writeFileSync(file, source);
+				const failed = await runNode(Effect.exit(build(options)));
+				expect(
+					Exit.isFailure(failed),
+					"the browser entry's TSX is checked even with files: []",
+				).toBe(true);
+				expect(snapshot(out)).toEqual(before);
+				expect(readdirSync(folder).filter((n) => n.startsWith(".fabrika-build-"))).toEqual([]);
+			},
+		);
+	}
+	law(
+		"a browser bundle that cannot build publishes nothing and leaves no temporary folder",
+		async ({name}) => {
+			const {build} = await import("./build.ts");
+			const {folder, entry, out} = fixture(name, clean);
+			const options = {out, files: [], ledger: [], browser: entry};
+			await runNode(build(options));
+			const before = snapshot(out);
+			writeFileSync(entry, 'import {gone} from "./nothing-here.ts"; export const x = gone; ((');
+			const failed = await runNode(Effect.exit(build(options)));
+			expect(Exit.isFailure(failed)).toBe(true);
+			expect(snapshot(out)).toEqual(before);
+			expect(readdirSync(folder).filter((n) => n.startsWith(".fabrika-build-"))).toEqual([]);
+		},
+	);
+	law(
+		"a good rebuild replaces every file at once and the build hash follows the script",
+		async ({name, label}) => {
+			const {build} = await import("./build.ts");
+			const {entry, file, out} = fixture(name, clean);
+			const options = {out, files: [], ledger: [], browser: entry};
+			// oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
+			const first = (await runNode(build(options))) as unknown as {script: string};
+			writeFileSync(file, `export const Tip = () => <b>{${JSON.stringify(label)}}</b>;`);
+			// oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
+			const second = (await runNode(build(options))) as unknown as {script: string};
+			expect(readFileSync(join(out, "window.js"), "utf8")).toBe(second.script);
+			expect(second.script).toContain(label);
+			expect(first.script).not.toContain(label);
+		},
+	);
+});
