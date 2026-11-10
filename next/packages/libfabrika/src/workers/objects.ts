@@ -1,4 +1,5 @@
-import * as Cloudflare from "@alchemy.run/cloudflare";
+import { DurableObject } from "@alchemy.run/cloudflare/Workers/DurableObject";
+import { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import type { ProjectBinding, ProcessBinding, GatewayBinding } from "./bindings.ts";
 import type { recordWrite } from "./record.ts";
 
@@ -20,8 +21,8 @@ export type RecordShape = {
 export type ProjectShape = ProjectBinding;
 export type ProcessShape = ProcessBinding;
 export type GatewayShape = GatewayBinding;
-export class Project extends Cloudflare.DurableObject<Project, ProjectShape>()("Project") {}
-export class Process extends Cloudflare.DurableObject<Process, ProcessShape>()("Process") {}
-export class Gateway extends Cloudflare.DurableObject<Gateway, GatewayShape>()("Gateway") {}
-export class RecordPart extends Cloudflare.DurableObject<RecordPart, RecordShape>()("RecordPart") {}
-export class Brain extends Cloudflare.Worker<Brain, Record<never, never>, RecordPart>()("Brain") {}
+export class Project extends DurableObject<Project, ProjectShape>()("Project") {}
+export class Process extends DurableObject<Process, ProcessShape>()("Process") {}
+export class Gateway extends DurableObject<Gateway, GatewayShape>()("Gateway") {}
+export class RecordPart extends DurableObject<RecordPart, RecordShape>()("RecordPart") {}
+export class Brain extends Worker<Brain, Record<never, never>, RecordPart>()("Brain") {}
