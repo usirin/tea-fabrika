@@ -152,8 +152,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - Claude runs under `sandbox-exec`: it cannot read `~/.fabrika/step-keys`, the leak words or
   `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
   work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
-- Mutation runs on `--agent claude` only, since it binds ports and starts Electron. One mutation
-  step at a time holds `BOXES/state/electron.lock`; the next waits.
+- Mutation runs on `--agent claude` only, since it binds ports and starts Electron. Start any
+  other Claude step whose laws or shots run the app with `--electron`. The box cannot write
+  `BOXES/state/electron.lock`, so drive takes it outside the box before the agent starts and holds
+  it for the whole step; the next Electron step waits. The sandbox is unchanged.
 - It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
   by a step it accepted) or the newest tip on origin of the branch or its `-wip` backup when that
   is ahead of it, else `origin/main`. So a lead commit (a merge of main, a lockfile commit) pushed
