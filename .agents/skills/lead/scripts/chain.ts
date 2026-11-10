@@ -319,7 +319,7 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
 
 	if (step === "mutation") {
 		lines.push(
-			`T=${f.ticket}, BUILD=${short(f.heads.tests ?? f.root)}..${short(f.heads.build ?? f.head)} (this round's build commits).`,
+			`T=${f.ticket}, BUILD=${short(f.heads.build ?? f.head)} (the newest build commit; the mutation sampler diffs it against its parent).`,
 		);
 	}
 

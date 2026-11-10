@@ -9,10 +9,12 @@
 // The agent runs through today's fabrika agents package on its ACP rows (./agents.ts): Codex or
 // Claude Code, unchanged, in the harness's own containment, with only its model login
 // (.decisions/0026, 0028). The box's git data sits outside the box, where the harness lets no
-// command read or write it, so the agent commits nothing: it leaves its changes in the tree, and
-// drive copies them into a fresh worktree of the main checkout and commits them as one signed step
-// commit through stepcommit, with main's own signer. Mutation runs on Claude only (it binds ports
-// and starts Electron), one Electron step at a time. The box cannot write state/electron.lock, so
+// command write it, so the agent commits nothing: it reads git through a view (`gitView`), leaves
+// its changes in the tree, and drive copies them into a fresh worktree of the main checkout and
+// commits them as one signed step commit through stepcommit, with main's own signer. Mutation runs
+// on Claude only, one Electron step at a time. Neither row lets a command listen on a port or a
+// unix socket yet (EPERM, measured 2026-11-09), so a step that runs Stryker or a socket law is
+// stuck until the harness rows can open one (tracker ticket 483). The box cannot write state/electron.lock, so
 // drive holds it for the whole step, outside the box: for mutation, and for a Claude step started
 // with --electron (a step whose laws or shots run the app). The chain runs these same pieces in
 // process (`prepare`, `driveStep`); the command below is for one step by hand.
@@ -456,6 +458,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
 const BOX_FILES = [
 	"",
 	"-gitdata",
+	"-view",
 	"-prompt.md",
 	".md",
 	".jsonl",
@@ -826,6 +829,44 @@ const boxGit = (env: Env, box: string, ...args: string[]) => {
 	return {code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? ""};
 };
 
+/**
+ * Git the agent can read. The box's own git data sits beside the box, where the harness closes
+ * everything, and it borrows its objects from the main checkout, closed too. So the agent gets a
+ * view: a mirror of the main checkout's git data (hard links, no copy), holding the box as a linked
+ * worktree at the step's base. The harness opens a worktree's git folder to read only
+ * (`gitOf` in packages/fabrika/src/agents/claude/sandbox.ts), so `git diff`, `log` and `show` work
+ * in the box and nothing git keeps can be written. drive never reads the view or the box's `.git`
+ * file: it reads the box's own data (`boxGit`). Returns what failed, or `null`.
+ */
+const gitView = (env: Env, ask: Ask): string | null => {
+	const work = join(env.BOXES, ask.box);
+	const view = join(env.BOXES, `${ask.box}-view`);
+	const own = join(view, "worktrees", ask.box);
+	const clone = sh("git", ["clone", "-q", "--mirror", "--local", env.MAIN, view]);
+
+	if (clone.code !== 0) {
+		return `git view: ${tail(clone.err)}`;
+	}
+
+	mkdirSync(own, {recursive: true});
+	writeFileSync(join(own, "commondir"), "../..\n");
+	writeFileSync(join(own, "gitdir"), `${join(work, ".git")}\n`);
+	writeFileSync(join(own, "HEAD"), `${ask.base}\n`);
+	copyFileSync(join(env.BOXES, `${ask.box}-gitdata`, "index"), join(own, "index"));
+	writeFileSync(join(work, ".git"), `gitdir: ${own}\n`);
+	return null;
+};
+
+/** The view goes when the step ends, and a box that stays gets its own `.git` line back. */
+const dropView = (env: Env, box: string) => {
+	const work = join(env.BOXES, box);
+	rmSync(join(env.BOXES, `${box}-view`), {recursive: true, force: true});
+
+	if (box !== "" && existsSync(join(env.BOXES, `${box}-gitdata`)) && existsSync(work)) {
+		writeFileSync(join(work, ".git"), `gitdir: ${join(env.BOXES, `${box}-gitdata`)}\n`);
+	}
+};
+
 /** Each file the agent left changed in the box's tree, by its status letters. */
 export const changesOf = (porcelain: string): {xy: string; path: string}[] =>
 	porcelain
@@ -975,7 +1016,14 @@ const handlers = (env: Env) => {
 					cmd.lane,
 				);
 				writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
-				return startedOf(r.code, r.err);
+				const started = startedOf(r.code, r.err);
+
+				if (started._tag !== "made") {
+					return started;
+				}
+
+				const problem = gitView(env, cmd);
+				return problem === null ? started : {_tag: "failed" as const, detail: problem};
 			}),
 		step_read: (ask: Ask) =>
 			Effect.sync((): Read => {
@@ -1159,6 +1207,7 @@ const handlers = (env: Env) => {
 				const {ask} = e;
 				const notes: string[] = [];
 				const ended = new Date().toISOString();
+				dropView(env, ask.box);
 
 				// The saved files are scrubbed first (redact.sh prints only a count), then the field row,
 				// held beside the boxes until a field PR lands it.
@@ -1249,8 +1298,8 @@ export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) 
 		ask.step === "plan"
 			? "Change no file. Your final message is the plan.\n"
 			: ask.step === "review"
-				? "Change no file: a review that leaves a changed file is stuck.\n"
-				: "git does not work in your box: its data is outside, where the box lets nothing read or write. Do not try to commit, run stepcommit or pnpm commits sign; you hold no step key. Leave every change in the tree, and drive.ts commits and signs all of it as one step commit when you answer. Never push.\n";
+				? "Change no file: a review that leaves a changed file is stuck. git reads work in your box (diff, log, show). Run no command that writes, not even a scratch copy or a temp file: your box refuses it, and a refused command ends your turn with no answer.\n"
+				: "git only reads in your box (status, diff, log, show): its data is outside, where the box lets nothing write. Do not try to stage, stash, check out or commit, run stepcommit or pnpm commits sign; you hold no step key. Leave every change in the tree, and drive.ts commits and signs all of it as one step commit when you answer. Never push.\n";
 	const lock = holdsElectron(ask.step, electron)
 		? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
 		: "";

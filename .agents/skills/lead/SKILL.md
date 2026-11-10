@@ -209,14 +209,24 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 A lead agent used to sit for hours on one lane, starting each step and reading its answer. That
 loop is code now (owner, 2026-11-09; tracker ticket 341). `chain.ts` is a tea machine on the
 Effect engine whose Cmds run `drive.ts`'s pieces in process for each step (`prepare`, then
-`driveStep`), read the step's one line, and pick the next move; a fresh Claude agent is started
+`driveStep`), read the step's one line, and pick the next move; a fresh read-only agent is started
 only where judgment is needed, and it is gone after one answer. Every agent, a step's and the
 judgment's, runs through today's fabrika agents package (`Agent`, `@kampus/fabrika-old`) on its ACP
 rows, the same harness rows `summon` starts (`scripts/agents.ts`, owner, 2026-11-09): Codex writes
 its box or only reads it (plan, review), Claude runs in its own OS sandbox. The box's git data is
 outside the box, so the agent commits nothing: it leaves its changes in the tree, and drive copies
-them into a worktree of the main checkout and signs them as one step commit (0028). It answers with
-one JSON object (verb, to, why, laws), read by the agents package's schema. Start it in the
+them into a worktree of the main checkout and signs them as one step commit (0028). A box reads
+nothing beside itself, so drive puts the approved plan's text in the step's prompt, and gives the
+box a git view to read: a hard-linked mirror of the main checkout's git data, `BOXES/<box>-view`,
+which the harness opens read-only and drive removes when the step ends (`git diff`, `log` and
+`show` work; nothing git keeps can be written). A brief names no file outside the box. The step
+answers with one JSON object (verb, to, why, laws), read by the agents package's schema.
+
+Measured on the first real lane (t411, 2026-11-09): neither row lets a command listen on a port or
+a unix socket (`EPERM`), so a step that runs Stryker or a socket law is stuck on these rows until
+the harness can open one (tracker ticket 483). On the read-only Codex row, a command that writes
+is refused and that ends the turn `cancelled` with no answer (ticket 484), so drive tells a review
+to run no writing command. Start it in the
 background and read the last line only:
 
 ```sh
@@ -247,9 +257,9 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   (`CHAIN_STUCKS`), `MaxSteps` 16 (`CHAIN_STEPS`). Proven against the real `drive.ts` on 2026-11-09
   with the disk under the 20 GB floor: the step was tried, retried on the schedule, and the lane
   ended `stuck` with `RetriesExhausted` and drive's reason, exit 30.
-- **Judgment** (an `ask:lead:question`, or a `stuck`): the chain runs one Claude turn in the main
-  checkout on the same agents-package row, told to change nothing, with the lane's state file and
-  the step's report. It answers one JSON object: `send` with a step and a note runs that step again
+- **Judgment** (an `ask:lead:question`, or a `stuck`): the chain runs one turn in the main
+  checkout on the agents package's read-only Codex row, which cannot change the checkout, with the
+  lane's state file and the step's report in its prompt. It answers one JSON object: `send` with a step and a note runs that step again
   with the note in its brief; `park` with why ends the lane for the lead.
   Its field row goes to `BOXES/<lane>-rows.jsonl` like a step's. Three stucks in a row on one
   step park without asking. Mutation always runs on Claude; `--claude` names other steps that need
