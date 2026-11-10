@@ -26,6 +26,7 @@ export const STEPS = [
 	"push",
 	"merge",
 ] as const;
+
 export const StepName = Schema.Literals(STEPS);
 export type StepName = typeof StepName.Type;
 

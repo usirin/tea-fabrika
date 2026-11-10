@@ -7,7 +7,9 @@ import {parseSync, Visitor} from "oxc-parser";
 
 const map = (x: unknown): x is Record<string, unknown> =>
 	typeof x === "object" && x !== null && !Array.isArray(x);
+
 const declaration = (file: string) => /\.d\.[cm]?ts$/.test(file);
+
 // Keep runtime conditions, including custom ones, but never TypeScript's types branch.
 const targets = (x: unknown): string[] =>
 	typeof x === "string"
@@ -19,6 +21,7 @@ const targets = (x: unknown): string[] =>
 					condition === "types" ? [] : targets(target),
 				)
 			: [];
+
 const worker = (name: string) =>
 	/^(?:cloudflare:|workerd(?:\/|$)|miniflare(?:\/|$)|@alchemy\.run\/cloudflare-runtime(?:\/|$)|@kampus\/libfabrika\/(?:box|workers)(?:\/|$))/.test(
 		name,
@@ -43,6 +46,7 @@ const workerClass = (node: unknown): boolean =>
 		? typeof node.name === "string" &&
 			/^(?:WorkerEntrypoint|DurableObject|WorkflowEntrypoint)$/.test(node.name)
 		: node.type === "MemberExpression" && workerClass(node.property));
+
 // A module Worker's default export names its event handlers.
 const handler = /^(?:fetch|scheduled|queue|email|tail)$/;
 const windowFile = (file: string) => /\.[jt]sx$/.test(file) && !/\.test\.[jt]sx$/.test(file);

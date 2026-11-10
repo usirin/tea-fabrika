@@ -65,6 +65,7 @@ const runtimes: ManagedRuntime.ManagedRuntime<Keys, never>[] = [];
 // hour, so a run beside this one keeps its own. The root .gitignore names the pattern too.
 const PLANT = ".door-laws-plant-";
 const STALE_MS = 60 * 60 * 1000;
+
 const clearStalePlants = () => {
 	for (const name of readdirSync(import.meta.dirname)) {
 		if (!name.startsWith(PLANT)) continue;
@@ -72,6 +73,7 @@ const clearStalePlants = () => {
 		if (Date.now() - statSync(dir).mtimeMs > STALE_MS) rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 afterAll(async () => {
 	for (const rt of runtimes) await rt.dispose();
 	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
@@ -117,6 +119,7 @@ const ORIGIN = "https://ledger.test";
 const NS = "fabrika-ledger";
 
 type Key = {readonly line: string; readonly sign: (text: string) => Promise<string>};
+
 const newKey = async (): Promise<Key> => {
 	const pair = (await crypto.subtle.generateKey({name: "Ed25519"}, true, [
 		"sign",
@@ -128,10 +131,12 @@ const newKey = async (): Promise<Key> => {
 
 /** A pool of Ed25519 keys, made once and reused, so a law's many runs do not each make keys. */
 let POOL: Key[] = [];
+
 beforeAll(async () => {
 	clearStalePlants();
 	POOL = await Promise.all(Array.from({length: 12}, () => newKey()));
 });
+
 /** The nth key of the pool. */
 const key = (i: number): Key => {
 	const k = POOL[i];
@@ -323,9 +328,11 @@ const sessionCount = (W: World): number =>
 const ensure = (cond: boolean, msg: string): void => {
 	if (!cond) throw new Error(msg);
 };
+
 const eq = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 type Answer = {ok: true} | {ok: false; status: number; why: string};
+
 /** The one answer for a keys service that failed: exactly `{status: 502, why: UNAVAILABLE}`. */
 const unavailable = (mod: Mod, r: Answer): boolean =>
 	!r.ok && eq({status: r.status, why: r.why}, {status: 502, why: mod.UNAVAILABLE});
@@ -342,12 +349,14 @@ type Req =
 const name = fc.constantFrom("ticket:1", "plan:2", "counter:3", "t/inbox", "a:1/b");
 const kind = fc.constantFrom("note", "filed", "commented", "built");
 const host = fc.constantFrom("host-a", "h1", "host-a@17", "L12");
+
 const reqTable: MsgArbitraryTable<Req> = {
 	register: arbRecordMsg("register", {name}),
 	append: arbRecordMsg("append", {stream: name, kind}),
 	exit: arbRecordMsg("exit", {name}),
 	claim: arbRecordMsg("claim", {name, host}),
 };
+
 const arbReq = arbMsg(reqTable);
 
 const ghId = fc.integer({min: 1, max: 9999}).map((n) => `github:${n}`);
@@ -1071,6 +1080,7 @@ const PEOPLE = [
 	{id: "github:9", name: "carol", key: 2},
 	{id: "github:10", name: "dave", key: 3},
 ] as const;
+
 /** The names a random run types: the people's, other cases of them, and names nobody has yet. */
 const NAMES = ["alice", "bob", "carol", "dave", "Bob", "ALICE", "robert", "zed"] as const;
 const AGENT_KEY = 5;
@@ -1099,6 +1109,7 @@ type Op =
 
 const nameIx = fc.nat({max: NAMES.length - 1});
 const personIx = fc.nat({max: PEOPLE.length - 1});
+
 const arbOp: fc.Arbitrary<Op> = fc.oneof(
 	fc.record({type: fc.constant("login" as const), as: nameIx, key: fc.nat({max: 4})}),
 	fc.record({type: fc.constant("self" as const), who: personIx}),
@@ -1107,6 +1118,7 @@ const arbOp: fc.Arbitrary<Op> = fc.oneof(
 	fc.record({type: fc.constant("remove" as const), by: fc.nat({max: 3}), who: fc.nat({max: 7})}),
 	fc.record({type: fc.constant("rename" as const), who: personIx, to: nameIx}),
 );
+
 /** alice's first login: it founds the ledger. */
 const FOUND: Op = {type: "self", who: 0};
 /** A random run, from a ledger not yet founded. */
@@ -1131,6 +1143,7 @@ const grantFor = (W: World, name: string) =>
 	});
 
 const loginOp = (W: World, name: string, k: number) => loginWith(W, name, key(k));
+
 const agentOp = (W: World, name: string, k: number) =>
 	agentLogin(W, {grant: grantFor(W, name), by: key(k), signer: key(AGENT_KEY)});
 
@@ -1692,23 +1705,28 @@ const provenAsModel: Law = {
 
 /** One question to `Keys`: by id, or by name. */
 type Q = {readonly q: "byId" | "of"; readonly arg: string};
+
 const GH_PEOPLE = [
 	["alice", 7],
 	["bob", 8],
 	["carol", 9],
 ] as const;
+
 const arbQ: fc.Arbitrary<Q> = fc.constantFrom(
 	...GH_PEOPLE.map(([, n]): Q => ({q: "byId", arg: `github:${n}`})),
 	...GH_PEOPLE.map(([login]): Q => ({q: "of", arg: login})),
 );
+
 /** A fake GitHub with alice, bob and carol, one key each. */
 const ghPeople = () => {
 	const gh = fakeGitHub();
 	for (const [login, n] of GH_PEOPLE) gh.users.set(login, {id: n, keys: [`ssh-ed25519 AAAA${n}`]});
 	return gh;
 };
+
 /** Where Effect's TestClock starts in these laws: a whole second, in 2027. */
 const T0 = 1_800_000_000_000;
+
 /** A question's answer as text: its keys, or the tag it failed with. */
 const answerOf = (mod: Mod, x: Q) =>
 	mod.Keys.use((k) => (x.q === "byId" ? k.byId(x.arg) : k.of(x.arg))).pipe(
@@ -1717,6 +1735,7 @@ const answerOf = (mod: Mod, x: Q) =>
 			onSuccess: (s): string => `keys ${JSON.stringify(s?.keys ?? null)}`,
 		}),
 	);
+
 /** `body` on a fresh `layerGitHub` over `gh`, with Effect's TestClock at `T0`. */
 const onTestClock = (
 	mod: Mod,
@@ -1737,7 +1756,9 @@ const arbLimit = fc.record({
 	how: fc.constantFrom("after" as const, "date" as const, "reset" as const),
 	secs: fc.integer({min: 1, max: 3600}),
 });
+
 type Limit = typeof arbLimit extends fc.Arbitrary<infer T> ? T : never;
+
 const limitHeaders = (l: Limit): Record<string, string> =>
 	l.how === "after"
 		? {"retry-after": String(l.secs)}
@@ -1814,6 +1835,7 @@ const arbHeader = fc.oneof(
 	fc.integer({min: 1, max: 10 * 365 * 24 * 3600}).map((s) => new Date(T0 + s * 1000).toUTCString()),
 	fc.stringMatching(/^[ -~]{0,16}$/),
 );
+
 const arbForged = fc
 	.record(
 		{
@@ -1981,6 +2003,7 @@ const waitEndsForAll: Law = {
 const HOUR = 60 * 60_000;
 /** How long a wait until `at` is, from `T0`: never below 0, never over an hour. */
 const waitUntil = (at: number) => Math.min(Math.max(at - T0, 0), HOUR);
+
 /** Seconds as text, to the wait they name, in BigInt so a number of any length is exact. */
 const waitOfSecs = (s: string) => {
 	const ms = BigInt(s) * 1000n;
@@ -1988,6 +2011,7 @@ const waitOfSecs = (s: string) => {
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
 const WEEKDAYS_LONG = [
 	"Sunday",
 	"Monday",
@@ -1997,6 +2021,7 @@ const WEEKDAYS_LONG = [
 	"Friday",
 	"Saturday",
 ] as const;
+
 const MONTHS = [
 	"Jan",
 	"Feb",
@@ -2011,10 +2036,12 @@ const MONTHS = [
 	"Nov",
 	"Dec",
 ] as const;
+
 const two = (n: number) => String(n).padStart(2, "0");
 
 /** The three forms of an HTTP-date, RFC 9110 section 5.6.7. */
 type DateForm = "imf" | "rfc850" | "asctime";
+
 /**
  * `t` (ms since 1970, a whole second, a year of four digits) as an HTTP-date in `form`, written here
  * by hand and not by `Date`'s own printer:
@@ -2035,6 +2062,7 @@ const httpDateText = (t: number, form: DateForm): string => {
 			return `${WEEKDAYS[d.getUTCDay()]} ${mon} ${String(day).padStart(2, " ")} ${time} ${year}`;
 	}
 };
+
 const arbForm = fc.constantFrom<DateForm>("imf", "rfc850", "asctime");
 /** Forty years in seconds: inside it a two-digit year is never in doubt. */
 const FORTY_YEARS = 40 * 365 * 24 * 3600;
@@ -2047,6 +2075,7 @@ const FORTY_YEARS = 40 * 365 * 24 * 3600;
  * These are IANA's fixed offsets, whose sign is the other way round: `Etc/GMT+12` is UTC-12.
  */
 const arbZone = fc.constantFrom("UTC", "Etc/GMT+12", "Etc/GMT-14");
+
 /** Runs a law whose runs set the zone, then puts back the zone the machine had. */
 const keepingZone = async (law: () => Promise<void>): Promise<void> => {
 	const was = process.env.TZ;
@@ -2079,7 +2108,9 @@ const arbParts = fc.record({
 	m: fc.nat({max: 59}),
 	s: fc.nat({max: 59}),
 });
+
 type Parts = typeof arbParts extends fc.Arbitrary<infer T> ? T : never;
+
 /** Ways to bend a date so it is no HTTP-date: a piece dropped, moved, spelled wrong or out of range. */
 const BENDS: readonly ((p: Parts) => string)[] = [
 	// IMF-fixdate with its weekday, its zone, its time, its seconds or its comma dropped.
@@ -2128,6 +2159,7 @@ const BENDS: readonly ((p: Parts) => string)[] = [
 ];
 
 const digits = fc.stringMatching(/^[0-9]{1,6}$/);
+
 /**
  * A header value that is neither digits only nor an HTTP-date: decimals, negatives, signs, spaces
  * inside, other spellings of numbers, huge numbers that are not digits only, words, ISO dates, and
@@ -2412,6 +2444,7 @@ const pastNoWait: Law = {
  */
 const NOW = new Date(T0);
 const THIS_YEAR = NOW.getUTCFullYear();
+
 /** `T0` fifty years on: the line a two-digit year's time may not pass. */
 const FIFTY_ON = Date.UTC(
 	THIS_YEAR + 50,
@@ -2421,14 +2454,17 @@ const FIFTY_ON = Date.UTC(
 	NOW.getUTCMinutes(),
 	NOW.getUTCSeconds(),
 );
+
 /** The two digits of the year fifty years on: the one year the line runs through. */
 const LINE_YY = (THIS_YEAR + 50) % 100;
+
 const rfc850Of = (yy: number, p: Parts) => {
 	let year = THIS_YEAR + 60 - ((THIS_YEAR + 60 - yy) % 100);
 	while (Date.UTC(year, p.mon, p.day, p.h, p.m, p.s) > FIFTY_ON) year -= 100;
 	const at = Date.UTC(year, p.mon, p.day, p.h, p.m, p.s);
 	return {at, year, text: httpDateText(at, "rfc850")};
 };
+
 const checkRfc850 = (mod: Mod, yy: number, p: Parts) => {
 	const {at, year, text} = rfc850Of(yy, p);
 	const w = mod.limitWait(403, {"retry-after": text}, T0);

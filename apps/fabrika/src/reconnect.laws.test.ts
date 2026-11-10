@@ -61,6 +61,7 @@ const malformed = {_tag: "malformed_result", issues: []} as const;
 
 const isTimer = (deps: unknown): deps is Timer =>
 	typeof deps === "object" && deps !== null && "ms" in deps && "msg" in deps;
+
 /** The subs `machine` asks for in `s`: the link's deps and the timer's, each null when off. */
 const subsOf = (machine: Machine, s: Reconnect) => {
 	const deps = (type: string) => machine.subs?.find((sub) => sub.type === type)?.deps(s) ?? null;
@@ -71,6 +72,7 @@ const subsOf = (machine: Machine, s: Reconnect) => {
 // ---------------------------------------------------------------- lists: any Msgs
 
 const why = fc.constantFrom("the socket closed", "EPIPE");
+
 /** What a try came to, mostly a failure, so lists reach long waits and the five minutes. */
 const tried: fc.Arbitrary<Tried> = fc.oneof(
 	{arbitrary: why.map((w) => ({kind: "lost", why: w}) as const), weight: 24},
@@ -83,7 +85,9 @@ const tried: fc.Arbitrary<Tried> = fc.oneof(
 		weight: 1,
 	},
 );
+
 const attempt = fc.integer({min: 0, max: 5});
+
 /** A pick the jitter Cmd's answer lets through: 0 to 30 s. Any other comes back as jitter_err. */
 const pick = fc.oneof(
 	fc.double({min: 0, max: MOST_WAIT, noNaN: true}),
@@ -108,11 +112,13 @@ const table: MsgArbitraryTable<Msg> = {
 		at: 0,
 	})),
 };
+
 /** Time between two Msgs: mostly short, sometimes a long silence, so lists cross five minutes. */
 const gap = fc.oneof(
 	{arbitrary: fc.nat({max: 3_000}), weight: 4},
 	{arbitrary: fc.integer({min: 20_000, max: 120_000}), weight: 1},
 );
+
 /** Each Msg that carries a time gets the clock's, and the clock only moves on. */
 const timed = (pairs: readonly (readonly [Msg, number])[]): readonly Msg[] => {
 	let now = 0;
@@ -121,6 +127,7 @@ const timed = (pairs: readonly (readonly [Msg, number])[]): readonly Msg[] => {
 		return "at" in msg ? {...msg, at: now} : msg;
 	});
 };
+
 const weights = {
 	attach_ok: 6,
 	jitter_ok: 4,
@@ -132,6 +139,7 @@ const weights = {
 	restart_ok: 2,
 	restart_err: 1,
 };
+
 const lists = fc
 	.array(fc.tuple(arbMsg(table, {weights}), gap), {maxLength: 40, size: "max"})
 	.map(timed);
@@ -172,6 +180,7 @@ interface World {
 	/** The link: not watched, watched, or watched and its one end already told. */
 	readonly link: "off" | "on" | "ended";
 }
+
 const EMPTY: World = {now: 0, tries: [], picks: [], timer: null, late: [], link: "off"};
 
 /** The world once `cmds` are asked for: each try and each pick is out until it is answered. */
@@ -256,6 +265,7 @@ interface Moment {
 	/** The world after the step, at the time the Msg came. */
 	readonly world: World;
 }
+
 interface Run {
 	readonly first: Reconnect;
 	/** The world once init has run. */
@@ -288,6 +298,7 @@ const simulate = (machine: Machine, choices: readonly Choice[]): Run => {
 
 /** The world's silences: as often long as short, so most runs live past five minutes. */
 const silence = fc.oneof(fc.nat({max: 3_000}), fc.integer({min: 20_000, max: 120_000}));
+
 const choice: fc.Arbitrary<Choice> = fc.oneof(
 	{arbitrary: silence.map((ms) => ({do: "wait", ms}) as const), weight: 3},
 	{
@@ -306,7 +317,9 @@ const choice: fc.Arbitrary<Choice> = fc.oneof(
 	{arbitrary: fc.constant({do: "again"} as const), weight: 1},
 	{arbitrary: fc.constant({do: "restart"} as const), weight: 1},
 );
+
 const choices = fc.array(choice, {maxLength: 100, size: "max"});
+
 /** The Msgs the world sends `machine`, for tea's pbt to fold again. */
 const worldLists = (machine: Machine) =>
 	choices.map((cs) => simulate(machine, cs).moments.map((m) => m.step.msg));
@@ -365,17 +378,22 @@ const isFailure = ({prev, msg}: ReStep) =>
 		(msg.type === "attach_err" || (msg.type === "attach_ok" && msg.value.kind === "lost"))) ||
 	(prev.at === "restarting" &&
 		(msg.type === "restart_err" || (msg.type === "restart_ok" && msg.value.kind === "lost")));
+
 /** May the person restart the host in `s`? On a host of another version, or of another build. */
 const restartable = (s: Reconnect) =>
 	s.at === "refused" || (s.at === "up" && s.found.kind === "build");
+
 /** The person's restart, where one is offered. */
 const isRestart = ({prev, msg}: ReStep) => msg.type === "restart" && restartable(prev);
+
 /** The attempts the step's picks are asked for. */
 const picksOf = (cmds: readonly ReconnectCmd[]) =>
 	cmds.flatMap((c) => (c.type === "jitter" ? [c.attempt] : []));
+
 /** A failure that does not stop asks exactly one pick, for `n` failures in a row. */
 const picksFor = (step: ReStep, n: number) =>
 	step.next.at === "stopped" ? step.cmds.length === 0 : same(picksOf(step.cmds), [n]);
+
 const isUp = ({prev, next}: ReStep) => prev.at !== "up" && next.at === "up";
 const isAgain = ({prev, msg}: ReStep) => prev.at === "stopped" && msg.type === "again";
 
@@ -661,21 +679,25 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = reconnectMachine.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...reconnectMachine,
 	update: {...real, ...update},
 });
+
 const timerSubs = reconnectMachine.subs?.filter((sub) => sub.type === "timer") ?? [];
 const linkSubs = reconnectMachine.subs?.filter((sub) => sub.type === "link") ?? [];
 /** The real machine with its subs changed. */
 const plantSubs = (subs: NonNullable<Machine["subs"]>): Machine => ({...reconnectMachine, subs});
+
 /** When the failures in a row began, while a try is out after one. */
 const originOf = (s: Reconnect) => {
 	const from =
 		s.at === "attaching" && "firstFailureAtMs" in s.retry ? s.retry.firstFailureAtMs : null;
 	return typeof from === "number" ? from : null;
 };
+
 /** What the real machine does on a try that failed at `at`, from `s`. */
 const lostFrom = (s: Reconnect, why: string, at: number) =>
 	real.attach_ok(s, attach.ok(attach({}), {kind: "lost", why}, at));

@@ -24,15 +24,19 @@ interface Diagnostic {
 }
 
 const ROOT = join(import.meta.dirname, "..");
+
 const scripts = readdirSync(join(ROOT, ".agents/skills"), {recursive: true, withFileTypes: true})
 	.filter((entry) => entry.isFile())
 	.map((entry) => join(entry.parentPath, entry.name).slice(ROOT.length + 1))
 	.filter((path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path));
+
 const missing = scriptReads(
 	new Map(scripts.map((path) => [path, readFileSync(join(ROOT, path), "utf8")])),
 );
+
 for (const row of missing)
 	console.error(`${row.test}: declare ${row.path}?raw, read through ${row.via}`);
+
 if (missing.length) process.exit(1);
 
 // A `.gitignore` hides a file from oxlint and oxfmt, and neither can be told to stop without also
@@ -40,6 +44,7 @@ if (missing.length) process.exit(1);
 // in one could take a whole folder out of the checks. Only `.gitignore` files count here, not this
 // machine's own ignore list.
 const hidden = checkTracked();
+
 if (!hidden.ok) {
 	console.error(
 		`Git failed or a .gitignore hides tracked files from the lint and format checks: ${hidden.files.map((file: string) => JSON.stringify(file)).join(", ")}`,
@@ -78,6 +83,7 @@ const read = (): readonly Diagnostic[] | null => {
 };
 
 const diagnostics = read();
+
 if (diagnostics === null) {
 	console.error(`oxlint did not finish: status ${ran.status}\n${ran.stdout}\n${ran.stderr}`);
 	process.exit(2);
@@ -87,6 +93,7 @@ const where = ({filename, labels}: Diagnostic) => {
 	const at = labels?.[0]?.span;
 	return at === undefined ? (filename ?? "") : `${filename}:${at.line}:${at.column}`;
 };
+
 const blocks = diagnostics.filter((d) => !ADVICE.has(d.code ?? ""));
 const advises = diagnostics.filter((d) => ADVICE.has(d.code ?? ""));
 for (const d of [...advises, ...blocks]) console.log(`${where(d)} ${d.code ?? ""} ${d.message}`);

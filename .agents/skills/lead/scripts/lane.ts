@@ -77,6 +77,25 @@ export const laneStuck = (out: string, laneSteps: ReadonlySet<string>): string[]
 		)
 		.map((a) => a.line);
 
+/**
+ * Each stuck answer that holds the step, as `<rule> <commit> [step <s>] [paths]`: the rule
+ * (stale_link, broken_chain, unsigned_commit, ...) and the commit, so the lead can send the step to
+ * the right place (ticket 429: 18 fetches on 2026-11-09 said only "commits check failed").
+ */
+export const heldRules = (out: string, laneSteps: ReadonlySet<string>): string[] =>
+	laneStuck(out, laneSteps).map((line) => {
+		const a = JSON.parse(line) as {why?: unknown; sha?: unknown; step?: unknown; paths?: unknown};
+		const paths = Array.isArray(a.paths) ? a.paths.slice(0, 3).map(String) : [];
+		return [
+			typeof a.why === "string" ? a.why : "stuck",
+			typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
+			typeof a.step === "string" ? `step ${a.step}` : "",
+			...paths,
+		]
+			.filter(Boolean)
+			.join(" ");
+	});
+
 /** Whether the commits check's exit holds the step: 0 never; 1 unless it gave stuck answers and
  * every one was waived; any other exit always. */
 export const checkHolds = (code: number, out: string, laneSteps: ReadonlySet<string>): boolean =>

@@ -16,6 +16,7 @@ import {describe, expect, it} from "vitest";
 const ROOT = resolve(import.meta.dirname, "..");
 const runs = {seed: 119120, numRuns: 8};
 const name = fc.integer({min: 0, max: 100000}).map((n) => `program${n}`);
+
 const run = (name: string, exports: unknown, sources: Readonly<Record<string, string>>) => {
 	const home = realpathSync(mkdtempSync("/tmp/p16-lint-"));
 	try {

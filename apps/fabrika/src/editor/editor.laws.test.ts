@@ -53,6 +53,7 @@ import {cells, PROMPT} from "./screen.ts";
 
 type Screen = typeof screen;
 type Machine = typeof editor;
+
 type Out =
 	| ReturnType<typeof write>
 	| ReturnType<typeof line>
@@ -849,6 +850,7 @@ describe("every plant", () => {
 // it. The "something good" laws press keys from wherever a list left the editor.
 
 type Msg = MsgOf<Machine>;
+
 type Cmd =
 	| ReturnType<typeof write>
 	| ReturnType<typeof line>
@@ -857,6 +859,7 @@ type Cmd =
 	| ReturnType<typeof keep>
 	// The plan's PR 1: the person's y or n to what a job asks.
 	| ReturnType<typeof answer>;
+
 type EditorStep = Step<Editor, Msg, Cmd>;
 
 const COLS = 80;
@@ -896,12 +899,15 @@ const PIECES = [
 	"\x1b[24~", // F12, bound to nothing
 	"\x1b", // Esc
 ];
+
 const piece = fc.oneof(
 	{weight: 30, arbitrary: fc.constantFrom(...PIECES)},
 	{weight: 1, arbitrary: fc.constant("\x04")}, // Ctrl-D: rare, as it ends tsh on an empty line
 );
+
 const data = fc.array(piece, {minLength: 1, maxLength: 4}).map((ps) => ps.join(""));
 const HISTORY = ["ls", "seq --to 3", "say", "true"];
+
 const job: Shell.Jobs = {
 	next: 2,
 	jobs: [
@@ -921,6 +927,7 @@ const job: Shell.Jobs = {
 /** A Cmd's failed answer. The editor's Cmds declare no errors, so a malformed answer is the one left. */
 const failed = <T extends string, C>(type: T, cmd: C) =>
 	fc.constant({type, cmd, error: {_tag: "malformed_result", issues: []} as const, at: 0});
+
 const [writing, lining, interrupting, closing, keeping, answering] = [
 	write({data: "x"}),
 	line({text: "ls"}),
@@ -929,6 +936,7 @@ const [writing, lining, interrupting, closing, keeping, answering] = [
 	keep({lines: ["ls"]}),
 	answer({n: 1, allow: true}),
 ] as const;
+
 /** What Tab offers after `summon` and `@`, as the host says it (the plan's PR 1, Tab). */
 const TALK: Shell.Talk = {
 	agents: ["fake"],
@@ -969,9 +977,12 @@ const tableFor = (size: fc.Arbitrary<number>): MsgArbitraryTable<Msg> => ({
 	answer_ok: fc.constant(answer.ok(answering, null, 0)),
 	answer_err: failed(answer.errType, answering),
 });
+
 const WEIGHTS = {weights: {keys: 30, ready: 4, printed: 2, ended: 1}};
+
 const listsOf = (table: MsgArbitraryTable<Msg>) =>
 	fc.array(arbMsg(table, WEIGHTS), {maxLength: 40, size: "max"});
+
 /** Any list, the terminal's width changing too. */
 const lists = listsOf(tableFor(fc.constantFrom(80, 20, 1, 0)));
 /** Lists where the terminal stays 80 wide, as the grid that reads the bytes back is. */
@@ -981,8 +992,10 @@ const OPTS = {numRuns: 300, seed: 1};
 // --- What a step did ---
 
 const lines = (cmds: readonly Cmd[]) => cmds.flatMap((c) => (c.type === "line" ? [c.text] : []));
+
 const toTsh = (cmds: readonly Cmd[]) =>
 	cmds.filter((c) => c.type === "line" || c.type === "interrupt" || c.type === "close");
+
 const bytes = (cmds: readonly Cmd[]) => cmds.flatMap((c) => (c.type === "write" ? [c.data] : []));
 
 /** Step `machine` on from `from` with these keys, keeping every Cmd it asks for. */
@@ -996,6 +1009,7 @@ const press = (machine: Machine, from: Editor, ...msgs: readonly Msg[]) => {
 	}
 	return {s, cmds};
 };
+
 const keys = (data: string): Msg => ({type: "keys", data});
 
 // --- The laws ---
@@ -1164,6 +1178,7 @@ const broken = (machine: Machine): readonly string[] =>
 // --- Planted mistakes ---
 
 const realUpdate = editor.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...editor,

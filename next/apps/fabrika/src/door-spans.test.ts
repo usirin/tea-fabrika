@@ -28,10 +28,12 @@ const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
 const SENT = "2026-11-08T04:00:00.000Z";
 const Input = Schema.TaggedUnion({comment: {text: Schema.String}});
 const text = fc.string({minLength: 1, maxLength: 100});
+
 const hex = (bytes: number) =>
 	fc
 		.uint8Array({minLength: bytes, maxLength: bytes})
 		.map((a) => `1${Buffer.from(a).toString("hex").slice(1)}`);
+
 const sample = fc.record({
 	seed: fc.uint8Array({minLength: 32, maxLength: 32}),
 	traceId: hex(16),
@@ -39,18 +41,23 @@ const sample = fc.record({
 	text,
 	id: fc.uuid(),
 });
+
 type Sample = typeof sample extends fc.Arbitrary<infer A> ? A : never;
+
 const u32 = (n: number) => {
 	const b = Buffer.alloc(4);
 	b.writeUInt32BE(n);
 	return b;
 };
+
 const field = (value: string | Uint8Array) => {
 	const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
 	return Buffer.concat([u32(bytes.length), bytes]);
 };
+
 const fingerprint = (bytes: Uint8Array) =>
 	`SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+
 // Generated Ed25519 seeds stay in memory. No key file is read or written.
 const key = (seed: Uint8Array, salt: number) => {
 	const privateKey = createPrivateKey({
@@ -97,6 +104,7 @@ const key = (seed: Uint8Array, salt: number) => {
 		},
 	};
 };
+
 const fixture = Effect.fnUntraced(function* (a: Sample) {
 	const databases: Array<DatabaseSync> = [];
 	const open = () => {
@@ -201,6 +209,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 	);
 	return {layer, window, stranger, root, controls};
 });
+
 const capture = (delegate: Tracer.Tracer) => {
 	const spans: Array<Tracer.Span> = [];
 	const tracer = Tracer.make({
@@ -212,7 +221,9 @@ const capture = (delegate: Tracer.Tracer) => {
 	});
 	return {spans, tracer};
 };
+
 const parent = (a: Sample) => Tracer.externalSpan({traceId: a.traceId, spanId: a.spanId});
+
 const checkSpan = (
 	span: Tracer.Span,
 	a: Sample,
@@ -225,6 +236,7 @@ const checkSpan = (
 	expect(span.status._tag).toBe("Ended");
 	if (span.status._tag === "Ended") expect(Exit.isSuccess(span.status.exit)).toBe(ok);
 };
+
 const hello = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	k: ReturnType<typeof key>,
@@ -249,6 +261,7 @@ const hello = Effect.fnUntraced(function* (
 		trusted: {url: URL, tab, name: k.fingerprint},
 	};
 });
+
 const online = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: Effect.Success<ReturnType<typeof fixture>>,
@@ -258,6 +271,7 @@ const online = Effect.fnUntraced(function* (
 	expect(yield* d.initialize(h.client, h.input, h.trusted)).toMatchObject({_tag: "online"});
 	return h.client;
 });
+
 const saw = (a: Sample) =>
 	Saw.make({
 		code: a.id,

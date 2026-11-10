@@ -14,15 +14,19 @@ const ROOT = resolve(import.meta.dirname, "../../../../..");
 const require = createRequire(import.meta.resolve("@alchemy.run/cloudflare"));
 const manifest = require.resolve("@alchemy.run/cloudflare-runtime/package.json");
 const exports = JSON.parse(readFileSync(manifest, "utf8")).exports;
+
 const load = (name: string) =>
 	import(pathToFileURL(resolve(dirname(manifest), exports[`./core/${name}`].import)).href);
+
 type End = {exitCode: number | null; signal: string | number | null};
+
 type Event = {worker: string} & (
 	| {type: "start"; pid: number}
 	| {type: "exit"; exit: End}
 	| {type: "restart"; exit: End; delay: number}
 	| {type: "stop"; exit: End; reason: "intensity" | "restart_failed"}
 );
+
 const spawned = () => {
 	const children: Array<{pid: number; closed: boolean; crash: () => void}> = [];
 	const sockets: Array<string> = [];

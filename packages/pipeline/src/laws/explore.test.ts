@@ -18,6 +18,7 @@ const toy: Update<Toy, ToyMsg, ToyCmd> = (s, m) => {
 			return s.waiting ? [s, [{type: "tick"}]] : [s, []];
 	}
 };
+
 /** A planted mistake: a tock counts even when nothing was asked. */
 const sloppy: Update<Toy, ToyMsg, ToyCmd> = (s, m) =>
 	m.type === "tock" ? [{n: Math.min(s.n + 1, 3), waiting: false}, []] : toy(s, m);
@@ -28,10 +29,13 @@ const world = (echoes = false): World<Toy, ToyMsg, ToyCmd> => ({
 	restart: (m) => m.type === "resume",
 	echoes,
 });
+
 const init: Toy = {n: 0, waiting: false};
+
 const belowTwo = law<Toy, ToyMsg, ToyCmd>("n stays below 2", (step) =>
 	step.next.n >= 2 ? `n is ${step.next.n}` : null,
 );
+
 const show = (m: ToyMsg) => m.type;
 
 describe("explore", () => {

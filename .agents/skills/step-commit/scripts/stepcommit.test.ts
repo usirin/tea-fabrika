@@ -40,6 +40,7 @@ const root = resolve(import.meta.dirname, "../../../..");
 const script = join(import.meta.dirname, "stepcommit.sh");
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
 const options = {seed: 321, numRuns: 3, endOnFailure: true};
+
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	const errors: Error[] = [];
 	for (const value of values) {
@@ -56,11 +57,19 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	}
 	if (errors.length) throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
 };
+
 type Owner = "tests" | "build" | "lead" | "mutation";
+
+/** gh's answer to stepcommit's open-PR query. */
+const open = (nodes: unknown[], totalCount = nodes.length) => ({
+	data: {repository: {pullRequests: {totalCount, nodes}}},
+});
+
 const put = (path: string, value: string) => {
 	mkdirSync(dirname(path), {recursive: true});
 	writeFileSync(path, value);
 };
+
 const withRepo = (owners: Array<[string, string]>, f: (r: Repo) => void) => {
 	const r = new Repo(owners);
 	try {
@@ -69,12 +78,14 @@ const withRepo = (owners: Array<[string, string]>, f: (r: Repo) => void) => {
 		rmSync(r.dir, {recursive: true, force: true});
 	}
 };
+
 class Repo {
 	readonly dir = mkdtempSync(join(tmpdir(), "sc321-"));
 	readonly boxes = join(this.dir, "boxes");
 	readonly repo = join(this.boxes, "one");
 	readonly env: NodeJS.ProcessEnv;
 	readonly base: string;
+
 	constructor(owners: Array<[string, string]>) {
 		const bin = join(this.dir, "bin");
 		mkdirSync(this.repo, {recursive: true});
@@ -94,6 +105,7 @@ class Repo {
 			GIT_COMMITTER_EMAIL: "fixture@example.test",
 			T321_CALLS: join(this.dir, "calls"),
 			T321_OXFMT: join(root, "node_modules/.bin/oxfmt"),
+			T390_PRS: join(this.dir, "prs.json"),
 		};
 		const stub = String.raw`
 const fs=require("node:fs"),cp=require("node:child_process");
@@ -107,6 +119,16 @@ if(args[0]==="exec"&&args[1]==="oxfmt") {
 console.error("fixture refuses package or network command"); process.exit(97);
 `;
 		writeFileSync(join(bin, "pnpm"), `#!${process.execPath}\n${stub}`, {mode: 0o755});
+		// gh answers the open-PR query from T390_PRS, a JSON file (no file: no open PRs; "fail": exit 1).
+		const gh = String.raw`
+const fs=require("node:fs");
+fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["gh",...process.argv.slice(2)])+"\n");
+const f=process.env.T390_PRS;
+const prs=f&&fs.existsSync(f)?fs.readFileSync(f,"utf8"):JSON.stringify({data:{repository:{pullRequests:{totalCount:0,nodes:[]}}}});
+if(prs.trim()==="fail"){console.error("gh: offline");process.exit(1);}
+process.stdout.write(prs);
+`;
+		writeFileSync(join(bin, "gh"), `#!${process.execPath}\n${gh}`, {mode: 0o755});
 		symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(bin, "oxfmt"));
 		this.git(
 			"init",
@@ -140,6 +162,7 @@ console.error("fixture refuses package or network command"); process.exit(97);
 			`ticket: 321\nbranch: fabrikalfa/one\nbase: ${this.base}\nplan: ${plan}\nplan-sha256: ${hash}\n`,
 		);
 	}
+
 	call(cmd: string, args: string[]) {
 		const r = spawnSync(cmd, args, {
 			cwd: this.repo,
@@ -150,11 +173,13 @@ console.error("fixture refuses package or network command"); process.exit(97);
 		expect(r.error).toBeUndefined();
 		return {code: r.status, text: r.stdout + r.stderr, stdout: r.stdout};
 	}
+
 	git(...args: string[]) {
 		const r = this.call("/usr/bin/git", args);
 		expect(r.code, r.text).toBe(0);
 		return r.stdout;
 	}
+
 	commit(step: Owner, paths: string[], only = false) {
 		return this.call("sh", [
 			script,
@@ -165,9 +190,11 @@ console.error("fixture refuses package or network command"); process.exit(97);
 			...paths,
 		]);
 	}
+
 	changed(path: string, text = 'export const value = "changed";\n') {
 		put(join(this.repo, path), text);
 	}
+
 	signs(): string[][] {
 		return existsSync(join(this.dir, "calls"))
 			? readFileSync(join(this.dir, "calls"), "utf8")
@@ -176,6 +203,38 @@ console.error("fixture refuses package or network command"); process.exit(97);
 					.map((s) => JSON.parse(s))
 					.filter((a: string[]) => a[0] === "commits")
 			: [];
+	}
+
+	asked(): boolean {
+		return (
+			existsSync(join(this.dir, "calls")) &&
+			readFileSync(join(this.dir, "calls"), "utf8").includes('["gh",')
+		);
+	}
+
+	/** An open PR on `branch` whose one commit carries a note for `ticket`. */
+	openPr(branch: string, ticket: string) {
+		this.git(
+			"notes",
+			"--ref=fabrika",
+			"add",
+			"-f",
+			"-m",
+			JSON.stringify({step: "build", ticket}),
+			this.base,
+		);
+		put(
+			join(this.dir, "prs.json"),
+			JSON.stringify(
+				open([
+					{
+						number: 609,
+						headRefName: branch,
+						commits: {totalCount: 1, nodes: [{commit: {oid: this.base}}]},
+					},
+				]),
+			),
+		);
 	}
 }
 
@@ -265,6 +324,49 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 								} else {
 									expect(got.code, got.text).not.toBe(0);
 									expect(got.text).toMatch(/not_owner|owner|unknown/);
+									expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+									expect(r.signs()).toEqual([]);
+								}
+							},
+						),
+					);
+				},
+			),
+			options,
+		);
+	});
+
+	// Plant: exact-only lookup (refuses a shot under the docs/ row), a plain string prefix
+	// (docs/shots/ also owning docs/shotsx/), or a '..' part escaping the row.
+	it("K4 a row ending in / owns every file under it, and nothing beside it", () => {
+		fc.assert(
+			fc.property(
+				word,
+				fc.constantFrom("tests" as Owner, "build" as Owner, "lead" as Owner),
+				(name, step) => {
+					each(["under", "deeper", "beside", "escape"], (kind) =>
+						withRepo(
+							[
+								["docs/shots/", step],
+								["src/foreign.ts", step === "tests" ? "build" : "tests"],
+							],
+							(r) => {
+								const path =
+									kind === "under"
+										? `docs/shots/${name}.png`
+										: kind === "deeper"
+											? `docs/shots/${name}/one.png`
+											: kind === "beside"
+												? `docs/shotsx/${name}.png`
+												: "docs/shots/../src/foreign.ts";
+								r.changed(kind === "escape" ? "src/foreign.ts" : path);
+								const got = r.commit(step, [path]);
+								expect(got.code).not.toBeNull();
+								if (kind === "under" || kind === "deeper") {
+									expect(got.code, got.text).toBe(0);
+									expect(r.git("show", "--format=", "--name-only", "HEAD").trim()).toBe(path);
+								} else {
+									expect(got.code, got.text).not.toBe(0);
 									expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
 									expect(r.signs()).toEqual([]);
 								}
@@ -475,6 +577,76 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 				}),
 			),
 			options,
+		);
+	});
+});
+
+describe("T390 a lead link never lands on another branch's open PR ticket, today's tooling", () => {
+	// Plants: drop the check; compare the branch without its -wip; check --commit-only or other
+	// steps; pass when gh cannot be read. PRs 609, 614, 615 and 617, 2026-11-09: field-row PRs signed
+	// lead under a lane's ticket, and the lane's own lead links read as stale_link.
+	it("T390 refuses a signed lead commit exactly when another branch's open PR holds the ticket", () => {
+		// scenario: every head place for a signed lead commit on the PR's ticket, then one change at a
+		// time (another ticket, another step, --commit-only), since sampling missed the -wip plant.
+		type Case = {
+			where: "other" | "same" | "own-wip" | "none";
+			ticket: string;
+			step: Owner;
+			only: boolean;
+		};
+		const lead = {ticket: "321", step: "lead" as Owner, only: false};
+		const cases: Case[] = [
+			...(["other", "same", "own-wip", "none"] as const).map((where) => ({...lead, where})),
+			{...lead, where: "other", ticket: "999"},
+			{...lead, where: "other", step: "build"},
+			{...lead, where: "other", only: true},
+		];
+		each(cases, ({where, ticket, step, only}) =>
+			withRepo([["src/owned.ts", step]], (r) => {
+				const head = {
+					other: "fabrikalfa/lane",
+					same: "fabrikalfa/one",
+					"own-wip": "fabrikalfa/one-wip",
+				};
+				if (where !== "none") r.openPr(head[where], ticket);
+				r.changed("src/owned.ts");
+				const got = r.commit(step, ["src/owned.ts"], only);
+				const refused = step === "lead" && !only && where === "other" && ticket === "321";
+				if (refused) {
+					expect(got.code, got.text).toBe(5);
+					expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/lane");
+					expect(got.text).toContain("Sign under a lead ticket");
+					expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+					expect(r.git("diff", "--cached", "--name-only")).toBe("");
+					expect(r.signs()).toEqual([]);
+				} else {
+					expect(got.code, got.text).toBe(0);
+					expect(r.signs()).toHaveLength(only ? 0 : 1);
+				}
+				expect(r.asked()).toBe(step === "lead" && !only);
+			}),
+		);
+	}, 180_000);
+
+	// scenario: gh fails, more than 100 open PRs, or a PR with more than 250 commits.
+	it("T390 refuses a signed lead commit when open PRs cannot be read whole", () => {
+		const commits = {totalCount: 251, nodes: []};
+		each(
+			[
+				"fail\n",
+				JSON.stringify(open([], 101)),
+				JSON.stringify(open([{number: 1, headRefName: "fabrikalfa/lane", commits}])),
+			],
+			(answer) =>
+				withRepo([["src/owned.ts", "lead"]], (r) => {
+					put(join(r.dir, "prs.json"), answer);
+					r.changed("src/owned.ts");
+					const got = r.commit("lead", ["src/owned.ts"]);
+					expect(got.code, got.text).toBe(5);
+					expect(got.text).toContain("open PRs cannot be read");
+					expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+					expect(r.signs()).toEqual([]);
+				}),
 		);
 	});
 });

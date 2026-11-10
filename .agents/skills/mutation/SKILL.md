@@ -35,6 +35,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    `file:line` and its status, with hand-plant evidence for startup survivors; the laws added;
    the commit. If the five minutes ran out, say
    how many lines and mutants it did not reach. That is reported, and the pull request goes on.
+   When the sampler selects no mutation ranges, because the diff has no product lines, commit
+   nothing and end with `answer: skip <why>`; review takes that row in place of a mutation run.
 
 ## The command
 

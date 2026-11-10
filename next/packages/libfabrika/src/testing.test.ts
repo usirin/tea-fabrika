@@ -9,11 +9,13 @@ import * as fc from "fast-check";
 const SEED = 119120;
 const Model = Schema.Struct({count: Schema.Int, carry: Schema.Int});
 const Msg = Schema.Struct({type: Schema.Literal("add"), n: Schema.Int});
+
 const report = Cmd.make("report", {
 	input: Schema.Struct({n: Schema.Int}),
 	ok: Schema.Null,
 	err: [],
 });
+
 const machine = Machine.make({
 	model: Model,
 	msg: Msg,
@@ -25,9 +27,11 @@ const machine = Machine.make({
 		report_err: (s) => [s, []],
 	},
 });
+
 const equals = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const encode = Schema.encodeSync(Model);
 const decode = Schema.decodeUnknownSync(Model);
+
 const msgs = [
 	{type: "add", n: 1},
 	{type: "add", n: 2},

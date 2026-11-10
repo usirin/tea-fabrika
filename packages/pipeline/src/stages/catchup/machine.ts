@@ -137,6 +137,7 @@ export type CatchupMsg =
 
 type Step = readonly [Catchup, readonly CatchupCmd[]];
 const stay = (s: Catchup): Step => [s, []];
+
 const end = (
 	s: Held,
 	outcome: CatchupOutcome,

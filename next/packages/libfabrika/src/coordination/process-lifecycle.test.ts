@@ -57,6 +57,7 @@ const check = <A, E, R>(
 			),
 		);
 	});
+
 const hash = fc.string({minLength: 1, maxLength: 256});
 
 describe("P33, saved state and process authority", () => {
@@ -526,6 +527,7 @@ describe("p79, names, parents and replay", () => {
 // P33: the fold trusts a ProcessFact only from the brain's own writer, `from().by` here.
 const OTHER = "SHA256:not-the-brain";
 const toW = Recipient.cases.process.make({process: W});
+
 const forger = (store: Storage, by: string, streamForLife: string) => ({
 	forge: (stream: string, fact: {readonly _tag: string} & Schema.JsonObject) =>
 		Ledger.use((ledger) =>
@@ -539,6 +541,7 @@ const forger = (store: Storage, by: string, streamForLife: string) => ({
 		ProcessManager.use((p) => p.isLive(process)).pipe(Effect.provide(manager(store))),
 	downs: () => store.rows().filter((row) => row._tag === "send"),
 });
+
 const lawsFor = (
 	store: Storage,
 	by: string,

@@ -57,6 +57,7 @@ type Msg = MsgOf<Machine>;
 type LaneStep = Step<Lane, Msg, LaneCmd>;
 
 const ID = make(LaneId)("L1");
+
 const STEP = runStep({
 	number: 7,
 	count: 1,
@@ -65,10 +66,12 @@ const STEP = runStep({
 	carry: EMPTY,
 	intent: "lane/7/1/triage",
 });
+
 const ASK = askPerson({number: 7, ask: "a", what: "w", picks: ["x"], intent: "i"});
 const READ = readFiled({number: 7});
 const CLAIM = claimLane({number: 7, lane: ID, intent: "c"});
 const RELEASE = releaseLane({number: 7, lane: ID, intent: "r"});
+
 const FRESH = freshMain({
 	number: 7,
 	from: {_tag: "run", step: "mutation"},
@@ -91,8 +94,10 @@ const OUTCOMES: readonly Outcome[] = [
 	// Self-fix PR 5: a build that changed the test writer's files asks the person which was wrong.
 	{kind: "stuck", why: "exam_touched"},
 ];
+
 /** A head, and green checks code ran there: what a build leaves for the steps after it (self-fix PR 4). */
 const BUILT_HEAD = "4".repeat(40);
+
 const GREEN_CARRY = {
 	head: BUILT_HEAD,
 	checked: {
@@ -102,9 +107,11 @@ const GREEN_CARRY = {
 		failed: [],
 	},
 } as const;
+
 /** The exam's pull request at its first head, and at a later one (self-fix PR 10). */
 const EXAM_A = "3".repeat(40);
 const EXAM_B = "6".repeat(40);
+
 /** What a yes or a review read at `head`: what `carry` needs (self-fix PR 10, Part 4). */
 const givenAt = (head: string) => ({
 	head,
@@ -112,8 +119,10 @@ const givenAt = (head: string) => ({
 	base: "9".repeat(40),
 	diff: "d".repeat(40),
 });
+
 /** What the exam review read at `head`, and what it met. */
 const reviewedAt = (head: string) => ({...givenAt(head), met: 1, of: 1});
+
 /** The exam's pull request as a step may leave it: landed, reviewed, said yes to, at the head or behind it. */
 const EXAM_PULLS = [
 	{examPull: {head: EXAM_A}},
@@ -122,11 +131,13 @@ const EXAM_PULLS = [
 	{examPull: {head: EXAM_B, reviewed: reviewedAt(EXAM_B), yes: givenAt(EXAM_A)}},
 	{examPull: {head: EXAM_B, reviewed: reviewedAt(EXAM_A)}},
 ] as const;
+
 const stepEnds: fc.Arbitrary<StepEnd> = fc.record({
 	outcome: fc.constantFrom(...OUTCOMES),
 	// Self-fix PR 10: the exam's pull request in the carry, so every law here reads it too.
 	carry: fc.constantFrom<StepEnd["carry"]>({}, GREEN_CARRY, ...EXAM_PULLS),
 });
+
 /** What a restart's fresh read of main may find (self-fix PR 5). */
 const freshes: fc.Arbitrary<Fresh> = fc.oneof(
 	fc.constantFrom({}, GREEN_CARRY).map((carry) => ({_tag: "fresh" as const, carry})),
@@ -134,6 +145,7 @@ const freshes: fc.Arbitrary<Fresh> = fc.oneof(
 	fc.constant({_tag: "conflicts" as const, files: ["src/lower.ts"]}),
 	fc.constant({_tag: "closed" as const}),
 );
+
 /** Every pick any question offers, and a call's `go_on`. */
 const ANY_PICK = [...new Set<string>([...Object.values(PICKS).flat(), "go_on"])];
 
@@ -170,11 +182,13 @@ const opening: readonly Msg[] = [
 	readFiled.ok(READ, {state: "open", mine: true}, 0),
 	claimLane.ok(CLAIM, ID, 0),
 ];
+
 const lists = fc
 	.tuple(fc.boolean(), fc.array(arbMsg(arbs), {minLength: 1, maxLength: 80}))
 	.map(([open, rest]) => (open ? [...opening, ...rest] : rest));
 
 const RUNS = {numRuns: 300, seed: 7};
+
 const each =
 	(law: (t: LaneStep) => void) =>
 	(step: LaneStep): boolean => {
@@ -1911,6 +1925,7 @@ interface ReviewEnd {
 	readonly yes: "none" | "head" | "old";
 	readonly moved: boolean;
 }
+
 const PASS: ReviewEnd = {how: "pass", reviewed: "head", yes: "none", moved: false};
 
 interface ExamScript {
@@ -2011,6 +2026,7 @@ const doneInOrder = (moves: readonly Moved[]): readonly string[] =>
 
 const examsIn = (moves: readonly Moved[]) =>
 	stepsIn(cmdsOf(moves)).filter((c) => c.step === "exam");
+
 const countOf = (seen: readonly string[], what: string) => seen.filter((x) => x === what).length;
 
 describe("the exam's pull request, step by step", () => {

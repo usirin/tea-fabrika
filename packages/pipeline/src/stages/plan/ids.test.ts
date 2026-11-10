@@ -14,12 +14,14 @@ import type {Plan, RevisedTask, Revision} from "./plan.ts";
 import {planMarkdown} from "./render.ts";
 
 const S1 = storyId("s1");
+
 const claim = (when: string): RevisedTask["criteria"][number] => ({
 	when,
 	result: `${when} shows`,
 	check: {how: "test", what: "a test reads it"},
 	serves: [S1],
 });
+
 const job = (when: string) => ({...claim(when), fixture: "three runs, each twice"});
 
 /** A first version with tasks of `n` single claims each, after its job, and no ids. */

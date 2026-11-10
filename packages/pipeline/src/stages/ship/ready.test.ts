@@ -21,12 +21,15 @@ import {filed} from "./scripted.ts";
 
 const C1 = criterionId("c1");
 const C2 = criterionId("c2");
+
 const CRITERIA: readonly [Criterion, ...Criterion[]] = [
 	{id: C1, version: 1, text: "every window opens"},
 	// Said again once since the plan: only a verdict on version 2 counts.
 	{id: C2, version: 2, text: "the door locks, from inside too"},
 ];
+
 const versionOf = (id: string) => CRITERIA.find((c) => c.id === id)?.version ?? 1;
+
 /** One review's row on a criterion, before the book files it as a verdict under an id of its own. */
 const pass = (criterion = C1, head = "A", version = versionOf(criterion)): Judged => ({
 	criterion,
@@ -35,8 +38,10 @@ const pass = (criterion = C1, head = "A", version = versionOf(criterion)): Judge
 	grade: "pass",
 	proof: `the review at ${head}`,
 });
+
 const fail = (criterion = C1, head = "A"): Judged => ({...pass(criterion, head), grade: "fail"});
 const green: Checks = {head: "A", state: "green"};
+
 /** A proof whose verdicts are `rows`, filed in order as `v1`, `v2`, ... */
 const proof = ({
 	rows = [pass(C1), pass(C2)],
@@ -50,6 +55,7 @@ const proof = ({
 	...patch,
 	verdicts: filed(rows),
 });
+
 const whys = (p: Proof): readonly string[] => {
 	const r = readyToMerge(p);
 	return "ready" in r ? [] : r.refused.map((x) => x.why);

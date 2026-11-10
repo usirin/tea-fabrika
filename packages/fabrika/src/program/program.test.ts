@@ -90,6 +90,7 @@ const greeter = defineProgram({
 			});
 		}).pipe(Effect.scoped),
 });
+
 type Greeter = typeof greeter;
 const at42 = Layer.succeed(Clock, {now: () => 42});
 const quiet = {salute: "hello", loud: false} as const;

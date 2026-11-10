@@ -34,6 +34,7 @@ const verdict = (law: string, list: readonly Step[]): LawResult => {
 				: `WRONG ${bad.map((s) => `${s.what}: ${s.got}, wanted ${s.want}`).join("; ")}`,
 	};
 };
+
 const steps = () => {
 	const list: Step[] = [];
 	const step = <A, E extends {readonly _tag: string}>(

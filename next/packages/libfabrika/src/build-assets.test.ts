@@ -24,12 +24,14 @@ import {afterEach, describe, expect, it, vi} from "vitest";
 import {check} from "./compiler.ts";
 
 type Asset = {readonly hash: string; readonly type: string; readonly body: string};
+
 type Serve = {
 	readonly serveAsset?: (
 		assets: Readonly<Record<string, Asset>>,
 		request: Request,
 	) => Effect.Effect<Response, unknown>;
 };
+
 const serving = async () => {
 	const worker = await vi.importActual<Serve>(
 		pathToFileURL(join(import.meta.dirname, "workers/index.ts")).href,
@@ -37,6 +39,7 @@ const serving = async () => {
 	assert.equal(typeof worker.serveAsset, "function", "P16 library asset serving is absent");
 	return worker.serveAsset!;
 };
+
 // The installed packages' own versions, read now. A build report must say what really ran.
 const installed = (name: string) =>
 	(
@@ -49,6 +52,7 @@ const ROOT = resolve(import.meta.dirname, "../../../..");
 const runs = {seed: 119120, numRuns: 3};
 // The clean-build property took 5.6 s for three samples under load. Budget 10 s per sample.
 const buildTimeout = (samples = runs.numRuns) => samples * 10_000;
+
 const cssRules = (css: string) => {
 	let rules: Rule[] = [];
 	transform({
@@ -62,18 +66,23 @@ const cssRules = (css: string) => {
 	});
 	return rules;
 };
+
 // Source locations change when the printer normalizes whitespace and escapes.
 const meaning = (rules: readonly Rule[]): unknown =>
 	JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
+
 const names = fc.integer({min: 0, max: 10000}).map((n) => `View${n}`);
 const values = fc.string({minLength: 1, maxLength: 30});
+
 const graphs = fc.record({
 	name: names,
 	value: values,
 	id: fc.integer({min: 0, max: 10000}),
 });
+
 const cssForms = ["double string", "single string", "url", "single url", "double url"] as const;
 type CssForm = (typeof cssForms)[number];
+
 const cssImports = fc.record({
 	name: fc.constantFrom(
 		"theme",
@@ -89,6 +98,7 @@ const cssImports = fc.record({
 	url: fc.constantFrom("url", "u\\72l", "\\75rl", "\\000075rl"),
 	continuation: fc.constantFrom("", "\n", "\r\n", "\r", "\f"),
 });
+
 // Generate the CSS spelling from a disk name. The expected content never decodes that spelling.
 const cssImport = (
 	path: string,
@@ -110,7 +120,9 @@ const cssImport = (
 	const target = `${quote}${quote && continuation ? `\\${continuation}` : ""}${ref}${quote}`;
 	return `@${keyword} ${form.endsWith("string") ? target : `${url}(${target})`}${media ? ` ${media}` : ""};`;
 };
+
 const homes: string[] = [];
+
 type Options = {
 	readonly out: string;
 	readonly root: string;
@@ -124,6 +136,7 @@ type Options = {
 	readonly ledger?: readonly {readonly file: string; readonly fn: string; readonly why: string}[];
 	readonly chaos: boolean;
 };
+
 type Build = {
 	readonly build: (
 		o: Options,
@@ -132,8 +145,10 @@ type Build = {
 		unknown
 	>;
 };
+
 type Handle = {generate: (o: OutputOptions) => Promise<RolldownOutput>; close: () => Promise<void>};
 type Roll = {readonly rolldown: (o: RolldownOptions) => Promise<Handle>};
+
 const fixture = (name: string, value: string) => {
 	const home = mkdtempSync("/tmp/fh.");
 	homes.push(home);
@@ -178,17 +193,21 @@ const fixture = (name: string, value: string) => {
 	vi.stubEnv("TYPESAFE_API_KEY", undefined);
 	return {home, file, options};
 };
+
 const load = async () => {
 	const file = join(import.meta.dirname, "build.ts");
 	assert(existsSync(file), "P16 not built: libfabrika/build and embedded assets absent");
 	return vi.importActual<Build>(pathToFileURL(file).href);
 };
+
 const run = async (options: Options) =>
 	Effect.runPromise((await load()).build(options).pipe(Effect.provide(NodeServices.layer)));
+
 const previous = (f: ReturnType<typeof fixture>, value: string) => {
 	mkdirSync(f.options.out);
 	writeFileSync(join(f.options.out, "brain.mjs"), value);
 };
+
 afterEach(() => {
 	vi.doUnmock("rolldown");
 	vi.resetModules();

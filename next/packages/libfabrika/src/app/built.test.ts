@@ -13,24 +13,29 @@ import {describe, expect, it, vi} from "vitest";
 
 type Program = {readonly hash: string; readonly source: string};
 type Asset = {readonly hash: string; readonly type: string; readonly body: string};
+
 type Built = {
 	readonly programs: Readonly<Record<string, Program>>;
 	readonly assets: Readonly<Record<string, Asset>>;
 };
+
 type Api = {
 	readonly Built: Schema.Codec<Built>;
 	readonly Asset: Schema.Codec<Asset>;
 	readonly BuiltProgram: Schema.Codec<Program>;
 	readonly decodeBuilt: (raw: unknown) => Effect.Effect<Built, {_tag: string; reason: string}>;
 };
+
 const load = async () => {
 	const file = join(import.meta.dirname, "built.ts");
 	assert(existsSync(file), "P16 not built: shared Built schemas and table validation absent");
 	vi.resetModules();
 	return vi.importActual<Api>(pathToFileURL(file).href);
 };
+
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const types = ["text/javascript; charset=utf-8", "text/css; charset=utf-8"] as const;
+
 const rows = fc.uniqueArray(
 	fc.record({
 		name: fc.integer({min: 0, max: 100}).map((n) => `program${n}`),
@@ -38,6 +43,7 @@ const rows = fc.uniqueArray(
 	}),
 	{minLength: 2, maxLength: 4, selector: (r) => r.name},
 );
+
 const routes = fc.uniqueArray(
 	fc.record({
 		route: fc
@@ -49,7 +55,9 @@ const routes = fc.uniqueArray(
 	}),
 	{minLength: 1, maxLength: 4, selector: (a) => a.route},
 );
+
 const runs = {seed: 119120, numRuns: 20};
+
 const failed = async (api: Api, raw: unknown) => {
 	// A throwing decode rejects here instead of returning a typed Failure.
 	const result = await Effect.runPromise(Effect.result(api.decodeBuilt(raw)));

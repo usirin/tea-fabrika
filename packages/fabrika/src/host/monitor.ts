@@ -115,6 +115,7 @@ export interface MonitorStepped {
 }
 
 const ask = (w: Watch): MonitorCmd => ({type: "monitor", ref: refOf(w), target: w.target});
+
 const asking = (w: Watch): Watch => ({
 	...w,
 	n: w.n + 1,
@@ -122,10 +123,12 @@ const asking = (w: Watch): Watch => ({
 	incarnation: null,
 	due: null,
 });
+
 const swap = (s: Monitors, from: Watch, to: Watch): Monitors => ({
 	...s,
 	watches: s.watches.map((x) => (x === from ? to : x)),
 });
+
 const byRef = (s: Monitors, ref: string) => s.watches.find((w) => refOf(w) === ref);
 
 /** `w` learns every incarnation up to `to` has ended: the ones it had not reported, or none. */

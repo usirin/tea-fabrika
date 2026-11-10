@@ -32,12 +32,15 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const folder = mkdtempSync(join(tmpdir(), "p6-spans-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
+
 const freshDb = (): DatabaseSync => {
 	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
 	opened.push(db);
 	return db;
 };
+
 const fresh = (): Sql => nodeSql(freshDb());
+
 afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
@@ -45,16 +48,19 @@ afterAll(() => {
 
 const READER = "gateway:t1";
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+
 /** A doorbell whose delivery to `fails` fails, as a gateway that went away would. */
 const failing = (fails: string) =>
 	Layer.succeed(Doorbell, {
 		ring: (to) => (to === fails ? Effect.fail(new LedgerError({why: "unreachable"})) : Effect.void),
 	});
+
 const onSql = (sql: Sql, doorbell: Layer.Layer<Doorbell> = quiet) =>
 	Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(doorbell));
 
 const BODY = "body-marker-7c1d";
 const SENT = "sent-marker-2026-11-07T21:10:01.204Z";
+
 const line = (over: Partial<Line> = {}): Line => ({
 	by: "SHA256:writer-a",
 	for: "owner",
@@ -102,6 +108,7 @@ const letters = fc.constantFrom("a", "b", "7", ":", "-", "_", "é");
 const shortText = fc.string({unit: letters, minLength: 1, maxLength: MOST});
 const longText = fc.string({unit: letters, minLength: MOST + 1, maxLength: 4096});
 const anyText = fc.oneof({arbitrary: longText, weight: 3}, {arbitrary: shortText, weight: 1});
+
 /**
  * A tag that took text from the caller: as it was when it fits, else cut to at most 128 characters
  * with the full length kept beside it as a number, `<key>.length`.

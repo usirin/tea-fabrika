@@ -6,12 +6,14 @@ import type {Settings} from "./src/settings.ts";
 
 /** Cloudflare's limit on one environment variable, in encoded bytes (Workers platform limits). */
 const ENV_BYTES = 5 * 1024;
+
 // A text setting the Worker receives. One at or over the limit is a config error before any deploy.
 const Setting = Schema.String.check(
 	Schema.makeFilter(
 		(value) => new TextEncoder().encode(value).byteLength < ENV_BYTES || "over 5 KB encoded",
 	),
 );
+
 const setting = (value: string) =>
 	Schema.decodeUnknownEffect(Setting)(value).pipe(
 		Effect.mapError((error) => new Config.ConfigError(error)),

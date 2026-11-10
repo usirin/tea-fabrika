@@ -41,6 +41,7 @@ const made = (area: number, name: string, suggested?: Made["suggested"]): Fact =
 	name,
 	...(suggested === undefined ? {} : {suggested}),
 });
+
 const renamed = (area: number, name: string): Fact => ({_tag: "area_renamed", area, name});
 const merged = (area: number, into: number): Fact => ({_tag: "area_merged", area, into});
 

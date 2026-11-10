@@ -22,6 +22,7 @@ export interface Span {
 	readonly italic: boolean;
 	readonly bold: boolean;
 }
+
 type Line = readonly Span[];
 
 /** A code block's lines of spans, or null when its language is not one the highlighter knows. */

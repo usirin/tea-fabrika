@@ -9,13 +9,16 @@ import {announcement, focusAfter, KeysWindow} from "./window.tsx";
 
 const step = (model: Editor, msg: EditorMsg) =>
 	applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, model, msg)[0];
+
 const table = (text: string): Keys => {
 	const read = decodeKeys(text, true);
 	if (Result.isFailure(read)) throw new Error(read.failure.why);
 	return read.success;
 };
+
 const selected = (keys: Keys, does: Editor["selected"]) =>
 	step(editorMachine.init(keys, undefined)[0], {type: "select", does});
+
 const draw = (editor: Editor) =>
 	renderToStaticMarkup(createElement(KeysWindow, {keys: editor.keys, editor, send: () => {}}));
 

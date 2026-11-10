@@ -21,14 +21,17 @@ import {
 // here, the way the ledger keeps it.
 
 const enough = Schema.decodeUnknownSync(Enough);
+
 const facts = (ratings: readonly RatingRow[], shipped: readonly string[] = []): Facts => ({
 	ratings,
 	shipped,
 });
+
 /** A rating in a row that `writer` wrote. */
 const by =
 	(writer: string) =>
 	(finding: string, says: Says): RatingRow => ({writer, rating: {finding, says}});
+
 const rated = by("user:owner");
 const byAgent = by("agent:review");
 const says = fc.constantFrom("fix" as const, "noise" as const);

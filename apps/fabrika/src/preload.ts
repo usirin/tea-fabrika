@@ -42,6 +42,7 @@ ipcRenderer.on(PORT_CHANNEL, (event, name: unknown) => {
 	};
 	for (const m of line.waiting.splice(0)) given.postMessage(m);
 });
+
 ipcRenderer.send(PORT_CHANNEL);
 
 const bridge: Bridge = {
@@ -62,4 +63,5 @@ const bridge: Bridge = {
 		lines.delete(name);
 	},
 };
+
 contextBridge.exposeInMainWorld("fabrika", bridge);

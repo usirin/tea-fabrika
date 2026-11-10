@@ -203,18 +203,23 @@ const SpanColumns = Schema.Struct({
 	resource: Schema.fromJsonString(SpanRow.fields.resource),
 	ok: Schema.Literals([0, 1]),
 });
+
 const decodeSpan = Schema.decodeUnknownSync(SpanColumns);
 const decodeSeq = Schema.decodeUnknownSync(Schema.Struct({seq: Schema.Int}));
+
 /** A content row: `state` says which case its other columns hold. */
 const decodeState = Schema.decodeUnknownSync(
 	Schema.Struct({state: Schema.Literals(["kept", "deleted"])}),
 );
+
 const decodeKept = Schema.decodeUnknownSync(
 	Schema.Struct({spanId: Schema.String, message: Schema.String}),
 );
+
 const decodeDeleted = Schema.decodeUnknownSync(
 	Schema.Struct({spanId: Schema.String, by: Schema.String, at: Schema.Int, why: Schema.String}),
 );
+
 const decodeRolled = Schema.decodeUnknownSync(
 	Schema.Struct({part: Schema.Int, next: Schema.String, bytes: Schema.Int}),
 );

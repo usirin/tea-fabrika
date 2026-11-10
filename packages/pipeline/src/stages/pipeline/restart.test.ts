@@ -22,6 +22,7 @@ const BASE = `5d38d582${"a".repeat(32)}`;
 const EXAM_COMMIT = "1".repeat(40);
 const BUILT = "2".repeat(40);
 const STORY = {id: "reader", who: "a reader", want: "one form", why: "names match"};
+
 const PLAN = Schema.decodeUnknownSync(HeldDraft)({
 	summary: "One form.",
 	stories: [STORY],
@@ -29,7 +30,9 @@ const PLAN = Schema.decodeUnknownSync(HeldDraft)({
 	pointers: [],
 	questions: [],
 });
+
 const DONE = {kind: "done", part: false};
+
 const GREEN = {
 	head: BUILT,
 	commands: [{command: "node_modules/.bin/vitest run", code: 0, ms: 4_210}],

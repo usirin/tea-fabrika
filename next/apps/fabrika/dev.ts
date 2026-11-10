@@ -8,6 +8,7 @@ import {localStage} from "./src/local-stage.ts";
 import {Settings} from "./src/settings.ts";
 
 class StageError extends Schema.TaggedError<StageError>()("StageError", {reason: Schema.String}) {}
+
 const flags = {
 	child: Flag.Boolean("child").pipe(Flag.withDefault(false)),
 	parent: Flag.String("parent").pipe(Flag.withDefault(undefined)),
@@ -17,8 +18,10 @@ const flags = {
 	founder: Flag.String("founder").pipe(Flag.withDefault(undefined)),
 	window: Flag.String("window").pipe(Flag.withDefault(undefined)),
 };
+
 // A base64url key can start with "-". Keep each string flag's value in the same word.
 const words: Array<string> = [];
+
 for (let n = 2; n < process.argv.length; n++) {
 	const word = process.argv[n] ?? "",
 		value = process.argv[n + 1];
@@ -26,7 +29,9 @@ for (let n = 2; n < process.argv.length; n++) {
 	words.push(flag ? `${word}=${value}` : word);
 	if (flag) n++;
 }
+
 process.env.DO_NOT_TRACK = "1";
+
 const command = Command.make("dev", flags, (options) => {
 	const guard = Effect.forever(
 		Effect.gen(function* () {
@@ -100,6 +105,7 @@ const command = Command.make("dev", flags, (options) => {
 	);
 	return options.child ? child : parent;
 });
+
 NodeRuntime.runMain(
 	Command.runWith(command, {version: "0.0.0"})(words).pipe(
 		Effect.provide([NodeServices.layer, SecureRandom.layerWebCrypto]),

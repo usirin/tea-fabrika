@@ -109,9 +109,12 @@ const OPTS = {numRuns: 2000, seed: 6};
 
 const since = (t: readonly Entry[]) =>
 	t.slice(t.findLastIndex((e) => e.fact.type === "reopened") + 1);
+
 const mergedSince = (t: readonly Entry[]) =>
 	since(t).some((e) => e.fact.type === "pr" && e.fact.state === "merged");
+
 const closedNow = (t: readonly Entry[]) => since(t).some((e) => e.fact.type === "closed");
+
 /**
  * Every kind of fact a ticket's stream can hold, and whether it is work: a fact that moves the
  * ticket on, so it wakes an idle one. The rest is advice, shown on the ticket and never read to

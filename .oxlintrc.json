@@ -50,6 +50,10 @@
 		// silence it.
 		"fabrika/no-bare-disable": "error",
 
+		// A blank line between top-level statements and between class members (owner, 2026-11-09;
+		// docs/direction/oxlint-and-oxfmt.md). `pnpm format` adds them.
+		"fabrika/padding-line-between-statements": "error",
+
 		"eslint/eqeqeq": ["error", "always", { "null": "ignore" }],
 		"eslint/no-fallthrough": ["error", { "allowEmptyCase": true }],
 		"eslint/no-labels": ["error", { "allowLoop": true, "allowSwitch": true }],

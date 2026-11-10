@@ -72,6 +72,7 @@ export const FINAL: ReadonlySet<StuckWhy> = new Set<StuckWhy>(FINAL_WHYS);
 export type EndOutcome =
 	| Exclude<LaneOutcome, {readonly kind: "stuck" | "ask"}>
 	| (Stuck & {readonly why: (typeof FINAL_WHYS)[number]});
+
 /** How a lane stops: the same line goes on from it. A stuck reason in `FINAL` read back from a save is one too, and a restart refuses it. */
 export type StopOutcome = Stuck | Extract<LaneOutcome, {readonly kind: "ask"}>;
 

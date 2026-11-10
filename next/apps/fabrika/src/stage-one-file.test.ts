@@ -32,6 +32,7 @@ const APP = resolve(import.meta.dirname, "..");
 const homes: string[] = [];
 const runs = {seed: 119120, numRuns: 3};
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
+
 const home = () => {
 	const h = mkdtempSync("/tmp/fh.");
 	homes.push(h);
@@ -40,6 +41,7 @@ const home = () => {
 	vi.stubEnv("DO_NOT_TRACK", "1");
 	return h;
 };
+
 // Alchemy sends SIGKILL when its scope closes, but the child can still hold its port.
 // Await the real close events before reusing that same port and saved state. No fixed sleep.
 // The fixed brain port itself is Alchemy's in-process worker proxy, not workerd. Its 30-second
@@ -61,6 +63,7 @@ const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
 		await Promise.all(closed);
 	}
 };
+
 // Change the disposable completed file, then exercise that file on the real stage below.
 // Parsing finds P12's loader policy, so the plant cannot silently miss a formatting change.
 const plantPolicy = (source: string, mode: "binding" | "outbound", name: string, value: string) => {
@@ -95,16 +98,20 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
 	);
 	return changed;
 };
+
 // A loaded program answers its init and step calls with P11's Step. Decode it, never read it raw.
 type Loaded = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
+
 const SealedTurn = Schema.Struct({
 	_tag: Schema.Literal("stepped"),
 	model: Schema.Struct({keys: Schema.Array(Schema.String), outbound: Schema.String}),
 });
+
 const CounterTurn = Schema.Struct({
 	_tag: Schema.Literal("stepped"),
 	model: Schema.Struct({count: Schema.Number}),
 });
+
 const turn = async <A>(
 	schema: Schema.Codec<A, unknown>,
 	program: Loaded,
@@ -115,6 +122,7 @@ const turn = async <A>(
 	assert(call, `loaded program has no ${method}`);
 	return Effect.runPromise(Schema.decodeUnknownEffect(schema)(await call(...args)));
 };
+
 afterEach(() => {
 	vi.doUnmock("alchemy");
 	vi.doUnmock("@alchemy.run/cloudflare");
@@ -122,12 +130,14 @@ afterEach(() => {
 	vi.unstubAllEnvs();
 	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
 });
+
 const field = (value: string | Buffer) => {
 	const b = Buffer.from(value),
 		n = Buffer.alloc(4);
 	n.writeUInt32BE(b.length);
 	return Buffer.concat([n, b]);
 };
+
 // P12's driver field names. Experiment 238's driver on branch fabrikalfa/exp241-script gives
 // lostLinkMs and writes the caps: experiment 241's guess from its sitting's four base runs.
 const Metrics = Schema.Struct({
@@ -139,6 +149,7 @@ const Metrics = Schema.Struct({
 	rss: Schema.Number,
 	startup: Schema.Number,
 });
+
 const Sample = Schema.Struct({
 	session: Schema.String,
 	settings: Schema.String,
@@ -155,6 +166,7 @@ const Sample = Schema.Struct({
 	lostLinkMs: Schema.Number,
 	workerdRssMb: Schema.Number,
 });
+
 const Bar = Schema.Struct({
 	driver: Schema.String,
 	capsFrom: Schema.String,
@@ -164,11 +176,13 @@ const Bar = Schema.Struct({
 	sizes: Schema.Struct({brain: Schema.Number, programs: Schema.Number, window: Schema.Number}),
 });
 type Bar = typeof Bar.Type;
+
 const median = (values: readonly number[]) => {
 	assert(values.length > 0, "reading missing");
 	const sorted = [...values].sort((a, b) => a - b);
 	return sorted[Math.floor(sorted.length / 2)]!;
 };
+
 const readings = (s: typeof Sample.Type) => ({
 	acceptedSend: median(s.sendMs.slice(1)),
 	publication: median(s.publishMs),
@@ -178,6 +192,7 @@ const readings = (s: typeof Sample.Type) => ({
 	rss: s.workerdRssMb,
 	startup: s.startMs,
 });
+
 // Whether any selected program's package exports "./window", read from the same package.json
 // files libfabrika's build reads: node_modules/<package> from `from` upward. A path has none.
 const findManifest = (from: string, name: string): string | undefined => {
@@ -185,6 +200,7 @@ const findManifest = (from: string, name: string): string | undefined => {
 	if (existsSync(file)) return file;
 	return dirname(from) === from ? undefined : findManifest(dirname(from), name);
 };
+
 const exportsWindow = (from: string, selected: ReadonlyArray<{readonly package: string}>) =>
 	selected.some(({package: name}) => {
 		const file = name.startsWith(".") || isAbsolute(name) ? undefined : findManifest(from, name);
@@ -192,6 +208,7 @@ const exportsWindow = (from: string, selected: ReadonlyArray<{readonly package: 
 		const exports: unknown = JSON.parse(readFileSync(file, "utf8")).exports;
 		return typeof exports === "object" && exports !== null && Object.hasOwn(exports, "./window");
 	});
+
 const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean) => {
 	assert.equal(bar.driver, "experiments/238-local-stage-speed-bar.ts");
 	assert.match(bar.capsFrom, /experiments?[/ ]241(?!\d)/, "capsFrom must name experiment 241");
@@ -220,6 +237,7 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
 			);
 	}
 };
+
 const identity = () => {
 	const pair = generateKeyPairSync("ed25519"),
 		raw = pair.publicKey.export({format: "jwk"}).x!;
@@ -417,6 +435,7 @@ class Client {
 	readonly key: ReturnType<typeof identity>;
 	readonly tab: string;
 	serial = 0;
+
 	constructor(url: string, key: ReturnType<typeof identity>, tab: string) {
 		this.url = url;
 		this.key = key;
@@ -428,6 +447,7 @@ class Client {
 		this.ws.addEventListener("close", () => this.frames.push({closed: true}));
 		this.ws.addEventListener("message", ({data}) => this.frames.push(JSON.parse(String(data))));
 	}
+
 	async next(match: (x: any) => boolean): Promise<any> {
 		for (;;) {
 			const at = this.frames.findIndex(match);
@@ -436,11 +456,13 @@ class Client {
 			await new Promise((done) => setTimeout(done, 10));
 		}
 	}
+
 	async call(method: string, params: unknown) {
 		const id = ++this.serial;
 		this.ws.send(JSON.stringify({jsonrpc: "2.0", id, method, params}));
 		return this.next((x) => x.id === id);
 	}
+
 	async hello() {
 		const {
 			params: {nonce},

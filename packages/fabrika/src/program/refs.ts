@@ -63,14 +63,17 @@ class Copy implements Equal.Equal {
 	readonly kind: string;
 	readonly id: string;
 	readonly msg: unknown;
+
 	constructor(kind: string, id: string, msg: unknown) {
 		this.kind = kind;
 		this.id = id;
 		this.msg = msg;
 	}
+
 	[Equal.symbol](that: unknown): boolean {
 		return that instanceof Copy && that.kind === this.kind && that.id === this.id;
 	}
+
 	[Hash.symbol](): number {
 		return Hash.string(`${this.kind}/${this.id}`);
 	}

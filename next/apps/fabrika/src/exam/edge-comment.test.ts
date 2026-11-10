@@ -17,6 +17,7 @@ const PRELUDE = [
 	'import {Effect} from "effect";',
 	"declare const p: Promise<number>, thing: Effect.Effect<number>;",
 ];
+
 const PROMISE = "export const a = Effect.tryPromise(() => p);";
 const RUN = "export const a = Effect.runPromise(thing);";
 const BOTH = "export const a = Effect.runPromise(Effect.tryPromise(() => p));";
@@ -125,6 +126,7 @@ const Config = Schema.Struct({
 
 // oxc-parser's tree, read loosely: only literals, arrays and objects are walked.
 type Tree = any;
+
 const toValue = (node: Tree): unknown => {
 	if (node.type === "ObjectExpression") {
 		return Object.fromEntries(

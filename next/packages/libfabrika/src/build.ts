@@ -20,6 +20,7 @@ export {BuildError} from "./app/built.ts";
 
 /** One program the client selects: its package, and the export that holds its declaration. */
 export type Selection = {readonly name: string; readonly package: string; readonly export: string};
+
 export type Built = {
 	/** The SHA-256 of the brain file's bytes. */
 	readonly build: string;
@@ -27,6 +28,7 @@ export type Built = {
 	readonly programs: Readonly<Record<string, BuiltProgram>>;
 	readonly assets: Readonly<Record<string, Asset>>;
 };
+
 export type Options = {
 	readonly out: string;
 	/** Where the Compiler ledger lives, and what its paths and the bundles' module ids are relative to. */
@@ -53,6 +55,7 @@ const Manifest = Schema.Struct({
 		Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.Unknown)]),
 	),
 });
+
 const fail = (reason: string) => () => new BuildError({reason});
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 

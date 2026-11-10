@@ -56,14 +56,17 @@ export const LIMIT_WAIT_MS = 60 * 60_000;
 
 const MONTH = "(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)";
 const TIME = "([0-9]{2}):([0-9]{2}):([0-9]{2})";
+
 /** `Sun, 06 Nov 1994 08:49:37 GMT`: the form to send. Day, month, year, then the time. */
 const IMF = new RegExp(
 	`^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), ([0-9]{2}) ${MONTH} ([0-9]{4}) ${TIME} GMT$`,
 );
+
 /** `Sunday, 06-Nov-94 08:49:37 GMT`: obsolete, with a two-digit year. */
 const RFC850 = new RegExp(
 	`^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), ([0-9]{2})-${MONTH}-([0-9]{2}) ${TIME} GMT$`,
 );
+
 /** `Sun Nov  6 08:49:37 1994`: obsolete, C's asctime. */
 const ASCTIME = new RegExp(
 	`^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) ${MONTH} ( [1-9]|[0-9]{2}) ${TIME} ([0-9]{4})$`,

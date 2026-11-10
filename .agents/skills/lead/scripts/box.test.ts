@@ -48,6 +48,7 @@ const options = {seed: 321, numRuns: 3, endOnFailure: true};
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
 type Call = {cmd: string; args: string[]; cwd: string; head?: string};
 type Operation = {path: string; text?: string; to?: string};
+
 type Setup = {
 	operations?: Operation[];
 	batches?: Operation[][];
@@ -61,6 +62,7 @@ type Setup = {
 	openPrs?: string[];
 	gh?: "down";
 };
+
 const body = (
 	files: Array<[string, string]> = [
 		["src/a.ts", "tests"],
@@ -68,9 +70,12 @@ const body = (
 	],
 ) =>
 	`# Today's tooling\n\n\`\`\`text\nstep -> fetch\n\`\`\`\n\n## Laws\n| Law | Generator | Plant |\n| --- | --- | --- |\n| holds | fc.record: files | break |\n\n## Files\n| File | Owner step |\n| --- | --- |\n${files.map(([path, owner]) => `| ${path} | ${owner} |`).join("\n")}\n\n## Size\n1 agent hour, 80 lines. Confidence: 90%.\n\n## What it records\nRun IDs and digests.\n\n## What it cannot tell us\nNo live service.\n\n## Open questions\nNone.\n`;
+
 const hash = (text: string) => createHash("sha256").update(Buffer.from(text)).digest("hex");
+
 const approve = (text: string) =>
 	`Approved by the lead agent, builds the decided note; body ${hash(text).slice(0, 12)}\nPlancheck-Version: 2\n${text}`;
+
 const write = (path: string, text: string) => {
 	mkdirSync(dirname(path), {recursive: true});
 	writeFileSync(path, text);
@@ -160,6 +165,7 @@ class Box {
 	readonly branch = "fabrikalfa/one";
 	readonly env: NodeJS.ProcessEnv;
 	readonly base: string;
+
 	constructor(files?: Array<[string, string]>) {
 		for (const path of [this.main, this.boxes, this.home, this.bin, join(this.boxes, "state")])
 			mkdirSync(path, {recursive: true});
@@ -242,28 +248,35 @@ class Box {
 		write(join(this.dir, "prompt"), "A bounded fixture run.\n");
 		this.state();
 	}
+
 	close() {
 		rmSync(this.dir, {recursive: true, force: true});
 	}
+
 	setup(value: Setup) {
 		write(join(this.dir, "setup.json"), JSON.stringify(value));
 	}
+
 	call(cmd: string, args: string[], cwd = this.main, env = this.env) {
 		const r = spawnSync(cmd, args, {cwd, env, encoding: "utf8", timeout: 15_000});
 		expect(r.error, `${cmd} failed to start`).toBeUndefined();
 		return {code: r.status, signal: r.signal, text: r.stdout + r.stderr, stdout: r.stdout};
 	}
+
 	must(cmd: string, args: string[], cwd = this.main) {
 		const r = this.call(cmd, args, cwd);
 		expect(r.code, r.text).toBe(0);
 		return r.stdout;
 	}
+
 	git(cwd: string, ...args: string[]) {
 		return this.must("/usr/bin/git", args, cwd);
 	}
+
 	head(cwd = this.main, rev = "HEAD") {
 		return this.git(cwd, "rev-parse", rev).trim();
 	}
+
 	state(base = this.base) {
 		const approvedBody = readFileSync(this.plan, "utf8").split("\n").slice(2).join("\n");
 		write(
@@ -271,6 +284,7 @@ class Box {
 			`ticket: 321\nbranch: ${this.branch}\nbase: ${base}\nparent: none\nchildren: none\nplan: ${this.plan}\nplan-sha256: ${hash(approvedBody)}\n`,
 		);
 	}
+
 	run(step = "tests") {
 		return this.call("sh", [
 			program,
@@ -284,6 +298,7 @@ class Box {
 			"321",
 		]);
 	}
+
 	fetch(step = "tests", ticket = "321") {
 		return this.call(
 			"sh",
@@ -292,6 +307,7 @@ class Box {
 			{...this.env, T321_FETCH: "1"},
 		);
 	}
+
 	new(base = "origin/main", branch = "fabrikalfa/new") {
 		return this.call("sh", [
 			program,
@@ -305,6 +321,7 @@ class Box {
 			this.plan,
 		]);
 	}
+
 	calls(): Call[] {
 		return existsSync(join(this.dir, "calls.jsonl"))
 			? readFileSync(join(this.dir, "calls.jsonl"), "utf8")
@@ -314,9 +331,11 @@ class Box {
 					.map((s) => JSON.parse(s))
 			: [];
 	}
+
 	notes() {
 		return this.git(this.main, "notes", "--ref=fabrika", "list");
 	}
+
 	sign(cwd: string, step: string, ticket = "321", key = step) {
 		return this.must(
 			process.execPath,
@@ -333,12 +352,14 @@ class Box {
 			cwd,
 		);
 	}
+
 	commit(cwd: string, path: string, text: string) {
 		write(join(cwd, path), text);
 		this.git(cwd, "add", "--", path);
 		this.git(cwd, "commit", "-q", "-m", "outside change");
 		return this.head(cwd);
 	}
+
 	rows(): Array<Record<string, unknown>> {
 		const path = join(this.boxes, "state/one.rows.jsonl");
 		return existsSync(path)
@@ -350,6 +371,7 @@ class Box {
 			: [];
 	}
 }
+
 const fixture = (f: (b: Box) => void, files?: Array<[string, string]>) => {
 	const b = new Box(files);
 	try {
@@ -358,11 +380,21 @@ const fixture = (f: (b: Box) => void, files?: Array<[string, string]>) => {
 		b.close();
 	}
 };
+
 const refused = (r: {code: number | null; text: string}, why: RegExp) => {
 	expect(r.code, r.text).not.toBe(0);
 	expect(r.text).toMatch(why);
 	expect(r.text).not.toMatch(/usage:|Traceback|command not found|cannot open/);
 };
+
+/** A start check's no: exit 3 and one `refused <check>: <why>` line, which drive reads (ticket 428). */
+const checkRefused = (r: {code: number | null; text: string}, check: string, why = /.*/) => {
+	refused(r, why);
+	expect(r.code, r.text).toBe(3);
+	expect(r.text).toMatch(new RegExp(`^refused ${check}: .*$`, "m"));
+	expect(r.text).not.toMatch(/^stuck /m);
+};
+
 // Exercise every independent fault, even while the product still lacks several checks.
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	const errors: Error[] = [];
@@ -380,6 +412,7 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	}
 	if (errors.length) throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
 };
+
 // A real SIGTERM to the runner and its child. The separate group contains only this fixture.
 const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
 	new Promise<{code: number | null; signal: NodeJS.Signals | null; text: string}>(
@@ -938,7 +971,16 @@ describe("T321 K2 box start, today's tooling", () => {
 								? b.new(sha, b.branch)
 								: b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
-						if (blocks.has(place)) refused(got, /shared_ticket 321 on fabrikalfa\/other/);
+						// A live branch is the check saying no; open PRs gh cannot read is a check that
+						// could not run, which stays stuck (ticket 428).
+						if (place === "gh-down") {
+							refused(
+								got,
+								/^stuck shared_ticket 321 on fabrikalfa\/other: open PRs cannot be read/m,
+							);
+							expect(got.code, got.text).toBe(1);
+						} else if (blocks.has(place))
+							checkRefused(got, "shared_ticket", /321 on fabrikalfa\/other/);
 						else expect(got.code, got.text).toBe(0);
 					}),
 				);
@@ -992,7 +1034,7 @@ describe("T321 K2 box start, today's tooling", () => {
 							...extra,
 						]);
 						if (root === "elsewhere") {
-							refused(got, /root is not an ancestor/);
+							checkRefused(got, "root_not_ancestor", /root is not an ancestor/);
 							return;
 						}
 						expect(got.code, got.text).toBe(0);
@@ -1009,10 +1051,12 @@ describe("T321 K2 box start, today's tooling", () => {
 
 	// Plant: accept any parent head, any role or any signer, rather than a verified build or lead link.
 	// layers and themes, 2026-11-09: a signed lead commit (a merge of main, a lockfile) was refused.
-	it("K2 accepts only origin/main or a verified parent build or lead head and records checked facts", () => {
+	// Plant: require main's tip, not any commit main holds. Eight of nine base_not_signed refusals on
+	// 2026-11-09 were a lane's plan base, an older main, after main moved on (ticket 428).
+	it("K2 accepts any commit origin/main holds or a verified parent build or lead head and records checked facts", () => {
 		fc.assert(
 			fc.property(word, (text) => {
-				each(["main", "build", "lead", "unsigned", "tests", "forged"], (kind) =>
+				each(["main", "older-main", "build", "lead", "unsigned", "tests", "forged"], (kind) =>
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/parent");
 						const parent = b.commit(b.main, "src/b.ts", `${text}\n`);
@@ -1029,20 +1073,26 @@ describe("T321 K2 box start, today's tooling", () => {
 								parent,
 							);
 						b.git(b.main, "checkout", "-q", "main");
-						const got = b.new(kind === "main" ? "origin/main" : parent);
+						// main moves on; box.sh new's own fetch of origin then sees the newer tip.
+						if (kind === "older-main") b.commit(b.main, "src/old.ts", `${text} newer\n`);
+						const onMain = kind === "main" || kind === "older-main";
+						const got = b.new(
+							kind === "main" ? "origin/main" : kind === "older-main" ? b.base : parent,
+						);
 						expect(got.code).not.toBeNull();
-						if (kind === "main" || kind === "build" || kind === "lead") {
+						if (onMain || kind === "build" || kind === "lead") {
 							expect(got.code, got.text).toBe(0);
 							expect(
 								existsSync(join(b.boxes, "state/new.box")),
 								"new must save its checked facts",
 							).toBe(true);
 							const state = readFileSync(join(b.boxes, "state/new.box"), "utf8");
-							expect(state).toContain(`base: ${kind === "main" ? b.base : parent}`);
+							expect(state).toContain(`base: ${onMain ? b.base : parent}`);
 							expect(state).toContain(`plan-sha256: ${hash(body())}`);
 							expect(state).toContain("ticket: 321");
-							if (kind !== "main") expect(state).toContain(`fabrikalfa/parent@${parent}`);
-						} else refused(got, /base_not_signed|base|build/);
+							if (onMain) expect(state).toContain("parent: none");
+							else expect(state).toContain(`fabrikalfa/parent@${parent}`);
+						} else checkRefused(got, "base_not_signed");
 					}),
 				);
 			}),
@@ -1066,7 +1116,8 @@ describe("T321 K2 box start, today's tooling", () => {
 						const got = b.new("origin/main", fault === "branch" ? "other/new" : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
 						if (fault === "renewed") expect(got.code, got.text).toBe(0);
-						else refused(got, /branch|prefix|plan|approval|hash|body/);
+						else if (fault === "branch") refused(got, /branch|prefix/);
+						else checkRefused(got, "plan_unapproved", /plan|approval|hash|body/);
 					}),
 				);
 			}),
@@ -1178,6 +1229,47 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 		);
 	});
 
+	// Plants: say only "commits check failed"; drop the commit, the step or the count past five.
+	// 18 fetches on 2026-11-09 stopped with no rule named, so nobody knew where to send them (T429).
+	it("K1 the fetch refusal names each rule and commit that held it, five at most", () => {
+		const rule = fc.constantFrom(
+			"unsigned_commit",
+			"build_touched_exam",
+			"broken_chain",
+			"stale_link",
+		);
+		// A stale link holds only for a step the lane signed (tests, here); others are waived.
+		const answer = fc
+			.record({
+				why: rule,
+				sha: fc.stringMatching(/^[0-9a-f]{40}$/),
+				step: fc.option(fc.constantFrom("tests", "build"), {nil: undefined}),
+			})
+			.map((a) => (a.why === "stale_link" ? {...a, step: "tests" as const} : a));
+		fc.assert(
+			fc.property(fc.array(answer, {minLength: 1, maxLength: 7}), (answers) =>
+				fixture((b) => {
+					const lines = answers.map((a) => JSON.stringify({_tag: "stuck", ...a}));
+					b.setup({
+						operations: [{path: "src/a.ts", text: "run\n"}],
+						check: {status: 1, text: `${lines.join("\n")}\n`},
+					});
+					expect(b.run().code).toBe(0);
+					const got = b.fetch();
+					expect(got.code, got.text).toBe(1);
+					const said = answers.map(
+						(a) => `${a.why} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`,
+					);
+					const more = said.length > 5 ? `; and ${said.length - 5} more` : "";
+					expect(got.text.trim().split("\n").at(-1)).toBe(
+						`stuck commits check failed: ${said.slice(0, 5).join("; ")}${more}`,
+					);
+				}),
+			),
+			{seed: 429, numRuns: 4, endOnFailure: true},
+		);
+	}, 180_000);
+
 	// Plant: trust the installed checker's scope skip. Review round 1, finding 4.
 	it("K1 scenario: an unsigned commit outside the exam list is refused on a plain fetch", () => {
 		fixture((b) => {
@@ -1187,7 +1279,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 				...b.env,
 				T321_FETCH: "1",
 			});
-			refused(got, /unlinked_commit|commits check failed/);
+			refused(got, /commits check failed: unlinked_commit [0-9a-f]{8}/);
 		});
 	});
 
@@ -1263,6 +1355,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 						"mutation",
 						"skip",
 						"lane-row",
+						"lane-row-skip",
 						"lane-row-stuck",
 					],
 					(kind) =>
@@ -1298,7 +1391,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										why: "recorded fixture result",
 									})}\n`,
 								);
-							if (kind === "lane-row" || kind === "lane-row-stuck") {
+							if (kind.startsWith("lane-row")) {
 								// Where drive writes a step's row: BOXES/<lane>-rows.jsonl, not the box's own.
 								appendFileSync(join(b.boxes, "state/one.box"), "lane: onelane\n");
 								write(
@@ -1308,7 +1401,8 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										ticket: "321",
 										role: "hand",
 										step: "mutation",
-										outcome: kind === "lane-row" ? "pass" : "stopped",
+										// drive writes `skip` for a mutation step that answered skip (ticket 423).
+										outcome: {"lane-row": "pass", "lane-row-skip": "skip"}[kind] ?? "stopped",
 										why: "drive.ts mutation fixture row",
 									})}\n`,
 								);
@@ -1318,9 +1412,17 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 								"mutation",
 								"skip",
 								"lane-row",
+								"lane-row-skip",
 								"lane-row-stuck",
 							].includes(kind);
-							const pass = ["tests", "since-root", "mutation", "skip", "lane-row"].includes(kind);
+							const pass = [
+								"tests",
+								"since-root",
+								"mutation",
+								"skip",
+								"lane-row",
+								"lane-row-skip",
+							].includes(kind);
 							const got = b.run(review ? "review" : "build");
 							expect(got.code).not.toBeNull();
 							if (pass) expect(got.code, got.text).toBe(0);

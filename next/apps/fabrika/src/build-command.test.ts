@@ -6,6 +6,7 @@ import {afterEach, describe, expect, it} from "vitest";
 
 const APP = resolve(import.meta.dirname, "..");
 const homes: string[] = [];
+
 const fixture = () => {
 	const home = mkdtempSync("/tmp/fh.");
 	homes.push(home);
@@ -13,6 +14,7 @@ const fixture = () => {
 	for (const dir of ["src", "node_modules"]) symlinkSync(join(APP, dir), join(home, dir), "dir");
 	return home;
 };
+
 const command = (home: string) =>
 	spawnSync(process.execPath, ["build.ts"], {
 		cwd: home,
@@ -25,11 +27,13 @@ const command = (home: string) =>
 			NODE_OPTIONS: undefined,
 		},
 	});
+
 const verify = (home: string, result: ReturnType<typeof command>) => {
 	expect(result.error, "Node must start").toBeUndefined();
 	expect(result.status, result.stderr).toBe(0);
 	expect(readFileSync(join(home, "dist/brain.mjs"), "utf8").length).toBeGreaterThan(0);
 };
+
 afterEach(() => {
 	for (const home of homes.splice(0)) rmSync(home, {recursive: true, force: true});
 });

@@ -21,6 +21,7 @@ const press = (key: string, mods: Partial<Omit<Press, "key">> = {}): Press => ({
 	meta: false,
 	...mods,
 });
+
 const cmd = (key: string, mods: Partial<Omit<Press, "key" | "meta">> = {}) =>
 	press(key, {...mods, meta: true});
 

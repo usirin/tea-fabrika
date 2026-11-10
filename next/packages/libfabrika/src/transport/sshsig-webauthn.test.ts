@@ -13,22 +13,27 @@ import * as T from "./index.ts";
 
 const SPACE = "fabrika-client";
 const utf8 = (text: string) => new TextEncoder().encode(text);
+
 const u32 = (n: number) => {
 	const b = Buffer.alloc(4);
 	b.writeUInt32BE(n);
 	return b;
 };
+
 const field = (value: string | Uint8Array) => {
 	const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
 	return Buffer.concat([u32(b.length), b]);
 };
+
 const armor = (bytes: Uint8Array) =>
 	`-----BEGIN SSH SIGNATURE-----\n${Buffer.from(bytes)
 		.toString("base64")
 		.match(/.{1,70}/g)
 		?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
+
 const fingerprint = (bytes: Uint8Array) =>
 	`SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+
 const signedBytes = (text: string, space: string = SPACE) =>
 	Buffer.concat([
 		Buffer.from("SSHSIG"),
@@ -37,6 +42,7 @@ const signedBytes = (text: string, space: string = SPACE) =>
 		field("sha512"),
 		field(createHash("sha512").update(text).digest()),
 	]);
+
 const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
 	armor(
 		Buffer.concat([
@@ -49,6 +55,7 @@ const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
 			field(signature),
 		]),
 	);
+
 const web = <A>(call: () => Promise<A>): Effect.Effect<A, Error> =>
 	Effect.tryPromise({try: call, catch: () => new Error("test WebCrypto failed")});
 
@@ -78,6 +85,7 @@ const integer = (raw: Uint8Array) => {
 		? Buffer.concat([Buffer.from([0]), bytes])
 		: bytes;
 };
+
 const passkey = Effect.fn("test.passkey")(function* () {
 	const pair = yield* web(() =>
 		crypto.subtle.generateKey({name: "ECDSA", namedCurve: "P-256"}, false, ["sign", "verify"]),
@@ -171,10 +179,13 @@ const passkey = Effect.fn("test.passkey")(function* () {
 });
 
 const text = "P10 passkey SSHSIG spike\n";
+
 const line =
 	"sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBGEPo5ySi5t5pOwiGQ+WSY3J3s/zKtn06TmL1fMrSNmurpZ9v7/OjqBjuUe2pidsbivMig9u4oyTDcApCEQJE1oAAAAMZmFicmlrYS50ZXN0";
+
 const realArmor =
 	"-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAAIcAAAAic2stZWNkc2Etc2hhMi1uaXN0cDI1NkBvcGVuc3NoLmNvbQ\nAAAAhuaXN0cDI1NgAAAEEEYQ+jnJKLm3mk7CIZD5ZJjcnez/Mq2fTpOYvV8ytI2a6uln2/\nv86OoGO5R7amJ2xuK8yKD27ijJMNwCkIRAkTWgAAAAxmYWJyaWthLnRlc3QAAAAOZmFicm\nlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAYoAAAArd2ViYXV0aG4tc2stZWNkc2Etc2hh\nMi1uaXN0cDI1NkBvcGVuc3NoLmNvbQAAAEoAAAAhANVTo/thhYAu0D8LJl6iukYHc8bZX2\nu9Ja2sv9PJMY2JAAAAIQC93CWItR64zeSMh+CkAQ31AC/mHRQrOG3gIdz/ZEmcgx0AAAAA\nAAAAFGh0dHBzOi8vZmFicmlrYS50ZXN0AAAA6HsidHlwZSI6IndlYmF1dGhuLmdldCIsIm\nNoYWxsZW5nZSI6IlUxTklVMGxIQUFBQURtWmhZbkpwYTJFdFkyeHBaVzUwQUFBQUFBQUFB\nQVp6YUdFMU1USUFBQUJBTE9kSFltTjBySENnal95eTB5dkNIZTB4azVtLW5tYWlVVWNQYX\nQ5c3ZXM0ROcm1wcmdQbDRGbnZKTm05N1VDdlF4RGFIblZXNE14QlBTUGVCMU02QmciLCJv\ncmlnaW4iOiJodHRwczovL2ZhYnJpa2EudGVzdCIsImNyb3NzT3JpZ2luIjpmYWxzZX0AAA\nAA\n-----END SSH SIGNATURE-----\n";
+
 const real = {
 	authenticatorData: "TMQQQmREoPKQly4AZogNCSKbLOxgin60g8viZbLsKGkdAAAAAA",
 	clientDataJSON:
@@ -182,7 +193,9 @@ const real = {
 	signature:
 		"MEYCIQDVU6P7YYWALtA_CyZeorpGB3PG2V9rvSWtrL_TyTGNiQIhAL3cJYi1HrjN5IyH4KQBDfUAL-YdFCs4beAh3P9kSZyD",
 } as const;
+
 const policy = {rp: "fabrika.test", origins: ["https://fabrika.test"]};
+
 const check = (armored: string, signer: string = line, body: string = text, over = {}) =>
 	T.verifySshsig({
 		text: body,
@@ -191,11 +204,15 @@ const check = (armored: string, signer: string = line, body: string = text, over
 		signers: [signer],
 		policy: {...policy, ...over},
 	});
+
 const refused = {_tag: "refused", why: "bad_signature"};
+
 const blob = (armored = realArmor) =>
 	Buffer.from(armored.trim().split("\n").slice(1, -1).join(""), "base64");
+
 const runs = {seed: 119120, numRuns: 40};
 const bodyArb = fc.string({unit: "binary"});
+
 const passkeyLineArb = fc
 	.tuple(fc.uint8Array({minLength: 64, maxLength: 64}), fc.string({minLength: 1}))
 	.map(
@@ -207,9 +224,11 @@ const passkeyLineArb = fc
 				field(rp),
 			]).toString("base64")}`,
 	);
+
 type Signed = {readonly line: string; readonly armored: string};
 const signedArb = fc.record({body: bodyArb, signed: fc.constant<Signed | null>(null)});
 const recorded = {body: text, signed: {line, armored: realArmor}};
+
 const signed = Effect.fnUntraced(function* (a: {body: string; signed: Signed | null}) {
 	if (a.signed !== null) return a.signed;
 	const k = yield* passkey();

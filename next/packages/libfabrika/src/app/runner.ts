@@ -113,6 +113,7 @@ const RESERVED = new Set([
 const WRITE = "write";
 const WriteCmd = Schema.Struct({stream: Schema.NonEmptyString, write: Write});
 const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
+
 /** Pending deliveries keep their original parent, including one saved before input TypeIDs. */
 const Delivery = Schema.Struct({
 	...Incoming.fields,
@@ -123,6 +124,7 @@ const decodeDelivery = Schema.decodeUnknownEffect(Delivery);
 const Typed = Schema.Struct({type: Schema.String});
 const decodeTyped = Schema.decodeUnknownOption(Typed);
 const decodeDown = Schema.decodeUnknownOption(Down);
+
 const inputDigest = Effect.fnUntraced(function* (input: Delivery) {
 	return yield* sha256(
 		new TextEncoder().encode(
@@ -1442,8 +1444,10 @@ const cmdType = (job: Dispatched): string =>
 	Option.match(decodeTyped(job.cmd), {onNone: () => "", onSome: (c) => c.type});
 
 const hasParent = (m: unknown): boolean => typeof m === "object" && m !== null && "parent" in m;
+
 const stamp = (m: unknown, parent: string): unknown =>
 	typeof m === "object" && m !== null ? {...m, parent} : m;
+
 const inputPort = (state: Live, m: unknown) =>
 	Option.match(decodeTyped(m), {
 		onNone: () => undefined,

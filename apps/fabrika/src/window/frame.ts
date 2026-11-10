@@ -63,6 +63,7 @@ interface Shape {
 	readonly takes: readonly string[];
 	readonly sends: readonly string[];
 }
+
 export type Shapes = ReadonlyMap<string, Shape>;
 
 /** The ticket a tile's run shows, by the run's id: what the ticket program's view said. */

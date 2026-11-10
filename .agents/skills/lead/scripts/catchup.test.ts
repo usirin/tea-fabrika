@@ -41,6 +41,7 @@ import {describe, expect, it} from "vitest";
 // Today's tooling. GitHub, signing and pushes are stubbed. Cleanup uses disposable local Git.
 const script = join(import.meta.dirname, "catchup.sh");
 const tip = "0123456789abcdef0123456789abcdef01234567";
+
 const storageFiles = (root: string) => {
 	const files: Record<string, string> = {};
 	const visit = (path: string, name: string) => {
@@ -56,9 +57,14 @@ const storageFiles = (root: string) => {
 	visit(root, ".");
 	return files;
 };
+
 const reads = ["head", "checks", "trust", "apps", "logs"] as const;
 const options = {seed: 520, numRuns: 12};
 type Call = {cmd: string; args: string[]; key?: string};
+type Post = {sub: string; ticket?: number; as: string; home: string; body?: string};
+// The squash commit GitHub answers for the merged PR.
+const merged = "feedfacefeedfacefeedfacefeedfacefeedface";
+
 type Setup = {
 	repo?: string;
 	failures: number[];
@@ -97,7 +103,14 @@ type Setup = {
 	stack?: "none" | "same" | "moved";
 	// Seconds since the start, read by `date` after that many check reads (the last one repeats).
 	clock?: number[];
+	// After the merge (0015): the PR's description, its state as GitHub says it, whether the merge
+	// commit is on main, and the tracker's tickets by number with their state.
+	body?: string;
+	landed?: "MERGED" | "OPEN";
+	offMain?: boolean;
+	tickets?: Record<number, "open" | "closed">;
 };
+
 const green: Setup = {
 	failures: [0, 0, 0, 0, 0],
 	pending: 0,
@@ -106,6 +119,7 @@ const green: Setup = {
 	merge: false,
 	refused: "none",
 };
+
 // The stub uses the platform's absolute Node executable. Its PATH never contains a real gh,
 // node or pnpm, and each write-capable command is refused unless handled here.
 const stub = String.raw`
@@ -119,7 +133,8 @@ const cmd = path.basename(process.argv[1]);
 const args = process.argv.slice(2);
 let key;
 if (cmd === "gh") {
-  if (args[0] === "pr" && args[1] === "view") key = args.includes("headRefOid") ? "oid" : "head";
+  if (args[0] === "pr" && args[1] === "view")
+    key = args.includes("state,mergeCommit") ? "landed" : args.includes("body") ? "body" : args.includes("headRefOid") ? "oid" : "head";
   else if (args[0] === "stack" && args[1] === "merge") key = "stack";
   else if (args[0] === "pr" && args[1] === "merge") key = "merge";
   else if (args[0] === "run" && args[1] === "view") key = "logs";
@@ -141,6 +156,8 @@ if (cmd === "gh") {
     die("temporary " + key + " read failure");
   }
   if (key === "head") console.log(setup.branch);
+  if (key === "landed") console.log(setup.landed === "OPEN" ? "OPEN " : "MERGED " + process.env.CATCHUP_MERGED);
+  if (key === "body") console.log(setup.body ?? "");
   if (key === "oid") console.log(setup.stack === "moved" ? "f".repeat(40) : process.env.CATCHUP_TIP);
   if (key === "merge" && setup.stack && setup.stack !== "none")
     die("This pull request is part of a stack and must be merged using the asynchronous merge REST API");
@@ -164,6 +181,7 @@ if (cmd === "gh") {
   process.exit(0);
 }
 if (cmd === "git") {
+  if (args.includes("merge-base") && args.includes(process.env.CATCHUP_MERGED)) process.exit(setup.offMain ? 1 : 0);
   if (setup.repo && (args.includes("merge-base") || args.includes("merge"))) {
     const at = args.includes("merge-base") ? args.indexOf("merge-base") : args.indexOf("merge");
     const ran = require("node:child_process").spawnSync("/usr/bin/git", ["-C", setup.repo, ...args.slice(at)], {encoding: "utf8"});
@@ -186,6 +204,18 @@ if (cmd === "git") {
   else if (!["fetch", "checkout", "push", "rev-parse"].includes(args[0]) && !args.includes("merge")) die("unhandled git command");
   process.exit(0);
 }
+if (cmd === "node" && args[0].endsWith("/apps/fabrika/src/cli.ts") && args[1] === "post") {
+  // The tracker's own post command: list, comment and close, as an agent, on FABRIKA_HOME.
+  const [sub, n] = [args[2], Number(args[3])];
+  const at = args.indexOf("--body-file");
+  const post = {sub, ticket: sub === "list" ? undefined : n, as: args[args.indexOf("--as") + 1], home: process.env.FABRIKA_HOME, body: at < 0 ? undefined : fs.readFileSync(args[at + 1], "utf8")};
+  fs.appendFileSync(path.join(dir, "posts.jsonl"), JSON.stringify(post) + "\n");
+  if (sub === "list")
+    // As the real list does: open tickets only, one line each, after the logger's own prefix.
+    for (const [number, state] of Object.entries(setup.tickets ?? {}))
+      if (state === "open") console.log("[15:00:00.000] INFO (#2): #" + number + " open c0 A ticket");
+  process.exit(0);
+}
 if (cmd === "node") {
   if (!args[0].endsWith("/botpush.mjs")) die("unhandled node command");
   if (setup.refused === "notes" || setup.refused === "branch" && setup.branch.startsWith("fabrikalfa/")) die("atomic push refused");
@@ -200,6 +230,7 @@ if (cmd === "date") {
 }
 die("unhandled tool: " + cmd);
 `;
+
 const run = (setup: Setup, args: string[] = []) => {
 	const dir = mkdtempSync(join(tmpdir(), "cu-"));
 	try {
@@ -474,6 +505,7 @@ const run = (setup: Setup, args: string[] = []) => {
 				GH_REPO: "fixture/repo",
 				CATCHUP_FIXTURE: dir,
 				CATCHUP_TIP: checkedTip,
+				CATCHUP_MERGED: merged,
 				GIT_CONFIG_NOSYSTEM: "1",
 				GIT_CONFIG_GLOBAL: "/dev/null",
 				TYPESAFE_API_KEY: undefined,
@@ -481,6 +513,13 @@ const run = (setup: Setup, args: string[] = []) => {
 		});
 		expect(ran.error).toBeUndefined();
 		expect(ran.signal).toBeNull();
+		const posts: Post[] = (
+			existsSync(join(dir, "posts.jsonl")) ? readFileSync(join(dir, "posts.jsonl"), "utf8") : ""
+		)
+			.trim()
+			.split("\n")
+			.filter(Boolean)
+			.map((line) => JSON.parse(line));
 		const calls: Call[] = (
 			existsSync(join(dir, "calls.jsonl")) ? readFileSync(join(dir, "calls.jsonl"), "utf8") : ""
 		)
@@ -537,6 +576,7 @@ const run = (setup: Setup, args: string[] = []) => {
 			code: ran.status,
 			text: ran.stdout + ran.stderr,
 			calls,
+			posts,
 			remaining,
 			keptHead,
 			checkedTip,
@@ -559,7 +599,9 @@ const run = (setup: Setup, args: string[] = []) => {
 		rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 const merges = (calls: Call[]) => calls.filter((c) => c.key === "merge");
+
 const assertHead = (calls: Call[]) => {
 	for (const call of merges(calls)) {
 		expect(call.args).toContain("--match-head-commit");
@@ -1248,5 +1290,144 @@ describe("catchup, today's tooling", () => {
 			),
 			{...options, numRuns: 8},
 		);
+	});
+});
+
+// 0015: a merged PR closes only the tickets its description names, one line each, in our own
+// phrase. GitHub's keywords, trailers and other text never close one.
+describe("catchup closes the tickets a merged PR names, today's tooling", () => {
+	const phrase = /^[ \t]*fabrika close ticket [0-9]+[ \t]*$/;
+	const note = () =>
+		`Closed by the merge of https://github.com/fixture/repo/pull/900, merge commit ${merged}.\n`;
+	const closes = (posts: Post[]) => posts.filter((p) => p.sub !== "list");
+	const noise = fc.stringMatching(/^[^\r\n]{0,30}$/).filter((line) => !phrase.test(line));
+
+	// Plant: match the phrase anywhere on a line, or close the ticket the PR was signed for.
+	it("T410 property: a description with no phrase line closes nothing", () => {
+		fc.assert(
+			fc.property(fc.array(noise, {maxLength: 6}), (lines) => {
+				const got = run({...green, body: lines.join("\n"), tickets: {520: "open", 5: "open"}});
+				expect(got.code, got.text).toBe(0);
+				expect(got.posts).toEqual([]);
+				expect(got.text).toContain("pr 900: no fabrika close ticket line; closed no tickets");
+			}),
+			{seed: 4101, numRuns: 6},
+		);
+	});
+
+	// Plant: read GitHub's closing keywords, or a ticket trailer, as a close.
+	it("T410 vector: GitHub's nine closing keywords and ticket trailers close nothing (GitHub docs, linking a pull request to an issue)", () => {
+		const keywords = [
+			"close",
+			"closes",
+			"closed",
+			"fix",
+			"fixes",
+			"fixed",
+			"resolve",
+			"resolves",
+			"resolved",
+		];
+		const body = [
+			...keywords.flatMap((k) => [`${k} #5`, `${k[0]!.toUpperCase()}${k.slice(1)} #5`, `${k}: 5`]),
+			"Ticket: 5",
+			"Closes-ticket: 5",
+			"T5 build: the fix",
+		].join("\n");
+		const got = run({...green, body, tickets: {5: "open"}});
+		expect(got.code, got.text).toBe(0);
+		expect(got.posts).toEqual([]);
+	});
+
+	// Plant: accept the phrase with other text before or after it on the line.
+	it("T410 property: the phrase inside other text on its line closes nothing", () => {
+		fc.assert(
+			fc.property(fc.stringMatching(/^[a-z.:#`>*-]{1,8}$/), fc.boolean(), (other, before) => {
+				const line = before ? `${other} fabrika close ticket 5` : `fabrika close ticket 5${other}`;
+				const got = run({...green, body: `Done.\n${line}\n`, tickets: {5: "open"}});
+				expect(got.code, got.text).toBe(0);
+				expect(got.posts).toEqual([]);
+			}),
+			{seed: 4102, numRuns: 6},
+		);
+	});
+
+	// Plant: close only the first line's ticket, skip the comment, or close one already closed.
+	it("T410 property: each phrase line closes its open ticket once, with a comment naming the PR and the merge commit", () => {
+		fc.assert(
+			fc.property(
+				fc.uniqueArray(fc.integer({min: 1, max: 999}), {minLength: 1, maxLength: 3}),
+				fc.array(fc.boolean(), {minLength: 3, maxLength: 3}),
+				fc.array(fc.constantFrom("", " ", "\t", "  "), {minLength: 2, maxLength: 2}),
+				fc.boolean(),
+				fc.array(noise, {maxLength: 2}),
+				(named, open, [lead, trail], crlf, other) => {
+					const tickets = Object.fromEntries(
+						named.map((n, i) => [n, open[i] ? ("open" as const) : ("closed" as const)]),
+					);
+					const lines = [...other, ...named.map((n) => `${lead}fabrika close ticket ${n}${trail}`)];
+					// A repeated line closes its ticket once.
+					lines.push(`fabrika close ticket ${named[0]}`);
+					const got = run({...green, body: lines.join(crlf ? "\r\n" : "\n"), tickets});
+					expect(got.code, got.text).toBe(0);
+					expect(got.posts[0]).toMatchObject({sub: "list", as: "lead"});
+					expect(closes(got.posts)).toEqual(
+						named.flatMap((n) =>
+							tickets[n] === "open"
+								? [
+										{sub: "comment", ticket: n, as: "lead", home: got.posts[0]!.home, body: note()},
+										{sub: "close", ticket: n, as: "lead", home: got.posts[0]!.home},
+									]
+								: [],
+						),
+					);
+					for (const n of named)
+						expect(got.text).toContain(
+							tickets[n] === "open"
+								? `pr 900: closed ticket ${n}\n`
+								: `pr 900: ticket ${n} is not open (already closed, or no such ticket); left as it is`,
+						);
+					expect(got.posts.every((p) => p.home.endsWith("/fh"))).toBe(true);
+				},
+			),
+			{seed: 4103, numRuns: 8},
+		);
+	});
+
+	// Plant: stop after the first ticket.
+	it("T410 scenario: two phrase lines close two tickets (the decision's own example)", () => {
+		const got = run({
+			...green,
+			body: "Builds the close.\n\nfabrika close ticket 410\nfabrika close ticket 411\n",
+			tickets: {410: "open", 411: "open"},
+		});
+		expect(got.code, got.text).toBe(0);
+		expect(closes(got.posts).map((p) => [p.sub, p.ticket])).toEqual([
+			["comment", 410],
+			["close", 410],
+			["comment", 411],
+			["close", 411],
+		]);
+		expect(got.text).toContain("pr 900: closed ticket 410\npr 900: closed ticket 411\n");
+	});
+
+	// Plant: read the description before the merge, or close when GitHub does not say MERGED or
+	// the merge commit is not on main.
+	it("T410 scenario: a refused, unconfirmed or off-main merge closes nothing", () => {
+		const body = "fabrika close ticket 5";
+		const refused = run({...green, mergeFails: true, body, tickets: {5: "open"}});
+		expect(refused.code, refused.text).toBe(1);
+		expect(refused.posts).toEqual([]);
+		expect(refused.calls.filter((c) => c.key === "landed" || c.key === "body")).toEqual([]);
+		const open = run({...green, landed: "OPEN", body, tickets: {5: "open"}});
+		expect(open.code, open.text).toBe(0);
+		expect(open.posts).toEqual([]);
+		expect(open.calls.filter((c) => c.key === "landed")).toHaveLength(10);
+		expect(open.calls.filter((c) => c.key === "body")).toEqual([]);
+		expect(open.text).toContain("pr 900: not confirmed merged (OPEN); closed no tickets");
+		const off = run({...green, offMain: true, body, tickets: {5: "open"}});
+		expect(off.code, off.text).toBe(0);
+		expect(off.posts).toEqual([]);
+		expect(off.text).toContain(`pr 900: merge commit ${merged} is not on main; closed no tickets`);
 	});
 });

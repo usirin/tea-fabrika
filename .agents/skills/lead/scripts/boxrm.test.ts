@@ -38,6 +38,7 @@ import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
 const script = join(import.meta.dirname, "box.sh");
+
 const storageFiles = (root: string) => {
 	const files: Record<string, string> = {};
 	const visit = (path: string, name: string) => {
@@ -53,6 +54,7 @@ const storageFiles = (root: string) => {
 	visit(root, ".");
 	return files;
 };
+
 const input = fc.record({
 	name: fc.stringMatching(/^[a-z]{2,8}$/),
 	value: fc.stringMatching(/^[a-z]{1,12}$/),
@@ -60,8 +62,10 @@ const input = fc.record({
 	depth: fc.integer({min: 1, max: 3}),
 	descendant: fc.boolean(),
 });
+
 type Input = {name: string; value: string; space: boolean; depth: number; descendant: boolean};
 type Remote = {branches: string[]; local: number};
+
 const fixture = (
 	v: Input,
 	body: (f: ReturnType<typeof setup>) => void,
@@ -75,6 +79,7 @@ const fixture = (
 		rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
 	const main = join(dir, "main"),
 		boxes = join(dir, "boxes");
@@ -164,7 +169,10 @@ const {spawnSync} = require("node:child_process");
 const cmd = require("node:path").basename(process.argv[1]);
 const args = process.argv.slice(2);
 if (cmd === "gh") {
-  if (args[0] === "pr" && args[1] === "view") console.log("main");
+  // After the merge (0015): merged at the tip, with a description that names no ticket.
+  if (args[0] === "pr" && args[1] === "view" && args.includes("state,mergeCommit")) console.log("MERGED " + ${JSON.stringify(tip)});
+  else if (args[0] === "pr" && args[1] === "view" && args.includes("body")) console.log("");
+  else if (args[0] === "pr" && args[1] === "view") console.log("main");
   else if (args[0] === "pr" && args[1] === "merge") process.exit(0);
   else if (args[0] === "run") console.log("commits\\tcheck\\t2026-11-08T00:00:00Z commits: 1 commits, ticket 318");
   else if (args[1].includes("check_name=")) console.log("github-actions");
@@ -204,6 +212,7 @@ if (cmd === "gh") {
 	const retained = (ref: string) => git(main, "fetch", "-q", data, `${ref}:refs/keep/${v.name}`);
 	return {dir, main, boxes, name, work, data, git, run, commit, retained, env};
 };
+
 const kept = (f: ReturnType<typeof setup>, code = 1) => {
 	const got = f.run();
 	expect(got.code, got.text).toBe(code);

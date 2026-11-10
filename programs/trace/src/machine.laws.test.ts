@@ -43,15 +43,18 @@ interface Flat {
 	readonly open: readonly string[];
 	readonly chosen: string | null;
 }
+
 const flat = (s: Model): Flat => {
 	if (s.shows.kind !== "job") throw new Error("a ticket view, from the job view's Msgs alone");
 	return {read: s.shows.read, open: s.open, chosen: s.chosen};
 };
+
 const unflat = (f: Flat): Model => ({
 	shows: {kind: "job", read: f.read},
 	open: f.open,
 	chosen: f.chosen,
 });
+
 /** One step, as the laws read it. `same`: the step gave back the very state it was given. */
 interface FlatStep {
 	readonly prev: Flat;
@@ -63,13 +66,16 @@ interface FlatStep {
 
 const OTHER = "f".repeat(32);
 const id = fc.constantFrom(TALLY_ID, OTHER);
+
 /** Every row of the tally record, and two it does not hold. */
 const row = fc.constantFrom(
 	...nodesOf(treeOf(TALLY_TRACE)).map((n) => n.key),
 	"span:ffffffffffffffff",
 	"",
 );
+
 const runningJob = TALLY_TRACE.job === null ? null : {...TALLY_TRACE.job, ended: null};
+
 /**
  * The whole record, the record before tally's machine ran, or the job just begun with nothing
  * under it: a read can hold fewer rows, or none. Two say the job has not ended, so a job can run,
@@ -92,6 +98,7 @@ const table: MsgArbitraryTable<JobMsg> = {
 	choose: arbRecordMsg("choose", {row: fc.option(row, {nil: null})}),
 	tick: arbRecordMsg("tick", {now: fc.nat()}),
 };
+
 const lists = fc.array(arbMsg(table), {maxLength: 30, size: "max"});
 const OPTS = {numRuns: 300, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
@@ -135,6 +142,7 @@ const depsOf = (machine: Machine, type: string, state: Flat): readonly unknown[]
 		const deps: unknown = sub.deps(unflat(state));
 		return deps === null || deps === undefined ? [] : [deps];
 	});
+
 /** The Sub types a machine may name: these two, and the ticket view's `facts` (ticket 141). */
 const SUB_TYPES: ReadonlySet<string> = new Set(["follow", "tick", "facts"]);
 
@@ -271,11 +279,13 @@ const broken = (machine: Machine): readonly string[] =>
 
 // Planted mistakes: the real machine with one cell, or its Sub, changed.
 const real = trace.update;
+
 /** A cell as these plants were written: on the flat view. */
 type Cell<T extends JobMsg["type"]> = (
 	s: Flat,
 	m: Extract<JobMsg, {readonly type: T}>,
 ) => readonly [Flat, readonly never[]];
+
 /** A flat cell as the machine's own: the very state back when the cell gave its own back. */
 const lift =
 	<T extends JobMsg["type"]>(cell: Cell<T>) =>
@@ -284,12 +294,14 @@ const lift =
 		const [n, cmds] = cell(f, m);
 		return [n === f ? s : unflat(n), cmds];
 	};
+
 /** The real `got`, on the flat view. */
 const realGot: Cell<"got"> = (s, m) => {
 	const u = unflat(s);
 	const [n, cmds] = real.got(u, m);
 	return [n === u ? s : flat(n), cmds];
 };
+
 const plant = (cells: {readonly [T in JobMsg["type"]]?: Cell<T>}): Machine => ({
 	...trace,
 	update: {

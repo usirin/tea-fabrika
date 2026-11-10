@@ -5,6 +5,7 @@ import {plant} from "./plant.ts";
 
 const CODE = "fabrika(no-ledger-sql)";
 const FILE = "next/packages/libfabrika/src/workers/runtime.ts";
+
 describe("ledger SQL stays behind its service", () => {
 	it("refuses ledger table reads and writes outside the service, including aliases and templates", async () => {
 		await fc.assert(

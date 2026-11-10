@@ -30,6 +30,7 @@ const unboundedJson = Arbitrary.schema(
 );
 
 const text = Schema.NonEmptyString.check(Schema.isMaxLength(40));
+
 // The old integer generator never made -0; JSON storage cannot distinguish it from 0.
 const policy = Schema.Struct({
 	why: ProcessFact.cases.down.fields.why,
@@ -39,6 +40,7 @@ const policy = Schema.Struct({
 		Schema.makeFilter((n) => !Object.is(n, -0)),
 	),
 });
+
 const nat = (max: number) => Schema.Int.check(Schema.isBetween({minimum: 0, maximum: max}));
 // Effect 4.1.1 has no examples option. Each callback also checks its old inputs.
 // Retain 0..40 times/texts and 2..31 errors. Explicit number bounds above

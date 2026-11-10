@@ -28,17 +28,20 @@ import {afterEach, describe, expect, it, vi} from "vitest";
 const ROOT = resolve(import.meta.dirname, "../../../..");
 const homes: string[] = [];
 const sha = (s: string | Uint8Array) => createHash("sha256").update(s).digest("hex");
+
 const text = fc
 	.array(fc.constantFrom("雪", "🫖", "'", '"', "\\", "\r\n", "\n", "</script>", "a"), {
 		minLength: 1,
 		maxLength: 12,
 	})
 	.map((xs) => xs.join(""));
+
 const graph = fc.record({text, chaos: fc.boolean(), count: fc.integer({min: 1, max: 3})});
 const runs = {seed: 119120, numRuns: 3};
 // Three real clean-build samples took 5.6 s under load. Allow 10 s per generated sample.
 const buildTimeout = (samples = runs.numRuns) => samples * 10_000;
 type Selection = {readonly name: string; readonly package: string; readonly export: string};
+
 type Built = {
 	readonly brain: string;
 	readonly build: string;
@@ -47,6 +50,7 @@ type Built = {
 		Record<string, {readonly hash: string; readonly type: string; readonly body: string}>
 	>;
 };
+
 type Build = {
 	readonly build: (options: {
 		readonly out: string;
@@ -117,11 +121,13 @@ const fixture = (value: string, count = 1) => {
 		},
 	};
 };
+
 const api = async () => {
 	const file = join(import.meta.dirname, "build.ts");
 	assert(existsSync(file), "P16 not built: libfabrika/build reusable one-file build is absent");
 	return vi.importActual<Build>(pathToFileURL(file).href);
 };
+
 const build = async (options: Parameters<Build["build"]>[0]) =>
 	Effect.runPromise((await api()).build(options).pipe(Effect.provide(NodeServices.layer)));
 
@@ -138,11 +144,13 @@ const strings = (source: string) => {
 	visit(parsed.program);
 	return found;
 };
+
 const embedded = (brain: string, sources: readonly string[]) => {
 	assert(sources.length > 0);
 	for (const source of sources)
 		assert(strings(brain).includes(source), "compiled text changed or executed");
 };
+
 const inert = (file: string) =>
 	execFileSync(
 		process.execPath,

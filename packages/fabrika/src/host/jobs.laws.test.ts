@@ -24,6 +24,7 @@ type Machine = typeof jobsMachine;
 type Msg = MsgOf<Machine>;
 
 const run = fc.constantFrom("r1", "r2", "r3", "r4", "r5", "r6");
+
 const stage: fc.Arbitrary<StageRecord> = fc.record({
 	program: fc.constantFrom("counter", "seq", "say"),
 	flags: fc.constant({}),
@@ -31,6 +32,7 @@ const stage: fc.Arbitrary<StageRecord> = fc.record({
 	wire: fc.constant(null),
 	ended: fc.constant(false),
 });
+
 const n = fc.integer({min: 1, max: 4});
 /** Two tiles' tsh, and a tsh with no name. */
 const owner = fc.constantFrom("t1", "t2", null);
@@ -62,11 +64,13 @@ const table: MsgArbitraryTable<Msg> = {
 		why: fc.constantFrom("wrong ticket", null),
 	}),
 };
+
 /** Long lists, so jobs pile up, leave and come back. Not tea's `arbMsgSequence`: its lists come out about ten long. */
 const lists = fc.array(arbMsg(table, {weights: {began: 3, stage_ended: 4, detached: 1}}), {
 	maxLength: 40,
 	size: "max",
 });
+
 const OPTS = {numRuns: 400, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
 
@@ -89,6 +93,7 @@ const everyStep = (name: string, holds: (step: JobStep) => boolean): Law => ({
 
 const byNumber = (s: Jobs, at: number): Job | undefined => s.jobs.find((job) => job.n === at);
 const live = (job: Job): boolean => job.stages.some((st) => !st.ended);
+
 /** Would this run's end end the job: it is in the job, and every other program has ended? */
 const lastOf = (job: Job, run: string): boolean =>
 	job.stages.some((st) => st.run === run) && job.stages.every((st) => st.ended || st.run === run);
@@ -317,12 +322,14 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = jobsMachine.update;
+
 /** The stages, with the programs of this run marked ended. */
 const endedIn = (stages: Job["stages"], at: string): Job["stages"] => {
 	const mark = (st: StageRecord): StageRecord => (st.run === at ? {...st, ended: true} : st);
 	const [first, ...rest] = stages;
 	return [mark(first), ...rest.map(mark)];
 };
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...jobsMachine,
@@ -517,6 +524,7 @@ const flagged: fc.Arbitrary<StageRecord> = fc.record({
 	}),
 	ended: fc.boolean(),
 });
+
 const keptTable: MsgArbitraryTable<Msg> = {
 	...table,
 	began: arbRecordMsg("began", {
@@ -529,6 +537,7 @@ const keptTable: MsgArbitraryTable<Msg> = {
 		by: writer,
 	}),
 };
+
 const keptLists = fc.array(arbMsg(keptTable, {weights: {began: 3, stage_ended: 4, detached: 1}}), {
 	maxLength: 40,
 	size: "max",

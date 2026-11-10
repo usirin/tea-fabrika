@@ -17,11 +17,13 @@ vi.mock("./table.ts", () => table);
 // P16: the brain reads its embedded tables from the build's generated module
 // (libfabrika's build-modules.d.ts). Mocking both keeps these laws on either wiring.
 vi.mock("virtual:fabrika-built", () => ({...table, assets: {}}));
+
 vi.mock("cloudflare:workers", () => ({
 	DurableObject: class {
 		// No parameter properties: the app's tsconfig keeps to erasable syntax (plain Node).
 		readonly ctx: DurableObjectState;
 		readonly env: Env;
+
 		constructor(ctx: DurableObjectState, env: Env) {
 			this.ctx = ctx;
 			this.env = env;
@@ -29,15 +31,18 @@ vi.mock("cloudflare:workers", () => ({
 	},
 	WorkerEntrypoint: class {},
 }));
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const field = (value: Buffer | string) => {
 	const body = Buffer.from(value),
 		size = Buffer.alloc(4);
 	size.writeUInt32BE(body.length);
 	return Buffer.concat([size, body]);
 };
+
 const identity = () => {
 	const pair = generateKeyPairSync("ed25519"),
 		bytes = Buffer.from(pair.publicKey.export({format: "jwk"}).x!, "base64url"),
@@ -72,22 +77,27 @@ const identity = () => {
 		},
 	};
 };
+
 const Model = Schema.Struct({
 	count: Schema.Int,
 	replies: Schema.Int,
 	failures: Schema.Array(Schema.String),
 });
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("prepare"), parent: Schema.optionalKey(Schema.String)}),
 	Schema.Struct({type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String)}),
 ]);
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["person_only", "not_granted"],
 });
+
 const caused = (parent: string) =>
 	write({stream: "events", write: {_tag: "caused", parent, fact: {_tag: "answered"}}});
+
 const approvals = {
 	name: "approvals",
 	machine: Machine.make({
@@ -117,10 +127,13 @@ const approvals = {
 	writes: {answered: {schema: Schema.TaggedStruct("answered", {}), personOnly: true}},
 	wake: () => null,
 } as const;
+
 const closers: Array<() => Promise<void>> = [];
+
 afterEach(async () => {
 	for (const close of closers.splice(0).reverse()) await close();
 });
+
 const storage = (db: DatabaseSync) => {
 	const sql = nodeSql(db),
 		values = new Map<string, unknown>();
@@ -142,6 +155,7 @@ const storage = (db: DatabaseSync) => {
 		deleteAlarm: async () => {},
 	};
 };
+
 const gate = () => {
 	let resolve = () => {};
 	const promise = new Promise<void>((done) => {
@@ -149,6 +163,7 @@ const gate = () => {
 	});
 	return {promise, resolve};
 };
+
 const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 	table.programs.counter = {hash: "counter-a", source: "counter"};
 	table.programs.approvals = {hash: "approvals-a", source: "approvals"};

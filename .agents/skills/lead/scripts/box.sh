@@ -305,6 +305,11 @@ main, boxes = pathlib.Path(os.environ["MAIN"]), pathlib.Path(os.environ["BOXES"]
 args = sys.argv[2:]
 def refuse(why):
     print("stuck " + why, file=sys.stderr); raise SystemExit(1)
+# A start check that said no, before any agent ran: one line `refused <check>: <why>` and exit 3, so
+# drive records refused:<check> and not a stuck step (ticket 428). A check that cannot run stays stuck.
+def refuse_check(check, why):
+    said = " | ".join(l.strip() for l in why.splitlines() if l.strip())
+    print("refused " + check + ": " + said, file=sys.stderr); raise SystemExit(3)
 if len(args) < 2: refuse("box command and name required")
 cmd, name, *args = args
 if not re.fullmatch(r"[A-Za-z0-9_-]+", name): refuse("invalid box name")
@@ -371,6 +376,12 @@ def plan_owners(state):
     result = call(["sh", str(here / "../../plan/scripts/plancheck.sh"), "--owners-json", state["plan"]])
     if result.returncode: refuse("not_owner: plan cannot be read")
     return json.loads(result.stdout)
+def owner_of(owners, p):
+    # A row ending in / owns every path under it; a plain prefix (owned.ts, owned.tsx) does not.
+    if p in owners: return owners[p]
+    if any(part in ("", ".", "..") for part in p.split("/")): return None
+    under = [k for k in owners if k.endswith("/") and p.startswith(k)]
+    return owners[max(under, key=len)] if under else None
 def fetched_head(branch):
     # Even start/end reads go through MAIN's fetch. No Git command runs in work.
     target = "refs/box-reads/" + uuid.uuid4().hex
@@ -390,20 +401,22 @@ def new_box():
     if not ticket or not plan: refuse("plan and ticket required")
     plan = str(pathlib.Path(plan).absolute())
     checked = call(["sh", str(here / "../../plan/scripts/plancheck.sh"), "--approved", plan])
-    if checked.returncode: refuse("plan_unapproved: " + checked.stdout.decode().strip())
+    if checked.returncode: refuse_check("plan_unapproved", checked.stdout.decode())
     digest = hashlib.sha256(pathlib.Path(plan).read_bytes().split(b"\n", 2)[2]).hexdigest()
     must(git("fetch", "-q", "origin"), "base fetch failed")
     head, parent = rev(base), "none"
     root_sha = rev(root) if root else head
-    if not ancestor(root_sha, head): refuse("root is not an ancestor of the base")
+    if not ancestor(root_sha, head): refuse_check("root_not_ancestor", "root is not an ancestor of the base")
     # A lane that starts one box per step continues its own branch: that head is a valid base too.
     own = any(git("rev-parse", "-q", "--verify", r + "^{commit}").stdout.decode().strip() == head for r in ("refs/heads/" + branch, "refs/remotes/origin/" + branch))
-    if head != rev("origin/main") and not own:
+    # Any commit main holds is a base: a lane's plan records main as it stood, and main moves on
+    # before the next step starts (8 of 9 base_not_signed refusals on 2026-11-09, ticket 428).
+    if not ancestor(head, rev("origin/main")) and not own:
         # A lead commit (a merge of main, a lockfile commit) is signed and checked like a step's, so
         # it is a base too (layers and themes, 2026-11-09: a lead commit left both lanes stuck).
-        if not (verified(head, "build") or verified(head, "lead")): refuse("base_not_signed: verified build or lead head required")
+        if not (verified(head, "build") or verified(head, "lead")): refuse_check("base_not_signed", "verified build or lead head, or a commit origin/main holds, required")
         branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/", "refs/remotes/origin/fabrikalfa/"), "parent lookup failed").splitlines()
-        if not branches: refuse("base_not_signed: no parent branch at head")
+        if not branches: refuse_check("base_not_signed", "no parent branch at head")
         parent = branches[0] + "@" + head
     # Two live lanes must not write one ticket. A branch that shares the ticket blocks only while it
     # is live: an open PR, or a box on disk whose state names it. A branch the base already holds,
@@ -429,7 +442,7 @@ def new_box():
         # Only links this lane's base lacks: an older branch of the same lane, already merged into
         # the base, is history, not another lane holding the ticket.
         if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits(head, other))) and not rows_only(other) and live(other):
-            refuse("shared_ticket " + ticket + " on " + other)
+            refuse_check("shared_ticket", ticket + " on " + other)
     must(git("clone", "-q", "--no-checkout", "--reference", str(main), "--separate-git-dir=" + str(gitdata), os.environ["REMOTE"], str(work)), "box clone failed")
     edge = ["--git-dir=" + str(gitdata), "--work-tree=" + str(work)]
     must(git(*edge, "fetch", "-q", str(main), head + ":refs/heads/" + branch), "box base fetch failed")
@@ -563,7 +576,7 @@ def fetch_box():
                 if exam.returncode not in (0, 1): refuse("exam list unreadable")
                 if step == "build" and exam.returncode: refuse("build exam paths " + sha)
                 for p in paths:
-                    if owners.get(p) != step and not (step == "mutation" and owners.get(p) == "tests"): refuse("not_owner " + p)
+                    if owner_of(owners, p) != step and not (step == "mutation" and owner_of(owners, p) == "tests"): refuse("not_owner " + p + " in " + sha[:8])
                 candidates.append(sha)
             # All candidates pass before any note is made. HEAD and index belong to a private gitdir.
             common = must(git("rev-parse", "--path-format=absolute", "--git-common-dir"), "gitdir lookup failed")
@@ -604,11 +617,20 @@ def fetch_box():
             if person(sha): continue
             if not isinstance(note, dict) or not isinstance(note.get("step"), str) or not verified(sha, note["step"]):
                 print(json.dumps({"_tag": "stuck", "why": "unlinked_commit", "commit": sha}))
-                answers.append({"_tag": "stuck"})
+                answers.append({"_tag": "stuck", "why": "unlinked_commit", "commit": sha})
         if unreadable or not (answers or waived): refuse("commits check unreadable output")
         # The checker exits 1 for any stuck answer; when every stuck it gave was waived, that exit is
         # explained. Any other failing exit still refuses.
-        if (checked.returncode and not (checked.returncode == 1 and waived)) or any(a["_tag"] == "stuck" for a in answers): refuse("commits check failed")
+        if (checked.returncode and not (checked.returncode == 1 and waived)) or any(a["_tag"] == "stuck" for a in answers):
+            # Name each rule and commit that held it, so the lead sends the step to the right place
+            # (ticket 429: 18 fetches on 2026-11-09 said only "commits check failed").
+            def said(a):
+                sha = a.get("sha") or a.get("commit") or ""
+                step = " step " + a["step"] if isinstance(a.get("step"), str) else ""
+                paths = " " + " ".join(map(str, a["paths"][:3])) if isinstance(a.get("paths"), list) and a["paths"] else ""
+                return str(a.get("why") or a["_tag"]) + (" " + str(sha)[:8] if sha else "") + step + paths
+            held = [said(a) for a in answers if a["_tag"] == "stuck"]
+            refuse("commits check failed: " + ("; ".join(held[:5]) + (f"; and {len(held) - 5} more" if len(held) > 5 else "") if held else "exit " + str(checked.returncode)))
     return 0
 try:
     if cmd == "new": new_box(); status = 0

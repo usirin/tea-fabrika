@@ -129,6 +129,7 @@ const encodeFact = Schema.encodeUnknownEffect(Fact);
 
 /** A plan as the ledger keeps it: through JSON and back, so it compares with a plan read back. */
 const PlanText = Schema.fromJsonString(RunPlan);
+
 const keptPlan = (plan: RunPlan) =>
 	Schema.encodeEffect(PlanText)(plan).pipe(
 		Effect.flatMap(Schema.decodeEffect(PlanText)),

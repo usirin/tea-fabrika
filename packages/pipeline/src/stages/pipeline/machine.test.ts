@@ -30,6 +30,7 @@ import {EXAM_MERGE_SENDS} from "./routes.ts";
 const ID = make(LaneId)("L1");
 const READ = readFiled({number: 7});
 const CLAIM = claimLane({number: 7, lane: ID, intent: "c"});
+
 const RUN = runStep({
 	number: 7,
 	count: 1,
@@ -77,6 +78,7 @@ const questionFor = (rules: readonly string[]) => {
 /** The exam's pull request, and its head as the exam step landed it. */
 const EXAM_PR = "local:example/lane/pull/1";
 const EXAM_HEAD = "3".repeat(40);
+
 /** What the exam review read at `head`, and what it met: what `carry` needs (self-fix PR 10, Part 4). */
 const REVIEWED_AT = (head: string) => ({
 	head,
@@ -114,11 +116,13 @@ const HEAD = "4".repeat(40);
 const OTHER_HEAD = "5".repeat(40);
 const CHECKS = [{command: "node_modules/.bin/vitest run", code: 0, ms: 4_210}];
 const GREEN_AT = (head: string) => ({head, commands: CHECKS, result: "green", failed: []}) as const;
+
 /** A build that ended well, with code's checks green at its own head: the only build a later step runs on. */
 const BUILT: StepEnd = {
 	outcome: {kind: "done", part: false},
 	carry: {head: HEAD, checked: GREEN_AT(HEAD)},
 };
+
 const UNSEEN = {kind: "ask", who: "owner", for: "unseen"} as const;
 const MARKED = {kind: "ask", who: "owner", for: "decision"} as const;
 const ended = (s: Lane, end: StepEnd) => lane.update.lane_step_ok(s, runStep.ok(RUN, end, 0));

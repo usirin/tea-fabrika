@@ -5,6 +5,7 @@ import {Schema} from "effect";
 const Day = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/));
 const Text = Schema.NullOr(Schema.String);
 const Count = Schema.NullOr(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
+
 const Note = Schema.Struct({
 	id: Schema.String,
 	date: Day,
@@ -19,6 +20,7 @@ const Note = Schema.Struct({
 	test: Schema.optionalKey(Text),
 	links: Schema.optionalKey(Schema.Array(Schema.String)),
 });
+
 const Run = Schema.Struct({
 	date: Day,
 	role: Schema.String,
@@ -43,12 +45,14 @@ const Run = Schema.Struct({
 	outputTokens: Schema.optionalKey(Count),
 	driver_caused: Schema.optionalKey(Schema.Boolean),
 });
+
 const fields = {
 	file: Schema.String,
 	line: Schema.Number,
 	field: Schema.String,
 	reason: Schema.String,
 };
+
 export const Finding = Schema.TaggedUnion({error: fields, warning: fields});
 export type Finding = typeof Finding.Type;
 
@@ -70,8 +74,9 @@ const words: Record<string, readonly string[]> = {
 		"driver",
 		"step",
 	],
-	outcome: ["merged", "pass", "fail", "triaged", "parked", "stopped"],
+	outcome: ["merged", "pass", "fail", "triaged", "parked", "skip", "stopped"],
 };
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 

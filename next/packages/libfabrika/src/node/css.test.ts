@@ -21,6 +21,7 @@ import {bundle, bundleAsync, type Rule, transform} from "lightningcss";
 import {afterEach, describe, expect, it, vi} from "vitest";
 
 type Inline = (file: string) => Effect.Effect<string, unknown, FileSystem.FileSystem | Path.Path>;
+
 type Build = {
 	readonly build: (options: {
 		readonly root: string;
@@ -36,11 +37,13 @@ type Build = {
 		readonly chaos: boolean;
 	}) => Effect.Effect<unknown, unknown, FileSystem.FileSystem | Path.Path>;
 };
+
 const product = async <A>(file: string, what: string) => {
 	const path = join(import.meta.dirname, file);
 	assert(existsSync(path), `P16 not built: ${what} absent`);
 	return vi.importActual<A>(pathToFileURL(path).href);
 };
+
 const inlineStylesheet = (file: string) =>
 	// oxlint-disable-next-line fabrika/no-effect-promise -- a missing product module dies with its "not built" message instead of passing as a typed refusal
 	Effect.promise(() =>
@@ -49,6 +52,7 @@ const inlineStylesheet = (file: string) =>
 		Effect.flatMap((m) => m.inlineStylesheet(file)),
 		Effect.provide(NodeServices.layer),
 	);
+
 const build: Build["build"] = (options) =>
 	// oxlint-disable-next-line fabrika/no-effect-promise -- a missing product module dies with its "not built" message instead of passing as a typed refusal
 	Effect.promise(() => product<Build>("../build.ts", "libfabrika/build")).pipe(
@@ -58,6 +62,7 @@ const build: Build["build"] = (options) =>
 const runs = {seed: 119120, numRuns: 30};
 const ids = fc.integer({min: 0, max: 10000});
 const homes: string[] = [];
+
 // Inspect the parsed rules before printing can merge or normalize them. Only locations differ.
 const cssRules = (css: string) => {
 	let rules: Rule[] = [];
@@ -72,8 +77,10 @@ const cssRules = (css: string) => {
 	});
 	return rules;
 };
+
 const meaning = (rules: readonly Rule[]): unknown =>
 	JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
+
 const fixture = (id: number) => {
 	const home = mkdtempSync("/tmp/p16css.");
 	homes.push(home);
@@ -89,6 +96,7 @@ const fixture = (id: number) => {
 		},
 	};
 };
+
 // Every refusal is the build's typed bundle failure. A thrown parser error rejects instead.
 const failure = async (stylesheet: Effect.Effect<string, unknown>) => {
 	const result = await Effect.runPromise(Effect.result(stylesheet));
@@ -105,7 +113,9 @@ const cssGraphs = fc.record({
 	between: fc.boolean(),
 	named: fc.boolean(),
 });
+
 type CssGraph = typeof cssGraphs extends fc.Arbitrary<infer A> ? A : never;
+
 const graphFixture = (graph: CssGraph, mixed: boolean) => {
 	const f = fixture(graph.id),
 		order = mixed ? graph.order : graph.order.filter((n) => n < 2),
@@ -195,6 +205,7 @@ const refusedBuild = async (home: string) => {
 	}
 	return Effect.runPromise(attempt);
 };
+
 afterEach(() => {
 	for (const home of homes.splice(0)) rmSync(home, {recursive: true, force: true});
 });

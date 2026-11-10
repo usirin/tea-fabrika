@@ -48,6 +48,7 @@ const policy = {
 	periodMs: 5000,
 	backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5000},
 };
+
 const NAME = "counter:1";
 const PRIVATE = "private failure text P34";
 const owner = Writer.cases.person.make({key: "SHA256:caller", for: from().for});
@@ -56,10 +57,12 @@ type Model = typeof Model.Type;
 const Msg = Schema.Struct({type: Schema.Literal("poison")});
 // Only the platform base class and the RPC transport are supplied. Box methods are real.
 vi.mock("cloudflare:workers", () => ({WorkerEntrypoint: class {}}));
+
 const runnerLayer: (
 	p: Descriptor,
 	options: {policy: typeof policy; recovery: {sql: Sql; name: string; capacity: number}},
 ) => ReturnType<typeof ProgramRunner.layer> = ProgramRunner.layer;
+
 const world = (
 	thrown: unknown,
 	adapter: "node" | "worker" = "node",
@@ -189,8 +192,10 @@ const world = (
 		},
 	};
 };
+
 const recorded = (process: string) =>
 	RecordManager.use((r) => Stream.runCollect(r.read({_tag: "job", process})));
+
 const recoverySpans = (w: ReturnType<typeof world>, process: string) =>
 	Effect.gen(function* () {
 		const until = w.alarms.at(-1);
@@ -244,6 +249,7 @@ const failure = fc
 									: message;
 		return {value, private: [message, ...(value instanceof Error ? [value.stack!] : [])]};
 	});
+
 const generatedThrow = fc.oneof(
 	failure,
 	fc

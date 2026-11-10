@@ -19,6 +19,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. A pull request that builds or finishes a Tier 1 row or a tracked plan item updates that row in `tier-1.md` and "Where we are now" in the README in the same pull request; if the step's owner list does not allow it, the lead updates them the same day ([0013](./.decisions/0013-plan-docs-change-with-the-work.md)). |
 | Know what the owner decided | [`.decisions/`](./.decisions/), one short file per decision; see [Decision discovery](#decision-discovery) | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, with [`/adr`](./.agents/skills/adr/SKILL.md). |
 | Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes | A note there when a decision needs the long reasoning, plus its row in that folder's README. Mark it **proposed** until it is settled. Its decision file links it. |
+| Know where `next/` follows a model (OTP, Elm, Kubernetes) and where it leaves it | [`docs/direction/follows/`](./docs/direction/follows/README.md), one table per model, one row per behavior | The row, in the same pull request that changes that behavior ([0017](./.decisions/0017-each-model-we-follow-has-one-table.md)). |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
 | Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), the index, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md): a Mermaid diagram first, then one real code block, then words, citing `path:line` ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)). |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
@@ -100,7 +101,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
-  `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the owner reads
+  `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
   ([no Promises](./docs/direction/no-promises.md)).
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
@@ -136,6 +137,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
   owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
   with the hit list in the PR. Only real loosening waits on the owner.
+  The lead merges any pull request, product code and exam changes included, with `catchup.sh`
+  once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
+  loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
+  owner ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)).
 - **One fresh agent per step** (owner, 2026-11-09). Each step's agent reads the lane's state
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
@@ -151,7 +156,9 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
   returns nothing, and reads one part through a selector, as in
   `useRuntime(run, (m) => m.views[id])`. No stand-in hook.
-- **In `next/`, no bare `of` and no `xOf` names.** Today's `nameOf` and `outcomesOf`
+- **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
+  Effect does it: `Lease.of(...)` under `import * as Lease`
+  ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
   stay until that code goes.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
   picks, and ideas the owner wants to try out there first. What a tryout teaches
@@ -277,8 +284,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   ```
 - **Names.** Use the industry's word for a thing
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
-  every pull request, prose included. An Effect service name is never plural: one that holds many is
-  `<Thing>Manager`, such as `LeaseManager`.
+  every pull request, prose included. An Effect service that holds many is named in the plural, as
+  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`
+  ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
 - **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not
   `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
   `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
@@ -358,7 +366,9 @@ pnpm format     # oxfmt and oxlint: format, sort imports and apply safe fixes, i
 ```
 
 Run `pnpm format` first, so a diff holds only what was meant. The format settings
-are in `.oxfmtrc.json`: tabs, 100 columns. The lint rules are in `.oxlintrc.json`:
+are in `.oxfmtrc.json`, Effect's own from ticket 466's sweep: 2 spaces, 120 columns, no
+semicolons, no trailing commas, spaces inside braces
+([0029](./.decisions/0029-format-and-names-follow-effect.md)). The lint rules are in `.oxlintrc.json`:
 the rules of the pipeline this repo rebuilds, with its custom rules in
 `oxlint-plugins/`. Why these two tools:
 [oxlint and oxfmt](./docs/direction/oxlint-and-oxfmt.md). Never switch a rule off

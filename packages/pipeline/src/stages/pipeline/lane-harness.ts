@@ -39,9 +39,11 @@ import {LaneWork} from "./work.ts";
 // touched. Today's version.
 
 export const MODULES = fileURLToPath(new URL("../../../node_modules", import.meta.url));
+
 export const BRIEFS = fileURLToPath(
 	new URL("../../../../../programs/pipeline/briefs", import.meta.url),
 );
+
 export const OWNER = "user:owner";
 export const NUMBER = 1;
 
@@ -1089,6 +1091,7 @@ export const inClone = (ran: Ran, ...args: readonly string[]) =>
 		encoding: "utf8",
 		stdio: "pipe",
 	}).trim();
+
 /** Whether `commit`'s tree holds `path`. */
 export const holds = (ran: Ran, commit: string, path: string) => {
 	try {
@@ -1098,18 +1101,23 @@ export const holds = (ran: Ran, commit: string, path: string) => {
 		return false;
 	}
 };
+
 /** The files `commit` changed from its first parent. */
 export const changedBy = (ran: Ran, commit: string) =>
 	inClone(ran, "diff-tree", "--no-commit-id", "--name-only", "-r", commit).split("\n");
+
 /** The round each run of `stage` started in. */
 export const roundsOf = (ran: Ran, stage: string) =>
 	ran.facts
 		.filter((f) => f.type === "started" && f.stage === stage)
 		.map((f) => Number(f.round ?? 1));
+
 export const moveMain = (where: Where) =>
 	Effect.sync(() => pushToMain(where, [{path: "docs/elsewhere.md", text: "Written elsewhere.\n"}]));
+
 /** The ticket's first `restarted` fact. */
 export const restartOf = (ran: Ran) => ran.facts.find((f) => f.type === "restarted");
+
 /** The head the lane's last end before its restart left: where the branch stood as it stopped. */
 export const headBefore = (ran: Ran) => {
 	const at = ran.facts.findIndex((f) => f.type === "restarted");
@@ -1125,10 +1133,13 @@ export const headBefore = (ran: Ran) => {
 
 /** What a builder leaves in the test writer's file, in its first build only. */
 export const TOUCHED = 'import {it} from "vitest";\n\nit("lowers capitals", () => {});\n';
+
 /** The test writer's file written again: red without `lower`, green with the builder's. */
 const REDONE =
 	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n\texpect(lower("AB")).toBe("ab");\n\texpect(lower("Ab")).toBe("ab");\n});\n';
+
 export const REDONE_MARK = 'lower("Ab")';
+
 /** A test writer's run that writes `REDONE`, and nothing else. */
 export const WRITES_REDONE = {
 	with: {
@@ -1136,6 +1147,7 @@ export const WRITES_REDONE = {
 		answers: [{property: "p1", kind: "test", file: "src/lower.test.ts", name: "lowers capitals"}],
 	},
 };
+
 /** The second test writer's run writes `REDONE`, and nothing else. */
 export const REDO = {tests: [null, WRITES_REDONE]};
 export const SEE = ["src/lower.ts", "src/lower.test.ts"];
@@ -1144,11 +1156,13 @@ export const SEE = ["src/lower.ts", "src/lower.test.ts"];
 
 export const runsOf = (ran: Ran, step: string) => codexRuns(ran.dir).filter((r) => r.step === step);
 export const THE_PLANS_NO = {approve: "no"};
+
 export const commentsOf = (ran: Ran) =>
 	ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
 
 export const REAL_LEAN =
 	"Use Unicode compatibility decomposition and remove combining marks. This gives Çay Şeker → cay-seker and ﬂower → flower, but Straße → stra-e.";
+
 export const REAL_QUESTION = {
 	ask: "How broadly should non-ASCII letters fold into ASCII?",
 	options: [
@@ -1162,6 +1176,7 @@ export const REAL_QUESTION = {
 	doubt:
 		"Confirm whether titles containing letters such as ß, æ and ø must retain their usual transliterations.",
 };
+
 export const REAL_P1 = {
 	when: "The three publication titles are converted",
 	result: "Their slugs are respectively “hello-world”, “cay-seker” and an empty string.",
@@ -1170,6 +1185,7 @@ export const REAL_P1 = {
 	tool: "test",
 	code: [],
 };
+
 export const REAL_P2 = {
 	when: "Nonempty ASCII letter-and-digit words are joined by spaces and converted",
 	result:
@@ -1179,9 +1195,11 @@ export const REAL_P2 = {
 	tool: "test",
 	code: [],
 };
+
 /** Why the real test writer said it could not test p1. */
 export const REAL_CANNOT =
 	"The three publication title inputs are unspecified. The linked issue was unreachable, and clarification has not arrived. Guessing inputs would not test the promised examples.";
+
 /** Why the real mutants' writer said it could not kill a mutant. */
 export const REAL_MUTANT =
 	"Both regexes globally remove every Unicode combining mark. The original deletes each consecutive run; the mutant deletes each mark individually. No observable behavior changes.";
@@ -1237,6 +1255,7 @@ export const reads = (ran: Ran, prefix: string, words: readonly string[]) => {
 
 export const RUN3_LEAN =
 	"Fold decomposable accents; treat remaining non-ASCII characters as word separators.";
+
 export const RUN3_QUESTION = {
 	ask: "How broadly should letters fold when Unicode accent decomposition does not produce ASCII, such as ß, ø, and ł?",
 	options: [
@@ -1249,6 +1268,7 @@ export const RUN3_QUESTION = {
 	sure: 75,
 	doubt: "Expected slugs for 'Straße', 'smør', and 'Łódź' would settle the intended scope.",
 };
+
 export const RUN3_FINDING = {
 	kind: "review-code",
 	from: {source: "check", name: "tests-prove-it"},
@@ -1261,8 +1281,10 @@ export const RUN3_FINDING = {
 		"Letters with plain ASCII forms survive folding, including these examples, and regression tests require their preservation instead of their loss.",
 	seen: "ran",
 };
+
 /** The same finding, as a reviewer told of q1 marks it. */
 export const AGAINST_Q1 = {...RUN3_FINDING, from: {source: "decision", id: "q1"}};
+
 export const OTHER_FINDING = {
 	...RUN3_FINDING,
 	from: {source: "check", name: "bugs-a-person-would-hit"},
@@ -1271,7 +1293,9 @@ export const OTHER_FINDING = {
 	wants: "An empty name comes back empty.",
 	seen: "read",
 };
+
 export const RUN3_NAME = "p1: preserves letters with plain ASCII forms, including ł and ø";
+
 export const RUN3_ROUND_2 = {
 	with: {
 		files: [
@@ -1287,8 +1311,10 @@ export const RUN3_ROUND_2 = {
 		],
 	},
 };
+
 const RUN3_LEFT =
 	"Blocked by contradictory protected tests: src/slug.test.ts requires Straße → stra-e and discards ł, ø, æ, and œ; src/slug.folding.test.ts requires Straße → strasse and preserves those letters. The exam owner must reconcile these expectations before implementation can satisfy every check.";
+
 export const NO_CHANGE = {
 	with: {
 		summary:
@@ -1297,9 +1323,11 @@ export const NO_CHANGE = {
 		left: [RUN3_LEFT],
 	},
 };
+
 export const THE_LEAN = {plan: [{with: {questions: [RUN3_QUESTION]}}]};
 
 export const found = (...findings: readonly unknown[]) => ({with: {findings}});
+
 /** Run 3 as it went: the finding is not marked, and the builder changes nothing in round 2. */
 export const RUN_3: FakeScript = {
 	answers: {
@@ -1309,7 +1337,9 @@ export const RUN_3: FakeScript = {
 		build: [null, NO_CHANGE],
 	},
 };
+
 export const bye = (ran: Ran) => ran.lines.at(-1) ?? "";
+
 export const answeredWith = (ran: Ran, pick: string) =>
 	ran.facts.filter((f) => f.type === "answered" && f.pick === pick);
 
@@ -1325,6 +1355,7 @@ export const RULES = "[rules] Read names in one form";
 export const RULE = ".oxlintrc.json";
 
 export const FAULT = "The rules list is not empty: it turns on a rule the plan never named.";
+
 /** A review of the exam's pull request that fails its one criterion, with the finding it rests on. */
 export const FAILS_E1 = {
 	with: {
@@ -1343,6 +1374,7 @@ export const FAILS_E1 = {
 		skipped: [],
 	},
 };
+
 export const exams = (ran: Ran) => codexRuns(ran.dir).filter((r) => r.step === "exam");
 
 /** Where in the facts the first end of `stage` is, or -1. */
@@ -1362,13 +1394,16 @@ export const mainTakesTheRule: NonNullable<Script["checksSay"]> = (_head, nth, w
 /** The head an exam step's `ended` fact carries for the exam's pull request. */
 export const pullHead = (fact: Ran["facts"][number] | undefined) =>
 	(fact?.carry as {readonly examPull?: {readonly head: string}} | undefined)?.examPull?.head ?? "";
+
 /** The lines on the ticket that name a kept ref. */
 export const keptLines = (ran: Ran) =>
 	ran.facts
 		.filter((f) => f.type === "commented" && String(f.body).includes("refs/kept/"))
 		.map((f) => String(f.body));
+
 /** The kept ref a line names. */
 export const refIn = (line: string) => /refs\/kept\/[^\s`'"]*[^\s`'".,;:)]/.exec(line)?.[0] ?? "";
+
 /** Where a kept ref may be: the lane's own clone, or the remote. */
 export const keptPlaces = (ran: Ran) => [
 	["-C", join(ran.dir, "home", "work", "clone")],

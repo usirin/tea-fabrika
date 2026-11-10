@@ -47,6 +47,7 @@ const TABLES = [
 	"CREATE INDEX IF NOT EXISTS process_letters_id ON process_letters (id, rev)",
 	"CREATE TABLE IF NOT EXISTS process_activity (process TEXT PRIMARY KEY, activity TEXT NOT NULL)",
 ];
+
 const encodeActivity = Schema.encodeSync(Schema.fromJsonString(Activity));
 const encodeCheckpoint = Schema.encodeUnknownSync(Schema.fromJsonString(Checkpoint));
 const decodeCheckpoint = Schema.decodeUnknownSync(Schema.fromJsonString(Checkpoint));
@@ -81,6 +82,7 @@ type ProcessStorage = {
 	/** Appends one RuntimeRecord to the process's stream. A retry answers its first placing. */
 	readonly record: (id: string, fact: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
+
 export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(
 	"@kampus/libfabrika/ProcessStore",
 ) {

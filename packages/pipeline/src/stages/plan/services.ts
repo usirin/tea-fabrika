@@ -38,6 +38,7 @@ export type Facts = typeof Facts.Type;
 
 /** How one planner run is to spend: the model, its effort, and the most it may cost. */
 export const EFFORTS = ["low", "medium", "high"] as const;
+
 export const Settings = Schema.Struct({
 	model: Schema.String,
 	effort: Schema.Literals(EFFORTS),

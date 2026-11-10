@@ -25,7 +25,9 @@ import type {Built} from "../src/build.ts";
 
 const APP = resolve(import.meta.dirname, ".."),
 	ROOT = resolve(APP, "../../..");
+
 type Asset = {readonly type: string; readonly body: string; readonly hash: string};
+
 type Build = {
 	readonly build: (options: {
 		readonly root: string;
@@ -41,6 +43,7 @@ type Build = {
 		readonly ledger: readonly unknown[];
 	}) => Effect.Effect<Built & {readonly assets: Readonly<Record<string, Asset>>}, unknown>;
 };
+
 const field = (v: string | Buffer) => {
 	const b = Buffer.from(v),
 		n = Buffer.alloc(4);

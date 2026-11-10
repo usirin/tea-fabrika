@@ -32,6 +32,7 @@ const pipe = (tint: Line["tint"], letter: string): Line => ({
 	tint,
 	letter,
 });
+
 const A = pipe(0, "A");
 
 /** t1 shows the tracker a pipe was typed in; t2 shows the pipe's ticket; t4 is a plain tsh. */

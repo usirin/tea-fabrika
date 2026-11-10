@@ -58,12 +58,16 @@ const OTHER_TRACE = "0bf92f3577b34da6a3ce929d0e0e4736";
 const SPAN = "00f067aa0ba902b7";
 const BUILD = "p11-build-a";
 const NAME = "queue:1";
+
 const writer = (as: "person" | "agent" = "person") =>
 	Writer.cases[as].make({key: `SHA256:${as}`, for: PERSON});
+
 const owner = Writer.cases.agent.make({key: "SHA256:owner", for: PERSON});
+
 // Trusted, repeatable UUIDv7 fixtures. The schema checks the same brand as the real door.
 const inputId = (n: number) =>
 	Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
+
 const from = (over: Partial<From> = {}): From => ({
 	by: "SHA256:person",
 	for: PERSON,
@@ -81,6 +85,7 @@ const Request = Schema.Struct({
 	tag: Schema.String,
 });
 type Request = typeof Request.Type;
+
 const Model = Schema.Struct({
 	count: Schema.Int,
 	replies: Schema.Int,
@@ -91,6 +96,7 @@ const Model = Schema.Struct({
 	wake: Schema.NullOr(Schema.Number),
 });
 type Model = typeof Model.Type;
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("add"), n: Schema.Int}),
 	Schema.Struct({
@@ -112,22 +118,28 @@ const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number}),
 	Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}),
 ]);
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["not_delivered", "spent", "person_only", "ended", "not_granted", "bad_cmd"],
 });
+
 const work = Cmd.make("work", {
 	input: Schema.Struct({n: Schema.Int}),
 	ok: Schema.Int,
 	err: ["disk"],
 });
+
 class DiskError extends Schema.TaggedError<DiskError>()("disk", {}) {}
+
 class WorkValue extends Schema.Class<WorkValue>("WorkValue")({
 	n: Schema.Int,
 	extra: Schema.optionalKey(Schema.String),
 }) {}
+
 const fire = Cmd.make("fire", {input: Schema.Struct({}), ok: Schema.Null, err: ["bad_cmd"]});
+
 const initial: Model = {
 	count: 0,
 	replies: 0,
@@ -137,6 +149,7 @@ const initial: Model = {
 	wake: null,
 	note: "private model body P11",
 };
+
 const command = (r: Request) =>
 	write({
 		stream: "facts",
@@ -145,12 +158,14 @@ const command = (r: Request) =>
 				? {_tag: "own", fact: {_tag: r.tag, token: r.token}}
 				: {_tag: "caused", parent: r.parent, fact: {_tag: r.tag, token: r.token}},
 	});
+
 const nextWrite = (s: Model): readonly [Model, ReadonlyArray<ReturnType<typeof write>>] => {
 	const [next, ...queue] = s.queue;
 	return next === undefined
 		? [{...s, busy: false}, []]
 		: [{...s, queue, busy: true}, [command(next)]];
 };
+
 const machine = Machine.make({
 	model: Model,
 	msg: Msg,
@@ -185,9 +200,11 @@ const machine = Machine.make({
 		],
 	},
 });
+
 const SavedFact = Schema.TaggedStruct("saved", {token: Schema.String});
 const Answered = Schema.TaggedStruct("answered", {token: Schema.String});
 const Polled = Schema.TaggedStruct("polled", {token: Schema.String});
+
 const authoring = (name = "queue") => ({
 	name,
 	machine,
@@ -222,6 +239,7 @@ const authoring = (name = "queue") => ({
 	},
 	wake: (s: Model) => s.wake,
 });
+
 type Incoming = {
 	readonly id: string;
 	readonly envelope: Envelope<unknown>;
@@ -229,19 +247,25 @@ type Incoming = {
 	readonly seen: number;
 	readonly span: {readonly traceId: string; readonly spanId: string};
 };
+
 type Failure = {readonly _tag: string; readonly why: string} | NotGranted;
+
 type Sent =
 	| {readonly _tag: "accepted"; readonly rev: number; readonly pos: number}
 	| {readonly _tag: "refused"; readonly why: string; readonly now?: number; readonly most?: number};
+
 type Opened = {readonly rev: number; readonly view: Model};
+
 type Runner = {
 	readonly open: (client: string) => Effect.Effect<Opened, Failure>;
 	readonly msg: (i: Incoming) => Effect.Effect<Sent, Failure>;
 	readonly due: (at: number) => Effect.Effect<void, Failure>;
 };
+
 // Decode this test program's view at its client, so changing the public View to unknown
 // cannot force the builder to edit these laws.
 class ViewedRunner extends Context.Service<ViewedRunner, Runner>()("test/P11ViewedRunner") {}
+
 type Update =
 	| {readonly type: "whole"; readonly rev: number; readonly view: Model}
 	| {
@@ -257,15 +281,25 @@ type Update =
 
 const folder = mkdtempSync(join(tmpdir(), "p11-runner-"));
 const databases: DatabaseSync[] = [];
+
 afterAll(() => {
 	for (const db of databases) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
 });
+
 let files = 0;
+
+const connect = (path: string) => {
+	const db = new DatabaseSync(path);
+	// Match the product's Node span queue settings in src/node/stage-recording.ts.
+	db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+	databases.push(db);
+	return db;
+};
+
 const disk = () => {
 	const path = join(folder, `${++files}.db`);
-	let db = new DatabaseSync(path);
-	databases.push(db);
+	let db = connect(path);
 	let inner = nodeSql(db);
 	const fault = {query: (_q: string) => false, once: false};
 	const sql: Sql = {
@@ -285,18 +319,21 @@ const disk = () => {
 		db: () => db,
 		reopen: () => {
 			db.close();
-			db = new DatabaseSync(path);
-			databases.push(db);
+			db = connect(path);
 			inner = nodeSql(db);
 		},
 	};
 };
+
 const read = (stream: string) => Ledger.use((l) => Stream.runCollect(l.read(stream, 0)));
+
 const body = (row: Entry) =>
 	Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(row.body);
+
 const inbox = read(`${NAME}/inbox`);
 const facts = read("facts");
 const steps = read(PROCESS).pipe(Effect.map((rows) => rows.filter((r) => r._tag === "stepped")));
+
 const resultLetters = inbox.pipe(
 	Effect.map((rows) =>
 		rows.filter((r) => {
@@ -307,6 +344,7 @@ const resultLetters = inbox.pipe(
 		}),
 	),
 );
+
 const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 	effect.pipe(
 		Effect.exit,
@@ -323,6 +361,7 @@ type ActivityStorage = {
 	readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError>;
 	readonly sync: () => Effect.Effect<void, LedgerError>;
 };
+
 const activityStorage = () => {
 	let durable: unknown = Activity.cases.idle.make({process: PROCESS});
 	let pending = durable;

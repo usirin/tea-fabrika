@@ -30,6 +30,7 @@ it("an unknown program is refused before the Worker Loader is called", async () 
 // takes the embedded asset table as its fourth argument. Nothing is read from disk.
 type Asset = {readonly hash: string; readonly type: string; readonly body: string};
 type Assets = Readonly<Record<string, Asset>>;
+
 type Api = {
 	readonly serveAsset?: (assets: Assets, request: Request) => Effect.Effect<Response, unknown>;
 	readonly fetch: (
@@ -39,6 +40,7 @@ type Api = {
 		assets?: Assets,
 	) => Effect.Effect<Response, unknown>;
 };
+
 const load = async () => {
 	const api: Api = await import("./index.ts");
 	expect(api.serveAsset, "P16 not built: libfabrika/workers serves no embedded asset").toBeTypeOf(
@@ -46,7 +48,9 @@ const load = async () => {
 	);
 	return {...api, serveAsset: api.serveAsset!};
 };
+
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+
 const assets = fc.record({
 	id: fc.nat(),
 	body: fc.string({unit: "grapheme"}),

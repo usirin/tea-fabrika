@@ -138,6 +138,7 @@ export const refine = createRefineLoop({
 export const MAX_RESTARTS = 1;
 
 type Held = {readonly ask: TestsAsk; readonly key: string};
+
 type Drafted = Held & {
 	readonly written: Written;
 	readonly tries: number;
@@ -170,6 +171,7 @@ export type TestWriter =
 	  });
 
 type WriterMsg = DraftMsg<"tests_write", Written>;
+
 export type TestWriterMsg =
 	| {readonly type: "start"; readonly ask: TestsAsk; readonly key: string}
 	/** Sent once after booting from saved state: re-issue whatever was in flight. */
@@ -179,6 +181,7 @@ export type TestWriterMsg =
 type Step = readonly [TestWriter, readonly TestWriterCmd[]];
 const stay = (s: TestWriter): Step => [s, []];
 const held = (s: Held): Held => ({ask: s.ask, key: s.key});
+
 const drafted = (s: Drafted): Drafted => ({
 	...held(s),
 	written: s.written,
@@ -196,10 +199,12 @@ const blank: TestWriterReport = {
 	costUsd: 0,
 	failure: null,
 };
+
 const end = (s: Held, outcome: TestWriterOutcome, report: Partial<TestWriterReport> = {}): Step => [
 	{...held(s), phase: "over", outcome, report: {...blank, ...report}},
 	[],
 ];
+
 const spent = (s: Drafted) => ({written: s.written, tries: s.tries, costUsd: s.costUsd});
 
 const intent = (s: Held, step: string) => intentOf("tests", s.ask.ticket, s.ask.plan.version, step);

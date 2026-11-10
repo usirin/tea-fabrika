@@ -26,6 +26,7 @@ import * as realOptions from "./worker-options.ts";
 type Options = typeof realOptions;
 
 const madeDirs: string[] = [];
+
 afterAll(() => {
 	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
 });
@@ -171,6 +172,7 @@ type Bad =
 
 const word = fc.stringMatching(/^[a-z][a-z-]{0,9}$/);
 const wire = fc.constantFrom("read", "register", "append", "claim", "readStream", "lease");
+
 const arbBad: fc.Arbitrary<Bad> = fc.oneof(
 	fc.record({type: fc.constant("worker404" as const), path: fc.constantFrom("/", "//x", "/?a=1")}),
 	fc.record({type: fc.constant("noCredential" as const), method: fc.oneof(wire, word)}),
@@ -202,12 +204,15 @@ const arbBad: fc.Arbitrary<Bad> = fc.oneof(
 		step: fc.constantFrom("login" as const, "agent-login" as const),
 	}),
 );
+
 /** A body as anyone may send one: small or big, JSON or not. Made from this at the call. */
 const arbBody = fc.record({
 	size: fc.constantFrom(0, 100, 64 * 1024, 256 * 1024, 1024 * 1024),
 	json: fc.boolean(),
 });
+
 type Body = typeof arbBody extends fc.Arbitrary<infer T> ? T : never;
+
 const bodyOf = (b: Body): string =>
 	b.json ? JSON.stringify([0, 10, "x".repeat(b.size)]) : "y".repeat(b.size);
 

@@ -29,6 +29,7 @@ import {Down, inSignalSpace, Owner, ProcessTable, Recipient, signalId, Start} fr
 const text = fc.string({minLength: 1, maxLength: 256});
 const refs = fc.uniqueArray(text, {minLength: 2, maxLength: 2});
 const session = fcProcessIds;
+
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
 	examples: A[],
@@ -61,6 +62,7 @@ const signals = (store: Storage) =>
 			rev: row.rev,
 			m: Schema.decodeUnknownSync(Schema.Struct({m: Down}))(row.body).m,
 		}));
+
 const seed = (store: Storage) =>
 	Effect.gen(function* () {
 		const processes = yield* ProcessManager;
@@ -74,18 +76,22 @@ const seed = (store: Storage) =>
 			from(),
 		);
 	}).pipe(Effect.provide(manager(store, brain(), ids(A, W, X).next)));
+
 const monitor = (store: Storage, ref: string, target = A, to = W) =>
 	ProcessManager.use((p) => p.monitor(ref, target, from())).pipe(
 		Effect.provide(manager(store, watcher(to))),
 	);
+
 const exit = (store: Storage, process = A) =>
 	ProcessManager.use((p) => p.exit(process, "crashed", from())).pipe(
 		Effect.provide(manager(store)),
 	);
+
 const cancel = (store: Storage, ref: string, to = W) =>
 	ProcessManager.use((p) => p.demonitor(ref, from())).pipe(
 		Effect.provide(manager(store, watcher(to))),
 	);
+
 const fresh = (store: Storage, process = W, after = 0) =>
 	receive(process, after).pipe(Effect.provide(manager(store, watcher(process))));
 
@@ -486,10 +492,12 @@ describe("p79, cancellation, replay and stale delivery", () => {
 // P33 review rules. A DOWN is a signal only under its own id, with a watch of that recipient,
 // ref and target, live or canceled. Anything else is plain mail. Watches key on (recipient, ref).
 const toW = Recipient.cases.process.make({process: W});
+
 const send = (store: Storage, id: string, m: unknown) =>
 	Mailbox.use((mailbox) => mailbox.send("watcher:1", id, m, from())).pipe(
 		Effect.provide(manager(store)),
 	);
+
 const demonitored = (store: Storage) =>
 	store
 		.rows()

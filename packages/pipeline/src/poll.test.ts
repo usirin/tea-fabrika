@@ -17,6 +17,7 @@ const readChecks = gather("checks_read", {
 	ok: Checks,
 	err: ["unknown"],
 });
+
 const writePr = act("pr_write", {
 	input: Schema.Struct({pr: Schema.Number, state: Schema.String}),
 	ok: Schema.Null,
@@ -28,6 +29,7 @@ const ci = createPoll({
 	read: (key, tick, {pr}: {pr: number}) => readChecks({key, tick, pr}),
 	by: (checks: Checks) => checks.state,
 });
+
 type State = ReturnType<typeof ci.start>;
 
 const pace = {every: 1000, limit: 300};

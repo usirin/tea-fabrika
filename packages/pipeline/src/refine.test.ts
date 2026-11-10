@@ -32,6 +32,7 @@ const step = <M extends AnyMsg>(s: State, msg: M) =>
 	applyCell<State, AnyMsg, Cmd>(poem.machine, s, msg);
 
 const brief: Brief = {topic: "tea"};
+
 const start: RefineMsg<Brief> = {
 	type: "start",
 	brief,
@@ -39,6 +40,7 @@ const start: RefineMsg<Brief> = {
 	note: "Rhyme, please.",
 	limit: 2,
 };
+
 const long: Draft = {lines: ["the kettle sings a long and winding song"]};
 const short: Draft = {lines: ["the kettle sings"]};
 
@@ -48,6 +50,7 @@ const wrote = (cmds: readonly Cmd[], draft: Draft, session = "poet-1") => {
 	if (cmd?.type !== "poem_write") throw new Error(`expected a write, got ${cmd?.type}`);
 	return poem.write.ok(cmd, {draft, session}, 1);
 };
+
 /** The checker's answer to the Cmd it was sent. */
 const checked = (cmds: readonly Cmd[], words: number[]) => {
 	const cmd = cmds[0];

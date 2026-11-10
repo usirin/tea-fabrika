@@ -147,6 +147,7 @@ const Shape = Schema.Struct({
 	rows: Schema.NonEmptyArray(Row),
 	carried: Schema.optionalKey(Schema.Array(Hop)),
 });
+
 const isShaped = Schema.is(Shape);
 
 /**

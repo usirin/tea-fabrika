@@ -8,6 +8,7 @@ export {BuildError, hash} from "../app/built.ts";
 
 /** Which bundle of a build this is. Recorded on its span, with no path or content. */
 export type Phase = "program" | "window" | "brain";
+
 type Options = {
 	readonly phase?: Phase;
 	/** Where module ids are made relative, so the bytes never name the checkout. */

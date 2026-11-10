@@ -63,6 +63,7 @@ const specific = <const P extends string>(prefix: P) => {
 	prefixes.set(schema, prefix);
 	return schema;
 };
+
 type Specific<P extends string> = ReturnType<typeof specific<P>>;
 
 /** A schema branded for one trusted prefix. An invalid prefix throws, as Schema.make does. */

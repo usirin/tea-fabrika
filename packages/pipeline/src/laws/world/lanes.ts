@@ -119,6 +119,7 @@ export interface Steps {
 	readonly review: Update<Review, AnyReviewMsg, ReviewCmd>;
 	readonly ship: Update<Ship, AnyShipMsg, ShipCmd>;
 }
+
 export const REAL: Steps = {loop: loopStep, build: buildStep, review: reviewStep, ship: shipStep};
 
 export type FormName = "pass" | "fail 1" | "fail both";
@@ -242,9 +243,12 @@ type WorldAct =
 	| ReturnType<typeof postVerdicts>
 	| ReturnType<typeof claimTicket>
 	| ReturnType<typeof releaseTicket>;
+
 type AnyCmd = BuildCmd | ReviewCmd | ShipCmd | WorldAct;
+
 const answeredByTheWorld = (cmd: AnyCmd | LoopCmd): cmd is WorldAct =>
 	cmd.type === "loop_post" || cmd.type === "loop_claim" || cmd.type === "loop_release";
+
 interface Flying {
 	readonly key: string;
 	readonly cmd: AnyCmd;
@@ -283,6 +287,7 @@ export interface Landing {
 	/** The last verdict posted at this head, if any. */
 	readonly verdict: "pass" | "fail" | null;
 }
+
 export interface Note {
 	readonly landings?: readonly Landing[];
 }
@@ -297,6 +302,7 @@ const FIRST_RECORD: Book = ["every window opens", "the door locks"].reduce(
 	(b, text) => apply(b, {type: "added", task: TASK, text, by: "plan"}),
 	EMPTY,
 );
+
 /** The ticket's criteria, under the ids and versions the record gave them. */
 const CRITERIA: readonly Criterion[] = currentOf(FIRST_RECORD).map(({id, version, text}) => ({
 	id,
@@ -305,6 +311,7 @@ const CRITERIA: readonly Criterion[] = currentOf(FIRST_RECORD).map(({id, version
 	checked: false,
 	evidence: null,
 }));
+
 /** How every lane's loop runs. There is no cap on rounds: the stall rule ends a loop, and the forms are few, so it ends. */
 const SETTINGS: LoopSettings = {
 	rubrics: "r",
@@ -313,8 +320,10 @@ const SETTINGS: LoopSettings = {
 	budget: 1,
 	ship: "write",
 };
+
 /** Every ticket has the number 1: the machines never compare numbers across lanes, and one number lets two lanes be the same up to renaming. */
 const NUMBER = 1;
+
 /** As a first version: no task or criterion keeps an id, so the ledger gives them when it folds the plan in. */
 const PLAN: Revision = {
 	summary: "windows",
@@ -354,6 +363,7 @@ const FAIL_BOTH: Form = {
 	})),
 	skipped: [],
 };
+
 const formOf = (name: FormName): Form => (name === "fail both" ? FAIL_BOTH : (FORMS[name] as Form));
 
 const prUrl = (ticket: string) => `P-${ticket}`;
@@ -378,6 +388,7 @@ export const firstDesk = (name: string): readonly Entry[] => {
 };
 
 const folds = new WeakMap<readonly Entry[], ReturnType<typeof foldLedger>>();
+
 /** The desk, folded: what waits on the owner. Kept per list, since a list never changes. */
 export const deskOf = (desk: readonly Entry[]) => {
 	let folded = folds.get(desk);
@@ -422,6 +433,7 @@ class Turn {
 	readonly landings: Landing[] = [];
 	readonly o: Required<Pick<LanesOptions, "steps" | "desk" | "claim">>;
 	readonly at: number;
+
 	constructor(
 		o: Required<Pick<LanesOptions, "steps" | "desk" | "claim">>,
 		at: number,

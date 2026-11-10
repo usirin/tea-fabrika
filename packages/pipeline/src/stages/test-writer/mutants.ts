@@ -127,6 +127,7 @@ const mutants = outcomesOf({
 	/** `not_killed`: a new test missed its mutant, or failed on the original. `run_failed`: a run could not run. */
 	stuck: ["not_killed", "run_failed"],
 });
+
 export const MutantsOutcome = mutants.schema;
 export type MutantsOutcome = typeof MutantsOutcome.Type;
 /** Every name the mutants job can end with, as the other stages export theirs. */

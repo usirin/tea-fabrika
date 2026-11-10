@@ -33,6 +33,7 @@ const row = (over: Partial<Row> & {readonly fact?: Fact}): Row => {
 };
 
 const owner = {kind: "user", id: "owner"} as const;
+
 const entry = (pos: number, ticket: number, fact: Fact): Entry => ({
 	pos,
 	ticket,

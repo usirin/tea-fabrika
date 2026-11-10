@@ -72,6 +72,7 @@ export class JevReceipts extends Context.Service<
 const Usage = Schema.Struct({
 	usage: Schema.Struct({input_tokens: Schema.Finite, output_tokens: Schema.Finite}),
 });
+
 const usageOf = Schema.decodeUnknownOption(Usage);
 
 /** The receipts summed. */

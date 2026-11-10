@@ -24,6 +24,7 @@ const step = (s: SortState, msg: AnyMsg) => applyCell<SortState, AnyMsg, SortCmd
 
 const URL = "https://github.com/acme/widgets/issues/12";
 const SETTINGS: Settings = {model: "haiku", effort: "low", budget: 0.2, note: "A widget library."};
+
 const TICKET: SortTicket = {
 	url: URL,
 	number: 12,
@@ -31,6 +32,7 @@ const TICKET: SortTicket = {
 	title: "Widgets render twice on resize",
 	body: "Resize the window: each widget draws two times.",
 };
+
 const CONTEXT: SortContext = {
 	earlier: [
 		{number: 4, title: "Widgets draw twice when the window resizes", state: "open", reason: null},
@@ -43,6 +45,7 @@ const CONTEXT: SortContext = {
 	],
 	plans: [{number: 8, tickets: [8, 9], summary: "Resize handling, end to end.", approved: true}],
 };
+
 const SPENT: Spend = {costUsd: 0.01, tokens: 900, context: 900, turns: 1, minutes: 0.1};
 
 /** From idle to the sorter's first answer asked for. */
@@ -54,7 +57,9 @@ function sorting(tries = 2): SortState {
 	const [gathering, [gather]] = step(reading, {type: readTicket.okType, cmd: read, value: TICKET});
 	return step(gathering, {type: readContext.okType, cmd: gather, value: CONTEXT})[0];
 }
+
 const runOf = (s: SortState) => runSub.deps(s)?.run ?? null;
+
 const finished = (s: SortState, answer: SortAnswer | null) => ({
 	type: "sort_finished",
 	key: "sort:12",

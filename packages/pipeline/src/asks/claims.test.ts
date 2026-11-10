@@ -15,6 +15,7 @@ const U = ticketId("o/r#8");
 const [L1, L2, L3, L4] = ["L1", "L2", "L3", "L4"].map(laneId) as [LaneId, LaneId, LaneId, LaneId];
 
 type Memory = ReturnType<typeof memoryLedger>;
+
 /** One process on `ledger`: its own leases, renewed while `effect` runs. */
 const proc = <A, E>(
 	ledger: Layer.Layer<Ledger>,
@@ -24,8 +25,10 @@ const proc = <A, E>(
 	Effect.runPromise(
 		effect.pipe(Effect.provide(layerLanes({ttlMs}).pipe(Layer.provideMerge(ledger)))),
 	);
+
 const holderNow = (memory: Memory, ticket = T) =>
 	Effect.runSync(holderOf(ticket).pipe(Effect.provide(memory.layer)));
+
 /** The `claimed` events on a ticket's name: one per claim the ledger took. */
 const claimsOn = (memory: Memory, ticket = T) =>
 	memory.rows().filter((r) => r.stream === ticketName(ticket) && r.kind === "claimed");

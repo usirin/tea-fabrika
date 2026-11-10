@@ -30,6 +30,7 @@ const bob: Stamp = {kind: "user", id: "github:8"};
 const alicesAgent: Stamp = {kind: "agent", id: "triage", for: FOUNDER};
 
 let n = 0;
+
 /** A ledger as a shared door leaves it at the founder's first login: one `founded`. */
 const fresh = () => {
 	const {db} = openDb(join(dir, `l${n++}.sqlite`));

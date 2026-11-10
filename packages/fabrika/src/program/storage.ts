@@ -273,6 +273,7 @@ const Slot = Schema.Struct({
 	sum: Schema.Number,
 	body: Schema.String,
 });
+
 const readSlot = Schema.decodeUnknownExit(Schema.fromJsonString(Slot));
 const SLOTS = ["a", "b"] as const;
 type At = 0 | 1;
@@ -296,6 +297,7 @@ const broken = (message: string) => (cause: unknown) => new StorageBroken({messa
 
 const part = (text: string) => encodeURIComponent(text);
 const recordKey = (run: string) => `run/${part(run)}/record`;
+
 const machineKey = (run: string, machine: string, id: string) =>
 	`run/${part(run)}/machine/${part(machine)}/${part(id)}`;
 

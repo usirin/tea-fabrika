@@ -24,19 +24,23 @@ vi.mock("./table.ts", () => table);
 // P16: the brain reads its embedded tables from the build's generated module
 // (libfabrika's build-modules.d.ts). Mocking both keeps these laws on either wiring.
 vi.mock("virtual:fabrika-built", () => ({...table, assets: {}}));
+
 vi.mock("effect", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("effect")>();
 	return {...actual, ManagedRuntime: {...actual.ManagedRuntime}};
 });
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SENT = "2026-11-08T04:00:00.000Z";
+
 const field = (value: Buffer | string) => {
 	const body = Buffer.from(value),
 		size = Buffer.alloc(4);
 	size.writeUInt32BE(body.length);
 	return Buffer.concat([size, body]);
 };
+
 const identity = () => {
 	const pair = generateKeyPairSync("ed25519"),
 		raw = pair.publicKey.export({format: "jwk"}).x!;
@@ -72,7 +76,9 @@ const identity = () => {
 		},
 	};
 };
+
 const closers: Array<() => Promise<void>> = [];
+
 const generated = fc.record({
 	letter: fc.uuid(),
 	write: fc.uuid(),
@@ -82,6 +88,7 @@ const generated = fc.record({
 	build: fc.uuid(),
 	rev: fc.integer({min: 1, max: 1_000_000}),
 });
+
 const prepareInput = {
 	letter: "prepare",
 	write: "write-1",
@@ -89,7 +96,9 @@ const prepareInput = {
 	build: "counter-b",
 	rev: 1,
 };
+
 const approveInput = {...prepareInput, letter: "approve"};
+
 const law = (
 	name: string,
 	check: (input: ReturnType<typeof generated.generate>["value"]) => Promise<void>,
@@ -106,9 +115,11 @@ const law = (
 			{seed: 119120, numRuns: 20, examples: [[prepareInput], [approveInput]]},
 		);
 	});
+
 afterEach(async () => {
 	for (const close of closers.splice(0).reverse()) await close();
 });
+
 const storage = (db: DatabaseSync) => {
 	const sql = nodeSql(db),
 		values = new Map<string, unknown>();
@@ -126,6 +137,7 @@ const storage = (db: DatabaseSync) => {
 		},
 	};
 };
+
 const world = async (trace = TRACE, build = "counter-b") => {
 	table.programs.counter = {hash: "counter-a", source: "counter"};
 	table.programs.approvals = {hash: "approvals-a", source: "approvals"};

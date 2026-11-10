@@ -11,11 +11,13 @@ const statements = (line: string): readonly Statement[] => {
 	if (parsed.kind !== "parsed") throw new Error(`refused: ${parsed.why}`);
 	return parsed.statements;
 };
+
 const run = (line: string) => {
 	const [first] = statements(line);
 	if (first?.kind !== "run") throw new Error("not a run");
 	return first;
 };
+
 const command = (line: string): Command => run(line).pipeline.commands[0];
 
 describe("words", () => {

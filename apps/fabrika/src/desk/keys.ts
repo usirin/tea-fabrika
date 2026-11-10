@@ -48,6 +48,7 @@ export const SHOWS = [
 	"host",
 	"palette",
 ] as const;
+
 export type Show = (typeof SHOWS)[number];
 
 /** What a key after the prefix does, or a tsh word does in the tile it was typed in. */

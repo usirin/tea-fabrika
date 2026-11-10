@@ -26,6 +26,7 @@ type Outputs = {
 	result: (r: {turn: number; stop: string; cost: null; input: null; output: null}) => void;
 	ask: (a: {ask: string; title: string; answer: string}) => void;
 };
+
 type Agent = {
 	flags: Record<string, unknown>;
 	outputs: Outputs;
@@ -40,6 +41,7 @@ type Agent = {
 	hold: boolean;
 	end: Deferred.Deferred<Ended<unknown>>;
 };
+
 const rig = vi.hoisted(() => ({agents: [] as Agent[]}));
 
 // ACP's program boundary, with its outputs controlled by the test. No process or model starts.
@@ -106,6 +108,7 @@ vi.mock("../../program/program.ts", async (original) => ({
 }));
 
 const PERSON = "user:owner";
+
 const hosted = <A, E>(body: Effect.Effect<A, E, SummonManager | SummonedNow | Scope.Scope>) =>
 	Effect.runPromise(
 		body.pipe(
@@ -113,15 +116,18 @@ const hosted = <A, E>(body: Effect.Effect<A, E, SummonManager | SummonedNow | Sc
 			Effect.provide(summonManager({storage: memoryStorage(), folder: "/repo"})),
 		),
 	);
+
 const summon = (agent = "fake", settings: readonly string[] = []) =>
 	Effect.gen(function* () {
 		return yield* (yield* SummonManager).summon({agent, settings, name: "scout", by: PERSON});
 	});
+
 const current = () => {
 	const agent = rig.agents[0];
 	if (agent === undefined) throw new Error("no ACP run");
 	return agent;
 };
+
 const turning = Effect.gen(function* () {
 	const manager = yield* SummonManager;
 	const news: TurnNews[] = [];
@@ -132,6 +138,7 @@ const turning = Effect.gen(function* () {
 	while (!news.some((n) => n._tag === "told")) yield* Effect.sleep(Duration.millis(5));
 	return {news, fiber};
 });
+
 const finish = () =>
 	current().outputs.result({
 		turn: current().turn,

@@ -4,6 +4,7 @@ import type {CreateRule} from "@oxlint/plugins";
 import {pathIn, type Node} from "./match.ts";
 
 const builtins = new Set(builtinModules);
+
 const replacement = (module: string): string => {
 	switch (module.split("/")[0]) {
 		case "fs":
