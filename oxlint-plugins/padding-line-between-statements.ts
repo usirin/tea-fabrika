@@ -83,9 +83,9 @@ const check = (
 	report: (prev: Node, next: Node, at: number) => void,
 	body: readonly Node[],
 ) => {
-	for (let i = 1; i < body.length; i++) {
-		const prev = body[i - 1]!;
-		const next = body[i]!;
+	for (const [i, next] of body.entries()) {
+		const prev = body[i - 1];
+		if (prev === undefined) continue;
 		if (isOneLine(prev) && isOneLine(next)) continue;
 		if (isListed(prev) && isListed(next)) continue;
 		if (isOverload(prev, next) || isTypeOfValue(prev, next)) continue;
