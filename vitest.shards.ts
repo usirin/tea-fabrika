@@ -13,6 +13,7 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * box, stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
  * next/ medians use main runs 42717511599, 42716453289 and 42715921306, rounded to one decimal.
  * The four catchup files are one time each from PR 770's CI run 42883743294, rounded to one decimal.
+ * The two build files are one time each from PR 763's CI run 42905335144, rounded to one decimal.
  * A file not measured counts 1 s.
  */
 export const measured: Record<string, number> = {
@@ -105,7 +106,7 @@ export const measured: Record<string, number> = {
   "apps/fabrika/src/window/tile.test.ts": 0.1,
   "apps/fabrika/src/window/type-scale.test.ts": 0.0,
   "next/apps/fabrika/src/brain-life.test.ts": 27.4,
-  "next/apps/fabrika/src/build.test.ts": 21.0,
+  "next/apps/fabrika/src/build.test.ts": 45.9,
   "next/apps/fabrika/src/door-recovery.test.ts": 52.6,
   "next/apps/fabrika/src/door-spans.test.ts": 2.8,
   "next/apps/fabrika/src/door.test.ts": 17.2,
@@ -156,6 +157,7 @@ export const measured: Record<string, number> = {
   "next/packages/libfabrika/src/app/runner.test.ts": 41.2,
   "next/packages/libfabrika/src/app/state.test.ts": 0.1,
   "next/packages/libfabrika/src/app/supervisor.laws.test.ts": 0.1,
+  "next/packages/libfabrika/src/build-one-file.test.ts": 54.3,
   "next/packages/libfabrika/src/coordination/authorization.test.ts": 16.4,
   "next/packages/libfabrika/src/coordination/client-manager.test.ts": 13.0,
   "next/packages/libfabrika/src/coordination/gateway-manager.test.ts": 2.5,
