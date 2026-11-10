@@ -1,6 +1,5 @@
-import type { Assets, ProgramSource } from "@kampus/libfabrika/workers";
+import type { Selection } from "@kampus/libfabrika/build";
 
-// Rolldown replaces this module with the checked program bundles and the built window's page and
-// script (P14). Unbuilt, there is no window to serve.
-export const programs: Readonly<Record<string, ProgramSource>> = {};
-export const assets: Assets | undefined = undefined;
+// The programs this app runs. Each package's pure `.` entry holds the declaration; a window, when a
+// program has one, stays on its package's `./window`. The build embeds both in the brain file.
+export const programs: ReadonlyArray<Selection> = [{ name: "counter", package: "@kampus/counter", export: "counter" }];

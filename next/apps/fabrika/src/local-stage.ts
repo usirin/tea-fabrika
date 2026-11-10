@@ -5,7 +5,7 @@ class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
 }) {}
 
 export const localStage = Effect.fn("brain.localStage")(function* (
-  built: import("./build.ts").Built,
+  built: Omit<import("./build.ts").Built, "assets">,
   options: Omit<import("./settings.ts").Settings, "build"> & { readonly home: string },
 ) {
   const path = yield* Path.Path;

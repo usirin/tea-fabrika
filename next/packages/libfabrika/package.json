@@ -12,6 +12,9 @@
     "./door": "./src/door/index.ts",
     "./sqlite": "./src/data/sqlite.ts",
     "./box": "./src/workers/box.ts",
+    "./build": "./src/build.ts",
+    "./build-modules": "./src/build-modules.d.ts",
+    "./compiler": "./src/compiler.ts",
     "./workers": "./src/workers/index.ts",
     "./workers/bindings": "./src/workers/bindings.ts",
     "./workers/control": "./src/workers/control.ts",
@@ -35,6 +38,9 @@
     "@alchemy.run/cloudflare-runtime": "2.0.0-beta.84",
     "@demlik/tea": "catalog:",
     "effect": "catalog:",
+    "lightningcss": "catalog:",
+    "oxc-parser": "catalog:",
+    "oxc-transform-react": "catalog:",
     "rolldown": "catalog:",
     "smol-toml": "catalog:"
   },
@@ -44,6 +50,7 @@
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "fast-check": "catalog:",
+    "react": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

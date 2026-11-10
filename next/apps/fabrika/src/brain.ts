@@ -17,9 +17,9 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Effect, Redacted } from "effect";
+import { assets, programs } from "virtual:fabrika-built";
 import type { ConnectionId } from "./door.ts";
 import { gatewayRuntime, projectRuntime, settings, type Env } from "./runtime.ts";
-import { assets, programs } from "./table.ts";
 
 export class Project extends DurableObject<Env> {
   readonly runtime = projectRuntime(this.ctx, this.env);

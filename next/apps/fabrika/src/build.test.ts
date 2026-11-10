@@ -1,4 +1,6 @@
-// P12, next/. Exercise the real build entry. A Compiler failure must preserve every last-good byte.
+// P12 and P16, next/. Exercise the real build entry. A Compiler failure must preserve every
+// last-good byte. P16: the app's build hands its selections to libfabrika's one-file build, so
+// only brain.mjs is published, and every failure is BuildError with its `reason`.
 import {
   chmodSync,
   mkdirSync,
@@ -11,9 +13,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Exit, FileSystem, Layer, type Path } from "effect";
+import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";
@@ -23,14 +24,23 @@ const homes: Array<string> = [];
 const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
   Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));
 
-const discovery = (files: Array<string>) =>
+const discovery = (files: Array<string>, seen?: { calls: number }) =>
   Layer.effect(
     FileSystem.FileSystem,
     Effect.map(FileSystem.FileSystem, (fs) => ({
       ...fs,
-      glob: () => Effect.succeed(files),
+      glob: () =>
+        Effect.sync(() => {
+          if (seen) {
+            seen.calls++;
+          }
+
+          return files;
+        }),
     })),
   );
+
+const refused = (reason: string) => ({ _tag: "Failure", failure: { _tag: "BuildError", reason } });
 
 afterEach(() => {
   for (const h of homes.splice(0)) {
@@ -119,8 +129,8 @@ describe("P12 Rolldown build", () => {
       await runNode(build(options));
       const before = snapshot(out);
       writeFileSync(file, source);
-      const failed = await runNode(Effect.exit(build(options)));
-      expect(Exit.isFailure(failed), "reachable input is checked even with files: []").toBe(true);
+      const failed = await runNode(Effect.result(build(options)));
+      expect(failed, "reachable input is checked even with files: []").toMatchObject(refused("compiler"));
       expect(snapshot(out)).toEqual(before);
     });
   }
@@ -143,7 +153,7 @@ describe("P12 Rolldown build", () => {
     expect(result).toMatchObject({ _tag: "Success" });
   });
   law(
-    "default discovery publishes one view module beside the tab's window.js, and custom modules export program",
+    "default discovery checks a view without publishing siblings and custom modules export program",
     async ({ name, label }) => {
       const { build } = await import("./build.ts");
       const parent = home(),
@@ -166,14 +176,18 @@ describe("P12 Rolldown build", () => {
           ),
         );
         expect(built.programs.counter?.hash).toMatch(/^[a-f0-9]{64}$/);
-        // `out` holds one `<hash>.js` per discovered view and P14's `window.js`; `brain.mjs` and
-        // `page.html` are not `.js`.
-        const scripts = readdirSync(out).filter((file) => file.endsWith(".js"));
-        const views = scripts.filter((file) => file !== "window.js");
-        expect(scripts).toContain("window.js");
-        expect(views).toHaveLength(1);
-        const compiled = await import(pathToFileURL(join(out, views[0]!)).href);
-        expect(compiled.label).toBe(label);
+        // P16 replaces P12's loose view files: the one published file is the brain.
+        expect(readdirSync(out)).toEqual(["brain.mjs"]);
+        // Discovery must still reach the real Compiler.
+        const before = snapshot(out);
+        writeFileSync(view, plants[1][1]);
+        const failed = await runNode(
+          Effect.result(build({ out, programs: { counter: program } })).pipe(
+            Effect.provide(discovery([relative(resolve(import.meta.dirname, "../../../.."), view)])),
+          ),
+        );
+        expect(failed, "default discovery must check its TSX inputs").toMatchObject(refused("compiler"));
+        expect(snapshot(out)).toEqual(before);
       } finally {
         chmodSync(parent, 0o700);
       }
@@ -193,8 +207,8 @@ describe("P12 Rolldown build", () => {
 
     for (const [name, source] of plants) {
       writeFileSync(file, source);
-      const failed = await runNode(Effect.exit(build(options)));
-      expect(Exit.isFailure(failed), name).toBe(true);
+      const failed = await runNode(Effect.result(build(options)));
+      expect(failed, name).toMatchObject(refused("compiler"));
       expect(snapshot(out), name).toEqual(before);
     }
   });
@@ -209,7 +223,7 @@ describe("P12 Rolldown build", () => {
 
     for (const stale of [file, join(h, "gone.tsx")]) {
       const result = await runNode(
-        Effect.exit(
+        Effect.result(
           build({
             out,
             files: [file],
@@ -217,7 +231,7 @@ describe("P12 Rolldown build", () => {
           }),
         ),
       );
-      expect(Exit.isFailure(result)).toBe(true);
+      expect(result).toMatchObject(refused("compiler"));
       expect(snapshot(out)).toEqual(before);
     }
   });
@@ -250,6 +264,70 @@ describe("P12 Rolldown build", () => {
       expect(built.build.length).toBeGreaterThan(0);
     },
   );
+  law("discovery keeps program TSX and leaves out test files and installed dependencies", async ({ name }) => {
+    const { build } = await import("./build.ts");
+    const folder = home(),
+      out = join(folder, "dist"),
+      root = resolve(import.meta.dirname, "../../../.."),
+      good = join(folder, `${name}.tsx`),
+      test = join(folder, `${name}.test.tsx`),
+      dependency = join(folder, "node_modules", `${name}.tsx`);
+    mkdirSync(join(folder, "node_modules"));
+    writeFileSync(good, clean);
+    writeFileSync(test, "this is invalid TSX");
+    writeFileSync(dependency, "this is invalid TSX");
+    const seen = { calls: 0 };
+    const built = await runNode(
+      build({ out, ledger: [] }).pipe(
+        Effect.provide(
+          discovery(
+            [good, test, dependency].map((file) => relative(root, file)),
+            seen,
+          ),
+        ),
+      ),
+    );
+    expect(seen.calls, "default discovery ran").toBeGreaterThan(0);
+    expect(built.brain).toBe(join(out, "brain.mjs"));
+    expect(readFileSync(built.brain, "utf8").length).toBeGreaterThan(0);
+    // Plant: the same good file, refused, still fails through discovery.
+    writeFileSync(good, plants[0][1]);
+    const failed = await runNode(
+      Effect.result(build({ out, ledger: [] })).pipe(Effect.provide(discovery([relative(root, good)]))),
+    );
+    expect(failed).toMatchObject(refused("compiler"));
+  });
+  law("discovery plant: a disk failure is a typed BuildError and preserves the last good file", async ({ label }) => {
+    const { build } = await import("./build.ts");
+    const folder = home(),
+      out = join(folder, "dist");
+    mkdirSync(out);
+    writeFileSync(join(out, "brain.mjs"), label);
+    const before = snapshot(out);
+    let calls = 0;
+    const failing = Layer.effect(
+      FileSystem.FileSystem,
+      Effect.map(FileSystem.FileSystem, (fs) => ({
+        ...fs,
+        glob: () => {
+          calls++;
+          return Effect.fail(
+            PlatformError.systemError({
+              _tag: "PermissionDenied",
+              module: "FileSystem",
+              method: "glob",
+              description: "planted discovery disk failure",
+            }),
+          );
+        },
+      })),
+    );
+    // Effect.result catches typed failures only. A defect escapes this law.
+    const result = await runNode(Effect.result(build({ out, ledger: [] })).pipe(Effect.provide(failing)));
+    expect(calls).toBeGreaterThan(0);
+    expect(result).toMatchObject(refused("read"));
+    expect(snapshot(out)).toEqual(before);
+  });
 });
 
 // P14 (ticket 286), the plan's "Build, screens and styles". Written before the browser half of

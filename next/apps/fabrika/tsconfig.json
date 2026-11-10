@@ -4,7 +4,9 @@
     "types": ["node", "@cloudflare/workers-types"],
     // The browser entry is React in a tab; the rest is the Worker and Node.
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    // The package commands use plain Node, which strips types without transforming them.
+    "erasableSyntaxOnly": true
   },
   "include": ["src", "dev.ts", "build.ts", "grant.ts", "alchemy.run.ts"]
 }
