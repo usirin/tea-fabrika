@@ -5,7 +5,16 @@ import { DatabaseSync } from "node:sqlite";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
 import { Door, Id, type Incoming } from "@kampus/libfabrika";
-import { ClientManager, grantText, ProcessIdGenerator, revokeText, Writer } from "@kampus/libfabrika/coordination";
+import {
+  Adds,
+  addText,
+  Change,
+  ClientManager,
+  grantText,
+  ProcessIdGenerator,
+  revokeText,
+  Writer,
+} from "@kampus/libfabrika/coordination";
 import { Archive, Doorbell, Ledger, LedgerTransaction, RecordManager, SpanSink } from "@kampus/libfabrika/data";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport";
@@ -21,6 +30,8 @@ const DoorCalls = Arbitrary.schema(
     body: bounded(0, 4096),
   }),
 );
+
+type DoorCall = typeof DoorCalls extends Arbitrary.Arbitrary<infer C> ? C : never;
 
 // WebCrypto owns ephemeral test key generation and signing. No machine key is read or printed.
 const web = <A>(f: () => Promise<A>) => Effect.tryPromise({ try: f, catch: () => new Error("test crypto failed") });
@@ -266,37 +277,109 @@ it.effect.prop(
   options,
 );
 
+// Every kind of /grant change (coordination/text.ts Change: granted, revoked, added), each with generated labels.
+const changes = Effect.fnUntraced(function* (w: World, c: DoorCall) {
+  const joining = yield* key(),
+    label = c.name.slice(0, 96);
+  return {
+    granted: grantText({
+      id: "grant_0000000000e008000000000002",
+      key: joining.raw,
+      for: person,
+      to: "p8",
+      as: "window",
+      sentAt,
+      saw: { code: "1234", label, where: "exam", how: "command", check: "none", has: [] },
+    }),
+    revoked: revokeText({
+      id: "revoke_0000000000e008000000000001",
+      key: w.agent.raw,
+      for: person,
+      to: "p8",
+      sentAt,
+      saw: { label, where: "exam", how: "panel", check: "touch" },
+    }),
+    added: addText({
+      id: "add_0000000000e008000000000001",
+      for: person,
+      to: "p8",
+      adds: Adds.cases.person.make({ key: joining.line, window: joining.raw }),
+      drops: [],
+      saw: { how: "device", check: "touch", where: label, has: [], typed: false, kept: null, old: null },
+      sentAt,
+    }),
+  };
+});
+
+type GrantDoor = Pick<World["door"], "grant">;
+
+// p64: "/grant with grant, revoke or approval signed by an agent: refused; no membership change".
+const agentSignedRefused = Effect.fnUntraced(function* (w: World, door: GrantDoor, c: DoorCall) {
+  const kinds = yield* changes(w, c);
+  const before = yield* Stream.runCollect(w.log.read("door/members", 0));
+
+  for (const text of [kinds.granted, kinds.revoked, kinds.added]) {
+    expect((yield* door.grant({ text, armored: yield* w.agent.sign(text) }))._tag).toBe("refused");
+    expect(yield* Stream.runCollect(w.log.read("door/members", 0))).toEqual(before);
+  }
+
+  return kinds;
+});
+
 it.effect.prop(
-  "current Door: agent-signed grant/revoke is refused, removal stops settled retries and signer",
+  "current Door: agent-signed grant, revoke and add are refused with no membership change",
+  { c: DoorCalls },
+  ({ c }) =>
+    Effect.gen(function* () {
+      const w = yield* world();
+      const kinds = yield* agentSignedRefused(w, w.door, c);
+
+      // Clean control: the same three texts signed by the person key do change membership.
+      for (const text of [kinds.granted, kinds.added, kinds.revoked]) {
+        expect((yield* w.door.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
+      }
+
+      expect((yield* Stream.runCollect(w.log.read("door/members", 0))).length).toBeGreaterThanOrEqual(3);
+    }),
+  options,
+);
+
+it.effect.prop(
+  "checker plant: a door that refuses agent signers only for granted and revoked fails the /grant law",
+  { c: DoorCalls },
+  ({ c }) =>
+    Effect.gen(function* () {
+      const w = yield* world();
+      // The plant trusts an agent's signature on an added change, as if a person key had signed it.
+      const planted: GrantDoor = {
+        grant: (input) =>
+          Effect.gen(function* () {
+            const { text } = Schema.decodeUnknownSync(Schema.Struct({ text: Schema.String }))(input);
+            const change = Schema.decodeUnknownSync(Schema.fromJsonString(Change))(text);
+            return change._tag === "added"
+              ? yield* w.door.grant({ text, armored: yield* w.root.sign(text) })
+              : yield* w.door.grant(input);
+          }),
+      };
+      const exit = yield* Effect.exit(agentSignedRefused(w, planted, c));
+      expect(Exit.isFailure(exit)).toBe(true);
+
+      if (Exit.isFailure(exit)) {
+        // The law fails on the added change being applied, not on a broken plant.
+        expect(Cause.pretty(exit.cause)).toContain("expected 'applied' to be 'refused'");
+      }
+    }),
+  options,
+);
+
+it.effect.prop(
+  "current Door: removal stops settled retries and signer",
   { c: DoorCalls },
   ({ c }) =>
     Effect.gen(function* () {
       const w = yield* world(),
         { client } = yield* w.hello(w.agent, c.name, "agent");
-      const before = yield* Stream.runCollect(w.log.read("door/members", 0));
-      const removal = revokeText({
-        id: "revoke_0000000000e008000000000001",
-        key: w.agent.raw,
-        for: person,
-        to: "p8",
-        sentAt,
-        saw: { label: "Exam agent", where: "exam", how: "panel", check: "touch" },
-      });
-      const grant = grantText({
-        id: "grant_0000000000e008000000000002",
-        key: w.root.raw,
-        for: person,
-        to: "p8",
-        as: "window",
-        sentAt,
-        saw: { code: "1234", label: "Other", where: "exam", how: "command", check: "none", has: [] },
-      });
-
-      for (const text of [grant, removal]) {
-        expect((yield* w.door.grant({ text, armored: yield* w.agent.sign(text) }))._tag).toBe("refused");
-      }
-
-      expect(yield* Stream.runCollect(w.log.read("door/members", 0))).toEqual(before);
+      const { revoked: removal } = yield* agentSignedRefused(w, w.door, c);
       yield* w.door.route(client, "process.send", request(c.body));
       const input = w.delivered.at(-1);
 

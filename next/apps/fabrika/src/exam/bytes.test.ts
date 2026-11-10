@@ -322,6 +322,54 @@ const BundleGraphs = Arbitrary.schema(
   }),
 );
 
+type BundleGraph = typeof BundleGraphs extends Arbitrary.Arbitrary<infer G> ? G : never;
+
+// A module tree that has exactly g.modules modules and up to 2 imports per module. Its depth is g.depth when that
+// many modules can reach it, else the nearest depth they can: one module has depth 0, 8 need depth 3 at 2 imports.
+const graphShape = (g: BundleGraph) => {
+  const capacity = (depth: number, fan: number) => (fan === 0 ? 1 : fan === 1 ? depth + 1 : 2 ** (depth + 1) - 1);
+  let least = 0;
+
+  while (capacity(least, 2) < g.modules) {
+    least++;
+  }
+
+  const depth = Math.max(least, Math.min(g.depth, g.modules - 1));
+  const fan = [g.imports, 1, 2].find((f) => capacity(depth, f) >= g.modules) ?? 2;
+  const level = [0],
+    children: Array<Array<number>> = [[]];
+
+  for (let i = 1; i < g.modules; i++) {
+    const parent = i <= depth ? i - 1 : level.findIndex((l, j) => l < depth && (children[j]?.length ?? 0) < fan);
+
+    if (parent < 0) {
+      throw new Error("graph shape has no room");
+    }
+
+    level.push((level[parent] ?? 0) + 1);
+    children.push([]);
+    children[parent]?.push(i);
+  }
+
+  return { depth, fan, children, level };
+};
+
+it.prop(
+  "checker controls: generated bundle graphs reach every module count 1 to 8 and depth 0 to 3",
+  { g: BundleGraphs },
+  ({ g }) => {
+    const shape = graphShape(g);
+    expect(shape.children).toHaveLength(g.modules);
+    expect(Math.max(...shape.level)).toBe(shape.depth);
+    expect(shape.depth).toBe(Math.max(Math.ceil(Math.log2(g.modules + 1)) - 1, Math.min(g.depth, g.modules - 1)));
+    expect(shape.children.every((c) => c.length <= Math.min(2, shape.fan))).toBe(true);
+    expect(graphShape({ ...g, modules: 8, depth: 0 }).depth).toBe(3);
+    expect(graphShape({ ...g, modules: 4, depth: 3 }).depth).toBe(3);
+    expect(graphShape({ ...g, modules: 8, depth: 3 }).children).toHaveLength(8);
+  },
+  options,
+);
+
 // Finite styles all run on every generated graph, including wrapper and dynamic/external edges.
 it.effect.prop(
   "checker controls: real Rolldown catches transitive, dynamic and external forbidden imports",
@@ -334,12 +382,11 @@ it.effect.prop(
 
       for (const style of ["static", "dynamic", "external"] as const) {
         const start = observations.builds.length;
-        const depth = Math.min(g.depth, 2);
-        const modules = Math.min(g.modules, g.imports === 0 ? 1 : g.imports === 1 ? depth + 1 : 2 ** (depth + 1) - 1);
+        const shape = graphShape(g),
+          modules = g.modules;
 
         for (let i = 0; i < modules; i++) {
-          const children = (g.imports === 2 ? [i * 2 + 1, i * 2 + 2] : [i + 1]).filter((child) => child < modules);
-          const next = children
+          const next = (shape.children[i] ?? [])
             .map((child) =>
               style === "dynamic"
                 ? `export const next${child} = () => import("./m${child}.ts");`
