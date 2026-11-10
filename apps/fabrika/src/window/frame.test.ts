@@ -14,7 +14,7 @@ import {
 	type Open,
 } from "../desk/desk.ts";
 import {decodeKeys, defaults, Does, type Keys} from "../desk/keymap.ts";
-import type {HostNow} from "../messages.ts";
+import type {HostNow, ThemeReport} from "../messages.ts";
 import type {JobEnded} from "../tile-jobs.ts";
 import {
 	agentsWord,
@@ -69,10 +69,17 @@ const fold = (msgs: readonly DeskMsg[]): Open => {
 	return s;
 };
 
-// Today's app, T343 amendment. scenario: the real page hears a host theme, its real desk changes
-// workspace and splits, and its note timer runs. Only the browser/terminal edges are replaced.
-// Plant: clear the load word on a timer, as build13 does with an ordinary four-second note.
-it("scenario: T21 the load word stays beside keys and info after a new workspace or split", async () => {
+interface ThemePage {
+	readonly bottom: () => FrameProps;
+	readonly line: () => string;
+	readonly sendDesk: (desk: Open) => void;
+	readonly load: (report: ThemeReport) => void;
+	readonly report: ThemeReport;
+}
+
+// Today's app, T343 amendment. T21 scenarios use the real page, host messages, frame drawing and
+// note timer. Only the browser/terminal edges are replaced, as in the original workspace/split run.
+const withThemePage = async (check: (page: ThemePage) => Promise<void>): Promise<void> => {
 	vi.resetModules();
 	vi.useFakeTimers();
 	let app: (() => ReactNode) | undefined;
@@ -151,48 +158,40 @@ it("scenario: T21 the load word stays beside keys and info after a new workspace
 				.replace(/&#x27;/g, "'")
 				.replace(/\s+/g, " ")
 				.trim();
-		let desk = fold([]);
-		const sendDesk = () => hear({type: "desk", desk, takes: {all: false, keys: []}});
-		sendDesk();
-		hear({
-			type: "theme",
-			version: "1",
-			value: {
-				format: 1,
-				name: "fabrika",
-				look: fabrika.look,
-				colors: fabrika.colors,
-				terminal: fabrika.terminal,
-			},
-			report: {
-				name: "dusk",
-				changes: [
-					{
-						_tag: "moved",
-						token: "text-faint",
-						on: "surface",
-						was: "#222222",
-						now: "#777777",
-						from: {wcag: 2.9, apca: -20},
-						to: {wcag: 4.5, apca: -60},
-					},
-				],
-				failures: [],
-				diagnostics: [],
-			},
-		});
-		const word = 'theme "dusk": 1 color moved';
-		expect(line()).toContain(word);
-		for (const does of ['tezgah."workspace --to new"', "tezgah.split"] as const) {
-			desk = foldFrom(desk, {type: "run", does});
-			sendDesk();
-			// Longer than the app's four-second note timer, without waiting on wall-clock time.
-			await vi.advanceTimersByTimeAsync(5000);
-			const words = line();
-			expect.soft(words, `load report still stands after ${does}`).toContain(word);
-			expect.soft(words).toMatch(/\bkeys\b/);
-			expect.soft(words).toMatch(/\binfo\b/);
-		}
+		const sendDesk = (desk: Open) => hear({type: "desk", desk, takes: {all: false, keys: []}});
+		const load = (report: ThemeReport) =>
+			hear({
+				type: "theme",
+				version: "1",
+				value: {
+					format: 1,
+					name: "fabrika",
+					look: fabrika.look,
+					colors: fabrika.colors,
+					terminal: fabrika.terminal,
+				},
+				report,
+			});
+		const report: ThemeReport = {
+			name: "dusk",
+			changes: [
+				{
+					_tag: "moved",
+					token: "text-faint",
+					on: "surface",
+					was: "#222222",
+					now: "#777777",
+					from: {wcag: 2.9, apca: -20},
+					to: {wcag: 4.5, apca: -60},
+				},
+			],
+			failures: [],
+			diagnostics: [],
+		};
+		sendDesk(fold([]));
+		load(report);
+		expect(line()).toContain('theme "dusk": 1 color moved');
+		await check({bottom, line, sendDesk, load, report});
 	} finally {
 		vi.doUnmock("./terminal.ts");
 		vi.doUnmock("./windows.tsx");
@@ -203,7 +202,61 @@ it("scenario: T21 the load word stays beside keys and info after a new workspace
 		vi.unstubAllGlobals();
 		vi.resetModules();
 	}
-});
+};
+
+// scenario: the host's load report stands while the real desk changes workspace and splits.
+// Plant: clear the load word on a timer, as build13 does with an ordinary four-second note.
+it("scenario: T21 the load word stays beside keys and info after a new workspace or split", () =>
+	withThemePage(async ({line, sendDesk}) => {
+		let desk = fold([]);
+		for (const does of ['tezgah."workspace --to new"', "tezgah.split"] as const) {
+			desk = foldFrom(desk, {type: "run", does});
+			sendDesk(desk);
+			// Longer than the app's four-second note timer, without waiting on wall-clock time.
+			await vi.advanceTimersByTimeAsync(5000);
+			const words = line();
+			expect
+				.soft(words, `load report still stands after ${does}`)
+				.toContain('theme "dusk": 1 color moved');
+			expect.soft(words).toMatch(/\bkeys\b/);
+			expect.soft(words).toMatch(/\binfo\b/);
+		}
+	}));
+
+// scenario: a later host report replaces the failing load with a clean load of the same theme.
+// Plant already present at 62159ccb: desk sends nothing when the clean report has no word.
+it("scenario: T21 a later clean load report clears the bottom-line load word", () =>
+	withThemePage(async ({line, load, report}) => {
+		load({...report, changes: [], failures: [], diagnostics: []});
+		for (const elapsed of [0, 5000]) {
+			await vi.advanceTimersByTimeAsync(elapsed);
+			const words = line();
+			expect.soft(words, `clean report after ${elapsed} ms`).not.toContain('theme "dusk":');
+			expect.soft(words).toMatch(/\bkeys\b/);
+			expect.soft(words).toMatch(/\binfo\b/);
+		}
+	}));
+
+// scenario: a real frame action shows a short note, then the page's own timer clears it while the
+// host's load report still stands. No repeated host report is needed to bring the load word back.
+// Plant already present at 62159ccb: the short note replaces the load word for good.
+it.each([
+	{kind: "palette next time", msg: {type: "ran", key: "C-b z"}, note: "next time: C-b z"},
+	{kind: "no tile shows", msg: {type: "say", note: nowhereNote(7)}, note: nowhereNote(7)},
+] as const)(
+	"scenario: T21 the load word returns beside keys and info after a $kind note clears",
+	({msg, note}) =>
+		withThemePage(async ({bottom, line}) => {
+			bottom().step(msg);
+			expect(line()).toContain(note);
+			await vi.advanceTimersByTimeAsync(5000);
+			const words = line();
+			expect(words).not.toContain(note);
+			expect.soft(words).toContain('theme "dusk": 1 color moved');
+			expect.soft(words).toMatch(/\bkeys\b/);
+			expect.soft(words).toMatch(/\binfo\b/);
+		}),
+);
 
 const foldFrom = (desk: Open, msg: DeskMsg): Open => {
 	const next = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, desk, msg)[0];
