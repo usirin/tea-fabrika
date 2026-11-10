@@ -73,12 +73,12 @@ const last = (got: readonly Answer[]) => got.at(-1);
 
 describe("the settings folder", () => {
 	it("is ~/.fabrika for the owner's start, and the home for a start on a home of its own (p11)", () => {
-		expect(settingsFolder({kind: "owner"}, "/home/someone")).toBe(
-			join("/home/someone", ".fabrika"),
+		expect(settingsFolder({kind: "owner"}, "/people/someone")).toBe(
+			join("/people/someone", ".fabrika"),
 		);
-		expect(settingsFolder({kind: "quiet", home: "/tmp/fh-1"}, "/home/someone")).toBe("/tmp/fh-1");
-		expect(settingsFolder({kind: "foreground", home: "/tmp/fh-2"}, "/home/someone")).toBe(
-			"/tmp/fh-2",
+		expect(settingsFolder({kind: "quiet", home: "/tmp/fh-a"}, "/people/someone")).toBe("/tmp/fh-a");
+		expect(settingsFolder({kind: "foreground", home: "/tmp/fh-b"}, "/people/someone")).toBe(
+			"/tmp/fh-b",
 		);
 	});
 });

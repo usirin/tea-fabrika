@@ -18,7 +18,8 @@ concurrency:
 # Every job has a time limit, so a stuck step fails instead of holding a pull request for the 360
 # minute default (pull request 696, ticket 496). The four set with ticket 496 are about twice the
 # slowest of that job's last 20 green runs on 2026-11-10 UTC, and at least 5: changes 39 s,
-# field 43 s, check 166 s, test 944 s. next (674 s) and e2e (333 s) had theirs before.
+# field 43 s, check 166 s, test 944 s. e2e (333 s) had its own before. next has one per shard,
+# sized at its job.
 # workflow-lint.ts fails a job without one.
 jobs:
   # Today's CI, both versions. One no-install classifier holds every path rule.
@@ -294,7 +295,15 @@ jobs:
           (needs.changes.result != 'success' ||
            needs.changes.outputs.next != 'false') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Each of the six machines gets this limit. The slowest shard took 132 s (93 to 132 s, run
+    # 42736438938 on pull request 653, ticket 376). next/ grew about half again since that run
+    # (one machine: 457 s then, 674 s when ticket 496 set its limit), so about 200 s now, and the
+    # limit is about three times that.
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -312,16 +321,19 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run next/
+      - run: pnpm exec vitest run next/ --shard "$SHARD"
+        env:
+          SHARD: ${{ matrix.shard }}/6
       - name: chromium
-        if: hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
+        if: matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
         run: pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
       - run: node next/apps/fabrika/e2e.ts
+        if: matrix.shard == 1
       # Tier 1, P35: each edge comment this pull request adds, one line with its reason, for the owner
       # (docs/direction/no-promises.md). In the step summary and as a note on that line of the diff.
       # It never blocks on an edge: it exits 0, or 2 only when it could not read a file.
       - name: edges
-        if: github.event_name == 'pull_request'
+        if: matrix.shard == 1 && github.event_name == 'pull_request'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: node next/apps/fabrika/src/exam/edges.ts --base "$BASE"
