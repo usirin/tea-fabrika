@@ -1,4 +1,5 @@
-// The app's build: its selected programs and its brain entry, handed to libfabrika's one-file build.
+// The app's build: its selected programs, its brain entry and the tab's entry and stylesheets,
+// handed to libfabrika's one-file build.
 // Disk and paths go through Effect's FileSystem and Path, which the caller provides.
 import { BuildError, build as buildOne, type Selection } from "@kampus/libfabrika/build";
 import type { Row } from "@kampus/libfabrika/compiler";
@@ -17,6 +18,10 @@ type Options = {
   readonly chaos?: boolean;
 };
 
+/** The tab's stylesheets in the order its page applies them: Manti's, then fabrika's tokens, then
+ *  Tuval's own rules. */
+const STYLES = ["@manti-ui/styles/index.css", "@kampus/fabrika-design/tokens.css", "@kampus/tuval/style.css"];
+
 export const build = Effect.fn("build.app")(function* (options: Options) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
@@ -33,6 +38,9 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
       Effect.map((found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test."))),
       Effect.mapError(() => new BuildError({ reason: "read" })),
     ));
+  const styles = yield* Effect.forEach(STYLES, (module) => path.fromFileUrl(new URL(import.meta.resolve(module))), {
+    concurrency: 1,
+  }).pipe(Effect.mapError(() => new BuildError({ reason: "read" })));
   return yield* buildOne({
     out: options.out,
     root: ROOT,
@@ -41,5 +49,6 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
     files,
     ...(options.ledger === undefined ? {} : { ledger: options.ledger }),
     chaos: options.chaos ?? false,
+    tab: { entry: path.join(APP, "src/entry/browser.tsx"), styles },
   });
 });

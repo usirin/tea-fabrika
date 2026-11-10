@@ -329,17 +329,42 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
   });
   yield* recorded(startRuntime());
 
+  // The key settings entry the brain has not taken yet, if any, and how to send it again.
+  let heldKeys: object | null = null;
+  let resendKeys: Effect.Effect<void> = Effect.void;
+
   if (options.keys !== undefined) {
     const random = yield* SecureRandom.SecureRandom;
-    /** One key settings change through the trusted local control, never a public route. */
-    const publish = Effect.fn("keys.publish")(function* (change: object) {
-      const id = Base64Url.encode(yield* random.randomBytes(12));
-      const sentAt = DateTime.formatIso(yield* DateTime.now);
-      yield* call("project", config.name, "", "settings", [
-        { id: `keys-${id}`, source: "file", reader: `stage:${config.name}`, sentAt, ...change },
-      ]);
+    /** One key settings entry through the trusted local control, never a public route. */
+    const publish = Effect.fn("keys.publish")(function* (entry: object) {
+      yield* call("project", config.name, "", "settings", [entry]);
     });
-    const settings = (change: object) => publish(change).pipe(Effect.ignore, Effect.provideContext(recording));
+    // The watcher reads a file only when it changes, so a change the brain could not take (it was
+    // restarting) is held and sent again, with its id, by the loop below until it lands. A newer
+    // change replaces it: each holds the whole table.
+    resendKeys = Effect.suspend(() => {
+      const entry = heldKeys;
+      return entry === null
+        ? Effect.void
+        : publish(entry).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                if (heldKeys === entry) {
+                  heldKeys = null;
+                }
+              }),
+            ),
+            Effect.ignore,
+            Effect.provideContext(recording),
+          );
+    });
+    const settings = (change: object) =>
+      Effect.gen(function* () {
+        const id = Base64Url.encode(yield* random.randomBytes(12));
+        const sentAt = DateTime.formatIso(yield* DateTime.now);
+        heldKeys = { id: `keys-${id}`, source: "file", reader: `stage:${config.name}`, sentAt, ...change };
+        yield* resendKeys;
+      }).pipe(Effect.ignore);
     yield* watchKeys({
       file: `${options.home}/keybindings.toml`,
       commands: options.keys.commands,
@@ -369,6 +394,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
             }),
         }).pipe(Effect.ignore);
         yield* flush.pipe(Effect.ignore);
+        yield* resendKeys;
         yield* flushRecords.pipe(
           Effect.catchIf(
             (error) => error.reason !== "storage",

@@ -77,7 +77,9 @@ export const LinkMsg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("beat"), ...OnDial }),
   Schema.Struct({ type: Schema.Literal("pong"), ...OnDial }),
   Schema.Struct({ type: Schema.Literal("stalled"), ...OnDial, ms: Ms }),
-  Schema.Struct({ type: Schema.Literal("renew"), ...OnDial }),
+  // `knocks` is the count the timer was set at: each renew gives the next timer new deps, since tea
+  // keeps a fired timer until its deps change. A renew for an older count is stale.
+  Schema.Struct({ type: Schema.Literal("renew"), ...OnDial, knocks: Schema.optionalKey(Count) }),
   Schema.Struct({ type: Schema.Literal("blocked"), reason: Schema.String }),
   Schema.Struct({ type: Schema.Literal("ask_again"), ...OnDial }),
 ]);
@@ -108,7 +110,7 @@ export const linkTimer = (link: Link): { readonly after: number; readonly msg: L
     case "dialing":
       return { after: DIALING, msg: { type: "stalled", dial: link.dial, ms: DIALING } };
     case "waiting_grant":
-      return { after: RENEW, msg: { type: "renew", dial: link.dial } };
+      return { after: RENEW, msg: { type: "renew", dial: link.dial, knocks: link.knocks ?? 0 } };
     case "online": {
       const after = Math.max(0, Math.min(link.ping, BEAT));
       return (link.pings ?? 0) === 0
@@ -194,7 +196,7 @@ export const linkMachine = Machine.make({
       s._tag === "online" && s.dial === m.dial && (s.pings ?? 0) > 0 ? [{ ...s, pings: 0 }, []] : stay(s),
     stalled: (s, m) => ((s._tag === "dialing" || s._tag === "online") && s.dial === m.dial ? [failed(s), []] : stay(s)),
     renew: (s, m) =>
-      s._tag === "waiting_grant" && s.dial === m.dial
+      s._tag === "waiting_grant" && s.dial === m.dial && (m.knocks === undefined || m.knocks === (s.knocks ?? 0))
         ? [{ ...s, knocks: (s.knocks ?? 0) + 1 }, [knock({ dial: s.dial })]]
         : stay(s),
     blocked: (s, m) =>
