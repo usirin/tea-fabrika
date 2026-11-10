@@ -18,6 +18,7 @@ import "./freshmain.ts?raw";
 import "./box.sh?raw";
 import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
+import "./loosening.sh?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 import "./env.sh?raw";
@@ -48,6 +49,7 @@ import {
   judgedOf,
   type Line,
   lineOf,
+  looseningEnd,
   makeMachine,
   judgedMove,
   moveFrom,
@@ -301,7 +303,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
   const ran = (m: ReturnType<typeof start>[0], l: Line) =>
     machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
 
-  it("a clean lane runs the four steps, opens the PR and lands it, with exit 0", () => {
+  it("a clean lane runs the four steps, opens the PR, runs loosening.sh and lands it, with exit 0", () => {
     let [m, cmds] = start();
     expect(cmds[0]).toMatchObject({ type: "step_run", step: "tests", round: 1 });
     const heads: string[] = [];
@@ -318,6 +320,11 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
     [m, cmds] = machine.update.pr_open_ok(m, {
       type: "pr_open_ok",
       value: { pr: 42, detail: "opened" },
+    } as never);
+    expect(cmds[0]).toMatchObject({ type: "loosen", pr: 42, head: heads[3] });
+    [m, cmds] = machine.update.loosen_ok(m, {
+      type: "loosen_ok",
+      value: { code: 0, text: "loosening: 0 hits in 0 exam files" },
     } as never);
     expect(cmds[0]).toMatchObject({ type: "land", pr: 42 });
     [m] = machine.update.land_ok(m, {
@@ -422,6 +429,84 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
       value: line("send:tests:step_said", "b".repeat(40)),
     } as never);
     expect(m).toMatchObject({ phase: "over", end: { kind: "ask" } });
+  });
+});
+
+describe("T590 loosening.sh runs after review and before catch-up, today's tooling", () => {
+  const machine = makeMachine({ maxSteps: 16, maxStucks: 3 });
+  // A lane whose review said merge-ready and whose PR is open: the loosening Cmd is next.
+  const opened = (pr: number, head: string) => {
+    const [idle] = machine.init(null, undefined);
+    let [m] = machine.update.start(idle, { type: "start", step: "tests" });
+
+    for (const _ of STEPS) {
+      [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never);
+    }
+
+    return machine.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never);
+  };
+  const pr = fc.integer({ min: 1, max: 99_999 });
+  const hits = fc
+    .array(word, { minLength: 1, maxLength: 5 })
+    .map((ws) => ws.map((w) => `a.test.ts: removed law: ${w}`));
+
+  it("an open PR runs loosening.sh on the reviewed head before any catch-up", () => {
+    fc.assert(
+      fc.property(pr, sha, (n, head) => {
+        const [m, cmds] = opened(n, head);
+        expect(m).toMatchObject({ phase: "loosening", pr: n });
+        expect(cmds).toEqual([expect.objectContaining({ type: "loosen", pr: n, head })]);
+      }),
+      options,
+    );
+  });
+
+  it("zero hits lands; any hit parks as ask (exit 20) with every hit; any other exit is stuck (exit 30)", () => {
+    fc.assert(
+      fc.property(pr, sha, hits, fc.integer({ min: -1, max: 255 }), (n, head, list, code) => {
+        const [m] = opened(n, head);
+        const [clean, landCmds] = machine.update.loosen_ok(m, {
+          type: "loosen_ok",
+          value: { code: 0, text: "loosening: 0 hits in 2 exam files" },
+        } as never);
+        expect(clean).toMatchObject({ phase: "landing", pr: n });
+        expect(landCmds).toEqual([expect.objectContaining({ type: "land", pr: n })]);
+
+        const [hit, none] = machine.update.loosen_ok(m, {
+          type: "loosen_ok",
+          value: { code: 1, text: list.join("\n") },
+        } as never);
+        expect(none).toEqual([]);
+        expect(hit).toMatchObject({ phase: "over", end: { kind: "ask" } });
+
+        if (hit.phase === "over") {
+          expect(exitOf(hit.end)).toBe(20);
+
+          for (const h of list) {
+            expect(hit.end.reason).toContain(h);
+          }
+        }
+
+        const other = code === 0 || code === 1 ? 2 : code;
+        const [broke, nothing] = machine.update.loosen_ok(m, {
+          type: "loosen_ok",
+          value: { code: other, text: "loosening: bad ref" },
+        } as never);
+        expect(nothing).toEqual([]);
+        expect(broke).toMatchObject({ phase: "over", end: { kind: "stuck" } });
+        expect(looseningEnd(n, { code: other, text: "x" })?.kind).toBe("stuck");
+        const [threw] = machine.update.loosen_err(m, { type: "loosen_err", error: { _tag: "unknown" } } as never);
+        expect(threw).toMatchObject({ phase: "over", end: { kind: "stuck" } });
+      }),
+      options,
+    );
+  });
+
+  it("scenario: a loosening answer outside the loosening phase changes nothing", () => {
+    const [idle] = machine.init(null, undefined);
+    const [same, cmds] = machine.update.loosen_ok(idle, { type: "loosen_ok", value: { code: 0, text: "" } } as never);
+    expect(same).toBe(idle);
+    expect(cmds).toEqual([]);
   });
 });
 
