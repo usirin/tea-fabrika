@@ -32,7 +32,7 @@ an added blank row fails because it is not JSON.
 Each added row must be a valid JSON object. The measured core fields and types in
 [field-schema.ts](../.github/ci/field-schema.ts) also block on errors:
 
-- Both files require a string `date` shaped as `YYYY-MM-DD`.
+- All three files require a string `date` shaped as `YYYY-MM-DD`.
 - Notes require string `id`, `stage`, `kind` and `what`, an array `lanes`, and
   string or null `fix`. If present, `cause`, `primitive` and `test` are string or
   null, `person` is boolean, and `links` is an array of strings.
@@ -43,14 +43,22 @@ Each added row must be a valid JSON object. The measured core fields and types i
   string or null; and `driver_caused` is boolean. `active`, `costUsd`, `listUsd`,
   `billed`, `inputTokens`, `cachedTokens` and `outputTokens` are finite,
   nonnegative numbers or null.
+- A row in `findings.jsonl` has `_tag` `finding` or `rated`. A finding requires every field in
+  [its table](#a-finding): `rule` from the closed list; `location` as `{path, line}`, with text
+  for the path and a whole number from 1 for the line; `says`, `proof`, `cost` and `by` with
+  something written in them; string `id` and `head`; string or null `model`, `ticket` and `pr`.
+  The key `at` on a finding is an error: the place is `location`. A rating requires string
+  `finding`, `says` as `fix` or `noise`, `by` with something written in it, and string or null
+  `ticket`.
 
 Extra fields are allowed. Ticket and PR forms do not block. Unknown facts can
 stay null or absent where the schema allows it. Do not invent zero or success.
 
 Missing README metadata, words outside its stage, kind, role and outcome lists,
 non-string lane members, unusual or repeated ids, unusual references, dates,
-timestamps or URLs, and inconsistent times or counts only warn. Warnings exit
-with code 0. An unknown direct `field/*.jsonl` file gets the JSON object check
+timestamps or URLs, and inconsistent times or counts only warn. On a finding, an id not shaped
+`<date>-f<nn>`, a `head` that is not a full sha, and a path that is not repo-relative only warn too.
+Warnings exit with code 0. An unknown direct `field/*.jsonl` file gets the JSON object check
 and a warning that it has no detailed schema. The tables below guide writers;
 their stricter wording does not add blocking rules.
 

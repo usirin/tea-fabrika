@@ -66,17 +66,15 @@ Read every decided note the PR builds, following the plan's references and the c
 Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law.
 Each blocker cites that source and shows the missed case.
 
-Start with merge-ready; tickets: <m> or changes: <n>; tickets: <m>.
-n counts blocking classes. Each class lists every affected case. m counts distinct confirmed
-tracker tickets linked in this answer.
+Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.
+n counts blocking classes. Each class lists every affected case. m counts the finding rows in
+this answer.
 Give every finding in that answer, grouped by class, most serious first.
 Name each checked decided note and say where the change follows or breaks it.
-Other actionable findings become tracker tickets. Use tracker_query to find an existing ticket,
-or tracker_file with value: {title, body, from: {_tag: "pr", url, step: "review"}}.
-Record the returned ID.
-If filing fails, include the exact pending payload for lead to retry. Do not count it as filed
-or start another review round for it.
-Every agent may file. Filing claims no ticket and starts no build.
+Any other actionable finding is one finding row with proof: never a ticket, a fix or only a
+mention, and never a security hole.
+Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl
+unchanged. Do not start another review round for it.
 Keep the four reason labels in the review skill. A missed case in a named class checks the law;
 it does not reopen every test's merits.
 
@@ -381,6 +379,25 @@ are for other people's repos only.
   request opens or is pushed, and when done. Not after every command.
 - A post is 2 to 5 plain lines with full pull request URLs. No security holes, secrets or personal
   names: the tracker will be shared.
+
+## Outside your task
+
+Something wrong that your task does not cover is one finding row with proof, then keep going:
+never a fix, a ticket or only a mention, and never a security hole.
+Decision [0035](../../../.decisions/0035-outside-work-becomes-finding-rows.md) says why.
+[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+counts as proof. The CI `field` job checks each added row's shape.
+
+- **Every brief says it in one line,** for an agent that reads no skill: outside work is a finding
+  row, see `field/README.md`.
+- **A step hands its rows over** in its report or answer, one JSON line each. Add each to
+  `field/findings.jsonl` unchanged the same day, in the pull request it was found during or a
+  rows-only one. Change only an `id` that is already taken. Never drop a row because you disagree
+  with it: a wrong one is rated `noise`.
+- **Never rate a row.** A person does. When the owner rates one, write the `rated` row as their
+  call, and for a `fix` file its ticket with `tracker_file` and put the number in that row.
+- **A `flaky_test` does not wait** for its rating: it gets a ticket and a fix the same day
+  ([0036](../../../.decisions/0036-a-flaky-test-is-fixed.md)).
 
 ## Lead tooling is fast-tracked
 
