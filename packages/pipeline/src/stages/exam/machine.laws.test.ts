@@ -28,6 +28,7 @@ type Msg = MsgOf<Machine>;
 type ExamStep = Step<Exam, Msg, ExamCmd>;
 
 const RULE = ".oxlintrc.json";
+
 const ask = (paths: readonly string[]): ExamAsk => ({
 	ticket: "o/r#1",
 	number: 1,
@@ -35,6 +36,7 @@ const ask = (paths: readonly string[]): ExamAsk => ({
 	changes: paths.map((path) => ({path, change: "c", why: "w"})),
 	tries: 2,
 });
+
 const LAND = landExam({ticket: "o/r#1", number: 1, base: "b", files: [], intent: "i"});
 
 const output = (paths: readonly string[]) => ({files: paths.map((path) => ({path, text: "t"}))});
@@ -213,10 +215,12 @@ interface Redo {
 	readonly head: string;
 	readonly why: readonly string[];
 }
+
 /** The redo an ask holds, if any. */
 const redoOf = (a: ExamAsk): Redo | undefined => (a as {readonly redo?: Redo}).redo;
 const EXAM_HEAD = "3".repeat(40);
 const WHY = ["e1: the rule turns on no-floating-promises in `src/` only", "checks: lint"];
+
 const redo = (paths: readonly string[]): ExamAsk =>
 	({...ask(paths), redo: {head: EXAM_HEAD, why: WHY}}) as ExamAsk;
 
@@ -227,6 +231,7 @@ const redoArbs: MsgArbitraryTable<Msg> = {
 		key: fc.constant("k"),
 	}),
 };
+
 const redoLists = fc.array(arbMsg(redoArbs), {minLength: 1, maxLength: 40});
 
 const checkRedo = (machine: Machine, law: (t: ExamStep) => void) =>

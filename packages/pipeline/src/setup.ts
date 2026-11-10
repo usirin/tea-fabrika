@@ -190,6 +190,7 @@ export function setupOf(
 
 const said = (from: From) =>
 	from === "default" ? "default" : from === "repo" ? "from the repository" : `from ${from}`;
+
 const words = (command: readonly string[]) => (command.length === 0 ? "none" : command.join(" "));
 
 /**

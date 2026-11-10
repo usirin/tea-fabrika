@@ -31,37 +31,46 @@ class FakeTerminal {
 	/** Who hears its keys and its new sizes. */
 	readonly keys: ((data: string) => void)[] = [];
 	readonly sizes: ((size: {cols: number; rows: number}) => void)[] = [];
+
 	constructor(options: Record<string, unknown>) {
 		this.options = {...options};
 		this.drawn = options["theme"];
 		FakeTerminal.made.push(this);
 	}
+
 	loadAddon() {}
+
 	/** As 0.4.0's open(): it ends by focusing itself. */
 	open(parent: object) {
 		this.opened = true;
 		this.element = parent;
 		this.focus();
 	}
+
 	onData(fn: (data: string) => void) {
 		this.keys.push(fn);
 		return {dispose: () => {}};
 	}
+
 	onResize(fn: (size: {cols: number; rows: number}) => void) {
 		this.sizes.push(fn);
 		return {dispose: () => {}};
 	}
+
 	write(data: string, done?: () => void) {
 		this.written.push(data);
 		done?.();
 	}
+
 	reset() {
 		this.written.length = 0;
 	}
+
 	clear() {}
 	refresh() {}
 	resize() {}
 	scrollToBottom() {}
+
 	/** As 0.4.0's focus(): once open, its element now, and again after a zero timeout. */
 	focus() {
 		const at = this.element;
@@ -73,6 +82,7 @@ class FakeTerminal {
 			}, 0),
 		);
 	}
+
 	dispose() {
 		this.disposed = true;
 	}
@@ -148,8 +158,10 @@ type Heard = (e: {matches: boolean}) => void;
  */
 let look: "dark" | "light" = "dark";
 const lists: {query: string; heard: Map<string, Heard[]>; list: object}[] = [];
+
 const matches = (query: string) =>
 	query.includes("light") ? look === "light" : query.includes("dark") ? look === "dark" : false;
+
 const matchMedia = (query: string) => {
 	const heard = new Map<string, Heard[]>();
 	const add = (name: string, fn: Heard) => heard.set(name, [...(heard.get(name) ?? []), fn]);
@@ -172,6 +184,7 @@ const matchMedia = (query: string) => {
 	lists.push({query, heard, list});
 	return list;
 };
+
 const switchTo = (next: "dark" | "light") => {
 	look = next;
 	for (const {query, heard, list} of lists) {

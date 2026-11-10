@@ -185,6 +185,7 @@ type Via = Data.TaggedEnum<{
 	word: Record<never, never>;
 	click: Record<never, never>;
 }>;
+
 const Via = Data.taggedEnum<Via>();
 
 /**

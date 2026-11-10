@@ -31,6 +31,7 @@ import {addressOf, connect, hostLedger, keepConnection} from "./connection.ts";
 // every key is made here, at test time.
 
 const users = new Map<string, {id: number; keys: string[]}>();
+
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
 	if (url.host !== "api.github.com") return new Response("not here", {status: 502});
@@ -57,6 +58,7 @@ const twinScope = Effect.runSync(Scope.make());
 const aliceKey = () => join(root, "alice.key");
 /** A fresh home for each test, so each makes its own agent key. */
 let homes = 0;
+
 const freshHome = () => {
 	homes += 1;
 	const home = join(root, `h${homes}`);
@@ -117,6 +119,7 @@ const fieldsOf = (line: string): Record<string, string> => {
 	}
 	return out;
 };
+
 const said = (lines: readonly string[], message: string) =>
 	lines.map(fieldsOf).filter((f) => f.message === message);
 
@@ -281,6 +284,7 @@ describe("an agent's session on a connected home", () => {
 
 /** Kinds any writer may write: a note, a ticket's facts, an ask put to the person. */
 const anyonesKind = fc.constantFrom("note", "filed", "commented", "closed", "ruling_needed");
+
 /** What a request may say it is: the person, another person, another agent, or nonsense. */
 const claimed = fc.constantFrom(
 	"user:github:7",

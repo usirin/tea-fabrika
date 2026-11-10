@@ -50,15 +50,18 @@ import {type Descriptor, ProgramRunner} from "./runner.ts";
 
 const NAME = "counter:1";
 const BUILD = "build-a";
+
 const policy = {
 	maxDeliveries: 3,
 	intensity: 5,
 	periodMs: 5000,
 	backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5000},
 };
+
 const person = Writer.cases.person.make({key: "SHA256:person", for: from().for});
 const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int});
 type Model = typeof Model.Type;
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("add"), n: Schema.Int}),
 	Schema.Struct({type: Schema.Literal("save"), token: Schema.String}),
@@ -74,22 +77,27 @@ const Msg = Schema.Union([
 		to: Recipient,
 	}),
 ]);
+
 const work = Cmd.make("work", {input: Schema.Struct({}), ok: Schema.Null, err: ["failed"]});
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["failed"],
 });
+
 const Saved = Schema.TaggedStruct("saved", {token: Schema.String});
 /** The wiring's policy. P34 amendment: its `maxDeliveries` may be absent (then 3). */
 type WiringPolicy = Omit<typeof policy, "maxDeliveries"> & {readonly maxDeliveries?: number};
 /** Limits a law sets: the program's own `maxDeliveries`, and the wiring's policy. */
 type Limits = {readonly program?: number | undefined; readonly policy?: WiringPolicy};
+
 type Wiring = {
 	policy: WiringPolicy;
 	recovery: {sql: Sql; name: string; capacity: number};
 	fault: (cut: string) => Effect.Effect<void, LedgerError>;
 };
+
 const runnerLayer: (p: Descriptor, wiring: Wiring) => ReturnType<typeof ProgramRunner.layer> =
 	ProgramRunner.layer;
 
@@ -369,16 +377,20 @@ const world = (
 		},
 	};
 };
+
 const lives = read(`processes/${NAME}`);
 const inbox = read(`${NAME}/inbox`);
+
 const dead = Effect.forEach(PIDS, (p) => read(`${p}/dead`), {concurrency: 1}).pipe(
 	Effect.map((rows) => rows.flat()),
 );
+
 const failed = <A, E, R>(e: Effect.Effect<A, E, R>) =>
 	e.pipe(
 		Effect.exit,
 		Effect.tap((exit) => Effect.sync(() => expect(Exit.isFailure(exit)).toBe(true))),
 	);
+
 /** A letter accepted before the saved model, as P11 marks one: sent and indexed as placed. */
 const accepted = (
 	id: string,
@@ -395,6 +407,7 @@ const accepted = (
 		if (sent._tag === "placed")
 			yield* ProcessStore.use((s) => s.save(checkpoint, [{id, rev: sent.rev, pos: sent.pos}]));
 	});
+
 const recover = (w: ReturnType<typeof world>) =>
 	Effect.gen(function* () {
 		const deadline = w.alarms.at(-1);

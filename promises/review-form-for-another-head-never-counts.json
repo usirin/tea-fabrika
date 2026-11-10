@@ -20,15 +20,15 @@
 		"packages/pipeline/src/laws/promise-check.ts"
 	],
 	"confirmed": {
-		"commit": "a5661f932ade7b3d8301ebd2210be8f6357b6f26",
+		"commit": "5a3fb8858fe349d92d04241b147efaa7f9ae69d3",
 		"prints": {
 			"packages/pipeline/src/stages/review/machine.ts#createReview": "08f4b583d64aa028",
 			"packages/pipeline/src/stages/review/machine.ts#isRun": "48535fac290df7ef",
 			"packages/pipeline/src/stages/review/machine.ts#judged": "b50574d828fec2b8",
 			"packages/pipeline/src/stages/review/machine.ts#end": "2c3c3315b585124e",
 			"packages/pipeline/src/stages/review/machine.ts#review": "a07bdcc7fa3235fe",
-			"packages/pipeline/src/laws/review.ts": "0f997423349a81e3",
-			"packages/pipeline/src/laws/explore.ts": "45d67ebdbe3ebac4",
+			"packages/pipeline/src/laws/review.ts": "bcb154f892e14e92",
+			"packages/pipeline/src/laws/explore.ts": "5604c01d06d48e01",
 			"packages/pipeline/src/laws/promise-check.ts": "d2f8c19615514cfc"
 		}
 	}

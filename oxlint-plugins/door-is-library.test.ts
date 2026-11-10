@@ -2,6 +2,7 @@ import {describe, expect, it} from "vitest";
 import {plant} from "../next/apps/fabrika/src/exam/plant.ts";
 
 const code = "fabrika(door-is-library)";
+
 describe("P17a, the library owns the door", async () => {
 	const files = {
 		"next/apps/fabrika/src/door.ts": [

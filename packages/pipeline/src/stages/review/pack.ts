@@ -28,6 +28,7 @@ export type Kind = typeof Kind.Type;
 export const TEXT_KINDS = ["review-code", "review-doc", "review-skill"] as const;
 export const TextKind = Schema.Literals(TEXT_KINDS);
 export type TextKind = typeof TextKind.Type;
+
 export const isTextKind = (kind: Kind): kind is TextKind =>
 	(TEXT_KINDS as readonly string[]).includes(kind);
 

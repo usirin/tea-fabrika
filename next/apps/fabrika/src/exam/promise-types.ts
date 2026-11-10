@@ -262,4 +262,5 @@ const main = Effect.gen(function* () {
 		api.close();
 	}
 });
+
 if (import.meta.main) NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)));

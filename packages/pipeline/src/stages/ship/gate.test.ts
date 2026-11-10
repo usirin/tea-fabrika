@@ -28,6 +28,7 @@ const clear: ShipFacts = {
 	criteria: CRITERIA,
 	verdicts: metAt("abc1234"),
 };
+
 /** The verdict rows, each way one can fall short at the head. */
 const FAILED_ROWS = [rowOn(C1, "abc1234"), rowOn(C2, "abc1234", "fail")];
 const FAILED_ROW = filed(FAILED_ROWS);
@@ -35,6 +36,7 @@ const OTHER_HEAD = metAt("0ld0000");
 const OLD_VERSION = filed([rowOn(C1, "abc1234"), rowOn(C2, "abc1234", "pass", 1)]);
 type Kind = ReviewKind["kind"];
 type Verdict = ReviewKind["verdict"];
+
 /** Review rows, kind by kind. */
 const rows = (list: Readonly<Partial<Record<Kind, Verdict>>>): ShipFacts["reviews"] => {
 	const [first, ...rest] = Object.entries(list).map(([kind, verdict]) => ({
@@ -44,11 +46,13 @@ const rows = (list: Readonly<Partial<Record<Kind, Verdict>>>): ShipFacts["review
 	if (first === undefined) throw new Error("a review row is owed");
 	return [first, ...rest];
 };
+
 const FAILED = rows({"review-code": "failed"});
 const MISSING = rows({"review-code": "missing"});
 const person = {id: "c1", by: "person"} as const;
 const bot = {id: "c2", by: "bot"} as const;
 const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({...clear, ...patch});
+
 /** The gate's answer in short: go, wait, or the outcome it stops with. */
 const outcomeOf = (patch: Partial<ShipFacts>): ShipOutcome | "go" | "wait_for_checks" => {
 	const gate = shipGate(facts(patch));

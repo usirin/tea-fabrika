@@ -150,11 +150,13 @@ const Where = Schema.Struct({
  * shas are kept (`--jq`), not the files and commits around them.
  */
 const MAIN_OF = "{tested: .merge_base_commit.sha, tip: .base_commit.sha}";
+
 const mainArgs = (
 	at: {readonly owner: string; readonly name: string},
 	base: string,
 	head: string,
 ) => ["api", `repos/${at.owner}/${at.name}/compare/${base}...${head}`, "--jq", MAIN_OF];
+
 const Answer = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -165,6 +167,7 @@ const Answer = Schema.Struct({
 		}),
 	}),
 });
+
 const Team = Schema.Struct({
 	data: Schema.Struct({
 		organization: Schema.Struct({
@@ -198,11 +201,13 @@ export function prOf(
 }
 
 const ISSUE = String.raw`(?:(?:[\w.-]+\/[\w.-]+)?#\d+|https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+)`;
+
 /** GitHub's own closing words: close, fix, resolve, in their three forms. */
 const CLOSES = new RegExp(
 	String.raw`\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+${ISSUE}`,
 	"i",
 );
+
 const PART_OF = new RegExp(String.raw`\bpart of\s+${ISSUE}`, "i");
 /** The end of a match of either: the ticket, as `#N`, `owner/name#N` or an issue's URL. */
 const NAMED = /(?:([\w.-]+)\/([\w.-]+))?#(\d+)$|github\.com\/([\w.-]+)\/([\w.-]+)\/issues\/(\d+)$/;
@@ -254,6 +259,7 @@ export const ticketOf = (
 /** Whether an account is one of a list. GitHub logins do not tell case apart. */
 const isOneOf = (author: Author, logins: readonly string[]): boolean =>
 	author !== null && logins.some((login) => login.toLowerCase() === author.login.toLowerCase());
+
 /** Whether a commit, written whole or short, is this head. */
 const isHead = (head: string, written: string): boolean =>
 	written.length >= 7 && head.startsWith(written);
@@ -422,6 +428,7 @@ const CHECKS = {
 	PENDING: "pending",
 	EXPECTED: "pending",
 } as const;
+
 const MERGEABLE = {MERGEABLE: "clean", CONFLICTING: "conflicts", UNKNOWN: "unknown"} as const;
 
 /** Who is who, as settings of the run: nothing here names an account. */
@@ -657,6 +664,7 @@ const Context = Schema.Union([
 	}),
 ]);
 type Context = typeof Context.Type;
+
 /** `null`: no check has reported on the commit. */
 const Rollup = Schema.NullOr(
 	Schema.Struct({
@@ -686,9 +694,11 @@ const ChangeAnswer = Schema.Struct({
 		}),
 	}),
 });
+
 const TicketAnswer = Schema.Struct({
 	data: Schema.Struct({repository: Schema.Struct({issue: Schema.Struct({body: Schema.String})})}),
 });
+
 /** GitHub's comparison of two commits: the files that differ, the first 300 of them. */
 const Compared = Schema.Struct({files: Schema.Array(Schema.Struct({filename: Schema.String}))});
 /** With this many files or more, a change's files, kinds and diff are not read. */
@@ -696,6 +706,7 @@ export const MOST_FILES = 300;
 
 const GREEN = ["SUCCESS", "NEUTRAL", "SKIPPED"];
 const RED = ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"];
+
 /** How one check stands. A word this does not know waits: it is never taken for a pass. */
 const standsAs = (word: string | null): "green" | "red" | "pending" =>
 	word === null
@@ -705,6 +716,7 @@ const standsAs = (word: string | null): "green" | "red" | "pending" =>
 			: RED.includes(word)
 				? "red"
 				: "pending";
+
 const checkOf = (context: Context) =>
 	context.__typename === "StatusContext"
 		? {name: context.context, state: standsAs(context.state)}
@@ -853,6 +865,7 @@ query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) { headRefOid commits(last: 1) { nodes { commit { oid statusCheckRollup { state } } } } }
   }
 }`;
+
 const ChecksNow = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -872,6 +885,7 @@ const ChecksNow = Schema.Struct({
 		}),
 	}),
 });
+
 /** One run of a workflow, as GitHub's REST API answers. `run_attempt`: which try it is on. */
 const RunNow = Schema.Struct({status: Schema.String, run_attempt: Schema.Number});
 
@@ -912,6 +926,7 @@ const QUEUE = `
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) { pullRequest(number: $number) { state isInMergeQueue mergeCommit { oid } } }
 }`;
+
 /** The same read, with GitHub's own record of each time the pull request went into the merge queue and came out of it. */
 const QUEUE_RECORD = `
 query($owner: String!, $name: String!, $number: Int!) {
@@ -932,6 +947,7 @@ const QueueStands = {
 	isInMergeQueue: Schema.Boolean,
 	mergeCommit: Schema.NullOr(Schema.Struct({oid: Schema.String})),
 };
+
 /**
  * One time the pull request went into the merge queue or came out of it, as
  * GitHub recorded it. `reason`: why it came out. GitHub writes a "removed"
@@ -944,9 +960,11 @@ const QueueEvent = Schema.Struct({
 	reason: Schema.optional(Schema.NullOr(Schema.String)),
 });
 type QueueEvent = typeof QueueEvent.Type;
+
 const QueueNow = Schema.Struct({
 	data: Schema.Struct({repository: Schema.Struct({pullRequest: Schema.Struct(QueueStands)})}),
 });
+
 const QueueRecordNow = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -962,6 +980,7 @@ const QueueRecordNow = Schema.Struct({
 export type LeftQueue =
 	| {readonly reading: "landed"; readonly commit: string}
 	| {readonly reading: "ejected"};
+
 const EJECTED: LeftQueue = {reading: "ejected"};
 
 /**
@@ -989,6 +1008,7 @@ export interface QueueWatch {
 	/** The reads in a row that showed it open and out of the queue, with no record to say why: how many, and when the first one was. */
 	readonly out: {readonly reads: number; readonly since: number} | null;
 }
+
 /** A wait that has read nothing yet. */
 export const OPENED: QueueWatch = {before: undefined, out: null};
 
@@ -1001,6 +1021,7 @@ export interface OutLimits {
 	readonly outPolls: number;
 	readonly outMs: number;
 }
+
 export const DEFAULT_OUT: OutLimits = {outPolls: 3, outMs: 90_000};
 
 /**
@@ -1203,6 +1224,7 @@ const TreeAt = Schema.NullOr(
 		),
 	}),
 );
+
 const Trees = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Record(Schema.String, TreeAt),

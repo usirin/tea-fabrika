@@ -35,6 +35,7 @@ import {appPrograms, type Placed, type Runs, startTsh, tshList, type WindowScree
 
 /** How many times tsh was told `signal`: one Ctrl-C is one interrupt, whichever path it took. */
 const signals = vi.hoisted(() => ({told: 0}));
+
 const lineGate = vi.hoisted(() => ({
 	wait: undefined as Effect.Effect<void> | undefined,
 	entered: false,

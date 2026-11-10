@@ -28,6 +28,7 @@ type ReadTicket = ReturnType<typeof readTicket>;
 
 const Model = Schema.Struct({selected: Schema.NullOr(Schema.String), open: Schema.NullOr(Ticket)});
 type Model = typeof Model.Type;
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("open"), id: Schema.String}),
 	Schema.Struct({type: Schema.Literal("close")}),

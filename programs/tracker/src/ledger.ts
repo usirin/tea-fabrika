@@ -50,6 +50,7 @@ const unreachable = (e: {readonly message: string}) => ({
 	_tag: "unreachable" as const,
 	why: e.message,
 });
+
 const refused = (stream: string) => ({
 	_tag: "refused" as const,
 	why: `the ledger refused ${stream}`,

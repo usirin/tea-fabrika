@@ -18,14 +18,17 @@ const schemaOptions = {seed: 119120, runs: 100};
 // itself fails if the installed API or the checked result stops refusing the plant.
 // @ts-expect-error Effect 4.1.2 has no Schema.notAnInstalledApi.
 type UnsupportedSchemaApi = typeof Schema.notAnInstalledApi;
+
 const typePlants = (
 	_unsupported: UnsupportedSchemaApi,
 	_report: ReturnType<typeof checker.checkFile>,
 ) => {};
+
 // @ts-expect-error An unchecked success is missing findings, annotations and added count.
 typePlants(undefined, {exitCode: 0});
 const Text = Schema.NullOr(Schema.String);
 const Count = Schema.NullOr(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
+
 // Independent contract schemas keep the input generator from weakening with a decoder.
 const Note = Schema.Struct({
 	id: Schema.String,
@@ -41,6 +44,7 @@ const Note = Schema.Struct({
 	test: Schema.optionalKey(Text),
 	links: Schema.optionalKey(Schema.Array(Schema.String)),
 });
+
 const Run = Schema.Struct({
 	date: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
 	role: Schema.String,
@@ -65,6 +69,7 @@ const Run = Schema.Struct({
 	outputTokens: Schema.optionalKey(Count),
 	driver_caused: Schema.optionalKey(Schema.Boolean),
 });
+
 const noteFields = [
 	"id",
 	"date",
@@ -79,6 +84,7 @@ const noteFields = [
 	"test",
 	"links",
 ];
+
 const runFields = [
 	"date",
 	"role",
@@ -179,6 +185,7 @@ it("a push keeps its two event trees and refuses failed diff, tree or blob reads
 // reads its paths. Plant caught: diffing the event's base SHA (main's tip), which counts main's
 // newer rows and edits against the PR and shows a field file the PR never touched.
 const gitEnv = {...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1"};
+
 const gitIn =
 	(dir: string) =>
 	(args: string[]): {status: number | null; stdout: string} =>
@@ -197,7 +204,9 @@ const gitIn =
 			],
 			{encoding: "utf8", env: gitEnv},
 		);
+
 const text = (rows: readonly string[]) => rows.map((row) => `${row}\n`).join("");
+
 it("a PR's field rows compare to the merge base while main moves ahead", () => {
 	const row = fc.stringMatching(/^[ -~]{0,20}$/);
 	fc.assert(

@@ -46,11 +46,13 @@ beforeAll(async () => {
 	await mf.ready;
 	url = (await mf.unsafeGetDirectURL()).origin;
 });
+
 afterAll(async () => {
 	await mf.dispose();
 });
 
 type Vault = {readonly key: Redacted.Redacted<string> | null; readonly uses: number};
+
 type VaultMsg =
 	| {readonly type: "hold"; readonly key: Redacted.Redacted<string>}
 	| {readonly type: "use"; readonly key: Redacted.Redacted<string>};
@@ -92,6 +94,7 @@ const keeper = (state: StateSchema<Vault>, msgs: readonly VaultMsg[]) =>
 /** The vault's state, its key written by `key`. */
 const vaultOf = <E>(key: Schema.Codec<Redacted.Redacted<string>, E>) =>
 	Schema.Struct({key: Schema.NullOr(key), uses: Schema.Int});
+
 const VaultState = vaultOf(Schema.Redacted(Schema.String));
 
 /** Each way Effect Schema writes a Redacted. */

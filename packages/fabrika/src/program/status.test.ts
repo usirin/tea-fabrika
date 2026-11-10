@@ -26,6 +26,7 @@ const step = defineMachine({
 		finish: (s) => [{...s, done: true}, []],
 	},
 });
+
 const Toy = Schema.Struct({n: Schema.Int, done: Schema.Boolean});
 type Toy = typeof Toy.Type;
 

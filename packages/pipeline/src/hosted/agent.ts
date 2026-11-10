@@ -88,6 +88,7 @@ export const quiet = defineMachine({
 	init: (loaded) => [loaded ?? {n: 0}, []],
 	update: {noop: (s) => [s, []]},
 });
+
 const Quiet = Schema.Struct({n: Schema.Number});
 
 /**

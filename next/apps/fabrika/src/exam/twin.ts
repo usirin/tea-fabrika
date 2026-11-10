@@ -7,6 +7,7 @@ import {parseSync, type ModuleExportName} from "oxc-parser";
 type Tree = any;
 type Program = ReturnType<typeof parseSync>["program"];
 type Finding = {file: string; line: number; reason: string};
+
 const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, string>) => {
 	const {dirname, join, resolve} = path;
 	const text = (file: string) => {

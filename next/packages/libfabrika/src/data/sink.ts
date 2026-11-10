@@ -67,6 +67,7 @@ const Unsent = Schema.Struct({
 	row: Schema.fromJsonString(SpanRow),
 	content: Schema.NullOr(Schema.String),
 });
+
 const decodeUnsent = Schema.decodeUnknownSync(Unsent);
 const encodeChain = Schema.encodeSync(Schema.fromJsonString(Chain));
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(SpanRow));
@@ -194,6 +195,7 @@ class SinkSpan extends Tracer.NativeSpan {
 		endTime: bigint,
 		exit: Exit.Exit<unknown, unknown>,
 	) => void;
+
 	constructor(
 		options: ConstructorParameters<typeof Tracer.NativeSpan>[0],
 		onEnd: (span: SinkSpan, endTime: bigint, exit: Exit.Exit<unknown, unknown>) => void,

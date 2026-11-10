@@ -42,6 +42,7 @@ type Row = typeof SpanRow.Type;
 const root = mkdtempSync(join(tmpdir(), "p37-sink-"));
 const opened: Array<DatabaseSync> = [];
 let homes = 0;
+
 afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 	rmSync(root, {recursive: true, force: true});
@@ -86,13 +87,16 @@ const world = (
 ) => Layer.mergeAll(SpanSink.layer(sql, {object: OBJECT}), records, archive);
 
 const flush = SpanSink.use((sink) => sink.flush);
+
 const recorded = (chain: ChainValue) =>
 	RecordManager.use((records) => Stream.runCollect(records.read(chain)));
+
 const traced = <A, E, R>(
 	name: string,
 	attributes: Record<string, unknown>,
 	body: Effect.Effect<A, E, R>,
 ) => body.pipe(Effect.withSpan(name, {attributes}));
+
 const step = (name: string, attributes: Record<string, unknown> = {}) =>
 	traced(name, attributes, Effect.void);
 
@@ -120,7 +124,9 @@ const full = () =>
 		errcode: 13,
 		errstr: "database or disk is full",
 	});
+
 const WRITE = /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i;
+
 /** A Sql over a real one that throws SQLITE_FULL on its next `armed` writes, as a full disk would. */
 const filling = (inner: Sql) => {
 	let armed = 0;
@@ -151,6 +157,7 @@ const filling = (inner: Sql) => {
 };
 
 const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");
+
 /** R2 in memory, as its binding behaves: `put` fails when the body does not match its SHA-256. */
 const bucket = () => {
 	const files = new Map<string, Uint8Array>();
@@ -642,6 +649,7 @@ const SECRET = "sk-p99-secret";
 const NOTE = "note-body-p99";
 const NOTE_TWO = "note-two-p99";
 const a = (n: number) => "a".repeat(n);
+
 class NoteError extends Error {
 	override readonly name = "NoteError";
 }

@@ -20,15 +20,15 @@
 		"packages/pipeline/src/laws/promise-check.ts"
 	],
 	"confirmed": {
-		"commit": "1a4882b8b3bb5a80df7efd73f05f6787f07455c3",
+		"commit": "5a3fb8858fe349d92d04241b147efaa7f9ae69d3",
 		"prints": {
 			"packages/pipeline/src/stages/ship/machine.ts#createShip": "ca580712a55c0a8f",
 			"packages/pipeline/src/stages/ship/machine.ts#over": "8ea1c0fc023805f3",
 			"packages/pipeline/src/stages/ship/machine.ts#stay": "f927f87947d01074",
 			"packages/pipeline/src/stages/ship/machine.ts#revived": "572f9a099fdb5105",
 			"packages/pipeline/src/stages/ship/machine.ts#ship": "e253baae3b116105",
-			"packages/pipeline/src/laws/ship.ts": "0b1b725cbb048d1d",
-			"packages/pipeline/src/laws/explore.ts": "45d67ebdbe3ebac4",
+			"packages/pipeline/src/laws/ship.ts": "b77e6e5e412e9c49",
+			"packages/pipeline/src/laws/explore.ts": "5604c01d06d48e01",
 			"packages/pipeline/src/laws/promise-check.ts": "d2f8c19615514cfc"
 		}
 	}

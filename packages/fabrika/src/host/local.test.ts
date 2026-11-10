@@ -23,6 +23,7 @@ const heldPort = async <A>(use: (port: number) => Promise<A>): Promise<A> => {
 
 /** Folders a test made, removed after it: a ledger's folder holds its door secret. */
 const made: string[] = [];
+
 const folder = (prefix: string): string => {
 	const path = mkdtempSync(join(tmpdir(), prefix));
 	made.push(path);

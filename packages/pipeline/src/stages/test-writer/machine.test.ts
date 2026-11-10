@@ -20,6 +20,7 @@ import type {Written} from "./written.ts";
 // script (./scripted.ts). No agent, no box, no test runner.
 
 const intent = (step: string) => `tests/acme/widgets#7/1/${step}`;
+
 const cannot: Written = {
 	...GOOD,
 	answers: [

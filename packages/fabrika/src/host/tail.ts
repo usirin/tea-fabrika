@@ -23,6 +23,7 @@ export interface Meter {
 	bytes: number;
 	rings: number;
 }
+
 export const meter = (): Meter => ({reads: 0, events: 0, bytes: 0, rings: 0});
 
 export interface TailOptions {

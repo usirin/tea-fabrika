@@ -32,6 +32,7 @@ import {pathsOf} from "./socket.ts";
 const root = mkdtempSync(join(tmpdir(), "move-"));
 afterAll(() => rmSync(root, {recursive: true, force: true}));
 let n = 0;
+
 const fresh = (name: string) => {
 	const dir = join(root, `${name}${n++}`);
 	mkdirSync(dir, {recursive: true});
@@ -42,6 +43,7 @@ const FOUNDER = "github:7";
 const alice = {kind: "user", id: FOUNDER} as const;
 
 const platform = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
+
 const run = <A, E>(e: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope>) =>
 	Effect.runPromise(e.pipe(Effect.scoped, Effect.provide(platform)));
 
@@ -129,6 +131,7 @@ const rowsOf = (db: Db) =>
 		r.data,
 		r.id,
 	]);
+
 const fileHash = (dir: string) =>
 	createHash("sha256")
 		.update(readdirSync(dir).sort().join("\n"))

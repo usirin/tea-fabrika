@@ -7,6 +7,7 @@ const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Supervision));
 const encode = Schema.encodeUnknownSync(Schema.fromJsonString(Supervision));
 const decodeReceipt = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt));
 const encodeReceipt = Schema.encodeSync(Schema.fromJsonString(Receipt));
+
 const receiptFor = (value: unknown, letter: unknown) => {
 	const saved = decodeReceipt(value);
 	if (saved.letter !== letter) throw new LedgerError({why: "bad_row"});
@@ -17,6 +18,7 @@ const TABLES = [
 	"CREATE TABLE IF NOT EXISTS process_recovery (name TEXT PRIMARY KEY, value TEXT NOT NULL)",
 	"CREATE TABLE IF NOT EXISTS process_receipts (name TEXT NOT NULL, letter TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (name, letter))",
 ];
+
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
 export class RecoveryStore extends Context.Service<

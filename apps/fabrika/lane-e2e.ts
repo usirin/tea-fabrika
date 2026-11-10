@@ -28,6 +28,7 @@ const shots = process.env.SHOTS ?? mkdtempSync(join(tmpdir(), "lane-shots-"));
 mkdirSync(shots, {recursive: true});
 
 const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-e2e-")));
+
 const {home, remote, seed} = makeLaneHome({
 	dir,
 	nodeModules: join(here, "../../packages/pipeline/node_modules"),
@@ -35,12 +36,14 @@ const {home, remote, seed} = makeLaneHome({
 });
 
 const env: Record<string, string> = {};
+
 for (const [name, value] of Object.entries(process.env))
 	if (
 		value !== undefined &&
 		!["TYPESAFE_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY"].includes(name)
 	)
 		env[name] = value;
+
 Object.assign(env, fakeEnv(dir), {FABRIKA_HOME: home});
 
 const check = (what: string, ok: boolean, seen?: unknown) => {
@@ -68,12 +71,15 @@ const until = async <T>(
 };
 
 const tile = (page: Page, id: string) => page.locator(`[data-tile="${id}"]`);
+
 const screen = async (page: Page, id: string) =>
 	(await tile(page, id)
 		.locator(".screen-text")
 		.textContent({timeout: 2000})
 		.catch(() => "")) ?? "";
+
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
+
 const tiles = (page: Page) =>
 	page
 		.locator("[data-tile]")
@@ -171,6 +177,7 @@ const hostPid = () => {
 // and the lane reads its repository off that checkout's origin.
 const app = await _electron.launch({executablePath: electronPath, args: [here], env, cwd: seed});
 let failed = false;
+
 try {
 	const page = await app.firstWindow();
 
@@ -414,4 +421,5 @@ try {
 	}
 	console.log(`shots: ${shots}\nhome: ${home}`);
 }
+
 if (failed) process.exit(1);

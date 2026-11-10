@@ -69,10 +69,12 @@ import {
 	ProjectClient,
 	StorageClient,
 } from "./platform.ts";
+
 const Event = Schema.declare<Parameters<typeof lineFor>[1]>(
 	(value): value is Parameters<typeof lineFor>[1] =>
 		Schema.is(Schema.JsonObject)(value) && typeof value._tag === "string",
 );
+
 const SavedDescriptor = Schema.Struct({
 	id: Schema.String,
 	name: Schema.String,
@@ -89,6 +91,7 @@ export interface Env {
 	readonly LOADER: WorkerLoader;
 	readonly HEALTH: R2Bucket;
 }
+
 export interface BrainOptions {
 	readonly name: string;
 	readonly person: string;
@@ -98,6 +101,7 @@ export interface BrainOptions {
 	readonly build: string;
 	readonly limits?: {readonly recordBytes: number};
 }
+
 export interface ProjectDoorOptions {
 	readonly sql: Sql;
 	readonly founder: Parameters<typeof ClientManager.layer>[0];
@@ -117,6 +121,7 @@ export interface ProjectDoorOptions {
 		reader: string,
 	) => Effect.Effect<unknown, LedgerError>;
 }
+
 export interface ProjectOptions {
 	readonly config: BrainOptions;
 	readonly programs: Readonly<Record<string, ProgramSource>>;
@@ -129,9 +134,12 @@ export interface ProjectOptions {
 		Ledger | LedgerTransaction | Id.Generator | ClientManager | SpanSink | RecordManager | Archive
 	>;
 }
+
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
+
 export const processStub = (env: Env, project: string, pid: string) =>
 	env.PROCESS.getByName(JSON.stringify([project, pid]));
+
 export const recordStub = (env: Env, project: string, name: string) =>
 	env.RECORD.getByName(JSON.stringify([project, name]));
 
@@ -157,16 +165,19 @@ const checkedReply = Effect.fnUntraced(function* <A, B>(
 		),
 	);
 });
+
 export const signingReply = Effect.fn("project.signingReply")(function* (
 	work: Effect.Effect<Session, unknown>,
 ) {
 	return yield* checkedReply(work, (value) => SigningReply.cases.ok.make({value}));
 });
+
 export const commitReply = Effect.fn("project.commitReply")(function* (
 	work: Effect.Effect<Appended, unknown>,
 ) {
 	return yield* checkedReply(work, (value) => CommitReply.cases.ok.make({value}));
 });
+
 const checkedValue = Effect.fnUntraced(function* <A>(
 	reply:
 		| (Omit<typeof SigningReply.cases.ok.Type, "value"> & {readonly value: A})
@@ -184,9 +195,11 @@ export const configureProcess = Effect.fn("process.configure")(function* (
 ) {
 	yield* rpc(StorageClient.make(ctx.storage).put("descriptor", descriptor));
 });
+
 export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: DurableObjectState) {
 	return yield* rpc(StorageClient.make(ctx.storage).get<number>("wake"));
 });
+
 export const processDescriptor = Effect.fn("process.descriptor")(function* (
 	ctx: DurableObjectState,
 ) {
@@ -198,6 +211,7 @@ export const processDescriptor = Effect.fn("process.descriptor")(function* (
 
 const hex = (bytes: ArrayBuffer) =>
 	Array.from(new Uint8Array(bytes), (n) => n.toString(16).padStart(2, "0")).join("");
+
 // R2 refuses a body whose SHA-256 differs from the one sent. The local bucket does not check,
 // so the adapter checks first and both places fail the same way.
 export const checkedPut = Effect.fnUntraced(function* (
@@ -214,6 +228,7 @@ export const checkedPut = Effect.fnUntraced(function* (
 	if (hex(digest) !== sha256.toLowerCase()) return yield* new LedgerError({why: "bad_row"});
 	yield* BucketClient.make(bucket).put(key, copy, sha256);
 });
+
 export const bucketHead = Effect.fn(function* (bucket: R2Bucket, key: string) {
 	const row = yield* BucketClient.make(bucket).head(key);
 	return row?.checksums.sha256 === undefined ? null : {sha256: hex(row.checksums.sha256)};
@@ -227,10 +242,13 @@ export const bucketCalls = (bucket: R2Bucket): BucketCalls => ({
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: P37's R2 interface returns a Promise
 		Effect.runPromise(bucketHead(bucket, key)),
 });
+
 const recordLayer = (env: Env, project: string) =>
 	RecordManager.remote((name) => recordStub(env, project, name));
+
 const archiveLayer = (env: Env) => Archive.bucket(bucketCalls(env.HEALTH));
 const flushed = SpanSink.use((sink) => sink.flush);
+
 export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
 	return yield* work.pipe(
 		Effect.exit,
@@ -242,6 +260,7 @@ export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, 
 		),
 	);
 });
+
 export const recordingLayer = (sql: Sql, env: Env, project: string, object: string) =>
 	Layer.mergeAll(recordLayer(env, project), archiveLayer(env), SpanSink.layer(sql, {object}));
 
@@ -257,6 +276,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
 	const hash = yield* work;
 	return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
 });
+
 const projectLogic = Effect.fn("project.init")(function* (
 	ctx: DurableObjectState,
 	env: Env,
@@ -635,10 +655,12 @@ export class ProjectService extends Context.Service<
 	ProjectService,
 	Effect.Success<ReturnType<typeof projectLogic>>
 >()("fabrika/Project") {}
+
 export const projectLayer = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
 	Layer.effect(ProjectService, projectLogic(ctx, env, options)).pipe(
 		Layer.provide(Layer.merge(ProcessIdGenerator.layer, Id.Generator.layer)),
 	);
+
 export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
 	ManagedRuntime.make(projectLayer(ctx, env, options));
 
@@ -646,6 +668,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
 const Delivered = Schema.Struct({
 	span: Schema.Struct({traceId: Schema.String, spanId: Schema.String}),
 });
+
 const processLogic = Effect.fnUntraced(function* (
 	ctx: DurableObjectState,
 	env: Env,
@@ -751,10 +774,12 @@ const processLogic = Effect.fnUntraced(function* (
 			),
 	};
 });
+
 export class ProcessService extends Context.Service<
 	ProcessService,
 	Effect.Success<ReturnType<typeof processLogic>>
 >()("fabrika/Process") {}
+
 export const processRuntime = (
 	ctx: DurableObjectState,
 	env: Env,

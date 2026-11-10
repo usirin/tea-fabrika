@@ -25,6 +25,7 @@ const Report = Schema.Struct({
 		}),
 	),
 });
+
 const readReport = Schema.decodeUnknownSync(Schema.fromJsonString(Report));
 
 /**

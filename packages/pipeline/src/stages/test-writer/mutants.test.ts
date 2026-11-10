@@ -21,11 +21,13 @@ const test: MutantAnswer = {
 	test: "redaction keeps the rest of the body",
 	file: "src/jev-redact.test.ts",
 };
+
 const cannot: MutantAnswer = {
 	mutant: "machine.ts:620:9:5d07c8",
 	answer: "cannot",
 	why: "an empty outbox loops zero times",
 };
+
 const noise: MutantAnswer = {
 	mutant: "jev.ts:105:13:b20e47",
 	answer: "noise",

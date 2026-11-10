@@ -51,7 +51,9 @@ const SAW = {
 	check: "touch",
 	has: ["window"],
 } as const;
+
 const TOOK = {label: "Mac A", where: "Istanbul", how: "panel", check: "touch"} as const;
+
 const addSaw = (how: "sheet" | "recovery" | "device", old: "lost" | "kept" | null = null) => ({
 	how,
 	check: "touch" as const,
@@ -61,6 +63,7 @@ const addSaw = (how: "sheet" | "recovery" | "device", old: "lost" | "kept" | nul
 	kept: how === "sheet" ? ("print" as const) : null,
 	old,
 });
+
 const signed = (signer: string) => ({
 	text: `signed by ${signer}`,
 	armored: "-----SSHSIG-----",
@@ -80,6 +83,7 @@ const founded = (
 	keys: [...keys],
 	window,
 });
+
 const granted = (
 	signer: string,
 	key: string,
@@ -97,11 +101,13 @@ const granted = (
 	},
 	signed: signed(signer),
 });
+
 const revoked = (signer: string, key: string, over: {readonly for?: string} = {}): MemberFact => ({
 	_tag: "revoked",
 	revoke: {id: nextId("revoke"), key, for: over.for ?? P, to: TO, saw: TOOK, sentAt: SENT},
 	signed: signed(signer),
 });
+
 const addedDevice = (
 	signer: string,
 	key: string,
@@ -124,6 +130,7 @@ const addedDevice = (
 	},
 	signed: signed(signer),
 });
+
 const addedSheet = (
 	signer: string,
 	key: string,
@@ -141,6 +148,7 @@ const addedSheet = (
 	},
 	signed: signed(signer),
 });
+
 const denied = (key: string, by: string): MemberFact => ({
 	_tag: "denied",
 	id: nextId("deny"),
@@ -158,15 +166,19 @@ const view = (m: Members) => ({
 		.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
 	spent: [...m.spent].sort(),
 });
+
 const isIn = (m: Members, key: string): boolean => "as" in admitted(m, key);
+
 const liveWith = (m: Members, rank: string): ReadonlyArray<string> =>
 	[...m.keys.entries()]
 		.filter(([key, k]) => k.rank === rank && k.live && !m.spent.has(key))
 		.map(([key]) => key)
 		.sort();
+
 /** Recovery keys that are live and not spent: the sheets that still work. */
 const liveSheets = (m: Members) => liveWith(m, "recovery");
 const livePersons = (m: Members) => liveWith(m, "person");
+
 /** Every key above `key` live, walking `under` to a root. A loop counts as not live. */
 const chainLive = (m: Members, key: string): boolean => {
 	let at = m.keys.get(key)?.under ?? null;
@@ -188,6 +200,7 @@ const STRANGER = "x1";
 const ALL: ReadonlyArray<string> = [...PERSONS, ...WINDOWS, ...LEAVES, ...SHEETS, STRANGER];
 // Keys no random list names, for a step a test adds on top.
 const FRESH_LEAF = "t9";
+
 const FRESH_DEVICES = [
 	["pY", "wY"],
 	["pZ", "wZ"],
@@ -198,10 +211,12 @@ const signer = fc.oneof(
 	{weight: 2, arbitrary: fc.constantFrom(...SHEETS)},
 	{weight: 2, arbitrary: fc.constantFrom(...WINDOWS, ...LEAVES, STRANGER)},
 );
+
 const forWhom = fc.oneof(
 	{weight: 9, arbitrary: fc.constant(P)},
 	{weight: 1, arbitrary: fc.constant(OTHER)},
 );
+
 const anyKey = fc.constantFrom(...ALL);
 const drops = (most: number) => fc.uniqueArray(anyKey, {maxLength: most});
 
@@ -265,16 +280,19 @@ const laterFact: fc.Arbitrary<() => MemberFact> = fc.oneof(
 			})),
 	},
 );
+
 const first = fc
 	.record({
 		keys: fc.constantFrom(["pA"], ["pA", "pB"], ["pA", "pB", "pC"]),
 		window: fc.constantFrom("wA", null),
 	})
 	.map((f) => founded(f.keys, f.window));
+
 /** A whole history: `founded` first, then up to 30 facts of any kind. Each fact gets its own id. */
 const history = fc
 	.tuple(first, fc.array(laterFact, {maxLength: 30}))
 	.map(([head, rest]) => [head, ...rest.map((make) => make())]);
+
 /** A history with two devices from the start, so tests that need two live devices often get them. */
 const twoDevices = fc
 	.tuple(fc.constantFrom(["pA", "pB"], ["pA", "pB", "pC"]), fc.array(laterFact, {maxLength: 20}))
@@ -290,9 +308,11 @@ const leafKey = fc
 		(key) =>
 			![...PERSONS, ...WINDOWS, ...SHEETS, "g1", "t2", "t3", "pY", "wY", "pZ", "wZ"].includes(key),
 	);
+
 const sheetKey = fc
 	.string()
 	.filter((key) => ![...PERSONS, ...WINDOWS, "r2", "pY", "wY", "pZ", "wZ"].includes(key));
+
 const opts = <A>(example: A): fc.Parameters<[A]> => ({
 	seed: SEED,
 	numRuns: RUNS,

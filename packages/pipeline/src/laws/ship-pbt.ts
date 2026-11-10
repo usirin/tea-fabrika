@@ -112,6 +112,7 @@ type VerdictRow = ShipFacts["verdicts"][number];
  */
 export const PROOFS = ["met", "failed", "other_head", "carried", "old_version"] as const;
 type ProofKind = (typeof PROOFS)[number];
+
 const rowsFor = (head: string, kind: ProofKind): readonly VerdictRow[] => {
 	switch (kind) {
 		case "met":
@@ -127,6 +128,7 @@ const rowsFor = (head: string, kind: ProofKind): readonly VerdictRow[] => {
 };
 
 type Hop = NonNullable<ShipFacts["carried"]>[number];
+
 /**
  * The hops a read names, by its proof: the old head to this one when the rows were carried, and
  * for rows that were not, none, a hop to another head, or one from this head back to the old.
@@ -141,10 +143,12 @@ const hopsFor = (head: string, kind: ProofKind, miss: 0 | 1 | 2): readonly Hop[]
 const CLOSES: ShipFacts["ticket"] = {id: "o/r#1", link: "closes_it"};
 const PART: ShipFacts["ticket"] = {id: "o/r#1", link: "part_of_it"};
 type Review = NonNullable<ShipFacts["reviews"]>[number];
+
 const review: fc.Arbitrary<Review> = fc.record({
 	kind: fc.constantFrom("review-code" as const, "review-doc" as const),
 	verdict: mostly<Review["verdict"]>("passed", "failed", "missing"),
 });
+
 /** One or two kinds of review, or none read. */
 const reviews: fc.Arbitrary<ShipFacts["reviews"]> = fc.oneof(
 	{
@@ -182,16 +186,21 @@ export const facts: fc.Arbitrary<ShipFacts> = fc
 // The Cmds an answer answers. The machine sends them; here they are made again from the head
 // alone, the way the machine makes them, because a list of Msgs is drawn before it is folded.
 const reads = readShipFacts({pr: PR});
+
 const rerunOf = (head: string) =>
 	rerunChecks({pr: PR, head, intent: intentOf("ship", PR, "rerun", head)});
+
 const enqueueOf = (head: string) =>
 	enqueue({ready: readyAt(PR, head), intent: intentOf("ship", PR, "enqueue", head)});
+
 const mergeOf = (head: string) =>
 	merge({ready: readyAt(PR, head), intent: intentOf("ship", PR, "merge", head)});
+
 const finishOf = (head: string) => finish({pr: PR, intent: intentOf("ship", PR, "finish", head)});
 
 const pr = fc.constant(PR);
 type QueueMsg = Extract<ShipMsg, {readonly type: "ship_queue"}>;
+
 /** One entry per Msg type: leaving one out does not compile. */
 export const table: MsgArbitraryTable<Msg> = {
 	start: arbRecordMsg("start", {pr}),
@@ -246,8 +255,10 @@ export const WEIGHTS: Partial<Record<Msg["type"], number>> = {
 	ship_merge_ok: 3,
 	ship_queue: 2,
 };
+
 /** As long as experiment 118's walk of the ship machine. */
 export const LENGTH = 60;
+
 /**
  * The lists of Msgs. Not tea's `arbMsgSequence`: it takes no `size`, and at fast-check's default
  * size a list with `maxLength: 60` is drawn about ten long, so most runs never get past a read.
@@ -302,10 +313,12 @@ export function reach(numRuns: number, seed: number): Reach {
 /** A law said no. `why` is in words. */
 export class Broke {
 	readonly why: string;
+
 	constructor(why: string) {
 		this.why = why;
 	}
 }
+
 const broke = (why: string): Broke => new Broke(why);
 
 /**
@@ -323,6 +336,7 @@ export type Law =
 	  };
 
 const each = (name: string, check: (step: ShipStep) => string | null): Law => ({name, each: check});
+
 /** A law that remembers: the memory before and one step in, the memory after, or what broke. */
 function along<W>(name: string, start: W, step: (memory: W, step: ShipStep) => W | Broke): Law {
 	return {
@@ -345,6 +359,7 @@ export class LawBroken extends Error {
 	readonly why: string;
 	/** The run up to the break, when the law saw all of it. */
 	readonly steps: readonly ShipStep[];
+
 	constructor(law: string, why: string, steps: readonly ShipStep[]) {
 		super(`${law}: ${why}`);
 		this.law = law;
@@ -405,6 +420,7 @@ interface Wanted {
 	readonly criteria: ShipFacts["criteria"];
 	readonly rows: readonly (VerdictRow | null)[];
 }
+
 const wantedOf = (f: ShipFacts): Wanted => ({
 	head: f.head,
 	checks: f.checks,
@@ -537,13 +553,16 @@ const stuck = (why: Extract<ShipOutcome, {kind: "stuck"}>["why"]): ShipOutcome =
 	kind: "stuck",
 	why,
 });
+
 const send = (why: Extract<ShipOutcome, {kind: "send"; to: "builder"}>["why"]): ShipOutcome => ({
 	kind: "send",
 	to: "builder",
 	why,
 });
+
 const landingOf = (f: ShipFacts): Landing =>
 	f.ticket !== "none" && f.ticket.link === "part_of_it" ? "part" : "whole";
+
 const done = (landing: Landing, commit: string, cleanup: "done" | "failed" | "not_run") => ({
 	kind: "done" as const,
 	part: landing === "part",
@@ -718,7 +737,9 @@ const NOISE = [
 	"enqueue_other",
 	"merge_other",
 ] as const;
+
 type Noise = (typeof NOISE)[number];
+
 const noiseOf = (kind: Noise, head: string): Msg => {
 	const other = head === "A" ? "B" : "A";
 	switch (kind) {
@@ -783,6 +804,7 @@ export const readyRuns = fc.record({
 		maxLength: 5,
 	}),
 });
+
 export type ReadyRun = typeof readyRuns extends fc.Arbitrary<infer T> ? T : never;
 
 /**
@@ -837,6 +859,7 @@ export function landsWhenReady<S extends Ship, U extends Sub>(
 // ---------------------------------------------------------------- a run from a saved state
 
 const TAMPER = ["none", "moved", "short"] as const;
+
 /** A kept proof, as it was or edited in storage: moved to another head, or a row dropped. */
 const proofOf = (head: string, tamper: (typeof TAMPER)[number]): ReadyToMerge => {
 	const r = readyAt(PR, head);
@@ -844,6 +867,7 @@ const proofOf = (head: string, tamper: (typeof TAMPER)[number]): ReadyToMerge =>
 	if (tamper === "short") return {...r, rows: [r.rows[0]]};
 	return r;
 };
+
 const PHASES = [
 	"reading",
 	"rerunning",
@@ -905,6 +929,7 @@ export const savedState = (agree: boolean): fc.Arbitrary<Ship> =>
 			})();
 			return JSON.parse(JSON.stringify(kept));
 		});
+
 /** Any saved state: the Cmd in flight may name the other head. */
 export const saved = savedState(false);
 
@@ -990,6 +1015,7 @@ export function holds<S extends Ship, U extends Sub>(
 }
 
 const LANDS = "a ready pull request lands";
+
 /** "A ready pull request lands", as a property on `machine`. fast-check's own: see `landsWhenReady`. */
 export function lands<S extends Ship, U extends Sub>(machine: ShipLike<S, U>, opts: Opts): void {
 	fc.assert(
@@ -1002,6 +1028,7 @@ export function lands<S extends Ship, U extends Sub>(machine: ShipLike<S, U>, op
 }
 
 export const SAVED = "a run from a saved state";
+
 /**
  * The run from a saved state, on the real machine. fast-check's own: in tea's runners `loaded` is
  * one value. `agree` keeps the Cmd in flight on the state's own head.
@@ -1021,6 +1048,7 @@ export interface Property {
 	readonly name: string;
 	readonly run: <S extends Ship, U extends Sub>(machine: ShipLike<S, U>, opts: Opts) => void;
 }
+
 const lawProperty = (law: Law): Property => ({
 	name: law.name,
 	run: (machine, opts) => holds(machine, law, opts),

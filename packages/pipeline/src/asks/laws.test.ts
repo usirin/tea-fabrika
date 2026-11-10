@@ -17,16 +17,19 @@ import {Ledger} from "./ledger.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "pipeline-laws-"));
 let mf: Miniflare;
+
 beforeAll(async () => {
 	mf = new Miniflare(ledgerOptions({persist: false, direct: 0}));
 	await mf.ready;
 });
+
 afterAll(async () => {
 	await mf.dispose();
 });
 
 const lawsOn = (layer: Layer.Layer<Ledger, unknown>) =>
 	Effect.runPromise(runPipelineLaws().pipe(Effect.provide(layer), Effect.scoped));
+
 const broken = (rs: readonly LawResult[]) => rs.filter((r) => !r.pass);
 const brokenLaws = (rs: readonly LawResult[]) => broken(rs).map((r) => r.law.split(".")[0]);
 

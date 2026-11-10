@@ -11,8 +11,10 @@ import {describe, expect, it} from "vitest";
 const script = join(import.meta.dirname, "redact.sh");
 const word = fc.stringMatching(/^[a-z][a-z0-9]{3,12}$/);
 const options = {seed: 321, numRuns: 8, endOnFailure: true};
+
 const unicode = (text: string) =>
 	[...text].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`).join("");
+
 const decode = (text: string) => {
 	let value = text
 		.replace(/\\u([0-9a-f]{4})/gi, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
@@ -26,6 +28,7 @@ const decode = (text: string) => {
 	}
 	return value;
 };
+
 const run = (
 	answer: string,
 	events: string,
@@ -69,6 +72,7 @@ const run = (
 		rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 const tokens = (value: string) => [
 	`npm_${value.repeat(40).slice(0, 36)}`,
 	`ghp_${value.repeat(40).slice(0, 36)}`,

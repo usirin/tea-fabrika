@@ -55,14 +55,17 @@ export interface Declared<D extends "flag" | "input" | "output", T> {
 	readonly description: string;
 	readonly shape: Shape<T>;
 }
+
 /** A value a program is started with, once, like argv. */
 export interface Flag<T> extends Declared<"flag", T> {
 	/** What a run is started with when the flag is not given. Left out: it must be given, unless its shape takes `undefined`. */
 	readonly default?: {readonly value: T};
 }
+
 /** A flag a line must give: it has no default, and its shape does not take `undefined`. */
 export const mustBeGiven = (declared: Flag<unknown>): boolean =>
 	declared.default === undefined && declared.shape.problem(undefined) !== undefined;
+
 /**
  * When a value told to an input counts as taken: AMQP's two acknowledgement
  * modes. `auto`: once `serve` takes it out of the mailbox. `manual`: once its
@@ -70,6 +73,7 @@ export const mustBeGiven = (declared: Flag<unknown>): boolean =>
  * its sender's outbox until then (./outbox.ts).
  */
 export type Ack = "auto" | "manual";
+
 /** A value a running program can be told at any time, like a line on stdin. */
 export interface Input<T, A extends Ack = Ack, C extends boolean = boolean> extends Declared<
 	"input",
@@ -110,6 +114,7 @@ export function capacityOf(capacity: number): number {
 		throw new Error(`a mailbox's capacity is a whole number, 1 or more, not ${capacity}`);
 	return capacity;
 }
+
 /** A value a program sends while it runs. One-way: nothing comes back, but a pipe's ack into an input that acks. */
 export interface Output<T> extends Declared<"output", T> {
 	/**

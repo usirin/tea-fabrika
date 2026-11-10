@@ -46,6 +46,7 @@ const PR = "https://github.com/example/repo/pull/7";
 /** The repo's two owners. Both open pull requests, and both post review verdicts. */
 const OWNERS = ["repo-owner", "second-owner"];
 const WHO: Accounts = {own: OWNERS, reviewers: OWNERS};
+
 const recorded = (name: string): string =>
 	readFileSync(new URL(`../../../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
 
@@ -98,10 +99,13 @@ function fakeGh(answers: Answers) {
 	};
 	return {gh, calls};
 }
+
 const factsOn = (pr: string, who = WHO, team?: string | "breaks") =>
 	Effect.runPromise(readPrFacts(fakeGh(team === undefined ? {pr} : {pr, team}).gh, who)(PR));
+
 const failureOn = (pr: string | "breaks") =>
 	Effect.runPromise(Effect.flip(readPrFacts(fakeGh({pr}).gh, WHO)(PR)));
+
 /**
  * A `CodeHost` that only reads facts: its two waits never say anything. With
  * it, a criteria record: by default one that holds no ticket.
@@ -120,6 +124,7 @@ const hostOf = (
 		}),
 		record,
 	);
+
 /**
  * The whole way: the service on a recorded answer, the real handler, the real
  * machine up to its first write. The record holds the ticket the pull request
@@ -151,6 +156,7 @@ function changed(
 	change(answer.data.repository.pullRequest, answer.data.repository);
 	return JSON.stringify(answer);
 }
+
 function changedTeam(change: (members: Record<string, any>) => void): string {
 	const answer = JSON.parse(recorded("team"));
 	change(answer.data.organization.team.members);

@@ -63,11 +63,13 @@ const child = defineProgram({
 });
 
 const sleep = (ms: number) => Effect.sleep(Duration.millis(ms));
+
 const until = (done: Effect.Effect<boolean, unknown, Ledger>, ms = 15_000) =>
 	Effect.gen(function* () {
 		const t0 = Date.now();
 		while (!(yield* done) && Date.now() - t0 < ms) yield* sleep(20);
 	});
+
 const countOf = (name: string) => Effect.map(savedState(name, Count), (s) => s.state?.count ?? 0);
 const kinds = (rows: readonly Row[], kind: string) => rows.filter((r) => r.kind === kind);
 

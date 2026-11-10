@@ -116,6 +116,7 @@ import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 export type Flags = Readonly<Record<string, Flag<any>>>;
 export type Inputs = Readonly<Record<string, Input<any>>>;
 export type Outputs = Readonly<Record<string, Output<any>>>;
+
 /** One typed value per declaration. */
 export type Given<D extends Readonly<Record<string, {readonly shape: Shape<any>}>>> = {
 	readonly [K in keyof D]: PayloadOf<D[K]>;
@@ -151,10 +152,12 @@ export interface Delivery<T> {
 // each handler's value type comes from its input's shape.
 
 const EndId: unique symbol = Symbol.for("@kampus/fabrika-old/End");
+
 /** What a handler answers to stop serving: {@link end}. */
 export interface End {
 	readonly [EndId]: typeof EndId;
 }
+
 const ending: End = {[EndId]: EndId};
 /**
  * Answered by a handler: stop serving after this value, like tsh's `exit`.
@@ -164,11 +167,13 @@ const ending: End = {[EndId]: EndId};
 export const end: Effect.Effect<End> = Effect.succeed(ending);
 
 const ForkedId: unique symbol = Symbol.for("@kampus/fabrika-old/Forked");
+
 /** A control input's handler, run at once beside the order: {@link fork}. */
 export interface Forked<A, E, R> {
 	readonly [ForkedId]: typeof ForkedId;
 	readonly handler: (value: A) => Effect.Effect<unknown, E, R>;
 }
+
 /**
  * The handler of a control input (`input(..., {control: true})`): run at
  * once, as each value comes, beside the order, Effect's `Rpc.fork`. A value of
@@ -179,6 +184,7 @@ export interface Forked<A, E, R> {
 export const fork = <A, E, R>(
 	handler: (value: A) => Effect.Effect<unknown, E, R>,
 ): Forked<A, E, R> => ({[ForkedId]: ForkedId, handler});
+
 const isForked = (handler: unknown): handler is Forked<unknown, unknown, unknown> =>
 	typeof handler === "object" && handler !== null && ForkedId in handler;
 

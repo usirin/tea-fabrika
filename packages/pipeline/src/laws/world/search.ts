@@ -170,6 +170,7 @@ function ample<W, N>(sys: System<W, N>, w: W, moves: readonly Move<W, N>[]): rea
 class Ints {
 	data = new Int32Array(1024);
 	size = 0;
+
 	push(n: number): void {
 		if (this.size === this.data.length) {
 			const bigger = new Int32Array(this.data.length * 2);
@@ -178,6 +179,7 @@ class Ints {
 		}
 		this.data[this.size++] = n;
 	}
+
 	at(i: number): number {
 		return this.data[i] as number;
 	}
@@ -187,6 +189,7 @@ class Ints {
 class Names {
 	readonly list: string[] = [];
 	readonly ids = new Map<string, number>();
+
 	id(name: string): number {
 		const known = this.ids.get(name);
 		if (known !== undefined) return known;

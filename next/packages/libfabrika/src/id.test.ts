@@ -16,8 +16,10 @@ const effectOptions = {arbitrary: {seed, runs: 40}};
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 const maxClock = 2 ** 48 - 1;
 const letters = fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz");
+
 const text = (minLength: number, maxLength: number) =>
 	fc.array(letters, {minLength, maxLength}).map((chars) => chars.join(""));
+
 const prefix = fc.oneof(
 	letters,
 	fc
@@ -28,6 +30,7 @@ const prefix = fc.oneof(
 		)
 		.map(([first, middle, last]) => first + middle.join("") + last),
 );
+
 // Each generated family visits every structural edge, including repeated interior underscores.
 const prefixShapes = fc
 	.tuple(letters, text(2, 62), text(63, 63), letters, letters)
@@ -39,6 +42,7 @@ const prefixShapes = fc
 		`${first}__${last}`,
 		first + "_".repeat(61) + last,
 	]);
+
 const badPrefixShapes = fc
 	.tuple(text(1, 63), text(64, 100), fc.constantFrom("0", "-", "/", "é", "\0", " ", "\n"))
 	.map(([word, long, bad]) => [
@@ -52,7 +56,9 @@ const badPrefixShapes = fc
 		// T518-PREFIX-EXCEPTION: mutation 13 admitted this invalid prefix; UUIDs stay generated.
 		"Stryker was here!",
 	]);
+
 const clock = fc.oneof(fc.constant(0), fc.constant(maxClock), fc.integer({min: 0, max: maxClock}));
+
 const uuid = fc.tuple(clock, fc.uint8Array({minLength: 10, maxLength: 10})).map(([at, random]) => {
 	const bytes = Uint8Array.from([
 		...Array.from({length: 6}, (_, i) => Number((BigInt(at) >> BigInt((5 - i) * 8)) & 255n)),
@@ -71,6 +77,7 @@ const referenceEncode = (bytes: Uint8Array): string => {
 		(_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)],
 	).join("");
 };
+
 const referenceDecode = (suffix: string): Uint8Array => {
 	const bits = [...suffix]
 		.map((char) => alphabet.indexOf(char).toString(2).padStart(5, "0"))
@@ -78,18 +85,22 @@ const referenceDecode = (suffix: string): Uint8Array => {
 		.slice(2);
 	return Uint8Array.from({length: 16}, (_, i) => Number.parseInt(bits.slice(i * 8, i * 8 + 8), 2));
 };
+
 const wire = (type: string, bytes: Uint8Array): string =>
 	(type === "" ? "" : `${type}_`) + referenceEncode(bytes);
+
 const split = (value: string): readonly [string, string] => {
 	const separator = value.lastIndexOf("_");
 	return separator < 0 ? ["", value] : [value.slice(0, separator), value.slice(separator + 1)];
 };
+
 const validPrefix = (type: string): boolean =>
 	type.length > 0 &&
 	type.length <= 63 &&
 	/^[a-z]$/.test(type[0]!) &&
 	/^[a-z]$/.test(type.at(-1)!) &&
 	[...type].every((char) => "abcdefghijklmnopqrstuvwxyz_".includes(char));
+
 const accepts = (input: unknown, type?: string): boolean => {
 	if (typeof input !== "string") return false;
 	const [found, suffix] = split(input);
@@ -100,6 +111,7 @@ const accepts = (input: unknown, type?: string): boolean => {
 	const bytes = referenceDecode(suffix);
 	return bytes[6]! >>> 4 === 7 && bytes[8]! >>> 6 === 2;
 };
+
 const canonical = fc.tuple(prefix, uuid).map(([type, bytes]) => wire(type, bytes));
 const unknown = fc.oneof(fc.anything(), fc.string(), canonical);
 
@@ -119,24 +131,30 @@ const expectDecoded = <A, E>(
 		}
 	}
 };
+
 const timestamp = (id: string): number =>
 	[...referenceDecode(split(id)[1]).slice(0, 6)].reduce((total, byte) => total * 256 + byte, 0);
+
 const increasing = (ids: ReadonlyArray<string>): void => {
 	expect(new Set(ids).size).toBe(ids.length);
 	for (let i = 1; i < ids.length; i++) expect(ids[i]! > ids[i - 1]!).toBe(true);
 };
+
 const compare = (left: string, right: string): -1 | 0 | 1 =>
 	left < right ? -1 : left > right ? 1 : 0;
+
 const Time = Schema.Int.check(Schema.isBetween({minimum: 0, maximum: maxClock}));
 const Count = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 128}));
 const Prefix = Schema.String.check(Schema.isPattern(/^[a-z](?:[a-z_]{0,61}[a-z])?$/));
 const rawBytes = fc.uint8Array({minLength: 16, maxLength: 16});
+
 const v7 = (raw: Uint8Array): Uint8Array => {
 	const bytes = raw.slice();
 	bytes[6] = (bytes[6]! & 15) | 0x70;
 	bytes[8] = (bytes[8]! & 63) | 0x80;
 	return bytes;
 };
+
 const expectIdFailure = <A, E>(exit: Exit.Exit<A, E>, why: string): void => {
 	expect(Exit.isFailure(exit)).toBe(true);
 	if (Exit.isFailure(exit)) {

@@ -25,12 +25,14 @@ const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const ids = Effect.runSync(Id.Generator.pipe(Effect.provide(Id.Generator.layer)));
 const processId = () => Effect.runSync(ids.next(Id.Process));
+
 const field = (value: Buffer | string) => {
 	const body = Buffer.from(value),
 		n = Buffer.alloc(4);
 	n.writeUInt32BE(body.length);
 	return Buffer.concat([n, body]);
 };
+
 const identity = () => {
 	const pair = generateKeyPairSync("ed25519"),
 		raw = pair.publicKey.export({format: "jwk"}).x!;
@@ -66,6 +68,7 @@ const identity = () => {
 		},
 	};
 };
+
 const span = (n: number) =>
 	Schema.decodeUnknownSync(SpanRow)({
 		traceId: TRACE,
@@ -81,6 +84,7 @@ const span = (n: number) =>
 		resource: {attributes: {"fab.object": "record-test"}},
 		ok: true,
 	});
+
 const world = async (
 	test: (
 		stage: any,
@@ -276,6 +280,7 @@ export class Control extends Brain.Control {
 };
 
 const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
+
 const wire = async (stage: any, key: ReturnType<typeof identity>, tab: string) => {
 	const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
 	const socket = new WebSocket(stage.url.replace("http", "ws") + name);
@@ -323,6 +328,7 @@ const wire = async (stage: any, key: ReturnType<typeof identity>, tab: string) =
 	).toBeUndefined();
 	return {name, call, socket, frames, closeCode: () => closeCode};
 };
+
 const workerdPid = () => {
 	const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], {encoding: "utf8"})
 		.split("\n")
@@ -339,6 +345,7 @@ const workerdPid = () => {
 	expect(matches.length).toBeLessThanOrEqual(1);
 	return matches[0]?.pid ?? 0;
 };
+
 const admitted = async (stage: any, key: ReturnType<typeof identity>, project = "p12-records") => {
 	const p = stage.project(project);
 	const client = await p.connect(),
@@ -363,8 +370,10 @@ const admitted = async (stage: any, key: ReturnType<typeof identity>, project = 
 	expect(hello._tag).toBe("online");
 	return {p, client};
 };
+
 const routed = (p: any, client: string, method: string, params: unknown) =>
 	p.route(client, method, params);
+
 const read = async (p: any, client: string, stream: string) => {
 	const r = await routed(p, client, "ledger.read", {stream, after: 0});
 	expect(r._tag).toBe("ok");

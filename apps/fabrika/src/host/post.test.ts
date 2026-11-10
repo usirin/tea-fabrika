@@ -18,6 +18,7 @@ import {AGENT_KEY, type Post, post} from "./post.ts";
 // ledger says each write is agent:triage, for bob, whatever the agent says it is.
 
 const users = new Map<string, {id: number; keys: string[]}>();
+
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
 	if (url.host !== "api.github.com") return new Response("not here", {status: 502});

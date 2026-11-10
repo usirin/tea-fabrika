@@ -27,6 +27,7 @@ const idle = defineMachine({
 
 const inputs = {n: input(Schema.Int, "A number.")};
 const outputs = {said: output(Schema.String, "What it is doing.")};
+
 const machines = {
 	idle: kind({
 		machine: idle,
@@ -37,6 +38,7 @@ const machines = {
 		status: () => "idle",
 	}),
 };
+
 const description = "Says it is open, reads its input until it closes, then says so.";
 
 const win = defineProgram({

@@ -41,10 +41,12 @@ const KEY = "k";
 const TRIES = 2;
 const SETTINGS: Settings = {model: "m", effort: "low", budget: 1, note: "n"};
 const TICKET: SortTicket = {url: URL, number: 5, state: "open", title: "t", body: "b"};
+
 const CONTEXT: SortContext = {
 	earlier: [{number: 2, title: "e", state: "closed", reason: null}],
 	plans: [{number: 9, tickets: [9], summary: "p", approved: false}],
 };
+
 const SPENT: Spend = {...noSpend, costUsd: 1, turns: 1};
 
 /** What the sorter may hand back, by a short name. */

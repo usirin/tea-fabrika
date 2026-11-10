@@ -51,6 +51,7 @@ const FACTS: PrFacts = {
 	comments: [],
 	main: {tested: "m", tip: "m"},
 };
+
 const PULL: Pull = {
 	id: "https://github.invalid/o/r/pull/9",
 	kind: "lane",
@@ -63,6 +64,7 @@ const PULL: Pull = {
 	body: "b",
 	verdicts: [],
 };
+
 const PASSED: Pull = {...PULL, verdicts: [{kind: "review-code", verdict: "pass"}]};
 
 describe("what GitHub says, under the lane's own facts", () => {
@@ -292,9 +294,12 @@ describe("the url a window shows", () => {
 // ---------------------------------------------------------------- over the stand-in `gh`
 
 const MODULES = fileURLToPath(new URL("../../../node_modules", import.meta.url));
+
 const FIXTURE = (name: string) =>
 	readFileSync(new URL(`../../../../../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
+
 const NUMBER = 7;
+
 const IDENTITY = {
 	GIT_AUTHOR_NAME: "fixture",
 	GIT_AUTHOR_EMAIL: "fixture@fabrika.invalid",

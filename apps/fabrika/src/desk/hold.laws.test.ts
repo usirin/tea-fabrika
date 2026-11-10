@@ -23,15 +23,18 @@ type Msg = MsgOf<Machine>;
 type HoldStep = Step<Hold, Msg, HoldCmd>;
 
 const NAMES = ["<c-b>", "<c-c>", "|", "l", "y"] as const;
+
 const keyOf = (name: string, code = ""): Key => ({
 	name,
 	press: {key: name, code, ctrl: name.startsWith("<c-"), alt: false, meta: false, shift: false},
 });
+
 const key = fc.constantFrom(...NAMES).map((name) => keyOf(name));
 
 /** A Cmd's failed answer. The hold's Cmds declare no errors, so a malformed answer is the one left. */
 const failed = <T extends string, C>(type: T, cmd: C) =>
 	fc.constant({type, cmd, error: {_tag: "malformed_result", issues: []} as const, at: 0});
+
 const pressing = press({id: 0, key: "<c-b>"});
 const passing = pass({key: keyOf("l"), held: false});
 
@@ -52,12 +55,14 @@ const table: MsgArbitraryTable<Msg> = {
 /** Each key gets its place in the list as its `code`, so no two keys are the same. */
 const named = (msgs: readonly Msg[]): readonly Msg[] =>
 	msgs.map((msg, at) => (msg.type === "key" ? {...msg, key: keyOf(msg.key.name, `k${at}`)} : msg));
+
 const lists = fc
 	.array(arbMsg(table, {weights: {key: 6, answer: 4, takes: 2, down: 1}}), {
 		maxLength: 40,
 		size: "max",
 	})
 	.map(named);
+
 const OPTS = {numRuns: 400, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
 
@@ -76,6 +81,7 @@ const presses = (cmds: readonly HoldCmd[]) => cmds.flatMap((c) => (c.type === "p
 const passes = (cmds: readonly HoldCmd[]) => cmds.flatMap((c) => (c.type === "pass" ? [c] : []));
 /** Does the desk take this key, as the host said last, with the link up? */
 const takes = (s: Hold, k: Key) => s.up && (s.takes.all || s.takes.keys.includes(k.name));
+
 /** Is this Msg what frees the key out: its answer, or the link dropping? */
 const frees = (s: Hold, msg: Msg) =>
 	s.waiting !== null && ((msg.type === "answer" && msg.id === s.waiting.id) || msg.type === "down");
@@ -271,6 +277,7 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = holdMachine.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...holdMachine,

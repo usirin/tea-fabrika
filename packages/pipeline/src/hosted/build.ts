@@ -359,6 +359,7 @@ export const hostedBuild: Stage<
 };
 
 const decodeJob = Schema.decodeUnknownExit(Schema.fromJsonString(BuildJob));
+
 /** The job, from the stage's inbox: boot runs after the stage has read it. */
 const jobOf = (self: Self["Service"]) =>
 	self.reads.readStream(self.inbox).pipe(

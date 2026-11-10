@@ -265,6 +265,7 @@ const judge = (tokens: ReadonlyMap<string, TokenFile>, resolved: Resolved, said:
 // ---- writing -----------------------------------------------------------------------------------
 
 const TYPES = ["background", "border", "text", "icon"] as const;
+
 const PLURAL: Record<(typeof TYPES)[number], string> = {
 	background: "backgrounds",
 	border: "borders",

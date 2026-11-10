@@ -24,9 +24,11 @@ const REFUSED = [
 	".github/workflows/ci.yml",
 	".github/workflows/nested/ci.yml",
 ] as const;
+
 const ORIGINAL = "original repo configuration\n";
 const INJECTED = "T237-injected-command";
 const made: string[] = [];
+
 afterEach(() => {
 	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});
 });
@@ -90,6 +92,7 @@ const seatbelt = spawnSync(
 	["-p", "(version 1)(allow default)", "/usr/bin/true"],
 	{encoding: "utf8"},
 );
+
 const nested = seatbelt.stderr?.includes("sandbox_apply: Operation not permitted") ?? false;
 const noSeatbelt = process.platform !== "darwin" || seatbelt.error !== undefined || nested;
 const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;

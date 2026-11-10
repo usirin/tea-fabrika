@@ -58,6 +58,7 @@ const PLAN_ID = planOf(TICKET);
 const LANE = "lane:7";
 const T1 = taskId("t1");
 const T2 = taskId("t2");
+
 const JOB: LaneJob = {
 	plan: PLAN_ID,
 	settings: {model: "m", effort: "low", budget: 1},
@@ -65,6 +66,7 @@ const JOB: LaneJob = {
 	rubrics: "r",
 	at: 0,
 };
+
 const OPEN: Item = {
 	criterion: criterionId("c1"),
 	text: "every window opens",

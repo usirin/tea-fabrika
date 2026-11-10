@@ -23,6 +23,7 @@ import {memoryStorage} from "./storage.ts";
 // bound. The flood laws on the one bound are in ./inputs-over-time.test.ts.
 
 const numbers = (count: number) => Array.from({length: count}, (_, i) => i);
+
 const turns = (n: number) =>
 	Effect.forEach(numbers(n), () => Effect.yieldNow, {discard: true, concurrency: 1});
 
@@ -34,8 +35,10 @@ interface Step {
 	readonly slow: number;
 	readonly pause: boolean;
 }
+
 const Told = Schema.Struct({n: Schema.Int, slow: Schema.Int});
 type Told = typeof Told.Type;
+
 const steps = fc.array(
 	fc.record({
 		to: fc.constantFrom<"a" | "b">("a", "b"),

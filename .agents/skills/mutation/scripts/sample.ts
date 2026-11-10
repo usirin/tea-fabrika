@@ -8,6 +8,7 @@ import {Schema} from "effect";
 import fc from "fast-check";
 
 type Position = {readonly line: number; readonly column: number};
+
 type Candidate = {
 	readonly id: string;
 	readonly fileName: string;
@@ -15,8 +16,10 @@ type Candidate = {
 	readonly replacement: string;
 	readonly location: {readonly start: Position; readonly end: Position};
 };
+
 type Changed = {readonly file: string; readonly line: number};
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 const Sample = Schema.Struct({
 	seed: Schema.Int,
 	ranges: Schema.Array(Schema.String),
@@ -24,15 +27,19 @@ const Sample = Schema.Struct({
 	selected: Count,
 	left: Count,
 });
+
 const position = (a: Position, b: Position) => a.line - b.line || a.column - b.column;
+
 const encloses = (a: Candidate, b: Candidate) =>
 	a.fileName === b.fileName &&
 	position(a.location.start, b.location.start) <= 0 &&
 	position(a.location.end, b.location.end) >= 0;
+
 const touches = (candidate: Candidate, changed: Changed) =>
 	candidate.fileName === changed.file &&
 	candidate.location.start.line <= changed.line &&
 	candidate.location.end.line >= changed.line;
+
 const identity = (candidate: Candidate) =>
 	JSON.stringify([
 		candidate.fileName,
@@ -42,7 +49,9 @@ const identity = (candidate: Candidate) =>
 		candidate.replacement,
 		candidate.id,
 	]);
+
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 const range = (candidate: Candidate) => {
 	const {start, end} = candidate.location;
 	return `${candidate.fileName}:${start.line}:${start.column}-${end.line}:${end.column}`;

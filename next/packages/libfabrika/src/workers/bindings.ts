@@ -8,17 +8,21 @@ import {Appended, type LedgerCalls, type RecordCalls} from "../data/index.ts";
 import type {Answer, checkHello} from "../transport/index.ts";
 
 export type ConnectionId = string & Brand.Brand<"ConnectionId">;
+
 const GrantReply = Schema.TaggedUnion({
 	applied: {rev: Schema.Number},
 	ignored: {rev: Schema.Number, why: Schema.String},
 	refused: {why: Schema.String},
 });
+
 const refusals = {
 	SigningRefused: {why: SigningRefused.fields.why},
 	NotGranted: {},
 };
+
 export const SigningReply = Schema.TaggedUnion({ok: {value: Session}, ...refusals});
 export const CommitReply = Schema.TaggedUnion({ok: {value: Appended}, ...refusals});
+
 export interface DoorCalls {
 	readonly connect: () => Effect.Effect<ConnectionId>;
 	readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
@@ -73,6 +77,7 @@ export interface DoorCalls {
 type RemoteCall<F> = F extends (...args: infer A) => infer B
 	? (...args: A) => Promise<Effect.Success<B>>
 	: never;
+
 type Remote<S> = {[K in keyof S]: RemoteCall<S[K]>};
 type DoorService = DoorCalls;
 type Processes = (typeof ProcessManager)["Service"];
@@ -122,6 +127,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 		publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<void>>;
 		brain: RemoteCall<(event: typeof BrainEvent.Type) => Effect.Effect<Appended>>;
 	};
+
 export type ProcessBinding = Rpc.DurableObjectBranded &
 	Remote<Pick<Runner, "msg" | "open" | "due">> & {
 		configure: RemoteCall<(descriptor: Descriptor) => Effect.Effect<void>>;
@@ -131,6 +137,7 @@ export type ProcessBinding = Rpc.DurableObjectBranded &
 		savedAlarm: RemoteCall<() => Effect.Effect<number | null>>;
 		abort: RemoteCall<() => Effect.Effect<void>>;
 	};
+
 export type GatewayBinding = Rpc.DurableObjectBranded &
 	Remote<{
 		fetch: (request: Request) => Effect.Effect<Response>;
@@ -138,4 +145,5 @@ export type GatewayBinding = Rpc.DurableObjectBranded &
 		notify: (client: string, news: unknown) => Effect.Effect<void>;
 		probe: (session: string) => Effect.Effect<number | null>;
 	}>;
+
 export type RecordBinding = Rpc.DurableObjectBranded & RecordCalls;

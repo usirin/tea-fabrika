@@ -119,6 +119,7 @@ const fitsKey = Schema.is(Key);
 const readJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
 
 type Json = null | boolean | number | string | readonly Json[] | {readonly [k: string]: Json};
+
 const isObject = (v: Json): v is {readonly [k: string]: Json} =>
 	typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -237,6 +238,7 @@ const caseList = (value: Json): readonly {readonly [k: string]: Json}[] | null =
 
 /** One object's name as a case: its first field that names it, else its place in the list. */
 const NAMES = ["key", "id", "item", "case", "ticket", "pr", "name", "n"] as const;
+
 const itemName = (o: {readonly [k: string]: Json}, i: number): string => {
 	for (const k of NAMES) {
 		const v = o[k];

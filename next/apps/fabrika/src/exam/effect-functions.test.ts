@@ -7,6 +7,7 @@ import {plant} from "./plant.ts";
 
 const CODE = "fabrika(effect-functions)";
 const FILE = "next/packages/libfabrika/src/data/tracing.ts";
+
 const source = [
 	'import {Effect, Stream} from "effect";',
 	"declare const append: () => Effect.Effect<void>;",

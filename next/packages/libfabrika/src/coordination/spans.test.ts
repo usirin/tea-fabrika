@@ -32,6 +32,7 @@ const PARENT = `in-${A}-41`;
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TO = "ledger:home";
 const SENT = "2026-11-07T21:10:01.204Z";
+
 const FOUNDER = {
 	name: "home",
 	keys: ["pA"],
@@ -40,17 +41,23 @@ const FOUNDER = {
 	by: "SHA256:founder-mac",
 	build: "b-5e9c2a0",
 } as const;
+
 const MOST = 128; // the longest text a span tag may hold (P37's law, as P6's p95)
+
 const nameArb = Start.cases.first.fields.name.check(
 	Schema.isPattern(/^notes:[a-z][a-z0-9._-]{0,30}$/),
 );
+
 const idArb = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9_-]{0,30}$/));
+
 const keyArb = MemberFact.cases.denied.fields.key.check(
 	Schema.isPattern(/^key-[a-z][a-z0-9_-]{0,30}$/),
 );
+
 // Include complete prefixed patterns: notes: plus 1..31, key- plus 1..31.
 // Bare ids, programs and hashes retain 1..31 characters too.
 const options = {arbitrary: {seed: 119120, runs: 20, size: 40}};
+
 // The installed runner uses runs/seed; old examples stay in these callbacks.
 const examples =
 	<A extends ReadonlyArray<unknown>, E, R>(
@@ -73,21 +80,25 @@ const MARKS = [M_MARK, SAW_MARK, SIG_MARK];
 const folder = mkdtempSync(join(tmpdir(), "p9-spans-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
+
 const fresh = (): Sql => {
 	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
 	opened.push(db);
 	return nodeSql(db);
 };
+
 afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
 });
 
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+
 const onSql = (sql: Sql) =>
 	Layer.mergeAll(Ledger.sql(sql, {reader: READER}), LedgerTransaction.layer(sql)).pipe(
 		Layer.provide(quiet),
 	);
+
 const all = (sql: Sql = fresh()) =>
 	Layer.mergeAll(
 		Mailbox.layer,
@@ -119,13 +130,17 @@ const capture = () => {
 	const ended = (name: string) => spans.filter((s) => s.name === name && s.status._tag === "Ended");
 	return {tracer, spans, ended};
 };
+
 const tags = (span: Tracer.NativeSpan): Record<string, unknown> =>
 	Object.fromEntries(span.attributes);
+
 /** The tag whose key is `word` or ends in `.word`. */
 const tagged = (span: Tracer.NativeSpan, word: string): unknown =>
 	Object.entries(tags(span)).find(([key]) => key === word || key.endsWith(`.${word}`))?.[1];
+
 const holds = (span: Tracer.NativeSpan, value: unknown): boolean =>
 	Object.values(tags(span)).includes(value);
+
 /** Whether `outer` is above `span`, walking its parents. */
 const within = (span: Tracer.NativeSpan, outer: Tracer.NativeSpan): boolean => {
 	let at: Option.Option<Tracer.AnySpan> = span.parent;
@@ -145,24 +160,30 @@ const SAW = {
 	check: "touch",
 	has: [SAW_MARK],
 } as const;
+
 const TOOK = {label: SAW_MARK, where: SAW_MARK, how: "panel", check: "touch"} as const;
+
 const signed = (signer: string) => ({
 	text: `${SIG_MARK} text`,
 	armored: `${SIG_MARK} armored`,
 	signer,
 });
+
 let made = 0;
 const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
+
 const granted = (signer: string, key: string): MemberFact => ({
 	_tag: "granted",
 	grant: {id: nextId("grant"), key, for: P, to: TO, as: "window", saw: SAW, sentAt: SENT},
 	signed: signed(signer),
 });
+
 const revoked = (signer: string, key: string): MemberFact => ({
 	_tag: "revoked",
 	revoke: {id: nextId("revoke"), key, for: P, to: TO, saw: TOOK, sentAt: SENT},
 	signed: signed(signer),
 });
+
 const addSaw = (how: "sheet" | "recovery") => ({
 	how,
 	check: "touch" as const,
@@ -172,6 +193,7 @@ const addSaw = (how: "sheet" | "recovery") => ({
 	kept: how === "sheet" ? ("print" as const) : null,
 	old: how === "recovery" ? ("lost" as const) : null,
 });
+
 const addedDevice = (
 	signer: string,
 	key: string,
@@ -190,6 +212,7 @@ const addedDevice = (
 	},
 	signed: signed(signer),
 });
+
 const addedSheet = (signer: string, key: string): MemberFact => ({
 	_tag: "added",
 	add: {
@@ -203,6 +226,7 @@ const addedSheet = (signer: string, key: string): MemberFact => ({
 	},
 	signed: signed(signer),
 });
+
 const denied = (key: string): MemberFact => ({
 	_tag: "denied",
 	id: nextId("deny"),

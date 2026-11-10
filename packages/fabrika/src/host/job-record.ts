@@ -25,6 +25,7 @@ import type * as L from "./rules.ts";
 import {JobCall} from "./traces.ts";
 
 type Cursor = {toArray(): L.SqlRow[]};
+
 type Ctx = {
 	id?: {name?: string};
 	storage: {
@@ -32,6 +33,7 @@ type Ctx = {
 		transactionSync<T>(fn: () => T): T;
 	};
 };
+
 type Env = {STEP_KEYFRAME?: string};
 
 const decodeCall = Schema.decodeUnknownExit(JobCall);

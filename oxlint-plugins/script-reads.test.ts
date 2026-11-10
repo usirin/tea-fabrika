@@ -11,6 +11,7 @@ import {scriptReads} from "./script-reads.mjs";
 // Review plant: an import inside a comment or a fixture string counts as declared.
 // Mutation round 2 plants: omit the TypeScript loader; count dynamic imports as declarations.
 const refs = fc.array(fc.nat({max: 19}), {maxLength: 3});
+
 const model = fc.record({
 	skills: fc.array(fc.array(refs, {minLength: 1, maxLength: 5}), {minLength: 1, maxLength: 4}),
 	tests: fc.array(fc.record({refs, declared: fc.array(fc.boolean(), {maxLength: 3})}), {
@@ -21,6 +22,7 @@ const model = fc.record({
 	fixtureForm: fc.integer({min: 0, max: 4}),
 	syntaxForm: fc.integer({min: 0, max: 2}),
 });
+
 const forms = (path: string, form: number) => {
 	const name = posix.basename(path);
 	return [
@@ -30,6 +32,7 @@ const forms = (path: string, form: number) => {
 		`../../${path.split("/").slice(2).join("/")}`,
 	][form]!;
 };
+
 const imports = (path: string, form: number, n: number) =>
 	[
 		`import value${n} from "${path}?raw";`,
@@ -40,12 +43,14 @@ const imports = (path: string, form: number, n: number) =>
 		`const value${n} = import("${path}");`,
 		`const value${n} = await import('${path}?raw');`,
 	][form]!;
+
 const syntax = (form: number, n: number) =>
 	[
 		"",
 		`const count${n}: number = ${n};`,
 		`interface Sample${n} { value: number }\nconst sample${n}: Sample${n} = { value: ${n} };`,
 	][form]!;
+
 const fixtures = (statement: string, form: number) =>
 	[
 		`// ${statement.replaceAll("\n", "\n// ")}`,

@@ -174,6 +174,7 @@ query($owner: String!, $name: String!, $number: Int!) {
     issue(number: $number) { state title body }
   }
 }`;
+
 const TicketAnswer = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -197,6 +198,7 @@ query($owner: String!, $name: String!) {
     }
   }
 }`;
+
 const ListAnswer = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({

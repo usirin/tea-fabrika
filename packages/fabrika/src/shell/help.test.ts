@@ -17,6 +17,7 @@ import {SMALL} from "./small.ts";
 // person reads it.
 
 const list = programList(SMALL);
+
 const page = (name: string) => {
 	const entry = list.get(name);
 	if (entry === undefined) throw new Error(name);

@@ -16,11 +16,14 @@ const readTrees = ["programs/", "fixtures/", "packages/", "next/"];
 const skillTrees = [".agents/skills/", ".claude/skills/"];
 /** @param {string} path */
 const script = (path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path);
+
 /** Skill prose is checked in the changes job on every event. @param {string} path */
 const prose = (path) =>
 	(path.startsWith(".agents/skills/") && path.endsWith(".md") && !script(path)) ||
 	/^\.claude\/skills\/[^/]+$/.test(path);
+
 const readFolders = new Set(["brief", "briefs", "prompt", "prompts"]);
+
 /**
  * Markdown a program or test reads: briefs, prompts and fixtures are inputs.
  * @param {string} path
@@ -32,11 +35,14 @@ const reads = (path) =>
 			.split("/")
 			.slice(0, -1)
 			.some((dir) => readFolders.has(dir)));
+
 /** @param {string} path */
 const markdown = (path) =>
 	path.endsWith(".md") && !reads(path) && !skillTrees.some((tree) => path.startsWith(tree));
+
 /** @param {string} path */
 const safe = (path) => rows(path) || markdown(path);
+
 /** @param {string} path */
 const old = (path) =>
 	today.some((tree) => path.startsWith(tree)) && !path.startsWith("packages/fabrika-design/");

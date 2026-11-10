@@ -50,9 +50,11 @@ interface Session {
 	used: number;
 	cancelled: boolean;
 }
+
 const sessions = new Map<string, Session>();
 
 const MODES = ["default", "auto", "plan"];
+
 const configOf = (s: Session): acp.SessionConfigOption[] => [
 	{
 		id: "mode",
@@ -79,6 +81,7 @@ const configOf = (s: Session): acp.SessionConfigOption[] => [
 		options: ["low", "medium", "high"].map((m) => ({value: m, name: m})),
 	},
 ];
+
 const modesOf = (s: Session): acp.SessionModeState => ({
 	currentModeId: s.mode,
 	availableModes: MODES.map((id) => ({id, name: id})),
@@ -288,6 +291,7 @@ const connection = app.connect(
 		Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>,
 	),
 );
+
 // Its client gone (stdin closed), it ends: a killed tsh leaves no fake agent behind.
 await connection.closed;
 process.exit(0);
