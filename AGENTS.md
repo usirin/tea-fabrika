@@ -165,6 +165,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   legal next is control state. It gets one named type with its transitions in one place, never
   flags, a position in code or an order two parties assume. A plan asks of new code: what are its
   states? ([0037](./.decisions/0037-implicit-state-machines-made-explicit.md)).
+- **In `next/`, a file exports at most one tea machine.** Its Model, Msg and update live in that
+  file, with no input or output code, and nothing outside it edits the Model by hand: it sends a
+  Msg. A small private helper machine may share its parent's file
+  ([0043](./.decisions/0043-one-tea-machine-per-file.md)).
 - **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
   Effect does it: `Lease.of(...)` under `import * as Lease`
   ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
