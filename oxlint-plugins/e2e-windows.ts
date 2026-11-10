@@ -140,7 +140,9 @@ export const e2eWindows: CreateRule = {
         for (const item of pattern.elements) {
           const found = item && patternKind(item, name, "window");
 
-          if (found) {return found;}
+          if (found) {
+            return found;
+          }
         }
       }
 

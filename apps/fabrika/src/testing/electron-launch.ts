@@ -184,7 +184,9 @@ export const createElectronRunner = <A>(io: Dependencies<A>) => {
     const testEnv: Record<string, string> = {};
 
     for (const [key, value] of Object.entries(env)) {
-      if (value !== undefined) {testEnv[key] = value;}
+      if (value !== undefined) {
+        testEnv[key] = value;
+      }
     }
 
     Object.assign(testEnv, {

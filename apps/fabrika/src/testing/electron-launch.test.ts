@@ -6,6 +6,11 @@ import { describe, expect, it } from "vitest";
 import { createElectronRunner, electronHookArgs, Report, type WindowReport } from "./electron-launch.ts";
 
 const options = { seed: 119120, numRuns: 50 };
+
+class ReportCheckError extends Schema.TaggedError<ReportCheckError>()("ReportCheckError", {
+  cause: Schema.Unknown,
+}) {}
+
 type Record = WindowReport["windows"][number]["records"][number];
 
 const safe = (id: string, complete: boolean, n = 1): WindowReport => ({
@@ -158,7 +163,7 @@ describe("Electron window law", () => {
               await expect(runReport(decoded, report.id)).resolves.toBeUndefined();
               return true;
             },
-            catch: (error) => error,
+            catch: (cause) => new ReportCheckError({ cause }),
           }),
         { seed: 119120, runs: 50 },
       ),
