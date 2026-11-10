@@ -16,7 +16,7 @@ request, as a plan row does ([0013](../../../.decisions/0013-plan-docs-change-wi
 
 | Table | The model for | Rows | Differs |
 |---|---|---|---|
-| [OTP](./otp.md) | Coordination: registry, mailbox, monitors, supervisors | 25 | 18 |
+| [OTP](./otp.md) | Coordination: registry, mailbox, monitors, supervisors | 28 | 19 |
 | [Elm](./elm.md) | tea programs and windows | 12 | 6 |
 | [Kubernetes](./kubernetes.md) | Restart backoff, `resourceVersion`, limits, labels, leases | 11 | 10 |
 
