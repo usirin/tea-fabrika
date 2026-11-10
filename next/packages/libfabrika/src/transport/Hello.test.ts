@@ -7,7 +7,7 @@ import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
-import { Admission, Who } from "./Wire.ts";
+import { Admission, type Who } from "./Wire.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";

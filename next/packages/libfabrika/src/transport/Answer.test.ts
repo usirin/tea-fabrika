@@ -4,7 +4,7 @@ import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { answerFrame } from "./Answer.ts";
-import { Answer, Attached, Who } from "./Wire.ts";
+import { Answer, Attached, type Who } from "./Wire.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 

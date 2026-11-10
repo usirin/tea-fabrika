@@ -259,7 +259,11 @@ const stillCoordination: ReadonlyArray<string> = [
 
 const RuleFile = Schema.Struct({
   layers: Schema.Array(
-    Schema.Struct({ name: Schema.String, paths: Schema.Array(Schema.String), floor: Schema.optional(Schema.Number) }),
+    Schema.Struct({
+      name: Schema.String,
+      paths: Schema.Array(Schema.String),
+      floor: Schema.optionalKey(Schema.Number),
+    }),
   ),
 });
 
