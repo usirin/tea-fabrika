@@ -130,6 +130,12 @@ const walk = (
   }
 };
 
+/** A knock a step emits (A13): the link's `knock` Cmd, or the window's `write` of a knock call. */
+const isKnock = (c: unknown): boolean => {
+  const cmd = c as { readonly type?: unknown; readonly call?: { readonly _tag?: unknown } };
+  return cmd.type === "knock" || (cmd.type === "write" && cmd.call?._tag === "knock");
+};
+
 const fail = (what: string): never => {
   throw new Error(what);
 };
@@ -295,9 +301,9 @@ const laws: Readonly<Record<string, (d: Driver) => void>> = {
   // (`timerDeps`, the deps a `linkTimer` gives) and fires it once; deps that do not change after it
   // fired start no second one. So from every reached state, the timer alone takes an online link
   // off `online` within BEAT + BEAT = 10 s, redials from `dialing` and `retrying`, and keeps a grant
-  // wait knocking without admitting it. A12: a knock is the window's `knock` Sub, keyed by the
-  // wait's dial and its `knocks` count, so a grant wait knocks again exactly when its timer moves
-  // it to a `(dial, knocks)` it was not at; the link asks no Cmd for it.
+  // wait knocking without admitting it. A13: a knock is one write the step emits, a `knock` Cmd the
+  // window turns into its `write`, or that `write` itself (`{type: "write", call: {_tag: "knock"}}`);
+  // the write settles once its frame is handed over, and the knock's answer comes on the socket Sub.
   [TEA_TIMER]: (d) =>
     fc.assert(
       fc.property(prefixed, (list) =>
@@ -305,10 +311,7 @@ const laws: Readonly<Record<string, (d: Driver) => void>> = {
           let s = start;
           let waited = 0;
           let fired: string | null = null;
-          /** The knock Sub's keys the wait was at: one more is one more knock. */
-          const knockAt = (l: Link): string | null =>
-            l._tag === "waiting_grant" ? JSON.stringify([l["dial"], l["knocks"] ?? 0]) : null;
-          const keys = new Set<string>();
+          let knocks = 0;
 
           for (let n = 0; n < 6; n++) {
             const t = d.timer(s);
@@ -329,12 +332,8 @@ const laws: Readonly<Record<string, (d: Driver) => void>> = {
 
             fired = key;
             waited += t.after;
-            const [next] = d.step(s, t.msg);
-            const at = knockAt(next);
-
-            if (start._tag === "waiting_grant" && at !== null && at !== knockAt(s)) {
-              keys.add(at);
-            }
+            const [next, cmds] = d.step(s, t.msg);
+            knocks += cmds.filter(isKnock).length;
 
             if (start._tag === "online" && next._tag !== "online") {
               if (waited > 10_000) {
@@ -355,8 +354,8 @@ const laws: Readonly<Record<string, (d: Driver) => void>> = {
             fail(`an online link with no answer is still online after ${waited} ms`);
           }
 
-          if (start._tag === "waiting_grant" && keys.size < 6) {
-            fail(`a grant wait knocked ${keys.size} times in six of its timers`);
+          if (start._tag === "waiting_grant" && knocks < 6) {
+            fail(`a grant wait knocked ${knocks} times in six of its timers`);
           }
         }),
       ),
@@ -457,7 +456,7 @@ describe("p5 plants: each break is caught by the law that names it", () => {
     });
     expect(failure(() => laws[TEA_TIMER]?.(broken))).toMatch(/past 10 s/);
   });
-  it("a grant wait whose timer moves on without knocking again is caught (tea's timer, A12)", async () => {
+  it("a grant wait whose timer moves on without knocking again is caught (tea's timer, A13)", async () => {
     const d = real(await api());
     // The renew moves the wait's code time, so its timer starts again, and keeps its knock count.
     const broken = plant(d, {
