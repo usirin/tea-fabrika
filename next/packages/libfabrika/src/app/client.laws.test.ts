@@ -1,24 +1,29 @@
-// P14, next/ (Tier 1, ticket 286): the program client's pure rules, p1 and p3 and the counter folds.
-// Written before `app/client.ts` and `app/patch.ts#applyPatch` (docs/plan/ticket-115.md p1, p3;
-// the plan's "Shared client data" and "Checked views"). The modules load by `import()` inside each
-// test, so a missing one is a red test and not a file that cannot be collected.
+// P14, next/ (Tier 1, ticket 286): the program client's rules, p1 and p3 and the counter folds, as
+// properties on one tea machine (plan A5, decision 0046). Written before `app/client.ts`'s
+// `clientMachine`, `app/window.ts` and `app/patch.ts#applyPatch` (docs/plan/ticket-115.md p1, p3; the
+// plan's "Shared client data" and "Checked views"). The modules load by `import()` inside each test,
+// so a missing one is a red test and not a file that cannot be collected.
 //
 // The shape these laws hold the modules to, from the plan's sketches (the build may add more):
-// - `emptyClient`: no pending letter, `written` 0, `seen` 0, no view.
-// - `press(c, {pid, m})`: reserves slot `n = written` as `{_tag: "dating", n, pid, m, seen, viewRev}`
-//   with the view revision shown for `pid` (0 if none) and `seen`; `written` grows by one.
-// - `dated(c, n, {letter, sentAt})`: the slot `n` becomes `{_tag: "ready", ..., letter, sentAt}`. No
-//   slot, or a slot already ready, changes nothing: a second answer cannot rewrite a letter.
-// - `reply(c, letter, answer)`: `answer` is `Sent` (accepted or refused), or `{_tag: "unreachable"}`
-//   or `{_tag: "unknown"}`. Only a matching accepted or refused answer removes that one letter.
-// - `outbox(c)`: the ready letters in slot order, each with the letter id it first got.
-// - `notice(c, pid, note, decode)`: `note` is `{type: "whole", rev, view}` or `{type: "patch", base,
-//   rev, patch}` (any junk too); answers `{client, ask}` and never throws. `ask` is true when the
-//   client wants a whole view.
+// - `clientMachine` (app/client.ts): a tea machine whose Model is `Client` and whose `init(null)` is
+//   the empty client: no pending letter, `written` 0, `seen` 0, no view. It has no Cmds of its own.
+// - `press {pid, m}`: reserves slot `n = written` as `{_tag: "dating", n, pid, m, seen, viewRev}` with
+//   the view revision shown for `pid` (0 if none) and `seen`; `written` grows by one.
+// - `dated {n, letter, sentAt}`: the slot `n` becomes `{_tag: "ready", ..., letter, sentAt}`. No slot,
+//   or a slot already ready, changes nothing: a second answer cannot rewrite a letter.
+// - `reply {letter, answer}`: `answer` is `Sent` (accepted or refused), or `{_tag: "unreachable"}` or
+//   `{_tag: "unknown"}`. Only a matching accepted or refused answer removes that one letter.
+// - `read {rev}`: raises `seen` to `rev`, never lowers it, and moves no letter.
+// - `outbox(c)` (app/client.ts, a read of the Model): the ready letters in slot order, each with the
+//   letter id it first got.
+// - `notice`: a view notification. Its form is the lead's open call (this round's answer): the p3 and
+//   counter laws below still call today's `notice(c, pid, note, decode)` until it is made.
 // - `applyPatch(before, ops)`: an Effect `Result` of the next value; it never changes `before`.
-// - `ClientRecord` and `failureRecord(error)`: a record row holds ids, numbers and fixed words only.
+// - `ClientRecord` and `failureRecord(error)` (app/window.ts): a record row holds ids, numbers and
+//   fixed words only.
 import {applyCell} from "@demlik/tea";
 import {Machine} from "@demlik/tea/effect";
+import {propertyTrace} from "@demlik/tea/pbt";
 import {describe, expect, it} from "@effect/vitest";
 import {Effect, Result, Schema} from "effect";
 import * as fc from "fast-check";
@@ -26,8 +31,10 @@ import {diff} from "./patch.ts";
 
 const SEED = 119120;
 const LOAD = "./client.ts";
+const WINDOW = "./window.ts";
 const PATCH = "./patch.ts";
 const RUNS = 300;
+const SENT_AT = "2026-11-09T00:00:00.000Z";
 
 type Letter = string;
 
@@ -51,11 +58,38 @@ type Client = {
 
 type Answer = {readonly _tag: string; readonly [key: string]: unknown};
 
+/** The client's Msgs these laws draw. `notice` waits on the lead's call (header). */
+type ClientMsg =
+	| {readonly type: "press"; readonly pid: string; readonly m: unknown}
+	| {readonly type: "dated"; readonly n: number; readonly letter: Letter; readonly sentAt: string}
+	| {readonly type: "reply"; readonly letter: Letter; readonly answer: Answer}
+	| {readonly type: "read"; readonly rev: number};
+
+type Step = {
+	readonly prev: Client;
+	readonly msg: ClientMsg;
+	readonly next: Client;
+	readonly cmds: ReadonlyArray<unknown>;
+};
+
+type Update = (s: Client, m: ClientMsg) => readonly [Client, ReadonlyArray<unknown>];
+
+interface ClientMachine {
+	readonly init: (loaded: Client | null, ctx: object) => readonly [Client, ReadonlyArray<unknown>];
+	readonly update: Readonly<Record<string, Update>>;
+}
+
+/** What the machine laws run on: the real machine and its read, or a planted copy of either. */
+interface MachineApi {
+	readonly clientMachine: ClientMachine;
+	readonly outbox: (c: Client) => ReadonlyArray<Pending>;
+}
+
+/** Today's view step, which the p3 and counter laws still call until the lead's call on `notice`. */
 interface ClientApi {
 	readonly emptyClient: Client;
 	readonly press: (c: Client, input: {pid: string; m: unknown}) => Client;
 	readonly dated: (c: Client, n: number, stamp: {letter: Letter; sentAt: string}) => Client;
-	readonly reply: (c: Client, letter: Letter, answer: Answer) => Client;
 	readonly outbox: (c: Client) => ReadonlyArray<Pending>;
 	readonly notice: (
 		c: Client,
@@ -63,6 +97,9 @@ interface ClientApi {
 		note: unknown,
 		decode: (u: unknown) => unknown,
 	) => {readonly client: Client; readonly ask: boolean};
+}
+
+interface WindowApi {
 	readonly failureRecord: (error: unknown) => unknown;
 	readonly ClientRecord: Schema.Top;
 }
@@ -77,6 +114,38 @@ interface PatchApi {
 const client = async (): Promise<ClientApi> => (await import(LOAD)) as ClientApi;
 const patching = async (): Promise<PatchApi> => (await import(PATCH)) as PatchApi;
 
+const windowing = async (): Promise<WindowApi> => {
+	const api = (await import(WINDOW)) as Partial<WindowApi>;
+	expect(api.failureRecord, "app/window.ts exports failureRecord").toBeTypeOf("function");
+	expect(api.ClientRecord, "app/window.ts exports ClientRecord").toBeDefined();
+	return api as WindowApi;
+};
+
+const machine = async (): Promise<MachineApi> => {
+	const api = (await import(LOAD)) as Partial<MachineApi>;
+	expect(api.clientMachine, "app/client.ts exports clientMachine").toBeDefined();
+	expect(api.outbox, "app/client.ts keeps outbox, a read of the Model").toBeTypeOf("function");
+	return api as MachineApi;
+};
+
+/** The real machine with one Msg's step post-processed: a plant's one break. */
+const planted = (
+	api: MachineApi,
+	type: ClientMsg["type"],
+	change: (out: readonly [Client, ReadonlyArray<unknown>], s: Client, m: ClientMsg) => Client,
+): MachineApi => {
+	const real = api.clientMachine.update[type];
+	expect(real, `clientMachine has a ${type} step`).toBeTypeOf("function");
+	const step: Update = (s, m) => {
+		const out = (real as Update)(s, m);
+		return [change(out, s, m), out[1]];
+	};
+	return {
+		...api,
+		clientMachine: {...api.clientMachine, update: {...api.clientMachine.update, [type]: step}},
+	};
+};
+
 // --- p1: a letter is never lost -----------------------------------------------------------------
 
 const PIDS = ["process_a", "process_b"] as const;
@@ -84,8 +153,10 @@ const PIDS = ["process_a", "process_b"] as const;
 type Op =
 	| {readonly op: "press"; readonly pid: string; readonly m: {type: string}}
 	| {readonly op: "dated"; readonly slot: number; readonly dup: boolean}
-	| {readonly op: "reply"; readonly nth: number; readonly kind: string};
+	| {readonly op: "reply"; readonly nth: number; readonly kind: string}
+	| {readonly op: "read"; readonly rev: number};
 
+/** Blind events: the same presses, dating answers and replies as before A5, plus reads. */
 const ops = fc.array(
 	fc.oneof(
 		{
@@ -112,120 +183,170 @@ const ops = fc.array(
 				kind: fc.constantFrom("accepted", "refused", "unreachable", "unknown"),
 			}),
 		},
+		{
+			weight: 2,
+			arbitrary: fc.record({op: fc.constant("read" as const), rev: fc.nat(40)}),
+		},
 	) as fc.Arbitrary<Op>,
 	{minLength: 1, maxLength: 60},
 );
 
-/** Runs `list` through the client and an independent model: an array of letters by slot. */
-const run = (api: ClientApi, list: ReadonlyArray<Op>): void => {
-	let c = api.emptyClient;
-	let issued = 0;
-	const model: Array<{n: number; letter: string | null; pid: string; m: unknown}> = [];
-	const everLetter = new Map<number, string>();
+const answerFor = (kind: string): Answer =>
+	kind === "accepted"
+		? {_tag: "accepted", rev: 1, pos: 1}
+		: kind === "refused"
+			? {_tag: "refused", why: "bad_msg"}
+			: {_tag: kind};
 
-	for (const o of list) {
+/**
+ * Turns blind events into the client's Msgs with an independent model, not the machine: a dating
+ * answer carries a fresh letter id for its slot every time (so a second answer would rewrite, if
+ * the machine let it), and a reply names the `nth` letter the model has out, or one never sent.
+ */
+const toMsgs = (list: ReadonlyArray<Op>): ReadonlyArray<ClientMsg> => {
+	const model: Array<{n: number; letter: Letter | null}> = [];
+	let written = 0;
+	return list.map((o, i): ClientMsg => {
 		if (o.op === "press") {
-			c = api.press(c, {pid: o.pid, m: o.m});
-			model.push({
-				n: model.length === 0 ? c.written - 1 : (model.at(-1)?.n ?? 0) + 1,
-				letter: null,
-				pid: o.pid,
-				m: o.m,
-			});
-			expect(c.written).toBe(issued + 1);
-			issued++;
-		} else if (o.op === "dated") {
+			model.push({n: written++, letter: null});
+			return {type: "press", pid: o.pid, m: o.m};
+		}
+
+		if (o.op === "read") {
+			return {type: "read", rev: o.rev};
+		}
+
+		if (o.op === "dated") {
+			const letter = `letter_${i}_${o.slot}`;
 			const slot = model.find((x) => x.n === o.slot);
-			const letter = `letter_${issued}_${o.slot}_${everLetter.size}`;
-			c = api.dated(c, o.slot, {letter, sentAt: "2026-11-09T00:00:00.000Z"});
 
 			if (slot !== undefined && slot.letter === null) {
 				slot.letter = letter;
-				everLetter.set(slot.n, letter);
 			}
-		} else {
-			const live = model.filter((x) => x.letter !== null);
-			const hit = live.length === 0 ? undefined : live[o.nth % live.length];
-			const letter = hit?.letter ?? "letter_never_sent";
-			const answer: Answer =
-				o.kind === "accepted"
-					? {_tag: "accepted", rev: 1, pos: 1}
-					: o.kind === "refused"
-						? {_tag: "refused", why: "bad_msg"}
-						: {_tag: o.kind};
-			c = api.reply(c, letter, answer);
 
-			if (hit !== undefined && (o.kind === "accepted" || o.kind === "refused")) {
-				model.splice(model.indexOf(hit), 1);
-			}
+			return {type: "dated", n: o.slot, letter, sentAt: SENT_AT};
 		}
 
-		// The law, after every step: the pending slots are the model's, in slot order, nothing lost.
-		expect(c.pending.map((p) => p.n)).toEqual(model.map((x) => x.n));
-		expect(c.pending.map((p) => p.pid)).toEqual(model.map((x) => x.pid));
-		expect(c.pending.map((p) => p.m)).toEqual(model.map((x) => x.m));
-		expect(c.pending.map((p) => p.letter ?? null)).toEqual(model.map((x) => x.letter));
-		// Written counts presses, and a letter that was dated keeps its first id (no new one on resend).
-		expect(c.written).toBe(issued);
+		const live = model.filter((x) => x.letter !== null);
+		const hit = live.length === 0 ? undefined : live[o.nth % live.length];
 
-		for (const p of c.pending) {
-			if (p.letter !== undefined) {
-				expect(p.letter).toBe(everLetter.get(p.n));
-			}
+		if (hit !== undefined && (o.kind === "accepted" || o.kind === "refused")) {
+			model.splice(model.indexOf(hit), 1);
 		}
 
-		expect(api.outbox(c).map((p) => p.letter)).toEqual(
-			model.filter((x) => x.letter !== null).map((x) => x.letter),
-		);
-		expect(api.outbox(c)).toEqual(api.outbox(c)); // a resend twice is the same letters
-	}
-
-	// Good-thing check: the generator reached every important state, not an empty run.
-	void c;
+		return {type: "reply", letter: hit?.letter ?? "letter_never_sent", answer: answerFor(o.kind)};
+	});
 };
 
-describe("p1: a letter is never lost (client)", () => {
+const msgs = ops.map(toMsgs);
+
+/** The p1 law over one run's steps, against an independent model of slots by number. */
+const lettersKept = (api: MachineApi, steps: ReadonlyArray<Step>): string | null => {
+	const model: Array<{n: number; letter: Letter | null; pid: string; m: unknown}> = [];
+	const first = new Map<number, Letter>();
+	let presses = 0;
+	let seen = 0;
+
+	for (const {msg, next} of steps) {
+		if (msg.type === "press") {
+			model.push({n: presses++, letter: null, pid: msg.pid, m: msg.m});
+		} else if (msg.type === "dated") {
+			const slot = model.find((x) => x.n === msg.n);
+
+			if (slot !== undefined && slot.letter === null) {
+				slot.letter = msg.letter;
+				first.set(slot.n, msg.letter);
+			}
+		} else if (msg.type === "read") {
+			seen = Math.max(seen, msg.rev);
+		} else if (msg.answer._tag === "accepted" || msg.answer._tag === "refused") {
+			const at = model.findIndex((x) => x.letter === msg.letter);
+
+			if (at >= 0) {
+				model.splice(at, 1);
+			}
+		}
+
+		// After every step: the pending slots are the model's, in slot order, nothing lost.
+		const got = {
+			n: next.pending.map((p) => p.n),
+			pid: next.pending.map((p) => p.pid),
+			m: next.pending.map((p) => p.m),
+			letter: next.pending.map((p) => p.letter ?? null),
+			written: next.written,
+			seen: next.seen,
+			outbox: api.outbox(next).map((p) => p.letter),
+		};
+		const want = {
+			n: model.map((x) => x.n),
+			pid: model.map((x) => x.pid),
+			m: model.map((x) => x.m),
+			letter: model.map((x) => x.letter),
+			// Written counts presses, and a read never moves a letter.
+			written: presses,
+			seen,
+			// A dated letter keeps its first id: a resend twice is the same letters.
+			outbox: model.filter((x) => x.letter !== null).map((x) => x.letter),
+		};
+
+		if (JSON.stringify(got) !== JSON.stringify(want)) {
+			return `${msg.type}: the client holds ${JSON.stringify(got)}, the model ${JSON.stringify(want)}`;
+		}
+
+		for (const p of next.pending) {
+			if (p.letter !== undefined && p.letter !== first.get(p.n)) {
+				return `${msg.type}: slot ${p.n} has letter ${p.letter}, first dated as ${first.get(p.n)}`;
+			}
+		}
+
+		const once = JSON.stringify(api.outbox(next));
+		const twice = JSON.stringify(api.outbox(next));
+
+		if (once !== twice) {
+			return "the outbox reads differently twice on one Model";
+		}
+	}
+
+	return null;
+};
+
+const p1 = (api: MachineApi) =>
+	propertyTrace(
+		api.clientMachine as never,
+		{} as never,
+		msgs as never,
+		((steps: ReadonlyArray<Step>) => lettersKept(api, steps)) as never,
+		{seed: SEED, numRuns: RUNS},
+	);
+
+describe("p1: a letter is never lost (clientMachine)", () => {
 	it("only a matching terminal answer removes a letter; written grows per press; ids never repeat", async () => {
-		const api = await client();
-		fc.assert(
-			fc.property(ops, (list) => run(api, list)),
-			{seed: SEED, numRuns: RUNS},
-		);
+		const api = await machine();
+		const [empty] = api.clientMachine.init(null, {});
+		expect(empty).toEqual({written: 0, seen: 0, pending: [], views: {}});
+		p1(api);
 	});
 
-	it("good thing: a generated run leaves a ready letter, a settled letter and a dating slot", async () => {
-		const api = await client();
+	it("good thing: the runs leave a ready letter, settle one, keep a dating slot, and every drawn Msg acts", async () => {
+		const api = await machine();
 		let ready = 0,
 			settled = 0,
 			dating = 0;
-		fc.assert(
-			fc.property(ops, (list) => {
-				let c = api.emptyClient;
-
-				for (const o of list) {
-					if (o.op === "press") {
-						c = api.press(c, {pid: o.pid, m: o.m});
-					} else if (o.op === "dated") {
-						c = api.dated(c, o.slot, {letter: `l${o.slot}`, sentAt: "2026-11-09T00:00:00.000Z"});
-					} else {
-						const before = c.pending.length;
-						const sent = c.pending.filter((p) => p.letter !== undefined);
-						const letter = sent[o.nth % Math.max(1, sent.length)]?.letter ?? "none";
-						c = api.reply(c, letter, {
-							_tag: o.kind === "accepted" ? "accepted" : "unknown",
-							rev: 1,
-							pos: 1,
-						});
-
-						if (c.pending.length < before) {
-							settled++;
-						}
+		const run = propertyTrace(
+			api.clientMachine as never,
+			{} as never,
+			msgs as never,
+			((steps: ReadonlyArray<Step>, final: Client) => {
+				for (const {prev, msg, next} of steps) {
+					if (msg.type === "reply" && next.pending.length < prev.pending.length) {
+						settled++;
 					}
 				}
 
-				ready += c.pending.filter((p) => p._tag === "ready").length;
-				dating += c.pending.filter((p) => p._tag === "dating").length;
-			}),
+				ready += final.pending.filter((p) => p._tag === "ready").length;
+				dating += final.pending.filter((p) => p._tag === "dating").length;
+				return null;
+			}) as never,
 			{seed: SEED, numRuns: RUNS},
 		);
 		expect({ready: ready > 0, settled: settled > 0, dating: dating > 0}).toEqual({
@@ -233,35 +354,41 @@ describe("p1: a letter is never lost (client)", () => {
 			settled: true,
 			dating: true,
 		});
+
+		for (const type of ["press", "dated", "reply", "read"]) {
+			expect(run.msgCounts.get(type)?.acted ?? 0, `${type} acted`).toBeGreaterThan(0);
+		}
 	});
 
-	// Plant (p1): clear the queue on any reply; allocate a new letter on resend. Each wrapped real
-	// function breaks one rule, and the law above must fail on it.
+	// Plant (p1): clear the queue on any reply; allocate a new letter on resend. Each plant wraps the
+	// real machine's step (or its read) with one break, and the law above must fail on it.
 	it("plant: a client that clears the queue on any reply is caught", async () => {
-		const real = await client();
-		const broken: ClientApi = {
-			...real,
-			reply: (c, l, a) => ({...real.reply(c, l, a), pending: []}),
-		};
-		expect(() =>
-			fc.assert(
-				fc.property(ops, (list) => run(broken, list)),
-				{seed: SEED, numRuns: RUNS},
-			),
-		).toThrow();
+		const api = await machine();
+		expect(() => p1(planted(api, "reply", ([c]) => ({...c, pending: []})))).toThrow();
 	});
 	it("plant: a client that gives a resent letter a new id is caught", async () => {
-		const real = await client();
-		const broken: ClientApi = {
-			...real,
-			dated: (c, n, s) => real.dated(c, n, {...s, letter: `${s.letter}!`}),
-			outbox: (c) => real.outbox(c).map((p) => ({...p, letter: `${p.letter}-again`})),
-		};
+		const api = await machine();
 		expect(() =>
-			fc.assert(
-				fc.property(ops, (list) => run(broken, list)),
-				{seed: SEED, numRuns: RUNS},
+			p1(
+				planted(api, "dated", ([c]) => ({
+					...c,
+					pending: c.pending.map((p) =>
+						p.letter === undefined ? p : {...p, letter: `${p.letter}!`},
+					),
+				})),
 			),
+		).toThrow();
+		expect(() =>
+			p1({...api, outbox: (c) => api.outbox(c).map((p) => ({...p, letter: `${p.letter}-again`}))}),
+		).toThrow();
+	});
+	it("plant: a read that moves a letter or lowers what was read is caught", async () => {
+		const api = await machine();
+		expect(() =>
+			p1(planted(api, "read", ([c], _s, m) => ({...c, seen: m.type === "read" ? m.rev : c.seen}))),
+		).toThrow();
+		expect(() =>
+			p1(planted(api, "read", ([c]) => ({...c, pending: c.pending.slice(1)}))),
 		).toThrow();
 	});
 });
@@ -720,7 +847,7 @@ describe("[secrets] client records carry ids, numbers and fixed words only", () 
 							: error;
 	};
 	it("a failure's record keeps none of the secret in any form, and decodes as a ClientRecord", async () => {
-		const api = await client();
+		const api = await windowing();
 		fc.assert(
 			fc.property(failures, (f) => {
 				const row = api.failureRecord(make(f));
@@ -736,7 +863,7 @@ describe("[secrets] client records carry ids, numbers and fixed words only", () 
 	});
 	// Plant: a record that copies the failure's message leaks the sentinel, and the check sees it.
 	it("plant: a record that copies the message is caught", async () => {
-		const api = await client();
+		const api = await windowing();
 		const leaky = (e: unknown) => ({
 			...(api.failureRecord(e) as object),
 			why: String((e as {message?: unknown})?.message ?? e),

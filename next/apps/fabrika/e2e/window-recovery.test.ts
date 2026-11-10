@@ -172,6 +172,7 @@ type Kill = {
 };
 
 const workerd = (s: Stage) => {
+	// edge: finds workerd with `ps` under the stage, since Alchemy's runtime has no form to list or crash it from outside, not reported, 0042 amendment 2026-11-09
 	const found = s.processes().find((p) => /workerd/.test(p.command));
 
 	if (found === undefined) {
@@ -190,12 +191,14 @@ const KILLS: ReadonlyArray<Kill> = [
 	{
 		name: "workerd is killed",
 		label: "loss detection",
+		// edge: kills workerd by signal, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
 		run: async (s) => s.kill(workerd(s), "SIGKILL"),
 	},
 	{
 		name: "the stage parent is killed and started again",
 		label: "restart",
 		run: async (s) => {
+			// edge: kills the local stage's parent by signal, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
 			s.kill(s.parent(), "SIGKILL");
 			await pause(1_000);
 			await s.start();
@@ -205,10 +208,12 @@ const KILLS: ReadonlyArray<Kill> = [
 		name: "a restart is held back by a second kill",
 		label: "reconnect",
 		run: async (s) => {
+			// edge: kills workerd by signal, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
 			s.kill(workerd(s), "SIGKILL");
 			await pause(300);
 
 			try {
+				// edge: kills the restarted workerd by signal, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
 				s.kill(workerd(s), "SIGKILL");
 			} catch {
 				/* the first restart has not made a new one yet */
@@ -220,8 +225,10 @@ const KILLS: ReadonlyArray<Kill> = [
 		label: "hang detection",
 		run: async (s) => {
 			const pid = workerd(s);
+			// edge: stops workerd by signal to hang the brain, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
 			s.kill(pid, "SIGSTOP");
 			await pause(8_000);
+			// edge: continues the stopped workerd by signal, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
 			s.kill(pid, "SIGCONT");
 		},
 	},

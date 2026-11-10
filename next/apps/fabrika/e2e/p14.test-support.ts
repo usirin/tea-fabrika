@@ -157,6 +157,7 @@ export const startStage = async (
 		);
 	};
 	const processes = () =>
+		// edge: finds workerd and the stage's other processes with `ps`, since Alchemy's runtime has no form to list or crash them from outside, not reported, 0042 amendment 2026-11-09
 		execFileSync("ps", ["-A", "-o", "pid=,ppid=,command="], {encoding: "utf8"})
 			.split("\n")
 			.flatMap((line) => {
@@ -189,6 +190,7 @@ export const startStage = async (
 		processes,
 		parent: () => child?.pid ?? -1,
 		start,
+		// edge: kills workerd or the stage parent by signal for the p17 kill cases, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
 		kill: (pid, signal) => process.kill(pid, signal),
 		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		stop: async () => {
@@ -198,7 +200,9 @@ export const startStage = async (
 				return;
 			}
 
+			// edge: stops the local stage by signal for the full stop and start case, since Alchemy's runtime has no form to stop it from outside, not reported, 0042 amendment 2026-11-09
 			mine.kill("SIGTERM");
+			// edge: kills the local stage by signal when it does not stop, since Alchemy's runtime has no form to stop it from outside, not reported, 0042 amendment 2026-11-09
 			// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 			await until(
 				"the stage to stop",

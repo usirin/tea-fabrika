@@ -378,6 +378,7 @@ describe("browser records: the tab keeps its rows until the door acknowledges th
 		} finally {
 			await stage.start();
 		}
+
 		// A new browser on the same profile delivers what the closed one kept, and deletes each row
 		// only once it is acknowledged.
 		const second = await profile(dir);

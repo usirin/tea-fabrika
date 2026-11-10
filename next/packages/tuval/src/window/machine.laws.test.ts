@@ -18,6 +18,10 @@
 // - Going online (`admitted` on the current dial) asks `open` once per distinct pid of the layout
 //   and `send` for every letter that is ready, in slot order, each once. Not online asks no `send`.
 //   Leaving online forgets what was opened and sent, so the next dial starts over.
+// - `client` moves only by `clientMachine` (app/client.ts, plan A5), stepped by hand as the link is:
+//   `press` steps it with `press {pid, m}`, `now_ok` with `dated {n, ...value}`, `send_ok` with
+//   `reply {letter, answer}` and `seen {rev}` with `read {rev}`. Views wait on the lead's call on
+//   `notice`, so the client law below compares the client's letters, `written` and `seen` only.
 import {applyCell} from "@demlik/tea";
 import {arbGuidedSequence, propertyTrace} from "@demlik/tea/pbt";
 import {describe, expect, it} from "@effect/vitest";
@@ -503,6 +507,80 @@ const laws: Readonly<Record<string, Law>> = {
 	},
 };
 
+type ClientMachine = {
+	readonly init: (loaded: unknown, ctx: object) => readonly [Model["client"], ReadonlyArray<Cmd>];
+};
+
+const clientMachine = async (): Promise<ClientMachine> => {
+	const lib = (await import("@kampus/libfabrika")) as {
+		readonly ProgramClient?: {readonly clientMachine?: ClientMachine};
+	};
+	const m = lib.ProgramClient?.clientMachine;
+	expect(m, "the library's ProgramClient exports clientMachine").toBeDefined();
+	return m as ClientMachine;
+};
+
+/** The window's lists with its `seen` Msg drawn too, for the client law only: the other laws keep
+ *  their lists, whose good-thing reach a wider draw thins. */
+const readLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => {
+	const {outside, answers} = cells(pids);
+	return arbGuidedSequence(
+		m as never,
+		{layout} as never,
+		{
+			outside: {...outside, seen: fc.record({type: fc.constant("seen"), rev: fc.nat(20)})},
+			answers,
+		} as never,
+		{maxLength: 70},
+	);
+};
+
+/** The client's Msg for one window Msg, or null when the window does not move its letters. */
+const clientMsg = (msg: Msg): Msg | null => {
+	const cmd = msg["cmd"] as {readonly n?: number; readonly letter?: string} | undefined;
+	return msg.type === "press"
+		? {type: "press", pid: msg["pid"], m: msg["m"]}
+		: msg.type === "now_ok"
+			? {type: "dated", n: cmd?.n, ...(msg["value"] as object)}
+			: msg.type === "send_ok"
+				? {type: "reply", letter: cmd?.letter, answer: msg["value"]}
+				: msg.type === "seen"
+					? {type: "read", rev: msg["rev"]}
+					: null;
+};
+
+/** What of the client these laws compare: its letters, presses and reads, not its views. */
+const letters = (c: Model["client"]): string =>
+	JSON.stringify({
+		written: c.written,
+		seen: (c as {readonly seen?: unknown}).seen,
+		pending: c.pending,
+	});
+
+/** The window's client is the client machine's own fold of what the window was told. */
+const clientFold =
+	(cm: ClientMachine) =>
+	(steps: ReadonlyArray<Step>): string | null => {
+		let client = cm.init(null, {})[0];
+
+		for (const {prev, msg, next} of steps) {
+			const own = clientMsg(msg);
+			// Views wait on the call on `notice`: the fold reads the window's own, so a press still
+			// captures the revision shown.
+			client = {...client, views: prev.client.views};
+
+			if (own !== null) {
+				client = applyCell(cm as never, client as never, own as never)[0] as never;
+			}
+
+			if (letters(next.client) !== letters(client)) {
+				return `${msg.type}: the window's client is ${letters(next.client)}, the client machine's is ${letters(client)}`;
+			}
+		}
+
+		return null;
+	};
+
 const fold = async (
 	m: Machine,
 	layout: Tree,
@@ -652,6 +730,21 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 			opts as never,
 		);
 	});
+
+	it("the parent steps the client by hand: its letters, written and seen are the client machine's own fold", async () => {
+		const m = await machine();
+		const cm = await clientMachine();
+
+		for (const [, layout, tiles] of LAYOUTS) {
+			propertyTrace(
+				m as never,
+				{layout} as never,
+				readLists(m, layout, tiles) as never,
+				clientFold(cm) as never,
+				opts as never,
+			);
+		}
+	});
 });
 
 // Plants: reverse two letters; send offline; skip the resend; keep opened after a reconnect; re-read
@@ -727,6 +820,27 @@ describe("window machine plants: each break is caught by the law that names it",
 						]
 					: [m, c],
 		));
+	it("a client edited by hand, not stepped as the client machine, is caught (A5)", async () => {
+		const cm = await clientMachine();
+		const real = await machine();
+		const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
+		// The window drops the oldest letter on an unreachable answer, by hand, where the client
+		// machine has no Msg that does.
+		const planted = broken(real, ([m, c], _s, msg) =>
+			msg.type === "send_err"
+				? [{...m, client: {...m.client, pending: m.client.pending.slice(1)}}, c]
+				: [m, c],
+		);
+		expect(() =>
+			propertyTrace(
+				planted as never,
+				{layout} as never,
+				readLists(real, layout, tiles) as never,
+				clientFold(cm) as never,
+				opts as never,
+			),
+		).toThrow();
+	});
 	it("sending while offline is caught (p2)", () =>
 		expectCaught(
 			"p2: what waited goes out: online sends every ready letter once in order, offline sends nothing",
