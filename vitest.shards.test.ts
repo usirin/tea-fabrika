@@ -9,10 +9,11 @@ import { assign, measured, Shards } from "./vitest.shards.ts";
 it("vector: next medians and four provisional split estimates match the recorded main runs", () => {
   // Today's CI, both versions. Main runs 42717511599, 42716453289 and 42715921306.
   // The four split files are estimates: original commits-git median 247.6 / 4 = 61.9 s.
-  // The other 103 rows are measured medians, including zero-second files.
+  // The other 103 rows are measured medians, including zero-second files, except build.test.ts:
+  // that one row is from PR 763's CI run 42905335144.
   const expected = {
     "next/apps/fabrika/src/brain-life.test.ts": 27.4,
-    "next/apps/fabrika/src/build.test.ts": 21.0,
+    "next/apps/fabrika/src/build.test.ts": 45.9,
     "next/apps/fabrika/src/door-recovery.test.ts": 52.6,
     "next/apps/fabrika/src/door-spans.test.ts": 2.8,
     "next/apps/fabrika/src/door.test.ts": 17.2,
@@ -180,6 +181,17 @@ it("vector: the four catchup files carry their times from PR 770's CI run", () =
     [".agents/skills/lead/scripts/catchup.cleanup.test.ts", 124.1],
     [".agents/skills/lead/scripts/catchup.nested-storage-checkout.test.ts", 175.7],
     [".agents/skills/lead/scripts/catchup.nested-storage-driver.test.ts", 163.6],
+  ] as const) {
+    expect.soft(measured[path], path).toBe(seconds);
+  }
+});
+
+it("vector: the two build files carry their times from PR 763's CI run", () => {
+  // T502, next/: one time each from run 42905335144, rounded to one decimal.
+  // Plant: drop these rows, so build-one-file.test.ts counts 1 s and both heavy build files can stack on one machine.
+  for (const [path, seconds] of [
+    ["next/apps/fabrika/src/build.test.ts", 45.9],
+    ["next/packages/libfabrika/src/build-one-file.test.ts", 54.3],
   ] as const) {
     expect.soft(measured[path], path).toBe(seconds);
   }
