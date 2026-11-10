@@ -15,7 +15,9 @@ import {
 } from "../app/entry.ts";
 import {workerExecution} from "../app/execution.ts";
 import {ProgramRunner} from "../app/runner.ts";
-import {Mailbox, ProcessStore, Writer} from "../coordination/index.ts";
+import {Mailbox, ProcessManager, ProcessStore, Writer} from "../coordination/index.ts";
+import {Owner, Recipient, Start} from "../coordination/process.ts";
+import {LedgerTransaction} from "../data/ledger-transaction.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import * as Id from "../id.ts";
@@ -71,6 +73,8 @@ const replyCase = (
 			Effect.provide(Id.Generator.layer),
 		);
 		const db = new DatabaseSync(":memory:");
+		// Ticket 402: the brain's process table lives in its own ledger.
+		const managerDb = new DatabaseSync(":memory:");
 		try {
 			const sql = nodeSql(db);
 			const checkpoint = () =>
@@ -153,10 +157,49 @@ const replyCase = (
 					})),
 				),
 			).pipe(Layer.provideMerge(mail));
+			// Ticket 402: every runner is supervised. The real manager's first start names PID, and
+			// receipts live in the same Sql as ProcessStore.
+			const manager = Layer.effectDiscard(
+				ProcessManager.use((m) =>
+					m.start(
+						Start.cases.first.make({
+							id: `boot:${NAME}`,
+							name: NAME,
+							code: {program: program.name, hash: "test"},
+						}),
+						{
+							by: "SHA256:brain",
+							for: "brain",
+							sentAt: "2026-11-08T00:00:00Z",
+							seen: 0,
+							parent: null,
+							traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+							build: "test",
+						},
+					),
+				).pipe(Effect.orDie),
+			).pipe(
+				Layer.provideMerge(
+					ProcessManager.layer(
+						{
+							by: "SHA256:brain",
+							owner: Owner.cases.brain.make({}),
+							recipient: Recipient.cases.client.make({client: "brain", session: PID}),
+						},
+						Effect.succeed(PID),
+					),
+				),
+				Layer.provide(
+					LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+						Layer.provide(Layer.succeed(Doorbell, {ring: () => Effect.void})),
+					),
+				),
+			);
 			const layer = ProgramRunner.withLoader(
 				{id: PID, name: NAME, program: program.name, build: "test", owner},
 				{load: () => Effect.succeed({...loaded, execution})},
-			).pipe(Layer.provideMerge(dependencies));
+				{recovery: {sql, name: NAME, capacity: 1024 ** 3}},
+			).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
 			yield* Effect.gen(function* () {
 				const runner = yield* ProgramRunner;
 				const store = yield* ProcessStore;
@@ -219,6 +262,7 @@ const replyCase = (
 			}).pipe(Effect.provide(layer));
 		} finally {
 			db.close();
+			managerDb.close();
 		}
 	});
 

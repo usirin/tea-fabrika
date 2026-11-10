@@ -11,7 +11,7 @@ import {Mailbox} from "../coordination/mailbox.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
 import {ProcessManager} from "../coordination/process-manager.ts";
 import {ProcessStore} from "../coordination/process-store.ts";
-import {Owner, Recipient} from "../coordination/process.ts";
+import {Owner, Recipient, Start} from "../coordination/process.ts";
 import {SessionManager, Writer} from "../coordination/session-manager.ts";
 import {Archive} from "../data/archive.ts";
 import {LedgerTransaction} from "../data/ledger-transaction.ts";
@@ -787,7 +787,8 @@ const runnerWorld = (
 	const data = disk(),
 		state = disk(),
 		sessions = disk(),
-		sink = disk();
+		sink = disk(),
+		processes = disk();
 	const spans: Array<Tracer.Span> = [];
 	const flushes: Array<ReadonlyArray<string>> = [];
 	const fault = {at: "none"};
@@ -867,6 +868,40 @@ const runnerWorld = (
 			};
 		}),
 	);
+	// Ticket 402: every runner is supervised. The real manager keeps its process table in its own
+	// ledger and its first start names PROCESS; receipts live beside ProcessStore.
+	const manager = Layer.effectDiscard(
+		ProcessManager.use((m) =>
+			m.start(
+				Start.cases.first.make({
+					id: `boot:${a.name}`,
+					name: a.name,
+					code: {program: program.name, hash: a.build},
+				}),
+				{
+					by: "brain",
+					for: "brain",
+					sentAt: "2026-11-08T00:00:00.000Z",
+					seen: 0,
+					parent: null,
+					traceId: signer.traceId,
+					build: a.build,
+				},
+			),
+		).pipe(Effect.orDie),
+	).pipe(
+		Layer.provideMerge(
+			ProcessManager.layer(
+				{
+					owner: Owner.cases.brain.make({}),
+					recipient: Recipient.cases.client.make({client: "brain", session: PROCESS}),
+					by: "brain",
+				},
+				Effect.succeed(PROCESS),
+			),
+		),
+		Layer.provide(LedgerTransaction.layer(processes.sql).pipe(Layer.provide(quiet))),
+	);
 	const adapters = Layer.mergeAll(
 		ProgramLoader.layer(
 			{[program.name]: program},
@@ -885,6 +920,7 @@ const runnerWorld = (
 		Layer.succeed(Alarm, {set: () => Effect.void}),
 		checked,
 		Recording.layer,
+		manager,
 	).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(base))));
 	const observed = Layer.mergeAll(
 		Layer.effect(
@@ -903,13 +939,16 @@ const runnerWorld = (
 			})),
 		),
 	).pipe(Layer.provideMerge(adapters));
-	const layer = ProgramRunner.layer({
-		id: PROCESS,
-		name: a.name,
-		program: program.name,
-		build: a.build,
-		owner,
-	}).pipe(Layer.provideMerge(observed));
+	const layer = ProgramRunner.layer(
+		{
+			id: PROCESS,
+			name: a.name,
+			program: program.name,
+			build: a.build,
+			owner,
+		},
+		{recovery: {sql: state.sql, name: a.name, capacity: 1024 ** 3}},
+	).pipe(Layer.provideMerge(observed));
 	const input = (n: number, m: unknown) =>
 		decodeIncoming({
 			id: `letter-${n}`,

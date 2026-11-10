@@ -4,8 +4,16 @@ import {Machine} from "@demlik/tea/effect";
 import {describe, expect, it} from "@effect/vitest";
 import {Effect, Exit, Layer, Option, Schema} from "effect";
 import * as fc from "fast-check";
-import {Mailbox, ProcessStore, Writer} from "../coordination/index.ts";
+import {
+	Mailbox,
+	ProcessManager,
+	ProcessStore,
+	RecoveryStore,
+	Writer,
+} from "../coordination/index.ts";
+import {Owner, Recipient, Start} from "../coordination/process.ts";
 import {Archive, Doorbell, Ledger, RecordManager, SpanSink} from "../data/index.ts";
+import {LedgerTransaction} from "../data/ledger-transaction.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import {processId} from "../id.test-support.ts";
 import {Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager} from "./entry.ts";
@@ -43,6 +51,8 @@ describe("P12 saved mail recovery", () => {
 					Effect.runPromise(
 						Effect.gen(function* () {
 							const db = new DatabaseSync(":memory:");
+							// Ticket 402: the brain's process table lives in its own ledger.
+							const managerDb = new DatabaseSync(":memory:");
 							try {
 								const sql = nodeSql(db),
 									pure = yield* Effect.fromResult(stepper(program));
@@ -99,17 +109,69 @@ describe("P12 saved mail recovery", () => {
 										own: () => Effect.die("no write declared"),
 									}),
 								).pipe(Layer.provideMerge(base));
-								const layer = ProgramRunner.layer({
-									id: PID,
-									name: "counter:1",
-									program: "counter",
-									build: "test",
-									owner: Writer.cases.person.make({key: "SHA256:fixture", for: "person-test"}),
-								}).pipe(Layer.provideMerge(dependencies));
+								// Ticket 402: every runner is supervised. The real manager's first start names
+								// PID, and receipts live in the same Sql as ProcessStore.
+								const manager = Layer.effectDiscard(
+									ProcessManager.use((m) =>
+										m.start(
+											Start.cases.first.make({
+												id: "boot:counter:1",
+												name: "counter:1",
+												code: {program: "counter", hash: "test"},
+											}),
+											{
+												by: "SHA256:brain",
+												for: "brain",
+												sentAt: "2026-11-08T00:00:00Z",
+												seen: 0,
+												parent: null,
+												traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+												build: "test",
+											},
+										),
+									).pipe(Effect.orDie),
+								).pipe(
+									Layer.provideMerge(
+										ProcessManager.layer(
+											{
+												by: "SHA256:brain",
+												owner: Owner.cases.brain.make({}),
+												recipient: Recipient.cases.client.make({client: "brain", session: PID}),
+											},
+											Effect.succeed(PID),
+										),
+									),
+									Layer.provide(
+										LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+											Layer.provide(Layer.succeed(Doorbell, {ring: () => Effect.void})),
+										),
+									),
+								);
+								const layer = ProgramRunner.layer(
+									{
+										id: PID,
+										name: "counter:1",
+										program: "counter",
+										build: "test",
+										owner: Writer.cases.person.make({key: "SHA256:fixture", for: "person-test"}),
+									},
+									{recovery: {sql, name: "counter:1", capacity: 1024 ** 3}},
+								).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
 								yield* Effect.gen(function* () {
 									const runner = yield* ProgramRunner,
 										mailbox = yield* Mailbox,
 										store = yield* ProcessStore;
+									/** Every counted program failure: a fresh receipt's errors, or a saved-mail observation. */
+									const spent = RecoveryStore.pipe(
+										Effect.flatMap((r) => r.load),
+										Effect.map((saved) => [
+											...(saved?.receipts ?? []).filter((r) => r.tries > 0 || r.errors.length > 0),
+											...(saved?.observations ?? []),
+										]),
+										Effect.provide(
+											RecoveryStore.layer(sql, {name: "counter:1", capacity: 1024 ** 3}),
+										),
+									);
 									expect(yield* runner.open("before")).toMatchObject({rev: 0, view: {count: 0}});
 									for (let n = 0; n < total; n++)
 										yield* mailbox.send(
@@ -130,12 +192,15 @@ describe("P12 saved mail recovery", () => {
 									const failed = yield* Effect.exit(runner.open("during-loss"));
 									expect.soft(Exit.isFailure(failed), "RPC loss must fail this attempt").toBe(true);
 									expect.soft((yield* store.load)?.saved.after).toBe(0);
+									// Ticket 402: a transport fault is not a program throw; it spends no delivery.
+									expect.soft(yield* spent, "RPC loss spends no delivery").toEqual([]);
 									down = false;
 									expect(yield* runner.open("recovered")).toMatchObject({
 										rev: total,
 										view: {count: total},
 									});
 									expect((yield* store.load)?.saved.after).toBe(total);
+									expect(yield* spent, "recovered mail spent no delivery").toEqual([]);
 									expect(yield* runner.open("again")).toMatchObject({
 										rev: total,
 										view: {count: total},
@@ -143,6 +208,7 @@ describe("P12 saved mail recovery", () => {
 								}).pipe(Effect.provide(layer));
 							} finally {
 								db.close();
+								managerDb.close();
 							}
 						}),
 					),
