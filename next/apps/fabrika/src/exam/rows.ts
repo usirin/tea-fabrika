@@ -13,11 +13,15 @@
 //     `**`, then more segments with no `*`, then more characters that are not `*` or `/`;
 //   - the tool refuses a file that two rows claim equally. Here that file gets both rows, so the
 //     exam can say so.
+//
+// A row may carry a `floor` (the local patch, demlik issue 913). A room's rank is its floor, so
+// moving a room is one edit and no other room moves. `floorsByName` reads it.
 
 /** One row of the rule file, as far as the exam reads it. */
 export interface Row {
   readonly name: string;
   readonly paths: ReadonlyArray<string>;
+  readonly floor?: number;
 }
 
 type Specificity = readonly [segments: number, literal: number, characters: number];
@@ -90,3 +94,7 @@ export const rowsAt = (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<st
 
   return [...new Set(found.filter((claim) => compare(claim.specificity, best) === 0).map((claim) => claim.name))];
 };
+
+/** The floor of each row that names one, by row name. A row with no `floor` has none here. */
+export const floorsByName = (rows: ReadonlyArray<Row>): ReadonlyMap<string, number> =>
+  new Map(rows.flatMap((row) => (row.floor === undefined ? [] : [[row.name, row.floor] as const])));

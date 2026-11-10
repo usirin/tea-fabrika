@@ -12,23 +12,24 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Id, Sent } from "@kampus/libfabrika";
-import * as C from "@kampus/libfabrika/coordination";
-import {
-  Archive,
-  Chain,
-  Doorbell,
-  Ledger,
-  LedgerError,
-  LedgerTransaction,
-  type LedgerTurn,
-  lineFor,
-  RecordManager,
-  SinkError,
-  SpanSink,
-  SpanRow,
-} from "@kampus/libfabrika/data";
+import { Adds, Add, Grant, MemberEvent, Saw, Revoke } from "@kampus/libfabrika/access/Access";
+import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import { SignRequest } from "@kampus/libfabrika/access/SessionManager";
+import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabrika/access/Text";
+import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import { lineFor } from "@kampus/libfabrika/ledger/Log";
+import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
+import { ProcessEvent, Recipient, Owner, Down, Start } from "@kampus/libfabrika/processes/Process";
+import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
+import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { checkSshsig, Hello } from "@kampus/libfabrika/transport";
+import { Archive } from "@kampus/libfabrika/telemetry/Archive";
+import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
+import { Hello } from "@kampus/libfabrika/transport/Wire";
 import { Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -224,10 +225,12 @@ const passkey = Effect.fn("test.passkey")(function* () {
 
 // Loading inside the test hook lets each new law report the missing door on the pre-build base,
 // instead of losing every law to a collection error. This always imports the real module.
-let Door: typeof import("@kampus/libfabrika/door").Door;
+let Door: typeof import("@kampus/libfabrika/gateway/Gateway").Door;
 
 beforeEach(async () => {
-  ({ Door } = await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
+  ({ Door } = await vi.importActual<typeof import("@kampus/libfabrika/gateway/Gateway")>(
+    "@kampus/libfabrika/gateway/Gateway",
+  ));
 });
 
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
@@ -313,7 +316,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   const controls = {
     deliver: (_: Delivery): DeliveryCheck => Effect.void,
     notify: (_client: string, _news: unknown): Effect.Effect<void, LedgerError> => Effect.void,
-    next: () => C.ProcessIdGenerator.use((g) => g.next),
+    next: () => ProcessIdGenerator.use((g) => g.next),
     // What the injected program answers a delivered letter with, as the runner's Sent does.
     answer: undefined as typeof Sent.cases.refused.Type | undefined,
   };
@@ -331,7 +334,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
       const value = Schema.decodeUnknownOption(Schema.Json)(envelope.input);
 
       if (Option.isSome(value)) {
-        const mailbox = yield* C.Mailbox;
+        const mailbox = yield* Mailbox;
         const placing = yield* mailbox.send(process, envelope.id, value.value, {
           by: envelope.by.key,
           for: envelope.by.for,
@@ -374,33 +377,33 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
   const ledger = Ledger.sql(sql, { reader: "project-a" }).pipe(Layer.provide(quiet));
-  const clients = C.ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
+  const clients = ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
   // P37's records.test.ts uses 64 KiB, above SQLite's empty table/index overhead.
   const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
   const env = Layer.mergeAll(
     clients,
     LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),
-    C.Mailbox.layer.pipe(Layer.provide(clients)),
+    Mailbox.layer.pipe(Layer.provide(clients)),
     SpanSink.layer(sql, { object: START }),
     records,
     Archive.memory,
-    C.ProcessIdGenerator.layer,
+    ProcessIdGenerator.layer,
     Id.Generator.layer,
   );
   const layer = Door.layer(settings).pipe(Layer.provideMerge(env));
   const reopen = (storage: ReturnType<typeof nodeSql>) => {
     const freshLedger = Ledger.sql(storage, { reader: "project-a" }).pipe(Layer.provide(quiet));
-    const freshClients = C.ClientManager.layer(founder).pipe(Layer.provideMerge(freshLedger));
+    const freshClients = ClientManager.layer(founder).pipe(Layer.provideMerge(freshLedger));
     return Door.layer({ ...settings, sql: storage }).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
           freshClients,
           LedgerTransaction.layer(storage).pipe(Layer.provide(quiet)),
-          C.Mailbox.layer.pipe(Layer.provide(freshClients)),
+          Mailbox.layer.pipe(Layer.provide(freshClients)),
           SpanSink.layer(storage, { object: START }),
           records,
           Archive.memory,
-          C.ProcessIdGenerator.layer,
+          ProcessIdGenerator.layer,
           Id.Generator.layer,
         ),
       ),
@@ -505,14 +508,14 @@ const grantWindow = Effect.fnUntraced(function* (
     saw: SAW,
     sentAt: SENT,
   };
-  const text = C.grantText(grant),
+  const text = grantText(grant),
     armored = yield* w.root.sign(text);
   expect((yield* d.grant({ text, armored }))._tag).toBe("applied");
   return yield* online(d, w, client, k);
 });
 
 const writeId = (id: string, effect: ReturnType<typeof Door.Service.signer>) =>
-  effect.pipe(Effect.provideService(C.SignRequest, { id }));
+  effect.pipe(Effect.provideService(SignRequest, { id }));
 
 const failSessionRecord = (inner: ReturnType<typeof nodeSql>) => {
   let armed = true;
@@ -536,11 +539,11 @@ const device = Effect.fnUntraced(function* (
   k: World["otherRoot"] = w.otherRoot,
   window: World["otherWindow"] = w.otherWindow,
 ) {
-  const text = C.addText({
+  const text = addText({
     id: `device-${k.raw}`,
     for: PERSON,
     to: "project-a",
-    adds: C.Adds.cases.person.make({ key: k.line, window: window.raw }),
+    adds: Adds.cases.person.make({ key: k.line, window: window.raw }),
     drops: [],
     saw: ADD_SAW,
     sentAt: SENT,
@@ -549,11 +552,11 @@ const device = Effect.fnUntraced(function* (
 });
 
 const sheet = Effect.fnUntraced(function* (d: typeof Door.Service, w: World) {
-  const text = C.addText({
+  const text = addText({
     id: "sheet",
     for: PERSON,
     to: "project-a",
-    adds: C.Adds.cases.recovery.make({ key: w.sheet.line, v: 1 }),
+    adds: Adds.cases.recovery.make({ key: w.sheet.line, v: 1 }),
     drops: [],
     saw: { ...ADD_SAW, how: "sheet", typed: true, kept: "print" },
     sentAt: SENT,
@@ -571,12 +574,12 @@ const enrolled = Effect.fnUntraced(function* (
     freshWindow = yield* key();
   const binding = { id, for: PERSON, to: "project-a", key: sk.line, window: freshWindow.raw };
   const nonce = yield* d.enrollment(binding);
-  const proof = yield* sk.sign(C.enrollmentText({ ...binding, nonce }));
+  const proof = yield* sk.sign(enrollmentText({ ...binding, nonce }));
   const add = {
     id,
     for: PERSON,
     to: "project-a",
-    adds: C.Adds.cases.person.make({
+    adds: Adds.cases.person.make({
       key: sk.line,
       window: freshWindow.raw,
       passkey: {
@@ -592,8 +595,8 @@ const enrolled = Effect.fnUntraced(function* (
     drops: [],
     saw: { ...ADD_SAW, how: signer === w.sheet ? "recovery" : "device" },
     sentAt: SENT,
-  } satisfies typeof C.Add.Type;
-  const text = C.addText(add),
+  } satisfies typeof Add.Type;
+  const text = addText(add),
     armored = yield* signer.sign(text);
   return { sk, freshWindow, binding, nonce, add, text, armored, proof };
 });
@@ -942,7 +945,7 @@ describe("P10 review regressions", () => {
         const saved = yield* pendingHello(d, w.otherWindow, "pending");
         expect((yield* d.watch(client)).rows).toEqual([]);
         yield* TestClock.adjust(w.settings.waiting.ttl - 1);
-        const text = C.grantText({
+        const text = grantText({
           id: "approve-key-without-knock",
           key: w.otherWindow.raw,
           for: PERSON,
@@ -1198,11 +1201,11 @@ describe("P10 review regressions", () => {
               const d = yield* Door;
               yield* online(d, w);
               const before = yield* entries("door/members");
-              const text = C.addText({
+              const text = addText({
                 id: "ed25519-with-passkey-claims",
                 for: PERSON,
                 to: "project-a",
-                adds: C.Adds.cases.person.make({
+                adds: Adds.cases.person.make({
                   key: w.otherRoot.line,
                   window: w.otherWindow.raw,
                   passkey: {
@@ -1491,8 +1494,8 @@ describe("P10 door admission and waiting", () => {
           as: "window",
           saw: { ...SAW, code: "not-the-shown-code" },
           sentAt: SENT,
-        } satisfies typeof C.Grant.Type;
-        const text = C.grantText(grant);
+        } satisfies typeof Grant.Type;
+        const text = grantText(grant);
         expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
         expect((yield* d.watch(client)).rows).toEqual([]);
         expect(w.notices.some((n) => n.client === pending && JSON.stringify(n.news).includes("client.granted"))).toBe(
@@ -1520,7 +1523,7 @@ describe("P10 signed membership changes", () => {
   it.effect.prop(
     "p42 recovery: the real P9 second fold's ignored result is not turned into applied",
     {
-      generated: C.Add.fields.id.check(Schema.isMinLength(1)).check(Schema.makeFilter((id) => id !== "recovery-loser")),
+      generated: Add.fields.id.check(Schema.isMinLength(1)).check(Schema.makeFilter((id) => id !== "recovery-loser")),
     },
     ({ generated }) =>
       Effect.forEach(
@@ -1534,14 +1537,14 @@ describe("P10 signed membership changes", () => {
               id: value,
               for: PERSON,
               to: "project-a",
-              adds: C.Adds.cases.person.make({ key: winnerKey.line, window: winnerWindow.raw }),
+              adds: Adds.cases.person.make({ key: winnerKey.line, window: winnerWindow.raw }),
               drops: [],
               saw: { ...ADD_SAW, how: "recovery" },
               sentAt: SENT,
-            } satisfies typeof C.Add.Type;
-            const text = C.addText(winner),
+            } satisfies typeof Add.Type;
+            const text = addText(winner),
               armored = yield* w.sheet.sign(text);
-            const event = C.MemberEvent.cases.added.make({
+            const event = MemberEvent.cases.added.make({
               add: winner,
               signed: { text, armored, signer: w.sheet.line },
             });
@@ -1564,13 +1567,13 @@ describe("P10 signed membership changes", () => {
                 })),
               ),
             ).pipe(Layer.provide(w.env));
-            const clients = C.ClientManager.layer(w.founder).pipe(Layer.provideMerge(racedLedger));
-            const env = Layer.mergeAll(w.env, clients, C.Mailbox.layer.pipe(Layer.provide(clients)));
+            const clients = ClientManager.layer(w.founder).pipe(Layer.provideMerge(racedLedger));
+            const env = Layer.mergeAll(w.env, clients, Mailbox.layer.pipe(Layer.provide(clients)));
             yield* Effect.gen(function* () {
               const d = yield* Door;
               yield* online(d, w);
               yield* sheet(d, w);
-              const manager = yield* C.ClientManager;
+              const manager = yield* ClientManager;
               intervene = manager
                 .write(event, {
                   by: w.sheet.sshFingerprint,
@@ -1585,10 +1588,10 @@ describe("P10 signed membership changes", () => {
                   Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe("applied"))),
                   Effect.asVoid,
                 );
-              const loser = C.addText({
+              const loser = addText({
                 ...winner,
                 id: "recovery-loser",
-                adds: C.Adds.cases.person.make({
+                adds: Adds.cases.person.make({
                   key: w.otherRoot.line,
                   window: w.otherWindow.raw,
                 }),
@@ -1610,7 +1613,7 @@ describe("P10 signed membership changes", () => {
   );
   it.effect.prop(
     "p42: a removed signer can resend its exact old event, but cannot change it",
-    { generated: C.Grant.fields.id.check(Schema.isMinLength(1)) },
+    { generated: Grant.fields.id.check(Schema.isMinLength(1)) },
     ({ generated }) =>
       Effect.forEach(
         ["before-removal", generated],
@@ -1629,11 +1632,11 @@ describe("P10 signed membership changes", () => {
                 as: "agent",
                 saw: SAW,
                 sentAt: SENT,
-              } satisfies typeof C.Grant.Type;
-              const text = C.grantText(grant),
+              } satisfies typeof Grant.Type;
+              const text = grantText(grant),
                 armored = yield* w.root.sign(text),
                 first = yield* d.grant({ text, armored });
-              const revoke = C.revokeText({
+              const revoke = revokeText({
                 id: "remove-author",
                 key: w.root.line,
                 for: PERSON,
@@ -1645,7 +1648,7 @@ describe("P10 signed membership changes", () => {
               const before = yield* entries("door/members");
               expect(yield* d.grant({ text, armored })).toEqual(first);
               expect(yield* entries("door/members")).toEqual(before);
-              const changed = C.grantText({ ...grant, key: w.otherWindow.raw });
+              const changed = grantText({ ...grant, key: w.otherWindow.raw });
               expect((yield* d.grant({ text: changed, armored: yield* w.root.sign(changed) }))._tag).toBe("refused");
             }).pipe(w.provide);
           }),
@@ -1655,7 +1658,7 @@ describe("P10 signed membership changes", () => {
   );
   it.effect.prop(
     "p43/p66: agent watch/deny refuse; window deny records its real writer and saw",
-    { generated: C.Saw },
+    { generated: Saw },
     ({ generated }) =>
       Effect.forEach(
         [SAW, generated],
@@ -1701,7 +1704,7 @@ describe("P10 signed membership changes", () => {
   for (const kind of ["granted", "revoked", "added"] as const) {
     it.effect.prop(
       `p27: ${kind} wrong-to never calls ClientManager.write or founds`,
-      { generated: C.Grant.fields.to.check(Schema.makeFilter((to) => to !== "project-a")) },
+      { generated: Grant.fields.to.check(Schema.makeFilter((to) => to !== "project-a")) },
       ({ generated }) =>
         Effect.forEach(
           ["project-b", generated],
@@ -1710,9 +1713,9 @@ describe("P10 signed membership changes", () => {
               const w = yield* world();
               const called = vi.fn();
               const clients = Layer.effect(
-                C.ClientManager,
-                C.ClientManager.pipe(
-                  Effect.map((real: typeof C.ClientManager.Service) => ({
+                ClientManager,
+                ClientManager.pipe(
+                  Effect.map((real: typeof ClientManager.Service) => ({
                     ...real,
                     write: (...args: Parameters<typeof real.write>) => {
                       called();
@@ -1725,7 +1728,7 @@ describe("P10 signed membership changes", () => {
                 const d = yield* Door;
                 const text =
                   kind === "granted"
-                    ? C.grantText({
+                    ? grantText({
                         id: "wrong-to",
                         key: w.otherWindow.raw,
                         for: PERSON,
@@ -1735,7 +1738,7 @@ describe("P10 signed membership changes", () => {
                         sentAt: SENT,
                       })
                     : kind === "revoked"
-                      ? C.revokeText({
+                      ? revokeText({
                           id: "wrong-to",
                           key: w.window.raw,
                           for: PERSON,
@@ -1743,11 +1746,11 @@ describe("P10 signed membership changes", () => {
                           saw: TOOK,
                           sentAt: SENT,
                         })
-                      : C.addText({
+                      : addText({
                           id: "wrong-to",
                           for: PERSON,
                           to: value,
-                          adds: C.Adds.cases.person.make({
+                          adds: Adds.cases.person.make({
                             key: w.otherRoot.line,
                             window: w.otherWindow.raw,
                           }),
@@ -1785,8 +1788,8 @@ describe("P10 signed membership changes", () => {
             as: "window",
             saw: SAW,
             sentAt: SENT,
-          } satisfies typeof C.Grant.Type;
-          const text = C.grantText(grant),
+          } satisfies typeof Grant.Type;
+          const text = grantText(grant),
             before = yield* entries("door/members");
           expect(
             (yield* d.grant({
@@ -1816,7 +1819,7 @@ describe("P10 signed membership changes", () => {
           as: "window",
           saw: SAW,
           sentAt: SENT,
-        } satisfies typeof C.Grant.Type;
+        } satisfies typeof Grant.Type;
         const text = `${JSON.stringify({ _tag: "granted", grant: value, future: { kept: true } }, null, 2)}\n`;
         const armored = yield* w.root.sign(text);
         const first = yield* d.grant({ text, armored });
@@ -1826,7 +1829,7 @@ describe("P10 signed membership changes", () => {
           signed: { text, armored, signer: w.root.line },
           grant: { saw: SAW },
         });
-        const changed = C.grantText({ ...value, key: w.agent.raw });
+        const changed = grantText({ ...value, key: w.agent.raw });
         expect((yield* d.grant({ text: changed, armored: yield* w.root.sign(changed) }))._tag).toBe("refused");
         expect((yield* entries("door/members")).length).toBe(rows.length);
       }).pipe(w.provide);
@@ -1836,7 +1839,7 @@ describe("P10 signed membership changes", () => {
   for (const mutation of ["text", "namespace", "person"] as const) {
     it.effect.prop(
       `p27: a ${mutation} mismatch writes no membership event`,
-      { generated: C.Grant.fields.id },
+      { generated: Grant.fields.id },
       ({ generated }) =>
         Effect.forEach(
           ["bad-sign", generated],
@@ -1846,7 +1849,7 @@ describe("P10 signed membership changes", () => {
               yield* Effect.gen(function* () {
                 const d = yield* Door;
                 yield* online(d, w);
-                const text = C.grantText({
+                const text = grantText({
                   id: value,
                   key: w.otherWindow.raw,
                   for: mutation === "person" ? "person_other" : PERSON,
@@ -2249,7 +2252,7 @@ describe("P10 passkey roots and recovery", () => {
             w.founder.by = sk.fingerprint;
             yield* Effect.gen(function* () {
               const d = yield* Door;
-              const text = C.grantText({
+              const text = grantText({
                 id: "founding-passkey-approval",
                 key: w.otherWindow.raw,
                 for: PERSON,
@@ -2295,7 +2298,7 @@ describe("P10 passkey roots and recovery", () => {
   it.effect.prop(
     "question 19: an enrolled passkey root approves, removes and recovers a cleared window",
     {
-      generated: C.Grant.fields.id.check(Schema.isMinLength(1)).check(Schema.makeFilter((id) => id !== "remove-fresh")),
+      generated: Grant.fields.id.check(Schema.isMinLength(1)).check(Schema.makeFilter((id) => id !== "remove-fresh")),
     },
     ({ generated }) =>
       Effect.forEach(
@@ -2309,7 +2312,7 @@ describe("P10 passkey roots and recovery", () => {
               const p = yield* enrolled(d, w);
               expect((yield* d.grant({ text: p.text, armored: p.armored }))._tag).toBe("applied");
               const fresh = yield* key();
-              const grant = C.grantText({
+              const grant = grantText({
                 id: value,
                 key: fresh.raw,
                 for: PERSON,
@@ -2327,7 +2330,7 @@ describe("P10 passkey roots and recovery", () => {
                 }))._tag,
               ).toBe("applied");
               const cleared = yield* online(d, w, "cleared", fresh);
-              const revoke = C.revokeText({
+              const revoke = revokeText({
                 id: "remove-fresh",
                 key: fresh.raw,
                 for: PERSON,
@@ -2384,15 +2387,15 @@ describe("P10 passkey roots and recovery", () => {
             nonce: (p.nonce.startsWith("a") ? "b" : "a") + p.nonce.slice(1),
           };
           const wrongBinding = { ...p.binding, nonce: p.nonce, [name]: changes[name] };
-          const proof = yield* p.sk.sign(C.enrollmentText(wrongBinding));
+          const proof = yield* p.sk.sign(enrollmentText(wrongBinding));
           const add = {
             ...p.add,
-            adds: C.Adds.cases.person.make({
+            adds: Adds.cases.person.make({
               ...p.add.adds,
               passkey: { ...p.add.adds.passkey!, proof: proof.armored },
             }),
           };
-          const text = C.addText(add),
+          const text = addText(add),
             before = yield* entries("door/members");
           expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("refused");
           expect(yield* entries("door/members")).toEqual(before);
@@ -2409,7 +2412,7 @@ describe("P10 passkey roots and recovery", () => {
           const d = yield* Door;
           yield* online(d, w);
           const p = yield* enrolled(d, w);
-          const noUv = yield* p.sk.sign(C.enrollmentText({ ...p.binding, nonce: p.nonce }), {
+          const noUv = yield* p.sk.sign(enrollmentText({ ...p.binding, nonce: p.nonce }), {
             flags: 25,
           });
           const extra =
@@ -2427,9 +2430,9 @@ describe("P10 passkey roots and recovery", () => {
                           : { be: false }),
                   },
                 };
-          const text = C.addText({
+          const text = addText({
             ...p.add,
-            adds: C.Adds.cases.person.make({ key: p.sk.line, window: p.freshWindow.raw, ...extra }),
+            adds: Adds.cases.person.make({ key: p.sk.line, window: p.freshWindow.raw, ...extra }),
           });
           expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("refused");
         }).pipe(w.provide);
@@ -2470,7 +2473,7 @@ describe("P10 passkey roots and recovery", () => {
 describe("P10 revocation and append", () => {
   it.effect.prop(
     "revocation: a device removal kills descendants despite lost close messages; other roots and sheet live",
-    { generated: C.Revoke.fields.id.check(Schema.isMinLength(1)) },
+    { generated: Revoke.fields.id.check(Schema.isMinLength(1)) },
     ({ generated }) =>
       Effect.forEach(
         ["revoke-root", generated],
@@ -2487,7 +2490,7 @@ describe("P10 revocation and append", () => {
               yield* d.route(agent.client, "process.send", request("old-agent"));
               const parent = w.deliveries.at(-1)!.envelope.id;
               w.controls.notify = () => Effect.fail(new LedgerError({ reason: "unreachable" }));
-              const text = C.revokeText({
+              const text = revokeText({
                 id: value,
                 key: w.root.line,
                 for: PERSON,
@@ -2505,7 +2508,7 @@ describe("P10 revocation and append", () => {
                 "NotGranted",
               );
               expect((yield* d.route(other.client, "ledger.read", { stream: "x", after: 0 }))._tag).toBe("ok");
-              const members = yield* C.ClientManager.use((m) => m.members);
+              const members = yield* ClientManager.use((m) => m.members);
               expect(members.keys.get(w.otherRoot.line)?.live).toBe(true);
               expect(members.keys.get(w.sheet.line)?.live).toBe(true);
               expect(w.notices.some((n) => JSON.stringify(n.news).includes("4003"))).toBe(true);
@@ -2531,7 +2534,7 @@ describe("P10 revocation and append", () => {
               yield* d.route(client, "process.send", request("press"));
               const parent = w.deliveries.at(-1)!.envelope.id;
               yield* writeId("entry-a", d.signer(parent, PROCESS, "saved"));
-              const text = C.revokeText({
+              const text = revokeText({
                 id: "revoke-window",
                 key: w.otherWindow.raw,
                 for: PERSON,
@@ -2629,7 +2632,7 @@ describe("P33 the door never writes process lifecycle events", () => {
     it.effect(`the door refuses any append under processes/, here ${stream}`, () => refusedAppend("saved", stream));
   }
 
-  for (const kind of Object.keys(C.ProcessEvent.cases)) {
+  for (const kind of Object.keys(ProcessEvent.cases)) {
     it.effect.prop(
       `the door refuses an event tagged ${kind} on any stream, from any receipt holder`,
       { generated: Schema.String },
@@ -2658,12 +2661,12 @@ describe("P33 signal ids belong to the brain", () => {
     traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
     build: "test-build",
   };
-  const toWatcher = C.Recipient.cases.process.make({ process: WATCHER });
-  const asBrain = C.Owner.cases.brain.make({});
-  const brainSeat = C.Recipient.cases.client.make({ client: "window-a", session: TARGET });
-  const processes = (w: World, owner: typeof C.Owner.Type, recipient: typeof C.Recipient.Type) => {
+  const toWatcher = Recipient.cases.process.make({ process: WATCHER });
+  const asBrain = Owner.cases.brain.make({});
+  const brainSeat = Recipient.cases.client.make({ client: "window-a", session: TARGET });
+  const processes = (w: World, owner: typeof Owner.Type, recipient: typeof Recipient.Type) => {
     const next = [TARGET, WATCHER];
-    return C.ProcessManager.layer(
+    return ProcessManager.layer(
       { owner, recipient, by: BRAIN },
       Effect.sync(() => next.shift()!),
     ).pipe(
@@ -2732,7 +2735,7 @@ describe("P33 signal ids belong to the brain", () => {
 
   it.effect.prop(
     "a client cannot take a DOWN's id first; the real exit then writes its DOWN",
-    { generated: C.Down.fields.ref },
+    { generated: Down.fields.ref },
     ({ generated }) =>
       Effect.forEach(
         ["watch:1", generated],
@@ -2741,10 +2744,10 @@ describe("P33 signal ids belong to the brain", () => {
             const w = yield* world();
             yield* Effect.gen(function* () {
               const d = yield* Door;
-              yield* C.ProcessManager.use((p) =>
+              yield* ProcessManager.use((p) =>
                 Effect.gen(function* () {
                   yield* p.start(
-                    C.Start.cases.first.make({
+                    Start.cases.first.make({
                       id: "start:target",
                       name: "target:1",
                       code: { program: "counter", hash: "build-a" },
@@ -2752,7 +2755,7 @@ describe("P33 signal ids belong to the brain", () => {
                     brainFrom,
                   );
                   yield* p.start(
-                    C.Start.cases.first.make({
+                    Start.cases.first.make({
                       id: "start:watcher",
                       name: "watcher:1",
                       code: { program: "watcher", hash: "build-a" },
@@ -2761,8 +2764,8 @@ describe("P33 signal ids belong to the brain", () => {
                   );
                 }),
               ).pipe(Effect.provide(processes(w, asBrain, brainSeat)));
-              const watcher = processes(w, C.Owner.cases.process.make({ process: WATCHER }), toWatcher);
-              yield* C.ProcessManager.use((p) => p.monitor(value, TARGET, brainFrom)).pipe(Effect.provide(watcher));
+              const watcher = processes(w, Owner.cases.process.make({ process: WATCHER }), toWatcher);
+              yield* ProcessManager.use((p) => p.monitor(value, TARGET, brainFrom)).pipe(Effect.provide(watcher));
               const { client } = yield* online(d, w);
               yield* d.route(client, "process.send", request("press"));
               const parent = w.deliveries.at(-1)!.envelope.id;
@@ -2786,7 +2789,7 @@ describe("P33 signal ids belong to the brain", () => {
                   }),
                 ),
               ).toMatchObject({ _tag: "SigningRefused" });
-              yield* C.ProcessManager.use((p) => p.exit(TARGET, "crashed", brainFrom)).pipe(
+              yield* ProcessManager.use((p) => p.exit(TARGET, "crashed", brainFrom)).pipe(
                 Effect.provide(processes(w, asBrain, brainSeat)),
               );
               const inbox = yield* entries("watcher:1/inbox");
@@ -2796,7 +2799,7 @@ describe("P33 signal ids belong to the brain", () => {
                 by: BRAIN,
                 body: { m: { _tag: "DOWN", ref: value, process: TARGET, reason: "crashed" } },
               });
-              const letters = yield* C.ProcessManager.use((p) => Stream.runCollect(p.receive(WATCHER, 0))).pipe(
+              const letters = yield* ProcessManager.use((p) => Stream.runCollect(p.receive(WATCHER, 0))).pipe(
                 Effect.provide(watcher),
               );
               expect(letters.map((letter) => letter.m)).toEqual([
@@ -2819,9 +2822,9 @@ describe("P33 signal ids belong to the brain", () => {
             const w = yield* world();
             yield* Effect.gen(function* () {
               const d = yield* Door;
-              yield* C.ProcessManager.use((p) =>
+              yield* ProcessManager.use((p) =>
                 p.start(
-                  C.Start.cases.first.make({
+                  Start.cases.first.make({
                     id: "start:watcher",
                     name: "watcher:1",
                     code: { program: "watcher", hash: "build-a" },
@@ -2855,8 +2858,8 @@ describe("P33 signal ids belong to the brain", () => {
               }
 
               // Pinned: a send with no m is skipped; any m is plain mail.
-              const watcher = processes(w, C.Owner.cases.process.make({ process: TARGET }), brainSeat);
-              const letters = yield* C.ProcessManager.use((p) => Stream.runCollect(p.receive(TARGET, 0))).pipe(
+              const watcher = processes(w, Owner.cases.process.make({ process: TARGET }), brainSeat);
+              const letters = yield* ProcessManager.use((p) => Stream.runCollect(p.receive(TARGET, 0))).pipe(
                 Effect.provide(watcher),
               );
               expect(letters.map((letter) => letter.m)).toEqual([{ _tag: "DOWN", ref: 5 }, value]);
@@ -3499,7 +3502,7 @@ describe("P10 refusal records and checked writes", () => {
     it.effect.prop(
       `p42: a queued change rechecks ${retry} after the preceding write`,
       {
-        generated: C.Grant.fields.id.check(Schema.isMinLength(1)).check(Schema.makeFilter((id) => id !== "enrolled")),
+        generated: Grant.fields.id.check(Schema.isMinLength(1)).check(Schema.makeFilter((id) => id !== "enrolled")),
       },
       ({ generated }) =>
         Effect.forEach(
@@ -3525,8 +3528,8 @@ describe("P10 refusal records and checked writes", () => {
                 },
               };
               const clients = Layer.effect(
-                C.ClientManager,
-                C.ClientManager.pipe(
+                ClientManager,
+                ClientManager.pipe(
                   Effect.map((real) => ({
                     ...real,
                     write: (...args: Parameters<typeof real.write>) =>
@@ -3546,7 +3549,7 @@ describe("P10 refusal records and checked writes", () => {
                 const d = yield* Door;
                 yield* online(d, w);
                 const p = retry === "replaced enrollment" ? yield* enrolled(d, w) : null;
-                const text = C.grantText({
+                const text = grantText({
                   id: value,
                   key: w.otherWindow.raw,
                   for: PERSON,
@@ -3600,7 +3603,7 @@ describe("P10 refusal records and checked writes", () => {
 
   it.effect.prop(
     "p42: an unfinished membership write cannot change its signed bytes on retry",
-    { generated: C.Grant.fields.id.check(Schema.isMinLength(1)) },
+    { generated: Grant.fields.id.check(Schema.isMinLength(1)) },
     ({ generated }) =>
       Effect.forEach(
         ["pending-change", generated],
@@ -3609,8 +3612,8 @@ describe("P10 refusal records and checked writes", () => {
             const w = yield* world();
             let fail = false;
             const clients = Layer.effect(
-              C.ClientManager,
-              C.ClientManager.pipe(
+              ClientManager,
+              ClientManager.pipe(
                 Effect.map((real) => ({
                   ...real,
                   write: (...args: Parameters<typeof real.write>) => {
@@ -3627,7 +3630,7 @@ describe("P10 refusal records and checked writes", () => {
             yield* Effect.gen(function* () {
               const d = yield* Door;
               yield* online(d, w);
-              const text = C.grantText({
+              const text = grantText({
                 id: value,
                 key: w.otherWindow.raw,
                 for: PERSON,
@@ -3761,11 +3764,11 @@ describe("P10 refusal records and checked writes", () => {
               const d = yield* Door;
               yield* online(d, w);
               const before = yield* entries("door/members");
-              const text = C.addText({
+              const text = addText({
                 id: "invalid-root",
                 for: PERSON,
                 to: "project-a",
-                adds: C.Adds.cases.person.make({
+                adds: Adds.cases.person.make({
                   key: value,
                   window: w.otherWindow.raw,
                 }),
@@ -3786,7 +3789,7 @@ describe("P10 refusal records and checked writes", () => {
   );
   it.effect.prop(
     "p42: the same signed text with different armor is not an exact resend",
-    { generated: C.Grant.fields.id.check(Schema.isMinLength(1)) },
+    { generated: Grant.fields.id.check(Schema.isMinLength(1)) },
     ({ generated }) =>
       Effect.forEach(
         ["armor-retry", generated],
@@ -3796,7 +3799,7 @@ describe("P10 refusal records and checked writes", () => {
             yield* Effect.gen(function* () {
               const d = yield* Door;
               yield* online(d, w);
-              const text = C.grantText({
+              const text = grantText({
                 id: value,
                 key: w.otherWindow.raw,
                 for: PERSON,
@@ -3825,7 +3828,7 @@ describe("P10 refusal records and checked writes", () => {
         yield* online(d, w);
         const { client } = yield* grantWindow(d, w);
         w.notices.length = 0;
-        const text = C.revokeText({
+        const text = revokeText({
           id: "close-window",
           key: w.otherWindow.raw,
           for: PERSON,
@@ -3957,7 +3960,7 @@ describe("P10 refusal records and checked writes", () => {
                   { _tag: "invalid_member" },
                 ),
               );
-              const text = C.grantText({
+              const text = grantText({
                 id: "after-bad-row",
                 key: w.otherWindow.raw,
                 for: PERSON,

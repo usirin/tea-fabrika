@@ -7,8 +7,9 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { it as effect } from "@effect/vitest";
 import { counter } from "@kampus/counter";
 import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrika";
+import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
-import { revokeText, Start } from "@kampus/libfabrika/coordination";
+import { Start } from "@kampus/libfabrika/processes/Process";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import {
   commitReply,

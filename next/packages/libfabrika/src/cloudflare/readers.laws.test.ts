@@ -6,7 +6,7 @@ import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
-import { Attached } from "../transport/index.ts";
+import { Attached } from "../transport/Wire.ts";
 import { GatewayService, gatewayRuntime } from "./connection.ts";
 import { control } from "./control.ts";
 import { recordRead } from "./record.ts";

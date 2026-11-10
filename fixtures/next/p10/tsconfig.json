@@ -8,10 +8,24 @@
 			"@effect/vitest": [
 				"../../../next/packages/libfabrika/node_modules/@effect/vitest/dist/index.d.ts"
 			],
-			"@kampus/libfabrika/data": ["../../../next/packages/libfabrika/src/data/index.ts"],
-			"@kampus/libfabrika/coordination": [
-				"../../../next/packages/libfabrika/src/coordination/index.ts"
-			],
+			"@kampus/libfabrika/access/Access": ["../../../next/packages/libfabrika/src/access/Access.ts"],
+			"@kampus/libfabrika/access/ClientManager": ["../../../next/packages/libfabrika/src/access/ClientManager.ts"],
+			"@kampus/libfabrika/access/SessionManager": ["../../../next/packages/libfabrika/src/access/SessionManager.ts"],
+			"@kampus/libfabrika/access/Text": ["../../../next/packages/libfabrika/src/access/Text.ts"],
+			"@kampus/libfabrika/gateway/Gateway": ["../../../next/packages/libfabrika/src/gateway/Gateway.ts"],
+			"@kampus/libfabrika/ledger/Ledger": ["../../../next/packages/libfabrika/src/ledger/Ledger.ts"],
+			"@kampus/libfabrika/ledger/LedgerTransaction": ["../../../next/packages/libfabrika/src/ledger/LedgerTransaction.ts"],
+			"@kampus/libfabrika/ledger/Log": ["../../../next/packages/libfabrika/src/ledger/Log.ts"],
+			"@kampus/libfabrika/processes/Mailbox": ["../../../next/packages/libfabrika/src/processes/Mailbox.ts"],
+			"@kampus/libfabrika/processes/Process": ["../../../next/packages/libfabrika/src/processes/Process.ts"],
+			"@kampus/libfabrika/processes/ProcessIdGenerator": ["../../../next/packages/libfabrika/src/processes/ProcessIdGenerator.ts"],
+			"@kampus/libfabrika/processes/ProcessManager": ["../../../next/packages/libfabrika/src/processes/ProcessManager.ts"],
+			"@kampus/libfabrika/telemetry/Archive": ["../../../next/packages/libfabrika/src/telemetry/Archive.ts"],
+			"@kampus/libfabrika/telemetry/Records": ["../../../next/packages/libfabrika/src/telemetry/Records.ts"],
+			"@kampus/libfabrika/telemetry/Sink": ["../../../next/packages/libfabrika/src/telemetry/Sink.ts"],
+			"@kampus/libfabrika/telemetry/Trace": ["../../../next/packages/libfabrika/src/telemetry/Trace.ts"],
+			"@kampus/libfabrika/transport/Sshsig": ["../../../next/packages/libfabrika/src/transport/Sshsig.ts"],
+			"@kampus/libfabrika/transport/Wire": ["../../../next/packages/libfabrika/src/transport/Wire.ts"],
 			"@kampus/libfabrika/sqlite": ["../../../next/packages/libfabrika/src/ledger/NodeSqlite.ts"]
 		}
 	}

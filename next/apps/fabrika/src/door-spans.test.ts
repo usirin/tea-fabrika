@@ -3,19 +3,16 @@
 import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Id } from "@kampus/libfabrika";
-import { ClientManager, grantText, Saw } from "@kampus/libfabrika/coordination";
-import {
-  Archive,
-  Chain,
-  Doorbell,
-  Ledger,
-  LedgerError,
-  LedgerTransaction,
-  type LedgerTurn,
-  RecordManager,
-  SpanSink,
-} from "@kampus/libfabrika/data";
+import { Saw } from "@kampus/libfabrika/access/Access";
+import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import { grantText } from "@kampus/libfabrika/access/Text";
+import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Archive } from "@kampus/libfabrika/telemetry/Archive";
+import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Cause, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";

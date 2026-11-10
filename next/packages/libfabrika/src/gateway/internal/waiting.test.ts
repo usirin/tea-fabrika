@@ -4,13 +4,13 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import * as fc from "fast-check";
-import * as T from "../../transport/index.ts";
+import { Waiting } from "./waiting.ts";
 
-const state = (ttl = 600_000, most = 3) => T.Waiting.make({ rows: [], most, ttl });
+const state = (ttl = 600_000, most = 3) => Waiting.make({ rows: [], most, ttl });
 const runs = { seed: 119120, numRuns: 100 };
 
 const knock = (s: ReturnType<typeof state>, key: string, client: string, at: number, code: string = "1234") =>
-  T.Waiting.knock(s, {
+  Waiting.knock(s, {
     key,
     client,
     label: "Browser",
@@ -48,9 +48,9 @@ describe("P10 waiting rows", () => {
             has: ["verify", "seal"],
             pass: null,
           });
-          const left = T.Waiting.leave(duplicate, { key, client: one });
+          const left = Waiting.leave(duplicate, { key, client: one });
           expect(left.rows[0]?.tabs).toBe(1);
-          expect(T.Waiting.leave(left, { key, client: two }).rows).toEqual([]);
+          expect(Waiting.leave(left, { key, client: two }).rows).toEqual([]);
         },
       ),
       {
@@ -82,8 +82,8 @@ describe("P10 waiting rows", () => {
         fc.integer({ min: 1, max: 1_000_000 }),
         (key, one, two, code, replacement, at, ttl) => {
           const first = knock(state(ttl), key, one, at, code);
-          expect(T.Waiting.expire(first, at + ttl - 1).rows).toHaveLength(1);
-          expect(T.Waiting.expire(first, at + ttl).rows).toEqual([]);
+          expect(Waiting.expire(first, at + ttl - 1).rows).toHaveLength(1);
+          expect(Waiting.expire(first, at + ttl).rows).toEqual([]);
           const next = knock(first, key, two, at + ttl, replacement);
           expect(next.rows[0]).toMatchObject({ code: replacement, tabs: 1, until: at + 2 * ttl });
         },
@@ -131,13 +131,13 @@ describe("P10 waiting rows", () => {
         const raw = { rows: [], most, ttl: 600_000 };
 
         if (most < 1) {
-          expect(() => T.Waiting.make(raw)).toThrow();
-          expect(Schema.decodeUnknownOption(T.Waiting)(raw)).toEqual(Option.none());
+          expect(() => Waiting.make(raw)).toThrow();
+          expect(Schema.decodeUnknownOption(Waiting)(raw)).toEqual(Option.none());
           return;
         }
 
         const keys = Array.from({ length: most + extra }, (_, i) => `k${i}`);
-        const s = keys.reduce((w, k, i) => knock(w, k, `${k}-tab`, i), T.Waiting.make(raw));
+        const s = keys.reduce((w, k, i) => knock(w, k, `${k}-tab`, i), Waiting.make(raw));
         expect(s.rows.map((r) => r.key)).toEqual(keys.slice(-most));
       }),
       // pinned: a cap of 0. Before PR 516 the cap was any Int, and slice(-0) kept every row, so

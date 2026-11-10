@@ -18,13 +18,31 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
-import * as data from "../data/index.ts";
 import { inputParents, processId } from "../Id.test-support.ts";
+import * as Id from "../Id.ts";
+import * as RevFront from "../Rev.ts";
+import { ParentText } from "../Rev.ts";
 import type { Sql } from "../Sql.ts";
+import * as LedgerFront from "./Ledger.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
+import * as LedgerTransactionFront from "./LedgerTransaction.ts";
+import * as LogFront from "./Log.ts";
 import type { Entry, InputId, Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
+import * as RefereeFront from "./Referee.ts";
 import { Referee } from "./Referee.ts";
+
+// What the old data barrel exported: the ledger's front files and the shared names it passed on.
+const data = {
+  ...LedgerFront,
+  ...LedgerTransactionFront,
+  ...LogFront,
+  ...RefereeFront,
+  ...RevFront,
+  Id,
+  IdError: Id.IdError,
+  InputId: Id.InputId,
+};
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
@@ -169,10 +187,10 @@ describe("p92, every entry has every field: the type", () => {
 
   it("type law, ParentText keeps legacy text, and only input and parent schemas expose InputId", () => {
     // A missing schema fails this assertion while the tests precede the build, not the import.
-    expect(data.ParentText, "the parent text schema is public").toBeDefined();
+    expect(ParentText, "the parent text schema is public").toBeDefined();
     expectTypeOf<(typeof Entry.Type)["parent"]>().toEqualTypeOf<string | InputId | null>();
     expectTypeOf<Line["parent"]>().toEqualTypeOf<string | InputId | null>();
-    expectTypeOf<typeof data.ParentText.Type>().toEqualTypeOf<string | InputId>();
+    expectTypeOf<typeof ParentText.Type>().toEqualTypeOf<string | InputId>();
     // P17a's input schema and parent reader expose the brand. No other data export does.
     type Gives<T> = T extends (...args: never) => infer R ? R : T extends { readonly Type: infer A } ? A : never;
     type MakesInputId = {
@@ -308,8 +326,8 @@ describe("p92, every entry has every field: at the referee", () => {
 describe("p68, an entry keeps its parent", () => {
   // Plants: keep the old eight-hex pattern, loosen it to in-.*, or answer bad_line.
   it("p68b, ParentText takes a TypeID process and a positive counter, and nothing one slip away", () => {
-    expect(data.ParentText, "the parent text schema is public").toBeDefined();
-    const is = Schema.is(data.ParentText);
+    expect(ParentText, "the parent text schema is public").toBeDefined();
+    const is = Schema.is(ParentText);
     expect(parents(50).every(is)).toBe(true);
     expect(badParents(goodParent).filter(is)).toEqual([]);
   });

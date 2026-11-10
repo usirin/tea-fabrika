@@ -4,13 +4,12 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
-import * as data from "../data/index.ts";
 import { inputParents } from "../Id.test-support.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Doorbell, Ledger, type LedgerCalls } from "./Ledger.ts";
-import { lineFor } from "./Log.ts";
+import { fromHere, lineFor, TraceId } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import { Referee } from "./Referee.ts";
 
@@ -45,17 +44,17 @@ describe("T518, TraceId generation", () => {
     { sampleSeed: Schema.Int },
     ({ sampleSeed }) =>
       Effect.gen(function* () {
-        const values = yield* Arbitrary.sampleEffect(Arbitrary.schema(data.TraceId), {
+        const values = yield* Arbitrary.sampleEffect(Arbitrary.schema(TraceId), {
           count: 200,
           seed: sampleSeed,
         });
         expect(values).toHaveLength(200);
 
         for (const value of values) {
-          expect(Schema.decodeUnknownSync(data.TraceId)(value)).toBe(value);
+          expect(Schema.decodeUnknownSync(TraceId)(value)).toBe(value);
           expect(value).toMatch(/^[0-9a-f]{32}$/);
           const zero = value.replace(/[0-9a-f]/g, "0");
-          expect(() => Schema.decodeUnknownSync(data.TraceId)(zero)).toThrow();
+          expect(() => Schema.decodeUnknownSync(TraceId)(zero)).toThrow();
         }
       }),
     { arbitrary: { seed: 119120, runs: 40 } },
@@ -79,7 +78,7 @@ describe("T246, fromHere", () => {
         Archive.memory,
       );
       return Effect.gen(function* () {
-        expect(data.fromHere, "fromHere reads the span already in scope").toBeTypeOf("function");
+        expect(fromHere, "fromHere reads the span already in scope").toBeTypeOf("function");
         yield* TestClock.setTime(Date.parse(SENT));
         const referee = yield* Referee;
         // The test's object-call bridge runs the real referee; it invents no answer or stored row.
@@ -92,7 +91,7 @@ describe("T246, fromHere", () => {
         yield* Effect.gen(function* () {
           const span = yield* Effect.currentSpan;
           expect(span.traceId).toBe(traceId);
-          const stamped = yield* data.fromHere(writer);
+          const stamped = yield* fromHere(writer);
           expect(stamped).toEqual({ ...writer, sentAt: SENT, traceId });
           const ledger = yield* Ledger;
           expect(yield* ledger.append("notes:1", "w-1", lineFor(stamped, { _tag: "saved", note: "n-1" }))).toEqual({
@@ -123,8 +122,8 @@ describe("T246, fromHere", () => {
 
   // Plant: fromHere falls back to a random id, or starts its own root span.
   it("no span no write: fromHere fails with NoSuchElementError outside a span", () => {
-    expect(data.fromHere, "fromHere requires a writer's span").toBeTypeOf("function");
-    const exit = Effect.runSyncExit(data.fromHere(from));
+    expect(fromHere, "fromHere requires a writer's span").toBeTypeOf("function");
+    const exit = Effect.runSyncExit(fromHere(from));
     expect(Exit.isFailure(exit)).toBe(true);
     const error = Exit.match(exit, { onFailure: Cause.squash, onSuccess: () => undefined });
     expect(Cause.isNoSuchElementError(error)).toBe(true);

@@ -4,8 +4,10 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import * as fc from "fast-check";
-import { Doorbell, Ledger, LedgerError, Referee, lineFor } from "../data/index.ts";
+import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import { Referee } from "../ledger/Referee.ts";
 import { Answer, Attached } from "../transport/Wire.ts";
 
 const SEED = 119120;

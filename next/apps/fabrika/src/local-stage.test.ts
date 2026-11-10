@@ -5,7 +5,7 @@ import { RuntimeLifecycle } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { afterEach, expect, it } from "@effect/vitest";
 import type { BrainEvent } from "@kampus/libfabrika/brain-event";
-import { ProcessIdGenerator } from "@kampus/libfabrika/coordination";
+import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";

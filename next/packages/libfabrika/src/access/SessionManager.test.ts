@@ -8,13 +8,14 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Brand, Effect, Result, Schema } from "effect";
-import * as C from "../coordination/index.ts";
 import { processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
 import { type InputId } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";
 import type { Sql } from "../Sql.ts";
+import { Writer, Session, SessionManager, NotGranted, SignRequest } from "./SessionManager.ts";
 
 // Match fc.jsonValue({maxDepth: depth}): finite numbers, strings/keys of
 // length 0..10, and arrays/objects of width 0..10. No required object keys.
@@ -63,11 +64,11 @@ const sessionSchema = Schema.Struct({
   PROCESS: Id.Process,
   OTHER_PROCESS: Id.Process,
   START: Id.Process,
-  PERSON: C.Writer.cases.person.fields.for.check(Schema.isPattern(/^person_[0-7][0-9a-hjkmnp-tv-z]{25}$/)),
-  TRACE: C.Session.fields.traceId.check(Schema.isPattern(/^[1-9a-f][0-9a-f]{31}$/)),
-  SPAN: C.Session.fields.span.fields.spanId.check(Schema.isPattern(/^[1-9a-f][0-9a-f]{15}$/)),
-  key: C.Writer.cases.person.fields.key.check(Schema.isPattern(/^SHA256:person-[\x20-\x7e]{1,40}$/)),
-  agentKey: C.Writer.cases.agent.fields.key.check(Schema.isPattern(/^SHA256:agent-[\x20-\x7e]{1,40}$/)),
+  PERSON: Writer.cases.person.fields.for.check(Schema.isPattern(/^person_[0-7][0-9a-hjkmnp-tv-z]{25}$/)),
+  TRACE: Session.fields.traceId.check(Schema.isPattern(/^[1-9a-f][0-9a-f]{31}$/)),
+  SPAN: Session.fields.span.fields.spanId.check(Schema.isPattern(/^[1-9a-f][0-9a-f]{15}$/)),
+  key: Writer.cases.person.fields.key.check(Schema.isPattern(/^SHA256:person-[\x20-\x7e]{1,40}$/)),
+  agentKey: Writer.cases.agent.fields.key.check(Schema.isPattern(/^SHA256:agent-[\x20-\x7e]{1,40}$/)),
   id: Schema.String.check(Schema.isPattern(/^write-[a-z0-9]{1,20}$/)),
   kinds: Schema.Array(
     Schema.String.check(
@@ -125,7 +126,7 @@ const setup = ({
     event: (name: string) => name === "answered",
   };
   const writer = (as: "person" | "agent") =>
-    C.Writer.cases[as].make({
+    Writer.cases[as].make({
       key: as === "person" ? key : agentKey,
       for: PERSON,
     });
@@ -142,14 +143,14 @@ const setup = ({
     arrivedAt: 100,
   });
   const authority = (sql: Sql, live: () => boolean = () => true) =>
-    C.SessionManager.layer(
+    SessionManager.layer(
       sql,
       (key: string) =>
-        live() ? Effect.succeed(writer(key === "agent" ? "agent" : "person")) : Effect.fail(new C.NotGranted({})),
+        live() ? Effect.succeed(writer(key === "agent" ? "agent" : "person")) : Effect.fail(new NotGranted({})),
       policy,
     );
   const signer = (writeId: string = id, kind: string = "answered", process = PROCESS, p: string = parent) =>
-    C.SessionManager.use((s) => s.signer(p, process, kind)).pipe(Effect.provideService(C.SignRequest, { id: writeId }));
+    SessionManager.use((s) => s.signer(p, process, kind)).pipe(Effect.provideService(SignRequest, { id: writeId }));
   return {
     PROCESS,
     OTHER_PROCESS,
@@ -232,10 +233,10 @@ describe("P10 saved signing authority", () => {
           traceId: TRACE,
           span: { traceId: TRACE, spanId: SPAN },
         };
-        expect(Schema.decodeUnknownSync(C.Session)(session)).toEqual(session);
+        expect(Schema.decodeUnknownSync(Session)(session)).toEqual(session);
 
         for (const span of [{}, { traceId: TRACE }, { spanId: SPAN }]) {
-          expect(Schema.is(C.Session)({ ...session, span })).toBe(false);
+          expect(Schema.is(Session)({ ...session, span })).toBe(false);
         }
       }
     },
@@ -250,7 +251,7 @@ describe("P10 saved signing authority", () => {
           _tag: "SigningRefused",
           reason: "not_delivered",
         });
-        const sessions = yield* C.SessionManager;
+        const sessions = yield* SessionManager;
         expect(yield* Effect.flip(sessions.delivered(parent, PROCESS))).toMatchObject({
           _tag: "SigningRefused",
           reason: "not_delivered",
@@ -263,7 +264,7 @@ describe("P10 saved signing authority", () => {
     ({ saved, parent, authority, PROCESS }) => {
       const { sql, db } = database();
       return Effect.gen(function* () {
-        const sessions = yield* C.SessionManager;
+        const sessions = yield* SessionManager;
         const input = saved();
         yield* sessions.record(input);
         yield* sessions.delivered(parent, PROCESS);
@@ -283,7 +284,7 @@ describe("P10 saved signing authority", () => {
     ({ saved, parent, signer, authority, PROCESS }) => {
       const { sql } = database();
       return Effect.gen(function* () {
-        const sessions = yield* C.SessionManager;
+        const sessions = yield* SessionManager;
         yield* sessions.record({ ...saved("person", false), name: "approve" });
         yield* sessions.delivered(parent, PROCESS);
         expect(yield* Effect.result(signer())).toMatchObject({
@@ -299,7 +300,7 @@ describe("P10 saved signing authority", () => {
       Effect.gen(function* () {
         const { sql } = database();
         yield* Effect.gen(function* () {
-          const s = yield* C.SessionManager;
+          const s = yield* SessionManager;
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
           const agent = { ...saved("agent"), id: inputId(`in-${START}-2`) };
@@ -326,7 +327,7 @@ describe("P10 saved signing authority", () => {
         Effect.gen(function* () {
           const { sql, db } = database();
           yield* Effect.gen(function* () {
-            const s = yield* C.SessionManager;
+            const s = yield* SessionManager;
             yield* s.record(saved("person", reason !== "person_only"));
 
             if (reason !== "not_delivered") {
@@ -368,7 +369,7 @@ describe("P10 saved signing authority", () => {
             ([firstId, secondId]) => {
               const { sql, db } = database();
               return Effect.gen(function* () {
-                const s = yield* C.SessionManager;
+                const s = yield* SessionManager;
                 yield* s.record(saved());
                 yield* s.delivered(parent, PROCESS);
                 yield* signer(firstId);
@@ -393,7 +394,7 @@ describe("P10 saved signing authority", () => {
       Effect.gen(function* () {
         const { sql } = database();
         yield* Effect.gen(function* () {
-          const s = yield* C.SessionManager;
+          const s = yield* SessionManager;
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
           expect(yield* Effect.flip(signer("write-a", "answered", OTHER_PROCESS))).toMatchObject({
@@ -408,7 +409,7 @@ describe("P10 saved signing authority", () => {
       Effect.gen(function* () {
         const { sql } = database();
         yield* Effect.gen(function* () {
-          const s = yield* C.SessionManager;
+          const s = yield* SessionManager;
           yield* s.record(saved("agent", true));
           yield* s.delivered(parent, PROCESS);
           expect(yield* Effect.flip(signer())).toMatchObject({ reason: "person_only" });
@@ -421,7 +422,7 @@ describe("P10 saved signing authority", () => {
       Effect.gen(function* () {
         const { sql } = database();
         yield* Effect.gen(function* () {
-          const s = yield* C.SessionManager;
+          const s = yield* SessionManager;
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
           expect((yield* signer("a", kinds[0]!)).by).toEqual(writer("person"));
@@ -435,7 +436,7 @@ describe("P10 saved signing authority", () => {
       Effect.gen(function* () {
         const first = database();
         const session = yield* Effect.gen(function* () {
-          const s = yield* C.SessionManager;
+          const s = yield* SessionManager;
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
           return yield* signer();
@@ -455,7 +456,7 @@ describe("P10 saved signing authority", () => {
         const { sql, db } = database();
         const failure = commitFault(sql);
         yield* Effect.gen(function* () {
-          const s = yield* C.SessionManager;
+          const s = yield* SessionManager;
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
           const before = snapshot(db);
@@ -474,7 +475,7 @@ describe("P10 saved signing authority", () => {
       Effect.gen(function* () {
         const first = database();
         yield* Effect.gen(function* () {
-          const s = yield* C.SessionManager;
+          const s = yield* SessionManager;
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
           yield* signer();
@@ -494,7 +495,7 @@ describe("P10 saved signing authority", () => {
         const { sql } = database();
         let live = true;
         yield* Effect.gen(function* () {
-          const s = yield* C.SessionManager;
+          const s = yield* SessionManager;
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
           yield* signer();
@@ -510,7 +511,7 @@ describe("P10 saved signing authority", () => {
       Effect.gen(function* () {
         const { sql } = database();
         yield* Effect.gen(function* () {
-          const s = yield* C.SessionManager;
+          const s = yield* SessionManager;
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
           expect(yield* Effect.flip(signer("a", "saved", PROCESS, `in-${START}-999`))).toMatchObject({
@@ -524,10 +525,10 @@ describe("P10 saved signing authority", () => {
 // P33 review round 3, rule 2: an id in the signal id space is the brain's alone, so the signer
 // refuses it, signs nothing, saves no receipt and leaves the parent free for a real write.
 describe("P33, the signer refuses every id in the signal id space", () => {
-  const toW = C.Recipient.cases.process.make({ process: OTHER_PROCESS });
+  const toW = Recipient.cases.process.make({ process: OTHER_PROCESS });
   const ids = [
     signalId(toW, "watch:1", 1),
-    signalId(C.Recipient.cases.client.make({ client: "window-a", session: START }), "w", 3),
+    signalId(Recipient.cases.client.make({ client: "window-a", session: START }), "w", 3),
     JSON.stringify(["DOWN"]),
     ' [ "DOWN" , 1 ]',
     '["DOWN", not json',
@@ -536,7 +537,7 @@ describe("P33, the signer refuses every id in the signal id space", () => {
     Effect.gen(function* () {
       const { sql, db } = database();
       yield* Effect.gen(function* () {
-        const s = yield* C.SessionManager;
+        const s = yield* SessionManager;
         yield* s.record(saved());
         yield* s.delivered(parent, PROCESS);
         const before = snapshot(db);
@@ -561,7 +562,7 @@ describe("P33, the signer refuses every id in the signal id space", () => {
           ? `[${space}${JSON.stringify(["DOWN", ...rest]).slice(1)}`
           : `["DOWN"${tail}`,
     ),
-    Arbitrary.filter(C.inSignalSpace),
+    Arbitrary.filter(inSignalSpace),
   );
   it.effect.prop(
     "for any id the signal id space holds, the signer answers SigningRefused",
@@ -571,7 +572,7 @@ describe("P33, the signer refuses every id in the signal id space", () => {
         [...ids, generated],
         (value) =>
           Effect.gen(function* () {
-            expect(C.inSignalSpace(value)).toBe(true);
+            expect(inSignalSpace(value)).toBe(true);
             yield* refusedThenFree(value);
           }),
         { concurrency: 1 },

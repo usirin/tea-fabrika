@@ -3,9 +3,9 @@ import { expect, expectTypeOf, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import type { IdError, IdSchema, IdValue } from "@kampus/libfabrika";
 import type * as Public from "@kampus/libfabrika";
-import type * as Data from "@kampus/libfabrika/data";
 import { type Context, Effect, Schema, type SchemaIssue } from "effect";
 import * as fc from "fast-check";
+import type * as Front from "./Id.ts";
 import type { ProcessIdGenerator } from "./processes/ProcessIdGenerator.ts";
 import type { ProcessId as TraceProcessId } from "./ProcessId.ts";
 
@@ -28,12 +28,12 @@ const checkTypes = (raw: string) => {
   expectTypeOf<IdSchema<"input">["Type"]>().toEqualTypeOf<typeof InputId.Type>();
   expectTypeOf<Id.IdSchema<"input">>().toEqualTypeOf<IdSchema<"input">>();
   expectTypeOf<Id.IdValue<"input">>().toEqualTypeOf<IdValue<"input">>();
-  expectTypeOf<Data.IdSchema<"input">>().toEqualTypeOf<IdSchema<"input">>();
-  expectTypeOf<Data.IdValue<"input">>().toEqualTypeOf<IdValue<"input">>();
-  expectTypeOf<Data.IdError>().toEqualTypeOf<IdError>();
+  expectTypeOf<Front.IdSchema<"input">>().toEqualTypeOf<IdSchema<"input">>();
+  expectTypeOf<Front.IdValue<"input">>().toEqualTypeOf<IdValue<"input">>();
+  expectTypeOf<Front.IdError>().toEqualTypeOf<IdError>();
   expectTypeOf<Id.IdError>().toEqualTypeOf<IdError>();
   expectTypeOf<"IdGenerator" extends keyof typeof Public ? true : false>().toEqualTypeOf<false>();
-  expectTypeOf<"IdGenerator" extends keyof typeof Data ? true : false>().toEqualTypeOf<false>();
+  expectTypeOf<"IdGenerator" extends keyof typeof Front ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"IdGenerator" extends keyof typeof Id ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<typeof Id.InputId.Type>().toEqualTypeOf<IdValue<"input">>();
   const takeProcess = (_id: typeof ProcessId.Type): void => {};

@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Id } from "@kampus/libfabrika";
-import { Entry, PAGE } from "@kampus/libfabrika/data";
+import { Entry, PAGE } from "@kampus/libfabrika/ledger/Log";
 import { Effect, Schema } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -380,7 +380,7 @@ describe("P12 real dev.ts wire", () => {
       other = new Client(s.url, otherKey, "other-key");
     expect((await Effect.runPromise(other.hello())).error?.data?.reason).toBe("not_granted");
     const knocked = await other.call("door.knock", { label: "Other client" });
-    const { grantText } = await import("@kampus/libfabrika/coordination");
+    const { grantText } = await import("@kampus/libfabrika/access/Text");
     const text = grantText({
       id: "grant-other",
       key: otherKey.raw,

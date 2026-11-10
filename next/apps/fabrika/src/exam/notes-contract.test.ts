@@ -23,20 +23,20 @@ import {
   type Refusal,
   type Update,
 } from "@kampus/libfabrika";
-import {
-  Mailbox,
-  ClientManager,
-  Owner,
-  ProcessManager,
-  ProcessStore,
-  ProcessIdGenerator,
-  Recipient,
-  Start,
-  Writer,
-} from "@kampus/libfabrika/coordination";
-import { Archive, Doorbell, Ledger, LedgerTransaction, RecordManager, SpanSink } from "@kampus/libfabrika/data";
+import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
+import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
+import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
+import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
+import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
+import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport";
+import { Archive } from "@kampus/libfabrika/telemetry/Archive";
+import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Result, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { TestClock } from "effect/testing";

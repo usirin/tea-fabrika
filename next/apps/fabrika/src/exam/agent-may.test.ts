@@ -5,19 +5,18 @@ import { DatabaseSync } from "node:sqlite";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
 import { Door, Id, type Incoming } from "@kampus/libfabrika";
-import {
-  Adds,
-  addText,
-  Change,
-  ClientManager,
-  grantText,
-  ProcessIdGenerator,
-  revokeText,
-  Writer,
-} from "@kampus/libfabrika/coordination";
-import { Archive, Doorbell, Ledger, LedgerTransaction, RecordManager, SpanSink } from "@kampus/libfabrika/data";
+import { Adds } from "@kampus/libfabrika/access/Access";
+import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { addText, Change, grantText, revokeText } from "@kampus/libfabrika/access/Text";
+import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
+import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport";
+import { Archive } from "@kampus/libfabrika/telemetry/Archive";
+import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 

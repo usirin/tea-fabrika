@@ -10,9 +10,12 @@ import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
-import type { From } from "@kampus/libfabrika/coordination";
-import { Archive, RecordManager, SpanRow, SpanSink } from "@kampus/libfabrika/data";
+import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Archive } from "@kampus/libfabrika/telemetry/Archive";
+import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
@@ -778,7 +781,7 @@ describe("P12 real object adapters", () => {
         if (end === "exit") {
           await p.exit(pid, "normal", fixture.from);
         } else {
-          const { revokeText } = await import("@kampus/libfabrika/coordination");
+          const { revokeText } = await import("@kampus/libfabrika/access/Text");
           const text = revokeText({
             id: "revoke-1",
             key: key.raw,

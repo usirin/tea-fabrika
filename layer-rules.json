@@ -6,10 +6,12 @@
     },
     {
       "name": "next-node",
+      "floor": 8,
       "paths": ["next/packages/libfabrika/src/node"]
     },
     {
       "name": "next-workers",
+      "floor": 8,
       "paths": ["next/packages/libfabrika/src/cloudflare"]
     },
     {
@@ -38,6 +40,7 @@
     },
     {
       "name": "next-libfabrika-entry",
+      "floor": 7,
       "paths": ["next/packages/libfabrika/src/index.ts"]
     },
     {
@@ -46,49 +49,56 @@
     },
     {
       "name": "next-door",
-      "paths": ["next/packages/libfabrika/src/door", "next/packages/libfabrika/src/gateway"]
+      "floor": 6,
+      "paths": ["next/packages/libfabrika/src/gateway"]
     },
     {
-      "name": "next-app",
+      "name": "next-runtime",
+      "floor": 5,
       "paths": [
-        "next/packages/libfabrika/src/app",
-        "next/packages/libfabrika/src/testing.ts",
         "next/packages/libfabrika/src/runtime",
-        "next/packages/libfabrika/src/Testing.ts"
+        "next/packages/libfabrika/src/Testing.ts",
+        "next/packages/libfabrika/src/coordination/index.ts"
       ]
     },
     {
-      "name": "next-coordination",
-      "paths": [
-        "next/packages/libfabrika/src/coordination",
-        "next/packages/libfabrika/src/processes",
-        "next/packages/libfabrika/src/presence",
-        "next/packages/libfabrika/src/access",
-        "next/packages/libfabrika/src/runtime/ProcessStore*",
-        "next/packages/libfabrika/src/runtime/RecoveryStore*",
-        "next/packages/libfabrika/src/runtime/internal/recovery*"
-      ]
+      "name": "next-access",
+      "floor": 4,
+      "paths": ["next/packages/libfabrika/src/access"]
     },
     {
-      "name": "next-data",
-      "paths": [
-        "next/packages/libfabrika/src/data",
-        "next/packages/libfabrika/src/telemetry",
-        "next/packages/libfabrika/src/ledger"
-      ]
+      "name": "next-processes",
+      "floor": 3,
+      "paths": ["next/packages/libfabrika/src/processes"]
+    },
+    {
+      "name": "next-presence",
+      "floor": 3,
+      "paths": ["next/packages/libfabrika/src/presence"]
+    },
+    {
+      "name": "next-ledger",
+      "floor": 2,
+      "paths": ["next/packages/libfabrika/src/ledger"]
     },
     {
       "name": "next-transport",
+      "floor": 2,
       "paths": ["next/packages/libfabrika/src/transport"]
+    },
+    {
+      "name": "next-telemetry",
+      "floor": 1,
+      "paths": ["next/packages/libfabrika/src/telemetry"]
     },
     {
       "name": "next-id-test-support",
       "paths": ["next/packages/libfabrika/src/Id.test-support.ts"]
     },
     {
-      "name": "next-id",
+      "name": "next-shared",
+      "floor": 0,
       "paths": [
-        "next/packages/libfabrika/src/id.ts",
         "next/packages/libfabrika/src/Id.ts",
         "next/packages/libfabrika/src/ProcessId.ts",
         "next/packages/libfabrika/src/Sql.ts",

@@ -3,10 +3,10 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Cause, Clock, Effect, Exit, Option, Schema, Tracer } from "effect";
 import { TestClock } from "effect/testing";
-import * as Coordination from "../coordination/index.ts";
 import { processClocks } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
 import { ProcessId } from "../ProcessId.ts";
+import { ProcessIdGenerator } from "./ProcessIdGenerator.ts";
 
 const maxClock = 2 ** 48 - 1;
 const Time = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: maxClock - 10_000 }));
@@ -42,7 +42,7 @@ describe("P10 shared process ids", () => {
       });
       return Effect.gen(function* () {
         yield* TestClock.setTime(at);
-        const generator = yield* Coordination.ProcessIdGenerator;
+        const generator = yield* ProcessIdGenerator;
         yield* generator.next;
         const process = spans.filter((span) => span.name === "process.next");
         const id = spans.filter((span) => span.name === "id.next");
@@ -51,7 +51,7 @@ describe("P10 shared process ids", () => {
         expect(process[0]!.status._tag).toBe("Ended");
         expect(id[0]!.status._tag).toBe("Ended");
         expect(id[0]!.parent).toEqual(Option.some(process[0]!));
-      }).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer), Effect.withTracer(tracer));
+      }).pipe(Effect.provide(ProcessIdGenerator.layer), Effect.withTracer(tracer));
     },
     options,
   );
@@ -70,7 +70,7 @@ describe("P10 shared process ids", () => {
       });
       return Effect.gen(function* () {
         yield* TestClock.setTime(at);
-        const generator = yield* Coordination.ProcessIdGenerator;
+        const generator = yield* ProcessIdGenerator;
 
         for (let i = 0; i < count; i++) {
           yield* generator.next;
@@ -83,7 +83,7 @@ describe("P10 shared process ids", () => {
         for (const span of operations) {
           expect(span.status._tag).toBe("Ended");
         }
-      }).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer), Effect.withTracer(tracer));
+      }).pipe(Effect.provide(ProcessIdGenerator.layer), Effect.withTracer(tracer));
     },
     options,
   );
@@ -102,7 +102,7 @@ describe("P10 shared process ids", () => {
 
         try {
           yield* TestClock.setTime(at);
-          const gen = yield* Coordination.ProcessIdGenerator;
+          const gen = yield* ProcessIdGenerator;
           const before = yield* gen.next;
           const after = yield* gen.next;
           expect(after > before).toBe(true);
@@ -111,7 +111,7 @@ describe("P10 shared process ids", () => {
         } finally {
           random.mockRestore();
         }
-      }).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+      }).pipe(Effect.provide(ProcessIdGenerator.layer)),
     options,
   );
   it.effect.prop(
@@ -120,7 +120,7 @@ describe("P10 shared process ids", () => {
     ({ distance }) =>
       Effect.gen(function* () {
         yield* TestClock.setTime(-distance);
-        const gen = yield* Coordination.ProcessIdGenerator;
+        const gen = yield* ProcessIdGenerator;
         const exit = yield* Effect.exit(gen.next);
         expect(Exit.isFailure(exit)).toBe(true);
 
@@ -135,7 +135,7 @@ describe("P10 shared process ids", () => {
             }
           }
         }
-      }).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+      }).pipe(Effect.provide(ProcessIdGenerator.layer)),
     options,
   );
   it.effect.prop(
@@ -145,7 +145,7 @@ describe("P10 shared process ids", () => {
       Effect.gen(function* () {
         const Specific = Id.make("process");
         yield* TestClock.setTime(at);
-        const gen = yield* Coordination.ProcessIdGenerator;
+        const gen = yield* ProcessIdGenerator;
         const ids = yield* Effect.forEach(Array.from({ length: count }), () => gen.next, {
           concurrency: 1,
         });
@@ -161,7 +161,7 @@ describe("P10 shared process ids", () => {
           expect(bytes[8]! >>> 6).toBe(2);
           expect(timestamp(id)).toBeGreaterThanOrEqual(at);
         }
-      }).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+      }).pipe(Effect.provide(ProcessIdGenerator.layer)),
     options,
   );
   it.effect.prop(
@@ -170,7 +170,7 @@ describe("P10 shared process ids", () => {
     ({ at, count }) =>
       Effect.gen(function* () {
         yield* TestClock.setTime(at);
-        const gen = yield* Coordination.ProcessIdGenerator;
+        const gen = yield* ProcessIdGenerator;
         const ids = yield* Effect.forEach(Array.from({ length: count }), () => gen.next, {
           concurrency: 1,
         });
@@ -179,7 +179,7 @@ describe("P10 shared process ids", () => {
         for (let i = 1; i < ids.length; i++) {
           expect(ids[i]! > ids[i - 1]!).toBe(true);
         }
-      }).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+      }).pipe(Effect.provide(ProcessIdGenerator.layer)),
     options,
   );
   it.effect.prop(
@@ -189,14 +189,14 @@ describe("P10 shared process ids", () => {
       Effect.gen(function* () {
         // Time stops 10,000 ms below the 48-bit limit, so the clock always moves back at least 1 ms.
         const now = Math.min(at + rollback, maxClock);
-        const gen = yield* Coordination.ProcessIdGenerator;
+        const gen = yield* ProcessIdGenerator;
         yield* TestClock.setTime(now);
         const before = yield* gen.next;
         yield* TestClock.setTime(at);
         expect(yield* Clock.currentTimeMillis).toBe(at);
         const after = yield* gen.next;
         expect(after > before).toBe(true);
-      }).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+      }).pipe(Effect.provide(ProcessIdGenerator.layer)),
     options,
   );
 
@@ -227,7 +227,7 @@ describe("P10 shared process ids", () => {
         return Effect.gen(function* () {
           try {
             yield* TestClock.setTime(exitReason === "clock" ? -distance : exitReason === "exhausted" ? maxClock : at);
-            const generator = yield* Coordination.ProcessIdGenerator;
+            const generator = yield* ProcessIdGenerator;
 
             if (exitReason === "exhausted") {
               yield* generator.next;
@@ -260,7 +260,7 @@ describe("P10 shared process ids", () => {
           } finally {
             random.mockRestore();
           }
-        }).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer), Effect.withTracer(tracer));
+        }).pipe(Effect.provide(ProcessIdGenerator.layer), Effect.withTracer(tracer));
       },
       options,
     );

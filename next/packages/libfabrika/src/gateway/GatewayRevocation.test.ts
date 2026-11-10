@@ -29,13 +29,13 @@ import { Sent } from "../runtime/Runner.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
-import { Answer } from "../transport/index.ts";
+import { Answer } from "../transport/Wire.ts";
 
-let Door: typeof import("@kampus/libfabrika/door").Door;
+let Door: typeof import("./Gateway.ts").Door;
 let Id: typeof import("../Id.ts");
 
 beforeEach(async () => {
-  ({ Door } = await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
+  ({ Door } = await vi.importActual<typeof import("./Gateway.ts")>("./Gateway.ts"));
   Id = await vi.importActual<typeof Id>("../Id.ts");
 });
 

@@ -21,7 +21,7 @@ import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { recordPart } from "../../telemetry/Records.ts";
 import { Chain, SpanRow } from "../../telemetry/Trace.ts";
-import { Attached } from "../../transport/index.ts";
+import { Attached } from "../../transport/Wire.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startStage } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";

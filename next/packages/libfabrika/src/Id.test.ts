@@ -4,10 +4,10 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import * as Public from "@kampus/libfabrika";
-import * as Data from "@kampus/libfabrika/data";
 import { Arbitrary, Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
+import * as Front from "./Id.ts";
 import { ProcessId } from "./ProcessId.ts";
 
 const seed = 119120;
@@ -224,10 +224,10 @@ describe("T518 Id format", () => {
   it("the data exports use the one public Id module", () => {
     fc.assert(
       fc.property(prefix, uuid, (type, bytes) => {
-        expect(Data.Id).toBe(Id);
-        expect(Data.IdError).toBe(Public.IdError);
+        expect(Front).toBe(Id);
+        expect(Front.IdError).toBe(Public.IdError);
         const raw = wire(type, bytes);
-        expect(Schema.decodeUnknownSync(Data.Id.make(type))(raw)).toBe(raw);
+        expect(Schema.decodeUnknownSync(Front.make(type))(raw)).toBe(raw);
       }),
       options,
     );
@@ -237,10 +237,10 @@ describe("T518 Id format", () => {
       fc.property(uuid, unknown, (bytes, input) => {
         expect(Id.InputId, "InputId is built into the Id module").toBeDefined();
         const builtin: typeof Id.Input = Id.InputId;
-        expect(Data.InputId).toBe(Id.InputId);
+        expect(Front.InputId).toBe(Id.InputId);
 
         for (const value of [wire("input", bytes), wire("process", bytes), input]) {
-          for (const schema of [builtin, Id.Input, Data.InputId]) {
+          for (const schema of [builtin, Id.Input, Front.InputId]) {
             expectDecoded(
               Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(schema)(value))),
               accepts(value, "input"),
