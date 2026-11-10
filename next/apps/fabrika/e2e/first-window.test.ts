@@ -350,6 +350,48 @@ describe("browser records: the tab keeps its rows until the door acknowledges th
 		expect((await queued(tab.page)).map((r) => r.id)).toContain("row_planted");
 	});
 
+	// The plan's "What P14 records": `client.key` outcomes go through the client record queue, as
+	// key reuse or rotation. Before admission the door keeps nothing for a stranger, so a waiting tab
+	// still holds its key rows, where this read sees them. Scenario: only real WebCrypto, IndexedDB and
+	// a reload of the built tab make a key and then reuse it.
+	it("scenario: a waiting tab keeps its key row as created, a reload keeps one as reused, and both leave once the tab is granted", async () => {
+		const p = await profile(`${stage.home}/profile-key-rows`);
+		const tab = await p.tab(stage.url);
+		await waiting(tab.page).waitFor({timeout: 30_000});
+		const keyRows = async () =>
+			(await queued(tab.page)).filter(
+				(r): r is ClientRow & {record: {_tag: "key"}} => r.record._tag === "key",
+			);
+		const made = await until("the key row to be kept", async () => {
+			const rows = await keyRows();
+			return rows.length > 0 ? rows : undefined;
+		});
+		expect(
+			made.map((r) => r.record.result),
+			"a first load makes the key, once",
+		).toEqual(["created"]);
+		await tab.page.reload();
+		await waiting(tab.page).waitFor({timeout: 30_000});
+		const both = await until("the reload's key row to be kept", async () => {
+			const rows = await keyRows();
+			return rows.length > 1 ? rows : undefined;
+		});
+		expect(
+			both.map((r) => r.record.result).sort(),
+			"a reload reuses the stored key and says so",
+		).toEqual(["created", "reused"]);
+		expect(new Set(both.map((r) => r.id)).size, "each row has its own id").toBe(2);
+		await grant(stage, tab);
+		await until(
+			"the key rows to be delivered and acknowledged",
+			async () => {
+				const ids = (await queued(tab.page)).map((r) => r.id);
+				return both.every((r) => !ids.includes(r.id)) ? true : undefined;
+			},
+			60_000,
+		);
+	});
+
 	it("scenario: a press made while the stage is down stays queued through the outage and a closed browser, and leaves once delivered", async () => {
 		const dir = `${stage.home}/profile-records`;
 		const first = await profile(dir);

@@ -16,6 +16,7 @@
 //   unique tile ids; no product control for it).
 import {execFile, execFileSync, spawn, type ChildProcess} from "node:child_process";
 import {
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
@@ -23,6 +24,7 @@ import {
 	rmSync,
 	statSync,
 	writeFileSync,
+	type Dirent,
 } from "node:fs";
 import {createServer} from "node:net";
 import {tmpdir} from "node:os";
@@ -425,20 +427,59 @@ export const ledgerRows = (
 	readonly tag: string;
 	readonly body: string;
 }> => {
-	const files = (dir: string): ReadonlyArray<string> =>
-		readdirSync(dir, {withFileTypes: true}).flatMap((e) => {
+	// The stage writes its files while this reads them: it renames a `.tmp` file away, or drops a
+	// folder, between the listing and the read (0036: the lead's run of 2026-11-10 threw ENOENT on
+	// `brain.pending.jsonl.tmp`). A name gone by then holds no ledger for this read, so it is
+	// skipped; any other failure still throws.
+	const gone = (error: unknown): boolean =>
+		typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+	const isLedger = (path: string): boolean => {
+		try {
+			return (
+				statSync(path).size > 100 &&
+				readFileSync(path).subarray(0, 15).toString() === "SQLite format 3"
+			);
+		} catch (error) {
+			if (gone(error)) {
+				return false;
+			}
+
+			throw error;
+		}
+	};
+	const files = (dir: string): ReadonlyArray<string> => {
+		let entries: ReadonlyArray<Dirent>;
+
+		try {
+			entries = readdirSync(dir, {withFileTypes: true});
+		} catch (error) {
+			if (gone(error)) {
+				return [];
+			}
+
+			throw error;
+		}
+
+		return entries.flatMap((e) => {
 			const path = join(dir, e.name);
-			return e.isDirectory()
-				? files(path)
-				: statSync(path).size > 100 &&
-					  readFileSync(path).subarray(0, 15).toString() === "SQLite format 3"
-					? [path]
-					: [];
+			return e.isDirectory() ? files(path) : isLedger(path) ? [path] : [];
 		});
+	};
 	const rows: Array<{stream: string; id: string; tag: string; body: string}> = [];
 
 	for (const file of files(home)) {
-		const db = new DatabaseSync(file, {readOnly: true});
+		let db: DatabaseSync;
+
+		try {
+			db = new DatabaseSync(file, {readOnly: true});
+		} catch (error) {
+			// The same race as in `files`: a ledger file gone since the listing is skipped.
+			if (!existsSync(file)) {
+				continue;
+			}
+
+			throw error;
+		}
 
 		try {
 			const has = db

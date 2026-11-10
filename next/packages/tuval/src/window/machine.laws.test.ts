@@ -30,6 +30,7 @@
 import {applyCell} from "@demlik/tea";
 import {arbGuidedSequence, propertyTrace} from "@demlik/tea/pbt";
 import {describe, expect, it} from "@effect/vitest";
+import {ClientRecord} from "@kampus/libfabrika";
 import {Schema} from "effect";
 import * as fc from "fast-check";
 
@@ -299,6 +300,33 @@ const kinds = (cmds: ReadonlyArray<Cmd>, type: string): ReadonlyArray<Cmd> =>
 const PERSIST =
 	"persist: asked once per new grant, never on a reconnect, and an answer leaves the window online";
 
+// P14's "What P14 records" and "Browser identity": the persistence attempt's boolean result or
+// failure, and a press's send attempts and settlement, are checked client observations the tab
+// keeps until `client.record` acknowledges them. The window asks for each with its `record` Cmd,
+// `{type: "record", record}`, a `ClientRecord` (app/window.ts), as it does for a press today.
+const PERSIST_RECORD =
+	"persist record: each persistence answer is kept once, as granted, refused or failed";
+
+const REPLY_RECORD =
+	"reply record: each answer that settles a letter is kept once, with its result and every time the letter was sent";
+
+/** The laws whose lists must each reach a new grant going online, so a persistence answer is met. */
+const GRANTED_LAWS: ReadonlySet<string> = new Set([PERSIST, PERSIST_RECORD]);
+
+const isClientRecord = Schema.is(ClientRecord);
+
+/** The records a step asks the tab to keep, each checked as a real `ClientRecord`. */
+const recordsIn = (cmds: ReadonlyArray<Cmd>): ReadonlyArray<ClientRecord> | string => {
+	const asked = kinds(cmds, "record").map((c) => c["record"]);
+	const bad = asked.find((r) => !isClientRecord(r));
+	return bad === undefined
+		? (asked as ReadonlyArray<ClientRecord>)
+		: `a record that is not a ClientRecord: ${JSON.stringify(bad)}`;
+};
+
+const isPersistRecord = (r: ClientRecord): boolean =>
+	r._tag === "persist" || (r._tag === "failure" && r.op === "persist");
+
 /** The laws, each a check over a run's steps, so a plant can run the same one. */
 const laws: Readonly<Record<string, Law>> = {
 	// p1: a letter leaves only on its matching terminal answer; written grows per press; ids never repeat.
@@ -502,6 +530,107 @@ const laws: Readonly<Record<string, Law>> = {
 
 		return null;
 	},
+	// The persistence answer is recorded: `persist_ok` true as granted, false as refused, and
+	// `persist_err` as failed (a `persist {failed}` or a `failure {op: "persist"}` row), exactly once
+	// in the step that answers, and no step that is not a persistence answer keeps one.
+	[PERSIST_RECORD]: (steps) => {
+		for (const {msg, cmds} of steps) {
+			const records = recordsIn(cmds);
+
+			if (typeof records === "string") {
+				return records;
+			}
+
+			const kept = records.filter(isPersistRecord);
+			const answer =
+				msg.type === "persist_ok" ? (msg["value"] === true ? "granted" : "refused") : null;
+
+			if (msg.type !== "persist_ok" && msg.type !== "persist_err") {
+				if (kept.length > 0) {
+					return `${msg.type} kept a persistence record: ${JSON.stringify(kept)}`;
+				}
+
+				continue;
+			}
+
+			if (kept.length !== 1) {
+				return `${msg.type} kept ${kept.length} persistence records, not one`;
+			}
+
+			const [r] = kept as [ClientRecord];
+			const right =
+				answer === null
+					? (r._tag === "persist" && r.result === "failed") || r._tag === "failure"
+					: r._tag === "persist" && r.result === answer;
+
+			if (!right) {
+				return `${msg.type} ${JSON.stringify(msg["value"] ?? msg["error"])} was kept as ${JSON.stringify(r)}`;
+			}
+		}
+
+		return null;
+	},
+	// A letter's settlement is recorded with the answer's result and every `send` of that letter
+	// asked so far, across dials: once, in the step whose answer settles it. No other step keeps an
+	// accepted or refused reply, so a duplicate or stale answer adds no second sample, and every
+	// reply row names the letter its step answered.
+	[REPLY_RECORD]: (steps) => {
+		const sends = new Map<string, number>();
+
+		for (const {prev, msg, next, cmds} of steps) {
+			const records = recordsIn(cmds);
+
+			if (typeof records === "string") {
+				return records;
+			}
+
+			const replies = records.filter(
+				(r): r is Extract<ClientRecord, {_tag: "reply"}> => r._tag === "reply",
+			);
+			const letter = (msg["cmd"] as {letter?: string} | undefined)?.letter;
+			const tag = msg.type === "send_ok" ? (msg["value"] as {_tag: string})._tag : null;
+			const settled =
+				letter !== undefined &&
+				(tag === "accepted" || tag === "refused") &&
+				prev.client.pending.some((p) => p.letter === letter) &&
+				!next.client.pending.some((p) => p.letter === letter);
+
+			for (const r of replies) {
+				if (r.letter !== letter) {
+					return `${msg.type} kept a reply for ${r.letter}, which it did not answer`;
+				}
+
+				if ((r.result === "accepted" || r.result === "refused") && !settled) {
+					return `${msg.type} kept a ${r.result} reply for ${r.letter}, which it did not settle`;
+				}
+			}
+
+			if (settled) {
+				const kept = replies.filter((r) => r.result === "accepted" || r.result === "refused");
+
+				if (kept.length !== 1) {
+					return `the ${tag} answer settling ${letter} kept ${kept.length} reply records, not one`;
+				}
+
+				const [r] = kept as [Extract<ClientRecord, {_tag: "reply"}>];
+
+				if (r.result !== tag) {
+					return `the ${tag} answer settling ${letter} was kept as ${r.result}`;
+				}
+
+				if (r.attempts !== (sends.get(letter) ?? 0)) {
+					return `${letter} was sent ${sends.get(letter) ?? 0} times, its reply says ${r.attempts}`;
+				}
+			}
+
+			for (const s of kinds(cmds, "send")) {
+				const l = String(s["letter"]);
+				sends.set(l, (sends.get(l) ?? 0) + 1);
+			}
+		}
+
+		return null;
+	},
 	// now: a press keeps what was shown when it was pressed; answers in any order send in slot order.
 	"now: a press captures what it showed, and reversed or failed answers still send in slot order": (
 		steps,
@@ -655,8 +784,8 @@ const fold = async (
 	const law = ((steps: ReadonlyArray<Step>) => laws[name]?.(steps, tiles) ?? null) as never;
 	propertyTrace(used as never, {layout} as never, lists(m, layout, tiles) as never, law, opts);
 
-	// The persist law also runs on lists that each reach a new grant, so its answer is always met.
-	if (name === PERSIST) {
+	// The persist laws also run on lists that each reach a new grant, so its answer is always met.
+	if (GRANTED_LAWS.has(name)) {
 		propertyTrace(
 			used as never,
 			{layout} as never,
@@ -737,6 +866,58 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 				}) as never,
 				{...opts, numRuns: 150} as never,
 			);
+		}
+
+		for (const [name, n] of Object.entries(seen)) {
+			expect(n, name).toBeGreaterThan(0);
+		}
+	});
+
+	it("good thing: the record laws' runs settle letters, settle one sent more than once, and meet each persistence answer", async () => {
+		const m = await machine();
+		const seen = {settled: 0, resentSettled: 0, granted: 0, refused: 0, failed: 0};
+
+		for (const [, layout, tiles] of LAYOUTS) {
+			for (const list of [lists(m, layout, tiles), grantedLists(m, layout, tiles)]) {
+				propertyTrace(
+					m as never,
+					{layout} as never,
+					list as never,
+					((steps: ReadonlyArray<Step>) => {
+						const sends = new Map<string, number>();
+
+						for (const {prev, msg, next, cmds} of steps) {
+							const letter = (msg["cmd"] as {letter?: string} | undefined)?.letter;
+
+							if (
+								msg.type === "send_ok" &&
+								letter !== undefined &&
+								prev.client.pending.some((p) => p.letter === letter) &&
+								!next.client.pending.some((p) => p.letter === letter)
+							) {
+								seen.settled++;
+								seen.resentSettled += (sends.get(letter) ?? 0) > 1 ? 1 : 0;
+							}
+
+							if (msg.type === "persist_ok") {
+								seen[msg["value"] === true ? "granted" : "refused"]++;
+							}
+
+							if (msg.type === "persist_err") {
+								seen.failed++;
+							}
+
+							for (const s of kinds(cmds, "send")) {
+								const l = String(s["letter"]);
+								sends.set(l, (sends.get(l) ?? 0) + 1);
+							}
+						}
+
+						return null;
+					}) as never,
+					opts as never,
+				);
+			}
 		}
 
 		for (const [name, n] of Object.entries(seen)) {
@@ -852,7 +1033,7 @@ describe("window machine plants: each break is caught by the law that names it",
 				planted as never,
 				{layout} as never,
 				// A persist plant breaks the answer, so its lists always reach a new grant (folded by the planted machine).
-				(name === PERSIST
+				(GRANTED_LAWS.has(name)
 					? grantedLists(planted, layout, tiles)
 					: lists(real, layout, tiles)) as never,
 				((steps: ReadonlyArray<Step>) => laws[name]?.(steps, tiles) ?? null) as never,
@@ -1003,6 +1184,59 @@ describe("window machine plants: each break is caught by the law that names it",
 	it("taking the granted window offline when persistence is refused is caught (persist)", () =>
 		expectCaught(PERSIST, ([m, c], _s, msg) =>
 			msg.type === "persist_ok" ? [{...m, link: {_tag: "retrying", dial: 1, tries: 1}}, c] : [m, c],
+		));
+	/** The step's Cmds with each record Cmd's record changed by `edit`, or dropped when it gives null. */
+	const records = (
+		c: ReadonlyArray<Cmd>,
+		edit: (r: ClientRecord) => ClientRecord | null,
+	): ReadonlyArray<Cmd> =>
+		c.flatMap((x) => {
+			if (x.type !== "record") {
+				return [x];
+			}
+
+			const r = edit(x["record"] as ClientRecord);
+			return r === null ? [] : [{...x, record: r}];
+		});
+	it("keeping a refused persistence as granted is caught (persist record)", () =>
+		expectCaught(PERSIST_RECORD, ([m, c], _s, msg) =>
+			msg.type === "persist_ok"
+				? [m, records(c, (r) => (r._tag === "persist" ? {...r, result: "granted"} : r))]
+				: [m, c],
+		));
+	it("losing the record of a failed persistence is caught (persist record)", () =>
+		expectCaught(PERSIST_RECORD, ([m, c], _s, msg) =>
+			msg.type === "persist_err" ? [m, records(c, (r) => (isPersistRecord(r) ? null : r))] : [m, c],
+		));
+	it("losing the record of a settled letter is caught (reply record)", () =>
+		expectCaught(REPLY_RECORD, ([m, c], _s, msg) =>
+			msg.type === "send_ok" ? [m, records(c, (r) => (r._tag === "reply" ? null : r))] : [m, c],
+		));
+	it("counting only this dial's send as the attempts is caught (reply record)", () =>
+		expectCaught(REPLY_RECORD, ([m, c]) => [
+			m,
+			records(c, (r) => (r._tag === "reply" ? {...r, attempts: 1} : r)),
+		]));
+	it("keeping a second sample for a duplicate answer is caught (reply record)", () =>
+		expectCaught(REPLY_RECORD, ([m, c], _s, msg) =>
+			msg.type === "send_ok" && (msg["value"] as {_tag: string})._tag === "accepted"
+				? [
+						m,
+						[
+							...c,
+							{
+								type: "record",
+								record: {
+									_tag: "reply",
+									letter: String((msg["cmd"] as {letter: string}).letter),
+									result: "accepted",
+									attempts: 1,
+									ms: 0,
+								},
+							},
+						],
+					]
+				: [m, c],
 		));
 	it("a failed now that drops the press is caught (now)", () =>
 		expectCaught(

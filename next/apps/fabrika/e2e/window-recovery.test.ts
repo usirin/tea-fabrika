@@ -7,7 +7,7 @@
 //     --testTimeout=120000 --hookTimeout=120000 window-recovery.test.ts
 // Each kill is its own case, run five times; "the whole sequence" runs them all in one stage life,
 // five times. `held restart` here is a second kill while the first restart is still being held back.
-import {afterAll, beforeAll, describe, expect, it} from "vitest";
+import {afterAll, beforeAll, beforeEach, describe, expect, it} from "vitest";
 import {
 	cleanup,
 	connection,
@@ -279,7 +279,24 @@ const recover = async (
 	expectOnePerLetter(accepted);
 };
 
+// The stage's restart budget: the local runtime restarts a dead workerd at most 3 times within 60 s
+// on one stage life, and past that it stops it for good, the brain `braked` (Alchemy's runtime as
+// patched here, patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.84.patch; terminal by design, as
+// past an OTP supervisor's intensity the parent decides). The lead's run of 2026-11-10 killed
+// workerd a fourth time inside 60 s on the one life the whole file shared, so run 4 of the first
+// kill found a braked brain, and every case after it found no page. So each kill case, and each run
+// of the whole sequence, starts on a fresh stage life: the same home, port, ledger and letters, and
+// a fresh budget. One life then sees at most 2 workerd deaths (a held restart; the sequence's lives
+// are split by its own parent kill and full stop), inside the budget, and a case that fails leaves
+// no dead stage for the next one.
+const freshLife = async (): Promise<void> => {
+	await stage.stop();
+	await stage.start();
+};
+
 describe("every named kill recovers, five times each", () => {
+	beforeEach(freshLife, 180_000);
+
 	for (const kill of KILLS) {
 		for (let n = 1; n <= 5; n++) {
 			it(`scenario: ${kill.name} (run ${n} of 5)`, () => survive(kill));
@@ -288,6 +305,8 @@ describe("every named kill recovers, five times each", () => {
 });
 
 describe("the whole recovery sequence, five times", () => {
+	beforeEach(freshLife, 180_000);
+
 	for (let n = 1; n <= 5; n++) {
 		it(`scenario: every kill in turn on one stage life (run ${n} of 5)`, async () => {
 			for (const kill of KILLS) {
