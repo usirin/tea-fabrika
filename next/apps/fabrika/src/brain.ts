@@ -18,7 +18,7 @@ import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Effect, Redacted } from "effect";
 import { assets, programs } from "virtual:fabrika-built";
 import type { ConnectionId } from "./door.ts";
-import objects from "./objects.ts";
+import { Objects } from "./objects.ts";
 import { gatewayRuntime, projectRuntime, settings, type Env } from "./runtime.ts";
 
 export class Project extends DurableObject<Env> {
@@ -301,7 +301,7 @@ export class Gateway extends DurableObject<Env> {
 
 const Bridge = makeDurableObjectBridge(DurableObject, {
   // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
-  entrypoint: objects as unknown as Effect.Effect<Record<string, unknown>>,
+  entrypoint: Objects as unknown as Effect.Effect<Record<string, unknown>>,
   stack: { name: "fabrika", stage: "local" },
 });
 
