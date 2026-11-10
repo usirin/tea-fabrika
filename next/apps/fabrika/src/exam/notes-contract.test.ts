@@ -730,8 +730,10 @@ const SaveCases = Arbitrary.schema(
 	}),
 );
 const savedMetadata = (actual: unknown, expected: unknown) => expect(actual).toEqual(expected);
-const staleAnswer = (actual: SavedAnswer, now: number) =>
+const staleAnswer = (actual: SavedAnswer, now: number) => {
+	expect(actual._tag).toBe("refused");
 	expect(actual).toEqual({_tag: "refused", why: "changed_elsewhere", now});
+};
 const tooLong = (actual: SavedAnswer, most: number) =>
 	expect(actual).toEqual({_tag: "refused", why: "too_long", most});
 
@@ -829,13 +831,32 @@ it.effect.prop(
 const BaseCases = Arbitrary.schema(
 	Schema.Struct({
 		version: number(0, 64),
-		base: number(0, 64),
+		base: number(-64, 64),
 		numerator: number(-64, 64),
 		denominator: number(2, 8),
 		future: number(1, 64),
 		body: text(4096),
 	}),
 );
+type BaseCase = typeof BaseCases extends Arbitrary.Arbitrary<infer C> ? C : never;
+const unequalBases = (c: BaseCase) =>
+	[
+		0,
+		...Array.from({length: 64}, (_, i) => -1 - i),
+		c.version + c.future,
+		c.numerator + 1 / c.denominator,
+		c.base,
+	].filter((base) => base !== c.version);
+const checkFreshBase = Effect.fnUntraced(function* (
+	d: Pick<NotesDriver, "snapshot" | "save">,
+	c: BaseCase,
+	base: number,
+	letter: number,
+) {
+	const before = yield* d.snapshot;
+	staleAnswer(yield* d.save(saveInput(letter, c.body, base)), c.version);
+	unchangedNotes(before, yield* d.snapshot);
+});
 it.effect.prop(
 	"not built: P13 / p54 every unequal base, including zero, negative, fractional and future",
 	{c: BaseCases},
@@ -843,14 +864,47 @@ it.effect.prop(
 		Effect.gen(function* () {
 			const d = yield* notes(ctx);
 			for (let v = 0; v < c.version; v++) accepted(yield* d.save(saveInput(v + 1, c.body, v)));
-			const before = yield* d.snapshot;
-			const fraction = c.numerator + 1 / c.denominator;
-			for (const base of [0, -1, -64, c.version + c.future, fraction, c.base]) {
-				if (base === c.version) continue;
-				staleAnswer(yield* d.save(saveInput(c.version + 1, c.body, base)), c.version);
-				unchangedNotes(before, yield* d.snapshot);
+			const bases = unequalBases(c);
+			for (const [i, base] of bases.entries()) yield* checkFreshBase(d, c, base, c.version + i + 1);
+			accepted(yield* d.save(saveInput(c.version + bases.length + 1, c.body, c.version)));
+		}),
+	opts,
+);
+it.effect.prop(
+	"P13 checker plants: every negative integer, fractional and future base fails at each current version",
+	{c: BaseCases},
+	({c}) =>
+		Effect.gen(function* () {
+			const bases = unequalBases(c);
+			for (let negative = -64; negative < 0; negative++) expect(bases).toContain(negative);
+			expect(bases).toContain(c.version + c.future);
+			expect(bases).toContain(c.numerator + 1 / c.denominator);
+			const snapshot: NotesSnapshot = {
+				log: [],
+				model: {version: c.version},
+				view: {version: c.version},
+				patches: [],
+				cmds: [],
+				history: [],
+			};
+			const clean = {
+				snapshot: Effect.succeed(snapshot),
+				save: () =>
+					Effect.succeed<SavedAnswer>({_tag: "refused", why: "changed_elsewhere", now: c.version}),
+			};
+			for (const [i, base] of bases.entries()) {
+				yield* checkFreshBase(clean, c, base, c.version + i + 1);
+				const acceptsOne = {
+					...clean,
+					save: (s: Parameters<NotesDriver["save"]>[0]) =>
+						s.base === base
+							? Effect.succeed<SavedAnswer>({_tag: "accepted", rev: 1, pos: 1})
+							: clean.save(),
+				};
+				const result = yield* Effect.exit(checkFreshBase(acceptsOne, c, base, c.version + i + 1));
+				expect(Exit.isFailure(result)).toBe(true);
+				if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("refused");
 			}
-			accepted(yield* d.save(saveInput(c.version + 2, c.body, c.version)));
 		}),
 	opts,
 );

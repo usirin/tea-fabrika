@@ -30,49 +30,102 @@ const escape = (s: string) =>
 		.replaceAll(">", "&gt;")
 		.replaceAll('"', "&quot;")
 		.replaceAll("'", "&#x27;");
+// Raw HTML tests exercise every element the Markdown renderer can itself produce.
+const rendererTags = [
+	"p",
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"ul",
+	"ol",
+	"li",
+	"strong",
+	"em",
+	"del",
+	"a",
+	"pre",
+	"code",
+	"span",
+	"blockquote",
+	"table",
+	"thead",
+	"tbody",
+	"tr",
+	"th",
+	"td",
+	"hr",
+	"br",
+	"input",
+] as const;
 const safe = (html: string) => {
-	// Only renderer-owned Markdown elements may appear. No list of dangerous raw tags.
-	const elements = new Set([
-		"p",
-		"h1",
-		"h2",
-		"h3",
-		"h4",
-		"h5",
-		"h6",
-		"ul",
-		"ol",
-		"li",
-		"strong",
-		"em",
-		"del",
-		"a",
-		"pre",
-		"code",
-		"span",
-		"blockquote",
-		"table",
-		"thead",
-		"tbody",
-		"tr",
-		"th",
-		"td",
-		"hr",
-		"br",
-		"input",
-	]);
+	const elements = new Set<string>(rendererTags);
 	for (const tag of html.matchAll(/<\/?([a-z][a-z0-9-]*)\b/gi))
 		expect(elements.has((tag[1] ?? "").toLowerCase())).toBe(true);
 	expect(html).not.toMatch(/<[^>]+\son[a-z]+\s*=/i);
+	expect(html).not.toMatch(/<input\b[^>]*(?:\btype\s*=\s*["']?image\b|\bsrc\s*=)/i);
 	for (const match of html.matchAll(/\bhref=["']([^"']*)["']/gi))
 		expect(match[1]).toMatch(/^https?:\/\//i);
 };
-const rawOmitted = (render: (source: string) => string, tag: string) => {
-	// Empty raw HTML, even a tag Markdown itself uses, contributes no element.
-	expect(render(`<${tag} data-p8="raw"></${tag}>`)).toBe("");
-	expect(render(`before <${tag} data-p8="raw"></${tag}> after`)).toBe("<p>before  after</p>");
-};
+type RawProbe = {readonly source: string; readonly expected: string};
+const rawOmitted = (render: (source: string) => string, probe: RawProbe) =>
+	expect(render(probe.source)).toBe(probe.expected);
 const Tag = bounded(1, 32).check(Schema.isPattern(/^[a-z][a-z0-9-]*$/));
+const RawCases = Arbitrary.schema(
+	Schema.Struct({
+		tag: Tag,
+		content: bounded(1, 128).check(Schema.isPattern(/^[a-zA-Z0-9]+$/)),
+		attribute: bounded(0, 96),
+	}),
+);
+type RawCase = typeof RawCases extends Arbitrary.Arbitrary<infer A> ? A : never;
+const rawSources = (c: RawCase) => {
+	const sources: RawProbe[] = [];
+	for (const tag of new Set([
+		...rendererTags,
+		"div",
+		"style",
+		"video",
+		"script",
+		"img",
+		"svg",
+		c.tag,
+	]))
+		for (const name of [tag.toLowerCase(), tag.toUpperCase()])
+			for (const attrs of [
+				"",
+				` data-p8="${escape(new URLSearchParams({v: c.attribute}).toString())}"`,
+			]) {
+				sources.push({source: `<${name}${attrs}></${name}>`, expected: ""});
+				// A newline after the opening tag makes a whole HTML block, even for inline tags.
+				// Its contents are part of that block, so dropping only empty tags cannot pass.
+				for (const content of ["", c.content])
+					sources.push(
+						{source: `<${name}${attrs}>\n${content}\n</${name}>`, expected: ""},
+						{
+							source: `before <${name}${attrs}>${content}</${name}> after`,
+							expected: `<p>before ${content} after</p>`,
+						},
+					);
+				for (const source of [`<${name}${attrs}/>`, `<${name}${attrs} />`])
+					sources.push(
+						{source, expected: ""},
+						{source: `before ${source} after`, expected: "<p>before  after</p>"},
+					);
+			}
+	for (const name of ["input", "INPUT"])
+		for (const source of [
+			`<${name} type="image" src="https://outside.test/p.png?${new URLSearchParams({p: c.attribute})}">`,
+			`<${name} src="https://outside.test/p.png" type="IMAGE" />`,
+		])
+			sources.push(
+				{source, expected: ""},
+				{source: `before ${source} after`, expected: "<p>before  after</p>"},
+			);
+	return sources;
+};
 const altText = (html: string, alt: string) => {
 	safe(html);
 	expect(html).not.toMatch(/<img\b/i);
@@ -131,15 +184,18 @@ const withDrawing = (ctx: {skip: (reason?: string) => never}, law: (d: Drawing) 
 
 it.effect.prop(
 	"not built: P22 / parse and draw are deterministic, omit HTML and draw images as alt",
-	{c: Arbitrary.schema(Schema.Struct({text: Text, alt: Alt, tag: Tag}))},
-	({c}, ctx) =>
+	{c: Arbitrary.schema(Schema.Struct({text: Text, alt: Alt, tag: Tag})), raw: RawCases},
+	({c, raw}, ctx) =>
 		withDrawing(ctx, (d) => {
 			const root = d.parse(c.text);
 			expect(d.parse(c.text)).toEqual(root);
 			expect(d.draw(root)).toBe(d.draw(d.parse(c.text)));
 			safe(d.draw(root));
-			for (const tag of [c.tag, "div", "style", "video", "script", "img", "svg", "p", "a", "span"])
-				rawOmitted((s) => d.draw(d.parse(s)), tag);
+			for (const source of rawSources(raw)) rawOmitted((s) => d.draw(d.parse(s)), source);
+			for (const tag of new Set([...rendererTags, "div", "style", "video", c.tag]))
+				expect(d.draw(d.parse(`before <${tag} data-p8="raw"></${tag}> after`))).toBe(
+					"<p>before  after</p>",
+				);
 			// Escape Markdown punctuation; Unicode is passed unchanged to the parser.
 			for (const alt of [c.alt, "مرحبا 🧪 שלום ![]()_*`<> &.,:;?\\"]) {
 				const source = alt.replace(/[\\`*_[\]{}()<>!#]/g, "\\$&").replaceAll("&", "&amp;");
@@ -236,31 +292,34 @@ it.effect("format: not built: P22 / block and inline vocabulary from the source 
 
 it.prop(
 	"checker clean control: escaped text and http/https links are safe",
-	{c: Arbitrary.schema(Schema.Struct({text: Text, alt: Alt, tag: Tag}))},
-	({c}) => {
+	{c: Arbitrary.schema(Schema.Struct({text: Text, alt: Alt, tag: Tag})), raw: RawCases},
+	({c, raw}) => {
 		safe(`<p>${escape(c.text)}</p><a href="https://example.test/a">link</a>`);
 		codeText(`<pre><code>${escape(c.text)}</code></pre>`, c.text);
 		codeText(
 			`<pre><code><span style="color:#ffffff">${escape(c.text)}</span></code></pre>`,
 			c.text,
 		);
-		rawOmitted((s) => (s.startsWith("before") ? "<p>before  after</p>" : ""), c.tag);
+		for (const probe of rawSources(raw)) rawOmitted(() => probe.expected, probe);
 		altText(`<p>${escape(c.alt)}</p>`, c.alt);
 	},
 	options,
 );
 it.prop(
 	"checker plants: raw HTML, javascript links, images, lost text and repeated keys fail",
-	{c: Arbitrary.schema(Schema.Struct({text: Text, alt: Alt, tag: Tag}))},
-	({c}) => {
+	{c: Arbitrary.schema(Schema.Struct({text: Text, alt: Alt, tag: Tag})), raw: RawCases},
+	({c, raw}) => {
 		for (const html of [
 			"<script>alert(1)</script>",
 			'<a href="javascript:alert(1)">x</a>',
 			'<img src="https://example.test/a">',
+			'<input type="image" src="https://outside.test/p.png">',
+			'<INPUT SRC="https://outside.test/p.png" TYPE="IMAGE" />',
 		])
 			expect(() => safe(html)).toThrow();
-		for (const tag of [c.tag, "div", "style", "video", "p", "a", "span"])
-			expect(() => rawOmitted((s) => s, tag)).toThrow();
+		for (const probe of rawSources(raw))
+			// Each plant preserves just this raw form. Other forms may still be correctly omitted.
+			expect(() => rawOmitted((s) => (s === probe.source ? s : probe.expected), probe)).toThrow();
 		expect(() => altText(`<p>${escape(c.alt)}!</p>`, `${c.alt}!lost`)).toThrow();
 		expect(() => codeText(`<pre><code><span>${c.text}<img></span></code></pre>`, c.text)).toThrow();
 		expect(() => codeText(`<pre><code>${escape(c.text)}!</code></pre>`, c.text)).toThrow();

@@ -73,11 +73,10 @@ const DeclarationCases = Arbitrary.array(
 			personOnly: Schema.Boolean,
 		}),
 	),
-	{minLength: 0, maxLength: 12},
+	{minLength: 0, maxLength: 16},
 ).pipe(
-	Arbitrary.map((inputs) => [
-		...standard,
-		...inputs.map((input, i) => ({
+	Arbitrary.map((inputs) =>
+		inputs.map((input, i) => ({
 			name: `extra${i}`,
 			schema: Schema.Struct({
 				[input.field]:
@@ -90,8 +89,16 @@ const DeclarationCases = Arbitrary.array(
 			readOnly: input.readOnly,
 			personOnly: input.personOnly,
 		})),
-	]),
+	),
 );
+// All four sets run on every case, including zero inputs and a nonempty hidden-only set.
+// Each set has at most 16 inputs. Standard notes inputs still run with generated extras.
+const declarationSets = (inputs: ReadonlyArray<InputDeclaration>) => [
+	[],
+	inputs,
+	[standard[3]!, ...inputs.slice(0, 15).map((d) => ({...d, personOnly: true}))],
+	[...standard, ...inputs.slice(0, 12)],
+];
 const inputSchema = (input: InputDeclaration) =>
 	Schema.toJsonSchemaDocument(Schema.Struct({value: input.schema})).schema;
 const tools = (
@@ -100,11 +107,11 @@ const tools = (
 ) => {
 	const publicInputs = declarations.filter((d) => !d.personOnly);
 	expect(actual.map((t) => t.name)).toEqual(["ps", ...publicInputs.map((d) => `notes_${d.name}`)]);
-	expect(actual[0]?.inputSchema).toMatchObject({type: "object"});
+	expect(actual[0]?.inputSchema).toEqual({type: "object"});
 	expect(actual[0]?.annotations?.readOnlyHint).toBe(true);
 	for (const [i, d] of publicInputs.entries()) {
 		const tool = actual[i + 1]!;
-		expect(tool.inputSchema).toMatchObject(inputSchema(d));
+		expect(tool.inputSchema).toEqual(inputSchema(d));
 		if (d.readOnly) expect(tool.annotations?.readOnlyHint).toBe(true);
 		else expect(tool.annotations?.readOnlyHint).not.toBe(true);
 	}
@@ -125,6 +132,25 @@ const visible = (
 ) => {
 	expect(a).toEqual({saved: body, shown: body, by: who.key, for: who.for});
 };
+const waitingTools = ["ps", "notes_list", "notes_read", "notes_save"] as const;
+type Waiting = {
+	readonly code: string;
+	readonly replies: Readonly<
+		Record<
+			(typeof waitingTools)[number],
+			{readonly words: string; readonly letters: ReadonlyArray<string>}
+		>
+	>;
+	readonly tools: ReadonlyArray<Tool>;
+};
+const waiting = (actual: Waiting) => {
+	tools(actual.tools);
+	expect(actual.code.length).toBeGreaterThan(0);
+	for (const tool of waitingTools) {
+		expect(actual.replies[tool].words).toContain(actual.code);
+		expect(actual.replies[tool].letters).toEqual([]);
+	}
+};
 type Bridge = {
 	readonly tools: (inputs: ReadonlyArray<InputDeclaration>) => Effect.Effect<ReadonlyArray<Tool>>;
 	readonly hidden: (
@@ -132,11 +158,8 @@ type Bridge = {
 		input: Schema.Json,
 		declarations: ReadonlyArray<InputDeclaration>,
 	) => Effect.Effect<{readonly words: string; readonly letters: ReadonlyArray<string>}>;
-	readonly waiting: (call: Call) => Effect.Effect<{
-		readonly words: string;
-		readonly letters: ReadonlyArray<string>;
-		readonly tools: ReadonlyArray<Tool>;
-	}>;
+	// The binding reads code from the real waiting handshake, then calls all four tools.
+	readonly waiting: (call: Call) => Effect.Effect<Waiting>;
 	readonly approved: (call: Call) => Effect.Effect<{
 		readonly afterRestart: boolean;
 		readonly otherName: boolean;
@@ -198,24 +221,24 @@ it.effect.prop(
 	({declarations, input}, ctx) =>
 		Effect.gen(function* () {
 			const b = yield* target(ctx);
-			tools(yield* b.tools(declarations), declarations);
-			for (const d of declarations.filter((d) => d.personOnly)) {
-				const name = `notes_${d.name}`;
-				unknownTool(yield* b.hidden(name, input, declarations), name);
+			for (const inputs of declarationSets(declarations)) {
+				tools(yield* b.tools(inputs), inputs);
+				for (const d of inputs.filter((d) => d.personOnly)) {
+					const name = `notes_${d.name}`;
+					unknownTool(yield* b.hidden(name, input, inputs), name);
+				}
 			}
 		}).pipe(Effect.provide(platform)),
 	options,
 );
 it.effect.prop(
-	"not built: P25 / before approval tools list; calls answer words without letters",
+	"not built: P25 / before approval tools list; each call answers with the code and no letters",
 	{c: AgentCalls},
 	({c}, ctx) =>
 		Effect.gen(function* () {
 			const b = yield* target(ctx),
 				a = yield* b.waiting(c);
-			tools(a.tools);
-			expect(a.words.length).toBeGreaterThan(0);
-			expect(a.letters).toEqual([]);
+			waiting(a);
 		}).pipe(Effect.provide(platform)),
 	options,
 );
@@ -269,6 +292,12 @@ const cleanTools = (
 			annotations: {readOnlyHint: d.readOnly},
 		})),
 ];
+const checkDeclarations = (
+	build: (inputs: ReadonlyArray<InputDeclaration>) => ReadonlyArray<Tool>,
+	inputs: ReadonlyArray<InputDeclaration>,
+) => {
+	for (const declarations of declarationSets(inputs)) tools(build(declarations), declarations);
+};
 it.prop(
 	"checker clean control: tool contract and checked-writer senderTest",
 	{
@@ -276,7 +305,7 @@ it.prop(
 		declarations: DeclarationCases,
 	},
 	({c, declarations}) => {
-		tools(cleanTools(declarations), declarations);
+		checkDeclarations(cleanTools, declarations);
 		unknownTool({words: "unknown tool notes_person_input", letters: []}, "notes_person_input");
 		const id = "letter_0000000000e008000000000001",
 			parent = "input_0000000000e008000000000001";
@@ -328,44 +357,129 @@ it.prop(
 it.prop(
 	"checker plants: empty schemas, missing fields, changed types and callable hidden inputs fail",
 	{declarations: DeclarationCases},
-	({declarations}) => {
-		const clean = cleanTools(declarations);
-		tools(clean, declarations);
-		for (const [i, tool] of clean.entries()) {
-			expect(() =>
-				tools(
-					clean.map((t, n) => (n === i ? {...t, inputSchema: {}} : t)),
-					declarations,
-				),
-			).toThrow();
-			if (i === 0) continue;
-			const d = declarations.filter((d) => !d.personOnly)[i - 1]!;
-			const shape = Schema.decodeUnknownSync(
-				Schema.Struct({properties: Schema.Record(Schema.String, Schema.Unknown)}),
-			)(inputSchema(d));
-			const bad = {...shape.properties, value: {type: "object", properties: {}}};
-			expect(() =>
-				tools(
-					clean.map((t) =>
-						t === tool ? {...t, inputSchema: {...inputSchema(d), properties: bad}} : t,
+	({declarations: inputs}) => {
+		for (const declarations of declarationSets(inputs)) {
+			const clean = cleanTools(declarations);
+			tools(clean, declarations);
+			for (const [i, tool] of clean.entries()) {
+				expect(() =>
+					tools(
+						clean.map((t, n) => (n === i ? {...t, inputSchema: {}} : t)),
+						declarations,
 					),
-					declarations,
-				),
-			).toThrow();
-			expect(() =>
-				tools(
-					clean.map((t) =>
-						t === tool
-							? {...t, inputSchema: {...inputSchema(d), properties: {value: {type: "number"}}}}
-							: t,
+				).toThrow();
+				if (i === 0) continue;
+				const d = declarations.filter((d) => !d.personOnly)[i - 1]!;
+				const shape = Schema.decodeUnknownSync(
+					Schema.Struct({properties: Schema.Record(Schema.String, Schema.Unknown)}),
+				)(inputSchema(d));
+				const bad = {...shape.properties, value: {type: "object", properties: {}}};
+				expect(() =>
+					tools(
+						clean.map((t) =>
+							t === tool ? {...t, inputSchema: {...inputSchema(d), properties: bad}} : t,
+						),
+						declarations,
 					),
-					declarations,
-				),
-			).toThrow();
+				).toThrow();
+				expect(() =>
+					tools(
+						clean.map((t) =>
+							t === tool
+								? {...t, inputSchema: {...inputSchema(d), properties: {value: {type: "number"}}}}
+								: t,
+						),
+						declarations,
+					),
+				).toThrow();
+			}
 		}
 		expect(() =>
 			unknownTool({words: "saved notes_person_input", letters: []}, "notes_person_input"),
 		).toThrow();
+	},
+	options,
+);
+it.prop(
+	"checker plants: extra argument, value and field constraints fail for every public tool",
+	{declarations: DeclarationCases},
+	({declarations}) => {
+		const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown));
+		for (const inputs of declarationSets(declarations)) {
+			const clean = cleanTools(inputs),
+				publicInputs = inputs.filter((d) => !d.personOnly);
+			tools(clean, inputs);
+			for (const [i, tool] of clean.entries()) {
+				const schema = object(tool.inputSchema);
+				const mutations: unknown[] = [{...schema, enum: [null]}];
+				if (i > 0) {
+					const properties = object(schema.properties),
+						value = object(properties.value);
+					mutations.push({...schema, properties: {...properties, value: {...value, enum: [null]}}});
+					for (const [field, fieldSchema] of Object.entries(object(value.properties ?? {})))
+						mutations.push({
+							...schema,
+							properties: {
+								...properties,
+								value: {
+									...value,
+									properties: {
+										...object(value.properties),
+										[field]: {...object(fieldSchema), enum: [null]},
+									},
+								},
+							},
+						});
+					// Confirm the field-level plant reaches notes_read.note as well as generated fields.
+					expect(tool.name).toBe(`notes_${publicInputs[i - 1]!.name}`);
+				}
+				for (const inputSchema of mutations)
+					expect(() =>
+						tools(
+							clean.map((t, n) => (n === i ? {...t, inputSchema} : t)),
+							inputs,
+						),
+					).toThrow();
+			}
+		}
+		for (const kind of ["zero", "person-only"] as const)
+			expect(() =>
+				checkDeclarations((inputs) => {
+					if (
+						kind === "zero"
+							? inputs.length === 0
+							: inputs.length > 0 && inputs.every((d) => d.personOnly)
+					)
+						throw new Error(`${kind} inputs rejected`);
+					return cleanTools(inputs);
+				}, declarations),
+			).toThrow(`${kind} inputs rejected`);
+	},
+	options,
+);
+it.prop(
+	"checker plants: each waiting tool must include its approval code and write no letter",
+	{code: Arbitrary.schema(text(1, 96))},
+	({code}) => {
+		const approval = `approval-${code}`,
+			reply = {words: `Waiting for approval. Code: ${approval}`, letters: []};
+		const clean: Waiting = {
+			code: approval,
+			tools: cleanTools(),
+			replies: {ps: reply, notes_list: reply, notes_read: reply, notes_save: reply},
+		};
+		waiting(clean);
+		for (const tool of waitingTools) {
+			expect(() =>
+				waiting({...clean, replies: {...clean.replies, [tool]: {...reply, words: "Waiting."}}}),
+			).toThrow();
+			expect(() =>
+				waiting({
+					...clean,
+					replies: {...clean.replies, [tool]: {...reply, letters: ["planted letter"]}},
+				}),
+			).toThrow();
+		}
 	},
 	options,
 );

@@ -31,46 +31,36 @@ const Note = Schema.Literals([
 	"note_0000000000e008000000000001",
 	"note_0000000000e008000000000002",
 ]);
-const Bases = Arbitrary.schema(
-	Schema.TaggedUnion({
-		version: {n: int(0, 64)},
-		negative: {n: int(0, 64)},
-		fractional: {numerator: int(-64, 64), denominator: int(2, 8)},
-		future: {n: int(0, 64)},
-	}),
-).pipe(
-	Arbitrary.map((b) =>
-		b._tag === "negative"
-			? -Math.max(1, b.n)
-			: b._tag === "fractional"
-				? b.numerator / b.denominator
-				: b._tag === "future"
-					? b.n + 65
-					: b.n,
-	),
-);
-// These are already accepted letters, including old bases a fresh guard might now refuse.
-// Replay never asks that guard. Fresh stale saves are checked in notes-contract.test.ts.
-const SaveSequences = Arbitrary.array(
-	Arbitrary.all({
-		note: Arbitrary.schema(int(0, 7)),
-		writer: Arbitrary.schema(int(0, 7)),
-		body: Arbitrary.schema(Text),
-		base: Bases,
-		clock: Arbitrary.schema(int(0, 281474976710655)),
-		arrivedAt: Arbitrary.schema(int(0, 281474976710655)),
-		rev: Arbitrary.schema(int(0, 4096)),
-		how: Arbitrary.schema(Schema.Literals(["pause", "leave", "done", "kept", "agent"])),
-		from: Arbitrary.schema(Schema.UndefinedOr(Schema.Struct({note: Note, version: int(0, 64)}))),
-	}),
-	{minLength: 0, maxLength: 32},
+// Generate good saves from init. Only this input generator tracks earlier accepted versions.
+// Expectations below read each recorded base, never a count of earlier saves.
+const Save = Arbitrary.all({
+	note: Arbitrary.schema(int(0, 7)),
+	writer: Arbitrary.schema(int(0, 7)),
+	body: Arbitrary.schema(Text),
+	clock: Arbitrary.schema(int(0, 281474976710655)),
+	arrivedAt: Arbitrary.schema(int(0, 281474976710655)),
+	rev: Arbitrary.schema(int(0, 4096)),
+	how: Arbitrary.schema(Schema.Literals(["pause", "leave", "done", "kept", "agent"])),
+	from: Arbitrary.schema(Schema.UndefinedOr(Schema.Struct({note: Note, version: int(0, 64)}))),
+});
+type Save = typeof Save extends Arbitrary.Arbitrary<infer S> ? S : never;
+const acceptedSequence = (saves: ReadonlyArray<Save>) => {
+	const versions = new Map<number, number>();
+	return saves.map((save) => {
+		const base = versions.get(save.note) ?? 0;
+		versions.set(save.note, base + 1);
+		return {...save, base};
+	});
+};
+const SaveSequences = Arbitrary.array(Save, {minLength: 0, maxLength: 32}).pipe(
+	Arbitrary.map(acceptedSequence),
 );
 type Sequence = typeof SaveSequences extends Arbitrary.Arbitrary<infer S> ? S : never;
 const exact = (actual: unknown, expected: unknown) => expect(actual).toEqual(expected);
 const history = (saves: Sequence) =>
-	saves.map((s, i) => ({
+	saves.map((s) => ({
 		note: `note_0000000000e00800000000000${s.note + 1}`,
-		version: saves.slice(0, i + 1).filter((prior) => prior.note === s.note).length,
+		version: s.base + 1,
 		body: s.body,
 		...(s.how === "agent" ? {} : {how: s.how}),
 		...(s.from === undefined ? {} : {from: s.from}),
@@ -80,6 +70,28 @@ const history = (saves: Sequence) =>
 		// Expose placing too: a global rev never becomes a note's version.
 		rev: s.rev,
 	}));
+// Find each note's final letter by position in the input, independently of the product fold.
+const noteList = (saves: Sequence) =>
+	saves
+		.filter((s, i) => !saves.slice(i + 1).some((later) => later.note === s.note))
+		.reverse()
+		.map((s) => ({
+			note: `note_0000000000e00800000000000${s.note + 1}`,
+			version: s.base + 1,
+			body: s.body,
+		}));
+type Fold = {readonly history: unknown; readonly notes: unknown};
+type Folds = {readonly live: Fold; readonly replay: Fold; readonly cuts: ReadonlyArray<Fold>};
+const foldStates = (actual: Folds) => [actual.live, actual.replay, ...actual.cuts];
+const checkFold = (actual: Fold, expected: Fold) => {
+	exact(actual.history, expected.history);
+	exact(actual.notes, expected.notes);
+};
+const checkFolds = (actual: Folds, saves: Sequence) => {
+	const expected = {history: history(saves), notes: noteList(saves)};
+	expect(actual.cuts).toHaveLength(saves.length + 1);
+	for (const fold of foldStates(actual)) checkFold(fold, expected);
+};
 
 type Bound = {
 	readonly latest: (texts: ReadonlyArray<string>) => {
@@ -87,11 +99,7 @@ type Bound = {
 		readonly cmds: ReadonlyArray<unknown>;
 		readonly initial: string;
 	};
-	readonly histories: (saves: Sequence) => {
-		readonly live: unknown;
-		readonly replay: unknown;
-		readonly cuts: ReadonlyArray<unknown>;
-	};
+	readonly histories: (saves: Sequence) => Folds;
 	readonly machine: TeaMachine<unknown, {readonly type: string}, Cmd, Sub, undefined>;
 	readonly messages: (saves: Sequence) => ReadonlyArray<{readonly type: string}>;
 	readonly encode: (model: unknown) => unknown;
@@ -179,12 +187,7 @@ it.effect.prop(
 		Effect.gen(function* () {
 			const d = yield* present;
 			if (d === null) return ctx.skip("not built: P13 notes");
-			const actual = d.histories(saves),
-				expected = history(saves);
-			exact(actual.live, expected);
-			exact(actual.replay, expected);
-			expect(actual.cuts).toHaveLength(saves.length + 1);
-			for (const cut of actual.cuts) exact(cut, expected);
+			checkFolds(d.histories(saves), saves);
 			syncTest(d.machine, stubCtxThrowingProxy<undefined>(), {
 				msgs: d.messages(saves),
 				encode: d.encode,
@@ -233,6 +236,75 @@ it.prop(
 		expect(() =>
 			exact([...expected, {...row, version: row.rev + 1}], [...expected, row]),
 		).toThrow();
+	},
+	options,
+);
+const cleanFolds = (saves: Sequence): Folds => {
+	const fold = {history: history(saves), notes: noteList(saves)};
+	return {live: fold, replay: fold, cuts: Array.from({length: saves.length + 1}, () => fold)};
+};
+it.prop(
+	"checker controls/plants: accepted histories record valid bases; saved versions use base plus one",
+	{saves: SaveSequences, repeated: Save},
+	({saves, repeated}) => {
+		const good = acceptedSequence([
+			...Array.from({length: 8}, () => ({...repeated, note: 0})),
+			...saves.slice(0, 24),
+		]);
+		const current = new Map<number, number>();
+		for (const save of good) {
+			expect(save.base).toBe(current.get(save.note) ?? 0);
+			current.set(save.note, save.base + 1);
+		}
+		checkFolds(cleanFolds(good), good);
+		// The accepted suffix starts after a saved-state cut. Its first base is already 7.
+		// Counting rows in this suffix gives the wrong version even though its letters are valid.
+		const suffix = good.slice(7),
+			rows = history(suffix);
+		expect(rows[0]?.version).toBe(8);
+		expect(rows[0]?.version).toBe(suffix[0]!.base + 1);
+		const counted = rows.map((row, i) => ({
+			...row,
+			version: suffix.slice(0, i + 1).filter((s) => s.note === suffix[i]!.note).length,
+		}));
+		for (const wrong of [counted, rows.map((row) => ({...row, version: row.version - 1}))])
+			expect(() =>
+				checkFolds(
+					{...cleanFolds(suffix), live: {history: wrong, notes: noteList(suffix)}},
+					suffix,
+				),
+			).toThrow();
+	},
+	options,
+);
+it.prop(
+	"checker plants: stale body, wrong version and creation order fail in live, replay and every reload cut",
+	{saves: SaveSequences, a: Save, b: Save},
+	({saves, a, b}) => {
+		// A1, B1, A2 always separates last-save order from creation order.
+		// The generated tail uses the other six notes and stays within 32 total messages.
+		const good = acceptedSequence([
+			{...a, note: 0},
+			{...b, note: 1},
+			{...a, note: 0, body: `${a.body}!`.slice(-4096)},
+			...saves.slice(0, 29).map((s) => ({...s, note: 2 + (s.note % 6)})),
+		]);
+		const clean = cleanFolds(good),
+			list = noteList(good);
+		checkFolds(clean, good);
+		const creationOrder = [...list].sort(
+			(left, right) =>
+				good.findIndex((s) => right.note.endsWith(String(s.note + 1))) -
+				good.findIndex((s) => left.note.endsWith(String(s.note + 1))),
+		);
+		for (const bad of [
+			list.map((row, i) => (i === 0 ? {...row, body: `${row.body}!`} : row)),
+			list.map((row, i) => (i === 0 ? {...row, version: row.version + 1} : row)),
+			creationOrder,
+		]) {
+			for (const fold of foldStates(clean))
+				expect(() => checkFold({...fold, notes: bad}, clean.live)).toThrow();
+		}
 	},
 	options,
 );
