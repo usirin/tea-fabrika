@@ -293,6 +293,8 @@ describe("each rule refuses what it is there to refuse", () => {
 			"no-ledger-sql",
 			"no-node-filesystem",
 			"no-node-imports",
+			// Generated no-why-key.test.ts plants run at next/ paths with the real lint config.
+			"no-why-key",
 		];
 		const missing = Object.keys(plugin.rules).filter(
 			(rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),

@@ -378,6 +378,7 @@
 				"fabrika/edge-comment": "error",
 				"fabrika/effect-functions": "error",
 				"fabrika/no-of": "error",
+				"fabrika/no-why-key": "error",
 				"fabrika/no-hand-tag": "error",
 				"fabrika/one-store-hook": "error"
 			}
