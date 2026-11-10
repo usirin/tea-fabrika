@@ -1172,7 +1172,7 @@ const sharedNames = Object.fromEntries(
 
 describe("the fence, too big for the box", () => {
 	const lines = (count: number) =>
-		Object.fromEntries(Array.from({length: count}, (_, n) => [`/home/x/private-${n}`, "deny"]));
+		Object.fromEntries(Array.from({length: count}, (_, n) => [`/people/x/private-${n}`, "deny"]));
 
 	it("lets a table at the limit through, and refuses one past it, by its size and no name", () => {
 		expect(fenceTooBig(lines(FENCE_LIMIT))).toBe(null);
