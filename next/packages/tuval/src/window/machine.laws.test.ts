@@ -536,8 +536,8 @@ const linkLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded
 
 /** Lists for the view laws: longer, with notes that continue the shown revision, so patch runs
  *  of one, two and more form and end by a whole view, an ask and the link leaving online. */
-const viewLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
-  guided(m, layout, cells(pids, { runs: true }), { maxLength: 120 });
+const viewLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded?: Model) =>
+  guided(m, layout, cells(pids, { runs: true }), { maxLength: 120, ...(loaded === undefined ? {} : { loaded }) });
 
 /** A new grant, as the browser meets it on its first dial: told `not_granted`, granted while it
  *  waits, then admitted. */
@@ -566,6 +566,32 @@ const after = (m: Machine, layout: Tree, list: ReadonlyArray<Msg>): { state: Mod
   }
 
   return out;
+};
+
+/** The lead's run-5 loss (A14), as a list: online on dial 1, every write handed over, then the
+ *  open's own whole for `process_a` at 5, a patch to 6, and only then the open's answer at 5. */
+const runFiveLoss = (m: Machine, layout: Tree): { readonly list: ReadonlyArray<Msg>; readonly answered: boolean } => {
+  const list: Array<Msg> = [{ type: "admitted", dial: 1, ping: 0, ms: 0 }];
+  const writes = after(m, layout, list).cmds.filter((c) => c.type === "write");
+  list.push(...writes.map((c): Msg => ({ type: "write_ok", cmd: c, value: null })));
+  const open = writes.find((c) => {
+    const call = c["call"] as { readonly _tag?: unknown; readonly pid?: unknown } | undefined;
+    return call?._tag === "open" && call.pid === A;
+  });
+  list.push(
+    { type: "view", pid: A, note: { type: "whole", rev: 5, view: { count: 5 } } },
+    {
+      type: "view",
+      pid: A,
+      note: { type: "patch", base: 5, rev: 6, patch: [{ op: "replace", path: "/count", value: 6 }] },
+    },
+  );
+
+  if (open !== undefined) {
+    list.push({ type: "open_ok", id: open["id"], dial: 1, value: { rev: 5, view: { count: 5 } }, ms: 0 });
+  }
+
+  return { list, answered: open !== undefined };
 };
 
 /** Lists where every run reaches a new grant going online, then the persistence answer, then a
@@ -1297,7 +1323,7 @@ const clientMachineFor = async (checks: Checks): Promise<ClientMachine> => {
 
 /** The window's lists with its `seen` Msg drawn too, for the client law only: the other laws keep
  *  their lists, whose good-thing reach a wider draw thins. */
-const readLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => {
+const readLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded?: Model) => {
   const { outside, answers, brain } = cells(pids);
   return guided(
     m,
@@ -1307,18 +1333,132 @@ const readLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => {
       answers,
       brain,
     } as never,
-    { maxLength: 70 },
+    { maxLength: 70, ...(loaded === undefined ? {} : { loaded }) },
   );
+};
+
+type Lists = (
+  m: Machine,
+  layout: Tree,
+  pids: ReadonlyArray<string>,
+  loaded?: Model,
+) => fc.Arbitrary<ReadonlyArray<Msg>>;
+
+/** A14: lists where a dial goes online and hands over its opens, then, for each pid, its view
+ *  notices and its open's answer come in a drawn order: the notices first (an open's late answer),
+ *  the answer first, or no answer. Then a guided tail of `tail`'s kind from the state the real fold
+ *  reached. The blind lists met a notice installing a pid's view before its open's answer about
+ *  once in 1,000 runs (tests round 14), and never with a decoder that refuses a negative count. */
+const lateLists =
+  (tail: Lists): Lists =>
+  (m, layout, pids) => {
+    const start: ReadonlyArray<Msg> = [{ type: "admitted", dial: 1, ping: 0, ms: 0 }];
+    const writes = after(m, layout, start).cmds.filter((c) => c.type === "write");
+    const online: ReadonlyArray<Msg> = [
+      ...start,
+      ...writes.map((c): Msg => ({ type: "write_ok", cmd: c, value: null })),
+    ];
+    const opens = writes.flatMap((c) => {
+      const call = c["call"] as { readonly _tag?: unknown; readonly pid?: unknown } | undefined;
+      return call?._tag === "open" ? [{ pid: String(call.pid), id: c["id"] }] : [];
+    });
+    const note = fc.oneof(
+      fc.record({
+        type: fc.constant("whole"),
+        rev: fc.nat(6),
+        view: fc.record({ count: fc.integer({ min: -3, max: 5 }) }),
+      }),
+      fc.nat(6).map((base) => ({
+        type: "patch",
+        base,
+        rev: base + 1,
+        patch: [{ op: "replace", path: "/count", value: base + 1 }],
+      })),
+    );
+    const each = fc.record({
+      order: fc.constantFrom("notices first", "answer first", "no answer"),
+      notes: fc.array(note, { minLength: 1, maxLength: 3 }),
+      rev: fc.nat(6),
+      count: fc.integer({ min: -3, max: 3 }),
+    });
+    return fc.tuple(...opens.map(() => each)).chain((drawn) => {
+      const prefix: Array<Msg> = [...online];
+
+      for (const [k, open] of opens.entries()) {
+        const d = drawn[k] as (typeof drawn)[number];
+        const answer: Msg = {
+          type: "open_ok",
+          id: open.id,
+          dial: 1,
+          value: { rev: d.rev, view: { count: d.count } },
+          ms: 0,
+        };
+        const notices = d.notes.map((n): Msg => ({ type: "view", pid: open.pid, note: n }));
+        prefix.push(
+          ...(d.order === "notices first"
+            ? [...notices, answer]
+            : d.order === "answer first"
+              ? [answer, ...notices]
+              : notices),
+        );
+      }
+
+      return tail(m, layout, pids, after(m, layout, prefix).state).map((t) => [...prefix, ...t]);
+    });
+  };
+
+/** A14: the `open_ok` steps of a run that come after a view notice installed their pid's view while
+ *  that open was in flight, so on its dial. The brain publishes the open's own whole before it
+ *  answers, so such an answer is never newer than that notice: it is stale. Whether a notice
+ *  installed is the client machine's own step from the window's client before it (the client law
+ *  holds the two equal); the client installs by replacing the pid's shown view. */
+const lateOpens = (cm: ClientMachine, steps: ReadonlyArray<Step>): ReadonlySet<Step> => {
+  const late = new Set<Step>();
+  const beaten = new Set<string>();
+  let flight: ReadonlyArray<Call> = [];
+
+  for (const step of steps) {
+    const { prev, msg, call } = step;
+
+    if (msg.type === "open_ok" && call !== null && beaten.has(wire(call.dial, call.id))) {
+      late.add(step);
+    }
+
+    if (msg.type === "view") {
+      const pid = String(msg["pid"]);
+      const [client]: readonly [Model["client"], ReadonlyArray<Cmd>] = applyCell(
+        cm as never,
+        prev.client as never,
+        {
+          type: "notice",
+          pid,
+          note: msg["note"],
+        } as never,
+      ) as never;
+      const now = client.views[pid];
+
+      if (now !== undefined && now !== prev.client.views[pid]) {
+        for (const c of flight.filter((x) => x.type === "open" && x["pid"] === pid)) {
+          beaten.add(wire(c.dial, c.id));
+        }
+      }
+    }
+
+    flight = step.flight;
+  }
+
+  return late;
 };
 
 /** The client's Msg for one window step, or null when the window does not move its client. An
  *  answer counts only for the write it is in flight for (A13): an `open_ok` only on the dial that is
- *  online now, a `send_ok` with the letter its write carried. */
-const clientMsg = ({ prev, msg, call }: Pick<Step, "prev" | "msg" | "call">): Msg | null => {
+ *  online now and only when no notice installed its pid's view first (`late`, A14), a `send_ok` with
+ *  the letter its write carried. */
+const clientMsg = ({ prev, msg, call }: Pick<Step, "prev" | "msg" | "call">, late: boolean): Msg | null => {
   const cmd = msg["cmd"] as { readonly n?: number } | undefined;
 
   if (msg.type === "open_ok") {
-    const current = call !== null && online(prev) && prev.link["dial"] === call.dial;
+    const current = call !== null && !late && online(prev) && prev.link["dial"] === call.dial;
     return current ? { type: "notice", pid: call["pid"], note: { type: "whole", ...(msg["value"] as object) } } : null;
   }
 
@@ -1351,10 +1491,12 @@ const clientFold =
   (cm: ClientMachine) =>
   (steps: ReadonlyArray<Folded>): string | null => {
     let client = cm.init(null, {})[0];
+    const run = traced(steps);
+    const late = lateOpens(cm, run);
 
-    for (const step of traced(steps)) {
+    for (const step of run) {
       const { msg, next } = step;
-      const own = clientMsg(step);
+      const own = clientMsg(step, late.has(step));
 
       if (own !== null) {
         client = applyCell(cm as never, client as never, own as never)[0] as never;
@@ -1379,6 +1521,14 @@ const VIEW_RECORD =
 const PATCH_RECORD =
   "patch record: a run of installed patches keeps one patch row when it ends, before its pid's next whole or asked row and when the link leaves online, with its last rev and an independent count; an empty run keeps none";
 
+// A14: an open's late answer never rolls the view back. On one dial, once a view notice installs a
+// view for a pid, that pid's open leaves flight, so its later `open_ok` is stale: the brain published
+// the open's own whole before it answered, so the answer is never newer than that notice. Build round
+// 6 found it as the lead's run-5 loss: a patch to N+1 came before the open's answer at N, the answer
+// installed N, and the count stayed one short.
+const LATE_OPEN =
+  "A14 late open: on one dial, an open_ok that comes after a notice installed its pid's view changes no shown view and keeps no view row";
+
 /** A view row, with the `patches` count A8 adds to the schema (the build adds it; the record check
  *  refuses it until then). */
 type ViewRow = Extract<ClientRecord, { _tag: "view" }> & { readonly patches?: number };
@@ -1394,9 +1544,9 @@ type Viewed = {
 
 const viewed =
   (cm: ClientMachine) =>
-  (step: Pick<Step, "prev" | "msg" | "call">): Viewed => {
+  (step: Pick<Step, "prev" | "msg" | "call">, late: boolean): Viewed => {
     const { prev } = step;
-    const own = clientMsg(step);
+    const own = clientMsg(step, late);
 
     if (own === null || own.type !== "notice") {
       return { whole: null, patch: null, asked: [] };
@@ -1441,8 +1591,10 @@ const viewLaws: Readonly<Record<string, ViewLaw>> = {
   // whole row at the installed rev; neither carries a patch count.
   [VIEW_RECORD]: (cm) => (steps) => {
     const seen = viewed(cm);
+    const run = traced(steps);
+    const late = lateOpens(cm, run);
 
-    for (const step of traced(steps)) {
+    for (const step of run) {
       const { prev, msg, cmds } = step;
       const records = recordsIn(cmds);
 
@@ -1450,7 +1602,7 @@ const viewLaws: Readonly<Record<string, ViewLaw>> = {
         return records;
       }
 
-      const v = seen(step);
+      const v = seen(step, late.has(step));
       const rows = viewRows(records).filter((r) => r.result !== "patch");
       const want = [
         ...(v.whole === null ? [] : [`whole ${v.whole.pid} ${v.whole.rev}`]),
@@ -1480,8 +1632,10 @@ const viewLaws: Readonly<Record<string, ViewLaw>> = {
   [PATCH_RECORD]: (cm) => (steps) => {
     const seen = viewed(cm);
     const runs = new Map<string, { n: number; rev: number }>();
+    const run = traced(steps);
+    const late = lateOpens(cm, run);
 
-    for (const step of traced(steps)) {
+    for (const step of run) {
       const { prev, msg, next, cmds } = step;
       const records = recordsIn(cmds);
 
@@ -1489,7 +1643,7 @@ const viewLaws: Readonly<Record<string, ViewLaw>> = {
         return records;
       }
 
-      const v = seen(step);
+      const v = seen(step, late.has(step));
       const rows = viewRows(records);
       const ending =
         online(prev) && !online(next) ? [...runs.keys()] : [...v.asked, ...(v.whole === null ? [] : [v.whole.pid])];
@@ -1520,6 +1674,32 @@ const viewLaws: Readonly<Record<string, ViewLaw>> = {
       if (v.patch !== null) {
         const run = runs.get(v.patch.pid);
         runs.set(v.patch.pid, { n: (run?.n ?? 0) + 1, rev: v.patch.rev });
+      }
+    }
+
+    return null;
+  },
+  // Each `open_ok` that comes after a notice installed its pid's view, on the dial the open is in
+  // flight on, leaves every shown view as it was and keeps no view row.
+  [LATE_OPEN]: (cm) => (steps) => {
+    const run = traced(steps);
+
+    for (const step of lateOpens(cm, run)) {
+      const { prev, msg, next, cmds } = step;
+      const records = recordsIn(cmds);
+
+      if (typeof records === "string") {
+        return records;
+      }
+
+      if (JSON.stringify(next.client.views) !== JSON.stringify(prev.client.views)) {
+        return `a late open_ok ${JSON.stringify(msg["value"])} for ${String(step.call?.["pid"])} moved the shown views from ${JSON.stringify(prev.client.views)} to ${JSON.stringify(next.client.views)}`;
+      }
+
+      const rows = viewRows(records);
+
+      if (rows.length > 0) {
+        return `a late open_ok ${JSON.stringify(msg["value"])} kept ${JSON.stringify(rows)}`;
       }
     }
 
@@ -1807,6 +1987,14 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
           m as never,
           { layout } as never,
           readLists(m, layout, tiles) as never,
+          clientFold(cm) as never,
+          opts as never,
+        );
+        // A14: also on lists where a notice installs a pid's view before its open's answer, and after.
+        propertyTrace(
+          m as never,
+          { layout } as never,
+          lateLists(readLists)(m, layout, tiles) as never,
           clientFold(cm) as never,
           opts as never,
         );
@@ -2185,6 +2373,14 @@ describe("window machine: the view records, with each set of checks, on every fi
 
         for (const [, layout, tiles] of LAYOUTS) {
           propertyTrace(m as never, { layout } as never, viewLists(m, layout, tiles) as never, law as never, opts);
+          // A14: also on lists where a notice installs a pid's view before its open's answer, and after.
+          propertyTrace(
+            m as never,
+            { layout } as never,
+            lateLists(viewLists)(m, layout, tiles) as never,
+            law as never,
+            opts,
+          );
 
           if (checks === NO_CHECKS) {
             propertyTrace(m as never, { layout } as never, lists(m, layout, tiles) as never, law as never, opts);
@@ -2197,7 +2393,8 @@ describe("window machine: the view records, with each set of checks, on every fi
   it("good thing: the runs meet every link outcome, a measured reply, wholes, asks and patch runs of one and more, ended each way", async () => {
     const [, checks] = CHECKS[2] as (typeof CHECKS)[number];
     const m = await machine(checks);
-    const seen = viewed(await clientMachineFor(checks));
+    const cm = await clientMachineFor(checks);
+    const seen = viewed(cm);
     const met = {
       online: 0,
       waiting: 0,
@@ -2234,7 +2431,10 @@ describe("window machine: the view records, with each set of checks, on every fi
               runs.delete(pid);
             };
 
-            for (const step of traced(steps)) {
+            const run = traced(steps);
+            const late = lateOpens(cm, run);
+
+            for (const step of run) {
               const { prev, msg, next } = step;
               const outcome = linkOutcome(prev, msg, next);
 
@@ -2246,7 +2446,7 @@ describe("window machine: the view records, with each set of checks, on every fi
                 met.measuredReply++;
               }
 
-              const v = seen(step);
+              const v = seen(step, late.has(step));
 
               if (online(prev) && !online(next)) {
                 for (const pid of [...runs.keys()]) {
@@ -2279,6 +2479,63 @@ describe("window machine: the view records, with each set of checks, on every fi
 
     for (const [name, n] of Object.entries(met)) {
       expect(n, name).toBeGreaterThan(0);
+    }
+  });
+
+  // A decoder that throws installs no view, so with it no notice can beat an open: the case is not
+  // there to meet.
+  it("good thing: the client and view laws' runs meet, on one dial, a notice installing a pid's view before its open's answer, and an open answered first, with each set of checks that installs (A14)", async () => {
+    for (const [named, checks] of CHECKS.filter(([n]) => n !== "a decoder that throws")) {
+      const m = await machine(checks);
+      const cm = await clientMachineFor(checks);
+      const seen = viewed(cm);
+
+      for (const [label, made] of [
+        ["client law", [readLists, lateLists(readLists)]],
+        ["view laws", [viewLists, lateLists(viewLists)]],
+      ] as const) {
+        const met = { noticeFirst: 0, answerFirst: 0 };
+
+        for (const [, layout, tiles] of LAYOUTS) {
+          for (const list of made) {
+            propertyTrace(
+              m as never,
+              { layout } as never,
+              list(m, layout, tiles) as never,
+              ((steps: ReadonlyArray<Folded>) => {
+                const run = traced(steps);
+                const late = lateOpens(cm, run);
+                met.noticeFirst += late.size;
+
+                for (const step of run) {
+                  met.answerFirst +=
+                    step.msg.type === "open_ok" && !late.has(step) && seen(step, false).whole !== null ? 1 : 0;
+                }
+
+                return null;
+              }) as never,
+              opts as never,
+            );
+          }
+        }
+
+        for (const [name, n] of Object.entries(met)) {
+          expect(n, `${name} (${label}, ${named})`).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it("pinned: the lead's run-5 loss (A14): a patch at N+1 then the open's late answer at N shows N+1, and every view law holds", async () => {
+    const m = await machine();
+    const cm = await clientMachineFor(NO_CHECKS);
+    const [, layout] = LAYOUTS[0] as (typeof LAYOUTS)[number];
+    const { list, answered } = runFiveLoss(m, layout);
+    expect(answered, "going online writes the open of process_a").toBe(true);
+    expect(after(m, layout, list).state.client.views[A]?.rev).toBe(6);
+
+    for (const law of [clientFold(cm), ...Object.values(viewLaws).map((l) => l(cm))]) {
+      propertyTrace(m as never, { layout } as never, fc.constant(list) as never, law as never, { numRuns: 1 });
     }
   });
 });
@@ -2720,15 +2977,12 @@ describe("window machine plants: each break of a view record is caught by its la
     state: Model,
     msg: Msg,
   ) => readonly [Model, ReadonlyArray<Cmd>];
-  const expectCaught = async (name: string, change: Change): Promise<void> => {
-    const [, checks] = CHECKS[2] as (typeof CHECKS)[number];
-    const real = await machine(checks);
-    const law = (viewLaws[name] as ViewLaw)(await clientMachineFor(checks));
-    const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
+  /** The real machine with each step post-processed by `change`. */
+  const plantedFrom = (real: Machine, change: Change): Machine => {
     // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
     const update = (real as unknown as { update: Record<string, Update> }).update;
     // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
-    const planted = {
+    return {
       ...real,
       update: Object.fromEntries(
         Object.entries(update).map(([type, f]) => [
@@ -2737,6 +2991,13 @@ describe("window machine plants: each break of a view record is caught by its la
         ]),
       ),
     } as unknown as Machine;
+  };
+  const expectCaught = async (name: string, change: Change): Promise<void> => {
+    const [, checks] = CHECKS[2] as (typeof CHECKS)[number];
+    const real = await machine(checks);
+    const law = (viewLaws[name] as ViewLaw)(await clientMachineFor(checks));
+    const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
+    const planted = plantedFrom(real, change);
     expect(() =>
       propertyTrace(planted as never, { layout } as never, viewLists(real, layout, tiles) as never, law as never, opts),
     ).toThrow();
@@ -2787,6 +3048,50 @@ describe("window machine plants: each break of a view record is caught by its la
           : [r],
       ),
     ]));
+  it("installing every open_ok, so a patch at N+1 then a late answer at N shows N, is caught (A14 late open, client law)", async () => {
+    // The plant installs every answer to an open written on the dial that is online now, by its
+    // write's pid, and keeps its whole row, as the window did before A14.
+    const pids = new Map<string, string>();
+    const plant: Change = ([m, c], s, msg) => {
+      const cmd = msg["cmd"] as { readonly call?: { _tag?: unknown; pid?: unknown }; id?: unknown; dial?: unknown };
+
+      if (msg.type === "write_ok" && cmd.call?._tag === "open") {
+        pids.set(wire(cmd.dial, cmd.id), String(cmd.call.pid));
+      }
+
+      const pid = pids.get(wire(msg["dial"], msg["id"]));
+      const value = msg["value"] as { readonly rev: number; readonly view: unknown };
+      return msg.type === "open_ok" && pid !== undefined && online(s) && s.link["dial"] === msg["dial"]
+        ? [
+            {
+              ...m,
+              client: { ...m.client, views: { ...m.client.views, [pid]: { rev: value.rev, view: value.view } } },
+            },
+            [...c, row({ _tag: "view", pid, result: "whole", rev: Math.max(0, value.rev) } as ViewRow)],
+          ]
+        : [m, c];
+    };
+    const real = await machine(NO_CHECKS);
+    const cm = await clientMachineFor(NO_CHECKS);
+    const planted = plantedFrom(real, plant);
+    const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
+
+    for (const law of [(viewLaws[LATE_OPEN] as ViewLaw)(cm), clientFold(cm)]) {
+      expect(() =>
+        propertyTrace(
+          planted as never,
+          { layout } as never,
+          lateLists(viewLists)(real, layout, tiles) as never,
+          law as never,
+          opts as never,
+        ),
+      ).toThrow();
+    }
+
+    const [, one] = LAYOUTS[0] as (typeof LAYOUTS)[number];
+    const { list } = runFiveLoss(real, one);
+    expect(after(plantedFrom(real, plant), one, list).state.client.views[A]?.rev, "the planted window shows N").toBe(5);
+  });
   it("keeping the run's row after its pid's whole row is caught (patch record)", () =>
     expectCaught(PATCH_RECORD, ([m, c]) => {
       const rows = c.filter((x) => x.type === "record" && (x["record"] as ClientRecord)._tag === "view");
