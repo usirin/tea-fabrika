@@ -231,6 +231,10 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   summary. A settled note is evidence, not a tiebreaker: nothing from before experiment
   107 (the first run on a repo other than demlik) is trusted without a test, and in a
   redesign every serious branch goes on the table, with what it would undo.
+- **A stated principle covers every case it fits.** When an owner ruling gives a principle, such as
+  [0043](./.decisions/0043-rooms-on-floors.md)'s "the floor above never sees what is two floors
+  down", apply it to each case it decides, not only the one it came with. Only a case it truly
+  cannot decide becomes a question.
 - **Lead with the known way.** Look up how the makers and the industry do it, and cite
   it, before you give a lean; a guess comes after, marked as a guess. If the plain way
   clashes with a stated goal, say so in one line, and let the owner pick. Never hide it
