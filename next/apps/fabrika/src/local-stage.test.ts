@@ -49,6 +49,7 @@ const fileWithoutSync = (file: FileSystem.File): FileSystem.File => ({
 	write: (buffer) => file.write(buffer),
 	writeAll: (buffer) => file.writeAll(buffer),
 });
+
 const filesWithoutSync = Layer.effect(
 	FileSystem.FileSystem,
 	Effect.map(FileSystem.FileSystem, (fs) =>
