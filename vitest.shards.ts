@@ -20,7 +20,7 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * A file not measured counts 1 s.
  */
 export const measured: Record<string, number> = {
-  ".agents/skills/lead/scripts/box.test.ts": 485.3,
+  ".agents/skills/lead/scripts/box.test.ts": 348.7,
   ".agents/skills/lead/scripts/catchup.cleanup.test.ts": 124.1,
   ".agents/skills/lead/scripts/catchup.nested-storage-checkout.test.ts": 175.7,
   ".agents/skills/lead/scripts/catchup.nested-storage-driver.test.ts": 163.6,
