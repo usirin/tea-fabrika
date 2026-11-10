@@ -182,11 +182,22 @@ it("L8: generated sharding assigns once to the least load including starts, inde
 
 it("vector: real CI medians include the previously unweighted scripts", () => {
   // Fixed medians from runs 42579837468, 42573088027 and 42571265116, rounded to one decimal.
-  // T554 refresh: medians of 42803733957, 42807559589 and 42801440878.
-  expect(measured[".agents/skills/plan/scripts/plancheck.test.ts"]).toBe(106.2);
-  expect(measured[".agents/skills/lead/scripts/catchup.test.ts"]).toBe(689.1);
+  expect(measured[".agents/skills/plan/scripts/plancheck.test.ts"]).toBe(59.1);
   expect(measured["apps/fabrika/src/bundles.test.ts"]).toBe(3.7);
   expect(measured["packages/pipeline/src/laws/standard.test.ts"]).toBe(3.5);
+});
+
+it("vector: the four catchup files carry their times from PR 770's CI run", () => {
+  // T559: the split files, one time each from run 42883743294, rounded to one decimal.
+  // Plant: drop these rows, so all four count as 1 s and can stack on one machine.
+  for (const [path, seconds] of [
+    [".agents/skills/lead/scripts/catchup.test.ts", 102.4],
+    [".agents/skills/lead/scripts/catchup.cleanup.test.ts", 124.1],
+    [".agents/skills/lead/scripts/catchup.nested-storage-checkout.test.ts", 175.7],
+    [".agents/skills/lead/scripts/catchup.nested-storage-driver.test.ts", 163.6],
+  ] as const) {
+    expect.soft(measured[path], path).toBe(seconds);
+  }
 });
 
 it("vector: lead test medians match the three green main CI runs", () => {

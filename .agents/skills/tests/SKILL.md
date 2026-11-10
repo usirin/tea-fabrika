@@ -80,6 +80,9 @@ Put the row in your report as one JSON line. The lead adds it to `field/findings
 The test config and typecheck.sh hold worker, home and typecheck limits.
 
 - Run `pnpm lint` once. Step-commit checks staged formatting.
+- A law never reads the person's home folder or app data, not even to guard against it. A law that
+  breaks on one machine is fixed by removing what it leaned on, never by catching the error
+  ([0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md)).
 - A sandbox may refuse sockets (`EPERM`), file watches (`EMFILE`), `ps` or Electron. Say which law
   that hits, and do not count it as red or green.
 

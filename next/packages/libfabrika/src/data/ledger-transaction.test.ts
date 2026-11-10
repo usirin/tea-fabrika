@@ -2,10 +2,10 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
+import type { Sql } from "../Sql.ts";
 import { LedgerTransaction } from "./ledger-transaction.ts";
 import { Doorbell, Ledger, LedgerError } from "./ledger.ts";
 import type { Line } from "./log.ts";
-import type { Sql } from "./referee.ts";
 import { nodeSql } from "./sqlite.ts";
 
 const opened: Array<DatabaseSync> = [];

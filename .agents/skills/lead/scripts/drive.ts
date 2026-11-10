@@ -44,7 +44,8 @@
 // whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start, before
 // any agent ran: `refused:<check>`, one of agent_cap (8 agents running: the ACP harnesses drive
 // started), low_disk (under 20 GB free after box.sh gc), branch_checked_out (the lane's
-// branch checked out in a worktree, which the fetch could not update), or a box.sh new start check
+// branch checked out in a worktree, which the fetch could not update), docker_busy (a mutation step
+// while another run holds the one Docker box), or a box.sh new start check
 // (plan_unapproved, base_not_signed, shared_ticket, root_not_ancestor). It never retries. A stuck step
 // keeps its box for the lead to look at, and so does any step whose box still holds uncommitted
 // files or commits off its branch. DRIVE_MINUTES (default 60) is how long the agent may run
@@ -60,6 +61,7 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -137,7 +139,7 @@ type Outcome = typeof drive.schema.Type;
  */
 const BOX_CHECKS = ["plan_unapproved", "base_not_signed", "shared_ticket", "root_not_ancestor"] as const;
 
-const CHECKS = [...BOX_CHECKS, "agent_cap", "low_disk", "branch_checked_out"] as const;
+const CHECKS = [...BOX_CHECKS, "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const;
 type Check = (typeof CHECKS)[number];
 type Refused = { readonly kind: "refused"; readonly check: Check };
 /** How a drive ends: the step's outcome, or a start check that refused before the step ran. */
@@ -871,12 +873,47 @@ const dropView = (env: Env, box: string) => {
   }
 };
 
+/** One file the agent left changed. `from` is set only for a case-only rename: its old name. */
+export type Change = { readonly xy: string; readonly path: string; readonly from?: string };
+
 /** Each file the agent left changed in the box's tree, by its status letters. */
-export const changedFiles = (porcelain: string): { xy: string; path: string }[] =>
+export const changedFiles = (porcelain: string): Change[] =>
   porcelain
     .split("\0")
     .filter(Boolean)
     .map((e) => ({ xy: e.slice(0, 2), path: e.slice(3) }));
+
+/**
+ * Case-only renames, which `git status` cannot see on a disk that ignores case: a tracked `id.ts`
+ * the agent renamed to `Id.ts` reads as a modified `id.ts`, or as nothing when its text is the
+ * same (ticket 573). The disk's own name, from `realpath`, says it moved. Each answer is the
+ * tracked name and the name on disk. A deleted file, a folder whose case changed and a disk that
+ * keeps case all give none: git already sees those, or (a folder) this does not handle them.
+ */
+export const caseRenames = (box: string, tracked: readonly string[]): { from: string; path: string }[] => {
+  const top = realpathSync.native(box);
+  const out: { from: string; path: string }[] = [];
+
+  for (const from of tracked) {
+    const at = join(box, from);
+
+    if (!existsSync(at)) {
+      continue;
+    }
+
+    const path = realpathSync.native(at).slice(top.length + 1);
+
+    if (
+      path !== from &&
+      path.toLowerCase() === from.toLowerCase() &&
+      path.split("/").slice(0, -1).join("/") === from.split("/").slice(0, -1).join("/")
+    ) {
+      out.push({ from, path });
+    }
+  }
+
+  return out;
+};
 
 /**
  * What the agent left in the box's tree, read from outside the box: every edited, deleted and new
@@ -885,7 +922,24 @@ export const changedFiles = (porcelain: string): { xy: string; path: string }[] 
  */
 export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
   const status = boxGit(env, box, "status", "--porcelain=v1", "-z", "--untracked-files=all");
-  return { ...status, changes: status.code === 0 ? changedFiles(status.out) : [] };
+
+  if (status.code !== 0) {
+    return { ...status, changes: [] as Change[] };
+  }
+
+  const listed = boxGit(env, box, "ls-files", "--cached", "-z");
+
+  if (listed.code !== 0) {
+    return { ...listed, changes: [] as Change[] };
+  }
+
+  const moved = caseRenames(join(env.BOXES, box), listed.out.split("\0").filter(Boolean));
+  const old = new Set(moved.map((m) => m.from));
+  const changes: Change[] = [
+    ...changedFiles(status.out).filter((c) => !old.has(c.path)),
+    ...moved.map((m) => ({ xy: "R ", ...m })),
+  ];
+  return { ...status, changes };
 };
 
 /**
@@ -908,7 +962,7 @@ export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string)
  * stepcommit commits them as the bot and signs them as the step, with main's own signer. The
  * branch then points at that one signed commit, or stays at the base when nothing changed.
  */
-const collect = (env: Env, ask: Ask, changes: readonly { xy: string; path: string }[]) => {
+const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   const git = (...args: string[]) => {
     const r = spawnSync("git", ["-C", env.MAIN, ...args], { encoding: "utf8", env: SAFE_GIT });
     return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
@@ -929,9 +983,15 @@ const collect = (env: Env, ask: Ask, changes: readonly { xy: string; path: strin
   try {
     const box = join(env.BOXES, ask.box);
 
-    for (const { xy, path } of changes) {
+    for (const { xy, path, from: old } of changes) {
       const to = join(wt, path);
       rmSync(to, { force: true, recursive: true });
+
+      // A case-only rename: the old name's file goes, so the copy below writes the new name on
+      // disk, and stepcommit drops the old index entry.
+      if (old !== undefined) {
+        rmSync(join(wt, old), { force: true });
+      }
 
       if (xy.includes("D")) {
         continue;
@@ -1311,6 +1371,24 @@ export const planTail = (step: StepName, path: string, text: string | null) =>
     ? ""
     : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 
+/**
+ * The lane's newest mutation report, whole, for a review: the review reads it (the review skill,
+ * "anything the brief names"), and its box reads nothing outside itself. Briefs named
+ * `../<lane>-mutationN.md`, so two Codex reviews ended stuck after half a minute and a Claude
+ * review said done without it (p34w-review1 and 2, layout-review2, 2026-11-10; ticket 569).
+ */
+export const mutationTail = (step: StepName, steps: Lane["steps"], read: (path: string) => string | null): string => {
+  if (step !== "review") {
+    return "";
+  }
+
+  const last = steps.findLast((s) => s.step === "mutation" && typeof s.report === "string");
+  const text = last?.report ? read(last.report) : null;
+  return text === null || !last?.report
+    ? "\n\n---\nThis lane has no mutation report drive can read; say so in your review, and do not look for one outside your box.\n"
+    : `\n\n---\nThe lane's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+};
+
 /** How a step's draft runs: what the step is asked, in; how its turn ended, out. */
 type DraftRun = (env: Env, agents: Agents, ask: Ask) => Effect.Effect<Turned<Answer>>;
 
@@ -1392,8 +1470,11 @@ export const mutboxArgs = (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: 
   "--out",
   join(env.BOXES, `${ask.box}-mutbox`),
   "--lock",
-  join(env.BOXES, "state", "docker.lock"),
+  dockerLock(env),
 ];
+
+/** The one Docker box's lock, as mutbox.ts takes it and drive's start check reads it. */
+export const dockerLock = (env: Pick<Env, "BOXES">) => join(env.BOXES, "state", "docker.lock");
 
 /** How mutbox.ts ran: its exit code and what it printed. */
 export type MutboxRun = (args: ReadonlyArray<string>) => Effect.Effect<{ readonly code: number; readonly out: string }>;
@@ -1481,7 +1562,7 @@ type Lane = {
   readonly branch?: string;
   readonly root?: string;
   readonly head?: string;
-  readonly steps: readonly { readonly step: string }[];
+  readonly steps: readonly { readonly step: string; readonly report?: string | null }[];
 };
 
 // ---------------------------------------------------------------- the command
@@ -1522,6 +1603,27 @@ const holderOf = (porcelain: string, branch: string): string | null => {
   }
 
   return null;
+};
+
+/**
+ * The live process holding the one Docker box's lock (mutbox.ts writes its pid there), or `null`
+ * when the lock is absent, unreadable or left by a dead run, which mutbox.ts itself takes over. A
+ * mutation step started while another box ran got mutbox's docker_busy only after its box was made,
+ * as a stuck step (layout-mutation3, 2026-11-10; ticket 566).
+ */
+export const dockerHolder = (lock: string | null, alive: (pid: number) => boolean): number | null => {
+  const pid = Number(lock?.trim());
+  return lock !== null && Number.isInteger(pid) && pid > 0 && alive(pid) ? pid : null;
+};
+
+const isAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM: the process exists and is someone else's.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
 };
 
 /**
@@ -1775,12 +1877,28 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     }
   }
 
+  // One Docker box at a time (0012): a mutation step's Stryker run needs it, so a box held by
+  // another run is a start check's no, before box.sh new, never a stuck step.
+  if (step === "mutation") {
+    const lock = dockerLock(env);
+    const holder = dockerHolder(existsSync(lock) ? readFileSync(lock, "utf8") : null, isAlive);
+
+    if (holder !== null) {
+      return refusal({
+        outcome: endName({ kind: "refused", check: "docker_busy" }),
+        reason: `another Docker box is running (pid ${holder}); one at a time`,
+        exit: 3,
+      });
+    }
+  }
+
   const verdict =
     step === "review" ? "Keep your verdict line, merge-ready or changes: <n>, as the report's first line.\n" : "";
   writeFileSync(
     ask.prompt,
     readFileSync(p.brief, "utf8") +
       planTail(step, plan, existsSync(plan) ? readFileSync(plan, "utf8") : null) +
+      mutationTail(step, saved?.steps ?? [], (path) => (existsSync(path) ? readFileSync(path, "utf8") : null)) +
       agentTail(ask, electron) +
       TAIL +
       verdict,

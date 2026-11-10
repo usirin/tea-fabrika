@@ -16,11 +16,15 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * run 42874119130, attempts 5 to 14 (a median of 10).
  * stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
  * next/ medians use main runs 42717511599, 42716453289 and 42715921306, rounded to one decimal.
+ * The four catchup files are one time each from PR 770's CI run 42883743294, rounded to one decimal.
  * A file not measured counts 1 s.
  */
 export const measured: Record<string, number> = {
-  ".agents/skills/lead/scripts/box.test.ts": 348.7,
-  ".agents/skills/lead/scripts/catchup.test.ts": 689.1,
+  ".agents/skills/lead/scripts/box.test.ts": 485.3,
+  ".agents/skills/lead/scripts/catchup.cleanup.test.ts": 124.1,
+  ".agents/skills/lead/scripts/catchup.nested-storage-checkout.test.ts": 175.7,
+  ".agents/skills/lead/scripts/catchup.nested-storage-driver.test.ts": 163.6,
+  ".agents/skills/lead/scripts/catchup.test.ts": 102.4,
   ".agents/skills/lead/scripts/gc.test.ts": 0.1,
   ".agents/skills/lead/scripts/redact.test.ts": 7.2,
   ".agents/skills/lead/scripts/skillscheck.test.ts": 25.9,

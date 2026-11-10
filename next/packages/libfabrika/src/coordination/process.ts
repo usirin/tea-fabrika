@@ -1,7 +1,7 @@
 import { Equal, Option, Result, Schema } from "effect";
 import { LedgerError } from "../data/ledger.ts";
 import { type Entry, valueFor } from "../data/log.ts";
-import { ProcessId } from "../data/trace.ts";
+import { ProcessId } from "../ProcessId.ts";
 import type { From } from "./mailbox.ts";
 
 /**

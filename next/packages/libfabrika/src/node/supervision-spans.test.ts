@@ -12,8 +12,8 @@ import { type Descriptor, ProgramRunner } from "../app/runner.ts";
 import { Archive, Mailbox, ProcessManager, ProcessStore, RecordManager, Writer } from "../coordination/index.ts";
 import { A, B, W, X, brain, data, first, from, ids, read, storage } from "../coordination/process.test-support.ts";
 import { RecoveryStore } from "../coordination/recovery-store.ts";
-import { type Sql } from "../data/referee.ts";
 import { SpanSink } from "../data/sink.ts";
+import type { Sql } from "../Sql.ts";
 import { programBox } from "../workers/box.ts";
 
 const policy = {

@@ -401,3 +401,93 @@ describe("person commits between step links (p86b)", () => {
     expect(stale.code).toBe(1);
   });
 });
+
+describe("0053 historical exam lists", () => {
+  // Plant: read --main or head for the old build. Pinned: P14 a7ff4ee8 before PR 687.
+  it("g1: old tsconfig build passes after main adds its row", () => {
+    fc.assert(
+      fc.property(name, (folder) => {
+        const r = new Repo(GOOD_KEYS, undefined, "sha1", "x", '[{"glob":"exam-paths.json","why":"policy"}]');
+        const path = `next/${folder}/tsconfig.json`;
+        r.write(path, "{}");
+        r.commit();
+        r.sign("build");
+        r.git("checkout", "-q", "main");
+        r.write("exam-paths.json", EXAM_LIST);
+        const main = r.commit();
+        r.git("checkout", "-q", "pr");
+        r.git("merge", "-q", "--no-edit", "main");
+        r.sign("lead");
+        expect(r.check([], main).answers).toEqual([ask(path)]);
+      }),
+      runs,
+    );
+  });
+  // Plant: use the lane's initial list for every build.
+  it("g2: later tsconfig build uses the restored parent row", () => {
+    fc.assert(
+      fc.property(name, (folder) => {
+        const r = new Repo(GOOD_KEYS, undefined, "sha1", "x", '[{"glob":"exam-paths.json","why":"policy"}]');
+        const path = `next/${folder}/tsconfig.json`;
+        r.write(path, "{}");
+        r.commit();
+        r.sign("build");
+        r.git("checkout", "-q", "main");
+        r.write("exam-paths.json", EXAM_LIST);
+        const main = r.commit();
+        r.git("checkout", "-q", "pr");
+        r.git("merge", "-q", "--no-edit", "main");
+        r.sign("lead");
+        r.write(path, "{ }");
+        const later = r.commit();
+        r.sign("build", { version: 2 });
+        expect(r.check([], main).answers).toEqual([stuck("build_touched_exam", later, { paths: [path] }), ask(path)]);
+      }),
+      runs,
+    );
+  });
+  // Plant: missing is empty, fallback to main, or exit 2 without answers.
+  it("g3: unreadable parent list refuses build and asks owner", () => {
+    fc.assert(
+      fc.property(fc.string(), (text) => {
+        for (const mode of ["delete", "folder", "text"]) {
+          const r = new Repo();
+          r.git("rm", "exam-paths.json");
+
+          if (mode === "folder") {
+            r.write("exam-paths.json/child", text);
+          }
+
+          if (mode === "text") {
+            r.write("exam-paths.json", `invalid:${text}`);
+          }
+
+          r.commit();
+          r.sign("tests");
+          const c = r.change("a.ts");
+          r.sign("build");
+          const out = r.check();
+          expect(out.answers).toEqual([stuck("no_exam_list", c), ask("exam-paths.json")]);
+          expect(out.code).toBe(1);
+        }
+      }),
+      runs,
+    );
+  });
+  // Plant: ask from head or parent rather than main.
+  it("g4: dropped boundary row still requires owner read", () => {
+    fc.assert(
+      fc.property(fc.string(), (text) => {
+        const r = new Repo();
+        r.write("exam-paths.json", '[{"glob":"exam-paths.json","why":"policy"}]');
+        r.commit();
+        r.sign("tests");
+        r.write("boundary-rules.json", `changed:${text}`);
+        r.commit();
+        r.sign("build");
+        expect(r.check().answers).toEqual([ask("boundary-rules.json", "exam-paths.json")]);
+      }),
+      runs,
+    );
+  });
+});

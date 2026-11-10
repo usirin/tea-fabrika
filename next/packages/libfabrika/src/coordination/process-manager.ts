@@ -1,8 +1,9 @@
 import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
 import { LedgerTransaction, type LedgerTurn } from "../data/ledger-transaction.ts";
 import { type Ledger, type LedgerError } from "../data/ledger.ts";
-import { lineFor, type Rev } from "../data/log.ts";
+import { lineFor } from "../data/log.ts";
 import { short } from "../data/trace.ts";
+import type { Rev } from "../Rev.ts";
 import { type From, type Letter, Mailbox } from "./mailbox.ts";
 import { processMail } from "./process-mail.ts";
 import {

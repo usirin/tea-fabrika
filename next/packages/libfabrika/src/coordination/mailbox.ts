@@ -3,8 +3,9 @@
 // (law p21, p97). An inbox is the stream `<name>/inbox` on P6's ledger.
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
 import { Ledger, LedgerError } from "../data/ledger.ts";
-import { Appended, type Entry, type Line, lineFor, type Rev } from "../data/log.ts";
+import { Appended, type Entry, type Line, lineFor } from "../data/log.ts";
 import { short } from "../data/trace.ts";
+import type { Rev } from "../Rev.ts";
 import { brainOnly, inRunnerSpace } from "./process.ts";
 
 /** Internal permission for a runner to save its own answers and alarm letters. */

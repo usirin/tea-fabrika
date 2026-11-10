@@ -1,8 +1,9 @@
 import { Context, Effect, Layer } from "effect";
+import type { Rev } from "../Rev.ts";
+import type { Sql } from "../Sql.ts";
 import { ledgerStore } from "./ledger-store.ts";
 import { Doorbell, type LedgerError } from "./ledger.ts";
-import { type Entry, type Line, type Rev } from "./log.ts";
-import type { Sql } from "./referee.ts";
+import { type Entry, type Line } from "./log.ts";
 
 /** Available only inside the synchronous callback. Refusal aborts the whole turn. */
 export interface LedgerTurn {

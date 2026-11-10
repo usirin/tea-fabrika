@@ -24,7 +24,7 @@ import "../../plan/scripts/plancheck.sh?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
@@ -37,15 +37,18 @@ import {
   agentsDraft,
   agentTail,
   boxChanges,
+  caseRenames,
   changedFiles,
   commitSubject,
   type MutboxRun,
   mutationDraft,
   mutboxAnswer,
   mutboxTail,
+  mutationTail,
   relatedIn,
   commitsSaid,
   decide,
+  dockerHolder,
   endName,
   freshBox,
   holdsElectron,
@@ -498,11 +501,78 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
 
   // Plant: give drive's own refusals and box.sh's checks names that clash with a step outcome.
   it("format: every refusal prints as refused:<check>, apart from the five step verbs", () => {
-    for (const c of [...checks, "agent_cap", "low_disk", "branch_checked_out"] as const) {
+    for (const c of [...checks, "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const) {
       const name = endName({ kind: "refused", check: c });
       expect(name).toBe(`refused:${c}`);
       expect(name.split(":")[0]).not.toMatch(/^(done|send|ask|skip|stuck)$/);
     }
+  });
+});
+
+describe("T566 a mutation step while another Docker box runs is refused before its box, today's tooling", () => {
+  const pid = fc.integer({ min: 1, max: 99_999 });
+  const lock = fc.oneof(
+    pid.map(String),
+    pid.map((n) => ` ${n}\n`),
+    fc.constantFrom("", "abc", "-4", "0", "1.5"),
+  );
+
+  // Plants: count a dead run's lock as busy; count an absent or garbled lock as busy; drop the pid.
+  it("property: busy exactly when the lock names a positive pid that is alive, and it names that pid", () => {
+    fc.assert(
+      fc.property(fc.option(lock, { nil: null }), fc.boolean(), (text, alive) => {
+        const asked: number[] = [];
+        const holder = dockerHolder(text, (p) => {
+          asked.push(p);
+          return alive;
+        });
+        const n = Number(text?.trim());
+        const named = text !== null && Number.isInteger(n) && n > 0;
+        expect(holder).toBe(named && alive ? n : null);
+        expect(asked).toEqual(named ? [n] : []);
+      }),
+      options,
+    );
+  });
+
+  it("scenario: layout-mutation3 on 2026-11-10, pid 97351 alive, is refused:docker_busy", () => {
+    expect(dockerHolder("97351", () => true)).toBe(97351);
+    expect(endName({ kind: "refused", check: "docker_busy" })).toBe("refused:docker_busy");
+  });
+});
+
+describe("T569 a review reads the lane's newest mutation report in its prompt, today's tooling", () => {
+  const stepName = fc.constantFrom("plan", "tests", "build", "mutation", "review");
+  const path = fc.stringMatching(/^\/b\/[a-z0-9]{1,6}\.md$/);
+  const row = fc.record({ step: stepName, report: fc.option(path, { nil: null }) });
+
+  // Plants: give it to every step; take the oldest mutation; drop the text; say nothing when none.
+  it("property: only a review gets it, the newest mutation row's report whole, else a plain note", () => {
+    fc.assert(
+      fc.property(stepName, fc.array(row, { maxLength: 8 }), fc.boolean(), (step, steps, readable) => {
+        const text = (p: string) => `report of ${p}`;
+        const tail = mutationTail(step, steps, (p) => (readable ? text(p) : null));
+        const newest = steps.filter((s) => s.step === "mutation" && s.report !== null).at(-1);
+
+        const whole = step === "review" && newest?.report !== undefined && newest.report !== null && readable;
+        expect(tail === "").toBe(step !== "review");
+        expect(tail.includes(text(newest?.report ?? "none"))).toBe(whole);
+        expect(tail.includes("cannot read outside itself")).toBe(whole);
+        expect(tail.includes("no mutation report")).toBe(step === "review" && !whole);
+      }),
+      options,
+    );
+  });
+
+  it("scenario: p34w-review1 on 2026-11-10 gets ../p34w-mutation3.md's text, not mutation2's", () => {
+    const steps = [
+      { step: "mutation", report: "/b/p34w-mutation2.md" },
+      { step: "mutation", report: "/b/p34w-mutation3.md" },
+      { step: "tests", report: "/b/p34w-tests10.md" },
+    ];
+    const tail = mutationTail("review", steps, (p) => `text of ${p}`);
+    expect(tail).toContain("text of /b/p34w-mutation3.md");
+    expect(tail).not.toContain("mutation2");
   });
 });
 
@@ -744,6 +814,69 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
     expect(lost.code).not.toBe(0);
     expect(lost.changes).toEqual([]);
     rmSync(root, { recursive: true, force: true });
+  });
+
+  // scenario: case-only renames, one with a text change and one without, as a move PR leaves
+  // them (ticket 573). On a disk that ignores case, git status reads the first as a modified old
+  // name and the second as nothing; on one that keeps case, as a delete and a new file. Either
+  // way the new name must be named and the old one must not survive as a plain edit.
+  // Plants: read only git status; take a file whose folder differs; name the old path as edited.
+  it("scenario: a case-only rename is named by its new name, on a disk that ignores case or keeps it", () => {
+    const top = mkdtempSync(join(tmpdir(), "drive-case-"));
+    const box = join(top, "c");
+    const cgit = (...args: string[]) =>
+      spawnSync(
+        "git",
+        [
+          `--git-dir=${join(top, "c-gitdata")}`,
+          `--work-tree=${box}`,
+          "-c",
+          "user.email=t@example.com",
+          "-c",
+          "user.name=t",
+          ...args,
+        ],
+        { encoding: "utf8" },
+      );
+    spawnSync("git", ["init", "-q", "--separate-git-dir", join(top, "c-gitdata"), box]);
+    mkdirSync(join(box, "src"));
+
+    for (const f of ["src/id.ts", "src/answer.ts", "src/keep.ts"]) {
+      writeFileSync(join(box, f), "1\n");
+    }
+
+    cgit("add", ".");
+    cgit("commit", "-q", "-m", "base");
+    // The agent's case-only renames: by a temporary name, as on a Mac.
+    renameSync(join(box, "src/id.ts"), join(box, "src/tmp"));
+    renameSync(join(box, "src/tmp"), join(box, "src/Id.ts"));
+    writeFileSync(join(box, "src/Id.ts"), "2\n");
+    renameSync(join(box, "src/answer.ts"), join(box, "src/tmp"));
+    renameSync(join(box, "src/tmp"), join(box, "src/Answer.ts"));
+    const ignoresCase = existsSync(join(box, "src/ID.TS"));
+    const read = boxChanges({ BOXES: top }, "c");
+    expect(read.code).toBe(0);
+    const named = read.changes.map((c) => c.path);
+    expect(named).toContain("src/Id.ts");
+    expect(named).toContain("src/Answer.ts");
+    expect(named).not.toContain("src/keep.ts");
+
+    if (ignoresCase) {
+      expect(read.changes.toSorted((x, y) => x.path.localeCompare(y.path))).toEqual([
+        { xy: "R ", from: "src/answer.ts", path: "src/Answer.ts" },
+        { xy: "R ", from: "src/id.ts", path: "src/Id.ts" },
+      ]);
+    } else {
+      expect(
+        read.changes
+          .filter((c) => c.xy === " D")
+          .map((c) => c.path)
+          .toSorted(),
+      ).toEqual(["src/answer.ts", "src/id.ts"]);
+    }
+
+    expect(caseRenames(box, ["src/keep.ts", "src/gone.ts"])).toEqual([]);
+    rmSync(top, { recursive: true, force: true });
   });
 });
 
