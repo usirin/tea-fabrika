@@ -41,13 +41,20 @@ const LETTER = "letter_01m6v5270hetdrt4r8h9vvjwjr";
 const folder = mkdtempSync(join(tmpdir(), "p9-mailbox-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
+
 const fresh = (): Sql => {
 	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
 	opened.push(db);
 	return nodeSql(db);
 };
+
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -66,12 +73,16 @@ const from = (over: Partial<From> = {}): From => ({
 	build: "b-7c1d073",
 	...over,
 });
+
 const send = (to: string, id: string, m: unknown, over: Partial<From> = {}) =>
 	Mailbox.use((mailbox) => mailbox.send(to, id, m, from(over)));
+
 const receive = (name: string, after = 0) =>
 	Mailbox.use((mailbox) => Stream.runCollect(mailbox.receive(name, after)));
+
 const inbox = (name: string) =>
 	Ledger.use((ledger) => Stream.runCollect(ledger.read(`${name}/inbox`, 0)));
+
 /** A line straight into the log, as another writer would put it. */
 const raw = (stream: string, id: string, over: Partial<Line>) =>
 	Ledger.use((ledger) =>
@@ -88,6 +99,7 @@ const raw = (stream: string, id: string, over: Partial<Line>) =>
 			...over,
 		}),
 	);
+
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
 	examples: NoInfer<A>[],
@@ -109,6 +121,7 @@ const check = <A, E, R>(
 			),
 		);
 	});
+
 const json = fc.jsonValue();
 
 describe("P33, only the owning runner writes its answers", () => {
@@ -132,7 +145,10 @@ describe("P33, only the owning runner writes its answers", () => {
 						expect(answer._tag, "runner writes only its own inbox and process").toBe(
 							allowed ? "placed" : "refused",
 						);
-						if (!allowed) expect(answer).toEqual({_tag: "refused", why: "forbidden"});
+
+						if (!allowed) {
+							expect(answer).toEqual({_tag: "refused", why: "forbidden"});
+						}
 					}
 				}
 			}).pipe(Effect.provideService(RunnerMail, {name, process}), Effect.provide(mail()));
@@ -147,13 +163,16 @@ describe("P33, only the owning runner writes its answers", () => {
 			expect(inRunnerSpace(answer), "numeric runner answer").toBe(true);
 			expect(inRunnerSpace(`${answer}/result`)).toBe(true);
 			expect(inRunnerSpace(`${process}/${step}/word/answer`)).toBe(false);
+
 			for (const write of [
 				{stream: "processes", id: "ordinary", tag: "saved"},
 				{stream: `processes/name:${count}`, id: "ordinary", tag: "saved"},
 				{stream: "notes/inbox", id: "ordinary", tag: "registered"},
 				{stream: "notes/inbox", id: answer, tag: "send"},
-			])
+			]) {
 				expect(brainOnly(write), "each protected write requires the brain").toBe(true);
+			}
+
 			expect(brainOnly({stream: "notes/inbox", id: `letter:${count}`, tag: "send"})).toBe(false);
 		},
 		{arbitrary: {seed: SEED, runs: 100}},
@@ -321,7 +340,11 @@ describe("p21, receive", () => {
 				const names = messages.map((_, i) =>
 					i < 3 ? ["letter_a", "letter_b", "letter_c"][i]! : `letter_${i}`,
 				);
-				for (const [i, m] of messages.entries()) yield* send("notes:1", names[i]!, m);
+
+				for (const [i, m] of messages.entries()) {
+					yield* send("notes:1", names[i]!, m);
+				}
+
 				expect((yield* receive("notes:1", 1)).map((l) => l.id)).toEqual(names.slice(1));
 				expect(yield* receive("notes:1", messages.length)).toEqual([]);
 			}).pipe(Effect.provide(mail())),
@@ -382,7 +405,10 @@ describe("p21, receive", () => {
 	it.effect("reads past one page: 300 letters, all, in order", () =>
 		check(fc.integer({min: 257, max: 600}), [300], (count) =>
 			Effect.gen(function* () {
-				for (let i = 0; i < count; i++) yield* send("notes:1", `letter_${i}`, i, {seen: i});
+				for (let i = 0; i < count; i++) {
+					yield* send("notes:1", `letter_${i}`, i, {seen: i});
+				}
+
 				const letters = yield* receive("notes:1");
 				expect(letters.map((l) => l.m)).toEqual(Array.from({length: count}, (_, i) => i));
 				expect(letters.map((l) => l.pos)).toEqual(Array.from({length: count}, (_, i) => i + 1));
@@ -406,6 +432,7 @@ describe("p21, receive", () => {
 				Effect.runPromise(
 					Effect.gen(function* () {
 						const want = new Map<string, Array<{readonly id: string; readonly m: unknown}>>();
+
 						for (const {to, id, m} of sends) {
 							const answer = yield* send(to, id, m);
 							const box = want.get(to) ?? [];
@@ -414,8 +441,12 @@ describe("p21, receive", () => {
 							expect(answer._tag, `${to} ${id}`).toBe(
 								known === undefined || same ? "placed" : "refused",
 							);
-							if (known === undefined) want.set(to, [...box, {id, m}]);
+
+							if (known === undefined) {
+								want.set(to, [...box, {id, m}]);
+							}
 						}
+
 						for (const to of ["notes:1", "notes:2"]) {
 							const letters = yield* receive(to);
 							expect(letters.map((l) => ({id: l.id, m: l.m}))).toEqual(want.get(to) ?? []);

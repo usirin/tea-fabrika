@@ -204,6 +204,7 @@ describe("claude: SDK messages", () => {
 			// @ts-expect-error nor name the system prompt itself
 			{more: () => ({systemPrompt: "something else"})},
 		];
+
 		for (const config of configs) {
 			const opened: Options[] = [];
 			const open: Open = ({options}) => {
@@ -290,12 +291,14 @@ describe("claude: where its settings come from", () => {
 			// @ts-expect-error nor the folder the project's settings are read from
 			{open, more: () => ({projectConfigRoot: "/work/repo"})},
 		];
+
 		for (const config of configs) {
 			const error = await Effect.runPromise(
 				Effect.scoped(Effect.flip(claudeAdapter(config).start(TURN))),
 			);
 			expect(error).toMatchObject({_tag: "AgentFailed", why: "contain"});
 		}
+
 		expect(seen).toHaveLength(0);
 	});
 
@@ -401,7 +404,10 @@ describe("codex: the system prompt", () => {
 		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir()};
 		const seen: ChildProcess.StandardCommand[] = [];
 		const spawner = ChildProcessSpawner.make((command) => {
-			if (command._tag === "StandardCommand") seen.push(command);
+			if (command._tag === "StandardCommand") {
+				seen.push(command);
+			}
+
 			return Effect.fail(
 				PlatformError.systemError({_tag: "NotFound", module: "test", method: "spawn"}),
 			);
@@ -451,7 +457,11 @@ describe("codex: the system prompt", () => {
 		const {why, seen, parent} = await tryStart(home, system, access);
 		expect(why.why).toBe("start");
 		const command = seen[0];
-		if (command === undefined) throw new Error("codex was never started");
+
+		if (command === undefined) {
+			throw new Error("codex was never started");
+		}
+
 		const args = command.args.filter((a) => typeof a === "string");
 		const flags = args.flatMap((a, i) => (args[i - 1] === "-c" ? [a] : []));
 		return {flags, home: codexHomeOf("session:s", parent), owner: home};
@@ -522,7 +532,10 @@ describe("codex: the system prompt", () => {
 		const parent = {PATH: "/usr/bin:/bin", HOME: home, USER: "someone", TMPDIR: tmpdir(), ...more};
 		const seen: ChildProcess.StandardCommand[] = [];
 		const spawner = ChildProcessSpawner.make((command) => {
-			if (command._tag === "StandardCommand") seen.push(command);
+			if (command._tag === "StandardCommand") {
+				seen.push(command);
+			}
+
 			return Effect.fail(
 				PlatformError.systemError({_tag: "NotFound", module: "test", method: "spawn"}),
 			);
@@ -639,7 +652,11 @@ describe("codex: the system prompt", () => {
 	it("starts nothing and says why when the box could not take the home's table", async () => {
 		const home = madeUpHome();
 		mkdirSync(join(home, "copy"));
-		for (let n = 0; n <= FENCE_LIMIT; n++) writeFileSync(join(home, `co-private-${n}`), "");
+
+		for (let n = 0; n <= FENCE_LIMIT; n++) {
+			writeFileSync(join(home, `co-private-${n}`), "");
+		}
+
 		const {why, seen, parent} = await tryStart(home, {_tag: "append", text: ""}, "write");
 		expect(why.why).toBe("contain");
 		expect(why.message).toContain(`at most ${FENCE_LIMIT}`);

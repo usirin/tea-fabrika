@@ -28,18 +28,27 @@ const folder = mkdtempSync(join(tmpdir(), "p6-rings-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
 const freshPath = (): string => join(folder, `ledger-${++files}.db`);
+
 const openDb = (path: string): DatabaseSync => {
 	const db = new DatabaseSync(path);
 	opened.push(db);
 	return db;
 };
+
 const fresh = (): Sql => nodeSql(openDb(freshPath()));
+
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
 type Rung = {readonly to: string; readonly stream: string; readonly rev: number};
+
 /** A doorbell that writes down each ring; `fails` names the waiters whose delivery fails. */
 const bell = (fails: ReadonlyArray<string> = []) => {
 	const rang: Array<Rung> = [];
@@ -55,8 +64,10 @@ const bell = (fails: ReadonlyArray<string> = []) => {
 	});
 	return {rang, layer};
 };
+
 const onReferee = (sql: Sql, doorbell: Layer.Layer<Doorbell>) =>
 	Referee.layer(sql).pipe(Layer.provide(doorbell));
+
 const onLedger = (sql: Sql, doorbell: Layer.Layer<Doorbell>, reader: string) =>
 	Ledger.sql(sql, {reader}).pipe(Layer.provide(doorbell));
 
@@ -72,10 +83,12 @@ const line = (over: Partial<Line> = {}): Line => ({
 	body: {note: "n-7f3a", base: 3},
 	...over,
 });
+
 const placed = (rev: number, pos: number) => ({_tag: "placed", rev, pos});
 const parked = {_tag: "parked"};
 const T1 = "gateway:t1";
 const T2 = "gateway:t2";
+
 const byWaiter = (rungs: ReadonlyArray<Rung>) =>
 	[...rungs].sort((x, y) => `${x.to} ${x.stream}`.localeCompare(`${y.to} ${y.stream}`));
 
@@ -152,7 +165,11 @@ describe("p94, a parked wait is a row, rung once", () => {
 			return Effect.gen(function* () {
 				const referee = yield* Referee;
 				yield* referee.append("a", "w-1", line());
-				for (const after of afters) expect(yield* referee.wait("a", after, T1)).toEqual(parked);
+
+				for (const after of afters) {
+					expect(yield* referee.wait("a", after, T1)).toEqual(parked);
+				}
+
 				expect(yield* referee.append("a", "w-2", line())).toEqual(placed(2, 2));
 				expect(rang).toEqual([{to: T1, stream: "a", rev: 2}]);
 				yield* referee.append("a", "w-3", line());
@@ -189,6 +206,7 @@ describe("p94, a parked wait is a row, rung once", () => {
 				ring: (to) =>
 					Effect.gen(function* () {
 						rang.push(to);
+
 						if (to === T1) {
 							yield* Deferred.succeed(started, undefined);
 							yield* Deferred.await(release);

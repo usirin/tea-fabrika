@@ -51,6 +51,7 @@ const run = fc.constantFrom("r-1", "r-2");
 /** One fact, by whoever may write it. Facts out of order are the fold's problems, not a throw. */
 type Written = readonly [Entry["by"], Fact];
 const by = (who: Entry["by"], f: Fact): Written => [who, f];
+
 const fact: fc.Arbitrary<Written> = fc.oneof(
 	{
 		arbitrary: fc
@@ -91,6 +92,7 @@ const fact: fc.Arbitrary<Written> = fc.oneof(
 	},
 	{arbitrary: fc.constant(by(owner, {type: "closed"})), weight: 1},
 );
+
 /** A read's rows: facts on a few tickets, a minute apart from the hour before noon. */
 const entries = fc.array(fc.tuple(ticket, fact), {maxLength: 8}).map((rows) =>
 	rows.map(([n, [by, f]], i): Entry => ({
@@ -101,6 +103,7 @@ const entries = fc.array(fc.tuple(ticket, fact), {maxLength: 8}).map((rows) =>
 		fact: f,
 	})),
 );
+
 /** Keys that wait, and one that never does. */
 const key = fc.constantFrom("1/a-1", "1/a-2", "2/a-1", "2/stuck/r-1", "3/stuck/r-2", "9/a-9");
 
@@ -119,6 +122,7 @@ const table: MsgArbitraryTable<Msg> = {
 		.map(([es, last]) => load.ok(load({after: 0}), {entries: es, last}, 0)),
 	load_err: fc.constant({type: load.errType, cmd: load({after: 0}), error: malformed, at: 0}),
 };
+
 const weights = {load_ok: 4, moved: 3, later: 2, back: 2, seen: 2};
 const lists = fc.array(arbMsg(table, {weights}), {maxLength: 30, size: "max"});
 
@@ -134,6 +138,7 @@ const everyStep = (name: string, holds: (step: AsksStep, machine: Machine) => bo
 	name,
 	check: (machine) => propertyInvariant(machine, ctx, lists, (step) => holds(step, machine), OPTS),
 });
+
 const everyTrace = (
 	name: string,
 	holds: (steps: readonly AsksStep[], machine: Machine) => boolean,
@@ -143,9 +148,12 @@ const everyTrace = (
 });
 
 const keys = (asks: readonly {readonly key: string}[]) => asks.map((a) => a.key).sort();
+
 const same = (a: readonly string[], b: readonly string[]) =>
 	a.length === b.length && a.every((k, i) => k === b[i]);
+
 const isAnswer = (msg: Msg) => msg.type === "load_ok" || msg.type === "load_err";
+
 const pollOf = (machine: Machine, s: Asks) =>
 	machine.subs?.find((sub) => sub.type === "poll")?.deps(s) ?? null;
 
@@ -154,12 +162,22 @@ const pollOf = (machine: Machine, s: Asks) =>
 const laterMoves = everyStep(
 	"later takes an ask out of the count, back brings it in, and neither changes what waits",
 	({prev, msg, next}) => {
-		if (msg.type !== "later" && msg.type !== "back") return true;
+		if (msg.type !== "later" && msg.type !== "back") {
+			return true;
+		}
+
 		const before = asksNow(prev);
 		const after = asksNow(next);
 		const waiting = keys([...after.asks, ...after.later]);
-		if (!same(keys([...before.asks, ...before.later]), waiting)) return false;
-		if (!waiting.includes(msg.key)) return true;
+
+		if (!same(keys([...before.asks, ...before.later]), waiting)) {
+			return false;
+		}
+
+		if (!waiting.includes(msg.key)) {
+			return true;
+		}
+
 		return msg.type === "later"
 			? !keys(after.asks).includes(msg.key)
 			: keys(after.asks).includes(msg.key);
@@ -167,7 +185,10 @@ const laterMoves = everyStep(
 );
 
 const seenOnlyDot = everyStep("seen takes the dot away and never an ask", ({prev, msg, next}) => {
-	if (msg.type !== "seen") return true;
+	if (msg.type !== "seen") {
+		return true;
+	}
+
 	const before = asksNow(prev);
 	const after = asksNow(next);
 	return (
@@ -180,11 +201,19 @@ const seenOnlyDot = everyStep("seen takes the dot away and never an ask", ({prev
 const oneRead = everyTrace("the ledger is asked for at most one read per answer", (steps) => {
 	// The first read is out from the start.
 	let out = 1;
+
 	for (const {msg, cmds} of steps) {
-		if (isAnswer(msg)) out = 0;
+		if (isAnswer(msg)) {
+			out = 0;
+		}
+
 		out += cmds.length;
-		if (out > 1) return false;
+
+		if (out > 1) {
+			return false;
+		}
 	}
+
 	return true;
 });
 
@@ -193,14 +222,24 @@ const newsRead = everyTrace(
 	(steps) => {
 		let out = true;
 		let news = false;
+
 		for (const {msg, cmds} of steps) {
-			if (msg.type === "moved" && out) news = true;
+			if (msg.type === "moved" && out) {
+				news = true;
+			}
+
 			if (isAnswer(msg) && out) {
-				if (news && cmds.length !== 1) return false;
+				if (news && cmds.length !== 1) {
+					return false;
+				}
+
 				news = false;
 				out = cmds.length > 0;
-			} else if (cmds.length > 0) out = true;
+			} else if (cmds.length > 0) {
+				out = true;
+			}
 		}
+
 		return true;
 	},
 );
@@ -209,8 +248,15 @@ const pollOff = everyStep(
 	"the poll is off while a read is out, and on once it came back with nothing to read",
 	({msg, cmds, next}, machine) => {
 		const poll = pollOf(machine, next);
-		if (cmds.length > 0) return poll === null;
-		if (isAnswer(msg)) return poll !== null;
+
+		if (cmds.length > 0) {
+			return poll === null;
+		}
+
+		if (isAnswer(msg)) {
+			return poll !== null;
+		}
+
 		return true;
 	},
 );
@@ -219,9 +265,15 @@ const failureSaid = everyStep(
 	"a failed read says so, with why, until a read works",
 	({msg, next}) => {
 		const now = asksNow(next);
-		if (msg.type === "failed" || msg.type === "load_err")
+
+		if (msg.type === "failed" || msg.type === "load_err") {
 			return now.reach === "failed" && now.why !== null;
-		if (msg.type === "load_ok") return now.reach === "ok" && now.why === null;
+		}
+
+		if (msg.type === "load_ok") {
+			return now.reach === "ok" && now.why === null;
+		}
+
 		return true;
 	},
 );
@@ -235,9 +287,15 @@ const marksWait = everyStep(
 	"a read keeps exactly the marks whose asks wait, and later sets aside only what waits",
 	({prev, msg, next}) => {
 		const waiting = new Set(waitingOf(next.tickets, next.now).map((a) => a.key));
-		if (msg.type === "later")
+
+		if (msg.type === "later") {
 			return next.later.every((k) => prev.later.includes(k) || waiting.has(k));
-		if (msg.type !== "load_ok") return true;
+		}
+
+		if (msg.type !== "load_ok") {
+			return true;
+		}
+
 		const kept = (keys: readonly string[]) => keys.filter((k) => waiting.has(k));
 		return same(next.later, kept(prev.later)) && same(next.seen, kept(prev.seen));
 	},
@@ -267,6 +325,7 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = asksMachine.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...asksMachine,
@@ -341,10 +400,12 @@ describe("the asks machine's laws", () => {
 		const reached = fc.sample(lists, OPTS).flatMap((msgs) => {
 			let s = asksMachine.init(null, ctx)[0];
 			const seen: Asks[] = [s];
+
 			for (const m of msgs) {
 				s = applyCell<Asks, Msg, Load>(asksMachine, s, m)[0];
 				seen.push(s);
 			}
+
 			return seen;
 		});
 		expect(new Set(reached.map((s) => s.load))).toEqual(new Set(["busy", "again", "idle"]));

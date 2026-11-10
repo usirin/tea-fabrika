@@ -144,7 +144,7 @@ waits until each has an answer, prints it, and stops the run. Each pull
 request ran through the old `run.ts` (a worktree of `main`) and the new one
 back to back, with `--own` set to the repo's two owner accounts, and the two
 outputs were compared byte for byte, stdout and stderr. The saved answers are
-in [`results/63-ship-program-old-vs-new.json`](./results/63-ship-program-old-vs-new.json).
+in [`results/63-ship-program-old-vs-new.json`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/63-ship-program-old-vs-new.json).
 
 | Pull request | State | Name | Old vs new |
 |---|---|---|---|

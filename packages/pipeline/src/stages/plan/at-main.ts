@@ -43,17 +43,23 @@ export const planAtMain = (gh: Gh, work: string): Layer.Layer<PlanHost> =>
 			const mainOf = (url: string) =>
 				Effect.gen(function* () {
 					const at = ticketOf(url);
-					if (at === null) return yield* failed;
+
+					if (at === null) {
+						return yield* failed;
+					}
+
 					const clone = cloneIn(work, at);
 					const there = yield* fs
 						.exists(path.join(clone, ".git"))
 						.pipe(Effect.orElseSucceed(() => false));
+
 					if (!there) {
 						yield* fs
 							.makeDirectory(path.dirname(clone), {recursive: true})
 							.pipe(Effect.mapError(() => ({_tag: "unknown" as const})));
 						yield* git(["clone", "--no-checkout", "--quiet", urlOf(at), clone]);
 					}
+
 					yield* git(["-C", clone, "fetch", "--prune", "--quiet", "origin"]);
 					return yield* git(["-C", clone, "rev-parse", "--verify", "origin/main^{commit}"]);
 				});

@@ -43,10 +43,20 @@ const FAILED: ReadonlySet<Check["conclusion"]> = new Set([
 
 /** A pull request's checks in one line: failed (and which), running, or passed. */
 export const checksLine = (checks: readonly Check[]): string => {
-	if (checks.length === 0) return "no checks";
+	if (checks.length === 0) {
+		return "no checks";
+	}
+
 	const failed = checks.filter((c) => FAILED.has(c.conclusion)).map((c) => c.name);
-	if (failed.length > 0) return `checks failed (${failed.join(", ")})`;
-	if (checks.some((c) => c.status !== "completed")) return "checks running";
+
+	if (failed.length > 0) {
+		return `checks failed (${failed.join(", ")})`;
+	}
+
+	if (checks.some((c) => c.status !== "completed")) {
+		return "checks running";
+	}
+
 	return "checks passed";
 };
 

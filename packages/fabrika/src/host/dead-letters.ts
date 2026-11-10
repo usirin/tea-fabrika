@@ -46,11 +46,15 @@ export const limitEnds = (name: string) =>
 		const ledger = yield* Ledger;
 		const rows = yield* ledger.readStream(streams(name).dead);
 		return rows.flatMap((r) => {
-			if (r.kind !== "limit" || r.writer !== "ledger") return [];
+			if (r.kind !== "limit" || r.writer !== "ledger") {
+				return [];
+			}
+
 			const d = decodeLimit(r.data);
 			return Exit.isSuccess(d) ? [d.value] : [];
 		});
 	});
+
 /** Under `REDRIVE`, so the door lets only a person send one (an agent's credential is refused). */
 const redriveId = (rev: number) => `${REDRIVE}${rev}`;
 
@@ -60,7 +64,10 @@ const deadOf = (name: string) =>
 		const ledger = yield* Ledger;
 		const rows = yield* ledger.readStream(streams(name).dead);
 		return rows.flatMap((r) => {
-			if (r.kind !== "dead_letter" || r.writer !== "ledger") return [];
+			if (r.kind !== "dead_letter" || r.writer !== "ledger") {
+				return [];
+			}
+
 			const d = decodeDead(r.data);
 			return Exit.isSuccess(d) ? [d.value] : [];
 		});
@@ -94,10 +101,21 @@ export const redrive = (name: string, rev: number, writer: string) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const inbox: Inbox = streams(name).inbox;
-		if (!(yield* deadOf(name)).some((d) => d.rev === rev)) return {how: "not_dead"} as Redriven;
+
+		if (!(yield* deadOf(name)).some((d) => d.rev === rev)) {
+			return {how: "not_dead"} as Redriven;
+		}
+
 		const original = (yield* ledger.readStream(inbox, rev - 1, 1))[0];
-		if (original === undefined || original.rev !== rev) return {how: "not_dead"} as Redriven;
-		if (original.writer === "ledger") return {how: "ledger_message"} as Redriven;
+
+		if (original === undefined || original.rev !== rev) {
+			return {how: "not_dead"} as Redriven;
+		}
+
+		if (original.writer === "ledger") {
+			return {how: "ledger_message"} as Redriven;
+		}
+
 		const data = yield* Effect.try(() => JSON.parse(original.data) as unknown).pipe(
 			Effect.orElseSucceed(() => original.data),
 		);

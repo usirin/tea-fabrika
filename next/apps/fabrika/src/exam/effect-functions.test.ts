@@ -7,6 +7,7 @@ import {plant} from "./plant.ts";
 
 const CODE = "fabrika(effect-functions)";
 const FILE = "next/packages/libfabrika/src/data/tracing.ts";
+
 const source = [
 	'import {Effect, Stream} from "effect";',
 	"declare const append: () => Effect.Effect<void>;",
@@ -75,12 +76,18 @@ describe("effect-functions", async () => {
 				});
 				const before = new Map<string, string>();
 				const after = new Map<string, string>();
+
 				for (const [index, present] of old.entries()) {
 					const path = `next/test-${index}.ts`;
 					const source = `// oxlint-disable-next-line fabrika/no-promises -- edge: case ${index}\nconst value = 1;`;
-					if (present) before.set(path, source);
+
+					if (present) {
+						before.set(path, source);
+					}
+
 					after.set(path, source);
 				}
+
 				const found = Effect.runSync(asks(before, after).pipe(Effect.withTracer(tracer)));
 				expect(found.map((edge) => edge.path).sort()).toEqual(
 					old.flatMap((present, index) => (present ? [] : [`next/test-${index}.ts`])).sort(),

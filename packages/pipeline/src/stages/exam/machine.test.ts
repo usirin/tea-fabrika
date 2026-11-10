@@ -6,6 +6,7 @@ import {type ExamAsk, exam, examSub} from "./machine.ts";
 
 const HEAD = "3".repeat(40);
 const WHY = ["Ship refused the merge: send:builder:conflicts."];
+
 const ASK: ExamAsk = {
 	ticket: "o/r#1",
 	number: 1,

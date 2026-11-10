@@ -41,6 +41,7 @@ const SMALL_LIST = programList(SMALL);
 
 const Waiting = Schema.Struct({phase: Schema.Literals(["waiting", "over"])});
 type Waiting = typeof Waiting.Type;
+
 const waiting = defineMachine({
 	types: {
 		model: {} as Waiting,
@@ -92,6 +93,7 @@ const lazy = defineProgram({
 	outputs: {},
 	main: () => Effect.sleep(Duration.millis(200)),
 });
+
 let runs = 0;
 
 /** One tsh on a storage. `line` tells it a line and answers what it printed for it, and its status. */
@@ -107,7 +109,11 @@ const session = (list: ProgramList, storage: Storage, show: Show = "short") =>
 			{printed: printed.hear, ready: ready.hear},
 			{id: `tsh:test-${runs}`, storage},
 		).pipe(Effect.provideService(Programs, list), Effect.provideService(HostJobs, jobs));
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		const line = (text: string) =>
 			Effect.gen(function* () {
@@ -125,8 +131,9 @@ const session = (list: ProgramList, storage: Storage, show: Show = "short") =>
 		/** Wait until tsh has printed a line that has `text` in it: a job's output comes when it comes. */
 		const heard = (text: string) =>
 			Effect.gen(function* () {
-				while (!printed.values.some((p) => p.text.includes(text)))
+				while (!printed.values.some((p) => p.text.includes(text))) {
 					yield* Effect.sleep(Duration.millis(5));
+				}
 			});
 		return {started, line, heard, printed, ready};
 	});
@@ -156,7 +163,11 @@ describe("tsh: the user's job, one session", () => {
 				// that started a program was a job too: the four above were %1 to %4, so this is %5.
 				const job = yield* line("tally &");
 				expect(job.err[0]).toMatch(/^\[5\] tally:[0-9a-f]{8}$/);
-				for (const n of [2, 3, 4]) expect((yield* line(`tell %5 add ${n}`)).status).toBe(0);
+
+				for (const n of [2, 3, 4]) {
+					expect((yield* line(`tell %5 add ${n}`)).status).toBe(0);
+				}
+
 				yield* heard("[5] total 9");
 				// Under the job, its one copy's status line.
 				expect((yield* line("jobs")).out).toEqual(["[5] running   tally", "      total 9"]);
@@ -288,7 +299,8 @@ describe("tsh: kept jobs", () => {
 
 	it("a tsh left with Ctrl-D does not leave the next one born with its line closed", async () => {
 		const storage = fileStorage(mkdtempSync(join(tmpdir(), "tsh-storage-")));
-		for (const _ of [1, 2, 3])
+
+		for (const _ of [1, 2, 3]) {
 			await Effect.runPromise(
 				Effect.gen(function* () {
 					const {line, started} = yield* session(SMALL_LIST, storage);
@@ -297,6 +309,7 @@ describe("tsh: kept jobs", () => {
 					expect((yield* started.run.ended).kind).toBe("ended");
 				}).pipe(Effect.scoped),
 			);
+		}
 	});
 
 	it("stop drops a detached job for good", async () => {
@@ -322,6 +335,7 @@ describe("tsh: kept jobs", () => {
 // ---------------------------------------------------------------- fabrika's own programs
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
+
 /** Clear once a review has kept its rows: each closes the ticket the recorded body names ("Fixes #625"). */
 const clear: PrFacts = {
 	head: HEADS.final,
@@ -335,6 +349,7 @@ const clear: PrFacts = {
 	comments: [],
 	main: {tested: "main0", tip: "main0"},
 };
+
 /** The recorded pull request, open at the head that merged. */
 const opened = changed(recorded("change-final.json"), (repo) => {
 	repo.pullRequest.state = "OPEN";

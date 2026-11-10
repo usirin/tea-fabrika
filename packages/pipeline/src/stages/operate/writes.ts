@@ -56,11 +56,19 @@ export const reviewWritesOn = (gh: Gh): ReviewWrites["Service"] => ({
 	post: (v) =>
 		Effect.gen(function* () {
 			const at = prOf(v.pr);
-			if (at === null) return yield* Effect.fail<Failed>({_tag: "unknown"});
+
+			if (at === null) {
+				return yield* Effect.fail<Failed>({_tag: "unknown"});
+			}
+
 			const path = `repos/${at.owner}/${at.name}/issues/${at.number}/comments`;
 			const marker = markerOf(v);
 			const there = yield* answerOf(gh, Comments, ["api", `${path}?per_page=100`]);
-			if (there.some((comment) => comment.body.split("\n")[0]?.trim() === marker)) return;
+
+			if (there.some((comment) => comment.body.split("\n")[0]?.trim() === marker)) {
+				return;
+			}
+
 			yield* gh(["api", "--method", "POST", path, "-f", `body=${commentOf(v)}`]);
 		}),
 });

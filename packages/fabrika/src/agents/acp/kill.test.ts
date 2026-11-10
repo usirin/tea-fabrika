@@ -63,23 +63,31 @@ const life = (home: string, line: string) =>
  */
 const kept = (home: string): Session | null => {
 	const dir = join(home, "storage");
-	if (!existsSync(dir)) return null;
+
+	if (!existsSync(dir)) {
+		return null;
+	}
+
 	let newest: {readonly opened: number; readonly count: number; readonly body: string} | null =
 		null;
+
 	for (const name of readdirSync(dir).filter((n) => /%2Fmachine%2Fsession%2F/.test(n))) {
 		// oxlint-disable-next-line fabrika/no-raw-try-catch -- a plain read of a file tsh may be writing right now; a torn one is expected, and `null` says so
 		try {
 			const slot = JSON.parse(readFileSync(join(dir, name), "utf8"));
+
 			if (
 				newest === null ||
 				slot.opened > newest.opened ||
 				(slot.opened === newest.opened && slot.count > newest.count)
-			)
+			) {
 				newest = slot;
+			}
 		} catch {
 			return null;
 		}
 	}
+
 	return newest === null ? null : (JSON.parse(newest.body) as Session);
 };
 
@@ -92,11 +100,13 @@ const prompts = (folder: string) => {
 /** Wait until `check` holds. Stopped mid-wait (the test's time limit, or a cancel), it says `what`. */
 const until = (what: string, check: () => boolean) =>
 	Effect.gen(function* () {
-		while (!check()) yield* Effect.sleep("25 millis");
+		while (!check()) {
+			yield* Effect.sleep("25 millis");
+		}
 	}).pipe(Effect.onInterrupt(() => Effect.logError(`waited for ${what}`)));
 
 describe("acp in tsh, killed mid turn, attached again", () => {
-	for (const reopen of ["load", "resume"])
+	for (const reopen of ["load", "resume"]) {
 		it.live(
 			`kill -9 in the second of three turns, then attach (${reopen}): every prompt answered, the cut one sent again, none retyped`,
 			() =>
@@ -151,4 +161,5 @@ describe("acp in tsh, killed mid turn, attached again", () => {
 					]);
 				}),
 		);
+	}
 });

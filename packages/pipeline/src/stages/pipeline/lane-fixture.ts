@@ -25,6 +25,7 @@ const IDENTITY = {
 const FAKE_CODEX = fileURLToPath(
 	new URL("../../../../../fixtures/pipeline-lane/codex.mjs", import.meta.url),
 );
+
 const FAKE_GH = fileURLToPath(
 	new URL("../../../../../fixtures/pipeline-lane/gh.mjs", import.meta.url),
 );
@@ -140,7 +141,11 @@ export function makeLaneHome({
 	put("docs/rubrics/code.md", "Code that does what its ticket says.\n");
 	put("docs/rubrics/doc.md", "Words that say what is true.\n");
 	put("docs/rubrics/skill.md", "A skill that does one job.\n");
-	for (const {path, text} of mainFiles) put(path, text);
+
+	for (const {path, text} of mainFiles) {
+		put(path, text);
+	}
+
 	put(
 		".fabrika/fabrika.toml",
 		[
@@ -188,6 +193,7 @@ export function makeLaneHome({
 	git(seed, "commit", "--quiet", "-m", "first");
 	git(seed, "remote", "add", "origin", remote);
 	git(seed, "push", "--quiet", "origin", "main");
+
 	if (host === "github") {
 		git(seed, "remote", "set-url", "origin", GITHUB_ORIGIN);
 		writeFileSync(
@@ -195,6 +201,7 @@ export function makeLaneHome({
 			`[url ${JSON.stringify(remote)}]\n\tinsteadOf = ${GITHUB_ORIGIN}\n`,
 		);
 	}
+
 	return {home, remote, seed};
 }
 
@@ -253,6 +260,7 @@ const GhPull = Schema.Struct({
 	mergeCommit: Schema.NullOr(Schema.String),
 	comments: Schema.Array(Schema.Struct({body: Schema.String})),
 });
+
 const readPulls = Schema.decodeUnknownSync(
 	Schema.fromJsonString(Schema.Struct({pulls: Schema.Array(GhPull)})),
 );

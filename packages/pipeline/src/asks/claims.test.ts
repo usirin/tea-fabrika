@@ -15,6 +15,7 @@ const U = ticketId("o/r#8");
 const [L1, L2, L3, L4] = ["L1", "L2", "L3", "L4"].map(laneId) as [LaneId, LaneId, LaneId, LaneId];
 
 type Memory = ReturnType<typeof memoryLedger>;
+
 /** One process on `ledger`: its own leases, renewed while `effect` runs. */
 const proc = <A, E>(
 	ledger: Layer.Layer<Ledger>,
@@ -24,8 +25,10 @@ const proc = <A, E>(
 	Effect.runPromise(
 		effect.pipe(Effect.provide(layerLanes({ttlMs}).pipe(Layer.provideMerge(ledger)))),
 	);
+
 const holderNow = (memory: Memory, ticket = T) =>
 	Effect.runSync(holderOf(ticket).pipe(Effect.provide(memory.layer)));
+
 /** The `claimed` events on a ticket's name: one per claim the ledger took. */
 const claimsOn = (memory: Memory, ticket = T) =>
 	memory.rows().filter((r) => r.stream === ticketName(ticket) && r.kind === "claimed");
@@ -36,7 +39,8 @@ const claimsOn = (memory: Memory, ticket = T) =>
  */
 const crowded = (memory: Memory) => {
 	const wrapped: Record<string, unknown> = {};
-	for (const [key, call] of Object.entries(memory.service))
+
+	for (const [key, call] of Object.entries(memory.service)) {
 		wrapped[key] =
 			key === "watch"
 				? call
@@ -44,6 +48,8 @@ const crowded = (memory: Memory) => {
 						Effect.yieldNow.pipe(
 							Effect.andThen((call as (...a: unknown[]) => Effect.Effect<unknown>)(...args)),
 						);
+	}
+
 	return Layer.succeed(Ledger, wrapped as Ledger["Service"]);
 };
 
@@ -66,7 +72,11 @@ describe("a claim on a ticket: the ledger's lease on its name", () => {
 		for (const order of ORDERS) {
 			const memory = memoryLedger();
 			const told: LaneId[] = [];
-			for (const lane of order) told.push(await proc(memory.layer, claim(T, lane)));
+
+			for (const lane of order) {
+				told.push(await proc(memory.layer, claim(T, lane)));
+			}
+
 			expect(told).toEqual([order[0], order[0], order[0]]);
 			expect(holderNow(memory)).toBe(order[0]);
 			expect(claimsOn(memory)).toHaveLength(1);
@@ -139,7 +149,11 @@ describe("a claim on a ticket: the ledger's lease on its name", () => {
 		expect(holderNow(memory)).toBeNull();
 		const started = Date.now();
 		const told: LaneId[] = [];
-		for (const lane of [L4, L2, L3, L1]) told.push(await proc(memory.layer, claim(T, lane)));
+
+		for (const lane of [L4, L2, L3, L1]) {
+			told.push(await proc(memory.layer, claim(T, lane)));
+		}
+
 		expect(told).toEqual([L4, L4, L4, L4]);
 		// Nothing waited for the old lease's 30 s: the release ended it.
 		expect(Date.now() - started).toBeLessThan(5_000);
@@ -151,13 +165,16 @@ describe("a claim on a ticket: the ledger's lease on its name", () => {
 	it("a claim on one ticket leaves another free", async () => {
 		const memory = memoryLedger();
 		const told: LaneId[] = [];
+
 		for (const [ticket, lane] of [
 			[T, L1],
 			[U, L2],
 			[T, L3],
 			[U, L3],
-		] as const)
+		] as const) {
 			told.push(await proc(memory.layer, claim(ticket, lane)));
+		}
+
 		expect(told).toEqual([L1, L2, L1, L2]);
 	});
 
@@ -207,7 +224,11 @@ describe("a lease that is lost", () => {
 			}),
 			300,
 		);
-		if (old === null) throw new Error("the claim gave no lease");
+
+		if (old === null) {
+			throw new Error("the claim gave no lease");
+		}
+
 		expect(await proc(memory.layer, claim(T, L2), 300)).toBe(L1);
 		await new Promise((r) => setTimeout(r, 400));
 		expect(await proc(memory.layer, claim(T, L2))).toBe(L2);
@@ -254,7 +275,8 @@ describe("a lease that is lost", () => {
 /** `memory`'s ledger behind a link that can drop: while `link.down`, every call goes unanswered. */
 const behind = (memory: Memory, link: {down: boolean}) => {
 	const wrapped: Record<string, unknown> = {};
-	for (const [key, call] of Object.entries(memory.service))
+
+	for (const [key, call] of Object.entries(memory.service)) {
 		wrapped[key] =
 			key === "watch"
 				? call
@@ -264,6 +286,8 @@ const behind = (memory: Memory, link: {down: boolean}) => {
 								? Effect.fail(new LedgerUnreachable({method: key, message: "the link is down"}))
 								: (call as (...a: unknown[]) => Effect.Effect<unknown>)(...args),
 						);
+	}
+
 	return Layer.succeed(Ledger, wrapped as Ledger["Service"]);
 };
 
@@ -357,7 +381,11 @@ describe("a ledger that does not answer", () => {
 				return old;
 			}),
 		);
-		if (old === null) throw new Error("the claim gave no lease");
+
+		if (old === null) {
+			throw new Error("the claim gave no lease");
+		}
+
 		expect(holderNow(memory)).toBe(L2);
 		const late = await Effect.runPromise(
 			Effect.flip(sendFact({type: "released", ticket: T, lane: L1}, {hold: old})).pipe(

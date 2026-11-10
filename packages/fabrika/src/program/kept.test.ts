@@ -26,11 +26,13 @@ import {type Handle, memoryStorage, StateRefused, type Storage} from "./storage.
 
 // An Act, in tea's own words: a Cmd that carries the name of its one write.
 const WriteIn = Schema.Struct({n: Schema.Finite, intent: Schema.String});
+
 const write = Cmd.define("job_write", {
 	input: Schema.toStandardSchemaV1(WriteIn),
 	ok: Schema.toStandardSchemaV1(Schema.String),
 	err: ["unknown"] as const,
 });
+
 type WriteCmd = ReturnType<typeof write>;
 
 /** The toy's state, and the schema it is kept and read back through. */
@@ -46,10 +48,12 @@ const Job = Schema.Union([
 type Job = typeof Job.Type;
 /** The toy's state as older code kept it: its work counted in `try`, not `run`. */
 const OlderJob = Schema.Struct({phase: Schema.Literal("working"), try: Schema.Finite});
+
 type JobMsg =
 	| {readonly type: "start"; readonly by: string}
 	| {readonly type: "resume"}
 	| {readonly type: "job_done"; readonly run: number};
+
 type WorkSub = Sub<"job_work", {readonly run: number}>;
 type Step = readonly [Job, readonly WriteCmd[]];
 
@@ -66,12 +70,21 @@ const job = defineMachine({
 		start: (s): Step => (s.phase === "idle" ? [{phase: "working", run: 1}, []] : [s, []]),
 		// The work that was on is gone with the process: start it again, as run n + 1. A write in flight goes again.
 		resume: (s): Step => {
-			if (s.phase === "working") return [{phase: "working", run: s.run + 1}, []];
-			if (s.phase === "writing") return [s, [s.asked]];
+			if (s.phase === "working") {
+				return [{phase: "working", run: s.run + 1}, []];
+			}
+
+			if (s.phase === "writing") {
+				return [s, [s.asked]];
+			}
+
 			return [s, []];
 		},
 		job_done: (s, m): Step => {
-			if (s.phase !== "working" || m.run !== s.run) return [s, []];
+			if (s.phase !== "working" || m.run !== s.run) {
+				return [s, []];
+			}
+
 			const asked = write({n: m.run, intent: `write/${m.run}`});
 			return [{phase: "writing", asked}, [asked]];
 		},
@@ -111,6 +124,7 @@ const world = () => {
 		},
 	};
 };
+
 type World = ReturnType<typeof world>;
 
 /** The toy as a kind: each kept phase `recovered` was asked about is noted in `asked`. */
@@ -182,9 +196,13 @@ describe("a ref's start: a kept run starts from its kept state, before anything 
 					store: handle.store("job", ID, Job),
 					terminal: isOver,
 				})).ready;
+
 				// The starter's resume lands after the boot, as the build and operate starters sent it before 69
 				// and review and ship still did. The fast Listen has answered by then, and its write is out.
-				while (runtime.getState().phase !== "writing") yield* Effect.sleep("1 millis");
+				while (runtime.getState().phase !== "writing") {
+					yield* Effect.sleep("1 millis");
+				}
+
 				yield* runtime.dispatch({type: "resume"});
 				yield* runtime.done();
 			}).pipe(Effect.scoped),
@@ -222,6 +240,7 @@ describe("a ref's start: a kept run starts from its kept state, before anything 
 	it("three restarts in a row, each stopped as it worked: each life starts the work once, and only the last writes", async () => {
 		const storage = await stoppedWorking();
 		const lives = [world(), world(), world()];
+
 		for (const w of lives.slice(0, 2)) {
 			// A life stopped as soon as its work started: before it answered, as a kill leaves it.
 			// The stop waits on the work's start, not on a clock: a busy machine takes longer to get there.
@@ -237,8 +256,13 @@ describe("a ref's start: a kept run starts from its kept state, before anything 
 			);
 			expect(endOf(stopped).kind).toBe("stopped");
 		}
+
 		const last = lives[2];
-		if (last === undefined) throw new Error("no last life");
+
+		if (last === undefined) {
+			throw new Error("no last life");
+		}
+
 		await Effect.runPromise(call(jobProgram(last), {}, {keeping: {id: "job:r1", storage}}));
 		expect(lives.map((w) => w.started)).toEqual([[2], [3], [4]]);
 		expect(lives.map((w) => w.writes)).toEqual([[], [], [4]]);
@@ -384,7 +408,10 @@ describe("one live copy per id", () => {
 								Effect.scoped,
 							);
 					const [a, b] = yield* Effect.all([one(), one()], {concurrency: "unbounded"});
-					if (a !== b) return yield* Effect.die(new Error("two copies of one id"));
+
+					if (a !== b) {
+						return yield* Effect.die(new Error("two copies of one id"));
+					}
 				}),
 		});
 		const called = await Effect.runPromise(
@@ -421,8 +448,12 @@ describe("one live copy per id", () => {
 					seen.push(none === first ? "no Msg: shared" : "two copies");
 					const used = yield* ref.start({type: "start", by: "loop"}, {conflict: "use_existing"});
 					seen.push(used === first ? "use_existing: shared" : "two copies");
+
 					// Its work starts, and a little later still it has started once.
-					while (w.started.length === 0) yield* Effect.sleep("1 millis");
+					while (w.started.length === 0) {
+						yield* Effect.sleep("1 millis");
+					}
+
 					yield* Effect.sleep("20 millis");
 				}).pipe(Effect.scoped),
 		});
@@ -647,7 +678,11 @@ describe("what a kept run does with what tea reports", () => {
 	it("says an error that is not an Error in words, `undefined` too", () => {
 		const {seen, report} = reporting();
 		const where = {phase: "sub"} as const;
-		for (const error of [undefined, "the disk"]) report(error, where);
+
+		for (const error of [undefined, "the disk"]) {
+			report(error, where);
+		}
+
 		expect(seen.fails.map((ended) => ended.message)).toEqual([
 			`job run j failed (tea's "sub"): undefined`,
 			`job run j failed (tea's "sub"): the disk`,
@@ -672,7 +707,11 @@ describe("one failure, one report", () => {
 					report(error, where);
 				},
 			});
-			while (reports.length < 1) yield* Effect.sleep("1 millis");
+
+			while (reports.length < 1) {
+				yield* Effect.sleep("1 millis");
+			}
+
 			// tea 0.22.0's repeat came within a millisecond of the first report; give it 50.
 			yield* Effect.sleep("50 millis");
 			expect(reports).toEqual(["reduce: the throw"]);

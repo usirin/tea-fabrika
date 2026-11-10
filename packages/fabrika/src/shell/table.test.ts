@@ -59,7 +59,10 @@ describe("the table printer", () => {
 		// 40 cells: 2 of indent, 3 + 3 between the columns, 1 for #, 4 for RUNS, and 27 for the title.
 		expect(lines[4]).toBe("  3   A title long enough that a…      0");
 		expect(lines[5]).toBe(`  2   ${"Short".padEnd(27)}      1`);
-		for (const line of lines) expect(widthOf(line)).toBeLessThanOrEqual(40);
+
+		for (const line of lines) {
+			expect(widthOf(line)).toBeLessThanOrEqual(40);
+		}
 	});
 
 	it("never cuts a column under twelve cells: a terminal too narrow wraps instead", () => {

@@ -34,9 +34,13 @@ const ranOf = (drafted: Drafted): Ran => ({
 export const msgOf =
 	(at: {readonly pr: string; readonly head: string; readonly run: number}) =>
 	(said: Said): ReviewMsg => {
-		if (said.kind === "note") return {type: "review_note", ...at, note: said.note};
+		if (said.kind === "note") {
+			return {type: "review_note", ...at, note: said.note};
+		}
+
 		const {drafted} = said;
 		const ran = ranOf(drafted);
+
 		switch (drafted.answer) {
 			case "form": {
 				const form = Schema.decodeUnknownOption(HeldForm)(drafted.form);

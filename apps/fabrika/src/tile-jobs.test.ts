@@ -6,6 +6,7 @@ import {endOf, type TileJobs, watchJobs} from "./tile-jobs.ts";
 // clock the test moves.
 
 const stage = (run: string) => ({program: run, flags: {}, run, wire: null, ended: false});
+
 const job = (n: number, text: string, runs: readonly string[], over: Partial<Shell.Job> = {}) => {
 	const [first = "", ...rest] = runs;
 	return {
@@ -20,6 +21,7 @@ const job = (n: number, text: string, runs: readonly string[], over: Partial<She
 		...over,
 	};
 };
+
 const table = (...jobs: Shell.Job[]): Shell.Jobs => ({jobs, next: 9});
 const ENDED = {kind: "ended", unread: {}} as const;
 const STOPPED = {kind: "stopped", unread: {}} as const;

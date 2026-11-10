@@ -22,15 +22,19 @@ const options = {seed: 119120, numRuns: 100};
 const heavy = {check: true, test: true, next: true, e2e: true};
 type Runner = (args: string[]) => {status: number | null; stdout: string};
 const word = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
+
 const safe = fc.oneof(
 	word.map((s) => `field/${s}.jsonl`),
 	word.map((s) => `docs/${s}.md`),
 	word.map((s) => `field/${s}.md`),
 );
+
 const today = fc
 	.tuple(fc.constantFrom("apps", "programs", "packs", "wip", "legacy", "packages/fabrika"), word)
 	.map(([dir, s]) => `${dir}/${s}.ts`);
+
 const next = word.map((s) => `next/packages/libfabrika/src/${s}.ts`);
+
 const shared = fc.oneof(
 	word.map((s) => `unknown/${s}`),
 	fc.constantFrom(
@@ -44,16 +48,19 @@ const shared = fc.oneof(
 		"field/a.jsonl.ts",
 	),
 );
+
 const skillName = fc
 	.stringMatching(/^[a-z]{1,12}$/)
 	// Brief/prompt folders belong to readMarkdown's heavy-path family below.
 	.filter((s) => !["brief", "briefs", "prompt", "prompts", "scripts"].includes(s));
+
 const prose = fc.oneof(
 	fc
 		.tuple(skillName, fc.array(skillName, {maxLength: 2}), skillName)
 		.map(([skill, dirs, name]) => [".agents/skills", skill, ...dirs, `${name}.md`].join("/")),
 	skillName.map((skill) => `.claude/skills/${skill}`),
 );
+
 const script = fc
 	.tuple(
 		fc.constantFrom("lead", "mutation", "plan", "step-commit"),
@@ -61,6 +68,7 @@ const script = fc
 		fc.constantFrom("sh", "py", "mjs", "ts", "json"),
 	)
 	.map(([skill, name, ext]) => `.agents/skills/${skill}/scripts/${name}.${ext}`);
+
 const otherSkill = fc.oneof(
 	fc
 		.tuple(
@@ -76,6 +84,7 @@ const otherSkill = fc.oneof(
 		.tuple(skillName, skillName, fc.constantFrom("md", "json", "ts"))
 		.map(([skill, name, ext]) => `.claude/skills/${skill}/${name}.${ext}`),
 );
+
 const path = fc.oneof(
 	safe,
 	today,
@@ -86,6 +95,7 @@ const path = fc.oneof(
 	otherSkill,
 	fc.string({minLength: 1}).map((s) => `unusual/${s}`),
 );
+
 const list = fc.array(path, {maxLength: 12});
 
 it("main enables every job for every path list", () => {
@@ -96,6 +106,7 @@ it("main enables every job for every path list", () => {
 		options,
 	);
 });
+
 it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
 	fc.assert(
 		fc.property(fc.array(fc.oneof(safe, prose), {minLength: 1, maxLength: 12}), (paths) => {
@@ -110,6 +121,7 @@ it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
 		options,
 	);
 });
+
 it("skill scripts run check and test; other version flags follow their readers", () => {
 	fc.assert(
 		fc.property(
@@ -142,6 +154,7 @@ it("skill scripts run check and test; other version flags follow their readers",
 		options,
 	);
 });
+
 it("other skill-tree paths still run every heavy job", () => {
 	fc.assert(
 		fc.property(fc.array(otherSkill, {minLength: 1, maxLength: 12}), (paths) => {
@@ -150,11 +163,13 @@ it("other skill-tree paths still run every heavy job", () => {
 		options,
 	);
 });
+
 // Plan change, 2026-11-09: only paths no check reads are safe. Markdown under these trees, or
 // in any brief or prompt folder, is read by a program (a brief is an agent's input; a fixture is
 // a test's input), so it runs every check. Plant caught: the old "every .md outside the skill
 // trees is safe" rule, which skipped programs/pipeline/briefs/x.md and fixtures/a/b.md.
 const folder = fc.constantFrom("brief", "briefs", "prompt", "prompts");
+
 const readMarkdown = fc.oneof(
 	fc
 		.tuple(
@@ -167,6 +182,7 @@ const readMarkdown = fc.oneof(
 		.tuple(fc.array(word, {maxLength: 3}), folder, fc.array(word, {maxLength: 2}), word)
 		.map(([above, dir, below, name]) => [...above, dir, ...below, `${name}.md`].join("/")),
 );
+
 it("Markdown a check reads runs every check, alone or beside safe paths", () => {
 	fc.assert(
 		fc.property(readMarkdown, fc.array(safe, {maxLength: 6}), (read, paths) => {
@@ -196,8 +212,11 @@ it("shared paths run everything; adding paths never disables a job", () => {
 				expect(ci.classify([...paths, unknown], "pull_request")).toMatchObject(heavy);
 				const before = ci.classify(paths, "pull_request");
 				const after = ci.classify([...paths, ...more], "pull_request");
-				for (const key of ["check", "test", "next", "e2e", "field"] as const)
+
+				for (const key of ["check", "test", "next", "e2e", "field"] as const) {
 					expect(!before[key] || after[key]).toBe(true);
+				}
+
 				expect(ci.classify([], "pull_request")).toMatchObject(heavy);
 				expect(ci.classify(null, "pull_request")).toMatchObject(heavy);
 			},
@@ -205,6 +224,7 @@ it("shared paths run everything; adding paths never disables a job", () => {
 		options,
 	);
 });
+
 it("today, next, mixed and the shared plant helper have separate version flags", () => {
 	fc.assert(
 		fc.property(
@@ -226,6 +246,7 @@ it("today, next, mixed and the shared plant helper have separate version flags",
 		options,
 	);
 });
+
 it("next's exam signer runs today's tests, alone or beside other paths", () => {
 	// T375 Amendment 1: box, plancheck and stepcommit tests read the signer.
 	// Plant caught: let commits.ts skip test like any other next/ path.
@@ -245,6 +266,7 @@ it("next's exam signer runs today's tests, alone or beside other paths", () => {
 		options,
 	);
 });
+
 it("NUL diff keeps both move names and unusual paths; failed reads cannot skip", () => {
 	fc.assert(
 		fc.property(
@@ -329,6 +351,7 @@ it("shared tracked-file check agrees with Git, including command errors", () => 
 	fc.assert(
 		fc.property(word, fc.boolean(), (name, ignored) => {
 			const root = mkdtempSync(join(tmpdir(), "ci-ignore-"));
+
 			try {
 				const data = join(root, "data");
 				// These disposable Git fixtures never touch this checkout's index or history.
@@ -360,7 +383,8 @@ it("skill script and prose rules apply only at the repo root", () => {
 				e2e: false,
 				field: false,
 			});
-			for (const root of ["next", "docs"])
+
+			for (const root of ["next", "docs"]) {
 				expect(
 					ci.classify([[root, ...dirs, ".claude/skills", skill].join("/")], "pull_request"),
 				).toEqual({
@@ -369,6 +393,7 @@ it("skill script and prose rules apply only at the repo root", () => {
 					e2e: root !== "next",
 					field: false,
 				});
+			}
 		}),
 		options,
 	);

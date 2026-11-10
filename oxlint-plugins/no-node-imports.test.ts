@@ -3,6 +3,7 @@ import {expect, it} from "vitest";
 import {plant} from "../next/apps/fabrika/src/exam/plant.ts";
 
 const CODE = "fabrika(no-node-imports)";
+
 it("every native import form needs a nonempty reason on its own line, in product and exam code", async () => {
 	await fc.assert(
 		fc.asyncProperty(
@@ -70,13 +71,17 @@ it("every native import form needs a nonempty reason on its own line, in product
 				const body = lines.join("\n");
 				const expected: number[] = [];
 				let line = 1;
+
 				for (const _ of forms) {
 					expected.push(line, line + 2, line + 4, line + 5, line + 6);
 					line += 7;
 				}
+
 				const result = await plant(Object.fromEntries(paths.map((path) => [path, body])));
-				for (const [i, path] of paths.entries())
+
+				for (const [i, path] of paths.entries()) {
 					expect(result(CODE, path)).toEqual(native && i < 3 ? expected : []);
+				}
 			},
 		),
 		{seed: 119120, numRuns: 12},

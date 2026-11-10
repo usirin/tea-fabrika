@@ -109,9 +109,12 @@ const OPTS = {numRuns: 2000, seed: 6};
 
 const since = (t: readonly Entry[]) =>
 	t.slice(t.findLastIndex((e) => e.fact.type === "reopened") + 1);
+
 const mergedSince = (t: readonly Entry[]) =>
 	since(t).some((e) => e.fact.type === "pr" && e.fact.state === "merged");
+
 const closedNow = (t: readonly Entry[]) => since(t).some((e) => e.fact.type === "closed");
+
 /**
  * Every kind of fact a ticket's stream can hold, and whether it is work: a fact that moves the
  * ticket on, so it wakes an idle one. The rest is advice, shown on the ticket and never read to
@@ -188,7 +191,11 @@ describe("a ticket's top line", () => {
 			const byClose =
 				close !== undefined && close.by.kind === "user" && answered && openAsksOf(t).length === 0;
 			expect(head._tag === "done").toBe(byMerge || byClose);
-			if (byMerge) expect(head).toEqual({_tag: "done", pr: "https://github.com/o/r/pull/12"});
+
+			if (byMerge) {
+				expect(head).toEqual({_tag: "done", pr: "https://github.com/o/r/pull/12"});
+			}
+
 			return true;
 		}),
 	);
@@ -211,7 +218,11 @@ describe("a ticket's top line", () => {
 			const open = openAsksOf(t);
 			const finished = mergedSince(t) || closedNow(t);
 			const head = headOf(t, now);
-			if (finished || open.length === 0) return head._tag !== "asks";
+
+			if (finished || open.length === 0) {
+				return head._tag !== "asks";
+			}
+
 			return head._tag === "asks" && same(head.asks, open);
 		}),
 	);
@@ -244,7 +255,11 @@ describe("a ticket's top line", () => {
 			const ended = new Set(t.flatMap((e) => (e.fact.type === "ended" ? [e.fact.run] : [])));
 			const going = t.some((e) => e.fact.type === "started" && !ended.has(e.fact.run));
 			const before: readonly Head["_tag"][] = ["done", "closed", "asks"];
-			if (before.includes(head._tag)) return true;
+
+			if (before.includes(head._tag)) {
+				return true;
+			}
+
 			return (head._tag === "running") === going;
 		}),
 	);
@@ -254,7 +269,11 @@ describe("a ticket's top line", () => {
 			fc.property(timeline, gap, gap, (t, g, more) => {
 				const early = headOf(t, nowOf(t, g));
 				const late = headOf(t, nowOf(t, g + more));
-				if (early._tag === late._tag) return same(late, early);
+
+				if (early._tag === late._tag) {
+					return same(late, early);
+				}
+
 				const quiet = nowOf(t, g + more) - lastWorkAt(t);
 				return early._tag === "next" && late._tag === "idle" && quiet > HOUR;
 			}),
@@ -266,7 +285,11 @@ describe("a ticket's top line", () => {
 			fc.property(timeline, gap, (t, g) => {
 				const now = nowOf(t, g);
 				const head = headOf(t, now);
-				if (head._tag !== "idle") return true;
+
+				if (head._tag !== "idle") {
+					return true;
+				}
+
 				return now - lastWorkAt(t) > HOUR && openAsksOf(t).length === 0;
 			}),
 			OPTS,
@@ -469,7 +492,10 @@ describe("what wakes a ticket (label-guidelines.md, L1: nothing decides on advic
 			const t = ticketOf(before, [by, fact]);
 			expect(headOf(t, AT + 30 * MINUTE)._tag).not.toBe("idle");
 			const later = headOf(t, AT + HOUR + 1);
-			if (later._tag === "idle") expect(later.since).toBe(AT);
+
+			if (later._tag === "idle") {
+				expect(later.since).toBe(AT);
+			}
 		},
 	);
 
@@ -481,8 +507,10 @@ describe("what wakes a ticket (label-guidelines.md, L1: nothing decides on advic
 			const t = ticketOf(before, [by, fact]);
 			expect(t).toHaveLength(was.length + 1);
 			expect(headOf(was, AT + 30 * MINUTE)._tag).toBe("idle");
-			for (const now of [AT, AT + 30 * MINUTE, AT + HOUR + 1, AT + 3 * HOUR])
+
+			for (const now of [AT, AT + 30 * MINUTE, AT + HOUR + 1, AT + 3 * HOUR]) {
 				expect(headOf(t, now)).toEqual(headOf(was, now));
+			}
 		},
 	);
 
@@ -525,13 +553,25 @@ describe("what wakes a ticket (label-guidelines.md, L1: nothing decides on advic
 				fc.nat({max: HOUR - 1}),
 				(t, g, [by, f], back) => {
 					const now = nowOf(t, g);
-					if (headOf(t, now)._tag !== "idle" || !WORK[f.type]) return true;
+
+					if (headOf(t, now)._tag !== "idle" || !WORK[f.type]) {
+						return true;
+					}
+
 					const at = Math.max(lastAt(t), now - back);
 					const pos = (t.at(-1)?.pos ?? 0) + 1;
 					const after = fold([], [...t, {pos, ticket: 1, by, at, fact: f}]).tickets[0]?.timeline;
-					if (after === undefined || after.length === t.length) return true;
+
+					if (after === undefined || after.length === t.length) {
+						return true;
+					}
+
 					const head = headOf(after, now);
-					if (head._tag === "idle") return false;
+
+					if (head._tag === "idle") {
+						return false;
+					}
+
 					const later = headOf(after, at + HOUR + 1);
 					return later._tag !== "idle" || later.since === at;
 				},

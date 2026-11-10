@@ -130,7 +130,11 @@ export const laneBuildHost = Layer.effect(
 				Effect.gen(function* () {
 					const t = yield* read(url).pipe(Effect.provideService(Tickets, tickets));
 					const id = readTicketId(url);
-					if (id === null) return yield* Effect.fail(failed);
+
+					if (id === null) {
+						return yield* Effect.fail(failed);
+					}
+
 					const state = foldLedger(yield* Effect.provideService(readFacts, Ledger, ledger));
 					const plan = planFor(state, id);
 					const track = plan === null ? undefined : state.plans.get(plan);
@@ -188,13 +192,25 @@ export const answerHeard = (number: number, ask: string, picks: readonly string[
 			const tickets = yield* Tickets;
 			const look = Effect.gen(function* () {
 				const ticket = yield* tickets.read(number);
+
 				for (const entry of ticket.timeline) {
 					const {fact} = entry;
-					if (entry.by.kind !== "user" || fact.type !== "answered" || fact.ask !== ask) continue;
-					if (!picks.includes(fact.pick)) continue;
-					if (fact.pick === "approve" && !(yield* covers(fact, ticket))) continue;
+
+					if (entry.by.kind !== "user" || fact.type !== "answered" || fact.ask !== ask) {
+						continue;
+					}
+
+					if (!picks.includes(fact.pick)) {
+						continue;
+					}
+
+					if (fact.pick === "approve" && !(yield* covers(fact, ticket))) {
+						continue;
+					}
+
 					return {ask, pick: fact.pick, note: fact.note, by: entry.by.id};
 				}
+
 				return null;
 			}).pipe(Effect.orElseSucceed(() => null));
 			const wait: Effect.Effect<{

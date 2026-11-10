@@ -26,6 +26,7 @@ const outcomes = outcomesOf({
 	skip: ["no_rules_change"],
 	stuck: ["draft_failed", "unchecked", "land_failed"],
 });
+
 export const ExamOutcome = outcomes.schema;
 export type ExamOutcome = typeof ExamOutcome.Type;
 /** Every name the exam can end with, as the other stages export theirs. */
@@ -154,6 +155,7 @@ const LandIn = Schema.Struct({
 	/** What the plan says of each, for the pull request's text. Left out: a land saved before this key still reads. */
 	changes: Schema.optionalKey(Schema.Array(ExamChange)),
 });
+
 /** The pull request the rule changes are on, and its head. */
 export const Landed = Schema.Struct({pr: Schema.String, head: Schema.String});
 export type Landed = typeof Landed.Type;
@@ -202,6 +204,7 @@ export type ExamMsg =
 	| {readonly type: "start"; readonly ask: ExamAsk; readonly key: string}
 	| {readonly type: "resume"}
 	| DraftMsg<"exam_write", ExamWritten>;
+
 export type ExamCmd = ReturnType<typeof landExam>;
 
 type Step = readonly [Exam, readonly ExamCmd[]];
@@ -238,14 +241,21 @@ const writing = (s: Held, guard: CheckChange): Step => {
 };
 
 export const examSub = examWrite.sub((s: Exam): DraftRun | null => {
-	if (s.phase !== "writing") return null;
+	if (s.phase !== "writing") {
+		return null;
+	}
+
 	const run = refine.runOf(s.refining);
 	return run === null ? null : {...run, folder: s.ask.base};
 });
 
 const drafted = (s: Exam, m: Exclude<ExamMsg, {type: "start" | "resume"}>): Step => {
-	if (s.phase !== "writing" || refine.runOf(s.refining)?.id !== m.id) return stay(s);
+	if (s.phase !== "writing" || refine.runOf(s.refining)?.id !== m.id) {
+		return stay(s);
+	}
+
 	const next = refine.update(s.refining, m);
+
 	switch (next.phase) {
 		case "drafting":
 			return [{...s, refining: next}, []];
@@ -283,7 +293,10 @@ export const exam = defineMachine({
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const at = {ask: m.ask, key: m.key};
 			const guard = checkChange(m.ask.changes.map((c) => c.path));
 			return guard === null ? end(at, {kind: "skip", why: "no_rules_change"}) : writing(at, guard);

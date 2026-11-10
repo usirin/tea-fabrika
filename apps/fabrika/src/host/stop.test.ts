@@ -120,16 +120,24 @@ describe("stopping the old host", () => {
 				const hostNow = () =>
 					got
 						.flatMap((m): ToPage[] => {
-							if (m.type !== "to" || m.port !== "desk") return [];
+							if (m.type !== "to" || m.port !== "desk") {
+								return [];
+							}
+
 							const read = readToPage(m.m);
 							return read.kind === "read" ? [read.msg] : [];
 						})
 						.findLast((m) => m.type === "host");
 				let now: ToPage | undefined;
+
 				for (let i = 0; i < 400 && now === undefined; i += 1) {
 					now = hostNow();
-					if (now === undefined) yield* Effect.sleep("25 millis");
+
+					if (now === undefined) {
+						yield* Effect.sleep("25 millis");
+					}
 				}
+
 				const kept = yield* fs.exists(`${paths.dir}/restart.json`);
 				return {now, kept};
 			}),
@@ -184,16 +192,24 @@ describe("stopping the old host", () => {
 				const again = yield* restart({home, deliver: (m) => got.push(m), start});
 				again.wire.send({type: "page"});
 				let now: ToPage | undefined;
+
 				for (let i = 0; i < 400 && now === undefined; i += 1) {
 					now = got
 						.flatMap((m): ToPage[] => {
-							if (m.type !== "to" || m.port !== "desk") return [];
+							if (m.type !== "to" || m.port !== "desk") {
+								return [];
+							}
+
 							const read = readToPage(m.m);
 							return read.kind === "read" ? [read.msg] : [];
 						})
 						.findLast((m) => m.type === "host");
-					if (now === undefined) yield* Effect.sleep("25 millis");
+
+					if (now === undefined) {
+						yield* Effect.sleep("25 millis");
+					}
 				}
+
 				return {started: started.length, state: again.wire.state().at, now};
 			}),
 		);

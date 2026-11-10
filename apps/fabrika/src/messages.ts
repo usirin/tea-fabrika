@@ -351,7 +351,11 @@ export const reader = <T, E>(schema: Schema.Codec<T, E>) => {
 	const decode = Schema.decodeUnknownExit(schema);
 	return (raw: unknown): Read<T> => {
 		const exit = decode(raw, {onExcessProperty: "error"});
-		if (Exit.isSuccess(exit)) return {kind: "read", msg: exit.value};
+
+		if (Exit.isSuccess(exit)) {
+			return {kind: "read", msg: exit.value};
+		}
+
 		const failure = Cause.squash(exit.cause);
 		return {kind: "refused", why: failure instanceof Error ? failure.message : String(failure)};
 	};

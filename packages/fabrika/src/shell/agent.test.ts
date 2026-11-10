@@ -44,6 +44,7 @@ const OTHER_AGENT = "agent:review for:github:7";
 const WRITERS = [PERSON, AGENT, OTHER_PERSON, OTHER_AGENT] as const;
 /** A writer text that names neither a person nor an agent (`writerOf` reads it as `null`). */
 const SOMEONE = "someone";
+
 /** Where `attach` says each writer's job goes on: an agent's tile by its name, a person's own. */
 const TILE: Readonly<Record<(typeof WRITERS)[number], string>> = {
 	[PERSON]: "their own tile",
@@ -51,6 +52,7 @@ const TILE: Readonly<Record<(typeof WRITERS)[number], string>> = {
 	[OTHER_PERSON]: "their own tile",
 	[OTHER_AGENT]: "review's tile",
 };
+
 const LONG = "sleep --ms 60000";
 const LIST = programList(SMALL);
 
@@ -70,7 +72,11 @@ const tshAs = (by: string, list: ProgramList = LIST) =>
 			Effect.provideService(HostJobs, {...jobs, owner: "t1", by}),
 			Effect.provideService(Programs, list),
 		);
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		/** One line, its `ready`, and what it printed on err. */
 		const line = (text: string) =>
@@ -112,9 +118,14 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 300; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("10 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 

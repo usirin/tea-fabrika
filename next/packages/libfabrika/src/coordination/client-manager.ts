@@ -63,21 +63,37 @@ type Replayed = {
 };
 
 const row = Effect.fnUntraced(function* (entry: Entry) {
-	if (!known.has(entry._tag)) return {entry, fact: null} satisfies Row;
+	if (!known.has(entry._tag)) {
+		return {entry, fact: null} satisfies Row;
+	}
+
 	const fact = decodeFact(valueFor(entry));
-	if (Result.isFailure(fact)) return yield* new LedgerError({why: "bad_row"});
+
+	if (Result.isFailure(fact)) {
+		return yield* new LedgerError({why: "bad_row"});
+	}
+
 	return {entry, fact: fact.success} satisfies Row;
 });
 
 const replay = (rows: ReadonlyArray<Row>): Replayed => {
 	const skipped = new Map<Rev, Why>();
 	let folded = EMPTY;
+
 	for (const {entry, fact} of rows) {
-		if (fact === null) continue;
+		if (fact === null) {
+			continue;
+		}
+
 		const next = allows(folded, fact);
-		if (Result.isSuccess(next)) folded = next.success;
-		else skipped.set(entry.rev, next.failure);
+
+		if (Result.isSuccess(next)) {
+			folded = next.success;
+		} else {
+			skipped.set(entry.rev, next.failure);
+		}
 	}
+
 	return {rows, folded, skipped, head: rows.at(-1)?.entry.rev ?? 0};
 };
 
@@ -126,7 +142,11 @@ export class ClientManager extends Context.Service<
 				/** The stream folded, after `founded` is in it. */
 				const load = Effect.gen(function* () {
 					const first = yield* read;
-					if (first.rows.length > 0) return first;
+
+					if (first.rows.length > 0) {
+						return first;
+					}
+
 					const {by, person, build} = founder;
 					// Both callers, members.read and members.write, already own a span.
 					const from = yield* fromHere({by, for: person, seen: 0, parent: null, build}).pipe(
@@ -136,11 +156,14 @@ export class ClientManager extends Context.Service<
 					// and the other hears `id_reused` and reads what the first wrote. Any other refusal
 					// fails: a stream with no `founded` would start with no members.
 					const placed = yield* ledger.append(MEMBERS, "founded", lineFor(from, founding));
-					if (placed._tag === "refused" && placed.why !== "id_reused")
+
+					if (placed._tag === "refused" && placed.why !== "id_reused") {
 						return yield* new LedgerError({
 							why: "refused",
 							message: `founded refused: ${placed.why}`,
 						});
+					}
+
 					return yield* read;
 				});
 
@@ -168,20 +191,27 @@ export class ClientManager extends Context.Service<
 						);
 						const before = yield* load;
 						const id = factId(fact);
+
 						// A fact already in the log goes to the referee as it is: a resend gets its first
 						// placing, and the answer is what the fold did with it then.
 						if (!before.rows.some(({entry}) => entry.id === id)) {
 							const verdict = allows(before.folded, fact);
-							if (Result.isFailure(verdict))
+
+							if (Result.isFailure(verdict)) {
 								return yield* answer(Written.cases.refused.make({why: verdict.failure}));
+							}
 						}
+
 						const placed = yield* ledger.append(
 							MEMBERS,
 							id,
 							lineFor({...from, seen: before.head}, fact),
 						);
-						if (placed._tag === "refused")
+
+						if (placed._tag === "refused") {
 							return yield* answer(Written.cases.refused.make({why: placed.why}));
+						}
+
 						const why = (yield* read).skipped.get(placed.rev);
 						return yield* answer(
 							why === undefined

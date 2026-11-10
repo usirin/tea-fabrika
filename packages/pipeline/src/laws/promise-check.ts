@@ -39,9 +39,17 @@ function machine<S, M extends {readonly type: string}, C>(m: {
 		depth: m.depth,
 		run: (name, plant) => {
 			const laws = m.laws().filter((l) => l.name === name);
-			if (laws.length !== 1) return `no law named "${name}"`;
+
+			if (laws.length !== 1) {
+				return `no law named "${name}"`;
+			}
+
 			const update = plant === null ? m.step : m.plants[plant];
-			if (update === undefined) return `no planted break named "${plant}"`;
+
+			if (update === undefined) {
+				return `no planted break named "${plant}"`;
+			}
+
 			return explore.explore({init: m.init, update, world: m.world(), laws, depth: m.depth});
 		},
 		show: (path) => path.map((msg, at) => `${at + 1}. ${m.show(msg as M)}`),
@@ -88,15 +96,19 @@ if (import.meta.main) {
 	const [name, law] = process.argv.slice(2);
 	const plant = process.env.PROMISE_PLANT || null;
 	const m = name === undefined ? undefined : MACHINES[name];
+
 	if (m === undefined || law === undefined) {
 		process.stderr.write(`usage: promise-check.ts <${Object.keys(MACHINES).join("|")}> "<law>"\n`);
 		process.exit(2);
 	}
+
 	const report = m.run(law, plant);
+
 	if (typeof report === "string") {
 		process.stderr.write(`${report}\n`);
 		process.exit(2);
 	}
+
 	const found = report.broken.find((b) => b.law === law);
 	const verdict = {
 		held: found === undefined,

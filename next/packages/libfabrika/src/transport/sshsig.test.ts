@@ -41,6 +41,7 @@ const check = (armored: string, signers: ReadonlyArray<string>, body: string = t
 
 // The wire, for building blobs by hand: RFC 4251's `string` is a u32 length, then the bytes.
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
+
 const join8 = (...parts: ReadonlyArray<Uint8Array>): Uint8Array => {
 	const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
 	parts.reduce((offset, p) => {
@@ -49,19 +50,24 @@ const join8 = (...parts: ReadonlyArray<Uint8Array>): Uint8Array => {
 	}, 0);
 	return out;
 };
+
 const u32 = (n: number): Uint8Array => {
 	const out = new Uint8Array(4);
 	new DataView(out.buffer).setUint32(0, n);
 	return out;
 };
+
 const str = (s: Uint8Array | string): Uint8Array => {
 	const bytes = typeof s === "string" ? utf8(s) : s;
 	return join8(u32(bytes.length), bytes);
 };
+
 const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
 const rows = (body: string): string => (body.match(/.{1,70}/g) ?? []).join("\n");
+
 const armor = (blob: Uint8Array): string =>
 	`-----BEGIN SSH SIGNATURE-----\n${rows(base64(blob))}\n-----END SSH SIGNATURE-----\n`;
+
 const unarmor = (armored: string): Uint8Array =>
 	Buffer.from(
 		armored
@@ -70,7 +76,9 @@ const unarmor = (armored: string): Uint8Array =>
 			.join(""),
 		"base64",
 	);
+
 const keyBlob = (key: Uint8Array): Uint8Array => join8(str("ssh-ed25519"), str(key));
+
 const lineFor = (blob: Uint8Array, comment?: string): string =>
 	comment === undefined ? `ssh-ed25519 ${base64(blob)}` : `ssh-ed25519 ${base64(blob)} ${comment}`;
 
@@ -84,6 +92,7 @@ type Blob = {
 	readonly hash: Uint8Array;
 	readonly signature: Uint8Array;
 };
+
 const parse = (bytes: Uint8Array): Blob => {
 	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 	let offset = 0;
@@ -104,6 +113,7 @@ const parse = (bytes: Uint8Array): Blob => {
 		signature: field(),
 	};
 };
+
 const build = (b: Blob, tail: Uint8Array = new Uint8Array()): Uint8Array =>
 	join8(
 		b.magic,
@@ -115,6 +125,7 @@ const build = (b: Blob, tail: Uint8Array = new Uint8Array()): Uint8Array =>
 		str(b.signature),
 		tail,
 	);
+
 /** What the signature covers: "SSHSIG", then namespace, reserved, hash name and H(message). */
 const toSign = (space: string, hash: string, digest: Uint8Array): Uint8Array =>
 	join8(utf8("SSHSIG"), str(space), str(""), str(hash), str(digest));
@@ -132,6 +143,7 @@ type Key = {
 	readonly seed: Uint8Array;
 	readonly privateKey: CryptoKey;
 };
+
 const freshKey = (comment?: string): Effect.Effect<Key> =>
 	Effect.gen(function* () {
 		const pair = yield* Effect.promise(() =>
@@ -147,22 +159,27 @@ const freshKey = (comment?: string): Effect.Effect<Key> =>
 			privateKey: pair.privateKey,
 		};
 	});
+
 const signWith =
 	(key: Key) =>
 	(bytes: Uint8Array): Effect.Effect<Uint8Array> =>
 		Effect.promise(() => crypto.subtle.sign("Ed25519", key.privateKey, new Uint8Array(bytes))).pipe(
 			Effect.map((sig) => new Uint8Array(sig)),
 		);
+
 const digest = (name: "SHA-256" | "SHA-384" | "SHA-512", bytes: Uint8Array) =>
 	Effect.promise(() => crypto.subtle.digest(name, new Uint8Array(bytes))).pipe(
 		Effect.map((d) => new Uint8Array(d)),
 	);
+
 const decodeLine = Schema.decodeUnknownEffect(KeyLine);
+
 /** `writeSshsig` over `body` with `key`, its line decoded first, as every caller must. */
 const write = (key: Key, body: string) =>
 	Effect.flatMap(decodeLine(key.line), (line) =>
 		writeSshsig({text: body, space: SPACE, line, sign: signWith(key)}),
 	);
+
 /** A blob signed by hand, with any hash name: what `ssh-keygen` would write if it used one. */
 const signedByHand = (key: Key, hash: string, digested: Uint8Array) =>
 	Effect.map(signWith(key)(toSign(SPACE, hash, digested)), (raw) =>
@@ -730,19 +747,24 @@ describe("a key line's parts and its type", () => {
 // p44: one signature shape, against the real `ssh-keygen`.
 const home = mkdtempSync(join(tmpdir(), "p44-"));
 afterAll(() => rmSync(home, {recursive: true, force: true}));
+
 const keygen = (args: ReadonlyArray<string>, input?: string) =>
 	Effect.sync(() => {
 		const run = spawnSync("ssh-keygen", args, {input, encoding: "utf8"});
+
 		if (run.error !== undefined) {
 			throw new Error(`p44 needs ssh-keygen and it did not run: ${run.error.message}`);
 		}
+
 		return run;
 	});
+
 const file = (name: string, body: string, mode = 0o644): string => {
 	const path = join(home, name);
 	writeFileSync(path, body, {mode});
 	return path;
 };
+
 /** An unencrypted `openssh-key-v1` private key file, so `ssh-keygen` can sign with a WebCrypto key. */
 const opensshPrivate = (key: Key): string => {
 	const checkWord = u32(0x5a5a5a5a);
@@ -817,6 +839,7 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
 			expect(keys.status, keys.stderr).toBe(0);
 			const line = readFileSync(`${made}.pub`, "utf8").trim();
 			const body = "made by ssh-keygen\nä ü ş\n";
+
 			for (const options of [[], ["-O", "hashalg=sha256"]]) {
 				const msg = file("made.msg", body);
 				const run = yield* keygen(["-Y", "sign", "-f", made, "-n", SPACE, ...options, msg]);

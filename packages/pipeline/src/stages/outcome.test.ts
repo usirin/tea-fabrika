@@ -157,6 +157,7 @@ describe("a name read back", () => {
 
 	it("tells a ship name from any other text, for a name read from a log", () => {
 		expect(NAMES.every(isShipName)).toBe(true);
+
 		for (const text of [
 			"",
 			"done:whole",

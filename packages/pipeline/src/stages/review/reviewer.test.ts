@@ -260,7 +260,11 @@ describe("what the reviewer is allowed", () => {
 
 	it("runs the repo's own check before each tool call, with its read-only rule on", async () => {
 		const hook = options.hooks?.PreToolUse?.[0]?.hooks[0];
-		if (hook === undefined) throw new Error("no hook");
+
+		if (hook === undefined) {
+			throw new Error("no hook");
+		}
+
 		const call = (tool_name: string, tool_input: Record<string, unknown>) =>
 			hook({hook_event_name: "PreToolUse", tool_name, tool_input} as never, undefined, {
 				signal: new AbortController().signal,
@@ -303,7 +307,9 @@ describe("what the reviewer is allowed", () => {
 describe("a live reviewer whose query is scripted", () => {
 	const dirs: string[] = [];
 	afterAll(() => {
-		for (const dir of dirs) rmSync(dir, {recursive: true, force: true});
+		for (const dir of dirs) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	/** A clone with one commit, and that commit's id. `more` adds to the commit. */
@@ -350,7 +356,11 @@ describe("a live reviewer whose query is scripted", () => {
 		/** How the run ended: the last thing it said, and the only `ended`. */
 		const drafted = said.then((all) => {
 			const ends = all.filter((s) => s.kind === "ended");
-			if (ends.length !== 1 || all.at(-1)?.kind !== "ended") throw new Error("not one end, last");
+
+			if (ends.length !== 1 || all.at(-1)?.kind !== "ended") {
+				throw new Error("not one end, last");
+			}
+
 			return (ends[0] as Extract<Said, {kind: "ended"}>).drafted;
 		});
 		return {drafted, said, seen: query.seen};
@@ -491,7 +501,11 @@ const linksIn = (folder: string, from = folder): string[] =>
 	readdirSync(folder, {withFileTypes: true})
 		.flatMap((entry) => {
 			const path = join(folder, entry.name);
-			if (entry.isSymbolicLink()) return [relative(from, path)];
+
+			if (entry.isSymbolicLink()) {
+				return [relative(from, path)];
+			}
+
 			return entry.isDirectory() ? linksIn(path, from) : [];
 		})
 		.sort();
@@ -499,7 +513,9 @@ const linksIn = (folder: string, from = folder): string[] =>
 describe("the links in the reviewer's copy of the code", () => {
 	const dirs: string[] = [];
 	afterAll(() => {
-		for (const dir of dirs) rmSync(dir, {recursive: true, force: true});
+		for (const dir of dirs) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	/** A tree with the three links, as `git archive` would unpack it, and the folder outside it. */
@@ -564,6 +580,7 @@ describe("the links in the reviewer's copy of the code", () => {
 			// And nothing is there to read, search or list.
 			expect(existsSync(join(tree, path))).toBe(false);
 		}
+
 		// Whatever a search walks from the top of the copy, it stays in the copy.
 		const walked = readdirSync(tree, {recursive: true}).map((entry) => realOf(String(entry)));
 		expect(walked.length).toBeGreaterThan(0);

@@ -44,10 +44,12 @@ interface Source {
 }
 
 type Value = string | readonly string[] | null;
+
 const version = (text: string | null) =>
 	createHash("sha256")
 		.update(text === null ? "missing" : `file:${text}`)
 		.digest("hex");
+
 const spelling = (key: Key) => `${key._tag === "after_prefix" ? "<prefix>" : ""}${spell(key.key)}`;
 const same = (a: Key, b: Key) => a._tag === b._tag && a.key === b.key;
 
@@ -63,6 +65,7 @@ const failed = (error: PlatformError.PlatformError) =>
 	new Refused({why: `save of keybindings.toml failed: ${saidOf(error)}`});
 
 export type KeybindingManager = Manager;
+
 export const KeybindingManager = Object.assign(ManagerService, {
 	make: (options: {readonly folder: string; readonly mac: boolean; readonly by: string}) =>
 		Effect.gen(function* () {
@@ -101,8 +104,12 @@ export const KeybindingManager = Object.assign(ManagerService, {
 				Effect.gen(function* () {
 					const current = yield* SubscriptionRef.get(state);
 					const digest = version(text);
+
 					if (!initial && digest === current.version) {
-						if (current.keys.file._tag !== "refused") return current;
+						if (current.keys.file._tag !== "refused") {
+							return current;
+						}
+
 						const recovered = {
 							...current,
 							keys: {
@@ -113,12 +120,15 @@ export const KeybindingManager = Object.assign(ManagerService, {
 						yield* SubscriptionRef.set(state, recovered);
 						return recovered;
 					}
+
 					const decoded = text === null ? Result.succeed(defaults) : decodeKeys(text, options.mac);
+
 					if (Result.isFailure(decoded)) {
 						yield* refuse(decoded.failure.why, decoded.failure.line);
 						initial = false;
 						return yield* SubscriptionRef.get(state);
 					}
+
 					const keys = decoded.success;
 					const record: Snapshot["changes"][number] = {
 						by: from === null ? null : options.by,
@@ -137,10 +147,13 @@ export const KeybindingManager = Object.assign(ManagerService, {
 						keys,
 						changes: initial ? [] : [...current.changes, record].slice(-CHANGES_SENT),
 					};
-					if (!initial)
+
+					if (!initial) {
 						yield* Effect.logInfo("keybindings_changed").pipe(
 							Effect.annotateLogs({change: record}),
 						);
+					}
+
 					initial = false;
 					bytes = text;
 					yield* SubscriptionRef.set(state, snapshot);
@@ -150,8 +163,12 @@ export const KeybindingManager = Object.assign(ManagerService, {
 				Stream.runForEach((answer) =>
 					one(
 						Effect.gen(function* () {
-							if (answer._tag === "refused") yield* refuse(answer.why, answer.line);
-							else yield* observe(answer._tag === "none" ? null : answer.value, null);
+							if (answer._tag === "refused") {
+								yield* refuse(answer.why, answer.line);
+							} else {
+								yield* observe(answer._tag === "none" ? null : answer.value, null);
+							}
+
 							yield* Deferred.succeed(ready, undefined);
 						}),
 					),
@@ -165,16 +182,23 @@ export const KeybindingManager = Object.assign(ManagerService, {
 						const latest = yield* read;
 						const checked =
 							latest === null ? Result.succeed(defaults) : decodeKeys(latest, options.mac);
-						if (Result.isFailure(checked))
+
+						if (Result.isFailure(checked)) {
 							return yield* new Refused({
 								why: `line ${checked.failure.line}: ${checked.failure.why}`,
 							});
-						if (latest !== bytes) yield* observe(latest, null);
+						}
+
+						if (latest !== bytes) {
+							yield* observe(latest, null);
+						}
+
 						const before = yield* SubscriptionRef.get(state);
 						const text = latest ?? "";
 						const values = writtenKeys(text);
 						const changes = new Map<string, Value>();
 						const displaced: {does: (typeof checked.success.rows)[number]["does"]; key: Key}[] = [];
+
 						switch (request._tag) {
 							case "prefix":
 								changes.set("prefix", request.key);
@@ -190,11 +214,16 @@ export const KeybindingManager = Object.assign(ManagerService, {
 									undo === null ||
 									request.version !== undo.version ||
 									request.version !== before.version
-								)
+								) {
 									return yield* new Refused({
 										why: "The file changed to a newer version. Undo is no longer available.",
 									});
-								for (const [word, value] of undo.rows) changes.set(word, value);
+								}
+
+								for (const [word, value] of undo.rows) {
+									changes.set(word, value);
+								}
+
 								break;
 							case "bind": {
 								// Decode the requested row apart so existing user claims can be removed before checking the result.
@@ -202,30 +231,47 @@ export const KeybindingManager = Object.assign(ManagerService, {
 									`${request.does} = ${JSON.stringify(request.keys)}`,
 									options.mac,
 								);
-								if (Result.isFailure(candidate))
+
+								if (Result.isFailure(candidate)) {
 									return yield* new Refused({why: candidate.failure.why});
+								}
+
 								const claimed =
 									candidate.success.rows.find((row) => row.does === request.does)?.keys ?? [];
+
 								for (const row of checked.success.rows) {
-									if (row.does === request.does) continue;
+									if (row.does === request.does) {
+										continue;
+									}
+
 									const lost = row.keys.filter((key) => claimed.some((take) => same(key, take)));
-									for (const key of lost) displaced.push({does: row.does, key});
-									if (lost.length > 0 && row.source === "yours")
+
+									for (const key of lost) {
+										displaced.push({does: row.does, key});
+									}
+
+									if (lost.length > 0 && row.source === "yours") {
 										changes.set(
 											row.does,
 											row.keys.filter((key) => !lost.some((take) => same(key, take))).map(spelling),
 										);
+									}
 								}
+
 								changes.set(request.does, request.keys);
 								break;
 							}
 						}
+
 						const saved = patchKeys(text, changes);
 						const decoded = decodeKeys(saved, options.mac);
-						if (Result.isFailure(decoded))
+
+						if (Result.isFailure(decoded)) {
 							return yield* new Refused({
 								why: `line ${decoded.failure.line}: ${decoded.failure.why}`,
 							});
+						}
+
 						const restore = new Map<string, Value>(
 							[...changes.keys()].map((word) => [word, values.get(word) ?? null]),
 						);

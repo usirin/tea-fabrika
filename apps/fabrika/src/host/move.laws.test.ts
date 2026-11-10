@@ -74,8 +74,10 @@ const laptop = (ops: readonly Op[]) => {
 			data: op.fact,
 			id: `w${i}`,
 		});
-		if (i % 3 === 0)
+
+		if (i % 3 === 0) {
 			rulesAppend(db, t++, "host/h1/inbox", "any", {kind: "tick", writer: "h1", data: {}});
+		}
 	});
 	return db;
 };
@@ -103,7 +105,10 @@ const target = (db: Db, drop: number | null) => {
 			progress: Effect.sync(() => moveProgress(db)),
 			send: (events) =>
 				Effect.suspend((): Effect.Effect<Progress, MoveStopped | LinkDropped> => {
-					if (drop !== null && landed >= drop) return Effect.fail(new LinkDropped({why: "gone"}));
+					if (drop !== null && landed >= drop) {
+						return Effect.fail(new LinkDropped({why: "gone"}));
+					}
+
 					landed++;
 					return answer(importChunk(db, FOUNDER, alice, {events}));
 				}),
@@ -148,13 +153,16 @@ describe("a moved ledger folds as the old one did", () => {
 					const old = laptop(ops);
 					const rows = read(old, 0, 1_000_000, ROOT);
 					const db = server();
-					if (drop !== null)
+
+					if (drop !== null) {
 						await Effect.runPromise(
 							copyInto(rows, {chunk, pauseMs: 1}).pipe(
 								Effect.provide(target(db, drop)),
 								Effect.ignore,
 							),
 						);
+					}
+
 					const done = await Effect.runPromise(
 						copyInto(rows, {chunk}).pipe(Effect.provide(target(db, null))),
 					);

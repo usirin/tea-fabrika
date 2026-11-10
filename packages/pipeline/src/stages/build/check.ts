@@ -20,6 +20,7 @@ const inside = (folder: string, path: string) => {
 /** A path with its links followed, as far as it is there: `/copy/out/x` where `out` links elsewhere is that elsewhere's `x`. */
 const realOf = (path: string): string => {
 	const parent = dirname(path);
+
 	try {
 		return realpathSync(path);
 	} catch {
@@ -62,12 +63,16 @@ export function builderRefusal(
 	input: Readonly<Record<string, unknown>>,
 ): string | null {
 	const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
+
 	if (READS.has(tool)) {
 		const pattern = tool === "Glob" ? text(input.pattern) : null;
+
 		// A Glob's pattern can leave the folder on its own: `/elsewhere/**`, `~/x`,
 		// or `..`, which after a `**` that matched nothing climbs one more than it shows.
-		if (pattern !== null && (pattern.startsWith("~") || pattern.split(/[\\/]/).includes("..")))
+		if (pattern !== null && (pattern.startsWith("~") || pattern.split(/[\\/]/).includes(".."))) {
 			return `The pattern ${pattern} leaves your working copy. Glob only inside ${tree}, without ".." or "~".`;
+		}
+
 		const asked = [
 			text(input.file_path),
 			text(input.path),
@@ -82,12 +87,21 @@ export function builderRefusal(
 			? null
 			: `${outside} is outside your working copy. Read only inside ${tree}.`;
 	}
-	if (tool !== "Bash") return null;
-	if (input.dangerouslyDisableSandbox === true)
+
+	if (tool !== "Bash") {
+		return null;
+	}
+
+	if (input.dangerouslyDisableSandbox === true) {
 		return "Every command runs in the sandbox here. Run it without asking to leave it.";
+	}
+
 	const command = text(input.command) ?? "";
-	if (TALKS.test(command))
+
+	if (TALKS.test(command)) {
 		return "This run has no network and no account. Do not call GitHub, push, fetch or reach the network: code commits, pushes and opens the pull request after you, from your form.";
+	}
+
 	return null;
 }
 

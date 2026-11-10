@@ -16,6 +16,7 @@ import type {Env} from "./runtime.ts";
 
 const table = vi.hoisted(() => ({programs: {} as Record<string, {hash: string; source: string}>}));
 vi.mock("./table.ts", () => table);
+
 vi.mock("cloudflare:workers", () => ({
 	DurableObject: class {
 		constructor(
@@ -25,15 +26,18 @@ vi.mock("cloudflare:workers", () => ({
 	},
 	WorkerEntrypoint: class {},
 }));
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const field = (value: Buffer | string) => {
 	const body = Buffer.from(value),
 		size = Buffer.alloc(4);
 	size.writeUInt32BE(body.length);
 	return Buffer.concat([size, body]);
 };
+
 const identity = () => {
 	const pair = generateKeyPairSync("ed25519"),
 		bytes = Buffer.from(pair.publicKey.export({format: "jwk"}).x!, "base64url"),
@@ -68,22 +72,27 @@ const identity = () => {
 		},
 	};
 };
+
 const Model = Schema.Struct({
 	count: Schema.Int,
 	replies: Schema.Int,
 	failures: Schema.Array(Schema.String),
 });
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("prepare"), parent: Schema.optionalKey(Schema.String)}),
 	Schema.Struct({type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String)}),
 ]);
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["person_only", "not_granted"],
 });
+
 const caused = (parent: string) =>
 	write({stream: "events", write: {_tag: "caused", parent, fact: {_tag: "answered"}}});
+
 const approvals = {
 	name: "approvals",
 	machine: Machine.make({
@@ -113,12 +122,18 @@ const approvals = {
 	writes: {answered: {schema: Schema.TaggedStruct("answered", {}), personOnly: true}},
 	wake: () => null,
 } as const;
+
 const closers: Array<() => Promise<void>> = [];
+
 afterEach(async () => {
-	for (const close of closers.splice(0).reverse()) await close();
+	for (const close of closers.splice(0).reverse()) {
+		await close();
+	}
 });
+
 // The platform alarm: a saved time that survives reopen and calls the object's alarm handler.
 type AlarmHooks = {readonly set: (at: number) => void; readonly clear: () => void};
+
 const storage = (db: DatabaseSync, alarms?: AlarmHooks) => {
 	const sql = nodeSql(db),
 		values = new Map<string, unknown>();
@@ -141,12 +156,15 @@ const storage = (db: DatabaseSync, alarms?: AlarmHooks) => {
 		deleteAlarm: async () => alarms?.clear(),
 	};
 };
+
 // A program that throws a TypeError on "throw" and counts on "inc", run inside the real box.
 const PoisonModel = Schema.Struct({count: Schema.Int});
+
 const PoisonMsg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("throw"), parent: Schema.optionalKey(Schema.String)}),
 	Schema.Struct({type: Schema.Literal("inc"), parent: Schema.optionalKey(Schema.String)}),
 ]);
+
 const poisonProgram = (limit: number | null) => ({
 	name: "poison",
 	...(limit === null ? {} : {maxDeliveries: limit}),
@@ -174,8 +192,10 @@ const poisonProgram = (limit: number | null) => ({
 	writes: {},
 	wake: () => null,
 });
+
 /** Project calls a Process made before ticket 402. Every other call is a new Project RPC. */
 const OLD_PROJECT_CALLS = new Set(["read", "wait", "append", "inbox", "own", "publish"]);
+
 const gate = () => {
 	let resolve = () => {};
 	const promise = new Promise<void>((done) => {
@@ -183,6 +203,7 @@ const gate = () => {
 	});
 	return {promise, resolve};
 };
+
 type Entry = {
 	object: Process;
 	readonly db: DatabaseSync;
@@ -191,7 +212,9 @@ type Entry = {
 	timer: ReturnType<typeof setTimeout> | undefined;
 	alarm: number | null;
 };
+
 type Lost = {readonly at: number; readonly side: "before" | "after"} | null;
+
 const world = (
 	fault: "failed" | "interrupted" | "healthy" = "healthy",
 	flow: {readonly limit: number | null; readonly lost: Lost} = {limit: null, lost: null},
@@ -219,14 +242,20 @@ const world = (
 		closed = false;
 	const schedule = (entry: Entry) => {
 		clearTimeout(entry.timer);
-		if (entry.alarm === null || closed) return;
+
+		if (entry.alarm === null || closed) {
+			return;
+		}
+
 		const fire = (tries: number) => {
 			entry.timer = setTimeout(
 				() => {
 					entry.alarm = null;
 					entry.object.alarm().catch(() => {
 						// workerd retries a failed alarm handler; so does this platform stand-in.
-						if (!closed && tries < 5 && entry.alarm === null) fire(tries + 1);
+						if (!closed && tries < 5 && entry.alarm === null) {
+							fire(tries + 1);
+						}
 					});
 				},
 				tries === 0 ? Math.max(0, (entry.alarm ?? 0) - Date.now()) : 100,
@@ -236,12 +265,24 @@ const world = (
 	};
 	const call = (method: string) => async (args: ReadonlyArray<unknown>) => {
 		const work = () => Reflect.apply(Reflect.get(project, method), project, args);
-		if (OLD_PROJECT_CALLS.has(method)) return work();
+
+		if (OLD_PROJECT_CALLS.has(method)) {
+			return work();
+		}
+
 		newCalls++;
 		const lost = flow.lost;
-		if (lost === null || lostDone || newCalls !== lost.at) return work();
+
+		if (lost === null || lostDone || newCalls !== lost.at) {
+			return work();
+		}
+
 		lostDone = true;
-		if (lost.side === "before") throw new Error("transport lost before the Project");
+
+		if (lost.side === "before") {
+			throw new Error("transport lost before the Project");
+		}
+
 		await work();
 		throw new Error("transport lost the Project's answer");
 	};
@@ -262,18 +303,25 @@ const world = (
 					{},
 					{
 						get: (_target, method) => {
-							if (typeof method !== "string" || method === "then") return undefined;
-							if (method === "sign")
+							if (typeof method !== "string" || method === "then") {
+								return undefined;
+							}
+
+							if (method === "sign") {
 								return (...args: Parameters<Project["sign"]>) => {
 									signs++;
 									return project.sign(...args);
 								};
-							if (method === "commit")
+							}
+
+							if (method === "commit") {
 								return async (...args: Parameters<Project["commit"]>) => {
 									commits++;
 									await beforeCommit();
 									return project.commit(...args);
 								};
+							}
+
 							return (...args: ReadonlyArray<unknown>) => call(method)(args);
 						},
 					},
@@ -289,12 +337,18 @@ const world = (
 					let entry: Entry | undefined;
 					const handles = storage(processDb, {
 						set: (at) => {
-							if (entry === undefined) return;
+							if (entry === undefined) {
+								return;
+							}
+
 							entry.alarm = at;
 							schedule(entry);
 						},
 						clear: () => {
-							if (entry === undefined) return;
+							if (entry === undefined) {
+								return;
+							}
+
 							entry.alarm = null;
 							clearTimeout(entry.timer);
 						},
@@ -319,24 +373,35 @@ const world = (
 					{},
 					{
 						get: (_target, method) => {
-							if (typeof method !== "string" || method === "then") return undefined;
-							if (method === "configure")
+							if (typeof method !== "string" || method === "then") {
+								return undefined;
+							}
+
+							if (method === "configure") {
 								return async (descriptor: Descriptor) => {
 									attempts.push(structuredClone(descriptor));
 									entered.resolve();
-									if (attempts.length === 1 && fault === "failed")
+
+									if (attempts.length === 1 && fault === "failed") {
 										throw new Error("configure failed before save");
+									}
+
 									if (attempts.length === 1 && fault === "interrupted") {
 										await interrupted.promise;
 										return;
 									}
+
 									return current.object.configure(descriptor);
 								};
-							if (method === "msg")
+							}
+
+							if (method === "msg") {
 								return (incoming: Incoming) => {
 									received.push(incoming);
 									return current.object.msg(incoming);
 								};
+							}
+
 							return (...args: ReadonlyArray<unknown>) =>
 								Reflect.apply(Reflect.get(current.object, method), current.object, args);
 						},
@@ -361,8 +426,14 @@ const world = (
 							init: (saved: unknown) => box.init(saved),
 							step: async (model: unknown, msg: unknown) => {
 								// Transport faults before the program: they decide nothing about the input.
-								if (stepFault === "rpc") throw new Error("transport failed before the program");
-								if (stepFault === "decode") return {unrecognized: true};
+								if (stepFault === "rpc") {
+									throw new Error("transport failed before the program");
+								}
+
+								if (stepFault === "decode") {
+									return {unrecognized: true};
+								}
+
 								return box.step(model, msg);
 							},
 							fold: (model: unknown, msg: unknown) => box.fold(model, msg),
@@ -372,6 +443,7 @@ const world = (
 							admit: (msg: unknown) => box.admit(msg),
 						};
 					}
+
 					const approval = id.startsWith("approvals-"),
 						program = approval ? approvals : counter,
 						execution = nodeExecution(program);
@@ -410,11 +482,13 @@ const world = (
 	closers.push(async () => {
 		closed = true;
 		interrupted.resolve();
+
 		for (const {object, db: processDb, timer} of processes.values()) {
 			clearTimeout(timer);
 			await object.runtime.dispose();
 			processDb.close();
 		}
+
 		await project.runtime.dispose();
 		db.close();
 	});
@@ -426,14 +500,22 @@ const world = (
 	/** The storage owner of a process ID, however the runtime keys it. */
 	const processFor = (pid: string): Entry => {
 		const direct = processes.get(pid);
-		if (direct !== undefined) return direct;
+
+		if (direct !== undefined) {
+			return direct;
+		}
+
 		const name = nameFor(pid);
 		const found = [...processes.entries()].find(
 			([storageKey, entry]) =>
 				Reflect.get(Object(entry.values.get("descriptor")), "id") === pid ||
 				(name !== undefined && storageKey === name),
 		);
-		if (found === undefined) throw new Error(`no storage owner for ${pid}`);
+
+		if (found === undefined) {
+			throw new Error(`no storage owner for ${pid}`);
+		}
+
 		return found[1];
 	};
 	return {
@@ -468,12 +550,15 @@ const world = (
 				clearTimeout(entry.timer);
 				await entry.object.runtime.dispose();
 			}
+
 			await project.runtime.dispose();
 			project = new Project(ctx, env);
+
 			for (const entry of processes.values()) {
 				entry.object = new Process(entry.ctx, env);
 				schedule(entry);
 			}
+
 			await project.info();
 		},
 		startPoison: async (name: string) =>
@@ -562,7 +647,7 @@ const world = (
 };
 
 describe("P12 Project configure recovery", () => {
-	for (const fault of ["failed", "interrupted", "healthy"] as const)
+	for (const fault of ["failed", "interrupted", "healthy"] as const) {
 		it(`pinned: ${fault} configure restores the descriptor after an interrupted start`, async () => {
 			const w = world(fault);
 			const first = w.project.info().then(
@@ -570,7 +655,11 @@ describe("P12 Project configure recovery", () => {
 				(error: unknown) => ({error}),
 			);
 			await w.entered;
-			if (fault === "interrupted") await w.interrupt();
+
+			if (fault === "interrupted") {
+				await w.interrupt();
+			}
+
 			const result = await first;
 			expect("value" in result).toBe(fault === "healthy");
 			const descriptor = w.attempts[0]!;
@@ -582,7 +671,11 @@ describe("P12 Project configure recovery", () => {
 				{process: descriptor.id, name: "counter:1", program: "counter"},
 			]);
 			expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);
-			for (const attempt of w.attempts) expect(attempt).toEqual(descriptor);
+
+			for (const attempt of w.attempts) {
+				expect(attempt).toEqual(descriptor);
+			}
+
 			const process = w.process(descriptor.id).object;
 			expect(await process.descriptor()).toEqual(descriptor);
 			expect(await process.open("audit")).toMatchObject({rev: 0, view: {count: 0}});
@@ -603,16 +696,21 @@ describe("P12 Project configure recovery", () => {
 			await w.reopen();
 			expect(w.attempts).toEqual(attempts);
 		});
+	}
 });
 
 describe("P12 Process RPC refusal answers", () => {
-	for (const reason of ["person_only", "not_granted"] as const)
+	for (const reason of ["person_only", "not_granted"] as const) {
 		it(`pinned: ${reason} refusal survives the Process RPC adapter as a saved typed answer`, async () => {
 			const w = world();
 			await w.project.info();
 			const {process: pid} = await w.start(),
 				client = await w.admit();
-			if (reason === "not_granted") w.revokeBeforeCommit();
+
+			if (reason === "not_granted") {
+				w.revokeBeforeCommit();
+			}
+
 			const result = await w.project
 				.route(client, "process.send", {
 					pid,
@@ -652,10 +750,12 @@ describe("P12 Process RPC refusal answers", () => {
 			).toHaveLength(1);
 			expect(w.calls()).toEqual({signs: 1, commits: reason === "not_granted" ? 1 : 0});
 		});
+	}
 });
 
 // Ticket 402: P34's recovery on the Worker path, with the real Project and Process classes.
 const Word = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9]{0,11}$/));
+
 /** One generated recovery flow. Limits run 1 to 32; null is the Worker's default policy. */
 const RecoveryFlow = Schema.Struct({
 	letter: Word,
@@ -675,22 +775,31 @@ const RecoveryFlow = Schema.Struct({
 });
 type RecoveryFlow = typeof RecoveryFlow.Type;
 const FLOW_WAIT = 15_000;
+
 const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) => boolean) => {
 	const end = Date.now() + FLOW_WAIT;
 	let last: unknown = null;
+
 	while (Date.now() < end) {
 		try {
 			const value = await look();
 			last = value;
-			if (done(value)) return value;
+
+			if (done(value)) {
+				return value;
+			}
 		} catch (error) {
 			last = {error: String(error)};
 		}
+
 		await new Promise((done) => setTimeout(done, 20));
 	}
+
 	throw new Error(`${what}: no answer in ${FLOW_WAIT} ms; last observed ${JSON.stringify(last)}`);
 };
+
 const NAME = "poison:1";
+
 /** Runs one flow and checks what must hold after it. */
 const runFlow = async (flow: RecoveryFlow) => {
 	const w = world("healthy", {limit: flow.limit, lost: flow.lost});
@@ -725,11 +834,20 @@ const runFlow = async (flow: RecoveryFlow) => {
 		w.fault("none");
 		expect(await restarts()).toEqual([]);
 	}
+
 	for (let n = 1; n <= k; n++) {
 		const answer = await send(original, letter, "throw");
-		if (n === limit) expect(answer).toMatchObject({answer: {_tag: "refused", why: "dead"}});
-		else expect(answer).not.toMatchObject({answer: {_tag: "ok"}});
-		if (flow.reopen === "throws" && n === 1) await w.reopenAll();
+
+		if (n === limit) {
+			expect(answer).toMatchObject({answer: {_tag: "refused", why: "dead"}});
+		} else {
+			expect(answer).not.toMatchObject({answer: {_tag: "ok"}});
+		}
+
+		if (flow.reopen === "throws" && n === 1) {
+			await w.reopenAll();
+		}
+
 		const rows = await until(`restart ${n}`, restarts, (found) => found.length >= n);
 		expect(rows).toHaveLength(n);
 		expect(rows[n - 1]).toMatchObject({after: chain.at(-1), name: NAME});
@@ -738,12 +856,16 @@ const runFlow = async (flow: RecoveryFlow) => {
 		chain.push(next);
 		await until(`process ${n} live`, live, (pid) => pid === next);
 	}
+
 	const current = chain.at(-1)!;
+
 	// Exactly one receipt for the letter, in the one store its name owns, with every try counted.
-	if (k > 0 || flow.fault !== "none")
+	if (k > 0 || flow.fault !== "none") {
 		expect(w.receipts(letter)).toMatchObject([
 			{letter, tries: k, errors: Array.from({length: k}, () => "TypeError")},
 		]);
+	}
+
 	const dead = k === limit ? [chain.at(-2)!] : [];
 	const deadFacts = () =>
 		deadRows(chain).then((rows) => rows.map((row) => ({...Object(row.body), _tag: row._tag})));
@@ -762,39 +884,58 @@ const runFlow = async (flow: RecoveryFlow) => {
 			asked: expect.stringMatching(/^SHA256:/),
 		})),
 	);
-	if (k === limit)
-		for (let n = 0; n < flow.resends; n++)
+
+	if (k === limit) {
+		for (let n = 0; n < flow.resends; n++) {
 			expect(await send(original, letter, "throw")).toMatchObject({
 				answer: {_tag: "refused", why: "dead"},
 			});
+		}
+	}
+
 	// Healthy mail on the live successor, then the same letters again after a reopen.
 	const accepted = [];
+
 	for (let n = 0; n < flow.healthy; n++) {
 		const answer = await send(current, `h${n}${flow.letter}`, "inc");
 		expect(answer).toMatchObject({answer: {_tag: "ok", result: {_tag: "accepted"}}});
 		accepted.push(answer);
 	}
+
 	expect(await route("view.open", {pid: current})).toMatchObject({
 		answer: {_tag: "ok", result: {view: {count: flow.healthy}}},
 	});
 	const inbox = (await w.project.read(`${NAME}/inbox`, 0, "audit")).length;
-	if (flow.reopen !== "none") await w.reopenAll();
-	for (let n = 0; n < flow.healthy; n++)
+
+	if (flow.reopen !== "none") {
+		await w.reopenAll();
+	}
+
+	for (let n = 0; n < flow.healthy; n++) {
 		expect(await send(current, `h${n}${flow.letter}`, "inc")).toEqual(accepted[n]);
-	if (k === limit)
+	}
+
+	if (k === limit) {
 		expect(await send(original, letter, "throw")).toMatchObject({
 			answer: {_tag: "refused", why: "dead"},
 		});
+	}
+
 	expect(await route("view.open", {pid: current})).toMatchObject({
 		answer: {_tag: "ok", result: {view: {count: flow.healthy}}},
 	});
 	expect(await w.project.read(`${NAME}/inbox`, 0, "audit")).toHaveLength(inbox);
 	expect(await restarts()).toHaveLength(k);
 	expect(await deadFacts()).toHaveLength(dead.length);
-	if (k > 0 || flow.fault !== "none") expect(w.receipts(letter)).toMatchObject([{tries: k}]);
+
+	if (k > 0 || flow.fault !== "none") {
+		expect(w.receipts(letter)).toMatchObject([{tries: k}]);
+	}
+
 	expect(await live()).toBe(current);
 	return {w, current, restarts, live, route};
 };
+
 const flowOptions = {timeout: 600_000, arbitrary: {seed: 119120, runs: 12}};
 
 describe("ticket 402: P34 recovery on the Worker runtime", () => {

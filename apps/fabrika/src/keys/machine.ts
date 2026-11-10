@@ -7,6 +7,7 @@ import {Edit} from "./program.ts";
 
 const Target = Schema.TaggedUnion({command: {does: Does}, prefix: {}, ignore: {}});
 type Target = typeof Target.Type;
+
 const Recording = Schema.TaggedUnion({
 	idle: {},
 	waiting: {target: Target, prefix: Schema.Boolean, add: Schema.Boolean},
@@ -34,7 +35,9 @@ const edit = Cmd.make("edit", {
 	ok: Schema.Null,
 	err: [],
 });
+
 export type EditorCmd = ReturnType<typeof edit>;
+
 export type EditorMsg =
 	| {readonly type: "query"; readonly query: string}
 	| {readonly type: "select"; readonly does: Editor["selected"]}
@@ -46,6 +49,7 @@ export type EditorMsg =
 	| {readonly type: "undo"};
 
 const spelling = (key: Key) => `${key._tag === "after_prefix" ? "<prefix>" : ""}${spell(key.key)}`;
+
 export const matching = (keys: Keys, query: string) => {
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 	return keys.rows.filter((row) => {
@@ -58,6 +62,7 @@ export const matching = (keys: Keys, query: string) => {
 
 type Step = readonly [Editor, readonly EditorCmd[]];
 const idle = () => Recording.cases.idle.make({});
+
 const target = (selected: Editor["selected"]): Target | null =>
 	selected === null
 		? null
@@ -66,6 +71,7 @@ const target = (selected: Editor["selected"]): Target | null =>
 			: selected === "ignore"
 				? Target.cases.ignore.make({})
 				: Target.cases.command.make({does: selected});
+
 const saving = (s: Editor, request: typeof Edit.Type): Step => {
 	const id = `keys-${s.next}`;
 	return [
@@ -78,6 +84,7 @@ const saving = (s: Editor, request: typeof Edit.Type): Step => {
 		[edit({request: id, edit: request})],
 	];
 };
+
 const recording = (s: Editor, add: boolean): Step => {
 	const selected = target(s.selected);
 	return selected === null
@@ -91,6 +98,7 @@ const recording = (s: Editor, add: boolean): Step => {
 				[],
 			];
 };
+
 const update = (s: Editor, m: EditorMsg): Step => {
 	switch (m.type) {
 		case "query":
@@ -123,16 +131,29 @@ const update = (s: Editor, m: EditorMsg): Step => {
 					];
 		case "press": {
 			const r = s.recording;
-			if (r._tag !== "waiting") return [s, []];
+
+			if (r._tag !== "waiting") {
+				return [s, []];
+			}
+
 			const name = keyName(m.press);
-			if (name === null || THE_MACS.has(name) || name === "<c-c>") return [s, []];
-			if (name === "<escape>") return update(s, {type: "cancel"});
+
+			if (name === null || THE_MACS.has(name) || name === "<c-c>") {
+				return [s, []];
+			}
+
+			if (name === "<escape>") {
+				return update(s, {type: "cancel"});
+			}
+
 			if (
 				r.target._tag === "command" &&
 				!r.prefix &&
 				matchPress(m.press, [Key.cases.alone.make({key: s.keys.prefix})], true) !== null
-			)
+			) {
 				return [{...s, recording: {...r, prefix: true}}, []];
+			}
+
 			const typed =
 				(m.press.alt || m.press.altGraph) && [...m.press.key].length === 1
 					? (keyName({...m.press, alt: false, ctrl: m.press.altGraph ? false : m.press.ctrl}) ??
@@ -151,9 +172,15 @@ const update = (s: Editor, m: EditorMsg): Step => {
 		}
 		case "save": {
 			const r = s.recording;
-			if (r._tag !== "candidate") return [s, []];
-			if (r.target._tag === "prefix")
+
+			if (r._tag !== "candidate") {
+				return [s, []];
+			}
+
+			if (r.target._tag === "prefix") {
 				return saving(s, Edit.cases.prefix.make({key: spell(r.keys[0]?.key ?? "")}));
+			}
+
 			const selected = r.target;
 			const original = r.add
 				? selected._tag === "ignore"
@@ -170,7 +197,7 @@ const update = (s: Editor, m: EditorMsg): Step => {
 		}
 		case "unbind":
 		case "reset":
-			if (s.selected === "prefix" || s.selected === "ignore")
+			if (s.selected === "prefix" || s.selected === "ignore") {
 				return saving(
 					s,
 					m.type === "reset"
@@ -179,7 +206,12 @@ const update = (s: Editor, m: EditorMsg): Step => {
 							? Edit.cases.ignore.make({keys: []})
 							: Edit.cases.prefix.make({key: spell(s.keys.prefix)}),
 				);
-			if (s.selected === null) return [s, []];
+			}
+
+			if (s.selected === null) {
+				return [s, []];
+			}
+
 			return saving(
 				s,
 				m.type === "reset"
@@ -215,7 +247,10 @@ const update = (s: Editor, m: EditorMsg): Step => {
 						[],
 					];
 		case "failed":
-			if (m.request === "open") return [{...s, error: m.why}, []];
+			if (m.request === "open") {
+				return [{...s, error: m.why}, []];
+			}
+
 			return s.recording._tag !== "saving" || s.recording.request !== m.request
 				? [s, []]
 				: [{...s, recording: idle(), error: `Save failed: ${m.why}`, save: "failed"}, []];
@@ -223,6 +258,7 @@ const update = (s: Editor, m: EditorMsg): Step => {
 			return s.undo === null ? [s, []] : saving(s, Edit.cases.undo.make({version: s.undo}));
 	}
 };
+
 const init = (loaded: Keys | Editor | null, _ctx: undefined): Step => [
 	{
 		keys: loaded !== null && "query" in loaded ? loaded.keys : (loaded ?? defaults),
@@ -236,6 +272,7 @@ const init = (loaded: Keys | Editor | null, _ctx: undefined): Step => [
 	},
 	[],
 ];
+
 const machine = defineMachine({
 	types: {model: {} as Editor, msg: {} as EditorMsg, cmd: {} as EditorCmd, ctx: undefined},
 	init,
@@ -256,4 +293,5 @@ const machine = defineMachine({
 		undo: update,
 	},
 });
+
 export const editorMachine = {...machine, init};

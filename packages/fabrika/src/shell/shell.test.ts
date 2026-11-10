@@ -35,7 +35,11 @@ describe("tsh: a job table saved by older code", () => {
 					Effect.provideService(Programs, programList(SMALL)),
 					Effect.provideService(HostJobs, jobs),
 				);
-				if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("tsh did not start");
+				}
+
 				expect(yield* tell(started.run, "line", "say --text still")).toBe("queued");
 				const [answer] = yield* ready.upTo(1);
 				return {status: answer?.status, said: printed.values.map((p) => p.text)};
@@ -80,10 +84,18 @@ describe("tsh: a line told beside the foreground", () => {
 					Effect.provideService(Programs, programList(SMALL)),
 					Effect.provideService(HostJobs, jobs),
 				);
-				if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("tsh did not start");
+				}
+
 				const table = () => jobs.table.getState().jobs;
 				yield* tell(started.run, "line", "sleep --ms 60000");
-				for (let i = 0; i < 300 && table().length === 0; i += 1) yield* Effect.sleep("10 millis");
+
+				for (let i = 0; i < 300 && table().length === 0; i += 1) {
+					yield* Effect.sleep("10 millis");
+				}
+
 				let told = 0;
 				/** One line on `background`: what it printed on err, its status, and the jobs after it. */
 				const besideOne = (text: string) =>
@@ -104,8 +116,11 @@ describe("tsh: a line told beside the foreground", () => {
 						};
 					});
 				const refused = [];
-				for (const text of ["jobs", "exit", "tally", "tally & ; jobs"])
+
+				for (const text of ["jobs", "exit", "tally", "tally & ; jobs"]) {
 					refused.push(yield* besideOne(text));
+				}
+
 				const unread = yield* besideOne("| x");
 				const taken = yield* besideOne("tally &");
 				const both = table().map((j) => [j.text, j.background]);
@@ -156,8 +171,13 @@ describe("tsh: && and || between statements", () => {
 					Effect.provideService(Programs, programList(SMALL)),
 					Effect.provideService(HostJobs, yield* openJobs(memoryStorage())),
 				);
-				if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("tsh did not start");
+				}
+
 				const seen: {status: number | undefined; out: string[]}[] = [];
+
 				for (const [i, line] of lines.entries()) {
 					const from = printed.values.length;
 					expect(yield* tell(started.run, "line", line)).toBe("queued");
@@ -167,6 +187,7 @@ describe("tsh: && and || between statements", () => {
 						out: printed.values.slice(from).map((p) => p.text),
 					});
 				}
+
 				return seen;
 			}).pipe(Effect.scoped),
 		);
@@ -209,7 +230,10 @@ describe("tsh: a line's logs carry the line and when it was said", () => {
 		const rows: {line?: unknown; said?: unknown}[] = [];
 		const caught = Logger.make((o) => {
 			const row = Logger.formatStructured.log(o);
-			if (row.message === "noted") rows.push(row.annotations);
+
+			if (row.message === "noted") {
+				rows.push(row.annotations);
+			}
 		});
 		const before = Date.now();
 		await Effect.runPromise(
@@ -224,7 +248,11 @@ describe("tsh: a line's logs carry the line and when it was said", () => {
 					Effect.provideService(Programs, programList([...SMALL, listed(note, Layer.empty)])),
 					Effect.provideService(HostJobs, yield* openJobs(memoryStorage())),
 				);
-				if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("tsh did not start");
+				}
+
 				expect(yield* tell(started.run, "line", "note")).toBe("queued");
 				yield* ready.upTo(1);
 			}).pipe(Effect.scoped, Effect.provide(Logger.layer([caught]))),

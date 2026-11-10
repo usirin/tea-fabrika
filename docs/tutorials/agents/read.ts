@@ -8,7 +8,11 @@ import {Book, Poet} from "./programs.ts";
 const main = Effect.gen(function* () {
 	const book = (yield* getState("book", Book)).state;
 	const poet = (yield* getState("poet", Poet)).state;
-	for (const l of book?.lines ?? []) yield* Console.log(`${l.guest.padEnd(6)}  ${l.line}`);
+
+	for (const l of book?.lines ?? []) {
+		yield* Console.log(`${l.guest.padEnd(6)}  ${l.line}`);
+	}
+
 	yield* Console.log(
 		`\n${book?.lines.length ?? 0} lines in the book, ${poet?.written ?? 0} written, $${(poet?.usd ?? 0).toFixed(4)} saved as spent`,
 	);

@@ -30,6 +30,7 @@ const unboundedJson = Arbitrary.schema(
 );
 
 const text = Schema.NonEmptyString.check(Schema.isMaxLength(40));
+
 // The old integer generator never made -0; JSON storage cannot distinguish it from 0.
 const policy = Schema.Struct({
 	why: ProcessFact.cases.down.fields.why,
@@ -39,6 +40,7 @@ const policy = Schema.Struct({
 		Schema.makeFilter((n) => !Object.is(n, -0)),
 	),
 });
+
 const nat = (max: number) => Schema.Int.check(Schema.isBetween({minimum: 0, maximum: max}));
 // Effect 4.1.1 has no examples option. Each callback also checks its old inputs.
 // Retain 0..40 times/texts and 2..31 errors. Explicit number bounds above
@@ -57,8 +59,9 @@ describe("p79, inclusive restart window", () => {
 				[10_000, 1_000, 0],
 				[10_000, 1_000, 1],
 				[now, period, offset],
-			] as const)
+			] as const) {
 				expect(canRestart([n - p + o], n, p, 1)).toBe(o < 0);
+			}
 		},
 		options,
 	);
@@ -76,7 +79,11 @@ describe("p79, inclusive restart window", () => {
 			] as const) {
 				const times = os.map((offset) => n - Math.min(offset, p));
 				expect(canRestart([], n, p, 1)).toBe(true);
-				if (times.length > 0) expect(canRestart(times, n, p, times.length)).toBe(false);
+
+				if (times.length > 0) {
+					expect(canRestart(times, n, p, times.length)).toBe(false);
+				}
+
 				expect(canRestart(times, n, p, times.length + 1)).toBe(true);
 			}
 		},
@@ -99,13 +106,14 @@ describe("p79, saved activity is not a crash detector", () => {
 		"P11 plant, decode an absent marker: a marker never written wakes as idle",
 		[processIds.pipe(Arbitrary.map((process) => Activity.cases.idle.make({process})))],
 		([generated]) => {
-			for (const saved of [undefined, generated])
+			for (const saved of [undefined, generated]) {
 				expect(
 					Result.match(recoverActivity(saved), {
 						onFailure: (error) => error.why,
 						onSuccess: (value) => value._tag,
 					}),
 				).toBe("idle");
+			}
 		},
 		options,
 	);
@@ -150,7 +158,10 @@ describe("p79, saved activity is not a crash detector", () => {
 			for (const saved of [...corrupt, generated]) {
 				const answer = recoverActivity(saved);
 				expect(Result.isFailure(answer)).toBe(true);
-				if (Result.isFailure(answer)) expect(answer.failure.why).toBe("bad_row");
+
+				if (Result.isFailure(answer)) {
+					expect(answer.failure.why).toBe("bad_row");
+				}
 			}
 		},
 		options,
@@ -181,6 +192,7 @@ describe("T540, next/ process UUIDv7 refusals", () => {
 			const replace = (at: number, char: string) =>
 				`process_${suffix.slice(0, at)}${char}${suffix.slice(at + 1)}`;
 			expect(Result.isSuccess(Schema.decodeUnknownResult(Id.Process)(process))).toBe(true);
+
 			for (const [part, invalid] of [
 				["version", replace(10, version)],
 				["variant", replace(13, variant)],
@@ -188,8 +200,9 @@ describe("T540, next/ process UUIDv7 refusals", () => {
 				["length", `process_${suffix.repeat(2).slice(0, length)}`],
 				["alphabet", replace(position, char)],
 				["prefix", `${prefix}_${suffix}`],
-			])
+			]) {
 				expect(Result.isFailure(Schema.decodeUnknownResult(Id.Process)(invalid)), part).toBe(true);
+			}
 		},
 		options,
 	);
@@ -287,14 +300,16 @@ describe("p80, supplied policy facts", () => {
 				generated,
 			]) {
 				expect(Schema.is(Dead)(Dead.make(value))).toBe(true);
+
 				for (const errors of [
 					[],
 					["TypeError"],
 					[...value.errors, "Error"],
 					["", "TypeError", "Error"],
 					[new Error("message"), "Error", "Error"],
-				])
+				]) {
 					expect(Schema.is(Dead)({...value, errors})).toBe(false);
+				}
 			}
 		},
 		options,
@@ -309,6 +324,7 @@ describe("p80, supplied policy facts", () => {
 					Effect.provide(manager(store, brain())),
 				);
 				const before = store.rows();
+
 				for (const [caller, why] of [
 					[brain(), "alive"],
 					[watcher(W), "not_parent"],
@@ -317,7 +333,11 @@ describe("p80, supplied policy facts", () => {
 						Effect.result(p.down(A, supplied, from())),
 					).pipe(Effect.provide(manager(store, caller)));
 					expect(Result.isFailure(answer)).toBe(true);
-					if (Result.isFailure(answer)) expect(answer.failure.why).toBe(why);
+
+					if (Result.isFailure(answer)) {
+						expect(answer.failure.why).toBe(why);
+					}
+
 					expect(store.rows()).toEqual(before);
 				}
 			});
@@ -343,7 +363,8 @@ describe("T319, next/ complete dead values", () => {
 			tries: value.errors.length,
 			limit: value.errors.length,
 		}));
-	for (const field of ["process", "program", "name"] as const)
+
+	for (const field of ["process", "program", "name"] as const) {
 		it(`plant, make ${field} optional or default it: complete dead values decode, removing ${field} fails`, () => {
 			fc.assert(
 				fc.property(complete, (value) => {
@@ -354,4 +375,5 @@ describe("T319, next/ complete dead values", () => {
 				{seed: 119120},
 			);
 		});
+	}
 });

@@ -14,6 +14,7 @@ const msgs: fc.Arbitrary<TrackerMsg> = fc.oneof(
 	arbRecordMsg("tick", {now: fc.nat()}),
 	arbConstantMsg("moved"),
 );
+
 const lists = fc.array(msgs, {maxLength: 40});
 const OPTS = {numRuns: 300, seed: 117};
 const ctx = stubCtxThrowingProxy<undefined>();
@@ -26,10 +27,17 @@ const selection = (machine: Machine) =>
 		lists,
 		(steps, last) => {
 			let selected: number | null = null;
+
 			for (const {msg, next} of steps) {
-				if (msg.type === "open") selected = msg.ticket;
-				if (next.open !== selected) return false;
+				if (msg.type === "open") {
+					selected = msg.ticket;
+				}
+
+				if (next.open !== selected) {
+					return false;
+				}
 			}
+
 			return last.open === selected;
 		},
 		OPTS,

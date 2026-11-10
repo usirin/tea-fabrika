@@ -185,6 +185,7 @@ type Via = Data.TaggedEnum<{
 	word: Record<never, never>;
 	click: Record<never, never>;
 }>;
+
 const Via = Data.taggedEnum<Via>();
 
 /**
@@ -277,7 +278,10 @@ export const serve = (options: {
 			);
 		};
 		const hide = (client: Client) => {
-			for (const stop of client.shown.values()) stop();
+			for (const stop of client.shown.values()) {
+				stop();
+			}
+
 			client.shown.clear();
 		};
 		const toPage = (client: Client, m: ToPage) => client.send({type: "to", port: "desk", m});
@@ -312,16 +316,25 @@ export const serve = (options: {
 		 */
 		const launched = new Map<string, {readonly agent: string; readonly at: number}>();
 		const seenNow = () => {
-			if (desk.at !== "open" || launched.size === 0) return;
+			if (desk.at !== "open" || launched.size === 0) {
+				return;
+			}
+
 			const open = desk;
 			const active = open.workspaces.find((ws) => ws.id === open.active);
+
 			for (const [tile, {agent, at}] of launched) {
 				const found = open.workspaces.flatMap((ws) => tilesOf(ws).filter((t) => t.id === tile))[0];
+
 				if (found === undefined) {
 					launched.delete(tile);
 					continue;
 				}
-				if (found.folded && active?.focused !== tile) continue;
+
+				if (found.folded && active?.focused !== tile) {
+					continue;
+				}
+
 				launched.delete(tile);
 				Effect.runForkWith(services)(
 					Effect.logInfo("agent_tile_opened").pipe(
@@ -332,7 +345,12 @@ export const serve = (options: {
 		};
 		const shout = () => {
 			const now = deskNow();
-			for (const client of clients) if (client.page) toPage(client, now);
+
+			for (const client of clients) {
+				if (client.page) {
+					toPage(client, now);
+				}
+			}
 		};
 		/**
 		 * Step the desk. A `show` is said to the page whose key asked for it (`from`), at once, as
@@ -344,33 +362,50 @@ export const serve = (options: {
 			const changed = next !== desk;
 			const agentsBefore = agentsOf(desk);
 			desk = next;
+
 			for (const c of cmds) {
-				if (c.type !== "show") Queue.offerUnsafe(queue, c);
-				else
-					for (const to of from === "every" ? clients : from === undefined ? [] : [from])
-						if (to.page) toPage(to, {type: "show", what: c.what});
+				if (c.type !== "show") {
+					Queue.offerUnsafe(queue, c);
+				} else {
+					for (const to of from === "every" ? clients : from === undefined ? [] : [from]) {
+						if (to.page) {
+							toPage(to, {type: "show", what: c.what});
+						}
+					}
+				}
 			}
+
 			if (changed) {
-				if (JSON.stringify(agentsOf(desk)) !== JSON.stringify(agentsBefore)) tellHost();
+				if (JSON.stringify(agentsOf(desk)) !== JSON.stringify(agentsBefore)) {
+					tellHost();
+				}
+
 				seenNow();
 			}
+
 			return changed;
 		};
 		const begin = (kept: unknown) => {
 			const [first, cmds] = deskMachine.init(restore(kept), undefined);
 			// A desk read back, or begun again, is on the keys file's table too.
 			desk = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, first, {type: "keys", keys: table})[0];
-			for (const c of cmds) Queue.offerUnsafe(queue, c);
+
+			for (const c of cmds) {
+				Queue.offerUnsafe(queue, c);
+			}
 		};
 
 		// The asks (asks.ts): one count, read off the ledger, said to every app, page or not, so
 		// the app's Dock badge counts the same as the window's top bar. It starts on the person's
 		// marks kept from before; a file that does not read is said in the log, and none are kept.
 		const read = readMarks(asksHome.kept);
-		if (read.kind === "refused")
+
+		if (read.kind === "refused") {
 			yield* Effect.logWarning(
 				`fabrika host: the asks' later and seen did not read back, so every ask counts and is new: ${read.why}`,
 			);
+		}
+
 		const marks = read.kind === "read" ? read.marks : NO_MARKS;
 		const asks = yield* (yield* run(asksMachine, asksOptions(marks))).ready;
 		const asksNowMsg = (): ToPage => ({type: "asks", now: asksNow(asks.getState())});
@@ -387,7 +422,11 @@ export const serve = (options: {
 		const keep = () => {
 			const now = marksOf(asks.getState());
 			const text = JSON.stringify(now);
-			if (text === keptMarks) return;
+
+			if (text === keptMarks) {
+				return;
+			}
+
 			keptMarks = text;
 			Queue.offerUnsafe(writes, now);
 		};
@@ -396,9 +435,16 @@ export const serve = (options: {
 		asks.observe(() => {
 			keep();
 			const now = asksNowMsg();
-			if (same(now, saidAsks)) return;
+
+			if (same(now, saidAsks)) {
+				return;
+			}
+
 			saidAsks = now;
-			for (const client of clients) toPage(client, now);
+
+			for (const client of clients) {
+				toPage(client, now);
+			}
 		});
 		const toAsks = (msg: AsksMsg) => {
 			Effect.runForkWith(services)(asks.dispatch(msg).pipe(Effect.ignore));
@@ -446,11 +492,17 @@ export const serve = (options: {
 		});
 		const tellHost = () => {
 			const now = hostNow();
-			for (const client of clients) if (client.page) toPage(client, now);
+
+			for (const client of clients) {
+				if (client.page) {
+					toPage(client, now);
+				}
+			}
 		};
 		// Each summon, dismiss and change of state, to every page: the top bar counts them.
 		const summonedNow = yield* Effect.serviceOption(SummonedNow);
-		if (Option.isSome(summonedNow))
+
+		if (Option.isSome(summonedNow)) {
 			yield* summonedNow.value.changes.pipe(
 				Stream.runForEach((all) =>
 					Effect.sync(() => {
@@ -460,6 +512,8 @@ export const serve = (options: {
 				),
 				Effect.forkScoped,
 			);
+		}
+
 		const agentCame = (name: string) =>
 			Effect.acquireRelease(
 				Effect.sync(() => {
@@ -477,9 +531,17 @@ export const serve = (options: {
 
 		/** A screen to show: on every page now, and on each page that loads after. The same screen again changes nothing. */
 		const add = (name: string, screen: Screen<unknown>) => {
-			if (screens.get(name) === screen) return;
+			if (screens.get(name) === screen) {
+				return;
+			}
+
 			screens.set(name, screen);
-			for (const client of clients) if (client.page) showTo(client, name, screen);
+
+			for (const client of clients) {
+				if (client.page) {
+					showTo(client, name, screen);
+				}
+			}
 		};
 		/**
 		 * Each tsh `keys` waiting on an editor, and the windows whose editor it waits on: those open
@@ -497,9 +559,14 @@ export const serve = (options: {
 			keyWatches.get(name)?.();
 			keyWatches.delete(name);
 			screens.delete(name);
+
 			for (const client of clients) {
 				const shown = client.shown.get(name);
-				if (shown === undefined) continue;
+
+				if (shown === undefined) {
+					continue;
+				}
+
 				shown();
 				client.shown.delete(name);
 				client.send({type: "gone", port: name});
@@ -518,14 +585,27 @@ export const serve = (options: {
 			lines,
 			edge: {
 				tell: (m) => {
-					if (step(m)) shout();
+					if (step(m)) {
+						shout();
+					}
 				},
 				said: (tile, does) => {
 					const why = refusedOf(desk, tile, does);
-					if (why !== null) return why;
+
+					if (why !== null) {
+						return why;
+					}
+
 					const word = commandFor(does);
-					if (word !== undefined) did(word, Via.word());
-					if (step({type: "typed", tile, does}, "every")) shout();
+
+					if (word !== undefined) {
+						did(word, Via.word());
+					}
+
+					if (step({type: "typed", tile, does}, "every")) {
+						shout();
+					}
+
 					return null;
 				},
 				terminal: (tile, screen) => add(`tile:${tile}`, screen),
@@ -535,11 +615,12 @@ export const serve = (options: {
 					keyWatches.set(
 						name,
 						screen.show((view) => {
-							if (view.program === "keys" && !keyRequests.has(name))
+							if (view.program === "keys" && !keyRequests.has(name)) {
 								keyRequests.set(name, {
 									screen,
 									waiting: new Set([...clients].filter((client) => client.editor !== null)),
 								});
+							}
 						}),
 					);
 					add(name, screen);
@@ -566,6 +647,7 @@ export const serve = (options: {
 			Effect.gen(function* () {
 				const {n, why} = ask;
 				const job = jobs.table.getState().jobs.find((one) => one.n === n);
+
 				if (job === undefined) {
 					const known = lines.job(n);
 					return yield* new StopRefused({
@@ -575,15 +657,18 @@ export const serve = (options: {
 								: `there is no job ${n}: the host's table does not hold it, and no end of it is kept`,
 					});
 				}
+
 				const say = (msg: Shell.JobsMsg) => jobs.table.dispatch(msg).pipe(Effect.ignore);
 				yield* say({type: "stopping", n, by: writerText(who), why});
 				const told =
 					job.state === "running" && job.owner !== null && (yield* tiles.stopJob(job.owner, n));
+
 				if (!told) {
 					yield* say({type: "detached", n});
 					yield* say({type: "dropped", n});
 					return StopAnswer.cases.dropped.make({n, text: job.text});
 				}
+
 				return yield* lines.ended(n).pipe(
 					Effect.map((ended) => StopAnswer.cases.stopped.make({job: ended})),
 					Effect.timeoutOrElse({
@@ -602,16 +687,24 @@ export const serve = (options: {
 		const lineFor: NonNullable<AgentOptions["line"]> = (who, ask) =>
 			Effect.gen(function* () {
 				let tile = agentsOf(desk)[who.id];
+
 				if (tile === undefined) {
-					if (step({type: "launch", agent: who.id})) shout();
+					if (step({type: "launch", agent: who.id})) {
+						shout();
+					}
+
 					tile = agentsOf(desk)[who.id];
-					if (tile === undefined)
+
+					if (tile === undefined) {
 						return yield* new LineRefused({
 							why: `the desk could not open a tile for ${who.id}: it is not open`,
 						});
+					}
+
 					launched.set(tile, {agent: who.id, at: clock.currentTimeMillisUnsafe()});
 					yield* Effect.logInfo("agent_tile").pipe(Effect.annotateLogs({agent: who.id, tile}));
 				}
+
 				const done = yield* Deferred.make<void>();
 				Queue.offerUnsafe(queue, {type: "fence", done});
 				yield* Deferred.await(done);
@@ -634,12 +727,16 @@ export const serve = (options: {
 			(r: Restarts): NonNullable<AgentOptions["restart"]> =>
 			(who, ask) =>
 				Effect.gen(function* () {
-					if (![...clients].some((client) => client.up()))
+					if (![...clients].some((client) => client.up())) {
 						return yield* new RestartRefused({
 							why: "no app is attached to start a new host: the host would stay down",
 						});
-					if (yield* Ref.getAndSet(restarting, true))
+					}
+
+					if (yield* Ref.getAndSet(restarting, true)) {
 						return yield* new RestartRefused({why: "the host is restarting already"});
+					}
+
 					const table = jobs.table.getState().jobs;
 					const detached = table.map((job) => job.n);
 					const foreground = table.flatMap((job) =>
@@ -687,7 +784,10 @@ export const serve = (options: {
 				case "send":
 					return Effect.sync(() => {
 						const heard = screens.get(`tile:${c.tile}`)?.heard({type: "keys", data: c.data});
-						if (heard?.kind === "refused") warn(`the desk's keys for ${c.tile}: ${heard.why}`);
+
+						if (heard?.kind === "refused") {
+							warn(`the desk's keys for ${c.tile}: ${heard.why}`);
+						}
 					});
 				case "save":
 					return home.save(c.desk);
@@ -699,7 +799,10 @@ export const serve = (options: {
 					return home.forget.pipe(
 						Effect.andThen(
 							Effect.sync(() => {
-								for (const client of clients) client.send({type: "close"});
+								for (const client of clients) {
+									client.send({type: "close"});
+								}
+
 								begin(null);
 								shout();
 							}),
@@ -720,7 +823,13 @@ export const serve = (options: {
 				table = answer._tag === "read" ? answer.value : defaults;
 				step({type: "keys", keys: table});
 			}
-			for (const client of clients) if (client.page) toPage(client, keysNow());
+
+			for (const client of clients) {
+				if (client.page) {
+					toPage(client, keysNow());
+				}
+			}
+
 			shout();
 		};
 		const keyChanges = options.keybindings.changes.pipe(
@@ -758,9 +867,17 @@ export const serve = (options: {
 		const closeEditor = (client: Client) =>
 			Effect.sync(() => {
 				const running = client.editor;
-				if (running === null) return;
-				for (const request of keyRequests.values())
-					if (request.waiting.delete(client) && request.waiting.size === 0) request.screen.closed();
+
+				if (running === null) {
+					return;
+				}
+
+				for (const request of keyRequests.values()) {
+					if (request.waiting.delete(client) && request.waiting.size === 0) {
+						request.screen.closed();
+					}
+				}
+
 				client.editor = null;
 				running.close("close");
 				running.close("edit");
@@ -769,7 +886,10 @@ export const serve = (options: {
 			});
 		const openEditor = (client: Client) =>
 			Effect.gen(function* () {
-				if (client.editor !== null) return client.editor;
+				if (client.editor !== null) {
+					return client.editor;
+				}
+
 				const manager = options.keybindings;
 				const running = yield* start(
 					keysProgram,
@@ -780,6 +900,7 @@ export const serve = (options: {
 					},
 					{id: `keys:${crypto.randomUUID().slice(0, 8)}`, storage: memoryStorage()},
 				).pipe(Effect.provideService(KeybindingManager, manager));
+
 				if (running.kind !== "running") {
 					toPage(client, {
 						type: "keys.failed",
@@ -788,8 +909,13 @@ export const serve = (options: {
 					});
 					return null;
 				}
+
 				client.editor = running;
-				for (const request of keyRequests.values()) request.waiting.add(client);
+
+				for (const request of keyRequests.values()) {
+					request.waiting.add(client);
+				}
+
 				add(`run:${running.run.id}`, {
 					show: (page) => {
 						page({type: "view", program: "keys", data: {open: true}});
@@ -803,9 +929,16 @@ export const serve = (options: {
 		yield* Queue.take(editorQueue).pipe(
 			Effect.flatMap(({client, message}) =>
 				Effect.gen(function* () {
-					if (message.type === "keys.close") return yield* closeEditor(client);
-					if (!client.page) return;
+					if (message.type === "keys.close") {
+						return yield* closeEditor(client);
+					}
+
+					if (!client.page) {
+						return;
+					}
+
 					const running = yield* openEditor(client);
+
 					if (message.type === "keys.edit") {
 						if (running === null) {
 							toPage(client, {
@@ -815,6 +948,7 @@ export const serve = (options: {
 							});
 							return;
 						}
+
 						yield* tell(running.run, "edit", {
 							request: message.request,
 							edit: message.edit,
@@ -827,7 +961,8 @@ export const serve = (options: {
 			Effect.forever,
 			Effect.forkScoped,
 		);
-		if (agents !== undefined)
+
+		if (agents !== undefined) {
 			yield* serveAgents({
 				server: agents.server,
 				ports: () => screens.keys(),
@@ -843,11 +978,16 @@ export const serve = (options: {
 				),
 				Effect.forkScoped,
 			);
+		}
 
 		/** A key the desk takes: logged when it runs a command, as the person spells it in the file. */
 		const pressed = (s: Open, key: string, at: number) => {
 			const routed = route(s, key, at);
-			if (routed.kind !== "desk" || routed.ran === null) return;
+
+			if (routed.kind !== "desk" || routed.ran === null) {
+				return;
+			}
+
 			const {does, key: on} = routed.ran;
 			// The desk's prefix is the table's: a refused file changes neither.
 			const keys =
@@ -867,49 +1007,84 @@ export const serve = (options: {
 					const at = clock.currentTimeMillisUnsafe();
 					lastKey = at;
 					const took = claims(desk, m.key, at);
-					if (took && desk.at === "open") pressed(desk, m.key, at);
-					if (took) step({type: "key", key: m.key, at}, client);
+
+					if (took && desk.at === "open") {
+						pressed(desk, m.key, at);
+					}
+
+					if (took) {
+						step({type: "key", key: m.key, at}, client);
+					}
+
 					// The desk first, so the page knows what the desk takes before it lets the next key go.
 					shout();
 					toPage(client, {type: "answer", id: m.id, took});
 					return;
 				}
 				case "click":
-					if (step({type: "click", tile: m.tile})) shout();
+					if (step({type: "click", tile: m.tile})) {
+						shout();
+					}
+
 					return;
 				case "resize":
-					if (step({type: "resize", container: m.container, sizes: m.sizes})) shout();
+					if (step({type: "resize", container: m.container, sizes: m.sizes})) {
+						shout();
+					}
+
 					return;
 				case "fold":
 					did("tezgah.fold", Via.click());
-					if (step({type: "fold", tile: m.tile})) shout();
+
+					if (step({type: "fold", tile: m.tile})) {
+						shout();
+					}
+
 					return;
 				case "unfold":
-					if (step({type: "unfold", node: m.node})) shout();
+					if (step({type: "unfold", node: m.node})) {
+						shout();
+					}
+
 					return;
 				case "area":
 					// Nothing to draw: the size only says where the next line's windows fit.
 					step({type: "area", width: m.width, height: m.height});
 					return;
 				case "go":
-					if (step({type: "go", tile: m.tile})) shout();
+					if (step({type: "go", tile: m.tile})) {
+						shout();
+					}
+
 					return;
 				case "pick": {
 					// A workspace clicked in the top bar: the command its number runs, from the first nine.
 					const at =
 						desk.at === "open" ? desk.workspaces.findIndex((w) => w.id === m.workspace) : -1;
 					const word = at < 0 ? undefined : commandFor({kind: "pick", at: at + 1});
-					if (word !== undefined) did(word, Via.click());
-					if (step({type: "pick", workspace: m.workspace})) shout();
+
+					if (word !== undefined) {
+						did(word, Via.click());
+					}
+
+					if (step({type: "pick", workspace: m.workspace})) {
+						shout();
+					}
+
 					return;
 				}
 				case "run":
 					did(m.does, m.via === undefined ? Via.palette() : Via.key(m.via));
+
 					if (m.does === "palette.open") {
 						toPage(client, {type: "show", what: "palette"});
 						return;
 					}
-					if (step({type: "run", does: m.does}, client)) shout();
+
+					if (step({type: "run", does: m.does}, client)) {
+						shout();
+					}
+
 					return;
 				case "later":
 				case "back":
@@ -920,7 +1095,7 @@ export const serve = (options: {
 					return;
 				// The top bar's Dismiss: the person at the window, as `dismiss <name>` in their tile.
 				case "dismiss":
-					if (summons !== undefined)
+					if (summons !== undefined) {
 						Effect.runForkWith(services)(
 							summons
 								.dismiss(m.name, writerText(author))
@@ -930,6 +1105,8 @@ export const serve = (options: {
 									),
 								),
 						);
+					}
+
 					return;
 			}
 		};
@@ -947,7 +1124,11 @@ export const serve = (options: {
 					toPage(client, hostNow());
 					toPage(client, saidAsks);
 					toPage(client, deskNow());
-					for (const [name, screen] of screens) showTo(client, name, screen);
+
+					for (const [name, screen] of screens) {
+						showTo(client, name, screen);
+					}
+
 					return;
 				case "away":
 					Queue.offerUnsafe(editorQueue, {client, message: {type: "keys.close"}});
@@ -957,15 +1138,26 @@ export const serve = (options: {
 				case "on": {
 					if (m.port === "desk") {
 						const read = readFromPage(m.m);
-						if (read.kind === "read") fromPage(client, read.msg);
-						else warn(`refused a message from a page: ${read.why}`);
+
+						if (read.kind === "read") {
+							fromPage(client, read.msg);
+						} else {
+							warn(`refused a message from a page: ${read.why}`);
+						}
+
 						return;
 					}
+
 					const heard = screens.get(m.port)?.heard(m.m);
-					if (heard?.kind === "refused") warn(`refused a message on ${m.port}: ${heard.why}`);
+
+					if (heard?.kind === "refused") {
+						warn(`refused a message on ${m.port}: ${heard.why}`);
+					}
 					// Keys typed in a tile's terminal are the person's keys too; its size is not.
-					else if (m.port.startsWith("tile:") && Reflect.get(Object(m.m), "type") === "keys")
+					else if (m.port.startsWith("tile:") && Reflect.get(Object(m.m), "type") === "keys") {
 						lastKey = clock.currentTimeMillisUnsafe();
+					}
+
 					return;
 				}
 			}

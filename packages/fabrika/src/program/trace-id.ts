@@ -40,8 +40,12 @@ export function sha256Hex(message: string): string {
 	view.setUint32(blocks.length - 4, bits >>> 0);
 	const h = [...H0];
 	const w = new Array<number>(64).fill(0);
+
 	for (let offset = 0; offset < blocks.length; offset += 64) {
-		for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
+		for (let i = 0; i < 16; i++) {
+			w[i] = view.getUint32(offset + i * 4);
+		}
+
 		for (let i = 16; i < 64; i++) {
 			const w15 = w[i - 15] ?? 0;
 			const w2 = w[i - 2] ?? 0;
@@ -49,7 +53,9 @@ export function sha256Hex(message: string): string {
 			const s1 = rotr(w2, 17) ^ rotr(w2, 19) ^ (w2 >>> 10);
 			w[i] = ((w[i - 16] ?? 0) + s0 + (w[i - 7] ?? 0) + s1) | 0;
 		}
+
 		let [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, hh = 0] = h;
+
 		for (let i = 0; i < 64; i++) {
 			const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
 			const ch = (e & f) ^ (~e & g);
@@ -66,9 +72,14 @@ export function sha256Hex(message: string): string {
 			b = a;
 			a = (t1 + t2) | 0;
 		}
+
 		const round = [a, b, c, d, e, f, g, hh];
-		for (let i = 0; i < 8; i++) h[i] = ((h[i] ?? 0) + (round[i] ?? 0)) | 0;
+
+		for (let i = 0; i < 8; i++) {
+			h[i] = ((h[i] ?? 0) + (round[i] ?? 0)) | 0;
+		}
 	}
+
 	return h.map((word) => (word >>> 0).toString(16).padStart(8, "0")).join("");
 }
 

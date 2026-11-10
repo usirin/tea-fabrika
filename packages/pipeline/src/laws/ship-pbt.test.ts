@@ -25,8 +25,10 @@ function caught<S extends Ship, U extends Sub>(
 		property.run(machine, opts);
 		return null;
 	} catch (e) {
-		if (e instanceof Error && e.cause instanceof pbt.LawBroken)
+		if (e instanceof Error && e.cause instanceof pbt.LawBroken) {
 			return {law: e.cause.law, why: e.cause.why};
+		}
+
 		throw e;
 	}
 }
@@ -60,6 +62,7 @@ const READY: ShipFacts = {
 	criteria: CRITERIA,
 	verdicts: metAt("A"),
 };
+
 const reads = readShipFacts({pr: pbt.PR});
 
 describe("ship, as property tests", () => {
@@ -237,11 +240,15 @@ describe("ship, as property tests", () => {
 	// read back from storage is checked proof by proof, not that its two proofs name one head.
 	it("finding: a saved state whose two proofs name different heads lands a head it never sent", () => {
 		let why = "";
+
 		try {
 			pbt.fromSavedState({numRuns: 5000, seed: 1});
 		} catch (e) {
-			if (e instanceof Error && e.cause instanceof pbt.LawBroken) why = e.cause.why;
+			if (e instanceof Error && e.cause instanceof pbt.LawBroken) {
+				why = e.cause.why;
+			}
 		}
+
 		expect(why).toMatch(/^landed [AB], and the heads sent were [AB]/);
 	});
 });

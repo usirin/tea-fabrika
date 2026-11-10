@@ -25,6 +25,7 @@ const REPO = "https://github.com/acme/widgets";
 const TICKET = `${REPO}/issues/1`;
 const PR = `${REPO}/pull/9`;
 const FLAGS = {model: "opus", effort: "medium", budget: 1, harness: undefined} as const;
+
 const RAN = {
 	spend: {costUsd: 0.5, tokens: 1, context: 1, turns: 1, minutes: 0.1},
 	tools: [],
@@ -82,6 +83,7 @@ function world(
 }
 
 type BuildRun = RunOf<typeof buildProgram>;
+
 const once = <A, E>(
 	w: {readonly services: ReturnType<typeof world>["services"]},
 	storage: Storage,
@@ -102,7 +104,11 @@ const once = <A, E>(
 				{built: builtEar.hear, opened: opened.hear},
 				{id: "build:test", storage},
 			);
-			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
+
+			if (started.kind !== "running") {
+				return yield* Effect.die(`did not start: ${started.why}`);
+			}
+
 			return yield* body(started.run, {built: builtEar, opened}, started.close);
 		}).pipe(Effect.scoped, Effect.provide(w.services)),
 	);
@@ -214,24 +220,38 @@ describe("build: kept across a restart", () => {
 			),
 		);
 		const built: string[][] = [];
+
 		for (const [i, w] of worlds.entries()) {
 			const life = lives[i];
-			if (life === undefined) throw new Error("no life");
+
+			if (life === undefined) {
+				throw new Error("no life");
+			}
+
 			built.push(
 				await once(w, storage, (run, heard, close) =>
 					Effect.gen(function* () {
 						// Only the first start is told anything. The input it closes stays closed in the storage.
 						if (i === 0) {
-							for (const t of tickets) yield* tell(run, "ticket", t);
+							for (const t of tickets) {
+								yield* tell(run, "ticket", t);
+							}
+
 							close("ticket");
 						}
-						if (life.cut === 0) yield* run.ended;
-						else yield* Deferred.await(life.started);
+
+						if (life.cut === 0) {
+							yield* run.ended;
+						} else {
+							yield* Deferred.await(life.started);
+						}
+
 						return heard.built.values.map((b) => `${(b as Built).ticket} ${(b as Built).name}`);
 					}),
 				),
 			);
 		}
+
 		expect(built).toEqual([[`${tickets[0]} done`], [`${tickets[1]} done`], [`${tickets[2]} done`]]);
 		// Every write once, across the three lives: no copy made again, no second pull request.
 		expect(worlds.flatMap((w) => w.writes).sort()).toEqual(
@@ -262,7 +282,10 @@ describe("build: kept across a restart", () => {
 		const w = many((n) => Effect.sleep("20 millis").pipe(Effect.as(form(`Built ${n}.`))));
 		const built = await once(w, memoryStorage(), (run, heard, close) =>
 			Effect.gen(function* () {
-				for (const t of [...tickets, ...tickets, tickets[1] ?? ""]) yield* tell(run, "ticket", t);
+				for (const t of [...tickets, ...tickets, tickets[1] ?? ""]) {
+					yield* tell(run, "ticket", t);
+				}
+
 				close("ticket");
 				yield* run.ended;
 				return heard.built.values.map((b) => (b as Built).ticket);

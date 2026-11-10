@@ -43,7 +43,11 @@ const list = defineProgram({
 	main: ({flags, send}) =>
 		Effect.gen(function* () {
 			const rows = Array.from({length: flags.to}, (_, i) => ({n: flags.to - i, title: `row ${i}`}));
-			for (const row of rows) yield* send("row", row);
+
+			for (const row of rows) {
+				yield* send("row", row);
+			}
+
 			yield* send("text", rows.map((r) => r.title).join(", "));
 		}),
 });
@@ -86,7 +90,11 @@ const session = (show: "short" | "json") =>
 			Effect.provideService(Programs, PROGRAMS),
 			Effect.provideService(HostJobs, yield* openJobs(storage)),
 		);
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		return (text: string) =>
 			Effect.gen(function* () {
@@ -205,7 +213,11 @@ describe("--all, as a person finds it", () => {
 	it("is in the help of a program with a table, beside --help", () => {
 		const help = (name: string) => {
 			const entry = PROGRAMS.get(name);
-			if (entry === undefined) throw new Error(`no ${name} in the list`);
+
+			if (entry === undefined) {
+				throw new Error(`no ${name} in the list`);
+			}
+
 			return helpOf(entry);
 		};
 		expect(help("list")).toContainEqual(

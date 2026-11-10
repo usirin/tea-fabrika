@@ -30,8 +30,12 @@ export const Planned = Schema.Struct({
 export type Planned = typeof Planned.Type;
 
 const status = (s: PlanState): string => {
-	if (s.phase === "idle") return "not started";
+	if (s.phase === "idle") {
+		return "not started";
+	}
+
 	const at = refOf(s.ask.ticket) ?? s.ask.ticket;
+
 	switch (s.phase) {
 		case "reading":
 			return `${at}: reading the ticket`;
@@ -85,7 +89,11 @@ export const planToTheEnd = (
 			.get(id)
 			.start({type: "start", ask, settings, key}, {conflict: "use_existing"});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the run stopped in ${end.phase}`);
+		}
+
 		return end;
 	}).pipe(Effect.scoped);
 

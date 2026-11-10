@@ -28,6 +28,7 @@ const field = (value: Buffer | string) => {
 	n.writeUInt32BE(body.length);
 	return Buffer.concat([n, body]);
 };
+
 const identity = () => {
 	const pair = generateKeyPairSync("ed25519"),
 		raw = pair.publicKey.export({format: "jwk"}).x!;
@@ -63,6 +64,7 @@ const identity = () => {
 		},
 	};
 };
+
 type Key = ReturnType<typeof identity>;
 
 // A small program that throws a TypeError on "throw" and counts on "inc". It declares
@@ -77,11 +79,13 @@ const poisonSource = [
 ].join("\n");
 
 type Stage = any;
+
 type Fixture = {
 	readonly from: From;
 	readonly hash: string;
 	readonly start: (name: string) => Promise<string>;
 };
+
 const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise<void>) => {
 	process.env.DO_NOT_TRACK = "1";
 	const {localState} = await import("alchemy/State/LocalState");
@@ -92,6 +96,7 @@ const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise
 		key = identity();
 	const previousHome = process.env.FABRIKA_HOME;
 	process.env.FABRIKA_HOME = home;
+
 	try {
 		const listener = createServer();
 		await new Promise<void>((done, fail) => {
@@ -99,7 +104,11 @@ const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise
 			listener.listen(0, "127.0.0.1", done);
 		});
 		const at = listener.address();
-		if (at === null || typeof at === "string") throw new Error("no TCP port");
+
+		if (at === null || typeof at === "string") {
+			throw new Error("no TCP port");
+		}
+
 		await new Promise<void>((done) => listener.close(() => done()));
 		symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
 		const poison = join(home, "poison.ts");
@@ -159,12 +168,17 @@ const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise
 	} finally {
 		// localStage closed with its scope before its durable files go.
 		rmSync(home, {recursive: true, force: true});
-		if (previousHome === undefined) delete process.env.FABRIKA_HOME;
-		else process.env.FABRIKA_HOME = previousHome;
+
+		if (previousHome === undefined) {
+			delete process.env.FABRIKA_HOME;
+		} else {
+			process.env.FABRIKA_HOME = previousHome;
+		}
 	}
 };
 
 const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(
 	what: string,
@@ -174,16 +188,22 @@ const until = async <A>(
 ): Promise<A> => {
 	const end = Date.now() + ms;
 	let last: {value: A} | {error: string} | null = null;
+
 	while (Date.now() < end) {
 		try {
 			const value = await look();
 			last = {value};
-			if (done(value)) return value;
+
+			if (done(value)) {
+				return value;
+			}
 		} catch (error) {
 			last = {error: String(error)};
 		}
+
 		await pause();
 	}
+
 	throw new Error(`${what}: no answer in ${ms} ms; last observed ${JSON.stringify(last)}`);
 };
 
@@ -195,7 +215,9 @@ const wire = async (stage: Stage, key: Key, tab: string) => {
 	let closeCode: number | undefined,
 		serial = 0;
 	socket.addEventListener("message", (event) => {
-		if (event.data !== "pong") frames.push(JSON.parse(String(event.data)));
+		if (event.data !== "pong") {
+			frames.push(JSON.parse(String(event.data)));
+		}
 	});
 	socket.addEventListener("close", (event) => {
 		closeCode = event.code;
@@ -205,12 +227,21 @@ const wire = async (stage: Stage, key: Key, tab: string) => {
 	});
 	const next = async (match: (frame: any) => boolean) => {
 		const end = Date.now() + WAIT;
+
 		while (Date.now() < end) {
 			const index = frames.findIndex(match);
-			if (index >= 0) return frames.splice(index, 1)[0];
-			if (closeCode !== undefined) throw new Error(`closed ${closeCode}`);
+
+			if (index >= 0) {
+				return frames.splice(index, 1)[0];
+			}
+
+			if (closeCode !== undefined) {
+				throw new Error(`closed ${closeCode}`);
+			}
+
 			await pause(20);
 		}
+
 		throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
 	};
 	const call = async (method: string, params: unknown) => {
@@ -243,10 +274,13 @@ const facts = async (stage: Stage, stream: string) =>
 		...row.body,
 		_tag: row._tag,
 	}));
+
 const restarts = async (stage: Stage, name: string) =>
 	(await facts(stage, `processes/${name}`)).filter((fact) => fact._tag === "restarted");
+
 const livePid = async (stage: Stage, name: string): Promise<string | undefined> =>
 	((await stage.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
+
 const send = (pid: string, letter: string, type: "throw" | "inc") => ({
 	pid,
 	letter,
@@ -254,6 +288,7 @@ const send = (pid: string, letter: string, type: "throw" | "inc") => ({
 	sentAt: SENT,
 	seen: 0,
 });
+
 /** Live means it also accepts a healthy input: an info row alone is not enough. */
 const healthy = async (
 	c: Awaited<ReturnType<typeof wire>>,
@@ -277,6 +312,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 			const name = "poison:1";
 			const first = await fixture.start(name);
 			const c = await wire(stage, key, "supervision");
+
 			try {
 				// 1. The first throw fails delivery. It is not accepted and writes no dead row.
 				const poison = send(first, "poison", "throw");
@@ -380,6 +416,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 			const name = "restart:1";
 			const first = await fixture.start(name);
 			const c = await wire(stage, key, "restart");
+
 			try {
 				// Change the model, so the re-folded state is visible.
 				await healthy(c, first, "before-restart");
@@ -429,6 +466,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 			const name = "abort:1";
 			const first = await fixture.start(name);
 			const c = await wire(stage, key, "abort");
+
 			try {
 				await healthy(c, first, "before-abort");
 				await stage.process(first).activity({

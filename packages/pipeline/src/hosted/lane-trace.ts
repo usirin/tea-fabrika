@@ -98,9 +98,11 @@ const reader =
 const parentOf = reader(
 	Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Struct({parent: Schema.String}))),
 );
+
 const fromOf = reader(
 	Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Struct({from: Schema.String}))),
 );
+
 const outcomeOf = reader(
 	Schema.decodeUnknownExit(
 		Schema.fromJsonString(
@@ -108,6 +110,7 @@ const outcomeOf = reader(
 		),
 	),
 );
+
 /** The lane's saved state: its phase, the child it waits on, the problems its report names. */
 const savedOf = reader(
 	Schema.decodeUnknownExit(
@@ -144,36 +147,59 @@ export const stepsOf = (log: readonly Row[], n: number, lane: string = LANE): re
 		const k = kids.indexOf(name) + 1;
 		return k > n ? 0 : k;
 	};
+
 	for (const r of log) {
 		if (r.kind === "registered" && parentOf(r.data)?.parent === lane) {
 			kids.push(r.stream);
 			const k = kids.length;
-			if (k > n) step("TooMany", k, r.pos, s);
-			else step("Start", k, r.pos, {...s, lane: "running", cur: k, proc: put(s.proc, k, "up")});
+
+			if (k > n) {
+				step("TooMany", k, r.pos, s);
+			} else {
+				step("Start", k, r.pos, {...s, lane: "running", cur: k, proc: put(s.proc, k, "up")});
+			}
 		} else if (
 			r.kind === "outcome" &&
 			r.stream.endsWith("/outcome") &&
 			r.stream !== `${lane}/outcome`
 		) {
 			const k = placeOf(r.stream.slice(0, -"/outcome".length));
-			if (k > 0) step("WriteRow", k, r.pos, {...s, row: put(s.row, k, kindOf(r.data))});
+
+			if (k > 0) {
+				step("WriteRow", k, r.pos, {...s, row: put(s.row, k, kindOf(r.data))});
+			}
 		} else if (r.kind === "exited" && r.stream === lane) {
 			step("Exit", s.cur, r.pos, {...s, lane: "gone"});
 		} else if (r.kind === "exited") {
 			const k = placeOf(r.stream);
-			if (k > 0) step("End", k, r.pos, {...s, proc: put(s.proc, k, "down")});
+
+			if (k > 0) {
+				step("End", k, r.pos, {...s, proc: put(s.proc, k, "down")});
+			}
 		} else if (r.kind === "EXIT" && r.stream === `${lane}/inbox`) {
 			const k = placeOf(fromOf(r.data)?.from ?? "");
-			if (k > 0) step("Deliver", k, r.pos, {...s, exit: put(s.exit, k, true)});
+
+			if (k > 0) {
+				step("Deliver", k, r.pos, {...s, exit: put(s.exit, k, true)});
+			}
 		} else if (r.kind === "state" && r.stream === `${lane}/state`) {
 			const now = savedOf(r.data)?.state;
-			if (now === undefined) continue;
+
+			if (now === undefined) {
+				continue;
+			}
+
 			const was: string | null = waitingOn;
 			waitingOn = now.phase === "running" ? (now.child ?? null) : null;
 			const over = now.phase === "over";
+
 			if (was !== null && waitingOn !== was) {
 				const k = placeOf(was);
-				if (k === 0) continue;
+
+				if (k === 0) {
+					continue;
+				}
+
 				const none = over && (now.report?.problems ?? []).includes(`${was}: no_outcome`);
 				step(none ? "SeeExit" : "SeeRow", k, r.pos, {
 					...s,
@@ -181,9 +207,12 @@ export const stepsOf = (log: readonly Row[], n: number, lane: string = LANE): re
 					lane: over ? "over" : "ready",
 					cur: over ? k : k + 1,
 				});
-			} else if (over && s.lane !== "over") step("Ended", s.cur, r.pos, {...s, lane: "over"});
+			} else if (over && s.lane !== "over") {
+				step("Ended", s.cur, r.pos, {...s, lane: "over"});
+			}
 		}
 	}
+
 	return out;
 };
 
@@ -232,14 +261,23 @@ export const driveCase = (o: {
 		const ledger = yield* Ledger;
 		const limitMs = o.limitMs ?? LIMIT_MS;
 		const kinds = new Map<number, "done" | "stuck">();
-		for (const p of o.script.pushes) if (p.act === "WriteRow") kinds.set(p.k, p.kind);
+
+		for (const p of o.script.pushes) {
+			if (p.act === "WriteRow") {
+				kinds.set(p.k, p.kind);
+			}
+		}
+
 		const named = new Set(o.script.pushes.map((p) => p.k));
 		const gates = new Map<
 			number,
 			{write: Deferred.Deferred<void>; exit: Deferred.Deferred<void>}
 		>();
-		for (const k of named)
+
+		for (const k of named) {
 			gates.set(k, {write: yield* Deferred.make<void>(), exit: yield* Deferred.make<void>()});
+		}
+
 		const live = new Set<number>();
 		let started = 0;
 		const planOf = (_name: string): ChildPlan => {
@@ -247,9 +285,12 @@ export const driveCase = (o: {
 			const k = started;
 			live.add(k);
 			const gate = gates.get(k);
+
 			// A child the script never names waits for good: the trace shows it was started.
-			if (gate === undefined)
+			if (gate === undefined) {
 				return {ending: "row_stuck", before: Effect.never, after: Effect.void};
+			}
+
 			const kind = kinds.get(k);
 			return {
 				ending: kind === undefined ? "no_row" : kind === "done" ? "row_done" : "row_stuck",
@@ -269,36 +310,57 @@ export const driveCase = (o: {
 			Effect.gen(function* () {
 				let seen = -1;
 				let quiet = 0;
+
 				for (;;) {
 					const s = yield* steps;
-					if (until(s)) return true;
+
+					if (until(s)) {
+						return true;
+					}
+
 					if (s.length !== seen) {
 						seen = s.length;
 						quiet = 0;
 					}
-					if (quiet > limitMs) return false;
+
+					if (quiet > limitMs) {
+						return false;
+					}
+
 					yield* tick;
 					quiet += 50;
 				}
 			});
 
 		let stalled: Driven["stalled"] = null;
+
 		for (const [at, p] of o.script.pushes.entries()) {
 			const ok = yield* waitFor((s) => laneSteps(s) >= p.after && live.has(p.k));
+
 			if (!ok) {
 				stalled = {before: at, wanted: p.after, had: laneSteps(yield* steps)};
 				break;
 			}
+
 			const gate = gates.get(p.k);
-			if (gate !== undefined)
+
+			if (gate !== undefined) {
 				yield* Deferred.succeed(p.act === "WriteRow" ? gate.write : gate.exit, undefined);
-			for (let y = 0; y < 50; y++) yield* Effect.yieldNow;
+			}
+
+			for (let y = 0; y < 50; y++) {
+				yield* Effect.yieldNow;
+			}
 		}
+
 		if (stalled === null) {
 			const want = o.script.laneSteps;
-			if (!(yield* waitFor((s) => laneSteps(s) >= want)))
+
+			if (!(yield* waitFor((s) => laneSteps(s) >= want))) {
 				stalled = {before: o.script.pushes.length, wanted: want, had: laneSteps(yield* steps)};
+			}
 		}
+
 		yield* waitFor(() => false);
 		const log = yield* ledger.read(0, 1_000_000).pipe(Effect.orDie);
 		return {log, steps: stepsOf(log, o.n), stalled};

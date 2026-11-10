@@ -22,6 +22,7 @@ export const Duplicate = Schema.Struct({
 	of: Schema.Int,
 	why: Why,
 });
+
 export const No = Schema.Struct({
 	answer: Schema.Literal("no"),
 	rule: Schema.Literals(NO_RULE_IDS),
@@ -29,6 +30,7 @@ export const No = Schema.Struct({
 	reason: Schema.String,
 	why: Why,
 });
+
 export const YesPlan = Schema.Struct({
 	answer: Schema.Literal("yes"),
 	next: Schema.Literal("plan"),
@@ -36,6 +38,7 @@ export const YesPlan = Schema.Struct({
 	partOf: Schema.NullOr(Schema.Int),
 	why: Why,
 });
+
 export const YesRuling = Schema.Struct({
 	answer: Schema.Literal("yes"),
 	next: Schema.Literal("ruling"),
@@ -44,6 +47,7 @@ export const YesRuling = Schema.Struct({
 	options: Schema.Array(Schema.String),
 	why: Why,
 });
+
 export const YesResearch = Schema.Struct({
 	answer: Schema.Literal("yes"),
 	next: Schema.Literal("research"),
@@ -59,8 +63,15 @@ export type SortReply = typeof SortReply.Type;
 
 /** An answer in one word, as the tables read it: `duplicate`, `no`, `fold`, or the route of a yes. */
 export type Said = "duplicate" | "no" | "fold" | "plan" | "ruling" | "research";
+
 export const saidOf = (a: SortAnswer): Said => {
-	if (a.answer !== "yes") return a.answer;
-	if (a.next === "plan" && a.partOf !== null) return "fold";
+	if (a.answer !== "yes") {
+		return a.answer;
+	}
+
+	if (a.next === "plan" && a.partOf !== null) {
+		return "fold";
+	}
+
 	return a.next;
 };

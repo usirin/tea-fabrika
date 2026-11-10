@@ -93,6 +93,7 @@ export const envelope = <A>(body: Schema.Codec<A, A>) =>
 		kind: Schema.String,
 		body,
 	});
+
 export type Envelope<A> = {
 	readonly id: string;
 	readonly rev: number;
@@ -126,13 +127,28 @@ const deliver = (
 	Effect.gen(function* () {
 		for (let lost = 1; patient || lost <= 20; lost++) {
 			const r = yield* ledger.send(inbox, id, event, fence).pipe(Effect.result);
-			if (r._tag === "Success") return {how: "sent", rev: r.success.rev, dup: r.success.dup};
+
+			if (r._tag === "Success") {
+				return {how: "sent", rev: r.success.rev, dup: r.success.dup};
+			}
+
 			const e = r.failure;
-			if (e._tag === "Fenced") return {how: "fenced"};
-			if (e._tag === "Denied") return {how: "denied"};
-			if (e._tag === "UnknownName") return {how: "unknown"};
+
+			if (e._tag === "Fenced") {
+				return {how: "fenced"};
+			}
+
+			if (e._tag === "Denied") {
+				return {how: "denied"};
+			}
+
+			if (e._tag === "UnknownName") {
+				return {how: "unknown"};
+			}
+
 			yield* Effect.sleep(patient ? backoff(lost) : Duration.millis(50));
 		}
+
 		return {how: "unreachable"};
 	});
 
@@ -172,6 +188,7 @@ const answered = <A, E, W>(
 		Effect.catchTag("LedgerUnreachable", () => Effect.succeed(unreachable)),
 		Effect.catch((e) => Effect.succeed(refused(e))),
 	);
+
 const isUnreachable = (e: unknown): boolean =>
 	typeof e === "object" && e !== null && "_tag" in e && e._tag === "LedgerUnreachable";
 
@@ -209,12 +226,14 @@ export type RunUnder = <
 
 /** A fenced call's word: `fenced` means this program's lease is gone, so it may not act. */
 export type Fenced = "fenced" | "unreachable";
+
 export type Monitoring =
 	/** The monitor is on, on this incarnation of the target. */
 	| {readonly how: "on"; readonly incarnation: number}
 	/** The target was not running: a DOWN `noproc` is in this program's inbox already. */
 	| {readonly how: "noproc"}
 	| {readonly how: Fenced};
+
 export type Starting =
 	/** `started: false`: it was up already. */
 	| {readonly how: "ok"; readonly incarnation: number; readonly started: boolean}
@@ -226,12 +245,14 @@ export type Starting =
 	 */
 	| {readonly how: "limit"; readonly over: Over}
 	| {readonly how: Fenced};
+
 /** 102: a hold before a turn. `limit`: it does not fit, and the run under `over.at` has ended. */
 export type Holding =
 	| {readonly how: "ok"; readonly dup: boolean}
 	| {readonly how: "limit"; readonly over: Over}
 	| {readonly how: "denied"}
 	| {readonly how: Fenced};
+
 /** 102: a charge after a turn. `over`: it crossed this limit, and that run has ended. */
 export type Charging =
 	| {readonly how: "ok"; readonly dup: boolean; readonly over: Over | null}
@@ -411,15 +432,19 @@ export interface Serving {
 }
 
 const Expired = Schema.fromJsonString(Schema.Struct({fence: Schema.Number}));
+
 const expiredFence = (r: Row): number | null => {
 	const exit = Schema.decodeUnknownExit(Expired)(r.data);
 	return Exit.isSuccess(exit) ? exit.value.fence : null;
 };
+
 const bodyOf = (r: Row): unknown => {
 	const exit = Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown))(r.data);
 	return Exit.isSuccess(exit) ? exit.value : null;
 };
+
 const DeadRev = Schema.fromJsonString(Schema.Struct({rev: Schema.Number}));
+
 const deadRevOf = (r: Row): number | null => {
 	const exit = Schema.decodeUnknownExit(DeadRev)(r.data);
 	return Exit.isSuccess(exit) ? exit.value.rev : null;
@@ -435,14 +460,21 @@ const LEASE_WORDS = new Set([
 	"Stale",
 	"UnknownName",
 ]);
+
 /** Does this failure come from the lease (a refused save or write), not from the program? */
 const isLeaseLoss = (cause: Cause.Cause<unknown>): boolean => {
 	const tagged = (x: unknown, depth: number): boolean => {
-		if (depth > 6 || typeof x !== "object" || x === null) return false;
+		if (depth > 6 || typeof x !== "object" || x === null) {
+			return false;
+		}
+
 		const tag = "_tag" in x ? x._tag : undefined;
 		const name = "name" in x ? x.name : undefined;
-		if ((typeof tag === "string" && LEASE_WORDS.has(tag)) || name === "StoreConflictError")
+
+		if ((typeof tag === "string" && LEASE_WORDS.has(tag)) || name === "StoreConflictError") {
 			return true;
+		}
+
 		return "cause" in x && tagged(x.cause, depth + 1);
 	};
 	return cause.reasons.some((r) =>
@@ -477,6 +509,7 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 			for (let tries = 0; tries < 10; tries++) {
 				const sentAt = Date.now();
 				const r = yield* ledger.claim(name, holder, rev, ttlMs).pipe(Effect.result);
+
 				if (r._tag === "Success") {
 					const {fence, incarnation} = r.success;
 					rev = r.success.rev;
@@ -484,16 +517,20 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 					const won: HostMsg = {type: "claimed", fence, until: sentAt + ttlMs, incarnation};
 					return won;
 				}
+
 				const e = r.failure;
+
 				if (e._tag === "Held") {
 					const held: HostMsg = {type: "held", waitMs: Math.max(0, e.expiresAt - Date.now()) + 1};
 					return held;
 				}
+
 				if (e._tag === "Down") {
 					say({ev: "claim", answer: "down", fence: null, incarnation: null});
 					const down: HostMsg = {type: "is_down", pos: e.pos};
 					return down;
 				}
+
 				if (e._tag !== "Stale") {
 					const answer =
 						e._tag === "UnknownName" ? "unknown" : e._tag === "Denied" ? "denied" : "unreachable";
@@ -503,8 +540,10 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 						answer === "unknown" ? {type: "held", waitMs: ttlMs} : {type: "claim_failed"};
 					return failed;
 				}
+
 				rev = e.rev;
 			}
+
 			say({ev: "claim", answer: "stale", fence: null, incarnation: null});
 			const failed: HostMsg = {type: "claim_failed"};
 			return failed;
@@ -514,10 +553,12 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 			Effect.gen(function* () {
 				const sentAt = Date.now();
 				const r = yield* ledger.renew(name, fence, ttlMs).pipe(Effect.result);
+
 				if (r._tag === "Success") {
 					const renewed: HostMsg = {type: "renewed", fence, until: sentAt + ttlMs};
 					return renewed;
 				}
+
 				const tag = r.failure._tag;
 				const answer = tag === "LeaseLost" ? "lost" : tag === "Cancelled" ? "stop" : "unknown";
 				say({ev: "renew", fence, answer});
@@ -551,9 +592,18 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 			}),
 		).pipe(
 			Stream.flatMap((r): Stream.Stream<HostMsg> => {
-				if (r.kind === "claimed") return Stream.make({type: "seen_claim", fence: r.pos});
-				if (r.kind === "exited") return Stream.make({type: "seen_exit", pos: r.pos});
-				if (r.kind === "restarted") return Stream.make({type: "seen_restart", pos: r.pos});
+				if (r.kind === "claimed") {
+					return Stream.make({type: "seen_claim", fence: r.pos});
+				}
+
+				if (r.kind === "exited") {
+					return Stream.make({type: "seen_exit", pos: r.pos});
+				}
+
+				if (r.kind === "restarted") {
+					return Stream.make({type: "seen_restart", pos: r.pos});
+				}
+
 				const fence = r.kind === "lease_expired" ? expiredFence(r) : null;
 				return fence === null ? Stream.empty : Stream.make({type: "seen_expiry", fence});
 			}),
@@ -696,8 +746,10 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 						});
 					const runUnder: RunUnder = (machine, journal, opts) =>
 						Effect.gen(function* () {
-							if (yield* Ref.getAndSet(used, true))
+							if (yield* Ref.getAndSet(used, true)) {
 								return yield* Effect.die(`${name}: Self.run is called once per serving`);
+							}
+
 							const store = journalStore(ledger, {
 								schema: journal.schema,
 								stream: S.state,
@@ -705,7 +757,10 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 								holder,
 								note: (n) => {
 									// A save that waits on the ledger is not refused: it goes on.
-									if (!n.ok && n.why !== "unreachable") refused = true;
+									if (!n.ok && n.why !== "unreachable") {
+										refused = true;
+									}
+
 									say(n);
 								},
 								signal: stop.signal,
@@ -755,8 +810,11 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 						Effect.provideService(Self, self),
 						Effect.withParentSpan(job),
 					);
-					if (started.kind !== "running")
+
+					if (started.kind !== "running") {
 						return yield* Effect.die(`${name} refused its flags: ${started.why}`);
+					}
+
 					const r = started.run;
 
 					// The messages set aside: read once, at the start. A message is set aside only at an
@@ -767,11 +825,16 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 						Effect.map(Deferred.await(ready), (cursor) => ({kind: "ready" as const, cursor})),
 						Effect.map(r.ended, (how) => ({kind: "ended" as const, how})),
 					);
+
 					if (first.kind === "ready") {
 						for (const row of yield* again(ledger.readStream(S.dead))) {
 							const d = deadRevOf(row);
-							if (d !== null) dead.add(d);
+
+							if (d !== null) {
+								dead.add(d);
+							}
 						}
+
 						const inboxEnd = yield* again(ledger.readLast(S.inbox, 1));
 						say({
 							ev: "program",
@@ -807,14 +870,23 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 							Effect.forkScoped,
 						);
 					}
+
 					const how = first.kind === "ended" ? first.how : yield* r.ended;
 
 					/** The first inbox message past the last saved state, not set aside: what it was on. */
 					const suspect = Effect.gen(function* () {
 						const read = yield* Ref.get(cursorNow);
-						if (first.kind !== "ready" || read === null) return null;
+
+						if (first.kind !== "ready" || read === null) {
+							return null;
+						}
+
 						const cursor = yield* read;
-						if (cursor === null) return null;
+
+						if (cursor === null) {
+							return null;
+						}
+
 						const next = yield* ledger
 							.readStream(S.inbox, cursor, dead.size + 1)
 							.pipe(Effect.orElseSucceed(() => []));
@@ -859,7 +931,7 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 		const fenceOf = (s: Host) => (s.phase === "owning" || s.phase === "exiting" ? s.fence : null);
 		const said = new Set<Host["phase"]>(["owning", "exiting", "down"]);
 		host.observe((msg, now) => {
-			if (now.phase !== was.phase && (said.has(now.phase) || said.has(was.phase)))
+			if (now.phase !== was.phase && (said.has(now.phase) || said.has(was.phase))) {
 				say({
 					ev: "phase",
 					from: was.phase,
@@ -867,6 +939,8 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 					fence: fenceOf(now) ?? fenceOf(was),
 					by: msg.type,
 				});
+			}
+
 			was = now;
 		});
 		say({ev: "up", ttlMs, renewEveryMs});

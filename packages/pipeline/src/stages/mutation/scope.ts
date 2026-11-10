@@ -89,12 +89,17 @@ export const isSource = (path: string): boolean =>
 function joined(spans: readonly Span[]): readonly Span[] {
 	const sorted = [...spans].sort((a, b) => a.from - b.from);
 	const out: Span[] = [];
+
 	for (const s of sorted) {
 		const last = out.at(-1);
-		if (last !== undefined && s.from <= last.to + 1)
+
+		if (last !== undefined && s.from <= last.to + 1) {
 			out[out.length - 1] = {...last, to: Math.max(last.to, s.to)};
-		else out.push(s);
+		} else {
+			out.push(s);
+		}
 	}
+
 	return out;
 }
 
@@ -137,9 +142,14 @@ export function changesOf(scope: Scope, exam: readonly string[]): readonly Chang
  * deletion too, asks again. One with no hash is never the same.
  */
 const sameAs = (a: Change, b: Change): boolean => {
-	if (a.kind === "disable" && b.kind === "disable") return a.file === b.file && a.text === b.text;
-	if (a.kind === "exam" && b.kind === "exam")
+	if (a.kind === "disable" && b.kind === "disable") {
+		return a.file === b.file && a.text === b.text;
+	}
+
+	if (a.kind === "exam" && b.kind === "exam") {
 		return a.file === b.file && a.hash !== null && a.hash === b.hash;
+	}
+
 	return false;
 };
 

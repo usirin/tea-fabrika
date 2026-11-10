@@ -190,6 +190,7 @@ export function setupOf(
 
 const said = (from: From) =>
 	from === "default" ? "default" : from === "repo" ? "from the repository" : `from ${from}`;
+
 const words = (command: readonly string[]) => (command.length === 0 ? "none" : command.join(" "));
 
 /**
@@ -286,8 +287,12 @@ export const writeRubrics = (
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		yield* fs.makeDirectory(folder, {recursive: true}).pipe(Effect.orDie);
-		for (const [file, text] of Object.entries(texts))
-			if (text !== undefined)
+
+		for (const [file, text] of Object.entries(texts)) {
+			if (text !== undefined) {
 				yield* fs.writeFileString(path.join(folder, file), text).pipe(Effect.orDie);
+			}
+		}
+
 		return folder;
 	});

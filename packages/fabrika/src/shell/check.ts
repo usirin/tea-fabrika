@@ -114,10 +114,23 @@ function partsNamed(entry: Entry, word: string): readonly Part[] {
 		)
 			? [{kind, name}]
 			: [];
-	if (word.startsWith("--")) return has("flag", word.slice(2));
-	if (word.startsWith(">")) return has("output", word.slice(1));
-	if (word.startsWith("<")) return has("input", word.slice(1));
-	if (word.endsWith("=")) return has("input", word.slice(0, -1));
+
+	if (word.startsWith("--")) {
+		return has("flag", word.slice(2));
+	}
+
+	if (word.startsWith(">")) {
+		return has("output", word.slice(1));
+	}
+
+	if (word.startsWith("<")) {
+		return has("input", word.slice(1));
+	}
+
+	if (word.endsWith("=")) {
+		return has("input", word.slice(0, -1));
+	}
+
 	return [...has("flag", word), ...has("input", word), ...has("output", word)];
 }
 
@@ -132,10 +145,12 @@ const no = (at: number, why: string, guess?: string, status = 2): Refusal => ({
 /** A stop in the walk: the check is refused. Thrown inside this file only, and caught by `check`. */
 class Stop {
 	readonly refusal: Refusal;
+
 	constructor(refusal: Refusal) {
 		this.refusal = refusal;
 	}
 }
+
 const stop = (refusal: Refusal): never => {
 	throw new Stop(refusal);
 };
@@ -146,11 +161,17 @@ export function check(pipeline: Pipeline, list: ProgramList, text: string): Chec
 		// `--help` in any command of the pipe shows that program's help and runs nothing, as
 		// `seq 3 | grep --help` does in bash: the first command that asks is the one answered.
 		const asked = pipeline.commands.find((c) => c.help !== null);
+
 		if (asked !== undefined && asked.help !== null) {
 			const entry = entryOf(asked, list);
 			const {name} = asked.help;
-			if (name === null) return {kind: "help", entry, parts: null};
+
+			if (name === null) {
+				return {kind: "help", entry, parts: null};
+			}
+
 			const parts = partsNamed(entry, name.name);
+
 			if (parts.length === 0) {
 				const {program} = entry;
 				const known = [
@@ -164,11 +185,16 @@ export function check(pipeline: Pipeline, list: ProgramList, text: string): Chec
 					didYouMean(name.name, known),
 				);
 			}
+
 			return {kind: "help", entry, parts};
 		}
+
 		return {kind: "line", line: lineOf(pipeline, list, text, true)};
 	} catch (stopped) {
-		if (stopped instanceof Stop) return stopped.refusal;
+		if (stopped instanceof Stop) {
+			return stopped.refusal;
+		}
+
 		throw stopped;
 	}
 }
@@ -176,7 +202,8 @@ export function check(pipeline: Pipeline, list: ProgramList, text: string): Chec
 function entryOf(command: Command, list: ProgramList): Entry {
 	const {name, at} = command.program;
 	const entry = list.get(name);
-	if (entry === undefined)
+
+	if (entry === undefined) {
 		return stop(
 			no(
 				at.start,
@@ -185,6 +212,8 @@ function entryOf(command: Command, list: ProgramList): Entry {
 				127,
 			),
 		);
+	}
+
 	return entry;
 }
 
@@ -196,43 +225,56 @@ function lineOf(pipeline: Pipeline, list: ProgramList, text: string, top: boolea
 		const to = pipeline.commands[i + 1];
 		const a = entries[i];
 		const b = entries[i + 1];
-		if (from === undefined || to === undefined || a === undefined || b === undefined)
+
+		if (from === undefined || to === undefined || a === undefined || b === undefined) {
 			return stop(no(bar.start, "a | needs a command on each side"));
+		}
+
 		return wireOf(from, a, to, b, bar);
 	});
 	const stages = pipeline.commands.map((command, i): Stage => {
 		const entry = entries[i] as Entry;
+
 		// Only a statement's own pipeline reaches here with one: `check` answers that one first.
-		if (command.help !== null)
+		if (command.help !== null) {
 			stop(
 				no(
 					command.help.at.start,
 					"--help shows a program's help and runs nothing, so it gives no value to a $( )",
 				),
 			);
+		}
+
 		const wire = wires[i] ?? null;
 		const fed = i === 0 ? null : (wires[i - 1]?.input ?? null);
-		if (command.out !== null && wire === null && top)
+
+		if (command.out !== null && wire === null && top) {
 			stop(
 				no(
 					command.out.at.start,
 					`>${command.out.name} names the output a pipe or a $( ) takes, and nothing takes it here`,
 				),
 			);
-		if (command.into !== null && fed === null)
+		}
+
+		if (command.into !== null && fed === null) {
 			stop(
 				no(
 					command.into.at.start,
 					`<${command.into.name} names the input a pipe feeds, and no pipe feeds this command`,
 				),
 			);
-		if (command.all !== null && !hasTable(entry))
+		}
+
+		if (command.all !== null && !hasTable(entry)) {
 			stop(
 				no(
 					command.all.start,
 					`--all shows every row of a table, and ${entry.program.name} prints no table`,
 				),
 			);
+		}
+
 		return {
 			entry,
 			flags: flagsOf(command, entry, list, text),
@@ -244,7 +286,11 @@ function lineOf(pipeline: Pipeline, list: ProgramList, text: string, top: boolea
 		};
 	});
 	const [first, ...rest] = stages;
-	if (first === undefined) return stop(no(pipeline.at.start, "expected a program name"));
+
+	if (first === undefined) {
+		return stop(no(pipeline.at.start, "expected a program name"));
+	}
+
 	return {stages: [first, ...rest], text: text.slice(pipeline.at.start, pipeline.at.end)};
 }
 
@@ -273,16 +319,23 @@ function wireOf(from: Command, a: Entry, to: Command, b: Entry, bar: At) {
 	const outs = namedOr(from.out, a.program.outputs, a.program.name, "output");
 	const ins = namedOr(to.into, b.program.inputs, b.program.name, "input");
 	const wired = wire(a, from.out?.name ?? null, b, to.into?.name ?? null);
-	if (wired.kind === "wired") return {output: wired.output, input: wired.input};
+
+	if (wired.kind === "wired") {
+		return {output: wired.output, input: wired.input};
+	}
+
 	const show = (program: Entry["program"], kind: "outputs" | "inputs", names: readonly string[]) =>
 		names.map((n) => `${n}: ${typeOf(program[kind][n].shape.json)}`).join("; ");
-	if (wired.kind === "several")
+
+	if (wired.kind === "several") {
 		return stop(
 			no(
 				bar.start,
 				`more than one way to wire ${a.program.name} into ${b.program.name}: ${wired.ways.map((p) => `${p.output} → ${p.input}`).join(", ")}. Name one with >output or <input`,
 			),
 		);
+	}
+
 	return stop(
 		no(
 			bar.start,
@@ -332,8 +385,15 @@ export function wire(a: Entry, out: string | null, b: Entry, into: string | null
 			: named && pairs[0]?.fit === "cannot_tell"
 				? pairs[0]
 				: undefined;
-	if (chosen !== undefined) return {kind: "wired", output: chosen.output, input: chosen.input};
-	if (fitting.length > 1) return {kind: "several", ways: fitting};
+
+	if (chosen !== undefined) {
+		return {kind: "wired", output: chosen.output, input: chosen.input};
+	}
+
+	if (fitting.length > 1) {
+		return {kind: "several", ways: fitting};
+	}
+
 	return {kind: "none"};
 }
 
@@ -358,8 +418,12 @@ function namedOr(
 	kind: "output" | "input",
 ): readonly string[] {
 	const all = Object.keys(declared);
-	if (named === null) return all;
-	if (!all.includes(named.name))
+
+	if (named === null) {
+		return all;
+	}
+
+	if (!all.includes(named.name)) {
 		return stop(
 			no(
 				named.at.start,
@@ -367,6 +431,8 @@ function namedOr(
 				didYouMean(named.name, all),
 			),
 		);
+	}
+
 	return [named.name];
 }
 
@@ -376,7 +442,8 @@ function flagsOf(command: Command, entry: Entry, list: ProgramList, text: string
 	const seen = new Set<string>();
 	const flags = command.flags.map((given) => {
 		const flag: Flag<unknown> | undefined = own(program.flags, given.name);
-		if (flag === undefined)
+
+		if (flag === undefined) {
 			return stop(
 				no(
 					given.at.start,
@@ -385,18 +452,30 @@ function flagsOf(command: Command, entry: Entry, list: ProgramList, text: string
 					maybeDashes(didYouMean(given.name, [...declared, "help"])),
 				),
 			);
-		if (seen.has(given.name)) return stop(no(given.at.start, `--${given.name} is given twice`));
+		}
+
+		if (seen.has(given.name)) {
+			return stop(no(given.at.start, `--${given.name} is given twice`));
+		}
+
 		seen.add(given.name);
 		const source = sourceOf(given, flag, `--${given.name}`, list, text);
 		return {name: given.name, source};
 	});
+
 	for (const name of declared) {
-		if (seen.has(name)) continue;
+		if (seen.has(name)) {
+			continue;
+		}
+
 		const flag: Flag<unknown> = program.flags[name];
+
 		// A flag with a default is filled from it when the run starts.
-		if (mustBeGiven(flag))
+		if (mustBeGiven(flag)) {
 			stop(no(command.at.end, `${program.name} needs --${name}: ${flag.description}`));
+		}
 	}
+
 	return flags;
 }
 
@@ -413,6 +492,7 @@ function toldOf(
 	const declared = Object.keys(program.inputs);
 	return command.told.map((given) => {
 		const into: Declared<"input", unknown> | undefined = own(program.inputs, given.name);
+
 		if (into === undefined) {
 			const asFlag = Object.hasOwn(program.flags, given.name) ? ` (--${given.name} is a flag)` : "";
 			return stop(
@@ -423,10 +503,13 @@ function toldOf(
 				),
 			);
 		}
-		if (given.name === fed)
+
+		if (given.name === fed) {
 			return stop(
 				no(given.at.start, `${given.name} is fed by the pipe: give it values on one or the other`),
 			);
+		}
+
 		return {name: given.name, source: sourceOf(given, into, given.name, list, text)};
 	});
 }
@@ -441,9 +524,11 @@ function sourceOf(
 ): Source {
 	const {shape} = target;
 	const value: Value = given.value;
+
 	if (value.kind === "text") {
 		const read = readValue(shape, value.text);
-		if (read.kind === "refused")
+
+		if (read.kind === "refused") {
 			return stop(
 				no(
 					value.at.start,
@@ -451,8 +536,11 @@ function sourceOf(
 					read.didYouMean,
 				),
 			);
+		}
+
 		return {kind: "value", value: read.value};
 	}
+
 	const line = lineOf(value.pipeline, list, text, false);
 	const last = line.stages[line.stages.length - 1] ?? line.stages[0];
 	const command =
@@ -468,7 +556,8 @@ function sourceOf(
 	const named =
 		command.out !== null && fit(program.outputs[command.out.name], target) === "cannot_tell";
 	const output = fitting.length === 1 ? fitting[0] : named ? command.out?.name : undefined;
-	if (output === undefined)
+
+	if (output === undefined) {
 		return stop(
 			no(
 				value.at.start,
@@ -477,5 +566,7 @@ function sourceOf(
 					: `does not fit: no output of ${program.name} (${outs.map((o) => `${o}: ${typeOf(program.outputs[o].shape.json)}`).join("; ")}) fits ${label} (${typeOf(shape.json)}). Nothing was started`,
 			),
 		);
+	}
+
 	return {kind: "sub", line, output, at: value.at};
 }

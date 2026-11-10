@@ -101,9 +101,12 @@ describe("the codex row", () => {
 		expect(h.env.HOME).toBe(codex);
 		expect(h.env.INITIAL_AGENT_MODE).toBe("workspace-write");
 		expect(h.prepare).toBeDefined();
+
 		// Planted in the parent: no key may reach Codex, or a plan run could bill it.
-		for (const key of ["OPENAI_API_KEY", "CODEX_API_KEY", "TYPESAFE_API_KEY"])
+		for (const key of ["OPENAI_API_KEY", "CODEX_API_KEY", "TYPESAFE_API_KEY"]) {
 			expect(h.env[key]).toBeUndefined();
+		}
+
 		expect(JSON.stringify(h.env)).not.toContain("kept-out");
 	});
 
@@ -135,8 +138,10 @@ describe("the codex row", () => {
 		});
 		expect(config.allow_login_shell).toBe(false);
 		expect(config.web_search).toBe("disabled");
-		for (const feature of ["apps", "plugins", "browser_use", "computer_use", "multi_agent"])
+
+		for (const feature of ["apps", "plugins", "browser_use", "computer_use", "multi_agent"]) {
 			expect(config.features[feature]).toBe(false);
+		}
 	});
 
 	it("tells an agent's commands where a version manager holds the real tools, and nothing else", () => {
@@ -172,6 +177,7 @@ describe("the codex row", () => {
 		const parent = parentOf(home);
 		const row = harnessOf({name: "codex", access: "read"}, folder, null, parent);
 		const told = withSystem(row, {_tag: "append", text: "Only look."}, folder, parent);
+
 		for (const h of [row, told]) {
 			expect(h.env.INITIAL_AGENT_MODE).toBe("read-only");
 			const config = JSON.parse(h.env.CODEX_CONFIG ?? "");
@@ -572,7 +578,11 @@ describe("the fence, a short table by patterns", () => {
 		["two characters", "ab", ["/h/ab?*", "/h/ab?*/**"]],
 	])("closes all that is longer than a kept name of %s, with no listing", (_, name, keys) => {
 		const table = homeFence("/h", [], `/h/${name}`, "write", two({"/h": [name, `${name}2`]}));
-		for (const key of keys) expect(table[key]).toBe("deny");
+
+		for (const key of keys) {
+			expect(table[key]).toBe("deny");
+		}
+
 		expect(table[`/h/${name}2`]).toBeUndefined();
 		expect(table[`/h/${name}`]).toBe("write");
 	});
@@ -737,7 +747,11 @@ describe("the fence, a short table by patterns", () => {
 			"write",
 			two({"/h": [toolWay, copyWay], [`/h/${toolWay}`]: [toolName], [`/h/${copyWay}`]: [copyName]}),
 		);
-		for (const key of keys) expect(table[key]).toBe("deny");
+
+		for (const key of keys) {
+			expect(table[key]).toBe("deny");
+		}
+
 		expect(table[`/h/${tool}`]).toBe("read");
 		expect(table[`/h/${copy}`]).toBe("write");
 	});
@@ -764,7 +778,11 @@ describe("the fence, a short table by patterns", () => {
 
 	it("trusts patterns only on a Mac, the one box where they are proved", () => {
 		expect(depthFor("darwin")).toBe(2);
-		for (const platform of ["linux", "freebsd", "win32"]) expect(depthFor(platform)).toBe(0);
+
+		for (const platform of ["linux", "freebsd", "win32"]) {
+			expect(depthFor(platform)).toBe(0);
+		}
+
 		expect(localDisk.depth).toBe(depthFor(process.platform));
 	});
 });
@@ -786,14 +804,19 @@ describe("the fence around home, from a listing", () => {
 			}),
 		);
 		expect(table["/h/.cache/lane/copy"]).toBe("write");
-		for (const open of ["/h", "/h/.cache", "/h/.cache/lane"]) expect(table[open]).toBeUndefined();
+
+		for (const open of ["/h", "/h/.cache", "/h/.cache/lane"]) {
+			expect(table[open]).toBeUndefined();
+		}
+
 		for (const beside of [
 			"/h/Documents",
 			"/h/notes.txt",
 			"/h/.cache/other",
 			"/h/.cache/lane/old-copy",
-		])
+		]) {
 			expect(table[beside]).toBe("deny");
+		}
 	});
 
 	it("gives the tools `read` and the folder its access, and does not list inside either", () => {
@@ -837,8 +860,10 @@ describe("the fence around home, from a listing", () => {
 		expect(table["/a"]).toBeUndefined();
 		expect(table["/a/.volta"]).toBe("read");
 		expect(table["/a/beside"]).toBe("deny");
-		for (const login of [...LOGIN_FILES, ".codex", ".codex/auth.json"])
+
+		for (const login of [...LOGIN_FILES, ".codex", ".codex/auth.json"]) {
 			expect(table[`/a/${login}`]).toBe("deny");
+		}
 	});
 
 	it("opens nothing that would open the account's home or a login in it", () => {
@@ -904,8 +929,11 @@ describe("the fence around home, from a listing", () => {
 
 	it("closes every login path, there or not, so one made during a run is closed too", () => {
 		const table = homeFence("/h", [], "/h/copy", "write", disk({"/h": ["copy"]}));
-		for (const login of [...LOGIN_FILES, ".codex", ".codex/auth.json"])
+
+		for (const login of [...LOGIN_FILES, ".codex", ".codex/auth.json"]) {
 			expect(table[`/h/${login}`]).toBe("deny");
+		}
+
 		// Where every session's Codex home is made, some after this table is.
 		expect(table["/h/.cache/tea-fabrika/codex"]).toBe("deny");
 	});
@@ -944,7 +972,11 @@ describe("the fence around home, from a listing", () => {
 			"write",
 			disk({"/h": [".ssh", ".cache", ".codex", "copy"]}),
 		);
-		for (const closed of ["/h/.ssh", "/h/.cache", "/h/.codex"]) expect(table[closed]).toBe("deny");
+
+		for (const closed of ["/h/.ssh", "/h/.cache", "/h/.codex"]) {
+			expect(table[closed]).toBe("deny");
+		}
+
 		expect(table["/h/.ssh/keys"]).toBeUndefined();
 	});
 
@@ -1109,6 +1141,7 @@ const longNames = (count: number) =>
 			"deny",
 		]),
 	);
+
 /** The box runs 254 lines of `longNames` and stops at 256, so these two stand on each side of what we allow. */
 const FENCE_BYTES_MOST = 220;
 const FENCE_BYTES_LEAST = 240;
@@ -1121,6 +1154,7 @@ const deepPatterns = (count: number) =>
 			return [n % 2 === 0 ? key : `${key}/**`, "deny"];
 		}),
 	);
+
 /** The box runs about 210 lines of `deepPatterns`, so these two stand on each side of what we allow. */
 const DEEP_MOST = 140;
 const DEEP_LEAST = 180;
@@ -1174,7 +1208,11 @@ describe("the fence, too big for the box", () => {
 		const home = fakeHome();
 		const folder = join(home, "copy");
 		mkdirSync(folder);
-		for (let n = 0; n <= FENCE_LIMIT; n++) writeFileSync(join(home, `co-private-${n}`), "");
+
+		for (let n = 0; n <= FENCE_LIMIT; n++) {
+			writeFileSync(join(home, `co-private-${n}`), "");
+		}
+
 		return {home, folder};
 	};
 
@@ -1216,33 +1254,42 @@ describe("a config as flags", () => {
 const boxHome = realpathSync(mkdtempSync(join(tmpdir(), "codex-box-")));
 afterAll(() => rmSync(boxHome, {recursive: true, force: true}));
 const boxEnv = codexEnvOf(process.env, boxHome);
+
 const codexBox = (cwd: string, config: Record<string, unknown>, line: string) =>
 	spawnSync("codex", ["sandbox", ...flagsOf(config), "--", "/bin/sh", "-c", line], {
 		cwd,
 		env: boxEnv,
 		stdio: "ignore",
 	}).status;
+
 const tried = spawnSync("codex", ["sandbox", "--", "/bin/sh", "-c", "exit 0"], {
 	cwd: boxHome,
 	env: boxEnv,
 	encoding: "utf8",
 	stdio: ["ignore", "ignore", "pipe"],
 });
+
 // Each is how a look along the PATH says no. A folder a box closes answers EPERM, not ENOENT.
 const noCodex =
 	tried.error !== undefined &&
 	"code" in tried.error &&
 	["ENOENT", "EACCES", "EPERM"].includes(String(tried.error.code));
+
 // A box cannot start inside another box, and nothing is wrong with either. Agents run these tests
 // inside one, with `codex` on the PATH. Only this one line says so: any other failure is a failure.
 const insideABox = tried.stderr?.includes("sandbox_apply: Operation not permitted") ?? false;
+
 /** Why Codex's box did not start, with its version. Empty when it did. */
 const boxBroken = (): string => {
-	if (tried.status === 0) return "";
+	if (tried.status === 0) {
+		return "";
+	}
+
 	const version = spawnSync("codex", ["--version"], {env: boxEnv, encoding: "utf8"}).stdout?.trim();
 	const said = (tried.stderr ?? "").trim().split("\n").slice(-3).join(" ");
 	return `${version} found, its box does not start (exit ${tried.status}): ${tried.error?.message ?? said}`;
 };
+
 const SLOW = 120_000;
 
 type Config = ReturnType<typeof codexConfig>;
@@ -1254,8 +1301,11 @@ const patternsBelow = (config: Config, home: string, below: string) => {
 	const filesystem: Record<string, FolderAccess | "deny"> = {
 		...config.permissions.fenced.filesystem,
 	};
-	for (let n = 0; Object.keys(filesystem).length < FENCE_LIMIT; n++)
+
+	for (let n = 0; Object.keys(filesystem).length < FENCE_LIMIT; n++) {
 		filesystem[`${home}/${below}/p${n}[!x]*`] = "deny";
+	}
+
 	return {...config, permissions: {fenced: {...config.permissions.fenced, filesystem}}};
 };
 
@@ -1307,7 +1357,11 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 					mkdirSync(folder);
 					writeFileSync(join(folder, "x.js"), "");
 					const room = FENCE_LIMIT - tableKeys(codexConfig(folder, [], home, "write", oneHome));
-					for (let n = 0; n < room; n++) writeFileSync(join(home, `co-near-${n}`), "");
+
+					for (let n = 0; n < room; n++) {
+						writeFileSync(join(home, `co-near-${n}`), "");
+					}
+
 					const names = codexConfig(folder, [], home, "write", oneHome);
 					expect(tableKeys(names)).toBe(FENCE_LIMIT);
 					expect(fenceTooBig(names.permissions.fenced.filesystem)).toBe(null);
@@ -1440,10 +1494,12 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 					mkdirSync(join(home, tool), {recursive: true});
 					writeFileSync(join(folder, "x.js"), "");
 					writeFileSync(join(home, tool, "t"), "");
+
 					for (const name of closed) {
 						mkdirSync(dirname(join(home, name)), {recursive: true});
 						writeFileSync(join(home, name), "");
 					}
+
 					const config = codexConfig(folder, [join(home, tool)], home, "write", oneHome);
 
 					expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
@@ -1460,6 +1516,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 							codexBox(folder, config, `cat ${word(join(home, name.toLowerCase()))}`) === 0,
 					);
 					expect(spelled).toEqual([]);
+
 					// Made after the table, sharing no first two characters with a way down, in each case.
 					for (const later of ["lz-after", "LZ-AFTER", "qafter", "QAFTER"]) {
 						writeFileSync(join(home, later), "");
@@ -1622,10 +1679,12 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 						"é/s",
 						"日本/s",
 					];
+
 					for (const name of closed) {
 						mkdirSync(dirname(join(home, name)), {recursive: true});
 						writeFileSync(join(home, name), "");
 					}
+
 					const config = codexConfig(folder, [join(home, tool)], home, "write", oneHome);
 
 					expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
@@ -1637,9 +1696,12 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 						(name) => codexBox(folder, config, `cat ${word(join(home, name))}`) === 0,
 					);
 					expect(open).toEqual([]);
+
 					// The same names, spelled in another case: the disk takes them, so the box must refuse them.
-					for (const spelled of ["LIBRARY/Keychains/k", "library/KEYCHAINS/k", ".SSH/id_x"])
+					for (const spelled of ["LIBRARY/Keychains/k", "library/KEYCHAINS/k", ".SSH/id_x"]) {
 						expect(codexBox(folder, config, `cat ${word(join(home, spelled))}`)).not.toBe(0);
+					}
+
 					// Made after the table, sharing no first two characters with the way down.
 					for (const later of [
 						"after/s",
@@ -1675,6 +1737,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 				const config = codexConfig(folder, tools, home, "write", oneHome);
 
 				expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
+
 				for (const secret of [
 					".ssh/id_x",
 					".ssh/sub/f",
@@ -1686,8 +1749,9 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 					"o/auth.json",
 					"a",
 					"h/.ssh/id_x",
-				])
+				]) {
 					expect(codexBox(folder, config, `cat ${word(join(home, secret))}`)).not.toBe(0);
+				}
 			});
 
 			it("closes a `.ssh` that links into the opened folder, by either name", () => {
@@ -1718,6 +1782,7 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 
 				expect(codexBox(folder, config, `"${process.execPath}" x.js`)).toBe(0);
 				expect(codexBox(folder, config, "echo x > y")).toBe(0);
+
 				for (const home of [real, link]) {
 					expect(codexBox(folder, config, `cat ${word(join(home, ".ssh", "id_x"))}`)).not.toBe(0);
 					expect(codexBox(folder, config, `cat ${word(join(home, "beside"))}`)).not.toBe(0);
@@ -1777,12 +1842,15 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 					const folder = join(home, name);
 					mkdirSync(join(home, "tools"));
 					const tool = join(home, "tools", name);
+
 					for (const open of [folder, tool, join(home, near), join(home, "tools", near)]) {
 						mkdirSync(open);
 						writeFileSync(join(open, "f"), "");
 					}
+
 					writeFileSync(join(folder, "x.js"), "");
 					const accesses: readonly FolderAccess[] = ["write", "read"];
+
 					for (const access of accesses) {
 						const config = codexConfig(folder, [tool], home, access, oneHome);
 						expect(codexBox(folder, config, "cat f")).toBe(0);
@@ -1812,10 +1880,12 @@ describe.skipIf(process.platform !== "darwin" || noCodex || insideABox)(
 			it("works under a home whose own path holds a `[`", () => {
 				const home = join(fakeHome(), "odd[1]");
 				const folder = join(home, "copy");
+
 				for (const made of [folder, join(home, ".ssh"), join(home, "beside")]) {
 					mkdirSync(made, {recursive: true});
 					writeFileSync(join(made, "f"), "");
 				}
+
 				writeFileSync(join(folder, "x.js"), "");
 				const config = codexConfig(folder, [], home, "write", oneHome);
 
@@ -1920,6 +1990,7 @@ describe("acp --agent codex", () => {
 	it.effect("refuses a mode where a model answers the asks, no sandbox, or no mode at all", () =>
 		Effect.gen(function* () {
 			const folder = realpathSync(mkdtempSync(join(tmpdir(), "acp-codex-")));
+
 			// Left out, codex's mode would say nothing about whether its folder may change.
 			for (const mode of ["agent", "agent-full-access", undefined]) {
 				const opened = ear<unknown>();
@@ -1938,7 +2009,11 @@ describe("acp --agent codex", () => {
 					{opened: opened.hear},
 					{id: `acp:codex-mode-${mode}`, storage: memoryStorage()},
 				);
-				if (started.kind !== "running") continue;
+
+				if (started.kind !== "running") {
+					continue;
+				}
+
 				const end = yield* started.run.ended;
 				expect(JSON.stringify(end)).toMatch(/codex runs only in read-only or workspace-write/);
 				expect(opened.values).toEqual([]);

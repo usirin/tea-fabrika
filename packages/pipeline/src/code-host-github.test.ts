@@ -46,6 +46,7 @@ const PR = "https://github.com/example/repo/pull/7";
 /** The repo's two owners. Both open pull requests, and both post review verdicts. */
 const OWNERS = ["repo-owner", "second-owner"];
 const WHO: Accounts = {own: OWNERS, reviewers: OWNERS};
+
 const recorded = (name: string): string =>
 	readFileSync(new URL(`../../../fixtures/code-host/${name}.json`, import.meta.url), "utf8");
 
@@ -72,14 +73,23 @@ function fakeGh(answers: Answers) {
 	const calls: (readonly string[])[] = [];
 	const gh: Gh = (args) => {
 		calls.push(args);
+
 		if (args[1]?.includes("/compare/")) {
 			const main = answers.main ?? JSON.stringify(MAIN);
 			return main === "breaks" ? Effect.fail({_tag: "unknown" as const}) : Effect.succeed(main);
 		}
+
 		const has = (field: string) => args.some((arg) => arg.startsWith(`${field}=`));
 		const answer = has("team") ? (answers.team ?? recorded("team")) : answers.pr;
-		if (answer === "breaks") return Effect.fail({_tag: "unknown" as const});
-		if (has("team") || has("codeowners")) return Effect.succeed(answer);
+
+		if (answer === "breaks") {
+			return Effect.fail({_tag: "unknown" as const});
+		}
+
+		if (has("team") || has("codeowners")) {
+			return Effect.succeed(answer);
+		}
+
 		// The first call. An answer that is not the recorded shape is handed on as it is, to fail where it would.
 		return Effect.try({
 			try: (): unknown => JSON.parse(answer).data.repository.pullRequest.headRefOid,
@@ -98,10 +108,13 @@ function fakeGh(answers: Answers) {
 	};
 	return {gh, calls};
 }
+
 const factsOn = (pr: string, who = WHO, team?: string | "breaks") =>
 	Effect.runPromise(readPrFacts(fakeGh(team === undefined ? {pr} : {pr, team}).gh, who)(PR));
+
 const failureOn = (pr: string | "breaks") =>
 	Effect.runPromise(Effect.flip(readPrFacts(fakeGh({pr}).gh, WHO)(PR)));
+
 /**
  * A `CodeHost` that only reads facts: its two waits never say anything. With
  * it, a criteria record: by default one that holds no ticket.
@@ -120,6 +133,7 @@ const hostOf = (
 		}),
 		record,
 	);
+
 /**
  * The whole way: the service on a recorded answer, the real handler, the real
  * machine up to its first write. The record holds the ticket the pull request
@@ -151,6 +165,7 @@ function changed(
 	change(answer.data.repository.pullRequest, answer.data.repository);
 	return JSON.stringify(answer);
 }
+
 function changedTeam(change: (members: Record<string, any>) => void): string {
 	const answer = JSON.parse(recorded("team"));
 	change(answer.data.organization.team.members);
@@ -1162,7 +1177,9 @@ describe("a repository's open pull requests", () => {
 describe("the folders under a repository's paths", () => {
 	const made: string[] = [];
 	afterEach(() => {
-		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+		for (const dir of made.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	/** A `gh` that answers `answer`, or exits 1 when it is `"breaks"`, and the calls it got. */

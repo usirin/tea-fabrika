@@ -131,7 +131,11 @@ describe("the exam's pull request", () => {
 			fake: {answers: {review: [FAILS_E1]}, see: [RULE]},
 			checksSay: (head, nth, where) => {
 				const said = mainTakesTheRule(head, nth, where);
-				if (nth === 0) moved = onMainHead(where.remote);
+
+				if (nth === 0) {
+					moved = onMainHead(where.remote);
+				}
+
 				return said;
 			},
 		});
@@ -207,6 +211,7 @@ describe("the exam's pull request", () => {
 				// Not here: the other place may hold it.
 			}
 		}
+
 		return null;
 	};
 

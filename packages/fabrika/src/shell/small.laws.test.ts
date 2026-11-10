@@ -27,6 +27,7 @@ type Msg = MsgOf<Count>;
 const table: MsgArbitraryTable<Msg> = {
 	add: arbRecordMsg("add", {n: fc.integer({min: -50, max: 50})}),
 };
+
 const lists = arbMsgSequence(arbMsg(table), {maxLength: 40});
 const OPTS = {numRuns: 300, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
@@ -130,6 +131,7 @@ const keepsEvery = (machine: Count, msgs: fc.Arbitrary<readonly Msg[]>, runs = 1
 		fc.asyncProperty(msgs, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("tally:r1", null));
 			const store = handle.store("count", "total", State);
+
 			for (const total of foldEvents(machine, ctx, null, list).states) {
 				await store.save(total);
 				expect(store.migrate(await store.load())).toEqual(total);

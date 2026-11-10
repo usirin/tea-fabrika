@@ -64,6 +64,7 @@ const ok = (exited: {readonly code: number; readonly out: string}): Effect.Effec
 	exited.code === 0 ? Effect.succeed(exited.out) : failed;
 
 const Comments = Schema.Array(Schema.Struct({body: Schema.String}));
+
 const IssueRead = Schema.Struct({
 	state: Schema.Literals(["open", "closed"]),
 	labels: Schema.Array(Schema.Struct({name: Schema.String})),
@@ -106,14 +107,22 @@ export const gitHubIssues = (repos: readonly string[]): Layer.Layer<Issues> =>
 				Effect.gen(function* () {
 					const text = yield* useKey(key);
 					const path = pathOf(issue);
-					if (path === null) return yield* failed;
+
+					if (path === null) {
+						return yield* failed;
+					}
+
 					yield* call(path, text);
 				});
 			return Issues.of({
 				hasComment: (issue, key) =>
 					Effect.gen(function* () {
 						const path = pathOf(issue);
-						if (path === null) return yield* failed;
+
+						if (path === null) {
+							return yield* failed;
+						}
+
 						// The first hundred comments: a sort's comment is among an issue's first few.
 						const there = yield* answerOf(gh, Comments, ["api", `${path}/comments?per_page=100`]);
 						return there.some((c) => c.body.includes(markerOf(key)));

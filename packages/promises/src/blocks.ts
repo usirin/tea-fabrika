@@ -31,49 +31,77 @@ function topLevelLines(source: string): readonly boolean[] {
 	// A stack of what we are inside: code with its depth, or a template string.
 	const stack: ({kind: "code"; depth: number} | {kind: "template"})[] = [{kind: "code", depth: 0}];
 	let mode: "code" | "line" | "block" | "'" | '"' = "code";
+
 	for (let i = 0; i < source.length; i++) {
 		const ch = source[i];
 		const next = source[i + 1];
 		const frame = stack[stack.length - 1] ?? {kind: "code" as const, depth: 0};
+
 		if (ch === "\n") {
-			if (mode === "line") mode = "code";
+			if (mode === "line") {
+				mode = "code";
+			}
+
 			top.push(stack.length === 1 && frame.kind === "code" && frame.depth === 0 && mode === "code");
 			continue;
 		}
-		if (mode === "line") continue;
+
+		if (mode === "line") {
+			continue;
+		}
+
 		if (mode === "block") {
 			if (ch === "*" && next === "/") {
 				mode = "code";
 				i++;
 			}
+
 			continue;
 		}
+
 		if (mode === "'" || mode === '"') {
-			if (ch === "\\") i++;
-			else if (ch === mode) mode = "code";
+			if (ch === "\\") {
+				i++;
+			} else if (ch === mode) {
+				mode = "code";
+			}
+
 			continue;
 		}
+
 		if (frame.kind === "template") {
-			if (ch === "\\") i++;
-			else if (ch === "`") stack.pop();
-			else if (ch === "$" && next === "{") {
+			if (ch === "\\") {
+				i++;
+			} else if (ch === "`") {
+				stack.pop();
+			} else if (ch === "$" && next === "{") {
 				stack.push({kind: "code", depth: 0});
 				i++;
 			}
+
 			continue;
 		}
-		if (ch === "/" && next === "/") mode = "line";
-		else if (ch === "/" && next === "*") {
+
+		if (ch === "/" && next === "/") {
+			mode = "line";
+		} else if (ch === "/" && next === "*") {
 			mode = "block";
 			i++;
-		} else if (ch === "'" || ch === '"') mode = ch;
-		else if (ch === "`") stack.push({kind: "template"});
-		else if (ch === "{" || ch === "(" || ch === "[") frame.depth++;
-		else if (ch === "}" || ch === ")" || ch === "]") {
-			if (frame.depth === 0 && stack.length > 1) stack.pop();
-			else frame.depth = Math.max(0, frame.depth - 1);
+		} else if (ch === "'" || ch === '"') {
+			mode = ch;
+		} else if (ch === "`") {
+			stack.push({kind: "template"});
+		} else if (ch === "{" || ch === "(" || ch === "[") {
+			frame.depth++;
+		} else if (ch === "}" || ch === ")" || ch === "]") {
+			if (frame.depth === 0 && stack.length > 1) {
+				stack.pop();
+			} else {
+				frame.depth = Math.max(0, frame.depth - 1);
+			}
 		}
 	}
+
 	return top;
 }
 
@@ -86,7 +114,11 @@ export function blocksOf(source: string): readonly Block[] {
 	);
 	return starts.map((from, k) => {
 		let to = (starts[k + 1] ?? lines.length) - 1;
-		while (to > from && (lines[to] ?? "").trim() === "") to--;
+
+		while (to > from && (lines[to] ?? "").trim() === "") {
+			to--;
+		}
+
 		const text = lines.slice(from, to + 1).join("\n");
 		return {name: DECLARES.exec(lines[from] ?? "")?.[1] ?? null, from: from + 1, to: to + 1, text};
 	});
@@ -100,7 +132,10 @@ export function splitPiece(piece: string): {readonly file: string; readonly name
 
 /** The text a piece names in a file's source. `null`: no top-level block declares that name. */
 export function textOf(source: string, name: string | null): string | null {
-	if (name === null) return source;
+	if (name === null) {
+		return source;
+	}
+
 	const found = blocksOf(source).filter((b) => b.name === name);
 	return found.length === 0 ? null : found.map((b) => b.text).join("\n");
 }

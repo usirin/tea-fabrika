@@ -118,6 +118,7 @@ describe("a line call, read", () => {
 			expect(call.kind, JSON.stringify(line)).toBe("refused");
 			expect(call.kind === "refused" ? call.why : "").toMatch(/\bline\b/);
 		}
+
 		// A line's own quotes, pipes and words in any script still fit.
 		expect(
 			callOf(LIST, LINE, {line: `tracker file='{"title":"Giriş bozuk","body":""}' &`}).kind,

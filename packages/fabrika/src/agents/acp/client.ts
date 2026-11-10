@@ -193,7 +193,8 @@ export const connect = (
 
 		let asks = 0;
 		const base = acp.client({name: "tea-fabrika acp"});
-		for (const method of extensions?.methods ?? [])
+
+		for (const method of extensions?.methods ?? []) {
 			base.onNotification(
 				method,
 				(params: unknown) => params,
@@ -201,6 +202,8 @@ export const connect = (
 					extensions?.heard(method, ctx.params);
 				},
 			);
+		}
+
 		const app = base
 			.onNotification(acp.methods.client.session.update, (ctx) => {
 				heard({kind: "update", update: ctx.params.update});
@@ -212,7 +215,10 @@ export const connect = (
 						asks += 1;
 						let open = true;
 						const answer = (response: acp.RequestPermissionResponse) => {
-							if (!open) return;
+							if (!open) {
+								return;
+							}
+
 							open = false;
 							resolve(response);
 						};
@@ -259,13 +265,16 @@ export const connect = (
 				mcpServers: [...servers],
 				...(meta === undefined ? {} : {_meta: {...meta}}),
 			};
-			if (how === "new")
+
+			if (how === "new") {
 				return call("session/new", () =>
 					agent.request<acp.NewSessionResponse, acp.NewSessionRequest>(
 						acp.methods.agent.session.new,
 						base,
 					),
 				).pipe(Effect.map((r) => openedOf(r.sessionId, r)));
+			}
+
 			const sessionId = id ?? "";
 			return how === "load"
 				? call("session/load", () =>
@@ -279,18 +288,23 @@ export const connect = (
 		const configure: Connection["configure"] = (session, category, value) =>
 			Effect.gen(function* () {
 				const option = session.config.find((o) => o.category === category);
-				if (option === undefined)
+
+				if (option === undefined) {
 					return yield* Effect.fail<AcpFailed>({
 						_tag: "acp_failed",
 						method: "session/set_config_option",
 						message: `the harness offers no ${category} option`,
 					});
-				if (!valuesOf(option).includes(value))
+				}
+
+				if (!valuesOf(option).includes(value)) {
 					return yield* Effect.fail<AcpFailed>({
 						_tag: "acp_failed",
 						method: "session/set_config_option",
 						message: `${category} ${value} is not one of: ${valuesOf(option).join(", ")}`,
 					});
+				}
+
 				const r = yield* call("session/set_config_option", () =>
 					agent.request(acp.methods.agent.session.setConfigOption, {
 						sessionId: session.id,

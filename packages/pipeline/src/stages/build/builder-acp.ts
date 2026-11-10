@@ -89,14 +89,19 @@ export const verdictOf =
 	(check: (tool: string, input: Readonly<Record<string, unknown>>) => string | null) =>
 	(request: acp.RequestPermissionRequest): Verdict => {
 		const tool = request.toolCall.name ?? null;
-		if (tool === null)
+
+		if (tool === null) {
 			return {allow: false, tool: "unknown", why: "The ask names no tool, so it is refused."};
-		if (!ALLOWED.includes(tool))
+		}
+
+		if (!ALLOWED.includes(tool)) {
 			return {
 				allow: false,
 				tool,
 				why: `${tool} is not one of your tools. Use ${TOOLS.join(", ")}.`,
 			};
+		}
+
 		const why = check(tool, isRecord(request.toolCall.rawInput) ? request.toolCall.rawInput : {});
 		return why === null ? {allow: true, tool} : {allow: false, tool, why};
 	};
@@ -174,7 +179,11 @@ const numberAt = (value: unknown, key: string): number =>
 /** The SDK result inside a `_claude/sdkMessage`, or `null` for any other message. */
 export const sdkResultOf = (params: unknown): SdkResult | null => {
 	const message = isRecord(params) ? params.message : null;
-	if (!isRecord(message) || message.type !== "result") return null;
+
+	if (!isRecord(message) || message.type !== "result") {
+		return null;
+	}
+
 	return {
 		subtype: typeof message.subtype === "string" ? message.subtype : "unknown",
 		turns: numberAt(message, "num_turns"),
@@ -247,6 +256,7 @@ export const runTurn = (
 				cost = update.cost?.amount ?? cost;
 				context = update.used;
 			}
+
 			if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
 				const old = calls.get(update.toolCallId);
 				calls.set(update.toolCallId, {
@@ -257,16 +267,21 @@ export const runTurn = (
 					refused: old?.refused ?? null,
 				});
 			}
-			if (ask.trace !== undefined)
-				for (const event of ask.trace.events.seen(seenOf(update), at))
+
+			if (ask.trace !== undefined) {
+				for (const event of ask.trace.events.seen(seenOf(update), at)) {
 					ask.trace.spans?.onEvent(event);
+				}
+			}
 		};
 
 		const pump = Effect.gen(function* () {
 			const batch = yield* Queue.takeAll(items);
 			const now = yield* Clock.currentTimeMillis;
+
 			for (const item of batch) {
 				ask.heard?.(item as Heard);
+
 				switch (item.kind) {
 					case "update":
 						seen(item.update, now);
@@ -308,21 +323,28 @@ export const runTurn = (
 		// `default`: the mode that asks. Set at every start; the adapter's own default is the owner's setting.
 		opened = yield* c.configure(opened, "mode", "default");
 		const mode = currentOf(opened, "mode") ?? opened.mode;
-		if (mode !== "default")
+
+		if (mode !== "default") {
 			return yield* Effect.fail<AcpFailed>({
 				_tag: "acp_failed",
 				method: "session/set_config_option",
 				message: `the session is in ${mode ?? "no"} mode, not default: nothing would ask`,
 			});
+		}
 
 		const t0 = yield* Clock.currentTimeMillis;
-		if (ask.trace !== undefined)
-			for (const event of ask.trace.events.start(t0, currentOf(opened, "model")))
+
+		if (ask.trace !== undefined) {
+			for (const event of ask.trace.events.start(t0, currentOf(opened, "model"))) {
 				ask.trace.spans?.onEvent(event);
+			}
+		}
+
 		const response = yield* c.prompt(opened.id, ask.prompt).pipe(Effect.result);
 		yield* sync;
 		const t1 = yield* Clock.currentTimeMillis;
 		const ok = response._tag === "Success" ? response.success : null;
+
 		if (ask.trace !== undefined) {
 			const ended = {
 				n: 1,
@@ -337,9 +359,14 @@ export const runTurn = (
 								total: ok.usage.totalTokens,
 							},
 			};
-			for (const event of ask.trace.events.end(ended, t1)) ask.trace.spans?.onEvent(event);
+
+			for (const event of ask.trace.events.end(ended, t1)) {
+				ask.trace.spans?.onEvent(event);
+			}
+
 			ask.trace.spans?.end();
 		}
+
 		return {
 			stop: ok?.stopReason ?? null,
 			error:
@@ -484,7 +511,10 @@ const overBudget = (turn: Turn) =>
 /** The check hook's log, line by line. A line that is not one is skipped: the log is written only by the hook. */
 export const checkedOf = (text: string): readonly Checked[] =>
 	text.split("\n").flatMap((line) => {
-		if (line.trim() === "") return [];
+		if (line.trim() === "") {
+			return [];
+		}
+
 		const parsed: unknown = JSON.parse(line);
 		return isRecord(parsed) &&
 			typeof parsed.tool === "string" &&
@@ -552,13 +582,19 @@ export const draftAcp = (
 			refused,
 			links: 0,
 		};
-		if (overBudget(turn)) return {answer: "over_budget", ...ran} satisfies BuildDrafted;
-		if (turn.error !== null || turn.stop !== "end_turn")
+
+		if (overBudget(turn)) {
+			return {answer: "over_budget", ...ran} satisfies BuildDrafted;
+		}
+
+		if (turn.error !== null || turn.stop !== "end_turn") {
 			return {
 				answer: "broke",
 				error: turn.error ?? `the turn stopped: ${turn.stop ?? "no reason"}`,
 				...ran,
 			} satisfies BuildDrafted;
+		}
+
 		const form = report.form();
 		return (
 			form === null ? {answer: "misfit", ...ran} : {answer: "built", built: form, ...ran}
@@ -587,6 +623,7 @@ export const draftAcp = (
 interface AcpBuilderShape {
 	readonly build: (brief: BuildBrief, settings: Settings) => Effect.Effect<BuildDrafted>;
 }
+
 export const AcpBuilder = Context.Reference<AcpBuilderShape>("BuildStageAcpBuilder", {
 	defaultValue: () => ({
 		build: () =>

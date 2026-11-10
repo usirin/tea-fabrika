@@ -14,12 +14,14 @@ import type {Plan, RevisedTask, Revision} from "./plan.ts";
 import {planMarkdown} from "./render.ts";
 
 const S1 = storyId("s1");
+
 const claim = (when: string): RevisedTask["criteria"][number] => ({
 	when,
 	result: `${when} shows`,
 	check: {how: "test", what: "a test reads it"},
 	serves: [S1],
 });
+
 const job = (when: string) => ({...claim(when), fixture: "three runs, each twice"});
 
 /** A first version with tasks of `n` single claims each, after its job, and no ids. */
@@ -62,7 +64,11 @@ describe("a plan's criterion ids", () => {
 	it("stay with their criteria when a next version puts new ones before them", () => {
 		const first = withIds(EMPTY, draft(["a", "b", "c"]));
 		const [task] = first.plan.tasks;
-		if (task === undefined) throw new Error("no task");
+
+		if (task === undefined) {
+			throw new Error("no task");
+		}
+
 		// A next version: a new claim at the top, one reworded, the rest as they were, ids kept.
 		const next = nextOf(first.plan, (t) => ({
 			...t,
@@ -108,7 +114,11 @@ describe("a plan's task ids", () => {
 		const first = withIds(EMPTY, draft(["a"], ["b"]));
 		const revision = revisionOf(first.plan);
 		const added = draft(["new"]).tasks[0];
-		if (added === undefined) throw new Error("no task");
+
+		if (added === undefined) {
+			throw new Error("no task");
+		}
+
 		const again = withIds(first.book, {...revision, tasks: [added, ...revision.tasks]});
 		expect(again.plan.tasks.map((t) => `${t.id} ${t.title}`)).toEqual([
 			"t3 task 1",
@@ -125,7 +135,11 @@ describe("a plan's task ids", () => {
 		const first = withIds(EMPTY, draft(["a"]));
 		const revision = revisionOf(first.plan);
 		const [task] = revision.tasks;
-		if (task === undefined) throw new Error("no task");
+
+		if (task === undefined) {
+			throw new Error("no task");
+		}
+
 		const stray = withIds(first.book, {...revision, tasks: [{...task, keeps: taskId("t9")}]});
 		expect(stray.plan.tasks.map((t) => t.id)).toEqual(["t2"]);
 		const twice = withIds(first.book, {...revision, tasks: [task, task]});
@@ -243,7 +257,11 @@ describe("a plan's own criteria (its goal)", () => {
 		const {plan, book} = withIds(EMPTY, two());
 		const revision = revisionOf(plan);
 		const [third] = draft(["c"]).tasks;
-		if (third === undefined) throw new Error("no task");
+
+		if (third === undefined) {
+			throw new Error("no task");
+		}
+
 		const next = withIds(
 			book,
 			{...revision, tasks: [...revision.tasks, {...third, title: "three"}]},
@@ -257,7 +275,11 @@ describe("a plan's own criteria (its goal)", () => {
 		const {plan, book} = withIds(EMPTY, two());
 		const revision = revisionOf(plan);
 		const goal = revision.goal;
-		if (goal === undefined) throw new Error("no goal");
+
+		if (goal === undefined) {
+			throw new Error("no goal");
+		}
+
 		const next = withIds(
 			book,
 			{...revision, goal: {...goal, criteria: goal.criteria.map((c) => ({...c, result: "new"}))}},

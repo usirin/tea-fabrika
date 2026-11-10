@@ -36,6 +36,7 @@ const KILL = kills.run({
 	side: "bad",
 	on: {commit: "c1", file: "a.test.ts", test: "t", mutant: null},
 });
+
 const finished = {key: fc.constant("k"), id: fc.constant("x"), spend: fc.constant(noSpend)};
 
 const arbs: MsgArbitraryTable<Msg> = {
@@ -77,6 +78,7 @@ const WALK: readonly Msg[] = [
 		session: "s",
 	},
 ];
+
 const lists = fc
 	.tuple(fc.subarray([...WALK]), fc.array(arbMsg(arbs), {minLength: 1, maxLength: 40, size: "max"}))
 	.map(([walk, rest]) => [...walk, ...rest]);
@@ -117,8 +119,14 @@ const plant = (update: Partial<Machine["update"]>): Machine =>
 /** A new test is committed on the head the mutants came from, and on no other. */
 const commitsOnTheHead = ({next, cmds}: AnswersStep) => {
 	for (const cmd of cmds) {
-		if (cmd.type !== "answers_commit") continue;
-		if (next.phase === "idle") throw new Error("a commit from nothing");
+		if (cmd.type !== "answers_commit") {
+			continue;
+		}
+
+		if (next.phase === "idle") {
+			throw new Error("a commit from nothing");
+		}
+
 		expect(cmd.base).toBe(next.ask.head);
 	}
 };
@@ -128,16 +136,29 @@ const failuresAreNamed = ({prev, msg, next}: AnswersStep) => {
 	const failed =
 		(msg.type === "answers_taken_err" && prev.phase === "reading") ||
 		(msg.type === "answers_commit_err" && prev.phase === "committing");
-	if (!failed) return;
+
+	if (!failed) {
+		return;
+	}
+
 	expect(next).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "run_failed"}});
 };
 
 /** A restart sends again only what was in flight, and changes nothing. */
 const resumeRepeats = ({prev, msg, next, cmds}: AnswersStep) => {
-	if (msg.type !== "resume") return;
+	if (msg.type !== "resume") {
+		return;
+	}
+
 	expect(next).toEqual(prev);
-	if (prev.phase === "reading" || prev.phase === "committing") expect(cmds).toEqual([prev.asked]);
-	if (prev.phase === "idle" || prev.phase === "over") expect(cmds).toEqual([]);
+
+	if (prev.phase === "reading" || prev.phase === "committing") {
+		expect(cmds).toEqual([prev.asked]);
+	}
+
+	if (prev.phase === "idle" || prev.phase === "over") {
+		expect(cmds).toEqual([]);
+	}
 };
 
 describe("the answers machine's laws", () => {
@@ -150,7 +171,10 @@ describe("each law fails on a planted mistake", () => {
 	it("a commit on another head", () => {
 		const planted = plant({
 			answers_taken_ok: (s) => {
-				if (s.phase !== "reading") return [s, []];
+				if (s.phase !== "reading") {
+					return [s, []];
+				}
+
 				const asked = commitAnswers({ticket: "o/r#1", base: "elsewhere", files: [], intent: "i"});
 				return [
 					{

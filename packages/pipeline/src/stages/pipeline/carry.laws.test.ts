@@ -35,6 +35,7 @@ const NAMES = ["add", "sub", "div", "greet", "server", "build"] as const;
 const CODE_INDENTS = ["\t", "  ", "    "] as const;
 const YAML_INDENTS = ["  ", "    ", "   "] as const;
 type Lines = (i: string) => string[];
+
 const CODE: readonly Lines[] = [
 	(i) => [`${i}return a + b;`],
 	(i) => [`${i}const s = "hello " + a;`],
@@ -43,6 +44,7 @@ const CODE: readonly Lines[] = [
 	(i) => [`${i}let n = 0;`],
 	(i) => [`${i}return a;`],
 ];
+
 const YAML: readonly Lines[] = [
 	(i) => [`${i}port: 8080`],
 	(i) => [`${i}debug: false`],
@@ -51,6 +53,7 @@ const YAML: readonly Lines[] = [
 	(i) => [`${i}retries: 3`],
 	(i) => [`${i}host: "x y"`],
 ];
+
 /** Lines a PR or main may add, in the indent of the line they go under. */
 const NEW_CODE: readonly ((i: string) => string)[] = [
 	(i) => `${i}check(a);`,
@@ -59,6 +62,7 @@ const NEW_CODE: readonly ((i: string) => string)[] = [
 	() => "}",
 	() => "",
 ];
+
 const NEW_YAML: readonly ((i: string) => string)[] = [
 	(i) => `${i}retries: 3`,
 	(i) => `${i}name: "app one"`,
@@ -72,6 +76,7 @@ const NEW_YAML: readonly ((i: string) => string)[] = [
  * line, `between` and `trailing` do not. A mut that does not fit its line adds a comment.
  */
 type Mut = "word" | "number" | "append" | "reindent" | "inString" | "between" | "trailing";
+
 const MUTS: readonly Mut[] = [
 	"word",
 	"number",
@@ -81,6 +86,7 @@ const MUTS: readonly Mut[] = [
 	"between",
 	"trailing",
 ];
+
 const WS_ONLY: ReadonlySet<Mut> = new Set(["reindent", "inString", "between", "trailing"]);
 
 const lead = (t: string) => /^\s*/.exec(t)?.[0] ?? "";
@@ -89,6 +95,7 @@ const mutate = (l: Line, m: Mut): Line => {
 	const t = l.text;
 	const to = (text: string): Line => ({text, kind: l.kind});
 	const append = () => to(`${t}${l.kind === "code" ? " // edited" : " # edited"}`);
+
 	switch (m) {
 		case "word": {
 			const w = /[A-Za-z_]+/.exec(t);
@@ -103,7 +110,10 @@ const mutate = (l: Line, m: Mut): Line => {
 		case "append":
 			return append();
 		case "reindent": {
-			if (t.trim() === "") return append();
+			if (t.trim() === "") {
+				return append();
+			}
+
 			const ws = lead(t);
 			return to(`${ws.startsWith("\t") ? `    ${ws.slice(1)}` : `${ws}  `}${t.slice(ws.length)}`);
 		}
@@ -113,10 +123,17 @@ const mutate = (l: Line, m: Mut): Line => {
 		}
 		case "between": {
 			let quoted = false;
+
 			for (let k = lead(t).length; k < t.length; k += 1) {
-				if (t[k] === '"') quoted = !quoted;
-				if (t[k] === " " && !quoted) return to(`${t.slice(0, k)} ${t.slice(k)}`);
+				if (t[k] === '"') {
+					quoted = !quoted;
+				}
+
+				if (t[k] === " " && !quoted) {
+					return to(`${t.slice(0, k)} ${t.slice(k)}`);
+				}
 			}
+
 			return append();
 		}
 		case "trailing":
@@ -136,8 +153,14 @@ const spot = (o: Op) => (o.kind === "insert" ? `g${o.gap}` : `l${o.line}`);
  * it, or the same gap. 3 or more is outside git's 3 lines of context: "4 lines away" in part 3.
  */
 const between = (x: Op, y: Op): number => {
-	if (x.kind === "replace" && y.kind === "replace") return Math.abs(x.line - y.line) - 1;
-	if (x.kind === "insert" && y.kind === "insert") return Math.abs(x.gap - y.gap);
+	if (x.kind === "replace" && y.kind === "replace") {
+		return Math.abs(x.line - y.line) - 1;
+	}
+
+	if (x.kind === "insert" && y.kind === "insert") {
+		return Math.abs(x.gap - y.gap);
+	}
+
 	const r = x.kind === "replace" ? x : (y as Extract<Op, {kind: "replace"}>);
 	const s = x.kind === "insert" ? x : (y as Extract<Op, {kind: "insert"}>);
 	return r.line < s.gap ? s.gap - r.line - 1 : r.line - s.gap;
@@ -145,13 +168,24 @@ const between = (x: Op, y: Op): number => {
 
 const apply = (base: readonly Line[], ops: readonly Op[]): Line[] => {
 	const out: Line[] = [];
+
 	for (let g = 0; g <= base.length; g += 1) {
-		for (const o of ops) if (o.kind === "insert" && o.gap === g) out.push(...o.lines);
+		for (const o of ops) {
+			if (o.kind === "insert" && o.gap === g) {
+				out.push(...o.lines);
+			}
+		}
+
 		const line = base[g];
-		if (line === undefined) continue;
+
+		if (line === undefined) {
+			continue;
+		}
+
 		const r = ops.find((o) => o.kind === "replace" && o.line === g);
 		out.push(...(r?.kind === "replace" ? r.to : [line]));
 	}
+
 	return out;
 };
 
@@ -161,6 +195,7 @@ type BlockSpec = {kind: Kind; name: number; indent: number; body: number[]};
 type OpSpec = {op: "change" | "delete" | "insert"; at: number; mut: Mut; lines: number[]};
 type MainSpec = OpSpec & {aim: "far" | "touch" | "any"; keep: "pr" | "main" | "both"};
 type How = "same" | "split" | "tweak" | "extra" | "move" | "drop";
+
 type Spec = {
 	blocks: BlockSpec[];
 	pr: OpSpec[];
@@ -175,6 +210,7 @@ const opArb = fc.record({
 	mut: fc.constantFrom(...MUTS),
 	lines: fc.array(fc.nat({max: 4}), {minLength: 1, maxLength: 2}),
 });
+
 const mainArb = fc.record({
 	op: fc.constantFrom("change", "delete", "insert"),
 	at: fc.nat({max: 999}),
@@ -183,6 +219,7 @@ const mainArb = fc.record({
 	aim: fc.constantFrom("far", "touch", "any"),
 	keep: fc.constantFrom("pr", "main", "both"),
 });
+
 const blocksArb: fc.Arbitrary<BlockSpec[]> = fc.array(
 	fc.record({
 		kind: fc.constantFrom("code", "yaml"),
@@ -192,6 +229,7 @@ const blocksArb: fc.Arbitrary<BlockSpec[]> = fc.array(
 	}),
 	{minLength: 2, maxLength: 5},
 );
+
 const specArb: fc.Arbitrary<Spec> = fc.record({
 	blocks: blocksArb,
 	pr: fc.array(opArb, {minLength: 1, maxLength: 3}),
@@ -251,7 +289,9 @@ const choices = (base: readonly Line[], s: OpSpec): Op[] =>
 			}));
 
 const addOnce = (ops: Op[], o: Op | undefined) => {
-	if (o !== undefined && !ops.some((p) => spot(p) === spot(o))) ops.push(o);
+	if (o !== undefined && !ops.some((p) => spot(p) === spot(o))) {
+		ops.push(o);
+	}
 };
 
 /**
@@ -266,6 +306,7 @@ const mainOps = (
 ) => {
 	const out: Op[] = [];
 	const touchable = avoid.flatMap((o) => (o.kind === "replace" ? [o.line] : []));
+
 	for (const s of specs) {
 		if (s.aim === "touch" && touch && touchable.length > 0) {
 			const line = pick(touchable, s.at);
@@ -273,10 +314,12 @@ const mainOps = (
 			addOnce(out, {kind: "replace", line, to: [mutate(base[line] as Line, mut)]});
 			continue;
 		}
+
 		const all = choices(base, s);
 		const far = all.filter((c) => avoid.every((a) => between(a, c) >= 3));
 		addOnce(out, pick(s.aim === "far" && far.length > 0 ? far : all, s.at));
 	}
+
 	return out;
 };
 
@@ -292,6 +335,7 @@ const remakeOps = (
 			? {how: "same", ops: [...p]}
 			: {how: "extra", ops: [...p, pick(free, push.at)]};
 	};
+
 	switch (push.how) {
 		case "same":
 		case "split":
@@ -302,10 +346,17 @@ const remakeOps = (
 			const spots = p.flatMap((o, k) =>
 				(o.kind === "insert" ? o.lines : o.to).map((_, j) => [k, j] as const),
 			);
-			if (spots.length === 0) return extra();
+
+			if (spots.length === 0) {
+				return extra();
+			}
+
 			const [k, j] = pick(spots, push.at);
 			const ops = p.map((o, n) => {
-				if (n !== k) return o;
+				if (n !== k) {
+					return o;
+				}
+
 				const lines = (o.kind === "insert" ? o.lines : o.to).map((l, m) =>
 					m === j ? mutate(l, push.mut) : l,
 				);
@@ -315,12 +366,20 @@ const remakeOps = (
 		}
 		case "move": {
 			const moves = p.filter((o) => o.kind === "insert");
-			if (moves.length === 0) return extra();
+
+			if (moves.length === 0) {
+				return extra();
+			}
+
 			const m = pick(moves, push.at);
 			const gaps = Array.from({length: base.length + 1}, (_, g) => g).filter(
 				(g) => !p.some((o) => o.kind === "insert" && o.gap === g),
 			);
-			if (gaps.length === 0) return extra();
+
+			if (gaps.length === 0) {
+				return extra();
+			}
+
 			const gap = pick(gaps, Math.floor(push.at / moves.length));
 			return {how: "move" as How, ops: p.map((o) => (o === m ? {...m, gap} : o))};
 		}
@@ -331,7 +390,9 @@ const remakeOps = (
 
 const norm = (ls: readonly Line[]) =>
 	ls.map((l) => l.text.replace(/\s+/g, "")).filter((t) => t !== "");
+
 const strings = (t: string) => (t.match(/"[^"]*"/g) ?? []).join("|");
+
 const sameText = (x: readonly Line[], y: readonly Line[]) =>
 	x.length === y.length && x.every((l, k) => l.text === y[k]?.text);
 
@@ -341,7 +402,11 @@ const meaningfulWhitespace = (x: readonly Line[], y: readonly Line[]) => {
 	const ny = y.filter((l) => l.text.trim() !== "");
 	return nx.some((l, k) => {
 		const m = ny[k];
-		if (m === undefined || l.text === m.text) return false;
+
+		if (m === undefined || l.text === m.text) {
+			return false;
+		}
+
 		return (
 			(l.kind === "yaml" && lead(l.text) !== lead(m.text)) || strings(l.text) !== strings(m.text)
 		);
@@ -368,31 +433,44 @@ const replayOver = (
 	const touches = (x: Op) =>
 		x.kind === "replace" && p.some((y) => y.kind === "replace" && y.line === x.line);
 	const touched = e.filter(touches);
+
 	if (touched.length === 0) {
-		if (e.some((x) => p.some((y) => between(x, y) < 3))) return {kind: "near"};
+		if (e.some((x) => p.some((y) => between(x, y) < 3))) {
+			return {kind: "near"};
+		}
+
 		return {kind: "far", ops: [...e, ...p]};
 	}
+
 	const ops: Op[] = e.filter((x) => !touches(x));
 	let kept = keep;
+
 	for (const y of p) {
 		const x = touched.find(
 			(t) => t.kind === "replace" && y.kind === "replace" && t.line === y.line,
 		);
+
 		if (x === undefined || x.kind !== "replace" || y.kind !== "replace") {
 			ops.push(y);
 			continue;
 		}
-		if (sameText(x.to, y.to)) return {kind: "same_change"};
+
+		if (sameText(x.to, y.to)) {
+			return {kind: "same_change"};
+		}
+
 		// Keeping the other side drops the PR's change. Fine when that change had words in it.
 		const words = y.to.length === 0 || norm(y.to).join() !== norm([base[y.line] as Line]).join();
 		kept = keep === "main" && !words ? "pr" : keep;
 		const to = kept === "pr" ? y.to : kept === "main" ? x.to : [...y.to, ...x.to];
 		ops.push({kind: "replace", line: y.line, to});
 	}
+
 	return {kind: "touch", kept, ops};
 };
 
 type Label = "keep" | "drop" | "skip";
+
 type Built = {
 	base: Line[];
 	a: Line[];
@@ -407,7 +485,11 @@ type Built = {
 const build = (spec: Spec): Built => {
 	const base = spec.blocks.flatMap(blockLines);
 	const p: Op[] = [];
-	for (const s of spec.pr) addOnce(p, pick(choices(base, s), s.at));
+
+	for (const s of spec.pr) {
+		addOnce(p, pick(choices(base, s), s.at));
+	}
+
 	const a = apply(base, p);
 	const push = spec.push;
 	const out = (
@@ -429,6 +511,7 @@ const build = (spec: Spec): Built => {
 	if (push.kind === "rebase") {
 		const e = mainOps(base, push.main, p, true);
 		const o = replayOver(base, p, e, push.main[0]?.keep ?? "pr");
+
 		switch (o.kind) {
 			case "near":
 				return out([], e, "skip", "main edit 1 to 3 lines from a PR edit");
@@ -445,17 +528,29 @@ const build = (spec: Spec): Built => {
 	const e = mainOps(base, push.main, [...p, ...q.ops], false);
 	const rebased = e.length > 0 ? ", rebased" : "";
 	const why = `force push: ${q.how}${rebased}`;
-	if (e.some((x) => [...p, ...q.ops].some((y) => between(x, y) < 3)))
+
+	if (e.some((x) => [...p, ...q.ops].some((y) => between(x, y) < 3))) {
 		return out([], e, "skip", "main edit 1 to 3 lines from a PR edit");
+	}
+
 	const b = apply(base, [...e, ...q.ops]);
 	const split =
 		q.how === "split" ? apply(base, [...e, ...q.ops.slice(0, Math.floor(q.ops.length / 2))]) : null;
 	const before = a;
 	const after = apply(base, q.ops);
-	if (sameText(before, after)) return out(b, e, "keep", why, split);
-	if (norm(before).join("\n") !== norm(after).join("\n")) return out(b, e, "drop", `${why}, words`);
-	if (meaningfulWhitespace(before, after))
+
+	if (sameText(before, after)) {
+		return out(b, e, "keep", why, split);
+	}
+
+	if (norm(before).join("\n") !== norm(after).join("\n")) {
+		return out(b, e, "drop", `${why}, words`);
+	}
+
+	if (meaningfulWhitespace(before, after)) {
 		return out(b, e, "drop", `${why}, whitespace in YAML indent or a string`);
+	}
+
 	return out([], e, "skip", "whitespace only, where it means nothing to the program");
 };
 
@@ -489,6 +584,7 @@ const MOVED_LINE: Spec = {
 		main: [],
 	},
 };
+
 const YAML_REINDENT: Spec = {
 	blocks: [
 		{kind: "yaml", name: 1, indent: 0, body: [0, 1]},
@@ -602,12 +698,22 @@ describe("carry, over 165's generated cases, on real git", () => {
 	/** What breaks the law in one case, or nothing. */
 	const broken = async (spec: Spec, answer: Carry, ids: Ids): Promise<string | null> => {
 		const c = build(spec);
-		if (c.label === "skip") return null;
+
+		if (c.label === "skip") {
+			return null;
+		}
+
 		const said = await answerOf(c, answer, ids);
-		if (c.label === "keep")
+
+		if (c.label === "keep") {
 			return said._tag === "stale" ? `${c.why}: built the same, and carry said stale` : null;
+		}
+
 		// A moved line keeps its -U0 id, so a glance may look at it. Anything else changed is stale.
-		if (c.why.includes("move")) return said._tag === "kept" ? `${c.why}: carry kept it` : null;
+		if (c.why.includes("move")) {
+			return said._tag === "kept" ? `${c.why}: carry kept it` : null;
+		}
+
 		return said._tag === "stale" ? null : `${c.why}: built changed, and carry said ${said._tag}`;
 	};
 

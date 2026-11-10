@@ -35,7 +35,10 @@ const heardEvents = (runId: string) => {
 
 	/** A model call open from here, if none is: the stretch to the next message. */
 	const think = (at: number): AgentEvent<string | null>[] => {
-		if (thinking) return [];
+		if (thinking) {
+			return [];
+		}
+
 		turn += 1;
 		return [{...head(at), type: "BrainStarted", turn, purpose: "turn", model: null, payload: null}];
 	};
@@ -46,9 +49,16 @@ const heardEvents = (runId: string) => {
 		output: string | null,
 		at: number,
 	): AgentEvent<string | null>[] => {
-		if (!open.has(id)) return [];
+		if (!open.has(id)) {
+			return [];
+		}
+
 		open.delete(id);
-		if (!failed) return [{...head(at), type: "ToolSettled", callId: id, result: output}];
+
+		if (!failed) {
+			return [{...head(at), type: "ToolSettled", callId: id, result: output}];
+		}
+
 		// tea writes a failure's `reason` as the span's status message, which a record keeps forever
 		// on the span. So the reason is a fixed word, and what came back rides beside it, in the output
 		// a record keeps apart, where a person can delete it.
@@ -76,6 +86,7 @@ const heardEvents = (runId: string) => {
 			}
 			case "tool": {
 				const started: AgentEvent<string | null>[] = [];
+
 				if (!names.has(heard.id)) {
 					const name = NAME.test(heard.title) ? heard.title : "command";
 					const args = {title: heard.title};
@@ -84,6 +95,7 @@ const heardEvents = (runId: string) => {
 					calls.push({callId: heard.id, name, args});
 					started.push({...head(at), type: "ToolStarted", callId: heard.id, name, args});
 				}
+
 				const done = heard.status === "completed" || heard.status === "failed";
 				return [
 					...started,
@@ -139,11 +151,17 @@ export const heardTrace = <A, E, R>(
 	Stream.unwrap(
 		Effect.gen(function* () {
 			const spans = yield* agentTrace<string | null>(name, {content});
-			if (spans === null) return run;
+
+			if (spans === null) {
+				return run;
+			}
+
 			const clock = yield* Clock.Clock;
 			const fold = heardEvents(turn.session);
 			const draw = (events: readonly AgentEvent<string | null>[]) => {
-				for (const event of events) spans.onEvent(event);
+				for (const event of events) {
+					spans.onEvent(event);
+				}
 			};
 			draw(fold.start(clock.currentTimeMillisUnsafe(), turn.model, turn.prompt));
 			return run.pipe(

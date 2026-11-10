@@ -68,6 +68,7 @@ export const KILLED_ALL: Ran = {
 	killed: 10,
 	survived: [],
 };
+
 export const ONE_SURVIVED: Ran = {...KILLED_ALL, killed: 9, survived: [SURVIVED]};
 
 /** One run of the repo's own tests: green or red, each failing test by name, and the output's last lines. */
@@ -116,6 +117,7 @@ export const fakes = (script: Script) =>
 	);
 
 type AnyMsg = {readonly type: string; readonly [field: string]: unknown};
+
 const step = (s: Mutation, msg: AnyMsg) =>
 	applyCell<Mutation, AnyMsg, MutationCmd>(mutation, s, msg);
 
@@ -136,7 +138,11 @@ function answer(cmd: MutationCmd, layer: Layer.Layer<MutationScope | MutationRun
 		}
 	};
 	const exit = Effect.runSyncExit(run().pipe(Effect.provide(layer)));
-	if (Exit.isSuccess(exit)) return {type: `${cmd.type}_ok`, cmd, value: exit.value};
+
+	if (Exit.isSuccess(exit)) {
+		return {type: `${cmd.type}_ok`, cmd, value: exit.value};
+	}
+
 	const error = Exit.findErrorOption(exit);
 	return {
 		type: `${cmd.type}_err`,
@@ -151,17 +157,28 @@ export function drive(script: Script, ask: MutationAsk = ASK) {
 	const cmds: MutationCmd[] = [];
 	let restarted = false;
 	let [s, out] = step({phase: "idle"}, {type: "start", ask});
+
 	for (let n = 0; n < 20 && s.phase !== "over"; n++) {
 		cmds.push(...out);
+
 		if (!restarted && script.restartAt === s.phase) {
 			restarted = true;
 			[s, out] = step(s, {type: "resume"});
 			continue;
 		}
+
 		const cmd = out[0];
-		if (cmd === undefined) throw new Error(`nothing in flight in ${s.phase}`);
+
+		if (cmd === undefined) {
+			throw new Error(`nothing in flight in ${s.phase}`);
+		}
+
 		[s, out] = step(s, answer(cmd, layer));
 	}
-	if (s.phase !== "over") throw new Error(`still ${s.phase}`);
+
+	if (s.phase !== "over") {
+		throw new Error(`still ${s.phase}`);
+	}
+
 	return {over: s, cmds};
 }

@@ -35,6 +35,7 @@ import {appPrograms, type Placed, type Runs, startTsh, tshList, type WindowScree
 
 /** How many times tsh was told `signal`: one Ctrl-C is one interrupt, whichever path it took. */
 const signals = vi.hoisted(() => ({told: 0}));
+
 const lineGate = vi.hoisted(() => ({
 	wait: undefined as Effect.Effect<void> | undefined,
 	entered: false,
@@ -44,12 +45,18 @@ const lineGate = vi.hoisted(() => ({
 vi.mock("@kampus/fabrika-old", async (importOriginal) => {
 	const real = await importOriginal<typeof import("@kampus/fabrika-old")>();
 	const tell: typeof real.tell = (run, name, value) => {
-		if (name === "signal") signals.told += 1;
+		if (name === "signal") {
+			signals.told += 1;
+		}
+
 		return real.tell(run, name, value);
 	};
 	const offer: typeof real.offer = (run, name, value) =>
 		Effect.suspend(() => {
-			if (name !== "line" || lineGate.wait === undefined) return real.offer(run, name, value);
+			if (name !== "line" || lineGate.wait === undefined) {
+				return real.offer(run, name, value);
+			}
+
 			lineGate.entered = true;
 			return lineGate.wait.pipe(Effect.andThen(real.offer(run, name, value)));
 		});
@@ -102,7 +109,11 @@ const session = (
 			line: (runs) => seen.push({kind: "line", runs}),
 			ended: (run) => {
 				const screen = screens.get(run);
-				if (screen === undefined) return;
+
+				if (screen === undefined) {
+					return;
+				}
+
 				screens.delete(run);
 				seen.push({kind: "close", run});
 				// As a real view does: taking it away says `closed`, whoever took it away.
@@ -131,7 +142,9 @@ const session = (
 		let bytes = "";
 		host.terminal.show((m) => {
 			// The plan's status and reply regions share the terminal's port: only `write` is bytes.
-			if (m.type === "write") bytes += m.data;
+			if (m.type === "write") {
+				bytes += m.data;
+			}
 		});
 		const rows = () => gridOf(bytes, 80, 1000).rows;
 		/** Wait until `check` holds, for at most five seconds. */
@@ -139,9 +152,14 @@ const session = (
 			Effect.gen(function* () {
 				for (let i = 0; i < 1000; i += 1) {
 					const got = check();
-					if (got !== undefined) return got;
+
+					if (got !== undefined) {
+						return got;
+					}
+
 					yield* Effect.sleep("5 millis");
 				}
+
 				return yield* Effect.die(`waited for ${what}; the terminal shows:\n${rows().join("\n")}`);
 			});
 		/** Wait until the terminal's last row is the prompt, after `n` prompts in all. */
@@ -201,7 +219,10 @@ const seedSeven = (ledger: Ledger["Service"]) =>
 			data: {type: "filed", title: SEVEN_TITLE, body: SEVEN_BODY},
 		});
 		const tickets = yield* Tickets;
-		for (const e of SEVEN.slice(1)) yield* tickets.write(7, `w/${e.pos}`, e.fact as CodeFact);
+
+		for (const e of SEVEN.slice(1)) {
+			yield* tickets.write(7, `w/${e.pos}`, e.fact as CodeFact);
+		}
 	}).pipe(Effect.provide(ticketsOnLedger(LANE)), Effect.provide(Layer.succeed(Ledger, ledger)));
 
 const go = <A, E>(test: Effect.Effect<A, E, FileSystem.FileSystem>) =>
@@ -219,8 +240,10 @@ describe("the terminal", () => {
 		const logs: Record<string, unknown>[] = [];
 		const caught = Logger.make((o) => {
 			const row = Logger.formatStructured.log(o);
-			if (row.message === "turn_began")
+
+			if (row.message === "turn_began") {
 				logs.push({at: Date.parse(row.timestamp), ...row.annotations});
+			}
 		});
 		const text = "  @scout why #7? don't cut a | b &";
 		await go(
@@ -299,11 +322,15 @@ describe("the terminal", () => {
 				// One page's terminal, shown the screen on its first port, then again on the next.
 				let page = "";
 				const first = s.host.terminal.show((m) => {
-					if (m.type === "write") page += m.data;
+					if (m.type === "write") {
+						page += m.data;
+					}
 				});
 				first();
 				s.host.terminal.show((m) => {
-					if (m.type === "write") page += m.data;
+					if (m.type === "write") {
+						page += m.data;
+					}
 				});
 				return gridOf(page, 80, 1000).rows;
 			}).pipe(Effect.scoped),
@@ -728,11 +755,21 @@ describe("a program's window", () => {
 				s.type("ticket --ticket 7 | trace\r");
 				yield* s.opened(2);
 				const view = s.seen.find((x) => x.kind === "open" && x.program === "trace");
-				if (view?.kind !== "open") return yield* Effect.die("trace did not open");
+
+				if (view?.kind !== "open") {
+					return yield* Effect.die("trace did not open");
+				}
+
 				yield* s.until("trace shows ticket 7's lane", () =>
 					mentions(s.seen, view.run, SEVEN_TRACE),
 				);
-				for (const o of s.seen) if (o.kind === "open") s.window(o.run).closed();
+
+				for (const o of s.seen) {
+					if (o.kind === "open") {
+						s.window(o.run).closed();
+					}
+				}
+
 				yield* s.prompts(2);
 			}).pipe(Effect.scoped),
 		);
@@ -754,7 +791,13 @@ describe("a program's window", () => {
 				yield* s.until("trace shows ticket 7's lane", () =>
 					mentions(s.seen, find("trace"), SEVEN_TRACE),
 				);
-				for (const o of s.seen) if (o.kind === "open") s.window(o.run).closed();
+
+				for (const o of s.seen) {
+					if (o.kind === "open") {
+						s.window(o.run).closed();
+					}
+				}
+
 				yield* s.prompts(2);
 			}).pipe(Effect.scoped),
 		);
@@ -766,7 +809,11 @@ describe("a program's window", () => {
 				s.type("seq --to 3 | tally | trace\r");
 				yield* s.opened(1);
 				const open = s.seen.find((x) => x.kind === "open");
-				if (open?.kind !== "open") return yield* Effect.die("trace did not open");
+
+				if (open?.kind !== "open") {
+					return yield* Effect.die("trace did not open");
+				}
+
 				const read = yield* s.until("trace read its job's record", () =>
 					s.seen.find(
 						(x) =>
@@ -800,7 +847,11 @@ describe("what a pipe can feed", () => {
 	const list = tshList(apps);
 	const takes = (name: string) => {
 		const entry = apps.find((e) => e.program.name === name);
-		if (entry === undefined) throw new Error(`no program ${name}`);
+
+		if (entry === undefined) {
+			throw new Error(`no program ${name}`);
+		}
+
 		return Shell.fedBy(entry.program, list);
 	};
 
@@ -810,16 +861,26 @@ describe("what a pipe can feed", () => {
 		// `any` takes whatever no typed input does (`anyInput`): a pipe feeds it from anything.
 		// Ticket 141: trace takes a ticket too, and its window's inputs are no pipe's.
 		expect(takes("trace")).toEqual(expect.arrayContaining(["ticket", "any"]));
-		for (const own of ["toggle", "choose", "quit", "seek", "step"])
+
+		for (const own of ["toggle", "choose", "quit", "seek", "step"]) {
 			expect(takes("trace")).not.toContain(own);
+		}
 	});
 
 	/** The input of trace a line feeds, as the shell's fit check wires it. */
 	const fedInto = (text: string, program: string) => {
 		const parsed = Shell.parse(text);
-		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error(text);
+
+		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") {
+			throw new Error(text);
+		}
+
 		const checked = Shell.check(parsed.statements[0].pipeline, Shell.programList(list), text);
-		if (checked.kind !== "line") throw new Error(`${text}: ${JSON.stringify(checked)}`);
+
+		if (checked.kind !== "line") {
+			throw new Error(`${text}: ${JSON.stringify(checked)}`);
+		}
+
 		return checked.line.stages.find((stage) => stage.entry.program.name === program)?.fed;
 	};
 
@@ -840,11 +901,20 @@ describe("what a pipe can feed", () => {
 	it("is what a line wires each stage's pipe into", () => {
 		const text = "tracker | ticket | trace";
 		const parsed = Shell.parse(text);
-		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error(text);
+
+		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") {
+			throw new Error(text);
+		}
+
 		const checked = Shell.check(parsed.statements[0].pipeline, Shell.programList(list), text);
-		if (checked.kind !== "line") throw new Error(text);
-		for (const stage of checked.line.stages.slice(1))
+
+		if (checked.kind !== "line") {
+			throw new Error(text);
+		}
+
+		for (const stage of checked.line.stages.slice(1)) {
 			expect(takes(stage.entry.program.name)).toContain(stage.fed);
+		}
 	});
 });
 
@@ -943,8 +1013,10 @@ describe("the desk's words", () => {
 						return null;
 					}),
 				});
+
 				for (const [i, word] of words.entries()) {
 					s.type(`${word}\r`);
+
 					if (word === "keys") {
 						const open = yield* s.opened();
 						editors.push(open.program);
@@ -952,6 +1024,7 @@ describe("the desk's words", () => {
 						s.window(open.run).closed();
 						yield* s.closed(open.run);
 					}
+
 					yield* s.prompts(i + 2);
 				}
 			}).pipe(Effect.scoped),
@@ -1117,8 +1190,11 @@ describe("an agent's tsh: what the mutation step found untested", () => {
 				const s = yield* session({author: CLAUDE});
 				yield* s.prompts(1);
 				const refused = [];
-				for (const text of ["", "a\nb", "x".repeat(4097), "\x1b[2J"])
+
+				for (const text of ["", "a\nb", "x".repeat(4097), "\x1b[2J"]) {
 					refused.push(yield* s.host.line(text).pipe(Effect.flip));
+				}
+
 				const before = s.rows().filter((r) => r.startsWith("$ "));
 				const jobs = s.jobs.table.getState().jobs.length;
 				const longest = yield* s.host.line("x".repeat(4096));

@@ -62,7 +62,10 @@ export function repoRulesOf(found: {
 		["AGENTS.md", found.agentsMd?.text],
 	];
 	return texts.flatMap(([file, text]) => {
-		if (text === null || text === undefined || text.trim() === "") return [];
+		if (text === null || text === undefined || text.trim() === "") {
+			return [];
+		}
+
 		return [
 			{
 				file,

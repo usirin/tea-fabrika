@@ -89,6 +89,7 @@ export type AppendResult =
 	| {ok: false; why: "denied"}
 	/** Kafka's UNKNOWN_TOPIC_OR_PARTITION: under no registered name. */
 	| {ok: false; why: "unknown"};
+
 export type ClaimResult =
 	| {ok: true; fence: number; rev: number; expiresAt: number; incarnation: number}
 	| {ok: false; why: "held"; holder: string; expiresAt: number}
@@ -97,15 +98,18 @@ export type ClaimResult =
 	| {ok: false; why: "unknown"}
 	/** The name exited (at the `exited` event's `pos`) and waits for its parent to restart it. */
 	| {ok: false; why: "down"; pos: number};
+
 export type RenewResult =
 	/** `written`: a `lease_resumed`, when the renew came after the lease's `lease_expired`. */
 	| {ok: true; expiresAt: number; written: readonly Written[]}
 	/** A newer claim took the name, or it exited: the fence is not its newest any more. */
 	| {ok: false; why: "lost"}
 	| {ok: false; why: "stop"};
+
 export type RegisterResult =
 	/** `created: false`: it was registered already; nothing was written. */
 	{ok: true; created: boolean; pos: number; rev: number} | {ok: false; why: "denied"};
+
 export type CancelResult = {ok: true; pos: number; rev: number} | {ok: false; why: "unknown"};
 
 /**
@@ -133,25 +137,40 @@ export type Limits = {usd?: number; tokens?: number; wallMs?: number; children?:
 export type LimitKind = "usd" | "tokens" | "wall" | "children";
 /** How a run its limit ended exits: Kubernetes' `OOMKilled` and `DeadlineExceeded`, one per kind. */
 export type LimitReason = "limit:usd" | "limit:tokens" | "limit:wall";
+
 export const isLimitReason = (r: string): r is LimitReason =>
 	r === "limit:usd" || r === "limit:tokens" || r === "limit:wall";
+
 /** A limit hit: which kind, whose (`at`), what was used (with what was asked, for a refusal) and its max. */
 export type Over = {kind: LimitKind; at: string; used: number; max: number};
 
 /** Why a set of limits cannot be kept, or null. */
 export const limitsRefusal = (l: Limits): string | null => {
 	const whole = (v: number | undefined) => v === undefined || (Number.isInteger(v) && v >= 0);
-	if (l.usd !== undefined && !(Number.isFinite(l.usd) && l.usd >= 0))
+
+	if (l.usd !== undefined && !(Number.isFinite(l.usd) && l.usd >= 0)) {
 		return "usd is a number, 0 or more";
-	if (!whole(l.tokens)) return "tokens is a whole number, 0 or more";
-	if (l.wallMs !== undefined && !(Number.isInteger(l.wallMs) && l.wallMs > 0))
+	}
+
+	if (!whole(l.tokens)) {
+		return "tokens is a whole number, 0 or more";
+	}
+
+	if (l.wallMs !== undefined && !(Number.isInteger(l.wallMs) && l.wallMs > 0)) {
 		return "wallMs is a whole number, more than 0";
-	if (!whole(l.children)) return "children is a whole number, 0 or more";
+	}
+
+	if (!whole(l.children)) {
+		return "children is a whole number, 0 or more";
+	}
+
 	return null;
 };
+
 const costOk = (c: Cost): boolean =>
 	(c.usd === undefined || (Number.isFinite(c.usd) && c.usd >= 0)) &&
 	(c.tokens === undefined || (Number.isInteger(c.tokens) && c.tokens >= 0));
+
 /** Dollars are kept as whole micro-dollars, so sums never drift. */
 export const micros = (usd: number | undefined): number => Math.round((usd ?? 0) * 1_000_000);
 
@@ -163,15 +182,18 @@ export type HoldResult =
 	| {ok: false; why: "denied"}
 	/** It does not fit under `over.at`'s limit: nothing is held, and `over.at` has ended. */
 	| {ok: false; why: "limit"; over: Over; written: readonly Written[]};
+
 export type ChargeResult =
 	/** `over`: the charge crossed this limit, and its name has ended. */
 	| {ok: true; dup: boolean; over: Over | null; written: readonly Written[]}
 	| {ok: false; why: "fenced"}
 	| {ok: false; why: "denied"};
+
 export type SetLimitsResult =
 	| {ok: true; pos: number; rev: number; written: readonly Written[]}
 	| {ok: false; why: "unknown"}
 	| {ok: false; why: "denied"};
+
 /** What a name has used and may use: `used.usd` in dollars, holds included. */
 export type Usage = {
 	name: string;
@@ -183,6 +205,7 @@ export type Usage = {
 	since: number;
 	deadline: number | null;
 };
+
 /** OTP's two exit signals a parent sends a child: `shutdown` (trappable) and `kill` (not). */
 export type Signal = "shutdown" | "kill";
 
@@ -193,11 +216,14 @@ export type ExitResult =
 	/** `dup`: this fence's exit had landed already, and nothing was written. */
 	| {ok: true; pos: number; incarnation: number; dup: boolean; written: readonly Written[]}
 	| {ok: false; why: "fenced"};
+
 export type MonitorResult =
 	/** `incarnation: null`: the name was not running, and a DOWN `noproc` went to the inbox. */
 	{ok: true; incarnation: number | null; written: readonly Written[]} | {ok: false; why: "fenced"};
+
 export type LinkResult = {ok: true} | {ok: false; why: "fenced"} | {ok: false; why: "noproc"};
 export type FlagResult = {ok: true} | {ok: false; why: "fenced"};
+
 export type StartResult =
 	/** `started: false`: it was up already (or is down past `after`, and its EXIT is on the way). */
 	| {ok: true; incarnation: number; started: boolean; written: readonly Written[]}
@@ -315,10 +341,15 @@ export function migrate(db: Db): number {
 	return db.tx(() => {
 		db.all("CREATE TABLE IF NOT EXISTS migrations (id INTEGER PRIMARY KEY, at INTEGER NOT NULL)");
 		const last = num(db.all("SELECT coalesce(max(id), 0) AS id FROM migrations")[0]?.id);
+
 		for (let id = last + 1; id <= migrations.length; id++) {
-			for (const stmt of migrations[id - 1] ?? []) db.all(stmt);
+			for (const stmt of migrations[id - 1] ?? []) {
+				db.all(stmt);
+			}
+
 			db.all("INSERT INTO migrations (id, at) VALUES (?, ?)", id, Date.now());
 		}
+
 		return migrations.length;
 	});
 }
@@ -501,6 +532,7 @@ export const PLANTED = {
 	"wall time counts from the last restart (102)": {...RULES, wallFromStart: false},
 	"a name a limit ended can be restarted (102)": {...RULES, limitEndIsFinal: false},
 } as const satisfies Record<string, Rules>;
+
 export type Planted = keyof typeof PLANTED;
 
 const marks = (xs: readonly string[]) => xs.map(() => "?").join(", ");
@@ -517,8 +549,14 @@ const ownerOf = (db: Db, stream: string): string | null => {
 
 /** Is `stream` an open door: exactly a registered name's inbox (or, without names, any inbox)? */
 const isOpenInbox = (db: Db, rules: Rules, stream: string): boolean => {
-	if (!isInbox(stream)) return false;
-	if (rules.registration === "first-claim" || !rules.inboxNeedsName) return true;
+	if (!isInbox(stream)) {
+		return false;
+	}
+
+	if (rules.registration === "first-claim" || !rules.inboxNeedsName) {
+		return true;
+	}
+
 	return ownerOf(db, stream) === stream.slice(0, -"/inbox".length);
 };
 
@@ -548,19 +586,34 @@ const fencedName = (db: Db, fence: number): string | null => {
 
 /** May the claim this fence names write `stream`? */
 const fenceHolds = (db: Db, rules: Rules, stream: string, fence: number): boolean => {
-	if (rules.reach === "inbox-ignores-fence" && isOpenInbox(db, rules, stream)) return true;
+	if (rules.reach === "inbox-ignores-fence" && isOpenInbox(db, rules, stream)) {
+		return true;
+	}
+
 	const name = fencedName(db, fence);
-	if (name === null) return false;
+
+	if (name === null) {
+		return false;
+	}
+
 	const own = stream === name || stream.startsWith(`${name}/`);
 	return own || (rules.reach === "name-and-inboxes" && isOpenInbox(db, rules, stream));
 };
 
 /** With no fence: is `stream` written only by its owner's lease? */
 const guarded = (db: Db, rules: Rules, now: number, stream: string, owner: string | null) => {
-	if (rules.guard === "off" || owner === null) return false;
-	if (rules.inboxOpen && isOpenInbox(db, rules, stream)) return false;
-	if (rules.guard === "live")
+	if (rules.guard === "off" || owner === null) {
+		return false;
+	}
+
+	if (rules.inboxOpen && isOpenInbox(db, rules, stream)) {
+		return false;
+	}
+
+	if (rules.guard === "live") {
 		return !!db.all("SELECT 1 FROM leases WHERE stream = ? AND expires_at > ?", owner, now)[0];
+	}
+
 	return true;
 };
 
@@ -585,7 +638,11 @@ const write = (
 ): AppendResult => {
 	const id = event.id ?? null;
 	const repeat = seen(db, stream, id);
-	if (repeat) return {ok: true, pos: num(repeat.pos), rev: num(repeat.rev), dup: true};
+
+	if (repeat) {
+		return {ok: true, pos: num(repeat.pos), rev: num(repeat.rev), dup: true};
+	}
+
 	const data = JSON.stringify(event.data ?? {});
 	const row = db.all(
 		insert,
@@ -597,7 +654,11 @@ const write = (
 		data,
 		id,
 	)[0];
-	if (row) return {ok: true, pos: num(row.pos), rev: num(row.rev), dup: false};
+
+	if (row) {
+		return {ok: true, pos: num(row.pos), rev: num(row.rev), dup: false};
+	}
+
 	return {ok: false, why: "stale", rev: revOf(db, stream)};
 };
 
@@ -611,16 +672,28 @@ export const registerWith =
 	(rules: Rules) =>
 	(db: Db, now: number, name: string, writer: string): RegisterResult =>
 		db.tx(() => {
-			if (!isNameShape(name)) return {ok: false, why: "denied"};
+			if (!isNameShape(name)) {
+				return {ok: false, why: "denied"};
+			}
+
 			const known = db.all("SELECT pos FROM names WHERE name = ?", name)[0];
+
 			if (known && rules.registerOnce) {
 				const pos = num(known.pos);
 				const rev = num(db.all("SELECT rev FROM events WHERE pos = ?", pos)[0]?.rev);
 				return {ok: true, created: false, pos, rev};
 			}
-			if (!known && rules.nestGuard && nested(db, name)) return {ok: false, why: "denied"};
+
+			if (!known && rules.nestGuard && nested(db, name)) {
+				return {ok: false, why: "denied"};
+			}
+
 			const res = write(db, now, name, "any", {kind: "registered", writer});
-			if (!res.ok) return {ok: false, why: "denied"};
+
+			if (!res.ok) {
+				return {ok: false, why: "denied"};
+			}
+
 			db.all("INSERT OR IGNORE INTO names (name, pos, at) VALUES (?, ?, ?)", name, res.pos, now);
 			return {ok: true, created: true, pos: res.pos, rev: res.rev};
 		});
@@ -650,17 +723,26 @@ export type ImportResult = {ok: true; pos: number} | {ok: false; why: string};
  * `claimed` would tell this ledger about a process it never ran.
  */
 export const importEvent = (db: Db, e: Moving): ImportResult => {
-	if (e.kind !== "registered" && LEDGER_KINDS.includes(e.kind))
+	if (e.kind !== "registered" && LEDGER_KINDS.includes(e.kind)) {
 		return {ok: false, why: `${e.kind} is the ledger's own word, and never moves`};
-	if (e.rev !== revOf(db, e.stream) + 1)
+	}
+
+	if (e.rev !== revOf(db, e.stream) + 1) {
 		return {ok: false, why: `${e.stream} rev ${e.rev} does not follow rev ${revOf(db, e.stream)}`};
+	}
+
 	if (e.kind === "registered") {
-		if (e.rev !== 1 || !isNameShape(e.stream) || nested(db, e.stream))
+		if (e.rev !== 1 || !isNameShape(e.stream) || nested(db, e.stream)) {
 			return {ok: false, why: `${e.stream} is not a name this ledger can register`};
-	} else if (ownerOf(db, e.stream) === null)
+		}
+	} else if (ownerOf(db, e.stream) === null) {
 		return {ok: false, why: `${e.stream} sits under no name the move registered`};
-	if (seen(db, e.stream, e.id) !== null)
+	}
+
+	if (seen(db, e.stream, e.id) !== null) {
 		return {ok: false, why: `${e.stream} has a message ${e.id} already`};
+	}
+
 	const row = db.all(
 		"INSERT INTO events (stream, rev, writer, kind, at, data, id) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING pos",
 		e.stream,
@@ -672,8 +754,11 @@ export const importEvent = (db: Db, e: Moving): ImportResult => {
 		e.id,
 	)[0];
 	const pos = num(row?.pos);
-	if (e.kind === "registered")
+
+	if (e.kind === "registered") {
 		db.all("INSERT INTO names (name, pos, at) VALUES (?, ?, ?)", e.stream, pos, e.at);
+	}
+
 	return {ok: true, pos};
 };
 
@@ -690,22 +775,36 @@ export const appendWith =
 		db.tx(() => {
 			if (!rules.fenceFirst) {
 				const repeat = seen(db, stream, event.id ?? null);
-				if (repeat) return {ok: true, pos: num(repeat.pos), rev: num(repeat.rev), dup: true};
+
+				if (repeat) {
+					return {ok: true, pos: num(repeat.pos), rev: num(repeat.rev), dup: true};
+				}
 			}
+
 			const owner = ownerOf(db, stream);
+
 			// Deny by default: nothing lands under a name nobody registered.
-			if (owner === null && rules.registration === "required" && !isOpenInbox(db, rules, stream))
+			if (owner === null && rules.registration === "required" && !isOpenInbox(db, rules, stream)) {
 				return {ok: false, why: "unknown"};
+			}
+
 			// Who may write: the newest fence of a name allowed here, or, with no fence, a stream no
 			// registered name guards. A writer whose fence a newer claim replaced hears `fenced` even
 			// for a repeat of a write that landed while it held it.
-			if (fence !== null && !fenceHolds(db, rules, stream, fence))
+			if (fence !== null && !fenceHolds(db, rules, stream, fence)) {
 				return {ok: false, why: "fenced"};
-			if (fence === null && guarded(db, rules, now, stream, owner))
+			}
+
+			if (fence === null && guarded(db, rules, now, stream, owner)) {
 				return {ok: false, why: "denied"};
+			}
+
 			// 99: only the ledger says DOWN, EXIT or exited. An inbox is open to anyone, so a forged
 			// DOWN would tell a watcher a live name died.
-			if (rules.ledgerWordsReserved && isLedgerWord(event)) return {ok: false, why: "denied"};
+			if (rules.ledgerWordsReserved && isLedgerWord(event)) {
+				return {ok: false, why: "denied"};
+			}
+
 			return write(db, now, stream, expected, event);
 		});
 
@@ -730,6 +829,7 @@ export const LEDGER_KINDS: readonly string[] = [
 	"limits",
 	"limit",
 ];
+
 export const isLedgerWord = (e: Event): boolean =>
 	e.writer === "ledger" || LEDGER_KINDS.includes(e.kind);
 
@@ -746,28 +846,44 @@ export const claimWith =
 	): ClaimResult =>
 		db.tx(() => {
 			const registered = !!db.all("SELECT 1 FROM names WHERE name = ?", name)[0];
+
 			if (!registered) {
 				// A lease's fence writes everything under its name: no lease inside or around another name.
-				if (rules.nestGuard && nested(db, name)) return {ok: false, why: "denied"};
-				if (rules.registration === "required" && !rules.claimRegisters)
+				if (rules.nestGuard && nested(db, name)) {
+					return {ok: false, why: "denied"};
+				}
+
+				if (rules.registration === "required" && !rules.claimRegisters) {
 					return {ok: false, why: "unknown"};
+				}
 			}
+
 			const proc = registered ? processOf(db, name) : null;
-			if (proc !== null && proc.down !== 0 && rules.downRefusesClaim)
+
+			if (proc !== null && proc.down !== 0 && rules.downRefusesClaim) {
 				return {ok: false, why: "down", pos: proc.down};
+			}
+
 			const live = db.all(
 				"SELECT holder, expires_at FROM leases WHERE stream = ? AND expires_at > ?",
 				name,
 				now,
 			)[0];
-			if (live)
+
+			if (live) {
 				return {ok: false, why: "held", holder: str(live.holder), expiresAt: num(live.expires_at)};
+			}
+
 			// The fence this claim ends: the newest one, live or past its end.
 			const old = db.all("SELECT fence FROM names WHERE name = ?", name)[0]?.fence ?? null;
 			const expiresAt = now + ttlMs;
 			const data = {holder, ttlMs, expiresAt, replaces: old === null ? null : num(old)};
 			const res = write(db, now, name, expectedRev, {kind: "claimed", writer: holder, data});
-			if (!res.ok) return {ok: false, why: "stale", rev: revOf(db, name)};
+
+			if (!res.ok) {
+				return {ok: false, why: "stale", rev: revOf(db, name)};
+			}
+
 			const fence = res.pos;
 			// Replaces a lease row only if it has run out (lazy expiry, no alarm needed).
 			db.all(
@@ -780,8 +896,11 @@ export const claimWith =
 				fence,
 				now,
 			);
-			if (!registered)
+
+			if (!registered) {
 				db.all("INSERT OR IGNORE INTO names (name, pos, at) VALUES (?, ?, ?)", name, fence, now);
+			}
+
 			// 151: from here on only this fence writes under the name, until the next claim.
 			db.all("UPDATE names SET fence = ? WHERE name = ?", fence, name);
 			scheduleExpiry(db, name, expiresAt + graceMs);
@@ -806,12 +925,19 @@ export function renew(
 	graceMs: number,
 ): RenewResult {
 	return db.tx(() => {
-		if (fencedName(db, fence) !== name) return {ok: false, why: "lost"};
+		if (fencedName(db, fence) !== name) {
+			return {ok: false, why: "lost"};
+		}
+
 		const expiresAt = now + ttlMs;
 		const lease = db.all("SELECT stop FROM leases WHERE stream = ? AND fence = ?", name, fence)[0];
 		const written: Written[] = [];
+
 		if (lease) {
-			if (num(lease.stop) === 1) return {ok: false, why: "stop"};
+			if (num(lease.stop) === 1) {
+				return {ok: false, why: "stop"};
+			}
+
 			db.all(
 				"UPDATE leases SET expires_at = ? WHERE stream = ? AND fence = ?",
 				expiresAt,
@@ -825,9 +951,16 @@ export function renew(
 				name,
 				fence,
 			)[0];
-			if (cancelled) return {ok: false, why: "stop"};
+
+			if (cancelled) {
+				return {ok: false, why: "stop"};
+			}
+
 			// An end now or before (a release) has nothing to put back.
-			if (ttlMs <= 0) return {ok: true, expiresAt, written};
+			if (ttlMs <= 0) {
+				return {ok: true, expiresAt, written};
+			}
+
 			const holder = str(db.all("SELECT writer FROM events WHERE pos = ?", fence)[0]?.writer);
 			db.all(
 				"INSERT INTO leases (stream, holder, expires_at, fence, stop) VALUES (?, ?, ?, ?, 0)",
@@ -843,6 +976,7 @@ export function renew(
 				write(db, now, name, "any", {kind: "lease_resumed", writer: "ledger", data}),
 			);
 		}
+
 		scheduleExpiry(db, name, expiresAt + graceMs);
 		return {ok: true, expiresAt, written};
 	});
@@ -851,7 +985,10 @@ export function renew(
 /** A person's cancel of a registered name: lands at its end, and tells the holder to stop. */
 export function cancel(db: Db, now: number, name: string, writer: string): CancelResult {
 	return db.tx(() => {
-		if (!db.all("SELECT 1 FROM names WHERE name = ?", name)[0]) return {ok: false, why: "unknown"};
+		if (!db.all("SELECT 1 FROM names WHERE name = ?", name)[0]) {
+			return {ok: false, why: "unknown"};
+		}
+
 		const res = write(db, now, name, "any", {kind: "cancel", writer});
 		db.all("UPDATE leases SET stop = 1 WHERE stream = ?", name);
 		return res.ok ? {ok: true, pos: res.pos, rev: res.rev} : {ok: false, why: "unknown"};
@@ -878,7 +1015,9 @@ export const processOf = (db: Db, name: string): ProcessInfo | null => {
 };
 
 const pushed = (written: Written[], stream: string, r: AppendResult): void => {
-	if (r.ok && !r.dup) written.push({stream, rev: r.rev, pos: r.pos});
+	if (r.ok && !r.dup) {
+		written.push({stream, rev: r.rev, pos: r.pos});
+	}
 };
 
 const linkBoth = (db: Db, a: string, b: string): void => {
@@ -913,12 +1052,21 @@ const takeDown = (
 ): number => {
 	const work: {name: string; ending: Ending}[] = [{name: first, ending}];
 	let firstPos = 0;
+
 	while (work.length > 0) {
 		const next = work.shift();
-		if (next === undefined) break;
+
+		if (next === undefined) {
+			break;
+		}
+
 		const {name, ending: e} = next;
 		const proc = processOf(db, name);
-		if (proc === null || proc.down !== 0) continue;
+
+		if (proc === null || proc.down !== 0) {
+			continue;
+		}
+
 		const newest = db.all("SELECT fence FROM names WHERE name = ?", name)[0]?.fence ?? null;
 		const data = {
 			fence: newest === null ? null : num(newest),
@@ -935,8 +1083,15 @@ const takeDown = (
 			id: `exited:${proc.incarnation}`,
 		});
 		pushed(written, name, res);
-		if (!res.ok) continue;
-		if (firstPos === 0) firstPos = res.pos;
+
+		if (!res.ok) {
+			continue;
+		}
+
+		if (firstPos === 0) {
+			firstPos = res.pos;
+		}
+
 		db.all("DELETE FROM leases WHERE stream = ?", name);
 		db.all("DELETE FROM jobs WHERE id = ?", `lease:${name}`);
 		// 151: an exit ends the fence too: the name waits for its parent, and no claim holds it.
@@ -949,6 +1104,7 @@ const takeDown = (
 			name,
 			proc.incarnation,
 		);
+
 		for (const m of monitors) {
 			const inbox = `${str(m.watcher)}/inbox`;
 			const down = {
@@ -970,14 +1126,20 @@ const takeDown = (
 				}),
 			);
 		}
+
 		db.all("DELETE FROM monitors WHERE target = ?", name);
 
 		// Links: a dead process has none left (OTP).
 		const linked = db.all("SELECT b FROM links WHERE a = ?", name).map((r) => str(r.b));
 		db.all("DELETE FROM links WHERE a = ?1 OR b = ?1", name);
+
 		for (const other of linked) {
 			const o = processOf(db, other);
-			if (o === null || o.down !== 0) continue;
+
+			if (o === null || o.down !== 0) {
+				continue;
+			}
+
 			if (o.trapExit && rules.trapExit) {
 				const inbox = `${other}/inbox`;
 				const exit = {
@@ -1008,6 +1170,7 @@ const takeDown = (
 			}
 		}
 	}
+
 	return firstPos;
 };
 
@@ -1029,10 +1192,12 @@ const strike = (
 		db.all("UPDATE names SET suspect = NULL, strikes = 0 WHERE name = ?", name);
 		return;
 	}
+
 	const row = db.all("SELECT suspect, strikes FROM names WHERE name = ?", name)[0];
 	const same = row !== undefined && row.suspect !== null && num(row.suspect) === e.suspect;
 	const strikes = (same ? num(row?.strikes) : 0) + 1;
 	const limit = rules.deadLetter === "first" ? 1 : maxDeliveries;
+
 	if (limit !== null && strikes >= limit) {
 		const dead = `${name}/dead`;
 		const data = {rev: e.suspect, strikes, why: e.why, at: now};
@@ -1049,6 +1214,7 @@ const strike = (
 		db.all("UPDATE names SET suspect = NULL, strikes = 0 WHERE name = ?", name);
 		return;
 	}
+
 	db.all("UPDATE names SET suspect = ?, strikes = ? WHERE name = ?", e.suspect, strikes, name);
 };
 
@@ -1071,18 +1237,32 @@ export const exitWith =
 	): ExitResult =>
 		db.tx(() => {
 			const proc = processOf(db, name);
+
 			if (proc !== null && proc.down !== 0) {
 				const at = db.all("SELECT data FROM events WHERE pos = ?", proc.down)[0];
 				const landed = at ? (JSON.parse(str(at.data)) as {fence?: number | null}) : null;
-				if (landed?.fence === fence)
+
+				if (landed?.fence === fence) {
 					return {ok: true, pos: proc.down, incarnation: proc.incarnation, dup: true, written: []};
+				}
 			}
-			if (proc === null) return {ok: false, why: "fenced"};
-			if (rules.exitNeedsLease && fencedName(db, fence) !== name) return {ok: false, why: "fenced"};
+
+			if (proc === null) {
+				return {ok: false, why: "fenced"};
+			}
+
+			if (rules.exitNeedsLease && fencedName(db, fence) !== name) {
+				return {ok: false, why: "fenced"};
+			}
+
 			const written: Written[] = [];
 			const ending: Ending = {reason, why, suspect, by: null, writer};
 			const pos = takeDown(db, rules, now, name, ending, maxDeliveries, written);
-			if (pos === 0) return {ok: false, why: "fenced"};
+
+			if (pos === 0) {
+				return {ok: false, why: "fenced"};
+			}
+
 			return {ok: true, pos, incarnation: proc.incarnation, dup: false, written};
 		});
 
@@ -1094,18 +1274,32 @@ export const monitorWith =
 	(db: Db, now: number, fence: number, ref: string, target: string): MonitorResult =>
 		db.tx(() => {
 			const watcher = fencedName(db, fence);
-			if (watcher === null) return {ok: false, why: "fenced"};
+
+			if (watcher === null) {
+				return {ok: false, why: "fenced"};
+			}
+
 			const held = db.all(
 				"SELECT incarnation FROM monitors WHERE watcher = ? AND ref = ?",
 				watcher,
 				ref,
 			)[0];
-			if (held) return {ok: true, incarnation: num(held.incarnation), written: []};
+
+			if (held) {
+				return {ok: true, incarnation: num(held.incarnation), written: []};
+			}
+
 			const inbox = `${watcher}/inbox`;
-			if (seen(db, inbox, `DOWN:${ref}`)) return {ok: true, incarnation: null, written: []};
+
+			if (seen(db, inbox, `DOWN:${ref}`)) {
+				return {ok: true, incarnation: null, written: []};
+			}
+
 			const t = processOf(db, target);
+
 			if (t === null || t.down !== 0) {
 				const written: Written[] = [];
+
 				if (rules.noprocAtOnce) {
 					const down = {
 						ref,
@@ -1128,6 +1322,7 @@ export const monitorWith =
 					return {ok: true, incarnation: null, written};
 				}
 			}
+
 			const incarnation = t?.incarnation ?? 0;
 			db.all(
 				"INSERT INTO monitors (watcher, ref, target, incarnation) VALUES (?, ?, ?, ?)",
@@ -1145,7 +1340,11 @@ export const monitor = monitorWith(RULES);
 export function demonitor(db: Db, fence: number, ref: string): FlagResult {
 	return db.tx(() => {
 		const watcher = fencedName(db, fence);
-		if (watcher === null) return {ok: false, why: "fenced"};
+
+		if (watcher === null) {
+			return {ok: false, why: "fenced"};
+		}
+
 		db.all("DELETE FROM monitors WHERE watcher = ? AND ref = ?", watcher, ref);
 		return {ok: true};
 	});
@@ -1155,10 +1354,21 @@ export function demonitor(db: Db, fence: number, ref: string): FlagResult {
 export function link(db: Db, fence: number, other: string): LinkResult {
 	return db.tx(() => {
 		const me = fencedName(db, fence);
-		if (me === null) return {ok: false, why: "fenced"};
-		if (other === me) return {ok: true};
+
+		if (me === null) {
+			return {ok: false, why: "fenced"};
+		}
+
+		if (other === me) {
+			return {ok: true};
+		}
+
 		const o = processOf(db, other);
-		if (o === null || o.down !== 0) return {ok: false, why: "noproc"};
+
+		if (o === null || o.down !== 0) {
+			return {ok: false, why: "noproc"};
+		}
+
 		linkBoth(db, me, other);
 		return {ok: true};
 	});
@@ -1168,7 +1378,11 @@ export function link(db: Db, fence: number, other: string): LinkResult {
 export function unlink(db: Db, fence: number, other: string): FlagResult {
 	return db.tx(() => {
 		const me = fencedName(db, fence);
-		if (me === null) return {ok: false, why: "fenced"};
+
+		if (me === null) {
+			return {ok: false, why: "fenced"};
+		}
+
 		db.all("DELETE FROM links WHERE (a = ?1 AND b = ?2) OR (a = ?2 AND b = ?1)", me, other);
 		return {ok: true};
 	});
@@ -1178,7 +1392,11 @@ export function unlink(db: Db, fence: number, other: string): FlagResult {
 export function trapExit(db: Db, fence: number, on: boolean): FlagResult {
 	return db.tx(() => {
 		const me = fencedName(db, fence);
-		if (me === null) return {ok: false, why: "fenced"};
+
+		if (me === null) {
+			return {ok: false, why: "fenced"};
+		}
+
 		db.all("UPDATE names SET trap_exit = ? WHERE name = ?", on ? 1 : 0, me);
 		return {ok: true};
 	});
@@ -1202,27 +1420,48 @@ export const startChildWith =
 	): StartResult =>
 		db.tx(() => {
 			const me = fencedName(db, fence);
-			if (me === null) return {ok: false, why: "fenced"};
-			if (limits !== null && limitsRefusal(limits) !== null) return {ok: false, why: "denied"};
+
+			if (me === null) {
+				return {ok: false, why: "fenced"};
+			}
+
+			if (limits !== null && limitsRefusal(limits) !== null) {
+				return {ok: false, why: "denied"};
+			}
+
 			const written: Written[] = [];
 			// 102: a tree that is spent starts nothing more, and ends (the alarm may not have run yet).
 			const chain = chainOf(db, me);
 			const spent = overOf(chain, now, NOTHING);
+
 			if (spent !== null) {
 				endFor(db, rules, now, chain, spent, written);
 				return {ok: false, why: "limit", over: spent, written};
 			}
+
 			const c = processOf(db, child);
+
 			if (c === null) {
-				if (!isNameShape(child) || nested(db, child)) return {ok: false, why: "denied"};
+				if (!isNameShape(child) || nested(db, child)) {
+					return {ok: false, why: "denied"};
+				}
+
 				const full = childrenOver(db, rules, chain);
-				if (full !== null) return {ok: false, why: "limit", over: full, written};
+
+				if (full !== null) {
+					return {ok: false, why: "limit", over: full, written};
+				}
+
 				const res = write(db, now, child, "any", {
 					kind: "registered",
 					writer: me,
 					data: limits === null ? {parent: me} : {parent: me, limits},
 				});
-				if (!res.ok) return {ok: false, why: "denied"};
+
+				if (!res.ok) {
+					return {ok: false, why: "denied"};
+				}
+
 				pushed(written, child, res);
 				db.all(
 					"INSERT INTO names (name, pos, at, parent) VALUES (?, ?, ?, ?)",
@@ -1231,22 +1470,46 @@ export const startChildWith =
 					now,
 					me,
 				);
-				if (limits !== null) keepLimits(db, child, limits, now);
+
+				if (limits !== null) {
+					keepLimits(db, child, limits, now);
+				}
+
 				linkBoth(db, me, child);
 				return {ok: true, incarnation: 1, started: true, written};
 			}
-			if (rules.parentOnly && c.parent !== me) return {ok: false, why: "denied"};
+
+			if (rules.parentOnly && c.parent !== me) {
+				return {ok: false, why: "denied"};
+			}
+
 			if (c.down !== 0 && (after === null || after === c.incarnation)) {
 				const caps = capsOf(db, child);
-				if (caps !== null && caps.limited !== null && rules.limitEndIsFinal)
+
+				if (caps !== null && caps.limited !== null && rules.limitEndIsFinal) {
 					return {ok: false, why: "limit", over: standing(caps, caps.limited, now), written};
+				}
+
 				const own = caps === null ? null : overOf([caps], now, NOTHING);
-				if (own !== null) return {ok: false, why: "limit", over: own, written};
+
+				if (own !== null) {
+					return {ok: false, why: "limit", over: own, written};
+				}
+
 				const full = childrenOver(db, rules, chain);
-				if (full !== null) return {ok: false, why: "limit", over: full, written};
-				if (caps !== null && !rules.spendKept) addUsed(db, [caps], -caps.usedUsd, -caps.usedTokens);
-				if (caps !== null && caps.wallMs !== null && !rules.wallFromStart)
+
+				if (full !== null) {
+					return {ok: false, why: "limit", over: full, written};
+				}
+
+				if (caps !== null && !rules.spendKept) {
+					addUsed(db, [caps], -caps.usedUsd, -caps.usedTokens);
+				}
+
+				if (caps !== null && caps.wallMs !== null && !rules.wallFromStart) {
 					keepDeadline(db, child, now + caps.wallMs);
+				}
+
 				const incarnation = c.incarnation + 1;
 				const res = write(db, now, child, "any", {
 					kind: "restarted",
@@ -1263,7 +1526,11 @@ export const startChildWith =
 				linkBoth(db, me, child);
 				return {ok: true, incarnation, started: true, written};
 			}
-			if (c.down === 0) linkBoth(db, me, child);
+
+			if (c.down === 0) {
+				linkBoth(db, me, child);
+			}
+
 			return {ok: true, incarnation: c.incarnation, started: false, written};
 		});
 
@@ -1290,15 +1557,31 @@ export const exitChildWith =
 	): ExitChildResult =>
 		db.tx(() => {
 			const me = fencedName(db, fence);
-			if (me === null) return {ok: false, why: "fenced"};
+
+			if (me === null) {
+				return {ok: false, why: "fenced"};
+			}
+
 			const c = processOf(db, child);
-			if (c === null) return {ok: false, why: "denied"};
-			if (rules.parentOnly && c.parent !== me) return {ok: false, why: "denied"};
+
+			if (c === null) {
+				return {ok: false, why: "denied"};
+			}
+
+			if (rules.parentOnly && c.parent !== me) {
+				return {ok: false, why: "denied"};
+			}
+
 			const stale = rules.signalNamesIncarnation && c.incarnation !== incarnation;
-			if (c.down !== 0 || stale) return {ok: true, how: "noproc", written: []};
+
+			if (c.down !== 0 || stale) {
+				return {ok: true, how: "noproc", written: []};
+			}
+
 			const written: Written[] = [];
 			const trapped =
 				c.trapExit && (signal === "shutdown" ? rules.shutdownTrappable : !rules.killUntrappable);
+
 			if (trapped) {
 				const parent = processOf(db, me);
 				const inbox = `${child}/inbox`;
@@ -1322,6 +1605,7 @@ export const exitChildWith =
 				);
 				return {ok: true, how: "signalled", written};
 			}
+
 			const ending: Ending = {
 				reason: signal === "kill" ? "killed" : "shutdown",
 				why,
@@ -1352,9 +1636,12 @@ type Caps = {
 	usedTokens: number;
 	limited: LimitKind | null;
 };
+
 const NOTHING = {usd: 0, tokens: 0};
+
 const orNull = (v: Value | undefined): number | null =>
 	v === null || v === undefined ? null : num(v);
+
 const isLimitKind = (v: string): v is LimitKind =>
 	v === "usd" || v === "tokens" || v === "wall" || v === "children";
 
@@ -1364,7 +1651,11 @@ const capsOf = (db: Db, name: string): Caps | null => {
 			deadline, used_usd, used_tokens, limited FROM names WHERE name = ?`,
 		name,
 	)[0];
-	if (r === undefined) return null;
+
+	if (r === undefined) {
+		return null;
+	}
+
 	const limited = r.limited === null || r.limited === undefined ? null : str(r.limited);
 	return {
 		name: str(r.name),
@@ -1387,24 +1678,37 @@ const chainOf = (db: Db, name: string): Caps[] => {
 	const out: Caps[] = [];
 	const seen = new Set<string>();
 	let at: string | null = name;
+
 	while (at !== null && !seen.has(at)) {
 		seen.add(at);
 		const c = capsOf(db, at);
-		if (c === null) break;
+
+		if (c === null) {
+			break;
+		}
+
 		out.push(c);
 		at = c.parent;
 	}
+
 	return out;
 };
 
 /** Where `kind` stands on `c` now, for an answer that names it. */
 const standing = (c: Caps, kind: LimitKind, now: number): Over => {
-	if (kind === "usd") return {kind, at: c.name, used: c.usedUsd / 1e6, max: (c.usd ?? 0) / 1e6};
-	if (kind === "tokens") return {kind, at: c.name, used: c.usedTokens, max: c.tokens ?? 0};
+	if (kind === "usd") {
+		return {kind, at: c.name, used: c.usedUsd / 1e6, max: (c.usd ?? 0) / 1e6};
+	}
+
+	if (kind === "tokens") {
+		return {kind, at: c.name, used: c.usedTokens, max: c.tokens ?? 0};
+	}
+
 	if (kind === "wall") {
 		const wall = c.wallMs ?? 0;
 		return {kind, at: c.name, used: now - ((c.deadline ?? now) - wall), max: wall};
 	}
+
 	return {kind, at: c.name, used: 0, max: c.children ?? 0};
 };
 
@@ -1419,13 +1723,24 @@ const overOf = (
 ): Over | null => {
 	for (let i = chain.length - 1; i >= 0; i--) {
 		const a = chain[i];
-		if (a === undefined) continue;
-		if (a.deadline !== null && a.deadline <= now) return standing(a, "wall", now);
-		if (a.usd !== null && a.usedUsd + ask.usd > a.usd)
+
+		if (a === undefined) {
+			continue;
+		}
+
+		if (a.deadline !== null && a.deadline <= now) {
+			return standing(a, "wall", now);
+		}
+
+		if (a.usd !== null && a.usedUsd + ask.usd > a.usd) {
 			return {kind: "usd", at: a.name, used: (a.usedUsd + ask.usd) / 1e6, max: a.usd / 1e6};
-		if (a.tokens !== null && a.usedTokens + ask.tokens > a.tokens)
+		}
+
+		if (a.tokens !== null && a.usedTokens + ask.tokens > a.tokens) {
 			return {kind: "tokens", at: a.name, used: a.usedTokens + ask.tokens, max: a.tokens};
+		}
 	}
+
 	return null;
 };
 
@@ -1447,28 +1762,39 @@ const liveUnder = (db: Db, rules: Rules, name: string): number =>
 const childrenOver = (db: Db, rules: Rules, chain: readonly Caps[]): Over | null => {
 	for (let i = chain.length - 1; i >= 0; i--) {
 		const a = chain[i];
-		if (a === undefined || a.children === null) continue;
+
+		if (a === undefined || a.children === null) {
+			continue;
+		}
+
 		const used = liveUnder(db, rules, a.name) + 1;
-		if (used > a.children) return {kind: "children", at: a.name, used, max: a.children};
+
+		if (used > a.children) {
+			return {kind: "children", at: a.name, used, max: a.children};
+		}
 	}
+
 	return null;
 };
 
 /** Add to what each name in `chain` has used. */
 const addUsed = (db: Db, chain: readonly Caps[], usd: number, tokens: number): void => {
-	for (const a of chain)
+	for (const a of chain) {
 		db.all(
 			"UPDATE names SET used_usd = used_usd + ?, used_tokens = used_tokens + ? WHERE name = ?",
 			usd,
 			tokens,
 			a.name,
 		);
+	}
 };
 
 const keepDeadline = (db: Db, name: string, deadline: number | null): void => {
 	db.all("UPDATE names SET deadline = ? WHERE name = ?", deadline, name);
-	if (deadline === null) db.all("DELETE FROM jobs WHERE id = ?", `deadline:${name}`);
-	else
+
+	if (deadline === null) {
+		db.all("DELETE FROM jobs WHERE id = ?", `deadline:${name}`);
+	} else {
 		db.all(
 			`INSERT INTO jobs (id, due_at, kind, stream) VALUES (?1, ?2, 'deadline', ?3)
 			ON CONFLICT (id) DO UPDATE SET due_at = ?2`,
@@ -1476,6 +1802,7 @@ const keepDeadline = (db: Db, name: string, deadline: number | null): void => {
 			deadline,
 			name,
 		);
+	}
 };
 
 /** Keep `limits` as the name's own; its wall time counts from its registration (`at`). */
@@ -1506,11 +1833,18 @@ const endFor = (
 	over: Over,
 	written: Written[],
 ): void => {
-	if (over.kind === "children") return;
+	if (over.kind === "children") {
+		return;
+	}
+
 	const i = chain.findIndex((c) => c.name === over.at);
 	const inside = i < 0 ? chain : chain.slice(0, i + 1);
 	const target = [...inside].reverse().find((c) => c.up);
-	if (target === undefined) return;
+
+	if (target === undefined) {
+		return;
+	}
+
 	const reason: LimitReason = `limit:${over.kind}`;
 	const why =
 		over.kind === "wall"
@@ -1519,7 +1853,11 @@ const endFor = (
 	const ending: Ending = {reason, why, suspect: null, by: null, writer: "ledger"};
 	takeDown(db, rules, now, target.name, ending, MAX_DELIVERIES, written);
 	db.all("UPDATE names SET limited = ? WHERE name = ?", over.kind, target.name);
-	if (!rules.limitRecorded) return;
+
+	if (!rules.limitRecorded) {
+		return;
+	}
+
 	const dead = `${target.name}/dead`;
 	const data = {
 		limit: over.kind,
@@ -1558,19 +1896,31 @@ export const holdWith =
 	(db: Db, now: number, fence: number, id: string, cost: Cost): HoldResult =>
 		db.tx(() => {
 			const me = fencedName(db, fence);
-			if (me === null) return {ok: false, why: "fenced"};
-			if (!costOk(cost)) return {ok: false, why: "denied"};
+
+			if (me === null) {
+				return {ok: false, why: "fenced"};
+			}
+
+			if (!costOk(cost)) {
+				return {ok: false, why: "denied"};
+			}
+
 			const spend = `${me}/spend`;
-			if (seen(db, spend, `hold:${fence}:${id}`) || seen(db, spend, `charge:${fence}:${id}`))
+
+			if (seen(db, spend, `hold:${fence}:${id}`) || seen(db, spend, `charge:${fence}:${id}`)) {
 				return {ok: true, dup: true, written: []};
+			}
+
 			const chain = chainOf(db, me);
 			const ask = {usd: micros(cost.usd), tokens: cost.tokens ?? 0};
 			const over = overOf(chain, now, rules.admission ? ask : NOTHING);
 			const written: Written[] = [];
+
 			if (over !== null) {
 				endFor(db, rules, now, chain, over, written);
 				return {ok: false, why: "limit", over, written};
 			}
+
 			const res = write(db, now, spend, "any", {
 				kind: "held",
 				writer: "ledger",
@@ -1595,12 +1945,22 @@ export const chargeWith =
 	(db: Db, now: number, fence: number, id: string, cost: Cost): ChargeResult =>
 		db.tx(() => {
 			const me = rules.lateChargeCounts ? claimedBy(db, fence) : fencedName(db, fence);
-			if (me === null) return {ok: false, why: "fenced"};
-			if (!costOk(cost)) return {ok: false, why: "denied"};
+
+			if (me === null) {
+				return {ok: false, why: "fenced"};
+			}
+
+			if (!costOk(cost)) {
+				return {ok: false, why: "denied"};
+			}
+
 			const spend = `${me}/spend`;
 			const key = `charge:${fence}:${id}`;
-			if (rules.chargeOnce && seen(db, spend, key))
+
+			if (rules.chargeOnce && seen(db, spend, key)) {
 				return {ok: true, dup: true, over: null, written: []};
+			}
+
 			const held = db.all(
 				"SELECT data FROM events WHERE stream = ? AND id = ?",
 				spend,
@@ -1625,7 +1985,11 @@ export const chargeWith =
 			);
 			const after = chainOf(db, me);
 			const over = overOf(after, now, NOTHING);
-			if (over !== null) endFor(db, rules, now, after, over, written);
+
+			if (over !== null) {
+				endFor(db, rules, now, after, over, written);
+			}
+
 			return {ok: true, dup: false, over, written};
 		});
 
@@ -1640,17 +2004,30 @@ export const setLimitsWith =
 	(rules: Rules) =>
 	(db: Db, now: number, name: string, limits: Limits, writer: string): SetLimitsResult =>
 		db.tx(() => {
-			if (limitsRefusal(limits) !== null) return {ok: false, why: "denied"};
-			if (!db.all("SELECT 1 FROM names WHERE name = ?", name)[0])
+			if (limitsRefusal(limits) !== null) {
+				return {ok: false, why: "denied"};
+			}
+
+			if (!db.all("SELECT 1 FROM names WHERE name = ?", name)[0]) {
 				return {ok: false, why: "unknown"};
+			}
+
 			const res = write(db, now, name, "any", {kind: "limits", writer, data: limits});
-			if (!res.ok) return {ok: false, why: "unknown"};
+
+			if (!res.ok) {
+				return {ok: false, why: "unknown"};
+			}
+
 			const written: Written[] = [];
 			pushed(written, name, res);
 			keepLimits(db, name, limits, now);
 			const chain = chainOf(db, name);
 			const over = overOf(chain, now, NOTHING);
-			if (over !== null) endFor(db, rules, now, chain, over, written);
+
+			if (over !== null) {
+				endFor(db, rules, now, chain, over, written);
+			}
+
 			return {ok: true, pos: res.pos, rev: res.rev, written};
 		});
 
@@ -1661,13 +2038,30 @@ export const usageWith =
 	(rules: Rules) =>
 	(db: Db, name: string): Usage | null => {
 		const c = capsOf(db, name);
-		if (c === null) return null;
+
+		if (c === null) {
+			return null;
+		}
+
 		const at = num(db.all("SELECT at FROM names WHERE name = ?", name)[0]?.at);
 		const limits: Limits = {};
-		if (c.usd !== null) limits.usd = c.usd / 1e6;
-		if (c.tokens !== null) limits.tokens = c.tokens;
-		if (c.wallMs !== null) limits.wallMs = c.wallMs;
-		if (c.children !== null) limits.children = c.children;
+
+		if (c.usd !== null) {
+			limits.usd = c.usd / 1e6;
+		}
+
+		if (c.tokens !== null) {
+			limits.tokens = c.tokens;
+		}
+
+		if (c.wallMs !== null) {
+			limits.wallMs = c.wallMs;
+		}
+
+		if (c.children !== null) {
+			limits.children = c.children;
+		}
+
 		return {
 			name,
 			limits,
@@ -1702,23 +2096,30 @@ export const runDueWith =
 	(db: Db, now: number): Written[] => {
 		const written: Written[] = [];
 		const due = db.all("SELECT id, kind, stream FROM jobs WHERE due_at <= ? ORDER BY due_at", now);
+
 		for (const job of due) {
 			db.tx(() => {
 				const stream = str(job.stream);
+
 				// 102: a wall time that ran out ends its name (Kubernetes' `DeadlineExceeded`).
 				if (str(job.kind) === "deadline") {
 					const caps = capsOf(db, stream);
 					const over = caps === null ? null : overOf([caps], now, NOTHING);
-					if (caps !== null && over !== null && over.kind === "wall")
+
+					if (caps !== null && over !== null && over.kind === "wall") {
 						endFor(db, rules, now, [caps], over, written);
+					}
+
 					db.all("DELETE FROM jobs WHERE id = ? AND due_at <= ?", str(job.id), now);
 					return;
 				}
+
 				const lease = db.all(
 					"SELECT fence, holder FROM leases WHERE stream = ? AND expires_at <= ?",
 					stream,
 					now,
 				)[0];
+
 				if (lease) {
 					const fence = num(lease.fence);
 					const res = write(db, now, stream, "any", {
@@ -1728,9 +2129,10 @@ export const runDueWith =
 					});
 					db.all("DELETE FROM leases WHERE stream = ? AND fence = ?", stream, fence);
 					pushed(written, stream, res);
+
 					// The planted mistake: a lease that ran out as a death. The name lives on (any host
 					// takes it over), so the real rules write nothing more here.
-					if (!rules.expiryIsAlive)
+					if (!rules.expiryIsAlive) {
 						for (const m of db.all("SELECT watcher, ref FROM monitors WHERE target = ?", stream)) {
 							const inbox = `${str(m.watcher)}/inbox`;
 							const down = {ref: str(m.ref), target: stream, reason: "noproc", why: "expired"};
@@ -1745,11 +2147,14 @@ export const runDueWith =
 								}),
 							);
 						}
+					}
 				}
+
 				// Delete the job only if a renew or a new claim did not move it on meanwhile.
 				db.all("DELETE FROM jobs WHERE id = ? AND due_at <= ?", str(job.id), now);
 			});
 		}
+
 		return written;
 	};
 

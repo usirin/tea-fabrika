@@ -70,6 +70,7 @@ describe("what a person's merge binds to", () => {
 
 // No git read may run here: every Gather and write dies when called.
 const nothingRead = Layer.mergeAll(Layer.mock(LaneWork, {at: () => ""}), Layer.mock(Tickets, {}));
+
 const judged = (pull: Pull, head: string) =>
 	Effect.runSync(judgedAt(pull, head).pipe(Effect.provide(nothingRead)));
 

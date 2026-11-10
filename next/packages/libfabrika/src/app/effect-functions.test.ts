@@ -26,11 +26,13 @@ import {Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager
 import {ProgramRunner} from "./runner.ts";
 
 const CHECK = {seed: 119120, numRuns: 40};
+
 const text = fc.string({
 	unit: fc.constantFrom("a", "b", "7", ":", "_"),
 	minLength: 1,
 	maxLength: 180,
 });
+
 const hex = (length: number) =>
 	fc
 		.string({
@@ -39,7 +41,9 @@ const hex = (length: number) =>
 			maxLength: length - 1,
 		})
 		.map((rest) => `1${rest}`);
+
 const context = fc.record({traceId: hex(32), spanId: hex(16)});
+
 const attributes = fc.record({
 	stream: text,
 	id: text,
@@ -48,11 +52,13 @@ const attributes = fc.record({
 	build: text,
 	value: fc.integer(),
 });
+
 const PROCESS = "process_01jc9q4w7zfm8s5r2t6v0xkb4d";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const DAY = 86_400_000;
 const BIG = 1_000_000_000;
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+
 const request = Effect.fn("test.request")(function* <A, E, R>(body: Effect.Effect<A, E, R>) {
 	return yield* body;
 });
@@ -67,23 +73,32 @@ const capture = (delegate?: Tracer.Tracer, spans: Array<Tracer.Span> = []) => {
 	});
 	return {spans, tracer};
 };
+
 const tags = (span: Tracer.Span) => Object.fromEntries(span.attributes);
 const parentId = (span: Tracer.Span) => Option.getOrNull(Option.map(span.parent, (p) => p.spanId));
+
 const ended = (span: Tracer.Span, ok: boolean) => {
 	expect(span.status._tag, span.name).toBe("Ended");
 	const status = span.status;
-	if (status._tag !== "Ended") throw new Error(`span did not end: ${span.name}`);
+
+	if (status._tag !== "Ended") {
+		throw new Error(`span did not end: ${span.name}`);
+	}
+
 	expect(Exit.isSuccess(status.exit), span.name).toBe(ok);
 	expect(status.endTime >= status.startTime, span.name).toBe(true);
 };
+
 const child = (span: Tracer.Span, parent: Tracer.AnySpan) => {
 	expect(span.traceId, span.name).toBe(parent.traceId);
 	expect(parentId(span), span.name).toBe(parent.spanId);
 };
+
 const cut = (key: string, value: string) =>
 	value.length <= 128
 		? {[key]: value}
 		: {[key]: value.slice(0, 128), [`${key}.length`]: value.length};
+
 const clock = (now: () => number): Clock.Clock => ({
 	currentTimeMillisUnsafe: now,
 	currentTimeMillis: Effect.sync(now),
@@ -93,6 +108,7 @@ const clock = (now: () => number): Clock.Clock => ({
 	monotonicTimeNanos: Effect.sync(() => BigInt(now()) * 1_000_000n),
 	sleep: () => Effect.void,
 });
+
 const disk = () => {
 	const db = new DatabaseSync(":memory:");
 	const actual = nodeSql(db);
@@ -104,11 +120,13 @@ const disk = () => {
 				fault.armed = false;
 				throw new Error("generated storage failure");
 			}
+
 			return actual.transaction(work);
 		},
 	};
 	return {db, sql, fault};
 };
+
 const line = (
 	a: typeof attributes extends fc.Arbitrary<infer A> ? A : never,
 	traceId: string,
@@ -148,11 +166,13 @@ describe("T285, ledger tracing keep-laws", () => {
 				async (a, ctx, calls) => {
 					const d = disk();
 					const c = capture();
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const ledger = yield* Ledger;
 								let head = 0;
+
 								for (const [index, call] of calls.entries()) {
 									const before = c.spans.length;
 									const parent = yield* Effect.currentSpan;
@@ -160,6 +180,7 @@ describe("T285, ledger tracing keep-laws", () => {
 									const input = line(a, ctx.traceId);
 									let name: string;
 									let expected: Record<string, unknown>;
+
 									if (call.op === "read") {
 										const rows = yield* Stream.runCollect(ledger.read(a.stream, call.after));
 										name = "ledger.read";
@@ -186,10 +207,12 @@ describe("T285, ledger tracing keep-laws", () => {
 										};
 									} else {
 										const twice = call.op === "id_reused" || call.op === "resend";
+
 										if (twice) {
 											yield* ledger.append(a.stream, id, input);
 											head++;
 										}
+
 										const changed =
 											call.op === "bad_line"
 												? {...input, by: ""}
@@ -204,7 +227,11 @@ describe("T285, ledger tracing keep-laws", () => {
 																: input;
 										const answer = yield* ledger.append(a.stream, id, changed);
 										const accepted = call.op === "append";
-										if (accepted) head++;
+
+										if (accepted) {
+											head++;
+										}
+
 										name = "ledger.append";
 										expected = {
 											...cut("messaging.destination.name", a.stream),
@@ -228,12 +255,16 @@ describe("T285, ledger tracing keep-laws", () => {
 										const first = c.spans.slice(before).filter((s) => s.name === name);
 										expect(first).toHaveLength(twice ? 2 : 1);
 									}
+
 									const spans = c.spans.slice(before).filter((s) => s.name === name);
 									const span = spans.at(-1)!;
 									ended(span, true);
 									child(span, parent);
 									expect(tags(span)).toEqual(expected);
-									if (call.op === "read" || call.op === "wait") expect(spans).toHaveLength(1);
+
+									if (call.op === "read" || call.op === "wait") {
+										expect(spans).toHaveLength(1);
+									}
 								}
 							}).pipe(
 								request,
@@ -267,17 +298,25 @@ describe("T285, ledger tracing keep-laws", () => {
 					let mode = "ok";
 					const bell = Layer.succeed(Doorbell, {
 						ring: () => {
-							if (mode === "throw") throw new Error("generated ring throw");
-							if (mode === "die") return Effect.die(new Error("generated ring defect"));
+							if (mode === "throw") {
+								throw new Error("generated ring throw");
+							}
+
+							if (mode === "die") {
+								return Effect.die(new Error("generated ring defect"));
+							}
+
 							return mode === "fail"
 								? Effect.fail(new LedgerError({why: "unreachable"}))
 								: Effect.void;
 						},
 					});
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const ledger = yield* Ledger;
+
 								for (const [index, failure] of modes.entries()) {
 									mode = failure;
 									const stream = `${a.stream}/${index}`;
@@ -328,10 +367,12 @@ describe("T285, ledger tracing keep-laws", () => {
 				async (a, ctx, calls) => {
 					const d = disk();
 					const c = capture();
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const ledger = yield* Ledger;
+
 								for (const [i, op] of calls.entries()) {
 									d.fault.armed = true;
 									const before = c.spans.length;
@@ -389,12 +430,14 @@ describe("T285, coordination tracing keep-laws", () => {
 						by: a.by,
 						build: a.build,
 					}).pipe(Layer.provide(Ledger.sql(d.sql, {reader: a.reader}).pipe(Layer.provide(quiet))));
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const clients = yield* ClientManager;
 								// Layer construction cannot do the first read or the founding write.
 								expect(c.spans).toEqual([]);
+
 								for (const fails of failures) {
 									d.fault.armed = fails;
 									const before = c.spans.length;
@@ -416,8 +459,10 @@ describe("T285, coordination tracing keep-laws", () => {
 													"fab.members.ignored": 0,
 												},
 									);
-									for (const append of spans.filter((s) => s.name === "ledger.append"))
+
+									for (const append of spans.filter((s) => s.name === "ledger.append")) {
 										child(append, read);
+									}
 								}
 							}).pipe(
 								Effect.withParentSpan(Tracer.externalSpan(ctx)),
@@ -458,6 +503,7 @@ describe("T285, coordination tracing keep-laws", () => {
 						},
 						Effect.succeed(PROCESS),
 					).pipe(Layer.provide(LedgerTransaction.layer(d.sql).pipe(Layer.provide(quiet))));
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
@@ -465,6 +511,7 @@ describe("T285, coordination tracing keep-laws", () => {
 								const ids = yield* ProcessIdGenerator;
 								expect(c.spans).toEqual([]);
 								const seen = new Set<string>();
+
 								for (const call of calls) {
 									d.fault.armed = call.op === "info" && call.fails;
 									const before = c.spans.length;
@@ -486,6 +533,7 @@ describe("T285, coordination tracing keep-laws", () => {
 									ended(selected[0]!, ok);
 									child(selected[0]!, spans[0]!);
 									expect(tags(selected[0]!)).toEqual({});
+
 									if (call.op === "next" && Exit.isSuccess(exit)) {
 										expect(spans.map((s) => s.name)).toEqual([
 											"test.request",
@@ -500,6 +548,7 @@ describe("T285, coordination tracing keep-laws", () => {
 										seen.add(id);
 									}
 								}
+
 								const before = c.spans.length;
 								const exit = yield* Effect.exit(
 									request(ids.next).pipe(
@@ -617,7 +666,11 @@ describe("T285, sink keep-law", () => {
 					const known = new Map<string, Sql>();
 					const records = RecordManager.sql((name) => {
 						const found = known.get(name);
-						if (found !== undefined) return found;
+
+						if (found !== undefined) {
+							return found;
+						}
+
 						const db = new DatabaseSync(":memory:");
 						parts.push(db);
 						const sql = nodeSql(db);
@@ -631,18 +684,24 @@ describe("T285, sink keep-law", () => {
 					);
 					const chain = job ? Chain.cases.job.make({process: PROCESS}) : Chain.cases.spans.make({});
 					let now = 100 * DAY;
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const sink = yield* SpanSink;
 								const records = yield* RecordManager;
+
 								for (const [index, sample] of samples.entries()) {
 									yield* Effect.gen(function* () {
 										now += sample.ms;
-										if (sample.failure === "fail")
+
+										if (sample.failure === "fail") {
 											return yield* Effect.fail(new LedgerError({why: "storage"}));
-										if (sample.failure === "die")
+										}
+
+										if (sample.failure === "die") {
 											return yield* Effect.die(new Error(`failure ${sample.name}`));
+										}
 									}).pipe(
 										Effect.withSpan(`sample.${index}`, {
 											attributes: {
@@ -654,12 +713,14 @@ describe("T285, sink keep-law", () => {
 										Effect.exit,
 									);
 								}
+
 								expect((yield* sink.flush).sent).toBe(samples.length);
 								expect(d.db.prepare("SELECT count(*) AS n FROM health").get()?.n).toBe(
 									samples.length,
 								);
 								const original = yield* Stream.runCollect(records.read(chain));
 								expect(original.map((s) => s.name)).toEqual(samples.map((_, i) => `sample.${i}`));
+
 								for (const [index, row] of original.entries()) {
 									const sample = samples[index]!;
 									expect(row.ok).toBe(sample.failure === "ok");
@@ -677,14 +738,23 @@ describe("T285, sink keep-law", () => {
 									});
 									expect(row.links).toEqual([{...ctx, attributes: {"test.index": index}}]);
 								}
+
 								// Old health rows must really take the archive path, including hashing.
 								now += 20 * DAY;
 								yield* sink.summaries(0, now);
+
 								for (const call of calls) {
-									if (call === "flush") expect((yield* sink.flush).sent).toBe(0);
-									else if (call === "summaries") yield* sink.summaries(0, now);
-									else for (const row of original) yield* records.content(chain, row.spanId);
+									if (call === "flush") {
+										expect((yield* sink.flush).sent).toBe(0);
+									} else if (call === "summaries") {
+										yield* sink.summaries(0, now);
+									} else {
+										for (const row of original) {
+											yield* records.content(chain, row.spanId);
+										}
+									}
 								}
+
 								expect((yield* sink.flush).sent).toBe(0);
 								expect(
 									Number(d.db.prepare("SELECT count(*) AS n FROM archived").get()?.n),
@@ -701,7 +771,10 @@ describe("T285, sink keep-law", () => {
 						);
 					} finally {
 						d.db.close();
-						for (const db of parts) db.close();
+
+						for (const db of parts) {
+							db.close();
+						}
 					}
 				},
 			),
@@ -713,6 +786,7 @@ describe("T285, sink keep-law", () => {
 // A small real program. The checked writer is the test's door adapter; the runner,
 // mailbox, session manager, process store, sink and record manager are the real ones.
 const Model = Schema.Struct({replies: Schema.Int});
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("work"), value: Schema.Int}),
 	Schema.Struct({
@@ -725,16 +799,19 @@ const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("throw")}),
 	Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number}),
 ]);
+
 const work = Cmd.make("work", {
 	input: Schema.Struct({value: Schema.Int}),
 	ok: Schema.Int,
 	err: ["handler_failed", "bad_cmd"],
 });
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["seen_ahead", "bad_cmd"],
 });
+
 const machine = Machine.make({
 	model: Model,
 	msg: Msg,
@@ -763,6 +840,7 @@ const machine = Machine.make({
 		write_err: (s) => [{replies: s.replies + 1}, []],
 	},
 });
+
 const program = {
 	name: "trace-test",
 	machine,
@@ -779,7 +857,9 @@ const program = {
 	writes: {saved: {schema: Schema.TaggedStruct("saved", {value: Schema.Int}), personOnly: false}},
 	wake: () => null,
 };
+
 const decodeIncoming = Schema.decodeUnknownSync(Incoming);
+
 const runnerWorld = (
 	a: {readonly name: string; readonly build: string; readonly key: string},
 	signer: {readonly traceId: string; readonly spanId: string},
@@ -813,7 +893,10 @@ const runnerWorld = (
 			const sessions = yield* SessionManager;
 			return {
 				append: Effect.fnUntraced(function* (input: Incoming) {
-					if (fault.at === "append_storage") return yield* new LedgerError({why: "storage"});
+					if (fault.at === "append_storage") {
+						return yield* new LedgerError({why: "storage"});
+					}
+
 					return yield* mailbox.send(a.name, input.id, input.envelope.input, {
 						by: input.envelope.by.key,
 						for: PERSON,
@@ -828,8 +911,15 @@ const runnerWorld = (
 					...[id, session, stream, fact]: Parameters<typeof CheckedWriter.Service.commit>
 				) {
 					const receipt = yield* sessions.receipt(id, session.parent, writer.process, fact._tag);
-					if (fault.at === "write_storage") return yield* new LedgerError({why: "storage"});
-					if (fault.at === "write_refused") return Appended.cases.refused.make({why: "seen_ahead"});
+
+					if (fault.at === "write_storage") {
+						return yield* new LedgerError({why: "storage"});
+					}
+
+					if (fault.at === "write_refused") {
+						return Appended.cases.refused.make({why: "seen_ahead"});
+					}
+
 					return yield* ledger.append(
 						stream,
 						id,
@@ -850,8 +940,14 @@ const runnerWorld = (
 				own: Effect.fnUntraced(function* (
 					...[id, stream, fact]: Parameters<typeof CheckedWriter.Service.own>
 				) {
-					if (fault.at === "write_storage") return yield* new LedgerError({why: "storage"});
-					if (fault.at === "write_refused") return Appended.cases.refused.make({why: "seen_ahead"});
+					if (fault.at === "write_storage") {
+						return yield* new LedgerError({why: "storage"});
+					}
+
+					if (fault.at === "write_refused") {
+						return Appended.cases.refused.make({why: "seen_ahead"});
+					}
+
 					return yield* ledger.append(
 						stream,
 						id,
@@ -914,10 +1010,14 @@ const runnerWorld = (
 			{[program.name]: program},
 			{
 				work: Effect.fnUntraced(function* (_cmd: unknown) {
-					if (fault.at === "handler_fail")
+					if (fault.at === "handler_fail") {
 						return yield* Effect.fail(new Error("generated handler failure"));
-					if (fault.at === "handler_die")
+					}
+
+					if (fault.at === "handler_die") {
 						return yield* Effect.die(new Error("generated handler defect"));
+					}
+
 					return Outcome.ok(1);
 				}),
 			},
@@ -939,8 +1039,11 @@ const runnerWorld = (
 			Effect.map(Recording, (actual) => ({
 				flush: Effect.sync(() => {
 					const runner = spans.filter((s) => s.name.startsWith("runner."));
-					for (const span of runner)
+
+					for (const span of runner) {
 						expect(span.status._tag, `${span.name} must end before flush`).toBe("Ended");
+					}
+
 					flushes.push(runner.map((s) => s.spanId));
 				}).pipe(Effect.andThen(actual.flush)),
 			})),
@@ -979,7 +1082,9 @@ const runnerWorld = (
 		/** The ID the next start will get. */
 		upcoming: () => idFor(ids),
 		close: () => {
-			for (const d of [data, state, sessions, sink]) d.db.close();
+			for (const d of [data, state, sessions, sink]) {
+				d.db.close();
+			}
 		},
 	};
 };
@@ -989,6 +1094,7 @@ describe("T285, runner tracing keep-laws", () => {
 		await fc.assert(
 			fc.asyncProperty(context, attributes, async (ctx, a) => {
 				const w = runnerWorld({name: "refused-reply", build: a.build, key: a.by}, ctx);
+
 				try {
 					await Effect.runPromise(
 						Effect.gen(function* () {
@@ -1036,11 +1142,13 @@ describe("T285, runner tracing keep-laws", () => {
 				async (ctx, calls) => {
 					const w = runnerWorld({name: "reply-test", build: "test", key: "test"}, ctx);
 					let now = 0;
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const runner = yield* ProgramRunner;
 								const ledger = yield* Ledger;
+
 								for (const [index, call] of calls.entries()) {
 									now = call.at;
 									yield* runner.msg(w.input(index + 1, {type: "work", value: call.value}));
@@ -1119,6 +1227,7 @@ describe("T285, runner tracing keep-laws", () => {
 					let until: number | null = null;
 					let crashes = 0;
 					let unloaded = false;
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
@@ -1126,6 +1235,7 @@ describe("T285, runner tracing keep-laws", () => {
 								const sessions = yield* SessionManager;
 								const records = yield* RecordManager;
 								const manager = yield* ProcessManager;
+
 								for (const [index, call] of calls.entries()) {
 									now += TICK;
 									const waiting = until !== null && now < until;
@@ -1148,6 +1258,7 @@ describe("T285, runner tracing keep-laws", () => {
 									// The letter is delivered to the process that will step it: the successor, when this op starts it.
 									const target = starting ? w.upcoming() : pid;
 									w.writer.process = target;
+
 									if (writing && call.op !== "own") {
 										yield* sessions.record({
 											id: input.envelope.id,
@@ -1163,6 +1274,7 @@ describe("T285, runner tracing keep-laws", () => {
 										});
 										yield* sessions.delivered(input.envelope.id, target);
 									}
+
 									const op =
 										call.op === "open" || call.op === "bad_client"
 											? "open"
@@ -1194,7 +1306,8 @@ describe("T285, runner tracing keep-laws", () => {
 									// Inside the backoff wait the successor is not started: every op that reaches the
 									// process answers down. An undecodable input is refused before that, as always.
 									const malformed = call.op === "bad_input";
-									if (waiting)
+
+									if (waiting) {
 										expect(
 											Exit.isFailure(exit) ? Cause.squash(exit.cause) : null,
 											call.op,
@@ -1203,6 +1316,8 @@ describe("T285, runner tracing keep-laws", () => {
 												? {_tag: "RunnerError", why: call.op}
 												: {_tag: "ProgramDown", why: "saved_letter"},
 										);
+									}
+
 									expect(w.flushes.length, call.op).toBe(flushes + 1);
 									const spans = w.spans.slice(before);
 									// The first op after the wait starts the successor under it; its spans are checked
@@ -1230,6 +1345,7 @@ describe("T285, runner tracing keep-laws", () => {
 									const live = (yield* manager.info).find((row) => row.name === a.name)?.process;
 									// The op's own span opens on the ID the call reached, before any successor starts.
 									const reached = pid;
+
 									if (starting) {
 										// A new live process ID, started once, after the process that threw.
 										expect(
@@ -1243,7 +1359,10 @@ describe("T285, runner tracing keep-laws", () => {
 										pid = live!;
 										pids.push(pid);
 										until = null;
-									} else expect(recovering, call.op).toEqual([]);
+									} else {
+										expect(recovering, call.op).toEqual([]);
+									}
+
 									if (!waiting && call.op === "step_throw") {
 										// The throw ends the process: a runner.throw span under runner.step, no live ID
 										// until the successor starts after its backoff.
@@ -1254,20 +1373,33 @@ describe("T285, runner tracing keep-laws", () => {
 										expect(live, call.op).toBeUndefined();
 										crashes += 1;
 										until = now + Math.min(100 * 2 ** (crashes - 1), 800);
-									} else if (!waiting) expect(live, call.op).toBe(pid);
+									} else if (!waiting) {
+										expect(live, call.op).toBe(pid);
+									}
+
 									const {
 										"fab.mailbox.letters": letters,
 										"fab.mailbox.skipped": skipped,
 										...own
 									} = tags(operation);
+
 									// A successor's first load reads the accepted letters under the op that does it.
-									if (starting) unloaded = true;
+									if (starting) {
+										unloaded = true;
+									}
+
 									if (unloaded) {
 										expect(Number.isInteger(letters ?? 0), call.op).toBe(true);
 										expect(Number.isInteger(skipped ?? 0), call.op).toBe(true);
-									} else expect([letters, skipped], call.op).toEqual([undefined, undefined]);
+									} else {
+										expect([letters, skipped], call.op).toEqual([undefined, undefined]);
+									}
+
 									// An undecodable input is refused before the successor loads.
-									if (call.op !== "bad_input") unloaded = false;
+									if (call.op !== "bad_input") {
+										unloaded = false;
+									}
+
 									expect(own).toEqual({
 										"fab.process": reached,
 										"fab.runner.name": a.name,
@@ -1275,6 +1407,7 @@ describe("T285, runner tracing keep-laws", () => {
 											? {"fab.runner.letter": input.id}
 											: {}),
 									});
+
 									if (!waiting && (writing || handling)) {
 										const cmd = selected[1]!;
 										const letter = (yield* Stream.runCollect(
@@ -1287,12 +1420,15 @@ describe("T285, runner tracing keep-laws", () => {
 											"fab.runner.cmd": writing ? "write" : "work",
 											"fab.runner.id": `${pid}/${letter.pos}/0`,
 										});
+
 										if (writing) {
 											const write = selected[2]!;
 											ended(write, call.op !== "write_storage");
 											child(write, cmd);
-											if (call.op === "own") expect(write.links).toEqual([]);
-											else
+
+											if (call.op === "own") {
+												expect(write.links).toEqual([]);
+											} else {
 												expect(
 													write.links.map(({span, attributes}) => ({
 														traceId: span.traceId,
@@ -1300,6 +1436,8 @@ describe("T285, runner tracing keep-laws", () => {
 														attributes,
 													})),
 												).toEqual([{...signer, attributes: {}}]);
+											}
+
 											expect(tags(write)).toEqual({
 												"fab.process": pid,
 												"fab.runner.write": tags(cmd)["fab.runner.id"],
@@ -1307,16 +1445,21 @@ describe("T285, runner tracing keep-laws", () => {
 											});
 										}
 									}
+
 									// Each life's spans are its own job's records.
 									const rows = [];
-									for (const id of pids)
+
+									for (const id of pids) {
 										rows.push(
 											...(yield* Stream.runCollect(
 												records.read(Chain.cases.job.make({process: id})),
 											)).filter((s) => s.name.startsWith("runner.")),
 										);
+									}
+
 									const all = w.spans.filter((s) => s.name.startsWith("runner."));
 									expect(rows.map((s) => s.spanId).sort()).toEqual(all.map((s) => s.spanId).sort());
+
 									for (const span of [...selected, ...recovering]) {
 										const row = rows.find((s) => s.spanId === span.spanId)!;
 										expect(row).toMatchObject({
@@ -1326,7 +1469,11 @@ describe("T285, runner tracing keep-laws", () => {
 										});
 										expect(row.attributes).toMatchObject(tags(span));
 										const status = span.status;
-										if (status._tag !== "Ended") expect.unreachable("runner span still open");
+
+										if (status._tag !== "Ended") {
+											expect.unreachable("runner span still open");
+										}
+
 										expect(row.startTimeUnixNano).toBe(String(status.startTime));
 										expect(row.endTimeUnixNano).toBe(String(status.endTime));
 										expect(row.ok).toBe(Exit.isSuccess(status.exit));

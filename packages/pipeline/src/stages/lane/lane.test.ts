@@ -35,6 +35,7 @@ const claim = (when: string, result: string) => ({
 	check: {how: "test" as const, what: "a test runs it"},
 	serves: ["mover"] as const,
 });
+
 const job = (when: string, result: string) => ({
 	...claim(when, result),
 	fixture: "three files in two packages, moved twice",
@@ -73,6 +74,7 @@ const DRAFT: PlanDraft = {
 };
 
 const ledger = (facts: readonly Fact[]): Entry[] => facts.map((fact, i) => ({seq: i + 1, fact}));
+
 const planned = (tickets = [TICKET]): Fact => ({
 	type: "planned",
 	plan: PLAN,
@@ -80,11 +82,13 @@ const planned = (tickets = [TICKET]): Fact => ({
 	data: revisionOfDraft(DRAFT)!,
 	problems: [],
 });
+
 const approve = (version: number): Fact => ({
 	type: "answered",
 	id: planAskId(PLAN, version),
 	answer: {kind: "approve"},
 });
+
 const judged = (
 	task: "t1" | "t2" | "plan",
 	head: string,
@@ -325,6 +329,7 @@ describe("the lane's view, from the facts", () => {
 
 type AnyMsg = {readonly type: string; readonly [field: string]: unknown};
 const step = (s: Lane, msg: AnyMsg) => applyCell<Lane, AnyMsg, LaneCmd>(lane, s, msg);
+
 const JOB: LaneJob = {
 	plan: PLAN,
 	settings: {model: "haiku", effort: "low", budget: 1},
@@ -426,7 +431,11 @@ describe("the lane machine", () => {
 		const running = (value: LaneView, child: string) => {
 			const [s1, [c1]] = step(s, {type: readLane.okType, cmd, value});
 			const [r1] = step(s1, {type: startChild.okType, cmd: c1, value: {started: true}});
-			if (!child.endsWith(":catchup")) return r1;
+
+			if (!child.endsWith(":catchup")) {
+				return r1;
+			}
+
 			const [s2, [c2]] = step(r1, {type: "child_over", child, end: {outcome: {kind: "done"}}});
 			return step(s2, {type: startChild.okType, cmd: c2, value: {started: true}})[0];
 		};

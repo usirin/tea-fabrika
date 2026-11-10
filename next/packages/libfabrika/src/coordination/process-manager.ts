@@ -31,6 +31,7 @@ type Failure = ProcessError | LedgerError;
  * key. Every fact this manager writes carries that `by`, and its fold trusts no other.
  */
 type Wiring = Caller & {readonly by: string};
+
 const failed = Effect.fnUntraced(function* (error: Failure) {
 	yield* Effect.annotateCurrentSpan({[tag("answer")]: "refused", [tag("why")]: error.why});
 });
@@ -98,12 +99,15 @@ export class ProcessManager extends Context.Service<
 							? clientInbox(to.client)
 							: `${Option.getOrThrow(table.life(to.process)).name}/inbox`;
 					const letter = signalId(to, ref, round);
+
 					// A retried call may find this signal already written. Only the brain's own row counts;
 					// another writer's row at this id makes the append refuse, and the whole turn with it.
 					if (
 						[...turn.read(inbox, 0)].some((entry) => entry.id === letter && entry.by === caller.by)
-					)
+					) {
 						return;
+					}
+
 					turn.append(
 						inbox,
 						letter,
@@ -125,11 +129,20 @@ export class ProcessManager extends Context.Service<
 								const process = yield* nextId;
 								return yield* checked((table, turn) => {
 									const current = table.start(request, caller, from);
-									if (Result.isFailure(current)) return Result.fail(current.failure);
-									if (Option.isSome(current.success)) return Result.succeed(current.success.value);
-									if (table.collision(process))
+
+									if (Result.isFailure(current)) {
+										return Result.fail(current.failure);
+									}
+
+									if (Option.isSome(current.success)) {
+										return Result.succeed(current.success.value);
+									}
+
+									if (table.collision(process)) {
 										return Result.fail(new ProcessError({why: "id_collision"}));
-									if (request._tag === "first")
+									}
+
+									if (request._tag === "first") {
 										turn.append(
 											ProcessTable.stream,
 											id("registered", request.name),
@@ -142,6 +155,8 @@ export class ProcessManager extends Context.Service<
 												}),
 											),
 										);
+									}
+
 									const placed = turn.append(
 										ProcessTable.facts(request.name),
 										request.id,
@@ -154,7 +169,8 @@ export class ProcessManager extends Context.Service<
 											}),
 										),
 									);
-									if (request._tag === "again")
+
+									if (request._tag === "again") {
 										turn.append(
 											ProcessTable.facts(request.name),
 											id("restarted", process),
@@ -169,6 +185,8 @@ export class ProcessManager extends Context.Service<
 												}),
 											),
 										);
+									}
+
 									return Result.succeed({process, rev: placed.rev});
 								});
 							});
@@ -187,16 +205,26 @@ export class ProcessManager extends Context.Service<
 					yield* Effect.annotateCurrentSpan({"fab.process": process});
 					yield* checked((table, turn) => {
 						const life = table.exit(process, why, caller.owner);
-						if (Result.isFailure(life)) return Result.fail(life.failure);
-						if (life.success.state._tag !== "live") return Result.succeed(undefined);
+
+						if (Result.isFailure(life)) {
+							return Result.fail(life.failure);
+						}
+
+						if (life.success.state._tag !== "live") {
+							return Result.succeed(undefined);
+						}
+
 						turn.append(
 							ProcessTable.facts(life.success.name),
 							id("exited", process),
 							line(from, ProcessFact.cases.exited.make({process, why})),
 						);
-						for (const watch of table.inbound(process))
+
+						for (const watch of table.inbound(process)) {
 							signal(table, turn, watch, process, why, watch.to, from);
-						for (const watch of table.outbound(process))
+						}
+
+						for (const watch of table.outbound(process)) {
 							turn.append(
 								ProcessTable.stream,
 								id("demonitored", watch.to, watch.ref, watch.round),
@@ -209,6 +237,8 @@ export class ProcessManager extends Context.Service<
 									}),
 								),
 							);
+						}
+
 						return Result.succeed(undefined);
 					});
 				}, Effect.tapError(failed));
@@ -223,14 +253,22 @@ export class ProcessManager extends Context.Service<
 					});
 					yield* checked((table, turn) => {
 						const round = table.monitor(ref, process, caller.recipient);
-						if (Result.isFailure(round)) return Result.fail(round.failure);
-						if (Option.isNone(round.success)) return Result.succeed(undefined);
+
+						if (Result.isFailure(round)) {
+							return Result.fail(round.failure);
+						}
+
+						if (Option.isNone(round.success)) {
+							return Result.succeed(undefined);
+						}
+
 						turn.append(
 							ProcessTable.stream,
 							id("monitored", caller.recipient, ref, round.success.value),
 							line(from, ProcessFact.cases.monitored.make({ref, process, to: caller.recipient})),
 						);
-						if (!table.isLive(process))
+
+						if (!table.isLive(process)) {
 							signal(
 								table,
 								turn,
@@ -240,6 +278,8 @@ export class ProcessManager extends Context.Service<
 								caller.recipient,
 								from,
 							);
+						}
+
 						return Result.succeed(undefined);
 					});
 				}, Effect.tapError(failed));
@@ -247,7 +287,8 @@ export class ProcessManager extends Context.Service<
 					yield* Effect.annotateCurrentSpan(short({[tag("ref")]: ref}));
 					yield* checked((table, turn) => {
 						const watch = table.demonitor(ref, caller.recipient);
-						if (Option.isSome(watch))
+
+						if (Option.isSome(watch)) {
 							turn.append(
 								ProcessTable.stream,
 								id("demonitored", caller.recipient, ref, watch.value.round),
@@ -256,6 +297,8 @@ export class ProcessManager extends Context.Service<
 									ProcessFact.cases.demonitored.make({ref, to: caller.recipient, why: "canceled"}),
 								),
 							);
+						}
+
 						return Result.succeed(undefined);
 					});
 				}, Effect.tapError(failed));
@@ -267,7 +310,11 @@ export class ProcessManager extends Context.Service<
 					yield* Effect.annotateCurrentSpan({"fab.process": process});
 					yield* checked((table, turn) => {
 						const life = table.down(process, policy.why, caller.owner);
-						if (Result.isFailure(life)) return Result.fail(life.failure);
+
+						if (Result.isFailure(life)) {
+							return Result.fail(life.failure);
+						}
+
 						turn.append(
 							ProcessTable.facts(life.success.name),
 							id("down", process, policy),
@@ -282,8 +329,11 @@ export class ProcessManager extends Context.Service<
 							yield* Effect.annotateCurrentSpan({"fab.process": process, [tag("after")]: after});
 							const mail = yield* checked((table, turn) => {
 								const life = table.life(process);
-								if (Option.isNone(life) || !table.isLive(process))
+
+								if (Option.isNone(life) || !table.isLive(process)) {
 									return Result.fail(new ProcessError({why: "ended"}));
+								}
+
 								return Result.succeed(
 									processMail(table, process, turn.read(`${life.value.name}/inbox`, after)),
 								);
@@ -324,7 +374,11 @@ export class ProcessManager extends Context.Service<
 						);
 						yield* checked((table, turn) => {
 							const life = table.parent(process, caller.owner);
-							if (Result.isFailure(life)) return Result.fail(life.failure);
+
+							if (Result.isFailure(life)) {
+								return Result.fail(life.failure);
+							}
+
 							const value = Dead.make({
 								...input,
 								process: life.success.state.process,
@@ -336,7 +390,11 @@ export class ProcessManager extends Context.Service<
 							const prior = [...turn.read(stream, 0)].find(
 								(entry) => entry.id === key && entry.by === caller.by,
 							);
-							if (prior === undefined) turn.append(stream, key, line(from, value));
+
+							if (prior === undefined) {
+								turn.append(stream, key, line(from, value));
+							}
+
 							return Result.succeed(undefined);
 						});
 					}),
@@ -363,6 +421,7 @@ export class ProcessManager extends Context.Service<
 export type ProcessCalls = Omit<Context.Service.Shape<typeof ProcessManager>, "receive"> & {
 	readonly receive: (process: string, after: Rev) => Effect.Effect<ReadonlyArray<Letter>, Failure>;
 };
+
 export const remoteProcessManager = (calls: ProcessCalls): Layer.Layer<ProcessManager> =>
 	Layer.succeed(ProcessManager, {
 		...calls,

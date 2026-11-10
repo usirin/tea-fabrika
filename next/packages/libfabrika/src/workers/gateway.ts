@@ -54,8 +54,15 @@ const gatewayLogic = Effect.fnUntraced(function* (
 				const answer = yield* rpc(
 					p.route(state.client as ConnectionId, "ledger.wait", {stream, after}, reader),
 				);
-				if (answer._tag === "parked") return Waited.cases.parked.make({});
-				if (answer._tag !== "ok") return yield* Effect.fail(answer);
+
+				if (answer._tag === "parked") {
+					return Waited.cases.parked.make({});
+				}
+
+				if (answer._tag !== "ok") {
+					return yield* Effect.fail(answer);
+				}
+
 				const ready = yield* Schema.decodeUnknownEffect(Schema.Struct({rev: Schema.Int}))(
 					answer.result,
 				).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
@@ -64,6 +71,7 @@ const gatewayLogic = Effect.fnUntraced(function* (
 			call: Effect.fnUntraced(
 				function* (method, params) {
 					const client = (yield* attached(ws)).client as ConnectionId;
+
 					if (method === "initialize") {
 						const hello = Schema.decodeUnknownResult(Hello)(params);
 						const result = yield* rpc(
@@ -73,8 +81,9 @@ const gatewayLogic = Effect.fnUntraced(function* (
 								name: key,
 							}),
 						);
+
 						if (result._tag === "refused") {
-							if (Result.isSuccess(hello))
+							if (Result.isSuccess(hello)) {
 								ws.serializeAttachment(
 									Attached.cases.waiting.make({
 										client,
@@ -83,8 +92,11 @@ const gatewayLogic = Effect.fnUntraced(function* (
 										nonce: hello.success.nonce,
 									}),
 								);
+							}
+
 							return result;
 						}
+
 						ws.serializeAttachment(
 							Attached.cases.online.make({
 								client,
@@ -100,11 +112,13 @@ const gatewayLogic = Effect.fnUntraced(function* (
 							result: {who: result.who, version: result.version, ping: result.ping},
 						});
 					}
+
 					if (method === "door.knock") {
 						const input = yield* Schema.decodeUnknownEffect(Schema.Struct({label: Schema.String}))(
 							params,
 						).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
 						const result = yield* rpc(p.knock(client, input));
+
 						if (result._tag === "ok") {
 							const waiting = yield* Schema.decodeUnknownEffect(
 								Schema.Struct({code: Schema.String, until: Schema.Number}),
@@ -112,8 +126,10 @@ const gatewayLogic = Effect.fnUntraced(function* (
 							yield* rpc(p.publish(client, {method: "door.waiting", params: waiting}));
 							return Answer.cases.ok.make({result: waiting});
 						}
+
 						return result;
 					}
+
 					return yield* rpc(p.route(client, method, params));
 				},
 				// A failed or defective call still answers its request without exposing error details.
@@ -136,18 +152,24 @@ const gatewayLogic = Effect.fnUntraced(function* (
 		connections.delete(ws);
 	});
 	const ring = Effect.fn("gateway.ring")(function* (stream: string, rev: number) {
-		for (const ws of ctx.getWebSockets())
-			if ((yield* attached(ws))._tag === "online") yield* (yield* connected(ws)).ring(stream, rev);
+		for (const ws of ctx.getWebSockets()) {
+			if ((yield* attached(ws))._tag === "online") {
+				yield* (yield* connected(ws)).ring(stream, rev);
+			}
+		}
 	});
 	const probe = Effect.fn("gateway.probe")(function* (session: string) {
-		for (const ws of ctx.getWebSockets(session))
-			if ((yield* attached(ws))._tag === "online")
+		for (const ws of ctx.getWebSockets(session)) {
+			if ((yield* attached(ws))._tag === "online") {
 				return yield* (yield* connected(ws)).probe(session);
+			}
+		}
+
 		return yield* new LedgerError({why: "unreachable"});
 	});
 	const notify = Effect.fn("gateway.notify")(function* (client: string, news: unknown) {
-		for (const ws of ctx.getWebSockets())
-			if ((yield* attached(ws)).client === client)
+		for (const ws of ctx.getWebSockets()) {
+			if ((yield* attached(ws)).client === client) {
 				yield* Effect.try({
 					try: () => {
 						if (
@@ -155,28 +177,36 @@ const gatewayLogic = Effect.fnUntraced(function* (
 							news !== null &&
 							"close" in news &&
 							typeof news.close === "number"
-						)
+						) {
 							ws.close(news.close, "permission changed");
-						else
+						} else {
 							ws.send(
 								JSON.stringify({
 									jsonrpc: "2.0",
 									...(typeof news === "object" && news !== null ? news : {}),
 								}),
 							);
+						}
 					},
 					catch: () => new LedgerError({why: "unreachable"}),
 				});
+			}
+		}
 	});
+
 	for (const ws of ctx.getWebSockets()) {
 		const work = (yield* make(ws)).wake();
 		yield* (yield* attached(ws))._tag === "online" ? recorded(work) : work;
 	}
+
 	return {
 		fetch: Effect.fnUntraced(function* (request: Request) {
 			const path = new URL(request.url).pathname.split("/");
-			if (request.headers.get("upgrade")?.toLowerCase() !== "websocket")
+
+			if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
 				return new Response("WebSocket required", {status: 426});
+			}
+
 			const segments = yield* Schema.decodeUnknownEffect(
 				Schema.Tuple([Schema.String, Schema.String]),
 			)(path.slice(2, 4)).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
@@ -199,7 +229,11 @@ const gatewayLogic = Effect.fnUntraced(function* (
 		}),
 		message: Effect.fnUntraced(function* (ws: WebSocket, text: string | ArrayBuffer) {
 			const state = yield* attached(ws);
-			if (typeof text !== "string") return;
+
+			if (typeof text !== "string") {
+				return;
+			}
+
 			const work = (yield* connected(ws)).frame(text);
 			return yield* state._tag === "online" ? recorded(work) : work;
 		}),
@@ -215,13 +249,16 @@ const gatewayLogic = Effect.fnUntraced(function* (
 		}),
 	};
 });
+
 export class GatewayService extends Context.Service<
 	GatewayService,
 	Effect.Success<ReturnType<typeof gatewayLogic>>
 >()("fabrika/Gateway") {}
+
 export const gatewayLayer = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
 	Layer.effect(GatewayService, gatewayLogic(ctx, env, config)).pipe(
 		Layer.provide(ProcessIdGenerator.layer),
 	);
+
 export const gatewayRuntime = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
 	ManagedRuntime.make(gatewayLayer(ctx, env, config));

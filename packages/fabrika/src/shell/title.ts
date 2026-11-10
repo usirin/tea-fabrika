@@ -23,12 +23,14 @@ export const Shorten = Context.Reference<Short>("tsh/Shorten", {defaultValue: ()
 /** A stage, by what ran and what it was told about. */
 const stageTitle = (stage: Stage, short: Short): string => {
 	const told = new Map<string, string[]>();
+
 	for (const {name, source} of stage.told) {
 		const refs = told.get(name) ?? [];
 		const ref =
 			source.kind === "value" && typeof source.value === "string" ? short(source.value) : null;
 		told.set(name, ref === null ? refs : [...refs, ref]);
 	}
+
 	return [stage.entry.program.name, ...[...told].flatMap(([name, refs]) => [name, ...refs])].join(
 		" ",
 	);

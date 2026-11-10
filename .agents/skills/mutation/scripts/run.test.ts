@@ -22,6 +22,7 @@ import {describe, expect, it} from "vitest";
 const script = join(import.meta.dirname, "run.sh");
 const root = join(import.meta.dirname, "../../../..");
 const options = {seed: 300, numRuns: 8};
+
 const helper = String.raw`
 const fs = require("node:fs"), path = require("node:path"), cp = require("node:child_process");
 const dir = process.env.COMMAND_FIXTURE;
@@ -48,8 +49,10 @@ if (args[0]?.endsWith("/core/bin/stryker.js")) {
   setInterval(() => {}, 1000);
 } else throw new Error("unhandled tool " + args[0]);
 `;
+
 type Setup = {ranges: string[]; sampleExit: number; exit: number; hold: boolean; orphan?: boolean};
 const defaults: Setup = {ranges: ['"src/math.ts:1:0-1:30"'], sampleExit: 0, exit: 0, hold: false};
+
 const fixture = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: string}) => {
 	expect(existsSync(script), "build must extract the executable run.sh").toBe(true);
 	const dir = mkdtempSync(join(tmpdir(), "mut-command-"));
@@ -69,8 +72,11 @@ const fixture = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: st
 		mode: 0o755,
 	});
 	mkdirSync(join(dir, ".agents/skills/mutation/scripts"), {recursive: true});
-	if (existsSync(script))
+
+	if (existsSync(script)) {
 		writeFileSync(join(dir, ".agents/skills/mutation/scripts/run.sh"), readFileSync(script));
+	}
+
 	writeFileSync(join(dir, ".agents/skills/mutation/scripts/sample.ts"), "// intercepted sampler\n");
 	writeFileSync(
 		join(dir, "vitest.config.ts"),
@@ -91,6 +97,7 @@ const fixture = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: st
 		script: join(dir, ".agents/skills/mutation/scripts/run.sh"),
 	};
 };
+
 type Invocation = {
 	args: string[];
 	config: {
@@ -105,12 +112,15 @@ type Invocation = {
 	};
 	vitest: string;
 };
+
 const invoked = (dir: string): Invocation | undefined =>
 	existsSync(join(dir, "invoked.json"))
 		? JSON.parse(readFileSync(join(dir, "invoked.json"), "utf8"))
 		: undefined;
+
 const run = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: string}) => {
 	const f = fixture(setup, inputs);
+
 	try {
 		const ran = spawnSync("sh", [f.script], {
 			cwd: f.dir,
@@ -137,12 +147,16 @@ const run = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: string
 		rmSync(f.dir, {recursive: true, force: true});
 	}
 };
+
 const alive = (pid: number) => {
 	try {
 		process.kill(pid, 0);
 		return true;
 	} catch (e) {
-		if ((e as NodeJS.ErrnoException).code === "ESRCH") return false;
+		if ((e as NodeJS.ErrnoException).code === "ESRCH") {
+			return false;
+		}
+
 		throw e;
 	}
 };
@@ -152,6 +166,7 @@ describe("mutation command, today's tooling", () => {
 	// Resolve the emitted config in a fresh process without starting Stryker's socket server.
 	it("T325 resolves shared settings without running the local CLI guard", () => {
 		const dir = mkdtempSync(join(tmpdir(), "mut-config-"));
+
 		try {
 			const got = run(defaults, {T: "325", BUILD: "abc1234", RELATED: "math.test.ts"});
 			expect(got.code, got.text).toBe(0);
@@ -292,6 +307,7 @@ console.log(JSON.stringify(resolved.test));
 				fc.record({ticket: fc.integer({min: 1, max: 9999}), failure: fc.integer({min: 1, max: 4})}),
 				({ticket, failure}) => {
 					const inputs = {T: `${ticket}`, BUILD: "abc1234", RELATED: "math.test.ts"};
+
 					for (const [setup, env] of [
 						[defaults, {...inputs, T: undefined}],
 						[defaults, {...inputs, T: ""}],
@@ -341,6 +357,7 @@ console.log(JSON.stringify(resolved.test));
 					{T: "300", BUILD: "abc1234", RELATED: "math.test.ts"},
 				);
 				let pids: number[] = [];
+
 				try {
 					const ran = spawnSync("sh", [f.script], {
 						cwd: f.dir,
@@ -350,8 +367,11 @@ console.log(JSON.stringify(resolved.test));
 					});
 					expect(ran.status, ran.stdout + ran.stderr).toBe(exit);
 					pids = JSON.parse(readFileSync(join(f.dir, "pids.json"), "utf8"));
-					for (let i = 0; i < 100 && pids.some(alive); i++)
+
+					for (let i = 0; i < 100 && pids.some(alive); i++) {
 						await new Promise((r) => setTimeout(r, 10));
+					}
+
 					expect(pids.filter(alive), "the left-behind worker must be stopped").toEqual([]);
 				} finally {
 					for (const pid of pids) {
@@ -359,6 +379,7 @@ console.log(JSON.stringify(resolved.test));
 							process.kill(pid, "SIGKILL");
 						} catch {}
 					}
+
 					rmSync(f.dir, {recursive: true, force: true});
 				}
 			}),
@@ -388,13 +409,16 @@ console.log(JSON.stringify(resolved.test));
 				});
 				const done = new Promise<number | null>((resolve) => child.once("exit", resolve));
 				let pids: number[] = [];
+
 				try {
 					for (
 						let i = 0;
 						i < 200 && !existsSync(join(f.dir, "pids.json")) && child.exitCode === null;
 						i++
-					)
+					) {
 						await new Promise((r) => setTimeout(r, 10));
+					}
+
 					expect(
 						existsSync(join(f.dir, "pids.json")),
 						`Stryker child must have started: ${output}`,
@@ -407,8 +431,11 @@ console.log(JSON.stringify(resolved.test));
 					]);
 					expect(code, output).not.toBe("still running");
 					expect(code, output).not.toBe(0);
-					for (let i = 0; i < 100 && pids.some(alive); i++)
+
+					for (let i = 0; i < 100 && pids.some(alive); i++) {
 						await new Promise((r) => setTimeout(r, 10));
+					}
+
 					expect(pids.filter(alive), output).toEqual([]);
 					expect(existsSync(join(f.dir, "vitest.mutation.config.ts")), output).toBe(false);
 				} finally {
@@ -417,11 +444,13 @@ console.log(JSON.stringify(resolved.test));
 							process.kill(-child.pid, "SIGKILL");
 						} catch {}
 					}
+
 					for (const pid of pids) {
 						try {
 							process.kill(pid, "SIGKILL");
 						} catch {}
 					}
+
 					await done;
 					rmSync(f.dir, {recursive: true, force: true});
 				}
@@ -435,6 +464,7 @@ console.log(JSON.stringify(resolved.test));
 	it("T300 package imports reach a discovered test and a real tested mutant", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "mut-package-"));
 		const started = performance.now();
+
 		try {
 			const core = join(root, "packages/pipeline/node_modules/@stryker-mutator/core");
 			expect(JSON.parse(readFileSync(join(core, "package.json"), "utf8")).version).toBe("10.1.1");
@@ -493,7 +523,11 @@ console.log(JSON.stringify(resolved.test));
 				'console.log(JSON.stringify("src/math.ts:1:0-1:60"));\n',
 			);
 			const command = join(dir, ".agents/skills/mutation/scripts/run.sh");
-			if (existsSync(script)) writeFileSync(command, readFileSync(script));
+
+			if (existsSync(script)) {
+				writeFileSync(command, readFileSync(script));
+			}
+
 			const git = (...args: string[]) => {
 				const ran = spawnSync("/usr/bin/git", ["-C", dir, ...args], {
 					encoding: "utf8",
@@ -550,6 +584,7 @@ console.log(JSON.stringify(resolved.test));
 							.filter(Boolean)
 							.map((line) => JSON.parse(line) as number)
 					: [];
+
 			try {
 				status = await Promise.race([
 					done,
@@ -560,23 +595,31 @@ console.log(JSON.stringify(resolved.test));
 			} finally {
 				clearTimeout(cap);
 				child.kill("SIGTERM");
+
 				for (const pid of children().reverse()) {
 					try {
 						process.kill(pid, "SIGTERM");
 					} catch {}
 				}
+
 				await new Promise((resolve) => setTimeout(resolve, 100));
+
 				for (const pid of children().reverse()) {
 					try {
 						process.kill(pid, "SIGKILL");
 					} catch {}
 				}
+
 				child.kill("SIGKILL");
 				await done;
-				for (let i = 0; i < 100 && children().some(alive); i++)
+
+				for (let i = 0; i < 100 && children().some(alive); i++) {
 					await new Promise((resolve) => setTimeout(resolve, 10));
+				}
+
 				expect(children().filter(alive), "fixture left Node children behind").toEqual([]);
 			}
+
 			const logPath = join(dir, "mut-300/log.txt");
 			const log = existsSync(logPath) ? readFileSync(logPath, "utf8") : output;
 			expect(status, log).toBe(0);

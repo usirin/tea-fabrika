@@ -86,6 +86,7 @@ const pr = (ci: Check): PrFact => ({
 	head: "abc1234",
 	checks: [ci],
 });
+
 const queued = pr({name: "ci", status: "queued", conclusion: null});
 const failure = pr({name: "ci", status: "completed", conclusion: "failure"});
 const success = pr({name: "ci", status: "completed", conclusion: "success"});
@@ -122,7 +123,11 @@ describe("Tickets", () => {
 				const tickets = yield* Tickets;
 				const watching = yield* Watcher;
 				const steps = [queued, failure, queued, success, failure];
-				for (const [i, fact] of steps.entries()) yield* watching.write(1, `watch/${i + 1}`, fact);
+
+				for (const [i, fact] of steps.entries()) {
+					yield* watching.write(1, `watch/${i + 1}`, fact);
+				}
+
 				const ticket = yield* tickets.read(1);
 				return ticket.timeline.flatMap((e) =>
 					e.fact.type === "pr" ? e.fact.checks.map((c) => c.conclusion ?? c.status) : [],

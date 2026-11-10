@@ -1,5 +1,6 @@
 // Declare script reads for Vitest's affected walk, including transitive calls.
 import "./box.sh?raw";
+import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
@@ -48,6 +49,7 @@ const options = {seed: 321, numRuns: 3, endOnFailure: true};
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
 type Call = {cmd: string; args: string[]; cwd: string; head?: string};
 type Operation = {path: string; text?: string; to?: string};
+
 type Setup = {
 	operations?: Operation[];
 	batches?: Operation[][];
@@ -61,6 +63,7 @@ type Setup = {
 	openPrs?: string[];
 	gh?: "down";
 };
+
 const body = (
 	files: Array<[string, string]> = [
 		["src/a.ts", "tests"],
@@ -68,9 +71,12 @@ const body = (
 	],
 ) =>
 	`# Today's tooling\n\n\`\`\`text\nstep -> fetch\n\`\`\`\n\n## Laws\n| Law | Generator | Plant |\n| --- | --- | --- |\n| holds | fc.record: files | break |\n\n## Files\n| File | Owner step |\n| --- | --- |\n${files.map(([path, owner]) => `| ${path} | ${owner} |`).join("\n")}\n\n## Size\n1 agent hour, 80 lines. Confidence: 90%.\n\n## What it records\nRun IDs and digests.\n\n## What it cannot tell us\nNo live service.\n\n## Open questions\nNone.\n`;
+
 const hash = (text: string) => createHash("sha256").update(Buffer.from(text)).digest("hex");
+
 const approve = (text: string) =>
 	`Approved by the lead agent, builds the decided note; body ${hash(text).slice(0, 12)}\nPlancheck-Version: 2\n${text}`;
+
 const write = (path: string, text: string) => {
 	mkdirSync(dirname(path), {recursive: true});
 	writeFileSync(path, text);
@@ -160,9 +166,12 @@ class Box {
 	readonly branch = "fabrikalfa/one";
 	readonly env: NodeJS.ProcessEnv;
 	readonly base: string;
+
 	constructor(files?: Array<[string, string]>) {
-		for (const path of [this.main, this.boxes, this.home, this.bin, join(this.boxes, "state")])
+		for (const path of [this.main, this.boxes, this.home, this.bin, join(this.boxes, "state")]) {
 			mkdirSync(path, {recursive: true});
+		}
+
 		this.env = {
 			HOME: this.home,
 			PATH: `${this.bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
@@ -190,8 +199,11 @@ class Box {
 		write(join(this.home, ".npmrc"), "");
 		write(join(this.dir, "global.npmrc"), "");
 		this.setup({});
-		for (const cmd of ["pnpm", "codex", "git", "gh"])
+
+		for (const cmd of ["pnpm", "codex", "git", "gh"]) {
 			writeFileSync(join(this.bin, cmd), `#!${process.execPath}\n${stub}`, {mode: 0o755});
+		}
+
 		writeFileSync(join(this.bin, "nice"), '#!/bin/sh\nshift 2\nexec "$@"\n', {mode: 0o755});
 		this.git(
 			this.main,
@@ -202,6 +214,7 @@ class Box {
 			`--separate-git-dir=${join(this.dir, "main-gitdata")}`,
 		);
 		const lines: string[] = [];
+
 		for (const role of ["tests", "build", "lead", "person", "stranger"]) {
 			const key = join(this.home, ".fabrika/step-keys", role);
 			mkdirSync(dirname(key), {recursive: true});
@@ -211,11 +224,14 @@ class Box {
 				.split(" ")
 				.slice(0, 2)
 				.join(" ");
-			if (role !== "stranger")
+
+			if (role !== "stranger") {
 				lines.push(
 					`${role === "person" ? "person:fixture" : role} namespaces="${role === "person" ? "git" : "fabrika-step"}" ${pub}`,
 				);
+			}
 		}
+
 		write(join(this.main, "allowed_signers"), `${lines.join("\n")}\n`);
 		const exam = JSON.parse(readFileSync(join(root, "exam-paths.json"), "utf8"));
 		// The installed checker skips ordinary tooling files. This disposable exam row makes its
@@ -242,28 +258,35 @@ class Box {
 		write(join(this.dir, "prompt"), "A bounded fixture run.\n");
 		this.state();
 	}
+
 	close() {
 		rmSync(this.dir, {recursive: true, force: true});
 	}
+
 	setup(value: Setup) {
 		write(join(this.dir, "setup.json"), JSON.stringify(value));
 	}
+
 	call(cmd: string, args: string[], cwd = this.main, env = this.env) {
 		const r = spawnSync(cmd, args, {cwd, env, encoding: "utf8", timeout: 15_000});
 		expect(r.error, `${cmd} failed to start`).toBeUndefined();
 		return {code: r.status, signal: r.signal, text: r.stdout + r.stderr, stdout: r.stdout};
 	}
+
 	must(cmd: string, args: string[], cwd = this.main) {
 		const r = this.call(cmd, args, cwd);
 		expect(r.code, r.text).toBe(0);
 		return r.stdout;
 	}
+
 	git(cwd: string, ...args: string[]) {
 		return this.must("/usr/bin/git", args, cwd);
 	}
+
 	head(cwd = this.main, rev = "HEAD") {
 		return this.git(cwd, "rev-parse", rev).trim();
 	}
+
 	state(base = this.base) {
 		const approvedBody = readFileSync(this.plan, "utf8").split("\n").slice(2).join("\n");
 		write(
@@ -271,6 +294,7 @@ class Box {
 			`ticket: 321\nbranch: ${this.branch}\nbase: ${base}\nparent: none\nchildren: none\nplan: ${this.plan}\nplan-sha256: ${hash(approvedBody)}\n`,
 		);
 	}
+
 	run(step = "tests") {
 		return this.call("sh", [
 			program,
@@ -284,6 +308,7 @@ class Box {
 			"321",
 		]);
 	}
+
 	fetch(step = "tests", ticket = "321") {
 		return this.call(
 			"sh",
@@ -292,6 +317,7 @@ class Box {
 			{...this.env, T321_FETCH: "1"},
 		);
 	}
+
 	new(base = "origin/main", branch = "fabrikalfa/new") {
 		return this.call("sh", [
 			program,
@@ -305,6 +331,7 @@ class Box {
 			this.plan,
 		]);
 	}
+
 	calls(): Call[] {
 		return existsSync(join(this.dir, "calls.jsonl"))
 			? readFileSync(join(this.dir, "calls.jsonl"), "utf8")
@@ -314,9 +341,11 @@ class Box {
 					.map((s) => JSON.parse(s))
 			: [];
 	}
+
 	notes() {
 		return this.git(this.main, "notes", "--ref=fabrika", "list");
 	}
+
 	sign(cwd: string, step: string, ticket = "321", key = step) {
 		return this.must(
 			process.execPath,
@@ -333,12 +362,14 @@ class Box {
 			cwd,
 		);
 	}
+
 	commit(cwd: string, path: string, text: string) {
 		write(join(cwd, path), text);
 		this.git(cwd, "add", "--", path);
 		this.git(cwd, "commit", "-q", "-m", "outside change");
 		return this.head(cwd);
 	}
+
 	rows(): Array<Record<string, unknown>> {
 		const path = join(this.boxes, "state/one.rows.jsonl");
 		return existsSync(path)
@@ -350,22 +381,35 @@ class Box {
 			: [];
 	}
 }
+
 const fixture = (f: (b: Box) => void, files?: Array<[string, string]>) => {
 	const b = new Box(files);
+
 	try {
 		f(b);
 	} finally {
 		b.close();
 	}
 };
+
 const refused = (r: {code: number | null; text: string}, why: RegExp) => {
 	expect(r.code, r.text).not.toBe(0);
 	expect(r.text).toMatch(why);
 	expect(r.text).not.toMatch(/usage:|Traceback|command not found|cannot open/);
 };
+
+/** A start check's no: exit 3 and one `refused <check>: <why>` line, which drive reads (ticket 428). */
+const checkRefused = (r: {code: number | null; text: string}, check: string, why = /.*/) => {
+	refused(r, why);
+	expect(r.code, r.text).toBe(3);
+	expect(r.text).toMatch(new RegExp(`^refused ${check}: .*$`, "m"));
+	expect(r.text).not.toMatch(/^stuck /m);
+};
+
 // Exercise every independent fault, even while the product still lacks several checks.
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	const errors: Error[] = [];
+
 	for (const value of values) {
 		try {
 			check(value);
@@ -378,8 +422,12 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
 			);
 		}
 	}
-	if (errors.length) throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
+
+	if (errors.length) {
+		throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
+	}
 };
+
 // A real SIGTERM to the runner and its child. The separate group contains only this fixture.
 const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
 	new Promise<{code: number | null; signal: NodeJS.Signals | null; text: string}>(
@@ -405,7 +453,10 @@ const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
 			const poll = setInterval(() => {
 				if (!sent && existsSync(join(b.dir, "ready"))) {
 					sent = true;
-					if (child.pid) process.kill(-child.pid, "SIGTERM");
+
+					if (child.pid) {
+						process.kill(-child.pid, "SIGTERM");
+					}
 				}
 			}, 10);
 			const timeout = setTimeout(() => {
@@ -414,6 +465,7 @@ const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
 						process.kill(-child.pid, "SIGKILL");
 					} catch {}
 				}
+
 				reject(new Error("fixture runner never reached the signal point"));
 			}, 10_000);
 			child.stdout.on("data", (s) => {
@@ -480,12 +532,14 @@ describe("T321 K1 fetch, today's tooling", () => {
 							const fetched = b.fetch(step);
 							expect(fetched.code, fetched.text).toBe(0);
 							expect(b.head(b.main, b.branch)).toBe(b.head(b.work));
+
 							for (const [i, sha] of commits.entries()) {
 								const note = JSON.parse(b.git(b.main, "notes", "--ref=fabrika", "show", sha));
 								expect(note).toMatchObject({step: "tests", ticket: "321", version: i + 1});
 								expect(note.from).toBe(b.head(b.main, `${sha}^1^{tree}`));
 								expect(note.to).toBe(b.head(b.main, `${sha}^{tree}`));
 							}
+
 							const verified = b.call(process.execPath, [
 								signer,
 								"check",
@@ -513,7 +567,8 @@ describe("T321 K1 fetch, today's tooling", () => {
 							expect(signs.every((c) => realpathSync(c.cwd) === realpathSync(b.main))).toBe(true);
 							const checks = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "check");
 							expect(checks).toHaveLength(2);
-							for (const c of checks)
+
+							for (const c of checks) {
 								expect(c.args).toEqual([
 									"commits",
 									"check",
@@ -522,6 +577,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 									"--head",
 									b.head(b.work),
 								]);
+							}
 						},
 						[["src/a.ts", "tests"]],
 					),
@@ -610,6 +666,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 		await fc.assert(
 			fc.asyncProperty(fc.boolean(), async (reverse) => {
 				const b = new Box();
+
 				try {
 					const two = join(b.boxes, "two"),
 						data = join(b.boxes, "two-gitdata");
@@ -676,8 +733,13 @@ describe("T321 K1 fetch, today's tooling", () => {
 								["one", "321"],
 								["two", "322"],
 							];
-					for (const got of await Promise.all(order.map(([name, ticket]) => fetch(name!, ticket!))))
+
+					for (const got of await Promise.all(
+						order.map(([name, ticket]) => fetch(name!, ticket!)),
+					)) {
 						expect(got.code, got.text).toBe(0);
+					}
+
 					for (const name of ["one", "two"]) {
 						const check = b.call(process.execPath, [
 							signer,
@@ -689,6 +751,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 						]);
 						expect(check.code, check.text).toBe(0);
 					}
+
 					expect(b.notes().trim().split("\n")).toHaveLength(2);
 				} finally {
 					b.close();
@@ -704,15 +767,20 @@ describe("T321 K1 fetch, today's tooling", () => {
 			fc.property(word, (text) => {
 				each(["ticket", "step", "outside", "base"], (fault) =>
 					fixture((b) => {
-						if (fault === "outside") b.commit(b.work, "src/a.ts", "outside\n");
+						if (fault === "outside") {
+							b.commit(b.work, "src/a.ts", "outside\n");
+						}
+
 						b.setup({operations: [{path: "src/a.ts", text: `${text}\n`}]});
 						expect(b.run().code).toBe(0);
+
 						if (fault === "base") {
 							const other = b
 								.git(b.main, "commit-tree", b.head(b.main, "HEAD^{tree}"), "-m", "unrelated")
 								.trim();
 							b.state(other);
 						}
+
 						refused(
 							b.fetch(fault === "step" ? "build" : "tests", fault === "ticket" ? "322" : "321"),
 							/run|ticket|step|base|ancestor|unsigned/,
@@ -744,6 +812,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 									"refs/notes/fabrika:refs/notes/fabrika",
 								);
 							}
+
 							const notes = b.notes();
 							const operations: Operation[] = [{path: "src/a.ts", text: `${text}\n`}];
 							operations.push(
@@ -790,10 +859,12 @@ describe("T321 K1 fetch, today's tooling", () => {
 						b.setup({operations: [{path: "src/a.ts", text: `${text}\n`}]});
 						expect(b.run().code).toBe(0);
 						const sha = b.head(b.work);
-						if (kind === "malformed")
+
+						if (kind === "malformed") {
 							b.git(b.work, "notes", "--ref=fabrika", "add", "-m", "not JSON", sha);
-						else {
+						} else {
 							b.sign(b.work, "tests");
+
 							if (kind === "invalid") {
 								const note = JSON.parse(b.git(b.work, "notes", "--ref=fabrika", "show", sha));
 								b.git(
@@ -807,6 +878,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 									sha,
 								);
 							}
+
 							if (kind === "stale") {
 								b.git(b.main, "fetch", "-q", b.work, "refs/notes/fabrika:refs/notes/fabrika");
 								b.git(b.main, "checkout", "-q", "-b", "other");
@@ -818,11 +890,14 @@ describe("T321 K1 fetch, today's tooling", () => {
 								b.git(b.work, "notes", "--ref=fabrika", "merge", "newer");
 							}
 						}
+
 						const original = b.git(b.work, "notes", "--ref=fabrika", "show", sha);
+
 						if (kind === "conflict") {
 							b.git(b.main, "fetch", "-q", b.work, `${b.branch}:refs/heads/incoming`);
 							b.git(b.main, "notes", "--ref=fabrika", "add", "-m", "different note", sha);
 						}
+
 						const mainNote =
 							kind === "conflict" ? b.git(b.main, "notes", "--ref=fabrika", "show", sha) : original;
 						refused(
@@ -867,11 +942,15 @@ describe("T321 K1 fetch, today's tooling", () => {
 							expect(b.run().code).toBe(0);
 							const got = b.fetch();
 							expect(got.code, got.text).toBe(pass ? 0 : 1);
+
 							if (status === 1) {
 								expect(got.text).toContain("unsigned_commit");
 								expect(got.text).toContain("stale_link");
 							}
-							if (pass) expect(got.text).toContain("exam_read");
+
+							if (pass) {
+								expect(got.text).toContain("exam_read");
+							}
 						}),
 				);
 			}),
@@ -905,7 +984,11 @@ describe("T321 K2 box start, today's tooling", () => {
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
 						const other = !["main", "this", "inside"].includes(place);
-						if (other) b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+
+						if (other) {
+							b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+						}
+
 						// Lead-only field rows on an open PR are not a lane (PR 601, 2026-11-09).
 						const path = place === "field-rows" ? "field/runs.jsonl" : "src/a.ts";
 						const sha = b.commit(b.main, path, `${text}\n`);
@@ -914,32 +997,53 @@ describe("T321 K2 box start, today's tooling", () => {
 							place === "field-rows" ? "lead" : "tests",
 							place === "different-ticket" ? "322" : "321",
 						);
-						if (place === "main" || place === "merged")
+
+						if (place === "main" || place === "merged") {
 							b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+						}
+
 						// An older branch of this lane that the base already holds is history (#590).
-						if (place === "inside") b.git(b.main, "branch", "fabrikalfa/old", sha);
+						if (place === "inside") {
+							b.git(b.main, "branch", "fabrikalfa/old", sha);
+						}
+
 						b.setup({
 							openPrs: ["open-pr", "field-rows"].includes(place)
 								? ["fabrikalfa/other"]
 								: ["fabrikalfa/unrelated"],
 							...(place === "gh-down" ? {gh: "down" as const} : {}),
 						});
+
 						if (place === "running-box") {
 							write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
 							mkdirSync(join(b.boxes, "two"));
 						}
+
 						if (place === "history") {
 							// A box state left behind with no box on disk is not a running lane.
 							write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
 						}
+
 						b.git(b.main, "checkout", "-q", "main");
 						const got =
 							place === "inside"
 								? b.new(sha, b.branch)
 								: b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
-						if (blocks.has(place)) refused(got, /shared_ticket 321 on fabrikalfa\/other/);
-						else expect(got.code, got.text).toBe(0);
+
+						// A live branch is the check saying no; open PRs gh cannot read is a check that
+						// could not run, which stays stuck (ticket 428).
+						if (place === "gh-down") {
+							refused(
+								got,
+								/^stuck shared_ticket 321 on fabrikalfa\/other: open PRs cannot be read/m,
+							);
+							expect(got.code, got.text).toBe(1);
+						} else if (blocks.has(place)) {
+							checkRefused(got, "shared_ticket", /321 on fabrikalfa\/other/);
+						} else {
+							expect(got.code, got.text).toBe(0);
+						}
 					}),
 				);
 			}),
@@ -991,15 +1095,21 @@ describe("T321 K2 box start, today's tooling", () => {
 							b.plan,
 							...extra,
 						]);
+
 						if (root === "elsewhere") {
-							refused(got, /root is not an ancestor/);
+							checkRefused(got, "root_not_ancestor", /root is not an ancestor/);
 							return;
 						}
+
 						expect(got.code, got.text).toBe(0);
 						const state = readFileSync(join(b.boxes, "state/new.box"), "utf8");
 						expect(state).toContain(`base: ${head}`);
-						if (root === "held") expect(state).toContain(`root: ${b.base}`);
-						else expect(state).not.toContain("root:");
+
+						if (root === "held") {
+							expect(state).toContain(`root: ${b.base}`);
+						} else {
+							expect(state).not.toContain("root:");
+						}
 					}),
 				);
 			}),
@@ -1009,16 +1119,21 @@ describe("T321 K2 box start, today's tooling", () => {
 
 	// Plant: accept any parent head, any role or any signer, rather than a verified build or lead link.
 	// layers and themes, 2026-11-09: a signed lead commit (a merge of main, a lockfile) was refused.
-	it("K2 accepts only origin/main or a verified parent build or lead head and records checked facts", () => {
+	// Plant: require main's tip, not any commit main holds. Eight of nine base_not_signed refusals on
+	// 2026-11-09 were a lane's plan base, an older main, after main moved on (ticket 428).
+	it("K2 accepts any commit origin/main holds or a verified parent build or lead head and records checked facts", () => {
 		fc.assert(
 			fc.property(word, (text) => {
-				each(["main", "build", "lead", "unsigned", "tests", "forged"], (kind) =>
+				each(["main", "older-main", "build", "lead", "unsigned", "tests", "forged"], (kind) =>
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/parent");
 						const parent = b.commit(b.main, "src/b.ts", `${text}\n`);
-						if (kind === "build" || kind === "tests" || kind === "lead")
+
+						if (kind === "build" || kind === "tests" || kind === "lead") {
 							b.sign(b.main, kind, "300");
-						if (kind === "forged")
+						}
+
+						if (kind === "forged") {
 							b.git(
 								b.main,
 								"notes",
@@ -1028,21 +1143,40 @@ describe("T321 K2 box start, today's tooling", () => {
 								'{"step":"build","ticket":"300","sig":"fake"}',
 								parent,
 							);
+						}
+
 						b.git(b.main, "checkout", "-q", "main");
-						const got = b.new(kind === "main" ? "origin/main" : parent);
+
+						// main moves on; box.sh new's own fetch of origin then sees the newer tip.
+						if (kind === "older-main") {
+							b.commit(b.main, "src/old.ts", `${text} newer\n`);
+						}
+
+						const onMain = kind === "main" || kind === "older-main";
+						const got = b.new(
+							kind === "main" ? "origin/main" : kind === "older-main" ? b.base : parent,
+						);
 						expect(got.code).not.toBeNull();
-						if (kind === "main" || kind === "build" || kind === "lead") {
+
+						if (onMain || kind === "build" || kind === "lead") {
 							expect(got.code, got.text).toBe(0);
 							expect(
 								existsSync(join(b.boxes, "state/new.box")),
 								"new must save its checked facts",
 							).toBe(true);
 							const state = readFileSync(join(b.boxes, "state/new.box"), "utf8");
-							expect(state).toContain(`base: ${kind === "main" ? b.base : parent}`);
+							expect(state).toContain(`base: ${onMain ? b.base : parent}`);
 							expect(state).toContain(`plan-sha256: ${hash(body())}`);
 							expect(state).toContain("ticket: 321");
-							if (kind !== "main") expect(state).toContain(`fabrikalfa/parent@${parent}`);
-						} else refused(got, /base_not_signed|base|build/);
+
+							if (onMain) {
+								expect(state).toContain("parent: none");
+							} else {
+								expect(state).toContain(`fabrikalfa/parent@${parent}`);
+							}
+						} else {
+							checkRefused(got, "base_not_signed");
+						}
 					}),
 				);
 			}),
@@ -1058,15 +1192,34 @@ describe("T321 K2 box start, today's tooling", () => {
 					fixture((b) => {
 						const original = `${body()}\n## Amendment 1\n${text}${ending}`;
 						let plan = approve(original);
-						if (fault === "unsigned") plan = `\nPlancheck-Version: 2\n${original}`;
-						if (fault === "body") plan = plan.replace(text, `${text}changed`);
-						if (fault === "amendment") plan += "\n## Amendment 2\nChanged.\n";
-						if (fault === "renewed") plan = approve(`${original}\n## Amendment 2\nChanged.\n`);
+
+						if (fault === "unsigned") {
+							plan = `\nPlancheck-Version: 2\n${original}`;
+						}
+
+						if (fault === "body") {
+							plan = plan.replace(text, `${text}changed`);
+						}
+
+						if (fault === "amendment") {
+							plan += "\n## Amendment 2\nChanged.\n";
+						}
+
+						if (fault === "renewed") {
+							plan = approve(`${original}\n## Amendment 2\nChanged.\n`);
+						}
+
 						write(b.plan, plan);
 						const got = b.new("origin/main", fault === "branch" ? "other/new" : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
-						if (fault === "renewed") expect(got.code, got.text).toBe(0);
-						else refused(got, /branch|prefix|plan|approval|hash|body/);
+
+						if (fault === "renewed") {
+							expect(got.code, got.text).toBe(0);
+						} else if (fault === "branch") {
+							refused(got, /branch|prefix/);
+						} else {
+							checkRefused(got, "plan_unapproved", /plan|approval|hash|body/);
+						}
 					}),
 				);
 			}),
@@ -1140,8 +1293,10 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 				});
 				expect(b.run().code).toBe(0);
 				const got = b.fetch();
-				if (step === "tests") refused(got, /commits check failed/);
-				else {
+
+				if (step === "tests") {
+					refused(got, /commits check failed/);
+				} else {
 					expect(got.code, got.text).toBe(0);
 					expect(got.text).toContain("stale_link_outside_lane");
 				}
@@ -1159,10 +1314,12 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 				b.git(b.work, "fetch", "-q", b.main, moved);
 				b.git(b.work, "reset", "-q", "--hard", moved);
 				let start = moved;
+
 				if (kind === "root-off-main") {
 					start = b.commit(b.work, "src/old.ts", "off main\n");
 					b.git(b.main, "fetch", "-q", b.work, start);
 				}
+
 				b.state(start);
 				const root = kind === "main-moved" ? b.base : start;
 				appendFileSync(join(b.boxes, "state/one.box"), `root: ${root}\n`);
@@ -1178,6 +1335,47 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 		);
 	});
 
+	// Plants: say only "commits check failed"; drop the commit, the step or the count past five.
+	// 18 fetches on 2026-11-09 stopped with no rule named, so nobody knew where to send them (T429).
+	it("K1 the fetch refusal names each rule and commit that held it, five at most", () => {
+		const rule = fc.constantFrom(
+			"unsigned_commit",
+			"build_touched_exam",
+			"broken_chain",
+			"stale_link",
+		);
+		// A stale link holds only for a step the lane signed (tests, here); others are waived.
+		const answer = fc
+			.record({
+				why: rule,
+				sha: fc.stringMatching(/^[0-9a-f]{40}$/),
+				step: fc.option(fc.constantFrom("tests", "build"), {nil: undefined}),
+			})
+			.map((a) => (a.why === "stale_link" ? {...a, step: "tests" as const} : a));
+		fc.assert(
+			fc.property(fc.array(answer, {minLength: 1, maxLength: 7}), (answers) =>
+				fixture((b) => {
+					const lines = answers.map((a) => JSON.stringify({_tag: "stuck", ...a}));
+					b.setup({
+						operations: [{path: "src/a.ts", text: "run\n"}],
+						check: {status: 1, text: `${lines.join("\n")}\n`},
+					});
+					expect(b.run().code).toBe(0);
+					const got = b.fetch();
+					expect(got.code, got.text).toBe(1);
+					const said = answers.map(
+						(a) => `${a.why} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`,
+					);
+					const more = said.length > 5 ? `; and ${said.length - 5} more` : "";
+					expect(got.text.trim().split("\n").at(-1)).toBe(
+						`stuck commits check failed: ${said.slice(0, 5).join("; ")}${more}`,
+					);
+				}),
+			),
+			{seed: 429, numRuns: 4, endOnFailure: true},
+		);
+	}, 180_000);
+
 	// Plant: trust the installed checker's scope skip. Review round 1, finding 4.
 	it("K1 scenario: an unsigned commit outside the exam list is refused on a plain fetch", () => {
 		fixture((b) => {
@@ -1187,7 +1385,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 				...b.env,
 				T321_FETCH: "1",
 			});
-			refused(got, /unlinked_commit|commits check failed/);
+			refused(got, /commits check failed: unlinked_commit [0-9a-f]{8}/);
 		});
 	});
 
@@ -1263,15 +1461,20 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 						"mutation",
 						"skip",
 						"lane-row",
+						"lane-row-skip",
 						"lane-row-stuck",
 					],
 					(kind) =>
 						fixture((b) => {
 							if (["before-base", "since-root", "bad-note", "tests"].includes(kind)) {
 								const sha = b.commit(b.work, "src/a.ts", `${text}\n`);
-								if (kind === "bad-note")
+
+								if (kind === "bad-note") {
 									b.git(b.work, "notes", "--ref=fabrika", "add", "-m", '{"step":"tests"}', sha);
-								else b.sign(b.work, "tests");
+								} else {
+									b.sign(b.work, "tests");
+								}
+
 								b.git(
 									b.main,
 									"fetch",
@@ -1280,13 +1483,18 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 									`${b.branch}:${b.branch}`,
 									"refs/notes/fabrika:refs/notes/fabrika",
 								);
-								if (kind === "before-base") b.state(sha);
+
+								if (kind === "before-base") {
+									b.state(sha);
+								}
+
 								if (kind === "since-root") {
 									b.state(sha);
 									appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
 								}
 							}
-							if (kind === "mutation" || kind === "skip")
+
+							if (kind === "mutation" || kind === "skip") {
 								write(
 									join(b.boxes, "state/one.rows.jsonl"),
 									`${JSON.stringify({
@@ -1298,7 +1506,9 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										why: "recorded fixture result",
 									})}\n`,
 								);
-							if (kind === "lane-row" || kind === "lane-row-stuck") {
+							}
+
+							if (kind.startsWith("lane-row")) {
 								// Where drive writes a step's row: BOXES/<lane>-rows.jsonl, not the box's own.
 								appendFileSync(join(b.boxes, "state/one.box"), "lane: onelane\n");
 								write(
@@ -1308,23 +1518,35 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										ticket: "321",
 										role: "hand",
 										step: "mutation",
-										outcome: kind === "lane-row" ? "pass" : "stopped",
+										// drive writes `skip` for a mutation step that answered skip (ticket 423).
+										outcome: {"lane-row": "pass", "lane-row-skip": "skip"}[kind] ?? "stopped",
 										why: "drive.ts mutation fixture row",
 									})}\n`,
 								);
 							}
+
 							const review = [
 								"review-absent",
 								"mutation",
 								"skip",
 								"lane-row",
+								"lane-row-skip",
 								"lane-row-stuck",
 							].includes(kind);
-							const pass = ["tests", "since-root", "mutation", "skip", "lane-row"].includes(kind);
+							const pass = [
+								"tests",
+								"since-root",
+								"mutation",
+								"skip",
+								"lane-row",
+								"lane-row-skip",
+							].includes(kind);
 							const got = b.run(review ? "review" : "build");
 							expect(got.code).not.toBeNull();
-							if (pass) expect(got.code, got.text).toBe(0);
-							else {
+
+							if (pass) {
+								expect(got.code, got.text).toBe(0);
+							} else {
 								refused(got, /step_out_of_order|tests|mutation/);
 								expect(b.calls().filter((c) => c.cmd === "codex")).toEqual([]);
 							}
@@ -1340,10 +1562,16 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 		fc.assert(
 			fc.property(fc.integer({min: 0, max: 9}), (count) =>
 				fixture((b) => {
-					for (let i = 0; i < count; i++)
+					for (let i = 0; i < count; i++) {
 						write(join(b.boxes, `state/live-${i}.pid`), `${process.pid}\n`);
-					for (let i = 0; i < 3; i++) write(join(b.boxes, `state/dead-${i}.pid`), "2147483647\n");
+					}
+
+					for (let i = 0; i < 3; i++) {
+						write(join(b.boxes, `state/dead-${i}.pid`), "2147483647\n");
+					}
+
 					const got = b.run();
+
 					if (count >= 8) {
 						refused(got, /slot|running|limit/);
 						expect(b.calls().filter((c) => c.cmd === "codex")).toEqual([]);
@@ -1351,9 +1579,13 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 						expect(got.code, got.text).toBe(0);
 						expect(b.rows()).toHaveLength(1);
 					}
+
 					expect(readdirSync(join(b.boxes, "state")).filter((n) => n === "one.pid")).toEqual([]);
-					for (let i = 0; i < count; i++)
+
+					for (let i = 0; i < count; i++) {
 						rmSync(join(b.boxes, `state/live-${i}.pid`), {force: true});
+					}
+
 					expect(b.run().code).toBe(0);
 					const rows = b.rows();
 					expect(rows).toHaveLength(count >= 8 ? 1 : 2);
@@ -1433,6 +1665,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 				),
 				(turns) => {
 					const dir = mkdtempSync(join(tmpdir(), "row321-"));
+
 					try {
 						const events = join(dir, "events.jsonl");
 						const lines = turns.map((turn) =>
@@ -1492,6 +1725,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 		await fc.assert(
 			fc.asyncProperty(fc.boolean(), async (usage) => {
 				const b = new Box();
+
 				try {
 					b.setup({hold: true, usage});
 					const got = await signalRun(b);
@@ -1558,6 +1792,7 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 								`sk-${value.repeat(48).slice(0, 48)}`,
 								`private-${value}-pass`,
 							];
+
 							for (const name of [
 								"MY_TOKEN",
 								"SERVICE_SECRET",
@@ -1565,14 +1800,18 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 								"DB_PASSWORD",
 								"HTTP_AUTH",
 								"NPM_CONFIG_AUTH",
-							])
+							]) {
 								b.env[lower ? name.toLowerCase() : name] = secrets[3];
+							}
+
 							for (const [file, token] of [
 								[join(b.home, ".npmrc"), secrets[0]],
 								[join(b.dir, "global.npmrc"), secrets[1]],
 								[join(runner === "box" ? b.work : b.main, ".npmrc"), secrets[2]],
-							])
+							]) {
 								write(file!, `//registry.example.test/:_authToken=${token}\n`);
+							}
+
 							b.env.NPM_CONFIG_GLOBALCONFIG = join(b.dir, "global.npmrc");
 							b.setup({secrets, exit, signal});
 							const got =
@@ -1595,11 +1834,13 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 								runner === "plan"
 									? readFileSync(join(b.boxes, "one-plan.jsonl"), "utf8")
 									: got.text;
+
 							for (const output of [readFileSync(answer, "utf8"), events]) {
 								for (const secret of secrets) {
 									expect(output.includes(secret)).toBe(false);
 									expect(output.includes(encodeURIComponent(secret))).toBe(false);
 								}
+
 								expect(output).toContain("[redacted]");
 							}
 						});
@@ -1625,6 +1866,7 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 			await fc.assert(
 				fc.asyncProperty(word, async (value) => {
 					const b = new Box();
+
 					try {
 						const secret = `npm_${value.repeat(40).slice(0, 36)}`;
 						b.env.PLANTED_TOKEN = secret;
@@ -1634,6 +1876,7 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 						const answer = runner === "box" ? join(b.dir, "answer") : join(b.boxes, "one-plan.md");
 						const events =
 							runner === "box" ? got.text : readFileSync(join(b.boxes, "one-plan.jsonl"), "utf8");
+
 						for (const output of [readFileSync(answer, "utf8"), events]) {
 							expect(output.includes(secret)).toBe(false);
 							expect(output).toContain("[redacted]");

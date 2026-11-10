@@ -70,17 +70,20 @@ const setup = (make: Make, script: (n: number) => FakeScript, more: Partial<Agen
 const fit = fc
 	.record({done: fc.boolean(), note: fc.string({maxLength: 8})})
 	.map((a) => ({text: JSON.stringify(a), value: a as Answer | null}));
+
 const misfit = fc.oneof(
 	fc.constant({text: '{"done": "maybe"}', value: null}),
 	fc
 		.string({maxLength: 12})
 		.map((s) => ({text: `no json here ${s.replace(/[{}]/g, "")}`, value: null})),
 );
+
 const tokens: fc.Arbitrary<Tokens> = fc.record({
 	input: fc.nat(1000),
 	cached: fc.nat(100),
 	output: fc.nat(500),
 });
+
 const step = fc.oneof(
 	fc.oneof(fit, misfit).map((s) => ({raw: {_tag: "said", text: s.text} as Raw, value: s.value})),
 	fc
@@ -93,12 +96,15 @@ const step = fc.oneof(
 	tokens.map((t) => ({raw: {_tag: "tokens", tokens: t, whole: false} as Raw})),
 	tokens.map((t) => ({raw: {_tag: "tokens", tokens: t, whole: true} as Raw})),
 );
+
 /** A script: some steps, then an end or not. */
 const script = fc.record({
 	steps: fc.array(step, {maxLength: 12}),
 	ends: fc.boolean(),
 });
+
 type Script = typeof script extends fc.Arbitrary<infer S> ? S : never;
+
 const scriptOf = (s: Script): FakeScript => ({
 	raws: [
 		...s.steps.map((x) => x.raw),
@@ -109,6 +115,7 @@ const scriptOf = (s: Script): FakeScript => ({
 });
 
 const OPTS = {numRuns: 150, seed: 1};
+
 const endOf = (heard: readonly Heard<Answer>[]) =>
 	heard.filter((h): h is Ended<Answer> => h._tag === "ended");
 
@@ -127,10 +134,12 @@ const laws: Law[] = [
 				fc.asyncProperty(script, async (s) => {
 					const {agents} = setup(make, () => scriptOf(s));
 					const {heard, exit} = await runAll(agents, turnOf());
+
 					if (!s.ends) {
 						expect(Exit.isFailure(exit)).toBe(true);
 						return;
 					}
+
 					expect(endOf(heard)).toHaveLength(1);
 					expect(heard.at(-1)?._tag).toBe("ended");
 				}),
@@ -187,10 +196,12 @@ const laws: Law[] = [
 					const {agents, fake} = setup(make, () => saying('{"done":true,"note":""}'));
 					const first = await runAll(agents, turnOf({session}));
 					const second = await runAll(agents, turnOf({session}));
+
 					for (const run of [first, second]) {
 						expect(run.heard[0]).toEqual({_tag: "started", session});
 						expect(JSON.stringify(run.heard)).not.toContain("fake-own-");
 					}
+
 					expect(fake.seen.started[0]?.resume).toBeNull();
 					expect(fake.seen.started[1]?.resume).toBe("fake-own-1");
 					expect(await Effect.runPromise(agents.knows(session))).toBe("fake");
@@ -225,7 +236,10 @@ const laws: Law[] = [
 					const ids = new Set(heard.flatMap((h) => (h._tag === "tool" ? [h.id] : [])));
 					expect(ids.size).toBeLessThanOrEqual(k);
 					const all = new Set(s.steps.flatMap((x) => (x.raw._tag === "tool" ? [x.raw.id] : [])));
-					if (all.size > k) expect(endOf(heard)[0]?.stop).toBe("max_turn_requests");
+
+					if (all.size > k) {
+						expect(endOf(heard)[0]?.stop).toBe("max_turn_requests");
+					}
 				}),
 				OPTS,
 			),
@@ -296,7 +310,10 @@ const laws: Law[] = [
 							pid: 100,
 							stop: Effect.sync(() => {
 								live.delete(100);
-								if (ends) live.clear();
+
+								if (ends) {
+									live.clear();
+								}
 							}),
 						})),
 				};
@@ -338,8 +355,14 @@ const PLANTED: Readonly<Record<string, Make>> = {
 			run: (turn) => {
 				let first: unknown = null;
 				return Stream.map(real.run(turn), (h) => {
-					if (h._tag === "said" && first === null) first = h.text;
-					if (h._tag !== "ended") return h;
+					if (h._tag === "said" && first === null) {
+						first = h.text;
+					}
+
+					if (h._tag !== "ended") {
+						return h;
+					}
+
 					const read = Schema.decodeUnknownOption(Schema.fromJsonString(Answer));
 					const got = typeof first === "string" ? read(first) : null;
 					return {...h, answer: got !== null && got._tag === "Some" ? got.value : null} as never;

@@ -314,7 +314,10 @@ const askFolders = (s: Tracker): Step =>
 
 /** Why an area write does not fit the areas as shown, or `null`: it may go to the ledger. */
 const refusedOf = (s: Tracker, write: Write): string | null => {
-	if (!isAreaWrite(write)) return null;
+	if (!isAreaWrite(write)) {
+		return null;
+	}
+
 	const made = areaFactOf(write, shownAreas(s));
 	return "why" in made ? made.why : null;
 };
@@ -351,7 +354,11 @@ const sendFirst = (s: Tracker): readonly SaveCmd[] => {
 const settled = (s: Tracker, rest: readonly Saving[]): Step => {
 	const next = {...s, saving: rest};
 	const sent = sendFirst(next);
-	if (s.load !== "idle") return [{...next, load: "again"}, sent];
+
+	if (s.load !== "idle") {
+		return [{...next, load: "again"}, sent];
+	}
+
 	return [{...next, load: "busy"}, [load({after: s.seen}), ...sent]];
 };
 
@@ -380,10 +387,17 @@ const hinted = (s: Tracker, ticket: number): Tracker => ({
  * keeps; with none kept, nothing is asked.
  */
 const hintFor = (s: Tracker, write: Write, ticket: number): Step => {
-	if (write.kind !== "file") return [s, []];
+	if (write.kind !== "file") {
+		return [s, []];
+	}
+
 	const filed = {title: write.title, body: write.body};
 	const candidates = candidatesOf(filed, openOf(s.tickets, ticket));
-	if (candidates.length === 0) return [s, []];
+
+	if (candidates.length === 0) {
+		return [s, []];
+	}
+
 	return [{...s, hinting: [...s.hinting, ticket]}, [duplicates({ticket, filed, candidates})]];
 };
 
@@ -415,11 +429,18 @@ export const tracker = defineMachine({
 		],
 		open: (s, m): Step => [{...s, open: m.ticket}, []],
 		write: (s, m): Step => {
-			if (s.quitting) return [s, []];
+			if (s.quitting) {
+				return [s, []];
+			}
+
 			// An area write that does not fit the areas read is refused here, in words; the save
 			// checks it again against the stream, which may have moved since.
 			const refused = refusedOf(s, m.write);
-			if (refused !== null) return [{...s, failed: {write: m.write, why: refused}}, []];
+
+			if (refused !== null) {
+				return [{...s, failed: {write: m.write, why: refused}}, []];
+			}
+
 			const next = {...s, saving: [...s.saving, {id: m.id, write: m.write}], failed: null};
 			return [next, s.saving.length === 0 ? sendFirst(next) : []];
 		},
@@ -459,10 +480,17 @@ export const tracker = defineMachine({
 
 		save_ok: (s, m): Step => {
 			const [front, ...rest] = s.saving;
-			if (front === undefined || front.id !== m.cmd.id) return [s, []];
+
+			if (front === undefined || front.id !== m.cmd.id) {
+				return [s, []];
+			}
+
 			const [next, sent] = settled(s, rest);
-			if (!("ticket" in m.value))
+
+			if (!("ticket" in m.value)) {
 				return [pendingArea(next, front.write, m.value.area, s.load !== "idle"), sent];
+			}
+
 			const [asking, asked] = hintFor(next, front.write, m.value.ticket);
 			return [asking, [...sent, ...asked]];
 		},
@@ -473,7 +501,11 @@ export const tracker = defineMachine({
 
 		duplicates_ok: (s, m): Step => {
 			const hints = m.value.kind === "scored" ? hintsOf(m.value.scores) : [];
-			if (hints.length === 0) return [hinted(s, m.cmd.ticket), []];
+
+			if (hints.length === 0) {
+				return [hinted(s, m.cmd.ticket), []];
+			}
+
 			return [s, [saveHints({ticket: m.cmd.ticket, hints})]];
 		},
 		duplicates_err: (s, m): Step => [
@@ -513,7 +545,10 @@ export const over = (s: Tracker) => s.quitting && s.saving.length === 0 && s.hin
  * counts, by name, in the order made: `4 open, 0 closed; areas: lane, apps/fabrika`.
  */
 export const statusOf = (s: Tracker): string => {
-	if (!s.ready) return "reading the ledger";
+	if (!s.ready) {
+		return "reading the ledger";
+	}
+
 	const open = s.tickets.filter((t) => t.state === "open").length;
 	const counts = `${open} open, ${s.tickets.length - open} closed`;
 	const line = s.saving.length === 0 ? counts : `${counts}, saving ${s.saving.length}`;

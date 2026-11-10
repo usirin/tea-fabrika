@@ -31,7 +31,11 @@ export function readTicketId(text: string): TicketId | null {
 /** A ticket's id from `owner/name#N` or its issue's url. Throws on anything else. */
 export function ticketId(text: string): TicketId {
 	const id = readTicketId(text);
-	if (id === null) throw new Error(`not a ticket: ${JSON.stringify(text)}`);
+
+	if (id === null) {
+		throw new Error(`not a ticket: ${JSON.stringify(text)}`);
+	}
+
 	return id;
 }
 

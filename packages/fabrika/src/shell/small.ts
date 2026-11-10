@@ -155,7 +155,11 @@ export const tally = defineProgram({
 					// The machine's own rule, asked first: a refused add is said to the caller and never
 					// told to the machine, so nothing is saved for it.
 					const added = addTo(counter.getState().total, n);
-					if (added.kind === "err") return send("refused", {n, why: added.why});
+
+					if (added.kind === "err") {
+						return send("refused", {n, why: added.why});
+					}
+
 					return counter.dispatch({type: "add", n}).pipe(
 						Effect.orDie,
 						Effect.andThen(() => send("total", counter.getState().total)),

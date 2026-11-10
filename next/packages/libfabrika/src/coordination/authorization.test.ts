@@ -21,19 +21,25 @@ import {ClientManager} from "./client-manager.ts";
 import {MemberFact} from "./members.ts";
 
 let appendAdmitted: typeof import("./authorization.ts").appendAdmitted;
+
 beforeEach(async () => {
 	({appendAdmitted} =
 		await vi.importActual<typeof import("./authorization.ts")>("./authorization.ts"));
 });
+
 const checks = {seed: 119120, numRuns: 35};
 const folder = mkdtempSync(join(tmpdir(), "p17-auth-"));
 afterAll(() => rmSync(folder, {recursive: true, force: true}));
+
 const root = "person-public-key",
 	old = "old-client-public-key",
 	other = "other-client-public-key";
+
 const person = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const sentAt = "2026-11-08T04:00:00.000Z",
 	traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const founder = {
 	name: "P17 project",
 	person,
@@ -42,6 +48,7 @@ const founder = {
 	by: "SHA256:root",
 	build: "test",
 };
+
 const from = {
 	by: "SHA256:root",
 	for: person,
@@ -51,7 +58,9 @@ const from = {
 	traceId,
 	build: "test",
 };
+
 const signed = {text: "already checked by the door", armored: "test signature", signer: root};
+
 const revoke = (key: string, id: string) =>
 	MemberFact.cases.revoked.make({
 		revoke: {
@@ -64,6 +73,7 @@ const revoke = (key: string, id: string) =>
 		},
 		signed,
 	});
+
 const grant = () =>
 	MemberFact.cases.granted.make({
 		grant: {
@@ -84,12 +94,15 @@ const grant = () =>
 		},
 		signed,
 	});
+
 const line = (body: string): Line =>
 	lineFor(
 		{...from, by: "SHA256:old"},
 		Schema.TaggedStruct("saved", {text: Schema.String}).make({text: body}),
 	);
+
 let homes = 0;
+
 type Observed = {
 	turn: number;
 	op: "read" | "append";
@@ -97,14 +110,17 @@ type Observed = {
 	after?: number;
 	inside: boolean;
 };
+
 const world = (path = join(folder, `${++homes}.db`), fail = false) => {
 	const db = new DatabaseSync(path),
 		base = nodeSql(db);
 	const sql: Sql = {
 		...base,
 		exec: (query, ...args) => {
-			if (fail && /^INSERT INTO entries/.test(query) && args[1] === "notes")
+			if (fail && /^INSERT INTO entries/.test(query) && args[1] === "notes") {
 				throw new Error("planted storage error, body must not become a tag");
+			}
+
 			return base.exec(query, ...args);
 		},
 	};
@@ -142,11 +158,14 @@ const world = (path = join(folder, `${++homes}.db`), fail = false) => {
 	);
 	return {db, sql, path, observations, layer};
 };
+
 const read = (stream: string) => Ledger.use((l) => Stream.runCollect(l.read(stream, 0)));
+
 const boot = ClientManager.use((clients) => clients.members).pipe(
 	Effect.andThen(ClientManager.use((clients) => clients.write(grant(), from))),
 	Effect.asVoid,
 );
+
 const remove = (id = "revoked") =>
 	ClientManager.use((clients) => clients.write(revoke(old, id), from));
 
@@ -161,24 +180,31 @@ describe("P17a, appendAdmitted", () => {
 				fc.constantFrom(0, 1, 257),
 				async (before, after, at, body, history) => {
 					const w = world();
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								yield* TestClock.setTime(at);
 								yield* boot;
+
 								for (let n = 0; n < before; n++) {
 									const write = {stream: "notes", id: `before-${n}`, line: line(body)};
 									const placed = yield* appendAdmitted(old, write);
 									expect(placed._tag).toBe("placed");
 									expect(yield* appendAdmitted(old, write)).toEqual(placed);
 								}
+
 								// Unknown future facts stay readable. Put revoke past the first ledger page too.
 								const future = Schema.TaggedStruct("future.member", {n: Schema.Int});
-								for (let n = 0; n < history; n++)
+
+								for (let n = 0; n < history; n++) {
 									yield* Ledger.use((l) =>
 										l.append("door/members", `future-${n}`, lineFor(from, future.make({n}))),
 									);
+								}
+
 								yield* remove(); // Same clock. Ledger order, not timestamp, ends permission.
+
 								for (let n = 0; n < after; n++) {
 									expect(
 										yield* Effect.flip(
@@ -186,6 +212,7 @@ describe("P17a, appendAdmitted", () => {
 										),
 									).toMatchObject({_tag: "NotGranted"});
 								}
+
 								expect(
 									yield* Effect.flip(
 										appendAdmitted(old, {stream: "notes", id: "before-0", line: line(body)}),
@@ -201,7 +228,8 @@ describe("P17a, appendAdmitted", () => {
 								]);
 								const appends = w.observations.filter((x) => x.op === "append");
 								expect(appends).toHaveLength(before * 2 + 1);
-								for (const write of appends)
+
+								for (const write of appends) {
 									expect(
 										w.observations
 											.filter((x) => x.turn === write.turn)
@@ -210,6 +238,7 @@ describe("P17a, appendAdmitted", () => {
 										{op: "read", stream: "door/members", after: 0, inside: true},
 										{op: "append", stream: "notes", after: undefined, inside: true},
 									]);
+								}
 							}).pipe(Effect.provide(w.layer), Effect.provide(TestClock.layer())),
 						);
 					} finally {
@@ -228,12 +257,16 @@ describe("P17a, appendAdmitted", () => {
 				fc.string({maxLength: 20}),
 				async (reopen, at, body) => {
 					const w = world();
+
 					try {
 						await Effect.runPromise(boot.pipe(Effect.provide(w.layer)));
+
 						if (reopen) {
 							w.db.close();
 						}
+
 						const fresh = reopen ? world(w.path) : w;
+
 						try {
 							await Effect.runPromise(
 								Effect.gen(function* () {
@@ -260,17 +293,24 @@ describe("P17a, appendAdmitted", () => {
 									yield* Deferred.succeed(release, undefined);
 									const result = yield* Fiber.join(pending);
 									expect(Result.isFailure(result)).toBe(true);
-									if (Result.isSuccess(result))
+
+									if (Result.isSuccess(result)) {
 										return yield* Effect.die(new Error("late append passed revoke"));
+									}
+
 									expect(result.failure).toMatchObject({_tag: "NotGranted"});
 									expect(yield* read("notes")).toEqual([]);
 								}).pipe(Effect.provide(fresh.layer), Effect.provide(TestClock.layer())),
 							);
 						} finally {
-							if (fresh.db.isOpen) fresh.db.close();
+							if (fresh.db.isOpen) {
+								fresh.db.close();
+							}
 						}
 					} finally {
-						if (w.db.isOpen) w.db.close();
+						if (w.db.isOpen) {
+							w.db.close();
+						}
 					}
 				},
 			),
@@ -285,20 +325,28 @@ describe("P17a, appendAdmitted", () => {
 				fc.string({maxLength: 30}),
 				async (damage, reopen, body) => {
 					const w = world();
+
 					try {
 						await Effect.runPromise(boot.pipe(Effect.provide(w.layer)));
-						if (damage === "json")
+
+						if (damage === "json") {
 							w.db.exec(
 								"UPDATE entries SET body='not JSON' WHERE stream='door/members' AND id='founded'",
 							);
-						else if (damage === "known_fact")
+						} else if (damage === "known_fact") {
 							w.db.exec(
 								"UPDATE entries SET body='{}' WHERE stream='door/members' AND id='founded'",
 							);
-						else
+						} else {
 							w.db.exec("UPDATE entries SET seen=-1 WHERE stream='door/members' AND id='founded'");
-						if (reopen) w.db.close();
+						}
+
+						if (reopen) {
+							w.db.close();
+						}
+
 						const fresh = reopen ? world(w.path) : w;
+
 						try {
 							await Effect.runPromise(
 								Effect.gen(function* () {
@@ -311,10 +359,14 @@ describe("P17a, appendAdmitted", () => {
 								}).pipe(Effect.provide(fresh.layer)),
 							);
 						} finally {
-							if (fresh.db.isOpen) fresh.db.close();
+							if (fresh.db.isOpen) {
+								fresh.db.close();
+							}
 						}
 					} finally {
-						if (w.db.isOpen) w.db.close();
+						if (w.db.isOpen) {
+							w.db.close();
+						}
 					}
 				},
 			),
@@ -328,6 +380,7 @@ describe("P17a, appendAdmitted", () => {
 				fc.integer({min: 1, max: 5}),
 				async (body, attempts) => {
 					const w = world();
+
 					try {
 						await Effect.runPromise(
 							boot.pipe(
@@ -341,11 +394,13 @@ describe("P17a, appendAdmitted", () => {
 					} finally {
 						w.db.close();
 					}
+
 					const fresh = world(w.path);
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
-								for (let n = 0; n < attempts; n++)
+								for (let n = 0; n < attempts; n++) {
 									expect(
 										yield* Effect.flip(
 											appendAdmitted(old, {
@@ -355,6 +410,8 @@ describe("P17a, appendAdmitted", () => {
 											}),
 										),
 									).toMatchObject({_tag: "NotGranted"});
+								}
+
 								expect(
 									(yield* appendAdmitted(other, {
 										stream: "notes",
@@ -385,16 +442,23 @@ describe("P17a, appendAdmitted", () => {
 				async (outcome, id, text) => {
 					const w = world(undefined, outcome === "storage"),
 						marker = `p17-private-body-${text}`;
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								yield* boot;
 								yield* SpanSink.use((sink) => sink.flush);
-								if (outcome === "not_granted") yield* remove();
-								if (outcome === "bad_row")
+
+								if (outcome === "not_granted") {
+									yield* remove();
+								}
+
+								if (outcome === "bad_row") {
 									w.db.exec(
 										"UPDATE entries SET body='{}' WHERE stream='door/members' AND id='founded'",
 									);
+								}
+
 								// Do not wrap the call in a test span. The operation must end its own span.
 								const result = yield* Effect.result(
 									appendAdmitted(old, {stream: "notes", id, line: line(marker)}),
@@ -414,6 +478,7 @@ describe("P17a, appendAdmitted", () => {
 									operations,
 									"the operation's own ended span records its id, stream and outcome",
 								).toHaveLength(1);
+
 								for (const row of operations) {
 									expect(row.attributes).toMatchObject({
 										"fab.authorization.id": id,

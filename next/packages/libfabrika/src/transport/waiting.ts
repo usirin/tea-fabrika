@@ -23,6 +23,7 @@ export class Waiting extends Schema.Opaque<Waiting>()(
 	static expire(state: Waiting, at: number): Waiting {
 		return Waiting.make({...state, rows: state.rows.filter((r) => r.until > at)});
 	}
+
 	static knock(
 		state: Waiting,
 		a: Omit<typeof Row.Type, "until" | "tabs" | "clients"> & {
@@ -32,6 +33,7 @@ export class Waiting extends Schema.Opaque<Waiting>()(
 	): Waiting {
 		const live = Waiting.expire(state, a.at);
 		const old = live.rows.find((r) => r.key === a.key);
+
 		if (old !== undefined) {
 			const clients = [...new Set([...old.clients, a.client])];
 			return Waiting.make({
@@ -39,6 +41,7 @@ export class Waiting extends Schema.Opaque<Waiting>()(
 				rows: live.rows.map((r) => (r === old ? {...old, clients, tabs: clients.length} : r)),
 			});
 		}
+
 		const {client, at, ...row} = a;
 		return Waiting.make({
 			...live,
@@ -48,12 +51,16 @@ export class Waiting extends Schema.Opaque<Waiting>()(
 			].slice(-state.most),
 		});
 	}
+
 	static leave(state: Waiting, a: {readonly key: string; readonly client: string}): Waiting {
 		return Waiting.make({
 			...state,
 			rows: state.rows
 				.map((r) => {
-					if (r.key !== a.key) return r;
+					if (r.key !== a.key) {
+						return r;
+					}
+
 					const clients = r.clients.filter((c) => c !== a.client);
 					return {...r, clients, tabs: clients.length};
 				})

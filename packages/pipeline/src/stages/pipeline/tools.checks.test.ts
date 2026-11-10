@@ -40,6 +40,7 @@ const IDENTITY = {
 	GIT_COMMITTER_NAME: "fixture",
 	GIT_COMMITTER_EMAIL: "fixture@fabrika.invalid",
 };
+
 const git = (cwd: string, ...args: readonly string[]) =>
 	execFileSync("git", args, {
 		cwd,
@@ -105,7 +106,9 @@ const unpruned = (home: string) =>
 /** Until `file` is there: a check that writes it has started. */
 const appeared = (file: string) =>
 	Effect.gen(function* () {
-		while (!existsSync(file)) yield* Effect.sleep(Duration.millis(50));
+		while (!existsSync(file)) {
+			yield* Effect.sleep(Duration.millis(50));
+		}
 	}).pipe(Effect.timeout(Duration.seconds(30)));
 
 describe("the folder the lane runs its checks in (tracker ticket 184)", () => {
@@ -175,8 +178,10 @@ describe("the folder the lane runs its checks in (tracker ticket 184)", () => {
 		).toEqual(["green", "green", "green"]);
 		const lines = recorded(ranIn);
 		expect(lines.map((line) => line.head)).toEqual(heads);
-		for (const line of lines)
+
+		for (const line of lines) {
 			expect(line.top, "the repository's top is the folder itself").toBe(line.folder);
+		}
 	});
 
 	// A check that calls git passes there. The second is the call `oxlint-plugins/lint.ts` makes.
@@ -273,8 +278,11 @@ describe("the folder the lane runs its checks in (tracker ticket 184)", () => {
 			const folders = foldersIn(ranIn);
 			expect(folders).toHaveLength(2);
 			expect(new Set(folders).size, "two lanes ran in one folder").toBe(2);
-			for (const folder of folders)
+
+			for (const folder of folders) {
 				expect(existsSync(folder), `${folder} is still there`).toBe(false);
+			}
+
 			expect(unpruned(made.home)).toBe("");
 		});
 

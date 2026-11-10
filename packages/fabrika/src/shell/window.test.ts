@@ -27,6 +27,7 @@ const idle = defineMachine({
 
 const inputs = {n: input(Schema.Int, "A number.")};
 const outputs = {said: output(Schema.String, "What it is doing.")};
+
 const machines = {
 	idle: kind({
 		machine: idle,
@@ -37,6 +38,7 @@ const machines = {
 		status: () => "idle",
 	}),
 };
+
 const description = "Says it is open, reads its input until it closes, then says so.";
 
 const win = defineProgram({
@@ -79,7 +81,11 @@ const session = () =>
 			{printed: printed.hear, ready: ready.hear},
 			{id: "tsh:window", storage},
 		).pipe(Effect.provideService(HostJobs, jobs), Effect.provideService(Programs, list));
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		return {run: started.run, printed, ready};
 	});
 

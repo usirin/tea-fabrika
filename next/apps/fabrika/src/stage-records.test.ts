@@ -5,7 +5,6 @@ import {execFileSync} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
 import {mkdtempSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {createServer as httpServer} from "node:http";
-import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {DatabaseSync} from "node:sqlite";
@@ -19,18 +18,21 @@ import {Effect, Layer, Schema, Stream} from "effect";
 import {SecureRandom} from "effect/crypto";
 import {rolldown} from "rolldown";
 import {describe, expect, it} from "vitest";
+import {heldPort} from "./port.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const ids = Effect.runSync(Id.Generator.pipe(Effect.provide(Id.Generator.layer)));
 const processId = () => Effect.runSync(ids.next(Id.Process));
+
 const field = (value: Buffer | string) => {
 	const body = Buffer.from(value),
 		n = Buffer.alloc(4);
 	n.writeUInt32BE(body.length);
 	return Buffer.concat([n, body]);
 };
+
 const identity = () => {
 	const pair = generateKeyPairSync("ed25519"),
 		raw = pair.publicKey.export({format: "jwk"}).x!;
@@ -66,6 +68,7 @@ const identity = () => {
 		},
 	};
 };
+
 const span = (n: number) =>
 	Schema.decodeUnknownSync(SpanRow)({
 		traceId: TRACE,
@@ -81,6 +84,7 @@ const span = (n: number) =>
 		resource: {attributes: {"fab.object": "record-test"}},
 		ok: true,
 	});
+
 const world = async (
 	test: (
 		stage: any,
@@ -102,26 +106,25 @@ const world = async (
 	const previousHome = process.env.FABRIKA_HOME;
 	process.env.FABRIKA_HOME = home;
 	let hits = 0;
+	let release: Effect.Effect<void> = Effect.void;
 	const outbound = httpServer((_request, reply) => {
 		hits++;
 		reply.end("reachable");
 	});
+
 	try {
 		await new Promise<void>((done, fail) => {
 			outbound.once("error", fail);
 			outbound.listen(0, "127.0.0.1", done);
 		});
 		const destination = outbound.address();
-		if (destination === null || typeof destination === "string")
+
+		if (destination === null || typeof destination === "string") {
 			throw new Error("no probe address");
-		const listener = createServer();
-		await new Promise<void>((done, fail) => {
-			listener.once("error", fail);
-			listener.listen(0, "127.0.0.1", done);
-		});
-		const at = listener.address();
-		if (at === null || typeof at === "string") throw new Error("no TCP port");
-		await new Promise<void>((done) => listener.close(() => done()));
+		}
+
+		const at = await Effect.runPromise(heldPort());
+		release = at.release;
 		symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
 		const writer = join(home, "writer.ts"),
 			timer = join(home, "timer.ts"),
@@ -163,7 +166,11 @@ const world = async (
 				programs: {"writer-fixture": writer, "timer-fixture": timer, "sealed-fixture": sealed},
 			}).pipe(Effect.provide(NodeServices.layer)),
 		);
-		if (instrument) await instrumentBrain(built.brain, home);
+
+		if (instrument) {
+			await instrumentBrain(built.brain, home);
+		}
+
 		await Effect.runPromise(
 			Effect.gen(function* () {
 				const stage = yield* localStage(built, {
@@ -215,8 +222,14 @@ const world = async (
 		await new Promise<void>((done) => outbound.close(() => done()));
 		// localStage must close before removing its durable files.
 		rmSync(home, {recursive: true, force: true});
-		if (previousHome === undefined) delete process.env.FABRIKA_HOME;
-		else process.env.FABRIKA_HOME = previousHome;
+		// Last, so the pair stays held until the stage that used its port is gone.
+		await Effect.runPromise(release);
+
+		if (previousHome === undefined) {
+			delete process.env.FABRIKA_HOME;
+		} else {
+			process.env.FABRIKA_HOME = previousHome;
+		}
 	}
 };
 
@@ -261,6 +274,7 @@ export class Control extends Brain.Control {
 		platform: "browser",
 		external: ["cloudflare:workers"],
 	});
+
 	try {
 		const out = await bundle.generate({format: "esm", codeSplitting: false});
 		writeFileSync(
@@ -276,6 +290,7 @@ export class Control extends Brain.Control {
 };
 
 const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
+
 const wire = async (stage: any, key: ReturnType<typeof identity>, tab: string) => {
 	const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
 	const socket = new WebSocket(stage.url.replace("http", "ws") + name);
@@ -283,7 +298,9 @@ const wire = async (stage: any, key: ReturnType<typeof identity>, tab: string) =
 	let closeCode: number | undefined,
 		serial = 0;
 	socket.addEventListener("message", (event) => {
-		if (event.data !== "pong") frames.push(JSON.parse(String(event.data)));
+		if (event.data !== "pong") {
+			frames.push(JSON.parse(String(event.data)));
+		}
 	});
 	socket.addEventListener("close", (event) => {
 		closeCode = event.code;
@@ -294,8 +311,15 @@ const wire = async (stage: any, key: ReturnType<typeof identity>, tab: string) =
 	const next = async (match: (frame: any) => boolean) => {
 		for (;;) {
 			const index = frames.findIndex(match);
-			if (index >= 0) return frames.splice(index, 1)[0];
-			if (closeCode !== undefined) throw new Error(`closed ${closeCode}`);
+
+			if (index >= 0) {
+				return frames.splice(index, 1)[0];
+			}
+
+			if (closeCode !== undefined) {
+				throw new Error(`closed ${closeCode}`);
+			}
+
 			await pause();
 		}
 	};
@@ -323,6 +347,7 @@ const wire = async (stage: any, key: ReturnType<typeof identity>, tab: string) =
 	).toBeUndefined();
 	return {name, call, socket, frames, closeCode: () => closeCode};
 };
+
 const workerdPid = () => {
 	const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], {encoding: "utf8"})
 		.split("\n")
@@ -331,14 +356,22 @@ const workerdPid = () => {
 			return m ? [{pid: Number(m[1]), parent: Number(m[2]), command: m[3]!}] : [];
 		});
 	const descendants = new Set([process.pid]);
-	for (let n = 0; n < rows.length; n++)
-		for (const row of rows) if (descendants.has(row.parent)) descendants.add(row.pid);
+
+	for (let n = 0; n < rows.length; n++) {
+		for (const row of rows) {
+			if (descendants.has(row.parent)) {
+				descendants.add(row.pid);
+			}
+		}
+	}
+
 	const matches = rows.filter(
 		(row) => descendants.has(row.pid) && /\/workerd(?:\s|$)/.test(row.command),
 	);
 	expect(matches.length).toBeLessThanOrEqual(1);
 	return matches[0]?.pid ?? 0;
 };
+
 const admitted = async (stage: any, key: ReturnType<typeof identity>, project = "p12-records") => {
 	const p = stage.project(project);
 	const client = await p.connect(),
@@ -363,8 +396,10 @@ const admitted = async (stage: any, key: ReturnType<typeof identity>, project = 
 	expect(hello._tag).toBe("online");
 	return {p, client};
 };
+
 const routed = (p: any, client: string, method: string, params: unknown) =>
 	p.route(client, method, params);
+
 const read = async (p: any, client: string, stream: string) => {
 	const r = await routed(p, client, "ledger.read", {stream, after: 0});
 	expect(r._tag).toBe("ok");
@@ -382,6 +417,7 @@ describe("P12 real object adapters", () => {
 			let c = await wire(stage, key, "wait-recovery");
 			const gateway = (method: string, ...args: unknown[]) => p.testGateway(c.name, method, args);
 			let after = 0;
+
 			try {
 				for (const mode of ["sleep", "abort", "replacement"] as const) {
 					let settled = false;
@@ -398,10 +434,12 @@ describe("P12 real object adapters", () => {
 						);
 					let waiting = wait();
 					let before = await gateway("testState");
+
 					while (!before.sockets.some((row: any) => row.attachment.waits?.length === 1)) {
 						await pause();
 						before = await gateway("testState");
 					}
+
 					if (mode === "sleep") {
 						// The original pending reply remains the one checked after wake.
 						// workerd's idle eviction is normally about ten seconds. This is an outside
@@ -411,19 +449,24 @@ describe("P12 real object adapters", () => {
 						expect(awake.incarnation).not.toBe(before.incarnation);
 						expect(awake.sockets[0].attachment.waits).toEqual(before.sockets[0].attachment.waits);
 					} else {
-						if (mode === "abort") await gateway("testAbort").catch(() => undefined);
-						else {
+						if (mode === "abort") {
+							await gateway("testAbort").catch(() => undefined);
+						} else {
 							const old = workerdPid();
 							expect(old).toBeGreaterThan(0);
 							process.kill(old, "SIGKILL");
 							let current = workerdPid();
+
 							while (current === 0 || current === old) {
 								await pause();
 								current = workerdPid();
 							}
+
 							expect(current).not.toBe(old);
 						}
+
 						let awake;
+
 						for (;;) {
 							try {
 								awake = await gateway("testState");
@@ -432,7 +475,9 @@ describe("P12 real object adapters", () => {
 								await pause();
 							}
 						}
+
 						expect(awake.incarnation).not.toBe(before.incarnation);
+
 						// If its socket closes, replay the pending wait before anything can ring it.
 						if (
 							mode === "replacement" ||
@@ -440,6 +485,7 @@ describe("P12 real object adapters", () => {
 							awake.sockets.length === 0
 						) {
 							expect(await waiting).toEqual({closed: true});
+
 							for (;;) {
 								try {
 									c = await wire(stage, key, "wait-recovery");
@@ -448,25 +494,31 @@ describe("P12 real object adapters", () => {
 									await pause();
 								}
 							}
+
 							settled = false;
 							waiting = wait();
 							let saved = await gateway("testState");
+
 							while (!saved.sockets.some((row: any) => row.attachment.waits?.length === 1)) {
 								await pause();
 								saved = await gateway("testState");
 							}
+
 							before = saved;
 						}
 					}
+
 					// Inspect saved data only. Calling wait here would conceal a lost registration.
 					const pending = before.sockets[0].attachment.waits[0];
 					expect(pending).toMatchObject({stream: "counter:1/inbox", after});
 					expect((await gateway("testState")).sockets[0].attachment.waits).toEqual([pending]);
 					let rings = await p.testWaits(c.name, "counter:1/inbox");
+
 					while (rings.length === 0) {
 						await pause();
 						rings = await p.testWaits(c.name, "counter:1/inbox");
 					}
+
 					expect(rings).toEqual([{to: c.name, stream: "counter:1/inbox", after}]);
 					expect(settled, `${mode} wait must still be parked before append`).toBe(false);
 					const reply = await routed(p, client, "process.send", {
@@ -496,6 +548,7 @@ describe("P12 real object adapters", () => {
 			const process = stage.process(pid),
 				c = await wire(stage, key, "busy-recovery");
 			let retry: Awaited<ReturnType<typeof wire>> | undefined;
+
 			try {
 				await process.testHold();
 				const params = {pid, letter: "busy-once", m: {type: "inc"}, sentAt: SENT, seen: 0};
@@ -503,14 +556,22 @@ describe("P12 real object adapters", () => {
 					(answer) => ({answer}),
 					() => ({closed: true}),
 				);
-				while (!(await process.testEntered())) await pause();
+
+				while (!(await process.testEntered())) {
+					await pause();
+				}
+
 				const before = await p.testGateway(c.name, "testState", []);
 				expect(before.sockets[0].attachment.busy).toBe(true);
 				await process.abort().catch(() => undefined);
 				await process.testRelease();
 				await p.testGateway(c.name, "testAbort", []).catch(() => undefined);
 				await p.testGateway(c.name, "testState", []);
-				while (c.closeCode() === undefined) await pause();
+
+				while (c.closeCode() === undefined) {
+					await pause();
+				}
+
 				// workerd abort closes with 1006; "p15 busy plant" in app/gateway.laws.test.ts holds 1012.
 				expect([1006, 1012]).toContain(c.closeCode());
 				await pending;
@@ -555,14 +616,20 @@ describe("P12 real object adapters", () => {
 			const first = stage.record("project-a", "spans/0");
 			const rows = Array.from({length: 70}, (_, n) => ({span: span(n), content: null}));
 			let part = 0;
+
 			for (const row of rows) {
 				for (;;) {
 					const answer = await stage.record("project-a", `spans/${part}`).write(chain, part, [row]);
-					if (answer._tag === "written") break;
+
+					if (answer._tag === "written") {
+						break;
+					}
+
 					expect(answer.next).toBe(`spans/${part + 1}`);
 					part++;
 				}
 			}
+
 			expect(part).toBeGreaterThan(0);
 			// Lose a successful write reply and resend it through the real manager.
 			const manager = RecordManager.remote((name) => stage.record("project-a", name));
@@ -606,8 +673,10 @@ describe("P12 real object adapters", () => {
 					Archive.use((a) => a.put("p12/health.json", body)).pipe(Effect.provide(archive)),
 				),
 			).toEqual({sha256: expected});
+
 			for (const fail of ["put", "checksum"]) {
 				const db = new DatabaseSync(":memory:");
+
 				try {
 					const archive = Archive.bucket(
 						fail === "put"
@@ -731,11 +800,17 @@ describe("P12 real object adapters", () => {
 					await capability.sign("write-1", parent, "noted"),
 				);
 				expect(reply._tag).toBe("ok");
-				if (reply._tag !== "ok") throw new Error(`sign refused: ${reply._tag}`);
+
+				if (reply._tag !== "ok") {
+					throw new Error(`sign refused: ${reply._tag}`);
+				}
+
 				const receipt = reply.value;
 				expect(receipt.parent).toBe(parent);
-				if (end === "exit") await p.exit(pid, "normal", fixture.from);
-				else {
+
+				if (end === "exit") {
+					await p.exit(pid, "normal", fixture.from);
+				} else {
 					const {revokeText} = await import("@kampus/libfabrika/coordination");
 					const text = revokeText({
 						id: "revoke-1",
@@ -747,6 +822,7 @@ describe("P12 real object adapters", () => {
 					});
 					expect(await p.grant({text, armored: key.proof(text)})).toMatchObject({_tag: "applied"});
 				}
+
 				const refused = {_tag: end === "exit" ? "SigningRefused" : "NotGranted"};
 				expect(
 					Schema.decodeUnknownSync(CommitReply)(
