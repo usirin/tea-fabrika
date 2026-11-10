@@ -16,7 +16,10 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 - **`next/` is Effect all the way:** services and Layers, typed errors, Streams.
 - **A Promise appears only at a thin edge the platform demands:** a Durable
   Object method, a browser event handler. It is one line of `Effect.runPromise` or
-  `Effect.tryPromise`, and it holds no logic.
+  `Effect.tryPromise`, and it holds no logic. *From 2026-11-09
+  ([0041](../../.decisions/0041-object-classes-are-effect-objects.md)): a Durable Object class
+  is written with Alchemy's Effect model, so once its port (ticket 502) lands, an object method
+  is no longer an edge we write. Until then the edge lines in `brain.ts` stay.*
 - **"Simplest shape" never covers it.** A brief for `next/` says so. An agent's
   shortcut against this is a bug in the change, not a tradeoff to list at the end.
 - **It is checked, not only written down.** Lint rules refuse Promises in `next/`

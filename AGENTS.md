@@ -214,6 +214,11 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   it, before you give a lean; a guess comes after, marked as a guess. If the plain way
   clashes with a stated goal, say so in one line, and let the owner pick. Never hide it
   behind a custom design.
+- **Try an existing tool before you hand-write one.** A plan or pull request that adds a check, a
+  script or a tool names the widely used tools it looked at, with a link each, and uses one or
+  says what it cannot do, with proof. "We could write it quickly" is not a reason. A hand-written
+  check lists its edge cases before the code, each with a test
+  ([0040](./.decisions/0040-existing-tools-before-hand-written.md)).
 - **Name the Elm answer first.** `@demlik/tea` is the Elm architecture in
   TypeScript. Parents are written by hand and step their children. Exceptions
   are named in [`docs/direction/elm-first.md`](./docs/direction/elm-first.md)
@@ -403,8 +408,8 @@ pnpm format     # oxfmt and oxlint: format, sort imports and apply safe fixes, i
 
 Run `pnpm format` first, so a diff holds only what was meant. The format settings
 are in `.oxfmtrc.json`, from ticket 466's sweep: 2 spaces, 120 columns and spaces inside braces,
-as Effect has them ([0029](./.decisions/0029-format-and-names-follow-effect.md)), with semicolons,
-and trailing commas in objects and arrays but not in function parameters or call arguments
+as Effect has them ([0029](./.decisions/0029-format-and-names-follow-effect.md)), with semicolons
+and trailing commas, function parameters and call arguments included
 ([0039](./.decisions/0039-keep-semicolons-and-es5-commas.md)). The lint rules are in `.oxlintrc.json`:
 the rules of the pipeline this repo rebuilds, with its custom rules in
 `oxlint-plugins/`. Why these two tools:
