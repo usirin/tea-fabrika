@@ -90,7 +90,7 @@ return total;
 - The first sweep added 2,920 blank lines to 566 files and nothing else. Open branches need
   `pnpm format` after merging main, since the blank lines conflict.
 - `path:line` citations in `.patterns/` and notes drift by a few lines in swept files.
-- The second sweep (ticket 439) touched 928 files, +37,704 and -8,330 lines; each file parses to the
+- The second sweep (ticket 439) touched 928 files, +37,705 and -8,330 lines; each file parses to the
   same tree with a one-statement block read as its statement. Runs of guard clauses now stand apart.
 - `pnpm format` may need more than one run on a file with deeply nested brace-less bodies: oxlint
   applies one fix per overlapping range a pass. The first sweep took 8 runs; new code rarely needs two.
