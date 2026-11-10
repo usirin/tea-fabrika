@@ -67,6 +67,109 @@ The same change turned on, as errors, Effect's 35 diagnostics that fired 0 times
 
 ## The new version's exam rules
 
+P16 adds `fabrika/program-package-layout` for `next/programs/` only. A package exports
+its pure program at `.` and its real window at `./window`. A package awaiting a window needs
+no stub. Worker entries and Worker runtime imports in the pure import graph fail, through
+re-exports, helpers, cycles, literal dynamic imports, `require`, and `#` aliases in the package's
+own `imports`. Type-only imports and re-exports pass, with either a declaration or a specifier
+marked `type`, and so do `types` export conditions and declaration files. This follows
+`docs/plan/tier-1-detail.md`, Packages, and the approved P16 plan. On 2026-11-10 it checked 3
+files in the real program tree: 0 findings, 0 false alarms. The counter's pure entry links three
+installed packages, which all resolve, so no link there went unresolved. Its 17 laws run the real
+oxlint plugin over generated layouts at seed 119120; with the rule switched off, 15 fail (the 2
+left are the accept law and the real-tree count). The rule blocks. What it cannot read it refuses
+as "cannot judge", never passes: a dynamic import or `require` by a computed name, a file that
+cannot be read or parsed, and a link that resolves to nothing. Two kinds of unresolved link stay
+fine: a `node:` builtin, which no file stands for, and a bare package name the manifest lists in
+`dependencies`, `devDependencies`, `peerDependencies` or `optionalDependencies`, which is code
+outside the package that may not be installed yet. A `#` alias that resolves to nothing is fine
+only when every target its `imports` entry names is one of these two. A `#` alias is a Worker
+runtime import when its `imports` entry names one under any condition, whatever the resolver
+answers. It parses other files with `oxc-parser`, a dev dependency of this folder.
+
+A Worker runtime import is one of the platform's names, the list
+[0042](../.decisions/0042-platform-pieces-go-through-alchemy.md) gives (`cloudflare:*`, `miniflare`,
+`workerd`, `wrangler`, `@cloudflare/*`), or Alchemy's local runtime
+(`@alchemy.run/cloudflare-runtime`) or libfabrika's `box` and `workers` entries. The rule's
+`platform` list cites 0042 and changes with it. A type-only import of any of them passes, so
+`@cloudflare/workers-types` stays fine as types. A link is followed when it is relative or when it
+resolves to a file that is not a dependency's, under `node_modules`: its own name, a `#` import or
+an absolute path, in the package or out of it.
+
+**Module resolution is a tool's, not ours** ([0040](../.decisions/0040-existing-tools-before-hand-written.md)).
+The tools looked at:
+
+- [`oxc-resolver`](https://github.com/oxc-project/oxc-resolver), 11.24.2, pinned in the catalog: the
+  version the lockfile already held under Rolldown and oxlint. It implements
+  [Node's ESM resolution](https://nodejs.org/api/esm.html#resolution-algorithm) with
+  [enhanced-resolve](https://github.com/webpack/enhanced-resolve)'s options. **Used.**
+- [`enhanced-resolve`](https://github.com/webpack/enhanced-resolve), webpack's resolver, which
+  `oxc-resolver` ports: the same answers, and a new package that the lockfile does not hold.
+- [`resolve.exports`](https://github.com/lukeed/resolve.exports): Node's `exports` lookup only, with
+  no relative links, and also one answer for one set of conditions. Not in the lockfile either.
+- [`typescript`](https://www.typescriptlang.org/docs/handbook/modules/reference.html)'s
+  `resolveModuleName`: it always matches the `types` condition, so it finds declarations, not the
+  file a runtime loads.
+
+The rule resolves each relative link with `oxc-resolver`: TypeScript's bundler lookup, with the
+extension added, a `.js` name standing for its `.ts` source and a folder's index. It resolves each
+export target as a file path, as written, and it sends each pattern subpath back through the
+package's own `exports`, by the package's name. So null targets and more specific keys apply as
+Node applies them. Its conditions are `workerd`, `import` and `default`, plus each condition path
+the package names. A package with no `name`, or a `name` that is not a string, cannot ask its own
+`exports`, so the rule fails closed: every subpath a pattern matches counts as offered, and a
+Worker behind it is refused. Any string name works, since 11.24.2 self-references by whatever the
+manifest names.
+
+What the resolver cannot do, with proof from 11.24.2 on a scratch package (2026-11-10):
+
+- **It answers for one set of conditions, with the first match in key order.** For
+  `"./ord": {"default": "./src/program.ts", "import": "./src/server.ts"}`, conditions `["import"]`
+  give `src/program.ts`; `src/server.ts` never comes back. For
+  `".": {"workerd": ["./src/server.ts"], "default": "./src/program.ts"}`, conditions `[]` give
+  `src/program.ts`, and `["workerd", "import", "default"]` give `src/server.ts`. The rule judges
+  every target a runtime condition names, so it lists the condition paths itself.
+- **It resolves one subpath, and cannot list the subpaths a pattern offers.** `"./*": "./src/*.ts"`
+  answers `@p16/x/server` with `src/server.ts`, but nothing asks it which subpaths exist. The rule
+  lists the package files each target's `*` matches.
+- **It names a `#` alias's module only in an error, and answers for one condition.** For
+  `"imports": {"#cf": "cloudflare:workers"}`, `#cf` answers
+  `{"error": "Cannot find module 'cloudflare:workers'"}`, with no field for the name. For
+  `"#mix": {"default": "./src/program.ts", "workerd": "cloudflare:workers"}`, it answers
+  `src/program.ts` (2026-11-10). So the rule reads the `imports` entry itself, every target under
+  every condition and each pattern key, and judges each target by name.
+
+The hand-written part, and the generated case that tests each edge in
+`program-package-layout.test.ts`:
+
+| Edge | Test |
+|---|---|
+| A string, an array or a conditions object as the whole `exports` value is `.` | "'.' written as the whole exports value", forms `string`, `array`, `conditions`, `array conditions` |
+| Every runtime condition, custom ones included, nested, `types` never | "mixed export conditions", and entry `condition` |
+| A target after `default` in the same object is still judged | "mixed export conditions" (`default` drawn before the planted condition) |
+| Each element of a fallback array, on a key, in a condition, under `.` | entries `array key`, `array condition`, `array dot` |
+| A window behind an array target is named at its key | entries `array key`, `array condition`, `array dot`, the moved window |
+| A pattern's `*` matches one or more characters, folders included | entries `pattern`, `key pattern` (paths of two folders) |
+| A pattern target without `*` maps every subpath to one file | entry `fixed pattern` |
+| A pattern subpath a null target or a more specific key takes is not the pattern's | entry `null pattern` |
+| Declaration files are never runtime code | "mixed export conditions", `.d.ts`, `.d.mts`, `.d.cts` |
+| A package with no `name`, or a name that is not a string, keeps every subpath a pattern matches | manifests `no name`, `number name`, and the pinned nameless `"./*"` example |
+| `./window` is judged for Worker code like every other subpath | entries `window`, `window tsx`, and the three pinned review 5 examples |
+| Every `*` in a target is the same text | the plants' two-`*` target |
+| A pattern target in build output, or under a symlinked folder, is listed | the plants' `dist/*.js` target and symlinked `src/lib` |
+| A link by a non-relative name (its own name, a `#` import, an absolute path) is followed when it resolves to a file outside `node_modules` | the plants' `#server` import; link `absolute` and its pinned review 7 example |
+| 0042's platform names are Worker runtime names, `@cloudflare/*` and `wrangler` included, even as declared dependencies | shapes 23 and 24 (`@cloudflare/containers`, `wrangler`), the drawn names of the runtime-import and dynamic-import plants, and the pinned review 7 `Container` example |
+| A `#` alias whose `imports` entry names a Worker runtime anywhere (a string, an array, a condition after a file target, a pattern key) is a Worker runtime import | links `imports alias`, `imports array`, `imports condition`, `imports pattern`, and the pinned review 6 `#cf` example |
+| A link that resolves to nothing is refused, save a `node:` builtin, a declared dependency, or a `#` alias whose every target is one | the plants' missing file, `#` with no entry, with a missing target or an undeclared target, undeclared package, own unexported subpath, `virtual:` scheme; the accept law's fine links |
+| A literal link is a string or a template literal with no `${}`; `require` and `import x = require()` are links; any other name is refused, never skipped | the plants' template literal, `require`, `import =` and computed import |
+| A file that cannot be read or parsed is refused, never read as empty | the plants' unparsable subpath and pure helper |
+| Pure code that oxlint does not lint line by line (outside the package, by a symlink, under `fixtures/`) is reported for the package | links `symlink`, `outside`, `absolute` under `condition` and `array dot`, and their two pinned examples; `fixtures/` has no test, as the harness lints with `--no-ignore` |
+| Package findings go on every file when the `.` entry is one oxlint skips (a test file is judged like any other) | the plants' `program.test.ts` and extensionless entries |
+| A plain subpath must name a real file; an export key is `.` or starts with `./` | the plants' `src/server.ts`, missing target and `import` key |
+
+fast-check 4.10.2 counts `examples` inside `numRuns`, so `withExamples` adds the generated runs on
+top. Before 2026-11-10 the layout law ran its 7 examples and 1 generated input.
+
 `one-id-module` keeps `next/`'s Id code in `libfabrika/src/id.ts`. It refuses the retired
 `libfabrika/src/data/id.ts`, even empty or forwarding, so a second module cannot stay behind.
 T518 A8's count on 2026-11-08 was one fire, the second module from P17a, with no false alarm.

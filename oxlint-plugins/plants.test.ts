@@ -4,6 +4,8 @@
 // packages/fabrika/src/redacted-lint.test.ts, `no-project-settings` in
 // packages/fabrika/src/agents/claude/rules.test.ts.
 // `no-node-filesystem` and `no-node-imports` plant next/ paths in their own test files.
+// `program-package-layout` reads a program's package.json, so it plants generated program
+// packages under next/programs/ in program-package-layout.test.ts.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -319,6 +321,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-node-imports",
       // libfabrika's rooms are planted at their real paths in rooms.test.ts.
       "rooms",
+      // P16's rule reads the program package, so generated packages plant it in its own test file.
+      "program-package-layout",
       // Generated no-why-key.test.ts plants run at next/ paths with the real lint config.
       "no-why-key",
     ];

@@ -64,6 +64,17 @@ the rest.
 6. **Report** each new law with `file:line` and how you saw it fail, anything
    in the plan you found wrong, and any red that is a sandbox limit.
 
+## Outside your task
+
+Something wrong that your task does not cover is one finding row with proof, then keep going:
+never a fix, a ticket or only a mention, and never a security hole.
+[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+counts as proof.
+
+Outside means no law in the approved plan covers it. Something wrong in the plan is not a
+finding: it goes back to plan (step 6).
+Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
+
 ## Go easy on the machine
 
 The test config and typecheck.sh hold worker, home and typecheck limits.

@@ -15,8 +15,7 @@
     "@kampus/libfabrika": "workspace:*",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:",
-    "oxc-parser": "catalog:",
-    "oxc-transform-react": "catalog:"
+    "oxc-parser": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261027.1",

@@ -26,6 +26,17 @@ the rest.
    `laws: green <the narrow test paths you ran>` just before `answer: done`. drive.ts takes that as
    done; `done` with no commit and no such line is `stuck:no_commit`.
 
+## Outside your task
+
+Something wrong that your task does not cover is one finding row with proof, then keep going:
+never a fix, a ticket or only a mention, and never a security hole.
+[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+counts as proof.
+
+Outside means the approved plan does not name it. A red law the plan names is your work, and a
+file you need but may not touch goes in your report (step 6): neither is a finding.
+Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
+
 ## Go easy on the machine
 
 The test config and typecheck.sh hold worker, home and typecheck limits.

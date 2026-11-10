@@ -32,6 +32,7 @@ import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
+import { programPackageLayout } from "./program-package-layout.ts";
 import { rooms } from "./rooms.ts";
 import { useImportExtensions } from "./use-import-extensions.ts";
 
@@ -65,6 +66,7 @@ const plugin: Plugin = {
     "no-type-assertions": noTypeAssertions,
     "no-why-key": noWhyKey,
     "one-store-hook": oneStoreHook,
+    "program-package-layout": programPackageLayout,
     "one-id-module": oneIdModule,
     "outside-input-constructor": outsideInputConstructor,
     "padding-line-between-statements": paddingLineBetweenStatements,

@@ -10,7 +10,7 @@ import type { Built } from "./build.ts";
 import { Settings } from "./settings.ts";
 
 export const startStage = Effect.fn("stage.startStage")(function* (
-  built: Built,
+  built: Omit<Built, "assets">,
   options: Omit<Settings, "build"> & { readonly home: string },
 ) {
   const path = yield* Path.Path;

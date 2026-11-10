@@ -13,6 +13,8 @@ import "./box.sh?raw";
 import "./keepruns.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./agents.ts?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 import "./env.sh?raw";
@@ -53,12 +55,12 @@ const check = [
 ];
 
 const answer = [
-  "Start with merge-ready; tickets: <m> or changes: <n>; tickets: <m>.",
-  "n counts blocking classes. Each class lists every affected case. m counts distinct confirmed tracker tickets linked in this answer.",
+  "Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.",
+  "n counts blocking classes. Each class lists every affected case. m counts the finding rows in this answer.",
   "Give every finding in that answer, grouped by class, most serious first.",
   "Name each checked decided note and say where the change follows or breaks it.",
-  'Use tracker_query to find an existing ticket, or tracker_file with value: {title, body, from: {_tag: "pr", url, step: "review"}}. Record the returned ID.',
-  "If filing fails, include the exact pending payload for lead to retry. Do not count it as filed or start another review round for it.",
+  "Any other actionable finding is one finding row with proof: never a ticket, a fix or only a mention, and never a security hole.",
+  "Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl unchanged. Do not start another review round for it.",
 ];
 
 const sections: Record<string, Record<string, string[]>> = {
@@ -403,6 +405,16 @@ const slice1bClauses = [
     "K20",
     "For a new property, use `@effect/vitest`'s `it.prop` or `it.effect.prop` with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases.",
   ],
+  // Ticket 523, decision 0035: each step skill and the lead skill say the finding rule once.
+  ...["plan", "tests", "build", "mutation", "lead"].map(
+    (skill) =>
+      [
+        skill,
+        "Outside your task",
+        "K21",
+        "Something wrong that your task does not cover is one finding row with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole.",
+      ] as const,
+  ),
 ] as const;
 
 const allClauses = [...clauses, ...slice1bClauses];
