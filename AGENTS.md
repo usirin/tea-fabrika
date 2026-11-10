@@ -403,8 +403,8 @@ pnpm format     # oxfmt and oxlint: format, sort imports and apply safe fixes, i
 
 Run `pnpm format` first, so a diff holds only what was meant. The format settings
 are in `.oxfmtrc.json`, from ticket 466's sweep: 2 spaces, 120 columns and spaces inside braces,
-as Effect has them ([0029](./.decisions/0029-format-and-names-follow-effect.md)), with semicolons,
-and trailing commas in objects and arrays but not in function parameters or call arguments
+as Effect has them ([0029](./.decisions/0029-format-and-names-follow-effect.md)), with semicolons
+and trailing commas, function parameters and call arguments included
 ([0039](./.decisions/0039-keep-semicolons-and-es5-commas.md)). The lint rules are in `.oxlintrc.json`:
 the rules of the pipeline this repo rebuilds, with its custom rules in
 `oxlint-plugins/`. Why these two tools:

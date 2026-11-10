@@ -1,16 +1,16 @@
 ---
 id: 0039
-title: The repo keeps semicolons, and trailing commas in objects and arrays, never in function parameters or call arguments
+title: The repo keeps semicolons and trailing commas, function parameters and call arguments included
 status: accepted
 date: 2026-11-09
 tags: [style, format, oxfmt, semicolons, trailing-commas, effect]
 ---
 
-# 0039: The repo keeps semicolons, and trailing commas in objects and arrays, never in function parameters or call arguments
+# 0039: The repo keeps semicolons and trailing commas, function parameters and call arguments included
 
 **What this decides:** two of the format settings that
 [0029](0029-format-and-names-follow-effect.md) took from Effect go back: statements end with a
-semicolon, and a multi-line object or array ends with a comma.
+semicolon, and every multi-line list ends with a comma.
 
 ```ts
 // Short lines are broken here only to show the commas.
@@ -25,7 +25,7 @@ const made = make(
   options
 )
 
-// 0039: semicolons, and a trailing comma in the object but not in the call
+// 0039: semicolons, and a trailing comma in the object and in the call
 import { Effect } from "effect";
 const lease = {
   id,
@@ -33,7 +33,7 @@ const lease = {
 };
 const made = make(
   lease,
-  options
+  options,
 );
 ```
 
@@ -41,7 +41,7 @@ const made = make(
 // .oxfmtrc.json, the two settings this decides
 {
   // "semi" is left out: oxfmt's default is true
-  "trailingComma": "es5"
+  "trailingComma": "all"
 }
 ```
 
@@ -53,24 +53,19 @@ file, had not landed yet. Later on 2026-11-09 the owner picked these two setting
 is the owner's reading taste.
 
 This amends 0029 in part, and with it the semicolon and trailing comma rows of
-[0023](0023-next-follows-effects-code-style.md)'s table. Ticket 498 is this record. Ticket 466's
-sweep takes the new settings.
+[0023](0023-next-follows-effects-code-style.md)'s table. Ticket 498 is this record, and ticket 503
+its amendment. Ticket 466's sweep takes the settings.
 
 ## Decision
 
-**Code in this repo ends statements with a semicolon, and puts a trailing comma in multi-line
-objects and arrays but not in function parameters or call arguments.**
+**Code in this repo ends statements with a semicolon, and puts a trailing comma in every multi-line
+list, function parameters and call arguments included.**
 
 - In oxfmt's settings: `semi` is `true`, its default, so the key is left out, and `trailingComma`
-  is `"es5"`.
-- What `"es5"` does was checked on the installed oxfmt, 0.75.0, by formatting a sample file. A
-  multi-line object, array, import list, export list, destructuring pattern, enum, tuple type and
-  type parameter list each end with a comma. A multi-line function parameter list and a multi-line
-  call's arguments do not.
-- oxfmt's `configuration_schema.json` lists the values `all`, `es5` and `none` and says nothing
-  more about each. The name comes from Prettier, whose
-  [docs](https://prettier.io/docs/options#trailing-commas) read it as "trailing commas where valid
-  in ES5 (objects, arrays, etc.)". The sample run is the proof for this version.
+  is `"all"`. These are the two values the repo had before 0029.
+- The installed oxfmt, 0.75.0, says in its `configuration_schema.json` that `trailingComma` prints
+  "trailing commas wherever possible in multi-line comma-separated syntactic structures", and that
+  a single-line array never gets one. `"all"` is its default.
 - Everything else in 0029's format stays: 2 spaces, 120 columns, spaces inside braces, and JSON
   keeps its own settings, with no trailing comma.
 
@@ -80,10 +75,19 @@ Binding constraints:
 
 ## Consequences
 
-- These two settings now differ from Effect's own. Code copied from Effect's docs or source is
+- These two settings differ from Effect's own. Code copied from Effect's docs or source is
   reformatted by `pnpm format`: it gains semicolons and trailing commas. That is the cost the owner
   accepted.
-- `.oxfmtrc.json` does not change in this record's pull request. Ticket 466's sweep changes it and
-  reformats every file once, with these settings.
+- `.oxfmtrc.json` does not change in this record's pull requests. Ticket 466's sweep changes it
+  and reformats every file once, with these settings.
 - 0023's table gets two kept differences: semicolons, and trailing commas.
 - Not decided here: any other format setting, and anything 0023 still marks open.
+
+## Amendments
+
+- 2026-11-09: trailing commas stay everywhere, function parameters and call arguments included, so
+  `trailingComma` is `"all"`. This record first said `"es5"`: a comma in objects and arrays, none
+  in function parameters or call arguments
+  ([PR 704](https://github.com/usirin/tea-fabrika/pull/704)). The owner changed that part the same
+  day, after reading that pull request. The title and the text above now say the new rule (ticket
+  503).
