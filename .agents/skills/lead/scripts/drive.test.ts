@@ -24,7 +24,7 @@ import "../../plan/scripts/plancheck.sh?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
@@ -37,6 +37,7 @@ import {
   agentsDraft,
   agentTail,
   boxChanges,
+  caseRenames,
   changedFiles,
   commitSubject,
   type MutboxRun,
@@ -813,6 +814,69 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
     expect(lost.code).not.toBe(0);
     expect(lost.changes).toEqual([]);
     rmSync(root, { recursive: true, force: true });
+  });
+
+  // scenario: case-only renames, one with a text change and one without, as a move PR leaves
+  // them (ticket 573). On a disk that ignores case, git status reads the first as a modified old
+  // name and the second as nothing; on one that keeps case, as a delete and a new file. Either
+  // way the new name must be named and the old one must not survive as a plain edit.
+  // Plants: read only git status; take a file whose folder differs; name the old path as edited.
+  it("scenario: a case-only rename is named by its new name, on a disk that ignores case or keeps it", () => {
+    const top = mkdtempSync(join(tmpdir(), "drive-case-"));
+    const box = join(top, "c");
+    const cgit = (...args: string[]) =>
+      spawnSync(
+        "git",
+        [
+          `--git-dir=${join(top, "c-gitdata")}`,
+          `--work-tree=${box}`,
+          "-c",
+          "user.email=t@example.com",
+          "-c",
+          "user.name=t",
+          ...args,
+        ],
+        { encoding: "utf8" },
+      );
+    spawnSync("git", ["init", "-q", "--separate-git-dir", join(top, "c-gitdata"), box]);
+    mkdirSync(join(box, "src"));
+
+    for (const f of ["src/id.ts", "src/answer.ts", "src/keep.ts"]) {
+      writeFileSync(join(box, f), "1\n");
+    }
+
+    cgit("add", ".");
+    cgit("commit", "-q", "-m", "base");
+    // The agent's case-only renames: by a temporary name, as on a Mac.
+    renameSync(join(box, "src/id.ts"), join(box, "src/tmp"));
+    renameSync(join(box, "src/tmp"), join(box, "src/Id.ts"));
+    writeFileSync(join(box, "src/Id.ts"), "2\n");
+    renameSync(join(box, "src/answer.ts"), join(box, "src/tmp"));
+    renameSync(join(box, "src/tmp"), join(box, "src/Answer.ts"));
+    const ignoresCase = existsSync(join(box, "src/ID.TS"));
+    const read = boxChanges({ BOXES: top }, "c");
+    expect(read.code).toBe(0);
+    const named = read.changes.map((c) => c.path);
+    expect(named).toContain("src/Id.ts");
+    expect(named).toContain("src/Answer.ts");
+    expect(named).not.toContain("src/keep.ts");
+
+    if (ignoresCase) {
+      expect(read.changes.toSorted((x, y) => x.path.localeCompare(y.path))).toEqual([
+        { xy: "R ", from: "src/answer.ts", path: "src/Answer.ts" },
+        { xy: "R ", from: "src/id.ts", path: "src/Id.ts" },
+      ]);
+    } else {
+      expect(
+        read.changes
+          .filter((c) => c.xy === " D")
+          .map((c) => c.path)
+          .toSorted(),
+      ).toEqual(["src/answer.ts", "src/id.ts"]);
+    }
+
+    expect(caseRenames(box, ["src/keep.ts", "src/gone.ts"])).toEqual([]);
+    rmSync(top, { recursive: true, force: true });
   });
 });
 

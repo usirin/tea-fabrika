@@ -261,6 +261,32 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
     );
   });
 
+  // scenario: a case-only rename, as a box agent leaves one on a Mac's disk (ticket 573): git keeps
+  // the index's old name, so without care the commit still holds `src/old.ts`. Plants: skip the
+  // old entry's removal; drop a tracked file whose name only looks alike.
+  it("scenario: a case-only rename, with or without a text change, commits the new name and drops the old", () => {
+    each(["same text", "new text"] as const, (kind) =>
+      withRepo(
+        [
+          ["src/old.ts", "tests"],
+          ["src/Old.ts", "tests"],
+        ],
+        (r) => {
+          const text = readFileSync(join(r.repo, "src/old.ts"), "utf8");
+          rmSync(join(r.repo, "src/old.ts"));
+          r.changed("src/Old.ts", kind === "same text" ? text : 'export const value = "moved";\n');
+          const got = r.commit("tests", ["src/Old.ts"]);
+          expect(got.code, got.text).toBe(0);
+          const tree = r.git("ls-tree", "-r", "--name-only", "HEAD", "--", "src").trim().split("\n");
+          expect(tree).toContain("src/Old.ts");
+          expect(tree).not.toContain("src/old.ts");
+          expect(tree).toContain("src/owned.ts");
+          expect(r.git("diff", "--cached", "--name-only")).toBe("");
+        },
+      ),
+    );
+  });
+
   // Plant: drop the staged-index refusal. Both routes must preserve the index and checkout.
   it("K4 refuses an occupied index with exit 4 before staging or signing", () => {
     fc.assert(

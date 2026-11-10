@@ -61,6 +61,7 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -872,12 +873,47 @@ const dropView = (env: Env, box: string) => {
   }
 };
 
+/** One file the agent left changed. `from` is set only for a case-only rename: its old name. */
+export type Change = { readonly xy: string; readonly path: string; readonly from?: string };
+
 /** Each file the agent left changed in the box's tree, by its status letters. */
-export const changedFiles = (porcelain: string): { xy: string; path: string }[] =>
+export const changedFiles = (porcelain: string): Change[] =>
   porcelain
     .split("\0")
     .filter(Boolean)
     .map((e) => ({ xy: e.slice(0, 2), path: e.slice(3) }));
+
+/**
+ * Case-only renames, which `git status` cannot see on a disk that ignores case: a tracked `id.ts`
+ * the agent renamed to `Id.ts` reads as a modified `id.ts`, or as nothing when its text is the
+ * same (ticket 573). The disk's own name, from `realpath`, says it moved. Each answer is the
+ * tracked name and the name on disk. A deleted file, a folder whose case changed and a disk that
+ * keeps case all give none: git already sees those, or (a folder) this does not handle them.
+ */
+export const caseRenames = (box: string, tracked: readonly string[]): { from: string; path: string }[] => {
+  const top = realpathSync.native(box);
+  const out: { from: string; path: string }[] = [];
+
+  for (const from of tracked) {
+    const at = join(box, from);
+
+    if (!existsSync(at)) {
+      continue;
+    }
+
+    const path = realpathSync.native(at).slice(top.length + 1);
+
+    if (
+      path !== from &&
+      path.toLowerCase() === from.toLowerCase() &&
+      path.split("/").slice(0, -1).join("/") === from.split("/").slice(0, -1).join("/")
+    ) {
+      out.push({ from, path });
+    }
+  }
+
+  return out;
+};
 
 /**
  * What the agent left in the box's tree, read from outside the box: every edited, deleted and new
@@ -886,7 +922,24 @@ export const changedFiles = (porcelain: string): { xy: string; path: string }[] 
  */
 export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
   const status = boxGit(env, box, "status", "--porcelain=v1", "-z", "--untracked-files=all");
-  return { ...status, changes: status.code === 0 ? changedFiles(status.out) : [] };
+
+  if (status.code !== 0) {
+    return { ...status, changes: [] as Change[] };
+  }
+
+  const listed = boxGit(env, box, "ls-files", "--cached", "-z");
+
+  if (listed.code !== 0) {
+    return { ...listed, changes: [] as Change[] };
+  }
+
+  const moved = caseRenames(join(env.BOXES, box), listed.out.split("\0").filter(Boolean));
+  const old = new Set(moved.map((m) => m.from));
+  const changes: Change[] = [
+    ...changedFiles(status.out).filter((c) => !old.has(c.path)),
+    ...moved.map((m) => ({ xy: "R ", ...m })),
+  ];
+  return { ...status, changes };
 };
 
 /**
@@ -909,7 +962,7 @@ export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string)
  * stepcommit commits them as the bot and signs them as the step, with main's own signer. The
  * branch then points at that one signed commit, or stays at the base when nothing changed.
  */
-const collect = (env: Env, ask: Ask, changes: readonly { xy: string; path: string }[]) => {
+const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   const git = (...args: string[]) => {
     const r = spawnSync("git", ["-C", env.MAIN, ...args], { encoding: "utf8", env: SAFE_GIT });
     return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
@@ -930,9 +983,15 @@ const collect = (env: Env, ask: Ask, changes: readonly { xy: string; path: strin
   try {
     const box = join(env.BOXES, ask.box);
 
-    for (const { xy, path } of changes) {
+    for (const { xy, path, from: old } of changes) {
       const to = join(wt, path);
       rmSync(to, { force: true, recursive: true });
+
+      // A case-only rename: the old name's file goes, so the copy below writes the new name on
+      // disk, and stepcommit drops the old index entry.
+      if (old !== undefined) {
+        rmSync(join(wt, old), { force: true });
+      }
 
       if (xy.includes("D")) {
         continue;
