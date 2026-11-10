@@ -38,7 +38,11 @@ type Manifest = {readonly name: string | null; readonly deps: readonly string[]}
 
 const read = (file: string): Manifest => {
 	const manifest: unknown = JSON.parse(readFileSync(join(root, file), "utf8"));
-	if (!isMap(manifest)) throw new Error(`${file}: not an object`);
+
+	if (!isMap(manifest)) {
+		throw new Error(`${file}: not an object`);
+	}
+
 	const deps = FIELDS.flatMap((field) => {
 		const map = manifest[field];
 		return isMap(map) ? Object.keys(map) : [];
@@ -57,7 +61,9 @@ const fail = (why: string): never => {
 	process.exit(2);
 };
 
-if (tracked.status !== 0) fail(`git could not list files.\n${tracked.stderr}`);
+if (tracked.status !== 0) {
+	fail(`git could not list files.\n${tracked.stderr}`);
+}
 
 const run = (): {readonly unreached: readonly string[]; readonly total: number} => {
 	const workspace: unknown = parse(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8"));
@@ -71,10 +77,15 @@ const run = (): {readonly unreached: readonly string[]; readonly total: number} 
 		.map((file) => dirname(file))
 		.filter((folder) => !LEFT_OUT.test(folder) && members.some((m) => m.test(folder)));
 	const byName = new Map<string, {readonly folder: string; readonly manifest: Manifest}>();
+
 	for (const folder of folders) {
 		const manifest = read(join(folder, "package.json"));
-		if (manifest.name !== null) byName.set(manifest.name, {folder, manifest});
+
+		if (manifest.name !== null) {
+			byName.set(manifest.name, {folder, manifest});
+		}
 	}
+
 	const reached = new Set<string>();
 	const queue = [
 		...read("package.json").deps,
@@ -82,12 +93,18 @@ const run = (): {readonly unreached: readonly string[]; readonly total: number} 
 			.filter(({folder}) => starts.some((s) => s.test(folder)))
 			.flatMap(({manifest}) => (manifest.name === null ? [] : [manifest.name])),
 	];
+
 	for (let name = queue.pop(); name !== undefined; name = queue.pop()) {
 		const found = byName.get(name);
-		if (found === undefined || reached.has(name)) continue;
+
+		if (found === undefined || reached.has(name)) {
+			continue;
+		}
+
 		reached.add(name);
 		queue.push(...found.manifest.deps);
 	}
+
 	const unreached = [...byName.entries()]
 		.filter(([name]) => !reached.has(name))
 		.map(([name, {folder}]) => `${folder} (${name})`)
@@ -104,7 +121,10 @@ try {
 }
 
 if (result.unreached.length > 0) {
-	for (const line of result.unreached) console.error(`${line}: no app, tool or root reaches it`);
+	for (const line of result.unreached) {
+		console.error(`${line}: no app, tool or root reaches it`);
+	}
+
 	console.error(
 		`workspace-reach: ${result.unreached.length} unreached. Delete the package, or name it as a dependency where it is used (decision 0003).`,
 	);
