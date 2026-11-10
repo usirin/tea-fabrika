@@ -83,13 +83,19 @@ if state:
     read = subprocess.run(["sh", str(here / "../../plan/scripts/plancheck.sh"), "--owners-json", state["plan"]], capture_output=True, text=True)
     if read.returncode: refuse("not_owner: cannot read plan")
     owners = json.loads(read.stdout)
+def owner_of(p):
+    # A row ending in / owns every path under it; a plain prefix (owned.ts, owned.tsx) does not.
+    if p in owners: return owners[p]
+    if any(part in ("", ".", "..") for part in p.split("/")): return None
+    under = [k for k in owners if k.endswith("/") and p.startswith(k)]
+    return owners[max(under, key=len)] if under else None
 def check(paths):
     if role == "build":
         exam = subprocess.run([sys.executable, str(here / "exam.py"), "exam-paths.json", *paths], capture_output=True)
         if exam.returncode: refuse("a build may not commit exam paths; answer send to tests", 3)
     if owners is not None:
         for p in paths:
-            if owners.get(p) != step and not (step == "mutation" and owners.get(p) == "tests"):
+            if owner_of(p) != step and not (step == "mutation" and owner_of(p) == "tests"):
                 refuse("not_owner: " + p)
 check(named)
 added = git("--literal-pathspecs", "add", "--", *named)
