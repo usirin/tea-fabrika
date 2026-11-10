@@ -1,66 +1,66 @@
 {
-	"name": "tea-fabrika",
-	"private": true,
-	"type": "module",
-	"description": "Fabrika as a tea machine: a minimal repro",
-	"scripts": {
-		"prepare": "effect-tsgo patch --typescript",
-		"typecheck": "sh scripts/typecheck.sh",
-		"build": "pnpm --filter @kampus/fabrika-old --filter @kampus/pipeline build",
-		"test": "vitest run",
-		"lint": "sh .agents/skills/lead/scripts/skillscheck.sh && node .github/ci/workflow-lint.ts && node oxlint-plugins/lint.ts && node oxlint-plugins/format.ts --check && pnpm -s lint:versions && pnpm -s lint:reach && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser && pnpm -s lint:dead && pnpm -s lint:compiler && pnpm -s lint:twin && pnpm -s lint:promise-types && node packages/fabrika-design/src/build/tokens.ts --check && node oxlint-plugins/stylelint.ts",
-		"lint:versions": "node oxlint-plugins/exact-versions.ts",
-		"lint:reach": "node oxlint-plugins/workspace-reach.ts",
-		"lint:layers": "code-graph . --layers --layer-rules layer-rules.json",
-		"lint:boundaries": "code-graph . --boundaries --ci --boundary-rules boundary-rules.json",
-		"lint:browser": "node packages/fabrika/browser-check.ts",
-		"lint:dead": "code-graph . --unreachable --ci --node-kinds node-kinds.json",
-		"lint:compiler": "node next/apps/fabrika/src/exam/compiler.ts",
-		"lint:twin": "node next/apps/fabrika/src/exam/twin.ts",
-		"lint:promise-types": "node next/apps/fabrika/src/exam/promise-types.ts",
-		"tokens": "node packages/fabrika-design/src/build/tokens.ts",
-		"promises": "node packages/promises/src/main.ts",
-		"commits": "node next/apps/fabrika/src/exam/commits.ts",
-		"format": "node oxlint-plugins/format.ts && node oxlint-plugins/lint.ts --fix && node oxlint-plugins/format.ts",
-		"tsh": "node packages/pipeline/src/tsh/fabrika-main.ts",
-		"fabrika": "pnpm --filter @kampus/fabrika-app-old start",
-		"trace:up": "docker run -d --rm --name tsh-jaeger --user 0 -p 16686:16686 -p 4318:4318 -v tsh-jaeger-data:/badger -v \"$PWD/jaeger:/etc/jaeger:ro\" -e OTEL_TRACES_SAMPLER=always_off jaegertracing/jaeger:2.21.0 --config /etc/jaeger/config.yaml && echo 'Jaeger: http://localhost:16686'",
-		"trace:down": "docker stop tsh-jaeger",
-		"trace:wipe": "docker volume rm tsh-jaeger-data"
-	},
-	"dependencies": {
-		"@demlik/code-graph": "catalog:",
-		"@demlik/tea": "catalog:",
-		"@effect/platform-node": "catalog:",
-		"@kampus/fabrika-old": "workspace:*",
-		"@kampus/pipeline": "workspace:*",
-		"@kampus/promises": "workspace:*",
-		"effect": "catalog:"
-	},
-	"devDependencies": {
-		"@demlik/structure-sweep": "catalog:",
-		"@effect/tsgo": "catalog:",
-		"@types/node": "catalog:",
-		"esbuild": "catalog:",
-		"fast-check": "catalog:",
-		"oxfmt": "catalog:",
-		"oxlint": "catalog:",
-		"stylelint": "catalog:",
-		"typescript": "catalog:",
-		"vitest": "catalog:"
-	},
-	"packageManager": "pnpm@12.16.1",
-	"engines": {
-		"node": "26.13.0"
-	},
-	"devEngines": {
-		"runtime": {
-			"name": "node",
-			"version": "26.13.0",
-			"onFail": "warn"
-		}
-	},
-	"volta": {
-		"node": "26.13.0"
-	}
+  "name": "tea-fabrika",
+  "private": true,
+  "type": "module",
+  "description": "Fabrika as a tea machine: a minimal repro",
+  "scripts": {
+    "prepare": "effect-tsgo patch --typescript",
+    "typecheck": "sh scripts/typecheck.sh",
+    "build": "pnpm --filter @kampus/fabrika-old --filter @kampus/pipeline build",
+    "test": "vitest run",
+    "lint": "sh .agents/skills/lead/scripts/skillscheck.sh && node .github/ci/workflow-lint.ts && node oxlint-plugins/lint.ts && node oxlint-plugins/format.ts --check && pnpm -s lint:versions && pnpm -s lint:reach && pnpm -s lint:layers && pnpm -s lint:boundaries && pnpm -s lint:browser && pnpm -s lint:dead && pnpm -s lint:compiler && pnpm -s lint:twin && pnpm -s lint:promise-types && node packages/fabrika-design/src/build/tokens.ts --check && node oxlint-plugins/stylelint.ts",
+    "lint:versions": "node oxlint-plugins/exact-versions.ts",
+    "lint:reach": "node oxlint-plugins/workspace-reach.ts",
+    "lint:layers": "code-graph . --layers --layer-rules layer-rules.json",
+    "lint:boundaries": "code-graph . --boundaries --ci --boundary-rules boundary-rules.json",
+    "lint:browser": "node packages/fabrika/browser-check.ts",
+    "lint:dead": "code-graph . --unreachable --ci --node-kinds node-kinds.json",
+    "lint:compiler": "node next/apps/fabrika/src/exam/compiler.ts",
+    "lint:twin": "node next/apps/fabrika/src/exam/twin.ts",
+    "lint:promise-types": "node next/apps/fabrika/src/exam/promise-types.ts",
+    "tokens": "node packages/fabrika-design/src/build/tokens.ts",
+    "promises": "node packages/promises/src/main.ts",
+    "commits": "node next/apps/fabrika/src/exam/commits.ts",
+    "format": "node oxlint-plugins/format.ts && node oxlint-plugins/lint.ts --fix && node oxlint-plugins/format.ts",
+    "tsh": "node packages/pipeline/src/tsh/fabrika-main.ts",
+    "fabrika": "pnpm --filter @kampus/fabrika-app-old start",
+    "trace:up": "docker run -d --rm --name tsh-jaeger --user 0 -p 16686:16686 -p 4318:4318 -v tsh-jaeger-data:/badger -v \"$PWD/jaeger:/etc/jaeger:ro\" -e OTEL_TRACES_SAMPLER=always_off jaegertracing/jaeger:2.21.0 --config /etc/jaeger/config.yaml && echo 'Jaeger: http://localhost:16686'",
+    "trace:down": "docker stop tsh-jaeger",
+    "trace:wipe": "docker volume rm tsh-jaeger-data"
+  },
+  "dependencies": {
+    "@demlik/code-graph": "catalog:",
+    "@demlik/tea": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@kampus/fabrika-old": "workspace:*",
+    "@kampus/pipeline": "workspace:*",
+    "@kampus/promises": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@demlik/structure-sweep": "catalog:",
+    "@effect/tsgo": "catalog:",
+    "@types/node": "catalog:",
+    "esbuild": "catalog:",
+    "fast-check": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "stylelint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": "26.13.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "26.13.0",
+      "onFail": "warn"
+    }
+  },
+  "volta": {
+    "node": "26.13.0"
+  }
 }

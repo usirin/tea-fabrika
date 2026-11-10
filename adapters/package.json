@@ -1,9 +1,9 @@
 {
-	"name": "acp-adapters",
-	"private": true,
-	"description": "The ACP adapters the acp program starts, pinned. Installed apart from the workspace: pnpm --dir adapters install --ignore-workspace --frozen-lockfile.",
-	"dependencies": {
-		"@agentclientprotocol/claude-agent-acp": "0.99.1",
-		"@agentclientprotocol/codex-acp": "2.5.0"
-	}
+  "name": "acp-adapters",
+  "private": true,
+  "description": "The ACP adapters the acp program starts, pinned. Installed apart from the workspace: pnpm --dir adapters install --ignore-workspace --frozen-lockfile.",
+  "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.99.1",
+    "@agentclientprotocol/codex-acp": "2.5.0"
+  }
 }

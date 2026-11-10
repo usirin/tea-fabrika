@@ -1,4 +1,4 @@
-import {Schema, SchemaAST} from "effect";
+import { Schema, SchemaAST } from "effect";
 
 // One base for everything the ledger keeps that stays the same thing through
 // change (docs/direction/smallest-ledger-proof-to-grow.md, "Every ledger
@@ -29,57 +29,51 @@ const VALUE = "ledger/value";
  * back: each still checks it.
  */
 export const Id = <const K extends string>(kind: OneKind<K>, pattern: RegExp) =>
-	Schema.toType(
-		Schema.String.check(Schema.isPattern(pattern)).pipe(Schema.brand<K>(kind)),
-	).annotate({[ID]: kind});
+  Schema.toType(Schema.String.check(Schema.isPattern(pattern)).pipe(Schema.brand<K>(kind))).annotate({ [ID]: kind });
 export type Id<K extends string> = ReturnType<typeof Id<K>>;
 
 /** One concrete kind, as `Schema.brand` asks: a single literal, never `string` or a union. */
 type OneKind<K extends string> = Parameters<typeof Schema.brand<K>>[0];
 
 /** An id from text, as a person or a log wrote it. Throws on text that is not one of its kind. */
-export const make = <K extends string>(id: Id<K>): ((text: string) => Id<K>["Type"]) =>
-	Schema.decodeUnknownSync(id);
+export const make = <K extends string>(id: Id<K>): ((text: string) => Id<K>["Type"]) => Schema.decodeUnknownSync(id);
 
 /** An id from text, or `null`: it is not one of its kind. */
 export const read = <K extends string>(id: Id<K>) => {
-	const is = Schema.is(id);
-	return (text: string): Id<K>["Type"] | null => (is(text) ? text : null);
+  const is = Schema.is(id);
+  return (text: string): Id<K>["Type"] | null => (is(text) ? text : null);
 };
 
 /** A thing the ledger keeps that stays the same thing through change: `id` first, of its own kind, then its fields. */
 export const entity = <const K extends string, const F extends NoId>(id: Id<K>, fields: F) =>
-	Schema.Struct({id, ...fields}).annotate({[ENTITY]: kindOf(id.ast)});
+  Schema.Struct({ id, ...fields }).annotate({ [ENTITY]: kindOf(id.ast) });
 
 /** A value: no id, and two with equal content are the same one. */
-export const value = <const F extends NoId>(fields: F) =>
-	Schema.Struct(fields).annotate({[VALUE]: true});
+export const value = <const F extends NoId>(fields: F) => Schema.Struct(fields).annotate({ [VALUE]: true });
 
 /** Fields with no `id`: an entity's id is the one it was made with, and a value has none. */
-type NoId = Schema.Struct.Fields & {readonly id?: never};
+type NoId = Schema.Struct.Fields & { readonly id?: never };
 
 /** The kind of id a schema is, or `null`: it is not an id. */
 export function kindOf(ast: SchemaAST.AST): string | null {
-	const kind = marks(ast)[ID];
-	return typeof kind === "string" ? kind : null;
+  const kind = marks(ast)[ID];
+  return typeof kind === "string" ? kind : null;
 }
 
 /** What a struct was made as: an entity of a kind, a value, or `null`: neither. */
-export function madeAs(
-	ast: SchemaAST.AST,
-): {readonly entity: string} | {readonly value: true} | null {
-	const m = marks(ast);
-	const kind = m[ENTITY];
+export function madeAs(ast: SchemaAST.AST): { readonly entity: string } | { readonly value: true } | null {
+  const m = marks(ast);
+  const kind = m[ENTITY];
 
-	if (typeof kind === "string") {
-		return {entity: kind};
-	}
+  if (typeof kind === "string") {
+    return { entity: kind };
+  }
 
-	return m[VALUE] === true ? {value: true} : null;
+  return m[VALUE] === true ? { value: true } : null;
 }
 
 /** Every mark on a node: its own, and the last check's, where `annotate` puts them on a checked one. */
 const marks = (ast: SchemaAST.AST): Readonly<Record<string, unknown>> => ({
-	...ast.annotations,
-	...SchemaAST.resolve(ast),
+  ...ast.annotations,
+  ...SchemaAST.resolve(ast),
 });

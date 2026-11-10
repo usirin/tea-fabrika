@@ -1,26 +1,26 @@
-import {applyCell} from "@demlik/tea";
-import {Result} from "effect";
-import {describe, expect, it} from "vitest";
-import {PIPES} from "../pipes.ts";
-import type {TileJobs} from "../tile-jobs.ts";
+import { applyCell } from "@demlik/tea";
+import { Result } from "effect";
+import { describe, expect, it } from "vitest";
+import { PIPES } from "../pipes.ts";
+import type { TileJobs } from "../tile-jobs.ts";
 import {
-	activeOf,
-	claims,
-	type Desk,
-	type DeskCmd,
-	type DeskMsg,
-	deskMachine,
-	type Open,
-	questionOf,
-	refusedOf,
-	restore,
-	savedOf,
-	takenNow,
-	tilesOf,
+  activeOf,
+  claims,
+  type Desk,
+  type DeskCmd,
+  type DeskMsg,
+  deskMachine,
+  type Open,
+  questionOf,
+  refusedOf,
+  restore,
+  savedOf,
+  takenNow,
+  tilesOf,
 } from "./desk.ts";
-import {decodeKeys, type Keys} from "./keymap.ts";
-import {keyName} from "./keys.ts";
-import {findTile} from "./layout/index.ts";
+import { decodeKeys, type Keys } from "./keymap.ts";
+import { keyName } from "./keys.ts";
+import { findTile } from "./layout/index.ts";
 
 // The desk, folded by hand. Its laws, as property tests on tea's pbt, are in desk.laws.test.ts.
 
@@ -28,998 +28,970 @@ const [start, booted] = deskMachine.init(null, undefined);
 
 /** A tile's jobs, as its tsh says them: `count` running, none ended. */
 const running = (count: number): TileJobs => ({
-	running: Array.from({length: count}, (_, i) => ({
-		n: i + 1,
-		text: "counter",
-		since: 0,
-		foreground: i === 0,
-	})),
-	ended: null,
+  running: Array.from({ length: count }, (_, i) => ({
+    n: i + 1,
+    text: "counter",
+    since: 0,
+    foreground: i === 0,
+  })),
+  ended: null,
 });
 
 describe("today's keys PR 1 command paths", () => {
-	it("K17: a prefix opens the palette, and an unbound command still runs by name", () => {
-		const read = decodeKeys('palette.open = "<prefix>p"\ntezgah.zoom = []', true);
+  it("K17: a prefix opens the palette, and an unbound command still runs by name", () => {
+    const read = decodeKeys('palette.open = "<prefix>p"\ntezgah.zoom = []', true);
 
-		if (Result.isFailure(read)) {
-			throw new Error(read.failure.why);
-		}
+    if (Result.isFailure(read)) {
+      throw new Error(read.failure.why);
+    }
 
-		const configured = fold([{type: "keys", keys: read.success}]).s;
-		const openedPalette = fold(prefixed("p"), configured);
-		expect(openedPalette.cmds).toContainEqual(
-			expect.objectContaining({type: "show", what: "palette"}),
-		);
-		const two = fold(prefixed("|"), configured).s;
-		expect(activeOf(opened(fold(prefixed("z"), two).s)).layout.zoomed).toBeNull();
-		const named = fold([{type: "run", does: "tezgah.zoom"}], two);
-		expect(activeOf(opened(named.s)).layout.zoomed).toBe("t2");
-	});
+    const configured = fold([{ type: "keys", keys: read.success }]).s;
+    const openedPalette = fold(prefixed("p"), configured);
+    expect(openedPalette.cmds).toContainEqual(expect.objectContaining({ type: "show", what: "palette" }));
+    const two = fold(prefixed("|"), configured).s;
+    expect(activeOf(opened(fold(prefixed("z"), two).s)).layout.zoomed).toBeNull();
+    const named = fold([{ type: "run", does: "tezgah.zoom" }], two);
+    expect(activeOf(opened(named.s)).layout.zoomed).toBe("t2");
+  });
 });
 
 /** Fold msgs through the desk from `from`, keeping every Cmd asked for. */
 const fold = (msgs: readonly DeskMsg[], from: Desk = start) => {
-	let s = from;
-	const cmds: DeskCmd[] = [];
+  let s = from;
+  const cmds: DeskCmd[] = [];
 
-	for (const msg of msgs) {
-		const [next, out] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, msg);
-		s = next;
-		cmds.push(...out);
-	}
+  for (const msg of msgs) {
+    const [next, out] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, msg);
+    s = next;
+    cmds.push(...out);
+  }
 
-	return {s, cmds};
+  return { s, cmds };
 };
 
 const opened = (s: Desk): Open => {
-	if (s.at !== "open") {
-		throw new Error("the desk is over");
-	}
+  if (s.at !== "open") {
+    throw new Error("the desk is over");
+  }
 
-	return s;
+  return s;
 };
 
 /** Ctrl-B, then `key`, a moment apart. */
 const prefixed = (key: string, at = 0): readonly DeskMsg[] => [
-	{type: "key", key: "<c-b>", at},
-	{type: "key", key, at: at + 1},
+  { type: "key", key: "<c-b>", at },
+  { type: "key", key, at: at + 1 },
 ];
 
 const ids = (s: Desk) => tilesOf(activeOf(opened(s))).map((t) => t.id);
 const focus = (s: Desk) => activeOf(opened(s)).focused;
-const counter = {id: "counter:1", program: "counter"};
+const counter = { id: "counter:1", program: "counter" };
 
 describe("the desk", () => {
-	it("starts with one tile running tsh, and asks for it", () => {
-		expect(ids(start)).toEqual(["t1"]);
-		expect(booted.map((c) => c.type)).toEqual(["open", "save"]);
-	});
+  it("starts with one tile running tsh, and asks for it", () => {
+    expect(ids(start)).toEqual(["t1"]);
+    expect(booted.map((c) => c.type)).toEqual(["open", "save"]);
+  });
 
-	it("splits side by side with | and top to bottom with -, the new tile focused and opened", () => {
-		const {s, cmds} = fold([...prefixed("|"), ...prefixed("-", 10)]);
-		const root = activeOf(opened(s)).layout.root;
-		expect(root.orientation).toBe("horizontal");
-		expect(ids(s)).toEqual(["t1", "t2", "t3"]);
-		expect(focus(s)).toBe("t3");
-		expect(cmds.filter((c) => c.type === "open")).toEqual([
-			{type: "open", tile: "t2"},
-			{type: "open", tile: "t3"},
-		]);
-	});
+  it("splits side by side with | and top to bottom with -, the new tile focused and opened", () => {
+    const { s, cmds } = fold([...prefixed("|"), ...prefixed("-", 10)]);
+    const root = activeOf(opened(s)).layout.root;
+    expect(root.orientation).toBe("horizontal");
+    expect(ids(s)).toEqual(["t1", "t2", "t3"]);
+    expect(focus(s)).toBe("t3");
+    expect(cmds.filter((c) => c.type === "open")).toEqual([
+      { type: "open", tile: "t2" },
+      { type: "open", tile: "t3" },
+    ]);
+  });
 
-	it("moves focus by direction, as tmux does, and stays at an edge", () => {
-		const split = fold([...prefixed("|"), ...prefixed("-", 10)]).s;
-		expect(focus(fold(prefixed("h", 20), split).s)).toBe("t1");
-		expect(focus(fold(prefixed("k", 20), split).s)).toBe("t2");
-		expect(focus(fold(prefixed("<arrowup>", 20), split).s)).toBe("t2");
-		expect(focus(fold(prefixed("l", 20), split).s)).toBe("t3");
-	});
+  it("moves focus by direction, as tmux does, and stays at an edge", () => {
+    const split = fold([...prefixed("|"), ...prefixed("-", 10)]).s;
+    expect(focus(fold(prefixed("h", 20), split).s)).toBe("t1");
+    expect(focus(fold(prefixed("k", 20), split).s)).toBe("t2");
+    expect(focus(fold(prefixed("<arrowup>", 20), split).s)).toBe("t2");
+    expect(focus(fold(prefixed("l", 20), split).s)).toBe("t3");
+  });
 
-	it("lets every key go to the tile while the prefix is not armed, and swallows an unbound one after it", () => {
-		expect(claims(start, "|", 0)).toBe(false);
-		expect(claims(start, "<c-b>", 0)).toBe(true);
-		const armed = fold([{type: "key", key: "<c-b>", at: 0}]).s;
-		expect(claims(armed, "q", 1)).toBe(true);
-		const after = fold([{type: "key", key: "q", at: 1}], armed);
-		expect(after.cmds).toEqual([]);
-		expect(opened(after.s).prefix).toEqual({armed: false});
-	});
+  it("lets every key go to the tile while the prefix is not armed, and swallows an unbound one after it", () => {
+    expect(claims(start, "|", 0)).toBe(false);
+    expect(claims(start, "<c-b>", 0)).toBe(true);
+    const armed = fold([{ type: "key", key: "<c-b>", at: 0 }]).s;
+    expect(claims(armed, "q", 1)).toBe(true);
+    const after = fold([{ type: "key", key: "q", at: 1 }], armed);
+    expect(after.cmds).toEqual([]);
+    expect(opened(after.s).prefix).toEqual({ armed: false });
+  });
 
-	it("sends one Ctrl-B on for Ctrl-B twice, as tmux's send-prefix", () => {
-		const {cmds} = fold(prefixed("<c-b>"));
-		expect(cmds).toEqual([{type: "send", tile: "t1", data: "\x02"}]);
-	});
+  it("sends one Ctrl-B on for Ctrl-B twice, as tmux's send-prefix", () => {
+    const { cmds } = fold(prefixed("<c-b>"));
+    expect(cmds).toEqual([{ type: "send", tile: "t1", data: "\x02" }]);
+  });
 
-	it("zooms the focused tile and back, and a split or a focus move undoes the zoom", () => {
-		const two = fold(prefixed("|")).s;
-		const zoomed = fold(prefixed("z", 10), two).s;
-		expect(activeOf(opened(zoomed)).layout.zoomed).toBe("t2");
-		expect(activeOf(opened(fold(prefixed("z", 20), zoomed).s)).layout.zoomed).toBeNull();
-		expect(activeOf(opened(fold(prefixed("h", 20), zoomed).s)).layout.zoomed).toBeNull();
-	});
+  it("zooms the focused tile and back, and a split or a focus move undoes the zoom", () => {
+    const two = fold(prefixed("|")).s;
+    const zoomed = fold(prefixed("z", 10), two).s;
+    expect(activeOf(opened(zoomed)).layout.zoomed).toBe("t2");
+    expect(activeOf(opened(fold(prefixed("z", 20), zoomed).s)).layout.zoomed).toBeNull();
+    expect(activeOf(opened(fold(prefixed("h", 20), zoomed).s)).layout.zoomed).toBeNull();
+  });
 
-	it("asks before closing a tile with nothing running, and y closes it at once", () => {
-		const two = fold(prefixed("|")).s;
-		const asked = fold(prefixed("x", 10), two);
-		expect(opened(asked.s).ask).toBe("t2");
-		expect(questionOf(opened(asked.s), "t2")).toBe("close t2? (y/n)");
-		expect(asked.cmds).toEqual([]);
-		const {s, cmds} = fold([{type: "key", key: "y", at: 20}], asked.s);
-		expect(ids(s)).toEqual(["t1"]);
-		expect(focus(s)).toBe("t1");
-		expect(cmds).toContainEqual({type: "stop", tile: "t2"});
-		expect(cmds.some((c) => c.type === "close")).toBe(false);
-	});
+  it("asks before closing a tile with nothing running, and y closes it at once", () => {
+    const two = fold(prefixed("|")).s;
+    const asked = fold(prefixed("x", 10), two);
+    expect(opened(asked.s).ask).toBe("t2");
+    expect(questionOf(opened(asked.s), "t2")).toBe("close t2? (y/n)");
+    expect(asked.cmds).toEqual([]);
+    const { s, cmds } = fold([{ type: "key", key: "y", at: 20 }], asked.s);
+    expect(ids(s)).toEqual(["t1"]);
+    expect(focus(s)).toBe("t1");
+    expect(cmds).toContainEqual({ type: "stop", tile: "t2" });
+    expect(cmds.some((c) => c.type === "close")).toBe(false);
+  });
 
-	it("takes only y for yes: any other key says no and keeps the tile", () => {
-		const asked = fold([...prefixed("|"), ...prefixed("x", 10)]).s;
+  it("takes only y for yes: any other key says no and keeps the tile", () => {
+    const asked = fold([...prefixed("|"), ...prefixed("x", 10)]).s;
 
-		for (const key of ["n", "Y", "a", "<c-b>", "<c-c>", "x", "<enter>"]) {
-			expect(claims(asked, key, 20)).toBe(true);
-			const no = fold([{type: "key", key, at: 20}], asked);
-			expect(ids(no.s)).toEqual(["t1", "t2"]);
-			expect(opened(no.s).ask).toBeNull();
-			expect(no.cmds).toEqual([]);
-		}
-	});
+    for (const key of ["n", "Y", "a", "<c-b>", "<c-c>", "x", "<enter>"]) {
+      expect(claims(asked, key, 20)).toBe(true);
+      const no = fold([{ type: "key", key, at: 20 }], asked);
+      expect(ids(no.s)).toEqual(["t1", "t2"]);
+      expect(opened(no.s).ask).toBeNull();
+      expect(no.cmds).toEqual([]);
+    }
+  });
 
-	it("gives a busy tile's programs the end of their inputs on y, and takes it away when its tsh ended", () => {
-		const busy = fold([...prefixed("|"), {type: "jobs", tile: "t2", jobs: running(1)}]).s;
-		const yes = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], busy);
-		expect(ids(yes.s)).toEqual(["t1", "t2"]);
-		expect(opened(yes.s).closing).toEqual(["t2"]);
-		expect(yes.cmds).toEqual([{type: "close", tile: "t2"}]);
-		// The programs ended, then tsh: the tile goes, and what is left of it is stopped.
-		const ended = fold(
-			[
-				{type: "jobs", tile: "t2", jobs: running(0)},
-				{type: "ended", tile: "t2"},
-			],
-			yes.s,
-		);
-		expect(ids(ended.s)).toEqual(["t1"]);
-		expect(opened(ended.s).closing).toEqual([]);
-		expect(ended.cmds).toContainEqual({type: "stop", tile: "t2"});
-	});
+  it("gives a busy tile's programs the end of their inputs on y, and takes it away when its tsh ended", () => {
+    const busy = fold([...prefixed("|"), { type: "jobs", tile: "t2", jobs: running(1) }]).s;
+    const yes = fold([...prefixed("x", 10), { type: "key", key: "y", at: 20 }], busy);
+    expect(ids(yes.s)).toEqual(["t1", "t2"]);
+    expect(opened(yes.s).closing).toEqual(["t2"]);
+    expect(yes.cmds).toEqual([{ type: "close", tile: "t2" }]);
+    // The programs ended, then tsh: the tile goes, and what is left of it is stopped.
+    const ended = fold(
+      [
+        { type: "jobs", tile: "t2", jobs: running(0) },
+        { type: "ended", tile: "t2" },
+      ],
+      yes.s,
+    );
+    expect(ids(ended.s)).toEqual(["t1"]);
+    expect(opened(ended.s).closing).toEqual([]);
+    expect(ended.cmds).toContainEqual({ type: "stop", tile: "t2" });
+  });
 
-	it("asks a closing tile to stop now, and y stops it", () => {
-		const covered = fold([
-			...prefixed("|"),
-			{type: "covered", tile: "t2", runs: [counter]},
-			...prefixed("x", 10),
-			{type: "key", key: "y", at: 20},
-		]).s;
-		expect(opened(covered).closing).toEqual(["t2"]);
-		const asked = fold(prefixed("x", 30), covered).s;
-		expect(opened(asked).ask).toBe("t2");
-		expect(questionOf(opened(asked), "t2")).toBe("stop t2 now? (y/n)");
-		const no = fold([{type: "key", key: "n", at: 40}], asked).s;
-		expect(ids(no)).toEqual(["t1", "t2"]);
-		expect(opened(no).closing).toEqual(["t2"]);
-		const yes = fold([{type: "key", key: "y", at: 40}], asked);
-		expect(ids(yes.s)).toEqual(["t1"]);
-		expect(yes.cmds).toContainEqual({type: "stop", tile: "t2"});
-	});
+  it("asks a closing tile to stop now, and y stops it", () => {
+    const covered = fold([
+      ...prefixed("|"),
+      { type: "covered", tile: "t2", runs: [counter] },
+      ...prefixed("x", 10),
+      { type: "key", key: "y", at: 20 },
+    ]).s;
+    expect(opened(covered).closing).toEqual(["t2"]);
+    const asked = fold(prefixed("x", 30), covered).s;
+    expect(opened(asked).ask).toBe("t2");
+    expect(questionOf(opened(asked), "t2")).toBe("stop t2 now? (y/n)");
+    const no = fold([{ type: "key", key: "n", at: 40 }], asked).s;
+    expect(ids(no)).toEqual(["t1", "t2"]);
+    expect(opened(no).closing).toEqual(["t2"]);
+    const yes = fold([{ type: "key", key: "y", at: 40 }], asked);
+    expect(ids(yes.s)).toEqual(["t1"]);
+    expect(yes.cmds).toContainEqual({ type: "stop", tile: "t2" });
+  });
 
-	it("hears a tile was closing before the page loaded: its question is stop", () => {
-		const two = fold([...prefixed("|"), {type: "closing", tile: "t2"}]).s;
-		expect(opened(two).closing).toEqual(["t2"]);
-		expect(questionOf(opened(two), "t2")).toBe("stop t2 now? (y/n)");
-	});
+  it("hears a tile was closing before the page loaded: its question is stop", () => {
+    const two = fold([...prefixed("|"), { type: "closing", tile: "t2" }]).s;
+    expect(opened(two).closing).toEqual(["t2"]);
+    expect(questionOf(opened(two), "t2")).toBe("stop t2 now? (y/n)");
+  });
 
-	it("empties when the last tile closes: the window closes, as with Terminal's last tab", () => {
-		const {s, cmds} = fold([...prefixed("x"), {type: "key", key: "y", at: 10}]);
-		expect(s).toEqual({at: "over"});
-		expect(cmds).toEqual([{type: "stop", tile: "t1"}, {type: "empty"}]);
-	});
+  it("empties when the last tile closes: the window closes, as with Terminal's last tab", () => {
+    const { s, cmds } = fold([...prefixed("x"), { type: "key", key: "y", at: 10 }]);
+    expect(s).toEqual({ at: "over" });
+    expect(cmds).toEqual([{ type: "stop", tile: "t1" }, { type: "empty" }]);
+  });
 
-	it("covers a tile with a foreground run, hands Ctrl-C to its tsh, and shows tsh again when it ends", () => {
-		const covered = fold([{type: "covered", tile: "t1", runs: [counter]}]).s;
-		expect(findTile(activeOf(opened(covered)).layout, "t1")?.shows).toEqual({
-			kind: "tsh",
-			run: counter,
-		});
-		expect(claims(covered, "<c-c>", 0)).toBe(true);
-		expect(fold([{type: "key", key: "<c-c>", at: 0}], covered).cmds).toEqual([
-			{type: "send", tile: "t1", data: "\x03"},
-		]);
-		const back = fold([{type: "over", run: counter.id}], covered).s;
-		expect(findTile(activeOf(opened(back)).layout, "t1")?.shows).toEqual({kind: "tsh", run: null});
-		expect(claims(back, "<c-c>", 0)).toBe(false);
-	});
+  it("covers a tile with a foreground run, hands Ctrl-C to its tsh, and shows tsh again when it ends", () => {
+    const covered = fold([{ type: "covered", tile: "t1", runs: [counter] }]).s;
+    expect(findTile(activeOf(opened(covered)).layout, "t1")?.shows).toEqual({
+      kind: "tsh",
+      run: counter,
+    });
+    expect(claims(covered, "<c-c>", 0)).toBe(true);
+    expect(fold([{ type: "key", key: "<c-c>", at: 0 }], covered).cmds).toEqual([
+      { type: "send", tile: "t1", data: "\x03" },
+    ]);
+    const back = fold([{ type: "over", run: counter.id }], covered).s;
+    expect(findTile(activeOf(opened(back)).layout, "t1")?.shows).toEqual({ kind: "tsh", run: null });
+    expect(claims(back, "<c-c>", 0)).toBe(false);
+  });
 
-	it("makes workspaces with N, and walks them with Ctrl-H and Ctrl-L, repeating within 500 ms", () => {
-		const three = fold([...prefixed("N"), ...prefixed("N", 10)]).s;
-		expect(opened(three).workspaces.map((w) => w.id)).toEqual(["w1", "w2", "w3"]);
-		expect(opened(three).active).toBe("w3");
-		const walked = fold(
-			[
-				{type: "key", key: "<c-b>", at: 100},
-				{type: "key", key: "<c-h>", at: 101},
-				{type: "key", key: "<c-h>", at: 300},
-			],
-			three,
-		).s;
-		expect(opened(walked).active).toBe("w1");
-		// After the window, the key is the tile's again, and the prefix is not armed.
-		expect(claims(walked, "<c-h>", 900)).toBe(false);
-		expect(opened(fold(prefixed("<c-l>", 1000), walked).s).active).toBe("w2");
-	});
+  it("makes workspaces with N, and walks them with Ctrl-H and Ctrl-L, repeating within 500 ms", () => {
+    const three = fold([...prefixed("N"), ...prefixed("N", 10)]).s;
+    expect(opened(three).workspaces.map((w) => w.id)).toEqual(["w1", "w2", "w3"]);
+    expect(opened(three).active).toBe("w3");
+    const walked = fold(
+      [
+        { type: "key", key: "<c-b>", at: 100 },
+        { type: "key", key: "<c-h>", at: 101 },
+        { type: "key", key: "<c-h>", at: 300 },
+      ],
+      three,
+    ).s;
+    expect(opened(walked).active).toBe("w1");
+    // After the window, the key is the tile's again, and the prefix is not armed.
+    expect(claims(walked, "<c-h>", 900)).toBe(false);
+    expect(opened(fold(prefixed("<c-l>", 1000), walked).s).active).toBe("w2");
+  });
 
-	it("closes a workspace with its last tile, and moves to the one next to it", () => {
-		const two = fold(prefixed("N")).s;
-		const {s} = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], two);
-		expect(opened(s).workspaces.map((w) => w.id)).toEqual(["w1"]);
-		expect(opened(s).active).toBe("w1");
-	});
+  it("closes a workspace with its last tile, and moves to the one next to it", () => {
+    const two = fold(prefixed("N")).s;
+    const { s } = fold([...prefixed("x", 10), { type: "key", key: "y", at: 20 }], two);
+    expect(opened(s).workspaces.map((w) => w.id)).toEqual(["w1"]);
+    expect(opened(s).active).toBe("w1");
+  });
 
-	it("resizes a container from a dragged border", () => {
-		const two = fold(prefixed("|")).s;
-		const root = activeOf(opened(two)).layout.root;
-		const {s} = fold([{type: "resize", container: root.id, sizes: {t1: 70, t2: 30}}], two);
-		expect(activeOf(opened(s)).layout.root.sizes).toEqual({t1: 70, t2: 30});
-	});
+  it("resizes a container from a dragged border", () => {
+    const two = fold(prefixed("|")).s;
+    const root = activeOf(opened(two)).layout.root;
+    const { s } = fold([{ type: "resize", container: root.id, sizes: { t1: 70, t2: 30 } }], two);
+    expect(activeOf(opened(s)).layout.root.sizes).toEqual({ t1: 70, t2: 30 });
+  });
 
-	it("closes a tile whose tsh ended", () => {
-		const two = fold(prefixed("|")).s;
-		const {s, cmds} = fold([{type: "ended", tile: "t2"}], two);
-		expect(ids(s)).toEqual(["t1"]);
-		expect(cmds).toContainEqual({type: "stop", tile: "t2"});
-	});
+  it("closes a tile whose tsh ended", () => {
+    const two = fold(prefixed("|")).s;
+    const { s, cmds } = fold([{ type: "ended", tile: "t2" }], two);
+    expect(ids(s)).toEqual(["t1"]);
+    expect(cmds).toContainEqual({ type: "stop", tile: "t2" });
+  });
 });
 
 describe("the desk, moved by the window's frame", () => {
-	it("picks a workspace by its place with Ctrl-B 1 to 9, or by a click on its name", () => {
-		const three = fold([...prefixed("N"), ...prefixed("N", 10)]).s;
-		expect(opened(fold(prefixed("1", 20), three).s).active).toBe("w1");
-		expect(opened(fold(prefixed("9", 20), three).s).active).toBe("w3");
-		const {s, cmds} = fold([{type: "pick", workspace: "w2"}], three);
-		expect(opened(s).active).toBe("w2");
-		expect(cmds.map((c) => c.type)).toEqual(["save"]);
-		expect(fold([{type: "pick", workspace: "w9"}], three).s).toBe(three);
-	});
+  it("picks a workspace by its place with Ctrl-B 1 to 9, or by a click on its name", () => {
+    const three = fold([...prefixed("N"), ...prefixed("N", 10)]).s;
+    expect(opened(fold(prefixed("1", 20), three).s).active).toBe("w1");
+    expect(opened(fold(prefixed("9", 20), three).s).active).toBe("w3");
+    const { s, cmds } = fold([{ type: "pick", workspace: "w2" }], three);
+    expect(opened(s).active).toBe("w2");
+    expect(cmds.map((c) => c.type)).toEqual(["save"]);
+    expect(fold([{ type: "pick", workspace: "w9" }], three).s).toBe(three);
+  });
 
-	it("goes to a tile in another workspace, as an ask picked in the list does, and unzooms another", () => {
-		const zoomed = fold([...prefixed("|"), ...prefixed("z", 10), ...prefixed("N", 20)]).s;
-		expect(opened(zoomed).active).not.toBe("w1");
-		const {s} = fold([{type: "go", tile: "t1"}], zoomed);
-		expect(opened(s).active).toBe("w1");
-		expect(focus(s)).toBe("t1");
-		expect(activeOf(opened(s)).layout.zoomed).toBeNull();
-		expect(fold([{type: "go", tile: "t9"}], zoomed).s).toBe(zoomed);
-	});
+  it("goes to a tile in another workspace, as an ask picked in the list does, and unzooms another", () => {
+    const zoomed = fold([...prefixed("|"), ...prefixed("z", 10), ...prefixed("N", 20)]).s;
+    expect(opened(zoomed).active).not.toBe("w1");
+    const { s } = fold([{ type: "go", tile: "t1" }], zoomed);
+    expect(opened(s).active).toBe("w1");
+    expect(focus(s)).toBe("t1");
+    expect(activeOf(opened(s)).layout.zoomed).toBeNull();
+    expect(fold([{ type: "go", tile: "t9" }], zoomed).s).toBe(zoomed);
+  });
 
-	it("runs a command from the palette by its word, as Ctrl-B and its key would", () => {
-		const viaPalette = fold([{type: "run", does: "tezgah.split"}]);
-		const viaKeys = fold(prefixed("|"));
-		expect(viaPalette.s).toEqual(viaKeys.s);
-		expect(viaPalette.cmds).toEqual(viaKeys.cmds);
-		expect(fold([{type: "run", does: "keys.open"}]).cmds).toEqual([{type: "show", what: "keys"}]);
-		// The palette is the page's own: the desk has nothing to run for it.
-		const palette = fold([{type: "run", does: "palette.open"}]);
-		expect(palette.s).toBe(start);
-		expect(palette.cmds).toEqual([]);
-	});
+  it("runs a command from the palette by its word, as Ctrl-B and its key would", () => {
+    const viaPalette = fold([{ type: "run", does: "tezgah.split" }]);
+    const viaKeys = fold(prefixed("|"));
+    expect(viaPalette.s).toEqual(viaKeys.s);
+    expect(viaPalette.cmds).toEqual(viaKeys.cmds);
+    expect(fold([{ type: "run", does: "keys.open" }]).cmds).toEqual([{ type: "show", what: "keys" }]);
+    // The palette is the page's own: the desk has nothing to run for it.
+    const palette = fold([{ type: "run", does: "palette.open" }]);
+    expect(palette.s).toBe(start);
+    expect(palette.cmds).toEqual([]);
+  });
 
-	it("asks the frame to show the asks, the keys, the info mode and an item's lines, and changes nothing else", () => {
-		for (const [key, what] of [
-			["a", "asks"],
-			["?", "keys"],
-			["i", "info"],
-			["B", "bars"],
-			["A", "agents"],
-			["S", "sync"],
-			["H", "host"],
-		] as const) {
-			const {s, cmds} = fold(prefixed(key));
-			expect(cmds).toEqual([{type: "show", what}]);
-			expect(savedOf(opened(s))).toEqual(savedOf(opened(start)));
-		}
-	});
+  it("asks the frame to show the asks, the keys, the info mode and an item's lines, and changes nothing else", () => {
+    for (const [key, what] of [
+      ["a", "asks"],
+      ["?", "keys"],
+      ["i", "info"],
+      ["B", "bars"],
+      ["A", "agents"],
+      ["S", "sync"],
+      ["H", "host"],
+    ] as const) {
+      const { s, cmds } = fold(prefixed(key));
+      expect(cmds).toEqual([{ type: "show", what }]);
+      expect(savedOf(opened(s))).toEqual(savedOf(opened(start)));
+    }
+  });
 });
 
 describe("the desk, moved by a word typed in tsh", () => {
-	it("does what the key does, from the tile it was typed in", () => {
-		const viaWord = fold([{type: "typed", tile: "t1", does: {kind: "zoom"}}]);
-		const viaKeys = fold(prefixed("z"));
-		expect(viaWord.s).toEqual(viaKeys.s);
-		expect(viaWord.cmds).toEqual(viaKeys.cmds);
-	});
+  it("does what the key does, from the tile it was typed in", () => {
+    const viaWord = fold([{ type: "typed", tile: "t1", does: { kind: "zoom" } }]);
+    const viaKeys = fold(prefixed("z"));
+    expect(viaWord.s).toEqual(viaKeys.s);
+    expect(viaWord.cmds).toEqual(viaKeys.cmds);
+  });
 
-	it("brings the tile's workspace forward and focuses it first, with one save of both", () => {
-		// t1 in w1, t2 in w2, which is in front.
-		const two = fold(prefixed("N")).s;
-		const {s, cmds} = fold(
-			[{type: "typed", tile: "t1", does: {kind: "split", orientation: "vertical"}}],
-			two,
-		);
-		expect(opened(s).active).toBe("w1");
-		expect(ids(s)).toEqual(["t1", "t3"]);
-		expect(focus(s)).toBe("t3");
-		expect(cmds.map((c) => c.type)).toEqual(["open", "save"]);
-	});
+  it("brings the tile's workspace forward and focuses it first, with one save of both", () => {
+    // t1 in w1, t2 in w2, which is in front.
+    const two = fold(prefixed("N")).s;
+    const { s, cmds } = fold([{ type: "typed", tile: "t1", does: { kind: "split", orientation: "vertical" } }], two);
+    expect(opened(s).active).toBe("w1");
+    expect(ids(s)).toEqual(["t1", "t3"]);
+    expect(focus(s)).toBe("t3");
+    expect(cmds.map((c) => c.type)).toEqual(["open", "save"]);
+  });
 
-	it("puts an armed prefix down, and moves to a tile by name with focus --to", () => {
-		const armed = fold([...prefixed("|"), {type: "key", key: "<c-b>", at: 20}]).s;
-		const {s} = fold([{type: "typed", tile: "t2", does: {kind: "go", tile: "t1"}}], armed);
-		expect(focus(s)).toBe("t1");
-		const zoomed = fold([{type: "typed", tile: "t2", does: {kind: "zoom"}}], armed).s;
-		expect(opened(zoomed).prefix.armed).toBe(false);
-		expect(activeOf(opened(zoomed)).layout.zoomed).toBe("t2");
-	});
+  it("puts an armed prefix down, and moves to a tile by name with focus --to", () => {
+    const armed = fold([...prefixed("|"), { type: "key", key: "<c-b>", at: 20 }]).s;
+    const { s } = fold([{ type: "typed", tile: "t2", does: { kind: "go", tile: "t1" } }], armed);
+    expect(focus(s)).toBe("t1");
+    const zoomed = fold([{ type: "typed", tile: "t2", does: { kind: "zoom" } }], armed).s;
+    expect(opened(zoomed).prefix.armed).toBe(false);
+    expect(activeOf(opened(zoomed)).layout.zoomed).toBe("t2");
+  });
 
-	it("shows an item's lines on every page, and saves nothing", () => {
-		const {s, cmds} = fold([{type: "typed", tile: "t1", does: {kind: "show", what: "agents"}}]);
-		expect(cmds).toEqual([{type: "show", what: "agents"}]);
-		expect(s).toEqual(start);
-	});
+  it("shows an item's lines on every page, and saves nothing", () => {
+    const { s, cmds } = fold([{ type: "typed", tile: "t1", does: { kind: "show", what: "agents" } }]);
+    expect(cmds).toEqual([{ type: "show", what: "agents" }]);
+    expect(s).toEqual(start);
+  });
 
-	it("says why a word does nothing: a tile gone, a tile or a workspace not there", () => {
-		const two = opened(fold(prefixed("N")).s);
-		expect(refusedOf(two, "t1", {kind: "zoom"})).toBeNull();
-		expect(refusedOf(two, "t9", {kind: "zoom"})).toBe("t9 is gone");
-		expect(refusedOf(two, "t1", {kind: "go", tile: "t7"})).toBe("no tile t7");
-		expect(refusedOf(two, "t1", {kind: "pick", at: 2})).toBeNull();
-		expect(refusedOf(two, "t1", {kind: "pick", at: 3})).toBe("no workspace 3: there are 2");
-		expect(refusedOf(opened(start), "t1", {kind: "pick", at: 2})).toBe(
-			"no workspace 2: there is 1",
-		);
-		expect(fold([{type: "typed", tile: "t9", does: {kind: "zoom"}}], two).s).toBe(two);
-	});
+  it("says why a word does nothing: a tile gone, a tile or a workspace not there", () => {
+    const two = opened(fold(prefixed("N")).s);
+    expect(refusedOf(two, "t1", { kind: "zoom" })).toBeNull();
+    expect(refusedOf(two, "t9", { kind: "zoom" })).toBe("t9 is gone");
+    expect(refusedOf(two, "t1", { kind: "go", tile: "t7" })).toBe("no tile t7");
+    expect(refusedOf(two, "t1", { kind: "pick", at: 2 })).toBeNull();
+    expect(refusedOf(two, "t1", { kind: "pick", at: 3 })).toBe("no workspace 3: there are 2");
+    expect(refusedOf(opened(start), "t1", { kind: "pick", at: 2 })).toBe("no workspace 2: there is 1");
+    expect(fold([{ type: "typed", tile: "t9", does: { kind: "zoom" } }], two).s).toBe(two);
+  });
 });
 
 describe("folds", () => {
-	const layout = (s: Desk) => activeOf(opened(s)).layout;
-	const folded = (s: Desk) =>
-		tilesOf(activeOf(opened(s)))
-			.filter((t) => t.folded)
-			.map((t) => t.id);
-	/** t1, t2 and t3 side by side, focus on t3. */
-	const row = fold([...prefixed("|"), ...prefixed("|", 10)]).s;
-	/** t1 beside a column of t2 over t3, the column c3, focus on t3. */
-	const column = fold([...prefixed("|"), ...prefixed("-", 10)]).s;
+  const layout = (s: Desk) => activeOf(opened(s)).layout;
+  const folded = (s: Desk) =>
+    tilesOf(activeOf(opened(s)))
+      .filter((t) => t.folded)
+      .map((t) => t.id);
+  /** t1, t2 and t3 side by side, focus on t3. */
+  const row = fold([...prefixed("|"), ...prefixed("|", 10)]).s;
+  /** t1 beside a column of t2 over t3, the column c3, focus on t3. */
+  const column = fold([...prefixed("|"), ...prefixed("-", 10)]).s;
 
-	it("turns the focused tile's container with Space, horizontal to vertical and back, and saves each", () => {
-		const turned = fold(prefixed(" ", 20), row);
-		expect(layout(turned.s).root.orientation).toBe("vertical");
-		expect(turned.cmds.at(-1)?.type).toBe("save");
-		expect(layout(fold(prefixed(" ", 30), turned.s).s).root.orientation).toBe("horizontal");
-	});
+  it("turns the focused tile's container with Space, horizontal to vertical and back, and saves each", () => {
+    const turned = fold(prefixed(" ", 20), row);
+    expect(layout(turned.s).root.orientation).toBe("vertical");
+    expect(turned.cmds.at(-1)?.type).toBe("save");
+    expect(layout(fold(prefixed(" ", 30), turned.s).s).root.orientation).toBe("horizontal");
+  });
 
-	it("folds the focused tile with Ctrl-B f, keeps its share, moves focus to an open tile, and saves", () => {
-		const {s, cmds} = fold(prefixed("f", 20), row);
-		expect(folded(s)).toEqual(["t3"]);
-		expect(focus(s)).toBe("t2");
-		expect(layout(s).root.sizes).toEqual(layout(row).root.sizes);
-		expect(cmds.map((c) => c.type)).toEqual(["save"]);
-	});
+  it("folds the focused tile with Ctrl-B f, keeps its share, moves focus to an open tile, and saves", () => {
+    const { s, cmds } = fold(prefixed("f", 20), row);
+    expect(folded(s)).toEqual(["t3"]);
+    expect(focus(s)).toBe("t2");
+    expect(layout(s).root.sizes).toEqual(layout(row).root.sizes);
+    expect(cmds.map((c) => c.type)).toEqual(["save"]);
+  });
 
-	it("folds a tile from its title bar, and focus stays where it was", () => {
-		const {s} = fold([{type: "fold", tile: "t1"}], row);
-		expect(folded(s)).toEqual(["t1"]);
-		expect(focus(s)).toBe("t3");
-	});
+  it("folds a tile from its title bar, and focus stays where it was", () => {
+    const { s } = fold([{ type: "fold", tile: "t1" }], row);
+    expect(folded(s)).toEqual(["t1"]);
+    expect(focus(s)).toBe("t3");
+  });
 
-	it("focuses a tile on one click of its title bar, and folds it on a double-click", () => {
-		const once = fold([{type: "click", tile: "t1"}], row).s;
-		expect([focus(once), folded(once)]).toEqual(["t1", []]);
-		// A double-click is two presses, each a click, then the fold.
-		const twice = fold(
-			[
-				{type: "click", tile: "t1"},
-				{type: "click", tile: "t1"},
-				{type: "fold", tile: "t1"},
-			],
-			row,
-		).s;
-		expect(folded(twice)).toEqual(["t1"]);
-		expect(focus(twice)).toBe("t2");
-	});
+  it("focuses a tile on one click of its title bar, and folds it on a double-click", () => {
+    const once = fold([{ type: "click", tile: "t1" }], row).s;
+    expect([focus(once), folded(once)]).toEqual(["t1", []]);
+    // A double-click is two presses, each a click, then the fold.
+    const twice = fold(
+      [
+        { type: "click", tile: "t1" },
+        { type: "click", tile: "t1" },
+        { type: "fold", tile: "t1" },
+      ],
+      row,
+    ).s;
+    expect(folded(twice)).toEqual(["t1"]);
+    expect(focus(twice)).toBe("t2");
+  });
 
-	it("refuses to fold the last open tile: nothing changes", () => {
-		const one = fold(
-			[
-				{type: "fold", tile: "t1"},
-				{type: "fold", tile: "t2"},
-			],
-			row,
-		).s;
-		const again = fold(prefixed("f", 20), one);
-		expect(folded(again.s)).toEqual(["t1", "t2"]);
-		expect(again.cmds).toEqual([]);
-		expect(fold([{type: "fold", tile: "t3"}], one).cmds).toEqual([]);
-	});
+  it("refuses to fold the last open tile: nothing changes", () => {
+    const one = fold(
+      [
+        { type: "fold", tile: "t1" },
+        { type: "fold", tile: "t2" },
+      ],
+      row,
+    ).s;
+    const again = fold(prefixed("f", 20), one);
+    expect(folded(again.s)).toEqual(["t1", "t2"]);
+    expect(again.cmds).toEqual([]);
+    expect(fold([{ type: "fold", tile: "t3" }], one).cmds).toEqual([]);
+  });
 
-	it("opens a folded tile when focus moves onto it, or its strip is clicked", () => {
-		const shut = fold(prefixed("f", 20), row).s;
-		const moved = fold(prefixed("l", 30), shut).s;
-		expect([focus(moved), folded(moved)]).toEqual(["t3", []]);
-		const clicked = fold([{type: "unfold", node: "t3"}], shut).s;
-		expect([focus(clicked), folded(clicked)]).toEqual(["t3", []]);
-	});
+  it("opens a folded tile when focus moves onto it, or its strip is clicked", () => {
+    const shut = fold(prefixed("f", 20), row).s;
+    const moved = fold(prefixed("l", 30), shut).s;
+    expect([focus(moved), folded(moved)]).toEqual(["t3", []]);
+    const clicked = fold([{ type: "unfold", node: "t3" }], shut).s;
+    expect([focus(clicked), folded(clicked)]).toEqual(["t3", []]);
+  });
 
-	it("folds a whole column when its tiles fold, and its strip opens them all", () => {
-		const shut = fold([...prefixed("f", 20), ...prefixed("f", 30)], column).s;
-		expect(folded(shut)).toEqual(["t2", "t3"]);
-		expect(focus(shut)).toBe("t1");
-		const {s, cmds} = fold([{type: "unfold", node: "c3"}], shut);
-		expect([focus(s), folded(s)]).toEqual(["t2", []]);
-		expect(cmds.map((c) => c.type)).toEqual(["save"]);
-		expect(fold([{type: "unfold", node: "c3"}], s).cmds).toEqual([]);
-	});
+  it("folds a whole column when its tiles fold, and its strip opens them all", () => {
+    const shut = fold([...prefixed("f", 20), ...prefixed("f", 30)], column).s;
+    expect(folded(shut)).toEqual(["t2", "t3"]);
+    expect(focus(shut)).toBe("t1");
+    const { s, cmds } = fold([{ type: "unfold", node: "c3" }], shut);
+    expect([focus(s), folded(s)]).toEqual(["t2", []]);
+    expect(cmds.map((c) => c.type)).toEqual(["save"]);
+    expect(fold([{ type: "unfold", node: "c3" }], s).cmds).toEqual([]);
+  });
 
-	it("folds a zoomed tile out of its zoom", () => {
-		const zoomed = fold(prefixed("z", 20), row).s;
-		const {s} = fold(prefixed("f", 30), zoomed);
-		expect([layout(s).zoomed, folded(s), focus(s)]).toEqual([null, ["t3"], "t2"]);
-	});
+  it("folds a zoomed tile out of its zoom", () => {
+    const zoomed = fold(prefixed("z", 20), row).s;
+    const { s } = fold(prefixed("f", 30), zoomed);
+    expect([layout(s).zoomed, folded(s), focus(s)]).toEqual([null, ["t3"], "t2"]);
+  });
 
-	it("comes back from a kept desk with its folds, and the focused tile open", () => {
-		const shut = fold(prefixed("f", 20), row).s;
-		const kept = savedOf(opened(shut));
-		expect(savedOf(restore(JSON.parse(JSON.stringify(kept))) ?? opened(row))).toEqual(kept);
-		const onFolded = {...kept, workspaces: kept.workspaces.map((ws) => ({...ws, focused: "t3"}))};
-		const back = restore(JSON.parse(JSON.stringify(onFolded)));
-		expect(back === null ? null : folded(back)).toEqual([]);
-	});
+  it("comes back from a kept desk with its folds, and the focused tile open", () => {
+    const shut = fold(prefixed("f", 20), row).s;
+    const kept = savedOf(opened(shut));
+    expect(savedOf(restore(JSON.parse(JSON.stringify(kept))) ?? opened(row))).toEqual(kept);
+    const onFolded = { ...kept, workspaces: kept.workspaces.map((ws) => ({ ...ws, focused: "t3" })) };
+    const back = restore(JSON.parse(JSON.stringify(onFolded)));
+    expect(back === null ? null : folded(back)).toEqual([]);
+  });
 });
 
 describe("a kept desk", () => {
-	// A desk kept before pipes had letters: its lines have none, and their tints are the old six's
-	// numbers. It still comes back, so nobody loses a desk to the change, and its pipes go as any
-	// kept line's do, since nothing runs after a restart.
-	it("comes back when it was kept before pipes had letters", () => {
-		const tracker = {id: "tracker:1", program: "tracker"};
-		const ticket = {id: "ticket:1", program: "ticket"};
-		const piped = fold([
-			...prefixed("|"),
-			{type: "covered", tile: "t2", runs: [tracker, ticket]},
-		]).s;
-		const before = JSON.parse(JSON.stringify(savedOf(opened(piped))), (key, value: unknown) =>
-			key === "letter" ? undefined : key === "tint" ? 4 : value,
-		);
-		expect(JSON.stringify(before)).not.toContain("letter");
-		const back = restore(before);
-		expect(back === null ? null : ids(back)).toEqual(["t1", "t2"]);
-		expect(back === null ? null : findTile(activeOf(back).layout, "t2")?.shows).toEqual({
-			kind: "tsh",
-			run: null,
-		});
-	});
+  // A desk kept before pipes had letters: its lines have none, and their tints are the old six's
+  // numbers. It still comes back, so nobody loses a desk to the change, and its pipes go as any
+  // kept line's do, since nothing runs after a restart.
+  it("comes back when it was kept before pipes had letters", () => {
+    const tracker = { id: "tracker:1", program: "tracker" };
+    const ticket = { id: "ticket:1", program: "ticket" };
+    const piped = fold([...prefixed("|"), { type: "covered", tile: "t2", runs: [tracker, ticket] }]).s;
+    const before = JSON.parse(JSON.stringify(savedOf(opened(piped))), (key, value: unknown) =>
+      key === "letter" ? undefined : key === "tint" ? 4 : value,
+    );
+    expect(JSON.stringify(before)).not.toContain("letter");
+    const back = restore(before);
+    expect(back === null ? null : ids(back)).toEqual(["t1", "t2"]);
+    expect(back === null ? null : findTile(activeOf(back).layout, "t2")?.shows).toEqual({
+      kind: "tsh",
+      run: null,
+    });
+  });
 
-	it("comes back as it was, and opens each tile's tsh", () => {
-		const kept = fold([...prefixed("|"), ...prefixed("-", 10), ...prefixed("N", 20)]).s;
-		const back = restore(JSON.parse(JSON.stringify(savedOf(opened(kept)))));
-		expect(back).not.toBeNull();
-		expect(back === null ? null : savedOf(back)).toEqual(savedOf(opened(kept)));
-		const [, cmds] = deskMachine.init(back, undefined);
-		expect(cmds).toEqual(["t1", "t2", "t3", "t4"].map((tile) => ({type: "open", tile})));
-	});
+  it("comes back as it was, and opens each tile's tsh", () => {
+    const kept = fold([...prefixed("|"), ...prefixed("-", 10), ...prefixed("N", 20)]).s;
+    const back = restore(JSON.parse(JSON.stringify(savedOf(opened(kept)))));
+    expect(back).not.toBeNull();
+    expect(back === null ? null : savedOf(back)).toEqual(savedOf(opened(kept)));
+    const [, cmds] = deskMachine.init(back, undefined);
+    expect(cmds).toEqual(["t1", "t2", "t3", "t4"].map((tile) => ({ type: "open", tile })));
+  });
 
-	it("drops what ran: a covered tile shows tsh, and nothing is closing", () => {
-		const ran = fold([
-			...prefixed("|"),
-			{type: "covered", tile: "t1", runs: [counter]},
-			{type: "closing", tile: "t2"},
-		]).s;
-		const back = restore(savedOf(opened(ran)));
-		expect(back === null ? null : ids(back)).toEqual(["t1", "t2"]);
-		expect(back?.closing).toEqual([]);
-		expect(back === null ? null : findTile(activeOf(back).layout, "t1")?.shows).toEqual({
-			kind: "tsh",
-			run: null,
-		});
-	});
+  it("drops what ran: a covered tile shows tsh, and nothing is closing", () => {
+    const ran = fold([
+      ...prefixed("|"),
+      { type: "covered", tile: "t1", runs: [counter] },
+      { type: "closing", tile: "t2" },
+    ]).s;
+    const back = restore(savedOf(opened(ran)));
+    expect(back === null ? null : ids(back)).toEqual(["t1", "t2"]);
+    expect(back?.closing).toEqual([]);
+    expect(back === null ? null : findTile(activeOf(back).layout, "t1")?.shows).toEqual({
+      kind: "tsh",
+      run: null,
+    });
+  });
 
-	it("refuses one that does not read or breaks a law", () => {
-		expect(restore(null)).toBeNull();
-		expect(restore({workspaces: [], active: "w1", next: 2})).toBeNull();
-		const kept = savedOf(opened(fold(prefixed("|")).s));
-		const named = {
-			...kept,
-			workspaces: kept.workspaces.map((ws) => ({
-				...ws,
-				layout: {
-					...ws.layout,
-					root: {
-						...ws.layout.root,
-						children: [{tag: "tile", id: "../x", shows: {kind: "tsh", run: null}, folded: false}],
-					},
-				},
-			})),
-		};
-		expect(restore(named)).toBeNull();
-		// A desk kept before containers and folds: its root was a "stack". It is not read back.
-		const old = {
-			...kept,
-			workspaces: kept.workspaces.map((ws) => ({
-				...ws,
-				layout: {...ws.layout, root: {...ws.layout.root, tag: "stack"}},
-			})),
-		};
-		expect(restore(old)).toBeNull();
-	});
+  it("refuses one that does not read or breaks a law", () => {
+    expect(restore(null)).toBeNull();
+    expect(restore({ workspaces: [], active: "w1", next: 2 })).toBeNull();
+    const kept = savedOf(opened(fold(prefixed("|")).s));
+    const named = {
+      ...kept,
+      workspaces: kept.workspaces.map((ws) => ({
+        ...ws,
+        layout: {
+          ...ws.layout,
+          root: {
+            ...ws.layout.root,
+            children: [{ tag: "tile", id: "../x", shows: { kind: "tsh", run: null }, folded: false }],
+          },
+        },
+      })),
+    };
+    expect(restore(named)).toBeNull();
+    // A desk kept before containers and folds: its root was a "stack". It is not read back.
+    const old = {
+      ...kept,
+      workspaces: kept.workspaces.map((ws) => ({
+        ...ws,
+        layout: { ...ws.layout, root: { ...ws.layout.root, tag: "stack" } },
+      })),
+    };
+    expect(restore(old)).toBeNull();
+  });
 });
 
 describe("a line with several windows", () => {
-	const tracker = {id: "tracker:1", program: "tracker"};
-	const ticket = {id: "ticket:1", program: "ticket"};
-	const trace = {id: "trace:1", program: "trace"};
-	const line = [tracker, ticket, trace] as const;
-	const layout = (s: Desk) => activeOf(opened(s)).layout;
-	const sizes = (s: Desk) => layout(s).root.sizes;
-	/** The same keys, each share within a hundredth of a percent. */
-	const near = (got: Readonly<Record<string, number>>, want: Readonly<Record<string, number>>) => {
-		expect(Object.keys(got).sort()).toEqual(Object.keys(want).sort());
+  const tracker = { id: "tracker:1", program: "tracker" };
+  const ticket = { id: "ticket:1", program: "ticket" };
+  const trace = { id: "trace:1", program: "trace" };
+  const line = [tracker, ticket, trace] as const;
+  const layout = (s: Desk) => activeOf(opened(s)).layout;
+  const sizes = (s: Desk) => layout(s).root.sizes;
+  /** The same keys, each share within a hundredth of a percent. */
+  const near = (got: Readonly<Record<string, number>>, want: Readonly<Record<string, number>>) => {
+    expect(Object.keys(got).sort()).toEqual(Object.keys(want).sort());
 
-		for (const [id, size] of Object.entries(want)) {
-			expect(got[id]).toBeCloseTo(size);
-		}
-	};
-	const tile = (s: Desk, id: string) => findTile(layout(s), id);
-	/** t1 and t2 side by side, focus on t2, in a workspace this wide. */
-	const beside = (width: number) => fold([{type: "area", width, height: 860}, ...prefixed("|")]).s;
-	/** The line open in t2, t3 and t4, with focus on t3, the ticket's window. */
-	const onTicket = () =>
-		fold(
-			[
-				{type: "covered", tile: "t2", runs: line},
-				{type: "click", tile: "t3"},
-			],
-			beside(1440),
-		).s;
+    for (const [id, size] of Object.entries(want)) {
+      expect(got[id]).toBeCloseTo(size);
+    }
+  };
+  const tile = (s: Desk, id: string) => findTile(layout(s), id);
+  /** t1 and t2 side by side, focus on t2, in a workspace this wide. */
+  const beside = (width: number) => fold([{ type: "area", width, height: 860 }, ...prefixed("|")]).s;
+  /** The line open in t2, t3 and t4, with focus on t3, the ticket's window. */
+  const onTicket = () =>
+    fold(
+      [
+        { type: "covered", tile: "t2", runs: line },
+        { type: "click", tile: "t3" },
+      ],
+      beside(1440),
+    ).s;
 
-	it("opens in place, beside the tile it was typed in, each window a third of its share", () => {
-		const {s, cmds} = fold([{type: "covered", tile: "t2", runs: line}], beside(1440));
-		expect(ids(s)).toEqual(["t1", "t2", "t3", "t4"]);
-		expect(layout(s).root.orientation).toBe("horizontal");
-		expect(sizes(s).t1).toBeCloseTo(50);
+  it("opens in place, beside the tile it was typed in, each window a third of its share", () => {
+    const { s, cmds } = fold([{ type: "covered", tile: "t2", runs: line }], beside(1440));
+    expect(ids(s)).toEqual(["t1", "t2", "t3", "t4"]);
+    expect(layout(s).root.orientation).toBe("horizontal");
+    expect(sizes(s).t1).toBeCloseTo(50);
 
-		for (const id of ["t2", "t3", "t4"]) {
-			expect(sizes(s)[id]).toBeCloseTo(50 / 3);
-		}
+    for (const id of ["t2", "t3", "t4"]) {
+      expect(sizes(s)[id]).toBeCloseTo(50 / 3);
+    }
 
-		const own = {id: "tracker:1", from: "t2", tint: 0, letter: "A"};
-		expect(tile(s, "t2")?.shows).toEqual({kind: "line", run: tracker, line: own});
-		expect(tile(s, "t3")?.shows).toEqual({kind: "window", run: ticket, line: own});
-		expect(tile(s, "t4")?.shows).toEqual({kind: "window", run: trace, line: own});
-		expect(layout(s).root.children.every((c) => c.tag === "tile" && !c.folded)).toBe(true);
-		// Focus stays where the line was typed, and only t2 has a tsh to open.
-		expect(focus(s)).toBe("t2");
-		expect(cmds.map((c) => c.type)).toEqual(["save"]);
-		expect(opened(s).next).toBe(5);
-	});
+    const own = { id: "tracker:1", from: "t2", tint: 0, letter: "A" };
+    expect(tile(s, "t2")?.shows).toEqual({ kind: "line", run: tracker, line: own });
+    expect(tile(s, "t3")?.shows).toEqual({ kind: "window", run: ticket, line: own });
+    expect(tile(s, "t4")?.shows).toEqual({ kind: "window", run: trace, line: own });
+    expect(layout(s).root.children.every((c) => c.tag === "tile" && !c.folded)).toBe(true);
+    // Focus stays where the line was typed, and only t2 has a tsh to open.
+    expect(focus(s)).toBe("t2");
+    expect(cmds.map((c) => c.type)).toEqual(["save"]);
+    expect(opened(s).next).toBe(5);
+  });
 
-	it("opens the windows after the first folded when they would be smaller than 220px", () => {
-		const s = fold([{type: "covered", tile: "t2", runs: line}], beside(900)).s;
-		expect(tile(s, "t2")?.folded).toBe(false);
-		expect(tile(s, "t3")?.folded).toBe(true);
-		expect(tile(s, "t4")?.folded).toBe(true);
-		// The first window keeps the tile's whole share; the strips hold none.
-		near(sizes(s), {t1: 50, t2: 50, t3: 0, t4: 0});
-	});
+  it("opens the windows after the first folded when they would be smaller than 220px", () => {
+    const s = fold([{ type: "covered", tile: "t2", runs: line }], beside(900)).s;
+    expect(tile(s, "t2")?.folded).toBe(false);
+    expect(tile(s, "t3")?.folded).toBe(true);
+    expect(tile(s, "t4")?.folded).toBe(true);
+    // The first window keeps the tile's whole share; the strips hold none.
+    near(sizes(s), { t1: 50, t2: 50, t3: 0, t4: 0 });
+  });
 
-	it("unfolds a window with a share of the line's own space, never an unrelated tile's", () => {
-		const tight = fold([{type: "covered", tile: "t2", runs: line}], beside(900)).s;
-		const one = fold([{type: "unfold", node: "t3"}], tight).s;
-		near(sizes(one), {t1: 50, t2: 25, t3: 25, t4: 0});
-		expect(focus(one)).toBe("t3");
-		const both = fold([{type: "unfold", node: "t4"}], one).s;
-		expect(sizes(both).t1).toBeCloseTo(50);
+  it("unfolds a window with a share of the line's own space, never an unrelated tile's", () => {
+    const tight = fold([{ type: "covered", tile: "t2", runs: line }], beside(900)).s;
+    const one = fold([{ type: "unfold", node: "t3" }], tight).s;
+    near(sizes(one), { t1: 50, t2: 25, t3: 25, t4: 0 });
+    expect(focus(one)).toBe("t3");
+    const both = fold([{ type: "unfold", node: "t4" }], one).s;
+    expect(sizes(both).t1).toBeCloseTo(50);
 
-		for (const id of ["t2", "t3", "t4"]) {
-			expect(sizes(both)[id]).toBeCloseTo(50 / 3);
-		}
+    for (const id of ["t2", "t3", "t4"]) {
+      expect(sizes(both)[id]).toBeCloseTo(50 / 3);
+    }
 
-		// Folding one again hands its share back to the line's other open windows.
-		const back = fold([{type: "fold", tile: "t4"}], both).s;
-		expect(sizes(back).t1).toBeCloseTo(50);
-		expect(sizes(back).t2).toBeCloseTo(25);
-		expect(sizes(back).t3).toBeCloseTo(25);
-	});
+    // Folding one again hands its share back to the line's other open windows.
+    const back = fold([{ type: "fold", tile: "t4" }], both).s;
+    expect(sizes(back).t1).toBeCloseTo(50);
+    expect(sizes(back).t2).toBeCloseTo(25);
+    expect(sizes(back).t3).toBeCloseTo(25);
+  });
 
-	it("nests the line in the tile's place when it runs across the tile's container", () => {
-		const s = fold(
-			[
-				{type: "area", width: 1440, height: 860},
-				...prefixed("-"),
-				{type: "covered", tile: "t2", runs: line},
-			],
-			start,
-		).s;
-		const root = layout(s).root;
-		expect(root.orientation).toBe("vertical");
-		const [top, row] = root.children;
-		expect(top?.id).toBe("t1");
-		expect(row?.tag === "container" ? [row.id, row.orientation] : null).toEqual([
-			"c3",
-			"horizontal",
-		]);
-		expect(row?.tag === "container" ? row.children.map((c) => c.id) : null).toEqual([
-			"t2",
-			"t3",
-			"t4",
-		]);
-		expect(root.sizes).toEqual({t1: 50, c3: 50});
-	});
+  it("nests the line in the tile's place when it runs across the tile's container", () => {
+    const s = fold(
+      [{ type: "area", width: 1440, height: 860 }, ...prefixed("-"), { type: "covered", tile: "t2", runs: line }],
+      start,
+    ).s;
+    const root = layout(s).root;
+    expect(root.orientation).toBe("vertical");
+    const [top, row] = root.children;
+    expect(top?.id).toBe("t1");
+    expect(row?.tag === "container" ? [row.id, row.orientation] : null).toEqual(["c3", "horizontal"]);
+    expect(row?.tag === "container" ? row.children.map((c) => c.id) : null).toEqual(["t2", "t3", "t4"]);
+    expect(root.sizes).toEqual({ t1: 50, c3: 50 });
+  });
 
-	it("hands Ctrl-C in a window to the tsh the line was typed in", () => {
-		const s = fold(
-			[
-				{type: "covered", tile: "t2", runs: line},
-				{type: "click", tile: "t4"},
-			],
-			beside(1440),
-		).s;
-		expect(fold([{type: "key", key: "<c-c>", at: 0}], s).cmds).toEqual([
-			{type: "send", tile: "t2", data: "\x03"},
-		]);
-	});
+  it("hands Ctrl-C in a window to the tsh the line was typed in", () => {
+    const s = fold(
+      [
+        { type: "covered", tile: "t2", runs: line },
+        { type: "click", tile: "t4" },
+      ],
+      beside(1440),
+    ).s;
+    expect(fold([{ type: "key", key: "<c-c>", at: 0 }], s).cmds).toEqual([{ type: "send", tile: "t2", data: "\x03" }]);
+  });
 
-	it("takes a window away when its run ends, its space back to the line", () => {
-		const s = fold([{type: "covered", tile: "t2", runs: line}], beside(1440)).s;
-		const {s: after, cmds} = fold([{type: "over", run: trace.id}], s);
-		expect(ids(after)).toEqual(["t1", "t2", "t3"]);
-		expect(cmds.map((c) => c.type)).toEqual(["stop", "save"]);
-		expect(sizes(after).t1).toBeCloseTo(50);
-		expect(sizes(after).t2).toBeCloseTo(25);
-		const done = fold(
-			[
-				{type: "over", run: ticket.id},
-				{type: "over", run: tracker.id},
-			],
-			after,
-		).s;
-		expect(ids(done)).toEqual(["t1", "t2"]);
-		expect(sizes(done).t2).toBeCloseTo(50);
-		expect(tile(done, "t2")?.shows).toEqual({kind: "tsh", run: null});
-	});
+  it("takes a window away when its run ends, its space back to the line", () => {
+    const s = fold([{ type: "covered", tile: "t2", runs: line }], beside(1440)).s;
+    const { s: after, cmds } = fold([{ type: "over", run: trace.id }], s);
+    expect(ids(after)).toEqual(["t1", "t2", "t3"]);
+    expect(cmds.map((c) => c.type)).toEqual(["stop", "save"]);
+    expect(sizes(after).t1).toBeCloseTo(50);
+    expect(sizes(after).t2).toBeCloseTo(25);
+    const done = fold(
+      [
+        { type: "over", run: ticket.id },
+        { type: "over", run: tracker.id },
+      ],
+      after,
+    ).s;
+    expect(ids(done)).toEqual(["t1", "t2"]);
+    expect(sizes(done).t2).toBeCloseTo(50);
+    expect(tile(done, "t2")?.shows).toEqual({ kind: "tsh", run: null });
+  });
 
-	it("closes a window on y as kill-pane: its one process gets its inputs' end, and the window goes when it ends", () => {
-		const s = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], onTicket());
-		// Only the ticket's process is ended; the tile it was typed in, and its tsh, are not touched.
-		expect(s.cmds).toEqual([{type: "end", process: ticket.id}]);
-		expect(opened(s.s).closing).toEqual(["t3"]);
-		expect(ids(s.s)).toEqual(["t1", "t2", "t3", "t4"]);
-		expect(questionOf(opened(s.s), "t3")).toBe("stop t3 now? (y/n)");
-		const {s: after, cmds} = fold([{type: "over", run: ticket.id}], s.s);
-		expect(ids(after)).toEqual(["t1", "t2", "t4"]);
-		expect(opened(after).closing).toEqual([]);
-		expect(cmds.map((c) => c.type)).toEqual(["stop", "save"]);
-	});
+  it("closes a window on y as kill-pane: its one process gets its inputs' end, and the window goes when it ends", () => {
+    const s = fold([...prefixed("x", 10), { type: "key", key: "y", at: 20 }], onTicket());
+    // Only the ticket's process is ended; the tile it was typed in, and its tsh, are not touched.
+    expect(s.cmds).toEqual([{ type: "end", process: ticket.id }]);
+    expect(opened(s.s).closing).toEqual(["t3"]);
+    expect(ids(s.s)).toEqual(["t1", "t2", "t3", "t4"]);
+    expect(questionOf(opened(s.s), "t3")).toBe("stop t3 now? (y/n)");
+    const { s: after, cmds } = fold([{ type: "over", run: ticket.id }], s.s);
+    expect(ids(after)).toEqual(["t1", "t2", "t4"]);
+    expect(opened(after).closing).toEqual([]);
+    expect(cmds.map((c) => c.type)).toEqual(["stop", "save"]);
+  });
 
-	it("kills a closing window's process on y to stop now, and the window goes at once", () => {
-		const closing = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], onTicket()).s;
-		const s = fold([...prefixed("x", 30), {type: "key", key: "y", at: 40}], closing);
-		expect(ids(s.s)).toEqual(["t1", "t2", "t4"]);
-		expect(opened(s.s).closing).toEqual([]);
-		expect(s.cmds).toEqual([
-			{type: "kill", process: ticket.id},
-			{type: "stop", tile: "t3"},
-			{type: "save", desk: savedOf(opened(s.s))},
-		]);
-	});
+  it("kills a closing window's process on y to stop now, and the window goes at once", () => {
+    const closing = fold([...prefixed("x", 10), { type: "key", key: "y", at: 20 }], onTicket()).s;
+    const s = fold([...prefixed("x", 30), { type: "key", key: "y", at: 40 }], closing);
+    expect(ids(s.s)).toEqual(["t1", "t2", "t4"]);
+    expect(opened(s.s).closing).toEqual([]);
+    expect(s.cmds).toEqual([
+      { type: "kill", process: ticket.id },
+      { type: "stop", tile: "t3" },
+      { type: "save", desk: savedOf(opened(s.s)) },
+    ]);
+  });
 
-	it("closes the tile the line was typed in as any busy tile: its tsh, and so every process of the line", () => {
-		const typed = fold(
-			[
-				{type: "covered", tile: "t2", runs: line},
-				{type: "jobs", tile: "t2", jobs: running(1)},
-			],
-			beside(1440),
-		).s;
-		const s = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], typed);
-		expect(s.cmds).toEqual([{type: "close", tile: "t2"}]);
-		expect(opened(s.s).closing).toEqual(["t2"]);
-	});
+  it("closes the tile the line was typed in as any busy tile: its tsh, and so every process of the line", () => {
+    const typed = fold(
+      [
+        { type: "covered", tile: "t2", runs: line },
+        { type: "jobs", tile: "t2", jobs: running(1) },
+      ],
+      beside(1440),
+    ).s;
+    const s = fold([...prefixed("x", 10), { type: "key", key: "y", at: 20 }], typed);
+    expect(s.cmds).toEqual([{ type: "close", tile: "t2" }]);
+    expect(opened(s.s).closing).toEqual(["t2"]);
+  });
 
-	it("gives each line its own tint and letter, and a run alone none", () => {
-		const one = fold([{type: "covered", tile: "t2", runs: line}], beside(2400)).s;
-		const two = fold(
-			[
-				{type: "covered", tile: "t1", runs: [{id: "map:1", program: "map"}, trace]},
-				{type: "covered", tile: "t4", runs: [counter]},
-			],
-			one,
-		).s;
-		const t1 = tile(two, "t1")?.shows;
-		expect(t1?.kind === "line" ? [t1.line.tint, t1.line.letter] : null).toEqual([1, "B"]);
-		expect(tile(two, "t4")?.shows.kind).toBe("window");
-		const alone = fold([{type: "covered", tile: "t1", runs: [counter]}], beside(1440)).s;
-		expect(tile(alone, "t1")?.shows).toEqual({kind: "tsh", run: counter});
-	});
+  it("gives each line its own tint and letter, and a run alone none", () => {
+    const one = fold([{ type: "covered", tile: "t2", runs: line }], beside(2400)).s;
+    const two = fold(
+      [
+        { type: "covered", tile: "t1", runs: [{ id: "map:1", program: "map" }, trace] },
+        { type: "covered", tile: "t4", runs: [counter] },
+      ],
+      one,
+    ).s;
+    const t1 = tile(two, "t1")?.shows;
+    expect(t1?.kind === "line" ? [t1.line.tint, t1.line.letter] : null).toEqual([1, "B"]);
+    expect(tile(two, "t4")?.shows.kind).toBe("window");
+    const alone = fold([{ type: "covered", tile: "t1", runs: [counter] }], beside(1440)).s;
+    expect(tile(alone, "t1")?.shows).toEqual({ kind: "tsh", run: counter });
+  });
 
-	// pipe-colors.md: colors are counted per workspace, sky first. A pipe in another workspace takes
-	// none of this one's colors or letters.
-	it("gives pipes in one workspace sky, pink, teal, violet, lime, plum in order, and each workspace its own count", () => {
-		const splits = Array.from({length: 5}, (_, i) => prefixed("|", 10 * i)).flat();
-		const six = fold(splits).s;
-		expect(ids(six)).toEqual(["t1", "t2", "t3", "t4", "t5", "t6"]);
-		const pipes = fold(
-			["t1", "t2", "t3", "t4", "t5", "t6"].map((at, n): DeskMsg => ({
-				type: "covered",
-				tile: at,
-				runs: [
-					{id: `tracker:${n}`, program: "tracker"},
-					{id: `ticket:${n}`, program: "ticket"},
-				],
-			})),
-			six,
-		).s;
-		const lineAt = (s: Desk, at: string) => {
-			const shows = tile(s, at)?.shows;
-			return shows?.kind === "line" ? shows.line : null;
-		};
-		const opened6 = ["t1", "t2", "t3", "t4", "t5", "t6"].map((at) => lineAt(pipes, at));
-		expect(opened6.map((l) => (l === null ? null : PIPES[l.tint]))).toEqual([
-			"sky",
-			"pink",
-			"teal",
-			"violet",
-			"lime",
-			"plum",
-		]);
-		expect(opened6.map((l) => l?.letter)).toEqual(["A", "B", "C", "D", "E", "F"]);
-		// A new workspace starts its own count: its first pipe is sky and A, though the first
-		// workspace already has a sky pipe A. Counted across workspaces, it would be pink.
-		const onePipe = fold(
-			[
-				{
-					type: "covered",
-					tile: "t1",
-					runs: [
-						{id: "tracker:8", program: "tracker"},
-						{id: "ticket:8", program: "ticket"},
-					],
-				},
-			],
-			six,
-		).s;
-		const other = fold(prefixed("N", 100), onePipe).s;
-		const here = focus(other);
-		const there = fold(
-			[
-				{
-					type: "covered",
-					tile: here,
-					runs: [
-						{id: "tracker:9", program: "tracker"},
-						{id: "ticket:9", program: "ticket"},
-					],
-				},
-			],
-			other,
-		).s;
-		const first = lineAt(there, here);
-		expect(first === null ? null : [PIPES[first.tint], first.letter]).toEqual(["sky", "A"]);
-	});
+  // pipe-colors.md: colors are counted per workspace, sky first. A pipe in another workspace takes
+  // none of this one's colors or letters.
+  it("gives pipes in one workspace sky, pink, teal, violet, lime, plum in order, and each workspace its own count", () => {
+    const splits = Array.from({ length: 5 }, (_, i) => prefixed("|", 10 * i)).flat();
+    const six = fold(splits).s;
+    expect(ids(six)).toEqual(["t1", "t2", "t3", "t4", "t5", "t6"]);
+    const pipes = fold(
+      ["t1", "t2", "t3", "t4", "t5", "t6"].map((at, n): DeskMsg => ({
+        type: "covered",
+        tile: at,
+        runs: [
+          { id: `tracker:${n}`, program: "tracker" },
+          { id: `ticket:${n}`, program: "ticket" },
+        ],
+      })),
+      six,
+    ).s;
+    const lineAt = (s: Desk, at: string) => {
+      const shows = tile(s, at)?.shows;
+      return shows?.kind === "line" ? shows.line : null;
+    };
+    const opened6 = ["t1", "t2", "t3", "t4", "t5", "t6"].map((at) => lineAt(pipes, at));
+    expect(opened6.map((l) => (l === null ? null : PIPES[l.tint]))).toEqual([
+      "sky",
+      "pink",
+      "teal",
+      "violet",
+      "lime",
+      "plum",
+    ]);
+    expect(opened6.map((l) => l?.letter)).toEqual(["A", "B", "C", "D", "E", "F"]);
+    // A new workspace starts its own count: its first pipe is sky and A, though the first
+    // workspace already has a sky pipe A. Counted across workspaces, it would be pink.
+    const onePipe = fold(
+      [
+        {
+          type: "covered",
+          tile: "t1",
+          runs: [
+            { id: "tracker:8", program: "tracker" },
+            { id: "ticket:8", program: "ticket" },
+          ],
+        },
+      ],
+      six,
+    ).s;
+    const other = fold(prefixed("N", 100), onePipe).s;
+    const here = focus(other);
+    const there = fold(
+      [
+        {
+          type: "covered",
+          tile: here,
+          runs: [
+            { id: "tracker:9", program: "tracker" },
+            { id: "ticket:9", program: "ticket" },
+          ],
+        },
+      ],
+      other,
+    ).s;
+    const first = lineAt(there, here);
+    expect(first === null ? null : [PIPES[first.tint], first.letter]).toEqual(["sky", "A"]);
+  });
 
-	it("is not kept: a desk read back has the tile it was typed in, at its whole share", () => {
-		const s = fold([{type: "covered", tile: "t2", runs: line}], beside(1440)).s;
-		const back = restore(JSON.parse(JSON.stringify(savedOf(opened(s)))));
-		expect(back === null ? null : ids(back)).toEqual(["t1", "t2"]);
-		expect(back === null ? null : sizes(back).t2).toBeCloseTo(50);
-		const [, cmds] = deskMachine.init(back, undefined);
-		expect(cmds.map((c) => (c.type === "open" ? c.tile : c.type))).toEqual(["t1", "t2"]);
-	});
+  it("is not kept: a desk read back has the tile it was typed in, at its whole share", () => {
+    const s = fold([{ type: "covered", tile: "t2", runs: line }], beside(1440)).s;
+    const back = restore(JSON.parse(JSON.stringify(savedOf(opened(s)))));
+    expect(back === null ? null : ids(back)).toEqual(["t1", "t2"]);
+    expect(back === null ? null : sizes(back).t2).toBeCloseTo(50);
+    const [, cmds] = deskMachine.init(back, undefined);
+    expect(cmds.map((c) => (c.type === "open" ? c.tile : c.type))).toEqual(["t1", "t2"]);
+  });
 });
 
 // ---------------------------------------------------------------- the keys file (ticket 174, PR 1)
 
 /** The keybindings file's table, as the host decodes it; a refusal fails the test. */
 const table = (text: string): Keys => {
-	const answer = decodeKeys(text, true);
+  const answer = decodeKeys(text, true);
 
-	if (Result.isFailure(answer)) {
-		throw new Error(`refused: ${answer.failure.why}`);
-	}
+  if (Result.isFailure(answer)) {
+    throw new Error(`refused: ${answer.failure.why}`);
+  }
 
-	return answer.success;
+  return answer.success;
 };
 
 /** The host swaps the desk's table: the file was saved. */
-const swap = (text: string): DeskMsg => ({type: "keys", keys: table(text)});
+const swap = (text: string): DeskMsg => ({ type: "keys", keys: table(text) });
 
 /**
  * Today's table, frozen from desk/keys.ts `BINDINGS` before this change: each key after the
  * prefix, what it does, and whether it repeats.
  */
 const TODAY = [
-	["|", {kind: "split", orientation: "horizontal"}, false],
-	["-", {kind: "split", orientation: "vertical"}, false],
-	["h", {kind: "focus", to: "left"}, false],
-	["j", {kind: "focus", to: "down"}, false],
-	["k", {kind: "focus", to: "up"}, false],
-	["l", {kind: "focus", to: "right"}, false],
-	["<arrowleft>", {kind: "focus", to: "left"}, false],
-	["<arrowdown>", {kind: "focus", to: "down"}, false],
-	["<arrowup>", {kind: "focus", to: "up"}, false],
-	["<arrowright>", {kind: "focus", to: "right"}, false],
-	[" ", {kind: "turn"}, false],
-	["f", {kind: "fold"}, false],
-	["z", {kind: "zoom"}, false],
-	["x", {kind: "close"}, false],
-	["N", {kind: "new"}, false],
-	["<c-h>", {kind: "step", to: "previous"}, true],
-	["<c-l>", {kind: "step", to: "next"}, true],
-	...Array.from({length: 9}, (_, i) => [String(i + 1), {kind: "pick", at: i + 1}, false] as const),
-	["a", {kind: "show", what: "asks"}, false],
-	["J", {kind: "show", what: "jobs"}, false],
-	["?", {kind: "show", what: "keys"}, false],
-	["i", {kind: "show", what: "info"}, false],
-	["B", {kind: "show", what: "bars"}, false],
-	["A", {kind: "show", what: "agents"}, false],
-	["S", {kind: "show", what: "sync"}, false],
-	["H", {kind: "show", what: "host"}, false],
+  ["|", { kind: "split", orientation: "horizontal" }, false],
+  ["-", { kind: "split", orientation: "vertical" }, false],
+  ["h", { kind: "focus", to: "left" }, false],
+  ["j", { kind: "focus", to: "down" }, false],
+  ["k", { kind: "focus", to: "up" }, false],
+  ["l", { kind: "focus", to: "right" }, false],
+  ["<arrowleft>", { kind: "focus", to: "left" }, false],
+  ["<arrowdown>", { kind: "focus", to: "down" }, false],
+  ["<arrowup>", { kind: "focus", to: "up" }, false],
+  ["<arrowright>", { kind: "focus", to: "right" }, false],
+  [" ", { kind: "turn" }, false],
+  ["f", { kind: "fold" }, false],
+  ["z", { kind: "zoom" }, false],
+  ["x", { kind: "close" }, false],
+  ["N", { kind: "new" }, false],
+  ["<c-h>", { kind: "step", to: "previous" }, true],
+  ["<c-l>", { kind: "step", to: "next" }, true],
+  ...Array.from({ length: 9 }, (_, i) => [String(i + 1), { kind: "pick", at: i + 1 }, false] as const),
+  ["a", { kind: "show", what: "asks" }, false],
+  ["J", { kind: "show", what: "jobs" }, false],
+  ["?", { kind: "show", what: "keys" }, false],
+  ["i", { kind: "show", what: "info" }, false],
+  ["B", { kind: "show", what: "bars" }, false],
+  ["A", { kind: "show", what: "agents" }, false],
+  ["S", { kind: "show", what: "sync" }, false],
+  ["H", { kind: "show", what: "host" }, false],
 ] as const;
 
 /** Three tiles in w1 and two in w2, w1 in front: every key has something to move. */
 const busy = fold([
-	...prefixed("|"),
-	...prefixed("-", 10),
-	...prefixed("N", 20),
-	...prefixed("|", 30),
-	...prefixed("1", 40),
+  ...prefixed("|"),
+  ...prefixed("-", 10),
+  ...prefixed("N", 20),
+  ...prefixed("|", 30),
+  ...prefixed("1", 40),
 ]).s;
 
 /** A desk without its prefix, to compare two ways to one command. */
-const unprefixed = (s: Desk) => (s.at === "open" ? {...s, prefix: null} : s);
+const unprefixed = (s: Desk) => (s.at === "open" ? { ...s, prefix: null } : s);
 
 /** A key's name in a test's title: the space is Space. */
 const titled = (key: string) => (key === " " ? "Space" : key);
 
 describe("the desk, on the keys file", () => {
-	it.each(TODAY.map(([key, does, repeats]) => [titled(key), key, does, repeats] as const))(
-		"does with no file what C-b %s does today (p1)",
-		(_, key, does, repeats) => {
-			for (const from of [busy, fold([swap("")], busy).s]) {
-				const viaKey = fold(prefixed(key, 100), from);
-				const viaWord = fold([{type: "typed", tile: focus(from), does}], from);
-				expect(unprefixed(viaKey.s)).toEqual(unprefixed(viaWord.s));
-				expect(viaKey.cmds).toEqual(viaWord.cmds);
-				expect(opened(viaKey.s).prefix).toEqual(
-					repeats ? {armed: true, until: 101 + 500} : {armed: false},
-				);
-			}
-		},
-	);
+  it.each(TODAY.map(([key, does, repeats]) => [titled(key), key, does, repeats] as const))(
+    "does with no file what C-b %s does today (p1)",
+    (_, key, does, repeats) => {
+      for (const from of [busy, fold([swap("")], busy).s]) {
+        const viaKey = fold(prefixed(key, 100), from);
+        const viaWord = fold([{ type: "typed", tile: focus(from), does }], from);
+        expect(unprefixed(viaKey.s)).toEqual(unprefixed(viaWord.s));
+        expect(viaKey.cmds).toEqual(viaWord.cmds);
+        expect(opened(viaKey.s).prefix).toEqual(repeats ? { armed: true, until: 101 + 500 } : { armed: false });
+      }
+    },
+  );
 
-	it("arms on your prefix, and Ctrl-B goes to the tile (p2)", () => {
-		const s = fold([swap('prefix = "ctrl+a"')]).s;
-		expect(takenNow(s, 0).keys).toContain("<c-a>");
-		expect(takenNow(s, 0).keys).not.toContain("<c-b>");
-		expect(claims(s, "<c-b>", 0)).toBe(false);
-		expect(claims(s, "<c-a>", 0)).toBe(true);
-		const split = fold(
-			[
-				{type: "key", key: "<c-a>", at: 0},
-				{type: "key", key: "|", at: 1},
-			],
-			s,
-		);
-		expect(ids(split.s)).toEqual(["t1", "t2"]);
-		// tmux's send-prefix sends the prefix itself on: Ctrl-A is byte 1.
-		const twice = fold(
-			[
-				{type: "key", key: "<c-a>", at: 0},
-				{type: "key", key: "<c-a>", at: 1},
-			],
-			s,
-		);
-		expect(twice.cmds).toEqual([{type: "send", tile: "t1", data: "\x01"}]);
-	});
+  it("arms on your prefix, and Ctrl-B goes to the tile (p2)", () => {
+    const s = fold([swap('prefix = "ctrl+a"')]).s;
+    expect(takenNow(s, 0).keys).toContain("<c-a>");
+    expect(takenNow(s, 0).keys).not.toContain("<c-b>");
+    expect(claims(s, "<c-b>", 0)).toBe(false);
+    expect(claims(s, "<c-a>", 0)).toBe(true);
+    const split = fold(
+      [
+        { type: "key", key: "<c-a>", at: 0 },
+        { type: "key", key: "|", at: 1 },
+      ],
+      s,
+    );
+    expect(ids(split.s)).toEqual(["t1", "t2"]);
+    // tmux's send-prefix sends the prefix itself on: Ctrl-A is byte 1.
+    const twice = fold(
+      [
+        { type: "key", key: "<c-a>", at: 0 },
+        { type: "key", key: "<c-a>", at: 1 },
+      ],
+      s,
+    );
+    expect(twice.cmds).toEqual([{ type: "send", tile: "t1", data: "\x01" }]);
+  });
 
-	it.each(TODAY.map(([key]) => [titled(key), key] as const))(
-		"moves C-b %s to C-a with the prefix (p2)",
-		(_, key) => {
-			const moved = fold([swap('prefix = "ctrl+a"')], busy).s;
-			const viaA = fold(
-				[
-					{type: "key", key: "<c-a>", at: 100},
-					{type: "key", key, at: 101},
-				],
-				moved,
-			);
-			const viaB = fold(prefixed(key, 100), busy);
-			expect({...opened(viaA.s), keys: null}).toEqual({...opened(viaB.s), keys: null});
-			expect(viaA.cmds).toEqual(viaB.cmds);
-		},
-	);
+  it.each(TODAY.map(([key]) => [titled(key), key] as const))("moves C-b %s to C-a with the prefix (p2)", (_, key) => {
+    const moved = fold([swap('prefix = "ctrl+a"')], busy).s;
+    const viaA = fold(
+      [
+        { type: "key", key: "<c-a>", at: 100 },
+        { type: "key", key, at: 101 },
+      ],
+      moved,
+    );
+    const viaB = fold(prefixed(key, 100), busy);
+    expect({ ...opened(viaA.s), keys: null }).toEqual({ ...opened(viaB.s), keys: null });
+    expect(viaA.cmds).toEqual(viaB.cmds);
+  });
 
-	it("runs a command on your key, and its old key after the prefix does nothing (p3)", () => {
-		const s = fold([swap('tezgah.zoom = "<prefix>m"')], busy).s;
-		const zoomed = fold(prefixed("m", 100), s).s;
-		expect(activeOf(opened(zoomed)).layout.zoomed).toBe(focus(s));
-		// z is bound to nothing now: swallowed after the prefix, as tmux does.
-		const armed = fold([{type: "key", key: "<c-b>", at: 100}], s).s;
-		expect(claims(armed, "z", 101)).toBe(true);
-		const z = fold([{type: "key", key: "z", at: 101}], armed);
-		expect(z.cmds).toEqual([]);
-		expect(z.s).toEqual(s);
-	});
+  it("runs a command on your key, and its old key after the prefix does nothing (p3)", () => {
+    const s = fold([swap('tezgah.zoom = "<prefix>m"')], busy).s;
+    const zoomed = fold(prefixed("m", 100), s).s;
+    expect(activeOf(opened(zoomed)).layout.zoomed).toBe(focus(s));
+    // z is bound to nothing now: swallowed after the prefix, as tmux does.
+    const armed = fold([{ type: "key", key: "<c-b>", at: 100 }], s).s;
+    expect(claims(armed, "z", 101)).toBe(true);
+    const z = fold([{ type: "key", key: "z", at: 101 }], armed);
+    expect(z.cmds).toEqual([]);
+    expect(z.s).toEqual(s);
+  });
 
-	it("runs your command on a default's key, and the default no longer does (p3)", () => {
-		const s = fold([swap('tezgah.zoom = "<prefix>x"')], busy).s;
-		const {s: after} = fold(prefixed("x", 100), s);
-		expect(activeOf(opened(after)).layout.zoomed).toBe(focus(s));
-		expect(opened(after).ask).toBeNull();
-	});
+  it("runs your command on a default's key, and the default no longer does (p3)", () => {
+    const s = fold([swap('tezgah.zoom = "<prefix>x"')], busy).s;
+    const { s: after } = fold(prefixed("x", 100), s);
+    expect(activeOf(opened(after)).layout.zoomed).toBe(focus(s));
+    expect(opened(after).ask).toBeNull();
+  });
 
-	it("runs an unbound command from the palette and from its tsh word, and from no key (p4)", () => {
-		const s = fold([swap("tezgah.zoom = []")], busy).s;
-		expect(fold(prefixed("z", 100), s).s).toEqual(s);
-		const viaPalette = fold([{type: "run", does: "tezgah.zoom"}], s).s;
-		expect(activeOf(opened(viaPalette)).layout.zoomed).toBe(focus(s));
-		const viaWord = fold([{type: "typed", tile: focus(s), does: {kind: "zoom"}}], s).s;
-		expect(activeOf(opened(viaWord)).layout.zoomed).toBe(focus(s));
-	});
+  it("runs an unbound command from the palette and from its tsh word, and from no key (p4)", () => {
+    const s = fold([swap("tezgah.zoom = []")], busy).s;
+    expect(fold(prefixed("z", 100), s).s).toEqual(s);
+    const viaPalette = fold([{ type: "run", does: "tezgah.zoom" }], s).s;
+    expect(activeOf(opened(viaPalette)).layout.zoomed).toBe(focus(s));
+    const viaWord = fold([{ type: "typed", tile: focus(s), does: { kind: "zoom" } }], s).s;
+    expect(activeOf(opened(viaWord)).layout.zoomed).toBe(focus(s));
+  });
 
-	it("takes a tezgah key pressed alone, and leaves the palette's key to the page (p5, p6)", () => {
-		const s = fold([swap(['tezgah.split = "cmd+d"', 'palette.open = "cmd+p"'].join("\n"))]).s;
-		expect(takenNow(s, 0).keys).toContain("<m-d>");
-		expect(takenNow(s, 0).keys).not.toContain("<m-p>");
-		expect(claims(s, "<m-p>", 0)).toBe(false);
-		const split = fold([{type: "key", key: "<m-d>", at: 0}], s);
-		expect(ids(split.s)).toEqual(["t1", "t2"]);
-		expect(opened(split.s).prefix).toEqual({armed: false});
-		// Split's old key went with the move.
-		expect(ids(fold(prefixed("|", 10), s).s)).toEqual(["t1"]);
-	});
+  it("takes a tezgah key pressed alone, and leaves the palette's key to the page (p5, p6)", () => {
+    const s = fold([swap(['tezgah.split = "cmd+d"', 'palette.open = "cmd+p"'].join("\n"))]).s;
+    expect(takenNow(s, 0).keys).toContain("<m-d>");
+    expect(takenNow(s, 0).keys).not.toContain("<m-p>");
+    expect(claims(s, "<m-p>", 0)).toBe(false);
+    const split = fold([{ type: "key", key: "<m-d>", at: 0 }], s);
+    expect(ids(split.s)).toEqual(["t1", "t2"]);
+    expect(opened(split.s).prefix).toEqual({ armed: false });
+    // Split's old key went with the move.
+    expect(ids(fold(prefixed("|", 10), s).s)).toEqual(["t1"]);
+  });
 
-	it("swaps the table at the next key: an armed prefix is disarmed, nothing is asked for or kept (p9)", () => {
-		const armed = fold([{type: "key", key: "<c-b>", at: 0}], busy).s;
-		const swapped = fold([swap('prefix = "ctrl+a"')], armed);
-		expect(opened(swapped.s).prefix).toEqual({armed: false});
-		expect(swapped.cmds).toEqual([]);
-		expect(savedOf(opened(swapped.s))).toEqual(savedOf(opened(armed)));
-		// The next key uses the new table: | is the tile's, C-a | splits.
-		expect(claims(swapped.s, "|", 1)).toBe(false);
-		const split = fold(
-			[
-				{type: "key", key: "<c-a>", at: 2},
-				{type: "key", key: "|", at: 3},
-			],
-			swapped.s,
-		).s;
-		expect(ids(split)).toHaveLength(ids(busy).length + 1);
-		// In the repeat window too.
-		const repeating = fold(prefixed("<c-l>", 10), busy).s;
-		expect(opened(repeating).prefix.armed).toBe(true);
-		expect(opened(fold([swap("")], repeating).s).prefix).toEqual({armed: false});
-	});
+  it("swaps the table at the next key: an armed prefix is disarmed, nothing is asked for or kept (p9)", () => {
+    const armed = fold([{ type: "key", key: "<c-b>", at: 0 }], busy).s;
+    const swapped = fold([swap('prefix = "ctrl+a"')], armed);
+    expect(opened(swapped.s).prefix).toEqual({ armed: false });
+    expect(swapped.cmds).toEqual([]);
+    expect(savedOf(opened(swapped.s))).toEqual(savedOf(opened(armed)));
+    // The next key uses the new table: | is the tile's, C-a | splits.
+    expect(claims(swapped.s, "|", 1)).toBe(false);
+    const split = fold(
+      [
+        { type: "key", key: "<c-a>", at: 2 },
+        { type: "key", key: "|", at: 3 },
+      ],
+      swapped.s,
+    ).s;
+    expect(ids(split)).toHaveLength(ids(busy).length + 1);
+    // In the repeat window too.
+    const repeating = fold(prefixed("<c-l>", 10), busy).s;
+    expect(opened(repeating).prefix.armed).toBe(true);
+    expect(opened(fold([swap("")], repeating).s).prefix).toEqual({ armed: false });
+  });
 
-	it.each([
-		["Alt-A", "alt+a", "<a-a>"],
-		["F12", "f12", "<f12>"],
-	])("takes a %s prefix pressed twice, and sends no byte, since it has none", (_, spelled, key) => {
-		const s = fold([swap(`prefix = "${spelled}"`)]).s;
-		const twice = fold(
-			[
-				{type: "key", key, at: 0},
-				{type: "key", key, at: 1},
-			],
-			s,
-		);
-		expect(twice.cmds).toEqual([]);
-		expect(opened(twice.s).prefix).toEqual({armed: false});
-	});
+  it.each([
+    ["Alt-A", "alt+a", "<a-a>"],
+    ["F12", "f12", "<f12>"],
+  ])("takes a %s prefix pressed twice, and sends no byte, since it has none", (_, spelled, key) => {
+    const s = fold([swap(`prefix = "${spelled}"`)]).s;
+    const twice = fold(
+      [
+        { type: "key", key, at: 0 },
+        { type: "key", key, at: 1 },
+      ],
+      s,
+    );
+    expect(twice.cmds).toEqual([]);
+    expect(opened(twice.s).prefix).toEqual({ armed: false });
+  });
 
-	it("sends no prefix byte to a tile a program covers, when the prefix is pressed twice", () => {
-		const covered = fold([{type: "covered", tile: "t1", runs: [counter]}]).s;
-		const twice = fold(prefixed("<c-b>"), covered);
-		expect(twice.cmds).toEqual([]);
-		expect(opened(twice.s).prefix).toEqual({armed: false});
-	});
+  it("sends no prefix byte to a tile a program covers, when the prefix is pressed twice", () => {
+    const covered = fold([{ type: "covered", tile: "t1", runs: [counter] }]).s;
+    const twice = fold(prefixed("<c-b>"), covered);
+    expect(twice.cmds).toEqual([]);
+    expect(opened(twice.s).prefix).toEqual({ armed: false });
+  });
 });
 
 describe("keyName", () => {
-	it("names keys as the table writes them", () => {
-		const plain = {ctrl: false, alt: false, meta: false};
-		expect(keyName({...plain, key: "b", ctrl: true})).toBe("<c-b>");
-		expect(keyName({...plain, key: "|"})).toBe("|");
-		expect(keyName({...plain, key: "N"})).toBe("N");
-		expect(keyName({...plain, key: "ArrowLeft"})).toBe("<arrowleft>");
-		expect(keyName({...plain, key: "Shift"})).toBeNull();
-		expect(keyName({...plain, key: "h", ctrl: true})).toBe("<c-h>");
-	});
+  it("names keys as the table writes them", () => {
+    const plain = { ctrl: false, alt: false, meta: false };
+    expect(keyName({ ...plain, key: "b", ctrl: true })).toBe("<c-b>");
+    expect(keyName({ ...plain, key: "|" })).toBe("|");
+    expect(keyName({ ...plain, key: "N" })).toBe("N");
+    expect(keyName({ ...plain, key: "ArrowLeft" })).toBe("<arrowleft>");
+    expect(keyName({ ...plain, key: "Shift" })).toBeNull();
+    expect(keyName({ ...plain, key: "h", ctrl: true })).toBe("<c-h>");
+  });
 });

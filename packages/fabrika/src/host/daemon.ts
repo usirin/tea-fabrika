@@ -11,49 +11,46 @@
 // started it is gone.
 //
 // Node at the edge, all of it: a process that `local.ts` signals, around Miniflare, a Node library.
-import {Config, Effect, Option} from "effect";
-import {Miniflare} from "miniflare";
-import {ledgerOptions} from "./worker-options.ts";
+import { Config, Effect, Option } from "effect";
+import { Miniflare } from "miniflare";
+import { ledgerOptions } from "./worker-options.ts";
 
 const t0 = performance.now();
 // Read as a `Redacted` and kept one: an empty or missing secret is none.
 const secret = Effect.runSync(Config.option(Config.Redacted("DOOR_SECRET")));
 
 const mf = new Miniflare(
-	ledgerOptions({
-		persist: process.env.PERSIST ?? false,
-		...(Option.isNone(secret)
-			? {}
-			: {
-					door: {
-						kind: "local" as const,
-						person: process.env.DOOR_PERSON ?? "owner",
-						secret: secret.value,
-					},
-				}),
-		graceMs: Number(process.env.GRACE_MS ?? "1000"),
-		...(process.env.MAX_DELIVERIES === undefined
-			? {}
-			: {
-					maxDeliveries:
-						process.env.MAX_DELIVERIES === "off" ? null : Number(process.env.MAX_DELIVERIES),
-				}),
-		direct: Number(process.env.PORT ?? "0"),
-	}),
+  ledgerOptions({
+    persist: process.env.PERSIST ?? false,
+    ...(Option.isNone(secret)
+      ? {}
+      : {
+          door: {
+            kind: "local" as const,
+            person: process.env.DOOR_PERSON ?? "owner",
+            secret: secret.value,
+          },
+        }),
+    graceMs: Number(process.env.GRACE_MS ?? "1000"),
+    ...(process.env.MAX_DELIVERIES === undefined
+      ? {}
+      : {
+          maxDeliveries: process.env.MAX_DELIVERIES === "off" ? null : Number(process.env.MAX_DELIVERIES),
+        }),
+    direct: Number(process.env.PORT ?? "0"),
+  }),
 );
 
 await mf.ready;
 const direct = await mf.unsafeGetDirectURL();
 
-process.stdout.write(
-	`${JSON.stringify({ready: direct.origin, ms: performance.now() - t0, pid: process.pid})}\n`,
-);
+process.stdout.write(`${JSON.stringify({ ready: direct.origin, ms: performance.now() - t0, pid: process.pid })}\n`);
 
 const stop = () => {
-	mf.dispose().then(
-		() => process.exit(0),
-		() => process.exit(1),
-	);
+  mf.dispose().then(
+    () => process.exit(0),
+    () => process.exit(1),
+  );
 };
 
 process.on("SIGTERM", stop);
@@ -63,7 +60,7 @@ process.on("SIGTERM", stop);
 const owner = process.ppid;
 
 setInterval(() => {
-	if (process.ppid !== owner) {
-		stop();
-	}
+  if (process.ppid !== owner) {
+    stop();
+  }
 }, 250).unref();
