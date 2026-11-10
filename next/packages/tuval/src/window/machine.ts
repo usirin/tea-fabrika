@@ -9,6 +9,13 @@
 // Going online opens every distinct pid of the fixed layout once and sends every ready letter ahead
 // of the first one still waiting for its time, in slot order. Leaving online forgets both, so the
 // next dial starts over and a letter keeps its id across dials.
+//
+// What it records (plan A8), each through the `record` Cmd: the key a dial found, one `connect` row
+// per link outcome with the `ms` its Msg carries, a press before its letter goes, a `reply` row when
+// a letter settles (with every `send` of it and the answer's `ms`), the persistence answer, and a
+// view's start and end: a `whole` row per whole view installed, an `asked` row per ask, and one
+// `patch` row per ended run of installed patches, with its count, never one per patch. A run ends
+// before its pid's next whole or asked row, and when the link leaves online.
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { ClientRecord, Keys, ProgramClient, type Rows, Sent } from "@kampus/libfabrika";
@@ -45,6 +52,9 @@ const Table = Schema.Struct({
 
 const Rows = Schema.Record(Schema.String, Schema.Array(Schema.String));
 
+const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
+
 export const WindowModel = Schema.Struct({
   /** The fixed layout's tiles, `{id, pid}` in reading order, read from the ctx at init. */
   tiles: Schema.Array(Schema.Struct({ id: Schema.String, pid: Schema.String })),
@@ -61,6 +71,10 @@ export const WindowModel = Schema.Struct({
   opened: Schema.Array(Schema.String),
   /** The letters out on this dial with no answer yet. */
   sent: Schema.Array(Schema.String),
+  /** How many times each unsettled letter was sent, across dials, for its reply record. */
+  attempts: Schema.Record(Schema.String, Count),
+  /** How many patches each pid installed since its last view row: the run its next row ends. */
+  patches: Schema.Record(Schema.String, Count),
   /** A grant was just given: persistence is asked once, when the link next goes online. */
   fresh: Schema.Boolean,
   /** Slots whose time could not be read, asked again by the retry timer. */
@@ -112,6 +126,8 @@ const Own = Schema.Union([
   Schema.Struct({ type: Schema.Literal("keys_failed"), error: Keys.KeyProblem }),
   /** The highest ledger revision the client has read. */
   Schema.Struct({ type: Schema.Literal("seen"), rev: Schema.Int }),
+  /** How a dial found the profile's key: made now, reused, or made to replace a removed one. */
+  Schema.Struct({ type: Schema.Literal("identity"), found: Schema.Literals(["created", "reused", "replaced"]) }),
 ]);
 
 /** A press's time and letter id, from Effect's Clock and the library's id generator. */
@@ -123,6 +139,12 @@ export const now = Cmd.make("now", {
     traceId: Schema.optionalKey(Schema.String),
   }),
   err: ["clock", "entropy"],
+});
+
+/** What `process.send` answered, a `Sent`, and how long the call took as the handler timed it. */
+const Answered = Schema.TaggedUnion({
+  accepted: { ...Sent.cases.accepted.fields, ms: Ms },
+  refused: { ...Sent.cases.refused.fields, ms: Ms },
 });
 
 /** `process.send` for one ready letter, with the same id and body every time. */
@@ -137,7 +159,7 @@ export const send = Cmd.make("send", {
     traceId: Schema.optionalKey(Schema.String),
     dial: Schema.Int,
   }),
-  ok: Sent,
+  ok: Answered,
   err: ["unreachable", "unknown"],
 });
 
@@ -205,6 +227,20 @@ const sends = (s: WindowModel, dial: number): ReadonlyArray<ReturnType<typeof se
       }),
     );
 
+/** Each letter's send count, with one more for every `send` in `out`. */
+const counted = (
+  attempts: WindowModel["attempts"],
+  out: ReadonlyArray<ReturnType<typeof send>>,
+): WindowModel["attempts"] => {
+  const next: Record<string, number> = { ...attempts };
+
+  for (const c of out) {
+    next[c.letter] = (next[c.letter] ?? 0) + 1;
+  }
+
+  return next;
+};
+
 /** Sends what may go now when online, marking it out. */
 const flush = (s: WindowModel): Step => {
   if (s.link._tag !== "online") {
@@ -212,7 +248,97 @@ const flush = (s: WindowModel): Step => {
   }
 
   const out = sends(s, s.link.dial);
-  return out.length === 0 ? [s, []] : [{ ...s, sent: [...s.sent, ...out.map((c) => c.letter)] }, out];
+  return out.length === 0
+    ? [s, []]
+    : [{ ...s, sent: [...s.sent, ...out.map((c) => c.letter)], attempts: counted(s.attempts, out) }, out];
+};
+
+/** The row that ends `pid`'s run of patches, at the rev the last one installed, or none for an empty
+ *  run. */
+const runEnd = (s: WindowModel, pid: string): ReadonlyArray<ReturnType<typeof record>> => {
+  const patches = s.patches[pid] ?? 0;
+  return patches === 0
+    ? []
+    : [
+        record({
+          record: ClientRecord.cases.view.make({
+            pid,
+            result: "patch",
+            rev: Math.max(0, s.client.views[pid]?.rev ?? 0),
+            patches,
+          }),
+        }),
+      ];
+};
+
+const noteType = (note: unknown): unknown =>
+  typeof note === "object" && note !== null && "type" in note ? note.type : null;
+
+/** One view notification for `pid`, stepped through the client, and its view rows: a whole view
+ *  installed or an ask ends the pid's run of patches first, then keeps its own row; a patch
+ *  installed adds one to the run. The client installs by replacing the pid's shown view, so a
+ *  shown view that changed is one it installed. */
+const noticed = (
+  s: WindowModel,
+  step: ClientStep,
+  pid: string,
+  note: unknown,
+): readonly [WindowModel, ReadonlyArray<ReturnType<typeof record>>, ReadonlyArray<string>] => {
+  const [client, asks] = step(s.client, { type: "notice", pid, note });
+  const was = s.client.views[pid];
+  const now = client.views[pid];
+  const installed = now !== undefined && now !== was ? (noteType(note) === "patch" ? "patch" : "whole") : null;
+
+  if (installed === "patch") {
+    return [{ ...s, client, patches: { ...s.patches, [pid]: (s.patches[pid] ?? 0) + 1 } }, [], asks];
+  }
+
+  if (installed === null && asks.length === 0) {
+    return [{ ...s, client }, [], asks];
+  }
+
+  const patches = Object.fromEntries(Object.entries(s.patches).filter(([p]) => p !== pid));
+  const whole =
+    installed === "whole" && now !== undefined
+      ? [record({ record: ClientRecord.cases.view.make({ pid, result: "whole", rev: Math.max(0, now.rev) }) })]
+      : [];
+  const asked = asks.map((p) =>
+    record({ record: ClientRecord.cases.view.make({ pid: p, result: "asked", rev: Math.max(0, was?.rev ?? 0) }) }),
+  );
+  return [{ ...s, client, patches }, [...runEnd(s, pid), ...whole, ...asked], asks];
+};
+
+type Outcome = (typeof ClientRecord.cases.connect.Type)["result"];
+
+/** The link outcome a step is, from the link before and after: going online, told to wait, the key
+ *  removed, or a close or stall that sent it to retry. Anything else, a stale Msg or a move into
+ *  `dialing` included, is no outcome. */
+const outcome = (was: Link, is: Link, m: LinkMsg): Outcome | null => {
+  if (was._tag !== "online" && is._tag === "online") {
+    return "online";
+  }
+
+  if (was._tag !== "waiting_grant" && is._tag === "waiting_grant") {
+    return "waiting";
+  }
+
+  if (was._tag !== "removed" && is._tag === "removed") {
+    return "removed";
+  }
+
+  if (was._tag !== "retrying" && is._tag === "retrying") {
+    return m.type === "closed" ? "closed" : m.type === "stalled" ? "stalled" : null;
+  }
+
+  return null;
+};
+
+/** The one connect row of a link outcome, with the dial its Msg was about and the ms it carries. */
+const connectRow = (was: Link, is: Link, m: LinkMsg): ReadonlyArray<ReturnType<typeof record>> => {
+  const result = outcome(was, is, m);
+  return result === null || !("ms" in m)
+    ? []
+    : [record({ record: ClientRecord.cases.connect.make({ dial: m.dial, result, ms: m.ms }) })];
 };
 
 /** A press: the client reserves its slot with what was shown, and the window asks its time. */
@@ -273,13 +399,19 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
     fresh: s.fresh || granted,
     rejected: link._tag === "removed" ? link.fingerprint : s.rejected,
   };
+  const connected = connectRow(s.link, link, m);
 
   if (link._tag !== "online") {
-    return [{ ...next, opened: [], sent: [] }, linkCmds];
+    // Leaving online ends every pid's run of patches.
+    const ended = s.link._tag === "online" ? Object.keys(s.patches).flatMap((pid) => runEnd(s, pid)) : [];
+    return [
+      { ...next, opened: [], sent: [], patches: s.link._tag === "online" ? {} : s.patches },
+      [...linkCmds, ...connected, ...ended],
+    ];
   }
 
   if (s.link._tag === "online") {
-    return [next, linkCmds];
+    return [next, [...linkCmds, ...connected]];
   }
 
   // Going online: open each distinct pid once, send what waited in order, ask persistence once.
@@ -288,8 +420,15 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   const out = sends({ ...next, sent: [] }, link.dial);
   const asked = next.fresh ? [persist({})] : [];
   return [
-    { ...next, opened: pids, sent: out.map((c) => c.letter), fresh: false, trouble: null },
-    [...linkCmds, ...opens, ...out, ...asked],
+    {
+      ...next,
+      opened: pids,
+      sent: out.map((c) => c.letter),
+      attempts: counted(next.attempts, out),
+      fresh: false,
+      trouble: null,
+    },
+    [...linkCmds, ...connected, ...opens, ...out, ...asked],
   ];
 };
 
@@ -327,6 +466,8 @@ const fresh = (ctx: WindowCtx | undefined, client: ProgramClient.Client): Window
     client,
     opened: [],
     sent: [],
+    attempts: {},
+    patches: {},
     fresh: false,
     redate: [],
     via: {},
@@ -368,16 +509,37 @@ export const windowMachineFor = (checks: WindowChecks) => {
         s.client.pending.some((p) => p.n === m.cmd.n && p._tag === "dating") && !s.redate.includes(m.cmd.n)
           ? [{ ...s, redate: [...s.redate, m.cmd.n] }, []]
           : [s, []],
+      // A letter its own answer settles keeps one reply row, with every send of it and the ms its
+      // answer carries. A duplicate or stale answer settles nothing and keeps none.
       send_ok: (s, m) => {
-        const [client] = step(s.client, { type: "reply", letter: m.cmd.letter, answer: m.value });
+        const letter = m.cmd.letter;
+        const [client] = step(s.client, { type: "reply", letter, answer: m.value });
+        const settled =
+          s.client.pending.some((p) => p._tag === "ready" && p.letter === letter) &&
+          !client.pending.some((p) => p._tag === "ready" && p.letter === letter);
+        const replied = settled
+          ? [
+              record({
+                record: ClientRecord.cases.reply.make({
+                  letter,
+                  result: m.value._tag,
+                  attempts: s.attempts[letter] ?? 0,
+                  ms: m.value.ms,
+                }),
+              }),
+            ]
+          : [];
         return [
           {
             ...s,
             client,
-            sent: s.sent.filter((l) => l !== m.cmd.letter),
-            trouble: m.value._tag === "refused" ? m.value.why : s.trouble,
+            sent: s.sent.filter((l) => l !== letter),
+            attempts: settled
+              ? Object.fromEntries(Object.entries(s.attempts).filter(([l]) => l !== letter))
+              : s.attempts,
+            trouble: m.value._tag === "refused" ? m.value.reason : s.trouble,
           },
-          [],
+          replied,
         ];
       },
       // A transport failure frees the letter for the retry timer. An answer the client cannot read
@@ -393,16 +555,31 @@ export const windowMachineFor = (checks: WindowChecks) => {
           return [s, []];
         }
 
-        const [client, asks] = step(s.client, {
-          type: "notice",
-          pid: m.cmd.pid,
-          note: { type: "whole", rev: m.value.rev, view: m.value.view },
+        const [next, rows, asks] = noticed(s, step, m.cmd.pid, {
+          type: "whole",
+          rev: m.value.rev,
+          view: m.value.view,
         });
-        return [{ ...s, client, trouble: asks.length > 0 ? "bad_view" : s.trouble }, []];
+        return [{ ...next, trouble: asks.length > 0 ? "bad_view" : s.trouble }, rows];
       },
       open_err: (s) => [{ ...s, trouble: "no_view" }, []],
-      persist_ok: (s) => [s, []],
-      persist_err: (s) => [s, []],
+      // The persistence answer is kept once: the browser's yes or no, or that it could not ask.
+      persist_ok: (s, m) => [
+        s,
+        [record({ record: ClientRecord.cases.persist.make({ result: m.value ? "granted" : "refused" }) })],
+      ],
+      persist_err: (s, m) => [
+        s,
+        [
+          record({
+            record:
+              m.error._tag === "unsupported"
+                ? ClientRecord.cases.failure.make({ op: "persist", error: "NotSupportedError" })
+                : ClientRecord.cases.persist.make({ result: "failed" }),
+          }),
+        ],
+      ],
+      identity: (s, m) => [s, [record({ record: ClientRecord.cases.key.make({ result: m.found }) })]],
       // A record the tab could not keep is lost to the door, never to the window's own state.
       record_ok: (s) => [s, []],
       record_err: (s) => [s, []],
@@ -414,11 +591,10 @@ export const windowMachineFor = (checks: WindowChecks) => {
       // A view notification. The client's ask for a whole view becomes a fresh open when the
       // pid is open on this dial; otherwise the next dial's open brings one.
       view: (s, m) => {
-        const [client, asks] = step(s.client, { type: "notice", pid: m.pid, note: m.note });
-        const next = { ...s, client };
+        const [next, rows, asks] = noticed(s, step, m.pid, m.note);
         return asks.length > 0 && s.link._tag === "online" && s.opened.includes(m.pid)
-          ? [next, [open({ pid: m.pid, dial: s.link.dial })]]
-          : [next, []];
+          ? [next, [...rows, open({ pid: m.pid, dial: s.link.dial })]]
+          : [next, rows];
       },
       resend: (s, m) => {
         const redated = s.redate.flatMap((n) =>

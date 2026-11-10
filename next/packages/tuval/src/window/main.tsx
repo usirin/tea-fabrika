@@ -18,7 +18,7 @@ import {
   writeSshsig,
 } from "@kampus/libfabrika/transport";
 import { Button, useClipboard } from "@manti-ui/react";
-import { DateTime, Deferred, Effect, Option, Queue, Result, Schema, type Scope, Stream } from "effect";
+import { Clock, DateTime, Deferred, Effect, Option, Queue, Result, Schema, type Scope, Stream } from "effect";
 import { type ReactNode, StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { keyEvent } from "../desktop/keys.ts";
@@ -333,7 +333,7 @@ const RpcAnswer = Schema.Struct({
   result: Schema.optionalKey(Schema.Unknown),
   error: Schema.optionalKey(
     Schema.Struct({
-      data: Schema.optionalKey(Schema.Struct({ why: Schema.optionalKey(Schema.String) })),
+      data: Schema.optionalKey(Schema.Struct({ reason: Schema.optionalKey(Schema.String) })),
     }),
   ),
 });
@@ -495,6 +495,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
           return emit({ type: "blocked", reason: "key_store" });
         }
 
+        emit({ type: "identity", found: key.success.found });
         yield* open(dial, key.success, emit);
         // The socket lives in this scope: it closes when tea stops the Sub, not before.
         return yield* Effect.never;
@@ -512,6 +513,10 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
     const back = new Map<string, string>();
     const work = yield* Queue.unbounded<Effect.Effect<void>>();
     let serial = 0;
+    /** When the link last entered `dialing` on this socket: the dial's start, or the grant that has
+     *  it sign again. A link outcome's `ms` is the time since, on Effect's Clock. */
+    let since = yield* Clock.currentTimeMillis;
+    const took = (at: number): number => Math.max(0, at - since);
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         connections.delete(dial);
@@ -643,7 +648,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
           return ws.close(4000, "bad answer");
         }
 
-        emit({ type: "admitted", dial, ping: admitted.ping });
+        emit({ type: "admitted", dial, ping: admitted.ping, ms: took(yield* Clock.currentTimeMillis) });
         // Online: the person's key settings, and the rows this tab kept, for as long as the dial.
         return yield* Effect.all([settings(admitted.who.person).pipe(Effect.ignore), deliver(call)], {
           concurrency: 2,
@@ -661,11 +666,18 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
       );
 
       if (Option.isSome(knocked)) {
-        emit({ type: "not_granted", dial, fingerprint: key.fingerprint, ...knocked.value });
+        emit({
+          type: "not_granted",
+          dial,
+          fingerprint: key.fingerprint,
+          ...knocked.value,
+          ms: took(yield* Clock.currentTimeMillis),
+        });
       }
     });
 
-    const notice = (method: string, params: unknown): void => {
+    /** One notification, at `at` on the Clock. */
+    const notice = (method: string, params: unknown, at: number): void => {
       if (method === "challenge" || method === "client.granted") {
         const nonce = Option.getOrNull(Schema.decodeUnknownOption(Nonce)(params));
 
@@ -674,6 +686,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         }
 
         if (method === "client.granted") {
+          since = at;
           emit({ type: "granted", dial });
         }
 
@@ -682,7 +695,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         const waiting = Option.getOrNull(Schema.decodeUnknownOption(WaitingCode)(params));
 
         if (waiting !== null) {
-          emit({ type: "not_granted", dial, fingerprint: key.fingerprint, ...waiting });
+          emit({ type: "not_granted", dial, fingerprint: key.fingerprint, ...waiting, ms: took(at) });
         }
       } else if (
         (method === "view.whole" || method === "view.patch") &&
@@ -699,7 +712,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
       }
     };
 
-    const message = (data: unknown): void => {
+    const message = (data: unknown, at: number): void => {
       if (data === "pong") {
         return emit({ type: "pong", dial });
       }
@@ -718,8 +731,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         }
 
         pending.delete(Number(frame.id));
-        // P12's wire names the door's reason `why`; the tab's own data says `reason`.
-        const reason = frame.error?.data?.why;
+        const reason = frame.error?.data?.reason;
         Deferred.doneUnsafe(
           waiting,
           frame.error === undefined
@@ -727,25 +739,27 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
             : Effect.fail<CallError>(F.unknown.make({ reason: reason ?? "error" })),
         );
       } else {
-        notice(frame.method, frame.params);
+        notice(frame.method, frame.params, at);
       }
     };
-    const closed = (code: number): void => {
+    const closed = (code: number, at: number): void => {
       for (const waiting of pending.values()) {
         Deferred.doneUnsafe(waiting, Effect.fail(unreachable));
       }
 
       pending.clear();
-      emit({ type: "closed", dial, code, fingerprint: key.fingerprint });
+      emit({ type: "closed", dial, code, fingerprint: key.fingerprint, ms: took(at) });
     };
     yield* ws.events.pipe(
       Stream.runForEach((e) =>
-        Effect.sync(() =>
-          e.event === "open"
-            ? Deferred.doneUnsafe(opened, Effect.void)
-            : e.event === "message"
-              ? message(e.data)
-              : closed(e.code),
+        Effect.flatMap(Clock.currentTimeMillis, (at) =>
+          Effect.sync(() =>
+            e.event === "open"
+              ? Deferred.doneUnsafe(opened, Effect.void)
+              : e.event === "message"
+                ? message(e.data, at)
+                : closed(e.code, at),
+          ),
         ),
       ),
       Effect.forkScoped,
@@ -767,7 +781,9 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         const letter = yield* ids.next(Id.Letter).pipe(Effect.mapError(() => F.entropy.make({})));
         return { letter, sentAt: yield* sentAt, traceId: yield* traceId };
       }),
+      // Its answer carries how long the call took, from the handler's start, for the reply row.
       send: Effect.fn("client.send")(function* (cmd) {
+        const start = yield* Clock.currentTimeMillis;
         const conn = yield* connection(cmd.dial);
         const pid = yield* conn.resolve(cmd.pid).pipe(Effect.mapError(retryable));
         const answer = yield* conn
@@ -780,9 +796,10 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
             ...(cmd.traceId === undefined ? {} : { traceId: cmd.traceId }),
           })
           .pipe(Effect.mapError(retryable));
-        return yield* Schema.decodeUnknownEffect(Sent)(answer).pipe(
+        const sent = yield* Schema.decodeUnknownEffect(Sent)(answer).pipe(
           Effect.mapError(() => F.unknown.make({ reason: "bad_answer" })),
         );
+        return { ...sent, ms: Math.max(0, (yield* Clock.currentTimeMillis) - start) };
       }),
       open: Effect.fn("client.view")(function* (cmd) {
         const conn = yield* connection(cmd.dial);

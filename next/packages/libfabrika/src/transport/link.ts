@@ -6,9 +6,12 @@
 // The link never sits still: every live state has a timer that moves it. A grant wait leaves only
 // by `client.granted` on its dial, a close or a block: no timer admits a key. A 4003 close means the
 // key was removed, and only a person's Ask again dials once more.
+//
+// A link outcome (`admitted`, `not_granted`, `closed`, `stalled`) carries `ms`: how long the dial took
+// to reach it, timed by the handler that dialed, or the wait the link's own timer ran for a stall it
+// fired. The machine reads no clock and does not read `ms`; a window copies it into its records.
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Context, type Effect, Schema, type Scope, type Stream } from "effect";
-import type { KeyLine } from "./sshsig.ts";
+import { Schema } from "effect";
 
 /** No wait is longer than this: p5's 30-second cap. */
 export const CAP = 30_000;
@@ -49,15 +52,18 @@ export const Link = Schema.TaggedUnion({
 export type Link = typeof Link.Type;
 
 const OnDial = { dial: Dial };
+/** How long the dial took to reach an outcome, in ms: a measurement, never authority. */
+const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 
 export const LinkMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("admitted"), ...OnDial, ping: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("admitted"), ...OnDial, ping: Schema.Number, ms: Ms }),
   Schema.Struct({
     type: Schema.Literal("not_granted"),
     ...OnDial,
     fingerprint: Schema.String,
     code: Schema.String,
     until: Schema.Number,
+    ms: Ms,
   }),
   Schema.Struct({ type: Schema.Literal("granted"), ...OnDial }),
   Schema.Struct({
@@ -65,11 +71,12 @@ export const LinkMsg = Schema.Union([
     ...OnDial,
     code: Schema.Int,
     fingerprint: Schema.String,
+    ms: Ms,
   }),
   Schema.Struct({ type: Schema.Literal("retry"), ...OnDial, tries: Schema.Int }),
   Schema.Struct({ type: Schema.Literal("beat"), ...OnDial }),
   Schema.Struct({ type: Schema.Literal("pong"), ...OnDial }),
-  Schema.Struct({ type: Schema.Literal("stalled"), ...OnDial }),
+  Schema.Struct({ type: Schema.Literal("stalled"), ...OnDial, ms: Ms }),
   Schema.Struct({ type: Schema.Literal("renew"), ...OnDial }),
   Schema.Struct({ type: Schema.Literal("blocked"), reason: Schema.String }),
   Schema.Struct({ type: Schema.Literal("ask_again"), ...OnDial }),
@@ -93,18 +100,20 @@ export const knock = Cmd.make("knock", {
 /** The wait before retry number `tries`: doubling from half a second, never past the cap. */
 export const backoff = (tries: number): number => Math.min(CAP, 500 * 2 ** Math.max(-1, Math.min(tries - 1, 16)));
 
-/** The timer the state waits on, or null when only a person can move it. */
+/** The timer the state waits on, or null when only a person can move it. A stall it fires carries
+ *  the wait it ran as its `ms`: the timer starts when the state is entered, so that is how long the
+ *  dial sat without an answer. */
 export const linkTimer = (link: Link): { readonly after: number; readonly msg: LinkMsg } | null => {
   switch (link._tag) {
     case "dialing":
-      return { after: DIALING, msg: { type: "stalled", dial: link.dial } };
+      return { after: DIALING, msg: { type: "stalled", dial: link.dial, ms: DIALING } };
     case "waiting_grant":
       return { after: RENEW, msg: { type: "renew", dial: link.dial } };
     case "online": {
       const after = Math.max(0, Math.min(link.ping, BEAT));
       return (link.pings ?? 0) === 0
         ? { after, msg: { type: "beat", dial: link.dial } }
-        : { after, msg: { type: "stalled", dial: link.dial } };
+        : { after, msg: { type: "stalled", dial: link.dial, ms: after } };
     }
     case "retrying":
       return { after: backoff(link.tries), msg: { type: "retry", dial: link.dial, tries: link.tries } };
@@ -198,73 +207,3 @@ export const linkMachine = Machine.make({
   },
   subs: [{ type: "timer", deps: (s) => timerDeps(s) }],
 });
-
-// --- What a client's platform gives it ----------------------------------------------------------
-//
-// The contracts a window consumes and a platform adapter provides (Tuval's browser adapter today,
-// P18's later ones). Declarations only: nothing here dials, stores or signs.
-
-/** Why a client's own store could not be used: the step, and the failure's platform name (a
- *  `DOMException` name, `TypeError`, or `other`). Never a message or a value. */
-export class StoreError extends Schema.TaggedError<StoreError>()("StoreError", {
-  op: Schema.Literals(["open", "read", "write", "make", "sign"]),
-  error: Schema.String,
-}) {}
-
-/** A client's key as the door checks it. */
-export type Identity = {
-  /** `SHA256:` and the unpadded base64 of SHA-256 over the raw public key: the gateway's name. */
-  readonly fingerprint: string;
-  /** The raw public key in canonical base64url, as the hello carries it. */
-  readonly raw: string;
-  readonly line: KeyLine;
-  /** How this read found the key: made now, reused, or made to replace a removed one. */
-  readonly found: "created" | "reused" | "replaced";
-  readonly sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array, StoreError>;
-};
-
-/** The profile's one key, and the one persistence attempt of a new grant. */
-export class ClientKey extends Context.Service<
-  ClientKey,
-  {
-    /** The profile's key, made once. `rejected` names a key the door removed: if it is still the
-     *  stored one, it is replaced; if another tab replaced it already, that one is used. */
-    readonly current: (rejected: string | null) => Effect.Effect<Identity, StoreError>;
-    /** Claims the one persistence attempt of a new grant. False when a tab claimed it before. */
-    readonly claimPersist: Effect.Effect<boolean, StoreError>;
-    /** Asks the platform to keep this client's storage: its answer, or why it could not ask. */
-    readonly persist: Effect.Effect<boolean, "unsupported" | "failed">;
-  }
->()("@kampus/libfabrika/transport/ClientKey") {}
-
-/** What one dial's socket tells the client, in the order it happened. */
-export type SocketEvent =
-  | { readonly event: "open" }
-  | { readonly event: "message"; readonly data: unknown }
-  | { readonly event: "close"; readonly code: number };
-
-/** One dial's socket: its events from the instant it exists, and text out. It closes with its
- *  scope. */
-export type Socket = {
-  readonly events: Stream.Stream<SocketEvent>;
-  /** Sends `text`; false when the socket is not open. */
-  readonly send: (text: string) => boolean;
-  readonly close: (code: number, reason: string) => void;
-};
-
-/** Dials the brain at `url`. */
-export class ClientSocket extends Context.Service<
-  ClientSocket,
-  { readonly dial: (url: string) => Effect.Effect<Socket, never, Scope.Scope> }
->()("@kampus/libfabrika/transport/ClientSocket") {}
-
-/** The client's own rows waiting for the door's acknowledgement, kept across a closed client. A row
- *  is any value with a string `id`; the client checks what it reads back. */
-export class ClientRows extends Context.Service<
-  ClientRows,
-  {
-    readonly put: (row: { readonly id: string }) => Effect.Effect<void, StoreError>;
-    readonly all: Effect.Effect<ReadonlyArray<unknown>, StoreError>;
-    readonly remove: (ids: ReadonlyArray<string>) => Effect.Effect<void, StoreError>;
-  }
->()("@kampus/libfabrika/transport/ClientRows") {}

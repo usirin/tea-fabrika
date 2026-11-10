@@ -96,7 +96,15 @@ export const ClientRecord = Schema.TaggedUnion({
     attempts: Count,
     ms: Ms,
   },
-  view: { pid: Schema.String, result: Schema.Literals(["whole", "patch", "asked"]), rev: Count },
+  /** A view's start and end (plan A8): a `whole` view installed, an `asked` for one, and one `patch`
+   *  row for a run of installed patches when it ends, never one per patch. */
+  view: {
+    pid: Schema.String,
+    result: Schema.Literals(["whole", "patch", "asked"]),
+    rev: Count,
+    /** On a `patch` row only: how many patches the run installed. */
+    patches: Schema.optionalKey(Count),
+  },
   persist: { result: Schema.Literals(["granted", "refused", "failed"]) },
   failure: {
     op: Schema.Literals(["key", "connect", "request", "view", "persist", "record"]),

@@ -6,22 +6,13 @@ export { answerFrame } from "./answer.ts";
 export { checkHello, helloText, sameOrigin, selectVersion } from "./hello.ts";
 export { Admission, Answer, Attached, Hello, Wait, Who } from "./wire.ts";
 export { Row, Waiting } from "./waiting.ts";
+export { backoff, knock, Link, LinkMsg, linkMachine, linkTimer, ping, REMOVED, socketDial, timerDeps } from "./link.ts";
 export {
-  backoff,
   ClientKey,
   ClientRows,
   ClientSocket,
   type Identity,
-  knock,
-  Link,
-  LinkMsg,
-  linkMachine,
-  linkTimer,
-  ping,
-  REMOVED,
   type Socket,
   type SocketEvent,
-  socketDial,
   StoreError,
-  timerDeps,
-} from "./link.ts";
+} from "./services.ts";
