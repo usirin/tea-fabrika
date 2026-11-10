@@ -72,6 +72,13 @@ application, so one program past its restart limit stops alone. Isolation gets h
 ([0020](../../.decisions/0020-programs-get-hard-walls.md)): quotas per program, each program's
 supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 
+`next/` naming sweep, ticket 337 (2026-11-09): product fields, saved JSON, deletion SQL,
+RPC replies and span keys now say `reason`; ledger event types and write payloads say `Event`
+and `event`. Reason values, tags, streams, ids and clocks stay the same. The new
+`fabrika/no-why-key` rule checks declarations in `next/`, tests included. Use fresh isolated lab
+storage for these saved shapes; this change does not migrate old lab stores. Today's version
+keeps `why`. → lands once its steps pass
+
 Today's hand-run tooling, ticket 318: [review, cleanup and saved waits](../direction/hand-run-review-and-cleanup.md)
 is decided 2026-11-08. Review sweeps every law and decided note and answers once. Drivers save
 waits and end; lead starts fresh drivers when the saved fact holds. After merge, catch-up keeps

@@ -242,7 +242,7 @@ const archivePart = Effect.fnUntraced(function* (sql: Sql, archive: (typeof Arch
   const ended = yield* Clock.currentTimeMillis;
   const span = yield* Effect.option(Effect.currentSpan);
   const failed: Failed | null = Result.match(stored, {
-    onFailure: (error) => (error.why === "unreachable" ? "unreachable" : "mismatch"),
+    onFailure: (error) => (error.reason === "unreachable" ? "unreachable" : "mismatch"),
     onSuccess: ({ sha256: held }) => (held === hash ? null : "mismatch"),
   });
   yield* Effect.try({

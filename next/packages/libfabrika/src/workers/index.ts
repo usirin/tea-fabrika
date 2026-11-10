@@ -15,7 +15,7 @@ export const workerLoader = (loader: WorkerLoader, programs: Readonly<Record<str
     const code = Object.hasOwn(programs, name) ? programs[name] : undefined;
 
     if (code === undefined) {
-      return yield* new ProgramDown({ why: "no_program" });
+      return yield* new ProgramDown({ reason: "no_program" });
     }
 
     const worker = loader.get(`${code.hash}/${process}`, () => ({
@@ -27,12 +27,12 @@ export const workerLoader = (loader: WorkerLoader, programs: Readonly<Record<str
       globalOutbound: null,
     }));
     const rpc = worker.getEntrypoint<Calls>();
-    const fail = () => new ProgramDown({ why: "load" });
+    const fail = () => new ProgramDown({ reason: "load" });
     // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader describes its checked declaration through RPC
     const work = Effect.tryPromise({ try: () => rpc.describe(), catch: fail });
     const raw = yield* work;
     const declaration = yield* Schema.decodeUnknownEffect(Declaration)(raw).pipe(
-      Effect.mapError(() => new ProgramDown({ why: "load" })),
+      Effect.mapError(() => new ProgramDown({ reason: "load" })),
     );
     return {
       execution: workerExecution(rpc),

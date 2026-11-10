@@ -135,7 +135,7 @@ describe("P12 Rolldown build", () => {
       Effect.exit(
         build({
           out: join(folder, "dist"),
-          ledger: [{ file: path, fn: "Tip", why: "fixture approval" }],
+          ledger: [{ file: path, fn: "Tip", reason: "fixture approval" }],
         }),
       ).pipe(Effect.provide(discovery([path]))),
     );
@@ -216,7 +216,7 @@ describe("P12 Rolldown build", () => {
           build({
             out,
             files: [file],
-            ledger: [{ file: stale, fn: "Tip", why: "test plant" }],
+            ledger: [{ file: stale, fn: "Tip", reason: "test plant" }],
           }),
         ),
       );

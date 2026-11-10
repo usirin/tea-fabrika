@@ -1,5 +1,5 @@
 // P34, next/. These are runner calls through P37's actual sink and JobRecords, not a span mock.
-// Only this file owns content deletion and trace attribution; other laws inspect lifecycle facts.
+// Only this file owns content deletion and trace attribution; other laws inspect lifecycle events.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Option, Schema, Stream } from "effect";
@@ -281,7 +281,7 @@ for (const adapter of ["node", "worker"] as const) {
               for (const content of kept) {
                 yield* r.deleteContent(chain, content.spanId, {
                   by: owner.key,
-                  why: "test deletion",
+                  reason: "test deletion",
                 });
                 expect(Option.getOrNull(yield* r.content(chain, content.spanId))).toMatchObject({
                   _tag: "deleted",
@@ -347,34 +347,64 @@ describe("P34 supervision recording", () => {
     );
   }
 
-  it.effect("content plant, message in errors/why/health: only deletable content holds failure text and stack", () =>
-    Effect.gen(function* () {
-      const w = world(new TypeError(PRIVATE));
-      yield* w.boot;
-      yield* Effect.gen(function* () {
-        yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
-        const rows = yield* recorded(A);
-        const r = yield* RecordManager;
-        const contents = yield* Effect.forEach(rows, (row) => r.content({ _tag: "job", process: A }, row.spanId), {
-          concurrency: 1,
-        });
-        const at = contents.findIndex((content) => JSON.stringify(content).includes(PRIVATE));
-        expect(at, "the original throw must reach deletable content before guards erase it").toBeGreaterThanOrEqual(0);
-        expect(JSON.stringify(rows)).not.toContain(PRIVATE);
-        expect(JSON.stringify(w.sink.sql.exec("SELECT * FROM health"))).not.toContain(PRIVATE);
-        expect(JSON.stringify(yield* read(`processes/${NAME}`))).not.toContain(PRIVATE);
-        expect(JSON.stringify(yield* read(`${A}/dead`))).not.toContain(PRIVATE);
-        const span = rows[at]!;
-        yield* r.deleteContent({ _tag: "job", process: A }, span.spanId, {
-          by: owner.key,
-          why: "test deletion",
-        });
-        expect(Option.getOrNull(yield* r.content({ _tag: "job", process: A }, span.spanId))).toMatchObject({
-          _tag: "deleted",
-        });
-        expect((yield* recorded(A)).find((row) => row.spanId === span.spanId)).toEqual(span);
-      }).pipe(Effect.provide(w.layer()));
-    }),
+  it.effect.prop(
+    "content plant, message in errors/reason/health: only deletable content holds failure text and stack",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        [PRIVATE, generated],
+        (value) =>
+          Effect.gen(function* () {
+            const secret = value === PRIVATE ? value : `private-supervision:${value}:marker`;
+            const w = world(new TypeError(secret));
+            yield* w.boot;
+            yield* Effect.gen(function* () {
+              yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
+              const rows = yield* recorded(A);
+              const r = yield* RecordManager;
+              const contents = yield* Effect.forEach(
+                rows,
+                (row) => r.content({ _tag: "job", process: A }, row.spanId),
+                { concurrency: 1 },
+              );
+              const at = contents.findIndex((content) =>
+                Option.match(content, {
+                  onNone: () => false,
+                  onSome: (c) => c._tag === "kept" && c.message.includes(secret),
+                }),
+              );
+              expect(
+                at,
+                "the original throw must reach deletable content before guards erase it",
+              ).toBeGreaterThanOrEqual(0);
+              expect(JSON.stringify(rows)).not.toContain(secret);
+              expect(JSON.stringify(w.sink.sql.exec("SELECT * FROM health"))).not.toContain(secret);
+              expect(JSON.stringify(yield* read(`processes/${NAME}`))).not.toContain(secret);
+              expect(JSON.stringify(yield* read(`${A}/dead`))).not.toContain(secret);
+
+              for (const output of [
+                rows,
+                w.sink.sql.exec("SELECT * FROM health"),
+                yield* read(`processes/${NAME}`),
+                yield* read(`${A}/dead`),
+              ]) {
+                expect(JSON.stringify(output)).not.toContain(JSON.stringify(secret).slice(1, -1));
+              }
+
+              const span = rows[at]!;
+              yield* r.deleteContent({ _tag: "job", process: A }, span.spanId, {
+                by: owner.key,
+                reason: "test deletion",
+              });
+              expect(Option.getOrNull(yield* r.content({ _tag: "job", process: A }, span.spanId))).toMatchObject({
+                _tag: "deleted",
+              });
+              expect((yield* recorded(A)).find((row) => row.spanId === span.spanId)).toEqual(span);
+            }).pipe(Effect.provide(w.layer()));
+          }),
+        { discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
   );
 
   it.effect(

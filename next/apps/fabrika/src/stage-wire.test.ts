@@ -211,7 +211,7 @@ type Frame = {
   method?: string;
   params?: any;
   result?: any;
-  error?: { data?: { why: string }; message?: string };
+  error?: { data?: { reason: string }; message?: string };
 };
 
 class Client {
@@ -371,14 +371,14 @@ describe("P12 real dev.ts wire", () => {
     const first = placing(await send(c, pid, "once"));
     expect(placing(await send(c, pid, "once"))).toEqual(first);
     const changed = await send(c, pid, "once", { type: "dec" });
-    expect(changed.error?.data?.why ?? changed.result?.why).toBe("id_reused");
+    expect(changed.error?.data?.reason ?? changed.result?.reason).toBe("id_reused");
     const rows = await read(c, "counter:1/inbox");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: "once", rev: first.rev, pos: first.pos });
     expect((await view(c, pid)).view).toEqual({ count: 1 });
     const otherKey = identity(),
       other = new Client(s.url, otherKey, "other-key");
-    expect((await Effect.runPromise(other.hello())).error?.data?.why).toBe("not_granted");
+    expect((await Effect.runPromise(other.hello())).error?.data?.reason).toBe("not_granted");
     const knocked = await other.call("door.knock", { label: "Other client" });
     const { grantText } = await import("@kampus/libfabrika/coordination");
     const text = grantText({
@@ -406,7 +406,7 @@ describe("P12 real dev.ts wire", () => {
     const notification = await other.next((f) => typeof f !== "string" && f.method === "client.granted");
     expect((await Effect.runPromise(other.hello(notification.params.nonce))).error).toBeUndefined();
     const identityChanged = await send(other, pid, "once");
-    expect(identityChanged.error?.data?.why ?? identityChanged.result?.why).toBe("id_reused");
+    expect(identityChanged.error?.data?.reason ?? identityChanged.result?.reason).toBe("id_reused");
     expect(await read(c, "counter:1/inbox")).toHaveLength(1);
   });
   it("scenario: p11 plant: reverse or repeat a page, or stop at the first page", async () => {
@@ -495,12 +495,14 @@ describe("P12 real dev.ts wire", () => {
       badKey = identity();
     const stranger = new Client(s.url, strangerKey, "pre-hello");
     await stranger.challenge();
-    expect((await stranger.call("ledger.read", { stream: "processes", after: 0 })).error?.data?.why).toBe("no_hello");
+    expect((await stranger.call("ledger.read", { stream: "processes", after: 0 })).error?.data?.reason).toBe(
+      "no_hello",
+    );
     const unknown = new Client(s.url, unknownKey, "ungranted");
-    expect((await Effect.runPromise(unknown.hello())).error?.data?.why).toBe("not_granted");
+    expect((await Effect.runPromise(unknown.hello())).error?.data?.reason).toBe("not_granted");
     const bad = new Client(s.url, badKey, "invalid-proof");
     const nonce = await bad.challenge();
-    expect((await Effect.runPromise(bad.hello(nonce, { signed: "not a proof" }))).error?.data?.why).toBe(
+    expect((await Effect.runPromise(bad.hello(nonce, { signed: "not a proof" }))).error?.data?.reason).toBe(
       "bad_signature",
     );
     const inputs = await read(c, "door/inputs");
@@ -576,7 +578,7 @@ describe("P12 real dev.ts wire", () => {
         personOnly: false,
         by: s.key.fingerprint,
       });
-      expect(response.error?.data?.why).toBe("unknown_method");
+      expect(response.error?.data?.reason).toBe("unknown_method");
     }
   });
   it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the stage child fails", async () => {

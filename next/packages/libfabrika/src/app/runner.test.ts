@@ -3,8 +3,8 @@
 // ProgramLoader.layer(programs, handlers), and entry.ts's CheckedWriter, WatcherManager,
 // Alarm and Recording services. Watchers receive publish(client, whole-or-patch).
 // A whole has {type:"whole", rev, view}; a patch has {type:"patch", base, rev, patch}.
-// CheckedWriter.append(Incoming) saves delivery; commit(id, session, stream, fact) and
-// own(id, stream, fact) are the checked door edges. The runner, not these adapters, signs.
+// CheckedWriter.append(Incoming) saves delivery; commit(id, session, stream, event) and
+// own(id, stream, event) are the checked door edges. The runner, not these adapters, signs.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +12,20 @@ import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { afterAll, describe, expect, it } from "@effect/vitest";
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schema, Stream } from "effect";
+import {
+  Cause,
+  Arbitrary,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
 import * as fc from "fast-check";
 import { type Envelope, type NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import { Mailbox, type From } from "../coordination/mailbox.ts";
@@ -20,13 +33,13 @@ import { ProcessStore } from "../coordination/process-store.ts";
 import { Activity, Down, Recipient, recoverActivity, signalId } from "../coordination/process.ts";
 import { Archive } from "../data/archive.ts";
 import { Doorbell, Ledger, LedgerError } from "../data/ledger.ts";
-import { type Entry, InputId, lineFor } from "../data/log.ts";
+import { Appended, type Entry, InputId, lineFor } from "../data/log.ts";
 import { RecordManager } from "../data/records.ts";
 import { type Sql } from "../data/referee.ts";
 import { SpanSink } from "../data/sink.ts";
 import { nodeSql } from "../data/sqlite.ts";
 import { type SpanRow } from "../data/trace.ts";
-import { processId } from "../id.test-support.ts";
+import { processId, processIds } from "../id.test-support.ts";
 import { type Update as WatcherUpdate } from "./entry.ts";
 import { Input, Program } from "./program.ts";
 
@@ -136,8 +149,8 @@ const command = (r: Request) =>
     stream: "facts",
     write:
       r.parent === null
-        ? { _tag: "own", fact: { _tag: r.tag, token: r.token } }
-        : { _tag: "caused", parent: r.parent, fact: { _tag: r.tag, token: r.token } },
+        ? { _tag: "own", event: { _tag: r.tag, token: r.token } }
+        : { _tag: "caused", parent: r.parent, event: { _tag: r.tag, token: r.token } },
   });
 
 const nextWrite = (s: Model): readonly [Model, ReadonlyArray<ReturnType<typeof write>>] => {
@@ -175,7 +188,7 @@ const machine = Machine.make({
   },
 });
 
-const SavedFact = Schema.TaggedStruct("saved", { token: Schema.String });
+const SavedEvent = Schema.TaggedStruct("saved", { token: Schema.String });
 const Answered = Schema.TaggedStruct("answered", { token: Schema.String });
 const Polled = Schema.TaggedStruct("polled", { token: Schema.String });
 
@@ -185,7 +198,7 @@ const authoring = (name = "queue") => ({
   state: { v: 1, upgrades: [] },
   view: (s: Model) => s,
   refuse: (s: Model, m: typeof Msg.Type) =>
-    m.type === "add" && s.count + m.n > 1000 ? { why: "limit", now: s.count, most: 1000 } : null,
+    m.type === "add" && s.count + m.n > 1000 ? { reason: "limit", now: s.count, most: 1000 } : null,
   inputs: {
     add: "Add",
     approve: { description: "Approve", personOnly: true } satisfies {
@@ -207,7 +220,7 @@ const authoring = (name = "queue") => ({
   },
   outputs: {},
   writes: {
-    saved: { schema: SavedFact, personOnly: false },
+    saved: { schema: SavedEvent, personOnly: false },
     answered: { schema: Answered, personOnly: true },
     polled: { schema: Polled, personOnly: false },
   },
@@ -222,11 +235,16 @@ type Incoming = {
   readonly span: { readonly traceId: string; readonly spanId: string };
 };
 
-type Failure = { readonly _tag: string; readonly why: string } | NotGranted;
+type Failure = { readonly _tag: string; readonly reason: string } | NotGranted;
 
 type Sent =
   | { readonly _tag: "accepted"; readonly rev: number; readonly pos: number }
-  | { readonly _tag: "refused"; readonly why: string; readonly now?: number; readonly most?: number };
+  | {
+      readonly _tag: "refused";
+      readonly reason: string;
+      readonly now?: number;
+      readonly most?: number;
+    };
 
 type Opened = { readonly rev: number; readonly view: Model };
 
@@ -310,7 +328,7 @@ const read = (stream: string) => Ledger.use((l) => Stream.runCollect(l.read(stre
 const body = (row: Entry) => Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(row.body);
 
 const inbox = read(`${NAME}/inbox`);
-const facts = read("facts");
+const events = read("facts");
 const steps = read(PROCESS).pipe(Effect.map((rows) => rows.filter((r) => r._tag === "stepped")));
 
 const resultLetters = inbox.pipe(
@@ -345,7 +363,7 @@ const activityStorage = () => {
   let aborted = false;
   const calls: Array<unknown> = [];
   const stored = <A>(f: () => A) =>
-    Effect.suspend(() => (aborted ? Effect.fail(new LedgerError({ why: "storage" })) : Effect.sync(f)));
+    Effect.suspend(() => (aborted ? Effect.fail(new LedgerError({ reason: "storage" })) : Effect.sync(f)));
   const storage: ActivityStorage = {
     get: (key) => stored(() => (key === "activity" ? structuredClone(pending) : undefined)),
     put: (key, value) =>
@@ -429,7 +447,7 @@ const world = async (
   const fault = {
     append: "" as "" | "before" | "after" | "refused",
     answer: false,
-    commitWhy: "" as "" | "seen_ahead" | "id_reused",
+    commitReason: "" as "" | (typeof Appended.cases.refused.Type)["reason"],
     sign: false,
     commit: false,
     record: false,
@@ -461,7 +479,7 @@ const world = async (
 
               if (fault.sign) {
                 fault.sign = false;
-                return yield* new LedgerError({ why: "unreachable" });
+                return yield* new LedgerError({ reason: "unreachable" });
               }
 
               return session;
@@ -475,7 +493,7 @@ const world = async (
           (key: string) => Effect.succeed(key === "agent" ? writer("agent") : writer()),
           {
             input: (name: string) => name === "approve",
-            fact: (tag: string) => p.writes[tag as keyof typeof p.writes]?.personOnly ?? false,
+            event: (tag: string) => p.writes[tag as keyof typeof p.writes]?.personOnly ?? false,
           },
         ),
       ),
@@ -510,7 +528,7 @@ const world = async (
               Effect.flatMap((answer) => {
                 if (fault.answer && args[1].endsWith("/answer")) {
                   fault.answer = false;
-                  return Effect.fail(new LedgerError({ why: "unreachable" }));
+                  return Effect.fail(new LedgerError({ reason: "unreachable" }));
                 }
 
                 return Effect.succeed(answer);
@@ -527,12 +545,12 @@ const world = async (
         const actual = yield* ProcessStore;
         return {
           ...actual,
-          record: (id: string, fact: unknown, who: From) =>
-            actual.record(id, fact, who).pipe(
+          record: (id: string, event: unknown, who: From) =>
+            actual.record(id, event, who).pipe(
               Effect.flatMap((answer: unknown) => {
                 if (fault.record) {
                   fault.record = false;
-                  return Effect.fail(new LedgerError({ why: "unreachable" }));
+                  return Effect.fail(new LedgerError({ reason: "unreachable" }));
                 }
 
                 return Effect.succeed(answer);
@@ -649,7 +667,7 @@ const world = async (
           return {
             flush: Effect.gen(function* () {
               if (fault.flush) {
-                return yield* new LedgerError({ why: "storage" });
+                return yield* new LedgerError({ reason: "storage" });
               }
 
               return yield* recording.flush;
@@ -668,11 +686,11 @@ const world = async (
               Effect.gen(function* () {
                 if (fault.append === "before") {
                   fault.append = "";
-                  return yield* new LedgerError({ why: "unreachable" });
+                  return yield* new LedgerError({ reason: "unreachable" });
                 }
 
                 if (fault.append === "refused") {
-                  return { _tag: "refused", why: "seen_ahead" };
+                  return { _tag: "refused", reason: "seen_ahead" };
                 }
 
                 const answer = yield* mailbox.send(
@@ -691,18 +709,18 @@ const world = async (
 
                 if (fault.append === "after") {
                   fault.append = "";
-                  return yield* new LedgerError({ why: "unreachable" });
+                  return yield* new LedgerError({ reason: "unreachable" });
                 }
 
                 return answer;
               }),
-            commit: (id: string, session: { readonly parent: string }, stream: string, fact: { _tag: string }) =>
+            commit: (id: string, session: { readonly parent: string }, stream: string, event: { _tag: string }) =>
               Effect.gen(function* () {
-                calls.push({ kind: fact._tag, id, parent: session.parent });
-                const checked = yield* s.receipt(id, session.parent, process, fact._tag);
+                calls.push({ kind: event._tag, id, parent: session.parent });
+                const checked = yield* s.receipt(id, session.parent, process, event._tag);
 
-                if (fault.commitWhy !== "") {
-                  return { _tag: "refused", why: fault.commitWhy } as const;
+                if (fault.commitReason !== "") {
+                  return { _tag: "refused", reason: fault.commitReason } as const;
                 }
 
                 const answer = yield* ledger.append(
@@ -715,24 +733,24 @@ const world = async (
                       parent: checked.parent,
                       traceId: checked.traceId,
                     }),
-                    fact,
+                    event,
                   ),
                 );
 
                 if (fault.commit) {
                   fault.commit = false;
-                  return yield* new LedgerError({ why: "unreachable" });
+                  return yield* new LedgerError({ reason: "unreachable" });
                 }
 
                 return answer;
               }),
-            own: (id: string, stream: string, fact: { _tag: string }) =>
+            own: (id: string, stream: string, event: { _tag: string }) =>
               Effect.gen(function* () {
-                calls.push({ kind: fact._tag, id, parent: null });
+                calls.push({ kind: event._tag, id, parent: null });
                 return yield* ledger.append(
                   stream,
                   id,
-                  lineFor(from({ by: checkedOwner.key, for: checkedOwner.for }), fact),
+                  lineFor(from({ by: checkedOwner.key, for: checkedOwner.for }), event),
                 );
               }),
           };
@@ -824,35 +842,46 @@ describe("P11 activity durability, experiment 231", () => {
       }).pipe(Effect.provide(w.layer())),
     );
   });
-  it("plant, buffered marker: an abort at the start of the step wakes as interrupted, never idle", async () => {
-    const activity = activityStorage();
-    let starts = 0;
-    const w = await world({
-      storage: activity.storage,
-      onStep: () => {
-        starts++;
-        activity.abort();
-        throw new Error("object aborted at step entry");
-      },
-    });
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        expect(yield* failure(r.msg(w.input(1, { type: "add", n: 1 })))).toMatchObject({
-          _tag: "ProgramDown",
-          why: "step",
-        });
-      }).pipe(Effect.provide(w.layer())),
-    );
-    expect(starts).toBe(1);
-    expect(Result.getOrThrow(recoverActivity(activity.wake()))).toEqual({
-      _tag: "interrupted",
-      process: PROCESS,
-      letter: "letter-1",
-      build: BUILD,
-      why: "interrupted",
-    });
-  });
+  it.effect.prop(
+    "plant, buffered marker: an abort at the start of the step wakes as interrupted, never idle",
+    { generated: Schema.Int.check(Schema.isLessThanOrEqualTo(1000)) },
+    ({ generated }) =>
+      Effect.forEach(
+        [1, generated],
+        (value) =>
+          Effect.promise(async () => {
+            const activity = activityStorage();
+            let starts = 0;
+            const w = await world({
+              storage: activity.storage,
+              onStep: () => {
+                starts++;
+                activity.abort();
+                throw new Error("object aborted at step entry");
+              },
+            });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                expect(yield* failure(r.msg(w.input(1, { type: "add", n: value })))).toMatchObject({
+                  _tag: "ProgramDown",
+                  reason: "step",
+                });
+              }).pipe(Effect.provide(w.layer())),
+            );
+            expect(starts).toBe(1);
+            expect(Result.getOrThrow(recoverActivity(activity.wake()))).toEqual({
+              _tag: "interrupted",
+              process: PROCESS,
+              letter: "letter-1",
+              build: BUILD,
+              reason: "interrupted",
+            });
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 });
 
 describe("p14 turns and watcher revisions", () => {
@@ -929,147 +958,204 @@ describe("p14 turns and watcher revisions", () => {
 
 describe("p22 refusal and p25 thrown steps", () => {
   for (const [label, msg, answer] of [
-    ["bad fresh shape", { type: "add", n: "bad" }, { _tag: "refused", why: "bad_msg" }],
-    ["program refusal", { type: "add", n: 1001 }, { _tag: "refused", why: "limit", now: 0, most: 1000 }],
+    ["bad fresh shape", { type: "add", n: "bad" }, { _tag: "refused", reason: "bad_msg" }],
+    ["program refusal", { type: "add", n: 1001 }, { _tag: "refused", reason: "limit", now: 0, most: 1000 }],
   ] as const) {
-    it(`plant, append before refusal: ${label} changes no history, view or Cmd`, async () => {
-      const w = await world();
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          const before = yield* r.open("a");
-          expect(yield* r.msg(w.input(1, msg))).toEqual(answer);
-          expect(yield* inbox).toEqual([]);
-          expect(yield* steps).toEqual([]);
-          expect((yield* r.open("inspect")).view).toEqual(before.view);
-          expect(w.published.get("a")).toHaveLength(1);
-          expect(w.workCalls()).toBe(0);
-        }).pipe(Effect.provide(w.layer())),
-      );
-    });
+    it.effect.prop(
+      `plant, append before refusal: ${label} changes no history, view or Cmd`,
+      {
+        generated: label === "program refusal" ? Schema.Int.check(Schema.isGreaterThan(1000)) : Schema.String,
+      },
+      ({ generated }) =>
+        Effect.forEach(
+          [msg.n, generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world();
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  const before = yield* r.open("a");
+                  expect(yield* r.msg(w.input(1, { ...msg, n: value }))).toEqual(answer);
+                  expect(yield* inbox).toEqual([]);
+                  expect(yield* steps).toEqual([]);
+                  expect((yield* r.open("inspect")).view).toEqual(before.view);
+                  expect(w.published.get("a")).toHaveLength(1);
+                  expect(w.workCalls()).toBe(0);
+                }).pipe(Effect.provide(w.layer())),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 
-  it("plant, turn throw into refusal: a fresh throw leaves no accepted input, result or Cmd", async () => {
-    const w = await world();
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        yield* r.open("a");
-        expect(yield* failure(r.msg(w.input(1, { type: "throw" })))).toMatchObject({
-          _tag: "ProgramDown",
-          why: "step",
-        });
-        expect(yield* inbox).toEqual([]);
-        expect(yield* steps).toEqual([]);
-        expect(w.workCalls()).toBe(0);
-        expect(w.published.get("a")).toHaveLength(1);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
-  it("plant, skip a bad saved letter: recovery preserves all letters and accepts no later input", async () => {
-    const w = await world();
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const m = yield* Mailbox;
-        const placed: Array<{ id: string; rev: number; pos: number }> = [];
-
-        for (const [id, value] of [
-          ["good-a", 1],
-          ["bad", "bad"],
-          ["good-b", 2],
-        ] as const) {
-          const sent = yield* m.send(NAME, id, { type: "add", n: value }, from());
-
-          if (sent._tag === "placed") {
-            placed.push({ id, rev: sent.rev, pos: sent.pos });
-          }
-        }
-
-        // These letters were accepted before the saved model. Only accepted poison is down.
-        yield* ProcessStore.use((s) =>
-          s.save({ saved: { v: 1, build: BUILD, model: initial, after: 0 }, turn: null, cmds: [] }, placed),
-        );
-      }).pipe(
-        Effect.provide(
-          Layer.mergeAll(Mailbox.layer, ProcessStore.layer(w.store.sql, { process: PROCESS })).pipe(
-            Layer.provide(w.base()),
-          ),
-        ),
+  it.effect.prop(
+    "plant, turn throw into refusal: a fresh throw leaves no accepted input, result or Cmd",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        ["private reducer detail", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            Object.assign(w.p.machine.update, {
+              throw: () => {
+                throw new Error(value);
+              },
+            });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                yield* r.open("a");
+                expect(yield* failure(r.msg(w.input(1, { type: "throw" })))).toMatchObject({
+                  _tag: "ProgramDown",
+                  reason: "step",
+                });
+                expect(yield* inbox).toEqual([]);
+                expect(yield* steps).toEqual([]);
+                expect(w.workCalls()).toBe(0);
+                expect(w.published.get("a")).toHaveLength(1);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
       ),
-    );
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        const before = yield* inbox;
-        expect(yield* failure(r.open("a"))).toMatchObject({
-          _tag: "ProgramDown",
-          why: "saved_letter",
-        });
-        expect(yield* failure(r.msg(w.input(4, { type: "add", n: 3 })))).toMatchObject({
-          _tag: "ProgramDown",
-        });
-        expect(yield* inbox).toEqual(before);
-        expect(w.published.size).toBe(0);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
+  it.effect.prop(
+    "plant, skip a bad saved letter: recovery preserves all letters and accepts no later input",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        ["bad", generated],
+        (poison) =>
+          Effect.promise(async () => {
+            const w = await world();
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const m = yield* Mailbox;
+                const placed: Array<{ id: string; rev: number; pos: number }> = [];
+
+                for (const [id, value] of [
+                  ["good-a", 1],
+                  ["bad", poison],
+                  ["good-b", 2],
+                ] as const) {
+                  const sent = yield* m.send(NAME, id, { type: "add", n: value }, from());
+
+                  if (sent._tag === "placed") {
+                    placed.push({ id, rev: sent.rev, pos: sent.pos });
+                  }
+                }
+
+                // These letters were accepted before the saved model. Only accepted poison is down.
+                yield* ProcessStore.use((s) =>
+                  s.save({ saved: { v: 1, build: BUILD, model: initial, after: 0 }, turn: null, cmds: [] }, placed),
+                );
+              }).pipe(
+                Effect.provide(
+                  Layer.mergeAll(Mailbox.layer, ProcessStore.layer(w.store.sql, { process: PROCESS })).pipe(
+                    Layer.provide(w.base()),
+                  ),
+                ),
+              ),
+            );
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                const before = yield* inbox;
+                expect(yield* failure(r.open("a"))).toMatchObject({
+                  _tag: "ProgramDown",
+                  reason: "saved_letter",
+                });
+                expect(yield* failure(r.msg(w.input(4, { type: "add", n: 3 })))).toMatchObject({
+                  _tag: "ProgramDown",
+                });
+                expect(yield* inbox).toEqual(before);
+                expect(w.published.size).toBe(0);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 });
 
 describe("p35 Cmd order, replay and recorded failures", () => {
   for (const [mode, ok, answer, failures] of [
-    ["tagged", Schema.Int, { type: "work_err", error: { _tag: "disk" }, why: "disk" }, ["disk"]],
+    ["tagged", Schema.Int, { type: "work_err", error: { _tag: "disk" }, reason: "disk" }, ["disk"]],
     ["class", Schema.Struct({ n: Schema.Int }), { type: "work_ok", value: { n: 29 } }, []],
-    ["non_json", Schema.Unknown, { type: "work_err", error: { _tag: "bad_cmd" }, why: "bad_cmd" }, ["bad_cmd"]],
+    ["non_json", Schema.Unknown, { type: "work_err", error: { _tag: "bad_cmd" }, reason: "bad_cmd" }, ["bad_cmd"]],
   ] as const) {
-    it(`plant, save raw ${mode} handler answer: encode it or save bad_cmd, then step once`, async () => {
-      const w = await world();
-      w.fault.work = mode;
-      const declared = Cmd.make("work", { input: Schema.Struct({ n: Schema.Int }), ok, err: ["disk"] });
-      Object.assign(
-        w.p,
-        Program.make({
-          ...authoring(w.p.name),
-          machine: { ...machine, cmds: [write, declared, fire] },
-        }),
-      );
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          expect(yield* r.msg(w.input(1, { type: "work", n: 29 }))).toMatchObject({
-            _tag: "accepted",
-          });
-          const answers = yield* resultLetters;
-          expect(answers).toHaveLength(1);
-          expect(answers[0]?.body).toMatchObject({ m: answer });
+    it.effect.prop(
+      `plant, save raw ${mode} handler answer: encode it or save bad_cmd, then step once`,
+      { generated: Schema.Int },
+      ({ generated }) =>
+        Effect.forEach(
+          [29, generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world();
+              w.fault.work = mode;
+              const declared = Cmd.make("work", {
+                input: Schema.Struct({ n: Schema.Int }),
+                ok,
+                err: ["disk"],
+              });
+              Object.assign(
+                w.p,
+                Program.make({
+                  ...authoring(w.p.name),
+                  machine: { ...machine, cmds: [write, declared, fire] },
+                }),
+              );
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  expect(yield* r.msg(w.input(1, { type: "work", n: value }))).toMatchObject({
+                    _tag: "accepted",
+                  });
+                  const answers = yield* resultLetters;
+                  expect(answers).toHaveLength(1);
+                  expect(answers[0]?.body).toMatchObject({
+                    m: mode === "class" ? { ...answer, value: { n: value } } : answer,
+                  });
 
-          if (mode === "tagged") {
-            const saved = Schema.decodeUnknownSync(Schema.Struct({ m: Schema.Struct({ error: DiskError }) }))(
-              answers[0]!.body,
-            );
-            expect(saved.m.error).toBeInstanceOf(DiskError);
-          }
+                  if (mode === "tagged") {
+                    const saved = Schema.decodeUnknownSync(Schema.Struct({ m: Schema.Struct({ error: DiskError }) }))(
+                      answers[0]!.body,
+                    );
+                    expect(saved.m.error).toBeInstanceOf(DiskError);
+                  }
 
-          if (mode === "class") {
-            const saved = Schema.decodeUnknownSync(Schema.Struct({ m: Schema.Struct({ value: WorkValue }) }))(
-              answers[0]!.body,
-            );
-            expect(saved.m.value).toEqual(new WorkValue({ n: 29 }));
-          }
+                  if (mode === "class") {
+                    const saved = Schema.decodeUnknownSync(Schema.Struct({ m: Schema.Struct({ value: WorkValue }) }))(
+                      answers[0]!.body,
+                    );
+                    expect(saved.m.value).toEqual(new WorkValue({ n: value }));
+                  }
 
-          expect((yield* r.open("answered")).view).toMatchObject({ replies: 1, failures });
-          expect((yield* ProcessStore.use((s) => s.load))?.cmds).toEqual([]);
-        }).pipe(Effect.provide(w.layer())),
-      );
-      w.reopen();
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          expect((yield* r.open("after-wake")).view).toMatchObject({ replies: 1, failures });
-          expect(yield* resultLetters).toHaveLength(1);
-          expect(w.workCalls()).toBe(1);
-        }).pipe(Effect.provide(w.layer())),
-      );
-    });
+                  expect((yield* r.open("answered")).view).toMatchObject({ replies: 1, failures });
+                  expect((yield* ProcessStore.use((s) => s.load))?.cmds).toEqual([]);
+                }).pipe(Effect.provide(w.layer())),
+              );
+              w.reopen();
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  expect((yield* r.open("after-wake")).view).toMatchObject({ replies: 1, failures });
+                  expect(yield* resultLetters).toHaveLength(1);
+                  expect(w.workCalls()).toBe(1);
+                }).pipe(Effect.provide(w.layer())),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 
   it("plant, fire before append: a real handler sees its saved input before it runs", async () => {
@@ -1105,55 +1191,77 @@ describe("p35 Cmd order, replay and recorded failures", () => {
     });
   }
 
-  for (const [mode, why] of [
+  for (const [mode, reason] of [
     ["declared", "disk"],
     ["undeclared", "bad_cmd"],
     ["throw", "handler_failed"],
     ["malformed", "bad_cmd"],
   ] as const) {
-    it(`plant, drop ${mode} result: one saved failure with why reaches update once`, async () => {
-      const w = await world();
-      w.fault.work = mode;
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          yield* r.msg(w.input(1, { type: "work", n: 23 }));
-          const answers = yield* resultLetters;
-          expect(answers).toHaveLength(1);
-          expect(answers[0]?.body).toMatchObject({ m: { type: "work_err", why } });
-          expect((yield* r.open("inspect")).view.replies).toBe(1);
-        }).pipe(Effect.provide(w.layer())),
-      );
-      w.reopen();
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          expect((yield* r.open("after-wake")).view.replies).toBe(1);
-          expect(yield* resultLetters).toHaveLength(1);
-          expect(w.workCalls()).toBe(1);
-        }).pipe(Effect.provide(w.layer())),
-      );
-    });
+    it.effect.prop(
+      `plant, drop ${mode} result: one saved failure with reason reaches update once`,
+      { generated: Schema.Int },
+      ({ generated }) =>
+        Effect.forEach(
+          [23, generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world();
+              w.fault.work = mode;
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  yield* r.msg(w.input(1, { type: "work", n: value }));
+                  const answers = yield* resultLetters;
+                  expect(answers).toHaveLength(1);
+                  expect(answers[0]?.body).toMatchObject({ m: { type: "work_err", reason } });
+                  expect((yield* r.open("inspect")).view.replies).toBe(1);
+                }).pipe(Effect.provide(w.layer())),
+              );
+              w.reopen();
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  expect((yield* r.open("after-wake")).view.replies).toBe(1);
+                  expect(yield* resultLetters).toHaveLength(1);
+                  expect(w.workCalls()).toBe(1);
+                }).pipe(Effect.provide(w.layer())),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 
   for (const name of ["queue", "chaos"]) {
-    it(`plant, dispatch fire by name alone: fire in ${name} respects its owning program`, async () => {
-      const w = await world({ name });
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          yield* r.msg(w.input(1, { type: "fire" }));
-          expect(w.fireCalls()).toBe(name === "chaos" ? 1 : 0);
-          expect(yield* resultLetters).toHaveLength(1);
-          expect((yield* resultLetters)[0]?.body).toMatchObject({
-            m: {
-              type: name === "chaos" ? "fire_ok" : "fire_err",
-              ...(name === "chaos" ? {} : { why: "bad_cmd" }),
-            },
-          });
-        }).pipe(Effect.provide(w.layer())),
-      );
-    });
+    it.effect.prop(
+      `plant, dispatch fire by name alone: fire in ${name} respects its owning program`,
+      { generated: Schema.NonEmptyString },
+      ({ generated }) =>
+        Effect.forEach(
+          [name, generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world({ name: value });
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  yield* r.msg(w.input(1, { type: "fire" }));
+                  expect(w.fireCalls()).toBe(value === "chaos" ? 1 : 0);
+                  expect(yield* resultLetters).toHaveLength(1);
+                  expect((yield* resultLetters)[0]?.body).toMatchObject({
+                    m: {
+                      type: value === "chaos" ? "fire_ok" : "fire_err",
+                      ...(value === "chaos" ? {} : { reason: "bad_cmd" }),
+                    },
+                  });
+                }).pipe(Effect.provide(w.layer())),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 
   it("plant, execute folded Cmds: wake rebuilds state from inbox without calling handlers", async () => {
@@ -1248,34 +1356,45 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 });
 
 describe("p69 sender survives queued work and Cmd replies", () => {
-  it("p69 plant, strip a mail parent: mail cannot borrow an unspent person approval", async () => {
-    const w = await world();
-    const person = w.input(1, { type: "request", token: "person", tag: "answered" });
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        yield* w.deliver(person, "approve");
-        const m = yield* Mailbox;
-        expect(
-          yield* m.send(
-            NAME,
-            "borrowed-mail",
-            { type: "request", token: "borrowed", parent: person.envelope.id, tag: "answered" },
-            from({ by: writer("agent").key }),
-          ),
-        ).toMatchObject({ _tag: "placed" });
-        expect((yield* r.open("mail-parent")).view).toEqual(initial);
-        expect(yield* steps).toEqual([]);
-        expect(yield* ProcessStore.use((s) => s.placed("borrowed-mail"))).toBeNull();
-        expect(yield* facts).toEqual([]);
-        expect(w.signCalls).toEqual([]);
-        expect(w.authority.db().prepare("SELECT count(*) AS n FROM door_receipts").get()?.n).toBe(0);
-        // Mail still works on a public port; only the borrowed parent is refused.
-        yield* m.send(NAME, "ordinary-mail", { type: "add", n: 2 }, from());
-        expect((yield* r.open("ordinary")).view.count).toBe(2);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+  it.effect.prop(
+    "p69 plant, strip a mail parent: mail cannot borrow an unspent person approval",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        ["borrowed", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            const person = w.input(1, { type: "request", token: "person", tag: "answered" });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                yield* w.deliver(person, "approve");
+                const m = yield* Mailbox;
+                expect(
+                  yield* m.send(
+                    NAME,
+                    "borrowed-mail",
+                    { type: "request", token: value, parent: person.envelope.id, tag: "answered" },
+                    from({ by: writer("agent").key }),
+                  ),
+                ).toMatchObject({ _tag: "placed" });
+                expect((yield* r.open("mail-parent")).view).toEqual(initial);
+                expect(yield* steps).toEqual([]);
+                expect(yield* ProcessStore.use((s) => s.placed("borrowed-mail"))).toBeNull();
+                expect(yield* events).toEqual([]);
+                expect(w.signCalls).toEqual([]);
+                expect(w.authority.db().prepare("SELECT count(*) AS n FROM door_receipts").get()?.n).toBe(0);
+                // Mail still works on a public port; only the borrowed parent is refused.
+                yield* m.send(NAME, "ordinary-mail", { type: "add", n: 2 }, from());
+                expect((yield* r.open("ordinary")).view.count).toBe(2);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 
   for (const as of ["person", "agent"] as const) {
     it(`p69 plant, admit person-only mail: mail from ${as} cannot use a person-only port`, async () => {
@@ -1341,137 +1460,188 @@ describe("p69 sender survives queued work and Cmd replies", () => {
     });
   }
 
-  it("p69 plant, trust a client parent: an agent cannot borrow an unspent person approval in the same process", async () => {
-    const w = await world();
-    const person = w.input(1, {
-      type: "request",
-      token: "person",
-      tag: "answered",
-    });
-    const agent = w.input(
-      2,
-      { type: "request", token: "borrowed", parent: person.envelope.id, tag: "answered" },
-      "agent",
-    );
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r = yield* w.ProgramRunner;
-        // P10 has delivered both to this process. The person's press has never reached the
-        // program or spent a receipt. Cross-process and spent-parent guards cannot save us.
-        yield* w.deliver(person, "approve");
-        yield* w.deliver(agent, "comment");
-        expect(w.authority.db().prepare("SELECT count(*) AS n FROM door_receipts").get()?.n).toBe(0);
-        const sent = yield* r.msg(agent);
-        expect(yield* facts, "an agent input must never produce a person-signed answered").toEqual([]);
-        expect(sent).toMatchObject({ _tag: "refused" });
-        expect(w.signCalls).toEqual([]);
-        expect(yield* inbox).toEqual([]);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
-  it("p69 plant, omit the door stamp: a parent-free input gives the program its own envelope id", async () => {
-    const w = await world();
-    const Stamped = Schema.Struct({
-      type: Schema.Literal("work"),
-      n: Schema.Int,
-      parent: Schema.optionalKey(Schema.String),
-    });
-    Object.assign(
-      w.p,
-      Program.make({
-        ...authoring(w.p.name),
-        machine: {
-          ...machine,
-          update: {
-            ...machine.update,
-            work: (s: Model, m: typeof Stamped.Type) => [
-              { ...s, note: m.parent ?? "no stamped parent" },
-              m.parent === undefined
-                ? []
-                : [
-                    write({
-                      stream: "facts",
-                      write: {
-                        _tag: "caused",
-                        parent: m.parent,
-                        fact: { _tag: "saved", token: "stamped" },
-                      },
-                    }),
-                  ],
-            ],
-          },
-        },
-      }),
-    );
-    const input = w.input(1, { type: "work", n: 1 }, "agent");
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r = yield* w.ProgramRunner;
-        yield* w.deliver(input, "comment");
-        expect(yield* r.msg(input)).toMatchObject({ _tag: "accepted" });
-        expect((yield* r.open("stamp")).view).toMatchObject({ note: input.envelope.id });
-        expect((yield* facts).map((row) => ({ by: row.by, parent: row.parent }))).toEqual([
-          { by: writer("agent").key, parent: input.envelope.id },
-        ]);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
-  it("plant, pair Cmd with latest Msg: a person's completion releases an agent's queued write", async () => {
-    const w = await world();
-    w.fault.pause = true;
-    const a = w.input(1, { type: "work", n: 37 });
-    const b = w.input(2, { type: "request", token: "b", tag: "saved" }, "agent");
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        yield* w.deliver(a);
-        yield* w.deliver(b, "comment");
-        const running = yield* r.msg(a).pipe(Effect.forkChild);
-        yield* Deferred.await(w.entered);
-        yield* r.msg(b);
-        expect((yield* r.open("queued")).view.queue).toEqual([{ token: "b", parent: b.envelope.id, tag: "saved" }]);
-        yield* Deferred.succeed(w.gate, undefined);
-        yield* Fiber.join(running);
-        const rows = yield* facts;
-        expect(rows.map((row) => ({ token: body(row).token, by: row.by, parent: row.parent }))).toEqual([
-          { token: "b", by: writer("agent").key, parent: b.envelope.id },
-        ]);
-        expect((yield* r.open("done")).view).toMatchObject({ queue: [], replies: 2 });
-        expect(w.signCalls).toMatchObject([{ parent: b.envelope.id, process: PROCESS, kind: "saved" }]);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
-  it("plant, read expected writers from returned parents: generated inputs keep an independent sender table", async () => {
-    const generated = fc.sample(fc.array(fc.boolean(), { minLength: 8, maxLength: 16 }), {
-      seed: SEED,
-      numRuns: 1,
-    })[0]!;
-    const w = await world();
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        const expected: Array<{ token: string; by: string; parent: string | null }> = [];
+  it.effect.prop(
+    "p69 plant, trust a client parent: an agent cannot borrow an unspent person approval in the same process",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        ["borrowed", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            const person = w.input(1, {
+              type: "request",
+              token: "person",
+              tag: "answered",
+            });
+            const agent = w.input(
+              2,
+              { type: "request", token: value, parent: person.envelope.id, tag: "answered" },
+              "agent",
+            );
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r = yield* w.ProgramRunner;
+                // P10 has delivered both to this process. The person's press has never reached the
+                // program or spent a receipt. Cross-process and spent-parent guards cannot save us.
+                yield* w.deliver(person, "approve");
+                yield* w.deliver(agent, "comment");
+                expect(w.authority.db().prepare("SELECT count(*) AS n FROM door_receipts").get()?.n).toBe(0);
+                const sent = yield* r.msg(agent);
+                expect(yield* events, "an agent input must never produce a person-signed answered").toEqual([]);
+                expect(sent).toMatchObject({ _tag: "refused" });
+                expect(w.signCalls).toEqual([]);
+                expect(yield* inbox).toEqual([]);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
+  it.effect.prop(
+    "p69 plant, omit the door stamp: a parent-free input gives the program its own envelope id",
+    { generated: Schema.Int },
+    ({ generated }) =>
+      Effect.forEach(
+        [1, generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            const Stamped = Schema.Struct({
+              type: Schema.Literal("work"),
+              n: Schema.Int,
+              parent: Schema.optionalKey(Schema.String),
+            });
+            Object.assign(
+              w.p,
+              Program.make({
+                ...authoring(w.p.name),
+                machine: {
+                  ...machine,
+                  update: {
+                    ...machine.update,
+                    work: (s: Model, m: typeof Stamped.Type) => [
+                      { ...s, note: m.parent ?? "no stamped parent" },
+                      m.parent === undefined
+                        ? []
+                        : [
+                            write({
+                              stream: "facts",
+                              write: {
+                                _tag: "caused",
+                                parent: m.parent,
+                                event: { _tag: "saved", token: "stamped" },
+                              },
+                            }),
+                          ],
+                    ],
+                  },
+                },
+              }),
+            );
+            const input = w.input(1, { type: "work", n: value }, "agent");
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r = yield* w.ProgramRunner;
+                yield* w.deliver(input, "comment");
+                expect(yield* r.msg(input)).toMatchObject({ _tag: "accepted" });
+                expect((yield* r.open("stamp")).view).toMatchObject({ note: input.envelope.id });
+                expect((yield* events).map((row) => ({ by: row.by, parent: row.parent }))).toEqual([
+                  { by: writer("agent").key, parent: input.envelope.id },
+                ]);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
+  it.effect.prop(
+    "plant, pair Cmd with latest Msg: a person's completion releases an agent's queued write",
+    { generated: Request.fields.token },
+    ({ generated }) =>
+      Effect.forEach(
+        ["b", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            w.fault.pause = true;
+            const a = w.input(1, { type: "work", n: 37 });
+            const b = w.input(2, { type: "request", token: value, tag: "saved" }, "agent");
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                yield* w.deliver(a);
+                yield* w.deliver(b, "comment");
+                const running = yield* r.msg(a).pipe(Effect.forkChild);
+                yield* Deferred.await(w.entered);
+                yield* r.msg(b);
+                expect((yield* r.open("queued")).view.queue).toEqual([
+                  { token: value, parent: b.envelope.id, tag: "saved" },
+                ]);
+                yield* Deferred.succeed(w.gate, undefined);
+                yield* Fiber.join(running);
+                const rows = yield* events;
+                expect(rows.map((row) => ({ token: body(row).token, by: row.by, parent: row.parent }))).toEqual([
+                  { token: value, by: writer("agent").key, parent: b.envelope.id },
+                ]);
+                expect((yield* r.open("done")).view).toMatchObject({ queue: [], replies: 2 });
+                expect(w.signCalls).toMatchObject([{ parent: b.envelope.id, process: PROCESS, kind: "saved" }]);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
+  it.effect.prop(
+    "plant, read expected writers from returned parents: generated inputs keep an independent sender table",
+    { generated: Schema.Array(Schema.Boolean).check(Schema.isMinLength(8), Schema.isMaxLength(16)) },
+    ({ generated }) =>
+      Effect.forEach(
+        [undefined, generated],
+        (value) =>
+          Effect.promise(async () => {
+            const generated = fc.sample(fc.array(fc.boolean(), { minLength: 8, maxLength: 16 }), {
+              seed: SEED,
+              numRuns: 1,
+            })[0]!;
+            const senders = value ?? generated;
+            const w = await world();
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                const expected: Array<{ token: string; by: string; parent: string | null }> = [];
 
-        for (const [index, asPerson] of generated.entries()) {
-          const token = `request-${index}`;
-          const as = asPerson ? "person" : "agent";
-          const m = w.input(index + 1, { type: "request", token, tag: "saved" }, as);
-          expected.push({ token, by: writer(as).key, parent: m.envelope.id });
-          yield* w.deliver(m, "comment");
-          yield* r.msg(m);
-        }
+                for (const [index, asPerson] of senders.entries()) {
+                  const token = `request-${index}`;
+                  const as = asPerson ? "person" : "agent";
+                  const m = w.input(index + 1, { type: "request", token, tag: "saved" }, as);
+                  expected.push({ token, by: writer(as).key, parent: m.envelope.id });
+                  yield* w.deliver(m, "comment");
+                  yield* r.msg(m);
+                }
 
-        const own = w.input(99, { type: "background", token: "own", tag: "polled" });
-        yield* r.msg(own);
-        expected.push({ token: "own", by: owner.key, parent: null });
-        expect((yield* facts).map((row) => ({ token: body(row).token, by: row.by, parent: row.parent }))).toEqual(
-          expected,
-        );
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+                const own = w.input(99, { type: "background", token: "own", tag: "polled" });
+                yield* r.msg(own);
+                expected.push({ token: "own", by: owner.key, parent: null });
+                expect(
+                  (yield* events).map((row) => ({
+                    token: body(row).token,
+                    by: row.by,
+                    parent: row.parent,
+                  })),
+                ).toEqual(expected);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 
-  for (const [scenario, why, as, inputName, parentProcess] of [
+  for (const [scenario, reason, as, inputName, parentProcess] of [
     ["undelivered", "not_delivered", "person", "approve", PROCESS],
     ["another process", "not_delivered", "person", "approve", REPLACEMENT],
     ["person comment", "person_only", "person", "comment", PROCESS],
@@ -1479,162 +1649,236 @@ describe("p69 sender survives queued work and Cmd replies", () => {
     ["agent approval", "person_only", "agent", "approve", PROCESS],
     ["ended process", "ended", "person", "approve", PROCESS],
   ] as const) {
-    it(`plant, fall back to owner: ${scenario} writes nothing and records ${why}`, async () => {
-      const w = await world();
-      const i = w.input(1, { type: "request", token: "refused", tag: "answered" }, as);
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          const s = yield* SessionManager;
+    it.effect.prop(
+      `plant, fall back to owner: ${scenario} writes nothing and records ${reason}`,
+      { generated: Request.fields.token },
+      ({ generated }) =>
+        Effect.forEach(
+          ["refused", generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world();
+              const i = w.input(1, { type: "request", token: value, tag: "answered" }, as);
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  const s = yield* SessionManager;
 
-          if (scenario !== "undelivered") {
-            yield* w.deliver(i, inputName, parentProcess);
-          }
+                  if (scenario !== "undelivered") {
+                    yield* w.deliver(i, inputName, parentProcess);
+                  }
 
-          if (scenario === "ended process") {
-            yield* s.end(PROCESS);
-          }
+                  if (scenario === "ended process") {
+                    yield* s.end(PROCESS);
+                  }
 
-          yield* r.msg(i);
-          expect(yield* facts).toEqual([]);
-          expect(w.calls.filter((c) => c.parent === null)).toEqual([]);
-          expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { type: "write_err", why } });
-        }).pipe(Effect.provide(w.layer())),
-      );
-    });
+                  yield* r.msg(i);
+                  expect(yield* events).toEqual([]);
+                  expect(w.calls.filter((c) => c.parent === null)).toEqual([]);
+                  expect((yield* resultLetters).at(-1)?.body).toMatchObject({
+                    m: { type: "write_err", reason },
+                  });
+                }).pipe(Effect.provide(w.layer())),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 
-  it("plant, spend by Cmd position: a second answered with the same parent is refused", async () => {
-    const w = await world();
-    Object.assign(
-      w.p,
-      Program.make({
-        ...authoring(w.p.name),
-        machine: {
-          ...machine,
-          update: {
-            ...machine.update,
-            request: (s: Model, m: Request) => [s, [command(m), command({ ...m, token: "second" })]],
-          },
-        },
-      }),
-    );
-    const first = w.input(1, { type: "request", token: "first", tag: "answered" });
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        yield* w.deliver(first);
-        yield* r.msg(first);
-        expect((yield* facts).map((row) => body(row).token)).toEqual(["first"]);
-        expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { why: "spent" } });
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
-  it("plant, own bypasses personOnly: even a person-owned process needs a qualifying parent", async () => {
-    const w = await world({ owner: writer("person") });
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        yield* r.msg(w.input(1, { type: "background", token: "own-approval", tag: "answered" }));
-        expect(yield* facts).toEqual([]);
-        expect(w.calls, "the runner must refuse before reaching the permissive own writer").toEqual([]);
-        expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { why: "person_only" } });
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+  it.effect.prop(
+    "plant, spend by Cmd position: a second answered with the same parent is refused",
+    { generated: Request.fields.token },
+    ({ generated }) =>
+      Effect.forEach(
+        ["first", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            Object.assign(
+              w.p,
+              Program.make({
+                ...authoring(w.p.name),
+                machine: {
+                  ...machine,
+                  update: {
+                    ...machine.update,
+                    request: (s: Model, m: Request) => [s, [command(m), command({ ...m, token: "second" })]],
+                  },
+                },
+              }),
+            );
+            const first = w.input(1, { type: "request", token: value, tag: "answered" });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                yield* w.deliver(first);
+                yield* r.msg(first);
+                expect((yield* events).map((row) => body(row).token)).toEqual([value]);
+                expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { reason: "spent" } });
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
+  it.effect.prop(
+    "plant, own bypasses personOnly: even a person-owned process needs a qualifying parent",
+    { generated: Request.fields.token },
+    ({ generated }) =>
+      Effect.forEach(
+        ["own-approval", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world({ owner: writer("person") });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                yield* r.msg(w.input(1, { type: "background", token: value, tag: "answered" }));
+                expect(yield* events).toEqual([]);
+                expect(w.calls, "the runner must refuse before reaching the permissive own writer").toEqual([]);
+                expect((yield* resultLetters).at(-1)?.body).toMatchObject({
+                  m: { reason: "person_only" },
+                });
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 
   for (const lost of ["sign", "commit"] as const) {
-    it(`plant, new write id after lost ${lost} reply: retry uses the saved receipt and places once`, async () => {
-      const w = await world();
-      w.fault[lost] = true;
-      const i = w.input(1, { type: "request", token: "retry", tag: "saved" }, "agent");
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          yield* w.deliver(i, "comment");
-          yield* Effect.exit(r.msg(i));
-        }).pipe(Effect.provide(w.layer())),
-      );
-      w.reopen();
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          expect(yield* r.msg(i)).toMatchObject({ _tag: "accepted" });
-          expect((yield* facts).map((row) => ({ by: row.by, parent: row.parent }))).toEqual([
-            { by: writer("agent").key, parent: i.envelope.id },
-          ]);
-          expect(w.signCalls.length).toBeGreaterThanOrEqual(2);
-          expect(new Set(w.signCalls.map((call) => call.id)).size).toBe(1);
-          expect((yield* resultLetters).filter((row) => JSON.stringify(row.body).includes("write_ok"))).toHaveLength(1);
-        }).pipe(Effect.provide(w.layer())),
-      );
-    });
+    it.effect.prop(
+      `plant, new write id after lost ${lost} reply: retry uses the saved receipt and places once`,
+      { generated: Request.fields.token },
+      ({ generated }) =>
+        Effect.forEach(
+          ["retry", generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world();
+              w.fault[lost] = true;
+              const i = w.input(1, { type: "request", token: value, tag: "saved" }, "agent");
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  yield* w.deliver(i, "comment");
+                  yield* Effect.exit(r.msg(i));
+                }).pipe(Effect.provide(w.layer())),
+              );
+              w.reopen();
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  expect(yield* r.msg(i)).toMatchObject({ _tag: "accepted" });
+                  expect((yield* events).map((row) => ({ by: row.by, parent: row.parent }))).toEqual([
+                    { by: writer("agent").key, parent: i.envelope.id },
+                  ]);
+                  expect(w.signCalls.length).toBeGreaterThanOrEqual(2);
+                  expect(new Set(w.signCalls.map((call) => call.id)).size).toBe(1);
+                  expect(
+                    (yield* resultLetters).filter((row) => JSON.stringify(row.body).includes("write_ok")),
+                  ).toHaveLength(1);
+                }).pipe(Effect.provide(w.layer())),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 
-  it("plant, sender table in runner memory: a queued parent survives a same-process storage wake", async () => {
-    const w = await world();
-    w.fault.pause = true;
-    const a = w.input(1, { type: "work", n: 41 });
-    const b = w.input(2, { type: "request", token: "queued-after-wake", tag: "saved" }, "agent");
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        yield* w.deliver(a);
-        yield* w.deliver(b, "comment");
-        const running = yield* r.msg(a).pipe(Effect.forkChild);
-        yield* Deferred.await(w.entered);
-        yield* r.msg(b);
-        yield* Fiber.interrupt(running);
-      }).pipe(Effect.provide(w.layer())),
-    );
-    w.reopen();
-    w.fault.pause = false;
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        expect((yield* r.open("wake")).view.queue).toEqual([
-          { token: "queued-after-wake", parent: b.envelope.id, tag: "saved" },
-        ]);
-        // A late brain-written answer, not a fresh client input.
-        yield* Ledger.use((ledger) =>
-          ledger.append(
-            `${NAME}/inbox`,
-            `${PROCESS}/1/0/answer`,
-            lineFor(from({ parent: a.envelope.id }), {
-              _tag: "send",
-              m: Schema.decodeUnknownSync(Schema.Json)(work.ok(work({ n: 41 }), 41, 1794099600003)),
-            }),
-          ),
-        );
-        yield* r.open("late-answer");
-        expect((yield* ProcessStore.use((s) => s.load))?.cmds).toMatchObject([
-          { cmd: { type: "write", write: { _tag: "caused", parent: b.envelope.id } } },
-        ]);
-        const session = yield* SessionManager.use((s) => s.signer(b.envelope.id, PROCESS, "saved")).pipe(
-          Effect.provideService(SignRequest, { id: `${PROCESS}/3/0` }),
-        );
-        expect(session).toMatchObject({ by: writer("agent"), parent: b.envelope.id });
-        expect(yield* facts).toEqual([]);
-        expect(w.workCalls()).toBe(1);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
-  it("plant, reuse old authority after replacement: old parent cannot sign for a new process id", async () => {
-    const w = await world({ process: REPLACEMENT });
-    const i = w.input(1, { type: "request", token: "old-queue", tag: "saved" }, "agent");
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        const s = yield* SessionManager;
-        yield* w.deliver(i, "comment", PROCESS);
-        yield* s.end(PROCESS);
-        yield* r.msg(i);
-        expect(yield* facts).toEqual([]);
-        expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { why: "not_delivered" } });
-        expect(w.signCalls).toMatchObject([{ process: REPLACEMENT, parent: i.envelope.id }]);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+  it.effect.prop(
+    "plant, sender table in runner memory: a queued parent survives a same-process storage wake",
+    { generated: Request.fields.token },
+    ({ generated }) =>
+      Effect.forEach(
+        ["queued-after-wake", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            w.fault.pause = true;
+            const a = w.input(1, { type: "work", n: 41 });
+            const b = w.input(2, { type: "request", token: value, tag: "saved" }, "agent");
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                yield* w.deliver(a);
+                yield* w.deliver(b, "comment");
+                const running = yield* r.msg(a).pipe(Effect.forkChild);
+                yield* Deferred.await(w.entered);
+                yield* r.msg(b);
+                yield* Fiber.interrupt(running);
+              }).pipe(Effect.provide(w.layer())),
+            );
+            w.reopen();
+            w.fault.pause = false;
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                expect((yield* r.open("wake")).view.queue).toEqual([
+                  { token: value, parent: b.envelope.id, tag: "saved" },
+                ]);
+                // A late brain-written answer, not a fresh client input.
+                yield* Ledger.use((ledger) =>
+                  ledger.append(
+                    `${NAME}/inbox`,
+                    `${PROCESS}/1/0/answer`,
+                    lineFor(from({ parent: a.envelope.id }), {
+                      _tag: "send",
+                      m: Schema.decodeUnknownSync(Schema.Json)(work.ok(work({ n: 41 }), 41, 1794099600003)),
+                    }),
+                  ),
+                );
+                yield* r.open("late-answer");
+                expect((yield* ProcessStore.use((s) => s.load))?.cmds).toMatchObject([
+                  { cmd: { type: "write", write: { _tag: "caused", parent: b.envelope.id } } },
+                ]);
+                const session = yield* SessionManager.use((s) => s.signer(b.envelope.id, PROCESS, "saved")).pipe(
+                  Effect.provideService(SignRequest, { id: `${PROCESS}/3/0` }),
+                );
+                expect(session).toMatchObject({ by: writer("agent"), parent: b.envelope.id });
+                expect(yield* events).toEqual([]);
+                expect(w.workCalls()).toBe(1);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
+  it.effect.prop(
+    "plant, reuse old authority after replacement: old parent cannot sign for a new process id",
+    { generated: Request.fields.token },
+    ({ generated }) =>
+      Effect.forEach(
+        ["old-queue", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world({ process: REPLACEMENT });
+            const i = w.input(1, { type: "request", token: value, tag: "saved" }, "agent");
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                const s = yield* SessionManager;
+                yield* w.deliver(i, "comment", PROCESS);
+                yield* s.end(PROCESS);
+                yield* r.msg(i);
+                expect(yield* events).toEqual([]);
+                expect((yield* resultLetters).at(-1)?.body).toMatchObject({
+                  m: { reason: "not_delivered" },
+                });
+                expect(w.signCalls).toMatchObject([{ process: REPLACEMENT, parent: i.envelope.id }]);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 });
 
 describe("P11 review: fresh input, accepted history, and brain-only ids", () => {
@@ -1642,26 +1886,40 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
     { type: "work_ok", cmd: work({ n: 1 }), value: 1, at: 42 },
     {
       type: "write_ok",
-      cmd: write({ stream: "facts", write: { _tag: "own", fact: { _tag: "polled", token: "forged" } } }),
+      cmd: write({ stream: "facts", write: { _tag: "own", event: { _tag: "polled", token: "forged" } } }),
       value: {},
       at: 42,
     },
     { type: "timer", at: 42 },
   ]) {
-    it(`plant, accept a client answer: fresh ${msg.type} cannot settle work or fire the timer`, async () => {
-      const w = await world();
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r = yield* w.ProgramRunner;
-          yield* r.open("before");
-          expect(yield* r.msg(w.input(1, msg))).toMatchObject({ _tag: "refused", why: "bad_msg" });
-          expect(yield* inbox).toEqual([]);
-          expect(w.workCalls()).toBe(0);
-          expect((yield* r.open("after")).view).toMatchObject({ count: 0, replies: 0 });
-          expect(w.published.get("before")).toHaveLength(1);
-        }).pipe(Effect.provide(w.layer())),
-      );
-    });
+    it.effect.prop(
+      `plant, accept a client answer: fresh ${msg.type} cannot settle work or fire the timer`,
+      { generated: Schema.Record(Schema.String, Schema.Json) },
+      ({ generated }) =>
+        Effect.forEach(
+          [msg, generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world();
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r = yield* w.ProgramRunner;
+                  yield* r.open("before");
+                  expect(yield* r.msg(w.input(1, { ...value, type: msg.type }))).toMatchObject({
+                    _tag: "refused",
+                    reason: "bad_msg",
+                  });
+                  expect(yield* inbox).toEqual([]);
+                  expect(w.workCalls()).toBe(0);
+                  expect((yield* r.open("after")).view).toMatchObject({ count: 0, replies: 0 });
+                  expect(w.published.get("before")).toHaveLength(1);
+                }).pipe(Effect.provide(w.layer())),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 
   it("plant, fold every inbox row: unaccepted mail goes through the fresh refusal", async () => {
@@ -1710,49 +1968,82 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
     });
   }
 
-  it("plant, fold DOWN as a saved Msg: a real P33 signal cannot mark its recipient down", async () => {
-    const w = await world();
-    const to = Recipient.cases.process.make({ process: PROCESS });
-    const down = Down.make({ ref: "child", process: REPLACEMENT, why: "ended", to });
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const ledger = yield* Ledger;
-        expect(
-          yield* ledger.append(
-            `${NAME}/inbox`,
-            signalId(to, "child", 1),
-            lineFor(from({ by: "SHA256:brain" }), { _tag: "send", m: down }),
-          ),
-        ).toMatchObject({ _tag: "placed" });
-        const r = yield* w.ProgramRunner;
-        const opened = yield* Effect.exit(r.open("down-mail"));
-        expect(opened._tag, "DOWN is fresh mail, never a corrupt accepted letter").toBe("Success");
+  it.effect.prop(
+    "plant, fold DOWN as a saved Msg: a real P33 signal cannot mark its recipient down",
+    { generated: Down.fields.reason },
+    ({ generated }) =>
+      Effect.forEach(
+        ["ended", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            const to = Recipient.cases.process.make({ process: PROCESS });
+            const down = Down.make({ ref: "child", process: REPLACEMENT, reason: value, to });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const ledger = yield* Ledger;
+                expect(
+                  yield* ledger.append(
+                    `${NAME}/inbox`,
+                    signalId(to, "child", 1),
+                    lineFor(from({ by: "SHA256:brain" }), { _tag: "send", m: down }),
+                  ),
+                ).toMatchObject({ _tag: "placed" });
+                const r = yield* w.ProgramRunner;
+                const opened = yield* Effect.exit(r.open("down-mail"));
+                expect(opened._tag, "DOWN is fresh mail, never a corrupt accepted letter").toBe("Success");
 
-        if (Exit.isSuccess(opened)) {
-          expect(opened.value.view).toMatchObject({ count: 0 });
-        }
+                if (Exit.isSuccess(opened)) {
+                  expect(opened.value.view).toMatchObject({ count: 0 });
+                }
 
-        expect(yield* r.msg(w.input(1, { type: "add", n: 1 }))).toMatchObject({ _tag: "accepted" });
-        expect((yield* r.open("still-live")).view).toMatchObject({ count: 1 });
-        expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+                expect(yield* r.msg(w.input(1, { type: "add", n: 1 }))).toMatchObject({
+                  _tag: "accepted",
+                });
+                expect((yield* r.open("still-live")).view).toMatchObject({ count: 1 });
+                expect((yield* read(PROCESS)).filter((row) => row._tag === "down")).toEqual([]);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 
   for (const id of [`${PROCESS}/1/0/answer`, `${PROCESS}/due/42`]) {
-    it(`plant, leave ${id} public: mail cannot squat on a runner-owned id`, async () => {
-      const w = await world();
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const mailbox = yield* Mailbox;
-          expect(yield* mailbox.send(NAME, id, { type: "add", n: 999 }, from())).toEqual({
-            _tag: "refused",
-            why: "forbidden",
-          });
-          expect(yield* inbox).toEqual([]);
-        }).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provideMerge(w.base())))),
-      );
-    });
+    it.effect.prop(
+      `plant, leave ${id} public: mail cannot squat on a runner-owned id`,
+      {
+        generated: Arbitrary.all({
+          process: processIds,
+          n: Arbitrary.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+        }).pipe(
+          Arbitrary.map(({ process, n }) =>
+            id.includes("/due/") ? `${process}/due/${n}` : `${process}/${n}/0/answer`,
+          ),
+        ),
+      },
+      ({ generated }) =>
+        Effect.forEach(
+          [id, generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world();
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const mailbox = yield* Mailbox;
+                  expect(yield* mailbox.send(NAME, value, { type: "add", n: 999 }, from())).toEqual({
+                    _tag: "refused",
+                    reason: "forbidden",
+                  });
+                  expect(yield* inbox).toEqual([]);
+                }).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provideMerge(w.base())))),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
     it(`plant, authorize ${id}: a caused write cannot spend a parent under a runner-owned id`, async () => {
       const w = await world();
       const input = w.input(1, { type: "add", n: 1 });
@@ -1790,84 +2081,106 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
 describe("P11 review: write boundaries, ports, and watcher bounds", () => {
   for (const stream of ["processes", "processes/other:1", "other:1/inbox", "client:other/inbox"]) {
     for (const signing of ["own", "caused"] as const) {
-      it(`plant, trust a valid fact on ${stream}: ${signing} write is refused before commit`, async () => {
-        const w = await world();
-        Object.assign(
-          w.p,
-          Program.make({
-            ...authoring(w.p.name),
-            machine: {
-              ...machine,
-              update: {
-                ...machine.update,
-                work: (s: Model) => [
-                  s,
-                  [
-                    write({
-                      stream,
-                      write:
-                        signing === "own"
-                          ? { _tag: "own", fact: { _tag: "polled", token: "forbidden" } }
-                          : {
-                              _tag: "caused",
-                              parent: inputId(1),
-                              fact: { _tag: "saved", token: "forbidden" },
-                            },
-                    }),
-                  ],
-                ],
-              },
-            },
-          }),
-        );
-        const input = w.input(1, { type: "work", n: 1 });
-        await Effect.runPromise(
-          Effect.gen(function* () {
-            const r = yield* w.ProgramRunner;
-            yield* w.deliver(input, "comment");
-            yield* r.msg(input);
-            expect(w.calls, "no checked commit may be attempted on this stream").toEqual([]);
-            expect(yield* read(stream)).toEqual([]);
-            expect((yield* resultLetters).map((row) => row.body)).toMatchObject([
-              { m: { type: "write_err", why: expect.any(String) } },
-            ]);
-          }).pipe(Effect.provide(w.layer())),
-        );
-      });
+      it.effect.prop(
+        `plant, trust a valid event on ${stream}: ${signing} write is refused before commit`,
+        { generated: Request.fields.token },
+        ({ generated }) =>
+          Effect.forEach(
+            ["forbidden", generated],
+            (value) =>
+              Effect.promise(async () => {
+                const w = await world();
+                Object.assign(
+                  w.p,
+                  Program.make({
+                    ...authoring(w.p.name),
+                    machine: {
+                      ...machine,
+                      update: {
+                        ...machine.update,
+                        work: (s: Model) => [
+                          s,
+                          [
+                            write({
+                              stream,
+                              write:
+                                signing === "own"
+                                  ? { _tag: "own", event: { _tag: "polled", token: value } }
+                                  : {
+                                      _tag: "caused",
+                                      parent: inputId(1),
+                                      event: { _tag: "saved", token: value },
+                                    },
+                            }),
+                          ],
+                        ],
+                      },
+                    },
+                  }),
+                );
+                const input = w.input(1, { type: "work", n: 1 });
+                await Effect.runPromise(
+                  Effect.gen(function* () {
+                    const r = yield* w.ProgramRunner;
+                    yield* w.deliver(input, "comment");
+                    yield* r.msg(input);
+                    expect(w.calls, "no checked commit may be attempted on this stream").toEqual([]);
+                    expect(yield* read(stream)).toEqual([]);
+                    expect((yield* resultLetters).map((row) => row.body)).toMatchObject([
+                      { m: { type: "write_err", reason: expect.any(String) } },
+                    ]);
+                  }).pipe(Effect.provide(w.layer())),
+                );
+              }),
+            { concurrency: 1, discard: true },
+          ),
+        { arbitrary: { seed: 119120, runs: 12 } },
+      );
     }
   }
 
-  for (const why of ["seen_ahead", "id_reused"] as const) {
-    it(`plant, replace refused commit why with bad_cmd: ${why} survives in the saved answer`, async () => {
-      const w = await world();
-      w.fault.commitWhy = why;
-      Object.assign(
-        w.p,
-        Program.make({
-          ...authoring(w.p.name),
-          machine: {
-            ...machine,
-            update: {
-              ...machine.update,
-              work: (s: Model) => [s, [command({ token: "refused-commit", parent: inputId(1), tag: "saved" })]],
-            },
-          },
-        }),
-      );
-      const input = w.input(1, { type: "work", n: 1 });
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r = yield* w.ProgramRunner;
-          yield* w.deliver(input, "comment");
-          yield* r.msg(input);
-          expect(w.calls).toHaveLength(1);
-          expect((yield* resultLetters).map((row) => row.body)).toMatchObject([
-            { m: { type: "write_err", why, error: { _tag: why } } },
-          ]);
-          expect(yield* facts).toEqual([]);
-        }).pipe(Effect.provide(w.layer())),
-      );
-    });
+  for (const reason of ["seen_ahead", "id_reused"] as const) {
+    it.effect.prop(
+      `plant, replace refused commit reason with bad_cmd: ${reason} survives in the saved answer`,
+      { generated: Appended.cases.refused.fields.reason },
+      ({ generated }) =>
+        Effect.forEach(
+          [reason, generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world();
+              w.fault.commitReason = value;
+              Object.assign(
+                w.p,
+                Program.make({
+                  ...authoring(w.p.name),
+                  machine: {
+                    ...machine,
+                    update: {
+                      ...machine.update,
+                      work: (s: Model) => [s, [command({ token: "refused-commit", parent: inputId(1), tag: "saved" })]],
+                    },
+                  },
+                }),
+              );
+              const input = w.input(1, { type: "work", n: 1 });
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r = yield* w.ProgramRunner;
+                  yield* w.deliver(input, "comment");
+                  yield* r.msg(input);
+                  expect(w.calls).toHaveLength(1);
+                  expect((yield* resultLetters).map((row) => row.body)).toMatchObject([
+                    { m: { type: "write_err", reason: value, error: { _tag: value } } },
+                  ]);
+                  expect(yield* events).toEqual([]);
+                }).pipe(Effect.provide(w.layer())),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 
   for (const port of ["read", "personOnly"] as const) {
@@ -1995,53 +2308,64 @@ describe("P11 recovery gaps and durable installation", () => {
     }
   }
 
-  it("p35 plant, retire only options.done: folding a saved write answer prevents another commit", async () => {
-    const w = await world();
-    Object.assign(
-      w.p,
-      Program.make({
-        ...authoring(w.p.name),
-        machine: {
-          ...machine,
-          update: {
-            ...machine.update,
-            work: (s: Model) => [
-              s,
-              [
-                write({
-                  stream: "facts",
-                  write: { _tag: "own", fact: { _tag: "polled", token: "once" } },
-                }),
-              ],
-            ],
-          },
-        },
-      }),
-    );
-    w.fault.answer = true;
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r = yield* w.ProgramRunner;
-        expect(yield* failure(r.msg(w.input(1, { type: "work", n: 1 })))).toMatchObject({
-          _tag: "LedgerError",
-        });
-        expect(yield* resultLetters).toHaveLength(1);
-        expect(w.calls).toHaveLength(1);
-      }).pipe(Effect.provide(w.layer())),
-    );
-    w.reopen();
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r = yield* w.ProgramRunner;
-        const opened = yield* Effect.exit(r.open("answer-wake"));
-        expect(w.calls, "the saved answer already settles this write").toHaveLength(1);
-        expect(Exit.isSuccess(opened)).toBe(true);
-        expect((yield* ProcessStore.use((s) => s.load))?.cmds).toEqual([]);
-        expect(yield* facts).toHaveLength(1);
-        expect(yield* resultLetters).toHaveLength(1);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+  it.effect.prop(
+    "p35 plant, retire only options.done: folding a saved write answer prevents another commit",
+    { generated: Request.fields.token },
+    ({ generated }) =>
+      Effect.forEach(
+        ["once", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            Object.assign(
+              w.p,
+              Program.make({
+                ...authoring(w.p.name),
+                machine: {
+                  ...machine,
+                  update: {
+                    ...machine.update,
+                    work: (s: Model) => [
+                      s,
+                      [
+                        write({
+                          stream: "facts",
+                          write: { _tag: "own", event: { _tag: "polled", token: value } },
+                        }),
+                      ],
+                    ],
+                  },
+                },
+              }),
+            );
+            w.fault.answer = true;
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r = yield* w.ProgramRunner;
+                expect(yield* failure(r.msg(w.input(1, { type: "work", n: 1 })))).toMatchObject({
+                  _tag: "LedgerError",
+                });
+                expect(yield* resultLetters).toHaveLength(1);
+                expect(w.calls).toHaveLength(1);
+              }).pipe(Effect.provide(w.layer())),
+            );
+            w.reopen();
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r = yield* w.ProgramRunner;
+                const opened = yield* Effect.exit(r.open("answer-wake"));
+                expect(w.calls, "the saved answer already settles this write").toHaveLength(1);
+                expect(Exit.isSuccess(opened)).toBe(true);
+                expect((yield* ProcessStore.use((s) => s.load))?.cmds).toEqual([]);
+                expect(yield* events).toHaveLength(1);
+                expect(yield* resultLetters).toHaveLength(1);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
   it("p35 plant, drop replayed follow-ups: an answer folded on wake saves its new Cmd without running it", async () => {
     const w = await world();
     Object.assign(
@@ -2093,37 +2417,48 @@ describe("P11 recovery gaps and durable installation", () => {
       }).pipe(Effect.provide(w.layer())),
     );
   });
-  it("an async handler result schema produces a saved bad_cmd reply", async () => {
-    const w = await world();
-    const broken: unknown = {
-      machine: {
-        ...w.p.machine,
-        cmds: [
-          write,
-          {
-            ...work,
-            schema: {
-              ...work.schema,
-              ok: {
-                "~standard": { validate: (value: unknown) => Promise.resolve({ value }) },
+  it.effect.prop(
+    "an async handler result schema produces a saved bad_cmd reply",
+    { generated: Schema.Int },
+    ({ generated }) =>
+      Effect.forEach(
+        [23, generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            const broken: unknown = {
+              machine: {
+                ...w.p.machine,
+                cmds: [
+                  write,
+                  {
+                    ...work,
+                    schema: {
+                      ...work.schema,
+                      ok: {
+                        "~standard": { validate: (value: unknown) => Promise.resolve({ value }) },
+                      },
+                    },
+                  },
+                  fire,
+                ],
               },
-            },
-          },
-          fire,
-        ],
-      },
-    };
-    Object.assign(w.p, broken);
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        expect((yield* r.msg(w.input(1, { type: "work", n: 23 })))._tag).toBe("accepted");
-        expect((yield* resultLetters).map((row) => row.body)).toMatchObject([
-          { m: { type: "work_err", why: "bad_cmd" } },
-        ]);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+            };
+            Object.assign(w.p, broken);
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                expect((yield* r.msg(w.input(1, { type: "work", n: value })))._tag).toBe("accepted");
+                expect((yield* resultLetters).map((row) => row.body)).toMatchObject([
+                  { m: { type: "work_err", reason: "bad_cmd" } },
+                ]);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 
   for (const cut of ["before append", "after append", "after stepped", "before checkpoint"] as const) {
     it(`plant, trust a prepared model: recovery ${cut} saves one accepted input at its original placing`, async () => {
@@ -2240,97 +2575,149 @@ describe("P11 recovery gaps and durable installation", () => {
       }).pipe(Effect.provide(w.layer())),
     );
   });
-  it("plant, accept an undeclared fact: caller-supplied personOnly cannot authorize a write", async () => {
-    const w = await world();
-    const i = w.input(1, {
-      type: "request",
-      token: "undeclared",
-      tag: "granted",
-      personOnly: false,
-    });
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        yield* w.deliver(i, "comment");
-        yield* r.msg(i);
-        expect(yield* facts).toEqual([]);
-        expect(w.signCalls).toEqual([]);
-        expect(w.calls).toEqual([]);
-        expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { why: "bad_cmd" } });
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+  it.effect.prop(
+    "plant, accept an undeclared event: caller-supplied personOnly cannot authorize a write",
+    {
+      generated: Request.fields.tag.check(Schema.makeFilter((tag) => !["saved", "answered", "polled"].includes(tag))),
+    },
+    ({ generated }) =>
+      Effect.forEach(
+        ["granted", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            const i = w.input(1, {
+              type: "request",
+              token: "undeclared",
+              tag: value,
+              personOnly: false,
+            });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                yield* w.deliver(i, "comment");
+                yield* r.msg(i);
+                expect(yield* events).toEqual([]);
+                expect(w.signCalls).toEqual([]);
+                expect(w.calls).toEqual([]);
+                expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { reason: "bad_cmd" } });
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 
   for (const tag of ["granted", "started", "stepped", "state.upgraded"]) {
-    it(`plant, trust a forbidden declaration: programs cannot emit ${tag} even if declared`, async () => {
-      const w = await world();
-      Object.assign(
-        w.p,
-        Program.make({
-          ...authoring(w.p.name),
-          writes: {
-            ...authoring().writes,
-            [tag]: { schema: Schema.TaggedStruct(tag, { token: Schema.String }), personOnly: false },
-          },
-        }),
-      );
-      const i = w.input(1, { type: "request", token: "reserved", tag });
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          yield* w.deliver(i);
-          yield* r.msg(i);
-          expect(yield* facts).toEqual([]);
-          expect(w.signCalls).toEqual([]);
-          expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { why: "bad_cmd" } });
-        }).pipe(Effect.provide(w.layer())),
-      );
-    });
+    it.effect.prop(
+      `plant, trust a forbidden declaration: programs cannot emit ${tag} even if declared`,
+      { generated: Request.fields.token },
+      ({ generated }) =>
+        Effect.forEach(
+          ["reserved", generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world();
+              Object.assign(
+                w.p,
+                Program.make({
+                  ...authoring(w.p.name),
+                  writes: {
+                    ...authoring().writes,
+                    [tag]: {
+                      schema: Schema.TaggedStruct(tag, { token: Schema.String }),
+                      personOnly: false,
+                    },
+                  },
+                }),
+              );
+              const i = w.input(1, { type: "request", token: value, tag });
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  yield* w.deliver(i);
+                  yield* r.msg(i);
+                  expect(yield* events).toEqual([]);
+                  expect(w.signCalls).toEqual([]);
+                  expect((yield* resultLetters).at(-1)?.body).toMatchObject({
+                    m: { reason: "bad_cmd" },
+                  });
+                }).pipe(Effect.provide(w.layer())),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 
-  it("S3 plant, overwrite before decoding: a rejected saved model keeps its old SQL value", async () => {
-    const w = await world();
-    const { ProcessStore } = await import("../coordination/process-store.ts");
-    const saved = {
-      saved: { v: 999, model: { n: 3 }, after: 0, build: "future-build" },
-      turn: null,
-      cmds: [],
-    };
-    const storeLayer = () => ProcessStore.layer(w.store.sql, { process: PROCESS }).pipe(Layer.provide(w.base()));
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const store = yield* ProcessStore;
-        yield* store.save(saved);
-      }).pipe(Effect.provide(storeLayer())),
-    );
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        expect(yield* failure(r.open("a"))).toMatchObject({
-          _tag: "ProgramDown",
-          why: "saved_state",
-        });
-      }).pipe(Effect.provide(w.layer())),
-    );
-    w.reopen();
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const store = yield* ProcessStore;
-        expect(yield* store.load).toEqual(saved);
-      }).pipe(Effect.provide(storeLayer())),
-    );
-  });
-  it("plant, let unknown Cmd disappear: it produces a saved bad_cmd answer", async () => {
-    const w = await world({ unknownCmd: true });
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        yield* r.msg(w.input(1, { type: "fire" }));
-        expect(w.fireCalls()).toBe(0);
-        expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { why: "bad_cmd" } });
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+  it.effect.prop(
+    "S3 plant, overwrite before decoding: a rejected saved model keeps its old SQL value",
+    { generated: Schema.Int.check(Schema.isGreaterThan(1)) },
+    ({ generated }) =>
+      Effect.forEach(
+        [999, generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            const { ProcessStore } = await import("../coordination/process-store.ts");
+            const saved = {
+              saved: { v: value, model: { n: 3 }, after: 0, build: "future-build" },
+              turn: null,
+              cmds: [],
+            };
+            const storeLayer = () =>
+              ProcessStore.layer(w.store.sql, { process: PROCESS }).pipe(Layer.provide(w.base()));
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const store = yield* ProcessStore;
+                yield* store.save(saved);
+              }).pipe(Effect.provide(storeLayer())),
+            );
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                expect(yield* failure(r.open("a"))).toMatchObject({
+                  _tag: "ProgramDown",
+                  reason: "saved_state",
+                });
+              }).pipe(Effect.provide(w.layer())),
+            );
+            w.reopen();
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const store = yield* ProcessStore;
+                expect(yield* store.load).toEqual(saved);
+              }).pipe(Effect.provide(storeLayer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
+  it.effect.prop(
+    "plant, let unknown Cmd disappear: it produces a saved bad_cmd answer",
+    { generated: Schema.Json },
+    ({ generated }) =>
+      Effect.forEach(
+        [{}, generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world({ unknownCmd: true });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                yield* r.msg(w.input(1, { type: "fire", extra: value }));
+                expect(w.fireCalls()).toBe(0);
+                expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { reason: "bad_cmd" } });
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 });
 
 describe("P11 monitoring, content and storage failures", () => {
@@ -2366,67 +2753,93 @@ describe("P11 monitoring, content and storage failures", () => {
       }).pipe(Effect.provide(w.layer())),
     );
   });
-  it("plant, use traceId as authority: changed trace context cannot replace the direct parent sender", async () => {
-    const w = await world();
-    const agent = w.input(1, { type: "request", token: "trace", tag: "saved" }, "agent");
-    const person = w.input(2, { type: "add", n: 1 });
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        yield* w.deliver(agent, "comment");
-        yield* w.deliver({ ...person, span: { traceId: OTHER_TRACE, spanId: SPAN } });
-        yield* r.msg({ ...agent, span: { traceId: OTHER_TRACE, spanId: SPAN } });
-        expect((yield* facts)[0]).toMatchObject({
-          by: writer("agent").key,
-          parent: agent.envelope.id,
-          traceId: TRACE,
-        });
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
-  it("plant, tag bodies or error messages: failures keep class, with content deletable separately", async () => {
-    const w = await world();
-    w.fault.work = "throw";
-    const marker = "private handler detail";
-    const signature = "made-up signature bytes P11";
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const r: Runner = yield* w.ProgramRunner;
-        yield* r.msg(w.input(1, { type: "work", n: 59, signature, body: "private model body P11" }));
-        const rows: ReadonlyArray<SpanRow> = yield* recorded();
-        const tags = JSON.stringify(
-          rows.map((row) => ({ attributes: row.attributes, events: row.events, links: row.links })),
-        );
-        const health = JSON.stringify(w.sink.db().prepare("SELECT * FROM health").all());
+  it.effect.prop(
+    "plant, use traceId as authority: changed trace context cannot replace the direct parent sender",
+    { generated: Request.fields.token },
+    ({ generated }) =>
+      Effect.forEach(
+        ["trace", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            const agent = w.input(1, { type: "request", token: value, tag: "saved" }, "agent");
+            const person = w.input(2, { type: "add", n: 1 });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                yield* w.deliver(agent, "comment");
+                yield* w.deliver({ ...person, span: { traceId: OTHER_TRACE, spanId: SPAN } });
+                yield* r.msg({ ...agent, span: { traceId: OTHER_TRACE, spanId: SPAN } });
+                expect((yield* events)[0]).toMatchObject({
+                  by: writer("agent").key,
+                  parent: agent.envelope.id,
+                  traceId: TRACE,
+                });
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
+  it.effect.prop(
+    "plant, tag bodies or error messages: failures keep class, with content deletable separately",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        ["test deletion", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const w = await world();
+            w.fault.work = "throw";
+            const marker = "private handler detail";
+            const signature = "made-up signature bytes P11";
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const r: Runner = yield* w.ProgramRunner;
+                yield* r.msg(w.input(1, { type: "work", n: 59, signature, body: "private model body P11" }));
+                const rows: ReadonlyArray<SpanRow> = yield* recorded();
+                const tags = JSON.stringify(
+                  rows.map((row) => ({
+                    attributes: row.attributes,
+                    events: row.events,
+                    links: row.links,
+                  })),
+                );
+                const health = JSON.stringify(w.sink.db().prepare("SELECT * FROM health").all());
 
-        for (const secret of [marker, signature, "private model body P11"]) {
-          expect(tags).not.toContain(secret);
-          expect(health).not.toContain(secret);
-        }
+                for (const secret of [marker, signature, "private model body P11"]) {
+                  expect(tags).not.toContain(secret);
+                  expect(health).not.toContain(secret);
+                }
 
-        const failed = rows.filter((row) => !row.ok);
-        expect(failed.length).toBeGreaterThan(0);
-        expect(failed.some((row) => typeof row.attributes["error.type"] === "string")).toBe(true);
-        const records = yield* RecordManager;
-        const content = yield* Effect.forEach(
-          failed,
-          (row) => records.content({ _tag: "job", process: PROCESS }, row.spanId),
-          { concurrency: 1 },
-        );
-        expect(JSON.stringify(content)).toContain(marker);
-        const contentSpan = failed[content.findIndex((value) => JSON.stringify(value).includes(marker))]!;
-        yield* records.deleteContent({ _tag: "job", process: PROCESS }, contentSpan.spanId, {
-          by: "SHA256:person",
-          why: "test deletion",
-        });
-        expect(
-          Option.getOrNull(yield* records.content({ _tag: "job", process: PROCESS }, contentSpan.spanId)),
-        ).toMatchObject({ _tag: "deleted", why: "test deletion" });
-        expect((yield* recorded()).some((row) => row.spanId === contentSpan.spanId)).toBe(true);
-        expect(JSON.stringify(yield* resultLetters)).not.toContain(marker);
-      }).pipe(Effect.provide(w.layer())),
-    );
-  });
+                const failed = rows.filter((row) => !row.ok);
+                expect(failed.length).toBeGreaterThan(0);
+                expect(failed.some((row) => typeof row.attributes["error.type"] === "string")).toBe(true);
+                const records = yield* RecordManager;
+                const content = yield* Effect.forEach(
+                  failed,
+                  (row) => records.content({ _tag: "job", process: PROCESS }, row.spanId),
+                  { concurrency: 1 },
+                );
+                expect(JSON.stringify(content)).toContain(marker);
+                const contentSpan = failed[content.findIndex((value) => JSON.stringify(value).includes(marker))]!;
+                yield* records.deleteContent({ _tag: "job", process: PROCESS }, contentSpan.spanId, {
+                  by: "SHA256:person",
+                  reason: value,
+                });
+                expect(
+                  Option.getOrNull(yield* records.content({ _tag: "job", process: PROCESS }, contentSpan.spanId)),
+                ).toMatchObject({ _tag: "deleted", reason: value });
+                expect((yield* recorded()).some((row) => row.spanId === contentSpan.spanId)).toBe(true);
+                expect(JSON.stringify(yield* resultLetters)).not.toContain(marker);
+              }).pipe(Effect.provide(w.layer())),
+            );
+          }),
+        { discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
   it("plant, flush success only: a thrown fresh step reaches JobRecord before returning failure", async () => {
     const w = await world();
     await Effect.runPromise(
@@ -2442,36 +2855,47 @@ describe("P11 monitoring, content and storage failures", () => {
   });
 
   for (const piece of ["process store", "sink"] as const) {
-    it(`plant, swallow ${piece} storage failure: no success or later handler dispatch`, async () => {
-      const w = await world();
+    it.effect.prop(
+      `plant, swallow ${piece} storage failure: no success or later handler dispatch`,
+      { generated: Schema.Int },
+      ({ generated }) =>
+        Effect.forEach(
+          [61, generated],
+          (value) =>
+            Effect.promise(async () => {
+              const w = await world();
 
-      if (piece === "sink") {
-        w.sink.fault.once = true;
-        w.sink.fault.query = (q) => /^\s*(INSERT|UPDATE|REPLACE)/i.test(q);
-      } else {
-        w.store.fault.once = true;
-        w.store.fault.query = (q) => /^\s*(INSERT|UPDATE|REPLACE)/i.test(q);
-      }
+              if (piece === "sink") {
+                w.sink.fault.once = true;
+                w.sink.fault.query = (q) => /^\s*(INSERT|UPDATE|REPLACE)/i.test(q);
+              } else {
+                w.store.fault.once = true;
+                w.store.fault.query = (q) => /^\s*(INSERT|UPDATE|REPLACE)/i.test(q);
+              }
 
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          expect(yield* failure(r.msg(w.input(1, { type: "work", n: 61 })))).toMatchObject({
-            why: "storage",
-          });
-          expect(piece === "sink" || w.workCalls() === 0).toBe(true);
-        }).pipe(Effect.provide(w.layer())),
-      );
-      w.fault.flush = false;
-      w.reopen();
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const r: Runner = yield* w.ProgramRunner;
-          const rows = yield* inbox;
-          yield* r.open("recovered");
-          expect(yield* inbox).toEqual(rows);
-        }).pipe(Effect.provide(w.layer())),
-      );
-    });
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  expect(yield* failure(r.msg(w.input(1, { type: "work", n: value })))).toMatchObject({
+                    reason: "storage",
+                  });
+                  expect(piece === "sink" || w.workCalls() === 0).toBe(true);
+                }).pipe(Effect.provide(w.layer())),
+              );
+              w.fault.flush = false;
+              w.reopen();
+              await Effect.runPromise(
+                Effect.gen(function* () {
+                  const r: Runner = yield* w.ProgramRunner;
+                  const rows = yield* inbox;
+                  yield* r.open("recovered");
+                  expect(yield* inbox).toEqual(rows);
+                }).pipe(Effect.provide(w.layer())),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 });

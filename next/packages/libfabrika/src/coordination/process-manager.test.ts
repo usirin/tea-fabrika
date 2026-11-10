@@ -13,7 +13,7 @@ import {
   brain,
   CODE as originalCode,
   data,
-  facts,
+  events,
   first as makeFirst,
   from,
   ids,
@@ -46,7 +46,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
 
 describe("p21 amended by p79, starts have request IDs and process IDs", () => {
   it.effect("each exit ends process.exit with the real process tag", () =>
-    check(hash, [], (why) => {
+    check(hash, [], (reason) => {
       const store = storage();
       const spans: Tracer.NativeSpan[] = [];
       const tracer = Tracer.make({
@@ -59,7 +59,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(makeFirst(), from());
-        yield* processes.exit(A, why, from());
+        yield* processes.exit(A, reason, from());
         const exits = spans.filter((s) => s.name === "process.exit" && s.status._tag === "Ended");
         expect(exits).toHaveLength(1);
         expect(exits[0]?.attributes.get("fab.process")).toBe(A);
@@ -67,19 +67,22 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
     }),
   );
   it.effect("fresh receive refuses missing and ended lives with the typed ended error", () =>
-    check(hash, [], (why) => {
+    check(hash, [], (reason) => {
       const store = storage();
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(makeFirst(), from());
-        yield* processes.exit(A, why, from());
+        yield* processes.exit(A, reason, from());
 
         for (const process of [A, B]) {
           const result = yield* Effect.exit(Stream.runCollect(processes.receive(process, 0)));
           expect(result._tag, "fresh receive refuses a life that is not live").toBe("Failure");
 
           if (result._tag === "Failure") {
-            expect(Cause.squash(result.cause)).toMatchObject({ _tag: "ProcessError", why: "ended" });
+            expect(Cause.squash(result.cause)).toMatchObject({
+              _tag: "ProcessError",
+              reason: "ended",
+            });
           }
         }
       }).pipe(Effect.provide(manager(store)));
@@ -95,7 +98,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
         const b = yield* processes.start(first("start:counter:2", "counter:2"), from());
         expect(a.process).toBe(A);
         expect(b.process).toBe(B);
-        const started = (yield* facts("counter:1")).filter((row) => row._tag === "started");
+        const started = (yield* events("counter:1")).filter((row) => row._tag === "started");
         expect(started).toHaveLength(1);
         expect(started[0]).toMatchObject({
           _tag: "started",
@@ -104,7 +107,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
           ...from(),
         });
         expect(started[0]?.rev).toBe(a.rev);
-        expect((yield* facts("counter:2")).filter((row) => row._tag === "started")).toHaveLength(1);
+        expect((yield* events("counter:2")).filter((row) => row._tag === "started")).toHaveLength(1);
       }).pipe(Effect.provide(manager(store)));
     }),
   );
@@ -117,9 +120,9 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
         const processes = yield* ProcessManager;
         const a = yield* processes.start(first(), from());
         expect(yield* processes.start(first(), from({ sentAt: "later" }))).toEqual(a);
-        expect((yield* Effect.flip(processes.start(first(), from({ parent: null })))).why).toBe("id_reused");
-        expect((yield* Effect.flip(processes.start(first(), from({ for: "other-person" })))).why).toBe("id_reused");
-        expect((yield* facts("counter:1")).filter((row) => row._tag === "started")).toHaveLength(1);
+        expect((yield* Effect.flip(processes.start(first(), from({ parent: null })))).reason).toBe("id_reused");
+        expect((yield* Effect.flip(processes.start(first(), from({ for: "other-person" })))).reason).toBe("id_reused");
+        expect((yield* events("counter:1")).filter((row) => row._tag === "started")).toHaveLength(1);
         expect(generated.calls()).toBe(1);
       }).pipe(Effect.provide(manager(store, brain(), generated.next)));
     }),
@@ -130,7 +133,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
       const store = storage();
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
-        expect((yield* Effect.flip(processes.start(first(), from({ seen: 5 })))).why).toBe("refused");
+        expect((yield* Effect.flip(processes.start(first(), from({ seen: 5 })))).reason).toBe("refused");
         expect(store.rows()).toEqual([]);
       }).pipe(Effect.provide(manager(store)));
     }),
@@ -157,11 +160,11 @@ describe("p21, CoordinationLayer", () => {
     }),
   );
 
-  for (const why of ["storage", "unreachable"] as const) {
-    it.effect(`plant, fail at layer build: ${why} stays a per-call failure`, () =>
+  for (const reason of ["storage", "unreachable"] as const) {
+    it.effect(`plant, fail at layer build: ${reason} stays a per-call failure`, () =>
       check(fc.jsonValue(), [1], (m) => {
         const { first } = fixture("build-a");
-        const failure = new LedgerError({ why });
+        const failure = new LedgerError({ reason });
         const broken = Layer.mergeAll(
           Layer.succeed(Ledger, {
             append: () => Effect.fail(failure),
@@ -174,8 +177,8 @@ describe("p21, CoordinationLayer", () => {
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           const mailbox = yield* Mailbox;
-          expect((yield* Effect.flip(processes.start(first(), from()))).why).toBe(why);
-          expect((yield* Effect.flip(mailbox.send("counter:1", "letter-a", m, from()))).why).toBe(why);
+          expect((yield* Effect.flip(processes.start(first(), from()))).reason).toBe(reason);
+          expect((yield* Effect.flip(mailbox.send("counter:1", "letter-a", m, from()))).reason).toBe(reason);
         }).pipe(Effect.provide(CoordinationLayer(brain(), ids(A).next).pipe(Layer.provide(broken))));
       }),
     );

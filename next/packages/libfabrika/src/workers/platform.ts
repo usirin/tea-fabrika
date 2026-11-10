@@ -8,7 +8,7 @@ type Client<S> = {
     : never;
 };
 
-const unreachable = () => new LedgerError({ why: "unreachable" });
+const unreachable = () => new LedgerError({ reason: "unreachable" });
 
 export class ProjectClient extends Context.Service<
   ProjectClient,

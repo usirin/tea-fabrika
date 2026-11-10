@@ -122,7 +122,7 @@ const setup = ({
   const parent = inputId(`in-${START}-1`);
   const policy = {
     input: (name: string) => name === "approve",
-    fact: (name: string) => name === "answered",
+    event: (name: string) => name === "answered",
   };
   const writer = (as: "person" | "agent") =>
     C.Writer.cases[as].make({
@@ -248,12 +248,12 @@ describe("P10 saved signing authority", () => {
       return Effect.gen(function* () {
         expect(yield* Effect.flip(signer())).toMatchObject({
           _tag: "SigningRefused",
-          why: "not_delivered",
+          reason: "not_delivered",
         });
         const sessions = yield* C.SessionManager;
         expect(yield* Effect.flip(sessions.delivered(parent, PROCESS))).toMatchObject({
           _tag: "SigningRefused",
-          why: "not_delivered",
+          reason: "not_delivered",
         });
       }).pipe(Effect.provide(authority(sql)));
     },
@@ -272,7 +272,7 @@ describe("P10 saved signing authority", () => {
         expect(snapshot(db)).toBe(before);
         expect(yield* Effect.flip(sessions.record({ ...input, digest: `${input.digest}-changed` }))).toMatchObject({
           _tag: "SigningRefused",
-          why: "not_delivered",
+          reason: "not_delivered",
         });
         expect(snapshot(db)).toBe(before);
       }).pipe(Effect.provide(authority(sql)));
@@ -288,7 +288,7 @@ describe("P10 saved signing authority", () => {
         yield* sessions.delivered(parent, PROCESS);
         expect(yield* Effect.result(signer())).toMatchObject({
           _tag: "Failure",
-          failure: { _tag: "SigningRefused", why: "person_only" },
+          failure: { _tag: "SigningRefused", reason: "person_only" },
         });
       }).pipe(Effect.provide(authority(sql)));
     },
@@ -319,27 +319,27 @@ describe("P10 saved signing authority", () => {
       }),
   );
 
-  for (const why of ["not_delivered", "person_only", "ended"] as const) {
+  for (const reason of ["not_delivered", "person_only", "ended"] as const) {
     authorityProperty(
-      `question 16: ${why} is distinct and changes no saved rows`,
+      `question 16: ${reason} is distinct and changes no saved rows`,
       ({ saved, parent, signer, authority, PROCESS }) =>
         Effect.gen(function* () {
           const { sql, db } = database();
           yield* Effect.gen(function* () {
             const s = yield* C.SessionManager;
-            yield* s.record(saved("person", why !== "person_only"));
+            yield* s.record(saved("person", reason !== "person_only"));
 
-            if (why !== "not_delivered") {
+            if (reason !== "not_delivered") {
               yield* s.delivered(parent, PROCESS);
             }
 
-            if (why === "ended") {
+            if (reason === "ended") {
               yield* s.end(PROCESS);
             }
 
             const before = snapshot(db);
             const error = yield* Effect.flip(signer("write-b"));
-            expect(error).toMatchObject({ _tag: "SigningRefused", why });
+            expect(error).toMatchObject({ _tag: "SigningRefused", reason });
             expect(snapshot(db)).toBe(before);
           }).pipe(Effect.provide(authority(sql)));
         }),
@@ -375,7 +375,7 @@ describe("P10 saved signing authority", () => {
                 const before = snapshot(db);
                 expect(yield* Effect.flip(signer(secondId))).toMatchObject({
                   _tag: "SigningRefused",
-                  why: "spent",
+                  reason: "spent",
                 });
                 expect(snapshot(db)).toBe(before);
               }).pipe(Effect.provide(authority(sql)));
@@ -397,7 +397,7 @@ describe("P10 saved signing authority", () => {
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
           expect(yield* Effect.flip(signer("write-a", "answered", OTHER_PROCESS))).toMatchObject({
-            why: "not_delivered",
+            reason: "not_delivered",
           });
         }).pipe(Effect.provide(authority(sql)));
       }),
@@ -411,7 +411,7 @@ describe("P10 saved signing authority", () => {
           const s = yield* C.SessionManager;
           yield* s.record(saved("agent", true));
           yield* s.delivered(parent, PROCESS);
-          expect(yield* Effect.flip(signer())).toMatchObject({ why: "person_only" });
+          expect(yield* Effect.flip(signer())).toMatchObject({ reason: "person_only" });
         }).pipe(Effect.provide(authority(sql)));
       }),
   );
@@ -444,7 +444,7 @@ describe("P10 saved signing authority", () => {
         const reopened = database(first.file);
         yield* Effect.gen(function* () {
           expect(yield* signer()).toEqual(session);
-          expect(yield* Effect.flip(signer("other-write"))).toMatchObject({ why: "spent" });
+          expect(yield* Effect.flip(signer("other-write"))).toMatchObject({ reason: "spent" });
         }).pipe(Effect.provide(authority(reopened.sql)));
       }),
   );
@@ -464,7 +464,7 @@ describe("P10 saved signing authority", () => {
           expect(snapshot(db)).toBe(before);
           const retry = yield* signer();
           expect(retry.parent).toBe(parent);
-          expect(yield* Effect.flip(signer("other-write"))).toMatchObject({ why: "spent" });
+          expect(yield* Effect.flip(signer("other-write"))).toMatchObject({ reason: "spent" });
         }).pipe(Effect.provide(authority(failure.sql)));
       }),
   );
@@ -483,7 +483,7 @@ describe("P10 saved signing authority", () => {
         first.db.close();
         const reopened = database(first.file);
         expect(yield* Effect.flip(signer()).pipe(Effect.provide(authority(reopened.sql)))).toMatchObject({
-          why: "ended",
+          reason: "ended",
         });
       }),
   );
@@ -514,7 +514,7 @@ describe("P10 saved signing authority", () => {
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
           expect(yield* Effect.flip(signer("a", "saved", PROCESS, `in-${START}-999`))).toMatchObject({
-            why: "not_delivered",
+            reason: "not_delivered",
           });
         }).pipe(Effect.provide(authority(sql)));
       }),
