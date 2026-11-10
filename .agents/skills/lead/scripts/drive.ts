@@ -65,9 +65,10 @@ import {
 	writeFileSync,
 } from "node:fs";
 import {homedir} from "node:os";
-import {dirname, join} from "node:path";
+import {join} from "node:path";
 import {defineMachine, type DepKeyedSub, type Sub} from "@demlik/tea";
 import {Cmd, run} from "@demlik/tea/effect";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import {nameOf, outcomesOf} from "@kampus/pipeline/stages/outcome";
 import {Cause, Effect, Schema, Stream} from "effect";
 import {
@@ -99,7 +100,7 @@ const AGENTS = ["codex", "claude"] as const;
 export type AgentName = (typeof AGENTS)[number];
 
 /** The provider row a step's agent runs on: Codex only reads for a plan or a review. */
-export const providerOf = (agent: AgentName, step: StepName): Provider =>
+export const stepProvider = (agent: AgentName, step: StepName): Provider =>
 	agent === "claude" ? "claude" : step === "plan" || step === "review" ? "codex-read" : "codex";
 
 // ---------------------------------------------------------------- the outcome
@@ -356,7 +357,7 @@ const stuck = (why: Extract<Outcome, {kind: "stuck"}>["why"], text: string): Jud
 });
 
 /** What the typed answer says, in the words `answerOf` uses; `null` when the agent gave none. */
-export const saidOf = (answer: Answer | null) =>
+export const answerWords = (answer: Answer | null) =>
 	answer === null ? null : {verb: answer.verb, to: answer.to ?? "", why: answer.why};
 
 /**
@@ -415,7 +416,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
 		};
 	}
 
-	const said = saidOf(answer) ?? answerOf(ask.step, read.report);
+	const said = answerWords(answer) ?? answerOf(ask.step, read.report);
 
 	if (said === null) {
 		return stuck("no_answer", "no answer line in the report");
@@ -814,7 +815,7 @@ const SAFE_GIT = {
 
 /** Git on the box's own data from outside it: by the data folder, never through the `.git` file
  * the agent could rewrite, with no hooks and no fsmonitor, so nothing it wrote runs as drive. */
-const boxGit = (env: Env, box: string, ...args: string[]) => {
+const boxGit = (env: Pick<Env, "BOXES">, box: string, ...args: string[]) => {
 	const r = spawnSync(
 		"git",
 		[
@@ -868,11 +869,21 @@ const dropView = (env: Env, box: string) => {
 };
 
 /** Each file the agent left changed in the box's tree, by its status letters. */
-export const changesOf = (porcelain: string): {xy: string; path: string}[] =>
+export const changedFiles = (porcelain: string): {xy: string; path: string}[] =>
 	porcelain
 		.split("\0")
 		.filter(Boolean)
 		.map((e) => ({xy: e.slice(0, 2), path: e.slice(3)}));
+
+/**
+ * What the agent left in the box's tree, read from outside the box: every edited, deleted and new
+ * file by its own name, a new folder file by file. The agent cannot commit, so this is all the
+ * work a box holds. A box whose data cannot be read answers a non-zero `code`, never "no changes".
+ */
+export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
+	const status = boxGit(env, box, "status", "--porcelain=v1", "-z", "--untracked-files=all");
+	return {...status, changes: status.code === 0 ? changedFiles(status.out) : []};
+};
 
 /**
  * The agent holds no key and cannot reach the box's git data, so it commits nothing. Its changes
@@ -915,7 +926,7 @@ const collect = (env: Env, ask: Ask, changes: readonly {xy: string; path: string
 
 			const from = join(box, path);
 			const stat = lstatSync(from);
-			mkdirSync(dirname(to), {recursive: true});
+			mkdirSync(join(to, ".."), {recursive: true});
 
 			if (stat.isSymbolicLink()) {
 				symlinkSync(readlinkSync(from), to);
@@ -977,7 +988,7 @@ export const commitsSaid = (
  */
 export const startedOf = (code: number, err: string): typeof Started.Type => {
 	if (code === 0) {
-		return {_tag: "made"};
+		return Started.cases.made.make({});
 	}
 
 	const line = err
@@ -988,10 +999,10 @@ export const startedOf = (code: number, err: string): typeof Started.Type => {
 	const check = BOX_CHECKS.find((c) => c === line?.[1]);
 
 	if (code === 3 && line && check) {
-		return {_tag: "refused", check, detail: line[2] ?? ""};
+		return Started.cases.refused.make({check, detail: line[2] ?? ""});
 	}
 
-	return {_tag: "failed", detail: `box.sh new: ${tail(err)}`};
+	return Started.cases.failed.make({detail: `box.sh new: ${tail(err)}`});
 };
 
 const handlers = (env: Env) => {
@@ -1023,7 +1034,7 @@ const handlers = (env: Env) => {
 				}
 
 				const problem = gitView(env, cmd);
-				return problem === null ? started : {_tag: "failed" as const, detail: problem};
+				return problem === null ? started : Started.cases.failed.make({detail: problem});
 			}),
 		step_read: (ask: Ask) =>
 			Effect.sync((): Read => {
@@ -1057,20 +1068,13 @@ const handlers = (env: Env) => {
 
 				// What the agent left in the tree, read from outside the box. A review leaves nothing, so
 				// its branch stays at the base and nothing is committed.
-				const status = boxGit(
-					env,
-					ask.box,
-					"status",
-					"--porcelain=v1",
-					"-z",
-					"--untracked-files=all",
-				);
+				const status = boxChanges(env, ask.box);
 
 				if (status.code !== 0) {
 					return {...empty, head: null, problem: `box status: ${tail(status.err)}`};
 				}
 
-				const changes = changesOf(status.out);
+				const {changes} = status;
 				empty.changed = changes.length;
 				// Work the box holds that no branch has: what the agent changed, until it is collected.
 				const held = changes.length > 0 ? [`${changes.length} uncommitted files`] : [];
@@ -1225,7 +1229,7 @@ const handlers = (env: Env) => {
 							run: ask.run,
 							ticket: ask.ticket,
 							step: ask.step,
-							provider: providerOf(ask.agent, ask.step),
+							provider: stepProvider(ask.agent, ask.step),
 							model: ask.model,
 							effort: ask.effort,
 							outcome: rowOf(e.outcome),
@@ -1316,29 +1320,50 @@ export const planTail = (step: StepName, path: string, text: string | null) =>
 		? ""
 		: `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 
+/** How a step's draft runs: what the step is asked, in; how its turn ended, out. */
+type DraftRun = (env: Env, agents: Agents, ask: Ask) => Effect.Effect<Turned<Answer>>;
+
+/** One turn of the agent in the box (a plan reads the main checkout). */
+const turnDraft: DraftRun = (env, agents, ask) =>
+	runTurn(agents, {
+		provider: stepProvider(ask.agent, ask.step),
+		session: ask.box,
+		folder: ask.step === "plan" ? env.MAIN : join(env.BOXES, ask.box),
+		prompt: readFileSync(ask.prompt, "utf8"),
+		system: `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts; answer with the JSON object the prompt asks for.`,
+		answer: Answer,
+		model: ask.model,
+		effort: ask.effort,
+		minutes: ask.minutes,
+		events: ask.events,
+		report: ask.report,
+	});
+
+// ---------------------------------------------------------------- MUTATION WIRING (ticket 483)
+//
+// The one place that says how the mutation step runs. Everything else here and in the chain
+// treats mutation as any step: the box, the git view, collect, the checks and the field row.
+//
+//   MUTATION_AGENT   who the chain starts it as, and the only agent `prepare` takes for it.
+//   mutationDraft    how its draft runs. Today it is the same agent turn as any step, on the Claude
+//                    ACP row, where Stryker cannot listen on a port (EPERM), so the step is stuck.
+//
+// The container script goes here: point `mutationDraft` at a `DraftRun` that starts it for
+// `join(env.BOXES, ask.box)`, writes `ask.events` and `ask.report`, and hands back how it ended
+// (`Turned<Answer>`: `done`, `skip` or `stuck` with its why, and what it spent). Nothing else
+// changes. This file opens no socket and allows none; that is the container's side.
+export const MUTATION_AGENT: AgentName = "claude";
+const mutationDraft: DraftRun = turnDraft;
+
 /**
- * The Draft: one turn of the agent in the box (a plan reads the main checkout), as a Sub that
- * answers once. The prompt file is the brief with drive's tail; the system prompt names the step.
+ * The Draft, as a Sub that answers once. The prompt file is the brief with drive's tail; the
+ * system prompt names the step.
  */
 export const agentsDraft = (env: Env, agents: Agents) => (sub: DraftSub) =>
 	Stream.fromEffect(
-		Effect.gen(function* () {
-			const ask = sub.deps;
-			const turned = yield* runTurn(agents, {
-				provider: providerOf(ask.agent, ask.step),
-				session: ask.box,
-				folder: ask.step === "plan" ? env.MAIN : join(env.BOXES, ask.box),
-				prompt: readFileSync(ask.prompt, "utf8"),
-				system: `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts; answer with the JSON object the prompt asks for.`,
-				answer: Answer,
-				model: ask.model,
-				effort: ask.effort,
-				minutes: ask.minutes,
-				events: ask.events,
-				report: ask.report,
-			});
-			return {type: "drafted", turned} satisfies Drafted;
-		}),
+		(sub.deps.step === "mutation" ? mutationDraft : turnDraft)(env, agents, sub.deps).pipe(
+			Effect.map((turned) => ({type: "drafted", turned}) satisfies Drafted),
+		),
 	);
 
 type Lane = {
@@ -1419,24 +1444,33 @@ const alive = (pid: number) => {
 	}
 };
 
+/** Takes the lock file for this pid; `false` when another process holds it. */
+const lockTaken = (lock: string): boolean => {
+	try {
+		writeFileSync(lock, String(process.pid), {flag: "wx"});
+		return true;
+	} catch {
+		return false;
+	}
+};
+
 /** One Electron step at a time: a lock file holding the owner's pid, taken over when it is dead. */
 const takeElectron = (env: Env) =>
 	Effect.gen(function* () {
 		const lock = join(env.BOXES, "state", "electron.lock");
 
 		for (;;) {
-			try {
-				writeFileSync(lock, String(process.pid), {flag: "wx"});
+			if (lockTaken(lock)) {
 				process.on("exit", () => rmSync(lock, {force: true}));
 				return;
-			} catch {
-				const owner = Number(readFileSync(lock, "utf8").trim());
+			}
 
-				if (alive(owner)) {
-					yield* Effect.sleep("20 seconds");
-				} else {
-					rmSync(lock, {force: true});
-				}
+			const owner = Number(readFileSync(lock, "utf8").trim());
+
+			if (alive(owner)) {
+				yield* Effect.sleep("20 seconds");
+			} else {
+				rmSync(lock, {force: true});
 			}
 		}
 	});
@@ -1456,26 +1490,20 @@ export interface StepArgs {
 	readonly from?: string | undefined;
 }
 
-export interface Prepared {
-	readonly _tag: "prepared";
-	readonly ask: Ask;
-	readonly electron: boolean;
-}
-
-/** A no before any agent ran: a usage error (exit 2) or a start check's refusal (exit 3). */
-export interface Refusal {
-	readonly _tag: "refused";
-	readonly outcome: string;
-	readonly reason: string;
-	readonly exit: number;
-}
-
-const usageError = (reason: string): Refusal => ({
-	_tag: "refused",
-	outcome: "usage",
-	reason,
-	exit: 2,
+/**
+ * How `prepare` ended: the step ready to run, or a no before any agent ran, a usage error (exit 2)
+ * or a start check's refusal (exit 3).
+ */
+export const Start = Schema.TaggedUnion({
+	prepared: {ask: Ask, electron: Schema.Boolean},
+	refused: {outcome: Schema.String, reason: Schema.String, exit: Schema.Number},
 });
+
+export type Prepared = typeof Start.cases.prepared.Type;
+export type Refusal = typeof Start.cases.refused.Type;
+const refusal = Start.cases.refused.make;
+
+const usageError = (reason: string): Refusal => refusal({outcome: "usage", reason, exit: 2});
 
 /**
  * Everything before the agent: the usage checks, the base and the lane's root, a fresh box name,
@@ -1489,8 +1517,10 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 		return usageError("a lane name and a brief file are required");
 	}
 
-	if (step === "mutation" && agent !== "claude") {
-		return usageError("mutation binds ports and starts Electron; run it with --agent claude");
+	if (step === "mutation" && agent !== MUTATION_AGENT) {
+		return usageError(
+			`mutation binds ports and starts Electron; run it with --agent ${MUTATION_AGENT}`,
+		);
 	}
 
 	if (electron && agent !== "claude") {
@@ -1608,12 +1638,11 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 		count("^codex exec");
 
 	if (agents >= 8) {
-		return {
-			_tag: "refused",
+		return refusal({
 			outcome: endName({kind: "refused", check: "agent_cap"}),
 			reason: `${agents} agents running (the ACP harnesses drive started); the cap is 8`,
 			exit: 3,
-		};
+		});
 	}
 
 	// Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk,
@@ -1629,12 +1658,11 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 	if (free === null || free < MIN_FREE_GB) {
 		const said = free === null ? "df could not read the free space" : `${free} GB free`;
 		const keeps = (gc.stdout ?? "").split("\n").filter((l) => l.startsWith("keep "));
-		return {
-			_tag: "refused",
+		return refusal({
 			outcome: endName({kind: "refused", check: "low_disk"}),
 			reason: `${said} on the boxes' volume after box.sh gc; drive needs ${MIN_FREE_GB}; gc kept ${keeps.length}: ${keeps.map((l) => l.slice(5)).join("; ") || "nothing"}`,
 			exit: 3,
-		};
+		});
 	}
 
 	// A plan reads the main checkout and a review changes nothing; every other step moves the
@@ -1645,18 +1673,16 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 
 		if (holder !== null) {
 			return list.code === 0
-				? {
-						_tag: "refused",
+				? refusal({
 						outcome: endName({kind: "refused", check: "branch_checked_out"}),
 						reason: `${branch} is checked out in ${holder}; detach it there (git switch --detach) first`,
 						exit: 3,
-					}
-				: {
-						_tag: "refused",
+					})
+				: refusal({
 						outcome: "stuck:worktree_unreadable",
 						reason: `git worktree list failed: ${tail(list.err)}`,
 						exit: 30,
-					};
+					});
 		}
 	}
 
@@ -1672,7 +1698,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 			TAIL +
 			verdict,
 	);
-	return {_tag: "prepared", ask, electron};
+	return Start.cases.prepared.make({ask, electron});
 };
 
 /** drive's one line: how the step ended, as the chain and a reader of the log take it. */
@@ -1822,21 +1848,26 @@ const main = () => {
 		const line = yield* driveStep(env, agents, prepared);
 		console.log(JSON.stringify(line));
 		process.exitCode = line.exit;
-	});
-	Effect.runPromise(program).catch((e: unknown) => {
-		console.log(
-			JSON.stringify({
-				outcome: "stuck:crash",
-				lane,
-				step,
-				box: prepared.ask.box,
-				reason: String(e),
-				kept: true,
-				exit: 30,
+	}).pipe(
+		// A crash is still one JSON line, and the box is kept for the lead to read.
+		Effect.catchCause((cause) =>
+			Effect.sync(() => {
+				console.log(
+					JSON.stringify({
+						outcome: "stuck:crash",
+						lane,
+						step,
+						box: prepared.ask.box,
+						reason: Cause.pretty(cause),
+						kept: true,
+						exit: 30,
+					}),
+				);
+				process.exitCode = 30;
 			}),
-		);
-		process.exitCode = 30;
-	});
+		),
+	);
+	NodeRuntime.runMain(program);
 };
 
 if (import.meta.main) {

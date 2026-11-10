@@ -68,22 +68,23 @@ export const NO_SPENT: Spent = {
 	tools: 0,
 };
 
+/** A turn the harness could not start, or that broke: its why, never a thrown error. */
+export const Failed = Schema.TaggedStruct("failed", {
+	why: Schema.String,
+	message: Schema.String,
+	spent: Spent,
+});
+
+/** A turn the agent ended, before its typed answer is added. */
+const Ended = Schema.TaggedStruct("ended", {
+	stop: Agent.Stop,
+	spent: Spent,
+	/** The agent's last message: the report. */
+	said: Schema.String,
+});
+
 /** How one turn ended: the agent's end with its typed answer, or a failure of the harness. */
-export type Turned<A> =
-	| {
-			readonly _tag: "ended";
-			readonly stop: Agent.Stop;
-			readonly answer: A | null;
-			readonly spent: Spent;
-			/** The agent's last message: the report. */
-			readonly said: string;
-	  }
-	| {
-			readonly _tag: "failed";
-			readonly why: string;
-			readonly message: string;
-			readonly spent: Spent;
-	  };
+export type Turned<A> = (typeof Ended.Type & {readonly answer: A | null}) | typeof Failed.Type;
 
 export interface TurnAsk<A> {
 	readonly provider: Provider;
@@ -157,7 +158,8 @@ export const runTurn = <A>(
 			session: ask.session,
 			folder: ask.folder,
 			prompt: ask.prompt,
-			system: {_tag: "append", text: ask.system},
+			// The append case: the harness's own coding prompt, then ours.
+			system: Agent.SystemPrompt.members[0].make({text: ask.system}),
 			answer: ask.answer,
 			model: ask.model,
 			effort: ask.effort,
@@ -183,16 +185,12 @@ export const runTurn = <A>(
 			Effect.result,
 		);
 		yield* fs.writeFileString(ask.report, state.said).pipe(Effect.ignore);
-		const failed = (why: string, message: string): Turned<A> => ({
-			_tag: "failed",
-			why,
-			message,
-			spent: state.spent,
-		});
+		const failed = (why: string, message: string) =>
+			Failed.make({why, message, spent: state.spent});
 
 		if (Result.isFailure(ran)) {
 			const e = ran.failure;
-			yield* append({at: new Date().toISOString(), _tag: "failed", why: e.why, message: e.message});
+			yield* append({at: new Date().toISOString(), ...failed(e.why, e.message)});
 			return failed(e.why, e.message);
 		}
 
@@ -202,14 +200,10 @@ export const runTurn = <A>(
 			return failed("broke", "the stream ended with no end");
 		}
 
-		const turned: Turned<A> = {
-			_tag: "ended",
-			stop: ended.stop,
+		return {
+			...Ended.make({stop: ended.stop, spent: state.spent, said: state.said}),
 			answer: ended.answer,
-			spent: state.spent,
-			said: state.said,
 		};
-		return turned;
 	}).pipe(Effect.provide(nodeServices));
 
 // ---------------------------------------------------------------- the field row
@@ -242,7 +236,7 @@ export interface RowAsk {
 }
 
 /** The turn's list-price dollars: Claude's SDK says its own; a Codex row is priced by the table. */
-export const listUsdOf = (provider: Provider, model: string, spent: Spent): number | null => {
+export const listUsd = (provider: Provider, model: string, spent: Spent): number | null => {
 	if (provider === "claude") {
 		return spent.usd;
 	}
@@ -272,7 +266,7 @@ export const stepRow = (r: RowAsk): string => {
 		const shifted = new Date(d.getTime() + offset * 60_000).toISOString().slice(0, 19);
 		return `${shifted}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
 	};
-	const usd = listUsdOf(r.provider, r.model, r.spent);
+	const usd = listUsd(r.provider, r.model, r.spent);
 	const priced =
 		r.provider === "claude"
 			? " Dollars are the Agent SDK's own total_cost_usd for the turn, at Anthropic's list price; the subscription bills no call."

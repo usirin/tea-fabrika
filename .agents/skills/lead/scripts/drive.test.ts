@@ -16,16 +16,20 @@ import "../../plan/scripts/plancheck.sh?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import {spawnSync} from "node:child_process";
-import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {Agent} from "@kampus/fabrika-old";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
+import {Effect, Stream} from "effect";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {NO_SPENT} from "./agents.ts";
 import {
+	agentsDraft,
 	agentTail,
-	changesOf,
+	boxChanges,
+	changedFiles,
 	commitsSaid,
 	decide,
 	endName,
@@ -146,22 +150,25 @@ describe("drive takes a skip answer, today's tooling", () => {
 		"tests" | "build" | "mutation" | "review"
 	>;
 	const read = (step: "tests" | "build" | "mutation" | "review", report: string) =>
-		machine.update.step_read_ok({phase: "reading", ask: {...ask, step}}, {
-			type: "step_read_ok",
-			value: {
-				head: ask.base,
-				commits: 0,
-				unsigned: [],
-				exam: [],
-				leaks: [],
-				left: [],
-				manifests: [],
-				plancheck: null,
-				changed: 0,
-				report,
-				problem: null,
-			},
-		} as never);
+		machine.update.step_read_ok(
+			{phase: "reading", ask: {...ask, step}, answer: null, spent: NO_SPENT},
+			{
+				type: "step_read_ok",
+				value: {
+					head: ask.base,
+					commits: 0,
+					unsigned: [],
+					exam: [],
+					leaks: [],
+					left: [],
+					manifests: [],
+					plancheck: null,
+					changed: 0,
+					report,
+					problem: null,
+				},
+			} as never,
+		);
 
 	// Plant: drop skip from the answer line, so it reads as no_answer and is stuck (t374 mutation1,
 	// 2026-11-09: "answer: skip no product file changed" was recorded as stuck:no_answer).
@@ -328,7 +335,7 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
 		step: fc.option(fc.constantFrom("tests", "build", "lead"), {nil: undefined}),
 	});
 	const lane = new Set(["tests", "build"]);
-	const held = (a: {why: string; step?: string}) =>
+	const held = (a: {why: string; step: string | undefined}) =>
 		!(a.why === "stale_link" && !(a.step !== undefined && lane.has(a.step)));
 
 	// Plants: print only the last lines of JSON; drop the commit; name a waived stale link.
@@ -419,12 +426,12 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
 describe("the box's changes are read from its status, today's tooling", () => {
 	it("each NUL-ended status entry is one file with its letters, so a deleted one is told apart", () => {
 		const out = " M a.ts\0?? b/c.ts\0 D gone.ts\0";
-		expect(changesOf(out)).toEqual([
+		expect(changedFiles(out)).toEqual([
 			{xy: " M", path: "a.ts"},
 			{xy: "??", path: "b/c.ts"},
 			{xy: " D", path: "gone.ts"},
 		]);
-		expect(changesOf("")).toEqual([]);
+		expect(changedFiles("")).toEqual([]);
 	});
 
 	it("a review that left a changed file is stuck:review_committed, whatever it answered", () => {
@@ -477,6 +484,164 @@ describe("the box's changes are read from its status, today's tooling", () => {
 		});
 		expect(decide(ask, read).outcome).toEqual({kind: "stuck", why: "step_said"});
 	});
+});
+
+describe("T341 drive reads what a box holds from outside it, today's tooling", () => {
+	const root = mkdtempSync(join(tmpdir(), "drive-box-"));
+	const env = {BOXES: root};
+	const git = (...args: string[]) =>
+		spawnSync(
+			"git",
+			[
+				`--git-dir=${join(root, "b-gitdata")}`,
+				`--work-tree=${join(root, "b")}`,
+				"-c",
+				"user.email=t@example.com",
+				"-c",
+				"user.name=t",
+				...args,
+			],
+			{encoding: "utf8"},
+		);
+
+	// scenario: a real box with its git data beside it, as box.sh new makes one. The agent cannot
+	// commit any more, so the files it left are all the work a box holds, and each must be named for
+	// collect to copy it. It takes over from the removed "counts edited and untracked files, and
+	// commits the step's branch lacks", which read a real box the same way.
+	// Plants: drop --untracked-files=all; read through the box's own `.git` file; call a box whose
+	// data is gone a box with no changes.
+	it("scenario: every edited, deleted and new file is named, a new folder file by file, whatever the box's `.git` file says", () => {
+		const box = join(root, "b");
+		spawnSync("git", ["init", "-q", "--separate-git-dir", join(root, "b-gitdata"), box]);
+		writeFileSync(join(box, "a.ts"), "1\n");
+		writeFileSync(join(box, "gone.ts"), "1\n");
+		git("add", "a.ts", "gone.ts");
+		git("commit", "-q", "-m", "base");
+		expect(boxChanges(env, "b")).toMatchObject({code: 0, changes: []});
+
+		writeFileSync(join(box, "a.ts"), "2\n");
+		rmSync(join(box, "gone.ts"));
+		mkdirSync(join(box, "new", "deep"), {recursive: true});
+		writeFileSync(join(box, "new", "deep", "c.ts"), "3\n");
+		writeFileSync(join(box, "new", "d.ts"), "4\n");
+		// The agent can rewrite this file; drive reads the data folder by name and never follows it.
+		writeFileSync(join(box, ".git"), `gitdir: ${join(root, "nowhere")}\n`);
+		const read = boxChanges(env, "b");
+		expect(read.code).toBe(0);
+		expect(read.changes.toSorted((x, y) => x.path.localeCompare(y.path))).toEqual([
+			{xy: " M", path: "a.ts"},
+			{xy: " D", path: "gone.ts"},
+			{xy: "??", path: "new/d.ts"},
+			{xy: "??", path: "new/deep/c.ts"},
+		]);
+
+		// A box whose data cannot be read is a failed read, which drive keeps as stuck.
+		const lost = boxChanges(env, "no-such-box");
+		expect(lost.code).not.toBe(0);
+		expect(lost.changes).toEqual([]);
+		rmSync(root, {recursive: true, force: true});
+	});
+});
+
+describe("T341 a step's agent runs in its own box, on the row its step allows, today's tooling", () => {
+	const dir = mkdtempSync(join(tmpdir(), "drive-row-"));
+	const env = {
+		MAIN: join(dir, "main"),
+		BOXES: join(dir, "boxes"),
+		GH_REPO: "",
+		CODEX_MODEL: "",
+		CODEX_EFFORT: "",
+	};
+	const prompt = join(dir, "prompt.md");
+	writeFileSync(prompt, "do the step");
+	const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
+		"plan" | "tests" | "build" | "mutation" | "review"
+	>;
+	const agent = fc.constantFrom("codex", "claude") as fc.Arbitrary<"codex" | "claude">;
+	const lane = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+	const drafted = (
+		step: "plan" | "tests" | "build" | "mutation" | "review",
+		who: "codex" | "claude",
+		box: string,
+	) =>
+		Effect.gen(function* () {
+			const rows = {
+				codex: Agent.fakeAdapter(() => Agent.saying("done")),
+				"codex-read": Agent.fakeAdapter(() => Agent.saying("done")),
+				claude: Agent.fakeAdapter(() => Agent.saying("done")),
+			};
+			const agents = Agent.makeAgents({
+				adapters: rows,
+				sessions: Agent.memorySessions(),
+				reaper: Agent.noReaper,
+			});
+			const sub = {
+				deps: {
+					...ask,
+					step,
+					agent: who,
+					box,
+					prompt,
+					events: join(dir, "events.jsonl"),
+					report: join(dir, "report.md"),
+				},
+			};
+			yield* Stream.runDrain(agentsDraft(env, agents)(sub as never));
+			return rows;
+		});
+
+	// The harness closes everything beside the folder a turn names (packages/fabrika/src/agents/acp/
+	// harness.test.ts, "the folder's siblings closed"), so the folder drive names is what keeps an
+	// agent out of BOXES/state, the lock, the step keys and the other boxes. These take over from the
+	// removed "never lets the box write the lock or anything else in BOXES/state" and "pinned: the
+	// profile allows writes only to the box, its git data and the caches", which read drive's own
+	// sandbox profile; drive has none now.
+	// Plants: run every step in BOXES; run a plan in a box; run a review on the row that writes.
+	it("a plan reads the main checkout and every other step works in its own box, never in a folder above it", () =>
+		fc.assert(
+			fc.asyncProperty(steps, agent, lane, fc.integer({min: 1, max: 99}), (step, who, name, n) =>
+				drafted(step, who, `${name}-${step}${n}`).pipe(
+					Effect.tap((rows) =>
+						Effect.sync(() => {
+							const started = Object.values(rows).flatMap((row) => row.seen.started);
+							expect(started.length).toBe(1);
+							const folder = started[0]?.folder ?? "";
+							expect(folder).toBe(
+								step === "plan" ? env.MAIN : join(env.BOXES, `${name}-${step}${n}`),
+							);
+							expect(env.BOXES.startsWith(folder)).toBe(false);
+							expect(folder.startsWith(join(env.BOXES, "state"))).toBe(false);
+						}),
+					),
+					Effect.asVoid,
+					Effect.runPromise,
+				),
+			),
+			options,
+		));
+
+	it("on Codex a plan and a review start on the row that only reads, and a Claude step never starts on a Codex row", () =>
+		fc.assert(
+			fc.asyncProperty(steps, agent, lane, (step, who, name) =>
+				drafted(step, who, `${name}-${step}1`).pipe(
+					Effect.tap((rows) =>
+						Effect.sync(() => {
+							const count = (row: keyof typeof rows) => rows[row].seen.started.length;
+
+							if (step === "plan" || step === "review") {
+								expect(count("codex")).toBe(0);
+							}
+
+							expect(count("claude")).toBe(who === "claude" ? 1 : 0);
+							expect(count("codex") + count("codex-read")).toBe(who === "codex" ? 1 : 0);
+						}),
+					),
+					Effect.asVoid,
+					Effect.runPromise,
+				),
+			),
+			options,
+		));
 });
 
 describe("T383 drive never passes off an older run's report, today's tooling", () => {

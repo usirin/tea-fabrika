@@ -29,7 +29,7 @@ import {Agent} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {Answer, listUsdOf, NO_SPENT, runTurn, type Spent, stepRow} from "./agents.ts";
+import {Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow} from "./agents.ts";
 import {
 	briefOf,
 	ChainRecord,
@@ -38,7 +38,7 @@ import {
 	type Line,
 	lineOf,
 	makeMachine,
-	movedOf,
+	judgedMove,
 	moveFrom,
 	moveOf,
 	RetriesExhausted,
@@ -296,7 +296,7 @@ describe("T341 drive's last line is what the chain reads, today's tooling", () =
 describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 	const machine = makeMachine({maxSteps: 16, maxStucks: 3});
 	const start = () => {
-		const [idle] = machine.init();
+		const [idle] = machine.init(null, undefined);
 		return machine.update.start(idle, {type: "start", step: "tests"});
 	};
 	const ran = (m: ReturnType<typeof start>[0], l: Line) =>
@@ -412,7 +412,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 
 	it("the step cap parks the lane as ask, never loops forever", () => {
 		const small = makeMachine({maxSteps: 2, maxStucks: 3});
-		const [idle] = small.init();
+		const [idle] = small.init(null, undefined);
 		let [m] = small.update.start(idle, {type: "start", step: "tests"});
 		[m] = small.update.step_run_ok(m, {
 			type: "step_run_ok",
@@ -442,20 +442,22 @@ describe("T341 the chain record is a Schema value, today's tooling", () => {
 	it("a step's record round-trips through encode and decode, before and after the step", () => {
 		fc.assert(
 			fc.property(step, fc.nat({max: 20}), outcome, sha, word, (s, round, o, head, why) => {
-				const before = {
-					lane: "l",
-					pr: null,
-					landed: null,
-					steps: [
-						{round, step: s, note: why, startedAt: "t", endedAt: null, line: null, judged: null},
-					],
+				const started = {
+					round,
+					step: s,
+					note: why,
+					startedAt: "t",
+					endedAt: null,
+					line: null,
+					judged: null,
 				};
+				const before = {lane: "l", pr: null, landed: null, steps: [started]};
 				const after = {
 					...before,
 					pr: 7,
 					steps: [
 						{
-							...before.steps[0],
+							...started,
 							endedAt: "u",
 							line: line(o, head, why),
 							judged: {box: "b", answer: why},
@@ -478,16 +480,16 @@ describe("T341 the chain record is a Schema value, today's tooling", () => {
 
 describe("T341 the judgment agent's typed answer is a move, today's tooling", () => {
 	it("send with a step runs that step again with the note; park, or a send with no step, parks", () => {
-		expect(movedOf({answer: "send", step: "build", note: "fix the law"})).toEqual({
+		expect(judgedMove({answer: "send", step: "build", note: "fix the law"})).toEqual({
 			_tag: "step",
 			step: "build",
 			note: "the lead's judgment: fix the law",
 		});
-		expect(movedOf({answer: "park", step: null, note: "a decision is needed"})).toEqual({
+		expect(judgedMove({answer: "park", step: null, note: "a decision is needed"})).toEqual({
 			_tag: "park",
 			reason: "a decision is needed",
 		});
-		expect(movedOf({answer: "send", step: null, note: ""})).toEqual({
+		expect(judgedMove({answer: "send", step: null, note: ""})).toEqual({
 			_tag: "park",
 			reason: "the judgment agent parked the lane with no why",
 		});
@@ -513,6 +515,8 @@ describe("T341 the judgment agent's typed answer is a move, today's tooling", ()
 
 describe("T341 a turn runs through the agents package on the fake adapter, today's tooling", () => {
 	const dir = mkdtempSync(join(tmpdir(), "chain-turn-"));
+	// Each turn writes its own events file.
+	let turns = 0;
 	const turn = (script: Agent.FakeScript) =>
 		Effect.gen(function* () {
 			const fake = Agent.fakeAdapter(() => script);
@@ -521,7 +525,8 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
 				sessions: Agent.memorySessions(),
 				reaper: Agent.noReaper,
 			});
-			const events = join(dir, `${Math.random().toString(36).slice(2)}.jsonl`);
+			turns += 1;
+			const events = join(dir, `${turns}.jsonl`);
 			const report = `${events}.md`;
 			const turned = yield* runTurn(agents, {
 				provider: "claude",
@@ -542,68 +547,79 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
 				events: readFileSync(events, "utf8"),
 				report: readFileSync(report, "utf8"),
 			};
-		}).pipe(Effect.runPromise);
-
-	it("the last message is the report, its JSON object is the typed answer, and every update is one event line", async () => {
-		const said = 'The laws are green.\n{"verb":"done","to":null,"why":"all green","laws":null}';
-		const {turned, fake, events, report} = await turn({
-			raws: [
-				{_tag: "tool", id: "t1", title: "pnpm test", status: "in_progress"},
-				{_tag: "tool", id: "t1", title: "pnpm test", status: "completed"},
-				{_tag: "said", text: said},
-				{_tag: "tokens", tokens: {input: 100, cached: 40, output: 10}, whole: true},
-				{_tag: "ended", stop: "end_turn", structured: undefined, usd: 0.5, requests: 2},
-			],
 		});
-		expect(report).toBe(said);
-		expect(turned._tag).toBe("ended");
+	// Vitest awaits the Promise a test hands back: the one place a law's Effect is run.
+	const ran = <A>(law: Effect.Effect<A>) => law.pipe(Effect.runPromise);
 
-		if (turned._tag !== "ended") {
-			return;
-		}
+	it("the last message is the report, its JSON object is the typed answer, and every update is one event line", () =>
+		ran(
+			Effect.gen(function* () {
+				const said = 'The laws are green.\n{"verb":"done","to":null,"why":"all green","laws":null}';
+				const {turned, fake, events, report} = yield* turn({
+					raws: [
+						{_tag: "tool", id: "t1", title: "pnpm test", status: "in_progress"},
+						{_tag: "tool", id: "t1", title: "pnpm test", status: "completed"},
+						{_tag: "said", text: said},
+						{_tag: "tokens", tokens: {input: 100, cached: 40, output: 10}, whole: true},
+						{_tag: "ended", stop: "end_turn", structured: undefined, usd: 0.5, requests: 2},
+					],
+				});
+				expect(report).toBe(said);
+				expect(turned._tag).toBe("ended");
 
-		expect(turned.answer).toEqual({verb: "done", to: null, why: "all green", laws: null});
-		expect(turned.spent).toEqual({
-			input: 100,
-			cached: 40,
-			output: 10,
-			counted: "turn",
-			usd: 0.5,
-			requests: 2,
-			tools: 1,
-		});
-		const lines = events
-			.trim()
-			.split("\n")
-			.map((l) => JSON.parse(l) as {_tag: string});
-		expect(lines.map((l) => l._tag)).toEqual([
-			"started",
-			"tool",
-			"tool",
-			"said",
-			"tokens",
-			"ended",
-		]);
-		// The prompt reached the adapter with the schema's form appended, and the system prompt named.
-		expect(fake.seen.started[0]?.prompt).toContain("do the step");
-		expect(fake.seen.started[0]?.system).toEqual({_tag: "append", text: "you are the step"});
-	});
+				if (turned._tag !== "ended") {
+					return;
+				}
 
-	it("a harness that breaks is a failed turn with its why, never a thrown error", async () => {
-		const {turned} = await turn({raws: [{_tag: "said", text: "half"}]});
-		expect(turned._tag).toBe("failed");
+				expect(turned.answer).toEqual({verb: "done", to: null, why: "all green", laws: null});
+				expect(turned.spent).toEqual({
+					input: 100,
+					cached: 40,
+					output: 10,
+					counted: "turn",
+					usd: 0.5,
+					requests: 2,
+					tools: 1,
+				});
+				const lines = events
+					.trim()
+					.split("\n")
+					.map((l) => JSON.parse(l) as {_tag: string});
+				expect(lines.map((l) => l._tag)).toEqual([
+					"started",
+					"tool",
+					"tool",
+					"said",
+					"tokens",
+					"ended",
+				]);
+				// The prompt reached the adapter with the schema's form appended, and the system prompt named.
+				expect(fake.seen.started[0]?.prompt).toContain("do the step");
+				expect(fake.seen.started[0]?.system).toEqual({_tag: "append", text: "you are the step"});
+			}),
+		));
 
-		if (turned._tag === "failed") {
-			expect(turned.why).toBe("broke");
-		}
-	});
+	it("a harness that breaks is a failed turn with its why, never a thrown error", () =>
+		ran(
+			Effect.gen(function* () {
+				const {turned} = yield* turn({raws: [{_tag: "said", text: "half"}]});
+				expect(turned._tag).toBe("failed");
 
-	it("an agent that says nothing fitting ends with a null answer and an empty report", async () => {
-		const {turned, report} = await turn(Agent.saying("no json here"));
-		expect(report).toBe("no json here");
-		expect(turned._tag === "ended" && turned.answer).toBeNull();
-		rmSync(dir, {recursive: true, force: true});
-	});
+				if (turned._tag === "failed") {
+					expect(turned.why).toBe("broke");
+				}
+			}),
+		));
+
+	it("an agent that says nothing fitting ends with a null answer and an empty report", () =>
+		ran(
+			Effect.gen(function* () {
+				const {turned, report} = yield* turn(Agent.saying("no json here"));
+				expect(report).toBe("no json here");
+				expect(turned._tag === "ended" && turned.answer).toBeNull();
+				rmSync(dir, {recursive: true, force: true});
+			}),
+		));
 });
 
 describe("T341 the field row prices a turn by its provider, today's tooling", () => {
@@ -618,11 +634,11 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
 	};
 
 	it("Claude's row takes the SDK's dollars; a Codex row is priced by the table, or not at all", () => {
-		expect(listUsdOf("claude", "sonnet", spent)).toBe(1.25);
+		expect(listUsd("claude", "sonnet", spent)).toBe(1.25);
 		// 500k uncached at $10, 500k cached at $1, 100k out at $50, per million.
-		expect(listUsdOf("codex", "gpt-6-astra", spent)).toBe(5 + 0.5 + 5);
-		expect(listUsdOf("codex", "gpt-unknown", spent)).toBeNull();
-		expect(listUsdOf("codex", "gpt-6-astra", NO_SPENT)).toBeNull();
+		expect(listUsd("codex", "gpt-6-astra", spent)).toBe(5 + 0.5 + 5);
+		expect(listUsd("codex", "gpt-unknown", spent)).toBeNull();
+		expect(listUsd("codex", "gpt-6-astra", NO_SPENT)).toBeNull();
 	});
 
 	it("format: one JSON line in fieldrow.py's shape, with the tokens and a why that says how they were counted", () => {

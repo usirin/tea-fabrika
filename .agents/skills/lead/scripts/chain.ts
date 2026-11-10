@@ -61,7 +61,7 @@ import {defineMachine} from "@demlik/tea";
 import {Cmd, run} from "@demlik/tea/effect";
 import {Context, Duration, Effect, Schedule, Schema} from "effect";
 import {type Agents, Judgment, makeStepAgents, runTurn, stepRow} from "./agents.ts";
-import {driveStep, type Env, loadEnv, prepare, sh} from "./drive.ts";
+import {driveStep, type Env, loadEnv, MUTATION_AGENT, prepare, sh} from "./drive.ts";
 import {wipOf} from "./lane.ts";
 
 const HERE = import.meta.dirname;
@@ -148,11 +148,17 @@ export const lineOf = (out: string, exit: number): Line | null => {
 // ---------------------------------------------------------------- the moves
 
 /** The next move after a step's outcome, as data. */
-export type Move =
-	| {readonly _tag: "step"; readonly step: StepName; readonly note: string}
-	| {readonly _tag: "judge"}
-	| {readonly _tag: "open"}
-	| {readonly _tag: "park"; readonly reason: string};
+export const Move = Schema.TaggedUnion({
+	step: {step: Schema.Literals(STEPS), note: Schema.String},
+	judge: {},
+	open: {},
+	park: {reason: Schema.String},
+});
+export type Move = typeof Move.Type;
+const toStep = (step: StepName, note: string) => Move.cases.step.make({step, note});
+const toPark = (reason: string) => Move.cases.park.make({reason});
+const toJudge = Move.cases.judge.make({});
+const toOpen = Move.cases.open.make({});
 
 /** The step a done answer hands to, or `null` at the end of the chain. */
 const after: Record<StepName, StepName | null> = {
@@ -173,44 +179,42 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
 	switch (verb) {
 		case "done": {
 			const next = after[step];
-			return next === null ? {_tag: "open"} : {_tag: "step", step: next, note: ""};
+			return next === null ? toOpen : toStep(next, "");
 		}
 		case "skip":
 			// Nothing here for this step: on to the next, with the why on record.
-			return after[step] === null
-				? {_tag: "open"}
-				: {_tag: "step", step: after[step] ?? "review", note: ""};
+			return after[step] === null ? toOpen : toStep(after[step] ?? "review", "");
 		case "send":
 			if (isStep(to)) {
-				return {_tag: "step", step: to, note: `${step} answered ${line.outcome}: ${line.reason}`};
+				return toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
 			}
 
-			return {_tag: "park", reason: `${step} sent the lane to ${to}: ${line.reason}`};
+			return toPark(`${step} sent the lane to ${to}: ${line.reason}`);
 		case "ask":
 			if (why === "lockfile") {
-				return {_tag: "park", reason: line.reason};
+				return toPark(line.reason);
 			}
 
-			return {_tag: "judge"};
+			return toJudge;
 		case "refused":
-			return {_tag: "park", reason: `drive refused: ${line.outcome}: ${line.reason}`};
+			return toPark(`drive refused: ${line.outcome}: ${line.reason}`);
 		default:
 			return stucks >= maxStucks
-				? {_tag: "park", reason: `${step} stuck ${maxStucks} times in a row: ${line.reason}`}
-				: {_tag: "judge"};
+				? toPark(`${step} stuck ${maxStucks} times in a row: ${line.reason}`)
+				: toJudge;
 	}
 };
 
 const JUDGED = /^[`*\s]*answer:\s*(send\s+(tests|build|mutation|review)|park)\b[`*\s]*(.*)$/i;
 
 /** A judgment: a step to run again with a note, or a park for the lead. */
-export type Judged = Extract<Move, {_tag: "step" | "park"}>;
+export type Judged = typeof Move.cases.step.Type | typeof Move.cases.park.Type;
 
 /** A typed judgment (./agents.ts) as a move; a send that names no step is a park. */
-export const movedOf = (j: Judgment): Judged =>
+export const judgedMove = (j: Judgment): Judged =>
 	j.answer === "send" && j.step !== null
-		? {_tag: "step", step: j.step, note: `the lead's judgment: ${j.note}`}
-		: {_tag: "park", reason: j.note || "the judgment agent parked the lane with no why"};
+		? toStep(j.step, `the lead's judgment: ${j.note}`)
+		: toPark(j.note || "the judgment agent parked the lane with no why");
 
 /** The judge Cmd's answer: the move it chose as JSON, or, for an older text, its `answer:` line. */
 export const moveFrom = (text: string): Judged => {
@@ -218,11 +222,11 @@ export const moveFrom = (text: string): Judged => {
 		const d = JSON.parse(text) as Judged;
 
 		if (d._tag === "step" && isStep(d.step)) {
-			return {_tag: "step", step: d.step, note: String(d.note ?? "")};
+			return toStep(d.step, String(d.note ?? ""));
 		}
 
 		if (d._tag === "park") {
-			return {_tag: "park", reason: String(d.reason ?? "")};
+			return toPark(String(d.reason ?? ""));
 		}
 	} catch {}
 
@@ -242,13 +246,13 @@ export const judgedOf = (text: string): Judged => {
 		const to = m[2]?.toLowerCase() ?? "";
 
 		if (isStep(to)) {
-			return {_tag: "step", step: to, note: `the lead's judgment: ${note}`};
+			return toStep(to, `the lead's judgment: ${note}`);
 		}
 
-		return {_tag: "park", reason: note || "the judgment agent parked the lane with no why"};
+		return toPark(note || "the judgment agent parked the lane with no why");
 	}
 
-	return {_tag: "park", reason: "the judgment agent gave no answer line"};
+	return toPark("the judgment agent gave no answer line");
 };
 
 // ---------------------------------------------------------------- the brief
@@ -678,7 +682,10 @@ const handlers = (s: Setup) => {
 				};
 				const brief = join(env.BOXES, `${s.lane}-chain${cmd.round}-${cmd.step}-brief.md`);
 				writeFileSync(brief, briefOf(s.brief, cmd.step, facts));
-				const claude = cmd.step === "mutation" || s.claude.has(cmd.step);
+				// MUTATION WIRING (ticket 483): mutation's agent is drive.ts's `MUTATION_AGENT`; how its
+				// draft runs is `mutationDraft` there. The chain names no other fact about that step.
+				const claude =
+					(cmd.step === "mutation" && MUTATION_AGENT === "claude") || s.claude.has(cmd.step);
 				const entry: StepRecord = {
 					round: cmd.round,
 					step: cmd.step,
@@ -809,7 +816,7 @@ const handlers = (s: Setup) => {
 				const text = turned._tag === "ended" ? turned.said : `${turned.why}: ${turned.message}`;
 				const move =
 					turned._tag === "ended" && turned.answer !== null
-						? movedOf(turned.answer)
+						? judgedMove(turned.answer)
 						: judgedOf(text);
 				// Its field row, beside the steps' rows (record wide).
 				const scrubbed = sh("sh", [join(HERE, "redact.sh"), at(".md"), at(".jsonl")]);
