@@ -1,7 +1,7 @@
 ---
 id: 0023
 title: next/ follows the Effect codebase's code style and doc comments as strictly as it can, and each kept difference names its reason
-status: amended-in-part by [0029](0029-format-and-names-follow-effect.md)
+status: amended-in-part by [0029](0029-format-and-names-follow-effect.md), [0032](0032-libraries-take-effects-file-layout.md)
 date: 2026-11-09
 tags: [style, format, lint, doc-comments, jsdoc, effect, next, readability, open-source]
 ---
