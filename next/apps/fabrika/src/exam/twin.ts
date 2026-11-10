@@ -402,7 +402,55 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         const key = (p: Tree) => (p?.computed ? null : (p?.key?.name ?? p?.key?.value));
         const env = props?.properties?.find((p: Tree) => key(p) === "env");
 
-        {
+        let hostedNames: Array<string> = [];
+        let hostName: string | undefined;
+
+        try {
+          if (contract === undefined) {
+            throw new Error("missing host contract");
+          }
+
+          const contracts: Array<Tree> = [];
+          nodes(tree("objects.ts", contract), (declaration) => {
+            if (declaration.type === "ClassDeclaration" && declaration.id?.name === "Brain") {
+              contracts.push(declaration.superClass);
+            }
+          });
+
+          if (contracts.length !== 1 || !contracts[0]) {
+            throw new Error("missing Brain contract");
+          }
+
+          const host = contracts[0].arguments?.[0];
+
+          if (host?.type !== "Literal" || typeof host.value !== "string") {
+            throw new Error("unsupported host name");
+          }
+
+          hostName = host.value;
+          const shape = contracts[0].callee?.typeArguments?.params?.[2];
+
+          if (!shape) {
+            throw new Error("missing hosted objects");
+          }
+
+          const types = shape.type === "TSUnionType" ? shape.types : [shape];
+          hostedNames = types.map((type: Tree) => {
+            if (type.type !== "TSTypeReference" || type.typeName?.type !== "Identifier" || type.typeArguments) {
+              throw new Error("unsupported host contract");
+            }
+
+            return type.typeName.name;
+          });
+        } catch {
+          report(env ?? node, "unsupported-case: cannot read host contract");
+        }
+
+        const workerName = node.arguments[0];
+
+        if (workerName?.type !== "Literal" || typeof workerName.value !== "string") {
+          report(node, "unsupported-case: Worker name is not a string literal");
+        } else if (workerName.value === hostName) {
           const bindings = env === undefined ? { type: "ObjectExpression", properties: [] } : unwrap(env.value);
 
           if (bindings?.type !== "ObjectExpression") {
@@ -434,37 +482,6 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
                   objects.set(String(key(binding)), name.value);
                 }
               }
-            }
-
-            let hostedNames: Array<string> = [];
-
-            try {
-              if (contract === undefined) {
-                throw new Error("missing host contract");
-              }
-
-              const contracts: Array<Tree> = [];
-              nodes(tree("objects.ts", contract), (declaration) => {
-                if (declaration.type === "ClassDeclaration" && declaration.id?.name === "Brain") {
-                  contracts.push(declaration.superClass?.callee?.typeArguments?.params?.[2]);
-                }
-              });
-
-              if (contracts.length !== 1 || !contracts[0]) {
-                throw new Error("missing Brain contract");
-              }
-
-              const shape = contracts[0];
-              const types = shape.type === "TSUnionType" ? shape.types : [shape];
-              hostedNames = types.map((type: Tree) => {
-                if (type.type !== "TSTypeReference" || type.typeName?.type !== "Identifier" || type.typeArguments) {
-                  throw new Error("unsupported host contract");
-                }
-
-                return type.typeName.name;
-              });
-            } catch {
-              report(env ?? node, "unsupported-case: cannot read host contract");
             }
 
             for (const hosted of hostedNames) {

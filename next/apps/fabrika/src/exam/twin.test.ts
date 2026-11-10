@@ -213,6 +213,12 @@ describe("P12 local twin lint", () => {
       `import * as ${alias} from "@alchemy.run/cloudflare";
        ${alias}.Workers.Worker("Brain", {main:"brain.mjs", ${bindings === undefined ? "" : `env:{${bindings}}`}}); ${other}`;
     const binding = `${alias}.DurableObject("RecordPart")`;
+    expect(scan("binding.ts", source(undefined).replace('"Brain"', '"Other"'))).toEqual([]);
+    expect(
+      scan("binding.ts", source(undefined).replace('"Brain"', "workerName")).some((f) =>
+        f.reason.startsWith("unsupported-case:"),
+      ),
+    ).toBe(true);
     expect(scan("binding.ts", source(`PROJECT:${alias}.DurableObject("Project"), RecordPart:${binding}`))).toEqual([]);
 
     for (const broken of [undefined, "", "export class Brain {}", contract.replace("RecordPart", "Unknown[]")]) {
