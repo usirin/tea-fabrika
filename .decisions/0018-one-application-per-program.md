@@ -1,7 +1,7 @@
 ---
 id: 0018
 title: Each program in next/ is its own OTP application, so one program past its restart limit stops alone, never the others
-status: accepted
+status: amended-in-part by [0020](0020-programs-get-hard-walls.md)
 date: 2026-11-09
 tags: [supervision, otp, coordination, tier-1, next, restart, application, isolation]
 ---
@@ -39,6 +39,10 @@ flowchart TD
 ```
 
 The single root is gone. A crash loop in `counter` stops `counter` and nothing else.
+
+> Amended in part by [0020](0020-programs-get-hard-walls.md): each program's supervisor lives in
+> its own object, and isolation has hard walls (quotas, a CPU limit per isolate) on top of code.
+> The rest of this file holds.
 
 ```ts
 // Sketch, next/. One application per program, under the brain.

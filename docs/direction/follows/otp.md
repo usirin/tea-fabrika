@@ -38,17 +38,21 @@ against main at `5b1171ed`. OTP's side is its documentation as read that day:
 | Past the limit | Ends its children and itself with `shutdown`; the parent decides ([sup]) | `down {why, crashes, until}`, then a new start at `until`, forever (`app/supervisor.ts:116-136`) | differs, because Tier 1 has no parent (C4); about 276,000 entries a day for a program that always throws; 0016 closes it |
 | Applications | A node runs many applications, each with its own top-level supervisor ([sup]); a `temporary` one that stops "is reported but no other applications are terminated" ([app]) | No applications yet; each program's supervisor sits in its own object (`app/supervisor.ts:59`, `app/runner.ts:310-431`), so one name's crash loop touches no other name | same in effect; [0018](../../../.decisions/0018-one-application-per-program.md) makes it explicit: one application per program, and no program's failure may stop another |
 | Shutdown | `brutal_kill`, a timeout or `infinity`; reverse start order ([sup]) | Exit is at once (`coordination/process-manager.ts:182-214`); later writes are refused (`door/door.ts:1350`, `:1356`) | differs, because steps are serial (`app/runner.ts:224`), so nothing is half-written (C5) |
+| A busy process | The scheduler preempts each process after a count of reductions, so one busy loop cannot stall the others ([proc]) | Each process runs in its own Worker Loader isolate (`workers/index.ts:25`), but `limits.cpuMs` is unset and a local workerd runs them on one thread: a 300 ms spin stalls every process ([experiment 173](../../../experiments/173-worker-loader.md)) | differs, because nothing caps a step yet; [0020](../../../.decisions/0020-programs-get-hard-walls.md) sets `cpuMs` from a measured step and a local step watchdog, built by P34c |
 
-Count: 26 rows, 8 same, 18 differ. Of the 18, 4 are not built yet (links, trap exit, three of the
+Count: 27 rows, 8 same, 19 differ. Of the 19, 4 are not built yet (links, trap exit, three of the
 four strategies, restart types), each waiting for Tier 4. One has no written reason yet: exit
-reasons (ticket 406). One is an open call: past the limit (ticket 404).
+reasons (ticket 406). One is an open call: past the limit (ticket 404). One is decided and not built: a busy process (0020).
 
 Coming: [0016](../../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)
 makes Tier 1's supervision OTP's top-level supervisor, built by P34c. The rows above say what is on
 main today. [0018](../../../.decisions/0018-one-application-per-program.md) amends it: each program is its own
 application with its own top-level supervisor, so one program past its limit stops alone. P34c's
 pull request updates the rows for who supervises, restart types, intensity, backoff, past the
-limit, applications and exit reasons.
+limit, applications, exit reasons and a busy process.
+[0020](../../../.decisions/0020-programs-get-hard-walls.md) amends 0018: each program's supervisor
+lives in its own object and learns of a crash by a letter, as OTP's supervisor learns of a death by
+message, and isolation gets hard walls: quotas per program and a CPU limit per isolate.
 
 [sup]: https://www.erlang.org/doc/system/sup_princ.html
 [supref]: https://www.erlang.org/doc/apps/stdlib/supervisor.html
