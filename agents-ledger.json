@@ -293,11 +293,6 @@
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-of)",
-			"code": "const answerOf = (step: StepName, report: string) => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-of)",
 			"code": "const greenOf = (report: string) => {"
 		},
 		{

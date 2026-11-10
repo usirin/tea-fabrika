@@ -225,13 +225,161 @@ describe("drive takes a skip answer, today's tooling", () => {
       "answer: skip x",
       "answer: stuck x",
     ]) {
-      const [, cmds] = read("review", line);
+      // A review's done also needs its merge-ready verdict line (ticket 557), so this reads a mutation step.
+      const [, cmds] = read("mutation", line);
       exits.set(line, (cmds[0] as { exit: number }).exit);
     }
 
     expect(new Set(exits.values()).size).toBe(exits.size);
     expect(exits.get("answer: skip x")).toBe(40);
     expect(exits.get("answer: stuck x")).toBe(30);
+  });
+});
+
+describe("T557 drive reads exactly one answer line, today's tooling", () => {
+  // The edge cases of the reading, each generated below: no answer line, two or more, one that names
+  // no verb, marks around the line (` and **), upper case, a line inside a code fence, a fence that
+  // never closes, and a review whose verdict line is not merge-ready.
+  type Step = "mutation" | "review";
+  const steps = fc.constantFrom<Step>("mutation", "review");
+  const why = fc.stringMatching(/^[a-z][a-z ]{0,20}[a-z]$/);
+  const wrap = fc.constantFrom("", "`", "**");
+  const spell = fc.constantFrom(
+    (l: string) => l,
+    (l: string) => l.toUpperCase(),
+  );
+  const readable = fc.constantFrom(
+    ["done", "done"],
+    ["send tests", "send:tests:step_said"],
+    ["send build", "send:build:step_said"],
+    ["send plan", "send:plan:step_said"],
+    ["ask", "ask:lead:question"],
+    ["skip", "skip:step_said"],
+    ["stuck", "stuck:step_said"],
+  );
+  const line = fc.oneof(
+    {
+      arbitrary: fc.tuple(readable, why).map(([[verb, name], text]) => ({ text: `answer: ${verb} ${text}`, name })),
+      weight: 4,
+    },
+    {
+      arbitrary: fc
+        .constantFrom("answer:", "answer: maybe", "answer: finished", "answer: send review x", "answer: merge-ready")
+        .map((text) => ({ text, name: null })),
+      weight: 1,
+    },
+  );
+  const lines = fc.array(fc.tuple(line, wrap, spell), { maxLength: 4 });
+  const ready = fc.constantFrom(
+    "merge-ready; findings: 0",
+    "**merge-ready; findings: 2**",
+    "# merge-ready; findings: 1",
+  );
+  const back = fc
+    .tuple(fc.integer({ min: 1, max: 12 }), fc.nat({ max: 3 }), fc.constantFrom("", "**", "`", "# "))
+    .map(([n, m, mark]) => `${mark}changes: ${n}; findings: ${m}${mark === "# " ? "" : mark}`);
+  const verdict = fc.oneof(ready, back, fc.constantFrom("", "The review", "changes: 0; findings: 1"));
+  const chatter = fc.constantFrom("", "what I checked", "the answer is below", "it says answer: done in the brief");
+
+  const ended = (step: Step, report: string) => {
+    const [state, cmds] = machine.update.step_read_ok({ phase: "reading", ask: { ...ask, step } }, {
+      type: "step_read_ok",
+      value: {
+        head: ask.base,
+        commits: 0,
+        unsigned: [],
+        exam: [],
+        leaks: [],
+        left: [],
+        manifests: [],
+        plancheck: null,
+        report,
+        problem: null,
+      },
+    } as never);
+    expect(state.phase).toBe("recording");
+    return cmds[0] as { outcome: string; exit: number; keep: boolean; reason: string };
+  };
+
+  const written = (first: string, said: readonly string[], between: string) =>
+    [first, "report body", ...said.flatMap((l) => [between, l])].join("\n\n");
+
+  // Plants: take the last answer line again; take the first; let a line with no known verb fall
+  // through to an older line; let a review's verdict line stand in for a missing answer line; drop
+  // the verdict check on a review's done. p16b review7, 2026-11-10 (finding 2026-11-10-f28).
+  it("the step's own outcome needs exactly one answer line that reads; any other count is stuck:no_answer", () => {
+    fc.assert(
+      fc.property(steps, verdict, lines, chatter, (step, first, said, between) => {
+        const texts = said.map(([l, w, f]) => `${w}${f(l.text)}${w}`);
+        const cmd = ended(step, written(first, texts, between));
+        const one = said.length === 1 ? said[0]![0].name : null;
+        const sentBack = step === "review" && !/merge-ready/.test(first);
+
+        if (one === null || (one === "done" && sentBack)) {
+          expect(cmd.outcome).toBe("stuck:no_answer");
+          expect(cmd.exit).toBe(30);
+          expect(cmd.keep).toBe(true);
+        } else {
+          expect(cmd.outcome).toBe(one);
+        }
+
+        expect(cmd.outcome === "done").toBe(one === "done" && !sentBack);
+      }),
+      options,
+    );
+  });
+
+  // Plants: read only the first line for the verdict; count `changes: 0` only; skip the check when
+  // the one answer line says done.
+  it("a review with a changes: n line, n above 0, is never done, whatever its answer lines say", () => {
+    fc.assert(
+      fc.property(back, lines, fc.boolean(), fc.option(ready, { nil: "" }), (sent, said, top, other) => {
+        const texts = said.map(([l, w, f]) => `${w}${f(l.text)}${w}`);
+        const report = top ? written(sent, texts, other) : written(other, texts, sent);
+        expect(ended("review", report).outcome).not.toBe("done");
+      }),
+      options,
+    );
+  });
+
+  // Plant: count the lines inside a code fence. A plan or a report quotes code with an `answer:`
+  // field, and drive's own prompt lists six answer lines.
+  it("an answer line inside a code fence is not the step's answer, and a fence left open hides the rest", () => {
+    fc.assert(
+      fc.property(
+        steps,
+        lines,
+        line,
+        fc.constantFrom("```", "~~~", "```ts"),
+        fc.boolean(),
+        (step, quoted, own, fence, closed) => {
+          const block = [
+            fence,
+            ...quoted.map(([l]) => l.text),
+            "\tanswer: Schema.Json,",
+            closed ? fence.slice(0, 3) : "",
+          ];
+          const cmd = ended(step, ["merge-ready; findings: 0", ...block, own.text].join("\n"));
+          expect(cmd.outcome).toBe(closed && own.name !== null ? own.name : "stuck:no_answer");
+        },
+      ),
+      options,
+    );
+  });
+
+  it("pinned: p16b review7's two answer lines under changes: 1 are stuck, not done (2026-11-10)", () => {
+    const report = [
+      "changes: 1; tickets: 2",
+      "",
+      "One thing blocks.",
+      "",
+      "answer: send tests the rule misses two cases",
+      "answer: done",
+    ].join("\n");
+    const cmd = ended("review", report);
+    expect(cmd.outcome).toBe("stuck:no_answer");
+    expect(cmd.exit).toBe(30);
+    expect(cmd.reason).toContain("2 answer lines");
   });
 });
 

@@ -258,34 +258,60 @@ type Msg = { readonly type: "start"; readonly ask: Ask } | Drafted;
 
 const ANSWER = /^[`*\s]*answer:\s*(done|send\s+(tests|build|plan)|ask|skip|stuck)\b[`*\s]*(.*)$/i;
 
-/** What the step said on its last `answer:` line; a review's verdict line counts without one. */
-const answerOf = (step: StepName, report: string) => {
-  const lines = report
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
+/**
+ * How a report's answer reads. Only `one` is the step's own word. `none`, `many` and `unread` are
+ * all stuck:no_answer: a report with two answers that disagree was once taken as its last one
+ * (p16b review7, 2026-11-10, ticket 557).
+ */
+const Said = Schema.TaggedUnion({
+  none: {},
+  many: { count: Schema.Number },
+  unread: {},
+  one: { verb: Schema.String, to: Schema.String, reason: Schema.String },
+});
 
-  for (const line of lines.toReversed()) {
-    const m = ANSWER.exec(line);
+const FENCE = /^(`{3,}|~{3,})/;
 
-    if (m) {
-      const verb = (m[1] ?? "").split(/\s+/)[0]?.toLowerCase() ?? "";
-      const reason = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
-      return { verb, to: m[2]?.toLowerCase() ?? "", reason };
+/** The report's lines outside its code fences, trimmed, the empty ones dropped. A plan quotes code
+ * with an `answer:` field, and a fence left open hides the rest. */
+const outsideFences = (report: string) => {
+  const lines: string[] = [];
+  let fenced = false;
+
+  for (const line of report.split("\n").map((l) => l.trim())) {
+    if (FENCE.test(line)) {
+      fenced = !fenced;
+    } else if (!fenced && line !== "") {
+      lines.push(line);
     }
   }
 
-  const first = (lines[0] ?? "").replace(/^[`*#\s]+/, "");
+  return lines;
+};
 
-  if (step === "review" && /^merge-ready/i.test(first)) {
-    return { verb: "done", to: "", reason: "merge-ready" };
+/** What the step said: its one `answer:` line. None, two or more, or one with no verb is not an answer. */
+const readAnswer = (report: string): typeof Said.Type => {
+  const lines = outsideFences(report).filter((l) => /^[`*\s]*answer:/i.test(l));
+
+  if (lines.length !== 1) {
+    return lines.length === 0 ? Said.cases.none.make({}) : Said.cases.many.make({ count: lines.length });
   }
 
-  if (step === "review" && /^changes/i.test(first)) {
-    return { verb: "send", to: "build", reason: first };
+  const m = ANSWER.exec(lines[0] ?? "");
+
+  if (m === null) {
+    return Said.cases.unread.make({});
   }
 
-  return null;
+  const verb = (m[1] ?? "").split(/\s+/)[0]?.toLowerCase() ?? "";
+  const reason = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
+  return Said.cases.one.make({ verb, to: m[2]?.toLowerCase() ?? "", reason });
+};
+
+/** A review is merge-ready only when its first line says so and no line says `changes: <n>`, n above 0. */
+const mergeReady = (report: string) => {
+  const lines = outsideFences(report).map((l) => l.replace(/^[`*#\s]+/, ""));
+  return /^merge-ready\b/i.test(lines[0] ?? "") && !lines.some((l) => /^changes:\s*0*[1-9]/i.test(l));
 };
 
 const GREEN = /^[`* \t]*laws:[ \t]*green\b[`* \t:]*(.*)$/im;
@@ -359,10 +385,18 @@ const decide = (ask: Ask, read: Read): Judged => {
     };
   }
 
-  const said = answerOf(ask.step, read.report);
+  const said = readAnswer(read.report);
 
-  if (said === null) {
+  if (said._tag === "none") {
     return stuck("no_answer", "no answer line in the report");
+  }
+
+  if (said._tag === "many") {
+    return stuck("no_answer", `${said.count} answer lines in the report, and drive takes exactly one`);
+  }
+
+  if (said._tag === "unread") {
+    return stuck("no_answer", "the answer line names no verb drive knows");
   }
 
   switch (said.verb) {
@@ -382,6 +416,10 @@ const decide = (ask: Ask, read: Read): Judged => {
 
       if (ask.step === "tests" && read.commits === 0) {
         return stuck("no_commit", "answered done with no commit");
+      }
+
+      if (ask.step === "review" && !mergeReady(read.report)) {
+        return stuck("no_answer", "answered done under a verdict that is not merge-ready");
       }
 
       return { outcome: { kind: "done", part: false, head: read.head }, reason: said.reason };
