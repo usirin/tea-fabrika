@@ -104,7 +104,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   alike: no `cloudflare:*`, `miniflare`, `workerd`, `wrangler` or `@cloudflare/*` import, no raw
   platform type, and nothing that starts or talks to the local runtime except through Alchemy. A
   gap is patched locally with its upstream issue filed the same day; a direct use stays only as a
-  marked edge with the issue link. Today's direct uses move with their ports, and the lint rule is
+  marked edge with the issue link. The six gaps 0042 lists are patched without an issue (its
+  amendment, 2026-11-09). Today's direct uses move with their ports, and the lint rule is
   ticket 506 ([0042](./.decisions/0042-platform-pieces-go-through-alchemy.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
@@ -162,6 +163,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   narrower. A change that loosens or removes a law still waits on the owner
   ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
+- **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
+  subject, with front files and an `internal/` no other room imports, and it re-exports no other
+  room's names. Its floor is one line in `layer-rules.json`: a room imports only from lower floors,
+  never from its own. A new file goes in its room now, before the move lands
+  ([0043](./.decisions/0043-rooms-on-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
@@ -171,6 +177,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   legal next is control state. It gets one named type with its transitions in one place, never
   flags, a position in code or an order two parties assume. A plan asks of new code: what are its
   states? ([0037](./.decisions/0037-implicit-state-machines-made-explicit.md)).
+- **In `next/`, every state machine is a tea machine, and a file exports at most one.** No plain
+  union with a transition function. The machine's Model, Msg and update live in that file, with no
+  input or output code, and nothing outside it edits the Model by hand: it sends a Msg. A small
+  private helper machine may share its parent's file
+  ([0044](./.decisions/0044-one-tea-machine-per-file.md)).
 - **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
   Effect does it: `Lease.of(...)` under `import * as Lease`
   ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
