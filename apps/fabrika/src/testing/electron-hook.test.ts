@@ -5,7 +5,7 @@ import {EventEmitter} from "node:events";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {install} from "./electron-hook.cjs";
-import {checkWindowReport, type WindowReport} from "./electron-launch.ts";
+import {createElectronRunner, type WindowReport} from "./electron-launch.ts";
 
 interface Bounds {
 	x: number;
@@ -140,10 +140,30 @@ const fixture = (initial: Bounds) => {
 	};
 };
 
+// Keep the original report in its original phase: inspect at startup or read after close.
+// An independent, safe hook lifetime supplies the other phase.
+const runReport = (report: unknown, complete: boolean, live: readonly number[] = []) => {
+	const baseline = fixture({x: 0, y: 0, width: 800, height: 600});
+	baseline.create(1, {x: 0, y: 0, width: 400, height: 300});
+	const startup = baseline.hook.report();
+	baseline.app.emit("quit");
+	const runner = createElectronRunner({
+		id: () => "hook-law",
+		executable: () => "/fake/electron",
+		launch: async () => ({}),
+		inspect: async () => ({report: complete ? startup : report, live}),
+		close: async () => {},
+		read: async () => JSON.stringify(complete ? report : baseline.written.at(-1)),
+	});
+	return runner.runE2e(async () => {
+		await runner.launchElectron({home: "test-home", env: {}});
+	});
+};
+
 describe("Electron startup hook", () => {
-	it("sets opacity, mouse-ignore and corner synchronously before every simulated showInactive", () => {
-		fc.assert(
-			fc.property(bounds, bounds, (b, area) => {
+	it("sets opacity, mouse-ignore and corner synchronously before every simulated showInactive", async () => {
+		await fc.assert(
+			fc.asyncProperty(bounds, bounds, async (b, area) => {
 				const f = fixture(area);
 				const w = f.create(1, b);
 				expect(w.opacity).toBe(0);
@@ -154,23 +174,23 @@ describe("Electron startup hook", () => {
 					["mouse", true],
 				]);
 				expect(w.calls.at(-1)?.method).toBe("showInactive");
-				expect(() => checkWindowReport(f.hook.report(), "hook-law", false, [1])).not.toThrow();
+				await expect(runReport(f.hook.report(), false, [1])).resolves.toBeUndefined();
 			}),
 			options,
 		);
 	});
 
-	it("moves, resizes and display changes preserve requested sizes and settle without recursion", () => {
+	it("moves, resizes and display changes preserve requested sizes and settle without recursion", async () => {
 		// fast-check: edge cases -- a fake native event schedule has no Schema equivalent.
-		fc.assert(
-			fc.property(
+		await fc.assert(
+			fc.asyncProperty(
 				bounds,
 				bounds,
 				fc.array(fc.record({kind: fc.constantFrom("move", "resize", "display"), bounds}), {
 					minLength: 0,
 					maxLength: 40,
 				}),
-				(b, initial, events) => {
+				async (b, initial, events) => {
 					const f = fixture(initial);
 					const w = f.create(1, b);
 					let area = initial;
@@ -191,48 +211,52 @@ describe("Electron startup hook", () => {
 						w.emit("resize");
 						expect(w.positionWrites).toBe(settled);
 					}
-					expect(() => checkWindowReport(f.hook.report(), "hook-law", false, [1])).not.toThrow();
+					await expect(runReport(f.hook.report(), false, [1])).resolves.toBeUndefined();
 				},
 			),
 			options,
 		);
 	});
 
-	it("covers reopened windows and retains closed-window history in the synchronous quit report", () => {
+	it("covers reopened windows and retains closed-window history in the synchronous quit report", async () => {
 		// fast-check: edge cases -- generated window lifetimes include closures and later creations.
-		fc.assert(
-			fc.property(bounds, fc.array(bounds, {minLength: 1, maxLength: 8}), (area, windows) => {
-				const f = fixture(area);
-				for (const [index, b] of windows.entries()) {
-					f.create(index + 1, b).close();
-					expect(f.written.at(-1)?.windows).toHaveLength(index + 1);
-				}
-				f.app.emit("activate");
-				const reopened = f.create(windows.length + 1, area);
-				expect(reopened.ignoresMouse).toBe(true);
-				f.app.emit("quit");
-				const report = f.written.at(-1);
-				expect(report?.complete).toBe(true);
-				expect(report?.windows.map((w) => [w.id, w.closed])).toEqual([
-					...windows.map((_, i) => [i + 1, true]),
-					[windows.length + 1, false],
-				]);
-				expect(() => checkWindowReport(report, "hook-law", true)).not.toThrow();
-			}),
+		await fc.assert(
+			fc.asyncProperty(
+				bounds,
+				fc.array(bounds, {minLength: 1, maxLength: 8}),
+				async (area, windows) => {
+					const f = fixture(area);
+					for (const [index, b] of windows.entries()) {
+						f.create(index + 1, b).close();
+						expect(f.written.at(-1)?.windows).toHaveLength(index + 1);
+					}
+					f.app.emit("activate");
+					const reopened = f.create(windows.length + 1, area);
+					expect(reopened.ignoresMouse).toBe(true);
+					f.app.emit("quit");
+					const report = f.written.at(-1);
+					expect(report?.complete).toBe(true);
+					expect(report?.windows.map((w) => [w.id, w.closed])).toEqual([
+						...windows.map((_, i) => [i + 1, true]),
+						[windows.length + 1, false],
+					]);
+					await expect(runReport(report, true)).resolves.toBeUndefined();
+				},
+			),
 			options,
 		);
 	});
 
-	it("retains transient positive opacity, enabled mouse and native focus after safe restoration and closure", () => {
+	it("retains transient positive opacity, enabled mouse and native focus after safe restoration and closure", async () => {
 		// fast-check: edge cases -- generated bad calls intentionally leave the safe-state Schema.
-		fc.assert(
-			fc.property(
+		await fc.assert(
+			fc.asyncProperty(
 				bounds,
 				fc.array(fc.constantFrom("opacity", "mouse", "focus", "close"), {
 					minLength: 0,
 					maxLength: 40,
 				}),
-				(area, schedule) => {
+				async (area, schedule) => {
 					for (const fault of ["opacity", "mouse", "focus"]) {
 						const f = fixture(area);
 						let id = 1;
@@ -254,7 +278,7 @@ describe("Electron startup hook", () => {
 						}
 						w.close();
 						f.app.emit("quit");
-						expect(() => checkWindowReport(f.written.at(-1), "hook-law", true)).toThrow();
+						await expect(runReport(f.written.at(-1), true)).rejects.toThrow();
 					}
 				},
 			),
@@ -262,41 +286,46 @@ describe("Electron startup hook", () => {
 		);
 	});
 
-	it("preserves native receivers, full setter arguments and returns; thrown setters never record success", () => {
+	it("preserves native receivers, full setter arguments and returns; thrown setters never record success", async () => {
 		// fast-check: edge cases -- native throws and extra setter arguments are platform behavior.
-		fc.assert(
-			fc.property(bounds, fc.boolean(), fc.boolean(), (area, forward, opacityFailure) => {
-				const f = fixture(area);
-				const w = f.create(1, area);
-				const args = {forward};
-				expect(w.setIgnoreMouseEvents(true, args)).toBe("mouse-result");
-				expect(w.calls.at(-1)).toEqual({method: "mouse", args: [true, args], receiver: w});
-				expect(w.setOpacity(0)).toBe("opacity-result");
-				w.throwMouse = !opacityFailure;
-				w.throwOpacity = opacityFailure;
-				expect(() =>
-					opacityFailure ? w.setOpacity(0.75) : w.setIgnoreMouseEvents(false, args),
-				).toThrow("native");
-				const failed = f.hook
-					.report()
-					.windows.flatMap((window) => window.records)
-					.filter((r) => r._tag === (opacityFailure ? "opacity" : "mouse"))
-					.at(-1);
-				expect(failed).toMatchObject({ok: false, error: expect.any(String)});
-				expect(failed && "value" in failed ? failed.value : undefined).toBeUndefined();
-				expect(() => checkWindowReport(f.hook.report(), "hook-law", false)).toThrow();
-			}),
+		await fc.assert(
+			fc.asyncProperty(
+				bounds,
+				fc.boolean(),
+				fc.boolean(),
+				async (area, forward, opacityFailure) => {
+					const f = fixture(area);
+					const w = f.create(1, area);
+					const args = {forward};
+					expect(w.setIgnoreMouseEvents(true, args)).toBe("mouse-result");
+					expect(w.calls.at(-1)).toEqual({method: "mouse", args: [true, args], receiver: w});
+					expect(w.setOpacity(0)).toBe("opacity-result");
+					w.throwMouse = !opacityFailure;
+					w.throwOpacity = opacityFailure;
+					expect(() =>
+						opacityFailure ? w.setOpacity(0.75) : w.setIgnoreMouseEvents(false, args),
+					).toThrow("native");
+					const failed = f.hook
+						.report()
+						.windows.flatMap((window) => window.records)
+						.filter((r) => r._tag === (opacityFailure ? "opacity" : "mouse"))
+						.at(-1);
+					expect(failed).toMatchObject({ok: false, error: expect.any(String)});
+					expect(failed && "value" in failed ? failed.value : undefined).toBeUndefined();
+					await expect(runReport(f.hook.report(), false)).rejects.toThrow();
+				},
+			),
 			options,
 		);
 	});
 
-	it("records setup failures and focus emitted before window creation", () => {
+	it("records setup failures and focus emitted before window creation", async () => {
 		// fast-check: edge cases -- startup native failures and early focus cannot be a valid report.
-		fc.assert(
-			fc.property(
+		await fc.assert(
+			fc.asyncProperty(
 				bounds,
 				fc.constantFrom("opacity", "mouse", "focus", "readback"),
-				(area, fault) => {
+				async (area, fault) => {
 					const f = fixture(area);
 					const w = new FakeWindow(1, area);
 					w.throwOpacity = fault === "opacity";
@@ -309,7 +338,7 @@ describe("Electron startup hook", () => {
 						/* A setup failure may also abort construction. */
 					}
 					f.app.emit("quit");
-					expect(() => checkWindowReport(f.written.at(-1), "hook-law", true)).toThrow();
+					await expect(runReport(f.written.at(-1), true)).rejects.toThrow();
 				},
 			),
 			options,

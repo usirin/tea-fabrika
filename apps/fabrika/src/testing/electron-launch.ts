@@ -57,7 +57,7 @@ export const Report = Schema.Struct({
 export type WindowReport = typeof Report.Type;
 
 /** Also used independently of the recorder, so dropped history cannot pass unnoticed. */
-export const checkWindowReport = (
+const checkWindowReport = (
 	input: unknown,
 	id: string,
 	complete: boolean,
@@ -108,7 +108,7 @@ export const checkWindowReport = (
 	return report;
 };
 
-export interface LaunchInput {
+interface LaunchInput {
 	readonly home: string;
 	readonly env: Readonly<NodeJS.ProcessEnv>;
 	readonly cwd?: string;

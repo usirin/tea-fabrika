@@ -4,7 +4,6 @@ import {Arbitrary, Effect, Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {
-	checkWindowReport,
 	createElectronRunner,
 	electronHookArgs,
 	Report,
@@ -67,6 +66,21 @@ const fixture = (bad: (report: WindowReport) => unknown = (r) => r) => {
 	return {...runner, calls, closed, reads};
 };
 
+// Judge each complete history through final file I/O, after a safe startup and cleanup.
+const runReport = (report: unknown, id: string) => {
+	const runner = createElectronRunner({
+		id: () => id,
+		executable: () => "/fake/electron",
+		launch: async () => ({}),
+		inspect: async () => ({report: safe(id, false), live: [1]}),
+		close: async () => {},
+		read: async () => JSON.stringify(report),
+	});
+	return runner.runE2e(async () => {
+		await runner.launchElectron({home: "test-home", env: {}});
+	});
+};
+
 describe("Electron window law", () => {
 	it("installs CJS before the app, copies the environment, keeps cwd and isolates repeated homes", async () => {
 		// fast-check: edge cases -- foreign environment fields and optional paths are launcher inputs.
@@ -116,50 +130,54 @@ describe("Electron window law", () => {
 		const result = await Effect.runPromise(
 			Arbitrary.checkEffect(
 				Arbitrary.schema(Report),
-				(report) => {
-					const good = safe(report.id, true, Math.max(1, report.windows.length));
-					const windows = good.windows.map((w, index) => {
-						const sample = report.windows[index]?.records.find(
-							(r) => r._tag === "setup" || r._tag === "bounds",
-						);
-						const state = sample && "state" in sample ? sample.state : undefined;
-						return {
-							...w,
-							records: w.records.map((r) =>
-								r._tag === "setup" && r.state && state
-									? {
-											...r,
-											state: {
-												...r.state,
-												bounds: {...state.bounds, x: state.area.x, y: state.area.y},
-												area: state.area,
-											},
-										}
-									: r,
-							),
-						};
-					});
-					const input = {...good, pid: report.pid, windows};
-					expect(
-						checkWindowReport(Schema.decodeUnknownSync(Report)(input), report.id, true),
-					).toEqual(input);
-					return true;
-				},
+				(report) =>
+					Effect.tryPromise({
+						try: async () => {
+							const good = safe(report.id, true, Math.max(1, report.windows.length));
+							const windows = good.windows.map((w, index) => {
+								const sample = report.windows[index]?.records.find(
+									(r) => r._tag === "setup" || r._tag === "bounds",
+								);
+								const state = sample && "state" in sample ? sample.state : undefined;
+								return {
+									...w,
+									records: w.records.map((r) =>
+										r._tag === "setup" && r.state && state
+											? {
+													...r,
+													state: {
+														...r.state,
+														bounds: {...state.bounds, x: state.area.x, y: state.area.y},
+														area: state.area,
+													},
+												}
+											: r,
+									),
+								};
+							});
+							const input = {...good, pid: report.pid, windows};
+							const decoded = Schema.decodeUnknownSync(Report)(input);
+							expect(decoded).toEqual(input);
+							await expect(runReport(decoded, report.id)).resolves.toBeUndefined();
+							return true;
+						},
+						catch: (error) => error,
+					}),
 				{seed: 119120, runs: 50},
 			),
 		);
 		expect(result._tag).toBe("Passed");
 	});
 
-	it("rejects bad history after safe restoration, including closed windows and missing setup", () => {
+	it("rejects bad history after safe restoration, including closed windows and missing setup", async () => {
 		// fast-check: edge cases -- malicious histories must be generated outside the valid Schema.
-		fc.assert(
-			fc.property(
+		await fc.assert(
+			fc.asyncProperty(
 				fc.integer({min: 1, max: 8}),
 				fc.array(fc.constantFrom("opacity", "mouse", "focus"), {minLength: 1, maxLength: 40}),
-				(count, events) => {
+				async (count, events) => {
 					const good = safe("history", true, count);
-					expect(() => checkWindowReport(good, "history", true)).not.toThrow();
+					await expect(runReport(good, "history")).resolves.toBeUndefined();
 					for (const event of events) {
 						const bad: Record =
 							event === "focus"
@@ -182,11 +200,11 @@ describe("Electron window law", () => {
 									: w,
 							),
 						};
-						expect(() => checkWindowReport(report, "history", true)).toThrow();
+						await expect(runReport(report, "history")).rejects.toThrow();
 					}
 					for (const tag of ["opacity", "mouse", "setup"])
-						expect(() =>
-							checkWindowReport(
+						await expect(
+							runReport(
 								{
 									...good,
 									windows: good.windows.map((w) => ({
@@ -195,9 +213,8 @@ describe("Electron window law", () => {
 									})),
 								},
 								"history",
-								true,
 							),
-						).toThrow();
+						).rejects.toThrow();
 				},
 			),
 			{seed: 119120, numRuns: 100},
@@ -283,13 +300,13 @@ describe("Electron window law", () => {
 		);
 	});
 
-	it("rejects failed setup, missing setter results and settled bounds away from the corner", () => {
+	it("rejects failed setup, missing setter results and settled bounds away from the corner", async () => {
 		// fast-check: edge cases -- malformed native evidence must fail, including after restoration.
-		fc.assert(
-			fc.property(
+		await fc.assert(
+			fc.asyncProperty(
 				fc.integer({min: 1, max: 20000}),
 				fc.constantFrom("setup", "bounds", "mouse", "opacity"),
-				(offset, fault) => {
+				async (offset, fault) => {
 					const good = safe("invalid", true);
 					const bad = good.windows.map((w) => ({
 						...w,
@@ -302,7 +319,7 @@ describe("Electron window law", () => {
 										return {...r, value: undefined};
 									}),
 					}));
-					expect(() => checkWindowReport({...good, windows: bad}, "invalid", true)).toThrow();
+					await expect(runReport({...good, windows: bad}, "invalid")).rejects.toThrow();
 					const misplaced = good.windows.map((w) => ({
 						...w,
 						records: w.records.map((r) =>
@@ -314,9 +331,13 @@ describe("Electron window law", () => {
 								: r,
 						),
 					}));
-					expect(() => checkWindowReport({...good, windows: misplaced}, "invalid", true)).toThrow(
-						"corner",
-					);
+					await expect(runReport({...good, windows: misplaced}, "invalid")).rejects.toMatchObject({
+						errors: [
+							expect.objectContaining({
+								cause: expect.objectContaining({message: expect.stringContaining("corner")}),
+							}),
+						],
+					});
 				},
 			),
 			{seed: 119120, numRuns: 100},
