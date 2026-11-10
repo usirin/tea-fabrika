@@ -12,7 +12,9 @@ so one failed first write leaves the sink without tables until the process resta
 would prevent the most real bugs are the table latch (4 copies, 3 different rules), the supervision
 record (24 state pairs allowed, 8 real, 5 runtime guards), and the connection handshake (two
 writers, one in the gateway and one in the door). 12 more machines are already explicit, 5
-step-by-step functions already have the right form, and 22 candidates are not machines.
+step-by-step functions already have the right form, and 22 candidates are not machines. Made
+explicit, the 13 would gain about 15 properties, which could stand in for about 65 of today's
+example tests (a rough read of test titles), and leave 23 invariants for someone to write.
 
 ```ts
 // The whole idea, as a sketch. Today (data/sink.ts:268): the latch flips inside the step.
@@ -74,6 +76,29 @@ Each machine below is tagged with where it hides:
 - **position**: a long function whose state is which step it has reached, so nothing stores it
   unless the code saves a marker;
 - **between two parties**: a protocol whose order each side only assumes, split over two files.
+
+### What tea's property tests check
+
+Read from the installed `@demlik/tea` 0.25.0, `dist/pbt/index.d.ts`. Today's version imports
+`@demlik/tea/pbt` in 46 files and `next/` in 3 (`app/brain-life.laws.test.ts`,
+`next/programs/counter/src/program.laws.test.ts`, and one exam test).
+
+- `arbMsgSequence` draws lists of Msgs, with a length bound and an optional fixed prefix.
+- `arbGuidedSequence` draws lists in which every answer answers a Cmd that was sent and not yet
+  answered. Its own docs say such a list never tests that a state refuses a Msg.
+- `propertyTerminates` checks that every drawn list ends in a state the caller calls terminal.
+- `propertyInvariant` checks a predicate on every step, given `{prev, msg, next, cmds}`.
+- `propertyTrace` checks a predicate over the whole trace and the final state.
+- Every runner takes `loaded`, a saved state to start from, which may itself be drawn.
+
+`next/` also has its own replay law, `syncTest` in `testing.ts:17`: stop at every Msg, save through
+JSON text, boot from it, and the rest of the run must match the run that never stopped. That is
+the law "state rebuilt from what is stored equals the state in memory" for a tea machine.
+
+A tea machine gets these as they are. A plain tagged union with one transition function needs a
+small fast-check wrapper: draw a list of events, fold them, check a predicate per step. Per
+[AGENTS.md](../AGENTS.md), a law is a property, or an example labeled `vector:`, `format:`,
+`pinned:` or `scenario:`.
 
 ### The first counts, checked
 
@@ -142,6 +167,10 @@ The sink never recovers in that process, though the disk is fine from the second
 on `node:sqlite` through `data/sqlite.ts`. On a Durable Object it is a guess: its
 `transactionSync` should roll back the same way, and a new isolate resets the latch.
 `data/records.ts` has the same lines and was not run.
+
+No test covers it today. `data/sink.test.ts` has four full-disk tests, and each lands one good span
+first (`step("warm", {})`, or the span numbered 0) before the disk fills, so the tables always
+exist by then.
 
 **Form.** One function in `data/` that every store uses, with the latch flipped only after the
 commit, as `ledger-store.ts` already does. A tagged union is not needed for two states; one
@@ -409,13 +438,13 @@ fold it. The stored state is membership in `cmds`, with `state: "dispatched"` as
 (`:91-98`).
 
 **Tests.** T1 and T2 yes. T3 yes. On a load only saved writes are run again (`:894-896`). A handler
-Cmd that was interrupted stays `dispatched` (`:1250-1253`), and nothing found here runs it again or
-tells anyone.
+Cmd that was interrupted stays `dispatched` (`:1250-1253`) and is not run again. A test says it
+"remains visible after wake" (`app/runner.test.ts`, "re-fire an unanswered dispatch"); where a
+person or a program would see it was not read.
 
 **Form.** Stored already. The union has one case where the life has three: `dispatched`,
-`interrupted` (nobody knows whether it acted) and answered. Adding `interrupted` would let a person
-or a program see it. Whether a stuck handler Cmd is a real problem today is a guess; it was not
-run. 60% sure.
+`interrupted` (nobody knows whether it acted) and answered. Adding `interrupted` would give that
+visible state a name. Whether a stuck handler Cmd is a real problem today is a guess; it was not run. 60% sure.
 
 ### 13. The span sink's hold
 
@@ -431,6 +460,87 @@ combinations, 3 real.
 **Disagreement with the rule.** This one should wait. All four combinations are reachable and each
 is handled the same way as a real one, so no wrong state is removed. Fix machine 1 in this file
 first. 70% sure.
+
+## What property tests each machine would get
+
+"Covers" counts today's example tests whose whole point is a state or a transition, read from
+test titles and not from each test's body, so every count is rough. Most of those tests also check
+storage through the real runner or door, so a property over the pure machine would replace their
+transition part, and few could be deleted outright.
+
+| # | Runs as is, or needs a wrapper | Properties gained | Invariants to write | Covers (rough) |
+|---|---|---|---|---|
+| 1 | wrapper | 1 | 2 | 0 |
+| 2 | tea: invariant, trace, terminates with guided lists | 3 | 4 | 15 |
+| 3 | none: the second copy goes | 0 | 1 | 3 |
+| 4 | tea: invariant, terminates | 2 | 3 | 1 |
+| 5 | wrapper | 2 | 2 | 10 |
+| 6 | wrapper | 2 | 3 | 7 |
+| 7 | wrapper | 1 | 2 | 3 |
+| 8 | wrapper | 1 | 2 | 5 |
+| 9 | wrapper, and it exists | 0 | 0 | 6 |
+| 10 | wrapper | 1 | 1 | 4 |
+| 11 | replay law, and it exists | 0 | 1 | 3 |
+| 12 | wrapper | 1 | 1 | 4 |
+| 13 | wrapper | 1 | 1 | 4 |
+| Total | | 15 | 23 | 65 |
+
+Per machine: the invariants in one line each, the wrong states that stop being a test because the
+type no longer allows them, and the replay law for those that pass T3.
+
+1. **Table latch.** Invariants: "ready means the tables exist"; "a step that throws leaves the
+   latch as it was". No state leaves the type. Covers 0: it adds the case nobody tests. T3 no.
+2. **Supervision record.** Invariants: "no start before its `until`"; "one successor per exit";
+   "a dead letter is written before its exit"; "the crash count resets only while live". The 16
+   wrong pairs and the five `bad_row` guards stop being testable. Replay law: checked today for
+   the machine's own three Cmds by `syncTest` (`app/supervisor.laws.test.ts`, "every saved cut
+   resumes the same recovery"), and by example per cut in `app/recovery-gaps.test.ts` (6). The
+   runner's hand edits (`dead`, `checkpoint`) are outside that law today. Covers: about 9 of the
+   25 in `app/runner-supervision.test.ts` plus those 6.
+3. **A process's life, told twice.** Invariant: "a name has at most one live process", on the
+   ledger's fold. The law "the record agrees with the ledger" disappears with the second copy.
+   Covers about 3 adoption tests in `app/runner-supervision.test.ts`.
+4. **Brain stage.** Invariants: "no port, then `offline`"; "an exit clears the pid before any
+   call"; "a stopped or braked stage never starts a replacement" (exists, `pinned:`, in
+   `app/brain-life.laws.test.ts`). 26 combinations leave the type. That file's three laws,
+   one of them the JSON replay law, run today against a machine the stage never reads. Covers 1
+   (`node/stage.laws.test.ts`); the three in `next/apps/fabrika/src/brain-life.test.ts` are
+   `scenario:` tests of process groups and stay.
+5. **Connection handshake.** Invariants: "only an online connection routes a method other than
+   `initialize` and `door.knock`" (exists as a property, `transport/answer.test.ts` d2); "a nonce
+   goes online at most once". "The gateway's copy equals the door's row" stops being a test with
+   one writer. Replay law: by example only, in `next/apps/fabrika/src/door.test.ts` ("survive
+   reopening SQLite", "restarted connections"). Covers about 8 of its 13 handshake tests and 2 of
+   10 in `transport/hello.test.ts`.
+6. **Input envelope.** Invariants: "a settled input answers the same result on every resend";
+   "only a delivered input signs"; "a superseded binding never delivers". The hidden `letter =
+   NULL` state and the text query leave. Replay law: by example per state, in
+   `next/apps/fabrika/src/door-recovery.test.ts` ("rebind only some states: ${state}"). Covers
+   its 3 examples and about 4 in `door.test.ts` (p67, question 16).
+7. **Runner's holder.** Invariants: "the alarm is the earlier of the program's wake and the
+   recovery wait"; "no step runs while the process is not live". `supervision === null` stops
+   meaning two things. Covers about 3 alarm tests in `app/runner-supervision.test.ts`. T3 no.
+8. **Delivery receipt.** Invariants: "tries never pass the limit"; "a dead receipt always
+   refuses". 12 of 16 combinations and the run-time filter leave. Replay law: one example,
+   `coordination/recovery-store.test.ts` ("memory-only receipt"). Covers about 5 counting tests in
+   `app/runner-supervision.test.ts`.
+9. **Member key standing.** The properties exist: `coordination/members.test.ts` has 36 tests
+   and already draws "over any list" ("at most one sheet is live at every step"). 4 of 8
+   combinations leave, and about 6 of its "plant" examples on revoked, spent and replaced keys
+   become cases the type cannot write. The fold is its own replay law.
+10. **Membership change.** Invariant: "an applied change answers the same reply for the same
+    bytes, and refuses other bytes". Covers about 4 of the p42 tests in `door.test.ts`.
+11. **Accepting one input.** Invariant: "an input is in the inbox at most once, at its first
+    placing". Replay law: checked today, by `app/runner-recovery.laws.test.ts` (1 property) and
+    per cut in `app/runner.test.ts` ("trust a prepared model: recovery ${cut}"). Covers about 3.
+12. **Running one Cmd.** Invariant: "a Cmd is answered at most once, and an interrupted handler
+    is never run again". Covers about 4 of the 17 Cmd tests in `app/runner.test.ts`.
+13. **Span sink hold.** Invariant: "unsent plus held is every span that ended". Covers the 4
+    full-disk examples in `data/sink.test.ts`; the one on a real full file stays as a `scenario:`.
+
+**The total.** About 15 properties gained, about 65 example tests whose transition part they could
+cover, and 23 invariants still to write, of which 3 exist today in some form (machines 4, 5 and
+9).
 
 ## Machines that are already explicit
 
@@ -526,6 +636,10 @@ const sql = { ...real, exec: (q, ...p) => {
   They were read, not driven. Only the latch and the schema checks were run.
 - How often any of this bites. There is no `field/` data for `next/` on resends, reconnects or
   restarts yet.
+- How many example tests a property could really replace. The 65 is a read of titles; nobody
+  opened each test to see what else it checks.
+- What tea's `lawInvariant`, `lawTerminates`, `lawTrace` and `foldEvents` check. `pbt` re-exports
+  them and they were not read.
 - What UML 2.5.1 itself says. The split between control state and extended state is quoted from
   Harel and from a secondary article, not from the specification.
 - Anything about `exam/`, tests, or today's version.

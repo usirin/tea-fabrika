@@ -20,6 +20,7 @@
     "membership_change": [4, 3],
     "span_sink_hold": [4, 3]
   },
+  "property_tests": { "tea": "0.25.0", "pbt_imports_today": 46, "pbt_imports_next": 3, "properties_gained": 15, "invariants_to_write": 23, "example_tests_covered_rough": 65 },
   "probe": {
     "sink_latch": { "tables_after_first_failed_write": 0, "tables_after_three_more_spans": 0, "held_at_flush": 4 },
     "supervision_wrong_pairs_decoded": 3
