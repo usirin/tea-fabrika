@@ -559,7 +559,7 @@ describe("P34 interrupted recovery", () => {
 	// for the real object's alarm; evict reconstructs the actual object with its durable storage.
 	// scenario: the optional P12 driver runs real object alarms and reconstruction on the local stage.
 	it.skipIf(!process.env.P34_STAGE_DRIVER)(
-		"p80 real stage: durable poison, down resends and duplicate alarms survive object reconstruction",
+		"scenario: p80 real stage: durable poison, down resends and duplicate alarms survive object reconstruction",
 		async () => {
 			type Status = {process: string; state: string; until: number | null};
 			type Stage = {
