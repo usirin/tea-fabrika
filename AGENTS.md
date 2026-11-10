@@ -183,7 +183,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   union with a transition function. The machine's Model, Msg and update live in that file, with no
   input or output code, and nothing outside it edits the Model by hand: it sends a Msg. A small
   private helper machine may share its parent's file. An `update` handler picks the next state with
-  a plain conditional on `_tag`, not `Match` or `.match`
+  a plain conditional on `_tag`, not `Match` or `.match`. A file may export one machine factory, a
+  function that takes a config and returns one machine, in place of the machine, never both
   ([0046](./.decisions/0046-one-tea-machine-per-file.md)).
 - **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
   Effect does it: `Lease.of(...)` under `import * as Lease`
