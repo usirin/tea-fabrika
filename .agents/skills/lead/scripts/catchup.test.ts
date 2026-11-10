@@ -15,6 +15,8 @@ import "./redact.sh?raw";
 import "./clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./lane.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./freshmain.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
@@ -129,6 +131,8 @@ type Setup = {
   landed?: "MERGED" | "OPEN";
   offMain?: boolean;
   tickets?: Record<number, "open" | "closed">;
+  // The last look at main refuses: main moved after the checks and the merged tree is red (552).
+  stale?: boolean;
 };
 
 const green: Setup = {
@@ -238,6 +242,11 @@ if (cmd === "node" && args[0].endsWith("/apps/fabrika/src/cli.ts") && args[1] ==
     // As the real list does: open tickets only, one line each, after the logger's own prefix.
     for (const [number, state] of Object.entries(setup.tickets ?? {}))
       if (state === "open") console.log("[15:00:00.000] INFO (#2): #" + number + " open c0 A ticket");
+  process.exit(0);
+}
+if (cmd === "node" && args[0].endsWith("/freshmain.ts")) {
+  // The last look at main, with its own laws in freshmain.test.ts: here it only passes or refuses.
+  if (setup.stale) die("pr 900: merge refused at the lint check: planted");
   process.exit(0);
 }
 if (cmd === "node") {
@@ -1401,6 +1410,35 @@ describe("catchup, today's tooling", () => {
     );
   });
 
+  // Plants: drop the freshmain call; call it after the merge; ignore its exit status.
+  it("T552 scenario: the last look at main runs once on the checked head, after the checks and before the merge, and its refusal stops the merge (a merge must never outrun it)", () => {
+    for (const [stale, stack] of [
+      [false, "none"],
+      [true, "none"],
+      [false, "same"],
+      [true, "same"],
+    ] as const) {
+      const got = run({ ...green, stale, stack });
+      expect(got.code, got.text).toBe(stale ? 1 : 0);
+      const looks = got.calls.filter((c) => c.cmd === "node" && c.args[0]!.endsWith("/freshmain.ts"));
+      expect(looks.map((c) => c.args.slice(1))).toEqual([["900", tip]]);
+      const order = got.calls.map((c) => (c.cmd === "node" ? "look" : c.key));
+      const landing = order.filter((key) => key === "merge" || key === "stack");
+      expect(landing).toEqual(stale ? [] : stack === "same" ? ["merge", "stack"] : ["merge"]);
+      expect(order.lastIndexOf("logs")).toBeLessThan(order.indexOf("look"));
+
+      if (!stale) {
+        expect(order.indexOf("look")).toBeLessThan(order.indexOf("merge"));
+      } else {
+        expect(got.text).toContain("pr 900: not merged");
+      }
+    }
+
+    // A check that never came back green never reaches the look.
+    const red = run({ ...green, answer: "red" });
+    expect(red.calls.some((c) => c.cmd === "node")).toBe(false);
+  });
+
   // Plant: test the deadline only after the green-and-complete break, as review round 4 found.
   // The clock moves with each check read, so the law holds wherever the script reads `date`.
   it("no merge once the clock is past the hour, and a green answer in time still merges", () => {
@@ -1458,7 +1496,7 @@ describe("catchup, today's tooling", () => {
             const got = run({ ...green, branch, merge, refused });
             const denied = merge && refused !== "none";
             expect(got.code, got.text).toBe(denied ? 1 : 0);
-            const botpush = got.calls.filter((c) => c.cmd === "node");
+            const botpush = got.calls.filter((c) => c.cmd === "node" && c.args[0]!.endsWith("/botpush.mjs"));
             expect(botpush.map((c) => c.args.slice(1))).toEqual(
               !merge ? [] : bot ? [[".", branch, tip]] : [[".", "-"]],
             );

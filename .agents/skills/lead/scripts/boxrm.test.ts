@@ -3,6 +3,8 @@ import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
 import "./catchup.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./freshmain.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
@@ -208,10 +210,13 @@ if (cmd === "gh") {
     process.stdout.write(got.stdout || ""); process.stderr.write(got.stderr || "");
     process.exit(got.status ?? 1);
   }
+} else if (cmd === "node" && args[0].endsWith("/freshmain.ts")) {
+  // The last look at main passes here; its own laws are in freshmain.test.ts.
+  process.exit(0);
 } else process.exit(1);
 `;
 
-      for (const tool of ["gh", "git"]) {
+      for (const tool of ["gh", "git", "node"]) {
         writeFileSync(join(bin, tool), `#!${process.execPath}\n${stub}`, { mode: 0o755 });
       }
 
