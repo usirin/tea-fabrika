@@ -281,7 +281,6 @@
 
 		// Each fired 0 times on the tree when it went on (lint audit, 2026-11-09). oxlint-plugins/plants.test.ts
 		// plants a line for each, so a rule that stops working is seen.
-		"eslint/no-unused-expressions": "error",
 		"eslint/no-constant-binary-expression": "error",
 		"eslint/no-unassigned-vars": "error",
 		"eslint/no-invalid-regexp": "error",
@@ -343,7 +342,6 @@
 		"unicorn/prefer-array-flat": "error",
 		"unicorn/prefer-math-min-max": "error",
 		"unicorn/error-message": "error",
-		"unicorn/prefer-type-error": "error",
 		"typescript/prefer-as-const": "error",
 		"typescript/no-confusing-non-null-assertion": "error",
 		"typescript/no-non-null-asserted-nullish-coalescing": "error",

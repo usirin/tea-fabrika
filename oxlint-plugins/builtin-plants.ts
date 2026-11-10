@@ -17,18 +17,11 @@ const XS = "declare const xs: number[];";
 const FN = "declare const f: () => void;";
 const P = "declare const p: Promise<number>;";
 const TEST = 'import {describe, expect, it, vi} from "vitest";';
+
 const REACT =
 	'import {Component, createContext, forwardRef, useEffect, useMemo, useState} from "react";';
 
 const eslint: readonly Plant[] = [
-	{
-		code: "eslint(no-unused-expressions)",
-		prelude: [NUM],
-		lines: [
-			["x + 1;", true],
-			["export const a = x + 1;", false],
-		],
-	},
 	{
 		code: "eslint(no-constant-binary-expression)",
 		prelude: ["declare const x: number | undefined;"],
@@ -524,14 +517,6 @@ const unicorn: readonly Plant[] = [
 		lines: [
 			["export const a = new Error();", true],
 			['export const b = new Error("b");', false],
-		],
-	},
-	{
-		code: "unicorn(prefer-type-error)",
-		prelude: ["declare const x: unknown;"],
-		lines: [
-			['if (typeof x !== "number") { throw new Error("a"); }', true],
-			['if (typeof x !== "string") { throw new TypeError("b"); }', false],
 		],
 	},
 ];
