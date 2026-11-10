@@ -170,7 +170,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   `plancheck --draft` on a plan. A `stale_link` counts only for a step the lane has signed; one for
   a step it has not reached (lead, before catch-up) is left to CI on the PR. Stepcommit reads the
   facts of the box it runs in, never another `.box` on the branch. A check that cannot run is
-  `stuck`, never a pass. A build that
+  `stuck`, never a pass. When the commits check holds a step, `box.sh fetch` and the outcome line's
+  `reason` name each rule and commit that held it (`stale_link 1a2b3c4d step tests`,
+  `broken_chain ...`, `unlinked_commit ...`; five at most), and `not_owner` names its path and
+  commit, so the lead knows which step to send it to. A build that
   answers `done` with no commit is done only with a `laws: green <paths>` line (every law already
   green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
 - A box has no network, so it cannot refresh `pnpm-lock.yaml`. When a step's commits change a

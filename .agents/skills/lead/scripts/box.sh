@@ -563,7 +563,7 @@ def fetch_box():
                 if exam.returncode not in (0, 1): refuse("exam list unreadable")
                 if step == "build" and exam.returncode: refuse("build exam paths " + sha)
                 for p in paths:
-                    if owners.get(p) != step and not (step == "mutation" and owners.get(p) == "tests"): refuse("not_owner " + p)
+                    if owners.get(p) != step and not (step == "mutation" and owners.get(p) == "tests"): refuse("not_owner " + p + " in " + sha[:8])
                 candidates.append(sha)
             # All candidates pass before any note is made. HEAD and index belong to a private gitdir.
             common = must(git("rev-parse", "--path-format=absolute", "--git-common-dir"), "gitdir lookup failed")
@@ -604,11 +604,20 @@ def fetch_box():
             if person(sha): continue
             if not isinstance(note, dict) or not isinstance(note.get("step"), str) or not verified(sha, note["step"]):
                 print(json.dumps({"_tag": "stuck", "why": "unlinked_commit", "commit": sha}))
-                answers.append({"_tag": "stuck"})
+                answers.append({"_tag": "stuck", "why": "unlinked_commit", "commit": sha})
         if unreadable or not (answers or waived): refuse("commits check unreadable output")
         # The checker exits 1 for any stuck answer; when every stuck it gave was waived, that exit is
         # explained. Any other failing exit still refuses.
-        if (checked.returncode and not (checked.returncode == 1 and waived)) or any(a["_tag"] == "stuck" for a in answers): refuse("commits check failed")
+        if (checked.returncode and not (checked.returncode == 1 and waived)) or any(a["_tag"] == "stuck" for a in answers):
+            # Name each rule and commit that held it, so the lead sends the step to the right place
+            # (ticket 429: 18 fetches on 2026-11-09 said only "commits check failed").
+            def said(a):
+                sha = a.get("sha") or a.get("commit") or ""
+                step = " step " + a["step"] if isinstance(a.get("step"), str) else ""
+                paths = " " + " ".join(map(str, a["paths"][:3])) if isinstance(a.get("paths"), list) and a["paths"] else ""
+                return str(a.get("why") or a["_tag"]) + (" " + str(sha)[:8] if sha else "") + step + paths
+            held = [said(a) for a in answers if a["_tag"] == "stuck"]
+            refuse("commits check failed: " + ("; ".join(held[:5]) + (f"; and {len(held) - 5} more" if len(held) > 5 else "") if held else "exit " + str(checked.returncode)))
     return 0
 try:
     if cmd == "new": new_box(); status = 0

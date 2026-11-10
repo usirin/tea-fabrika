@@ -24,6 +24,7 @@ import {afterAll, describe, expect, it} from "vitest";
 import {
 	claudeProfile,
 	claudeTail,
+	commitsSaid,
 	freshBox,
 	holdsElectron,
 	leftIn,
@@ -194,6 +195,43 @@ describe("drive takes a skip answer, today's tooling", () => {
 		expect(new Set(exits.values()).size).toBe(exits.size);
 		expect(exits.get("answer: skip x")).toBe(40);
 		expect(exits.get("answer: stuck x")).toBe(30);
+	});
+});
+
+describe("T429 drive names the commits check's rule and commit, today's tooling", () => {
+	const rule = fc.constantFrom(
+		"unsigned_commit",
+		"build_touched_exam",
+		"broken_chain",
+		"stale_link",
+	);
+	const answer = fc.record({
+		why: rule,
+		sha: fc.stringMatching(/^[0-9a-f]{40}$/),
+		step: fc.option(fc.constantFrom("tests", "build", "lead"), {nil: undefined}),
+	});
+	const lane = new Set(["tests", "build"]);
+	const held = (a: {why: string; step?: string}) =>
+		!(a.why === "stale_link" && !(a.step !== undefined && lane.has(a.step)));
+
+	// Plants: print only the last lines of JSON; drop the commit; name a waived stale link.
+	it("each held answer is named as rule, commit and step, and a waived stale link is not", () => {
+		fc.assert(
+			fc.property(fc.array(answer, {minLength: 1, maxLength: 7}), (answers) => {
+				const out = answers.map((a) => JSON.stringify({_tag: "stuck", ...a})).join("\n");
+				const said = commitsSaid({code: 1, out, err: "commits: stuck ..."}, lane);
+				const named = answers
+					.filter(held)
+					.map((a) => `${a.why} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`);
+				if (named.length === 0) {
+					expect(said).toMatch(/^commits check exit 1: /);
+					return;
+				}
+				const more = named.length > 5 ? `; and ${named.length - 5} more` : "";
+				expect(said).toBe(`commits check: ${named.slice(0, 5).join("; ")}${more}`);
+			}),
+			options,
+		);
 	});
 });
 
