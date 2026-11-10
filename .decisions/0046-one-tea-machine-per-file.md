@@ -1,12 +1,12 @@
 ---
-id: 0045
+id: 0046
 title: In next/, every state machine is a tea machine and a file exports at most one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
 status: accepted
 date: 2026-11-09
 tags: [state-machine, tea, file-layout, lint, properties, elm, next]
 ---
 
-# 0045: In next/, every state machine is a tea machine and a file exports at most one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
+# 0046: In next/, every state machine is a tea machine and a file exports at most one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
 
 **What this decides:** in `next/`, every state machine is written as a tea machine, and each tea
 machine has a file that holds its Model, its Msg and its update and nothing that does input or
