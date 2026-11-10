@@ -425,7 +425,8 @@ const run = (setup: Setup = {}) => {
 			encoding: "utf8",
 			timeout: 30_000,
 			env: {
-				PATH: `${bin}:/usr/bin:/bin`,
+				// With no stand-in, no docker at all: a CI machine has a real one in /usr/bin.
+				PATH: setup.docker === false ? bin : `${bin}:/usr/bin:/bin`,
 				HOME: dir,
 				FAKE: fake,
 				...setup.env,
