@@ -23,11 +23,13 @@ machines wrap. Five things are worth taking, in this order:
    back a Tier 5 law: "when hands restart, they resume the maker's session".
 3. **The transcript leaves as events.** Every change to history goes out on the output stream as
    `HistoryAppended` or `HistoryReplaced`, so the caller keeps the transcript without reading the
-   agent's memory. Lean 70%. It fits [an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md).
+   agent's memory. Lean 70%. **Decided** (owner, 2026-11-09, [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)). It fits [an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md).
 4. **Limits are `Context.Reference`s, retries are one named `Schedule`, and a typed error says the
-   tries ran out.** Lean 75% on the shape. Not its numbers: they have no source.
+   tries ran out.** Lean 75% on the shape. Not its numbers: they have no source. **Decided** (owner,
+   2026-11-09, [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)).
 5. **The executor's state is a Schema value the caller holds and hands back.** Store it beside the
-   transcript, and a resume needs nothing in memory. Lean 80%. Fits P6 of the
+   transcript, and a resume needs nothing in memory. Lean 80%. **Decided** (owner, 2026-11-09,
+   [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)). Fits P6 of the
    [pipeline guidelines](../docs/direction/pipeline-guidelines.md).
 
 What not to take: its loop state in `let` and `MutableRef` (ours is a tea machine), its in-memory
@@ -365,7 +367,8 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
 - **Why.** The caller never reads the agent's memory, so a crash loses at most one step. A
   replace (a compaction) is a fact we would lose forever if only the final history were kept,
   which [record wide](../AGENTS.md) forbids.
-- **What it changes.** Nothing decided. It gives [an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md)
+- **What it changes.** **Decided** (owner, 2026-11-09, [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)): the events and the compaction
+  record, read from the harness's own stream. *It said: nothing decided.* It gives [an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md)
   (proposed) its event shape.
 - **Cost.** Small, in the service. **How sure: 70%.** The doubt is volume on a long step; content
   is already the deletable part.
@@ -379,7 +382,8 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
 - **Why.** `next/` has one `Context.Reference` and no `Schedule` today (`rg` on main: one, in `next/packages/libfabrika/src/workers/runtime.ts:269`).
   An inactivity limit that pauses while a tool runs is also a better stop than drive's one
   60-minute wall clock, which cannot tell a long test run from a stalled model.
-- **What it changes.** Nothing decided. A model call's 429 retry is P8's first row (the service
+- **What it changes.** **Decided** (owner, 2026-11-09, [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)), for `next/` and the new
+  `drive.ts`, with our own numbers from field rows. *It said: nothing decided.* A model call's 429 retry is P8's first row (the service
   that owns the call retries, with backoff), so it lives in `Agents`, never in the lane.
 - **Cost.** Small. **How sure: 75%** on the shape. clanka's numbers (20 tries, 5 minutes, 5 s cap)
   have no source given, so P8 still needs ours.
@@ -391,7 +395,8 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
   never reading inside it.
 - **Why.** P6 says every stop saves what a resume needs. With this, a resume needs nothing in
   memory, in the box or in the maker's session files.
-- **What it changes.** Nothing decided. **Cost.** Small. **How sure: 80%.**
+- **What it changes.** **Decided** (owner, 2026-11-09, [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)): the parent stores it in the
+  lane's record before and after each box step. *It said: nothing decided.* **Cost.** Small. **How sure: 80%.**
 
 ### Smaller ones
 
@@ -447,7 +452,7 @@ contradicting a decision: a no keeps the note as it is.
    **Answered no** (owner, 2026-11-09,
    [0026](../.decisions/0026-fabrika-never-owns-the-agent-loop.md)): the adapter does not own the
    history, and a restart resumes the harness's own session. Borrows 3 to 5 do not need our own
-   loop and stay open leads.
+   loop. *It said: they stay open leads.* All three were then decided ([0030](../.decisions/0030-copy-clankas-shapes-where-better.md)).
 
 ## What it cannot tell us
 
