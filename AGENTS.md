@@ -166,7 +166,9 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 - **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
   subject, with front files and an `internal/` no other room imports, and it re-exports no other
   room's names. Its floor is one line in `layer-rules.json`: a room imports only from lower floors,
-  never from its own. A new file goes in its room now, before the move lands
+  never from its own. A room offers Effect services in its own types and errors, plus the shared
+  names beside `Id.ts`: a lower room's error is translated at the service, with its cause kept, and
+  `runtime/` never imports `ledger/`. A new file goes in its room now, before the move lands
   ([0043](./.decisions/0043-rooms-on-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
@@ -181,7 +183,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   union with a transition function. The machine's Model, Msg and update live in that file, with no
   input or output code, and nothing outside it edits the Model by hand: it sends a Msg. A small
   private helper machine may share its parent's file
-  ([0044](./.decisions/0044-one-tea-machine-per-file.md)).
+  ([0046](./.decisions/0046-one-tea-machine-per-file.md)).
 - **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
   Effect does it: `Lease.of(...)` under `import * as Lease`
   ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
@@ -496,6 +498,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
   `BrowserWindow` gets `setOpacity(0)`, `setIgnoreMouseEvents(true)` and a position in the work
   area's corner. Never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
+- A step that needs ports, sockets or its own processes runs in a container with its own network
+  (`--network none` while test code runs), never behind a hole in the laptop sandbox: no
+  `allowLocalBinding`, no unix-socket allowance, no patch of the tool. No key, login or home folder
+  goes in. Docker not running ends the step `stuck`
+  ([0045](./.decisions/0045-test-steps-run-in-containers.md)).
 
 ### Tool facts that cost us time
 

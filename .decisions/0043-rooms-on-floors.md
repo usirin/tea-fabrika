@@ -1,12 +1,12 @@
 ---
 id: 0043
-title: libfabrika's src/ has one folder per subject, a room, and a layer is a floor, a line in the rule file that says who may import whom, never a folder
+title: libfabrika's src/ has one folder per subject, a room, and a layer is a floor, a line in the rule file that says who may import whom, never a folder, and each room offers Effect services in its own types and errors
 status: accepted
 date: 2026-11-09
-tags: [layout, files, folders, rooms, floors, layers, internal, access, presence, telemetry, libfabrika, next]
+tags: [layout, files, folders, rooms, floors, layers, internal, services, errors, access, presence, telemetry, libfabrika, next]
 ---
 
-# 0043: libfabrika's src/ has one folder per subject, a room, and a layer is a floor, a line in the rule file that says who may import whom, never a folder
+# 0043: libfabrika's src/ has one folder per subject, a room, and a layer is a floor, a line in the rule file that says who may import whom, never a folder, and each room offers Effect services in its own types and errors
 
 **What this decides:** in `next/packages/libfabrika/src`, a folder holds one subject and is called a
 room, and the order of imports between rooms is kept only in the rule file, where each room sits on
@@ -37,7 +37,7 @@ next/packages/libfabrika/src/
   processes/   (the mailbox lives inside)    presence/
   ledger/                                    telemetry/
   transport/
-  Id.ts and the shared names (ProcessId, Sql, LedgerError) beside it
+  Id.ts and the shared names (ProcessId, Sql, Rev, ParentText) beside it
 ```
 
 All of this is about `next/`. Today's version is not touched.
@@ -97,7 +97,7 @@ next/packages/libfabrika/src/
 
 ```text
 next/packages/libfabrika/src/
-  index.ts  Id.ts  Testing.ts  and one file per shared name (ProcessId, Sql, LedgerError)
+  index.ts  Id.ts  Testing.ts  and one file per shared name (ProcessId, Sql, Rev, ParentText)
   transport/   answer, gateway, hello, sshsig, webauthn, wire                internal/ binary
   telemetry/   archive, record-part, records, sink, trace                    internal/ health
   ledger/      ledger, ledger-transaction, log, referee, sqlite, worker-sql  internal/ ledger-store
@@ -132,8 +132,8 @@ The rule file, before and after:
   { "name": "next-processes", "floor": 3, "paths": ["next/packages/libfabrika/src/processes"] },
   { "name": "next-presence", "floor": 3, "paths": ["next/packages/libfabrika/src/presence"] },
   { "name": "next-ledger", "floor": 2, "paths": ["next/packages/libfabrika/src/ledger"] },
-  { "name": "next-telemetry", "floor": 1, "paths": ["next/packages/libfabrika/src/telemetry"] },
-  { "name": "next-transport", "floor": 1, "paths": ["next/packages/libfabrika/src/transport"] }
+  { "name": "next-transport", "floor": 2, "paths": ["next/packages/libfabrika/src/transport"] },
+  { "name": "next-telemetry", "floor": 1, "paths": ["next/packages/libfabrika/src/telemetry"] }
 ]
 ```
 
@@ -163,8 +163,11 @@ The rules:
    | 5 | `runtime/` |
    | 4 | `access/` |
    | 3 | `processes/`, `presence/` |
-   | 2 | `ledger/` |
-   | 1 | `transport/`, `telemetry/` |
+   | 2 | `ledger/`, `transport/` |
+   | 1 | `telemetry/` |
+
+   `telemetry/` is the lowest floor, alone, and any room may import its front files openly (owner,
+   2026-11-10, [Amendments](#amendments)).
 
    The owner listed five floors, with `ledger/` beside `telemetry/` and `runtime/` beside
    `access/`. Main's imports do not allow those two pairs under rule 3, so rule 3 was applied as
@@ -185,7 +188,8 @@ The rules:
    - `access/`: `members.ts`, `client-manager.ts`, `authorization.ts`, `session-manager.ts`. The
      session manager records who an input is by and signs on their behalf.
    - `runtime/`: `process-store.ts`, `recovery.ts`, `recovery-store.ts`. Only the runner's files
-     and the Workers wiring use them (experiment 245).
+     and the Workers wiring use them (experiment 245). Two of them read the ledger today, and
+     `runtime/` may not: [Amendments](#amendments) says what is cut first.
    - `text.ts` imports only `members.ts`. The plan decides whether it moves to `access/` with it or
      the read is cut.
 6. **"Members" becomes "access"** as the name of who is allowed in and what each key may do. It is
@@ -202,7 +206,9 @@ The rules:
    - No room re-exports another room's names. Today `coordination/index.ts` re-exports 11 names
      that are not its own, 10 from `data/` and `InputId` from `id.ts`, so "the app layer never
      imports data" is true only by the path of the import (experiment 245).
-   - `runtime/` imports `ledger/` and `telemetry/` openly where it needs them.
+   - `runtime/` does not import `ledger/`. It imports `telemetry/` openly. *It said: `runtime/`
+     imports `ledger/` and `telemetry/` openly where it needs them. The owner ruled no on the
+     ledger half on 2026-11-10 ([Amendments](#amendments)).*
 9. **The runner and the door are split, move-only first.** `app/runner.ts` is 1,721 lines, 1,492 of
    them one function. `door/door.ts` is 1,776 lines and does four jobs. Each becomes a front file
    plus `internal/` files cut along its state machines
@@ -213,20 +219,15 @@ The rules:
 10. **A room that needs "and" to describe it splits.** Rooms we expect later, as guesses: a job
     queue (Tier 4), spend and limits (Tier 5), pipes between programs (Tier 2).
 
-**The exam's layer row: the owner rules on this row.** Rule 8 changes what
-`next/apps/fabrika/src/exam/layers.test.ts` checks, and one part of that is not decided here.
+**The exam's layer row keeps its limit** (owner, 2026-11-10). Rule 8 changes what
+`next/apps/fabrika/src/exam/layers.test.ts` reads, and loosens nothing in the ledger's row.
 
-- What gets stricter: the check reads real imports. A name passed through another room no longer
-  counts, and another room's `internal/` is refused. These are new laws and need no owner read.
-- What gets wider: the row `app: ["coordination", "id"]` becomes a runtime row that lists
-  `ledger` and `telemetry`. Today the app layer can reach only the 10 names the pass-through
-  hands it. After, it could import any front name of those two rooms, such as the `Ledger` service
-  itself. The planted break "app may not import data" goes.
-- **This is a real loosening of that one row,** so by AGENTS.md and
-  [0014](0014-the-lead-merges-when-every-step-passed.md) it waits on the owner. The stricter
-  reading does not cancel it: an import that fails today would pass.
-- The question, one yes or no: may the runtime row list `ledger` and `telemetry`? A no keeps the
-  limit by a lint rule that lets `runtime/` import only the names it reads today.
+- The check reads real imports. A name passed through another room no longer counts, and another
+  room's `internal/` is refused. These are new laws.
+- The row `app: ["coordination", "id"]` becomes a runtime row with no `ledger` in it. The planted
+  break "app may not import data" stays, now checked on a real import of `ledger/`.
+- So no row waits on the owner. *It said: this row is a real loosening and the owner rules on it.
+  He did: no.*
 
 **Binding constraints:**
 
@@ -246,9 +247,9 @@ The rules:
   only for a concept's parts, `internal/` in camelCase with `@internal`, the namespace `index.ts`
   and no platform at the top level. No folders by kind stays too: no `services/`, `types/`,
   `utils/` or `helpers/`.
-- **0034's binding constraint on the exam is where the open row comes from.** It said the exam's
-  table keeps "the app layer imports coordination, not data". This record does not remove that
-  law; the owner does, or does not.
+- **0034's binding constraint on the exam holds.** It said the exam's table keeps "the app layer
+  imports coordination, not data". The runtime row still has no ledger in it, and after the
+  pass-through is gone that is true of what the runtime knows, not only of an import's path.
 - **The path shows the subject and not the order.** A reader learns a room's floor from the rule
   file or the lint error.
 - **The move plan is rewritten** for this layout. It was written for 0034 and no file had moved.
@@ -266,7 +267,10 @@ The rules:
   - **Which way supervision is fixed.** Its parts now sit in one room, `runtime/`. Whether the
     supervisor learns of a death by letter, as OTP's does, is P34c's
     ([0016](0016-tier-1-supervision-is-otps-top-level-supervisor.md)).
-  - **The exam's runtime row,** above.
+  - **How lint checks rule 12,** that a room's exported signatures name no other room's types.
+    See [Amendments](#amendments).
+  - **Whether the door and `access/` come under "never two floors down".** Both import `ledger/`
+    today. See [Amendments](#amendments).
   - The app's layout (`next/apps/fabrika`), as in 0032.
 
 ## Amendments
@@ -275,12 +279,75 @@ The rules:
   sideways. It does not allow every import that goes down. The exam's table
   (`next/apps/fabrika/src/exam/layers.test.ts`) still says which lower rooms each room may import,
   written by room, and it keeps every limit it has today: only the door imports `transport/`, for
-  example, though `transport/` is below every room. The one row that gets wider is the runtime row
-  above, which the owner rules on. Replacing the table with the floors alone would widen more rows.
-  That is a further loosening and is not decided. This record first said a room may import every
-  room below it; that sentence was wrong and is replaced.
+  example, though `transport/` is below every room. *It said: the one row that gets wider is the
+  runtime row above, which the owner rules on. He ruled no, below.* Replacing the table with the
+  floors alone would widen more rows. That is a further loosening and is not decided. This record
+  first said a room may import every room below it; that sentence was wrong and is replaced.
+- 2026-11-10: **the owner ruled on the open row: no. `runtime/` does not import `ledger/`** (rule
+  11). The law stays and is made true for real. The principle he gave: each floor offers Effect
+  services of its own that give the floor above higher-level functions, in its own words, and the
+  floor above never sees what is two floors down. Nothing in the ledger's row is loosened.
+  What main says, read at `9407cf46`:
+  - `app/runner.ts` never uses the `Ledger` service. It names `LedgerError` 19 times: one import
+    (`:31`), three types (`:159`, `:1189`, `:1691`) and 15 places where it builds one itself, such
+    as `new LedgerError({why: "bad_row"})` for a bad supervision state at `app/runner.ts:379`.
+  - It gets that error from below as the services' own: `Mailbox.send`, `receive` and `read`
+    (`coordination/mailbox.ts:119-123`) and `ProcessManager` (`coordination/process-manager.ts:28`,
+    `:44`, `:62`) fail with `LedgerError`.
+  - Two files that rule 5 sends to `runtime/` read the ledger. `coordination/process-store.ts:5`
+    takes the `Ledger` service and appends a runtime record with it (`:222`), and
+    `coordination/recovery.ts:2` builds a field from the ledger's `Line` (`:62`). Each moves to
+    `runtime/` as rule 5 says, and its ledger read is cut in the step that gives `processes/` a
+    function for it, before the runtime row is checked by room.
+- 2026-11-10: **rule 12, every room offers its functions as Effect services in its own words.** A
+  service's signatures use only the room's own types and errors, plus the shared names beside
+  `Id.ts`.
+  - A lower room's error is translated at the service boundary into the room's own tagged error,
+    with the original kept as its `cause`, so no detail is lost. This is Effect's own shape: in
+    `node_modules/effect/AGENTS.md` (`effect@4.1.2`, "Services") the `Database` service's `query`
+    fails with `DatabaseError`, a `Schema.TaggedError` of its own with `cause: Schema.Defect()`.
+    Ours already asks for the cause
+    ([an error keeps its cause](../.patterns/effect-errors-keep-their-cause.md)).
+  - `processes/` gets an error of its own for a fault from below. `ProcessError`
+    (`coordination/process.ts:160`), its refusal, stays.
+  - No room builds another room's error. The runner's 15 `new LedgerError` become the runtime's
+    own error.
+  - `LedgerError` is the ledger's own and leaves the list of shared names. The first text of this
+    record listed it there; under this rule a shared error would let every room go on returning
+    it. `door/store.ts`, `door/nonce.ts` and `coordination/recovery-store.ts` use it today for
+    their own SQLite faults and get their room's error.
+- 2026-11-10: **rule 13, plain values that several rooms need are shared names** beside `Id.ts`.
+  Read on main: `Sql` and `SqlValue` (`data/referee.ts:7-10`, the storage handle), `ProcessId`
+  (`data/trace.ts:12`), `Rev` (`data/log.ts:12`, a place in the log) and `ParentText`
+  (`data/log.ts:20`). The runtime reads them at `app/runner.ts:50`, `app/state.ts:5` and
+  `app/program.ts:6`. These stay the ledger's own: its services (`Ledger`, `LedgerTransaction`,
+  `Referee`, `Doorbell`), `LedgerError`, `Line`, `Entry` and `Waited`. `Appended`
+  (`data/log.ts:90`), what `append` answers, stays the ledger's too: `app/entry.ts:151-162` and
+  `app/runner.ts:1189` name it today, and by rule 12 the rooms between answer in their own words.
+- 2026-11-10: **rule 14, `telemetry/` is the lowest floor and any room may import its front
+  openly.** The runtime reads `SpanSink`, `SinkError`, `RecordManager` and `Archive`
+  (`app/entry.ts:8-16`) and `sha256` (`app/runner.ts:46`) from it directly. `transport/` moves up
+  beside `ledger/` on floor 2, so `telemetry/` is alone at the bottom; the floors are still six.
+  Today's exam counts these files as data, which transport and the app layer may not import. So
+  this rule widens those rows for telemetry's front, by the owner's own ruling.
+- 2026-11-10, **open, with a lean and no ruling: how lint checks rule 12.** The import rules cover
+  re-exports and `internal/`. A signature that names another room's type is not an import fact
+  alone. Lean: an existing tool first
+  ([0040](0040-existing-tools-before-hand-written.md)), 70% that code-graph can carry it. It reads imports
+  and re-exports; its CLI reference says its API ledger "records names, never signatures", and
+  [demlik issue 912](https://github.com/kamp-us/demlik/issues/912) asks for a signature rule.
+  [Issue 913](https://github.com/kamp-us/demlik/issues/913) asks for the same-floor rule, since
+  `--layers` allows imports inside one layer today. Until they ship, a local `pnpm patch` is the
+  way forward. A type-level test per room is the fallback.
+- 2026-11-10, **open: the door and `access/`.** Both import `ledger/` today, two floors down or
+  more (`door/door.ts:37-52`, `coordination/session-manager.ts`). The ruling names `runtime/`.
+  Their exam rows stay as they are. Lean: the door is where the rooms are put together and keeps
+  its row; `access/` is asked next, 60%.
 
 ## Records
+
+- 2026-11-10: no glossary row changes. `LedgerError` has no row; `Rev` and `ParentText` are named
+  inside other rows and keep their meaning.
 
 - [`.glossary/TERMS.md`](../.glossary/TERMS.md), new rows: `floor` and `room (library)` (Shared
   names), `access` (Clients), `presence` (Ledger), `telemetry` (Runtime). Changed: the `five layers`

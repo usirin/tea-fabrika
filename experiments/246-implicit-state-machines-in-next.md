@@ -6,7 +6,7 @@ counts, with one small probe script. No model was called, $0. 85 non-test source
 their state-holding parts, the rest by search. The counts are in
 [`results/246-implicit-state-machines-in-next.json`](./results/246-implicit-state-machines-in-next.json).
 
-*Note, 2026-11-09, after this run: [0044](../.decisions/0044-one-tea-machine-per-file.md) removed
+*Note, 2026-11-09, after this run: [0046](../.decisions/0046-one-tea-machine-per-file.md) removed
 the plain form. Where this write-up names "a tagged union plus one transition function" as a form
 (the T3 row, the Form column and each machine's Form paragraph), the form is now a tea machine. The
 findings and counts stand as run.*
