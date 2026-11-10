@@ -8,8 +8,12 @@ export type Style = {readonly source: "manti" | "tokens" | "tuval"; readonly css
 /** Text that cannot end the element it sits in. */
 const inert = (text: string): string => text.replaceAll("</", "<\\/");
 
-/** The page that loads the window. */
-export const page = (styles: ReadonlyArray<Style>): string =>
+/** Text that cannot leave the attribute it sits in. */
+const attribute = (text: string): string =>
+	text.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+
+/** The page that loads the window. `build` names the script, for the rows the tab records. */
+export const page = (styles: ReadonlyArray<Style>, build = ""): string =>
 	[
 		"<!doctype html>",
 		'<html lang="en">',
@@ -17,6 +21,7 @@ export const page = (styles: ReadonlyArray<Style>): string =>
 		'<meta charset="utf-8">',
 		'<meta name="viewport" content="width=device-width, initial-scale=1">',
 		'<meta name="color-scheme" content="light dark">',
+		`<meta name="fabrika-build" content="${attribute(build)}">`,
 		"<title>fabrika</title>",
 		'<link rel="icon" href="data:,">',
 		...styles.map((s) => `<style data-source="${s.source}">${inert(s.css)}</style>`),

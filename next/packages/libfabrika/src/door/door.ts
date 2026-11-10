@@ -14,6 +14,7 @@ import {Base64, Base64Url} from "effect/encoding";
 import {Incoming} from "../app/entry.ts";
 import {type ProgramDown} from "../app/program.ts";
 import {type RunnerError, type Sent} from "../app/runner.ts";
+import {ClientRow} from "../app/window.ts";
 import {
 	admitted,
 	appendAdmitted,
@@ -240,7 +241,40 @@ const methods: ReadonlySet<string> = new Set([
 	"spans.deleteContent",
 	"door.watch",
 	"door.deny",
+	"client.record",
 ]);
+
+/** `client.record {rows}`: a window's own checked rows. Each row is checked on its own, so one bad
+ *  row costs only itself. */
+const RecordRows = Schema.Struct({rows: Schema.Array(Schema.Unknown)});
+const decodeRow = Schema.decodeUnknownOption(ClientRow);
+
+/** One client row as a span sample, stamped with the writer and person the door admitted. Nothing
+ *  the caller says about who wrote it is kept: the row's own fields are the record's. */
+const sampleFor = (row: ClientRow, by: {readonly key: string; readonly for: string}) => {
+	const tags: Record<string, string | number> = {
+		"fab.client.tab": row.tab,
+		"fab.client.build": row.build,
+		"fab.client.sentAt": row.sentAt,
+	};
+
+	for (const key of Object.keys(row.record)) {
+		const value: unknown = Reflect.get(row.record, key);
+
+		if (key !== "ms" && (typeof value === "string" || typeof value === "number")) {
+			tags[`fab.client.${key}`] = value;
+		}
+	}
+
+	tags["fab.writer"] = by.key;
+	tags["fab.person"] = by.for;
+	return {
+		id: row.id,
+		name: `client.${row.record._tag}`,
+		ms: "ms" in row.record ? row.record.ms : 0,
+		tags,
+	};
+};
 
 type Options<A, RNext, RDeliver, RNotify> = {
 	readonly sql: Parameters<typeof doorStore>[0];
@@ -1091,6 +1125,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			refusal ??= "bad_input";
 		}
 
+		if (method === "client.record" && !Schema.is(RecordRows)(params)) {
+			refusal ??= "bad_input";
+		}
+
 		if (
 			method === "spans.deleteContent" &&
 			(by._tag !== "person" || !Schema.is(DeleteContent)(params))
@@ -1341,6 +1379,22 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				if (method === "door.deny") {
 					const answer = yield* deny(client, params);
 					return answer._tag === "refused" ? no(answer.why) : ok(answer);
+				}
+
+				// A window's own rows, acknowledged only once the sink holds them durably; a row it
+				// held before is acknowledged again and not kept twice.
+				if (method === "client.record") {
+					const p = Schema.decodeUnknownResult(RecordRows)(params);
+
+					if (Result.isFailure(p)) {
+						return no("bad_input");
+					}
+
+					const samples = p.success.rows.flatMap((raw) =>
+						Option.toArray(Option.map(decodeRow(raw), (row) => sampleFor(row, by))),
+					);
+					const {acknowledged} = yield* sink.ingest(samples);
+					return ok({acknowledged: [...acknowledged]});
 				}
 
 				if (

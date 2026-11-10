@@ -147,9 +147,11 @@ export const bootstraps = (
 ): ReadonlyArray<Bootstrap> => {
 	const list: ReadonlyArray<Bootstrap> = "name" in option ? [option] : option;
 
-	for (const [i, one] of list.entries())
-		{if (list.some((other, j) => j !== i && (other.name === one.name || other.id === one.id)))
-			throw new Error(`bootstrap ${one.name} is named twice`);}
+	for (const [i, one] of list.entries()) {
+		if (list.some((other, j) => j !== i && (other.name === one.name || other.id === one.id))) {
+			throw new Error(`bootstrap ${one.name} is named twice`);
+		}
+	}
 
 	return list;
 };
@@ -174,7 +176,7 @@ const Read = {
 };
 
 const Rows = Schema.Record(Schema.String, Schema.Array(Schema.String));
-const KeyProblem = Schema.Struct({line: Schema.Int, why: Schema.String});
+const KeyProblem = Schema.Struct({line: Schema.Int, reason: Schema.String});
 
 const KeySettings = Schema.Union([
 	Schema.Struct({...Read, rows: Rows}),
@@ -190,7 +192,7 @@ const KeysFact = Schema.TaggedStruct("keys", {
 
 const KeysFailed = Schema.TaggedStruct("keys_failed", {
 	line: KeyProblem.fields.line,
-	why: KeyProblem.fields.why,
+	reason: KeyProblem.fields.reason,
 	source: Read.source,
 	reader: Read.reader,
 });
@@ -607,13 +609,14 @@ const projectLogic = Effect.fn("project.init")(function* (
 			Effect.map(Option.getOrUndefined),
 		);
 
-		if (original !== undefined)
-			{return {
+		if (original !== undefined) {
+			return {
 				process: (yield* Schema.decodeUnknownEffect(Bootstrapped)(original.body).pipe(
 					Effect.mapError(() => new LedgerError({why: "bad_row"})),
 				)).process,
 				rev: original.rev,
-			};}
+			};
+		}
 
 		const loaded = yield* loader.load(bootstrap.program, `project:${name}`);
 		return yield* start(
@@ -628,7 +631,9 @@ const projectLogic = Effect.fn("project.init")(function* (
 	const boots = yield* Effect.forEach(fixed, bootOne, {concurrency: 1});
 	const [boot] = boots;
 
-	if (boot === undefined) {return yield* new LedgerError({why: "refused"});}
+	if (boot === undefined) {
+		return yield* new LedgerError({why: "refused"});
+	}
 
 	const wrapped = <A, E>(effect: Effect.Effect<A, E>) =>
 		complete(effect).pipe(Effect.provideContext(services));
@@ -680,7 +685,9 @@ const projectLogic = Effect.fn("project.init")(function* (
 		const stream = `person/${config.person}/settings`;
 		const entries = [...(yield* Stream.runCollect(ledger.read(stream, 0)))];
 
-		if (entries.some((entry) => entry.id === value.id)) {return null;}
+		if (entries.some((entry) => entry.id === value.id)) {
+			return null;
+		}
 
 		const fact =
 			"rows" in value
@@ -689,8 +696,9 @@ const projectLogic = Effect.fn("project.init")(function* (
 		const last = entries.at(-1);
 		const before = last === undefined ? undefined : decodeKeys(valueFor(last));
 
-		if (before?._tag === "Some" && JSON.stringify(before.value) === JSON.stringify(fact))
-			{return null;}
+		if (before?._tag === "Some" && JSON.stringify(before.value) === JSON.stringify(fact)) {
+			return null;
+		}
 
 		const origin = yield* from();
 		return yield* ledger.append(stream, value.id, lineFor({...origin, sentAt: value.sentAt}, fact));

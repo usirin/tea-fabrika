@@ -114,18 +114,26 @@ const UNSAFE: ReadonlySet<string> = new Set(["__proto__"]);
 
 /** The tokens of an RFC 6901 pointer, or why it is not one. `""` is the whole value. */
 const tokens = (path: string): Result.Result<ReadonlyArray<string>, PatchError> => {
-	if (path === "") {return Result.succeed([]);}
+	if (path === "") {
+		return Result.succeed([]);
+	}
 
-	if (!path.startsWith("/")) {return Result.fail(new PatchError({reason: "pointer"}));}
+	if (!path.startsWith("/")) {
+		return Result.fail(new PatchError({reason: "pointer"}));
+	}
 
 	const out: Array<string> = [];
 
 	for (const raw of path.slice(1).split("/")) {
-		if (/~(?![01])/.test(raw)) {return Result.fail(new PatchError({reason: "pointer"}));}
+		if (/~(?![01])/.test(raw)) {
+			return Result.fail(new PatchError({reason: "pointer"}));
+		}
 
 		const token = raw.replaceAll("~1", "/").replaceAll("~0", "~");
 
-		if (UNSAFE.has(token)) {return Result.fail(new PatchError({reason: "unsafe_key"}));}
+		if (UNSAFE.has(token)) {
+			return Result.fail(new PatchError({reason: "unsafe_key"}));
+		}
 
 		out.push(token);
 	}
@@ -146,18 +154,24 @@ const at = (
 ): Result.Result<unknown, PatchError> => {
 	const [key, ...rest] = path;
 
-	if (key === undefined) {return op.op === "remove" ? missing() : Result.succeed(op.value);}
+	if (key === undefined) {
+		return op.op === "remove" ? missing() : Result.succeed(op.value);
+	}
 
 	if (Array.isArray(doc)) {
 		const append = key === "-" && rest.length === 0 && op.op === "add";
 
-		if (!append && !INDEX.test(key)) {return missing();}
+		if (!append && !INDEX.test(key)) {
+			return missing();
+		}
 
 		const i = append ? doc.length : Number(key);
 		const copy = [...doc];
 
 		if (rest.length > 0) {
-			if (i >= doc.length) {return missing();}
+			if (i >= doc.length) {
+				return missing();
+			}
 
 			return Result.map(at(doc[i], rest, op), (child) => {
 				copy[i] = child;
@@ -166,30 +180,45 @@ const at = (
 		}
 
 		if (op.op === "add") {
-			if (i > doc.length) {return missing();}
+			if (i > doc.length) {
+				return missing();
+			}
 
 			copy.splice(i, 0, op.value);
-		} else if (i >= doc.length) {return missing();}
-		else if (op.op === "remove") {copy.splice(i, 1);}
-		else {copy[i] = op.value;}
+		} else if (i >= doc.length) {
+			return missing();
+		} else if (op.op === "remove") {
+			copy.splice(i, 1);
+		} else {
+			copy[i] = op.value;
+		}
 
 		return Result.succeed(copy);
 	}
 
-	if (!isPlain(doc)) {return missing();}
+	if (!isPlain(doc)) {
+		return missing();
+	}
 
 	const has = Object.hasOwn(doc, key);
 
-	if (rest.length > 0)
-		{return has
+	if (rest.length > 0) {
+		return has
 			? Result.map(at(doc[key], rest, op), (child) => ({...doc, [key]: child}))
-			: missing();}
+			: missing();
+	}
 
-	if (op.op === "add") {return Result.succeed({...doc, [key]: op.value});}
+	if (op.op === "add") {
+		return Result.succeed({...doc, [key]: op.value});
+	}
 
-	if (!has) {return missing();}
+	if (!has) {
+		return missing();
+	}
 
-	if (op.op === "replace") {return Result.succeed({...doc, [key]: op.value});}
+	if (op.op === "replace") {
+		return Result.succeed({...doc, [key]: op.value});
+	}
 
 	const {[key]: _gone, ...kept} = doc;
 	return Result.succeed(kept);
@@ -199,18 +228,24 @@ const at = (
 export const applyPatch = (before: unknown, ops: unknown): Result.Result<unknown, PatchError> => {
 	const decoded = decodeOperations(ops);
 
-	if (Result.isFailure(decoded)) {return Result.fail(new PatchError({reason: "malformed"}));}
+	if (Result.isFailure(decoded)) {
+		return Result.fail(new PatchError({reason: "malformed"}));
+	}
 
 	let doc = before;
 
 	for (const op of decoded.success) {
 		const path = tokens(op.path);
 
-		if (Result.isFailure(path)) {return path;}
+		if (Result.isFailure(path)) {
+			return path;
+		}
 
 		const next = at(doc, path.success, op);
 
-		if (Result.isFailure(next)) {return next;}
+		if (Result.isFailure(next)) {
+			return next;
+		}
 
 		doc = next.success;
 	}

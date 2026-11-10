@@ -40,8 +40,9 @@ const NODE_PROBE = 'globalThis.process?.getBuiltinModule?.("node:async_hooks")';
 const browserOnly: Plugin = {
 	name: "fabrika-browser-only",
 	transform(code, id) {
-		if (id.includes("/effect/dist/") && code.includes(NODE_PROBE))
-			{return {code: code.replace(NODE_PROBE, "undefined")};}
+		if (id.includes("/effect/dist/") && code.includes(NODE_PROBE)) {
+			return {code: code.replace(NODE_PROBE, "undefined")};
+		}
 	},
 };
 
@@ -52,7 +53,9 @@ const browserBundle = Effect.fn("build.browser")(function* (input: string, plugi
 		plugins: [...plugins, browserOnly],
 		// Rolldown notes each "use client" it drops; a bundle for one tab has no server half.
 		onLog: (level, log, handler) => {
-			if (log.code !== "MODULE_LEVEL_DIRECTIVE") {handler(level, log);}
+			if (log.code !== "MODULE_LEVEL_DIRECTIVE") {
+				handler(level, log);
+			}
 		},
 		platform: "browser",
 		transform: {define: {"process.env.NODE_ENV": JSON.stringify("production")}},
@@ -123,7 +126,9 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 	const browserCompiler: Plugin = {
 		name: "fabrika-compiler",
 		transform(code, id) {
-			if (!id.endsWith(".tsx")) {return;}
+			if (!id.endsWith(".tsx")) {
+				return;
+			}
 
 			browserFiles.set(path.relative(ROOT, id), code);
 			return {code: compile(id, code).code};
@@ -154,7 +159,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 			),
 		{concurrency: 1},
 	).pipe(Effect.mapError(() => new BuildError({reason: "read"})));
-	const html = page(style);
+	const html = page(style, yield* hash(script));
 	const output = yield* bundle(path.join(APP, "src/brain.ts"), [
 		compiler,
 		{

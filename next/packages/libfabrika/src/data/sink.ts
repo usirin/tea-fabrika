@@ -499,8 +499,9 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 		for (const raw of samples) {
 			const sample = decodeSample(raw);
 
-			if (Option.isSome(sample) && !checked.has(sample.value.id))
-				{checked.set(sample.value.id, sample.value);}
+			if (Option.isSome(sample) && !checked.has(sample.value.id)) {
+				checked.set(sample.value.id, sample.value);
+			}
 		}
 
 		const now = yield* Clock.currentTimeMillis;
@@ -508,7 +509,9 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 			try: () =>
 				atomic(() => {
 					for (const sample of checked.values()) {
-						if (sql.exec(`SELECT 1 FROM samples WHERE id = ?`, sample.id).length > 0) {continue;}
+						if (sql.exec(`SELECT 1 FROM samples WHERE id = ?`, sample.id).length > 0) {
+							continue;
+						}
 
 						sql.exec(`INSERT INTO samples (id) VALUES (?)`, sample.id);
 						land(sampled(sample, now));

@@ -2,4 +2,4 @@
 // fold, key routing, and the React view that reads the run. The page, the style and the browser
 // adapter are subpaths.
 export {split, tile, type Tree} from "./desktop/layout.ts";
-export {mount, type TileWindow} from "./window/main.tsx";
+export {mount, startWindow, type TileWindow} from "./window/main.tsx";

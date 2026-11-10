@@ -102,7 +102,9 @@ export const rectangles = (tree: Tree, size: Size): ReadonlyArray<Rect> => {
 
 /** The least room a subtree needs to show every tile at `MINIMUM`. */
 const need = (tree: Tree): Size => {
-	if (tree._tag === "tile") {return {w: MINIMUM.width, h: MINIMUM.height};}
+	if (tree._tag === "tile") {
+		return {w: MINIMUM.width, h: MINIMUM.height};
+	}
 
 	const a = need(tree.a),
 		b = need(tree.b);
@@ -124,8 +126,11 @@ const foldInto = (
 	folded: Array<string>,
 ): void => {
 	if (tree._tag === "tile") {
-		if (fits(need(tree), box)) {shown.push({id: tree.id, ...box});}
-		else {folded.push(tree.id);}
+		if (fits(need(tree), box)) {
+			shown.push({id: tree.id, ...box});
+		} else {
+			folded.push(tree.id);
+		}
 
 		return;
 	}
@@ -160,7 +165,9 @@ const foldInto = (
 	const [keep, drop] = keepA ? [tree.a, tree.b] : [tree.b, tree.a];
 	foldInto(keep, box, focused, shown, folded);
 
-	for (const t of tilesIn(drop)) {folded.push(t.id);}
+	for (const t of tilesIn(drop)) {
+		folded.push(t.id);
+	}
 };
 
 /**

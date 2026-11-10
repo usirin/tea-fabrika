@@ -1,15 +1,17 @@
 // The window's parent machine, next/ (Tier 1, P14; laws p1, p2, p4 and `now`). Elm first: it holds
-// the link (libfabrika's link machine) and the program client (libfabrika's client rules) and steps
-// both by hand. It owns what is this window's own: which pids it opened on this dial, which letters
-// are out, the focused tile and the key prefix. It reads no clock: a press reserves its slot here,
-// and its time and letter id come back from the `now` Cmd.
+// the link (libfabrika's link machine) and the program client (libfabrika's client machine) and
+// steps both by hand, by sending them Msgs; it never edits either's Model itself. It owns what is
+// this window's own: which pids it opened on this dial, which letters are out, the focused tile and
+// the key prefix. It reads no clock: a press reserves its slot in the client, and its time and
+// letter id come back from the `now` Cmd. The file exports one machine factory,
+// `windowMachineFor(checks)`, and no machine (decision 0046, plan A7).
 //
 // Going online opens every distinct pid of the fixed layout once and sends every ready letter ahead
 // of the first one still waiting for its time, in slot order. Leaving online forgets both, so the
 // next dial starts over and a letter keeps its id across dials.
 import {applyCell, type Sub} from "@demlik/tea";
 import {Cmd, Machine} from "@demlik/tea/effect";
-import {Keys, ProgramClient, type Rows, Sent} from "@kampus/libfabrika";
+import {ClientRecord, Keys, ProgramClient, type Rows, Sent} from "@kampus/libfabrika";
 import {
 	knock,
 	Link,
@@ -38,8 +40,11 @@ export type WindowCtx = {
 };
 
 /** How the window checks what it installs: a tile's view decoder, the registration's own schema
- *  for the program behind `pid`. A step reads no ctx, so the machine closes over it. */
-export type WindowChecks = {readonly decode?: (pid: string) => (view: unknown) => unknown};
+ *  for the program behind `pid`. It is libfabrika's `ClientChecks`, passed through to the client
+ *  machine, which captures it: a step reads no ctx. */
+export type WindowChecks = ProgramClient.ClientChecks;
+
+const Via = Schema.Literals(["button", "key"]);
 
 const Table = Schema.Struct({
 	rows: Schema.Record(Schema.String, Schema.Array(Schema.String)),
@@ -68,6 +73,8 @@ export const WindowModel = Schema.Struct({
 	fresh: Schema.Boolean,
 	/** Slots whose time could not be read, asked again by the retry timer. */
 	redate: Schema.Array(Schema.Int),
+	/** How each slot still waiting for its time was pressed, by slot number, for its press record. */
+	via: Schema.Record(Schema.String, Via),
 	/** The key fingerprint the door removed, which the next dial replaces. */
 	rejected: Schema.NullOr(Schema.String),
 	focus: Schema.NullOr(Schema.String),
@@ -95,7 +102,7 @@ const Own = Schema.Union([
 		type: Schema.Literal("press"),
 		pid: Schema.String,
 		m: Schema.Json,
-		via: Schema.optionalKey(Schema.Literals(["button", "key"])),
+		via: Schema.optionalKey(Via),
 	}),
 	/** A view notification for `pid`, as the socket received it. */
 	Schema.Struct({type: Schema.Literal("view"), pid: Schema.String, note: Schema.Unknown}),
@@ -156,18 +163,39 @@ export const persist = Cmd.make("persist", {
 	err: ["unsupported", "failed"],
 });
 
+/** Keep one checked observation until the door acknowledges it (`client.record`). The handler gives
+ *  it its row id, tab, build and time. */
+export const record = Cmd.make("record", {
+	input: Schema.Struct({record: ClientRecord}),
+	ok: Schema.Null,
+	err: ["failed"],
+});
+
 type Out = ReadonlyArray<
 	| ReturnType<typeof now>
 	| ReturnType<typeof send>
 	| ReturnType<typeof open>
 	| ReturnType<typeof persist>
+	| ReturnType<typeof record>
 	| ReturnType<typeof ping>
 	| ReturnType<typeof knock>
 >;
 
 type Step = readonly [WindowModel, Out];
 
-const anyView = (view: unknown): unknown => view;
+/** The client machine, as the window steps it: its next Model, and the pids it asks a whole view
+ *  of. */
+type ClientStep = (
+	client: ProgramClient.Client,
+	m: ProgramClient.ClientMsg,
+) => readonly [ProgramClient.Client, ReadonlyArray<string>];
+
+/** The command a press of `m` on `pid` names, from the commands that pid's program takes. */
+const commandFor = (s: WindowModel, pid: string, m: unknown): string => {
+	const type =
+		typeof m === "object" && m !== null && "type" in m && typeof m.type === "string" ? m.type : "";
+	return (s.commands[pid] ?? []).find((c) => c.endsWith(`.${type}`)) ?? type;
+};
 
 /** The letters that may go now and are not out yet, as `send` Cmds for this dial. */
 const sends = (s: WindowModel, dial: number): ReadonlyArray<ReturnType<typeof send>> =>
@@ -188,16 +216,55 @@ const sends = (s: WindowModel, dial: number): ReadonlyArray<ReturnType<typeof se
 
 /** Sends what may go now when online, marking it out. */
 const flush = (s: WindowModel): Step => {
-	if (s.link._tag !== "online") {return [s, []];}
+	if (s.link._tag !== "online") {
+		return [s, []];
+	}
 
 	const out = sends(s, s.link.dial);
 	return out.length === 0 ? [s, []] : [{...s, sent: [...s.sent, ...out.map((c) => c.letter)]}, out];
 };
 
-/** A press: reserve its slot with what was shown, and ask its time. */
-const pressed = (s: WindowModel, pid: string, m: unknown): Step => {
-	const client = C.press(s.client, {pid, m});
-	return [{...s, client}, [now({n: s.client.written})]];
+/** A press: the client reserves its slot with what was shown, and the window asks its time. */
+const pressed = (
+	s: WindowModel,
+	step: ClientStep,
+	press: {readonly pid: string; readonly m: unknown; readonly via: "button" | "key"},
+): Step => {
+	const n = s.client.written;
+	const [client] = step(s.client, {type: "press", pid: press.pid, m: press.m});
+	return [{...s, client, via: {...s.via, [n]: press.via}}, [now({n})]];
+};
+
+/** Slot `n` got its time: the client dates it, and the window keeps its press record before the
+ *  letter is sent, then sends what may go. tea runs one step's Cmds one after another in list
+ *  order, so the `record` ahead of the `send`s is stored before any of them goes. */
+const datedSlot = (
+	s: WindowModel,
+	step: ClientStep,
+	n: number,
+	stamp: {readonly letter: string; readonly sentAt: string; readonly traceId?: string},
+): Step => {
+	const [client] = step(s.client, {type: "dated", n, ...stamp});
+	const {[n]: via, ...rest} = s.via;
+	const slot = client.pending.find((p) => p.n === n);
+	const kept =
+		via !== undefined && slot?._tag === "ready" && slot.letter === stamp.letter
+			? [
+					record({
+						record: ClientRecord.cases.press.make({
+							command: commandFor(s, slot.pid, slot.m),
+							via,
+							pid: slot.pid,
+							viewRev: Math.max(0, slot.viewRev),
+							seen: Math.max(0, slot.seen),
+							letter: slot.letter,
+							depth: client.pending.length,
+						}),
+					}),
+				]
+			: [];
+	const [after, out] = flush({...s, client, via: rest, redate: s.redate.filter((r) => r !== n)});
+	return [after, [...kept, ...out]];
 };
 
 /** Steps the link by hand, then does what its move means for this window. */
@@ -216,9 +283,13 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
 		rejected: link._tag === "removed" ? link.fingerprint : s.rejected,
 	};
 
-	if (link._tag !== "online") {return [{...next, opened: [], sent: []}, linkCmds];}
+	if (link._tag !== "online") {
+		return [{...next, opened: [], sent: []}, linkCmds];
+	}
 
-	if (s.link._tag === "online") {return [next, linkCmds];}
+	if (s.link._tag === "online") {
+		return [next, linkCmds];
+	}
 
 	// Going online: open each distinct pid once, send what waited in order, ask persistence once.
 	const pids = [...new Set(s.tiles.map((t) => t.pid))];
@@ -255,7 +326,7 @@ const linkUpdate = Object.fromEntries(
 	) => Step;
 };
 
-const fresh = (ctx: WindowCtx | undefined): WindowModel => {
+const fresh = (ctx: WindowCtx | undefined, client: ProgramClient.Client): WindowModel => {
 	const tiles = ctx === undefined ? [] : tilesIn(ctx.layout);
 	const defaults = ctx?.keys?.defaults ?? {};
 	return WindowModel.make({
@@ -267,11 +338,12 @@ const fresh = (ctx: WindowCtx | undefined): WindowModel => {
 		link: linkMachine.init(null, {})[0],
 		dials: 1,
 		size: null,
-		client: C.emptyClient,
+		client,
 		opened: [],
 		sent: [],
 		fresh: false,
 		redate: [],
+		via: {},
 		rejected: null,
 		focus: null,
 		keys: Keys.buildTable(defaults, {}),
@@ -284,29 +356,35 @@ const fresh = (ctx: WindowCtx | undefined): WindowModel => {
 /** The socket for one dial; a replaced key is named so the next dial makes its successor. */
 type SocketSub = Sub<"socket", {readonly dial: number; readonly rejected: string | null}>;
 
-/** The window machine, checking each view with `checks`. */
+/** The window machine, checking each view with `checks` through the client machine it steps. */
 export const windowMachineFor = (checks: WindowChecks) => {
-	const decoderFor = (pid: string) => checks.decode?.(pid) ?? anyView;
+	const clientMachine = C.clientMachineFor(checks);
+	/** One step of the client machine, by hand, as the link is stepped: its Model and its asks. */
+	const step: ClientStep = (client, m) => {
+		const [next, cmds] = applyCell<
+			ProgramClient.Client,
+			ProgramClient.ClientMsg,
+			{readonly type: "ask"; readonly pid: string}
+		>(clientMachine, client, m);
+		return [next, cmds.map((c) => c.pid)];
+	};
 	return Machine.make({
 		model: WindowModel,
 		msg: Schema.Union([LinkMsg, Own]),
-		cmds: [now, send, open, persist, ping, knock],
+		cmds: [now, send, open, persist, record, ping, knock],
 		types: {sub: {} as SocketSub, ctx: {} as WindowCtx},
-		init: (loaded, ctx) => [loaded ?? fresh(ctx), []],
+		init: (loaded, ctx) => [loaded ?? fresh(ctx, clientMachine.init(null, {})[0]), []],
 		update: {
 			...linkUpdate,
-			press: (s, m) => pressed(s, m.pid, m.m),
-			now_ok: (s, m) => {
-				const client = C.dated(s.client, m.cmd.n, m.value);
-				return flush({...s, client, redate: s.redate.filter((n) => n !== m.cmd.n)});
-			},
+			press: (s, m) => pressed(s, step, {pid: m.pid, m: m.m, via: m.via ?? "button"}),
+			now_ok: (s, m) => datedSlot(s, step, m.cmd.n, m.value),
 			now_err: (s, m) =>
 				s.client.pending.some((p) => p.n === m.cmd.n && p._tag === "dating") &&
 				!s.redate.includes(m.cmd.n)
 					? [{...s, redate: [...s.redate, m.cmd.n]}, []]
 					: [s, []],
 			send_ok: (s, m) => {
-				const client = C.reply(s.client, m.cmd.letter, m.value);
+				const [client] = step(s.client, {type: "reply", letter: m.cmd.letter, answer: m.value});
 				return [
 					{
 						...s,
@@ -323,29 +401,37 @@ export const windowMachineFor = (checks: WindowChecks) => {
 				m.error._tag === "unreachable"
 					? [{...s, sent: s.sent.filter((l) => l !== m.cmd.letter)}, []]
 					: [{...s, trouble: "unknown_reply"}, []],
+			// A whole view on the current dial. The client's ask for another becomes the window's
+			// trouble: this open just answered, so a second one would ask the same.
 			open_ok: (s, m) => {
-				if (s.link._tag !== "online" || s.link.dial !== m.cmd.dial) {return [s, []];}
+				if (s.link._tag !== "online" || s.link.dial !== m.cmd.dial) {
+					return [s, []];
+				}
 
-				const shown = C.notice(
-					s.client,
-					m.cmd.pid,
-					{type: "whole", rev: m.value.rev, view: m.value.view},
-					decoderFor(m.cmd.pid),
-				);
-				return [{...s, client: shown.client, trouble: shown.ask ? "bad_view" : s.trouble}, []];
+				const [client, asks] = step(s.client, {
+					type: "notice",
+					pid: m.cmd.pid,
+					note: {type: "whole", rev: m.value.rev, view: m.value.view},
+				});
+				return [{...s, client, trouble: asks.length > 0 ? "bad_view" : s.trouble}, []];
 			},
 			open_err: (s) => [{...s, trouble: "no_view"}, []],
 			persist_ok: (s) => [s, []],
+			persist_err: (s) => [s, []],
+			// A record the tab could not keep is lost to the door, never to the window's own state.
+			record_ok: (s) => [s, []],
+			record_err: (s) => [s, []],
 			// A ping or knock that could not go is the link's to notice: its timers move it on.
 			ping_ok: (s) => [s, []],
 			ping_err: (s) => [s, []],
 			knock_ok: (s) => [s, []],
 			knock_err: (s) => [s, []],
-			persist_err: (s) => [s, []],
+			// A view notification. The client's ask for a whole view becomes a fresh open when the
+			// pid is open on this dial; otherwise the next dial's open brings one.
 			view: (s, m) => {
-				const shown = C.notice(s.client, m.pid, m.note, decoderFor(m.pid));
-				const next = {...s, client: shown.client};
-				return shown.ask && s.link._tag === "online" && s.opened.includes(m.pid)
+				const [client, asks] = step(s.client, {type: "notice", pid: m.pid, note: m.note});
+				const next = {...s, client};
+				return asks.length > 0 && s.link._tag === "online" && s.opened.includes(m.pid)
 					? [next, [open({pid: m.pid, dial: s.link.dial})]]
 					: [next, []];
 			},
@@ -355,7 +441,9 @@ export const windowMachineFor = (checks: WindowChecks) => {
 				);
 				const cleared = {...s, redate: []};
 
-				if (s.link._tag !== "online" || s.link.dial !== m.dial) {return [cleared, redated];}
+				if (s.link._tag !== "online" || s.link.dial !== m.dial) {
+					return [cleared, redated];
+				}
 
 				const [after, out] = flush(cleared);
 				return [after, [...redated, ...out]];
@@ -376,7 +464,9 @@ export const windowMachineFor = (checks: WindowChecks) => {
 					commands: tile === null ? [] : (s.commands[tile.pid] ?? []),
 				});
 				const next = {...s, armed: routed.armed};
-				return routed.press === null ? [next, []] : pressed(next, routed.press.pid, routed.press.m);
+				return routed.press === null
+					? [next, []]
+					: pressed(next, step, {pid: routed.press.pid, m: routed.press.m, via: "key"});
 			},
 			keys: (s, m) => [
 				{
@@ -388,7 +478,10 @@ export const windowMachineFor = (checks: WindowChecks) => {
 				[],
 			],
 			keys_failed: (s, m) => [{...s, keyError: m.error, armed: null}, []],
-			seen: (s, m) => [{...s, client: C.read(s.client, m.rev)}, []],
+			seen: (s, m) => {
+				const [client] = step(s.client, {type: "read", rev: m.rev});
+				return [{...s, client}, []];
+			},
 		},
 		subs: [
 			{type: "timer", deps: (s) => timerDeps(s.link)},
@@ -412,11 +505,14 @@ export const windowMachineFor = (checks: WindowChecks) => {
 	});
 };
 
-/** The window machine with no view check of its own: any JSON view a tile is sent. */
-export const windowMachine = windowMachineFor({});
-
 /** Every Msg the window folds: its own and the link's, and the answers tea mints for its Cmds. */
 export type WindowMsg =
-	typeof windowMachine extends Machine<WindowModel, infer M, infer _C, infer _U, infer _X>
+	ReturnType<typeof windowMachineFor> extends Machine<
+		WindowModel,
+		infer M,
+		infer _C,
+		infer _U,
+		infer _X
+	>
 		? M
 		: never;

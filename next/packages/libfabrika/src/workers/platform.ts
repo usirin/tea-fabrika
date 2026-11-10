@@ -80,7 +80,7 @@ export class ProjectClient extends Context.Service<
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Project brain RPC enters Effect
 				Effect.tryPromise({try: () => stub.brain(...args), catch: unreachable}),
 			settings: (...args) =>
-				// oxlint-disable-next-line fabrika/no-promises -- edge: Project settings RPC enters Effect
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project settings RPC enters Effect, a direct stub call that moves with tracker ticket 502's port (0042)
 				Effect.tryPromise({try: () => stub.settings(...args), catch: unreachable}),
 			append: (...args) =>
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Project append RPC enters Effect

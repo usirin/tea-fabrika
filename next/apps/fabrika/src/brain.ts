@@ -164,7 +164,7 @@ export class Project extends DurableObject<Env> {
 	}
 
 	settings(input: unknown) {
-		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise, a direct platform use on the plain Project class that moves with tracker ticket 502's port (0042)
 		return this.runtime.runPromise(ProjectService.use((p) => p.settings(input)));
 	}
 }

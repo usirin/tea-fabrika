@@ -31,7 +31,9 @@ const folder = (path: string): string => {
 
 /** Whether a watch event is about the key file. An event that names no path counts. */
 const about = (file: string, event: unknown): boolean => {
-	if (typeof event !== "object" || event === null || !("path" in event)) {return true;}
+	if (typeof event !== "object" || event === null || !("path" in event)) {
+		return true;
+	}
 
 	return typeof event.path !== "string" || base(event.path) === base(file);
 };
@@ -49,11 +51,15 @@ export const watchKeys = Effect.fn("keys.watch")(function* (
 			return yield* options.status({error: null});
 		}
 
-		if (Result.isFailure(text)) {return yield* options.status({error: {line: 0, why: "read"}});}
+		if (Result.isFailure(text)) {
+			return yield* options.status({error: {line: 0, reason: "read"}});
+		}
 
 		const rows = parseKeys(text.success, options.commands);
 
-		if (Result.isFailure(rows)) {return yield* options.status({error: rows.failure});}
+		if (Result.isFailure(rows)) {
+			return yield* options.status({error: rows.failure});
+		}
 
 		yield* Effect.annotateCurrentSpan("fab.keys.commands", Object.keys(rows.success).length);
 		yield* options.publish({rows: rows.success, source: "file"});
@@ -64,7 +70,7 @@ export const watchKeys = Effect.fn("keys.watch")(function* (
 	yield* fs.watch(folder(options.file)).pipe(
 		Stream.filter((event) => about(options.file, event)),
 		Stream.runForEach(() => read()),
-		Effect.catch(() => options.status({error: {line: 0, why: "watch"}})),
+		Effect.catch(() => options.status({error: {line: 0, reason: "watch"}})),
 		Effect.forkScoped,
 	);
 });

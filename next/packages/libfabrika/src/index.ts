@@ -37,9 +37,10 @@ export {
 	workerExecution,
 } from "./app/execution.ts";
 export {Door, type ConnectionId} from "./door/index.ts";
-// A program client's own rules (P14): pending letters, checked views, a program window's typed
-// contract, and the rows a client records. Any client steps them: a browser tab, Electron, headless.
+// A program client's own rules (P14): the client machine's factory, with pending letters and checked
+// views. Any client steps it: a browser tab, Electron, headless.
 export * as ProgramClient from "./app/client.ts";
+// A program window's typed contract, and the rows a client records (P14).
 export {
 	ClientRecord,
 	ClientRow,
@@ -49,7 +50,7 @@ export {
 	type WindowMsg,
 	type WindowProps,
 	type WindowRegistration,
-} from "./app/client.ts";
+} from "./app/window.ts";
 export {applyPatch, PatchError} from "./app/patch.ts";
 // Key tables (P14): the person's key file, the rows over a program's defaults, and the match.
 export * as Keys from "./app/keybindings.ts";
