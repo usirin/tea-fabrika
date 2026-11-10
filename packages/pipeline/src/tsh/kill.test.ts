@@ -79,18 +79,23 @@ describe("tsh killed mid build, attached again with its input closed", () => {
 
 		const log = logOf(folder);
 		const times = (line: string) => log.filter((l) => l === line).length;
+
 		// Every write once across the three lives: no copy made again, no second pull request.
-		for (const n of [1, 2, 3])
+		for (const n of [1, 2, 3]) {
 			expect([times(`copy ${n}`), times(`push ${n}`), times(`open ${n}`)], `ticket ${n}`).toEqual([
 				1, 1, 1,
 			]);
+		}
+
 		// The builder cut off by a kill is started again once, on the conversation it had.
 		const starts = (n: number) => log.filter((l) => l.startsWith(`start ${n} `));
 		expect(starts(1)).toHaveLength(1);
+
 		for (const n of [2, 3]) {
 			expect(starts(n)).toHaveLength(2);
 			expect(new Set(starts(n)).size, `ticket ${n} keeps its conversation`).toBe(1);
 		}
+
 		// Each life sent what it finished; the last says the job ended, and why.
 		expect(a.out()).toContain("built #1001");
 		expect(b.out()).toContain("built #1002");

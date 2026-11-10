@@ -113,20 +113,28 @@ export const workQueue = <E1, R1, E2, R2>(
 		const waiting = yield* queues.get(ID).start().pipe(Scope.provide(live));
 		const tidy = (item: string) =>
 			after(item).pipe(Effect.andThen(waiting.dispatch({type: "cleared", item})));
+
 		// What a killed start owed first.
-		for (const item of waiting.getState().clearing) yield* tidy(item);
+		for (const item of waiting.getState().clearing) {
+			yield* tidy(item);
+		}
+
 		// A nudge to the worker: a value was queued, or the serving ended. Extra nudges are harmless.
 		const nudge = yield* Queue.unbounded<void>();
 		let reading = true;
 		const worker = Effect.gen(function* () {
 			while (true) {
 				const [first] = waiting.getState().items;
+
 				if (first !== undefined) {
 					yield* work(first);
 					yield* waiting.dispatch({type: "done", item: first});
 					yield* tidy(first);
-				} else if (reading) yield* Queue.take(nudge);
-				else return;
+				} else if (reading) {
+					yield* Queue.take(nudge);
+				} else {
+					return;
+				}
 			}
 		});
 		return {
@@ -175,11 +183,16 @@ export const workQueue = <E1, R1, E2, R2>(
 export const drop = (queues: RefsOf<typeof queueKind>, matches: (item: string) => boolean) =>
 	Effect.gen(function* () {
 		const waiting = yield* queues.get(ID).start();
-		for (const item of waiting.getState().items.filter(matches))
+
+		for (const item of waiting.getState().items.filter(matches)) {
 			yield* waiting.dispatch({type: "dropped", item});
+		}
+
 		yield* Effect.callback<void>((resume) => {
 			const gone = () => {
-				if (!waiting.getState().items.some(matches)) resume(Effect.void);
+				if (!waiting.getState().items.some(matches)) {
+					resume(Effect.void);
+				}
 			};
 			const off = waiting.subscribe(gone);
 			gone();

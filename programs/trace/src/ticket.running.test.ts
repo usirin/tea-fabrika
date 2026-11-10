@@ -112,7 +112,10 @@ const lanesOfShown = (s: Model): readonly LaneShown[] => shownOf(s).ticket?.lane
 /** What each Sub entry of `type` asks for in `s`: its deps, each one that is on. */
 const depsOf = (type: string, s: Model): readonly unknown[] =>
 	(trace.subs ?? []).flatMap((sub): unknown[] => {
-		if (sub.type !== type) return [];
+		if (sub.type !== type) {
+			return [];
+		}
+
 		const deps: unknown = sub.deps(s);
 		return deps === null || deps === undefined ? [] : [deps];
 	});
@@ -208,7 +211,10 @@ describe("a lane left without its end closes when a newer lane starts (review A1
 			expect(newer?.open).toBe(false);
 			expect(older?.to).toBeLessThanOrEqual(newer?.from ?? Number.NaN);
 			expect(older?.to).toBeGreaterThanOrEqual(older?.from ?? Number.NaN);
-			for (const row of older?.rows ?? []) expect(row.to).toBeLessThanOrEqual(older?.to ?? 0);
+
+			for (const row of older?.rows ?? []) {
+				expect(row.to).toBeLessThanOrEqual(older?.to ?? 0);
+			}
 		});
 
 		it(`with ${name}: the older lane does not grow with now, nor its waits`, () => {
@@ -257,7 +263,11 @@ describe("a lane left without its end closes when a newer lane starts (review A1
 /** The text of the `tag` element a screen reader names `label`: tags out, spaces as one. */
 const named = (markup: string, tag: string, label: string): string | undefined => {
 	const at = markup.indexOf(`aria-label="${label}"`);
-	if (at < 0) return undefined;
+
+	if (at < 0) {
+		return undefined;
+	}
+
 	const from = markup.lastIndexOf(`<${tag}`, at);
 	const to = markup.indexOf(`</${tag}>`, at);
 	return markup

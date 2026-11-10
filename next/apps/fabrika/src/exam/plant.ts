@@ -58,11 +58,13 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
 	const at = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({prefix: "exam-"}));
 	yield* fs.copyFile(path.join(ROOT, ".oxlintrc.json"), path.join(at, ".oxlintrc.json"));
 	yield* fs.symlink(path.join(ROOT, "oxlint-plugins"), path.join(at, "oxlint-plugins"));
+
 	for (const [file, text] of Object.entries(files)) {
 		const full = path.join(at, file);
 		yield* fs.makeDirectory(path.dirname(full), {recursive: true});
 		yield* fs.writeFileString(full, text);
 	}
+
 	const ran = yield* ChildProcess.make(
 		path.join(ROOT, "node_modules", ".bin", "oxlint"),
 		[
@@ -83,9 +85,11 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
 		{concurrency: 3},
 	);
 	const report = readReport(out);
+
 	if (report.number_of_files !== Object.keys(files).length) {
 		return yield* Effect.die(new Error(`oxlint read ${report.number_of_files} files: ${err}`));
 	}
+
 	return report.diagnostics.map((d): Fire => ({
 		code: d.code ?? "",
 		file: d.filename,

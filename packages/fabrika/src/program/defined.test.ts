@@ -70,7 +70,11 @@ describe("a program not made by defineProgram", () => {
 		const piped = await Effect.runPromiseExit(
 			Effect.gen(function* () {
 				const to = yield* start(echo, {});
-				if (to.kind !== "running") return;
+
+				if (to.kind !== "running") {
+					return;
+				}
+
 				yield* pipe({program: copy, flags: {}}, "said", to, "word");
 			}).pipe(Effect.scoped),
 		);

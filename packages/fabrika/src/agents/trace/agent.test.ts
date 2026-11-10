@@ -44,7 +44,11 @@ const keptRun = async () => {
 	await Effect.runPromise(
 		Effect.gen(function* () {
 			const trace = yield* agentTrace("build", {content: "kept"});
-			if (trace === null) return yield* Effect.die("no agent trace with tracing on");
+
+			if (trace === null) {
+				return yield* Effect.die("no agent trace with tracing on");
+			}
+
 			const agent = defineAgent({model: scripted(), tools: [lookUp], instructions: "Answer."});
 			yield* Effect.tryPromise({
 				try: () =>

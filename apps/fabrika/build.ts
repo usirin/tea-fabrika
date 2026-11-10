@@ -67,12 +67,17 @@ const program = Effect.gen(function* () {
 	);
 	const inputs = [...new Set(metas.flatMap((m) => Object.keys(m.metafile?.inputs ?? {})))].sort();
 	const hash = createHash("sha256");
+
 	for (const input of inputs) {
 		hash.update(`${input}\0`);
 		// A name esbuild made up, with no file behind it, counts by its name alone.
 		const file = path.resolve(here, input);
-		if (yield* fs.exists(file)) hash.update(yield* fs.readFile(file));
+
+		if (yield* fs.exists(file)) {
+			hash.update(yield* fs.readFile(file));
+		}
 	}
+
 	const id = hash.digest("hex").slice(0, 12);
 
 	yield* fs.makeDirectory(at("dist"), {recursive: true});

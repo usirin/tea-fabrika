@@ -23,6 +23,7 @@ const event = (key: string, mods = {}) => ({
 describe("today's recording laws", () => {
 	it("K4: a prefix waits indefinitely; modifiers, dead keys and composition cannot finish it", () => {
 		vi.useFakeTimers();
+
 		try {
 			fc.assert(
 				fc.property(
@@ -39,6 +40,7 @@ describe("today's recording laws", () => {
 						expect(cmds).toEqual([]);
 						expect(armed.recording).toMatchObject({_tag: "waiting", prefix: true});
 						model = armed;
+
 						for (const key of noise) {
 							const [next, out] = step(model, {
 								type: "press",
@@ -48,6 +50,7 @@ describe("today's recording laws", () => {
 							expect(out).toEqual([]);
 							model = next;
 						}
+
 						const [composed, out] = step(model, {
 							type: "press",
 							press: event("m", {composing: true}),

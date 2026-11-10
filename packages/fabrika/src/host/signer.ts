@@ -58,7 +58,11 @@ export const layerSignerFile = (
 			);
 			// The private key is in the clear only here, handed to the parser that imports it.
 			const read = yield* Effect.promise(() => keyFileOf(Redacted.value(text)));
-			if (!read.ok) return yield* new KeyUnreadable({path, why: read.why});
+
+			if (!read.ok) {
+				return yield* new KeyUnreadable({path, why: read.why});
+			}
+
 			return yield* signerOf(read.pair);
 		}),
 	);

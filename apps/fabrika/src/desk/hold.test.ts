@@ -17,11 +17,13 @@ const ctrlB = key("<c-b>", "b");
 const fold = (msgs: readonly HoldMsg[]) => {
 	let s: Hold = holdMachine.init(null, undefined)[0];
 	const steps: (readonly HoldCmd[])[] = [];
+
 	for (const msg of msgs) {
 		const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, s, msg);
 		s = next;
 		steps.push(cmds);
 	}
+
 	return {s, steps};
 };
 

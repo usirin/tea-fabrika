@@ -36,18 +36,30 @@ const START = {line: 1, column: 0};
 
 const problem = (comment: string): string | null => {
 	const found = DISABLE.exec(comment);
-	if (found === null) return null;
+
+	if (found === null) {
+		return null;
+	}
+
 	const [, form = "", rest = ""] = found;
 	const at = rest.search(REASON);
 	const rules = (at < 0 ? rest : rest.slice(0, at))
 		.split(",")
 		.map((rule) => rule.trim())
 		.filter((rule) => rule !== "");
-	if (!rules.some((rule) => EDGE_RULES.has(rule))) return null;
-	if (form !== "-next-line") return "is not the `-next-line` form. An edge is one line";
+
+	if (!rules.some((rule) => EDGE_RULES.has(rule))) {
+		return null;
+	}
+
+	if (form !== "-next-line") {
+		return "is not the `-next-line` form. An edge is one line";
+	}
+
 	if (rules.some((rule) => !EDGE_RULES.has(rule))) {
 		return "names a rule that is not an edge rule. Give that exception its own comment";
 	}
+
 	const why = at < 0 ? "" : rest.slice(at).replace(REASON, "");
 	return EDGE_WHY.test(why) ? null : "does not give its reason as `edge: <why>`";
 };
@@ -57,7 +69,11 @@ export const edgeComment: CreateRule = {
 		Program() {
 			for (const comment of context.sourceCode.getAllComments()) {
 				const wrong = problem(comment.value);
-				if (wrong === null) continue;
+
+				if (wrong === null) {
+					continue;
+				}
+
 				context.report({
 					loc: {start: START, end: START},
 					message: `The edge comment on line ${context.sourceCode.getLocFromIndex(comment.range[0]).line} ${wrong}: ${SHAPE}, or the same for \`fabrika/no-effect-run-outside-edge\`.`,

@@ -12,7 +12,9 @@ import {Mailbox, type From} from "./mailbox.ts";
 const opened: DatabaseSync[] = [];
 
 afterAll(() => {
-	for (const db of opened) db.close();
+	for (const db of opened) {
+		db.close();
+	}
 });
 
 const from: From = {
@@ -74,8 +76,11 @@ describe("P11 richer mailbox history", () => {
 			});
 			return Effect.gen(function* () {
 				const mailbox = yield* Mailbox;
-				for (const [i, m] of messages.entries())
+
+				for (const [i, m] of messages.entries()) {
 					yield* mailbox.send("counter:1", `letter:${i}`, m, from);
+				}
+
 				expect(yield* Stream.runCollect(mailbox.read("counter:1", 0))).toHaveLength(
 					messages.length,
 				);

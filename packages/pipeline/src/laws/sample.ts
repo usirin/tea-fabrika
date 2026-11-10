@@ -42,6 +42,7 @@ export const sample = (run: (choices: readonly number[]) => Walked, budget: Budg
 		const batch = budget.batch ?? 100;
 		const started = performance.now();
 		let runs = 0;
+
 		for (let round = 0; performance.now() - started < budget.ms; round++) {
 			const r = yield* Arbitrary.checkEffect(choices, (cs) => run(cs).broke === null, {
 				runs: batch,
@@ -49,6 +50,7 @@ export const sample = (run: (choices: readonly number[]) => Walked, budget: Budg
 				seed: `${budget.seed}:${round}`,
 				maxShrinks: 5_000,
 			});
+
 			if (r._tag === "Falsified") {
 				const shrunk = run(r.shrunkInput);
 				return {
@@ -59,8 +61,10 @@ export const sample = (run: (choices: readonly number[]) => Walked, budget: Budg
 					why: shrunk.broke?.why ?? null,
 				} satisfies Sampled;
 			}
+
 			runs += batch;
 		}
+
 		return {
 			caught: false,
 			ms: Math.round(performance.now() - started),

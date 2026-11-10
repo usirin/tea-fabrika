@@ -20,10 +20,12 @@ import {serveAgent} from "./serve.ts";
 /** One log line's `key=value` fields, as `Logger.formatSimple` writes them, quotes taken off. */
 const fieldsOf = (line: string): Record<string, string> => {
 	const out: Record<string, string> = {};
+
 	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
 		const [, key = "", raw = ""] = m;
 		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
 	}
+
 	return out;
 };
 
@@ -32,9 +34,14 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 1000; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
@@ -67,7 +74,12 @@ describe("a tool call whose handler crashed", () => {
 					rest += chunk.toString("utf8");
 					const parts = rest.split("\n");
 					rest = parts.pop() ?? "";
-					for (const part of parts) if (part.trim() !== "") got.push(JSON.parse(part));
+
+					for (const part of parts) {
+						if (part.trim() !== "") {
+							got.push(JSON.parse(part));
+						}
+					}
 				});
 				yield* Effect.addFinalizer(() => Effect.sync(() => client.destroy()));
 				const say = (message: unknown) => client.write(`${JSON.stringify(message)}\n`);
@@ -137,7 +149,12 @@ describe("an agent's initialize", () => {
 					rest += chunk.toString("utf8");
 					const parts = rest.split("\n");
 					rest = parts.pop() ?? "";
-					for (const part of parts) if (part.trim() !== "") got.push(JSON.parse(part));
+
+					for (const part of parts) {
+						if (part.trim() !== "") {
+							got.push(JSON.parse(part));
+						}
+					}
 				});
 				yield* Effect.addFinalizer(() => Effect.sync(() => client.destroy()));
 				const say = (message: unknown) => client.write(`${JSON.stringify(message)}\n`);

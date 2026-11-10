@@ -81,6 +81,7 @@ describe("the exam's pull request", () => {
 		const ref = refIn(line);
 		expect(ref, line).toMatch(/^refs\/kept\/./);
 		let tip: string | null = null;
+
 		try {
 			tip = execFileSync(
 				"git",
@@ -90,6 +91,7 @@ describe("the exam's pull request", () => {
 		} catch {
 			// Not on the remote.
 		}
+
 		expect.soft(tip, `${ref} is on the remote`).not.toBeNull();
 		expect
 			.soft(
@@ -109,7 +111,10 @@ describe("the exam's pull request", () => {
 			// Under the exam review's checks, the lane's first, after `examReady` read the branch:
 			// main takes the rule file, and a person pushes on top of the exam head.
 			checksSay: (head, nth, where) => {
-				if (nth === 0) pushed = pushOnTopOf(where, head, [PERSONS]);
+				if (nth === 0) {
+					pushed = pushOnTopOf(where, head, [PERSONS]);
+				}
+
 				return mainTakesTheRule(head, nth, where);
 			},
 		});
@@ -223,7 +228,10 @@ describe("the exam's pull request", () => {
 			fake: {answers: {review: [FAILS_E1]}},
 			// Under the exam review's checks, the lane's first, after `examReady` read the branch.
 			checksSay: (head, nth, where) => {
-				if (nth === 0) pushed = pushOnTopOf(where, head, [PERSONS]);
+				if (nth === 0) {
+					pushed = pushOnTopOf(where, head, [PERSONS]);
+				}
+
 				return null;
 			},
 		});
@@ -242,7 +250,10 @@ describe("the exam's pull request", () => {
 			picks: {...YES, rounds_spent: "stop"},
 			// The exam review's checks, the lane's first: a person pushes while they run, and they fail.
 			checksSay: (head, nth, where) => {
-				if (nth !== 0) return null;
+				if (nth !== 0) {
+					return null;
+				}
+
 				pushed = pushOnTopOf(where, head, [PERSONS]);
 				return {
 					head,

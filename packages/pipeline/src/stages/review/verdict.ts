@@ -29,7 +29,11 @@ export function verdictOf(sheet: Sheet, kind: TextKind): Verdict {
 		sheet.findings.some(
 			(finding) => finding.kind === kind && finding.state === "open" && !isAgainstDecision(finding),
 		);
-	if (failed) return "fail";
+
+	if (failed) {
+		return "fail";
+	}
+
 	return sheet.rows.some((row) => row.grade === "unseen") ? "unseen" : "pass";
 }
 
@@ -47,9 +51,14 @@ export const verdictsOf = (kinds: readonly TextKind[], sheet: Sheet): readonly K
  * kind of review this stage does not do.
  */
 export function outcomeOf(brief: Brief, verdicts: readonly KindVerdict[]): ReviewOutcome {
-	if (verdicts.some((v) => v.verdict === "fail"))
+	if (verdicts.some((v) => v.verdict === "fail")) {
 		return {kind: "send", to: "builder", why: "review_failed"};
-	if (verdicts.some((v) => v.verdict === "unseen")) return {kind: "stuck", why: "unseen"};
+	}
+
+	if (verdicts.some((v) => v.verdict === "unseen")) {
+		return {kind: "stuck", why: "unseen"};
+	}
+
 	return {kind: "done", part: brief.left.length > 0, head: brief.head};
 }
 
@@ -129,8 +138,15 @@ export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
 			text: criterion.text,
 			findings,
 		};
-		if (row === undefined) return {...base, state: "open", says: "No row was given.", where: []};
-		if (row.grade === "unseen") return {...base, state: "open", says: row.says, where: []};
+
+		if (row === undefined) {
+			return {...base, state: "open", says: "No row was given.", where: []};
+		}
+
+		if (row.grade === "unseen") {
+			return {...base, state: "open", says: row.says, where: []};
+		}
+
 		return {
 			...base,
 			state: row.grade === "pass" && findings.length === 0 ? "met" : "open",
@@ -161,7 +177,11 @@ export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
 export function rowsOf(brief: Brief, sheet: Sheet): readonly Row[] {
 	return brief.criteria.flatMap((criterion): Row[] => {
 		const row = sheet.rows.find((r) => r.id === criterion.id);
-		if (row === undefined || row.grade === "unseen") return [];
+
+		if (row === undefined || row.grade === "unseen") {
+			return [];
+		}
+
 		const held = sheet.findings.some(
 			(f) => f.state === "open" && f.from.source === "criterion" && f.from.id === criterion.id,
 		);

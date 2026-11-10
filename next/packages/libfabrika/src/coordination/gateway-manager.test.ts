@@ -84,7 +84,11 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 				return Effect.gen(function* () {
 					yield* TestClock.setTime(NOW);
 					const gateway = yield* GatewayManager;
-					for (let i = 0; i < count; i++) yield* gateway.join(world.connection(`tab-${i}`));
+
+					for (let i = 0; i < count; i++) {
+						yield* gateway.join(world.connection(`tab-${i}`));
+					}
+
 					const pending = yield* Effect.forkChild(gateway.online("key-a"));
 					yield* Effect.gen(function* () {
 						yield* TestClock.adjust(1);
@@ -114,6 +118,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 			return Effect.gen(function* () {
 				yield* Effect.gen(function* () {
 					const gateway = yield* GatewayManager;
+
 					for (const action of [
 						gateway.join(world.connection()),
 						gateway.leave("tab-a", A),
@@ -121,7 +126,10 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 					]) {
 						const result = yield* Effect.result(action);
 						expect(result).toMatchObject({_tag: "Failure", failure: {why: "storage"}});
-						if (result._tag === "Failure") expect(result.failure).toBeInstanceOf(LedgerError);
+
+						if (result._tag === "Failure") {
+							expect(result.failure).toBeInstanceOf(LedgerError);
+						}
 					}
 				}).pipe(Effect.provide(broken));
 				yield* Effect.gen(function* () {
@@ -134,6 +142,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 			});
 		}),
 	);
+
 	for (const [elapsed, state] of [
 		[74_999, "online"],
 		[75_000, "away"],
@@ -170,6 +179,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 			),
 		);
 	}
+
 	it.effect(
 		"plant, no first ping means away: a new session uses its admitted connection time",
 		() =>
@@ -334,12 +344,14 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 					yield* gateways.join(connection());
 					yield* gateways.online("key-a");
 					yield* gateways.leave("tab-a", A);
+
 					for (const name of ["gateway.join", "gateway.online", "gateway.probe", "gateway.leave"]) {
 						expect(
 							spans.filter((span) => span.name === name && span.status._tag === "Ended"),
 							name,
 						).toHaveLength(1);
 					}
+
 					const join = spans.find((span) => span.name === "gateway.join")!;
 					expect(join.attributes.get("fab.gateway.client")).toBe("tab-a");
 					expect(join.attributes.get("fab.gateway.session")).toBe(A);

@@ -112,7 +112,11 @@ const reworded = (b: Book, m: Extract<CriteriaMsg, {type: "reworded"}>): Book =>
 	...b,
 	live: b.live.map((e) => {
 		const now = lastOf(e);
-		if (e.id !== m.id || now.text === m.text) return e;
+
+		if (e.id !== m.id || now.text === m.text) {
+			return e;
+		}
+
 		return {...e, wordings: [...e.wordings, {version: now.version + 1, text: m.text, by: m.by}]};
 	}),
 });
@@ -128,7 +132,11 @@ const removed = (b: Book, m: Extract<CriteriaMsg, {type: "removed"}>): Book => {
 const judged = (b: Book, m: Extract<CriteriaMsg, {type: "judged"}>): Book => {
 	const {criterion, version} = m.row;
 	const entry = [...b.live, ...b.retired].find((e) => e.id === criterion);
-	if (entry === undefined || version > lastOf(entry).version) return b;
+
+	if (entry === undefined || version > lastOf(entry).version) {
+		return b;
+	}
+
 	return {...b, verdicts: [...b.verdicts, {id: nextVerdict(b), ...m.row}]};
 };
 

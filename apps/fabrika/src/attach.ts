@@ -71,6 +71,7 @@ export const attach = <E, R>(options: AttachOptions<E, R>) =>
 	Effect.gen(function* () {
 		const {home, deliver, start, ours = PROTOCOL, build = BUILD} = options;
 		const paths = yield* pathsOf(home);
+
 		if ((yield* reach(paths.sock)) !== "live") {
 			const exited = yield* start;
 			const listening = reach(paths.sock).pipe(
@@ -97,6 +98,7 @@ export const attach = <E, R>(options: AttachOptions<E, R>) =>
 				),
 			);
 		}
+
 		// The link runs in a scope of its own, inside the caller's: closed as soon as the try fails,
 		// so its socket is not left open until the caller's scope ends.
 		const link = yield* Scope.fork(yield* Effect.scope);
@@ -123,16 +125,20 @@ export const attach = <E, R>(options: AttachOptions<E, R>) =>
 export const restart = <E, R>(options: AttachOptions<E, R>) =>
 	Effect.gen(function* () {
 		const paths = yield* pathsOf(options.home);
+
 		if ((yield* reach(paths.sock)) === "live") {
 			const by = yield* personOn(options.home);
 			const at = yield* Clock.currentTimeMillis;
-			if (by !== null)
+
+			if (by !== null) {
 				yield* leaveNote(paths, {by, why: null, at}).pipe(
 					Effect.catch((e) =>
 						Effect.logWarning(`fabrika: the restart's note could not be left: ${e.message}`),
 					),
 				);
+			}
 		}
+
 		yield* stopHost(options.home).pipe(Effect.tapError(() => forgetNote(paths)));
 		return yield* attach(options);
 	});

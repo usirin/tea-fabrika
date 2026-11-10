@@ -59,7 +59,10 @@ export class JobRecord extends DurableObject {
 	/** Refuse a caller that named another record than this one. */
 	private mine(name: string) {
 		const named = this.ctx.id?.name;
-		if (named !== undefined && named !== name) throw new Error("not this record");
+
+		if (named !== undefined && named !== name) {
+			throw new Error("not this record");
+		}
 	}
 
 	/**
@@ -70,7 +73,11 @@ export class JobRecord extends DurableObject {
 	async call(name: string, body: unknown, by: string): Promise<string> {
 		this.mine(name);
 		const exit = decodeCall(body);
-		if (Exit.isFailure(exit)) return JSON.stringify({error: "not a call this record takes"});
+
+		if (Exit.isFailure(exit)) {
+			return JSON.stringify({error: "not a call this record takes"});
+		}
+
 		return JSON.stringify(callJob(this.db, this.heads, exit.value, by, Date.now(), this.keyframe));
 	}
 

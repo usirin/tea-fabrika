@@ -60,7 +60,11 @@ const ended = (ticket: number, run: string, outcome: Extract<Fact, {type: "ended
 const loaded = (entries: readonly Entry[], kept: Marks = NO_MARKS): Asks => {
 	const [start, first] = asksMachine.init(null, kept);
 	const cmd = first[0];
-	if (cmd === undefined) throw new Error("the machine starts with a load");
+
+	if (cmd === undefined) {
+		throw new Error("the machine starts with a load");
+	}
+
 	const [read] = step(start, load.ok(cmd, {entries, last: entries.length}, 0));
 	const [ticked] = step(read, {type: "tick", now: NOON + HOUR});
 	return ticked;
@@ -113,7 +117,11 @@ describe("the asks", () => {
 		);
 		const [busy, cmds] = step(seen, {type: "moved"});
 		const cmd = cmds[0];
-		if (cmd === undefined) throw new Error("news asks for a load");
+
+		if (cmd === undefined) {
+			throw new Error("news asks for a load");
+		}
+
 		const [read] = step(
 			busy,
 			load.ok(cmd, {entries: more.slice(facts.length), last: more.length}, 0),
@@ -134,7 +142,11 @@ describe("the asks", () => {
 		expect(none).toHaveLength(0);
 		expect(again.load).toBe("again");
 		const cmd = first[0];
-		if (cmd === undefined) throw new Error("news asks for a load");
+
+		if (cmd === undefined) {
+			throw new Error("news asks for a load");
+		}
+
 		const [, next] = step(again, load.ok(cmd, {entries: [], last: 0}, 0));
 		expect(next).toHaveLength(1);
 	});
@@ -145,7 +157,11 @@ describe("the asks", () => {
 		expect(newAsks(new Set(["7/a-1"]), now).map((a) => a.key)).toEqual(["8/stuck/r-1"]);
 		expect(newAsks(keysOf(now), now)).toEqual([]);
 		const [one, two] = now.asks;
-		if (one === undefined || two === undefined) throw new Error("two asks");
+
+		if (one === undefined || two === undefined) {
+			throw new Error("two asks");
+		}
+
 		expect(noticeOf([one])).toEqual({title: "#7 Login fails", body: "approve plan"});
 		expect(noticeOf([one, two])).toEqual({
 			title: "2 new asks",
@@ -183,6 +199,7 @@ describe("the asks", () => {
 			kind: "read",
 			marks: {later: ["7/a-1"], seen: []},
 		});
+
 		for (const text of ["", "{", '{"later":["7/a-1"]}', '{"later":[],"seen":[],"open":[]}', "[]"]) {
 			const read = readMarks(text);
 			expect(read.kind, text).toBe("refused");

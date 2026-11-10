@@ -218,12 +218,14 @@ function writing(s: Held, brief: WriterBrief, restarts = 0, costUsd = 0): Step {
 
 /** A draft passed the Check: commit its tests, or ask at once when no Property got one. */
 function commit(s: Drafted): Step {
-	if (testsOf(s.written.answers).length === 0)
+	if (testsOf(s.written.answers).length === 0) {
 		return end(
 			s,
 			{kind: "ask", who: "owner", for: "cannot_test"},
 			{...spent(s), found: cannotOf(s.written.answers)},
 		);
+	}
+
 	const asked = commitTests({
 		ticket: s.ask.ticket,
 		base: s.ask.base,
@@ -240,9 +242,13 @@ function commit(s: Drafted): Step {
  * child ended in to decide its own next phase (nested TEA, the OutMsg way).
  */
 function draftMsg(s: TestWriter, m: Exclude<WriterMsg, {type: "tests_write_tool"}>): Step {
-	if (s.phase !== "writing" || refine.runOf(s.refining)?.id !== m.id) return stay(s);
+	if (s.phase !== "writing" || refine.runOf(s.refining)?.id !== m.id) {
+		return stay(s);
+	}
+
 	const costUsd = s.costUsd + m.spend.costUsd;
 	const next = refine.update(s.refining, m);
+
 	switch (next.phase) {
 		case "drafting":
 			return [{...s, refining: next, costUsd}, []];
@@ -265,7 +271,10 @@ function draftMsg(s: TestWriter, m: Exclude<WriterMsg, {type: "tests_write_tool"
 
 /** The writer's run: on only while a draft is asked for, in a copy of the code at the base. */
 export const runSub = testsWrite.sub((s: TestWriter): DraftRun | null => {
-	if (s.phase !== "writing") return null;
+	if (s.phase !== "writing") {
+		return null;
+	}
+
 	const run = refine.runOf(s.refining);
 	return run === null ? null : {...run, folder: s.ask.base};
 });
@@ -281,29 +290,49 @@ export const testWriter = defineMachine({
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const at = {ask: m.ask, key: m.key};
-			if (m.ask.properties.length === 0) return end(at, {kind: "skip", why: "no_properties"});
+
+			if (m.ask.properties.length === 0) {
+				return end(at, {kind: "skip", why: "no_properties"});
+			}
+
 			const asked = readTaken({base: m.ask.base, includes: m.ask.includes});
 			return [{...at, phase: "reading", asked}, [asked]];
 		},
 		resume: (s): Step => {
-			if (s.phase === "reading" || s.phase === "committing" || s.phase === "running")
+			if (s.phase === "reading" || s.phase === "committing" || s.phase === "running") {
 				return [s, [s.asked]];
-			if (s.phase === "recording") return [s, [inFlight(s.remember)]];
-			if (s.phase !== "writing") return stay(s);
+			}
+
+			if (s.phase === "recording") {
+				return [s, [inFlight(s.remember)]];
+			}
+
+			if (s.phase !== "writing") {
+				return stay(s);
+			}
+
 			// The run that was on is gone with the process, and its conversation's name is taken.
-			if (s.restarts >= MAX_RESTARTS)
+			if (s.restarts >= MAX_RESTARTS) {
 				return end(
 					s,
 					{kind: "stuck", why: "cut_off"},
 					{costUsd: s.costUsd, problems: [`the writer was cut off ${s.restarts + 1} times`]},
 				);
+			}
+
 			return writing(s, s.brief, s.restarts + 1, s.costUsd);
 		},
 
 		tests_taken_ok: (s, m): Step => {
-			if (s.phase !== "reading") return stay(s);
+			if (s.phase !== "reading") {
+				return stay(s);
+			}
+
 			const {ticket, plan, base, properties, pointers, includes, rewrite} = s.ask;
 			const brief = writer.fill({
 				ticket,
@@ -325,7 +354,10 @@ export const testWriter = defineMachine({
 		tests_write_failed: (s, m): Step => draftMsg(s, m),
 
 		tests_commit_ok: (s, m): Step => {
-			if (s.phase !== "committing") return stay(s);
+			if (s.phase !== "committing") {
+				return stay(s);
+			}
+
 			const tests = testsOf(s.written.answers).map(({property, file, name}) => ({
 				property,
 				file,
@@ -338,13 +370,17 @@ export const testWriter = defineMachine({
 			s.phase === "committing" ? end(s, {kind: "stuck", why: "commit_failed"}, spent(s)) : stay(s),
 
 		tests_on_base_ok: (s, m): Step => {
-			if (s.phase !== "running") return stay(s);
+			if (s.phase !== "running") {
+				return stay(s);
+			}
+
 			const tests = testsOf(s.written.answers);
 			const read = readRun(s.ask.properties, tests, m.value, {
 				version: s.ask.plan.version,
 				head: s.commit,
 			});
-			if (!read.read)
+
+			if (!read.read) {
 				return end(
 					s,
 					{kind: "stuck", why: "no_result"},
@@ -354,6 +390,8 @@ export const testWriter = defineMachine({
 						problems: read.missing.map((p) => `the run on the base said nothing for ${p}'s test`),
 					},
 				);
+			}
+
 			const write = recordFacts({
 				ticket: s.ask.ticket,
 				written: {fact: "tests_written", ticket: s.ask.ticket, commit: s.commit},
@@ -382,7 +420,10 @@ export const testWriter = defineMachine({
 		// Stuck, never an ask: a `go_on` would let the build start on tests that never ran on the base.
 		// The cause and what the writer said no test can check are kept for the stuck comment.
 		tests_on_base_err: (s, m): Step => {
-			if (s.phase !== "running") return stay(s);
+			if (s.phase !== "running") {
+				return stay(s);
+			}
+
 			const failure = failureOf(m.error);
 			return end(
 				s,
@@ -398,7 +439,10 @@ export const testWriter = defineMachine({
 		},
 
 		tests_record_ok: (s): Step => {
-			if (s.phase !== "recording" || s.remember.step !== "writing") return stay(s);
+			if (s.phase !== "recording" || s.remember.step !== "writing") {
+				return stay(s);
+			}
+
 			const [r, cmds] = wrote(s.remember);
 			return [{...s, remember: r}, cmds];
 		},
@@ -412,14 +456,20 @@ export const testWriter = defineMachine({
 				: stay(s),
 
 		tests_checked_ok: (s, m): Step => {
-			if (s.phase !== "recording" || s.remember.step !== "reading") return stay(s);
+			if (s.phase !== "recording" || s.remember.step !== "reading") {
+				return stay(s);
+			}
+
 			const report = {...spent(s), commit: s.commit, checked: s.checked, found: s.found};
-			if (!shows(m.value, s.checked))
+
+			if (!shows(m.value, s.checked)) {
 				return end(
 					s,
 					{kind: "stuck", why: "record_failed"},
 					{...report, problems: ["the ledger, read after the write, does not show every result"]},
 				);
+			}
+
 			const first = firstOf(s.found);
 			return end(
 				s,

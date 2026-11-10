@@ -44,7 +44,11 @@ const world = (name: string, spec: SupervisorSpec) => {
 	};
 	const exit = (child: string, reason: "crash" | "shutdown" | "killed" | "normal", at = now) => {
 		const r = runs.get(child);
-		if (r === undefined || !r.up) return;
+
+		if (r === undefined || !r.up) {
+			return;
+		}
+
 		r.up = false;
 		feed({type: "exit", rev: ++rev, from: child, to: 1, incarnation: r.inc, reason, why: "x", at});
 	};
@@ -52,6 +56,7 @@ const world = (name: string, spec: SupervisorSpec) => {
 	const settle = (limit = 100) => {
 		for (let i = 0; i < limit; i++) {
 			const stop = stopOf(s);
+
 			if (stop !== null) {
 				did.push(`stop ${stop.name}`);
 				const r = runs.get(stop.name);
@@ -67,14 +72,21 @@ const world = (name: string, spec: SupervisorSpec) => {
 				exit(stop.name, stop.signal === "kill" ? "killed" : "shutdown");
 				continue;
 			}
+
 			const start = startsOf(s)[0];
-			if (start === undefined) return;
+
+			if (start === undefined) {
+				return;
+			}
+
 			now = Math.max(now, start.notBefore);
 			const r = runs.get(start.name) ?? {inc: 0, up: false};
+
 			if (!r.up) {
 				r.inc += 1;
 				r.up = true;
 			}
+
 			runs.set(start.name, r);
 			did.push(`start ${start.name}`);
 			feed({
@@ -167,8 +179,11 @@ describe("the supervisor's strategies", () => {
 	it("a start in flight when a group restart catches it is stopped and started again, in order", () => {
 		const step = superviseWith("s", base("rest_for_one"));
 		let s = step(NOT_BEGUN, {type: "begin", incarnation: 1, parent: null});
-		for (const [i, name] of ["c1", "c2", "c3"].entries())
+
+		for (const [i, name] of ["c1", "c2", "c3"].entries()) {
 			s = step(s, {type: "started", name, incarnation: 1, at: i, generation: 0});
+		}
+
 		// c4's start is on its way (generation 0) when c2 crashes: c4 must not run ahead of c2.
 		const generation = startsOf(s).find((p) => p.name === "c4")?.generation;
 		s = step(s, {
@@ -210,10 +225,12 @@ describe("the supervisor's strategies", () => {
 	it("past its intensity it stops every child in reverse order, then exits", () => {
 		const w = world("s", {...base("one_for_one"), intensity: 3});
 		w.settle();
+
 		for (let i = 0; i < 3; i++) {
 			w.exit("c1", "crash");
 			w.settle();
 		}
+
 		expect(w.state.phase).toBe("running");
 		w.did.length = 0;
 		w.exit("c1", "crash");
@@ -255,8 +272,11 @@ describe("shutdown: brutal_kill, a timeout, infinity", () => {
 		};
 		const step = superviseWith("s", spec);
 		let s = step(NOT_BEGUN, {type: "begin", incarnation: 1, parent: null});
-		for (const [i, c] of spec.children.entries())
+
+		for (const [i, c] of spec.children.entries()) {
 			s = step(s, {type: "started", name: c.name, incarnation: 1, at: i, generation: 0});
+		}
+
 		s = step(s, {
 			type: "exit",
 			rev: 1,
@@ -325,6 +345,7 @@ describe("restart backoff", () => {
 		w.settle();
 		const waits: number[] = [];
 		let at = 1000;
+
 		for (let i = 0; i < 4; i++) {
 			w.clock(at);
 			w.exit("c1", "crash", at);
@@ -333,6 +354,7 @@ describe("restart backoff", () => {
 			w.settle();
 			at = (start?.notBefore ?? 0) + 10;
 		}
+
 		expect(waits).toEqual([100, 200, 400, 800]);
 		expect(delayOf(spec.backoff, 6)).toBe(800);
 		// A fifth crash inside the period: the brake trips.
@@ -422,7 +444,10 @@ const sleep = (ms: number) => Effect.sleep(Duration.millis(ms));
 const until = (done: Effect.Effect<boolean, unknown, Ledger>, ms = 15_000) =>
 	Effect.gen(function* () {
 		const t0 = Date.now();
-		while (!(yield* done) && Date.now() - t0 < ms) yield* sleep(20);
+
+		while (!(yield* done) && Date.now() - t0 < ms) {
+			yield* sleep(20);
+		}
 	});
 
 const decodeExit = Schema.decodeUnknownExit(ExitMessage);
@@ -439,8 +464,14 @@ const counter = defineMachine({
 	init: (loaded) => [loaded ?? {count: 0, cursor: 0}, []],
 	update: {
 		inc: (s, m) => {
-			if (m.rev <= s.cursor) return [s, []];
-			if (m.poison) throw new Error("poison");
+			if (m.rev <= s.cursor) {
+				return [s, []];
+			}
+
+			if (m.poison) {
+				throw new Error("poison");
+			}
+
 			return [{count: s.count + 1, cursor: m.rev}, []];
 		},
 	},
@@ -463,8 +494,15 @@ const worker = (trap: "no" | "graceful" | "ignore") =>
 		main: ({serve}) =>
 			Effect.gen(function* () {
 				const self = yield* Self;
-				if (bootCrash.has(self.name)) return yield* Effect.die("planted boot crash");
-				if (trap !== "no") yield* self.trapExit(true);
+
+				if (bootCrash.has(self.name)) {
+					return yield* Effect.die("planted boot crash");
+				}
+
+				if (trap !== "no") {
+					yield* self.trapExit(true);
+				}
+
 				const handle = yield* self.run(
 					counter,
 					{schema: Count, cursor: (s) => s.cursor},
@@ -474,12 +512,17 @@ const worker = (trap: "no" | "graceful" | "ignore") =>
 				yield* serve({
 					inbox: (e) => {
 						const count = machine.dispatch({type: "inc", rev: e.rev, poison: false});
+
 						if (e.kind === "EXIT" && e.from === "ledger") {
 							const x = decodeExit(e.body);
-							if (Exit.isSuccess(x) && x.value.to === self.incarnation && trap === "graceful")
+
+							if (Exit.isSuccess(x) && x.value.to === self.incarnation && trap === "graceful") {
 								return count.pipe(Effect.andThen(self.exit("shutdown", "asked to")), Effect.asVoid);
+							}
+
 							return count;
 						}
+
 						const b = decodeBody(e.body);
 						return Exit.isSuccess(b) && b.value.crashAfter === true
 							? count.pipe(Effect.andThen(Effect.die("planted crash")))
@@ -540,17 +583,25 @@ const tree = Effect.gen(function* () {
 	const ledger = yield* Ledger;
 	yield* ledger.register("top", "test");
 	yield* ledger.register("harness:1", "test");
+
 	for (const [name, spec] of [
 		["top", TREE.top],
 		["sup:all", TREE.all],
 		["sup:rest", TREE.rest],
 	] as const) {
 		const sup = supervisor(name, spec);
-		if (!sup.ok) return yield* Effect.die(sup.why);
+
+		if (!sup.ok) {
+			return yield* Effect.die(sup.why);
+		}
+
 		yield* serve({name, holder: `h-${name}`, program: sup.program});
 	}
-	for (const [name, trap] of Object.entries(TRAPS))
+
+	for (const [name, trap] of Object.entries(TRAPS)) {
 		yield* serve({name, holder: `h-${name}`, program: worker(trap), ttlMs: 1000});
+	}
+
 	yield* until(
 		Effect.map(
 			Effect.forEach(Object.keys(TRAPS), (n) => ledger.lease(n), {concurrency: "unbounded"}),
@@ -569,10 +620,15 @@ const replyTo = (id: string) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const rows = yield* ledger.readStream(streams("harness:1").inbox);
+
 		for (const r of rows) {
 			const x = Schema.decodeUnknownExit(Schema.fromJsonString(Reply))(r.data);
-			if (Exit.isSuccess(x) && x.value.id === id) return x.value.res;
+
+			if (Exit.isSuccess(x) && x.value.id === id) {
+				return x.value.res;
+			}
 		}
+
 		return null;
 	});
 
@@ -753,7 +809,11 @@ describe("dead letters", () => {
 					periodMs: 10_000,
 					children: [{name: "p:1", restart: "permanent"}],
 				});
-				if (!sup.ok) return yield* Effect.die(sup.why);
+
+				if (!sup.ok) {
+					return yield* Effect.die(sup.why);
+				}
+
 				yield* serve({name: "sup:p", holder: "hs", program: sup.program});
 				yield* serve({name: "p:1", holder: "hp", program: picky});
 				yield* until(Effect.map(ledger.lease("p:1"), (l) => l !== null));

@@ -108,8 +108,11 @@ export const liveJev = (
 				const done = yield* Ref.get(receipts);
 				const sent = yield* Ref.get(out);
 				const spent = spentOf(done, sent);
-				if (spent.calls >= cap.calls || spent.usd >= cap.usd)
+
+				if (spent.calls >= cap.calls || spent.usd >= cap.usd) {
 					return yield* Effect.fail(failed({_tag: "over_cap", cap, spent} satisfies OverCap));
+				}
+
 				yield* Ref.update(out, (n) => n + 1);
 			});
 

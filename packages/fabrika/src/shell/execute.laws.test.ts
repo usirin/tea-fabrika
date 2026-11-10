@@ -41,7 +41,11 @@ const session = (storage: Storage) =>
 			{printed: printed.hear, ready: ready.hear},
 			{id: `tsh:laws-${runs}`, storage},
 		).pipe(Effect.provideService(Programs, SMALL_LIST), Effect.provideService(HostJobs, jobs));
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		const line = (text: string) =>
 			Effect.gen(function* () {
@@ -58,8 +62,9 @@ const session = (storage: Storage) =>
 		/** Wait until tsh has printed `text`: a job's end comes when it comes. */
 		const heard = (text: string) =>
 			Effect.gen(function* () {
-				while (!printed.values.some((p) => p.text === text))
+				while (!printed.values.some((p) => p.text === text)) {
 					yield* Effect.sleep(Duration.millis(5));
+				}
 			});
 		const said = () => printed.values.map((p) => p.text);
 		return {started, line, heard, said};
@@ -86,24 +91,34 @@ describe("tsh over jobs saved by older code", () => {
 		await fc.assert(
 			fc.asyncProperty(jobsAndOrder, async ([jobs, order]) => {
 				const firstGood = order.findIndex((i) => jobs[i]?.older === false);
-				if (order.slice(0, Math.max(firstGood, 0)).some((i) => jobs[i]?.older)) refusedFirst += 1;
+
+				if (order.slice(0, Math.max(firstGood, 0)).some((i) => jobs[i]?.older)) {
+					refusedFirst += 1;
+				}
+
 				const storage = memoryStorage();
 				const ids = await Effect.runPromise(
 					Effect.gen(function* () {
 						const {line, heard, started} = yield* session(storage);
 						const out: string[] = [];
+
 						for (const [i, job] of jobs.entries()) {
 							const n = i + 1;
 							out.push((yield* line("tally &")).err[0]?.split(" ")[1] ?? "");
 							yield* line(`tell %${n} add ${job.add}`);
 							yield* heard(`[${n}] total ${job.add}`);
 						}
+
 						yield* started.stop;
 						return out;
 					}).pipe(Effect.scoped),
 				);
+
 				for (const [i, job] of jobs.entries()) {
-					if (!job.older) continue;
+					if (!job.older) {
+						continue;
+					}
+
 					const old = await Effect.runPromise(storage.open(ids[i] ?? "", null));
 					await old.store("count", "total", OlderTotal).save({sum: job.add});
 				}
@@ -112,20 +127,28 @@ describe("tsh over jobs saved by older code", () => {
 					Effect.gen(function* () {
 						const {line, heard} = yield* session(storage);
 						yield* line("");
+
 						for (const i of order) {
 							const n = i + 1;
 							const job = jobs[i];
-							if (job === undefined) continue;
+
+							if (job === undefined) {
+								continue;
+							}
+
 							const {err} = yield* line(`attach %${n} &`);
+
 							if (job.older) {
 								yield* heard(`[${n}] ${SAVED_BY_OLDER_CODE}  tally`);
 								yield* heard(`[${n}] it stays in the table, detached; stop %${n} drops it`);
 								continue;
 							}
+
 							expect(err).toEqual([`[${n}] attached ${ids[i]}`]);
 							yield* line(`tell %${n} add 1`);
 							yield* heard(`[${n}] total ${job.add + 1}`);
 						}
+
 						return (yield* line("jobs")).out;
 					}).pipe(Effect.scoped),
 				);
@@ -136,16 +159,19 @@ describe("tsh over jobs saved by older code", () => {
 							: [`[${i + 1}] running   tally`, `      total ${job.add + 1}`],
 					),
 				);
+
 				for (const [i, job] of jobs.entries()) {
 					const kept = await Effect.runPromise(storage.open(ids[i] ?? "", null));
-					if (job.older)
+
+					if (job.older) {
 						expect(await Effect.runPromise(kept.read("count", "total", OlderTotal))).toEqual({
 							sum: job.add,
 						});
-					else
+					} else {
 						expect(await Effect.runPromise(kept.read("count", "total", Total))).toEqual({
 							total: job.add + 1,
 						});
+					}
 				}
 			}),
 			{numRuns: 12, seed: 1},
@@ -173,7 +199,11 @@ describe("tsh over jobs saved by older code", () => {
 				const said = await Effect.runPromise(
 					Effect.gen(function* () {
 						const {line, said} = yield* session(storage);
-						for (const text of told) yield* line(text);
+
+						for (const text of told) {
+							yield* line(text);
+						}
+
 						return said();
 					}).pipe(Effect.scoped),
 				);

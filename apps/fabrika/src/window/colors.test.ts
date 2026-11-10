@@ -103,14 +103,22 @@ const argsOf = (inner: string) => {
 	const parts: string[] = [];
 	let depth = 0;
 	let from = 0;
+
 	for (let i = 0; i < inner.length; i += 1) {
-		if (inner[i] === "(") depth += 1;
-		if (inner[i] === ")") depth -= 1;
+		if (inner[i] === "(") {
+			depth += 1;
+		}
+
+		if (inner[i] === ")") {
+			depth -= 1;
+		}
+
 		if (inner[i] === "," && depth === 0) {
 			parts.push(inner.slice(from, i).trim());
 			from = i + 1;
 		}
 	}
+
 	parts.push(inner.slice(from).trim());
 	return parts;
 };
@@ -127,15 +135,28 @@ const hexOf = (value: string) => {
 const valueIn = (value: string, look: Look, seen: readonly string[] = []): string => {
 	const v = value.trim();
 	const named = /^var\((--[\w-]+)\)$/.exec(v);
-	if (named?.[1] !== undefined) return tokenIn(named[1], look, seen);
+
+	if (named?.[1] !== undefined) {
+		return tokenIn(named[1], look, seen);
+	}
+
 	const pair = /^light-dark\((.*)\)$/.exec(v);
+
 	if (pair?.[1] !== undefined) {
 		const [light = "", dark = ""] = argsOf(pair[1]);
 		return valueIn(look === "light" ? light : dark, look, seen);
 	}
+
 	const mix = /^color-mix\(\s*in oklab\s*,(.*)\)$/.exec(v);
-	if (mix?.[1] !== undefined) return mixIn(v, mix[1], look, seen);
-	if (/^#[0-9a-f]{3,8}$/i.test(v)) return hexOf(v);
+
+	if (mix?.[1] !== undefined) {
+		return mixIn(v, mix[1], look, seen);
+	}
+
+	if (/^#[0-9a-f]{3,8}$/i.test(v)) {
+		return hexOf(v);
+	}
+
 	return v;
 };
 
@@ -152,7 +173,11 @@ const mixIn = (v: string, inner: string, look: Look, seen: readonly string[]): s
 		return {lab: solid ? toOklab(rgbaOf(color)) : undefined, at: m?.[2]};
 	});
 	const [a, b] = parts;
-	if (parts.length !== 2 || a?.lab === undefined || b?.lab === undefined) return v;
+
+	if (parts.length !== 2 || a?.lab === undefined || b?.lab === undefined) {
+		return v;
+	}
+
 	const pa = a.at === undefined ? (b.at === undefined ? 50 : 100 - Number(b.at)) : Number(a.at);
 	const pb = b.at === undefined ? 100 - pa : Number(b.at);
 	const t = pa / (pa + pb);
@@ -162,9 +187,16 @@ const mixIn = (v: string, inner: string, look: Look, seen: readonly string[]): s
 };
 
 const tokenIn = (name: string, look: Look, seen: readonly string[] = []): string => {
-	if (seen.includes(name)) throw new Error(`var() loop: ${[...seen, name].join(" -> ")}`);
+	if (seen.includes(name)) {
+		throw new Error(`var() loop: ${[...seen, name].join(" -> ")}`);
+	}
+
 	const value = ROOT.get(name);
-	if (value === undefined) return `(no ${name} in :root)`;
+
+	if (value === undefined) {
+		return `(no ${name} in :root)`;
+	}
+
 	return valueIn(value, look, [...seen, name]);
 };
 
@@ -175,7 +207,11 @@ type Rgba = readonly [number, number, number, number];
 /** An oklch() color, as today's ramps are written, in sRGB (Björn Ottosson's OKLab matrices). */
 const fromOklch = (value: string): Rgba | undefined => {
 	const m = /^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)\s*\)$/.exec(value);
-	if (m === null) return undefined;
+
+	if (m === null) {
+		return undefined;
+	}
+
 	const C = Number(m[3]);
 	const H = (Number(m[4]) * Math.PI) / 180;
 	return fromOklab(Number(m[1]) / (m[2] === "%" ? 100 : 1), C * Math.cos(H), C * Math.sin(H));
@@ -203,8 +239,13 @@ const rgbaOf = (value: string): Rgba => {
 		const at = (i: number) => Number.parseInt(value.slice(i, i + 2), 16) / 255;
 		return [at(1), at(3), at(5), value.length === 9 ? at(7) : 1];
 	}
+
 	const lch = fromOklch(value);
-	if (lch !== undefined) return lch;
+
+	if (lch !== undefined) {
+		return lch;
+	}
+
 	throw new Error(`not a color this test computes: ${value}`);
 };
 
@@ -326,7 +367,11 @@ describe("A2: the terminal, the window's frame and the build read the package", 
 		const fileOf = (id: string) => {
 			const read = new RegExp(`const ${id}\\s*=\\s*yield\\*\\s*([^;]*);`).exec(code)?.[1] ?? "";
 			const named = /"([^"]+)"/.exec(read)?.[1];
-			if (named !== undefined) return named;
+
+			if (named !== undefined) {
+				return named;
+			}
+
 			const constant = /\(([A-Z_]+)\)/.exec(read)?.[1] ?? "";
 			return (
 				new RegExp(`const ${constant}\\s*=\\s*"([^"]+)"`).exec(code)?.[1] ?? `(${id}: ${read})`
@@ -487,7 +532,11 @@ describe("A3: every text the app draws reads on what it sits on, in both looks",
 		const unread = PAINTS.flatMap(({selector, fg, bg}) => {
 			const ink = valueIn(fg, look);
 			const fill = valueIn(bg, look);
-			if (NO_FILL.has(fill)) return [];
+
+			if (NO_FILL.has(fill)) {
+				return [];
+			}
+
 			return [
 				...(COLOR.test(ink) ? [] : [`${selector}: color ${fg} reads as ${ink}`]),
 				...(COLOR.test(fill) ? [] : [`${selector}: background ${bg} reads as ${fill}`]),
@@ -500,7 +549,11 @@ describe("A3: every text the app draws reads on what it sits on, in both looks",
 		const pairs = PAINTS.flatMap(({selector, fg, bg}) => {
 			const ink = valueIn(fg, look);
 			const fill = valueIn(bg, look);
-			if (!COLOR.test(ink) || !COLOR.test(fill)) return [];
+
+			if (!COLOR.test(ink) || !COLOR.test(fill)) {
+				return [];
+			}
+
 			return ["--surface", "--surface-raised"].map(
 				(page) =>
 					[
@@ -555,8 +608,12 @@ describe("A3: text takes Radix's two text steps, and a title is step 12, in both
 				(r) => r.selector.split(",").some((s) => s.trim() === selector) && r.says.has("color"),
 			);
 			const last = sets[sets.length - 1];
-			if (last !== undefined) return valueIn(last.says.get("color") ?? "", look);
+
+			if (last !== undefined) {
+				return valueIn(last.says.get("color") ?? "", look);
+			}
 		}
+
 		return `(no color for ${chain.join(" in ")})`;
 	};
 
@@ -735,16 +792,20 @@ describe("A3: the accent fill says your turn and nothing else", () => {
 	const ACCENT = (() => {
 		const names = new Set(["--turn-fill", "--turn-fill-hover"]);
 		let grew = true;
+
 		while (grew) {
 			grew = false;
+
 			for (const [name, value] of ROOT) {
 				const to = /^var\((--[\w-]+)\)$/.exec(value.trim())?.[1];
+
 				if (to !== undefined && names.has(to) && !names.has(name)) {
 					names.add(name);
 					grew = true;
 				}
 			}
 		}
+
 		return names;
 	})();
 
@@ -812,20 +873,33 @@ const splitMedia = (css: string, query: RegExp) => {
 	const inside: string[] = [];
 	let outside = "";
 	let from = 0;
+
 	for (const m of css.matchAll(/@media([^{]*)\{/g)) {
-		if (!query.test(m[1] ?? "") || (m.index ?? 0) < from) continue;
+		if (!query.test(m[1] ?? "") || (m.index ?? 0) < from) {
+			continue;
+		}
+
 		let depth = 1;
 		const open = (m.index ?? 0) + m[0].length;
 		let i = open;
+
 		while (i < css.length && depth > 0) {
-			if (css[i] === "{") depth += 1;
-			if (css[i] === "}") depth -= 1;
+			if (css[i] === "{") {
+				depth += 1;
+			}
+
+			if (css[i] === "}") {
+				depth -= 1;
+			}
+
 			i += 1;
 		}
+
 		outside += css.slice(from, m.index);
 		inside.push(css.slice(open, i - 1));
 		from = i;
 	}
+
 	return {inside: inside.join("\n"), outside: outside + css.slice(from)};
 };
 
@@ -894,8 +968,14 @@ describe("every focus indicator draws in the one focus token", () => {
 	// geometry only; e2e.ts's trackerFocus checks what wins the cascade and forced colors.
 	it("a tracker row's replacement focus shadow spans all four sides at 2px", () => {
 		const off = focusRules(splitMedia(app, FORCED).outside).filter((rule) => {
-			if (!rule.selector.includes(".tracker-list") || !rule.says.has("box-shadow")) return false;
-			if (/^(none|0)$/.test(rule.says.get("box-shadow") ?? "")) return false;
+			if (!rule.selector.includes(".tracker-list") || !rule.says.has("box-shadow")) {
+				return false;
+			}
+
+			if (/^(none|0)$/.test(rule.says.get("box-shadow") ?? "")) {
+				return false;
+			}
+
 			const shadows = argsOf(rule.says.get("box-shadow") ?? "");
 			return !shadows.some((shadow) => {
 				const lengths = shadow
@@ -924,16 +1004,20 @@ describe("the turn's text token is only ever text", () => {
 	const TEXT = (() => {
 		const names = new Set(["--turn-text"]);
 		let grew = true;
+
 		while (grew) {
 			grew = false;
+
 			for (const [name, value] of ROOT) {
 				const to = /^var\((--[\w-]+)\)$/.exec(value.trim())?.[1];
+
 				if (to !== undefined && names.has(to) && !names.has(name)) {
 					names.add(name);
 					grew = true;
 				}
 			}
 		}
+
 		return names;
 	})();
 

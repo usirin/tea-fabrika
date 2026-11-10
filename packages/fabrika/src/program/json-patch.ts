@@ -34,9 +34,14 @@ const isObject = (v: Json): v is {readonly [k: string]: Json} =>
 
 /** Two JSON values are the same value. */
 const same = (a: Json, b: Json): boolean => {
-	if (a === b) return true;
-	if (Array.isArray(a) && Array.isArray(b))
+	if (a === b) {
+		return true;
+	}
+
+	if (Array.isArray(a) && Array.isArray(b)) {
 		return a.length === b.length && a.every((v, i) => same(v, b[i] as Json));
+	}
+
 	if (isObject(a) && isObject(b)) {
 		const keys = Object.keys(a);
 		return (
@@ -44,30 +49,54 @@ const same = (a: Json, b: Json): boolean => {
 			keys.every((k) => Object.hasOwn(b, k) && same(a[k] as Json, b[k] as Json))
 		);
 	}
+
 	return false;
 };
 
 const walk = (from: Json, to: Json, path: string, out: Op[]): void => {
-	if (same(from, to)) return;
+	if (same(from, to)) {
+		return;
+	}
+
 	if (Array.isArray(from) && Array.isArray(to)) {
 		const both = Math.min(from.length, to.length);
-		for (let i = 0; i < both; i++) walk(from[i] as Json, to[i] as Json, `${path}/${i}`, out);
-		for (let i = both; i < to.length; i++)
+
+		for (let i = 0; i < both; i++) {
+			walk(from[i] as Json, to[i] as Json, `${path}/${i}`, out);
+		}
+
+		for (let i = both; i < to.length; i++) {
 			out.push({op: "add", path: `${path}/${i}`, value: to[i] as Json});
+		}
+
 		// From the end, so each index still names the element it removes.
-		for (let i = from.length - 1; i >= both; i--) out.push({op: "remove", path: `${path}/${i}`});
+		for (let i = from.length - 1; i >= both; i--) {
+			out.push({op: "remove", path: `${path}/${i}`});
+		}
+
 		return;
 	}
+
 	if (isObject(from) && isObject(to)) {
-		for (const k of Object.keys(from))
-			if (!Object.hasOwn(to, k)) out.push({op: "remove", path: `${path}/${toPart(k)}`});
+		for (const k of Object.keys(from)) {
+			if (!Object.hasOwn(to, k)) {
+				out.push({op: "remove", path: `${path}/${toPart(k)}`});
+			}
+		}
+
 		for (const k of Object.keys(to)) {
 			const at = `${path}/${toPart(k)}`;
-			if (Object.hasOwn(from, k)) walk(from[k] as Json, to[k] as Json, at, out);
-			else out.push({op: "add", path: at, value: to[k] as Json});
+
+			if (Object.hasOwn(from, k)) {
+				walk(from[k] as Json, to[k] as Json, at, out);
+			} else {
+				out.push({op: "add", path: at, value: to[k] as Json});
+			}
 		}
+
 		return;
 	}
+
 	out.push({op: "replace", path, value: to});
 };
 
@@ -82,16 +111,32 @@ export const diff = (from: Json, to: Json): readonly Op[] => {
 export class PatchMisfit extends Error {}
 
 const partsOf = (path: string): readonly string[] => {
-	if (path === "") return [];
-	if (!path.startsWith("/")) throw new PatchMisfit(`not a JSON pointer: ${path}`);
+	if (path === "") {
+		return [];
+	}
+
+	if (!path.startsWith("/")) {
+		throw new PatchMisfit(`not a JSON pointer: ${path}`);
+	}
+
 	return path.slice(1).split("/").map(fromPart);
 };
 
 const indexOf = (part: string, length: number, adding: boolean): number => {
-	if (adding && part === "-") return length;
-	if (!/^(0|[1-9][0-9]*)$/.test(part)) throw new PatchMisfit(`not an array index: ${part}`);
+	if (adding && part === "-") {
+		return length;
+	}
+
+	if (!/^(0|[1-9][0-9]*)$/.test(part)) {
+		throw new PatchMisfit(`not an array index: ${part}`);
+	}
+
 	const i = Number(part);
-	if (i > length || (!adding && i === length)) throw new PatchMisfit(`index ${i} is past the end`);
+
+	if (i > length || (!adding && i === length)) {
+		throw new PatchMisfit(`index ${i} is past the end`);
+	}
+
 	return i;
 };
 
@@ -100,35 +145,60 @@ const applyOne = (value: Json, op: Op): Json => {
 	const parts = partsOf(op.path);
 	const at = (node: Json, depth: number): Json => {
 		const part = parts[depth];
+
 		if (part === undefined) {
-			if (op.op === "remove") throw new PatchMisfit("the whole value cannot be removed");
+			if (op.op === "remove") {
+				throw new PatchMisfit("the whole value cannot be removed");
+			}
+
 			return op.value;
 		}
+
 		const last = depth === parts.length - 1;
+
 		if (Array.isArray(node)) {
 			const copy = [...node];
 			const i = indexOf(part, copy.length, last && op.op === "add");
-			if (!last) copy[i] = at(copy[i] as Json, depth + 1);
-			else if (op.op === "add") copy.splice(i, 0, op.value);
-			else if (op.op === "remove") copy.splice(i, 1);
-			else copy[i] = op.value;
+
+			if (!last) {
+				copy[i] = at(copy[i] as Json, depth + 1);
+			} else if (op.op === "add") {
+				copy.splice(i, 0, op.value);
+			} else if (op.op === "remove") {
+				copy.splice(i, 1);
+			} else {
+				copy[i] = op.value;
+			}
+
 			return copy;
 		}
+
 		if (isObject(node)) {
 			const copy: {[k: string]: Json} = {...node};
+
 			if (!last) {
-				if (!Object.hasOwn(copy, part)) throw new PatchMisfit(`no key ${part}`);
+				if (!Object.hasOwn(copy, part)) {
+					throw new PatchMisfit(`no key ${part}`);
+				}
+
 				copy[part] = at(copy[part] as Json, depth + 1);
 			} else if (op.op === "remove") {
-				if (!Object.hasOwn(copy, part)) throw new PatchMisfit(`no key ${part}`);
+				if (!Object.hasOwn(copy, part)) {
+					throw new PatchMisfit(`no key ${part}`);
+				}
+
 				delete copy[part];
 			} else {
-				if (op.op === "replace" && !Object.hasOwn(copy, part))
+				if (op.op === "replace" && !Object.hasOwn(copy, part)) {
 					throw new PatchMisfit(`no key ${part}`);
+				}
+
 				copy[part] = op.value;
 			}
+
 			return copy;
 		}
+
 		throw new PatchMisfit(`${op.path}: a ${typeof node} has no parts`);
 	};
 	return at(value, 0);

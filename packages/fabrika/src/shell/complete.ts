@@ -52,8 +52,12 @@ export function complete(
 	// A said line (S2): only its `@name` is a word. What is said after it is the agent's, as typed,
 	// so no program, built-in or operator is offered in it.
 	const lead = line.trimStart();
+
 	if (lead.startsWith("@")) {
-		if (/\s/.test(lead)) return none(lead.slice(lead.search(/\S*$/)));
+		if (/\s/.test(lead)) {
+			return none(lead.slice(lead.search(/\S*$/)));
+		}
+
 		return {
 			candidates: matching(
 				lead,
@@ -62,16 +66,24 @@ export function complete(
 			word: lead,
 		};
 	}
+
 	const {tokens, open, trailing} = words(line);
+
 	// Inside an open quote the word's text is not what is on the line: no guess beats a wrong one.
-	if (open) return none("");
+	if (open) {
+		return none("");
+	}
+
 	const last = tokens.at(-1);
 	const current: Extract<Token, {kind: "word"}> | undefined =
 		!trailing && last?.kind === "word" ? last : undefined;
 	const typed = current?.text ?? "";
 	const raw = current === undefined ? "" : line.slice(current.start);
+
 	// A word with quotes or escapes in it reads differently from how it is typed: leave it be.
-	if (typed !== raw) return none(raw);
+	if (typed !== raw) {
+		return none(raw);
+	}
 
 	// The words of the command the cursor is in, before the cursor's own word.
 	const before = current === undefined ? tokens : tokens.slice(0, -1);
@@ -92,19 +104,30 @@ export function complete(
 		return {candidates: matching(typed, [...programs, ...(inPipe ? [] : BUILTINS)]), word: raw};
 	}
 
-	if (head === "summon") return summonWord(rest, typed, talk);
-	if (head === "dismiss")
+	if (head === "summon") {
+		return summonWord(rest, typed, talk);
+	}
+
+	if (head === "dismiss") {
 		return rest.length === 0 ? {candidates: matching(typed, talk.names), word: raw} : none(raw);
-	if ((BUILTINS as readonly string[]).includes(head))
+	}
+
+	if ((BUILTINS as readonly string[]).includes(head)) {
 		return builtinWord(head, rest, typed, list, jobs);
+	}
 
 	const entry = list.get(head);
-	if (entry === undefined) return none(raw);
+
+	if (entry === undefined) {
+		return none(raw);
+	}
+
 	const {program} = entry;
 	const valuesOf = (schema: Record<string, unknown> | undefined) => choices(schema).map(String);
 
 	// A value after `--flag ` (the flag's word before this one, with no `=`).
 	const prior = rest.at(-1);
+
 	if (prior !== undefined && HELP_WORDS.has(prior)) {
 		const parts = [
 			...Object.keys(program.flags).map((f) => `--${f}`),
@@ -113,21 +136,25 @@ export function complete(
 		];
 		return {candidates: matching(typed, parts), word: raw};
 	}
+
 	// `--all` takes no value: the word after it is any other.
 	if (prior?.startsWith("--") && prior !== ALL_WORD && !prior.includes("=")) {
 		const flag: Flag<unknown> | undefined = own(program.flags, prior.slice(2));
 		return {candidates: matching(typed, valuesOf(flag?.shape.json)), word: raw};
 	}
+
 	const given = new Set(
 		rest.filter((w) => w.startsWith("--")).map((w) => w.slice(2).split("=")[0]),
 	);
+
 	if (typed.startsWith("--") && typed.includes("=")) {
 		const name = typed.slice(2, typed.indexOf("="));
 		const flag: Flag<unknown> | undefined = own(program.flags, name);
 		const values = valuesOf(flag?.shape.json).map((v) => `--${name}=${v}`);
 		return {candidates: matching(typed, values), word: raw};
 	}
-	if (typed.startsWith(">"))
+
+	if (typed.startsWith(">")) {
 		return {
 			candidates: matching(
 				typed,
@@ -135,7 +162,9 @@ export function complete(
 			),
 			word: raw,
 		};
-	if (typed.startsWith("<"))
+	}
+
+	if (typed.startsWith("<")) {
 		return {
 			candidates: matching(
 				typed,
@@ -143,12 +172,15 @@ export function complete(
 			),
 			word: raw,
 		};
+	}
+
 	if (!typed.startsWith("-") && typed.includes("=")) {
 		const name = typed.slice(0, typed.indexOf("="));
 		const into: Input<unknown> | undefined = own(program.inputs, name);
 		const values = valuesOf(into?.shape.json).map((v) => `${name}=${v}`);
 		return {candidates: matching(typed, values), word: raw};
 	}
+
 	const flags = Object.keys(program.flags)
 		.filter((f) => !given.has(f))
 		.map((f) => `--${f}`);
@@ -184,17 +216,28 @@ function feeding(
 	// stage passed over whole.
 	let start = tokens[bar]?.start ?? 0;
 	let depth = 0;
+
 	for (const token of tokens.slice(0, bar).reverse()) {
-		if (token.kind === "op" && token.op === ")") depth += 1;
-		else if (token.kind === "op" && token.op === "$(" && depth > 0) depth -= 1;
-		else if (token.kind === "op" && depth === 0) break;
+		if (token.kind === "op" && token.op === ")") {
+			depth += 1;
+		} else if (token.kind === "op" && token.op === "$(" && depth > 0) {
+			depth -= 1;
+		} else if (token.kind === "op" && depth === 0) {
+			break;
+		}
+
 		start = token.start;
 	}
+
 	const parsed = parse(line.slice(start, tokens[bar]?.start));
 	const [statement] = parsed.kind === "parsed" ? parsed.statements : [];
 	const [command, ...more] = statement?.kind === "run" ? statement.pipeline.commands : [];
 	const entry = command === undefined ? undefined : list.get(command.program.name);
-	if (entry === undefined || more.length > 0) return null;
+
+	if (entry === undefined || more.length > 0) {
+		return null;
+	}
+
 	return {entry, out: command?.out?.name ?? null};
 }
 
@@ -215,9 +258,17 @@ const canWire = ({entry, out}: Feeds, b: Entry): boolean =>
  */
 function summonWord(rest: readonly string[], typed: string, talk: Talk): Completed {
 	const [agent, ...more] = rest;
-	if (agent === undefined) return {candidates: matching(typed, talk.agents), word: typed};
+
+	if (agent === undefined) {
+		return {candidates: matching(typed, talk.agents), word: typed};
+	}
+
 	const at = more.indexOf("as");
-	if (at !== -1) return none(typed);
+
+	if (at !== -1) {
+		return none(typed);
+	}
+
 	const offered = (talk.offers[agent] ?? []).filter((w) => !more.includes(w));
 	return {
 		candidates: matching(typed, more.length >= 2 ? ["as"] : ["as", ...offered]),
@@ -233,14 +284,21 @@ function builtinWord(
 	list: ProgramList,
 	jobs: Jobs,
 ): Completed {
-	if (name === "help")
+	if (name === "help") {
 		return rest.length === 0
 			? {candidates: matching(typed, list.keys()), word: typed}
 			: none(typed);
+	}
+
 	const onJob = name === "tell" || name === "close" || name === "stop" || name === "attach";
-	if (!onJob) return none(typed);
+
+	if (!onJob) {
+		return none(typed);
+	}
+
 	const [jobWord, inputWord] = rest;
-	if (jobWord === undefined)
+
+	if (jobWord === undefined) {
 		return {
 			candidates: matching(
 				typed,
@@ -248,14 +306,28 @@ function builtinWord(
 			),
 			word: typed,
 		};
-	if (name !== "tell" && name !== "close") return none(typed);
+	}
+
+	if (name !== "tell" && name !== "close") {
+		return none(typed);
+	}
+
 	const job = jobNamed(jobs, jobWord);
 	const stage = job?.stages.find((s) => s.run === jobWord) ?? job?.stages[0];
 	const program = stage === undefined ? undefined : list.get(stage.program)?.program;
-	if (program === undefined) return none(typed);
-	if (inputWord === undefined)
+
+	if (program === undefined) {
+		return none(typed);
+	}
+
+	if (inputWord === undefined) {
 		return {candidates: matching(typed, Object.keys(program.inputs)), word: typed};
-	if (name === "close") return none(typed);
+	}
+
+	if (name === "close") {
+		return none(typed);
+	}
+
 	const into: Input<unknown> | undefined = own(program.inputs, inputWord);
 	return {candidates: matching(typed, choices(into?.shape.json).map(String)), word: typed};
 }

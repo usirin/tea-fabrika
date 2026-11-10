@@ -60,19 +60,26 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 2000; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
 /** One log line's `key=value` fields, as `Logger.formatSimple` writes them, quotes taken off. */
 const fieldsOf = (line: string): Record<string, string> => {
 	const out: Record<string, string> = {};
+
 	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
 		const [, key = "", raw = ""] = m;
 		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
 	}
+
 	return out;
 };
 
@@ -145,7 +152,10 @@ const appOn = (sock: string) =>
 		const hostNow = () =>
 			got
 				.flatMap((m): ToPage[] => {
-					if (m.type !== "to" || m.port !== "desk") return [];
+					if (m.type !== "to" || m.port !== "desk") {
+						return [];
+					}
+
 					const read = readToPage(m.m);
 					return read.kind === "read" ? [read.msg] : [];
 				})
@@ -202,12 +212,18 @@ const agentOn = (home: string, agent: string) =>
 			Effect.gen(function* () {
 				for (let i = 0; i < 400; i += 1) {
 					const answer = yield* call("job", {n});
+
 					if (!answer.error) {
 						const data = JSON.parse(answer.text) as Record<string, unknown>;
-						if (ok(data)) return data;
+
+						if (ok(data)) {
+							return data;
+						}
 					}
+
 					yield* Effect.sleep("25 millis");
 				}
+
 				return yield* Effect.die(`job ${n} never came to what was waited for`);
 			});
 		return {call, tools, jobWhen, heard};
@@ -221,7 +237,10 @@ const freshHome = Effect.gen(function* () {
 
 /** The host's `restarted`, as the top bar has it; `undefined` while it says none. */
 const restartedOf = (now: ToPage | undefined): unknown => {
-	if (now?.type !== "host") return undefined;
+	if (now?.type !== "host") {
+		return undefined;
+	}
+
 	const restarted: unknown = Reflect.get(now.now, "restarted");
 	return restarted === null ? undefined : restarted;
 };
@@ -266,7 +285,11 @@ describe("the restart tool", () => {
 				yield* agent.jobWhen(2, (d) => tagOf(d) === "running");
 
 				const answer = yield* agent.call("restart", {why: WHY});
-				if (answer.error) return yield* Effect.die(`the restart was refused: ${answer.text}`);
+
+				if (answer.error) {
+					return yield* Effect.die(`the restart was refused: ${answer.text}`);
+				}
+
 				const exit = yield* old.ended;
 				const sock = yield* reach(old.paths.sock);
 				const lost = yield* app.ended.pipe(Effect.timeout("5 seconds"));
@@ -345,7 +368,11 @@ describe("the restart tool", () => {
 				app.type("counter &\r");
 				yield* agent.jobWhen(1, (d) => tagOf(d) === "running");
 				const answer = yield* agent.call("restart", {why: WHY});
-				if (answer.error) return yield* Effect.die(`the restart was refused: ${answer.text}`);
+
+				if (answer.error) {
+					return yield* Effect.die(`the restart was refused: ${answer.text}`);
+				}
+
 				yield* old.ended;
 				const next = yield* hostOn(home, [], NEW);
 				const shown = yield* appOn(next.paths.sock);
@@ -396,10 +423,12 @@ describe("the restart tool", () => {
 				return {alone, gone, runs, sock, note: yield* fs.exists(yield* noteIn(home))};
 			}),
 		);
+
 		for (const refused of [seen.alone, seen.gone]) {
 			expect(refused.error).toBe(true);
 			expect(refused.text).toMatch(/\bapp\b/);
 		}
+
 		expect(seen.runs.error).toBe(false);
 		expect(seen.sock).toBe("live");
 		expect(seen.note).toBe(false);
@@ -407,7 +436,10 @@ describe("the restart tool", () => {
 		// A refused call leaves no other trace than its line.
 		const called = said(lines, "tool_called").filter((f) => f.tool === "restart");
 		expect(called).toHaveLength(2);
-		for (const line of called) expect(line.refused).toMatch(/\bapp\b/);
+
+		for (const line of called) {
+			expect(line.refused).toMatch(/\bapp\b/);
+		}
 	});
 
 	it("is refused with no why, an empty why, one past 500 characters, or one of two lines, and the host runs on", async () => {
@@ -429,10 +461,12 @@ describe("the restart tool", () => {
 				return {refusals, sock, note: yield* fs.exists(yield* noteIn(home))};
 			}),
 		);
+
 		for (const refused of seen.refusals) {
 			expect(refused.error).toBe(true);
 			expect(refused.text).toMatch(/\bwhy\b/);
 		}
+
 		expect(seen.sock).toBe("live");
 		expect(seen.note).toBe(false);
 		expect(said(lines, "host_restart")).toEqual([]);
@@ -575,7 +609,10 @@ describe("the restart tool, at its edges", () => {
 		// The person's name the call said reaches no line the host wrote.
 		const refusal = said(lines, "tool_called").filter((f) => f.tool === "restart");
 		expect(refusal).toHaveLength(1);
-		for (const line of lines) expect(line).not.toContain("user:owner");
+
+		for (const line of lines) {
+			expect(line).not.toContain("user:owner");
+		}
 	});
 
 	it("logs this build's own id at the start of a host given none", async () => {
@@ -632,7 +669,11 @@ describe("a real host process, restarted by an agent", () => {
 				yield* app.up;
 				const agent = yield* agentOn(home, "claude");
 				const answer = yield* agent.call("restart", {why: WHY});
-				if (answer.error) return yield* Effect.die(`the restart was refused: ${answer.text}`);
+
+				if (answer.error) {
+					return yield* Effect.die(`the restart was refused: ${answer.text}`);
+				}
+
 				const code = yield* host.exitCode.pipe(
 					Effect.timeoutOrElse({
 						duration: "10 seconds",
@@ -657,6 +698,7 @@ describe("a restart.json that does not read", () => {
 				const {dir} = yield* pathsOf(home);
 				yield* fs.makeDirectory(dir, {recursive: true, mode: 0o700});
 				const answers = [];
+
 				for (const text of [
 					"{not json",
 					JSON.stringify({by: 3, why: ["a"]}),
@@ -673,10 +715,12 @@ describe("a restart.json that does not read", () => {
 					yield* app.leave;
 					yield* host.stop;
 				}
+
 				return answers;
 			}),
 		);
 		expect(seen).toHaveLength(3);
+
 		for (const {now, began, kept} of seen) {
 			// The file is taken all the same, so no later host reads it either.
 			expect(kept).toBe(false);
@@ -716,7 +760,11 @@ describe("no secret in a restart's answer, its note or a log line (d24)", () => 
 				app.type("counter &\r");
 				yield* agent.jobWhen(1, (d) => tagOf(d) === "running");
 				const answer = yield* agent.call("restart", {why: "the secrets check"});
-				if (answer.error) return yield* Effect.die(`the restart was refused: ${answer.text}`);
+
+				if (answer.error) {
+					return yield* Effect.die(`the restart was refused: ${answer.text}`);
+				}
+
 				yield* old.ended;
 				const note = yield* fs.readFileString(yield* noteIn(home));
 				const next = yield* hostOn(home, after, NEW);
@@ -730,6 +778,7 @@ describe("no secret in a restart's answer, its note or a log line (d24)", () => 
 		expect(seen.note).toContain("the secrets check");
 		expect(said(before, "host_restart")).toHaveLength(1);
 		expect(said(after, "host_began")).toHaveLength(1);
+
 		for (const text of [...seen.heard, seen.note, ...before, ...after]) {
 			expect(text).not.toContain(secret);
 			expect(text).not.toContain(NAME);

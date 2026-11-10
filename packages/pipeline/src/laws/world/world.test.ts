@@ -146,13 +146,18 @@ describe("the loop and the owner's desk read one stall rule", () => {
 				{outcome: {kind: "send", to: "builder", why: "review_failed"}},
 				Array.from({length: opens[i] as number}, (_, k) => item(k)),
 			);
-			if (next.go === "end") return next.outcome.kind === "ask" ? i + 1 : null;
+
+			if (next.go === "end") {
+				return next.outcome.kind === "ask" ? i + 1 : null;
+			}
 		}
+
 		return null;
 	};
 	/** The round the asks core raises its stuck ask at, told each round as a reviewed fact. */
 	const deskAsks = (opens: readonly number[]): number | null => {
 		const desk: Entry[] = [...firstDesk("T1")];
+
 		for (let i = 0; i < opens.length; i++) {
 			desk.push({
 				seq: desk.length + 1,
@@ -163,21 +168,31 @@ describe("the loop and the owner's desk read one stall rule", () => {
 					open: opens[i] as number,
 				},
 			});
-			if (openAsks(foldLedger(desk)).some((a) => a.for === "stuck")) return i + 1;
+
+			if (openAsks(foldLedger(desk)).some((a) => a.for === "stuck")) {
+				return i + 1;
+			}
 		}
+
 		return null;
 	};
 
 	const differ = (rule = afterReview) => {
 		const out: string[] = [];
 		let runs = 0;
-		for (let n = 2; n <= 6; n++)
+
+		for (let n = 2; n <= 6; n++) {
 			for (const opens of runsOf(n)) {
 				runs++;
 				const loop = loopAsks(opens, rule);
 				const desk = deskAsks(opens);
-				if (loop !== desk) out.push(`${opens.join(",")}: loop at ${loop}, desk at ${desk}`);
+
+				if (loop !== desk) {
+					out.push(`${opens.join(",")}: loop at ${loop}, desk at ${desk}`);
+				}
 			}
+		}
+
 		expect(runs).toBe(9 + 27 + 81 + 243 + 729);
 		return out;
 	};
@@ -215,6 +230,7 @@ describe("no cap on rounds", () => {
 			// Someone else merges, so ship may send the passed head back (behind): a round with 1 open.
 			{...ONE, desk: true, queue: false, outsider: 2},
 		];
+
 		for (const world of worlds) {
 			const r = search(lanesWorld(world), {
 				laws: [asksReachTheOwner],
@@ -331,6 +347,7 @@ describe("the reductions find what the whole search finds", () => {
 		{por: false, symmetry: true},
 		{por: true, symmetry: true},
 	];
+
 	// Four searches each. With no cap, a lane whose round 1 fails builds a round 2, so the
 	// one-ticket world with fails takes a few seconds.
 	for (const [name, o] of [
@@ -341,15 +358,17 @@ describe("the reductions find what the whole search finds", () => {
 			"one ticket, no claim, no door",
 			{...SAME_FAIL_ONCE, claim: "none" as const, door: "none" as const},
 		],
-	] as const)
+	] as const) {
 		it(name, () => {
 			const full = run(o);
+
 			for (const mode of modes) {
 				const r = run(o, mode);
 				expect(broken(r)).toEqual(broken(full));
 				expect(r.states).toBeLessThanOrEqual(full.states);
 			}
 		});
+	}
 
 	it("symmetry and partial order together keep under half the states of two lanes", () => {
 		const full = run(TWO);

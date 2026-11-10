@@ -134,7 +134,11 @@ export const memoryTracing = ({
  */
 export const endpointOf = (env: Readonly<Record<string, string | undefined>>): string | null => {
 	const set = env.TSH_TRACE;
-	if (set === undefined || set === "" || set === "0") return null;
+
+	if (set === undefined || set === "" || set === "0") {
+		return null;
+	}
+
 	return set.startsWith("http://") || set.startsWith("https://") ? set : DEFAULT_ENDPOINT;
 };
 
@@ -152,10 +156,15 @@ const keptTag = (key: string, v: unknown): string | number | boolean | undefined
 /** Attributes as a record keeps its tags: each one `keptTag` keeps. */
 const keptTags = (attributes: Readonly<Record<string, unknown>>) => {
 	const out: Record<string, string | number | boolean> = {};
+
 	for (const [k, v] of Object.entries(attributes)) {
 		const t = keptTag(k, v);
-		if (t !== undefined) out[k] = t;
+
+		if (t !== undefined) {
+			out[k] = t;
+		}
 	}
+
 	return out;
 };
 
@@ -193,12 +202,18 @@ export const recordTracing = (records: Pick<Records, "keep">, viewing: Viewing =
 	const keeping: SpanExporter = {
 		export: (batch, done) => {
 			const traces = new Map<string, SpanRow[]>();
+
 			for (const s of batch) {
 				const trace = s.spanContext().traceId;
 				const list = traces.get(trace);
-				if (list === undefined) traces.set(trace, [toSpanRow(s)]);
-				else list.push(toSpanRow(s));
+
+				if (list === undefined) {
+					traces.set(trace, [toSpanRow(s)]);
+				} else {
+					list.push(toSpanRow(s));
+				}
 			}
+
 			// One record after another: each is one SQLite file, written in this thread.
 			const all = Effect.forEach([...traces], ([trace, rows]) => records.keep(trace, rows), {
 				concurrency: 1,

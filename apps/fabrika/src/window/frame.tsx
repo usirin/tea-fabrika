@@ -388,7 +388,11 @@ function useFreeMiddle(
 	useLayoutEffect(() => {
 		const header = bar.current;
 		const name = brand.current;
-		if (header === null || name === null) return;
+
+		if (header === null || name === null) {
+			return;
+		}
+
 		const items = [...header.children].filter(
 			(item) => item !== name && !item.classList.contains("drag"),
 		);
@@ -401,7 +405,11 @@ function useFreeMiddle(
 			);
 		const watch = new ResizeObserver(check);
 		watch.observe(header);
-		for (const item of items) watch.observe(item);
+
+		for (const item of items) {
+			watch.observe(item);
+		}
+
 		return () => watch.disconnect();
 	}, [bar, brand, hasDesk]);
 	return free;
@@ -410,6 +418,7 @@ function useFreeMiddle(
 /** What lies over the desk now: the asks list, the jobs list, an item's lines, or the palette. Shown with the bars hidden too. */
 export function Over(props: FrameProps): ReactNode {
 	const {over} = props.frame;
+
 	switch (over.kind) {
 		case "none":
 			return null;
@@ -454,8 +463,13 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	const close = useCallback(() => step({type: "close"}), [step]);
 	const open = (row: Row) => {
 		const ask = [...asks.asks, ...asks.later].find((a) => a.key === row.id);
-		if (ask === undefined) return;
+
+		if (ask === undefined) {
+			return;
+		}
+
 		const to = opensOf(desk, ask.ticket, tickets);
+
 		switch (to.kind) {
 			case "tile":
 				toHost({type: "go", tile: to.tile});
@@ -527,7 +541,11 @@ function JobsMenu(props: FrameProps & {readonly desk: Open}): ReactNode {
 	const close = useCallback(() => step({type: "close"}), [step]);
 	const go = (row: Row) => {
 		const tile = list.tiles.get(row.id);
-		if (tile !== undefined && tile !== here) toHost({type: "go", tile});
+
+		if (tile !== undefined && tile !== here) {
+			toHost({type: "go", tile});
+		}
+
 		close();
 	};
 	return (
@@ -565,7 +583,7 @@ function ItemLines(props: FrameProps & {readonly what: Part}): ReactNode {
 	const host = reachedOf(props);
 	const now = Date.now();
 	const body = (): ReactNode => {
-		if (props.what === "host")
+		if (props.what === "host") {
 			return (
 				<HostLines
 					link={link}
@@ -576,13 +594,17 @@ function ItemLines(props: FrameProps & {readonly what: Part}): ReactNode {
 					now={now}
 				/>
 			);
-		if (host === null)
+		}
+
+		if (host === null) {
 			return (
 				<>
 					<h2 className="pop-title">The app is not on the host</h2>
 					<p className="pop-text">Once it is back, this says what the host says.</p>
 				</>
 			);
+		}
+
 		return props.what === "agents" ? (
 			<AgentsLines host={host} now={now} toHost={props.toHost} />
 		) : (
@@ -625,7 +647,11 @@ function SummonedLines(props: {
 	readonly toHost: (m: FromPage) => void;
 }): ReactNode {
 	const {summoned} = props;
-	if (summoned.length === 0) return null;
+
+	if (summoned.length === 0) {
+		return null;
+	}
+
 	return (
 		<>
 			<h2 className="pop-title">
@@ -691,7 +717,8 @@ function AgentsLines(props: {
 /** Each agent attached to the host now, a row each: its name, and since when. */
 function AttachedLines(props: {readonly host: HostNow; readonly now: number}): ReactNode {
 	const {agents} = props.host;
-	if (agents === null)
+
+	if (agents === null) {
 		return (
 			<>
 				<h2 className="pop-title">No agents attach here</h2>
@@ -701,6 +728,8 @@ function AttachedLines(props: {readonly host: HostNow; readonly now: number}): R
 				</p>
 			</>
 		);
+	}
+
 	return (
 		<>
 			<h2 className="pop-title">
@@ -736,7 +765,8 @@ function SyncLines(props: {readonly host: HostNow; readonly asks: AsksNow | null
 			<p className="pop-text">The asks count is the last one read. It reads again every second.</p>
 		</>
 	);
-	if (ledger.kind === "own")
+
+	if (ledger.kind === "own") {
 		return (
 			<>
 				<h2 className={`pop-title${failed ? " broken" : ""}`}>
@@ -749,6 +779,8 @@ function SyncLines(props: {readonly host: HostNow; readonly asks: AsksNow | null
 				{why}
 			</>
 		);
+	}
+
 	return (
 		<>
 			<h2 className={`pop-title${failed ? " broken" : ""}`}>
@@ -793,6 +825,7 @@ function HostLines(props: {
 	const restart = (
 		<Do onClick={() => props.toApp({type: "restart"})}>Stop the old host and start this one</Do>
 	);
+
 	switch (link.kind) {
 		case "up":
 			return (
@@ -893,13 +926,15 @@ export function BottomLine(props: FrameProps): ReactNode {
 	const now = useNow((t) => jobItem(jobs, t) !== null);
 	const job = jobItem(jobs, now);
 	const left = (): ReactNode => {
-		if (question !== null)
+		if (question !== null) {
 			return (
 				<span className="prompt" role="alertdialog" aria-label={question}>
 					{question}
 				</span>
 			);
-		if (armed)
+		}
+
+		if (armed) {
 			return (
 				<span className="keying">
 					<b>PREFIX</b>
@@ -911,7 +946,9 @@ export function BottomLine(props: FrameProps): ReactNode {
 					))}
 				</span>
 			);
-		if (frame.info.kind === "on")
+		}
+
+		if (frame.info.kind === "on") {
 			return (
 				<span className="info">
 					<b>INFO</b>
@@ -919,7 +956,12 @@ export function BottomLine(props: FrameProps): ReactNode {
 					{frame.info.explained ?? "point at anything"}
 				</span>
 			);
-		if (desk === null) return null;
+		}
+
+		if (desk === null) {
+			return null;
+		}
+
 		return (
 			<>
 				<span className="here" data-info={INFO.here}>
@@ -935,9 +977,18 @@ export function BottomLine(props: FrameProps): ReactNode {
 		);
 	};
 	const right = (): ReactNode => {
-		if (question !== null) return <span className="quiet">y closes · n keeps it</span>;
-		if (armed) return <span className="quiet">esc cancels</span>;
-		if (frame.note !== null) return <span className="note">{frame.note}</span>;
+		if (question !== null) {
+			return <span className="quiet">y closes · n keeps it</span>;
+		}
+
+		if (armed) {
+			return <span className="quiet">esc cancels</span>;
+		}
+
+		if (frame.note !== null) {
+			return <span className="note">{frame.note}</span>;
+		}
+
 		const keys = keyFor(props, "keys");
 		const info = keyFor(props, "info");
 		const quiet = quietOf(frame);
@@ -1048,7 +1099,10 @@ const useNow = (moving: (now: number) => boolean): number => {
 	const [now, setNow] = useState(Date.now);
 	const on = moving(now);
 	useEffect(() => {
-		if (!on) return;
+		if (!on) {
+			return;
+		}
+
 		setNow(Date.now());
 		const timer = setInterval(() => setNow(Date.now()), TICK_MS);
 		return () => clearInterval(timer);
@@ -1097,9 +1151,14 @@ const countWord = (n: number, keys: boolean): string =>
 function CommandPalette(props: FrameProps): ReactNode {
 	const {frame, step, desk} = props;
 	const close = useCallback(() => step({type: "close"}), [step]);
-	if (frame.over.kind !== "palette") return null;
+
+	if (frame.over.kind !== "palette") {
+		return null;
+	}
+
 	const {title, query, at} = frame.over;
-	if (title === "keys" && props.keysEditor != null && props.editKeys !== undefined)
+
+	if (title === "keys" && props.keysEditor != null && props.editKeys !== undefined) {
 		return (
 			<Dialog
 				id={POP.palette}
@@ -1111,7 +1170,9 @@ function CommandPalette(props: FrameProps): ReactNode {
 				showCloseButton={false}
 				closeOnInteractOutside={props.keysEditor.recording._tag !== "saving"}
 				onOpenChange={(open) => {
-					if (!open && props.keysEditor?.recording._tag !== "saving") close();
+					if (!open && props.keysEditor?.recording._tag !== "saving") {
+						close();
+					}
 				}}
 			>
 				<KeysWindow
@@ -1123,11 +1184,17 @@ function CommandPalette(props: FrameProps): ReactNode {
 				/>
 			</Dialog>
 		);
+	}
+
 	const keys = title === "keys";
 	const shown = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query);
 	const run = (i: number) => {
 		const c = shown[i];
-		if (c === undefined) return;
+
+		if (c === undefined) {
+			return;
+		}
+
 		props.toHost({type: "run", does: c.runs});
 		step({type: "ran", key: c.key});
 	};

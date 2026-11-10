@@ -38,7 +38,12 @@ const openDb = (path: string): DatabaseSync => {
 const fresh = (): Sql => nodeSql(openDb(freshPath()));
 
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -160,7 +165,11 @@ describe("p94, a parked wait is a row, rung once", () => {
 			return Effect.gen(function* () {
 				const referee = yield* Referee;
 				yield* referee.append("a", "w-1", line());
-				for (const after of afters) expect(yield* referee.wait("a", after, T1)).toEqual(parked);
+
+				for (const after of afters) {
+					expect(yield* referee.wait("a", after, T1)).toEqual(parked);
+				}
+
 				expect(yield* referee.append("a", "w-2", line())).toEqual(placed(2, 2));
 				expect(rang).toEqual([{to: T1, stream: "a", rev: 2}]);
 				yield* referee.append("a", "w-3", line());
@@ -197,6 +206,7 @@ describe("p94, a parked wait is a row, rung once", () => {
 				ring: (to) =>
 					Effect.gen(function* () {
 						rang.push(to);
+
 						if (to === T1) {
 							yield* Deferred.succeed(started, undefined);
 							yield* Deferred.await(release);

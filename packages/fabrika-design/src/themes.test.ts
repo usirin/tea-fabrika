@@ -252,7 +252,11 @@ const stepsOf = (color: string, key: string): readonly string[] => {
 		typeof scale === "object" && scale !== null
 			? Object.entries(scale).find(([name]) => name === key)?.[1]
 			: undefined;
-	if (!Array.isArray(steps) || steps.length !== 12) throw new Error(`no ${color} ${key} in Radix`);
+
+	if (!Array.isArray(steps) || steps.length !== 12) {
+		throw new Error(`no ${color} ${key} in Radix`);
+	}
+
 	return steps.map((s) => String(s).toLowerCase());
 };
 
@@ -297,14 +301,22 @@ const argsOf = (inner: string) => {
 	const parts: string[] = [];
 	let depth = 0;
 	let from = 0;
+
 	for (let i = 0; i < inner.length; i += 1) {
-		if (inner[i] === "(") depth += 1;
-		if (inner[i] === ")") depth -= 1;
+		if (inner[i] === "(") {
+			depth += 1;
+		}
+
+		if (inner[i] === ")") {
+			depth -= 1;
+		}
+
 		if (inner[i] === "," && depth === 0) {
 			parts.push(inner.slice(from, i).trim());
 			from = i + 1;
 		}
 	}
+
 	parts.push(inner.slice(from).trim());
 	return parts;
 };
@@ -321,20 +333,36 @@ const hexOf = (value: string) => {
 const valueIn = (value: string, look: Look, seen: readonly string[] = []): string => {
 	const v = value.trim();
 	const named = /^var\((--[\w-]+)\)$/.exec(v);
-	if (named?.[1] !== undefined) return tokenIn(named[1], look, seen);
+
+	if (named?.[1] !== undefined) {
+		return tokenIn(named[1], look, seen);
+	}
+
 	const pair = /^light-dark\((.*)\)$/.exec(v);
+
 	if (pair?.[1] !== undefined) {
 		const [light = "", dark = ""] = argsOf(pair[1]);
 		return valueIn(look === "light" ? light : dark, look, seen);
 	}
-	if (/^#[0-9a-f]{3,8}$/i.test(v)) return hexOf(v);
+
+	if (/^#[0-9a-f]{3,8}$/i.test(v)) {
+		return hexOf(v);
+	}
+
 	return v;
 };
 
 const tokenIn = (name: string, look: Look, seen: readonly string[] = []): string => {
-	if (seen.includes(name)) throw new Error(`var() loop: ${[...seen, name].join(" -> ")}`);
+	if (seen.includes(name)) {
+		throw new Error(`var() loop: ${[...seen, name].join(" -> ")}`);
+	}
+
 	const value = ROOT.get(name);
-	if (value === undefined) return `(no ${name} in tokens.css)`;
+
+	if (value === undefined) {
+		return `(no ${name} in tokens.css)`;
+	}
+
 	return valueIn(value, look, [...seen, name]);
 };
 
@@ -351,7 +379,10 @@ const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/;
 type Rgba = readonly [number, number, number, number];
 
 const rgbaOf = (value: string): Rgba => {
-	if (!HEX.test(value)) throw new Error(`not a color this test computes: ${value}`);
+	if (!HEX.test(value)) {
+		throw new Error(`not a color this test computes: ${value}`);
+	}
+
 	const at = (i: number) => Number.parseInt(value.slice(i, i + 2), 16) / 255;
 	return [at(1), at(3), at(5), value.length === 9 ? at(7) : 1];
 };

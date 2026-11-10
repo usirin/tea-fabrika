@@ -14,12 +14,17 @@ const me = process.argv[2] ?? "host-a";
 const holder = `${me}@${Date.now()}`;
 
 const say = (name: string) => (e: HostEvent) => {
-	if (e.ev === "claim" && e.answer === "claimed")
+	if (e.ev === "claim" && e.answer === "claimed") {
 		console.log(`${holder}  ${name.padEnd(6)}  claimed, fence ${e.fence}`);
-	if (e.ev === "program" && e.phase === "started")
+	}
+
+	if (e.ev === "program" && e.phase === "started") {
 		console.log(`${holder}  ${name.padEnd(6)}  running, ${e.backlog} waiting in its inbox`);
-	if (e.ev === "program" && e.phase === "ended")
+	}
+
+	if (e.ev === "program" && e.phase === "ended") {
 		console.log(`${holder}  ${name.padEnd(6)}  ${e.how}`);
+	}
 };
 
 const main = Effect.gen(function* () {

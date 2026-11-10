@@ -96,8 +96,13 @@ export function withIds(book: Book, revision: Revision, versions: readonly Plan[
 	const used = new Set<CriterionId>();
 	const usedTasks = new Set<TaskId>();
 	const step = (msg: CriteriaMsg) => {
-		if (msg.type === "reworded" && currentOf(b).some((x) => x.id === msg.id && x.text === msg.text))
+		if (
+			msg.type === "reworded" &&
+			currentOf(b).some((x) => x.id === msg.id && x.text === msg.text)
+		) {
 			return;
+		}
+
 		events.push(msg);
 		b = apply(b, msg);
 	};
@@ -202,7 +207,11 @@ export function keptFrom(last: Plan, next: Revision): Revision {
 	};
 	const tasks = next.tasks.map((t): RevisedTask => {
 		const was = last.tasks.find((p) => same(p.title, t.title));
-		if (was === undefined) return t;
+
+		if (was === undefined) {
+			return t;
+		}
+
 		return {
 			...t,
 			keeps: was.id,

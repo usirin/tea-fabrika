@@ -65,8 +65,14 @@ const plant = (update: Partial<Machine["update"]>): Machine =>
 
 /** A pull request opens only once the head is on the remote, and only on that answer. */
 const opensAfterPush = ({prev, msg, cmds}: PushStep) => {
-	if (msg.type === "resume") return;
-	if (!cmds.some((c) => c.type === "push_open")) return;
+	if (msg.type === "resume") {
+		return;
+	}
+
+	if (!cmds.some((c) => c.type === "push_open")) {
+		return;
+	}
+
 	expect(prev.phase).toBe("pushing");
 	expect(msg.type).toBe("push_head_ok");
 };
@@ -78,22 +84,36 @@ const failuresAreNamed = ({prev, msg, next}: PushStep) => {
 		push_open_err: ["opening", "open_failed"],
 		push_post_err: ["posting", "post_failed"],
 	} as const;
-	if (!(msg.type in named)) return;
+
+	if (!(msg.type in named)) {
+		return;
+	}
+
 	const [phase, why] = named[msg.type as keyof typeof named];
-	if (prev.phase !== phase) return;
+
+	if (prev.phase !== phase) {
+		return;
+	}
+
 	expect(next).toMatchObject({phase: "over", outcome: {kind: "stuck", why}});
 };
 
 /** It is `done` only after the reviews are posted, and it hands back the head the review passed. */
 const doneOnThatHead = ({prev, next}: PushStep) => {
-	if (next.phase !== "over" || next.outcome.kind !== "done" || prev.phase === "over") return;
+	if (next.phase !== "over" || next.outcome.kind !== "done" || prev.phase === "over") {
+		return;
+	}
+
 	expect(prev.phase).toBe("posting");
 	expect(next.outcome.head).toBe(next.ask.head);
 };
 
 /** Over stays over. */
 const overStays = ({prev, next, cmds}: PushStep) => {
-	if (prev.phase !== "over") return;
+	if (prev.phase !== "over") {
+		return;
+	}
+
 	expect(next).toEqual(prev);
 	expect(cmds).toEqual([]);
 };

@@ -182,8 +182,14 @@ describe("the idempotency gate", () => {
 					// The intent row lands; the lease runs out before the send, and then what comes next.
 					const then = Effect.gen(function* () {
 						yield* Effect.sleep(Duration.millis(800));
-						if (next === "renew") yield* ledger.renew(NAME, a.fence, 30_000);
-						if (next === "claim") yield* claimed("b", 30_000);
+
+						if (next === "renew") {
+							yield* ledger.renew(NAME, a.fence, 30_000);
+						}
+
+						if (next === "claim") {
+							yield* claimed("b", 30_000);
+						}
 					});
 					yield* Effect.forkScoped(then);
 					yield* Effect.sleep(Duration.millis(150));
@@ -217,7 +223,11 @@ describe("the idempotency gate", () => {
 			}),
 		);
 		const [kept] = spent;
-		if (kept === undefined) throw new Error("the send never ran");
+
+		if (kept === undefined) {
+			throw new Error("the send never ran");
+		}
+
 		expect(kept.real).toBe(true);
 		const late = await Effect.runPromise(Effect.flip(useKey(kept)));
 		expect(late).toBeInstanceOf(KeyRefused);

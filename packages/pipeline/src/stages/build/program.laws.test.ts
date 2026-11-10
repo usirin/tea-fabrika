@@ -193,6 +193,7 @@ const keepsEvery = (machine: Machine, runs = 150, saved = new Set<string>()) =>
 		fc.asyncProperty(lists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("build:r1", null));
 			const store = handle.store("build", T, buildKind.state);
+
 			for (const s of foldEvents(machine, ctx, null, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);
@@ -237,13 +238,16 @@ const refusedStaysRefused = (machine: Machine) =>
 			list.forEach((msg, i) => {
 				const before = states[i];
 				const after = states[i + 1];
+
 				if (
 					msg.type !== "build_push_err" ||
 					msg.error._tag !== "exam_touched" ||
 					before?.phase !== "pushing" ||
 					msg.cmd.ticket !== before.asked.ticket
-				)
+				) {
 					return;
+				}
+
 				expect(after).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "exam_touched"}});
 			});
 		}),

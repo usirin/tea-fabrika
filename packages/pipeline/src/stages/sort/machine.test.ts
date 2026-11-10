@@ -73,10 +73,12 @@ const finished = (s: SortState, answer: SortAnswer | null) => ({
 function writeAll(s: SortState): {readonly end: SortState; readonly sent: readonly SortCmd[]} {
 	const sent: SortCmd[] = [];
 	let now = s;
+
 	for (let i = 0; i < 10 && now.phase === "writing"; i++) {
 		sent.push(now.asked);
 		now = step(now, {type: writeOne.okType, cmd: now.asked, value: null})[0];
 	}
+
 	return {end: now, sent};
 }
 
@@ -139,7 +141,11 @@ describe("the sort machine", () => {
 	it("writes nothing when the ticket closed or changed while it was sorted", () => {
 		const s = sorting();
 		const [checking] = step(s, finished(s, {answer: "duplicate", of: 4, why: "Same bug."}));
-		if (checking.phase !== "checking") throw new Error("no door");
+
+		if (checking.phase !== "checking") {
+			throw new Error("no door");
+		}
+
 		const [closed, none] = step(checking, {
 			type: readTicket.okType,
 			cmd: checking.asked,
@@ -191,9 +197,17 @@ describe("the sort machine", () => {
 			finished(s, {answer: "no", rule: "not_work", reason: "won't do: not a work item", why: "Q."}),
 		);
 		const [writing] = door(checking);
-		if (writing.phase !== "writing") throw new Error("not writing");
+
+		if (writing.phase !== "writing") {
+			throw new Error("not writing");
+		}
+
 		const [second] = step(writing, {type: writeOne.okType, cmd: writing.asked, value: null});
-		if (second.phase !== "writing") throw new Error("not writing");
+
+		if (second.phase !== "writing") {
+			throw new Error("not writing");
+		}
+
 		const [end] = step(second, {
 			type: writeOne.errType,
 			cmd: second.asked,
@@ -209,7 +223,11 @@ describe("the sort machine", () => {
 		const s = sorting();
 		const [checking] = step(s, finished(s, {answer: "duplicate", of: 4, why: "Same bug."}));
 		const [writing] = door(checking);
-		if (writing.phase !== "writing") throw new Error("not writing");
+
+		if (writing.phase !== "writing") {
+			throw new Error("not writing");
+		}
+
 		const [, cmds] = step(writing, {type: "resume"});
 		expect(cmds).toEqual([writing.asked]);
 	});
@@ -266,8 +284,14 @@ describe("the Check", () => {
 	it("states the bar in the prompt, all seven noes and the four yeses that stay", () => {
 		const text = promptOf(brief);
 		expect(NO_RULE_IDS).toEqual(NO_RULES.map((r) => r.id));
-		for (const id of NO_RULE_IDS) expect(text).toContain(`\`${id}\``);
-		for (const yes of STILL_YES) expect(text).toContain(yes.rule);
+
+		for (const id of NO_RULE_IDS) {
+			expect(text).toContain(`\`${id}\``);
+		}
+
+		for (const yes of STILL_YES) {
+			expect(text).toContain(yes.rule);
+		}
 	});
 });
 
@@ -279,7 +303,11 @@ describe("the writes and the reason a later sort reads", () => {
 			reason: "won't do: already ruled out; reopen only with a new fact",
 			why: "Ruled out in #3.",
 		});
-		if (comment?.op !== "comment") throw new Error("no comment first");
+
+		if (comment?.op !== "comment") {
+			throw new Error("no comment first");
+		}
+
 		const posted = `${comment.body}\n\n<!-- fabrika-key: sort:12#comment:${URL} -->`;
 		expect(reasonIn(["a person's comment", posted])).toBe(
 			"No: won't do: already ruled out; reopen only with a new fact",

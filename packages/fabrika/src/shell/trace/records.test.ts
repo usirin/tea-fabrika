@@ -50,11 +50,18 @@ const lineIn = (at: string, line: string) =>
 				Effect.provideService(Programs, programList(SMALL)),
 				Effect.provideService(HostJobs, jobs),
 			);
-			if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+			if (started.kind !== "running") {
+				return yield* Effect.die("tsh did not start");
+			}
+
 			let first: string | null = null;
 			const off = jobs.table.subscribe(() => {
 				const job = jobs.table.getState().jobs[0];
-				if (first === null && job !== undefined) first = traceIdOf(job);
+
+				if (first === null && job !== undefined) {
+					first = traceIdOf(job);
+				}
 			});
 			yield* tell(started.run, "line", line);
 			yield* ready.upTo(1);
@@ -63,7 +70,11 @@ const lineIn = (at: string, line: string) =>
 			yield* started.run.ended;
 			return first;
 		}).pipe(Effect.scoped, Effect.provide(recordTracing(records)));
-		if (trace === null) return yield* Effect.die("the line made no job");
+
+		if (trace === null) {
+			return yield* Effect.die("the line made no job");
+		}
+
 		return yield* readOn(records, trace);
 	}).pipe(Effect.scoped, Effect.provide(node));
 

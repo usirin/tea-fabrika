@@ -106,7 +106,9 @@ const law = (
 				try {
 					await check(input);
 				} finally {
-					for (const close of closers.splice(0).reverse()) await close();
+					for (const close of closers.splice(0).reverse()) {
+						await close();
+					}
 				}
 			}),
 			{seed: 119120, numRuns: 20, examples: [[prepareInput], [approveInput]]},
@@ -114,7 +116,9 @@ const law = (
 	});
 
 afterEach(async () => {
-	for (const close of closers.splice(0).reverse()) await close();
+	for (const close of closers.splice(0).reverse()) {
+		await close();
+	}
 });
 
 const storage = (db: DatabaseSync) => {
@@ -222,11 +226,13 @@ const world = async (trace = TRACE, build = "counter-b") => {
 			make(layer.pipe(Layer.withParentSpan(span)), options),
 		);
 	let runtime: ReturnType<typeof projectRuntime>;
+
 	try {
 		runtime = projectRuntime(ctx, env);
 	} finally {
 		startup.mockRestore();
 	}
+
 	const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
 	closers.push(async () => {
 		await runtime.dispose();
@@ -412,15 +418,18 @@ describe("P12 Project authority", () => {
 			(error: unknown) => ({error}),
 		);
 		await Effect.runPromise(Deferred.await(entered));
+
 		try {
 			expect(await w.revoke()).toMatchObject({_tag: "applied"});
 		} finally {
 			await Effect.runPromise(Deferred.succeed(release, undefined));
 		}
+
 		await pending;
 		expect(await w.run(w.p.read("counter:1/inbox", 0, "audit"))).toEqual([]);
 	});
-	for (const operation of ["own", "inbox", "start", "exit"] as const)
+
+	for (const operation of ["own", "inbox", "start", "exit"] as const) {
 		law(
 			`the Project releases its write permit before notifying ${operation}`,
 			async ({write, letter}) => {
@@ -439,7 +448,10 @@ describe("P12 Project authority", () => {
 				let reentered = false;
 				let inside = false;
 				w.ring(async () => {
-					if (inside) return;
+					if (inside) {
+						return;
+					}
+
 					inside = true;
 					const answer = await w.run(
 						w.p
@@ -455,16 +467,23 @@ describe("P12 Project authority", () => {
 					);
 					reentered = Option.isSome(answer);
 				});
-				if (operation === "own") await w.run(w.p.own(pid, write, "events", {_tag: "noted"}));
-				else if (operation === "start") await w.start();
-				else if (operation === "exit") await w.run(w.p.exit(pid, "normal", w.from));
-				else {
+
+				if (operation === "own") {
+					await w.run(w.p.own(pid, write, "events", {_tag: "noted"}));
+				} else if (operation === "start") {
+					await w.start();
+				} else if (operation === "exit") {
+					await w.run(w.p.exit(pid, "normal", w.from));
+				} else {
 					await w.send(pid, "inc", letter);
 					await w.run(w.p.inbox(pid, w.received[0]!));
 				}
+
 				expect(reentered, "a ring can reenter Project without waiting on its caller").toBe(true);
 			},
 		);
+	}
+
 	law(
 		"reopening a project restores its process when the available bundle changes",
 		async ({build}) => {
@@ -478,6 +497,7 @@ describe("P12 Project authority", () => {
 				}).pipe(Effect.exit),
 			);
 			expect(result).toMatchObject({_tag: "Success"});
+
 			if (Exit.isSuccess(result)) {
 				expect(await w.run(result.value.info)).toEqual(before);
 				expect(w.configured).toHaveLength(configured);
@@ -485,7 +505,8 @@ describe("P12 Project authority", () => {
 			}
 		},
 	);
-	for (const field of ["writer", "trace"] as const)
+
+	for (const field of ["writer", "trace"] as const) {
 		law(`an own write retains its process ${field}`, async ({trace, write}) => {
 			const w = await world(trace),
 				pid = w.p.boot.process;
@@ -505,6 +526,7 @@ describe("P12 Project authority", () => {
 					: {traceId: trace},
 			);
 		});
+	}
 });
 
 describe("P12 Project saved and wire readers", () => {
@@ -530,6 +552,7 @@ describe("P12 Project saved and wire readers", () => {
 		await fc.assert(
 			fc.asyncProperty(invalid, async (raw) => {
 				let runtime: ReturnType<typeof projectRuntime> | undefined;
+
 				try {
 					const w = await world();
 					typed(
@@ -542,13 +565,22 @@ describe("P12 Project saved and wire readers", () => {
 					);
 				} finally {
 					await runtime?.dispose();
-					for (const close of closers.splice(0).reverse()) await close();
+
+					for (const close of closers.splice(0).reverse()) {
+						await close();
+					}
 				}
 			}),
 			{seed: 119120, numRuns: 20, examples: [["{"], ["{}"], ["null"]]},
 		);
 	});
-	for (const reader of ["bootstrap", "own descriptor", "pending descriptor", "own event"] as const)
+
+	for (const reader of [
+		"bootstrap",
+		"own descriptor",
+		"pending descriptor",
+		"own event",
+	] as const) {
 		it(`${reader} rejects malformed saved or wire values with LedgerError, never a defect`, async () => {
 			const event = Schema.Struct({_tag: Schema.String});
 			const values =
@@ -560,6 +592,7 @@ describe("P12 Project saved and wire readers", () => {
 					try {
 						const w = await world(),
 							pid = w.p.boot.process;
+
 						if (reader === "bootstrap") {
 							// An unrelated event at the stable bootstrap ID passes the generic ledger schema.
 							// ProcessTable ignores its unknown tag; the bootstrap reader must check its body.
@@ -582,12 +615,15 @@ describe("P12 Project saved and wire readers", () => {
 							typed(exit);
 						}
 					} finally {
-						for (const close of closers.splice(0).reverse()) await close();
+						for (const close of closers.splice(0).reverse()) {
+							await close();
+						}
 					}
 				}),
 				{seed: 119120, numRuns: 20, examples: [[null], [{}], [17]]},
 			);
 		});
+	}
 });
 
 describe("P12 WebCrypto failures", () => {
@@ -596,16 +632,21 @@ describe("P12 WebCrypto failures", () => {
 		fc.string().map((message) => new Error(message)),
 		fc.constant(new DOMException("digest refused", "OperationError")),
 	);
-	for (const edge of ["fingerprint", "archive checksum"] as const)
+
+	for (const edge of ["fingerprint", "archive checksum"] as const) {
 		it(`${edge} refuses every thrown or rejected failure with reason crypto`, async () => {
 			await fc.assert(
 				fc.asyncProperty(failure, fc.boolean(), fc.uint8Array(), async (value, throws, body) => {
 					const w = edge === "fingerprint" ? await world() : null;
 					const digest = vi.spyOn(crypto.subtle, "digest").mockImplementation(() => {
-						if (throws) throw value;
+						if (throws) {
+							throw value;
+						}
+
 						return Promise.reject(value);
 					});
 					const put = vi.fn(async () => null);
+
 					try {
 						if (w !== null) {
 							const result = await w.run(Effect.exit(w.p.online(w.key.fingerprint)));
@@ -622,19 +663,24 @@ describe("P12 WebCrypto failures", () => {
 							).rejects.toMatchObject({_tag: "LedgerError", why: "crypto"});
 							expect(put).not.toHaveBeenCalled();
 						}
+
 						expect(digest).toHaveBeenCalled();
 					} finally {
 						digest.mockRestore();
-						for (const close of closers.splice(0).reverse()) await close();
+
+						for (const close of closers.splice(0).reverse()) {
+							await close();
+						}
 					}
 				}),
 				{seed: 119120, numRuns: 20},
 			);
 		});
+	}
 });
 
 describe("P12 Gateway recording", () => {
-	for (const operation of ["ring", "probe", "close", "notify"] as const)
+	for (const operation of ["ring", "probe", "close", "notify"] as const) {
 		law(
 			`an authenticated ${operation} records through the project's sink`,
 			async ({letter, rev}) => {
@@ -654,7 +700,9 @@ describe("P12 Gateway recording", () => {
 						attached = a;
 					},
 					send: () => {
-						if (operation === "notify") throw new Error("delivery failed");
+						if (operation === "notify") {
+							throw new Error("delivery failed");
+						}
 					},
 					close: () => {},
 				};
@@ -674,6 +722,7 @@ describe("P12 Gateway recording", () => {
 				const socket = ws as unknown as WebSocket;
 				const config = await Effect.runPromise(settings(w.env));
 				const runtime = gatewayRuntime(ctx, {...w.env, PROJECT: project}, config);
+
 				try {
 					const gateway = await runtime.runPromise(GatewayService),
 						before = w.recorded.length;
@@ -688,11 +737,15 @@ describe("P12 Gateway recording", () => {
 					await runtime.runPromise(Effect.exit(action));
 					const rows = w.recorded.slice(before);
 					expect(rows.some((row) => row.name === `gateway.${operation}`)).toBe(true);
-					if (operation === "notify") expect(rows.some((row) => !row.ok)).toBe(true);
+
+					if (operation === "notify") {
+						expect(rows.some((row) => !row.ok)).toBe(true);
+					}
 				} finally {
 					await runtime.dispose();
 					db.close();
 				}
 			},
 		);
+	}
 });

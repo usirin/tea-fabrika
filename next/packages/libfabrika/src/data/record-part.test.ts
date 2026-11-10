@@ -62,6 +62,7 @@ describe("P12 single record part", () => {
 							const file = join(home, `page-${total}-${at}.sqlite`);
 							rmSync(file, {force: true});
 							let db = new DatabaseSync(file);
+
 							try {
 								let part: Part = recordPart(nodeSql(db), {_tag: "spans"}, 0, 1_000_000_000);
 								const rows = Array.from({length: total}, (_, n) => ({
@@ -113,6 +114,7 @@ describe("P12 single record part", () => {
 							let size = 0;
 							const inner = nodeSql(a);
 							const sql: Sql = {...inner, size: () => size};
+
 							try {
 								const first: Part = recordPart(sql, {_tag: "spans"}, index, cap);
 								const next: Part = recordPart(

@@ -59,8 +59,9 @@ describe("the exam_merge rows", () => {
 	});
 
 	it("never ask a person: each send at exam_merge is fixable (193's classes)", () => {
-		for (const move of Object.values(EXAM_MERGE_SENDS))
+		for (const move of Object.values(EXAM_MERGE_SENDS)) {
 			expect(JSON.stringify(move)).not.toMatch(/ask|stuck/);
+		}
 	});
 });
 

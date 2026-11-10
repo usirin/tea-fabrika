@@ -16,16 +16,24 @@ export const Policy = Schema.Struct({
 	backoff: Schema.Struct({minMs: Count, maxMs: Count, resetAfterMs: Count}),
 }).check(
 	Schema.makeFilter((p) => {
-		if (p.intensity < p.maxDeliveries || p.backoff.minMs > p.backoff.maxMs)
+		if (p.intensity < p.maxDeliveries || p.backoff.minMs > p.backoff.maxMs) {
 			return "invalid restart policy";
+		}
+
 		// The first intensity waits must fit in one window, or the brake cannot trip.
 		let total = 0;
 		let wait = p.backoff.minMs;
+
 		for (let n = 0; n < p.intensity; n++) {
 			total += wait;
-			if (total >= p.periodMs) return "restart waits exceed the window";
+
+			if (total >= p.periodMs) {
+				return "restart waits exceed the window";
+			}
+
 			wait = Math.min(wait * 2, p.backoff.maxMs);
 		}
+
 		return true;
 	}),
 );

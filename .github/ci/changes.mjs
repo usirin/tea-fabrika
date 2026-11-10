@@ -56,8 +56,14 @@ const old = (path) =>
  * @returns {Flags}
  */
 export const classify = (paths, event) => {
-	if (event !== "pull_request" || paths === null || paths.length === 0) return {...all};
-	if (paths.some(reads)) return {...all, field: paths.some(rows)};
+	if (event !== "pull_request" || paths === null || paths.length === 0) {
+		return {...all};
+	}
+
+	if (paths.some(reads)) {
+		return {...all, field: paths.some(rows)};
+	}
+
 	/** @param {string} path */
 	const quiet = (path) => safe(path) || prose(path);
 	return {
@@ -86,16 +92,32 @@ const git = (args) => spawnSync("git", args, {encoding: "utf8", maxBuffer: 2 ** 
  * @returns {string[] | null}
  */
 export const readPaths = (base, head, event, run = git) => {
-	if (!validSha(base) || !validSha(head)) return null;
+	if (!validSha(base) || !validSha(head)) {
+		return null;
+	}
+
 	let from = base;
+
 	if (event === "pull_request") {
 		const merged = run(["merge-base", base, head]);
-		if (merged.status !== 0) return null;
+
+		if (merged.status !== 0) {
+			return null;
+		}
+
 		from = merged.stdout.trim();
-		if (!validSha(from)) return null;
+
+		if (!validSha(from)) {
+			return null;
+		}
 	}
+
 	const diff = run(["diff", "--no-renames", "--name-only", "-z", from, head, "--"]);
-	if (diff.status !== 0 || (diff.stdout !== "" && !diff.stdout.endsWith("\0"))) return null;
+
+	if (diff.status !== 0 || (diff.stdout !== "" && !diff.stdout.endsWith("\0"))) {
+		return null;
+	}
+
 	return diff.stdout === "" ? [] : diff.stdout.slice(0, -1).split("\0");
 };
 
@@ -108,7 +130,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 		.join("\n")}\n`;
 	process.stdout.write(output);
 	const file = process.env["GITHUB_OUTPUT"];
-	if (file) appendFileSync(file, output);
+
+	if (file) {
+		appendFileSync(file, output);
+	}
+
 	if (paths === null) {
 		console.error("changes: history could not be read; every job is enabled");
 		process.exitCode = 1;

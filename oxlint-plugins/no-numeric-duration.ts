@@ -45,10 +45,21 @@ export const noNumericDuration: CreateRule = {
 			CallExpression(node) {
 				const name = plainCall(node);
 				const where = name === null ? undefined : POSITION[name]?.[node.arguments.length];
-				if (where === undefined) return;
+
+				if (where === undefined) {
+					return;
+				}
+
 				const duration = node.arguments[where];
-				if (duration === undefined || !isNumber(duration)) return;
-				if (grouped(context.sourceCode, duration) > 0) return;
+
+				if (duration === undefined || !isNumber(duration)) {
+					return;
+				}
+
+				if (grouped(context.sourceCode, duration) > 0) {
+					return;
+				}
+
 				context.report({
 					node: duration,
 					message:

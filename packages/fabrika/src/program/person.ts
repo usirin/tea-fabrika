@@ -102,13 +102,28 @@ export type Person<T, H extends string = string> =
  * is. The types already hold the cut column to a header of the table.
  */
 export function personOf<T, H extends string>(person: Person<T, H>): Person<T, H> {
-	if (typeof person === "string" || !("table" in person)) return person;
+	if (typeof person === "string" || !("table" in person)) {
+		return person;
+	}
+
 	const {title, columns, cut} = person.table;
 	const headers = columns.map((c) => c.header);
-	if (title.trim() === "") throw new Error("a table needs a title: what its rows are");
-	if (headers.some((h) => h.trim() === "")) throw new Error("a table's column needs a header");
-	if (new Set(headers).size !== headers.length)
+
+	if (title.trim() === "") {
+		throw new Error("a table needs a title: what its rows are");
+	}
+
+	if (headers.some((h) => h.trim() === "")) {
+		throw new Error("a table's column needs a header");
+	}
+
+	if (new Set(headers).size !== headers.length) {
 		throw new Error(`a table's headers are each its own, not ${headers.join(", ")}`);
-	if (!headers.includes(cut)) throw new Error(`a table cuts one of its columns, not ${cut}`);
+	}
+
+	if (!headers.includes(cut)) {
+		throw new Error(`a table cuts one of its columns, not ${cut}`);
+	}
+
 	return person;
 }

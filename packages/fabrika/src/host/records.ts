@@ -86,9 +86,14 @@ export const keepJobs = (jobs: JobsOnHost, records: Records, host: string): Jobs
 		Effect.gen(function* () {
 			const now = table.getState().jobs;
 			const at = yield* Clock.currentTimeMillis;
+
 			if (msg.type === "began") {
 				const job = holding(now, msg.stages[0].run);
-				if (job === undefined) return;
+
+				if (job === undefined) {
+					return;
+				}
+
 				const trace = traceIdOf(job);
 				// The job's own writer, not the records' one: a line an agent typed is the agent's.
 				const by = job.by === null ? {} : {by: job.by};
@@ -99,20 +104,27 @@ export const keepJobs = (jobs: JobsOnHost, records: Records, host: string): Jobs
 				);
 				return;
 			}
+
 			const job =
 				msg.type === "stage_ended"
 					? holding(before, msg.run)
 					: msg.type === "dropped"
 						? before.find((j) => j.n === msg.n && j.state === "detached")
 						: undefined;
-			if (job === undefined) return;
+
+			if (job === undefined) {
+				return;
+			}
+
 			const trace = traceIdOf(job);
 			const how =
 				msg.type === "stage_ended" ? worse(ends.get(trace) ?? "done", msg.how) : "stopped";
+
 			if (now.some((j) => j.n === job.n)) {
 				ends.set(trace, how);
 				return;
 			}
+
 			ends.delete(trace);
 			// Who asked it to stop, and why, as the table kept it: none for a job that ended on its own.
 			yield* write("its end", trace, jobWrites(records.calls, trace).ended(how, at, job.stop));

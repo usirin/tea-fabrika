@@ -172,10 +172,12 @@ describe("P34 recovery storage", () => {
 		// Find the actual saved JSON column, without prescribing the store's table names.
 		let planted = 0;
 		const quote = (word: string) => `"${word.replaceAll('"', '""')}"`;
+
 		for (const {name} of disk.sql.exec(
 			"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
 		)) {
 			const table = quote(String(name));
+
 			for (const row of disk.sql.exec(`SELECT rowid, * FROM ${table}`)) {
 				for (const [column, value] of Object.entries(row)) {
 					if (typeof value === "string" && value.includes('"recovery"')) {
@@ -189,6 +191,7 @@ describe("P34 recovery storage", () => {
 				}
 			}
 		}
+
 		expect(planted, "the cut must corrupt real saved supervision bytes").toBeGreaterThan(0);
 		disk.reopen();
 		await Effect.runPromise(
@@ -205,7 +208,10 @@ describe("P34 recovery storage", () => {
 		const sql: Sql = {
 			...disk.sql,
 			exec: (q, ...args) => {
-				if (fail && /^\s*(INSERT|UPDATE|REPLACE)/i.test(q)) throw new Error("SQLITE_FULL");
+				if (fail && /^\s*(INSERT|UPDATE|REPLACE)/i.test(q)) {
+					throw new Error("SQLITE_FULL");
+				}
+
 				return disk.sql.exec(q, ...args);
 			},
 		};

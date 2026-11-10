@@ -192,20 +192,33 @@ export const bridge = (
 		const toHost = (conn: Conn, line: unknown) => {
 			const m = envelope(line);
 			const asked = askedId(m);
-			if (asked !== null) conn.clientAsked.add(asked);
+
+			if (asked !== null) {
+				conn.clientAsked.add(asked);
+			}
+
 			const answered = answeredId(m);
+
 			// An answer to a request of a host that is gone: no host on this connection asked it.
-			if (answered !== null && !conn.hostAsked.delete(answered)) return;
+			if (answered !== null && !conn.hostAsked.delete(answered)) {
+				return;
+			}
+
 			Queue.offerUnsafe(conn.toHost, line);
 		};
 
 		const fromClient = (line: unknown) => {
 			const m = envelope(line);
 			const asked = askedId(m);
-			if (m.method === "initialize" && asked !== null && kept.initialize === null)
+
+			if (m.method === "initialize" && asked !== null && kept.initialize === null) {
 				kept.initialize = {id: asked, line};
-			if (m.method === "notifications/initialized" && kept.initialized === null)
+			}
+
+			if (m.method === "notifications/initialized" && kept.initialized === null) {
 				kept.initialized = line;
+			}
+
 			switch (link._tag) {
 				case "Opening":
 				case "Open":
@@ -216,7 +229,10 @@ export const bridge = (
 					link.queued.push(line);
 					return;
 				case "Reconnecting":
-					if (asked !== null) Queue.offerUnsafe(toClient, restarting(asked, NOT_SENT));
+					if (asked !== null) {
+						Queue.offerUnsafe(toClient, restarting(asked, NOT_SENT));
+					}
+
 					return;
 			}
 		};
@@ -225,35 +241,57 @@ export const bridge = (
 		const toClientFrom = (conn: Conn, line: unknown) => {
 			const m = envelope(line);
 			const answered = answeredId(m);
+
 			// Only an answer to an id the client sent on this connection reaches it.
-			if (answered !== null && !conn.clientAsked.delete(answered)) return;
+			if (answered !== null && !conn.clientAsked.delete(answered)) {
+				return;
+			}
+
 			const asked = askedId(m);
-			if (asked !== null) conn.hostAsked.add(asked);
+
+			if (asked !== null) {
+				conn.hostAsked.add(asked);
+			}
+
 			Queue.offerUnsafe(toClient, line);
 		};
 
 		const fromHost = (conn: Conn, line: unknown): Effect.Effect<void, BridgeStopped> => {
 			const replayed = kept.initialize;
+
 			if (
 				link._tag !== "Replaying" ||
 				replayed === null ||
 				answeredId(envelope(line)) !== replayed.id
-			)
+			) {
 				return Effect.sync(() => toClientFrom(conn, line));
+			}
+
 			// The new host's answer to the client's initialize: the client had its own, so it goes no
 			// further. One that refuses leaves the client nothing to go on with.
 			const refused = decodeInitError(line);
-			if (refused._tag === "Some")
+
+			if (refused._tag === "Some") {
 				return Effect.fail(
 					new BridgeStopped({
 						why: `the new host refused the client's initialize: ${refused.value.error.message}`,
 					}),
 				);
+			}
+
 			const {queued} = link;
-			if (kept.initialized !== null) Queue.offerUnsafe(conn.toHost, kept.initialized);
+
+			if (kept.initialized !== null) {
+				Queue.offerUnsafe(conn.toHost, kept.initialized);
+			}
+
 			Queue.offerUnsafe(toClient, LIST_CHANGED);
 			link = Link.Open({conn});
-			for (const waiting of queued) fromClient(waiting);
+
+			for (const waiting of queued) {
+				fromClient(waiting);
+			}
+
 			return Effect.void;
 		};
 
@@ -261,15 +299,24 @@ export const bridge = (
 		const shake = (conn: Conn, line: unknown) =>
 			Effect.gen(function* () {
 				const answer = decodeAnswer(line);
-				if (answer._tag === "None")
+
+				if (answer._tag === "None") {
 					return yield* new BridgeStopped({why: "the host sent no handshake"});
-				if (answer.value.type === "refused")
+				}
+
+				if (answer.value.type === "refused") {
 					return yield* new BridgeStopped({why: answer.value.why});
+				}
+
 				if (link._tag === "Opening") {
 					link = Link.Open({conn});
 					return;
 				}
-				if (link._tag !== "Reconnecting") return;
+
+				if (link._tag !== "Reconnecting") {
+					return;
+				}
+
 				const now = yield* Clock.currentTimeMillis;
 				yield* Effect.logInfo("host_back").pipe(
 					Effect.annotateLogs({
@@ -278,12 +325,14 @@ export const bridge = (
 						tries: link.streak.attempt,
 					}),
 				);
+
 				if (kept.initialize === null) {
 					// A client that sent no initialize (2026-07-28) has nothing to say again.
 					link = Link.Open({conn});
 					Queue.offerUnsafe(toClient, LIST_CHANGED);
 					return;
 				}
+
 				link = Link.Replaying({conn, queued: [], streak: link.streak});
 				Queue.offerUnsafe(conn.toHost, kept.initialize.line);
 			});
@@ -298,7 +347,10 @@ export const bridge = (
 							Ndjson.duplex({maxLineBytes: MAX_LINE})(Socket.toChannel(socket)),
 						),
 						Stream.runForEach((line) => {
-							if (shook) return fromHost(conn, line);
+							if (shook) {
+								return fromHost(conn, line);
+							}
+
 							shook = true;
 							return shake(conn, line);
 						}),
@@ -331,12 +383,20 @@ export const bridge = (
 					return Effect.succeed(recordFailure(link.streak, why, now));
 				case "Open":
 				case "Replaying": {
-					for (const id of link.conn.clientAsked) Queue.offerUnsafe(toClient, restarting(id, LOST));
-					if (link._tag === "Replaying")
+					for (const id of link.conn.clientAsked) {
+						Queue.offerUnsafe(toClient, restarting(id, LOST));
+					}
+
+					if (link._tag === "Replaying") {
 						for (const waiting of link.queued) {
 							const asked = askedId(envelope(waiting));
-							if (asked !== null) Queue.offerUnsafe(toClient, restarting(asked, NOT_SENT));
+
+							if (asked !== null) {
+								Queue.offerUnsafe(toClient, restarting(asked, NOT_SENT));
+							}
 						}
+					}
+
 					return Effect.logInfo("host_lost").pipe(
 						Effect.annotateLogs({agent, why}),
 						Effect.as(
@@ -370,18 +430,25 @@ export const bridge = (
 
 		while (true) {
 			const why = yield* run(current);
+
 			if (over) {
-				if (link._tag === "Opening")
+				if (link._tag === "Opening") {
 					return yield* new BridgeStopped({why: "the host closed the socket before its handshake"});
+				}
+
 				break;
 			}
+
 			const now = yield* Clock.currentTimeMillis;
 			const streak = yield* ended(why, now);
 			link = Link.Reconnecting({streak});
-			if (!shouldRetry(streak, wait, now))
+
+			if (!shouldRetry(streak, wait, now)) {
 				return yield* new BridgeStopped({
 					why: `the host did not come back within ${Duration.format(Duration.millis(wait.maxElapsedMs))}: ${why}`,
 				});
+			}
+
 			const pick = yield* Random.next;
 			yield* Effect.sleep(
 				Duration.millis(
@@ -392,9 +459,14 @@ export const bridge = (
 					),
 				),
 			).pipe(Effect.raceFirst(Deferred.await(stdinEnded)));
-			if (over) break;
+
+			if (over) {
+				break;
+			}
+
 			current = yield* freshConn;
 		}
+
 		Queue.endUnsafe(toClient);
 		yield* Fiber.join(writer);
 	}).pipe(Effect.scoped);

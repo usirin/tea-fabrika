@@ -137,8 +137,11 @@ export const resolveTurn =
 	> =>
 		Effect.gen(function* () {
 			const read = readResolveAsk(ask.brief);
-			if (Exit.isFailure(read))
+
+			if (Exit.isFailure(read)) {
 				return yield* Effect.die(`a resolve ask that does not read: ${ask.id}`);
+			}
+
 			const a = read.value;
 			const work = yield* BuildWork;
 			const outside = yield* Outside;
@@ -187,8 +190,15 @@ const handlers = (o: {
 		Effect.gen(function* () {
 			const head = yield* outside.branchHead(repo, branch);
 			const main = yield* outside.branchHead(repo, "main");
-			if (main === null) return yield* failed;
-			if (head === null) return {branch: null, main, merged: true, drops: []};
+
+			if (main === null) {
+				return yield* failed;
+			}
+
+			if (head === null) {
+				return {branch: null, main, merged: true, drops: []};
+			}
+
 			yield* copyAt(git, remote, tree, head);
 			const merged =
 				(yield* git.git(["-C", tree, "merge-base", "--is-ancestor", main, head])).code === 0;
@@ -241,9 +251,11 @@ const handlers = (o: {
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			yield* copyAt(git, remote, tree, cmd.base);
+
 			if (cmd.main === null) {
 				for (const sha of cmd.reverts) {
 					const ran = yield* o.commitGit.git(["-C", tree, "revert", "--no-edit", sha]);
+
 					if (ran.code !== 0) {
 						yield* git.git(["-C", tree, "revert", "--abort"]);
 						return yield* refuse("unresolved");
@@ -251,13 +263,18 @@ const handlers = (o: {
 				}
 			} else {
 				yield* mergeIn(git, tree, cmd.main);
+
 				for (const f of cmd.resolved) {
-					if (MARKERS.test(f.text)) return yield* refuse("unresolved");
+					if (MARKERS.test(f.text)) {
+						return yield* refuse("unresolved");
+					}
+
 					yield* fs
 						.writeFileString(`${tree}/${f.path}`, f.text)
 						.pipe(Effect.mapError((): PushErr => ({_tag: "unknown"})));
 					yield* git.ok(["-C", tree, "add", "--", f.path]);
 				}
+
 				if (cmd.lockfile) {
 					// Main's lockfile, then made again from the merged manifests: never merged by hand.
 					yield* git.ok(["-C", tree, "checkout", "--theirs", "--", LOCKFILE]);
@@ -266,10 +283,18 @@ const handlers = (o: {
 						["install", "--lockfile-only", "--offline", "--ignore-scripts"],
 						{cwd: tree, env: o.work.env},
 					).pipe(Effect.mapError((): PushErr => ({_tag: "lockfile_failed"})));
-					if (made.code !== 0) return yield* refuse("lockfile_failed");
+
+					if (made.code !== 0) {
+						return yield* refuse("lockfile_failed");
+					}
+
 					yield* git.ok(["-C", tree, "add", "--", LOCKFILE]);
 				}
-				if ((yield* unmerged(git, tree)).length > 0) return yield* refuse("unresolved");
+
+				if ((yield* unmerged(git, tree)).length > 0) {
+					return yield* refuse("unresolved");
+				}
+
 				const key = `${o.name}#push:${branch}@${cmd.base}`;
 				yield* o.commitGit.ok([
 					"-C",
@@ -281,9 +306,14 @@ const handlers = (o: {
 					`${cmd.message}\n\nFabrika-Key: ${key}`,
 				]);
 			}
+
 			const sha = (yield* git.ok(["-C", tree, "rev-parse", "HEAD"])).trim();
 			const pushed: Pushed = {head: sha, changed: sha !== cmd.base};
-			if (!pushed.changed) return pushed;
+
+			if (!pushed.changed) {
+				return pushed;
+			}
+
 			return yield* gate.once({
 				op: "push",
 				subject: `${branch}@${cmd.base}`,
@@ -296,8 +326,15 @@ const handlers = (o: {
 					Effect.gen(function* () {
 						// Compare-and-set: only from where the catch-up read the branch.
 						const now = yield* outside.branchHead(repo, branch);
-						if (now === sha) return pushed;
-						if (now !== cmd.base) return yield* failed;
+
+						if (now === sha) {
+							return pushed;
+						}
+
+						if (now !== cmd.base) {
+							return yield* failed;
+						}
+
 						yield* outside.push(k, {repo, tree, branch, sha});
 						return pushed;
 					}),
@@ -317,13 +354,16 @@ const handlers = (o: {
 			).pipe(
 				Effect.map((asked): CatchupMsg => {
 					const at = {base: sub.deps.base, main: sub.deps.main};
-					if (asked.how !== "answered")
+
+					if (asked.how !== "answered") {
 						return {
 							type: "catchup_unresolved",
 							...at,
 							why: "the resolver reached its limit",
 							ran: null,
 						};
+					}
+
 					const d = asked.answer.drafted;
 					const ran = {spend: d.spend, tools: d.tools, refused: d.refused, links: d.links};
 					return d.answer === "built"

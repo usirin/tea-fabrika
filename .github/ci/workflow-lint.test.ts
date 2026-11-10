@@ -239,6 +239,7 @@ it("accepts generated valid wiring and rejects every isolated wiring plant", () 
 		fc.property(name, name, (label, extra) => {
 			const clean = valid(label, extra);
 			expect(lint(JSON.stringify(clean))).toEqual([]);
+
 			for (const [plant, mutate] of plants) {
 				const broken = structuredClone(clean);
 				mutate(broken);

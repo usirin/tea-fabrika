@@ -70,7 +70,11 @@ export const takeNote = (paths: HostPaths) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const file = yield* fileIn(paths);
-		if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false)))) return null;
+
+		if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false)))) {
+			return null;
+		}
+
 		const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => ""));
 		yield* forgetNote(paths);
 		return yield* decodeNote(text).pipe(
@@ -100,8 +104,11 @@ export const personOn = (home: string) =>
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const file = path.join(home, "ledger.json");
-		if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false))))
+
+		if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false)))) {
 			return writerText({kind: "user", id: "owner"});
+		}
+
 		const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => ""));
 		return yield* decodeLogin(text).pipe(
 			Effect.map(({login}) => writerText({kind: "user", id: login})),

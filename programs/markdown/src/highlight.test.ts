@@ -18,12 +18,16 @@ describe("loadColors", () => {
 
 	it("colors a language it knows, by its name or an alias, in any case", async () => {
 		const colors = await loadColors();
+
 		for (const lang of ["ts", "typescript", "TS"]) {
 			const lines = colors?.(TS, lang) ?? [];
 			expect(lines).toHaveLength(3);
 			const colored = lines.flat().filter((s) => s.color !== null);
 			expect(colored.length).toBeGreaterThan(3);
-			for (const span of colored) expect(span.color).toMatch(/^#[0-9a-f]{6,8}$/);
+
+			for (const span of colored) {
+				expect(span.color).toMatch(/^#[0-9a-f]{6,8}$/);
+			}
 		}
 	});
 
