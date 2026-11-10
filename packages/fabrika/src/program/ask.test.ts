@@ -1,5 +1,5 @@
 import {it} from "@effect/vitest";
-import {Arbitrary, type Cause, Deferred, type Duration, Effect, Fiber, Schema} from "effect";
+import {Arbitrary, type Cause, Deferred, type Duration, Effect, Exit, Fiber, Schema} from "effect";
 import {TestClock} from "effect/testing";
 import {describe, expectTypeOf} from "vitest";
 import {type AnyRun, defineProgram, end, fork, start, type Word, type Run} from "./program.ts";
@@ -54,6 +54,13 @@ const same = (what: string, actual: unknown, expected: unknown) =>
 	ensure(
 		JSON.stringify(actual) === JSON.stringify(expected),
 		`${what}: got ${JSON.stringify(actual)}, wanted ${JSON.stringify(expected)}`,
+	);
+
+/** The Exit is a success holding exactly the word "queued": compared by meaning, not by how Effect serializes it. */
+const queued = (what: string, exit: Exit.Exit<unknown, unknown>) =>
+	ensure(
+		Exit.isSuccess(exit) && exit.value === "queued",
+		`${what}: got ${Exit.isSuccess(exit) ? JSON.stringify(exit.value) : "a failure"}, wanted "queued"`,
 	);
 
 /** A mailbox with an ordinary input, a control input and a manual one; every handler waits on `gate`. */
@@ -146,7 +153,7 @@ describe("L5: a handler that never returns, or a main that never serves", () => 
 					yield* TestClock.adjust(1);
 					yield* settle;
 					const word = yield* Fiber.join(fiber).pipe(Effect.exit);
-					yield* same("the answer at the cap", word, {_tag: "Success", value: "queued"});
+					yield* queued("the answer at the cap", word);
 					// It was not cancelled: let go, and the handler runs once for this value.
 					yield* open(gate);
 					yield* settle;
@@ -232,7 +239,7 @@ describe("L6: admission spends the caller's time", () => {
 						yield* open(gate);
 						yield* settle;
 						const answer = yield* Fiber.join(fiber).pipe(Effect.exit);
-						yield* same("admitted in time", answer, {_tag: "Success", value: "queued"});
+						yield* queued("admitted in time", answer);
 						yield* ensure(handled.includes("plain 1"), "admitted, but never handled");
 						return;
 					}

@@ -552,7 +552,7 @@ const RUNS = 200;
 const AGENT: Writer = {kind: "agent", id: "mcp", for: "owner"};
 
 /** Each failure of a property in words, as fast-check's report: the shrunk case and what differed. */
-const holds = <A>(arb: Arbitrary.Arbitrary<A>, body: (a: A) => Effect.Effect<void, string>) =>
+const holds = <A, E>(arb: Arbitrary.Arbitrary<A>, body: (a: A) => Effect.Effect<void, E>) =>
 	Arbitrary.checkEffect(arb, (a) => body(a).pipe(Effect.as(true)), {
 		seed: SEED,
 		runs: RUNS,
