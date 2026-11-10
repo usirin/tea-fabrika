@@ -5,21 +5,6 @@
   "head": "8936c7e15b4c794dfed5748a28cd8592ceb47763",
   "main_last_200": {
     "commits": 200,
-    "merges_among_them": 24,
-    "gitleaks_default_rules": {
-      "commits_scanned": 174,
-      "megabytes": 4.01,
-      "seconds": 1.31,
-      "hits": 1,
-      "commits_with_a_hit": 1,
-      "true_hits": 0,
-      "by_rule": {
-        "private-key": 1
-      },
-      "where": [
-        ".agents/skills/lead/scripts/redact.test.ts:77"
-      ]
-    },
     "leakgrep_built_in_shapes_empty_word_list": {
       "hits": 2,
       "commits_with_a_hit": 1,
@@ -63,32 +48,22 @@
     "made_up_word": "zorblatt-quux",
     "re_indent_only_3_lines": {
       "gitleaks": 3,
-      "gitleaks_with_git_w": 0,
       "gitleaks_with_git_b": 0,
       "gitleaks_with_baseline_from_first_commit": 3,
       "leakgrep": 3,
-      "leakgrep_with_git_w": 0,
       "leakgrep_with_git_b": 0
     },
     "first_time_indent_1_line": {
       "gitleaks": 1,
-      "gitleaks_with_git_w": 0,
       "gitleaks_with_git_b": 1,
       "leakgrep": 1,
-      "leakgrep_with_git_w": 0,
       "leakgrep_with_git_b": 1
     },
     "word_made_by_deleting_a_space_real_leak": {
       "gitleaks": 1,
-      "gitleaks_with_git_w": 0,
       "gitleaks_with_git_b": 1,
       "leakgrep": 1,
-      "leakgrep_with_git_w": 0,
       "leakgrep_with_git_b": 1
-    },
-    "added_then_removed_in_the_next_commit": {
-      "gitleaks_per_commit": 1,
-      "leakgrep_net_diff": 0
     },
     "only_removes_a_line_with_the_word": {
       "gitleaks": 0,
@@ -115,16 +90,6 @@
         "gitleaks": true,
         "leakgrep": true
       },
-      "word_in_pnpm_lock": {
-        "gitleaks": false,
-        "gitleaks_word_rule_alone": true,
-        "leakgrep": true
-      },
-      "word_on_a_line_with_gitleaks_allow": {
-        "gitleaks": false,
-        "gitleaks_ignore_gitleaks_allow": true,
-        "leakgrep": true
-      },
       "npm_token": {
         "gitleaks": true,
         "leakgrep": true
@@ -137,33 +102,9 @@
         "gitleaks": true,
         "leakgrep": true
       },
-      "openai_shape_48_random": {
-        "gitleaks": false,
-        "leakgrep": true
-      },
-      "openai_project_shape_124_random": {
-        "gitleaks": false,
-        "leakgrep": true
-      },
-      "aws_access_key_id": {
-        "gitleaks": true,
-        "leakgrep": false
-      },
       "pem_private_key_block": {
         "gitleaks": true,
         "leakgrep": true
-      },
-      "slack_bot_token": {
-        "gitleaks": true,
-        "leakgrep": false
-      },
-      "quoted_40_random_after_apiKey": {
-        "gitleaks": true,
-        "leakgrep": false
-      },
-      "github_token_in_base64": {
-        "gitleaks": true,
-        "leakgrep": false
       },
       "this_repos_own_url": {
         "gitleaks": false,
@@ -188,8 +129,6 @@
     "re_indent_only_3_lines": 0,
     "first_time_indent_1_line": 0,
     "word_made_by_deleting_a_space_real_leak": 1,
-    "added_then_removed_in_the_next_commit": 0,
-    "only_removes_a_line_with_the_word": 0,
-    "one_sample_per_kind": "same 14 of 19 as before"
+    "only_removes_a_line_with_the_word": 0
   }
 }
