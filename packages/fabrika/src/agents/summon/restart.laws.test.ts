@@ -55,12 +55,14 @@ it("T237-4: attach after a host crash recovers the turn's answer without typing 
 			const first = yield* life(home, folder, "summon fake as scout\n@scout slowly read a.txt");
 			yield* Effect.gen(function* () {
 				const log = join(folder, ".fake-acp", "log");
+
 				while (
 					!first.output().includes('told {"name":"scout","turn":1}') ||
 					!existsSync(log) ||
 					!readFileSync(log, "utf8").includes(" 1 slowly")
-				)
+				) {
 					yield* Effect.sleep("10 millis");
+				}
 			}).pipe(Effect.timeout("15 seconds"));
 			yield* kill(first);
 			const second = yield* life(home, folder, "attach %1");

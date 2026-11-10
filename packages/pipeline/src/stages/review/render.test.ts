@@ -13,7 +13,11 @@ const C2 = criterionId("c2");
 
 const sheetOf = (form: Form, brief = BRIEF): Sheet => {
 	const made = readForm(brief, form);
-	if (made.answer !== "sheet") throw new Error(made.problems.join("; "));
+
+	if (made.answer !== "sheet") {
+		throw new Error(made.problems.join("; "));
+	}
+
 	return made.sheet;
 };
 
@@ -79,6 +83,7 @@ describe("the printout", () => {
 		for (const form of [FAILING, PASSING]) {
 			const printed = comments(form);
 			expect(printed.map((comment) => comment.kind)).toEqual(["review-code", "review-doc"]);
+
 			for (const {text} of printed) {
 				const at = [HEADINGS.change, HEADINGS.rows, HEADINGS.unseen].map((heading) =>
 					text.indexOf(`\n${heading}\n`),

@@ -84,20 +84,35 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
 				const held = store.holds(rows.map((row) => row.span.spanId));
 				const seen = new Set(held);
 				const left = rows.filter((row) => {
-					if (seen.has(row.span.spanId)) return false;
+					if (seen.has(row.span.spanId)) {
+						return false;
+					}
+
 					seen.add(row.span.spanId);
 					return true;
 				});
-				if (left.length === 0) return Written.cases.written.make({});
+
+				if (left.length === 0) {
+					return Written.cases.written.make({});
+				}
+
 				const had = rows.map((row) => row.span.spanId).filter((id) => held.has(id));
 				const rolled = Option.getOrElse(store.rolled(), () => {
 					const bytes = store.size();
-					if (bytes < cap) return undefined;
+
+					if (bytes < cap) {
+						return undefined;
+					}
+
 					const made = Rolled.make({part: at, next: partName(chain, at + 1), bytes});
 					store.roll(made);
 					return made;
 				});
-				if (rolled !== undefined) return Written.cases.rolled.make({next: rolled.next, had});
+
+				if (rolled !== undefined) {
+					return Written.cases.rolled.make({next: rolled.next, had});
+				}
+
 				store.insert(left);
 				return Written.cases.written.make({});
 			}),
@@ -105,7 +120,10 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
 		lookup: (spanId: string): Lookup => store.atomic(() => lookup(spanId)),
 		erase: (spanId: string, by: Deletion): Lookup =>
 			store.atomic(() => {
-				if (store.holds([spanId]).has(spanId)) store.erase(spanId, by);
+				if (store.holds([spanId]).has(spanId)) {
+					store.erase(spanId, by);
+				}
+
 				return lookup(spanId);
 			}),
 	};
@@ -232,14 +250,24 @@ const sqlStore = (sql: Sql): Store => {
 	return {
 		atomic: (step) =>
 			sql.transaction(() => {
-				if (!ready) for (const query of PART_TABLES) sql.exec(query);
+				if (!ready) {
+					for (const query of PART_TABLES) {
+						sql.exec(query);
+					}
+				}
+
 				ready = true;
 				return step();
 			}),
 		holds: (ids) => {
 			const found = new Set<string>();
-			for (const id of new Set(ids))
-				if (Option.isSome(one(`SELECT 1 FROM spans WHERE "spanId" = ?`, id))) found.add(id);
+
+			for (const id of new Set(ids)) {
+				if (Option.isSome(one(`SELECT 1 FROM spans WHERE "spanId" = ?`, id))) {
+					found.add(id);
+				}
+			}
+
 			return found;
 		},
 		rolled: () =>
@@ -273,12 +301,14 @@ const sqlStore = (sql: Sql): Store => {
 					JSON.stringify(span.resource),
 					span.ok ? 1 : 0,
 				);
-				if (content !== null)
+
+				if (content !== null) {
 					sql.exec(
 						`INSERT INTO content ("spanId", state, message) VALUES (?, 'kept', ?)`,
 						span.spanId,
 						content,
 					);
+				}
 			}
 		},
 		page: (after) => {
@@ -354,6 +384,7 @@ const memoryStore = (): Store => {
 				spans.set(span.spanId, span);
 				order.push(span);
 				bytes += encoder.encode(JSON.stringify(span)).length;
+
 				if (content !== null) {
 					contents.set(
 						span.spanId,
@@ -370,7 +401,10 @@ const memoryStore = (): Store => {
 		content: (spanId) => Option.fromUndefinedOr(contents.get(spanId)),
 		erase: (spanId, by) => {
 			const known = contents.get(spanId);
-			if (known?._tag === "kept") contents.set(spanId, Content.cases.deleted.make({spanId, ...by}));
+
+			if (known?._tag === "kept") {
+				contents.set(spanId, Content.cases.deleted.make({spanId, ...by}));
+			}
 		},
 	};
 };
@@ -381,7 +415,11 @@ const parts = (make: (name: string) => Store, cap: number) => {
 	return (chain: Chain, at: number): Calls => {
 		const name = partName(chain, at);
 		const found = known.get(name);
-		if (found !== undefined) return found;
+
+		if (found !== undefined) {
+			return found;
+		}
+
 		const made = local(part(make(name), chain, at, cap));
 		known.set(name, made);
 		return made;

@@ -137,13 +137,19 @@ export function createDraft<const N extends string, O>(config: {
 	 */
 	function msgsOf(message: SDKMessage, run: DraftRun, context = 0): Msg[] {
 		const {key, id} = run;
+
 		if (message.type === "assistant" && message.parent_tool_use_id === null) {
 			return message.message.content.flatMap((block) =>
 				block.type === "tool_use" ? [{type: types.tool, key, id, tool: block.name} as Msg] : [],
 			);
 		}
-		if (message.type !== "result") return [];
+
+		if (message.type !== "result") {
+			return [];
+		}
+
 		const spend = spendOf(message, context);
+
 		if (message.subtype !== "success" || message.is_error) {
 			return [
 				{
@@ -155,6 +161,7 @@ export function createDraft<const N extends string, O>(config: {
 				} as Msg,
 			];
 		}
+
 		return [
 			{
 				type: types.finished,
@@ -175,14 +182,23 @@ export function createDraft<const N extends string, O>(config: {
 	 */
 	function answerOf(structured: unknown, text: string): O | null {
 		const direct = read(structured);
-		if (Option.isSome(direct)) return direct.value;
+
+		if (Option.isSome(direct)) {
+			return direct.value;
+		}
+
 		const objects =
 			typeof text === "string" ? [...text.matchAll(/\{[^{}]*\}/g)].map((m) => m[0]) : [];
+
 		for (const candidate of objects.reverse()) {
 			// Not JSON, or not the answer's shape: try the one before it.
 			const parsed = Option.flatten(readJson(candidate));
-			if (Option.isSome(parsed)) return parsed.value;
+
+			if (Option.isSome(parsed)) {
+				return parsed.value;
+			}
 		}
+
 		return null;
 	}
 
@@ -222,7 +238,10 @@ export function extraTools(
 	listed: readonly string[],
 	opened: readonly string[] = [],
 ): number {
-	if (!Array.isArray(named)) return 0;
+	if (!Array.isArray(named)) {
+		return 0;
+	}
+
 	const own = new Set([...named, ...opened, ANSWER_TOOL]);
 	return listed.filter((tool) => !own.has(tool)).length;
 }
@@ -249,7 +268,11 @@ export class NotStarted extends Error {
  */
 export const openLive: Open = (params) => {
 	const why = startRefusal(params.options);
-	if (why === null) return query(params);
+
+	if (why === null) {
+		return query(params);
+	}
+
 	return {
 		[Symbol.asyncIterator]: () => ({next: () => Promise.reject(new NotStarted(why))}),
 		interrupt: () => Promise.resolve(undefined),
@@ -307,7 +330,7 @@ export const sdkRunner =
 					});
 					const live = {on: true, result: false, context: 0};
 					const fail = (error: string) => {
-						if (live.on)
+						if (live.on) {
 							Queue.offerUnsafe(queue, {
 								type: draft.types.failed,
 								key: run.key,
@@ -315,6 +338,7 @@ export const sdkRunner =
 								error,
 								spend: noSpend,
 							} as DraftMsg<N, O>);
+						}
 					};
 					const loop = (async () => {
 						// oxlint-disable-next-line fabrika/no-raw-try-catch -- a plain loop over the SDK's stream, outside Effect on purpose: it keeps reading after the Sub closes, and its catch turns the SDK's throw into a Msg
@@ -325,6 +349,7 @@ export const sdkRunner =
 									m.type === "system" && m.subtype === "init"
 										? extraTools(named.tools, m.tools, more.opened)
 										: 0;
+
 								if (extra > 0) {
 									// The run is over, as after a result: nothing is left to interrupt, and what the SDK throws on the way out is no news.
 									live.result = true;
@@ -334,16 +359,28 @@ export const sdkRunner =
 									);
 									return;
 								}
+
 								live.context = draft.contextOf(m) ?? live.context;
-								if (m.type === "result") live.result = true;
-								if (live.on)
-									for (const msg of draft.msgsOf(m, run, live.context))
+
+								if (m.type === "result") {
+									live.result = true;
+								}
+
+								if (live.on) {
+									for (const msg of draft.msgsOf(m, run, live.context)) {
 										Queue.offerUnsafe(queue, msg);
+									}
+								}
 							}
-							if (!live.result) fail("the stream ended with no result");
+
+							if (!live.result) {
+								fail("the stream ended with no result");
+							}
 						} catch (error) {
 							// The SDK throws after an error result it already sent; only a throw before one is news.
-							if (!live.result) fail(error instanceof NotStarted ? error.message : String(error));
+							if (!live.result) {
+								fail(error instanceof NotStarted ? error.message : String(error));
+							}
 						}
 					})();
 					return {q, live, loop};
@@ -352,6 +389,7 @@ export const sdkRunner =
 					// oxlint-disable-next-line fabrika/no-effect-promise -- closing a scope has no way to fail with a typed error; the interrupt's failure is caught, both waits time out, and a throw from `close` is a bug
 					Effect.promise(async () => {
 						live.on = false;
+
 						if (!live.result) {
 							await Promise.race([
 								q.interrupt().catch(() => undefined),
@@ -359,6 +397,7 @@ export const sdkRunner =
 							]);
 							await Promise.race([loop, new Promise((r) => setTimeout(r, 30_000))]);
 						}
+
 						q.close();
 					}),
 			),

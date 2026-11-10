@@ -13,8 +13,12 @@ const heldPort = async <A>(use: (port: number) => Promise<A>): Promise<A> => {
 	const server = createServer((socket) => socket.destroy());
 	await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
 	const address = server.address();
+
 	try {
-		if (address === null || typeof address === "string") throw new Error("no port");
+		if (address === null || typeof address === "string") {
+			throw new Error("no port");
+		}
+
 		return await use(address.port);
 	} finally {
 		await new Promise<void>((done) => server.close(() => done()));
@@ -33,7 +37,10 @@ const folder = (prefix: string): string => {
 describe("layerLocal", () => {
 	afterEach(() => {
 		vi.unstubAllEnvs();
-		for (const path of made.splice(0)) rmSync(path, {recursive: true, force: true});
+
+		for (const path of made.splice(0)) {
+			rmSync(path, {recursive: true, force: true});
+		}
 	});
 
 	it("on a port another program holds, the start fails when the child ends, not when a clock runs out, and says why", async () => {

@@ -40,7 +40,11 @@ const running = (count: number): TileJobs => ({
 describe("today's keys PR 1 command paths", () => {
 	it("K17: a prefix opens the palette, and an unbound command still runs by name", () => {
 		const read = decodeKeys('palette.open = "<prefix>p"\ntezgah.zoom = []', true);
-		if (Result.isFailure(read)) throw new Error(read.failure.why);
+
+		if (Result.isFailure(read)) {
+			throw new Error(read.failure.why);
+		}
+
 		const configured = fold([{type: "keys", keys: read.success}]).s;
 		const openedPalette = fold(prefixed("p"), configured);
 		expect(openedPalette.cmds).toContainEqual(
@@ -57,16 +61,21 @@ describe("today's keys PR 1 command paths", () => {
 const fold = (msgs: readonly DeskMsg[], from: Desk = start) => {
 	let s = from;
 	const cmds: DeskCmd[] = [];
+
 	for (const msg of msgs) {
 		const [next, out] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, msg);
 		s = next;
 		cmds.push(...out);
 	}
+
 	return {s, cmds};
 };
 
 const opened = (s: Desk): Open => {
-	if (s.at !== "open") throw new Error("the desk is over");
+	if (s.at !== "open") {
+		throw new Error("the desk is over");
+	}
+
 	return s;
 };
 
@@ -144,6 +153,7 @@ describe("the desk", () => {
 
 	it("takes only y for yes: any other key says no and keeps the tile", () => {
 		const asked = fold([...prefixed("|"), ...prefixed("x", 10)]).s;
+
 		for (const key of ["n", "Y", "a", "<c-b>", "<c-c>", "x", "<enter>"]) {
 			expect(claims(asked, key, 20)).toBe(true);
 			const no = fold([{type: "key", key, at: 20}], asked);
@@ -541,7 +551,10 @@ describe("a line with several windows", () => {
 	/** The same keys, each share within a hundredth of a percent. */
 	const near = (got: Readonly<Record<string, number>>, want: Readonly<Record<string, number>>) => {
 		expect(Object.keys(got).sort()).toEqual(Object.keys(want).sort());
-		for (const [id, size] of Object.entries(want)) expect(got[id]).toBeCloseTo(size);
+
+		for (const [id, size] of Object.entries(want)) {
+			expect(got[id]).toBeCloseTo(size);
+		}
 	};
 	const tile = (s: Desk, id: string) => findTile(layout(s), id);
 	/** t1 and t2 side by side, focus on t2, in a workspace this wide. */
@@ -561,7 +574,11 @@ describe("a line with several windows", () => {
 		expect(ids(s)).toEqual(["t1", "t2", "t3", "t4"]);
 		expect(layout(s).root.orientation).toBe("horizontal");
 		expect(sizes(s).t1).toBeCloseTo(50);
-		for (const id of ["t2", "t3", "t4"]) expect(sizes(s)[id]).toBeCloseTo(50 / 3);
+
+		for (const id of ["t2", "t3", "t4"]) {
+			expect(sizes(s)[id]).toBeCloseTo(50 / 3);
+		}
+
 		const own = {id: "tracker:1", from: "t2", tint: 0, letter: "A"};
 		expect(tile(s, "t2")?.shows).toEqual({kind: "line", run: tracker, line: own});
 		expect(tile(s, "t3")?.shows).toEqual({kind: "window", run: ticket, line: own});
@@ -589,7 +606,11 @@ describe("a line with several windows", () => {
 		expect(focus(one)).toBe("t3");
 		const both = fold([{type: "unfold", node: "t4"}], one).s;
 		expect(sizes(both).t1).toBeCloseTo(50);
-		for (const id of ["t2", "t3", "t4"]) expect(sizes(both)[id]).toBeCloseTo(50 / 3);
+
+		for (const id of ["t2", "t3", "t4"]) {
+			expect(sizes(both)[id]).toBeCloseTo(50 / 3);
+		}
+
 		// Folding one again hands its share back to the line's other open windows.
 		const back = fold([{type: "fold", tile: "t4"}], both).s;
 		expect(sizes(back).t1).toBeCloseTo(50);
@@ -788,7 +809,11 @@ describe("a line with several windows", () => {
 /** The keybindings file's table, as the host decodes it; a refusal fails the test. */
 const table = (text: string): Keys => {
 	const answer = decodeKeys(text, true);
-	if (Result.isFailure(answer)) throw new Error(`refused: ${answer.failure.why}`);
+
+	if (Result.isFailure(answer)) {
+		throw new Error(`refused: ${answer.failure.why}`);
+	}
+
 	return answer.success;
 };
 

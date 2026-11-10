@@ -226,55 +226,85 @@ const badPlace = (place: Place) =>
 export const formProblems: Check<Form, Brief> = (form, brief) => {
 	const problems: string[] = [];
 	const asked: readonly CriterionId[] = brief.criteria.map((criterion) => criterion.id);
+
 	for (const id of asked) {
 		const rows = form.rows.filter((row) => row.id === id).length;
-		if (rows !== 1)
+
+		if (rows !== 1) {
 			problems.push(rows === 0 ? `criterion ${id} has no row` : `criterion ${id} has ${rows} rows`);
+		}
 	}
+
 	for (const row of form.rows) {
-		if (!asked.includes(row.id))
+		if (!asked.includes(row.id)) {
 			problems.push(`a row is for criterion ${row.id}, and the ticket has no such criterion`);
-		if (row.grade !== "unseen" && row.where.some(badPlace))
+		}
+
+		if (row.grade !== "unseen" && row.where.some(badPlace)) {
 			problems.push(`the row for criterion ${row.id} names lines that are not lines`);
+		}
 	}
+
 	const fromCriterion = (id: CriterionId) =>
 		form.findings.filter((found) => found.from.source === "criterion" && found.from.id === id);
+
 	for (const row of form.rows) {
 		const findings = fromCriterion(row.id).length;
+
 		// A failed criterion with nothing to change gives the builder nothing to do.
-		if (row.grade === "fail" && findings === 0)
+		if (row.grade === "fail" && findings === 0) {
 			problems.push(`criterion ${row.id} is graded fail, and no finding says what has to change`);
-		if (row.grade === "pass" && findings > 0)
+		}
+
+		if (row.grade === "pass" && findings > 0) {
 			problems.push(`criterion ${row.id} is graded pass, and a finding comes from it`);
+		}
+
 		// What a pass does not cover is still asked for: the criterion stays open.
-		if (row.grade === "pass" && row.limit !== null)
+		if (row.grade === "pass" && row.limit !== null) {
 			problems.push(
 				`criterion ${row.id} is graded pass with a limit (${JSON.stringify(row.limit)}). A limit is never a pass: grade it fail, with a finding for what is not met, or unseen if you could not see it`,
 			);
+		}
 	}
+
 	for (const found of form.findings) {
 		const name = `the finding "${found.fault.slice(0, 60)}"`;
-		if (!brief.kinds.includes(found.kind))
+
+		if (!brief.kinds.includes(found.kind)) {
 			problems.push(`${name} is for ${found.kind}, which this change does not owe`);
-		if (found.from.source === "criterion" && !asked.includes(found.from.id))
+		}
+
+		if (found.from.source === "criterion" && !asked.includes(found.from.id)) {
 			problems.push(
 				`${name} comes from criterion ${found.from.id}, and the ticket has no such criterion`,
 			);
-		if (found.from.source === "decision" && !(brief.decisions ?? []).includes(found.from.id))
+		}
+
+		if (found.from.source === "decision" && !(brief.decisions ?? []).includes(found.from.id)) {
 			problems.push(
 				`${name} goes against decision ${found.from.id}, and the plan has no such question. Name a question from the decisions you were given, or take the mark off`,
 			);
-		if (found.at !== null && badPlace(found.at))
+		}
+
+		if (found.at !== null && badPlace(found.at)) {
 			problems.push(`${name} names lines that are not lines`);
-		if (found.fault.trim() === "" || found.wants.trim() === "")
+		}
+
+		if (found.fault.trim() === "" || found.wants.trim() === "") {
 			problems.push(`${name} does not say what is wrong, or what it wants`);
+		}
 	}
+
 	return problems;
 };
 
 /** A checked row, as a sheet keeps it: a pass that got here has no limit. */
 const gradedOf = (row: Row): Graded => {
-	if (row.grade !== "pass") return row;
+	if (row.grade !== "pass") {
+		return row;
+	}
+
 	const {limit: _none, ...whole} = row;
 	return whole;
 };
@@ -289,12 +319,21 @@ export type ReadForm =
  */
 export function readForm(brief: Brief, form: Form): ReadForm {
 	const [first, ...rest] = formProblems(form, brief);
-	if (first !== undefined) return {answer: "problems", problems: [first, ...rest]};
+
+	if (first !== undefined) {
+		return {answer: "problems", problems: [first, ...rest]};
+	}
+
 	const findings = new Map<string, Finding>();
+
 	for (const found of form.findings) {
 		const id = idOf(found);
-		if (!findings.has(id)) findings.set(id, {id, state: "open", ...found});
+
+		if (!findings.has(id)) {
+			findings.set(id, {id, state: "open", ...found});
+		}
 	}
+
 	return {
 		answer: "sheet",
 		sheet: {

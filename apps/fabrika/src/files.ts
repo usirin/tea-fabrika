@@ -55,7 +55,11 @@ export const isOurs = (url: string): boolean => {
 /** The file a url names, or `null`: not the app's own, or not one of its files. */
 export const fileOf = (url: string): Served | null => {
 	const parsed = URL.parse(url);
-	if (parsed === null || !isOurs(url)) return null;
+
+	if (parsed === null || !isOurs(url)) {
+		return null;
+	}
+
 	const path = parsed.pathname === "/" ? "/desk.html" : parsed.pathname;
 	return isServed(path) ? path : null;
 };
@@ -76,7 +80,11 @@ const headers = (file: Served | null) => ({
 export const answer = (dir: string, url: string) =>
 	Effect.gen(function* () {
 		const file = fileOf(url);
-		if (file === null) return new Response("not found", {status: 404, headers: headers(null)});
+
+		if (file === null) {
+			return new Response("not found", {status: 404, headers: headers(null)});
+		}
+
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		// Every file it serves is text.

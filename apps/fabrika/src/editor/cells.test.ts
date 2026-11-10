@@ -83,13 +83,18 @@ describe("the table and the facts", () => {
 		const first = new Map<string, number>();
 		const unlike: string[] = [];
 		const same = (a: Answers, b: Answers) => JSON.stringify(a) === JSON.stringify(b);
+
 		for (let cp = 0; cp < 0x110000; cp += 1) {
 			const group = groupOf(cp);
 			const one = first.get(group);
-			if (one === undefined) first.set(group, cp);
-			else if (unlike.length < 5 && !same(answersOf(probed, one), answersOf(probed, cp)))
+
+			if (one === undefined) {
+				first.set(group, cp);
+			} else if (unlike.length < 5 && !same(answersOf(probed, one), answersOf(probed, cp))) {
 				unlike.push(`U+${cp.toString(16)} is not like U+${one.toString(16)}`);
+			}
 		}
+
 		expect(unlike).toEqual([]);
 		const wrong = [...first.values()].flatMap((cp) => {
 			const wasm = answersOf(probed, cp);
@@ -119,7 +124,11 @@ describe("the layout on random texts", () => {
 			rows.push(row);
 			return row;
 		};
-		for (const c of text) print(pen, c.codePointAt(0) ?? 0, cols, next);
+
+		for (const c of text) {
+			print(pen, c.codePointAt(0) ?? 0, cols, next);
+		}
+
 		const all = Array.from({length: HEIGHT}, (_, y) =>
 			Array.from({length: cols}, (_, x) => seenOf(rows[y]?.[x] ?? BLANK)),
 		);
@@ -130,7 +139,10 @@ describe("the layout on random texts", () => {
 	// editor.laws.test.ts for why).
 	let memory: {readonly ghostty: Ghostty; made: number} | null = null;
 	const terminal = (cols: number): GhosttyTerminal => {
-		if (memory === null || memory.made >= 200) memory = {ghostty: fresh(), made: 0};
+		if (memory === null || memory.made >= 200) {
+			memory = {ghostty: fresh(), made: 0};
+		}
+
 		memory.made += 1;
 		return memory.ghostty.createTerminal(cols, HEIGHT);
 	};

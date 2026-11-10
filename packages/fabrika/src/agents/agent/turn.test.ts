@@ -43,19 +43,27 @@ describe("a turn's system prompt", () => {
 		const read = (value: unknown) => Exit.isSuccess(Schema.decodeUnknownExit(SystemPrompt)(value));
 		expect(read({_tag: "append", text: "One task."})).toBe(true);
 		expect(read({_tag: "replace", text: "Sort one ticket."})).toBe(true);
-		for (const text of BLANK) expect(read({_tag: "replace", text})).toBe(false);
+
+		for (const text of BLANK) {
+			expect(read({_tag: "replace", text})).toBe(false);
+		}
+
 		expect(read({_tag: "none"})).toBe(false);
 		expect(read(null)).toBe(false);
 	});
 
 	it("makes no replace prompt's text from blank words", () => {
-		for (const text of BLANK) expect(() => NonBlank.make(text)).toThrow();
+		for (const text of BLANK) {
+			expect(() => NonBlank.make(text)).toThrow();
+		}
+
 		expect(NonBlank.make(" Sort one ticket.\n")).toBe(" Sort one ticket.\n");
 	});
 
 	it("sends no replace prompt with blank text to an adapter, even past its type", async () => {
 		const fake = fakeAdapter(() => saying('{"note":"ok"}'));
 		const agents = makeAgents({adapters: {fake}, sessions: memorySessions(), reaper: noReaper});
+
 		for (const [n, text] of BLANK.entries()) {
 			// oxlint-disable-next-line fabrika/no-type-assertions -- a planted mistake, as JavaScript or a cast could send it; the type refuses it
 			const system = {_tag: "replace", text} as unknown as SystemPrompt;
@@ -64,6 +72,7 @@ describe("a turn's system prompt", () => {
 			);
 			expect(error).toMatchObject({_tag: "AgentFailed", why: "system"});
 		}
+
 		expect(fake.seen.started).toHaveLength(0);
 	});
 
@@ -75,8 +84,11 @@ describe("a turn's system prompt", () => {
 			{_tag: "append", text: "You plan; you change no file; hand back one PlanDraft."},
 			{_tag: "append", text: ""},
 		];
-		for (const [n, system] of sent.entries())
+
+		for (const [n, system] of sent.entries()) {
 			await Effect.runPromise(Stream.runDrain(agents.run(turn(`s-${n}`, system))));
+		}
+
 		expect(fake.seen.started.map((t) => t.system)).toEqual(sent);
 	});
 });

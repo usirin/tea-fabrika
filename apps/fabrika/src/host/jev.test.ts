@@ -12,8 +12,11 @@ const found = (write: string | null) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const home = yield* fs.makeTempDirectoryScoped({prefix: "jev-"});
-		if (write !== null)
+
+		if (write !== null) {
 			yield* fs.writeFileString((yield* Path.Path).join(home, JEV_KEY_FILE), write);
+		}
+
 		const context = yield* Layer.build(hostJev(home));
 		return {
 			jev: Option.isSome(Context.getOption(context, Jev)),

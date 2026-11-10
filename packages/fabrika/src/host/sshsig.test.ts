@@ -121,7 +121,11 @@ describe("an OpenSSH key file", () => {
 		])) as CryptoKeyPair;
 		const raw = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
 		const read = await keyFileOf(await keyFileText(pair, "alice@laptop"));
-		if (!read.ok) throw new Error(read.why);
+
+		if (!read.ok) {
+			throw new Error(read.why);
+		}
+
 		const back = new Uint8Array(await crypto.subtle.exportKey("raw", read.pair.publicKey));
 		expect(keyLineOf(back)).toBe(keyLineOf(raw));
 		const sig = await sign("hello", NS, read.pair.privateKey, back);

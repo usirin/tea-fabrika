@@ -80,8 +80,10 @@ describe("the writers a move maps", () => {
 		expect(byOf("user:github:7", FOUNDER)).toEqual({kind: "founder"});
 		expect(byOf("agent:x", FOUNDER)).toEqual({kind: "agent", id: "x"});
 		expect(byOf("agent:x for:github:7", FOUNDER)).toEqual({kind: "agent", id: "x"});
-		for (const w of ["user:github:8", "agent:x for:github:8", "ledger", "h1@user:owner", "DOWN"])
+
+		for (const w of ["user:github:8", "agent:x for:github:8", "ledger", "h1@user:owner", "DOWN"]) {
 			expect(byOf(w, FOUNDER)).toBeNull();
+		}
 	});
 
 	it("plans the tracker's rows with every writer mapped, and names what it cannot map", () => {
@@ -131,8 +133,11 @@ describe("the import window", () => {
 	it("refuses anyone but the founder, as a person", () => {
 		const db = fresh();
 		const {events} = plan();
-		for (const who of [bob, alicesAgent])
+
+		for (const who of [bob, alicesAgent]) {
 			expect(importChunk(db, FOUNDER, who, {events})).toMatchObject({ok: false, status: 403});
+		}
+
 		expect(importChunk(db, null, alice, {events})).toMatchObject({ok: false, status: 404});
 		expect(moveStateOf(db)).toEqual({kind: "fresh"});
 	});
@@ -207,10 +212,12 @@ describe("the import window", () => {
 			["data that is not JSON", {...filed, data: "{"}],
 			["a stream under no moved name", {...filed, stream: "tracker/other/inbox"}],
 		];
+
 		for (const [, e] of bad) {
 			expect(importChunk(db, FOUNDER, alice, {events: [reg, e]}).ok).toBe(false);
 			expect(moved(db)).toHaveLength(0);
 		}
+
 		// A writer the request names is not even read: the wire has no place for one.
 		expect(importChunk(db, FOUNDER, alice, {events: [{...reg, writer: "user:github:8"}]}).ok).toBe(
 			false,

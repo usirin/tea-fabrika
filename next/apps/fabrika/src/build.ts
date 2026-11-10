@@ -47,7 +47,10 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 	const compiler: Plugin = {
 		name: "fabrika-compiler",
 		transform(code, id) {
-			if (!id.endsWith(".tsx")) return;
+			if (!id.endsWith(".tsx")) {
+				return;
+			}
+
 			files.set(path.relative(ROOT, id), code);
 			const out = compile(id, code);
 			return {code: out.code};
@@ -71,10 +74,14 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 		{
 			name: "fabrika-table",
 			resolveId(id) {
-				if (id === "./table.ts") return "\0fabrika-table";
+				if (id === "./table.ts") {
+					return "\0fabrika-table";
+				}
 			},
 			load(id) {
-				if (id === "\0fabrika-table") return `export const programs = ${JSON.stringify(programs)};`;
+				if (id === "\0fabrika-table") {
+					return `export const programs = ${JSON.stringify(programs)};`;
+				}
 			},
 		},
 	]);
@@ -83,25 +90,42 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 		.map((o) => o.code)
 		.join("\n");
 	const build = yield* hash(brain);
+
 	// Include modules discovered by Rolldown, then check the whole ledger for stale rows.
-	if (check(files, ledger).length) return yield* new BuildError({reason: "compiler"});
+	if (check(files, ledger).length) {
+		return yield* new BuildError({reason: "compiler"});
+	}
+
 	yield* Effect.gen(function* () {
 		const directory = path.dirname(options.out);
-		if (!(yield* fs.exists(directory))) yield* fs.makeDirectory(directory, {recursive: true});
+
+		if (!(yield* fs.exists(directory))) {
+			yield* fs.makeDirectory(directory, {recursive: true});
+		}
+
 		const pending = yield* fs.makeTempDirectory({directory, prefix: ".fabrika-build-"});
 		const backup = `${pending}.old`;
 		yield* Effect.gen(function* () {
 			yield* fs.writeFileString(path.join(pending, "brain.mjs"), brain);
-			for (const [file, text] of files)
+
+			for (const [file, text] of files) {
 				yield* fs.writeFileString(
 					path.join(pending, `${yield* hash(file)}.js`),
 					compile(file, text).code,
 				);
-			if (yield* fs.exists(options.out)) yield* fs.rename(options.out, backup);
+			}
+
+			if (yield* fs.exists(options.out)) {
+				yield* fs.rename(options.out, backup);
+			}
+
 			yield* fs.rename(pending, options.out).pipe(
 				Effect.catch((error) =>
 					Effect.gen(function* () {
-						if (yield* fs.exists(backup)) yield* fs.rename(backup, options.out);
+						if (yield* fs.exists(backup)) {
+							yield* fs.rename(backup, options.out);
+						}
+
 						return yield* Effect.fail(error);
 					}),
 				),

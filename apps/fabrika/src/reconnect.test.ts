@@ -25,11 +25,13 @@ const start = (): Reconnect => reconnectMachine.init(null, undefined)[0];
 const fold = (msgs: readonly Msg[], from: Reconnect = start()) => {
 	let s = from;
 	const steps: (readonly ReconnectCmd[])[] = [];
+
 	for (const msg of msgs) {
 		const [next, cmds] = applyCell<Reconnect, Msg, ReconnectCmd>(reconnectMachine, s, msg);
 		s = next;
 		steps.push(cmds);
 	}
+
 	return {s, steps};
 };
 

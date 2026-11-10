@@ -50,16 +50,21 @@ export const loadGhostty = Effect.tryPromise({
 			env: {
 				// Ghostty's own log: a text in its memory, at `at`, `length` bytes long.
 				log: (at: number, length: number) => {
-					if (memory !== null)
+					if (memory !== null) {
 						console.log(
 							"[ghostty-vt]",
 							new TextDecoder().decode(new Uint8Array(memory.buffer, at, length)),
 						);
+					}
 				},
 			},
 		});
 		const exported = instance.exports.memory;
-		if (exported instanceof WebAssembly.Memory) memory = exported;
+
+		if (exported instanceof WebAssembly.Memory) {
+			memory = exported;
+		}
+
 		return new Ghostty(instance);
 	},
 	catch: (cause) => new Error("the terminals could not start their screen", {cause}),
@@ -79,19 +84,27 @@ const sayingEvery = (ms: number, say: (now: string | null) => void) => {
 	let waiting: ReturnType<typeof setTimeout> | null = null;
 	let newest: string | null = null;
 	const stop = () => {
-		if (waiting !== null) clearTimeout(waiting);
+		if (waiting !== null) {
+			clearTimeout(waiting);
+		}
+
 		waiting = null;
 	};
 	const to = (now: string | null) => {
 		newest = now;
 		const since = Date.now() - last;
+
 		if (now === null || since >= ms) {
 			stop();
 			last = Date.now();
 			say(now);
 			return;
 		}
-		if (waiting !== null) return;
+
+		if (waiting !== null) {
+			return;
+		}
+
 		waiting = setTimeout(() => {
 			waiting = null;
 			last = Date.now();
@@ -146,7 +159,10 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		const p = document.createElement("p");
 		p.textContent = line;
 		said.append(p);
-		while (said.childElementCount > SAID_KEPT) said.firstElementChild?.remove();
+
+		while (said.childElementCount > SAID_KEPT) {
+			said.firstElementChild?.remove();
+		}
 	};
 
 	const make = () => {
@@ -175,14 +191,19 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	let keptLength = 0;
 	const keep = (bytes: string) => {
 		const reset = bytes.lastIndexOf(FULL_RESET);
+
 		if (reset >= 0) {
 			kept = [];
 			keptLength = 0;
 		}
+
 		const part = reset >= 0 ? bytes.slice(reset) : bytes;
 		kept.push(part);
 		keptLength += part.length;
-		while (keptLength > KEPT && kept.length > 1) keptLength -= kept.shift()?.length ?? 0;
+
+		while (keptLength > KEPT && kept.length > 1) {
+			keptLength -= kept.shift()?.length ?? 0;
+		}
 	};
 
 	/**
@@ -194,8 +215,11 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		const buffer = term.buffer.active;
 		const end = Math.min(buffer.length, buffer.length - term.rows + buffer.cursorY + 1);
 		const rows: string[] = [];
-		for (let y = Math.max(0, end - MIRRORED); y < end; y += 1)
+
+		for (let y = Math.max(0, end - MIRRORED); y < end; y += 1) {
 			rows.push(buffer.getLine(y)?.translateToString(true) ?? "");
+		}
+
 		text.textContent = rows.join("\n");
 	};
 	/**
@@ -204,7 +228,10 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	 */
 	let mirroring = false;
 	const mirrorSoon = () => {
-		if (mirroring) return;
+		if (mirroring) {
+			return;
+		}
+
 		mirroring = true;
 		requestAnimationFrame(() => {
 			mirroring = false;
@@ -238,7 +265,11 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		term.open(screen);
 		fit.fit();
 		term.wasmTerm?.write(FULL_RESET);
-		for (const bytes of kept) term.write(bytes);
+
+		for (const bytes of kept) {
+			term.write(bytes);
+		}
+
 		fit.observeResize();
 		term.onData((data) => window.fabrika.send(port, {type: "keys", data}));
 		term.onResize(({cols, rows}) => size(cols, rows));
@@ -261,32 +292,47 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		const focused = [old.textarea, old.element].some((at) => at !== undefined && at === active);
 		({term, fit} = make());
 		old.dispose();
-		if (!opened) return;
+
+		if (!opened) {
+			return;
+		}
+
 		const focus = term.focus;
-		if (!focused) term.focus = () => {};
+
+		if (!focused) {
+			term.focus = () => {};
+		}
+
 		try {
 			open();
 		} finally {
 			term.focus = focus;
 		}
+
 		if (focused) {
 			term.focus();
 			return;
 		}
+
 		const remade = term;
 		const nowhere = active === null || active === document.body;
 		const back = () => {
 			if (nowhere) {
 				const held = document.activeElement;
-				for (const at of [remade.textarea, remade.element])
-					if (at !== undefined && at === held) at.blur();
+
+				for (const at of [remade.textarea, remade.element]) {
+					if (at !== undefined && at === held) {
+						at.blur();
+					}
+				}
 			} else if (
 				typeof active === "object" &&
 				active !== null &&
 				"focus" in active &&
 				typeof active.focus === "function"
-			)
+			) {
 				active.focus();
+			}
 		};
 		back();
 		// A focus queued before the remake can still be waiting from the old terminal.
@@ -297,21 +343,32 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 
 	return {
 		attach: (slot) => {
-			if (element.parentElement !== slot) slot.append(element);
-			if (opened) return fit.fit();
+			if (element.parentElement !== slot) {
+				slot.append(element);
+			}
+
+			if (opened) {
+				return fit.fit();
+			}
+
 			opened = true;
 			open();
 			// Heard only once it is open: the bytes that came before wait in the preload, in order.
 			window.fabrika.onMessage(port, (raw) => {
 				const read = readToTerminal(raw);
+
 				if (read.kind === "refused") {
 					console.warn(`fabrika: refused a message for ${tile}: ${read.why}`);
 					return;
 				}
+
 				const {msg} = read;
-				if (msg.type === "status") statusTo(msg.text);
-				else if (msg.type === "said") sayLine(msg.text);
-				else {
+
+				if (msg.type === "status") {
+					statusTo(msg.text);
+				} else if (msg.type === "said") {
+					sayLine(msg.text);
+				} else {
 					keep(msg.data);
 					term.write(msg.data, mirrorSoon);
 				}

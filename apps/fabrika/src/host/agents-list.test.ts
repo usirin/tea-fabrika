@@ -67,9 +67,14 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 1000; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
@@ -126,6 +131,7 @@ describe("programsFor: the list an agent is served", () => {
 		expect(doors.host.readOnly).toBeNull();
 		expect(doors.own.readOnly).toBeNull();
 		expect(doors.readOnly.readOnly).toEqual({why: "no key here"});
+
 		for (const served of Object.values(doors)) {
 			expect(personOnlyIn(served.list)).toEqual([]);
 			// The tracker is still served, with the inputs anyone may tell.

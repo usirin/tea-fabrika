@@ -18,10 +18,15 @@ export const endTalk = (
 	round: number,
 	problems: readonly string[],
 ): EndTalk | null => {
-	if (problems.length === 0) return null;
+	if (problems.length === 0) {
+		return null;
+	}
+
 	// `send_back` is no matter here: it changes only where a red head goes, and a red head is a send.
-	if (outcome.kind === "stuck" && !("ask" in after(step, outcome, round)))
+	if (outcome.kind === "stuck" && !("ask" in after(step, outcome, round))) {
 		return {kind: "stuck", body: `${step} is stuck. ${problems.join(" ").slice(0, 2_000)}`};
+	}
+
 	return outcome.kind === "ask" || outcome.kind === "stuck"
 		? {kind: "found", body: problems.join("\n")}
 		: null;

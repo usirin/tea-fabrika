@@ -85,13 +85,28 @@ export const sample = ({
 	const ranges: string[] = [];
 	const eligibleSet = new Set(eligible);
 	const take = (candidate: Candidate) => {
-		if (selected.has(candidate)) return false;
+		if (selected.has(candidate)) {
+			return false;
+		}
+
 		const enclosed = candidates.filter((other) => encloses(candidate, other));
-		if (enclosed.some((other) => !eligibleSet.has(other))) return false;
+
+		if (enclosed.some((other) => !eligibleSet.has(other))) {
+			return false;
+		}
+
 		const added = enclosed.filter((other) => !selected.has(other));
-		if (selected.size + added.length > cap) return false;
+
+		if (selected.size + added.length > cap) {
+			return false;
+		}
+
 		ranges.push(range(candidate));
-		for (const other of added) selected.add(other);
+
+		for (const other of added) {
+			selected.add(other);
+		}
+
 		return true;
 	};
 	// First picks go round-robin across changed files, in line order within each file, so a cap
@@ -103,12 +118,17 @@ export const sample = ({
 	const lines = Array.from({length: Math.max(0, ...queues.map((q) => q.length))}, (_, turn) =>
 		queues.flatMap((queue) => (turn < queue.length ? [queue[turn]] : [])),
 	).flat();
+
 	for (const line of lines) {
 		if (![...selected].some((candidate) => touches(candidate, line))) {
 			ordered.find((candidate) => touches(candidate, line) && take(candidate));
 		}
 	}
-	for (const candidate of ordered) take(candidate);
+
+	for (const candidate of ordered) {
+		take(candidate);
+	}
+
 	return Schema.decodeUnknownSync(Sample)({
 		seed,
 		ranges,
@@ -127,7 +147,11 @@ if (import.meta.main) {
 			report: {type: "string"},
 		},
 	});
-	if (!values.build || !values.report) throw new Error("sample: --build and --report are required");
+
+	if (!values.build || !values.report) {
+		throw new Error("sample: --build and --report are required");
+	}
+
 	const seed = Schema.decodeUnknownSync(Schema.Int)(Number(values.seed));
 	const max = Schema.decodeUnknownSync(Count)(Number(values.max));
 	const diff = execFileSync(
@@ -151,14 +175,23 @@ if (import.meta.main) {
 	);
 	const changed: Changed[] = [];
 	let file = "";
+
 	for (const line of diff.split("\n")) {
-		if (line.startsWith("+++ b/")) file = line.slice(6);
+		if (line.startsWith("+++ b/")) {
+			file = line.slice(6);
+		}
+
 		const hunk = /^@@ .* \+(\d+)(?:,(\d+))? @@/.exec(line);
+
 		if (hunk) {
 			const start = Number(hunk[1]);
-			for (let n = 0; n < Number(hunk[2] ?? 1); n++) changed.push({file, line: start + n});
+
+			for (let n = 0; n < Number(hunk[2] ?? 1); n++) {
+				changed.push({file, line: start + n});
+			}
 		}
 	}
+
 	// Resolve from the package that owns the installed Instrumenter; no root dependency is added.
 	const require = createRequire(resolve("packages/pipeline/package.json"));
 	const {Instrumenter} = await import(
@@ -194,8 +227,10 @@ if (import.meta.main) {
 	const report = sample({candidates, changed, seed, max});
 	writeFileSync(values.report, `${Schema.encodeSync(Schema.fromJsonString(Sample))(report)}\n`);
 	console.log(report.ranges.map((item) => JSON.stringify(item)).join(","));
-	if (report.left)
+
+	if (report.left) {
 		console.error(
 			`sample: ${report.left} of ${report.total} mutants left outside the cap; see ${values.report}`,
 		);
+	}
 }

@@ -27,7 +27,11 @@ export const holderOf = (ticket: TicketId): Effect.Effect<LaneId | null, never, 
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const lease = yield* steady("read a lease", ledger.lease(ticketName(ticket)));
-		if (lease === null || lease.expires_at <= Date.now()) return null;
+
+		if (lease === null || lease.expires_at <= Date.now()) {
+			return null;
+		}
+
 		// Past a door, the holder is the lane, then who claimed it (`hostOf`).
 		return readLaneId(hostOf(lease.holder)) ?? (yield* Effect.die(`not a lane: ${lease.holder}`));
 	});
@@ -102,25 +106,36 @@ export const layerLanes = (o: LanesOptions = {}) =>
 					const every = ttlMs / 3;
 					let until = claimedUntil;
 					let away = false;
+
 					for (;;) {
 						yield* Effect.sleep(Duration.millis(away ? Math.min(1000, every) : every));
 						const sentAt = Date.now();
 						const r = yield* ledger.renew(ticketName(ticket), fence, ttlMs).pipe(Effect.result);
+
 						if (r._tag === "Success") {
 							until = Math.max(until, sentAt + ttlMs);
 							away = false;
 							continue;
 						}
+
 						// No answer: the fence holds until another lane claims, so ask again soon.
 						if (r.failure._tag === "LedgerUnreachable") {
 							away = true;
-							if (Date.now() < until + graceMs) continue;
+
+							if (Date.now() < until + graceMs) {
+								continue;
+							}
+
 							yield* Effect.logWarning(
 								`${ticketName(ticket)}: no word from the ledger for ${Math.round(graceMs / 1000)} s past the lease's end; the lane lets its ticket go`,
 							);
 						}
+
 						// Lost, cancelled, or the lease clock ran out: this process holds the ticket no more.
-						if (held.get(ticket)?.fence === fence) held.delete(ticket);
+						if (held.get(ticket)?.fence === fence) {
+							held.delete(ticket);
+						}
+
 						return;
 					}
 				});
@@ -128,15 +143,21 @@ export const layerLanes = (o: LanesOptions = {}) =>
 			const claim = (ticket: TicketId, lane: LaneId) =>
 				Effect.gen(function* () {
 					const mine = held.get(ticket);
-					if (mine !== undefined) return mine.lane;
+
+					if (mine !== undefined) {
+						return mine.lane;
+					}
+
 					const name = ticketName(ticket);
 					yield* ensureName(name, lane);
 					let rev = (yield* steady("read a registry", ledger.readLast(name, 1)))[0]?.rev ?? 0;
+
 					for (;;) {
 						const sentAt = Date.now();
 						const r = yield* steady("claim", ledger.claim(name, lane, rev, ttlMs)).pipe(
 							Effect.result,
 						);
+
 						if (r._tag === "Success") {
 							held.set(ticket, {lane, fence: r.success.fence});
 							yield* FiberMap.run(
@@ -145,15 +166,24 @@ export const layerLanes = (o: LanesOptions = {}) =>
 							)(renewing(ticket, r.success.fence, sentAt + ttlMs));
 							return lane;
 						}
+
 						const e = r.failure;
+
 						switch (e._tag) {
 							case "Stale":
 								rev = e.rev;
 								continue;
 							case "Held": {
 								const holder = readLaneId(hostOf(e.holder));
-								if (holder === null) return yield* Effect.die(`not a lane: ${e.holder}`);
-								if (holder !== lane) return holder;
+
+								if (holder === null) {
+									return yield* Effect.die(`not a lane: ${e.holder}`);
+								}
+
+								if (holder !== lane) {
+									return holder;
+								}
+
 								// Its own lease from before a crash: no fence here, so wait it out.
 								yield* Effect.sleep(Duration.millis(Math.max(1, e.expiresAt - Date.now() + 1)));
 								continue;
@@ -167,7 +197,11 @@ export const layerLanes = (o: LanesOptions = {}) =>
 			const release = (ticket: TicketId, lane: LaneId) =>
 				Effect.gen(function* () {
 					const mine = held.get(ticket);
-					if (mine === undefined || mine.lane !== lane) return;
+
+					if (mine === undefined || mine.lane !== lane) {
+						return;
+					}
+
 					const name = ticketName(ticket);
 					yield* drop(ticket);
 					yield* appendFact({type: "released", ticket, lane}, {name, fence: mine.fence}).pipe(
@@ -181,13 +215,24 @@ export const layerLanes = (o: LanesOptions = {}) =>
 			const holding = (ticket: TicketId, lane: LaneId) =>
 				Effect.gen(function* () {
 					const mine = held.get(ticket);
-					if (mine === undefined) return (yield* claim(ticket, lane)) === lane;
-					if (mine.lane !== lane) return false;
+
+					if (mine === undefined) {
+						return (yield* claim(ticket, lane)) === lane;
+					}
+
+					if (mine.lane !== lane) {
+						return false;
+					}
+
 					const renewed = yield* steady(
 						"renew",
 						ledger.renew(ticketName(ticket), mine.fence, ttlMs),
 					).pipe(Effect.result);
-					if (renewed._tag === "Success") return true;
+
+					if (renewed._tag === "Success") {
+						return true;
+					}
+
 					yield* drop(ticket);
 					return false;
 				});

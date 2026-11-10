@@ -45,6 +45,7 @@ const laws = (cell: string) => table(["Law", "Generator", "Plant"], [["holds", c
 
 const check = (body: string, marker = "Plancheck-Version: 2") => {
 	const folder = mkdtempSync(join(tmpdir(), "pc-"));
+
 	try {
 		const plan = join(folder, "plan.md");
 		writeFileSync(plan, `Approved by the lead agent, builds ticket 520.\n\n${marker}\n\n${body}\n`);
@@ -67,6 +68,7 @@ const word = fc.stringMatching(/^[a-z][a-z0-9]{0,8}$/);
 
 const handoff = (text: string, draft = false) => {
 	const folder = mkdtempSync(join(tmpdir(), "pc-300-"));
+
 	try {
 		const plan = join(folder, "plan.md");
 		writeFileSync(plan, text);
@@ -336,7 +338,10 @@ describe("plancheck, today's tooling", () => {
 					const body = `${table(heads, [heads.map((head) => row[head]!)])}\n\n\`\`\`md\n${laws("TBD")}\n\`\`\`\n\n${even}`;
 					const got = check(body);
 					expect(got.code, got.text).toBe(valid ? 0 : 1);
-					if (!valid) expect(got.text).toContain("line 7:");
+
+					if (!valid) {
+						expect(got.text).toContain("line 7:");
+					}
 				},
 			),
 			{
@@ -364,7 +369,11 @@ describe("plancheck, today's tooling", () => {
 				}),
 				({marker, cells}) => {
 					const rows = cells.map((c) => ["holds", c.text, "break"]);
-					if (!marker) rows.push(["legacy law", "none", "old law"]);
+
+					if (!marker) {
+						rows.push(["legacy law", "none", "old law"]);
+					}
+
 					const body = table(["Law", "Generator", "Plant"], rows);
 					const got = check(body, marker);
 					const pass =
@@ -719,10 +728,12 @@ describe("plancheck, today's tooling", () => {
 				}),
 				({picked, separators, owner, possessive, why}) => {
 					const words = picked.map(({path, wrap}) => wraps[wrap](path));
+
 					if (possessive) {
 						const at = possessive.at % words.length;
 						words[at] = `${possessive.name}'s ${words[at]}`;
 					}
+
 					const other = possessive !== undefined && !possessive.repo;
 					const cell = words.reduce((joined, p, i) => `${joined}${separators[i - 1]}${p}`);
 					const counted = picked
@@ -732,6 +743,7 @@ describe("plancheck, today's tooling", () => {
 					const line = (p: string) => `${p} is an exam path owned by ${owner}, not tests`;
 					const ran = check(table(["File", "Why", "Owner step"], [[cell, why, owner]]));
 					expect(ran.code, `${cell}\n${ran.text}`).toBe(wrong && counted.length > 0 ? 1 : 0);
+
 					for (const {path} of picked) {
 						expect(ran.text.includes(line(path)), `${path} in ${cell}\n${ran.text}`).toBe(
 							wrong && counted.includes(path),
@@ -875,6 +887,7 @@ describe("plancheck, today's tooling", () => {
 					const bad = rows.some(
 						(r) => !r.owner || (r.path !== "src/plain.ts" && r.owner !== "tests"),
 					);
+
 					for (const marker of ["", "Plancheck-Version: 2"]) {
 						const got = check(
 							table(
@@ -936,6 +949,7 @@ const approved = (body: string, note = "the decided note") =>
 
 const modeCheck = (text: string, mode: "--draft" | "--approved") => {
 	const folder = mkdtempSync(join(tmpdir(), "pc-321-"));
+
 	try {
 		const path = join(folder, "plan.md");
 		writeFileSync(path, Buffer.from(text));
@@ -962,6 +976,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
 				const body = complete(`\n${title}\n`);
 				const good = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
 				expect(good.code, good.text).toBe(0);
+
 				for (const part of [
 					"```text\nplan -> check -> approve\n```\n",
 					`## Laws\n${laws("fc.record: generated inputs")}\n`,
@@ -998,6 +1013,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
 					const good = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
 					expect(good.code, good.text).toBe(0);
 				}
+
 				for (const body of [
 					complete().replace("85%", "sure"),
 					complete().replace("None.", `1. ${text}? Lean yes, ${percent}%.\n2. Another?`),
@@ -1065,6 +1081,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
 					expect(draft.text).toContain(digest(body));
 					const good = modeCheck(approved(body), "--approved");
 					expect(good.code, good.text).toBe(0);
+
 					for (const edited of [
 						`${body}\n`,
 						body.replace(text, `${text}x`),
@@ -1107,6 +1124,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
 				const first = approved(body, note).split("\n")[0]!;
 				const good = modeCheck(approved(body, note), "--approved");
 				expect(good.code, good.text).toBe(0);
+
 				for (const line of [
 					"",
 					first.replace("lead agent", "driver"),
@@ -1118,6 +1136,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
 					const bad = modeCheck(`${line}\nPlancheck-Version: 2\n${body}`, "--approved");
 					expect(bad.code, bad.text).toBe(1);
 				}
+
 				const duplicate = `${body}\n${first}\n`;
 				expect(modeCheck(approved(duplicate), "--approved").code).toBe(1);
 			}),
@@ -1134,17 +1153,23 @@ describe("T325 K6 plancheck, today's tooling", () => {
 				fc.record({suffix: word, leak: fc.boolean(), draft: fc.boolean()}),
 				({suffix, leak, draft}) => {
 					const dir = mkdtempSync(join(tmpdir(), "pc-leak-"));
+
 					try {
 						const root = join(dir, "repo"),
 							scripts = join(root, ".agents/skills");
-						for (const part of ["plan", "lead", "step-commit"])
+
+						for (const part of ["plan", "lead", "step-commit"]) {
 							mkdirSync(join(scripts, part, "scripts"), {recursive: true});
+						}
+
 						for (const file of [
 							"plan/scripts/plancheck.sh",
 							"lead/scripts/leakgrep.sh",
 							"step-commit/scripts/exam.py",
-						])
+						]) {
 							cpSync(join(import.meta.dirname, "../..", file), join(scripts, file));
+						}
+
 						cpSync(
 							join(import.meta.dirname, "../../../../exam-paths.json"),
 							join(root, "exam-paths.json"),

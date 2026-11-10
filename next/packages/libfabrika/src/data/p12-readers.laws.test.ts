@@ -36,7 +36,7 @@ const typed = (exit: Exit.Exit<unknown, unknown>) => {
 	});
 };
 
-for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as const)
+for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as const) {
 	it(`record ${reader} decoder refuses malformed disk rows with a typed failure`, async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.string(), async (text) => {
@@ -48,28 +48,43 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
 					...real,
 					exec: (query, ...args) => {
 						const rows = real.exec(query, ...args);
-						if (corrupt && reader === "kept" && query.includes("SELECT * FROM content"))
+
+						if (corrupt && reader === "kept" && query.includes("SELECT * FROM content")) {
 							return rows.map((r) => ({...r, message: text.length}));
+						}
+
 						return corrupt && reader === "seq" && query.includes("rowid AS seq")
 							? rows.map((r) => ({...r, seq: text}))
 							: rows;
 					},
 				};
+
 				try {
 					const part = recordPart(sql, {_tag: "spans"}, 0, 1_000_000_000);
 					await Effect.runPromise(part.write([{span, content: "deletable message"}]));
-					if (reader === "span") db.prepare("UPDATE spans SET attributes=?").run(`${text}!`);
-					if (reader === "state") db.prepare("UPDATE content SET state=?").run(`unknown-${text}`);
-					if (reader === "deleted")
+
+					if (reader === "span") {
+						db.prepare("UPDATE spans SET attributes=?").run(`${text}!`);
+					}
+
+					if (reader === "state") {
+						db.prepare("UPDATE content SET state=?").run(`unknown-${text}`);
+					}
+
+					if (reader === "deleted") {
 						db.prepare(
 							"UPDATE content SET state='deleted', at=?, \"by\"='actor', why='requested'",
 						).run(`bad-${text}`);
-					if (reader === "rolled")
+					}
+
+					if (reader === "rolled") {
 						db.prepare("INSERT INTO rolled (one,part,next,bytes) VALUES (1,?,?,?)").run(
 							`bad-${text}`,
 							"spans/1",
 							1,
 						);
+					}
+
 					corrupt = true;
 					typed(
 						await Effect.runPromiseExit(
@@ -85,20 +100,26 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
 			{seed: 119120, numRuns: 20},
 		);
 	});
+}
 
-for (const reader of ["chain", "row", "part"] as const)
+for (const reader of ["chain", "row", "part"] as const) {
 	it(`sink ${reader} decoder refuses malformed saved rows and keeps the unsent span`, async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.string(), async (text) => {
 				const db = new DatabaseSync(":memory:"),
 					sql = nodeSql(db);
+
 				try {
 					await Effect.runPromise(
 						Effect.gen(function* () {
 							yield* Effect.void.pipe(Effect.withSpan("parse.test"));
-							if (reader === "part")
+
+							if (reader === "part") {
 								db.prepare("INSERT INTO parts (chain,part) VALUES ('spans',?)").run(`bad-${text}`);
-							else db.prepare(`UPDATE unsent SET ${reader}=?`).run(`${text}!`);
+							} else {
+								db.prepare(`UPDATE unsent SET ${reader}=?`).run(`${text}!`);
+							}
+
 							typed(yield* SpanSink.use((sink) => sink.flush).pipe(Effect.exit));
 							expect(db.prepare("SELECT count(*) AS n FROM unsent").get()?.n).toBe(1);
 						}).pipe(
@@ -118,3 +139,4 @@ for (const reader of ["chain", "row", "part"] as const)
 			{seed: 119120, numRuns: 20},
 		);
 	});
+}

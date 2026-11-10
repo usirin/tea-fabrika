@@ -1,3 +1,0 @@
-p2-types.ts(4,39): error TS2345: Argument of type 'EffectRuntime<{ count: number; }, { type: "inc"; }, never, never>' is not assignable to parameter of type 'BootedRunHandle<{ count: number; }, { type: "inc"; }, never>'.
-  Types of property 'ready' are incompatible.
-    Type 'Effect<EffectRuntime<{ count: number; }, { type: "inc"; }, never, never>, StoreFailed, never>' is missing the following properties from type 'Promise<BootedRunHandle<{ count: number; }, { type: "inc"; }, never>>': then, catch, finally, [Symbol.toStringTag]

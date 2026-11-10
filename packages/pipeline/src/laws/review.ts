@@ -201,36 +201,71 @@ export function reviewLaws<S extends Review>(): readonly Law<S, Msg, ReviewCmd>[
 			(memory, step) => {
 				const pack = lastPack(memory, step);
 				const end = decided(step);
-				if (end === null || end.outcome.kind !== "done") return pack;
+
+				if (end === null || end.outcome.kind !== "done") {
+					return pack;
+				}
+
 				const {msg} = step;
-				if (msg.type !== "review_reviewed") return broke(`done on ${msg.type}, with no form`);
+
+				if (msg.type !== "review_reviewed") {
+					return broke(`done on ${msg.type}, with no form`);
+				}
+
 				const unmet = (pack?.criteria ?? []).filter(
 					(c) => !msg.form.rows.some((row) => row.id === c.id && row.grade === "pass"),
 				);
-				if (unmet.length > 0)
+
+				if (unmet.length > 0) {
 					return broke(
 						`done, and criteria ${unmet.map((c) => c.id).join(", ")} have no pass row in the form`,
 					);
-				if (msg.form.findings.length > 0) return broke("done, and the form has open findings");
-				if (pack === null || pack.checks.state !== "green")
+				}
+
+				if (msg.form.findings.length > 0) {
+					return broke("done, and the form has open findings");
+				}
+
+				if (pack === null || pack.checks.state !== "green") {
 					return broke(`done, and the checks were ${pack?.checks.state ?? "never read"}`);
-				if (end.outcome.head !== pack.head)
+				}
+
+				if (end.outcome.head !== pack.head) {
 					return broke(`done at ${end.outcome.head}, and the pack was read at ${pack.head}`);
-				if (criteriaOfEnd(end).some((c) => c.state !== "met"))
+				}
+
+				if (criteriaOfEnd(end).some((c) => c.state !== "met")) {
 					return broke("done, and a criterion is open");
+				}
+
 				return pack;
 			},
 		),
 		law<S, Msg, ReviewCmd>("a form for another head or an old run never counts", (step) => {
 			const {msg, prev} = step;
-			if (msg.type !== "review_reviewed" && msg.type !== "review_failed") return null;
-			if (prev.phase !== "reviewing") return null;
-			if (structuralHash(step.next) === structuralHash(prev)) return null;
-			if (msg.head !== prev.brief.head || msg.run !== prev.run)
+
+			if (msg.type !== "review_reviewed" && msg.type !== "review_failed") {
+				return null;
+			}
+
+			if (prev.phase !== "reviewing") {
+				return null;
+			}
+
+			if (structuralHash(step.next) === structuralHash(prev)) {
+				return null;
+			}
+
+			if (msg.head !== prev.brief.head || msg.run !== prev.run) {
 				return `a form from ${msg.head} run ${msg.run} was used for ${prev.brief.head} run ${prev.run}`;
+			}
+
 			const end = decided(step);
-			if (end !== null && headOfEnd(end) !== prev.brief.head)
+
+			if (end !== null && headOfEnd(end) !== prev.brief.head) {
 				return `the report is about ${headOfEnd(end)}, and ${prev.brief.head} was reviewed`;
+			}
+
 			return null;
 		}),
 		agree<S, Msg, ReviewCmd>(
@@ -238,8 +273,11 @@ export function reviewLaws<S extends Review>(): readonly Law<S, Msg, ReviewCmd>[
 			(step) => {
 				const {msg, prev} = step;
 				const end = decided(step);
-				if (end === null || msg.type !== "review_reviewed" || prev.phase !== "reviewing")
+
+				if (end === null || msg.type !== "review_reviewed" || prev.phase !== "reviewing") {
 					return null;
+				}
+
 				const {deviations, ...rest} = prev.brief;
 				const criteria = criteriaOfEnd(end)
 					.map((c) => `${c.from === "ticket" ? c.id : "added"} "${c.text}" ${c.state}`)
@@ -253,18 +291,34 @@ export function reviewLaws<S extends Review>(): readonly Law<S, Msg, ReviewCmd>[
 		),
 		law<S, Msg, ReviewCmd>("a criterion's id, version and words are the ticket's", (step) => {
 			const end = decided(step);
+
 			// A review that ended with no usable form judged no criterion: there is nothing to compare.
-			if (end === null || step.prev.phase !== "reviewing" || end.outcome.kind === "stuck")
+			if (end === null || step.prev.phase !== "reviewing" || end.outcome.kind === "stuck") {
 				return null;
-			const ticket = step.prev.brief.criteria;
-			for (const c of criteriaOfEnd(end)) {
-				if (c.from !== "ticket") continue;
-				const t = ticket.find((x) => x.id === c.id);
-				if (t === undefined) return `criterion ${c.id} is not the ticket's`;
-				if (t.version !== c.version)
-					return `criterion ${c.id} was judged at v${c.version}, and the ticket's is v${t.version}`;
-				if (t.text !== c.text) return `criterion ${c.id} reads "${c.text}"`;
 			}
+
+			const ticket = step.prev.brief.criteria;
+
+			for (const c of criteriaOfEnd(end)) {
+				if (c.from !== "ticket") {
+					continue;
+				}
+
+				const t = ticket.find((x) => x.id === c.id);
+
+				if (t === undefined) {
+					return `criterion ${c.id} is not the ticket's`;
+				}
+
+				if (t.version !== c.version) {
+					return `criterion ${c.id} was judged at v${c.version}, and the ticket's is v${t.version}`;
+				}
+
+				if (t.text !== c.text) {
+					return `criterion ${c.id} reads "${c.text}"`;
+				}
+			}
+
 			const missing = ticket.filter(
 				(t) => !criteriaOfEnd(end).some((c) => c.from === "ticket" && c.id === t.id),
 			);
@@ -274,8 +328,11 @@ export function reviewLaws<S extends Review>(): readonly Law<S, Msg, ReviewCmd>[
 		}),
 		law<S, Msg, ReviewCmd>("a pass with a named limit leaves the criterion open", (step) => {
 			const end = decided(step);
-			if (end === null || end.outcome.kind !== "done" || step.msg.type !== "review_reviewed")
+
+			if (end === null || end.outcome.kind !== "done" || step.msg.type !== "review_reviewed") {
 				return null;
+			}
+
 			const limited = step.msg.form.rows.flatMap((row) =>
 				row.grade === "pass" && row.limit !== null ? [`${row.id} ("${row.limit}")`] : [],
 			);
@@ -356,8 +413,10 @@ export const deviationExcuses: Update<Review, Msg, ReviewCmd> = (s, m) => {
 		m.type !== "review_reviewed" ||
 		s.phase !== "reviewing" ||
 		s.brief.deviations.state !== "listed"
-	)
+	) {
 		return reviewUpdate(s, m);
+	}
+
 	const form: Form = {
 		...m.form,
 		rows: m.form.rows.map((row): Row => (row.grade === "fail" ? passOf(row) : row)),
@@ -369,8 +428,11 @@ export const deviationExcuses: Update<Review, Msg, ReviewCmd> = (s, m) => {
 /** The report takes a criterion's words from the builder's deviations. */
 export const rewordsFromDeviations: Update<Review, Msg, ReviewCmd> = (s, m) => {
 	const [next, cmds] = reviewUpdate(s, m);
-	if (next.phase !== "over" || s.phase !== "reviewing" || s.brief.deviations.state !== "listed")
+
+	if (next.phase !== "over" || s.phase !== "reviewing" || s.brief.deviations.state !== "listed") {
 		return [next, cmds];
+	}
+
 	const text = s.brief.deviations.text;
 	const criteria = next.report.criteria.map((c) =>
 		c.from === "ticket" && c.id === id(1) ? {...c, text} : c,
@@ -381,7 +443,11 @@ export const rewordsFromDeviations: Update<Review, Msg, ReviewCmd> = (s, m) => {
 /** The verdict says every criterion was judged at its first version, though c2 was said again. */
 export const judgesTheFirstVersion: Update<Review, Msg, ReviewCmd> = (s, m) => {
 	const [next, cmds] = reviewUpdate(s, m);
-	if (next.phase !== "over") return [next, cmds];
+
+	if (next.phase !== "over") {
+		return [next, cmds];
+	}
+
 	const criteria = next.report.criteria.map((c) => (c.from === "ticket" ? {...c, version: 1} : c));
 	return [{...next, report: {...next.report, criteria}}, cmds];
 };

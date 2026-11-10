@@ -83,13 +83,19 @@ describe("edge-comment", async () => {
 	it("refuses each wrong edge comment, at the top of the file", () => {
 		const refused = Object.entries(CASES).filter(([, [, , no]]) => no);
 		expect(refused).toHaveLength(8);
-		for (const [name] of refused) expect([name, all(CODE, at(name))]).toEqual([name, [1]]);
+
+		for (const [name] of refused) {
+			expect([name, all(CODE, at(name))]).toEqual([name, [1]]);
+		}
 	});
 
 	it("passes a right one for each rule and for both, and leaves other comments alone", () => {
 		const passed = Object.entries(CASES).filter(([, [, , no]]) => !no);
 		expect(passed).toHaveLength(4);
-		for (const [name] of passed) expect([name, all(CODE, at(name))]).toEqual([name, []]);
+
+		for (const [name] of passed) {
+			expect([name, all(CODE, at(name))]).toEqual([name, []]);
+		}
 	});
 
 	it("speaks alone: the line under each comment is silenced and no comment is unused", () => {
@@ -133,8 +139,15 @@ const toValue = (node: Tree): unknown => {
 			node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]),
 		);
 	}
-	if (node.type === "ArrayExpression") return node.elements.map(toValue);
-	if (node.type === "Literal") return node.value;
+
+	if (node.type === "ArrayExpression") {
+		return node.elements.map(toValue);
+	}
+
+	if (node.type === "Literal") {
+		return node.value;
+	}
+
 	throw new Error(`.oxlintrc.json holds a ${node.type}`);
 };
 
@@ -153,12 +166,19 @@ describe(".oxlintrc.json", () => {
 
 	it("turns the three rules on in next/**", () => {
 		const next = config.overrides.find((o) => o.files.length === 1 && o.files[0] === "next/**");
-		for (const rule of RULES) expect([rule, next?.rules[rule]]).toEqual([rule, "error"]);
+
+		for (const rule of RULES) {
+			expect([rule, next?.rules[rule]]).toEqual([rule, "error"]);
+		}
 	});
 
 	it("turns an edge rule off only for next/'s tests, and ignores no next/ path", () => {
 		const loosened = config.overrides.filter((o) => RULES.some((rule) => off(o.rules[rule])));
-		for (const o of loosened) expect(o.files.filter((f) => !TESTS.includes(f))).toEqual([]);
+
+		for (const o of loosened) {
+			expect(o.files.filter((f) => !TESTS.includes(f))).toEqual([]);
+		}
+
 		expect(config.ignorePatterns.filter((p) => p.startsWith("next"))).toEqual([]);
 	});
 });

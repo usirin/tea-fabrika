@@ -72,6 +72,7 @@ it("dev refuses every invalid parent with reason parent_gone before touching set
 			const touched = vi.fn(() => Effect.never);
 			cli.layer = Layer.merge(FileSystem.layerNoop({makeDirectory: touched}), Path.layer);
 			process.argv = [process.execPath, "dev.ts", "--child", `--parent=${parent}`];
+
 			try {
 				vi.resetModules();
 				await import("../dev.ts");
@@ -115,12 +116,18 @@ it("dev defaults to a scoped detached child and reports its nonzero exit as chil
 			);
 			cli.layer = Layer.mergeAll(FileSystem.layerNoop({}), Path.layer, spawn);
 			process.argv = [process.execPath, "dev.ts", "--name", name];
+
 			try {
 				vi.resetModules();
 				await import("../dev.ts");
 				const exit = await Effect.runPromiseExit(cli.work!);
-				if (code === 0) expect(Exit.isSuccess(exit)).toBe(true);
-				else stageFailure(exit, "child_failed");
+
+				if (code === 0) {
+					expect(Exit.isSuccess(exit)).toBe(true);
+				} else {
+					stageFailure(exit, "child_failed");
+				}
+
 				expect(commands).toHaveLength(1);
 				expect(commands[0]).toMatchObject({
 					_tag: "StandardCommand",
@@ -150,7 +157,7 @@ it("dev defaults to a scoped detached child and reports its nonzero exit as chil
 	);
 });
 
-for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as const)
+for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as const) {
 	it(`dev reports ${edge} failure with reason settings and never starts a build`, async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.uuid(), async (name) => {
@@ -180,6 +187,7 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
 				vi.stubEnv("FABRIKA_HOME", folder);
 				cli.layer = Layer.merge(fs, Path.layer);
 				process.argv = [process.execPath, "dev.ts", "--child", `--parent=${process.ppid}`];
+
 				try {
 					vi.resetModules();
 					await import("../dev.ts");
@@ -195,6 +203,7 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
 			{seed: 119120, numRuns: 10},
 		);
 	});
+}
 
 // Bundler output is platform input here. Compiler behavior has its own real-build laws.
 vi.mock("@kampus/libfabrika/node/build", async (original) => ({
@@ -239,11 +248,12 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
 		calls.push([name, ...args]);
 	};
 	const move = (from: string, to: string) => {
-		for (const [path, text] of [...files])
+		for (const [path, text] of [...files]) {
 			if (path === from || path.startsWith(`${from}/`)) {
 				files.delete(path);
 				files.set(to + path.slice(from.length), text);
 			}
+		}
 	};
 	const write = (path: string, text: string) =>
 		Effect.sync(() => {
@@ -278,7 +288,8 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
 		rename: (from, to) =>
 			Effect.suspend(() => {
 				note("rename", from, to);
-				if (failPublish && from === pending && to === out)
+
+				if (failPublish && from === pending && to === out) {
 					return Effect.fail(
 						PlatformError.systemError({
 							module: "FileSystem",
@@ -287,14 +298,20 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
 							pathOrDescriptor: from,
 						}),
 					);
+				}
+
 				move(from, to);
 				return Effect.void;
 			}),
 		remove: (path) =>
 			Effect.sync(() => {
 				note("remove", path);
-				for (const file of files.keys())
-					if (file === path || file.startsWith(`${path}/`)) files.delete(file);
+
+				for (const file of files.keys()) {
+					if (file === path || file.startsWith(`${path}/`)) {
+						files.delete(file);
+					}
+				}
 			}),
 	});
 	const path = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
@@ -311,7 +328,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
 	return {out, pending, backup, files, calls, paths, modes, layer};
 };
 
-for (const failed of [false, true])
+for (const failed of [false, true]) {
 	it(`build reads and publishes through FileSystem, preserving write and rollback order: ${failed ? "rename fails" : "success"}`, async () => {
 		await fc.assert(
 			fc.asyncProperty(generated, async ({name, label}) => {
@@ -323,6 +340,7 @@ for (const failed of [false, true])
 				mkdirSync(w.out);
 				writeFileSync(join(w.out, "brain.mjs"), "last good");
 				writeFileSync(source, text);
+
 				try {
 					const result = await Effect.runPromiseExit(
 						build({out: w.out, files: [source]}).pipe(Effect.provide(w.layer)),
@@ -350,11 +368,13 @@ for (const failed of [false, true])
 					expect(Exit.isFailure(result)).toBe(failed);
 					const cause = Exit.isFailure(result) ? result.cause : Cause.empty;
 					expect(Cause.hasDies(cause)).toBe(false);
-					if (failed)
+
+					if (failed) {
 						expect(Cause.findErrorOption(cause)).toMatchObject({
 							_tag: "Some",
 							value: {_tag: "BuildError", reason: "publish"},
 						});
+					}
 				} finally {
 					rmSync(folder, {recursive: true, force: true});
 				}
@@ -362,6 +382,7 @@ for (const failed of [false, true])
 			{seed: 119120, numRuns: 10, examples: [[boundary]]},
 		);
 	});
+}
 
 it("dev chooses flags, saved settings or defaults and saves with mode 0600 before building", async () => {
 	await fc.assert(
@@ -390,7 +411,11 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
 					build: "old",
 				};
 				const w = recorded(folder, source, "export const view = 1;", false);
-				if (choices.saved) w.files.set(file, JSON.stringify(saved));
+
+				if (choices.saved) {
+					w.files.set(file, JSON.stringify(saved));
+				}
+
 				writeFileSync(source, "export const view = 1;");
 				const argv = process.argv;
 				vi.stubEnv("FABRIKA_HOME", folder);
@@ -417,6 +442,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
 						choices.inline ? [`--${field}=${value}`] : [`--${field}`, String(value)],
 					),
 				];
+
 				try {
 					vi.resetModules();
 					await import("../dev.ts");
@@ -476,6 +502,7 @@ it("dev without saved settings reports settings for each missing required value"
 						.filter((field) => field !== missing)
 						.map((field) => `--${field}=${name}`),
 				];
+
 				try {
 					vi.resetModules();
 					await import("../dev.ts");
@@ -509,6 +536,7 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
 			const w = recorded(folder, source, "export const view = 1;", false);
 			w.files.set(join(root, "compiler-ledger.json"), raw);
 			writeFileSync(source, "export const view = 1;");
+
 			try {
 				const exit = await Effect.runPromiseExit(
 					build({out: w.out, files: [source]}).pipe(Effect.provide(w.layer)),
@@ -557,6 +585,7 @@ it("dev returns StageError for malformed saved settings without writing or build
 			cli.layer = w.layer;
 			cli.work = undefined;
 			process.argv = [process.execPath, "dev.ts", "--child", `--parent=${process.ppid}`];
+
 			try {
 				vi.resetModules();
 				await import("../dev.ts");

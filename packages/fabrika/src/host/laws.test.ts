@@ -116,6 +116,7 @@ describe("a test machine whose clock is off from the Durable Object's", () => {
 		it(`leaves laws 3, 12 and 18 as they are with it ${skew} ms off`, async () => {
 			const real = Date.now;
 			const moved = vi.spyOn(Date, "now").mockImplementation(() => real.call(Date) + skew);
+
 			try {
 				const {off, rs} = await Effect.runPromise(
 					Effect.gen(function* () {

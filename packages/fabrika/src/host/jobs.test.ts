@@ -77,7 +77,11 @@ const ctx = stubCtxThrowingProxy<undefined>();
 const after = (msgs: readonly Msg[], loaded: Jobs | null = null): Jobs => {
 	const {states} = foldEvents(jobsMachine, ctx, loaded, msgs);
 	const last = states.at(-1);
-	if (last === undefined) throw new Error("no state");
+
+	if (last === undefined) {
+		throw new Error("no state");
+	}
+
 	return last;
 };
 
@@ -251,9 +255,19 @@ const byFromBegan = ({prev, msg, next}: JobStep) =>
 const stopOnce = ({prev, msg, next}: JobStep) =>
 	prev.jobs.every((j) => {
 		const now = byNumber(next, j.n);
-		if (now === undefined) return true;
-		if (j.stop !== null) return JSON.stringify(now.stop) === JSON.stringify(j.stop);
-		if (now.stop === null) return true;
+
+		if (now === undefined) {
+			return true;
+		}
+
+		if (j.stop !== null) {
+			return JSON.stringify(now.stop) === JSON.stringify(j.stop);
+		}
+
+		if (now.stop === null) {
+			return true;
+		}
+
 		return (
 			msg.type === "stopping" && msg.n === j.n && now.stop.by === msg.by && now.stop.why === msg.why
 		);

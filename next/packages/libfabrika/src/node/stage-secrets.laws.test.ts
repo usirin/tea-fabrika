@@ -52,8 +52,14 @@ const forms = (text: string) => [
 ];
 
 const strings = (value: unknown): Array<string> => {
-	if (typeof value === "string") return [value];
-	if (Array.isArray(value)) return value.flatMap(strings);
+	if (typeof value === "string") {
+		return [value];
+	}
+
+	if (Array.isArray(value)) {
+		return value.flatMap(strings);
+	}
+
 	return value !== null && typeof value === "object"
 		? Object.entries(value).flatMap(([key, child]) => [key, ...strings(child)])
 		: [];
@@ -62,13 +68,18 @@ const strings = (value: unknown): Array<string> => {
 const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
 	const forbidden = words.flatMap(forms);
 	const leaks: Array<Destination> = [];
+
 	for (const destination of destinations) {
 		// JSON covers saved strings; inspect also sees Error messages and non-enumerable values.
 		const json = JSON.stringify(outputs[destination]);
 		const text =
 			json + inspect(outputs[destination], {depth: null}) + strings(JSON.parse(json)).join("\n");
-		if (forbidden.some((word) => text.includes(word))) leaks.push(destination);
+
+		if (forbidden.some((word) => text.includes(word))) {
+			leaks.push(destination);
+		}
 	}
+
 	expect(leaks, "no named output may hold a secret or raw frame").toEqual([]);
 };
 
@@ -120,10 +131,12 @@ const flow = async (sample: Flow) => {
 	const parts = new Map<string, DatabaseSync>();
 	const part = (name: string) => {
 		let db = parts.get(name);
+
 		if (!db) {
 			db = new DatabaseSync(":memory:");
 			parts.set(name, db);
 		}
+
 		return db;
 	};
 	let mode = "ok";
@@ -151,10 +164,16 @@ const flow = async (sample: Flow) => {
 		)(String(options?.body));
 		// The platform send is allowed to hold the bearer; persistent outputs are checked below.
 		expect(new Headers(options?.headers).get("authorization")).toBe(`Bearer ${bearer}`);
-		if (call.method === "write")
+
+		if (call.method === "write") {
 			return Response.json({value: await delivered(`node/${call.name}`, call.args)});
+		}
+
 		if (call.method === "brain") {
-			if (mode === "rpc") throw new Error(`${bearer} ${rawFrame}`);
+			if (mode === "rpc") {
+				throw new Error(`${bearer} ${rawFrame}`);
+			}
+
 			const event = Schema.decodeUnknownSync(BrainEvent)(call.args[0]);
 			await journal.runPromise(
 				Ledger.use((ledger) =>
@@ -178,9 +197,19 @@ const flow = async (sample: Flow) => {
 			);
 			return Response.json({value: null});
 		}
-		if (mode === "rpc") throw new Error(`${bearer} ${rawFrame}`);
-		if (mode === "malformed") return new Response(`${bearer} ${rawFrame}`);
-		if (mode === "refused") return Response.json({error: {reason: "refused"}});
+
+		if (mode === "rpc") {
+			throw new Error(`${bearer} ${rawFrame}`);
+		}
+
+		if (mode === "malformed") {
+			return new Response(`${bearer} ${rawFrame}`);
+		}
+
+		if (mode === "refused") {
+			return Response.json({error: {reason: "refused"}});
+		}
+
 		return Response.json({value: []});
 	});
 	const consoleSpies = (["log", "info", "warn", "error", "debug"] as const).map((name) =>
@@ -234,8 +263,14 @@ const flow = async (sample: Flow) => {
 		PROJECT: {
 			getByName: () => ({
 				route: async () => {
-					if (mode === "rpc") throw new Error(`${bearer} ${rawFrame}`);
-					if (mode === "refused") return {_tag: "refused", why: "not_granted"};
+					if (mode === "rpc") {
+						throw new Error(`${bearer} ${rawFrame}`);
+					}
+
+					if (mode === "refused") {
+						return {_tag: "refused", why: "not_granted"};
+					}
+
 					return {_tag: "ok", result: {accepted: true}};
 				},
 				info: async () => [],
@@ -250,6 +285,7 @@ const flow = async (sample: Flow) => {
 		},
 	} as unknown as Env;
 	const runtime = gatewayRuntime(ctx, env, config);
+
 	try {
 		const gateway = await runtime.runPromise(GatewayService.pipe(Effect.provide(logger)));
 		await Effect.runPromise(
@@ -283,12 +319,18 @@ const flow = async (sample: Flow) => {
 						Effect.gen(function* () {
 							for (;;) {
 								const rows = yield* outbox.pending;
-								if (rows.some(ready)) return;
+
+								if (rows.some(ready)) {
+									return;
+								}
+
 								yield* Effect.sleep("5 millis");
 							}
 						}).pipe(Effect.timeout("5 seconds"));
+
 					for (const move of sample.moves) {
 						mode = move;
+
 						if (move === "restart") {
 							const previous = yield* outbox.last;
 							observe({
@@ -305,6 +347,7 @@ const flow = async (sample: Flow) => {
 							observe({type: "start", worker: config.name, pid: 27003});
 							yield* awaitEvent((row) => row._tag === "started" && row.after === previous);
 						}
+
 						// Arbitrary bodies and passes cross real Gateway parsing, including refusals and throws.
 						yield* Effect.tryPromise({
 							try: () =>
@@ -321,6 +364,7 @@ const flow = async (sample: Flow) => {
 						}).pipe(Effect.ignore);
 						outputs.outbox.push(yield* outbox.pending);
 					}
+
 					mode = "rpc";
 					// The real stage remains the single writer. Wait for its queue before closing scope.
 					observe({
@@ -378,6 +422,7 @@ const flow = async (sample: Flow) => {
 		]);
 		expect((await Effect.runPromise(denied)).status).toBe(403);
 		const answer = await Effect.runPromiseExit(checked.pipe(Effect.provide(logger)));
+
 		// Keep content collection independent of the new contract assertion.
 		for (const db of parts.values()) {
 			outputs.spans.push(
@@ -385,14 +430,17 @@ const flow = async (sample: Flow) => {
 				db.prepare("SELECT * FROM content").all(),
 			);
 		}
+
 		outputs.health.push(...health(gatewayDb));
 		const nodeDb = new DatabaseSync(join(home, "brain.records.sqlite"));
+
 		try {
 			outputs.health.push(...health(nodeDb));
 			outputs.spans.push(nodeDb.prepare("SELECT * FROM unsent").all());
 		} finally {
 			nodeDb.close();
 		}
+
 		outputs.journal.push(journalDb.prepare("SELECT * FROM entries").all());
 		expect(parts.size).toBeGreaterThan(0);
 		expect(outputs.journal.length).toBeGreaterThan(0);
@@ -400,12 +448,20 @@ const flow = async (sample: Flow) => {
 		return {outputs, words, answer};
 	} finally {
 		fetch.mockRestore();
-		for (const spy of consoleSpies) spy.mockRestore();
+
+		for (const spy of consoleSpies) {
+			spy.mockRestore();
+		}
+
 		await runtime.dispose();
 		await journal.dispose();
 		journalDb.close();
 		gatewayDb.close();
-		for (const db of parts.values()) db.close();
+
+		for (const db of parts.values()) {
+			db.close();
+		}
+
 		vi.unstubAllEnvs();
 		rmSync(home, {recursive: true, force: true});
 	}
@@ -421,14 +477,17 @@ it("[secrets] generated flows keep bearer, private material, bodies and raw fram
 		fc.asyncProperty(generated, async (sample) => {
 			const {outputs, words} = await flow(sample);
 			clean(outputs, words);
+
 			// Plant each secret/frame encoding in every collected destination. The same check
 			// must fail even for destinations which a successful flow leaves empty, such as logs.
-			for (const destination of destinations)
-				for (const word of words)
+			for (const destination of destinations) {
+				for (const word of words) {
 					for (const encoded of forms(word)) {
 						const planted = {...outputs, [destination]: [...outputs[destination], {leak: encoded}]};
 						expect(() => clean(planted, words)).toThrow();
 					}
+				}
+			}
 		}),
 		{
 			seed: 119120,

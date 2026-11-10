@@ -80,7 +80,11 @@ const parentId = (span: Tracer.Span) => Option.getOrNull(Option.map(span.parent,
 const ended = (span: Tracer.Span, ok: boolean) => {
 	expect(span.status._tag, span.name).toBe("Ended");
 	const status = span.status;
-	if (status._tag !== "Ended") throw new Error(`span did not end: ${span.name}`);
+
+	if (status._tag !== "Ended") {
+		throw new Error(`span did not end: ${span.name}`);
+	}
+
 	expect(Exit.isSuccess(status.exit), span.name).toBe(ok);
 	expect(status.endTime >= status.startTime, span.name).toBe(true);
 };
@@ -116,6 +120,7 @@ const disk = () => {
 				fault.armed = false;
 				throw new Error("generated storage failure");
 			}
+
 			return actual.transaction(work);
 		},
 	};
@@ -161,11 +166,13 @@ describe("T285, ledger tracing keep-laws", () => {
 				async (a, ctx, calls) => {
 					const d = disk();
 					const c = capture();
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const ledger = yield* Ledger;
 								let head = 0;
+
 								for (const [index, call] of calls.entries()) {
 									const before = c.spans.length;
 									const parent = yield* Effect.currentSpan;
@@ -173,6 +180,7 @@ describe("T285, ledger tracing keep-laws", () => {
 									const input = line(a, ctx.traceId);
 									let name: string;
 									let expected: Record<string, unknown>;
+
 									if (call.op === "read") {
 										const rows = yield* Stream.runCollect(ledger.read(a.stream, call.after));
 										name = "ledger.read";
@@ -199,10 +207,12 @@ describe("T285, ledger tracing keep-laws", () => {
 										};
 									} else {
 										const twice = call.op === "id_reused" || call.op === "resend";
+
 										if (twice) {
 											yield* ledger.append(a.stream, id, input);
 											head++;
 										}
+
 										const changed =
 											call.op === "bad_line"
 												? {...input, by: ""}
@@ -217,7 +227,11 @@ describe("T285, ledger tracing keep-laws", () => {
 																: input;
 										const answer = yield* ledger.append(a.stream, id, changed);
 										const accepted = call.op === "append";
-										if (accepted) head++;
+
+										if (accepted) {
+											head++;
+										}
+
 										name = "ledger.append";
 										expected = {
 											...cut("messaging.destination.name", a.stream),
@@ -241,12 +255,16 @@ describe("T285, ledger tracing keep-laws", () => {
 										const first = c.spans.slice(before).filter((s) => s.name === name);
 										expect(first).toHaveLength(twice ? 2 : 1);
 									}
+
 									const spans = c.spans.slice(before).filter((s) => s.name === name);
 									const span = spans.at(-1)!;
 									ended(span, true);
 									child(span, parent);
 									expect(tags(span)).toEqual(expected);
-									if (call.op === "read" || call.op === "wait") expect(spans).toHaveLength(1);
+
+									if (call.op === "read" || call.op === "wait") {
+										expect(spans).toHaveLength(1);
+									}
 								}
 							}).pipe(
 								request,
@@ -280,17 +298,25 @@ describe("T285, ledger tracing keep-laws", () => {
 					let mode = "ok";
 					const bell = Layer.succeed(Doorbell, {
 						ring: () => {
-							if (mode === "throw") throw new Error("generated ring throw");
-							if (mode === "die") return Effect.die(new Error("generated ring defect"));
+							if (mode === "throw") {
+								throw new Error("generated ring throw");
+							}
+
+							if (mode === "die") {
+								return Effect.die(new Error("generated ring defect"));
+							}
+
 							return mode === "fail"
 								? Effect.fail(new LedgerError({why: "unreachable"}))
 								: Effect.void;
 						},
 					});
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const ledger = yield* Ledger;
+
 								for (const [index, failure] of modes.entries()) {
 									mode = failure;
 									const stream = `${a.stream}/${index}`;
@@ -341,10 +367,12 @@ describe("T285, ledger tracing keep-laws", () => {
 				async (a, ctx, calls) => {
 					const d = disk();
 					const c = capture();
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const ledger = yield* Ledger;
+
 								for (const [i, op] of calls.entries()) {
 									d.fault.armed = true;
 									const before = c.spans.length;
@@ -402,12 +430,14 @@ describe("T285, coordination tracing keep-laws", () => {
 						by: a.by,
 						build: a.build,
 					}).pipe(Layer.provide(Ledger.sql(d.sql, {reader: a.reader}).pipe(Layer.provide(quiet))));
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const clients = yield* ClientManager;
 								// Layer construction cannot do the first read or the founding write.
 								expect(c.spans).toEqual([]);
+
 								for (const fails of failures) {
 									d.fault.armed = fails;
 									const before = c.spans.length;
@@ -429,8 +459,10 @@ describe("T285, coordination tracing keep-laws", () => {
 													"fab.members.ignored": 0,
 												},
 									);
-									for (const append of spans.filter((s) => s.name === "ledger.append"))
+
+									for (const append of spans.filter((s) => s.name === "ledger.append")) {
 										child(append, read);
+									}
 								}
 							}).pipe(
 								Effect.withParentSpan(Tracer.externalSpan(ctx)),
@@ -471,6 +503,7 @@ describe("T285, coordination tracing keep-laws", () => {
 						},
 						Effect.succeed(PROCESS),
 					).pipe(Layer.provide(LedgerTransaction.layer(d.sql).pipe(Layer.provide(quiet))));
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
@@ -478,6 +511,7 @@ describe("T285, coordination tracing keep-laws", () => {
 								const ids = yield* ProcessIdGenerator;
 								expect(c.spans).toEqual([]);
 								const seen = new Set<string>();
+
 								for (const call of calls) {
 									d.fault.armed = call.op === "info" && call.fails;
 									const before = c.spans.length;
@@ -499,6 +533,7 @@ describe("T285, coordination tracing keep-laws", () => {
 									ended(selected[0]!, ok);
 									child(selected[0]!, spans[0]!);
 									expect(tags(selected[0]!)).toEqual({});
+
 									if (call.op === "next" && Exit.isSuccess(exit)) {
 										expect(spans.map((s) => s.name)).toEqual([
 											"test.request",
@@ -513,6 +548,7 @@ describe("T285, coordination tracing keep-laws", () => {
 										seen.add(id);
 									}
 								}
+
 								const before = c.spans.length;
 								const exit = yield* Effect.exit(
 									request(ids.next).pipe(
@@ -630,7 +666,11 @@ describe("T285, sink keep-law", () => {
 					const known = new Map<string, Sql>();
 					const records = RecordManager.sql((name) => {
 						const found = known.get(name);
-						if (found !== undefined) return found;
+
+						if (found !== undefined) {
+							return found;
+						}
+
 						const db = new DatabaseSync(":memory:");
 						parts.push(db);
 						const sql = nodeSql(db);
@@ -644,18 +684,24 @@ describe("T285, sink keep-law", () => {
 					);
 					const chain = job ? Chain.cases.job.make({process: PROCESS}) : Chain.cases.spans.make({});
 					let now = 100 * DAY;
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const sink = yield* SpanSink;
 								const records = yield* RecordManager;
+
 								for (const [index, sample] of samples.entries()) {
 									yield* Effect.gen(function* () {
 										now += sample.ms;
-										if (sample.failure === "fail")
+
+										if (sample.failure === "fail") {
 											return yield* Effect.fail(new LedgerError({why: "storage"}));
-										if (sample.failure === "die")
+										}
+
+										if (sample.failure === "die") {
 											return yield* Effect.die(new Error(`failure ${sample.name}`));
+										}
 									}).pipe(
 										Effect.withSpan(`sample.${index}`, {
 											attributes: {
@@ -667,12 +713,14 @@ describe("T285, sink keep-law", () => {
 										Effect.exit,
 									);
 								}
+
 								expect((yield* sink.flush).sent).toBe(samples.length);
 								expect(d.db.prepare("SELECT count(*) AS n FROM health").get()?.n).toBe(
 									samples.length,
 								);
 								const original = yield* Stream.runCollect(records.read(chain));
 								expect(original.map((s) => s.name)).toEqual(samples.map((_, i) => `sample.${i}`));
+
 								for (const [index, row] of original.entries()) {
 									const sample = samples[index]!;
 									expect(row.ok).toBe(sample.failure === "ok");
@@ -690,14 +738,23 @@ describe("T285, sink keep-law", () => {
 									});
 									expect(row.links).toEqual([{...ctx, attributes: {"test.index": index}}]);
 								}
+
 								// Old health rows must really take the archive path, including hashing.
 								now += 20 * DAY;
 								yield* sink.summaries(0, now);
+
 								for (const call of calls) {
-									if (call === "flush") expect((yield* sink.flush).sent).toBe(0);
-									else if (call === "summaries") yield* sink.summaries(0, now);
-									else for (const row of original) yield* records.content(chain, row.spanId);
+									if (call === "flush") {
+										expect((yield* sink.flush).sent).toBe(0);
+									} else if (call === "summaries") {
+										yield* sink.summaries(0, now);
+									} else {
+										for (const row of original) {
+											yield* records.content(chain, row.spanId);
+										}
+									}
 								}
+
 								expect((yield* sink.flush).sent).toBe(0);
 								expect(
 									Number(d.db.prepare("SELECT count(*) AS n FROM archived").get()?.n),
@@ -714,7 +771,10 @@ describe("T285, sink keep-law", () => {
 						);
 					} finally {
 						d.db.close();
-						for (const db of parts) db.close();
+
+						for (const db of parts) {
+							db.close();
+						}
 					}
 				},
 			),
@@ -830,7 +890,10 @@ const runnerWorld = (
 			const sessions = yield* SessionManager;
 			return {
 				append: Effect.fnUntraced(function* (input: Incoming) {
-					if (fault.at === "append_storage") return yield* new LedgerError({why: "storage"});
+					if (fault.at === "append_storage") {
+						return yield* new LedgerError({why: "storage"});
+					}
+
 					return yield* mailbox.send(a.name, input.id, input.envelope.input, {
 						by: input.envelope.by.key,
 						for: PERSON,
@@ -845,8 +908,15 @@ const runnerWorld = (
 					...[id, session, stream, fact]: Parameters<typeof CheckedWriter.Service.commit>
 				) {
 					const receipt = yield* sessions.receipt(id, session.parent, PROCESS, fact._tag);
-					if (fault.at === "write_storage") return yield* new LedgerError({why: "storage"});
-					if (fault.at === "write_refused") return Appended.cases.refused.make({why: "seen_ahead"});
+
+					if (fault.at === "write_storage") {
+						return yield* new LedgerError({why: "storage"});
+					}
+
+					if (fault.at === "write_refused") {
+						return Appended.cases.refused.make({why: "seen_ahead"});
+					}
+
 					return yield* ledger.append(
 						stream,
 						id,
@@ -867,8 +937,14 @@ const runnerWorld = (
 				own: Effect.fnUntraced(function* (
 					...[id, stream, fact]: Parameters<typeof CheckedWriter.Service.own>
 				) {
-					if (fault.at === "write_storage") return yield* new LedgerError({why: "storage"});
-					if (fault.at === "write_refused") return Appended.cases.refused.make({why: "seen_ahead"});
+					if (fault.at === "write_storage") {
+						return yield* new LedgerError({why: "storage"});
+					}
+
+					if (fault.at === "write_refused") {
+						return Appended.cases.refused.make({why: "seen_ahead"});
+					}
+
 					return yield* ledger.append(
 						stream,
 						id,
@@ -892,10 +968,14 @@ const runnerWorld = (
 			{[program.name]: program},
 			{
 				work: Effect.fnUntraced(function* (_cmd: unknown) {
-					if (fault.at === "handler_fail")
+					if (fault.at === "handler_fail") {
 						return yield* Effect.fail(new Error("generated handler failure"));
-					if (fault.at === "handler_die")
+					}
+
+					if (fault.at === "handler_die") {
 						return yield* Effect.die(new Error("generated handler defect"));
+					}
+
 					return Outcome.ok(1);
 				}),
 			},
@@ -916,8 +996,11 @@ const runnerWorld = (
 			Effect.map(Recording, (actual) => ({
 				flush: Effect.sync(() => {
 					const runner = spans.filter((s) => s.name.startsWith("runner."));
-					for (const span of runner)
+
+					for (const span of runner) {
 						expect(span.status._tag, `${span.name} must end before flush`).toBe("Ended");
+					}
+
 					flushes.push(runner.map((s) => s.spanId));
 				}).pipe(Effect.andThen(actual.flush)),
 			})),
@@ -950,7 +1033,9 @@ const runnerWorld = (
 		fault,
 		input,
 		close: () => {
-			for (const d of [data, state, sessions, sink]) d.db.close();
+			for (const d of [data, state, sessions, sink]) {
+				d.db.close();
+			}
 		},
 	};
 };
@@ -960,6 +1045,7 @@ describe("T285, runner tracing keep-laws", () => {
 		await fc.assert(
 			fc.asyncProperty(context, attributes, async (ctx, a) => {
 				const w = runnerWorld({name: "refused-reply", build: a.build, key: a.by}, ctx);
+
 				try {
 					await Effect.runPromise(
 						Effect.gen(function* () {
@@ -1007,11 +1093,13 @@ describe("T285, runner tracing keep-laws", () => {
 				async (ctx, calls) => {
 					const w = runnerWorld({name: "reply-test", build: "test", key: "test"}, ctx);
 					let now = 0;
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const runner = yield* ProgramRunner;
 								const ledger = yield* Ledger;
+
 								for (const [index, call] of calls.entries()) {
 									now = call.at;
 									yield* runner.msg(w.input(index + 1, {type: "work", value: call.value}));
@@ -1079,12 +1167,14 @@ describe("T285, runner tracing keep-laws", () => {
 				fc.array(action, {minLength: 1, maxLength: 12}),
 				async (ctx, signer, a, calls) => {
 					const w = runnerWorld(a, signer);
+
 					try {
 						await Effect.runPromise(
 							Effect.gen(function* () {
 								const runner = yield* ProgramRunner;
 								const sessions = yield* SessionManager;
 								const records = yield* RecordManager;
+
 								for (const [index, call] of calls.entries()) {
 									w.fault.at = call.op;
 									const n = index + 1;
@@ -1101,6 +1191,7 @@ describe("T285, runner tracing keep-laws", () => {
 												? {type: "unknown", value: call.value}
 												: {type: "work", value: call.value};
 									const input = w.input(n, m);
+
 									if (writing && call.op !== "own") {
 										yield* sessions.record({
 											id: input.envelope.id,
@@ -1116,6 +1207,7 @@ describe("T285, runner tracing keep-laws", () => {
 										});
 										yield* sessions.delivered(input.envelope.id, PROCESS);
 									}
+
 									const op =
 										call.op === "open" || call.op === "bad_client"
 											? "open"
@@ -1165,6 +1257,7 @@ describe("T285, runner tracing keep-laws", () => {
 											? {"fab.runner.letter": input.id}
 											: {}),
 									});
+
 									if (writing || handling) {
 										const cmd = selected[1]!;
 										const letter = (yield* Stream.runCollect(
@@ -1177,12 +1270,15 @@ describe("T285, runner tracing keep-laws", () => {
 											"fab.runner.cmd": writing ? "write" : "work",
 											"fab.runner.id": `${PROCESS}/${letter.pos}/0`,
 										});
+
 										if (writing) {
 											const write = selected[2]!;
 											ended(write, call.op !== "write_storage");
 											child(write, cmd);
-											if (call.op === "own") expect(write.links).toEqual([]);
-											else
+
+											if (call.op === "own") {
+												expect(write.links).toEqual([]);
+											} else {
 												expect(
 													write.links.map(({span, attributes}) => ({
 														traceId: span.traceId,
@@ -1190,6 +1286,8 @@ describe("T285, runner tracing keep-laws", () => {
 														attributes,
 													})),
 												).toEqual([{...signer, attributes: {}}]);
+											}
+
 											expect(tags(write)).toEqual({
 												"fab.process": PROCESS,
 												"fab.runner.write": tags(cmd)["fab.runner.id"],
@@ -1197,11 +1295,13 @@ describe("T285, runner tracing keep-laws", () => {
 											});
 										}
 									}
+
 									const rows = (yield* Stream.runCollect(
 										records.read(Chain.cases.job.make({process: PROCESS})),
 									)).filter((s) => s.name.startsWith("runner."));
 									const all = w.spans.filter((s) => s.name.startsWith("runner."));
 									expect(rows.map((s) => s.spanId).sort()).toEqual(all.map((s) => s.spanId).sort());
+
 									for (const span of selected) {
 										const row = rows.find((s) => s.spanId === span.spanId)!;
 										expect(row).toMatchObject({
@@ -1211,7 +1311,11 @@ describe("T285, runner tracing keep-laws", () => {
 										});
 										expect(row.attributes).toMatchObject(tags(span));
 										const status = span.status;
-										if (status._tag !== "Ended") expect.unreachable("runner span still open");
+
+										if (status._tag !== "Ended") {
+											expect.unreachable("runner span still open");
+										}
+
 										expect(row.startTimeUnixNano).toBe(String(status.startTime));
 										expect(row.endTimeUnixNano).toBe(String(status.endTime));
 										expect(row.ok).toBe(Exit.isSuccess(status.exit));

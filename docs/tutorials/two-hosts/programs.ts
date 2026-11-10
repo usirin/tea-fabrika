@@ -51,8 +51,12 @@ export const kettleProgram = defineProgram({
 						// save below, the next host pours again under the same key, and the ledger
 						// answers `dup`: one glass, never two.
 						const poured = yield* self.send(glass, `pour:${e.body.id}`, {guest: e.body.guest});
+
 						// Fenced: another host holds the kettle now. Stop; it pours this one itself.
-						if (poured.how !== "sent") return yield* Effect.interrupt;
+						if (poured.how !== "sent") {
+							return yield* Effect.interrupt;
+						}
+
 						yield* machine.dispatch({type: "brewed", rev: e.rev, guest: e.body.guest});
 					}),
 			});

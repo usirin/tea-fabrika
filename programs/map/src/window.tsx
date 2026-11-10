@@ -109,7 +109,8 @@ interface Lit {
 
 const litOf = (view: View): Lit => {
 	const ticket = view.ticket;
-	if (ticket === null)
+
+	if (ticket === null) {
 		return {
 			number: view.number,
 			ticket: null,
@@ -117,6 +118,8 @@ const litOf = (view: View): Lit => {
 			asks: [],
 			line: view.ready ? `no ticket #${view.number ?? "?"}` : "reading the ledger",
 		};
+	}
+
 	const head = headOf(ticket.timeline, view.now);
 	return {
 		number: ticket.number,
@@ -432,6 +435,7 @@ const placed = (name: ProgramName | "ledger") => {
 
 function bodyOf(name: ProgramName, lit: Lit): ReactNode {
 	const n = lit.number === null ? "" : `#${lit.number}`;
+
 	switch (name) {
 		case "tracker":
 			return (
@@ -526,7 +530,11 @@ function FitOnResize({box}: {readonly box: RefObject<HTMLDivElement | null>}) {
 	const flow = useReactFlow();
 	useEffect(() => {
 		const el = box.current;
-		if (el === null) return;
+
+		if (el === null) {
+			return;
+		}
+
 		const seen = new ResizeObserver(() => void flow.fitView({padding: 0.04}));
 		seen.observe(el);
 		return () => seen.disconnect();

@@ -53,10 +53,15 @@ const couldNotRun = {_tag: "could_not_run"} as const;
 export const addedIn = (file: string, diff: string): readonly Added[] => {
 	const out: Added[] = [];
 	let line = 0;
+
 	for (const text of diff.split("\n")) {
-		if (text.startsWith("@@")) line = Number(/\+(\d+)/.exec(text)?.[1] ?? 0);
-		else if (line > 0 && text.startsWith("+")) out.push({file, line: line++, text: text.slice(1)});
+		if (text.startsWith("@@")) {
+			line = Number(/\+(\d+)/.exec(text)?.[1] ?? 0);
+		} else if (line > 0 && text.startsWith("+")) {
+			out.push({file, line: line++, text: text.slice(1)});
+		}
 	}
+
 	return out;
 };
 
@@ -64,7 +69,11 @@ export const addedIn = (file: string, diff: string): readonly Added[] => {
 export const spanIn = (file: string, text: string, name: string) => {
 	const lines = text.split("\n");
 	const from = lines.findIndex((l) => new RegExp(`\\b${name.replace(/\W/g, "\\$&")}\\b`).test(l));
-	if (from < 0) return [];
+
+	if (from < 0) {
+		return [];
+	}
+
 	const rest = lines.slice(from + 1).findIndex((l) => /^\S/.test(l) && !/^[})\]]/.test(l));
 	const to = rest < 0 ? lines.length : from + 1 + rest;
 	return [{file, from: from + 1, to}];
@@ -90,6 +99,7 @@ export const laneBuildWrites = Layer.effect(
 						yield* now.exam.get,
 						(file) => ruleFiles([file]).length > 0,
 					);
+
 					if (touched.length > 0) {
 						yield* tickets
 							.talk(numberOf(ticket), `exam-touched/${copied.base}`, {
@@ -99,11 +109,13 @@ export const laneBuildWrites = Layer.effect(
 							.pipe(Effect.ignore);
 						return yield* Effect.fail({_tag: "exam_touched" as const});
 					}
+
 					// The builder's files through the repository's formatter, which leaves out the ones it took
 					// away and any a link leads through. One that failed keeps what it wrote, and the ticket says
 					// so: the checks still judge the change.
 					const formatted = yield* work.format(copied.tree, changed);
-					if (formatted._tag === "failed")
+
+					if (formatted._tag === "failed") {
 						yield* tickets
 							.talk(numberOf(ticket), `format-build-failed/${copied.base}`, {
 								type: "commented",
@@ -112,6 +124,8 @@ export const laneBuildWrites = Layer.effect(
 								),
 							})
 							.pipe(Effect.ignore);
+					}
+
 					const head = yield* work.commit(copied.tree, [], message);
 					return {head, changed: head !== copied.base};
 				}),
@@ -194,8 +208,11 @@ export const laneTestsWork = Layer.effect(
 					),
 				);
 				const run = settings.test_writer?.run;
-				if (run === undefined)
+
+				if (run === undefined) {
 					return yield* failing("no_command", null, "[test_writer] run is not set");
+				}
+
 				const folder = yield* work
 					.copy(commit)
 					.pipe(
@@ -206,8 +223,11 @@ export const laneTestsWork = Layer.effect(
 					Effect.map((info) => info.type),
 					Effect.catch((e) => failing("copy_failed", null, e.message, [folder])),
 				);
-				if (kind !== "Directory")
+
+				if (kind !== "Directory") {
 					return yield* failing("copy_failed", null, "the copy is not a folder", [folder]);
+				}
+
 				const out = path.join(folder, ".lane-report.json");
 				yield* fs.remove(out, {force: true}).pipe(Effect.ignore);
 				const ran = yield* inBox(
@@ -266,6 +286,7 @@ export const laneTestsWork = Layer.effect(
 						const [one] = resultsOf(report, [{property: "p", file: on.file, name: on.test}]);
 						return one === undefined ? yield* Effect.fail(couldNotRun) : one.result;
 					}
+
 					const {file, line} = placeIn(on.mutant);
 					yield* work.copy(on.commit);
 					const ran = yield* runner.run({
@@ -355,7 +376,11 @@ export const laneExamWork = Layer.effect(
 		const sideAt = (name: string, base: string) =>
 			Effect.gen(function* () {
 				const side = yield* work.side(name);
-				if ((yield* work.head(side.tree)) === base) return side;
+
+				if ((yield* work.head(side.tree)) === base) {
+					return side;
+				}
+
 				return (yield* work.sideTo(name, base)) === "moved" ? side : yield* work.sideFresh(name);
 			});
 		return {
@@ -368,11 +393,14 @@ export const laneExamWork = Layer.effect(
 						side.tree,
 						files.map((file) => file.path),
 					);
-					if (formatted._tag === "none")
+
+					if (formatted._tag === "none") {
 						yield* tickets
 							.talk(number, "format-none", {type: "commented", body: NO_FORMATTER})
 							.pipe(Effect.ignore);
-					if (formatted._tag === "failed")
+					}
+
+					if (formatted._tag === "failed") {
 						yield* tickets
 							.talk(number, `format-exam-pr-failed/${side.branch}`, {
 								type: "commented",
@@ -381,6 +409,8 @@ export const laneExamWork = Layer.effect(
 								),
 							})
 							.pipe(Effect.ignore);
+					}
+
 					const head = yield* work.commit(side.tree, [], `rule changes for ticket ${number}`);
 					yield* pushBranch({work, tickets}, number, side.tree, head, side.branch);
 					const title = `Rule changes for ticket ${number}`;
@@ -520,21 +550,27 @@ export const laneCheckRunner = Layer.effect(
 						tail: publicText(tail),
 					});
 					const settings = yield* Effect.result(work.settings);
-					if (settings._tag === "Failure")
+
+					if (settings._tag === "Failure") {
 						return notRun(
 							[],
 							`The repository's settings could not be read, so no check ran at ${head}. ${settings.failure.says ?? ""}`.trim(),
 						);
+					}
+
 					const build = settings.success.build;
 					const commands = build?.checks ?? [];
 					return yield* Effect.scoped(
 						Effect.gen(function* () {
 							const worktree = yield* Effect.result(work.worktree(head));
-							if (worktree._tag === "Failure")
+
+							if (worktree._tag === "Failure") {
 								return notRun(
 									commands.map((command) => command.join(" ")),
 									`The worktree of ${head} could not be made, so no check ran there. ${worktree.failure.says ?? ""}`.trim(),
 								);
+							}
+
 							const folder = worktree.success;
 							return yield* Effect.provide(
 								Effect.gen(function* () {
@@ -564,7 +600,11 @@ export const laneMutationRunner = Layer.effect(
 				const settings = yield* work.settings;
 				const tests = settings.mutation?.tests;
 				const typecheck = settings.mutation?.typecheck;
-				if (tests === undefined || typecheck === undefined) return yield* Effect.fail(couldNotRun);
+
+				if (tests === undefined || typecheck === undefined) {
+					return yield* Effect.fail(couldNotRun);
+				}
+
 				const vitest = settings.mutation?.vitest;
 				return yield* Effect.provide(
 					Effect.gen(function* () {

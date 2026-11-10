@@ -87,7 +87,11 @@ const world = (adapter: "node" | "worker", limit: number, failure: unknown) => {
 			update: {
 				add: (s, m) => {
 					calls++;
-					if (move === "throw") throw failure;
+
+					if (move === "throw") {
+						throw failure;
+					}
+
 					return [{count: s.count + m.n}, []];
 				},
 			},
@@ -119,11 +123,16 @@ const world = (adapter: "node" | "worker", limit: number, failure: unknown) => {
 						: workerExecution({
 								init: (s) => box.init(s),
 								step: async (s, m) => {
-									if (move === "rpc")
+									if (move === "rpc") {
 										return Effect.runPromise(
 											Effect.fail(new Error("transport failed before the program")),
 										);
-									if (move === "decode") return {unrecognized: true};
+									}
+
+									if (move === "decode") {
+										return {unrecognized: true};
+									}
+
 									return box.step(s, m);
 								},
 								fold: (s, m) => box.fold(s, m),
@@ -201,6 +210,7 @@ const world = (adapter: "node" | "worker", limit: number, failure: unknown) => {
 					: saved?.recovery._tag === "starting" && saved.pending?.type === "start"
 						? saved.pending.until
 						: undefined;
+
 			if (until !== undefined) {
 				expect(alarm).toBe(until);
 				yield* TestClock.setTime(until);
@@ -232,7 +242,7 @@ const sequence = fc.record({
 	letter: fc.uuid(),
 });
 
-for (const source of ["rpc", "decode"] as const)
+for (const source of ["rpc", "decode"] as const) {
 	it(`supervised ${source} failures never change deliveries, receipt failures or dead events`, async () => {
 		await fc.assert(
 			fc.asyncProperty(sequence, (sample) =>
@@ -242,15 +252,23 @@ for (const source of ["rpc", "decode"] as const)
 						yield* w.boot;
 						const input = incoming(sample.letter, sample.n);
 						let crashes = 0;
+
 						for (const move of [source, ...sample.moves]) {
-							if (crashes === sample.limit) break;
+							if (crashes === sample.limit) {
+								break;
+							}
+
 							w.move(move);
 							const beforeCalls = w.calls();
 							const exit = yield* ProgramRunner.use((r) => r.msg(input)).pipe(
 								Effect.provide(w.layer()),
 								Effect.exit,
 							);
-							if (move === "throw") crashes++;
+
+							if (move === "throw") {
+								crashes++;
+							}
+
 							const receipt = yield* w.receipt(input.id);
 							// First assert the durable record, even when the caller was also given a false dead answer.
 							expect(receipt).toMatchObject({
@@ -258,6 +276,7 @@ for (const source of ["rpc", "decode"] as const)
 								errors: Array.from({length: crashes}, () => "TypeError"),
 								result: crashes === sample.limit ? {_tag: "refused", why: "dead"} : null,
 							});
+
 							if (move !== "throw") {
 								expect(w.calls()).toBe(beforeCalls);
 								expect(Exit.isFailure(exit)).toBe(true);
@@ -271,16 +290,19 @@ for (const source of ["rpc", "decode"] as const)
 								expect(saved?.attempt).toBeNull();
 								expect(saved?.observations).toHaveLength(crashes);
 							}
+
 							const dead = (yield* Effect.forEach(PIDS, (p) => w.read(`${p}/dead`), {
 								concurrency: 1,
 							})).flat();
 							expect(dead).toHaveLength(crashes === sample.limit ? 1 : 0);
 							expect(yield* w.read(`${NAME}/inbox`)).toEqual([]);
+
 							if (crashes < sample.limit) {
 								w.move("ok");
 								yield* w.recover;
 							}
 						}
+
 						if (crashes < sample.limit) {
 							w.move("ok");
 							expect(
@@ -303,6 +325,7 @@ for (const source of ["rpc", "decode"] as const)
 			},
 		);
 	});
+}
 
 it("Node records the actual class for generated Error and non-Error throws", async () => {
 	await fc.assert(
@@ -343,6 +366,7 @@ it("the real Worker box records the same thrown class as Node under supervision"
 				Effect.gen(function* () {
 					const receipts = [],
 						dead = [];
+
 					for (const adapter of ["node", "worker"] as const) {
 						const w = world(adapter, 1, failure);
 						yield* w.boot;
@@ -359,6 +383,7 @@ it("the real Worker box records the same thrown class as Node under supervision"
 								.map((r) => r.body),
 						);
 					}
+
 					const expected = failureClass(failure);
 					expect(receipts[0]).toMatchObject({errors: [expected], tries: 1});
 					expect(dead[0]).toMatchObject([{errors: [expected], tries: 1}]);

@@ -80,18 +80,37 @@ export const loadCell = (cmd: ReturnType<typeof load>) =>
 		const broken: string[] = [];
 		let last = cmd.after;
 		const names = namesOf(yield* ledger.readStream(MEMBERS));
+
 		for (;;) {
 			const page = yield* ledger.read(last, PAGE, TRACKER);
+
 			for (const row of page) {
 				const read = readRow(row);
-				if (read.kind === "entry") entries.push(named(read.entry, names));
-				if (read.kind === "broken") broken.push(read.why);
+
+				if (read.kind === "entry") {
+					entries.push(named(read.entry, names));
+				}
+
+				if (read.kind === "broken") {
+					broken.push(read.why);
+				}
+
 				const area = readAreaRow(row);
-				if (area._tag === "entry") areas.push(area.entry);
-				if (area._tag === "broken") broken.push(area.why);
+
+				if (area._tag === "entry") {
+					areas.push(area.entry);
+				}
+
+				if (area._tag === "broken") {
+					broken.push(area.why);
+				}
 			}
+
 			last = page.at(-1)?.pos ?? last;
-			if (page.length < PAGE) return {entries, broken, last, areas};
+
+			if (page.length < PAGE) {
+				return {entries, broken, last, areas};
+			}
 		}
 	}).pipe(Effect.mapError(unreachable));
 
@@ -99,8 +118,13 @@ export const loadCell = (cmd: ReturnType<typeof load>) =>
 const claim = (next: number, writer: string) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
-		for (let n = next; n < next + TRIES; n++)
-			if ((yield* ledger.register(nameOf(n), writer)).created) return n;
+
+		for (let n = next; n < next + TRIES; n++) {
+			if ((yield* ledger.register(nameOf(n), writer)).created) {
+				return n;
+			}
+		}
+
 		return yield* Effect.fail(refused(`${TRIES} ticket numbers from ${next}: every one was taken`));
 	});
 
@@ -127,13 +151,17 @@ const saveArea = (id: string, write: AreaWrite) =>
 		const ledger = yield* Ledger;
 		const author = yield* Author;
 		const writer = writerText(author);
+
 		// A ledger behind the door refuses this too; a ledger in this process does not, so it is here.
-		if (author.kind !== "user")
+		if (author.kind !== "user") {
 			return yield* Effect.fail({
 				_tag: "refused" as const,
 				why: `only a person writes ${write.kind}, and this tracker writes as agent ${author.id}`,
 			});
+		}
+
 		yield* ledger.register(AREAS, writer);
+
 		for (let tries = 0; tries < TRIES; tries++) {
 			const rows = yield* ledger.readStream(AREAS_INBOX, 0, -1);
 			const entries = rows.flatMap((row) => {
@@ -142,9 +170,17 @@ const saveArea = (id: string, write: AreaWrite) =>
 			});
 			// An earlier try of this same write landed: it is not written twice.
 			const landed = entries.find((e) => e.id === id);
-			if (landed !== undefined) return {area: landed.entry.fact.area};
+
+			if (landed !== undefined) {
+				return {area: landed.entry.fact.area};
+			}
+
 			const made = areaFactOf(write, areasOf(entries.map((e) => e.entry)).areas);
-			if ("why" in made) return yield* Effect.fail({_tag: "refused" as const, why: made.why});
+
+			if ("why" in made) {
+				return yield* Effect.fail({_tag: "refused" as const, why: made.why});
+			}
+
 			const {fact} = made;
 			const wrote = yield* ledger
 				.append(AREAS_INBOX, rows.at(-1)?.rev ?? 0, {kind: fact._tag, writer, data: fact, id})
@@ -152,8 +188,12 @@ const saveArea = (id: string, write: AreaWrite) =>
 					Effect.as(true),
 					Effect.catchTag("Stale", () => Effect.succeed(false)),
 				);
-			if (wrote) return {area: fact.area};
+
+			if (wrote) {
+				return {area: fact.area};
+			}
 		}
+
 		return yield* Effect.fail(refused(`${AREAS_INBOX}: ${TRIES} tries, each one stale`));
 	});
 
@@ -181,12 +221,15 @@ const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
 		const author = yield* Author;
 		const writer = writerText(author);
 		const fact = yield* factOf(write);
+
 		// A ledger behind the door refuses this too; a ledger in this process does not, so it is here.
-		if (!mayWrite(author, fact.type))
+		if (!mayWrite(author, fact.type)) {
 			return yield* Effect.fail({
 				_tag: "refused" as const,
 				why: `only a person writes ${fact.type}, and this tracker writes as agent ${author.id}`,
 			});
+		}
+
 		const ticket = write.kind === "file" ? yield* claim(cmd.next, writer) : write.ticket;
 		const inbox = streams(nameOf(ticket)).inbox;
 		// A comment names the run live as it is written, read off the ticket's own facts.
@@ -216,7 +259,8 @@ export const saveHintsCell = (cmd: ReturnType<typeof saveHints>) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const writer = writerText(hinterOf(yield* Author));
-		for (const hint of cmd.hints)
+
+		for (const hint of cmd.hints) {
 			yield* ledger.send(
 				streams(nameOf(cmd.ticket)).inbox,
 				`maybe_duplicate/${cmd.ticket}/${hint.of}`,
@@ -226,6 +270,8 @@ export const saveHintsCell = (cmd: ReturnType<typeof saveHints>) =>
 					data: {type: "maybe_duplicate", of: hint.of, yes: hint.yes},
 				},
 			);
+		}
+
 		return {};
 	}).pipe(
 		Effect.catchTags({

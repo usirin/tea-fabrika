@@ -41,7 +41,11 @@ describe("the mutation step", () => {
 
 	it("sends a mutant the weak test let survive to the test writer, with the mutant in the report", () => {
 		const {over} = drive({run: ONE_SURVIVED});
-		if (over.phase !== "over") throw new Error("over");
+
+		if (over.phase !== "over") {
+			throw new Error("over");
+		}
+
 		expect(nameOf(over.outcome)).toBe("send:test_writer:mutant_survived");
 		expect(over.report.ran?.survived).toEqual([SURVIVED]);
 	});
@@ -50,7 +54,11 @@ describe("the mutation step", () => {
 		const added = {file: "src/clamp.ts", line: 11, text: DISABLE};
 		const scope = {...SCOPE, diff: {...SCOPE.diff, added: [...SCOPE.diff.added, added]}};
 		const {over, cmds} = drive({scope});
-		if (over.phase !== "over") throw new Error("over");
+
+		if (over.phase !== "over") {
+			throw new Error("over");
+		}
+
 		expect(nameOf(over.outcome)).toBe("ask:owner:check_change");
 		expect(over.report.changes).toEqual([{kind: "disable", ...added, text: DISABLE.trim()}]);
 		expect(cmds.map((c) => c.type)).toEqual(["mutation_scope"]);
@@ -60,7 +68,11 @@ describe("the mutation step", () => {
 		const exam = "packages/pipeline/src/stages/mutation/ignorer.ts";
 		const scope = {...SCOPE, diff: {...SCOPE.diff, files: [...SCOPE.diff.files, exam]}};
 		const {over} = drive({scope});
-		if (over.phase !== "over") throw new Error("over");
+
+		if (over.phase !== "over") {
+			throw new Error("over");
+		}
+
 		expect(nameOf(over.outcome)).toBe("ask:owner:check_change");
 		// The read gave no hash for it, so no approval could hold.
 		expect(over.report.changes).toEqual([{kind: "exam", file: exam, hash: null}]);
@@ -133,7 +145,11 @@ describe("the mutation step", () => {
 
 	it("sends a head whose own tests fail back to the builder, with each failing test by name, before Stryker runs", () => {
 		const {over, cmds} = drive({tests: RED});
-		if (over.phase !== "over") throw new Error("over");
+
+		if (over.phase !== "over") {
+			throw new Error("over");
+		}
+
 		expect(nameOf(over.outcome)).toBe("send:builder:tests_red");
 		expect(over.report.failed).toEqual([FAILING]);
 		expect(cmds.map((c) => c.type)).toEqual(["mutation_scope", "mutation_tests"]);
@@ -189,7 +205,11 @@ describe("the mutation step after code's checks", () => {
 	it("skips its own suite run on green checks at its head, and names them in the report", () => {
 		const {over, cmds} = drive({tests: RED}, {...ASK, checked: GREEN_HERE} as MutationAsk);
 		expect(cmds.map((c) => c.type)).toEqual(["mutation_scope", "mutation_run"]);
-		if (over.phase !== "over") throw new Error("over");
+
+		if (over.phase !== "over") {
+			throw new Error("over");
+		}
+
 		expect(nameOf(over.outcome)).toBe("done");
 		expect((over.report as {readonly trusted?: unknown}).trusted).toEqual(GREEN_HERE);
 	});
@@ -201,7 +221,11 @@ describe("the mutation step after code's checks", () => {
 	])("runs its own tests first on checks %s, and trusts none", (_, checked) => {
 		const {over, cmds} = drive({}, {...ASK, checked} as MutationAsk);
 		expect(cmds.map((c) => c.type)).toEqual(["mutation_scope", "mutation_tests", "mutation_run"]);
-		if (over.phase !== "over") throw new Error("over");
+
+		if (over.phase !== "over") {
+			throw new Error("over");
+		}
+
 		expect((over.report as {readonly trusted?: unknown}).trusted ?? null).toBeNull();
 	});
 
@@ -216,7 +240,11 @@ describe("the mutation step after code's checks", () => {
 
 	it("a Stryker run that fails after a skip still says what it would have mutated and which checks it trusted", () => {
 		const {over} = drive({run: "fail"}, {...ASK, checked: GREEN_HERE} as MutationAsk);
-		if (over.phase !== "over") throw new Error("over");
+
+		if (over.phase !== "over") {
+			throw new Error("over");
+		}
+
 		expect(nameOf(over.outcome)).toBe("stuck:run_failed");
 		expect(over.report.spans).toEqual([{file: "src/clamp.ts", from: 9, to: 14}]);
 		expect((over.report as {readonly trusted?: unknown}).trusted).toEqual(GREEN_HERE);

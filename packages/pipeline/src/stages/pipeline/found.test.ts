@@ -188,7 +188,10 @@ describe("agent words a person or a pull request reads", () => {
 		});
 
 		it("reaches a pull request with no reference or mention outside a code span, if it is let through", () => {
-			if (refused().length > 0) return;
+			if (refused().length > 0) {
+				return;
+			}
+
 			const [line = ""] = ruleChangeLines([
 				{path: PATH, change: "add a rule", why: "it needs one"},
 			]);

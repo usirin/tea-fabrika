@@ -34,6 +34,7 @@ const keepsEvery = <S, M extends {readonly type: string}, C extends Cmd, U exten
 		fc.asyncProperty(msgs, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("acp:r1", null));
 			const store = handle.store("m", "one", state);
+
 			for (const s of foldEvents(machine, ctx, null, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);
@@ -189,13 +190,16 @@ describe("the acp program's kinds are kept", () => {
 					...real.update,
 					seen: (s, m) => {
 						let t = s;
+
 						for (const e of m.events) {
 							if (e.kind !== "other") {
 								t = real.update.seen(t, {type: "seen", events: [e]})[0];
 								continue;
 							}
+
 							t = {...t, other: {...t.other, [e.what]: (t.other[e.what] ?? 0) + 1}};
 						}
+
 						return [t, []];
 					},
 				},

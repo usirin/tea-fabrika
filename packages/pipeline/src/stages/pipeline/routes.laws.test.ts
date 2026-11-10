@@ -420,7 +420,10 @@ const ended = (
 	name: string,
 	carry: StepEnd["carry"] = {},
 ): readonly [Lane, readonly LaneCmd[]] => {
-	if (s.phase !== "running") return [s, []];
+	if (s.phase !== "running") {
+		return [s, []];
+	}
+
 	const after = CALLS[`${s.step} ${name}`];
 	return lane.update.lane_step_ok(
 		s,
@@ -458,7 +461,11 @@ type Drive = (step: LaneStep, name: string, mode: Mode, arrival: 1 | 2) => Dest;
 
 const drive: Drive = (step, name, mode, arrival) => {
 	const [first] = ended(runningAt(step, mode), name);
-	if (arrival === 1 || first.phase !== "running" || first.step !== step) return destOf(first);
+
+	if (arrival === 1 || first.phase !== "running" || first.step !== step) {
+		return destOf(first);
+	}
+
 	return destOf(ended(first, name)[0]);
 };
 
@@ -470,7 +477,11 @@ const planted =
 
 const stepOf = (key: string): LaneStep => {
 	const step = STEPS.find((s) => key.startsWith(`${s} `));
-	if (step === undefined) throw new Error(`no step in ${key}`);
+
+	if (step === undefined) {
+		throw new Error(`no step in ${key}`);
+	}
+
 	return step;
 };
 
@@ -600,7 +611,11 @@ describe("experiment 193's lists, as this test holds them", () => {
 
 	it("give each hole one kind, in the plan's counts for the step rows: 18 to a step, 22 wait, 31 once, 8 by meaning, 1 guard", () => {
 		const counts: Record<string, number> = {};
-		for (const {kind} of Object.values(HOLES_BY_HAND)) counts[kind] = (counts[kind] ?? 0) + 1;
+
+		for (const {kind} of Object.values(HOLES_BY_HAND)) {
+			counts[kind] = (counts[kind] ?? 0) + 1;
+		}
+
 		// The plan's 20, 27 and 10 count the lane's other doors too: the two guard stops, five reads
 		// and claims, and the two claims another lane holds. Those are driven by hand below.
 		expect(counts).toEqual({step: 18, wait: 22, once: 31, meaning: 8, guard: 1});
@@ -761,7 +776,10 @@ describe("ROUTES, by kind (self-fix PR 11a)", () => {
 // The rows traced, on the real reducer.
 
 const asking = (s: Lane) => {
-	if (s.phase !== "asking") throw new Error(`not asking: ${s.phase}`);
+	if (s.phase !== "asking") {
+		throw new Error(`not asking: ${s.phase}`);
+	}
+
 	return s;
 };
 
@@ -779,8 +797,11 @@ describe("the rows traced (self-fix PR 11a)", () => {
 		const behind = () => {
 			const [s, cmds] = ended(runningAt("merge"), "send:builder:behind");
 			const read = cmds.find((cmd) => cmd.type === "lane_fresh");
-			if (read?.type !== "lane_fresh")
+
+			if (read?.type !== "lane_fresh") {
 				throw new Error(`main was not read: the lane went ${JSON.stringify(destOf(s))}`);
+			}
+
 			return {s, read};
 		};
 
@@ -921,11 +942,18 @@ const FIXABLE_AT: Readonly<Partial<Record<LaneStep, readonly string[]>>> = Objec
 
 /** What is wrong with the lane's move after `key`, or nothing. `again`: its step said a once row just before. */
 const wrongAfter = (key: string, again: boolean, to: Dest): string | null => {
-	if (to.go === "end") return `${key} ended the lane`;
-	if (to.go === "stop" && !(again && HOLES[key]?.kind === "once"))
+	if (to.go === "end") {
+		return `${key} ended the lane`;
+	}
+
+	if (to.go === "stop" && !(again && HOLES[key]?.kind === "once")) {
 		return `${key} stopped on its first arrival`;
-	if (to.go === "ask" && to.for !== "rounds_spent" && !(again && BACK_ONCE.has(key)))
+	}
+
+	if (to.go === "ask" && to.for !== "rounds_spent" && !(again && BACK_ONCE.has(key))) {
 		return `${key} asked ${to.for}`;
+	}
+
 	return null;
 };
 
@@ -939,11 +967,19 @@ describe("a run of fixable rows, on any step (self-fix PR 11a)", () => {
 				fc.array(fc.nat(), {minLength: 1, maxLength: 8}),
 				(start, mode, picks) => {
 					let s = runningAt(start, mode);
+
 					for (const pick of picks) {
-						if (s.phase !== "running") return;
+						if (s.phase !== "running") {
+							return;
+						}
+
 						const names = FIXABLE_AT[s.step] ?? [];
 						const name = names[pick % names.length];
-						if (name === undefined) return;
+
+						if (name === undefined) {
+							return;
+						}
+
 						const key = `${s.step} ${name}`;
 						const last = s.trail.at(-1);
 						const again =

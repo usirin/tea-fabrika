@@ -111,7 +111,11 @@ const planOne = (w: ReturnType<typeof world>) =>
 				{planned: planned.hear},
 				{id: "plan:test", storage: memoryStorage()},
 			);
-			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
+
+			if (started.kind !== "running") {
+				return yield* Effect.die(`did not start: ${started.why}`);
+			}
+
 			yield* tell(started.run, "ticket", URL);
 			started.close("ticket");
 			yield* started.run.ended;
@@ -179,7 +183,11 @@ describe("the live planner", () => {
 						.pipe(Stream.takeUntil((m) => m.type !== "plan_tool")),
 				);
 				const options = scripted.asked[0];
-				if (options?.cwd !== undefined) seen.files = readdirSync(options.cwd).sort();
+
+				if (options?.cwd !== undefined) {
+					seen.files = readdirSync(options.cwd).sort();
+				}
+
 				return all;
 			}).pipe(Effect.provide(livePlanner({repo, open: scripted.open})), Effect.scoped),
 		);

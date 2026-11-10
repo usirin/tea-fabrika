@@ -1,5 +1,0 @@
-chromium 153.0.8010.12
-{"probe":"P6 useMachine activity","want":"returns undefined; 1, show 2; errors reduce:Error,discard:DispatchDiscardedError","got":{"returns undefined; 1, show 2; errors reduce:Error,discard:DispatchDiscardedError":20}}
-{"probe":"P6 useMachine strict activity","want":"returns undefined; 1, show 2; errors reduce:Error,discard:DispatchDiscardedError","got":{"returns undefined; 1, show 2; errors reduce:Error,discard:DispatchDiscardedError":20}}
-{"probe":"P6 Effect run → useRuntime: send","want":"2","got":{"2":20}}
-{"probe":"P6 hand-built handle → useRuntime: send","want":"1","got":{"1":20}}

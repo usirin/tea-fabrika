@@ -186,12 +186,25 @@ const viewAfter = (seen: Seen, prev: Lane, msg: Msg): LaneView | null =>
 function countOf(f: Flow, end: ChildEnd): {readonly task: Owner; readonly open: number} | null {
 	const {kind, why} = end.outcome;
 	const review = (f.flow === "round" || f.flow === "final") && f.step === "review";
-	if (kind === "stuck" && !(review && why === "unseen")) return null;
+
+	if (kind === "stuck" && !(review && why === "unseen")) {
+		return null;
+	}
+
 	const open = Math.max(1, end.open?.length ?? 1);
-	if (f.flow === "round" && f.step === "review")
+
+	if (f.flow === "round" && f.step === "review") {
 		return kind === "skip" ? null : {task: f.task, open: kind === "done" ? 0 : open};
-	if (f.flow === "final" && f.step === "review") return kind === "done" ? null : {task: PLAN, open};
-	if (f.flow === "ship") return kind === "done" ? null : {task: PLAN, open: 1};
+	}
+
+	if (f.flow === "final" && f.step === "review") {
+		return kind === "done" ? null : {task: PLAN, open};
+	}
+
+	if (f.flow === "ship") {
+		return kind === "done" ? null : {task: PLAN, open: 1};
+	}
+
 	return null;
 }
 
@@ -220,13 +233,22 @@ export function laneLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 			{view: null, started: []},
 			(seen, {prev, msg, cmds}) => {
 				const started = [...seen.started];
+
 				for (const c of cmds) {
-					if (c.type !== "lane_start") continue;
+					if (c.type !== "lane_start") {
+						continue;
+					}
+
 					const job = structuralHash(c.job);
 					const before = started.find(([child]) => child === c.child);
-					if (before === undefined) started.push([c.child, job]);
-					else if (before[1] !== job) return broke(`${c.child} started again with another job`);
+
+					if (before === undefined) {
+						started.push([c.child, job]);
+					} else if (before[1] !== job) {
+						return broke(`${c.child} started again with another job`);
+					}
 				}
+
 				return {view: viewAfter(seen, prev, msg), started};
 			},
 		),
@@ -236,8 +258,11 @@ export function laneLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 			(seen, {prev, msg, cmds}) => {
 				const v = viewAfter(seen, prev, msg);
 				const work = cmds.some((c) => c.type === "lane_start" || c.type === "lane_open");
-				if (work && msg.type !== "resume" && v !== null && (v.waiting.length > 0 || v.closed))
+
+				if (work && msg.type !== "resume" && v !== null && (v.waiting.length > 0 || v.closed)) {
 					return broke("work started on a read with the owner's ask open");
+				}
+
 				return {view: v, started: seen.started};
 			},
 		),
@@ -246,17 +271,29 @@ export function laneLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 			{view: null, started: []},
 			(seen, {prev, msg, cmds}) => {
 				const v = viewAfter(seen, prev, msg);
+
 				for (const c of cmds) {
-					if (c.type !== "lane_open") continue;
-					if (v === null) return broke("opened before any read");
-					if (!v.met || v.behind || c.head !== v.head)
+					if (c.type !== "lane_open") {
+						continue;
+					}
+
+					if (v === null) {
+						return broke("opened before any read");
+					}
+
+					if (!v.met || v.behind || c.head !== v.head) {
 						return broke(`opened at ${c.head}: met ${v.met}, behind ${v.behind}, head ${v.head}`);
+					}
+
 					const named = closes(c.body);
-					if (structuralHash(named) !== structuralHash(numbers(v.tickets)))
+
+					if (structuralHash(named) !== structuralHash(numbers(v.tickets))) {
 						return broke(
 							`the text closes ${named.join(", ")}, the plan covers ${numbers(v.tickets).join(", ")}`,
 						);
+					}
 				}
+
 				return {view: v, started: seen.started};
 			},
 		),
@@ -265,8 +302,13 @@ export function laneLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 			{view: null, started: []},
 			(seen, {prev, msg, next}) => {
 				const v = viewAfter(seen, prev, msg);
-				if (next.phase === "over" && prev.phase !== "over" && next.outcome.kind === "done")
-					if (v?.pr?.state !== "merged") return broke("done with no merged pull request");
+
+				if (next.phase === "over" && prev.phase !== "over" && next.outcome.kind === "done") {
+					if (v?.pr?.state !== "merged") {
+						return broke("done with no merged pull request");
+					}
+				}
+
 				return {view: v, started: seen.started};
 			},
 		),
@@ -281,13 +323,21 @@ export function laneLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 			"every review, and every ship run that did not merge, is counted for the stall rule with what it left open",
 			({prev, msg, cmds}) => {
 				const taken = endTaken(prev, msg);
-				if (taken === null) return null;
+
+				if (taken === null) {
+					return null;
+				}
+
 				const want = countOf(taken.flow, taken.end);
 				const notes = cmds.flatMap((c) =>
 					c.type === "lane_note" ? [{task: c.task, open: c.open}] : [],
 				);
 				const said = notes.map((n) => `${n.open} in ${n.task}`).join(", ") || "nothing";
-				if (want === null) return notes.length === 0 ? null : `${taken.child}: counted ${said}`;
+
+				if (want === null) {
+					return notes.length === 0 ? null : `${taken.child}: counted ${said}`;
+				}
+
 				return notes.length === 1 && notes[0]?.task === want.task && notes[0].open === want.open
 					? null
 					: `${taken.child} left ${want.open} open in ${want.task}, and the lane counted ${said}`;
@@ -296,10 +346,22 @@ export function laneLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 		law<S, Msg, LaneCmd>(
 			"no count of the lane's own ends it: only a read, a child stuck or a failed write does",
 			({prev, msg, next}) => {
-				if (next.phase !== "over" || prev.phase === "over") return null;
-				if (msg.type === "lane_read_ok" && endsOn(msg.value)) return null;
-				if (msg.type === "child_over" && msg.end.outcome.kind !== "done") return null;
-				if (msg.type.endsWith("_err")) return null;
+				if (next.phase !== "over" || prev.phase === "over") {
+					return null;
+				}
+
+				if (msg.type === "lane_read_ok" && endsOn(msg.value)) {
+					return null;
+				}
+
+				if (msg.type === "child_over" && msg.end.outcome.kind !== "done") {
+					return null;
+				}
+
+				if (msg.type.endsWith("_err")) {
+					return null;
+				}
+
 				return `the lane ended ${next.outcome.kind}:${"why" in next.outcome ? next.outcome.why : ""} on ${msg.type}, with work left`;
 			},
 		),
@@ -355,7 +417,11 @@ const NO_LISTS: Lists = {counts: {}, asked: null};
 const counted = <S extends Lane>(lists: Lists, step: Step<S, Msg, LaneCmd>): Lists => {
 	const taken = endTaken(step.prev, step.msg);
 	const c = taken === null ? null : countOf(taken.flow, taken.end);
-	if (c === null) return lists;
+
+	if (c === null) {
+		return lists;
+	}
+
 	const list = [...(lists.counts[c.task] ?? []), c.open];
 	const asked = lists.asked ?? (asksOnStall(list) ? `${c.task}'s list, ${list.join(", ")},` : null);
 	return {counts: {...lists.counts, [c.task]: list}, asked};
@@ -378,9 +444,13 @@ export function deskLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 			NO_LISTS,
 			(before, step) => {
 				const lists = counted(before, step);
-				for (const c of step.cmds)
-					if (c.type === "lane_start" && lists.asked !== null)
+
+				for (const c of step.cmds) {
+					if (c.type === "lane_start" && lists.asked !== null) {
 						return broke(`${lists.asked} asks the owner, and ${c.child} started`);
+					}
+				}
+
 				return lists;
 			},
 		),
@@ -393,10 +463,13 @@ export function deskLaws<S extends Lane>(): readonly Law<S, Msg, LaneCmd>[] {
 				const stops =
 					(next.phase === "waiting" && prev.phase !== "waiting") ||
 					(next.phase === "over" && prev.phase !== "over" && next.outcome.kind !== "done");
-				if (stops && lists.asked === null)
+
+				if (stops && lists.asked === null) {
 					return broke(
 						`the lane stopped (${next.phase}) with every list still shrinking: ${shownLists(lists)}`,
 					);
+				}
+
 				return lists;
 			},
 		),
@@ -485,20 +558,37 @@ export function withTheDesk(
 				at.ships += 1;
 				return {outcome: {kind: "send", why: "checks_red"}};
 			}
-			if (pr !== null) pr = {...pr, state: "merged"};
+
+			if (pr !== null) {
+				pr = {...pr, state: "merged"};
+			}
+
 			return {outcome: {kind: "done"}};
 		}
-		if (f.flow === "drop" || f.flow === "plan" || f.step !== "review")
+
+		if (f.flow === "drop" || f.flow === "plan" || f.step !== "review") {
 			return {outcome: {kind: "done"}, head: "H"};
+		}
+
 		const list = f.flow === "round" ? task : finals;
 		const i = f.flow === "round" ? at.task : at.finals;
+
 		if (i < list.length) {
-			if (f.flow === "round") at.task += 1;
-			else at.finals += 1;
+			if (f.flow === "round") {
+				at.task += 1;
+			} else {
+				at.finals += 1;
+			}
+
 			return {outcome: {kind: "send", why: "review_failed"}, open: items(list[i] ?? 1)};
 		}
-		if (f.flow === "round") at.settled = true;
-		else at.passed = true;
+
+		if (f.flow === "round") {
+			at.settled = true;
+		} else {
+			at.passed = true;
+		}
+
 		return {outcome: {kind: "done"}, head: "H"};
 	};
 	const answer = (cmd: LaneCmd): Msg => {
@@ -526,33 +616,60 @@ export function withTheDesk(
 	const started: Record<string, number> = {};
 	let state: Lane = laneInit;
 	const queue: Msg[] = [{type: "start", lane: LANE, job: JOB}];
+
 	for (let n = 0; n < most; n++) {
 		const msg =
 			queue.shift() ??
 			(state.phase === "running"
 				? {type: "child_over", child: state.child, end: endOf(state.flow)}
 				: null);
-		if (msg === null) break;
+
+		if (msg === null) {
+			break;
+		}
+
 		const [next, cmds] = update(state, msg);
 		const step = {prev: state, msg, next, cmds};
 		watches = watches.map((w, i) => {
-			if (w === null) return null;
+			if (w === null) {
+				return null;
+			}
+
 			const after = w.step(step);
-			if (!(after instanceof Broke)) return after;
+
+			if (!(after instanceof Broke)) {
+				return after;
+			}
+
 			broken.push({law: laws[i]?.name ?? "?", why: after.why});
 			return null;
 		});
+
 		for (const c of cmds) {
 			const kind = c.type === "lane_start" ? startedOf(c.child) : null;
-			if (kind !== null) started[kind] = (started[kind] ?? 0) + 1;
+
+			if (kind !== null) {
+				started[kind] = (started[kind] ?? 0) + 1;
+			}
+
 			queue.push(answer(c));
 		}
+
 		state = next;
-		if (state.phase === "waiting" || state.phase === "over") break;
+
+		if (state.phase === "waiting" || state.phase === "over") {
+			break;
+		}
 	}
+
 	const noted: Record<string, number[]> = {};
-	for (const {fact} of entries)
-		if (fact.type === "reviewed") noted[fact.task] = [...(noted[fact.task] ?? []), fact.open];
+
+	for (const {fact} of entries) {
+		if (fact.type === "reviewed") {
+			noted[fact.task] = [...(noted[fact.task] ?? []), fact.open];
+		}
+	}
+
 	return {
 		state,
 		broken,
@@ -573,11 +690,19 @@ export const aCapPutBack =
 	(most: number): Update<Lane, Msg, LaneCmd> =>
 	(s, m) => {
 		const [next, cmds] = laneUpdate(s, m);
-		if (s.phase !== "reading" || next.phase !== "starting") return [next, cmds];
+
+		if (s.phase !== "reading" || next.phase !== "starting") {
+			return [next, cmds];
+		}
+
 		const f = next.flow;
 		const count =
 			f.flow === "round" || f.flow === "final" ? f.round : f.flow === "ship" ? f.run : 0;
-		if (count <= most) return [next, cmds];
+
+		if (count <= most) {
+			return [next, cmds];
+		}
+
 		const {lane: name, job, at, pr} = next;
 		return [
 			{
@@ -596,8 +721,11 @@ export const aCapPutBack =
 /** The lane counts no last review, as before the cap came out: a last review that keeps failing runs on, asked about by nobody. */
 export const forgetsTheLastReviews: Update<Lane, Msg, LaneCmd> = (s, m) => {
 	const [next, cmds] = laneUpdate(s, m);
-	if (s.phase !== "running" || s.flow.flow !== "final" || next.phase !== "noting")
+
+	if (s.phase !== "running" || s.flow.flow !== "final" || next.phase !== "noting") {
 		return [next, cmds];
+	}
+
 	const asked = readLane({plan: next.job.plan, pr: next.pr});
 	const {lane: name, job, at, pr} = next;
 	return [{lane: name, job, at, pr, phase: "reading", asked}, [asked]];
@@ -606,8 +734,11 @@ export const forgetsTheLastReviews: Update<Lane, Msg, LaneCmd> = (s, m) => {
 /** The planner's summary goes into the pull request as it came: its "Fixes #2" closes #2. */
 export const rawBody: Update<Lane, Msg, LaneCmd> = (s, m) => {
 	const [next, cmds] = laneUpdate(s, m);
-	if (next.phase !== "opening" || s.phase !== "reading" || m.type !== "lane_read_ok")
+
+	if (next.phase !== "opening" || s.phase !== "reading" || m.type !== "lane_read_ok") {
 		return [next, cmds];
+	}
+
 	const asked = {...next.asked, body: `${m.value.summary}\n\n${next.asked.body}`};
 	return [{...next, asked}, cmds.map((c) => (c.type === "lane_open" ? asked : c))];
 };

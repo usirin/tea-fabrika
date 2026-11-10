@@ -40,7 +40,11 @@ const candidates = (line: string, jobs: Jobs = EMPTY) => complete(line, list, jo
 const checkedAt = (line: string, programs: ProgramList = list): number | null => {
 	const parsed = parse(line);
 	const [first] = parsed.kind === "parsed" ? parsed.statements : [];
-	if (first?.kind !== "run") throw new Error(`not one pipeline: ${line}`);
+
+	if (first?.kind !== "run") {
+		throw new Error(`not one pipeline: ${line}`);
+	}
+
 	const checked = check(first.pipeline, programs, line);
 	return checked.kind === "refused" ? checked.at : null;
 };
@@ -120,6 +124,7 @@ describe("Tab completion after a pipe", () => {
 /** Tab after `before |` offers a program exactly when the checker wires it there, as typed or with one `<in`. */
 function expectSameAsChecker(before: string, programs: ProgramList) {
 	const offered = complete(`${before} | `, programs, EMPTY).candidates;
+
 	for (const [next, entry] of programs) {
 		const ways = [next, ...Object.keys(entry.program.inputs).map((i) => `${next} <${i}`)];
 		const wires = ways.some(

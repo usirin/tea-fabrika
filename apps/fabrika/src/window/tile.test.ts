@@ -156,8 +156,14 @@ describe("a tile's title bar", () => {
 		);
 		expect(stateOf(drawn(t2, {closing: true, zoomed: true}))).toBe("closing");
 		expect(stateOf(drawn(t2))).toBe("");
-		for (const html of [closing, drawn(t2, {zoomed: true}), drawn(t2, {asking: "close t2? (y/n)"})])
+
+		for (const html of [
+			closing,
+			drawn(t2, {zoomed: true}),
+			drawn(t2, {asking: "close t2? (y/n)"}),
+		]) {
 			expect(orderOf(html).at(-1)).toBe("tid");
+		}
 	});
 
 	it("marks only the close question as asking, never closing or zoomed", () => {
@@ -200,15 +206,34 @@ const handlersOf = (props: TileProps) => {
 	const found: {section?: Record<string, unknown>; header?: Record<string, unknown>} = {};
 	const walk = (node: unknown): void => {
 		if (Array.isArray(node)) {
-			for (const kid of node) walk(kid);
+			for (const kid of node) {
+				walk(kid);
+			}
+
 			return;
 		}
-		if (!isValidElement(node)) return;
+
+		if (!isValidElement(node)) {
+			return;
+		}
+
 		const given = node.props;
-		if (typeof given !== "object" || given === null) return;
-		if (node.type === "section") found.section = {...given};
-		if (node.type === "header") found.header = {...given};
-		if ("children" in given) walk(given.children);
+
+		if (typeof given !== "object" || given === null) {
+			return;
+		}
+
+		if (node.type === "section") {
+			found.section = {...given};
+		}
+
+		if (node.type === "header") {
+			found.header = {...given};
+		}
+
+		if ("children" in given) {
+			walk(given.children);
+		}
 	};
 	function Read(): ReactNode {
 		const tile = Tile(props);
@@ -222,12 +247,15 @@ const handlersOf = (props: TileProps) => {
 /** Call a handler the way React would, with an event that only counts its preventDefault. */
 const fire = (handler: unknown) => {
 	let prevented = false;
-	if (typeof handler === "function")
+
+	if (typeof handler === "function") {
 		handler({
 			preventDefault: () => {
 				prevented = true;
 			},
 		});
+	}
+
 	return {called: typeof handler === "function", prevented};
 };
 
@@ -306,18 +334,31 @@ const CSS = readFileSync(join(import.meta.dirname, "window.css"), "utf8").replac
 /** The body of every @media block whose query matches. */
 const insideMedia = (css: string, query: RegExp) => {
 	const bodies: string[] = [];
+
 	for (const m of css.matchAll(/@media([^{]*)\{/g)) {
-		if (!query.test(m[1] ?? "")) continue;
+		if (!query.test(m[1] ?? "")) {
+			continue;
+		}
+
 		let depth = 1;
 		const from = (m.index ?? 0) + m[0].length;
 		let i = from;
+
 		while (i < css.length && depth > 0) {
-			if (css[i] === "{") depth += 1;
-			if (css[i] === "}") depth -= 1;
+			if (css[i] === "{") {
+				depth += 1;
+			}
+
+			if (css[i] === "}") {
+				depth -= 1;
+			}
+
 			i += 1;
 		}
+
 		bodies.push(css.slice(from, i - 1));
 	}
+
 	return bodies.join("\n");
 };
 
@@ -325,18 +366,31 @@ const insideMedia = (css: string, query: RegExp) => {
 const outsideMedia = (css: string) => {
 	let out = "";
 	let at = 0;
+
 	for (const m of css.matchAll(/@media[^{]*\{/g)) {
-		if ((m.index ?? 0) < at) continue;
+		if ((m.index ?? 0) < at) {
+			continue;
+		}
+
 		out += css.slice(at, m.index);
 		let depth = 1;
 		let i = (m.index ?? 0) + m[0].length;
+
 		while (i < css.length && depth > 0) {
-			if (css[i] === "{") depth += 1;
-			if (css[i] === "}") depth -= 1;
+			if (css[i] === "{") {
+				depth += 1;
+			}
+
+			if (css[i] === "}") {
+				depth -= 1;
+			}
+
 			i += 1;
 		}
+
 		at = i;
 	}
+
 	return out + css.slice(at);
 };
 
@@ -532,10 +586,12 @@ describe("a tile under a person's own settings", () => {
 		expect(FORCED.length).toBeGreaterThan(0);
 		expect(outlineOf(FORCED, ".tile")).toContain("CanvasText");
 		expect(outlineOf(FORCED, ".strip")).toContain("CanvasText");
+
 		for (const focused of [".tile.focused", ".strip:focus-visible"]) {
 			expect(outlineOf(FORCED, focused)).toContain("2px");
 			expect(outlineOf(FORCED, focused)).toContain("Highlight");
 		}
+
 		const slot = FORCED.filter((r) => r.selectors.some((s) => draws(s, "slot")));
 		expect(slot.map((r) => r.says.get("color"))).toContain("CanvasText");
 	});

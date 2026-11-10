@@ -111,7 +111,11 @@ const withGreeter = <A, E>(
 	Effect.runPromise(
 		Effect.gen(function* () {
 			const started = yield* start(greeter, flags, listeners, kept());
-			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
+
+			if (started.kind !== "running") {
+				return yield* Effect.die(`did not start: ${started.why}`);
+			}
+
 			return yield* body(started);
 		}).pipe(Effect.scoped, Effect.provide(at42)),
 	);
@@ -172,7 +176,11 @@ describe("a running program", () => {
 		const heard = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(eager, quiet, {count: counts.hear}, kept());
-				if (started.kind !== "running") return null;
+
+				if (started.kind !== "running") {
+					return null;
+				}
+
 				yield* tell(started.run, "name", "ada");
 				return yield* counts.upTo(2);
 			}).pipe(Effect.scoped, Effect.provide(at42)),
@@ -237,7 +245,11 @@ describe("a running program", () => {
 					{},
 					{each: (v) => heard.hear(refs.push(new WeakRef(v)))},
 				);
-				if (started.kind !== "running") return null;
+
+				if (started.kind !== "running") {
+					return null;
+				}
+
 				yield* tell(started.run, "times", 10_000);
 				yield* heard.upTo(10_000);
 				// A WeakRef keeps its value alive until the task that made it ends: let it end, then collect.
@@ -265,7 +277,11 @@ describe("a running program", () => {
 					Effect.forkChild,
 				);
 				yield* Deferred.await(first);
-				for (const name of ["ada", "alan", "grace"]) yield* tell(run, "name", name);
+
+				for (const name of ["ada", "alan", "grace"]) {
+					yield* tell(run, "name", name);
+				}
+
 				yield* counts.upTo(3);
 				const now = view.state();
 				yield* stop;
@@ -367,7 +383,11 @@ describe("closing an input, like the end of stdin", () => {
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(slow, {}, {said: said.hear});
-				if (started.kind !== "running") return null;
+
+				if (started.kind !== "running") {
+					return null;
+				}
+
 				yield* tell(started.run, "line", "one");
 				yield* Deferred.await(picked);
 				started.close("line");
@@ -429,10 +449,18 @@ describe("many writers on one input, like a Unix pipe", () => {
 			Effect.gen(function* () {
 				const said = ear<string>();
 				const target = yield* start(echo, {}, {said: said.hear});
-				if (target.kind !== "running") return null;
+
+				if (target.kind !== "running") {
+					return null;
+				}
+
 				const a = yield* pipe({program: relay, flags: {}}, "line", target, "line");
 				const b = yield* pipe({program: relay, flags: {}}, "line", target, "line");
-				if (a.kind !== "running" || b.kind !== "running") return null;
+
+				if (a.kind !== "running" || b.kind !== "running") {
+					return null;
+				}
+
 				yield* tell(a.run, "line", "from a");
 				a.close("line");
 				yield* a.run.ended;
@@ -486,9 +514,17 @@ describe("pipe: one program's output into another's input", () => {
 			Effect.gen(function* () {
 				const said = ear<string>();
 				const target = yield* start(to, {}, {said: said.hear});
-				if (target.kind !== "running") return null;
+
+				if (target.kind !== "running") {
+					return null;
+				}
+
 				const source = yield* pipe({program: lines, flags: {lines: sent}}, "line", target, "line");
-				if (source.kind !== "running") return null;
+
+				if (source.kind !== "running") {
+					return null;
+				}
+
 				const from = yield* source.run.ended;
 				return {from, to: yield* target.run.ended, said: said.values};
 			}).pipe(Effect.scoped),
@@ -514,7 +550,11 @@ describe("pipe: one program's output into another's input", () => {
 		const closedFirst = await Effect.runPromise(
 			Effect.gen(function* () {
 				const target = yield* start(lingers, {});
-				if (target.kind !== "running") return null;
+
+				if (target.kind !== "running") {
+					return null;
+				}
+
 				target.close("line");
 				const source = yield* pipe(
 					{program: lines, flags: {lines: ["one"]}},
@@ -557,7 +597,11 @@ describe("pipe: one program's output into another's input", () => {
 		const answer = await Effect.runPromise(
 			Effect.gen(function* () {
 				const target = yield* start(counter, {});
-				if (target.kind !== "running") return null;
+
+				if (target.kind !== "running") {
+					return null;
+				}
+
 				return yield* pipe({program: sends, flags: {}}, "n", target, "n");
 			}).pipe(Effect.scoped),
 		);
@@ -627,23 +671,42 @@ describe("pipe into an input that acks (experiment 75d)", () => {
 								Effect.gen(function* () {
 									got.push(value);
 									const counted = ack.pipe(Effect.andThen(Effect.sync(() => acked++)));
-									if (yield* Deferred.isDone(go)) yield* counted;
-									else held.push(counted);
+
+									if (yield* Deferred.isDone(go)) {
+										yield* counted;
+									} else {
+										held.push(counted);
+									}
 								}),
 						}),
 				});
 				const seen = yield* Effect.gen(function* () {
 					const target = yield* start(slow, {});
-					if (target.kind !== "running") return null;
+
+					if (target.kind !== "running") {
+						return null;
+					}
+
 					const source = yield* pipe({program: counts, flags: {}}, "n", target, "n");
-					if (source.kind !== "running") return null;
+
+					if (source.kind !== "running") {
+						return null;
+					}
+
 					// Held: WINDOW values reach the receiver, and the sender waits on the next.
-					while (got.length < WINDOW) yield* Effect.sleep("1 millis");
+					while (got.length < WINDOW) {
+						yield* Effect.sleep("1 millis");
+					}
+
 					yield* Effect.sleep("30 millis");
 					const waiting = {sent, got: got.length};
 					// Let go: the held acks are kept, and from here each value is acked as it comes.
 					yield* Deferred.succeed(go, undefined);
-					for (const one of held.splice(0)) yield* one;
+
+					for (const one of held.splice(0)) {
+						yield* one;
+					}
+
 					return {
 						waiting,
 						from: yield* source.run.ended,
@@ -692,9 +755,17 @@ describe("pipe into an input that acks (experiment 75d)", () => {
 				});
 				const seen = yield* Effect.gen(function* () {
 					const target = yield* start(late, {});
-					if (target.kind !== "running") return null;
+
+					if (target.kind !== "running") {
+						return null;
+					}
+
 					const source = yield* pipe({program: counts, flags: {}}, "n", target, "n");
-					if (source.kind !== "running") return null;
+
+					if (source.kind !== "running") {
+						return null;
+					}
+
 					const from = yield* source.run.ended;
 					const before = got.length;
 					yield* Deferred.succeed(go, undefined);
@@ -718,7 +789,11 @@ describe("how a run ends", () => {
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(once, quiet, {count: atStart.hear}, kept());
-				if (started.kind !== "running") return null;
+
+				if (started.kind !== "running") {
+					return null;
+				}
+
 				const ended = yield* started.run.ended;
 				const after: unknown[] = [];
 				started.run.listen("count", (n) => after.push(n));
@@ -733,7 +808,11 @@ describe("how a run ends", () => {
 		const run = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(greeter, quiet, {}, kept());
-				if (started.kind !== "running") return yield* Effect.die("did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("did not start");
+				}
+
 				return started.run;
 			}).pipe(Effect.scoped, Effect.provide(at42)),
 		);
@@ -826,7 +905,11 @@ describe("flags", () => {
 		const heard = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(echo, {}, {said: said.hear});
-				if (started.kind !== "running") return null;
+
+				if (started.kind !== "running") {
+					return null;
+				}
+
 				yield* tell(started.run, "line", "one");
 				yield* tell(started.run, "line", "two");
 				return yield* said.upTo(2);

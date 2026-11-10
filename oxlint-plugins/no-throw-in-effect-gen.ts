@@ -34,7 +34,10 @@ export const noThrowInEffectGen: CreateRule = {
 		return {
 			ThrowStatement(node) {
 				for (const up of ancestors(node)) {
-					if (up.type !== "CallExpression" || !opensEffect(up.callee)) continue;
+					if (up.type !== "CallExpression" || !opensEffect(up.callee)) {
+						continue;
+					}
+
 					context.report({
 						node,
 						message:

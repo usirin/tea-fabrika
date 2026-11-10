@@ -24,7 +24,9 @@ const Older = Schema.Struct({count: Schema.Int});
 const dirs: string[] = [];
 
 afterEach(() => {
-	for (const dir of dirs.splice(0)) rmSync(dir, {recursive: true, force: true});
+	for (const dir of dirs.splice(0)) {
+		rmSync(dir, {recursive: true, force: true});
+	}
 });
 
 const go = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
@@ -284,7 +286,10 @@ describe("a torn write", () => {
 				return KeyValueStore.make({
 					...real,
 					set: (key, value) => {
-						if (!tearNext || typeof value !== "string") return real.set(key, value);
+						if (!tearNext || typeof value !== "string") {
+							return real.set(key, value);
+						}
+
 						tearNext = false;
 						return real.set(key, value.slice(0, Math.floor(value.length / 2)));
 					},
@@ -318,7 +323,11 @@ describe("a torn write", () => {
 		const newest = slots
 			.map((name) => ({name, count: JSON.parse(readFileSync(join(dir, name), "utf8")).count}))
 			.sort((a, b) => b.count - a.count)[0];
-		if (newest === undefined) throw new Error("no record slot was written");
+
+		if (newest === undefined) {
+			throw new Error("no record slot was written");
+		}
+
 		const text = readFileSync(join(dir, newest.name), "utf8");
 		writeFileSync(join(dir, newest.name), text.slice(0, Math.floor(text.length / 2)));
 

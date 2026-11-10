@@ -70,9 +70,14 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 1000; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
@@ -93,7 +98,12 @@ const clientEnd = Effect.gen(function* () {
 			rest += typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
 			const parts = rest.split("\n");
 			rest = parts.pop() ?? "";
-			for (const part of parts) if (part.trim() !== "") heard.push(JSON.parse(part));
+
+			for (const part of parts) {
+				if (part.trim() !== "") {
+					heard.push(JSON.parse(part));
+				}
+			}
 		});
 	const stdio = Stdio.make({
 		args: Effect.succeed([]),
@@ -153,15 +163,26 @@ const recordingHost = (path: string, name: string, options: HostOptions = {}) =>
 				rest += chunk.toString("utf8");
 				const parts = rest.split("\n");
 				rest = parts.pop() ?? "";
+
 				for (const part of parts) {
-					if (part.trim() === "") continue;
+					if (part.trim() === "") {
+						continue;
+					}
+
 					const m: unknown = JSON.parse(part);
 					lines.push(m);
-					if (holds(m)) continue;
+
+					if (holds(m)) {
+						continue;
+					}
+
 					if (field(m, "type") === "handshake") {
-						if (shake === null) socket.end();
-						else say(shake);
-					} else if (field(m, "method") === "initialize")
+						if (shake === null) {
+							socket.end();
+						} else {
+							say(shake);
+						}
+					} else if (field(m, "method") === "initialize") {
 						say({
 							jsonrpc: "2.0",
 							id: field(m, "id"),
@@ -171,17 +192,21 @@ const recordingHost = (path: string, name: string, options: HostOptions = {}) =>
 								serverInfo: {name, version: "0.0.0"},
 							},
 						});
-					else if (field(m, "method") === "tools/call")
+					} else if (field(m, "method") === "tools/call") {
 						say({
 							jsonrpc: "2.0",
 							id: field(m, "id"),
 							result: {content: [{type: "text", text: name}]},
 						});
+					}
 				}
 			});
 		});
 		const stop = Effect.callback<void>((resume) => {
-			for (const socket of open) socket.destroy();
+			for (const socket of open) {
+				socket.destroy();
+			}
+
 			server.close(() => resume(Effect.void));
 		});
 		yield* Effect.callback<void>((resume) => {
@@ -767,10 +792,12 @@ describe("the first host, before or at its handshake", () => {
 				const first = yield* recordingHost(path, "host 1", options);
 				const client = yield* clientEnd;
 				const running = yield* bridgeOn(path, client.stdio);
+
 				if (after !== undefined) {
 					yield* opened(client);
 					after(first);
 				}
+
 				return whyOf(yield* endOf(running));
 			}),
 		);
@@ -907,7 +934,11 @@ describe("the wait between dials, on the app's own shape (full jitter)", () => {
 			const open = new Set<NetSocket>();
 			const server = createServer((socket) => {
 				const at = first === null ? 0 : 1;
-				if (at === 0) first = socket;
+
+				if (at === 0) {
+					first = socket;
+				}
+
 				open.add(socket);
 				socket.on("error", () => {});
 				socket.on("close", () => open.delete(socket));
@@ -917,9 +948,14 @@ describe("the wait between dials, on the app's own shape (full jitter)", () => {
 					rest += chunk.toString("utf8");
 					const parts = rest.split("\n");
 					rest = parts.pop() ?? "";
+
 					for (const part of parts) {
-						if (part.trim() === "") continue;
+						if (part.trim() === "") {
+							continue;
+						}
+
 						const m: unknown = JSON.parse(part);
+
 						if (field(m, "type") === "handshake") {
 							shaken += 1;
 							say({type: "handshake", version: AGENTS_PROTOCOL});
@@ -928,6 +964,7 @@ describe("the wait between dials, on the app's own shape (full jitter)", () => {
 								socket.destroy();
 								return;
 							}
+
 							say({
 								jsonrpc: "2.0",
 								id: field(m, "id"),
@@ -946,9 +983,15 @@ describe("the wait between dials, on the app's own shape (full jitter)", () => {
 			});
 			yield* Effect.addFinalizer(() =>
 				Effect.callback<void>((resume) => {
-					for (const socket of open) socket.destroy();
-					if (server.listening) server.close(() => resume(Effect.void));
-					else resume(Effect.void);
+					for (const socket of open) {
+						socket.destroy();
+					}
+
+					if (server.listening) {
+						server.close(() => resume(Effect.void));
+					} else {
+						resume(Effect.void);
+					}
 				}),
 			);
 			return {shaken: () => shaken, drop: () => first?.destroy()};
@@ -985,12 +1028,14 @@ describe("the wait between dials, on the app's own shape (full jitter)", () => {
 					yield* opened(client);
 					host.drop();
 					let moved = 0;
+
 					while (moved < PAST && running.pollUnsafe() === undefined) {
 						yield* clock.adjust(STEP);
 						moved += STEP;
 						// A short real window for the dial, the handshake and the close.
 						yield* Effect.sleep("20 millis");
 					}
+
 					return {exit: running.pollUnsafe(), moved, shaken: host.shaken()};
 				}),
 			);
@@ -1009,7 +1054,12 @@ describe("the wait between dials, on the app's own shape (full jitter)", () => {
 				.filter((l) => l.includes("message=host_back"))
 				.map((l) => Number(/tries=(\d+)/.exec(l)?.[1]));
 			expect(tries.length).toBeGreaterThan(3);
-			for (const [i, n] of tries.entries()) if (i > 0) expect(n).toBeGreaterThan(tries[i - 1] ?? 0);
+
+			for (const [i, n] of tries.entries()) {
+				if (i > 0) {
+					expect(n).toBeGreaterThan(tries[i - 1] ?? 0);
+				}
+			}
 		},
 		LONG,
 	);
@@ -1046,6 +1096,7 @@ const sdkClientOn = (client: Effect.Success<typeof clientEnd>, changed: unknown[
 					seen += 1;
 					transport.onmessage?.(message);
 				}
+
 				yield* Effect.sleep("2 millis");
 			}
 		}).pipe(Effect.forkScoped);
@@ -1116,7 +1167,10 @@ describe("an MCP client on the bridge, across a host restart (d20)", () => {
 			// Each host heard the client's initialize first, so each names the client in its line.
 			const came = lines.filter((l) => l.includes("message=agent_came"));
 			expect(came).toHaveLength(2);
-			for (const line of came) expect(line).toContain("client=claude-code");
+
+			for (const line of came) {
+				expect(line).toContain("client=claude-code");
+			}
 		},
 		LONG,
 	);

@@ -121,11 +121,18 @@ describe("box gc, today's tooling", () => {
 		fc.assert(
 			fc.property(seen, ({name, git}) => {
 				const to = backupsOf(name, git?.branch ?? null);
-				for (const b of to) expect(b).toMatch(/^fabrikalfa\/.+(?<!-wip)-wip$/);
+
+				for (const b of to) {
+					expect(b).toMatch(/^fabrikalfa\/.+(?<!-wip)-wip$/);
+				}
+
 				expect(to.at(-1)).toBe(`fabrikalfa/${name}-wip`);
 				expect(new Set(to).size).toBe(to.length);
 				const base = git?.branch?.replace(/(-wip)+$/, "");
-				if (base?.startsWith("fabrikalfa/")) expect(to[0]).toBe(`${base}-wip`);
+
+				if (base?.startsWith("fabrikalfa/")) {
+					expect(to[0]).toBe(`${base}-wip`);
+				}
 			}),
 			options,
 		);
@@ -220,10 +227,19 @@ describe("dirtyIn reads a real box, today's tooling", () => {
 		writeFileSync(join(box, "a.ts"), "1\n");
 		git("add", "a.ts");
 		git("commit", "-q", "-m", "base");
+
 		// Three hours ago, then a stat change with no content change: plain git status rewrites the
 		// index for that, and makes index.lock in the git data folder.
-		for (const p of [join(box, "a.ts"), join(data, "index"), join(data, "logs", "HEAD"), data, box])
+		for (const p of [
+			join(box, "a.ts"),
+			join(data, "index"),
+			join(data, "logs", "HEAD"),
+			data,
+			box,
+		]) {
 			utimesSync(p, old, old);
+		}
+
 		utimesSync(join(box, "a.ts"), new Date(), new Date());
 		utimesSync(box, old, old);
 		const before = lastTouched(box, data);

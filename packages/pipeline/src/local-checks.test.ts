@@ -94,8 +94,10 @@ beforeAll(async () => {
 			yield* sh(root, "git", ["init", "-q", dev]);
 			const commitWith = (files: Readonly<Record<string, string>>, message: string) =>
 				Effect.gen(function* () {
-					for (const [name, text] of Object.entries(files))
+					for (const [name, text] of Object.entries(files)) {
 						yield* fs.writeFileString(path.join(dev, name), text);
+					}
+
 					yield* sh(dev, "git", ["add", "-A"]);
 					yield* sh(dev, "git", ["commit", "-q", "--no-verify", "--allow-empty", "-m", message]);
 					return yield* sh(dev, "git", ["rev-parse", "HEAD"]);

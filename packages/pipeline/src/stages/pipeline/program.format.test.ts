@@ -144,11 +144,17 @@ const answering = (picks: Readonly<Record<string, string>>) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const done = new Set<string>();
+
 		for (;;) {
 			const ticket = yield* read;
+
 			for (const entry of ticket.timeline) {
 				const fact = entry.fact;
-				if (fact.type !== "asked" || done.has(fact.ask)) continue;
+
+				if (fact.type !== "asked" || done.has(fact.ask)) {
+					continue;
+				}
+
 				done.add(fact.ask);
 				yield* ledger.send(streams(nameOf(NUMBER)).inbox, `answer-${fact.ask}`, {
 					kind: "answered",
@@ -162,6 +168,7 @@ const answering = (picks: Readonly<Record<string, string>>) =>
 					},
 				});
 			}
+
 			yield* Effect.sleep("50 millis");
 		}
 	});
@@ -193,12 +200,17 @@ describe("an exam file that fails the format check before a build round", () => 
 				mainFiles: [FORMATTER],
 			});
 			writeFileSync(join(dir, "script.json"), JSON.stringify(FAKE));
-			for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
+
+			for (const [key, value] of Object.entries(fakeEnv(dir))) {
+				vi.stubEnv(key, value);
+			}
+
 			const lines: string[] = [];
 			let named = false;
 			const say = (said: string) =>
 				Effect.sync(() => {
 					lines.push(said);
+
 					if (!named && said.startsWith("build: done")) {
 						named = true;
 						nameFormatter(seed);
@@ -218,7 +230,9 @@ describe("an exam file that fails the format check before a build round", () => 
 						),
 					);
 					yield* Effect.gen(function* () {
-						while (!over()) yield* Effect.sleep("50 millis");
+						while (!over()) {
+							yield* Effect.sleep("50 millis");
+						}
 					}).pipe(Effect.timeoutOption(Duration.seconds(240)));
 					yield* Fiber.interrupt(running);
 					return (yield* read).timeline;
@@ -315,7 +329,11 @@ describe("a test the mutants' writer adds that fails the format check", () => {
 					answers: {mutants: [{with: {files: [{path: ANSWER, text: ANSWER_SPACES}]}}]},
 				}),
 			);
-			for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
+
+			for (const [key, value] of Object.entries(fakeEnv(dir))) {
+				vi.stubEnv(key, value);
+			}
+
 			const lines: string[] = [];
 			const say = (said: string) => Effect.sync(() => void lines.push(said));
 			const log = join(dir, "codex.log");
@@ -333,7 +351,9 @@ describe("a test the mutants' writer adds that fails the format check", () => {
 						),
 					);
 					yield* Effect.gen(function* () {
-						while (!over()) yield* Effect.sleep("50 millis");
+						while (!over()) {
+							yield* Effect.sleep("50 millis");
+						}
 					}).pipe(Effect.timeoutOption(Duration.seconds(240)));
 					yield* Fiber.interrupt(running);
 				}).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),

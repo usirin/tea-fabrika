@@ -10,7 +10,10 @@ export const rssLayer = (
 		ChildProcessSpawner.ChildProcessSpawner,
 		ChildProcessSpawner.make((command) =>
 			Effect.sync(() => {
-				if (command._tag === "StandardCommand") onSpawn?.(command.command, command.args);
+				if (command._tag === "StandardCommand") {
+					onSpawn?.(command.command, command.args);
+				}
+
 				const stdout = Stream.make(new TextEncoder().encode(String(sample())));
 				return ChildProcessSpawner.makeHandle({
 					pid: ChildProcessSpawner.ProcessId(27000),

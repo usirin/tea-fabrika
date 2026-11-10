@@ -66,6 +66,7 @@ export const localReviewTurn =
 			const at = brief === null ? null : taskOf(brief.pr);
 			const work = yield* BuildWork;
 			const dir = brief === null ? null : readingIn(work.dir, brief.pr);
+
 			if (brief !== null && at !== null && dir !== null) {
 				const outside = yield* Outside;
 				const git = yield* gitOn(work.env);
@@ -74,6 +75,7 @@ export const localReviewTurn =
 					Effect.ignore,
 				);
 			}
+
 			return yield* reviewTurn(agent)(ask);
 		});
 
@@ -125,9 +127,17 @@ const jobOf = (self: Self["Service"]) =>
 const keepJudged = (end: Extract<Review, {phase: "over"}>, job: LocalReviewJob) =>
 	Effect.gen(function* () {
 		const judgement = judgementOf(end.report, targetOf(job));
-		if (judgement === null) return false;
+
+		if (judgement === null) {
+			return false;
+		}
+
 		const book = bookOf(foldLedger(yield* readFacts), job.plan);
-		if (book === null) return false;
+
+		if (book === null) {
+			return false;
+		}
+
 		const self = yield* Self;
 		yield* sendFact(
 			{
@@ -200,7 +210,10 @@ export const hostedLocalReview: Stage<
 	resume: {type: "resume"},
 	finish: (end, job) =>
 		Effect.gen(function* () {
-			if (end.phase !== "over") return null;
+			if (end.phase !== "over") {
+				return null;
+			}
+
 			const judged = yield* keepJudged(end, job);
 			return {
 				name: nameOf(end.outcome),

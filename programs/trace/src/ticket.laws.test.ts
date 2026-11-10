@@ -123,6 +123,7 @@ describe("the ticket's lanes (L1 to L6)", () => {
 			fc.property(stories, extra, (story, adds) => {
 				const first = story.timeline[0]?.at ?? 0;
 				let timeline = story.timeline;
+
 				for (const add of adds) {
 					// Days before the first fact, or anywhere up to now.
 					const at = Math.floor(
@@ -130,6 +131,7 @@ describe("the ticket's lanes (L1 to L6)", () => {
 					);
 					timeline = noted(timeline, at, add.kind);
 				}
+
 				expect(lanesOf(timeline, story.now, Infinity)).toEqual(live(story));
 			}),
 			OPTS,
@@ -162,7 +164,8 @@ describe("the ticket's lanes (L1 to L6)", () => {
 				const rows = new Map(
 					live(story).flatMap((l) => waitsIn(l).map((r): [string, LaneRow] => [r.ask, r])),
 				);
-				for (const ask of story.lanes.flatMap((l) => l.asks))
+
+				for (const ask of story.lanes.flatMap((l) => l.asks)) {
 					expect(rows.get(ask.ask)).toEqual({
 						kind: "wait",
 						ask: ask.ask,
@@ -172,6 +175,7 @@ describe("the ticket's lanes (L1 to L6)", () => {
 						pick: ask.answer?.pick ?? null,
 						by: ask.answer?.by ?? null,
 					});
+				}
 			}),
 			OPTS,
 		);
@@ -213,8 +217,10 @@ describe("the ticket's lanes (L1 to L6)", () => {
 				);
 				// A step not ended with a model has no price yet: the next law says what it is not.
 				const priced = story.lanes.flatMap((l) => l.steps).filter((s) => s.price !== null);
-				for (const step of priced)
+
+				for (const step of priced) {
 					expect(rounded(rows.get(step.run))).toEqual(rounded(step.price ?? undefined));
+				}
 			}),
 			OPTS,
 		);
@@ -229,8 +235,10 @@ describe("the ticket's lanes (L1 to L6)", () => {
 				);
 				const running = story.lanes.flatMap((l) => l.steps).filter((s) => s.price === null);
 				seen += running.length;
-				for (const step of running)
+
+				for (const step of running) {
 					expect(["usd", "unknown", "none"], step.run).not.toContain(rows.get(step.run)?.kind);
+				}
 			}),
 			OPTS,
 		);
@@ -258,13 +266,20 @@ describe("the ticket's lanes (L1 to L6)", () => {
 				const check = (got: ReturnType<typeof summaryOf>, truths: readonly TrueLane[]) => {
 					const w = want(truths);
 					expect({...got, usd: null}).toEqual({...w, usd: null});
-					if (w.usd === null) expect(got.usd).toBeNull();
-					else expect(got.usd).toBeCloseTo(w.usd, 9);
+
+					if (w.usd === null) {
+						expect(got.usd).toBeNull();
+					} else {
+						expect(got.usd).toBeCloseTo(w.usd, 9);
+					}
 				};
 				check(summaryOf(lanes), story.lanes);
 				lanes.forEach((lane, i) => {
 					const truth = story.lanes[i];
-					if (truth !== undefined) check(summaryOf([lane]), [truth]);
+
+					if (truth !== undefined) {
+						check(summaryOf([lane]), [truth]);
+					}
 				});
 			}),
 			OPTS,

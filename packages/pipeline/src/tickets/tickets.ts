@@ -283,10 +283,17 @@ export const memoryTickets = (seed: readonly Seeded[] = []): Layer.Layer<MemoryT
 				add: (n, id, by, fact) =>
 					Effect.gen(function* () {
 						const all = yield* Ref.get(entries);
-						if (!all.some((e) => e.ticket === n && e.fact.type === "filed"))
+
+						if (!all.some((e) => e.ticket === n && e.fact.type === "filed")) {
 							return yield* Effect.fail(failed(n, "no_ticket", `no ticket #${n} in memory`));
+						}
+
 						const key = `${n}/${id}`;
-						if ((yield* Ref.get(ids)).has(key)) return;
+
+						if ((yield* Ref.get(ids)).has(key)) {
+							return;
+						}
+
 						const at = yield* Clock.currentTimeMillis;
 						yield* Ref.update(ids, (s) => new Set([...s, key]));
 						yield* Ref.update(entries, (es) => [

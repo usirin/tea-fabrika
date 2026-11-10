@@ -30,7 +30,11 @@ import {Duration, Effect, Layer, Schedule, Schema} from "effect";
 export const portOf = (persist: string): number => {
 	// FNV-1a, 32 bits: a fixed spread of folder names over the range, nothing secret.
 	let h = 0x811c9dc5;
-	for (let i = 0; i < persist.length; i++) h = Math.imul(h ^ persist.charCodeAt(i), 0x01000193);
+
+	for (let i = 0; i < persist.length; i++) {
+		h = Math.imul(h ^ persist.charCodeAt(i), 0x01000193);
+	}
+
 	return 12_000 + ((h >>> 0) % 20_000);
 };
 

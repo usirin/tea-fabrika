@@ -20,16 +20,16 @@
 		"packages/pipeline/src/laws/promise-check.ts"
 	],
 	"confirmed": {
-		"commit": "5a3fb8858fe349d92d04241b147efaa7f9ae69d3",
+		"commit": "6580740b1eb60ed8ea1d4e0fbd215aa38b26b712",
 		"prints": {
-			"packages/pipeline/src/stages/ship/machine.ts#createShip": "ca580712a55c0a8f",
+			"packages/pipeline/src/stages/ship/machine.ts#createShip": "1caff7852ecf9b60",
 			"packages/pipeline/src/stages/ship/machine.ts#over": "8ea1c0fc023805f3",
 			"packages/pipeline/src/stages/ship/machine.ts#stay": "f927f87947d01074",
-			"packages/pipeline/src/stages/ship/machine.ts#revived": "572f9a099fdb5105",
+			"packages/pipeline/src/stages/ship/machine.ts#revived": "f5d708113bd4a8ac",
 			"packages/pipeline/src/stages/ship/machine.ts#ship": "e253baae3b116105",
-			"packages/pipeline/src/laws/ship.ts": "b77e6e5e412e9c49",
-			"packages/pipeline/src/laws/explore.ts": "5604c01d06d48e01",
-			"packages/pipeline/src/laws/promise-check.ts": "d2f8c19615514cfc"
+			"packages/pipeline/src/laws/ship.ts": "74e3746e8283ca5a",
+			"packages/pipeline/src/laws/explore.ts": "8251bd007f30b2a3",
+			"packages/pipeline/src/laws/promise-check.ts": "520a80b55a40e82c"
 		}
 	}
 }

@@ -68,15 +68,21 @@ export const markdown = defineProgram({
 				Effect.sync(() => {
 					first = input;
 				}).pipe(Effect.andThen(end));
+
 			if (flags.text !== undefined) {
 				yield* show(flags.text);
 				first = "text";
-			} else
+			} else {
 				yield* serve(
 					{text: (text) => show(text).pipe(Effect.andThen(got("text"))), quit: () => got("quit")},
 					{until: ["text"]},
 				);
-			if (first !== "text") return;
+			}
+
+			if (first !== "text") {
+				return;
+			}
+
 			// Then each text told, in order with the window's quit: a pipe's end does not end the
 			// window, a person reads, then quits. A quit, or `quit` closed, does.
 			yield* serve({text: show, quit: () => end}, {until: ["quit"]});

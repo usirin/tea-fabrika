@@ -37,18 +37,22 @@ const {home, remote, seed} = makeLaneHome({
 
 const env: Record<string, string> = {};
 
-for (const [name, value] of Object.entries(process.env))
+for (const [name, value] of Object.entries(process.env)) {
 	if (
 		value !== undefined &&
 		!["TYPESAFE_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY"].includes(name)
-	)
+	) {
 		env[name] = value;
+	}
+}
 
 Object.assign(env, fakeEnv(dir), {FABRIKA_HOME: home});
 
 const check = (what: string, ok: boolean, seen?: unknown) => {
-	if (!ok)
+	if (!ok) {
 		throw new Error(`${what}: no${seen === undefined ? "" : `, saw ${JSON.stringify(seen)}`}`);
+	}
+
 	console.log(`ok  ${what}`);
 };
 
@@ -62,11 +66,16 @@ const until = async <T>(
 ) => {
 	const from = Date.now();
 	let seen = await look();
+
 	while (!ok(seen)) {
-		if (Date.now() - from > ms) throw new Error(`waited for ${what}; saw ${JSON.stringify(seen)}`);
+		if (Date.now() - from > ms) {
+			throw new Error(`waited for ${what}; saw ${JSON.stringify(seen)}`);
+		}
+
 		await sleep(100);
 		seen = await look();
 	}
+
 	return seen;
 };
 
@@ -118,7 +127,11 @@ const split = async (page: Page, key: "|" | "-") => {
 		10_000,
 	);
 	const made = after.find((t) => !before.includes(t));
-	if (made === undefined) throw new Error("no new tile");
+
+	if (made === undefined) {
+		throw new Error("no new tile");
+	}
+
 	return made;
 };
 
@@ -388,6 +401,7 @@ try {
 		(t) => t.includes(traceTile) && t.includes(mapTile),
 		10_000,
 	);
+
 	// ---- the same lane, its windows closing one by one down to two stacked
 	for (const id of [traceTile, mapTile]) {
 		await tile(page, id).click({position: {x: 3, y: 3}});
@@ -400,26 +414,35 @@ try {
 			15_000,
 		);
 	}
+
 	await shot(page, "merged-stacked");
 } catch (cause) {
 	failed = true;
 	console.error(cause);
 	const [page] = app.windows();
+
 	if (page !== undefined) {
 		await page.screenshot({path: join(shots, "failed.png")}).catch(() => {});
 		const ids = await tiles(page).catch(() => [] as readonly string[]);
-		for (const id of ids) console.error(`--- ${id}\n${await screen(page, id)}`);
+
+		for (const id of ids) {
+			console.error(`--- ${id}\n${await screen(page, id)}`);
+		}
 	}
 } finally {
 	const pid = hostPid();
 	await app.close().catch(() => {});
+
 	// This run started that host, on its own temp home, and only this run stops it.
 	if (!Number.isNaN(pid)) {
 		try {
 			process.kill(pid, "SIGTERM");
 		} catch {}
 	}
+
 	console.log(`shots: ${shots}\nhome: ${home}`);
 }
 
-if (failed) process.exit(1);
+if (failed) {
+	process.exit(1);
+}

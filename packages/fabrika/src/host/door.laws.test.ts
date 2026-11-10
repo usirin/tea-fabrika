@@ -68,15 +68,26 @@ const STALE_MS = 60 * 60 * 1000;
 
 const clearStalePlants = () => {
 	for (const name of readdirSync(import.meta.dirname)) {
-		if (!name.startsWith(PLANT)) continue;
+		if (!name.startsWith(PLANT)) {
+			continue;
+		}
+
 		const dir = join(import.meta.dirname, name);
-		if (Date.now() - statSync(dir).mtimeMs > STALE_MS) rmSync(dir, {recursive: true, force: true});
+
+		if (Date.now() - statSync(dir).mtimeMs > STALE_MS) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	}
 };
 
 afterAll(async () => {
-	for (const rt of runtimes) await rt.dispose();
-	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
+	for (const rt of runtimes) {
+		await rt.dispose();
+	}
+
+	for (const d of madeDirs) {
+		rmSync(d, {recursive: true, force: true});
+	}
 });
 
 type File = "door" | "writer" | "keys" | "keys-github";
@@ -94,17 +105,25 @@ async function plant(
 ): Promise<Mod> {
 	const dir = mkdtempSync(join(import.meta.dirname, PLANT));
 	madeDirs.push(dir);
+
 	for (const f of FILES) {
 		let text = readFileSync(join(import.meta.dirname, `${f}.ts`), "utf8");
+
 		if (f === file) {
 			for (const [a, b] of [[from, to] as const, ...more]) {
 				const count = text.split(a).length - 1;
-				if (count !== 1) throw new Error(`plant edit on ${f}: "${a}" found ${count} times, want 1`);
+
+				if (count !== 1) {
+					throw new Error(`plant edit on ${f}: "${a}" found ${count} times, want 1`);
+				}
+
 				text = text.replace(a, () => b);
 			}
 		}
+
 		writeFileSync(join(dir, `${f}.ts`), text);
 	}
+
 	const url = (f: string) => pathToFileURL(join(dir, `${f}.ts`)).href;
 	const d = (await import(/* @vite-ignore */ url("door"))) as typeof realDoor;
 	const w = (await import(/* @vite-ignore */ url("writer"))) as typeof realWriter;
@@ -140,7 +159,11 @@ beforeAll(async () => {
 /** The nth key of the pool. */
 const key = (i: number): Key => {
 	const k = POOL[i];
-	if (k === undefined) throw new Error(`no key ${i}`);
+
+	if (k === undefined) {
+		throw new Error(`no key ${i}`);
+	}
+
 	return k;
 };
 
@@ -275,6 +298,7 @@ const sharedWorld = (mod: Mod, o: {founder?: string; sessionMs?: number} = {}): 
 /** `Door.invite`, with the fake keys service told it is inside an invite. */
 const invite = async (W: World, by: Stamp, name: string) => {
 	W.state.inInvite = true;
+
 	try {
 		return await W.door.invite(by, name);
 	} finally {
@@ -298,7 +322,10 @@ const closedDoor = (mod: Mod): InstanceType<Mod["Door"]> => {
 const addressOf = (W: World, object: string) => W.door.address(ORIGIN, object);
 
 const mustOk = <T>(r: {ok: true; value: T} | {ok: false; status: number; why: string}): T => {
-	if (!r.ok) throw new Error(`refused ${r.status}: ${r.why}`);
+	if (!r.ok) {
+		throw new Error(`refused ${r.status}: ${r.why}`);
+	}
+
 	return r.value;
 };
 
@@ -326,7 +353,9 @@ const sessionCount = (W: World): number =>
 	Number(W.db.all("SELECT COUNT(*) AS n FROM door_sessions")[0]?.n);
 
 const ensure = (cond: boolean, msg: string): void => {
-	if (!cond) throw new Error(msg);
+	if (!cond) {
+		throw new Error(msg);
+	}
 };
 
 const eq = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -413,6 +442,7 @@ const writerIsStamp: Law = {
 		await fc.assert(
 			fc.property(fc.array(arbReq, {maxLength: 8}), anyStamp, (reqs, who) => {
 				const want = mod.stampText(who);
+
 				for (const req of reqs) {
 					const [method, args] = argsOf(req);
 					const r = mod.trustedArgs(method, args, who);
@@ -452,13 +482,17 @@ const agentNeverUser: Law = {
 		await fc.assert(
 			fc.property(fc.array(arbReq, {maxLength: 8}), agentStamp, (reqs, agent) => {
 				ensure(mod.stampText(agent).startsWith("agent:"), "an agent's stamp is not an agent");
+
 				for (const req of reqs) {
 					const [method, args] = argsOf(req);
 					const got = writerOfResult(req, mustOk(mod.trustedArgs(method, args, agent)));
 					ensure(!got.includes("user:"), `${method}: an agent produced a user writer (${got})`);
-					if (req.type === "claim")
+
+					if (req.type === "claim") {
 						ensure(got.includes("@agent:"), `claim holder not an agent: ${got}`);
-					else ensure(got.startsWith("agent:"), `${method}: not an agent writer: ${got}`);
+					} else {
+						ensure(got.startsWith("agent:"), `${method}: not an agent writer: ${got}`);
+					}
 				}
 			}),
 			OPTS_PURE,
@@ -636,7 +670,11 @@ const bindToId: Law = {
 						inv.ok && eq(inv.value, {id: `github:${bobId}`, name: "bob"}),
 						"the invite was refused, or did not answer the service's id and the name",
 					);
-					if (joined) mustOk(await loginWith(W, "bob", key(1)));
+
+					if (joined) {
+						mustOk(await loginWith(W, "bob", key(1)));
+					}
+
 					// The name "bob" is taken over by someone with a new id; the old id gets a new name.
 					W.people.set("bob", {id: `github:${takerId}`, keys: [key(2).line]});
 					W.people.set("robert", {id: `github:${bobId}`, keys: [key(1).line]});
@@ -730,9 +768,12 @@ const listedKeys: Law = {
 					const W = sharedWorld(mod);
 					const keys = Array.from({length: n}, (_, i) => key(i));
 					W.people.set("alice", {id: "github:7", keys: keys.map((k) => k.line)});
+
 					// Any key listed signs in.
-					for (const [i, k] of keys.entries())
+					for (const [i, k] of keys.entries()) {
 						ensure((await loginWith(W, "alice", k)).ok, `listed key ${i} of ${n} was refused`);
+					}
+
 					const opened = mustOk(await loginWith(W, "alice", key(gone)));
 					// One key is taken off the list: the next login with it fails, the rest still work.
 					W.people.set("alice", {
@@ -741,9 +782,13 @@ const listedKeys: Law = {
 					});
 					const after = await loginWith(W, "alice", key(gone));
 					ensure(!after.ok && after.status === 401, "a key no longer listed still signed in");
-					for (const [i, k] of keys.entries())
-						if (i !== gone)
+
+					for (const [i, k] of keys.entries()) {
+						if (i !== gone) {
 							ensure((await loginWith(W, "alice", k)).ok, `a still listed key ${i} was refused`);
+						}
+					}
+
 					// The session it already opened lives on, until its own end.
 					W.clock.t = opened.expires - 1;
 					ensure((await W.door.who(opened.token)).ok, "an open session ended with its key");
@@ -771,23 +816,37 @@ const fakeGitHub = (o: {refuse?: "token" | "all"} = {}) => {
 		const url = new URL(req.url);
 		const auth = req.headers.get("authorization");
 		asked.push({path: url.pathname, auth});
-		if (state.refusal !== null)
+
+		if (state.refusal !== null) {
 			return new Response("refused", {
 				status: state.refusal.status,
 				headers: state.refusal.headers,
 			});
-		if (o.refuse === "all" || (o.refuse === "token" && auth !== null))
+		}
+
+		if (o.refuse === "all" || (o.refuse === "token" && auth !== null)) {
 			return Response.json({message: "Bad credentials"}, {status: 401});
-		if (url.host !== "api.github.com") return notFound();
+		}
+
+		if (url.host !== "api.github.com") {
+			return notFound();
+		}
+
 		const byId = /^\/user\/([0-9]+)$/.exec(url.pathname)?.[1];
+
 		if (byId !== undefined) {
 			const hit = [...users].find(([, u]) => u.id === Number(byId));
 			return hit === undefined ? notFound() : Response.json({id: hit[1].id, login: hit[0]});
 		}
+
 		const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
 		const login = m?.[1] === undefined ? "" : decodeURIComponent(m[1]);
 		const u = users.get(login);
-		if (u === undefined) return notFound();
+
+		if (u === undefined) {
+			return notFound();
+		}
+
 		return m?.[2] === undefined
 			? Response.json({id: u.id, login})
 			: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
@@ -982,7 +1041,11 @@ const personKinds: Law = {
 				);
 				const inbox = `${name}/inbox`;
 				const a = mod.trustedArgs("append", [inbox, "any", event, null], agent);
-				if (a.ok) dispatch(db, rules.RULES, 0, now, "append", a.value);
+
+				if (a.ok) {
+					dispatch(db, rules.RULES, 0, now, "append", a.value);
+				}
+
 				ensure(
 					rules.readStream(db, inbox).length === 0,
 					`an agent's answered was stored in ${inbox}`,
@@ -1088,7 +1151,11 @@ const NOBODY_KEY = 11;
 
 const at = <T>(xs: readonly T[], i: number): T => {
 	const x = xs[i % xs.length];
-	if (x === undefined) throw new Error(`nothing at ${i}`);
+
+	if (x === undefined) {
+		throw new Error(`nothing at ${i}`);
+	}
+
 	return x;
 };
 
@@ -1129,7 +1196,11 @@ const arbFounded = arbRun.map((ops) => [FOUND, ...ops]);
 /** A shared ledger whose founder is alice, with the four people at the keys service. */
 const peopleWorld = (mod: Mod): World => {
 	const W = sharedWorld(mod, {founder: "github:7"});
-	for (const p of PEOPLE) W.people.set(p.name, {id: p.id, keys: [key(p.key).line]});
+
+	for (const p of PEOPLE) {
+		W.people.set(p.name, {id: p.id, keys: [key(p.key).line]});
+	}
+
 	return W;
 };
 
@@ -1151,6 +1222,7 @@ const agentOp = (W: World, name: string, k: number) =>
 const runOp = async (W: World, op: Op): Promise<void> => {
 	const m = W.door.members();
 	const members = [...m.members.keys()];
+
 	switch (op.type) {
 		case "login":
 			await loginOp(W, at(NAMES, op.as), op.key);
@@ -1164,20 +1236,29 @@ const runOp = async (W: World, op: Op): Promise<void> => {
 			await agentOp(W, at(NAMES, op.as), op.key);
 			return;
 		case "invite":
-			if (members.length > 0)
+			if (members.length > 0) {
 				await invite(W, {kind: "user", id: at(members, op.by)}, at(NAMES, op.name));
+			}
+
 			return;
 		case "remove": {
 			const off = [...members, ...m.invited.keys()];
-			if (members.length > 0)
+
+			if (members.length > 0) {
 				W.door.remove({kind: "user", id: at(members, op.by)}, at(off, op.who));
+			}
+
 			return;
 		}
 		case "rename": {
 			const p = at(PEOPLE, op.who);
 			const to = at(NAMES, op.to);
 			const now = [...W.people].find(([, q]) => q.id === p.id);
-			if (now === undefined || W.people.has(to)) return;
+
+			if (now === undefined || W.people.has(to)) {
+				return;
+			}
+
 			W.people.delete(now[0]);
 			W.people.set(to, now[1]);
 			return;
@@ -1186,7 +1267,9 @@ const runOp = async (W: World, op: Op): Promise<void> => {
 };
 
 const runOps = async (W: World, ops: readonly Op[]): Promise<void> => {
-	for (const op of ops) await runOp(W, op);
+	for (const op of ops) {
+		await runOp(W, op);
+	}
 };
 
 /** Does the ledger know someone by `name`, in any case: a member or an open invite. */
@@ -1211,7 +1294,11 @@ const strangersAskNothing: Law = {
 			fc.asyncProperty(arbFounded, typed, fc.nat({max: 4}), async (ops, name, k) => {
 				const W = peopleWorld(mod);
 				await runOps(W, ops);
-				if (knowsName(W, name)) return;
+
+				if (knowsName(W, name)) {
+					return;
+				}
+
 				const asked = W.asks.length;
 				const before = sessionCount(W);
 				const person = await loginOp(W, name, k);
@@ -1250,10 +1337,15 @@ const oneRefusal: Law = {
 					...more,
 				];
 				const answers = new Set<string>();
+
 				for (const [n, k] of all) {
 					const r = await loginOp(W, n, k);
-					if (!r.ok) answers.add(JSON.stringify({status: r.status, why: r.why}));
+
+					if (!r.ok) {
+						answers.add(JSON.stringify({status: r.status, why: r.why}));
+					}
 				}
+
 				ensure(answers.size === 1, `failed logins gave different answers: ${[...answers]}`);
 			}),
 			OPTS_RUN,
@@ -1335,12 +1427,20 @@ const renameKeepsResult: Law = {
 						const W = peopleWorld(mod);
 						const alice = mustOk(await loginOp(W, "alice", 0));
 						mustOk(await invite(W, alice.who, "bob"));
-						if (joined) mustOk(await loginOp(W, "bob", 1));
+
+						if (joined) {
+							mustOk(await loginOp(W, "bob", 1));
+						}
+
 						if (renamed) {
 							W.people.delete("bob");
 							W.people.set(renamedTo, {id: "github:8", keys: [key(1).line]});
-							if (takenOver) W.people.set("bob", {id: "github:600", keys: [key(4).line]});
+
+							if (takenOver) {
+								W.people.set("bob", {id: "github:600", keys: [key(4).line]});
+							}
 						}
+
 						const r = asAgent ? await agentOp(W, typed, k) : await loginOp(W, typed, k);
 						return r.ok
 							? {ok: true, who: r.value.who, expires: r.value.expires}
@@ -1381,12 +1481,17 @@ const otherIdIs502: Law = {
 					...PEOPLE.map((p) => [p.name, p.key, true] as const),
 					...more,
 				];
+
 				for (const [n, k, asAgent] of all) {
 					const asked = W.asks.length;
 					const sessions = sessionCount(W);
 					const facts = rules.readStream(W.db, mod.MEMBERS).length;
 					const r = asAgent ? await agentOp(W, n, k) : await loginOp(W, n, k);
-					if (!W.asks.slice(asked).some((a) => a.lied)) continue;
+
+					if (!W.asks.slice(asked).some((a) => a.lied)) {
+						continue;
+					}
+
 					ensure(
 						unavailable(mod, r),
 						`${n} on another id's answer was not UNAVAILABLE: ${JSON.stringify(r)}`,
@@ -1442,28 +1547,37 @@ const tokenRetry: Law = {
 					ensure(paths.length > 0, "GitHub was not asked");
 					const bearer = `Bearer ${token}`;
 					let retried = 0;
+
 					for (const path of paths) {
 						const auths = gh.asked.filter((a) => a.path === path).map((a) => a.auth);
 						const shown = `${path} was asked with ${JSON.stringify(auths)}`;
+
 						if (!withToken) {
 							ensure(eq(auths, [null]), shown);
 							continue;
 						}
+
 						// `of` asks two paths together, and the first to fail stops the other: that one may
 						// end before its second ask. A question that ends well asked each path twice.
 						ensure(eq(auths, [bearer, null]) || (!wantOk && eq(auths, [bearer])), shown);
-						if (auths.length === 2) retried++;
+
+						if (auths.length === 2) {
+							retried++;
+						}
 					}
+
 					const warned = logs.filter((l) => l === mod.TOKEN_REFUSED).length;
 					ensure(
 						withToken ? warned >= retried && warned <= paths.length : warned === 0,
 						`the log said ${JSON.stringify(logs)} for ${retried} asks again`,
 					);
-					if (Exit.isFailure(exit))
+
+					if (Exit.isFailure(exit)) {
 						ensure(
 							!JSON.stringify(exit.cause).includes(token) && !logs.some((l) => l.includes(token)),
 							"the token went into an error or the log",
 						);
+					}
 				},
 			),
 			{numRuns: 12, seed: 7},
@@ -1540,9 +1654,17 @@ const refusalsNameNobody: Law = {
 				fc.array(arbStep, {maxLength: 10}),
 				async (folk, strangers, steps) => {
 					const founder = folk[0];
-					if (founder === undefined) return;
+
+					if (founder === undefined) {
+						return;
+					}
+
 					const W = sharedWorld(mod, {founder: founder.id});
-					for (const p of folk) W.people.set(p.name, {id: p.id, keys: [key(p.key).line]});
+
+					for (const p of folk) {
+						W.people.set(p.name, {id: p.id, keys: [key(p.key).line]});
+					}
+
 					const ids = new Set(folk.flatMap((p) => [p.id, `${p.id}9`]));
 					const names = new Set([...folk.map((p) => p.name), ...strangers]);
 					const typed = (as: number, upper: boolean) => {
@@ -1551,34 +1673,47 @@ const refusalsNameNobody: Law = {
 					};
 					const seen: {typed: string; status: number; why: string; logged: boolean}[] = [];
 					const keep = (t: string, r: Answer, logsBefore: number) => {
-						if (!r.ok) seen.push({...r, typed: t, logged: W.logs.length > logsBefore});
+						if (!r.ok) {
+							seen.push({...r, typed: t, logged: W.logs.length > logsBefore});
+						}
 					};
 					await loginOp(W, founder.name, founder.key);
+
 					for (const s of steps) {
 						const m = W.door.members();
 						const members = [...m.members.keys()];
 						const logs = W.logs.length;
+
 						if (s.type === "login" || s.type === "agent") {
 							const t = typed(s.as, s.upper);
 							const k = s.key === 6 ? NOBODY_KEY : s.key;
 							keep(t, s.type === "login" ? await loginOp(W, t, k) : await agentOp(W, t, k), logs);
 						} else if (s.type === "invite") {
-							if (members.length === 0) continue;
+							if (members.length === 0) {
+								continue;
+							}
+
 							const t = typed(s.as, false);
 							keep(t, await invite(W, {kind: "user", id: at(members, s.by)}, t), logs);
 						} else if (s.type === "remove") {
 							const off = [...members, ...m.invited.keys()];
-							if (members.length > 0)
+
+							if (members.length > 0) {
 								keep(
 									"",
 									W.door.remove({kind: "user", id: at(members, s.by)}, at(off, s.who)),
 									logs,
 								);
+							}
 						} else if (s.type === "rename") {
 							const p = at(folk, s.who);
 							const now = [...W.people].find(([, q]) => q.id === p.id);
 							const to = `r${s.to}-y`;
-							if (now === undefined || W.people.has(to)) continue;
+
+							if (now === undefined || W.people.has(to)) {
+								continue;
+							}
+
 							W.people.delete(now[0]);
 							W.people.set(to, now[1]);
 							names.add(to);
@@ -1589,13 +1724,17 @@ const refusalsNameNobody: Law = {
 							W.state.lie = s.on ? (id) => `${id}9` : null;
 						}
 					}
+
 					for (const r of seen) {
 						const shown = `${JSON.stringify(r)} (ids ${[...ids]}, names ${[...names]})`;
-						if (r.status === 502)
+
+						if (r.status === 502) {
 							ensure(
 								r.why === mod.UNAVAILABLE && r.logged,
 								`a 502 was not UNAVAILABLE, logged: ${shown}`,
 							);
+						}
+
 						const text =
 							r.typed === ""
 								? r.why.toLowerCase()
@@ -1657,6 +1796,7 @@ const provenAsModel: Law = {
 				W.people.set("alice", {id: "github:1", keys: [key(0).line]});
 				mustOk(await loginOp(W, "alice", 0));
 				const liars = new Set<string>();
+
 				for (const [i, c] of cands.entries()) {
 					const id = `github:${100 + i}`;
 					const fact = (kind: string) =>
@@ -1666,27 +1806,40 @@ const provenAsModel: Law = {
 							data: {id, name: c.as},
 						});
 					fact("invited");
-					if (c.member) fact("joined");
-					if (c.says === "down") W.state.downFor.add(id);
-					if (c.says === "lies") liars.add(id);
-					if (c.says !== "nobody")
+
+					if (c.member) {
+						fact("joined");
+					}
+
+					if (c.says === "down") {
+						W.state.downFor.add(id);
+					}
+
+					if (c.says === "lies") {
+						liars.add(id);
+					}
+
+					if (c.says !== "nobody") {
 						W.people.set(`p${i}`, {
 							id,
 							keys: [key(c.says === "other-key" ? OTHER : SIGNER).line],
 						});
+					}
 				}
+
 				W.state.lie = (id) => (liars.has(id) ? `${id}9` : id);
 				const sessions = sessionCount(W);
 				const r = await loginOp(W, typedName, SIGNER);
 				const want = provenModel(cands.map((c) => c.says));
 				const provers = cands.flatMap((c, i) => (c.says === "proves" ? [`github:${100 + i}`] : []));
 				const shown = `${JSON.stringify(cands)} answered ${JSON.stringify(r)}, the model says ${want}`;
-				if (want === "in")
+
+				if (want === "in") {
 					ensure(
 						r.ok && provers.includes(r.value.who.kind === "user" ? r.value.who.id : ""),
 						shown,
 					);
-				else {
+				} else {
 					ensure(
 						want === "unavailable"
 							? unavailable(mod, r)
@@ -1720,7 +1873,11 @@ const arbQ: fc.Arbitrary<Q> = fc.constantFrom(
 /** A fake GitHub with alice, bob and carol, one key each. */
 const ghPeople = () => {
 	const gh = fakeGitHub();
-	for (const [login, n] of GH_PEOPLE) gh.users.set(login, {id: n, keys: [`ssh-ed25519 AAAA${n}`]});
+
+	for (const [login, n] of GH_PEOPLE) {
+		gh.users.set(login, {id: n, keys: [`ssh-ed25519 AAAA${n}`]});
+	}
+
 	return gh;
 };
 
@@ -1791,6 +1948,7 @@ const limitSilence: Law = {
 						);
 						gh.state.refusal = null;
 						const sent = gh.asked.length;
+
 						for (const [t, q] of times) {
 							yield* TestClock.setTime(T0 + t);
 							const a = yield* answerOf(mod, q);
@@ -1799,6 +1957,7 @@ const limitSilence: Law = {
 								`${q.q} ${q.arg} at ${t} ms of a ${wait} ms wait answered ${a}, with ${gh.asked.length - sent} calls out`,
 							);
 						}
+
 						yield* TestClock.setTime(T0 + wait);
 						const a = yield* answerOf(mod, last);
 						ensure(
@@ -1916,7 +2075,10 @@ const keptExactly: Law = {
 					gh,
 					{cacheMs, failMs},
 					Effect.gen(function* () {
-						if (fails) gh.state.refusal = {status: 503, headers: {}};
+						if (fails) {
+							gh.state.refusal = {status: 503, headers: {}};
+						}
+
 						const was = yield* answerOf(mod, q);
 						ensure(
 							fails ? was === "KeysUnreachable" : was.startsWith("keys"),
@@ -1924,15 +2086,20 @@ const keptExactly: Law = {
 						);
 						// GitHub changes its answer: it is up again, and every key is new.
 						gh.state.refusal = null;
-						for (const [login, n] of GH_PEOPLE)
+
+						for (const [login, n] of GH_PEOPLE) {
 							gh.users.set(login, {id: n, keys: [`ssh-ed25519 BBBB${n}`]});
+						}
+
 						const sent = gh.asked.length;
 						const shown = `${q.q} ${q.arg}, cacheMs ${cacheMs}, failMs ${failMs}, ${fails ? "a failure" : "an answer"}`;
+
 						if (ttl > 0) {
 							yield* TestClock.setTime(T0 + ttl - 1);
 							const kept = yield* answerOf(mod, q);
 							ensure(kept === was && gh.asked.length === sent, `not kept to its last ms: ${shown}`);
 						}
+
 						yield* TestClock.setTime(T0 + ttl);
 						const fresh = yield* answerOf(mod, q);
 						ensure(
@@ -1965,7 +2132,10 @@ const waitEndsForAll: Law = {
 				arbQ,
 				async (lim, failMs, back, first, during) => {
 					// The first question's refusal is GitHub's own, kept `failMs`: that one may stay failed.
-					if (eq(first, during)) return;
+					if (eq(first, during)) {
+						return;
+					}
+
 					const gh = ghPeople();
 					const wait = lim.secs * 1000;
 					// Asked `back` ms before the end, at the latest 1 ms before it.
@@ -2053,6 +2223,7 @@ const httpDateText = (t: number, form: DateForm): string => {
 	const mon = MONTHS[d.getUTCMonth()];
 	const year = d.getUTCFullYear();
 	const time = `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}:${two(d.getUTCSeconds())}`;
+
 	switch (form) {
 		case "imf":
 			return `${WEEKDAYS[d.getUTCDay()]}, ${two(day)} ${mon} ${year} ${time} GMT`;
@@ -2079,11 +2250,15 @@ const arbZone = fc.constantFrom("UTC", "Etc/GMT+12", "Etc/GMT-14");
 /** Runs a law whose runs set the zone, then puts back the zone the machine had. */
 const keepingZone = async (law: () => Promise<void>): Promise<void> => {
 	const was = process.env.TZ;
+
 	try {
 		await law();
 	} finally {
-		if (was === undefined) Reflect.deleteProperty(process.env, "TZ");
-		else process.env.TZ = was;
+		if (was === undefined) {
+			Reflect.deleteProperty(process.env, "TZ");
+		} else {
+			process.env.TZ = was;
+		}
 	}
 };
 
@@ -2460,7 +2635,11 @@ const LINE_YY = (THIS_YEAR + 50) % 100;
 
 const rfc850Of = (yy: number, p: Parts) => {
 	let year = THIS_YEAR + 60 - ((THIS_YEAR + 60 - yy) % 100);
-	while (Date.UTC(year, p.mon, p.day, p.h, p.m, p.s) > FIFTY_ON) year -= 100;
+
+	while (Date.UTC(year, p.mon, p.day, p.h, p.m, p.s) > FIFTY_ON) {
+		year -= 100;
+	}
+
 	const at = Date.UTC(year, p.mon, p.day, p.h, p.m, p.s);
 	return {at, year, text: httpDateText(at, "rfc850")};
 };
@@ -2561,6 +2740,7 @@ const BUGS: readonly (readonly [Law, RegExp])[] = [];
 /** The names of the laws a module breaks. The real module breaks none. */
 const broken = async (mod: Mod): Promise<readonly string[]> => {
 	const out: string[] = [];
+
 	for (const law of LAWS) {
 		try {
 			await law.run(mod);
@@ -2568,6 +2748,7 @@ const broken = async (mod: Mod): Promise<readonly string[]> => {
 			out.push(law.name);
 		}
 	}
+
 	return out;
 };
 
@@ -2592,7 +2773,11 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 		),
 	// An agent is allowed to invite.
 	agentInvites: () =>
-		plant("door", 'if (by.kind !== "user") return refuse(403, "only a person invites");', ""),
+		plant(
+			"door",
+			'if (by.kind !== "user") {\n\t\t\treturn refuse(403, "only a person invites");\n\t\t}',
+			"",
+		),
 	// An agent session takes its grant's end, ignoring the person's session.
 	longAgent: () => plant("door", "Math.min(g.expires, live)", "g.expires"),
 	// A spent challenge is not deleted, so it works again.
@@ -2608,7 +2793,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 			[
 				["return letIn({id, name: as});", "return letIn({id: s.id, name: as});"],
 				[
-					'else if (m.invited.has(id)) this.#fact(me, "joined", {id, name});',
+					'else if (m.invited.has(id)) {\n\t\t\t\tthis.#fact(me, "joined", {id, name});\n\t\t\t}',
 					'else if (m.invited.has(id) || [...m.invited.values()].includes(name)) this.#fact(me, "joined", {id, name});',
 				],
 			],
@@ -2617,21 +2802,21 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	removesLast: () =>
 		plant(
 			"door",
-			'if (m.members.has(id) && m.members.size === 1) return refuse(403, "the last member stays");',
+			'if (m.members.has(id) && m.members.size === 1) {\n\t\t\treturn refuse(403, "the last member stays");\n\t\t}',
 			'if (false) return refuse(403, "the last member stays");',
 		),
 	// A closed door answers 401 instead of 403.
 	closedIs401: () =>
 		plant(
 			"door",
-			'if (c.kind === "closed") return refuse(403, "this ledger has no door");',
+			'if (c.kind === "closed") {\n\t\t\treturn refuse(403, "this ledger has no door");\n\t\t}',
 			'if (c.kind === "closed") return refuse(401, "this ledger has no door");',
 		),
 	// No credential answers 403 instead of 401.
 	noCredIs403: () =>
 		plant(
 			"door",
-			'if (token === null || Redacted.value(token) === "") return refuse(401, "no credential");',
+			'if (token === null || Redacted.value(token) === "") {\n\t\t\treturn refuse(401, "no credential");\n\t\t}',
 			'if (token === null || Redacted.value(token) === "") return refuse(403, "no credential");',
 		),
 	// The door checks a login against the first listed key only.
@@ -2652,7 +2837,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	grantAnyObject: () =>
 		plant(
 			"door",
-			'if (g.address !== address) return refuse(401, "the grant is for another ledger");',
+			'if (g.address !== address) {\n\t\t\treturn refuse(401, "the grant is for another ledger");\n\t\t}',
 			"",
 		),
 	// Old `agent:<id>` rows no longer read.
@@ -2700,7 +2885,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	refreshesByName: () =>
 		plant(
 			"door",
-			"if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) return letIn({id, name: as});",
+			"if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) {\n\t\t\t\treturn letIn({id, name: as});\n\t\t\t}",
 			"if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) {\n\t\t\t\tawait this.#ask(as, (k) => k.of(as), () => true);\n\t\t\t\treturn letIn({id, name: as});\n\t\t\t}",
 		),
 	// The founder is asked about at every login by a known name, even after being taken off.
@@ -2761,7 +2946,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	limitIgnored: () =>
 		plant(
 			"keys-github",
-			"if (wait !== null) yield* Ref.update(waitUntil, (u) => Math.max(u, now + wait));",
+			"if (wait !== null) {\n\t\t\t\t\t\t\tyield* Ref.update(waitUntil, (u) => Math.max(u, now + wait));\n\t\t\t\t\t\t}",
 			"",
 		),
 	// The wait holds back questions by id only: a question by name still goes out.

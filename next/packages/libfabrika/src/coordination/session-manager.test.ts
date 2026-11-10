@@ -109,7 +109,12 @@ const database = (file = join(folder, `${++count}.db`)) => {
 };
 
 afterAll(() => {
-	for (const db of opened) if (db.isOpen) db.close();
+	for (const db of opened) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -222,10 +227,12 @@ const commitFault = (inner: Sql) => {
 		transaction: (step) =>
 			inner.transaction(() => {
 				const answer = step();
+
 				if (armed) {
 					armed = false;
 					throw new Error("SQLITE_FULL");
 				}
+
 				return answer;
 			}),
 	};
@@ -251,8 +258,10 @@ describe("P10 saved signing authority", () => {
 					span: {traceId: TRACE, spanId: SPAN},
 				};
 				expect(Schema.decodeUnknownSync(C.Session)(session)).toEqual(session);
-				for (const span of [{}, {traceId: TRACE}, {spanId: SPAN}])
+
+				for (const span of [{}, {traceId: TRACE}, {spanId: SPAN}]) {
 					expect(Schema.is(C.Session)({...session, span})).toBe(false);
+				}
 			}
 		},
 		{arbitrary: {seed: 119120, runs: 100, size: 54}},
@@ -333,7 +342,8 @@ describe("P10 saved signing authority", () => {
 				}).pipe(Effect.provide(authority(sql)));
 			}),
 	);
-	for (const why of ["not_delivered", "person_only", "ended"] as const)
+
+	for (const why of ["not_delivered", "person_only", "ended"] as const) {
 		authorityProperty(
 			`question 16: ${why} is distinct and changes no saved rows`,
 			({saved, parent, signer, authority, PROCESS}) =>
@@ -342,8 +352,15 @@ describe("P10 saved signing authority", () => {
 					yield* Effect.gen(function* () {
 						const s = yield* C.SessionManager;
 						yield* s.record(saved("person", why !== "person_only"));
-						if (why !== "not_delivered") yield* s.delivered(parent, PROCESS);
-						if (why === "ended") yield* s.end(PROCESS);
+
+						if (why !== "not_delivered") {
+							yield* s.delivered(parent, PROCESS);
+						}
+
+						if (why === "ended") {
+							yield* s.end(PROCESS);
+						}
+
 						const before = snapshot(db);
 						const error = yield* Effect.flip(signer("write-b"));
 						expect(error).toMatchObject({_tag: "SigningRefused", why});
@@ -351,6 +368,8 @@ describe("P10 saved signing authority", () => {
 					}).pipe(Effect.provide(authority(sql)));
 				}),
 		);
+	}
+
 	it.effect.prop(
 		"question 16: spent is distinct and changes no saved rows",
 		[

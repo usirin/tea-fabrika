@@ -145,7 +145,11 @@ const askStop = (shell: Shell, n: number) =>
  */
 const sayStopper = (shell: Shell, n: number) => {
 	const stop = shell.table.getState().jobs.find((job) => job.n === n)?.stop ?? null;
-	if (stop === null || stop.by === shell.by) return;
+
+	if (stop === null || stop.by === shell.by) {
+		return;
+	}
+
 	shell.print("err", `[${n}] stopped by ${stop.by}${stop.why === null ? "" : `: ${stop.why}`}`, n);
 };
 
@@ -165,8 +169,13 @@ export const stopJob = (shell: Shell, job: Job) =>
 			shell.print("err", `[${job.n}] dropped  ${job.text}`);
 			return;
 		}
+
 		const stop = shell.stops.get(job.stages[0].run);
-		if (stop === undefined || stop.asked) return;
+
+		if (stop === undefined || stop.asked) {
+			return;
+		}
+
 		// Marked before the first yield: the host's stop and a `stop %n` run side by side, and the
 		// second must find this one already asked, or both say the stopper.
 		stop.asked = true;
@@ -186,10 +195,15 @@ export const SAVED_BY_OLDER_CODE = "this job was saved by older code, can't open
 /** A failure, or one it was caused by, is a kept state its schema refused. */
 const isRefusal = (failure: unknown): boolean => {
 	let at = failure;
+
 	for (let depth = 0; depth < 8 && typeof at === "object" && at !== null; depth++) {
-		if (at instanceof StateRefused) return true;
+		if (at instanceof StateRefused) {
+			return true;
+		}
+
 		at = "cause" in at ? at.cause : undefined;
 	}
+
 	return false;
 };
 
@@ -208,9 +222,16 @@ const refusedEnd = (ended: Ended<unknown>): boolean =>
 
 /** One line of why a run failed: its declared failure as the program sent it, or a defect's first line. */
 const whyOf = (ended: Ended<unknown>): string => {
-	if (ended.kind !== "failed") return ended.kind;
+	if (ended.kind !== "failed") {
+		return ended.kind;
+	}
+
 	const declared = Cause.findErrorOption(ended.cause);
-	if (Option.isSome(declared)) return `failed: ${inWords(declared.value)}`;
+
+	if (Option.isSome(declared)) {
+		return `failed: ${inWords(declared.value)}`;
+	}
+
 	const first = Cause.pretty(ended.cause).split("\n")[0] ?? "a defect";
 	return `failed: ${first.replace(/^Error: /, "")}`;
 };
@@ -220,10 +241,20 @@ const whyOf = (ended: Ended<unknown>): string => {
  * with the underscores as spaces (`read_failed`: read failed), else as JSON.
  */
 const inWords = (failure: unknown): string => {
-	if (typeof failure !== "object" || failure === null) return show(failure);
+	if (typeof failure !== "object" || failure === null) {
+		return show(failure);
+	}
+
 	const {message, _tag} = failure as {readonly message?: unknown; readonly _tag?: unknown};
-	if (typeof message === "string" && message !== "") return message;
-	if (typeof _tag === "string") return _tag.replaceAll("_", " ");
+
+	if (typeof message === "string" && message !== "") {
+		return message;
+	}
+
+	if (typeof _tag === "string") {
+		return _tag.replaceAll("_", " ");
+	}
+
 	return show(failure);
 };
 
@@ -238,8 +269,12 @@ const valuesOf = (shell: Shell, stage: Stage) =>
 	Effect.gen(function* () {
 		const read = (source: Source, label: string) =>
 			Effect.gen(function* () {
-				if (source.kind === "value") return {ok: true as const, values: [source.value]};
+				if (source.kind === "value") {
+					return {ok: true as const, values: [source.value]};
+				}
+
 				const done = yield* runLine(shell, source.line, {kind: "capture", output: source.output});
+
 				if (done.status !== 0) {
 					shell.print(
 						"err",
@@ -247,13 +282,20 @@ const valuesOf = (shell: Shell, stage: Stage) =>
 					);
 					return {ok: false as const, status: done.status};
 				}
+
 				return {ok: true as const, values: done.values};
 			});
 		const flags: Record<string, unknown> = {};
+
 		for (const {name, source} of stage.flags) {
 			const got = yield* read(source, `--${name}`);
-			if (!got.ok) return {ok: false as const, status: got.status};
+
+			if (!got.ok) {
+				return {ok: false as const, status: got.status};
+			}
+
 			const [only, ...more] = got.values;
+
 			if (got.values.length !== 1 || only === undefined || more.length > 0) {
 				shell.print(
 					"err",
@@ -261,26 +303,38 @@ const valuesOf = (shell: Shell, stage: Stage) =>
 				);
 				return {ok: false as const, status: 2};
 			}
+
 			const why = stage.entry.program.flags[name]?.shape.problem(only);
+
 			if (why !== undefined) {
 				shell.print("err", `tsh: --${name} does not take what its $( ) sent: ${why}`);
 				return {ok: false as const, status: 2};
 			}
+
 			flags[name] = only;
 		}
+
 		const told: Record<string, unknown[]> = {};
+
 		for (const {name, source} of stage.told) {
 			const got = yield* read(source, name);
-			if (!got.ok) return {ok: false as const, status: got.status};
+
+			if (!got.ok) {
+				return {ok: false as const, status: got.status};
+			}
+
 			for (const value of got.values) {
 				const why = stage.entry.program.inputs[name]?.shape.problem(value);
+
 				if (why !== undefined) {
 					shell.print("err", `tsh: ${name} does not take what its $( ) sent: ${why}`);
 					return {ok: false as const, status: 2};
 				}
 			}
+
 			told[name] = [...(told[name] ?? []), ...got.values];
 		}
+
 		return {ok: true as const, flags, told};
 	});
 
@@ -337,40 +391,78 @@ function printers(
 	const asking: Asking[] = [];
 	const showAsk = () => {
 		const next = asking[0];
-		if (next !== undefined) shell.print("out", `${job}${next.text}  allow? [y/N]`, at.n);
+
+		if (next !== undefined) {
+			shell.print("out", `${job}${next.text}  allow? [y/N]`, at.n);
+		}
+
 		shell.ask(at.n, next ?? null);
 	};
 	const listenerOf = (output: string): ((value: unknown) => void) => {
-		if (output === skip) return (value) => taken?.(value);
+		if (output === skip) {
+			return (value) => taken?.(value);
+		}
+
 		const person = outputs[output]?.person;
-		if (shell.show === "json" || person === undefined)
+
+		if (shell.show === "json" || person === undefined) {
 			return (value) => shell.print("out", `${prefix(output)}${shown(value, shell.show)}`, at.n);
-		if (person === "none" || skip !== null) return () => {};
-		if ("line" in person)
+		}
+
+		if (person === "none" || skip !== null) {
+			return () => {};
+		}
+
+		if ("line" in person) {
 			return (value) => {
 				const text = person.line(value);
 				shell.print("out", `${job}${text}`, at.n);
-				if (person.announce === true) shell.announce(at.n, text);
+
+				if (person.announce === true) {
+					shell.announce(at.n, text);
+				}
 			};
-		if ("status" in person)
+		}
+
+		if ("status" in person) {
 			return (value) => {
 				showing = true;
 				shell.status(at.n, person.status(value));
 			};
-		if ("ask" in person)
+		}
+
+		if ("ask" in person) {
 			return (value) => {
 				const question = person.ask(value);
+
 				if (question.text === null) {
 					const index = asking.findIndex((a) => a.id === question.id);
-					if (index === -1) return;
+
+					if (index === -1) {
+						return;
+					}
+
 					asking.splice(index, 1);
-					if (index === 0) showAsk();
+
+					if (index === 0) {
+						showAsk();
+					}
+
 					return;
 				}
-				if (asking.some((a) => a.id === question.id)) return;
+
+				if (asking.some((a) => a.id === question.id)) {
+					return;
+				}
+
 				asking.push({...question, run: at.run, input: person.answer});
-				if (asking.length === 1) showAsk();
+
+				if (asking.length === 1) {
+					showAsk();
+				}
 			};
+		}
+
 		const table = {view: person.table, rows: [] as unknown[]};
 		tables.push(table);
 		return (value) => table.rows.push(value);
@@ -379,16 +471,27 @@ function printers(
 		listeners: Object.fromEntries(names.map((output) => [output, listenerOf(output)])),
 		flush: (ok) => {
 			// The run is over: what it showed in place goes, and nothing waits on an answer.
-			if (showing) shell.status(at.n, null);
+			if (showing) {
+				shell.status(at.n, null);
+			}
+
 			showing = false;
-			if (asking.length > 0) shell.ask(at.n, null);
+
+			if (asking.length > 0) {
+				shell.ask(at.n, null);
+			}
+
 			asking.length = 0;
+
 			for (const table of tables) {
-				if (ok || table.rows.length > 0)
+				if (ok || table.rows.length > 0) {
 					shell.printTable(tableOf(table.view, table.rows, {all: at.all, typed: at.typed}), at.n);
+				}
+
 				// Printed once: a second end said of the same run prints nothing more.
 				table.rows = [];
 			}
+
 			tables.length = 0;
 		},
 	};
@@ -407,7 +510,9 @@ interface Starting {
 /** Print the tables of a job's stages, each once its run has ended. */
 const flushAll = (stages: readonly Starting[], ends: readonly Ended<unknown>[]) =>
 	Effect.sync(() => {
-		for (const [i, stage] of stages.entries()) stage.flush(ends[i]?.kind === "ended");
+		for (const [i, stage] of stages.entries()) {
+			stage.flush(ends[i]?.kind === "ended");
+		}
 	});
 
 /**
@@ -422,6 +527,7 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
 	Effect.gen(function* () {
 		const runs: AnyRunning[] = [];
 		let downstream: AnyRunning | undefined;
+
 		for (const stage of [...stages].reverse()) {
 			const {entry, record} = stage;
 			const keeping = {id: record.run, storage: shell.storage};
@@ -436,16 +542,20 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
 							downstream,
 							record.wire.input,
 						);
-			if (started.kind !== "running")
+
+			if (started.kind !== "running") {
 				return {
 					ok: false as const,
 					runs,
 					why: `${entry.program.name} did not start: ${started.kind === "bad_shape" ? `${started.name}: ${started.why}` : "its pipe does not fit"}`,
 				};
+			}
+
 			runs.unshift(started);
 			downstream = started;
+
 			// Told before any upstream starts, so never waited for: a full line, or a word but `queued`, stops the job here.
-			for (const [name, values] of Object.entries(stage.told))
+			for (const [name, values] of Object.entries(stage.told)) {
 				for (const value of values) {
 					const word = yield* started.run
 						.tell(name, value)
@@ -454,17 +564,26 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
 								Effect.succeed(`full: its mailbox holds ${full.capacity} values`),
 							),
 						);
-					if (word !== "queued")
+
+					if (word !== "queued") {
 						return {
 							ok: false as const,
 							runs,
 							why: `${entry.program.name} did not take its ${name}: it answered ${word}`,
 						};
+					}
 				}
-			if (close && viewOf(entry.program) === undefined)
-				for (const [name, declared] of Object.entries<Input<unknown>>(entry.program.inputs))
-					if (name !== stage.fed && !declared.personOnly) started.close(name);
+			}
+
+			if (close && viewOf(entry.program) === undefined) {
+				for (const [name, declared] of Object.entries<Input<unknown>>(entry.program.inputs)) {
+					if (name !== stage.fed && !declared.personOnly) {
+						started.close(name);
+					}
+				}
+			}
 		}
+
 		return {ok: true as const, runs};
 	});
 
@@ -503,8 +622,12 @@ const watchEnds = (
 	Effect.gen(function* () {
 		const [first] = runs;
 		const watcher: Watcher = yield* Deferred.make<readonly Ended<unknown>[]>();
+
 		// In the map before the fiber starts, so the fiber's own leaving always finds it there.
-		if (first !== undefined) shell.watched.set(first.run.id, watcher);
+		if (first !== undefined) {
+			shell.watched.set(first.run.id, watcher);
+		}
+
 		const stopAll = Effect.forEach(runs, (r) => r.stop, {concurrency: "unbounded", discard: true});
 		yield* Effect.forEach(
 			runs,
@@ -532,7 +655,10 @@ const watchEnds = (
 			Effect.flatMap((ends) => Deferred.succeed(watcher, ends)),
 			Effect.ensuring(
 				Effect.sync(() => {
-					if (first === undefined) return;
+					if (first === undefined) {
+						return;
+					}
+
 					shell.watched.delete(first.run.id);
 					shell.stops.delete(first.run.id);
 				}),
@@ -574,13 +700,20 @@ const sayJobEnd = (
 			shell.print("err", `[${n}] it stays in the table, detached; stop %${n} drops it`, n);
 			return;
 		}
+
 		const status = statusOfJob(ends);
 		shell.print("err", `[${n}] ${status === 0 ? "ended" : `ended ${status}`}  ${text}`, n);
+
 		for (const [i, r] of runs.entries()) {
 			const ended = ends[i];
-			if (ended === undefined) continue;
+
+			if (ended === undefined) {
+				continue;
+			}
+
 			const name = r.run.program.name;
 			const left = unreadWords(ended.unread);
+
 			if (ended.kind !== "ended") {
 				shell.print(
 					"err",
@@ -589,6 +722,7 @@ const sayJobEnd = (
 				);
 				continue;
 			}
+
 			const record = yield* shell.storage.record(r.run.id).pipe(Effect.orElseSucceed(() => null));
 			shell.print("err", `[${n}] ${name} ended: ${onItsOwn(record?.closed ?? [], left)}`, n);
 		}
@@ -602,8 +736,10 @@ const unreadWords = (unread: Unread): string | null => {
 
 /** Why a stage ended on its own, by the inputs its starter closed, and what it left unread. */
 const onItsOwn = (closed: readonly string[], left: string | null): string => {
-	if (closed.length === 0)
+	if (closed.length === 0) {
 		return left === null ? "it had nothing left to do" : `it stopped reading, with ${left}`;
+	}
+
 	const inputs =
 		closed.length === 1 ? `its input ${closed[0]} was` : `its inputs ${closed.join(", ")} were`;
 	return left === null
@@ -628,15 +764,24 @@ const sayEnd = (
 	names: readonly string[],
 ) => {
 	ends.forEach((ended, i) => {
-		if (ended.kind === "failed") shell.print("err", `tsh: ${names[i] ?? "?"} ${whyOf(ended)}`, n);
+		if (ended.kind === "failed") {
+			shell.print("err", `tsh: ${names[i] ?? "?"} ${whyOf(ended)}`, n);
+		}
+
 		const left = unreadWords(ended.unread);
-		if (left !== null) shell.print("err", `tsh: ${names[i] ?? "?"} ended with ${left}`, n);
+
+		if (left !== null) {
+			shell.print("err", `tsh: ${names[i] ?? "?"} ended with ${left}`, n);
+		}
 	});
 	// A stopped stage whose program says how it ended, a stop included, said it already.
 	const unsaid = ends.some(
 		(e, i) => e.kind === "stopped" && !saysItsEnd(shell.list.get(names[i] ?? "")?.program),
 	);
-	if (unsaid) shell.print("err", `[stopped] ${text}`, n);
+
+	if (unsaid) {
+		shell.print("err", `[stopped] ${text}`, n);
+	}
 };
 
 /**
@@ -654,7 +799,11 @@ export const runLine = (shell: Shell, line: Line, mode: Mode): Effect.Effect<Don
 		);
 		const [first] = runs;
 		const body = runStages(shell, line, mode, runs);
-		if (mode.kind === "capture" || first === undefined) return yield* body;
+
+		if (mode.kind === "capture" || first === undefined) {
+			return yield* body;
+		}
+
 		const short = yield* Shorten;
 		return yield* body.pipe(Effect.withSpan(titleOf(line, short), lineSpan(first.run, mode.typed)));
 	});
@@ -685,11 +834,17 @@ const runStages = (
 			readonly flags: Record<string, unknown>;
 			readonly told: Record<string, unknown[]>;
 		}[] = [];
+
 		for (const stage of line.stages) {
 			const got = yield* valuesOf(shell, stage);
-			if (!got.ok) return {status: got.status, values: []};
+
+			if (!got.ok) {
+				return {status: got.status, values: []};
+			}
+
 			read.push(got);
 		}
+
 		const records = runs.map(({stage, run}, i): StageRecord => ({
 			program: stage.entry.program.name,
 			flags: read[i]?.flags ?? {},
@@ -698,7 +853,11 @@ const runStages = (
 			ended: false,
 		}));
 		const [head, ...tail] = records;
-		if (head === undefined) return {status: 0, values: []};
+
+		if (head === undefined) {
+			return {status: 0, values: []};
+		}
+
 		const background = mode.kind === "background";
 		// `call` closes every input at once: not for a program whose window tells them, nor one a
 		// person answers while it runs.
@@ -748,6 +907,7 @@ const runStages = (
 			};
 		});
 		const [only] = starting;
+
 		if (calling && only !== undefined) {
 			// Heard before the run starts, so a Ctrl-C at its first instant is not lost. A stop told
 			// to tsh (`stopJob`) said who asked already.
@@ -768,6 +928,7 @@ const runStages = (
 				run: only.record.run,
 				how: called.kind === "bad_shape" ? "failed" : jobEnd(called.ended),
 			});
+
 			if (called.kind === "bad_shape") {
 				shell.print(
 					"err",
@@ -776,26 +937,36 @@ const runStages = (
 				);
 				return {status: 2, values: []};
 			}
+
 			only.flush(called.ended.kind === "ended");
 			sayEnd(shell, n, line.text, [called.ended], [only.entry.program.name]);
 			return {status: statusOf(called.ended), values};
 		}
+
 		const jobScope = yield* Scope.fork(shell.scope);
 		const started = yield* startStages(shell, starting, !background).pipe(
 			Effect.annotateLogs({job: n}),
 			Scope.provide(jobScope),
 		);
+
 		if (!started.ok) {
 			shell.stops.delete(head.run);
 			yield* Effect.forEach(started.runs, (r) => r.stop, {concurrency: "unbounded"});
 			yield* Scope.close(jobScope, Exit.void);
+
 			// The job leaves the table now: the stages that never started never end.
-			for (const record of records)
+			for (const record of records) {
 				yield* note(shell, {type: "stage_ended", run: record.run, how: "failed"});
+			}
+
 			shell.print("err", `tsh: ${started.why}`, n);
 			return {status: 1, values: []};
 		}
-		for (const r of started.runs) shell.live.set(r.run.id, r);
+
+		for (const r of started.runs) {
+			shell.live.set(r.run.id, r);
+		}
+
 		const names = line.stages.map((s) => s.entry.program.name);
 		const watcher = yield* watchEnds(shell, started.runs, jobScope, (ends) =>
 			flushAll(starting, ends).pipe(
@@ -805,10 +976,12 @@ const runStages = (
 			),
 		);
 		yield* stopIfAsked(stop, started.runs);
+
 		if (background) {
 			shell.print("err", `[${n}] ${records.map((r) => r.run).join(" ")}`, n);
 			return {status: 0, values: []};
 		}
+
 		const ends = yield* waitFor(shell, n, started.runs, watcher);
 		sayEnd(shell, n, line.text, ends, names);
 		return {status: statusOfJob(ends), values};
@@ -822,8 +995,12 @@ export const waitForJob = (shell: Shell, job: Job) =>
 			return r === undefined ? [] : [r];
 		});
 		const watcher = shell.watched.get(job.stages[0].run);
+
 		// Its watcher left already: the job ended between the line's read and now.
-		if (watcher === undefined) return 0;
+		if (watcher === undefined) {
+			return 0;
+		}
+
 		// In the table before the wait, as bash's `fg` moves the job first: whoever reads the table
 		// (a terminal drawing a program's window) sees the job in the foreground while tsh waits.
 		yield* note(shell, {type: "foreground", n: job.n});
@@ -860,11 +1037,14 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			shell.print("err", `tsh: this job is ${job.by}'s: attach it in ${where}`);
 			return 2;
 		}
+
 		const missing = job.stages.find((st) => !shell.list.has(st.program));
+
 		if (missing !== undefined) {
 			shell.print("err", `tsh: ${missing.program} is not on the program list any more`);
 			return 1;
 		}
+
 		// Its stop, kept before the table says it runs again (`Shell.stops`).
 		const stop = yield* keepStop(shell, job.stages[0].run);
 		yield* note(shell, {type: "attached", n: job.n, background, owner: shell.owner});
@@ -901,6 +1081,7 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			Effect.annotateLogs({job: job.n}),
 			Scope.provide(jobScope),
 		);
+
 		if (!started.ok) {
 			shell.stops.delete(job.stages[0].run);
 			yield* Effect.forEach(started.runs, (r) => r.stop, {concurrency: "unbounded"});
@@ -909,7 +1090,11 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			shell.print("err", `tsh: ${started.why}`, job.n);
 			return 1;
 		}
-		for (const r of started.runs) shell.live.set(r.run.id, r);
+
+		for (const r of started.runs) {
+			shell.live.set(r.run.id, r);
+		}
+
 		// Attached in the foreground or not, the job says why it ended: one that ended on its own
 		// leaves the table, and must not leave it in silence.
 		const watcher = yield* watchEnds(shell, started.runs, jobScope, (ends) =>
@@ -918,10 +1103,12 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			),
 		);
 		yield* stopIfAsked(stop, started.runs);
+
 		if (background) {
 			shell.print("err", `[${job.n}] attached ${job.stages.map((s) => s.run).join(" ")}`, job.n);
 			return 0;
 		}
+
 		return statusOfJob(yield* waitFor(shell, job.n, started.runs, watcher));
 	}).pipe(
 		Effect.withSpan(

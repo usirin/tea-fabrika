@@ -104,6 +104,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
 					await Effect.runPromise(
 						Effect.gen(function* () {
 							const ledger = yield* Ledger;
+
 							for (const c of calls) {
 								const value = line(parent.traceId, c.body);
 								append = c.refused
@@ -131,7 +132,8 @@ describe("ledger.call, next/ tracing keep-laws", () => {
 						),
 					);
 					expect(sent).toHaveLength(calls.reduce((n, c) => n + c.pages + 3, 0));
-					for (const {method, stream, active} of sent)
+
+					for (const {method, stream, active} of sent) {
 						expect(active).toEqual([
 							{
 								name: "ledger.call",
@@ -142,12 +144,18 @@ describe("ledger.call, next/ tracing keep-laws", () => {
 								},
 							},
 						]);
+					}
+
 					expect(spans.map((s) => s.name)).toEqual(sent.map(() => "ledger.call"));
+
 					for (const span of spans) {
 						expect(span.traceId).toBe(parent.traceId);
 						expect(Option.getOrThrow(span.parent).spanId).toBe(parent.spanId);
 						expect(span.status._tag).toBe("Ended");
-						if (span.status._tag === "Ended") expect(Exit.isSuccess(span.status.exit)).toBe(true);
+
+						if (span.status._tag === "Ended") {
+							expect(Exit.isSuccess(span.status.exit)).toBe(true);
+						}
 					}
 				},
 			),
@@ -171,9 +179,13 @@ describe("ledger.call, next/ tracing keep-laws", () => {
 				),
 				async (parent, reader, stream, calls) => {
 					const {spans, tracer} = capture();
+
 					for (const c of calls) {
 						const send = async () => {
-							if (c.unreachable) throw new Error("generated remote failure");
+							if (c.unreachable) {
+								throw new Error("generated remote failure");
+							}
+
 							return c.bad;
 						};
 						const stub: LedgerCalls = {append: send, read: send, wait: send};
@@ -195,8 +207,11 @@ describe("ledger.call, next/ tracing keep-laws", () => {
 						);
 						const why = c.unreachable ? "unreachable" : "bad_row";
 						expect(Exit.isFailure(result)).toBe(true);
-						if (Exit.isFailure(result))
+
+						if (Exit.isFailure(result)) {
 							expect(Cause.squash(result.cause)).toEqual(new LedgerError({why}));
+						}
+
 						const span = spans.at(-1)!;
 						expect(span.name).toBe("ledger.call");
 						expect(span.traceId).toBe(parent.traceId);
@@ -208,8 +223,12 @@ describe("ledger.call, next/ tracing keep-laws", () => {
 							"fab.ledger.why": why,
 						});
 						expect(span.status._tag).toBe("Ended");
-						if (span.status._tag === "Ended") expect(Exit.isFailure(span.status.exit)).toBe(true);
+
+						if (span.status._tag === "Ended") {
+							expect(Exit.isFailure(span.status.exit)).toBe(true);
+						}
 					}
+
 					expect(spans).toHaveLength(calls.length);
 				},
 			),

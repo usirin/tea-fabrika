@@ -41,18 +41,29 @@ export const post = (home: string, name: string, writes: ReadonlyArray<Post>) =>
 	Effect.gen(function* () {
 		for (const w of writes) {
 			const misfit = tracker.inputs[w.type].shape.problem(w.value);
-			if (misfit !== undefined)
+
+			if (misfit !== undefined) {
 				return yield* new PostFailed({why: `${w.type} does not fit: ${misfit}`});
+			}
 		}
+
 		const services = yield* Layer.build(Layer.merge(agentLedger(home, name), pullRequestsOf([])));
 		const view = viewOf(tracker);
-		if (view === undefined) return yield* Effect.die("the tracker has no view");
+
+		if (view === undefined) {
+			return yield* Effect.die("the tracker has no view");
+		}
+
 		const ready = (id: string) =>
 			Effect.gen(function* () {
 				const started = yield* start(tracker, {}, {}, {id, storage: memoryStorage()}).pipe(
 					Effect.provideContext(services),
 				);
-				if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("the tracker did not start");
+				}
+
 				const shown = yield* started.run.machines.tickets.changes.pipe(
 					Stream.filter((s) => s !== null),
 					Stream.map((s) => view.of(s) as Shown),
@@ -72,12 +83,20 @@ export const post = (home: string, name: string, writes: ReadonlyArray<Post>) =>
 			),
 			Effect.forkScoped,
 		);
+
 		// Told one after another; the run reads them in that order, across its inputs, then quits.
-		for (const w of writes) yield* offer(writing.run, w.type, w.value);
+		for (const w of writes) {
+			yield* offer(writing.run, w.type, w.value);
+		}
+
 		yield* offer(writing.run, "quit", null);
 		yield* writing.run.ended;
 		const why = yield* Ref.get(refused);
-		if (why !== null) return yield* new PostFailed({why});
+
+		if (why !== null) {
+			return yield* new PostFailed({why});
+		}
+
 		const after = yield* ready(`tracker:post:${name}:after`);
 		yield* offer(after.run, "quit", null);
 		return after.shown.page.kind === "list" ? after.shown.page.tickets.map(lineOf) : [];

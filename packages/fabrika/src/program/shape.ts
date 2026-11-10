@@ -110,8 +110,10 @@ export const CAPACITY = 1000;
 
 /** `capacity`, if it is one a mailbox can hold: a whole number, 1 or more. Refused here otherwise, when the program is defined. */
 export function capacityOf(capacity: number): number {
-	if (!Number.isInteger(capacity) || capacity < 1)
+	if (!Number.isInteger(capacity) || capacity < 1) {
 		throw new Error(`a mailbox's capacity is a whole number, 1 or more, not ${capacity}`);
+	}
+
 	return capacity;
 }
 
@@ -148,12 +150,18 @@ const isStandard = <T>(schema: ShapeSchema<T>): schema is StandardShape<T> =>
 
 function fromEffect<T>(schema: Schema.Codec<T, T>): Shape<T> {
 	// `toType` strips every encoding, at any depth, and keeps the same node when there is none.
-	if (SchemaAST.toType(schema.ast) !== schema.ast)
+	if (SchemaAST.toType(schema.ast) !== schema.ast) {
 		throw new Error("a shape only checks: this schema converts a value somewhere inside it");
+	}
+
 	const decode = Schema.decodeUnknownExit(schema);
 	const problem = (value: unknown): string | undefined => {
 		const exit = decode(value, {onExcessProperty: "error"});
-		if (Exit.isSuccess(exit)) return undefined;
+
+		if (Exit.isSuccess(exit)) {
+			return undefined;
+		}
+
 		const failure = Cause.squash(exit.cause);
 		return failure instanceof Error ? failure.message : String(failure);
 	};
@@ -171,13 +179,19 @@ function fromStandard<T>(schema: StandardShape<T>): Shape<T> {
 		);
 	const problem = (value: unknown): string | undefined => {
 		const exit = validate(value);
-		if (Exit.isFailure(exit)) return "the check threw";
+
+		if (Exit.isFailure(exit)) {
+			return "the check threw";
+		}
+
 		const result = exit.value;
+
 		// A check that does not answer now is a no, never a wait.
 		if (result instanceof Promise) {
 			result.catch(() => undefined);
 			return "the check did not answer at once";
 		}
+
 		return result.issues === undefined
 			? undefined
 			: result.issues.map((issue) => issue.message).join("; ");
@@ -195,7 +209,10 @@ export const shapeOf = <T>(schema: ShapeSchema<T>): Shape<T> =>
 
 /** The description a declaration must carry. */
 export function described(description: string): string {
-	if (description.trim() === "") throw new Error("an input or output needs a description");
+	if (description.trim() === "") {
+		throw new Error("an input or output needs a description");
+	}
+
 	return description;
 }
 
@@ -219,7 +236,11 @@ export const flag = <T>(
 /** The same flag, with `value` as its default. A value that does not fit the flag's shape is refused here. */
 export function defaulted<T>(declared: Flag<T>, value: T): Flag<T> {
 	const why = declared.shape.problem(value);
-	if (why !== undefined) throw new Error(`a default must fit its flag: ${why}`);
+
+	if (why !== undefined) {
+		throw new Error(`a default must fit its flag: ${why}`);
+	}
+
 	return {...declared, default: {value}};
 }
 
@@ -301,17 +322,29 @@ const NOTES = new Set(["description", "title", "examples", "default", "$comment"
 const TABLES = new Set(["properties", "$defs", "definitions", "patternProperties"]);
 
 function bare(node: unknown): unknown {
-	if (Array.isArray(node)) return node.map(bare);
-	if (node === null || typeof node !== "object") return node;
+	if (Array.isArray(node)) {
+		return node.map(bare);
+	}
+
+	if (node === null || typeof node !== "object") {
+		return node;
+	}
+
 	const out: Record<string, unknown> = {};
+
 	for (const [key, value] of Object.entries(node)) {
-		if (NOTES.has(key)) continue;
+		if (NOTES.has(key)) {
+			continue;
+		}
+
 		if (TABLES.has(key) && value !== null && typeof value === "object") {
 			out[key] = Object.fromEntries(Object.entries(value).map(([name, s]) => [name, bare(s)]));
 			continue;
 		}
+
 		out[key] = bare(value);
 	}
+
 	return out;
 }
 
@@ -329,15 +362,26 @@ export function fit(
 ): Fit {
 	const a = from.shape.json;
 	const b = into.shape.json;
-	if (a === undefined || b === undefined) return into.any === true ? "takes_any" : "cannot_tell";
+
+	if (a === undefined || b === undefined) {
+		return into.any === true ? "takes_any" : "cannot_tell";
+	}
+
 	const sent = structuralHash(bare(a));
 	const taken = [b, ...membersOf(b)];
-	if (taken.some((shape) => structuralHash(bare(shape)) === sent)) return "fits";
+
+	if (taken.some((shape) => structuralHash(bare(shape)) === sent)) {
+		return "fits";
+	}
+
 	return into.any === true ? "takes_any" : "does_not_fit";
 }
 
 /** The members of a union's JSON Schema; none for any other. */
 function membersOf(json: unknown): ReadonlyArray<unknown> {
-	if (json === null || typeof json !== "object" || !("anyOf" in json)) return [];
+	if (json === null || typeof json !== "object" || !("anyOf" in json)) {
+		return [];
+	}
+
 	return Array.isArray(json.anyOf) ? json.anyOf : [];
 }

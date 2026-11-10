@@ -9,8 +9,9 @@ import {fileURLToPath} from "node:url";
 
 const [dir, branch, src = "HEAD"] = process.argv.slice(2);
 
-if (!dir || !(branch === "-" || branch?.startsWith("fabrikalfa/")))
+if (!dir || !(branch === "-" || branch?.startsWith("fabrikalfa/"))) {
 	throw new Error("usage: botpush.mjs <worktree> fabrikalfa/<name>");
+}
 
 // Check only committed additions, before reading credentials or making any network request.
 // A lane's diff can pass execFileSync's 1 MB default (a minified CSS patch did), so the buffer is
@@ -82,7 +83,11 @@ const api = async (path, init = {}, auth = `Bearer ${jwt}`) => {
 			"X-GitHub-Api-Version": "2022-11-28",
 		},
 	});
-	if (!r.ok) throw new Error(`${path}: ${r.status}`);
+
+	if (!r.ok) {
+		throw new Error(`${path}: ${r.status}`);
+	}
+
 	return r.json();
 };
 
@@ -116,7 +121,10 @@ const git = (...a) =>
 const url = `https://github.com/${REPO}.git`;
 // One atomic push: the notes and the branch land together or not at all, so CI finds the signatures.
 const refs = ["refs/notes/fabrika:refs/notes/fabrika"];
-if (branch !== "-") refs.push(`${src}:refs/heads/${branch}`);
+
+if (branch !== "-") {
+	refs.push(`${src}:refs/heads/${branch}`);
+}
 
 // Take the remote's notes first and merge them in, as the signer's own push does, so the push is a
 // fast-forward. A conflict (two notes on one commit) stops here, before anything is pushed.
@@ -156,15 +164,20 @@ const staleNotesOnly = (stderr) => {
 try {
 	takeNotes();
 	let retried = false;
+
 	try {
 		git("push", "--atomic", url, ...refs);
 	} catch (e) {
-		if (!staleNotesOnly(String(e.stderr ?? ""))) throw e;
+		if (!staleNotesOnly(String(e.stderr ?? ""))) {
+			throw e;
+		}
+
 		// One retry, never a force: take the newer notes, merge them, push again.
 		retried = true;
 		takeNotes();
 		git("push", "--atomic", url, ...refs);
 	}
+
 	console.log(
 		`pushed ${branch} as fabrikalfa[bot]${retried ? " after one notes retry" : ""}; installation ${inst.id}; token expires ${tok.expires_at}`,
 	);
