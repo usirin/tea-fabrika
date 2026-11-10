@@ -129,4 +129,4 @@ export type GatewayBinding = Rpc.DurableObjectBranded &
     probe: (session: string) => Effect.Effect<number | null>;
   }>;
 
-export type RecordBinding = Rpc.DurableObjectBranded & RecordCalls;
+export type RecordBinding = Rpc.DurableObjectBranded & Remote<RecordCalls>;

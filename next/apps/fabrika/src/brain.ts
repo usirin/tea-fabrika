@@ -1,10 +1,9 @@
+import { makeDurableObjectBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { Descriptor, Incoming } from "@kampus/libfabrika";
 import type { Activity, From, Start } from "@kampus/libfabrika/coordination";
-import type { Chain } from "@kampus/libfabrika/data";
 import { fetch } from "@kampus/libfabrika/workers";
 import { control } from "@kampus/libfabrika/workers/control";
 import { GatewayService } from "@kampus/libfabrika/workers/gateway";
-import { recordContent, recordDelete, recordRead, recordWrite } from "@kampus/libfabrika/workers/record";
 import {
   processRuntime,
   ProcessService,
@@ -15,10 +14,12 @@ import {
   signingReply,
   commitReply,
 } from "@kampus/libfabrika/workers/runtime";
+// edge: bundle: false hands Alchemy the platform base class; not reported, 0042 amendment 2026-11-09
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Effect, Redacted } from "effect";
 import { assets, programs } from "virtual:fabrika-built";
 import type { ConnectionId } from "./door.ts";
+import objects from "./objects.ts";
 import { gatewayRuntime, projectRuntime, settings, type Env } from "./runtime.ts";
 
 export class Project extends DurableObject<Env> {
@@ -239,37 +240,12 @@ export class Gateway extends DurableObject<Env> {
   }
 }
 
-type Rows = Parameters<typeof recordWrite>[4];
+const Bridge = makeDurableObjectBridge(DurableObject, {
+  entrypoint: objects,
+  stack: { name: "fabrika", stage: "local" },
+});
 
-export class RecordPart extends DurableObject<Env> {
-  write(chain: Chain, at: number, rows: Rows) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return Effect.runPromise(
-      settings(this.env).pipe(Effect.flatMap((s) => recordWrite(this.ctx, s.limits?.recordBytes, chain, at, rows))),
-    );
-  }
-
-  read(chain: Chain, at: number, after: number) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return Effect.runPromise(
-      settings(this.env).pipe(Effect.flatMap((s) => recordRead(this.ctx, s.limits?.recordBytes, chain, at, after))),
-    );
-  }
-
-  content(chain: Chain, at: number, id: string) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return Effect.runPromise(
-      settings(this.env).pipe(Effect.flatMap((s) => recordContent(this.ctx, s.limits?.recordBytes, chain, at, id))),
-    );
-  }
-
-  deleteContent(chain: Chain, at: number, id: string, by: Parameters<typeof recordDelete>[5]) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return Effect.runPromise(
-      settings(this.env).pipe(Effect.flatMap((s) => recordDelete(this.ctx, s.limits?.recordBytes, chain, at, id, by))),
-    );
-  }
-}
+export class RecordPart extends Bridge("RecordPart") {}
 
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {

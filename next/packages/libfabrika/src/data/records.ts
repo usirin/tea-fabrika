@@ -47,10 +47,10 @@ const PAGE = 500;
 
 /** What a record part's object answers across an object call. Its answers are decoded here. */
 export type RecordCalls = {
-  write(chain: Chain, part: number, rows: ReadonlyArray<Sent>): Promise<unknown>;
-  read(chain: Chain, part: number, after: number): Promise<unknown>;
-  content(chain: Chain, part: number, spanId: string): Promise<unknown>;
-  deleteContent(chain: Chain, part: number, spanId: string, by: Deletion): Promise<unknown>;
+  write(chain: Chain, part: number, rows: ReadonlyArray<Sent>): Effect.Effect<unknown, unknown>;
+  read(chain: Chain, part: number, after: number): Effect.Effect<unknown, unknown>;
+  content(chain: Chain, part: number, spanId: string): Effect.Effect<unknown, unknown>;
+  deleteContent(chain: Chain, part: number, spanId: string, by: Deletion): Effect.Effect<unknown, unknown>;
 };
 
 /** What one part keeps, synchronously: SQLite in a part object, a Map in tests. */
@@ -433,10 +433,11 @@ export class RecordManager extends Context.Service<
       method: M,
       ...args: Parameters<RecordCalls[M]>
     ): Effect.fn.Return<A, SinkError> {
-      const fail = () => new SinkError({ reason: "unreachable", held: 0 });
+      const fail = (cause: unknown) => new SinkError({ reason: "unreachable", held: 0, cause });
       const rpc = yield* Effect.try({ try: () => stub(name), catch: fail });
-      // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
-      const io = Effect.tryPromise({ try: () => Reflect.apply(rpc[method], rpc, args), catch: fail });
+      const io: Effect.Effect<unknown, SinkError> = Reflect.apply(rpc[method], rpc, args).pipe(
+        Effect.mapError((cause: unknown) => (Schema.is(SinkError)(cause) ? cause : fail(cause))),
+      );
       return yield* io.pipe(
         Effect.flatMap((raw) =>
           Schema.decodeUnknownEffect(answer)(raw).pipe(

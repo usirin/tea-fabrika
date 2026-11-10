@@ -1,3 +1,4 @@
+import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
 // The one-file build (Tier 1, P12 and P16): every selected program as a sealed Worker Loader module,
 // every window script, chunk and stylesheet, and the brain that carries them all as text. Nothing
 // is published until every bundle and the Compiler check pass; a failure keeps the last good file.
@@ -337,9 +338,10 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
       ).pipe(Effect.flatMap((o) => collect(o.output)))
     : {};
   const tables = yield* Tables.makeEffect({ programs, assets }).pipe(Effect.mapError(fail("table")));
-  const output = yield* bundle(options.entry, [compiler, embed(tables)], {
+  const output = yield* bundle(options.entry, [compiler, embed(tables), unreachableChunksPlugin()], {
     phase: "brain",
     cwd: root,
+    define: { "globalThis.__ALCHEMY_RUNTIME__": "true" },
   });
   const brain = output.output
     .filter((o) => o.type === "chunk")
