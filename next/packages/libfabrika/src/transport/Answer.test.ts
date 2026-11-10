@@ -3,16 +3,17 @@
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import * as T from "./index.ts";
+import { answerFrame } from "./Answer.ts";
+import { Answer, Attached, Who } from "./Wire.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 class Offline extends Schema.TaggedError<Offline>()("Offline", {}) {}
 
-type Route = (method: string, params: unknown, who: typeof T.Who.Type) => Effect.Effect<typeof T.Answer.Type, Offline>;
+type Route = (method: string, params: unknown, who: typeof Who.Type) => Effect.Effect<typeof Answer.Type, Offline>;
 
 const online = () =>
-  T.Attached.cases.online.make({
+  Attached.cases.online.make({
     client: "c1",
     who: { key: "SHA256:checked", person: PERSON, as: "window" },
     version: 2,
@@ -44,7 +45,7 @@ const METHODS = [
 ] as const;
 
 const unauthenticated = fc.oneof(
-  fc.record({ client: fc.string(), nonce: fc.string() }).map((a) => T.Attached.cases.new.make(a)),
+  fc.record({ client: fc.string(), nonce: fc.string() }).map((a) => Attached.cases.new.make(a)),
   fc
     .record({
       client: fc.string(),
@@ -63,7 +64,7 @@ const unauthenticated = fc.oneof(
         signed: fc.string(),
       }),
     })
-    .map((a) => T.Attached.cases.waiting.make(a)),
+    .map((a) => Attached.cases.waiting.make(a)),
 );
 
 const admit = () => Effect.die("online routing must not repeat hello admission");
@@ -80,8 +81,8 @@ const frame = (over: Record<string, unknown> = {}) =>
 describe("P10 JSON-RPC", () => {
   it.effect("p23: numeric reply id zero is preserved, not mistaken for a notification", () =>
     Effect.gen(function* () {
-      const result = yield* T.answerFrame(frame({ id: 0 }), online(), admit, () =>
-        Effect.succeed(T.Answer.cases.ok.make({ result: null })),
+      const result = yield* answerFrame(frame({ id: 0 }), online(), admit, () =>
+        Effect.succeed(Answer.cases.ok.make({ result: null })),
       );
       expect(JSON.parse(result.send!)).toEqual({ jsonrpc: "2.0", id: 0, result: null });
     }),
@@ -90,15 +91,15 @@ describe("P10 JSON-RPC", () => {
   for (const mode of ["ok", "refused"] as const) {
     it.effect.prop(
       `p23: ${mode} has one matching reply`,
-      { generated: T.Answer.cases.refused },
+      { generated: Answer.cases.refused },
       ({ generated }) =>
         Effect.forEach(
-          [T.Answer.cases.refused.make({ reason: "stale" }), generated],
+          [Answer.cases.refused.make({ reason: "stale" }), generated],
           (value) =>
             Effect.gen(function* () {
-              const answer = mode === "ok" ? T.Answer.cases.ok.make({ result: { rows: [1] } }) : value;
+              const answer = mode === "ok" ? Answer.cases.ok.make({ result: { rows: [1] } }) : value;
               const route = vi.fn(() => Effect.succeed(answer));
-              const result = yield* T.answerFrame(frame(), online(), admit, route);
+              const result = yield* answerFrame(frame(), online(), admit, route);
               expect(result.send).not.toBeNull();
               const reply = JSON.parse(result.send!);
               expect(reply).toMatchObject({ jsonrpc: "2.0", id: "r1" });
@@ -123,10 +124,10 @@ describe("P10 JSON-RPC", () => {
         const route = vi
           .fn<Route>()
           .mockReturnValueOnce(first)
-          .mockReturnValueOnce(Effect.succeed(T.Answer.cases.ok.make({ result: "recovered" })));
-        const failed = yield* T.answerFrame(frame(), attached, admit, route);
+          .mockReturnValueOnce(Effect.succeed(Answer.cases.ok.make({ result: "recovered" })));
+        const failed = yield* answerFrame(frame(), attached, admit, route);
         expect(failed).toEqual({ send: null, attached });
-        const retried = yield* T.answerFrame(frame(), failed.attached, admit, route);
+        const retried = yield* answerFrame(frame(), failed.attached, admit, route);
         expect(JSON.parse(retried.send!)).toMatchObject({ id: "r1", result: "recovered" });
         expect(route).toHaveBeenCalledTimes(2);
       }),
@@ -142,8 +143,8 @@ describe("P10 JSON-RPC", () => {
   ]) {
     it.effect(`p23: no reply for junk, response or notification ${text}`, () =>
       Effect.gen(function* () {
-        const route = vi.fn(() => Effect.succeed(T.Answer.cases.ok.make({ result: null })));
-        expect((yield* T.answerFrame(text, online(), admit, route)).send).toBeNull();
+        const route = vi.fn(() => Effect.succeed(Answer.cases.ok.make({ result: null })));
+        expect((yield* answerFrame(text, online(), admit, route)).send).toBeNull();
       }),
     );
   }
@@ -165,9 +166,9 @@ describe("P10 JSON-RPC", () => {
           Effect.runPromise(
             Effect.gen(function* () {
               const route = vi.fn((..._: ReadonlyArray<unknown>) =>
-                Effect.succeed(T.Answer.cases.ok.make({ result: answer })),
+                Effect.succeed(Answer.cases.ok.make({ result: answer })),
               );
-              const result = yield* T.answerFrame(frame({ id, method, params }), attached, admit, route);
+              const result = yield* answerFrame(frame({ id, method, params }), attached, admit, route);
               expect(result.send).not.toBeNull();
               expect(result.attached).toEqual(attached);
               const wire = <A>(value: A): A => JSON.parse(JSON.stringify(value));
@@ -205,8 +206,8 @@ describe("P10 JSON-RPC", () => {
         (attached, id, stream, after) =>
           Effect.runPromise(
             Effect.gen(function* () {
-              const result = yield* T.answerFrame(frame({ id, method: "door.knock" }), attached, admit, () =>
-                Effect.succeed(T.Answer.cases.parked.make({ stream, after })),
+              const result = yield* answerFrame(frame({ id, method: "door.knock" }), attached, admit, () =>
+                Effect.succeed(Answer.cases.parked.make({ stream, after })),
               );
               expect(result).toEqual({ send: null, attached });
             }),
@@ -219,8 +220,8 @@ describe("P10 JSON-RPC", () => {
   for (const id of ["r1", 0]) {
     it.effect(`p23: parked wait retains reply id ${id} and cursor, with no unresolved work`, () =>
       Effect.gen(function* () {
-        const result = yield* T.answerFrame(frame({ id }), online(), admit, () =>
-          Effect.succeed(T.Answer.cases.parked.make({ stream: "x", after: 8 })),
+        const result = yield* answerFrame(frame({ id }), online(), admit, () =>
+          Effect.succeed(Answer.cases.parked.make({ stream: "x", after: 8 })),
         );
         expect(result.send).toBeNull();
         assert(result.attached._tag === "online");
@@ -232,11 +233,11 @@ describe("P10 JSON-RPC", () => {
 
   it.effect("p82: additive request fields leave the reply id and checked writer alone", () =>
     Effect.gen(function* () {
-      const route = vi.fn((_method: string, _params: unknown, _who: typeof T.Who.Type) =>
-        Effect.succeed(T.Answer.cases.ok.make({ result: null })),
+      const route = vi.fn((_method: string, _params: unknown, _who: typeof Who.Type) =>
+        Effect.succeed(Answer.cases.ok.make({ result: null })),
       );
       const attached = online();
-      const result = yield* T.answerFrame(frame({ future: { by: "forged" } }), attached, admit, route);
+      const result = yield* answerFrame(frame({ future: { by: "forged" } }), attached, admit, route);
       expect(JSON.parse(result.send!)).toMatchObject({ id: "r1", result: null });
       expect(route.mock.calls[0]?.[2]).toEqual(attached.who);
     }),

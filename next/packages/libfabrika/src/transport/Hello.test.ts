@@ -6,7 +6,8 @@ import { createHash } from "node:crypto";
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import * as Transport from "./index.ts";
+import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
+import { Admission, Who } from "./Wire.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
@@ -96,7 +97,7 @@ const setup = Effect.fnUntraced(function* () {
     key: k.fingerprint,
     person: PERSON,
     as: "window",
-  } satisfies typeof Transport.Who.Type;
+  } satisfies typeof Who.Type;
   let used = false;
   const consume = vi.fn(() => {
     if (used) {
@@ -106,7 +107,7 @@ const setup = Effect.fnUntraced(function* () {
     used = true;
     return true;
   });
-  const admit = vi.fn(() => Effect.succeed(Transport.Admission.cases.admitted.make({ who })));
+  const admit = vi.fn(() => Effect.succeed(Admission.cases.admitted.make({ who })));
   const trusted = {
     url,
     tab,
@@ -144,9 +145,9 @@ describe("P10 hello", () => {
             };
             const consume = vi.fn(() => true);
             const admit = vi.fn((_key: string) =>
-              Effect.succeed(Transport.Admission.cases.refused.make({ reason: "not_granted" })),
+              Effect.succeed(Admission.cases.refused.make({ reason: "not_granted" })),
             );
-            const result = yield* Transport.checkHello({
+            const result = yield* checkHello({
               hello,
               url,
               tab,
@@ -182,7 +183,7 @@ describe("P10 hello", () => {
             Effect.gen(function* () {
               const x = yield* setup();
               expect(
-                yield* Transport.checkHello({
+                yield* checkHello({
                   hello: {
                     ...x.hello,
                     [binding]: value === x.hello[binding] ? `another-${value}` : value,
@@ -202,7 +203,7 @@ describe("P10 hello", () => {
   it.effect("p82: a client with an unknown OS can still initialize", () =>
     Effect.gen(function* () {
       const x = yield* setup();
-      expect(yield* Transport.checkHello({ hello: { ...x.hello, os: "unknown" }, ...x.trusted })).toMatchObject({
+      expect(yield* checkHello({ hello: { ...x.hello, os: "unknown" }, ...x.trusted })).toMatchObject({
         _tag: "online",
         hello: { os: "unknown" },
       });
@@ -211,7 +212,7 @@ describe("P10 hello", () => {
   it.effect("p26: a checked window goes online with the fold's identity and chosen version", () =>
     Effect.gen(function* () {
       const x = yield* setup();
-      const checked = Transport.checkHello({ hello: x.hello, ...x.trusted });
+      const checked = checkHello({ hello: x.hello, ...x.trusted });
       const result = yield* checked;
       expect(result).toMatchObject({
         _tag: "online",
@@ -231,7 +232,7 @@ describe("P10 hello", () => {
         fc.array(fc.integer({ min: 1, max: 9 })),
         (client, server) => {
           const common = [...new Set(client)].filter((v) => server.includes(v));
-          expect(Transport.selectVersion(client, server)).toEqual(common.length ? Math.max(...common) : null);
+          expect(selectVersion(client, server)).toEqual(common.length ? Math.max(...common) : null);
         },
       ),
       { seed: 119120, numRuns: 100 },
@@ -242,7 +243,7 @@ describe("P10 hello", () => {
     it.effect(`p26: changed trusted ${binding} refuses before admission`, () =>
       Effect.gen(function* () {
         const x = yield* setup();
-        const checked = Transport.checkHello({
+        const checked = checkHello({
           hello: x.hello,
           ...x.trusted,
           [binding]: "changed",
@@ -258,9 +259,9 @@ describe("P10 hello", () => {
   it.effect("p26: a consumed nonce cannot initialize again", () =>
     Effect.gen(function* () {
       const x = yield* setup();
-      const first = Transport.checkHello({ hello: x.hello, ...x.trusted });
+      const first = checkHello({ hello: x.hello, ...x.trusted });
       expect((yield* first)._tag).toBe("online");
-      const repeated = Transport.checkHello({ hello: x.hello, ...x.trusted });
+      const repeated = checkHello({ hello: x.hello, ...x.trusted });
       expect((yield* repeated)._tag).toBe("refused");
     }),
   );
@@ -268,10 +269,10 @@ describe("P10 hello", () => {
   for (const kind of ["signature", "key", "version", "unknown"] as const) {
     it.effect.prop(
       `p26/p82: ${kind} refusal has no nonce write or successful admission`,
-      { generated: Transport.Admission.cases.refused },
+      { generated: Admission.cases.refused },
       ({ generated }) =>
         Effect.forEach(
-          [Transport.Admission.cases.refused.make({ reason: "not_granted" }), generated],
+          [Admission.cases.refused.make({ reason: "not_granted" }), generated],
           (value) =>
             Effect.gen(function* () {
               const x = yield* setup();
@@ -286,7 +287,7 @@ describe("P10 hello", () => {
                       : {}),
               };
               const admit = kind === "unknown" ? vi.fn(() => Effect.succeed(value)) : x.admit;
-              const checked = Transport.checkHello({ hello, ...x.trusted, admit });
+              const checked = checkHello({ hello, ...x.trusted, admit });
               const result = yield* checked;
               expect(result).toMatchObject({
                 _tag: "refused",
@@ -304,7 +305,7 @@ describe("P10 hello", () => {
   it.effect("p82/p66: additive hello fields are ignored, has/os preserved, ping clamped", () =>
     Effect.gen(function* () {
       const x = yield* setup();
-      const checked = Transport.checkHello({
+      const checked = checkHello({
         ...x.trusted,
         hello: { ...x.hello, future: { rank: "person" }, ping: "1ms" },
       });
@@ -326,7 +327,7 @@ describe("P10 hello", () => {
   ] as const) {
     it(`p26 origin: ${origin} / ${host}`, () => {
       expect(
-        Transport.sameOrigin({
+        sameOrigin({
           origin,
           host,
           origins: ["https://fabrika.test"],

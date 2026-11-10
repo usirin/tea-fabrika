@@ -9,7 +9,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import * as T from "./index.ts";
+import { checkSshsig, verifySshsig } from "./Sshsig.ts";
+import { PasskeyLine, writeWebauthnSshsig } from "./Webauthn.ts";
 
 const SPACE = "fabrika-client";
 const utf8 = (text: string) => new TextEncoder().encode(text);
@@ -186,7 +187,7 @@ const real = {
 const policy = { rp: "fabrika.test", origins: ["https://fabrika.test"] };
 
 const check = (armored: string, signer: string = line, body: string = text, over = {}) =>
-  T.verifySshsig({
+  verifySshsig({
     text: body,
     armored,
     space: SPACE,
@@ -242,7 +243,7 @@ describe("P10 WebAuthn SSHSIG", () => {
           }
 
           bytes[at + 4] = prefix;
-          expect(Schema.is(T.PasskeyLine)(`${line.split(" ")[0]} ${bytes.toString("base64")}`)).toBe(false);
+          expect(Schema.is(PasskeyLine)(`${line.split(" ")[0]} ${bytes.toString("base64")}`)).toBe(false);
         },
       ),
       { ...runs, examples: [[line, 3]] },
@@ -266,9 +267,9 @@ describe("P10 WebAuthn SSHSIG", () => {
           Effect.gen(function* () {
             expect(
               yield* Effect.flip(
-                T.writeWebauthnSshsig({
+                writeWebauthnSshsig({
                   text,
-                  line: Schema.decodeUnknownSync(T.PasskeyLine)(line),
+                  line: Schema.decodeUnknownSync(PasskeyLine)(line),
                   assertion: {
                     authenticatorData: new Uint8Array(Buffer.from(real.authenticatorData, "base64url")),
                     clientDataJSON: new Uint8Array(Buffer.from(real.clientDataJSON, "base64url")),
@@ -389,9 +390,9 @@ describe("P10 WebAuthn SSHSIG", () => {
         signature: new Uint8Array(Buffer.from(real.signature, "base64url")),
       };
       expect(assertion.signature.length).toBe(72);
-      const armored = yield* T.writeWebauthnSshsig({
+      const armored = yield* writeWebauthnSshsig({
         text,
-        line: Schema.decodeUnknownSync(T.PasskeyLine)(line),
+        line: Schema.decodeUnknownSync(PasskeyLine)(line),
         assertion,
       });
       expect(armored).toBe(realArmor);
@@ -644,16 +645,16 @@ describe("P10 WebAuthn SSHSIG", () => {
       fc.asyncProperty(bodyArb, bodyArb, (body, comment) =>
         Effect.runPromise(
           Effect.gen(function* () {
-            expect(yield* T.checkSshsig({ text, armored: realArmor, space: SPACE, signers: [line] })).toEqual({
+            expect(yield* checkSshsig({ text, armored: realArmor, space: SPACE, signers: [line] })).toEqual({
               reason: "bad_signature",
             });
             const k = yield* key();
             const armored = yield* k.sign(body);
             const supplied = `${k.line} ${comment}`;
-            expect(yield* T.checkSshsig({ text: body, armored, space: SPACE, signers: [supplied] })).toEqual({
+            expect(yield* checkSshsig({ text: body, armored, space: SPACE, signers: [supplied] })).toEqual({
               signer: supplied,
             });
-            const checked = T.verifySshsig({
+            const checked = verifySshsig({
               text: body,
               armored,
               space: SPACE,
@@ -671,8 +672,8 @@ describe("P10 WebAuthn SSHSIG", () => {
     // Plant: ignore the outer key type word. The ordinary ECDSA line must still throw.
     fc.assert(
       fc.property(passkeyLineArb, (line) => {
-        expect(Schema.decodeUnknownSync(T.PasskeyLine)(line)).toBe(line);
-        expect(() => Schema.decodeUnknownSync(T.PasskeyLine)(line.replace("sk-ecdsa", "ecdsa"))).toThrow();
+        expect(Schema.decodeUnknownSync(PasskeyLine)(line)).toBe(line);
+        expect(() => Schema.decodeUnknownSync(PasskeyLine)(line.replace("sk-ecdsa", "ecdsa"))).toThrow();
       }),
       { ...runs, examples: [[line]] },
     );
