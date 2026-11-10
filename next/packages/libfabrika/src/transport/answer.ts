@@ -42,9 +42,14 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <
 	const text = frame[0];
 	const attached: A = frame[1];
 	const request = Schema.decodeUnknownResult(Request)(text);
-	if (Result.isFailure(request)) return {send: null, attached};
+
+	if (Result.isFailure(request)) {
+		return {send: null, attached};
+	}
+
 	const {id, method, params} = request.success;
-	if (attached._tag !== "online" && !(attached._tag === "waiting" && method === "door.knock"))
+
+	if (attached._tag !== "online" && !(attached._tag === "waiting" && method === "door.knock")) {
 		return {
 			send: JSON.stringify({
 				jsonrpc: "2.0",
@@ -53,10 +58,16 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <
 			}),
 			attached,
 		};
+	}
+
 	const exit = yield* Effect.exit(
 		isOnline(frame) ? frame[3](method, params, frame[1].who) : frame[3](method, params),
 	);
-	if (Exit.isFailure(exit)) return {send: null, attached};
+
+	if (Exit.isFailure(exit)) {
+		return {send: null, attached};
+	}
+
 	return Answer.match(exit.value, {
 		ok: ({result}) => ({send: JSON.stringify({jsonrpc: "2.0", id, result}), attached}),
 		refused: ({why}) => ({

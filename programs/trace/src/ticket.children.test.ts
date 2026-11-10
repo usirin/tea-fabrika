@@ -61,20 +61,36 @@ const longStep = (n: number): {readonly record: JobTrace; readonly under: readon
 	add(span(other, null, "run a step", {[LANE.run]: "r-other"}), false);
 	add(span(idOf(3), null, "read the ticket"), false);
 	let next = 16;
-	for (let i = 0; i < 100; i++) add(span(idOf(next++), other, "turn"), false);
+
+	for (let i = 0; i < 100; i++) {
+		add(span(idOf(next++), other, "turn"), false);
+	}
+
 	for (let i = 0; i < n; i++) {
 		const child = idOf(next++);
 		add(span(child, root, "turn"), true);
-		if (i % 50 !== 0) continue;
+
+		if (i % 50 !== 0) {
+			continue;
+		}
+
 		const first = idOf(next++);
 		add(span(first, child, "tool"), true);
 		add(span(idOf(next++), child, "tool"), true);
-		if (i % 500 === 0) add(span(idOf(next++), first, "POST"), true);
+
+		if (i % 500 === 0) {
+			add(span(idOf(next++), first, "POST"), true);
+		}
 	}
+
 	// Distinct starts, shuffled: a prime step through m places visits each once.
 	const m = built.length;
 	const STEP = 7919;
-	if (m % STEP === 0) throw new Error(`${m} spans: the step must not divide them`);
+
+	if (m % STEP === 0) {
+		throw new Error(`${m} spans: the step must not divide them`);
+	}
+
 	const spans = built.map(({s}, j): Span => {
 		const start = T0 + ((j * STEP) % m) * 10;
 		return {...s, start, end: start + 1};
@@ -92,12 +108,18 @@ const fresh = (r: JobTrace): JobTrace => ({...r, spans: [...r.spans]});
 /** The fastest of `times` runs of `f`, each on records made before the clock starts. */
 const fastest = (times: number, make: () => readonly JobTrace[]): number => {
 	let best = Infinity;
+
 	for (let k = 0; k < times; k++) {
 		const records = make();
 		const t = performance.now();
-		for (const r of records) childrenOf(r, RUN, 0, 1);
+
+		for (const r of records) {
+			childrenOf(r, RUN, 0, 1);
+		}
+
 		best = Math.min(best, performance.now() - t);
 	}
+
 	return best;
 };
 

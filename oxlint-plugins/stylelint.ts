@@ -30,12 +30,21 @@ if (files.length === 0) {
 try {
 	// `code` avoids glob expansion; the empty ignore file prevents .stylelintignore taking effect.
 	const config = await stylelint.resolveConfig(join(ROOT, files[0] ?? ""), {configFile});
-	if (config === undefined) throw new Error("No stylelint config");
-	const counts = new Map<string, {fires: number; known: Set<string>}>();
-	for (const rule of Object.keys(config.rules ?? {})) {
-		if (rule.startsWith("fabrika/")) counts.set(rule, {fires: 0, known: new Set()});
+
+	if (config === undefined) {
+		throw new Error("No stylelint config");
 	}
+
+	const counts = new Map<string, {fires: number; known: Set<string>}>();
+
+	for (const rule of Object.keys(config.rules ?? {})) {
+		if (rule.startsWith("fabrika/")) {
+			counts.set(rule, {fires: 0, known: new Set()});
+		}
+	}
+
 	let blocks = 0;
+
 	for (const file of files) {
 		const report = await stylelint.lint({
 			code: await readFile(join(ROOT, file), "utf8"),
@@ -44,7 +53,11 @@ try {
 			ignorePath: devNull,
 			ignoreDisables: false,
 		});
-		if (report.results.length !== 1) throw new Error(`No stylelint result for ${file}`);
+
+		if (report.results.length !== 1) {
+			throw new Error(`No stylelint result for ${file}`);
+		}
+
 		for (const result of report.results) {
 			for (const warning of [
 				...result.warnings,
@@ -57,14 +70,24 @@ try {
 				console.error(`${file}:${line}:${column} ${rule} ${warning.text}`);
 				blocks++;
 			}
+
 			const postcss: CssResult | undefined = result._postcssResult;
+
 			for (const [rule, hits] of postcss?.fabrika ?? []) {
 				const total = counts.get(rule);
-				if (total === undefined) throw new Error(`Unconfigured CSS rule ${rule}`);
+
+				if (total === undefined) {
+					throw new Error(`Unconfigured CSS rule ${rule}`);
+				}
+
 				total.fires += hits.fires;
-				for (const entry of hits.known) total.known.add(entry);
+
+				for (const entry of hits.known) {
+					total.known.add(entry);
+				}
 			}
 		}
+
 		if (
 			report.errored &&
 			report.results.every(
@@ -78,18 +101,25 @@ try {
 			blocks++;
 		}
 	}
+
 	for (const [rule, hits] of counts) {
 		const setting = config.rules?.[rule];
 		const known: unknown = Array.isArray(setting) ? setting[1]?.known : undefined;
-		if (!Array.isArray(known)) throw new Error(`${rule} needs its known list`);
+
+		if (!Array.isArray(known)) {
+			throw new Error(`${rule} needs its known list`);
+		}
+
 		for (const entry of known) {
 			if (!hits.known.has(entry)) {
 				console.error(`${rule}: stale known entry ${entry}`);
 				blocks++;
 			}
 		}
+
 		console.log(`${rule}: ${hits.fires} fires, ${hits.known.size} known entries`);
 	}
+
 	console.log(`stylelint: ${files.length} files, ${blocks} blocking`);
 	process.exitCode = blocks === 0 ? 0 : 1;
 } catch (error) {

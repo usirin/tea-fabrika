@@ -127,31 +127,64 @@ const STRATEGIES: readonly Strategy[] = ["one_for_one", "one_for_all", "rest_for
 
 /** Why a spec is refused, or null: it can work. */
 export const refusalOf = (name: string, spec: SupervisorSpec): string | null => {
-	if (!STRATEGIES.includes(spec.strategy)) return `no strategy ${spec.strategy}`;
-	if (!Number.isInteger(spec.intensity) || spec.intensity < 0)
+	if (!STRATEGIES.includes(spec.strategy)) {
+		return `no strategy ${spec.strategy}`;
+	}
+
+	if (!Number.isInteger(spec.intensity) || spec.intensity < 0) {
 		return "intensity must be a whole number, 0 or more";
-	if (!(spec.periodMs > 0)) return "periodMs must be more than 0";
+	}
+
+	if (!(spec.periodMs > 0)) {
+		return "periodMs must be more than 0";
+	}
+
 	const names = spec.children.map((c) => c.name);
-	if (new Set(names).size !== names.length) return "two children share a name";
-	if (names.includes(name)) return "a child cannot be the supervisor's own name";
+
+	if (new Set(names).size !== names.length) {
+		return "two children share a name";
+	}
+
+	if (names.includes(name)) {
+		return "a child cannot be the supervisor's own name";
+	}
+
 	for (const c of spec.children) {
-		if (typeof c.shutdown === "number" && !(c.shutdown >= 0 && Number.isFinite(c.shutdown)))
+		if (typeof c.shutdown === "number" && !(c.shutdown >= 0 && Number.isFinite(c.shutdown))) {
 			return `child ${c.name}: shutdown must be 0 ms or more, brutal_kill or infinity`;
+		}
+
 		const bad = c.limits === undefined ? null : limitsRefusal(c.limits);
-		if (bad !== null) return `child ${c.name}: ${bad}`;
+
+		if (bad !== null) {
+			return `child ${c.name}: ${bad}`;
+		}
 	}
+
 	const deliveries = spec.maxDeliveries === undefined ? MAX_DELIVERIES : spec.maxDeliveries;
-	if (deliveries !== null && spec.intensity < deliveries)
+
+	if (deliveries !== null && spec.intensity < deliveries) {
 		return `intensity ${spec.intensity} is below maxDeliveries ${deliveries}: one poison message would take the whole tree down before the ledger sets it aside`;
-	const b = spec.backoff;
-	if (b !== undefined) {
-		if (!(b.minMs > 0) || !(b.maxMs >= b.minMs) || !(b.resetAfterMs >= 0))
-			return "backoff needs 0 < minMs <= maxMs and resetAfterMs >= 0";
-		let spread = 0;
-		for (let n = 1; n <= spec.intensity; n++) spread += delayOf(b, n);
-		if (spread >= spec.periodMs)
-			return `backoff spreads ${spec.intensity} restarts over ${spread} ms, not under periodMs ${spec.periodMs}: the brake could never trip, so a crash loop would never reach the parent`;
 	}
+
+	const b = spec.backoff;
+
+	if (b !== undefined) {
+		if (!(b.minMs > 0) || !(b.maxMs >= b.minMs) || !(b.resetAfterMs >= 0)) {
+			return "backoff needs 0 < minMs <= maxMs and resetAfterMs >= 0";
+		}
+
+		let spread = 0;
+
+		for (let n = 1; n <= spec.intensity; n++) {
+			spread += delayOf(b, n);
+		}
+
+		if (spread >= spec.periodMs) {
+			return `backoff spreads ${spec.intensity} restarts over ${spread} ms, not under periodMs ${spec.periodMs}: the brake could never trip, so a crash loop would never reach the parent`;
+		}
+	}
+
 	return null;
 };
 
@@ -421,7 +454,11 @@ const answerAll = (s: S, res: Answer): S =>
 /** Answer every call waiting on `name` for `until`. */
 const resolve = (s: S, name: string, until: "started" | "stopped", res: Answer): S => {
 	const hit = s.waiting.filter((w) => w.name === name && w.until === until);
-	if (hit.length === 0) return s;
+
+	if (hit.length === 0) {
+		return s;
+	}
+
 	const rest = {...s, waiting: s.waiting.filter((w) => !hit.includes(w))};
 	return hit.reduce<S>((acc, w) => answer(acc, w, res), rest);
 };
@@ -449,7 +486,10 @@ const ended = (s: S, c: Child, afterStop: AfterStop): S => {
 
 /** Stop everything and exit: OTP's give-up, and its answer to its parent's `shutdown`. */
 const giveUp = (s: S, why: string): S => {
-	if (s.phase !== "running") return s;
+	if (s.phase !== "running") {
+		return s;
+	}
+
 	// Up: stopped, then gone. Stopping: gone once stopped. Starting: dropped (a run a late start
 	// made ends with the supervisor's own exit, through their link). Stopped: kept as it is.
 	const children = s.children.flatMap((c): Child[] =>
@@ -467,6 +507,7 @@ const giveUp = (s: S, why: string): S => {
 /** One sibling caught in a one_for_all or rest_for_one restart: stop it, then start it again. */
 const caught = (s: S, c: Child, notBefore: number): S => {
 	const remove = c.restart === "temporary";
+
 	switch (c.run.is) {
 		case "up":
 			return put(s, {
@@ -508,18 +549,30 @@ const decide =
 	(s: S, c: Child, e: Ended): S => {
 		const since = c.run.is === "up" ? c.run.since : e.at;
 		const known = {...c, incarnation: Math.max(c.incarnation, e.incarnation)};
-		if (c.restart === "temporary") return drop(s, c.name);
+
+		if (c.restart === "temporary") {
+			return drop(s, c.name);
+		}
+
 		// 102: its limit ended it. Starting it again would only spend past the limit again.
-		if (isLimitReason(e.reason)) return put(s, {...known, run: {is: "stopped"}});
-		if (c.restart === "transient" && (e.reason === "normal" || e.reason === "shutdown"))
+		if (isLimitReason(e.reason)) {
 			return put(s, {...known, run: {is: "stopped"}});
+		}
+
+		if (c.restart === "transient" && (e.reason === "normal" || e.reason === "shutdown")) {
+			return put(s, {...known, run: {is: "stopped"}});
+		}
+
 		const restarts = [...s.restarts.filter((t) => t > e.at - spec.periodMs), e.at];
-		if (restarts.length > spec.intensity)
+
+		if (restarts.length > spec.intensity) {
 			return giveUp(
 				// The child that tipped it is down already: nothing to stop.
 				put({...s, restarts}, {...known, run: {is: "stopped"}}),
 				`reached_max_restart_intensity: ${restarts.length} restarts within ${spec.periodMs} ms, the last for ${c.name} (${e.reason}: ${e.why})`,
 			);
+		}
+
 		const b = spec.backoff;
 		const fails = b === undefined ? 0 : (e.at - since >= b.resetAfterMs ? 0 : c.fails) + 1;
 		const notBefore = e.at + delayOf(b, fails);
@@ -551,22 +604,34 @@ const request = (name: string, s: S, caller: Caller | null, req: Request): S => 
 	const reply = (st: S, res: Answer) => (caller === null ? st : answer(st, caller, res));
 	const wait = (st: S, child: string, until: "started" | "stopped") =>
 		caller === null ? st : {...st, waiting: [...st.waiting, {...caller, name: child, until}]};
-	if (req.op === "which_children") return reply(s, {ok: true, children: s.children.map(infoOf)});
+
+	if (req.op === "which_children") {
+		return reply(s, {ok: true, children: s.children.map(infoOf)});
+	}
+
 	const target = req.op === "start_child" ? req.spec.name : req.name;
 	const c = s.children.find((x) => x.name === target);
+
 	switch (req.op) {
 		case "start_child": {
-			if (target === name)
+			if (target === name) {
 				return reply(s, {ok: false, error: "bad_spec: the supervisor's own name"});
-			if (c !== undefined)
+			}
+
+			if (c !== undefined) {
 				return reply(s, {
 					ok: false,
 					error: c.run.is === "stopped" ? "already_present" : "already_started",
 				});
+			}
+
 			return wait({...s, children: [...s.children, childOf(req.spec)]}, target, "started");
 		}
 		case "terminate_child": {
-			if (c === undefined) return reply(s, {ok: false, error: "not_found"});
+			if (c === undefined) {
+				return reply(s, {ok: false, error: "not_found"});
+			}
+
 			switch (c.run.is) {
 				case "up":
 					return wait(
@@ -585,16 +650,29 @@ const request = (name: string, s: S, caller: Caller | null, req: Request): S => 
 				case "stopped":
 					return reply(s, {ok: true});
 			}
+
 			return s;
 		}
 		case "restart_child": {
-			if (c === undefined) return reply(s, {ok: false, error: "not_found"});
-			if (c.run.is !== "stopped") return reply(s, {ok: false, error: "running"});
+			if (c === undefined) {
+				return reply(s, {ok: false, error: "not_found"});
+			}
+
+			if (c.run.is !== "stopped") {
+				return reply(s, {ok: false, error: "running"});
+			}
+
 			return wait(put(s, {...c, fails: 0, run: startAgain(c, 0)}), target, "started");
 		}
 		case "delete_child": {
-			if (c === undefined) return reply(s, {ok: false, error: "not_found"});
-			if (c.run.is !== "stopped") return reply(s, {ok: false, error: "running"});
+			if (c === undefined) {
+				return reply(s, {ok: false, error: "not_found"});
+			}
+
+			if (c.run.is !== "stopped") {
+				return reply(s, {ok: false, error: "running"});
+			}
+
 			return reply(drop(s, target), {ok: true});
 		}
 	}
@@ -612,7 +690,10 @@ export const superviseWith = (name: string, spec: SupervisorSpec) => {
 	const step = (s: S, m: SupervisorMsg): S => {
 		switch (m.type) {
 			case "begin": {
-				if (m.incarnation === s.incarnation) return s;
+				if (m.incarnation === s.incarnation) {
+					return s;
+				}
+
 				// A new incarnation: OTP's `init/1`, every child from the spec. The cursor stays: the
 				// inbox before it was read by an earlier incarnation. Calls waiting on the old one fail.
 				const told = answerAll(s, {ok: false, error: "restarted"});
@@ -627,20 +708,37 @@ export const superviseWith = (name: string, spec: SupervisorSpec) => {
 				};
 			}
 			case "exit": {
-				if (m.rev <= s.cursor) return s;
+				if (m.rev <= s.cursor) {
+					return s;
+				}
+
 				const read = {...s, cursor: m.rev};
+
 				// Meant for an earlier run of this supervisor, or it is done.
-				if (m.to !== s.incarnation || s.phase === "shutdown") return read;
-				if (m.from === s.parent && m.from !== name)
+				if (m.to !== s.incarnation || s.phase === "shutdown") {
+					return read;
+				}
+
+				if (m.from === s.parent && m.from !== name) {
 					return giveUp(read, `parent ${m.from} exited (${m.reason})`);
+				}
+
 				const c = read.children.find((x) => x.name === m.from);
-				if (c === undefined) return read;
+
+				if (c === undefined) {
+					return read;
+				}
+
 				const e: Ended = {incarnation: m.incarnation, reason: m.reason, why: m.why, at: m.at};
+
 				switch (c.run.is) {
 					case "starting": {
 						const after = c.run.after;
-						if (e.incarnation < c.incarnation || (after !== null && e.incarnation <= after))
+
+						if (e.incarnation < c.incarnation || (after !== null && e.incarnation <= after)) {
 							return read;
+						}
+
 						const held = c.run.held;
 						const keep = held !== null && held.incarnation >= e.incarnation ? held : e;
 						return put(read, {...c, run: {...c.run, held: keep}});
@@ -654,30 +752,49 @@ export const superviseWith = (name: string, spec: SupervisorSpec) => {
 					case "stopped":
 						return put(read, {...c, incarnation: Math.max(c.incarnation, e.incarnation)});
 				}
+
 				return read;
 			}
 			case "request": {
-				if (m.rev <= s.cursor) return s;
+				if (m.rev <= s.cursor) {
+					return s;
+				}
+
 				const read = {...s, cursor: m.rev};
 				const caller = m.caller;
+
 				if (caller !== null) {
 					const old = read.answered.find((a) => a.id === caller.id);
-					if (old !== undefined)
+
+					if (old !== undefined) {
 						return read.outbox.some((o) => o.id === caller.id)
 							? read
 							: {...read, outbox: [...read.outbox, {...caller, res: old.res}]};
-					if (read.waiting.some((w) => w.id === caller.id)) return read;
+					}
+
+					if (read.waiting.some((w) => w.id === caller.id)) {
+						return read;
+					}
 				}
-				if (read.phase !== "running")
+
+				if (read.phase !== "running") {
 					return caller === null ? read : answer(read, caller, {ok: false, error: "shutting_down"});
+				}
+
 				return request(name, read, caller, m.req);
 			}
 			case "started": {
 				const c = s.children.find((x) => x.name === m.name);
-				if (c === undefined || s.phase !== "running") return s;
+
+				if (c === undefined || s.phase !== "running") {
+					return s;
+				}
+
 				const incarnation = Math.max(c.incarnation, m.incarnation);
+
 				if (c.run.is === "stopped")
-					// terminate_child came while this start was in flight: stop the run it made.
+				// terminate_child came while this start was in flight: stop the run it made.
+				{
 					return m.incarnation >= c.incarnation
 						? put(s, {
 								...c,
@@ -685,7 +802,12 @@ export const superviseWith = (name: string, spec: SupervisorSpec) => {
 								run: {is: "stopping", afterStop: {do: "stay"}, signalledAt: null},
 							})
 						: s;
-				if (c.run.is !== "starting") return s;
+				}
+
+				if (c.run.is !== "starting") {
+					return s;
+				}
+
 				if (m.generation < c.run.generation) {
 					// Sent before a group restart caught it: it may run ahead of a sibling it must
 					// follow. Stop that run (or, ended already, just start again) in the new generation. A
@@ -693,16 +815,23 @@ export const superviseWith = (name: string, spec: SupervisorSpec) => {
 					// drops it.
 					const temporary = c.restart === "temporary";
 					const held = c.run.held;
+
 					if (held !== null && held.incarnation >= m.incarnation) {
-						if (temporary) return drop(s, c.name);
+						if (temporary) {
+							return drop(s, c.name);
+						}
+
 						// 102: its limit ended it, so it is not started again.
-						if (isLimitReason(held.reason))
+						if (isLimitReason(held.reason)) {
 							return resolve(put(s, {...c, incarnation, run: {is: "stopped"}}), c.name, "started", {
 								ok: false,
 								error: held.reason,
 							});
+						}
+
 						return put(s, {...c, incarnation, run: {...c.run, after: incarnation, held: null}});
 					}
+
 					return put(s, {
 						...c,
 						incarnation,
@@ -713,6 +842,7 @@ export const superviseWith = (name: string, spec: SupervisorSpec) => {
 						},
 					});
 				}
+
 				const up: Child = {...c, incarnation, run: {is: "up", since: m.at}};
 				const told = resolve(put(s, up), c.name, "started", {ok: true, incarnation});
 				const held = c.run.held;
@@ -720,15 +850,27 @@ export const superviseWith = (name: string, spec: SupervisorSpec) => {
 			}
 			case "start_refused": {
 				const c = s.children.find((x) => x.name === m.name);
-				if (c === undefined || c.run.is !== "starting") return s;
-				if (m.why === "denied")
+
+				if (c === undefined || c.run.is !== "starting") {
+					return s;
+				}
+
+				if (m.why === "denied") {
 					return resolve(drop(s, c.name), c.name, "started", {ok: false, error: "denied"});
+				}
+
 				// 102: a limit. A child from the spec, or one that has run, is kept.
 				const fresh = c.incarnation === 0 && !spec.children.some((x) => x.name === c.name);
 				const error = m.over.kind === "children" ? "max_children" : `limit:${m.over.kind}`;
-				if (fresh) return resolve(drop(s, c.name), c.name, "started", {ok: false, error});
-				if (m.over.kind === "children")
+
+				if (fresh) {
+					return resolve(drop(s, c.name), c.name, "started", {ok: false, error});
+				}
+
+				if (m.over.kind === "children") {
 					return put(s, {...c, run: {...c.run, notBefore: m.at + LIMIT_RETRY_MS}});
+				}
+
 				return resolve(put(s, {...c, run: {is: "stopped"}}), c.name, "started", {
 					ok: false,
 					error,
@@ -736,9 +878,19 @@ export const superviseWith = (name: string, spec: SupervisorSpec) => {
 			}
 			case "signalled": {
 				const c = s.children.find((x) => x.name === m.name);
-				if (c === undefined || c.run.is !== "stopping" || m.incarnation !== c.incarnation) return s;
-				if (m.how === "noproc") return ended(s, c, c.run.afterStop);
-				if (c.run.signalledAt !== null) return s;
+
+				if (c === undefined || c.run.is !== "stopping" || m.incarnation !== c.incarnation) {
+					return s;
+				}
+
+				if (m.how === "noproc") {
+					return ended(s, c, c.run.afterStop);
+				}
+
+				if (c.run.signalledAt !== null) {
+					return s;
+				}
+
 				return put(s, {...c, run: {...c.run, signalledAt: m.at}});
 			}
 			case "replied":
@@ -771,12 +923,26 @@ export const startsOf = (s: S): readonly Start[] =>
 /** The one stop to send now: the last child in start order being stopped, by its `shutdown`. */
 export const stopOf = (s: S): Stop | null => {
 	const c = s.children.findLast((x) => x.run.is === "stopping");
-	if (c === undefined || c.run.is !== "stopping") return null;
+
+	if (c === undefined || c.run.is !== "stopping") {
+		return null;
+	}
+
 	const at = c.run.signalledAt;
 	const of = {name: c.name, incarnation: c.incarnation};
-	if (c.shutdown === "brutal_kill") return at === null ? {...of, signal: "kill", at: 0} : null;
-	if (at === null) return {...of, signal: "shutdown", at: 0};
-	if (c.shutdown === "infinity") return null;
+
+	if (c.shutdown === "brutal_kill") {
+		return at === null ? {...of, signal: "kill", at: 0} : null;
+	}
+
+	if (at === null) {
+		return {...of, signal: "shutdown", at: 0};
+	}
+
+	if (c.shutdown === "infinity") {
+		return null;
+	}
+
 	return {...of, signal: "kill", at: at + c.shutdown};
 };
 
@@ -867,23 +1033,32 @@ const decodeCall = Schema.decodeUnknownExit(CallBody);
 export const msgOf = (e: Envelope<unknown>): SupervisorMsg => {
 	if (e.kind === "EXIT" && e.from === "ledger") {
 		const x = decodeExit(e.body);
-		if (Exit.isSuccess(x)) return {type: "exit", rev: e.rev, ...x.value};
+
+		if (Exit.isSuccess(x)) {
+			return {type: "exit", rev: e.rev, ...x.value};
+		}
 	}
+
 	if (e.kind === "cast" || e.kind === "message") {
 		const c = decodeCall(e.body);
+
 		if (Exit.isSuccess(c)) {
 			const {id, replyTo, req} = c.value;
 			return {type: "request", rev: e.rev, caller: {id, replyTo}, req};
 		}
+
 		const x = decodeStart(e.body);
-		if (Exit.isSuccess(x))
+
+		if (Exit.isSuccess(x)) {
 			return {
 				type: "request",
 				rev: e.rev,
 				caller: null,
 				req: {op: "start_child", spec: x.value.start_child},
 			};
+		}
 	}
+
 	return {type: "ignored", rev: e.rev};
 };
 
@@ -910,8 +1085,11 @@ const supervisorProgram = (name: string, spec: SupervisorSpec) =>
 		main: ({serve}) =>
 			Effect.gen(function* () {
 				const self = yield* Self;
-				if (self.name !== name)
+
+				if (self.name !== name) {
 					return yield* Effect.die(`supervisor for ${name} served under ${self.name}`);
+				}
+
 				// 151: at the start too, a ledger that does not answer is asked again until it does. Its
 				// fence holds until someone newer claims, so waiting loses nothing; the host's lease
 				// clock ends the run past its grace. (Both gave up after a second, and the host
@@ -921,13 +1099,19 @@ const supervisorProgram = (name: string, spec: SupervisorSpec) =>
 				const trapped = yield* self
 					.trapExit(true)
 					.pipe(Effect.repeat({until: (w) => w !== "unreachable", schedule: again}));
-				if (trapped !== "ok") return yield* fencedOut("trap_exit");
+
+				if (trapped !== "ok") {
+					return yield* fencedOut("trap_exit");
+				}
+
 				const info = yield* self.reads.processInfo(name).pipe(Effect.retry(again), Effect.orDie);
 				const startOne = (s: Start) =>
 					Effect.gen(function* () {
 						yield* sleepUntil(s.notBefore);
+
 						for (;;) {
 							const r: Starting = yield* self.startChild(s.name, s.after, s.limits);
+
 							if (r.how === "ok") {
 								const at = Date.now();
 								return {
@@ -938,9 +1122,12 @@ const supervisorProgram = (name: string, spec: SupervisorSpec) =>
 									generation: s.generation,
 								} as const;
 							}
-							if (r.how === "denied")
+
+							if (r.how === "denied") {
 								return {type: "start_refused", name: s.name, why: "denied"} as const;
-							if (r.how === "limit")
+							}
+
+							if (r.how === "limit") {
 								return {
 									type: "start_refused",
 									name: s.name,
@@ -948,18 +1135,28 @@ const supervisorProgram = (name: string, spec: SupervisorSpec) =>
 									over: r.over,
 									at: Date.now(),
 								} as const;
-							if (r.how === "fenced") return null;
+							}
+
+							if (r.how === "fenced") {
+								return null;
+							}
+
 							yield* Effect.sleep(Duration.millis(AGAIN_MS));
 						}
 					});
 				const stopOne = (s: Stop) =>
 					Effect.gen(function* () {
 						yield* sleepUntil(s.at);
+
 						for (;;) {
 							const why = `${name}: ${s.signal}`;
 							const how = yield* self.exitChild(s.name, s.incarnation, s.signal, why);
-							if (how === "fenced") return null;
-							if (how !== "unreachable")
+
+							if (how === "fenced") {
+								return null;
+							}
+
+							if (how !== "unreachable") {
 								return {
 									type: "signalled",
 									name: s.name,
@@ -969,18 +1166,31 @@ const supervisorProgram = (name: string, spec: SupervisorSpec) =>
 									how: how === "denied" ? "noproc" : how,
 									at: Date.now(),
 								} as const;
+							}
+
 							yield* Effect.sleep(Duration.millis(AGAIN_MS));
 						}
 					});
 				const replyOne = (o: Outgoing) =>
 					Effect.gen(function* () {
 						const to = inboxOf(o.replyTo);
+
 						for (;;) {
 							// A reply-to that is no inbox, or nobody registered: dropped, as OTP drops it.
-							if (to === null) return {type: "replied", id: o.id} as const;
+							if (to === null) {
+								return {type: "replied", id: o.id} as const;
+							}
+
 							const r = yield* self.send(to, `reply:${o.id}`, {id: o.id, res: o.res});
-							if (r.how === "fenced") return null;
-							if (r.how !== "unreachable") return {type: "replied", id: o.id} as const;
+
+							if (r.how === "fenced") {
+								return null;
+							}
+
+							if (r.how !== "unreachable") {
+								return {type: "replied", id: o.id} as const;
+							}
+
 							yield* Effect.sleep(Duration.millis(AGAIN_MS));
 						}
 					});

@@ -21,7 +21,9 @@ const secretOf = (path: string) => `${SECRET}${randomBytes(12).toString("hex")}:
 const TEXT = "ordinary text\n";
 
 afterEach(() => {
-	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});
+	for (const folder of made.splice(0)) {
+		rmSync(folder, {recursive: true, force: true});
+	}
 });
 
 const fixture = () => {
@@ -34,8 +36,15 @@ const fixture = () => {
 	const hidden = [".env", ".env.local", "src/.env", "src/deep/.env.production"];
 	const ordinary = ["README.md", "src/env.ts", ".environment", ".envrc", "src/deep/note.txt"];
 	const secrets = hidden.map(secretOf);
-	for (const [i, path] of hidden.entries()) writeFileSync(join(folder, path), secrets[i]!);
-	for (const path of ordinary) writeFileSync(join(folder, path), TEXT);
+
+	for (const [i, path] of hidden.entries()) {
+		writeFileSync(join(folder, path), secrets[i]!);
+	}
+
+	for (const path of ordinary) {
+		writeFileSync(join(folder, path), TEXT);
+	}
+
 	symlinkSync(join(folder, ".env"), join(folder, "alias.txt"));
 	symlinkSync(join(folder, "src"), join(folder, "linked"));
 	symlinkSync(join(folder, "README.md"), join(folder, "readme-link.txt"));
@@ -81,16 +90,20 @@ describe("T237-1: hidden repo files in the harness", () => {
 			const match = /^Read\((.*)\)$/.exec(rule);
 			return match?.[1] === undefined ? [] : [match[1]];
 		});
-		for (const path of ordinary)
+
+		for (const path of ordinary) {
 			expect(
 				reads.some((rule) => covers(folder, rule, path)),
 				path,
 			).toBe(false);
-		for (const path of hidden)
+		}
+
+		for (const path of hidden) {
 			expect(
 				reads.some((rule) => covers(folder, rule, path)),
 				path,
 			).toBe(true);
+		}
 	});
 
 	it("keeps shell reads, listings and searches behind env denies, with ordinary files open", () => {
@@ -98,6 +111,7 @@ describe("T237-1: hidden repo files in the harness", () => {
 		const options = claude(folder);
 		const files = options.sandbox?.filesystem;
 		expect(options.sandbox).toMatchObject({enabled: true, allowUnsandboxedCommands: false});
+
 		for (const path of ordinary) {
 			expect(files?.allowRead).toContain(folder);
 			expect(
@@ -105,11 +119,13 @@ describe("T237-1: hidden repo files in the harness", () => {
 				path,
 			).toBe(false);
 		}
-		for (const path of hidden)
+
+		for (const path of hidden) {
 			expect(
 				(files?.denyRead ?? []).some((rule) => covers(folder, rule, path)),
 				path,
 			).toBe(true);
+		}
 	});
 
 	it("denies env files in Codex's read-only repo despite the repo's read grant", () => {
@@ -125,16 +141,20 @@ describe("T237-1: hidden repo files in the harness", () => {
 			.map(([path]) => path);
 		expect(h.env.INITIAL_AGENT_MODE).toBe("read-only");
 		expect(files[folder]).toBe("read");
-		for (const path of ordinary)
+
+		for (const path of ordinary) {
 			expect(
 				denied.some((rule) => covers(folder, rule, path)),
 				path,
 			).toBe(false);
-		for (const path of hidden)
+		}
+
+		for (const path of hidden) {
 			expect(
 				denied.some((rule) => covers(folder, rule, path)),
 				path,
 			).toBe(true);
+		}
 	});
 });
 
@@ -180,6 +200,7 @@ describe.skipIf(noSeatbelt)("T237-1: real reads, listings and searches", () => {
 					{cwd: f.folder, env: h.env, encoding: "utf8"},
 				);
 			}
+
 			const files = claude(f.folder).sandbox!.filesystem!;
 			const path = (p: string) => (isAbsolute(p) ? p : resolve(f.folder, p));
 			const wrapped = wrapCommandWithSandboxMacOS({
@@ -207,6 +228,7 @@ describe.skipIf(noSeatbelt)("T237-1: real reads, listings and searches", () => {
 
 		it(`${agent}: ordinary reads work, including symlinks and .. paths`, () => {
 			const f = fixture();
+
 			for (const path of f.ordinary) {
 				const got = run(f, `/bin/cat ${word(path)}`);
 				expect(got.status, got.stderr).toBe(0);
@@ -217,6 +239,7 @@ describe.skipIf(noSeatbelt)("T237-1: real reads, listings and searches", () => {
 		it(`${agent}: no env bytes escape through direct, nested, symlink or .. reads`, () => {
 			const f = fixture();
 			ready(f);
+
 			for (const path of f.hidden) {
 				const got = run(f, `/bin/cat ${word(path)}`);
 				expect(got.status, path).not.toBe(0);
@@ -234,8 +257,11 @@ describe.skipIf(noSeatbelt)("T237-1: real reads, listings and searches", () => {
 				'for d in . src src/deep linked linked/deep src/..; do /bin/ls -a "$d"; ' +
 					'for n in $(/bin/ls -a "$d"); do [ -f "$d/$n" ] && /bin/cat "$d/$n"; done; done; true',
 			);
-			for (const name of ["README.md", "env.ts", ".environment", ".envrc", "note.txt"])
+
+			for (const name of ["README.md", "env.ts", ".environment", ".envrc", "note.txt"]) {
 				expect(got.stdout, name).toContain(name);
+			}
+
 			expect(got.stdout).toContain(TEXT);
 			expect(leaked(f, got.stdout + got.stderr)).toEqual([]);
 		});
@@ -244,8 +270,11 @@ describe.skipIf(noSeatbelt)("T237-1: real reads, listings and searches", () => {
 			const f = fixture();
 			ready(f);
 			const got = run(f, "/usr/bin/find -L . -type f -print -exec /bin/cat {} ';'");
-			for (const path of ["./README.md", "./src/env.ts", "./.envrc", "./src/deep/note.txt"])
+
+			for (const path of ["./README.md", "./src/env.ts", "./.envrc", "./src/deep/note.txt"]) {
 				expect(got.stdout, path).toContain(path);
+			}
+
 			expect(got.stdout).toContain("./linked/deep/note.txt");
 			expect(got.stdout).toContain(TEXT);
 			expect(leaked(f, got.stdout + got.stderr)).toEqual([]);

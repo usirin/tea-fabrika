@@ -84,7 +84,9 @@ interface Law {
 const everyStep = (name: string, holds: (step: LinkStep) => boolean): Law => ({
 	name,
 	check: (machine) => {
-		for (const ctx of SIDES) propertyInvariant(machine, ctx, lists, holds, OPTS);
+		for (const ctx of SIDES) {
+			propertyInvariant(machine, ctx, lists, holds, OPTS);
+		}
 	},
 });
 
@@ -113,7 +115,11 @@ const deliversOnlyUp = everyStep(
 	"a line is handed on only while the link is up, and as it came",
 	({prev, msg, next, cmds}) => {
 		const handed = cmds.filter((c) => c.type === "deliver");
-		if (handed.length === 0) return true;
+
+		if (handed.length === 0) {
+			return true;
+		}
+
 		return (
 			prev.at === "up" &&
 			next.at === "up" &&
@@ -137,10 +143,14 @@ const appGreets: Law = {
 	check: (machine) => {
 		const [app, appSays] = machine.init(null, {side: "app", ours: OURS});
 		const [host, hostSays] = machine.init(null, {side: "host", ours: OURS});
-		if (app.at !== "hello" || !same(appSays, [greet({version: OURS})]))
+
+		if (app.at !== "hello" || !same(appSays, [greet({version: OURS})])) {
 			throw new Error(`the app starts ${JSON.stringify([app, appSays])}`);
-		if (host.at !== "hello" || hostSays.length > 0)
+		}
+
+		if (host.at !== "hello" || hostSays.length > 0) {
 			throw new Error(`the host starts ${JSON.stringify([host, hostSays])}`);
+		}
 	},
 };
 
@@ -162,7 +172,10 @@ const comesUp = everyStep(
 const refusesOther = everyStep(
 	"a hello in another version, while it waits for one, is refused plainly and the socket closed",
 	({prev, msg, next, cmds}) => {
-		if (prev.at !== "hello" || msg.type !== "hello" || msg.version === prev.ours) return true;
+		if (prev.at !== "hello" || msg.type !== "hello" || msg.version === prev.ours) {
+			return true;
+		}
+
 		const types = cmds.map((c) => c.type);
 		return (
 			next.at === "refused" &&
@@ -184,8 +197,14 @@ const deliversLines = everyStep(
 const closesSocket = everyStep(
 	"a link it closes itself, for a bad line or a line out of turn, has its socket closed; a hang-up closes it with nothing to say",
 	({prev, msg, next, cmds}) => {
-		if (over(prev) || next.at !== "closed") return true;
-		if (msg.type === "ended") return cmds.length === 0 && next.why === msg.why;
+		if (over(prev) || next.at !== "closed") {
+			return true;
+		}
+
+		if (msg.type === "ended") {
+			return cmds.length === 0 && next.why === msg.why;
+		}
+
 		return same(cmds, [drop({why: next.why})]);
 	},
 );

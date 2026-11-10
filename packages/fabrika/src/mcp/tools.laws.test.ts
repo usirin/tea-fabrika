@@ -106,6 +106,7 @@ describe("the tools an agent is served, for any program list", () => {
 				expect(host.map((t) => t.name)).toEqual(
 					expect.arrayContaining(["runs", "job", "stop", "restart", "line"]),
 				);
+
 				for (const tool of host) {
 					expect(tool.name).not.toContain("_");
 					expect(programTools.has(tool.name)).toBe(false);

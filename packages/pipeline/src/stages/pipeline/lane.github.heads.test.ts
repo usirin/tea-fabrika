@@ -26,7 +26,10 @@ describe("a lane, whole, on GitHub", () => {
 	});
 	afterEach(() => {
 		vi.unstubAllEnvs();
-		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+
+		for (const dir of made.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	it("with GitHub's checks not counted, lands with none on GitHub and never waits on them", async () => {

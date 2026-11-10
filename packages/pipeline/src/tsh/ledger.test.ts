@@ -43,6 +43,7 @@ describe("localLedger", () => {
 		// Twice on CI this failed with nothing but "expected null": say why the ledger did not start.
 		expect(first.ledger, String(first.exit)).not.toBeNull();
 		const second = await open(layer);
+
 		try {
 			expect(Exit.isFailure(second.exit)).toBe(true);
 			expect(String(second.exit)).toContain("another tsh is using the ledger");
@@ -58,7 +59,9 @@ describe("localLedger", () => {
 			await Effect.runPromise(Scope.close(second.scope, Exit.void));
 			await Effect.runPromise(Scope.close(first.scope, Exit.void));
 		}
+
 		const third = await open(layer);
+
 		try {
 			const lease = await Effect.runPromise((third.ledger as Ledger["Service"]).lease("operate:7"));
 			// Past the local door: the host's tag, then its one person.

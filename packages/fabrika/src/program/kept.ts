@@ -134,12 +134,19 @@ export const failureReport =
 		},
 	): OnError =>
 	(error, {phase}) => {
-		if (error instanceof RuntimeDiscardNotice) return;
+		if (error instanceof RuntimeDiscardNotice) {
+			return;
+		}
+
 		const ended = new Error(`${label} failed (tea's "${phase}"): ${wordsOf(error)}`, {
 			cause: error,
 		});
-		if (closing()) broken(ended);
-		else fail(ended);
+
+		if (closing()) {
+			broken(ended);
+		} else {
+			fail(ended);
+		}
 	};
 
 /**
@@ -209,6 +216,7 @@ export const runKept = <
 		// Before the run, so its finalizer runs after tea's `stop()`: every step folded is written.
 		const keep = handle.step === undefined ? null : yield* stepsOf(handle.step, name, id, state);
 		const booting = yield* runTraced(name, machine, opts, drawing(kept));
+
 		if (keep !== null) {
 			// Each step's Cmds, from the state before it: `update` is pure, so folding the Msg again
 			// gives the Cmds tea started for it (tea's `observe` hands over the Msg and the state only).
@@ -234,13 +242,18 @@ export const runKept = <
 						const ended = new Error(`${name} run ${id} failed to keep a step: ${wordsOf(cause)}`, {
 							cause,
 						});
-						if (closing) broken(ended);
-						else Deferred.doneUnsafe(failed, Effect.die(ended));
+
+						if (closing) {
+							broken(ended);
+						} else {
+							Deferred.doneUnsafe(failed, Effect.die(ended));
+						}
 					}),
 				),
 				Effect.forkScoped,
 			);
 		}
+
 		// Added after the run, so it runs before tea's `stop()`: what tea reports from here on, its last
 		// save among them, has nobody waiting on `done()`.
 		yield* Effect.addFinalizer(() =>
@@ -250,9 +263,13 @@ export const runKept = <
 		);
 		const runtime = yield* booting.ready;
 		yield* show(runtime);
+
 		// To quiescence, not once: tea's `done()` reads the state its fold set, before that state's save and
 		// its listeners have run. A caller that waits on `done()` must find a first Msg that has settled.
-		if (msg !== null) yield* runtime.dispatch(msg);
+		if (msg !== null) {
+			yield* runtime.dispatch(msg);
+		}
+
 		yield* shut.open;
 		const done = () => Effect.raceFirst(runtime.done(), Deferred.await(failed));
 		return {...runtime, done};
@@ -289,7 +306,10 @@ const stepsOf = <S>(
 
 /** A failure in a few words: its message, else its tag, else itself. */
 const wordsOf = (error: unknown): string => {
-	if (error instanceof Error && error.message !== "") return error.message;
+	if (error instanceof Error && error.message !== "") {
+		return error.message;
+	}
+
 	const tag = (error as {readonly _tag?: unknown} | null)?._tag;
 	return typeof tag === "string" ? tag : String(error);
 };

@@ -117,34 +117,48 @@ export function keysIn(raw: string): readonly string[] {
 	const chars = [...raw];
 	let text = "";
 	const flush = () => {
-		if (text !== "") keys.push(text);
+		if (text !== "") {
+			keys.push(text);
+		}
+
 		text = "";
 	};
+
 	for (let i = 0; i < chars.length; i += 1) {
 		const c = chars[i] ?? "";
+
 		if (printable(c)) {
 			text += c;
 			continue;
 		}
+
 		flush();
 		const next = chars[i + 1];
+
 		if (c !== ESC || next === undefined) {
 			keys.push(c);
 			continue;
 		}
+
 		if (next === "[") {
 			// CSI: parameters, then one final character.
 			let end = i + 2;
-			while (end < chars.length && /[0-9;?]/.test(chars[end] ?? "")) end += 1;
+
+			while (end < chars.length && /[0-9;?]/.test(chars[end] ?? "")) {
+				end += 1;
+			}
+
 			keys.push(chars.slice(i, end + 1).join(""));
 			i = end;
 			continue;
 		}
+
 		// SS3 (`ESC O` and one more), or Alt and one key.
 		const length = next === "O" ? 3 : 2;
 		keys.push(chars.slice(i, i + length).join(""));
 		i += length - 1;
 	}
+
 	flush();
 	return keys;
 }
@@ -152,7 +166,14 @@ export function keysIn(raw: string): readonly string[] {
 /** One key, as what it does. */
 export function keyOf(raw: string): Key {
 	const command = BOUND.get(raw);
-	if (command !== undefined) return {kind: "command", command};
-	if (raw !== "" && [...raw].every(printable)) return {kind: "text", text: raw};
+
+	if (command !== undefined) {
+		return {kind: "command", command};
+	}
+
+	if (raw !== "" && [...raw].every(printable)) {
+		return {kind: "text", text: raw};
+	}
+
 	return {kind: "unknown"};
 }

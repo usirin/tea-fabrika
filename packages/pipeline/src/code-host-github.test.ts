@@ -73,14 +73,23 @@ function fakeGh(answers: Answers) {
 	const calls: (readonly string[])[] = [];
 	const gh: Gh = (args) => {
 		calls.push(args);
+
 		if (args[1]?.includes("/compare/")) {
 			const main = answers.main ?? JSON.stringify(MAIN);
 			return main === "breaks" ? Effect.fail({_tag: "unknown" as const}) : Effect.succeed(main);
 		}
+
 		const has = (field: string) => args.some((arg) => arg.startsWith(`${field}=`));
 		const answer = has("team") ? (answers.team ?? recorded("team")) : answers.pr;
-		if (answer === "breaks") return Effect.fail({_tag: "unknown" as const});
-		if (has("team") || has("codeowners")) return Effect.succeed(answer);
+
+		if (answer === "breaks") {
+			return Effect.fail({_tag: "unknown" as const});
+		}
+
+		if (has("team") || has("codeowners")) {
+			return Effect.succeed(answer);
+		}
+
 		// The first call. An answer that is not the recorded shape is handed on as it is, to fail where it would.
 		return Effect.try({
 			try: (): unknown => JSON.parse(answer).data.repository.pullRequest.headRefOid,
@@ -1168,7 +1177,9 @@ describe("a repository's open pull requests", () => {
 describe("the folders under a repository's paths", () => {
 	const made: string[] = [];
 	afterEach(() => {
-		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+		for (const dir of made.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	/** A `gh` that answers `answer`, or exits 1 when it is `"breaks"`, and the calls it got. */

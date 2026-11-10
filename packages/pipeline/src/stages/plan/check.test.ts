@@ -20,7 +20,11 @@ import {planMarkdown} from "./render.ts";
 /** A draft the Check passes, numbered as the plan's first version. */
 const numbered = (draft: Plan) => {
 	const revision = revisionOfDraft(draft);
-	if (revision === null) throw new Error("a story's name is not a story id");
+
+	if (revision === null) {
+		throw new Error("a story's name is not a story id");
+	}
+
 	return numberedRevision(revision);
 };
 
@@ -157,6 +161,7 @@ describe("userNames: the names a user of the published packages meets", () => {
 
 	it("reads the package, its subpaths, its commands and every name in code in its docs", () => {
 		const names = userNames([gate]);
+
 		for (const name of [
 			"@acme/gate",
 			"@acme/gate/rules",
@@ -165,8 +170,10 @@ describe("userNames: the names a user of the published packages meets", () => {
 			"rules.json",
 			"decidedBy",
 			"layerGate",
-		])
+		]) {
 			expect(names).toContain(name);
+		}
+
 		expect(names).not.toContain("Run");
 	});
 
@@ -226,8 +233,9 @@ describe("claimProblems: one criterion is one claim", () => {
 			"it installs the package, and the lockfile, and no other package",
 			"it runs once, and only once and then exits",
 			"it runs once, and also exits 0",
-		])
+		]) {
 			expect(claimProblems(crit("someone runs it", result)), result).toContain(JOINED);
+		}
 	});
 
 	it("passes a last part that only narrows the result: one claim", () => {
@@ -238,8 +246,9 @@ describe("claimProblems: one criterion is one claim", () => {
 			"it lists the three files, and no other file",
 			"it writes to the first run's folder, and only the first run's folder",
 			"the page names the maintainer, and nobody else",
-		])
+		]) {
 			expect(claimProblems(crit("someone runs it", result)), result).toEqual([]);
+		}
 	});
 
 	it("sends back a step to take, an empty part, and a doubled When", () => {

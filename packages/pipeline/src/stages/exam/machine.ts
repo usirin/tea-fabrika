@@ -241,14 +241,21 @@ const writing = (s: Held, guard: CheckChange): Step => {
 };
 
 export const examSub = examWrite.sub((s: Exam): DraftRun | null => {
-	if (s.phase !== "writing") return null;
+	if (s.phase !== "writing") {
+		return null;
+	}
+
 	const run = refine.runOf(s.refining);
 	return run === null ? null : {...run, folder: s.ask.base};
 });
 
 const drafted = (s: Exam, m: Exclude<ExamMsg, {type: "start" | "resume"}>): Step => {
-	if (s.phase !== "writing" || refine.runOf(s.refining)?.id !== m.id) return stay(s);
+	if (s.phase !== "writing" || refine.runOf(s.refining)?.id !== m.id) {
+		return stay(s);
+	}
+
 	const next = refine.update(s.refining, m);
+
 	switch (next.phase) {
 		case "drafting":
 			return [{...s, refining: next}, []];
@@ -286,7 +293,10 @@ export const exam = defineMachine({
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const at = {ask: m.ask, key: m.key};
 			const guard = checkChange(m.ask.changes.map((c) => c.path));
 			return guard === null ? end(at, {kind: "skip", why: "no_rules_change"}) : writing(at, guard);

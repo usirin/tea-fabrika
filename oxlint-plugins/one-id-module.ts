@@ -4,7 +4,10 @@ import {pathIn} from "./match.ts";
 
 export const oneIdModule: CreateRule = {
 	create(context) {
-		if (pathIn(context) !== "next/packages/libfabrika/src/data/id.ts") return {};
+		if (pathIn(context) !== "next/packages/libfabrika/src/data/id.ts") {
+			return {};
+		}
+
 		return {
 			Program(node) {
 				context.report({node, message: "Delete data/id.ts. The one Id module is src/id.ts."});

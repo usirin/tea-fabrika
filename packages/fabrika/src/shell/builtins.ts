@@ -96,8 +96,12 @@ const AGENTS: TableView<Summoned> = {
 
 /** The job a built-in's first word names, or why none. */
 function named(shell: Shell, word: Named | undefined, verb: string): Job | string {
-	if (word === undefined) return `${verb} needs a job: %n, or a run id`;
+	if (word === undefined) {
+		return `${verb} needs a job: %n, or a run id`;
+	}
+
 	const job = jobNamed(shell.table.getState(), word.name);
+
 	if (job === undefined) {
 		const known = shell.table
 			.getState()
@@ -105,6 +109,7 @@ function named(shell: Shell, word: Named | undefined, verb: string): Job | strin
 		const guess = didYouMean(word.name, known);
 		return `no job ${word.name}${guess === undefined ? "" : `. Did you mean ${guess}?`}`;
 	}
+
 	return job;
 }
 
@@ -125,32 +130,50 @@ export const runBuiltin = (
 		};
 		/** Only a person summons, dismisses or talks: an agent's tsh never starts a paid run. */
 		const person = writerOf(shell.by ?? "")?.kind === "user";
+
 		switch (st.name) {
 			case "summon": {
-				if (!person) return refuse("only a person summons an agent");
+				if (!person) {
+					return refuse("only a person summons an agent");
+				}
+
 				const as = st.args.findIndex((a) => a.name === "as");
 				const agent = first?.name;
 				const name = st.args[as + 1]?.name;
-				if (agent === undefined || as < 1 || name === undefined)
+
+				if (agent === undefined || as < 1 || name === undefined) {
 					return refuse(
 						"summon takes an agent and a name: summon <agent> [model] [effort] as <name>",
 					);
+				}
+
 				const settings = st.args.slice(1, as).map((a) => a.name);
 				const [on, place, ...more] = st.args.slice(as + 2);
-				if (on?.name === "on")
+
+				if (on?.name === "on") {
 					return refuse(
 						`${name} would run on this Mac: summon starts agents here only, so leave out on ${place?.name ?? "<place>"}`,
 					);
-				if (on !== undefined || more.length > 0)
+				}
+
+				if (on !== undefined || more.length > 0) {
 					return refuse(`summon ends with its name: nothing after as ${name}`);
-				if (settings.length > 2)
+				}
+
+				if (settings.length > 2) {
 					return refuse(
 						`summon takes at most two settings, a model then an effort, not ${settings.join(" ")}`,
 					);
+				}
+
 				const made = yield* shell.summons
 					.summon({agent, settings, name, by: shell.by ?? ""})
 					.pipe(Effect.result);
-				if (made._tag === "Failure") return refuse(made.failure.why, 1);
+
+				if (made._tag === "Failure") {
+					return refuse(made.failure.why, 1);
+				}
+
 				shell.print(
 					"out",
 					`  ${made.success.name} · ${settingsOf(made.success)} · in this repo, on this Mac · ready`,
@@ -158,11 +181,20 @@ export const runBuiltin = (
 				return ok;
 			}
 			case "dismiss": {
-				if (!person) return refuse("only a person dismisses an agent");
-				if (first === undefined || second !== undefined)
+				if (!person) {
+					return refuse("only a person dismisses an agent");
+				}
+
+				if (first === undefined || second !== undefined) {
 					return refuse("dismiss takes one name: dismiss <name>");
+				}
+
 				const gone = yield* shell.summons.dismiss(first.name, shell.by ?? "").pipe(Effect.result);
-				if (gone._tag === "Failure") return refuse(gone.failure.why, 1);
+
+				if (gone._tag === "Failure") {
+					return refuse(gone.failure.why, 1);
+				}
+
 				const {cut} = gone.success;
 				shell.print(
 					"out",
@@ -171,25 +203,37 @@ export const runBuiltin = (
 				return ok;
 			}
 			case "agents": {
-				if (first !== undefined) return refuse("agents takes no words");
+				if (first !== undefined) {
+					return refuse("agents takes no words");
+				}
+
 				const all = yield* shell.summons.list;
+
 				if (all.length === 0) {
 					shell.print("out", "No agent is summoned. summon <agent> as <name> starts one.");
 					return ok;
 				}
+
 				shell.printTable(tableOf(AGENTS, all, {all: true, typed: "agents"}));
 				return ok;
 			}
 			case "help": {
 				if (first === undefined) {
-					for (const line of HELP.split("\n")) shell.print("out", line);
+					for (const line of HELP.split("\n")) {
+						shell.print("out", line);
+					}
+
 					return ok;
 				}
-				if (second !== undefined)
+
+				if (second !== undefined) {
 					return refuse(
 						`help takes one program. For one of its parts: ${first.name} --help ${second.name}`,
 					);
+				}
+
 				const entry = shell.list.get(first.name);
+
 				if (entry === undefined) {
 					const guess = didYouMean(first.name, [...shell.list.keys()]);
 					return refuse(
@@ -197,7 +241,11 @@ export const runBuiltin = (
 						127,
 					);
 				}
-				for (const line of helpOf(entry, shell.list)) shell.print("out", line);
+
+				for (const line of helpOf(entry, shell.list)) {
+					shell.print("out", line);
+				}
+
 				return ok;
 			}
 			case "programs": {
@@ -206,7 +254,11 @@ export const runBuiltin = (
 					shape: "",
 					text: entry.program.description,
 				}));
-				for (const row of columns(rows)) shell.print("out", row.slice(2));
+
+				for (const row of columns(rows)) {
+					shell.print("out", row.slice(2));
+				}
+
 				shell.print("out", "");
 				shell.print("out", "<program> --help shows how to run one.");
 				return ok;
@@ -214,60 +266,98 @@ export const runBuiltin = (
 			case "jobs":
 				for (const job of shell.table.getState().jobs) {
 					shell.print("out", `[${job.n}] ${job.state.padEnd(8)}  ${job.text}`);
-					for (const row of fullRows(job, shell.live)) shell.print("out", row);
-					for (const row of copyRows(job, shell.live)) shell.print("out", row);
+
+					for (const row of fullRows(job, shell.live)) {
+						shell.print("out", row);
+					}
+
+					for (const row of copyRows(job, shell.live)) {
+						shell.print("out", row);
+					}
 				}
+
 				return ok;
 			case "ps":
 				shell.print("out", "RUN                       PROGRAM    JOB  STATE");
-				for (const job of shell.table.getState().jobs)
-					for (const stage of job.stages)
+
+				for (const job of shell.table.getState().jobs) {
+					for (const stage of job.stages) {
 						shell.print(
 							"out",
 							`${stage.run.padEnd(25)} ${stage.program.padEnd(10)} %${String(job.n).padEnd(3)} ${job.state === "detached" ? "detached" : stage.ended ? "ended" : "running"}`,
 						);
+					}
+				}
+
 				return ok;
 			case "exit": {
 				const status = first === undefined ? 0 : Number(first.name);
-				if (!Number.isInteger(status) || status < 0 || status > 255)
+
+				if (!Number.isInteger(status) || status < 0 || status > 255) {
 					return refuse(`exit takes a status from 0 to 255, not ${first?.name}`);
+				}
+
 				return {status, exit: true};
 			}
 			case "tell":
 			case "close": {
 				const job = named(shell, first, st.name);
-				if (typeof job === "string") return refuse(job);
+
+				if (typeof job === "string") {
+					return refuse(job);
+				}
+
 				const stage = runIn(job, first?.name ?? "");
 				const running = shell.live.get(stage.run);
-				if (job.state === "detached" || running === undefined)
+
+				if (job.state === "detached" || running === undefined) {
 					return refuse(
 						`%${job.n} is detached: it ran in an earlier tsh. Start it again with attach %${job.n} &`,
 						1,
 					);
+				}
+
 				const inputs = Object.keys(running.run.program.inputs);
-				if (second === undefined) return refuse(`${st.name} needs an input: ${inputs.join(", ")}`);
+
+				if (second === undefined) {
+					return refuse(`${st.name} needs an input: ${inputs.join(", ")}`);
+				}
+
 				if (!inputs.includes(second.name)) {
 					const guess = didYouMean(second.name, inputs);
 					return refuse(
 						`${stage.program} has no input named ${second.name}${guess === undefined ? "" : `. Did you mean ${guess}?`}`,
 					);
 				}
+
 				if (st.name === "close") {
-					if (rest.length > 0) return refuse("close takes a job and an input, nothing more");
+					if (rest.length > 0) {
+						return refuse("close takes a job and an input, nothing more");
+					}
+
 					running.close(second.name);
 					return ok;
 				}
-				if (rest.length === 0) return refuse(`tell needs a value for ${second.name}`);
+
+				if (rest.length === 0) {
+					return refuse(`tell needs a value for ${second.name}`);
+				}
+
 				const shape = running.run.program.inputs[second.name].shape;
 				const values: unknown[] = [];
+
 				for (const word of rest) {
 					const read = readValue(shape, word.name);
-					if (read.kind === "refused")
+
+					if (read.kind === "refused") {
 						return refuse(
 							`${second.name} does not take ${JSON.stringify(word.name)}: ${read.why}${read.didYouMean === undefined ? "" : `. Did you mean ${read.didYouMean}?`}`,
 						);
+					}
+
 					values.push(read.value);
 				}
+
 				for (const value of values) {
 					const word = yield* running.run
 						.tell(second.name, value)
@@ -276,37 +366,55 @@ export const runBuiltin = (
 								Effect.succeed(`full: ${full.capacity} values it has not read`),
 							),
 						);
-					if (word !== "queued") return refuse(`${stage.program} said ${word}`, 1);
+
+					if (word !== "queued") {
+						return refuse(`${stage.program} said ${word}`, 1);
+					}
 				}
+
 				return ok;
 			}
 			case "stop": {
 				const job = named(shell, first, "stop");
-				if (typeof job === "string") return refuse(job);
+
+				if (typeof job === "string") {
+					return refuse(job);
+				}
+
 				// Only a person's tsh may stop any job (tracker 185b). Any other tsh, an agent's or one
 				// whose writer does not read as a person, stops only its own writer's: the `stop` tool,
 				// with its why, is how an agent stops anyone else's. It fails closed (tracker 219): a job
 				// with no writer kept is a person's from before jobs kept one. Refused before any stop is
 				// asked, so the record keeps no stopper.
 				const mine = shell.by ?? null;
-				if (writerOf(mine ?? "")?.kind !== "user" && job.by !== mine)
+
+				if (writerOf(mine ?? "")?.kind !== "user" && job.by !== mine) {
 					return refuse(
 						job.by === null
 							? `%${job.n} has no writer kept: the stop tool asks why`
 							: `%${job.n} is ${job.by}'s: the stop tool asks why`,
 					);
+				}
+
 				yield* stopJob(shell, job);
 				return ok;
 			}
 			case "attach": {
 				const job = named(shell, first, "attach");
-				if (typeof job === "string") return refuse(job);
-				if (job.state === "detached")
+
+				if (typeof job === "string") {
+					return refuse(job);
+				}
+
+				if (job.state === "detached") {
 					return {status: yield* reattach(shell, job, st.background, typed), exit: false};
+				}
+
 				if (st.background) {
 					shell.print("err", `[${job.n}] is already running here`);
 					return ok;
 				}
+
 				return {status: yield* waitForJob(shell, job), exit: false};
 			}
 		}

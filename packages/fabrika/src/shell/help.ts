@@ -62,15 +62,22 @@ const wrap = (text: string, width: number): readonly string[] =>
 function wrapWords(words: readonly string[], width: number): readonly string[] {
 	const lines: string[] = [];
 	let line = "";
+
 	for (const word of words) {
-		if (word === "") continue;
-		if (line === "") line = word;
-		else if (line.length + 1 + word.length <= width) line += ` ${word}`;
-		else {
+		if (word === "") {
+			continue;
+		}
+
+		if (line === "") {
+			line = word;
+		} else if (line.length + 1 + word.length <= width) {
+			line += ` ${word}`;
+		} else {
 			lines.push(line);
 			line = word;
 		}
 	}
+
 	return line === "" ? lines : [...lines, line];
 }
 
@@ -96,7 +103,11 @@ export function columns(rows: readonly Row[]): readonly string[] {
 	return rows.flatMap((r) => {
 		const head = left(r);
 		const [first, ...rest] = wrap(r.text, WIDTH - at);
-		if (first === undefined) return [head];
+
+		if (first === undefined) {
+			return [head];
+		}
+
 		const under = rest.map((l) => pad + l);
 		return head.length + 2 <= at
 			? [head.padEnd(at) + first, ...under]
@@ -159,7 +170,11 @@ function piped(a: Entry, b: Entry): Pipe | null {
 			.map(([input]) => ({output, input, says: JSON.stringify(out.shape.json ?? {}).length})),
 	);
 	const [pair] = pairs;
-	if (pair === undefined) return null;
+
+	if (pair === undefined) {
+		return null;
+	}
+
 	const line =
 		pairs.length === 1
 			? `${bare(a)} | ${bare(b)}`
@@ -257,7 +272,11 @@ export function partsHelp(entry: Entry, parts: readonly Part[]): readonly string
 	const declared = {flag: page.flags, input: page.inputs, output: page.outputs};
 	return parts.flatMap((part, i) => {
 		const one = declared[part.kind].find((d) => d.name === part.name);
-		if (one === undefined) return [];
+
+		if (one === undefined) {
+			return [];
+		}
+
 		return [
 			...(i === 0 ? [] : [""]),
 			`${page.name} ${written[part.kind](part.name)}  (${part.kind === "flag" ? "a" : "an"} ${part.kind} of ${page.name})`,

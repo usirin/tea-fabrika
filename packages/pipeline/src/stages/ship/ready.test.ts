@@ -64,7 +64,11 @@ const whys = (p: Proof): readonly string[] => {
 describe("ReadyToMerge cannot be made by hand", () => {
 	it("is refused as a literal, a boolean, a bare head, a failing row and an empty list", () => {
 		const [met] = filed([pass()]);
-		if (met === undefined) throw new Error("no verdict");
+
+		if (met === undefined) {
+			throw new Error("no verdict");
+		}
+
 		// @ts-expect-error a literal lacks the brand
 		const literal: ReadyToMerge = {pr: "P", head: "A", criteria: CRITERIA, rows: [met]};
 		// @ts-expect-error a yes is not a proof
@@ -88,7 +92,11 @@ describe("ReadyToMerge cannot be made by hand", () => {
 		// @ts-expect-error a proof's shape, written out, is not a proof
 		const shaped = merge({ready: {pr: "P", head: "A"}, intent: "i"});
 		const r = readyToMerge(proof());
-		if (!("ready" in r)) throw new Error("not ready");
+
+		if (!("ready" in r)) {
+			throw new Error("not ready");
+		}
+
 		const queued = enqueue({ready: r.ready, intent: "i"});
 		expect([bare, shaped].length).toBe(2);
 		expect(queued.ready.head).toBe("A");
@@ -98,7 +106,11 @@ describe("ReadyToMerge cannot be made by hand", () => {
 describe("readyToMerge", () => {
 	it("is ready only with a passing row per criterion, at its version, at the head, and green checks there", () => {
 		const r = readyToMerge(proof());
-		if (!("ready" in r)) throw new Error("not ready");
+
+		if (!("ready" in r)) {
+			throw new Error("not ready");
+		}
+
 		expect({pr: r.ready.pr, head: r.ready.head}).toEqual({pr: "P", head: "A"});
 		expect(
 			r.ready.rows.map((row) => `${row.id}: ${row.criterion} v${row.version}@${row.head}`),
@@ -133,7 +145,11 @@ describe("readyToMerge", () => {
 
 	it("survives being kept: it is plain data, and a kept one is checked again", () => {
 		const r = readyToMerge(proof({rows: [fail(C1, "B"), pass(C1), pass(C2)]}));
-		if (!("ready" in r)) throw new Error("not ready");
+
+		if (!("ready" in r)) {
+			throw new Error("not ready");
+		}
+
 		const kept: unknown = JSON.parse(JSON.stringify(r.ready));
 		expect(ReadyToMerge.revive(kept)).toEqual(r.ready);
 		// What was kept is checked again, not trusted: an edited row is refused.
@@ -163,8 +179,9 @@ describe("readyToMerge", () => {
 		];
 		let tried = 0;
 		const wrong: string[] = [];
-		for (const one of rowsFor(C1))
-			for (const two of rowsFor(C2))
+
+		for (const one of rowsFor(C1)) {
+			for (const two of rowsFor(C2)) {
 				for (const c of checks) {
 					const rows = [one, two].filter((v): v is Judged => v !== null);
 					const p = proof({rows, checks: c});
@@ -181,8 +198,14 @@ describe("readyToMerge", () => {
 						c.head === "A" &&
 						c.state === "green";
 					tried++;
-					if ("ready" in readyToMerge(p) !== rule) wrong.push(JSON.stringify(p));
+
+					if ("ready" in readyToMerge(p) !== rule) {
+						wrong.push(JSON.stringify(p));
+					}
 				}
+			}
+		}
+
 		expect({tried, wrong}).toEqual({tried: 5 * 6 * 4, wrong: []});
 	});
 });
@@ -198,7 +221,11 @@ describe("readyToMerge, with rows carried to the head", () => {
 
 	it("is ready on rows judged at another head, when that head was carried to this one", () => {
 		const r = readyToMerge(proof({rows: [pass(C1, "B"), pass(C2, "B")], carried: [carried]}));
-		if (!("ready" in r)) throw new Error(`not ready: ${JSON.stringify(r.refused)}`);
+
+		if (!("ready" in r)) {
+			throw new Error(`not ready: ${JSON.stringify(r.refused)}`);
+		}
+
 		expect({pr: r.ready.pr, head: r.ready.head}).toEqual({pr: "P", head: "A"});
 		// A carried row keeps the head it was judged at.
 		expect(r.ready.rows.map((row) => `${row.criterion}@${row.head}`)).toEqual(["c1@B", "c2@B"]);
@@ -254,30 +281,50 @@ describe("readyToMerge, with rows carried to the head", () => {
 		// c1 was judged at B, c2 at C, and code carried each head to A: two hops into one head.
 		const hops = [carried, {from: "C", to: "A"}];
 		const r = readyToMerge(proof({rows: [pass(C1, "B"), pass(C2, "C")], carried: hops}));
-		if (!("ready" in r)) throw new Error(`not ready: ${JSON.stringify(r.refused)}`);
+
+		if (!("ready" in r)) {
+			throw new Error(`not ready: ${JSON.stringify(r.refused)}`);
+		}
+
 		expect(r.ready.rows.map((row) => `${row.criterion}@${row.head}`)).toEqual(["c1@B", "c2@C"]);
 		expect(r.ready.carried).toEqual(hops);
 		// The same hop twice goes in once.
 		const twice = readyToMerge(
 			proof({rows: [pass(C1, "B"), pass(C2, "B")], carried: [carried, carried]}),
 		);
-		if (!("ready" in twice)) throw new Error("not ready");
+
+		if (!("ready" in twice)) {
+			throw new Error("not ready");
+		}
+
 		expect(twice.ready.carried).toEqual([carried]);
 	});
 
 	it("leaves `carried` out of a proof whose rows were all judged at the head", () => {
 		const none = readyToMerge(proof());
-		if (!("ready" in none)) throw new Error("not ready");
+
+		if (!("ready" in none)) {
+			throw new Error("not ready");
+		}
+
 		expect("carried" in none.ready).toBe(false);
 		// A hop the rows do not stand on goes in no more than none at all.
 		const unused = readyToMerge(proof({carried: [carried]}));
-		if (!("ready" in unused)) throw new Error("not ready");
+
+		if (!("ready" in unused)) {
+			throw new Error("not ready");
+		}
+
 		expect("carried" in unused.ready).toBe(false);
 	});
 
 	it("survives being kept, and a kept one is checked again, its carry too", () => {
 		const r = readyToMerge(proof({rows: [pass(C1, "B"), pass(C2, "B")], carried: [carried]}));
-		if (!("ready" in r)) throw new Error("not ready");
+
+		if (!("ready" in r)) {
+			throw new Error("not ready");
+		}
+
 		const kept: unknown = JSON.parse(JSON.stringify(r.ready));
 		expect(ReadyToMerge.revive(kept)).toEqual(r.ready);
 		expect(Schema.is(Ready)(r.ready)).toBe(true);
@@ -311,9 +358,10 @@ describe("readyToMerge, with rows carried to the head", () => {
 		const checks: readonly Checks[] = [green, {head: "A", state: "red"}];
 		let tried = 0;
 		const wrong: string[] = [];
-		for (const one of rowsFor(C1))
-			for (const two of rowsFor(C2))
-				for (const hops of hopSets)
+
+		for (const one of rowsFor(C1)) {
+			for (const two of rowsFor(C2)) {
+				for (const hops of hopSets) {
 					for (const c of checks) {
 						const rows = [one, two].filter((v): v is Judged => v !== null);
 						const moved = rows.map((v) =>
@@ -330,8 +378,15 @@ describe("readyToMerge, with rows carried to the head", () => {
 							c.state === "green";
 						tried++;
 						const p = proof({rows, carried: hops, checks: c});
-						if ("ready" in readyToMerge(p) !== rule) wrong.push(JSON.stringify(p));
+
+						if ("ready" in readyToMerge(p) !== rule) {
+							wrong.push(JSON.stringify(p));
+						}
 					}
+				}
+			}
+		}
+
 		expect({tried, wrong}).toEqual({tried: 5 * 5 * 8 * 2, wrong: []});
 	});
 });

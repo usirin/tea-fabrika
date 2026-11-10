@@ -46,14 +46,22 @@ const counted = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`
 /** The queue a stage works its values from: the one it works now, and how many wait behind it. */
 export const queueLine = (s: Waiting): string => {
 	const [first, ...rest] = s.items;
-	if (first === undefined) return "nothing waiting";
+
+	if (first === undefined) {
+		return "nothing waiting";
+	}
+
 	return `${ref(first)} now, ${rest.length === 0 ? "nothing else" : rest.length} waiting`;
 };
 
 /** One review of one pull request. */
 export const reviewLine = (s: Review): string => {
-	if (s.phase === "idle") return "not started";
+	if (s.phase === "idle") {
+		return "not started";
+	}
+
 	const at = ref(s.ask.pr);
+
 	switch (s.phase) {
 		case "gathering":
 			return `${at}: reading the pull request`;
@@ -70,8 +78,12 @@ export const reviewLine = (s: Review): string => {
 
 /** One ship of one pull request. */
 export const shipLine = (s: Ship): string => {
-	if (s.phase === "idle") return "not started";
+	if (s.phase === "idle") {
+		return "not started";
+	}
+
 	const at = ref(s.pr);
+
 	switch (s.phase) {
 		case "reading":
 			return `${at}: reading the pull request`;
@@ -94,8 +106,12 @@ export const shipLine = (s: Ship): string => {
 
 /** One build round of one ticket. */
 export const buildLine = (s: Build): string => {
-	if (s.phase === "idle") return "not started";
+	if (s.phase === "idle") {
+		return "not started";
+	}
+
 	const at = `${ref(s.ask.ticket)} round ${s.ask.round}`;
+
 	switch (s.phase) {
 		case "reading":
 			return `${at}: reading the ticket`;
@@ -114,8 +130,12 @@ export const buildLine = (s: Build): string => {
 
 /** One ticket's loop in operate: which stage of which round it is in, and how it ended. */
 export const loopLine = (s: Loop): string => {
-	if (s.phase === "idle") return "not started";
+	if (s.phase === "idle") {
+		return "not started";
+	}
+
 	const ticket = ref(s.ticket);
+
 	switch (s.phase) {
 		case "claiming":
 			return `${ticket}: claiming it as ${s.lane}`;

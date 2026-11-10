@@ -158,14 +158,25 @@ const overForGood: Law = ({prev, next, cmds}) =>
 
 /** It ends `done` only when Stryker ran and nothing survived, and every mutant that survives is sent on. */
 const nothingSurvivesQuietly: Law = ({prev, next}) => {
-	if (prev.phase === "over" || next.phase !== "over") return null;
+	if (prev.phase === "over" || next.phase !== "over") {
+		return null;
+	}
+
 	const {outcome, report} = next;
 	const survived = report.ran?.survived.length ?? 0;
-	if (outcome.kind === "done" && (report.ran === null || survived > 0))
+
+	if (outcome.kind === "done" && (report.ran === null || survived > 0)) {
 		return "done without a clean run";
-	if (survived > 0 && outcome.kind !== "send") return "a mutant survived and was not sent on";
-	if (outcome.kind === "send" && outcome.to === "test_writer" && survived === 0)
+	}
+
+	if (survived > 0 && outcome.kind !== "send") {
+		return "a mutant survived and was not sent on";
+	}
+
+	if (outcome.kind === "send" && outcome.to === "test_writer" && survived === 0) {
 		return "sent to the writer with no mutant";
+	}
+
 	return null;
 };
 
@@ -175,13 +186,21 @@ const nothingSurvivesQuietly: Law = ({prev, next}) => {
  */
 const redGoesBack: Law = ({prev, msg, next}) => {
 	if (msg.type === "mutation_tests_ok" && prev.phase === "testing" && msg.value.result === "red") {
-		if (next.phase !== "over") return `a red run went on to ${next.phase}`;
-		if (next.outcome.kind !== "send" || next.outcome.to !== "builder")
+		if (next.phase !== "over") {
+			return `a red run went on to ${next.phase}`;
+		}
+
+		if (next.outcome.kind !== "send" || next.outcome.to !== "builder") {
 			return `a red run ended ${next.outcome.kind}`;
-		if (JSON.stringify(next.report.failed) !== JSON.stringify(msg.value.failed))
+		}
+
+		if (JSON.stringify(next.report.failed) !== JSON.stringify(msg.value.failed)) {
 			return "a red run lost the names of its failing tests";
+		}
+
 		return null;
 	}
+
 	const sentBack =
 		prev.phase !== "over" &&
 		next.phase === "over" &&
@@ -195,11 +214,22 @@ const redGoesBack: Law = ({prev, msg, next}) => {
  * green at this very head, or again after a restart that found it in flight.
  */
 const testsFirst: Law = ({prev, msg, cmds}) => {
-	if (!cmds.some((c) => c.type === "mutation_run")) return null;
-	if (msg.type === "mutation_tests_ok" && msg.value.result === "green") return null;
-	if (msg.type === "mutation_scope_ok" && prev.phase === "reading" && greenHere(prev.ask))
+	if (!cmds.some((c) => c.type === "mutation_run")) {
 		return null;
-	if (msg.type === "resume" && prev.phase === "mutating") return null;
+	}
+
+	if (msg.type === "mutation_tests_ok" && msg.value.result === "green") {
+		return null;
+	}
+
+	if (msg.type === "mutation_scope_ok" && prev.phase === "reading" && greenHere(prev.ask)) {
+		return null;
+	}
+
+	if (msg.type === "resume" && prev.phase === "mutating") {
+		return null;
+	}
+
 	return `Stryker started on ${msg.type}`;
 };
 
@@ -210,33 +240,52 @@ const testsFirst: Law = ({prev, msg, cmds}) => {
  */
 const skipIsWritten: TraceLaw = (steps) => {
 	let tested = false;
+
 	for (const {prev, msg, next} of steps) {
-		if (msg.type === "start" && prev.phase === "idle") tested = false;
+		if (msg.type === "start" && prev.phase === "idle") {
+			tested = false;
+		}
+
 		if (
 			msg.type === "mutation_tests_ok" &&
 			prev.phase === "testing" &&
 			msg.value.result === "green"
-		)
+		) {
 			tested = true;
-		if (prev.phase === "over" || next.phase !== "over") continue;
+		}
+
+		if (prev.phase === "over" || next.phase !== "over") {
+			continue;
+		}
+
 		const trusted = trustedOf(next.report);
-		if (trusted !== null && (trusted.result !== "green" || trusted.head !== next.ask.head))
+
+		if (trusted !== null && (trusted.result !== "green" || trusted.head !== next.ask.head)) {
 			return `trusted checks ${trusted.result} at ${trusted.head}`;
-		if (next.report.ran !== null && !tested && trusted === null)
+		}
+
+		if (next.report.ran !== null && !tested && trusted === null) {
 			return "Stryker ran with no tests run and no checks named";
+		}
 	}
+
 	return null;
 };
 
 /** A change to the exam the owner did not allow never reaches a run: the last diff read had none. */
 const examIsTheOwners: TraceLaw = (steps) => {
 	let open = false;
+
 	for (const {prev, msg, cmds} of steps) {
-		if (msg.type === "mutation_scope_ok" && prev.phase === "reading")
+		if (msg.type === "mutation_scope_ok" && prev.phase === "reading") {
 			open = unapproved(changesOf(msg.value, prev.ask.exam), prev.ask.allowed).length > 0;
-		if (open && cmds.some((c) => c.type === "mutation_tests" || c.type === "mutation_run"))
+		}
+
+		if (open && cmds.some((c) => c.type === "mutation_tests" || c.type === "mutation_run")) {
 			return "ran with a change the owner did not allow";
+		}
 	}
+
 	return null;
 };
 
@@ -255,8 +304,10 @@ const checkWhole = (machine: Machine, law: TraceLaw) =>
 
 describe("the mutation step's laws", () => {
 	it("hold on the real machine", () => {
-		for (const law of [overForGood, nothingSurvivesQuietly, testsFirst, kept])
+		for (const law of [overForGood, nothingSurvivesQuietly, testsFirst, kept]) {
 			checkEach(mutation, law);
+		}
+
 		checkWhole(mutation, examIsTheOwners);
 	});
 
@@ -376,7 +427,11 @@ describe("each law is seen to fail on a planted mistake", () => {
 		const leaks = plant({
 			mutation_scope_ok: (s, m) => {
 				const [next, cmds] = mutation.update.mutation_scope_ok(s, m);
-				if (next.phase !== "testing") return [next, cmds];
+
+				if (next.phase !== "testing") {
+					return [next, cmds];
+				}
+
 				return [{...next, spans: next.spans.map((x) => ({...x, from: x.from - 9}))}, cmds];
 			},
 		});
@@ -388,7 +443,11 @@ describe("each law is seen to fail on a planted mistake", () => {
 		plant({
 			mutation_scope_ok: (s, m) => {
 				const [next, cmds] = mutation.update.mutation_scope_ok(s, m);
-				if (s.phase !== "reading" || next.phase !== "testing" || !skips(s)) return [next, cmds];
+
+				if (s.phase !== "reading" || next.phase !== "testing" || !skips(s)) {
+					return [next, cmds];
+				}
+
 				const {head, seed, most} = s.ask;
 				const asked = runMutants({head, spans: next.spans, seed, most});
 				return [{ask: s.ask, spans: next.spans, phase: "mutating", asked}, [asked]];
@@ -405,7 +464,11 @@ describe("each law is seen to fail on a planted mistake", () => {
 			...skipping((s) => greenHere(s.ask)).update,
 			mutation_run_ok: (s, m) => {
 				const [next, cmds] = mutation.update.mutation_run_ok(s, m);
-				if (next.phase !== "over") return [next, cmds];
+
+				if (next.phase !== "over") {
+					return [next, cmds];
+				}
+
 				const {trusted: _, ...report} = next.report as typeof next.report & {trusted?: unknown};
 				return [{...next, report}, cmds];
 			},
@@ -418,7 +481,11 @@ describe("each law is seen to fail on a planted mistake", () => {
 			...skipping((s) => greenHere(s.ask)).update,
 			mutation_run_ok: (s, m) => {
 				const [next, cmds] = mutation.update.mutation_run_ok(s, m);
-				if (next.phase !== "over") return [next, cmds];
+
+				if (next.phase !== "over") {
+					return [next, cmds];
+				}
+
 				const report = {...next.report, trusted: {...GREEN_HERE, head: "o".repeat(40)}};
 				return [{...next, report}, cmds];
 			},

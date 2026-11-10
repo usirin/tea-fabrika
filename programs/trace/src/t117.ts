@@ -70,7 +70,11 @@ const shapeOf = (astraAs: Runner) => {
 			trace: o.trace,
 			...who(o.runner),
 		});
-		if (o.runner !== null) add(o.from + 1, lane, {type: "session", run: o.run, id: `s-${o.run}`});
+
+		if (o.runner !== null) {
+			add(o.from + 1, lane, {type: "session", run: o.run, id: `s-${o.run}`});
+		}
+
 		const usd = o.runner?.harness === "claude" ? (o.billed ?? 0) : (o.listUsd ?? 0);
 		return add(o.from + o.took, lane, {
 			type: "ended",

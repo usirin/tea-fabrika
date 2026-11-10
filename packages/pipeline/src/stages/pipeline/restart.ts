@@ -144,10 +144,12 @@ export const fold = (seen: Seen): Folded => {
 	const madeBy = (step: LaneStep): readonly Made[] => {
 		const by = MADE_BY[step];
 		const made: Made[] = [];
+
 		for (let next = commits[0]; next !== undefined && by?.has(next.by); next = commits[0]) {
 			made.push(next);
 			commits.shift();
 		}
+
 		return made;
 	};
 
@@ -156,11 +158,21 @@ export const fold = (seen: Seen): Folded => {
 		const made = madeBy(step);
 		const head = made.at(-1)?.sha ?? null;
 		const checks = inRun === null || inRun === undefined ? {} : {checked: checksOf(inRun)};
+
 		switch (step) {
 			case "plan":
-				if (outcome.kind !== "done" && outcome.kind !== "ask") return carry;
-				if (seen.plan === null) missing.add("plan");
-				if (version === null) missing.add("version");
+				if (outcome.kind !== "done" && outcome.kind !== "ask") {
+					return carry;
+				}
+
+				if (seen.plan === null) {
+					missing.add("plan");
+				}
+
+				if (version === null) {
+					missing.add("version");
+				}
+
 				return {
 					...carry,
 					plan: seen.plan,
@@ -170,9 +182,17 @@ export const fold = (seen: Seen): Folded => {
 				};
 			case "test_writer": {
 				const base = round > 1 ? carry.base : seen.base;
-				if (base === null) missing.add("base");
+
+				if (base === null) {
+					missing.add("base");
+				}
+
 				const files = made.flatMap((c) => c.files);
-				if (outcome.kind === "done" && files.length === 0) missing.add("exam");
+
+				if (outcome.kind === "done" && files.length === 0) {
+					missing.add("exam");
+				}
+
 				return {...carry, base, head: head ?? base, exam: [...carry.exam, ...files]};
 			}
 			case "build":
@@ -189,33 +209,54 @@ export const fold = (seen: Seen): Folded => {
 		}
 	};
 
-	for (const {fact} of seen.timeline)
+	for (const {fact} of seen.timeline) {
 		switch (fact.type) {
 			case "started":
-				if (!isStep(fact.stage)) break;
+				if (!isStep(fact.stage)) {
+					break;
+				}
+
 				runs.add(fact.run);
 				round = fact.round ?? 1;
 				inRun = null;
-				if (STEPS.indexOf(fact.stage) > STEPS.indexOf("plan")) pastPlan = true;
+
+				if (STEPS.indexOf(fact.stage) > STEPS.indexOf("plan")) {
+					pastPlan = true;
+				}
+
 				break;
 			case "checked":
 				// An exam head's, with its pull request: never the lane's own (self-fix PR 10).
-				if (fact.pr !== undefined) break;
+				if (fact.pr !== undefined) {
+					break;
+				}
+
 				// In a run: the run's own. Out of one: a restart's, at the head main's new base gave.
-				if (inRun !== undefined) inRun = fact;
-				else carry = {...carry, head: fact.head, checked: checksOf(fact)};
+				if (inRun !== undefined) {
+					inRun = fact;
+				} else {
+					carry = {...carry, head: fact.head, checked: checksOf(fact)};
+				}
+
 				break;
 			case "planned":
 				version = fact.version;
 				break;
 			case "ended": {
-				if (!isStep(fact.stage)) break;
+				if (!isStep(fact.stage)) {
+					break;
+				}
+
 				trail = [...trail, {step: fact.stage, said: nameOf(fact.outcome)}];
 				const change = fact.carry === undefined ? Option.none() : changeOf(fact.carry);
 				carry = Option.isSome(change)
 					? {...carry, ...change.value}
 					: proven(fact.stage, fact.outcome);
-				if (fact.stage === "plan") approved = false;
+
+				if (fact.stage === "plan") {
+					approved = false;
+				}
+
 				last = fact.stage;
 				inRun = undefined;
 				at = resumeAfter(fact.stage, fact.outcome, round, trail);
@@ -223,7 +264,11 @@ export const fold = (seen: Seen): Folded => {
 			}
 			case "asked": {
 				const kind = askedFor(fact.ask);
-				if (kind === null) break;
+
+				if (kind === null) {
+					break;
+				}
+
 				kinds.set(fact.ask, kind);
 				const step = askedStep(kind, last);
 				at = kind === "step" ? {_tag: "run", step} : {_tag: "ask", for: kind, step};
@@ -232,21 +277,29 @@ export const fold = (seen: Seen): Folded => {
 			case "answered": {
 				// The first answer to a lane's question is the one it took.
 				const kind = kinds.get(fact.ask);
-				if (kind === undefined) break;
+
+				if (kind === undefined) {
+					break;
+				}
+
 				kinds.delete(fact.ask);
 				trail = [...trail, {step: fact.ask, said: fact.pick}];
 				// A `merge` on the exam's pull request is a yes on what its review read, as the lane lays it.
 				const said = kind === "exam_merge" && fact.pick === "merge" ? saidYes(carry) : carry;
 				const noted = withNote(said, fact.note);
 				carry = fact.pick === "go_on" ? letThrough(noted) : noted;
-				if (kind === "approve" && fact.pick === "approve") approved = true;
+
+				if (kind === "approve" && fact.pick === "approve") {
+					approved = true;
+				}
+
 				const step = askedStep(kind, last);
 				at = resumeOf({ask: fact.ask, what: "", picks: [], for: kind, step}, fact.pick);
 				break;
 			}
 			case "restarted":
 				// The branch started again from main: nothing built or written before stands on it.
-				if (fact.kept !== undefined)
+				if (fact.kept !== undefined) {
 					carry = {
 						...carry,
 						base: fact.onto,
@@ -256,18 +309,24 @@ export const fold = (seen: Seen): Folded => {
 						touched: [],
 						cannot: [],
 					};
+				}
 				// Main moved under a working copy: the lane's commits now stand on it, at the head the restart
 				// kept, or else the branch's last.
 				else if (fact.base !== null && fact.base !== fact.onto) {
 					const head = fact.to ?? seen.commits.at(-1)?.sha ?? carry.head;
 					carry = {...carry, base: fact.onto, head};
 				}
+
 				break;
 			default:
 				break;
 		}
+	}
 
-	if (pastPlan && !approved) missing.add("decided");
+	if (pastPlan && !approved) {
+		missing.add("decided");
+	}
+
 	const goesOn = [...missing].flatMap((field) => WRITES[field] ?? []);
 	return {
 		held: {count: runs.size, round, carry, trail},
@@ -278,9 +337,15 @@ export const fold = (seen: Seen): Folded => {
 
 /** The step a commit on the lane's branch was made for, by the title code gave it. Pure. */
 const byTitle = (title: string, built: boolean): Made["by"] => {
-	if (title.startsWith("format the tests")) return "format";
+	if (title.startsWith("format the tests")) {
+		return "format";
+	}
+
 	// Tests after a build are the mutants' answers.
-	if (title.startsWith("tests for ")) return built ? "mutants" : "test_writer";
+	if (title.startsWith("tests for ")) {
+		return built ? "mutants" : "test_writer";
+	}
+
 	return "build";
 };
 
@@ -299,9 +364,14 @@ export const seenOf = (number: number): Effect.Effect<Seen, TicketsFailed, Ticke
 		const base = yield* work
 			.mergeBase("origin/main", branch)
 			.pipe(Effect.orElseSucceed((): string | null => null));
-		if (base === null) return {timeline, plan: null, base, commits: []};
+
+		if (base === null) {
+			return {timeline, plan: null, base, commits: []};
+		}
+
 		const listed = yield* work.commits(base, branch).pipe(Effect.orElseSucceed(() => []));
 		const commits: Made[] = [];
+
 		for (const {sha, title} of listed) {
 			const files = yield* work
 				.filesOf(work.at("clone"), sha)
@@ -315,5 +385,6 @@ export const seenOf = (number: number): Effect.Effect<Seen, TicketsFailed, Ticke
 				files,
 			});
 		}
+
 		return {timeline, plan: null, base, commits};
 	});

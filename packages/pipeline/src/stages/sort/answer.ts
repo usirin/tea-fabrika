@@ -65,7 +65,13 @@ export type SortReply = typeof SortReply.Type;
 export type Said = "duplicate" | "no" | "fold" | "plan" | "ruling" | "research";
 
 export const saidOf = (a: SortAnswer): Said => {
-	if (a.answer !== "yes") return a.answer;
-	if (a.next === "plan" && a.partOf !== null) return "fold";
+	if (a.answer !== "yes") {
+		return a.answer;
+	}
+
+	if (a.next === "plan" && a.partOf !== null) {
+		return "fold";
+	}
+
 	return a.next;
 };

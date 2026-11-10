@@ -200,20 +200,26 @@ export const configOf = (env: Record<string, unknown>): DoorConfig => {
 			: /^[0-9]{1,12}$/.test(s(k)) && Number(s(k)) >= min
 				? Number(s(k))
 				: null;
+
 	if (
 		s("DOOR") === "local" &&
 		isPersonId(s("LOCAL_PERSON")) &&
 		/^[0-9a-f]{64}$/.test(s("LOCAL_SECRET_HASH"))
-	)
+	) {
 		return {kind: "local", person: s("LOCAL_PERSON"), secretHash: s("LOCAL_SECRET_HASH")};
+	}
+
 	const sessionMs = ms("SESSION_MS", SESSION_MS, MINUTE);
+
 	if (
 		s("DOOR") === "shared" &&
 		isPersonId(s("FOUNDER")) &&
 		sessionMs !== null &&
 		(s("ORIGIN") === "" || /^https?:\/\/[^/\s]+$/.test(s("ORIGIN")))
-	)
+	) {
 		return {kind: "shared", founder: s("FOUNDER"), origin: s("ORIGIN") || null, sessionMs};
+	}
+
 	return {kind: "closed"};
 };
 
@@ -257,7 +263,11 @@ const factOf = (kind: string, data: string): MemberFact | null => {
 		const d = readRemoved(data);
 		return Option.isSome(d) ? {kind, id: d.value.id} : null;
 	}
-	if (kind !== "founded" && kind !== "invited" && kind !== "joined") return null;
+
+	if (kind !== "founded" && kind !== "invited" && kind !== "joined") {
+		return null;
+	}
+
 	const d = readCame(data);
 	return Option.isSome(d) ? {kind, id: d.value.id, name: d.value.name} : null;
 };
@@ -267,22 +277,32 @@ export const membersOf = (rows: readonly SqlRow[]): Members => {
 	let founded = false;
 	const members = new Map<string, string>();
 	const invited = new Map<string, string>();
+
 	for (const r of rows) {
 		// Only the door writes here; a row that does not read is skipped, never trusted.
 		const f = factOf(String(r.kind), String(r.data));
-		if (f === null) continue;
+
+		if (f === null) {
+			continue;
+		}
+
 		if (f.kind === "founded") {
 			founded = true;
 			members.set(f.id, f.name);
 		} else if (f.kind === "invited") {
-			if (!members.has(f.id)) invited.set(f.id, f.name);
+			if (!members.has(f.id)) {
+				invited.set(f.id, f.name);
+			}
 		} else if (f.kind === "joined") {
-			if (invited.delete(f.id)) members.set(f.id, f.name);
+			if (invited.delete(f.id)) {
+				members.set(f.id, f.name);
+			}
 		} else {
 			members.delete(f.id);
 			invited.delete(f.id);
 		}
 	}
+
 	return {founded, members, invited};
 };
 
@@ -293,10 +313,15 @@ export const membersOf = (rows: readonly SqlRow[]): Members => {
  */
 export const namesOf = (rows: readonly {readonly kind: unknown; readonly data: unknown}[]) => {
 	const names = new Map<string, string>();
+
 	for (const r of rows) {
 		const f = factOf(String(r.kind), String(r.data));
-		if (f !== null && f.kind !== "removed") names.set(f.id, f.name);
+
+		if (f !== null && f.kind !== "removed") {
+			names.set(f.id, f.name);
+		}
 	}
+
 	return names as ReadonlyMap<string, string>;
 };
 
@@ -357,10 +382,18 @@ export const grantOf = (text: string): Grant | null => {
 		/^fabrika agent grant\nledger: (\S+)\nagent: (\S+)\nkey: (ssh-ed25519 \S+)\nfor: (\S+)\nexpires: ([0-9]{1,15})\n$/.exec(
 			text,
 		);
-	if (m === null) return null;
+
+	if (m === null) {
+		return null;
+	}
+
 	const [, address = "", agent, key = "", name, expires] = m;
 	const line = keyOnly(key);
-	if (!isAgentName(agent) || !isName(name) || line === null || line !== key) return null;
+
+	if (!isAgentName(agent) || !isName(name) || line === null || line !== key) {
+		return null;
+	}
+
 	const g: Grant = {address, agent, key: line, for: name, expires: Number(expires)};
 	return grantText(g) === text ? g : null;
 };
@@ -381,7 +414,11 @@ export const hashOf = async (token: Redacted.Redacted<string>): Promise<string> 
 const randomText = (prefix: string): string => {
 	const b = crypto.getRandomValues(new Uint8Array(32));
 	let bin = "";
-	for (const x of b) bin += String.fromCharCode(x);
+
+	for (const x of b) {
+		bin += String.fromCharCode(x);
+	}
+
 	return `${prefix}${btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
 };
 
@@ -441,7 +478,9 @@ export class Door {
 		this.#now = o.now ?? Date.now;
 		this.#wrote = o.wrote ?? (() => {});
 		db.tx(() => {
-			for (const stmt of MIGRATION) db.all(stmt);
+			for (const stmt of MIGRATION) {
+				db.all(stmt);
+			}
 		});
 	}
 
@@ -466,27 +505,51 @@ export class Door {
 	/** Who a credential is. Every request but the login's own steps goes through here first. */
 	async who(token: Redacted.Redacted<string> | null): Promise<Let<Stamp>> {
 		const c = this.#config;
-		if (c.kind === "closed") return refuse(403, "this ledger has no door");
-		if (token === null || Redacted.value(token) === "") return refuse(401, "no credential");
+
+		if (c.kind === "closed") {
+			return refuse(403, "this ledger has no door");
+		}
+
+		if (token === null || Redacted.value(token) === "") {
+			return refuse(401, "no credential");
+		}
+
 		const hash = await hashOf(token);
-		if (c.kind === "local" && hash === c.secretHash) return letIn({kind: "user", id: c.person});
+
+		if (c.kind === "local" && hash === c.secretHash) {
+			return letIn({kind: "user", id: c.person});
+		}
+
 		const now = this.#now();
 		const row = this.#db.all(
 			"SELECT kind, person, agent FROM door_sessions WHERE hash = ? AND expires_at > ?",
 			hash,
 			now,
 		)[0];
-		if (row === undefined) return refuse(401, "no such session, or it has ended");
+
+		if (row === undefined) {
+			return refuse(401, "no such session, or it has ended");
+		}
+
 		const person = String(row.person);
-		if (c.kind === "shared" && !this.members().members.has(person))
+
+		if (c.kind === "shared" && !this.members().members.has(person)) {
 			return refuse(403, "not a member of this ledger");
-		if (row.kind === "agent") return letIn({kind: "agent", id: String(row.agent), for: person});
+		}
+
+		if (row.kind === "agent") {
+			return letIn({kind: "agent", id: String(row.agent), for: person});
+		}
+
 		return letIn({kind: "user", id: person});
 	}
 
 	/** A fresh challenge for a login, good once and for `CHALLENGE_MS`. */
 	challenge(address: string): Let<{readonly text: string}> {
-		if (this.#config.kind !== "shared") return refuse(404, "this ledger's door takes no login");
+		if (this.#config.kind !== "shared") {
+			return refuse(404, "this ledger's door takes no login");
+		}
+
 		const now = this.#now();
 		const nonce = randomText("");
 		const text = challengeText({address, nonce, expires: now + CHALLENGE_MS});
@@ -504,7 +567,10 @@ export class Door {
 
 	/** Take a challenge back: it must be one this ledger gave out, unused and in time. Used up either way. */
 	#spend(text: unknown): Refused | null {
-		if (typeof text !== "string") return refuse(400, "no challenge");
+		if (typeof text !== "string") {
+			return refuse(400, "no challenge");
+		}
+
 		const nonce = /\nnonce: (\S+)\n/.exec(text)?.[1] ?? "";
 		const now = this.#now();
 		const row = this.#db.tx(() => {
@@ -515,9 +581,15 @@ export class Door {
 			this.#db.all("DELETE FROM door_challenges WHERE nonce = ?", nonce);
 			return r;
 		});
-		if (row === undefined || row.text !== text)
+
+		if (row === undefined || row.text !== text) {
 			return refuse(401, "not a challenge this ledger gave out");
-		if (Number(row.expires_at) <= now) return refuse(401, "the challenge has ended");
+		}
+
+		if (Number(row.expires_at) <= now) {
+			return refuse(401, "the challenge has ended");
+		}
+
 		return null;
 	}
 
@@ -527,7 +599,10 @@ export class Door {
 			writer: stampText(by),
 			data,
 		});
-		if (res.ok) this.#wrote({stream: MEMBERS, rev: res.rev, pos: res.pos});
+
+		if (res.ok) {
+			this.#wrote({stream: MEMBERS, rev: res.rev, pos: res.pos});
+		}
 	}
 
 	#session(
@@ -594,30 +669,50 @@ export class Door {
 	 * the others. `UNAVAILABLE` only when none proved and a question failed; else `NOT_PROVEN`.
 	 */
 	async #proven(name: unknown, text: string, signature: unknown): Promise<Let<Known>> {
-		if (!isName(name)) return refuse(400, "not a name");
-		if (typeof signature !== "string") return refuse(400, "no signature");
+		if (!isName(name)) {
+			return refuse(400, "not a name");
+		}
+
+		if (typeof signature !== "string") {
+			return refuse(400, "no signature");
+		}
+
 		const c = this.#config;
 		const m = this.members();
 		const known = knownBy(m, name);
 		const founder = c.kind === "shared" && !m.founded ? c.founder : null;
 		const ids = [...known.map((k) => k.id), ...(founder === null ? [] : [founder])];
 		let failed: Refused | null = null;
+
 		for (const id of new Set(ids)) {
 			const asked = await this.#ask(
 				id,
 				(k) => k.byId(id),
 				(s) => s.id === id,
 			);
+
 			if (!asked.ok) {
 				failed = asked;
 				continue;
 			}
+
 			const s = asked.value;
-			if (s === null) continue;
+
+			if (s === null) {
+				continue;
+			}
+
 			const as = known.find((k) => k.id === id)?.name ?? s.name;
-			if (as.toLowerCase() !== name.toLowerCase()) continue;
-			if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) return letIn({id, name: as});
+
+			if (as.toLowerCase() !== name.toLowerCase()) {
+				continue;
+			}
+
+			if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) {
+				return letIn({id, name: as});
+			}
 		}
+
 		return failed ?? refuse(401, NOT_PROVEN);
 	}
 
@@ -627,21 +722,39 @@ export class Door {
 		challenge?: unknown;
 		signature?: unknown;
 	}): Promise<Let<LoginAnswer>> {
-		if (this.#config.kind !== "shared") return refuse(404, "this ledger's door takes no login");
+		if (this.#config.kind !== "shared") {
+			return refuse(404, "this ledger's door takes no login");
+		}
+
 		const {founder, sessionMs} = this.#config;
 		const spent = this.#spend(body.challenge);
-		if (spent !== null) return spent;
+
+		if (spent !== null) {
+			return spent;
+		}
+
 		const proven = await this.#proven(body.name, String(body.challenge), body.signature);
-		if (!proven.ok) return proven;
+
+		if (!proven.ok) {
+			return proven;
+		}
+
 		const {id, name} = proven.value;
 		const m = this.members();
 		const me: Person = {kind: "user", id};
+
 		if (!m.members.has(id)) {
-			if (!m.founded && id === founder) this.#fact(me, "founded", {id, name});
-			else if (m.invited.has(id)) this.#fact(me, "joined", {id, name});
+			if (!m.founded && id === founder) {
+				this.#fact(me, "founded", {id, name});
+			} else if (m.invited.has(id)) {
+				this.#fact(me, "joined", {id, name});
+			}
 			// Taken off while they signed: as if this ledger never knew them.
-			else return refuse(401, NOT_PROVEN);
+			else {
+				return refuse(401, NOT_PROVEN);
+			}
 		}
+
 		const a = this.#session("person", id, null, this.#now() + sessionMs);
 		await this.#store(a, "person");
 		return letIn(a);
@@ -657,31 +770,60 @@ export class Door {
 		address: string,
 		body: {grant?: unknown; granted?: unknown; challenge?: unknown; signature?: unknown},
 	): Promise<Let<LoginAnswer>> {
-		if (this.#config.kind !== "shared") return refuse(404, "this ledger's door takes no login");
+		if (this.#config.kind !== "shared") {
+			return refuse(404, "this ledger's door takes no login");
+		}
+
 		const spent = this.#spend(body.challenge);
-		if (spent !== null) return spent;
+
+		if (spent !== null) {
+			return spent;
+		}
+
 		const g = typeof body.grant === "string" ? grantOf(body.grant) : null;
-		if (g === null) return refuse(400, "not a grant");
+
+		if (g === null) {
+			return refuse(400, "not a grant");
+		}
+
 		const now = this.#now();
-		if (g.address !== address) return refuse(401, "the grant is for another ledger");
-		if (g.expires <= now) return refuse(401, "the grant has ended");
+
+		if (g.address !== address) {
+			return refuse(401, "the grant is for another ledger");
+		}
+
+		if (g.expires <= now) {
+			return refuse(401, "the grant has ended");
+		}
+
 		const proven = await this.#proven(g.for, String(body.grant), body.granted);
-		if (!proven.ok) return proven;
-		if (!this.members().members.has(proven.value.id))
+
+		if (!proven.ok) {
+			return proven;
+		}
+
+		if (!this.members().members.has(proven.value.id)) {
 			return refuse(403, `${g.for} is not a member of this ledger`);
+		}
+
 		if (
 			typeof body.signature !== "string" ||
 			(await verify(body.signature, String(body.challenge), NAMESPACE, [g.key])) === null
-		)
+		) {
 			return refuse(401, "the challenge is not signed by the grant's key");
+		}
+
 		const person = proven.value.id;
 		const live = this.#db.all(
 			"SELECT MAX(expires_at) AS until FROM door_sessions WHERE kind = 'person' AND person = ? AND expires_at > ?",
 			person,
 			now,
 		)[0]?.until;
-		if (typeof live !== "number")
+
+		if (typeof live !== "number") {
 			return refuse(403, `${g.for} has no session on this ledger: they log in first`);
+		}
+
 		const a = this.#session("agent", person, g.agent, Math.min(g.expires, live));
 		await this.#store(a, "agent");
 		return letIn(a);
@@ -693,32 +835,68 @@ export class Door {
 	 * person who joins is that one, and signs in by that name, whatever they go by there later.
 	 */
 	async invite(by: Stamp, name: unknown): Promise<Let<Known>> {
-		if (by.kind !== "user") return refuse(403, "only a person invites");
-		if (this.#config.kind !== "shared") return refuse(404, "a local ledger has one person");
-		if (!isName(name)) return refuse(400, "not a name");
+		if (by.kind !== "user") {
+			return refuse(403, "only a person invites");
+		}
+
+		if (this.#config.kind !== "shared") {
+			return refuse(404, "a local ledger has one person");
+		}
+
+		if (!isName(name)) {
+			return refuse(400, "not a name");
+		}
+
 		const asked = await this.#ask(
 			name,
 			(k) => k.of(name),
 			(s) => isName(s.name),
 		);
-		if (!asked.ok) return asked;
-		if (asked.value === null) return refuse(404, `nobody goes by ${name}`);
+
+		if (!asked.ok) {
+			return asked;
+		}
+
+		if (asked.value === null) {
+			return refuse(404, `nobody goes by ${name}`);
+		}
+
 		const {id} = asked.value;
 		const m = this.members();
 		const known = m.members.get(id) ?? m.invited.get(id);
-		if (known !== undefined) return letIn({id, name: known});
+
+		if (known !== undefined) {
+			return letIn({id, name: known});
+		}
+
 		this.#fact(by, "invited", {id, name: asked.value.name});
 		return letIn({id, name: asked.value.name});
 	}
 
 	/** A member takes a member, or an invite, off, by the person's id. The last member stays. */
 	remove(by: Stamp, id: unknown): Let<{readonly id: string}> {
-		if (by.kind !== "user") return refuse(403, "only a person removes");
-		if (this.#config.kind !== "shared") return refuse(404, "a local ledger has one person");
-		if (!isPersonId(id)) return refuse(400, "not a person's id");
+		if (by.kind !== "user") {
+			return refuse(403, "only a person removes");
+		}
+
+		if (this.#config.kind !== "shared") {
+			return refuse(404, "a local ledger has one person");
+		}
+
+		if (!isPersonId(id)) {
+			return refuse(400, "not a person's id");
+		}
+
 		const m = this.members();
-		if (!m.members.has(id) && !m.invited.has(id)) return refuse(404, "not a member or an invite");
-		if (m.members.has(id) && m.members.size === 1) return refuse(403, "the last member stays");
+
+		if (!m.members.has(id) && !m.invited.has(id)) {
+			return refuse(404, "not a member or an invite");
+		}
+
+		if (m.members.has(id) && m.members.size === 1) {
+			return refuse(403, "the last member stays");
+		}
+
 		this.#db.tx(() => {
 			this.#fact(by, "removed", {id});
 			this.#db.all("DELETE FROM door_sessions WHERE person = ?", id);
@@ -728,9 +906,18 @@ export class Door {
 
 	/** On a local ledger: the person mints a token for one of their agents. */
 	async addAgent(by: Stamp, name: unknown): Promise<Let<LoginAnswer>> {
-		if (by.kind !== "user") return refuse(403, "only a person adds an agent");
-		if (this.#config.kind !== "local") return refuse(404, "agents log in with a grant here");
-		if (!isAgentName(name)) return refuse(400, "not an agent's name");
+		if (by.kind !== "user") {
+			return refuse(403, "only a person adds an agent");
+		}
+
+		if (this.#config.kind !== "local") {
+			return refuse(404, "agents log in with a grant here");
+		}
+
+		if (!isAgentName(name)) {
+			return refuse(400, "not an agent's name");
+		}
+
 		const a = this.#session("agent", by.id, name, this.#now() + LOCAL_AGENT_MS);
 		await this.#store(a, "agent");
 		return letIn(a);
@@ -761,19 +948,38 @@ const withWriter = (args: unknown[], who: Stamp) => letIn([...args, stampText(wh
  * too), so each refusal below holds on every write.
  */
 const eventOf = (event: unknown, who: Stamp): Let<Event> => {
-	if (typeof event !== "object" || event === null || Array.isArray(event))
+	if (typeof event !== "object" || event === null || Array.isArray(event)) {
 		return refuse(400, "an event is an object");
+	}
+
 	const e = event as Record<string, unknown>;
-	if ("writer" in e) return refuse(400, "a request does not say its writer: the door does");
-	if (Object.keys(e).some((k) => k !== "kind" && k !== "data" && k !== "id"))
+
+	if ("writer" in e) {
+		return refuse(400, "a request does not say its writer: the door does");
+	}
+
+	if (Object.keys(e).some((k) => k !== "kind" && k !== "data" && k !== "id")) {
 		return refuse(400, "an event has kind, data and id only");
-	if (typeof e.kind !== "string") return refuse(400, "an event has a kind");
+	}
+
+	if (typeof e.kind !== "string") {
+		return refuse(400, "an event has a kind");
+	}
+
 	const id = e.id ?? null;
-	if (id !== null && typeof id !== "string") return refuse(400, "an event's id is text");
-	if (who.kind !== "user" && typeof id === "string" && id.startsWith(REDRIVE))
+
+	if (id !== null && typeof id !== "string") {
+		return refuse(400, "an event's id is text");
+	}
+
+	if (who.kind !== "user" && typeof id === "string" && id.startsWith(REDRIVE)) {
 		return refuse(403, "only a person sends a dead letter back");
-	if (who.kind !== "user" && isPersonKind(e.kind))
+	}
+
+	if (who.kind !== "user" && isPersonKind(e.kind)) {
 		return refuse(403, `only a person writes ${e.kind}: an agent does not answer for its person`);
+	}
+
 	return letIn({kind: e.kind, data: e.data, id, writer: stampText(who)});
 };
 
@@ -827,11 +1033,22 @@ export const isWireMethod = (method: string): boolean => Object.hasOwn(SHAPES, m
  */
 export const trustedArgs = (method: string, args: unknown, who: Stamp): Let<unknown[]> => {
 	const shape = Object.hasOwn(SHAPES, method) ? SHAPES[method] : undefined;
-	if (shape === undefined) return refuse(404, `no method ${method}`);
-	if (!Array.isArray(args) || args.length !== shape.arity)
+
+	if (shape === undefined) {
+		return refuse(404, `no method ${method}`);
+	}
+
+	if (!Array.isArray(args) || args.length !== shape.arity) {
 		return refuse(400, `${method} takes ${shape.arity} arguments, and none of them is a writer`);
-	if (shape.person && who.kind !== "user") return refuse(403, `only a person may ${method}`);
-	if (!shape.read && args.some((a) => typeof a === "string" && isDoorStream(a)))
+	}
+
+	if (shape.person && who.kind !== "user") {
+		return refuse(403, `only a person may ${method}`);
+	}
+
+	if (!shape.read && args.some((a) => typeof a === "string" && isDoorStream(a))) {
 		return refuse(403, "only the door writes under door/");
+	}
+
 	return shape.build ? shape.build(args, who) : letIn(args);
 };

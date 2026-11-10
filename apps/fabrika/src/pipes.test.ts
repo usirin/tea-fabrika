@@ -61,7 +61,11 @@ const scaleOf = (color: string, kind: "solid" | "alpha", look: Look): readonly s
 		typeof scale === "object" && scale !== null
 			? Object.entries(scale).find(([name]) => name === key)?.[1]
 			: undefined;
-	if (!Array.isArray(steps) || steps.length !== 12) throw new Error(`no ${color} ${key} in Radix`);
+
+	if (!Array.isArray(steps) || steps.length !== 12) {
+		throw new Error(`no ${color} ${key} in Radix`);
+	}
+
 	return steps.map((s) => String(s).toLowerCase());
 };
 
@@ -76,36 +80,62 @@ const uncommented = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 const outsideMedia = (css: string) => {
 	let out = "";
 	let at = 0;
+
 	for (const m of css.matchAll(/@media[^{]*\{/g)) {
-		if ((m.index ?? 0) < at) continue;
+		if ((m.index ?? 0) < at) {
+			continue;
+		}
+
 		out += css.slice(at, m.index);
 		let depth = 1;
 		let i = (m.index ?? 0) + m[0].length;
+
 		while (i < css.length && depth > 0) {
-			if (css[i] === "{") depth += 1;
-			if (css[i] === "}") depth -= 1;
+			if (css[i] === "{") {
+				depth += 1;
+			}
+
+			if (css[i] === "}") {
+				depth -= 1;
+			}
+
 			i += 1;
 		}
+
 		at = i;
 	}
+
 	return out + css.slice(at);
 };
 
 /** The body of every @media block whose query matches. */
 const insideMedia = (css: string, query: RegExp) => {
 	const bodies: string[] = [];
+
 	for (const m of css.matchAll(/@media([^{]*)\{/g)) {
-		if (!query.test(m[1] ?? "")) continue;
+		if (!query.test(m[1] ?? "")) {
+			continue;
+		}
+
 		let depth = 1;
 		const from = (m.index ?? 0) + m[0].length;
 		let i = from;
+
 		while (i < css.length && depth > 0) {
-			if (css[i] === "{") depth += 1;
-			if (css[i] === "}") depth -= 1;
+			if (css[i] === "{") {
+				depth += 1;
+			}
+
+			if (css[i] === "}") {
+				depth -= 1;
+			}
+
 			i += 1;
 		}
+
 		bodies.push(css.slice(from, i - 1));
 	}
+
 	return bodies.join("\n");
 };
 
@@ -159,14 +189,22 @@ const argsOf = (inner: string) => {
 	const parts: string[] = [];
 	let depth = 0;
 	let from = 0;
+
 	for (let i = 0; i < inner.length; i += 1) {
-		if (inner[i] === "(") depth += 1;
-		if (inner[i] === ")") depth -= 1;
+		if (inner[i] === "(") {
+			depth += 1;
+		}
+
+		if (inner[i] === ")") {
+			depth -= 1;
+		}
+
 		if (inner[i] === "," && depth === 0) {
 			parts.push(inner.slice(from, i).trim());
 			from = i + 1;
 		}
 	}
+
 	parts.push(inner.slice(from).trim());
 	return parts;
 };
@@ -186,7 +224,10 @@ const tokenIn = (
 	scope: Scope,
 	seen: readonly string[] = [],
 ): string | undefined => {
-	if (seen.includes(name)) throw new Error(`var() loop: ${[...seen, name].join(" -> ")}`);
+	if (seen.includes(name)) {
+		throw new Error(`var() loop: ${[...seen, name].join(" -> ")}`);
+	}
+
 	const value = tokensOf(scope).get(name);
 	return value === undefined ? undefined : valueIn(value, look, scope, [...seen, name]);
 };
@@ -199,20 +240,29 @@ const valueIn = (
 ): string | undefined => {
 	const v = value.trim();
 	const named = /^var\((--[\w-]+)\)$/.exec(v);
-	if (named?.[1] !== undefined) return tokenIn(named[1], look, scope, seen);
+
+	if (named?.[1] !== undefined) {
+		return tokenIn(named[1], look, scope, seen);
+	}
+
 	const pair = /^light-dark\((.*)\)$/.exec(v);
+
 	if (pair?.[1] !== undefined) {
 		const [light = "", dark = ""] = argsOf(pair[1]);
 		return valueIn(look === "light" ? light : dark, look, scope, seen);
 	}
+
 	return /^#[0-9a-f]{3,8}$/i.test(v) ? hexOf(v) : v;
 };
 
 /** A token as a color, or a thrown error that names it: a missing token fails its law loudly. */
 const colorIn = (name: string, look: Look, scope: Scope) => {
 	const value = tokenIn(name, look, scope);
-	if (value === undefined || !/^#[0-9a-f]{6}([0-9a-f]{2})?$/.test(value))
+
+	if (value === undefined || !/^#[0-9a-f]{6}([0-9a-f]{2})?$/.test(value)) {
 		throw new Error(`${name} for ${scope} in ${look} is not a color: ${value ?? "(not set)"}`);
+	}
+
 	return value;
 };
 
@@ -323,7 +373,11 @@ describe("a tile's colors are Radix steps, in both looks", () => {
 		const off = PIPES.flatMap((pipe) => {
 			const edge = tokenIn("--tile-edge-on", look, pipe);
 			const steps = scaleOf(pipe, "alpha", look);
-			if (look === "dark") return edge === alpha(pipe, 8, look) ? [] : [`${pipe} ${edge}`];
+
+			if (look === "dark") {
+				return edge === alpha(pipe, 8, look) ? [] : [`${pipe} ${edge}`];
+			}
+
 			return edge !== undefined && steps.indexOf(edge) >= 7 ? [] : [`${pipe} ${edge}`];
 		});
 		expect(off).toEqual([]);
@@ -332,7 +386,11 @@ describe("a tile's colors are Radix steps, in both looks", () => {
 	it.each(LOOKS)("a pipe's loud edge, when set, is a step of its own color, %s", (look) => {
 		const off = PIPES.flatMap((pipe) => {
 			const loud = tokenIn("--tile-edge-loud", look, pipe);
-			if (!pipeTokens(pipe).has("--tile-edge-loud")) return [];
+
+			if (!pipeTokens(pipe).has("--tile-edge-loud")) {
+				return [];
+			}
+
 			return loud !== undefined && scaleOf(pipe, "alpha", look).includes(loud)
 				? []
 				: [`${pipe} ${loud}`];

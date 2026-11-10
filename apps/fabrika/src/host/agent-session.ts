@@ -63,7 +63,11 @@ const agentKeyOf = (home: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const file = (yield* Path.Path).join(home, AGENT_KEY);
-		if (yield* fs.exists(file)) return file;
+
+		if (yield* fs.exists(file)) {
+			return file;
+		}
+
 		const text = yield* Effect.tryPromise({
 			try: async () => {
 				const pair = (await crypto.subtle.generateKey({name: "Ed25519"}, true, [
@@ -94,15 +98,20 @@ export const agentLedger = (
 ): Layer.Layer<Ledger | Author, ConnectFailed, FileSystem.FileSystem | Path.Path> =>
 	Layer.unwrap(
 		Effect.gen(function* () {
-			if (!isAgentName(name))
+			if (!isAgentName(name)) {
 				return yield* new ConnectFailed({
 					why: `${name} is not an agent's name: lower-case letters, digits, dots, dashes, underscores`,
 				});
+			}
+
 			const found = yield* connectionOf(home);
-			if (Option.isNone(found))
+
+			if (Option.isNone(found)) {
 				return yield* new ConnectFailed({
 					why: "this home has no ledger server: fabrika connect first",
 				});
+			}
+
 			const c = found.value;
 			const fs = yield* FileSystem.FileSystem;
 			// The agent's key, read once: what the grant names, and what signs each challenge.

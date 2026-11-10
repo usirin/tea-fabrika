@@ -15,7 +15,10 @@ describe("a lane, on what a real agent might answer", () => {
 	});
 	afterEach(() => {
 		vi.unstubAllEnvs();
-		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+
+		for (const dir of made.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	const runsOf = (ran: Ran, step: string) => codexRuns(ran.dir).filter((r) => r.step === step);
@@ -56,6 +59,7 @@ describe("a lane, on what a real agent might answer", () => {
 				run = String(f.run);
 				return [`started ${String(f.stage)}`];
 			}
+
 			return f.type === "session"
 				? [`session ${String(f.id)}${f.run === run ? "" : " of another run"}`]
 				: [];
@@ -158,11 +162,13 @@ describe("a lane, on what a real agent might answer", () => {
 				},
 			});
 			expect(ran.lines.at(-1)).toContain("ended: done");
+
 			for (const step of ONCE) {
 				const runs = runsOf(ran, step);
 				expect({step, runs: runs.length}).toEqual({step, runs: 2});
 				expect(runs[1]?.prompt).toContain(MISFIT);
 			}
+
 			const reviews = runsOf(ran, "review");
 			expect(reviews).toHaveLength(4);
 			// The first read the exam's criterion, made by code; the third the lane's pull request.

@@ -30,6 +30,7 @@ export const noEffectPromise: CreateRule = {
 		return {
 			CallExpression(node) {
 				const name = plainCall(node);
+
 				if (name === "Effect.promise") {
 					context.report({
 						node: node.arguments[0] ?? node,
@@ -37,13 +38,18 @@ export const noEffectPromise: CreateRule = {
 							"Advice, does not block: `Effect.promise(...)` is discouraged: a rejection becomes an uncatchable defect with an empty error channel (.patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`, or lift the pure core to an `Effect.fn` returning a typed `Effect`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
 					});
 				}
+
 				if (name === "Effect.tryPromise") {
 					const [only] = node.arguments;
 					const isObject =
 						node.arguments.length === 1 &&
 						only?.type === "ObjectExpression" &&
 						grouped(context.sourceCode, only) === 0;
-					if (isObject) return;
+
+					if (isObject) {
+						return;
+					}
+
 					context.report({
 						node: only ?? node,
 						message:

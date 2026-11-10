@@ -21,17 +21,27 @@ const RUNS = ["r-plan-1", "r-exam-2", "r-build-3"] as const;
 /** The step's span, as the record says: tagged with the run, else the best untagged overlap. */
 const rootOf = (record: JobTrace, run: string, from: number, to: number): Span | undefined => {
 	const tagged = record.spans.find((s) => s.tags[LANE.run] === run);
-	if (tagged !== undefined) return tagged;
+
+	if (tagged !== undefined) {
+		return tagged;
+	}
+
 	let best: Span | undefined;
 	let most = 0;
+
 	for (const s of record.spans) {
-		if (s.name !== STEP_SPAN || s.tags[LANE.run] !== undefined) continue;
+		if (s.name !== STEP_SPAN || s.tags[LANE.run] !== undefined) {
+			continue;
+		}
+
 		const shared = Math.min(s.end, to) - Math.max(s.start, from);
+
 		if (shared > most) {
 			best = s;
 			most = shared;
 		}
 	}
+
 	return best;
 };
 

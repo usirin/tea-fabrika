@@ -129,7 +129,11 @@ export const outboxOf = ({
 		const again = (n: number, value: unknown) =>
 			Effect.suspend(() => {
 				const why = problem(value);
-				if (why === undefined) return room.take(1).pipe(Effect.andThen(handOn(n, value)));
+
+				if (why === undefined) {
+					return room.take(1).pipe(Effect.andThen(handOn(n, value)));
+				}
+
 				// The why stays off the span: a shape's words can quote the value, and a span carries none.
 				mark(`dead letter ${output}`, {[ATTR.output]: output});
 				return handle.deadLetter(output, n, why).pipe(Effect.orDie);

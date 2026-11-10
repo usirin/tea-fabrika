@@ -109,7 +109,7 @@ state is a stored Schema value.**
 |---|---|---|
 | Claude Agent SDK 0.3.316 | `assistant` and `user` messages | `system` message, subtype `compact_boundary`, with `trigger` and `pre_tokens` |
 | ACP SDK 2.2.0 | message and tool call updates | `compaction_update` in `session/update` |
-| Codex CLI 0.167.0, `exec --json` | `item.completed` items | **none: an open gap**, see below |
+| Codex CLI 0.167.0, `exec --json` | `item.completed` items | the session rollout's `compacted` line, since `exec --json` drops it (see Amendments; "none: an open gap" was wrong) |
 
 - This decides only the events and the compaction record. Content masking and deletion stay with
   [an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md) (proposed,
@@ -145,7 +145,10 @@ state is a stored Schema value.**
 
 ## Consequences
 
-- **Codex does not report compactions in `exec --json`.** Codex CLI 0.167.0 compacts (its binary
+- **Wrong in part, see Amendments (2026-11-09):** the item list below misses two types, and "lost
+  today" and the open gap were wrong, since each run's rollout file records the compaction. Kept as
+  written:
+  **Codex does not report compactions in `exec --json`.** Codex CLI 0.167.0 compacts (its binary
   holds `ContextCompacted`, and its app server has a `thread/compacted` notice), but the item types
   `exec --json` writes are only `agent_message`, `reasoning`, `command_execution`, `file_change`,
   `mcp_tool_call`, `web_search` and `todo_list`. None of our saved Codex runs has a compaction
@@ -166,3 +169,27 @@ state is a stored Schema value.**
 
 - Glossary rows added in [`.glossary/TERMS.md`](../.glossary/TERMS.md), Pipeline: box state,
   history event, RetriesExhausted.
+
+## Amendments
+
+- 2026-11-09: Codex CLI 0.167.0 reports each compaction in two places, and `codex exec --json` is
+  not one of them. Read at tag `rust-v0.167.0`:
+  - `exec --json` writes nine item types: the seven above plus `collab_tool_call` and `error`
+    (`codex-rs/exec/src/exec_events.rs:107-133`). Its mapper drops every other item, the
+    `contextCompaction` item included (`codex-rs/exec/src/event_processor_with_jsonl_output.rs:323`),
+    and every other notice, `thread/compacted` included (same file, `:600`).
+  - The app server sends a `contextCompaction` thread item
+    (`codex-rs/app-server-protocol/src/protocol/v2/item.rs:493`, from core's `ContextCompactionItem`,
+    `codex-rs/protocol/src/items.rs:81` and `:518`) and the older `thread/compacted` notice, marked
+    deprecated (`codex-rs/app-server-protocol/src/protocol/common.rs:2088-2089`). Core's own event
+    is `EventMsg::ContextCompacted` (`codex-rs/protocol/src/protocol.rs:1559-1560`).
+  - The session rollout, `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, writes a
+    `{"type":"compacted"}` line (`codex-rs/history/src/lib.rs:228`, serialized in
+    `codex-rs/history/src/rollout_payload.rs:32-52`). `exec` writes this file unless `--ephemeral`
+    (`codex-rs/exec/src/cli.rs:40-42`). Seven `codex exec` rollouts from 2026-11-08 have one.
+
+  So a Codex step's `replaced` comes from the rollout's `compacted` line, read by the adapter after
+  or during the run, until a step runs through the app server, where the `contextCompaction` item is
+  the source. It is not lost, and a Codex run's record does not say `compaction: unreported`. The
+  binary's `PreCompact` and `PostCompact` hooks (`codex-rs/protocol/src/protocol.rs:1790-1791`) are
+  not used: repo tooling adds no hooks.

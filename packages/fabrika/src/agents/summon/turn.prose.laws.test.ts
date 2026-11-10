@@ -85,7 +85,11 @@ const typed = (line: string) =>
 			Effect.provideService(Programs, list),
 			Effect.provideService(SummonManager, m.service),
 		);
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		yield* tell(started.run, "line", line);
 		const [first] = yield* ready.upTo(1);
 		return {status: first?.status, prompts: m.prompts, printed: printed.values};

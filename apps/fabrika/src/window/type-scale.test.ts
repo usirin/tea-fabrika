@@ -38,15 +38,26 @@ const rulesOf = (css: string) =>
 /** A font size in px, given the root's: `13px`, or `0.8125rem` against the root. */
 const pxOf = (size: string, root: number): number => {
 	const [, n = "", unit] = /^(\d*\.?\d+)(px|rem)$/.exec(size) ?? [];
-	if (unit === "px") return Number(n);
-	if (unit === "rem") return Number(n) * root;
+
+	if (unit === "px") {
+		return Number(n);
+	}
+
+	if (unit === "rem") {
+		return Number(n) * root;
+	}
+
 	throw new Error(`not a size this test computes: ${size}`);
 };
 
 /** Each --fs-* token, computed against the root's own font size. */
 const scaleOf = (css: string) => {
 	const root = rulesOf(css).find((r) => r.selector === ":root");
-	if (root === undefined) throw new Error("no :root rule");
+
+	if (root === undefined) {
+		throw new Error("no :root rule");
+	}
+
 	const rootSize = pxOf(root.says.get("font-size") ?? "16px", 16);
 	return Object.fromEntries(
 		[...root.says]

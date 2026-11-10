@@ -54,7 +54,13 @@ export function matcherFor(pattern: string): RegExp {
 /** Who owns a path: the last row that covers it. Empty: nobody. */
 export function ownersOf(rows: readonly OwnerRow[], path: string): readonly string[] {
 	let owners: readonly string[] = [];
-	for (const row of rows) if (matcherFor(row.pattern).test(path)) owners = row.owners;
+
+	for (const row of rows) {
+		if (matcherFor(row.pattern).test(path)) {
+			owners = row.owners;
+		}
+	}
+
 	return owners;
 }
 

@@ -59,14 +59,22 @@ const runJob = (trace: string) =>
 		);
 		yield* Effect.gen(function* () {
 			const counted = yield* start(tally, {}, {}, {id: TALLY, storage});
-			if (counted.kind !== "running") return yield* Effect.die("tally did not start");
+
+			if (counted.kind !== "running") {
+				return yield* Effect.die("tally did not start");
+			}
+
 			const counting = yield* pipe(
 				{program: seq, flags: {to: 3}, keeping: {id: SEQ, storage}},
 				"n",
 				counted,
 				"add",
 			);
-			if (counting.kind !== "running") return yield* Effect.die("seq did not start");
+
+			if (counting.kind !== "running") {
+				return yield* Effect.die("seq did not start");
+			}
+
 			yield* counting.run.ended;
 			yield* counted.run.ended;
 		}).pipe(
@@ -230,6 +238,7 @@ describe("a job's record, on the Miniflare twin", () => {
 			{run: "claim-other-agent", sender: person, claim: "agent:claude for:github:8", kept: person},
 			{run: "claim-its-person", sender: agent, claim: person, kept: agent},
 		];
+
 		for (const {run, sender, claim, kept} of claims) {
 			const trace = runTraceId(run);
 			await Effect.runPromise(

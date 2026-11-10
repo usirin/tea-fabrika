@@ -218,8 +218,11 @@ export function seenOf(update: SessionUpdate): Seen {
 		case "user_message_chunk":
 		case "agent_message_chunk": {
 			const text = textOf(update.content);
-			if (text === null)
+
+			if (text === null) {
 				return {kind: "other", what: `${update.sessionUpdate}:${update.content.type}`};
+			}
+
 			return {
 				kind: "said",
 				who: update.sessionUpdate === "user_message_chunk" ? "user" : "agent",
@@ -295,7 +298,10 @@ const turnOf = (s: Transcript): number | null => (s.phase === "loading" ? null :
 
 function said(s: Transcript, e: Extract<Seen, {kind: "said"}>): Transcript {
 	// A harness may echo the prompt back during a live turn: the `turn` Msg already put it in.
-	if (e.who === "user" && s.phase !== "loading") return {...s, other: count(s.other, "user_echo")};
+	if (e.who === "user" && s.phase !== "loading") {
+		return {...s, other: count(s.other, "user_echo")};
+	}
+
 	const turn = turnOf(s);
 	const last = s.messages.at(-1);
 	const same =
@@ -303,7 +309,8 @@ function said(s: Transcript, e: Extract<Seen, {kind: "said"}>): Transcript {
 		last.who === e.who &&
 		last.turn === turn &&
 		(e.id === null || last.id === null || last.id === e.id);
-	if (same)
+
+	if (same) {
 		return {
 			...s,
 			messages: [
@@ -311,11 +318,14 @@ function said(s: Transcript, e: Extract<Seen, {kind: "said"}>): Transcript {
 				{...last, text: last.text + e.text, id: last.id ?? e.id},
 			],
 		};
+	}
+
 	return {...s, messages: [...s.messages, {who: e.who, text: e.text, id: e.id, turn}]};
 }
 
 function tooled(s: Transcript, e: Extract<Seen, {kind: "tool" | "tool_update"}>): Transcript {
 	const at = s.tools.findIndex((tool) => tool.id === e.id);
+
 	if (at === -1) {
 		const tool: Tool = {
 			id: e.id,
@@ -326,6 +336,7 @@ function tooled(s: Transcript, e: Extract<Seen, {kind: "tool" | "tool_update"}>)
 		};
 		return {...s, tools: [...s.tools, tool]};
 	}
+
 	const old = s.tools[at] as Tool;
 	const tool: Tool = {
 		...old,

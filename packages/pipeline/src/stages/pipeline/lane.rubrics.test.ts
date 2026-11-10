@@ -28,7 +28,10 @@ describe("which rubrics judge a change, on the local host", () => {
 	});
 	afterEach(() => {
 		vi.unstubAllEnvs();
-		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+
+		for (const dir of made.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	it("reads the folder the file names from main, so a head cannot rewrite its judge", async () => {
@@ -67,7 +70,8 @@ describe("which rubrics judge a change, on the local host", () => {
 
 		const judged = codexRuns(ran.dir).filter((r) => r.step === "review" || r.step === "mutants");
 		expect(judged.map((r) => r.step).toSorted()).toEqual(["mutants", "review"]);
-		for (const run of judged)
+
+		for (const run of judged) {
 			expect(run.loaded).toEqual({
 				"AGENTS.md": MAIN_RULES,
 				"AGENTS.override.md": null,
@@ -77,6 +81,7 @@ describe("which rubrics judge a change, on the local host", () => {
 				".agents/skills/pass/SKILL.md": null,
 				".claude/rules/pass.md": null,
 			});
+		}
 
 		// The review is still told: its diff comes from git, and shows the change to them.
 		const diff = codexRuns(ran.dir).find((r) => r.step === "review")?.diff ?? "";
@@ -119,6 +124,7 @@ describe("which rubrics judge a change, on the local host", () => {
 		expect(second?.loaded["src/CLAUDE.md"]).toBeNull();
 		// What the copy holds: the head's own tests and main's, and not the head's file main has not.
 		const told = [second, codexRuns(ran.dir).find((r) => r.step === "mutants")];
+
 		for (const run of told) {
 			expect(run?.taken).toContain("src/lower.test.ts");
 			expect(run?.taken).toContain(".claude/main.test.ts");

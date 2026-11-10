@@ -21,7 +21,11 @@ const answer = (pack: Pack) => {
 describe("the check before the reviewer", () => {
 	it("lets a whole pack through, and hands on a brief with nothing left to ask", () => {
 		const gate = reviewGate(WHOLE);
-		if (gate.answer !== "go") throw new Error("it did not go");
+
+		if (gate.answer !== "go") {
+			throw new Error("it did not go");
+		}
+
 		expect(gate.brief).toEqual({
 			pr: WHOLE.pr,
 			head: WHOLE.head,
@@ -96,7 +100,11 @@ describe("the check before the reviewer", () => {
 			...WHOLE,
 			kinds: ["review-code", "review-doc", "governance", "review-ui"],
 		});
-		if (gate.answer !== "go") throw new Error("it did not go");
+
+		if (gate.answer !== "go") {
+			throw new Error("it did not go");
+		}
+
 		expect(gate.brief.kinds).toEqual(["review-code", "review-doc"]);
 		expect(gate.brief.left).toEqual(["governance", "review-ui"]);
 	});

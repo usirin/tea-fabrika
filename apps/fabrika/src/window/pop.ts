@@ -31,10 +31,23 @@ const NAMED: Readonly<Record<string, string>> = {
 /** A bare key as one keycap: a lowercase letter as the key's own capital, a capital with ⇧. */
 const bareCap = (key: string): Cap => {
 	const named = NAMED[key];
-	if (named !== undefined) return named;
-	if (key === " ") return "Space";
-	if (/^[a-z]$/.test(key)) return key.toUpperCase();
-	if (/^[A-Z]$/.test(key)) return `⇧${key}`;
+
+	if (named !== undefined) {
+		return named;
+	}
+
+	if (key === " ") {
+		return "Space";
+	}
+
+	if (/^[a-z]$/.test(key)) {
+		return key.toUpperCase();
+	}
+
+	if (/^[A-Z]$/.test(key)) {
+		return `⇧${key}`;
+	}
+
 	return key;
 };
 
@@ -44,7 +57,11 @@ const bareCap = (key: string): Cap => {
  */
 export const capOf = (key: string): Cap => {
 	const wrapped = /^<(.+)>$/.exec(key)?.[1];
-	if (wrapped === undefined) return bareCap(key);
+
+	if (wrapped === undefined) {
+		return bareCap(key);
+	}
+
 	const parts = /^((?:[casm]-)*)(.+)$/.exec(wrapped);
 	const mods = (parts?.[1] ?? "").split("-").filter(Boolean);
 	const base = parts?.[2] ?? wrapped;
@@ -143,7 +160,11 @@ export const activeIn = (stops: readonly Stop[], at: string | null): Stop | unde
  */
 export const hintsOf = (foot: readonly Hint[], active: Stop | undefined): readonly Hint[] => {
 	const second = active?.kind === "row" ? active.row.second : null;
-	if (second === null) return foot;
+
+	if (second === null) {
+		return foot;
+	}
+
 	return foot.map((h) =>
 		h.caps.length === 1 && h.caps[0] === second.cap ? {...h, name: second.name} : h,
 	);
@@ -152,7 +173,11 @@ export const hintsOf = (foot: readonly Hint[], active: Stop | undefined): readon
 /** The stop the active one moves to when its row leaves: the next, else the one before. */
 export const neighborOf = (stops: readonly Stop[], id: string): string | null => {
 	const i = stops.findIndex((s) => s.id === id);
-	if (i === -1) return null;
+
+	if (i === -1) {
+		return null;
+	}
+
 	return stops[i + 1]?.id ?? stops[i - 1]?.id ?? null;
 };
 
@@ -188,15 +213,26 @@ export const menuKey = (
 	at: string | null,
 	press: MenuPress,
 ): MenuDo | null => {
-	if (press.key === "Escape" || press.key === "Tab") return {do: "close"};
-	if (press.mods === true) return null;
+	if (press.key === "Escape" || press.key === "Tab") {
+		return {do: "close"};
+	}
+
+	if (press.mods === true) {
+		return null;
+	}
+
 	const active = activeIn(stops, at);
-	if (active === undefined) return null;
+
+	if (active === undefined) {
+		return null;
+	}
+
 	const i = stops.indexOf(active);
 	const to = (j: number): MenuDo | null => {
 		const s = stops[(j + stops.length) % stops.length];
 		return s === undefined ? null : {do: "move", to: s.id};
 	};
+
 	switch (press.key) {
 		case "ArrowDown":
 		case "j":
@@ -218,13 +254,21 @@ export const menuKey = (
 				? {do: "second", row: active.row}
 				: null;
 	}
-	if (!/^\p{L}$/u.test(press.key)) return null;
+
+	if (!/^\p{L}$/u.test(press.key)) {
+		return null;
+	}
+
 	const letter = press.key.toLowerCase();
+
 	for (let step = 1; step <= stops.length; step += 1) {
 		const s = stops[(i + step) % stops.length];
-		if (s !== undefined && titleOf(s).toLowerCase().startsWith(letter))
+
+		if (s !== undefined && titleOf(s).toLowerCase().startsWith(letter)) {
 			return {do: "move", to: s.id};
+		}
 	}
+
 	return null;
 };
 
@@ -240,18 +284,28 @@ interface Run {
 export const marked = (name: string, query: string): readonly Run[] => {
 	const lower = name.toLowerCase();
 	const on = new Array<boolean>(name.length).fill(false);
+
 	for (const word of query.toLowerCase().split(/\s+/).filter(Boolean)) {
 		const at = lower.indexOf(word);
-		if (at !== -1) on.fill(true, at, at + word.length);
+
+		if (at !== -1) {
+			on.fill(true, at, at + word.length);
+		}
 	}
+
 	const runs: Run[] = [];
+
 	for (let i = 0; i < name.length; i += 1) {
 		const last = runs.at(-1);
 		const mark = on[i] === true;
-		if (last !== undefined && last.mark === mark)
+
+		if (last !== undefined && last.mark === mark) {
 			runs[runs.length - 1] = {text: last.text + name.charAt(i), mark};
-		else runs.push({text: name.charAt(i), mark});
+		} else {
+			runs.push({text: name.charAt(i), mark});
+		}
 	}
+
 	return runs;
 };
 

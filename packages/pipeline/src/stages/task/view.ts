@@ -90,11 +90,27 @@ export type TaskGate =
 	| {readonly answer: "stop"; readonly outcome: TaskOutcome};
 
 export function taskGate(view: TaskView): TaskGate {
-	if (view.closed) return {answer: "stop", outcome: {kind: "skip", why: "closed"}};
-	if (!view.approved) return {answer: "stop", outcome: {kind: "skip", why: "not_approved"}};
-	if (!view.live) return {answer: "stop", outcome: {kind: "skip", why: "removed"}};
-	if (view.base === null) return {answer: "stop", outcome: {kind: "stuck", why: "read_failed"}};
+	if (view.closed) {
+		return {answer: "stop", outcome: {kind: "skip", why: "closed"}};
+	}
+
+	if (!view.approved) {
+		return {answer: "stop", outcome: {kind: "skip", why: "not_approved"}};
+	}
+
+	if (!view.live) {
+		return {answer: "stop", outcome: {kind: "skip", why: "removed"}};
+	}
+
+	if (view.base === null) {
+		return {answer: "stop", outcome: {kind: "stuck", why: "read_failed"}};
+	}
+
 	const [first, ...rest] = view.criteria;
-	if (first === undefined) return {answer: "stop", outcome: {kind: "stuck", why: "no_criteria"}};
+
+	if (first === undefined) {
+		return {answer: "stop", outcome: {kind: "stuck", why: "no_criteria"}};
+	}
+
 	return {answer: "go", criteria: [first, ...rest]};
 }

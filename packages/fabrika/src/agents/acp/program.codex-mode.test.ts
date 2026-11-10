@@ -23,6 +23,7 @@ vi.mock("./harness.ts", async (original) => {
 
 it("accepts workspace-write and selects a writable codex harness", async () => {
 	const folder = realpathSync(mkdtempSync(join(tmpdir(), "acp-mode-")));
+
 	try {
 		const end = await Effect.runPromise(
 			Effect.gen(function* () {
@@ -41,12 +42,17 @@ it("accepts workspace-write and selects a writable codex harness", async () => {
 					{},
 					{id: "acp:writable", storage: memoryStorage()},
 				);
-				if (started.kind !== "running") return yield* Effect.die("acp did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("acp did not start");
+				}
+
 				return yield* started.run.ended;
 			}).pipe(Effect.scoped, Effect.provide(nodeServices)),
 		);
 		expect(harnessOf).toHaveBeenCalledWith({name: "codex", access: "write"}, folder, null);
 		expect(end.kind).toBe("failed");
+
 		if (end.kind === "failed") {
 			const error = Cause.findErrorOption(end.cause);
 			expect(Option.isSome(error) ? error.value : null).toMatchObject({

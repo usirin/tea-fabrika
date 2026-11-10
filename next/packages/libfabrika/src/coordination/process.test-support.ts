@@ -75,7 +75,12 @@ const opened: Array<DatabaseSync> = [];
 let files = 0;
 
 afterAll(() => {
-	for (const db of opened) if (db.isOpen) db.close();
+	for (const db of opened) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -97,20 +102,29 @@ export const storage = () => {
 	const sql: Sql = {
 		exec: (query, ...params) => {
 			if (/^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i.test(query)) {
-				if (fault.after === 0)
+				if (fault.after === 0) {
 					throw fault.error ?? new Error("SQLITE_FULL planted after an earlier write");
-				if (fault.after !== null) fault.after--;
+				}
+
+				if (fault.after !== null) {
+					fault.after--;
+				}
+
 				const answer = backend.exec(query, ...params);
 				fault.writes++;
 				return answer;
 			}
+
 			return backend.exec(query, ...params);
 		},
 		transaction: (step) => backend.transaction(step),
 		size: () => backend.size(),
 	};
 	const rows = (): ReadonlyArray<Entry> => {
-		if (!db.prepare("SELECT name FROM sqlite_master WHERE name='entries'").get()) return [];
+		if (!db.prepare("SELECT name FROM sqlite_master WHERE name='entries'").get()) {
+			return [];
+		}
+
 		return db
 			.prepare("SELECT * FROM entries ORDER BY rev")
 			.all()
@@ -142,7 +156,11 @@ export const ids = (...values: ReadonlyArray<string>) => {
 	return {
 		next: Effect.sync(() => {
 			const value = values[calls++];
-			if (value === undefined) throw new Error("test exhausted its process IDs");
+
+			if (value === undefined) {
+				throw new Error("test exhausted its process IDs");
+			}
+
 			return value;
 		}),
 		calls: () => calls,

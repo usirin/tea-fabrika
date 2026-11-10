@@ -99,8 +99,11 @@ export const lawHome = (l: Service) =>
 		const lane = laneId("L1");
 		yield* p.run(claim(T, lane));
 		const hold = yield* p.run(Lanes.use((s) => s.hold(T)));
-		for (const fact of facts)
+
+		for (const fact of facts) {
 			yield* onLedger(l, hold === null ? sendFact(fact) : appendFact(fact, hold));
+		}
+
 		yield* p.run(release(T, lane));
 		yield* p.close;
 		const written = [...facts, {type: "released", ticket: T, lane} satisfies Fact];
@@ -129,7 +132,11 @@ export const lawUnfenced = (l: Service) =>
 		const p = yield* proc(l, 30_000);
 		yield* p.run(claim(T, laneId("L1")));
 		const hold = yield* p.run(Lanes.use((s) => s.hold(T)));
-		if (hold === null) return verdict(law, [{what: "claim", got: "no lease", want: "a lease"}]);
+
+		if (hold === null) {
+			return verdict(law, [{what: "claim", got: "no lease", want: "a lease"}]);
+		}
+
 		const released = {type: "released", ticket: T, lane: laneId("L1")} satisfies Fact;
 		const event = {kind: "released", writer: "L2", data: released};
 		yield* step("no fence", l.append(factsOf(name), "any", event), "denied");
@@ -153,7 +160,11 @@ export const lawLost = (l: Service, ttlMs = 500, graceMs = 1000) =>
 		const hold = yield* old.run(Lanes.use((s) => s.hold(T)));
 		// The process is gone, frozen or cut off: nothing renews its lease.
 		yield* old.close;
-		if (hold === null) return verdict(law, [{what: "claim", got: "no lease", want: "a lease"}]);
+
+		if (hold === null) {
+			return verdict(law, [{what: "claim", got: "no lease", want: "a lease"}]);
+		}
+
 		const next = yield* proc(l, 30_000);
 		check("claimed while the lease lives", yield* next.run(claim(T, laneId("L2"))), "L1");
 		yield* Effect.sleep(Duration.millis(ttlMs + graceMs));
@@ -183,15 +194,21 @@ export const lawOneWins = (l: Service, n = 8, rounds = 10) =>
 		});
 		let split = 0;
 		let landed = 0;
+
 		for (let round = 0; round < rounds; round++) {
 			const T = freshTicket("p4");
 			const told = yield* Effect.all(
 				procs.map((p, i) => p.run(claim(T, laneId(`L${i + 1}`)))),
 				{concurrency: "unbounded"},
 			);
-			if (new Set(told).size !== 1) split++;
+
+			if (new Set(told).size !== 1) {
+				split++;
+			}
+
 			landed += (yield* l.readStream(ticketName(T))).filter((r) => r.kind === "claimed").length;
 		}
+
 		yield* Effect.forEach(procs, (p) => p.close, {concurrency: "unbounded"});
 		check("rounds with two holders", split, 0);
 		check("claims landed", landed, rounds);

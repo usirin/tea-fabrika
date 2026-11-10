@@ -4,7 +4,10 @@ import {pathIn} from "./match.ts";
 
 export const doorIsLibrary: CreateRule = {
 	create(context) {
-		if (!/^next\/apps\/fabrika\/src\/door(?:-store|-nonce)?\.ts$/.test(pathIn(context))) return {};
+		if (!/^next\/apps\/fabrika\/src\/door(?:-store|-nonce)?\.ts$/.test(pathIn(context))) {
+			return {};
+		}
+
 		return {
 			Program(node) {
 				for (const statement of node.body) {
@@ -13,8 +16,10 @@ export const doorIsLibrary: CreateRule = {
 							statement.type === "ExportNamedDeclaration") &&
 						statement.source?.value === "@kampus/libfabrika/door" &&
 						!("declaration" in statement && statement.declaration !== null)
-					)
+					) {
 						continue;
+					}
+
 					context.report({
 						node: statement,
 						message:

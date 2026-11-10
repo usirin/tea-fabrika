@@ -98,14 +98,22 @@ export const foldedPlanHost = (host: PlanHost["Service"], ledger: Ledger["Servic
 			Effect.gen(function* () {
 				const ticket = yield* host.ticket(url);
 				const id = readTicketId(url);
-				if (id === null) return ticket;
+
+				if (id === null) {
+					return ticket;
+				}
+
 				const entries = yield* readFacts.pipe(
 					Effect.provideService(Ledger, ledger),
 					Effect.mapError(() => ({_tag: "unknown" as const})),
 				);
 				const state = foldLedger(entries);
 				const latest = latestOf(state, planOf(id));
-				if (latest === null) return ticket;
+
+				if (latest === null) {
+					return ticket;
+				}
+
 				const folds = yield* Effect.forEach(
 					foldsOf(state, planOf(id)),
 					(t) => host.ticket(issueUrl(url, Number(t.slice(t.indexOf("#") + 1)))),
@@ -138,8 +146,11 @@ export const planTurn =
 	(ask: AgentAsk): Effect.Effect<Turn, never, Planner> =>
 		Effect.gen(function* () {
 			const read = readAsk(ask.brief);
-			if (Exit.isFailure(read))
+
+			if (Exit.isFailure(read)) {
 				return yield* Effect.die(`a plan ask that does not read: ${ask.id}`);
+			}
+
 			// Tool notes, then one end: a live run's stream stays open after it, so it is read up to
 			// the end and no further (as the builder's is).
 			const msgs = Array.from(

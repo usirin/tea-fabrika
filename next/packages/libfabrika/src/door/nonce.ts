@@ -11,14 +11,21 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 ) {
 	const secret = yield* store.atomic(() => {
 		const saved = store.get("challengeKey", Schema.String);
-		if (saved !== null) return saved;
+
+		if (saved !== null) {
+			return saved;
+		}
+
 		const fresh = Base64Url.encode(crypto.getRandomValues(new Uint8Array(32)));
 		store.set("challengeKey", Schema.String, fresh);
 		return fresh;
 	});
 	const bytes = Base64Url.decode(secret);
-	if (Result.isFailure(bytes) || bytes.success.length !== 32)
+
+	if (Result.isFailure(bytes) || bytes.success.length !== 32) {
 		return yield* new LedgerError({why: "storage"});
+	}
+
 	const fail = () => new LedgerError({why: "crypto"});
 	const args: Parameters<SubtleCrypto["importKey"]> = [
 		"raw",
@@ -44,18 +51,25 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 	});
 	const check = Effect.fnUntraced(function* (client: string, nonce: string) {
 		const parts = /^(0|[1-9]\d*)\.([A-Za-z0-9_-]{32})\.([A-Za-z0-9_-]{43})$/.exec(nonce);
-		if (parts === null) return null;
+
+		if (parts === null) {
+			return null;
+		}
+
 		const issuedAt = Number(parts[1]),
 			salt = parts[2] ?? "",
 			mac = Base64Url.decode(parts[3] ?? "");
 		const at = yield* clock;
+
 		if (
 			!Number.isSafeInteger(issuedAt) ||
 			issuedAt > at ||
 			issuedAt + ttl <= at ||
 			Result.isFailure(mac)
-		)
+		) {
 			return null;
+		}
+
 		const args: Parameters<SubtleCrypto["verify"]> = [
 			"HMAC",
 			key,
@@ -72,13 +86,17 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 		if (
 			until <= at ||
 			store.sql.exec("SELECT nonce FROM door_spent WHERE nonce=?", nonce).length > 0
-		)
+		) {
 			return Result.succeed(false);
+		}
+
 		if (
 			Number(store.sql.exec("SELECT count(*) n FROM door_spent WHERE until>?", at)[0]?.n ?? 0) >=
 			cap
-		)
+		) {
 			return Result.fail(new LedgerError({why: "storage"}));
+		}
+
 		store.sql.exec("DELETE FROM door_spent WHERE until<=?", at);
 		store.sql.exec("INSERT INTO door_spent (nonce,until) VALUES (?,?)", nonce, until);
 		return Result.succeed(true);

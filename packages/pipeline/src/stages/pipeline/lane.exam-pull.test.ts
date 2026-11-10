@@ -164,8 +164,10 @@ describe("the exam's pull request", () => {
 			picks: YES,
 			// The exam review's checks are the lane's first: main moves under them, once.
 			checksSay: (_head, nth, where) => {
-				if (nth === 0)
+				if (nth === 0) {
 					pushToMain(where, [{path: "docs/elsewhere.md", text: "Written elsewhere.\n"}]);
+				}
+
 				return null;
 			},
 		});
@@ -191,6 +193,7 @@ describe("the exam's pull request", () => {
 					pushToMain(where, [{path: RULE, text: '{"main": 1}\n'}]);
 					moved = onMainHead(where.remote);
 				}
+
 				return null;
 			},
 		});

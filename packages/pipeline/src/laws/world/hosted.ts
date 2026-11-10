@@ -136,9 +136,18 @@ const setChild = (w: Hosted, child: Child): Hosted => ({
 
 /** What a row written by a child changes in the ledger and the code host. */
 const wrote = (w: Hosted, child: string, row: ChildEnd): Hosted => {
-	if (row.outcome.kind !== "done") return w;
-	if (child === `${LANE}:t1:r1:review`) return {...w, settled: true};
-	if (child.endsWith(":ship")) return {...w, pr: "merged"};
+	if (row.outcome.kind !== "done") {
+		return w;
+	}
+
+	if (child === `${LANE}:t1:r1:review`) {
+		return {...w, settled: true};
+	}
+
+	if (child.endsWith(":ship")) {
+		return {...w, pr: "merged"};
+	}
+
 	return w;
 };
 
@@ -198,6 +207,7 @@ function movesOf(w: Hosted, o: HostedOptions): Move<Hosted>[] {
 	const out: Move<Hosted>[] = [];
 	const move = (label: string, fair: string | null, next: Hosted) =>
 		out.push({label, lane: 0, touches: ["lane"], fair, rare: false, next});
+
 	if (!w.booted) {
 		move(
 			"the host starts the lane",
@@ -206,58 +216,75 @@ function movesOf(w: Hosted, o: HostedOptions): Move<Hosted>[] {
 		);
 		return out;
 	}
+
 	// The lane's Cmds: each is answered in the end.
 	for (const [i, cmd] of w.asked.entries()) {
 		const rest = {...w, asked: w.asked.filter((_, j) => j !== i)};
-		for (const a of answersOf(rest, cmd, o.errors ?? false))
+
+		for (const a of answersOf(rest, cmd, o.errors ?? false)) {
 			move(a.label, `answer ${cmd.type}`, stepLane(a.before, a.msg));
+		}
 	}
+
 	for (const child of w.children) {
 		if (child.alive) {
 			// The row may never be written: no fairness. The process ending is fair.
 			// Under `always`, the write is the fair move and the process ends only after it.
-			if (child.row === null)
-				for (const [name, row] of rows)
+			if (child.row === null) {
+				for (const [name, row] of rows) {
 					move(
 						`${child.name} writes its row: ${name}`,
 						o.always ? `end ${child.name}` : null,
 						wrote(setChild(w, {...child, row}), child.name, row),
 					);
-			if (child.row !== null || !o.always)
+				}
+			}
+
+			if (child.row !== null || !o.always) {
 				move(
 					child.row === null ? `${child.name} ends with no row` : `${child.name} ends`,
 					`end ${child.name}`,
 					setChild(w, {...child, alive: false}),
 				);
+			}
 		} else if (!child.told)
-			// The host's EXIT to the parent. The lane traps it; today nothing reads it.
+		// The host's EXIT to the parent. The lane traps it; today nothing reads it.
+		{
 			move(
 				`EXIT of ${child.name} reaches the lane`,
 				`exit ${child.name}`,
 				setChild(w, {...child, told: true}),
 			);
+		}
 	}
+
 	// The lane's child Sub, from the real machine's own deps.
 	const deps = childSub.deps(w.lane);
+
 	if (deps !== null && deps !== undefined) {
 		const child = w.children.find((k) => k.name === deps.child);
 		const row = child?.row ?? null;
 		const gone = o.sub === "fixed" && child !== undefined && child.told;
-		if (row !== null)
+
+		if (row !== null) {
 			move(
 				`the Sub reads ${deps.child}'s row`,
 				"sub",
 				stepLane(w, {type: "child_over", child: deps.child, end: row}),
 			);
-		else if (gone)
+		} else if (gone) {
 			move(
 				`the Sub sees ${deps.child} gone with no row: stuck:no_outcome`,
 				"sub",
 				stepLane(w, {type: "child_over", child: deps.child, end: NO_OUTCOME}),
 			);
+		}
 		// The row is not there: the Sub reads again in 150 ms. Nothing changes.
-		else move(`the Sub reads ${deps.child}: no row yet`, "sub", w);
+		else {
+			move(`the Sub reads ${deps.child}: no row yet`, "sub", w);
+		}
 	}
+
 	return out;
 }
 

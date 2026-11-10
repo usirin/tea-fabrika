@@ -132,11 +132,18 @@ const summonedOf = (live: Live): Summoned => ({
 
 /** Why a name cannot be summoned, or `null`: it can. */
 const badName = (name: string): string | null => {
-	if (name !== name.toLowerCase() && isAgentName(name.toLowerCase()))
+	if (name !== name.toLowerCase() && isAgentName(name.toLowerCase())) {
 		return `${name}: an agent's name is in lower case: ${name.toLowerCase()}`;
-	if (RESERVED.includes(name)) return `${name} means a group or you: pick another name`;
-	if (!isAgentName(name))
+	}
+
+	if (RESERVED.includes(name)) {
+		return `${name} means a group or you: pick another name`;
+	}
+
+	if (!isAgentName(name)) {
 		return `${JSON.stringify(name)} is not a name: lower-case letters, digits, dots, dashes and underscores, 64 at most, starting with a letter or digit`;
+	}
+
 	return null;
 };
 
@@ -148,14 +155,31 @@ const sorted = (
 ): {readonly model: string | null; readonly effort: string | null} | string => {
 	const lists = `${agent}'s models: ${o.models.join(", ") || "none"}; efforts: ${o.efforts.join(", ") || "none"}`;
 	const [one, two] = words;
-	if (one === undefined) return {model: null, effort: null};
+
+	if (one === undefined) {
+		return {model: null, effort: null};
+	}
+
 	if (two === undefined) {
-		if (o.models.includes(one)) return {model: one, effort: null};
-		if (o.efforts.includes(one)) return {model: null, effort: one};
+		if (o.models.includes(one)) {
+			return {model: one, effort: null};
+		}
+
+		if (o.efforts.includes(one)) {
+			return {model: null, effort: one};
+		}
+
 		return `${one} is not a model or an effort ${agent} offers. ${lists}`;
 	}
-	if (!o.models.includes(one)) return `${one} is not a model ${agent} offers. ${lists}`;
-	if (!o.efforts.includes(two)) return `${two} is not an effort ${agent} offers. ${lists}`;
+
+	if (!o.models.includes(one)) {
+		return `${one} is not a model ${agent} offers. ${lists}`;
+	}
+
+	if (!o.efforts.includes(two)) {
+		return `${two} is not an effort ${agent} offers. ${lists}`;
+	}
+
 	return {model: one, effort: two};
 };
 
@@ -253,12 +277,14 @@ export const summonManager = (options: {
 							l.history.length = 0;
 							l.turn = h.turn;
 							setState(l, "turn");
-						} else if (h._tag === "ask") setState(l, h.answer === "waiting" ? "asking" : "turn");
-						else if (h._tag === "result") {
+						} else if (h._tag === "ask") {
+							setState(l, h.answer === "waiting" ? "asking" : "turn");
+						} else if (h._tag === "result") {
 							l.turn = null;
 							l.cost = h.cost ?? l.cost;
 							setState(l, "idle");
 						}
+
 						l.history.push(h);
 						PubSub.publishUnsafe(heard, h);
 					};
@@ -299,16 +325,21 @@ export const summonManager = (options: {
 						},
 						{id: name.run, storage},
 					).pipe(Effect.provide(nodeServices), Scope.provide(own));
+
 					if (started.kind !== "running") {
 						yield* Scope.close(own, Exit.void);
 						return yield* refuse(`${name.agent} would not start: ${started.why}`);
 					}
+
 					l.acp = started;
 					// A run that ends on its own is down: it opens no more turns.
 					yield* started.run.ended.pipe(
 						Effect.flatMap((end) =>
 							Effect.sync(() => {
-								if (live.get(name.name) !== l) return;
+								if (live.get(name.name) !== l) {
+									return;
+								}
+
 								l.why = whyOf(end) ?? `${name.agent} ended`;
 								setState(l, "down");
 								const down = Exit.fail(new SummonRefused({why: l.why}));
@@ -325,7 +356,10 @@ export const summonManager = (options: {
 			/** Stop a name's run and let go of it. */
 			const close = (l: Live) =>
 				Effect.gen(function* () {
-					if (live.get(l.name.name) === l) live.delete(l.name.name);
+					if (live.get(l.name.name) === l) {
+						live.delete(l.name.name);
+					}
+
 					changed();
 					yield* Scope.close(l.scope, Exit.void);
 					yield* PubSub.shutdown(l.heard);
@@ -341,8 +375,10 @@ export const summonManager = (options: {
 						l.acp === null ||
 						l.state === "down" ||
 						(!accepted && l.state !== "turn" && l.state !== "asking")
-					)
+					) {
 						return;
+					}
+
 					const ended = yield* PubSub.subscribe(l.heard);
 					yield* l.acp.run.tell("cancel", "now").pipe(Effect.ignore);
 					yield* Stream.fromSubscription(ended).pipe(
@@ -379,7 +415,11 @@ export const summonManager = (options: {
 				Effect.gen(function* () {
 					const set = {model: o.model, effort: null as string | null};
 					const acp = l.acp;
-					if (acp === null || (words.model === null && words.effort === null)) return set;
+
+					if (acp === null || (words.model === null && words.effort === null)) {
+						return set;
+					}
+
 					const heard = yield* PubSub.unbounded<{
 						readonly model: string | null;
 						readonly effort: string | null;
@@ -389,11 +429,15 @@ export const summonManager = (options: {
 						PubSub.publishUnsafe(heard, now);
 					});
 					yield* Effect.addFinalizer(() => Effect.sync(unlisten));
+
 					for (const [input, value] of [
 						["model", words.model],
 						["effort", words.effort],
 					] as const) {
-						if (value === null) continue;
+						if (value === null) {
+							continue;
+						}
+
 						yield* acp.run.tell(input, value).pipe(Effect.ignore);
 						const now = yield* PubSub.take(sub).pipe(
 							Effect.timeout(OPENING),
@@ -401,9 +445,12 @@ export const summonManager = (options: {
 						);
 						set.model = now.model;
 						set.effort = now.effort;
-						if ((input === "model" ? now.model : now.effort) !== value)
+
+						if ((input === "model" ? now.model : now.effort) !== value) {
 							return yield* refuse(`${l.name.agent} did not take the ${input} ${value}`);
+						}
 					}
+
 					return set;
 				}).pipe(Effect.scoped);
 
@@ -414,13 +461,17 @@ export const summonManager = (options: {
 						const why = Cause.findErrorOption(done.cause);
 						l.why = Option.isSome(why) ? why.value.why : `${l.name.agent} would not open`;
 						setState(l, "down");
-					} else if (l.state === "opening") setState(l, "idle");
+					} else if (l.state === "opening") {
+						setState(l, "idle");
+					}
+
 					Deferred.doneUnsafe(l.ready, done);
 				});
 
 			// A host started again: each kept name opens again, in the background, with its settings.
 			for (const name of kept.now().names) {
 				const l = yield* open(name).pipe(Effect.result);
+
 				if (l._tag === "Failure") {
 					const down: Live = {
 						name,
@@ -441,6 +492,7 @@ export const summonManager = (options: {
 					put(name.name, down);
 					continue;
 				}
+
 				const agent = l.success;
 				put(name.name, agent);
 				yield* opening(agent).pipe(
@@ -460,15 +512,27 @@ export const summonManager = (options: {
 				summon: ({agent, settings, name, by}) =>
 					Effect.gen(function* () {
 						const bad = badName(name);
-						if (bad !== null) return yield* refuse(bad);
+
+						if (bad !== null) {
+							return yield* refuse(bad);
+						}
+
 						const taken = live.get(name);
-						if (taken !== undefined)
+
+						if (taken !== undefined) {
 							return yield* refuse(
 								`${name} is already ${taken.name.agent} ${taken.name.model.resolved ?? "with its default model"}, summoned by ${taken.name.by}: dismiss ${name} first`,
 							);
-						if (pending.has(name)) return yield* refuse(`${name} is being summoned now`);
-						if (!(AGENTS as readonly string[]).includes(agent))
+						}
+
+						if (pending.has(name)) {
+							return yield* refuse(`${name} is being summoned now`);
+						}
+
+						if (!(AGENTS as readonly string[]).includes(agent)) {
 							return yield* refuse(`no agent named ${agent}: ${AGENTS.join(", ")}`);
+						}
+
 						pending.add(name);
 						return yield* Effect.gen(function* () {
 							const hex = (yield* Random.nextIntBetween(0, 0xffffffff)).toString(16);
@@ -487,15 +551,22 @@ export const summonManager = (options: {
 							const gone = (why: string) => close(l).pipe(Effect.andThen(refuse(why)));
 							const o = yield* opening(l).pipe(Effect.catch((e) => gone(e.why)));
 							const words = sorted(agent, settings, o);
-							if (typeof words === "string") return yield* gone(words);
+
+							if (typeof words === "string") {
+								return yield* gone(words);
+							}
+
 							const set = yield* settle(l, o, words).pipe(Effect.catch((e) => gone(e.why)));
 							l.name = {
 								...first,
 								model: {typed: words.model, resolved: set.model},
 								effort: {typed: words.effort, set: set.effort},
 							};
-							if (!(yield* kept.take(l.name)))
+
+							if (!(yield* kept.take(l.name))) {
 								return yield* gone(`${name} was summoned meanwhile: dismiss ${name} first`);
+							}
+
 							put(name, l);
 							yield* readied(l, Exit.void);
 							yield* log("summoned", {
@@ -516,7 +587,11 @@ export const summonManager = (options: {
 				dismiss: (name, by) =>
 					Effect.gen(function* () {
 						const l = live.get(name);
-						if (l === undefined) return yield* refuse(`no agent named ${name} is summoned`);
+
+						if (l === undefined) {
+							return yield* refuse(`no agent named ${name} is summoned`);
+						}
+
 						const cut = l.state === "turn" || l.state === "asking" ? l.turn : null;
 						yield* cancelTurn(l);
 						yield* kept.free(name);
@@ -529,8 +604,11 @@ export const summonManager = (options: {
 				identify: (name, turn) =>
 					Effect.gen(function* () {
 						const l = live.get(name);
-						if (l === undefined || !l.history.some((h) => h._tag === "told" && h.turn === turn))
+
+						if (l === undefined || !l.history.some((h) => h._tag === "told" && h.turn === turn)) {
 							return yield* refuse(`${name}: turn ${turn} is no longer available`);
+						}
+
 						return {run: l.name.run};
 					}),
 
@@ -538,30 +616,46 @@ export const summonManager = (options: {
 					Stream.unwrap(
 						Effect.gen(function* () {
 							const l = live.get(name);
-							if (l === undefined) return yield* refuse(`no agent named ${name} is summoned`);
+
+							if (l === undefined) {
+								return yield* refuse(`no agent named ${name} is summoned`);
+							}
+
 							yield* Deferred.await(l.ready).pipe(
 								Effect.mapError((e) => new SummonRefused({why: `${name} is down: ${e.why}`})),
 							);
 							yield* Effect.acquireRelease(l.permit.take(1), () => l.permit.release(1));
 							const acp = l.acp;
-							if (acp === null || live.get(name) !== l)
+
+							if (acp === null || live.get(name) !== l) {
 								return yield* refuse(`${name} was dismissed`);
-							if (l.state === "down") return yield* refuse(`${name} is down: ${l.why}`);
-							if (resume !== undefined && resume.run !== l.name.run)
+							}
+
+							if (l.state === "down") {
+								return yield* refuse(`${name} is down: ${l.why}`);
+							}
+
+							if (resume !== undefined && resume.run !== l.name.run) {
 								return yield* refuse(
 									`${name} is a different agent now: this job belongs to ${resume.run}`,
 								);
+							}
+
 							const heard = yield* PubSub.subscribe(l.heard);
 							const past = resume === undefined ? [] : [...l.history];
 							const began = yield* Clock.currentTimeMillis;
 							let mine: number | null = resume?.turn ?? null;
+
 							if (resume === undefined) {
 								yield* Effect.acquireRelease(
 									Effect.gen(function* () {
 										const word = yield* acp.run
 											.tell("prompt", prompt)
 											.pipe(Effect.catchTag("MailboxFull", () => Effect.succeed("full")));
-										if (word !== "queued") return yield* refuse(`${name} took nothing: ${word}`);
+
+										if (word !== "queued") {
+											return yield* refuse(`${name} took nothing: ${word}`);
+										}
 									}),
 									// Until told, this stream owns the accepted prompt of this exact run.
 									() => (mine === null ? cancelTurn(l, true) : Effect.void),
@@ -573,6 +667,7 @@ export const summonManager = (options: {
 									room: room ?? "",
 								});
 							}
+
 							let ended: Extract<Heard, {_tag: "result"}> | null = null;
 							const since = Effect.map(Clock.currentTimeMillis, (now) => now - began);
 							const news = Stream.concat(
@@ -584,17 +679,32 @@ export const summonManager = (options: {
 										? refuse(h.why)
 										: Effect.map(since, (ms): readonly TurnNews[] => {
 												if (h._tag === "told") {
-													if (mine !== null) return [];
+													if (mine !== null) {
+														return [];
+													}
+
 													mine = h.turn;
 													return [{_tag: "told", turn: h.turn}];
 												}
-												if (mine === null) return [];
-												if (h._tag === "said") return [{_tag: "said", text: h.text}];
-												if (h._tag === "ask")
+
+												if (mine === null) {
+													return [];
+												}
+
+												if (h._tag === "said") {
+													return [{_tag: "said", text: h.text}];
+												}
+
+												if (h._tag === "ask") {
 													return h.answer === "waiting"
 														? [{_tag: "ask", ask: h.ask, title: h.title}]
 														: [{_tag: "answered", ask: h.ask, allow: h.answer === "allowed"}];
-												if (h.turn !== mine) return [];
+												}
+
+												if (h.turn !== mine) {
+													return [];
+												}
+
 												ended = h;
 												return [{_tag: "result", stop: h.stop, ms, cost: h.cost}];
 											}),
@@ -657,19 +767,26 @@ export const summonManager = (options: {
 				cancel: (name, mine) =>
 					Effect.suspend(() => {
 						const l = live.get(name);
+
 						if (
 							l === undefined ||
 							(mine !== undefined &&
 								(l.turn !== mine.turn || (mine.run !== undefined && l.name.run !== mine.run)))
-						)
+						) {
 							return Effect.void;
+						}
+
 						return cancelTurn(l);
 					}),
 
 				answer: (name, ask, allow, by) =>
 					Effect.suspend(() => {
 						const acp = live.get(name)?.acp;
-						if (acp === undefined || acp === null) return Effect.void;
+
+						if (acp === undefined || acp === null) {
+							return Effect.void;
+						}
+
 						return acp.run
 							.tell(allow ? "allow" : "refuse", ask)
 							.pipe(
@@ -693,9 +810,16 @@ const present = (fields: Readonly<Record<string, unknown>>): Record<string, unkn
 
 /** Why a run failed, in its own words: its declared failure's message. */
 const whyOf = (end: Ended<unknown>): string | null => {
-	if (end.kind !== "failed") return null;
+	if (end.kind !== "failed") {
+		return null;
+	}
+
 	const declared = Cause.findErrorOption(end.cause);
-	if (Option.isNone(declared)) return null;
+
+	if (Option.isNone(declared)) {
+		return null;
+	}
+
 	const {message} = declared.value as {readonly message?: unknown};
 	return typeof message === "string" ? message : null;
 };

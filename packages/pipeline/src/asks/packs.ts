@@ -132,7 +132,10 @@ const isRecordOfStrings = (value: unknown): value is Readonly<Record<string, str
 	Object.values(value).every((v) => typeof v === "string");
 
 function isShell(value: unknown): value is Shell {
-	if (typeof value !== "object" || value === null) return false;
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
 	const {typed, unread, replies, pages} = value as Record<string, unknown>;
 	return (
 		typeof typed === "string" &&
@@ -144,13 +147,32 @@ function isShell(value: unknown): value is Shell {
 
 /** Whether a module's default export looks like a pack. The program's own checks run at its start. */
 function packOf(value: unknown): Pack | null {
-	if (typeof value !== "object" || value === null) return null;
+	if (typeof value !== "object" || value === null) {
+		return null;
+	}
+
 	const {program, listens, answers, layer, holds, shell} = value as Record<string, unknown>;
-	if (typeof program !== "object" || program === null || !("main" in program)) return null;
-	if (!isRecordOfStrings(listens) || !isRecordOfStrings(answers)) return null;
-	if (typeof layer !== "function") return null;
-	if (holds !== undefined && typeof holds !== "boolean") return null;
-	if (shell !== undefined && !isShell(shell)) return null;
+
+	if (typeof program !== "object" || program === null || !("main" in program)) {
+		return null;
+	}
+
+	if (!isRecordOfStrings(listens) || !isRecordOfStrings(answers)) {
+		return null;
+	}
+
+	if (typeof layer !== "function") {
+		return null;
+	}
+
+	if (holds !== undefined && typeof holds !== "boolean") {
+		return null;
+	}
+
+	if (shell !== undefined && !isShell(shell)) {
+		return null;
+	}
+
 	return value as Pack;
 }
 
@@ -172,10 +194,13 @@ export const loadPacks = (
 					catch: (error) => refused(name, `it did not load: ${String(error)}`),
 				});
 				const pack = packOf(module.default);
-				if (pack === null)
+
+				if (pack === null) {
 					return yield* Effect.fail(
 						refused(name, "its default export is not a pack: program, listens, answers, layer"),
 					);
+				}
+
 				return {name, pack};
 			}),
 		// In the config's order: the first that fails is the one named.
@@ -201,31 +226,66 @@ export const settingsOf = (settings: Readonly<Record<string, unknown>>, name: st
 
 /** Why a pack does not fit the core, or `null`: every wire it asks for fits by shape. */
 export function misfit(core: AnyProgram, pack: Pack): string | null {
-	if (pack.holds === true && core.flags[HOLDS] === undefined)
+	if (pack.holds === true && core.flags[HOLDS] === undefined) {
 		return `it holds what it hears, and the core has no ${HOLDS} flag to wait on it`;
+	}
+
 	for (const [from, to] of Object.entries(pack.listens)) {
 		const out: Output<unknown> | undefined = own(core.outputs, from);
 		const into: Input<unknown> | undefined = own(pack.program.inputs, to);
-		if (out === undefined) return `the core has no output ${from}`;
-		if (into === undefined) return `the pack has no input ${to}`;
-		if (fit(out, into) === "does_not_fit") return `the core's ${from} does not fit its ${to}`;
+
+		if (out === undefined) {
+			return `the core has no output ${from}`;
+		}
+
+		if (into === undefined) {
+			return `the pack has no input ${to}`;
+		}
+
+		if (fit(out, into) === "does_not_fit") {
+			return `the core's ${from} does not fit its ${to}`;
+		}
 	}
+
 	for (const [from, to] of Object.entries(pack.answers)) {
 		const out: Output<unknown> | undefined = own(pack.program.outputs, from);
 		const into: Input<unknown> | undefined = own(core.inputs, to);
-		if (out === undefined) return `the pack has no output ${from}`;
-		if (into === undefined) return `the core has no input ${to}`;
-		if (fit(out, into) === "does_not_fit") return `its ${from} does not fit the core's ${to}`;
+
+		if (out === undefined) {
+			return `the pack has no output ${from}`;
+		}
+
+		if (into === undefined) {
+			return `the core has no input ${to}`;
+		}
+
+		if (fit(out, into) === "does_not_fit") {
+			return `its ${from} does not fit the core's ${to}`;
+		}
 	}
+
 	if (pack.shell !== undefined) {
 		const {typed, unread} = pack.shell;
 		const into: Input<unknown> | undefined = own(pack.program.inputs, typed);
 		const out: Output<unknown> | undefined = own(pack.program.outputs, unread);
-		if (into === undefined) return `the pack has no input ${typed}`;
-		if (out === undefined) return `the pack has no output ${unread}`;
-		if (fit(TYPED, into) === "does_not_fit") return `its ${typed} does not take a typed reply`;
-		if (fit(out, UNREAD) === "does_not_fit") return `its ${unread} does not say a refusal`;
+
+		if (into === undefined) {
+			return `the pack has no input ${typed}`;
+		}
+
+		if (out === undefined) {
+			return `the pack has no output ${unread}`;
+		}
+
+		if (fit(TYPED, into) === "does_not_fit") {
+			return `its ${typed} does not take a typed reply`;
+		}
+
+		if (fit(out, UNREAD) === "does_not_fit") {
+			return `its ${unread} does not say a refusal`;
+		}
 	}
+
 	return null;
 }
 
@@ -281,10 +341,15 @@ export const startWithPacks = <R>(
 	Effect.gen(function* () {
 		for (const {name, pack} of packs) {
 			const why = misfit(core.program, pack);
-			if (why !== null) return yield* Effect.fail(refused(name, why));
+
+			if (why !== null) {
+				return yield* Effect.fail(refused(name, why));
+			}
 		}
+
 		const toCore = yield* Queue.unbounded<{readonly input: string; readonly value: unknown}>();
 		const started: StartedPack[] = [];
+
 		for (const {name, pack} of packs) {
 			const layer = yield* pack
 				.layer(settingsOf(settings, name), hosting.places(name))
@@ -306,15 +371,24 @@ export const startWithPacks = <R>(
 					Scope.Scope
 				>
 			).pipe(Effect.provide(layer));
-			if (begun.kind !== "running") return yield* Effect.fail(refused(name, begun.why));
+
+			if (begun.kind !== "running") {
+				return yield* Effect.fail(refused(name, begun.why));
+			}
+
 			started.push({name, pack, running: begun});
 		}
+
 		const tellPacks = (output: string) => (value: unknown) => {
 			for (const {pack, running} of started) {
 				const input = pack.listens[output];
+
 				// Offered, as the core is fed below: a pack slow to read makes the core's value wait, never drops it.
-				if (input !== undefined) Effect.runFork((running.run as AnyRun).offer(input, value));
+				if (input !== undefined) {
+					Effect.runFork((running.run as AnyRun).offer(input, value));
+				}
 			}
+
 			hosting.core?.(output, value);
 		};
 		const listeners = Object.fromEntries(
@@ -333,7 +407,11 @@ export const startWithPacks = <R>(
 			never,
 			R | Scope.Scope
 		>;
-		if (begun.kind !== "running") return yield* Effect.fail(refused("core", begun.why));
+
+		if (begun.kind !== "running") {
+			return yield* Effect.fail(refused("core", begun.why));
+		}
+
 		const run = begun.run as AnyRun;
 		yield* Effect.forkScoped(
 			Effect.forever(
