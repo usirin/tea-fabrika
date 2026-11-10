@@ -17,7 +17,8 @@ it("L6 testHomes isolates homes at the socket boundary and preserves toolchains"
         app: optional,
         volta: optional,
         pnpm: optional,
-        length: fc.integer({ min: 60, max: 110 }),
+        // pinned: 82, 83 and 84 straddle the 103-byte socket path (length + 20), so `<=` for `<` dies.
+        length: fc.oneof(fc.integer({ min: 60, max: 110 }), fc.constantFrom(82, 83, 84)),
       }),
       ({ home, app, volta, pnpm, length }) => {
         const base = mkdtempSync("/tmp/l6-");
