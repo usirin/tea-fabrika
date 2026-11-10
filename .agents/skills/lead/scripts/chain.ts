@@ -6,16 +6,18 @@
 //                 [--plan <approved plan>] [--claude tests,build] [--electron tests,build]
 //                 [--model sonnet|opus] [--start tests|build|mutation|review]
 //
-// The lane is a tea machine on the Effect engine. Each step runs through drive.ts itself (one
-// Codex box or one Claude agent, started and read by code), and the machine reads drive's one JSON
-// line to pick the next move. A fresh, short Claude agent is started only where judgment is
-// needed: a step that asked a question or got stuck. It reads the lane's state file and the
-// report, answers one line, and is gone. The five verbs stay: done, send, ask, skip, stuck.
+// The lane is a tea machine on the Effect engine. Each step runs drive.ts's pieces in this
+// process (`prepare`, then `driveStep`: one box, one agent turn, the reads, the push, the row),
+// and the machine reads the step's one line to pick the next move. Every agent, a step's and the
+// judgment's, runs through today's fabrika agents package on its ACP rows (./agents.ts): the
+// unmodified harness, in its own containment, with only its model login. A fresh, short
+// read-only Codex agent is started only where judgment is needed: a step that asked a question or got stuck. It
+// reads the lane's state file and the report, answers once, and is gone. The five verbs stay:
+// done, send, ask, skip, stuck.
 //
-//   stepping   Act     drive.ts <lane> <step> <brief>, the brief cut from the lane brief's section
+//   stepping   Act     drive's prepare and driveStep, the brief cut from the lane brief's section
 //                      plus the lane's facts (heads, round, what the last step said)
-//   waiting    Act     a sleep, when drive refused for the agent cap or low disk; then the step again
-//   judging    Draft   claude -p in the main checkout, read-only, one answer line: send a step
+//   judging    Draft   one read-only Codex turn in the main checkout, one typed answer: send a step
 //                      again with a note, or park the lane for the lead
 //   opening    Act     botpush the branch and open the pull request (or find the open one)
 //   landing    Act     catchup.sh: merge main in, wait for CI, squash-land
@@ -34,15 +36,16 @@
 //
 // Each step's record is a Schema value (`StepRecord`) written to `state/<lane>-chain.json` before
 // the step starts and again when it ends, so a resume (`--start <step>`) needs nothing in memory.
-// The chain holds every right (the bot's push, the PR, catch-up); a box or the judgment agent holds
-// only its model login (.decisions/0028-the-parent-holds-every-right.md). The steps run the unmodified harness through drive.ts (.decisions/0026-fabrika-never-owns-the-agent-loop.md).
+// The chain holds every right (the bot's push, the PR, catch-up, the commit and its signature); a
+// box or the judgment agent holds only its model login
+// (.decisions/0028-the-parent-holds-every-right.md). The steps run the unmodified harness
+// (.decisions/0026-fabrika-never-owns-the-agent-loop.md).
 //
 // The lane brief is one Markdown file. Its text before the first `## ` heading goes to every step.
 // Then one section per step, `## tests`, `## build`, `## mutation`, `## review`, and `## pr`, the
-// pull request's description (its first line is the title). drive.ts appends its own answer tail.
+// pull request's description (its first line is the title). drive appends its own answer tail.
 
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import {
   appendFileSync,
   closeSync,
@@ -51,15 +54,15 @@ import {
   openSync,
   readFileSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
-import { run } from "@demlik/tea/effect";
-import { act, intentOf } from "@kampus/pipeline/primitives";
+import { Cmd, run } from "@demlik/tea/effect";
 import { Context, Duration, Effect, Schedule, Schema } from "effect";
-import { claudeProfile, type Env, loadEnv, sh } from "./drive.ts";
+import { type Agents, Judgment, makeStepAgents, runTurn, stepRow } from "./agents.ts";
+import { driveStep, type Env, loadEnv, MUTATION_AGENT, prepare, sh } from "./drive.ts";
 import { wipOf } from "./lane.ts";
 
 const HERE = import.meta.dirname;
@@ -146,11 +149,17 @@ export const lineOf = (out: string, exit: number): Line | null => {
 // ---------------------------------------------------------------- the moves
 
 /** The next move after a step's outcome, as data. */
-export type Move =
-  | { readonly _tag: "step"; readonly step: StepName; readonly note: string }
-  | { readonly _tag: "judge" }
-  | { readonly _tag: "open" }
-  | { readonly _tag: "park"; readonly reason: string };
+export const Move = Schema.TaggedUnion({
+  step: { step: Schema.Literals(STEPS), note: Schema.String },
+  judge: {},
+  open: {},
+  park: { reason: Schema.String },
+});
+export type Move = typeof Move.Type;
+const toStep = (step: StepName, note: string) => Move.cases.step.make({ step, note });
+const toPark = (reason: string) => Move.cases.park.make({ reason });
+const toJudge = Move.cases.judge.make({});
+const toOpen = Move.cases.open.make({});
 
 /** The step a done answer hands to, or `null` at the end of the chain. */
 const after: Record<StepName, StepName | null> = {
@@ -171,36 +180,57 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
   switch (verb) {
     case "done": {
       const next = after[step];
-      return next === null ? { _tag: "open" } : { _tag: "step", step: next, note: "" };
+      return next === null ? toOpen : toStep(next, "");
     }
     case "skip":
       // Nothing here for this step: on to the next, with the why on record.
-      return after[step] === null ? { _tag: "open" } : { _tag: "step", step: after[step] ?? "review", note: "" };
+      return after[step] === null ? toOpen : toStep(after[step] ?? "review", "");
     case "send":
       if (isStep(to)) {
-        return { _tag: "step", step: to, note: `${step} answered ${line.outcome}: ${line.reason}` };
+        return toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
       }
 
-      return { _tag: "park", reason: `${step} sent the lane to ${to}: ${line.reason}` };
+      return toPark(`${step} sent the lane to ${to}: ${line.reason}`);
     case "ask":
       if (why === "lockfile") {
-        return { _tag: "park", reason: line.reason };
+        return toPark(line.reason);
       }
 
-      return { _tag: "judge" };
+      return toJudge;
     case "refused":
-      return { _tag: "park", reason: `drive refused: ${line.outcome}: ${line.reason}` };
+      return toPark(`drive refused: ${line.outcome}: ${line.reason}`);
     default:
-      return stucks >= maxStucks
-        ? { _tag: "park", reason: `${step} stuck ${maxStucks} times in a row: ${line.reason}` }
-        : { _tag: "judge" };
+      return stucks >= maxStucks ? toPark(`${step} stuck ${maxStucks} times in a row: ${line.reason}`) : toJudge;
   }
 };
 
 const JUDGED = /^[`*\s]*answer:\s*(send\s+(tests|build|mutation|review)|park)\b[`*\s]*(.*)$/i;
 
 /** A judgment: a step to run again with a note, or a park for the lead. */
-export type Judged = Extract<Move, { _tag: "step" | "park" }>;
+export type Judged = typeof Move.cases.step.Type | typeof Move.cases.park.Type;
+
+/** A typed judgment (./agents.ts) as a move; a send that names no step is a park. */
+export const judgedMove = (j: Judgment): Judged =>
+  j.answer === "send" && j.step !== null
+    ? toStep(j.step, `the lead's judgment: ${j.note}`)
+    : toPark(j.note || "the judgment agent parked the lane with no why");
+
+/** The judge Cmd's answer: the move it chose as JSON, or, for an older text, its `answer:` line. */
+export const moveFrom = (text: string): Judged => {
+  try {
+    const d = JSON.parse(text) as Judged;
+
+    if (d._tag === "step" && isStep(d.step)) {
+      return toStep(d.step, String(d.note ?? ""));
+    }
+
+    if (d._tag === "park") {
+      return toPark(String(d.reason ?? ""));
+    }
+  } catch {}
+
+  return judgedOf(text);
+};
 
 /** What the judgment agent said on its last `answer:` line; none is a park. */
 export const judgedOf = (text: string): Judged => {
@@ -215,13 +245,13 @@ export const judgedOf = (text: string): Judged => {
     const to = m[2]?.toLowerCase() ?? "";
 
     if (isStep(to)) {
-      return { _tag: "step", step: to, note: `the lead's judgment: ${note}` };
+      return toStep(to, `the lead's judgment: ${note}`);
     }
 
-    return { _tag: "park", reason: note || "the judgment agent parked the lane with no why" };
+    return toPark(note || "the judgment agent parked the lane with no why");
   }
 
-  return { _tag: "park", reason: "the judgment agent gave no answer line" };
+  return toPark("the judgment agent gave no answer line");
 };
 
 // ---------------------------------------------------------------- the brief
@@ -289,7 +319,7 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
 
   if (step === "mutation") {
     lines.push(
-      `T=${f.ticket}, BUILD=${short(f.heads.tests ?? f.root)}..${short(f.heads.build ?? f.head)} (this round's build commits).`,
+      `T=${f.ticket}, BUILD=${short(f.heads.build ?? f.head)} (the newest build commit; the mutation sampler diffs it against its parent).`,
     );
   }
 
@@ -315,7 +345,7 @@ const LineS = Schema.Struct({
 
 const Done = Schema.Struct({ ok: Schema.Boolean, detail: Schema.String });
 
-const stepRun = act("step_run", { input: Run, ok: LineS, err: ["RetriesExhausted", "unknown"] });
+const stepRun = Cmd.make("step_run", { input: Run, ok: LineS, err: ["RetriesExhausted", "unknown"] });
 
 /** One step's record, saved before it starts (`line` null) and again when it ends. */
 export const StepRecord = Schema.Struct({
@@ -339,19 +369,29 @@ export const ChainRecord = Schema.Struct({
 });
 export type ChainRecord = typeof ChainRecord.Type;
 
-const judge = act("judge", {
+/**
+ * The rounds a lane's record already holds. A lane started again (`--start`) counts on from here,
+ * so a new round never takes an older round's record.
+ */
+export const roundsIn = (record: ChainRecord): number => record.steps.reduce((most, e) => Math.max(most, e.round), 0);
+
+const judge = Cmd.make("judge", {
   input: Schema.Struct({ step: Schema.Literals(STEPS), line: LineS, round: Schema.Number }),
   ok: Schema.Struct({ text: Schema.String }),
   err: ["unknown"],
 });
 
-const prOpen = act("pr_open", {
+const prOpen = Cmd.make("pr_open", {
   input: Schema.Struct({ head: Schema.String }),
   ok: Schema.Struct({ pr: Schema.NullOr(Schema.Number), detail: Schema.String }),
   err: ["unknown"],
 });
 
-const land = act("land", { input: Schema.Struct({ pr: Schema.Number }), ok: Done, err: ["unknown"] });
+const land = Cmd.make("land", {
+  input: Schema.Struct({ pr: Schema.Number }),
+  ok: Done,
+  err: ["unknown"],
+});
 
 type Cmds = ReturnType<typeof stepRun> | ReturnType<typeof judge> | ReturnType<typeof prOpen> | ReturnType<typeof land>;
 
@@ -391,7 +431,7 @@ const over = (lane: Lane, end: End): Step => [{ phase: "over", lane, end }, []];
 const runStep = (lane: Lane, step: StepName, note: string): Step => {
   const round = lane.round + 1;
   const next = { ...lane, round };
-  const asked = stepRun({ step, note, round, intent: intentOf("step", round) });
+  const asked = stepRun({ step, note, round });
   return [{ phase: "stepping", lane: next, step, note }, [asked]];
 };
 
@@ -405,12 +445,9 @@ const take = (lane: Lane, step: StepName, line: Line, move: Move, max: number): 
     case "step":
       return runStep(lane, move.step, move.note);
     case "judge":
-      return [
-        { phase: "judging", lane, step, line },
-        [judge({ step, line, round: lane.round, intent: intentOf("judge", lane.round) })],
-      ];
+      return [{ phase: "judging", lane, step, line }, [judge({ step, line, round: lane.round })]];
     case "open":
-      return [{ phase: "opening", lane }, [prOpen({ head: lane.head, intent: intentOf("open", lane.head) })]];
+      return [{ phase: "opening", lane }, [prOpen({ head: lane.head })]];
     default:
       return over(lane, { kind: "ask", reason: move.reason });
   }
@@ -455,7 +492,7 @@ export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
           return stay(s);
         }
 
-        const move = judgedOf(m.value.text);
+        const move = moveFrom(m.value.text);
         return take(s.lane, s.step, s.line, move, maxSteps);
       },
       judge_err: (s): Step =>
@@ -474,10 +511,7 @@ export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
           return over(s.lane, { kind: "stuck", reason: m.value.detail });
         }
 
-        return [
-          { phase: "landing", lane: s.lane, pr: m.value.pr },
-          [land({ pr: m.value.pr, intent: intentOf("land", m.value.pr) })],
-        ];
+        return [{ phase: "landing", lane: s.lane, pr: m.value.pr }, [land({ pr: m.value.pr })]];
       },
       pr_open_err: (s): Step =>
         s.phase === "opening" ? over(s.lane, { kind: "stuck", reason: "opening the PR threw" }) : stay(s),
@@ -542,6 +576,7 @@ const spawnEffect = (
 
 type Setup = {
   readonly env: Env;
+  readonly agents: Agents;
   readonly lane: string;
   readonly ticket: string;
   readonly branch: string;
@@ -552,18 +587,32 @@ type Setup = {
   readonly model: string;
 };
 
-const JUDGE_TAIL = (lane: string, step: StepName, line: Line, state: string) => `
+/** The last `n` lines of a file, or a line saying it is not there. */
+const lastLines = (path: string | null, n: number): string =>
+  path !== null && existsSync(path) ? readFileSync(path, "utf8").trim().split("\n").slice(-n).join("\n") : "(none)";
+
+const JUDGE_TAIL = (lane: string, step: StepName, line: Line, state: string, report: string) => `
 You are the lead's judgment for lane ${lane}, started by chain.ts because the ${step} step
 answered ${line.outcome}: ${line.reason}
-You read; you change no file and start nothing. Read the lane's state file ${state}, the step's
-report${line.report ? ` ${line.report}` : ""}, and what you need in this repo. Before you park a
-question, search .decisions/, .glossary/ and docs/direction/ for its answer. Then end your reply
-with exactly one line:
-answer: send <tests|build|mutation|review> <what to tell that step, in one or two sentences>
-answer: park <why the lead has to look, in one sentence>
+You read; you change no file and start nothing. Your row only reads this repo and nothing beside
+it, so the lane's state file and the step's report follow below. Read what you need in this repo.
+Before you park a question, search .decisions/, .glossary/ and docs/direction/ for its answer. Then
+answer with one JSON object (its schema follows): answer "send" with the step to run again (tests, build, mutation
+or review) and a note of one or two sentences for that step, or answer "park" with step null and
+why the lead has to look, in one sentence.
 Send a step again when the fix is clear and that step owns it (a tests step owns test files, a
 build step product code). Park when a plan would change, a decision is needed, a secret or a
 person is involved, or the same step already failed the same way.
+
+---
+The lane's state file, its last lines:
+
+${state}
+
+---
+The ${step} step's report:
+
+${report}
 `;
 
 const handlers = (s: Setup) => {
@@ -596,6 +645,9 @@ const handlers = (s: Setup) => {
       : [...r.steps, entry];
     writeRecord({ ...r, steps });
   };
+  // A lane started again (`--start`) counts on from the rounds its record holds, so a new round
+  // never takes an older round's record, brief or judgment files.
+  const earlier = roundsIn(readRecord());
   const headsOf = () => {
     const heads: Partial<Record<StepName, string>> = {};
 
@@ -611,35 +663,24 @@ const handlers = (s: Setup) => {
     step_run: (cmd: typeof Run.Type) =>
       Effect.gen(function* () {
         const lane = saved();
+        const round = earlier + cmd.round;
         const facts: Facts = {
           ticket: s.ticket,
           branch: s.branch,
           plan: s.plan,
           root: lane.root ?? "",
           head: lane.head ?? "",
-          round: cmd.round,
+          round,
           heads: headsOf(),
           note: cmd.note,
         };
-        const brief = join(env.BOXES, `${s.lane}-chain${cmd.round}-${cmd.step}-brief.md`);
+        const brief = join(env.BOXES, `${s.lane}-chain${round}-${cmd.step}-brief.md`);
         writeFileSync(brief, briefOf(s.brief, cmd.step, facts));
-        const claude = cmd.step === "mutation" || s.claude.has(cmd.step);
-        const args = [
-          join(HERE, "drive.ts"),
-          s.lane,
-          cmd.step,
-          brief,
-          "--ticket",
-          s.ticket,
-          "--branch",
-          s.branch,
-          "--plan",
-          s.plan,
-          ...(claude ? ["--agent", "claude", "--model", s.model] : []),
-          ...(claude && s.electron.has(cmd.step) ? ["--electron"] : []),
-        ];
+        // MUTATION WIRING (ticket 483): mutation's agent is drive.ts's `MUTATION_AGENT`; how its
+        // draft runs is `mutationDraft` there. The chain names no other fact about that step.
+        const claude = (cmd.step === "mutation" && MUTATION_AGENT === "claude") || s.claude.has(cmd.step);
         const entry: StepRecord = {
-          round: cmd.round,
+          round,
           step: cmd.step,
           note: cmd.note,
           startedAt: new Date().toISOString(),
@@ -649,29 +690,52 @@ const handlers = (s: Setup) => {
         };
         saveStep(entry);
         note(
-          `round ${cmd.round}: starting ${cmd.step} on ${claude ? "claude" : "codex"}${cmd.note ? ` (${cmd.note})` : ""}`,
+          `round ${round}: starting ${cmd.step} on ${claude ? "claude" : "codex"}${cmd.note ? ` (${cmd.note})` : ""}`,
         );
         const minutes = yield* WaitMinutes;
         const times = yield* MaxWaits;
-        // One drive run; a slot refusal is a typed failure the schedule retries.
+        // One drive run, in this process: prepare (the start checks) and, when they pass, the step.
+        // A slot refusal is a typed failure the schedule retries.
         const once = Effect.gen(function* () {
-          const ran = yield* spawnEffect("node", args, { errFile });
-          const line = lineOf(ran.out, ran.code) ?? {
-            outcome: "stuck:crash",
-            head: "",
-            reason: `drive.ts exited ${ran.code} with no outcome line; see ${errFile}`,
-            report: null,
-            box: "",
-            exit: 30,
-          };
-          const check = slotRefusal(line.outcome);
+          const prepared = prepare(env, {
+            lane: s.lane,
+            step: cmd.step,
+            brief,
+            agent: claude ? "claude" : "codex",
+            model: claude ? s.model : undefined,
+            electron: claude && s.electron.has(cmd.step),
+            ticket: s.ticket,
+            branch: s.branch,
+            plan: s.plan,
+          });
 
-          if (check !== null) {
-            note(`drive refused ${cmd.step} (${check}); trying again in ${minutes} minutes`);
-            return yield* Effect.fail(new SlotRefused({ check, reason: line.reason }));
+          if (prepared._tag === "refused") {
+            const check = slotRefusal(prepared.outcome);
+
+            if (check !== null) {
+              note(`drive refused ${cmd.step} (${check}); trying again in ${minutes} minutes`);
+              return yield* Effect.fail(new SlotRefused({ check, reason: prepared.reason }));
+            }
+
+            return {
+              outcome: prepared.outcome,
+              head: "",
+              reason: prepared.reason,
+              report: null,
+              box: "",
+              exit: prepared.exit,
+            } satisfies Line;
           }
 
-          return line;
+          const ran = yield* driveStep(env, s.agents, prepared);
+          return {
+            outcome: ran.outcome,
+            head: ran.head,
+            reason: ran.reason,
+            report: ran.report,
+            box: ran.box,
+            exit: ran.exit,
+          } satisfies Line;
         });
         const line = yield* once.pipe(
           Effect.retry({ schedule: slotSchedule(minutes), times }),
@@ -698,7 +762,7 @@ const handlers = (s: Setup) => {
                   exit: 30,
                 },
               });
-              note(`round ${cmd.round}: ${cmd.step} ${e._tag}: ${e.reason.slice(0, 200)}`);
+              note(`round ${round}: ${cmd.step} ${e._tag}: ${e.reason.slice(0, 200)}`);
             }),
           ),
           // tea's err channel takes a plain tagged record; the class stays inside the handler.
@@ -714,94 +778,57 @@ const handlers = (s: Setup) => {
       }),
     judge: (cmd: { step: StepName; line: Line; round: number }) =>
       Effect.gen(function* () {
-        const box = `${s.lane}-judge${cmd.round}`;
+        const box = `${s.lane}-judge${earlier + cmd.round}`;
         const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
-        const home = homedir();
-        writeFileSync(at(".sb"), claudeProfile(home, env.BOXES, box, "plan"));
-        const settings = at(".drive-claude-settings.json");
-        writeFileSync(
-          settings,
-          JSON.stringify({ permissions: { deny: ["Read(~/.fabrika/**)", "Read(~/.codex/**)"] } }),
-        );
-        writeFileSync(at("-prompt.md"), JUDGE_TAIL(s.lane, cmd.step, cmd.line, md));
-        const tools = "Read,Glob,Grep";
-        const session = randomUUID();
-        note(`round ${cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`);
-        const ran = yield* spawnEffect(
-          "nice",
-          [
-            "-n",
-            "15",
-            "sandbox-exec",
-            "-f",
-            at(".sb"),
-            "claude",
-            "-p",
-            "--session-id",
-            session,
-            "--model",
-            s.model,
-            "--tools",
-            tools,
-            "--allowedTools",
-            tools,
-            "--setting-sources",
-            "",
-            "--strict-mcp-config",
-            "--settings",
-            settings,
-            "--output-format",
-            "stream-json",
-            "--verbose",
-          ],
-          { cwd: env.MAIN, stdin: at("-prompt.md"), errFile: at(".err") },
-        );
-        writeFileSync(at(".jsonl"), ran.out);
-        let text = "";
-
-        for (const raw of ran.out.split("\n").toReversed()) {
-          try {
-            const d = JSON.parse(raw) as { type?: string; result?: string };
-
-            if (d.type === "result") {
-              text = d.result ?? "";
-              break;
-            }
-          } catch {}
-        }
-
-        writeFileSync(at(".md"), text);
-        const move = judgedOf(text);
+        note(`round ${earlier + cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`);
+        const started = new Date();
+        // One turn in the main checkout on the row that only reads (Codex's read-only profile):
+        // the judgment cannot change the checkout, by the harness and not by a promise. That row
+        // reads nothing beside the checkout, so the state file and the report ride in the prompt.
+        const turned = yield* runTurn(s.agents, {
+          provider: "codex-read",
+          session: box,
+          folder: env.MAIN,
+          prompt: JUDGE_TAIL(s.lane, cmd.step, cmd.line, lastLines(md, 40), lastLines(cmd.line.report, 200)),
+          system: `You are the lead's judgment for lane ${s.lane}, run by chain.ts. You read and change no file.`,
+          answer: Judgment,
+          model: env.CODEX_MODEL,
+          effort: env.CODEX_EFFORT,
+          minutes: 20,
+          events: at(".jsonl"),
+          report: at(".md"),
+        });
+        const text = turned._tag === "ended" ? turned.said : `${turned.reason}: ${turned.message}`;
+        const move = turned._tag === "ended" && turned.answer !== null ? judgedMove(turned.answer) : judgedOf(text);
         // Its field row, beside the steps' rows (record wide).
-        const row = sh("python3", [
-          "-I",
-          join(HERE, "clauderow.py"),
-          "--run",
-          `t${s.ticket}-judge${cmd.round}`,
-          "--ticket",
-          s.ticket,
-          "--outcome",
-          move._tag === "step" ? "pass" : "parked",
-          "--step",
-          cmd.step,
-          at(".jsonl"),
-          `chain.ts judgment for ${s.lane} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}`,
-        ]);
-
-        if (row.code === 0) {
-          appendFileSync(join(env.BOXES, `${s.lane}-rows.jsonl`), row.out);
-        }
-
+        const scrubbed = sh("sh", [join(HERE, "redact.sh"), at(".md"), at(".jsonl")]);
+        appendFileSync(
+          join(env.BOXES, `${s.lane}-rows.jsonl`),
+          stepRow({
+            run: `t${s.ticket}-judge${earlier + cmd.round}`,
+            ticket: s.ticket,
+            step: cmd.step,
+            provider: "codex-read",
+            model: env.CODEX_MODEL,
+            effort: env.CODEX_EFFORT,
+            outcome: move._tag === "step" ? "pass" : "parked",
+            reason: `chain.ts judgment for ${s.lane} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}`,
+            started,
+            ended: new Date(),
+            spent: turned.spent,
+            redacted: scrubbed.code === 0 ? Number(scrubbed.out.trim()) : null,
+          }),
+        );
         const answer = move._tag === "step" ? `send ${move.step}: ${move.note}` : `park: ${move.reason}`;
         note(`judgment: ${answer}`);
         const r = readRecord();
-        const last = r.steps.find((e) => e.round === cmd.round);
+        const last = r.steps.find((e) => e.round === earlier + cmd.round);
 
         if (last) {
           saveStep({ ...last, judged: { box, answer } });
         }
 
-        return { text };
+        return { text: JSON.stringify(move) };
       }),
     pr_open: (cmd: { head: string }) =>
       Effect.gen(function* () {
@@ -846,7 +873,7 @@ const handlers = (s: Setup) => {
           "",
           "## Steps",
           "",
-          `Ran end to end by \`drive.ts ${s.lane} chain\`: no lead agent held the lane. Each step was its own agent (Codex in a box, or Claude for ${["mutation", ...s.claude].join(", ")}); the lead agent wrote no step's work. Steps and dollars:`,
+          `Ran end to end by \`chain.ts ${s.lane}\`: no lead agent held the lane. Each step was its own agent through the fabrika agents package on ACP (Codex in a box, or Claude for ${["mutation", ...s.claude].join(", ")}); the lead agent wrote no step's work. Steps and dollars:`,
           "",
           ...stepsTable(join(env.BOXES, `${s.lane}-rows.jsonl`), saved().steps),
         ].join("\n");
@@ -880,10 +907,15 @@ const handlers = (s: Setup) => {
     land: (cmd: { pr: number }) =>
       Effect.gen(function* () {
         note(`catchup.sh ${cmd.pr} ${s.ticket}`);
+        const size = existsSync(errFile) ? statSync(errFile).size : 0;
         const ran = yield* spawnEffect("sh", [join(HERE, "catchup.sh"), String(cmd.pr), s.ticket], {
           errFile,
         });
-        const last = ran.out.trim().split("\n").at(-1) ?? "";
+        // catchup.sh says why it stopped on stderr; its last stdout line is only its last push.
+        const why = existsSync(errFile)
+          ? (readFileSync(errFile).subarray(size).toString("utf8").trim().split("\n").at(-1) ?? "")
+          : "";
+        const last = (ran.code === 0 ? "" : why) || (ran.out.trim().split("\n").at(-1) ?? "");
         note(`catchup.sh exited ${ran.code}: ${last}`);
         writeRecord({ ...readRecord(), landed: ran.code === 0 ? new Date().toISOString() : null });
         return { ok: ran.code === 0, detail: last || `exit ${ran.code}; see ${errFile}` };
@@ -977,7 +1009,7 @@ export const chainMain = (args: string[], env: Env) =>
       process.exit(2);
     }
 
-    const setup: Setup = {
+    const setup: Omit<Setup, "agents"> = {
       env,
       lane,
       ticket,
@@ -990,9 +1022,10 @@ export const chainMain = (args: string[], env: Env) =>
     };
     const limits: Limits = { maxSteps: yield* MaxSteps, maxStucks: yield* MaxStucks };
     const machine = makeMachine(limits);
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
     const handle = yield* run(machine, {
       ctx: undefined,
-      interpret: handlers(setup),
+      interpret: handlers({ ...setup, agents }),
       terminal: (m) => m.phase === "over",
     });
     const runtime = yield* handle.ready;

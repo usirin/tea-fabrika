@@ -17,9 +17,9 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Effect, Redacted } from "effect";
+import { assets, programs } from "virtual:fabrika-built";
 import type { ConnectionId } from "./door.ts";
 import { gatewayRuntime, projectRuntime, settings, type Env } from "./runtime.ts";
-import { programs } from "./table.ts";
 
 export class Project extends DurableObject<Env> {
   readonly runtime = projectRuntime(this.ctx, this.env);
@@ -281,6 +281,6 @@ export class Control extends WorkerEntrypoint<Env, { token: string }> {
 export default {
   fetch(request: Request, env: Env) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Worker fetch returns a Promise
-    return Effect.runPromise(settings(env).pipe(Effect.flatMap((config) => fetch(request, env, config))));
+    return Effect.runPromise(settings(env).pipe(Effect.flatMap((config) => fetch(request, env, config, assets))));
   },
 };

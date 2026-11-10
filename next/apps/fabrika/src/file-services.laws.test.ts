@@ -1,4 +1,5 @@
 // P12, next/. Run the real build and dev command with a recorded FileSystem and Path layer.
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -189,9 +190,13 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
 }
 
 // Bundler output is platform input here. Compiler behavior has its own real-build laws.
+// P16's table check refuses a program whose hash is not its source's own SHA-256 hex.
 vi.mock("@kampus/libfabrika/node/build", async (original) => ({
   ...(await original<typeof import("@kampus/libfabrika/node/build")>()),
-  bundlePrograms: () => Effect.succeed({ counter: { hash: "counter-build", source: "counter" } }),
+  bundlePrograms: () =>
+    Effect.succeed({
+      counter: { hash: createHash("sha256").update("counter").digest("hex"), source: "counter" },
+    }),
   bundle: () => Effect.succeed({ output: [{ type: "chunk", code: "export default {};" }] }),
 }));
 
@@ -336,7 +341,8 @@ for (const failed of [false, true]) {
           ]);
           const firstRename = w.calls.findIndex(([call]) => call === "rename");
           const writes = w.calls.flatMap(([call], index) => (call === "write" ? [index] : []));
-          expect(writes.length).toBe(2);
+          // P16 publishes one file: brain.mjs is the only file written, into the pending folder.
+          expect(writes.map((index) => w.calls[index]![1])).toEqual([join(w.pending, "brain.mjs")]);
           expect(writes.every((index) => index < firstRename)).toBe(true);
           expect(w.calls.slice(-2)).toEqual([
             ["remove", w.pending],

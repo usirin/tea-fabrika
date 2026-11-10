@@ -46,6 +46,18 @@ line, and name the note. That includes an item a row calls "a walk" or "the owne
 decided note answers it. Before you put anything in open questions, ask: could the owner say no
 without contradicting a decision already made? If not, it is not a question.
 
+## Outside your task
+
+Something wrong that your task does not cover is one finding row with proof, then keep going:
+never a fix, a ticket or only a mention, and never a security hole.
+[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+counts as proof.
+
+Outside means the ticket does not ask for it and the plan does not need it. What the plan needs
+goes in the plan.
+Put the row in a last section of the plan, `## Findings`, as one JSON line in a fence. The lead
+adds it to `field/findings.jsonl` unchanged.
+
 ## Never
 
 - Quote anything private. Cite only repo files.
