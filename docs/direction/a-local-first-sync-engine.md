@@ -498,6 +498,10 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   Kubernetes-style backoff. Past intensity the root stops its children and itself; the brain marks
   the name `failed`, logs it and asks the person, and only a person restarts it. The `down {until}`
   retry above goes. P34c builds it. Sibling strategies, nested trees and links still wait for Tier 4.
+  *Amended 2026-11-09 (owner, [0018](../../.decisions/0018-one-application-per-program.md)):* not one root per brain. Each program is its
+  own OTP application with its own top-level supervisor, under the brain as the node. Past
+  intensity only that program stops and asks the person; every other program keeps running. Fault
+  isolation per program is required from the first version.
 - **C5, which OTP calls stay:** coordination sits where OTP sits, so it
   follows OTP: registry, mailbox, links, monitors, trap exit, supervisors. A
   difference from OTP needs a written reason. A check that ours matches OTP is
@@ -544,6 +548,8 @@ found them with no written reason; these are the reasons. Paths are under
   the supervisor becomes one root per brain, in the project object beside the process tree, so a
   restart is counted in the same transaction as the `exited` and `started` facts it causes. The
   receipts and dead letters stay in the program's object. P34c writes the new reason.
+  *Amended 2026-11-09 (owner, [0018](../../.decisions/0018-one-application-per-program.md)):* one top-level supervisor per program, not one
+  per brain, so one program's crash loop never stops another.
 - **`demonitor` always flushes.** OTP keeps a queued `DOWN` unless the caller asks for `flush`
   ([`demonitor/2`](https://www.erlang.org/doc/apps/erts/erlang.html#demonitor/2)). Here a
   canceled watch's `DOWN` is dropped every time (`coordination/process.ts:423-429`): once the
