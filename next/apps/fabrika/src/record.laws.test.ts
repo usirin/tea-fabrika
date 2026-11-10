@@ -71,7 +71,7 @@ const Input = Schema.Struct({
 const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
   const repair = (value: unknown): unknown => {
     if (typeof value === "string") {
-      return value.toWellFormed();
+      return value.replace(/\p{Cs}/gu, "�");
     }
 
     if (Array.isArray(value)) {
@@ -79,7 +79,9 @@ const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
     }
 
     if (value !== null && typeof value === "object") {
-      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key.toWellFormed(), repair(item)]));
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [key.replace(/\p{Cs}/gu, "�"), repair(item)]),
+      );
     }
 
     return value;
