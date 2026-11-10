@@ -128,7 +128,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
   they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
   agent changes them directly, keeps each change small, and merges on green CI with a clean leak
-  grep. Product code (`next/` and today's app) keeps its steps.
+  grep. Fast-tracked is not loose: agents read `.agents/` and copy its habits, so its code follows
+  `next/`'s conventions and lint rules, edge comments included. What it broke on the day it joined
+  is in `agents-ledger.json`, which only shrinks; a shell or Python script moves to TypeScript and
+  Effect when it is next touched ([0033](./.decisions/0033-agents-code-follows-next-rules.md)).
+  Product code (`next/` and today's app) keeps its steps.
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
   part is small, never absent. A rule that code already checks leaves a skill's prose; a rule
