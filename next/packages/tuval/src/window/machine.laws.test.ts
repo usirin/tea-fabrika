@@ -171,6 +171,9 @@ type Tuning = {
   readonly runs?: boolean;
   /** Draw the brain's ping interval on `admitted`, below, at and past the link's beat (the hang law). */
   readonly pings?: boolean;
+  /** Also draw a failed key settings read, `settings_failed {dial, reason}`, on any dial, and the
+   *  settings Msgs `keys` and `keys_failed` (A15). */
+  readonly settings?: boolean;
 };
 
 /** The ms a list's handlers measured: drawn on the tuned lists, and a constant 0 on the default
@@ -202,6 +205,21 @@ const runNote = fc.oneof(
   },
   { weight: 1, arbitrary: fc.jsonValue() },
 );
+
+/** A15: the settings read's own Msgs. A failed read names its dial and the call's own reason; a
+ *  good table or a problem has no dial, as the runner sends them today. */
+const settingsCells = {
+  settings_failed: fc.record({
+    type: fc.constant("settings_failed"),
+    dial,
+    reason: fc.constantFrom("unreachable", "refused", "not_found"),
+  }),
+  keys: fc.record({ type: fc.constant("keys"), rows: fc.constantFrom({}, { "counter.inc": ["+"] }) }),
+  keys_failed: fc.record({
+    type: fc.constant("keys_failed"),
+    error: fc.record({ line: fc.integer({ min: 1, max: 5 }), reason: fc.constantFrom("syntax", "read", "watch") }),
+  }),
+};
 
 /** The Msgs nothing sends a Cmd for, and the answers to the Cmds the window asks. */
 // A8: each link outcome Msg (`admitted`, `not_granted`, `closed`, `stalled`) carries `ms`, the
@@ -243,6 +261,7 @@ const cells = (pids: ReadonlyArray<string>, tuning: Tuning = {}) => {
     granted: fc.record({ type: fc.constant("granted"), dial }),
     stalled: fc.record({ type: fc.constant("stalled"), dial, ms }),
     ...again,
+    ...(tuning.settings ? settingsCells : {}),
     press: fc.record({ type: fc.constant("press"), pid, m: body }),
     view: fc.record({
       type: fc.constant("view"),
@@ -538,6 +557,11 @@ const linkLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded
  *  of one, two and more form and end by a whole view, an ask and the link leaving online. */
 const viewLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded?: Model) =>
   guided(m, layout, cells(pids, { runs: true }), { maxLength: 120, ...(loaded === undefined ? {} : { loaded }) });
+
+/** Lists for the settings law (A15): a failed key settings read on any dial, and good tables and
+ *  problems, among every other Msg. */
+const settingsLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
+  guided(m, layout, cells(pids, { settings: true }), { maxLength: 70 });
 
 /** A new grant, as the browser meets it on its first dial: told `not_granted`, granted while it
  *  waits, then admitted. */
@@ -1707,6 +1731,14 @@ const viewLaws: Readonly<Record<string, ViewLaw>> = {
   },
 };
 
+/** The laws that also run on the settings lists (A15): a dial a failed read ends loses no letter,
+ *  and the next dial sends and opens as any other. */
+const SETTINGS_RUNS: ReadonlySet<string> = new Set([
+  "p1: a letter is never lost, written counts presses, ids never repeat",
+  "p2: what waited goes out: online sends every ready letter once in order, offline sends nothing",
+  "p4: every distinct pid of the layout opens once per dial, and a new dial opens again",
+]);
+
 const fold = async (
   m: Machine,
   layout: Tree,
@@ -1727,6 +1759,11 @@ const fold = async (
   // drawn ms.
   if (LINK_LAWS.has(name)) {
     propertyTrace(used as never, { layout } as never, linkLists(m, layout, tiles) as never, law, opts);
+  }
+
+  // A15: p1, p2 and p4 also run on lists where a failed settings read ends a dial.
+  if (SETTINGS_RUNS.has(name)) {
+    propertyTrace(used as never, { layout } as never, settingsLists(m, layout, tiles) as never, law, opts);
   }
 
   // The resend law also runs on lists that each end a dial with letters and opens unanswered.
@@ -3099,6 +3136,204 @@ describe("window machine plants: each break of a view record is caught by its la
     }));
 });
 
+// A15: a failed key settings read is a Msg. The runner (main.tsx) reports a failed `ledger.read` or
+// `ledger.wait` on `person/<id>/settings` as `settings_failed {dial, reason}` and stops reading on
+// that dial; the Model decides what follows. Its `settings` is the read's state per dial,
+// `{_tag: "reading", dial}` or `{_tag: "failed", dial, reason}`. On the online dial a failure ends
+// the dial as a lost socket does (a `closed` on that dial, code 1006, folded by the same machine from
+// the same Model), keeps its reason in `settings` until something clears it, and the next dial that
+// goes online reads again. A later `keys` or `keys_failed` while a newer dial's socket is open
+// clears it. A `settings_failed` for any other dial, or while the link is not online, changes nothing.
+const SETTINGS =
+  "A15 settings: a failed settings read on the online dial ends it by a lost socket's path and keeps its reason; the next dial online reads again; a later keys or keys_failed on a new dial clears it; any other changes nothing";
+
+type Settings = { readonly _tag?: unknown; readonly dial?: unknown; readonly reason?: unknown } | undefined;
+
+/** The Model's settings read state (A15), as the plan's sketch names it. */
+const readState = (s: Model): Settings => (s as Model & { readonly settings?: Settings }).settings;
+
+/** The settings read state as text, for the law's message. */
+const told = (s: Settings): string => JSON.stringify(s) ?? "undefined";
+
+/** The window with its settings read state left out, for the lost socket's path. */
+const besides = (s: Model): string => JSON.stringify({ ...s, settings: null });
+
+/** A step's Cmds, the connect rows left out: a failed read is no link outcome the connect law names. */
+const besidesConnect = (cmds: ReadonlyArray<Cmd>): string =>
+  JSON.stringify(cmds.filter((c) => !(c.type === "record" && (c["record"] as { _tag?: unknown })?._tag === "connect")));
+
+const settingsLaw =
+  (real: Machine) =>
+  (steps: ReadonlyArray<Folded>): string | null => {
+    for (const { prev, msg, next, cmds } of steps) {
+      const was = readState(prev);
+      const is = readState(next);
+
+      if (msg.type === "settings_failed") {
+        if (!online(prev) || prev.link["dial"] !== msg["dial"]) {
+          if (JSON.stringify(next) !== JSON.stringify(prev) || cmds.length > 0) {
+            return `a settings_failed for dial ${String(msg["dial"])}, while ${prev.link._tag} on ${String(prev.link["dial"])}, moved the window or asked ${JSON.stringify(cmds.map((c) => c.type))}`;
+          }
+
+          continue;
+        }
+
+        if (online(next)) {
+          return `a settings_failed on the online dial ${String(msg["dial"])} left the link online, with no reader`;
+        }
+
+        const lost: Msg = { type: "closed", dial: msg["dial"], code: 1006, fingerprint: "SHA256:x", ms: 0 };
+        const [lostNext, lostCmds]: readonly [Model, ReadonlyArray<Cmd>] = applyCell(
+          real as never,
+          prev as never,
+          lost as never,
+        ) as never;
+
+        if (besides(next) !== besides(lostNext)) {
+          return `a settings_failed on dial ${String(msg["dial"])} left ${besides(next)}, a lost socket leaves ${besides(lostNext)}`;
+        }
+
+        if (besidesConnect(cmds) !== besidesConnect(lostCmds)) {
+          return `a settings_failed on dial ${String(msg["dial"])} asked ${besidesConnect(cmds)}, a lost socket asks ${besidesConnect(lostCmds)}`;
+        }
+
+        if (is?._tag !== "failed" || is.dial !== msg["dial"] || is.reason !== msg["reason"]) {
+          return `a settings_failed ${JSON.stringify(msg)} left settings ${told(is)}, not failed with its dial and reason`;
+        }
+
+        continue;
+      }
+
+      if (online(next) && !online(prev)) {
+        if (is?._tag !== "reading" || is.dial !== next.link["dial"]) {
+          return `going online on dial ${String(next.link["dial"])} left settings ${told(is)}, not reading on that dial`;
+        }
+
+        continue;
+      }
+
+      if (was?._tag !== "failed") {
+        continue;
+      }
+
+      const open = openDial(prev);
+
+      if ((msg.type === "keys" || msg.type === "keys_failed") && open !== null && open !== was.dial) {
+        if (is?._tag === "failed") {
+          return `${msg.type} on dial ${String(open)} kept the failed read of dial ${String(was.dial)}: ${told(is)}`;
+        }
+
+        continue;
+      }
+
+      if (JSON.stringify(is) !== JSON.stringify(was)) {
+        return `${msg.type} moved the failed read ${told(was)} to ${told(is)} before a new dial went online`;
+      }
+    }
+
+    return null;
+  };
+
+describe("window machine: a failed key settings read is a Msg (A15)", () => {
+  for (const [label, layout, tiles] of LAYOUTS) {
+    it(`${SETTINGS} (${label})`, async () => {
+      const m = await machine();
+      propertyTrace(
+        m as never,
+        { layout } as never,
+        settingsLists(m, layout, tiles) as never,
+        settingsLaw(m) as never,
+        opts,
+      );
+    });
+  }
+
+  it("good thing: the settings runs fail a read on the online dial and on a stale one, go online again after a failure, and clear one by keys on a new dial", async () => {
+    const m = await machine();
+    const seen = { current: 0, staleOnline: 0, staleOffline: 0, readAgain: 0, cleared: 0 };
+
+    for (const [, layout, tiles] of LAYOUTS) {
+      propertyTrace(
+        m as never,
+        { layout } as never,
+        settingsLists(m, layout, tiles) as never,
+        ((folded: ReadonlyArray<Folded>) => {
+          let failed = false;
+
+          for (const { prev, msg, next } of folded) {
+            if (msg.type === "settings_failed") {
+              const current = online(prev) && prev.link["dial"] === msg["dial"];
+              seen.current += current ? 1 : 0;
+              seen.staleOnline += online(prev) && !current ? 1 : 0;
+              seen.staleOffline += online(prev) ? 0 : 1;
+              failed ||= current;
+            }
+
+            if (failed && online(next) && !online(prev)) {
+              seen.readAgain++;
+              failed = false;
+            }
+
+            const was = readState(prev);
+
+            if (
+              (msg.type === "keys" || msg.type === "keys_failed") &&
+              was?._tag === "failed" &&
+              openDial(prev) !== null &&
+              openDial(prev) !== was.dial
+            ) {
+              seen.cleared++;
+            }
+          }
+
+          return null;
+        }) as never,
+        { ...opts, numRuns: 150 } as never,
+      );
+    }
+
+    for (const [name, n] of Object.entries(seen)) {
+      expect(n, name).toBeGreaterThan(0);
+    }
+  });
+
+  // Plants: the window ignores the Msg (the dial stays online with no reader, nothing shows), and
+  // the window acts on a stale dial's Msg as if it were the online one's. Each wraps the real update
+  // for `settings_failed` only; the law must hold on the real machine first, so a plant is caught
+  // for its break, not for a missing handler.
+  type Update = (state: Model, msg: Msg, ctx: object) => readonly [Model, ReadonlyArray<Cmd>];
+  const planted = (real: Machine, change: (own: Update | undefined) => Update): Machine => {
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
+    const update = (real as unknown as { update: Record<string, Update> }).update;
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the plant keeps the real machine and swaps one handler; the cast names it a Machine again
+    return { ...real, update: { ...update, settings_failed: change(update["settings_failed"]) } } as unknown as Machine;
+  };
+  const expectCaught = async (change: (own: Update | undefined) => Update): Promise<void> => {
+    const real = await machine();
+    const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
+    const run = (used: Machine) => () =>
+      propertyTrace(
+        used as never,
+        { layout } as never,
+        settingsLists(real, layout, tiles) as never,
+        settingsLaw(real) as never,
+        opts,
+      );
+    expect(run(real), "the law holds on the real window").not.toThrow();
+    expect(run(planted(real, change))).toThrow();
+  };
+
+  it("ignoring a failed settings read, so the dial stays online with no reader and nothing shows, is caught (A15)", () =>
+    expectCaught(() => (s) => [s, []]));
+  it("acting on a stale dial's failed settings read is caught (A15)", () =>
+    expectCaught((own) => (s, msg, ctx) => {
+      const step = own ?? ((x: Model): readonly [Model, ReadonlyArray<Cmd>] => [x, []]);
+      return online(s) && s.link["dial"] !== msg["dial"]
+        ? step(s, { ...msg, dial: s.link["dial"] }, ctx)
+        : step(s, msg, ctx);
+    }));
+});
+
 describe("window machine: saved state", () => {
   it("stopping at every message and booting from the saved model gives the same run", async () => {
     const m = await machine();
@@ -3106,18 +3341,22 @@ describe("window machine: saved state", () => {
     const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
     // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
     const model = (m as unknown as { model: Schema.Codec<unknown, unknown> }).model;
-    fc.assert(
-      fc.property(lists(m, layout, tiles), (list) => {
-        syncTest(m as never, { layout } as never, {
-          msgs: list as never,
-          encode: Schema.encodeSync(model),
-          decode: Schema.decodeUnknownSync(model),
-          equals: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
-          seed: SEED,
-        });
-      }),
-      { seed: SEED, numRuns: 100 },
-    );
+
+    // A15: also on runs where a failed settings read ends a dial, so the read's state saves too.
+    for (const made of [lists, settingsLists]) {
+      fc.assert(
+        fc.property(made(m, layout, tiles), (list) => {
+          syncTest(m as never, { layout } as never, {
+            msgs: list as never,
+            encode: Schema.encodeSync(model),
+            decode: Schema.decodeUnknownSync(model),
+            equals: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
+            seed: SEED,
+          });
+        }),
+        { seed: SEED, numRuns: 100 },
+      );
+    }
   });
 });
 
@@ -3165,6 +3404,17 @@ describe("window machine: format of the Msgs", () => {
     expect(await accepts({ type: "send_err", id: 7, dial: 3, error: { _tag: "unknown" } })).toBe(true);
     expect(await accepts({ type: "send_err", id: 7, dial: 3, error: { _tag: "unreachable" } })).toBe(true);
     expect(await accepts({ type: "send_err", dial: 3, error: { _tag: "unknown" } })).toBe(false);
+  });
+
+  it("format: a failed key settings read is `settings_failed` with its dial and the call's reason (A15)", async () => {
+    // reason: the runner (main.tsx) dispatches it when a settings `ledger.read` or `ledger.wait`
+    // fails, and the Model shows its reason; decoded through the machine's own `msg` schema.
+    expect(await accepts({ type: "settings_failed", dial: 3, reason: "unreachable" })).toBe(true);
+    expect(await accepts({ type: "settings_failed", dial: 1, reason: "refused" })).toBe(true);
+    expect(await accepts({ type: "settings_failed", reason: "unreachable" })).toBe(false);
+    expect(await accepts({ type: "settings_failed", dial: 3 })).toBe(false);
+    expect(await accepts({ type: "settings_failed", dial: "3", reason: "unreachable" })).toBe(false);
+    expect(await accepts({ type: "settings_failed", dial: 3, reason: 7 })).toBe(false);
   });
 
   it("format: the socket Sub's answer to an open, open_ok, carries the write's id and dial and a {rev, view}", async () => {
