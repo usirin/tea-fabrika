@@ -142,8 +142,8 @@ patchedDependencies:
   # Alchemy's prebuilt-bundle watcher serves again on every watch event, changed or not. macOS
   # reports a late event for a folder made just before the watch began, so a Mac replaced the
   # brain's workerd soon after a start, and after the three-replacement brake too. The patch
-  # passes on only a bundle whose hash differs. Tracker ticket 497 holds the upstream issue;
-  # drop the patch at the release that compares before it serves.
+  # passes on only a bundle whose hash differs. Drop this when Alchemy compares the bundle
+  # before it serves again (https://github.com/alchemy-run/alchemy/issues/3214).
   '@alchemy.run/cloudflare@2.0.0-beta.84': patches/@alchemy.run__cloudflare@2.0.0-beta.84.patch
 
 minimumReleaseAgeExclude:
