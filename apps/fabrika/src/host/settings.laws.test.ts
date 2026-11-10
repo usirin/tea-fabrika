@@ -252,17 +252,18 @@ const play = Effect.fnUntraced(function* (steps: Timeline, law: "L2" | "L6" | "L
   expect(h.logs).toEqual([{ file: name, by: "start" }]);
   let now = 0;
   const until = Effect.fnUntraced(function* (end: number) {
-    while (now < end) {
-      const next = Math.min(end, (Math.floor(now / 50) + 1) * 50);
-      yield* advance(next - now);
-      now = next;
+    if (now < end) {
+      yield* advance(end - now);
+      now = end;
     }
   });
 
   for (const [i, step] of steps.entries()) {
     // Precondition for a per-save bound: no later save replaces it before its
-    // bound. Slots leave > POLL + SETTLE between saves, and drain late hints.
-    const base = i * 6000;
+    // bound. The latest hint is at 3099 ms, then POLL + SETTLE ends at
+    // 4149 ms. A 5000 ms slot drains that work and keeps the next poll's phase.
+    const base = i * 5000;
+    // Only ticks can run between slots; TestClock drives their registered sleeps.
     yield* until(base);
     yield* h.allow;
     yield* h.fs.writeFileString(file, `before:${i}`);
@@ -313,11 +314,30 @@ const play = Effect.fnUntraced(function* (steps: Timeline, law: "L2" | "L6" | "L
     const end = Math.max(deadline, ...matching, ...other) + 1050;
     const times = new Set([begins, done, deadline, end, ...matching, ...other]);
 
-    // Every possible timer end is 50 ms after a hint, tick or closing read.
-    // Stop there before doing same-time file/event actions: timer wins ties.
-    for (const at of [...times]) {
-      for (let next = at + 50; next <= end; next += 50) {
+    // Stop at ticks and possible settle ends, not an empty 50 ms grid.
+    // A closing read can extend the end only if a write happened since the
+    // preceding read. Include both parts and timer-before-action ties. Hints
+    // with unchanged text still have their own end, covering debounce plants.
+    const reads = [...matching];
+
+    for (let at = base + 1000; at <= end; at += 1000) {
+      times.add(at);
+      reads.push(at);
+    }
+
+    for (const read of reads) {
+      let previous = read;
+      let next = previous + 50;
+
+      while (next <= end) {
         times.add(next);
+
+        if (![begins, done].some((at) => at >= previous && at < next)) {
+          break;
+        }
+
+        previous = next;
+        next += 50;
       }
     }
 
@@ -350,7 +370,11 @@ const play = Effect.fnUntraced(function* (steps: Timeline, law: "L2" | "L6" | "L
         }
       }
 
-      yield* drain;
+      // Only queued watch events can start work after these file actions.
+      // Otherwise advance already drained the timer work at this stop.
+      if (matching.includes(at) || other.includes(at)) {
+        yield* drain;
+      }
 
       if (at === deadline && law === "L2") {
         expect(h.got.at(-1)).toEqual(expected);
