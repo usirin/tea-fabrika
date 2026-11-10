@@ -122,16 +122,16 @@ describe("the check before each step of a shell", () => {
 });
 
 describe("the check with its read-only rule on", () => {
-	const reads = {tree: "/tmp/review-1/code", alsoWritable: ["/tmp"], readOnly: true};
+	const reads = {tree: "/tmp/review-a/code", alsoWritable: ["/tmp"], readOnly: true};
 	const why = (tool: string, input: Record<string, unknown>) => refusal(reads, tool, input);
 
 	it("lets the three reads through inside the tree, by a whole path or one from the tree", () => {
-		expect(why("Read", {file_path: "/tmp/review-1/code/src/a.ts"})).toBeNull();
+		expect(why("Read", {file_path: "/tmp/review-a/code/src/a.ts"})).toBeNull();
 		expect(why("Read", {file_path: "src/a.ts"})).toBeNull();
 		expect(why("Grep", {pattern: "exit 3"})).toBeNull();
 		expect(why("Grep", {pattern: "/etc/passwd", path: "packages"})).toBeNull();
 		expect(why("Glob", {pattern: "**/*.test.ts"})).toBeNull();
-		expect(why("Glob", {pattern: "src/**/*.ts", path: "/tmp/review-1/code/packages"})).toBeNull();
+		expect(why("Glob", {pattern: "src/**/*.ts", path: "/tmp/review-a/code/packages"})).toBeNull();
 	});
 
 	it("refuses a read outside the tree, however the path is written", () => {
@@ -141,7 +141,7 @@ describe("the check with its read-only rule on", () => {
 		expect(why("Read", {file_path: "../other/secret.txt"})).toContain(
 			"outside the code you were given",
 		);
-		expect(why("Read", {file_path: "/tmp/review-1/code-of-another-run/a.ts"})).toContain("outside");
+		expect(why("Read", {file_path: "/tmp/review-a/code-of-another-run/a.ts"})).toContain("outside");
 		expect(why("Grep", {pattern: "token", path: "/Users"})).toContain("/Users is outside");
 		expect(why("Grep", {pattern: "token", path: "../.."})).toContain("outside");
 		expect(why("Glob", {pattern: "/etc/*"})).toContain("/etc is outside");
@@ -150,7 +150,7 @@ describe("the check with its read-only rule on", () => {
 	});
 
 	it("refuses every other tool, a write inside the tree and a harmless command among them", () => {
-		expect(why("Write", {file_path: "/tmp/review-1/code/src/a.ts", content: ""})).toContain(
+		expect(why("Write", {file_path: "/tmp/review-a/code/src/a.ts", content: ""})).toContain(
 			"This run only reads. Write is not allowed here",
 		);
 		expect(why("Edit", {file_path: "src/a.ts"})).toContain("This run only reads");

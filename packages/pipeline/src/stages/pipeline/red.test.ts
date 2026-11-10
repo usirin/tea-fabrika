@@ -92,10 +92,10 @@ describe("what a run cost, when its step broke before it named a model", () => {
 describe("the last lines of a run with no report, before a public ticket shows them", () => {
 	it("say the copy as `.` and the home as `~`", () => {
 		const text = [
-			"FAIL /home/someone/fab/work/copies/abc123/src/a.test.ts",
-			"at /home/someone/.cache/x.js:1",
+			"FAIL /people/someone/fab/work/copies/abc123/src/a.test.ts",
+			"at /people/someone/.cache/x.js:1",
 		].join("\n");
-		expect(tidyPaths(text, "/home/someone/fab/work/copies/abc123", "/home/someone")).toBe(
+		expect(tidyPaths(text, "/people/someone/fab/work/copies/abc123", "/people/someone")).toBe(
 			["FAIL ./src/a.test.ts", "at ~/.cache/x.js:1"].join("\n"),
 		);
 	});
