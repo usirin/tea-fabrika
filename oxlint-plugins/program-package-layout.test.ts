@@ -9,7 +9,7 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
-import {dirname, join, resolve} from "node:path";
+import {dirname, join, relative, resolve} from "node:path";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
@@ -25,7 +25,19 @@ const withExamples = <P extends {readonly numRuns: number; readonly examples: re
 
 const name = fc.integer({min: 0, max: 100000}).map((n) => `program${n}`);
 
-const run = (name: string, exports: unknown, sources: Readonly<Record<string, string>>) => {
+// The manifest a package is written with, from the fields the harness gives it, and symlinks:
+// each path in the package points to a path given from the package folder.
+type Package = {
+	readonly manifest?: (fields: Readonly<Record<string, unknown>>) => unknown;
+	readonly links?: Readonly<Record<string, string>>;
+};
+
+const run = (
+	name: string,
+	exports: unknown,
+	sources: Readonly<Record<string, string>>,
+	{manifest = (fields) => fields, links = {}}: Package = {},
+) => {
 	const home = realpathSync(mkdtempSync("/tmp/p16-lint-"));
 
 	try {
@@ -33,15 +45,28 @@ const run = (name: string, exports: unknown, sources: Readonly<Record<string, st
 		symlinkSync(join(ROOT, "oxlint-plugins"), join(home, "oxlint-plugins"));
 		const pkg = `next/programs/${name}`;
 		mkdirSync(join(home, pkg), {recursive: true});
+		const written = manifest({name: `@p16/${name}`, type: "module", exports});
 		writeFileSync(
 			join(home, pkg, "package.json"),
-			JSON.stringify({name: `@p16/${name}`, type: "module", exports}),
+			typeof written === "string" ? written : JSON.stringify(written),
 		);
 
 		for (const [path, text] of Object.entries(sources)) {
 			mkdirSync(dirname(join(home, pkg, path)), {recursive: true});
 			writeFileSync(join(home, pkg, path), text);
 		}
+
+		for (const [path, target] of Object.entries(links)) {
+			const at = join(home, pkg, path);
+			mkdirSync(dirname(at), {recursive: true});
+			symlinkSync(relative(dirname(at), join(home, pkg, target)), at);
+		}
+
+		// oxlint lints only JavaScript and TypeScript files, here only the package's own: a file
+		// outside it is outside the rule too.
+		const linted = Object.keys(sources).filter(
+			(path) => /\.[cm]?[jt]sx?$/.test(path) && !path.startsWith("../"),
+		);
 
 		const result = spawnSync(
 			join(ROOT, "node_modules/.bin/oxlint"),
@@ -51,13 +76,14 @@ const run = (name: string, exports: unknown, sources: Readonly<Record<string, st
 				"--disable-nested-config",
 				"--no-ignore",
 				"--format=json",
-				...Object.keys(sources).map((path) => `${pkg}/${path}`),
+				...linted.map((path) => `${pkg}/${path}`),
 			],
 			{cwd: home, encoding: "utf8"},
 		);
+		expect(result.stdout, result.stderr).not.toBe("");
 		const report: {number_of_files: number; diagnostics: Array<{code?: string; message: string}>} =
 			JSON.parse(result.stdout);
-		expect(report.number_of_files).toBe(Object.keys(sources).length);
+		expect(report.number_of_files).toBe(linted.length);
 		return report.diagnostics.filter((d) => d.code === "fabrika(program-package-layout)");
 	} finally {
 		rmSync(home, {recursive: true, force: true});
@@ -166,6 +192,136 @@ describe("fabrika/program-package-layout", () => {
 					{".": "./missing.ts", "./window": "./src/window.tsx"},
 				]) {
 					expect(run(name, exports, files).length).toBeGreaterThan(0);
+				}
+
+				// Review 5 of P16b's sweep: each place the rule returned early, skipped a key, dropped
+				// a target or read a missing value as fine. Each package holds Worker code the rule
+				// cannot see, or cannot read, and is refused.
+				const pure = "src/program.ts",
+					program = "export const program = 1;",
+					fetch = "export default {fetch() { return new Response(''); }};",
+					cases: readonly {
+						readonly exports: unknown;
+						readonly files: Readonly<Record<string, string>>;
+						readonly package?: Package;
+					}[] = [
+						// scenario: a test file as the '.' entry, which the rule skipped, so its findings
+						// were never reported anywhere.
+						{
+							exports: {".": "./src/program.test.ts"},
+							files: {"src/program.test.ts": fetch, "src/helper.ts": program},
+						},
+						// scenario: a '.' entry oxlint does not lint (no extension), so the findings
+						// meant for it were never reported.
+						{
+							exports: {".": "./src/program"},
+							files: {"src/program": fetch, "src/helper.ts": program},
+						},
+						// scenario: an unparsable file behind a subpath, read as an empty module.
+						{
+							exports: {".": `./${pure}`, "./server": "./src/server.ts"},
+							files: {[pure]: program, "src/server.ts": `${fetch}\nexport default {fetch() {`},
+						},
+						// scenario: an unparsable file in the pure graph, read as an empty module.
+						{
+							exports: {".": `./${pure}`},
+							files: {
+								[pure]: 'export * from "./broken.ts";',
+								"src/broken.ts": 'import "cloudflare:workers";\nexport const x = {',
+							},
+						},
+						// scenario: a subpath target that does not start with "./" resolved to nothing and
+						// was dropped, though the file holds a Worker.
+						{
+							exports: {".": `./${pure}`, "./server": "src/server.ts"},
+							files: {[pure]: program, "src/server.ts": fetch},
+						},
+						// scenario: a subpath target naming no file was dropped.
+						{exports: {".": `./${pure}`, "./server": "./src/missing.ts"}, files: {[pure]: program}},
+						// scenario: an exports key that is neither '.' nor './…' was never read.
+						{
+							exports: {".": `./${pure}`, import: "./src/server.ts"},
+							files: {[pure]: program, "src/server.ts": fetch},
+						},
+						// scenario: a pattern target in dist/, which the file listing left out.
+						{
+							exports: {".": `./${pure}`, "./*": "./dist/*.js"},
+							files: {[pure]: program, "dist/server.js": fetch},
+						},
+						// scenario: a pattern target with two `*`, matched only up to the second.
+						{
+							exports: {".": `./${pure}`, "./*": "./src/*/*.ts"},
+							files: {[pure]: program, "src/server/server.ts": fetch},
+						},
+						// scenario: a pattern target under a symlinked folder, which the listing never
+						// entered.
+						{
+							exports: {".": `./${pure}`, "./*": "./src/*.ts"},
+							files: {[pure]: program, "../../../shared/server.ts": fetch},
+							package: {links: {"src/lib": "../../../shared"}},
+						},
+						// scenario: a target outside the package is judged like any other.
+						{
+							exports: {".": `./${pure}`, "./server": "../../../shared/server.ts"},
+							files: {[pure]: program, "../../../shared/server.ts": fetch},
+						},
+						// scenario: a `#` import in the pure graph was never followed.
+						{
+							exports: {".": `./${pure}`},
+							files: {
+								[pure]: 'export {Server} from "#server";',
+								"src/server.ts": "export class Server extends WorkerEntrypoint {}",
+							},
+							package: {
+								manifest: (fields) => ({...fields, imports: {"#server": "./src/server.ts"}}),
+							},
+						},
+						// scenario: a dynamic import by a template literal was never followed.
+						{
+							exports: {".": `./${pure}`},
+							files: {
+								[pure]: "export const load = () => import(`./server.ts`);",
+								"src/server.ts": "export class Server extends WorkerEntrypoint {}",
+							},
+						},
+						// scenario: a `require` was never followed.
+						{
+							exports: {".": `./${pure}`},
+							files: {
+								[pure]: 'const server = require("./server.ts"); export {server};',
+								"src/server.ts": "export class Server extends WorkerEntrypoint {}",
+							},
+						},
+						// scenario: `import x = require(…)` was never followed.
+						{
+							exports: {".": `./${pure}`},
+							files: {
+								[pure]: 'import server = require("./server.ts"); export {server};',
+								"src/server.ts": "export class Server extends WorkerEntrypoint {}",
+							},
+						},
+						// scenario: a `require` of a Worker runtime in pure code was not reported.
+						{
+							exports: {".": `./${pure}`},
+							files: {[pure]: 'const w = require("cloudflare:workers"); export {w};'},
+						},
+						// scenario: `import x = require(…)` of a Worker runtime in pure code was not reported.
+						{
+							exports: {".": `./${pure}`},
+							files: {[pure]: 'import w = require("cloudflare:workers"); export {w};'},
+						},
+						// scenario: a dynamic import by a computed name loads what the rule cannot see.
+						{
+							exports: {".": `./${pure}`},
+							files: {
+								[pure]: 'const at = "./server.ts"; export const load = () => import(at);',
+								"src/server.ts": fetch,
+							},
+						},
+					];
+
+				for (const {exports, files, package: setup} of cases) {
+					expect(run(name, exports, files, setup), JSON.stringify(exports)).not.toEqual([]);
 				}
 			}),
 			runs,
@@ -290,14 +446,22 @@ describe("fabrika/program-package-layout", () => {
 			defines: true,
 			pure: [],
 		},
+		// Review 5 of P16b's sweep: a Worker base class by a local name (22).
+		{
+			text: (c) => `const ${c}Base = DurableObject; export class ${c} extends ${c}Base {}`,
+			defines: true,
+			pure: [],
+		},
 	];
-	// How the Worker file is reached from its export: itself, a `.ts` link, or a link written
-	// without an extension, which TypeScript resolves.
-	const links = ["same file", ".ts", "no extension"] as const;
+	// How the Worker file is reached from its export: itself, a `.ts` link, a link written without
+	// an extension, which TypeScript resolves, a symlink to a file outside the package, or a link
+	// out of the package.
+	const links = ["same file", ".ts", "no extension", "symlink", "outside"] as const;
 	// How the package exports the Worker file: its own key, a pattern key, or a runtime condition
 	// of '.' beside the pure program. Review 3 of P16b: a fallback array on a key, inside a
 	// condition, or under a runtime condition of '.'; a pattern whose target has no `*`; and a
 	// pattern that a null target shuts off for the Worker file, which then exports nothing.
+	// Review 5 of P16b: './window' itself, with the Worker in a `.ts` or a `.tsx` file.
 	const entries = [
 		"key",
 		"pattern",
@@ -308,7 +472,16 @@ describe("fabrika/program-package-layout", () => {
 		"array dot",
 		"fixed pattern",
 		"null pattern",
+		"window",
+		"window tsx",
 	] as const;
+	// Review 5 of P16b: the manifest's name, which a pattern asks the package's own exports by. With
+	// none, or one that is not a string, every subpath a pattern matches counts as offered.
+	const manifests = {
+		name: (fields: Readonly<Record<string, unknown>>) => fields,
+		"no name": ({name: _, ...fields}: Readonly<Record<string, unknown>>) => fields,
+		"number name": (fields: Readonly<Record<string, unknown>>) => ({...fields, name: 7}),
+	} as const;
 	const box = /\/(?:worker|workers|workerd|box|brain)(?:\/|$)/;
 	it("plants: a Worker entry or a window behind any other export key is refused, by what it loads", () => {
 		fc.assert(
@@ -321,6 +494,7 @@ describe("fabrika/program-package-layout", () => {
 				fc.constantFrom(...links),
 				fc.constantFrom(...entries),
 				fc.constantFrom("workerd", "worker", "browser", "import", "node", "default"),
+				fc.constantFrom(...(Object.keys(manifests) as (keyof typeof manifests)[])),
 				(
 					name,
 					[workerKey, windowKey, helperKey],
@@ -330,90 +504,120 @@ describe("fabrika/program-package-layout", () => {
 					link,
 					entry,
 					condition,
+					manifest,
 				) => {
-					const worker = `./${workerPath}.ts`,
+					const windowEntry = entry === "window" || entry === "window tsx",
+						ext = entry === "window tsx" ? "tsx" : "ts",
+						worker = `./${workerPath}.${ext}`,
 						view = `./${windowPath}.tsx`,
-						impl = `./${workerPath.split("/").at(-1)}.impl${link === ".ts" ? ".ts" : ""}`,
+						last = workerPath.split("/").at(-1) ?? "",
+						impl = `./${last}.impl${link === ".ts" ? ".ts" : ""}`,
+						// The Worker code's own file outside the package, as written from the package
+						// folder and from the Worker file's folder.
+						outside = `../../../outside/${last}.ts`,
+						up = `${"../".repeat(workerPath.split("/").length - 1)}${outside}`,
 						text = shapes[shape]!.text(c),
 						files: Record<string, string> = {
 							"src/program.ts": "export const program = 1;",
 							[`${helperPath}.ts`]: "export const helper = 1;",
 							[`${windowPath}.tsx`]: "export const View = () => <b>ok</b>;",
-							// The Worker code sits in the exported file or in a local file it loads.
+							// The Worker code sits in the exported file, in a local file it loads, or
+							// outside the package.
 							...(link === "same file"
-								? {[`${workerPath}.ts`]: text}
-								: {
-										[`${workerPath}.ts`]: `export * from ${JSON.stringify(impl)};`,
-										[`${workerPath}.impl.ts`]: text,
-									}),
+								? {[`${workerPath}.${ext}`]: text}
+								: link === "symlink"
+									? {[outside]: text}
+									: link === "outside"
+										? {
+												[`${workerPath}.${ext}`]: `export * from ${JSON.stringify(up)};`,
+												[outside]: text,
+											}
+										: {
+												[`${workerPath}.${ext}`]: `export * from ${JSON.stringify(impl)};`,
+												[`${workerPath}.impl.ts`]: text,
+											}),
 						},
+						symlinks = link === "symlink" ? {[`${workerPath}.${ext}`]: outside} : {},
 						// The pure program sits beside the Worker file under '.', on the other condition.
 						beside = condition === "default" ? "import" : "default",
 						// The Worker file's subpaths under "./*", which "null pattern" shuts off.
 						shut = [
 							`./${workerPath.slice("src/".length)}`,
-							...(link === "same file" ? [] : [`./${workerPath.slice("src/".length)}.impl`]),
+							...(link === ".ts" || link === "no extension"
+								? [`./${workerPath.slice("src/".length)}.impl`]
+								: []),
 						],
 						// The export that carries the Worker file, and the key its finding names.
-						[shown, exported]: [string, Record<string, unknown>] =
-							entry === "key"
-								? [workerKey, {[workerKey]: worker}]
-								: entry === "pattern"
-									? ["./*", {"./*": "./src/*.ts"}]
-									: entry === "key pattern"
-										? [`${workerKey}/*`, {[`${workerKey}/*`]: "./src/*.ts"}]
-										: entry === "condition"
-											? [".", {".": {[condition]: worker, [beside]: "./src/program.ts"}}]
-											: entry === "array key"
-												? [workerKey, {[workerKey]: [worker]}]
-												: entry === "array condition"
-													? [workerKey, {[workerKey]: {[condition]: [worker]}}]
-													: entry === "array dot"
-														? [".", {".": {[condition]: [worker], [beside]: "./src/program.ts"}}]
-														: entry === "fixed pattern"
-															? [`${workerKey}/*`, {[`${workerKey}/*`]: worker}]
-															: [
-																	"./*",
-																	{
-																		"./*": "./src/*.ts",
-																		...Object.fromEntries(shut.map((key) => [key, null])),
-																	},
-																],
+						carriers: Record<(typeof entries)[number], [string, Record<string, unknown>]> = {
+							key: [workerKey, {[workerKey]: worker}],
+							pattern: ["./*", {"./*": "./src/*.ts"}],
+							"key pattern": [`${workerKey}/*`, {[`${workerKey}/*`]: "./src/*.ts"}],
+							condition: [".", {".": {[condition]: worker, [beside]: "./src/program.ts"}}],
+							"array key": [workerKey, {[workerKey]: [worker]}],
+							"array condition": [workerKey, {[workerKey]: {[condition]: [worker]}}],
+							"array dot": [".", {".": {[condition]: [worker], [beside]: "./src/program.ts"}}],
+							"fixed pattern": [`${workerKey}/*`, {[`${workerKey}/*`]: worker}],
+							"null pattern": [
+								"./*",
+								{"./*": "./src/*.ts", ...Object.fromEntries(shut.map((key) => [key, null]))},
+							],
+							window: ["./window", {"./window": worker}],
+							"window tsx": ["./window", {"./window": worker}],
+						},
+						[shown, exported] = carriers[entry],
 						// A window behind an array target is the same window.
 						arrays = entry.startsWith("array"),
 						target = (path: string) => (arrays ? [path] : path),
-						workerMessage = `A program package has no Worker entry. libfabrika builds its box; '${shown}' is one.`,
+						entryMessage = (key: string) =>
+							`A program package has no Worker entry. libfabrika builds its box; '${key}' is one.`,
+						workerMessage = entryMessage(shown),
 						windowMessage = `The window is exported at './window', never at '${windowKey}'.`,
 						unexported =
 							"Export the real window at './window'. A program without a window needs no stub.",
 						// Under '.', the file is pure code too: a Worker class or handler names '.', and a
-						// Worker runtime import is reported on its own line. A null target exports nothing,
-						// though a key named for libfabrika's box is refused by its name alone.
+						// Worker runtime import is reported on its own line, or for the package when the
+						// file is one oxlint does not lint here (outside the package, or by a symlink).
+						lined = link !== "symlink" && link !== "outside",
+						away = link === "symlink" ? `${workerPath}.${ext}` : outside,
+						pure = lined
+							? shapes[shape]!.pure
+							: shapes[shape]!.pure.length > 0
+								? [`Pure program code cannot load Worker runtime APIs, as '${away}' does.`]
+								: [],
+						// A null target exports nothing, though a key named for libfabrika's box is
+						// refused by its name alone. With no name to ask the exports by, the pattern
+						// keeps the subpath.
+						boxed = shut.filter((key) => box.test(key)).map(entryMessage),
 						expected =
 							entry === "condition" || entry === "array dot"
-								? [...(shapes[shape]!.defines ? [workerMessage] : []), ...shapes[shape]!.pure]
+								? [...(shapes[shape]!.defines ? [workerMessage] : []), ...pure]
 								: entry === "null pattern"
-									? shut
-											.filter((key) => box.test(key))
-											.map(
-												(key) =>
-													`A program package has no Worker entry. libfabrika builds its box; '${key}' is one.`,
-											)
+									? manifest === "name"
+										? boxed
+										: [workerMessage, ...boxed]
 									: [workerMessage],
+						// A Worker file shaped like a window is a window nobody exports, until './window'
+						// carries it.
+						stray = entry === "window tsx" ? [unexported] : [],
 						base = {
 							".": target("./src/program.ts"),
 							"./window": target(view),
 							[helperKey]: `./${helperPath}.ts`,
 						},
 						messages = (exports: unknown) =>
-							run(name, exports, files)
+							run(name, exports, files, {manifest: manifests[manifest], links: symlinks})
 								.map((d) => d.message)
 								.sort();
 					// A pure extra export and a window at './window' are fine; an unexported .ts is not judged.
-					expect(messages(base)).toEqual([]);
-					expect(messages({...base, ...exported})).toEqual([...expected].sort());
+					expect(messages(base)).toEqual(stray);
+					// At './window' the Worker takes the real window's place, which nobody exports then.
+					expect(messages({...base, ...exported})).toEqual(
+						[...expected, ...(windowEntry ? [unexported] : [])].sort(),
+					);
 					const {"./window": _, ...moved} = base;
-					expect(messages({...moved, [windowKey]: target(view)})).toEqual([windowMessage]);
+					expect(messages({...moved, [windowKey]: target(view)})).toEqual(
+						[windowMessage, ...stray].sort(),
+					);
 					// A window file nobody exports, at any path, still needs './window'.
 					expect(messages(moved)).toEqual([unexported]);
 					// The review's package: a Worker entry and the window both behind other keys.
@@ -436,6 +640,7 @@ describe("fabrika/program-package-layout", () => {
 						"same file",
 						"key",
 						"workerd",
+						"name",
 					],
 					// pinned: review 2 of P16b, "./*": "./src/*.ts" with a WorkerEntrypoint class in
 					// src/server.ts: the literal pattern target was looked up as a file and gave no finding.
@@ -448,6 +653,7 @@ describe("fabrika/program-package-layout", () => {
 						"same file",
 						"pattern",
 						"workerd",
+						"name",
 					],
 					// pinned: review 2 of P16b, `export default {async fetch() {}} satisfies
 					// ExportedHandler;` behind "./server" gave no finding.
@@ -460,6 +666,7 @@ describe("fabrika/program-package-layout", () => {
 						"same file",
 						"key",
 						"workerd",
+						"name",
 					],
 					// pinned: review 2 of P16b, the same handler under `as` gave no finding.
 					[
@@ -471,6 +678,7 @@ describe("fabrika/program-package-layout", () => {
 						"same file",
 						"key",
 						"workerd",
+						"name",
 					],
 					// pinned: review 2 of P16b, `const app = {fetch() {}}; export default app;` gave no finding.
 					[
@@ -482,6 +690,7 @@ describe("fabrika/program-package-layout", () => {
 						"same file",
 						"key",
 						"workerd",
+						"name",
 					],
 					// pinned: review 2 of P16b, ".": {"workerd": "./src/worker.ts", "default":
 					// "./src/program.ts"} with a fetch handler in worker.ts gave no finding.
@@ -494,6 +703,7 @@ describe("fabrika/program-package-layout", () => {
 						"same file",
 						"condition",
 						"workerd",
+						"name",
 					],
 					// pinned: review 2 of P16b, src/server.ts holding `export * from "./impl"` with the
 					// Worker in impl.ts gave no finding: the link without an extension was not followed.
@@ -506,6 +716,7 @@ describe("fabrika/program-package-layout", () => {
 						"no extension",
 						"key",
 						"workerd",
+						"name",
 					],
 					// pinned: review 3 of P16b, "./server": ["./src/server.ts"] with a WorkerEntrypoint
 					// class in server.ts gave no finding, and a window behind an array target was told
@@ -519,6 +730,7 @@ describe("fabrika/program-package-layout", () => {
 						"same file",
 						"array key",
 						"workerd",
+						"name",
 					],
 					// pinned: review 3 of P16b, "./server": {"default": ["./src/server.ts"]} gave no finding.
 					[
@@ -530,6 +742,7 @@ describe("fabrika/program-package-layout", () => {
 						"same file",
 						"array condition",
 						"default",
+						"name",
 					],
 					// pinned: review 3 of P16b, ".": {"workerd": ["./src/worker.ts"], "default":
 					// "./src/program.ts"} gave no finding for the Worker in worker.ts.
@@ -542,6 +755,7 @@ describe("fabrika/program-package-layout", () => {
 						"same file",
 						"array dot",
 						"workerd",
+						"name",
 					],
 					// pinned: review 3 of P16b, `const h = {fetch() {}}; export default {...h};` behind
 					// "./server" gave no finding.
@@ -554,6 +768,96 @@ describe("fabrika/program-package-layout", () => {
 						"same file",
 						"key",
 						"workerd",
+						"name",
+					],
+					// pinned: review 5 of P16b, "./window": "./src/window.tsx" holding `export default
+					// {fetch() {}}` gave no finding: the "./window" graph was never judged for Worker code.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/window", "src/ui", "src/lib"],
+						"Window",
+						4,
+						"same file",
+						"window tsx",
+						"workerd",
+						"name",
+					],
+					// pinned: review 5 of P16b, the same "./window" file holding a class on WorkerEntrypoint
+					// from cloudflare:workers gave no finding.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/window", "src/ui", "src/lib"],
+						"Window",
+						0,
+						"same file",
+						"window tsx",
+						"workerd",
+						"name",
+					],
+					// pinned: review 5 of P16b, "./window": "./src/server.ts" with a fetch handler gave no finding.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"Server",
+						4,
+						"same file",
+						"window",
+						"workerd",
+						"name",
+					],
+					// pinned: review 5 of P16b, a manifest with no `name` and "./*": "./src/*.ts" with a fetch
+					// handler in src/server.ts gave no finding: the pattern's targets were dropped.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"Server",
+						4,
+						"same file",
+						"pattern",
+						"workerd",
+						"no name",
+					],
+					// pinned: review 5 of P16b's sweep, `const Base = DurableObject; class X extends Base {}`
+					// behind "./server" gave no finding.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"Server",
+						22,
+						"same file",
+						"key",
+						"workerd",
+						"name",
+					],
+					// pinned: review 5 of P16b's sweep, '.' under "workerd" loading, through a symlink, a file
+					// outside the package that imports cloudflare:workers gave no finding: oxlint never lints it.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/worker", "src/ui", "src/lib"],
+						"Worker",
+						7,
+						"symlink",
+						"condition",
+						"workerd",
+						"name",
+					],
+					// pinned: review 5 of P16b's sweep, the same import reached by a link out of the package.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/worker", "src/ui", "src/lib"],
+						"Worker",
+						7,
+						"outside",
+						"condition",
+						"workerd",
+						"name",
 					],
 				],
 			}),

@@ -32,6 +32,9 @@ const APP = resolve(import.meta.dirname, "..");
 const homes: string[] = [];
 const runs = {seed: 119120, numRuns: 3};
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
+// The platform's loader and stub types come from the code under test, never by their ambient
+// names (0042, tests included).
+type Platform = Parameters<typeof workerLoader>[0];
 
 const home = () => {
 	const h = mkdtempSync("/tmp/fh.");
@@ -428,13 +431,13 @@ describe("P16 stack and sealed loader", () => {
 						fetch: unused,
 						connect: unused,
 					};
-					const stub: WorkerStub = {
+					const stub: ReturnType<Platform["get"]> = {
 						getEntrypoint: unused,
 						getDurableObjectClass: unused,
 					};
 					vi.spyOn(stub, "getEntrypoint").mockReturnValue(rpc);
 					// Record the real adapter's config; the copied-file tests below exercise workerd itself.
-					const platform: WorkerLoader = {
+					const platform: Platform = {
 						get: (key, callback) => {
 							calls.push({key, config: callback()});
 							return stub;

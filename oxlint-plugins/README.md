@@ -100,7 +100,10 @@ extension added, a `.js` name standing for its `.ts` source and a folder's index
 export target as a file path, as written, and it sends each pattern subpath back through the
 package's own `exports`, by the package's name. So null targets and more specific keys apply as
 Node applies them. Its conditions are `workerd`, `import` and `default`, plus each condition path
-the package names. A package with no `name` resolves no pattern subpath.
+the package names. A package with no `name`, or a `name` that is not a string, cannot ask its own
+`exports`, so the rule fails closed: every subpath a pattern matches counts as offered, and a
+Worker behind it is refused. Any string name works, since 11.24.2 self-references by whatever the
+manifest names.
 
 What the resolver cannot do, with proof from 11.24.2 on a scratch package (2026-11-10):
 
@@ -128,6 +131,16 @@ The hand-written part, and the generated case that tests each edge in
 | A pattern target without `*` maps every subpath to one file | entry `fixed pattern` |
 | A pattern subpath a null target or a more specific key takes is not the pattern's | entry `null pattern` |
 | Declaration files are never runtime code | "mixed export conditions", `.d.ts`, `.d.mts`, `.d.cts` |
+| A package with no `name`, or a name that is not a string, keeps every subpath a pattern matches | manifests `no name`, `number name`, and the pinned nameless `"./*"` example |
+| `./window` is judged for Worker code like every other subpath | entries `window`, `window tsx`, and the three pinned review 5 examples |
+| Every `*` in a target is the same text | the plants' two-`*` target |
+| A pattern target in build output, or under a symlinked folder, is listed | the plants' `dist/*.js` target and symlinked `src/lib` |
+| A link by a non-relative name (its own name, a `#` import) is followed when it resolves inside the package | the plants' `#server` import |
+| A literal link is a string or a template literal with no `${}`; `require` and `import x = require()` are links; any other name is refused, never skipped | the plants' template literal, `require`, `import =` and computed import |
+| A file that cannot be read or parsed is refused, never read as empty | the plants' unparsable subpath and pure helper |
+| Pure code that oxlint does not lint line by line (outside the package, by a symlink, under `fixtures/`) is reported for the package | links `symlink`, `outside` under `condition` and `array dot`, and their two pinned examples; `fixtures/` has no test, as the harness lints with `--no-ignore` |
+| Package findings go on every file when the `.` entry is one oxlint skips (a test file is judged like any other) | the plants' `program.test.ts` and extensionless entries |
+| A plain subpath must name a real file; an export key is `.` or starts with `./` | the plants' `src/server.ts`, missing target and `import` key |
 
 fast-check 4.10.2 counts `examples` inside `numRuns`, so `withExamples` adds the generated runs on
 top. Before 2026-11-10 the layout law ran its 7 examples and 1 generated input.
