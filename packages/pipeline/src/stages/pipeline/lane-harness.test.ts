@@ -1,5 +1,7 @@
+import { Effect } from "effect";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
+import * as Layer from "./layer.ts";
 
 import { lane, YES, TIMED_OUT, stoppedLine } from "./lane-harness.ts";
 
@@ -43,12 +45,26 @@ it("scenario: L7 a real lane's timeout ends with the stopped line then TIMED_OUT
   expect(ran.lines.at(-2)).toMatch(/^stopped after 1 s; last line \d+\.\d s before; load \d+\.\d on \d+ CPUs$/);
 });
 
-it("scenario: the stopped line holds the lane's own last line time and the machine's load", async () => {
-  // A real lane cut at one second says its lines first; the quiet time is within the limit, the load is read.
-  // Plant: add the clock to the last line's time, or read the load as 0.
-  const ran = await lane({ picks: YES, within: 1 });
-  const stopped = ran.lines.at(-2) ?? "";
-  expect(ran.lines.length).toBeGreaterThan(2);
-  expect(Number(/last line (\d+\.\d) s before/.exec(stopped)?.[1])).toBeLessThanOrEqual(1.5);
-  expect(stopped).toContain("load 7.3 on");
+it("scenario: scripted lane lines determine the stopped quiet time and load", async () => {
+  // Script the public runner so line delivery cannot race the real one-second timeout.
+  // Only the diagnostic clock is controlled; Effect's timeout keeps its live scheduler.
+  const clock = vi.spyOn(performance, "now").mockReturnValue(1000);
+  const runner = vi.spyOn(Layer, "runLane").mockImplementation((_n, say) =>
+    Effect.gen(function* () {
+      clock.mockReturnValue(4000);
+      yield* say("scripted lane line");
+      clock.mockReturnValue(9000);
+      return yield* Effect.never;
+    }),
+  );
+
+  try {
+    const ran = await lane({ picks: YES, within: 1 });
+    expect(ran.lines).toContain("scripted lane line");
+    expect(ran.lines.at(-2)).toMatch(/^stopped after 1 s; last line 5\.0 s before; load 7\.3 on \d+ CPUs$/);
+    expect(ran.lines.at(-1)).toBe(TIMED_OUT);
+  } finally {
+    runner.mockRestore();
+    clock.mockRestore();
+  }
 });
