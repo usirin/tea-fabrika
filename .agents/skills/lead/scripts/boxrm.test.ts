@@ -164,7 +164,10 @@ const {spawnSync} = require("node:child_process");
 const cmd = require("node:path").basename(process.argv[1]);
 const args = process.argv.slice(2);
 if (cmd === "gh") {
-  if (args[0] === "pr" && args[1] === "view") console.log("main");
+  // After the merge (0015): merged at the tip, with a description that names no ticket.
+  if (args[0] === "pr" && args[1] === "view" && args.includes("state,mergeCommit")) console.log("MERGED " + ${JSON.stringify(tip)});
+  else if (args[0] === "pr" && args[1] === "view" && args.includes("body")) console.log("");
+  else if (args[0] === "pr" && args[1] === "view") console.log("main");
   else if (args[0] === "pr" && args[1] === "merge") process.exit(0);
   else if (args[0] === "run") console.log("commits\\tcheck\\t2026-11-08T00:00:00Z commits: 1 commits, ticket 318");
   else if (args[1].includes("check_name=")) console.log("github-actions");
