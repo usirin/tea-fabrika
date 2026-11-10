@@ -746,7 +746,7 @@ export class ProgramRunner extends Context.Service<
                   : original === null
                     ? "null"
                     : typeof original;
-            const down = wrapped instanceof ProgramDown ? wrapped : new ProgramDown({ why, cause: original });
+            const down = wrapped instanceof ProgramDown ? wrapped : new ProgramDown({ reason, cause: original });
             // The step's own failure is the answer; a later recovery write's failure never replaces it.
             yield* observed(
               (reason === "step" ? Failure.cases.fresh : Failure.cases.saved).make({
@@ -1352,7 +1352,7 @@ export class ProgramRunner extends Context.Service<
                   const asked = JSON.stringify(input.envelope.input);
 
                   if (Option.exists(letter, (l) => l.id === input.id && JSON.stringify(l.m) !== asked)) {
-                    return { answer: Sent.cases.refused.make({ why: "id_reused" }), jobs: [] };
+                    return { answer: Sent.cases.refused.make({ reason: "id_reused" }), jobs: [] };
                   }
 
                   return yield* accept(yield* ready(), input);

@@ -171,7 +171,7 @@ export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Ef
     Effect.map((value): ProcessReply<A> => ({ ...ProcessReplies.cases.ok.make({ value }), value })),
     Effect.catch((error): Effect.Effect<ProcessReply<A>, E> =>
       error instanceof ProcessError
-        ? Effect.succeed(ProcessReplies.cases.ProcessError.make({ why: error.why }))
+        ? Effect.succeed(ProcessReplies.cases.ProcessError.make({ reason: error.reason }))
         : Effect.fail(error),
     ),
   );
@@ -182,9 +182,9 @@ const processValue = Effect.fnUntraced(function* <A>(reply: ProcessReply<A>) {
   }
 
   const refused = yield* Schema.decodeUnknownEffect(ProcessReplies.cases.ProcessError)(reply).pipe(
-    Effect.mapError(() => new LedgerError({ why: "bad_row" })),
+    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
   );
-  return yield* new ProcessError({ why: refused.why });
+  return yield* new ProcessError({ reason: refused.reason });
 });
 
 /** A trusted restart: its request ID makes a repeat one replacement. */
@@ -396,7 +396,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   const resolved = (pid: string) =>
     processes
       .resolve(pid)
-      .pipe(Effect.catchTag("ProcessError", () => Effect.fail(new LedgerError({ why: "refused" }))));
+      .pipe(Effect.catchTag("ProcessError", () => Effect.fail(new LedgerError({ reason: "refused" }))));
   /** The registered name whose object stores this process ID. */
   const processObject = (pid: string) => Effect.map(resolved(pid), (life) => life.name);
   type InputPolicy = { inputs: Array<string>; events: Array<string> };
@@ -766,12 +766,13 @@ const processLogic = Effect.fnUntraced(function* (
     work.pipe(
       Effect.retry({
         times: 2,
-        while: (error) => error instanceof LedgerError && error.why === "unreachable",
+        while: (error) => error instanceof LedgerError && error.reason === "unreachable",
       }),
     );
   const manager: ProcessCalls = {
     start: (request, from) => asked(rpc(p.processStart(request, from))).pipe(Effect.flatMap(processValue)),
-    exit: (process, why, from) => asked(rpc(p.processExit(process, why, from))).pipe(Effect.flatMap(processValue)),
+    exit: (process, reason, from) =>
+      asked(rpc(p.processExit(process, reason, from))).pipe(Effect.flatMap(processValue)),
     info: Effect.suspend(() => asked(rpc(p.info()))),
     status: (name) =>
       asked(rpc(p.processStatus(name))).pipe(
@@ -856,7 +857,7 @@ const processLogic = Effect.fnUntraced(function* (
     due: (at: number) => attributed(runner.due(at)),
     restart: (request: unknown) =>
       Schema.decodeUnknownEffect(RestartRequest)(request).pipe(
-        Effect.mapError(() => new LedgerError({ why: "bad_row" })),
+        Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
         Effect.flatMap((checked) => attributed(runner.restart(checked))),
       ),
     // A platform alarm delivers the saved due time, so a repeated alarm is the same letter.

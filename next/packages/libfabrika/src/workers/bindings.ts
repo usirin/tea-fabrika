@@ -28,7 +28,7 @@ export const CommitReply = Schema.TaggedUnion({ ok: { value: Appended }, ...refu
  *  value's own type comes from the call; the schema checks the refusal. */
 export const ProcessReplies = Schema.TaggedUnion({
   ok: { value: Schema.Unknown },
-  ProcessError: { why: ProcessError.fields.why },
+  ProcessError: { reason: ProcessError.fields.reason },
 });
 
 export type ProcessReply<A> =
