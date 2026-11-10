@@ -122,7 +122,7 @@ const value = (node: unknown): unknown =>
 const handlerObject = (
 	node: unknown,
 	named: (node: unknown) => unknown,
-	seen: Set<unknown> = new Set(),
+	seen = new Set<unknown>(),
 ): boolean => {
 	const object = named(node);
 

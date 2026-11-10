@@ -61,6 +61,10 @@ The other is `no-bare-tell.grit`. A `tell` or `offer` to a program's input is an
 
 `plants.test.ts` plants one line per rule that no other test plants, and the built-in rules that must not be lost (unused imports and variables, non-null, ts-ignore), and sees each fire. It also runs `lint.ts`: advice alone exits 0 and still prints; a blocking fire exits 1.
 
+`builtin-plants.ts` holds a plant for each of oxlint's own rules that went on with 0 hits on 2026-11-09 (ticket 438): 124 rules from the eslint, oxc, unicorn, typescript, vitest, react, `import` and `promise` sets. With 0 hits a rule had shown nothing, so the plant is the only proof it works. Four quirks of oxlint 1.90.0 that the plants found: `no-implied-eval` reads `globalThis.setTimeout("...")` but not a bare `setTimeout("...")`; `no-non-null-asserted-nullish-coalescing` leaves a `declare const` alone; `promise/no-multiple-resolved` goes quiet when a second Promise follows in the file; and `require-awaited-expect-poll` and `import/no-commonjs` report one line twice. `react/preserve-manual-memoization` and `react/no-object-type-as-default-prop` stayed off: no plant made the first fire, and the second had 1 hit (`apps/fabrika/src/keys/window.tsx:98`). Two more stayed off after main moved on: `unicorn/prefer-type-error` had 12 hits once every `if` body got braces (it reads only a braced `throw`), and `eslint/no-unused-expressions` had 0 hits on the tree but refuses the bare `helper;` that `one-store-hook.test.ts` plants on purpose.
+
+The same change turned on, as errors, Effect's 35 diagnostics that fired 0 times on the tree (28 suggestions and 7 that were off), plus `globalErrorInEffectCatch` and `globalErrorInEffectFailure` for `next/` files that are not tests, through the plugin's `overrides` in `tsconfig.base.json`. `effect-tsgo diagnostics --file` does not apply an override's `exclude`; `tsc` does, and `pnpm typecheck` is what blocks.
+
 ## The new version's exam rules
 
 P16 adds `fabrika/program-package-layout` for `next/programs/` only. A package exports
