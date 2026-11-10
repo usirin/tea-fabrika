@@ -55,7 +55,7 @@ const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
   expect(Cause.hasFails(cause)).toBe(true);
   expect(Cause.findErrorOption(cause)).toMatchObject({
     _tag: "Some",
-    value: { _tag: tag, why: "bad_row" },
+    value: { _tag: tag, reason: "bad_row" },
   });
 };
 
@@ -232,7 +232,7 @@ it("Gateway ready RPC decoding fails in the typed channel before the wait refusa
         expect(w.ws.send.mock.calls.map(([text]) => JSON.parse(text))).toContainEqual(
           expect.objectContaining({
             id: "wait",
-            error: expect.objectContaining({ data: { why: "bad_row" } }),
+            error: expect.objectContaining({ data: { reason: "bad_row" } }),
           }),
         );
       } finally {

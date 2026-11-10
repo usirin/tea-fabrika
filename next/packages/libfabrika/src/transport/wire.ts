@@ -21,12 +21,12 @@ export const Who = Schema.Struct({
 
 export const Admission = Schema.TaggedUnion({
   admitted: { who: Who },
-  refused: { why: Schema.Literal("not_granted") },
+  refused: { reason: Schema.Literal("not_granted") },
 });
 
 export const Answer = Schema.TaggedUnion({
   ok: { result: Schema.Json },
-  refused: { why: Schema.String },
+  refused: { reason: Schema.String },
   parked: { stream: Schema.String, after: Schema.Int },
 });
 

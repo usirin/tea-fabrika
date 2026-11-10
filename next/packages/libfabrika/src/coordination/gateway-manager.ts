@@ -51,7 +51,7 @@ export class GatewayManager extends Context.Service<
 							session TEXT NOT NULL, at INTEGER NOT NULL)`);
                 return step();
               }),
-            catch: (error) => new LedgerError({ why: Schema.isSchemaError(error) ? "bad_row" : "storage" }),
+            catch: (error) => new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage" }),
           });
         });
         const probe = Effect.fn("gateway.probe")(function* (connection: Connection) {

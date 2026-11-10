@@ -25,7 +25,7 @@ interface Edge {
   readonly path: string;
   readonly line: number;
   readonly rules: string;
-  readonly why: string;
+  readonly reason: string;
 }
 
 const EDGE_RULES: ReadonlySet<string> = new Set(["fabrika/no-promises", "fabrika/no-effect-run-outside-edge"]);
@@ -61,13 +61,13 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
       return [];
     }
 
-    const why = at < 0 ? "" : rest.slice(at).replace(REASON, "").trim();
+    const reason = at < 0 ? "" : rest.slice(at).replace(REASON, "").trim();
     const line = text.slice(0, comment.start).split("\n").length;
-    return [{ path, line, rules: rules.join(", "), why }];
+    return [{ path, line, rules: rules.join(", "), reason }];
   });
 });
 
-const matchKey = (edge: Edge) => JSON.stringify([edge.path, edge.rules, edge.why]);
+const matchKey = (edge: Edge) => JSON.stringify([edge.path, edge.rules, edge.reason]);
 
 /**
  * The edge comments at `head` that were not at `base`, each map keyed by path from the top of the
@@ -127,10 +127,10 @@ const lines = (text: string) => text.split("\n").filter((line) => line !== "");
 const notice = (edge: Edge) => {
   const escape = (s: string) => s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
   const where = escape(edge.path).replaceAll(":", "%3A").replaceAll(",", "%2C");
-  return `::notice file=${where},line=${edge.line}::${escape(`${edge.rules} -- ${edge.why}`)}`;
+  return `::notice file=${where},line=${edge.line}::${escape(`${edge.rules} -- ${edge.reason}`)}`;
 };
 
-const ask = (edge: Edge) => `${edge.path}:${edge.line}  ${edge.rules}  ${edge.why}  [ok] [no]`;
+const ask = (edge: Edge) => `${edge.path}:${edge.line}  ${edge.rules}  ${edge.reason}  [ok] [no]`;
 
 const main = Effect.gen(function* () {
   const args = process.argv.slice(2);

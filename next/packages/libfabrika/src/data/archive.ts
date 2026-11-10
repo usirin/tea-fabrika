@@ -18,7 +18,7 @@ const hex = (bytes: Uint8Array): string => Array.from(bytes, (byte) => byte.toSt
 /** The body's SHA-256, as lowercase hex. An unnamed `Effect.fn`: the sink's own work ends no span. */
 export const sha256 = Effect.fn(function* (body: Uint8Array) {
   const bytes = new Uint8Array(body);
-  const fail = () => new SinkError({ why: "storage", held: 0 });
+  const fail = () => new SinkError({ reason: "storage", held: 0 });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
   const digest = yield* work;
@@ -55,7 +55,7 @@ export class Archive extends Context.Service<
       method: M,
       ...args: Parameters<BucketCalls[M]>
     ): Effect.Effect<Awaited<ReturnType<BucketCalls[M]>>, SinkError> => {
-      const fail = () => new SinkError({ why: "unreachable", held: 0 });
+      const fail = () => new SinkError({ reason: "unreachable", held: 0 });
       // oxlint-disable-next-line fabrika/no-promises -- edge: an R2 binding answers with a Promise
       return Effect.tryPromise({ try: () => Reflect.apply(calls[method], calls, args), catch: fail });
     };
@@ -64,7 +64,9 @@ export class Archive extends Context.Service<
         const hash = yield* sha256(body);
         yield* call("put", key, body, hash);
         const raw = yield* call("head", key);
-        const stored = yield* decodeHead(raw).pipe(Effect.mapError(() => new SinkError({ why: "bad_row", held: 0 })));
+        const stored = yield* decodeHead(raw).pipe(
+          Effect.mapError(() => new SinkError({ reason: "bad_row", held: 0 })),
+        );
         return { sha256: stored === null ? null : stored.sha256 };
       }),
     });

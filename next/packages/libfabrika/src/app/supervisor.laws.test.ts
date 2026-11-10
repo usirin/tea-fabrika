@@ -131,7 +131,7 @@ describe("P34 policy and saved supervision laws", () => {
     );
   });
 
-  it("p80 plant, down after one crash: a down fact only on the crash that trips the brake, and every start waits its backoff", async () => {
+  it("p80 plant, down after one crash: a down event only on the crash that trips the brake, and every start waits its backoff", async () => {
     const s = await subject();
     const policies = fc
       .record({
@@ -214,7 +214,7 @@ describe("P34 policy and saved supervision laws", () => {
       {
         seed: SEED,
         numRuns: 100,
-        // T271 decision check: one crash inside the budget wrote a down fact.
+        // T271 decision check: one crash inside the budget wrote a down event.
         examples: [
           [
             {

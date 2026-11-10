@@ -44,7 +44,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
           : {
               jsonrpc: "2.0",
               id,
-              error: { code: -32000, message: answer.why, data: { why: answer.why } },
+              error: { code: -32000, message: answer.reason, data: { reason: answer.reason } },
             },
       ),
     );
@@ -68,10 +68,10 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     if (Result.isFailure(answer)) {
       const error = answer.failure;
       const reason =
-        typeof error === "object" && error !== null && "why" in error && typeof error.why === "string"
-          ? error.why
+        typeof error === "object" && error !== null && "reason" in error && typeof error.reason === "string"
+          ? error.reason
           : "unreachable";
-      yield* remove(wait, Answer.cases.refused.make({ why: reason }));
+      yield* remove(wait, Answer.cases.refused.make({ reason }));
     } else if (answer.success._tag === "ready") {
       yield* remove(wait, Answer.cases.ok.make({ result: { rev: answer.success.rev } }));
     }
@@ -82,13 +82,13 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     const now = yield* read;
 
     if (now._tag !== "online") {
-      return respond(id, Answer.cases.refused.make({ why: "no_hello" }));
+      return respond(id, Answer.cases.refused.make({ reason: "no_hello" }));
     }
 
     const decoded = Schema.decodeUnknownResult(Read)(params);
 
     if (Result.isFailure(decoded)) {
-      return respond(id, Answer.cases.refused.make({ why: "bad_input" }));
+      return respond(id, Answer.cases.refused.make({ reason: "bad_input" }));
     }
 
     const wait = Wait.make({ id, ...decoded.success });
@@ -99,7 +99,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       next.waits.length > 64 ||
       new TextEncoder().encode(JSON.stringify(next)).length > 16_384
     ) {
-      return respond(id, Answer.cases.refused.make({ why: "too_many_waits" }));
+      return respond(id, Answer.cases.refused.make({ reason: "too_many_waits" }));
     }
 
     options.save(next);
@@ -109,7 +109,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     const now = yield* read;
 
     if (now._tag !== "online" && !["initialize", "door.knock"].includes(request.method)) {
-      return respond(request.id, Answer.cases.refused.make({ why: "no_hello" }));
+      return respond(request.id, Answer.cases.refused.make({ reason: "no_hello" }));
     }
 
     if (now._tag === "online") {

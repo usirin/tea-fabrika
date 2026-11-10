@@ -350,7 +350,7 @@ const make = (sql: Sql, who: { readonly object: string }) => {
   const flush = Effect.gen(function* () {
     if (failed || held.length > 0) {
       failed = false;
-      return yield* Effect.fail(new SinkError({ why: "storage", held: held.length }));
+      return yield* Effect.fail(new SinkError({ reason: "storage", held: held.length }));
     }
 
     const records = yield* RecordManager;
@@ -382,7 +382,7 @@ const make = (sql: Sql, who: { readonly object: string }) => {
     const done = commit([], yield* Clock.currentTimeMillis, false);
 
     if (Result.isFailure(done)) {
-      return yield* Effect.fail(new SinkError({ why: "storage", held: held.length }));
+      return yield* Effect.fail(new SinkError({ reason: "storage", held: held.length }));
     }
 
     return yield* attempt(() => readSummaries(sql, from, to));

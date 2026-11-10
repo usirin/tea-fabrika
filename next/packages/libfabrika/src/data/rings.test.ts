@@ -56,7 +56,9 @@ const bell = (fails: ReadonlyArray<string> = []) => {
     ring: (to, stream, rev) =>
       Effect.sync(() => {
         rang.push({ to, stream, rev });
-      }).pipe(Effect.andThen(fails.includes(to) ? Effect.fail(new LedgerError({ why: "unreachable" })) : Effect.void)),
+      }).pipe(
+        Effect.andThen(fails.includes(to) ? Effect.fail(new LedgerError({ reason: "unreachable" })) : Effect.void),
+      ),
   });
   return { rang, layer };
 };

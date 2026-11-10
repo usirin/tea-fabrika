@@ -13,7 +13,7 @@
 //   part's name. `RecordManager.sql(open, cap)` opens each part by that name.
 // - `read(chain)` walks part 0, then each `rolled.next`, and yields every span once, in write order.
 // - `content(chain, spanId)` is none, `{_tag: "kept", spanId, message}`, or
-//   `{_tag: "deleted", spanId, by, at, why}`; `at` is the Clock's ms. `deleteContent` looks in every
+//   `{_tag: "deleted", spanId, by, at, reason}`; `at` is the Clock's ms. `deleteContent` looks in every
 //   part, and a second delete changes nothing. Nothing but content is ever deleted.
 // - A part's tables in `RecordManager.sql`: `spans`, `content` and `rolled` (at most one row).
 // - `RecordManager.remote(stub)` asks `stub(name)` for the part's object; a call that rejects is
@@ -25,14 +25,14 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import type { Layer } from "effect";
-import { Effect, Option, Stream } from "effect";
+import { Effect, Option, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { processId } from "../id.test-support.ts";
 import { RecordManager, type RecordCalls } from "./records.ts";
 import type { Sql } from "./referee.ts";
 import { SinkError } from "./sink.ts";
 import { nodeSql } from "./sqlite.ts";
-import type { Chain, SpanRow } from "./trace.ts";
+import { type Chain, SpanRow } from "./trace.ts";
 
 type ChainValue = typeof Chain.Type;
 type Row = typeof SpanRow.Type;
@@ -320,119 +320,156 @@ describe("p102, the cap is checked before the write (RecordManager.sql)", () => 
     });
   });
 
-  it.effect("a part's Sql that throws answers storage, and writes nothing", () => {
-    const throwing: Sql = {
-      exec: () => {
-        throw Object.assign(new Error("database or disk is full"), { errcode: 13 });
-      },
-      transaction: () => {
-        throw Object.assign(new Error("database or disk is full"), { errcode: 13 });
-      },
-      size: () => 0,
-    };
-    return Effect.gen(function* () {
-      const error = yield* Effect.flip(RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])));
-      expect(error).toBeInstanceOf(SinkError);
-      expect(error.why).toBe("storage");
-    }).pipe(Effect.provide(RecordManager.sql(() => throwing, CAP)));
-  });
+  it.effect.prop(
+    "a part's Sql that throws answers storage, and writes nothing",
+    { generated: Schema.Unknown },
+    ({ generated }) =>
+      Effect.forEach(
+        [Object.assign(new Error("database or disk is full"), { errcode: 13 }), generated],
+        (value) => {
+          const throwing: Sql = {
+            exec: () => {
+              throw value;
+            },
+            transaction: () => {
+              throw value;
+            },
+            size: () => 0,
+          };
+          return Effect.gen(function* () {
+            const error = yield* Effect.flip(RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])));
+            expect(error).toBeInstanceOf(SinkError);
+            expect(error.reason).toBe("storage");
+          }).pipe(Effect.provide(RecordManager.sql(() => throwing, CAP)));
+        },
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 });
 
 const T = Date.UTC(2026, 10, 7, 22, 0, 0, 20);
 const MESSAGE = "TypeError: note-body-p100 was not a function\n    at step (counter.ts:12:3)";
 
 describe.each(backends)("p100, content is the one deletable part, on RecordManager.$name", (backend) => {
-  it.effect(
-    "deleteContent keeps who, when and why; the span row stays as it was; a second delete changes nothing",
-    () => {
-      const { layer, parts } = backend.make(CAP);
-      return Effect.gen(function* () {
-        const records = yield* RecordManager;
-        const failed = {
-          ...row(id(0)),
-          ok: false,
-          attributes: { ...row(id(0)).attributes, "error.type": "TypeError" },
-        };
-        yield* records.write(job, 0, [kept(failed, MESSAGE), kept(row(id(1)))]);
-        expect(yield* records.content(job, id(0))).toEqual(
-          Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
-        );
-        expect(yield* records.content(job, id(1))).toEqual(Option.none());
-        const before = yield* read(job);
-        const rawBefore = parts?.rows(part(0), "spans");
+  it.effect.prop(
+    "deleteContent keeps who, when and reason; the span row stays as it was; a second delete changes nothing",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        ["a note's text was in the message", generated],
+        (value) => {
+          const { layer, parts } = backend.make(CAP);
+          return Effect.gen(function* () {
+            const records = yield* RecordManager;
+            const failed = {
+              ...row(id(0)),
+              ok: false,
+              attributes: { ...row(id(0)).attributes, "error.type": "TypeError" },
+            };
+            yield* records.write(job, 0, [kept(failed, MESSAGE), kept(row(id(1)))]);
+            expect(yield* records.content(job, id(0))).toEqual(
+              Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
+            );
+            expect(yield* records.content(job, id(1))).toEqual(Option.none());
+            const before = yield* read(job);
+            const rawBefore = parts?.rows(part(0), "spans");
 
-        yield* TestClock.setTime(T);
-        yield* records.deleteContent(job, id(0), {
-          by: "owner",
-          why: "a note's text was in the message",
-        });
-        const deleted = {
-          _tag: "deleted",
-          spanId: id(0),
-          by: "owner",
-          at: T,
-          why: "a note's text was in the message",
-        };
-        expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
+            yield* TestClock.setTime(T);
+            yield* records.deleteContent(job, id(0), {
+              by: "owner",
+              reason: value,
+            });
+            const deleted = {
+              _tag: "deleted",
+              spanId: id(0),
+              by: "owner",
+              at: T,
+              reason: value,
+            };
+            expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
 
-        yield* TestClock.setTime(T + 60_000);
-        yield* records.deleteContent(job, id(0), { by: "someone-else", why: "again" });
-        expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
+            yield* TestClock.setTime(T + 60_000);
+            yield* records.deleteContent(job, id(0), { by: "someone-else", reason: "again" });
+            expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
 
-        expect(yield* read(job)).toEqual(before);
+            expect(yield* read(job)).toEqual(before);
 
-        if (parts !== undefined) {
-          expect(parts.rows(part(0), "spans")).toEqual(rawBefore);
-          const content = JSON.stringify(parts.rows(part(0), "content"));
-          expect(content).not.toContain("note-body-p100");
-          expect(content).toContain("owner");
-        }
-      }).pipe(Effect.provide(layer));
-    },
+            if (parts !== undefined) {
+              expect(parts.rows(part(0), "spans")).toEqual(rawBefore);
+              const content = JSON.stringify(parts.rows(part(0), "content"));
+              expect(content).not.toContain("note-body-p100");
+              expect(content).toContain("owner");
+            }
+          }).pipe(Effect.provide(layer));
+        },
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
   );
 
-  it.effect("write of a known span id changes nothing: not its row, not its content, not a deletion", () => {
-    const { layer } = backend.make(CAP);
-    return Effect.gen(function* () {
-      const records = yield* RecordManager;
-      const first = { ...row(id(0)), ok: false };
-      yield* records.write(job, 0, [kept(first, MESSAGE)]);
-      const other = { ...row(id(0)), name: "overwritten", attributes: { "fab.other": 1 } };
-      expect(yield* records.write(job, 0, [kept(other, "another message")])).toEqual({
-        _tag: "written",
-      });
-      expect(yield* read(job)).toEqual([first]);
-      expect(yield* records.content(job, id(0))).toEqual(
-        Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
-      );
-      yield* records.deleteContent(job, id(0), { by: "owner", why: "private" });
-      yield* records.write(job, 0, [kept(first, MESSAGE)]);
-      const after = yield* records.content(job, id(0));
-      expect(Option.map(after, (c) => c._tag)).toEqual(Option.some("deleted"));
-      expect(yield* read(job)).toEqual([first]);
-    }).pipe(Effect.provide(layer));
-  });
+  it.effect.prop(
+    "write of a known span id changes nothing: not its row, not its content, not a deletion",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        ["private", generated],
+        (value) => {
+          const { layer } = backend.make(CAP);
+          return Effect.gen(function* () {
+            const records = yield* RecordManager;
+            const first = { ...row(id(0)), ok: false };
+            yield* records.write(job, 0, [kept(first, MESSAGE)]);
+            const other = { ...row(id(0)), name: "overwritten", attributes: { "fab.other": 1 } };
+            expect(yield* records.write(job, 0, [kept(other, "another message")])).toEqual({
+              _tag: "written",
+            });
+            expect(yield* read(job)).toEqual([first]);
+            expect(yield* records.content(job, id(0))).toEqual(
+              Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
+            );
+            yield* records.deleteContent(job, id(0), { by: "owner", reason: value });
+            yield* records.write(job, 0, [kept(first, MESSAGE)]);
+            const after = yield* records.content(job, id(0));
+            expect(Option.map(after, (c) => c._tag)).toEqual(Option.some("deleted"));
+            expect(yield* read(job)).toEqual([first]);
+          }).pipe(Effect.provide(layer));
+        },
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 
-  it.effect("a delete finds its span in an older part, after the chain rolled", () => {
-    const { layer } = backend.make(CAP);
-    return Effect.gen(function* () {
-      const records = yield* RecordManager;
-      yield* records.write(job, 0, [kept({ ...row(id(0)), ok: false }, MESSAGE)]);
-      let at = 0;
+  it.effect.prop(
+    "a delete finds its span in an older part, after the chain rolled",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        ["private", generated],
+        (value) => {
+          const { layer } = backend.make(CAP);
+          return Effect.gen(function* () {
+            const records = yield* RecordManager;
+            yield* records.write(job, 0, [kept({ ...row(id(0)), ok: false }, MESSAGE)]);
+            let at = 0;
 
-      for (let n = 1; n < 60; n++) {
-        at = yield* send(job, at, [kept(row(id(n), FILL))]);
-      }
+            for (let n = 1; n < 60; n++) {
+              at = yield* send(job, at, [kept(row(id(n), FILL))]);
+            }
 
-      expect(at, "the chain rolled past part 0").toBeGreaterThan(0);
-      yield* TestClock.setTime(T);
-      yield* records.deleteContent(job, id(0), { by: "owner", why: "private" });
-      expect(yield* records.content(job, id(0))).toEqual(
-        Option.some({ _tag: "deleted", spanId: id(0), by: "owner", at: T, why: "private" }),
-      );
-      expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
-    }).pipe(Effect.provide(layer));
-  });
+            expect(at, "the chain rolled past part 0").toBeGreaterThan(0);
+            yield* TestClock.setTime(T);
+            yield* records.deleteContent(job, id(0), { by: "owner", reason: value });
+            expect(yield* records.content(job, id(0))).toEqual(
+              Option.some({ _tag: "deleted", spanId: id(0), by: "owner", at: T, reason: value }),
+            );
+            expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
+          }).pipe(Effect.provide(layer));
+        },
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 });
 
 describe("RecordManager.remote, the record object's stub", () => {
@@ -465,40 +502,58 @@ describe("RecordManager.remote, the record object's stub", () => {
     }).pipe(Effect.provide(RecordManager.remote(make)));
   });
 
-  it.effect("a rejected call is unreachable, an answer that does not decode is bad_row", () =>
-    Effect.gen(function* () {
-      const gone = stub(() => Promise.reject(new Error("object went away")));
-      const odd = stub(() => Promise.resolve({ weird: 1 }));
-      const unreachable = yield* Effect.flip(
-        RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])).pipe(
-          Effect.provide(RecordManager.remote(gone.make)),
-        ),
-      );
-      expect(unreachable).toBeInstanceOf(SinkError);
-      expect(unreachable.why).toBe("unreachable");
-      const bad = yield* Effect.flip(
-        RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])).pipe(
-          Effect.provide(RecordManager.remote(odd.make)),
-        ),
-      );
-      expect(bad.why).toBe("bad_row");
-      const readFailed = yield* Effect.flip(read(job).pipe(Effect.provide(RecordManager.remote(gone.make))));
-      expect(readFailed.why).toBe("unreachable");
-    }),
+  it.effect.prop(
+    "a rejected call is unreachable, an answer that does not decode is bad_row",
+    { generated: Schema.Unknown },
+    ({ generated }) =>
+      Effect.forEach(
+        [new Error("object went away"), generated],
+        (value) =>
+          Effect.gen(function* () {
+            const gone = stub(() => Promise.reject(value));
+            const odd = stub(() => Promise.resolve({ weird: 1 }));
+            const unreachable = yield* Effect.flip(
+              RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])).pipe(
+                Effect.provide(RecordManager.remote(gone.make)),
+              ),
+            );
+            expect(unreachable).toBeInstanceOf(SinkError);
+            expect(unreachable.reason).toBe("unreachable");
+            const bad = yield* Effect.flip(
+              RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])).pipe(
+                Effect.provide(RecordManager.remote(odd.make)),
+              ),
+            );
+            expect(bad.reason).toBe("bad_row");
+            const readFailed = yield* Effect.flip(read(job).pipe(Effect.provide(RecordManager.remote(gone.make))));
+            expect(readFailed.reason).toBe("unreachable");
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
   );
 
-  it.effect("a page keeps each span's events whole; an event that is not one is bad_row", () =>
-    Effect.gen(function* () {
-      const event = { name: "cache.miss", timeUnixNano: "1250000000", attributes: { "fab.n": 3 } };
-      const page = (events: ReadonlyArray<unknown>) =>
-        stub(() => Promise.resolve({ spans: [{ ...row(id(0)), events }], after: 1, rolled: false }));
-      const good = yield* read(job).pipe(Effect.provide(RecordManager.remote(page([event]).make)));
-      expect(good.map((r) => r.events)).toEqual([[event]]);
+  it.effect.prop(
+    "a page keeps each span's events whole; an event that is not one is bad_row",
+    { generated: SpanRow.fields.events.value },
+    ({ generated }) =>
+      Effect.forEach(
+        [{ name: "cache.miss", timeUnixNano: "1250000000", attributes: { "fab.n": 3 } }, generated],
+        (value) =>
+          Effect.gen(function* () {
+            const event = value;
+            const page = (events: ReadonlyArray<unknown>) =>
+              stub(() => Promise.resolve({ spans: [{ ...row(id(0)), events }], after: 1, rolled: false }));
+            const good = yield* read(job).pipe(Effect.provide(RecordManager.remote(page([event]).make)));
+            expect(good.map((r) => r.events)).toEqual([[event]]);
 
-      for (const broken of [{}, { ...event, name: 7 }, { ...event, attributes: { "fab.n": {} } }]) {
-        const bad = yield* Effect.flip(read(job).pipe(Effect.provide(RecordManager.remote(page([broken]).make))));
-        expect(bad.why, JSON.stringify(broken)).toBe("bad_row");
-      }
-    }),
+            for (const broken of [{}, { ...event, name: 7 }, { ...event, attributes: { "fab.n": {} } }]) {
+              const bad = yield* Effect.flip(read(job).pipe(Effect.provide(RecordManager.remote(page([broken]).make))));
+              expect(bad.reason, JSON.stringify(broken)).toBe("bad_row");
+            }
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
   );
 });

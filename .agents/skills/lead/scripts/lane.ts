@@ -61,12 +61,12 @@ const stuckIn = (out: string) =>
       return [];
     }
 
-    if (a === null || typeof a !== "object") {
+    if (a === null || typeof a !== "object" || !("_tag" in a) || a._tag !== "stuck") {
       return [];
     }
 
-    const { _tag, why, step } = a as { _tag?: unknown; why?: unknown; step?: unknown };
-    return _tag === "stuck" ? [{ line, why, step }] : [];
+    const { reason, step } = a as { reason?: unknown; step?: unknown };
+    return [{ line, reason, step }];
   });
 
 /**
@@ -78,7 +78,7 @@ const stuckIn = (out: string) =>
  */
 export const laneStuck = (out: string, laneSteps: ReadonlySet<string>): string[] =>
   stuckIn(out)
-    .filter(({ why, step }) => !(why === "stale_link" && !(typeof step === "string" && laneSteps.has(step))))
+    .filter(({ reason, step }) => !(reason === "stale_link" && !(typeof step === "string" && laneSteps.has(step))))
     .map((a) => a.line);
 
 /**
@@ -88,10 +88,15 @@ export const laneStuck = (out: string, laneSteps: ReadonlySet<string>): string[]
  */
 export const heldRules = (out: string, laneSteps: ReadonlySet<string>): string[] =>
   laneStuck(out, laneSteps).map((line) => {
-    const a = JSON.parse(line) as { why?: unknown; sha?: unknown; step?: unknown; paths?: unknown };
+    const a = JSON.parse(line) as {
+      reason?: unknown;
+      sha?: unknown;
+      step?: unknown;
+      paths?: unknown;
+    };
     const paths = Array.isArray(a.paths) ? a.paths.slice(0, 3).map(String) : [];
     return [
-      typeof a.why === "string" ? a.why : "stuck",
+      typeof a.reason === "string" ? a.reason : "stuck",
       typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
       typeof a.step === "string" ? `step ${a.step}` : "",
       ...paths,

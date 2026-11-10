@@ -21,7 +21,7 @@ import {
   watcher,
   X,
 } from "./process.test-support.ts";
-import { Dead, Down, Owner, ProcessFact, Recipient, Start } from "./process.ts";
+import { Dead, Down, Owner, ProcessEvent, Recipient, Start } from "./process.ts";
 
 const CAP = 256;
 const at = (length: number, unit = "a") => unit.repeat(length);
@@ -57,8 +57,8 @@ const seed = (store: Storage) =>
 const monitor = (store: Storage, ref: string) =>
   ProcessManager.use((p) => p.monitor(ref, A, from())).pipe(Effect.provide(manager(store, watcher(W))));
 
-const exit = (store: Storage, why = "crashed") =>
-  ProcessManager.use((p) => p.exit(A, why, from())).pipe(Effect.provide(manager(store)));
+const exit = (store: Storage, reason = "crashed") =>
+  ProcessManager.use((p) => p.exit(A, reason, from())).pipe(Effect.provide(manager(store)));
 
 const fresh = (store: Storage) => receive(W).pipe(Effect.provide(manager(store, watcher(W))));
 
@@ -113,9 +113,9 @@ describe("P33 rule 1, the text caps live in the schema", () => {
       value: (t) => ({ _tag: "first", id: "i", name: "n", code: { program: "p", hash: t } }),
     },
     {
-      name: "Start again why",
+      name: "Start again reason",
       schema: Start,
-      value: (t) => ({ _tag: "again", id: "i", name: "n", code, after: A, why: t }),
+      value: (t) => ({ _tag: "again", id: "i", name: "n", code, after: A, reason: t }),
     },
     {
       name: "a client id",
@@ -125,41 +125,41 @@ describe("P33 rule 1, the text caps live in the schema", () => {
     {
       name: "a DOWN's ref",
       schema: Down,
-      value: (t) => ({ _tag: "DOWN", ref: t, process: A, why: "w", to: toW }),
+      value: (t) => ({ _tag: "DOWN", ref: t, process: A, reason: "w", to: toW }),
     },
     {
-      name: "a DOWN's why",
+      name: "a DOWN's reason",
       schema: Down,
-      value: (t) => ({ _tag: "DOWN", ref: "r", process: A, why: t, to: toW }),
+      value: (t) => ({ _tag: "DOWN", ref: "r", process: A, reason: t, to: toW }),
     },
     {
-      name: "a monitored fact's ref",
-      schema: ProcessFact,
+      name: "a monitored event's ref",
+      schema: ProcessEvent,
       value: (t) => ({ _tag: "monitored", ref: t, process: A, to: toW }),
     },
     {
-      name: "a demonitored fact's ref",
-      schema: ProcessFact,
-      value: (t) => ({ _tag: "demonitored", ref: t, to: toW, why: "canceled" }),
+      name: "a demonitored event's ref",
+      schema: ProcessEvent,
+      value: (t) => ({ _tag: "demonitored", ref: t, to: toW, reason: "canceled" }),
     },
     {
-      name: "an exited fact's why",
-      schema: ProcessFact,
-      value: (t) => ({ _tag: "exited", process: A, why: t }),
+      name: "an exited event's reason",
+      schema: ProcessEvent,
+      value: (t) => ({ _tag: "exited", process: A, reason: t }),
     },
     {
-      name: "a down fact's why",
-      schema: ProcessFact,
-      value: (t) => ({ _tag: "down", process: A, why: t, crashes: 1, until: 0 }),
+      name: "a down event's reason",
+      schema: ProcessEvent,
+      value: (t) => ({ _tag: "down", process: A, reason: t, crashes: 1, until: 0 }),
     },
     {
-      name: "a registered fact's name",
-      schema: ProcessFact,
+      name: "a registered event's name",
+      schema: ProcessEvent,
       value: (t) => ({ _tag: "registered", name: t, program: "p", owner: { _tag: "brain" } }),
     },
     {
-      name: "a started fact's name",
-      schema: ProcessFact,
+      name: "a started event's name",
+      schema: ProcessEvent,
       value: (t) => ({ _tag: "started", process: A, name: t, program: "p", hash: "h" }),
     },
   ];
@@ -289,7 +289,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     options,
   );
   it.effect.prop(
-    `an exit whose why has ${CAP + 1} characters`,
+    `an exit whose reason has ${CAP + 1} characters`,
     [overText],
     examples([[over]], (over: string) => {
       const store = storage();
@@ -302,7 +302,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     options,
   );
   it.effect.prop(
-    `a down whose why has ${CAP + 1} characters`,
+    `a down whose reason has ${CAP + 1} characters`,
     [overText],
     examples([[over]], (over: string) => {
       const store = storage();
@@ -311,7 +311,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
         yield* exit(store);
         yield* refusedWritingNothing(
           store,
-          ProcessManager.use((p) => p.down(A, { why: over, crashes: 1, until: 0 }, from())).pipe(
+          ProcessManager.use((p) => p.down(A, { reason: over, crashes: 1, until: 0 }, from())).pipe(
             Effect.provide(manager(store)),
           ),
         );
@@ -352,7 +352,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
   }
 
   it.effect.prop(
-    `a restart whose why has ${CAP + 1} characters`,
+    `a restart whose reason has ${CAP + 1} characters`,
     [overText],
     examples([[over]], (over: string) => {
       const store = storage();
@@ -365,7 +365,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
           name: "counter:1",
           code: CODE,
           after: A,
-          why: over,
+          reason: over,
         });
         yield* refusedWritingNothing(
           store,
@@ -387,17 +387,17 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
       yield* seed(store);
       return Exit.isSuccess(yield* Effect.exit(monitor(store, ref)));
     });
-  const delivered = (ref: string, why: string) =>
+  const delivered = (ref: string, reason: string) =>
     Effect.gen(function* () {
       const store = storage();
       yield* seed(store);
       yield* monitor(store, ref);
-      yield* exit(store, why);
-      expect(downs(yield* fresh(store))).toEqual([Down.make({ ref, process: A, why, to: toW })]);
+      yield* exit(store, reason);
+      expect(downs(yield* fresh(store))).toEqual([Down.make({ ref, process: A, reason, to: toW })]);
     });
   it.effect.prop(
     "the longest ref a monitor accepts still lets the target's exit land",
-    [Schema.NonEmptyString.check(Schema.isMaxLength(CAP)), Down.fields.why],
+    [Schema.NonEmptyString.check(Schema.isMaxLength(CAP)), Down.fields.reason],
     (generated) =>
       Effect.gen(function* () {
         // Find the limit by calling the monitor, so raising its cap cannot hide a lost DOWN.
@@ -415,10 +415,10 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
         }
 
         yield* delivered(at(low), "crashed");
-        yield* examples([[at(CAP), at(CAP, '"')]], (ref: string, why: string) =>
+        yield* examples([[at(CAP), at(CAP, '"')]], (ref: string, reason: string) =>
           Effect.gen(function* () {
             yield* delivered(ref, "crashed");
-            yield* delivered(ref, why);
+            yield* delivered(ref, reason);
           }),
         )(generated);
       }),
@@ -462,7 +462,7 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
 
         yield* monitor(store, text);
         yield* exit(store);
-        expect(downs(yield* fresh(store))).toEqual([Down.make({ ref: text, process: A, why: "crashed", to: toW })]);
+        expect(downs(yield* fresh(store))).toEqual([Down.make({ ref: text, process: A, reason: "crashed", to: toW })]);
       }),
     { arbitrary: { seed: 119120, runs: 25 } },
   );

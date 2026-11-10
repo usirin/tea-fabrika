@@ -2,7 +2,7 @@
 // rule (p96, p97). Tier 1, P9. It never verifies a signature: the door checks SSHSIG at wiring, then
 // calls `write`.
 //
-// `write` folds, refuses what the rule refuses (writing nothing), else appends under the fact's own
+// `write` folds, refuses what the rule refuses (writing nothing), else appends under the event's own
 // id and folds on to the new rev. The second fold is the honest answer to a race: two Macs typing
 // one stolen sheet at once both pass the first check, the log puts one first, and the other hears
 // `ignored used`, never "you are in".
@@ -11,7 +11,17 @@ import { Ledger, LedgerError } from "../data/ledger.ts";
 import { Appended, type Entry, fromHere, lineFor, Rev, valueFor } from "../data/log.ts";
 import { short } from "../data/trace.ts";
 import type { From } from "./mailbox.ts";
-import { allows, EMPTY, factId, type Folded, MemberFact, type Members, signedBy, subject, Why } from "./members.ts";
+import {
+  allows,
+  EMPTY,
+  eventId,
+  type Folded,
+  MemberEvent,
+  type Members,
+  signedBy,
+  subject,
+  Reason,
+} from "./members.ts";
 
 /** The stream who belongs is kept on. */
 const MEMBERS = "door/members";
@@ -28,54 +38,54 @@ export type Founder = typeof Founder.Type;
 export const Written = Schema.TaggedUnion({
   /** In the log, and the fold takes it. */
   applied: { rev: Rev },
-  /** In the log, but an earlier fact won the race (flag 6). */
-  ignored: { rev: Rev, why: Why },
-  /** Nothing written: the rule's why, or the ledger's own. */
-  refused: { why: Schema.Union([Why, Appended.cases.refused.fields.why]) },
+  /** In the log, but an earlier event won the race (flag 6). */
+  ignored: { rev: Rev, reason: Reason },
+  /** Nothing written: the rule's reason, or the ledger's own. */
+  refused: { reason: Schema.Union([Reason, Appended.cases.refused.fields.reason]) },
 });
 export type Written = typeof Written.Type;
 
 const tag = (word: string): string => `fab.members.${word}`;
 
-const known: ReadonlySet<string> = new Set(Object.keys(MemberFact.cases));
-const decodeFact = Schema.decodeUnknownResult(MemberFact);
+const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
+const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
 
-/** One entry of `door/members` and the fact it holds; a case this piece does not know is none. */
-type Row = { readonly entry: Entry; readonly fact: MemberFact | null };
+/** One entry of `door/members` and the event it holds; a case this piece does not know is none. */
+type Row = { readonly entry: Entry; readonly event: MemberEvent | null };
 
-/** The fold of a read, with the why of each fact it skipped, by rev. */
+/** The fold of a read, with the reason of each event it skipped, by rev. */
 type Replayed = {
   readonly rows: ReadonlyArray<Row>;
   readonly folded: Folded;
-  readonly skipped: ReadonlyMap<Rev, Why>;
+  readonly skipped: ReadonlyMap<Rev, Reason>;
   /** The rev of the stream's newest entry, 0 when it is empty. */
   readonly head: Rev;
 };
 
 const row = Effect.fnUntraced(function* (entry: Entry) {
   if (!known.has(entry._tag)) {
-    return { entry, fact: null } satisfies Row;
+    return { entry, event: null } satisfies Row;
   }
 
-  const fact = decodeFact(valueFor(entry));
+  const event = decodeEvent(valueFor(entry));
 
-  if (Result.isFailure(fact)) {
-    return yield* new LedgerError({ why: "bad_row" });
+  if (Result.isFailure(event)) {
+    return yield* new LedgerError({ reason: "bad_row" });
   }
 
-  return { entry, fact: fact.success } satisfies Row;
+  return { entry, event: event.success } satisfies Row;
 });
 
 const replay = (rows: ReadonlyArray<Row>): Replayed => {
-  const skipped = new Map<Rev, Why>();
+  const skipped = new Map<Rev, Reason>();
   let folded = EMPTY;
 
-  for (const { entry, fact } of rows) {
-    if (fact === null) {
+  for (const { entry, event } of rows) {
+    if (event === null) {
       continue;
     }
 
-    const next = allows(folded, fact);
+    const next = allows(folded, event);
 
     if (Result.isSuccess(next)) {
       folded = next.success;
@@ -88,7 +98,7 @@ const replay = (rows: ReadonlyArray<Row>): Replayed => {
 };
 
 const view = ({ folded, skipped, rows }: Replayed) => ({
-  [tag("facts")]: rows.length,
+  [tag("events")]: rows.length,
   [tag("keys")]: folded.members.keys.size,
   [tag("live")]: [...folded.members.keys.values()].filter((k) => k.live).length,
   [tag("ignored")]: skipped.size,
@@ -98,14 +108,14 @@ export class ClientManager extends Context.Service<
   ClientManager,
   {
     readonly members: Effect.Effect<Members, LedgerError>;
-    readonly write: (fact: MemberFact, from: From) => Effect.Effect<Written, LedgerError>;
+    readonly write: (event: MemberEvent, from: From) => Effect.Effect<Written, LedgerError>;
   }
 >()("@kampus/libfabrika/ClientManager") {
   /** Building it writes nothing. The first call on an empty `door/members` writes `founded` under
    *  the fixed id `founded`, inside that call's error channel, so the referee keeps it once (p20). */
   static readonly layer = (
     founder: Founder & {
-      /** The person the founder works for: `founded`'s `for`, and its fact's id. */
+      /** The person the founder works for: `founded`'s `for`, and its event's id. */
       readonly person: string;
       /** The founder's checked key, which signs `founded`: `by`, never the person. */
       readonly by: string;
@@ -117,7 +127,7 @@ export class ClientManager extends Context.Service<
       ClientManager,
       Effect.gen(function* () {
         const ledger = yield* Ledger;
-        const founding = MemberFact.cases.founded.make({
+        const founding = MemberEvent.cases.founded.make({
           id: founder.person,
           name: founder.name,
           keys: founder.keys,
@@ -145,10 +155,10 @@ export class ClientManager extends Context.Service<
           // fails: a stream with no `founded` would start with no members.
           const placed = yield* ledger.append(MEMBERS, "founded", lineFor(from, founding));
 
-          if (placed._tag === "refused" && placed.why !== "id_reused") {
+          if (placed._tag === "refused" && placed.reason !== "id_reused") {
             return yield* new LedgerError({
-              why: "refused",
-              message: `founded refused: ${placed.why}`,
+              reason: "refused",
+              message: `founded refused: ${placed.reason}`,
             });
           }
 
@@ -160,57 +170,57 @@ export class ClientManager extends Context.Service<
             [tag("answer")]: written._tag,
             ...Written.match(written, {
               applied: ({ rev }) => ({ [tag("rev")]: rev }),
-              ignored: ({ rev, why }) => ({ [tag("rev")]: rev, [tag("why")]: why }),
-              refused: ({ why }) => ({ [tag("why")]: why }),
+              ignored: ({ rev, reason }) => ({ [tag("rev")]: rev, [tag("reason")]: reason }),
+              refused: ({ reason }) => ({ [tag("reason")]: reason }),
             }),
           });
           return written;
         });
 
         const write = Effect.fn("members.write")(
-          function* (fact: MemberFact, from: From) {
+          function* (event: MemberEvent, from: From) {
             yield* Effect.annotateCurrentSpan(
               short({
-                [tag("tag")]: fact._tag,
-                [tag("id")]: factId(fact),
-                ...nonNull(tag("signer"), signedBy(fact)),
-                ...nonNull(tag("key"), subject(fact)),
+                [tag("tag")]: event._tag,
+                [tag("id")]: eventId(event),
+                ...nonNull(tag("signer"), signedBy(event)),
+                ...nonNull(tag("key"), subject(event)),
               }),
             );
             const before = yield* load;
-            const id = factId(fact);
+            const id = eventId(event);
 
-            // A fact already in the log goes to the referee as it is: a resend gets its first
+            // An event already in the log goes to the referee as it is: a resend gets its first
             // placing, and the answer is what the fold did with it then.
             if (!before.rows.some(({ entry }) => entry.id === id)) {
-              const verdict = allows(before.folded, fact);
+              const verdict = allows(before.folded, event);
 
               if (Result.isFailure(verdict)) {
-                return yield* answer(Written.cases.refused.make({ why: verdict.failure }));
+                return yield* answer(Written.cases.refused.make({ reason: verdict.failure }));
               }
             }
 
-            const placed = yield* ledger.append(MEMBERS, id, lineFor({ ...from, seen: before.head }, fact));
+            const placed = yield* ledger.append(MEMBERS, id, lineFor({ ...from, seen: before.head }, event));
 
             if (placed._tag === "refused") {
-              return yield* answer(Written.cases.refused.make({ why: placed.why }));
+              return yield* answer(Written.cases.refused.make({ reason: placed.reason }));
             }
 
-            const why = (yield* read).skipped.get(placed.rev);
+            const reason = (yield* read).skipped.get(placed.rev);
             return yield* answer(
-              why === undefined
+              reason === undefined
                 ? Written.cases.applied.make({ rev: placed.rev })
-                : Written.cases.ignored.make({ rev: placed.rev, why }),
+                : Written.cases.ignored.make({ rev: placed.rev, reason }),
             );
           },
-          Effect.tapError((error) => Effect.annotateCurrentSpan(tag("why"), error.why)),
+          Effect.tapError((error) => Effect.annotateCurrentSpan(tag("reason"), error.reason)),
         );
 
         const members = Effect.fn("members.read")(function* () {
           return yield* load.pipe(
             Effect.tap((replayed) => Effect.annotateCurrentSpan(view(replayed))),
             Effect.map(({ folded }) => folded.members),
-            Effect.tapError((error) => Effect.annotateCurrentSpan(tag("why"), error.why)),
+            Effect.tapError((error) => Effect.annotateCurrentSpan(tag("reason"), error.reason)),
           );
         });
         return {

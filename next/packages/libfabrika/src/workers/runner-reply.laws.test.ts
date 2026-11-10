@@ -187,7 +187,7 @@ const replyCase = (
           if (Exit.isFailure(result)) {
             expect(Cause.squash(result.cause)).toMatchObject({
               _tag: "ProgramDown",
-              why: "step",
+              reason: "step",
               source: mode,
             });
           }
@@ -209,7 +209,7 @@ const replyCase = (
           expect(rows).toHaveLength(2);
           expect(rows[1]).toMatchObject({
             id: `${PID}/1/0/answer`,
-            body: { m: { type: "work_err", cmd: work({ n }), why: reason, error: { _tag: reason } } },
+            body: { m: { type: "work_err", cmd: work({ n }), reason: reason, error: { _tag: reason } } },
           });
           expect(yield* store.load).toMatchObject({
             saved: { after: rows[1]!.rev, model: { replies: 1, reason } },

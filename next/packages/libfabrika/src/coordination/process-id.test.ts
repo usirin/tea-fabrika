@@ -131,7 +131,7 @@ describe("P10 shared process ids", () => {
             expect(Cause.isDieReason(reason)).toBe(true);
 
             if (Cause.isDieReason(reason)) {
-              expect(reason.defect).toMatchObject({ _tag: "IdError", why: "clock" });
+              expect(reason.defect).toMatchObject({ _tag: "IdError", reason: "clock" });
             }
           }
         }
@@ -200,9 +200,9 @@ describe("P10 shared process ids", () => {
     options,
   );
 
-  for (const why of ["clock", "entropy", "exhausted"] as const) {
+  for (const exitReason of ["clock", "entropy", "exhausted"] as const) {
     it.effect.prop(
-      `next dies on IdError ${why} and keeps process.next around id.next`,
+      `next dies on IdError ${exitReason} and keeps process.next around id.next`,
       { at: Time, distance: Count, marker: Schema.String },
       ({ at, distance, marker }) => {
         const spans: Array<Tracer.NativeSpan> = [];
@@ -214,7 +214,7 @@ describe("P10 shared process ids", () => {
           },
         });
         const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-          if (why === "entropy") {
+          if (exitReason === "entropy") {
             throw new Error(marker);
           }
 
@@ -226,10 +226,10 @@ describe("P10 shared process ids", () => {
         });
         return Effect.gen(function* () {
           try {
-            yield* TestClock.setTime(why === "clock" ? -distance : why === "exhausted" ? maxClock : at);
+            yield* TestClock.setTime(exitReason === "clock" ? -distance : exitReason === "exhausted" ? maxClock : at);
             const generator = yield* Coordination.ProcessIdGenerator;
 
-            if (why === "exhausted") {
+            if (exitReason === "exhausted") {
               yield* generator.next;
             }
 
@@ -242,7 +242,7 @@ describe("P10 shared process ids", () => {
               expect(Cause.isDieReason(reason)).toBe(true);
 
               if (Cause.isDieReason(reason)) {
-                expect(reason.defect).toMatchObject({ _tag: "IdError", why });
+                expect(reason.defect).toMatchObject({ _tag: "IdError", reason: exitReason });
               }
             }
 
