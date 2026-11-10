@@ -33,6 +33,7 @@ import {Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow} from "./agents.
 import {
 	briefOf,
 	ChainRecord,
+	roundsIn,
 	exitOf,
 	judgedOf,
 	type Line,
@@ -513,6 +514,40 @@ describe("T341 the judgment agent's typed answer is a move, today's tooling", ()
 	});
 });
 
+describe("T341 a lane started again keeps its earlier rounds, today's tooling", () => {
+	// The dry run of 2026-11-10 (ticket 522): `--start review` began at round 1 again and wrote its
+	// review over the record of the tests step, which also was round 1.
+	// Plants: start every run at round 1; count the steps instead of taking the highest round.
+	it("no new round is a round the record already holds", () => {
+		fc.assert(
+			fc.property(
+				fc.uniqueArray(fc.integer({min: 1, max: 40}), {maxLength: 12}),
+				fc.integer({min: 1, max: 16}),
+				step,
+				(rounds, next, s) => {
+					const record = {
+						lane: "l",
+						pr: null,
+						landed: null,
+						steps: rounds.map((round) => ({
+							round,
+							step: s,
+							note: "",
+							startedAt: "t",
+							endedAt: null,
+							line: null,
+							judged: null,
+						})),
+					};
+					expect(rounds).not.toContain(roundsIn(record) + next);
+					expect(roundsIn({...record, steps: []})).toBe(0);
+				},
+			),
+			options,
+		);
+	});
+});
+
 describe("T341 a turn runs through the agents package on the fake adapter, today's tooling", () => {
 	const dir = mkdtempSync(join(tmpdir(), "chain-turn-"));
 	// Each turn writes its own events file.
@@ -678,7 +713,7 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
 			billing: "subscription",
 			redacted: 0,
 		});
-		expect(String(row.why)).toContain("a floor");
+		expect(String(row.why)).toContain("ticket 485");
 		expect(Object.keys(row)).toContain("date");
 	});
 });

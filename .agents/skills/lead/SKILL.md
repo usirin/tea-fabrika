@@ -226,8 +226,19 @@ Measured on the first real lane (t411, 2026-11-09): neither row lets a command l
 a unix socket (`EPERM`), so a step that runs Stryker or a socket law is stuck on these rows until
 the harness can open one (tracker ticket 483). On the read-only Codex row, a command that writes
 is refused and that ends the turn `cancelled` with no answer (ticket 484), so drive tells a review
-to run no writing command. Start it in the
-background and read the last line only:
+to run no writing command.
+
+Measured on a throwaway lane (ticket 522, 2026-11-10, $0.10 at list price): a tests step's one new
+file was collected and signed as one step commit, a review on the read-only Codex row read it with
+`git diff` and said merge-ready, the chain found the lane's open pull request, and `catchup.sh`
+merged main in, signed it as lead and pushed. A command that fails does not end a turn; only a
+refused ask does. The merge itself was not run: the `commits` check runs only for a pull request
+into main, so catch-up on a scratch base waits for it until its hour is up.
+
+The mutation step has one wiring spot: `MUTATION_AGENT` and `mutationDraft` in `drive.ts`, under
+the heading `MUTATION WIRING`. The container run of ticket 483 goes there and nowhere else.
+
+Start it in the background and read the last line only:
 
 ```sh
 node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
@@ -275,7 +286,9 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   and the steps run the unmodified harness through `drive.ts`.
 - **Watching:** `tail -f BOXES/state/<lane>.md`. To stop a lane, stop the chain process: the
   running step's process group goes with it, and drive records that step as stuck. Start the chain
-  again with `--start <step>` to go on from there.
+  again with `--start <step>` to go on from there: its rounds count on from the ones the chain
+  record holds, so no earlier round's record, brief or judgment file is written over. Read the
+  line's own `exit`, never the shell's: `volta run` answers 126 for any exit that is not 0.
 
 ## Pushes and protected refs
 

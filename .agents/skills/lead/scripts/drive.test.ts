@@ -30,6 +30,7 @@ import {
 	agentTail,
 	boxChanges,
 	changedFiles,
+	commitSubject,
 	commitsSaid,
 	decide,
 	endName,
@@ -483,6 +484,37 @@ describe("the box's changes are read from its status, today's tooling", () => {
 			why: "a law",
 		});
 		expect(decide(ask, read).outcome).toEqual({kind: "stuck", why: "step_said"});
+	});
+});
+
+describe("T341 a step commit's subject says what the step did, today's tooling", () => {
+	const text = fc.stringMatching(/^[A-Za-z][A-Za-z0-9 ,.]{0,100}[a-z]$/);
+	const step = fc.constantFrom("tests", "build", "mutation") as fc.Arbitrary<
+		"tests" | "build" | "mutation"
+	>;
+
+	// The dry run of 2026-11-10 (ticket 522): a report that was the JSON answer alone gave the
+	// subject "the step's work", which says nothing in the log.
+	// Plants: skip the answer's why; take the JSON line as the subject; let the subject run long.
+	it("is the report's first prose line, else the answer's why, on one line that names the ticket and step", () => {
+		fc.assert(
+			fc.property(text, text, step, fc.boolean(), (prose, why, s, alone) => {
+				const answer = JSON.stringify({verb: "done", to: null, why, laws: null});
+				const subject = commitSubject(
+					{ticket: "7", step: s},
+					alone ? `${answer}\n` : `\n## ${prose}\n\nmore\n${answer}\n`,
+				);
+				expect(subject).toBe(`T7 ${s}: ${(alone ? why : prose).slice(0, 72)}`);
+				expect(subject).not.toContain("\n");
+				expect(subject).not.toContain("{");
+			}),
+			options,
+		);
+	});
+
+	it("pinned: a report with no prose and no answer still gets a subject", () => {
+		// pinned: an agent that ended with nothing to say (the turn's report is empty).
+		expect(commitSubject({ticket: "7", step: "build"}, "")).toBe("T7 build: the step's work");
 	});
 });
 

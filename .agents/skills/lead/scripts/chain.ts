@@ -54,6 +54,7 @@ import {
 	openSync,
 	readFileSync,
 	renameSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import {join} from "node:path";
@@ -373,6 +374,13 @@ export const ChainRecord = Schema.Struct({
 });
 export type ChainRecord = typeof ChainRecord.Type;
 
+/**
+ * The rounds a lane's record already holds. A lane started again (`--start`) counts on from here,
+ * so a new round never takes an older round's record.
+ */
+export const roundsIn = (record: ChainRecord): number =>
+	record.steps.reduce((most, e) => Math.max(most, e.round), 0);
+
 const judge = Cmd.make("judge", {
 	input: Schema.Struct({step: Schema.Literals(STEPS), line: LineS, round: Schema.Number}),
 	ok: Schema.Struct({text: Schema.String}),
@@ -655,6 +663,9 @@ const handlers = (s: Setup) => {
 			: [...r.steps, entry];
 		writeRecord({...r, steps});
 	};
+	// A lane started again (`--start`) counts on from the rounds its record holds, so a new round
+	// never takes an older round's record, brief or judgment files.
+	const earlier = roundsIn(readRecord());
 	const headsOf = () => {
 		const heads: Partial<Record<StepName, string>> = {};
 
@@ -670,24 +681,25 @@ const handlers = (s: Setup) => {
 		step_run: (cmd: typeof Run.Type) =>
 			Effect.gen(function* () {
 				const lane = saved();
+				const round = earlier + cmd.round;
 				const facts: Facts = {
 					ticket: s.ticket,
 					branch: s.branch,
 					plan: s.plan,
 					root: lane.root ?? "",
 					head: lane.head ?? "",
-					round: cmd.round,
+					round,
 					heads: headsOf(),
 					note: cmd.note,
 				};
-				const brief = join(env.BOXES, `${s.lane}-chain${cmd.round}-${cmd.step}-brief.md`);
+				const brief = join(env.BOXES, `${s.lane}-chain${round}-${cmd.step}-brief.md`);
 				writeFileSync(brief, briefOf(s.brief, cmd.step, facts));
 				// MUTATION WIRING (ticket 483): mutation's agent is drive.ts's `MUTATION_AGENT`; how its
 				// draft runs is `mutationDraft` there. The chain names no other fact about that step.
 				const claude =
 					(cmd.step === "mutation" && MUTATION_AGENT === "claude") || s.claude.has(cmd.step);
 				const entry: StepRecord = {
-					round: cmd.round,
+					round,
 					step: cmd.step,
 					note: cmd.note,
 					startedAt: new Date().toISOString(),
@@ -697,7 +709,7 @@ const handlers = (s: Setup) => {
 				};
 				saveStep(entry);
 				note(
-					`round ${cmd.round}: starting ${cmd.step} on ${claude ? "claude" : "codex"}${cmd.note ? ` (${cmd.note})` : ""}`,
+					`round ${round}: starting ${cmd.step} on ${claude ? "claude" : "codex"}${cmd.note ? ` (${cmd.note})` : ""}`,
 				);
 				const minutes = yield* WaitMinutes;
 				const times = yield* MaxWaits;
@@ -769,7 +781,7 @@ const handlers = (s: Setup) => {
 									exit: 30,
 								},
 							});
-							note(`round ${cmd.round}: ${cmd.step} ${e._tag}: ${e.reason.slice(0, 200)}`);
+							note(`round ${round}: ${cmd.step} ${e._tag}: ${e.reason.slice(0, 200)}`);
 						}),
 					),
 					// tea's err channel takes a plain tagged record; the class stays inside the handler.
@@ -785,10 +797,10 @@ const handlers = (s: Setup) => {
 			}),
 		judge: (cmd: {step: StepName; line: Line; round: number}) =>
 			Effect.gen(function* () {
-				const box = `${s.lane}-judge${cmd.round}`;
+				const box = `${s.lane}-judge${earlier + cmd.round}`;
 				const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
 				note(
-					`round ${cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`,
+					`round ${earlier + cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`,
 				);
 				const started = new Date();
 				// One turn in the main checkout on the row that only reads (Codex's read-only profile):
@@ -823,7 +835,7 @@ const handlers = (s: Setup) => {
 				appendFileSync(
 					join(env.BOXES, `${s.lane}-rows.jsonl`),
 					stepRow({
-						run: `t${s.ticket}-judge${cmd.round}`,
+						run: `t${s.ticket}-judge${earlier + cmd.round}`,
 						ticket: s.ticket,
 						step: cmd.step,
 						provider: "codex-read",
@@ -841,7 +853,7 @@ const handlers = (s: Setup) => {
 					move._tag === "step" ? `send ${move.step}: ${move.note}` : `park: ${move.reason}`;
 				note(`judgment: ${answer}`);
 				const r = readRecord();
-				const last = r.steps.find((e) => e.round === cmd.round);
+				const last = r.steps.find((e) => e.round === earlier + cmd.round);
 
 				if (last) {
 					saveStep({...last, judged: {box, answer}});
@@ -932,10 +944,15 @@ const handlers = (s: Setup) => {
 		land: (cmd: {pr: number}) =>
 			Effect.gen(function* () {
 				note(`catchup.sh ${cmd.pr} ${s.ticket}`);
+				const size = existsSync(errFile) ? statSync(errFile).size : 0;
 				const ran = yield* spawnEffect("sh", [join(HERE, "catchup.sh"), String(cmd.pr), s.ticket], {
 					errFile,
 				});
-				const last = ran.out.trim().split("\n").at(-1) ?? "";
+				// catchup.sh says why it stopped on stderr; its last stdout line is only its last push.
+				const why = existsSync(errFile)
+					? (readFileSync(errFile).subarray(size).toString("utf8").trim().split("\n").at(-1) ?? "")
+					: "";
+				const last = (ran.code === 0 ? "" : why) || (ran.out.trim().split("\n").at(-1) ?? "");
 				note(`catchup.sh exited ${ran.code}: ${last}`);
 				writeRecord({...readRecord(), landed: ran.code === 0 ? new Date().toISOString() : null});
 				return {ok: ran.code === 0, detail: last || `exit ${ran.code}; see ${errFile}`};

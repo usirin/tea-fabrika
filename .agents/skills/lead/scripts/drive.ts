@@ -886,6 +886,20 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
 };
 
 /**
+ * The step commit's subject: the report's first line of prose, else the `why` of its JSON answer
+ * (a report can be the answer alone), else a plain stand-in. One line, cut to fit.
+ */
+export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string): string => {
+	const lines = report.split("\n").map((l) => l.replace(/^[#*`\s]+|[*`\s]+$/g, ""));
+	const prose = lines.find((l) => l.length > 0 && !l.startsWith("{"));
+	const why = lines
+		.filter((l) => l.startsWith("{"))
+		.map((l) => /"why"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(l)?.[1]?.replace(/\\(.)/g, "$1").trim())
+		.find((w) => w !== undefined && w.length > 0);
+	return `T${ask.ticket} ${ask.step}: ${(prose ?? why ?? "the step's work").slice(0, 72)}`;
+};
+
+/**
  * The agent holds no key and cannot reach the box's git data, so it commits nothing. Its changes
  * are read from the tree and copied into a fresh worktree of the main checkout at the base;
  * stepcommit commits them as the bot and signs them as the step, with main's own signer. The
@@ -901,11 +915,7 @@ const collect = (env: Env, ask: Ask, changes: readonly {xy: string; path: string
 		return git("update-ref", `refs/heads/${ask.branch}`, ask.base);
 	}
 
-	const first = readFileSync(ask.report, "utf8")
-		.split("\n")
-		.map((l) => l.replace(/^[#*`\s]+|[*`\s]+$/g, ""))
-		.find((l) => l.length > 0 && !l.startsWith("{"));
-	const subject = `T${ask.ticket} ${ask.step}: ${(first ?? "the step's work").slice(0, 72)}`;
+	const subject = commitSubject(ask, readFileSync(ask.report, "utf8"));
 	const wt = join(env.BOXES, `${ask.box}-sign`);
 	const add = git("worktree", "add", "-q", "--detach", wt, ask.base);
 

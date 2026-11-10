@@ -13,8 +13,9 @@
 //   // every update as one JSON line in `events`, the last message in `report`, the typed answer back
 //
 // The provider table: `codex` writes its folder, `codex-read` only reads it (a plan in the main
-// checkout, a review), `claude` is Claude Code through ACP. Codex through ACP reports only the last
-// request's tokens (`counted: "last"`), so a Codex row's dollars are a floor, and the row says so.
+// checkout, a review), `claude` is Claude Code through ACP. The adapter labels a Codex turn's tokens
+// the last request's (`counted: "last"`), but measured turns grow with each request, so they read
+// as the turn's total; the row says both until ticket 485 settles it.
 
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Agent} from "@kampus/fabrika-old";
@@ -275,7 +276,7 @@ export const stepRow = (r: RowAsk): string => {
 				: ` Dollars are ${r.model}'s standard list price (fieldrow.py's table); the plan bills no call.`;
 	const counted =
 		r.spent.counted === "last"
-			? " Tokens are the last model request's only (ACP's PromptResponse.usage), so they and the dollars are a floor."
+			? " Tokens are what ACP's PromptResponse.usage gave. The adapter labels them the last request's, but five measured turns grew 25,000 to 28,000 a request, so they read as the turn's total (ticket 485)."
 			: "";
 	const measured = r.spent.counted !== "none";
 	const row = {

@@ -376,6 +376,9 @@ importers:
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.63.0
+      '@tea-fabrika/agents':
+        specifier: workspace:*
+        version: link:.agents
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
@@ -400,6 +403,8 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+
+  .agents: {}
 
   .github/ci:
     dependencies:
