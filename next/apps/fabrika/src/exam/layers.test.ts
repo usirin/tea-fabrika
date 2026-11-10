@@ -11,6 +11,7 @@
 // lint:layers` reads too, so the exam keeps no second list of the library's paths (ticket 477, PR
 // 0). `rows.ts` picks the row the way code-graph does, and `rowParts` maps a row to its part. A
 // library file under `src/` that no row claims fails: it cannot pass by having no row.
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -804,5 +805,35 @@ describe("planted breaks in the room folders", () => {
       .filter((fault) => !fault.includes(" imports "))
       .map((fault) => fault.split(": ")[0]);
     expect(unclaimed).toEqual([]);
+  });
+
+  // scenario: the patched code-graph reads a package import by its subpath (demlik issue 915), since
+  // `--layers` once mapped every import of a workspace package to the alphabetically first `exports`
+  // file. Package `a` exports `.` as `src/index.ts` and `./low` as `src/aaa-low.ts`, which sorts
+  // first. `b` imports `"a"`, the root, and sits below `aaa-low.ts` and above `index.ts`. The
+  // patched tool reads the import as `index.ts`, a downward edge, so no upward site shows.
+  // Plant: drop the patch. `packageSourceEntry` then sorts `./src/aaa-low.ts` before
+  // `./src/index.ts`, `b` reads as importing the high row, and the tool reports 1 UP and exits 1.
+  it("scenario: a root import of a package reads the root file, not its first-sorting subpath", () => {
+    const root = plant({
+      "package.json": { name: "plant", private: true, workspaces: ["pkgs/*"] },
+      "pnpm-workspace.yaml": 'packages:\n  - "pkgs/*"\n',
+      "pkgs/a/package.json": { name: "a", exports: { ".": "./src/index.ts", "./low": "./src/aaa-low.ts" } },
+      "pkgs/a/src/aaa-low.ts": "export const low = 1;\n",
+      "pkgs/a/src/index.ts": "export const root = 1;\n",
+      "pkgs/b/package.json": { name: "b" },
+      "pkgs/b/src/b.ts": 'import { root } from "a";\nexport const b = root;\n',
+      "rules.json": {
+        layers: [
+          { name: "high", paths: ["pkgs/a/src/aaa-low.ts"] },
+          { name: "mid", paths: ["pkgs/b"] },
+          { name: "low", paths: ["pkgs/a/src/index.ts"] },
+        ],
+      },
+    });
+    const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
+    const run = spawnSync(bin, [".", "--layers", "--layer-rules", "rules.json"], { cwd: root, encoding: "utf8" });
+    expect(run.stdout).toContain("1 down, 0 sideways, 0 UP");
+    expect(run.status).toBe(0);
   });
 });
