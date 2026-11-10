@@ -32,6 +32,7 @@ const EDGE_RULES: ReadonlySet<string> = new Set([
 	"fabrika/no-promises",
 	"fabrika/no-effect-run-outside-edge",
 ]);
+
 const DISABLE = /^\s*(?:oxlint|eslint)-disable(?:-next-line|-line)?(.*)$/s;
 const REASON = /\s--\s+/;
 const CODE = /\.[cm]?[jt]sx?$/;
@@ -41,16 +42,28 @@ class Unparsed extends Schema.TaggedError<Unparsed>()("Unparsed", {path: Schema.
 /** The edge comments in one file, in line order. */
 const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
 	const parsed = parseSync(path, text);
-	if (parsed.errors.length > 0) return yield* new Unparsed({path});
+
+	if (parsed.errors.length > 0) {
+		return yield* new Unparsed({path});
+	}
+
 	return parsed.comments.flatMap((comment): Edge[] => {
 		const rest = DISABLE.exec(comment.value)?.[1];
-		if (rest === undefined) return [];
+
+		if (rest === undefined) {
+			return [];
+		}
+
 		const at = rest.search(REASON);
 		const rules = (at < 0 ? rest : rest.slice(0, at))
 			.split(",")
 			.map((rule) => rule.trim())
 			.filter((rule) => rule !== "");
-		if (!rules.some((rule) => EDGE_RULES.has(rule))) return [];
+
+		if (!rules.some((rule) => EDGE_RULES.has(rule))) {
+			return [];
+		}
+
 		const why = at < 0 ? "" : rest.slice(at).replace(REASON, "").trim();
 		const line = text.slice(0, comment.start).split("\n").length;
 		return [{path, line, rules: rules.join(", "), why}];
@@ -68,17 +81,27 @@ export const asks = Effect.fn("exam.asks")(function* (
 	head: ReadonlyMap<string, string>,
 ) {
 	const found: Edge[] = [];
+
 	for (const path of [...head.keys()].sort()) {
 		const old = base.get(path);
 		const before = old === undefined ? [] : yield* edgesIn(path, old);
 		const left = new Map<string, number>();
-		for (const edge of before) left.set(matchKey(edge), (left.get(matchKey(edge)) ?? 0) + 1);
+
+		for (const edge of before) {
+			left.set(matchKey(edge), (left.get(matchKey(edge)) ?? 0) + 1);
+		}
+
 		for (const edge of yield* edgesIn(path, head.get(path) ?? "")) {
 			const n = left.get(matchKey(edge)) ?? 0;
-			if (n > 0) left.set(matchKey(edge), n - 1);
-			else found.push(edge);
+
+			if (n > 0) {
+				left.set(matchKey(edge), n - 1);
+			} else {
+				found.push(edge);
+			}
 		}
 	}
+
 	return found;
 });
 
@@ -94,7 +117,11 @@ const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
 		[run.stdout.pipe(Stream.decodeText(), Stream.mkString), run.exitCode],
 		{concurrency: 2},
 	);
-	if (code !== 0) return yield* new GitFailed({args: args.join(" "), code});
+
+	if (code !== 0) {
+		return yield* new GitFailed({args: args.join(" "), code});
+	}
+
 	return out;
 }, Effect.scoped);
 
@@ -125,11 +152,17 @@ const main = Effect.gen(function* () {
 	const paths = yield* Path.Path;
 	const before = new Map<string, string>();
 	const after = new Map<string, string>();
+
 	for (const path of changed.filter((p) => CODE.test(p))) {
-		if (atBase.has(path)) before.set(path, yield* at(["show", `${base}:${path}`]));
-		if (yield* fs.exists(paths.join(top, path)))
+		if (atBase.has(path)) {
+			before.set(path, yield* at(["show", `${base}:${path}`]));
+		}
+
+		if (yield* fs.exists(paths.join(top, path))) {
 			after.set(path, yield* fs.readFileString(paths.join(top, path)));
+		}
 	}
+
 	const found = yield* asks(before, after);
 	const head =
 		found.length === 0
@@ -137,8 +170,12 @@ const main = Effect.gen(function* () {
 			: "Edges this pull request adds, for the owner:";
 	yield* Console.log([head, ...found.map(ask)].join("\n"));
 	const summary = yield* Config.String("GITHUB_STEP_SUMMARY").pipe(Config.option);
+
 	if (Option.isSome(summary)) {
-		for (const edge of found) yield* Console.log(notice(edge));
+		for (const edge of found) {
+			yield* Console.log(notice(edge));
+		}
+
 		const body = [`### ${head}`, "", ...found.map((edge) => `- \`${ask(edge)}\``), ""];
 		yield* fs.writeFileString(summary.value, `${body.join("\n")}\n`, {flag: "a"});
 	}

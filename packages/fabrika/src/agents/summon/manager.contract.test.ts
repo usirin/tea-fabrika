@@ -26,6 +26,7 @@ type Outputs = {
 	result: (r: {turn: number; stop: string; cost: null; input: null; output: null}) => void;
 	ask: (a: {ask: string; title: string; answer: string}) => void;
 };
+
 type Agent = {
 	flags: Record<string, unknown>;
 	outputs: Outputs;
@@ -40,6 +41,7 @@ type Agent = {
 	hold: boolean;
 	end: Deferred.Deferred<Ended<unknown>>;
 };
+
 const rig = vi.hoisted(() => ({agents: [] as Agent[]}));
 
 // ACP's program boundary, with its outputs controlled by the test. No process or model starts.
@@ -79,17 +81,27 @@ vi.mock("../../program/program.ts", async (original) => ({
 							? Effect.fail(new MailboxFull({input: name, capacity: 1}))
 							: Effect.sync(() => {
 									if (name === "model" || name === "effort") {
-										if (name === "model") model = value;
-										else effort = value;
+										if (name === "model") {
+											model = value;
+										} else {
+											effort = value;
+										}
+
 										settings?.({model, effort});
 									}
+
 									if (name === "prompt") {
 										agent.turn += 1;
-										if (!agent.hold) outputs.told({turn: agent.turn});
+
+										if (!agent.hold) {
+											outputs.told({turn: agent.turn});
+										}
 									}
+
 									if (name === "cancel") {
 										agent.cancelled += 1;
-										if (!agent.hush)
+
+										if (!agent.hush) {
 											outputs.result({
 												turn: agent.turn,
 												stop: "cancelled",
@@ -97,7 +109,9 @@ vi.mock("../../program/program.ts", async (original) => ({
 												input: null,
 												output: null,
 											});
+										}
 									}
+
 									return "queued";
 								}),
 				},
@@ -106,6 +120,7 @@ vi.mock("../../program/program.ts", async (original) => ({
 }));
 
 const PERSON = "user:owner";
+
 const hosted = <A, E>(body: Effect.Effect<A, E, SummonManager | SummonedNow | Scope.Scope>) =>
 	Effect.runPromise(
 		body.pipe(
@@ -113,15 +128,22 @@ const hosted = <A, E>(body: Effect.Effect<A, E, SummonManager | SummonedNow | Sc
 			Effect.provide(summonManager({storage: memoryStorage(), folder: "/repo"})),
 		),
 	);
+
 const summon = (agent = "fake", settings: readonly string[] = []) =>
 	Effect.gen(function* () {
 		return yield* (yield* SummonManager).summon({agent, settings, name: "scout", by: PERSON});
 	});
+
 const current = () => {
 	const agent = rig.agents[0];
-	if (agent === undefined) throw new Error("no ACP run");
+
+	if (agent === undefined) {
+		throw new Error("no ACP run");
+	}
+
 	return agent;
 };
+
 const turning = Effect.gen(function* () {
 	const manager = yield* SummonManager;
 	const news: TurnNews[] = [];
@@ -129,9 +151,14 @@ const turning = Effect.gen(function* () {
 		Stream.runForEach((n) => Effect.sync(() => news.push(n))),
 		Effect.forkChild,
 	);
-	while (!news.some((n) => n._tag === "told")) yield* Effect.sleep(Duration.millis(5));
+
+	while (!news.some((n) => n._tag === "told")) {
+		yield* Effect.sleep(Duration.millis(5));
+	}
+
 	return {news, fiber};
 });
+
 const finish = () =>
 	current().outputs.result({
 		turn: current().turn,
@@ -167,7 +194,11 @@ describe("the manager reads ACP's state", () => {
 				const fiber = yield* manager
 					.turn("scout", "hello", null)
 					.pipe(Stream.runDrain, Effect.forkChild);
-				while (current().turn === 0) yield* Effect.sleep("5 millis");
+
+				while (current().turn === 0) {
+					yield* Effect.sleep("5 millis");
+				}
+
 				Deferred.doneUnsafe(
 					current().end,
 					Exit.succeed({
@@ -223,10 +254,16 @@ describe("the manager reads ACP's state", () => {
 					{told: told.hear, result: result.hear},
 					{id: "turn:accepted-before-told", storage: memoryStorage()},
 				);
-				if (job.kind !== "running") return yield* Effect.die("turn did not start");
+
+				if (job.kind !== "running") {
+					return yield* Effect.die("turn did not start");
+				}
+
 				yield* program.tell(job.run, "prompt", "slowly read the repo");
 				yield* Effect.gen(function* () {
-					while (current().turn === 0) yield* Effect.sleep("5 millis");
+					while (current().turn === 0) {
+						yield* Effect.sleep("5 millis");
+					}
 				}).pipe(Effect.timeout("2 seconds"));
 				expect(current().turn).toBe(1);
 				expect(told.values).toEqual([]);
@@ -278,7 +315,11 @@ describe("the manager reads ACP's state", () => {
 				yield* turning;
 				current().hush = true;
 				const cancelling = yield* manager.cancel("scout").pipe(Effect.forkChild);
-				while (current().cancelled === 0) yield* Effect.sleep(Duration.millis(5));
+
+				while (current().cancelled === 0) {
+					yield* Effect.sleep(Duration.millis(5));
+				}
+
 				Deferred.doneUnsafe(
 					current().end,
 					Exit.succeed({
@@ -322,7 +363,11 @@ describe("the manager reads ACP's state", () => {
 					Stream.runForEach((n) => Effect.sync(() => news.push(n))),
 					Effect.forkChild,
 				);
-				while (current().turn === 0) yield* Effect.sleep(Duration.millis(5));
+
+				while (current().turn === 0) {
+					yield* Effect.sleep(Duration.millis(5));
+				}
+
 				current().outputs.said("the last turn's tail");
 				current().outputs.told({turn: current().turn});
 				current().outputs.said("this turn's reply");
@@ -338,10 +383,12 @@ describe("the manager reads ACP's state", () => {
 	it("refuses an invalid second setting with the offered efforts", async () => {
 		const refused = await hosted(Effect.result(summon("fake", ["fake-large", "ultra"])));
 		expect(refused._tag).toBe("Failure");
-		if (refused._tag === "Failure")
+
+		if (refused._tag === "Failure") {
 			expect(refused.failure.why).toBe(
 				"ultra is not an effort fake offers. fake's models: fake-small, fake-large; efforts: low, high",
 			);
+		}
 	});
 
 	it("starts codex read-only in the person's repository", async () => {

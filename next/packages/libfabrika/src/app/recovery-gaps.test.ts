@@ -44,36 +44,44 @@ import {
 import {type Descriptor, ProgramRunner} from "./runner.ts";
 
 const NAME = "counter:1";
+
 const policy = {
 	maxDeliveries: 3,
 	intensity: 5,
 	periodMs: 5000,
 	backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5000},
 };
+
 const owner = Writer.cases.person.make({key: "SHA256:caller", for: from().for});
+
 const Model = Schema.Struct({
 	count: Schema.Int,
 	replies: Schema.Int,
 	queue: Schema.NullOr(Schema.String),
 });
 type Model = typeof Model.Type;
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("poison")}),
 	Schema.Struct({type: Schema.Literal("add"), n: Schema.Int}),
 	Schema.Struct({type: Schema.Literal("wait")}),
 	Schema.Struct({type: Schema.Literal("queue"), parent: Schema.String}),
 ]);
+
 const wait = Cmd.make("wait", {input: Schema.Struct({}), ok: Schema.Null, err: []});
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["not_delivered", "ended", "spent"],
 });
+
 type Wiring = {
 	policy: typeof policy;
 	recovery: {sql: Sql; name: string; capacity: number};
 	fault: (cut: string) => Effect.Effect<void, LedgerError>;
 };
+
 const runnerLayer: (p: Descriptor, options: Wiring) => ReturnType<typeof ProgramRunner.layer> =
 	ProgramRunner.layer;
 
@@ -107,7 +115,10 @@ const world = Effect.fnUntraced(function* () {
 				throw new TypeError("private gap failure");
 			},
 			add: (s, m) => {
-				if (controls.saved) throw new RangeError("private saved failure");
+				if (controls.saved) {
+					throw new RangeError("private saved failure");
+				}
+
 				return [
 					{...s, count: s.count + m.n, queue: null},
 					s.queue === null
@@ -173,7 +184,10 @@ const world = Effect.fnUntraced(function* () {
 	const processSql: Sql = {
 		...state.sql,
 		exec: (q, ...args) => {
-			if (controls.save && /^\s*(INSERT|UPDATE|REPLACE)/i.test(q)) throw new Error("SQLITE_FULL");
+			if (controls.save && /^\s*(INSERT|UPDATE|REPLACE)/i.test(q)) {
+				throw new Error("SQLITE_FULL");
+			}
+
 			return state.sql.exec(q, ...args);
 		},
 	};
@@ -185,7 +199,10 @@ const world = Effect.fnUntraced(function* () {
 				recovery: {sql: processSql, name: NAME, capacity: 1024 ** 3},
 				fault: (cut) =>
 					Effect.suspend(() => {
-						if (cut !== controls.cut) return Effect.void;
+						if (cut !== controls.cut) {
+							return Effect.void;
+						}
+
 						controls.hits.push(cut);
 						controls.cut = "";
 						return Effect.fail(new LedgerError({why: "unreachable"}));
@@ -276,10 +293,12 @@ const world = Effect.fnUntraced(function* () {
 		},
 	};
 });
+
 const lives = read(`processes/${NAME}`);
 const inbox = read(`${NAME}/inbox`);
 const exitBody = Schema.decodeUnknownSync(Schema.Struct({process: Schema.String}));
 const restartBody = Schema.decodeUnknownSync(Schema.Struct({after: Schema.String}));
+
 const restart = (r: (typeof ProgramRunner)["Service"], id: string, build: string) =>
 	Effect.gen(function* () {
 		expect(r.restart, "P34 trusted Restart operation is missing").toBeTypeOf("function");
@@ -294,12 +313,13 @@ describe("P34 interrupted recovery", () => {
 		"after_down",
 		"after_start",
 		"after_checkpoint",
-	])
+	]) {
 		it.effect(`failure gaps plant, clear before answer: ${cut} resumes one durable action`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
 				yield* w.boot;
 				w.controls.cut = cut;
+
 				if (cut === "after_down") {
 					w.controls.saved = true;
 					// Accepted before the saved model, as P11 marks one: sent and indexed as placed.
@@ -307,7 +327,8 @@ describe("P34 interrupted recovery", () => {
 						const sent = yield* Mailbox.use((m) =>
 							m.send(NAME, "saved", {type: "add", n: 7}, from()),
 						);
-						if (sent._tag === "placed")
+
+						if (sent._tag === "placed") {
 							yield* ProcessStore.use((s) =>
 								s.save(
 									{
@@ -323,15 +344,21 @@ describe("P34 interrupted recovery", () => {
 									[{id: "saved", rev: sent.rev, pos: sent.pos}],
 								),
 							);
+						}
 					}).pipe(Effect.provide(w.layer()));
 					yield* ProgramRunner.use((r) => Effect.exit(r.open("wake"))).pipe(
 						Effect.provide(w.layer()),
 					);
+
 					// P34 amendment: down is written only when the brake trips, so each successor
 					// folds the same saved letter and crashes again until the restart budget is spent.
 					for (let n = 0; n < 8 && w.controls.hits.length === 0; n++) {
 						const deadline = w.alarms.at(-1);
-						if (typeof deadline !== "number") break;
+
+						if (typeof deadline !== "number") {
+							break;
+						}
+
 						yield* TestClock.setTime(deadline);
 						yield* ProgramRunner.use((r) => Effect.exit(r.due(deadline))).pipe(
 							Effect.provide(w.layer()),
@@ -349,6 +376,7 @@ describe("P34 interrupted recovery", () => {
 							Effect.provide(w.layer()),
 						);
 						const deadline = w.alarms.at(-1);
+
 						if (typeof deadline === "number") {
 							yield* TestClock.setTime(deadline);
 							yield* ProgramRunner.use((r) => Effect.exit(r.due(deadline))).pipe(
@@ -357,18 +385,25 @@ describe("P34 interrupted recovery", () => {
 						}
 					}
 				}
+
 				expect(w.controls.hits, "the real recovery path must reach the injected cut").toEqual([
 					cut,
 				]);
 				w.reopen();
 				yield* Effect.gen(function* () {
 					const r = yield* ProgramRunner;
+
 					for (let n = 0; n < 2; n++) {
 						const at = w.alarms.at(-1);
-						if (typeof at !== "number") break;
+
+						if (typeof at !== "number") {
+							break;
+						}
+
 						yield* TestClock.setTime(at);
 						yield* Effect.exit(r.due(at));
 					}
+
 					const rows = yield* lives;
 					const exits = rows.filter((row) => row._tag === "exited");
 					expect(new Set(exits.map((row) => exitBody(row.body).process)).size).toBe(exits.length);
@@ -376,11 +411,16 @@ describe("P34 interrupted recovery", () => {
 					expect(new Set(restarts.map((row) => restartBody(row.body).after)).size).toBe(
 						restarts.length,
 					);
-					if (cut === "after_start") expect(restarts).toHaveLength(1);
+
+					if (cut === "after_start") {
+						expect(restarts).toHaveLength(1);
+					}
+
 					if (cut === "after_checkpoint") {
 						expect((yield* r.open("new")).view).toMatchObject({count: 7});
 						expect((yield* inbox).map((row) => row.id)).toEqual(["good"]);
 					}
+
 					if (cut === "after_dead") {
 						const records = yield* Effect.forEach([A, B, W, X], (p) => read(`${p}/dead`), {
 							concurrency: 1,
@@ -394,6 +434,7 @@ describe("P34 interrupted recovery", () => {
 				}).pipe(Effect.provide(w.layer()));
 			}),
 		);
+	}
 
 	it.effect(
 		"wake probe plant, idle before observation: unfinished durable step recovers once without inventing a throw",
@@ -407,6 +448,7 @@ describe("P34 interrupted recovery", () => {
 					),
 				).pipe(Effect.provide(w.layer()));
 				w.reopen();
+
 				for (let n = 0; n < 2; n++) {
 					yield* Effect.gen(function* () {
 						yield* Effect.exit(ProgramRunner.use((r) => r.open("wake")));
@@ -507,7 +549,7 @@ describe("P34 interrupted recovery", () => {
 			}),
 	);
 
-	for (const part of ["save", "flush"] as const)
+	for (const part of ["save", "flush"] as const) {
 		it.effect(
 			`storage plant, success before required ${part}: no terminal answer or further work`,
 			() =>
@@ -527,6 +569,7 @@ describe("P34 interrupted recovery", () => {
 					}).pipe(Effect.provide(w.layer()));
 				}),
 		);
+	}
 
 	// P12 supplies its real local-stage test driver. This file stays in the tests role's paths.
 	// Set P34_STAGE_DRIVER to that module's file URL on the lead's machine. Its open function
@@ -556,6 +599,7 @@ describe("P34 interrupted recovery", () => {
 					(s) =>
 						Effect.gen(function* () {
 							const original = {type: "poison"};
+
 							for (let n = 1; n <= 3; n++) {
 								const answer = yield* Effect.exit(s.send("poison", original));
 								expect(answer).toMatchObject(
@@ -577,6 +621,7 @@ describe("P34 interrupted recovery", () => {
 								yield* s.duplicateAlarm;
 								expect(yield* s.status).toEqual(next);
 							}
+
 							expect(yield* s.send("poison", original)).toMatchObject({
 								_tag: "refused",
 								why: "dead",

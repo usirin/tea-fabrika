@@ -57,6 +57,7 @@ const check = <A, E, R>(
 			),
 		);
 	});
+
 const hash = fc.string({minLength: 1, maxLength: 256});
 
 describe("P33, saved state and process authority", () => {
@@ -108,7 +109,10 @@ describe("P33, saved state and process authority", () => {
 				expect(() => recoverActivity(idle)).not.toThrow();
 				const recovered = recoverActivity(idle);
 				expect(recovered._tag).toBe("Success");
-				if (recovered._tag === "Success") expect(recovered.success).toEqual(idle);
+
+				if (recovered._tag === "Success") {
+					expect(recovered.success).toEqual(idle);
+				}
 			}),
 			{seed: 119120, numRuns: 100},
 		);
@@ -194,7 +198,10 @@ describe("p79, process identity", () => {
 							{concurrency: 1},
 						);
 						expect(new Set(answers.map((answer) => answer.process)).size).toBe(count);
-						for (const answer of answers) expect(Schema.is(ProcessId)(answer.process)).toBe(true);
+
+						for (const answer of answers) {
+							expect(Schema.is(ProcessId)(answer.process)).toBe(true);
+						}
 					}).pipe(Effect.provide(manager(store, brain(), generated.next)));
 				}).pipe(Effect.provide(ProcessIdGenerator.layer)),
 			),
@@ -239,12 +246,14 @@ describe("p79, process identity", () => {
 					const processes = yield* ProcessManager;
 					yield* processes.start(first(), from());
 					const before = store.rows();
+
 					for (const changed of [
 						first("start:counter:1", name),
 						first("start:counter:1", "counter:1", {...CODE, hash: build}),
 					]) {
 						expect((yield* Effect.flip(processes.start(changed, from()))).why).toBe("id_reused");
 					}
+
 					expect(store.rows()).toEqual(before);
 				}).pipe(Effect.provide(manager(store, brain(), ids(A).next)));
 			},
@@ -447,6 +456,7 @@ describe("p79, names, parents and replay", () => {
 				);
 				store.reopen();
 				const before = store.rows();
+
 				for (const code of [
 					{...CODE, hash: build},
 					{program: "other", hash: "build-a"},
@@ -459,6 +469,7 @@ describe("p79, names, parents and replay", () => {
 					expect(error._tag).toBe("ProcessError");
 					expect(error.why).toBe("name_taken");
 				}
+
 				expect(store.rows()).toEqual(before);
 			});
 		});
@@ -526,6 +537,7 @@ describe("p79, names, parents and replay", () => {
 // P33: the fold trusts a ProcessFact only from the brain's own writer, `from().by` here.
 const OTHER = "SHA256:not-the-brain";
 const toW = Recipient.cases.process.make({process: W});
+
 const forger = (store: Storage, by: string, streamForLife: string) => ({
 	forge: (stream: string, fact: {readonly _tag: string} & Schema.JsonObject) =>
 		Ledger.use((ledger) =>
@@ -539,6 +551,7 @@ const forger = (store: Storage, by: string, streamForLife: string) => ({
 		ProcessManager.use((p) => p.isLive(process)).pipe(Effect.provide(manager(store))),
 	downs: () => store.rows().filter((row) => row._tag === "send"),
 });
+
 const lawsFor = (
 	store: Storage,
 	by: string,
@@ -605,7 +618,7 @@ const lawsFor = (
 };
 
 describe("P33, the process fold ignores facts not written by the brain", () => {
-	for (const tag of Object.keys(ProcessFact.cases) as Array<keyof typeof ProcessFact.cases>)
+	for (const tag of Object.keys(ProcessFact.cases) as Array<keyof typeof ProcessFact.cases>) {
 		it.effect(`the fold ignores a fact tagged ${tag} whose by is not the brain's writer`, () => {
 			return check(
 				fc.tuple(
@@ -629,10 +642,11 @@ describe("P33, the process fold ignores facts not written by the brain", () => {
 				},
 			);
 		});
+	}
 });
 
 describe("P33, names and client ids are checked against a pattern", () => {
-	for (const name of ["processes", "a/b", "counter:1/inbox"])
+	for (const name of ["processes", "a/b", "counter:1/inbox"]) {
 		it.effect(`a start named ${JSON.stringify(name)} is refused with a typed error`, () => {
 			return check(
 				fc.oneof(
@@ -654,7 +668,9 @@ describe("P33, names and client ids are checked against a pattern", () => {
 				},
 			);
 		});
-	for (const client of ["processes", "w/x", "counter:1"])
+	}
+
+	for (const client of ["processes", "w/x", "counter:1"]) {
 		it.effect(`a client recipient id ${JSON.stringify(client)} is refused with a typed error`, () =>
 			check(
 				fc.oneof(
@@ -685,6 +701,7 @@ describe("P33, names and client ids are checked against a pattern", () => {
 				},
 			),
 		);
+	}
 });
 
 describe("P33, the brain writes process facts and `parent` keeps who asked", () => {
@@ -705,6 +722,7 @@ describe("P33, the brain writes process facts and `parent` keeps who asked", () 
 					yield* ProcessManager.use((p) => p.start(first(), from({by: X_KEY, parent: asked})));
 					const written = store.rows().filter((row) => Object.hasOwn(ProcessFact.cases, row._tag));
 					expect(written.map((row) => row._tag)).toEqual(["registered", "started"]);
+
 					for (const row of written) {
 						expect(row.by).toBe(brain().by);
 						const cause = store.rows().find((entry) => entry.id === row.parent);

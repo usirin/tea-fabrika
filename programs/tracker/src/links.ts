@@ -41,17 +41,33 @@ export const piecesOf = (body: string): readonly Piece[] => {
 	const pieces: Piece[] = [];
 	/** Where the text not placed yet starts. */
 	let placed = 0;
+
 	for (const start of body.matchAll(START)) {
 		const from = start.index;
+
 		// A start inside a URL already linked, such as a redirect's ?to=https://...
-		if (from < placed) continue;
+		if (from < placed) {
+			continue;
+		}
+
 		const to = urlEnd(body, from, from + start[0].length);
-		if (to === null) continue;
-		if (from > placed) pieces.push({kind: "text", text: body.slice(placed, from)});
+
+		if (to === null) {
+			continue;
+		}
+
+		if (from > placed) {
+			pieces.push({kind: "text", text: body.slice(placed, from)});
+		}
+
 		pieces.push({kind: "link", url: body.slice(from, to)});
 		placed = to;
 	}
-	if (placed < body.length) pieces.push({kind: "text", text: body.slice(placed)});
+
+	if (placed < body.length) {
+		pieces.push({kind: "text", text: body.slice(placed)});
+	}
+
 	return pieces;
 };
 
@@ -60,7 +76,11 @@ const urlEnd = (body: string, from: number, at: number): number | null => {
 	const host = /[\p{L}\p{N}\p{M}_.-]*/uy;
 	host.lastIndex = at;
 	const name = host.exec(body)?.[0] ?? "";
-	if (!isHost(name)) return null;
+
+	if (!isHost(name)) {
+		return null;
+	}
+
 	const stop = /[\s<>]/gu;
 	stop.lastIndex = at + name.length;
 	return trimmed(body, from, stop.exec(body)?.index ?? body.length);
@@ -78,26 +98,42 @@ const isHost = (host: string): boolean =>
 const trimmed = (body: string, from: number, to: number): number => {
 	let opens = 0;
 	let closes = 0;
+
 	for (let i = from; i < to; i += 1) {
-		if (body[i] === "(") opens += 1;
-		else if (body[i] === ")") closes += 1;
+		if (body[i] === "(") {
+			opens += 1;
+		} else if (body[i] === ")") {
+			closes += 1;
+		}
 	}
+
 	let end = to;
+
 	while (end > from) {
 		const last = body[end - 1] ?? "";
-		if (TRAILING.has(last)) end -= 1;
-		else if (last === ";") end = entityAt(body, from, end) ?? end - 1;
-		else if (last === ")" && closes > opens) {
+
+		if (TRAILING.has(last)) {
+			end -= 1;
+		} else if (last === ";") {
+			end = entityAt(body, from, end) ?? end - 1;
+		} else if (last === ")" && closes > opens) {
 			end -= 1;
 			closes -= 1;
-		} else break;
+		} else {
+			break;
+		}
 	}
+
 	return end;
 };
 
 /** Where the &name; that ends at `end` starts, or null when `body[.., end)` ends in no such one. */
 const entityAt = (body: string, from: number, end: number): number | null => {
 	let at = end - 2;
-	while (at > from && ALNUM.test(body[at] ?? "")) at -= 1;
+
+	while (at > from && ALNUM.test(body[at] ?? "")) {
+		at -= 1;
+	}
+
 	return at < end - 2 && body[at] === "&" ? at : null;
 };

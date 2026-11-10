@@ -44,10 +44,13 @@ export const pathsOf = (home: string) =>
 			lock: path.join(dir, "lock"),
 			log: path.join(dir, "log"),
 		};
-		if (new TextEncoder().encode(paths.sock).length > MAX_SOCKET_PATH)
+
+		if (new TextEncoder().encode(paths.sock).length > MAX_SOCKET_PATH) {
 			return yield* Effect.die(
 				`the host's socket path is longer than ${MAX_SOCKET_PATH} bytes: use a shorter home`,
 			);
+		}
+
 		return paths;
 	});
 
@@ -66,10 +69,17 @@ export const reach = (sock: string): Effect.Effect<Reached> =>
 			Effect.catch((e) => {
 				const cause = e.reason._tag === "SocketOpenError" ? e.reason.cause : undefined;
 				const code = codeOf(cause);
-				if (code === "ENOENT") return Effect.succeed<Reached>("absent");
+
+				if (code === "ENOENT") {
+					return Effect.succeed<Reached>("absent");
+				}
+
 				// A socket file no one listens on: its host crashed, or was killed. Or a file that is no
 				// socket at all, in a folder only the user can write.
-				if (code === "ECONNREFUSED" || code === "ENOTSOCK") return Effect.succeed<Reached>("stale");
+				if (code === "ECONNREFUSED" || code === "ENOTSOCK") {
+					return Effect.succeed<Reached>("stale");
+				}
+
 				return Effect.die(e);
 			}),
 		);

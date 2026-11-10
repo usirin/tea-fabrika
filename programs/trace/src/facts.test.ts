@@ -34,7 +34,9 @@ const counting = (facts: Ref.Ref<readonly Entry[]>, reads: Ref.Ref<readonly numb
 /** Let the clock run `ms`, a second at a time, so each wakeup in between runs. */
 const pass = (ms: number) =>
 	Effect.gen(function* () {
-		for (let left = ms; left > 0; left -= 1_000) yield* TestClock.adjust(Math.min(1_000, left));
+		for (let left = ms; left > 0; left -= 1_000) {
+			yield* TestClock.adjust(Math.min(1_000, left));
+		}
 	});
 
 describe("the trace program on a ticket", () => {
@@ -50,7 +52,11 @@ describe("the trace program on a ticket", () => {
 					{},
 					{id: "trace:test", storage: memoryStorage()},
 				).pipe(Effect.provide(Layer.merge(counting(facts, reads), memoryTraces([]))));
-				if (started.kind !== "running") return yield* Effect.die("the trace program did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("the trace program did not start");
+				}
+
 				const count = Effect.map(Ref.get(reads), (all) => all.length);
 				yield* pass(3_000);
 				const early = yield* count;

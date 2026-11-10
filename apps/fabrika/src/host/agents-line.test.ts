@@ -55,19 +55,26 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 2000; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
 /** One log line's `key=value` fields, as `Logger.formatSimple` writes them, quotes taken off. */
 const fieldsOf = (line: string): Record<string, string> => {
 	const out: Record<string, string> = {};
+
 	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
 		const [, key = "", raw = ""] = m;
 		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
 	}
+
 	return out;
 };
 
@@ -104,7 +111,10 @@ const hostOn = (home: string, lines: string[]) =>
 		/** What the page was sent on the desk's port, read. */
 		const page = (): ToPage[] =>
 			got.flatMap((m) => {
-				if (m.type !== "to" || m.port !== "desk") return [];
+				if (m.type !== "to" || m.port !== "desk") {
+					return [];
+				}
+
 				const read = readToPage(m.m);
 				return read.kind === "read" ? [read.msg] : [];
 			});
@@ -198,12 +208,18 @@ const agentOn = (home: string, agent: string) =>
 			Effect.gen(function* () {
 				for (let i = 0; i < 400; i += 1) {
 					const answer = yield* call("job", {n});
+
 					if (!answer.error) {
 						const data = JSON.parse(answer.text) as Record<string, unknown>;
-						if (ok(data)) return data;
+
+						if (ok(data)) {
+							return data;
+						}
 					}
+
 					yield* Effect.sleep("25 millis");
 				}
+
 				return yield* Effect.die(`job ${n} never came to what was waited for`);
 			});
 		return {call, line, tools, jobWhen, heard, leave: Scope.close(scope, Exit.void)};
@@ -362,11 +378,13 @@ describe("the line tool", {timeout: 30_000}, () => {
 				return {typed, told, piped, zoom, desk: host.desk()};
 			}),
 		);
+
 		for (const answer of [seen.typed, seen.told, seen.piped]) {
 			expect(answer).toMatchObject({data: {_tag: "said"}});
 			expect(Reflect.get(Object(answer.data), "status")).not.toBe(0);
 			expect(JSON.stringify(answer.data)).toContain("tracker has no input named answer");
 		}
+
 		// `zoom` is a desk word: the desk is the person's, so it is no word here.
 		expect(Reflect.get(Object(seen.zoom.data), "status")).not.toBe(0);
 		expect(seen.desk?.workspaces[0]?.layout.zoomed ?? null).toBeNull();
@@ -513,8 +531,14 @@ describe("the line tool", {timeout: 30_000}, () => {
 /** The container `tile` sits in, in the first workspace: unfolding it opens its tiles and focuses the first. */
 const parentOf = (desk: Open | undefined, tile: string): string | undefined => {
 	const walk = (node: LayoutNode): string | undefined => {
-		if (!isContainerNode(node)) return undefined;
-		if (node.children.some((child) => child.id === tile)) return node.id;
+		if (!isContainerNode(node)) {
+			return undefined;
+		}
+
+		if (node.children.some((child) => child.id === tile)) {
+			return node.id;
+		}
+
 		return node.children.map(walk).find((id) => id !== undefined);
 	};
 	const root = desk?.workspaces[0]?.layout.root;
@@ -540,7 +564,11 @@ describe("the line tool: what the mutation step found untested", {timeout: 30_00
 				const folded = said(lines, "agent_tile_opened").length;
 				// The column holding t2 opened: t2 is open, and focus goes to its first tile, t1.
 				const column = parentOf(host.desk(), "t2");
-				if (column === undefined) return yield* Effect.die("no container holds t2");
+
+				if (column === undefined) {
+					return yield* Effect.die("no container holds t2");
+				}
+
 				host.unfold(column);
 				const opened = yield* until("the tile opened in the log", () =>
 					said(lines, "agent_tile_opened").at(0),
@@ -616,6 +644,7 @@ describe("no secret in a line's answer or a log line (d24)", () => {
 		);
 		expect(said(lines, "agent_tile").length).toBeGreaterThan(0);
 		expect(said(lines, "tool_called").length).toBeGreaterThan(0);
+
 		for (const text of [...heard.heard, ...heard.screen, ...lines]) {
 			expect(text).not.toContain(secret);
 		}

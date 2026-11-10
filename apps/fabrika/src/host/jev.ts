@@ -30,7 +30,11 @@ export const hostJev = (
 			const fs = yield* FileSystem.FileSystem;
 			const file = (yield* Path.Path).join(home, JEV_KEY_FILE);
 			const key = (yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => ""))).trim();
-			if (key === "") return Layer.empty;
+
+			if (key === "") {
+				return Layer.empty;
+			}
+
 			return Layer.provide(liveJev(Redacted.make(key), HOST_CAP), FetchHttpClient.layer);
 		}),
 	);

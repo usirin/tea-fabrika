@@ -26,33 +26,46 @@ const ENV: NodeJS.ProcessEnv = {
 	GIT_COMMITTER_NAME: "step",
 	GIT_COMMITTER_EMAIL: "step@fabrika.test",
 };
+
 delete ENV.GITHUB_STEP_SUMMARY;
 delete ENV.GITHUB_ACTIONS;
 
 const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV) => {
 	const ran = spawnSync(cmd, args, {cwd, env, input, encoding: "utf8"});
-	if (ran.status !== 0) throw new Error(`${cmd} ${args.join(" ")}: ${ran.stderr}`);
+
+	if (ran.status !== 0) {
+		throw new Error(`${cmd} ${args.join(" ")}: ${ran.stderr}`);
+	}
+
 	return ran.stdout;
 };
 
 const KEYS = join(TOP, "keys");
 mkdirSync(KEYS, {mode: 0o700});
 type Who = Role | "stranger";
-for (const who of ["tests", "build", "lead", "stranger", "person"])
+
+for (const who of ["tests", "build", "lead", "stranger", "person"]) {
 	sh(KEYS, "ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", who, "-f", join(KEYS, who)]);
+}
+
 sh(KEYS, "ssh-keygen", ["-q", "-t", "ecdsa", "-N", "", "-C", "ecdsa", "-f", join(KEYS, "ecdsa")]);
+
 const pub = (who: string) =>
 	readFileSync(join(KEYS, `${who}.pub`), "utf8")
 		.split(" ")
 		.slice(0, 2)
 		.join(" ");
+
 /** A key's fingerprint, as `ssh-keygen -l` prints it and a note's `key` holds it. */
 const fingerprint = (who: string) =>
 	// oxlint-disable-next-line typescript/no-non-null-assertion -- Moved test setup reads ssh-keygen's fixed output after checking its exit code.
 	sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${who}.pub`)]).split(" ")[1]!;
+
 const keyLine = (role: string, who: string) => `${role} namespaces="fabrika-step" ${pub(who)}`;
+
 const stepKeys = (build = "build") =>
 	`${[keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")].join("\n")}\n`;
+
 const GOOD_KEYS = stepKeys();
 const personLine = (id: string, who = "person") => `person:${id} namespaces="git" ${pub(who)}`;
 const PERSON_KEYS = `${GOOD_KEYS}${personLine("github:42")}\n`;
@@ -74,7 +87,11 @@ class Repo {
 		this.dir = at ?? join(TOP, `r${count}`);
 		mkdirSync(this.dir);
 		this.git("init", "-q", "-b", "main", `--object-format=${format}`);
-		if (keys !== null) this.write("allowed_signers", keys);
+
+		if (keys !== null) {
+			this.write("allowed_signers", keys);
+		}
+
 		this.write("exam-paths.json", EXAM_LIST);
 		this.write("README.md", initial);
 		this.write("boundary-rules.json", "[]\n");
@@ -249,10 +266,12 @@ const verifies = (repo: Repo, note: {sig: string; step: Role}, text: string) => 
 
 const squashed = (r: Repo, notes: Array<{note: object; commit: string}>, moveMain = false) => {
 	r.git("checkout", "-q", "main");
+
 	if (moveMain) {
 		r.write("docs/other.md", "o\n");
 		r.commit("main moves");
 	}
+
 	r.git("merge", "--squash", "-q", "pr");
 	const squash = r.commit("squash");
 	const rows = notes.map(
@@ -277,6 +296,7 @@ const squashed = (r: Repo, notes: Array<{note: object; commit: string}>, moveMai
 	);
 	return {squash, rows};
 };
+
 const log = (r: Repo, rows: object[]) => {
 	r.write("field/runs.jsonl", `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
 	return r.commit("log");

@@ -32,8 +32,12 @@ interface Struct {
 
 /** The literal a union member is told apart by (`type`, `for`, `kind`, ...), for a readable path. */
 const tagOf = (ast: SchemaAST.Objects): string | null => {
-	for (const p of ast.propertySignatures)
-		if (SchemaAST.isLiteral(p.type) && typeof p.type.literal === "string") return p.type.literal;
+	for (const p of ast.propertySignatures) {
+		if (SchemaAST.isLiteral(p.type) && typeof p.type.literal === "string") {
+			return p.type.literal;
+		}
+	}
+
 	return null;
 };
 
@@ -44,8 +48,12 @@ function structsIn(
 	own: boolean,
 	seen: Set<SchemaAST.AST>,
 ): Struct[] {
-	if (seen.has(ast)) return [];
+	if (seen.has(ast)) {
+		return [];
+	}
+
 	seen.add(ast);
+
 	switch (ast._tag) {
 		case "Objects":
 			return [
@@ -72,15 +80,30 @@ function structsIn(
 
 /** What is wrong with one struct the ledger holds. `null`: it is an entity with its id, or a value. */
 function problemOf(s: Struct): string | null {
-	if (s.own) return null;
+	if (s.own) {
+		return null;
+	}
+
 	const made = madeAs(s.ast);
-	if (made === null)
+
+	if (made === null) {
 		return `${s.path} is a struct made neither by entity(...) nor by value(...): if it stays the same thing through change, it is an entity and needs a typed id`;
-	if ("value" in made) return null;
+	}
+
+	if ("value" in made) {
+		return null;
+	}
+
 	const id = s.ast.propertySignatures.find((p) => p.name === "id");
-	if (id === undefined) return `${s.path} is an entity of ${made.entity} with no id`;
-	if (SchemaAST.isOptional(id.type))
+
+	if (id === undefined) {
+		return `${s.path} is an entity of ${made.entity} with no id`;
+	}
+
+	if (SchemaAST.isOptional(id.type)) {
 		return `${s.path} is an entity of ${made.entity} whose id may be missing`;
+	}
+
 	const kind = kindOf(id.type);
 	return kind === made.entity
 		? null
@@ -119,9 +142,19 @@ describe("every ledger entity has a typed id", () => {
 	it("names a plan, a ticket and a lane, which it holds no struct of, only by their typed ids", () => {
 		const idsIn = (ast: SchemaAST.AST): string[] => {
 			const kind = kindOf(ast);
-			if (kind !== null) return [kind];
-			if (SchemaAST.isArrays(ast)) return [...ast.elements, ...ast.rest].flatMap(idsIn);
-			if (SchemaAST.isUnion(ast)) return ast.types.flatMap(idsIn);
+
+			if (kind !== null) {
+				return [kind];
+			}
+
+			if (SchemaAST.isArrays(ast)) {
+				return [...ast.elements, ...ast.rest].flatMap(idsIn);
+			}
+
+			if (SchemaAST.isUnion(ast)) {
+				return ast.types.flatMap(idsIn);
+			}
+
 			return [];
 		};
 		const named = new Set(

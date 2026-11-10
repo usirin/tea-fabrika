@@ -5,13 +5,16 @@ const Life = {
 	start: Schema.NonEmptyString,
 	at: Schema.Number,
 };
+
 const Reason = Schema.Literals(["open", "crash", "memory", "core"]);
+
 const Exit = {
 	exitCode: Schema.optionalKey(Schema.NullOr(Schema.Int)),
 	signal: Schema.optionalKey(Schema.NullOr(Schema.String)),
 	bytes: Schema.optionalKey(Schema.Int),
 	backoff: Schema.optionalKey(Schema.Number),
 };
+
 export const BrainEvent = Schema.TaggedUnion({
 	started: {
 		...Life,

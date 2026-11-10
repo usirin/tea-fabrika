@@ -22,9 +22,17 @@ describe("counter", () => {
 		const views = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(counter, {}, {}, keeping());
-				if (started.kind !== "running") return yield* Effect.die("counter did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("counter did not start");
+				}
+
 				const view = viewOf(counter);
-				if (view === undefined) return yield* Effect.die("counter has no view");
+
+				if (view === undefined) {
+					return yield* Effect.die("counter has no view");
+				}
+
 				const seen = yield* started.run.machines.count.changes.pipe(
 					Stream.filter((s) => s !== null),
 					Stream.map(view.of),

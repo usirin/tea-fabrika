@@ -54,19 +54,26 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 2000; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
 /** One log line's `key=value` fields, as `Logger.formatSimple` writes them, quotes taken off. */
 const fieldsOf = (line: string): Record<string, string> => {
 	const out: Record<string, string> = {};
+
 	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
 		const [, key = "", raw = ""] = m;
 		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
 	}
+
 	return out;
 };
 
@@ -151,12 +158,18 @@ const agentOn = (home: string, agent: string) =>
 			Effect.gen(function* () {
 				for (let i = 0; i < 400; i += 1) {
 					const answer = yield* call("job", {n});
+
 					if (!answer.error) {
 						const data = JSON.parse(answer.text) as Record<string, unknown>;
-						if (ok(data)) return data;
+
+						if (ok(data)) {
+							return data;
+						}
 					}
+
 					yield* Effect.sleep("25 millis");
 				}
+
 				return yield* Effect.die(`job ${n} never came to what was waited for`);
 			});
 		return {call, tools, jobWhen};
@@ -179,6 +192,7 @@ const recordRows = (home: string) =>
 			.filter((name) => name.endsWith(".sqlite"))
 			.flatMap((name) => {
 				const db = new DatabaseSync(path.join(dir, name), {readOnly: true});
+
 				try {
 					return db.prepare("SELECT * FROM job").all();
 				} catch {
@@ -230,11 +244,17 @@ describe("the stop tool", () => {
 					said(lines, "job_ended").length > 0 ? true : undefined,
 				);
 				let rows: readonly Record<string, unknown>[] = [];
+
 				for (let i = 0; i < 400; i += 1) {
 					rows = yield* recordRows(home);
-					if (rows.some((row) => row.n === 1 && row.how !== null)) break;
+
+					if (rows.some((row) => row.n === 1 && row.how !== null)) {
+						break;
+					}
+
 					yield* Effect.sleep("25 millis");
 				}
+
 				return {answer, rows};
 			}),
 		);
@@ -386,9 +406,10 @@ describe("the stop tool", () => {
 					yield* agent.call("stop", {n: 1, why: "wrong ticket\nfake row one"}),
 					yield* agent.call("stop", {n: 2, why: "wrong ticket\rfake row two"}),
 				];
+
 				// Whatever each stop came to, the tile has said all it will about it a moment on.
-				for (const [i, answer] of answers.entries())
-					if (!answer.error)
+				for (const [i, answer] of answers.entries()) {
+					if (!answer.error) {
 						yield* until(`the stopper's line for ${i + 1}`, () =>
 							host
 								.rows()
@@ -396,13 +417,21 @@ describe("the stop tool", () => {
 								? true
 								: undefined,
 						);
+					}
+				}
+
 				yield* Effect.sleep("300 millis");
 				return {answers, rows: host.rows()};
 			}),
 		);
 		// No row of its own: a why refused, or kept on the stopper's row, never starts one.
 		expect(seen.rows.filter((row) => row.trimStart().startsWith("fake row"))).toEqual([]);
-		for (const answer of seen.answers) if (answer.error) expect(answer.text).toMatch(/\bwhy\b/);
+
+		for (const answer of seen.answers) {
+			if (answer.error) {
+				expect(answer.text).toMatch(/\bwhy\b/);
+			}
+		}
 	});
 
 	it("refuses a stop with no why, an empty why or one past 500 characters, and the job runs on", async () => {
@@ -421,10 +450,12 @@ describe("the stop tool", () => {
 				return {refusals: [none, empty, long], after};
 			}),
 		);
+
 		for (const refused of seen.refusals) {
 			expect(refused.error).toBe(true);
 			expect(refused.text).toMatch(/\bwhy\b/);
 		}
+
 		expect(seen.after).toMatchObject({n: 1, state: {_tag: "running"}});
 		expect(said(lines, "job_stopped")).toEqual([]);
 	});

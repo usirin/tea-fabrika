@@ -18,18 +18,25 @@ import {decodeKeys, defaults, type Does, type Keys} from "../desk/keymap.ts";
 import {Edit, KeybindingManager, type Snapshot} from "./keybindings.ts";
 
 const platform = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
+
 const go = <A, E>(test: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope>) =>
 	Effect.runPromise(test.pipe(Effect.scoped, Effect.provide(platform)));
+
 const FROM = {how: "pressed" as const, window: "window-1", said: 100};
 const bind = (does: Does, keys: readonly string[]) => Edit.cases.bind.make({does, keys});
 const row = (keys: Keys, does: string) => keys.rows.find((r) => r.does === does);
 const pause = Effect.sleep("150 millis");
+
 const until = (what: string, check: () => boolean) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 1000; i += 1) {
-			if (check()) return;
+			if (check()) {
+				return;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
@@ -176,12 +183,16 @@ describe("today's KeybindingManager", () => {
 				const h = yield* opened('prefix = "ctrl+a"\n');
 				const good = yield* h.current;
 				const bytes = yield* h.fs.readFileString(h.file);
+
 				for (const failure of ["read", "write"] as const) {
 					h.faults[failure] = true;
 					const result = yield* h.edit(bind("tezgah.zoom", ["<prefix>m"])).pipe(Effect.result);
 					expect(Result.isFailure(result)).toBe(true);
-					if (Result.isFailure(result))
+
+					if (Result.isFailure(result)) {
 						expect(String(result.failure)).toMatch(/read|write|rename|denied/i);
+					}
+
 					h.faults[failure] = false;
 					yield* pause;
 					expect(yield* h.fs.readFileString(h.file)).toBe(bytes);
@@ -286,8 +297,11 @@ describe("today's KeybindingManager", () => {
 					.edit(Edit.cases.undo.make({version: another.version}))
 					.pipe(Effect.result);
 				expect(Result.isFailure(stale)).toBe(true);
-				if (Result.isFailure(stale))
+
+				if (Result.isFailure(stale)) {
 					expect(String(stale.failure)).toMatch(/newer|changed|version/i);
+				}
+
 				expect(yield* h.fs.readFileString(h.file)).toBe(newer);
 			}),
 		);
@@ -388,8 +402,11 @@ describe("today's KeybindingManager", () => {
 			Effect.gen(function* () {
 				const h = yield* opened();
 				let last: Snapshot | null = null;
-				for (let i = 0; i < 25; i += 1)
+
+				for (let i = 0; i < 25; i += 1) {
 					last = yield* h.edit(bind("tezgah.zoom", [i % 2 === 0 ? "<prefix>m" : "<prefix>u"]));
+				}
+
 				expect(last?.changes).toHaveLength(20);
 				expect(last?.changes.at(-1)?.version).toBe(last?.version);
 				const undone = yield* h.edit(Edit.cases.undo.make({version: last?.version ?? ""}));

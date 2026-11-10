@@ -234,6 +234,7 @@ describe("person commits between step links (p86b)", () => {
 				.trim();
 		const {squash, rows} = squashed(r, [{note: middle, commit: person}]);
 		const row = rows[0]!.attested[0]!;
+
 		switch (plant) {
 			case "the wrong key":
 				row.key = fingerprint("tests");
@@ -264,6 +265,7 @@ describe("person commits between step links (p86b)", () => {
 				break;
 			}
 		}
+
 		log(r, rows);
 		const out = r.run(["chain", "--squash", squash]);
 		expect(out.answers).toEqual([stuck("broken_chain", squash)]);
@@ -344,7 +346,11 @@ describe("person commits between step links (p86b)", () => {
 			const r = new Repo(PERSON_KEYS);
 			const tests = r.change("a.ts");
 			const first = r.sign("tests");
-			if (change === "file change") r.write("next/packages/x/src/person.ts", "person\n");
+
+			if (change === "file change") {
+				r.write("next/packages/x/src/person.ts", "person\n");
+			}
+
 			const person = r.gitSigned();
 			expect(verifyCommit(r, person)).toBe(0);
 			const middle = personLink(r, person);

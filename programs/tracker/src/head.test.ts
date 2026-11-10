@@ -23,6 +23,7 @@ const ticketOf = (...facts: readonly (readonly [Entry["by"], Fact])[]) => {
 	expect(problems).toEqual([]);
 	return tickets[0]?.timeline ?? [];
 };
+
 const lineAt = (timeline: readonly Entry[], now: number) =>
 	lineOf(headOf(timeline, now), (at) => `${at / MINUTE}m`);
 
@@ -30,10 +31,12 @@ const filed: readonly [Entry["by"], Fact] = [
 	owner,
 	{type: "filed", title: "Login fails", body: "On main."},
 ];
+
 const started: readonly [Entry["by"], Fact] = [
 	agent("build"),
 	{type: "started", run: "r-1", stage: "build", task: "t-1", log: null},
 ];
+
 const ended = (
 	outcome: Extract<Fact, {type: "ended"}>["outcome"],
 ): readonly [Entry["by"], Fact] => [
@@ -49,14 +52,17 @@ const ended = (
 		turns: 14,
 	},
 ];
+
 const asked: readonly [Entry["by"], Fact] = [
 	agent("plan"),
 	{type: "asked", ask: "a-1", what: "approve plan v2", picks: ["approve", "change one line", "no"]},
 ];
+
 const answered: readonly [Entry["by"], Fact] = [
 	owner,
 	{type: "answered", ask: "a-1", pick: "approve", note: ""},
 ];
+
 const merged: readonly [Entry["by"], Fact] = [
 	agent("watcher"),
 	{

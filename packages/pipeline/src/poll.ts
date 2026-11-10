@@ -122,17 +122,30 @@ export function createPoll<const N extends string, I, R extends Keyed, V>(config
 	 * another phase, or another child changes nothing.
 	 */
 	function ticked(s: State, m: Tick<typeof tickType>): readonly [State, readonly R[]] {
-		if (m.key !== s.key || m.tick !== s.tick || m.phase !== s.phase) return [s, []];
-		if (s.phase === "reading") return [next(s, s.last), []];
+		if (m.key !== s.key || m.tick !== s.tick || m.phase !== s.phase) {
+			return [s, []];
+		}
+
+		if (s.phase === "reading") {
+			return [next(s, s.last), []];
+		}
+
 		const reading: State = {...s, phase: "reading"};
 		return [reading, [readOf(reading)]];
 	}
 
 	/** The read answered: a change when `by` differs from the last one reported, else nothing. An answer for a read given up changes nothing. */
 	function answered(s: State, read: R, value: V): Step {
-		if (!current(s, read)) return [s, null];
+		if (!current(s, read)) {
+			return [s, null];
+		}
+
 		const seen = config.by(value);
-		if (seen === s.last) return [next(s, s.last), null];
+
+		if (seen === s.last) {
+			return [next(s, s.last), null];
+		}
+
 		return [next(s, seen), {key: s.key, tick: s.tick, value}];
 	}
 

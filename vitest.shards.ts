@@ -569,11 +569,13 @@ export const assign = (
 		.toSorted((x, y) => y.seconds - x.seconds || (x.path < y.path ? -1 : x.path > y.path ? 1 : 0));
 	const load = Array.from({length: count}, () => 0);
 	const machines = files.map(() => 0);
+
 	for (const file of order) {
 		const least = load.indexOf(Math.min(...load));
 		machines[file.at] = least;
 		load[least] = (load[least] ?? 0) + file.seconds;
 	}
+
 	return machines;
 };
 
@@ -581,8 +583,12 @@ export const assign = (
 export class Shards extends BaseSequencer {
 	override async shard(files: TestSpecification[]): Promise<TestSpecification[]> {
 		const {root, shard} = this.ctx.config;
+
 		// vitest calls `shard` only when `--shard` is given; the type does not know that.
-		if (shard === undefined) throw new Error("Shards.shard: called without --shard");
+		if (shard === undefined) {
+			throw new Error("Shards.shard: called without --shard");
+		}
+
 		const machines = assign(
 			files.map((spec) => {
 				const path = relative(root, spec.moduleId);

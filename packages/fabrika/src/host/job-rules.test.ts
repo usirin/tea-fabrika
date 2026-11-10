@@ -65,6 +65,7 @@ describe("a job's record keeps an agent run's content", () => {
 			{span: TOOL, input: '{"file_path":".env.example"}', output: '"A=1\\nB=2"'},
 			{span: CHAT, input: '{"input":"Build it."}', output: '{"content":"I read the file."}'},
 		]);
+
 		for (const s of read.spans) {
 			expect(s.tags).not.toHaveProperty(INPUT);
 			expect(s.tags).not.toHaveProperty(OUTPUT);

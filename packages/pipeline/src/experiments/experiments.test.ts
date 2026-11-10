@@ -53,6 +53,7 @@ const racing = (ledger: Ledger["Service"]): Ledger["Service"] => {
 			first = Deferred.makeUnsafe<void>();
 			return Deferred.await(first);
 		}
+
 		const waiting = first;
 		first = null;
 		return Deferred.succeed(waiting, undefined);
@@ -129,7 +130,11 @@ describe("Experiments on the ledger", () => {
 				const [a, b] = yield* twoRuns;
 				const ex = yield* Experiments;
 				const [ra, rb] = yield* ex.runs("170");
-				if (ra === undefined || rb === undefined) return yield* Effect.die("two runs");
+
+				if (ra === undefined || rb === undefined) {
+					return yield* Effect.die("two runs");
+				}
+
 				return Comparison.fromRuns(ra, rb, yield* ex.cases(a), yield* ex.cases(b));
 			}),
 		);
@@ -234,7 +239,11 @@ describe("Experiments on the ledger", () => {
 
 	it("refuses a key whose id another key's run has, started after it or at once", async () => {
 		const [first, second] = CLASH.map((key) => ({...plan, key}));
-		if (first === undefined || second === undefined) throw new Error("two keys");
+
+		if (first === undefined || second === undefined) {
+			throw new Error("two keys");
+		}
+
 		expect(runIdOf("170", first.key)).toBe("170.93c55fefa810");
 		expect(runIdOf("170", second.key)).toBe("170.93c55fefa810");
 		const fresh = Effect.gen(function* () {
@@ -402,12 +411,15 @@ describe("the fold", () => {
 			Effect.gen(function* () {
 				const name = experimentName("170");
 				yield* ledger.register(name, "user:owner");
-				for (const [i, data] of facts.entries())
+
+				for (const [i, data] of facts.entries()) {
 					yield* ledger.send(streams(name).inbox, String(i), {
 						kind: data.type,
 						writer: "user:owner",
 						data,
 					});
+				}
+
 				return yield* ledger.readStream(streams(name).inbox, 0, -1);
 			}),
 		);

@@ -1,7 +1,7 @@
 ---
 id: 0016
 title: Tier 1 supervision is OTP's top-level supervisor, and each difference from OTP is written with its reason
-status: accepted
+status: amended-in-part by [0018](0018-one-application-per-program.md)
 date: 2026-11-09
 tags: [supervision, otp, coordination, tier-1, next, restart]
 ---
@@ -43,6 +43,10 @@ const child = {name: "counter:1", program: "counter", restart: "permanent", shut
 // More than `intensity` restarts in `periodMs`: every child exits, the root stops, and the brain
 // writes `failed` on the log and raises an ask to the person.
 ```
+
+> Amended in part by [0018](0018-one-application-per-program.md): there is no single root per
+> brain. Each program is its own application with its own top-level supervisor, so one program past
+> its intensity stops alone. The rest of this file holds, read per program.
 
 ## Context
 

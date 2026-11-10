@@ -8,6 +8,7 @@ import {localStage} from "./src/local-stage.ts";
 import {Settings} from "./src/settings.ts";
 
 class StageError extends Schema.TaggedError<StageError>()("StageError", {reason: Schema.String}) {}
+
 const flags = {
 	child: Flag.Boolean("child").pipe(Flag.withDefault(false)),
 	parent: Flag.String("parent").pipe(Flag.withDefault(undefined)),
@@ -17,22 +18,32 @@ const flags = {
 	founder: Flag.String("founder").pipe(Flag.withDefault(undefined)),
 	window: Flag.String("window").pipe(Flag.withDefault(undefined)),
 };
+
 // A base64url key can start with "-". Keep each string flag's value in the same word.
 const words: Array<string> = [];
+
 for (let n = 2; n < process.argv.length; n++) {
 	const word = process.argv[n] ?? "",
 		value = process.argv[n + 1];
 	const flag = /^--(port|name|person|founder|window|parent)$/.test(word) && value !== undefined;
 	words.push(flag ? `${word}=${value}` : word);
-	if (flag) n++;
+
+	if (flag) {
+		n++;
+	}
 }
+
 process.env.DO_NOT_TRACK = "1";
+
 const command = Command.make("dev", flags, (options) => {
 	const guard = Effect.forever(
 		Effect.gen(function* () {
 			const owner = Number(options.parent);
-			if (!Number.isSafeInteger(owner) || owner <= 1 || process.ppid !== owner)
+
+			if (!Number.isSafeInteger(owner) || owner <= 1 || process.ppid !== owner) {
 				return yield* new StageError({reason: "parent_gone"});
+			}
+
 			yield* Effect.sleep("250 millis");
 		}),
 	);
@@ -95,11 +106,15 @@ const command = Command.make("dev", flags, (options) => {
 					forceKillAfter: "3 seconds",
 				},
 			);
-			if ((yield* stage.exitCode) !== 0) return yield* new StageError({reason: "child_failed"});
+
+			if ((yield* stage.exitCode) !== 0) {
+				return yield* new StageError({reason: "child_failed"});
+			}
 		}),
 	);
 	return options.child ? child : parent;
 });
+
 NodeRuntime.runMain(
 	Command.runWith(command, {version: "0.0.0"})(words).pipe(
 		Effect.provide([NodeServices.layer, SecureRandom.layerWebCrypto]),

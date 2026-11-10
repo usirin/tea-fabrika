@@ -19,11 +19,13 @@ const fold = (ctx: LinkCtx, msgs: readonly LinkMsg[]) => {
 	const [first, init] = linkMachine.init(null, ctx);
 	let s: Link = first;
 	const steps: (readonly LinkCmd[])[] = [init];
+
 	for (const msg of msgs) {
 		const [next, cmds] = applyCell<Link, LinkMsg, LinkCmd>(linkMachine, s, msg);
 		s = next;
 		steps.push(cmds);
 	}
+
 	return {s, steps};
 };
 
@@ -33,6 +35,7 @@ const HOST: LinkCtx = {side: "host", ours: 1};
 describe("the link", () => {
 	it("K21: today's new protocol refuses the old version in both directions before delivery", () => {
 		expect(PROTOCOL).toBeGreaterThan(1);
+
 		for (const side of ["app", "host"] as const) {
 			const {s, steps} = fold({side, ours: PROTOCOL}, [
 				{type: "hello", version: 1},

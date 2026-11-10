@@ -2,6 +2,7 @@ import {describe, expect, it} from "vitest";
 import {plant} from "../next/apps/fabrika/src/exam/plant.ts";
 
 const code = "fabrika(door-is-library)";
+
 describe("P17a, the library owns the door", async () => {
 	const files = {
 		"next/apps/fabrika/src/door.ts": [
@@ -25,6 +26,8 @@ describe("P17a, the library owns the door", async () => {
 		expect(linted(code, "next/apps/fabrika/src/door-nonce.ts")).toEqual([1]);
 	});
 	it("permits library logic, app wiring and tests", () => {
-		for (const path of Object.keys(files).slice(3)) expect(linted(code, path)).toEqual([]);
+		for (const path of Object.keys(files).slice(3)) {
+			expect(linted(code, path)).toEqual([]);
+		}
 	});
 });

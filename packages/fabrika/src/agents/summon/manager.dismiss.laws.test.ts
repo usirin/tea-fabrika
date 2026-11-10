@@ -20,8 +20,11 @@ const PERSON = "user:owner";
 const PRIVATE = "T237-dismiss-this-private-prompt";
 const KEEP = "T237-keep-the-other-conversation";
 const made: string[] = [];
+
 afterEach(() => {
-	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});
+	for (const folder of made.splice(0)) {
+		rmSync(folder, {recursive: true, force: true});
+	}
 });
 
 const bytes = (folder: string): string =>
@@ -46,6 +49,7 @@ it("T237-R2-4: dismiss removes its kept conversation, while another agent and it
 	const seen = await Effect.runPromise(
 		Effect.gen(function* () {
 			const manager = yield* SummonManager;
+
 			for (const [name, prompt] of [
 				["scout", PRIVATE],
 				["researcher", KEEP],
@@ -56,6 +60,7 @@ it("T237-R2-4: dismiss removes its kept conversation, while another agent and it
 					.pipe(Stream.runCollect);
 				expect(news.at(-1)).toMatchObject({_tag: "result", stop: "end_turn"});
 			}
+
 			const scout = (yield* manager.identify!("scout", 1)).run;
 			const other = (yield* manager.identify!("researcher", 1)).run;
 			const before = bytes(disk);

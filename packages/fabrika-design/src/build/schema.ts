@@ -141,7 +141,11 @@ const decodeWith =
 			onExcessProperty: "error",
 			errors: "all",
 		});
-		if (Exit.isSuccess(exit)) return {_tag: "ok", value: exit.value};
+
+		if (Exit.isSuccess(exit)) {
+			return {_tag: "ok", value: exit.value};
+		}
+
 		const said = String(Cause.squash(exit.cause)).replace(/^SchemaError\(|\)$/g, "");
 		const errors = [...said.matchAll(/(.+)\n\s+at (\S+)/g)].map(
 			([, what = "", at = ""]) => `${file}: ${fieldOf(at)}: ${what.trim()}`,
@@ -159,9 +163,11 @@ const isTable = (x: unknown): x is Readonly<Record<string, unknown>> =>
 /** One token file, as `<token>.toml` and its parsed TOML. */
 export const decodeToken = (file: string, input: unknown): Decoded<TokenFile> => {
 	const name = file.replace(/\.toml$/, "");
+
 	if (!/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(name)) {
 		return {_tag: "bad", errors: [`${file}: name: a token's name is lowercase words and hyphens`]};
 	}
+
 	const extending = isTable(input) && isTable(input["colors"]) && "extends" in input["colors"];
 	return extending ? decodeWith(Extends)(file, input) : decodeWith(Own)(file, input);
 };
@@ -174,7 +180,10 @@ export const decodeParts = (input: unknown): Decoded<Parts> =>
 
 /** A value with alpha under 1 in a look: an `a` step, black or white alpha, an 8-digit hex. */
 export const isTranslucent = (value: Value): boolean => {
-	if (typeof value === "string") return /\.a\d+$/.test(value);
+	if (typeof value === "string") {
+		return /\.a\d+$/.test(value);
+	}
+
 	return "step" in value ? /\.a\d+$/.test(value.step) : value.hex.length === 9;
 };
 
@@ -199,45 +208,75 @@ export const checkAcross = ({tokens, manti, parts, hand}: Sources): readonly str
 		if (!Object.hasOwn(parts, token.owner)) {
 			bad(name, "owner", `"${token.owner}" is not named in parts.toml`);
 		}
+
 		if (!isOwn(token)) {
 			if (!tokens.has(token.colors.extends)) {
 				bad(name, "colors.extends", `no token "${token.colors.extends}"`);
 			}
+
 			continue;
 		}
+
 		const {type, on, floor, aim, carries, except, colors} = token;
+
 		for (const backdrop of on ?? []) {
 			for (const part of backdrop.split("/")) {
-				if (!tokens.has(part)) bad(name, "on", `no token "${part}" in "${backdrop}"`);
+				if (!tokens.has(part)) {
+					bad(name, "on", `no token "${part}" in "${backdrop}"`);
+				}
 			}
 		}
+
 		if (type === "text") {
-			if (on === undefined) bad(name, "on", "a text token names what it sits on");
-			if (floor === undefined || floor < 4.5) bad(name, "floor", "a text token needs 4.5 or more");
-			if (carries !== undefined) bad(name, "carries", "text always carries a fact");
+			if (on === undefined) {
+				bad(name, "on", "a text token names what it sits on");
+			}
+
+			if (floor === undefined || floor < 4.5) {
+				bad(name, "floor", "a text token needs 4.5 or more");
+			}
+
+			if (carries !== undefined) {
+				bad(name, "carries", "text always carries a fact");
+			}
 		}
+
 		if (type === "border" || type === "icon") {
 			const a = type === "icon" ? "an icon" : "a border";
+
 			if (carries === undefined) {
-				if (on === undefined) bad(name, "on", `${a} names what it sits on, or carries nothing`);
-				if (floor === undefined) bad(name, "floor", `${a} needs 3 or more, or carries nothing`);
+				if (on === undefined) {
+					bad(name, "on", `${a} names what it sits on, or carries nothing`);
+				}
+
+				if (floor === undefined) {
+					bad(name, "floor", `${a} needs 3 or more, or carries nothing`);
+				}
 			} else if (floor !== undefined) {
 				bad(name, "floor", "a value that carries nothing has no floor");
 			}
 		}
+
 		if (type === "background" && carries !== undefined) {
 			bad(name, "carries", "a background needs no floor, so it says nothing it carries");
 		}
+
 		if ((isTranslucent(colors.dark) || isTranslucent(colors.light)) && on === undefined) {
 			bad(name, "on", "a translucent value names its backdrop");
 		}
+
 		if ((floor !== undefined || aim !== undefined) && on === undefined) {
 			bad(name, "on", "a floor or an aim is judged on what the token sits on");
 		}
+
 		for (const [i, e] of (except ?? []).entries()) {
-			if (floor === undefined) bad(name, `except.${i}`, "an exception is to a floor");
-			if (!(on ?? []).some((backdrop) => backdrop === e.on))
+			if (floor === undefined) {
+				bad(name, `except.${i}`, "an exception is to a floor");
+			}
+
+			if (!(on ?? []).some((backdrop) => backdrop === e.on)) {
 				bad(name, `except.${i}.on`, `"${e.on}" is not in on`);
+			}
 		}
 	}
 
@@ -245,12 +284,15 @@ export const checkAcross = ({tokens, manti, parts, hand}: Sources): readonly str
 	for (const name of tokens.keys()) {
 		const seen = [name];
 		let at = tokens.get(name);
+
 		while (at !== undefined && !isOwn(at)) {
 			const next = at.colors.extends;
+
 			if (seen.includes(next)) {
 				bad(name, "colors.extends", `a cycle: ${[...seen, next].join(" -> ")}`);
 				break;
 			}
+
 			seen.push(next);
 			at = tokens.get(next);
 		}
@@ -261,20 +303,33 @@ export const checkAcross = ({tokens, manti, parts, hand}: Sources): readonly str
 	const where = new Map<string, string[]>();
 	const note = (property: string, from: string) =>
 		where.set(property.toLowerCase(), [...(where.get(property.toLowerCase()) ?? []), from]);
-	for (const name of tokens.keys()) note(`--${name}`, `${name}.toml`);
-	for (const property of Object.keys(manti)) note(property, `manti.toml ${property}`);
-	for (const property of hand) note(property, `tokens.css ${property}`);
+
+	for (const name of tokens.keys()) {
+		note(`--${name}`, `${name}.toml`);
+	}
+
+	for (const property of Object.keys(manti)) {
+		note(property, `manti.toml ${property}`);
+	}
+
+	for (const property of hand) {
+		note(property, `tokens.css ${property}`);
+	}
+
 	for (const [property, from] of where) {
-		if (from.length > 1)
+		if (from.length > 1) {
 			errors.push(`${from.join(", ")}: name: ${property} is written ${from.length} times`);
+		}
 	}
 
 	// Each Manti token names a custom property we define.
 	const ours = new Set([...[...tokens.keys()].map((name) => `--${name}`), ...hand]);
+
 	for (const [property, value] of Object.entries(manti)) {
 		if (typeof value === "string" && !ours.has(value)) {
 			errors.push(`manti.toml: ${property}: no custom property ${value} of ours`);
 		}
 	}
+
 	return errors;
 };

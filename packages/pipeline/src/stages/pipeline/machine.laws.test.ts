@@ -57,6 +57,7 @@ type Msg = MsgOf<Machine>;
 type LaneStep = Step<Lane, Msg, LaneCmd>;
 
 const ID = make(LaneId)("L1");
+
 const STEP = runStep({
 	number: 7,
 	count: 1,
@@ -65,10 +66,12 @@ const STEP = runStep({
 	carry: EMPTY,
 	intent: "lane/7/1/triage",
 });
+
 const ASK = askPerson({number: 7, ask: "a", what: "w", picks: ["x"], intent: "i"});
 const READ = readFiled({number: 7});
 const CLAIM = claimLane({number: 7, lane: ID, intent: "c"});
 const RELEASE = releaseLane({number: 7, lane: ID, intent: "r"});
+
 const FRESH = freshMain({
 	number: 7,
 	from: {_tag: "run", step: "mutation"},
@@ -91,8 +94,10 @@ const OUTCOMES: readonly Outcome[] = [
 	// Self-fix PR 5: a build that changed the test writer's files asks the person which was wrong.
 	{kind: "stuck", why: "exam_touched"},
 ];
+
 /** A head, and green checks code ran there: what a build leaves for the steps after it (self-fix PR 4). */
 const BUILT_HEAD = "4".repeat(40);
+
 const GREEN_CARRY = {
 	head: BUILT_HEAD,
 	checked: {
@@ -102,9 +107,11 @@ const GREEN_CARRY = {
 		failed: [],
 	},
 } as const;
+
 /** The exam's pull request at its first head, and at a later one (self-fix PR 10). */
 const EXAM_A = "3".repeat(40);
 const EXAM_B = "6".repeat(40);
+
 /** What a yes or a review read at `head`: what `carry` needs (self-fix PR 10, Part 4). */
 const givenAt = (head: string) => ({
 	head,
@@ -112,8 +119,10 @@ const givenAt = (head: string) => ({
 	base: "9".repeat(40),
 	diff: "d".repeat(40),
 });
+
 /** What the exam review read at `head`, and what it met. */
 const reviewedAt = (head: string) => ({...givenAt(head), met: 1, of: 1});
+
 /** The exam's pull request as a step may leave it: landed, reviewed, said yes to, at the head or behind it. */
 const EXAM_PULLS = [
 	{examPull: {head: EXAM_A}},
@@ -122,11 +131,13 @@ const EXAM_PULLS = [
 	{examPull: {head: EXAM_B, reviewed: reviewedAt(EXAM_B), yes: givenAt(EXAM_A)}},
 	{examPull: {head: EXAM_B, reviewed: reviewedAt(EXAM_A)}},
 ] as const;
+
 const stepEnds: fc.Arbitrary<StepEnd> = fc.record({
 	outcome: fc.constantFrom(...OUTCOMES),
 	// Self-fix PR 10: the exam's pull request in the carry, so every law here reads it too.
 	carry: fc.constantFrom<StepEnd["carry"]>({}, GREEN_CARRY, ...EXAM_PULLS),
 });
+
 /** What a restart's fresh read of main may find (self-fix PR 5). */
 const freshes: fc.Arbitrary<Fresh> = fc.oneof(
 	fc.constantFrom({}, GREEN_CARRY).map((carry) => ({_tag: "fresh" as const, carry})),
@@ -134,6 +145,7 @@ const freshes: fc.Arbitrary<Fresh> = fc.oneof(
 	fc.constant({_tag: "conflicts" as const, files: ["src/lower.ts"]}),
 	fc.constant({_tag: "closed" as const}),
 );
+
 /** Every pick any question offers, and a call's `go_on`. */
 const ANY_PICK = [...new Set<string>([...Object.values(PICKS).flat(), "go_on"])];
 
@@ -170,11 +182,13 @@ const opening: readonly Msg[] = [
 	readFiled.ok(READ, {state: "open", mine: true}, 0),
 	claimLane.ok(CLAIM, ID, 0),
 ];
+
 const lists = fc
 	.tuple(fc.boolean(), fc.array(arbMsg(arbs), {minLength: 1, maxLength: 80}))
 	.map(([open, rest]) => (open ? [...opening, ...rest] : rest));
 
 const RUNS = {numRuns: 300, seed: 7};
+
 const each =
 	(law: (t: LaneStep) => void) =>
 	(step: LaneStep): boolean => {
@@ -207,7 +221,10 @@ const isFresh = (cmd: {readonly type: string}): cmd is FreshCmd => cmd.type === 
 
 /** Where the restart `s` waits on goes on: the `from` of its fresh read of main. `null`: it waits on none. */
 const freshFrom = (s: Lane): Resume | null => {
-	if (!("asked" in s)) return null;
+	if (!("asked" in s)) {
+		return null;
+	}
+
 	const asked: {readonly type: string} = s.asked;
 	return isFresh(asked) ? asked.from : null;
 };
@@ -222,31 +239,56 @@ const ends = (outcome: LaneOutcome): boolean =>
 
 /** A step starts only as `after` says, or as a person's answer says. */
 const inOrder = ({prev, msg, cmds}: LaneStep) => {
-	if (msg.type === "resume") return;
+	if (msg.type === "resume") {
+		return;
+	}
+
 	/** The step this Msg should start. A person's answer may start the one its question names. */
 	const wanted = (started: string): string => {
-		if (msg.type === "lane_claim_ok") return "triage";
+		if (msg.type === "lane_claim_ok") {
+			return "triage";
+		}
+
 		if (msg.type === "lane_answered") {
-			if (prev.phase !== "asking") throw new Error("a step started on no question");
+			if (prev.phase !== "asking") {
+				throw new Error("a step started on no question");
+			}
+
 			return started;
 		}
+
 		// A step that could not run is run once more, as it was (self-fix PR 5, P8).
 		if (msg.type === "lane_step_err") {
-			if (prev.phase !== "running")
+			if (prev.phase !== "running") {
 				throw new Error(`a step started on a failed step in ${prev.phase}`);
+			}
+
 			return prev.step;
 		}
+
 		// A restart's fresh read: the step the lane stopped at, or the build for the builder's conflicts.
 		if (msg.type === "lane_fresh_ok") {
 			const from = freshFrom(prev);
-			if (from === null)
+
+			if (from === null) {
 				throw new Error(`a step started on a fresh read nobody asked, in ${prev.phase}`);
-			if (msg.value._tag === "conflicts") return "build";
-			if (from._tag === "run") return from.step;
+			}
+
+			if (msg.value._tag === "conflicts") {
+				return "build";
+			}
+
+			if (from._tag === "run") {
+				return from.step;
+			}
+
 			throw new Error(`${started} started where the lane goes on by asking ${from.for}`);
 		}
-		if (msg.type !== "lane_step_ok" || prev.phase !== "running")
+
+		if (msg.type !== "lane_step_ok" || prev.phase !== "running") {
 			throw new Error(`a step started on ${msg.type} in ${prev.phase}`);
+		}
+
 		// Self-fix PR 10: a passing exam review goes on by what its carry holds, which `after` does not
 		// read. A yes that carries to the head runs the merge with no second question; a review or a
 		// yes at another head goes back to the review (`running`'s guard). The laws of the exam's pull
@@ -255,31 +297,54 @@ const inOrder = ({prev, msg, cmds}: LaneStep) => {
 			prev.step === "exam_review" &&
 			msg.value.outcome.kind === "done" &&
 			(started === "exam_merge" || started === "exam_review")
-		)
+		) {
 			return started;
+		}
+
 		const want = afterStep(prev.step, msg.value.outcome, prev.round);
-		if (!("to" in want)) throw new Error(`${started} started where the order says stop`);
+
+		if (!("to" in want)) {
+			throw new Error(`${started} started where the order says stop`);
+		}
+
 		return want.to;
 	};
-	for (const cmd of stepsIn(cmds)) expect(cmd.step).toBe(wanted(cmd.step));
+
+	for (const cmd of stepsIn(cmds)) {
+		expect(cmd.step).toBe(wanted(cmd.step));
+	}
+
 	// The step run once more is the same Act, under the same intent.
-	if (msg.type === "lane_step_err" && prev.phase === "running")
-		for (const cmd of stepsIn(cmds)) expect(cmd).toEqual(prev.asked);
+	if (msg.type === "lane_step_err" && prev.phase === "running") {
+		for (const cmd of stepsIn(cmds)) {
+			expect(cmd).toEqual(prev.asked);
+		}
+	}
 };
 
 /** No merge, of the change or of the rules, but on the person's own answer to the right question. */
 const noMergeUnasked = ({prev, msg, cmds}: LaneStep) => {
 	// A restart sends again only what was already started: `resumeRepeats` holds it to that.
-	if (msg.type === "resume") return;
+	if (msg.type === "resume") {
+		return;
+	}
+
 	for (const cmd of stepsIn(cmds)) {
-		if (cmd.step !== "merge" && cmd.step !== "exam_merge") continue;
+		if (cmd.step !== "merge" && cmd.step !== "exam_merge") {
+			continue;
+		}
+
 		// The same merge, run once more after it could not run: `inOrder` holds it to the same Act.
-		if (msg.type === "lane_step_err") continue;
+		if (msg.type === "lane_step_err") {
+			continue;
+		}
+
 		// A restart goes on at a merge only where the lane stopped in it, after the person's yes.
 		if (msg.type === "lane_fresh_ok") {
 			expect(freshFrom(prev)).toEqual({_tag: "run", step: cmd.step});
 			continue;
 		}
+
 		// Self-fix PR 10: the person's `merge` carries to a new exam head when `carry` keeps it, so the
 		// exam's merge runs with no second question: the yes is in the carry it starts with, at its
 		// head. Ship's `ejected` runs the same merge once more, on the same yes.
@@ -298,42 +363,72 @@ const noMergeUnasked = ({prev, msg, cmds}: LaneStep) => {
 			expect(pull?.yes?.head, "the exam's merge ran with no yes at its head").toBe(pull?.head);
 			continue;
 		}
-		if (msg.type !== "lane_answered" || prev.phase !== "asking")
+
+		if (msg.type !== "lane_answered" || prev.phase !== "asking") {
 			throw new Error(`${cmd.step} started on ${msg.type}`);
+		}
+
 		// "again" on a step already asked about comes back to it; it was a person's answer as well.
 		expect(["merge", "again"]).toContain(msg.pick);
-		if (msg.pick === "merge") expect(["merge", "exam_merge"]).toContain(prev.question.for);
+
+		if (msg.pick === "merge") {
+			expect(["merge", "exam_merge"]).toContain(prev.question.for);
+		}
 	}
 };
 
 /** A restart re-sends what was in flight, with its own intent, and starts no step of its own. */
 const resumeRepeats = ({prev, msg, next, cmds}: LaneStep) => {
-	if (msg.type !== "resume") return;
+	if (msg.type !== "resume") {
+		return;
+	}
+
 	expect(next).toEqual(prev);
-	if (prev.phase === "idle" || prev.phase === "over") expect(cmds).toEqual([]);
-	else expect(cmds).toEqual([prev.asked]);
+
+	if (prev.phase === "idle" || prev.phase === "over") {
+		expect(cmds).toEqual([]);
+	} else {
+		expect(cmds).toEqual([prev.asked]);
+	}
 };
 
 /** The lane never runs a step under a count it used: each Act's intent is new. */
 const eachStepOnce = ({prev, msg, next, cmds}: LaneStep) => {
-	if (msg.type === "resume") return;
-	const was = "count" in prev ? prev.count : 0;
-	// A step that could not run is run once more under its own intent: the only Act sent twice (P8).
-	if (msg.type === "lane_step_err") {
-		for (const cmd of stepsIn(cmds)) expect(cmd.count).toBe(was);
+	if (msg.type === "resume") {
 		return;
 	}
+
+	const was = "count" in prev ? prev.count : 0;
+
+	// A step that could not run is run once more under its own intent: the only Act sent twice (P8).
+	if (msg.type === "lane_step_err") {
+		for (const cmd of stepsIn(cmds)) {
+			expect(cmd.count).toBe(was);
+		}
+
+		return;
+	}
+
 	for (const cmd of stepsIn(cmds)) {
 		expect(cmd.count).toBe(was + 1);
 		expect(cmd.intent).toBe(`lane/${cmd.number}/${cmd.count}/${cmd.step}`);
 	}
-	if ("count" in next) expect(next.count).toBeGreaterThanOrEqual(was);
+
+	if ("count" in next) {
+		expect(next.count).toBeGreaterThanOrEqual(was);
+	}
 };
 
 /** A step's own answer, a skip included, is written on the trail as it was said. */
 const everyEndWritten = ({prev, msg, next}: LaneStep) => {
-	if (msg.type !== "lane_step_ok" || prev.phase !== "running") return;
-	if (!("trail" in next)) throw new Error("the trail was lost");
+	if (msg.type !== "lane_step_ok" || prev.phase !== "running") {
+		return;
+	}
+
+	if (!("trail" in next)) {
+		throw new Error("the trail was lost");
+	}
+
 	expect(next.trail.at(-1)).toEqual({step: prev.step, said: nameOf(msg.value.outcome)});
 };
 
@@ -343,15 +438,23 @@ const everyEndWritten = ({prev, msg, next}: LaneStep) => {
  * writer's files asks the person which was wrong.
  */
 const stuckEnds = ({prev, msg, next, cmds}: LaneStep) => {
-	if (prev.phase !== "running") return;
+	if (prev.phase !== "running") {
+		return;
+	}
+
 	if (msg.type === "lane_step_err" && next.phase === "running") {
 		expect(cmds).toEqual([prev.asked]);
 		return;
 	}
+
 	const stuck =
 		(msg.type === "lane_step_ok" && msg.value.outcome.kind === "stuck") ||
 		msg.type === "lane_step_err";
-	if (!stuck) return;
+
+	if (!stuck) {
+		return;
+	}
+
 	if (
 		msg.type === "lane_step_ok" &&
 		prev.step === "build" &&
@@ -360,8 +463,13 @@ const stuckEnds = ({prev, msg, next, cmds}: LaneStep) => {
 		expect(next.phase === "asking" && next.question.for).toBe("exam_touched");
 		return;
 	}
+
 	expect(next.phase).toBe("releasing");
-	if (next.phase !== "releasing") return;
+
+	if (next.phase !== "releasing") {
+		return;
+	}
+
 	expect(next.outcome.kind).toBe("stuck");
 	expect(next.said).not.toBe("");
 	expect(stepsIn(cmds)).toEqual([]);
@@ -374,7 +482,10 @@ const kept = ({next}: LaneStep) => expect(decode(encode(next))).toEqual(next);
 
 /** The ticket is not touched for a ticket not yours. */
 const refusesOthers = ({prev, msg, next, cmds}: LaneStep) => {
-	if (msg.type !== "lane_read_ok" || prev.phase !== "reading" || msg.value.mine) return;
+	if (msg.type !== "lane_read_ok" || prev.phase !== "reading" || msg.value.mine) {
+		return;
+	}
+
 	expect(next.phase).toBe("over");
 	expect(cmds).toEqual([]);
 };
@@ -386,15 +497,24 @@ const decodeHeld = Schema.decodeUnknownSync(Held);
  * as it was, and where it goes on. An end, done or a closed ticket, keeps neither.
  */
 const stopsSave = ({prev, next}: LaneStep) => {
-	if (next.phase !== "over" || prev.phase === "over") return;
+	if (next.phase !== "over" || prev.phase === "over") {
+		return;
+	}
+
 	const {outcome} = next;
 	const name = nameOf(outcome);
 	const kept = "held" in next || "at" in next;
-	if ((outcome.kind === "done" || name === "skip:closed") && kept)
+
+	if ((outcome.kind === "done" || name === "skip:closed") && kept) {
 		throw new Error(`${name} kept a Held or a place to go on`);
+	}
+
 	const mayGoOn = outcome.kind === "stuck" && !ends(outcome);
-	if (mayGoOn && (!("held" in next) || !("at" in next)))
+
+	if (mayGoOn && (!("held" in next) || !("at" in next))) {
 		throw new Error(`${name} from ${prev.phase} kept no Held or no place to go on`);
+	}
+
 	const saved =
 		mayGoOn && "held" in next && "count" in prev ? {kept: next.held, had: decodeHeld(prev)} : null;
 	expect(saved?.kept, `${name} from ${prev.phase} changed its Held`).toEqual(saved?.had);
@@ -405,14 +525,19 @@ const stopsSave = ({prev, next}: LaneStep) => {
  * On anything else it does nothing.
  */
 const restartReadsFirst = ({prev, msg, next, cmds}: LaneStep) => {
-	if (msg.type !== "restart") return;
+	if (msg.type !== "restart") {
+		return;
+	}
+
 	expect(stepsIn(cmds), "a step started on the restart itself").toEqual([]);
 	const stopped = prev.phase === "over" && "held" in prev && !ends(prev.outcome);
+
 	if (!stopped) {
 		expect(next).toEqual(prev);
 		expect(cmds).toEqual([]);
 		return;
 	}
+
 	expect(next.phase).not.toBe("over");
 	expect(cmds).not.toEqual([]);
 };
@@ -431,13 +556,17 @@ const LAWS = {
 };
 
 describe("the lane's laws", () => {
-	for (const [name, law] of Object.entries(LAWS))
+	for (const [name, law] of Object.entries(LAWS)) {
 		it(`${name} holds on the real reducer`, () => check(lane, law));
+	}
 });
 
 describe("each law fails on its planted break", () => {
 	const startMerge = (s: Lane) => {
-		if (s.phase !== "running") return [s, []] as const;
+		if (s.phase !== "running") {
+			return [s, []] as const;
+		}
+
 		const cmd = runStep({
 			number: s.number,
 			count: s.count + 1,
@@ -465,7 +594,10 @@ describe("each law fails on its planted break", () => {
 		},
 		everyEndWritten: {
 			lane_step_ok: (s: Lane, m: Extract<Msg, {type: "lane_step_ok"}>) => {
-				if (s.phase !== "running") return [s, []];
+				if (s.phase !== "running") {
+					return [s, []];
+				}
+
 				const [n, cmds] = lane.update.lane_step_ok(s, m);
 				return ["trail" in n ? {...n, trail: s.trail} : n, cmds] as never;
 			},
@@ -499,10 +631,12 @@ describe("each law fails on its planted break", () => {
 			restart: (s: Lane) => (s.phase === "over" ? [s, [STEP]] : [s, []]),
 		},
 	};
-	for (const [name, law] of Object.entries(LAWS))
+
+	for (const [name, law] of Object.entries(LAWS)) {
 		it(`${name} catches its plant`, () => {
 			expect(() => check(plant(breaks[name as keyof typeof LAWS]), law)).toThrow();
 		});
+	}
 });
 
 // A law over a whole run, not over one Msg: what a person is asked, across every question of a lane.
@@ -570,11 +704,18 @@ describe("the questions a lane asks, over any run", () => {
 			}
 		};
 		let s: Lane = {phase: "idle"};
+
 		for (let i = 0; i < 200; i++) {
 			const [moved, cmds] = next(s);
 			s = moved;
-			for (const cmd of cmds) if (cmd.type === "lane_ask") asks.push(cmd.ask);
+
+			for (const cmd of cmds) {
+				if (cmd.type === "lane_ask") {
+					asks.push(cmd.ask);
+				}
+			}
 		}
+
 		return asks;
 	};
 
@@ -621,6 +762,7 @@ describe("the whole lane, step by step", () => {
 		};
 		go(readFiled.ok(READ, {state: "open", mine: true}, 0));
 		go(claimLane.ok(CLAIM, ID, 0));
+
 		for (let i = 0; i < 40 && s.phase !== "over"; i++) {
 			if (s.phase === "running") {
 				seen.push(s.step);
@@ -640,8 +782,11 @@ describe("the whole lane, step by step", () => {
 					ask: s.question.ask,
 					pick: picks[s.question.for] ?? s.question.picks[0] ?? "",
 				});
-			} else if (s.phase === "releasing") go(releaseLane.ok(RELEASE, "released", 0));
+			} else if (s.phase === "releasing") {
+				go(releaseLane.ok(RELEASE, "released", 0));
+			}
 		}
+
 		return {s, seen};
 	};
 
@@ -748,7 +893,11 @@ describe("the whole lane, step by step", () => {
 			runStep.ok(STEP, {outcome: {kind: "send", to: "plan", why: "yes"}, carry: {}}, 0),
 			runStep.ok(STEP, {outcome: DONE, carry: {}}, 0),
 		].reduce<Lane>((s, m) => stepped(s, m as Msg), IDLE);
-		if (asked.phase !== "asking") throw new Error(asked.phase);
+
+		if (asked.phase !== "asking") {
+			throw new Error(asked.phase);
+		}
+
 		const end = stepped(asked, {type: "lane_answered", ask: asked.question.ask, pick: "no"});
 		expect(end.phase).toBe("releasing");
 		const over = stepped(end, releaseLane.ok(RELEASE, "released", 0));
@@ -813,7 +962,10 @@ describe("red and green heads, over any run", () => {
 				case "claiming":
 					return claimLane.ok(CLAIM, ID, 0);
 				case "running":
-					if (s.step === "build") builds++;
+					if (s.step === "build") {
+						builds++;
+					}
+
 					return runStep.ok(
 						STEP,
 						{outcome: answerTo(s), carry: s.step === "build" ? GREEN_CARRY : {}},
@@ -822,7 +974,11 @@ describe("red and green heads, over any run", () => {
 				case "asking": {
 					const spent = s.question.for === "rounds_spent";
 					const pick = spent ? (answers.shift() ?? "stop") : (s.question.picks[0] ?? "");
-					if (spent && pick === "again") agains++;
+
+					if (spent && pick === "again") {
+						agains++;
+					}
+
 					return {type: "lane_answered", ask: s.question.ask, pick};
 				}
 				case "releasing":
@@ -833,32 +989,54 @@ describe("red and green heads, over any run", () => {
 			}
 		};
 		let s: Lane = {phase: "idle"};
+
 		for (let i = 0; i < 400; i++) {
 			const msg = msgFor(s);
-			if (msg === null) break;
+
+			if (msg === null) {
+				break;
+			}
+
 			const next = stepped(s, msg);
+
 			if (s.phase === "running" && s.step === "mutation" && msg.type === "lane_step_ok") {
 				const red = msg.value.outcome.kind === "send";
 				const toBuild = next.phase === "running" && next.step === "build";
-				if (!red && !(next.phase === "running" && next.step === "review"))
+
+				if (!red && !(next.phase === "running" && next.step === "review")) {
 					problems.push(`a green head went to ${where(next)}`);
-				if (red && s.round < MAX_ROUNDS && !(toBuild && next.round === s.round + 1))
+				}
+
+				if (red && s.round < MAX_ROUNDS && !(toBuild && next.round === s.round + 1)) {
 					problems.push(`a red head in round ${s.round} went to ${where(next)}`);
+				}
+
 				if (
 					red &&
 					s.round >= MAX_ROUNDS &&
 					!(next.phase === "asking" && next.question.for === "rounds_spent")
-				)
+				) {
 					problems.push(`a red head with the rounds spent went to ${where(next)}`);
+				}
 			}
-			if (next.phase === "running" && next.step === "build" && next.round > MAX_ROUNDS + agains)
+
+			if (next.phase === "running" && next.step === "build" && next.round > MAX_ROUNDS + agains) {
 				problems.push(`build round ${next.round} on ${agains} agains`);
+			}
+
 			const name = next.phase === "releasing" ? nameOf(next.outcome) : "";
-			if (name.startsWith("stuck:") && name !== "stuck:rounds_spent")
+
+			if (name.startsWith("stuck:") && name !== "stuck:rounds_spent") {
 				problems.push(`ended ${name}`);
+			}
+
 			s = next;
 		}
-		if (builds > MAX_ROUNDS + agains) problems.push(`${builds} builds on ${agains} agains`);
+
+		if (builds > MAX_ROUNDS + agains) {
+			problems.push(`${builds} builds on ${agains} agains`);
+		}
+
 		return problems;
 	};
 
@@ -908,6 +1086,7 @@ describe("code's checks after the build, over any run", () => {
 	const at = (head: string, checks: Checks) => {
 		const ran = (on: string, result: "green" | "red" | "not_run") =>
 			({head: on, commands: COMMANDS, result, failed: result === "red" ? [NAME] : []}) as const;
+
 		switch (checks) {
 			case "green":
 				return {head, checked: ran(head, "green")};
@@ -965,6 +1144,7 @@ describe("code's checks after the build, over any run", () => {
 		let commits = 0;
 		const endOf = (s: Extract<Lane, {phase: "running"}>): StepEnd => {
 			const DONE = {kind: "done", part: false} as const;
+
 			switch (s.step) {
 				case "triage":
 					return {outcome: {kind: "send", to: "plan", why: "yes"}, carry: {}};
@@ -1035,25 +1215,38 @@ describe("code's checks after the build, over any run", () => {
 			}
 		};
 		let s: Lane = {phase: "idle"};
+
 		for (let i = 0; i < 300; i++) {
 			const msg = msgFor(s);
-			if (msg === null) break;
+
+			if (msg === null) {
+				break;
+			}
+
 			const [next, cmds] = (
 				machine.update[msg.type] as (s: Lane, m: Msg) => readonly [Lane, readonly LaneCmd[]]
 			)(s, msg);
+
 			for (const cmd of stepsIn(cmds)) {
-				if (!AFTER_BUILD.has(cmd.step)) continue;
+				if (!AFTER_BUILD.has(cmd.step)) {
+					continue;
+				}
+
 				const {head, checked} = cmd.carry as {
 					readonly head: string | null;
 					readonly checked?: {readonly head: string; readonly result: string};
 				};
-				if (checked?.result !== "green" || checked.head !== head)
+
+				if (checked?.result !== "green" || checked.head !== head) {
 					problems.push(
 						`${cmd.step} ran on ${head} with checks ${JSON.stringify(checked ?? null)}`,
 					);
+				}
 			}
+
 			s = next;
 		}
+
 		return problems;
 	};
 
@@ -1123,12 +1316,18 @@ const repliesTo = (cmd: LaneCmd, s: Lane, world: World): readonly Msg[] => {
 		case "lane_fresh":
 			return [freshMain.ok(cmd, world.fresh ?? {_tag: "fresh", carry: {}}, 0)];
 		case "lane_step": {
-			if (s.phase !== "running") return [];
+			if (s.phase !== "running") {
+				return [];
+			}
+
 			const end = world.end(s, cmd);
 			return [end === "err" ? runStep.err(cmd, {_tag: "unknown"}, 0) : runStep.ok(cmd, end, 0)];
 		}
 		case "lane_ask":
-			if (s.phase !== "asking") return [];
+			if (s.phase !== "asking") {
+				return [];
+			}
+
 			return [
 				askPerson.ok(cmd, null, 0),
 				{type: "lane_answered", ask: cmd.ask, pick: world.pick(s.question)},
@@ -1149,14 +1348,23 @@ const drive = (
 	const moves: Moved[] = [];
 	const queue: Msg[] = [first];
 	let s = from;
+
 	for (let i = 0; i < 400 && !until(s); i++) {
 		const msg = queue.shift();
-		if (msg === undefined) break;
+
+		if (msg === undefined) {
+			break;
+		}
+
 		const {state, cmds} = foldUpdates<Lane, Msg, LaneCmd>(machine, s, [msg]);
 		moves.push({prev: s, msg, next: state, cmds});
 		s = state;
-		for (const cmd of cmds) queue.push(...repliesTo(cmd, s, world));
+
+		for (const cmd of cmds) {
+			queue.push(...repliesTo(cmd, s, world));
+		}
 	}
+
 	return {s, moves};
 };
 
@@ -1203,10 +1411,18 @@ const stoppingAt = (step: StepName, how: StepEnd | "err", world: World = ROUTED)
 /** A lane walked from its start until it stops at `step`, ending as `how`. */
 const stoppedAt = (step: StepName, how: StepEnd | "err") => {
 	const walked = drive(IDLE, START, stoppingAt(step, how));
-	if (walked.s.phase !== "over") throw new Error(`the lane did not stop at ${step}`);
+
+	if (walked.s.phase !== "over") {
+		throw new Error(`the lane did not stop at ${step}`);
+	}
+
 	const ran = stepsIn(cmdsOf(walked.moves)).filter((c) => c.step === step);
 	const last = ran.at(-1);
-	if (last === undefined) throw new Error(`${step} never ran`);
+
+	if (last === undefined) {
+		throw new Error(`${step} never ran`);
+	}
+
 	return {over: walked.s, ran: last, moves: walked.moves};
 };
 
@@ -1232,8 +1448,9 @@ describe("a lane stopped at any step goes on there, with the carry it had", () =
 		{name: "ended stuck", how: STUCK_END},
 		{name: "could not run, twice", how: "err"},
 	];
-	for (const step of STEPS)
-		for (const {name, how} of WAYS)
+
+	for (const step of STEPS) {
+		for (const {name, how} of WAYS) {
 			it(`${step}, which ${name}: the restart reads main, then runs ${step}, and no step before it`, () => {
 				const {over, ran} = stoppedAt(step, how);
 				expect(over, "the stop saved where it goes on").toMatchObject({at: {_tag: "run", step}});
@@ -1248,11 +1465,16 @@ describe("a lane stopped at any step goes on there, with the carry it had", () =
 					expect.arrayContaining(["lane_claim", "lane_fresh"]),
 				);
 				expect(cmds.slice(0, at).filter((c) => c.type === "lane_ask")).toEqual([]);
+
 				// A restart never asks the plan's yes again while the plan's version is the same.
-				if (STEPS.indexOf(step) > STEPS.indexOf("plan"))
+				if (STEPS.indexOf(step) > STEPS.indexOf("plan")) {
 					expect(approveAsks(again.moves)).toEqual([]);
+				}
+
 				expect(again.s.phase === "over" && nameOf(again.s.outcome)).toBe("done");
 			});
+		}
+	}
 });
 
 describe("every stop, at every step, for every reason", () => {
@@ -1313,7 +1535,10 @@ describe("every stop, at every step, for every reason", () => {
 
 	it("FINAL is the closed list: not_yours, and no reason that is not a lane's", () => {
 		expect(FINAL.has("not_yours")).toBe(true);
-		for (const why of FINAL) expect(STUCK).toContain(why);
+
+		for (const why of FINAL) {
+			expect(STUCK).toContain(why);
+		}
 	});
 
 	// Round 4 of the tests for self-fix PR 5: this law held every reason on a carry with green checks,
@@ -1321,16 +1546,23 @@ describe("every stop, at every step, for every reason", () => {
 	// the fresh read gives the checks code ran at the head, green: the step runs on them.
 	it("a reason in FINAL never restarts; every other one runs the step it stopped at, with the carry it held and the checks the fresh read ran", () => {
 		const world = freshChecks(GREEN_CARRY.checked);
-		for (const step of STEPS)
+
+		for (const step of STEPS) {
 			for (const why of STUCK.filter((reason) => stopsAt(reason, step))) {
 				const over = stop({kind: "stuck", why}, step, heldFor(why));
-				if (over.phase !== "over" || !("held" in over)) throw new Error("a stop did not read back");
+
+				if (over.phase !== "over" || !("held" in over)) {
+					throw new Error("a stop did not read back");
+				}
+
 				const {moves} = drive(over, RESTART, world);
+
 				if (ends(over.outcome)) {
 					expect(moves[0]?.cmds, `${why} restarted`).toEqual([]);
 					expect(moves[0]?.next).toEqual(over);
 					continue;
 				}
+
 				const cmds = cmdsOf(moves);
 				const started = stepsIn(cmds)[0];
 				expect(started?.step, `${why} at ${step}`).toBe(step);
@@ -1340,8 +1572,12 @@ describe("every stop, at every step, for every reason", () => {
 				});
 				const at = started === undefined ? -1 : cmds.indexOf(started);
 				expect(cmds.slice(0, at).some(isFresh), `${why} at ${step}: main read first`).toBe(true);
-				if (STEPS.indexOf(step) > STEPS.indexOf("plan")) expect(approveAsks(moves)).toEqual([]);
+
+				if (STEPS.indexOf(step) > STEPS.indexOf("plan")) {
+					expect(approveAsks(moves)).toEqual([]);
+				}
 			}
+		}
 	});
 
 	it("done, and a ticket a person closed, never restart", () => {
@@ -1360,7 +1596,8 @@ describe("every stop, at every step, for every reason", () => {
 
 	it("a stop for its checks whose fresh read finds them red goes back to the build as the next round, and past the bound asks", () => {
 		const world = freshChecks(checkedAs("red"));
-		for (const step of STEPS)
+
+		for (const step of STEPS) {
 			for (const why of [...CHECKS].filter((reason) => stopsAt(reason, step))) {
 				const under = stop({kind: "stuck", why}, step, heldFor(why, MAX_ROUNDS - 1));
 				const ran = stepsIn(cmdsOf(drive(under, RESTART, world).moves));
@@ -1371,6 +1608,7 @@ describe("every stop, at every step, for every reason", () => {
 					"rounds_spent",
 				);
 			}
+		}
 	});
 
 	it("a build whose checks could not run goes on at the checks, never the builder again", () => {
@@ -1408,27 +1646,37 @@ describe("every stop, at every step, for every reason", () => {
 		});
 		let s: Lane = stoppedAt("mutation", STUCK_END).over;
 		const names: string[] = [];
+
 		for (let i = 0; i < 2; i++) {
 			const {s: reading, moves} = drive(s, RESTART, ROUTED, (at) => at.phase === "refreshing");
-			for (const cmd of cmdsOf(moves))
-				if (cmd.type === "lane_claim" || cmd.type === "lane_fresh") names.push(cmd.intent);
+
+			for (const cmd of cmdsOf(moves)) {
+				if (cmd.type === "lane_claim" || cmd.type === "lane_fresh") {
+					names.push(cmd.intent);
+				}
+			}
+
 			// Main could not be read: the lane stops before any step, and lets the ticket go.
 			s = drive(reading, freshMain.err(FRESH_CMD, {_tag: "unknown"}, 0), ROUTED).s;
 			expect(s.phase, `restart ${i + 1}`).toBe("over");
 		}
+
 		expect(names).toHaveLength(4);
 		expect(names.filter((name, at) => names.indexOf(name) !== at)).toEqual([]);
 	});
 });
 
 describe("a step that could not run is run once more, on the same intent (`once`, P8)", () => {
-	for (const step of STEPS)
+	for (const step of STEPS) {
 		it(`${step}: run once more at once, and the lane goes on`, () => {
 			let failed = false;
 			const world: World = {
 				...ROUTED,
 				end: (s, cmd) => {
-					if (s.step !== step || failed) return ROUTED.end(s, cmd);
+					if (s.step !== step || failed) {
+						return ROUTED.end(s, cmd);
+					}
+
 					failed = true;
 					return "err";
 				},
@@ -1439,6 +1687,7 @@ describe("a step that could not run is run once more, on the same intent (`once`
 			expect(runs[1]?.intent).toBe(runs[0]?.intent);
 			expect(s.phase === "over" && nameOf(s.outcome)).toBe("done");
 		});
+	}
 
 	it("on any run, an intent starts at most twice, and a second time only at once after it could not run", () => {
 		fc.assert(
@@ -1450,19 +1699,34 @@ describe("a step that could not run is run once more, on the same intent (`once`
 				};
 				const {s, moves} = drive(IDLE, START, world);
 				const starts = new Map<string, number>();
-				for (const cmd of stepsIn(cmdsOf(moves)))
+
+				for (const cmd of stepsIn(cmdsOf(moves))) {
 					starts.set(cmd.intent, (starts.get(cmd.intent) ?? 0) + 1);
-				for (const [intent, n] of starts) expect(n, intent).toBeLessThanOrEqual(2);
+				}
+
+				for (const [intent, n] of starts) {
+					expect(n, intent).toBeLessThanOrEqual(2);
+				}
+
 				for (const [at, m] of moves.entries()) {
-					if (m.msg.type !== "lane_step_err" || m.prev.phase !== "running") continue;
+					if (m.msg.type !== "lane_step_err" || m.prev.phase !== "running") {
+						continue;
+					}
+
 					const intent = m.prev.asked.intent;
 					const before = stepsIn(cmdsOf(moves.slice(0, at))).filter((c) => c.intent === intent);
+
 					// Its first failure: run again now. Its second: the lane stops there, to go on there.
-					if (before.length === 1) expect(m.cmds).toEqual([m.prev.asked]);
-					else expect(stepsIn(m.cmds)).toEqual([]);
+					if (before.length === 1) {
+						expect(m.cmds).toEqual([m.prev.asked]);
+					} else {
+						expect(stepsIn(m.cmds)).toEqual([]);
+					}
 				}
-				if (s.phase === "over" && s.outcome.kind === "stuck")
+
+				if (s.phase === "over" && s.outcome.kind === "stuck") {
 					expect(s).toMatchObject({at: {_tag: "run"}});
+				}
 			}),
 			{numRuns: 200, seed: 119120},
 		);
@@ -1481,8 +1745,11 @@ describe("every pick of every question goes on at the step its definition names 
 			s.phase === "asking" && s.question.for === kind;
 	const reach = (kind: AskFor, world: World, from: Lane = IDLE, first: Msg = START): Reached => {
 		const {s} = drive(from, first, world, asksFor(kind));
-		if (s.phase !== "asking" || s.question.for !== kind)
+
+		if (s.phase !== "asking" || s.question.for !== kind) {
 			throw new Error(`the lane never asked ${kind}; it is ${s.phase}`);
+		}
+
 		return {s, world: ROUTED};
 	};
 	const CONFLICT: Fresh = {_tag: "exam_conflict", files: ["src/lower.test.ts"]};
@@ -1519,9 +1786,10 @@ describe("every pick of every question goes on at the step its definition names 
 			),
 	};
 
-	for (const kind of AskFor.literals)
+	for (const kind of AskFor.literals) {
 		it(`${kind}: each pick goes on at its own step, and no step before it; no pick ends the lane`, () => {
 			const {s, world} = REACH[kind]();
+
 			for (const pick of s.question.picks) {
 				const to = resumeOf(s.question, pick);
 				const after = drive(s, answer(s, pick), world).moves;
@@ -1531,7 +1799,11 @@ describe("every pick of every question goes on at the step its definition names 
 						m.cmds.some((c) => c.type === "lane_step" || c.type === "lane_ask"),
 				);
 				const turned = after[turn];
-				if (turned === undefined) throw new Error(`${kind}: ${pick} went nowhere`);
+
+				if (turned === undefined) {
+					throw new Error(`${kind}: ${pick} went nowhere`);
+				}
+
 				// A pause, not an end: it keeps its Held and where it goes on, and the same line goes on there.
 				const paused = turned.next.phase === "over";
 				expect(paused ? turned.next : {held: "running", at: to}, `${kind}: ${pick}`).toMatchObject({
@@ -1552,6 +1824,7 @@ describe("every pick of every question goes on at the step its definition names 
 				);
 			}
 		});
+	}
 
 	// Round 3 of the tests for self-fix PR 5: what the mutation step found no test held.
 
@@ -1588,7 +1861,7 @@ describe("every pick of every question goes on at the step its definition names 
 		call: q.call,
 	});
 
-	for (const [name, reached] of CASES)
+	for (const [name, reached] of CASES) {
 		it(`${name}: a question that could not be asked is asked again as it was; a step's own runs the step`, () => {
 			const {s} = reached();
 			const failed = drive(s, askPerson.err(ASK, {_tag: "unknown"}, 0), ROUTED).s;
@@ -1605,13 +1878,15 @@ describe("every pick of every question goes on at the step its definition names 
 			const runs = s.question.for === "step" || s.question.call !== undefined;
 			expect(went, name).toEqual(runs ? {run: s.question.step} : {ask: shown(s.question)});
 		});
+	}
 
-	for (const [name, reached] of CASES)
+	for (const [name, reached] of CASES) {
 		it(`${name}: each pick's line names the round the lane runs next, and no other round`, () => {
 			const {s, world} = reached();
 			const ask = s.asked;
 			expect(ask.type, name).toBe("lane_ask");
 			const lines = ask.type === "lane_ask" ? (ask.does ?? []) : [];
+
 			for (const [i, pick] of s.question.picks.entries()) {
 				const after = drive(s, answer(s, pick), world).moves;
 				// The pick's own turn: a pause, a step it runs, or a question it asks.
@@ -1631,6 +1906,7 @@ describe("every pick of every question goes on at the step its definition names 
 				).toEqual(round > s.round ? [round] : []);
 			}
 		});
+	}
 });
 
 describe("a stopped lane goes on, case by case", () => {
@@ -1679,13 +1955,15 @@ describe("a stopped lane goes on, case by case", () => {
 			return stepsIn(cmdsOf(moves))[0];
 		};
 
-		for (const stopped of ["push", "merge"] as const)
-			for (const {review, first} of SAYS)
+		for (const stopped of ["push", "merge"] as const) {
+			for (const {review, first} of SAYS) {
 				it(`stopped at ${stopped}, the review ${review._tag === "kept" ? `kept, ${review.why}` : review._tag}: the restart runs ${first} first`, () => {
 					const start = restartedAt(stopped, review);
 					expect(start?.step).toBe(first);
 					expect(start?.carry).toMatchObject(moved);
 				});
+			}
+		}
 
 		it("a review that stands runs no review before the merge: push, then merge", () => {
 			const {over} = stoppedAt("merge", STUCK_END);
@@ -1714,7 +1992,11 @@ describe("a stopped lane goes on, case by case", () => {
 			stoppingAt("build", {outcome: {kind: "stuck", why: "exam_touched"}, carry: {}}),
 			(at) => at.phase === "asking" && at.question.for === "exam_touched",
 		);
-		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+
+		if (s.phase !== "asking") {
+			throw new Error(`the lane is ${s.phase}, not asking`);
+		}
+
 		expect(s.question.for).toBe("exam_touched");
 		expect(s.question.picks).toEqual(PICKS.exam_touched);
 		// The builder was wrong: the files go back, and the build runs again as the next round.
@@ -1739,8 +2021,13 @@ describe("a stopped lane goes on, case by case", () => {
 			stoppingAt("build", {outcome: {kind: "stuck", why: "exam_touched"}, carry: {}}),
 			(at) => at.phase === "asking" && at.question.for === "exam_touched",
 		);
-		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+
+		if (s.phase !== "asking") {
+			throw new Error(`the lane is ${s.phase}, not asking`);
+		}
+
 		expect(s.round).toBe(1);
+
 		for (const pick of PICKS.exam_touched) {
 			const {s: spent, moves} = drive(
 				s,
@@ -1763,7 +2050,11 @@ describe("a stopped lane goes on, case by case", () => {
 			fresh: {_tag: "exam_conflict", files: ["src/lower.test.ts"]},
 		};
 		const {s} = drive(over, RESTART, conflict, (at) => at.phase === "asking");
-		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+
+		if (s.phase !== "asking") {
+			throw new Error(`the lane is ${s.phase}, not asking`);
+		}
+
 		expect(s.question.for).toBe("exam_conflict");
 		expect(s.question.what).toContain("src/lower.test.ts");
 		expect(s.question.picks).toEqual(PICKS.exam_conflict);
@@ -1805,7 +2096,11 @@ describe("a stopped lane goes on, case by case", () => {
 
 	it("a `no` on the plan's yes pauses at the plan; the same line runs the plan with the note, and not triage", () => {
 		const {s} = drive(IDLE, START, ROUTED, (at) => at.phase === "asking");
-		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+
+		if (s.phase !== "asking") {
+			throw new Error(`the lane is ${s.phase}, not asking`);
+		}
+
 		expect(s.question.for).toBe("approve");
 		const NOTE = "Keep it to ASCII.";
 		const paused = drive(s, answer(s, "no", NOTE), ROUTED).s;
@@ -1823,7 +2118,11 @@ describe("a stopped lane goes on, case by case", () => {
 			ROUTED,
 			(at) => at.phase === "asking" && at.question.for === "merge",
 		);
-		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+
+		if (s.phase !== "asking") {
+			throw new Error(`the lane is ${s.phase}, not asking`);
+		}
+
 		const paused = drive(s, answer(s, "no"), ROUTED).s;
 		expect(paused).toMatchObject({phase: "over", at: {_tag: "ask", for: "merge"}});
 		const {moves} = drive(paused, RESTART, ROUTED, (at) => at.phase === "asking");
@@ -1842,7 +2141,11 @@ describe("a stopped lane goes on, case by case", () => {
 			stoppingAt("build", RED),
 			(at) => at.phase === "asking" && at.question.for === "rounds_spent",
 		);
-		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
+
+		if (s.phase !== "asking") {
+			throw new Error(`the lane is ${s.phase}, not asking`);
+		}
+
 		const paused = drive(s, answer(s, "stop"), ROUTED).s;
 		expect(paused).toMatchObject({phase: "over", at: {_tag: "run", step: "build"}});
 		const ran = stepsIn(cmdsOf(drive(paused, RESTART, ROUTED).moves));
@@ -1863,12 +2166,14 @@ describe("a stopped lane goes on, case by case", () => {
 				claimLane.err(CLAIM, {_tag: "unknown"}, 0),
 			]).state,
 		};
-		for (const [how, over] of Object.entries(stops))
+
+		for (const [how, over] of Object.entries(stops)) {
 			expect(over, `the ${how} failed`).toMatchObject({
 				phase: "over",
 				said: expect.stringMatching(/\S/),
 				held: {sendBack: false},
 			});
+		}
 	});
 
 	it("a build that changed the test writer's files asks which was wrong, naming the files", () => {
@@ -1882,8 +2187,14 @@ describe("a stopped lane goes on, case by case", () => {
 			}),
 			(at) => at.phase === "asking" && at.question.for === "exam_touched",
 		);
-		if (s.phase !== "asking") throw new Error(`the lane is ${s.phase}, not asking`);
-		for (const file of TOUCHED) expect(s.question.what).toContain(file);
+
+		if (s.phase !== "asking") {
+			throw new Error(`the lane is ${s.phase}, not asking`);
+		}
+
+		for (const file of TOUCHED) {
+			expect(s.question.what).toContain(file);
+		}
 	});
 });
 
@@ -1911,6 +2222,7 @@ interface ReviewEnd {
 	readonly yes: "none" | "head" | "old";
 	readonly moved: boolean;
 }
+
 const PASS: ReviewEnd = {how: "pass", reviewed: "head", yes: "none", moved: false};
 
 interface ExamScript {
@@ -1925,8 +2237,15 @@ interface ExamScript {
 /** Ship's end, from its name: `send:reviewer:no_review`, `stuck:checks_stuck`, `done`. */
 const shipEnd = (name: string): Outcome => {
 	const [verb, a = "", b = ""] = name.split(":");
-	if (verb === "send") return {kind: "send", to: a, why: b};
-	if (verb === "stuck") return {kind: "stuck", why: a};
+
+	if (verb === "send") {
+		return {kind: "send", to: a, why: b};
+	}
+
+	if (verb === "stuck") {
+		return {kind: "stuck", why: a};
+	}
+
 	return {kind: "done", part: false};
 };
 
@@ -1959,11 +2278,14 @@ const examWorld = (script: ExamScript): World => {
 				case "exam_review": {
 					const r = reviews.shift() ?? PASS;
 					const head = r.moved ? examHead(++heads) : (pullOf(s.carry)?.head ?? EXAM_OLD);
-					if (r.how !== "pass")
+
+					if (r.how !== "pass") {
 						return {
 							outcome: {kind: "send", to: "builder", why: r.how},
 							carry: {examPull: {head}},
 						} as StepEnd;
+					}
+
 					const at = (which: "head" | "old") => (which === "head" ? head : EXAM_OLD);
 					return {
 						outcome: {kind: "done", part: false},
@@ -2011,6 +2333,7 @@ const doneInOrder = (moves: readonly Moved[]): readonly string[] =>
 
 const examsIn = (moves: readonly Moved[]) =>
 	stepsIn(cmdsOf(moves)).filter((c) => c.step === "exam");
+
 const countOf = (seen: readonly string[], what: string) => seen.filter((x) => x === what).length;
 
 describe("the exam's pull request, step by step", () => {
@@ -2037,7 +2360,7 @@ describe("the exam's pull request, step by step", () => {
 		});
 	});
 
-	for (const why of ["review_failed", "checks_red"] as const)
+	for (const why of ["review_failed", "checks_red"] as const) {
 		it(`a review that ends ${why} runs the exam step again, from the exam head, and the build never starts first`, () => {
 			const {moves} = examRun({reviews: [{...PASS, how: why}]});
 			expect(doneInOrder(moves).slice(3)).toEqual([
@@ -2053,6 +2376,7 @@ describe("the exam's pull request, step by step", () => {
 			expect(pullOf(examsIn(moves)[1]?.carry)?.head).toBe(examHead(1));
 			expect(examsIn(moves)[1]?.carry.examPr).toBe(EXAM_PR);
 		});
+	}
 
 	it("a review that keeps failing runs the exam step at most the bound, then asks `rounds_spent`", () => {
 		const failing = Array.from({length: 8}, () => ({...PASS, how: "review_failed" as const}));
@@ -2107,13 +2431,17 @@ describe("the exam's pull request, step by step", () => {
 		);
 	});
 
-	for (const [send, next] of Object.entries(NEXT_AFTER_SHIP))
+	for (const [send, next] of Object.entries(NEXT_AFTER_SHIP)) {
 		it(`ship's ${send} at exam_merge runs ${next} next, and never ends stuck:sent_back`, () => {
 			const {moves} = examRun({merges: [send]});
 			const steps = doneInOrder(moves).filter((x) => !x.startsWith("ask:"));
 			expect(steps[steps.indexOf("exam_merge") + 1]).toBe(next);
-			for (const m of moves) expect(JSON.stringify(m.next)).not.toContain('"sent_back"');
+
+			for (const m of moves) {
+				expect(JSON.stringify(m.next)).not.toContain('"sent_back"');
+			}
 		});
+	}
 
 	it("ship's no_review: the lane runs exam_review, then exam_merge, and asks the person no second time", () => {
 		const {moves} = examRun({
@@ -2170,10 +2498,12 @@ describe("the exam's pull request, step by step", () => {
 
 	it("verdicts at another head never start exam_merge, even on a person's merge", () => {
 		const {moves} = examRun({reviews: [{...PASS, reviewed: "old"}, PASS]});
+
 		for (const cmd of stepsIn(cmdsOf(moves)).filter((c) => c.step === "exam_merge")) {
 			const pull = pullOf(cmd.carry);
 			expect(pull?.reviewed?.head).toBe(pull?.head);
 		}
+
 		expect(doneInOrder(moves).at(-1)).toBe("test_writer");
 	});
 
@@ -2267,16 +2597,26 @@ describe("the exam's pull request, over any script", () => {
 		const green = new Set<string>();
 		const yes = new Set<string>();
 		const problems: string[] = [];
+
 		for (const {prev, msg, cmds} of moves) {
 			if (msg.type === "lane_step_ok" && prev.phase === "running" && prev.step === "exam_review") {
 				const pull = pullOf(msg.value.carry);
+
 				if (msg.value.outcome.kind !== "done") {
-					if (pull !== undefined) green.delete(pull.head);
+					if (pull !== undefined) {
+						green.delete(pull.head);
+					}
 				} else if (pull !== undefined) {
-					if (pull.reviewed?.head === pull.head) green.add(pull.head);
-					if (pull.yes !== undefined) yes.add(pull.yes.head);
+					if (pull.reviewed?.head === pull.head) {
+						green.add(pull.head);
+					}
+
+					if (pull.yes !== undefined) {
+						yes.add(pull.yes.head);
+					}
 				}
 			}
+
 			if (
 				msg.type === "lane_answered" &&
 				prev.phase === "asking" &&
@@ -2284,16 +2624,29 @@ describe("the exam's pull request, over any script", () => {
 				msg.pick === "merge"
 			) {
 				const head = pullOf(prev.carry)?.head;
-				if (head !== undefined) yes.add(head);
+
+				if (head !== undefined) {
+					yes.add(head);
+				}
 			}
+
 			for (const cmd of stepsIn(cmds)) {
-				if (cmd.step !== "exam_merge") continue;
+				if (cmd.step !== "exam_merge") {
+					continue;
+				}
+
 				const head = pullOf(cmd.carry)?.head ?? "(none)";
-				if (!green.has(head))
+
+				if (!green.has(head)) {
 					problems.push(`exam_merge started at ${head} with no green review there`);
-				if (!yes.has(head)) problems.push(`exam_merge started at ${head} with no yes there`);
+				}
+
+				if (!yes.has(head)) {
+					problems.push(`exam_merge started at ${head} with no yes there`);
+				}
 			}
 		}
+
 		return problems;
 	};
 
@@ -2316,16 +2669,27 @@ describe("the exam's pull request, over any script", () => {
 	const examFirst: Law = (moves) => {
 		let cleared = false;
 		const problems: string[] = [];
+
 		for (const {prev, msg, cmds} of moves) {
 			if (msg.type === "lane_step_ok" && prev.phase === "running") {
 				const {outcome} = msg.value;
-				if (prev.step === "exam_merge" && outcome.kind === "done") cleared = true;
-				if (prev.step === "exam" && outcome.kind === "skip") cleared = true;
+
+				if (prev.step === "exam_merge" && outcome.kind === "done") {
+					cleared = true;
+				}
+
+				if (prev.step === "exam" && outcome.kind === "skip") {
+					cleared = true;
+				}
 			}
-			for (const cmd of stepsIn(cmds))
-				if (!cleared && (cmd.step === "test_writer" || cmd.step === "build"))
+
+			for (const cmd of stepsIn(cmds)) {
+				if (!cleared && (cmd.step === "test_writer" || cmd.step === "build")) {
 					problems.push(`${cmd.step} started before the rule changes merged`);
+				}
+			}
 		}
+
 		return problems;
 	};
 
@@ -2338,8 +2702,10 @@ describe("the exam's pull request, over any script", () => {
 		);
 
 	const LAWS_10 = {routed, guarded, bounded, examFirst};
-	for (const [name, law] of Object.entries(LAWS_10))
+
+	for (const [name, law] of Object.entries(LAWS_10)) {
 		it(`${name} holds on the real reducer`, () => holds(lane, law));
+	}
 
 	/** The lane, with each `lane_step_ok` it is sent rewritten first. */
 	const rewriting = (to: (s: Lane, end: StepEnd) => StepEnd): Machine =>
@@ -2379,8 +2745,15 @@ describe("the exam's pull request, over any script", () => {
 		const planted = plant({
 			lane_step_ok: (s: Lane, m: Extract<Msg, {type: "lane_step_ok"}>) => {
 				const [next, cmds] = lane.update.lane_step_ok(s, m);
-				if (s.phase !== "running" || s.step !== "exam" || !("trail" in next)) return [next, cmds];
-				if (!next.trail.some((row) => row.step === "exam_merge")) return [next, cmds];
+
+				if (s.phase !== "running" || s.step !== "exam" || !("trail" in next)) {
+					return [next, cmds];
+				}
+
+				if (!next.trail.some((row) => row.step === "exam_merge")) {
+					return [next, cmds];
+				}
+
 				// The exam's own row, after a route from exam_merge, is not on the trail the bound reads.
 				const at = next.trail.findLastIndex((row) => row.step === "exam");
 				return [{...next, trail: next.trail.filter((_, i) => i !== at)}, cmds] as never;

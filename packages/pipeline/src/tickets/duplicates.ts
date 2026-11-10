@@ -92,7 +92,13 @@ export const candidatesOf = (
 	const mine = wordsOfTicket(filed);
 	const theirs = open.map((c) => ({c, words: wordsOfTicket(c)}));
 	const df = new Map<string, number>();
-	for (const {words} of theirs) for (const w of words) df.set(w, (df.get(w) ?? 0) + 1);
+
+	for (const {words} of theirs) {
+		for (const w of words) {
+			df.set(w, (df.get(w) ?? 0) + 1);
+		}
+	}
+
 	const rarity = (w: string) => Math.log((open.length + 1) / (df.get(w) ?? 1));
 	return theirs
 		.map(({c, words}) => ({

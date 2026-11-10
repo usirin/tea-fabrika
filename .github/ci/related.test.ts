@@ -13,14 +13,17 @@ import {measured} from "../../vitest.shards.ts";
 // T375 plants caught: restoring skill force triggers selects every test; deleting box.test.ts's
 // box.sh declaration omits that test. The latter first survived mixed subsets; singletons catch it.
 const root = join(import.meta.dirname, "../..");
+
 const files = readdirSync(join(root, ".agents/skills"), {recursive: true, withFileTypes: true})
 	.filter((entry) => entry.isFile())
 	.map((entry) => relative(root, join(entry.parentPath, entry.name)));
+
 const tree = new Map(
 	files
 		.filter((path) => /\/scripts\/[^/]+$/.test(path))
 		.map((path) => [path, readFileSync(join(root, path), "utf8")]),
 );
+
 const scripts = [...tree.keys()].filter((path) => !path.endsWith(".test.ts"));
 const tests = [...tree.keys()].filter((path) => path.endsWith(".test.ts"));
 
@@ -30,30 +33,39 @@ const readers = new Map(
 	tests.map((test) => {
 		const reached = new Set<string>();
 		const queue = [test];
+
 		for (const path of queue) {
 			const names = new Set((tree.get(path) ?? "").match(/[\w-]+\.(?:sh|py|mjs|ts|json)\b/g));
-			for (const script of scripts)
+
+			for (const script of scripts) {
 				if (names.has(basename(script)) && !reached.has(script)) {
 					reached.add(script);
 					queue.push(script);
 				}
+			}
 		}
+
 		return [test, reached] as const;
 	}),
 );
+
 // Unreferenced scripts have no reader, as the plan's final limits section says.
 const readScripts = scripts.filter((script) =>
 	[...readers.values()].some((paths) => paths.has(script)),
 );
+
 const markdown = files.filter((path) => path.endsWith(".md") && !path.includes("/scripts/"));
 const options = {seed: 119120, numRuns: 20};
 let vitest: Vitest;
+
 beforeAll(async () => {
 	vitest = await createVitest("test", {root, watch: false, maxWorkers: 1});
 });
+
 afterAll(async () => {
 	await vitest?.close();
 });
+
 const affected = async (paths: string[]) => {
 	vitest.config.related = paths.map((path) => join(root, path));
 	return (await vitest.getRelevantTestSpecifications())
@@ -100,10 +112,12 @@ describe("next workflow coverage", () => {
 	const repoPath = (spec: TestSpecification) => relative(root, spec.moduleId).replaceAll("\\", "/");
 	const partition = async (specs: TestSpecification[]) => {
 		const kept: string[][] = [];
+
 		for (const context of contexts.slice(1)) {
 			const Sequencer = context.config.sequence.sequencer;
 			kept.push((await new Sequencer(context).shard(specs)).map(repoPath));
 		}
+
 		return kept;
 	};
 	const complete = (kept: string[][], universe: string[]) => {
@@ -116,7 +130,8 @@ describe("next workflow coverage", () => {
 		nextSpecs = (await baseline.globTestSpecifications()).filter((spec) =>
 			repoPath(spec).startsWith("next/"),
 		);
-		for (const index of indices)
+
+		for (const index of indices) {
 			contexts.push(
 				await createVitest("test", {
 					root,
@@ -125,9 +140,12 @@ describe("next workflow coverage", () => {
 					shard: `${index}/${denominator}`,
 				}),
 			);
+		}
 	});
 	afterAll(async () => {
-		for (const context of contexts) await context.close();
+		for (const context of contexts) {
+			await context.close();
+		}
 	});
 
 	it("scenario: workflow shards partition every config-discovered next file exactly once", async () => {
@@ -140,11 +158,13 @@ describe("next workflow coverage", () => {
 		expect(universe.length).toBeGreaterThan(0);
 		expect(new Set(universe).size).toBe(universe.length);
 		const kept: string[][] = [];
+
 		for (const context of contexts.slice(1)) {
 			const specs = await context.globTestSpecifications(["next/"]);
 			const Sequencer = context.config.sequence.sequencer;
 			kept.push((await new Sequencer(context).shard(specs)).map(repoPath));
 		}
+
 		complete(kept, universe);
 	});
 
@@ -162,7 +182,11 @@ describe("next workflow coverage", () => {
 							join(root, `next/apps/fabrika/src/unmeasured-${suffix}-${letter}.test.ts`),
 						),
 					);
-					for (const spec of unknown) expect(Object.hasOwn(measured, repoPath(spec))).toBe(false);
+
+					for (const spec of unknown) {
+						expect(Object.hasOwn(measured, repoPath(spec))).toBe(false);
+					}
+
 					const files = [...subset, ...unknown];
 					const shuffled = files
 						.map((spec, i) => ({spec, rank: order[i]!}))
@@ -170,6 +194,7 @@ describe("next workflow coverage", () => {
 						.map(({spec}) => spec);
 					const first = await partition(files);
 					complete(first, files.map(repoPath));
+
 					for (const permutation of [shuffled, files.toReversed()]) {
 						const kept = await partition(permutation);
 						complete(kept, files.map(repoPath));

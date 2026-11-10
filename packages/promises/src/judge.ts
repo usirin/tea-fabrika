@@ -67,16 +67,27 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 /** What a change did to the exam: everything in a record except `confirmed`, and every exam piece's print. */
 export function examChanges(entry: Entry, before: Entry | null): readonly ExamChange[] {
-	if (before === null) return ["a new promise"];
+	if (before === null) {
+		return ["a new promise"];
+	}
+
 	const out: string[] = [];
-	for (const key of ["promise", "harm", "tool", "check", "plant", "covers", "exam"] as const)
-		if (!same(entry[key], before[key])) out.push(`its ${key} was changed`);
-	for (const piece of entry.exam)
+
+	for (const key of ["promise", "harm", "tool", "check", "plant", "covers", "exam"] as const) {
+		if (!same(entry[key], before[key])) {
+			out.push(`its ${key} was changed`);
+		}
+	}
+
+	for (const piece of entry.exam) {
 		if (
 			before.confirmed.prints[piece] !== undefined &&
 			entry.confirmed.prints[piece] !== before.confirmed.prints[piece]
-		)
+		) {
 			out.push(`${piece} was changed`);
+		}
+	}
+
 	return out;
 }
 
@@ -84,38 +95,50 @@ export function judge(f: Facts): Judged {
 	const problems: Problem[] = [];
 	const pieces = piecesOf(f.entry);
 	const gone = pieces.filter((p) => f.now[p] === null || f.now[p] === undefined);
-	if (gone.length > 0) problems.push({why: "gone", pieces: gone});
+
+	if (gone.length > 0) {
+		problems.push({why: "gone", pieces: gone});
+	}
+
 	const stale = pieces.filter((p) => !gone.includes(p) && f.now[p] !== f.entry.confirmed.prints[p]);
-	if (stale.length > 0)
+
+	if (stale.length > 0) {
 		problems.push({why: "stale", pieces: stale, commit: f.entry.confirmed.commit});
+	}
 
 	const checked = f.entry.check;
-	if (f.check.kind === "none")
+
+	if (f.check.kind === "none") {
 		problems.push({why: "no_verdict", which: "check", detail: f.check.why});
-	else if (f.check.verdict.plant !== null)
+	} else if (f.check.verdict.plant !== null) {
 		problems.push({
 			why: "no_verdict",
 			which: "check",
 			detail: `it ran the plant ${f.check.verdict.plant}, not the real code`,
 		});
-	else if (!f.check.verdict.held) problems.push({why: "red", verdict: f.check.verdict});
+	} else if (!f.check.verdict.held) {
+		problems.push({why: "red", verdict: f.check.verdict});
+	}
 
 	const asked = f.entry.plant.name;
-	if (f.plant.kind === "none")
+
+	if (f.plant.kind === "none") {
 		problems.push({why: "no_verdict", which: "plant", detail: f.plant.why});
-	else if (f.plant.verdict.plant !== asked)
+	} else if (f.plant.verdict.plant !== asked) {
 		problems.push({
 			why: "no_verdict",
 			which: "plant",
 			detail: `asked for the plant ${asked}, it ran ${f.plant.verdict.plant ?? "the real code"}`,
 		});
-	else if (f.check.kind === "verdict" && f.plant.verdict.checked !== f.check.verdict.checked)
+	} else if (f.check.kind === "verdict" && f.plant.verdict.checked !== f.check.verdict.checked) {
 		problems.push({
 			why: "no_verdict",
 			which: "plant",
 			detail: `the plant checked "${f.plant.verdict.checked}", the check "${f.check.verdict.checked}" (${checked})`,
 		});
-	else if (f.plant.verdict.held) problems.push({why: "not_caught", verdict: f.plant.verdict});
+	} else if (f.plant.verdict.held) {
+		problems.push({why: "not_caught", verdict: f.plant.verdict});
+	}
 
 	const before = f.before === "unknown" ? undefined : f.before;
 	return {

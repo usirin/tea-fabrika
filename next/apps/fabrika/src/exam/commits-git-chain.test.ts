@@ -298,10 +298,17 @@ describe("chain after the merge (p86 and p89)", () => {
 			fc.property(fc.nat(rows.length - 1), change, (at, how) => {
 				const bad = structuredClone(rows);
 				const link: Record<string, unknown> = bad[at]!.attested[0]!;
+
 				if (how._tag === "cause") {
-					if (!how.keepParent) delete link.parent;
+					if (!how.keepParent) {
+						delete link.parent;
+					}
+
 					link.cause = how.cause;
-				} else delete link[how.field];
+				} else {
+					delete link[how.field];
+				}
+
 				log(r, bad);
 				const out = r.run(["chain", "--squash", squash]);
 				expect(out.code).toBe(2);

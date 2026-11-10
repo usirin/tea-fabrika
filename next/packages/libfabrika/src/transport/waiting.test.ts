@@ -8,6 +8,7 @@ import * as T from "./index.ts";
 
 const state = (ttl = 600_000, most = 3) => T.Waiting.make({rows: [], most, ttl});
 const runs = {seed: 119120, numRuns: 100};
+
 const knock = (
 	s: ReturnType<typeof state>,
 	key: string,
@@ -26,6 +27,7 @@ const knock = (
 		pass: null,
 		at,
 	});
+
 describe("P10 waiting rows", () => {
 	it("p43: one checked key, two tabs, one stable code until expiry", () => {
 		// Plant: append duplicate clients without a Set. The two-tab match must fail.
@@ -100,7 +102,11 @@ describe("P10 waiting rows", () => {
 		fc.assert(
 			fc.property(fc.uniqueArray(fc.string(), {minLength: 2, maxLength: 20}), (keys) => {
 				let s = state(600_000, keys.length - 1);
-				for (const [at, key] of keys.entries()) s = knock(s, key, `${key}1`, at);
+
+				for (const [at, key] of keys.entries()) {
+					s = knock(s, key, `${key}1`, at);
+				}
+
 				expect(s.rows.map((r) => r.key)).toEqual(keys.slice(1));
 			}),
 			{...runs, examples: [[["a", "b", "c", "d"]]]},
@@ -111,7 +117,11 @@ describe("P10 waiting rows", () => {
 		fc.assert(
 			fc.property(fc.array(fc.integer({min: 0, max: 5}), {minLength: 1, maxLength: 40}), (tabs) => {
 				let s = state();
-				for (const tab of tabs) s = knock(s, "a", `t${tab}`, 0);
+
+				for (const tab of tabs) {
+					s = knock(s, "a", `t${tab}`, 0);
+				}
+
 				expect(s.rows).toHaveLength(1);
 				expect(s.rows[0]?.tabs).toBe(new Set(tabs).size);
 			}),
@@ -125,11 +135,13 @@ describe("P10 waiting rows", () => {
 		fc.assert(
 			fc.property(fc.integer({min: -5, max: 8}), fc.integer({min: 1, max: 6}), (most, extra) => {
 				const raw = {rows: [], most, ttl: 600_000};
+
 				if (most < 1) {
 					expect(() => T.Waiting.make(raw)).toThrow();
 					expect(Schema.decodeUnknownOption(T.Waiting)(raw)).toEqual(Option.none());
 					return;
 				}
+
 				const keys = Array.from({length: most + extra}, (_, i) => `k${i}`);
 				const s = keys.reduce((w, k, i) => knock(w, k, `${k}-tab`, i), T.Waiting.make(raw));
 				expect(s.rows.map((r) => r.key)).toEqual(keys.slice(-most));

@@ -130,18 +130,21 @@ export const greet = Cmd.make("greet", {
 	ok: Done,
 	err: [],
 });
+
 /** Hand the line on: to the host's clients, or to the app's relay. */
 export const deliver = Cmd.make("deliver", {
 	input: Schema.Struct({m: Schema.Unknown}),
 	ok: Done,
 	err: [],
 });
+
 /** The other side speaks another version: say so plainly. */
 export const refuse = Cmd.make("refuse", {
 	input: Schema.Struct({theirs: Schema.Int, ours: Schema.Int}),
 	ok: Done,
 	err: [],
 });
+
 /** Close the socket. */
 export const drop = Cmd.make("drop", {
 	input: Schema.Struct({why: Schema.String}),
@@ -173,10 +176,20 @@ export const linkMachine = defineMachine({
 	],
 	update: {
 		hello: (s, m) => {
-			if (over(s)) return [s, []];
-			if (s.at === "up") return closed(s, "a second hello");
+			if (over(s)) {
+				return [s, []];
+			}
+
+			if (s.at === "up") {
+				return closed(s, "a second hello");
+			}
+
 			const back = s.side === "host" ? [greet({version: s.ours})] : [];
-			if (m.version === s.ours) return [{...ctxOf(s), at: "up"}, back];
+
+			if (m.version === s.ours) {
+				return [{...ctxOf(s), at: "up"}, back];
+			}
+
 			const why = `the other side speaks version ${m.version}, this one ${s.ours}`;
 			return [
 				{...ctxOf(s), at: "refused", theirs: m.version},
@@ -184,8 +197,14 @@ export const linkMachine = defineMachine({
 			];
 		},
 		line: (s, m) => {
-			if (over(s)) return [s, []];
-			if (s.at === "hello") return closed(s, "a line before the hello");
+			if (over(s)) {
+				return [s, []];
+			}
+
+			if (s.at === "hello") {
+				return closed(s, "a line before the hello");
+			}
+
 			return [s, [deliver({m: m.m})]];
 		},
 		bad: (s, m) => (over(s) ? [s, []] : closed(s, `a line that does not read: ${m.why}`)),
@@ -203,9 +222,16 @@ export const linkMachine = defineMachine({
 
 /** A line off the wire, read already, as the link machine hears it: a hello, another line, or one that does not read. */
 export const linkMsgOf = (got: Read<Up | Down>): LinkMsg => {
-	if (got.kind === "refused") return {type: "bad", why: got.why};
+	if (got.kind === "refused") {
+		return {type: "bad", why: got.why};
+	}
+
 	const msg = got.msg;
-	if (msg.type === "hello") return {type: "hello", version: msg.version};
+
+	if (msg.type === "hello") {
+		return {type: "hello", version: msg.version};
+	}
+
 	return {type: "line", m: msg};
 };
 

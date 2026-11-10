@@ -45,7 +45,11 @@ const tshOn = (wrap: (storage: Storage) => Storage) =>
 			Effect.provideService(HostJobs, {...jobs, owner: "t1", by: PERSON}),
 			Effect.provideService(Programs, LIST),
 		);
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		/** One line, and its `ready`. */
 		const line = (text: string) =>
@@ -81,9 +85,14 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 300; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("10 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
@@ -101,12 +110,14 @@ const settled = (table: JobTable) =>
 	Effect.gen(function* () {
 		let last = JSON.stringify(shapeOf(table.getState()));
 		let still = 0;
+
 		for (let i = 0; i < 300 && still < 6; i += 1) {
 			yield* Effect.sleep("10 millis");
 			const now = JSON.stringify(shapeOf(table.getState()));
 			still = now === last ? still + 1 : 0;
 			last = now;
 		}
+
 		return shapeOf(table.getState());
 	});
 
@@ -121,6 +132,7 @@ const setUp = (t: Effect.Success<typeof tshInT1>, kinds: readonly Kind[]) =>
 				yield* t.line(`${LONG} &`);
 				continue;
 			}
+
 			yield* t.table.dispatch({
 				type: "began",
 				text: LONG,
@@ -137,8 +149,10 @@ const setUp = (t: Effect.Success<typeof tshInT1>, kinds: readonly Kind[]) =>
 				owner: kind === "other" ? "t2" : "t1",
 				by: kind === "other" ? "user:github:8" : PERSON,
 			});
-			if (kind === "detached")
+
+			if (kind === "detached") {
 				yield* t.table.dispatch({type: "detached", n: t.table.getState().next - 1});
+			}
 		}
 	});
 
@@ -185,7 +199,11 @@ describe("tsh's stop input does what stop %n does", () => {
 				yield* until("job 1 in the table", () =>
 					t.table.getState().jobs.some((job) => job.n === 1) ? true : undefined,
 				);
-				for (let i = 0; i < 20; i += 1) yield* tell(t.run, "line", "jobs");
+
+				for (let i = 0; i < 20; i += 1) {
+					yield* tell(t.run, "line", "jobs");
+				}
+
 				const word = yield* t.stop(1);
 				const [first] = yield* t.ready
 					.upTo(1)
@@ -230,7 +248,10 @@ describe("the stopper's line in the tile the job ran in", () => {
 				const stops: unknown[] = [];
 				const unsubscribe = t.table.subscribe(() => {
 					const job = t.table.getState().jobs.find((j) => j.n === 1);
-					if (job?.stop != null) stops.push(job.stop);
+
+					if (job?.stop != null) {
+						stops.push(job.stop);
+					}
 				});
 				yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
 				// What the host does for the agent: its stop first, then the word to the tsh that runs it.
@@ -249,7 +270,10 @@ describe("the stopper's line in the tile the job ran in", () => {
 		expect(seen.printed).toContain(`[1] stopped by ${AGENT}: wrong ticket`);
 		// Kept once: the tsh's own ask after the host's changed nothing.
 		expect(seen.stops.length).toBeGreaterThan(0);
-		for (const stop of seen.stops) expect(stop).toEqual({by: AGENT, why: "wrong ticket"});
+
+		for (const stop of seen.stops) {
+			expect(stop).toEqual({by: AGENT, why: "wrong ticket"});
+		}
 	});
 
 	it("names the stopper of the job told, not another job's, with two jobs running", async () => {

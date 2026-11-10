@@ -46,6 +46,9 @@ test:
     for machines that cannot run Docker) or `Sandbox.none` (today's way).
   - fabrika's own part is a runner inside the box and the host's side of the
     line format. The program's code is the same in all three.
+  - Requirement (owner, 2026-11-09): the `Sandbox` service removes a job's box and its files when
+    the job's lane lands, saving its work first; no person cleans up or frees disk
+    ([0019](../../.decisions/0019-nothing-stale.md)).
   - A program already has a command line's shape
     ([tea-program](./tea-program.md)): flags are argv, inputs are stdin,
     outputs are events. They cross the wall as one JSON line each, checked by

@@ -4,6 +4,7 @@ import "./leakgrep.sh?raw";
 import "./botpush.mjs?raw";
 import "./env.sh?raw";
 import "./box.sh?raw";
+import "./keepruns.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
 import "./fieldrow.py?raw";
@@ -47,15 +48,19 @@ const {parse} = createRequire(new URL("../../../../.github/ci/package.json", imp
 // Today's tooling. GitHub, signing and pushes are stubbed. Cleanup uses disposable local Git.
 const script = join(import.meta.dirname, "catchup.sh");
 const tip = "0123456789abcdef0123456789abcdef01234567";
+
 const workflow = parse(
 	readFileSync(join(import.meta.dirname, "../../../../.github/workflows/check.yaml"), "utf8"),
 );
+
 const nextNames: string[] = workflow.jobs.next.strategy.matrix.shard.map(
 	(index: number) => `next (${index})`,
 );
+
 type Check = {name: string; status: string; conclusion: string};
 const success = (name: string): Check => ({name, status: "completed", conclusion: "success"});
 const matrixChecks = ["check", "e2e", "commits", ...nextNames].map(success);
+
 const storageFiles = (root: string) => {
 	const files: Record<string, string> = {};
 	const visit = (path: string, name: string) => {
@@ -65,15 +70,24 @@ const storageFiles = (root: string) => {
 			: info.isFile()
 				? `file:${readFileSync(path).toString("base64")}`
 				: "directory";
-		if (info.isDirectory())
-			for (const child of readdirSync(path)) visit(join(path, child), `${name}/${child}`);
+
+		if (info.isDirectory()) {
+			for (const child of readdirSync(path)) {
+				visit(join(path, child), `${name}/${child}`);
+			}
+		}
 	};
 	visit(root, ".");
 	return files;
 };
+
 const reads = ["head", "checks", "trust", "apps", "logs"] as const;
 const options = {seed: 520, numRuns: 12};
 type Call = {cmd: string; args: string[]; key?: string};
+type Post = {sub: string; ticket?: number; as: string; home: string; body?: string};
+// The squash commit GitHub answers for the merged PR.
+const merged = "feedfacefeedfacefeedfacefeedfacefeedface";
+
 type Setup = {
 	checks?: Check[];
 	repo?: string;
@@ -113,7 +127,14 @@ type Setup = {
 	stack?: "none" | "same" | "moved";
 	// Seconds since the start, read by `date` after that many check reads (the last one repeats).
 	clock?: number[];
+	// After the merge (0015): the PR's description, its state as GitHub says it, whether the merge
+	// commit is on main, and the tracker's tickets by number with their state.
+	body?: string;
+	landed?: "MERGED" | "OPEN";
+	offMain?: boolean;
+	tickets?: Record<number, "open" | "closed">;
 };
+
 const green: Setup = {
 	failures: [0, 0, 0, 0, 0],
 	pending: 0,
@@ -122,6 +143,7 @@ const green: Setup = {
 	merge: false,
 	refused: "none",
 };
+
 // The stub uses the platform's absolute Node executable. Its PATH never contains a real gh,
 // node or pnpm, and each write-capable command is refused unless handled here.
 const stub = String.raw`
@@ -135,7 +157,8 @@ const cmd = path.basename(process.argv[1]);
 const args = process.argv.slice(2);
 let key;
 if (cmd === "gh") {
-  if (args[0] === "pr" && args[1] === "view") key = args.includes("headRefOid") ? "oid" : "head";
+  if (args[0] === "pr" && args[1] === "view")
+    key = args.includes("state,mergeCommit") ? "landed" : args.includes("body") ? "body" : args.includes("headRefOid") ? "oid" : "head";
   else if (args[0] === "stack" && args[1] === "merge") key = "stack";
   else if (args[0] === "pr" && args[1] === "merge") key = "merge";
   else if (args[0] === "run" && args[1] === "view") key = "logs";
@@ -157,6 +180,8 @@ if (cmd === "gh") {
     die("temporary " + key + " read failure");
   }
   if (key === "head") console.log(setup.branch);
+  if (key === "landed") console.log(setup.landed === "OPEN" ? "OPEN " : "MERGED " + process.env.CATCHUP_MERGED);
+  if (key === "body") console.log(setup.body ?? "");
   if (key === "oid") console.log(setup.stack === "moved" ? "f".repeat(40) : process.env.CATCHUP_TIP);
   if (key === "merge" && setup.stack && setup.stack !== "none")
     die("This pull request is part of a stack and must be merged using the asynchronous merge REST API");
@@ -184,6 +209,7 @@ if (cmd === "gh") {
   process.exit(0);
 }
 if (cmd === "git") {
+  if (args.includes("merge-base") && args.includes(process.env.CATCHUP_MERGED)) process.exit(setup.offMain ? 1 : 0);
   if (setup.repo && (args.includes("merge-base") || args.includes("merge"))) {
     const at = args.includes("merge-base") ? args.indexOf("merge-base") : args.indexOf("merge");
     const ran = require("node:child_process").spawnSync("/usr/bin/git", ["-C", setup.repo, ...args.slice(at)], {encoding: "utf8"});
@@ -206,6 +232,18 @@ if (cmd === "git") {
   else if (!["fetch", "checkout", "push", "rev-parse"].includes(args[0]) && !args.includes("merge")) die("unhandled git command");
   process.exit(0);
 }
+if (cmd === "node" && args[0].endsWith("/apps/fabrika/src/cli.ts") && args[1] === "post") {
+  // The tracker's own post command: list, comment and close, as an agent, on FABRIKA_HOME.
+  const [sub, n] = [args[2], Number(args[3])];
+  const at = args.indexOf("--body-file");
+  const post = {sub, ticket: sub === "list" ? undefined : n, as: args[args.indexOf("--as") + 1], home: process.env.FABRIKA_HOME, body: at < 0 ? undefined : fs.readFileSync(args[at + 1], "utf8")};
+  fs.appendFileSync(path.join(dir, "posts.jsonl"), JSON.stringify(post) + "\n");
+  if (sub === "list")
+    // As the real list does: open tickets only, one line each, after the logger's own prefix.
+    for (const [number, state] of Object.entries(setup.tickets ?? {}))
+      if (state === "open") console.log("[15:00:00.000] INFO (#2): #" + number + " open c0 A ticket");
+  process.exit(0);
+}
 if (cmd === "node") {
   if (!args[0].endsWith("/botpush.mjs")) die("unhandled node command");
   if (setup.refused === "notes" || setup.refused === "branch" && setup.branch.startsWith("fabrikalfa/")) die("atomic push refused");
@@ -220,8 +258,10 @@ if (cmd === "date") {
 }
 die("unhandled tool: " + cmd);
 `;
+
 const run = (setup: Setup, args: string[] = []) => {
 	const dir = mkdtempSync(join(tmpdir(), "cu-"));
+
 	try {
 		const bin = join(dir, "bin");
 		mkdirSync(bin);
@@ -253,6 +293,7 @@ const run = (setup: Setup, args: string[] = []) => {
 		let protectedWork = "",
 			protectedData = "",
 			saved = "";
+
 		if (setup.cleanup) {
 			git(dir, "init", "-q", "--initial-branch=main");
 			git(dir, "config", "user.name", "Fixture");
@@ -277,6 +318,7 @@ const run = (setup: Setup, args: string[] = []) => {
 			git(dir, "worktree", "add", "-q", join(dir, "boxes/driver"), setup.branch);
 			git(dir, "branch", `${setup.branch}-sibling`, checkedTip);
 			git(dir, "worktree", "add", "-q", join(dir, "boxes/sibling"), `${setup.branch}-sibling`);
+
 			for (const [name, branch] of [
 				["exact box", setup.branch],
 				["sibling box", `${setup.branch}-sibling`],
@@ -293,26 +335,47 @@ const run = (setup: Setup, args: string[] = []) => {
 				expect(git(work, "remote")).toBe("origin");
 				git(work, "config", "user.name", "Fixture");
 				git(work, "config", "user.email", "fixture@example.test");
+
 				if (name === "exact box") {
-					if (setup.cleanup === "dirty") writeFileSync(join(work, "tracked"), "dirty");
+					if (setup.cleanup === "dirty") {
+						writeFileSync(join(work, "tracked"), "dirty");
+					}
+
 					if (setup.cleanup === "unsaved") {
 						writeFileSync(join(work, "tracked"), "unsaved");
 						git(work, "commit", "-qam", "unsaved");
 					}
-					if (setup.cleanup === "malformed") writeFileSync(join(data, "HEAD"), "malformed");
+
+					if (setup.cleanup === "malformed") {
+						writeFileSync(join(data, "HEAD"), "malformed");
+					}
 				}
 			}
-			if (setup.cleanup === "dirty") writeFileSync(join(dir, "boxes/driver/tracked"), "dirty");
-			if (setup.cleanup === "locked") git(dir, "worktree", "lock", join(dir, "boxes/driver"));
+
+			if (setup.cleanup === "dirty") {
+				writeFileSync(join(dir, "boxes/driver/tracked"), "dirty");
+			}
+
+			if (setup.cleanup === "locked") {
+				git(dir, "worktree", "lock", join(dir, "boxes/driver"));
+			}
+
 			if (setup.trouble === "unregistered") {
 				git(dir, "worktree", "remove", "--force", join(dir, "boxes/catchup-900"));
 				mkdirSync(join(dir, "boxes/catchup-900/node_modules"), {recursive: true});
 			}
-			if (setup.trouble === "twins")
+
+			if (setup.trouble === "twins") {
 				git(dir, "worktree", "add", "-q", "-f", join(dir, "boxes/driver twin"), setup.branch);
-			if (setup.trouble === "missing") rmSync(join(dir, "boxes/driver"), {recursive: true});
+			}
+
+			if (setup.trouble === "missing") {
+				rmSync(join(dir, "boxes/driver"), {recursive: true});
+			}
+
 			mkdirSync(join(dir, "boxes/state"));
 			writeFileSync(join(dir, "boxes/state/driver.md"), "saved wait");
+
 			if (setup.protected) {
 				protectedWork = join(dir, "boxes", setup.protected === "state" ? "state" : "protected");
 				protectedData = `${protectedWork}-gitdata`;
@@ -321,6 +384,7 @@ const run = (setup: Setup, args: string[] = []) => {
 				git(protectedWork, "remote", "add", "origin", dir);
 				git(protectedWork, "fetch", "-q", "origin", `${setup.branch}:refs/heads/${setup.branch}`);
 				git(protectedWork, "checkout", "-q", setup.branch);
+
 				if (setup.protected !== "state") {
 					main =
 						setup.protected === "main-work"
@@ -333,27 +397,33 @@ const run = (setup: Setup, args: string[] = []) => {
 									);
 					mkdirSync(main, {recursive: true});
 				}
+
 				saved = join(setup.protected === "state" ? protectedWork : main, "saved.md");
 				writeFileSync(saved, setup.branch);
 			}
+
 			expect(git(dir, "remote")).toBe("");
+
 			if (setup.deepStorage || setup.sharedAdmin || setup.unwalkable) {
 				const original = join(dir, ".git");
 				const worktree =
 					setup.deepStorage?.worktree ?? setup.sharedAdmin ?? setup.unwalkable!.worktree;
 				admin = git(join(dir, "boxes", worktree), "rev-parse", "--absolute-git-dir");
 				history = git(dir, "rev-list", "--objects", "--all");
+
 				if (setup.sharedAdmin) {
 					// A worktree removal deletes its admin directory outside the work folder.
 					// MAIN is another reader of that exact directory, with the same common store.
 					const common = join(dir, "main-common");
 					renameSync(original, common);
+
 					for (const name of ["catchup-900", "driver", "sibling"]) {
 						writeFileSync(
 							join(dir, "boxes", name, ".git"),
 							`gitdir: ${join(common, "worktrees", name)}\n`,
 						);
 					}
+
 					admin = join(common, "worktrees", worktree);
 					writeFileSync(original, `gitdir: ${admin}\n`);
 					storage = admin;
@@ -365,10 +435,18 @@ const run = (setup: Setup, args: string[] = []) => {
 				} else {
 					const path = setup.deepStorage!;
 					git(dir, "pack-refs", "--all");
-					if (path.kind === "objects/pack") git(dir, "repack", "-ad");
-					if (path.kind === "refs") git(dir, "update-ref", "refs/keep/storage", "HEAD");
+
+					if (path.kind === "objects/pack") {
+						git(dir, "repack", "-ad");
+					}
+
+					if (path.kind === "refs") {
+						git(dir, "update-ref", "refs/keep/storage", "HEAD");
+					}
+
 					history = git(dir, "rev-list", "--objects", "--all");
 					let root = original;
+
 					if (path.root === "common") {
 						root = join(dir, "main-common");
 						cpSync(original, root, {recursive: true});
@@ -379,6 +457,7 @@ const run = (setup: Setup, args: string[] = []) => {
 							`${path.relative ? relative(original, root) : root}\n`,
 						);
 					}
+
 					if (path.root === "alternate") {
 						root = join(dir, "main-alternate");
 						renameSync(join(original, "objects"), root);
@@ -388,6 +467,7 @@ const run = (setup: Setup, args: string[] = []) => {
 							`${path.relative ? relative(join(original, "objects"), root) : root}\n`,
 						);
 					}
+
 					const source = join(
 						root,
 						path.kind === "loose"
@@ -398,12 +478,17 @@ const run = (setup: Setup, args: string[] = []) => {
 									? path.kind.replace(/^objects\//, "")
 									: path.kind,
 					);
+
 					if (!existsSync(source)) {
 						mkdirSync(join(source, ".."), {recursive: true});
-						if (["generated-file", "packed-refs", "index"].includes(path.kind))
+
+						if (["generated-file", "packed-refs", "index"].includes(path.kind)) {
 							writeFileSync(source, setup.branch);
-						else mkdirSync(source);
+						} else {
+							mkdirSync(source);
+						}
 					}
+
 					storage = join(
 						path.location === "admin" ? admin : join(dir, "boxes", path.worktree, "node_modules"),
 						...path.parts,
@@ -417,14 +502,23 @@ const run = (setup: Setup, args: string[] = []) => {
 					const real = (at: string) => join(realpathSync(join(at, "..")), basename(at));
 					const name = (from: string, to: string) =>
 						path.relative ? relative(realpathSync(from), real(to)) : to;
-					if (path.through) symlinkSync(name(join(storage, ".."), stored), storage);
+
+					if (path.through) {
+						symlinkSync(name(join(storage, ".."), stored), storage);
+					}
+
 					symlinkSync(name(join(source, ".."), storage), source);
 				}
-				if (stored) savedStorage = storageFiles(stored);
+
+				if (stored) {
+					savedStorage = storageFiles(stored);
+				}
+
 				expect(git(dir, "rev-list", "--objects", "--all")).toBe(history);
 				const registered = git(dir, "worktree", "list", "--porcelain", "-z");
 				expect(registered).toContain(`worktree ${realpathSync(join(dir, "boxes", worktree))}\0`);
 			}
+
 			if (setup.storage) {
 				const path = setup.storage;
 				const original = join(dir, ".git");
@@ -432,6 +526,7 @@ const run = (setup: Setup, args: string[] = []) => {
 				mkdirSync(join(storage, ".."), {recursive: true});
 				const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
 				history = git(dir, "rev-list", "--objects", "--all");
+
 				if (path.binding === "alternates-file") {
 					const outside = join(dir, "outside-objects");
 					renameSync(join(original, "objects"), outside);
@@ -447,8 +542,15 @@ const run = (setup: Setup, args: string[] = []) => {
 						: join(original, "objects");
 					const stored = path.through ? join(dir, "outside-storage") : storage;
 					renameSync(source, stored);
-					if (path.through) symlinkSync(name(join(storage, ".."), stored), storage);
-					if (path.binding === "gitdir") symlinkSync(name(dir, storage), original);
+
+					if (path.through) {
+						symlinkSync(name(join(storage, ".."), stored), storage);
+					}
+
+					if (path.binding === "gitdir") {
+						symlinkSync(name(dir, storage), original);
+					}
+
 					if (path.binding === "commondir") {
 						mkdirSync(original);
 						writeFileSync(join(original, "HEAD"), readFileSync(join(stored, "HEAD")));
@@ -457,9 +559,14 @@ const run = (setup: Setup, args: string[] = []) => {
 						// spelling valid while the common directory is borrowed from a worktree.
 						symlinkSync(name(original, join(storage, "worktrees")), join(original, "worktrees"));
 					}
-					if (path.binding === "objects") symlinkSync(name(original, storage), source);
+
+					if (path.binding === "objects") {
+						symlinkSync(name(original, storage), source);
+					}
+
 					if (path.binding === "alternates") {
 						let next = storage;
+
 						for (let i = 0; i < path.hops; i++) {
 							const objects = i === path.hops - 1 ? source : join(dir, `alternate-${i}`);
 							mkdirSync(join(objects, "info"), {recursive: true});
@@ -468,17 +575,23 @@ const run = (setup: Setup, args: string[] = []) => {
 						}
 					}
 				}
+
 				expect(git(dir, "rev-list", "--objects", "--all")).toBe(history);
 				expect(git(dir, "check-ignore", storage)).toBe(storage);
 				const registered = git(dir, "worktree", "list", "--porcelain", "-z");
-				for (const worktree of ["catchup-900", "driver"])
+
+				for (const worktree of ["catchup-900", "driver"]) {
 					expect(registered).toContain(`worktree ${realpathSync(join(dir, "boxes", worktree))}\0`);
+				}
 			}
 		}
+
 		writeFileSync(join(dir, "setup.json"), JSON.stringify(setup));
+
 		for (const cmd of ["gh", "git", "node", "pnpm", "nice", "sleep", "date"]) {
 			writeFileSync(join(bin, cmd), `#!${process.execPath}\n${stub}`, {mode: 0o755});
 		}
+
 		const ran = spawnSync("sh", [script, "900", "520", ...args], {
 			encoding: "utf8",
 			timeout: 15_000,
@@ -494,6 +607,7 @@ const run = (setup: Setup, args: string[] = []) => {
 				GH_REPO: "fixture/repo",
 				CATCHUP_FIXTURE: dir,
 				CATCHUP_TIP: checkedTip,
+				CATCHUP_MERGED: merged,
 				GIT_CONFIG_NOSYSTEM: "1",
 				GIT_CONFIG_GLOBAL: "/dev/null",
 				TYPESAFE_API_KEY: undefined,
@@ -501,6 +615,13 @@ const run = (setup: Setup, args: string[] = []) => {
 		});
 		expect(ran.error).toBeUndefined();
 		expect(ran.signal).toBeNull();
+		const posts: Post[] = (
+			existsSync(join(dir, "posts.jsonl")) ? readFileSync(join(dir, "posts.jsonl"), "utf8") : ""
+		)
+			.trim()
+			.split("\n")
+			.filter(Boolean)
+			.map((line) => JSON.parse(line));
 		const calls: Call[] = (
 			existsSync(join(dir, "calls.jsonl")) ? readFileSync(join(dir, "calls.jsonl"), "utf8") : ""
 		)
@@ -509,6 +630,7 @@ const run = (setup: Setup, args: string[] = []) => {
 			.filter(Boolean)
 			.map((line) => JSON.parse(line));
 		expect(existsSync(join(dir, "boxes/catchup.lock"))).toBe(false);
+
 		// Its own checkout is gone once the run passed the usage check, success or failure, unless it
 		// holds MAIN's Git storage, or MAIN cannot be read to tell: then a line says why it stayed.
 		if (calls.length > 0) {
@@ -524,8 +646,12 @@ const run = (setup: Setup, args: string[] = []) => {
 				setup.deepStorage ??
 				setup.sharedAdmin ??
 				setup.unwalkable;
-			if (setup.cleanup && planted === undefined) expect(guarded, ran.stdout).toBe(false);
+
+			if (setup.cleanup && planted === undefined) {
+				expect(guarded, ran.stdout).toBe(false);
+			}
 		}
+
 		const remaining = readdirSync(join(dir, "boxes"));
 		const keptHead = setup.cleanup
 			? spawnSync("/usr/bin/git", ["-C", dir, "rev-parse", "--verify", "refs/keep/pr/900"], {
@@ -557,6 +683,7 @@ const run = (setup: Setup, args: string[] = []) => {
 			code: ran.status,
 			text: ran.stdout + ran.stderr,
 			calls,
+			posts,
 			remaining,
 			keptHead,
 			checkedTip,
@@ -579,12 +706,15 @@ const run = (setup: Setup, args: string[] = []) => {
 		rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 const merges = (calls: Call[]) => calls.filter((c) => c.key === "merge");
+
 const assertHead = (calls: Call[]) => {
 	for (const call of merges(calls)) {
 		expect(call.args).toContain("--match-head-commit");
 		expect(call.args[call.args.indexOf("--match-head-commit") + 1]).toBe(tip);
 	}
+
 	for (const call of calls.filter((c) => c.key && ["checks", "trust", "apps"].includes(c.key))) {
 		expect(call.args[1]).toContain(tip);
 	}
@@ -629,7 +759,7 @@ describe("catchup, today's tooling", () => {
 					bare: fc.constantFrom("success", "skipped"),
 				}),
 				({order, bare}) => {
-					for (const name of nextNames)
+					for (const name of nextNames) {
 						for (const fault of [
 							"missing",
 							"in_progress",
@@ -658,6 +788,7 @@ describe("catchup, today's tooling", () => {
 							expect(merges(got.calls)).toHaveLength(0);
 							assertHead(got.calls);
 						}
+					}
 				},
 			),
 			{seed: 119120, numRuns: 2},
@@ -935,11 +1066,13 @@ describe("catchup, today's tooling", () => {
 						expect(got.code, got.text).toBe(lands ? 0 : 1);
 						const tried = merges(got.calls);
 						expect(tried).toHaveLength(reached ? 1 : 0);
+
 						for (const call of tried) {
 							expect(
 								call.args.filter((a) => a.startsWith("--") && a !== "--match-head-commit"),
 							).toEqual(["--squash"]);
 						}
+
 						const stacked = got.calls.filter((c) => c.key === "stack");
 						expect(stacked.map((c) => c.args)).toEqual(
 							reached && stack === "same" ? [["stack", "merge", "900", "--squash", "--yes"]] : [],
@@ -949,6 +1082,7 @@ describe("catchup, today's tooling", () => {
 						);
 						assertHead(got.calls);
 					}
+
 					for (const args of [
 						["--merge-method", "squash"],
 						["--merge-method", "merge"],
@@ -994,6 +1128,7 @@ describe("catchup, today's tooling", () => {
 							expect(ran.status, ran.stderr).toBe(0);
 							return ran.stdout.trim();
 						};
+
 						try {
 							git("init", "-q", "--initial-branch=main");
 							git("config", "user.name", "Fixture");
@@ -1010,24 +1145,37 @@ describe("catchup, today's tooling", () => {
 								rows.map((r) => JSON.stringify({...r, side})),
 							);
 							const logs = ["runs", "notes"].map((name) => join(dir, `field/${name}.jsonl`));
-							for (const log of logs) writeFileSync(log, `${prefix.join("\n")}\n`);
+
+							for (const log of logs) {
+								writeFileSync(log, `${prefix.join("\n")}\n`);
+							}
+
 							writeFileSync(join(dir, "ordinary.txt"), "base\n");
 							git("add", ".");
 							git("commit", "-qm", "base");
 							git("branch", "peer");
+
 							for (const [i, branch] of ["main", "peer"].entries()) {
 								git("checkout", "-q", branch);
-								for (const log of logs)
+
+								for (const log of logs) {
 									writeFileSync(log, `${[...prefix, ...tails[i]!].join("\n")}\n`);
-								if (conflict) writeFileSync(join(dir, "ordinary.txt"), `${branch}\n`);
+								}
+
+								if (conflict) {
+									writeFileSync(join(dir, "ordinary.txt"), `${branch}\n`);
+								}
+
 								git("add", ".");
 								git("commit", "-qm", branch);
 							}
+
 							git("update-ref", "refs/remotes/origin/main", "peer");
 							git("checkout", "-q", "main");
 							const before = git("rev-parse", "HEAD");
 							const got = run({...green, merge: true, repo: dir});
 							expect(got.code, got.text).toBe(conflict ? 1 : 0);
+
 							if (conflict) {
 								expect(git("rev-parse", "HEAD")).toBe(before);
 								expect(git("status", "--porcelain")).toBe("");
@@ -1040,12 +1188,16 @@ describe("catchup, today's tooling", () => {
 											c.key === "merge",
 									),
 								).toBe(false);
-							} else
+							} else {
 								for (const log of logs) {
 									const actual = readFileSync(log, "utf8").trimEnd().split("\n");
 									expect(actual.sort()).toEqual([...prefix, ...tails.flat()].sort());
-									for (const line of actual) expect(() => JSON.parse(line)).not.toThrow();
+
+									for (const line of actual) {
+										expect(() => JSON.parse(line)).not.toThrow();
+									}
 								}
+							}
 						} finally {
 							rmSync(dir, {recursive: true, force: true});
 						}
@@ -1076,8 +1228,17 @@ describe("catchup, today's tooling", () => {
 							...patch,
 						});
 						expect(got.code, got.text).toBe(1);
-						for (const path of ["exact box", "exact box-gitdata", "later box", "driver", "sibling"])
+
+						for (const path of [
+							"exact box",
+							"exact box-gitdata",
+							"later box",
+							"driver",
+							"sibling",
+						]) {
 							expect(got.remaining).toContain(path);
+						}
+
 						// The catch-up checkout holds nothing of MAIN's, so the EXIT trap force-removes it.
 						expect(got.remaining).not.toContain("catchup-900");
 						expect(got.keptHead).toBe("");
@@ -1086,19 +1247,24 @@ describe("catchup, today's tooling", () => {
 								c.cmd === "git" && (c.args.includes("remove") || c.args.includes("update-ref")),
 						);
 						expect(touched).toHaveLength(1);
+
 						for (const call of touched) {
 							expect(call.args).toContain("--force");
 							expect(call.args.at(-1)).toMatch(/\/catchup-900$/);
 						}
 					}
+
 					// Positive case keeps this law red until cleanup exists; absence alone is insufficient.
 					const landed = run({...green, branch: `fabrikalfa/cleanup-${suffix}`, cleanup: "clean"});
 					expect(landed.code, landed.text).toBe(0);
 					expect(landed.remaining).not.toContain("catchup-900");
 					const mergedAt = landed.calls.findIndex((c) => c.key === "merge");
-					for (const [i, c] of landed.calls.entries())
-						if (c.cmd === "git" && (c.args.includes("remove") || c.args.includes("update-ref")))
+
+					for (const [i, c] of landed.calls.entries()) {
+						if (c.cmd === "git" && (c.args.includes("remove") || c.args.includes("update-ref"))) {
 							expect(i).toBeGreaterThan(mergedAt);
+						}
+					}
 				},
 			),
 			{seed: 3191, numRuns: 3},
@@ -1113,6 +1279,7 @@ describe("catchup, today's tooling", () => {
 				const got = run({...green, branch: `fabrikalfa/${suffix}`, cleanup: "clean"});
 				expect(got.code, got.text).toBe(0);
 				expect(got.keptHead).toBe(got.checkedTip);
+
 				for (const path of [
 					"exact box",
 					"exact box-gitdata",
@@ -1120,10 +1287,14 @@ describe("catchup, today's tooling", () => {
 					"later box-gitdata",
 					"catchup-900",
 					"driver",
-				])
+				]) {
 					expect(got.remaining).not.toContain(path);
-				for (const path of ["sibling box", "sibling box-gitdata", "sibling", "state"])
+				}
+
+				for (const path of ["sibling box", "sibling box-gitdata", "sibling", "state"]) {
 					expect(got.remaining).toContain(path);
+				}
+
 				expect(got.state).toBe("saved wait");
 				const removes = got.calls.filter(
 					(c) => c.cmd === "git" && c.args.includes("worktree") && c.args.includes("remove"),
@@ -1195,28 +1366,45 @@ describe("catchup, today's tooling", () => {
 					// The catch-up checkout holds nothing of MAIN's here, so whatever the trouble, EXIT
 					// force-removes it; only the branch's other worktrees and boxes wait on the trouble.
 					expect(has("catchup-900")).toBe(false);
+
 					if (trouble === "list") {
 						expect(got.text).toMatch(/^kept worktrees: [^\n]+$/m);
 						expect(got.keptHead).toBe(got.checkedTip);
-						for (const path of ["driver", "sibling"]) expect(has(path)).toBe(true);
-						for (const path of ["exact box", "later box"]) expect(has(path)).toBe(false);
+
+						for (const path of ["driver", "sibling"]) {
+							expect(has(path)).toBe(true);
+						}
+
+						for (const path of ["exact box", "later box"]) {
+							expect(has(path)).toBe(false);
+						}
 					}
+
 					if (trouble === "keep") {
 						expect(got.keptHead).toBe("");
 						expect(got.text).toMatch(/^kept worktree driver: [^\n]+$/m);
 						expect(got.text).toMatch(/^kept box exact box: [^\n]+$/m);
-						for (const path of ["driver", "exact box", "later box"]) expect(has(path)).toBe(true);
+
+						for (const path of ["driver", "exact box", "later box"]) {
+							expect(has(path)).toBe(true);
+						}
 					}
+
 					if (trouble === "unregistered") {
-						for (const path of ["driver", "exact box", "later box"]) expect(has(path)).toBe(false);
+						for (const path of ["driver", "exact box", "later box"]) {
+							expect(has(path)).toBe(false);
+						}
 					}
+
 					if (trouble === "twins") {
 						for (const path of ["driver", "driver twin"]) {
 							expect(has(path)).toBe(true);
 							expect(got.text).toMatch(new RegExp(`^kept worktree ${path}: [^\\n]+$`, "m"));
 						}
-						for (const path of ["catchup-900", "exact box", "later box"])
+
+						for (const path of ["catchup-900", "exact box", "later box"]) {
 							expect(has(path)).toBe(false);
+						}
 					}
 				}
 			}),
@@ -1233,17 +1421,26 @@ describe("catchup, today's tooling", () => {
 					const got = run({...green, failures});
 					const stopped = failures.findIndex((n) => n >= 3);
 					expect(got.code, got.text).toBe(stopped < 0 ? 0 : 1);
+
 					for (const [i, key] of reads.entries()) {
 						const expected = stopped >= 0 && i > stopped ? 0 : Math.min(failures[i]! + 1, 3);
 						expect(got.calls.filter((c) => c.key === key).length, key).toBe(expected);
 					}
+
 					const waits = failures
 						.slice(0, stopped < 0 ? 5 : stopped + 1)
 						.flatMap((n) => (n === 0 ? [] : n === 1 ? ["1"] : ["1", "2"]));
 					expect(got.calls.filter((c) => c.cmd === "sleep").map((c) => c.args[0])).toEqual(waits);
 					expect(merges(got.calls)).toHaveLength(stopped < 0 ? 1 : 0);
-					if (stopped > 0) expect(got.text).toContain(tip);
-					if (stopped >= 0) expect(got.text).toContain("gh");
+
+					if (stopped > 0) {
+						expect(got.text).toContain(tip);
+					}
+
+					if (stopped >= 0) {
+						expect(got.text).toContain("gh");
+					}
+
 					assertHead(got.calls);
 				},
 			),
@@ -1290,10 +1487,12 @@ describe("catchup, today's tooling", () => {
 					const merged = answer === "green" || answer === "startup";
 					expect(got.code, got.text).toBe(merged ? 0 : 1);
 					expect(merges(got.calls)).toHaveLength(merged ? 1 : 0);
+
 					for (const [i, key] of reads.entries()) {
 						const count = i > stop ? 0 : failures[i]! + 1 + (key === "checks" ? pending : 0);
 						expect(got.calls.filter((c) => c.key === key).length, key).toBe(count);
 					}
+
 					assertHead(got.calls);
 				},
 			),
@@ -1313,15 +1512,24 @@ describe("catchup, today's tooling", () => {
 				}),
 				({pending, steps}) => {
 					const clock = [0];
-					for (const step of steps) clock.push(clock.at(-1)! + step);
+
+					for (const step of steps) {
+						clock.push(clock.at(-1)! + step);
+					}
+
 					const seconds = clock.map((t) => (t === 3600 ? 3601 : t));
 					// The green answer is the check read after the pending ones.
 					const late = seconds[pending + 1]! >= 3600;
 					const got = run({...green, pending, clock: seconds});
 					expect(got.code, got.text).toBe(late ? 1 : 0);
 					expect(merges(got.calls)).toHaveLength(late ? 0 : 1);
-					if (late) expect(got.text).toMatch(/not done .* after an hour/);
-					else expect(got.text).not.toContain("after an hour");
+
+					if (late) {
+						expect(got.text).toMatch(/not done .* after an hour/);
+					} else {
+						expect(got.text).not.toContain("after an hour");
+					}
+
 					assertHead(got.calls);
 				},
 			),
@@ -1366,5 +1574,147 @@ describe("catchup, today's tooling", () => {
 			),
 			{...options, numRuns: 8},
 		);
+	});
+});
+
+// 0015: a merged PR closes only the tickets its description names, one line each, in our own
+// phrase. GitHub's keywords, trailers and other text never close one.
+describe("catchup closes the tickets a merged PR names, today's tooling", () => {
+	const phrase = /^[ \t]*fabrika close ticket [0-9]+[ \t]*$/;
+	const note = () =>
+		`Closed by the merge of https://github.com/fixture/repo/pull/900, merge commit ${merged}.\n`;
+	const closes = (posts: Post[]) => posts.filter((p) => p.sub !== "list");
+	const noise = fc.stringMatching(/^[^\r\n]{0,30}$/).filter((line) => !phrase.test(line));
+
+	// Plant: match the phrase anywhere on a line, or close the ticket the PR was signed for.
+	it("T410 property: a description with no phrase line closes nothing", () => {
+		fc.assert(
+			fc.property(fc.array(noise, {maxLength: 6}), (lines) => {
+				const got = run({...green, body: lines.join("\n"), tickets: {520: "open", 5: "open"}});
+				expect(got.code, got.text).toBe(0);
+				expect(got.posts).toEqual([]);
+				expect(got.text).toContain("pr 900: no fabrika close ticket line; closed no tickets");
+			}),
+			{seed: 4101, numRuns: 6},
+		);
+	});
+
+	// Plant: read GitHub's closing keywords, or a ticket trailer, as a close.
+	it("T410 vector: GitHub's nine closing keywords and ticket trailers close nothing (GitHub docs, linking a pull request to an issue)", () => {
+		const keywords = [
+			"close",
+			"closes",
+			"closed",
+			"fix",
+			"fixes",
+			"fixed",
+			"resolve",
+			"resolves",
+			"resolved",
+		];
+		const body = [
+			...keywords.flatMap((k) => [`${k} #5`, `${k[0]!.toUpperCase()}${k.slice(1)} #5`, `${k}: 5`]),
+			"Ticket: 5",
+			"Closes-ticket: 5",
+			"T5 build: the fix",
+		].join("\n");
+		const got = run({...green, body, tickets: {5: "open"}});
+		expect(got.code, got.text).toBe(0);
+		expect(got.posts).toEqual([]);
+	});
+
+	// Plant: accept the phrase with other text before or after it on the line.
+	it("T410 property: the phrase inside other text on its line closes nothing", () => {
+		fc.assert(
+			fc.property(fc.stringMatching(/^[a-z.:#`>*-]{1,8}$/), fc.boolean(), (other, before) => {
+				const line = before ? `${other} fabrika close ticket 5` : `fabrika close ticket 5${other}`;
+				const got = run({...green, body: `Done.\n${line}\n`, tickets: {5: "open"}});
+				expect(got.code, got.text).toBe(0);
+				expect(got.posts).toEqual([]);
+			}),
+			{seed: 4102, numRuns: 6},
+		);
+	});
+
+	// Plant: close only the first line's ticket, skip the comment, or close one already closed.
+	it("T410 property: each phrase line closes its open ticket once, with a comment naming the PR and the merge commit", () => {
+		fc.assert(
+			fc.property(
+				fc.uniqueArray(fc.integer({min: 1, max: 999}), {minLength: 1, maxLength: 3}),
+				fc.array(fc.boolean(), {minLength: 3, maxLength: 3}),
+				fc.array(fc.constantFrom("", " ", "\t", "  "), {minLength: 2, maxLength: 2}),
+				fc.boolean(),
+				fc.array(noise, {maxLength: 2}),
+				(named, open, [lead, trail], crlf, other) => {
+					const tickets = Object.fromEntries(
+						named.map((n, i) => [n, open[i] ? ("open" as const) : ("closed" as const)]),
+					);
+					const lines = [...other, ...named.map((n) => `${lead}fabrika close ticket ${n}${trail}`)];
+					// A repeated line closes its ticket once.
+					lines.push(`fabrika close ticket ${named[0]}`);
+					const got = run({...green, body: lines.join(crlf ? "\r\n" : "\n"), tickets});
+					expect(got.code, got.text).toBe(0);
+					expect(got.posts[0]).toMatchObject({sub: "list", as: "lead"});
+					expect(closes(got.posts)).toEqual(
+						named.flatMap((n) =>
+							tickets[n] === "open"
+								? [
+										{sub: "comment", ticket: n, as: "lead", home: got.posts[0]!.home, body: note()},
+										{sub: "close", ticket: n, as: "lead", home: got.posts[0]!.home},
+									]
+								: [],
+						),
+					);
+
+					for (const n of named) {
+						expect(got.text).toContain(
+							tickets[n] === "open"
+								? `pr 900: closed ticket ${n}\n`
+								: `pr 900: ticket ${n} is not open (already closed, or no such ticket); left as it is`,
+						);
+					}
+
+					expect(got.posts.every((p) => p.home.endsWith("/fh"))).toBe(true);
+				},
+			),
+			{seed: 4103, numRuns: 8},
+		);
+	});
+
+	// Plant: stop after the first ticket.
+	it("T410 scenario: two phrase lines close two tickets (the decision's own example)", () => {
+		const got = run({
+			...green,
+			body: "Builds the close.\n\nfabrika close ticket 410\nfabrika close ticket 411\n",
+			tickets: {410: "open", 411: "open"},
+		});
+		expect(got.code, got.text).toBe(0);
+		expect(closes(got.posts).map((p) => [p.sub, p.ticket])).toEqual([
+			["comment", 410],
+			["close", 410],
+			["comment", 411],
+			["close", 411],
+		]);
+		expect(got.text).toContain("pr 900: closed ticket 410\npr 900: closed ticket 411\n");
+	});
+
+	// Plant: read the description before the merge, or close when GitHub does not say MERGED or
+	// the merge commit is not on main.
+	it("T410 scenario: a refused, unconfirmed or off-main merge closes nothing", () => {
+		const body = "fabrika close ticket 5";
+		const refused = run({...green, mergeFails: true, body, tickets: {5: "open"}});
+		expect(refused.code, refused.text).toBe(1);
+		expect(refused.posts).toEqual([]);
+		expect(refused.calls.filter((c) => c.key === "landed" || c.key === "body")).toEqual([]);
+		const open = run({...green, landed: "OPEN", body, tickets: {5: "open"}});
+		expect(open.code, open.text).toBe(0);
+		expect(open.posts).toEqual([]);
+		expect(open.calls.filter((c) => c.key === "landed")).toHaveLength(10);
+		expect(open.calls.filter((c) => c.key === "body")).toEqual([]);
+		expect(open.text).toContain("pr 900: not confirmed merged (OPEN); closed no tickets");
+		const off = run({...green, offMain: true, body, tickets: {5: "open"}});
+		expect(off.code, off.text).toBe(0);
+		expect(off.posts).toEqual([]);
+		expect(off.text).toContain(`pr 900: merge commit ${merged} is not on main; closed no tickets`);
 	});
 });

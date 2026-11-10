@@ -24,9 +24,15 @@ const isTag = (key: Node): boolean =>
 
 export const noHandTag: CreateRule = {
 	create(context) {
-		if (pathIn(context) === EDGE) return {};
+		if (pathIn(context) === EDGE) {
+			return {};
+		}
+
 		const check = (node: Node, key: Node, computed: boolean) => {
-			if (computed || !isTag(key)) return;
+			if (computed || !isTag(key)) {
+				return;
+			}
+
 			context.report({
 				node,
 				message:
@@ -36,7 +42,10 @@ export const noHandTag: CreateRule = {
 		return {
 			Property(node) {
 				const {parent} = node as Node & {readonly parent: Node};
-				if (parent.type === "ObjectExpression") check(node, node.key, node.computed);
+
+				if (parent.type === "ObjectExpression") {
+					check(node, node.key, node.computed);
+				}
 			},
 			PropertyDefinition(node) {
 				check(node, node.key, node.computed);

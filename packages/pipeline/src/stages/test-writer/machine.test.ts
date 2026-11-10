@@ -20,6 +20,7 @@ import type {Written} from "./written.ts";
 // script (./scripted.ts). No agent, no box, no test runner.
 
 const intent = (step: string) => `tests/acme/widgets#7/1/${step}`;
+
 const cannot: Written = {
 	...GOOD,
 	answers: [
@@ -149,7 +150,11 @@ describe("the test writer", () => {
 			outcome: {kind: "stuck", why: "unchecked"},
 			report: {written: {answers: []}, tries: 1},
 		});
-		if (over.phase !== "over") throw new Error("over");
+
+		if (over.phase !== "over") {
+			throw new Error("over");
+		}
+
 		expect(over.report.problems).toHaveLength(2);
 	});
 
@@ -274,13 +279,21 @@ describe("the test writer", () => {
 			},
 		])("names a `$failure.why` cause in words among its problems", ({failure, words}) => {
 			const {over} = drive({drafts: [GOOD], run: "fail", failure});
-			if (over.phase !== "over") throw new Error("over");
+
+			if (over.phase !== "over") {
+				throw new Error("over");
+			}
+
 			expect(over.report.problems).toEqual([words]);
 		});
 
 		it("a bare `could_not_run` has no cause to put in words: its problems are empty", () => {
 			const {over} = drive({drafts: [GOOD], run: "fail"});
-			if (over.phase !== "over") throw new Error("over");
+
+			if (over.phase !== "over") {
+				throw new Error("over");
+			}
+
 			expect(over.report.problems).toEqual([]);
 		});
 
@@ -296,7 +309,10 @@ describe("the test writer", () => {
 			};
 			const [reading] = step({phase: "idle"}, {type: "start", ask: ASK, key: "k"});
 			const {over} = drive({drafts: [GOOD]});
-			for (const s of [reading, over]) expect(step(s, late)).toEqual([s, []]);
+
+			for (const s of [reading, over]) {
+				expect(step(s, late)).toEqual([s, []]);
+			}
 		});
 	});
 

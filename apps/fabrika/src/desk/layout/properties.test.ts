@@ -30,6 +30,7 @@ type BuildStep =
 const orientation = fc.constantFrom<Orientation>("horizontal", "vertical");
 
 const splitOf = fc.record({kind: fc.constant("split" as const), at: fc.nat(), orientation});
+
 const onTile = <K extends "turn" | "fold" | "unfold">(kind: K) =>
 	fc.record({kind: fc.constant(kind), at: fc.nat()});
 
@@ -49,15 +50,23 @@ function build(steps: readonly BuildStep[]): LayoutTree {
 	steps.forEach((step, index) => {
 		const all = [...tiles(tree.root)];
 		const target = all[step.at % all.length];
-		if (!target) return;
-		if (step.kind === "split")
+
+		if (!target) {
+			return;
+		}
+
+		if (step.kind === "split") {
 			tree = split(tree, target.id, step.orientation, {
 				tile: `t${index + 1}`,
 				container: `c${index + 1}`,
 			});
-		else if (step.kind === "turn") tree = turn(tree, target.id);
-		else if (step.kind === "fold") tree = fold(tree, target.id);
-		else tree = unfold(tree, target.id);
+		} else if (step.kind === "turn") {
+			tree = turn(tree, target.id);
+		} else if (step.kind === "fold") {
+			tree = fold(tree, target.id);
+		} else {
+			tree = unfold(tree, target.id);
+		}
 	});
 	return tree;
 }
@@ -72,9 +81,15 @@ const picks = fc.tuple(trees, fc.nat()).map(([tree, pick]) => {
 });
 
 function* containers(node: LayoutNode): Generator<ContainerNode> {
-	if (node.tag === "tile") return;
+	if (node.tag === "tile") {
+		return;
+	}
+
 	yield node;
-	for (const child of node.children) yield* containers(child);
+
+	for (const child of node.children) {
+		yield* containers(child);
+	}
 }
 
 interface Resize {
@@ -143,7 +158,11 @@ const sum = (values: readonly number[]) => values.reduce((total, value) => total
 
 const sizesOf = (tree: LayoutTree, id: ContainerId): Readonly<Record<NodeId, number>> => {
 	const container = [...containers(tree.root)].find((candidate) => candidate.id === id);
-	if (container === undefined) throw new Error(`test setup: no container "${id}"`);
+
+	if (container === undefined) {
+		throw new Error(`test setup: no container "${id}"`);
+	}
+
 	return container.sizes;
 };
 
@@ -153,13 +172,22 @@ const sizesOf = (tree: LayoutTree, id: ContainerId): Readonly<Record<NodeId, num
  * decimals: the scaling in `resolveSizes` is float arithmetic.
  */
 function normalise(node: LayoutNode): unknown {
-	if (node.tag === "tile") return node;
+	if (node.tag === "tile") {
+		return node;
+	}
+
 	const sizes: Record<string, number> = {};
+
 	for (const [id, value] of Object.entries(node.sizes)) {
 		sizes[id] = Number(value.toFixed(6));
 	}
+
 	const children = node.children.map(normalise);
-	if (node.children.length === 1) return {tag: "container", id: node.id, children, sizes};
+
+	if (node.children.length === 1) {
+		return {tag: "container", id: node.id, children, sizes};
+	}
+
 	return {...node, children, sizes};
 }
 
@@ -214,7 +242,11 @@ describe("layout properties", () => {
 		fc.assert(
 			fc.property(picks, ({tree, tile}) => {
 				const folded = fold(tree, tile);
-				if (folded === tree) return;
+
+				if (folded === tree) {
+					return;
+				}
+
 				expect(unfold(folded, tile)).toEqual({...tree, zoomed: folded.zoomed});
 			}),
 		);
@@ -236,7 +268,10 @@ describe("layout properties", () => {
 		fc.assert(
 			fc.property(trees, (tree) => {
 				for (const container of containers(tree.root)) {
-					if (isFolded(container)) continue;
+					if (isFolded(container)) {
+						continue;
+					}
+
 					expect(sum(Object.values(openShares(container)))).toBeCloseTo(1, 6);
 				}
 			}),
@@ -261,8 +296,14 @@ describe("layout properties", () => {
 				const named = Object.keys(sizes);
 				const rest = container.children.filter((child) => !named.includes(child.id));
 				const left = (100 - sum(Object.values(sizes))) / rest.length;
-				for (const id of named) expect(resized[id]).toBeCloseTo(sizes[id] ?? Number.NaN, 6);
-				for (const child of rest) expect(resized[child.id]).toBeCloseTo(left, 6);
+
+				for (const id of named) {
+					expect(resized[id]).toBeCloseTo(sizes[id] ?? Number.NaN, 6);
+				}
+
+				for (const child of rest) {
+					expect(resized[child.id]).toBeCloseTo(left, 6);
+				}
 			}),
 		);
 	});
@@ -274,6 +315,7 @@ describe("layout properties", () => {
 				expect(total).toBeGreaterThan(100);
 				const resized = sizesOf(resize(tree, container.id, sizes), container.id);
 				expect(sum(Object.values(resized))).toBeCloseTo(100, 6);
+
 				for (const child of container.children) {
 					expect(resized[child.id]).toBeCloseTo(((sizes[child.id] ?? 0) * 100) / total, 6);
 				}
@@ -288,7 +330,11 @@ describe("layout properties", () => {
 				fc.constantFrom("left" as const, "right" as const, "up" as const, "down" as const),
 				({tree, tile}, direction) => {
 					const landed = findSibling(tree, tile, direction);
-					if (landed === null) return;
+
+					if (landed === null) {
+						return;
+					}
+
 					expect(order(tree)).toContain(landed.id);
 					expect(landed.id).not.toBe(tile);
 				},

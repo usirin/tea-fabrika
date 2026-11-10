@@ -59,12 +59,17 @@ export const jsonJournal = <S>(): Schema.Codec<S, unknown> =>
 export const JOB_ID = "job";
 
 const OutcomeRow = Schema.fromJsonString(Schema.Struct({outcome: Schema.Unknown}));
+
 /** A stage's outcome, read from the ledger. `null`: it has none yet. */
 export const readOutcome = (name: string) =>
 	Effect.gen(function* () {
 		const rows = yield* (yield* Ledger).readStream(outcomeOf(name));
 		const row = rows.find((r) => r.id === "outcome");
-		if (row === undefined) return null;
+
+		if (row === undefined) {
+			return null;
+		}
+
 		const data = Schema.decodeUnknownExit(OutcomeRow)(row.data);
 		return Exit.isSuccess(data) ? {outcome: data.value.outcome, writer: row.writer} : null;
 	});
@@ -95,6 +100,7 @@ export const hostedStage = <S, M extends {readonly type: string}, J, R>(
 					yield* note("already_over");
 					return yield* exitNormal;
 				}
+
 				const decodeJob = Schema.decodeUnknownExit(Schema.fromJsonString(stage.job));
 				const job = yield* Effect.gen(function* () {
 					for (;;) {
@@ -103,7 +109,11 @@ export const hostedStage = <S, M extends {readonly type: string}, J, R>(
 							.pipe(Effect.orElseSucceed(() => []));
 						const row = rows.find((r) => r.id === JOB_ID);
 						const decoded = row === undefined ? null : decodeJob(row.data);
-						if (decoded !== null && Exit.isSuccess(decoded)) return decoded.value;
+
+						if (decoded !== null && Exit.isSuccess(decoded)) {
+							return decoded.value;
+						}
+
 						yield* Effect.sleep(SPACING);
 					}
 				});
@@ -116,6 +126,7 @@ export const hostedStage = <S, M extends {readonly type: string}, J, R>(
 					);
 					yield* note(`agent_${started.how}`);
 				}
+
 				const idempotency = yield* gate({
 					name,
 					fence,
@@ -129,11 +140,13 @@ export const hostedStage = <S, M extends {readonly type: string}, J, R>(
 				const runtime = yield* booting.ready.pipe(Effect.orDie);
 				yield* serve({inbox: () => Effect.void}).pipe(Effect.forkScoped);
 				const now = runtime.getState();
+
 				if (!stage.over(now)) {
 					const first = stage.idle(now) ? stage.start(job, name) : stage.resume;
 					yield* note(first.type === "resume" ? "resumed" : "started");
 					yield* runtime.dispatch(first).pipe(Effect.orDie);
 				}
+
 				const end = stage.over(now) ? now : yield* runtime.done();
 				const outcome = yield* stage
 					.finish(end, job, name)
@@ -148,21 +161,29 @@ export const hostedStage = <S, M extends {readonly type: string}, J, R>(
 						fence,
 					),
 				).pipe(Effect.result);
+
 				// A lost lease: the next holder writes it.
-				if (wrote._tag === "Failure") return yield* Effect.never;
+				if (wrote._tag === "Failure") {
+					return yield* Effect.never;
+				}
+
 				yield* Effect.sync(() => say({ev: "outcome", name, fence, outcome}));
+
 				if (stage.agent !== null) {
 					const child = yield* self.reads
 						.processInfo(agentOf(name))
 						.pipe(Effect.orElseSucceed(() => null));
-					if (child !== null && child.down === 0)
+
+					if (child !== null && child.down === 0) {
 						yield* self.exitChild(
 							agentOf(name),
 							child.incarnation,
 							"shutdown",
 							"its stage is over",
 						);
+					}
 				}
+
 				return yield* exitNormal;
 			}).pipe(Effect.scoped),
 	});

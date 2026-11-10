@@ -15,8 +15,12 @@ export const scriptReads = (tree) => {
 		),
 	}));
 	const missing = [];
+
 	for (const [test, text] of tree) {
-		if (!test.endsWith(".test.ts")) continue;
+		if (!test.endsWith(".test.ts")) {
+			continue;
+		}
+
 		// Parse imports so comments and fixture strings cannot declare a dependency.
 		const parsed = buildSync({
 			stdin: {contents: text, sourcefile: test, loader: "ts"},
@@ -36,15 +40,24 @@ export const scriptReads = (tree) => {
 		);
 		const seen = new Set([test]);
 		const queue = [test];
+
 		for (const via of queue) {
 			const source = tree.get(via) ?? "";
+
 			for (const {path, word} of names) {
-				if (seen.has(path) || !word.test(source)) continue;
+				if (seen.has(path) || !word.test(source)) {
+					continue;
+				}
+
 				seen.add(path);
 				queue.push(path);
-				if (!declared.has(path)) missing.push({test, path, via});
+
+				if (!declared.has(path)) {
+					missing.push({test, path, via});
+				}
 			}
 		}
 	}
+
 	return missing;
 };

@@ -523,10 +523,12 @@ describe("the push stage's push of the lane's branch", () => {
 				const commit = (path: string) => lane.commit(tree, [{path, text: `${path}\n`}], path);
 				yield* push.push(TICKET, NUMBER, yield* commit("a.md"));
 				const persons: string[] = [];
+
 				for (const path of ["b.md", "c.md"]) {
 					persons.push(yield* Effect.sync(() => personPushes(seed, `before ${path}\n`)));
 					yield* push.push(TICKET, NUMBER, yield* commit(path));
 				}
+
 				const ticket = yield* (yield* Tickets).read(NUMBER);
 				const lines = factsOf(ticket.timeline, "commented")
 					.map((c) => String(c.body))

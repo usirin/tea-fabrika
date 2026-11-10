@@ -140,6 +140,7 @@ it("generated sharding assigns once, ignores input order and balances measured s
 				const machines = assign(files, count);
 				expect(machines).toHaveLength(files.length);
 				const running = Array.from({length: count}, () => 0);
+
 				for (const {file, index} of files
 					.map((file, index) => ({file, index}))
 					.toSorted(
@@ -151,6 +152,7 @@ it("generated sharding assigns once, ignores input order and balances measured s
 					expect(running[machine]).toBe(Math.min(...running));
 					running[machine] = running[machine]! + file.seconds;
 				}
+
 				expect(machines.every((m) => m >= 0 && m < count && Number.isInteger(m))).toBe(true);
 				const first = Object.fromEntries(files.map((f, i) => [f.path, machines[i]]));
 				const reversed = files.toReversed();
@@ -276,9 +278,11 @@ describe("Shards", () => {
 			.filter((name) => /^lane\..*\.test\.ts$/.test(name))
 			.map((name) => `${LANES}/${name}`);
 		const kept: string[][] = [];
+
 		for (const index of [1, 2, 3, 4, 5, 6]) {
 			// This repo's config, as `vitest run --shard k/6` reads it; nothing runs.
 			const vitest = await createVitest("test", {root: ROOT, watch: false, shard: `${index}/6`});
+
 			try {
 				const specs = await vitest.globTestSpecifications();
 				const Sequencer = vitest.config.sequence.sequencer;
@@ -288,6 +292,7 @@ describe("Shards", () => {
 				await vitest.close();
 			}
 		}
+
 		expect(
 			kept
 				.flat()

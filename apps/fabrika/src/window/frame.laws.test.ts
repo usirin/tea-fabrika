@@ -10,6 +10,7 @@ import {type FrameProps, Over, TopBar} from "./frame.tsx";
 import type {PaletteProps} from "./pop.tsx";
 
 const palette = vi.hoisted(() => ({props: null as PaletteProps | null}));
+
 vi.mock("./pop.tsx", async (original) => {
 	const real = await original<typeof import("./pop.tsx")>();
 	return {
@@ -23,12 +24,21 @@ vi.mock("./pop.tsx", async (original) => {
 
 const fold = (...msgs: DeskMsg[]): Open => {
 	let desk = deskMachine.init(null, undefined)[0];
-	for (const msg of msgs) desk = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, desk, msg)[0];
-	if (desk.at !== "open") throw new Error("desk ended");
+
+	for (const msg of msgs) {
+		desk = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, desk, msg)[0];
+	}
+
+	if (desk.at !== "open") {
+		throw new Error("desk ended");
+	}
+
 	return desk;
 };
+
 const host = {pid: 42, since: 0, build: "current", ledger: {kind: "own"}, agents: []} as const;
 const asks: AsksNow = {asks: [], later: [], reach: "ok", why: null};
+
 const props = (over: Partial<FrameProps> = {}): FrameProps => ({
 	desk: fold(),
 	frame: FRAME,
@@ -46,6 +56,7 @@ const props = (over: Partial<FrameProps> = {}): FrameProps => ({
 	step: () => {},
 	...over,
 });
+
 const show = (over: Partial<FrameProps>) => renderToStaticMarkup(createElement(Over, props(over)));
 
 describe("today's frame display laws", () => {
@@ -86,11 +97,21 @@ describe("today's frame display laws", () => {
 		const words: unknown[] = [];
 		const walk = (node: unknown): void => {
 			if (Array.isArray(node)) {
-				for (const child of node) walk(child);
+				for (const child of node) {
+					walk(child);
+				}
+
 				return;
 			}
-			if (!isValidElement<Record<string, unknown>>(node)) return;
-			if (node.props.name === "ticket") words.push(node.props.word);
+
+			if (!isValidElement<Record<string, unknown>>(node)) {
+				return;
+			}
+
+			if (node.props.name === "ticket") {
+				words.push(node.props.word);
+			}
+
 			walk(node.props.children);
 		};
 		function Read(): ReactNode {
@@ -155,7 +176,11 @@ describe("today's frame display laws", () => {
 		expect(show({frame, desk: null})).toContain('<span class="chip">Keyboard shortcuts</span>');
 		show({frame, step: (msg) => stepped.push(msg), toHost: (msg) => sent.push(msg)});
 		const drawn = palette.props;
-		if (drawn === null) throw new Error("palette did not render");
+
+		if (drawn === null) {
+			throw new Error("palette did not render");
+		}
+
 		const options = drawn.sections.flatMap((section) => section.options);
 		const zoom = options.findIndex((option) => option.name === "zoom");
 		expect(zoom).toBeGreaterThanOrEqual(0);

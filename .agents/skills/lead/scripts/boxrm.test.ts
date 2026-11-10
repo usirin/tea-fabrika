@@ -1,4 +1,5 @@
 import "./box.sh?raw";
+import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
 import "./catchup.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -46,11 +47,13 @@ const {parse} = createRequire(new URL("../../../../.github/ci/package.json", imp
 const workflow = parse(
 	readFileSync(join(import.meta.dirname, "../../../../.github/workflows/check.yaml"), "utf8"),
 );
+
 const nextNames: string[] = workflow.jobs.next.strategy.matrix.shard.map(
 	(index: number) => `next (${index})`,
 );
 
 const script = join(import.meta.dirname, "box.sh");
+
 const storageFiles = (root: string) => {
 	const files: Record<string, string> = {};
 	const visit = (path: string, name: string) => {
@@ -60,12 +63,17 @@ const storageFiles = (root: string) => {
 			: info.isFile()
 				? `file:${readFileSync(path).toString("base64")}`
 				: "directory";
-		if (info.isDirectory())
-			for (const child of readdirSync(path)) visit(join(path, child), `${name}/${child}`);
+
+		if (info.isDirectory()) {
+			for (const child of readdirSync(path)) {
+				visit(join(path, child), `${name}/${child}`);
+			}
+		}
 	};
 	visit(root, ".");
 	return files;
 };
+
 const input = fc.record({
 	name: fc.stringMatching(/^[a-z]{2,8}$/),
 	value: fc.stringMatching(/^[a-z]{1,12}$/),
@@ -73,8 +81,10 @@ const input = fc.record({
 	depth: fc.integer({min: 1, max: 3}),
 	descendant: fc.boolean(),
 });
+
 type Input = {name: string; value: string; space: boolean; depth: number; descendant: boolean};
 type Remote = {branches: string[]; local: number};
+
 const fixture = (
 	v: Input,
 	body: (f: ReturnType<typeof setup>) => void,
@@ -82,12 +92,14 @@ const fixture = (
 	remote?: Remote,
 ) => {
 	const dir = mkdtempSync(join(tmpdir(), "box-law-"));
+
 	try {
 		body(setup(v, clone, dir, remote));
 	} finally {
 		rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
 	const main = join(dir, "main"),
 		boxes = join(dir, "boxes");
@@ -95,7 +107,11 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
 	const work = join(boxes, name),
 		data = `${work}-gitdata`,
 		home = join(dir, "home");
-	for (const path of [main, boxes, home]) mkdirSync(path);
+
+	for (const path of [main, boxes, home]) {
+		mkdirSync(path);
+	}
+
 	const env = {
 		...process.env,
 		HOME: home,
@@ -126,24 +142,31 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
 	writeFileSync(join(main, ".gitignore"), "node_modules/\n");
 	git(main, "add", ".");
 	git(main, "commit", "-qm", "base");
+
 	if (remote) {
 		const base = git(main, "rev-parse", "HEAD"),
 			tree = git(main, "rev-parse", "HEAD^{tree}");
+
 		for (const branch of remote.branches) {
 			const tip = git(main, "commit-tree", tree, "-p", base, "-m", `${v.value} ${branch}`);
 			git(main, "update-ref", `refs/heads/${branch}`, tip);
 		}
 	}
+
 	const origin = join(dir, "origin.git");
 	git(main, "clone", "-q", "--bare", "--no-hardlinks", main, origin);
+
 	if (remote) {
 		rmSync(main, {recursive: true});
 		git(dir, "clone", "-q", "--no-hardlinks", origin, main);
 		git(main, "config", "user.name", "Fixture");
 		git(main, "config", "user.email", "fixture@example.test");
-		for (const branch of remote.branches.slice(0, remote.local))
+
+		for (const branch of remote.branches.slice(0, remote.local)) {
 			git(main, "branch", branch, `origin/${branch}`);
+		}
 	}
+
 	if (clone) {
 		git(main, "clone", "-q", "--reference", main, `--separate-git-dir=${data}`, origin, work);
 	} else {
@@ -155,6 +178,7 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
 		git(work, "fetch", "-q", "origin", "main");
 		git(work, "checkout", "-q", "-B", "main", "FETCH_HEAD");
 	}
+
 	git(work, "config", "user.name", "Fixture");
 	git(work, "config", "user.email", "fixture@example.test");
 	expect(git(main, "remote")).toBe(remote ? "origin" : "");
@@ -165,6 +189,7 @@ const setup = (v: Input, clone: boolean, dir: string, remote?: Remote) => {
 		entry: "direct" | "catchup" = "direct",
 	) => {
 		let command = [script, "rm", chosen];
+
 		if (entry === "catchup") {
 			const bin = join(dir, "cleanup-bin");
 			mkdirSync(bin, {recursive: true});
@@ -177,7 +202,10 @@ const {spawnSync} = require("node:child_process");
 const cmd = require("node:path").basename(process.argv[1]);
 const args = process.argv.slice(2);
 if (cmd === "gh") {
-  if (args[0] === "pr" && args[1] === "view") console.log("main");
+  // After the merge (0015): merged at the tip, with a description that names no ticket.
+  if (args[0] === "pr" && args[1] === "view" && args.includes("state,mergeCommit")) console.log("MERGED " + ${JSON.stringify(tip)});
+  else if (args[0] === "pr" && args[1] === "view" && args.includes("body")) console.log("");
+  else if (args[0] === "pr" && args[1] === "view") console.log("main");
   else if (args[0] === "pr" && args[1] === "merge") process.exit(0);
   else if (args[0] === "run") console.log("commits\\tcheck\\t2026-11-08T00:00:00Z commits: 1 commits, ticket 318");
   else if (args[1].includes("check_name=")) console.log("github-actions");
@@ -195,11 +223,15 @@ if (cmd === "gh") {
   }
 } else process.exit(1);
 `;
-			for (const tool of ["gh", "git"])
+
+			for (const tool of ["gh", "git"]) {
 				writeFileSync(join(bin, tool), `#!${process.execPath}\n${stub}`, {mode: 0o755});
+			}
+
 			extra = {...extra, PATH: `${bin}:/usr/bin:/bin`};
 			command = [join(import.meta.dirname, "catchup.sh"), "900", "318"];
 		}
+
 		const ran = spawnSync("sh", command, {
 			cwd: main,
 			encoding: "utf8",
@@ -218,6 +250,7 @@ if (cmd === "gh") {
 	const retained = (ref: string) => git(main, "fetch", "-q", data, `${ref}:refs/keep/${v.name}`);
 	return {dir, main, boxes, name, work, data, git, run, commit, retained, env};
 };
+
 const kept = (f: ReturnType<typeof setup>, code = 1) => {
 	const got = f.run();
 	expect(got.code, got.text).toBe(code);
@@ -261,10 +294,18 @@ describe("box rm, today's tooling", () => {
 						fixture(v, (f) => {
 							const original = join(f.main, ".git");
 							f.git(f.main, "pack-refs", "--all");
-							if (kind === "objects/pack") f.git(f.main, "repack", "-ad");
-							if (kind === "refs") f.git(f.main, "update-ref", "refs/keep/storage", "HEAD");
+
+							if (kind === "objects/pack") {
+								f.git(f.main, "repack", "-ad");
+							}
+
+							if (kind === "refs") {
+								f.git(f.main, "update-ref", "refs/keep/storage", "HEAD");
+							}
+
 							const history = f.git(f.main, "rev-list", "--objects", "--all");
 							let root = original;
+
 							if (rootKind === "common") {
 								root = join(f.dir, "main-common");
 								cpSync(original, root, {recursive: true});
@@ -273,6 +314,7 @@ describe("box rm, today's tooling", () => {
 									`${path.relative ? relative(original, root) : root}\n`,
 								);
 							}
+
 							if (rootKind === "alternate") {
 								root = join(f.dir, "main-alternate");
 								renameSync(join(original, "objects"), root);
@@ -282,6 +324,7 @@ describe("box rm, today's tooling", () => {
 									`${path.relative ? relative(join(original, "objects"), root) : root}\n`,
 								);
 							}
+
 							const source = join(
 								root,
 								kind === "loose"
@@ -292,12 +335,17 @@ describe("box rm, today's tooling", () => {
 											? kind.replace(/^objects\//, "")
 											: kind,
 							);
+
 							if (!existsSync(source)) {
 								mkdirSync(join(source, ".."), {recursive: true});
-								if (kind === "generated-file" || kind === "packed-refs" || kind === "index")
+
+								if (kind === "generated-file" || kind === "packed-refs" || kind === "index") {
 									writeFileSync(source, v.value);
-								else mkdirSync(source);
+								} else {
+									mkdirSync(source);
+								}
 							}
+
 							const target = join(
 								data ? join(f.data, "objects/info") : join(f.work, "node_modules"),
 								...path.parts,
@@ -307,7 +355,11 @@ describe("box rm, today's tooling", () => {
 							const stored = path.through ? join(f.dir, "outside-storage") : target;
 							renameSync(source, stored);
 							const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
-							if (path.through) symlinkSync(name(join(target, ".."), stored), target);
+
+							if (path.through) {
+								symlinkSync(name(join(target, ".."), stored), target);
+							}
+
 							symlinkSync(name(join(source, ".."), target), source);
 							const saved = storageFiles(stored);
 							expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
@@ -399,6 +451,7 @@ describe("box rm, today's tooling", () => {
 							);
 							const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
 							mkdirSync(join(target, ".."), {recursive: true});
+
 							if (binding === "gitdir-root") {
 								rmSync(original, {recursive: true});
 								writeFileSync(join(f.main, ".git"), `gitdir: ${name(f.main, f.data)}\n`);
@@ -427,17 +480,28 @@ describe("box rm, today's tooling", () => {
 									: join(original, "objects");
 								const stored = through ? join(f.dir, "outside-storage") : target;
 								renameSync(source, stored);
-								if (through) symlinkSync(name(join(target, ".."), stored), target);
-								if (binding === "gitdir")
+
+								if (through) {
+									symlinkSync(name(join(target, ".."), stored), target);
+								}
+
+								if (binding === "gitdir") {
 									writeFileSync(original, `gitdir: ${name(f.main, target)}\n`);
+								}
+
 								if (binding === "commondir") {
 									mkdirSync(original);
 									writeFileSync(join(original, "HEAD"), readFileSync(join(stored, "HEAD")));
 									writeFileSync(join(original, "commondir"), `${name(original, target)}\n`);
 								}
-								if (binding === "objects") symlinkSync(name(original, target), source);
+
+								if (binding === "objects") {
+									symlinkSync(name(original, target), source);
+								}
+
 								if (binding === "alternates") {
 									let next = target;
+
 									for (let i = 0; i < path.hops; i++) {
 										const objects = i === path.hops - 1 ? source : join(f.dir, `alternate-${i}`);
 										mkdirSync(join(objects, "info"), {recursive: true});
@@ -446,6 +510,7 @@ describe("box rm, today's tooling", () => {
 									}
 								}
 							}
+
 							expect(f.git(f.main, "rev-list", "--objects", "--all")).toBe(history);
 							const got = f.run(f.name, {}, entry);
 							expect(got.code, got.text).toBe(entry === "direct" ? 1 : 0);
@@ -501,6 +566,7 @@ describe("box rm, today's tooling", () => {
 								return {oid: made.stdout.trim(), text};
 							};
 							let target = commit;
+
 							for (let i = 0; i < (kind === "nested" ? annotation.depth : 1); i++) {
 								const made = tag(
 									target,
@@ -511,26 +577,36 @@ describe("box rm, today's tooling", () => {
 								raw.push(made.text);
 								target = made.oid;
 							}
+
 							const ref = `refs/tags/${v.name}`;
 							f.git(f.work, "update-ref", ref, target);
 							const retainTag = (source: string) =>
 								f.git(f.main, "fetch", "-q", "--no-tags", f.data, `${source}:refs/keep/${v.name}`);
+
 							if (retention === "retained" || retention === "objects-only") {
 								retainTag(ref);
-								if (retention === "objects-only")
+
+								if (retention === "objects-only") {
 									f.git(f.main, "update-ref", "-d", `refs/keep/${v.name}`);
+								}
 							}
+
 							if (retention === "different-tag") {
 								const other = tag(commit, annotation.messages.join("\n"), false, `other-${v.name}`);
 								f.git(f.work, "update-ref", `refs/tags/other-${v.name}`, other.oid);
 								retainTag(`refs/tags/other-${v.name}`);
 							}
-							if (retention === "inner-only") retainTag(objects.at(-2)!);
+
+							if (retention === "inner-only") {
+								retainTag(objects.at(-2)!);
+							}
+
 							const reachable = f
 								.git(f.main, "rev-list", "--objects", "--all")
 								.split("\n")
 								.map((line) => line.split(" ")[0]);
 							expect(reachable.includes(target)).toBe(retention === "retained");
+
 							if (retention === "commit-only") {
 								const absent = spawnSync("/usr/bin/git", ["-C", f.main, "cat-file", "-e", target], {
 									env: f.env,
@@ -538,6 +614,7 @@ describe("box rm, today's tooling", () => {
 								});
 								expect(absent.status).not.toBe(0);
 							}
+
 							const got = f.run(f.name, {}, entry);
 							const remove = retention === "retained";
 							expect(got.code, got.text).toBe(entry === "catchup" || remove ? 0 : 1);
@@ -549,6 +626,7 @@ describe("box rm, today's tooling", () => {
 							);
 							expect(existsSync(f.work)).toBe(!remove);
 							expect(existsSync(f.data)).toBe(!remove);
+
 							for (const [i, oid] of objects.entries()) {
 								const at = remove ? f.main : f.work;
 								const read = spawnSync("/usr/bin/git", ["-C", at, "cat-file", "tag", oid], {
@@ -589,8 +667,11 @@ describe("box rm, today's tooling", () => {
 								tree = f.git(f.main, "rev-parse", "HEAD^{tree}"),
 								changed = remote.branches[remote.branches.length - 1]!;
 							const packed = readFileSync(join(f.data, "packed-refs"), "utf8");
-							for (const name of remote.branches)
+
+							for (const name of remote.branches) {
 								expect(packed).toContain(` refs/remotes/origin/${name}\n`);
+							}
+
 							expect(f.git(f.main, "for-each-ref", "--format=%(refname)", "refs/heads")).toBe(
 								["main", ...remote.branches.slice(0, remote.local)]
 									.sort()
@@ -598,11 +679,14 @@ describe("box rm, today's tooling", () => {
 									.join("\n"),
 							);
 							f.git(f.work, "checkout", "-qb", branch);
+
 							for (let i = 0; i < v.depth; i++) {
 								writeFileSync(join(f.work, "tracked"), `${v.value} step ${i}`);
 								f.commit();
 							}
+
 							const step = f.git(f.work, "rev-parse", "HEAD");
+
 							// Move origin/main and one topic after both clones. The topic's older packed
 							// tip, loose tip and remote reflog are all fetched copies, absent from MAIN's
 							// retained history. FETCH_HEAD records every remote branch, too.
@@ -611,6 +695,7 @@ describe("box rm, today's tooling", () => {
 									tip = f.git(f.main, "commit-tree", tree, "-p", parent, "-m", `advance ${name}`);
 								f.git(origin, "fetch", "-q", f.main, `${tip}:refs/heads/${name}`);
 							}
+
 							f.git(f.main, "fetch", "-q", "origin");
 							f.git(f.work, "fetch", "-q", "origin");
 							f.git(f.work, "merge", "-qm", `${v.value} merge`, "origin/main");
@@ -626,11 +711,13 @@ describe("box rm, today's tooling", () => {
 							const fetchHead = readFileSync(join(f.data, "FETCH_HEAD"), "utf8");
 							expect(fetchHead.trim().split("\n")).toHaveLength(remote.branches.length + 1);
 							expect(fetchHead).toContain(fetched);
+
 							if (worktreeConfig) {
 								f.git(f.work, "config", "extensions.worktreeConfig", "true");
 								f.git(f.work, "config", "--worktree", "user.name", "Fixture");
 								expect(existsSync(join(f.data, "config.worktree"))).toBe(true);
 							}
+
 							f.retained(`refs/heads/${branch}`);
 							expect(
 								f
@@ -656,10 +743,12 @@ describe("box rm, today's tooling", () => {
 			fc.property(input, (v) =>
 				fixture(v, (f) => {
 					const base = f.git(f.work, "rev-parse", "HEAD");
+
 					for (let i = 0; i < v.depth; i++) {
 						writeFileSync(join(f.work, "tracked"), `${v.value} saved ${i}`);
 						f.commit();
 					}
+
 					const saved = f.git(f.work, "rev-parse", "HEAD");
 					f.git(f.work, "checkout", "-q", "--detach", base);
 					f.git(f.work, "branch", "-f", "main", base);
@@ -687,10 +776,12 @@ describe("box rm, today's tooling", () => {
 			fc.property(input, (v) =>
 				fixture(v, (f) => {
 					const base = f.git(f.work, "rev-parse", "HEAD");
+
 					for (let i = 0; i < v.depth; i++) {
 						writeFileSync(join(f.work, "tracked"), `${v.value} saved ${i}`);
 						f.commit();
 					}
+
 					const saved = f.git(f.work, "rev-parse", "HEAD");
 					f.git(f.work, "checkout", "-q", "--detach", base);
 					f.git(f.work, "branch", "-f", "main", base);
@@ -699,7 +790,11 @@ describe("box rm, today's tooling", () => {
 						path = join(f.data, "logs", name);
 					f.git(f.work, "update-ref", "--create-reflog", name, saved);
 					f.git(f.work, "update-ref", "--create-reflog", name, base);
-					if (name !== "HEAD") rmSync(join(f.data, name));
+
+					if (name !== "HEAD") {
+						rmSync(join(f.data, name));
+					}
+
 					expect(f.git(f.work, "rev-list", "HEAD", "--all").split("\n")).not.toContain(saved);
 					expect(existsSync(join(f.data, "ORIG_HEAD"))).toBe(false);
 					expect(readFileSync(path, "utf8")).toContain(saved);
@@ -747,15 +842,18 @@ describe("box rm, today's tooling", () => {
 						const tip = f.commit();
 						f.git(f.work, "checkout", "-q", "--detach", base);
 						f.git(f.work, "branch", "-f", "main", base);
-						if (kind === "annotated")
+
+						if (kind === "annotated") {
 							f.git(f.work, "tag", "-a", parts.join("/"), tip, "-m", v.value);
-						else
+						} else {
 							f.git(
 								f.work,
 								"update-ref",
 								`refs/${kind === "lightweight" ? "tags" : parts.join("/")}/${v.name}`,
 								tip,
 							);
+						}
+
 						kept(f);
 					}),
 				),
@@ -770,12 +868,14 @@ describe("box rm, today's tooling", () => {
 			fc.property(input, fc.integer({min: 2, max: 9}), fc.nat(), (v, depth, choice) =>
 				fixture(v, (f) => {
 					const missing = 1 + (choice % (depth - 1));
+
 					for (let i = 0; i < depth; i++) {
 						writeFileSync(join(f.work, "tracked"), `${v.value} ${i}`);
 						f.git(f.work, "stash", "push", "-qm", `${v.name}-${i}`);
 					}
-					for (let i = 0; i < depth; i++)
-						if (i !== missing)
+
+					for (let i = 0; i < depth; i++) {
+						if (i !== missing) {
 							f.git(
 								f.main,
 								"fetch",
@@ -783,6 +883,9 @@ describe("box rm, today's tooling", () => {
 								f.data,
 								`${f.git(f.work, "rev-parse", `stash@{${i}}`)}:refs/keep/stash-${i}`,
 							);
+						}
+					}
+
 					kept(f);
 				}),
 			),
@@ -833,12 +936,21 @@ describe("box rm, today's tooling", () => {
 					for (let i = 0; i < total; i++) {
 						const linked = join(inside ? f.work : f.dir, `${v.name}-linked-${i}`);
 						f.git(f.work, "worktree", "add", "-q", "--detach", linked, "HEAD");
-						if (i !== total - 1) continue;
+
+						if (i !== total - 1) {
+							continue;
+						}
+
 						writeFileSync(join(linked, "tracked"), `${v.value} saved`);
 						f.git(linked, "add", "tracked");
-						if (kind === "detached") f.git(linked, "commit", "-qm", v.value);
-						else writeFileSync(join(linked, "tracked"), readFileSync(join(f.main, "tracked")));
+
+						if (kind === "detached") {
+							f.git(linked, "commit", "-qm", v.value);
+						} else {
+							writeFileSync(join(linked, "tracked"), readFileSync(join(f.main, "tracked")));
+						}
 					}
+
 					kept(f);
 				}),
 			),
@@ -854,6 +966,7 @@ describe("box rm, today's tooling", () => {
 				fc.property(input, (v) =>
 					fixture(kind === "state" ? {...v, name: "state", space: false} : v, (f) => {
 						let main = f.main;
+
 						if (kind.startsWith("main")) {
 							main =
 								kind === "main-work"
@@ -864,8 +977,12 @@ describe("box rm, today's tooling", () => {
 												kind === "main-data-child" ? f.data : f.work,
 												...Array.from({length: v.depth}, (_, i) => `child-${v.value}-${i}`),
 											);
-							if (kind.endsWith("child")) mkdirSync(main, {recursive: true});
+
+							if (kind.endsWith("child")) {
+								mkdirSync(main, {recursive: true});
+							}
 						}
+
 						const saved = join(kind === "state" ? f.work : main, "saved.md");
 						writeFileSync(saved, v.value);
 						const got = f.run(f.name, {MAIN: main});
@@ -933,6 +1050,7 @@ describe("box rm, today's tooling", () => {
 						mkdirSync(path);
 						writeFileSync(join(path, "saved.md"), v.value);
 					}
+
 					writeFileSync(join(f.work, `${v.value}.untracked`), v.value);
 					mkdirSync(join(f.work, "node_modules"));
 					writeFileSync(join(f.work, "node_modules/install"), v.value);
@@ -941,14 +1059,42 @@ describe("box rm, today's tooling", () => {
 					expect(got.text).toBe(`removed box ${f.name}`);
 					expect(existsSync(f.work)).toBe(false);
 					expect(existsSync(f.data)).toBe(false);
-					for (const path of [`${f.name}-neighbor`, "state"])
+
+					for (const path of [`${f.name}-neighbor`, "state"]) {
 						expect(readFileSync(join(f.boxes, path, "saved.md"), "utf8")).toBe(v.value);
+					}
+
 					expect(f.run()).toEqual({code: 0, text: `absent box ${f.name}`});
 				}),
 			),
 			{seed: 3186, numRuns: 4},
 		);
 	});
+
+	// Plant: drop the keepruns.sh call; the box's runs/ goes with the folder (field note 2026-11-09:
+	// experiment 244's raw answers were lost that way).
+	it.each(["direct", "catchup"] as const)(
+		"T475 %s rm moves the box's runs/ into MAIN's runs/<box>/ before the box goes",
+		(entry) => {
+			fc.assert(
+				fc.property(input, (v) =>
+					fixture({...v, space: true}, (f) => {
+						mkdirSync(join(f.work, "runs", v.value), {recursive: true});
+						writeFileSync(join(f.work, "runs", v.value, "answers.jsonl"), v.value);
+						const got = f.run(f.name, {}, entry);
+						expect(got.code, got.text).toBe(0);
+						expect(got.text).toContain(`kept runs of ${f.name} at runs/${f.name}`);
+						expect(got.text).toContain(`removed box ${f.name}`);
+						expect(existsSync(f.work)).toBe(false);
+						expect(
+							readFileSync(join(f.main, "runs", f.name, v.value, "answers.jsonl"), "utf8"),
+						).toBe(v.value);
+					}),
+				),
+				{seed: 3186, numRuns: 3},
+			);
+		},
+	);
 
 	// Plants: inspect only unstaged changes; treat an unsuccessful status as empty output.
 	it("T318 every tracked change and failed status keep both paths", () => {
@@ -962,22 +1108,32 @@ describe("box rm, today's tooling", () => {
 					"staged-deletion",
 					"conflict",
 					"status-failed",
-				])
+				]) {
 					fixture(v, (f) => {
 						expect.hasAssertions();
 						const tracked = join(f.work, "tracked");
+
 						if (change === "staged" || change === "unstaged") {
 							writeFileSync(tracked, `changed ${v.value}`);
-							if (change === "staged") f.git(f.work, "add", "tracked");
+
+							if (change === "staged") {
+								f.git(f.work, "add", "tracked");
+							}
 						}
+
 						if (change === "addition") {
 							writeFileSync(join(f.work, "added"), v.value);
 							f.git(f.work, "add", "added");
 						}
+
 						if (change.includes("deletion")) {
 							rmSync(tracked);
-							if (change === "staged-deletion") f.git(f.work, "add", "tracked");
+
+							if (change === "staged-deletion") {
+								f.git(f.work, "add", "tracked");
+							}
 						}
+
 						if (change === "conflict") {
 							const hash = f.git(f.work, "rev-parse", "HEAD:tracked");
 							f.git(f.work, "update-index", "--force-remove", "tracked");
@@ -992,10 +1148,14 @@ describe("box rm, today's tooling", () => {
 							);
 							expect(ran.status).toBe(0);
 						}
-						if (change === "status-failed")
+
+						if (change === "status-failed") {
 							writeFileSync(join(f.data, "index"), "unreadable index bytes");
+						}
+
 						kept(f);
 					});
+				}
 			}),
 			{seed: 3187, numRuns: 3},
 		);
@@ -1005,16 +1165,26 @@ describe("box rm, today's tooling", () => {
 	it("T318 each local branch detached HEAD stash and step-note needs MAIN retention", () => {
 		fc.assert(
 			fc.property(input, (v) => {
-				for (const kind of ["branch", "detached", "stash", "notes", "remote-only", "objects-only"])
-					for (const retain of [false, true])
+				for (const kind of [
+					"branch",
+					"detached",
+					"stash",
+					"notes",
+					"remote-only",
+					"objects-only",
+				]) {
+					for (const retain of [false, true]) {
 						fixture(v, (f) => {
 							const base = f.git(f.work, "rev-parse", "HEAD");
+
 							for (let i = 0; i < v.depth; i++) {
 								writeFileSync(join(f.work, "tracked"), `extra ${v.value} ${i}`);
 								f.commit();
 							}
+
 							const tip = f.git(f.work, "rev-parse", "HEAD");
 							let ref = "refs/heads/extra";
+
 							if (kind === "detached") {
 								f.git(f.work, "checkout", "-q", "--detach", tip);
 								f.git(f.work, "branch", "-f", "main", base);
@@ -1023,19 +1193,25 @@ describe("box rm, today's tooling", () => {
 								f.git(f.work, "branch", "extra", tip);
 								f.git(f.work, "checkout", "-q", "--detach", base);
 								f.git(f.work, "branch", "-f", "main", base);
+
 								if (kind === "stash" || kind === "notes") {
 									ref = kind === "stash" ? "refs/stash" : "refs/notes/fabrika";
 									f.git(f.work, "update-ref", ref, tip);
 									f.git(f.work, "branch", "-D", "extra");
 								}
 							}
+
 							if (kind === "objects-only" || kind === "remote-only") {
 								f.git(f.main, "fetch", "-q", f.data, `${ref}:refs/remotes/fixture/extra`);
-								if (kind === "objects-only")
+
+								if (kind === "objects-only") {
 									f.git(f.main, "update-ref", "-d", "refs/remotes/fixture/extra");
+								}
 							}
+
 							if (retain) {
 								f.retained(ref);
+
 								if (v.descendant) {
 									const kept = `refs/keep/${v.name}`,
 										tree = f.git(f.main, "rev-parse", `${kept}^{tree}`);
@@ -1051,12 +1227,15 @@ describe("box rm, today's tooling", () => {
 									f.git(f.main, "update-ref", kept, child);
 								}
 							}
+
 							const got = f.run();
 							expect(got.code, `${kind}: ${got.text}`).toBe(retain ? 0 : 1);
 							expect(got.text).toMatch(retain ? /^removed box / : /^kept box /);
 							expect(existsSync(f.work)).toBe(!retain);
 							expect(existsSync(f.data)).toBe(!retain);
 						});
+					}
+				}
 			}),
 			{seed: 3188, numRuns: 3},
 		);
@@ -1074,11 +1253,12 @@ describe("box rm, today's tooling", () => {
 					"data-link",
 					"work-link",
 					"outside-pointer",
-				])
+				]) {
 					fixture(v, (f) => {
 						const outside = join(f.dir, "outside");
 						mkdirSync(outside);
 						writeFileSync(join(outside, "keep"), v.value);
+
 						if (kind === "name") {
 							for (const name of [
 								"",
@@ -1098,23 +1278,40 @@ describe("box rm, today's tooling", () => {
 								expect(existsSync(f.data)).toBe(true);
 							}
 						} else {
-							if (kind === "missing-data" || kind === "data-link")
+							if (kind === "missing-data" || kind === "data-link") {
 								rmSync(f.data, {recursive: true});
-							if (kind === "missing-work" || kind === "work-link")
+							}
+
+							if (kind === "missing-work" || kind === "work-link") {
 								rmSync(f.work, {recursive: true});
-							if (kind === "data-link") symlinkSync(outside, f.data);
-							if (kind === "work-link") symlinkSync(outside, f.work);
-							if (kind === "metadata") writeFileSync(join(f.data, "HEAD"), "not git metadata");
-							if (kind === "outside-pointer")
+							}
+
+							if (kind === "data-link") {
+								symlinkSync(outside, f.data);
+							}
+
+							if (kind === "work-link") {
+								symlinkSync(outside, f.work);
+							}
+
+							if (kind === "metadata") {
+								writeFileSync(join(f.data, "HEAD"), "not git metadata");
+							}
+
+							if (kind === "outside-pointer") {
 								writeFileSync(join(f.work, ".git"), `gitdir: ${outside}\n`);
+							}
+
 							const got = f.run();
 							expect(got.code, got.text).toBe(1);
 							expect(got.text).toMatch(/^kept box /);
 							expect(existsSync(f.work)).toBe(kind !== "missing-work");
 							expect(existsSync(f.data)).toBe(kind !== "missing-data");
 						}
+
 						expect(readFileSync(join(outside, "keep"), "utf8")).toBe(v.value);
 					});
+				}
 			}),
 			{seed: 3189, numRuns: 3},
 		);
@@ -1133,12 +1330,17 @@ describe("box rm, today's tooling", () => {
 		);
 		fc.assert(
 			fc.property(input, pointer, (v, text) => {
-				for (const kind of ["pointer", "refs", "objects"])
+				for (const kind of ["pointer", "refs", "objects"]) {
 					fixture(v, (f) => {
-						if (kind === "pointer") writeFileSync(join(f.work, ".git"), text);
-						else rmSync(join(f.data, kind), {recursive: true});
+						if (kind === "pointer") {
+							writeFileSync(join(f.work, ".git"), text);
+						} else {
+							rmSync(join(f.data, kind), {recursive: true});
+						}
+
 						kept(f);
 					});
+				}
 			}),
 			{seed: 3194, numRuns: 6},
 		);
@@ -1148,23 +1350,38 @@ describe("box rm, today's tooling", () => {
 	it("T318 inspection never executes box or inherited Git programs or writes its index", () => {
 		fc.assert(
 			fc.property(input, (v) => {
-				for (const kind of ["hook", "fsmonitor", "filter", "include", "inherited"])
-					for (const dirty of [false, true])
+				for (const kind of ["hook", "fsmonitor", "filter", "include", "inherited"]) {
+					for (const dirty of [false, true]) {
 						fixture(v, (f) => {
 							const marker = join(f.dir, "executed"),
 								program = join(f.dir, "program");
 							writeFileSync(program, `#!/bin/sh\nprintf bad >> '${marker}'\ncat\n`, {mode: 0o755});
 							const include = join(f.dir, "included-config");
 							writeFileSync(include, `[core]\nfsmonitor = ${program}\n`);
-							if (kind === "fsmonitor") f.git(f.work, "config", "core.fsmonitor", program);
-							if (kind === "hook") f.git(f.work, "config", "core.hooksPath", f.dir);
-							if (kind === "include") f.git(f.work, "config", "include.path", include);
+
+							if (kind === "fsmonitor") {
+								f.git(f.work, "config", "core.fsmonitor", program);
+							}
+
+							if (kind === "hook") {
+								f.git(f.work, "config", "core.hooksPath", f.dir);
+							}
+
+							if (kind === "include") {
+								f.git(f.work, "config", "include.path", include);
+							}
+
 							if (kind === "filter") {
 								f.git(f.work, "config", "filter.fixture.clean", program);
 								writeFileSync(join(f.work, ".gitattributes"), "tracked filter=fixture\n");
 							}
+
 							writeFileSync(join(f.work, "tracked"), readFileSync(join(f.work, "tracked")));
-							if (dirty) writeFileSync(join(f.work, "tracked"), `dirty ${v.value}`);
+
+							if (dirty) {
+								writeFileSync(join(f.work, "tracked"), `dirty ${v.value}`);
+							}
+
 							writeFileSync(join(f.dir, "post-index-change"), readFileSync(program), {mode: 0o755});
 							const index = readFileSync(join(f.data, "index"));
 							const got = f.run(
@@ -1180,8 +1397,13 @@ describe("box rm, today's tooling", () => {
 							expect(got.code, got.text).toBe(dirty ? 1 : 0);
 							expect(got.text).toMatch(dirty ? /^kept box / : /^removed box /);
 							expect(existsSync(marker)).toBe(false);
-							if (dirty) expect(readFileSync(join(f.data, "index"))).toEqual(index);
+
+							if (dirty) {
+								expect(readFileSync(join(f.data, "index"))).toEqual(index);
+							}
 						});
+					}
+				}
 			}),
 			{seed: 3190, numRuns: 4},
 		);

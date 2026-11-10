@@ -17,6 +17,7 @@ const root = resolve(import.meta.dirname, "..");
 const oxlint = join(root, "node_modules/.bin/oxlint");
 const config = join(root, ".oxlintrc.json");
 const code = "fabrika(prefer-schema-arbitrary)";
+
 const constructors = [
 	"record",
 	"string",
@@ -38,27 +39,34 @@ const constructors = [
 	"jsonValue",
 	"uint8Array",
 ] as const;
+
 const options = {seed: 119120, numRuns: 4};
 const name = fc.stringMatching(/^[a-z]{3,8}$/).map((s) => `random_${s}`);
+
 interface Diagnostic {
 	code: string;
 	message: string;
 	labels: {span: {line: number}}[];
 }
+
 const lint = (files: Record<string, string>, runner = false, args: string[] = []) => {
 	const dir = realpathSync(
 		mkdtempSync(join(runner ? join(root, "next") : tmpdir(), ".schema-lint-")),
 	);
+
 	try {
 		spawnSync("git", ["init", "-q", dir]);
+
 		if (!runner) {
 			copyFileSync(config, join(dir, ".oxlintrc.json"));
 			symlinkSync(join(root, "oxlint-plugins"), join(dir, "oxlint-plugins"));
 		}
+
 		for (const [path, text] of Object.entries(files)) {
 			mkdirSync(dirname(join(dir, path)), {recursive: true});
 			writeFileSync(join(dir, path), text);
 		}
+
 		const ran = spawnSync(
 			runner ? process.execPath : oxlint,
 			runner
@@ -75,7 +83,11 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
 		);
 		expect(ran.error).toBeUndefined();
 		expect(ran.signal).toBeNull();
-		if (runner) return {ran, hits: [] as Diagnostic[]};
+
+		if (runner) {
+			return {ran, hits: [] as Diagnostic[]};
+		}
+
 		const report = JSON.parse(ran.stdout) as {diagnostics: Diagnostic[]};
 		expect(
 			report.diagnostics.filter((d) => d.code.includes("parse")),
@@ -86,6 +98,7 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
 		rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 const imports = (alias: string) =>
 	`import ${alias} from 'fast-check';\nimport {Schema} from 'effect';\nconst S = Schema.Struct({x: Schema.String});\n`;
 
@@ -95,30 +108,35 @@ describe("T325 K20 prefer-schema-arbitrary, today's tooling for next tests", () 
 		fc.assert(
 			fc.property(fc.record({alias: name, field: name}), ({alias, field}) => {
 				const prefix = imports(alias);
+
 				for (const callback of [
 					`n => ({count: n, ${field}: S.make({x: 'fixed'})})`,
 					`n => { const unrelated = S.make({x: 'fixed'}); return n; }`,
 					`n => S.make({x: 'fixed'})`,
 					`n => ({count: n, ${field}: S.make})`,
-				])
+				]) {
 					expect(
 						lint({
 							"next/unit.test.ts": `${prefix}export const g = ${alias}.integer().map(${callback});`,
 						}).hits,
 						callback,
 					).toHaveLength(0);
+				}
+
 				for (const callback of [
 					"S.make",
 					"n => S.make(n)",
 					"n => { return S.make(n); }",
 					"n => S.make({x: n})",
-				])
+				]) {
 					expect(
 						lint({
 							"next/unit.test.ts": `${prefix}export const g = ${alias}.string().map(${callback});`,
 						}).hits,
 						callback,
 					).toHaveLength(1);
+				}
+
 				const assembled = `${prefix}
 ${alias}.assert(${alias}.property(${alias}.string(), value => Schema.is(S)({x: value})));
 ${alias}.assert(${alias}.property(${alias}.record({x: ${alias}.string()}), fields => {
@@ -138,7 +156,11 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
 				fc.record({alias: name, depth: fc.integer({min: 1, max: 3})}),
 				({alias, depth}) => {
 					let expr = `${alias}.string().map(Schema.String.make)`;
-					for (let i = 0; i < depth; i++) expr = `${alias}.record({x: ${expr}})`;
+
+					for (let i = 0; i < depth; i++) {
+						expr = `${alias}.record({x: ${expr}})`;
+					}
+
 					const {hits} = lint({
 						"next/unit.test.ts": `${imports(alias)}export const g: ${alias}.Arbitrary<typeof S.Type> = ${expr};`,
 					});
@@ -203,6 +225,7 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
 							: lines;
 					const {hits} = lint({"next/unit.test.ts": prefix + body.join("\n")});
 					expect(hits.map((d) => d.labels[0]!.span.line)).toEqual(body.map((_, i) => i + 4));
+
 					for (const hit of hits) {
 						expect(hit.message).toContain("S");
 						expect(hit.message).toContain("nearby reason");

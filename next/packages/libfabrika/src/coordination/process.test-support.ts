@@ -21,6 +21,7 @@ export const A = "process_0000000000e008000000000000";
 export const B = "process_0000000000e008000000000001";
 export const W = "process_0000000000e008000000000002";
 export const X = "process_0000000000e008000000000003";
+
 /** A, B, W, X, then 36 more: enough for a world that restarts past the brake or a 32-try limit. */
 export const PIDS: ReadonlyArray<string> = [
 	A,
@@ -32,11 +33,13 @@ export const PIDS: ReadonlyArray<string> = [
 		(_, n) => `process_0000000000e00800${String(n + 4).padStart(10, "0")}`,
 	),
 ];
+
 export const CODE = {program: "counter", hash: "build-a"};
 /** The brain's own writer key: the `by` on every process fact, and the only one the fold trusts. */
 export const BRAIN = "SHA256:brain";
 /** A client's own key: what it asks with, never a fact the fold trusts. */
 export const CLIENT = "SHA256:window-a";
+
 export const from = (over: Partial<From> = {}): From => ({
 	by: BRAIN,
 	for: "person_01m6v5270hf3c8x2q7w9z4k5mn",
@@ -47,26 +50,37 @@ export const from = (over: Partial<From> = {}): From => ({
 	build: "writer-build",
 	...over,
 });
+
 type Caller = {readonly owner: typeof Owner.Type; readonly recipient: typeof Recipient.Type};
+
 export const brain = (): Caller & {readonly by: string} => ({
 	owner: Owner.cases.brain.make({}),
 	recipient: Recipient.cases.client.make({client: "window-a", session: X}),
 	by: BRAIN,
 });
+
 export const watcher = (process: string): Caller => ({
 	owner: Owner.cases.process.make({process}),
 	recipient: Recipient.cases.process.make({process}),
 });
+
 export const first = (id = "start:counter:1", name = "counter:1", code = CODE) =>
 	Start.cases.first.make({id, name, code});
+
 export const again = (after: string, id = `restart:${after}`, code = CODE) =>
 	Start.cases.again.make({id, name: "counter:1", after, why: "crashed", code});
 
 const folder = mkdtempSync(join(tmpdir(), "p33-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
+
 afterAll(() => {
-	for (const db of opened) if (db.isOpen) db.close();
+	for (const db of opened) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
@@ -88,20 +102,29 @@ export const storage = () => {
 	const sql: Sql = {
 		exec: (query, ...params) => {
 			if (/^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i.test(query)) {
-				if (fault.after === 0)
+				if (fault.after === 0) {
 					throw fault.error ?? new Error("SQLITE_FULL planted after an earlier write");
-				if (fault.after !== null) fault.after--;
+				}
+
+				if (fault.after !== null) {
+					fault.after--;
+				}
+
 				const answer = backend.exec(query, ...params);
 				fault.writes++;
 				return answer;
 			}
+
 			return backend.exec(query, ...params);
 		},
 		transaction: (step) => backend.transaction(step),
 		size: () => backend.size(),
 	};
 	const rows = (): ReadonlyArray<Entry> => {
-		if (!db.prepare("SELECT name FROM sqlite_master WHERE name='entries'").get()) return [];
+		if (!db.prepare("SELECT name FROM sqlite_master WHERE name='entries'").get()) {
+			return [];
+		}
+
 		return db
 			.prepare("SELECT * FROM entries ORDER BY rev")
 			.all()
@@ -119,23 +142,31 @@ export const storage = () => {
 		},
 	};
 };
+
 export type Storage = ReturnType<typeof storage>;
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+
 export const data = (sql: Sql, bell = quiet) =>
 	Layer.mergeAll(Ledger.sql(sql, {reader: "gateway:test"}), LedgerTransaction.layer(sql)).pipe(
 		Layer.provide(bell),
 	);
+
 export const ids = (...values: ReadonlyArray<string>) => {
 	let calls = 0;
 	return {
 		next: Effect.sync(() => {
 			const value = values[calls++];
-			if (value === undefined) throw new Error("test exhausted its process IDs");
+
+			if (value === undefined) {
+				throw new Error("test exhausted its process IDs");
+			}
+
 			return value;
 		}),
 		calls: () => calls,
 	};
 };
+
 export const manager = (
 	store: Storage,
 	caller: Caller = brain(),
@@ -145,9 +176,12 @@ export const manager = (
 	ProcessManager.layer({...caller, by: BRAIN}, next).pipe(
 		Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(store.sql, bell)))),
 	);
+
 export const read = (stream: string) =>
 	Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, 0)));
+
 /** A registered name's lifecycle facts, on the stream only the brain may write. */
 export const facts = (name: string) => read(`processes/${name}`);
+
 export const receive = (process: string, after = 0) =>
 	ProcessManager.use((processes) => Stream.runCollect(processes.receive(process, after)));

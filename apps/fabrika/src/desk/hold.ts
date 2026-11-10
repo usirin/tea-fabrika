@@ -73,6 +73,7 @@ export const press = Cmd.make("press", {
 	ok: Done,
 	err: [],
 });
+
 /**
  * The key goes on to the tile, as if the desk were not there. `held: false` is the key pressed
  * this instant, which the page lets go on as it is; `held: true` is one held back, which the
@@ -95,6 +96,7 @@ const taken = (s: Hold, key: Key): boolean =>
 /** Send the keys held, in order, until one is sent to the host: the rest wait for its answer. */
 const release = (s: Hold, cmds: readonly HoldCmd[]): Step => {
 	const out: HoldCmd[] = [...cmds];
+
 	for (const [at, key] of s.held.entries()) {
 		if (taken(s, key)) {
 			const sent: Hold = {
@@ -105,8 +107,10 @@ const release = (s: Hold, cmds: readonly HoldCmd[]): Step => {
 			};
 			return [sent, [...out, press({id: s.next, key: key.name})]];
 		}
+
 		out.push(pass({key, held: true}));
 	}
+
 	return [{...s, held: []}, out];
 };
 
@@ -117,15 +121,24 @@ export const holdMachine = defineMachine({
 	update: {
 		takes: (s, m) => [{...s, takes: m.takes, up: true}, []],
 		key: (s, m): Step => {
-			if (s.waiting !== null) return [{...s, held: [...s.held, m.key]}, []];
-			if (!taken(s, m.key)) return [s, [pass({key: m.key, held: false})]];
+			if (s.waiting !== null) {
+				return [{...s, held: [...s.held, m.key]}, []];
+			}
+
+			if (!taken(s, m.key)) {
+				return [s, [pass({key: m.key, held: false})]];
+			}
+
 			return [
 				{...s, waiting: {id: s.next, key: m.key}, next: s.next + 1},
 				[press({id: s.next, key: m.key.name})],
 			];
 		},
 		answer: (s, m): Step => {
-			if (s.waiting === null || s.waiting.id !== m.id) return [s, []];
+			if (s.waiting === null || s.waiting.id !== m.id) {
+				return [s, []];
+			}
+
 			const back = m.took ? [] : [pass({key: s.waiting.key, held: true})];
 			return release({...s, waiting: null}, back);
 		},

@@ -63,6 +63,7 @@ interface Shape {
 	readonly takes: readonly string[];
 	readonly sends: readonly string[];
 }
+
 export type Shapes = ReadonlyMap<string, Shape>;
 
 /** The ticket a tile's run shows, by the run's id: what the ticket program's view said. */
@@ -75,11 +76,19 @@ const readShowsTicket = Schema.decodeUnknownOption(ShowsTicket);
 /** The tickets the runs' views show now, by run: only the ticket program's views say one. */
 export const ticketsShown = (views: Iterable<readonly [string, ToWindow]>): TicketsShown => {
 	const shown = new Map<string, number>();
+
 	for (const [run, view] of views) {
-		if (view.program !== "ticket") continue;
+		if (view.program !== "ticket") {
+			continue;
+		}
+
 		const read = readShowsTicket(view.data);
-		if (Option.isSome(read) && read.value.number !== null) shown.set(run, read.value.number);
+
+		if (Option.isSome(read) && read.value.number !== null) {
+			shown.set(run, read.value.number);
+		}
 	}
+
 	return shown;
 };
 
@@ -94,10 +103,21 @@ export const keyWord = (key: string): string => {
 		"<arrowdown>": "↓",
 	};
 	const arrow = arrows[key];
-	if (arrow !== undefined) return arrow;
-	if (key === " ") return "Space";
+
+	if (arrow !== undefined) {
+		return arrow;
+	}
+
+	if (key === " ") {
+		return "Space";
+	}
+
 	const mod = /^<((?:[casm]-)*)(.+)>$/.exec(key);
-	if (mod === null) return key;
+
+	if (mod === null) {
+		return key;
+	}
+
 	return `${(mod[1] ?? "").toUpperCase()}${mod[2]}`;
 };
 
@@ -164,9 +184,17 @@ const keyCaps = (prefix: string, key: Key): readonly Cap[] =>
 export const commandsOf = (keys: Keys, workspaces: number): readonly Command[] => {
 	const all = keys.rows.flatMap((row): Command[] => {
 		const binding = bindingFor(row.does);
-		if (binding === undefined) return [];
+
+		if (binding === undefined) {
+			return [];
+		}
+
 		const at = /^workspace (\d+)$/.exec(binding.name);
-		if (at !== null && Number(at[1]) > workspaces) return [];
+
+		if (at !== null && Number(at[1]) > workspaces) {
+			return [];
+		}
+
 		const tsh = wordOf(binding.does);
 		const [first] = row.keys;
 		return [
@@ -212,7 +240,11 @@ const ticketOn = (tile: TileNode, tickets: TicketsShown): number | undefined =>
 /** A tile's program, as the frame names it: `ticket #7`, `tracker`, or `tsh`. */
 export const tileWord = (tile: TileNode, tickets: TicketsShown): string => {
 	const run = tile.shows.run;
-	if (run === null) return "tsh";
+
+	if (run === null) {
+		return "tsh";
+	}
+
 	const n = ticketOn(tile, tickets);
 	return n === undefined ? run.program : `${run.program} #${n}`;
 };
@@ -223,10 +255,15 @@ export const tileWord = (tile: TileNode, tickets: TicketsShown): string => {
  */
 export const workspaceName = (ws: Workspace, tickets: TicketsShown): string => {
 	const all = tilesOf(ws);
+
 	for (const tile of all) {
 		const n = ticketOn(tile, tickets);
-		if (n !== undefined) return `#${n}`;
+
+		if (n !== undefined) {
+			return `#${n}`;
+		}
 	}
+
 	const head = all.find((t) => t.shows.kind === "line") ?? all.find((t) => t.shows.run !== null);
 	return head?.shows.run?.program ?? "tsh";
 };
@@ -248,7 +285,11 @@ export const lineIn = (ws: Workspace): readonly Segment[] => {
 	const shown = (t: TileNode) => (t.shows.kind === "tsh" ? null : t.shows.line.id);
 	const id =
 		(focused === undefined ? null : shown(focused)) ?? all.map(shown).find((l) => l !== null);
-	if (id === undefined || id === null) return [];
+
+	if (id === undefined || id === null) {
+		return [];
+	}
+
 	return all.flatMap((t) =>
 		shown(t) === id && t.shows.run !== null
 			? [{program: t.shows.run.program, tile: t.id, focused: t.id === ws.focused}]
@@ -289,7 +330,11 @@ export const agentsWord = (host: HostNow): string | null => {
  */
 export const restartedWord = (host: HostNow, now: number): string | null => {
 	const restarted = host.restarted ?? null;
-	if (restarted === null) return null;
+
+	if (restarted === null) {
+		return null;
+	}
+
 	const writer = writerOf(restarted.by);
 	const who = writer === null ? restarted.by : writer.kind === "agent" ? writer.id : "you";
 	const why = restarted.why === null ? "" : `: ${restarted.why}`;
@@ -303,8 +348,14 @@ export const restartedWord = (host: HostNow, now: number): string | null => {
  * read says `ledger unreachable`, in red. C-b S opens its lines either way.
  */
 export const syncWord = (now: AsksNow, ledger: LedgerLink): Said | null => {
-	if (now.reach === "failed") return {word: "ledger unreachable", broken: true};
-	if (ledger.kind === "own" || now.reach === "ok") return null;
+	if (now.reach === "failed") {
+		return {word: "ledger unreachable", broken: true};
+	}
+
+	if (ledger.kind === "own" || now.reach === "ok") {
+		return null;
+	}
+
 	return {word: "syncing", broken: false};
 };
 
@@ -410,9 +461,16 @@ type Opens =
 	| {readonly kind: "none"};
 
 export const opensOf = (desk: Open | null, ticket: number, tickets: TicketsShown): Opens => {
-	if (desk === null) return {kind: "none"};
+	if (desk === null) {
+		return {kind: "none"};
+	}
+
 	const tile = tileOfTicket(desk, ticket, tickets);
-	if (tile !== undefined) return {kind: "tile", tile};
+
+	if (tile !== undefined) {
+		return {kind: "tile", tile};
+	}
+
 	const tracker = trackerOn(desk);
 	const run = tracker?.shows.run;
 	return tracker === undefined || run == null
@@ -472,17 +530,24 @@ export const asksSections = (
  */
 export const hereWord = (desk: Open, shapes: Shapes, tickets: TicketsShown): string => {
 	const tile = focusedOf(desk);
-	if (tile === null) return "";
+
+	if (tile === null) {
+		return "";
+	}
+
 	const ws = activeOf(desk);
 	const parts = [`${tile.id} ${tileWord(tile, tickets)}`];
 	const program = tile.shows.run?.program;
 	const shape = program === undefined ? undefined : shapes.get(program);
+
 	if (shape !== undefined) {
 		parts.push(`takes ${shape.takes.join(", ") || "nothing"}`);
 		parts.push(`sends ${shape.sends.join(", ") || "nothing"}`);
 	}
+
 	const line = lineIn(ws);
 	const at = line.findIndex((s) => s.tile === tile.id);
+
 	if (at !== -1) {
 		const [before, after] = [line[at - 1]?.program, line[at + 1]?.program];
 		const near = [
@@ -490,9 +555,16 @@ export const hereWord = (desk: Open, shapes: Shapes, tickets: TicketsShown): str
 			after === undefined ? "" : `→ ${after}`,
 		];
 		const said = near.filter(Boolean).join(" ");
-		if (said !== "") parts.push(said);
+
+		if (said !== "") {
+			parts.push(said);
+		}
 	}
-	if (ws.layout.zoomed === tile.id) parts.push("zoomed");
+
+	if (ws.layout.zoomed === tile.id) {
+		parts.push("zoomed");
+	}
+
 	return parts.join(" · ");
 };
 
@@ -506,9 +578,17 @@ export const hereWord = (desk: Open, shapes: Shapes, tickets: TicketsShown): str
  */
 export const tookWord = (ms: number): string => {
 	const s = Math.max(0, Math.floor(ms / 1000));
-	if (s < 60) return `${s}s`;
+
+	if (s < 60) {
+		return `${s}s`;
+	}
+
 	const m = Math.floor(s / 60);
-	if (m < 60) return `${m}m`;
+
+	if (m < 60) {
+		return `${m}m`;
+	}
+
 	const h = Math.floor(m / 60);
 	return m % 60 === 0 ? `${h}h` : `${h}h ${m % 60}m`;
 };
@@ -529,7 +609,11 @@ const QUICK_MS = 5000;
  */
 const endWord = (ended: JobEnded): string => {
 	const ms = ended.at - ended.since;
-	if (ms < 1000) return `${ended.how} at once`;
+
+	if (ms < 1000) {
+		return `${ended.how} at once`;
+	}
+
 	const took = tookWord(ms);
 	return ended.how === "done" ? `done in ${took}` : `${ended.how} after ${took}`;
 };
@@ -563,12 +647,22 @@ export interface JobItem {
  * current job `%+`. `null` when nothing runs and nothing just ended: the line says nothing.
  */
 export const jobItem = (jobs: TileJobs | undefined, now: number): JobItem | null => {
-	if (jobs === undefined) return null;
+	if (jobs === undefined) {
+		return null;
+	}
+
 	const {running, ended} = jobs;
-	if (fresh(ended, now))
+
+	if (fresh(ended, now)) {
 		return {n: ended.n, text: ended.text, said: endWord(ended), ended: true, more: running.length};
+	}
+
 	const shown = running.findLast((j) => j.foreground) ?? running.at(-1);
-	if (shown === undefined) return null;
+
+	if (shown === undefined) {
+		return null;
+	}
+
 	return {
 		n: shown.n,
 		text: shown.text,
@@ -635,13 +729,18 @@ export const jobsList = (desk: Open, now: number): JobsList => {
 	const mine = here === undefined ? undefined : desk.jobs[here];
 	const hereRows: Row[] = [];
 	const endedRows: Row[] = [];
+
 	if (here !== undefined && mine !== undefined) {
 		const first = jobItem({running: mine.running, ended: null}, now)?.n;
 		const lead = mine.running.filter((j) => j.n === first);
-		for (const j of [...lead, ...mine.running.filter((j) => j.n !== first)])
+
+		for (const j of [...lead, ...mine.running.filter((j) => j.n !== first)]) {
 			hereRows.push(at(here, runningRow(here, j, now)));
+		}
+
 		const {ended} = mine;
-		if (ended !== null)
+
+		if (ended !== null) {
 			endedRows.push(
 				at(here, {
 					id: `${here}/ended`,
@@ -652,7 +751,9 @@ export const jobsList = (desk: Open, now: number): JobsList => {
 					second: null,
 				}),
 			);
+		}
 	}
+
 	const otherRows = Object.keys(desk.jobs)
 		.filter((tile) => tile !== here)
 		.sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)))
@@ -865,8 +966,14 @@ const explain = (f: Frame, text: string | null): Frame =>
  * frame comes back, so the key goes on: to the desk, or to the tile.
  */
 const escaped = (f: Frame, desk: MidKey): Frame => {
-	if (f.over.kind !== "none") return {...f, over: {kind: "none"}};
-	if (desk.armed || desk.asking) return f;
+	if (f.over.kind !== "none") {
+		return {...f, over: {kind: "none"}};
+	}
+
+	if (desk.armed || desk.asking) {
+		return f;
+	}
+
 	return f.info.kind === "on" ? leaveInfo(f) : f;
 };
 
@@ -906,8 +1013,14 @@ export const keyGoesTo = (
 	prefix: string,
 	desk: MidKey,
 ): "over" | "desk" => {
-	if (over.kind === "none") return "desk";
-	if (over.kind === "palette") return "over";
+	if (over.kind === "none") {
+		return "desk";
+	}
+
+	if (over.kind === "palette") {
+		return "over";
+	}
+
 	return key === prefix || desk.armed || desk.asking ? "desk" : "over";
 };
 
@@ -922,7 +1035,10 @@ export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
 		case "query":
 			return f.over.kind === "palette" ? {...f, over: {...f.over, query: m.query, at: 0}} : f;
 		case "move": {
-			if (f.over.kind !== "palette" || m.of === 0) return f;
+			if (f.over.kind !== "palette" || m.of === 0) {
+				return f;
+			}
+
 			const at = (f.over.at + m.by + m.of) % m.of;
 			return {...f, over: {...f.over, at}};
 		}
@@ -951,7 +1067,10 @@ export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
  *   focusFollows(open)    "ws1/t2/tsh/"     zoomed: "ws1/t2/tsh/t2"
  */
 export const focusFollows = (open: Open | null): string => {
-	if (open === null) return "";
+	if (open === null) {
+		return "";
+	}
+
 	const ws = activeOf(open);
 	const tile = focusedOf(open);
 	return tile === null

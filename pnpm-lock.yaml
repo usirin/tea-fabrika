@@ -348,21 +348,12 @@ importers:
 
   .:
     dependencies:
-      '@agentclientprotocol/sdk':
-        specifier: 'catalog:'
-        version: 2.2.0(@modelcontextprotocol/server@2.4.0)(zod@4.6.7)
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: 'catalog:'
-        version: 0.3.316(@anthropic-ai/sdk@0.133.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)
       '@demlik/code-graph':
         specifier: 'catalog:'
         version: 0.15.0(patch_hash=327c1b18f1f541ef6d69cb38b361a79f6019380cf78f69482f35c7b3916bcf83)
       '@demlik/tea':
         specifier: 'catalog:'
         version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
-      '@effect/opentelemetry':
-        specifier: 'catalog:'
-        version: 4.1.2(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.223.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.1.2)
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
@@ -375,54 +366,9 @@ importers:
       '@kampus/promises':
         specifier: workspace:*
         version: link:packages/promises
-      '@opentelemetry/api':
-        specifier: 'catalog:'
-        version: 1.9.1
-      '@opentelemetry/exporter-trace-otlp-http':
-        specifier: 'catalog:'
-        version: 0.223.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources':
-        specifier: 'catalog:'
-        version: 2.12.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-base':
-        specifier: 'catalog:'
-        version: 2.12.0(@opentelemetry/api@1.9.1)
-      '@tea-fabrika/compare':
-        specifier: workspace:*
-        version: link:programs/compare
-      '@tea-fabrika/counter':
-        specifier: workspace:*
-        version: link:programs/counter
-      '@tea-fabrika/experiment':
-        specifier: workspace:*
-        version: link:programs/experiment
-      '@tea-fabrika/experiments':
-        specifier: workspace:*
-        version: link:programs/experiments
-      '@tea-fabrika/map':
-        specifier: workspace:*
-        version: link:programs/map
-      '@tea-fabrika/markdown':
-        specifier: workspace:*
-        version: link:programs/markdown
-      '@tea-fabrika/ticket':
-        specifier: workspace:*
-        version: link:programs/ticket
-      '@tea-fabrika/trace':
-        specifier: workspace:*
-        version: link:programs/trace
-      '@tea-fabrika/tracker':
-        specifier: workspace:*
-        version: link:programs/tracker
       effect:
         specifier: 'catalog:'
         version: 4.1.2
-      smol-toml:
-        specifier: 'catalog:'
-        version: 1.9.1
-      zod:
-        specifier: 'catalog:'
-        version: 4.6.7
     devDependencies:
       '@demlik/structure-sweep':
         specifier: 'catalog:'
@@ -439,9 +385,6 @@ importers:
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
-      miniflare:
-        specifier: 'catalog:'
-        version: 4.20260730.0
       oxfmt:
         specifier: 'catalog:'
         version: 0.75.0

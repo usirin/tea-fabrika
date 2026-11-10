@@ -8,12 +8,14 @@ tea-fabrika is built to fix what goes wrong in fabrika. This folder is the
 half that records what goes wrong (and right) in today's fabrika when it drives live lanes,
 and which part of tea-fabrika would change it.
 
-Two files, one record per line, so a script can read them:
+Three files, one record per line, so a script can read them:
 
 - `notes.jsonl`: one observation each. Something broke, cost too much, needed
   a person, or worked well.
 - `runs.jsonl`: one agent run each. Which role, which lane, how it ended, and
   what it cost.
+- `findings.jsonl`: one finding each, from this repo's own work. Something an agent
+  found outside its task, and later a person's rating of it.
 
 ## What CI checks
 
@@ -83,7 +85,7 @@ their stricter wording does not add blocking rules.
 | `active` | minutes a model or tool was working, beside the wall-clock `minutes`, where the run can say; `null` until something records it. Added 2026-11-01 |
 | `role` | `operator`, `builder`, `reviewer`, `shipper`, `triager`, `planner`, or `machine` for a lane tea-fabrika's operator machine drove (`legacy/src/operator.ts`, the old first generation), or `acp` for a harness session the `acp` program drove (`packages/fabrika/src/agents/acp/`, experiment 76): no lane (`lane: null`), and leave these out of any baseline. `hand` is a subagent a person's own Claude Code session started by hand, not a lane our machine or today's fabrika ran: `ticket` and `pr` are the tracker ticket and the PR it served (on old rows, `lane`, as `<owner>/<repo>#139`), and `parent` is the `session` row that started it. Leave these out of any baseline too. `session` is a person's own main Claude Code session, logged as a run of its own from 2026-11-01, one row per stretch of work, with `parent: null`. Its `minutes` cover the subagents it started, so a reader never adds it to the rows whose `parent` it is; its `why` says what it did itself. `pipeline` is a whole lane run by today's `pipeline` program (`programs/pipeline`), and its `why` says which parts were this repo's machine. `driver` is a Claude subagent that carried a ticket or a job for the lead session by starting other agents (Claude subagents or Codex steps), from 2026-11-08; its `parent` is the driver that started it, or `null`, and its children name it as their `parent`, so a reader never adds a driver to its children. `step` is one agent run inside such a lane, on one of the steps that runs an agent: `triage`, `plan`, `exam`, `test_writer`, `build`, `mutants`, `review`. Both have `ticket` as `<owner>/<repo>#n` (on old rows, `lane`), a `step` row's `parent` is its `pipeline` row, and their `why` starts `pipeline, tracker ticket <n>, <step>:` (the `pipeline` row leaves out the step). An older row can have the same `lane`, such as a `hand` row on 2026-10-26 with `#117`: that one is work by hand under that number, not this pipeline, and its role and `why` tell them apart. Added 2026-11-01; [the how-to](../docs/how-to/run-a-pipeline-ticket.md) says how to log them |
 | `model`, `effort` | as spawned; `null` for `machine`. On a `hand` row, a model the spawn left unset is the main session's, and an unset effort is `null`. A `shipper` row with `model: null` is a ship stage the ship machine ran (`src/stages/ship/`), with no agent: its `tokens`, `tools` and `costUsd` are 0, and its Cmds are counted on the `machine` row |
-| `outcome` | how it ended, one word: `merged`, `pass`, `fail`, `triaged`, `parked`, `stopped`. On a `pipeline` row, from the lane's verb: `done` is `merged`, or `triaged` when triage closed the ticket; `ask` is `parked`; `skip` and `stuck` are `stopped`, with the outcome's name in `why`, such as `stuck:step_stuck` and the step's own word. A lane never ends on `send`. On a `step` row: `done` is `pass`; `send` is `fail`, with where it went in `why`; `ask` is `parked`; `skip` and `stuck` are `stopped` |
+| `outcome` | how it ended, one word: `merged`, `pass`, `fail`, `triaged`, `parked`, `skip`, `stopped`. On a `pipeline` row, from the lane's verb: `done` is `merged`, or `triaged` when triage closed the ticket; `ask` is `parked`; `skip` and `stuck` are `stopped`, with the outcome's name in `why`, such as `stuck:step_stuck` and the step's own word. A lane never ends on `send`. On a `step` row: `done` is `pass`; `send` is `fail`, with where it went in `why`; `ask` is `parked`; `skip` is `skip`, so review's order check counts a skipped mutation step; `stuck` is `stopped` |
 | `why` | for `parked` and `stopped`, the reason in a few words. On a `hand` row, what the run was for, then the reason if it stopped |
 | `tokens`, `tools`, `minutes` | what the run reported when it ended. `tokens` is the size of the run's conversation at its last turn: that is what a Claude Code subagent reports, and what a shell under the machine is logged with, so the two compare. For `machine`: `tokens` is 0, `tools` is the Cmds it sent, `minutes` is the whole lane. For `hand`: they are what the subagent reported when it last finished (`subagent_tokens`, `tool_uses`, `duration_ms`). A subagent that was sent more work after it finished counts as one run, so `tools` and `minutes` cover all of it. All three are `null` when it was stopped before it reported. For `step`: the lane does not capture `tokens`, the last turn's size, so it stays `null`. Its numbers are in each step's printed line and in the fact the lane writes on the ticket when a run ends (`input`, `output`, `cached`, `turns`, `minutes`, `model`, `effort`). `minutes` comes from there, `tools` stays `null`, and `billed` is `input` plus `output`. Nothing writes these rows yet, so a person or agent copies them |
 | `note` | which `notes.jsonl` id explains it, if one does |
@@ -134,6 +136,51 @@ Two things in that last row are put right by hand before it goes in
 writes a sentence in `note`, so the sentence moves to a note and the row
 points at it.
 
+## A finding
+
+An agent that finds work outside its task writes one row here and keeps going. It does not fix it,
+file a ticket, or only mention it in its report
+([0035](../.decisions/0035-outside-work-becomes-finding-rows.md)). These rows are about this repo's
+own work, in either version. They move into `next/`'s ledger when it holds findings (Tier 6), so
+the keys follow the proposed shape in
+[every finding is rated](../docs/direction/every-finding-is-rated.md).
+
+A `flaky_test` is the one exception: it also gets a tracker ticket and a fix the same day, and
+its row does not wait for a rating
+([0036](../.decisions/0036-a-flaky-test-is-fixed.md)).
+
+A row needs proof to be written at all: `location`, `proof` and `cost`. Never write a security hole
+here. Rows are only added, never edited or deleted.
+
+| Field | What it holds |
+|---|---|
+| `_tag` | `finding` |
+| `id` | `<date>-f<nn>`, in the order written |
+| `date` | the day it was found, `YYYY-MM-DD` |
+| `by` | the step or job the agent was running: `plan`, `tests`, `build`, `mutation`, `review`, `lead`, or the job's own name |
+| `model` | the model as spawned, or `null` when not known |
+| `rule` | one of `bug`, `dead_code`, `duplicate`, `missing_test`, `flaky_test`, `doc_drift`, `rule_break`; the decision says what each is. A finding that fits none is not written: say so in the report |
+| `location` | where it is, as `{path, line}`: a repo-relative path and a line at `head`. For something missing, the line of the code it is about |
+| `says` | what is wrong, in a sentence |
+| `proof` | how it fails or how you know: the command and what it printed, or the two lines that disagree. Reading one function is not proof |
+| `cost` | what it costs if left |
+| `head` | the commit it was seen on, the full sha |
+| `ticket`, `pr` | the work it was found during, as `<owner>/<repo>#n`, or `null`, written as on a run |
+
+A rating is a row of its own, written by a person's tool: by hand, or by the lead session writing
+down the owner's call, until a window exists. The agent that found a row never rates it, and no
+agent rates. A row never rated counts as noise once the pull request it was found during ships;
+nothing is written for that.
+
+| Field | What it holds |
+|---|---|
+| `_tag` | `rated` |
+| `finding` | the `id` of the finding row |
+| `says` | `fix` or `noise` |
+| `by` | who rated, as a role: `owner` |
+| `date` | the day it was rated |
+| `ticket` | for a `fix`, the tracker ticket it became, as `<owner>/<repo>#n`; `null` for `noise` |
+
 ## What the numbers are for
 
 The first questions to ask of these files:
@@ -144,6 +191,8 @@ The first questions to ask of these files:
 2. How often does a lane stop for a person, and how many of those stops did a
    person really need?
 3. Which primitive comes up most in the fixes? That says what to build next.
+4. For each `by` and each `rule` in `findings.jsonl`: how often was it noise? That sets
+   how high the bar for writing a finding is.
 
 ## Adding to it
 

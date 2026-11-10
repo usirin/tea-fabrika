@@ -52,22 +52,30 @@ type Msg = MsgOf<Machine>;
 type DeskStep = Step<Desk, Msg, DeskCmd>;
 
 const tile = fc.constantFrom("t1", "t2", "t3", "t4", "t5", "t6");
+
 const run = fc.constantFrom(
 	{id: "counter:1", program: "counter"},
 	{id: "tracker:1", program: "tracker"},
 	{id: "ticket:1", program: "ticket"},
 	{id: "trace:1", program: "trace"},
 );
+
 /** A line's runs with a view: mostly one, sometimes two or three, each run once. */
 const line = fc
 	.uniqueArray(run, {minLength: 1, maxLength: 3, selector: (r) => r.id})
 	.map((runs) => {
 		const [first, ...rest] = runs;
-		if (first === undefined) throw new Error("a line has a run");
+
+		if (first === undefined) {
+			throw new Error("a line has a run");
+		}
+
 		return [first, ...rest] as const;
 	});
+
 /** Half the keys are the prefix, so most lists split, zoom, close and walk a good deal. */
 const after = ["|", "-", "h", "j", "k", "l", "<arrowup>", "z", "x", "N", "<c-h>", "<c-l>"];
+
 /**
  * The turn and fold keys come less often, so they do not crowd out the questions and the closes;
  * x and y come a little more, so a question is asked and answered yes in most runs.
@@ -77,6 +85,7 @@ const key = fc.oneof(
 	{arbitrary: fc.constantFrom(...after, "y", "n", "<c-c>", "a"), weight: 3},
 	{arbitrary: fc.constantFrom(" ", "f", "x", "y"), weight: 1},
 );
+
 /** A strip's node: a tile, or a container, that exists or not. */
 const node = fc.constantFrom("t1", "t2", "t3", "t4", "c1", "c2", "c3", "c4", "c5");
 
@@ -162,6 +171,7 @@ const table: MsgArbitraryTable<Msg> = {
 	kill_ok: fc.constant(kill.ok(killing, null, 0)),
 	kill_err: failed(kill.errType, killing),
 };
+
 /**
  * Lists of Msgs, mostly keys. Not tea's `arbMsgSequence`: at fast-check's default size its lists
  * come out about ten long (demlik#744), too short to make a few workspaces and close them again.
@@ -174,6 +184,7 @@ const random = fc.array(
 	}),
 	{maxLength: 60, size: "max"},
 );
+
 /**
  * A line of three typed in t1, its window t2 focused and asked to close, then answered y once or
  * twice. Random keys seldom get that far, and a window's close is a rule of its own.
@@ -192,16 +203,20 @@ const asked: readonly Msg[] = [
 	{type: "key", key: "<c-b>", at: 0},
 	{type: "key", key: "x", at: 0},
 ];
+
 const yes: Msg = {type: "key", key: "y", at: 0};
+
 const windowFirst = fc.constantFrom<readonly Msg[]>(
 	[],
 	[],
 	[...asked, yes],
 	[...asked, yes, ...asked.slice(1), yes],
 );
+
 const lists = fc
 	.tuple(windowFirst, random)
 	.map(([first, rest]): readonly Msg[] => [...first, ...rest]);
+
 /**
  * Lists with agents' tiles in them: the same Msgs, and now and then the host asks for claude's or
  * lead's tile, before, between and after the person's keys (tracker 185b, PR 3).
@@ -212,6 +227,7 @@ const agentLists = fc.array(
 	}),
 	{maxLength: 60, size: "max"},
 );
+
 const OPTS = {numRuns: 400, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
 
@@ -245,10 +261,13 @@ const atTheEnd = (
 });
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 const tileIds = (s: Desk): ReadonlySet<string> =>
 	new Set(s.at === "over" ? [] : s.workspaces.flatMap((ws) => tilesOf(ws).map((t) => t.id)));
+
 const sameSet = (a: readonly string[], b: readonly string[]) =>
 	a.length === b.length && a.every((x) => b.includes(x));
+
 const tilesIn = (cmds: readonly DeskCmd[], type: "open" | "stop" | "close") =>
 	cmds.flatMap((c) => (c.type === type ? [c.tile] : []));
 
@@ -260,7 +279,11 @@ const kept = (s: Open): Saved => ({
 	...savedOf(s),
 	workspaces: s.workspaces.map((ws) => {
 		const layout = quiet(ws.layout);
-		if (findTile(ws.layout, ws.focused)?.shows.kind !== "window") return {...ws, layout};
+
+		if (findTile(ws.layout, ws.focused)?.shows.kind !== "window") {
+			return {...ws, layout};
+		}
+
 		const focused = [...tiles(layout.root)][0]?.id ?? ws.focused;
 		return {...ws, layout: unfold(layout, focused), focused};
 	}),
@@ -268,9 +291,11 @@ const kept = (s: Open): Saved => ({
 
 /** Press keys a moment apart, long after any list's keys: the repeat window is over by then. */
 const LATE = 1_000_000;
+
 const press = (machine: Machine, from: Desk, keys: readonly string[]) => {
 	let s = from;
 	const cmds: DeskCmd[] = [];
+
 	for (const [at, key] of keys.entries()) {
 		const [next, out] = applyCell<Desk, Msg, DeskCmd>(machine, s, {
 			type: "key",
@@ -280,6 +305,7 @@ const press = (machine: Machine, from: Desk, keys: readonly string[]) => {
 		s = next;
 		cmds.push(...out);
 	}
+
 	return {s, cmds};
 };
 
@@ -288,16 +314,30 @@ const press = (machine: Machine, from: Desk, keys: readonly string[]) => {
 const whole = everyStep(
 	"every layout stays whole: each tile in one place, focus on a tile there, the zoom on the focused tile, and the active workspace is one of them",
 	({next: s}) => {
-		if (s.at === "over") return true;
+		if (s.at === "over") {
+			return true;
+		}
+
 		const seen = new Set<string>();
+
 		for (const ws of s.workspaces) {
-			if (checkTree(ws.layout).length > 0 || findTile(ws.layout, ws.focused) === null) return false;
-			if (ws.layout.zoomed !== null && ws.layout.zoomed !== ws.focused) return false;
+			if (checkTree(ws.layout).length > 0 || findTile(ws.layout, ws.focused) === null) {
+				return false;
+			}
+
+			if (ws.layout.zoomed !== null && ws.layout.zoomed !== ws.focused) {
+				return false;
+			}
+
 			for (const t of tilesOf(ws)) {
-				if (seen.has(t.id)) return false;
+				if (seen.has(t.id)) {
+					return false;
+				}
+
 				seen.add(t.id);
 			}
 		}
+
 		return s.workspaces.some((ws) => ws.id === s.active);
 	},
 );
@@ -349,8 +389,14 @@ const closesOnce = everyStep(
 const freshIds = everyStep(
 	"an id is never given twice: every tile, container and workspace number is below the next one, which never goes down",
 	({prev, next}) => {
-		if (next.at === "over") return true;
-		if (prev.at === "open" && next.next < prev.next) return false;
+		if (next.at === "over") {
+			return true;
+		}
+
+		if (prev.at === "open" && next.next < prev.next) {
+			return false;
+		}
+
 		const numbers = next.workspaces.flatMap((ws) => [
 			ws.id,
 			...[...tiles(ws.layout.root)].map((t) => t.id),
@@ -363,7 +409,11 @@ const savesChanges = everyStep(
 	"every change to what is kept is saved, and a save holds the desk as it is now",
 	({prev, next, cmds}) => {
 		const saves = cmds.flatMap((c) => (c.type === "save" ? [c.desk] : []));
-		if (next.at === "over") return saves.length === 0;
+
+		if (next.at === "over") {
+			return saves.length === 0;
+		}
+
 		const changed = prev.at === "open" && !same(kept(prev), kept(next));
 		return (!changed || saves.length > 0) && saves.every((d) => same(d, savedOf(next)));
 	},
@@ -372,7 +422,10 @@ const savesChanges = everyStep(
 const takesWhatItSays = everyStep(
 	"a key changes the desk or asks for work only when the desk said it takes that key",
 	({prev, msg, next, cmds}) => {
-		if (msg.type !== "key" || (same(prev, next) && cmds.length === 0)) return true;
+		if (msg.type !== "key" || (same(prev, next) && cmds.length === 0)) {
+			return true;
+		}
+
 		const takes = takenNow(prev, msg.at);
 		return takes.all || takes.keys.includes(msg.key);
 	},
@@ -394,12 +447,15 @@ const emptiesAtTheEnd = everyStep(
 const yesCloses = everyStep(
 	"y to a tile's question closes it: an idle or closing tile goes, stopped; a busy one starts closing; a line's window ends its one process, then kills it",
 	({prev, msg, next, cmds}) => {
-		if (prev.at !== "open" || prev.ask === null || msg.type !== "key" || msg.key !== "y")
+		if (prev.at !== "open" || prev.ask === null || msg.type !== "key" || msg.key !== "y") {
 			return true;
+		}
+
 		const asked = prev.ask;
 		const gone = !tileIds(next).has(asked) && tilesIn(cmds, "stop").includes(asked);
 		const closing = next.at === "open" && next.closing.includes(asked);
 		const shows = findTile(activeOf(prev).layout, asked)?.shows;
+
 		if (shows?.kind === "window") {
 			// Its tsh is the tile it was typed in: that tile is never closed for it.
 			const only = (type: "end" | "kill") =>
@@ -407,6 +463,7 @@ const yesCloses = everyStep(
 				!tilesIn(cmds, "close").includes(shows.line.from);
 			return prev.closing.includes(asked) ? gone && only("kill") : closing && only("end");
 		}
+
 		return gone || (closing && tilesIn(cmds, "close").includes(asked));
 	},
 );
@@ -422,9 +479,16 @@ const endedGoes = everyStep(
 const ctrlCReaches = everyStep(
 	"Ctrl-C over a program in the focused tile goes at once to the tsh it runs in: the tile's, or the one its line was typed in",
 	({prev, msg, cmds}) => {
-		if (prev.at !== "open" || prev.ask !== null || prev.prefix.armed) return true;
+		if (prev.at !== "open" || prev.ask !== null || prev.prefix.armed) {
+			return true;
+		}
+
 		const focused = focusedOf(prev);
-		if (msg.type !== "key" || msg.key !== "<c-c>" || focused?.shows.run == null) return true;
+
+		if (msg.type !== "key" || msg.key !== "<c-c>" || focused?.shows.run == null) {
+			return true;
+		}
+
 		const to = focused.shows.kind === "window" ? focused.shows.line.from : focused.id;
 		return same(cmds, [send({tile: to, data: "\x03"})]);
 	},
@@ -433,10 +497,17 @@ const ctrlCReaches = everyStep(
 const splitOpens = atTheEnd(
 	"wherever it is, Ctrl-B then | makes a new tile beside the focused one, focuses it, and opens its tsh",
 	(machine, last) => {
-		if (last.at === "over") return true;
+		if (last.at === "over") {
+			return true;
+		}
+
 		// `n` first: it answers a question no, ends a waiting prefix, and is nothing to the desk else.
 		const {s, cmds} = press(machine, last, ["n", "<c-b>", "|"]);
-		if (s.at === "over") return false;
+
+		if (s.at === "over") {
+			return false;
+		}
+
 		const made = activeOf(s).focused;
 		return !tileIds(last).has(made) && same(tilesIn(cmds, "open"), [made]);
 	},
@@ -445,9 +516,16 @@ const splitOpens = atTheEnd(
 const comesBack = atTheEnd(
 	"a kept desk comes back as it was kept, and every tile's tsh is opened again",
 	(machine, last) => {
-		if (last.at === "over") return true;
+		if (last.at === "over") {
+			return true;
+		}
+
 		const back = restore(JSON.parse(JSON.stringify(savedOf(last))));
-		if (back === null) return false;
+
+		if (back === null) {
+			return false;
+		}
+
 		const [s, cmds] = machine.init(back, undefined);
 		const all = back.workspaces.flatMap((ws) => tilesOf(ws).map((t) => open({tile: t.id})));
 		return s.at === "open" && same(savedOf(s), kept(last)) && same(cmds, all);
@@ -486,11 +564,13 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = deskMachine.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...deskMachine,
 	update: {...real, ...update},
 });
+
 /** The desk with focus put on this tile, in the active workspace. */
 const focusOn = (s: Open, focused: string): Open => {
 	const [first, ...rest] = s.workspaces.map((ws) =>
@@ -504,7 +584,11 @@ const PLANTS = {
 	focusOnTheGone: plant({
 		ended: (s, m) => {
 			const [next, cmds] = real.ended(s, m);
-			if (s.at !== "open" || next.at !== "open") return [next, cmds];
+
+			if (s.at !== "open" || next.at !== "open") {
+				return [next, cmds];
+			}
+
 			return [focusOn(next, activeOf(s).focused), cmds];
 		},
 	}),
@@ -513,7 +597,11 @@ const PLANTS = {
 		ended: (s, m) => {
 			const [next, cmds] = real.ended(s, m);
 			const kept = s.at === "open" ? s.jobs[m.tile] : undefined;
-			if (next.at !== "open" || kept === undefined) return [next, cmds];
+
+			if (next.at !== "open" || kept === undefined) {
+				return [next, cmds];
+			}
+
 			return [{...next, jobs: {...next.jobs, [m.tile]: kept}}, cmds];
 		},
 	}),
@@ -574,9 +662,17 @@ const PLANTS = {
 	closesTheLine: plant({
 		key: (s, m) => {
 			const [next, cmds] = real.key(s, m);
-			if (s.at !== "open" || s.ask === null || m.key !== "y") return [next, cmds];
+
+			if (s.at !== "open" || s.ask === null || m.key !== "y") {
+				return [next, cmds];
+			}
+
 			const shows = findTile(activeOf(s).layout, s.ask)?.shows;
-			if (shows?.kind !== "window") return [next, cmds];
+
+			if (shows?.kind !== "window") {
+				return [next, cmds];
+			}
+
 			return [next, [...cmds, close({tile: shows.line.from})]];
 		},
 	}),
@@ -593,9 +689,15 @@ const PLANTS = {
 	splitKeepsFocus: plant({
 		key: (s, m) => {
 			const [next, cmds] = real.key(s, m);
-			if (s.at !== "open" || next.at !== "open" || !cmds.some((c) => c.type === "open"))
+
+			if (s.at !== "open" || next.at !== "open" || !cmds.some((c) => c.type === "open")) {
 				return [next, cmds];
-			if (findTile(activeOf(next).layout, activeOf(s).focused) === null) return [next, cmds];
+			}
+
+			if (findTile(activeOf(next).layout, activeOf(s).focused) === null) {
+				return [next, cmds];
+			}
+
 			const back = focusOn(next, activeOf(s).focused);
 			return [back, cmds.map((c) => (c.type === "save" ? save({desk: savedOf(back)}) : c))];
 		},
@@ -604,9 +706,17 @@ const PLANTS = {
 	foldsUnderFocus: plant({
 		key: (s, m) => {
 			const [next, cmds] = real.key(s, m);
-			if (s.at !== "open" || next.at !== "open" || m.key !== "f") return [next, cmds];
+
+			if (s.at !== "open" || next.at !== "open" || m.key !== "f") {
+				return [next, cmds];
+			}
+
 			const [was, now] = [activeOf(s), activeOf(next)];
-			if (was.id !== now.id || was.focused === now.focused) return [next, cmds];
+
+			if (was.id !== now.id || was.focused === now.focused) {
+				return [next, cmds];
+			}
+
 			const back = focusOn(next, was.focused);
 			return [back, cmds.map((c) => (c.type === "save" ? save({desk: savedOf(back)}) : c))];
 		},
@@ -709,11 +819,21 @@ const agentOfTile = (s: Open): ReadonlyMap<string, string> =>
 const launchFolds = atTheEnd(
 	"wherever it is, the host's launch for a name with no tile makes one tile, folded, in the active workspace, moves no focus and changes no other tile; launched again, nothing changes",
 	(machine, last) => {
-		if (last.at === "over") return true;
+		if (last.at === "over") {
+			return true;
+		}
+
 		return NAMES.every((agent) => {
 			const [s, cmds] = launched(machine, last, agent);
-			if (last.agents[agent] !== undefined) return same(s, last) && cmds.length === 0;
-			if (s.at !== "open") return false;
+
+			if (last.agents[agent] !== undefined) {
+				return same(s, last) && cmds.length === 0;
+			}
+
+			if (s.at !== "open") {
+				return false;
+			}
+
 			const id = `t${last.next}`;
 			const before = nodesOf(last);
 			const after = nodesOf(s);
@@ -745,7 +865,10 @@ const launchFolds = atTheEnd(
 const agentTilesThere = everyStep(
 	"an agent's tile is always a tile of the desk, no tile is two names', and only a launch gives a name a tile: a tile that goes takes its name with it",
 	({prev, msg, next}) => {
-		if (next.at === "over") return true;
+		if (next.at === "over") {
+			return true;
+		}
+
 		const tiles = Object.values(next.agents);
 		const was = prev.at === "open" ? prev.agents : {};
 		return (
@@ -763,12 +886,22 @@ const agentTilesThere = everyStep(
 const freshAfterGone = atTheEnd(
 	"after an agent's tile goes, the next launch for its name opens a fresh tile, as that agent",
 	(machine, last) => {
-		if (last.at === "over") return true;
+		if (last.at === "over") {
+			return true;
+		}
+
 		return Object.entries(last.agents).every(([agent, tile]) => {
 			const [gone] = applyCell<Desk, Msg, DeskCmd>(machine, last, {type: "ended", tile});
+
 			// The agent's tile was the last: the desk is over, and the host begins it again.
-			if (gone.at === "over") return true;
-			if (agent in gone.agents) return false;
+			if (gone.at === "over") {
+				return true;
+			}
+
+			if (agent in gone.agents) {
+				return false;
+			}
+
 			const [s, cmds] = launched(machine, gone, agent);
 			const id = `t${gone.next}`;
 			return (
@@ -786,7 +919,11 @@ const opensAsAgent = everyStep(
 	"it opens an agent's tile as that agent, and every other tile as the person: a split from an agent's tile is the person's",
 	({next, cmds}) => {
 		const opens = opensIn(cmds);
-		if (next.at === "over") return opens.length === 0;
+
+		if (next.at === "over") {
+			return opens.length === 0;
+		}
+
 		const whose = agentOfTile(next);
 		return opens.every(([tile, agent]) => (whose.get(tile) ?? null) === agent);
 	},
@@ -796,11 +933,22 @@ const opensAsAgent = everyStep(
 const comesBackAsAgents = atTheEnd(
 	"a kept desk comes back with its agents' tiles, and opens each as its agent again, every other tile as the person (call D)",
 	(machine, last) => {
-		if (last.at === "over") return true;
+		if (last.at === "over") {
+			return true;
+		}
+
 		const back = restore(JSON.parse(JSON.stringify(savedOf(last))));
-		if (back === null) return false;
+
+		if (back === null) {
+			return false;
+		}
+
 		const [s, cmds] = machine.init(back, undefined);
-		if (s.at !== "open") return false;
+
+		if (s.at !== "open") {
+			return false;
+		}
+
 		const whose = agentOfTile(last);
 		const all = back.workspaces.flatMap((ws) =>
 			tilesOf(ws).map((t) => [t.id, whose.get(t.id) ?? null] as const),
@@ -846,8 +994,11 @@ const AGENT_PLANTS = {
 	focusesTheAgent: plant({
 		launch: (s, m) => {
 			const [next, cmds] = real.launch(s, m);
-			if (s.at !== "open" || next.at !== "open" || s.agents[m.agent] !== undefined)
+
+			if (s.at !== "open" || next.at !== "open" || s.agents[m.agent] !== undefined) {
 				return [next, cmds];
+			}
+
 			const back = focusOn(next, `t${s.next}`);
 			return [back, cmds.map((c) => (c.type === "save" ? save({desk: savedOf(back)}) : c))];
 		},
@@ -856,7 +1007,11 @@ const AGENT_PLANTS = {
 	keepsTheGone: plant({
 		ended: (s, m) => {
 			const [next, cmds] = real.ended(s, m);
-			if (s.at !== "open" || next.at !== "open") return [next, cmds];
+
+			if (s.at !== "open" || next.at !== "open") {
+				return [next, cmds];
+			}
+
 			return [{...next, agents: s.agents}, cmds];
 		},
 	}),

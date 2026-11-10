@@ -4,12 +4,14 @@ import {canRestart, Start} from "../coordination/process.ts";
 import {Failure, Policy, Recovery, Supervision} from "../coordination/recovery.ts";
 
 export {Policy};
+
 export const defaultPolicy: Policy = {
 	maxDeliveries: 3,
 	intensity: 5,
 	periodMs: 5000,
 	backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5000},
 };
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("threw"), failure: Failure, at: Schema.Number}),
 	Schema.Struct({type: Schema.Literal("exited"), at: Schema.Number}),
@@ -17,7 +19,9 @@ const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("started"), process: Schema.String, at: Schema.Number}),
 	Schema.Struct({type: Schema.Literal("healthy"), at: Schema.Number}),
 ]);
+
 export type SupervisorMsg = typeof Msg.Type;
+
 type Ctx = {
 	readonly policy: Policy;
 	readonly process: string;
@@ -25,24 +29,30 @@ type Ctx = {
 	readonly build: string;
 	readonly at: number;
 };
+
 const exit = Cmd.make("exit", {
 	input: Schema.Struct({process: Schema.String, id: Schema.String}),
 	ok: Schema.Null,
 	err: [],
 });
+
 const down = Cmd.make("down", {
 	input: Schema.Struct({process: Schema.String}),
 	ok: Schema.Null,
 	err: [],
 });
+
 const start = Cmd.make("start", {
 	input: Schema.Struct({process: Schema.String, until: Schema.Number}),
 	ok: Schema.Null,
 	err: [],
 });
+
 const pending = (s: Supervision) => [s, []] as const;
+
 const crashWhy = (failure: Failure) =>
 	failure._tag === "saved" ? "saved_letter" : failure._tag === "fresh" ? "step" : "interrupted";
+
 /** The successor's start request, after the process that crashed. */
 const again = (s: Supervision, after: string, why: string) =>
 	Recovery.cases.starting.make({
@@ -99,7 +109,10 @@ export const supervisor = Machine.make({
 			];
 		},
 		exited: (s, m) => {
-			if (s.recovery._tag !== "ending") return [s, []];
+			if (s.recovery._tag !== "ending") {
+				return [s, []];
+			}
+
 			const {failure, process} = s.recovery;
 			const crashes = s.crashes ?? 1;
 			const wait = Math.min(
@@ -108,11 +121,13 @@ export const supervisor = Machine.make({
 			);
 			const until = m.at + wait;
 			const why = crashWhy(failure);
+
 			// Inside the restart budget the successor waits its backoff, and nothing goes down.
 			if (canRestart(s.restarts, until, s.policy.periodMs, s.policy.intensity)) {
 				const pending = start({process, until});
 				return [{...s, recovery: again(s, process, why), pending}, [pending]];
 			}
+
 			// The brake: N crashes in T. Down waits until the window has room again.
 			const times = s.restarts
 				.filter((at) => at >= until - s.policy.periodMs)
@@ -130,7 +145,10 @@ export const supervisor = Machine.make({
 			];
 		},
 		due: (s, m) => {
-			if (s.recovery._tag !== "down" || m.at < s.recovery.until) return [s, []];
+			if (s.recovery._tag !== "down" || m.at < s.recovery.until) {
+				return [s, []];
+			}
+
 			const pending = start({process: s.recovery.process, until: s.recovery.until});
 			return [{...s, recovery: again(s, s.recovery.process, s.recovery.why), pending}, [pending]];
 		},

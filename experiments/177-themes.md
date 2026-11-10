@@ -72,14 +72,14 @@ built page in a headless Chromium tab with the real views of ticket #7.
 | Back to the app's own look | No inline style left |
 | Two people, one desk, same messages | Two tabs, two grounds: `#1e1e2e` and `#eff1f5` |
 
-Shots: [one](./177-themes/shots/app-solarized-one.png),
-[side by side](./177-themes/shots/app-solarized-side-by-side.png),
-[stacked](./177-themes/shots/app-solarized-stacked.png),
-[2x2](./177-themes/shots/app-solarized-2x2.png),
-[small](./177-themes/shots/app-solarized-small.png), all from the real app. With ticket #7's views:
-[default](./177-themes/shots/tab-default-2x2.png), [Mocha](./177-themes/shots/tab-mocha-2x2.png),
-[Solarized](./177-themes/shots/tab-solarized-2x2.png),
-[a piped line](./177-themes/shots/tab-mocha-line.png).
+Shots: [one](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/app-solarized-one.png?raw=true),
+[side by side](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/app-solarized-side-by-side.png?raw=true),
+[stacked](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/app-solarized-stacked.png?raw=true),
+[2x2](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/app-solarized-2x2.png?raw=true),
+[small](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/app-solarized-small.png?raw=true), all from the real app. With ticket #7's views:
+[default](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/tab-default-2x2.png?raw=true), [Mocha](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/tab-mocha-2x2.png?raw=true),
+[Solarized](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/tab-solarized-2x2.png?raw=true),
+[a piped line](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/tab-mocha-line.png?raw=true).
 
 ## What stays hardcoded and breaks (today)
 
@@ -89,12 +89,12 @@ anyway:
 
 - **The host writes colors into terminal bytes.**
   - `apps/fabrika/src/editor/screen.ts` has a `PALETTE` of 24-bit colors.
-  - On a light theme "Experiments" is near-white on cream ([shot](./177-themes/shots/app-solarized-small.png)).
+  - On a light theme "Experiments" is near-white on cream ([shot](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/app-solarized-small.png?raw=true)).
   - It also breaks "the theme is the viewer's": bytes are shared by everyone on the desk.
   - Fix: the host sends a tone or a palette index, and the client picks the color.
 - **The code highlighter is GitHub Dark Dimmed, inline.**
   - `programs/markdown/src/highlight.ts`. On light themes a span reads at 1.41 (Solarized) and 1.34
-    (Latte) ([shot](./177-themes/shots/tab-latte-code.png)).
+    (Latte) ([shot](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/tab-latte-code.png?raw=true)).
   - Fix idea, not tried: Shiki-style CSS variables, or Base16's roles.
 - **ghostty-web 0.4 cannot change colors live.**
   - The option warns "not yet fully supported". OSC 4, 10 and 11 are refused.
@@ -104,14 +104,14 @@ anyway:
 - **Themes found old token mistakes.**
   - `.tracker button.tracker-primary` uses `--ink` on `--key`. That is 2.68 in the app's own look,
     1.05 on Mocha, 1.04 on Latte. "approve" is a blank button in the
-    [Mocha shot](./177-themes/shots/tab-mocha-2x2.png).
+    [Mocha shot](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/tab-mocha-2x2.png?raw=true).
   - `--wire`, `--border-strong` and `--key` are used as text in the top bar, under 3:1 in every look:
     `.sep` 1.56 and `.num`, `.seg.plain`, `.quiet`, `.pipe` 2.14 in the default.
   - These are non-text tokens used as text, so repair cannot catch them. They need role pairs and a
     lint rule.
 - **Shadows and the scrim are `rgb(0 0 0 / …)`.** They do not change on light.
 - **The tracker's note box looks unstyled in every look.** It is a dark bar even on the
-  [unreadable test](./177-themes/shots/tab-unreadable-2x2.png).
+  [unreadable test](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/tab-unreadable-2x2.png?raw=true).
 
 By layout, in the shots:
 
@@ -188,7 +188,7 @@ What a pick cannot do, measured:
 - **Keep our meanings by itself.**
   - `window.css` says the accent means your turn, red stuck, amber running, green done.
   - 14 of 25 accents sit within 25 degrees of a status hue, red and tomato among them.
-  - See [red](./177-themes/shots/radix-slate-red-dark-shift-2x2.png): your turn looks like stuck.
+  - See [red](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-red-dark-shift-2x2.png?raw=true): your turn looks like stuck.
   - A picker should warn, or offer the 11 clear ones: blue, cyan, indigo, iris, mint, pink, plum,
     purple, sky, teal, violet.
 - **Give a terminal palette.** Built from steps 11 and 9: ink 15.15 and 2 colors under 3:1 in dark,
@@ -211,10 +211,10 @@ What full values cannot do:
 | Map (slate + indigo, dark) | Kinds of text under 4.5, over 8 layouts | How it looks |
 |---|---|---|
 | The app's own look, for comparison | 36 | The baseline |
-| `naive`: `--n-k` = step k | 259 | [Lighter, faint text fails](./177-themes/shots/radix-slate-indigo-dark-naive-2x2.png) |
+| `naive`: `--n-k` = step k | 259 | [Lighter, faint text fails](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-dark-naive-2x2.png?raw=true) |
 | `lift`: naive, text steps moved until they read | 40 | Passes, still too light |
-| `own`: as `@radix-ui/themes` 3.3.0 uses steps | 201 | [Right roles, one step light](./177-themes/shots/radix-slate-indigo-dark-own-2x2.png) |
-| `shift`: `own`, one step darker | 201 | [Closest to today](./177-themes/shots/radix-slate-indigo-dark-shift-2x2.png) |
+| `own`: as `@radix-ui/themes` 3.3.0 uses steps | 201 | [Right roles, one step light](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-dark-own-2x2.png?raw=true) |
+| `shift`: `own`, one step darker | 201 | [Closest to today](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-dark-shift-2x2.png?raw=true) |
 
 - **Why step for step loses the look.** The ladders differ. In OKLCH lightness:
   - Today, `--n-1` to `--n-12`: .15 .18 .21 .23 .26 .28 .32 .40 .63 .70 .79 .94
@@ -233,11 +233,11 @@ What full values cannot do:
   - It puts today's `--n-2` near gray-1 (.178 and .18). Radix's page calls steps 1 and 2
     interchangeable for backgrounds.
   - `--n-1`, the sunken ground, has no step, so it needs one custom value beside the scale.
-  - Shots: [one](./177-themes/shots/radix-slate-indigo-dark-shift-one.png),
-    [side by side](./177-themes/shots/radix-slate-indigo-dark-shift-side-by-side.png),
-    [stacked](./177-themes/shots/radix-slate-indigo-dark-shift-stacked.png),
-    [small](./177-themes/shots/radix-slate-indigo-dark-shift-small.png),
-    [line](./177-themes/shots/radix-slate-indigo-dark-shift-line.png). Nothing new squeezes.
+  - Shots: [one](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-dark-shift-one.png?raw=true),
+    [side by side](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-dark-shift-side-by-side.png?raw=true),
+    [stacked](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-dark-shift-stacked.png?raw=true),
+    [small](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-dark-shift-small.png?raw=true),
+    [line](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-dark-shift-line.png?raw=true). Nothing new squeezes.
   - Sure it looks right: 70%, from shots at this size. The doubt: only the owner's eye settles
     "cool". The [clickable page](../apps/fabrika/docs/themes/mockup.html) uses this map.
 - **The cost in text.**
@@ -246,8 +246,8 @@ What full values cannot do:
     gray-1. Radix keeps a10 for placeholders. We use faint for real words.
   - So real words in `--text-faint` should move to a11, or the app drops a level. That is a real
     design change to `window.css`, not a color swap.
-- **Light.** Use `own`, with white behind: [2x2](./177-themes/shots/radix-slate-indigo-light-own-2x2.png),
-  [small](./177-themes/shots/radix-slate-indigo-light-own-small.png). The top bar's misused tokens get
+- **Light.** Use `own`, with white behind: [2x2](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-light-own-2x2.png?raw=true),
+  [small](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-light-own-small.png?raw=true). The top bar's misused tokens get
   worse here, as listed above.
 
 **Radix's setup, in our world:**
@@ -376,7 +376,7 @@ What the SDK must give authors, in order:
 
 - **Contrast: repair, do not refuse.** Move text along its own hue until it reads, as iTerm2 does, and
   record it.
-  - The [unreadable test](./177-themes/shots/tab-unreadable-2x2.png): every color near one gray, 7
+  - The [unreadable test](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/tab-unreadable-2x2.png?raw=true): every color near one gray, 7
     tokens moved, and only the top bar's misused tokens stay under 3:1, of 313 checked.
   - Real themes need it, even hand-tuned ones: Solarized's `--done` is 2.97 before.
   - Terminals have no minimum contrast in ghostty-web. Solarized has 8 palette colors under 3:1, and
@@ -439,7 +439,7 @@ port the spike: its first-paint trick and replay are lessons, not code.
   values, never a theme of Manti's or of another project". Users' themes need that sentence narrowed:
   the default stays ours. Radix values as the default would need it changed too.
 - The same note says nobody has drawn light. Now it is drawn, on the
-  [light map](./177-themes/shots/radix-slate-indigo-light-own-2x2.png).
+  [light map](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/177-themes/shots/radix-slate-indigo-light-own-2x2.png?raw=true).
 - [`docs/direction/one-fabrika-toml-per-repo.md`](../docs/direction/one-fabrika-toml-per-repo.md):
   `~/.fabrika/fabrika.toml` holds "their own settings", but a browser client has no files. So a theme
   choice cannot live only there. That note also says state is not settings, so this fits as state.

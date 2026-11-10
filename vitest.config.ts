@@ -64,21 +64,30 @@ export const testConfig = {
 // Use Vitest's installed matcher, including its dot-path behavior.
 const match = createRequire(import.meta.resolve("vitest/package.json"))("picomatch");
 const workers = Number(process.env.FABRIKA_MAX_WORKERS ?? 3);
-if (!Number.isInteger(workers) || workers < 1)
+
+if (!Number.isInteger(workers) || workers < 1) {
 	throw new Error("FABRIKA_MAX_WORKERS must be a positive integer");
+}
 
 const localLimits = () => {
-	if (!/^vitest(?:\.[cm]?js)?$/.test(basename(process.argv[1] ?? ""))) return;
+	if (!/^vitest(?:\.[cm]?js)?$/.test(basename(process.argv[1] ?? ""))) {
+		return;
+	}
+
 	const pinned = packageJson.engines.node;
-	if (!process.env.CI && process.versions.node !== pinned)
+
+	if (!process.env.CI && process.versions.node !== pinned) {
 		throw new Error(
 			`Local test run refused. Running Node ${process.version}; pinned Node v${pinned}. Use: volta run --node ${pinned} pnpm exec vitest run --maxWorkers=1 <narrow path>`,
 		);
+	}
+
 	const cli = parseCLI(["vitest", ...process.argv.slice(2)], {allowUnknownOptions: true});
 	const narrow = (filter: string) => {
 		const path = isAbsolute(filter) ? relative(process.cwd(), filter) : filter.replace(/^\.\//, "");
 		return !/[*?[\]{}]/.test(path) && /(?:^|\/)[^/]+\.test\.[cm]?[jt]sx?(?::[\d-]+)?$/.test(path);
 	};
+
 	if (!process.env.CI && !(cli.filter.length > 0 && cli.filter.every(narrow))) {
 		const changed = cli.options.changed;
 		// The same three sets as Vitest 5.0.5's GitVCSProvider. A net diff loses staged
@@ -99,12 +108,14 @@ const localLimits = () => {
 					(path) => path && match.isMatch(path, testConfig.test.forceRerunTriggers, {dot: true}),
 				),
 		);
+
 		if (changed === undefined || diffs.some((diff) => diff.status !== 0) || forced) {
 			throw new Error(
 				"Local broad test run refused. Use: pnpm exec vitest run --maxWorkers=1 <narrow path>",
 			);
 		}
 	}
+
 	const value = cli.options.maxWorkers ?? workers;
 	// Vitest resolves percentages against availableParallelism, rounded and clamped.
 	const requested =
@@ -117,8 +128,11 @@ const localLimits = () => {
 					),
 				)
 			: Number(value);
-	if (!Number.isInteger(requested) || requested < 1 || requested > workers)
+
+	if (!Number.isInteger(requested) || requested < 1 || requested > workers) {
 		throw new Error("--maxWorkers exceeds FABRIKA_MAX_WORKERS or is invalid");
+	}
+
 	return {test: {maxWorkers: requested}};
 };
 

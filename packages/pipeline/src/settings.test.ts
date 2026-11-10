@@ -375,13 +375,21 @@ describe("fabrika.toml", () => {
 		/** The file as the load rules take it: one they refuse fails the test that asks, saying why. */
 		const loaded = async () => {
 			const settings = await read(readFileSync(new URL(SETTINGS_FILE, ROOT), "utf8"));
-			if (typeof settings === "string") throw new Error(settings);
+
+			if (typeof settings === "string") {
+				throw new Error(settings);
+			}
+
 			return settings;
 		};
 
 		it("passes the load rules, and [review] rubrics names a folder that holds every rubric", async () => {
 			const folder = (await loaded()).review?.rubrics;
-			if (folder === undefined) throw new Error("[review] rubrics is not named");
+
+			if (folder === undefined) {
+				throw new Error("[review] rubrics is not named");
+			}
+
 			const missing = ["code.md", "doc.md", "skill.md"].filter(
 				(file) => !existsSync(new URL(`${folder}/${file}`, ROOT)),
 			);
@@ -402,6 +410,7 @@ describe("fabrika.toml", () => {
 		it("each [[checks.run]] installs before it runs: a fresh copy of a head has no node_modules", async () => {
 			const checks = (await loaded()).checks?.run ?? [];
 			expect(checks).not.toEqual([]);
+
 			for (const {run} of checks) {
 				expect(run).toHaveLength(3);
 				expect(run.slice(0, 2)).toEqual(["sh", "-c"]);

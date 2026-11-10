@@ -14,12 +14,15 @@ type Store = {
 	readonly input: (letter: string) => Effect.Effect<unknown, LedgerError>;
 	readonly receipt: (letter: string) => Effect.Effect<unknown, LedgerError>;
 };
+
 type Subject = {
 	readonly RecoveryStore: Context.Service<Store, Store> & {
 		readonly layer: (sql: Sql, who: {name: string; capacity: number}) => Layer.Layer<Store>;
 	};
 };
+
 const modulePath = "./recovery-store.ts";
+
 const subject = async (): Promise<Subject> => {
 	expect(
 		existsSync(new URL(modulePath, import.meta.url)),
@@ -27,12 +30,14 @@ const subject = async (): Promise<Subject> => {
 	).toBe(true);
 	return await import(modulePath);
 };
+
 const policy = {
 	maxDeliveries: 3,
 	intensity: 5,
 	periodMs: 5000,
 	backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5000},
 };
+
 const input = {
 	id: "poison",
 	envelope: {
@@ -45,6 +50,7 @@ const input = {
 	seen: 0,
 	span: {traceId: from().traceId, spanId: "00f067aa0ba902b7"},
 };
+
 const terminal = {
 	letter: "poison",
 	input,
@@ -53,6 +59,7 @@ const terminal = {
 	result: {_tag: "refused", why: "dead"},
 	process: B,
 };
+
 const snapshot = {
 	v: 1,
 	name: "counter:1",
@@ -165,10 +172,12 @@ describe("P34 recovery storage", () => {
 		// Find the actual saved JSON column, without prescribing the store's table names.
 		let planted = 0;
 		const quote = (word: string) => `"${word.replaceAll('"', '""')}"`;
+
 		for (const {name} of disk.sql.exec(
 			"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
 		)) {
 			const table = quote(String(name));
+
 			for (const row of disk.sql.exec(`SELECT rowid, * FROM ${table}`)) {
 				for (const [column, value] of Object.entries(row)) {
 					if (typeof value === "string" && value.includes('"recovery"')) {
@@ -182,6 +191,7 @@ describe("P34 recovery storage", () => {
 				}
 			}
 		}
+
 		expect(planted, "the cut must corrupt real saved supervision bytes").toBeGreaterThan(0);
 		disk.reopen();
 		await Effect.runPromise(
@@ -198,7 +208,10 @@ describe("P34 recovery storage", () => {
 		const sql: Sql = {
 			...disk.sql,
 			exec: (q, ...args) => {
-				if (fail && /^\s*(INSERT|UPDATE|REPLACE)/i.test(q)) throw new Error("SQLITE_FULL");
+				if (fail && /^\s*(INSERT|UPDATE|REPLACE)/i.test(q)) {
+					throw new Error("SQLITE_FULL");
+				}
+
 				return disk.sql.exec(q, ...args);
 			},
 		};

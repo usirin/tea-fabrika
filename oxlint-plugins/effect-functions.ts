@@ -7,9 +7,16 @@ import {dotted, type Node} from "./match.ts";
 type FunctionNode = ESTree.ArrowFunctionExpression | ESTree.Function;
 
 const named = (node: FunctionNode): boolean => {
-	if (node.type !== "ArrowFunctionExpression" && node.id !== null) return true;
+	if (node.type !== "ArrowFunctionExpression" && node.id !== null) {
+		return true;
+	}
+
 	const parent = node.parent;
-	if (parent.type === "ArrowFunctionExpression") return named(parent);
+
+	if (parent.type === "ArrowFunctionExpression") {
+		return named(parent);
+	}
+
 	return (
 		(parent.type === "VariableDeclarator" && parent.id.type === "Identifier") ||
 		parent.type === "Property" ||
@@ -20,8 +27,15 @@ const named = (node: FunctionNode): boolean => {
 
 const returned = (node: FunctionNode): Node | null => {
 	const body = node.body;
-	if (body === null) return null;
-	if (body.type !== "BlockStatement") return body;
+
+	if (body === null) {
+		return null;
+	}
+
+	if (body.type !== "BlockStatement") {
+		return body;
+	}
+
 	const [only] = body.body;
 	return body.body.length === 1 && only?.type === "ReturnStatement" ? only.argument : null;
 };
@@ -34,25 +48,45 @@ export const effectFunctions: CreateRule = {
 			return [...effects].some((effect) => name === `${effect}.withSpan`);
 		};
 		const wrapper = (node: Node): Node | null => {
-			if (node.type !== "CallExpression") return null;
-			if (isSpan(node.callee)) return node;
+			if (node.type !== "CallExpression") {
+				return null;
+			}
+
+			if (isSpan(node.callee)) {
+				return node;
+			}
+
 			const callee = node.callee;
+
 			if (
 				callee.type !== "MemberExpression" ||
 				callee.computed ||
 				callee.property.type !== "Identifier" ||
 				callee.property.name !== "pipe"
-			)
+			) {
 				return null;
-			for (const arg of node.arguments)
-				if (arg.type === "CallExpression" && isSpan(arg.callee)) return arg;
+			}
+
+			for (const arg of node.arguments) {
+				if (arg.type === "CallExpression" && isSpan(arg.callee)) {
+					return arg;
+				}
+			}
+
 			return wrapper(callee.object);
 		};
 		const check = (node: FunctionNode) => {
-			if (!named(node)) return;
+			if (!named(node)) {
+				return;
+			}
+
 			const body = returned(node);
 			const span = body === null ? null : wrapper(body);
-			if (span === null) return;
+
+			if (span === null) {
+				return;
+			}
+
 			context.report({
 				node: span,
 				message:
@@ -67,8 +101,9 @@ export const effectFunctions: CreateRule = {
 							spec.type === "ImportSpecifier" &&
 							dotted(spec.imported) === "Effect") ||
 						(node.source.value === "effect/Effect" && spec.type === "ImportNamespaceSpecifier")
-					)
+					) {
 						effects.add(spec.local.name);
+					}
 				}
 			},
 			ArrowFunctionExpression: check,

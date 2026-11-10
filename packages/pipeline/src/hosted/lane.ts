@@ -88,8 +88,13 @@ const handlers = (o: {
 			const state = foldLedger(yield* readFacts);
 			const head = yield* outside.branchHead(repo, branch);
 			const main = yield* outside.branchHead(repo, "main");
-			if (main === null) return yield* failed;
+
+			if (main === null) {
+				return yield* failed;
+			}
+
 			let behind = false;
+
 			if (head !== null) {
 				const work = yield* BuildWork;
 				const git = yield* gitOn(work.env);
@@ -98,6 +103,7 @@ const handlers = (o: {
 				behind =
 					(yield* git.git(["-C", tree, "merge-base", "--is-ancestor", main, head])).code !== 0;
 			}
+
 			const open = yield* outside.prFrom(repo, branch);
 			const known = cmd.pr ?? open;
 			const landing = known === null ? null : yield* outside.landing(known, head ?? "");
@@ -116,8 +122,11 @@ const handlers = (o: {
 		Effect.gen(function* () {
 			const self = yield* Self;
 			const ledger = yield* Ledger;
-			if ((yield* readOutcome(cmd.child).pipe(Effect.orElseSucceed(() => null))) !== null)
+
+			if ((yield* readOutcome(cmd.child).pipe(Effect.orElseSucceed(() => null))) !== null) {
 				return {started: false};
+			}
+
 			yield* steady(
 				"note a child",
 				ledger.append(
@@ -131,9 +140,17 @@ const handlers = (o: {
 				"start a child",
 				self.startChild(cmd.child, null, cmd.usd === null ? undefined : {usd: cmd.usd}),
 			);
-			if (started.how !== "ok") return yield* failed;
+
+			if (started.how !== "ok") {
+				return yield* failed;
+			}
+
 			const sent = yield* self.send(streams(cmd.child).inbox, "job", cmd.job);
-			if (sent.how !== "sent") return yield* failed;
+
+			if (sent.how !== "sent") {
+				return yield* failed;
+			}
+
 			return {started: started.started};
 		}).pipe(Effect.provideContext(o.context));
 
@@ -157,7 +174,11 @@ const handlers = (o: {
 			const row = yield* readOutcome(cmd.child).pipe(Effect.orElseSucceed(() => null));
 			const draft = decodeDraft(row?.outcome);
 			const data = Exit.isSuccess(draft) ? revisionOfDraft(draft.value.draft) : null;
-			if (data === null) return yield* Effect.fail<PlanFailed>({_tag: "no_plan"});
+
+			if (data === null) {
+				return yield* Effect.fail<PlanFailed>({_tag: "no_plan"});
+			}
+
 			const last = latestOf(foldLedger(yield* readFacts), cmd.plan);
 			yield* sendFact(
 				{
@@ -265,6 +286,7 @@ const handlers = (o: {
 };
 
 const decodeJob = Schema.decodeUnknownExit(Schema.fromJsonString(LaneJobSchema));
+
 const jobOf = (self: Self["Service"]) =>
 	self.reads.readStream(self.inbox).pipe(
 		Effect.orElseSucceed(() => []),

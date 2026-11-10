@@ -31,6 +31,7 @@ const NEXT = resolve(import.meta.dirname, "../../../..");
 const GROUPS = ["packages", "programs", "apps"] as const; // pnpm-workspace.yaml's next/ globs
 
 const Names = Schema.optional(Schema.Record(Schema.String, Schema.String));
+
 const Manifest = Schema.Struct({
 	name: Schema.String,
 	version: Schema.optional(Schema.String),
@@ -43,18 +44,24 @@ const Manifest = Schema.Struct({
 	peerDependencies: Names,
 	optionalDependencies: Names,
 });
+
 type Package = {
 	readonly dir: string;
 	readonly group: (typeof GROUPS)[number];
 	readonly manifest: typeof Manifest.Type;
 };
+
 const readManifest = Schema.decodeUnknownSync(Manifest);
 
 /** Every package under `next`: a child folder of a group that holds a `package.json`. */
 const packagesIn = (next: string): ReadonlyArray<Package> =>
 	GROUPS.flatMap((group) => {
 		const folder = join(next, group);
-		if (!existsSync(folder)) return [];
+
+		if (!existsSync(folder)) {
+			return [];
+		}
+
 		return readdirSync(folder, {withFileTypes: true})
 			.filter(
 				(entry) => entry.isDirectory() && existsSync(join(folder, entry.name, "package.json")),
@@ -74,7 +81,11 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
 		? []
 		: readdirSync(dir, {withFileTypes: true}).flatMap((entry) => {
 				const path = join(dir, entry.name);
-				if (!entry.isDirectory()) return /\.tsx?$/.test(entry.name) ? [path] : [];
+
+				if (!entry.isDirectory()) {
+					return /\.tsx?$/.test(entry.name) ? [path] : [];
+				}
+
 				const skip = ["node_modules", "dist"].includes(entry.name) || entry.name.startsWith(".");
 				return skip ? [] : codeFiles(path);
 			});
@@ -84,12 +95,15 @@ const IMPORTS = [
 	/^[ \t]*import\s*["']([^"']+)["']/gm,
 	/\bimport\(\s*["']([^"']+)["']\s*\)/g,
 ];
+
 const importsIn = (text: string): ReadonlyArray<string> =>
 	IMPORTS.flatMap((pattern) =>
 		[...text.matchAll(pattern)].flatMap((m) => (m[1] === undefined ? [] : [m[1]])),
 	);
+
 const importsInFile = (file: string): ReadonlyArray<string> =>
 	importsIn(readFileSync(file, "utf8"));
+
 const isRelative = (spec: string): boolean => spec.startsWith(".");
 
 /** `@kampus/libfabrika/transport` is `{name: "@kampus/libfabrika", subpath: "./transport"}`. */
@@ -119,17 +133,29 @@ const pointsAt = (from: string, spec: string): string => {
 /** A package's `exports` map, each key with the file it points at. */
 const exportMap = (pkg: Package): ReadonlyMap<string, string | undefined> => {
 	const target = (value: unknown): string | undefined => {
-		if (typeof value === "string") return join(pkg.dir, value);
-		if (typeof value !== "object" || value === null) return undefined;
+		if (typeof value === "string") {
+			return join(pkg.dir, value);
+		}
+
+		if (typeof value !== "object" || value === null) {
+			return undefined;
+		}
+
 		const conditions = new Map(Object.entries(value));
 		return target(conditions.get("import") ?? conditions.get("default"));
 	};
 	const exports = pkg.manifest.exports;
+
 	if (typeof exports !== "object" || exports === null) {
 		return exports === undefined ? new Map() : new Map([[".", target(exports)]]);
 	}
+
 	const entries = Object.entries(exports);
-	if (!entries.every(([key]) => key.startsWith("."))) return new Map([[".", target(exports)]]);
+
+	if (!entries.every(([key]) => key.startsWith("."))) {
+		return new Map([[".", target(exports)]]);
+	}
+
 	return new Map(entries.map(([key, value]) => [key, target(value)]));
 };
 
@@ -141,19 +167,27 @@ const shown = (from: string, file: string): string => relative(from, file).split
 
 // Planted trees: each scan is seen to fire on a planted break before it is trusted on `next/`.
 const planted: Array<string> = [];
+
 const plant = (files: Readonly<Record<string, string | object>>): string => {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
 	planted.push(root);
+
 	for (const [path, body] of Object.entries(files)) {
 		mkdirSync(dirname(join(root, path)), {recursive: true});
 		writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
 	}
+
 	return root;
 };
+
 afterAll(() => {
-	for (const root of planted.splice(0)) rmSync(root, {recursive: true, force: true});
+	for (const root of planted.splice(0)) {
+		rmSync(root, {recursive: true, force: true});
+	}
 });
+
 const lines = (...each: ReadonlyArray<string>): string => `${each.join("\n")}\n`;
+
 /** A `package.json` the way p65 wants one; `extra` overrides or adds fields. */
 const manifest = (name: string, extra: object = {}): object => ({
 	name,
@@ -209,29 +243,45 @@ const importFaults = (next: string): ReadonlyArray<string> => {
 	return codeFiles(next).flatMap((file) => {
 		const where = shown(next, file);
 		const pkg = ownerAt(packages, file);
-		if (pkg === undefined) return EXAM.test(where) ? [] : [`${where}: sits in no package`];
+
+		if (pkg === undefined) {
+			return EXAM.test(where) ? [] : [`${where}: sits in no package`];
+		}
+
 		const names = listed(pkg.manifest);
 		return importsInFile(file).flatMap((spec) => {
 			const found: Array<string> = [];
+
 			if (isRelative(spec)) {
 				if (!pointsAt(file, spec).startsWith(`${pkg.dir}${sep}`)) {
 					found.push(`${where} imports "${spec}": a relative path out of its package`);
 				}
+
 				return found;
 			}
-			if (isPlatform(spec)) return found;
+
+			if (isPlatform(spec)) {
+				return found;
+			}
+
 			const {name, subpath} = packageAt(spec);
+
 			if (name !== pkg.manifest.name && !names.has(name)) {
 				found.push(`${where} imports "${spec}": ${name} is not in its package.json`);
 			}
+
 			const target = byName.get(name);
+
 			if (target !== undefined && !exportMap(target).has(subpath)) {
 				found.push(`${where} imports "${spec}": ${subpath} is not in ${name}'s exports`);
 			}
+
 			const inApp = pkg.group === "apps" && shown(pkg.dir, file) !== "src/entry/electron-main.ts";
+
 			if (name === "electron" && inApp) {
 				found.push(`${where} imports "${spec}": in an app, only src/entry/electron-main.ts may`);
 			}
+
 			return found;
 		});
 	});
@@ -258,6 +308,7 @@ const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
 	"@kampus/tuval": ["."],
 	"@kampus/notes": ["."],
 };
+
 const browserEntries = (
 	packages: ReadonlyArray<Package>,
 ): ReadonlyArray<{readonly label: string; readonly file: string}> =>
@@ -279,12 +330,17 @@ const reach = async (next: string, label: string, file: string): Promise<Readonl
 		name: "forbidden",
 		resolveId(source, importer) {
 			const rule = FORBIDDEN.find((f) => f.test(source));
-			if (rule === undefined) return undefined;
+
+			if (rule === undefined) {
+				return undefined;
+			}
+
 			hits.push(`${label} reaches ${rule.name}: "${source}" from ${shown(next, importer ?? file)}`);
 			return {id: source, external: true};
 		},
 	};
 	let bundle: Awaited<ReturnType<typeof rolldown>> | undefined;
+
 	try {
 		bundle = await rolldown({
 			input: file,

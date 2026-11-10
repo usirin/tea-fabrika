@@ -50,7 +50,9 @@ own_url = re.compile(re.escape(repo_url) + r'(?:\.git)?(?=$|[\s/#?)>]|\.(?=$|[\s
 # OpenSSH's short sk- type names contain punctuation outside these key payloads.
 patterns = [
     # Decision 0011: a plain path under /tmp passes; a first part ending in -<number> may hold a user id.
-    ('machine_path', re.compile(r'/(?:Users|home|private/tmp|private/var/folders|var/folders)/|/(?:tmp)/[^/\s]*-[0-9]+(?![^/\s"\'`)\]>,;:])|[A-Za-z]:[\\/]Users[\\/]', re.I)),
+    # Home folders match in their real case (/Users on a Mac, /home on Linux), so a lowercase API
+    # path such as GitHub's /users/<name>/keys passes. The temp folders and C:\Users match in any case.
+    ('machine_path', re.compile(r'/(?:Users|home)/|(?i:/(?:private/tmp|private/var/folders|var/folders)/|/tmp/[^/\s]*-[0-9]+(?![^/\s"\'`)\]>,;:])|[A-Za-z]:[\\/]Users[\\/])')),
     ('key', re.compile(r'\b(?:npm_[A-Za-z0-9]{36,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{82,}|sk-(?:[A-Za-z0-9]{48,}|(?:proj|svcacct|admin)-[A-Za-z0-9_-]{124,}))|-----BEGIN (?:[A-Z ]*PRIVATE )?KEY-----')),
     ('em_dash', re.compile(chr(0x2014))),
     ('canvas', re.compile(r'https?://(?:claude\.ai/(?:design|artifacts)|[^/\s]*\.claude\.site)(?:[/?#]|$)', re.I)),

@@ -9,11 +9,13 @@ import * as fc from "fast-check";
 const SEED = 119120;
 const Model = Schema.Struct({count: Schema.Int, carry: Schema.Int});
 const Msg = Schema.Struct({type: Schema.Literal("add"), n: Schema.Int});
+
 const report = Cmd.make("report", {
 	input: Schema.Struct({n: Schema.Int}),
 	ok: Schema.Null,
 	err: [],
 });
+
 const machine = Machine.make({
 	model: Model,
 	msg: Msg,
@@ -25,9 +27,11 @@ const machine = Machine.make({
 		report_err: (s) => [s, []],
 	},
 });
+
 const equals = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const encode = Schema.encodeSync(Model);
 const decode = Schema.decodeUnknownSync(Model);
+
 const msgs = [
 	{type: "add", n: 1},
 	{type: "add", n: 2},
@@ -83,6 +87,7 @@ describe("S2 syncTest catches its plants", () => {
 	});
 	it("plant, skip the first or last cut: boot and final saves are checked even for an empty list", async () => {
 		const {syncTest} = await import("./testing.ts");
+
 		for (const list of [[], msgs] as const) {
 			let saves = 0;
 			const cuts: number[] = [];
@@ -156,7 +161,8 @@ describe("p69 senderTest catches its plants", () => {
 		const wrong = [writes[0]!, {...writes[1]!, parent: null, by: owner}, writes[2]!];
 		expect(() => senderTest({inputs, expected, writes: wrong, owner, seed: SEED})).toThrow();
 	});
-	for (const fault of ["missing", "duplicate", "extra"] as const)
+
+	for (const fault of ["missing", "duplicate", "extra"] as const) {
 		it(`plant, ${fault} write: every expected write matches exactly once`, async () => {
 			const {senderTest} = await import("./testing.ts");
 			const wrong =
@@ -167,4 +173,5 @@ describe("p69 senderTest catches its plants", () => {
 						: [...writes, {...writes[0]!, id: "unexpected"}];
 			expect(() => senderTest({inputs, expected, writes: wrong, owner, seed: SEED})).toThrow();
 		});
+	}
 });

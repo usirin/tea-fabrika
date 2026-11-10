@@ -14,14 +14,22 @@ export function ear<T>() {
 	let waiting: {readonly n: number; readonly done: Deferred.Deferred<readonly T[]>}[] = [];
 	const hear = (value: T) => {
 		values.push(value);
-		for (const w of waiting)
-			if (values.length >= w.n) Deferred.doneUnsafe(w.done, Effect.succeed(values.slice(0, w.n)));
+
+		for (const w of waiting) {
+			if (values.length >= w.n) {
+				Deferred.doneUnsafe(w.done, Effect.succeed(values.slice(0, w.n)));
+			}
+		}
+
 		waiting = waiting.filter((w) => values.length < w.n);
 	};
 	/** The first `n` values heard, once there are that many. */
 	const upTo = (n: number) =>
 		Effect.gen(function* () {
-			if (values.length >= n) return values.slice(0, n);
+			if (values.length >= n) {
+				return values.slice(0, n);
+			}
+
 			const done = yield* Deferred.make<readonly T[]>();
 			waiting.push({n, done});
 			return yield* Deferred.await(done);

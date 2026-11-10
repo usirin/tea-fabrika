@@ -49,6 +49,7 @@ const ToolUse = Schema.Struct({
 	id: Schema.optional(Schema.String),
 	name: Schema.String,
 });
+
 const ToolResult = Schema.Struct({
 	type: Schema.Literal("tool_result"),
 	tool_use_id: Schema.String,
@@ -65,11 +66,13 @@ const Assistant = Schema.Struct({
 		usage: Schema.optional(Usage),
 	}),
 });
+
 const User = Schema.Struct({
 	type: Schema.Literal("user"),
 	parent_tool_use_id: Schema.NullOr(Schema.String),
 	message: Schema.Struct({content: Schema.Union([Schema.String, Schema.Array(Schema.Unknown)])}),
 });
+
 /** The partial message that ends a model turn, with the turn's output tokens. */
 const Delta = Schema.Struct({
 	type: Schema.Literal("stream_event"),
@@ -79,12 +82,14 @@ const Delta = Schema.Struct({
 		usage: Schema.Struct({output_tokens: Schema.Number}),
 	}),
 });
+
 const Result = Schema.Struct({
 	type: Schema.Literal("result"),
 	subtype: Schema.String,
 	is_error: Schema.Boolean,
 	usage: Usage,
 });
+
 const Seen = Schema.Union([Assistant, User, Delta, Result]);
 
 const seenOf = Schema.decodeUnknownOption(Seen);
@@ -141,7 +146,10 @@ export const sdkEvents = (runId: string): SdkEvents => {
 
 	/** The open turn's end. `output`: its output tokens, when its `message_delta` said them. */
 	const settle = (at: number, output?: number): AgentEvent<null>[] => {
-		if (open === null) return [];
+		if (open === null) {
+			return [];
+		}
+
 		const {calls, usage} = open;
 		open = null;
 		const known =
@@ -152,30 +160,46 @@ export const sdkEvents = (runId: string): SdkEvents => {
 	};
 
 	const seen = (message: unknown, at: number): AgentEvent<null>[] => {
-		if (streamed(message)) return [];
+		if (streamed(message)) {
+			return [];
+		}
+
 		asked ??= at;
 		const decoded = seenOf(message);
-		if (Option.isNone(decoded)) return [];
+
+		if (Option.isNone(decoded)) {
+			return [];
+		}
+
 		const m = decoded.value;
 		const head = {runId, at};
+
 		if (m.type === "result") {
 			const done = settle(at);
-			if (m.subtype === "success" && !m.is_error)
+
+			if (m.subtype === "success" && !m.is_error) {
 				return [
 					...done,
 					{...head, type: "RunDone", status: {kind: "done", output: null, usage: usageOf(m.usage)}},
 				];
+			}
+
 			const failure =
 				m.subtype === "error_max_turns"
 					? {reason: "turn_limit" as const, at}
 					: {reason: "llm" as const, error: m.subtype, at};
 			return [...done, {...head, type: "RunDone", status: {kind: "failed", failure}}];
 		}
-		if (m.parent_tool_use_id !== null) return [];
+
+		if (m.parent_tool_use_id !== null) {
+			return [];
+		}
+
 		if (m.type === "stream_event") {
 			asked = at;
 			return settle(at, m.event.usage.output_tokens);
 		}
+
 		if (m.type === "user") {
 			asked = at;
 			return blocks(m.message.content, toolResultOf).map((r): AgentEvent<null> => {
@@ -191,9 +215,11 @@ export const sdkEvents = (runId: string): SdkEvents => {
 					: {...head, type: "ToolSettled", callId: r.tool_use_id, result: null};
 			});
 		}
+
 		// The SDK can hand one model turn over in several messages, all with the turn's id.
 		const id = m.message.id ?? null;
 		const events: AgentEvent<null>[] = [];
+
 		if (id === null || id !== current) {
 			turn += 1;
 			events.push(...settle(at), {
@@ -208,6 +234,7 @@ export const sdkEvents = (runId: string): SdkEvents => {
 			current = id;
 			open = {calls: [], usage: m.message.usage};
 		}
+
 		const calls: ToolCall[] = blocks(m.message.content, toolUseOf).map((use, i) => ({
 			callId: use.id ?? `${turn}.${(open?.calls.length ?? 0) + i}`,
 			name: use.name,
@@ -215,10 +242,12 @@ export const sdkEvents = (runId: string): SdkEvents => {
 		}));
 		// A late message of a turn already settled: its calls still start, the turn is already drawn.
 		open?.calls.push(...calls);
+
 		for (const call of calls) {
 			names.set(call.callId, call.name);
 			events.push({...head, type: "ToolStarted", ...call});
 		}
+
 		return events;
 	};
 

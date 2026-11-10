@@ -53,11 +53,13 @@ export class Key {
 	/** The registered name whose lease the write was sent under. */
 	readonly name: string;
 	readonly fence: number;
+
 	private constructor(text: string, name: string, fence: number) {
 		this.text = text;
 		this.name = name;
 		this.fence = fence;
 	}
+
 	static {
 		mint = (text, name, fence) => {
 			const key = new Key(text, name, fence);
@@ -65,6 +67,7 @@ export class Key {
 			return key;
 		};
 	}
+
 	/** True for a key this module made. A key forged with a cast is not one. */
 	get real(): boolean {
 		return this.#minted && minted.has(this);
@@ -188,8 +191,15 @@ export const gate = (o: GateOptions) =>
 		const leaseHeld = Effect.gen(function* () {
 			for (;;) {
 				const lease = yield* steady("read the lease", ledger.lease(o.name));
-				if (lease !== null && lease.fence !== o.fence) return false;
-				if (lease !== null && lease.expires_at - Date.now() > marginMs) return true;
+
+				if (lease !== null && lease.fence !== o.fence) {
+					return false;
+				}
+
+				if (lease !== null && lease.expires_at - Date.now() > marginMs) {
+					return true;
+				}
+
 				yield* Effect.sleep(SPACING);
 			}
 		});
@@ -202,14 +212,17 @@ export const gate = (o: GateOptions) =>
 				const decodeAnswer = Schema.decodeUnknownExit(write.answer);
 				const rows = yield* steady("read the write rows", ledger.readStream(stream));
 				const done = rows.find((r) => r.id === `done:${key}`);
+
 				if (done !== undefined) {
 					const row = decodeDone(done.data);
 					const answer = Exit.isSuccess(row) ? decodeAnswer(row.value.answer) : null;
+
 					if (answer !== null && Exit.isSuccess(answer)) {
 						yield* note("done_found");
 						return answer.value;
 					}
 				}
+
 				const finish = (answer: A) =>
 					append(`done:${key}`, "done", {key, op: write.op, answer}).pipe(
 						Effect.matchEffect({
@@ -220,9 +233,11 @@ export const gate = (o: GateOptions) =>
 									: Effect.fail<Failed>({_tag: "unknown"}),
 						}),
 					);
+
 				if (rows.some((r) => r.id === `intent:${key}`)) {
 					// A host died between the two rows: is the write out there?
 					const there = yield* write.look(key);
+
 					if (Option.isSome(there)) {
 						yield* note("found_out_there");
 						return yield* finish(there.value);
@@ -231,15 +246,22 @@ export const gate = (o: GateOptions) =>
 					const wrote = yield* append(`intent:${key}`, "intent", {key, op: write.op}).pipe(
 						Effect.result,
 					);
-					if (wrote._tag === "Failure")
+
+					if (wrote._tag === "Failure") {
 						return yield* wrote.failure._tag === "Fenced"
 							? stop(write.op, key, "refused_fence")
 							: Effect.fail<Failed>({_tag: "unknown"});
+					}
+
 					yield* note("intent");
 				}
+
 				yield* faults.at(`before-send:${write.op}`);
-				if (o.planted !== "no_lease_check" && !(yield* leaseHeld))
+
+				if (o.planted !== "no_lease_check" && !(yield* leaseHeld)) {
 					return yield* stop(write.op, key, "refused_lease");
+				}
+
 				const k = mint(key, o.name, o.fence);
 				yield* note("send");
 				const sent = yield* Effect.acquireUseRelease(
@@ -247,10 +269,12 @@ export const gate = (o: GateOptions) =>
 					() => write.send(k),
 					() => Effect.sync(() => sending.delete(k)),
 				).pipe(Effect.result);
+
 				if (sent._tag === "Failure") {
 					yield* note("failed");
 					return yield* Effect.fail<Failed>({_tag: "unknown"});
 				}
+
 				yield* note("sent");
 				yield* faults.at(`after-send:${write.op}`);
 				return yield* finish(sent.success);

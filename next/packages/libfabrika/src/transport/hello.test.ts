@@ -11,22 +11,27 @@ import * as Transport from "./index.ts";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const SPACE = "fabrika-client";
+
 const u32 = (n: number) => {
 	const b = Buffer.alloc(4);
 	b.writeUInt32BE(n);
 	return b;
 };
+
 const field = (value: string | Uint8Array) => {
 	const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
 	return Buffer.concat([u32(b.length), b]);
 };
+
 const armor = (bytes: Uint8Array) =>
 	`-----BEGIN SSH SIGNATURE-----\n${Buffer.from(bytes)
 		.toString("base64")
 		.match(/.{1,70}/g)
 		?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
+
 const fingerprint = (bytes: Uint8Array) =>
 	`SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+
 const signedBytes = (text: string, space: string = SPACE) =>
 	Buffer.concat([
 		Buffer.from("SSHSIG"),
@@ -35,6 +40,7 @@ const signedBytes = (text: string, space: string = SPACE) =>
 		field("sha512"),
 		field(createHash("sha512").update(text).digest()),
 	]);
+
 const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
 	armor(
 		Buffer.concat([
@@ -47,6 +53,7 @@ const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
 			field(signature),
 		]),
 	);
+
 const web = <A>(call: () => Promise<A>): Effect.Effect<A, Error> =>
 	Effect.tryPromise({try: call, catch: () => new Error("test WebCrypto failed")});
 
@@ -71,6 +78,7 @@ const key = Effect.fn("test.key")(function* () {
 const url = "https://fabrika.test/project-a",
 	tab = "tab-a",
 	nonce = "nonce-a";
+
 const setup = Effect.fnUntraced(function* () {
 	const k = yield* key();
 	const signed = yield* k.sign(`fabrika-hello\n${url}\n${tab}\n${nonce}`);
@@ -93,7 +101,10 @@ const setup = Effect.fnUntraced(function* () {
 	} satisfies typeof Transport.Who.Type;
 	let used = false;
 	const consume = vi.fn(() => {
-		if (used) return false;
+		if (used) {
+			return false;
+		}
+
 		used = true;
 		return true;
 	});
@@ -110,6 +121,7 @@ const setup = Effect.fnUntraced(function* () {
 	};
 	return {hello, trusted, who, consume, admit};
 });
+
 describe("P10 hello", () => {
 	// d2: for any signed hello (a fresh key, any url, tab and nonce) that admission refuses
 	// (not_granted, its one refusal), the refusal carries that caller's own checked fingerprint and spends no nonce.
@@ -160,7 +172,8 @@ describe("P10 hello", () => {
 			{seed: 119120, endOnFailure: true, numRuns: 40},
 		);
 	});
-	for (const binding of ["tab", "nonce"] as const)
+
+	for (const binding of ["tab", "nonce"] as const) {
 		it.effect(
 			`p26: an unsigned ${binding} claim cannot differ from the ${binding} bound by the proof`,
 			() =>
@@ -176,6 +189,8 @@ describe("P10 hello", () => {
 					expect(x.consume).not.toHaveBeenCalled();
 				}),
 		);
+	}
+
 	it.effect("p82: a client with an unknown OS can still initialize", () =>
 		Effect.gen(function* () {
 			const x = yield* setup();
@@ -215,7 +230,8 @@ describe("P10 hello", () => {
 			{seed: 119120, numRuns: 100},
 		);
 	});
-	for (const binding of ["nonce", "url", "tab", "name"] as const)
+
+	for (const binding of ["nonce", "url", "tab", "name"] as const) {
 		it.effect(`p26: changed trusted ${binding} refuses before admission`, () =>
 			Effect.gen(function* () {
 				const x = yield* setup();
@@ -230,6 +246,8 @@ describe("P10 hello", () => {
 				expect(x.consume).not.toHaveBeenCalled();
 			}),
 		);
+	}
+
 	it.effect("p26: a consumed nonce cannot initialize again", () =>
 		Effect.gen(function* () {
 			const x = yield* setup();
@@ -239,7 +257,8 @@ describe("P10 hello", () => {
 			expect((yield* repeated)._tag).toBe("refused");
 		}),
 	);
-	for (const kind of ["signature", "key", "version", "unknown"] as const)
+
+	for (const kind of ["signature", "key", "version", "unknown"] as const) {
 		it.effect(`p26/p82: ${kind} refusal has no nonce write or successful admission`, () =>
 			Effect.gen(function* () {
 				const x = yield* setup();
@@ -273,6 +292,8 @@ describe("P10 hello", () => {
 				expect(admit.mock.calls.length).toBe(kind === "unknown" ? 1 : 0);
 			}),
 		);
+	}
+
 	it.effect("p82/p66: additive hello fields are ignored, has/os preserved, ping clamped", () =>
 		Effect.gen(function* () {
 			const x = yield* setup();
@@ -286,6 +307,7 @@ describe("P10 hello", () => {
 			expect(result.hello).toMatchObject({os: "ios", has: ["verify", "seal"]});
 		}),
 	);
+
 	for (const [origin, host, accepted] of [
 		["https://fabrika.test", "127.0.0.1:8123", true],
 		[null, "127.0.0.1:8123", true],
@@ -294,7 +316,7 @@ describe("P10 hello", () => {
 		["https://fabrika.test@evil.test", "127.0.0.1:8123", false],
 		["not a URL", "127.0.0.1:8123", false],
 		["https://fabrika.test", "evil.test:8123", false],
-	] as const)
+	] as const) {
 		it(`p26 origin: ${origin} / ${host}`, () => {
 			expect(
 				Transport.sameOrigin({
@@ -306,4 +328,5 @@ describe("P10 hello", () => {
 				}),
 			).toBe(accepted);
 		});
+	}
 });

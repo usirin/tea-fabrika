@@ -16,6 +16,8 @@
 #     in a gh stack must merge through the stack API, which takes no head pin: its head is read
 #     again first, then `gh stack merge <pr> --squash --yes` lands it
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
+#   - once the squash is on main, closes each ticket the PR description names on a line of its
+#     own, `fabrika close ticket <N>`, and prints what it closed (0015)
 set -eu
 usage() { echo "usage: catchup.sh <pr> <ticket>" >&2; exit 1; }
 [ "$#" = 2 ] || usage
@@ -36,11 +38,64 @@ read_gh() {
 		attempt=$((attempt + 1))
 	done
 }
+# close_named: once GitHub says MERGED and the squash commit is on main, close each ticket the PR
+# description names on a line of its own, `fabrika close ticket <N>` (0015). Nothing else closes
+# one: no GitHub keyword, trailer or signed ticket. Each close gets a comment naming the PR and
+# its merge commit, through the tracker's own `post` command, as agent:lead. Its list shows only
+# open tickets, so one not on it (already closed, or no such ticket) is said and skipped. Trouble
+# here prints a line and never turns a landed merge red.
+TRACKER_HOME=${FABRIKA_HOME:-$HOME/Library/Application Support/@kampus/fabrika-app}
+tracker() { FABRIKA_HOME=$TRACKER_HOME node "$MAIN/apps/fabrika/src/cli.ts" post "$@" --as lead 2>&1; }
+# The tracker's first ERROR line, never its stack, which names local paths.
+first_error() { printf '%s\n' "$1" | grep -m 1 ERROR || echo "no reason given"; }
+close_named() {
+	landed=""
+	# A stack merges asynchronously: give it a few minutes to say MERGED.
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		landed=$(read_gh pr view "$pr" -R "$GH_REPO" --json state,mergeCommit \
+			-q '"\(.state) \(.mergeCommit.oid // "")"') || landed=""
+		case $landed in "MERGED "?*) break ;; esac
+		sleep 30
+	done
+	case $landed in
+	"MERGED "?*) oid=${landed#MERGED } ;;
+	*) landed=${landed% }; echo "pr $pr: not confirmed merged (${landed:-no answer}); closed no tickets"; return 0 ;;
+	esac
+	if ! { git fetch -q origin main && git merge-base --is-ancestor "$oid" origin/main; }; then
+		echo "pr $pr: merge commit $oid is not on main; closed no tickets"
+		return 0
+	fi
+	body=$(read_gh pr view "$pr" -R "$GH_REPO" --json body -q .body) ||
+		{ echo "pr $pr: cannot read the description; closed no tickets"; return 0; }
+	named=$(printf '%s\n' "$body" | tr -d '\r' |
+		awk '/^[ \t]*fabrika close ticket [0-9]+[ \t]*$/ && !seen[$4 + 0]++ {print $4 + 0}')
+	[ -n "$named" ] || { echo "pr $pr: no fabrika close ticket line; closed no tickets"; return 0; }
+	listed=$(tracker list) || { echo "pr $pr: cannot read the tracker; closed no tickets: $(echo $named)"; return 0; }
+	note=$W/.fabrika-close-note
+	for n in $named; do
+		state=$(printf '%s\n' "$listed" | sed -n "s/.*: #$n \([a-z]*\) .*/\1/p" | head -n 1)
+		case $state in
+		open)
+			printf 'Closed by the merge of https://github.com/%s/pull/%s, merge commit %s.\n' \
+				"$GH_REPO" "$pr" "$oid" >"$note"
+			if ! said=$(tracker comment "$n" --body-file "$note"); then
+				echo "pr $pr: ticket $n not closed, the comment failed: $(first_error "$said")"
+			elif ! said=$(tracker close "$n"); then
+				echo "pr $pr: ticket $n not closed: $(first_error "$said")"
+			else
+				echo "pr $pr: closed ticket $n"
+			fi
+			;;
+		*) echo "pr $pr: ticket $n is not open (already closed, or no such ticket); left as it is" ;;
+		esac
+	done
+}
 # sweep <mode> <pr> <branch> <tip> <checkout> <box.sh>: `checkout` removes this run's own
 # checkout, forced, unless it holds MAIN's Git storage; `landed` keeps the checked head and removes
 # the branch's boxes and its one driver worktree, each only when that is safe.
+# Before either removal, keepruns.sh moves the folder's runs/ into MAIN's runs/<name>/.
 sweep() {
-python3 - "$@" <<'PY'
+KEEPRUNS="$LEAD/keepruns.sh" python3 - "$@" <<'PY'
 from pathlib import Path
 import os
 import re
@@ -51,6 +106,13 @@ import sys
 mode, pr, branch, tip, checkout, box_script = sys.argv[1:]
 main = Path(os.environ["MAIN"]).resolve()
 boxes = Path(os.environ["BOXES"]).resolve()
+
+def keep_runs(path):
+    # Raw samples live under runs/, never in git: move them to MAIN before the folder goes.
+    result = subprocess.run(["sh", os.environ["KEEPRUNS"], str(path)], capture_output=True, text=True)
+    if result.stdout.strip():
+        print(result.stdout.rstrip(), flush=True)
+    return result.returncode == 0
 
 def kept(item, why):
     # Paths from Git may contain newlines. Keep each result on one line.
@@ -176,6 +238,8 @@ try:
             kept(label, "checked head not retained")
         elif any(field.split(" ", 1)[0] in ("locked", "prunable") for field in fields):
             kept(label, "locked or unreadable worktree")
+        elif not keep_runs(path):
+            kept(label, "could not keep its runs/")
         elif git("worktree", "remove", str(path)).returncode:
             kept(label, "worktree removal refused or failed")
 
@@ -189,6 +253,9 @@ try:
         reason = storage_reason(path, False)
         if reason:
             kept(f"worktree {path.name}", reason)
+            return
+        if not keep_runs(path):
+            kept(f"worktree {path.name}", "could not keep its runs/")
             return
         git("worktree", "remove", "--force", "--force", str(path))
         if os.path.lexists(path):
@@ -367,6 +434,7 @@ if ! said=$(gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" 
 	esac
 fi
 echo "pr $pr: merged at $(git rev-parse --short "$tip"), signed for ticket $ticket"
+close_named || echo "pr $pr: closing tickets failed; close them by hand"
 # A landed merge stays successful even if cleanup must keep a working copy. The EXIT trap then
 # removes the catch-up checkout itself.
 if cd "$MAIN"; then

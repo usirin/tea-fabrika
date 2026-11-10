@@ -150,11 +150,13 @@ const Where = Schema.Struct({
  * shas are kept (`--jq`), not the files and commits around them.
  */
 const MAIN_OF = "{tested: .merge_base_commit.sha, tip: .base_commit.sha}";
+
 const mainArgs = (
 	at: {readonly owner: string; readonly name: string},
 	base: string,
 	head: string,
 ) => ["api", `repos/${at.owner}/${at.name}/compare/${base}...${head}`, "--jq", MAIN_OF];
+
 const Answer = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -165,6 +167,7 @@ const Answer = Schema.Struct({
 		}),
 	}),
 });
+
 const Team = Schema.Struct({
 	data: Schema.Struct({
 		organization: Schema.Struct({
@@ -198,11 +201,13 @@ export function prOf(
 }
 
 const ISSUE = String.raw`(?:(?:[\w.-]+\/[\w.-]+)?#\d+|https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+)`;
+
 /** GitHub's own closing words: close, fix, resolve, in their three forms. */
 const CLOSES = new RegExp(
 	String.raw`\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+${ISSUE}`,
 	"i",
 );
+
 const PART_OF = new RegExp(String.raw`\bpart of\s+${ISSUE}`, "i");
 /** The end of a match of either: the ticket, as `#N`, `owner/name#N` or an issue's URL. */
 const NAMED = /(?:([\w.-]+)\/([\w.-]+))?#(\d+)$|github\.com\/([\w.-]+)\/([\w.-]+)\/issues\/(\d+)$/;
@@ -224,7 +229,11 @@ export function ticketIn(body: string): TicketRef | null {
 	const closes = CLOSES.exec(body);
 	const found = closes ?? PART_OF.exec(body);
 	const at = found === null ? null : NAMED.exec(found[0]);
-	if (at === null) return null;
+
+	if (at === null) {
+		return null;
+	}
+
 	const link = closes === null ? "part_of_it" : "closes_it";
 	return {
 		link,
@@ -254,6 +263,7 @@ export const ticketOf = (
 /** Whether an account is one of a list. GitHub logins do not tell case apart. */
 const isOneOf = (author: Author, logins: readonly string[]): boolean =>
 	author !== null && logins.some((login) => login.toLowerCase() === author.login.toLowerCase());
+
 /** Whether a commit, written whole or short, is this head. */
 const isHead = (head: string, written: string): boolean =>
 	written.length >= 7 && head.startsWith(written);
@@ -282,7 +292,11 @@ export function textKindOf(path: string): "review-code" | "review-doc" | "review
  */
 export function rulesOfBoth(configs: readonly (string | null)[]): Rules | null {
 	const known = configs.map(reviewRules).filter((r): r is Rules => r !== null);
-	if (known.length !== configs.length || known.length === 0) return null;
+
+	if (known.length !== configs.length || known.length === 0) {
+		return null;
+	}
+
 	return {governed: known.flatMap((r) => r.governed), ui: known.flatMap((r) => r.ui)};
 }
 
@@ -318,16 +332,29 @@ export function verdictsAt(
 	reviewers: readonly string[],
 ): ReadonlyMap<string, "PASS" | "FAIL"> {
 	const last = new Map<string, "PASS" | "FAIL">();
+
 	for (const comment of [...comments].sort(
 		(a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
 	)) {
-		if (!isOneOf(comment.author, reviewers)) continue;
+		if (!isOneOf(comment.author, reviewers)) {
+			continue;
+		}
+
 		const [standing] = verdictsIn(comment.body);
-		if (standing === undefined) continue;
+
+		if (standing === undefined) {
+			continue;
+		}
+
 		const at = standing.marker.head ?? standing.marker.range?.tip ?? null;
-		if (at === null || !isHead(head, at)) continue;
+
+		if (at === null || !isHead(head, at)) {
+			continue;
+		}
+
 		last.set(standing.marker.namespace, standing.marker.polarity);
 	}
+
 	return last;
 }
 
@@ -344,7 +371,11 @@ export function reviewKindsOf(
 ): PrFacts["reviews"] {
 	const files = pr.files.nodes.map((file) => file.path);
 	const all = rulesOfBoth(configs);
-	if (all === null || files.length === 0 || pr.files.pageInfo.hasNextPage) return null;
+
+	if (all === null || files.length === 0 || pr.files.pageInfo.hasNextPage) {
+		return null;
+	}
+
 	const verdicts = verdictsAt(pr.headRefOid, pr.comments.nodes, reviewers);
 	const needed = kindsNeeded(files, all);
 	const alsoFailed = [...verdicts].flatMap(([kind, verdict]) =>
@@ -379,10 +410,16 @@ export function approvalNeeded(
 ):
 	| {readonly kind: "not_needed" | "unknown"}
 	| {readonly kind: "one_of"; readonly owners: readonly string[]} {
-	if (codeowners === null) return {kind: "unknown"};
+	if (codeowners === null) {
+		return {kind: "unknown"};
+	}
+
 	const rows = parseCodeowners(codeowners);
-	if (pr.files.nodes.some((file) => ownersOf(rows, file.path).length > 0))
+
+	if (pr.files.nodes.some((file) => ownersOf(rows, file.path).length > 0)) {
 		return {kind: "one_of", owners: everyOwner(rows)};
+	}
+
 	return {
 		kind: pr.files.pageInfo.hasNextPage || pr.files.nodes.length === 0 ? "unknown" : "not_needed",
 	};
@@ -396,6 +433,7 @@ export function approvalNeeded(
  */
 export function approvedBy(pr: Pr, owners: readonly string[]): "given" | "missing" {
 	const soleAuthor = owners.length === 1 && isOneOf(pr.author, owners);
+
 	if (soleAuthor) {
 		const said = pr.comments.nodes.some(
 			(c) =>
@@ -403,6 +441,7 @@ export function approvedBy(pr: Pr, owners: readonly string[]): "given" | "missin
 		);
 		return said ? "given" : "missing";
 	}
+
 	const approved = pr.reviews.nodes.some(
 		(r) =>
 			r.state === "APPROVED" &&
@@ -422,6 +461,7 @@ const CHECKS = {
 	PENDING: "pending",
 	EXPECTED: "pending",
 } as const;
+
 const MERGEABLE = {MERGEABLE: "clean", CONFLICTING: "conflicts", UNKNOWN: "unknown"} as const;
 
 /** Who is who, as settings of the run: nothing here names an account. */
@@ -456,7 +496,10 @@ export function approvalDeclared(
 	codeowners: string | null,
 	declared: Declared["approval"],
 ): ReturnType<typeof approvalNeeded> {
-	if (codeowners === null && declared === "none") return {kind: "not_needed"};
+	if (codeowners === null && declared === "none") {
+		return {kind: "not_needed"};
+	}
+
 	return approvalNeeded(pr, codeowners);
 }
 
@@ -470,13 +513,16 @@ export function factsOf(
 	main: Main,
 ): PrFacts | null {
 	const [last] = pr.commits.nodes;
+
 	// The checks must be the head's own, and every thread must be in hand.
 	if (
 		last === undefined ||
 		last.commit.oid !== pr.headRefOid ||
 		pr.reviewThreads.pageInfo.hasNextPage
-	)
+	) {
 		return null;
+	}
+
 	const rollup = last.commit.statusCheckRollup;
 	return {
 		head: pr.headRefOid,
@@ -550,7 +596,11 @@ const accountsOf = (gh: Gh, owners: readonly string[]) =>
 		owners,
 		(owner) => {
 			const team = teamOf(owner);
-			if (team === null) return Effect.succeed<readonly string[] | null>([owner.replace(/^@/, "")]);
+
+			if (team === null) {
+				return Effect.succeed<readonly string[] | null>([owner.replace(/^@/, "")]);
+			}
+
 			return ask(gh, Team, TEAM, team).pipe(
 				Effect.map(({data}) => data.organization.team.members),
 				Effect.match({
@@ -578,7 +628,11 @@ export const readPrFacts =
 	(url: string): Effect.Effect<PrFacts, {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = prOf(url);
-			if (at === null) return yield* failed;
+
+			if (at === null) {
+				return yield* failed;
+			}
+
 			const {headRefOid: head, baseRefName: base} = (yield* ask(gh, Where, WHERE, at)).data
 				.repository.pullRequest;
 			const {repository} = (yield* ask(gh, Answer, QUERY, {
@@ -589,8 +643,12 @@ export const readPrFacts =
 				headConfig: `${head}:${SETTINGS_FILE}`,
 			})).data;
 			const pr = repository.pullRequest;
+
 			// The head moved between the two calls: the files beside it are another commit's.
-			if (pr.headRefOid !== head) return yield* failed;
+			if (pr.headRefOid !== head) {
+				return yield* failed;
+			}
+
 			const need = approvalDeclared(pr, textOf(repository.codeowners), declared.approval);
 			const owners = need.kind === "one_of" ? yield* accountsOf(gh, need.owners) : null;
 			const approval =
@@ -657,6 +715,7 @@ const Context = Schema.Union([
 	}),
 ]);
 type Context = typeof Context.Type;
+
 /** `null`: no check has reported on the commit. */
 const Rollup = Schema.NullOr(
 	Schema.Struct({
@@ -686,9 +745,11 @@ const ChangeAnswer = Schema.Struct({
 		}),
 	}),
 });
+
 const TicketAnswer = Schema.Struct({
 	data: Schema.Struct({repository: Schema.Struct({issue: Schema.Struct({body: Schema.String})})}),
 });
+
 /** GitHub's comparison of two commits: the files that differ, the first 300 of them. */
 const Compared = Schema.Struct({files: Schema.Array(Schema.Struct({filename: Schema.String}))});
 /** With this many files or more, a change's files, kinds and diff are not read. */
@@ -696,6 +757,7 @@ export const MOST_FILES = 300;
 
 const GREEN = ["SUCCESS", "NEUTRAL", "SKIPPED"];
 const RED = ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"];
+
 /** How one check stands. A word this does not know waits: it is never taken for a pass. */
 const standsAs = (word: string | null): "green" | "red" | "pending" =>
 	word === null
@@ -705,6 +767,7 @@ const standsAs = (word: string | null): "green" | "red" | "pending" =>
 			: RED.includes(word)
 				? "red"
 				: "pending";
+
 const checkOf = (context: Context) =>
 	context.__typename === "StatusContext"
 		? {name: context.context, state: standsAs(context.state)}
@@ -731,7 +794,10 @@ export function checksOf(
 	rollup: typeof Rollup.Type | undefined,
 	counted: Counted = "required",
 ): Change["checks"] {
-	if (rollup === null || rollup === undefined) return {state: "pending", required: []};
+	if (rollup === null || rollup === undefined) {
+		return {state: "pending", required: []};
+	}
+
 	const required = rollup.contexts.nodes
 		.filter((context) => counted === "every" || context.isRequired)
 		.map(checkOf);
@@ -764,7 +830,11 @@ export const readChange =
 	(url: string, asked: string | null): Effect.Effect<Change, {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = prOf(url);
-			if (at === null || (asked !== null && !/^[0-9a-f]{40}$/.test(asked))) return yield* failed;
+
+			if (at === null || (asked !== null && !/^[0-9a-f]{40}$/.test(asked))) {
+				return yield* failed;
+			}
+
 			const where = (yield* ask(gh, Where, WHERE, at)).data.repository.pullRequest;
 			const head = asked ?? where.headRefOid;
 			const {repository} = (yield* ask(gh, ChangeAnswer, CHANGE, {
@@ -776,9 +846,11 @@ export const readChange =
 				...rulesAt(where.baseRefName),
 			})).data;
 			const pr = repository.pullRequest;
+
 			// No such commit, or the head moved between the two calls.
-			if (repository.commit === null || (asked === null && pr.headRefOid !== head))
+			if (repository.commit === null || (asked === null && pr.headRefOid !== head)) {
 				return yield* failed;
+			}
 
 			const ticket = ticketIn(pr.body);
 			const criteria =
@@ -853,6 +925,7 @@ query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) { headRefOid commits(last: 1) { nodes { commit { oid statusCheckRollup { state } } } } }
   }
 }`;
+
 const ChecksNow = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -872,6 +945,7 @@ const ChecksNow = Schema.Struct({
 		}),
 	}),
 });
+
 /** One run of a workflow, as GitHub's REST API answers. `run_attempt`: which try it is on. */
 const RunNow = Schema.Struct({status: Schema.String, run_attempt: Schema.Number});
 
@@ -891,20 +965,36 @@ export const checksSettledNow = (
 ): Effect.Effect<boolean> =>
 	Effect.gen(function* () {
 		const at = prOf(url);
-		if (at === null) return false;
+
+		if (at === null) {
+			return false;
+		}
+
 		const pr = (yield* ask(gh, ChecksNow, CHECKS_NOW, at)).data.repository.pullRequest;
-		if (pr.headRefOid !== head) return true;
+
+		if (pr.headRefOid !== head) {
+			return true;
+		}
+
 		const [last] = pr.commits.nodes;
 		const state = last?.commit.oid === head ? last.commit.statusCheckRollup?.state : undefined;
+
 		// No check has reported, or one is still running or still expected.
-		if (state === undefined || state === "PENDING" || state === "EXPECTED") return false;
+		if (state === undefined || state === "PENDING" || state === "EXPECTED") {
+			return false;
+		}
+
 		for (const {run, attempt} of after) {
 			const now = yield* answerOf(gh, RunNow, [
 				"api",
 				`repos/${at.owner}/${at.name}/actions/runs/${run}`,
 			]);
-			if (now.run_attempt <= attempt || now.status !== "completed") return false;
+
+			if (now.run_attempt <= attempt || now.status !== "completed") {
+				return false;
+			}
 		}
+
 		return true;
 	}).pipe(Effect.match({onSuccess: (settled) => settled, onFailure: () => false}));
 
@@ -912,6 +1002,7 @@ const QUEUE = `
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) { pullRequest(number: $number) { state isInMergeQueue mergeCommit { oid } } }
 }`;
+
 /** The same read, with GitHub's own record of each time the pull request went into the merge queue and came out of it. */
 const QUEUE_RECORD = `
 query($owner: String!, $name: String!, $number: Int!) {
@@ -932,6 +1023,7 @@ const QueueStands = {
 	isInMergeQueue: Schema.Boolean,
 	mergeCommit: Schema.NullOr(Schema.Struct({oid: Schema.String})),
 };
+
 /**
  * One time the pull request went into the merge queue or came out of it, as
  * GitHub recorded it. `reason`: why it came out. GitHub writes a "removed"
@@ -944,9 +1036,11 @@ const QueueEvent = Schema.Struct({
 	reason: Schema.optional(Schema.NullOr(Schema.String)),
 });
 type QueueEvent = typeof QueueEvent.Type;
+
 const QueueNow = Schema.Struct({
 	data: Schema.Struct({repository: Schema.Struct({pullRequest: Schema.Struct(QueueStands)})}),
 });
+
 const QueueRecordNow = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -962,6 +1056,7 @@ const QueueRecordNow = Schema.Struct({
 export type LeftQueue =
 	| {readonly reading: "landed"; readonly commit: string}
 	| {readonly reading: "ejected"};
+
 const EJECTED: LeftQueue = {reading: "ejected"};
 
 /**
@@ -989,6 +1084,7 @@ export interface QueueWatch {
 	/** The reads in a row that showed it open and out of the queue, with no record to say why: how many, and when the first one was. */
 	readonly out: {readonly reads: number; readonly since: number} | null;
 }
+
 /** A wait that has read nothing yet. */
 export const OPENED: QueueWatch = {before: undefined, out: null};
 
@@ -1001,6 +1097,7 @@ export interface OutLimits {
 	readonly outPolls: number;
 	readonly outMs: number;
 }
+
 export const DEFAULT_OUT: OutLimits = {outPolls: 3, outMs: 90_000};
 
 /**
@@ -1022,9 +1119,14 @@ export function queueStep(
 	now: number,
 ): {readonly watch: QueueWatch; readonly left: LeftQueue | null} {
 	// Merged, and GitHub has not named the commit yet: not an answer yet.
-	if (read.state === "MERGED")
+	if (read.state === "MERGED") {
 		return {watch, left: read.commit === null ? null : {reading: "landed", commit: read.commit}};
-	if (read.state === "CLOSED") return {watch, left: EJECTED};
+	}
+
+	if (read.state === "CLOSED") {
+		return {watch, left: EJECTED};
+	}
+
 	if (read.events !== null) {
 		const dates = read.events.map((event) => Date.parse(event.createdAt));
 		const before =
@@ -1038,7 +1140,11 @@ export function queueStep(
 			(before === null || Date.parse(last.createdAt) > before);
 		return {watch: {before, out: null}, left: thrownOut ? EJECTED : null};
 	}
-	if (read.inQueue) return {watch: {...watch, out: null}, left: null};
+
+	if (read.inQueue) {
+		return {watch: {...watch, out: null}, left: null};
+	}
+
 	const out = {reads: (watch.out?.reads ?? 0) + 1, since: watch.out?.since ?? now};
 	return {
 		watch: {...watch, out},
@@ -1055,17 +1161,23 @@ export function queueStep(
 export const queueNow = (gh: Gh, url: string): Effect.Effect<QueueRead | null> =>
 	Effect.gen(function* () {
 		const at = prOf(url);
-		if (at === null) return null;
+
+		if (at === null) {
+			return null;
+		}
+
 		const stands = (pr: typeof QueueNow.Type.data.repository.pullRequest) => ({
 			state: pr.state,
 			inQueue: pr.isInMergeQueue,
 			commit: pr.mergeCommit?.oid ?? null,
 		});
 		const whole = yield* Effect.option(ask(gh, QueueRecordNow, QUEUE_RECORD, at));
+
 		if (Option.isSome(whole)) {
 			const pr = whole.value.data.repository.pullRequest;
 			return {...stands(pr), events: pr.timelineItems.nodes.filter((event) => event !== null)};
 		}
+
 		return {
 			...stands((yield* ask(gh, QueueNow, QUEUE, at)).data.repository.pullRequest),
 			events: null,
@@ -1092,7 +1204,11 @@ const leftQueue = (
 			every,
 			Effect.gen(function* () {
 				const read = yield* queueNow(gh, url);
-				if (read === null) return null;
+
+				if (read === null) {
+					return null;
+				}
+
 				const next = queueStep(limits, watch, read, yield* Clock.currentTimeMillis);
 				watch = next.watch;
 				return next.left;
@@ -1137,7 +1253,11 @@ export const readPullRequests =
 	(repo: string): Effect.Effect<readonly PullRequest[], {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = repoOf(repo);
-			if (at === null) return yield* failed;
+
+			if (at === null) {
+				return yield* failed;
+			}
+
 			const listed = yield* answerOf(gh, Schema.Array(Listed), [
 				"api",
 				`repos/${at.owner}/${at.name}/pulls?state=open&per_page=${MOST_PULL_REQUESTS}`,
@@ -1203,6 +1323,7 @@ const TreeAt = Schema.NullOr(
 		),
 	}),
 );
+
 const Trees = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Record(Schema.String, TreeAt),
@@ -1216,8 +1337,15 @@ const Trees = Schema.Struct({
 const readFolders = (gh: Gh) => (repo: string, under: readonly string[]) =>
 	Effect.gen(function* () {
 		const at = repoOf(repo);
-		if (at === null || !under.every((path) => FOLDER.test(path))) return yield* failed;
-		if (under.length === 0) return [];
+
+		if (at === null || !under.every((path) => FOLDER.test(path))) {
+			return yield* failed;
+		}
+
+		if (under.length === 0) {
+			return [];
+		}
+
 		const trees = under
 			.map(
 				(path, i) =>

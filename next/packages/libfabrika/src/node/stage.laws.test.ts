@@ -32,6 +32,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
 			async (raw) => {
 				const home = mkdtempSync(join(tmpdir(), "p12-port-"));
 				vi.stubEnv("FABRIKA_HOME", home);
+
 				try {
 					const exit = await Effect.runPromiseExit(
 						Effect.scoped(
@@ -69,9 +70,11 @@ it("the control plugin returns a typed error for malformed platform port data", 
 		{seed: 119120, numRuns: 20, examples: [[null], [{}], [1.5]]},
 	);
 });
+
 type Step = ReturnType<typeof step.generate>["value"];
 const memoryBrake: Step = {rss: 600_000, exitCode: null, signal: "SIGTERM", delay: 250};
 const crashBrake: Step = {rss: null, exitCode: 1, signal: null, delay: 0};
+
 const sequence = fc.record({
 	restarts: fc.array(step, {maxLength: 4}),
 	final: step,
@@ -97,6 +100,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 					call.method === "brain" ? {error: {reason: "offline"}} : {value: {_tag: "written"}},
 				);
 			});
+
 			try {
 				await Effect.runPromise(
 					Effect.scoped(
@@ -134,7 +138,11 @@ it("every observed exit is durable once across restart or brake, with its reason
 									// The enclosing test's abort signal bounds this wait.
 									for (;;) {
 										const rows = yield* outbox.pending;
-										if (rows.some(ready)) return rows;
+
+										if (rows.some(ready)) {
+											return rows;
+										}
+
 										yield* TestClock.withLive(Effect.sleep("10 millis"));
 									}
 								});
@@ -160,17 +168,27 @@ it("every observed exit is durable once across restart or brake, with its reason
 									})),
 								).toEqual(expected);
 							});
+
 							for (const [index, item] of [...restarts, final].entries()) {
 								// Run the real memory sampler and replacement request on a supplied clock.
 								platform.rss = item.rss ?? 0;
 								const samples = platform.samples;
+
 								for (;;) {
 									yield* TestClock.adjust("1 second");
-									if (platform.samples > samples) break;
+
+									if (platform.samples > samples) {
+										break;
+									}
+
 									// The previous sample's file flush must finish before it sleeps again.
 									yield* TestClock.withLive(Effect.sleep("10 millis"));
 								}
-								if (item.rss !== null) expect(kill).toHaveBeenCalledWith(27001 + index, "SIGTERM");
+
+								if (item.rss !== null) {
+									expect(kill).toHaveBeenCalledWith(27001 + index, "SIGTERM");
+								}
+
 								const rows = yield* outbox.pending;
 								// Startup may already be acknowledged; last remains durable in either case.
 								const start =
@@ -185,6 +203,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 									...(item.rss === null ? {} : {bytes: item.rss * 1024}),
 								});
 								observe({type: "exit", worker: "life-test", exit});
+
 								if (index < restarts.length) {
 									observe({type: "restart", worker: "life-test", exit, delay: item.delay});
 									yield* waitForEvent(
@@ -215,6 +234,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 									yield* assertExits;
 								}
 							}
+
 							const memoryPids = [...restarts, final].flatMap((item, i) =>
 								item.rss === null ? [] : [27001 + i],
 							);
@@ -240,15 +260,18 @@ it("every observed exit is durable once across restart or brake, with its reason
 				// The memory sampler asks ps for one runtime's RSS, never another command.
 				const pids = new Set([...restarts, final].map((_, i) => String(27001 + i)));
 				expect(spawned.length).toBeGreaterThan(0);
+
 				for (const {command, args} of spawned) {
 					expect(command).toBe("ps");
 					expect(args.slice(0, 3)).toEqual(["-o", "rss=", "-p"]);
 					expect(args).toHaveLength(4);
 					expect(pids.has(String(args[3]))).toBe(true);
 				}
+
 				// Lifecycle events go to the project object's own brain method, with no name.
 				const brainCalls = calls.filter((call) => call.method === "brain");
 				expect(brainCalls.length).toBeGreaterThan(0);
+
 				for (const call of brainCalls) {
 					expect({target: call.target, project: call.project, name: call.name}).toEqual({
 						target: "project",
@@ -256,6 +279,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 						name: "",
 					});
 				}
+
 				// A stop while a replacement waits fails that replacement, and the failure is recorded.
 				const failed = calls
 					.filter((call) => call.target === "record" && call.method === "write")

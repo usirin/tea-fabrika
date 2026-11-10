@@ -47,6 +47,7 @@ const TABLES = [
 	"CREATE INDEX IF NOT EXISTS process_letters_id ON process_letters (id, rev)",
 	"CREATE TABLE IF NOT EXISTS process_activity (process TEXT PRIMARY KEY, activity TEXT NOT NULL)",
 ];
+
 const encodeActivity = Schema.encodeSync(Schema.fromJsonString(Activity));
 const encodeCheckpoint = Schema.encodeUnknownSync(Schema.fromJsonString(Checkpoint));
 const decodeCheckpoint = Schema.decodeUnknownSync(Schema.fromJsonString(Checkpoint));
@@ -81,6 +82,7 @@ type ProcessStorage = {
 	/** Appends one RuntimeRecord to the process's stream. A retry answers its first placing. */
 	readonly record: (id: string, fact: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
+
 export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(
 	"@kampus/libfabrika/ProcessStore",
 ) {
@@ -106,7 +108,12 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 				const stored = Effect.fnUntraced(function* <A>(step: () => A) {
 					return yield* Effect.try({
 						try: () => {
-							if (!ready) for (const query of TABLES) sql.exec(query);
+							if (!ready) {
+								for (const query of TABLES) {
+									sql.exec(query);
+								}
+							}
+
 							ready = true;
 							return step();
 						},
@@ -176,7 +183,8 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 									who.process,
 									text,
 								);
-								for (const {id, rev, pos} of placed)
+
+								for (const {id, rev, pos} of placed) {
 									sql.exec(
 										"INSERT OR IGNORE INTO process_letters (process, id, rev, pos) VALUES (?, ?, ?, ?)",
 										who.process,
@@ -184,6 +192,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 										rev,
 										pos,
 									);
+								}
 							});
 						}),
 					placed: (id) =>
@@ -205,14 +214,21 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 						}),
 					record: Effect.fn("process.record")(function* (id: string, fact: unknown, from: From) {
 						const decoded = decodeRecord(fact);
-						if (Result.isFailure(decoded)) return yield* new LedgerError({why: "refused"});
+
+						if (Result.isFailure(decoded)) {
+							return yield* new LedgerError({why: "refused"});
+						}
+
 						const answer = yield* ledger.append(
 							who.process,
 							id,
 							lineFor(from, encodeRecord(decoded.success)),
 						);
-						if (answer._tag === "refused")
+
+						if (answer._tag === "refused") {
 							return yield* new LedgerError({why: "refused", message: answer.why});
+						}
+
 						return answer;
 					}),
 				};

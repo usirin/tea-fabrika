@@ -22,19 +22,46 @@ import {Redacted} from "effect";
 export const holdsSecret = (value: unknown): boolean => {
 	const seen = new Set<object>();
 	const walk = (v: unknown): boolean => {
-		if (typeof v !== "object" || v === null) return false;
-		if (Redacted.isRedacted(v)) return true;
-		if (seen.has(v)) return false;
+		if (typeof v !== "object" || v === null) {
+			return false;
+		}
+
+		if (Redacted.isRedacted(v)) {
+			return true;
+		}
+
+		if (seen.has(v)) {
+			return false;
+		}
+
 		seen.add(v);
+
 		if (v instanceof Map) {
-			for (const [k, inner] of v) if (walk(k) || walk(inner)) return true;
+			for (const [k, inner] of v) {
+				if (walk(k) || walk(inner)) {
+					return true;
+				}
+			}
+
 			return false;
 		}
+
 		if (v instanceof Set || Array.isArray(v)) {
-			for (const inner of v) if (walk(inner)) return true;
+			for (const inner of v) {
+				if (walk(inner)) {
+					return true;
+				}
+			}
+
 			return false;
 		}
-		for (const inner of Object.values(v)) if (walk(inner)) return true;
+
+		for (const inner of Object.values(v)) {
+			if (walk(inner)) {
+				return true;
+			}
+		}
+
 		return false;
 	};
 	return walk(value);

@@ -77,8 +77,11 @@ export const rowOf = (line: string): Row | null => {
 	const [pid, ppid, group, ...started] = line.trim().split(/\s+/);
 	const numbers = [pid, ppid, group].map(Number);
 	const [p, pp, g] = numbers;
-	if (p === undefined || pp === undefined || g === undefined || numbers.some(Number.isNaN))
+
+	if (p === undefined || pp === undefined || g === undefined || numbers.some(Number.isNaN)) {
 		return null;
+	}
+
 	return {pid: p, ppid: pp, group: g, started: started.join(" ")};
 };
 
@@ -92,10 +95,17 @@ const same = (a: Row, b: Row) => a.pid === b.pid && a.started === b.started;
 /** `root` and every process under it. */
 export const under = (root: number, rows: readonly Row[]): Row[] => {
 	const found = rows.filter((r) => r.pid === root);
+
 	for (let i = 0; i < found.length; i++) {
 		const parent = found[i]?.pid;
-		for (const r of rows) if (r.ppid === parent && r.pid !== root) found.push(r);
+
+		for (const r of rows) {
+			if (r.ppid === parent && r.pid !== root) {
+				found.push(r);
+			}
+		}
 	}
+
 	return found;
 };
 
@@ -138,8 +148,15 @@ export const stopTree = (root: number, seen: () => readonly Row[] = () => []) =>
 			...tree.map((r) => r.pid),
 			...[...new Set(tree.map((r) => r.group))].filter((g) => g > 1 && g !== own).map((g) => -g),
 		];
-		if (targets.length === 0) return;
-		for (const t of targets) send(t, "SIGTERM");
+
+		if (targets.length === 0) {
+			return;
+		}
+
+		for (const t of targets) {
+			send(t, "SIGTERM");
+		}
+
 		yield* Effect.sync(() => targets.some((t) => send(t, 0))).pipe(
 			Effect.repeat({
 				schedule: Schedule.spaced("100 millis"),
@@ -147,7 +164,10 @@ export const stopTree = (root: number, seen: () => readonly Row[] = () => []) =>
 				times: GRACE_MS / 100,
 			}),
 		);
-		for (const t of targets) send(t, "SIGKILL");
+
+		for (const t of targets) {
+			send(t, "SIGKILL");
+		}
 	});
 
 /** Ends when the run's end of fd 3 closes: the run's process is gone, however it ended. */
@@ -180,7 +200,9 @@ export const guard = (lock: string, wait: number, command: string, args: readonl
 		yield* table.pipe(
 			Effect.tap((rows) =>
 				Effect.sync(() => {
-					for (const r of under(agent.pid, rows)) seen.set(`${r.pid} ${r.started}`, r);
+					for (const r of under(agent.pid, rows)) {
+						seen.set(`${r.pid} ${r.started}`, r);
+					}
 				}),
 			),
 			Effect.repeat(Schedule.spaced(WATCH_EVERY)),
@@ -201,17 +223,22 @@ export const guard = (lock: string, wait: number, command: string, args: readonl
 /** `<lock> <wait> -- <command> <args...>` */
 export const parseArgs = (argv: readonly string[]) => {
 	const [lock, wait, dashes, command, ...args] = argv;
-	if (lock === undefined || dashes !== "--" || command === undefined || !(Number(wait) >= 0))
+
+	if (lock === undefined || dashes !== "--" || command === undefined || !(Number(wait) >= 0)) {
 		return null;
+	}
+
 	return {lock, wait: Number(wait), command, args};
 };
 
 if (import.meta.main) {
 	const asked = parseArgs(process.argv.slice(2));
+
 	if (asked === null) {
 		process.stderr.write("usage: guard.ts <lock> <wait seconds> -- <command> [args...]\n");
 		process.exit(2);
 	}
+
 	runMain(
 		guard(asked.lock, asked.wait, asked.command, asked.args).pipe(Effect.provide(nodeServices)),
 		{

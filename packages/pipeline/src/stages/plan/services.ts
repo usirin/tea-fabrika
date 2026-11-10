@@ -38,6 +38,7 @@ export type Facts = typeof Facts.Type;
 
 /** How one planner run is to spend: the model, its effort, and the most it may cost. */
 export const EFFORTS = ["low", "medium", "high"] as const;
+
 export const Settings = Schema.Struct({
 	model: Schema.String,
 	effort: Schema.Literals(EFFORTS),
@@ -99,7 +100,11 @@ export const githubPlanHost = (gh: Gh) =>
 		ticket: (url) =>
 			Effect.gen(function* () {
 				const at = ticketOf(url);
-				if (at === null) return yield* Effect.fail({_tag: "unknown" as const});
+
+				if (at === null) {
+					return yield* Effect.fail({_tag: "unknown" as const});
+				}
+
 				const {issue} = (yield* ask(gh, Answer, TICKET, {
 					owner: at.owner,
 					name: at.name,

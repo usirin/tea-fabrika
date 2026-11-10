@@ -63,6 +63,7 @@ export const TaskAsk = Schema.Struct({
 export type TaskAsk = typeof TaskAsk.Type;
 
 type At = {readonly task: TaskId; readonly round: number; readonly run: number};
+
 export type TaskRunSub = Sub<
 	"task_run",
 	At & {readonly brief: BuildBrief; readonly settings: Settings}
@@ -80,11 +81,13 @@ export const TaskReport = Schema.Struct({
 export type TaskReport = typeof TaskReport.Type;
 
 type Held = {readonly ask: TaskAsk; readonly settings: Settings; readonly session: string};
+
 type Read = Held & {
 	readonly view: TaskView;
 	readonly base: string;
 	readonly criteria: readonly [Criterion, ...Criterion[]];
 };
+
 type Done = Read & {readonly built: Built; readonly ran: Ran; readonly runs: number};
 
 export type Task =
@@ -114,10 +117,12 @@ type Step = readonly [Task, readonly TaskCmd[]];
 const stay = (s: Task): Step => [s, []];
 const held = (s: Held): Held => ({ask: s.ask, settings: s.settings, session: s.session});
 const blank: TaskReport = {head: null, changed: false, runs: 0, problems: []};
+
 const end = (s: Held, outcome: TaskOutcome, report: Partial<TaskReport> = {}): Step => [
 	{...held(s), phase: "over", outcome, report: {...blank, ...report}},
 	[],
 ];
+
 const intent = (s: Held, step: string) =>
 	intentOf("task", s.ask.plan, s.ask.task, s.ask.round, step);
 
@@ -176,7 +181,10 @@ export const task = defineMachine({
 	subs: [taskRunSub],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const asked = readTask({plan: m.ask.plan, task: m.ask.task});
 			return [
 				{ask: m.ask, settings: m.settings, session: m.session, phase: "reading", asked},
@@ -184,21 +192,36 @@ export const task = defineMachine({
 			];
 		},
 		resume: (s): Step => {
-			if (s.phase === "reading" || s.phase === "pushing") return [s, [s.asked]];
-			if (s.phase !== "building") return stay(s);
-			if (s.run >= MAX_RUNS)
+			if (s.phase === "reading" || s.phase === "pushing") {
+				return [s, [s.asked]];
+			}
+
+			if (s.phase !== "building") {
+				return stay(s);
+			}
+
+			if (s.run >= MAX_RUNS) {
 				return end(
 					s,
 					{kind: "stuck", why: "over_budget"},
 					{runs: s.run, problems: [`the builder was cut off ${s.run} times`]},
 				);
+			}
+
 			return [{...s, run: s.run + 1}, []];
 		},
 		task_read_ok: (s, m): Step => {
-			if (s.phase !== "reading") return stay(s);
+			if (s.phase !== "reading") {
+				return stay(s);
+			}
+
 			const view = m.value;
 			const gate = taskGate(view);
-			if (gate.answer === "stop") return end(s, gate.outcome);
+
+			if (gate.answer === "stop") {
+				return end(s, gate.outcome);
+			}
+
 			// The gate let no view through without a base.
 			const base = view.base ?? "";
 			return [{...held(s), view, base, criteria: gate.criteria, phase: "building", run: 1}, []];
@@ -206,7 +229,10 @@ export const task = defineMachine({
 		task_read_err: (s): Step =>
 			s.phase === "reading" ? end(s, {kind: "stuck", why: "read_failed"}) : stay(s),
 		task_built: (s, m): Step => {
-			if (!isRun(s, m)) return stay(s);
+			if (!isRun(s, m)) {
+				return stay(s);
+			}
+
 			const done: Done = {...readOf(s), built: m.built, ran: m.ran, runs: s.run};
 			const asked = pushTask({
 				plan: s.ask.plan,
@@ -220,9 +246,13 @@ export const task = defineMachine({
 			return [{...done, phase: "pushing", asked}, [asked]];
 		},
 		task_failed: (s, m): Step => {
-			if (!isRun(s, m)) return stay(s);
+			if (!isRun(s, m)) {
+				return stay(s);
+			}
+
 			const report = {runs: s.run};
-			if (m.why === "over_budget")
+
+			if (m.why === "over_budget") {
 				return end(
 					s,
 					{kind: "stuck", why: "over_budget"},
@@ -231,6 +261,8 @@ export const task = defineMachine({
 						problems: [`the builder reached its limit of ${s.settings.budget} dollars`],
 					},
 				);
+			}
+
 			return end(
 				s,
 				{kind: "stuck", why: "draft_failed"},

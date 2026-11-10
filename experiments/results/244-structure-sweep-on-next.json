@@ -1,0 +1,27 @@
+{
+  "experiment": 244,
+  "date": "2026-11-09",
+  "base": "972bfcdd",
+  "tools": {"structure-sweep": "0.3.9", "code-graph": "0.15.0", "model": "jev-1.13.0"},
+  "pairs": {
+    "candidates": 20,
+    "functions": 35,
+    "consideredFunctions": 218,
+    "pairwise": {"look_alike": {"n": 9, "right": 7}, "shared_helper": {"n": 9, "right": 4}, "same_decision": {"n": 2, "rightRuleRepeats": 2, "rightAction": 0}, "right": 13, "of": 20},
+    "anchor": {"same_decision": 0, "look_alike": 20, "missedReal": 2},
+    "flippedOnRerun": 1,
+    "askedTwice": 4
+  },
+  "sweep": {
+    "files": 91,
+    "featureRight": 83,
+    "featureWrong": 8,
+    "ruleInSurfaceFlagged": 5,
+    "ruleInSurfaceHoldsRule": 5,
+    "ruleInSurfaceWorthActing": 3
+  },
+  "movePlan": {"moves": 28, "review": 25, "pinned": 21, "applied": false},
+  "inputTokens": {"pairsTry": 3748, "pairsPairwise": 20808, "pairsAnchor": 19585, "sweepTry": 13978, "sweep": 218300, "total": 276419},
+  "dollars": 0.012,
+  "price": "$0.042 per million input tokens, output free, TypeSafe models page, read 2026-11-09"
+}

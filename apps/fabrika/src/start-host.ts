@@ -49,6 +49,7 @@ export const startHost = (s: HostStart): Effect.Effect<Effect.Effect<number | nu
 		try: () => {
 			mkdirSync(s.paths.dir, {recursive: true, mode: 0o700});
 			const log = openSync(s.paths.log, "a", 0o600);
+
 			try {
 				const child = spawn(s.binary, [s.entry], {
 					env: {

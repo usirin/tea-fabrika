@@ -26,8 +26,11 @@ import * as realOptions from "./worker-options.ts";
 type Options = typeof realOptions;
 
 const madeDirs: string[] = [];
+
 afterAll(() => {
-	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
+	for (const d of madeDirs) {
+		rmSync(d, {recursive: true, force: true});
+	}
 });
 
 /**
@@ -56,15 +59,23 @@ const FILES = [
 async function plant(from: string, to: string): Promise<Options> {
 	const dir = mkdtempSync(join(import.meta.dirname, "..", ".door-wire-laws-plant-"));
 	madeDirs.push(dir);
+
 	for (const f of FILES) {
 		let text = readFileSync(join(import.meta.dirname, `${f}.ts`), "utf8");
+
 		if (f === "durable-object") {
 			const count = text.split(from).length - 1;
-			if (count !== 1) throw new Error(`plant edit: "${from}" found ${count} times, want 1`);
+
+			if (count !== 1) {
+				throw new Error(`plant edit: "${from}" found ${count} times, want 1`);
+			}
+
 			text = text.replace(from, () => to);
 		}
+
 		writeFileSync(join(dir, `${f}.ts`), text);
 	}
+
 	return (await import(
 		/* @vite-ignore */ pathToFileURL(join(dir, "worker-options.ts")).href
 	)) as Options;
@@ -77,8 +88,15 @@ const LEDGER = "demo";
 /** A fake api.github.com that knows alice, github:7, with one key. */
 const fakeGitHub = (alice: string) => async (req: Request) => {
 	const url = new URL(req.url);
-	if (url.pathname === "/user/7") return Response.json({id: 7, login: "alice"});
-	if (url.pathname === "/users/alice/keys") return Response.json([{id: 1, key: alice}]);
+
+	if (url.pathname === "/user/7") {
+		return Response.json({id: 7, login: "alice"});
+	}
+
+	if (url.pathname === "/users/alice/keys") {
+		return Response.json([{id: 1, key: alice}]);
+	}
+
 	return Response.json({message: "Not Found"}, {status: 404});
 };
 
@@ -123,9 +141,11 @@ type Call = {
  */
 const onOneConnection = async (url: string, calls: readonly Call[]) => {
 	const agent = new Agent({keepAlive: true, maxSockets: 1});
+
 	try {
 		const answers: {status: number; reused: boolean}[] = [];
-		for (const c of calls)
+
+		for (const c of calls) {
 			answers.push(
 				await new Promise((resolve) => {
 					const req = request(
@@ -150,6 +170,8 @@ const onOneConnection = async (url: string, calls: readonly Call[]) => {
 					req.end(c.body);
 				}),
 			);
+		}
+
 		return answers;
 	} finally {
 		agent.destroy();
@@ -171,6 +193,7 @@ type Bad =
 
 const word = fc.stringMatching(/^[a-z][a-z-]{0,9}$/);
 const wire = fc.constantFrom("read", "register", "append", "claim", "readStream", "lease");
+
 const arbBad: fc.Arbitrary<Bad> = fc.oneof(
 	fc.record({type: fc.constant("worker404" as const), path: fc.constantFrom("/", "//x", "/?a=1")}),
 	fc.record({type: fc.constant("noCredential" as const), method: fc.oneof(wire, word)}),
@@ -202,12 +225,15 @@ const arbBad: fc.Arbitrary<Bad> = fc.oneof(
 		step: fc.constantFrom("login" as const, "agent-login" as const),
 	}),
 );
+
 /** A body as anyone may send one: small or big, JSON or not. Made from this at the call. */
 const arbBody = fc.record({
 	size: fc.constantFrom(0, 100, 64 * 1024, 256 * 1024, 1024 * 1024),
 	json: fc.boolean(),
 });
+
 type Body = typeof arbBody extends fc.Arbitrary<infer T> ? T : never;
+
 const bodyOf = (b: Body): string =>
 	b.json ? JSON.stringify([0, 10, "x".repeat(b.size)]) : "y".repeat(b.size);
 
@@ -215,6 +241,7 @@ const bodyOf = (b: Body): string =>
 const callOf = (bad: Bad, body: string, token: string): Call => {
 	const post = (path: string, t?: string): Call =>
 		t === undefined ? {method: "POST", path, body} : {method: "POST", path, body, token: t};
+
 	switch (bad.type) {
 		case "worker404":
 			return post(bad.path);
@@ -244,7 +271,9 @@ const GOOD = (token: string): Call => ({
 });
 
 const ensure = (cond: boolean, msg: string): void => {
-	if (!cond) throw new Error(msg);
+	if (!cond) {
+		throw new Error(msg);
+	}
 };
 
 /**
@@ -254,6 +283,7 @@ const ensure = (cond: boolean, msg: string): void => {
  */
 const nextCallAnswered = async (options: Options): Promise<void> => {
 	const L = await ledgerOf(options);
+
 	try {
 		await fc.assert(
 			fc.asyncProperty(
@@ -265,6 +295,7 @@ const nextCallAnswered = async (options: Options): Promise<void> => {
 					];
 					const answers = await onOneConnection(L.url, calls);
 					const shown = `${JSON.stringify(bads)} answered ${JSON.stringify(answers)}`;
+
 					for (const [i, a] of answers.entries()) {
 						const last = i === answers.length - 1;
 						ensure(a.status !== 0, `call ${i} got no answer: ${shown}`);
@@ -291,7 +322,7 @@ const PLANTS: Record<string, () => Promise<Options>> = {
 	// The Worker's own 404 answers without reading the body.
 	workerKeepsBody: () =>
 		plant(
-			'if (name === null) return drained(req, new Response("not found", {status: 404}));',
+			'if (name === null) {\n\t\t\treturn drained(req, new Response("not found", {status: 404}));\n\t\t}',
 			'if (name === null) return new Response("not found", {status: 404});',
 		),
 };
@@ -304,7 +335,8 @@ describe("the door's wire law", () => {
 	it("the law is seen to fail on each planted mistake", async () => {
 		// "caught" only when the law itself failed on a call after a refusal; a crash is not caught.
 		const caught: Record<string, string> = {};
-		for (const [name, make] of Object.entries(PLANTS))
+
+		for (const [name, make] of Object.entries(PLANTS)) {
 			caught[name] = await nextCallAnswered(await make()).then(
 				() => "held",
 				(e: unknown) => {
@@ -314,6 +346,8 @@ describe("the door's wire law", () => {
 						: why;
 				},
 			);
+		}
+
 		expect(caught).toEqual({objectKeepsBody: "caught", workerKeepsBody: "caught"});
 	}, 240_000);
 });

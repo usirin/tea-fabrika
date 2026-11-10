@@ -38,17 +38,22 @@ describe("T325 K6 botpush, today's tooling", () => {
 		fc.assert(
 			fc.property(input, ({word, leak, range}) => {
 				const dir = mkdtempSync(join(tmpdir(), "push-"));
+
 				try {
 					const scripts = join(dir, ".agents/skills/lead/scripts");
 					mkdirSync(scripts, {recursive: true});
-					for (const file of ["botpush.mjs", "leakgrep.sh"])
+
+					for (const file of ["botpush.mjs", "leakgrep.sh"]) {
 						cpSync(join(import.meta.dirname, file), join(scripts, file));
+					}
+
 					writeFileSync(join(dir, "shim.mjs"), shim);
 					const words = join(tmpdir(), `words-${dir.split("/").at(-1)}`);
 					writeFileSync(
 						words,
 						`${word}\n${"https://github.com/usirin/tea-fabrika".split("/").slice(-2).join("\n")}\n`,
 					);
+
 					try {
 						const git = (...args: string[]) => {
 							const out = spawnSync(
@@ -72,6 +77,7 @@ describe("T325 K6 botpush, today's tooling", () => {
 						git("add", "subject.md");
 						git("commit", "-qm", "change");
 						const source = git("rev-parse", "HEAD");
+
 						if (range === "diverged") {
 							const text = readFileSync(join(dir, "subject.md"), "utf8");
 							git("checkout", "-qb", "upstream", "HEAD^");
@@ -82,14 +88,17 @@ describe("T325 K6 botpush, today's tooling", () => {
 							git("update-ref", "refs/remotes/origin/main", "HEAD");
 							git("checkout", "--detach", source);
 						}
+
 						writeFileSync(join(dir, "tip.md"), "safe followup\n");
 						git("add", "tip.md");
 						git("commit", "-qm", "safe followup");
+
 						if (range === "saved") {
 							writeFileSync(join(dir, "subject.md"), `${leak ? "safe after source" : word}\n`);
 							git("add", "subject.md");
 							git("commit", "-qm", "opposite result after source");
 						}
+
 						const sourceArgs = range === "saved" ? [source] : [];
 						git("notes", "--ref=fabrika", "add", "-m", "throwaway");
 						const pushed = join(dir, "pushed");
@@ -223,11 +232,15 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
 		fc.assert(
 			fc.property(race, ({server, races, branchRefused}) => {
 				const dir = mkdtempSync(join(tmpdir(), "race-"));
+
 				try {
 					const scripts = join(dir, "work/.agents/skills/lead/scripts");
 					mkdirSync(scripts, {recursive: true});
-					for (const file of ["botpush.mjs", "leakgrep.sh"])
+
+					for (const file of ["botpush.mjs", "leakgrep.sh"]) {
 						cpSync(join(import.meta.dirname, file), join(scripts, file));
+					}
+
 					writeFileSync(join(dir, "shim.mjs"), raceShim);
 					writeFileSync(join(dir, "words"), "private_zzzzzzzz\n");
 					const work = join(dir, "work");
@@ -249,6 +262,7 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
 					const base = run(work, "rev-parse", "HEAD");
 					run(work, "push", "-q", remote, "HEAD:refs/heads/main");
 					run(work, "update-ref", "refs/remotes/origin/main", base);
+
 					if (branchRefused) {
 						// The remote branch holds a commit the source lacks: a real refusal.
 						writeFileSync(join(work, "other.md"), "other\n");
@@ -257,6 +271,7 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
 						run(work, "push", "-q", remote, "HEAD:refs/heads/fabrikalfa/test");
 						run(work, "reset", "-q", "--hard", base);
 					}
+
 					writeFileSync(join(work, "a.md"), "step\n");
 					run(work, "add", "a.md");
 					run(work, "commit", "-qm", "step");
@@ -316,6 +331,7 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
 						pushes: branchRefused ? 1 : Math.min(races, 1) + 1,
 					});
 					expect(tip).toBe(lands ? source : before);
+
 					if (lands) {
 						// Nothing forced: the other session's notes are kept beside ours.
 						const notes = (sha: string) =>
@@ -323,7 +339,10 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
 								encoding: "utf8",
 							}).stdout;
 						expect(notes(source)).toContain("signed");
-						if (races > 0) expect(notes(base)).toContain("race 0");
+
+						if (races > 0) {
+							expect(notes(base)).toContain("race 0");
+						}
 					}
 				} finally {
 					rmSync(dir, {recursive: true, force: true});

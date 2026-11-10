@@ -99,15 +99,22 @@ export const nextArea = (areas: Areas): AreaNumber => areas.live.size + areas.in
 /** The live area that has `name`, ignoring case, other than `but`; `null`: none has it. */
 const holderOf = (areas: Areas, name: string, but?: AreaNumber): string | null => {
 	const wanted = name.toLowerCase();
-	for (const [n, other] of areas.live)
-		if (n !== but && other.toLowerCase() === wanted) return other;
+
+	for (const [n, other] of areas.live) {
+		if (n !== but && other.toLowerCase() === wanted) {
+			return other;
+		}
+	}
+
 	return null;
 };
 
 /** Why a name cannot be an area's, beside the live areas; `null`: it can. */
 export const nameRefused = (areas: Areas, name: string, but?: AreaNumber): string | null => {
-	if (!Schema.is(AreaName)(name))
+	if (!Schema.is(AreaName)(name)) {
 		return "an area's name is 1 to 32 characters, with no space at either end";
+	}
+
 	const holder = holderOf(areas, name, but);
 	return holder === null ? null : `the area "${holder}" has that name already`;
 };
@@ -117,15 +124,28 @@ export const areaRefused = (areas: Areas, fact: AreaFact): string | null => {
 	switch (fact._tag) {
 		case "area_made": {
 			const next = nextArea(areas);
-			if (fact.area !== next) return `area ${fact.area} made, but the next number is ${next}`;
+
+			if (fact.area !== next) {
+				return `area ${fact.area} made, but the next number is ${next}`;
+			}
+
 			return nameRefused(areas, fact.name);
 		}
 		case "area_renamed":
-			if (!areas.live.has(fact.area)) return `a rename of area ${fact.area}, which is not live`;
+			if (!areas.live.has(fact.area)) {
+				return `a rename of area ${fact.area}, which is not live`;
+			}
+
 			return nameRefused(areas, fact.name, fact.area);
 		case "area_merged":
-			if (fact.area === fact.into) return `area ${fact.area} merged into itself`;
-			if (!areas.live.has(fact.area)) return `a merge of area ${fact.area}, which is not live`;
+			if (fact.area === fact.into) {
+				return `area ${fact.area} merged into itself`;
+			}
+
+			if (!areas.live.has(fact.area)) {
+				return `a merge of area ${fact.area}, which is not live`;
+			}
+
 			return areas.live.has(fact.into) ? null : `a merge into area ${fact.into}, which is not live`;
 	}
 };
@@ -167,20 +187,30 @@ export const areasOf = (
 ): {readonly areas: Areas; readonly problems: readonly string[]} => {
 	let areas = from;
 	const problems: string[] = [];
+
 	for (const {pos, by, fact} of entries) {
 		const step = mayWriteArea(by, fact._tag)
 			? areaAfter(areas, fact)
 			: {why: `${fact._tag} written by an agent, but only a person writes it`};
-		if ("areas" in step) areas = step.areas;
-		else problems.push(`row ${pos} on the areas: ${step.why}`);
+
+		if ("areas" in step) {
+			areas = step.areas;
+		} else {
+			problems.push(`row ${pos} on the areas: ${step.why}`);
+		}
 	}
+
 	return {areas, problems};
 };
 
 /** The live area `n` reads as: itself, or where its merges went, followed to the end. */
 export const liveOf = (areas: Areas, n: AreaNumber): AreaNumber => {
 	let at = n;
-	for (let next = areas.into.get(at); next !== undefined; next = areas.into.get(at)) at = next;
+
+	for (let next = areas.into.get(at); next !== undefined; next = areas.into.get(at)) {
+		at = next;
+	}
+
 	return at;
 };
 
@@ -197,14 +227,28 @@ export type AreaRead = typeof AreaRead.Type;
 
 /** Read one row. A row on the areas' inbox must hold an area fact, kept under its own tag. */
 export const readAreaRow = (row: Row): AreaRead => {
-	if (row.stream !== AREAS_INBOX) return AreaRead.cases.other.make({});
+	if (row.stream !== AREAS_INBOX) {
+		return AreaRead.cases.other.make({});
+	}
+
 	const broken = (why: string) =>
 		AreaRead.cases.broken.make({why: `row ${row.pos} on the areas: ${why}`});
 	const by = writerOf(row.writer);
-	if (by === null) return broken(`its writer "${row.writer}" is neither a user nor an agent`);
+
+	if (by === null) {
+		return broken(`its writer "${row.writer}" is neither a user nor an agent`);
+	}
+
 	const fact = Option.getOrNull(decodeFact(row.data));
-	if (fact === null) return broken("its data is not an area fact");
-	if (fact._tag !== row.kind) return broken(`an ${fact._tag} fact kept as ${row.kind}`);
+
+	if (fact === null) {
+		return broken("its data is not an area fact");
+	}
+
+	if (fact._tag !== row.kind) {
+		return broken(`an ${fact._tag} fact kept as ${row.kind}`);
+	}
+
 	return AreaRead.cases.entry.make({entry: {pos: row.pos, by, at: row.at, fact}});
 };
 
@@ -216,7 +260,11 @@ const TITLES_FEWEST = 3;
 /** A title's first word before a colon, in lower case: "Lane tests: ..." is `lane`. `null`: no colon. */
 const wordOf = (title: string): string | null => {
 	const colon = title.indexOf(":");
-	if (colon === -1) return null;
+
+	if (colon === -1) {
+		return null;
+	}
+
 	const word = title.slice(0, colon).trim().split(/\s+/)[0]?.toLowerCase() ?? "";
 	return word === "" ? null : word;
 };
@@ -241,10 +289,15 @@ export const suggestionsOf = (
 	areas: Areas,
 ): readonly Suggested[] => {
 	const counts = new Map<string, number>();
+
 	for (const t of tickets) {
 		const word = t.state === "open" ? wordOf(t.title) : null;
-		if (word !== null) counts.set(word, (counts.get(word) ?? 0) + 1);
+
+		if (word !== null) {
+			counts.set(word, (counts.get(word) ?? 0) + 1);
+		}
 	}
+
 	const words = [...counts]
 		.filter(([, n]) => n >= TITLES_FEWEST)
 		.sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
@@ -253,9 +306,17 @@ export const suggestionsOf = (
 	const taken = new Set([...areas.live.values()].map((n) => n.toLowerCase()));
 	return all.filter((s) => {
 		const name = suggestedName(s);
-		if (!Schema.is(AreaName)(name)) return false;
+
+		if (!Schema.is(AreaName)(name)) {
+			return false;
+		}
+
 		const key = name.toLowerCase();
-		if (taken.has(key)) return false;
+
+		if (taken.has(key)) {
+			return false;
+		}
+
 		taken.add(key);
 		return true;
 	});
