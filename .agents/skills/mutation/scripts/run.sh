@@ -1,5 +1,6 @@
 #!/bin/sh
-# Today's tooling. Run from the repo root with T, BUILD and RELATED set.
+# Today's tooling. Run from the repo root with T, BUILD and RELATED set. SINCE, when set, is the
+# commit the sample's diff starts from (the lane's base); else it is BUILD's first parent.
 # FINAL=0 reuses unchanged answers in an intermediate round. The default forces fresh answers.
 set -eu
 : "${T:?T must name the ticket}"
@@ -41,7 +42,7 @@ if (!process.env.RELATED.split(",").some(p => p.trim())) {
 M=${TMPDIR:-/tmp}/mut-$T; mkdir -p "$M"
 S=packages/pipeline/node_modules/@stryker-mutator
 ranges=$(node .agents/skills/mutation/scripts/sample.ts \
-  --build "$BUILD" --seed 119120 --max 150 --report "$M/sample.json")
+  --build "$BUILD" ${SINCE:+--since "$SINCE"} --seed 119120 --max 150 --report "$M/sample.json")
 [ -n "$ranges" ] || { echo "no mutation ranges selected" >&2; exit 1; }
 # Keep the 10 s limit and the existing nested-Stryker and e2e excludes.
 cat > vitest.mutation.config.ts <<'TS'
