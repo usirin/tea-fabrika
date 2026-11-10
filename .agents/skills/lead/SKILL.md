@@ -160,7 +160,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   by a step it accepted) or the newest tip on origin of the branch or its `-wip` backup when that
   is ahead of it, else `origin/main`. So a lead commit (a merge of main, a lockfile commit) pushed
   to `-wip` is where the next step starts, and `box.sh new` takes a verified lead head as a base
-  like a build head. A plan reads the main checkout and takes no `--from`.
+  like a build head, and so is any commit `origin/main` holds, such as the main a plan read before
+  main moved on. A plan reads the main checkout and takes no `--from`.
 - `box.sh new` refuses `shared_ticket` only when another live branch carries a link for the same
   ticket: one with an open PR, or one a box on disk names. A branch the base already holds, one
   with neither, or one whose change is only `field/*.jsonl` rows, does not block.
@@ -187,9 +188,12 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
   is in `reason`), 30 stuck, 40 skip (`answer: skip <why>`: nothing here for the step, such as a
   mutation step whose diff has no product lines; its field row says `skip`, which review's order
-  check takes in place of a mutation row), 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
-  drive started, under 20 GB free after `box.sh gc`, or the lane's branch checked out in a
-  worktree, which the end-of-step fetch could not update). It never retries. A stuck step keeps its
+  check takes in place of a mutation row), 2 usage, 3 refused before any agent ran, printed as
+  `refused:<check>`: `agent_cap` (8 agents running: Codex boxes plus Claude steps drive started),
+  `low_disk` (under 20 GB free after `box.sh gc`), `branch_checked_out` (the lane's branch checked
+  out in a worktree, which the end-of-step fetch could not update), or a `box.sh new` start check
+  (`plan_unapproved`, `base_not_signed`, `shared_ticket`, `root_not_ancestor`). A refusal is not a
+  step outcome, so the stuck count holds only steps an agent ran. It never retries. A stuck step keeps its
   box. A box's number is the first that no older run's files hold, and the line's `report` is `null`
   when this run wrote none, as when box.sh refused it before the agent started. The commits check reads the whole lane, from where it left main, so each earlier step's
   newest link is in its chain. After a lead merge of main it starts at the merge-base with
