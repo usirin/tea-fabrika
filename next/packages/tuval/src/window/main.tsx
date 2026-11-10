@@ -52,6 +52,7 @@ const pickViews = (m: WindowModel) => m.client.views;
 const pickQueue = (m: WindowModel) => m.client.pending.length;
 const pickTrouble = (m: WindowModel) => m.trouble;
 const pickKeyError = (m: WindowModel) => m.keyError;
+const pickSettings = (m: WindowModel) => m.settings;
 const pickKeys = (m: WindowModel) => m.keys;
 const pickFocus = (m: WindowModel) => m.focus;
 const pickSize = (m: WindowModel) => m.size;
@@ -243,6 +244,7 @@ const Status = ({ run }: { readonly run: LiveWindow }) => {
   const [queue] = useRuntime(run, pickQueue);
   const [trouble] = useRuntime(run, pickTrouble);
   const [keyError] = useRuntime(run, pickKeyError);
+  const [settings] = useRuntime(run, pickSettings);
   const state = link._tag === "online" ? "online" : "reconnecting";
   return (
     <footer className="bottomline" role="status">
@@ -265,6 +267,14 @@ const Status = ({ run }: { readonly run: LiveWindow }) => {
           </span>
         </>
       )}
+      {settings._tag === "failed" ? (
+        <>
+          <span className="sep">·</span>
+          <span className="broken" data-testid="settings">
+            key settings not read: {settings.reason.replaceAll("_", " ")}
+          </span>
+        </>
+      ) : null}
     </footer>
   );
 };
@@ -561,9 +571,12 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
       let cursor = after;
 
       for (;;) {
+        // A failed call keeps its own reason; a page that does not decode is an answer this client
+        // cannot use.
         const page = yield* call("ledger.read", { stream, after: cursor }).pipe(
-          Effect.flatMap((r) => Schema.decodeUnknownEffect(Entries)(r)),
-          Effect.mapError(() => unreachable),
+          Effect.flatMap((r) =>
+            Schema.decodeUnknownEffect(Entries)(r).pipe(Effect.mapError(() => F.unknown.make({ reason: "bad_page" }))),
+          ),
         );
         out.push(...page.entries);
         const last = Option.getOrNull(Schema.decodeUnknownOption(Rev)(page.entries.at(-1)));
@@ -708,7 +721,16 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         );
         emit({ type: "admitted", dial, ping: admitted.ping, ms: took(yield* Clock.currentTimeMillis) });
         // Online: the person's key settings, and the rows this tab kept, for as long as the dial.
-        return yield* Effect.all([settings(admitted.who.person).pipe(Effect.ignore), deliver(call)], {
+        // A failed read or wait is the Model's to decide (A15): it is reported with the call's own
+        // reason, and reading stops on this dial. It is never retried here.
+        const reported = settings(admitted.who.person).pipe(
+          Effect.catch((e: CallError) =>
+            Effect.sync(() =>
+              emit({ type: "settings_failed", dial, reason: e._tag === "unknown" ? e.reason : "unreachable" }),
+            ),
+          ),
+        );
+        return yield* Effect.all([reported, deliver(call)], {
           concurrency: 2,
           discard: true,
         });

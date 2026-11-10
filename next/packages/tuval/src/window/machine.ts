@@ -17,6 +17,11 @@
 // dial's end drops its calls; their letters stay in the client and go again by the rules above. A
 // view notice that installs a pid's view drops that pid's open, so its late answer is stale (A14).
 //
+// The person's key settings read is explicit per dial (A15): going online reads them, `reading`. A
+// failed read on the online dial is `failed` with the call's own reason, shown in the frame, and
+// ends the dial as a lost socket does, so the next dial reads again; a `keys` or `keys_failed` while
+// a newer dial's socket is open clears it. A failed read on any other dial does nothing.
+//
 // What it records (plan A8), each through the `record` Cmd: the key a dial found, one `connect` row
 // per link outcome with the `ms` its Msg carries, a press before its letter goes, a `reply` row when
 // a letter settles (with every `send` of it and the answer's `ms`), the persistence answer, and a
@@ -59,6 +64,13 @@ const Table = Schema.Struct({
 });
 
 const Rows = Schema.Record(Schema.String, Schema.Array(Schema.String));
+
+/** The person's key settings read on one dial: reading, or ended by a failed `ledger.read` or
+ *  `ledger.wait` with the call's own reason. */
+const Settings = Schema.TaggedUnion({
+  reading: { dial: Schema.Int },
+  failed: { dial: Schema.Int, reason: Schema.String },
+});
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
@@ -128,6 +140,8 @@ export const WindowModel = Schema.Struct({
   keys: Table,
   armed: Schema.NullOr(Schema.Struct({ chords: Schema.Array(Schema.String) })),
   keyError: Schema.NullOr(Keys.KeyProblem),
+  /** The key settings read of the last dial that went online, or the one that failed (A15). */
+  settings: Settings,
   /** A plain word for the last answer the window could not use, shown once in the frame. */
   trouble: Schema.NullOr(Schema.String),
 });
@@ -165,6 +179,8 @@ const Own = Schema.Union([
     rows: Schema.Record(Schema.String, Schema.Array(Schema.String)),
   }),
   Schema.Struct({ type: Schema.Literal("keys_failed"), error: Keys.KeyProblem }),
+  /** The settings read on `dial` failed, and the runner stopped reading on it (A15). */
+  Schema.Struct({ type: Schema.Literal("settings_failed"), dial: Schema.Int, reason: Schema.String }),
   /** The highest ledger revision the client has read. */
   Schema.Struct({ type: Schema.Literal("seen"), rev: Schema.Int }),
   // The socket Sub's answers to the writes, by id and dial. `ms` is the runner's, from the write it
@@ -497,11 +513,24 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
       attempts: counted(next.attempts, out),
       fresh: false,
       trouble: null,
+      settings: Settings.cases.reading.make({ dial: link.dial }),
     },
     link.dial,
     [...pids.map((pid) => Call.cases.open.make({ pid })), ...out],
   );
   return [written, [...linkCmds, ...connected, ...writes, ...asked]];
+};
+
+/** A lost socket's close code: the dial ends and the link retries. */
+const LOST = 1006;
+
+/** The settings read once a `keys` or `keys_failed` arrives: a failure of an older dial clears to
+ *  reading on the dial whose socket is open now; anything else stays. */
+const read = (s: WindowModel): WindowModel["settings"] => {
+  const open = socketDial(s.link);
+  return s.settings._tag === "failed" && open !== null && open !== s.settings.dial
+    ? Settings.cases.reading.make({ dial: open })
+    : s.settings;
 };
 
 const findTile = (s: WindowModel, id: string | null) =>
@@ -550,6 +579,7 @@ const fresh = (ctx: WindowCtx | undefined, client: ProgramClient.Client): Window
     keys: Keys.buildTable(defaults, {}),
     armed: null,
     keyError: null,
+    settings: Settings.cases.reading.make({ dial: 1 }),
     trouble: null,
   });
 };
@@ -768,10 +798,24 @@ export const windowMachineFor = (checks: WindowChecks) => {
           keys: Keys.buildTable(s.defaults, m.rows),
           armed: null,
           keyError: null,
+          settings: read(s),
         },
         [],
       ],
-      keys_failed: (s, m) => [{ ...s, keyError: m.error, armed: null }, []],
+      keys_failed: (s, m) => [{ ...s, keyError: m.error, armed: null, settings: read(s) }, []],
+      // A failed read on the online dial ends it by a lost socket's own path, keeping its reason. It
+      // is no socket outcome, so it keeps no connect row: no handler timed it.
+      settings_failed: (s, m) => {
+        if (s.link._tag !== "online" || s.link.dial !== m.dial) {
+          return [s, []];
+        }
+
+        const [next, cmds] = linked(s, { type: "closed", dial: m.dial, code: LOST, fingerprint: "", ms: 0 });
+        return [
+          { ...next, settings: Settings.cases.failed.make({ dial: m.dial, reason: m.reason }) },
+          cmds.filter((c) => c.type !== "record" || c.record._tag !== "connect"),
+        ];
+      },
       seen: (s, m) => {
         const [client] = step(s.client, { type: "read", rev: m.rev });
         return [{ ...s, client }, []];
