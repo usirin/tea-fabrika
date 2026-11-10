@@ -16,7 +16,7 @@ import type {Launch} from "../launch.ts";
 // fabrika.toml's theme later, by the same rule (plan for ticket 174, "one reader of ~/.fabrika/").
 // Today's version. Effect's FileSystem and Path only, so a test runs it on a temp folder.
 //
-//   settingsFile(folder, "keybindings.toml", decode)
+//   settingsSaves(folder, "keybindings.toml", decode)
 //     no file                                   {_tag: "none"}
 //     a file that decodes                       {_tag: "read", value}
 //     a file that does not                      {_tag: "refused", line, why}
@@ -24,8 +24,8 @@ import type {Launch} from "../launch.ts";
 //
 // The folder is watched, not the file: an editor saves by writing a new file and renaming it
 // over the old one, and a watch on the old file would end there. Each file is read apart, so a
-// bad fabrika.toml never touches the keys, and the other way round. An answer is said once: a
-// save that leaves the text as it was says nothing. A page never reads a file; the host sends
+// bad fabrika.toml never touches the keys, and the other way round. Each burst of saves is
+// answered, though the text is what it was: the reader that writes the file needs that. A page never reads a file; the host sends
 // each value on (a browser is always a client).
 
 /**
@@ -76,34 +76,17 @@ const SETTLE_MS = 50;
 type Decode<A> = (text: string) => Result.Result<A, {readonly line: number; readonly why: string}>;
 
 /**
- * Every answer for the file `name` in `folder`: one as the watch starts, then one each time a save
- * changes its text. The folder is made if it is missing, so a file put there later is heard; when it
- * cannot be made, or the watch fails, the answer stays as it was last said.
- */
-export const settingsFile = <A>(
-	folder: string,
-	name: string,
-	decode: Decode<A>,
-): Stream.Stream<Setting<A>, never, FileSystem.FileSystem | Path.Path> =>
-	reads(folder, name, decode, true);
-
-/**
- * An answer for each burst of saves to the file, even when its text is what the last answer said.
- * For a reader that also writes the file: its own save moves what it holds, so a later save by
- * another process that puts the text back is news to it, though not to the watch (host/keybindings.ts).
+ * An answer for each burst of saves to the file `name` in `folder`, even when its text is what the
+ * last answer said; one more as the watch starts. For a reader that also writes the file: its own
+ * save moves what it holds, so a later save by another process that puts the text back is news to
+ * it, though not to the watch (host/keybindings.ts). The folder is made if it is missing, so a file
+ * put there later is heard; when it cannot be made, or the watch fails, the answer stays as it was
+ * last said.
  */
 export const settingsSaves = <A>(
 	folder: string,
 	name: string,
 	decode: Decode<A>,
-): Stream.Stream<Setting<A>, never, FileSystem.FileSystem | Path.Path> =>
-	reads(folder, name, decode, false);
-
-const reads = <A>(
-	folder: string,
-	name: string,
-	decode: Decode<A>,
-	once: boolean,
 ): Stream.Stream<Setting<A>, never, FileSystem.FileSystem | Path.Path> =>
 	Stream.unwrap(
 		Effect.gen(function* () {
@@ -155,10 +138,8 @@ const reads = <A>(
 					).pipe(Stream.drain),
 				),
 			);
-			const texts = Stream.merge(Stream.fromEffect(Deferred.await(ready)), saves).pipe(
+			return Stream.merge(Stream.fromEffect(Deferred.await(ready)), saves).pipe(
 				Stream.mapEffect(() => text),
-			);
-			return (once ? texts.pipe(Stream.changesWith((a, b) => a === b)) : texts).pipe(
 				Stream.map(answer),
 			);
 		}),
