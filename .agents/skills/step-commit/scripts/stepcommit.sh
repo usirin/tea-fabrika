@@ -98,6 +98,16 @@ def check(paths):
             if owner_of(p) != step and not (step == "mutation" and owner_of(p) == "tests"):
                 refuse("not_owner: " + p)
 check(named)
+# A case-only rename on a disk that ignores case (id.ts to Id.ts): git keeps the index's old name
+# and stages nothing new under the new one, so the old entry goes first. Only a tracked path that
+# differs from a named one by case alone, and is not itself named, is dropped (ticket 573).
+tracked = [t for t in git("ls-files", "--cached", "-z").stdout.decode().split("\0") if t]
+exact = set(tracked)
+for n in named:
+    if n in exact: continue
+    for t in tracked:
+        if t != n and t.lower() == n.lower() and t not in named:
+            if git("--literal-pathspecs", "rm", "--cached", "-q", "--", t).returncode: refuse("case rename could not be staged: " + t)
 added = git("--literal-pathspecs", "add", "--", *named)
 if added.returncode: refuse("named path could not be staged")
 # --no-renames lists both sides as add/delete, including a removed exam path.
