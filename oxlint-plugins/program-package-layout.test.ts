@@ -180,17 +180,78 @@ describe("fabrika/program-package-layout", () => {
 		fc
 			.uniqueArray(values, {minLength: 3, maxLength: 3})
 			.map((all): [string, string, string] => [all[0] ?? "", all[1] ?? "", all[2] ?? ""]);
-	const shapes = [
-		(c: string) =>
-			`import {WorkerEntrypoint} from "cloudflare:workers"; export class ${c} extends WorkerEntrypoint {}`,
-		(c: string) => `export class ${c} extends DurableObject {}`,
-		(c: string) => `export const ${c} = class extends WorkflowEntrypoint {};`,
-		(c: string) => `class ${c} extends cloudflare.DurableObject {} export {${c}};`,
-		(c: string) => `export default {fetch() { return new Response("${c}"); }};`,
-		(c: string) => `export const ${c} = 1; export * from "@kampus/libfabrika/box";`,
-		(c: string) => `export const ${c} = () => import("workerd");`,
-		(c: string) => `import "miniflare"; export const ${c} = 1;`,
+	const imports = "Pure program code cannot import Worker runtime APIs.";
+	// Each Worker shape: whether it defines a Worker (a class or a handler), and what the per-line
+	// check says of it when '.' loads it as pure code.
+	const shapes: readonly {
+		readonly text: (c: string) => string;
+		readonly defines: boolean;
+		readonly pure: readonly string[];
+	}[] = [
+		{
+			text: (c) =>
+				`import {WorkerEntrypoint} from "cloudflare:workers"; export class ${c} extends WorkerEntrypoint {}`,
+			defines: true,
+			pure: [imports],
+		},
+		{text: (c) => `export class ${c} extends DurableObject {}`, defines: true, pure: []},
+		{
+			text: (c) => `export const ${c} = class extends WorkflowEntrypoint {};`,
+			defines: true,
+			pure: [],
+		},
+		{
+			text: (c) => `class ${c} extends cloudflare.DurableObject {} export {${c}};`,
+			defines: true,
+			pure: [],
+		},
+		{
+			text: (c) => `export default {fetch() { return new Response("${c}"); }};`,
+			defines: true,
+			pure: [],
+		},
+		{
+			text: (c) => `export const ${c} = 1; export * from "@kampus/libfabrika/box";`,
+			defines: false,
+			pure: ["Pure program code cannot export Worker runtime APIs."],
+		},
+		{
+			text: (c) => `export const ${c} = () => import("workerd");`,
+			defines: false,
+			pure: ["Pure program code cannot load Worker runtime APIs."],
+		},
+		{text: (c) => `import "miniflare"; export const ${c} = 1;`, defines: false, pure: [imports]},
+		// Review 2 of P16b: Cloudflare's documented handler forms, and a handler by name.
+		{
+			text: (c) =>
+				`export default {async fetch() { return new Response("${c}"); }} satisfies ExportedHandler;`,
+			defines: true,
+			pure: [],
+		},
+		{
+			text: (c) => `export default {fetch() { return new Response("${c}"); }} as ExportedHandler;`,
+			defines: true,
+			pure: [],
+		},
+		{
+			text: (c) => `const ${c} = {fetch() { return new Response(""); }}; export default ${c};`,
+			defines: true,
+			pure: [],
+		},
+		{
+			text: (c) =>
+				`const ${c} = {scheduled() {}} satisfies ExportedHandler; const app = ${c}; export default app;`,
+			defines: true,
+			pure: [],
+		},
+		{text: (c) => `const ${c} = {queue() {}}; export {${c} as default};`, defines: true, pure: []},
 	];
+	// How the Worker file is reached from its export: itself, a `.ts` link, or a link written
+	// without an extension, which TypeScript resolves.
+	const links = ["same file", ".ts", "no extension"] as const;
+	// How the package exports the Worker file: its own key, a pattern key, or a runtime condition
+	// of '.' beside the pure program.
+	const entries = ["key", "pattern", "key pattern", "condition"] as const;
 	it("plants: a Worker entry or a window behind any other export key is refused, by what it loads", () => {
 		fc.assert(
 			fc.property(
@@ -199,60 +260,156 @@ describe("fabrika/program-package-layout", () => {
 				three(path),
 				fc.stringMatching(/^[A-Z][A-Za-z0-9]{0,7}$/),
 				fc.nat({max: shapes.length - 1}),
-				fc.boolean(),
+				fc.constantFrom(...links),
+				fc.constantFrom(...entries),
+				fc.constantFrom("workerd", "worker", "browser", "import", "node"),
 				(
 					name,
 					[workerKey, windowKey, helperKey],
 					[workerPath, windowPath, helperPath],
 					c,
 					shape,
-					deep,
+					link,
+					entry,
+					condition,
 				) => {
-					const workerMessage = `A program package has no Worker entry. libfabrika builds its box; '${workerKey}' is one.`,
-						windowMessage = `The window is exported at './window', never at '${windowKey}'.`,
-						unexported =
-							"Export the real window at './window'. A program without a window needs no stub.",
-						worker = `./${workerPath}.ts`,
+					const worker = `./${workerPath}.ts`,
 						view = `./${windowPath}.tsx`,
+						impl = `./${workerPath.split("/").at(-1)}.impl${link === ".ts" ? ".ts" : ""}`,
+						text = shapes[shape]!.text(c),
 						files: Record<string, string> = {
 							"src/program.ts": "export const program = 1;",
 							[`${helperPath}.ts`]: "export const helper = 1;",
 							[`${windowPath}.tsx`]: "export const View = () => <b>ok</b>;",
 							// The Worker code sits in the exported file or in a local file it loads.
-							...(deep
-								? {
-										[`${workerPath}.ts`]: `export * from "./${workerPath.split("/").at(-1)}.impl.ts";`,
-										[`${workerPath}.impl.ts`]: shapes[shape]!(c),
-									}
-								: {[`${workerPath}.ts`]: shapes[shape]!(c)}),
+							...(link === "same file"
+								? {[`${workerPath}.ts`]: text}
+								: {
+										[`${workerPath}.ts`]: `export * from ${JSON.stringify(impl)};`,
+										[`${workerPath}.impl.ts`]: text,
+									}),
 						},
+						// The export that carries the Worker file, and the key its finding names.
+						[shown, exported]: [string, Record<string, unknown>] =
+							entry === "key"
+								? [workerKey, {[workerKey]: worker}]
+								: entry === "pattern"
+									? ["./*", {"./*": "./src/*.ts"}]
+									: entry === "key pattern"
+										? [`${workerKey}/*`, {[`${workerKey}/*`]: "./src/*.ts"}]
+										: [".", {".": {[condition]: worker, default: "./src/program.ts"}}],
+						workerMessage = `A program package has no Worker entry. libfabrika builds its box; '${shown}' is one.`,
+						windowMessage = `The window is exported at './window', never at '${windowKey}'.`,
+						unexported =
+							"Export the real window at './window'. A program without a window needs no stub.",
+						// Under '.', the file is pure code too: a Worker class or handler names '.', and a
+						// Worker runtime import is reported on its own line.
+						expected =
+							entry === "condition"
+								? [...(shapes[shape]!.defines ? [workerMessage] : []), ...shapes[shape]!.pure]
+								: [workerMessage],
 						base = {".": "./src/program.ts", "./window": view, [helperKey]: `./${helperPath}.ts`},
-						messages = (exports: unknown) => run(name, exports, files).map((d) => d.message);
+						messages = (exports: unknown) =>
+							run(name, exports, files)
+								.map((d) => d.message)
+								.sort();
 					// A pure extra export and a window at './window' are fine; an unexported .ts is not judged.
 					expect(messages(base)).toEqual([]);
-					expect(messages({...base, [workerKey]: worker})).toEqual([workerMessage]);
+					expect(messages({...base, ...exported})).toEqual([...expected].sort());
 					const {"./window": _, ...moved} = base;
 					expect(messages({...moved, [windowKey]: view})).toEqual([windowMessage]);
 					// A window file nobody exports, at any path, still needs './window'.
 					expect(messages(moved)).toEqual([unexported]);
 					// The review's package: a Worker entry and the window both behind other keys.
-					expect(messages({...moved, [workerKey]: worker, [windowKey]: view}).sort()).toEqual(
-						[workerMessage, windowMessage].sort(),
+					expect(messages({...moved, ...exported, [windowKey]: view})).toEqual(
+						[...expected, windowMessage].sort(),
 					);
 				},
 			),
 			{
 				...runs,
-				// Review 1 of P16b: "./server" loading a WorkerEntrypoint class and "./ui" loading a
-				// .tsx gave no finding, while the same package with "./worker" did.
 				examples: [
+					// Review 1 of P16b: "./server" loading a WorkerEntrypoint class and "./ui" loading a
+					// .tsx gave no finding, while the same package with "./worker" did.
 					[
 						"program0",
 						["./server", "./ui", "./lib"],
 						["src/server", "src/ui", "src/lib"],
 						"Server",
 						0,
-						false,
+						"same file",
+						"key",
+						"workerd",
+					],
+					// pinned: review 2 of P16b, "./*": "./src/*.ts" with a WorkerEntrypoint class in
+					// src/server.ts: the literal pattern target was looked up as a file and gave no finding.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"Server",
+						0,
+						"same file",
+						"pattern",
+						"workerd",
+					],
+					// pinned: review 2 of P16b, `export default {async fetch() {}} satisfies
+					// ExportedHandler;` behind "./server" gave no finding.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"Server",
+						8,
+						"same file",
+						"key",
+						"workerd",
+					],
+					// pinned: review 2 of P16b, the same handler under `as` gave no finding.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"Server",
+						9,
+						"same file",
+						"key",
+						"workerd",
+					],
+					// pinned: review 2 of P16b, `const app = {fetch() {}}; export default app;` gave no finding.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"app",
+						10,
+						"same file",
+						"key",
+						"workerd",
+					],
+					// pinned: review 2 of P16b, ".": {"workerd": "./src/worker.ts", "default":
+					// "./src/program.ts"} with a fetch handler in worker.ts gave no finding.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/worker", "src/ui", "src/lib"],
+						"Worker",
+						4,
+						"same file",
+						"condition",
+						"workerd",
+					],
+					// pinned: review 2 of P16b, src/server.ts holding `export * from "./impl"` with the
+					// Worker in impl.ts gave no finding: the link without an extension was not followed.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"Server",
+						0,
+						"no extension",
+						"key",
+						"workerd",
 					],
 				],
 			},

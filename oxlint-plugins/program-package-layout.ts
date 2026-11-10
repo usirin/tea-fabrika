@@ -1,6 +1,6 @@
 // P16, next/. Program packages export pure code at '.' and an existing window at './window'.
 // The generated Worker entry belongs to libfabrika, never to the program package.
-import {existsSync, readdirSync, readFileSync} from "node:fs";
+import {existsSync, readdirSync, readFileSync, statSync} from "node:fs";
 import {dirname, join, resolve} from "node:path";
 import type {CreateRule} from "@oxlint/plugins";
 import {parseSync, Visitor} from "oxc-parser";
@@ -51,13 +51,72 @@ const workerClass = (node: unknown): boolean =>
 const handler = /^(?:fetch|scheduled|queue|email|tail)$/;
 const windowFile = (file: string) => /\.[jt]sx$/.test(file) && !/\.test\.[jt]sx$/.test(file);
 
+const isFile = (path: string) => existsSync(path) && statSync(path).isFile();
+
+// TypeScript's bundler resolution for a relative link: the file as written, a .js-family name
+// standing for its TypeScript source, the name with an extension added, then a folder's index.
+const sourceExtensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+
+const jsSources: Readonly<Record<string, readonly string[]>> = {
+	".js": [".ts", ".tsx"],
+	".jsx": [".tsx"],
+	".mjs": [".mts"],
+	".cjs": [".cts"],
+};
+
+const resolveLink = (from: string, name: string): string | undefined => {
+	const base = resolve(dirname(from), name);
+	const written = /\.[cm]?jsx?$/.exec(base)?.[0];
+	const stem = written === undefined ? base : base.slice(0, -written.length);
+
+	return [
+		base,
+		...(written === undefined ? [] : (jsSources[written] ?? []).map((ext) => stem + ext)),
+		...sourceExtensions.map((ext) => base + ext),
+		...sourceExtensions.map((ext) => join(base, `index${ext}`)),
+	].find(isFile);
+};
+
+// Unwrap what TypeScript adds around a value: `satisfies`, `as`, `<T>x`, `x!` and parentheses.
+const value = (node: unknown): unknown =>
+	map(node) &&
+	/^(?:TSSatisfiesExpression|TSAsExpression|TSTypeAssertion|TSNonNullExpression|ParenthesizedExpression)$/.test(
+		String(node.type),
+	)
+		? value(node.expression)
+		: node;
+
+const handlerObject = (node: unknown) => {
+	const object = value(node);
+
+	return (
+		map(object) &&
+		object.type === "ObjectExpression" &&
+		Array.isArray(object.properties) &&
+		object.properties.some(
+			(p: unknown) =>
+				map(p) &&
+				p.type === "Property" &&
+				map(p.key) &&
+				((p.key.type === "Identifier" && handler.test(String(p.key.name))) ||
+					(p.key.type === "Literal" && handler.test(String(p.key.value)))),
+		)
+	);
+};
+
 // Follow an entry's value links, including re-exports and literal dynamic imports. Each file
 // says whether it loads Worker code: a Worker runtime import, a Worker class or a Worker handler.
+// `definesWorker` keeps the last two apart, for '.', whose runtime imports are reported per line.
 const graph = (root: string, entries: readonly string[]) => {
 	const files = new Set<string>();
 	let loadsWorker = false;
+	let definesWorker = false;
+	const defines = () => {
+		loadsWorker = true;
+		definesWorker = true;
+	};
 	const visit = (file: string) => {
-		if (declaration(file) || files.has(file) || !existsSync(file)) {
+		if (declaration(file) || files.has(file) || !isFile(file)) {
 			return;
 		}
 
@@ -67,8 +126,43 @@ const graph = (root: string, entries: readonly string[]) => {
 			if (worker(name)) {
 				loadsWorker = true;
 			} else if (name.startsWith(".")) {
-				visit(resolve(dirname(file), name));
+				const target = resolveLink(file, name);
+
+				if (target !== undefined) {
+					visit(target);
+				}
 			}
+		};
+		// A default export by name, as in `const app = {fetch() {}}; export default app;`.
+		const values = new Map<string, unknown>();
+
+		for (const statement of tree.body) {
+			const declared =
+				statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+
+			if (declared?.type === "VariableDeclaration") {
+				for (const d of declared.declarations) {
+					if (d.id.type === "Identifier") {
+						values.set(d.id.name, d.init);
+					}
+				}
+			}
+		}
+
+		const named = (node: unknown) => {
+			const seen = new Set<string>();
+			let at = value(node);
+
+			while (map(at) && at.type === "Identifier" && typeof at.name === "string") {
+				if (seen.has(at.name)) {
+					return undefined;
+				}
+
+				seen.add(at.name);
+				at = value(values.get(at.name));
+			}
+
+			return at;
 		};
 		new Visitor({
 			ImportDeclaration(node) {
@@ -79,6 +173,20 @@ const graph = (root: string, entries: readonly string[]) => {
 			ExportNamedDeclaration(node) {
 				if (valueLink(node.exportKind, node.specifiers) && typeof node.source?.value === "string") {
 					link(node.source.value);
+				}
+
+				// `export {app as default};` names the default export too.
+				if (
+					node.source === null &&
+					node.specifiers.some(
+						(s) =>
+							s.exportKind !== "type" &&
+							s.exported.type === "Identifier" &&
+							s.exported.name === "default" &&
+							handlerObject(named(s.local)),
+					)
+				) {
+					defines();
 				}
 			},
 			ExportAllDeclaration(node) {
@@ -93,22 +201,17 @@ const graph = (root: string, entries: readonly string[]) => {
 			},
 			ClassDeclaration(node) {
 				if (workerClass(node.superClass)) {
-					loadsWorker = true;
+					defines();
 				}
 			},
 			ClassExpression(node) {
 				if (workerClass(node.superClass)) {
-					loadsWorker = true;
+					defines();
 				}
 			},
 			ExportDefaultDeclaration(node) {
-				if (
-					node.declaration.type === "ObjectExpression" &&
-					node.declaration.properties.some(
-						(p) => p.type === "Property" && p.key.type === "Identifier" && handler.test(p.key.name),
-					)
-				) {
-					loadsWorker = true;
+				if (handlerObject(named(node.declaration))) {
+					defines();
 				}
 			},
 		}).visit(tree);
@@ -118,13 +221,34 @@ const graph = (root: string, entries: readonly string[]) => {
 		visit(resolve(root, entry));
 	}
 
-	return {files, loadsWorker};
+	return {files, loadsWorker, definesWorker};
+};
+
+const sources = (root: string) =>
+	readdirSync(root, {recursive: true, encoding: "utf8"}).filter(
+		(path) => !/(?:^|\/)(?:node_modules|dist)(?:\/|$)/.test(path),
+	);
+
+// A pattern export ("./*": "./src/*.ts") exports every package file its target matches, as
+// Node resolves it: one `*`, which may span folders.
+const expand = (root: string, key: string, target: string): string[] => {
+	if (!key.includes("*") || !target.includes("*")) {
+		return [target];
+	}
+
+	const [before = "", after = ""] = target.split("*");
+	const escape = (text: string) => text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const pattern = new RegExp(`^${escape(before)}.+${escape(after)}$`);
+
+	return sources(root)
+		.map((path) => `./${path}`)
+		.filter((path) => pattern.test(path) && isFile(resolve(root, path)));
 };
 
 // Every window-shaped source file in the package, tests and dependencies aside.
 const windowFiles = (root: string) =>
-	readdirSync(root, {recursive: true, encoding: "utf8"})
-		.filter((path) => !/(?:^|\/)(?:node_modules|dist)(?:\/|$)/.test(path) && windowFile(path))
+	sources(root)
+		.filter(windowFile)
 		.map((path) => resolve(root, path));
 
 export const programPackageLayout: CreateRule = {
@@ -152,12 +276,19 @@ export const programPackageLayout: CreateRule = {
 		const exports = map(manifest) ? manifest.exports : undefined;
 		const entries =
 			typeof exports === "string" ? targets(exports) : map(exports) ? targets(exports["."]) : [];
-		const pure = graph(root, entries).files;
-		const main = entries.some((entry) => resolve(root, entry) === file);
+		const dot = graph(root, entries);
+		const pure = dot.files;
+		// The package's findings are reported once, on its first real '.' entry.
+		const main = entries.map((entry) => resolve(root, entry)).find(isFile) === file;
 		const errors: string[] = [];
 
 		if (entries.length === 0 || entries.some((entry) => !existsSync(resolve(root, entry)))) {
 			errors.push("Export a real pure program at '.'.");
+		}
+
+		// A Worker class or handler behind any runtime condition of '.', such as "workerd".
+		if (dot.definesWorker) {
+			errors.push("A program package has no Worker entry. libfabrika builds its box; '.' is one.");
 		}
 
 		const subpaths = map(exports)
@@ -169,7 +300,10 @@ export const programPackageLayout: CreateRule = {
 
 		// libfabrika's own entry names stay refused even on pure code: the box is never the program's.
 		for (const [key, target] of subpaths) {
-			const loaded = graph(root, targets(target));
+			const loaded = graph(
+				root,
+				targets(target).flatMap((path) => expand(root, key, path)),
+			);
 
 			for (const path of loaded.files) {
 				exported.add(path);
