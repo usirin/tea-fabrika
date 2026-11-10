@@ -26,7 +26,10 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
 					projectLayer(ctx, env, {
 						config,
 						programs,
-						bootstrap: {name: "counter:1", id: "counter:1", program: "counter"},
+						bootstrap: [
+							{name: "counter:1", id: "counter:1", program: "counter"},
+							{name: "counter:2", id: "counter:2", program: "counter"},
+						],
 						door: (options) =>
 							Door.pipe(
 								Effect.provide(

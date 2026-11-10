@@ -16,7 +16,12 @@
 		"@effect/platform-node": "catalog:",
 		"effect": "catalog:",
 		"oxc-parser": "catalog:",
-		"oxc-transform-react": "catalog:"
+		"oxc-transform-react": "catalog:",
+		"@kampus/tuval": "workspace:*",
+		"@kampus/fabrika-design": "workspace:*",
+		"@manti-ui/styles": "catalog:",
+		"react": "catalog:",
+		"react-dom": "catalog:"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "5.20261027.1",
@@ -31,6 +36,8 @@
 		"@alchemy.run/cloudflare": "catalog:",
 		"alchemy": "catalog:",
 		"typescript": "catalog:",
-		"vitest": "catalog:"
+		"vitest": "catalog:",
+		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:"
 	}
 }

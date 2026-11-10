@@ -3,10 +3,14 @@ import {LedgerError} from "../data/index.ts";
 import {GatewayClient, ProjectClient} from "./platform.ts";
 import {projectStub, rpc, type BrainOptions, type Env} from "./runtime.ts";
 
+/** What the app supplies for a window: the built page and the browser script, as text. */
+export type Assets = {readonly page: string; readonly script: string};
+
 export const fetch = Effect.fn("workers.fetch")(function* (
 	request: Request,
 	env: Env,
 	config: BrainOptions,
+	assets?: Assets,
 ) {
 	const url = new URL(request.url),
 		origin = `http://127.0.0.1:${config.port}`;
@@ -14,6 +18,14 @@ export const fetch = Effect.fn("workers.fetch")(function* (
 		return new Response("Wrong host", {status: 421});
 	if (request.headers.get("origin") !== null && request.headers.get("origin") !== origin)
 		return new Response("Foreign origin", {status: 403});
+	if (assets !== undefined && request.method === "GET" && url.pathname === "/")
+		return new Response(assets.page, {
+			headers: {"content-type": "text/html; charset=utf-8", "cache-control": "no-store"},
+		});
+	if (assets !== undefined && request.method === "GET" && url.pathname === "/window.js")
+		return new Response(assets.script, {
+			headers: {"content-type": "text/javascript; charset=utf-8", "cache-control": "no-store"},
+		});
 	if (url.pathname.startsWith("/client/"))
 		return yield* rpc(GatewayClient.make(env.GATEWAY.getByName(url.pathname)).fetch(request));
 	const project = ProjectClient.make(projectStub(env, config.name));

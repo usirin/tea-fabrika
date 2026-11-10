@@ -37,6 +37,7 @@ const methods = {
 		"leave",
 		"online",
 		"brain",
+		"settings",
 	]),
 	process: new Set(["msg", "open", "due", "abort", "activity", "recover", "savedAlarm"]),
 	record: new Set(["write", "read", "content", "deleteContent"]),

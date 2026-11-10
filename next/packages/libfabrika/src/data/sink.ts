@@ -59,7 +59,25 @@ const SINK_TABLES = [
 	`CREATE TABLE IF NOT EXISTS unsent (
 		"spanId" TEXT PRIMARY KEY, chain TEXT NOT NULL, row TEXT NOT NULL, content TEXT)`,
 	`CREATE TABLE IF NOT EXISTS parts (chain TEXT PRIMARY KEY, part INTEGER NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS samples (id TEXT PRIMARY KEY)`,
 ];
+
+/** A client's own measurement (P14): a stable id, an operation name, its duration in ms on the
+ *  client's clock, and tags that are words, numbers and booleans. Nothing in it says who wrote it;
+ *  the caller that checked the client stamps that, and the row lands under `spans`. */
+const Sample = Schema.Struct({
+	id: Schema.NonEmptyString,
+	name: Schema.NonEmptyString,
+	ms: Schema.Number.check(Schema.isFinite()),
+	tags: Schema.Record(
+		Schema.String,
+		Schema.Union([Schema.String, Schema.Number.check(Schema.isFinite()), Schema.Boolean]),
+	),
+});
+type Sample = typeof Sample.Type;
+const decodeSample = Schema.decodeUnknownOption(Sample);
+/** The tag that holds a sample's duration as its client measured it. */
+const CLIENT_MS = "fab.client.ms";
 
 const Unsent = Schema.Struct({
 	spanId: Schema.String,
@@ -221,6 +239,12 @@ export class SpanSink extends Context.Service<
 			from: number,
 			to: number,
 		) => Effect.Effect<ReadonlyArray<Summary>, SinkError>;
+		/** Lands checked client samples in `unsent` and the health rows, and answers the ids that are
+		 *  durably there. A sample that does not decode is refused; one whose id landed before is not
+		 *  written again and is still acknowledged; a write that fails acknowledges nothing. */
+		readonly ingest: (
+			samples: ReadonlyArray<unknown>,
+		) => Effect.Effect<{readonly acknowledged: ReadonlyArray<string>}>;
 	}
 >()("@kampus/libfabrika/SpanSink") {
 	/** Provides `Tracer.Tracer` and `SpanSink` over this object's `Sql`. Building it touches nothing:
@@ -379,5 +403,61 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 		return yield* attempt(() => readSummaries(sql, from, to));
 	});
 
-	return {tracer, sink: {flush, summaries}};
+	/** A sample's rows. Its time is when it reached this object; its duration stays a tag, the
+	 *  client's own measurement, and is the health row's `ms`. */
+	const sampled = (sample: Sample, now: number): Ended => {
+		const own = keep(Object.entries(sample.tags));
+		const at = String(BigInt(now) * 1_000_000n);
+		return {
+			health: {
+				piece: sample.name,
+				at: now,
+				ms: sample.ms,
+				ok: true,
+				error: null,
+				lag: largestLag(own.tags),
+				spanId: sample.id,
+			},
+			chain: Chain.cases.spans.make({}),
+			row: SpanRow.make({
+				traceId: sample.id,
+				spanId: sample.id,
+				parentSpanId: null,
+				name: sample.name,
+				kind: "client",
+				startTimeUnixNano: at,
+				endTimeUnixNano: at,
+				attributes: {...own.tags, [CLIENT_MS]: sample.ms},
+				events: [],
+				links: [],
+				resource: {attributes: {[OBJECT]: who.object}},
+				ok: true,
+			}),
+			content: null,
+		};
+	};
+
+	const ingest = Effect.fnUntraced(function* (samples: ReadonlyArray<unknown>) {
+		const checked = new Map<string, Sample>();
+		for (const raw of samples) {
+			const sample = decodeSample(raw);
+			if (Option.isSome(sample) && !checked.has(sample.value.id))
+				checked.set(sample.value.id, sample.value);
+		}
+		const now = yield* Clock.currentTimeMillis;
+		const done = Result.try({
+			try: () =>
+				atomic(() => {
+					for (const sample of checked.values()) {
+						if (sql.exec(`SELECT 1 FROM samples WHERE id = ?`, sample.id).length > 0) continue;
+						sql.exec(`INSERT INTO samples (id) VALUES (?)`, sample.id);
+						land(sampled(sample, now));
+					}
+				}),
+			catch: (error) => error,
+		});
+		return {acknowledged: Result.isSuccess(done) ? [...checked.keys()] : []};
+	});
+
+	return {tracer, sink: {flush, summaries, ingest}};
 };

@@ -37,3 +37,20 @@ export {
 	workerExecution,
 } from "./app/execution.ts";
 export {Door, type ConnectionId} from "./door/index.ts";
+// A program client's own rules (P14): pending letters, checked views, a program window's typed
+// contract, and the rows a client records. Any client steps them: a browser tab, Electron, headless.
+export * as ProgramClient from "./app/client.ts";
+export {
+	ClientRecord,
+	ClientRow,
+	commandMsg,
+	defineWindow,
+	type WindowData,
+	type WindowMsg,
+	type WindowProps,
+	type WindowRegistration,
+} from "./app/client.ts";
+export {applyPatch, PatchError} from "./app/patch.ts";
+// Key tables (P14): the person's key file, the rows over a program's defaults, and the match.
+export * as Keys from "./app/keybindings.ts";
+export type {Armed, KeyEvent, KeyProblem, Rows, Table} from "./app/keybindings.ts";

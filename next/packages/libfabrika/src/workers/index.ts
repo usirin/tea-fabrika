@@ -8,7 +8,7 @@ import {
 import {ProgramDown} from "../app/program.ts";
 export type {ProgramSource} from "../app/execution.ts";
 export {workerSql} from "../data/worker-sql.ts";
-export {fetch} from "./fetch.ts";
+export {type Assets, fetch} from "./fetch.ts";
 
 type Calls = Rpc.WorkerEntrypointBranded &
 	Required<ExecutionCalls> & {

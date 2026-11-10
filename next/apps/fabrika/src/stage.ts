@@ -1,3 +1,4 @@
+import {counterKeys} from "@kampus/counter";
 import {startStage as start} from "@kampus/libfabrika/node/stage";
 import {AlchemyContext} from "alchemy/AlchemyContext";
 import {ArtifactStore, createArtifactStore} from "alchemy/Artifacts";
@@ -15,7 +16,8 @@ export const startStage = Effect.fn("stage.startStage")(function* (
 ) {
 	const path = yield* Path.Path;
 	const config = Settings.make({...options, build: built.build});
-	return yield* start({...config, home: options.home}, (local, scope) => {
+	const keys = {commands: Object.keys(counterKeys)};
+	return yield* start({...config, home: options.home, keys}, (local, scope) => {
 		const engine = Layer.mergeAll(
 			Layer.succeed(AlchemyContext, {
 				dotAlchemy: path.join(options.home, ".alchemy"),

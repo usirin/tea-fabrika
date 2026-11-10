@@ -46,6 +46,7 @@ import {
 	RecordManager,
 	Referee,
 	SpanSink,
+	valueFor,
 	type BucketCalls,
 	type Sql,
 } from "../data/index.ts";
@@ -120,7 +121,8 @@ export interface ProjectDoorOptions {
 export interface ProjectOptions {
 	readonly config: BrainOptions;
 	readonly programs: Readonly<Record<string, ProgramSource>>;
-	readonly bootstrap: {readonly name: string; readonly id: string; readonly program: string};
+	/** The fixed processes the Project starts once and wakes by their saved ids: one, or a list. */
+	readonly bootstrap: Bootstrap | ReadonlyArray<Bootstrap>;
 	readonly door: (
 		options: ProjectDoorOptions,
 	) => Effect.Effect<
@@ -129,6 +131,59 @@ export interface ProjectOptions {
 		Ledger | LedgerTransaction | Id.Generator | ClientManager | SpanSink | RecordManager | Archive
 	>;
 }
+/** A fixed process a Project starts on its first boot and finds by its saved start after that. */
+export type Bootstrap = {readonly name: string; readonly id: string; readonly program: string};
+
+/** The bootstraps a Project starts, in order. A single one stays valid; a repeated name or id is a
+ *  wiring mistake and is refused before anything starts. */
+export const bootstraps = (
+	option: Bootstrap | ReadonlyArray<Bootstrap>,
+): ReadonlyArray<Bootstrap> => {
+	const list: ReadonlyArray<Bootstrap> = "name" in option ? [option] : option;
+	for (const [i, one] of list.entries())
+		if (list.some((other, j) => j !== i && (other.name === one.name || other.id === one.id)))
+			throw new Error(`bootstrap ${one.name} is named twice`);
+	return list;
+};
+
+/** A view update as a client receives it (P14): `view.whole` or `view.patch`, with the update as
+ *  its params and the process it is about added to both. The update itself is not changed. */
+export const viewNotice = (
+	pid: string,
+	update: {readonly type: string},
+): {readonly method: string; readonly params: Record<string, unknown>} => ({
+	method: update.type === "whole" ? "view.whole" : "view.patch",
+	params: {pid, ...update},
+});
+
+/** A person's key settings, as the trusted local control hands them in: rows the stage checked,
+ *  which reader read them, and when on the stage's clock. */
+const Read = {
+	id: Schema.NonEmptyString,
+	source: Schema.Literal("file"),
+	reader: Schema.NonEmptyString,
+	sentAt: Schema.String,
+};
+const Rows = Schema.Record(Schema.String, Schema.Array(Schema.String));
+const KeyProblem = Schema.Struct({line: Schema.Int, why: Schema.String});
+const KeySettings = Schema.Union([
+	Schema.Struct({...Read, rows: Rows}),
+	Schema.Struct({...Read, error: KeyProblem}),
+]);
+/** The settings entries: a good table read from the file, or why the last read was not used. */
+const KeysFact = Schema.TaggedStruct("keys", {
+	rows: Rows,
+	source: Read.source,
+	reader: Read.reader,
+});
+const KeysFailed = Schema.TaggedStruct("keys_failed", {
+	line: KeyProblem.fields.line,
+	why: KeyProblem.fields.why,
+	source: Read.source,
+	reader: Read.reader,
+});
+const decodeKeys = Schema.decodeUnknownOption(Schema.Union([KeysFact, KeysFailed]));
+
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
 export const processStub = (env: Env, project: string, pid: string) =>
 	env.PROCESS.getByName(JSON.stringify([project, pid]));
@@ -262,7 +317,8 @@ const projectLogic = Effect.fn("project.init")(function* (
 	env: Env,
 	options: ProjectOptions,
 ) {
-	const {config, programs, bootstrap} = options;
+	const {config, programs} = options;
+	const fixed = bootstraps(options.bootstrap);
 	const name = ctx.id.name ?? config.name,
 		sql = workerSql(ctx.storage);
 	const turn = yield* Semaphore.make(1);
@@ -328,7 +384,6 @@ const projectLogic = Effect.fn("project.init")(function* (
 		members = Context.get(services, ClientManager),
 		processes = Context.get(services, ProcessManager);
 	const loader = workerLoader(env.LOADER, programs);
-	const loaded = yield* loader.load(bootstrap.program, `project:${name}`);
 	sql.exec(
 		"CREATE TABLE IF NOT EXISTS stage_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
 	);
@@ -347,7 +402,8 @@ const projectLogic = Effect.fn("project.init")(function* (
 		sql.exec("UPDATE stage_descriptors SET pending=0 WHERE process=?", pid);
 	});
 	const policies = new Map<string, {inputs: Array<string>; events: Array<string>}>();
-	const remember = (pid: string, declaration: typeof loaded.declaration) =>
+	type Declared = Effect.Success<ReturnType<typeof loader.load>>["declaration"];
+	const remember = (pid: string, declaration: Declared) =>
 		policies.set(pid, {
 			inputs: Object.entries(declaration.inputs)
 				.filter(([, p]) => p.personOnly)
@@ -469,28 +525,34 @@ const projectLogic = Effect.fn("project.init")(function* (
 		yield* configure(result.process);
 		return result;
 	});
-	const original = yield* ledger.read(`processes/${bootstrap.name}`, 0).pipe(
-		Stream.filter((entry) => entry.id === bootstrap.id),
-		Stream.runHead,
-		Effect.map(Option.getOrUndefined),
-	);
-	const Bootstrap = Schema.Struct({process: Schema.String});
-	const boot =
-		original !== undefined
-			? {
-					process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
-						Effect.mapError(() => new LedgerError({why: "bad_row"})),
-					)).process,
-					rev: original.rev,
-				}
-			: yield* start(
-					Start.cases.first.make({
-						id: bootstrap.id,
-						name: bootstrap.name,
-						code: {program: bootstrap.program, hash: loaded.hash},
-					}),
-					yield* from(),
-				);
+	const Bootstrapped = Schema.Struct({process: Schema.String});
+	/** Finds a fixed process by its saved start, or starts it: once, however often the brain wakes. */
+	const bootOne = Effect.fnUntraced(function* (bootstrap: Bootstrap) {
+		const original = yield* ledger.read(`processes/${bootstrap.name}`, 0).pipe(
+			Stream.filter((entry) => entry.id === bootstrap.id),
+			Stream.runHead,
+			Effect.map(Option.getOrUndefined),
+		);
+		if (original !== undefined)
+			return {
+				process: (yield* Schema.decodeUnknownEffect(Bootstrapped)(original.body).pipe(
+					Effect.mapError(() => new LedgerError({why: "bad_row"})),
+				)).process,
+				rev: original.rev,
+			};
+		const loaded = yield* loader.load(bootstrap.program, `project:${name}`);
+		return yield* start(
+			Start.cases.first.make({
+				id: bootstrap.id,
+				name: bootstrap.name,
+				code: {program: bootstrap.program, hash: loaded.hash},
+			}),
+			yield* from(),
+		);
+	});
+	const boots = yield* Effect.forEach(fixed, bootOne, {concurrency: 1});
+	const [boot] = boots;
+	if (boot === undefined) return yield* new LedgerError({why: "refused"});
 	const wrapped = <A, E>(effect: Effect.Effect<A, E>) =>
 		complete(effect).pipe(Effect.provideContext(services));
 	const own = Effect.fn("project.own")(function* (
@@ -521,6 +583,27 @@ const projectLogic = Effect.fn("project.init")(function* (
 	});
 	const brain = Effect.fn("project.brain")(function* (event: typeof BrainEvent.Type) {
 		return yield* ledger.append("door/brain", event.id, lineFor(yield* from(), event));
+	});
+	/** Appends a valid key settings change to the person's settings stream, as the brain's own
+	 *  write with the reader named in it. An id already there, or the same rows as the last entry,
+	 *  is no change. */
+	const keySettings = Effect.fn("project.settings")(function* (input: unknown) {
+		const value = yield* Schema.decodeUnknownEffect(KeySettings)(input).pipe(
+			Effect.mapError(() => new LedgerError({why: "refused"})),
+		);
+		const stream = `person/${config.person}/settings`;
+		const entries = [...(yield* Stream.runCollect(ledger.read(stream, 0)))];
+		if (entries.some((entry) => entry.id === value.id)) return null;
+		const fact =
+			"rows" in value
+				? KeysFact.make({rows: value.rows, source: value.source, reader: value.reader})
+				: KeysFailed.make({...value.error, source: value.source, reader: value.reader});
+		const last = entries.at(-1);
+		const before = last === undefined ? undefined : decodeKeys(valueFor(last));
+		if (before?._tag === "Some" && JSON.stringify(before.value) === JSON.stringify(fact))
+			return null;
+		const origin = yield* from();
+		return yield* ledger.append(stream, value.id, lineFor({...origin, sentAt: value.sentAt}, fact));
 	});
 	yield* flushed.pipe(Effect.provideContext(services));
 	return {
@@ -627,7 +710,9 @@ const projectLogic = Effect.fn("project.init")(function* (
 			);
 		},
 		brain: (event: typeof BrainEvent.Type) => wrapped(brain(event)),
+		settings: (input: unknown) => wrapped(write(keySettings(input))),
 		boot,
+		boots,
 	};
 });
 
@@ -668,8 +753,11 @@ const processLogic = Effect.fnUntraced(function* (
 	const store = Context.get(services, ProcessStore),
 		sink = Context.get(services, SpanSink);
 	const saved = yield* processDescriptor(ctx);
-	const publish = Effect.fn("process.publish")(function* (client: string, update: unknown) {
-		yield* rpc(p.publish(client, update));
+	const publish = Effect.fn("process.publish")(function* (
+		client: string,
+		update: {readonly type: string},
+	) {
+		yield* rpc(p.publish(client, viewNotice(pid, update)));
 	});
 	const dependencies = Layer.mergeAll(
 		Layer.succeed(CheckedWriter, {

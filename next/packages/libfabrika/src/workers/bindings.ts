@@ -121,6 +121,8 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 		>;
 		publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<void>>;
 		brain: RemoteCall<(event: typeof BrainEvent.Type) => Effect.Effect<Appended>>;
+		/** The trusted local control's key settings: a checked value the stage read from a file. */
+		settings: RemoteCall<(input: unknown) => Effect.Effect<Appended | null>>;
 	};
 export type ProcessBinding = Rpc.DurableObjectBranded &
 	Remote<Pick<Runner, "msg" | "open" | "due">> & {

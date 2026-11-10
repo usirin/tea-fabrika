@@ -1,0 +1,284 @@
+/*
+ * The window's own rules, next/ (Tier 1, P14). Colors, type sizes, spacing and Manti's mapping come
+ * from @kampus/fabrika-design/tokens.css, which the page applies before this file. The tile, title
+ * bar, frame and slot rules are adapted from apps/fabrika/src/window/window.css at 25d1317, as
+ * Tier 1's Styling section allows (docs/plan/tier-1-detail.md#styling):
+ *
+ * - `.tile`, `.tile.focused`, `.titlebar`, `.titlebar .tid`, `.slot`, `.topbar`, `.bottomline`,
+ *   `.sep`, `.quiet` and `.strip` keep their shapes. Old names map to the shared ones: `--tile-focus`
+ *   is `--focus`, `--text-secondary` and `--text-muted` are `--text-faint`, and `.fb.broken` is
+ *   `.broken` on plain text. The `--tile-*` tokens stay the tile part's own (today's window.css).
+ * - Tiles are placed at the absolute rectangles of Tuval's fold, not by flex, so `.tile` drops
+ *   `flex: 1` and takes `position: absolute`. The title bar is a header in the flow, not an
+ *   absolute button. A tile's edge is an outline, which forced colors keep.
+ * - The bars stay monospace; no line below the top bar or above the bottom line.
+ */
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	background: var(--surface-sunken);
+	color: var(--text-faint);
+	font: 400 var(--fs-body) var(--font);
+}
+
+.frame {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.topbar,
+.bottomline {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 0;
+	min-width: 0;
+	padding: 0 var(--s-3);
+	color: var(--text-faint);
+	font: 400 var(--fs-small) / 1 var(--mono);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.topbar {
+	height: 34px;
+}
+
+.bottomline {
+	height: 28px;
+}
+
+.sep {
+	padding: 0 6px;
+	color: var(--text-faint);
+}
+
+.quiet {
+	color: var(--text-faint);
+}
+
+.broken {
+	color: var(--stuck);
+}
+
+/* The tiles' area: the fold places each shown tile at its own rectangle inside it. */
+.desk {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	margin: 0 var(--s-1);
+}
+
+.tile {
+	position: absolute;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	border: 2px solid transparent;
+	border-radius: var(--r-lg);
+	background: var(--surface);
+	background-clip: padding-box;
+	outline: 1px solid var(--border-faint);
+	outline-offset: -3px;
+	overflow: hidden;
+}
+
+.tile.focused {
+	outline: 2px solid var(--focus);
+	outline-offset: -4px;
+}
+
+/* A tile's title bar: its program and the process it shows. */
+.titlebar {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	height: 20px;
+	padding: 0 var(--s-3);
+	color: var(--text-faint);
+	font: 400 var(--fs-small) var(--mono);
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.titlebar .tid {
+	margin-left: auto;
+	color: var(--text-faint);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tile.focused .titlebar {
+	color: var(--text-primary);
+}
+
+.slot {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+/* Folded tiles: one strip each, in place along the desk's foot. A strip is a button, not a region. */
+.strips {
+	position: absolute;
+	inset: auto 0 0 0;
+	display: flex;
+	gap: var(--s-1);
+	padding: var(--s-1);
+	overflow-x: auto;
+}
+
+.strip {
+	all: unset;
+	padding: 2px var(--s-2);
+	border-radius: var(--r-sm);
+	background: var(--surface);
+	outline: 1px solid var(--border-faint);
+	outline-offset: -1px;
+	color: var(--text-faint);
+	font: 400 var(--fs-small) var(--mono);
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.strip:hover {
+	color: var(--text-primary);
+}
+
+.strip:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+	color: var(--text-primary);
+}
+
+/* The whole-window screens: waiting for a grant, removed, blocked and connecting. */
+.screen {
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-3);
+	max-width: 720px;
+	min-height: 100%;
+	margin: 0 auto;
+	padding: var(--s-10) var(--s-6);
+	justify-content: center;
+}
+
+.screen-title {
+	margin: 0;
+	color: var(--text-primary);
+	font: 600 var(--fs-title) var(--font);
+}
+
+.screen-text {
+	margin: 0;
+	color: var(--text-faint);
+	font-size: var(--fs-prose);
+	line-height: 1.5;
+}
+
+.screen-command {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2);
+}
+
+.screen-command code {
+	flex: 1 1 320px;
+	min-width: 0;
+	padding: var(--s-2) var(--s-3);
+	border-radius: var(--r);
+	background: var(--surface-raised);
+	outline: 1px solid var(--border-faint);
+	outline-offset: -1px;
+	color: var(--text-primary);
+	font: 400 var(--fs-small) / 1.5 var(--mono);
+	overflow-wrap: anywhere;
+}
+
+/* A command or a key is typed by hand: every character as it is, with no ligature joining `--`. */
+.screen code,
+.screen-facts dd {
+	font-family: var(--mono);
+	font-variant-ligatures: none;
+}
+
+.screen-facts {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: var(--s-1) var(--s-4);
+	margin: 0;
+	font: 400 var(--fs-small) var(--mono);
+}
+
+.screen-facts dt {
+	color: var(--text-faint);
+}
+
+.screen-facts dd {
+	margin: 0;
+	color: var(--text-primary);
+	overflow-wrap: anywhere;
+}
+
+.screen-facts [data-testid="grant-code"] {
+	font-size: var(--fs-head);
+	letter-spacing: 0.1em;
+}
+
+.screen-quiet {
+	margin: 0;
+	padding: var(--s-3);
+	color: var(--text-faint);
+	font: 400 var(--fs-small) var(--mono);
+}
+
+/* The counter's window (programs/counter/src/window.tsx): one readable number and its actions. */
+.counter {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s-4);
+	min-height: 100%;
+	padding: var(--s-3);
+	box-sizing: border-box;
+}
+
+.counter-count {
+	color: var(--text-primary);
+	font: 600 var(--fs-title) var(--mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.counter-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--s-2);
+}
+
+@media (forced-colors: active) {
+	/* The tile's spacing border would be painted as text; it is only room around the edge. */
+	.tile {
+		border-color: Canvas;
+	}
+
+	.tile.focused,
+	.strip:focus-visible {
+		outline: 2px solid Highlight;
+	}
+}

@@ -24,7 +24,7 @@ import {DurableObject, WorkerEntrypoint} from "cloudflare:workers";
 import {Effect, Redacted} from "effect";
 import type {ConnectionId} from "./door.ts";
 import {gatewayRuntime, projectRuntime, settings, type Env} from "./runtime.ts";
-import {programs} from "./table.ts";
+import {assets, programs} from "./table.ts";
 
 export class Project extends DurableObject<Env> {
 	readonly runtime = projectRuntime(this.ctx, this.env);
@@ -137,6 +137,10 @@ export class Project extends DurableObject<Env> {
 	brain(event: Parameters<ContextProject["brain"]>[0]) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
 		return this.runtime.runPromise(ProjectService.use((p) => p.brain(event)));
+	}
+	settings(input: unknown) {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+		return this.runtime.runPromise(ProjectService.use((p) => p.settings(input)));
 	}
 }
 type ContextProject = (typeof ProjectService)["Service"];
@@ -265,7 +269,7 @@ export default {
 	fetch(request: Request, env: Env) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Worker fetch returns a Promise
 		return Effect.runPromise(
-			settings(env).pipe(Effect.flatMap((config) => fetch(request, env, config))),
+			settings(env).pipe(Effect.flatMap((config) => fetch(request, env, config, assets))),
 		);
 	},
 };

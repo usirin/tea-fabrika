@@ -2,7 +2,18 @@ import * as Plugin from "@alchemy.run/cloudflare-runtime/core/Plugin";
 import {RuntimeLifecycle, type RuntimeEvent} from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import {SystemError} from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
 import {applyCell} from "@demlik/tea";
-import {Context, Deferred, Effect, Exit, Queue, Redacted, Schema, Scope, Stream} from "effect";
+import {
+	Context,
+	DateTime,
+	Deferred,
+	Effect,
+	Exit,
+	Queue,
+	Redacted,
+	Schema,
+	Scope,
+	Stream,
+} from "effect";
 import {SecureRandom} from "effect/crypto";
 import {Base64Url} from "effect/encoding";
 import {ChildProcess} from "effect/process";
@@ -10,6 +21,7 @@ import {BrainEvent} from "../app/brain-event.ts";
 import {brainLife} from "../app/brain-life.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
 import {SpanSink} from "../data/sink.ts";
+import {watchKeys} from "./keybindings.ts";
 import {brainOutbox, checkMemory} from "./local-stage.ts";
 import {stageRecording} from "./stage-recording.ts";
 
@@ -55,6 +67,9 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		readonly port: number;
 		readonly build: string;
 		readonly home: string;
+		/** The commands the person's `keybindings.toml` may bind. With them, the stage reads the
+		 *  file under its home for its whole life and hands each checked change to the brain. */
+		readonly keys?: {readonly commands: ReadonlyArray<string>};
 	},
 	deploy: (local: Context.Context<never>, scope: Scope.Scope) => Effect.Effect<unknown, E, R>,
 ) {
@@ -301,6 +316,26 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		yield* flush;
 	});
 	yield* recorded(startRuntime());
+	if (options.keys !== undefined) {
+		const random = yield* SecureRandom.SecureRandom;
+		/** One key settings change through the trusted local control, never a public route. */
+		const publish = Effect.fn("keys.publish")(function* (change: object) {
+			const id = Base64Url.encode(yield* random.randomBytes(12));
+			const sentAt = DateTime.formatIso(yield* DateTime.now);
+			yield* call("project", config.name, "", "settings", [
+				{id: `keys-${id}`, source: "file", reader: `stage:${config.name}`, sentAt, ...change},
+			]);
+		});
+		const settings = (change: object) =>
+			publish(change).pipe(Effect.ignore, Effect.provideContext(recording));
+		yield* watchKeys({
+			file: `${options.home}/keybindings.toml`,
+			commands: options.keys.commands,
+			defaults: {},
+			publish: ({rows}) => settings({rows}),
+			status: ({error}) => (error === null ? Effect.void : settings({error})),
+		});
+	}
 	yield* Effect.forkScoped(
 		Effect.forever(
 			Effect.gen(function* () {

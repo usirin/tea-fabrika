@@ -78,6 +78,9 @@ export class ProjectClient extends Context.Service<
 			brain: (...args) =>
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Project brain RPC enters Effect
 				Effect.tryPromise({try: () => stub.brain(...args), catch: unreachable}),
+			settings: (...args) =>
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Project settings RPC enters Effect
+				Effect.tryPromise({try: () => stub.settings(...args), catch: unreachable}),
 			append: (...args) =>
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Project append RPC enters Effect
 				Effect.tryPromise({try: () => stub.append(...args), catch: unreachable}),
