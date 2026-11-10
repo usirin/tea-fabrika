@@ -360,7 +360,7 @@ if ! git merge-base --is-ancestor origin/main HEAD; then
 fi
 rmdir "$LOCK"; held=no
 # Wait for every check on this exact sha, up to an hour. A skipped job (no code changed) is done.
-need="check e2e next commits"
+need="check e2e commits"
 # The clock is read after every answer and before a green one can break out to the merge.
 missing=$need; pending=1; finished=no
 deadline=$(($(date +%s) + 3600))
@@ -369,8 +369,21 @@ for _ in $(seq 120); do
 		-q '.check_runs[]|"\(.name)\t\(.status)\t\(.conclusion)"')
 	bad=$(printf '%s\n' "$runs" | awk -F'\t' '$2=="completed" && $3!="success" && $3!="skipped" && $3!="neutral" {print $1": "$3}')
 	[ -z "$bad" ] || { echo "pr $pr: red at $tip: $bad" >&2; exit 1; }
-	missing=""
-	for n in $need; do printf '%s\n' "$runs" | grep -q "^$n	" || missing="$missing $n"; done
+	missing=$(printf '%s\n' "$runs" | awk -F'\t' -v need="$need" '
+		{ present[$1]=1 }
+		$1=="next" && $2=="completed" && $3=="skipped" { skipped=1 }
+		$1 ~ /^next \([0-9]+\)$/ { matrix=1 }
+		END {
+			count=split(need, required, " ")
+			for (i=1; i<=count; i++)
+				if (!(required[i] in present)) printf " %s", required[i]
+			# A skipped matrix job has one bare check; any member requires all six names.
+			if (skipped && !matrix) exit
+			for (i=1; i<=6; i++) {
+				name="next (" i ")"
+				if (!(name in present)) printf " %s", name
+			}
+		}')
 	pending=$(printf '%s\n' "$runs" | awk -F'\t' 'NF && $2!="completed"' | wc -l | tr -d ' ')
 	[ "$(date +%s)" -lt "$deadline" ] || break
 	if [ -z "$missing" ] && [ "$pending" = 0 ]; then finished=yes; break; fi
