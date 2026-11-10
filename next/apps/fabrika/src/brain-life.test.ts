@@ -141,21 +141,16 @@ const launch = async (startupGate = false) => {
 		return {child, folder, url, output: () => output, observed};
 	}
 
-	for (;;) {
-		if (child.exitCode !== null) {
-			throw new Error(`P12 dev.ts did not start: ${output}`);
-		}
-
-		try {
-			if ((await fetch(url)).ok) {
-				break;
+	// Wait for the stage's own ready line, not for the first HTTP answer. workerd answers HTTP
+	// while the stage still makes its startup calls, and a kill in that gap fails the startup.
+	await new Promise<void>((done, fail) => {
+		child.stdout!.on("data", () => {
+			if (output.includes('{"ready":')) {
+				done();
 			}
-		} catch {
-			/* Listener is not ready. */
-		}
-
-		await pause();
-	}
+		});
+		child.once("exit", () => fail(new Error(`P12 dev.ts did not start: ${output}`)));
+	});
 
 	return {child, folder, url, output: () => output, observed};
 };
@@ -300,11 +295,22 @@ describe("P12 local brain life", () => {
 				details(),
 			).toEqual([]);
 			const {brainOutbox} = await import("@kampus/libfabrika/node/local-stage");
-			const pending = await Effect.runPromise(
-				Effect.flatMap(brainOutbox(s.folder), (o) => o.pending).pipe(
-					Effect.provide(NodeServices.layer),
-				),
-			);
+			const read = () =>
+				Effect.runPromise(
+					Effect.flatMap(brainOutbox(s.folder), (o) => o.pending).pipe(
+						Effect.provide(NodeServices.layer),
+					),
+				);
+			// The stage writes `braked` after Alchemy stops, with a synced file write. Wait for
+			// that row, as `workerd` waits for a pid, and do not read the outbox once and hope.
+			const until = performance.now() + 10_000;
+			let pending = await read();
+
+			while (!pending.some((event) => event._tag === "braked") && performance.now() < until) {
+				await pause();
+				pending = await read();
+			}
+
 			expect(pending, details()).toEqual(
 				expect.arrayContaining([expect.objectContaining({_tag: "braked"})]),
 			);
