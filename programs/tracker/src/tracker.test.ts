@@ -1,19 +1,22 @@
 import {
 	Ledger,
+	listed as listedProgram,
 	memoryStorage,
 	offer,
 	type PayloadOf,
 	readInput,
 	start,
+	Shell,
 	streams,
 	type Word,
 	type Writer,
 } from "@kampus/fabrika-old";
+import {driveFor} from "@kampus/fabrika-old/mcp";
 import {memoryService} from "@kampus/fabrika-old/memory";
 import {hashOf} from "@kampus/pipeline/tickets/approval";
 import type {CodeFact, PrFact} from "@kampus/pipeline/tickets/ticket";
 import {Tickets, ticketsOnLedger, Watcher, watcherOnLedger} from "@kampus/pipeline/tickets/tickets";
-import {Effect, Layer, Option, Stream} from "effect";
+import {Arbitrary, Effect, Layer, Option, Schema, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {headOf, lineOf} from "./head.ts";
 import {Author, type PullRequest, pickOf, pullRequestsOf, tracker} from "./index.ts";
@@ -533,5 +536,246 @@ describe("pickOf", () => {
 		expect(pickOf({ticket: 7}, 3)).toBe(7);
 		expect(pickOf({ticket: 7}, 7)).toBeNull();
 		expect(pickOf({status: "open"}, 7)).toBeNull();
+	});
+});
+
+// An MCP call on a tracker input answers with the view its OWN input made (tracker 411). The agent's
+// door, `driveFor`, runs the real tracker on a real in-memory ledger; before the fix it answered with
+// the view from before the input was handled. A changed view must come from the returned call itself:
+// the only reads beside it are the setup (warm-up, waiting for the first load) and the ledger rows.
+//
+//   tracker_query {ticket: 386}  then  tracker_query {ticket: 337}
+//   // the second answer's view: page {kind: "ticket", number: 337, ...}, not 386's
+
+const SEED = 119120;
+const RUNS = 200;
+const AGENT: Writer = {kind: "agent", id: "mcp", for: "owner"};
+
+/** Each failure of a property in words, as fast-check's report: the shrunk case and what differed. */
+const holds = <A>(arb: Arbitrary.Arbitrary<A>, body: (a: A) => Effect.Effect<void, string>) =>
+	Arbitrary.checkEffect(arb, (a) => body(a).pipe(Effect.as(true)), {
+		seed: SEED,
+		runs: RUNS,
+		concurrency: 1,
+	}).pipe(
+		Effect.flatMap((result) =>
+			result._tag === "Passed"
+				? Effect.void
+				: Effect.die(Arbitrary.formatCheckFailure(result) ?? result._tag),
+		),
+	);
+const ensure = (ok: boolean, what: string) => (ok ? Effect.void : Effect.fail(what));
+const same = (what: string, actual: unknown, expected: unknown) =>
+	ensure(
+		JSON.stringify(actual) === JSON.stringify(expected),
+		`${what}: got ${JSON.stringify(actual)}, wanted ${JSON.stringify(expected)}`,
+	);
+
+interface Seeded {
+	readonly number: number;
+	readonly state: "open" | "closed";
+}
+
+/** Tickets on a fresh ledger, filed as the person: `Ticket n`, and closed where asked. */
+const seeded = (tickets: readonly Seeded[]) =>
+	Effect.gen(function* () {
+		const ledger = memoryService();
+		for (const t of [...tickets].sort((a, b) => a.number - b.number)) {
+			const stream = streams(`tracker/ticket/${t.number}`).inbox;
+			yield* ledger.register(`tracker/ticket/${t.number}`, "user:owner");
+			yield* ledger.send(stream, `file-${t.number}`, {
+				kind: "filed",
+				writer: "user:owner",
+				data: {type: "filed", title: `Ticket ${t.number}`, body: `Body of ${t.number}`},
+			});
+			if (t.state === "closed")
+				yield* ledger.send(stream, `close-${t.number}`, {
+					kind: "closed",
+					writer: "user:owner",
+					data: {type: "closed"},
+				});
+		}
+		return ledger;
+	});
+
+/** The agent's door on the tracker over `ledger`, its run started and its first load done. */
+const door = (ledger: Ledger["Service"]) =>
+	Effect.gen(function* () {
+		const {drive} = yield* driveFor({
+			list: Shell.programList([listedProgram(tracker, services(ledger, AGENT))]),
+			tiles: () => [],
+		});
+		// Setup, not the call under test: the first call starts the run; wait until it has read the ledger.
+		yield* drive.call("tracker_query", {value: {status: "all"}});
+		for (let i = 0; i < 1000; i += 1) {
+			const runs = yield* drive.call("runs", {});
+			const yours: unknown = runs.kind === "done" ? Reflect.get(Object(runs.data), "yours") : [];
+			const view = Array.isArray(yours) ? Reflect.get(Object(yours[0]), "view") : null;
+			if (Reflect.get(Object(view), "ready") === true) return drive;
+			yield* Effect.sleep("2 millis");
+		}
+		return yield* Effect.die("the tracker never finished its first load");
+	});
+
+/** The view in a done answer, as plain data: `null` for a refusal. */
+const viewOf = (answer: {readonly kind: string; readonly data?: unknown}): unknown =>
+	answer.kind === "done" ? Reflect.get(Object(answer.data), "view") : null;
+
+/** The page of a view, read loosely: the law checks its fields by name. */
+const pageOf = (view: unknown): Record<string, unknown> => {
+	const page: unknown = Reflect.get(Object(view), "page");
+	return typeof page === "object" && page !== null ? Object(page) : {};
+};
+const numbersOf = (view: unknown): unknown => {
+	const tickets: unknown = Reflect.get(pageOf(view), "tickets");
+	return Array.isArray(tickets) ? tickets.map((t) => Reflect.get(Object(t), "number")) : tickets;
+};
+
+const Numbered = Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 500}));
+const Find = Schema.Literals(["", "ticket", "zzz"]);
+
+describe("an MCP call on the tracker answers with its own input's view", () => {
+	const TrackerQueries = Schema.Struct({
+		numbers: Schema.Array(Numbered).check(Schema.isBetweenLength(2, 5)),
+		target: Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 4})),
+		priorTicket: Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 4})),
+		prior: Schema.Literals(["ticket", "list"]),
+		status: Schema.Literals(["open", "closed", "all"]),
+		find: Find,
+	}).pipe(Schema.check(Schema.makeFilter(({numbers}) => new Set(numbers).size >= 2)));
+
+	it("L2: query N returns page number N and the opened ticket N, whatever query came before; a list query applies its show and find together", async () => {
+		await Effect.runPromise(
+			holds(Arbitrary.schema(TrackerQueries), (q) =>
+				Effect.gen(function* () {
+					const numbers = [...new Set(q.numbers)];
+					const ledger = yield* seeded(numbers.map((number) => ({number, state: "open" as const})));
+					const drive = yield* door(ledger);
+					const at = (i: number) => numbers[i % numbers.length] ?? 1;
+					const target = at(q.target);
+					yield* drive.call("tracker_query", {
+						value:
+							q.prior === "ticket" ? {ticket: at(q.priorTicket)} : {status: q.status, find: q.find},
+					});
+					const view = viewOf(yield* drive.call("tracker_query", {value: {ticket: target}}));
+					yield* same("the page", [pageOf(view).kind, pageOf(view).number], ["ticket", target]);
+					const opened = Reflect.get(Object(Reflect.get(pageOf(view), "opened")), "ticket");
+					yield* same("the opened ticket", Reflect.get(Object(opened), "number"), target);
+					// And a list query right after: its filter and its rows are its own, both applied.
+					const listView = viewOf(
+						yield* drive.call("tracker_query", {value: {status: q.status, find: q.find}}),
+					);
+					const wanted =
+						q.status === "closed" || q.find === "zzz" ? [] : numbers.toSorted((a, b) => b - a);
+					yield* same("the list's filter", Reflect.get(Object(listView), "filter"), {
+						show: q.status,
+						find: q.find,
+					});
+					yield* same("the list's rows", numbersOf(listView), wanted);
+				}).pipe(Effect.scoped),
+			),
+		);
+	});
+
+	// pinned: the reported bug. A person asked for ticket 386, then for ticket 337, and the second
+	// answer was ticket 386's page, the view from before its own query was handled.
+	it("pinned: ticket 386, then ticket 337, answers 337's page", async () => {
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const ledger = yield* seeded([
+					{number: 337, state: "open"},
+					{number: 386, state: "open"},
+				]);
+				const drive = yield* door(ledger);
+				const first = viewOf(yield* drive.call("tracker_query", {value: {ticket: 386}}));
+				const second = viewOf(yield* drive.call("tracker_query", {value: {ticket: 337}}));
+				return [pageOf(first).number, pageOf(second).number];
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toEqual([386, 337]);
+	});
+
+	const Filings = Schema.Struct({
+		numbers: Schema.Array(Numbered).check(Schema.isBetweenLength(0, 4)),
+		title: Schema.String.check(Schema.isPattern(/^[A-Z][a-z]{2,9}( [a-z]{2,9}){0,3}$/)),
+		body: Schema.String.check(Schema.isPattern(/^[a-z]{0,12}( [a-z]{1,9}){0,3}$/)),
+	});
+
+	it("L3: a filing on the full list answers with a view holding its new number and title, and its title and body are already on the ledger", async () => {
+		await Effect.runPromise(
+			holds(Arbitrary.schema(Filings), ({numbers, title, body}) =>
+				Effect.gen(function* () {
+					const had = [...new Set(numbers)];
+					const ledger = yield* seeded(had.map((number) => ({number, state: "open" as const})));
+					const drive = yield* door(ledger);
+					const view = viewOf(yield* drive.call("tracker_file", {value: {title, body}}));
+					const next = Math.max(0, ...had) + 1;
+					const row = (yield* ledger
+						.readStream(streams(`tracker/ticket/${next}`).inbox)
+						.pipe(Effect.orElseSucceed(() => []))).find((r) => r.kind === "filed");
+					yield* same("the saved fact", row === undefined ? null : JSON.parse(row.data), {
+						type: "filed",
+						title,
+						body,
+					});
+					const tickets: unknown = Reflect.get(pageOf(view), "tickets");
+					const mine = Array.isArray(tickets)
+						? tickets.find((t) => Reflect.get(Object(t), "number") === next)
+						: undefined;
+					yield* same(
+						"its row in the returned view",
+						mine === undefined ? null : Reflect.get(mine, "title"),
+						title,
+					);
+				}).pipe(Effect.scoped),
+			),
+		);
+	});
+
+	const TrackerWrites = Schema.Struct({
+		others: Schema.Array(Numbered).check(Schema.isBetweenLength(0, 3)),
+		held: Numbered,
+		state: Schema.Literals(["open", "closed"]),
+		write: Schema.Literals(["comment", "flip"]),
+		body: Schema.String.check(Schema.isPattern(/^[a-z]{1,10}( [a-z]{1,9}){0,3}$/)),
+	});
+
+	it("L4: comment, close and reopen answer with the selected ticket as that write left it, and the ledger agrees", async () => {
+		await Effect.runPromise(
+			holds(Arbitrary.schema(TrackerWrites), ({others, held, state, write, body}) =>
+				Effect.gen(function* () {
+					const rest = [...new Set(others)].filter((n) => n !== held);
+					const ledger = yield* seeded([
+						...rest.map((number) => ({number, state: "open" as const})),
+						{number: held, state},
+					]);
+					const drive = yield* door(ledger);
+					yield* drive.call("tracker_query", {value: {ticket: held}});
+					const tool =
+						write === "comment"
+							? "tracker_comment"
+							: state === "open"
+								? "tracker_close"
+								: "tracker_reopen";
+					const value = write === "comment" ? {ticket: held, body} : {ticket: held};
+					const view = viewOf(yield* drive.call(tool, {value}));
+					const opened = Reflect.get(Object(Reflect.get(pageOf(view), "opened")), "ticket");
+					const timeline: unknown = Reflect.get(Object(opened), "timeline");
+					const last = Array.isArray(timeline) ? timeline.at(-1) : undefined;
+					const fact = Reflect.get(Object(Reflect.get(Object(last), "fact")), "type");
+					const wantFact =
+						write === "comment" ? "commented" : state === "open" ? "closed" : "reopened";
+					const wantState = write === "comment" ? state : state === "open" ? "closed" : "open";
+					yield* same("the last fact the view shows", fact, wantFact);
+					yield* same(
+						"the ticket's state in the view",
+						Reflect.get(Object(opened), "state"),
+						wantState,
+					);
+					const rows = yield* ledger.readStream(streams(`tracker/ticket/${held}`).inbox);
+					yield* same("the last fact on the ledger", rows.at(-1)?.kind, wantFact);
+				}).pipe(Effect.scoped),
+			),
+		);
 	});
 });
