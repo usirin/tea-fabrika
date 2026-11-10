@@ -1,7 +1,7 @@
 ---
 id: 0042
 title: In next/, everything from Cloudflare Workers and the local runtime (Miniflare, workerd, the local stage) is used through Alchemy, never directly
-status: accepted
+status: amended-in-part by [0050](0050-a-ledger-step-is-a-plain-function.md)
 date: 2026-11-09
 tags: [alchemy, cloudflare, workers, miniflare, workerd, local-stage, bindings, effect, lint, next]
 ---
@@ -241,6 +241,8 @@ imports (4).
     `Workers/DurableObjectStorage.ts`. The form is `state.storage.transaction`, which takes an
     Effect and rolls back on a typed failure, a defect or an interruption. It runs the platform's
     `transaction`, not `transactionSync`. The object services move to it in the port's PR 8.
+    What runs inside it is a plain step, `Effect.sync(step)`, never an Effect body
+    ([0050](0050-a-ledger-step-is-a-plain-function.md)); the rest of this bullet holds.
   - **Read, not run.** Each form is a name in beta.84's source. The binding constraint above
     holds, and 0041's amendment lists what is not known: an Effect `fetch` and `ctx.props` have
     not run here, `props` on a service binding are dropped on a real deploy for now, and the
