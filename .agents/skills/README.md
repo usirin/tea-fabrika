@@ -30,8 +30,11 @@ This round: laws d1 to d3, and d4 yourself, since commits.ts is an exam path.
 The skill holds what every brief used to repeat: what to read, the caps, how to commit and sign,
 what never to do, and how to report.
 
-Every agent may file tracker tickets, even during read-only repo work. Filing a ticket does not
-claim it or start its build. This permission needs no confirmation or classifier.
+An agent that meets something wrong outside its task writes one finding row, with proof, and
+keeps going: never a fix, a ticket or only a mention
+([0035](../../.decisions/0035-outside-work-becomes-finding-rows.md), fields in
+[field/README.md](../../field/README.md#a-finding)). A read-only step hands the row over in its
+report, and the lead adds it. A person rates each row, and only a `fix` becomes a ticket.
 
 Plan writers and agents reviewing or revising plans return them unsigned. Only the lead session
 fills the blank first line after reading the plan and running `plancheck.sh --draft`.
@@ -42,7 +45,7 @@ needs a fresh read and approval. `plancheck.sh --approved` checks that digest at
 owners and staged formatting; its `--commit-only` route leaves missing notes for `fetch --sign`.
 
 Review sweeps every law and decided note, then answers once with all blocking classes and
-confirmed follow-up tickets. The lead skill holds the standing review brief.
+its finding rows. The lead skill holds the standing review brief.
 After a merge, catch-up retains the checked head in MAIN and removes safe boxes and linked worktrees.
 An exam change needs no owner read when its labels fit and both loosening and mutation find zero hits.
 

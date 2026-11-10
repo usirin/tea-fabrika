@@ -275,6 +275,9 @@ catalogs:
     ghostty-web:
       specifier: 0.4.0
       version: 0.4.0
+    lightningcss:
+      specifier: 1.33.0
+      version: 1.33.0
     mdast-util-from-markdown:
       specifier: 2.1.0
       version: 2.1.0
@@ -290,6 +293,9 @@ catalogs:
     oxc-parser:
       specifier: 0.157.0
       version: 0.157.0
+    oxc-resolver:
+      specifier: 11.24.2
+      version: 11.24.2
     oxc-transform-react:
       specifier: 0.157.0
       version: 0.157.0
@@ -337,7 +343,7 @@ overrides:
   '@effect/platform-node-shared': 4.1.2
 
 patchedDependencies:
-  '@alchemy.run/cloudflare-runtime@2.0.0-beta.84': 997555b8035188a150cb2b3d02ffb15fadd47c835aa3799d66f1d63edbe4383c
+  '@alchemy.run/cloudflare-runtime@2.0.0-beta.84': 7cc192309c69f6bde73904889a3e499616b2c2d5bfec0ab06dc1907ad8dc9131
   '@alchemy.run/cloudflare@2.0.0-beta.84': 04c7b6846712db5cdfeb25b3344a1e65d7f6c833b94e4a7c4170c4051de60b48
   '@demlik/code-graph@0.15.0': 327c1b18f1f541ef6d69cb38b361a79f6019380cf78f69482f35c7b3916bcf83
   '@demlik/tea@0.25.0': a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3
@@ -602,16 +608,13 @@ importers:
       oxc-parser:
         specifier: 'catalog:'
         version: 0.157.0
-      oxc-transform-react:
-        specifier: 'catalog:'
-        version: 0.157.0
     devDependencies:
       '@alchemy.run/cloudflare':
         specifier: 'catalog:'
         version: 2.0.0-beta.84(patch_hash=04c7b6846712db5cdfeb25b3344a1e65d7f6c833b94e4a7c4170c4051de60b48)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@alchemy.run/cloudflare-runtime':
         specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(patch_hash=997555b8035188a150cb2b3d02ffb15fadd47c835aa3799d66f1d63edbe4383c)(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2))(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+        version: 2.0.0-beta.84(patch_hash=7cc192309c69f6bde73904889a3e499616b2c2d5bfec0ab06dc1907ad8dc9131)(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2))(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@cloudflare/workers-types':
         specifier: 5.20261027.1
         version: 5.20261027.1
@@ -650,13 +653,22 @@ importers:
     dependencies:
       '@alchemy.run/cloudflare-runtime':
         specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(patch_hash=997555b8035188a150cb2b3d02ffb15fadd47c835aa3799d66f1d63edbe4383c)(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2))(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+        version: 2.0.0-beta.84(patch_hash=7cc192309c69f6bde73904889a3e499616b2c2d5bfec0ab06dc1907ad8dc9131)(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2))(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@demlik/tea':
         specifier: 'catalog:'
         version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
       effect:
         specifier: 'catalog:'
         version: 4.1.2
+      lightningcss:
+        specifier: 'catalog:'
+        version: 1.33.0
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.157.0
+      oxc-transform-react:
+        specifier: 'catalog:'
+        version: 0.157.0
       rolldown:
         specifier: 'catalog:'
         version: 1.2.13
@@ -676,6 +688,9 @@ importers:
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -719,6 +734,15 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.157.0
+      oxc-resolver:
+        specifier: 'catalog:'
+        version: 11.24.2
       postcss-value-parser:
         specifier: 'catalog:'
         version: 4.2.0
@@ -5925,7 +5949,7 @@ snapshots:
       alchemy: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
       effect: 4.1.2
 
-  '@alchemy.run/cloudflare-runtime@2.0.0-beta.84(patch_hash=997555b8035188a150cb2b3d02ffb15fadd47c835aa3799d66f1d63edbe4383c)(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2))(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
+  '@alchemy.run/cloudflare-runtime@2.0.0-beta.84(patch_hash=7cc192309c69f6bde73904889a3e499616b2c2d5bfec0ab06dc1907ad8dc9131)(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2))(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
     dependencies:
       '@alchemy.run/node-utils': 2.0.0-beta.84
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261012.1)
@@ -5951,7 +5975,7 @@ snapshots:
   '@alchemy.run/cloudflare@2.0.0-beta.84(patch_hash=04c7b6846712db5cdfeb25b3344a1e65d7f6c833b94e4a7c4170c4051de60b48)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))':
     dependencies:
       '@alchemy.run/acme': 2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)
-      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.84(patch_hash=997555b8035188a150cb2b3d02ffb15fadd47c835aa3799d66f1d63edbe4383c)(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2))(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.84(patch_hash=7cc192309c69f6bde73904889a3e499616b2c2d5bfec0ab06dc1907ad8dc9131)(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.1.2))(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.2)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
       '@alchemy.run/docker': 2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)
       '@alchemy.run/sql': 2.0.0-beta.84(alchemy@2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1))(effect@4.1.2)
       '@distilled.cloud/aws4signer': 1.0.0-rc.17(effect@4.1.2)

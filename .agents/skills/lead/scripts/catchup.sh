@@ -15,6 +15,9 @@
 #     merges with --match-head-commit, so a newer head or a red check stops it (hand PRs only). A PR
 #     in a gh stack must merge through the stack API, which takes no head pin: its head is read
 #     again first, then `gh stack merge <pr> --squash --yes` lands it
+#   - just before the squash it looks at main once more: when main moved after the checks,
+#     freshmain.ts runs `pnpm lint` on the head merged with it and refuses a red one, a conflict or
+#     a fetch that fails. No flag skips it. The tests are not run again (ticket 552)
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
 #   - once the squash is on main, closes each ticket the PR description names on a line of its
 #     own, `fabrika close ticket <N>`, and prints what it closed (0015)
@@ -423,6 +426,10 @@ case $said in
 "commits: not in scope"* | "commits: "*" commits, ticket $ticket") ;;
 *) echo "pr $pr: run $run_id is not for ticket $ticket: $said" >&2; exit 1 ;;
 esac
+# Main may have moved since those checks ran (ticket 552). freshmain.ts fetches it and, when it
+# moved, runs pnpm lint on this head merged with it, in this checkout. A red lint, a conflict or a
+# fetch that fails stops here: the lane merges main and pushes, and catch-up runs again.
+node "$LEAD/freshmain.ts" "$pr" "$tip" || { echo "pr $pr: not merged" >&2; exit 1; }
 if ! said=$(gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" 2>&1); then
 	case $said in
 	*"part of a stack"*)
