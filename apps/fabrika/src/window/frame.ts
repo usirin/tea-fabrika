@@ -4,6 +4,7 @@ import { whenOf } from "@tea-fabrika/tracker/window";
 import { Option, Schema } from "effect";
 import type { Ask, AsksNow } from "../asks.ts";
 import { activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace } from "../desk/desk.ts";
+import type { HoldCmd, Key as HeldKey } from "../desk/hold.ts";
 import { bindingFor, defaults, type Does, type File, type Key, type Keys } from "../desk/keymap.ts";
 import { type Group, groupOf, type Show, wordOf } from "../desk/keys.ts";
 import type { TileId, TileNode } from "../desk/layout/index.ts";
@@ -938,6 +939,27 @@ const escaped = (f: Frame, desk: MidKey): Frame => {
 };
 
 /**
+ * How a key reaches the frame: `fresh`, pressed just now, or `passed`, released by the hold after
+ * the host's answer. It is call-local: a fresh key finds the host's outstanding key ahead of it, a
+ * passed one already had its turn.
+ */
+export type Delivery = "fresh" | "passed";
+
+/**
+ * What the frame makes of a key before any tile has it: the same frame when the key goes on, else
+ * the frame it changed, and the key is consumed. Only Escape is the frame's today, through
+ * `escaped`. `actual` is the desk's own prefix and question; `waiting` is the hold's outstanding
+ * key, which makes a fresh key queue behind it (the desk is mid-key) and never a passed one.
+ */
+export const frameKey = (f: Frame, key: string, actual: MidKey, waiting: boolean, delivery: Delivery): Frame =>
+  key === "Escape"
+    ? frameUpdate(f, {
+        type: "escape",
+        desk: delivery === "fresh" ? { armed: actual.armed || waiting, asking: actual.asking } : actual,
+      })
+    : f;
+
+/**
  * What a key after Ctrl-B shows: the asks list, the jobs list, every key, no bars, or an item's
  * lines. Info mode is a message of its own (`info`), since it needs what focus is on.
  */
@@ -977,6 +999,82 @@ export const keyGoesTo = (over: Over, key: string, prefix: string, desk: MidKey)
   }
 
   return key === prefix || desk.armed || desk.asking ? "desk" : "over";
+};
+
+/** What the page does for one Cmd of the hold's step, in order (`passOn`). */
+export type Out =
+  | { readonly _tag: "press"; readonly id: number; readonly key: string }
+  | { readonly _tag: "live" }
+  | { readonly _tag: "replay"; readonly key: HeldKey }
+  | { readonly _tag: "over"; readonly key: HeldKey };
+
+/**
+ * The whole loop over the hold's Cmds: a `press` goes to the host, a key pressed now goes on live,
+ * and a key released goes through `frameKey` as `passed`, the frame threaded from key to key. One
+ * the frame changes is consumed; any other goes to the over (`keyGoesTo`) or is pressed again.
+ * `waiting` is the final hold model's, and only an armed desk's reading of the over counts it.
+ */
+export const passOn = (
+  f: Frame,
+  cmds: readonly HoldCmd[],
+  actual: MidKey,
+  waiting: boolean,
+  keys: { prefix: string },
+): { frame: Frame; out: readonly Out[] } => {
+  const out: Out[] = [];
+  let frame = f;
+
+  for (const c of cmds) {
+    if (c.type === "press") {
+      out.push({ _tag: "press", id: c.id, key: c.key });
+    } else if (!c.held) {
+      out.push({ _tag: "live" });
+    } else {
+      const next = frameKey(frame, c.key.press.key, actual, waiting, "passed");
+
+      if (next !== frame) {
+        frame = next;
+      } else {
+        const to = keyGoesTo(frame.over, c.key.name, keys.prefix, {
+          armed: actual.armed || waiting,
+          asking: actual.asking,
+        });
+        out.push({ _tag: to === "over" ? "over" : "replay", key: c.key });
+      }
+    }
+  }
+
+  return { frame, out };
+};
+
+/** What the page can do for an `Out`: the host, the DOM, and the focus the over takes. */
+export interface Ports {
+  readonly toHost: (id: number, key: string) => void;
+  readonly dispatch: (key: HeldKey) => void;
+  readonly focusOver: () => "in" | "moved in";
+}
+
+/**
+ * Carry out `passOn`'s answer through the ports, in order, each once, and route no key again: a
+ * `replay` is dispatched, an `over` key is dispatched only if focus was already in the over.
+ * Answers whether the key pressed this instant goes on as it is.
+ */
+export const deliver = (out: readonly Out[], ports: Ports): boolean => {
+  let live = false;
+
+  for (const o of out) {
+    if (o._tag === "press") {
+      ports.toHost(o.id, o.key);
+    } else if (o._tag === "live") {
+      live = true;
+    } else if (o._tag === "replay") {
+      ports.dispatch(o.key);
+    } else if (ports.focusOver() === "in") {
+      ports.dispatch(o.key);
+    }
+  }
+
+  return live;
 };
 
 export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
