@@ -9,7 +9,8 @@ import { moveFaults, partFaults, renameFaults, splitFaults } from "./movecheck.t
 //
 // The four entry points, each answering a list of faults, empty when the diff is clean. A fault
 // names the file it is about in `path`: a rename's `to`, a move's `to`, any other change's `path`.
-// These laws read only that, never a fault's words.
+// Decision laws read path. The format laws also read reason's line locations and excerpts,
+// which help a person find the fault; other message phrasing is not held.
 //   moveFaults(changes, {moves, named})      a move PR (the plan's PRs 2 to 5)
 //   splitFaults(before, after)               a split PR (`--split`, PRs 7 and 8)
 //   renameFaults(changes, table)             a rename PR (`--renamed <table>`, PRs 14 and 15)
@@ -165,12 +166,13 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
   });
 
   // What one row of the plan's table did in the generated pull request: moved as the table says,
-  // moved somewhere else, or deleted with no new path.
-  const fate = fc.constantFrom("moved", "elsewhere", "gone");
+  // moved somewhere else, deleted with no new path, or received from the wrong source.
+  const fate = fc.constantFrom("moved", "elsewhere", "gone", "wrong-source");
   const stray = fc.constantFrom("added", "deleted", "edited", "renamed");
 
   // Plants (the plan's): add a new file; delete one with no new path. Also: take any rename, in
   // the table or not; take an edit to a file the plan did not name.
+  // Plant: replace move.from === change.from with true, accepting a wrong source at a listed target.
   it("a move PR changes only the table's renames, files that only follow them, and the named files", () => {
     fc.assert(
       fc.property(
@@ -190,6 +192,8 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
             switch (fates[n]) {
               case "moved":
                 return [{ _tag: "renamed", ...move, ...texts }];
+              case "wrong-source":
+                return [{ _tag: "renamed", ...move, from: `${move.from}.wrong.ts`, ...texts }];
               case "elsewhere":
                 return [{ _tag: "renamed", from: move.from, to: `${move.to}.elsewhere.ts`, ...texts }];
               default:
@@ -197,7 +201,15 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
             }
           });
           const wrong = moves.flatMap((move, n) =>
-            fates[n] === "moved" ? [] : [fates[n] === "elsewhere" ? `${move.to}.elsewhere.ts` : move.from],
+            fates[n] === "moved"
+              ? []
+              : [
+                  fates[n] === "elsewhere"
+                    ? `${move.to}.elsewhere.ts`
+                    : fates[n] === "wrong-source"
+                      ? move.to
+                      : move.from,
+                ],
           );
           const outside = strays.map((what, n): Change => {
             const path = `${SRC}/node/stray${n}.ts`;
@@ -479,6 +491,8 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
 
   // Plants: compare nothing when a file has no row on the head; excuse every file once one is
   // excused; read the row from the old path on both sides.
+  // Plants: replace either length === 1 (or both checks together) with true, or either && with ||.
+  // No claims on both sides and tied claims on either side must remain faults.
   it("a file moved to another row, or left with no row, is a fault, and only a named exception is excused", () => {
     // The rule file with one exact path per file, so each file's row can be changed alone.
     const rows = (side: 0 | 1, moved: ReadonlyMap<string, string | null>): ReadonlyArray<Row> =>
@@ -498,9 +512,10 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
               maxLength: broken.length,
             }),
             fc.subarray([...TABLE]),
+            fc.constantFrom("none", "base-tied", "head-tied", "both-tied"),
           ),
         ),
-        ([broken, rowsNow, excused]) => {
+        ([broken, rowsNow, excused, claims]) => {
           // Each broken file's row on the head: another row, or none.
           const moved = new Map(
             broken.flatMap((entry, n): ReadonlyArray<readonly [string, string | null]> =>
@@ -514,6 +529,24 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
             [...moved.keys()]
               .filter((to) => !excused.some((entry) => entry[1] === to))
               .map(at)
+              .sort(),
+          );
+          // Keep the original cases above, then exercise missing and ambiguous claims on
+          // the same generated subset. Equal exact paths tie in rowsAt.
+          const selected = broken.map((entry) => ({ from: at(entry[0]), to: at(entry[1]) }));
+          const claimed = (side: "from" | "to"): ReadonlyArray<Row> =>
+            claims === "none"
+              ? []
+              : [
+                  { name: "first", paths: selected.map((move) => move[side]) },
+                  ...(claims === "both-tied" || claims === (side === "from" ? "base-tied" : "head-tied")
+                    ? [{ name: "second", paths: selected.map((move) => move[side]) }]
+                    : []),
+                ];
+          expect(paths(partFaults(selected, { base: claimed("from"), head: claimed("to") }, except))).toEqual(
+            selected
+              .filter((move) => !except.includes(move.from))
+              .map((move) => move.to)
               .sort(),
           );
         },
@@ -571,5 +604,37 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
         waiting.map((m) => m.from),
       ),
     ).toEqual([]);
+  });
+});
+
+// format: the CLI prints these locations and excerpts verbatim. A person needs the correct
+// line and a readable excerpt, not a frozen sentence describing the kind of fault.
+describe("movecheck: fault locations and excerpts", () => {
+  const reason = (before: string, after: string): string | undefined =>
+    moveFaults([{ _tag: "modified", path: "a.ts", before, after }], { moves: [], named: [] })[0]?.reason;
+
+  // Plants: at + 1 -> at - 1; remove trim(); > 80 -> >= 80; slice(0, 77) -> slice(0, 78).
+  // Also planted report IDs 6-13, 25, 27-32, 34-35, 38-40 and 49: empty helpers/messages,
+  // wrong comparisons, split delimiters, excerpts and line locations all fail this law.
+  // format: short text and the two boundary lengths pin the CLI excerpt format.
+  it("format: a changed line has its one-based number and a trimmed excerpt capped at 80 characters", () => {
+    expect(reason("b\n", "c;\n")).toMatch(/line 1: c;$/);
+    expect(reason("a\nb\n", "a\n  c;  \n")).toMatch(/line 2: c;$/);
+    expect(reason("a\nb\n", `a\n${"y".repeat(80)}\n`)).toMatch(new RegExp(`line 2: ${"y".repeat(80)}$`));
+    expect(reason("a\nb\n", `a\n${"x".repeat(81)}\n`)).toMatch(new RegExp(`line 2: ${"x".repeat(77)}\\.\\.\\.$`));
+  });
+
+  // Plants: at < 0 -> false (report 33), or before.split("\n") -> before.split("") (26).
+  // format: an absent last line has no new excerpt; the CLI must give the count and last line.
+  it("format: trailing deletions give the missing count and the last remaining line", () => {
+    expect(reason("a\nb\n\n", "a\nb\n")).toMatch(/1 lines are gone after line 3$/);
+  });
+
+  // Plant: linesIn's n + 1 -> n - 1.
+  // format: the old file's line number locates a dropped line even across blank lines.
+  it("format: a split fault locates a missing line in the old file", () => {
+    expect(
+      splitFaults({ path: "a.ts", text: "x = 1;\n\ny = 2;\n" }, [{ path: "a.ts", text: "x = 1;\n" }])[0]?.reason,
+    ).toMatch(/^old line 3 is gone: y = 2;$/);
   });
 });
