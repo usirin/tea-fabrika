@@ -68,7 +68,9 @@ export const noNumericDuration: CreateRule = {
   `eslint/curly` `"all"` blocks a missing brace, and `pnpm format` adds both
   ([0021](../../.decisions/0021-a-blank-line-between-top-level-statements.md)).
 - **Oxfmt keeps the old settings:** tabs, 100 columns, no bracket spacing, imports sorted. It leaves
-  Markdown, YAML and fixtures alone, as Biome did.
+  Markdown, YAML and fixtures alone, as Biome did. *Superseded 2026-11-09 for indent, width,
+  semicolons, trailing commas and bracket spacing: the format follows Effect's settings
+  ([0029](../../.decisions/0029-format-and-names-follow-effect.md)). Oxfmt and the import sort stay.*
 
 ## Why it can be trusted
 

@@ -1,7 +1,7 @@
 ---
 id: 0023
 title: next/ follows the Effect codebase's code style and doc comments as strictly as it can, and each kept difference names its reason
-status: amended-in-part by [0021](0021-a-blank-line-between-top-level-statements.md)
+status: amended-in-part by [0021](0021-a-blank-line-between-top-level-statements.md), [0029](0029-format-and-names-follow-effect.md)
 date: 2026-11-09
 tags: [style, format, lint, doc-comments, jsdoc, effect, next, readability, open-source]
 ---
@@ -36,6 +36,8 @@ import * as core from "./internal/core.ts"
  */
 export interface Deferred<in out A, in out E = never> extends Deferred.Variance<A, E>, Pipeable {
 ```
+
+*[0029](0029-format-and-names-follow-effect.md) settles indent, line width, semicolons, trailing commas, spaces in braces, the generator star, bare `of` and plural service names; the rest of this file still holds.*
 
 ## Context
 
