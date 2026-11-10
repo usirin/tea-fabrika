@@ -193,8 +193,8 @@ it("vector: lead test medians match the three green main CI runs", () => {
   // T375 Amendment 1: fixed CI medians from 42631962689, 42631256491 and 42630840277.
   // Plant: discard these rows, leaving the scripts to count as 1 s.
   for (const [path, seconds] of [
-    // T554 refresh: median of 42803733957, 42807559589 and 42801440878.
-    [".agents/skills/lead/scripts/box.test.ts", 416.1],
+    // T554 refresh: median of 10 runs, PR 757's check run 42874119130, attempts 5 to 14.
+    [".agents/skills/lead/scripts/box.test.ts", 348.7],
     [".agents/skills/step-commit/scripts/stepcommit.test.ts", 18.2],
     [".agents/skills/lead/scripts/redact.test.ts", 7.2],
     [".agents/skills/lead/scripts/gc.test.ts", 0.1],
