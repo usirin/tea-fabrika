@@ -3,7 +3,8 @@
 //
 //   a box is kept while   a process has its cwd there, or its git index, HEAD log or folder changed
 //                         in the last 2 h (lastTouched; gc's own reads write none of them),
-//                         or drive kept it stuck less than 24 h ago, or it holds uncommitted
+//                         or drive kept it stuck less than 24 h ago and its lane has not landed,
+//                         or it holds uncommitted
 //                         or untracked files (a backup saves only HEAD, so they would be lost)
 //   else it is removed    when its branch (minus -wip) has a merged pull request, or its HEAD is
 //                         on a remote branch; else its HEAD is pushed as the bot to <branch>-wip
@@ -68,7 +69,8 @@ export const decide = (s: Seen): Verdict => {
 		return {_tag: "keep", reason: `a process is working in it (pid ${s.busy.join(", ")})`};
 	if (s.idle < IDLE)
 		return {_tag: "keep", reason: `touched ${Math.round(s.idle / 60_000)} min ago`};
-	if (s.stuck !== null && s.stuck < STUCK)
+	// A stuck box is kept for the lead to read, until its lane lands (0019).
+	if (s.stuck !== null && s.stuck < STUCK && !s.merged)
 		return {_tag: "keep", reason: `stuck, kept by drive ${Math.round(s.stuck / HOUR)} h ago`};
 	if (s.git.head === null) return {_tag: "keep", reason: "no HEAD commit"};
 	// A backup pushes HEAD only, so files never committed would go with the folder (field note
@@ -166,15 +168,24 @@ const gitDirOf = (box: string): string | null => {
 
 const mtime = (path: string) => (existsSync(path) ? statSync(path).mtimeMs : 0);
 
+/** When the HEAD log's newest entry was written, from its own time stamp, in ms; 0 when none. Not
+ * the file's mtime: git gc's reflog expiry rewrites every worktree's log and so changes that. */
+export const lastLogged = (log: string): number => {
+	if (!existsSync(log)) return 0;
+	const last = readFileSync(log, "utf8").trimEnd().split("\n").at(-1) ?? "";
+	const m = / (\d+) [+-]\d{4}\t/.exec(last);
+	return m?.[1] ? Number(m[1]) * 1000 : 0;
+};
+
 /** When work last happened in a box: the newest of its folder (a box being made), its index (an
- * add, a checkout) and its HEAD log (a commit, a reset). Never the git data folder itself: any
- * git command's lock files change that. */
+ * add, a checkout) and its HEAD log's newest entry (a commit, a reset). Never the git data folder
+ * itself: any git command's lock files change that. */
 export const lastTouched = (box: string, gitDir: string | null): number =>
 	Math.max(
 		mtime(box),
 		gitDir === null
 			? 0
-			: Math.max(mtime(join(gitDir, "index")), mtime(join(gitDir, "logs", "HEAD"))),
+			: Math.max(mtime(join(gitDir, "index")), lastLogged(join(gitDir, "logs", "HEAD"))),
 	);
 
 /** Every working folder some process sits in, with its pid, from one lsof call. */

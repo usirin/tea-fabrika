@@ -56,12 +56,14 @@ const seen = fc.record({
 const options = {seed: 119120, numRuns: 300};
 
 describe("box gc, today's tooling", () => {
-	// Plants: drop the busy check; drop the 2 h wait; drop the 24 h wait on a kept stuck box.
-	it("never touches a box in use, touched in the last 2 h, or kept stuck under 24 h", () => {
+	// Plants: drop the busy check; drop the 2 h wait; drop the 24 h wait on a kept stuck box. Once its
+	// lane merged a stuck box is not held: p12's 22 stuck boxes outlived PR 530 (field note 2026-11-09-254).
+	it("never touches a box in use, touched in the last 2 h, or kept stuck under 24 h before its lane lands", () => {
 		fc.assert(
 			fc.property(seen, (s) => {
 				const v = decide(s);
-				const young = s.busy.length > 0 || s.idle < IDLE || (s.stuck !== null && s.stuck < STUCK);
+				const young =
+					s.busy.length > 0 || s.idle < IDLE || (s.stuck !== null && s.stuck < STUCK && !s.merged);
 				const mustKeep = young || s.git === null || s.git.head === null;
 				expect(mustKeep && v._tag !== "keep", JSON.stringify(s)).toBe(false);
 			}),
@@ -205,7 +207,11 @@ describe("dirtyIn reads a real box, today's tooling", () => {
 		const box = join(root, "quiet");
 		const data = join(root, "quiet-gitdata");
 		spawnSync("git", ["init", "-q", `--separate-git-dir=${data}`, box]);
-		const git = (...args: string[]) => spawnSync("git", ["-C", box, ...args], {encoding: "utf8"});
+		const old = new Date(Date.now() - 3 * 3_600_000);
+		// The HEAD log stamps each entry with the committer's time.
+		const env = {...process.env, GIT_COMMITTER_DATE: old.toISOString()};
+		const git = (...args: string[]) =>
+			spawnSync("git", ["-C", box, ...args], {encoding: "utf8", env});
 		git("config", "user.email", "t@example.com");
 		git("config", "user.name", "t");
 		writeFileSync(join(box, "a.ts"), "1\n");
@@ -213,7 +219,6 @@ describe("dirtyIn reads a real box, today's tooling", () => {
 		git("commit", "-q", "-m", "base");
 		// Three hours ago, then a stat change with no content change: plain git status rewrites the
 		// index for that, and makes index.lock in the git data folder.
-		const old = new Date(Date.now() - 3 * 3_600_000);
 		for (const p of [join(box, "a.ts"), join(data, "index"), join(data, "logs", "HEAD"), data, box])
 			utimesSync(p, old, old);
 		utimesSync(join(box, "a.ts"), new Date(), new Date());
@@ -224,5 +229,8 @@ describe("dirtyIn reads a real box, today's tooling", () => {
 		expect(lastTouched(box, data)).toBe(before);
 		expect(Date.now() - before).toBeGreaterThanOrEqual(IDLE);
 		expect(statSync(join(data, "index")).mtimeMs).toBe(old.getTime());
+		// git gc's reflog expiry rewrites the HEAD log: its file time is not work in the box.
+		utimesSync(join(data, "logs", "HEAD"), new Date(), new Date());
+		expect(lastTouched(box, data)).toBe(before);
 	});
 });
