@@ -393,6 +393,29 @@
   },
   "overrides": [
     {
+      "files": ["apps/fabrika/src/host/settings.laws.test.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@effect/platform-node",
+                  "@effect/platform-node/*",
+                  "node:fs",
+                  "node:fs/*",
+                  "@radix-ui/colors",
+                  "@radix-ui/colors/*"
+                ],
+                "message": "L8: settings laws use an in-memory FileSystem, never a real file system. Radix tokens remain restricted."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // Test files only: an `expect` that sits only inside an `if` may never run.
       // `!` is allowed here: a test that hits a missing value fails on its own.
       "files": ["**/*.test.ts"],

@@ -13,6 +13,7 @@ import { settingsFile, settingsFolder } from "./settings.ts";
 //   a file that decodes       {_tag: "read", value}
 //   a file that does not      {_tag: "refused", line, why}
 //   a save, in place or by a rename over it   the next answer, with no restart
+//   no OS event               a one second poll still hears the save
 //
 // Which folder (p11): an owner's start reads ~/.fabrika; a start on a home of its own (a test or
 // an agent, FABRIKA_HOME set) reads that home.
@@ -212,6 +213,7 @@ describe("a settings file, when the folder cannot be watched", () => {
         yield* fs.writeFileString(join(dir, "keybindings.toml"), "ctrl+a");
         const broken = yield* watchFails;
         return yield* settingsFile(dir, "keybindings.toml", decode).pipe(
+          Stream.take(1),
           Stream.runCollect,
           Effect.provideService(FileSystem.FileSystem, broken),
           Effect.timeout("3 seconds"),
