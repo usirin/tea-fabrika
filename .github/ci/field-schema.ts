@@ -70,7 +70,7 @@ const words: Record<string, readonly string[]> = {
 		"driver",
 		"step",
 	],
-	outcome: ["merged", "pass", "fail", "triaged", "parked", "stopped"],
+	outcome: ["merged", "pass", "fail", "triaged", "parked", "skip", "stopped"],
 };
 const isObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);

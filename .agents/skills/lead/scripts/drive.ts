@@ -33,7 +33,8 @@
 //   over               the outcome
 //
 // Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (a question for
-// the lead, in `reason`), 30 stuck, 2 usage, 3 refused to start (8 agents running: Codex boxes plus
+// the lead, in `reason`), 30 stuck, 40 skip (nothing here for the step, such as a mutation step
+// whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start (8 agents running: Codex boxes plus
 // Claude steps drive started, under 20 GB free after box.sh gc, or the lane's branch checked out in
 // a worktree, which the fetch could not update). It never retries. A stuck step
 // keeps its box for the lead to look at, and so does any step whose box still holds uncommitted
@@ -86,7 +87,7 @@ const drive = outcomesOf({
 		plan: ["plancheck", "step_said"],
 	},
 	ask: {lead: ["question", "lockfile"]},
-	skip: [],
+	skip: ["step_said"],
 	stuck: [
 		"box_failed",
 		"agent_failed",
@@ -114,10 +115,17 @@ const exitOf = (o: Outcome): number => {
 			return o.to === "tests" ? 10 : o.to === "build" ? 11 : 12;
 		case "ask":
 			return 20;
+		case "skip":
+			return 40;
 		default:
 			return 30;
 	}
 };
+
+/** The field row's outcome word for a drive outcome's name (field/README.md, a `step` row). */
+export const rowOf = (outcome: string): string =>
+	({done: "pass", send: "fail", ask: "parked", skip: "skip"})[outcome.split(":")[0] ?? ""] ??
+	"stopped";
 
 // ---------------------------------------------------------------- the moves
 
@@ -220,7 +228,7 @@ type Msg = {readonly type: "start"; readonly ask: Ask} | Drafted;
 
 // ---------------------------------------------------------------- the Check
 
-const ANSWER = /^[`*\s]*answer:\s*(done|send\s+(tests|build|plan)|ask|stuck)\b[`*\s]*(.*)$/i;
+const ANSWER = /^[`*\s]*answer:\s*(done|send\s+(tests|build|plan)|ask|skip|stuck)\b[`*\s]*(.*)$/i;
 
 /** What the step said on its last `answer:` line; a review's verdict line counts without one. */
 const answerOf = (step: StepName, report: string) => {
@@ -310,6 +318,8 @@ const decide = (ask: Ask, read: Read): Judged => {
 		}
 		case "ask":
 			return {outcome: {kind: "ask", who: "lead", for: "question"}, why: said.why};
+		case "skip":
+			return {outcome: {kind: "skip", why: "step_said"}, why: said.why};
 		default:
 			return stuck("step_said", said.why);
 	}
@@ -843,8 +853,7 @@ const handlers = (env: Env) => {
 				const ended = new Date().toISOString();
 				// The field row, held beside the boxes until a field PR lands it.
 				if (existsSync(ask.events)) {
-					const row =
-						{done: "pass", send: "fail", ask: "parked"}[e.outcome.split(":")[0] ?? ""] ?? "stopped";
+					const row = rowOf(e.outcome);
 					const why = `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}. ${e.why}`;
 					const r =
 						ask.agent === "claude"
@@ -1099,6 +1108,7 @@ answer: done
 answer: send tests <why>
 answer: send build <why>
 answer: ask <the one question for the lead>
+answer: skip <why there is nothing here for this step>
 answer: stuck <why>
 
 A build that needs no commit, because every law is already green at its start, puts this line

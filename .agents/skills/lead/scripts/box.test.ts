@@ -1263,6 +1263,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 						"mutation",
 						"skip",
 						"lane-row",
+						"lane-row-skip",
 						"lane-row-stuck",
 					],
 					(kind) =>
@@ -1298,7 +1299,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										why: "recorded fixture result",
 									})}\n`,
 								);
-							if (kind === "lane-row" || kind === "lane-row-stuck") {
+							if (kind.startsWith("lane-row")) {
 								// Where drive writes a step's row: BOXES/<lane>-rows.jsonl, not the box's own.
 								appendFileSync(join(b.boxes, "state/one.box"), "lane: onelane\n");
 								write(
@@ -1308,7 +1309,8 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										ticket: "321",
 										role: "hand",
 										step: "mutation",
-										outcome: kind === "lane-row" ? "pass" : "stopped",
+										// drive writes `skip` for a mutation step that answered skip (ticket 423).
+										outcome: {"lane-row": "pass", "lane-row-skip": "skip"}[kind] ?? "stopped",
 										why: "drive.ts mutation fixture row",
 									})}\n`,
 								);
@@ -1318,9 +1320,17 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 								"mutation",
 								"skip",
 								"lane-row",
+								"lane-row-skip",
 								"lane-row-stuck",
 							].includes(kind);
-							const pass = ["tests", "since-root", "mutation", "skip", "lane-row"].includes(kind);
+							const pass = [
+								"tests",
+								"since-root",
+								"mutation",
+								"skip",
+								"lane-row",
+								"lane-row-skip",
+							].includes(kind);
 							const got = b.run(review ? "review" : "build");
 							expect(got.code).not.toBeNull();
 							if (pass) expect(got.code, got.text).toBe(0);
