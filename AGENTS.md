@@ -111,6 +111,13 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   appears only in a one-line edge the platform demands, marked where it stands with
   `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
   ([no Promises](./docs/direction/no-promises.md)).
+- **In `next/`, a resource is acquired in a scope.** A child process, a test window, a database,
+  a file handle, a socket, a temp folder, a timer or a subscription is opened with
+  `Effect.acquireRelease` and offered as a `Layer` or a scoped Effect, so the scope gives it back.
+  No `try/finally` and no `afterEach` that releases it, and no "remember to close" in prose. A
+  raw handle from the platform is wrapped once, at the edge. A process killed with SIGKILL runs no
+  finalizer, so a resource that must not outlive it needs a guard outside the process too
+  ([0061](./.decisions/0061-resources-are-acquired-in-a-scope.md)).
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
@@ -332,8 +339,10 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Names.** Use the industry's word for a thing
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
   every pull request, prose included. An Effect service that holds many is named in the plural, as
-  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`
-  ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
+  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`. Test tooling follows the same
+  names: a test helper or shared suite is read through its module, as Effect writes
+  `SqlEventLogServerUnencryptedStorageTest.suite(...)`, so `SinkTest.suite(nodeSql)`, never a bare
+  `sinkSuite(...)` ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
 - **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not
   `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
   `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
