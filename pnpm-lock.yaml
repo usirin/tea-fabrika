@@ -644,9 +644,18 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@kampus/fabrika-design':
+        specifier: workspace:*
+        version: link:../../../packages/fabrika-design
       '@kampus/libfabrika':
         specifier: workspace:*
         version: link:../../packages/libfabrika
+      '@kampus/tuval':
+        specifier: workspace:*
+        version: link:../../packages/tuval
+      '@manti-ui/styles':
+        specifier: 'catalog:'
+        version: 0.13.0
       effect:
         specifier: 'catalog:'
         version: 4.1.2
@@ -656,6 +665,12 @@ importers:
       oxc-transform-react:
         specifier: 'catalog:'
         version: 0.157.0
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.1(react@19.3.1)
     devDependencies:
       '@alchemy.run/cloudflare':
         specifier: 'catalog:'
@@ -678,6 +693,12 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
       alchemy:
         specifier: 'catalog:'
         version: 2.0.0-beta.84(patch_hash=8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a)(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))))(@types/react@19.3.0)(effect@4.1.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
@@ -711,6 +732,9 @@ importers:
       rolldown:
         specifier: 'catalog:'
         version: 1.2.13
+      smol-toml:
+        specifier: 'catalog:'
+        version: 1.9.1
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 5.20261027.1
@@ -791,9 +815,15 @@ importers:
       '@kampus/libfabrika':
         specifier: workspace:*
         version: link:../../packages/libfabrika
+      '@manti-ui/react':
+        specifier: 'catalog:'
+        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 'catalog:'
         version: 4.1.2
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -801,6 +831,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
