@@ -1,6 +1,6 @@
 // P12, next/. The real Project and Process services, Door and runner on SQLite.
 // Only Cloudflare's handles and Worker Loader transport are supplied by this Node fixture.
-// No class from brain.ts and no cloudflare:workers: the services are what the classes hand off to.
+// No class from brain.ts, and the only fake is the box's platform base class: the services are what the classes hand off to.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Cmd, Machine } from "@demlik/tea/effect";
@@ -27,6 +27,8 @@ import { programs } from "./table.ts";
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
+// Only the platform base class is fake. The box methods run the real programBox.
+vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
 type ProjectCalls = (typeof ProjectService)["Service"];
 type ProcessCalls = (typeof ProcessService)["Service"];
