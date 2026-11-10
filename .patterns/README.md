@@ -31,11 +31,8 @@ A doc that already covers the shape is extended, never doubled.
 
 ## Index
 
-No docs yet. The first doc replaces this line with the table below and its own row. Once the table
-passes about a dozen rows, split it into sections by area.
+Once the table passes about a dozen rows, split it into sections by area.
 
-```markdown
 | Pattern | Where | Read when |
 |---|---|---|
-| [<name>.md](./<name>.md) | packages/pipeline | the moment a reader knows they need it |
-```
+| [doc-comments.md](./doc-comments.md) | next/packages | Adding or changing a public export of a library, or its module file |
