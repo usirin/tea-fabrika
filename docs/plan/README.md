@@ -75,6 +75,11 @@ application, so one program past its restart limit stops alone. Isolation gets h
 ([0020](../../.decisions/0020-programs-get-hard-walls.md)): quotas per program, each program's
 supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 
+*2026-11-10:* P8, the notes small exam, is in (ticket 274): saved notes letters frozen in
+`fixtures/next/notes-letters.jsonl`, and the notes, drawing, agent and bytes laws that P13, P22 and P25
+must pass. 55 run green now; 25 wait, marked `not built`, until those rows add their code. → P13's
+build can start.
+
 `next/` naming sweep, ticket 337 (2026-11-09): product fields, saved JSON, deletion SQL,
 RPC replies and span keys now say `reason`; ledger event types and write payloads say `Event`
 and `event`. Reason values, tags, streams, ids and clocks stay the same. The new
