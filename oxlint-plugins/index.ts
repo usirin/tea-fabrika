@@ -31,6 +31,7 @@ import {oneStoreHook} from "./one-store-hook.ts";
 import {outsideInputConstructor} from "./outside-input-constructor.ts";
 import {paddingLineBetweenStatements} from "./padding-line-between-statements.ts";
 import {preferSchemaArbitrary} from "./prefer-schema-arbitrary.ts";
+import {rooms} from "./rooms.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
@@ -66,6 +67,7 @@ const plugin: Plugin = {
 		"outside-input-constructor": outsideInputConstructor,
 		"padding-line-between-statements": paddingLineBetweenStatements,
 		"prefer-schema-arbitrary": preferSchemaArbitrary,
+		rooms,
 		"use-import-extensions": useImportExtensions,
 	},
 };

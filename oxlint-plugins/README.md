@@ -72,6 +72,18 @@ The same change turned on, as errors, Effect's 35 diagnostics that fired 0 times
 T518 A8's count on 2026-11-08 was one fire, the second module from P17a, with no false alarm.
 Its property test generates file contents and checks nearby paths stay allowed.
 
+### libfabrika's rooms
+
+Ticket 477, decision [0043](../.decisions/0043-rooms-on-floors.md). One rule of ours and two of oxlint's own hold a room's shape in `next/packages/libfabrika/src`. `.oxlintrc.json` gives all three their paths and lists, and `rooms.test.ts` plants each law at its real path with that config.
+
+| Rule | Refuses | Lists, in `.oxlintrc.json` | Tests |
+|---|---|---|---|
+| `rooms` | a room file that re-exports another room's names (`export ... from`, `export *`, or an imported name sent on); a file in a folder or at a top name `src/` does not list; an export in a room's `internal/` with no `/** @internal */` above it; a service or an error in a shared top file | `src`, `rooms`, `folders`, `files`, `values` | on |
+
+The other two laws are oxlint's own rules, since an existing rule comes before a hand-written one ([0040](../.decisions/0040-existing-tools-before-hand-written.md)). `eslint/no-restricted-imports` refuses an import or `export ... from` of another room's `internal/`, by one pattern group in an override for `src/**`; the override repeats the base rule's Radix entry, since an override replaces a rule's options. `unicorn/filename-case` holds a front file to PascalCase and an `internal/` file to camelCase, in two overrides.
+
+Count on 2026-11-10, on main at `33a282f8` with this change: `rooms` 0, the `internal/` pattern 0, `filename-case` 0. Zero was expected and measures no false-alarm rate: no room has an `internal/` yet, and only `transport/` and `door/` exist. So the lists hold main's old names too (`data`, `coordination`, `app`, `id`, `testing`), and the two case overrides name only the six rooms with no file on main. Each old name leaves, and `transport` and `door` join the case overrides, in the pull request that moves its files. The top of `rooms.ts` lists what the rule does not see: a package specifier, a name given a new binding before it is exported, and an error or service made by a helper under another name.
+
 Seven rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, and P35). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests live with the rest of the exam, in `next/apps/fabrika/src/exam/`, and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
 
 | Rule | Refuses | Edges | Tests |

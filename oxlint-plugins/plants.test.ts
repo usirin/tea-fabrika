@@ -323,6 +323,8 @@ describe("each rule refuses what it is there to refuse", () => {
 			"no-ledger-sql",
 			"no-node-filesystem",
 			"no-node-imports",
+			// libfabrika's rooms are planted at their real paths in rooms.test.ts.
+			"rooms",
 		];
 		const missing = Object.keys(plugin.rules).filter(
 			(rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
