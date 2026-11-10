@@ -233,6 +233,29 @@ describe("P12 local twin lint", () => {
       expect(scan("binding.ts", source(`RECORD:${binding}, ${key}:${binding}`))).toEqual([]);
     }
 
+    // Pinned review-2 escapes: later keys and spreads can replace a valid binding.
+    for (const overwritten of ["undefined", '"Other"', "replacement"]) {
+      expect(
+        scan("binding.ts", source(`RecordPart:${binding}, RecordPart:${overwritten}`)).some((f) =>
+          f.reason.startsWith("unsupported-case:"),
+        ),
+      ).toBe(true);
+    }
+
+    for (const props of [
+      `env:{RecordPart:${binding}}, env:{}`,
+      `env:{RecordPart:${binding}}, ...replacement`,
+      `env:{RecordPart:${binding}, ...replacement}`,
+    ]) {
+      expect(
+        scan(
+          "binding.ts",
+          `import * as ${alias} from "@alchemy.run/cloudflare";
+           ${alias}.Workers.Worker("Brain", {main:"brain.mjs", ${props}});`,
+        ).some((f) => f.reason.startsWith("unsupported-case:")),
+      ).toBe(true);
+    }
+
     for (const [bindings, other] of [
       [undefined, ""],
       ["", ""],

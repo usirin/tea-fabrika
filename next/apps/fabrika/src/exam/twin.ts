@@ -400,6 +400,31 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       if (["Worker", "Workers.Worker"].includes(parts.join("."))) {
         const props = unwrap(node.arguments[1]);
         const key = (p: Tree) => (p?.computed ? null : (p?.key?.name ?? p?.key?.value));
+        const literalKeys = (object: Tree): boolean => {
+          if (object?.type !== "ObjectExpression") {
+            report(object ?? node, "unsupported-case: class-name bindings are not a literal object");
+            return false;
+          }
+
+          const keys = new Set<string>();
+          let valid = true;
+
+          for (const property of object.properties) {
+            const name = key(property);
+
+            if (property.type !== "Property" || name == null) {
+              report(property, "unsupported-case: indirect class-name binding");
+              valid = false;
+            } else if (keys.has(String(name))) {
+              report(property, `unsupported-case: duplicate key ${name}`);
+              valid = false;
+            } else {
+              keys.add(String(name));
+            }
+          }
+
+          return valid;
+        };
         const env = props?.properties?.find((p: Tree) => key(p) === "env");
 
         let hostedNames: Array<string> = [];
@@ -451,11 +476,13 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         if (workerName?.type !== "Literal" || typeof workerName.value !== "string") {
           report(node, "unsupported-case: Worker name is not a string literal");
         } else if (workerName.value === hostName) {
+          if (!literalKeys(props)) {
+            return;
+          }
+
           const bindings = env === undefined ? { type: "ObjectExpression", properties: [] } : unwrap(env.value);
 
-          if (bindings?.type !== "ObjectExpression") {
-            report(env ?? node, "unsupported-case: class-name bindings are not a literal object");
-          } else {
+          if (literalKeys(bindings)) {
             const objects = new Map<string, string>();
 
             for (const binding of bindings.properties) {
