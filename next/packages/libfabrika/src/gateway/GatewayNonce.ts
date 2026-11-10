@@ -1,6 +1,6 @@
 import { Effect, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
-import { LedgerError } from "../data/index.ts";
+import { LedgerError } from "../ledger/Ledger.ts";
 import type { doorStore } from "./GatewayStore.ts";
 
 // SYN cookies keep an unproved connection out of storage (RFC 4987, section 3.6).

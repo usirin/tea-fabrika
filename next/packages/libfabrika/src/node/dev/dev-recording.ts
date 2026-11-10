@@ -1,7 +1,9 @@
 import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for P37's durable span queue
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
-import { Archive, RecordManager, SpanSink } from "../../data/index.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
+import { Archive } from "../../telemetry/Archive.ts";
+import { RecordManager } from "../../telemetry/Records.ts";
+import { SpanSink } from "../../telemetry/Sink.ts";
 
 // This is P37's durable span queue, never a second ledger. Delivery makes no spans.
 export const stageRecording = Effect.fn("brain.stageRecording")(function* <E>(

@@ -1,62 +1,40 @@
 import { Context, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import { admitted, foldMembers, MemberEvent, Saw } from "../access/Access.ts";
+import { appendAdmitted } from "../access/Authorization.ts";
+import { ClientManager } from "../access/ClientManager.ts";
 import {
-  admitted,
-  appendAdmitted,
-  brainOnly,
-  Change,
-  ClientManager,
-  enrollmentText,
   type Envelope,
-  foldMembers,
-  type From,
-  MemberEvent,
   NotGranted,
-  ProcessManager,
-  type ProcessError,
-  Saw,
   SessionManager,
   SigningRefused,
   SignRequest,
   Writer,
-} from "../coordination/index.ts";
-import type { SinkError } from "../data/index.ts";
-import {
-  Archive,
-  Chain,
-  fromHere,
-  Ledger,
-  LedgerError,
-  LedgerTransaction,
-  Line,
-  lineFor,
-  PAGE,
-  ProcessId,
-  RecordManager,
-  SpanSink,
-  valueFor,
-} from "../data/index.ts";
+} from "../access/SessionManager.ts";
+import { Change, enrollmentText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { InputId } from "../Id.ts";
+import { Ledger, LedgerError } from "../ledger/Ledger.ts";
+import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import { fromHere, Line, lineFor, PAGE, valueFor } from "../ledger/Log.ts";
+import { type From } from "../processes/Mailbox.ts";
+import { type ProcessError, brainOnly } from "../processes/Process.ts";
+import { ProcessManager } from "../processes/ProcessManager.ts";
+import { ProcessId } from "../ProcessId.ts";
 import { Incoming } from "../runtime/Entry.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RunnerError, type Sent } from "../runtime/Runner.ts";
-import {
-  Admission,
-  Answer,
-  Attached,
-  checkHello,
-  type Checked,
-  Hello,
-  KeyLine,
-  PasskeyLine,
-  passkeyRp,
-  Row,
-  verifySshsig,
-  Waiting,
-} from "../transport/index.ts";
+import { Archive } from "../telemetry/Archive.ts";
+import { RecordManager } from "../telemetry/Records.ts";
+import { type SinkError, SpanSink } from "../telemetry/Sink.ts";
+import { Chain } from "../telemetry/Trace.ts";
+import { checkHello } from "../transport/Hello.ts";
+import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
+import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
+import { Admission, Answer, Attached, Hello } from "../transport/Wire.ts";
 import { doorNonce } from "./GatewayNonce.ts";
 import { doorStore } from "./GatewayStore.ts";
+import { Row, Waiting } from "./internal/waiting.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;

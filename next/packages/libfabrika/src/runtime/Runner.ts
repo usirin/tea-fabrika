@@ -66,6 +66,8 @@ import { defaultPolicy, supervisor, type SupervisorMsg } from "./internal/superv
 import { diff } from "./Patch.ts";
 import { ProgramDown, Refusal, Step, Write } from "./Program.ts";
 
+export { defaultPolicy } from "./internal/supervisor.ts";
+
 /** What `msg` answers: the input's placing in the inbox, or why it was not taken. */
 export const Sent = Schema.TaggedUnion({
   accepted: { rev: Schema.Int, pos: Schema.Int },

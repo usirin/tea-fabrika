@@ -20,7 +20,7 @@ export const localStage = Effect.fn("brain.localStage")(function* (
   // oxlint-disable-next-line fabrika/no-promises -- edge: the platform module is loaded at the local command boundary
   const { ProcessIdGenerator } = yield* Effect.tryPromise({
     // oxlint-disable-next-line fabrika/no-promises -- edge: load the platform dependency at the command boundary
-    try: () => import("@kampus/libfabrika/coordination"),
+    try: () => import("@kampus/libfabrika/processes/ProcessIdGenerator"),
     catch: () => new BrainError({ reason: "storage" }),
   });
   return yield* startStage(built, options).pipe(Effect.provide(ProcessIdGenerator.layer));

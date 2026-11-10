@@ -1,6 +1,7 @@
 import type { Descriptor, Incoming } from "@kampus/libfabrika";
-import type { Activity, From, Start } from "@kampus/libfabrika/coordination";
-import type { Chain } from "@kampus/libfabrika/data";
+import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import type { Activity, Start } from "@kampus/libfabrika/processes/Process";
+import type { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { fetch } from "@kampus/libfabrika/workers";
 import { control } from "@kampus/libfabrika/workers/control";
 import { GatewayService } from "@kampus/libfabrika/workers/gateway";

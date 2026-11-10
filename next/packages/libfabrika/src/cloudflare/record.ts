@@ -1,6 +1,8 @@
 import { Effect, Schema } from "effect";
-import { type Chain, recordPart, SinkError } from "../data/index.ts";
 import { workerSql } from "../ledger/CloudflareSql.ts";
+import { recordPart } from "../telemetry/RecordPart.ts";
+import { SinkError } from "../telemetry/Sink.ts";
+import { type Chain } from "../telemetry/Trace.ts";
 
 type Part = ReturnType<typeof recordPart>;
 type Rows = Parameters<Part["write"]>[0];

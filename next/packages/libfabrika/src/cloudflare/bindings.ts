@@ -1,12 +1,17 @@
 import { type Brand, type Effect, Schema } from "effect";
-import type { Activity, From, GatewayManager, ProcessManager, Start } from "../coordination/index.ts";
-import { ProcessError, Session, SigningRefused } from "../coordination/index.ts";
-import { Appended, type LedgerCalls, type RecordCalls } from "../data/index.ts";
-import type { Letter } from "../processes/Mailbox.ts";
+import { Session, SigningRefused } from "../access/SessionManager.ts";
+import type { LedgerCalls } from "../ledger/Ledger.ts";
+import { Appended } from "../ledger/Log.ts";
+import type { GatewayManager } from "../presence/Connections.ts";
+import type { From, Letter } from "../processes/Mailbox.ts";
+import { ProcessError, type Activity, type Start } from "../processes/Process.ts";
+import type { ProcessManager } from "../processes/ProcessManager.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import type { Incoming } from "../runtime/Entry.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
-import type { Answer, checkHello } from "../transport/index.ts";
+import type { RecordCalls } from "../telemetry/Records.ts";
+import type { checkHello } from "../transport/Hello.ts";
+import type { Answer } from "../transport/Wire.ts";
 
 export type ConnectionId = string & Brand.Brand<"ConnectionId">;
 

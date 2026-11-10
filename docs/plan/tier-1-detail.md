@@ -671,9 +671,11 @@ Nothing is lost. A focus move was never kept for its own sake, and PR 223's `des
 "sideEffects": false,
 "exports": {
 	".": "./src/index.ts",                   // the app layer's names, no platform: what a program may see
-	"./transport": "./src/transport/index.ts", // no platform; for tuval's named exception and wiring
+	"./transport/*": "./src/transport/*.ts", // a room's front files, no platform; for tuval's named exception and wiring
+	"./transport/internal/*": null,          // nobody outside the room
 	"./coordination": "./src/coordination/index.ts", // no platform; for wiring
-	"./data": "./src/data/index.ts",         // no platform; for wiring
+	"./ledger/*": "./src/ledger/*.ts",       // the same pair for each room; no platform; for wiring
+	"./ledger/internal/*": null,
 	"./workers": "./src/workers.ts",         // the object classes; `cloudflare:workers`
 	"./box": "./src/app/entry.ts",           // `entrypoint`, what the box loads; `cloudflare:workers`
 	"./sqlite": "./src/data/sqlite.ts",      // `Ledger.sql` on node:sqlite, for tests

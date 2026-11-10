@@ -1,5 +1,5 @@
 import { Context, Effect } from "effect";
-import { LedgerError } from "../data/index.ts";
+import { LedgerError } from "../ledger/Ledger.ts";
 import type { GatewayBinding, ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
 
 type Client<S> = {

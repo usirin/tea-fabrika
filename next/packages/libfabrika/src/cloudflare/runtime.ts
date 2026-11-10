@@ -12,49 +12,29 @@ import {
   Tracer,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
-import {
-  admitted,
-  ClientManager,
-  GatewayManager,
-  Mailbox,
-  NotGranted,
-  ProcessIdGenerator,
-  ProcessError,
-  ProcessManager,
-  ProcessStore,
-  recoverActivity,
-  Owner,
-  Recipient,
-  Writer,
-  type From,
-  Start,
-  SigningRefused,
-  type Session,
-} from "../coordination/index.ts";
-import type { Appended } from "../data/index.ts";
-import {
-  Archive,
-  Doorbell,
-  Ledger,
-  LedgerError,
-  LedgerTransaction,
-  lineFor,
-  fromHere,
-  RecordManager,
-  Referee,
-  SpanSink,
-  type BucketCalls,
-  type Sql,
-} from "../data/index.ts";
+import { admitted } from "../access/Access.ts";
+import { ClientManager } from "../access/ClientManager.ts";
+import { NotGranted, SigningRefused, Writer, type Session } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import { workerSql } from "../ledger/CloudflareSql.ts";
-import { remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
+import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import { type Appended, fromHere, lineFor } from "../ledger/Log.ts";
+import { Referee } from "../ledger/Referee.ts";
+import { GatewayManager } from "../presence/Connections.ts";
+import { Mailbox, type From } from "../processes/Mailbox.ts";
+import { Owner, ProcessError, Recipient, recoverActivity, Start } from "../processes/Process.ts";
+import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
+import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
-// oxlint-disable-next-line no-restricted-imports -- edge: removed by kind 2 of this PR
-import { defaultPolicy } from "../runtime/internal/supervisor.ts";
+import { ProcessStore } from "../runtime/ProcessStore.ts";
 import type { Descriptor, Sent } from "../runtime/Runner.ts";
-import { ProgramRunner } from "../runtime/Runner.ts";
+import { defaultPolicy, ProgramRunner } from "../runtime/Runner.ts";
+import { type Sql } from "../Sql.ts";
+import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
+import { RecordManager } from "../telemetry/Records.ts";
+import { SpanSink } from "../telemetry/Sink.ts";
 import {
   CommitReply,
   ProcessReplies,

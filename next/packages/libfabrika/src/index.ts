@@ -36,4 +36,4 @@ export {
   nodeExecution,
   workerExecution,
 } from "./runtime/Execution.ts";
-export { Door, type ConnectionId } from "./gateway/index.ts";
+export { Door, type ConnectionId } from "./gateway/Gateway.ts";

@@ -1,5 +1,6 @@
 import { Effect, Result, Schema } from "effect";
-import { LedgerError, type Sql } from "../data/index.ts";
+import { LedgerError } from "../ledger/Ledger.ts";
+import { type Sql } from "../Sql.ts";
 
 // Only checked connection state and input metadata belong here. Input bodies stay out.
 export const doorStore = (sql: Sql) => {

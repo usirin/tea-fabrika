@@ -7,9 +7,24 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Sql": "./src/Sql.ts",
+    "./transport/*": "./src/transport/*.ts",
+    "./transport/internal/*": null,
+    "./telemetry/*": "./src/telemetry/*.ts",
+    "./telemetry/internal/*": null,
+    "./ledger/*": "./src/ledger/*.ts",
+    "./ledger/internal/*": null,
+    "./processes/*": "./src/processes/*.ts",
+    "./processes/internal/*": null,
+    "./presence/*": "./src/presence/*.ts",
+    "./presence/internal/*": null,
+    "./access/*": "./src/access/*.ts",
+    "./access/internal/*": null,
+    "./runtime/*": "./src/runtime/*.ts",
+    "./runtime/internal/*": null,
+    "./gateway/*": "./src/gateway/*.ts",
+    "./gateway/internal/*": null,
     "./coordination": "./src/coordination/index.ts",
-    "./data": "./src/data/index.ts",
-    "./door": "./src/gateway/index.ts",
     "./sqlite": "./src/ledger/NodeSqlite.ts",
     "./box": "./src/cloudflare/box.ts",
     "./build": "./src/node/build/build.ts",
@@ -27,9 +42,7 @@
     "./node/stage-recording": "./src/node/dev/dev-recording.ts",
     "./brain-life": "./src/runtime/BrainLife.ts",
     "./brain-event": "./src/runtime/BrainEvent.ts",
-    "./testing": "./src/Testing.ts",
-    "./transport": "./src/transport/index.ts",
-    "./transport/gateway": "./src/transport/Connection.ts"
+    "./testing": "./src/Testing.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."

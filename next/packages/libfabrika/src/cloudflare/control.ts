@@ -1,5 +1,5 @@
 import { Effect, Equal, Redacted, Result, Schema } from "effect";
-import { LedgerError } from "../data/index.ts";
+import { LedgerError } from "../ledger/Ledger.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
 import { ProcessClient, ProjectClient, RecordClient } from "./platform.ts";
 import { checkedPut, bucketHead, processStub, projectStub, recordStub, rpc, type Env } from "./runtime.ts";

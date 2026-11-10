@@ -1,1 +1,1 @@
-export { Door, type ConnectionId } from "@kampus/libfabrika/door";
+export { Door, type ConnectionId } from "@kampus/libfabrika/gateway/Gateway";

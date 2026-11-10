@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { LedgerError } from "../data/index.ts";
+import { LedgerError } from "../ledger/Ledger.ts";
 import { GatewayClient, ProjectClient } from "./platform.ts";
 import { projectStub, rpc, type BrainOptions, type Env } from "./runtime.ts";
 

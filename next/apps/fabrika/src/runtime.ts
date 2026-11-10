@@ -1,4 +1,4 @@
-import { LedgerError } from "@kampus/libfabrika/data";
+import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import { gatewayLayer } from "@kampus/libfabrika/workers/gateway";
 import { projectLayer, type Env as Bindings } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
