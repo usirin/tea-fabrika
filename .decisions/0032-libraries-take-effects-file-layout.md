@@ -1,7 +1,7 @@
 ---
 id: 0032
 title: next/'s libraries take Effect's file layout, a flat src/ of PascalCase modules with prefixed variants, internal/ for private parts and a namespace index, never folders by area or kind
-status: accepted
+status: amended-in-part by [0034](0034-libfabrika-folders-are-bounded-contexts.md)
 date: 2026-11-09
 tags: [layout, files, names, modules, barrel, internal, effect, libfabrika, next]
 ---
@@ -11,6 +11,9 @@ tags: [layout, files, names, modules, barrel, internal, effect, libfabrika, next
 **What this decides:** `libfabrika` and every other library package in `next/` lays out its files
 the way Effect and its core team's own libraries do: one PascalCase file per concept in a flat
 `src/`, and an `index.ts` that re-exports each one as a namespace.
+
+[0034](0034-libfabrika-folders-are-bounded-contexts.md) replaces the one flat `src/` with one folder
+per bounded context. The rest of this record still holds, inside each folder.
 
 ```mermaid
 flowchart LR
