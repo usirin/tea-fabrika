@@ -1,4 +1,4 @@
-import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
+import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Effect, Schema } from "effect";
 import { type Chain, recordPart, SinkError } from "../data/index.ts";
@@ -70,7 +70,7 @@ export const recordDelete = Effect.fn(function* (
 
 export const RecordPartLive = RecordPart.make(
   Effect.gen(function* () {
-    const state = yield* DurableObjectState;
+    const state = yield* ObjectState;
     const env = yield* WorkerEnvironment;
     const cap = yield* Schema.decodeUnknownEffect(
       Schema.fromJsonString(
