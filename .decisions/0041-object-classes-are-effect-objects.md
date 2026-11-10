@@ -1,7 +1,7 @@
 ---
 id: 0041
 title: In next/, a Durable Object class is written with Alchemy's Effect Durable Object model in its modular form, never as a plain cloudflare:workers class
-status: amended-in-part by [0050](0050-a-ledger-step-is-a-plain-function.md)
+status: amended-in-part by [0050](0050-a-ledger-step-is-a-plain-function.md), [0054](0054-read-upstream-before-patching-it.md)
 date: 2026-11-09
 tags: [durable-objects, alchemy, effect, object-class, brain, rpc, next]
 ---
@@ -115,6 +115,8 @@ caller's stub answers with an Effect, and Alchemy's bridge is the one place a Pr
   compose (its 0033).*
 - **A gap in Alchemy is patched locally,** with `pnpm patch`, and the upstream issue is filed the
   same day. It is never a reason to go back to a plain class.
+  A patch comes only after reading Alchemy's docs and source for its own answer
+  ([0054](0054-read-upstream-before-patching-it.md)).
 
 **Binding constraints**
 
