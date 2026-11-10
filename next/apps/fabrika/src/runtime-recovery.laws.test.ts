@@ -18,12 +18,15 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Schema } from "effect";
+import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectRuntime, type Env } from "./runtime.ts";
-import { programs } from "./table.ts";
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
+// P16: the runtime reads its built program table from the build's generated module
+// (libfabrika's build-modules.d.ts). Mocking both keeps these laws on either wiring.
+vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 type ProjectCalls = (typeof ProjectService)["Service"];
 type ProcessCalls = (typeof ProcessService)["Service"];

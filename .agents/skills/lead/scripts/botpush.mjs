@@ -29,11 +29,19 @@ try {
   process.exit(1);
 }
 
+const leakgrep = fileURLToPath(new URL("./leakgrep.sh", import.meta.url));
+
 try {
-  execFileSync("sh", [fileURLToPath(new URL("./leakgrep.sh", import.meta.url))], {
+  execFileSync("sh", [leakgrep], {
     cwd: dir,
     input: diff,
     stdio: ["pipe", "inherit", "inherit"],
+  });
+  // Decision 0048: each commit this push sends is read on its own, beside the branch's net change
+  // above. A commit a ref of origin already holds is not sent, so it is not read again.
+  execFileSync("sh", [leakgrep, "--commits", src, "--not", "--remotes=origin"], {
+    cwd: dir,
+    stdio: ["ignore", "inherit", "inherit"],
   });
 } catch {
   process.exit(1);
