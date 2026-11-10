@@ -102,6 +102,7 @@ export type Tried = typeof Tried.Type;
 export const attach = Cmd.make("attach", {input: Schema.Struct({}), ok: Tried, err: []});
 /** Stop the host by its pid and wait for it to exit, then one try, which starts this build's. */
 export const restart = Cmd.make("restart", {input: Schema.Struct({}), ok: Tried, err: []});
+
 /** Pick the wait before try `attempt`: full jitter, between 0 and the policy's bound for it. */
 export const jitter = Cmd.make("jitter", {
 	input: Schema.Struct({attempt: Schema.Int}),
@@ -127,7 +128,11 @@ const trying = (retry: RetryState, why: string | null): Step => [
 /** A try failed, or the link ended: wait and try again, or stop after five minutes of it. */
 const failed = (retry: RetryState, why: string, at: number): Step => {
 	const next = recordFailure(retry, why, at);
-	if (!shouldRetry(next, POLICY, at)) return [{at: "stopped", why}, []];
+
+	if (!shouldRetry(next, POLICY, at)) {
+		return [{at: "stopped", why}, []];
+	}
+
 	return [{at: "waiting", retry: next, why, wait: null}, [jitter({attempt: next.attempt})]];
 };
 

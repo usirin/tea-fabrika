@@ -14,26 +14,38 @@ import {ledgerOptions} from "./worker-options.ts";
 
 const pairOf = async () =>
 	(await crypto.subtle.generateKey({name: "Ed25519"}, true, ["sign", "verify"])) as CryptoKeyPair;
+
 const lineOf = async (p: CryptoKeyPair) =>
 	keyLineOf(new Uint8Array(await crypto.subtle.exportKey("raw", p.publicKey)));
 
 const users = new Map<string, {id: number; keys: string[]}>();
 /** Every call the Worker made to the fake GitHub: its path, and its `authorization` header. */
 const calls: {path: string; auth: string | null}[] = [];
+
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
 	calls.push({path: url.pathname, auth: req.headers.get("authorization")});
-	if (url.host !== "api.github.com") return new Response("not here", {status: 502});
+
+	if (url.host !== "api.github.com") {
+		return new Response("not here", {status: 502});
+	}
+
 	const byId = /^\/user\/([0-9]+)$/.exec(url.pathname);
+
 	if (byId !== null) {
 		const found = [...users].find(([, u]) => u.id === Number(byId[1]));
 		return found === undefined
 			? Response.json({message: "Not Found"}, {status: 404})
 			: Response.json({id: found[1].id, login: found[0]});
 	}
+
 	const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
 	const u = m?.[1] === undefined ? undefined : users.get(decodeURIComponent(m[1]));
-	if (u === undefined) return Response.json({message: "Not Found"}, {status: 404});
+
+	if (u === undefined) {
+		return Response.json({message: "Not Found"}, {status: 404});
+	}
+
 	return m?.[2] === undefined
 		? Response.json({id: u.id, login: m?.[1]})
 		: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
@@ -45,6 +57,7 @@ let url = "";
 let alice: CryptoKeyPair;
 let bob: CryptoKeyPair;
 let triage: CryptoKeyPair;
+
 beforeAll(async () => {
 	[alice, bob, triage] = await Promise.all([pairOf(), pairOf(), pairOf()]);
 	users.set("alice", {id: 7, keys: [await lineOf(alice)]});
@@ -64,16 +77,19 @@ beforeAll(async () => {
 	await mf.ready;
 	url = (await mf.unsafeGetDirectURL()).origin;
 });
+
 afterAll(async () => {
 	await mf.dispose();
 });
 
 const door = () => doorOf({url, ledger: LEDGER});
 const run = <A, E>(e: Effect.Effect<A, E>) => Effect.runPromise(e);
+
 const asLedger = <A, E>(token: Redacted.Redacted<string>, e: Effect.Effect<A, E, Ledger>) =>
 	Effect.runPromiseExit(
 		e.pipe(Effect.provide(layerHttp({url, ledger: LEDGER, token})), Effect.scoped),
 	);
+
 const post = (path: string, body: unknown, token?: string) =>
 	fetch(`${url}/${LEDGER}/${path}`, {
 		method: "POST",
@@ -176,7 +192,11 @@ describe("the door in workerd", () => {
 				return yield* ledger.readStream("t/inbox");
 			}),
 		);
-		if (Exit.isFailure(exit)) throw new Error(String(exit.cause));
+
+		if (Exit.isFailure(exit)) {
+			throw new Error(String(exit.cause));
+		}
+
 		expect(exit.value.map((r) => r.writer)).toEqual(["user:github:7"]);
 	});
 
@@ -207,7 +227,11 @@ describe("the door in workerd", () => {
 				return yield* ledger.readStream("t/inbox");
 			}),
 		);
-		if (Exit.isFailure(exit)) throw new Error(String(exit.cause));
+
+		if (Exit.isFailure(exit)) {
+			throw new Error(String(exit.cause));
+		}
+
 		expect(exit.value.map((r) => r.writer)).toEqual(["user:github:7", "agent:triage for:github:7"]);
 	});
 
@@ -239,10 +263,18 @@ describe("the door in workerd", () => {
 		const theirs = await send(agent, "answered:a1", "answered");
 		expect(Exit.isFailure(theirs) && String(theirs.cause)).toContain("answered 403");
 		const mine = await send(person, "answered:p1", "answered");
-		if (Exit.isFailure(mine)) throw new Error(String(mine.cause));
+
+		if (Exit.isFailure(mine)) {
+			throw new Error(String(mine.cause));
+		}
+
 		// The agent's own facts still land: here, the ask it puts to the owner.
 		const asked = await send(agent, "asked:a1", "ruling_needed");
-		if (Exit.isFailure(asked)) throw new Error(String(asked.cause));
+
+		if (Exit.isFailure(asked)) {
+			throw new Error(String(asked.cause));
+		}
+
 		expect(asked.value.slice(-2).map((r) => [r.kind, r.writer])).toEqual([
 			["answered", "user:github:7"],
 			["ruling_needed", "agent:triage for:github:7"],
@@ -271,10 +303,15 @@ describe("the door in workerd", () => {
 
 	it("lets a member in after a rename on GitHub, by the name this ledger knows", async () => {
 		const was = users.get("bob");
-		if (was === undefined) throw new Error("bob is set up above");
+
+		if (was === undefined) {
+			throw new Error("bob is set up above");
+		}
+
 		users.delete("bob");
 		users.set("robert", was);
 		calls.length = 0;
+
 		try {
 			const s = await run(
 				door()
@@ -300,7 +337,11 @@ describe("the door in workerd", () => {
 				return yield* ledger.lease("c");
 			}),
 		);
-		if (Exit.isFailure(exit)) throw new Error(String(exit.cause));
+
+		if (Exit.isFailure(exit)) {
+			throw new Error(String(exit.cause));
+		}
+
 		expect(exit.value?.holder).toBe("host-a@agent:triage for:github:7");
 	});
 });
@@ -311,9 +352,11 @@ describe("the door in workerd", () => {
  */
 const onOneConnection = async (calls: {path: string; body: string; token?: string}[]) => {
 	const agent = new Agent({keepAlive: true, maxSockets: 1});
+
 	try {
 		const answers: {status: number; reused: boolean}[] = [];
-		for (const c of calls)
+
+		for (const c of calls) {
 			answers.push(
 				await new Promise((resolve) => {
 					const req = request(
@@ -335,6 +378,8 @@ const onOneConnection = async (calls: {path: string; body: string; token?: strin
 					req.end(c.body);
 				}),
 			);
+		}
+
 		return answers;
 	} finally {
 		agent.destroy();
@@ -352,6 +397,7 @@ describe("a refusal on a kept-alive connection", () => {
 			{path: `/${LEDGER}/tail`, body: big, token: person},
 			{path: `/${LEDGER}/door/nothing`, body: big, token: person},
 		];
+
 		for (const refusal of refusals) {
 			const [first, next] = await onOneConnection([
 				refusal,
@@ -406,6 +452,7 @@ describe("a GitHub token", () => {
 				},
 			}),
 		);
+
 		try {
 			await withToken.ready;
 			const base = (await withToken.unsafeGetDirectURL()).origin;
@@ -426,9 +473,11 @@ describe("a GitHub token", () => {
 describe("a ledger with no door", () => {
 	it("refuses every request, with or without a credential", async () => {
 		const closed = new Miniflare(ledgerOptions({persist: false, direct: 0}));
+
 		try {
 			await closed.ready;
 			const base = (await closed.unsafeGetDirectURL()).origin;
+
 			for (const auth of [{}, {authorization: "Bearer fabrika_p_anything"}]) {
 				const res = await fetch(`${base}/x/read`, {
 					method: "POST",
@@ -437,6 +486,7 @@ describe("a ledger with no door", () => {
 				});
 				expect(res.status).toBe(403);
 			}
+
 			const login = await fetch(`${base}/x/door/challenge`, {method: "POST", body: "{}"});
 			expect(login.status).toBe(404);
 		} finally {
@@ -451,6 +501,7 @@ describe("a local door", () => {
 		const local = new Miniflare(
 			ledgerOptions({persist: false, direct: 0, door: {kind: "local", person: "owner", secret}}),
 		);
+
 		try {
 			await local.ready;
 			const base = (await local.unsafeGetDirectURL()).origin;
@@ -467,7 +518,11 @@ describe("a local door", () => {
 					return yield* ledger.readStream("t/inbox");
 				}).pipe(Effect.provide(layerHttp({url: base, ledger: "x", token: a.token})), Effect.scoped),
 			);
-			if (Exit.isFailure(exit)) throw new Error(String(exit.cause));
+
+			if (Exit.isFailure(exit)) {
+				throw new Error(String(exit.cause));
+			}
+
 			expect(exit.value.map((r) => r.writer)).toEqual(["agent:triage for:owner"]);
 		} finally {
 			await local.dispose();

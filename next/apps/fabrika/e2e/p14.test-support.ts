@@ -48,11 +48,15 @@ export const until = async <T>(
 	ms = 30_000,
 ): Promise<T> => {
 	const stop = Date.now() + ms;
+
 	for (;;) {
 		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		const got = await Promise.resolve(read()).catch(() => undefined);
-		if (got !== undefined) return got;
-		if (Date.now() > stop) throw new Error(`timed out after ${ms} ms waiting for ${what}`);
+
+		if (got !== undefined) {return got;}
+
+		if (Date.now() > stop) {throw new Error(`timed out after ${ms} ms waiting for ${what}`);}
+
 		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		await pause(50);
 	}
@@ -65,7 +69,9 @@ const freePort = (): Promise<number> =>
 		server.once("error", fail);
 		server.listen(0, "127.0.0.1", () => {
 			const at = server.address();
-			if (at === null || typeof at === "string") return fail(new Error("no TCP port"));
+
+			if (at === null || typeof at === "string") {return fail(new Error("no TCP port"));}
+
 			server.close(() => done(at.port));
 		});
 	});
@@ -94,13 +100,17 @@ export const startStage = async (
 	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const port = shared?.port ?? (await freePort());
 	const key = join(home, "person");
+
 	if (shared === undefined)
-		execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]);
+		{execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]);}
+
 	const founder = readFileSync(`${key}.pub`, "utf8").trim();
 	const url = `http://127.0.0.1:${port}`;
 	const env = {...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1"};
+
 	for (const secret of ["TYPESAFE_API_KEY", "FABRIKA_FOREGROUND", "CLOUDFLARE_API_TOKEN"])
-		delete env[secret];
+		{delete env[secret];}
+
 	let child: ChildProcess | undefined;
 	let output = "";
 	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
@@ -128,7 +138,8 @@ export const startStage = async (
 			"the stage to answer",
 			// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 			async () => {
-				if (mine.exitCode !== null) throw new Error(`dev.ts exited: ${output}`);
+				if (mine.exitCode !== null) {throw new Error(`dev.ts exited: ${output}`);}
+
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 				return (await fetch(url)).ok ? true : undefined;
 			},
@@ -144,14 +155,17 @@ export const startStage = async (
 			})
 			.filter((p, _i, all) => {
 				const mine = new Set<number>([child?.pid ?? -1]);
+
 				for (let grew = true; grew;) {
 					grew = false;
+
 					for (const q of all)
-						if (mine.has(q.ppid) && !mine.has(q.pid)) {
+						{if (mine.has(q.ppid) && !mine.has(q.pid)) {
 							mine.add(q.pid);
 							grew = true;
-						}
+						}}
 				}
+
 				return mine.has(p.pid);
 			});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
@@ -168,7 +182,9 @@ export const startStage = async (
 		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		stop: async () => {
 			const mine = child;
-			if (mine === undefined || mine.exitCode !== null) return;
+
+			if (mine === undefined || mine.exitCode !== null) {return;}
+
 			mine.kill("SIGTERM");
 			// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 			await until(
@@ -185,6 +201,7 @@ export interface Tab {
 	readonly console: ReadonlyArray<string>;
 	readonly urls: ReadonlyArray<string>;
 }
+
 /** A browser, its context (a persistent profile when `dir` is given) and a way to open tabs on it. */
 // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const openProfile = async (
@@ -241,12 +258,14 @@ export interface Granted {
 	readonly key: string;
 	readonly to: string;
 }
+
 /** A fresh throwaway key file under `home`, for a signer the person never trusted. */
 export const otherKey = (home: string, name: string): string => {
 	const file = join(home, name);
 	execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", file]);
 	return file;
 };
+
 /** Reads the waiting screen's code and fingerprint, then runs the real grant command with `key`. */
 // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const readWaiting = async (
@@ -270,12 +289,14 @@ export const readWaiting = async (
 	const target = (await response.json()) as {key: string; to: string};
 	return {code, fingerprint, command, target: {key: target.key, to: target.to}};
 };
+
 export const runGrant = (stage: Stage, fingerprint: string, code: string, key: string) =>
 	run(
 		process.execPath,
 		[join(APP, "grant.ts"), "client", stage.url, fingerprint, `--code=${code}`, `--key=${key}`],
 		{cwd: APP, env: {...process.env, FABRIKA_HOME: stage.home}},
 	);
+
 /** Grants a waiting tab with the real command and waits for its counters. */
 // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const grant = async (stage: Stage, tab: Tab): Promise<Granted> => {
@@ -296,6 +317,7 @@ export const grant = async (stage: Stage, tab: Tab): Promise<Granted> => {
 		to: w.target.to,
 	};
 };
+
 /** Removes a granted window key: the person's key signs the removal, as the door's tests do. */
 // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const revoke = async (stage: Stage, granted: Granted): Promise<void> => {
@@ -318,24 +340,28 @@ export const revoke = async (stage: Stage, granted: Granted): Promise<void> => {
 		headers: {"content-type": "application/json"},
 		body: JSON.stringify({text, armored}),
 	});
-	if (!response.ok) throw new Error(`revoke refused: ${response.status}`);
+
+	if (!response.ok) {throw new Error(`revoke refused: ${response.status}`);}
 };
 
 // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const counts = async (page: Page): Promise<ReadonlyArray<number>> =>
 	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	(await page.getByTestId("count").allInnerTexts()).map((t) => Number(t.replace(/[^\d-]/g, "")));
+
 export const press = (page: Page, action: "Add one" | "Take one away" | "Back to zero", tile = 0) =>
 	page
 		.getByRole("region", {name: /^counter/i})
 		.nth(tile)
 		.getByRole("button", {name: action})
 		.click();
+
 export const connection = (page: Page): Promise<string> =>
 	page.getByTestId("connection").first().innerText();
 
 /** Times `work` in ms and keeps the sample under `runs/p14/<label>.jsonl`, which is private (ignored by git). */
 export const samples: Record<string, Array<number>> = {};
+
 // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const timed = async <T>(label: string, work: () => Promise<T>): Promise<T> => {
 	const t0 = performance.now();
@@ -344,6 +370,7 @@ export const timed = async <T>(label: string, work: () => Promise<T>): Promise<T
 	(samples[label] ??= []).push(Math.round(performance.now() - t0));
 	return out;
 };
+
 export const summary = (): string => {
 	const dir = join(ROOT, "runs/p14");
 	mkdirSync(dir, {recursive: true});
@@ -390,13 +417,17 @@ export const ledgerRows = (
 					: [];
 		});
 	const rows: Array<{stream: string; id: string; tag: string; body: string}> = [];
+
 	for (const file of files(home)) {
 		const db = new DatabaseSync(file, {readOnly: true});
+
 		try {
 			const has = db
 				.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'")
 				.get();
-			if (has === undefined) continue;
+
+			if (has === undefined) {continue;}
+
 			for (const r of db
 				.prepare("SELECT stream, id, _tag AS tag, body FROM entries ORDER BY rev")
 				.all()) {
@@ -413,9 +444,10 @@ export const ledgerRows = (
 			db.close();
 		}
 	}
+
 	return rows;
 };
 
 export const cleanup = (...homes: ReadonlyArray<string>): void => {
-	for (const h of homes) rmSync(h, {recursive: true, force: true});
+	for (const h of homes) {rmSync(h, {recursive: true, force: true});}
 };

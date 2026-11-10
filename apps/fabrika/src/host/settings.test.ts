@@ -54,9 +54,13 @@ const watching = (folder: string, name: string) =>
 const until = (what: string, check: () => boolean) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 2000; i += 1) {
-			if (check()) return;
+			if (check()) {
+				return;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 

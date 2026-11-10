@@ -30,6 +30,7 @@ const PATCH = "./patch.ts";
 const RUNS = 300;
 
 type Letter = string;
+
 type Pending = {
 	readonly _tag: "dating" | "ready";
 	readonly n: number;
@@ -40,13 +41,16 @@ type Pending = {
 	readonly letter?: Letter;
 	readonly sentAt?: string;
 };
+
 type Client = {
 	readonly written: number;
 	readonly seen: number;
 	readonly pending: ReadonlyArray<Pending>;
 	readonly views: Readonly<Record<string, {readonly rev: number; readonly view: unknown}>>;
 };
+
 type Answer = {readonly _tag: string; readonly [key: string]: unknown};
+
 interface ClientApi {
 	readonly emptyClient: Client;
 	readonly press: (c: Client, input: {pid: string; m: unknown}) => Client;
@@ -62,22 +66,26 @@ interface ClientApi {
 	readonly failureRecord: (error: unknown) => unknown;
 	readonly ClientRecord: Schema.Top;
 }
+
 interface PatchApi {
 	readonly applyPatch: (
 		before: unknown,
 		ops: ReadonlyArray<unknown>,
 	) => Result.Result<unknown, unknown>;
 }
+
 const client = async (): Promise<ClientApi> => (await import(LOAD)) as ClientApi;
 const patching = async (): Promise<PatchApi> => (await import(PATCH)) as PatchApi;
 
 // --- p1: a letter is never lost -----------------------------------------------------------------
 
 const PIDS = ["process_a", "process_b"] as const;
+
 type Op =
 	| {readonly op: "press"; readonly pid: string; readonly m: {type: string}}
 	| {readonly op: "dated"; readonly slot: number; readonly dup: boolean}
 	| {readonly op: "reply"; readonly nth: number; readonly kind: string};
+
 const ops = fc.array(
 	fc.oneof(
 		{
@@ -114,6 +122,7 @@ const run = (api: ClientApi, list: ReadonlyArray<Op>): void => {
 	let issued = 0;
 	const model: Array<{n: number; letter: string | null; pid: string; m: unknown}> = [];
 	const everLetter = new Map<number, string>();
+
 	for (const o of list) {
 		if (o.op === "press") {
 			c = api.press(c, {pid: o.pid, m: o.m});
@@ -129,6 +138,7 @@ const run = (api: ClientApi, list: ReadonlyArray<Op>): void => {
 			const slot = model.find((x) => x.n === o.slot);
 			const letter = `letter_${issued}_${o.slot}_${everLetter.size}`;
 			c = api.dated(c, o.slot, {letter, sentAt: "2026-11-09T00:00:00.000Z"});
+
 			if (slot !== undefined && slot.letter === null) {
 				slot.letter = letter;
 				everLetter.set(slot.n, letter);
@@ -144,10 +154,12 @@ const run = (api: ClientApi, list: ReadonlyArray<Op>): void => {
 						? {_tag: "refused", why: "bad_msg"}
 						: {_tag: o.kind};
 			c = api.reply(c, letter, answer);
+
 			if (hit !== undefined && (o.kind === "accepted" || o.kind === "refused")) {
 				model.splice(model.indexOf(hit), 1);
 			}
 		}
+
 		// The law, after every step: the pending slots are the model's, in slot order, nothing lost.
 		expect(c.pending.map((p) => p.n)).toEqual(model.map((x) => x.n));
 		expect(c.pending.map((p) => p.pid)).toEqual(model.map((x) => x.pid));
@@ -155,13 +167,16 @@ const run = (api: ClientApi, list: ReadonlyArray<Op>): void => {
 		expect(c.pending.map((p) => p.letter ?? null)).toEqual(model.map((x) => x.letter));
 		// Written counts presses, and a letter that was dated keeps its first id (no new one on resend).
 		expect(c.written).toBe(issued);
+
 		for (const p of c.pending)
-			if (p.letter !== undefined) expect(p.letter).toBe(everLetter.get(p.n));
+			{if (p.letter !== undefined) expect(p.letter).toBe(everLetter.get(p.n));}
+
 		expect(api.outbox(c).map((p) => p.letter)).toEqual(
 			model.filter((x) => x.letter !== null).map((x) => x.letter),
 		);
 		expect(api.outbox(c)).toEqual(api.outbox(c)); // a resend twice is the same letters
 	}
+
 	// Good-thing check: the generator reached every important state, not an empty run.
 	void c;
 };
@@ -183,10 +198,11 @@ describe("p1: a letter is never lost (client)", () => {
 		fc.assert(
 			fc.property(ops, (list) => {
 				let c = api.emptyClient;
+
 				for (const o of list) {
-					if (o.op === "press") c = api.press(c, {pid: o.pid, m: o.m});
+					if (o.op === "press") {c = api.press(c, {pid: o.pid, m: o.m});}
 					else if (o.op === "dated")
-						c = api.dated(c, o.slot, {letter: `l${o.slot}`, sentAt: "2026-11-09T00:00:00.000Z"});
+						{c = api.dated(c, o.slot, {letter: `l${o.slot}`, sentAt: "2026-11-09T00:00:00.000Z"});}
 					else {
 						const before = c.pending.length;
 						const sent = c.pending.filter((p) => p.letter !== undefined);
@@ -196,9 +212,11 @@ describe("p1: a letter is never lost (client)", () => {
 							rev: 1,
 							pos: 1,
 						});
-						if (c.pending.length < before) settled++;
+
+						if (c.pending.length < before) {settled++;}
 					}
 				}
+
 				ready += c.pending.filter((p) => p._tag === "ready").length;
 				dating += c.pending.filter((p) => p._tag === "dating").length;
 			}),
@@ -248,8 +266,10 @@ describe("p1: a letter is never lost (client)", () => {
 const json: fc.Arbitrary<unknown> = fc
 	.jsonValue({maxDepth: 3})
 	.filter((v) => !JSON.stringify(v).includes("__proto__"));
+
 const objects = fc.dictionary(fc.string({maxLength: 6}), json, {maxKeys: 5});
 const decodeAny = (u: unknown): unknown => u;
+
 const isJson = (u: unknown): boolean => {
 	try {
 		return JSON.stringify(u) !== undefined;
@@ -323,6 +343,7 @@ const viewLaws: Readonly<Record<string, (api: ClientApi) => void>> = {
 					{type: "whole", rev: 7, view: views[0]},
 					decodeAny,
 				).client;
+
 				for (let i = 1; i < views.length; i++) {
 					c = api.notice(
 						c,
@@ -331,6 +352,7 @@ const viewLaws: Readonly<Record<string, (api: ClientApi) => void>> = {
 						decodeAny,
 					).client;
 				}
+
 				expect(c.views["process_a"]).toEqual({rev: 6 + views.length, view: views.at(-1)});
 			}),
 			{seed: SEED, numRuns: RUNS},
@@ -344,6 +366,7 @@ const viewLaws: Readonly<Record<string, (api: ClientApi) => void>> = {
 					{type: "whole", rev: 3, view: good},
 					decodeAny,
 				).client;
+
 				for (const note of [
 					junk,
 					other,
@@ -354,6 +377,7 @@ const viewLaws: Readonly<Record<string, (api: ClientApi) => void>> = {
 				]) {
 					expect(api.notice(base, "process_a", note, decodeAny).client.views).toEqual(base.views);
 				}
+
 				expect(({} as {x?: unknown}).x).toBeUndefined();
 			}),
 			{seed: SEED, numRuns: RUNS},
@@ -447,7 +471,9 @@ describe("p3: views move forward by one (client)", () => {
 			notice: (c, pid, note, d) => {
 				const out = real.notice(c, pid, note, d);
 				const cur = c.views[pid]?.view;
-				if (typeof cur === "object" && cur !== null) Object.assign(cur, {leak: 1});
+
+				if (typeof cur === "object" && cur !== null) {Object.assign(cur, {leak: 1});}
+
 				return out;
 			},
 		};
@@ -478,7 +504,9 @@ describe("applyPatch: checked, pure, and refused when malformed", () => {
 				const frozen = structuredClone(a);
 				const out = applyPatch(a, diff(a, b));
 				expect(Result.isSuccess(out)).toBe(true);
-				if (Result.isSuccess(out)) expect(out.success).toEqual(b);
+
+				if (Result.isSuccess(out)) {expect(out.success).toEqual(b);}
+
 				expect(a).toEqual(frozen);
 			}),
 			{seed: SEED, numRuns: RUNS},
@@ -528,7 +556,9 @@ const CounterMsg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("dec")}),
 	Schema.Struct({type: Schema.Literal("reset")}),
 ]);
+
 const CounterModel = Schema.Struct({count: Schema.Int});
+
 const counterMachine = Machine.make({
 	model: CounterModel,
 	msg: CounterMsg,
@@ -570,16 +600,23 @@ describe("the counter's typed views and resends agree with an independent fold",
 					{type: "whole", rev, view: {count: model.count}},
 					decode,
 				).client;
-				for (const m of msgs) c = api.press(c, {pid: "process_a", m});
+
+				for (const m of msgs) {c = api.press(c, {pid: "process_a", m});}
+
 				for (const n of msgs.keys()) {
 					c = api.dated(c, n, {letter: `letter_${n}`, sentAt: "2026-11-09T00:00:00.000Z"});
 				}
+
 				const send = (n: number): void => {
 					const letter = api.outbox(c).find((p) => p.n === n)?.letter;
-					if (letter === undefined || seenLetters.has(letter)) return; // a resend: placed once already
+
+					if (letter === undefined || seenLetters.has(letter)) {return;} // a resend: placed once already
+
 					seenLetters.add(letter);
 					const m = msgs[n];
-					if (m === undefined) return;
+
+					if (m === undefined) {return;}
+
 					const [next] = applyCell(counterMachine, model, m as never);
 					const patch = diff({count: model.count}, {count: next.count});
 					model = next;
@@ -587,7 +624,9 @@ describe("the counter's typed views and resends agree with an independent fold",
 					rev++;
 					c = api.notice(c, "process_a", {type: "patch", base: rev - 1, rev, patch}, decode).client;
 				};
-				for (const n of [...msgs.keys(), ...resends.filter((r) => r < msgs.length)]) send(n);
+
+				for (const n of [...msgs.keys(), ...resends.filter((r) => r < msgs.length)]) {send(n);}
+
 				expect(c.views["process_a"]?.view).toEqual({count: fold(saved)});
 				expect(c.views["process_a"]?.view).toEqual({
 					count: fold(msgs.filter((_, n) => seenLetters.has(`letter_${n}`))),
@@ -635,6 +674,7 @@ const SECRET_FORMS = (s: string): ReadonlyArray<string> => [
 	Array.from(new TextEncoder().encode(s), (b) => b.toString(16).padStart(2, "0")).join(""),
 	JSON.stringify(s).slice(1, -1),
 ];
+
 const sentinel = fc.stringMatching(/^[A-Za-z0-9+/=_ -]{12,32}$/).map((s) => `KEY-${s}`);
 
 describe("[secrets] client records carry ids, numbers and fixed words only", () => {
@@ -668,7 +708,8 @@ describe("[secrets] client records carry ids, numbers and fixed words only", () 
 				const row = api.failureRecord(make(f));
 				Schema.decodeUnknownSync(api.ClientRecord as Schema.Decoder<unknown>)(row);
 				const text = JSON.stringify(row);
-				for (const form of SECRET_FORMS(f.secret)) expect(text).not.toContain(form);
+
+				for (const form of SECRET_FORMS(f.secret)) {expect(text).not.toContain(form);}
 			}),
 			{seed: SEED, numRuns: RUNS},
 		);

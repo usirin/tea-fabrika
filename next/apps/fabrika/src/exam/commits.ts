@@ -86,6 +86,7 @@ export const Answer = Schema.TaggedUnion({
 export type Answer = typeof Answer.Type;
 
 const done = Answer.cases.done.make({});
+
 const stuck = (why: Why, sha: string, more: {paths?: string[]; step?: Role} = {}) =>
 	Answer.cases.stuck.make({why, sha, ...more});
 
@@ -118,23 +119,44 @@ const KEY_LINE =
  * principals in `git`. Ed25519 only, no key twice and no other option. No file is refused.
  */
 export const keysProblem = (text: string | null): string | null => {
-	if (text === null) return "no allowed_signers on the base";
+	if (text === null) {
+		return "no allowed_signers on the base";
+	}
+
 	const roles = new Set<string>();
 	const keys = new Set<string>();
+
 	for (const line of text.replace(/\n$/, "").split("\n")) {
 		const m = KEY_LINE.exec(line);
-		if (m === null) return `refused line ${JSON.stringify(line)}`;
+
+		if (m === null) {
+			return `refused line ${JSON.stringify(line)}`;
+		}
+
 		const [, role = "", namespace = "", key = ""] = m;
 		const step = (ROLES as ReadonlyArray<string>).includes(role);
 		const person = /^person:[A-Za-z0-9._:-]+$/.test(role);
-		if (!step && !person) return `unknown role ${JSON.stringify(role)}`;
-		if (namespace !== (step ? NAMESPACE : "git"))
+
+		if (!step && !person) {
+			return `unknown role ${JSON.stringify(role)}`;
+		}
+
+		if (namespace !== (step ? NAMESPACE : "git")) {
 			return `wrong namespace for ${JSON.stringify(role)}`;
-		if (person && roles.has(role)) return `principal named twice: ${JSON.stringify(role)}`;
-		if (keys.has(key)) return `a key named twice, the second under ${role}`;
+		}
+
+		if (person && roles.has(role)) {
+			return `principal named twice: ${JSON.stringify(role)}`;
+		}
+
+		if (keys.has(key)) {
+			return `a key named twice, the second under ${role}`;
+		}
+
 		keys.add(key);
 		roles.add(role);
 	}
+
 	const missing = ROLES.filter((r) => !roles.has(r));
 	return missing.length === 0 ? null : `no key for ${missing.join(", ")}`;
 };
@@ -152,10 +174,22 @@ const globRegex = (glob: string) =>
 		`^${glob
 			.split(/(\*\*\/|\/\*\*$|\*\*|\*)/)
 			.map((part) => {
-				if (part === "**/") return "(?:.*/)?";
-				if (part === "/**") return "(?:/.*)?";
-				if (part === "**") return ".*";
-				if (part === "*") return "[^/]*";
+				if (part === "**/") {
+					return "(?:.*/)?";
+				}
+
+				if (part === "/**") {
+					return "(?:/.*)?";
+				}
+
+				if (part === "**") {
+					return ".*";
+				}
+
+				if (part === "*") {
+					return "[^/]*";
+				}
+
 				return part.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
 			})
 			.join("")}$`,
@@ -216,9 +250,14 @@ export const staleSteps = (
 	used: ReadonlyArray<Note>,
 ): ReadonlySet<Role> => {
 	const stale = new Set<Role>();
+
 	for (const role of ROLES) {
 		const mine = all.filter((s) => verified(s) && s.note.step === role && s.note.ticket === ticket);
-		if (mine.length === 0) continue;
+
+		if (mine.length === 0) {
+			continue;
+		}
+
 		const top = Math.max(...mine.map((s) => s.note.version));
 		const newest = new Set(
 			mine.filter((s) => s.note.version === top).map((s) => signedText(s.note)),
@@ -226,8 +265,12 @@ export const staleSteps = (
 		const chain = used.filter((n) => n.step === role).map(signedText);
 		const [only] = newest;
 		const at = only === undefined ? -1 : chain.indexOf(only);
-		if (newest.size !== 1 || at < 0 || at !== chain.length - 1) stale.add(role);
+
+		if (newest.size !== 1 || at < 0 || at !== chain.length - 1) {
+			stale.add(role);
+		}
 	}
+
 	return stale;
 };
 
@@ -243,22 +286,36 @@ export const check = (pr: PullRequest, isExam: (path: string) => boolean) => {
 	);
 	const stale = ticket === null ? new Set<Role>() : staleSteps(ticket, pr.notes, used);
 	const answers: Answer[] = [];
+
 	for (const c of pr.commits) {
 		const step = role(c);
 		const touched = step === "build" ? c.paths.filter(isExam).sort() : [];
-		if (step === null && !(c.signed === null && c.person === true))
+
+		if (step === null && !(c.signed === null && c.person === true)) {
 			answers.push(stuck("unsigned_commit", c.sha));
-		else if (touched.length > 0) answers.push(stuck("build_touched_exam", c.sha, {paths: touched}));
-		else if (step !== null && stale.has(step)) answers.push(stuck("stale_link", c.sha, {step}));
+		} else if (touched.length > 0) {
+			answers.push(stuck("build_touched_exam", c.sha, {paths: touched}));
+		} else if (step !== null && stale.has(step)) {
+			answers.push(stuck("stale_link", c.sha, {step}));
+		}
 	}
+
 	for (const step of stale) {
-		if (!pr.commits.some((c) => role(c) === step))
+		if (!pr.commits.some((c) => role(c) === step)) {
 			answers.push(stuck("stale_link", pr.head, {step}));
+		}
 	}
-	if (!pr.containsBase) answers.push(stuck("broken_chain", pr.head));
+
+	if (!pr.containsBase) {
+		answers.push(stuck("broken_chain", pr.head));
+	}
+
 	const exam = [...new Set(pr.changed.filter(isExam))].sort();
-	if (exam.length > 0)
+
+	if (exam.length > 0) {
 		answers.push(Answer.cases.ask.make({who: "owner", for: "exam_read", paths: exam}));
+	}
+
 	return {ticket, answers: answers.length === 0 ? [done] : answers};
 };
 
@@ -309,7 +366,11 @@ export const chain = (
 		first.from === trees.get(first.base) &&
 		links.every((l, i) => i === 0 || l.from === links[i - 1]?.to) &&
 		last.to === trees.get(squash);
-	if (!whole || first === undefined) return [stuck("broken_chain", squash)];
+
+	if (!whole || first === undefined) {
+		return [stuck("broken_chain", squash)];
+	}
+
 	const all = rows.flatMap(({link, signer}): Signed[] =>
 		link.step === "person" || signer === "person" ? [] : [{note: link, signer}],
 	);
@@ -358,14 +419,18 @@ const must = Effect.fnUntraced(function* (
 const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>, input?: string) {
 	return yield* must("git", args, input);
 });
+
 const gitMaybe = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
 	return yield* run("git", args).pipe(Effect.map((r) => (r.code === 0 ? r.out : null)));
 });
+
 const nul = (out: string) => out.split("\0").filter((p) => p !== "");
 const words = (out: string) => out.split("\n").filter((p) => p !== "");
+
 const treeAt = Effect.fnUntraced(function* (rev: string) {
 	return yield* gitMaybe(["rev-parse", "--verify", "-q", `${rev}^{tree}`]);
 });
+
 const fileAt = Effect.fnUntraced(function* (rev: string, path: string) {
 	return yield* gitMaybe(["show", `${rev}:${path}`]);
 });
@@ -389,7 +454,11 @@ const verifier = Effect.gen(function* () {
 			const found = yield* run("ssh-keygen", ["-Y", "find-principals", "-s", sig, "-f", allowed]);
 			const names = words(found.out);
 			const [who] = names;
-			if (found.code !== 0 || names.length !== 1 || who !== note.step) return null;
+
+			if (found.code !== 0 || names.length !== 1 || who !== note.step) {
+				return null;
+			}
+
 			const args = ["-Y", "verify", "-f", allowed, "-I", who, "-n", NAMESPACE, "-s", sig];
 			const ok = yield* run("ssh-keygen", args, signedText(note));
 			const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(ok.out)?.[1];
@@ -401,16 +470,24 @@ const verifier = Effect.gen(function* () {
 /** Git separates header lines only at LF and removes one space from continuation lines. */
 const headerField = (lines: ReadonlyArray<string>, name: string) => {
 	const values: string[] = [];
+
 	for (let i = 0; i < lines.length; i += 1) {
 		const line = lines[i] ?? "";
-		if (!line.startsWith(`${name} `)) continue;
+
+		if (!line.startsWith(`${name} `)) {
+			continue;
+		}
+
 		const value = [line.slice(name.length + 1)];
+
 		while (lines[i + 1]?.startsWith(" ")) {
 			i += 1;
 			value.push((lines[i] ?? "").slice(1));
 		}
+
 		values.push(value.join("\n"));
 	}
+
 	return values.length === 1 ? values[0] : undefined;
 };
 
@@ -421,10 +498,13 @@ const personVerifier = Effect.gen(function* () {
 	return Effect.fnUntraced(function* (keys: string) {
 		return yield* Effect.gen(function* () {
 			const people = words(keys).filter((line) => line.startsWith("person:"));
-			if (people.length === 0)
+
+			if (people.length === 0) {
 				return Effect.fnUntraced(function* (_sha: string, _link?: PersonLink) {
 					return yield* Effect.succeed(false);
 				});
+			}
+
 			const fs = yield* FileSystem.FileSystem;
 			const allowed = yield* fs.makeTempFileScoped();
 			yield* fs.writeFileString(allowed, `${people.join("\n")}\n`);
@@ -434,17 +514,23 @@ const personVerifier = Effect.gen(function* () {
 				const headers = ((raw ?? "").split("\n\n", 1)[0] ?? "").split("\n");
 				const signature = headerField(headers, name);
 				const tree = headerField(headers, "tree");
+
 				if (
 					signature === undefined ||
 					tree === undefined ||
 					signature.split("\n", 1)[0] !== "-----BEGIN SSH SIGNATURE-----"
-				)
+				) {
 					return false;
+				}
+
 				if (link !== undefined) {
 					const parent = yield* treeAt(`${sha}^1`);
-					if (link.sig !== `${signature}\n` || link.to !== tree || link.from !== parent?.trim())
+
+					if (link.sig !== `${signature}\n` || link.to !== tree || link.from !== parent?.trim()) {
 						return false;
+					}
 				}
+
 				const result = yield* run("git", [
 					"-c",
 					"gpg.format=ssh",
@@ -465,26 +551,34 @@ const personVerifier = Effect.gen(function* () {
 /** Every note on one notes ref, decoded; one that does not decode is left out. */
 const notesOn = Effect.fnUntraced(function* (ref: string) {
 	const found: Array<{commit: string; note: Note}> = [];
+
 	for (const line of words(yield* git(["notes", `--ref=${ref}`, "list"]))) {
 		const [blob = "", commit = ""] = line.split(" ");
 		const note = decodeNote((yield* git(["cat-file", "blob", blob])).trim());
-		if (Option.isSome(note)) found.push({commit, note: note.value});
+
+		if (Option.isSome(note)) {
+			found.push({commit, note: note.value});
+		}
 	}
+
 	return found;
 });
 
 const HEX = /^[0-9a-f]{40}$/;
+
 const flag = (name: string) => {
 	const args = process.argv.slice(3);
 	const at = args.indexOf(name);
 	return at < 0 ? undefined : args[at + 1];
 };
+
 const need = Effect.fnUntraced(function* (name: string) {
 	const value = flag(name);
 	return yield* value === undefined || value.startsWith("-")
 		? Effect.fail(new Failed({what: `${name} is required`}))
 		: Effect.succeed(value);
 });
+
 const resolve = Effect.fnUntraced(function* (rev: string) {
 	return yield* git(["rev-parse", "--verify", "-q", `${rev}^{commit}`]).pipe(
 		Effect.map((s) => s.trim()),
@@ -501,32 +595,47 @@ const endpoints = Effect.gen(function* () {
 	const base = yield* need("--base");
 	const head = yield* need("--head");
 	const main = flag("--main");
+
 	if (process.argv.includes("--fetch")) {
 		const pr = flag("--pr");
 		const shas = [base, head, main ?? ""];
-		if (!shas.every((sha) => HEX.test(sha)) || (pr !== undefined && !/^[0-9]+$/.test(pr)))
+
+		if (!shas.every((sha) => HEX.test(sha)) || (pr !== undefined && !/^[0-9]+$/.test(pr))) {
 			return yield* new Failed({what: "--fetch takes 40-hex shas, --main included, and a number"});
+		}
+
 		yield* git(["fetch", "--no-tags", "-q", "origin", base, head]);
 		const remote = yield* run("git", ["ls-remote", "--exit-code", "origin", "refs/notes/fabrika"]);
-		if (remote.code === 0)
+
+		if (remote.code === 0) {
 			yield* git(["fetch", "--no-tags", "-q", "origin", "+refs/notes/fabrika:refs/notes/fabrika"]);
+		}
 	}
+
 	return {head: yield* resolve(head), main: yield* resolve(main ?? base)};
 });
 
 /** Text inside a workflow command, escaped as GitHub's own toolkit does, so it cannot start another. */
 export const annotate = (s: string) =>
 	s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+
 /** A path in a printed line: JSON-quoted, and safe inside markdown code and a table. */
 const quote = (path: string) =>
 	JSON.stringify(path)
 		.replaceAll("`", "\\u0060")
 		.replaceAll("<", "\\u003c")
 		.replaceAll("|", "\\u007c");
+
 /** One answer as a line, its paths shown by `show`. */
 export const plain = (a: Answer, show: (path: string) => string = quote) => {
-	if (a._tag === "done") return "done";
-	if (a._tag === "ask") return `ask owner exam_read ${a.paths.map(show).join(" ")}`;
+	if (a._tag === "done") {
+		return "done";
+	}
+
+	if (a._tag === "ask") {
+		return `ask owner exam_read ${a.paths.map(show).join(" ")}`;
+	}
+
 	const paths = a.paths === undefined ? "" : ` ${a.paths.map(show).join(" ")}`;
 	return `stuck ${a.why} ${a.sha}${a.step === undefined ? "" : ` step ${a.step}`}${paths}`;
 };
@@ -544,12 +653,15 @@ const report = Effect.fnUntraced(function* (
 		yield* Console.log(JSON.stringify(a));
 		yield* Console.error(`${title}: ${plain(a)}`);
 	}
+
 	const summary = yield* Config.String("GITHUB_STEP_SUMMARY").pipe(Config.option);
+
 	if (Option.isSome(summary)) {
 		for (const a of answers) {
 			const level = a._tag === "stuck" ? "error" : a._tag === "ask" ? "warning" : "notice";
 			yield* Console.log(`::${level} title=${title}::${annotate(plain(a, (p) => p))}`);
 		}
+
 		const rows = answers.map((a) => `| \`${a._tag}\` | \`${plain(a)}\` |`);
 		const body = [`### ${title}${extra}`, "", "| answer | detail |", "|---|---|", ...rows, ""];
 		const fs = yield* FileSystem.FileSystem;
@@ -557,6 +669,7 @@ const report = Effect.fnUntraced(function* (
 			.writeFileString(summary.value, `${body.join("\n")}\n`, {flag: "a"})
 			.pipe(Effect.mapError(() => new Failed({what: "could not write the step summary"})));
 	}
+
 	return answers.some((a) => a._tag === "stuck") ? 1 : 0;
 });
 
@@ -574,12 +687,14 @@ const changedPaths = Effect.fnUntraced(function* (from: string, sha: string) {
 		Effect.map((out) => {
 			const parts = nul(out);
 			const paths: string[] = [];
+
 			for (let i = 0; i < parts.length;) {
 				const status = parts[i] ?? "";
 				const two = status.startsWith("R") || status.startsWith("C");
 				paths.push(...parts.slice(i + 1, i + (two ? 3 : 2)));
 				i += two ? 3 : 2;
 			}
+
 			return paths;
 		}),
 	);
@@ -589,20 +704,29 @@ const checkMain = Effect.gen(function* () {
 	const {head, main} = yield* endpoints;
 	const trust = flag("--keys-from") === "head" ? head : main;
 	const exam = decodeExam((yield* fileAt(trust, "exam-paths.json")) ?? "");
-	if (Option.isNone(exam)) return yield* new Failed({what: "no readable exam-paths.json"});
+
+	if (Option.isNone(exam)) {
+		return yield* new Failed({what: "no readable exam-paths.json"});
+	}
+
 	const isExam = examMatcher(exam.value);
 	const changed = nul(
 		yield* git(["diff", "--name-only", "-z", "--no-renames", `${main}...${head}`]),
 	);
+
 	if (!inScope(changed, isExam)) {
 		yield* Console.log(JSON.stringify(done));
 		yield* Console.error("commits: not in scope: touches no next/** and no exam path");
 		return 0;
 	}
+
 	const keys = yield* fileAt(trust, "allowed_signers");
 	const problem = keysProblem(keys);
-	if (problem !== null || keys === null)
+
+	if (problem !== null || keys === null) {
 		return yield* new Failed({what: `allowed_signers: ${problem}`});
+	}
+
 	const verify = yield* verifier;
 	const people = yield* personVerifier;
 	const verifyPerson = yield* people(keys);
@@ -612,6 +736,7 @@ const checkMain = Effect.gen(function* () {
 	const notes = yield* notesOn("fabrika");
 	const byCommit = new Map(notes.map((n) => [n.commit, n.note]));
 	const commits: Commit[] = [];
+
 	for (const sha of words(
 		yield* git(["rev-list", "--topo-order", "--reverse", `${main}..${head}`]),
 	)) {
@@ -626,16 +751,22 @@ const checkMain = Effect.gen(function* () {
 			person: note === undefined && (yield* verifyPerson(sha)) ? true : undefined,
 		});
 	}
+
 	// p89 reads every note on the ref, but only one naming a ticket of this pull request can matter.
 	const tickets = new Set(
 		commits.flatMap((c) => (c.signed === null ? [] : [c.signed.note.ticket])),
 	);
 	const all: Signed[] = [];
+
 	for (const n of notes) {
-		if (!tickets.has(n.note.ticket)) continue;
+		if (!tickets.has(n.note.ticket)) {
+			continue;
+		}
+
 		const mine = commits.find((c) => c.sha === n.commit)?.signed;
 		all.push(mine ?? (yield* signedBy(n.note)));
 	}
+
 	const containsBase = (yield* run("git", ["merge-base", "--is-ancestor", main, head])).code === 0;
 	const result = check({head, containsBase, changed, commits, notes: all}, isExam);
 	const extra = result.ticket === null ? "" : `, ticket ${result.ticket}`;
@@ -650,26 +781,44 @@ const checkMain = Effect.gen(function* () {
 const loggedAt = Effect.fnUntraced(function* (rev: string) {
 	const lines = ((yield* fileAt(rev, "field/runs.jsonl")) ?? "").split("\n");
 	const found: Array<{line: string; link: ChainLink}> = [];
+
 	for (const [i, line] of lines.entries()) {
-		if (line.trim() === "") continue;
+		if (line.trim() === "") {
+			continue;
+		}
+
 		const row: unknown = yield* Effect.try({
 			try: () => JSON.parse(line),
 			catch: () => new Failed({what: `field/runs.jsonl line ${i + 1} is not JSON`}),
 		});
-		if (row === null || typeof row !== "object") continue;
+
+		if (row === null || typeof row !== "object") {
+			continue;
+		}
+
 		const links = (row as {attested?: unknown}).attested;
-		if (links === undefined) continue;
-		if (!Array.isArray(links))
+
+		if (links === undefined) {
+			continue;
+		}
+
+		if (!Array.isArray(links)) {
 			return yield* new Failed({what: `field/runs.jsonl line ${i + 1}: attested is not a list`});
+		}
+
 		for (const raw of links) {
 			const link = decodeLink(raw);
-			if (Option.isNone(link))
+
+			if (Option.isNone(link)) {
 				return yield* new Failed({
 					what: `field/runs.jsonl line ${i + 1}: a link that does not read`,
 				});
+			}
+
 			found.push({line, link: link.value});
 		}
 	}
+
 	return found;
 });
 
@@ -685,8 +834,10 @@ const chainMain = Effect.gen(function* () {
 	let main = "HEAD";
 	let squashes: string[];
 	const one = flag("--squash");
-	if (one !== undefined) squashes = [yield* resolve(one)];
-	else if (advice) {
+
+	if (one !== undefined) {
+		squashes = [yield* resolve(one)];
+	} else if (advice) {
 		const added = words(
 			yield* git([
 				"log",
@@ -705,9 +856,13 @@ const chainMain = Effect.gen(function* () {
 			added === undefined
 				? []
 				: words(yield* git(["rev-list", "--first-parent", `${added}..HEAD`]));
+
 		for (const sha of since) {
 			const paths = yield* changedPaths(`${sha}^1`, sha);
-			if (inScope(paths, isExam)) squashes.push(sha);
+
+			if (inScope(paths, isExam)) {
+				squashes.push(sha);
+			}
 		}
 	} else {
 		const ends = yield* endpoints;
@@ -721,9 +876,11 @@ const chainMain = Effect.gen(function* () {
 			),
 		];
 	}
+
 	const verify = yield* verifier;
 	const rows: Logged<ChainLink>[] = [];
 	const people = yield* personVerifier;
+
 	// A row's keys commit counts only when it was on main before its squash. Anyone who can push can
 	// make a commit whose allowed_signers holds their own key, on a branch or in a log pull request.
 	for (const {link} of yield* loggedAt(rev)) {
@@ -731,35 +888,56 @@ const chainMain = Effect.gen(function* () {
 			? yield* fileAt(link.keys, "allowed_signers")
 			: null;
 		let signer: Logged<ChainLink>["signer"] = null;
+
 		if (keys !== null && keysProblem(keys) === null) {
 			if (link.step === "person") {
 				// A squash does not keep the original commit in main's history.
-				if ((yield* gitMaybe(["cat-file", "-e", `${link.commit}^{commit}`])) === null)
+				if ((yield* gitMaybe(["cat-file", "-e", `${link.commit}^{commit}`])) === null) {
 					yield* run("git", ["fetch", "--no-tags", "-q", "origin", link.commit]);
+				}
+
 				const verifyPerson = yield* people(keys);
 				signer = (yield* verifyPerson(link.commit, link)) ? "person" : null;
-			} else signer = yield* verify(keys, link);
+			} else {
+				signer = yield* verify(keys, link);
+			}
 		}
+
 		rows.push({link, signer});
 	}
+
 	const answers: Answer[] = [];
+
 	for (const squash of squashes) {
 		const trees = new Map<string, string>();
+
 		for (const sha of [
 			squash,
 			...rows.filter((r) => r.link.squash === squash).map((r) => r.link.base),
 		]) {
 			const tree = yield* treeAt(sha);
-			if (tree !== null) trees.set(sha, tree.trim());
+
+			if (tree !== null) {
+				trees.set(sha, tree.trim());
+			}
 		}
+
 		const before = new Set<string>();
+
 		for (const r of rows.filter((r) => r.link.squash === squash)) {
-			if (yield* ancestor(r.link.base, `${squash}^1`)) before.add(r.link.base);
+			if (yield* ancestor(r.link.base, `${squash}^1`)) {
+				before.add(r.link.base);
+			}
 		}
+
 		const onMain = yield* ancestor(squash, main);
 		answers.push(...chain(squash, rows, trees, {onMain, before}));
 	}
-	if (squashes.length === 0) yield* Console.error("chain: no squash to walk");
+
+	if (squashes.length === 0) {
+		yield* Console.error("chain: no squash to walk");
+	}
+
 	const code = yield* report("chain", answers, "");
 	return advice ? 0 : code;
 });
@@ -768,22 +946,35 @@ const signMain = Effect.gen(function* () {
 	const step = Schema.decodeUnknownOption(Role)(flag("--step"));
 	const ticket = Schema.decodeUnknownOption(Ticket)(flag("--ticket"));
 	const key = yield* need("--key");
-	if (Option.isNone(step) || Option.isNone(ticket))
+
+	if (Option.isNone(step) || Option.isNone(ticket)) {
 		return yield* new Failed({what: "--step is tests, build or lead, and --ticket a number"});
+	}
+
 	const head = yield* resolve("HEAD");
 	const from = yield* treeAt("HEAD^1");
 	const to = yield* treeAt("HEAD");
 	const keys = yield* fileAt("HEAD", "allowed_signers");
-	if (from === null || to === null || keys === null)
+
+	if (from === null || to === null || keys === null) {
 		return yield* new Failed({what: "HEAD needs a parent and an allowed_signers"});
+	}
+
 	const verify = yield* verifier;
 	let top = 0;
+
 	for (const ref of ["fabrika", "fabrika-origin"]) {
 		for (const {note} of yield* notesOn(ref)) {
-			if (note.step !== step.value || note.ticket !== ticket.value || note.version <= top) continue;
-			if ((yield* verify(keys, note)) === step.value) top = note.version;
+			if (note.step !== step.value || note.ticket !== ticket.value || note.version <= top) {
+				continue;
+			}
+
+			if ((yield* verify(keys, note)) === step.value) {
+				top = note.version;
+			}
 		}
 	}
+
 	const link = {
 		step: step.value,
 		ticket: ticket.value,
@@ -798,10 +989,13 @@ const signMain = Effect.gen(function* () {
 	);
 	const print = yield* must("ssh-keygen", ["-l", "-f", `${key}.pub`]);
 	const note = Note.make({...link, key: print.split(" ")[1] ?? "", sig});
-	if ((yield* verify(keys, note)) !== step.value)
+
+	if ((yield* verify(keys, note)) !== step.value) {
 		return yield* new Failed({
 			what: `the key does not verify as ${step.value} in HEAD's allowed_signers`,
 		});
+	}
+
 	yield* git(["notes", "--ref=fabrika", "add", "-F", "-", head], JSON.stringify(note));
 	yield* Console.log(JSON.stringify({...note, commit: head}));
 	return 0;
@@ -810,7 +1004,11 @@ const signMain = Effect.gen(function* () {
 const pushMain = Effect.gen(function* () {
 	const merge = Effect.gen(function* () {
 		const remote = yield* run("git", ["ls-remote", "--exit-code", "origin", "refs/notes/fabrika"]);
-		if (remote.code !== 0) return;
+
+		if (remote.code !== 0) {
+			return;
+		}
+
 		yield* git([
 			"fetch",
 			"--no-tags",
@@ -822,20 +1020,35 @@ const pushMain = Effect.gen(function* () {
 	});
 	yield* merge;
 	const pushed = yield* run("git", ["push", "-q", "origin", "refs/notes/fabrika"]);
+
 	if (pushed.code !== 0) {
 		yield* merge;
 		yield* git(["push", "-q", "origin", "refs/notes/fabrika"]);
 	}
+
 	yield* git(["push", "-q", "origin", "HEAD"]);
 	return 0;
 });
 
 const main = Effect.gen(function* () {
 	const command = process.argv[2];
-	if (command === "check") return yield* checkMain;
-	if (command === "chain") return yield* chainMain;
-	if (command === "sign") return yield* signMain;
-	if (command === "push") return yield* pushMain;
+
+	if (command === "check") {
+		return yield* checkMain;
+	}
+
+	if (command === "chain") {
+		return yield* chainMain;
+	}
+
+	if (command === "sign") {
+		return yield* signMain;
+	}
+
+	if (command === "push") {
+		return yield* pushMain;
+	}
+
 	return yield* new Failed({what: "commands: check, chain, sign, push"});
 });
 

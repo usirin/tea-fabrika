@@ -32,6 +32,7 @@ const step = <M extends AnyMsg>(s: State, msg: M) =>
 	applyCell<State, AnyMsg, Cmd>(poem.machine, s, msg);
 
 const brief: Brief = {topic: "tea"};
+
 const start: RefineMsg<Brief> = {
 	type: "start",
 	brief,
@@ -39,19 +40,29 @@ const start: RefineMsg<Brief> = {
 	note: "Rhyme, please.",
 	limit: 2,
 };
+
 const long: Draft = {lines: ["the kettle sings a long and winding song"]};
 const short: Draft = {lines: ["the kettle sings"]};
 
 /** The writer's answer to the Cmd it was sent. */
 const wrote = (cmds: readonly Cmd[], draft: Draft, session = "poet-1") => {
 	const cmd = cmds[0];
-	if (cmd?.type !== "poem_write") throw new Error(`expected a write, got ${cmd?.type}`);
+
+	if (cmd?.type !== "poem_write") {
+		throw new Error(`expected a write, got ${cmd?.type}`);
+	}
+
 	return poem.write.ok(cmd, {draft, session}, 1);
 };
+
 /** The checker's answer to the Cmd it was sent. */
 const checked = (cmds: readonly Cmd[], words: number[]) => {
 	const cmd = cmds[0];
-	if (cmd?.type !== "poem_check") throw new Error(`expected a check, got ${cmd?.type}`);
+
+	if (cmd?.type !== "poem_check") {
+		throw new Error(`expected a check, got ${cmd?.type}`);
+	}
+
 	return poem.check.ok(cmd, {words}, 2);
 };
 
@@ -59,10 +70,12 @@ const checked = (cmds: readonly Cmd[], words: number[]) => {
 function walk(answers: readonly ((cmds: readonly Cmd[]) => AnyMsg)[]) {
 	let [state, cmds] = step({phase: "idle"}, start);
 	const sent: Cmd[] = [...cmds];
+
 	for (const answer of answers) {
 		[state, cmds] = step(state, answer(cmds));
 		sent.push(...cmds);
 	}
+
 	return {state, cmds, sent};
 }
 
@@ -187,7 +200,11 @@ describe("draft and vet", () => {
 	it("stops when the writer or the checker fails, and a retry asks again with the same input", () => {
 		const [writing, first] = step({phase: "idle"}, start);
 		const writeCmd = first[0];
-		if (writeCmd?.type !== "poem_write") throw new Error("expected a write");
+
+		if (writeCmd?.type !== "poem_write") {
+			throw new Error("expected a write");
+		}
+
 		const [failed] = step(writing, poem.write.err(writeCmd, {_tag: "agent_failed"}, 1));
 
 		expect(failed).toMatchObject({phase: "write_failed", note: "Rhyme, please.", tries: 1});
@@ -195,7 +212,11 @@ describe("draft and vet", () => {
 
 		const [checking, second] = step(writing, wrote(first, short));
 		const checkCmd = second[0];
-		if (checkCmd?.type !== "poem_check") throw new Error("expected a check");
+
+		if (checkCmd?.type !== "poem_check") {
+			throw new Error("expected a check");
+		}
+
 		const [unchecked] = step(checking, poem.check.err(checkCmd, {_tag: "could_not_run"}, 2));
 
 		expect(unchecked).toMatchObject({phase: "check_failed", draft: short});
@@ -231,7 +252,11 @@ describe("draft and vet", () => {
 			applyCell<StrictState, AnyMsg, StrictCmd>(strict.machine, s, msg);
 		const write = (s: StrictState, cmds: readonly StrictCmd[], draft: Draft) => {
 			const cmd = cmds[0];
-			if (cmd?.type !== "strict_write") throw new Error(`expected a write, got ${cmd?.type}`);
+
+			if (cmd?.type !== "strict_write") {
+				throw new Error(`expected a write, got ${cmd?.type}`);
+			}
+
 			return go(s, strict.write.ok(cmd, {draft, session: "poet-1"}, 1));
 		};
 
@@ -256,7 +281,11 @@ describe("draft and vet", () => {
 			const [writing, first] = go({phase: "idle"}, start);
 			const [checking, second] = write(writing, first, long);
 			const checkCmd = second[0];
-			if (checkCmd?.type !== "strict_check") throw new Error("expected a check");
+
+			if (checkCmd?.type !== "strict_check") {
+				throw new Error("expected a check");
+			}
+
 			const [stopped, none] = go(checking, strict.check.ok(checkCmd, {words: []}, 2));
 
 			expect(stopped).toMatchObject({phase: "stopped", reason: {kind: "unread"}, draft: long});

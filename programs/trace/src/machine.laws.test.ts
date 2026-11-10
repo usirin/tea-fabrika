@@ -43,15 +43,21 @@ interface Flat {
 	readonly open: readonly string[];
 	readonly chosen: string | null;
 }
+
 const flat = (s: Model): Flat => {
-	if (s.shows.kind !== "job") throw new Error("a ticket view, from the job view's Msgs alone");
+	if (s.shows.kind !== "job") {
+		throw new Error("a ticket view, from the job view's Msgs alone");
+	}
+
 	return {read: s.shows.read, open: s.open, chosen: s.chosen};
 };
+
 const unflat = (f: Flat): Model => ({
 	shows: {kind: "job", read: f.read},
 	open: f.open,
 	chosen: f.chosen,
 });
+
 /** One step, as the laws read it. `same`: the step gave back the very state it was given. */
 interface FlatStep {
 	readonly prev: Flat;
@@ -63,13 +69,16 @@ interface FlatStep {
 
 const OTHER = "f".repeat(32);
 const id = fc.constantFrom(TALLY_ID, OTHER);
+
 /** Every row of the tally record, and two it does not hold. */
 const row = fc.constantFrom(
 	...nodesOf(treeOf(TALLY_TRACE)).map((n) => n.key),
 	"span:ffffffffffffffff",
 	"",
 );
+
 const runningJob = TALLY_TRACE.job === null ? null : {...TALLY_TRACE.job, ended: null};
+
 /**
  * The whole record, the record before tally's machine ran, or the job just begun with nothing
  * under it: a read can hold fewer rows, or none. Two say the job has not ended, so a job can run,
@@ -92,6 +101,7 @@ const table: MsgArbitraryTable<JobMsg> = {
 	choose: arbRecordMsg("choose", {row: fc.option(row, {nil: null})}),
 	tick: arbRecordMsg("tick", {now: fc.nat()}),
 };
+
 const lists = fc.array(arbMsg(table), {maxLength: 30, size: "max"});
 const OPTS = {numRuns: 300, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
@@ -131,17 +141,24 @@ const every = (name: string, law: (step: FlatStep, machine: Machine) => boolean)
  */
 const depsOf = (machine: Machine, type: string, state: Flat): readonly unknown[] =>
 	(machine.subs ?? []).flatMap((sub): unknown[] => {
-		if (sub.type !== type) return [];
+		if (sub.type !== type) {
+			return [];
+		}
+
 		const deps: unknown = sub.deps(unflat(state));
 		return deps === null || deps === undefined ? [] : [deps];
 	});
+
 /** The Sub types a machine may name: these two, and the ticket view's `facts` (ticket 141). */
 const SUB_TYPES: ReadonlySet<string> = new Set(["follow", "tick", "facts"]);
 
 const openAreGroups = every(
 	"only a row that groups others is ever open, and only in a record that was read",
 	({next}) => {
-		if (next.read.at !== "read") return next.open.length === 0;
+		if (next.read.at !== "read") {
+			return next.open.length === 0;
+		}
+
 		const groups = groupsOf(treeOf(next.read.trace));
 		return next.open.every((k) => groups.has(k)) && new Set(next.open).size === next.open.length;
 	},
@@ -181,9 +198,18 @@ const ticksWhileItRuns = every(
 const holdsTimeWhileItRuns = every(
 	"it holds the time only while the job runs, and a tick moves it to the later time, never back",
 	({prev, msg, next}) => {
-		if (next.read.at !== "read") return true;
-		if (!isRunning(next.read.trace)) return next.read.now === null;
-		if (msg.type !== "tick") return true;
+		if (next.read.at !== "read") {
+			return true;
+		}
+
+		if (!isRunning(next.read.trace)) {
+			return next.read.now === null;
+		}
+
+		if (msg.type !== "tick") {
+			return true;
+		}
+
 		const before = prev.read.at === "read" ? prev.read.now : null;
 		return next.read.now === Math.max(before ?? msg.now, msg.now);
 	},
@@ -198,8 +224,10 @@ const lookAgainIsNothing = every(
 const againKeepsRows = every(
 	"a newer read of the record shown keeps the rows open and the detail chosen, where they still are",
 	({prev, msg, next}) => {
-		if (msg.type !== "got" || prev.read.at !== "read" || idOf(prev.read) !== msg.trace.trace)
+		if (msg.type !== "got" || prev.read.at !== "read" || idOf(prev.read) !== msg.trace.trace) {
 			return true;
+		}
+
 		const tree = treeOf(msg.trace);
 		const groups = groupsOf(tree);
 		// A record with nothing under its job had no row to keep: the next opens as a first read.
@@ -221,7 +249,11 @@ const newestWins: Law = {
 			(steps, last) => {
 				const looked = steps.findLast((s) => s.msg.type === "look")?.msg;
 				const held = idOf(flat(last).read);
-				if (looked?.type !== "look") return held === null;
+
+				if (looked?.type !== "look") {
+					return held === null;
+				}
+
 				return held === looked.id;
 			},
 			OPTS,
@@ -237,7 +269,11 @@ const twiceIsNothing: Law = {
 			fc.tuple(lists, row).map(([msgs, r]): Msg[] => [...msgs, {type: "toggle", row: r}]),
 			(steps, last) => {
 				const step = steps.at(-1);
-				if (step?.msg.type !== "toggle") return true;
+
+				if (step?.msg.type !== "toggle") {
+					return true;
+				}
+
 				const [again] = applyCell<Model, Msg, never>(machine, last, step.msg);
 				const was = new Set(step.prev.open);
 				return again.open.length === was.size && again.open.every((k) => was.has(k));
@@ -271,11 +307,13 @@ const broken = (machine: Machine): readonly string[] =>
 
 // Planted mistakes: the real machine with one cell, or its Sub, changed.
 const real = trace.update;
+
 /** A cell as these plants were written: on the flat view. */
 type Cell<T extends JobMsg["type"]> = (
 	s: Flat,
 	m: Extract<JobMsg, {readonly type: T}>,
 ) => readonly [Flat, readonly never[]];
+
 /** A flat cell as the machine's own: the very state back when the cell gave its own back. */
 const lift =
 	<T extends JobMsg["type"]>(cell: Cell<T>) =>
@@ -284,12 +322,14 @@ const lift =
 		const [n, cmds] = cell(f, m);
 		return [n === f ? s : unflat(n), cmds];
 	};
+
 /** The real `got`, on the flat view. */
 const realGot: Cell<"got"> = (s, m) => {
 	const u = unflat(s);
 	const [n, cmds] = real.got(u, m);
 	return [n === u ? s : flat(n), cmds];
 };
+
 const plant = (cells: {readonly [T in JobMsg["type"]]?: Cell<T>}): Machine => ({
 	...trace,
 	update: {
@@ -356,7 +396,11 @@ const PLANTS = {
 	staysClosed: plant({
 		got: (s, m) => {
 			const [next, cmds] = realGot(s, m);
-			if (s.read.at !== "read" || idOf(s.read) !== m.trace.trace) return [next, cmds];
+
+			if (s.read.at !== "read" || idOf(s.read) !== m.trace.trace) {
+				return [next, cmds];
+			}
+
 			const groups = groupsOf(treeOf(m.trace));
 			return [{...next, open: s.open.filter((k) => groups.has(k))}, cmds];
 		},

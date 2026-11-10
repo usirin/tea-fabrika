@@ -26,6 +26,7 @@ type Tree =
 			readonly a: Tree;
 			readonly b: Tree;
 	  };
+
 type Rect = {
 	readonly id: string;
 	readonly x: number;
@@ -33,6 +34,7 @@ type Rect = {
 	readonly w: number;
 	readonly h: number;
 };
+
 interface LayoutApi {
 	readonly Layout: Schema.Codec<Tree, unknown>;
 	readonly MINIMUM: {readonly width: number; readonly height: number};
@@ -44,6 +46,7 @@ interface LayoutApi {
 		focused: string | null,
 	) => {readonly shown: ReadonlyArray<Rect>; readonly folded: ReadonlyArray<string>};
 }
+
 const api = async (): Promise<LayoutApi> => (await import(LOAD)) as LayoutApi;
 
 /** A checked percentage tree: the shape from generated depth and splits, ids numbered so each is unique. */
@@ -59,24 +62,32 @@ const shapes: fc.Arbitrary<unknown> = fc.letrec<{node: unknown}>((tie) => ({
 		}),
 	),
 })).node;
+
 const number = (shape: unknown, next: {n: number} = {n: 0}): Tree => {
 	if (shape === "tile") {
 		const n = next.n++;
 		return {_tag: "tile", id: `tile_${n}`, pid: `process_${n % 2}`};
 	}
+
 	const s = shape as {dir: "row" | "col"; at: number; a: unknown; b: unknown};
 	return {_tag: "split", dir: s.dir, at: s.at, a: number(s.a, next), b: number(s.b, next)};
 };
+
 const trees: fc.Arbitrary<Tree> = shapes.map((s) => number(s));
 const sizes = fc.record({w: fc.integer({min: 1, max: 2400}), h: fc.integer({min: 1, max: 1600})});
+
 const deepFreeze = <T>(value: T): T => {
 	if (typeof value === "object" && value !== null) {
-		for (const v of Object.values(value)) deepFreeze(v);
+		for (const v of Object.values(value)) {deepFreeze(v);}
+
 		Object.freeze(value);
 	}
+
 	return value;
 };
+
 const area = (rs: ReadonlyArray<Rect>): number => rs.reduce((n, r) => n + r.w * r.h, 0);
+
 const overlap = (p: Rect, q: Rect): boolean =>
 	p.x < q.x + q.w - 1e-6 &&
 	q.x < p.x + p.w - 1e-6 &&
@@ -89,6 +100,7 @@ type Check = (
 	size: {w: number; h: number},
 	focused: string | null,
 ) => void;
+
 const checks: Readonly<Record<string, Check>> = {
 	"every tile is shown or folded exactly once, and shown ones fit": (a, tree, size, focused) => {
 		const out = a.fold(structuredClone(tree), size, focused);
@@ -97,6 +109,7 @@ const checks: Readonly<Record<string, Check>> = {
 			.map((t) => t.id)
 			.sort();
 		expect([...out.shown.map((r) => r.id), ...out.folded].sort()).toEqual(all);
+
 		for (const r of out.shown) {
 			expect(r.w).toBeGreaterThanOrEqual(a.MINIMUM.width - 1e-6);
 			expect(r.h).toBeGreaterThanOrEqual(a.MINIMUM.height - 1e-6);
@@ -105,8 +118,9 @@ const checks: Readonly<Record<string, Check>> = {
 			expect(r.x + r.w).toBeLessThanOrEqual(size.w + 1e-6);
 			expect(r.y + r.h).toBeLessThanOrEqual(size.h + 1e-6);
 		}
+
 		for (const [i, p] of out.shown.entries())
-			for (const q of out.shown.slice(i + 1)) expect(overlap(p, q)).toBe(false);
+			{for (const q of out.shown.slice(i + 1)) expect(overlap(p, q)).toBe(false);}
 	},
 	"the input tree is never changed": (a, tree, size, focused) => {
 		const frozen = deepFreeze(structuredClone(tree));
@@ -203,14 +217,19 @@ describe("layout: the fixed layout folds locally", () => {
 			fc.property(trees, sizes, (tree, size) => {
 				const n = a.tilesIn(tree).length;
 				const out = a.fold(tree, size, null);
-				if (n === 1) seen.lone++;
-				if (n >= 3) seen.many++;
-				if (out.folded.length > 0) seen.folds++;
-				if (n > 1 && out.folded.length === 0) seen.fits++;
+
+				if (n === 1) {seen.lone++;}
+
+				if (n >= 3) {seen.many++;}
+
+				if (out.folded.length > 0) {seen.folds++;}
+
+				if (n > 1 && out.folded.length === 0) {seen.fits++;}
 			}),
 			opts,
 		);
-		for (const [name, count] of Object.entries(seen)) expect(count, name).toBeGreaterThan(0);
+
+		for (const [name, count] of Object.entries(seen)) {expect(count, name).toBeGreaterThan(0);}
 	});
 
 	// Plants (layout): change the shared tree; lose a folded tile; give another tab this tab's size.
@@ -236,7 +255,8 @@ describe("layout: the fixed layout folds locally", () => {
 		const broken: LayoutApi = {
 			...real,
 			fold: (t, s, f) => {
-				if (t._tag === "split") (t as {a: Tree}).a = t.b;
+				if (t._tag === "split") {(t as {a: Tree}).a = t.b;}
+
 				return real.fold(t, s, f);
 			},
 		};

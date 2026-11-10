@@ -16,7 +16,7 @@ for 3 features", at 3.5 times the cost. And a false "two claims" catch left
 504 stuck after 3 drafts, where part 1 passed. $4.26 for the planners, 46 to
 146 seconds a plan. Confidence 65%.**
 
-The plans, as views, are in [`86-plans/`](./86-plans/). They now start with
+The plans, as views, are in [`86-plans/`](https://github.com/usirin/tea-fabrika/tree/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/86-plans/). They now start with
 the stories and show which stories each criterion serves.
 
 ## What changed and why

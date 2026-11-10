@@ -81,7 +81,11 @@ export const connectionOf = (home: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const file = yield* fileOf(home);
-		if (!(yield* fs.exists(file))) return Option.none<Connection>();
+
+		if (!(yield* fs.exists(file))) {
+			return Option.none<Connection>();
+		}
+
 		const text = yield* fs.readFileString(file);
 		return Option.some(
 			yield* decodeConnection(text).pipe(
@@ -186,6 +190,7 @@ export const hostLedger = (
 	Layer.unwrap(
 		Effect.gen(function* () {
 			const c = yield* connectionOf(home);
+
 			if (Option.isNone(c)) {
 				const path = yield* Path.Path;
 				return Layer.merge(
@@ -193,6 +198,7 @@ export const hostLedger = (
 					Layer.succeed(Author, OWNER),
 				);
 			}
+
 			const first = yield* loginWith(c.value).pipe(
 				Effect.catchTag("KeyUnreadable", (e) =>
 					Effect.fail(new ConnectFailed({why: `the key ${e.path}: ${e.why}`})),

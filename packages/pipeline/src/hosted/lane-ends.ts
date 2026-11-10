@@ -73,7 +73,11 @@ const decodeEnd = Schema.decodeUnknownExit(ChildEnd);
 const plan = (() => {
 	const first = plans86b().find((p) => p.plan !== null);
 	const data = first?.plan == null ? null : revisionOfDraft(first.plan);
-	if (first === undefined || data === null) throw new Error("experiment 86b's first plan is gone");
+
+	if (first === undefined || data === null) {
+		throw new Error("experiment 86b's first plan is gone");
+	}
+
 	const ticket = ticketId(first.ticket);
 	const id = planOf(ticket);
 	const facts: readonly Fact[] = [
@@ -105,6 +109,7 @@ const outside = Layer.succeed(Outside, {
 	merge: () => Effect.die("no merge in this world"),
 	rerunChecks: () => Effect.die("no checks in this world"),
 });
+
 const work = Layer.succeed(BuildWork, {dir: "", env: {}, install: false});
 
 // ---------------------------------------------------------------- the fixed lane, built here
@@ -127,8 +132,15 @@ const fixedChild =
 		);
 		const look = Effect.gen(function* () {
 			const now = yield* row;
-			if (now !== null) return now;
-			if (!(yield* down)) return undefined;
+
+			if (now !== null) {
+				return now;
+			}
+
+			if (!(yield* down)) {
+				return undefined;
+			}
+
 			return yield* row;
 		});
 		const decodeRow = Schema.decodeUnknownExit(
@@ -194,6 +206,7 @@ const childProgram = (
 				const ledger = yield* Ledger;
 				const {ending, before, after} = planOf(self.name);
 				yield* before;
+
 				if (ending !== "no_row") {
 					const outcome =
 						ending === "row_done"
@@ -208,6 +221,7 @@ const childProgram = (
 						)
 						.pipe(Effect.orDie);
 				}
+
 				yield* after;
 				yield* self.exit(ending === "no_row" ? "crash" : "normal", `stand-in: ${ending}`);
 				const at = yield* Clock.currentTimeMillis;
@@ -280,7 +294,10 @@ export const startLane = (
 /** One tick of the case's clock: 50 ms of virtual time, then room for every fiber to run. */
 export const tick = Effect.gen(function* () {
 	yield* TestClock.adjust(TICK);
-	for (let k = 0; k < 20; k++) yield* Effect.yieldNow;
+
+	for (let k = 0; k < 20; k++) {
+		yield* Effect.yieldNow;
+	}
 });
 
 const pause = (ms: number) => (ms > 0 ? Effect.sleep(Duration.millis(ms)) : Effect.void);
@@ -327,18 +344,28 @@ const caseIn = (o: Case) =>
 
 		const cap = o.capMs ?? 120_000;
 		const start = yield* Clock.currentTimeMillis;
+
 		for (;;) {
 			yield* tick;
 			const now = yield* Clock.currentTimeMillis;
 			const row = yield* readOutcome(LANE).pipe(Effect.orElseSucceed(() => null));
+
 			if (row !== null && (o.settle !== true || up.size === 0 || now - start > cap)) {
 				// A settled trace also holds the lane's own exit, which comes after its row.
-				if (o.settle === true) for (let k = 0; k < SETTLE_TICKS; k++) yield* tick;
+				if (o.settle === true) {
+					for (let k = 0; k < SETTLE_TICKS; k++) {
+						yield* tick;
+					}
+				}
+
 				return {ended: true, outcome: row.outcome, children, ms: now - start} satisfies Seen;
 			}
+
 			const quiet = children.length > 0 && up.size === 0 && now - lastEnd > o.limitMs;
-			if (quiet || now - start > cap)
+
+			if (quiet || now - start > cap) {
 				return {ended: false, outcome: null, children, ms: now - start} satisfies Seen;
+			}
 		}
 	});
 

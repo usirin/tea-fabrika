@@ -156,13 +156,21 @@ export interface Report {
 function ample<W, N>(sys: System<W, N>, w: W, moves: readonly Move<W, N>[]): readonly Move<W, N>[] {
 	for (let lane = 0; lane < sys.lanes; lane++) {
 		const own = moves.filter((m) => m.lane === lane);
-		if (own.length === 0 || own.length === moves.length) continue;
+
+		if (own.length === 0 || own.length === moves.length) {
+			continue;
+		}
+
 		const face = sys.face(w, lane);
 		const local = own.every(
 			(m) => m.touches.every((part) => sys.mine(lane, part)) && sys.face(m.next, lane) === face,
 		);
-		if (local) return own;
+
+		if (local) {
+			return own;
+		}
 	}
+
 	return moves;
 }
 
@@ -170,14 +178,17 @@ function ample<W, N>(sys: System<W, N>, w: W, moves: readonly Move<W, N>[]): rea
 class Ints {
 	data = new Int32Array(1024);
 	size = 0;
+
 	push(n: number): void {
 		if (this.size === this.data.length) {
 			const bigger = new Int32Array(this.data.length * 2);
 			bigger.set(this.data);
 			this.data = bigger;
 		}
+
 		this.data[this.size++] = n;
 	}
+
 	at(i: number): number {
 		return this.data[i] as number;
 	}
@@ -187,9 +198,14 @@ class Ints {
 class Names {
 	readonly list: string[] = [];
 	readonly ids = new Map<string, number>();
+
 	id(name: string): number {
 		const known = this.ids.get(name);
-		if (known !== undefined) return known;
+
+		if (known !== undefined) {
+			return known;
+		}
+
 		this.list.push(name);
 		this.ids.set(name, this.list.length - 1);
 		return this.list.length - 1;
@@ -202,8 +218,11 @@ export function search<W, N>(sys: System<W, N>, options: Options<W, N>): Report 
 	const por = options.por ?? false;
 	const symmetry = options.symmetry ?? false;
 	const graph = options.eventually ?? false;
-	if (graph && (por || symmetry))
+
+	if (graph && (por || symmetry)) {
 		throw new Error("the eventually check needs the whole graph: no reduction");
+	}
+
 	const most = options.most ?? Number.POSITIVE_INFINITY;
 	const keyOf = symmetry ? sys.canon : sys.key;
 
@@ -230,15 +249,28 @@ export function search<W, N>(sys: System<W, N>, options: Options<W, N>): Report 
 
 	const pathTo = (id: number): string[] => {
 		const path: string[] = [];
-		for (let at = id; at > 0; at = parent.at(at)) path.push(labels.list[via.at(at)] as string);
+
+		for (let at = id; at > 0; at = parent.at(at)) {
+			path.push(labels.list[via.at(at)] as string);
+		}
+
 		return path.reverse();
 	};
 	const endsOf = (w: W): number => {
 		let bits = 0;
-		for (let lane = 0; lane < sys.lanes; lane++) if (sys.ended(w, lane)) bits |= 1 << lane;
+
+		for (let lane = 0; lane < sys.lanes; lane++) {
+			if (sys.ended(w, lane)) {
+				bits |= 1 << lane;
+			}
+		}
+
 		return bits;
 	};
-	if (graph) ends.push(endsOf(sys.init));
+
+	if (graph) {
+		ends.push(endsOf(sys.init));
+	}
 
 	const broken = new Map<string, Broken>();
 	const layers: number[] = [1];
@@ -252,10 +284,12 @@ export function search<W, N>(sys: System<W, N>, options: Options<W, N>): Report 
 
 	for (let depth = 0; depth < options.depth && frontier.length > 0 && !capped; depth++) {
 		const next: {readonly id: number; readonly w: W}[] = [];
+
 		for (const {id, w} of frontier) {
 			const all = sys.moves(w);
 			widest = Math.max(widest, all.length);
 			let moves = por ? ample(sys, w, all) : all;
+
 			// C3, for a breadth-first walk: a reduced step that leads to a state kept at this
 			// depth or before (not one found for the next depth) could close a loop; expand in full.
 			if (
@@ -264,43 +298,78 @@ export function search<W, N>(sys: System<W, N>, options: Options<W, N>): Report 
 					const seen = ids.get(keyOf(m.next));
 					return seen !== undefined && level.at(seen) <= depth;
 				})
-			)
+			) {
 				moves = all;
-			if (moves !== all) reduced++;
-			if (graph) from.push(to.size);
+			}
+
+			if (moves !== all) {
+				reduced++;
+			}
+
+			if (graph) {
+				from.push(to.size);
+			}
+
 			for (const move of moves) {
 				steps++;
 				const labelId = labels.id(move.label);
+
 				for (const law of options.laws) {
-					if (broken.has(law.name)) continue;
+					if (broken.has(law.name)) {
+						continue;
+					}
+
 					const why = law.check(w, move, move.next);
-					if (why !== null)
+
+					if (why !== null) {
 						broken.set(law.name, {law: law.name, why, path: [...pathTo(id), move.label]});
+					}
 				}
+
 				const key = keyOf(move.next);
 				let target = ids.get(key);
+
 				if (target === undefined) {
 					target = ids.size;
 					ids.set(key, target);
 					parent.push(id);
 					via.push(labelId);
 					level.push(depth + 1);
-					if (graph) ends.push(endsOf(move.next));
+
+					if (graph) {
+						ends.push(endsOf(move.next));
+					}
+
 					next.push({id: target, w: move.next});
-					if (ids.size >= most) capped = true;
+
+					if (ids.size >= most) {
+						capped = true;
+					}
 				}
+
 				if (graph) {
 					to.push(target);
 					label.push(labelId);
 					fair.push(move.fair === null ? -1 : fairs.id(move.fair));
 					rare.push(move.rare ? 1 : 0);
 				}
-				if (capped) break;
+
+				if (capped) {
+					break;
+				}
 			}
-			if (graph) upto.push(to.size);
+
+			if (graph) {
+				upto.push(to.size);
+			}
+
 			expanded++;
-			if (capped) break;
+
+			if (capped) {
+				break;
+			}
 		}
+
 		layers.push(next.length);
 		frontier = next;
 	}
@@ -308,15 +377,24 @@ export function search<W, N>(sys: System<W, N>, options: Options<W, N>): Report 
 	const complete = frontier.length === 0 && !capped;
 	let lassos: Lasso[] | null = null;
 	let dead: Dead[] | null = null;
+
 	if (graph) {
 		const g: Graph = {from, upto, to, label, fair, rare, ends, expanded, lanes: sys.lanes};
 		lassos = [];
 		dead = [];
+
 		for (let lane = 0; lane < sys.lanes; lane++) {
 			const found = lassoOf(g, lane, labels.list, pathTo);
-			if (found !== null) lassos.push(found);
+
+			if (found !== null) {
+				lassos.push(found);
+			}
+
 			const stuck = deadOf(g, lane);
-			if (stuck !== null) dead.push({lane, path: pathTo(stuck)});
+
+			if (stuck !== null) {
+				dead.push({lane, path: pathTo(stuck)});
+			}
 		}
 	}
 
@@ -351,8 +429,13 @@ interface Graph {
 
 /** The edges of one state, as indexes into the edge lists. */
 function* edgesOf(g: Graph, id: number): Generator<number> {
-	if (id >= g.expanded) return;
-	for (let e = g.from.at(id); e < g.upto.at(id); e++) yield e;
+	if (id >= g.expanded) {
+		return;
+	}
+
+	for (let e = g.from.at(id); e < g.upto.at(id); e++) {
+		yield e;
+	}
 }
 
 const open = (g: Graph, id: number, lane: number) => (g.ends.at(id) & (1 << lane)) === 0;
@@ -360,15 +443,24 @@ const open = (g: Graph, id: number, lane: number) => (g.ends.at(id) & (1 << lane
 /** The first state, by depth, where the lane has not ended and nothing that must happen is possible. */
 function deadOf(g: Graph, lane: number): number | null {
 	for (let id = 0; id < g.expanded; id++) {
-		if (!open(g, id, lane)) continue;
+		if (!open(g, id, lane)) {
+			continue;
+		}
+
 		let must = false;
-		for (const e of edgesOf(g, id))
+
+		for (const e of edgesOf(g, id)) {
 			if (g.fair.at(e) >= 0) {
 				must = true;
 				break;
 			}
-		if (!must) return id;
+		}
+
+		if (!must) {
+			return id;
+		}
 	}
+
 	return null;
 }
 
@@ -401,8 +493,12 @@ function lassoOf(
 	let parts = 0;
 	const fairParts: number[] = [];
 	const members: number[][] = [];
+
 	for (let root = 0; root < n; root++) {
-		if (index[root] !== -1 || !open(g, root, lane)) continue;
+		if (index[root] !== -1 || !open(g, root, lane)) {
+			continue;
+		}
+
 		const work: {id: number; edges: number[]; at: number}[] = [];
 		const enter = (id: number) => {
 			index[id] = low[id] = counter++;
@@ -411,32 +507,48 @@ function lassoOf(
 			work.push({id, edges: [...edgesOf(g, id)].filter((e) => inside(e, id)), at: 0});
 		};
 		enter(root);
+
 		while (work.length > 0) {
 			const top = work[work.length - 1] as {id: number; edges: number[]; at: number};
+
 			if (top.at < top.edges.length) {
 				const w = g.to.at(top.edges[top.at++] as number);
-				if (index[w] === -1) enter(w);
-				else if (onStack[w] === 1)
+
+				if (index[w] === -1) {
+					enter(w);
+				} else if (onStack[w] === 1) {
 					low[top.id] = Math.min(low[top.id] as number, index[w] as number);
+				}
+
 				continue;
 			}
+
 			work.pop();
 			const below = work[work.length - 1];
-			if (below !== undefined)
+
+			if (below !== undefined) {
 				low[below.id] = Math.min(low[below.id] as number, low[top.id] as number);
-			if (low[top.id] !== index[top.id]) continue;
+			}
+
+			if (low[top.id] !== index[top.id]) {
+				continue;
+			}
+
 			const ids: number[] = [];
 			let x: number;
+
 			do {
 				x = stack.pop() as number;
 				onStack[x] = 0;
 				part[x] = parts;
 				ids.push(x);
 			} while (x !== top.id);
+
 			members.push(ids);
 			parts++;
 		}
 	}
+
 	for (let p = 0; p < parts; p++) {
 		const ids = members[p] as number[];
 		const looped =
@@ -444,21 +556,39 @@ function lassoOf(
 			[...edgesOf(g, ids[0] as number)].some(
 				(e) => inside(e, ids[0] as number) && g.to.at(e) === ids[0],
 			);
-		if (!looped) continue;
-		if (unfairIn(g, ids, part, p, lane) === null) fairParts.push(p);
+
+		if (!looped) {
+			continue;
+		}
+
+		if (unfairIn(g, ids, part, p, lane) === null) {
+			fairParts.push(p);
+		}
 	}
-	if (fairParts.length === 0) return null;
+
+	if (fairParts.length === 0) {
+		return null;
+	}
+
 	// The fair part reached first, by depth.
 	let best = -1;
 	let entry = n;
+
 	for (const p of fairParts) {
 		let first = n;
-		for (const id of members[p] as number[]) if (id < first) first = id;
+
+		for (const id of members[p] as number[]) {
+			if (id < first) {
+				first = id;
+			}
+		}
+
 		if (first < entry) {
 			entry = first;
 			best = p;
 		}
 	}
+
 	const cycle = fairWalk(g, members[best] as number[], part, best, entry, lane, names);
 	return {lane, prefix: pathTo(entry), cycle};
 }
@@ -466,7 +596,13 @@ function lassoOf(
 /** The fairness classes possible in a state. */
 function classesAt(g: Graph, id: number): Set<number> {
 	const out = new Set<number>();
-	for (const e of edgesOf(g, id)) if (g.fair.at(e) >= 0) out.add(g.fair.at(e));
+
+	for (const e of edgesOf(g, id)) {
+		if (g.fair.at(e) >= 0) {
+			out.add(g.fair.at(e));
+		}
+	}
+
 	return out;
 }
 
@@ -480,15 +616,25 @@ function unfairIn(
 ): number | null {
 	let always: Set<number> | null = null;
 	const taken = new Set<number>();
+
 	for (const id of ids) {
 		const here = classesAt(g, id);
 		const before: Set<number> | null = always;
 		always = before === null ? here : new Set([...before].filter((c: number) => here.has(c)));
-		for (const e of edgesOf(g, id))
-			if (g.rare.at(e) === 0 && part[g.to.at(e)] === p && open(g, g.to.at(e), lane))
+
+		for (const e of edgesOf(g, id)) {
+			if (g.rare.at(e) === 0 && part[g.to.at(e)] === p && open(g, g.to.at(e), lane)) {
 				taken.add(g.fair.at(e));
+			}
+		}
 	}
-	for (const c of always ?? []) if (!taken.has(c)) return c;
+
+	for (const c of always ?? []) {
+		if (!taken.has(c)) {
+			return c;
+		}
+	}
+
 	return null;
 }
 
@@ -515,33 +661,55 @@ function fairWalk(
 	 * as edge indexes. `still`: `a` itself counts, with no move.
 	 */
 	const route = (a: number, goal: (id: number) => boolean, still: boolean): number[] => {
-		if (still && goal(a)) return [];
+		if (still && goal(a)) {
+			return [];
+		}
+
 		const back = new Map<number, {readonly edge: number; readonly from: number}>();
 		let layer = [a];
 		const seen = new Set<number>([a]);
+
 		while (layer.length > 0) {
 			const next: number[] = [];
-			for (const id of layer)
+
+			for (const id of layer) {
 				for (const e of edgesOf(g, id)) {
-					if (!within(e)) continue;
+					if (!within(e)) {
+						continue;
+					}
+
 					const t = g.to.at(e);
+
 					if (goal(t)) {
 						const path = [e];
+
 						for (let at = id; at !== a;) {
 							const step = back.get(at);
-							if (step === undefined) break;
+
+							if (step === undefined) {
+								break;
+							}
+
 							path.push(step.edge);
 							at = step.from;
 						}
+
 						return path.reverse();
 					}
-					if (seen.has(t)) continue;
+
+					if (seen.has(t)) {
+						continue;
+					}
+
 					seen.add(t);
 					back.set(t, {edge: e, from: id});
 					next.push(t);
 				}
+			}
+
 			layer = next;
 		}
+
 		return [];
 	};
 	const walk: number[] = [];
@@ -549,25 +717,47 @@ function fairWalk(
 	const take = (edges: readonly number[]) => {
 		walk.push(...edges);
 		const last = edges[edges.length - 1];
-		if (last !== undefined) at = g.to.at(last);
+
+		if (last !== undefined) {
+			at = g.to.at(last);
+		}
 	};
+
 	for (let guard = 0; guard < 64; guard++) {
 		const always = classesAt(g, entry);
+
 		for (const e of walk) {
 			const here = classesAt(g, g.to.at(e));
-			for (const c of always) if (!here.has(c)) always.delete(c);
+
+			for (const c of always) {
+				if (!here.has(c)) {
+					always.delete(c);
+				}
+			}
 		}
+
 		const taken = new Set(walk.map((e) => g.fair.at(e)));
 		const owed = [...always].find((c) => !taken.has(c));
-		if (owed === undefined) break;
+
+		if (owed === undefined) {
+			break;
+		}
+
 		// Take a move of the owed class inside the part; with none, visit a state where it is not possible.
 		const has = (id: number) => [...edgesOf(g, id)].some((e) => within(e) && g.fair.at(e) === owed);
+
 		if (ids.some(has)) {
 			take(route(at, has, true));
 			const e = [...edgesOf(g, at)].find((x) => within(x) && g.fair.at(x) === owed);
-			if (e !== undefined) take([e]);
-		} else take(route(at, (id) => !classesAt(g, id).has(owed), true));
+
+			if (e !== undefined) {
+				take([e]);
+			}
+		} else {
+			take(route(at, (id) => !classesAt(g, id).has(owed), true));
+		}
 	}
+
 	take(route(at, (id) => id === entry, walk.length > 0));
 	return walk.map((e) => names[g.label.at(e)] as string);
 }

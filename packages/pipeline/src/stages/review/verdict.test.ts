@@ -22,6 +22,7 @@ const finding = (kind: Finding["kind"], state: Finding["state"]): Finding => ({
 	proof: "a proof",
 	wants: "a fix",
 });
+
 const sheetOf = (rows: readonly Row[], findings: readonly Finding[] = []): Sheet => ({
 	head: "a".repeat(40),
 	rows,
@@ -36,6 +37,7 @@ const ROWS: readonly [string, readonly Row[]][] = [
 	["a row failed and another could not be seen", [pass, fail, unseen]],
 	["no row at all", []],
 ];
+
 const FINDINGS: readonly [string, readonly Finding[]][] = [
 	["no finding", []],
 	["an open finding of this kind", [finding("review-code", "open")]],

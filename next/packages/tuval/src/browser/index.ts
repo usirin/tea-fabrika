@@ -42,26 +42,33 @@ const Answer = Schema.Struct({
 		}),
 	),
 });
+
 const Notification = Schema.Struct({
 	method: Schema.String,
 	params: Schema.optionalKey(Schema.Unknown),
 });
+
 const decodeFrame = Schema.decodeUnknownOption(
 	Schema.fromJsonString(Schema.Union([Answer, Notification])),
 );
+
 const Admitted = Schema.Struct({
 	ping: Schema.Number,
 	who: Schema.Struct({person: Schema.String}),
 });
+
 const Waiting = Schema.Struct({code: Schema.String, until: Schema.Number});
 const Nonce = Schema.Struct({nonce: Schema.String});
 const Opened = Schema.Struct({rev: Schema.Int, view: Schema.Json});
 const Entries = Schema.Struct({entries: Schema.Array(Schema.Unknown)});
 const Rev = Schema.Struct({rev: Schema.Int});
+
 const KeysBody = Schema.Struct({
 	body: Schema.Struct({rows: Schema.Record(Schema.String, Schema.Array(Schema.String))}),
 });
+
 const FailedBody = Schema.Struct({body: Keys.KeyProblem});
+
 /** An entry's case, read from what `ledger.read` sent. */
 const caseName = (entry: unknown): unknown =>
 	typeof entry === "object" && entry !== null && "_tag" in entry ? entry._tag : null;
@@ -80,12 +87,15 @@ const Failure = Schema.TaggedUnion({
 	unsupported: {},
 	closed: {},
 });
+
 const F = Failure.cases;
 type CallError = typeof F.unreachable.Type | typeof F.unknown.Type;
 const unreachable = F.unreachable.make({});
+
 /** A letter or a view call's failure as its Cmd declares it: "not now" reasons are retryable. */
 const retryable = (error: CallError): CallError =>
 	error._tag === "unknown" && RETRYABLE.has(error.why) ? unreachable : error;
+
 /** Door reasons that mean "not now": the socket or the brain will be back. */
 const RETRYABLE: ReadonlySet<string> = new Set([
 	"unreachable",
@@ -104,11 +114,17 @@ type Connection = {
 
 const osName = (): "macos" | "windows" | "linux" | "android" | "ios" | "unknown" => {
 	const agent = navigator.userAgent.toLowerCase();
-	if (agent.includes("iphone") || agent.includes("ipad")) return "ios";
-	if (agent.includes("android")) return "android";
-	if (agent.includes("mac")) return "macos";
-	if (agent.includes("win")) return "windows";
-	if (agent.includes("linux")) return "linux";
+
+	if (agent.includes("iphone") || agent.includes("ipad")) {return "ios";}
+
+	if (agent.includes("android")) {return "android";}
+
+	if (agent.includes("mac")) {return "macos";}
+
+	if (agent.includes("win")) {return "windows";}
+
+	if (agent.includes("linux")) {return "linux";}
+
 	return "unknown";
 };
 
@@ -142,7 +158,9 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
 			Effect.gen(function* () {
 				const emit = (m: WindowMsg) => Queue.offerUnsafe(queue, m);
 				const key = yield* Effect.result(keys.current(rejected));
-				if (Result.isFailure(key)) return emit({type: "blocked", reason: "key_store"});
+
+				if (Result.isFailure(key)) {return emit({type: "blocked", reason: "key_store"});}
+
 				yield* open(dial, key.success, emit);
 				// The socket lives in this scope: it closes when tea stops the Sub, not before.
 				return yield* Effect.never;
@@ -182,8 +200,10 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
 			(ws) =>
 				Effect.sync(() => {
 					connections.delete(dial);
+
 					for (const waiting of pending.values())
-						Deferred.doneUnsafe(waiting, Effect.fail(unreachable));
+						{Deferred.doneUnsafe(waiting, Effect.fail(unreachable));}
+
 					ws.close(1000, "dial ended");
 				}),
 		);
@@ -194,13 +214,16 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
 			const id = ++serial;
 			const answer = yield* Deferred.make<unknown, CallError>();
 			pending.set(id, answer);
-			if (ws.readyState !== WebSocket.OPEN) return yield* Effect.fail(unreachable);
+
+			if (ws.readyState !== WebSocket.OPEN) {return yield* Effect.fail(unreachable);}
+
 			ws.send(JSON.stringify({jsonrpc: "2.0", id, method, params}));
 			return yield* Deferred.await(answer);
 		});
 		const readAll = Effect.fnUntraced(function* (stream: string, after: number) {
 			const out: Array<unknown> = [];
 			let cursor = after;
+
 			for (;;) {
 				const page = yield* call("ledger.read", {stream, after: cursor}).pipe(
 					Effect.flatMap((r) => Schema.decodeUnknownEffect(Entries)(r)),
@@ -208,18 +231,25 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
 				);
 				out.push(...page.entries);
 				const last = Option.getOrNull(Schema.decodeUnknownOption(Rev)(page.entries.at(-1)));
+
 				if (last === null || page.entries.length < PAGE)
-					return {entries: out, cursor: last?.rev ?? cursor};
+					{return {entries: out, cursor: last?.rev ?? cursor};}
+
 				cursor = last.rev;
 			}
 		});
 		const resolve = Effect.fnUntraced(function* (name: string) {
-			if (name.startsWith("process_")) return name;
+			if (name.startsWith("process_")) {return name;}
+
 			const known = names.get(name);
-			if (known !== undefined) return known;
+
+			if (known !== undefined) {return known;}
+
 			const {entries} = yield* readAll(`processes/${name}`, 0);
 			const pid = ProgramClient.resolveName(entries, name, (by) => by.startsWith("brain:"));
-			if (pid === null) return yield* Effect.fail(F.unknown.make({why: "no_process"}));
+
+			if (pid === null) {return yield* Effect.fail(F.unknown.make({why: "no_process"}));}
+
 			names.set(name, pid);
 			back.set(pid, name);
 			return pid;
@@ -227,7 +257,8 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
 		connections.set(dial, {
 			call,
 			text: (t) => {
-				if (ws.readyState !== WebSocket.OPEN) return false;
+				if (ws.readyState !== WebSocket.OPEN) {return false;}
+
 				ws.send(t);
 				return true;
 			},
@@ -238,20 +269,26 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
 		const settings = Effect.fnUntraced(function* (person: string) {
 			const stream = `person/${person}/settings`;
 			let cursor = 0;
+
 			for (;;) {
 				const read = yield* readAll(stream, cursor);
 				const good = read.entries
 					.filter((e) => caseName(e) === "keys")
 					.flatMap((e) => Option.toArray(Schema.decodeUnknownOption(KeysBody)(e)))
 					.at(-1);
-				if (good !== undefined) emit({type: "keys", rows: good.body.rows});
+
+				if (good !== undefined) {emit({type: "keys", rows: good.body.rows});}
+
 				const last = read.entries.at(-1);
 				const failed =
 					caseName(last) === "keys_failed"
 						? Option.getOrNull(Schema.decodeUnknownOption(FailedBody)(last))
 						: null;
-				if (failed !== null) emit({type: "keys_failed", error: failed.body});
-				if (read.cursor > cursor) emit({type: "seen", rev: read.cursor});
+
+				if (failed !== null) {emit({type: "keys_failed", error: failed.body});}
+
+				if (read.cursor > cursor) {emit({type: "seen", rev: read.cursor});}
+
 				cursor = read.cursor;
 				yield* call("ledger.wait", {stream, after: cursor});
 			}
@@ -280,32 +317,42 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
 					signed,
 				}),
 			);
+
 			if (Result.isSuccess(answer)) {
 				const admitted = Option.getOrNull(Schema.decodeUnknownOption(Admitted)(answer.success));
-				if (admitted === null) return ws.close(4000, "bad answer");
+
+				if (admitted === null) {return ws.close(4000, "bad answer");}
+
 				emit({type: "admitted", dial, ping: admitted.ping});
 				return yield* settings(admitted.who.person).pipe(Effect.ignore);
 			}
+
 			if (answer.failure._tag !== "unknown" || answer.failure.why !== "not_granted")
-				return ws.close(4000, "not admitted");
+				{return ws.close(4000, "not admitted");}
+
 			const knocked = yield* call("door.knock", {label: options.label}).pipe(
 				Effect.flatMap((r) => Schema.decodeUnknownEffect(Waiting)(r)),
 				Effect.option,
 			);
+
 			if (Option.isSome(knocked))
-				emit({type: "not_granted", dial, fingerprint: key.fingerprint, ...knocked.value});
+				{emit({type: "not_granted", dial, fingerprint: key.fingerprint, ...knocked.value});}
 		});
 
 		const notice = (method: string, params: unknown): void => {
 			if (method === "challenge" || method === "client.granted") {
 				const nonce = Option.getOrNull(Schema.decodeUnknownOption(Nonce)(params));
-				if (nonce === null) return;
-				if (method === "client.granted") emit({type: "granted", dial});
+
+				if (nonce === null) {return;}
+
+				if (method === "client.granted") {emit({type: "granted", dial});}
+
 				Queue.offerUnsafe(work, hello(nonce.nonce).pipe(Effect.ignore));
 			} else if (method === "door.waiting") {
 				const waiting = Option.getOrNull(Schema.decodeUnknownOption(Waiting)(params));
+
 				if (waiting !== null)
-					emit({type: "not_granted", dial, fingerprint: key.fingerprint, ...waiting});
+					{emit({type: "not_granted", dial, fingerprint: key.fingerprint, ...waiting});}
 			} else if (
 				(method === "view.whole" || method === "view.patch") &&
 				typeof params === "object" &&
@@ -314,17 +361,23 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
 			) {
 				const {pid, ...note} = params;
 				const name = typeof pid === "string" ? (back.get(pid) ?? pid) : null;
-				if (name !== null) emit({type: "view", pid: name, note});
+
+				if (name !== null) {emit({type: "view", pid: name, note});}
 			}
 		};
 
 		const message = (data: unknown): void => {
-			if (data === "pong") return emit({type: "pong", dial});
+			if (data === "pong") {return emit({type: "pong", dial});}
+
 			const frame = Option.getOrNull(decodeFrame(String(data)));
-			if (frame === null) return;
+
+			if (frame === null) {return;}
+
 			if ("id" in frame) {
 				const waiting = pending.get(Number(frame.id));
-				if (waiting === undefined) return;
+
+				if (waiting === undefined) {return;}
+
 				pending.delete(Number(frame.id));
 				const why = frame.error?.data?.why;
 				Deferred.doneUnsafe(
@@ -333,11 +386,12 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
 						? Effect.succeed(frame.result ?? null)
 						: Effect.fail<CallError>(F.unknown.make({why: why ?? "error"})),
 				);
-			} else notice(frame.method, frame.params);
+			} else {notice(frame.method, frame.params);}
 		};
 		const closed = (code: number): void => {
 			for (const waiting of pending.values())
-				Deferred.doneUnsafe(waiting, Effect.fail(unreachable));
+				{Deferred.doneUnsafe(waiting, Effect.fail(unreachable));}
+
 			pending.clear();
 			emit({type: "closed", dial, code, fingerprint: key.fingerprint});
 		};
@@ -400,9 +454,13 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
 			}),
 			persist: Effect.fn("client.persist")(function* () {
 				const claimed = yield* keys.claimPersist.pipe(Effect.mapError(() => F.failed.make({})));
-				if (!claimed) return false;
+
+				if (!claimed) {return false;}
+
 				const st: StorageManager | undefined = navigator.storage;
-				if (st?.persist === undefined) return yield* Effect.fail(F.unsupported.make({}));
+
+				if (st?.persist === undefined) {return yield* Effect.fail(F.unsupported.make({}));}
+
 				const failed = F.failed.make({});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: the Storage API asks for persistence through a Promise
 				return yield* Effect.tryPromise({try: () => st.persist(), catch: () => failed});

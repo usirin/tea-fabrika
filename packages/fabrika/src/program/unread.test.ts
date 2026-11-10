@@ -33,14 +33,22 @@ const all = defineProgram({
 describe("a run's end names what it never read", () => {
 	it("main that stops reading early: the end counts each value left on the line, not only the one it took", async () => {
 		const called = await Effect.runPromise(call(firstOnly, {}, {told: {word: words(5)}}));
-		if (called.kind !== "called") throw new Error(called.why);
+
+		if (called.kind !== "called") {
+			throw new Error(called.why);
+		}
+
 		expect(called.heard).toEqual([{name: "said", value: "w0"}]);
 		expect(called.ended).toEqual({kind: "ended", unread: {word: 4}});
 	});
 
 	it("main that reads every value: nothing unread", async () => {
 		const called = await Effect.runPromise(call(all, {}, {told: {word: words(5)}}));
-		if (called.kind !== "called") throw new Error(called.why);
+
+		if (called.kind !== "called") {
+			throw new Error(called.why);
+		}
+
 		expect(called.heard).toHaveLength(5);
 		expect(called.ended).toEqual({kind: "ended", unread: {}});
 	});
@@ -60,9 +68,19 @@ describe("a run's end names what it never read", () => {
 		const ended: Ended<never> = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(stuck, {});
-				if (started.kind !== "running") return yield* Effect.die(started.why);
-				for (const w of words(3)) yield* tell(started.run, "word", w);
-				for (const w of words(2)) yield* tell(started.run, "job", w);
+
+				if (started.kind !== "running") {
+					return yield* Effect.die(started.why);
+				}
+
+				for (const w of words(3)) {
+					yield* tell(started.run, "word", w);
+				}
+
+				for (const w of words(2)) {
+					yield* tell(started.run, "job", w);
+				}
+
 				return yield* started.stop;
 			}).pipe(Effect.scoped),
 		);
@@ -78,7 +96,11 @@ describe("a run's end names what it never read", () => {
 			main: ({serve}) => serve({word: () => Effect.fail("broke" as const)}),
 		});
 		const called = await Effect.runPromise(call(failing, {}, {told: {word: words(3)}}));
-		if (called.kind !== "called") throw new Error(called.why);
+
+		if (called.kind !== "called") {
+			throw new Error(called.why);
+		}
+
 		expect(called.ended.kind).toBe("failed");
 		expect(called.ended.unread).toEqual({word: 2});
 	});
@@ -95,7 +117,11 @@ describe("a run's end names what it never read", () => {
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(early, {});
-				if (started.kind !== "running") return yield* Effect.die(started.why);
+
+				if (started.kind !== "running") {
+					return yield* Effect.die(started.why);
+				}
+
 				const first = yield* tell(started.run, "word", "a");
 				yield* Deferred.succeed(gate, undefined);
 				const ended = yield* started.run.ended;

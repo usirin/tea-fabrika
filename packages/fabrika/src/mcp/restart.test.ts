@@ -99,6 +99,7 @@ describe("a restart call, read", () => {
 			expect(call.kind, JSON.stringify(why)).toBe("refused");
 			expect(call.kind === "refused" ? call.why : "").toMatch(/\bwhy\b/);
 		}
+
 		expect(callOf(LIST, RESTART, {why: "yeni sürümü al"}).kind).toBe("restart");
 	});
 });

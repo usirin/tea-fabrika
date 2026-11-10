@@ -66,10 +66,13 @@ const NAMED: ReadonlySet<string> = new Set([
 	"arrowright",
 	...Array.from({length: 12}, (_, n) => `f${n + 1}`),
 ]);
+
 const MODIFIERS = ["ctrl", "alt", "meta", "shift"] as const;
 type Modifier = (typeof MODIFIERS)[number];
+
 const isModifier = (word: string): word is Modifier =>
 	(MODIFIERS as ReadonlyArray<string>).includes(word);
+
 /** Keys a browser keeps for its tabs and windows with Ctrl or Cmd: close, new, address, reload, quit. */
 const RESERVED: ReadonlySet<string> = new Set(["w", "t", "n", "l", "r", "q"]);
 /** Keys that are only a modifier going down, never a chord of their own. */
@@ -87,11 +90,16 @@ const chord = (text: string): string | null => {
 			? ""
 			: text.slice(0, text.length - key.length - 1);
 	const mods = lead === "" ? [] : lead.split("+");
+
 	if (key === "" || mods.some((m) => !isModifier(m)) || new Set(mods).size !== mods.length)
-		return null;
+		{return null;}
+
 	const name = typed(key) ? key : key.toLowerCase();
-	if (!typed(key) && !NAMED.has(name)) return null;
-	if (typed(key) && mods.includes("shift")) return null;
+
+	if (!typed(key) && !NAMED.has(name)) {return null;}
+
+	if (typed(key) && mods.includes("shift")) {return null;}
+
 	return [...MODIFIERS.filter((m) => mods.includes(m)), name].join("+");
 };
 
@@ -103,9 +111,12 @@ const sequence = (text: string): ReadonlyArray<string> | null => {
 
 /** The canonical chord of a key event, or null when it can be no chord. */
 const eventChord = (e: KeyEvent): string | null => {
-	if (LONE.has(e.key) || e.key === "" || e.key === "Dead" || e.key === "Unidentified") return null;
+	if (LONE.has(e.key) || e.key === "" || e.key === "Dead" || e.key === "Unidentified") {return null;}
+
 	const name = typed(e.key) ? e.key : e.key === " " ? "space" : e.key.toLowerCase();
-	if (!typed(e.key) && !NAMED.has(name)) return null;
+
+	if (!typed(e.key) && !NAMED.has(name)) {return null;}
+
 	const mods: ReadonlyArray<Modifier> = [
 		...(e.ctrl ? (["ctrl"] as const) : []),
 		...(e.alt ? (["alt"] as const) : []),
@@ -122,13 +133,15 @@ const startsWith = (long: ReadonlyArray<string>, short: ReadonlyArray<string>): 
 const bindings = (t: Table): ReadonlyArray<{command: string; chords: ReadonlyArray<string>}> => {
 	const order = [...t.file, ...Object.keys(t.rows).filter((c) => !t.file.includes(c))];
 	const out: Array<{command: string; chords: ReadonlyArray<string>}> = [];
+
 	for (const command of order)
-		for (const text of t.rows[command] ?? []) {
+		{for (const text of t.rows[command] ?? []) {
 			const chords = sequence(text);
 			if (chords === null) continue;
 			if (out.some((b) => startsWith(b.chords, chords) || startsWith(chords, b.chords))) continue;
 			out.push({command, chords});
-		}
+		}}
+
 	return out;
 };
 
@@ -144,17 +157,24 @@ export const matchKey = (
 	armed: Armed | null,
 	e: KeyEvent,
 ): {readonly armed: Armed | null; readonly out: KeyOut} => {
-	if (e.composing || e.editable) return {armed, out: nothing};
+	if (e.composing || e.editable) {return {armed, out: nothing};}
+
 	const pressed = eventChord(e);
-	if (pressed === null) return {armed, out: nothing};
-	if ((e.ctrl || e.meta) && RESERVED.has(e.key.toLowerCase())) return {armed: null, out: nothing};
+
+	if (pressed === null) {return {armed, out: nothing};}
+
+	if ((e.ctrl || e.meta) && RESERVED.has(e.key.toLowerCase())) {return {armed: null, out: nothing};}
+
 	const chords = [...(armed?.chords ?? []), pressed];
 	const all = bindings(t);
 	const exact = all.find((b) => b.chords.length === chords.length && startsWith(b.chords, chords));
+
 	if (exact !== undefined)
-		return {armed: null, out: KeyOut.cases.command.make({command: exact.command})};
+		{return {armed: null, out: KeyOut.cases.command.make({command: exact.command})};}
+
 	if (all.some((b) => b.chords.length > chords.length && startsWith(b.chords, chords)))
-		return {armed: {chords}, out: KeyOut.cases.prefix.make({})};
+		{return {armed: {chords}, out: KeyOut.cases.prefix.make({})};}
+
 	return {armed: null, out: nothing};
 };
 
@@ -162,10 +182,12 @@ export const matchKey = (
 export const hintFor = (t: Table, command: string): string | null => t.rows[command]?.[0] ?? null;
 
 type Problem = {readonly line: number; readonly why: KeyProblem["why"]};
+
 const problem = (line: number, why: Problem["why"]): Result.Result<never, Problem> =>
 	Result.fail({line, why});
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /** The line a command's row is written on, counting from 1, or 1 when it cannot be found. */
 const lineNumber = (text: string, command: string): number => {
 	const last = command.split(".").at(-1) ?? command;
@@ -188,8 +210,9 @@ const flatten = (
 ): void => {
 	for (const [key, value] of Object.entries(table)) {
 		const name = prefix === "" ? key : `${prefix}.${key}`;
-		if (isTable(value)) flatten(value, name, out);
-		else out.push([name, value]);
+
+		if (isTable(value)) {flatten(value, name, out);}
+		else {out.push([name, value]);}
 	}
 };
 
@@ -203,33 +226,48 @@ export const parseKeys = (
 	commands: ReadonlyArray<string>,
 ): Result.Result<Rows, Problem> => {
 	const doc = Result.try({try: () => parse(text), catch: (error) => error});
+
 	if (Result.isFailure(doc))
-		return problem(doc.failure instanceof TomlError ? Math.max(1, doc.failure.line) : 1, "syntax");
+		{return problem(doc.failure instanceof TomlError ? Math.max(1, doc.failure.line) : 1, "syntax");}
+
 	const keys = doc.success["keys"];
-	if (keys === undefined) return Result.succeed({});
-	if (!isTable(keys)) return problem(lineNumber(text, "keys"), "syntax");
+
+	if (keys === undefined) {return Result.succeed({});}
+
+	if (!isTable(keys)) {return problem(lineNumber(text, "keys"), "syntax");}
+
 	const entries: Array<readonly [string, unknown]> = [];
 	flatten(keys, "", entries);
 	const rows: Record<string, ReadonlyArray<string>> = {};
 	const taken: Array<{command: string; chords: ReadonlyArray<string>}> = [];
+
 	for (const [command, value] of entries) {
 		const line = lineNumber(text, command);
 		const list = typeof value === "string" ? [value] : value;
+
 		if (!Array.isArray(list) || !list.every((k): k is string => typeof k === "string"))
-			return problem(line, "syntax");
-		if (!commands.includes(command)) return problem(line, "unknown_command");
+			{return problem(line, "syntax");}
+
+		if (!commands.includes(command)) {return problem(line, "unknown_command");}
+
 		for (const k of list) {
 			const chords = sequence(k);
-			if (chords === null) return problem(line, "unknown_key");
+
+			if (chords === null) {return problem(line, "unknown_key");}
+
 			const other = taken.find(
 				(b) =>
 					b.command !== command && (startsWith(b.chords, chords) || startsWith(chords, b.chords)),
 			);
-			if (other !== undefined) return problem(line, "clash");
+
+			if (other !== undefined) {return problem(line, "clash");}
+
 			taken.push({command, chords});
 		}
+
 		rows[command] = list;
 	}
+
 	return Result.succeed(rows);
 };
 
@@ -250,7 +288,8 @@ export const reload = (
 	commands: ReadonlyArray<string>,
 	source: KeySource,
 ): {readonly table: Table; readonly armed: null; readonly error: Problem | null} => {
-	if (source._tag === "failed") return {table: last, armed: null, error: {line: 0, why: "read"}};
+	if (source._tag === "failed") {return {table: last, armed: null, error: {line: 0, why: "read"}};}
+
 	const rows = parseKeys(source.text, commands);
 	return Result.isSuccess(rows)
 		? {table: buildTable(defaults, rows.success), armed: null, error: null}

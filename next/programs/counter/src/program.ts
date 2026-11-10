@@ -6,6 +6,7 @@ import {Schema} from "effect";
 
 /** The counter's model, which is also its view: the window checks what it shows against it. */
 export const counterModel = Schema.Struct({count: Schema.Int});
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("inc")}),
 	Schema.Struct({type: Schema.Literal("dec")}),

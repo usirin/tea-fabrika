@@ -16,6 +16,7 @@ import {ProgramRunner} from "./runner.ts";
 const PID = Effect.runSync(processId);
 const Model = Schema.Struct({count: Schema.Int});
 const Msg = Schema.Struct({type: Schema.Literal("inc")});
+
 const program = {
 	name: "counter",
 	machine: Machine.make({
@@ -43,6 +44,7 @@ describe("P12 saved mail recovery", () => {
 					Effect.runPromise(
 						Effect.gen(function* () {
 							const db = new DatabaseSync(":memory:");
+
 							try {
 								const sql = nodeSql(db),
 									pure = yield* Effect.fromResult(stepper(program));
@@ -50,13 +52,17 @@ describe("P12 saved mail recovery", () => {
 								const execution = workerExecution({
 									init: async (saved) => pure.init(saved),
 									admit: async () => {
-										if (down && point === "admit")
+										if (down && point === "admit") {
 											return Promise.reject(new Error("temporary RPC loss"));
+										}
+
 										return true;
 									},
 									step: async (model, msg) => {
-										if (down && point === "step")
+										if (down && point === "step") {
 											return Promise.reject(new Error("temporary RPC loss"));
+										}
+
 										return pure.step(model, msg);
 									},
 									fold: async (model, msg) => pure.fold(model, msg),
@@ -111,7 +117,8 @@ describe("P12 saved mail recovery", () => {
 										mailbox = yield* Mailbox,
 										store = yield* ProcessStore;
 									expect(yield* runner.open("before")).toMatchObject({rev: 0, view: {count: 0}});
-									for (let n = 0; n < total; n++)
+
+									for (let n = 0; n < total; n++) {
 										yield* mailbox.send(
 											"counter:1",
 											`${letter}-${n}`,
@@ -126,6 +133,8 @@ describe("P12 saved mail recovery", () => {
 												build: "test",
 											},
 										);
+									}
+
 									down = true;
 									const failed = yield* Effect.exit(runner.open("during-loss"));
 									expect.soft(Exit.isFailure(failed), "RPC loss must fail this attempt").toBe(true);

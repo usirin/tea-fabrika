@@ -17,6 +17,7 @@ const PRELUDE = [
 	'import {Effect} from "effect";',
 	"declare const p: Promise<number>, thing: Effect.Effect<number>;",
 ];
+
 const PROMISE = "export const a = Effect.tryPromise(() => p);";
 const RUN = "export const a = Effect.runPromise(thing);";
 const BOTH = "export const a = Effect.runPromise(Effect.tryPromise(() => p));";
@@ -82,13 +83,19 @@ describe("edge-comment", async () => {
 	it("refuses each wrong edge comment, at the top of the file", () => {
 		const refused = Object.entries(CASES).filter(([, [, , no]]) => no);
 		expect(refused).toHaveLength(8);
-		for (const [name] of refused) expect([name, all(CODE, at(name))]).toEqual([name, [1]]);
+
+		for (const [name] of refused) {
+			expect([name, all(CODE, at(name))]).toEqual([name, [1]]);
+		}
 	});
 
 	it("passes a right one for each rule and for both, and leaves other comments alone", () => {
 		const passed = Object.entries(CASES).filter(([, [, , no]]) => !no);
 		expect(passed).toHaveLength(4);
-		for (const [name] of passed) expect([name, all(CODE, at(name))]).toEqual([name, []]);
+
+		for (const [name] of passed) {
+			expect([name, all(CODE, at(name))]).toEqual([name, []]);
+		}
 	});
 
 	it("speaks alone: the line under each comment is silenced and no comment is unused", () => {
@@ -125,14 +132,22 @@ const Config = Schema.Struct({
 
 // oxc-parser's tree, read loosely: only literals, arrays and objects are walked.
 type Tree = any;
+
 const toValue = (node: Tree): unknown => {
 	if (node.type === "ObjectExpression") {
 		return Object.fromEntries(
 			node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]),
 		);
 	}
-	if (node.type === "ArrayExpression") return node.elements.map(toValue);
-	if (node.type === "Literal") return node.value;
+
+	if (node.type === "ArrayExpression") {
+		return node.elements.map(toValue);
+	}
+
+	if (node.type === "Literal") {
+		return node.value;
+	}
+
 	throw new Error(`.oxlintrc.json holds a ${node.type}`);
 };
 
@@ -151,12 +166,34 @@ describe(".oxlintrc.json", () => {
 
 	it("turns the three rules on in next/**", () => {
 		const next = config.overrides.find((o) => o.files.length === 1 && o.files[0] === "next/**");
-		for (const rule of RULES) expect([rule, next?.rules[rule]]).toEqual([rule, "error"]);
+
+		for (const rule of RULES) {
+			expect([rule, next?.rules[rule]]).toEqual([rule, "error"]);
+		}
 	});
 
 	it("turns an edge rule off only for next/'s tests, and ignores no next/ path", () => {
 		const loosened = config.overrides.filter((o) => RULES.some((rule) => off(o.rules[rule])));
-		for (const o of loosened) expect(o.files.filter((f) => !TESTS.includes(f))).toEqual([]);
+
+		for (const o of loosened) {
+			expect(o.files.filter((f) => !TESTS.includes(f))).toEqual([]);
+		}
+
 		expect(config.ignorePatterns.filter((p) => p.startsWith("next"))).toEqual([]);
+	});
+
+	// pinned: `.agents/` is held to next/'s rules by a second override that repeats the `next/**`
+	// rule block (0033), since the law above wants that override's files to be exactly `next/**`.
+	// Two copies drift, so the copies must stay equal.
+	it("pinned: the .agents/ override repeats the next/** rule block exactly (0033)", () => {
+		const next = config.overrides.filter((o) => o.files.length === 1 && o.files[0] === "next/**");
+		const agents = config.overrides.filter(
+			(o) =>
+				o.files.some((f) => f.startsWith(".agents/")) && !o.files.some((f) => f.includes(".test.")),
+		);
+
+		expect([next.length, agents.length]).toEqual([1, 1]);
+		expect(agents[0]?.files).toEqual([".agents/**/*.ts", ".agents/**/*.mjs"]);
+		expect(agents[0]?.rules).toEqual(next[0]?.rules);
 	});
 });

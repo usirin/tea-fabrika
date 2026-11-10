@@ -34,6 +34,7 @@ const keepsEvery = <S, M extends {readonly type: string}, C extends Cmd, U exten
 		fc.asyncProperty(msgs, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("acp:r1", null));
 			const store = handle.store("m", "one", state);
+
 			for (const s of foldEvents(machine, ctx, null, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);
@@ -45,6 +46,7 @@ const keepsEvery = <S, M extends {readonly type: string}, C extends Cmd, U exten
 // ---------------------------------------------------------------- the session
 
 type SessionMsg = MsgOf<typeof session.machine>;
+
 const sessionTable: MsgArbitraryTable<SessionMsg> = {
 	opened: arbRecordMsg("opened", {
 		agent: fc.constantFrom("claude", "codex"),
@@ -53,6 +55,7 @@ const sessionTable: MsgArbitraryTable<SessionMsg> = {
 	told: arbRecordMsg("told", {prompt: fc.constantFrom("read a.txt", "", "and é")}),
 	ended: arbRecordMsg("ended", {n: fc.integer({min: 0, max: 6})}),
 };
+
 const sessionLists = arbMsgSequence(arbMsg(sessionTable), {maxLength: 30});
 
 // ---------------------------------------------------------------- the transcript
@@ -64,6 +67,7 @@ const status = fc.constantFrom("pending", "in_progress", "completed", "failed" a
 const count = fc.nat({max: 200_000});
 /** Update kinds the fold does not use, as `seenOf` names them. */
 const OTHER = ["available_commands_update", "agent_message_chunk:image", "config_option_update"];
+
 const seen = (what: fc.Arbitrary<string>): fc.Arbitrary<Seen> =>
 	fc.oneof(
 		fc.record({
@@ -108,6 +112,7 @@ const seen = (what: fc.Arbitrary<string>): fc.Arbitrary<Seen> =>
 		}),
 		fc.record({kind: fc.constant("other" as const), what}),
 	);
+
 const transcriptTable = (what: fc.Arbitrary<string>): MsgArbitraryTable<TranscriptMsg> => ({
 	opening: arbRecordMsg("opening", {
 		how: fc.constantFrom("new", "load", "resume"),
@@ -142,6 +147,7 @@ const transcriptTable = (what: fc.Arbitrary<string>): MsgArbitraryTable<Transcri
 	}),
 	cancelling: fc.constant({type: "cancelling"} as const),
 });
+
 const transcriptLists = (what: fc.Arbitrary<string>) =>
 	arbMsgSequence(arbMsg(transcriptTable(what)), {maxLength: 30});
 
@@ -184,13 +190,16 @@ describe("the acp program's kinds are kept", () => {
 					...real.update,
 					seen: (s, m) => {
 						let t = s;
+
 						for (const e of m.events) {
 							if (e.kind !== "other") {
 								t = real.update.seen(t, {type: "seen", events: [e]})[0];
 								continue;
 							}
+
 							t = {...t, other: {...t.other, [e.what]: (t.other[e.what] ?? 0) + 1}};
 						}
+
 						return [t, []];
 					},
 				},

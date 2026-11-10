@@ -29,6 +29,7 @@ const late = (go: Deferred.Deferred<void>, got: number[], capacity = CAPACITY) =
 		main: ({serve}) =>
 			Deferred.await(go).pipe(Effect.andThen(serve({n: (n) => Effect.sync(() => got.push(n))}))),
 	});
+
 const numbers = (count: number) => Array.from({length: count}, (_, i) => i);
 
 /** Sends on each line it is told. */
@@ -60,18 +61,32 @@ const once = (
 	Effect.gen(function* () {
 		const got: string[] = [];
 		const target = yield* start(holder(shape, got), {});
-		if (target.kind !== "running") return null;
+
+		if (target.kind !== "running") {
+			return null;
+		}
+
 		const source = yield* pipe(
 			{program: relay, flags: {}, keeping: {id: "relay:1", storage: disk}},
 			"out",
 			target,
 			"line",
 		);
-		if (source.kind !== "running") return null;
-		for (const line of told) yield* tell(source.run, "line", line);
+
+		if (source.kind !== "running") {
+			return null;
+		}
+
+		for (const line of told) {
+			yield* tell(source.run, "line", line);
+		}
+
 		// Settled: holder has what it should, and a resend had its time; or relay ended first.
 		const settled = Effect.gen(function* () {
-			while (got.length < expected) yield* Effect.sleep("1 millis");
+			while (got.length < expected) {
+				yield* Effect.sleep("1 millis");
+			}
+
 			yield* Effect.sleep("50 millis");
 			return null;
 		});
@@ -135,9 +150,17 @@ describe("a run's flags at its next start (row 6)", () => {
 			Effect.gen(function* () {
 				const keeping = {id: "moder:1", storage: disk};
 				const a = yield* start(moder, {mode: "read", loud: false}, {}, keeping);
-				if (a.kind === "running") yield* a.run.ended;
+
+				if (a.kind === "running") {
+					yield* a.run.ended;
+				}
+
 				const b = yield* start(moder, second, {}, keeping);
-				if (b.kind !== "running") return b;
+
+				if (b.kind !== "running") {
+					return b;
+				}
+
 				return yield* b.run.ended;
 			}).pipe(Effect.scoped),
 		);
@@ -175,7 +198,10 @@ describe("a run's flags at its next start (row 6)", () => {
 					{},
 					{id: "moder:1", storage: disk},
 				);
-				if (a.kind === "running") yield* a.run.ended;
+
+				if (a.kind === "running") {
+					yield* a.run.ended;
+				}
 			}).pipe(Effect.scoped),
 		);
 		const stricter = defineProgram({
@@ -213,7 +239,11 @@ describe("a mailbox nobody reads (row 11)", () => {
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(stuck, {});
-				if (started.kind !== "running") return null;
+
+				if (started.kind !== "running") {
+					return null;
+				}
+
 				const counts: Record<string, number> = {};
 				const tellOne = (i: number) =>
 					tell(started.run, i % 2 === 0 ? "n" : "m", i).pipe(
@@ -224,9 +254,17 @@ describe("a mailbox nobody reads (row 11)", () => {
 							}),
 						),
 					);
-				for (let i = 0; i < 1000; i++) yield* tellOne(i);
+
+				for (let i = 0; i < 1000; i++) {
+					yield* tellOne(i);
+				}
+
 				const full = heap();
-				for (let i = 1000; i < 100_000; i++) yield* tellOne(i);
+
+				for (let i = 1000; i < 100_000; i++) {
+					yield* tellOne(i);
+				}
+
 				const grewMB = (heap() - full) / 1e6;
 				return {counts, mailbox: started.run.mailbox(), grewMB};
 			}).pipe(Effect.scoped),
@@ -251,7 +289,11 @@ describe("a mailbox nobody reads (row 11)", () => {
 				const seen = yield* Effect.gen(function* () {
 					const go = yield* Deferred.make<void>();
 					const started = yield* start(late(go, got), {});
-					if (started.kind !== "running") return null;
+
+					if (started.kind !== "running") {
+						return null;
+					}
+
 					const offering = yield* Effect.forkChild(
 						// One at a time: the order they arrive in is the point.
 						Effect.forEach(numbers(3 * CAPACITY), (n) => offer(started.run, "n", n), {
@@ -287,20 +329,32 @@ describe("a mailbox nobody reads (row 11)", () => {
 				const seen = yield* Effect.gen(function* () {
 					const go = yield* Deferred.make<void>();
 					const target = yield* start(late(go, got), {});
-					if (target.kind !== "running") return null;
+
+					if (target.kind !== "running") {
+						return null;
+					}
+
 					const source = yield* pipe(
 						{program: counts, flags: {to: 3 * CAPACITY}},
 						"n",
 						target,
 						"n",
 					);
-					if (source.kind !== "running") return null;
+
+					if (source.kind !== "running") {
+						return null;
+					}
+
 					// The source fills the mailbox at its own pace, and the next writer then waits on it.
 					const isFull = () => {
 						const {length, inputs} = target.run.mailbox();
 						return length === CAPACITY && inputs.n?.waiting === 1;
 					};
-					while (!isFull()) yield* Effect.sleep("1 millis");
+
+					while (!isFull()) {
+						yield* Effect.sleep("1 millis");
+					}
+
 					const full = target.run.mailbox();
 					yield* Deferred.succeed(go, undefined);
 					return {full, from: yield* source.run.ended, to: yield* target.run.ended};
@@ -337,9 +391,19 @@ describe("a mailbox nobody reads (row 11)", () => {
 					const go = yield* Deferred.make<void>();
 					const a = yield* start(late(go, got), {});
 					const b = yield* start(stuck, {});
-					if (a.kind !== "running" || b.kind !== "running") return null;
-					for (const n of numbers(CAPACITY)) yield* tell(a.run, "n", n);
-					for (const n of numbers(CAPACITY)) yield* tell(b.run, "n", n);
+
+					if (a.kind !== "running" || b.kind !== "running") {
+						return null;
+					}
+
+					for (const n of numbers(CAPACITY)) {
+						yield* tell(a.run, "n", n);
+					}
+
+					for (const n of numbers(CAPACITY)) {
+						yield* tell(b.run, "n", n);
+					}
+
 					const closing = yield* Effect.forkChild(offer(a.run, "n", -1));
 					const stopping = yield* Effect.forkChild(offer(b.run, "m", -1));
 					yield* Effect.sleep("10 millis");
@@ -367,9 +431,17 @@ describe("a mailbox nobody reads (row 11)", () => {
 				const seen = yield* Effect.gen(function* () {
 					const go = yield* Deferred.make<void>();
 					const started = yield* start(late(go, got), {});
-					if (started.kind !== "running") return null;
+
+					if (started.kind !== "running") {
+						return null;
+					}
+
 					const empty = started.run.mailbox();
-					for (const n of numbers(CAPACITY)) yield* tell(started.run, "n", n);
+
+					for (const n of numbers(CAPACITY)) {
+						yield* tell(started.run, "n", n);
+					}
+
 					const word = yield* tell(started.run, "n", -1).pipe(
 						Effect.catchTag("MailboxFull", (full) => Effect.succeed(full._tag)),
 					);
@@ -400,8 +472,15 @@ describe("a mailbox nobody reads (row 11)", () => {
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(stuck, {});
-				if (started.kind !== "running") return null;
-				for (const n of numbers(CAPACITY)) yield* tell(started.run, "n", n);
+
+				if (started.kind !== "running") {
+					return null;
+				}
+
+				for (const n of numbers(CAPACITY)) {
+					yield* tell(started.run, "n", n);
+				}
+
 				yield* Effect.forkChild(offer(started.run, "m", -1));
 				yield* Effect.yieldNow;
 				return yield* Effect.flip(tell(started.run, "n", -2));
@@ -425,7 +504,11 @@ describe("a program's own capacity, declared where the program declares it", () 
 		const seen = await Effect.runPromise(
 			Effect.gen(function* () {
 				const started = yield* start(small, {});
-				if (started.kind !== "running") return null;
+
+				if (started.kind !== "running") {
+					return null;
+				}
+
 				const words = yield* Effect.forEach(
 					numbers(16),
 					(n) => tell(started.run, n < 8 ? "n" : "m", n),
@@ -447,8 +530,15 @@ describe("a program's own capacity, declared where the program declares it", () 
 	it("a MailboxFull nobody catches fails the caller, and its type says so", async () => {
 		const caller = Effect.gen(function* () {
 			const started = yield* start(small, {});
-			if (started.kind !== "running") return "not started";
-			for (const n of numbers(17)) yield* tell(started.run, "n", n);
+
+			if (started.kind !== "running") {
+				return "not started";
+			}
+
+			for (const n of numbers(17)) {
+				yield* tell(started.run, "n", n);
+			}
+
 			return "all told";
 		}).pipe(Effect.scoped);
 		expectTypeOf(caller).toEqualTypeOf<Effect.Effect<"not started" | "all told", MailboxFull>>();
@@ -468,8 +558,15 @@ describe("a program's own capacity, declared where the program declares it", () 
 				const seen = yield* Effect.gen(function* () {
 					const go = yield* Deferred.make<void>();
 					const started = yield* start(late(go, got, 16), {});
-					if (started.kind !== "running") return null;
-					for (const n of numbers(16)) yield* tell(started.run, "n", n);
+
+					if (started.kind !== "running") {
+						return null;
+					}
+
+					for (const n of numbers(16)) {
+						yield* tell(started.run, "n", n);
+					}
+
 					const offering = yield* Effect.forkChild(offer(started.run, "n", 16));
 					yield* Effect.sleep("10 millis");
 					const asleep = started.run.mailbox();

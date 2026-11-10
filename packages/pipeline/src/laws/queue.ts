@@ -51,7 +51,11 @@ export function queueLaws<S extends Waiting>(): readonly Law<S, Msg, Cmd>[] {
 			"the value being worked stays first until its work ends",
 			({prev, msg, next}) => {
 				const first = firstOf(prev);
-				if (first === null || (msg.type === "done" && msg.item === first)) return null;
+
+				if (first === null || (msg.type === "done" && msg.item === first)) {
+					return null;
+				}
+
 				return firstOf(next) === first
 					? null
 					: `${first} was being worked, and after ${msg.type} ${msg.item} the first is ${firstOf(next) ?? "nothing"}`;

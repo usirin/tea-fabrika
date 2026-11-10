@@ -75,12 +75,16 @@ const programOf = (run: string) => run.replace(/[-:][^-:]*$/, "");
 const byFrom = (a: Node, b: Node) => a.from - b.from;
 
 const stepKey = (s: Step) => `step:${JSON.stringify([s.run, s.machine, s.id, s.n])}`;
+
 const machineKey = (run: string, machine: string, id: string) =>
 	`machine:${JSON.stringify([run, machine, id])}`;
 
 /** How a Msg reads in one line: its type, then each plain field. `{type: "add", n: 2}` is `add 2`. */
 export const msgName = (msg: unknown): string => {
-	if (typeof msg !== "object" || msg === null) return JSON.stringify(msg) ?? String(msg);
+	if (typeof msg !== "object" || msg === null) {
+		return JSON.stringify(msg) ?? String(msg);
+	}
+
 	const {type, ...rest} = msg as {readonly type?: unknown; readonly [k: string]: unknown};
 	const plain = Object.values(rest).map((v) =>
 		typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? String(v) : "…",
@@ -108,18 +112,22 @@ export const treeOf = (trace: JobTrace): Node => {
 	const ids = new Set(spans.map((s) => s.span));
 	/** Each span's children, by its id; `null` holds the roots and the spans whose parent is missing. */
 	const kids = new Map<string | null, Span[]>();
+
 	for (const s of spans) {
 		const parent = s.parent !== null && ids.has(s.parent) ? s.parent : null;
 		kids.set(parent, [...(kids.get(parent) ?? []), s]);
 	}
+
 	/** Each run's machine runs, in the order their first step came, with their steps. */
 	const machines = new Map<string, Map<string, Step[]>>();
+
 	for (const step of trace.steps.toSorted((a, b) => a.at - b.at || a.n - b.n)) {
 		const of = machines.get(step.run) ?? new Map<string, Step[]>();
 		const key = machineKey(step.run, step.machine, step.id);
 		of.set(key, [...(of.get(key) ?? []), step]);
 		machines.set(step.run, of);
 	}
+
 	const failed = new Set(trace.runs.filter((r) => r.status === "failed").map((r) => r.run));
 
 	/** A run's machine runs, each with its steps, and the machine spans they took over. */
@@ -134,7 +142,11 @@ export const treeOf = (trace: JobTrace): Node => {
 			const own = under.filter((c) => c.tags[ATTR.machine] === first.machine);
 			const copies = runs.filter((r) => r[0]?.machine === first.machine).length;
 			const span = own.length === 1 && copies === 1 ? (own[0] as Span) : null;
-			if (span !== null) used.add(span.span);
+
+			if (span !== null) {
+				used.add(span.span);
+			}
+
 			const key = machineKey(run, first.machine, first.id);
 			return {
 				key,
@@ -231,6 +243,7 @@ export const treeOf = (trace: JobTrace): Node => {
 	const roots = kids.get(null) ?? [];
 	const jobWrong = trace.job?.ended?.how === "failed";
 	const [only] = roots;
+
 	// One root is the job's row when it is the line's own span, or when no job says otherwise. A
 	// span reaches the record only once it ends, so while a job runs its one root can be a run or a
 	// machine already over. The row keeps the job's line, whichever way it is drawn. It covers the
@@ -248,6 +261,7 @@ export const treeOf = (trace: JobTrace): Node => {
 			children: [...node.children, ...alone].toSorted(byFrom),
 		};
 	}
+
 	const children = [...roots.map(spanNode), ...alone].toSorted(byFrom);
 	const from =
 		trace.job?.started ?? (children.length === 0 ? 0 : Math.min(...children.map((c) => c.from)));

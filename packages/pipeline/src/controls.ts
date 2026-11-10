@@ -53,7 +53,11 @@ export const mustPass = (onGood: Result): typeof ok | typeof falseAlarm =>
 export function controls(onBad: Result, onGood: Result): Controlled {
 	const bad = mustFail(onBad);
 	const good = mustPass(onGood);
-	if (bad.kind === "missed" && good.kind === "false_alarm") return {kind: "backwards"};
+
+	if (bad.kind === "missed" && good.kind === "false_alarm") {
+		return {kind: "backwards"};
+	}
+
 	return bad.kind === "missed" ? bad : good;
 }
 
@@ -89,10 +93,23 @@ function answerOf<C>(sides: Sides<Run<C>>): Controlled | null {
 	const result = (run: Run<C> | null) => (run === null || run.at === "asked" ? null : run.result);
 	const bad = result(sides.bad);
 	const good = result(sides.good);
-	if (sides.bad !== null && bad === null) return null;
-	if (sides.good !== null && good === null) return null;
-	if (bad !== null && good !== null) return controls(bad, good);
-	if (bad !== null) return mustFail(bad);
+
+	if (sides.bad !== null && bad === null) {
+		return null;
+	}
+
+	if (sides.good !== null && good === null) {
+		return null;
+	}
+
+	if (bad !== null && good !== null) {
+		return controls(bad, good);
+	}
+
+	if (bad !== null) {
+		return mustFail(bad);
+	}
+
 	return good === null ? null : mustPass(good);
 }
 
@@ -133,9 +150,16 @@ export function createControls<const N extends string, I extends CmdInput, V>(co
 
 	/** One side's run came back. A side not asked, or already back, changes nothing. */
 	function ran(s: State, side: Side, verdict: V): State {
-		if (s.phase !== "running") return s;
+		if (s.phase !== "running") {
+			return s;
+		}
+
 		const was = s.sides[side];
-		if (was === null || was.at === "ran") return s;
+
+		if (was === null || was.at === "ran") {
+			return s;
+		}
+
 		const back: Run<Cmd> = {at: "ran", result: config.resultOf(verdict)};
 		const sides: Sides<Run<Cmd>> =
 			side === "bad" ? {...s.sides, bad: back} : {...s.sides, good: back};
@@ -151,7 +175,10 @@ export function createControls<const N extends string, I extends CmdInput, V>(co
 
 	/** The runs still out, which a restart sends again. */
 	function asked(s: State): readonly Cmd[] {
-		if (s.phase !== "running") return [];
+		if (s.phase !== "running") {
+			return [];
+		}
+
 		return [s.sides.bad, s.sides.good].flatMap((r) =>
 			r !== null && r.at === "asked" ? [r.cmd] : [],
 		);

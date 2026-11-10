@@ -40,10 +40,12 @@ export const LAST_MAX = 1_000;
 /** A line's bytes as it goes out: UTF-8, and its newline. A lone surrogate goes as U+FFFD, three bytes. */
 const bytesOf = (line: string): number => {
 	let n = 1;
+
 	for (const ch of line) {
 		const code = ch.codePointAt(0) ?? 0;
 		n += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
 	}
+
 	return n;
 };
 
@@ -51,12 +53,18 @@ const bytesOf = (line: string): number => {
 const cutTo = (line: string, bytes: number): string => {
 	let n = 1;
 	let end = 0;
+
 	for (const ch of line) {
 		const size = bytesOf(ch) - 1;
-		if (n + size > bytes) break;
+
+		if (n + size > bytes) {
+			break;
+		}
+
 		n += size;
 		end += ch.length;
 	}
+
 	return line.slice(0, end);
 };
 
@@ -68,16 +76,23 @@ const cutTo = (line: string, bytes: number): string => {
 export const lastLines = (printed: readonly string[], last: number): readonly string[] => {
 	const out: string[] = [];
 	let bytes = 0;
+
 	for (let i = printed.length - 1; i >= 0 && out.length < last; i -= 1) {
 		const line = printed[i] ?? "";
 		const size = bytesOf(line);
+
 		if (bytes + size > BYTES_MAX) {
-			if (out.length === 0) out.push(cutTo(line, BYTES_MAX));
+			if (out.length === 0) {
+				out.push(cutTo(line, BYTES_MAX));
+			}
+
 			break;
 		}
+
 		bytes += size;
 		out.push(line);
 	}
+
 	return out.reverse();
 };
 
@@ -95,8 +110,10 @@ export class KeptLines {
 		const [line = ""] = lastLines([text], 1);
 		this.#lines.push(line);
 		this.#bytes += bytesOf(line);
-		while (this.#lines.length > LAST_MAX || this.#bytes > BYTES_MAX)
+
+		while (this.#lines.length > LAST_MAX || this.#bytes > BYTES_MAX) {
 			this.#bytes -= bytesOf(this.#lines.shift() ?? "");
+		}
 	}
 
 	get lines(): readonly string[] {

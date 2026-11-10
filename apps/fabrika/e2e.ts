@@ -117,6 +117,7 @@ const home = await mkdtemp(join(tmpdir(), "fabrika-home-"));
 const env = {...process.env, FABRIKA_HOME: home};
 
 const saved: string[] = [];
+
 const shot = async (page: Page, name: string) => {
 	const file = join(shots, `${name}.png`);
 	await page.screenshot({path: file});
@@ -124,23 +125,31 @@ const shot = async (page: Page, name: string) => {
 };
 
 const check = (what: string, ok: boolean, seen?: unknown) => {
-	if (!ok)
+	if (!ok) {
 		throw new Error(`${what}: no${seen === undefined ? "" : `, saw ${JSON.stringify(seen)}`}`);
+	}
+
 	console.log(`ok  ${what}`);
 };
 
 /** Wait until `ok` holds, and answer what it saw. */
 const until = async <T>(what: string, look: () => Promise<T>, ok: (seen: T) => boolean) => {
 	let seen = await look();
+
 	for (let i = 0; i < 200 && !ok(seen); i += 1) {
 		await new Promise((resolve) => setTimeout(resolve, 50));
 		seen = await look();
 	}
-	if (!ok(seen)) throw new Error(`waited for ${what}; saw ${JSON.stringify(seen)}`);
+
+	if (!ok(seen)) {
+		throw new Error(`waited for ${what}; saw ${JSON.stringify(seen)}`);
+	}
+
 	return seen;
 };
 
 const tile = (page: Page, id: string) => page.locator(`[data-tile="${id}"]`);
+
 /**
  * A tile's screen, as text: its rows, with no trailing spaces. Empty while it is not drawn, as the
  * first tile is not until the host is up: `until` is what waits, and a look here never ends it.
@@ -149,15 +158,19 @@ const screen = async (page: Page, id: string) => {
 	const text = tile(page, id).locator(".screen-text");
 	return (await text.count()) === 0 ? "" : ((await text.textContent({timeout: 2000})) ?? "");
 };
+
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
+
 /** The tiles drawn now, in reading order. */
 const tiles = (page: Page) =>
 	page.locator("[data-tile]").evaluateAll((all) => all.map((t) => t.getAttribute("data-tile")));
+
 const focused = (page: Page) =>
 	page.locator('[data-tile][aria-current="true"]').getAttribute("data-tile", {timeout: 2000});
 
 const shows = (page: Page, id: string, what: string, ok: (text: string) => boolean) =>
 	until(`${id}: ${what}`, () => screen(page, id), ok);
+
 const prompted = (page: Page, id: string) =>
 	shows(page, id, "the prompt", (t) => lastRow(t) === "tsh$");
 
@@ -165,24 +178,32 @@ const prompted = (page: Page, id: string) =>
 const typeLine = async (page: Page, id: string, line: string) => {
 	const expected = `tsh$ ${line}`;
 	const seen: string[] = [];
+
 	for (let attempt = 0; attempt < 3; attempt += 1) {
 		if (attempt > 0) {
 			await page.keyboard.press("Control+e");
 			await page.keyboard.press("Control+u");
 			await prompted(page, id);
 		}
+
 		await page.keyboard.type(line);
 		let row = lastRow(await screen(page, id));
+
 		for (let i = 0; i < 200 && row !== expected; i += 1) {
 			await page.waitForTimeout(50);
 			row = lastRow(await screen(page, id));
 		}
-		if (row === expected) return;
+
+		if (row === expected) {
+			return;
+		}
+
 		seen.push(row);
 		console.warn(
 			`${id}: typing attempt ${attempt + 1} for ${JSON.stringify(line)}; saw ${JSON.stringify(row)}`,
 		);
 	}
+
 	throw new Error(
 		`${id}: could not type ${JSON.stringify(line)} after 3 attempts; saw ${JSON.stringify(seen)}`,
 	);
@@ -206,6 +227,7 @@ const focusIs = (page: Page, id: string) =>
 		() => focused(page),
 		(f) => f === id,
 	);
+
 const tilesAre = (page: Page, ids: readonly string[]) =>
 	until(
 		`the tiles ${ids.join(" ")}`,
@@ -219,28 +241,33 @@ const asked = (page: Page) =>
 		.getByRole("alertdialog")
 		.textContent({timeout: 2000})
 		.then((t) => t ?? "");
+
 const askedIs = (page: Page, question: string) =>
 	until(
 		`the question ${question}`,
 		() => asked(page),
 		(q) => q === question,
 	);
+
 const noQuestion = (page: Page) =>
 	until(
 		"no question",
 		() => page.getByRole("alertdialog").count(),
 		(n) => n === 0,
 	);
+
 /** The word in a tile's state slot, or "" for none. */
 const stateIn = async (page: Page, id: string) => {
 	const state = tile(page, id).locator(".titlebar .state");
 	return (await state.count()) === 0 ? "" : ((await state.textContent({timeout: 2000})) ?? "");
 };
+
 /** 1 when a tile's title bar says it is closing, else 0. */
 const closingIn = async (page: Page, id: string) =>
 	(await stateIn(page, id)) === "closing" ? 1 : 0;
 
 const countIn = (page: Page, id: string) => tile(page, id).getByLabel("count", {exact: true});
+
 const windowCount = (app: ElectronApplication) =>
 	app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().length);
 
@@ -267,9 +294,12 @@ const noBrowser = async (app: ElectronApplication) => {
 		shell.openExternal = list;
 		return shell.openExternal === list;
 	});
-	if (!swapped)
+
+	if (!swapped) {
 		throw new Error("shell.openExternal was not swapped: this run would open a real browser");
+	}
 };
+
 /** What main has asked the browser to open, in order. */
 const openedOutside = (app: ElectronApplication) =>
 	app.evaluate(() => (globalThis as {opened?: string[]}).opened ?? []);
@@ -286,6 +316,7 @@ const activate = async (app: ElectronApplication) => {
 /** The popover that holds the page's focus: its id, or `null`. */
 const overHolds = (page: Page) =>
 	page.evaluate(() => document.activeElement?.closest("[data-over]")?.id ?? null);
+
 const gone = (page: Page, id: string) =>
 	until(
 		`#${id} to close`,
@@ -307,7 +338,11 @@ const popovers = async (page: Page) => {
 		"with nothing waiting, it says so in one calm line",
 		empty.includes("Nothing waits on you"),
 	);
-	for (const key of ["ArrowUp", "ArrowDown", "Enter", "j", "x"]) await page.keyboard.press(key);
+
+	for (const key of ["ArrowUp", "ArrowDown", "Enter", "j", "x"]) {
+		await page.keyboard.press(key);
+	}
+
 	// Focus knocked out of the list, onto the page itself: the next key still never reaches t3.
 	await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 	await page.keyboard.press("ArrowUp");
@@ -373,6 +408,7 @@ const popovers = async (page: Page) => {
 
 /** Every text a locator finds now, none when it finds nothing: a look that never waits. */
 const textsOf = (at: Locator) => at.evaluateAll((all) => all.map((el) => el.textContent ?? ""));
+
 /**
  * The window's own status region for its mode: not a tile's closing note, and not the top bar's
  * host item, which are status regions too. Waits until there is one, and it says `want`.
@@ -383,7 +419,9 @@ const modeSaid = (page: Page, want: string) =>
 		() => textsOf(page.locator('[role="status"]:not([data-tile] *):not(.topbar *)')),
 		(said) => said.length === 1 && said[0] === want,
 	);
+
 const bottomLine = (page: Page) => page.locator("footer.bottomline");
+
 /** Waits until the bottom line's INFO words hold `want`. */
 const explained = (page: Page, want: string) =>
 	until(
@@ -394,6 +432,7 @@ const explained = (page: Page, want: string) =>
 
 /** The bottom line's info item, by its name, which stays `info` whether the mode is on or off. */
 const infoItem = (page: Page) => bottomLine(page).getByRole("button", {name: /info$/});
+
 /** Click t3, and wait until focus is back in it. */
 const backInT3 = async (page: Page) => {
 	await tile(page, "t3").click();
@@ -465,12 +504,23 @@ const infoMode = async (page: Page) => {
 			for (const r of records) {
 				const at = r.target instanceof Element ? r.target : r.target.parentElement;
 				const inside = at?.closest(".info") != null;
-				if (inside && r.oldValue !== null) seen.push(r.oldValue);
-				for (const n of [...r.addedNodes, ...r.removedNodes])
-					if (inside || holdsInfo(n)) seen.push(n.textContent ?? "");
+
+				if (inside && r.oldValue !== null) {
+					seen.push(r.oldValue);
+				}
+
+				for (const n of [...r.addedNodes, ...r.removedNodes]) {
+					if (inside || holdsInfo(n)) {
+						seen.push(n.textContent ?? "");
+					}
+				}
 			}
+
 			const now = document.querySelector("footer.bottomline .info");
-			if (now !== null) seen.push(now.textContent ?? "");
+
+			if (now !== null) {
+				seen.push(now.textContent ?? "");
+			}
 		});
 		watch.observe(document.body, {
 			subtree: true,
@@ -578,7 +628,11 @@ const infoModeSmall = async (page: Page) => {
 	const ring = () =>
 		page.evaluate(() => {
 			const el = document.activeElement;
-			if (el === null) return {drawn: false, inside: false, box: null, focused: null};
+
+			if (el === null) {
+				return {drawn: false, inside: false, box: null, focused: null};
+			}
+
 			const style = getComputedStyle(el);
 			const out = Number.parseFloat(style.outlineWidth) + Number.parseFloat(style.outlineOffset);
 			const r = el.getBoundingClientRect();
@@ -611,6 +665,7 @@ const infoModeSmall = async (page: Page) => {
 			["Tab", keysWords, "keys"],
 			["Shift+Tab", infoWords, "info"],
 		];
+
 		for (const [press, words, name] of walk) {
 			await page.keyboard.press(press);
 			const seen = await until(`focus on the ${name} item`, ring, (r) => r.focused === words);
@@ -686,7 +741,8 @@ const infoModeSmall = async (page: Page) => {
 		const out = [...line.querySelectorAll(".right *")].find(
 			(el) => el.children.length === 0 && el.textContent === "esc leaves",
 		);
-		if (left === null || info === null || out === undefined)
+
+		if (left === null || info === null || out === undefined) {
 			return {
 				found: false,
 				full: false,
@@ -697,6 +753,8 @@ const infoModeSmall = async (page: Page) => {
 				lineIn: false,
 				outIn: false,
 			};
+		}
+
 		return {
 			found: true,
 			full: (info.textContent ?? "").includes(said),
@@ -751,6 +809,7 @@ const pressEnds = async (page: Page, chord: string, want: "free" | "taken") => {
  */
 const closeKeysDoNothing = async (app: ElectronApplication, page: Page, where: string) => {
 	const before = await tiles(page);
+
 	for (const chord of ["Meta+w"]) {
 		await page.evaluate(() => delete document.documentElement.dataset.keyEnd);
 		await page.keyboard.press(chord);
@@ -767,9 +826,18 @@ const chordFor = (accelerator: string) =>
 	accelerator
 		.split("+")
 		.map((part) => {
-			if (/^(Command|Cmd|CommandOrControl|CmdOrCtrl)$/.test(part)) return "Meta";
-			if (part === "Option") return "Alt";
-			if (part === "Plus") return "Shift+=";
+			if (/^(Command|Cmd|CommandOrControl|CmdOrCtrl)$/.test(part)) {
+				return "Meta";
+			}
+
+			if (part === "Option") {
+				return "Alt";
+			}
+
+			if (part === "Plus") {
+				return "Shift+=";
+			}
+
 			return part.length === 1 ? part.toLowerCase() : part;
 		})
 		.join("+");
@@ -784,7 +852,10 @@ const systemKeys = async (app: ElectronApplication, page: Page) => {
 		window.addEventListener(
 			"keydown",
 			(e) => {
-				if (["Meta", "Shift", "Alt", "Control"].includes(e.key)) return;
+				if (["Meta", "Shift", "Alt", "Control"].includes(e.key)) {
+					return;
+				}
+
 				// Read on the next turn: by then every listener on the page has had the key.
 				setTimeout(() => {
 					document.documentElement.dataset.keyEnd = e.defaultPrevented ? "taken" : "free";
@@ -818,6 +889,7 @@ const systemKeys = async (app: ElectronApplication, page: Page) => {
 	});
 	const chords = accelerators.map(chordFor).filter((chord) => chord !== "Meta+w");
 	check("the menu has Quit on Cmd-Q", chords.includes("Meta+q"), chords);
+
 	for (const chord of [...chords, "Meta+,", "Meta+`", "Meta+t"]) {
 		await pressEnds(page, chord, "free");
 		const row = lastRow(await screen(page, "t1"));
@@ -838,7 +910,9 @@ const systemKeys = async (app: ElectronApplication, page: Page) => {
 	const palette = page.getByRole("dialog", {name: "Commands"});
 	await palette.waitFor();
 	await page.evaluate(() => {
-		if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+		if (document.activeElement instanceof HTMLElement) {
+			document.activeElement.blur();
+		}
 	});
 	await pressEnds(page, "Meta+q", "free");
 	check("Cmd-Q goes by a palette without focus", true);
@@ -1299,13 +1373,19 @@ const again = async (app: ElectronApplication, left: string) => {
 	);
 };
 
-if (process.platform !== "darwin")
+if (process.platform !== "darwin") {
 	throw new Error("this run checks macOS's window rules: run it on a Mac");
+}
 
 const launch = async (on: string) => {
 	const testEnv: Record<string, string> = {};
-	for (const [name, value] of Object.entries(process.env))
-		if (value !== undefined && name !== "FABRIKA_FOREGROUND") testEnv[name] = value;
+
+	for (const [name, value] of Object.entries(process.env)) {
+		if (value !== undefined && name !== "FABRIKA_FOREGROUND") {
+			testEnv[name] = value;
+		}
+	}
+
 	testEnv.FABRIKA_HOME = on;
 	const app = await _electron.launch({
 		executablePath: electronPath,
@@ -1328,12 +1408,14 @@ const alive = (pid: number) => {
 		return false;
 	}
 };
+
 /** The pid the host wrote in its home, or none. */
 const hostPid = async (on: string) => {
 	const text = await readFile(join(on, "host", "pid"), "utf8").catch(() => "");
 	const pid = Number.parseInt(text, 10);
 	return Number.isInteger(pid) ? pid : null;
 };
+
 /**
  * The jobs in the host's one table, as kept in `<home>/storage/jobs` (host/run.ts), read from the
  * files and never opened: an open takes the table over from the host that runs on it
@@ -1356,19 +1438,28 @@ const keptJobs = async (on: string): Promise<readonly Shell.Job[]> => {
 	const newest = slots
 		.flatMap((slot) => (slot === null ? [] : [slot]))
 		.sort((x, y) => y.opened - x.opened || y.count - x.count)[0];
-	if (newest === undefined) throw new Error(`no job table kept in ${on}`);
+
+	if (newest === undefined) {
+		throw new Error(`no job table kept in ${on}`);
+	}
+
 	const table: Shell.Jobs = JSON.parse(newest.body);
 	return table.jobs;
 };
+
 /** The pids whose command line names `what`, as pgrep finds them. */
 const pgrep = (what: string) =>
 	promisify(execFile)("pgrep", ["-f", what]).then(
 		(r) => r.stdout.split("\n").filter((l) => l !== ""),
 		(): string[] => [],
 	);
+
 /** Stop a process by its pid, as the test's own clean-up, and wait for it to be gone. */
 const stop = async (pid: number) => {
-	if (alive(pid)) process.kill(pid, "SIGTERM");
+	if (alive(pid)) {
+		process.kill(pid, "SIGTERM");
+	}
+
 	await until(
 		`pid ${pid} to stop`,
 		async () => alive(pid),
@@ -1409,8 +1500,10 @@ const oldHost = async (on: string) => {
 const mismatch = async () => {
 	const other = await mkdtemp(join(tmpdir(), "fabrika-old-"));
 	const old = await oldHost(other);
+
 	try {
 		const app = await launch(other);
+
 		try {
 			const page = await app.firstWindow();
 			const said = await until(
@@ -1436,13 +1529,17 @@ const mismatch = async () => {
 		} finally {
 			await app.close().catch(() => {});
 		}
+
 		check(
 			"the host of another version still runs: the app did not stop it",
 			old.pid !== undefined && alive(old.pid),
 		);
 	} finally {
-		if (old.pid !== undefined) await stop(old.pid);
+		if (old.pid !== undefined) {
+			await stop(old.pid);
+		}
 	}
+
 	check(
 		"the old host stopped by its pid: pgrep finds nothing on its home",
 		(await pgrep(other)).length === 0,
@@ -1466,11 +1563,15 @@ const askingHost = async (on: string) => {
 		link.on("data", (chunk) => {
 			const lines = `${held}${chunk}`.split("\n");
 			held = lines.pop() ?? "";
+
 			for (const line of lines) {
 				const m = JSON.parse(line);
-				if (m.type === "hello")
+
+				if (m.type === "hello") {
 					link.write(`${JSON.stringify({type: "hello", version: PROTOCOL})}\n`);
-				else heard.push(m);
+				} else {
+					heard.push(m);
+				}
 			}
 		});
 	});
@@ -1478,10 +1579,15 @@ const askingHost = async (on: string) => {
 	return {
 		heard,
 		toPage: (m: unknown) => {
-			for (const link of links) link.write(`${JSON.stringify({type: "to", port: "desk", m})}\n`);
+			for (const link of links) {
+				link.write(`${JSON.stringify({type: "to", port: "desk", m})}\n`);
+			}
 		},
 		stop: () => {
-			for (const link of links) link.destroy();
+			for (const link of links) {
+				link.destroy();
+			}
+
 			return new Promise<void>((resolve) => server.close(() => resolve()));
 		},
 	};
@@ -1505,6 +1611,7 @@ const asksSwap = async () => {
 	});
 	const seen = async () => host.heard.filter((m) => m.type === "on" && m.m?.type === "seen").length;
 	const app = await launch(other);
+
 	try {
 		const page = await app.firstWindow();
 		await until(
@@ -1540,6 +1647,7 @@ const ours = (pid: number) =>
 		(r) => r.stdout.includes(here),
 		() => false,
 	);
+
 /** Kill a host this run started, as a crash does: SIGKILL, so it cleans nothing up. */
 const crash = async (pid: number) => {
 	check(`pid ${pid} is a host of this build, started by this run`, await ours(pid), pid);
@@ -1571,7 +1679,11 @@ const cutLink = (app: ElectronApplication) =>
 					h._handle?.constructor.name === "Pipe" &&
 					(h._handle.fd ?? -1) > 2,
 			);
-		for (const link of links) link.destroy?.();
+
+		for (const link of links) {
+			link.destroy?.();
+		}
+
 		return links.length;
 	});
 
@@ -1588,18 +1700,26 @@ const noInterrupts = (app: ElectronApplication) =>
 		};
 		const box = noted("dialog");
 		Object.assign(dialog, {showMessageBox: box, showMessageBoxSync: box, showErrorBox: box});
-		if (app.dock !== undefined) Object.assign(app.dock, {bounce: noted("bounce")});
+
+		if (app.dock !== undefined) {
+			Object.assign(app.dock, {bounce: noted("bounce")});
+		}
+
 		Object.assign(app, {focus: noted("app focus")});
-		for (const w of BrowserWindow.getAllWindows())
+
+		for (const w of BrowserWindow.getAllWindows()) {
 			Object.assign(w, {
 				focus: noted("focus"),
 				show: noted("show"),
 				moveTop: noted("moveTop"),
 				flashFrame: noted("flashFrame"),
 			});
+		}
+
 		const now: unknown = dialog.showMessageBox;
 		return now === box;
 	});
+
 /** What main was asked that would interrupt a person, in order. */
 const interruptions = (app: ElectronApplication) =>
 	app.evaluate(() => (globalThis as {asked?: string[]}).asked ?? []);
@@ -1613,6 +1733,7 @@ const LINK = '[role="status"][aria-label="the link to the host"]';
 const UP = "host up";
 /** The host's item: the first button of the link, before any Try again. */
 const HOST = `${LINK} button`;
+
 /**
  * From now on, note each change in what the window says of the link: a word may be up for a
  * moment only.
@@ -1624,7 +1745,10 @@ const watchNotes = (page: Page) =>
 			Object.assign(globalThis, {said});
 			new MutationObserver(() => {
 				const name = document.querySelector(host)?.getAttribute("aria-label") ?? "";
-				if (said.at(-1) !== name) said.push(name);
+
+				if (said.at(-1) !== name) {
+					said.push(name);
+				}
 			}).observe(document.body, {
 				childList: true,
 				subtree: true,
@@ -1634,9 +1758,11 @@ const watchNotes = (page: Page) =>
 		},
 		{host: HOST, up: UP},
 	);
+
 /** The words the window said of the link since `watchNotes`, in order, with no host up. */
 const notesSaid = (page: Page) =>
 	page.evaluate((up) => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== up), UP);
+
 /** What the window says of the link now, by the host item's name, or "" for none drawn. */
 const noteNow = (page: Page) =>
 	page
@@ -1647,6 +1773,7 @@ const noteNow = (page: Page) =>
 			(t) => t ?? "",
 			() => "",
 		);
+
 /**
  * A part that works says nothing: on a fresh home with nothing asking and no agent attached, the
  * top bar's right end is the host's quiet icon alone, with no word and no `·`. C-b A and C-b S
@@ -1688,6 +1815,7 @@ const quietAtRest = async (page: Page) => {
 		sync,
 	);
 };
+
 /** The host's few lines, opened from its word in the top bar, then closed again. */
 const hostLines = async (page: Page) => {
 	const host = page.locator(LINK).getByRole("button", {name: /^host /});
@@ -1697,11 +1825,13 @@ const hostLines = async (page: Page) => {
 	await host.click();
 	return lines;
 };
+
 /** The tile that holds the page's focus, or none. */
 const focusedIn = (page: Page) =>
 	page.evaluate(
 		() => document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile") ?? null,
 	);
+
 /** The desk is back: the host's item is its quiet up icon with no word, and nothing is dimmed. */
 const deskBack = (page: Page) =>
 	until(
@@ -1724,6 +1854,7 @@ const reconnect = async () => {
 	const own = await mkdtemp(join(tmpdir(), "fabrika-link-"));
 	const started = new Set<number>();
 	const app = await launch(own);
+
 	try {
 		const page = await app.firstWindow();
 		await prompted(page, "t1");
@@ -1739,7 +1870,11 @@ const reconnect = async () => {
 		await countIn(page, "t2").filter({hasText: /^1$/}).waitFor();
 		const host = await hostPid(own);
 		check("a host started on this stage's own home", host !== null && (await ours(host)), host);
-		if (host === null) return;
+
+		if (host === null) {
+			return;
+		}
+
 		started.add(host);
 		await watchNotes(page);
 		check("main's dialogs, dock bounce and focus are swapped for a list", await noInterrupts(app));
@@ -1780,7 +1915,11 @@ const reconnect = async () => {
 			() => hostPid(own),
 			(p) => p !== null && p !== host,
 		);
-		if (next === null) return;
+
+		if (next === null) {
+			return;
+		}
+
 		started.add(next);
 		await deskBack(page);
 		await tilesAre(page, ["t1", "t2"]);
@@ -1859,7 +1998,11 @@ const reconnect = async () => {
 			() => hostPid(own),
 			(p) => p !== null && p !== next,
 		);
-		if (last !== null) started.add(last);
+
+		if (last !== null) {
+			started.add(last);
+		}
+
 		await deskBack(page);
 		await tilesAre(page, ["t1", "t2"]);
 		await shows(page, "t1", "only a fresh prompt", (t) => t === "tsh$");
@@ -1872,7 +2015,12 @@ const reconnect = async () => {
 		check("on the restored desk, only t2 is told of its counter: t1 never ran it", true, still);
 	} finally {
 		await app.close().catch(() => {});
-		for (const pid of started) if (alive(pid) && (await ours(pid))) await stop(pid);
+
+		for (const pid of started) {
+			if (alive(pid) && (await ours(pid))) {
+				await stop(pid);
+			}
+		}
 	}
 };
 
@@ -1899,6 +2047,7 @@ const lookIs = async (app: ElectronApplication, page: Page, look: "dark" | "ligh
 			}),
 	);
 };
+
 /** The tile a title bar's slot, name and state belong to, as the page draws them. */
 const titleOf = (page: Page, id: string) =>
 	tile(page, id)
@@ -1908,6 +2057,7 @@ const titleOf = (page: Page, id: string) =>
 			slot: bar.querySelector(".slot")?.textContent ?? "",
 			name: bar.querySelector(".name")?.textContent ?? "",
 		}));
+
 /** A click on a tile's title bar: it focuses the tile and presses nothing in its body. */
 const focusOn = async (page: Page, id: string) => {
 	await tile(page, id).locator(".titlebar").click();
@@ -1918,6 +2068,7 @@ const focusOn = async (page: Page, id: string) => {
 const lookFocus = async () => {
 	const own = await mkdtemp(join(tmpdir(), "fabrika-look-"));
 	const app = await launch(own);
+
 	try {
 		await app.evaluate(({BrowserWindow}) =>
 			BrowserWindow.getAllWindows()[0]?.setBounds({x: 0, y: 0, width: 1200, height: 600}),
@@ -1930,6 +2081,7 @@ const lookFocus = async () => {
 		await prompted(page, "t2");
 		await focusOn(page, "t2");
 		const burst = "focusstaysright".repeat(4);
+
 		for (const look of ["light", "dark"] as const) {
 			await prompted(page, "t1");
 			await prompted(page, "t2");
@@ -1963,7 +2115,10 @@ const lookFocus = async () => {
 	} finally {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
-		if (pid !== null) await stop(pid);
+
+		if (pid !== null) {
+			await stop(pid);
+		}
 	}
 };
 
@@ -1986,13 +2141,17 @@ const tilesLook = async () => {
 	const out = join(shots, "tiles");
 	await mkdir(out, {recursive: true});
 	const app = await launch(own);
+
 	try {
 		const page = await app.firstWindow();
 		await prompted(page, "t1");
 		await lookIs(app, page, "dark");
 		/** One picture, with the pointer off every tile unless `hovered` says it is on one. */
 		const snap = async (name: string, hovered = false) => {
-			if (!hovered) await page.mouse.move(1, 1);
+			if (!hovered) {
+				await page.mouse.move(1, 1);
+			}
+
 			await page.waitForTimeout(250);
 			const file = join(out, `${name}.png`);
 			await page.screenshot({path: file});
@@ -2147,11 +2306,13 @@ const tilesLook = async () => {
 		await focusOn(page, "t9");
 		await run(page, "t9", "ticket --ticket 1");
 		await tile(page, "t9").getByText("Tiles, the look").first().waitFor();
+
 		for (const id of ["t12", "t13"]) {
 			await focusOn(page, "t9");
 			await prefixed(page, "|");
 			await prompted(page, id);
 		}
+
 		await focusOn(page, "t8");
 		await run(page, "t8", "tracker | ticket | trace");
 		await pickIn(tile(page, "t8").getByLabel("tracker view"));
@@ -2165,7 +2326,10 @@ const tilesLook = async () => {
 	} finally {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
-		if (pid !== null) await stop(pid);
+
+		if (pid !== null) {
+			await stop(pid);
+		}
 	}
 };
 
@@ -2173,22 +2337,27 @@ const tilesLook = async () => {
 const keysLook = async () => {
 	const out = join(shots, "keybindings");
 	await mkdir(out, {recursive: true});
+
 	for (const layout of ["one", "side", "stacked", "2x2", "small"] as const) {
 		const own = await mkdtemp(join(tmpdir(), "fk-"));
 		const file = join(own, "keybindings.toml");
 		await writeFile(file, "tezgah.fold = []\n");
 		const app = await launch(own);
+
 		try {
 			const page = await app.firstWindow();
 			await prompted(page, "t1");
+
 			if (layout === "side" || layout === "2x2" || layout === "small") {
 				await prefixed(page, "|");
 				await prompted(page, "t2");
 			}
+
 			if (layout === "stacked") {
 				await prefixed(page, "-");
 				await prompted(page, "t2");
 			}
+
 			if (layout === "2x2" || layout === "small") {
 				await prefixed(page, "-");
 				await prompted(page, "t3");
@@ -2196,6 +2365,7 @@ const keysLook = async () => {
 				await prefixed(page, "-");
 				await prompted(page, "t4");
 			}
+
 			if (layout === "small") {
 				const cdp = await page.context().newCDPSession(page);
 				await cdp.send("Emulation.setDeviceMetricsOverride", {
@@ -2205,6 +2375,7 @@ const keysLook = async () => {
 					mobile: false,
 				});
 			}
+
 			await focusOn(page, "t1");
 			await app.evaluate(() => {
 				// A dynamic import has no loader inside Playwright's evaluate: take the built-in as it is.
@@ -2215,13 +2386,16 @@ const keysLook = async () => {
 					const message = args[0];
 					const data =
 						typeof message === "object" && message !== null ? Reflect.get(message, "data") : null;
+
 					if (
 						event === "message" &&
 						typeof data === "object" &&
 						data !== null &&
 						Reflect.get(data, "type") === "keys"
-					)
+					) {
 						sends.push(data);
+					}
+
 					return Reflect.apply(emit, this, [event, ...args]);
 				};
 				Object.assign(globalThis, {keysTestBytes: sends});
@@ -2237,7 +2411,10 @@ const keysLook = async () => {
 				window.addEventListener(
 					"keydown",
 					(event) => {
-						if (["Meta", "Control", "Shift", "Alt"].includes(event.key)) return;
+						if (["Meta", "Control", "Shift", "Alt"].includes(event.key)) {
+							return;
+						}
+
 						setTimeout(() => {
 							document.documentElement.dataset.keyEnd = event.defaultPrevented ? "taken" : "free";
 						});
@@ -2620,7 +2797,11 @@ const keysLook = async () => {
 		} finally {
 			await app.close().catch(() => {});
 			const pid = await hostPid(own);
-			if (pid !== null) await stop(pid);
+
+			if (pid !== null) {
+				await stop(pid);
+			}
+
 			await rm(own, {recursive: true, force: true});
 		}
 	}
@@ -2633,6 +2814,7 @@ const keysLook = async () => {
 const borderDrag = async () => {
 	const own = await mkdtemp(join(tmpdir(), "fk-"));
 	const app = await launch(own);
+
 	try {
 		const page = await app.firstWindow();
 		await prompted(page, "t1");
@@ -2642,7 +2824,11 @@ const borderDrag = async () => {
 			page.locator('[data-cell="t1"]').evaluate((el) => el.getBoundingClientRect().width);
 		const before = await width();
 		const box = await page.locator("hr.border").first().boundingBox();
-		if (box === null) throw new Error("no border between t1 and t2");
+
+		if (box === null) {
+			throw new Error("no border between t1 and t2");
+		}
+
 		const y = box.y + box.height / 2;
 		await page.mouse.move(box.x + box.width / 2, y);
 		await page.mouse.down();
@@ -2665,7 +2851,11 @@ const borderDrag = async () => {
 			page.locator('[data-cell="t1"]').evaluate((el) => el.getBoundingClientRect().height);
 		const tall = await height();
 		const across = await page.locator('hr.border[aria-orientation="horizontal"]').boundingBox();
-		if (across === null) throw new Error("no border between t1 and t3");
+
+		if (across === null) {
+			throw new Error("no border between t1 and t3");
+		}
+
 		const x = across.x + across.width / 2;
 		await page.mouse.move(x, across.y + across.height / 2);
 		await page.mouse.down();
@@ -2676,7 +2866,11 @@ const borderDrag = async () => {
 	} finally {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
-		if (pid !== null) await stop(pid);
+
+		if (pid !== null) {
+			await stop(pid);
+		}
+
 		await rm(own, {recursive: true, force: true});
 	}
 };
@@ -2696,7 +2890,11 @@ const addedTile = async (
 		(t) => t.length === total && t.some((id) => !before.includes(id)),
 	);
 	const id = now.find((t) => t !== null && !before.includes(t));
-	if (id === undefined || id === null) throw new Error("no new tile");
+
+	if (id === undefined || id === null) {
+		throw new Error("no new tile");
+	}
+
 	return id;
 };
 
@@ -2733,17 +2931,21 @@ const layoutIs = async (page: Page, layout: Layout, ids: readonly string[]) => {
 /** Start with one tile, or a pipe's two windows, and build the promised layout around them. */
 const arrange = async (page: Page, layout: Layout, first: string, second?: string) => {
 	let ids = [first];
+
 	if (layout !== "one") {
 		const b = second ?? (await splitTile(page, first, layout === "stacked" ? "-" : "|"));
+
 		if (second !== undefined && layout === "stacked") {
 			await focusOn(page, first);
 			await prefixed(page, " ");
 		}
+
 		ids =
 			layout === "2x2" || layout === "small"
 				? [first, await splitTile(page, first, "-"), b, await splitTile(page, b, "-")]
 				: [first, b];
 	}
+
 	await layoutIs(page, layout, ids);
 	await focusOn(page, first);
 	return ids;
@@ -2769,6 +2971,7 @@ const grid = async (
 				(size) => size === "1024x700",
 			);
 		}
+
 		const before = await tiles(page);
 		await prefixed(page, "N");
 		const first = await addedTile(page, before, 1);
@@ -2788,6 +2991,7 @@ const STATES = [
 	"closing",
 	"pipe",
 ] as const;
+
 type State = (typeof STATES)[number];
 
 /** The existing, made-up ticket #7 has a plan waiting on the person. No agent is started. */
@@ -2795,6 +2999,7 @@ const seedAsks = (own: string) =>
 	Effect.runPromise(
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
+
 			for (const entry of SEVEN) {
 				const name = nameOf(entry.ticket);
 				const writer = writerText(entry.by);
@@ -2816,6 +3021,7 @@ const FOCUS = {
 	"asks-dot": "apps/fabrika/docs/focus",
 	"map-you": "programs/map/docs/focus",
 } as const;
+
 const LOOKS = ["dark", "light"] as const;
 
 /** T245 A and B, today's tracker: actual keyboard focus, with the built app's CSS cascade. */
@@ -2823,6 +3029,7 @@ const trackerFocus = async () => {
 	const own = await mkdtemp(join(tmpdir(), "fh-ring-"));
 	await seedAsks(own);
 	const app = await launch(own);
+
 	try {
 		const page = await app.firstWindow();
 		await prompted(page, "t1");
@@ -2832,8 +3039,11 @@ const trackerFocus = async () => {
 		await tracker.getByLabel("new ticket title").fill("Focus check");
 		const failures: string[] = [];
 		const record = (law: string, ok: boolean, seen: unknown) => {
-			if (ok) check(law, true);
-			else failures.push(`${law}: ${JSON.stringify(seen)}`);
+			if (ok) {
+				check(law, true);
+			} else {
+				failures.push(`${law}: ${JSON.stringify(seen)}`);
+			}
 		};
 		const ring = async (target: Locator) => {
 			await target.press("ArrowRight");
@@ -2883,13 +3093,16 @@ const trackerFocus = async () => {
 				};
 			});
 		};
+
 		for (const look of LOOKS) {
 			await lookIs(app, page, look);
 			await page.emulateMedia({forcedColors: "none"});
+
 			for (const name of ["search titles", "new ticket title", "new ticket body"]) {
 				const seen = await ring(tracker.getByLabel(name));
 				record(`T245 A: ${name}, ${look}, draws a 2px --focus outline`, seen.outline, seen);
 			}
+
 			const row = tracker.locator(".tracker-list button").filter({hasText: SEVEN_TITLE});
 			const normal = await ring(row);
 			record(
@@ -2905,11 +3118,15 @@ const trackerFocus = async () => {
 				forced,
 			);
 		}
+
 		check("T245 tracker focus laws", failures.length === 0, failures);
 	} finally {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
-		if (pid !== null) await stop(pid);
+
+		if (pid !== null) {
+			await stop(pid);
+		}
 	}
 };
 
@@ -2924,6 +3141,7 @@ const focusShots = async () => {
 	);
 	const planned = pending.size;
 	const app = await launch(own);
+
 	try {
 		const page = await app.firstWindow();
 		await prompted(page, "t1");
@@ -2957,6 +3175,7 @@ const focusShots = async () => {
 			const both = async (state: keyof typeof FOCUS, prepare: () => Promise<unknown>) => {
 				const folder = join(shots, FOCUS[state]);
 				await mkdir(folder, {recursive: true});
+
 				for (const look of LOOKS) {
 					await lookIs(app, page, look);
 					await prepare();
@@ -2969,6 +3188,7 @@ const focusShots = async () => {
 					check(`one planned image: ${name}`, pending.delete(name));
 					saved.push(file);
 				}
+
 				await lookIs(app, page, "dark");
 			};
 			await both("tile-focused", () => focusOn(page, first));
@@ -2999,7 +3219,10 @@ const focusShots = async () => {
 	} finally {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
-		if (pid !== null) await stop(pid);
+
+		if (pid !== null) {
+			await stop(pid);
+		}
 	}
 };
 
@@ -3014,7 +3237,11 @@ const ARIA = join(here, "aria");
  */
 const scrubbed = (tree: string, own: string, pids: readonly number[]) => {
 	let out = tree.replaceAll(own, "<home>").replaceAll(join("/private", own), "<home>");
-	for (const pid of pids) out = out.replace(new RegExp(`\\b${String(pid)}\\b`, "g"), "<pid>");
+
+	for (const pid of pids) {
+		out = out.replace(new RegExp(`\\b${String(pid)}\\b`, "g"), "<pid>");
+	}
+
 	return out
 		.replace(/\bpid( ?)\d+\b/gi, "pid$1<pid>")
 		.replace(/\b\d{1,2}:\d{2}(:\d{2})?(\s?[AP]M)?\b/g, "<time>")
@@ -3027,7 +3254,8 @@ const linesDiff = (was: string, now: string) => {
 	const a = was.split("\n");
 	const b = now.split("\n");
 	const lcs = a.map(() => b.map(() => 0));
-	for (let i = a.length - 1; i >= 0; i -= 1)
+
+	for (let i = a.length - 1; i >= 0; i -= 1) {
 		for (let j = b.length - 1; j >= 0; j -= 1) {
 			const row = lcs[i] ?? [];
 			row[j] =
@@ -3035,9 +3263,12 @@ const linesDiff = (was: string, now: string) => {
 					? (lcs[i + 1]?.[j + 1] ?? 0) + 1
 					: Math.max(lcs[i + 1]?.[j] ?? 0, row[j + 1] ?? 0);
 		}
+	}
+
 	const out: string[] = [];
 	let i = 0;
 	let j = 0;
+
 	while (i < a.length || j < b.length) {
 		if (i < a.length && j < b.length && a[i] === b[j]) {
 			out.push(`  ${a[i] ?? ""}`);
@@ -3054,10 +3285,15 @@ const linesDiff = (was: string, now: string) => {
 			i += 1;
 		}
 	}
+
 	// Context: three lines either side of a change, as a unified diff keeps.
 	const near = new Set<number>();
 	out.forEach((line, n) => {
-		if (!line.startsWith("  ")) for (let k = n - 3; k <= n + 3; k += 1) near.add(k);
+		if (!line.startsWith("  ")) {
+			for (let k = n - 3; k <= n + 3; k += 1) {
+				near.add(k);
+			}
+		}
 	});
 	return out.filter((_, n) => near.has(n)).join("\n");
 };
@@ -3083,6 +3319,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 	const pending = new Set(STATES.flatMap((state) => LAYOUTS.map((layout) => `${state}-${layout}`)));
 	const planned = pending.size;
 	let reached: 0 | 2 = 0;
+
 	try {
 		const page = await app.firstWindow();
 		await prompted(page, "t1");
@@ -3106,19 +3343,27 @@ const ariaStage = async (): Promise<0 | 2> => {
 		};
 		const cell = async (state: State, layout: Layout, ids: readonly string[]) => {
 			const name = `${state}-${layout}`;
-			if (state === "strips") await tilesAre(page, ids);
-			else await layoutIs(page, layout, ids);
+
+			if (state === "strips") {
+				await tilesAre(page, ids);
+			} else {
+				await layoutIs(page, layout, ids);
+			}
+
 			await page.waitForTimeout(250);
 			const first = await read();
 			await page.waitForTimeout(1100);
 			const second = await read();
+
 			if (first !== second) {
 				tally.flake += 1;
 				console.log(`flake  ${name}: two reads differ\n${linesDiff(first, second)}`);
 			}
+
 			await writeFile(join(out, `${name}.aria.yml`), `${second}\n`);
 			check(`one planned ARIA tree: ${name}`, pending.delete(name));
 			const approved = await readFile(join(ARIA, `${name}.aria.yml`), "utf8").catch(() => null);
+
 			if (approved === null) {
 				tally.fresh += 1;
 				console.log(`new    ${name}: no approved tree yet`);
@@ -3133,13 +3378,18 @@ const ariaStage = async (): Promise<0 | 2> => {
 		await grid(page, async (layout, ids) => {
 			const [first = "", ...rest] = ids;
 			const last = rest.at(-1) ?? first;
+
 			for (const state of STATES) {
 				try {
-					if (state === "plain") await cell(state, layout, ids);
+					if (state === "plain") {
+						await cell(state, layout, ids);
+					}
+
 					if (state === "asks-dot") {
 						await page.locator(".udot").waitFor({state: "visible"});
 						await cell(state, layout, ids);
 					}
+
 					if (state === "close-asked") {
 						await focusOn(page, first);
 						await prefixed(page, "x");
@@ -3148,6 +3398,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 						await page.keyboard.press("n");
 						await noQuestion(page);
 					}
+
 					if (state === "info") {
 						await focusOn(page, first);
 						await prefixed(page, "i");
@@ -3164,6 +3415,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 							(on) => on === "false",
 						);
 					}
+
 					if (state === "palette") {
 						await focusOn(page, first);
 						await page.keyboard.press("Meta+k");
@@ -3172,6 +3424,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 						await page.keyboard.press("Escape");
 						await gone(page, "pop-palette");
 					}
+
 					if (state === "strips") {
 						const folded = rest.length === 0 ? await splitTile(page, first, "|") : first;
 						await focusOn(page, folded);
@@ -3180,6 +3433,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 						await strip.waitFor();
 						await cell(state, layout, rest.length === 0 ? ids : rest);
 						await strip.click();
+
 						if (rest.length === 0) {
 							await tilesAre(page, [first, folded]);
 							await focusOn(page, folded);
@@ -3187,8 +3441,10 @@ const ariaStage = async (): Promise<0 | 2> => {
 							await askedIs(page, `close ${folded}? (y/n)`);
 							await page.keyboard.press("y");
 						}
+
 						await tilesAre(page, ids);
 					}
+
 					if (state === "pipe") {
 						// Closing can remove the workspace's last tile. Start the pipe on a fresh one.
 						const before = await tiles(page);
@@ -3198,7 +3454,11 @@ const ariaStage = async (): Promise<0 | 2> => {
 						await run(page, source, "tracker | ticket");
 						const ticket = await addedTile(page, [source]);
 						let pipeIds = [source, ticket];
-						if (layout !== "one") pipeIds = await arrange(page, layout, source, ticket);
+
+						if (layout !== "one") {
+							pipeIds = await arrange(page, layout, source, ticket);
+						}
+
 						const tracker = tile(page, source).getByLabel("tracker view");
 						await tracker.waitFor();
 						await tracker.locator(".tracker-list button").filter({hasText: SEVEN_TITLE}).click();
@@ -3210,13 +3470,16 @@ const ariaStage = async (): Promise<0 | 2> => {
 								exact: true,
 							})
 							.waitFor();
+
 						if (layout === "one") {
 							await focusOn(page, ticket);
 							await prefixed(page, "z");
 							pipeIds = [ticket];
 						}
+
 						await cell(state, layout, pipeIds);
 					}
+
 					if (state === "closing") {
 						await focusOn(page, last);
 						await run(page, last, "sleep --ms 600000 &");
@@ -3255,8 +3518,12 @@ const ariaStage = async (): Promise<0 | 2> => {
 	} finally {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
-		if (pid !== null) await stop(pid);
+
+		if (pid !== null) {
+			await stop(pid);
+		}
 	}
+
 	console.log(
 		`aria: ${planned - pending.size}/${planned} planned, ${String(tally.same)} same, ` +
 			`${String(tally.diff)} differ, ${String(tally.fresh)} new, ${String(tally.flake)} flaky; trees in ${out}`,
@@ -3267,6 +3534,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 const all = async () => {
 	const first = await launch(home);
 	let left = "";
+
 	try {
 		try {
 			left = await flow(first);
@@ -3275,6 +3543,7 @@ const all = async () => {
 			// With counter up, at 1: `close` asks Electron's `app.quit()`, as Cmd-Q does.
 			await first.close();
 		}
+
 		const pid = await hostPid(home);
 		check("the app quit, and the host it started runs on", pid !== null && alive(pid), pid);
 		const kept = (await keptJobs(home)).map((job) => [job.n, job.text, job.owner]);
@@ -3289,11 +3558,13 @@ const all = async () => {
 		check("the host kept the history in the home", history.endsWith("counter\n"), history);
 
 		const next = await launch(home);
+
 		try {
 			await again(next, left);
 		} finally {
 			await next.close().catch(() => {});
 		}
+
 		check(
 			"then the app quits, and the same host runs on",
 			(await hostPid(home)) === pid && pid !== null && alive(pid),
@@ -3312,27 +3583,42 @@ const all = async () => {
 	} finally {
 		// No person stops the host: there is no command for it. The run stops its own, by its pid.
 		const pid = await hostPid(home);
-		if (pid !== null) await stop(pid);
+
+		if (pid !== null) {
+			await stop(pid);
+		}
 	}
 };
 
 // Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
-if (process.argv.includes("--keys")) await keysLook();
-else if (process.argv.includes("--drag")) await borderDrag();
-else if (process.argv.includes("--tiles")) await tilesLook();
-else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();
-else if (process.argv.includes("--focus")) await focusShots();
-else if (process.argv.includes("--tracker-focus")) await trackerFocus();
-else await all();
+if (process.argv.includes("--keys")) {
+	await keysLook();
+} else if (process.argv.includes("--drag")) {
+	await borderDrag();
+} else if (process.argv.includes("--tiles")) {
+	await tilesLook();
+} else if (process.argv.includes("--aria")) {
+	process.exitCode = await ariaStage();
+} else if (process.argv.includes("--focus")) {
+	await focusShots();
+} else if (process.argv.includes("--tracker-focus")) {
+	await trackerFocus();
+} else {
+	await all();
+}
+
 const after = await pgrep(here);
+
 check(
 	"the host stopped by its pid: pgrep finds nothing of this app left",
 	after.length === 0,
 	after,
 );
+
 const sock = await stat(join(home, "host", "sock")).then(
 	() => true,
 	() => false,
 );
+
 check("the host took its socket away as it stopped", !sock);
 console.log(`screenshots:\n${saved.map((s) => `  ${s}`).join("\n")}`);

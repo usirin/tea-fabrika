@@ -40,11 +40,13 @@ export const laneRoot = (
 /** The step a git note names, or none when it does not read. */
 export const stepOf = (note: string): string[] => {
 	let n: unknown;
+
 	try {
 		n = JSON.parse(note);
 	} catch {
 		return [];
 	}
+
 	const step = n !== null && typeof n === "object" ? (n as {step?: unknown}).step : undefined;
 	return typeof step === "string" ? [step] : [];
 };
@@ -52,12 +54,17 @@ export const stepOf = (note: string): string[] => {
 const stuckIn = (out: string) =>
 	out.split("\n").flatMap((line) => {
 		let a: unknown;
+
 		try {
 			a = JSON.parse(line);
 		} catch {
 			return [];
 		}
-		if (a === null || typeof a !== "object") return [];
+
+		if (a === null || typeof a !== "object") {
+			return [];
+		}
+
 		const {_tag, why, step} = a as {_tag?: unknown; why?: unknown; step?: unknown};
 		return _tag === "stuck" ? [{line, why, step}] : [];
 	});
@@ -77,6 +84,25 @@ export const laneStuck = (out: string, laneSteps: ReadonlySet<string>): string[]
 		)
 		.map((a) => a.line);
 
+/**
+ * Each stuck answer that holds the step, as `<rule> <commit> [step <s>] [paths]`: the rule
+ * (stale_link, broken_chain, unsigned_commit, ...) and the commit, so the lead can send the step to
+ * the right place (ticket 429: 18 fetches on 2026-11-09 said only "commits check failed").
+ */
+export const heldRules = (out: string, laneSteps: ReadonlySet<string>): string[] =>
+	laneStuck(out, laneSteps).map((line) => {
+		const a = JSON.parse(line) as {why?: unknown; sha?: unknown; step?: unknown; paths?: unknown};
+		const paths = Array.isArray(a.paths) ? a.paths.slice(0, 3).map(String) : [];
+		return [
+			typeof a.why === "string" ? a.why : "stuck",
+			typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
+			typeof a.step === "string" ? `step ${a.step}` : "",
+			...paths,
+		]
+			.filter(Boolean)
+			.join(" ");
+	});
+
 /** Whether the commits check's exit holds the step: 0 never; 1 unless it gave stuck answers and
  * every one was waived; any other exit always. */
 export const checkHolds = (code: number, out: string, laneSteps: ReadonlySet<string>): boolean =>
@@ -86,14 +112,27 @@ export const checkHolds = (code: number, out: string, laneSteps: ReadonlySet<str
 export const workspaceGlobs = (yaml: string): string[] => {
 	const lines = yaml.split("\n");
 	const start = lines.findIndex((l) => /^packages:\s*(#.*)?$/.test(l));
-	if (start < 0) return [];
+
+	if (start < 0) {
+		return [];
+	}
+
 	const globs: string[] = [];
+
 	for (const line of lines.slice(start + 1)) {
-		if (/^\s*(#.*)?$/.test(line)) continue;
+		if (/^\s*(#.*)?$/.test(line)) {
+			continue;
+		}
+
 		const m = /^\s+-\s+['"]?([^'"#\s]+)['"]?\s*(#.*)?$/.exec(line);
-		if (m === null) break;
+
+		if (m === null) {
+			break;
+		}
+
 		globs.push(m[1] ?? "");
 	}
+
 	return globs;
 };
 
@@ -129,7 +168,11 @@ const canon = (v: unknown): string =>
 const lockedPart = (text: string): string | null => {
 	try {
 		const json: unknown = JSON.parse(text);
-		if (json === null || typeof json !== "object") return null;
+
+		if (json === null || typeof json !== "object") {
+			return null;
+		}
+
 		return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
 	} catch {
 		return null;
@@ -160,11 +203,26 @@ export const lockfileBehind = (
 		? []
 		: changed
 				.filter(({path, before, after}) => {
-					if (before === after) return false;
-					if (path === "pnpm-workspace.yaml") return true;
-					if (path !== "package.json" && !path.endsWith("/package.json")) return false;
-					if (!member(dirname(path), globs)) return false;
-					if (before === null || after === null) return true;
+					if (before === after) {
+						return false;
+					}
+
+					if (path === "pnpm-workspace.yaml") {
+						return true;
+					}
+
+					if (path !== "package.json" && !path.endsWith("/package.json")) {
+						return false;
+					}
+
+					if (!member(dirname(path), globs)) {
+						return false;
+					}
+
+					if (before === null || after === null) {
+						return true;
+					}
+
 					const was = lockedPart(before);
 					const is = lockedPart(after);
 					return was === null || is === null || was !== is;

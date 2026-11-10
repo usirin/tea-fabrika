@@ -23,6 +23,7 @@ const missing = (error: unknown): boolean =>
 
 /** The last path segment, the way a directory watcher names the file that changed. */
 const base = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
+
 const folder = (path: string): string => {
 	const at = path.lastIndexOf("/");
 	return at <= 0 ? (at === 0 ? "/" : ".") : path.slice(0, at);
@@ -30,7 +31,8 @@ const folder = (path: string): string => {
 
 /** Whether a watch event is about the key file. An event that names no path counts. */
 const about = (file: string, event: unknown): boolean => {
-	if (typeof event !== "object" || event === null || !("path" in event)) return true;
+	if (typeof event !== "object" || event === null || !("path" in event)) {return true;}
+
 	return typeof event.path !== "string" || base(event.path) === base(file);
 };
 
@@ -40,14 +42,19 @@ export const watchKeys = Effect.fn("keys.watch")(function* (
 	const fs = yield* FileSystem.FileSystem;
 	const read = Effect.fn("keys.read")(function* () {
 		const text = yield* Effect.result(fs.readFileString(options.file));
+
 		// No file is the empty table: every command keeps its defaults.
 		if (Result.isFailure(text) && missing(text.failure)) {
 			yield* options.publish({rows: {}, source: "file"});
 			return yield* options.status({error: null});
 		}
-		if (Result.isFailure(text)) return yield* options.status({error: {line: 0, why: "read"}});
+
+		if (Result.isFailure(text)) {return yield* options.status({error: {line: 0, why: "read"}});}
+
 		const rows = parseKeys(text.success, options.commands);
-		if (Result.isFailure(rows)) return yield* options.status({error: rows.failure});
+
+		if (Result.isFailure(rows)) {return yield* options.status({error: rows.failure});}
+
 		yield* Effect.annotateCurrentSpan("fab.keys.commands", Object.keys(rows.success).length);
 		yield* options.publish({rows: rows.success, source: "file"});
 		yield* options.status({error: null});

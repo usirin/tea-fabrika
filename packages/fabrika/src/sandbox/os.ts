@@ -88,7 +88,11 @@ const wrap =
 			// srt's own package too: on Linux its seccomp helper runs inside the sandbox.
 			const tools = [...toolchain(parent, process.execPath), path.dirname(path.dirname(cli))];
 			const {settings, opens} = settingsOf(job, workspace, tools);
-			if (opens !== null) return yield* new SandboxError({why: "opens_home", what: opens});
+
+			if (opens !== null) {
+				return yield* new SandboxError({why: "opens_home", what: opens});
+			}
+
 			const file = path.join(workspace.root, "srt.json");
 			yield* fs
 				.writeFileString(file, JSON.stringify(settings))

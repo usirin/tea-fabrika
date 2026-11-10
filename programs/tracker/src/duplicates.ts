@@ -28,7 +28,11 @@ import type {duplicates} from "./machine.ts";
 export const duplicatesCell = (cmd: ReturnType<typeof duplicates>) =>
 	Effect.gen(function* () {
 		const jev = yield* Effect.serviceOption(Jev);
-		if (Option.isNone(jev)) return {kind: "off" as const};
+
+		if (Option.isNone(jev)) {
+			return {kind: "off" as const};
+		}
+
 		const scores = yield* scoresOf(cmd.filed, cmd.candidates).pipe(
 			Effect.provideService(Jev, jev.value),
 			Effect.mapError(() => ({_tag: "unreachable" as const, why: "Jev did not answer"})),

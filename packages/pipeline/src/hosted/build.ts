@@ -97,7 +97,11 @@ export const commitEnv = (env: Readonly<Record<string, string>>, at: number) => 
 const baseOf = (git: Git, remote: string, branch: string) =>
 	Effect.gen(function* () {
 		const own = yield* branchHeadAt(git, remote, branch);
-		if (own !== null) return own;
+
+		if (own !== null) {
+			return own;
+		}
+
 		const main = yield* branchHeadAt(git, remote, "main");
 		return main === null ? yield* failed : main;
 	});
@@ -107,12 +111,14 @@ export const copyAt = (git: Git, remote: string, tree: string, base: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
+
 		if (!(yield* fs.exists(path.join(tree, ".git")).pipe(Effect.orElseSucceed(() => false)))) {
 			yield* fs
 				.makeDirectory(path.dirname(tree), {recursive: true})
 				.pipe(Effect.mapError((): Failed => ({_tag: "unknown"})));
 			yield* git.okLow(["clone", "-q", "--no-checkout", remote, tree]);
 		}
+
 		yield* git.okLow(["-C", tree, "fetch", "-q", remote, "+refs/heads/*:refs/remotes/origin/*"]);
 		yield* git.ok(["-C", tree, "checkout", "-q", "--detach", "-f", base]);
 		yield* git.ok(["-C", tree, "reset", "-q", "--hard", base]);
@@ -123,12 +129,19 @@ export const copyAt = (git: Git, remote: string, tree: string, base: string) =>
 const installIn = (tree: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
-		if (yield* fs.exists(`${tree}/node_modules`).pipe(Effect.orElseSucceed(() => false))) return;
+
+		if (yield* fs.exists(`${tree}/node_modules`).pipe(Effect.orElseSucceed(() => false))) {
+			return;
+		}
+
 		const done = yield* runLow("pnpm", ["install", "--frozen-lockfile"], {
 			cwd: tree,
 			env: runEnv(),
 		});
-		if (done.code !== 0) return yield* failed;
+
+		if (done.code !== 0) {
+			return yield* failed;
+		}
 	});
 
 /** The `BuildWrites` of one hosted round: copy names, push makes the commit again, both writes keyed. */
@@ -161,9 +174,17 @@ const hostedBuildWrites = (o: {
 				null,
 				asWritten<BuildAnswer>(),
 			);
-			if (asked.how !== "answered" || asked.answer.base !== copied.base) return yield* failed;
+
+			if (asked.how !== "answered" || asked.answer.base !== copied.base) {
+				return yield* failed;
+			}
+
 			const {patch} = asked.answer;
-			if (patch === "") return {head: copied.base, changed: false};
+
+			if (patch === "") {
+				return {head: copied.base, changed: false};
+			}
+
 			// The copy, made again here from the remote: this host may never have had one.
 			yield* copyAt(git, remote, tree, copied.base);
 			const fs = yield* FileSystem.FileSystem;
@@ -196,9 +217,17 @@ const hostedBuildWrites = (o: {
 					Effect.gen(function* () {
 						// Compare-and-set: only from where the ledger says the branch stood.
 						const now = yield* outside.branchHead(repo, copied.branch);
-						if (now === sha) return pushed;
+
+						if (now === sha) {
+							return pushed;
+						}
+
 						const fromMain = (yield* outside.branchHead(repo, "main")) === copied.base;
-						if (!(now === copied.base || (now === null && fromMain))) return yield* failed;
+
+						if (!(now === copied.base || (now === null && fromMain))) {
+							return yield* failed;
+						}
+
 						yield* outside.push(k, {repo, tree, branch: copied.branch, sha});
 						return pushed;
 					}),
@@ -264,8 +293,11 @@ export const buildTurn =
 	> =>
 		Effect.gen(function* () {
 			const read = readAsk(ask.brief);
-			if (Exit.isFailure(read))
+
+			if (Exit.isFailure(read)) {
 				return yield* Effect.die(`a build ask that does not read: ${ask.id}`);
+			}
+
 			// The brief names the stage's folder: the child works in its own.
 			const {brief} = read.value;
 			const work = yield* BuildWork;
@@ -276,7 +308,11 @@ export const buildTurn =
 			const base = yield* baseOf(git, remote, brief.branch);
 			const tree = `${work.dir}/${at.name.replace(/[^a-zA-Z0-9._-]/g, "_")}/tree`;
 			yield* copyAt(git, remote, tree, base);
-			if (work.install) yield* installIn(tree);
+
+			if (work.install) {
+				yield* installIn(tree);
+			}
+
 			const drafted = yield* (yield* Builder).build({...brief, tree}, read.value.settings);
 			yield* git.ok(["-C", tree, "add", "-A"]);
 			const patch = yield* git.ok(["-C", tree, "diff", "--cached", "--binary", base]);
@@ -359,6 +395,7 @@ export const hostedBuild: Stage<
 };
 
 const decodeJob = Schema.decodeUnknownExit(Schema.fromJsonString(BuildJob));
+
 /** The job, from the stage's inbox: boot runs after the stage has read it. */
 const jobOf = (self: Self["Service"]) =>
 	self.reads.readStream(self.inbox).pipe(

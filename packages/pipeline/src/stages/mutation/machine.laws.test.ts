@@ -39,10 +39,12 @@ const DISABLE = {
 	line: 11,
 	text: "// Stryker disable next-line all: no test can tell",
 };
+
 const EXAM = {...SCOPE.diff, files: [...SCOPE.diff.files, ...ASK.exam]};
 /** The ignorer as the owner approved it, and as it reads after another edit. */
 const APPROVED = ASK.exam.map((file) => ({file, hash: "0a1b2c3d4e5f"}));
 const EDITED = ASK.exam.map((file) => ({file, hash: "f5e4d3c2b1a0"}));
+
 /** A diff as it comes: clean, with a disable comment, touching the ignorer, or with no source line. */
 const scopes = fc.constantFrom(
 	SCOPE,
@@ -52,6 +54,7 @@ const scopes = fc.constantFrom(
 	{...SCOPE, diff: EXAM, exam: EDITED},
 	{diff: {files: ["README.md"], added: []}, kept: [], exam: []},
 );
+
 /** A run with none, one or two mutants that survived, each as often. */
 const ran: fc.Arbitrary<Ran> = fc.integer({min: 0, max: 2}).map((n) => ({
 	found: 5,
@@ -61,6 +64,7 @@ const ran: fc.Arbitrary<Ran> = fc.integer({min: 0, max: 2}).map((n) => ({
 	killed: 4 - n,
 	survived: Array.from({length: n}, () => SURVIVED),
 }));
+
 /** Code's checks at a head, as the lane hands them on (self-fix PR 4). */
 interface Checked {
 	readonly head: string;
@@ -72,6 +76,7 @@ interface Checked {
 	readonly result: "green" | "red" | "not_run";
 	readonly failed: readonly string[];
 }
+
 const checkedAt = (head: string, result: Checked["result"]): Checked => ({
 	head,
 	commands: [
@@ -80,11 +85,15 @@ const checkedAt = (head: string, result: Checked["result"]): Checked => ({
 	result,
 	failed: [],
 });
+
 const GREEN_HERE = checkedAt(HEAD, "green");
+
 const checkedOf = (ask: unknown): Checked | null =>
 	(ask as {readonly checked?: Checked}).checked ?? null;
+
 const trustedOf = (report: unknown): Checked | null =>
 	(report as {readonly trusted?: Checked | null}).trusted ?? null;
+
 /** Green checks at the ask's own head: the one case the step may skip its suite run on. */
 const greenHere = (ask: {readonly head: string}) => {
 	const checked = checkedOf(ask);
@@ -120,6 +129,7 @@ const table: MsgArbitraryTable<Msg> = {
 	mutation_run_ok: ran.map((r) => runMutants.ok(RUN_CMD, r, 0)),
 	mutation_run_err: fc.constant(runMutants.err(RUN_CMD, NOT_RUN, 0)),
 };
+
 /** A start first, most of the time, then any Msgs: a run's answers, late ones, restarts and failures. */
 const lists = fc
 	.tuple(
@@ -132,6 +142,7 @@ const lists = fc
 		),
 	)
 	.map(([first, rest]) => (first === null ? rest : [first, ...rest]));
+
 const RUNS = {numRuns: 400, seed: 49};
 
 /** The law, as a step's answer: `null` holds, a sentence is how it broke. */
@@ -147,14 +158,25 @@ const overForGood: Law = ({prev, next, cmds}) =>
 
 /** It ends `done` only when Stryker ran and nothing survived, and every mutant that survives is sent on. */
 const nothingSurvivesQuietly: Law = ({prev, next}) => {
-	if (prev.phase === "over" || next.phase !== "over") return null;
+	if (prev.phase === "over" || next.phase !== "over") {
+		return null;
+	}
+
 	const {outcome, report} = next;
 	const survived = report.ran?.survived.length ?? 0;
-	if (outcome.kind === "done" && (report.ran === null || survived > 0))
+
+	if (outcome.kind === "done" && (report.ran === null || survived > 0)) {
 		return "done without a clean run";
-	if (survived > 0 && outcome.kind !== "send") return "a mutant survived and was not sent on";
-	if (outcome.kind === "send" && outcome.to === "test_writer" && survived === 0)
+	}
+
+	if (survived > 0 && outcome.kind !== "send") {
+		return "a mutant survived and was not sent on";
+	}
+
+	if (outcome.kind === "send" && outcome.to === "test_writer" && survived === 0) {
 		return "sent to the writer with no mutant";
+	}
+
 	return null;
 };
 
@@ -164,13 +186,21 @@ const nothingSurvivesQuietly: Law = ({prev, next}) => {
  */
 const redGoesBack: Law = ({prev, msg, next}) => {
 	if (msg.type === "mutation_tests_ok" && prev.phase === "testing" && msg.value.result === "red") {
-		if (next.phase !== "over") return `a red run went on to ${next.phase}`;
-		if (next.outcome.kind !== "send" || next.outcome.to !== "builder")
+		if (next.phase !== "over") {
+			return `a red run went on to ${next.phase}`;
+		}
+
+		if (next.outcome.kind !== "send" || next.outcome.to !== "builder") {
 			return `a red run ended ${next.outcome.kind}`;
-		if (JSON.stringify(next.report.failed) !== JSON.stringify(msg.value.failed))
+		}
+
+		if (JSON.stringify(next.report.failed) !== JSON.stringify(msg.value.failed)) {
 			return "a red run lost the names of its failing tests";
+		}
+
 		return null;
 	}
+
 	const sentBack =
 		prev.phase !== "over" &&
 		next.phase === "over" &&
@@ -184,11 +214,22 @@ const redGoesBack: Law = ({prev, msg, next}) => {
  * green at this very head, or again after a restart that found it in flight.
  */
 const testsFirst: Law = ({prev, msg, cmds}) => {
-	if (!cmds.some((c) => c.type === "mutation_run")) return null;
-	if (msg.type === "mutation_tests_ok" && msg.value.result === "green") return null;
-	if (msg.type === "mutation_scope_ok" && prev.phase === "reading" && greenHere(prev.ask))
+	if (!cmds.some((c) => c.type === "mutation_run")) {
 		return null;
-	if (msg.type === "resume" && prev.phase === "mutating") return null;
+	}
+
+	if (msg.type === "mutation_tests_ok" && msg.value.result === "green") {
+		return null;
+	}
+
+	if (msg.type === "mutation_scope_ok" && prev.phase === "reading" && greenHere(prev.ask)) {
+		return null;
+	}
+
+	if (msg.type === "resume" && prev.phase === "mutating") {
+		return null;
+	}
+
 	return `Stryker started on ${msg.type}`;
 };
 
@@ -199,51 +240,74 @@ const testsFirst: Law = ({prev, msg, cmds}) => {
  */
 const skipIsWritten: TraceLaw = (steps) => {
 	let tested = false;
+
 	for (const {prev, msg, next} of steps) {
-		if (msg.type === "start" && prev.phase === "idle") tested = false;
+		if (msg.type === "start" && prev.phase === "idle") {
+			tested = false;
+		}
+
 		if (
 			msg.type === "mutation_tests_ok" &&
 			prev.phase === "testing" &&
 			msg.value.result === "green"
-		)
+		) {
 			tested = true;
-		if (prev.phase === "over" || next.phase !== "over") continue;
+		}
+
+		if (prev.phase === "over" || next.phase !== "over") {
+			continue;
+		}
+
 		const trusted = trustedOf(next.report);
-		if (trusted !== null && (trusted.result !== "green" || trusted.head !== next.ask.head))
+
+		if (trusted !== null && (trusted.result !== "green" || trusted.head !== next.ask.head)) {
 			return `trusted checks ${trusted.result} at ${trusted.head}`;
-		if (next.report.ran !== null && !tested && trusted === null)
+		}
+
+		if (next.report.ran !== null && !tested && trusted === null) {
 			return "Stryker ran with no tests run and no checks named";
+		}
 	}
+
 	return null;
 };
 
 /** A change to the exam the owner did not allow never reaches a run: the last diff read had none. */
 const examIsTheOwners: TraceLaw = (steps) => {
 	let open = false;
+
 	for (const {prev, msg, cmds} of steps) {
-		if (msg.type === "mutation_scope_ok" && prev.phase === "reading")
+		if (msg.type === "mutation_scope_ok" && prev.phase === "reading") {
 			open = unapproved(changesOf(msg.value, prev.ask.exam), prev.ask.allowed).length > 0;
-		if (open && cmds.some((c) => c.type === "mutation_tests" || c.type === "mutation_run"))
+		}
+
+		if (open && cmds.some((c) => c.type === "mutation_tests" || c.type === "mutation_run")) {
 			return "ran with a change the owner did not allow";
+		}
 	}
+
 	return null;
 };
 
 const encode = Schema.encodeSync(Mutation);
 const decode = Schema.decodeUnknownSync(Mutation);
+
 /** Every state saves and loads back equal, so a restart reads what it left. */
 const kept: Law = ({next}) =>
 	JSON.stringify(decode(encode(next))) === JSON.stringify(next) ? null : "lost on save";
 
 const checkEach = (machine: Machine, law: Law) =>
 	propertyInvariant(machine, undefined, lists, each(law), RUNS);
+
 const checkWhole = (machine: Machine, law: TraceLaw) =>
 	propertyTrace(machine, undefined, lists, whole(law), RUNS);
 
 describe("the mutation step's laws", () => {
 	it("hold on the real machine", () => {
-		for (const law of [overForGood, nothingSurvivesQuietly, testsFirst, kept])
+		for (const law of [overForGood, nothingSurvivesQuietly, testsFirst, kept]) {
 			checkEach(mutation, law);
+		}
+
 		checkWhole(mutation, examIsTheOwners);
 	});
 
@@ -363,7 +427,11 @@ describe("each law is seen to fail on a planted mistake", () => {
 		const leaks = plant({
 			mutation_scope_ok: (s, m) => {
 				const [next, cmds] = mutation.update.mutation_scope_ok(s, m);
-				if (next.phase !== "testing") return [next, cmds];
+
+				if (next.phase !== "testing") {
+					return [next, cmds];
+				}
+
 				return [{...next, spans: next.spans.map((x) => ({...x, from: x.from - 9}))}, cmds];
 			},
 		});
@@ -375,7 +443,11 @@ describe("each law is seen to fail on a planted mistake", () => {
 		plant({
 			mutation_scope_ok: (s, m) => {
 				const [next, cmds] = mutation.update.mutation_scope_ok(s, m);
-				if (s.phase !== "reading" || next.phase !== "testing" || !skips(s)) return [next, cmds];
+
+				if (s.phase !== "reading" || next.phase !== "testing" || !skips(s)) {
+					return [next, cmds];
+				}
+
 				const {head, seed, most} = s.ask;
 				const asked = runMutants({head, spans: next.spans, seed, most});
 				return [{ask: s.ask, spans: next.spans, phase: "mutating", asked}, [asked]];
@@ -392,7 +464,11 @@ describe("each law is seen to fail on a planted mistake", () => {
 			...skipping((s) => greenHere(s.ask)).update,
 			mutation_run_ok: (s, m) => {
 				const [next, cmds] = mutation.update.mutation_run_ok(s, m);
-				if (next.phase !== "over") return [next, cmds];
+
+				if (next.phase !== "over") {
+					return [next, cmds];
+				}
+
 				const {trusted: _, ...report} = next.report as typeof next.report & {trusted?: unknown};
 				return [{...next, report}, cmds];
 			},
@@ -405,7 +481,11 @@ describe("each law is seen to fail on a planted mistake", () => {
 			...skipping((s) => greenHere(s.ask)).update,
 			mutation_run_ok: (s, m) => {
 				const [next, cmds] = mutation.update.mutation_run_ok(s, m);
-				if (next.phase !== "over") return [next, cmds];
+
+				if (next.phase !== "over") {
+					return [next, cmds];
+				}
+
 				const report = {...next.report, trusted: {...GREEN_HERE, head: "o".repeat(40)}};
 				return [{...next, report}, cmds];
 			},

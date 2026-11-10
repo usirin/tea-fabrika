@@ -88,6 +88,7 @@ export const quiet = defineMachine({
 	init: (loaded) => [loaded ?? {n: 0}, []],
 	update: {noop: (s) => [s, []]},
 });
+
 const Quiet = Schema.Struct({n: Schema.Number});
 
 /**
@@ -131,12 +132,21 @@ export const agentProgram = <R>(o: {
 							.readStream(askingOf(stage))
 							.pipe(Effect.orElseSucceed(() => []));
 						const said = new Map<string, boolean>();
+
 						for (const r of rows) {
 							const a = readAsking(r.data);
-							if (Exit.isSuccess(a) && a.value.fence === fence) said.set(a.value.id, a.value.on);
+
+							if (Exit.isSuccess(a) && a.value.fence === fence) {
+								said.set(a.value.id, a.value.on);
+							}
 						}
+
 						const mine = said.get(id);
-						if (mine !== undefined) return mine ? "wanted" : "withdrawn";
+
+						if (mine !== undefined) {
+							return mine ? "wanted" : "withdrawn";
+						}
+
 						const done = yield* ledger.readStream(answers).pipe(Effect.orElseSucceed(() => []));
 						const waiting = [...said].some(
 							([other, on]) => on && !done.some((r) => r.id === other),
@@ -148,15 +158,22 @@ export const agentProgram = <R>(o: {
 				const wanted = (id: string) =>
 					Effect.gen(function* () {
 						let first: {readonly fence: number; readonly expires_at: number} | null = null;
+
 						for (;;) {
 							const lease = yield* ledger.lease(stage).pipe(Effect.orElseSucceed(() => null));
+
 							if (lease !== null) {
 								first ??= lease;
+
 								if (lease.fence !== first.fence || lease.expires_at > first.expires_at) {
 									const now = yield* standing(lease.fence, id);
-									if (now !== "unsaid") return now;
+
+									if (now !== "unsaid") {
+										return now;
+									}
 								}
 							}
+
 							yield* Effect.sleep(Duration.millis(100));
 						}
 					});
@@ -166,18 +183,29 @@ export const agentProgram = <R>(o: {
 						for (;;) {
 							yield* Effect.sleep(Duration.millis(250));
 							const lease = yield* ledger.lease(stage).pipe(Effect.orElseSucceed(() => null));
-							if (lease !== null && (yield* standing(lease.fence, id)) === "withdrawn") return;
+
+							if (lease !== null && (yield* standing(lease.fence, id)) === "withdrawn") {
+								return;
+							}
 						}
 					});
 				const one = (ask: AgentAsk) =>
 					Effect.gen(function* () {
-						if (yield* answered(ask.id)) return yield* say("skipped", ask.id);
-						if ((yield* wanted(ask.id)) === "withdrawn") return yield* say("withdrawn", ask.id);
+						if (yield* answered(ask.id)) {
+							return yield* say("skipped", ask.id);
+						}
+
+						if ((yield* wanted(ask.id)) === "withdrawn") {
+							return yield* say("withdrawn", ask.id);
+						}
+
 						const held = yield* self.hold(ask.id, o.hold);
+
 						if (held.how !== "ok") {
 							yield* say("limit", ask.id);
 							return yield* Effect.never;
 						}
+
 						yield* say("hold", ask.id);
 						const ran = yield* Effect.gen(function* () {
 							yield* Effect.sleep(Duration.millis(o.turnFaultMs ?? 100)).pipe(
@@ -190,17 +218,23 @@ export const agentProgram = <R>(o: {
 							Effect.map((turn) => ({turn})),
 							Effect.raceFirst(takenBack(ask.id).pipe(Effect.as(null))),
 						);
+
 						// Cut short: what it spent stays counted at its hold.
-						if (ran === null) return yield* say("withdrawn", ask.id);
+						if (ran === null) {
+							return yield* say("withdrawn", ask.id);
+						}
+
 						const {turn} = ran;
 						yield* say("turn", ask.id, {agent: turn.agent, usd: turn.cost.usd ?? 0});
 						yield* faults.at("agent-answered");
 						// The money is spent whatever comes next: the charge goes first.
 						const charged = yield* self.charge(ask.id, turn.cost);
+
 						if (charged.how === "ok" && charged.over !== null) {
 							yield* say("limit", ask.id);
 							return yield* Effect.never;
 						}
+
 						// 151: sent again with no limit while the ledger does not answer; the ask's id makes
 						// that safe.
 						const wrote = yield* steady(
@@ -212,8 +246,12 @@ export const agentProgram = <R>(o: {
 								fence,
 							),
 						).pipe(Effect.result);
+
 						// A lost lease: the next holder answers it.
-						if (wrote._tag === "Failure") return yield* Effect.never;
+						if (wrote._tag === "Failure") {
+							return yield* Effect.never;
+						}
+
 						yield* say("answered", ask.id, {agent: turn.agent});
 					});
 				return yield* serve({
@@ -235,10 +273,12 @@ export const asWritten = <A>(): Schema.Codec<A, unknown> =>
 /** FNV-1a of a text, as 8 hex digits: an ask's id from what it asks, the same on every host. */
 export const digest = (text: string): string => {
 	let h = 0x811c9dc5;
+
 	for (let k = 0; k < text.length; k++) {
 		h ^= text.charCodeAt(k);
 		h = Math.imul(h, 0x01000193) >>> 0;
 	}
+
 	return h.toString(16).padStart(8, "0");
 };
 
@@ -275,13 +315,18 @@ export const askAgent = <A>(
 			).pipe(Effect.result);
 		// Recorded before it is sent, so a child that reads the ask finds it wanted.
 		const noted = yield* say(true);
+
 		if (noted._tag === "Failure") {
 			// A lost lease: the program is about to be stopped.
-			if (noted.failure._tag === "Fenced") return yield* Effect.never;
+			if (noted.failure._tag === "Fenced") {
+				return yield* Effect.never;
+			}
+
 			return yield* Effect.die(
 				`${self.name} could not record its ask ${id}: ${noted.failure._tag}`,
 			);
 		}
+
 		return yield* answerOf(child, id, answer, brief).pipe(
 			// Cut while waiting (its Sub ended, or the stage stops): taken back, so the child does not
 			// run it for nobody. A lost lease refuses the row, and the next holder speaks for itself.
@@ -303,22 +348,35 @@ const answerOf = <A>(
 		const sent = yield* self
 			.send(streams(child).inbox, id, {id, brief})
 			.pipe(Effect.repeat({until: (d) => d.how !== "unknown", schedule: EVERY_100_MS}));
+
 		// A lost lease: the program is about to be stopped.
-		if (sent.how === "fenced") return yield* Effect.never;
+		if (sent.how === "fenced") {
+			return yield* Effect.never;
+		}
+
 		for (;;) {
 			const rows = yield* ledger.readStream(answersOf(child)).pipe(Effect.orElseSucceed(() => []));
 			const row = rows.find((r) => r.id === id);
+
 			if (row !== undefined) {
 				const data = decodeRow(row.data);
 				const value = Exit.isSuccess(data) ? decode(data.value.answer) : null;
-				if (value === null || Exit.isFailure(value))
+
+				if (value === null || Exit.isFailure(value)) {
 					return yield* Effect.die(`${child} answered ${id} with a shape that does not read`);
+				}
+
 				return {how: "answered", answer: value.value} as const;
 			}
+
 			const dead = yield* ledger
 				.readStream(streams(child).dead)
 				.pipe(Effect.orElseSucceed(() => []));
-			if (dead.some((r) => r.kind === "limit")) return {how: "limit"} as const;
+
+			if (dead.some((r) => r.kind === "limit")) {
+				return {how: "limit"} as const;
+			}
+
 			yield* Effect.sleep(Duration.millis(100));
 		}
 	});

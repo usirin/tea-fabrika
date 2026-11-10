@@ -23,19 +23,23 @@ const SEED = 119120;
 const opts = {seed: SEED, numRuns: 40};
 
 type Assets = {readonly page: string; readonly script: string};
+
 type Fetch = (
 	request: Request,
 	env: Env,
 	config: BrainOptions,
 	assets: Assets,
 ) => Effect.Effect<Response, unknown>;
+
 type Control = (
 	request: Request,
 	env: Env,
 	token: Redacted.Redacted<string>,
 	programs: object,
 ) => Effect.Effect<Response, unknown>;
+
 type Bootstrap = {readonly name: string; readonly id: string; readonly program: string};
+
 interface Runtime {
 	readonly viewNotice: (
 		pid: string,
@@ -43,9 +47,12 @@ interface Runtime {
 	) => {readonly method: string; readonly params: Record<string, unknown>};
 	readonly bootstraps: (option: Bootstrap | ReadonlyArray<Bootstrap>) => ReadonlyArray<Bootstrap>;
 }
+
 const fetchApi = async (): Promise<Fetch> => ((await import("./fetch.ts")) as {fetch: Fetch}).fetch;
+
 const controlApi = async (): Promise<Control> =>
 	((await import("./control.ts")) as {control: Control}).control;
+
 const runtimeApi = async (): Promise<Runtime> => {
 	// oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
 	const loaded = (await import("./runtime.ts")) as unknown as Partial<Runtime>;
@@ -55,6 +62,7 @@ const runtimeApi = async (): Promise<Runtime> => {
 };
 
 const word = fc.stringMatching(/^[A-Za-z0-9]{4,16}$/);
+
 const config = (port: number): BrainOptions => ({
 	name: "p14",
 	port,
@@ -92,9 +100,12 @@ const world = () => {
 	} as unknown as Env;
 	return {env, calls};
 };
+
 const run = <A, E>(work: Effect.Effect<A, E>) => Effect.runPromiseExit(work);
+
 const must = <A, E>(exit: Exit.Exit<A, E>): A => {
-	if (Exit.isSuccess(exit)) return exit.value;
+	if (Exit.isSuccess(exit)) {return exit.value;}
+
 	throw new Error(Cause.pretty(exit.cause));
 };
 
@@ -126,10 +137,12 @@ describe("P14: the Worker serves the built page and script, behind the same chec
 					expect(code.status).toBe(200);
 					expect(code.headers.get("content-type")).toMatch(/javascript/);
 					expect(await code.text()).toBe(script);
+
 					for (const path of ["/", "/window.js"]) {
 						expect(must(await at(path, {host: "evil.example"})).status).toBe(421);
 						expect(must(await at(path, {origin: "http://evil.example"})).status).toBe(403);
 					}
+
 					expect(calls, "serving the page reaches no object").toEqual([]);
 				},
 			),

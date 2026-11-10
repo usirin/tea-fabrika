@@ -23,15 +23,18 @@ type Msg = MsgOf<Machine>;
 type HoldStep = Step<Hold, Msg, HoldCmd>;
 
 const NAMES = ["<c-b>", "<c-c>", "|", "l", "y"] as const;
+
 const keyOf = (name: string, code = ""): Key => ({
 	name,
 	press: {key: name, code, ctrl: name.startsWith("<c-"), alt: false, meta: false, shift: false},
 });
+
 const key = fc.constantFrom(...NAMES).map((name) => keyOf(name));
 
 /** A Cmd's failed answer. The hold's Cmds declare no errors, so a malformed answer is the one left. */
 const failed = <T extends string, C>(type: T, cmd: C) =>
 	fc.constant({type, cmd, error: {_tag: "malformed_result", issues: []} as const, at: 0});
+
 const pressing = press({id: 0, key: "<c-b>"});
 const passing = pass({key: keyOf("l"), held: false});
 
@@ -52,12 +55,14 @@ const table: MsgArbitraryTable<Msg> = {
 /** Each key gets its place in the list as its `code`, so no two keys are the same. */
 const named = (msgs: readonly Msg[]): readonly Msg[] =>
 	msgs.map((msg, at) => (msg.type === "key" ? {...msg, key: keyOf(msg.key.name, `k${at}`)} : msg));
+
 const lists = fc
 	.array(arbMsg(table, {weights: {key: 6, answer: 4, takes: 2, down: 1}}), {
 		maxLength: 40,
 		size: "max",
 	})
 	.map(named);
+
 const OPTS = {numRuns: 400, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
 
@@ -76,6 +81,7 @@ const presses = (cmds: readonly HoldCmd[]) => cmds.flatMap((c) => (c.type === "p
 const passes = (cmds: readonly HoldCmd[]) => cmds.flatMap((c) => (c.type === "pass" ? [c] : []));
 /** Does the desk take this key, as the host said last, with the link up? */
 const takes = (s: Hold, k: Key) => s.up && (s.takes.all || s.takes.keys.includes(k.name));
+
 /** Is this Msg what frees the key out: its answer, or the link dropping? */
 const frees = (s: Hold, msg: Msg) =>
 	s.waiting !== null && ((msg.type === "answer" && msg.id === s.waiting.id) || msg.type === "down");
@@ -86,9 +92,12 @@ const followed = (steps: readonly HoldStep[]) => {
 	const left: string[] = [];
 	const passed: string[] = [];
 	const refused = new Set<string>();
+
 	for (const {prev, msg, next, cmds} of steps) {
-		if (msg.type === "answer" && !msg.took && prev.waiting?.id === msg.id)
+		if (msg.type === "answer" && !msg.took && prev.waiting?.id === msg.id) {
 			refused.add(prev.waiting.key.press.code);
+		}
+
 		for (const c of cmds) {
 			// A press goes with the key it leaves out, under the same id.
 			const code =
@@ -98,9 +107,13 @@ const followed = (steps: readonly HoldStep[]) => {
 						? next.waiting.key.press.code
 						: `id ${c.id}`;
 			(c.type === "pass" ? passed : pressed).push(code);
-			if (!left.includes(code)) left.push(code);
+
+			if (!left.includes(code)) {
+				left.push(code);
+			}
 		}
 	}
+
 	const order = steps.flatMap(({msg}) => (msg.type === "key" ? [msg.key.press.code] : []));
 	return {order, pressed, passed, left, refused};
 };
@@ -114,7 +127,11 @@ const oneOut = everyStep(
 	"one key at most is out at the host: a key is sent only when none is out, and it is then the one out",
 	({prev, msg, next, cmds}) => {
 		const sent = presses(cmds);
-		if (sent.length === 0) return true;
+
+		if (sent.length === 0) {
+			return true;
+		}
+
 		const [only] = sent;
 		return (
 			sent.length === 1 &&
@@ -225,7 +242,10 @@ const takenGoesUp = everyStep(
 const answerMoves = everyStep(
 	"the answer for the key out lets the keys held go on: one is out next, or none is left held",
 	({prev, msg, next, cmds}) => {
-		if (msg.type !== "answer" || prev.waiting?.id !== msg.id) return true;
+		if (msg.type !== "answer" || prev.waiting?.id !== msg.id) {
+			return true;
+		}
+
 		const back = passes(cmds)[0];
 		const refusedFirst =
 			msg.took || (back?.held === true && back.key.press.code === prev.waiting.key.press.code);
@@ -271,6 +291,7 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = holdMachine.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...holdMachine,
@@ -298,7 +319,10 @@ const PLANTS = {
 	/** A key is sent to the host while the link is down. */
 	sendsWhenDown: plant({
 		key: (s, m) => {
-			if (s.up) return real.key(s, m);
+			if (s.up) {
+				return real.key(s, m);
+			}
+
 			const [next, cmds] = real.key({...s, up: true}, m);
 			return [{...next, up: false}, cmds];
 		},
@@ -337,7 +361,10 @@ const PLANTS = {
 	/** The answer frees the key out and forgets to let the held keys go on. */
 	answerForgetsHeld: plant({
 		answer: (s, m) => {
-			if (s.waiting === null || s.waiting.id !== m.id) return [s, []];
+			if (s.waiting === null || s.waiting.id !== m.id) {
+				return [s, []];
+			}
+
 			const back = m.took ? [] : [pass({key: s.waiting.key, held: true})];
 			return [{...s, waiting: null}, back];
 		},

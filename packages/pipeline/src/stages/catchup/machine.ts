@@ -137,6 +137,7 @@ export type CatchupMsg =
 
 type Step = readonly [Catchup, readonly CatchupCmd[]];
 const stay = (s: Catchup): Step => [s, []];
+
 const end = (
 	s: Held,
 	outcome: CatchupOutcome,
@@ -177,7 +178,10 @@ export const catchup = defineMachine({
 	subs: [resolveSub],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const asked = readCatchup(m.ask);
 			return [{ask: m.ask, phase: "reading", asked}, [asked]];
 		},
@@ -186,11 +190,21 @@ export const catchup = defineMachine({
 				? [s, [s.asked]]
 				: stay(s),
 		catchup_read_ok: (s, m): Step => {
-			if (s.phase !== "reading") return stay(s);
+			if (s.phase !== "reading") {
+				return stay(s);
+			}
+
 			const v = m.value;
-			if (v.branch === null) return end(s, {kind: "skip", why: "up_to_date"});
+
+			if (v.branch === null) {
+				return end(s, {kind: "skip", why: "up_to_date"});
+			}
+
 			if (s.ask.drop !== null) {
-				if (v.drops.length === 0) return end(s, {kind: "skip", why: "up_to_date"});
+				if (v.drops.length === 0) {
+					return end(s, {kind: "skip", why: "up_to_date"});
+				}
+
 				return push(s, {
 					base: v.branch,
 					main: null,
@@ -200,17 +214,27 @@ export const catchup = defineMachine({
 					message: "",
 				});
 			}
-			if (v.merged) return end(s, {kind: "skip", why: "up_to_date"});
+
+			if (v.merged) {
+				return end(s, {kind: "skip", why: "up_to_date"});
+			}
+
 			const asked = tryMerge({plan: s.ask.plan, base: v.branch, main: v.main});
 			return [{ask: s.ask, base: v.branch, main: v.main, phase: "trying", asked}, [asked]];
 		},
 		catchup_read_err: (s): Step =>
 			s.phase === "reading" ? end(s, {kind: "stuck", why: "read_failed"}) : stay(s),
 		catchup_try_ok: (s, m): Step => {
-			if (s.phase !== "trying") return stay(s);
+			if (s.phase !== "trying") {
+				return stay(s);
+			}
+
 			const tried = m.value;
-			if (tried.conflicts.length > 0)
+
+			if (tried.conflicts.length > 0) {
 				return [{ask: s.ask, base: s.base, main: s.main, phase: "resolving", tried}, []];
+			}
+
 			return push(s, {
 				base: s.base,
 				main: s.main,
@@ -223,15 +247,21 @@ export const catchup = defineMachine({
 		catchup_try_err: (s): Step =>
 			s.phase === "trying" ? end(s, {kind: "stuck", why: "read_failed"}) : stay(s),
 		catchup_resolved: (s, m): Step => {
-			if (!isFor(s, m) || s.phase !== "resolving") return stay(s);
+			if (!isFor(s, m) || s.phase !== "resolving") {
+				return stay(s);
+			}
+
 			const missing = s.tried.conflicts.filter((p) => !m.files.some((f) => f.path === p));
-			if (missing.length > 0)
+
+			if (missing.length > 0) {
 				return end(
 					s,
 					{kind: "stuck", why: "unresolved"},
 					[`the resolver left ${missing.join(", ")}`],
 					m.ran.spend.costUsd,
 				);
+			}
+
 			return push(s, {
 				base: s.base,
 				main: s.main,
@@ -250,7 +280,10 @@ export const catchup = defineMachine({
 				? end(s, {kind: "done", part: false, head: m.value.head, changed: m.value.changed})
 				: stay(s),
 		catchup_push_err: (s, m): Step => {
-			if (s.phase !== "pushing") return stay(s);
+			if (s.phase !== "pushing") {
+				return stay(s);
+			}
+
 			const why =
 				m.error._tag === "unresolved"
 					? "unresolved"

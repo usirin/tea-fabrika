@@ -42,11 +42,13 @@ const HealthColumns = Schema.Struct({
 	lag: Schema.NullOr(Schema.Number),
 	spanId: Schema.NullOr(Schema.String),
 });
+
 const decodeHealth = Schema.decodeUnknownSync(HealthColumns);
 const decodeHour = Schema.decodeUnknownSync(Schema.Struct({hour: Schema.Int}));
 const decodeDay = Schema.decodeUnknownSync(Schema.Struct({day: Schema.Int}));
 const decodeCount = Schema.decodeUnknownSync(Schema.Struct({n: Schema.Int}));
 const decodeSeq = Schema.decodeUnknownSync(Schema.Struct({seq: Schema.Int}));
+
 const decodeSummary = Schema.decodeUnknownSync(
 	Schema.Struct({
 		piece: Schema.String,
@@ -88,7 +90,11 @@ const rank = (sorted: ReadonlyArray<number>, percent: number): number =>
 /** One hour's rows as one summary per piece. */
 const summarize = (hour: number, rows: ReadonlyArray<Health>): Array<Summary> => {
 	const pieces = new Map<string, Array<Health>>();
-	for (const row of rows) pieces.set(row.piece, [...(pieces.get(row.piece) ?? []), row]);
+
+	for (const row of rows) {
+		pieces.set(row.piece, [...(pieces.get(row.piece) ?? []), row]);
+	}
+
 	return [...pieces].map(([piece, group]) => {
 		const ms = group.map((row) => row.ms).sort((x, y) => x - y);
 		const lags = group.flatMap((row) => (row.lag === null ? [] : [row.lag]));
@@ -113,6 +119,7 @@ export const rollup = (sql: Sql, now: number): void => {
 			hourStart(now),
 		)
 		.map((row) => decodeHour(row).hour);
+
 	for (const hour of hours) {
 		const rows = healthRows(
 			sql,
@@ -120,7 +127,8 @@ export const rollup = (sql: Sql, now: number): void => {
 			hour,
 			hour + HOUR,
 		);
-		for (const {piece, count, errors, ms, lag} of summarize(hour, rows))
+
+		for (const {piece, count, errors, ms, lag} of summarize(hour, rows)) {
 			sql.exec(
 				`INSERT INTO summary (piece, hour, count, errors, p50, p95, max, lag)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -133,6 +141,8 @@ export const rollup = (sql: Sql, now: number): void => {
 				ms.max,
 				lag,
 			);
+		}
+
 		sql.exec(`INSERT INTO summarized (hour) VALUES (?)`, hour);
 	}
 };
@@ -145,7 +155,11 @@ export const writeSize = (sql: Sql, now: number): void => {
 		start,
 		start + HOUR,
 	);
-	if (had !== undefined && decodeCount(had).n > 0) return;
+
+	if (had !== undefined && decodeCount(had).n > 0) {
+		return;
+	}
+
 	sql.exec(`INSERT INTO sizes (at, bytes) VALUES (?, ?)`, now, sql.size());
 };
 
@@ -199,7 +213,11 @@ const due = (sql: Sql, object: string, now: number): Array<Part> => {
 				start,
 				start + DAY,
 			);
-			if (open !== undefined && decodeCount(open).n > 0) return [];
+
+			if (open !== undefined && decodeCount(open).n > 0) {
+				return [];
+			}
+
 			const read = sql.exec(
 				`SELECT rowid AS seq, * FROM health WHERE at >= ? AND at < ? ORDER BY at, rowid`,
 				start,
@@ -251,6 +269,7 @@ const archivePart = Effect.fnUntraced(function* (
 		try: () =>
 			sql.transaction(() => {
 				const error: Failed | null = failed ?? (unchanged(sql, part) ? null : "mismatch");
+
 				if (error === null) {
 					sql.exec(
 						`INSERT INTO archived (day, part, key, sha256, rows) VALUES (?, ?, ?, ?, ?)`,
@@ -267,6 +286,7 @@ const archivePart = Effect.fnUntraced(function* (
 						part.last,
 					);
 				}
+
 				writeHealth(sql, {
 					piece: ARCHIVE,
 					at: ended,

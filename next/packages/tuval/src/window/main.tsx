@@ -182,7 +182,9 @@ const Desk = ({run, layout, windowFor}: WindowProps) => {
 	const area = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		const element = area.current;
-		if (element === null) return;
+
+		if (element === null) {return;}
+
 		const measure = () => send({type: "resized", w: element.clientWidth, h: element.clientHeight});
 		const observer = new ResizeObserver(measure);
 		observer.observe(element);
@@ -269,13 +271,19 @@ export const Window = (props: WindowProps) => {
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, [send]);
-	if (link._tag === "blocked") return <Blocked reason={link.reason} />;
-	if (link._tag === "removed") return <Removed run={props.run} />;
+
+	if (link._tag === "blocked") {return <Blocked reason={link.reason} />;}
+
+	if (link._tag === "removed") {return <Removed run={props.run} />;}
+
 	if (link._tag === "waiting_grant")
-		return <Waiting code={link.code} fingerprint={link.fingerprint} origin={props.origin} />;
+		{return <Waiting code={link.code} fingerprint={link.fingerprint} origin={props.origin} />;}
+
 	const pids = [...new Set(tilesIn(props.layout).map((t) => t.pid))];
 	const ready = pids.every((pid) => views[pid] !== undefined);
-	if (!ready && (link._tag === "online" || Object.keys(views).length === 0)) return <Connecting />;
+
+	if (!ready && (link._tag === "online" || Object.keys(views).length === 0)) {return <Connecting />;}
+
 	return (
 		<div className="frame">
 			<header className="topbar">

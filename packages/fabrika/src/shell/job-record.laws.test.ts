@@ -46,11 +46,13 @@ beforeAll(async () => {
 	await mf.ready;
 	url = (await mf.unsafeGetDirectURL()).origin;
 });
+
 afterAll(async () => {
 	await mf.dispose();
 });
 
 type Vault = {readonly key: Redacted.Redacted<string> | null; readonly uses: number};
+
 type VaultMsg =
 	| {readonly type: "hold"; readonly key: Redacted.Redacted<string>}
 	| {readonly type: "use"; readonly key: Redacted.Redacted<string>};
@@ -85,13 +87,17 @@ const keeper = (state: StateSchema<Vault>, msgs: readonly VaultMsg[]) =>
 		main: ({machines}) =>
 			Effect.gen(function* () {
 				const one = yield* machines.vault.get("v").start();
-				for (const msg of msgs) yield* one.dispatch(msg);
+
+				for (const msg of msgs) {
+					yield* one.dispatch(msg);
+				}
 			}).pipe(Effect.scoped),
 	});
 
 /** The vault's state, its key written by `key`. */
 const vaultOf = <E>(key: Schema.Codec<Redacted.Redacted<string>, E>) =>
 	Schema.Struct({key: Schema.NullOr(key), uses: Schema.Int});
+
 const VaultState = vaultOf(Schema.Redacted(Schema.String));
 
 /** Each way Effect Schema writes a Redacted. */
@@ -119,7 +125,11 @@ const storageFor = (how: (typeof TRANSPORTS)[number], trace: string) =>
 const runIn = (program: ReturnType<typeof keeper>, run: string, storage: Storage) =>
 	Effect.gen(function* () {
 		const started = yield* start(program, {}, {}, {id: run, storage});
-		if (started.kind !== "running") return yield* Effect.die("keeper did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("keeper did not start");
+		}
+
 		return yield* started.run.ended;
 	}).pipe(
 		Effect.withSpan("keeper"),
@@ -137,8 +147,8 @@ const hold: VaultMsg = {type: "hold", key: Redacted.make(SECRET)};
 const use: VaultMsg = {type: "use", key: Redacted.make(SECRET)};
 
 describe("a job's record keeps no secret", () => {
-	for (const how of TRANSPORTS)
-		for (const [name, schema] of SCHEMAS)
+	for (const how of TRANSPORTS) {
+		for (const [name, schema] of SCHEMAS) {
 			it(`refuses a state that holds one (${name}, ${how}), and no row holds its text`, async () => {
 				const run = `keeper-${how}-${name.replaceAll(/[^a-z]/gi, "")}`;
 				const trace = runTraceId(run);
@@ -152,10 +162,15 @@ describe("a job's record keeps no secret", () => {
 				expect(rows).toContain(run);
 				expect(rows).not.toContain(SECRET);
 				expect(ended.kind).toBe("failed");
-				if (ended.kind === "failed") expect(Cause.pretty(ended.cause)).toContain("holds a secret");
-			}, 30_000);
 
-	for (const how of TRANSPORTS)
+				if (ended.kind === "failed") {
+					expect(Cause.pretty(ended.cause)).toContain("holds a secret");
+				}
+			}, 30_000);
+		}
+	}
+
+	for (const how of TRANSPORTS) {
 		it(`keeps a Msg that holds one as "<redacted>" (${how})`, async () => {
 			const run = `keeper-msg-${how}`;
 			const trace = runTraceId(run);
@@ -166,6 +181,7 @@ describe("a job's record keeps no secret", () => {
 			);
 			const rows = await everyRow(trace);
 			expect(rows).not.toContain(SECRET);
+
 			if (how === "http") {
 				expect(ended.kind).toBe("ended");
 				const dump = (await recordInside(mf, LEDGER, trace).dump()) as {
@@ -177,12 +193,16 @@ describe("a job's record keeps no secret", () => {
 				]);
 			}
 		}, 30_000);
+	}
 
 	it("memory storage refuses it too: no storage keeps a secret", async () => {
 		const ended = await Effect.runPromise(
 			runIn(keeper(SCHEMAS[1]?.[1] ?? VaultState, [hold]), "keeper-memory", memoryStorage()),
 		);
 		expect(ended.kind).toBe("failed");
-		if (ended.kind === "failed") expect(Cause.pretty(ended.cause)).toContain("holds a secret");
+
+		if (ended.kind === "failed") {
+			expect(Cause.pretty(ended.cause)).toContain("holds a secret");
+		}
 	});
 });

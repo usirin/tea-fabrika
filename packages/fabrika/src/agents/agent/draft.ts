@@ -43,11 +43,18 @@ export const agentRunner =
 						Effect.gen(function* () {
 							// One Msg per tool call, at its first update: its later ones are the same call.
 							if (heard._tag === "tool") {
-								if (tools.has(heard.id)) return [];
+								if (tools.has(heard.id)) {
+									return [];
+								}
+
 								tools.add(heard.id);
 								return [{type: `${name}_tool`, key, id, tool: heard.title} as DraftMsg<N, O>];
 							}
-							if (heard._tag !== "ended") return [];
+
+							if (heard._tag !== "ended") {
+								return [];
+							}
+
 							const spend = spendOf(heard, yield* minutes);
 							return [
 								heard.stop === "end_turn"

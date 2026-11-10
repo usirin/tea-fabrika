@@ -70,6 +70,7 @@ export type LoopSettings = typeof LoopSettings.Type;
 
 /** A ticket, and the lane that claims or lets it go. */
 const LaneIn = Schema.Struct({ticket: Schema.String, lane: LaneId});
+
 const BuildIn = Schema.Struct({
 	ticket: Schema.String,
 	/** The lane that holds the ticket: the handler builds only while it still does. */
@@ -79,6 +80,7 @@ const BuildIn = Schema.Struct({
 	open: Schema.Array(Item),
 	settings: Settings,
 });
+
 const ReviewIn = Schema.Struct({
 	ticket: Schema.String,
 	pr: Schema.String,
@@ -114,6 +116,7 @@ export const Post = Schema.Struct({
 export type Post = typeof Post.Type;
 
 const PostIn = Schema.Struct({pr: Schema.String, head: Schema.String, posts: Schema.Array(Post)});
+
 const ShipIn = Schema.Struct({
 	ticket: Schema.String,
 	/** The lane that holds the ticket: the handler ships only while it still does. */
@@ -152,6 +155,7 @@ const Held = Schema.Struct({
 type Held = typeof Held.Type;
 const At = Schema.Struct({...Held.fields, round: Schema.Finite});
 type At = typeof At.Type;
+
 const Ended = Schema.Struct({
 	outcome: LoopOutcome,
 	/** The last stage outcome the loop read before it ended, by name, or why no stage could be run. */
@@ -215,6 +219,7 @@ export type LoopMsg =
 
 type Step = readonly [Loop, readonly LoopCmd[]];
 const stay = (s: Loop): Step => [s, []];
+
 const held = (s: Held): Held => ({
 	ticket: s.ticket,
 	number: s.number,
@@ -222,7 +227,9 @@ const held = (s: Held): Held => ({
 	settings: s.settings,
 	rounds: s.rounds,
 });
+
 const intent = (s: At, stage: string) => intentOf("loop", s.ticket, s.round, stage);
+
 /** The agent one step runs: its own, when the loop was given one, else the loop's shared one. */
 const agent = (s: Held, step: "build" | "review"): Settings =>
 	s.settings.agents?.[step] ?? {
@@ -344,7 +351,11 @@ export function postsOf(reviewed: Reviewed): readonly Post[] {
 	const reason = `${met} of ${reviewed.criteria.length} criteria met`;
 	return reviewed.verdicts.flatMap((v) => {
 		const text = reviewed.comments.find((c) => c.kind === v.kind)?.text;
-		if (text === undefined || v.verdict === "unseen") return [];
+
+		if (text === undefined || v.verdict === "unseen") {
+			return [];
+		}
+
 		return [{kind: v.kind, verdict: v.verdict, reason, text}];
 	});
 }
@@ -402,8 +413,12 @@ export const loop = defineMachine({
 			};
 			const at = {...held(s), rounds: [...s.rounds, round], round: s.round};
 			const next = afterBuild(s.round, m.value);
+
 			// Only a build that is done goes on to a review, and a done build names its pull request.
-			if (next.go === "review" && outcome.kind === "done") return review(at, outcome.pr);
+			if (next.go === "review" && outcome.kind === "done") {
+				return review(at, outcome.pr);
+			}
+
 			return next.go === "end"
 				? over(at, next.outcome, m.value.name)
 				: over(at, {kind: "stuck", why: "build"}, m.value.name);
@@ -426,7 +441,11 @@ export const loop = defineMachine({
 			const at = {...held(s), rounds, round: s.round};
 			const next = afterReview(rounds, reviewed, items);
 			const posts = postsOf(reviewed);
-			if (posts.length === 0 || reviewed.head === null) return go(at, s.pr, next, reviewed.name);
+
+			if (posts.length === 0 || reviewed.head === null) {
+				return go(at, s.pr, next, reviewed.name);
+			}
+
 			const asked = postVerdicts({
 				pr: s.pr,
 				head: reviewed.head,

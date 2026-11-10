@@ -35,7 +35,11 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
 		? []
 		: readdirSync(dir, {withFileTypes: true}).flatMap((entry) => {
 				const path = join(dir, entry.name);
-				if (!entry.isDirectory()) return /\.tsx?$/.test(entry.name) ? [path] : [];
+
+				if (!entry.isDirectory()) {
+					return /\.tsx?$/.test(entry.name) ? [path] : [];
+				}
+
 				const skip = ["node_modules", "dist"].includes(entry.name) || entry.name.startsWith(".");
 				return skip ? [] : codeFiles(path);
 			});
@@ -135,6 +139,7 @@ describe("planted machines", () => {
 		"l/split.laws.test.ts": 'import {forAll} from "@demlik/tea/pbt";',
 		"l/split.sync.laws.test.ts": "syncTest(split, opts);",
 	};
+
 	for (const [path, text] of Object.entries(planted)) {
 		mkdirSync(dirname(join(root, path)), {recursive: true});
 		writeFileSync(join(root, path), `${text}\n`);

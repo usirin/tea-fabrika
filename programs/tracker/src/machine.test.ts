@@ -11,6 +11,7 @@ type Msg = MsgOf<typeof tracker>;
 const steps = (...msgs: readonly Msg[]) => replay(tracker, {ctx: undefined, msgs});
 
 const owner = {kind: "user", id: "owner"} as const;
+
 const filed = (pos: number, ticket: number, title: string): Entry => ({
 	pos,
 	ticket,
@@ -18,6 +19,7 @@ const filed = (pos: number, ticket: number, title: string): Entry => ({
 	at: pos,
 	fact: {type: "filed", title, body: ""},
 });
+
 const loaded = (after: number, entries: readonly Entry[], last = entries.at(-1)?.pos ?? after) =>
 	load.ok(load({after}), {entries, broken: [], last, areas: []});
 

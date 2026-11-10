@@ -34,7 +34,11 @@ const watched = () => {
 	const ledger = new Proxy(inner, {
 		get: (target, key, receiver) => {
 			const value: unknown = Reflect.get(target, key, receiver);
-			if (typeof key !== "string" || !WRITES.has(key) || typeof value !== "function") return value;
+
+			if (typeof key !== "string" || !WRITES.has(key) || typeof value !== "function") {
+				return value;
+			}
+
 			return (...args: unknown[]) => {
 				writes.push(key);
 				return Reflect.apply(value, target, args);
@@ -81,7 +85,10 @@ const desk = (storage = memoryStorage(), more: {readonly sessionFor?: AgentSessi
 					shown.set(tile, []);
 					screen.show((m) => {
 						// The plan's status and reply regions share the terminal's port: only `write` is bytes.
-						if (m.type === "write") bytes.set(tile, (bytes.get(tile) ?? "") + m.data);
+						if (m.type === "write") {
+							bytes.set(tile, (bytes.get(tile) ?? "") + m.data);
+						}
+
 						shown.get(tile)?.push(m);
 					});
 				},
@@ -104,9 +111,14 @@ const desk = (storage = memoryStorage(), more: {readonly sessionFor?: AgentSessi
 			Effect.gen(function* () {
 				for (let i = 0; i < 3000; i += 1) {
 					const got = check();
-					if (got !== undefined) return got;
+
+					if (got !== undefined) {
+						return got;
+					}
+
 					yield* Effect.sleep("5 millis");
 				}
+
 				return yield* Effect.die(`waited for ${what}; told ${JSON.stringify(told)}`);
 			});
 		const prompts = (tile: string, n: number) =>

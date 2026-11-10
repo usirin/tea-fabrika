@@ -19,6 +19,7 @@ import {testConfig} from "../vitest.config.ts";
 const root = resolve(import.meta.dirname, "..");
 const options = {seed: 325, numRuns: 4};
 const configUrl = pathToFileURL(join(root, "vitest.config.ts")).href;
+
 const load = `
 if (process.env.TEST_NODE_VERSION) {
   Object.defineProperty(process, 'version', {value: 'v' + process.env.TEST_NODE_VERSION});
@@ -42,6 +43,7 @@ console.log(JSON.stringify({workers: value.test.maxWorkers, home: process.env.FA
   setupFiles: value.test.setupFiles, sequencer: value.test.sequence?.sequencer === Shards,
   forceRerunTriggers: value.test.forceRerunTriggers, include: value.test.include}));
 `;
+
 const probe = (cwd: string, args: string[], env: Record<string, string | undefined> = {}) =>
 	spawnSync(process.execPath, ["--input-type=module", "-e", load], {
 		cwd,
@@ -74,6 +76,7 @@ describe("T325 K9 machine caps, today's tooling", () => {
 				fc.tuple(fc.integer({min: 20, max: 30}), fc.nat({max: 30}), fc.nat({max: 30})),
 				(parts) => {
 					const different = parts.join(".") === pinned ? `${parts[0]}.0.99` : parts.join(".");
+
 					for (const version of [pinned, different, undefined]) {
 						for (const ci of [undefined, "1"]) {
 							const ran = probe(root, ["run", "--maxWorkers=1", "scripts/caps.test.ts"], {
@@ -83,6 +86,7 @@ describe("T325 K9 machine caps, today's tooling", () => {
 							});
 							const refused = !ci && version !== pinned;
 							expect(ran.status, ran.stderr).toBe(refused ? 1 : 0);
+
 							if (refused) {
 								const lines = ran.stderr
 									.split("\n")
@@ -112,12 +116,13 @@ describe("T325 K9 machine caps, today's tooling", () => {
 		["alive", "shares the typecheck lock across temp roots"],
 		["group", "recovers a killed typecheck holder"],
 		["wrapper", "keeps the compiler lock after its wrapper dies"],
-	] as const)
+	] as const) {
 		it(`R4 ${title}`, async () => {
 			await fc.assert(
 				fc.asyncProperty(fc.stringMatching(/^[a-z]{2,8}$/), async (suffix) => {
 					const dir = mkdtempSync(join(tmpdir(), "tc-r4-"));
 					const children: ChildProcess[] = [];
+
 					try {
 						const bin = join(dir, "bin"),
 							events = join(dir, "events");
@@ -131,12 +136,15 @@ appendFileSync(process.env.TEST_EVENTS, 'start '+process.env.TEST_ID+'\\n');
 setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }, 10);
 `,
 						);
-						for (const command of ["pnpm", "tsgo", "effect-tsgo"])
+
+						for (const command of ["pnpm", "tsgo", "effect-tsgo"]) {
 							writeFileSync(
 								join(bin, command),
 								`#!/bin/sh\nexec '${process.execPath}' '${join(dir, "compiler.mjs")}' "$@"\n`,
 								{mode: 0o755},
 							);
+						}
+
 						const start = (id: string, temp: string) => {
 							mkdirSync(temp, {recursive: true});
 							const child = spawn("sh", [join(root, "scripts/typecheck.sh")], {
@@ -158,25 +166,36 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 						};
 						const until = async (test: () => boolean) => {
 							const end = Date.now() + 3_000;
-							while (!test() && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
+
+							while (!test() && Date.now() < end) {
+								await new Promise((r) => setTimeout(r, 20));
+							}
+
 							expect(test(), readFileSync(events, "utf8")).toBe(true);
 						};
 						const temp = join(dir, suffix),
 							first = start("a", temp);
 						await until(() => readFileSync(events, "utf8").includes("start a"));
+
 						if (ended !== "alive") {
 							process.kill(ended === "group" ? -first.pid! : first.pid!, "SIGKILL");
 							await until(() => first.signalCode !== null);
 						}
+
 						const second = start("b", ended === "group" ? temp : join(dir, `${suffix}-other`));
+
 						if (ended !== "group") {
 							await new Promise((r) => setTimeout(r, 250));
 							expect(readFileSync(events, "utf8"), "two fake compilers overlapped").toBe(
 								"start a\n",
 							);
 							writeFileSync(join(dir, "release-a"), "");
-							if (ended === "alive") await until(() => first.exitCode !== null);
+
+							if (ended === "alive") {
+								await until(() => first.exitCode !== null);
+							}
 						}
+
 						await until(() => readFileSync(events, "utf8").includes("start b"));
 						writeFileSync(join(dir, "release-b"), "");
 						await until(() => second.exitCode !== null);
@@ -184,17 +203,21 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 					} finally {
 						for (const child of children) {
 							try {
-								if (child.pid) process.kill(-child.pid, "SIGKILL");
+								if (child.pid) {
+									process.kill(-child.pid, "SIGKILL");
+								}
 							} catch {
 								/* Already reaped. */
 							}
 						}
+
 						rmSync(dir, {recursive: true, force: true});
 					}
 				}),
 				{...options, seed: 119120, numRuns: 2, endOnFailure: true},
 			);
 		});
+	}
 
 	// R4 finding 8. Plant: inherit the whole temp-root length into a socket home.
 	it("R4 bounds generated home bytes even under long temp roots", () => {
@@ -202,6 +225,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 			fc.property(fc.integer({min: 104, max: 180}), (length) => {
 				const dir = mkdtempSync(join(tmpdir(), "fh-r4-"));
 				let generated: string | undefined;
+
 				try {
 					const temp = join(dir, "x".repeat(length));
 					mkdirSync(temp);
@@ -216,7 +240,10 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 					expect(Buffer.byteLength(generated!)).toBeLessThan(103);
 					expect(existsSync(generated!)).toBe(true);
 				} finally {
-					if (generated) rmSync(generated, {recursive: true, force: true});
+					if (generated) {
+						rmSync(generated, {recursive: true, force: true});
+					}
+
 					rmSync(dir, {recursive: true, force: true});
 				}
 			}),
@@ -237,6 +264,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 					);
 					const cpus = Number(counts.stdout);
 					const resolved = Math.max(1, Math.min(cpus, Math.round((percent / 100) * cpus)));
+
 					for (const [value, count] of [
 						[`${percent}%`, resolved],
 						[` ${percent}.5% `, resolved],
@@ -258,7 +286,10 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 								ran.status,
 								`${args.join(" ")} resolved to ${count} with cap ${cap}: ${ran.stderr}`,
 							).toBe(count > cap ? 1 : 0);
-							if (count <= cap) expect(JSON.parse(ran.stdout).workers).toBe(count);
+
+							if (count <= cap) {
+								expect(JSON.parse(ran.stdout).workers).toBe(count);
+							}
 						}
 					}
 				},
@@ -273,6 +304,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 		fc.assert(
 			fc.property(fc.stringMatching(/^[a-z]{2,8}$/), (suffix) => {
 				const dir = mkdtempSync(join(tmpdir(), "caps-git-"));
+
 				try {
 					const git = (...args: string[]) => {
 						const ran = spawnSync(
@@ -291,11 +323,13 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 					git("add", ".");
 					git("commit", "-qm", "base");
 					git("update-ref", "refs/remotes/origin/main", "HEAD");
+
 					for (const filter of [".", "test", "./", dir]) {
 						const ran = probe(dir, ["run", filter]);
 						expect(ran.status, `broad filter ${filter}`).toBe(1);
 						expect(ran.stderr).toContain("<narrow path>");
 					}
+
 					// T375: skill paths follow imports instead of forcing every test to rerun.
 					for (const [path, refused] of [
 						[`fixtures/.${suffix}/input.ts`, true],
@@ -308,6 +342,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 						);
 						rmSync(join(dir, path));
 					}
+
 					put("pnpm-lock.yaml", "staged");
 					git("add", "pnpm-lock.yaml");
 					put("pnpm-lock.yaml", "base");
@@ -352,6 +387,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 		fc.assert(
 			fc.property(fc.constantFrom("merge", "spread", "p10"), (form) => {
 				const dir = mkdtempSync(join(tmpdir(), "caps-export-"));
+
 				try {
 					const wrapper = join(dir, "config.mjs");
 					writeFileSync(
@@ -360,6 +396,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 							? `export {default} from ${JSON.stringify(pathToFileURL(join(root, "fixtures/next/p10/vitest.config.ts")).href)};`
 							: `import base from ${JSON.stringify(configUrl)};\nimport {mergeConfig} from ${JSON.stringify(import.meta.resolve("vitest/config"))};\nexport default ${form === "merge" ? "mergeConfig(base, {test: {includeTaskLocation: true}})" : '{...base, test: {...base.test, include: ["one.test.ts"]}}'};`,
 					);
+
 					for (const args of [[], ["run"]]) {
 						const imported = probe(root, args, {
 							TEST_CONFIG: pathToFileURL(wrapper).href,
@@ -368,6 +405,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 						expect(imported.status, imported.stderr).toBe(0);
 						expect(JSON.parse(imported.stdout).testTimeout).toBe(60_000);
 					}
+
 					const programmatic = probe(root, [], {
 						TEST_CONFIG: pathToFileURL(wrapper).href,
 						TEST_PROGRAMMATIC: "1",
@@ -402,6 +440,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 					expect(ran.status, ran.stderr).toBe(0);
 					expect(JSON.parse(ran.stdout).workers).toBe(count);
 				}
+
 				for (const requested of [1, n + 1]) {
 					const ran = probe(root, ["run", `--maxWorkers=${requested}`, "scripts/caps.test.ts"], {
 						FABRIKA_MAX_WORKERS: String(n),
@@ -413,10 +452,12 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 							: JSON.parse(ran.stdout).workers === requested,
 					).toBe(true);
 				}
-				for (const setting of ["0", "-1", "1.5", "garbage"])
+
+				for (const setting of ["0", "-1", "1.5", "garbage"]) {
 					expect(
 						probe(root, ["run", "scripts/caps.test.ts"], {FABRIKA_MAX_WORKERS: setting}).status,
 					).not.toBe(0);
+				}
 			}),
 			options,
 		);
@@ -442,6 +483,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 				}),
 				({trigger, form}) => {
 					const dir = mkdtempSync(join(tmpdir(), "caps-"));
+
 					try {
 						const git = (...args: string[]) => {
 							const ran = spawnSync(
@@ -459,15 +501,18 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 						mkdirSync(dirname(join(dir, trigger)), {recursive: true});
 						writeFileSync(join(dir, trigger), "changed");
 						git("add", trigger);
+
 						for (const args of [["run"], ["run", form], ["run", "--changed", "origin/main"]]) {
 							const ran = probe(dir, args);
 							expect(ran.status).not.toBe(0);
 							expect(ran.stderr).toContain("pnpm exec vitest run --maxWorkers=1 <narrow path>");
 							expect(probe(dir, args, {CI: "1"}).status).toBe(0);
 						}
+
 						expect(probe(dir, ["run", "scripts/caps.test.ts"]).status).toBe(0);
 						git("restore", "--staged", "--", trigger);
 						rmSync(join(dir, trigger));
+
 						// T375: source and skill changes alone must not force a broad run.
 						for (const path of [
 							"plain.ts",
@@ -477,11 +522,13 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 							mkdirSync(dirname(join(dir, path)), {recursive: true});
 							writeFileSync(join(dir, path), "changed");
 							git("add", path);
+
 							for (const args of [
 								["run", form],
 								["run", "--changed", "origin/main"],
-							])
+							]) {
 								expect(probe(dir, args).status, path).toBe(0);
+							}
 						}
 					} finally {
 						rmSync(dir, {recursive: true, force: true});
@@ -514,6 +561,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 				}),
 				({paths, args, ci, trigger}) => {
 					const dir = mkdtempSync(join(tmpdir(), "caps-config-"));
+
 					try {
 						mkdirSync(join(dir, "scripts"));
 						writeFileSync(
@@ -526,7 +574,11 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 						)
 							.split("<<'TS'\n")[1]
 							?.split("\nTS\n")[0];
-						if (!source) throw new Error("run.sh did not emit a Vitest config");
+
+						if (!source) {
+							throw new Error("run.sh did not emit a Vitest config");
+						}
+
 						const wrapper = join(dir, "vitest.mutation.config.mjs");
 						writeFileSync(
 							wrapper,
@@ -534,6 +586,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 								.replace('"./vitest.config.ts"', JSON.stringify(configUrl))
 								.replace('"vitest/config"', JSON.stringify(import.meta.resolve("vitest/config"))),
 						);
+
 						for (const mutation of [true, false]) {
 							const ran = probe(root, mutation ? args : ["run", "scripts/caps.test.ts"], {
 								CI: ci,
@@ -552,16 +605,19 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 							expect(got.setupFiles).toContain("./scripts/vitest.setup.ts");
 							expect(got.sequencer).toBe(true);
 							expect(got.sharedTimeouts).toEqual([60_000, 60_000]);
+
 							// T375: Stryker keeps the remaining triggers and skill non-triggers.
 							for (const [path, forced] of [
 								[trigger, true],
 								[".agents/skills/tests/SKILL.md", false],
 								[".claude/skills/tests/SKILL.md", false],
-							] as const)
+							] as const) {
 								expect(
 									got.forceRerunTriggers.some((glob: string) => matchesGlob(path, glob)),
 									path,
 								).toBe(forced);
+							}
+
 							if (mutation) {
 								expect(got.workers).toBe(1);
 								expect(got.include).toEqual(paths);
@@ -587,6 +643,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 				fc.record({link: fc.boolean(), suffix: fc.stringMatching(/^[a-z]{1,6}$/)}),
 				({link, suffix}) => {
 					const dir = mkdtempSync(join(tmpdir(), "fh-"));
+
 					try {
 						const home = join(dir, "person"),
 							real = join(home, ".fabrika"),
@@ -629,6 +686,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 		fc.assert(
 			fc.property(fc.stringMatching(/^[a-z]{2,8}$/), (suffix) => {
 				const dir = mkdtempSync(join(tmpdir(), "fh-link-"));
+
 				try {
 					const home = join(dir, "person"),
 						real = join(home, ".fabrika"),
@@ -644,6 +702,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 					});
 					expect(accepted.status, accepted.stderr).toBe(0);
 					expect(JSON.parse(accepted.stdout).home).toBe(safe);
+
 					for (const path of [real, alias, join(real, "..", ".fabrika")]) {
 						const refused = probe(root, ["run", "scripts/caps.test.ts"], {
 							...env,
@@ -673,6 +732,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 				async ({code, cancel}) => {
 					const dir = mkdtempSync(join(tmpdir(), "tc-"));
 					const children: ChildProcess[] = [];
+
 					try {
 						const bin = join(dir, "bin");
 						mkdirSync(bin);
@@ -680,12 +740,15 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 							join(dir, "compiler.mjs"),
 							`import {appendFileSync, existsSync} from 'node:fs';\nconst id = process.env.TEST_ID;\nif (process.argv.includes('patch')) process.exit(0);\nappendFileSync(process.env.TEST_EVENTS, 'start '+id+'\\n');\nconst timer = setInterval(() => {if (existsSync(process.env.TEST_RELEASE)) {clearInterval(timer); appendFileSync(process.env.TEST_EVENTS, 'end '+id+'\\n'); process.exit(Number(process.env.TEST_EXIT));}}, 10);\n`,
 						);
-						for (const command of ["pnpm", "tsgo", "effect-tsgo"])
+
+						for (const command of ["pnpm", "tsgo", "effect-tsgo"]) {
 							writeFileSync(
 								join(bin, command),
 								`#!/bin/sh\nexec '${process.execPath}' '${join(dir, "compiler.mjs")}' "$@"\n`,
 								{mode: 0o755},
 							);
+						}
+
 						const events = join(dir, "events");
 						writeFileSync(events, "");
 						const start = (id: string, code: number) => {
@@ -709,7 +772,11 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 						};
 						const until = async (test: () => boolean) => {
 							const end = Date.now() + 3_000;
-							while (!test() && Date.now() < end) await new Promise((r) => setTimeout(r, 15));
+
+							while (!test() && Date.now() < end) {
+								await new Promise((r) => setTimeout(r, 15));
+							}
+
 							expect(test(), readFileSync(events, "utf8")).toBe(true);
 						};
 						const first = start("a", code);
@@ -717,19 +784,23 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 						const second = start("b", 0);
 						await new Promise((r) => setTimeout(r, 100));
 						expect(readFileSync(events, "utf8")).toBe("start a\n");
+
 						if (cancel) {
 							second.kill("SIGTERM");
 							await until(() => second.signalCode !== null);
 						}
+
 						writeFileSync(join(dir, "release-a"), "");
 						await until(() => first.exitCode !== null);
 						expect(first.exitCode).toBe(code);
+
 						if (!cancel) {
 							await until(() => readFileSync(events, "utf8").includes("start b"));
 							writeFileSync(join(dir, "release-b"), "");
 							await until(() => second.exitCode !== null);
 							expect(second.exitCode).toBe(0);
 						}
+
 						const last = start("c", 0);
 						await until(() => readFileSync(events, "utf8").includes("start c"));
 						writeFileSync(join(dir, "release-c"), "");
@@ -738,11 +809,14 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 					} finally {
 						for (const child of children) {
 							try {
-								if (child.pid) process.kill(-child.pid, "SIGKILL");
+								if (child.pid) {
+									process.kill(-child.pid, "SIGKILL");
+								}
 							} catch {
 								/* Already reaped. */
 							}
 						}
+
 						rmSync(dir, {recursive: true, force: true});
 					}
 				},

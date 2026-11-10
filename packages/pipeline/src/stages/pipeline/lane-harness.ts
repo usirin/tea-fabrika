@@ -39,9 +39,11 @@ import {LaneWork} from "./work.ts";
 // touched. Today's version.
 
 export const MODULES = fileURLToPath(new URL("../../../node_modules", import.meta.url));
+
 export const BRIEFS = fileURLToPath(
 	new URL("../../../../../programs/pipeline/briefs", import.meta.url),
 );
+
 export const OWNER = "user:owner";
 export const NUMBER = 1;
 
@@ -88,24 +90,41 @@ export const answering = (
 		const done = new Set<string>();
 		const queue = [...steps];
 		const inTurn = new Map(Object.entries(queues).map(([kind, said]) => [kind, [...said]]));
+
 		for (;;) {
 			const ticket = yield* read;
+
 			for (const entry of ticket.timeline) {
 				const fact = entry.fact;
-				if (fact.type !== "asked" || done.has(fact.ask)) continue;
+
+				if (fact.type !== "asked" || done.has(fact.ask)) {
+					continue;
+				}
+
 				const kind = fact.ask.split("-")[1] ?? "";
-				if (kind === "step" && onlyStep !== undefined && fact.ask !== onlyStep) continue;
+
+				if (kind === "step" && onlyStep !== undefined && fact.ask !== onlyStep) {
+					continue;
+				}
+
 				done.add(fact.ask);
+
 				// A question this person leaves: the lane waits on it.
-				if (leave.includes(kind)) continue;
+				if (leave.includes(kind)) {
+					continue;
+				}
+
 				const pick =
 					(kind === "step" ? queue.shift() : undefined) ?? inTurn.get(kind)?.shift() ?? picks[kind];
-				if (pick === undefined)
+
+				if (pick === undefined) {
 					return yield* Effect.die(
 						new Error(
 							`The test's person has no pick for ${fact.ask}, "${fact.what}" (${fact.picks.join(" or ")}). Give the test one.`,
 						),
 					);
+				}
+
 				yield* ledger.send(streams(nameOf(NUMBER)).inbox, `answer-${fact.ask}`, {
 					kind: "answered",
 					writer: OWNER,
@@ -118,6 +137,7 @@ export const answering = (
 					},
 				});
 			}
+
 			yield* Effect.sleep("50 millis");
 		}
 	});
@@ -130,6 +150,7 @@ const waitingOnLeft = (leave: readonly string[]) =>
 	Effect.gen(function* () {
 		let facts = -1;
 		let quiet = 0;
+
 		for (;;) {
 			const {timeline} = yield* read;
 			const asked = new Set(
@@ -138,7 +159,11 @@ const waitingOnLeft = (leave: readonly string[]) =>
 			const waiting = leave.every((kind) => asked.has(kind));
 			quiet = waiting && timeline.length === facts ? quiet + 1 : 0;
 			facts = timeline.length;
-			if (quiet >= 10) return;
+
+			if (quiet >= 10) {
+				return;
+			}
+
 			yield* Effect.sleep("100 millis");
 		}
 	}).pipe(Effect.orDie);
@@ -364,9 +389,15 @@ const LegacyOver = Schema.Struct({
 /** A ticket's fact as a lane from before self-fix PR 4 wrote it: no `checked` fact, and no checks in an end's carry. */
 const withoutChecks = (entry: Entry): readonly Entry[] => {
 	const {fact} = entry;
-	if (fact.type === "checked") return [];
-	if (fact.type !== "ended" || typeof fact.carry !== "object" || fact.carry === null)
+
+	if (fact.type === "checked") {
+		return [];
+	}
+
+	if (fact.type !== "ended" || typeof fact.carry !== "object" || fact.carry === null) {
 		return [entry];
+	}
+
 	const carry = Object.fromEntries(Object.entries(fact.carry).filter(([key]) => key !== "checked"));
 	return [{...entry, fact: {...fact, carry}}];
 };
@@ -374,7 +405,11 @@ const withoutChecks = (entry: Entry): readonly Entry[] => {
 /** A ticket's fact as a lane from before self-fix PR 5 wrote it: an end kept no carry. */
 const withoutCarry = (entry: Entry): Entry => {
 	const {fact} = entry;
-	if (fact.type !== "ended") return entry;
+
+	if (fact.type !== "ended") {
+		return entry;
+	}
+
 	const {carry: _, ...rest} = fact;
 	return {...entry, fact: rest};
 };
@@ -385,8 +420,11 @@ export const keptAsLegacy = (home: string) =>
 		const handle = yield* fileStorage(join(home, "storage", "lanes")).open(`lane-${NUMBER}`, {});
 		const store = handle.store("lane", `lane/${NUMBER}`, Schema.Unknown);
 		const raw = yield* Effect.promise(() => store.load());
-		if (!Schema.is(LegacyOver)(raw))
+
+		if (!Schema.is(LegacyOver)(raw)) {
 			return yield* Effect.die(new Error("the lane was not saved over"));
+		}
+
 		const {phase, number, trail, outcome, said} = raw;
 		yield* Effect.promise(() => store.save({phase, number, trail, outcome, said}));
 	}).pipe(Effect.orDie);
@@ -403,8 +441,11 @@ export const keptGoingOn = (
 		const handle = yield* fileStorage(join(home, "storage", "lanes")).open(`lane-${NUMBER}`, {});
 		const store = handle.store("lane", `lane/${NUMBER}`, Lane);
 		const saved = store.migrate(yield* Effect.promise(() => store.load()));
-		if (!Schema.is(Lane)(saved) || saved.phase !== "over" || !("held" in saved))
+
+		if (!Schema.is(Lane)(saved) || saved.phase !== "over" || !("held" in saved)) {
 			return yield* Effect.die(new Error("the lane was not saved stopped"));
+		}
+
 		yield* Effect.promise(() =>
 			store.save({
 				...saved,
@@ -427,10 +468,12 @@ export const pushToMain = (
 			{cwd: work, stdio: "pipe"},
 		);
 	execFileSync("git", ["clone", "-q", remote, work], {stdio: "pipe"});
+
 	for (const {path, text} of files) {
 		mkdirSync(dirname(join(work, path)), {recursive: true});
 		writeFileSync(join(work, path), text);
 	}
+
 	git("add", "-A");
 	git("commit", "-qm", "Main moved elsewhere");
 	git("push", "-q", "origin", "HEAD:main");
@@ -462,8 +505,11 @@ export const pushOnTopOf = (
 		.split("\n")
 		.filter((name) => name !== "" && name !== "main");
 	const [branch] = branches;
-	if (branch === undefined || branches.length > 1)
+
+	if (branch === undefined || branches.length > 1) {
 		throw new Error(`one branch should end at ${head}, not ${JSON.stringify(branches)}`);
+	}
+
 	const work = join(dir, "person");
 	const git = (...args: readonly string[]) =>
 		execFileSync(
@@ -476,10 +522,12 @@ export const pushOnTopOf = (
 			},
 		);
 	execFileSync("git", ["clone", "-q", "--branch", branch, remote, work], {stdio: "pipe"});
+
 	for (const {path, text} of files) {
 		mkdirSync(dirname(join(work, path)), {recursive: true});
 		writeFileSync(join(work, path), text);
 	}
+
 	git("add", "-A");
 	git("commit", "-qm", "A person's change");
 	git("push", "-q", "origin", `HEAD:refs/heads/${branch}`);
@@ -510,8 +558,11 @@ const keptAsAsking = (home: string, offers: readonly string[]) =>
 		const handle = yield* fileStorage(join(home, "storage", "lanes")).open(`lane-${NUMBER}`, {});
 		const store = handle.store("lane", `lane/${NUMBER}`, Lane);
 		const saved = store.migrate(yield* Effect.promise(() => store.load()));
-		if (!Schema.is(Lane)(saved) || saved.phase !== "asking")
+
+		if (!Schema.is(Lane)(saved) || saved.phase !== "asking") {
 			return yield* Effect.die(new Error("the lane was not saved asking"));
+		}
+
 		yield* Effect.promise(() =>
 			store.save({
 				...saved,
@@ -622,13 +673,21 @@ export const lane = ({
 	const ticketMoves = (tickets: Tickets["Service"], n: number) =>
 		Effect.gen(function* () {
 			const move = ticketAfter[ticketMoved];
-			if (move === undefined || ledgerOf === null) return;
+
+			if (move === undefined || ledgerOf === null) {
+				return;
+			}
+
 			const {timeline} = yield* tickets.read(n);
 			const ended = timeline.some((e) => {
 				const fact = e.fact as Ran["facts"][number];
 				return fact.type === "ended" && fact.stage === move.step;
 			});
-			if (!ended) return;
+
+			if (!ended) {
+				return;
+			}
+
 			ticketMoved++;
 			yield* ledgerOf.send(streams(nameOf(NUMBER)).inbox, `${move.fact}-${ticketMoved}`, {
 				kind: move.fact,
@@ -656,22 +715,49 @@ export const lane = ({
 	/** The person's `branchAfter` push, once its step has ended on the ticket. */
 	const branchMoves = (tickets: Tickets["Service"], n: number) =>
 		Effect.gen(function* () {
-			if (branchAfter === undefined || branchMoved) return;
+			if (branchAfter === undefined || branchMoved) {
+				return;
+			}
+
 			const facts = (yield* tickets.read(n)).timeline.map((e) => e.fact as Ran["facts"][number]);
-			if (!facts.some((f) => f.type === "ended" && f.stage === branchAfter.step)) return;
+
+			if (!facts.some((f) => f.type === "ended" && f.stage === branchAfter.step)) {
+				return;
+			}
+
 			const head = facts.filter((f) => f.type === "pushed").at(-1)?.head;
-			if (typeof head !== "string") return;
+
+			if (typeof head !== "string") {
+				return;
+			}
+
 			branchMoved = true;
 			yield* Effect.sync(() => pushOnTopOf({dir, home, remote}, head, branchAfter.files));
 		}).pipe(Effect.orDie);
-	if (formatter) nameFormatter(seed);
-	if (noOrigin) execFileSync("git", ["remote", "remove", "origin"], {cwd: seed, stdio: "pipe"});
+
+	if (formatter) {
+		nameFormatter(seed);
+	}
+
+	if (noOrigin) {
+		execFileSync("git", ["remote", "remove", "origin"], {cwd: seed, stdio: "pipe"});
+	}
+
 	// The fake reads the remote from its script, for a person's push (`pushesAt`).
-	if (fake !== undefined)
+	if (fake !== undefined) {
 		writeFileSync(join(dir, "script.json"), JSON.stringify({...fake, remote}));
-	for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
+	}
+
+	for (const [key, value] of Object.entries(fakeEnv(dir))) {
+		vi.stubEnv(key, value);
+	}
+
 	const gh = story === undefined ? null : makeFakeGh({dir, remote, story});
-	for (const [key, value] of Object.entries(gh?.env ?? {})) vi.stubEnv(key, value);
+
+	for (const [key, value] of Object.entries(gh?.env ?? {})) {
+		vi.stubEnv(key, value);
+	}
+
 	const lines: string[] = [];
 	const stops: (Lane | null)[] = [];
 	const folds: (Folded | string)[] = [];
@@ -680,7 +766,11 @@ export const lane = ({
 	const kept = () =>
 		Effect.gen(function* () {
 			stops.push(yield* savedLane(home));
-			if (!folding) return;
+
+			if (!folding) {
+				return;
+			}
+
 			const folded = yield* Effect.exit(
 				seenOf(NUMBER).pipe(
 					Effect.map(fold),
@@ -718,7 +808,11 @@ export const lane = ({
 				run: (head) =>
 					Effect.suspend(() => {
 						const said = checksSay?.(head, checksRan++, {dir, home, remote}) ?? null;
-						if (said !== null) return Effect.succeed(said);
+
+						if (said !== null) {
+							return Effect.succeed(said);
+						}
+
 						return checksDown()
 							? Effect.succeed({
 									head,
@@ -736,8 +830,11 @@ export const lane = ({
 				onBase: (commit, tests) =>
 					Effect.suspend(() => {
 						onBase.push({line: typed, commit, files: tests.map((test) => test.file)});
-						if (failOnBase !== undefined && typed === 0 && onBase.length > failOnBaseFrom)
+
+						if (failOnBase !== undefined && typed === 0 && onBase.length > failOnBaseFrom) {
 							return Effect.fail({...failOnBase, _tag: "could_not_run"} as const);
+						}
+
 						const says = onBaseSays?.(onBase.length - 1, tests) ?? null;
 						return says === null ? work.onBase(commit, tests) : Effect.succeed(says);
 					}),
@@ -748,7 +845,7 @@ export const lane = ({
 					Effect.andThen(
 						Effect.andThen(ticketMoves(tickets, n), branchMoves(tickets, n)),
 						Effect.suspend(() => {
-							if (typed !== readFailsAt || readFailed)
+							if (typed !== readFailsAt || readFailed) {
 								return tickets
 									.read(n)
 									.pipe(
@@ -756,6 +853,8 @@ export const lane = ({
 											typed > 0 ? {...ticket, timeline: olderThan(ticket.timeline)} : ticket,
 										),
 									);
+							}
+
 							readFailed = true;
 							return Effect.fail(
 								new TicketsFailed({
@@ -798,36 +897,57 @@ export const lane = ({
 			);
 			const run = Effect.gen(function* () {
 				// The ticket's working copy, made from main as it is now, as an earlier line would leave it.
-				if (treeFirst)
+				if (treeFirst) {
 					yield* Effect.gen(function* () {
 						const work = yield* LaneWork;
 						const {tree} = yield* work.tree(NUMBER);
-						if (treeHolds !== undefined)
+
+						if (treeHolds !== undefined) {
 							yield* work.commit(tree, treeHolds, "a commit main lacks, from an earlier line");
+						}
 					}).pipe(
 						Effect.provide(
 							laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"}, polling),
 						),
 						Effect.orDie,
 					);
+				}
+
 				if (savedAsking !== undefined) {
 					const first = yield* Effect.forkScoped(line());
-					while (!lines.some((said) => savedAsking.at.test(said))) yield* Effect.sleep("20 millis");
+
+					while (!lines.some((said) => savedAsking.at.test(said))) {
+						yield* Effect.sleep("20 millis");
+					}
+
 					yield* Fiber.interrupt(first);
 					lines.push(KILLED);
 					yield* keptAsAsking(home, savedAsking.offers);
 				}
+
 				if (killAt !== undefined) {
 					const first = yield* Effect.forkScoped(line());
-					while (!lines.some((said) => said.includes(killAt))) yield* Effect.sleep("20 millis");
+
+					while (!lines.some((said) => said.includes(killAt))) {
+						yield* Effect.sleep("20 millis");
+					}
+
 					yield* Fiber.interrupt(first);
 					lines.push(KILLED);
-					if (redAfterKill) writeFileSync(red, "");
+
+					if (redAfterKill) {
+						writeFileSync(red, "");
+					}
 				}
+
 				yield* line();
 				yield* kept();
+
 				for (const {between} of again) {
-					if (between !== undefined) yield* between({dir, home, remote});
+					if (between !== undefined) {
+						yield* between({dir, home, remote});
+					}
+
 					typed++;
 					lines.push(AGAIN);
 					yield* line();
@@ -871,7 +991,11 @@ export const keptAtStart = (sendBack: boolean): Promise<Lane> => {
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 	made.push(dir);
 	const {home, seed} = makeLaneHome({dir, nodeModules: MODULES, sendBack});
-	for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
+
+	for (const [key, value] of Object.entries(fakeEnv(dir))) {
+		vi.stubEnv(key, value);
+	}
+
 	const lines: string[] = [];
 	return Effect.runPromise(
 		Effect.gen(function* () {
@@ -881,12 +1005,20 @@ export const keptAtStart = (sendBack: boolean): Promise<Lane> => {
 					Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
 				),
 			);
-			while (lines.length === 0) yield* Effect.sleep("20 millis");
+
+			while (lines.length === 0) {
+				yield* Effect.sleep("20 millis");
+			}
+
 			yield* Fiber.interrupt(running);
 			const handle = yield* fileStorage(join(home, "storage", "lanes")).open(`lane-${NUMBER}`, {});
 			const store = handle.store("lane", `lane/${NUMBER}`, Lane);
 			const saved = store.migrate(yield* Effect.promise(() => store.load()));
-			if (!Schema.is(Lane)(saved)) return yield* Effect.die(new Error(lines.join("\n")));
+
+			if (!Schema.is(Lane)(saved)) {
+				return yield* Effect.die(new Error(lines.join("\n")));
+			}
+
 			return saved;
 		}).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),
 	);
@@ -1023,7 +1155,11 @@ export const heldAt = (ran: Ran, i: number) => {
 export const foldsAsSaved = (ran: Ran, i: number) => {
 	const stop = heldAt(ran, i);
 	expect(stop, `line ${i} saved no Held`).not.toBeNull();
-	if (stop === null) return;
+
+	if (stop === null) {
+		return;
+	}
+
 	const {count, round, carry, trail} = stop.held;
 	expect(ran.folds[i]).toEqual({held: {count, round, carry, trail}, missing: [], at: stop.at});
 };
@@ -1042,7 +1178,11 @@ export const WRITES = ["commit_make", "ref_move", "merge_write"];
 /** A lane on the stand-in. Strict: a call it does not know fails this test, whatever the test says. */
 export const onGitHub = async (script: Script) => {
 	const ran = await lane({within: 50, story: PASSED_CI, ...script});
-	if (ran.gh === null) return expect.unreachable("no stand-in gh was played");
+
+	if (ran.gh === null) {
+		return expect.unreachable("no stand-in gh was played");
+	}
+
 	const calls = ran.gh.calls();
 	// It really reached the stand-in: a lane that never asked proves nothing.
 	expect(calls.map((call) => call.kind)).toContain("pr_create");
@@ -1089,6 +1229,7 @@ export const inClone = (ran: Ran, ...args: readonly string[]) =>
 		encoding: "utf8",
 		stdio: "pipe",
 	}).trim();
+
 /** Whether `commit`'s tree holds `path`. */
 export const holds = (ran: Ran, commit: string, path: string) => {
 	try {
@@ -1098,18 +1239,23 @@ export const holds = (ran: Ran, commit: string, path: string) => {
 		return false;
 	}
 };
+
 /** The files `commit` changed from its first parent. */
 export const changedBy = (ran: Ran, commit: string) =>
 	inClone(ran, "diff-tree", "--no-commit-id", "--name-only", "-r", commit).split("\n");
+
 /** The round each run of `stage` started in. */
 export const roundsOf = (ran: Ran, stage: string) =>
 	ran.facts
 		.filter((f) => f.type === "started" && f.stage === stage)
 		.map((f) => Number(f.round ?? 1));
+
 export const moveMain = (where: Where) =>
 	Effect.sync(() => pushToMain(where, [{path: "docs/elsewhere.md", text: "Written elsewhere.\n"}]));
+
 /** The ticket's first `restarted` fact. */
 export const restartOf = (ran: Ran) => ran.facts.find((f) => f.type === "restarted");
+
 /** The head the lane's last end before its restart left: where the branch stood as it stopped. */
 export const headBefore = (ran: Ran) => {
 	const at = ran.facts.findIndex((f) => f.type === "restarted");
@@ -1125,10 +1271,13 @@ export const headBefore = (ran: Ran) => {
 
 /** What a builder leaves in the test writer's file, in its first build only. */
 export const TOUCHED = 'import {it} from "vitest";\n\nit("lowers capitals", () => {});\n';
+
 /** The test writer's file written again: red without `lower`, green with the builder's. */
 const REDONE =
 	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n\texpect(lower("AB")).toBe("ab");\n\texpect(lower("Ab")).toBe("ab");\n});\n';
+
 export const REDONE_MARK = 'lower("Ab")';
+
 /** A test writer's run that writes `REDONE`, and nothing else. */
 export const WRITES_REDONE = {
 	with: {
@@ -1136,6 +1285,7 @@ export const WRITES_REDONE = {
 		answers: [{property: "p1", kind: "test", file: "src/lower.test.ts", name: "lowers capitals"}],
 	},
 };
+
 /** The second test writer's run writes `REDONE`, and nothing else. */
 export const REDO = {tests: [null, WRITES_REDONE]};
 export const SEE = ["src/lower.ts", "src/lower.test.ts"];
@@ -1144,11 +1294,13 @@ export const SEE = ["src/lower.ts", "src/lower.test.ts"];
 
 export const runsOf = (ran: Ran, step: string) => codexRuns(ran.dir).filter((r) => r.step === step);
 export const THE_PLANS_NO = {approve: "no"};
+
 export const commentsOf = (ran: Ran) =>
 	ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
 
 export const REAL_LEAN =
 	"Use Unicode compatibility decomposition and remove combining marks. This gives Çay Şeker → cay-seker and ﬂower → flower, but Straße → stra-e.";
+
 export const REAL_QUESTION = {
 	ask: "How broadly should non-ASCII letters fold into ASCII?",
 	options: [
@@ -1162,6 +1314,7 @@ export const REAL_QUESTION = {
 	doubt:
 		"Confirm whether titles containing letters such as ß, æ and ø must retain their usual transliterations.",
 };
+
 export const REAL_P1 = {
 	when: "The three publication titles are converted",
 	result: "Their slugs are respectively “hello-world”, “cay-seker” and an empty string.",
@@ -1170,6 +1323,7 @@ export const REAL_P1 = {
 	tool: "test",
 	code: [],
 };
+
 export const REAL_P2 = {
 	when: "Nonempty ASCII letter-and-digit words are joined by spaces and converted",
 	result:
@@ -1179,9 +1333,11 @@ export const REAL_P2 = {
 	tool: "test",
 	code: [],
 };
+
 /** Why the real test writer said it could not test p1. */
 export const REAL_CANNOT =
 	"The three publication title inputs are unspecified. The linked issue was unreachable, and clarification has not arrived. Guessing inputs would not test the promised examples.";
+
 /** Why the real mutants' writer said it could not kill a mutant. */
 export const REAL_MUTANT =
 	"Both regexes globally remove every Unicode combining mark. The original deletes each consecutive run; the mutant deletes each mark individually. No observable behavior changes.";
@@ -1237,6 +1393,7 @@ export const reads = (ran: Ran, prefix: string, words: readonly string[]) => {
 
 export const RUN3_LEAN =
 	"Fold decomposable accents; treat remaining non-ASCII characters as word separators.";
+
 export const RUN3_QUESTION = {
 	ask: "How broadly should letters fold when Unicode accent decomposition does not produce ASCII, such as ß, ø, and ł?",
 	options: [
@@ -1249,6 +1406,7 @@ export const RUN3_QUESTION = {
 	sure: 75,
 	doubt: "Expected slugs for 'Straße', 'smør', and 'Łódź' would settle the intended scope.",
 };
+
 export const RUN3_FINDING = {
 	kind: "review-code",
 	from: {source: "check", name: "tests-prove-it"},
@@ -1261,8 +1419,10 @@ export const RUN3_FINDING = {
 		"Letters with plain ASCII forms survive folding, including these examples, and regression tests require their preservation instead of their loss.",
 	seen: "ran",
 };
+
 /** The same finding, as a reviewer told of q1 marks it. */
 export const AGAINST_Q1 = {...RUN3_FINDING, from: {source: "decision", id: "q1"}};
+
 export const OTHER_FINDING = {
 	...RUN3_FINDING,
 	from: {source: "check", name: "bugs-a-person-would-hit"},
@@ -1271,7 +1431,9 @@ export const OTHER_FINDING = {
 	wants: "An empty name comes back empty.",
 	seen: "read",
 };
+
 export const RUN3_NAME = "p1: preserves letters with plain ASCII forms, including ł and ø";
+
 export const RUN3_ROUND_2 = {
 	with: {
 		files: [
@@ -1287,8 +1449,10 @@ export const RUN3_ROUND_2 = {
 		],
 	},
 };
+
 const RUN3_LEFT =
 	"Blocked by contradictory protected tests: src/slug.test.ts requires Straße → stra-e and discards ł, ø, æ, and œ; src/slug.folding.test.ts requires Straße → strasse and preserves those letters. The exam owner must reconcile these expectations before implementation can satisfy every check.";
+
 export const NO_CHANGE = {
 	with: {
 		summary:
@@ -1297,9 +1461,11 @@ export const NO_CHANGE = {
 		left: [RUN3_LEFT],
 	},
 };
+
 export const THE_LEAN = {plan: [{with: {questions: [RUN3_QUESTION]}}]};
 
 export const found = (...findings: readonly unknown[]) => ({with: {findings}});
+
 /** Run 3 as it went: the finding is not marked, and the builder changes nothing in round 2. */
 export const RUN_3: FakeScript = {
 	answers: {
@@ -1309,7 +1475,9 @@ export const RUN_3: FakeScript = {
 		build: [null, NO_CHANGE],
 	},
 };
+
 export const bye = (ran: Ran) => ran.lines.at(-1) ?? "";
+
 export const answeredWith = (ran: Ran, pick: string) =>
 	ran.facts.filter((f) => f.type === "answered" && f.pick === pick);
 
@@ -1325,6 +1493,7 @@ export const RULES = "[rules] Read names in one form";
 export const RULE = ".oxlintrc.json";
 
 export const FAULT = "The rules list is not empty: it turns on a rule the plan never named.";
+
 /** A review of the exam's pull request that fails its one criterion, with the finding it rests on. */
 export const FAILS_E1 = {
 	with: {
@@ -1343,6 +1512,7 @@ export const FAILS_E1 = {
 		skipped: [],
 	},
 };
+
 export const exams = (ran: Ran) => codexRuns(ran.dir).filter((r) => r.step === "exam");
 
 /** Where in the facts the first end of `stage` is, or -1. */
@@ -1355,20 +1525,26 @@ export const MAIN_RULE = '{"main": 1}\n';
 
 /** Main changes the rule file under the exam review's checks, the lane's first, once. */
 export const mainTakesTheRule: NonNullable<Script["checksSay"]> = (_head, nth, where) => {
-	if (nth === 0) pushToMain(where, [{path: RULE, text: MAIN_RULE}]);
+	if (nth === 0) {
+		pushToMain(where, [{path: RULE, text: MAIN_RULE}]);
+	}
+
 	return null;
 };
 
 /** The head an exam step's `ended` fact carries for the exam's pull request. */
 export const pullHead = (fact: Ran["facts"][number] | undefined) =>
 	(fact?.carry as {readonly examPull?: {readonly head: string}} | undefined)?.examPull?.head ?? "";
+
 /** The lines on the ticket that name a kept ref. */
 export const keptLines = (ran: Ran) =>
 	ran.facts
 		.filter((f) => f.type === "commented" && String(f.body).includes("refs/kept/"))
 		.map((f) => String(f.body));
+
 /** The kept ref a line names. */
 export const refIn = (line: string) => /refs\/kept\/[^\s`'"]*[^\s`'".,;:)]/.exec(line)?.[0] ?? "";
+
 /** Where a kept ref may be: the lane's own clone, or the remote. */
 export const keptPlaces = (ran: Ran) => [
 	["-C", join(ran.dir, "home", "work", "clone")],

@@ -16,7 +16,8 @@ type DomKey = {
 };
 
 const editable = (target: unknown): boolean => {
-	if (typeof target !== "object" || target === null) return false;
+	if (typeof target !== "object" || target === null) {return false;}
+
 	const element = target as {readonly tagName?: unknown; readonly isContentEditable?: unknown};
 	const tag = typeof element.tagName === "string" ? element.tagName.toLowerCase() : "";
 	return (
@@ -54,11 +55,15 @@ export const routeKey = (a: {
 	} | null;
 	readonly taken: boolean;
 } => {
-	if (a.tile === null) return {armed: null, press: null, taken: false};
+	if (a.tile === null) {return {armed: null, press: null, taken: false};}
+
 	const {armed, out} = Keys.matchKey(a.table, a.armed, a.event);
-	if (out._tag === "prefix") return {armed, press: null, taken: true};
+
+	if (out._tag === "prefix") {return {armed, press: null, taken: true};}
+
 	if (out._tag !== "command" || !a.commands.includes(out.command))
-		return {armed, press: null, taken: false};
+		{return {armed, press: null, taken: false};}
+
 	const m = commandMsg(out.command);
 	return m === null
 		? {armed, press: null, taken: false}

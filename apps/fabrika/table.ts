@@ -21,14 +21,20 @@ const here = import.meta.dirname;
 const rowsOf = (table: string): string[] => {
 	const rows: string[] = [];
 	let row = "";
+
 	for (const [run] of table.matchAll(/[0-9a-z]+[A-Z]{2}/g)) {
 		if (row.length + run.length > 96) {
 			rows.push(row);
 			row = "";
 		}
+
 		row += run;
 	}
-	if (row !== "") rows.push(row);
+
+	if (row !== "") {
+		rows.push(row);
+	}
+
 	return rows;
 };
 

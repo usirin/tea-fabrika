@@ -14,6 +14,7 @@ import {shownOf} from "./view.ts";
 
 const STARTED = 1000;
 const job = {n: 1, text: "counter", by: "user:owner", host: "laptop", started: STARTED};
+
 const just: JobTrace = {
 	trace: TALLY_ID,
 	job: {...job, ended: null},
@@ -22,6 +23,7 @@ const just: JobTrace = {
 	steps: [],
 	opened: [],
 };
+
 const stepping: JobTrace = {
 	...just,
 	steps: [
@@ -38,6 +40,7 @@ const stepping: JobTrace = {
 		},
 	],
 };
+
 const span = (more: Partial<Span>): Span => ({
 	span: "a1b2c3d4e5f60708",
 	parent: null,
@@ -51,6 +54,7 @@ const span = (more: Partial<Span>): Span => ({
 	by: "user:owner",
 	...more,
 });
+
 const ended: JobTrace = {
 	...stepping,
 	job: {...job, ended: {how: "done", at: STARTED + 2000}},
@@ -71,6 +75,7 @@ const after = (...msgs: readonly TraceMsg[]): Model => replay(trace, {ctx: undef
 const look: TraceMsg = {type: "look", id: TALLY_ID};
 const got = (t: JobTrace): TraceMsg => ({type: "got", trace: t});
 const tick = (now: number): TraceMsg => ({type: "tick", now});
+
 const nowIn = (s: Model) =>
 	s.shows.kind === "job" && s.shows.read.at === "read" ? s.shows.read.now : "not read";
 
@@ -175,7 +180,11 @@ describe("the tick", () => {
 					{},
 					{id: "trace:test", storage: memoryStorage()},
 				).pipe(Effect.provide(growing));
-				if (started.kind !== "running") return yield* Effect.die("it did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("it did not start");
+				}
+
 				const until = (ok: (s: Model) => boolean) =>
 					started.run.machines.trace.changes.pipe(
 						Stream.filter((s): s is Model => s !== null),

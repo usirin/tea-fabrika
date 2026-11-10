@@ -33,6 +33,7 @@ const runOf = (i: number): string => `r-build-${i + 1}`;
 const ticketOf = (rows: number): readonly Entry[] => {
 	const facts: Fact[] = [{type: "filed", title: "A made-up ticket", body: ""}];
 	const at: number[] = [T0 - 60 * MIN];
+
 	for (let i = 0; i < rows; i++) {
 		const run = runOf(i);
 		facts.push(
@@ -51,6 +52,7 @@ const ticketOf = (rows: number): readonly Entry[] => {
 		);
 		at.push(T0 + 2 * i * MIN, T0 + (2 * i + 1) * MIN);
 	}
+
 	return facts.map((fact, i) => ({
 		pos: i + 1,
 		ticket: NUMBER,
@@ -68,6 +70,7 @@ const countingRecord = (): {readonly record: JobTrace; readonly reads: {n: numbe
 	const spans: Span[] = [];
 	const idOf = (n: number) => n.toString(16).padStart(16, "0");
 	let next = 1;
+
 	for (let i = 0; i < ROWS; i++) {
 		const from = T0 + 2 * i * MIN;
 		const root = idOf(next++);
@@ -81,7 +84,8 @@ const countingRecord = (): {readonly record: JobTrace; readonly reads: {n: numbe
 			end: from + MIN,
 			tags: {[LANE.run]: runOf(i)},
 		});
-		for (let c = 0; c < CHILDREN; c++)
+
+		for (let c = 0; c < CHILDREN; c++) {
 			spans.push({
 				...base,
 				span: idOf(next++),
@@ -91,11 +95,16 @@ const countingRecord = (): {readonly record: JobTrace; readonly reads: {n: numbe
 				end: from + c + 1,
 				tags: {},
 			});
+		}
 	}
+
 	const reads = {n: 0};
 	const counted = new Proxy(spans, {
 		get: (target, key, receiver) => {
-			if (typeof key === "string" && /^\d+$/.test(key)) reads.n++;
+			if (typeof key === "string" && /^\d+$/.test(key)) {
+				reads.n++;
+			}
+
 			return Reflect.get(target, key, receiver);
 		},
 	});
@@ -251,12 +260,18 @@ const callsOpen = (n: number): Model =>
 /** The fastest of `times` redraws of each state `make` gives, made before the clock starts. */
 const fastestDrawing = (times: number, make: () => readonly Model[]): number => {
 	let best = Infinity;
+
 	for (let k = 0; k < times; k++) {
 		const states = make();
 		const t = performance.now();
-		for (const s of states) shownOf(s);
+
+		for (const s of states) {
+			shownOf(s);
+		}
+
 		best = Math.min(best, performance.now() - t);
 	}
+
 	return best;
 };
 

@@ -122,15 +122,30 @@ const AT_THE_GATE: {readonly [S in PlanState]: S extends "approved" ? null : Bui
 };
 
 export function buildGate(ticket: Ticket): BuildGate {
-	if (ticket.state === "closed") return {answer: "stop", outcome: {kind: "skip", why: "closed"}};
-	if (ticket.prs.some((pr) => pr.state === "merged"))
+	if (ticket.state === "closed") {
+		return {answer: "stop", outcome: {kind: "skip", why: "closed"}};
+	}
+
+	if (ticket.prs.some((pr) => pr.state === "merged")) {
 		return {answer: "stop", outcome: {kind: "skip", why: "merged"}};
+	}
+
 	const stop = AT_THE_GATE[ticket.plan ?? "unknown"];
-	if (stop !== null) return {answer: "stop", outcome: stop};
-	if (ticket.criteria === null)
+
+	if (stop !== null) {
+		return {answer: "stop", outcome: stop};
+	}
+
+	if (ticket.criteria === null) {
 		return {answer: "stop", outcome: {kind: "stuck", why: "criteria_unknown"}};
+	}
+
 	const [first, ...rest] = ticket.criteria;
-	if (first === undefined) return {answer: "stop", outcome: {kind: "stuck", why: "no_criteria"}};
+
+	if (first === undefined) {
+		return {answer: "stop", outcome: {kind: "stuck", why: "no_criteria"}};
+	}
+
 	return {answer: "go", criteria: [first, ...rest]};
 }
 
@@ -180,7 +195,11 @@ export const readTicket =
 	(url: string, number: number): Effect.Effect<Ticket, {readonly _tag: "unknown"}> =>
 		Effect.gen(function* () {
 			const at = ticketOf(url);
-			if (at === null) return yield* Effect.fail({_tag: "unknown" as const});
+
+			if (at === null) {
+				return yield* Effect.fail({_tag: "unknown" as const});
+			}
+
 			const {repository} = (yield* ask(gh, Answer, TICKET, {
 				owner: at.owner,
 				name: at.name,

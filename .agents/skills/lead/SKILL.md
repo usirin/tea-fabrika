@@ -99,8 +99,8 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   memory. A PR still merges only after every step ran, each by its own agent (plan, tests, build,
   mutation, one review saying merge-ready), with CI green and the leak grep clean. No step is ever
   skipped. Only a new design call or an exam read that does not meet the bar (step 9) comes back to
-  the lead. A drive script (tracker ticket 341) will chain the mechanical steps in code and start an
-  agent only where judgment is needed. *It said (owner, 2026-11-08): one driver per ticket, start
+  the lead. `chain.ts` (tracker ticket 341) chains the mechanical steps in code and starts an
+  agent only where judgment is needed ([below](#run-a-whole-lane-with-chaints)). *It said (owner, 2026-11-08): one driver per ticket, start
   to finish. One driver ran for 11 hours, which was wasteful.*
 - **A step agent never writes another step's code or tests** (owner, 2026-11-08). The agent
   that hands work along fetches, reads the report, and runs what a Codex box cannot: e2e runs and
@@ -118,8 +118,9 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh new <name> <base> <branch> --ticket <n> --plan <path> [--root <sha>]` | check the start and save its facts (the lane root that build order and the commits check read from), then clone and install |
 | `box.sh run <name> <prompt> <out> --step <step>` | run Codex, save redacted output and the run row |
 | `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
-| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone; drive runs it at start |
+| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone, then every clean, idle linked worktree whose lane's pull request merged or closed, found by its branch, by a remote branch at its HEAD or by the PR's head commit; before any folder goes, `keepruns.sh` moves its `runs/` (raw samples, never in git) into the main checkout's `runs/<folder>/`, and a folder it cannot move is kept, as in `box.sh rm` and `catchup.sh`; it prints each keep with its reason, and drive runs it at start and names those keeps when it still refuses on disk. Cleanup is the tooling's job: never ask the owner to free disk (owner, 2026-11-09) |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
+| `chain.ts <lane> <lane-brief.md>` | the whole lane end to end, with no lead agent holding it: tests, build, mutation, review through `drive.ts`, then the PR and `catchup.sh`; a short judgment agent only on an ask or a stuck ([below](#run-a-whole-lane-with-chaints)) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
@@ -152,13 +153,16 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - Claude runs under `sandbox-exec`: it cannot read `~/.fabrika/step-keys`, the leak words or
   `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
   work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
-- Mutation runs on `--agent claude` only, since it binds ports and starts Electron. One mutation
-  step at a time holds `BOXES/state/electron.lock`; the next waits.
+- Mutation runs on `--agent claude` only, since it binds ports and starts Electron. Start any
+  other Claude step whose laws or shots run the app with `--electron`. The box cannot write
+  `BOXES/state/electron.lock`, so drive takes it outside the box before the agent starts and holds
+  it for the whole step; the next Electron step waits. The sandbox is unchanged.
 - It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
   by a step it accepted) or the newest tip on origin of the branch or its `-wip` backup when that
   is ahead of it, else `origin/main`. So a lead commit (a merge of main, a lockfile commit) pushed
   to `-wip` is where the next step starts, and `box.sh new` takes a verified lead head as a base
-  like a build head. A plan reads the main checkout and takes no `--from`.
+  like a build head, and so is any commit `origin/main` holds, such as the main a plan read before
+  main moved on. A plan reads the main checkout and takes no `--from`.
 - `box.sh new` refuses `shared_ticket` only when another live branch carries a link for the same
   ticket: one with an open PR, or one a box on disk names. A branch the base already holds, one
   with neither, or one whose change is only `field/*.jsonl` rows, does not block.
@@ -168,7 +172,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   `plancheck --draft` on a plan. A `stale_link` counts only for a step the lane has signed; one for
   a step it has not reached (lead, before catch-up) is left to CI on the PR. Stepcommit reads the
   facts of the box it runs in, never another `.box` on the branch. A check that cannot run is
-  `stuck`, never a pass. A build that
+  `stuck`, never a pass. When the commits check holds a step, `box.sh fetch` and the outcome line's
+  `reason` name each rule and commit that held it (`stale_link 1a2b3c4d step tests`,
+  `broken_chain ...`, `unlinked_commit ...`; five at most), and `not_owner` names its path and
+  commit, so the lead knows which step to send it to. A build that
   answers `done` with no commit is done only with a `laws: green <paths>` line (every law already
   green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
 - A box has no network, so it cannot refresh `pnpm-lock.yaml`. When a step's commits change a
@@ -183,13 +190,75 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   step's branch, and the outcome line's `reason` ends with `(box kept: ...)` saying what is left.
   A stop after the time limit takes the agent's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
-  is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
-  drive started, under 20 GB free after `box.sh gc`, or the lane's branch checked out in a
-  worktree, which the end-of-step fetch could not update). It never retries. A stuck step keeps its
-  box. The commits check reads the whole lane, from where it left main, so each earlier step's
+  is in `reason`), 30 stuck, 40 skip (`answer: skip <why>`: nothing here for the step, such as a
+  mutation step whose diff has no product lines; its field row says `skip`, which review's order
+  check takes in place of a mutation row), 2 usage, 3 refused before any agent ran, printed as
+  `refused:<check>`: `agent_cap` (8 agents running: Codex boxes plus Claude steps drive started),
+  `low_disk` (under 20 GB free after `box.sh gc`), `branch_checked_out` (the lane's branch checked
+  out in a worktree, which the end-of-step fetch could not update), or a `box.sh new` start check
+  (`plan_unapproved`, `base_not_signed`, `shared_ticket`, `root_not_ancestor`). A refusal is not a
+  step outcome, so the stuck count holds only steps an agent ran. It never retries. A stuck step keeps its
+  box. A box's number is the first that no older run's files hold, and the line's `report` is `null`
+  when this run wrote none, as when box.sh refused it before the agent started. The commits check reads the whole lane, from where it left main, so each earlier step's
   newest link is in its chain. After a lead merge of main it starts at the merge-base with
   `origin/main` instead, so main's own commits are not judged as the lane's. A tests, build or mutation step waits while `pgrep -x tsgo` finds
   one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
+
+## Run a whole lane with chain.ts
+
+A lead agent used to sit for hours on one lane, starting each step and reading its answer. That
+loop is code now (owner, 2026-11-09; tracker ticket 341). `chain.ts` is a tea machine on the
+Effect engine whose Cmds run `drive.ts` for each step, read its one JSON line, and pick the next
+move; a fresh Claude agent is started only where judgment is needed, and it is gone after one
+answer. Start it in the background and read the last line only:
+
+```sh
+node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
+	[--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] \
+	[--claude tests,build] [--electron tests,build] [--model sonnet|opus] [--start <step>] &
+```
+
+- **The lane brief** is one Markdown file. Its text before the first `## ` heading goes to every
+  step (the ticket, its version, the approved plan, the decided notes). Then one section per step,
+  `## tests`, `## build`, `## mutation` and `## review`, written as a step brief is written today
+  (the review one keeps the template above, minus the two head lines), and `## pr`: the pull
+  request's description, its first line the title, with the `fabrika close ticket <N>` line when
+  the PR finishes the ticket. Every section is required. Each step's brief is the shared head, its
+  section, and the lane's facts the chain fills in: the round, where the step starts, each step's
+  head so far, what the last step said, `Reviewed head` and `Parent base` for a review, `T=` and
+  `BUILD=` for a mutation. The chain saves each one as `BOXES/<lane>-chain<round>-<step>-brief.md`.
+- **The moves:** tests done leads to build, build to mutation, mutation (done or skip) to review,
+  and a merge-ready review pushes the branch as the bot, opens the PR (or finds the open one) with a
+  steps-and-dollars table in its body, and runs `catchup.sh`. A `send` goes to the step it names,
+  with the sender's word in that step's brief. A send to plan parks: only the lead approves a plan.
+  A lockfile ask parks with drive's own instructions. Any other refusal parks.
+- **Retries and limits** (decided with the clanka walk, 2026-11-09): a step drive refused for a full
+  laptop (`refused:agent_cap`, `refused:low_disk`) is retried on one named Effect `Schedule`,
+  `slotSchedule`, and running out is a typed `RetriesExhausted`, reported as stuck with the schedule's
+  name. Every limit is a `Context.Reference` with a default the environment may override:
+  `WaitMinutes` 5 (`CHAIN_WAIT_MINUTES`), `MaxWaits` 6 (`CHAIN_WAITS`), `MaxStucks` 3
+  (`CHAIN_STUCKS`), `MaxSteps` 16 (`CHAIN_STEPS`). Proven against the real `drive.ts` on 2026-11-09
+  with the disk under the 20 GB floor: the step was tried, retried on the schedule, and the lane
+  ended `stuck` with `RetriesExhausted` and drive's reason, exit 30.
+- **Judgment** (an `ask:lead:question`, or a `stuck`): the chain starts `claude -p` in the main
+  checkout, read-only (`Read,Glob,Grep`, under the same sandbox profile as a Claude plan step), with
+  the lane's state file and the step's report. It answers one line: `answer: send <step> <note>`
+  runs that step again with the note in its brief; `answer: park <why>` ends the lane for the lead.
+  Its field row goes to `BOXES/<lane>-rows.jsonl` like a step's. Three stucks in a row on one
+  step park without asking. Mutation always runs on Claude; `--claude` names other steps that need
+  Claude (Electron or socket work), `--electron` the ones that run the app.
+- **Where it ends:** one JSON line, `outcome` `done` (landed, exit 0), `ask` (parked, exit 20,
+  the why in `reason`) or `stuck` (exit 30). `state/<lane>.md` gets a `chain:` line for every move,
+  so the status page reads the lane as before. `state/<lane>-chain.json` is the chain record, a
+  Schema value (`ChainRecord`): one `StepRecord` per round, written before the step starts and again
+  when it ends (drive's line, the judgment's answer), plus the PR number and when it landed, so a
+  resume needs nothing in memory. The step state file, boxes, rows and exit codes are drive's own,
+  unchanged. The chain holds every right (the bot's push, the PR, catch-up); a box and the judgment
+  agent hold only their model login ([0028](../../../.decisions/0028-the-parent-holds-every-right.md)),
+  and the steps run the unmodified harness through `drive.ts`.
+- **Watching:** `tail -f BOXES/state/<lane>.md`. To stop a lane, stop the chain process: the
+  running step's process group goes with it, and drive records that step as stuck. Start the chain
+  again with `--start <step>` to go on from there.
 
 ## Pushes and protected refs
 
@@ -246,6 +315,8 @@ visible, and never weaken the rules to hide this message.
    Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.
    The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list
    in the PR. Only real loosening waits on the owner.
+   Did this PR change a row in docs/direction/follows/? It updates that row in the same PR ([0017](../../../.decisions/0017-each-model-we-follow-has-one-table.md)).
+   Then the lead merges, product code included; a new design call is the only other wait ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)).
    Apply the labels rule and both zero-hit checks together. These are proper property tests.
    Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
    diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed
@@ -291,9 +362,10 @@ visible, and never weaken the rules to hide this message.
    metadata, unknown state, and any pair holding MAIN or BOXES/state.
    An annotated tag's own object ID must be reachable under MAIN's retained refs. Keeping only
    its commit loses the annotation. This also applies to signed tags and tags pointing at tags.
-10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
-    `MergeRow`, then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the
-    main checkout, plus any build the app needs to start. The owner runs the app from there and
+10. **After the merge:** `catchup.sh` closes each ticket the description names on a line of its
+    own, `fabrika close ticket <N>`, so put that line in when the PR finishes the ticket
+    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Write the `MergeRow`,
+    then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
     never pulls or installs first. If the pull refuses, because of local edits or another branch,
     leave them and tell the owner in one line.
 
@@ -346,6 +418,9 @@ nobody recorded.
 
 The leak check fails closed (owner, 2026-11-08): any hit stops the push or merge for the lead's
 hand check.
+A flagged line that only respaces a line the same file's diff removes is old text, and is not a
+hit (owner, 2026-11-09, ticket 500). Spaces put inside braces and a line wrapped another way are
+still new text.
 
 ## Go easy on the machine
 

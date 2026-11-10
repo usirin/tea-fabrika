@@ -161,22 +161,34 @@ interface DrawnRow {
 const rowsDrawn = (view: Shown, send: (msg: unknown) => void): readonly DrawnRow[] => {
 	const out: DrawnRow[] = [];
 	const walk = (node: ReactNode): void => {
-		if (Array.isArray(node)) return node.forEach(walk);
-		if (!isValidElement<Record<string, unknown>>(node)) return;
+		if (Array.isArray(node)) {
+			return node.forEach(walk);
+		}
+
+		if (!isValidElement<Record<string, unknown>>(node)) {
+			return;
+		}
+
 		const {props} = node;
 		const key = props["data-row"];
-		if (node.type === "tr" && typeof key === "string")
+
+		if (node.type === "tr" && typeof key === "string") {
 			out.push({
 				key,
 				onClick: props.onClick as DrawnRow["onClick"],
 				onKeyDown: props.onKeyDown as DrawnRow["onKeyDown"],
 			});
+		}
+
 		walk(props.children as ReactNode);
 	};
 	// TraceWindow hands the ticket view to its own component, which keeps no state: call it.
 	const outer = TraceWindow({view, send});
-	if (isValidElement<Record<string, unknown>>(outer) && typeof outer.type === "function")
+
+	if (isValidElement<Record<string, unknown>>(outer) && typeof outer.type === "function") {
 		walk((outer.type as (p: unknown) => ReactNode)(outer.props));
+	}
+
 	return out;
 };
 
@@ -187,8 +199,11 @@ const press = (s: Model, row: string, key: string) => {
 	const rows = rowsDrawn(shownOf(s), (m) => sent.push(m));
 	const stand: StandIn[] = [];
 	const grid = {querySelectorAll: () => stand};
-	for (const r of rows)
+
+	for (const r of rows) {
 		stand.push({key: r.key, focus: () => focused.push(r.key), closest: () => grid});
+	}
+
 	// The handler finds its row among the grid's by identity, so the event carries the stand-in.
 	const event: KeyPress = {
 		key,

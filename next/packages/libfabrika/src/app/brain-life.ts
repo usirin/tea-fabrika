@@ -10,6 +10,7 @@ export const BrainState = Schema.TaggedUnion({
 	stopped: {},
 });
 type BrainState = typeof BrainState.Type;
+
 const Msg = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("started"),
@@ -28,7 +29,9 @@ const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("stop")}),
 	Schema.Struct({type: Schema.Literal("stopped")}),
 ]);
+
 const terminal = (s: BrainState) => s._tag === "braked" || s._tag === "stopped";
+
 export const brainLife = Machine.make({
 	model: BrainState,
 	msg: Msg,

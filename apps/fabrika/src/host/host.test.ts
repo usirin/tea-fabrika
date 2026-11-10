@@ -40,9 +40,14 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 2000; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
@@ -87,7 +92,10 @@ const appOn = (sock: string, ours?: number) =>
 		/** What the page was sent on the desk's port, read. */
 		const page = (): ToPage[] =>
 			got.flatMap((m) => {
-				if (m.type !== "to" || m.port !== "desk") return [];
+				if (m.type !== "to" || m.port !== "desk") {
+					return [];
+				}
+
 				const read = readToPage(m.m);
 				return read.kind === "read" ? [read.msg] : [];
 			});
@@ -427,8 +435,12 @@ describe("the asks' later and seen", () => {
 	const write = (home: string, facts: readonly (readonly [number, string, Fact])[]) =>
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
+
 			for (const [n, id, fact] of facts) {
-				if (fact.type === "filed") yield* ledger.register(nameOf(n), owner);
+				if (fact.type === "filed") {
+					yield* ledger.register(nameOf(n), owner);
+				}
+
 				const writer = fact.type === "asked" ? agent : owner;
 				yield* ledger.send(streams(nameOf(n)).inbox, id, {kind: fact.type, writer, data: fact});
 			}
@@ -482,9 +494,14 @@ describe("the asks' later and seen", () => {
 		Effect.gen(function* () {
 			for (let i = 0; i < 400; i += 1) {
 				const now = yield* kept(home);
-				if (JSON.stringify(now) === JSON.stringify(marks)) return now;
+
+				if (JSON.stringify(now) === JSON.stringify(marks)) {
+					return now;
+				}
+
 				yield* Effect.sleep("5 millis");
 			}
+
 			const last = JSON.stringify(yield* kept(home));
 			return yield* Effect.die(`waited for asks.json to hold ${JSON.stringify(marks)}: ${last}`);
 		});
@@ -726,10 +743,12 @@ const goLogged = <A, E>(
 /** A log line's `key=value` fields, a quoted value unquoted. */
 const fieldsOf = (line: string): Record<string, string> => {
 	const out: Record<string, string> = {};
+
 	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
 		const [, key = "", raw = ""] = m;
 		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
 	}
+
 	return out;
 };
 
@@ -1070,6 +1089,7 @@ it("K20: one window closing its editor leaves tsh's keys waiting on another wind
 			yield* until("t1's prompt", () => (a.rows("t1")[0] === "tsh$" ? true : undefined));
 			const prompts = () => a.rows("t1").filter((row) => row.trim() === "tsh$").length;
 			a.type("t1", "keys\r");
+
 			for (const app of [a, b]) {
 				yield* until("the editor asked for", () =>
 					app.page().find((m) => m.type === "show" && m.what === "keys"),
@@ -1077,6 +1097,7 @@ it("K20: one window closing its editor leaves tsh's keys waiting on another wind
 				app.send({type: "on", port: "desk", m: {type: "keys.open"}});
 				yield* until("the editor opened", () => app.page().find((m) => m.type === "keys.opened"));
 			}
+
 			a.send({type: "on", port: "desk", m: {type: "keys.close"}});
 			yield* until("a's editor closed", () => a.page().find((m) => m.type === "keys.closed"));
 			yield* Effect.sleep("300 millis");

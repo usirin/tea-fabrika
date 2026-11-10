@@ -49,14 +49,23 @@ describe("an agent whose login was refused is served the read-only door", () => 
 		// The default is the door as it is today, with every write.
 		expect(seen.open.map((t) => t.name)).toContain("tracker_file");
 		expect(seen.shut.length).toBeGreaterThan(0);
-		for (const tool of seen.shut) expect(tool.annotations).toEqual({readOnlyHint: true});
+
+		for (const tool of seen.shut) {
+			expect(tool.annotations).toEqual({readOnlyHint: true});
+		}
+
 		const names = seen.shut.map((t) => t.name);
 		expect(names).toEqual(expect.arrayContaining(["runs", "tracker_query"]));
 		expect(names).not.toContain("tracker_file");
 		expect(names).not.toContain("tracker_comment");
 		// Every tool on the read-only door is one the open door marks read-only too: none is made up.
 		const openHints = new Map(seen.open.map((t) => [t.name, t.annotations?.readOnlyHint]));
-		for (const name of names) if (name !== "job") expect(openHints.get(name)).toBe(true);
+
+		for (const name of names) {
+			if (name !== "job") {
+				expect(openHints.get(name)).toBe(true);
+			}
+		}
 	});
 
 	it("refuses a write tool before any run starts, and nothing reaches the ledger", async () => {

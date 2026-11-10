@@ -85,6 +85,7 @@ const Unsent = Schema.Struct({
 	row: Schema.fromJsonString(SpanRow),
 	content: Schema.NullOr(Schema.String),
 });
+
 const decodeUnsent = Schema.decodeUnknownSync(Unsent);
 const encodeChain = Schema.encodeSync(Schema.fromJsonString(Chain));
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(SpanRow));
@@ -103,21 +104,37 @@ type Ended = {
 const keep = (attributes: Iterable<readonly [string, unknown]>) => {
 	const tags: Record<string, Tag> = {};
 	let dropped = 0;
+
 	for (const [key, value] of attributes) {
-		if (Redacted.isRedacted(value)) tags[key] = "<redacted>";
-		else if (typeof value === "string") Object.assign(tags, short({[key]: value}));
-		else if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)))
+		if (Redacted.isRedacted(value)) {
+			tags[key] = "<redacted>";
+		} else if (typeof value === "string") {
+			Object.assign(tags, short({[key]: value}));
+		} else if (
+			typeof value === "boolean" ||
+			(typeof value === "number" && Number.isFinite(value))
+		) {
 			tags[key] = value;
-		else dropped += 1;
+		} else {
+			dropped += 1;
+		}
 	}
+
 	return {tags, dropped};
 };
 
 /** The span's own `fab.process`, else its nearest ancestor's, else none. */
 const findProcess = (span: Tracer.AnySpan): Option.Option<string> => {
-	if (span._tag === "ExternalSpan") return Option.none();
+	if (span._tag === "ExternalSpan") {
+		return Option.none();
+	}
+
 	const own = span.attributes.get(PROCESS);
-	if (typeof own === "string" && own !== "") return Option.some(own);
+
+	if (typeof own === "string" && own !== "") {
+		return Option.some(own);
+	}
+
 	return Option.flatMap(span.parent, findProcess);
 };
 
@@ -212,6 +229,7 @@ class SinkSpan extends Tracer.NativeSpan {
 		endTime: bigint,
 		exit: Exit.Exit<unknown, unknown>,
 	) => void;
+
 	constructor(
 		options: ConstructorParameters<typeof Tracer.NativeSpan>[0],
 		onEnd: (span: SinkSpan, endTime: bigint, exit: Exit.Exit<unknown, unknown>) => void,
@@ -221,7 +239,10 @@ class SinkSpan extends Tracer.NativeSpan {
 	}
 
 	override end(endTime: bigint, exit: Exit.Exit<unknown, unknown>): void {
-		if (this.status._tag === "Ended") return;
+		if (this.status._tag === "Ended") {
+			return;
+		}
+
 		super.end(endTime, exit);
 		this.onEnd(this, endTime, exit);
 	}
@@ -270,7 +291,12 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 	/** Runs `step` as one atomic step, with the tables made first on first use. */
 	const atomic = <A>(step: () => A): A =>
 		sql.transaction(() => {
-			if (!ready) for (const query of [...HEALTH_TABLES, ...SINK_TABLES]) sql.exec(query);
+			if (!ready) {
+				for (const query of [...HEALTH_TABLES, ...SINK_TABLES]) {
+					sql.exec(query);
+				}
+			}
+
 			ready = true;
 			return step();
 		});
@@ -298,21 +324,32 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 		const done = Result.try({
 			try: () =>
 				atomic(() => {
-					for (const one of batch) land(one);
+					for (const one of batch) {
+						land(one);
+					}
+
 					if (hour > checked) {
 						rollup(sql, now);
-						if (sized) writeSize(sql, now);
+
+						if (sized) {
+							writeSize(sql, now);
+						}
 					}
 				}),
 			catch: (error) => error,
 		});
+
 		if (Result.isFailure(done)) {
 			held = batch;
 			failed = true;
 		} else {
 			held = [];
-			if (sized && hour > checked) checked = hour;
+
+			if (sized && hour > checked) {
+				checked = hour;
+			}
 		}
+
 		return done;
 	};
 
@@ -345,26 +382,36 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 		);
 		let left = rows;
 		let sent = 0;
+
 		while (left.length > 0) {
 			const answer = yield* records.write(chain, at, left);
 			const landed = answer._tag === "written" ? left.map((row) => row.span.spanId) : answer.had;
 			const next = at + 1;
 			yield* attempt(() => {
-				for (const spanId of landed) sql.exec(`DELETE FROM unsent WHERE "spanId" = ?`, spanId);
-				if (answer._tag === "rolled")
+				for (const spanId of landed) {
+					sql.exec(`DELETE FROM unsent WHERE "spanId" = ?`, spanId);
+				}
+
+				if (answer._tag === "rolled") {
 					sql.exec(
 						`INSERT INTO parts (chain, part) VALUES (?, ?)
 							ON CONFLICT (chain) DO UPDATE SET part = excluded.part`,
 						name,
 						next,
 					);
+				}
 			});
 			sent += landed.length;
-			if (answer._tag === "written") return sent;
+
+			if (answer._tag === "written") {
+				return sent;
+			}
+
 			const had = new Set(answer.had);
 			left = left.filter((row) => !had.has(row.span.spanId));
 			at = next;
 		}
+
 		return sent;
 	});
 
@@ -373,6 +420,7 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 			failed = false;
 			return yield* Effect.fail(new SinkError({why: "storage", held: held.length}));
 		}
+
 		const records = yield* RecordManager;
 		const unsent = yield* attempt(() =>
 			sql.exec(`SELECT * FROM unsent ORDER BY rowid`).map((row) => decodeUnsent(row)),
@@ -381,25 +429,33 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 			string,
 			{chain: Chain; rows: Array<{span: SpanRow; content: string | null}>}
 		>();
+
 		for (const {chain, row, content} of unsent) {
 			const name = chainName(chain);
 			const group = chains.get(name) ?? {chain, rows: []};
 			group.rows.push({span: row, content});
 			chains.set(name, group);
 		}
+
 		let sent = 0;
+
 		for (const {chain, rows} of chains.values()) {
-			for (let from = 0; from < rows.length; from += BATCH)
+			for (let from = 0; from < rows.length; from += BATCH) {
 				sent += yield* send(records, chain, rows.slice(from, from + BATCH));
+			}
 		}
+
 		yield* archiveDays(sql, who.object, yield* Clock.currentTimeMillis);
 		return {sent};
 	});
 
 	const summaries = Effect.fnUntraced(function* (from: number, to: number) {
 		const done = commit([], yield* Clock.currentTimeMillis, false);
-		if (Result.isFailure(done))
+
+		if (Result.isFailure(done)) {
 			return yield* Effect.fail(new SinkError({why: "storage", held: held.length}));
+		}
+
 		return yield* attempt(() => readSummaries(sql, from, to));
 	});
 
@@ -439,17 +495,21 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 
 	const ingest = Effect.fnUntraced(function* (samples: ReadonlyArray<unknown>) {
 		const checked = new Map<string, Sample>();
+
 		for (const raw of samples) {
 			const sample = decodeSample(raw);
+
 			if (Option.isSome(sample) && !checked.has(sample.value.id))
-				checked.set(sample.value.id, sample.value);
+				{checked.set(sample.value.id, sample.value);}
 		}
+
 		const now = yield* Clock.currentTimeMillis;
 		const done = Result.try({
 			try: () =>
 				atomic(() => {
 					for (const sample of checked.values()) {
-						if (sql.exec(`SELECT 1 FROM samples WHERE id = ?`, sample.id).length > 0) continue;
+						if (sql.exec(`SELECT 1 FROM samples WHERE id = ?`, sample.id).length > 0) {continue;}
+
 						sql.exec(`INSERT INTO samples (id) VALUES (?)`, sample.id);
 						land(sampled(sample, now));
 					}

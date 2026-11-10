@@ -47,6 +47,7 @@ const PLAIN: Readonly<Record<PlatformError.PlatformError["reason"]["_tag"], stri
 	WouldBlock: "it would have to wait",
 	WriteZero: "nothing was written",
 };
+
 export const saidOf = (error: PlatformError.PlatformError): string => PLAIN[error.reason._tag];
 
 /** What came of a settings file: none, what it decoded to, or why not, with the line to look at. */
@@ -104,18 +105,26 @@ export const settingsFile = <A>(
 					),
 				);
 			const answer = (said: string | null | Setting<never>): Setting<A> => {
-				if (said === null) return Setting.none();
-				if (typeof said !== "string") return said;
+				if (said === null) {
+					return Setting.none();
+				}
+
+				if (typeof said !== "string") {
+					return said;
+				}
+
 				const read = decode(said);
 				return Result.isSuccess(read)
 					? Setting.read({value: read.success})
 					: Setting.refused({line: read.failure.line, why: read.failure.why});
 			};
 			const made = yield* Effect.exit(fs.makeDirectory(folder, {recursive: true}));
+
 			if (Exit.isFailure(made)) {
 				yield* Effect.logWarning(`fabrika host: no settings folder at ${folder}, so none is heard`);
 				return Stream.fromEffect(Effect.map(text, answer));
 			}
+
 			// The first read waits for the watch, so no save between the two is missed.
 			const ready = yield* Deferred.make<void>();
 			const saves = fs.watch(folder, {onReady: () => Deferred.doneUnsafe(ready, Effect.void)}).pipe(

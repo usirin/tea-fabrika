@@ -8,6 +8,7 @@ import {Schema} from "effect";
 import fc from "fast-check";
 
 type Position = {readonly line: number; readonly column: number};
+
 type Candidate = {
 	readonly id: string;
 	readonly fileName: string;
@@ -15,8 +16,10 @@ type Candidate = {
 	readonly replacement: string;
 	readonly location: {readonly start: Position; readonly end: Position};
 };
+
 type Changed = {readonly file: string; readonly line: number};
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 const Sample = Schema.Struct({
 	seed: Schema.Int,
 	ranges: Schema.Array(Schema.String),
@@ -24,15 +27,19 @@ const Sample = Schema.Struct({
 	selected: Count,
 	left: Count,
 });
+
 const position = (a: Position, b: Position) => a.line - b.line || a.column - b.column;
+
 const encloses = (a: Candidate, b: Candidate) =>
 	a.fileName === b.fileName &&
 	position(a.location.start, b.location.start) <= 0 &&
 	position(a.location.end, b.location.end) >= 0;
+
 const touches = (candidate: Candidate, changed: Changed) =>
 	candidate.fileName === changed.file &&
 	candidate.location.start.line <= changed.line &&
 	candidate.location.end.line >= changed.line;
+
 const identity = (candidate: Candidate) =>
 	JSON.stringify([
 		candidate.fileName,
@@ -42,7 +49,9 @@ const identity = (candidate: Candidate) =>
 		candidate.replacement,
 		candidate.id,
 	]);
+
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 const range = (candidate: Candidate) => {
 	const {start, end} = candidate.location;
 	return `${candidate.fileName}:${start.line}:${start.column}-${end.line}:${end.column}`;
@@ -76,13 +85,28 @@ export const sample = ({
 	const ranges: string[] = [];
 	const eligibleSet = new Set(eligible);
 	const take = (candidate: Candidate) => {
-		if (selected.has(candidate)) return false;
+		if (selected.has(candidate)) {
+			return false;
+		}
+
 		const enclosed = candidates.filter((other) => encloses(candidate, other));
-		if (enclosed.some((other) => !eligibleSet.has(other))) return false;
+
+		if (enclosed.some((other) => !eligibleSet.has(other))) {
+			return false;
+		}
+
 		const added = enclosed.filter((other) => !selected.has(other));
-		if (selected.size + added.length > cap) return false;
+
+		if (selected.size + added.length > cap) {
+			return false;
+		}
+
 		ranges.push(range(candidate));
-		for (const other of added) selected.add(other);
+
+		for (const other of added) {
+			selected.add(other);
+		}
+
 		return true;
 	};
 	// First picks go round-robin across changed files, in line order within each file, so a cap
@@ -94,12 +118,17 @@ export const sample = ({
 	const lines = Array.from({length: Math.max(0, ...queues.map((q) => q.length))}, (_, turn) =>
 		queues.flatMap((queue) => (turn < queue.length ? [queue[turn]] : [])),
 	).flat();
+
 	for (const line of lines) {
 		if (![...selected].some((candidate) => touches(candidate, line))) {
 			ordered.find((candidate) => touches(candidate, line) && take(candidate));
 		}
 	}
-	for (const candidate of ordered) take(candidate);
+
+	for (const candidate of ordered) {
+		take(candidate);
+	}
+
 	return Schema.decodeUnknownSync(Sample)({
 		seed,
 		ranges,
@@ -118,7 +147,11 @@ if (import.meta.main) {
 			report: {type: "string"},
 		},
 	});
-	if (!values.build || !values.report) throw new Error("sample: --build and --report are required");
+
+	if (!values.build || !values.report) {
+		throw new Error("sample: --build and --report are required");
+	}
+
 	const seed = Schema.decodeUnknownSync(Schema.Int)(Number(values.seed));
 	const max = Schema.decodeUnknownSync(Count)(Number(values.max));
 	const diff = execFileSync(
@@ -142,14 +175,23 @@ if (import.meta.main) {
 	);
 	const changed: Changed[] = [];
 	let file = "";
+
 	for (const line of diff.split("\n")) {
-		if (line.startsWith("+++ b/")) file = line.slice(6);
+		if (line.startsWith("+++ b/")) {
+			file = line.slice(6);
+		}
+
 		const hunk = /^@@ .* \+(\d+)(?:,(\d+))? @@/.exec(line);
+
 		if (hunk) {
 			const start = Number(hunk[1]);
-			for (let n = 0; n < Number(hunk[2] ?? 1); n++) changed.push({file, line: start + n});
+
+			for (let n = 0; n < Number(hunk[2] ?? 1); n++) {
+				changed.push({file, line: start + n});
+			}
 		}
 	}
+
 	// Resolve from the package that owns the installed Instrumenter; no root dependency is added.
 	const require = createRequire(resolve("packages/pipeline/package.json"));
 	const {Instrumenter} = await import(
@@ -185,8 +227,10 @@ if (import.meta.main) {
 	const report = sample({candidates, changed, seed, max});
 	writeFileSync(values.report, `${Schema.encodeSync(Schema.fromJsonString(Sample))(report)}\n`);
 	console.log(report.ranges.map((item) => JSON.stringify(item)).join(","));
-	if (report.left)
+
+	if (report.left) {
 		console.error(
 			`sample: ${report.left} of ${report.total} mutants left outside the cap; see ${values.report}`,
 		);
+	}
 }

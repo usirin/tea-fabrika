@@ -10,9 +10,13 @@ import {codexEnv} from "./harness.ts";
 // Claude row's commands get them (`fencedEnv`), by Codex's config. Codex itself keeps the host's PATH.
 
 const made: string[] = [];
+
 afterAll(() => {
-	for (const path of made) rmSync(path, {recursive: true, force: true});
+	for (const path of made) {
+		rmSync(path, {recursive: true, force: true});
+	}
 });
+
 const madeHome = () => {
 	const home = realpathSync(mkdtempSync(join(tmpdir(), "codex-env-")));
 	made.push(home);
@@ -61,16 +65,19 @@ describe("what a command in Codex's box is handed", () => {
 // In Codex's own box, with no model, as "the fence, in Codex's own box" asks (harness.test.ts).
 const boxHome = madeHome();
 const boxEnv = codexEnvOf(process.env, boxHome);
+
 const tried = spawnSync("codex", ["sandbox", "--", "/bin/sh", "-c", "exit 0"], {
 	cwd: boxHome,
 	env: boxEnv,
 	encoding: "utf8",
 	stdio: ["ignore", "ignore", "pipe"],
 });
+
 const noCodex =
 	tried.error !== undefined &&
 	"code" in tried.error &&
 	["ENOENT", "EACCES", "EPERM"].includes(String(tried.error.code));
+
 const insideABox = tried.stderr?.includes("sandbox_apply: Operation not permitted") ?? false;
 const SLOW = 120_000;
 

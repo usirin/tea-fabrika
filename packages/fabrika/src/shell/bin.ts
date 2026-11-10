@@ -33,6 +33,7 @@ const installed = (name: string): boolean => {
 };
 
 const missing = NEEDS.filter((name) => !installed(name));
+
 if (missing.length > 0) {
 	// The install line carries the package's own peer versions: a bare `npm install` takes each
 	// package's latest, which can differ. `src/shell/` and `dist/shell/` both sit two levels down. In

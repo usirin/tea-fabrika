@@ -44,6 +44,7 @@ const CLASSES = [
 	"base",
 	"modifier",
 ] as const;
+
 export type Class = (typeof CLASSES)[number];
 
 /** What Ghostty knows of a code point. */
@@ -76,12 +77,17 @@ const runsOf = (
 	const starts: number[] = [];
 	const facts: Facts[] = [];
 	let at = 0;
+
 	for (const [, length = "", letters = ""] of text.matchAll(/([0-9a-z]+)([A-Z]{2})/g)) {
 		starts.push(at);
 		facts.push(unpack((letters.charCodeAt(0) - 65) * 26 + letters.charCodeAt(1) - 65));
 		at += Number.parseInt(length, 36);
 	}
-	if (at !== 0x110000) throw new Error(`cells.table.ts: the runs cover ${at} code points, not all`);
+
+	if (at !== 0x110000) {
+		throw new Error(`cells.table.ts: the runs cover ${at} code points, not all`);
+	}
+
 	return {starts, facts};
 };
 
@@ -89,12 +95,17 @@ const runsOf = (
 export const tableOf = (packed: ArrayLike<number>): string => {
 	let text = "";
 	let from = 0;
+
 	for (let cp = 1; cp <= packed.length; cp += 1) {
-		if (cp < packed.length && packed[cp] === packed[from]) continue;
+		if (cp < packed.length && packed[cp] === packed[from]) {
+			continue;
+		}
+
 		const n = packed[from] ?? 0;
 		text += (cp - from).toString(36) + String.fromCharCode(65 + Math.floor(n / 26), 65 + (n % 26));
 		from = cp;
 	}
+
 	return text;
 };
 
@@ -108,11 +119,17 @@ export const factsOf = (cp: number): Facts => {
 	const {starts, facts} = runs;
 	let lo = 0;
 	let hi = starts.length - 1;
+
 	while (lo < hi) {
 		const mid = (lo + hi + 1) >> 1;
-		if ((starts[mid] ?? 0) <= cp) lo = mid;
-		else hi = mid - 1;
+
+		if ((starts[mid] ?? 0) <= cp) {
+			lo = mid;
+		} else {
+			hi = mid - 1;
+		}
 	}
+
 	return facts[lo] ?? {width: 1, class: "other", vs: false};
 };
 
@@ -128,27 +145,50 @@ const isPict = (k: Class) => k === "pict" || k === "base";
 /** Whether there is a grapheme break between two code points of these classes. */
 const breaks = (k1: Class, k2: Class, state: BreakState): boolean => {
 	// GB11 remembers an emoji seen in the cluster.
-	if (!state.pict && isPict(k1)) state.pict = true;
+	if (!state.pict && isPict(k1)) {
+		state.pict = true;
+	}
+
 	// GB6, GB7, GB8: Hangul syllables.
-	if (k1 === "L" && (k2 === "L" || k2 === "V" || k2 === "LV" || k2 === "LVT")) return false;
-	if ((k1 === "LV" || k1 === "V") && (k2 === "V" || k2 === "T")) return false;
-	if ((k1 === "LVT" || k1 === "T") && k2 === "T") return false;
+	if (k1 === "L" && (k2 === "L" || k2 === "V" || k2 === "LV" || k2 === "LVT")) {
+		return false;
+	}
+
+	if ((k1 === "LV" || k1 === "V") && (k2 === "V" || k2 === "T")) {
+		return false;
+	}
+
+	if ((k1 === "LVT" || k1 === "T") && k2 === "T") {
+		return false;
+	}
+
 	// GB9, GB9a, GB9b.
-	if (k2 === "extend" || k2 === "zwj") return false;
-	if (k1 === "prepend") return false;
+	if (k2 === "extend" || k2 === "zwj") {
+		return false;
+	}
+
+	if (k1 === "prepend") {
+		return false;
+	}
+
 	// GB12, GB13: flags are pairs of regional indicators.
 	if (k1 === "ri" && k2 === "ri") {
 		const second = state.ri;
 		state.ri = !second;
 		return second;
 	}
+
 	// GB11: an emoji, ZWJ, an emoji.
 	if (state.pict && k1 === "zwj" && isPict(k2)) {
 		state.pict = false;
 		return false;
 	}
+
 	// UTS #51: a skin tone joins an emoji that takes one.
-	if (k1 === "base" && k2 === "modifier") return false;
+	if (k1 === "base" && k2 === "modifier") {
+		return false;
+	}
+
 	return true;
 };
 
@@ -156,11 +196,13 @@ const breaks = (k1: Class, k2: Class, state: BreakState): boolean => {
 const breaksAfter = (cluster: readonly number[], cp: number): boolean => {
 	const state: BreakState = {pict: false, ri: false};
 	let k1 = factsOf(cluster[0] ?? 0).class;
+
 	for (const c of cluster.slice(1)) {
 		const k2 = factsOf(c).class;
 		breaks(k1, k2, state);
 		k1 = k2;
 	}
+
 	return breaks(k1, factsOf(cp).class, state);
 };
 
@@ -194,9 +236,19 @@ const VS16 = 0xfe0f;
 const put = (pen: Pen, cell: Cell): void => {
 	const {row, x} = pen;
 	const was = row[x];
-	if (was?.wide === "wide" && row[x + 1] !== undefined) row[x + 1] = BLANK;
-	if (was?.wide === "tail" && x > 0) row[x - 1] = BLANK;
-	while (row.length < x) row.push(BLANK);
+
+	if (was?.wide === "wide" && row[x + 1] !== undefined) {
+		row[x + 1] = BLANK;
+	}
+
+	if (was?.wide === "tail" && x > 0) {
+		row[x - 1] = BLANK;
+	}
+
+	while (row.length < x) {
+		row.push(BLANK);
+	}
+
 	row[x] = cell;
 };
 
@@ -215,26 +267,44 @@ const joined = (pen: Pen, cp: number, cols: number): boolean => {
 	const left = pen.row[pen.x - 1]?.wide === "tail" ? 2 : 1;
 	const at = pen.x - left;
 	const prev = pen.row[at];
-	if (prev === undefined || prev.cps.length === 0 || breaksAfter(prev.cps, cp)) return false;
+
+	if (prev === undefined || prev.cps.length === 0 || breaksAfter(prev.cps, cp)) {
+		return false;
+	}
+
 	if (cp === VS16 || cp === VS15) {
 		const base = prev.cps[0] ?? 0;
-		if (!factsOf(base).vs) return true;
+
+		if (!factsOf(base).vs) {
+			return true;
+		}
+
 		if (cp === VS16 && prev.wide !== "wide") {
 			// Drawn again, wide: the cell keeps only its first code point, then U+FE0F.
 			pen.x = at;
 			put(pen, {cps: [base], wide: "wide"});
 			pen.x += 1;
 			put(pen, {cps: [], wide: "tail"});
-			if (pen.x === cols - 1) pen.pending = true;
-			else pen.x += 1;
+
+			if (pen.x === cols - 1) {
+				pen.pending = true;
+			} else {
+				pen.x += 1;
+			}
 		}
+
 		if (cp === VS15 && prev.wide === "wide") {
 			pen.row[at] = {...prev, wide: "narrow"};
 			pen.row[at + 1] = {...(pen.row[at + 1] ?? BLANK), wide: "narrow"};
-			if (pen.x === cols - 1) pen.pending = false;
-			else pen.x -= 1;
+
+			if (pen.x === cols - 1) {
+				pen.pending = false;
+			} else {
+				pen.x -= 1;
+			}
 		}
 	}
+
 	const cell = pen.row[at] ?? BLANK;
 	pen.row[at] = {...cell, cps: [...cell.cps, cp]};
 	return true;
@@ -244,22 +314,41 @@ const joined = (pen: Pen, cp: number, cols: number): boolean => {
 export const print = (pen: Pen, code: number, cols: number, next: () => Cell[]): void => {
 	// A string goes to the terminal as UTF-8, where a lone surrogate is U+FFFD.
 	const cp = code >= 0xd800 && code <= 0xdfff ? 0xfffd : code;
-	if (cp > 0xff && pen.x > 0 && joined(pen, cp, cols)) return;
+
+	if (cp > 0xff && pen.x > 0 && joined(pen, cp, cols)) {
+		return;
+	}
+
 	const width = cp <= 0xff ? 1 : factsOf(cp).width;
-	if (width === 0) return;
-	if (pen.pending) wrap(pen, next);
-	if (width === 1) put(pen, {cps: [cp], wide: "narrow"});
-	else if (cols > 1) {
+
+	if (width === 0) {
+		return;
+	}
+
+	if (pen.pending) {
+		wrap(pen, next);
+	}
+
+	if (width === 1) {
+		put(pen, {cps: [cp], wide: "narrow"});
+	} else if (cols > 1) {
 		if (pen.x === cols - 1) {
 			put(pen, {cps: [], wide: "head"});
 			wrap(pen, next);
 		}
+
 		put(pen, {cps: [cp], wide: "wide"});
 		pen.x += 1;
 		put(pen, {cps: [], wide: "tail"});
-	} else put(pen, BLANK);
-	if (pen.x === cols - 1) pen.pending = true;
-	else pen.x += 1;
+	} else {
+		put(pen, BLANK);
+	}
+
+	if (pen.x === cols - 1) {
+		pen.pending = true;
+	} else {
+		pen.x += 1;
+	}
 };
 
 /**
@@ -274,7 +363,11 @@ export const spot = (text: string, cols: number): number => {
 		rows += 1;
 		return [];
 	};
-	for (const c of text) print(pen, c.codePointAt(0) ?? 0, cols, next);
+
+	for (const c of text) {
+		print(pen, c.codePointAt(0) ?? 0, cols, next);
+	}
+
 	return pen.pending ? (rows + 1) * cols : rows * cols + pen.x;
 };
 

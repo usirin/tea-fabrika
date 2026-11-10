@@ -59,6 +59,7 @@ export interface MemoryOptions {
 }
 
 type LeaseRow = {holder: string; expiresAt: number; fence: number; stop: boolean};
+
 /** The process behind a name: `rules.ts`'s `names` row. `down` is the `exited` event's pos; 0: up. */
 type Proc = {
 	pos: number;
@@ -77,7 +78,9 @@ type Proc = {
 	used: {usd: number; tokens: number};
 	limited: LimitKind | null;
 };
+
 type Monitor = {watcher: string; ref: string; target: string; incarnation: number};
+
 type Ending = {
 	reason: EndReason;
 	why: string;
@@ -114,16 +117,28 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	const fencedName = (fence: number) => [...names].find(([, p]) => p.fence === fence)?.[0] ?? null;
 	const fenceHolds = (stream: string, fence: number) => {
 		const name = fencedName(fence);
-		if (name === null) return false;
+
+		if (name === null) {
+			return false;
+		}
+
 		return stream === name || stream.startsWith(`${name}/`) || openInbox(stream);
 	};
 
 	const insert = (now: number, stream: string, expected: Expected, e: Event): AppendResult => {
 		const id = e.id ?? null;
 		const repeat = id === null ? undefined : ids.get(stream)?.get(id);
-		if (repeat) return {ok: true, pos: repeat.pos, rev: repeat.rev, dup: true};
+
+		if (repeat) {
+			return {ok: true, pos: repeat.pos, rev: repeat.rev, dup: true};
+		}
+
 		const rev = revOf(stream);
-		if (expected !== "any" && expected !== rev) return {ok: false, why: "stale", rev};
+
+		if (expected !== "any" && expected !== rev) {
+			return {ok: false, why: "stale", rev};
+		}
+
 		const row: Row = {
 			pos: log.length + 1,
 			stream,
@@ -136,14 +151,22 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		};
 		log.push(row);
 		streams.set(stream, [...(streams.get(stream) ?? []), row]);
-		if (id !== null) ids.set(stream, (ids.get(stream) ?? new Map()).set(id, row));
+
+		if (id !== null) {
+			ids.set(stream, (ids.get(stream) ?? new Map()).set(id, row));
+		}
+
 		written.push(stream);
 		return {ok: true, pos: row.pos, rev: row.rev, dup: false};
 	};
 	/** The ledger's own message to `stream`, kept in `out` if it landed now. */
 	const say = (now: number, out: Written[], stream: string, e: Event) => {
 		const r = insert(now, stream, "any", e);
-		if (r.ok && !r.dup) out.push({stream, rev: r.rev, pos: r.pos});
+
+		if (r.ok && !r.dup) {
+			out.push({stream, rev: r.rev, pos: r.pos});
+		}
+
 		return r;
 	};
 	const linkBoth = (a: string, b: string) => {
@@ -167,13 +190,26 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	});
 
 	const register = (now: number, name: string, writer: string): RegisterResult => {
-		if (!isNameShape(name)) return {ok: false, why: "denied"};
+		if (!isNameShape(name)) {
+			return {ok: false, why: "denied"};
+		}
+
 		const known = names.get(name);
-		if (known !== undefined)
+
+		if (known !== undefined) {
 			return {ok: true, created: false, pos: known.pos, rev: log[known.pos - 1]?.rev ?? 0};
-		if (nested(name)) return {ok: false, why: "denied"};
+		}
+
+		if (nested(name)) {
+			return {ok: false, why: "denied"};
+		}
+
 		const r = insert(now, name, "any", {kind: "registered", writer});
-		if (!r.ok) return {ok: false, why: "denied"};
+
+		if (!r.ok) {
+			return {ok: false, why: "denied"};
+		}
+
 		names.set(name, newProc(r.pos, null, now));
 		return {ok: true, created: true, pos: r.pos, rev: r.rev};
 	};
@@ -186,10 +222,23 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		fence: number | null,
 	): AppendResult => {
 		const owner = ownerOf(stream);
-		if (owner === null) return {ok: false, why: "unknown"};
-		if (fence !== null && !fenceHolds(stream, fence)) return {ok: false, why: "fenced"};
-		if (fence === null && !openInbox(stream)) return {ok: false, why: "denied"};
-		if (isLedgerWord(e)) return {ok: false, why: "denied"};
+
+		if (owner === null) {
+			return {ok: false, why: "unknown"};
+		}
+
+		if (fence !== null && !fenceHolds(stream, fence)) {
+			return {ok: false, why: "fenced"};
+		}
+
+		if (fence === null && !openInbox(stream)) {
+			return {ok: false, why: "denied"};
+		}
+
+		if (isLedgerWord(e)) {
+			return {ok: false, why: "denied"};
+		}
+
 		return insert(now, stream, expected, e);
 	};
 
@@ -201,16 +250,29 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		ttlMs: number,
 	): ClaimResult => {
 		const proc = names.get(name);
-		if (proc === undefined)
+
+		if (proc === undefined) {
 			return nested(name) ? {ok: false, why: "denied"} : {ok: false, why: "unknown"};
-		if (proc.down !== 0) return {ok: false, why: "down", pos: proc.down};
+		}
+
+		if (proc.down !== 0) {
+			return {ok: false, why: "down", pos: proc.down};
+		}
+
 		const live = leases.get(name);
-		if (live && live.expiresAt > now)
+
+		if (live && live.expiresAt > now) {
 			return {ok: false, why: "held", holder: live.holder, expiresAt: live.expiresAt};
+		}
+
 		const expiresAt = now + ttlMs;
 		const data = {holder, ttlMs, expiresAt, replaces: proc.fence};
 		const r = insert(now, name, expectedRev, {kind: "claimed", writer: holder, data});
-		if (!r.ok) return {ok: false, why: "stale", rev: revOf(name)};
+
+		if (!r.ok) {
+			return {ok: false, why: "stale", rev: revOf(name)};
+		}
+
 		leases.set(name, {holder, expiresAt, fence: r.pos, stop: false});
 		proc.fence = r.pos;
 		jobs.set(name, expiresAt + graceMs);
@@ -219,17 +281,31 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 
 	/** `rules.ts`'s `renew`: by the newest fence at any time; after a `lease_expired`, `lease_resumed`. */
 	const renew = (now: number, name: string, fence: number, ttlMs: number): RenewResult => {
-		if (names.get(name)?.fence !== fence) return {ok: false, why: "lost"};
+		if (names.get(name)?.fence !== fence) {
+			return {ok: false, why: "lost"};
+		}
+
 		const expiresAt = now + ttlMs;
 		const out: Written[] = [];
 		const l = leases.get(name);
+
 		if (l !== undefined) {
-			if (l.stop) return {ok: false, why: "stop"};
+			if (l.stop) {
+				return {ok: false, why: "stop"};
+			}
+
 			l.expiresAt = expiresAt;
 		} else {
 			const since = (streams.get(name) ?? []).some((e) => e.kind === "cancel" && e.pos > fence);
-			if (since) return {ok: false, why: "stop"};
-			if (ttlMs <= 0) return {ok: true, expiresAt, written: out};
+
+			if (since) {
+				return {ok: false, why: "stop"};
+			}
+
+			if (ttlMs <= 0) {
+				return {ok: true, expiresAt, written: out};
+			}
+
 			const holder = log[fence - 1]?.writer ?? "";
 			leases.set(name, {holder, expiresAt, fence, stop: false});
 			say(now, out, name, {
@@ -238,15 +314,23 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 				data: {fence, holder, expiresAt},
 			});
 		}
+
 		jobs.set(name, expiresAt + graceMs);
 		return {ok: true, expiresAt, written: out};
 	};
 
 	const cancel = (now: number, name: string, writer: string): CancelResult => {
-		if (!names.has(name)) return {ok: false, why: "unknown"};
+		if (!names.has(name)) {
+			return {ok: false, why: "unknown"};
+		}
+
 		const r = insert(now, name, "any", {kind: "cancel", writer});
 		const l = leases.get(name);
-		if (l) l.stop = true;
+
+		if (l) {
+			l.stop = true;
+		}
+
 		return r.ok ? {ok: true, pos: r.pos, rev: r.rev} : {ok: false, why: "unknown"};
 	};
 
@@ -259,7 +343,9 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 			p.strikes = 0;
 			return;
 		}
+
 		const strikes = (p.suspect === e.suspect ? p.strikes : 0) + 1;
+
 		if (maxDeliveries !== null && strikes >= maxDeliveries) {
 			say(now, out, `${name}/dead`, {
 				kind: "dead_letter",
@@ -271,6 +357,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 			p.strikes = 0;
 			return;
 		}
+
 		p.suspect = e.suspect;
 		p.strikes = strikes;
 	};
@@ -279,10 +366,15 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	const takeDown = (now: number, first: string, ending: Ending, out: Written[]): number => {
 		const work: {name: string; e: Ending}[] = [{name: first, e: ending}];
 		let firstPos = 0;
+
 		for (let next = work.shift(); next !== undefined; next = work.shift()) {
 			const {name, e} = next;
 			const p = names.get(name);
-			if (p === undefined || p.down !== 0) continue;
+
+			if (p === undefined || p.down !== 0) {
+				continue;
+			}
+
 			const r = say(now, out, name, {
 				kind: "exited",
 				writer: e.writer,
@@ -296,17 +388,32 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 				},
 				id: `exited:${p.incarnation}`,
 			});
-			if (!r.ok) continue;
-			if (firstPos === 0) firstPos = r.pos;
+
+			if (!r.ok) {
+				continue;
+			}
+
+			if (firstPos === 0) {
+				firstPos = r.pos;
+			}
+
 			leases.delete(name);
 			jobs.delete(name);
 			p.down = r.pos;
 			p.fence = null;
 			strike(now, name, p, e, out);
+
 			for (const [key, m] of monitors) {
-				if (m.target !== name) continue;
+				if (m.target !== name) {
+					continue;
+				}
+
 				monitors.delete(key);
-				if (m.incarnation !== p.incarnation) continue;
+
+				if (m.incarnation !== p.incarnation) {
+					continue;
+				}
+
 				say(now, out, `${m.watcher}/inbox`, {
 					kind: "DOWN",
 					writer: "ledger",
@@ -321,13 +428,22 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 					id: `DOWN:${m.ref}`,
 				});
 			}
+
 			const linked = [...(links.get(name) ?? [])].sort();
 			links.delete(name);
-			for (const other of linked) links.get(other)?.delete(name);
+
+			for (const other of linked) {
+				links.get(other)?.delete(name);
+			}
+
 			for (const other of linked) {
 				const o = names.get(other);
-				if (o === undefined || o.down !== 0) continue;
-				if (o.trapExit)
+
+				if (o === undefined || o.down !== 0) {
+					continue;
+				}
+
+				if (o.trapExit) {
 					say(now, out, `${other}/inbox`, {
 						kind: "EXIT",
 						writer: "ledger",
@@ -341,7 +457,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 						},
 						id: `EXIT:${name}:${p.incarnation}`,
 					});
-				else if (e.reason !== "normal")
+				} else if (e.reason !== "normal") {
 					work.push({
 						name: other,
 						e: {
@@ -352,8 +468,10 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 							writer: "ledger",
 						},
 					});
+				}
 			}
 		}
+
 		return firstPos;
 	};
 
@@ -367,13 +485,20 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		writer: string,
 	): ExitResult => {
 		const p = names.get(name);
+
 		if (p !== undefined && p.down !== 0) {
 			const landed = log[p.down - 1];
 			const was = landed ? (JSON.parse(landed.data) as {fence?: number | null}) : null;
-			if (was?.fence === fence)
+
+			if (was?.fence === fence) {
 				return {ok: true, pos: p.down, incarnation: p.incarnation, dup: true, written: []};
+			}
 		}
-		if (p === undefined || fencedName(fence) !== name) return {ok: false, why: "fenced"};
+
+		if (p === undefined || fencedName(fence) !== name) {
+			return {ok: false, why: "fenced"};
+		}
+
 		const out: Written[] = [];
 		const incarnation = p.incarnation;
 		const pos = takeDown(now, name, {reason, why, suspect, by: null, writer}, out);
@@ -384,12 +509,25 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 
 	const monitor = (now: number, fence: number, ref: string, target: string): MonitorResult => {
 		const watcher = fencedName(fence);
-		if (watcher === null) return {ok: false, why: "fenced"};
+
+		if (watcher === null) {
+			return {ok: false, why: "fenced"};
+		}
+
 		const held = monitors.get(`${watcher}\u0000${ref}`);
-		if (held) return {ok: true, incarnation: held.incarnation, written: []};
+
+		if (held) {
+			return {ok: true, incarnation: held.incarnation, written: []};
+		}
+
 		const inbox = `${watcher}/inbox`;
-		if (ids.get(inbox)?.has(`DOWN:${ref}`)) return {ok: true, incarnation: null, written: []};
+
+		if (ids.get(inbox)?.has(`DOWN:${ref}`)) {
+			return {ok: true, incarnation: null, written: []};
+		}
+
 		const t = names.get(target);
+
 		if (t === undefined || t.down !== 0) {
 			const out: Written[] = [];
 			say(now, out, inbox, {
@@ -407,30 +545,50 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 			});
 			return {ok: true, incarnation: null, written: out};
 		}
+
 		monitors.set(`${watcher}\u0000${ref}`, {watcher, ref, target, incarnation: t.incarnation});
 		return {ok: true, incarnation: t.incarnation, written: []};
 	};
 
 	const demonitor = (fence: number, ref: string): FlagResult => {
 		const watcher = fencedName(fence);
-		if (watcher === null) return {ok: false, why: "fenced"};
+
+		if (watcher === null) {
+			return {ok: false, why: "fenced"};
+		}
+
 		monitors.delete(`${watcher}\u0000${ref}`);
 		return {ok: true};
 	};
 
 	const link = (fence: number, other: string): LinkResult => {
 		const me = fencedName(fence);
-		if (me === null) return {ok: false, why: "fenced"};
-		if (other === me) return {ok: true};
+
+		if (me === null) {
+			return {ok: false, why: "fenced"};
+		}
+
+		if (other === me) {
+			return {ok: true};
+		}
+
 		const o = names.get(other);
-		if (o === undefined || o.down !== 0) return {ok: false, why: "noproc"};
+
+		if (o === undefined || o.down !== 0) {
+			return {ok: false, why: "noproc"};
+		}
+
 		linkBoth(me, other);
 		return {ok: true};
 	};
 
 	const unlink = (fence: number, other: string): FlagResult => {
 		const me = fencedName(fence);
-		if (me === null) return {ok: false, why: "fenced"};
+
+		if (me === null) {
+			return {ok: false, why: "fenced"};
+		}
+
 		links.get(me)?.delete(other);
 		links.get(other)?.delete(me);
 		return {ok: true};
@@ -439,7 +597,11 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	const trapExit = (fence: number, on: boolean): FlagResult => {
 		const me = fencedName(fence);
 		const p = me === null ? undefined : names.get(me);
-		if (p === undefined) return {ok: false, why: "fenced"};
+
+		if (p === undefined) {
+			return {ok: false, why: "fenced"};
+		}
+
 		p.trapExit = on;
 		return {ok: true};
 	};
@@ -452,36 +614,75 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		limits: Limits | null,
 	): StartResult => {
 		const me = fencedName(fence);
-		if (me === null) return {ok: false, why: "fenced"};
-		if (limits !== null && limitsRefusal(limits) !== null) return {ok: false, why: "denied"};
+
+		if (me === null) {
+			return {ok: false, why: "fenced"};
+		}
+
+		if (limits !== null && limitsRefusal(limits) !== null) {
+			return {ok: false, why: "denied"};
+		}
+
 		const out: Written[] = [];
 		const spent = overIn(now, me, NONE);
+
 		if (spent !== null) {
 			end(now, me, spent, out);
 			return {ok: false, why: "limit", over: spent, written: out};
 		}
+
 		const c = names.get(child);
+
 		if (c === undefined) {
-			if (!isNameShape(child) || nested(child)) return {ok: false, why: "denied"};
+			if (!isNameShape(child) || nested(child)) {
+				return {ok: false, why: "denied"};
+			}
+
 			const full = tooMany(me);
-			if (full !== null) return {ok: false, why: "limit", over: full, written: out};
+
+			if (full !== null) {
+				return {ok: false, why: "limit", over: full, written: out};
+			}
+
 			const data = limits === null ? {parent: me} : {parent: me, limits};
 			const r = say(now, out, child, {kind: "registered", writer: me, data});
-			if (!r.ok) return {ok: false, why: "denied"};
+
+			if (!r.ok) {
+				return {ok: false, why: "denied"};
+			}
+
 			const p = newProc(r.pos, me, now);
 			names.set(child, p);
-			if (limits !== null) setMax(child, p, limits);
+
+			if (limits !== null) {
+				setMax(child, p, limits);
+			}
+
 			linkBoth(me, child);
 			return {ok: true, incarnation: 1, started: true, written: out};
 		}
-		if (c.parent !== me) return {ok: false, why: "denied"};
+
+		if (c.parent !== me) {
+			return {ok: false, why: "denied"};
+		}
+
 		if (c.down !== 0 && (after === null || after === c.incarnation)) {
-			if (c.limited !== null)
+			if (c.limited !== null) {
 				return {ok: false, why: "limit", over: where(now, child, c, c.limited), written: out};
+			}
+
 			const own = overOf(now, [[child, c]], NONE);
-			if (own !== null) return {ok: false, why: "limit", over: own, written: out};
+
+			if (own !== null) {
+				return {ok: false, why: "limit", over: own, written: out};
+			}
+
 			const full = tooMany(me);
-			if (full !== null) return {ok: false, why: "limit", over: full, written: out};
+
+			if (full !== null) {
+				return {ok: false, why: "limit", over: full, written: out};
+			}
+
 			const incarnation = c.incarnation + 1;
 			say(now, out, child, {
 				kind: "restarted",
@@ -495,7 +696,11 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 			linkBoth(me, child);
 			return {ok: true, incarnation, started: true, written: out};
 		}
-		if (c.down === 0) linkBoth(me, child);
+
+		if (c.down === 0) {
+			linkBoth(me, child);
+		}
+
 		return {ok: true, incarnation: c.incarnation, started: false, written: out};
 	};
 
@@ -509,13 +714,24 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		why: string,
 	): ExitChildResult => {
 		const me = fencedName(fence);
-		if (me === null) return {ok: false, why: "fenced"};
+
+		if (me === null) {
+			return {ok: false, why: "fenced"};
+		}
+
 		const c = names.get(child);
-		if (c === undefined || c.parent !== me) return {ok: false, why: "denied"};
-		if (c.down !== 0 || c.incarnation !== incarnation)
+
+		if (c === undefined || c.parent !== me) {
+			return {ok: false, why: "denied"};
+		}
+
+		if (c.down !== 0 || c.incarnation !== incarnation) {
 			return {ok: true, how: "noproc", written: []};
+		}
+
 		const out: Written[] = [];
 		const reason = signal === "kill" ? "killed" : "shutdown";
+
 		if (signal === "shutdown" && c.trapExit) {
 			say(now, out, `${child}/inbox`, {
 				kind: "EXIT",
@@ -532,13 +748,18 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 			});
 			return {ok: true, how: "signalled", written: out};
 		}
+
 		takeDown(now, child, {reason, why, suspect: null, by: me, writer: "ledger"}, out);
 		return {ok: true, how: "exited", written: out};
 	};
 
 	const processInfo = (name: string): ProcessInfo | null => {
 		const p = names.get(name);
-		if (p === undefined) return null;
+
+		if (p === undefined) {
+			return null;
+		}
+
 		const {parent, incarnation, down, trapExit} = p;
 		return {name, parent, incarnation, down, trapExit};
 	};
@@ -549,22 +770,34 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	/** The name and its parents, up to the top. */
 	const chain = (name: string): [string, Proc][] => {
 		const out: [string, Proc][] = [];
+
 		for (let at: string | null = name; at !== null;) {
 			const p = names.get(at);
-			if (p === undefined || out.some(([n]) => n === at)) break;
+
+			if (p === undefined || out.some(([n]) => n === at)) {
+				break;
+			}
+
 			out.push([at, p]);
 			at = p.parent;
 		}
+
 		return out;
 	};
 	const where = (now: number, name: string, p: Proc, kind: LimitKind): Over => {
-		if (kind === "usd")
+		if (kind === "usd") {
 			return {kind, at: name, used: p.used.usd / 1e6, max: (p.max.usd ?? 0) / 1e6};
-		if (kind === "tokens") return {kind, at: name, used: p.used.tokens, max: p.max.tokens ?? 0};
+		}
+
+		if (kind === "tokens") {
+			return {kind, at: name, used: p.used.tokens, max: p.max.tokens ?? 0};
+		}
+
 		if (kind === "wall") {
 			const wall = p.max.wallMs ?? 0;
 			return {kind, at: name, used: now - ((p.deadline ?? now) - wall), max: wall};
 		}
+
 		return {kind, at: name, used: 0, max: p.max.children ?? 0};
 	};
 	/** The outermost limit in `c` crossed now, or that `ask` more would cross. */
@@ -574,12 +807,19 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		ask: {usd: number; tokens: number},
 	): Over | null => {
 		for (const [name, p] of [...c].reverse()) {
-			if (p.deadline !== null && p.deadline <= now) return where(now, name, p, "wall");
-			if (p.max.usd !== null && p.used.usd + ask.usd > p.max.usd)
+			if (p.deadline !== null && p.deadline <= now) {
+				return where(now, name, p, "wall");
+			}
+
+			if (p.max.usd !== null && p.used.usd + ask.usd > p.max.usd) {
 				return {kind: "usd", at: name, used: (p.used.usd + ask.usd) / 1e6, max: p.max.usd / 1e6};
-			if (p.max.tokens !== null && p.used.tokens + ask.tokens > p.max.tokens)
+			}
+
+			if (p.max.tokens !== null && p.used.tokens + ask.tokens > p.max.tokens) {
 				return {kind: "tokens", at: name, used: p.used.tokens + ask.tokens, max: p.max.tokens};
+			}
 		}
+
 		return null;
 	};
 	const overIn = (now: number, name: string, ask: {usd: number; tokens: number}) =>
@@ -589,22 +829,36 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		let n = 0;
 		const todo = [name];
 		const seen = new Set(todo);
-		for (let at = todo.pop(); at !== undefined; at = todo.pop())
-			for (const [k, p] of names)
+
+		for (let at = todo.pop(); at !== undefined; at = todo.pop()) {
+			for (const [k, p] of names) {
 				if (p.parent === at && !seen.has(k)) {
 					seen.add(k);
 					todo.push(k);
-					if (p.down === 0) n++;
+
+					if (p.down === 0) {
+						n++;
+					}
 				}
+			}
+		}
+
 		return n;
 	};
 	/** One more child under `parent`: too many, anywhere up the tree? */
 	const tooMany = (parent: string): Over | null => {
 		for (const [name, p] of chain(parent).reverse()) {
-			if (p.max.children === null) continue;
+			if (p.max.children === null) {
+				continue;
+			}
+
 			const used = liveUnder(name) + 1;
-			if (used > p.max.children) return {kind: "children", at: name, used, max: p.max.children};
+
+			if (used > p.max.children) {
+				return {kind: "children", at: name, used, max: p.max.children};
+			}
 		}
+
 		return null;
 	};
 	const setMax = (name: string, p: Proc, l: Limits) => {
@@ -616,8 +870,12 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		};
 		p.limited = null;
 		p.deadline = l.wallMs === undefined ? null : p.at + l.wallMs;
-		if (p.deadline === null) deadlines.delete(name);
-		else deadlines.set(name, p.deadline);
+
+		if (p.deadline === null) {
+			deadlines.delete(name);
+		} else {
+			deadlines.set(name, p.deadline);
+		}
 	};
 	const spendOn = (name: string, usd: number, tokens: number) => {
 		for (const [, p] of chain(name)) {
@@ -627,11 +885,18 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	};
 	/** End the outermost run still up at or under `over.at`, from `from` up: reason `limit:<kind>`. */
 	const end = (now: number, from: string, over: Over, out: Written[]) => {
-		if (over.kind === "children") return;
+		if (over.kind === "children") {
+			return;
+		}
+
 		const c = chain(from);
 		const i = c.findIndex(([n]) => n === over.at);
 		const target = (i < 0 ? c : c.slice(0, i + 1)).reverse().find(([, p]) => p.down === 0);
-		if (target === undefined) return;
+
+		if (target === undefined) {
+			return;
+		}
+
 		const [name, p] = target;
 		const why =
 			over.kind === "wall"
@@ -662,18 +927,30 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 
 	const hold = (now: number, fence: number, id: string, cost: Cost): HoldResult => {
 		const me = fencedName(fence);
-		if (me === null) return {ok: false, why: "fenced"};
-		if (!costOk(cost)) return {ok: false, why: "denied"};
+
+		if (me === null) {
+			return {ok: false, why: "fenced"};
+		}
+
+		if (!costOk(cost)) {
+			return {ok: false, why: "denied"};
+		}
+
 		const spend = ids.get(`${me}/spend`);
-		if (spend?.has(`hold:${fence}:${id}`) || spend?.has(`charge:${fence}:${id}`))
+
+		if (spend?.has(`hold:${fence}:${id}`) || spend?.has(`charge:${fence}:${id}`)) {
 			return {ok: true, dup: true, written: []};
+		}
+
 		const ask = {usd: micros(cost.usd), tokens: cost.tokens ?? 0};
 		const out: Written[] = [];
 		const over = overIn(now, me, ask);
+
 		if (over !== null) {
 			end(now, me, over, out);
 			return {ok: false, why: "limit", over, written: out};
 		}
+
 		say(now, out, `${me}/spend`, {
 			kind: "held",
 			writer: "ledger",
@@ -687,10 +964,21 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 	const charge = (now: number, fence: number, id: string, cost: Cost): ChargeResult => {
 		const claimed = log[fence - 1];
 		const me = claimed?.kind === "claimed" ? claimed.stream : null;
-		if (me === null) return {ok: false, why: "fenced"};
-		if (!costOk(cost)) return {ok: false, why: "denied"};
+
+		if (me === null) {
+			return {ok: false, why: "fenced"};
+		}
+
+		if (!costOk(cost)) {
+			return {ok: false, why: "denied"};
+		}
+
 		const spend = ids.get(`${me}/spend`);
-		if (spend?.has(`charge:${fence}:${id}`)) return {ok: true, dup: true, over: null, written: []};
+
+		if (spend?.has(`charge:${fence}:${id}`)) {
+			return {ok: true, dup: true, over: null, written: []};
+		}
+
 		const held = spend?.get(`hold:${fence}:${id}`);
 		const h = held ? (JSON.parse(held.data) as {usd: number; tokens: number}) : NONE;
 		const paid = {usd: micros(cost.usd), tokens: cost.tokens ?? 0};
@@ -703,7 +991,11 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		});
 		spendOn(me, paid.usd - h.usd, paid.tokens - h.tokens);
 		const over = overIn(now, me, NONE);
-		if (over !== null) end(now, me, over, out);
+
+		if (over !== null) {
+			end(now, me, over, out);
+		}
+
 		return {ok: true, dup: false, over, written: out};
 	};
 
@@ -713,26 +1005,58 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 		limits: Limits,
 		writer: string,
 	): SetLimitsResult => {
-		if (limitsRefusal(limits) !== null) return {ok: false, why: "denied"};
+		if (limitsRefusal(limits) !== null) {
+			return {ok: false, why: "denied"};
+		}
+
 		const p = names.get(name);
-		if (p === undefined) return {ok: false, why: "unknown"};
+
+		if (p === undefined) {
+			return {ok: false, why: "unknown"};
+		}
+
 		const out: Written[] = [];
 		const r = say(now, out, name, {kind: "limits", writer, data: limits});
-		if (!r.ok) return {ok: false, why: "unknown"};
+
+		if (!r.ok) {
+			return {ok: false, why: "unknown"};
+		}
+
 		setMax(name, p, limits);
 		const over = overIn(now, name, NONE);
-		if (over !== null) end(now, name, over, out);
+
+		if (over !== null) {
+			end(now, name, over, out);
+		}
+
 		return {ok: true, pos: r.pos, rev: r.rev, written: out};
 	};
 
 	const usage = (name: string): Usage | null => {
 		const p = names.get(name);
-		if (p === undefined) return null;
+
+		if (p === undefined) {
+			return null;
+		}
+
 		const limits: Limits = {};
-		if (p.max.usd !== null) limits.usd = p.max.usd / 1e6;
-		if (p.max.tokens !== null) limits.tokens = p.max.tokens;
-		if (p.max.wallMs !== null) limits.wallMs = p.max.wallMs;
-		if (p.max.children !== null) limits.children = p.max.children;
+
+		if (p.max.usd !== null) {
+			limits.usd = p.max.usd / 1e6;
+		}
+
+		if (p.max.tokens !== null) {
+			limits.tokens = p.max.tokens;
+		}
+
+		if (p.max.wallMs !== null) {
+			limits.wallMs = p.max.wallMs;
+		}
+
+		if (p.max.children !== null) {
+			limits.children = p.max.children;
+		}
+
 		return {
 			name,
 			limits,
@@ -745,15 +1069,26 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 
 	const runDue = (now: number) => {
 		for (const [name, due] of deadlines) {
-			if (due > now) continue;
+			if (due > now) {
+				continue;
+			}
+
 			deadlines.delete(name);
 			const p = names.get(name);
 			const over = p === undefined ? null : overOf(now, [[name, p]], NONE);
-			if (over?.kind === "wall") end(now, name, over, []);
+
+			if (over?.kind === "wall") {
+				end(now, name, over, []);
+			}
 		}
+
 		for (const [name, due] of jobs) {
-			if (due > now) continue;
+			if (due > now) {
+				continue;
+			}
+
 			const l = leases.get(name);
+
 			if (l && l.expiresAt <= now) {
 				insert(now, name, "any", {
 					kind: "lease_expired",
@@ -762,6 +1097,7 @@ export const memoryLedger = (graceMs: number, maxDeliveries: number | null = MAX
 				});
 				leases.delete(name);
 			}
+
 			jobs.delete(name);
 		}
 	};
@@ -830,7 +1166,11 @@ const serviceOf = (
 	const step = <A>(f: (now: number) => A) =>
 		Effect.sync(() => {
 			const now = clock.currentTimeMillisUnsafe();
-			if (due) m.runDue(now);
+
+			if (due) {
+				m.runDue(now);
+			}
+
 			return f(now);
 		}).pipe(Effect.tap(() => ring));
 	const raw: Raw = {

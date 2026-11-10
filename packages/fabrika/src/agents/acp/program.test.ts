@@ -19,6 +19,7 @@ import {type Transcript, turnShapes} from "./transcript.ts";
 // two files, answer, follow up. Then the mechanism rows.
 
 type Flags = Given<(typeof acpProgram)["flags"]>;
+
 type Heard = {
 	readonly opened: ReturnType<typeof ear<unknown>>;
 	readonly said: ReturnType<typeof ear<string>>;
@@ -42,6 +43,7 @@ const promptsSent = (folder: string) => {
 };
 
 let runs = 0;
+
 /** One start of the acp program, kept under `id` in `storage`. */
 const life = (flags: Flags, storage: Storage, id: string) =>
 	Effect.gen(function* () {
@@ -58,7 +60,11 @@ const life = (flags: Flags, storage: Storage, id: string) =>
 			},
 			{id, storage},
 		);
-		if (started.kind !== "running") return yield* Effect.die(`acp did not start: ${started.why}`);
+
+		if (started.kind !== "running") {
+			return yield* Effect.die(`acp did not start: ${started.why}`);
+		}
+
 		const transcript = () => started.run.machines.transcript.state() as Transcript | null;
 		return {started, heard, transcript};
 	});
@@ -77,7 +83,9 @@ const fake = (folder: string, more: Partial<Flags> = {}): Flags => ({
 
 const until = (check: () => boolean, what: string) =>
 	Effect.gen(function* () {
-		while (!check()) yield* Effect.sleep(Duration.millis(10));
+		while (!check()) {
+			yield* Effect.sleep(Duration.millis(10));
+		}
 	}).pipe(
 		// Stopped mid-wait (the test's time limit, or a cancel): say what it waited for.
 		Effect.onInterrupt(() => Effect.logError(`waited for ${what}`)),
@@ -120,7 +128,11 @@ describe("acp on the fake agent", () => {
 						storage: memoryStorage(),
 					},
 				);
-				if (started.kind !== "running") return yield* Effect.die("acp did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("acp did not start");
+				}
+
 				yield* tell(started.run, "prompt", "hello");
 				return yield* result.upTo(1);
 			}),
@@ -144,12 +156,15 @@ describe("acp on the fake agent", () => {
 					memoryStorage(),
 					`acp:test-${runs}`,
 				);
+
 				for (const prompt of [
 					"Read a.txt and b.txt, then say what each says.",
 					"Which of the two files names a number?",
 					"Say it in one word.",
-				])
+				]) {
 					expect(yield* tell(started.run, "prompt", prompt)).toBe("queued");
+				}
+
 				started.close("prompt");
 				const end = yield* started.run.ended;
 				expect(end.kind).toBe("ended");
@@ -247,7 +262,7 @@ describe("acp on the fake agent", () => {
 		}),
 	);
 
-	for (const reopen of ["load", "resume"] as const)
+	for (const reopen of ["load", "resume"] as const) {
 		it.live(
 			`stopped mid turn and started again (${reopen}): the same session opens again, the cut prompt is sent again, nobody retells it`,
 			() =>
@@ -290,10 +305,15 @@ describe("acp on the fake agent", () => {
 					expect(again.told).toEqual([{turn: 2}]);
 					// Loaded, the transcript comes back from the replay; resumed, only what came after.
 					const replayed = again.transcript?.messages.filter((m) => m.turn === null).length ?? 0;
-					if (reopen === "load") expect(replayed).toBeGreaterThan(0);
-					else expect(replayed).toBe(0);
+
+					if (reopen === "load") {
+						expect(replayed).toBeGreaterThan(0);
+					} else {
+						expect(replayed).toBe(0);
+					}
 				}),
 		);
+	}
 
 	it("a folder in a repository is refused before any harness starts", async () => {
 		const inRepo = await run(
@@ -328,11 +348,15 @@ describe("acp on the fake agent", () => {
 			JSON.stringify([s.name, s.attributes, s.events.map((e) => [e.name, e.attributes])]);
 		const raw = await traced(true);
 		const shown = await traced(false);
+
 		for (const spans of [raw, shown]) {
 			const all = spans.map(text).join("\n");
-			for (const words of ["secretword", "Kura", "arches", "a.txt"])
+
+			for (const words of ["secretword", "Kura", "arches", "a.txt"]) {
 				expect(all).not.toContain(words);
+			}
 		}
+
 		const names = raw.map((s) => s.name);
 		expect(names).toContain("acp transcript");
 		expect(names).toContain("acp session");

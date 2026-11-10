@@ -11,7 +11,9 @@ const window = Effect.gen(function* () {
 	const booting = yield* startWindow({layout, ctx, checks, label: "Browser"});
 	const live = yield* booting.ready;
 	const root = document.getElementById("root");
-	if (root === null) return;
+
+	if (root === null) {return;}
+
 	yield* mount(root, {run: live, layout, windowFor, origin: location.origin});
 	return yield* Effect.never;
 });

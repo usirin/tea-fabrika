@@ -28,15 +28,19 @@ import {stageRecording} from "./stage-recording.ts";
 class ControlPlugin extends Plugin.Service<ControlPlugin>()(
 	"cloudflare-runtime/plugin/FabrikaControl",
 ) {}
+
 class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
 	reason: Schema.String,
 }) {}
+
 type Target = "project" | "process" | "record" | "loader" | "bucket";
 type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
+
 const Response = Schema.Struct({
 	value: Schema.optionalKey(Schema.Unknown),
 	error: Schema.optionalKey(Schema.Struct({reason: Schema.String})),
 });
+
 const sample = (pid: number) =>
 	Effect.scoped(
 		Effect.gen(function* () {
@@ -45,13 +49,22 @@ const sample = (pid: number) =>
 				[Stream.mkString(Stream.decodeText(child.stdout)), child.exitCode],
 				{concurrency: 2},
 			);
-			if (code !== 0) return yield* new ControlError({reason: "sample"});
+
+			if (code !== 0) {
+				return yield* new ControlError({reason: "sample"});
+			}
+
 			return Number(text.trim()) * 1024;
 		}),
 	).pipe(Effect.mapError(() => new ControlError({reason: "sample"})));
+
 const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) {
 	const raw = yield* work;
-	if (raw === null) return null;
+
+	if (raw === null) {
+		return null;
+	}
+
 	const {sha256} = yield* Schema.decodeUnknownEffect(Schema.Struct({sha256: Schema.String}))(raw);
 	return {
 		checksums: {
@@ -116,7 +129,10 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		method: string,
 		args: ReadonlyArray<unknown>,
 	) {
-		if (port === 0) return yield* new ControlError({reason: "offline"});
+		if (port === 0) {
+			return yield* new ControlError({reason: "offline"});
+		}
+
 		const url = `http://127.0.0.1:${port}`;
 		const fail = () => new ControlError({reason: "unreachable"});
 		const request = yield* Effect.try({
@@ -139,7 +155,11 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		const answer = yield* Schema.decodeUnknownEffect(Response)(raw).pipe(
 			Effect.mapError(() => new ControlError({reason: "bad_row"})),
 		);
-		if (answer.error !== undefined) return yield* new ControlError(answer.error);
+
+		if (answer.error !== undefined) {
+			return yield* new ControlError(answer.error);
+		}
+
 		return answer.value;
 	});
 	const flush = outbox.flush((event) => call("project", config.name, "", "brain", [event]));
@@ -168,11 +188,13 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 	const local = Context.empty().pipe(
 		Context.add(RuntimeLifecycle, (event) => {
 			const observed = {event, reason, bytes};
+
 			// A new child starts with a clean cause before any queued file write can yield.
 			if (event.type === "start") {
 				reason = "crash";
 				bytes = undefined;
 			}
+
 			Queue.offerUnsafe(events, observed);
 		}),
 		Context.add(ControlPlugin, {
@@ -200,6 +222,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 					),
 				);
 				yield* Deferred.succeed(listening, undefined);
+
 				if (replacement !== null) {
 					yield* Deferred.succeed(replacement, undefined);
 					replacement = null;
@@ -211,6 +234,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		stopping = true;
 		transition({type: "stop"});
 		yield* Scope.close(runtimeScope, Exit.void);
+
 		if (start !== "") {
 			yield* outbox.add(
 				BrainEvent.cases.stopped.make({
@@ -222,6 +246,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 			);
 			yield* flush.pipe(Effect.ignore);
 		}
+
 		transition({type: "stopped"});
 	});
 	yield* Effect.addFinalizer(() => recorded(stopRuntime()).pipe(Effect.orDie));
@@ -233,7 +258,11 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 	const recordEvents = Effect.forever(
 		Effect.gen(function* () {
 			const {event, reason, bytes: rss} = yield* Queue.take(events);
-			if (stopping) return;
+
+			if (stopping) {
+				return;
+			}
+
 			if (event.type === "exit") {
 				yield* outbox.add(
 					BrainEvent.cases.exited.make({
@@ -251,6 +280,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 				replacement = ready;
 				yield* Effect.forkIn(recorded(restartRuntime(ready)).pipe(Effect.ignore), scope);
 			}
+
 			if (event.type === "start") {
 				previous = start || previous;
 				start = yield* ids.next;
@@ -287,6 +317,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 					yield* Deferred.fail(replacement, new ControlError({reason: event.reason}));
 					replacement = null;
 				}
+
 				transition({type: "braked", after: start, reason: event.reason});
 				yield* outbox.add(
 					BrainEvent.cases.braked.make({
@@ -316,6 +347,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		yield* flush;
 	});
 	yield* recorded(startRuntime());
+
 	if (options.keys !== undefined) {
 		const random = yield* SecureRandom.SecureRandom;
 		/** One key settings change through the trusted local control, never a public route. */
@@ -336,11 +368,16 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 			status: ({error}) => (error === null ? Effect.void : settings({error})),
 		});
 	}
+
 	yield* Effect.forkScoped(
 		Effect.forever(
 			Effect.gen(function* () {
 				yield* Effect.sleep("1 second");
-				if (stopping || pid === 0) return;
+
+				if (stopping || pid === 0) {
+					return;
+				}
+
 				yield* checkMemory({
 					pid,
 					sample,
@@ -368,8 +405,14 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 	) =>
 		new Proxy(Object.assign<Binding, Members>({}, members), {
 			get: (_value, method) => {
-				if (method === "then") return undefined;
-				if (Object.hasOwn(members, method)) return members[method as keyof Members];
+				if (method === "then") {
+					return undefined;
+				}
+
+				if (Object.hasOwn(members, method)) {
+					return members[method as keyof Members];
+				}
+
 				const work = (args: ReadonlyArray<unknown>) => invoke(String(method), args);
 				// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local binding proxy matches Durable Object's Promise API
 				return (...args: ReadonlyArray<unknown>) => Effect.runPromise(work(args));

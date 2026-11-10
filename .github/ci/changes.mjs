@@ -16,11 +16,14 @@ const readTrees = ["programs/", "fixtures/", "packages/", "next/"];
 const skillTrees = [".agents/skills/", ".claude/skills/"];
 /** @param {string} path */
 const script = (path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path);
+
 /** Skill prose is checked in the changes job on every event. @param {string} path */
 const prose = (path) =>
 	(path.startsWith(".agents/skills/") && path.endsWith(".md") && !script(path)) ||
 	/^\.claude\/skills\/[^/]+$/.test(path);
+
 const readFolders = new Set(["brief", "briefs", "prompt", "prompts"]);
+
 /**
  * Markdown a program or test reads: briefs, prompts and fixtures are inputs.
  * @param {string} path
@@ -32,11 +35,14 @@ const reads = (path) =>
 			.split("/")
 			.slice(0, -1)
 			.some((dir) => readFolders.has(dir)));
+
 /** @param {string} path */
 const markdown = (path) =>
 	path.endsWith(".md") && !reads(path) && !skillTrees.some((tree) => path.startsWith(tree));
+
 /** @param {string} path */
 const safe = (path) => rows(path) || markdown(path);
+
 /** @param {string} path */
 const old = (path) =>
 	today.some((tree) => path.startsWith(tree)) && !path.startsWith("packages/fabrika-design/");
@@ -50,8 +56,14 @@ const old = (path) =>
  * @returns {Flags}
  */
 export const classify = (paths, event) => {
-	if (event !== "pull_request" || paths === null || paths.length === 0) return {...all};
-	if (paths.some(reads)) return {...all, field: paths.some(rows)};
+	if (event !== "pull_request" || paths === null || paths.length === 0) {
+		return {...all};
+	}
+
+	if (paths.some(reads)) {
+		return {...all, field: paths.some(rows)};
+	}
+
 	/** @param {string} path */
 	const quiet = (path) => safe(path) || prose(path);
 	return {
@@ -80,16 +92,32 @@ const git = (args) => spawnSync("git", args, {encoding: "utf8", maxBuffer: 2 ** 
  * @returns {string[] | null}
  */
 export const readPaths = (base, head, event, run = git) => {
-	if (!validSha(base) || !validSha(head)) return null;
+	if (!validSha(base) || !validSha(head)) {
+		return null;
+	}
+
 	let from = base;
+
 	if (event === "pull_request") {
 		const merged = run(["merge-base", base, head]);
-		if (merged.status !== 0) return null;
+
+		if (merged.status !== 0) {
+			return null;
+		}
+
 		from = merged.stdout.trim();
-		if (!validSha(from)) return null;
+
+		if (!validSha(from)) {
+			return null;
+		}
 	}
+
 	const diff = run(["diff", "--no-renames", "--name-only", "-z", from, head, "--"]);
-	if (diff.status !== 0 || (diff.stdout !== "" && !diff.stdout.endsWith("\0"))) return null;
+
+	if (diff.status !== 0 || (diff.stdout !== "" && !diff.stdout.endsWith("\0"))) {
+		return null;
+	}
+
 	return diff.stdout === "" ? [] : diff.stdout.slice(0, -1).split("\0");
 };
 
@@ -102,7 +130,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 		.join("\n")}\n`;
 	process.stdout.write(output);
 	const file = process.env["GITHUB_OUTPUT"];
-	if (file) appendFileSync(file, output);
+
+	if (file) {
+		appendFileSync(file, output);
+	}
+
 	if (paths === null) {
 		console.error("changes: history could not be read; every job is enabled");
 		process.exitCode = 1;

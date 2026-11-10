@@ -187,32 +187,60 @@ export type Next =
 
 /** The next step, from what the lane has done and what it reads now. Pure. */
 export function next(at: LaneAt, v: LaneView): Next {
-	if (v.pr?.state === "merged") return {go: "done", pr: v.pr.url, head: v.pr.head};
-	if (v.closed) return {go: "skip", why: "closed"};
-	if (v.waiting.length > 0) return {go: "wait", asks: v.waiting};
+	if (v.pr?.state === "merged") {
+		return {go: "done", pr: v.pr.url, head: v.pr.head};
+	}
+
+	if (v.closed) {
+		return {go: "skip", why: "closed"};
+	}
+
+	if (v.waiting.length > 0) {
+		return {go: "wait", asks: v.waiting};
+	}
+
 	// No version yet: the lane plans the first itself, and it waits on the owner as any other.
-	if (!v.approved)
+	if (!v.approved) {
 		return v.version === 0
 			? {go: "plan", version: 1, folds: v.folds}
 			: {go: "stuck", why: "read_failed"};
-	if (v.folds.length > 0) return {go: "plan", version: v.version + 1, folds: v.folds};
+	}
+
+	if (v.folds.length > 0) {
+		return {go: "plan", version: v.version + 1, folds: v.folds};
+	}
+
 	const drop = v.removed.find((t) => !at.dropped.includes(t));
-	if (drop !== undefined) return {go: "drop", task: drop};
+
+	if (drop !== undefined) {
+		return {go: "drop", task: drop};
+	}
+
 	// Every task removed and its commits off the branch: a last review of nothing proves nothing.
-	if (v.tasks.length === 0) return {go: "skip", why: "emptied"};
+	if (v.tasks.length === 0) {
+		return {go: "skip", why: "emptied"};
+	}
+
 	const todo = v.tasks.find((t) => !t.settled);
+
 	if (todo !== undefined) {
 		const round = (at.rounds[todo.task] ?? 0) + 1;
 		// The last task is where the plan comes together: it builds the plan's own criteria too.
 		const goal = todo.task === v.tasks.at(-1)?.task ? v.planTodo : [];
 		return {go: "round", task: todo.task, round, open: [...todo.open, ...goal], fix: false};
 	}
+
 	if (v.met && !v.behind) {
-		if (v.pr === null) return {go: "open"};
+		if (v.pr === null) {
+			return {go: "open"};
+		}
+
 		return {go: "ship", pr: v.pr.url, run: at.ships + 1};
 	}
+
 	const last = v.tasks.at(-1);
-	if (v.planOpen.length > 0 && at.fixedAt !== at.finals && last !== undefined)
+
+	if (v.planOpen.length > 0 && at.fixedAt !== at.finals && last !== undefined) {
 		return {
 			go: "round",
 			task: last.task,
@@ -220,5 +248,7 @@ export function next(at: LaneAt, v: LaneView): Next {
 			open: v.planOpen,
 			fix: true,
 		};
+	}
+
 	return {go: "final", round: at.finals + 1};
 }

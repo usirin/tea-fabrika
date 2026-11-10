@@ -28,14 +28,18 @@ import {
 
 let stage: Stage;
 const closers: Array<() => Promise<void>> = [];
+
 beforeAll(async () => {
 	stage = await startStage("p14-recover");
 }, 180_000);
+
 afterAll(async () => {
-	for (const close of closers.splice(0)) await close().catch(() => undefined);
+	for (const close of closers.splice(0)) {await close().catch(() => undefined);}
+
 	await stage?.stop();
 	process.stdout.write(`${summary()}\n`);
-	if (stage !== undefined) cleanup(stage.home);
+
+	if (stage !== undefined) {cleanup(stage.home);}
 });
 
 /** A separately granted browser context with one tab on the stage. */
@@ -53,29 +57,35 @@ const window = async (
 	await grant(stage, tab);
 	return {tab, context: p.context, close: p.close};
 };
+
 const first = async (tab: Tab): Promise<number> => (await counts(tab.page))[0] ?? Number.NaN;
+
 const settled = (tab: Tab, n: number, ms = 60_000) =>
 	until(
 		`the first count to read ${n}`,
 		async () => ((await first(tab)) === n ? true : undefined),
 		ms,
 	);
+
 /** The inbox lines the stage saved for the counters: one `send` per letter, each id once. */
 const letters = (): ReadonlyArray<string> =>
 	ledgerRows(stage.home)
 		.filter((r) => r.tag === "send" && r.stream.endsWith("/inbox"))
 		.map((r) => r.id);
+
 const expectOnePerLetter = (accepted: number): void => {
 	const ids = letters();
 	expect(new Set(ids).size, "no letter is saved twice").toBe(ids.length);
 	expect(ids.length, "every accepted letter is saved once").toBe(accepted);
 };
+
 let accepted = 0; // presses made so far, which the saved ledger must hold exactly
 
 describe("two windows mirror, press by press, and every press is measured", () => {
 	it("scenario: a press shows in its own tab and the other window, five times", async () => {
 		const a = await window();
 		const b = await window();
+
 		for (let n = 1; n <= 5; n++) {
 			await timed("same-tab click", async () => {
 				await press(a.tab.page, "Add one", 0);
@@ -85,6 +95,7 @@ describe("two windows mirror, press by press, and every press is measured", () =
 			await timed("other-tab click", () => settled(b.tab, n));
 			expect(await counts(b.tab.page)).toEqual(await counts(a.tab.page));
 		}
+
 		await until(
 			"the ledger to hold the five",
 			() => (letters().length === accepted ? true : undefined),
@@ -126,7 +137,9 @@ describe("an offline press lands once", () => {
 		await until("the frame to say offline", async () =>
 			/offline|reconnecting/i.test(await connection(a.tab.page)) ? true : undefined,
 		);
-		for (let n = 0; n < 3; n++) await press(a.tab.page, "Add one", 0);
+
+		for (let n = 0; n < 3; n++) {await press(a.tab.page, "Add one", 0);}
+
 		accepted += 3;
 		await expect(a.tab.page.getByTestId("queue")).toHaveText(/3/);
 		expect(await first(b.tab), "nothing reached the other window yet").toBe(base);
@@ -147,17 +160,21 @@ type Kill = {
 	readonly run: (s: Stage) => Promise<void>;
 	readonly label: string;
 };
+
 const workerd = (s: Stage) => {
 	const found = s.processes().find((p) => /workerd/.test(p.command));
+
 	if (found === undefined)
-		throw new Error(
+		{throw new Error(
 			`no workerd under the stage: ${s
 				.processes()
 				.map((p) => p.command.slice(0, 60))
 				.join(" | ")}`,
-		);
+		);}
+
 	return found.pid;
 };
+
 const KILLS: ReadonlyArray<Kill> = [
 	{
 		name: "workerd is killed",
@@ -179,6 +196,7 @@ const KILLS: ReadonlyArray<Kill> = [
 		run: async (s) => {
 			s.kill(workerd(s), "SIGKILL");
 			await pause(300);
+
 			try {
 				s.kill(workerd(s), "SIGKILL");
 			} catch {
@@ -210,6 +228,7 @@ const KILLS: ReadonlyArray<Kill> = [
 const survive = async (kill: Kill): Promise<void> => {
 	const a = await window();
 	const b = await window();
+
 	try {
 		await recover(kill, a, b);
 	} finally {
@@ -217,6 +236,7 @@ const survive = async (kill: Kill): Promise<void> => {
 		await b.close().catch(() => undefined);
 	}
 };
+
 const recover = async (
 	kill: Kill,
 	a: Awaited<ReturnType<typeof window>>,
@@ -243,14 +263,14 @@ const recover = async (
 
 describe("every named kill recovers, five times each", () => {
 	for (const kill of KILLS) {
-		for (let n = 1; n <= 5; n++) it(`scenario: ${kill.name} (run ${n} of 5)`, () => survive(kill));
+		for (let n = 1; n <= 5; n++) {it(`scenario: ${kill.name} (run ${n} of 5)`, () => survive(kill));}
 	}
 });
 
 describe("the whole recovery sequence, five times", () => {
 	for (let n = 1; n <= 5; n++) {
 		it(`scenario: every kill in turn on one stage life (run ${n} of 5)`, async () => {
-			for (const kill of KILLS) await survive(kill);
+			for (const kill of KILLS) {await survive(kill);}
 		});
 	}
 });

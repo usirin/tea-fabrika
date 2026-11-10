@@ -30,11 +30,17 @@ const HAND = [
 const decodeAll = () => {
 	const tokens = new Map<string, TokenFile>();
 	const errors: string[] = [];
+
 	for (const file of FILES) {
 		const decoded = decodeToken(file, read(join("color", file)));
-		if (decoded._tag === "ok") tokens.set(file.replace(/\.toml$/, ""), decoded.value);
-		else errors.push(...decoded.errors);
+
+		if (decoded._tag === "ok") {
+			tokens.set(file.replace(/\.toml$/, ""), decoded.value);
+		} else {
+			errors.push(...decoded.errors);
+		}
 	}
+
 	return {tokens, errors};
 };
 
@@ -42,7 +48,11 @@ const sources = () => {
 	const {tokens} = decodeAll();
 	const manti = decodeManti(read("manti.toml"));
 	const parts = decodeParts(read("parts.toml"));
-	if (manti._tag === "bad" || parts._tag === "bad") throw new Error("manti.toml or parts.toml");
+
+	if (manti._tag === "bad" || parts._tag === "bad") {
+		throw new Error("manti.toml or parts.toml");
+	}
+
 	return {tokens, manti: manti.value, parts: parts.value, hand: HAND};
 };
 
@@ -161,11 +171,23 @@ describe("the checks across files", () => {
 	const without = (name: string, ...keys: readonly string[]) => {
 		const s = sources();
 		const token = s.tokens.get(name);
-		if (token === undefined) throw new Error(`no ${name}`);
+
+		if (token === undefined) {
+			throw new Error(`no ${name}`);
+		}
+
 		const changed: Record<string, unknown> = {...token};
-		for (const key of keys) delete changed[key];
+
+		for (const key of keys) {
+			delete changed[key];
+		}
+
 		const decoded = decodeToken(`${name}.toml`, changed);
-		if (decoded._tag === "bad") throw new Error(decoded.errors.join("\n"));
+
+		if (decoded._tag === "bad") {
+			throw new Error(decoded.errors.join("\n"));
+		}
+
 		s.tokens.set(name, decoded.value);
 		return checkAcross(s);
 	};
@@ -176,11 +198,19 @@ describe("the checks across files", () => {
 	const changed = (name: string, change: (t: Record<string, unknown>) => void) => {
 		const s = sources();
 		const token = s.tokens.get(name);
-		if (token === undefined) throw new Error(`no ${name}`);
+
+		if (token === undefined) {
+			throw new Error(`no ${name}`);
+		}
+
 		const t: Record<string, unknown> = {...token};
 		change(t);
 		const decoded = decodeToken(`${name}.toml`, t);
-		if (decoded._tag === "bad") throw new Error(decoded.errors.join("\n"));
+
+		if (decoded._tag === "bad") {
+			throw new Error(decoded.errors.join("\n"));
+		}
+
 		s.tokens.set(name, decoded.value);
 		return checkAcross(s).map((e) => e.split(": ").slice(1));
 	};
@@ -192,7 +222,9 @@ describe("the checks across files", () => {
 	const drop =
 		(...keys: readonly string[]) =>
 		(t: Record<string, unknown>): void => {
-			for (const key of keys) delete t[key];
+			for (const key of keys) {
+				delete t[key];
+			}
 		};
 
 	it("holds a text token to 4.5, so a WCAG 3 is not enough", () => {
@@ -276,7 +308,11 @@ describe("the checks across files", () => {
 		const s = sources();
 		const set = (name: string, input: unknown) => {
 			const decoded = decodeToken(`${name}.toml`, input);
-			if (decoded._tag === "bad") throw new Error(decoded.errors.join("\n"));
+
+			if (decoded._tag === "bad") {
+				throw new Error(decoded.errors.join("\n"));
+			}
+
 			s.tokens.set(name, decoded.value);
 		};
 		set("tile-text", {tier: "component", owner: "tile", colors: {extends: "tile-text-on"}});

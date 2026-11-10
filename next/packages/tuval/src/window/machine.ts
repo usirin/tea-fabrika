@@ -125,6 +125,7 @@ export const now = Cmd.make("now", {
 	}),
 	err: ["clock", "entropy"],
 });
+
 /** `process.send` for one ready letter, with the same id and body every time. */
 export const send = Cmd.make("send", {
 	input: Schema.Struct({
@@ -140,12 +141,14 @@ export const send = Cmd.make("send", {
 	ok: Sent,
 	err: ["unreachable", "unknown"],
 });
+
 /** `view.open` for one pid on one dial. */
 export const open = Cmd.make("open", {
 	input: Schema.Struct({pid: Schema.String, dial: Schema.Int}),
 	ok: Schema.Struct({rev: Schema.Int, view: Schema.Json}),
 	err: ["unreachable", "unknown"],
 });
+
 /** Ask the browser to keep this origin's storage, once per new grant. */
 export const persist = Cmd.make("persist", {
 	input: Schema.Struct({}),
@@ -161,6 +164,7 @@ type Out = ReadonlyArray<
 	| ReturnType<typeof ping>
 	| ReturnType<typeof knock>
 >;
+
 type Step = readonly [WindowModel, Out];
 
 const anyView = (view: unknown): unknown => view;
@@ -184,7 +188,8 @@ const sends = (s: WindowModel, dial: number): ReadonlyArray<ReturnType<typeof se
 
 /** Sends what may go now when online, marking it out. */
 const flush = (s: WindowModel): Step => {
-	if (s.link._tag !== "online") return [s, []];
+	if (s.link._tag !== "online") {return [s, []];}
+
 	const out = sends(s, s.link.dial);
 	return out.length === 0 ? [s, []] : [{...s, sent: [...s.sent, ...out.map((c) => c.letter)]}, out];
 };
@@ -210,8 +215,11 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
 		fresh: s.fresh || granted,
 		rejected: link._tag === "removed" ? link.fingerprint : s.rejected,
 	};
-	if (link._tag !== "online") return [{...next, opened: [], sent: []}, linkCmds];
-	if (s.link._tag === "online") return [next, linkCmds];
+
+	if (link._tag !== "online") {return [{...next, opened: [], sent: []}, linkCmds];}
+
+	if (s.link._tag === "online") {return [next, linkCmds];}
+
 	// Going online: open each distinct pid once, send what waited in order, ask persistence once.
 	const pids = [...new Set(s.tiles.map((t) => t.pid))];
 	const opens = pids.map((pid) => open({pid, dial: link.dial}));
@@ -316,7 +324,8 @@ export const windowMachineFor = (checks: WindowChecks) => {
 					? [{...s, sent: s.sent.filter((l) => l !== m.cmd.letter)}, []]
 					: [{...s, trouble: "unknown_reply"}, []],
 			open_ok: (s, m) => {
-				if (s.link._tag !== "online" || s.link.dial !== m.cmd.dial) return [s, []];
+				if (s.link._tag !== "online" || s.link.dial !== m.cmd.dial) {return [s, []];}
+
 				const shown = C.notice(
 					s.client,
 					m.cmd.pid,
@@ -345,7 +354,9 @@ export const windowMachineFor = (checks: WindowChecks) => {
 					s.client.pending.some((p) => p.n === n && p._tag === "dating") ? [now({n})] : [],
 				);
 				const cleared = {...s, redate: []};
-				if (s.link._tag !== "online" || s.link.dial !== m.dial) return [cleared, redated];
+
+				if (s.link._tag !== "online" || s.link.dial !== m.dial) {return [cleared, redated];}
+
 				const [after, out] = flush(cleared);
 				return [after, [...redated, ...out]];
 			},

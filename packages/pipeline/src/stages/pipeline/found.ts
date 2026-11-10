@@ -182,7 +182,11 @@ export const spentWords = (ends: readonly FactOf<"ended">[]): string => {
 	const known = prices.flatMap((usd) => (usd === null ? [] : [usd]));
 	const total = known.reduce((sum, usd) => sum + usd, 0);
 	const unknown = prices.length - known.length;
-	if (unknown === 0) return `The runs on this ticket have cost ${money(total)} so far.`;
+
+	if (unknown === 0) {
+		return `The runs on this ticket have cost ${money(total)} so far.`;
+	}
+
 	const rest = total > 0 ? `, and ${money(total)} for the rest` : "";
 	return `What the runs on this ticket have cost so far: price unknown for ${unknown} of them${rest}.`;
 };
@@ -223,7 +227,11 @@ export const decidedWords = (carry: Pick<Carry, "plan" | "decided">): string => 
 			? questionLines({questions})
 			: (carry.plan?.questions ?? []).map((q) => `- ${q.ask} Lean: ${q.lean}`);
 	const said = carry.decided?.said ?? [];
-	if (leans.length === 0 && said.length === 0) return "None.";
+
+	if (leans.length === 0 && said.length === 0) {
+		return "None.";
+	}
+
 	return [
 		...(leans.length === 0
 			? []

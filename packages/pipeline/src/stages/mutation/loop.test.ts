@@ -48,19 +48,29 @@ function briefFrom(survived: readonly Survived[]) {
 function answer(survived: readonly Survived[], tries: readonly Answered[]) {
 	let s = answering.start("k", briefFrom(survived), 3);
 	const prompts: string[] = [];
+
 	for (const output of tries) {
 		const run = answering.runOf(s);
-		if (run === null) break;
+
+		if (run === null) {
+			break;
+		}
+
 		prompts.push(run.prompt);
 		s = answering.update(s, said(run, output));
 	}
+
 	return {s, prompts};
 }
 
 describe("a mutant that survives goes back to the writer", () => {
 	it("from the planted weak test to a test that kills it", () => {
 		const {over} = drive({run: ONE_SURVIVED});
-		if (over.phase !== "over" || over.report.ran === null) throw new Error("ran");
+
+		if (over.phase !== "over" || over.report.ran === null) {
+			throw new Error("ran");
+		}
+
 		expect(nameOf(over.outcome)).toBe("send:test_writer:mutant_survived");
 		const survived = over.report.ran.survived;
 
@@ -79,7 +89,10 @@ describe("a mutant that survives goes back to the writer", () => {
 			`${SURVIVED.mutant} (EqualityOperator): \`n > high\` made \`n >= high\``,
 		);
 		expect(prompts[1]).toContain(`${SURVIVED.mutant} has no answer`);
-		if (s.phase !== "done") throw new Error(s.phase);
+
+		if (s.phase !== "done") {
+			throw new Error(s.phase);
+		}
 
 		// Code checks the new test on both sides: red with the mutant in, green without.
 		const [killing, cmds] = startKills("c".repeat(40), s.output.answers);
@@ -111,13 +124,21 @@ describe("a disable comment asks the owner", () => {
 			why: "n equal to low returns low either way",
 		};
 		const {s} = answer(SURVIVED_ONLY, [{files: [], answers: [cannot]}]);
-		if (s.phase !== "done") throw new Error(s.phase);
+
+		if (s.phase !== "done") {
+			throw new Error(s.phase);
+		}
+
 		expect(outcomeOf(s.output.answers, {})).toEqual({kind: "ask", who: "owner", for: "disable"});
 
 		const added = {file: "src/clamp.ts", line: 11, text: COMMENT};
 		const scope = {...SCOPE, diff: {...SCOPE.diff, added: [...SCOPE.diff.added, added]}};
 		const asked = drive({scope}).over;
-		if (asked.phase !== "over") throw new Error("over");
+
+		if (asked.phase !== "over") {
+			throw new Error("over");
+		}
+
 		expect(nameOf(asked.outcome)).toBe("ask:owner:check_change");
 		expect(asked.report.changes).toEqual([{kind: "disable", ...added, text: COMMENT.trim()}]);
 		expect(asked.report.ran).toBeNull();

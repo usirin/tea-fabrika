@@ -23,6 +23,7 @@ const runs = [
 	"export const g = FiberSet.runtimePromise(set)();", // 11
 	"export const h = FiberSet.makeRuntimePromise();", // 12
 ].join("\n");
+
 const RUN_LINES = [4, 5, 6, 7, 8, 9, 11, 12];
 
 const passes = [
@@ -92,7 +93,10 @@ describe("no-effect-run-outside-edge", async () => {
 
 	it("fires at each of the 18 paths the old list named: the list is gone", () => {
 		expect(OLD_EDGES).toHaveLength(18);
-		for (const path of OLD_EDGES) expect(all(CODE, path)).toEqual(RUN_LINES);
+
+		for (const path of OLD_EDGES) {
+			expect(all(CODE, path)).toEqual(RUN_LINES);
+		}
 	});
 
 	it("passes each run under an edge comment, and one comment for both rules", () => {

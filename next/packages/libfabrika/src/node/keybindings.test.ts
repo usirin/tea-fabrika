@@ -17,6 +17,7 @@ const LOAD = "./keybindings.ts";
 const COMMANDS = ["counter.inc", "counter.dec", "counter.reset"] as const;
 
 type Status = {readonly error: {readonly line: number; readonly why: string} | null};
+
 type Watch = (o: {
 	file: string;
 	commands: ReadonlyArray<string>;
@@ -31,6 +32,7 @@ type Step =
 	| {readonly _tag: "bad"}
 	| {readonly _tag: "unreadable"}
 	| {readonly _tag: "watcher_fails"};
+
 const steps: fc.Arbitrary<ReadonlyArray<Step>> = fc.array(
 	fc.oneof(
 		{
@@ -45,6 +47,7 @@ const steps: fc.Arbitrary<ReadonlyArray<Step>> = fc.array(
 	),
 	{minLength: 1, maxLength: 12},
 );
+
 const text = (keys: ReadonlyArray<string>): string =>
 	`[keys]\n"counter.inc" = ${JSON.stringify(keys)}\n`;
 
@@ -80,19 +83,25 @@ const play = (watch: Watch, list: ReadonlyArray<Step>, closeAfter: number = list
 			status: (s) => Ref.update(statuses, (all) => [...all, s]),
 		}).pipe(Effect.provide(fs), Scope.provide(scope));
 		const model: Array<unknown> = [{"counter.inc": ["a"]}];
+
 		for (const [n, step] of list.entries()) {
-			if (n === closeAfter) yield* Scope.close(scope, {_tag: "Success", value: undefined} as never);
+			if (n === closeAfter) {yield* Scope.close(scope, {_tag: "Success", value: undefined} as never);}
+
 			if (step._tag === "good") {
 				yield* Ref.set(content, text(step.keys));
-				if (n < closeAfter) model.push({"counter.inc": step.keys});
-			} else if (step._tag === "bad") yield* Ref.set(content, `[keys]\n"no.such" = ["a"]\n`);
-			else if (step._tag === "unreadable") yield* Ref.set(content, "unreadable");
+
+				if (n < closeAfter) {model.push({"counter.inc": step.keys});}
+			} else if (step._tag === "bad") {yield* Ref.set(content, `[keys]\n"no.such" = ["a"]\n`);}
+			else if (step._tag === "unreadable") {yield* Ref.set(content, "unreadable");}
+
 			yield* Queue.offer(events, step._tag === "watcher_fails" ? "fail" : "change");
 			yield* Effect.yieldNow;
 			yield* Effect.yieldNow;
 		}
+
 		if (closeAfter >= list.length)
-			yield* Scope.close(scope, {_tag: "Success", value: undefined} as never);
+			{yield* Scope.close(scope, {_tag: "Success", value: undefined} as never);}
+
 		return {
 			published: yield* Ref.get(published),
 			statuses: yield* Ref.get(statuses),
@@ -104,18 +113,23 @@ const play = (watch: Watch, list: ReadonlyArray<Step>, closeAfter: number = list
 const lawOne = (watch: Watch, list: ReadonlyArray<Step>) =>
 	Effect.gen(function* () {
 		const trimmed: Array<Step> = [];
+
 		for (const s of list) {
 			trimmed.push(s);
-			if (s._tag === "watcher_fails") break; // a failed watcher is the end of that watch
+
+			if (s._tag === "watcher_fails") {break;} // a failed watcher is the end of that watch
 		}
+
 		const out = yield* play(watch, trimmed);
 		expect(out.published).toEqual(out.model);
 		const last = out.statuses.at(-1);
 		const final = trimmed.filter((s) => s._tag !== "watcher_fails").at(-1);
-		if (trimmed.at(-1)?._tag === "watcher_fails") expect(last?.error?.why).toBe("watch");
-		else if (final?._tag === "good" || final === undefined) expect(last?.error).toBeNull();
-		else expect(last?.error).not.toBeNull();
+
+		if (trimmed.at(-1)?._tag === "watcher_fails") {expect(last?.error?.why).toBe("watch");}
+		else if (final?._tag === "good" || final === undefined) {expect(last?.error).toBeNull();}
+		else {expect(last?.error).not.toBeNull();}
 	});
+
 const lawTwo = (watch: Watch, list: ReadonlyArray<Step>, at: number) =>
 	Effect.gen(function* () {
 		const closeAfter = at % list.length;
@@ -127,6 +141,7 @@ const lawTwo = (watch: Watch, list: ReadonlyArray<Step>, at: number) =>
 		expect(out.published).toEqual(out.model);
 		expect(out.reads).toBeLessThanOrEqual(1 + closeAfter); // the first read, then one per change before the close
 	});
+
 const check = (
 	run: (list: ReadonlyArray<Step>, at: number) => Effect.Effect<void, unknown, never>,
 ) =>
@@ -134,6 +149,7 @@ const check = (
 		fc.asyncProperty(steps, fc.nat(11), (list, at) => Effect.runPromise(run(list, at))),
 		{seed: SEED, numRuns: 100},
 	);
+
 const load = async (): Promise<Watch> => ((await import(LOAD)) as {watchKeys: Watch}).watchKeys;
 
 describe("key file reader: validated publication, visible failures, scoped cleanup", () => {

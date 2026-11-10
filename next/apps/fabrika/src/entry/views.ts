@@ -21,6 +21,7 @@ export const windowFor = (pid: string): TileWindow | null => {
 
 /** The two counters side by side: the window's layout. The others are test arrangements. */
 const row = split("row", 50, tile("left", "counter:1"), tile("right", "counter:2"));
+
 const layouts: Readonly<Record<string, Tree>> = {
 	row,
 	one: tile("one", "counter:1"),

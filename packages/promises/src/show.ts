@@ -39,7 +39,10 @@ export function listText(all: readonly Judged[]): string {
 const indent = (lines: readonly string[], by: string) => lines.map((l) => `${by}${l}`);
 
 function ranText(label: string, ran: Ran, caughtWord: string, heldWord: string): string[] {
-	if (ran.kind === "none") return [`${label}gave no verdict: ${ran.why}`];
+	if (ran.kind === "none") {
+		return [`${label}gave no verdict: ${ran.why}`];
+	}
+
 	const v = ran.verdict;
 	const head = `${label}${v.held ? heldWord : caughtWord}: "${v.checked}", ${v.bound} (${ran.ms} ms)`;
 	return v.path.length === 0 ? [head] : [head, ...indent(v.path, "           ")];

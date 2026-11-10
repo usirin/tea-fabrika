@@ -16,7 +16,18 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 - **`next/` is Effect all the way:** services and Layers, typed errors, Streams.
 - **A Promise appears only at a thin edge the platform demands:** a Durable
   Object method, a browser event handler. It is one line of `Effect.runPromise` or
-  `Effect.tryPromise`, and it holds no logic.
+  `Effect.tryPromise`, and it holds no logic. *From 2026-11-09
+  ([0041](../../.decisions/0041-object-classes-are-effect-objects.md)): a Durable Object class
+  is written with Alchemy's Effect model, so once its port (ticket 502) lands, an object method
+  is no longer an edge we write. Until then the edge lines in `brain.ts` stay.*
+  *Also from 2026-11-09
+  ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md)): every platform piece,
+  in the cloud and in the local stage, is used through Alchemy's Effect form, so a platform call
+  is not an edge we write either. 130 edge comments sit on platform calls today (64
+  `fabrika/no-promises`, 66 `fabrika/no-effect-run-outside-edge`); each goes with its port. An
+  edge stays only where Alchemy has a gap that cannot be patched in reasonable size, and then its
+  comment carries the upstream issue link. What is not the platform's stays an edge as before:
+  WebCrypto, a browser event handler, Rolldown.*
 - **"Simplest shape" never covers it.** A brief for `next/` says so. An agent's
   shortcut against this is a bug in the change, not a tradeoff to list at the end.
 - **It is checked, not only written down.** Lint rules refuse Promises in `next/`
@@ -29,7 +40,10 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 
 ## Edges the owner has read
 
-Each new edge comment is read by the owner, one line at a time. The ones read so far:
+Each new edge comment is read by the lead at merge, one line at a time, and added here. A new kind
+of edge, one that is not a one-line call the platform demands, is a new design call and goes to the
+owner ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). *Changed
+2026-11-09 (owner): the owner read each new edge.* The ones read so far:
 
 | Where | The edge | Read |
 |---|---|---|
@@ -58,8 +72,8 @@ request moves them to `crypto`.
 - Effect's overhead on each step. Ticket 115 measures it against a bar on click
   time, and we do not know the answer yet.
 - A rule the lint can only partly check: an edge comment covers one line, however
-  long, so "one line that holds no logic" is checked by a reader, the owner, who reads
-  each new edge. *Changed 2026-11-06 (Tier 1, P35): it said the rule names files, not
+  long, so "one line that holds no logic" is checked by a reader, the lead, who reads
+  each new edge at merge (0014; it said the owner). *Changed 2026-11-06 (Tier 1, P35): it said the rule names files, not
   lines.*
 - `useMachine` and `useRuntime` in `@demlik/tea` expect Promise verbs, so the
   window may need its own small hook. *Updated 2026-11-01:* probes on tea's Effect
@@ -67,7 +81,8 @@ request moves them to `crypto`.
   [Tier 1's plan](../plan/tier-1.md) uses it. Nothing is built yet.
 
 **How sure: 95%** on the rule. The edge list is gone: an edge is a line with an edge comment,
-and the owner reads each new one (owner, 2026-11-05; Tier 1's P35 builds it). *It said: 80% on
+and the lead reads each new one (owner, 2026-11-05, and 2026-11-09 for the lead; Tier 1's P35
+builds it). *It said: 80% on
 the edge list, which ticket 115 sets.*
 
 ## What it cannot tell us

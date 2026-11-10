@@ -35,7 +35,11 @@ const onLedger = <A, E>(use: Effect.Effect<A, E, Experiments>) =>
 describe("experiment", () => {
 	it("sends the page as data, then as markdown with the answer first", async () => {
 		const called = await onLedger(call(experiment, {n: "170"}));
-		if (called.kind !== "called") throw new Error(called.why);
+
+		if (called.kind !== "called") {
+			throw new Error(called.why);
+		}
+
 		const [page, markdown] = called.heard;
 		expect(
 			page?.name === "page" && [page.value.title, page.value.runs.map((r) => [r.run, r.label])],
@@ -57,7 +61,11 @@ describe("experiment", () => {
 
 	it("fails on a number the ledger does not have", async () => {
 		const called = await onLedger(call(experiment, {n: "404"}));
-		if (called.kind !== "called" || called.ended.kind !== "failed") throw new Error("it ended");
+
+		if (called.kind !== "called" || called.ended.kind !== "failed") {
+			throw new Error("it ended");
+		}
+
 		const failure = Option.getOrUndefined(Cause.findErrorOption(called.ended.cause));
 		expect(failure).toMatchObject({why: "no_experiment"});
 		// What tsh prints after `failed: `: the words, not the error's tag.

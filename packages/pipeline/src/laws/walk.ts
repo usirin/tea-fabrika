@@ -64,6 +64,7 @@ interface Next<M, C> {
 /** Every move the world may make: the same list, in the same order, as `explore` makes. */
 function nextOf<S, M, C>(world: World<S, M, C>, at: At<S, M, C>): readonly Next<M, C>[] {
 	const out: Next<M, C>[] = [];
+
 	for (const msg of world.outside(at.state)) {
 		const restart = world.restart?.(msg) ?? false;
 		out.push({
@@ -73,11 +74,17 @@ function nextOf<S, M, C>(world: World<S, M, C>, at: At<S, M, C>): readonly Next<
 			echo: false,
 		});
 	}
+
 	at.flight.forEach((f, i) => {
-		if (i > 0 && at.flight[i - 1]?.key === f.key) return;
+		if (i > 0 && at.flight[i - 1]?.key === f.key) {
+			return;
+		}
+
 		const rest = [...at.flight.slice(0, i), ...at.flight.slice(i + 1)];
-		for (const msg of world.answers(f.cmd))
+
+		for (const msg of world.answers(f.cmd)) {
 			out.push({msg, flight: rest, echoes: at.echoes, echo: true});
+		}
 	});
 	at.echoes.forEach((msg, i) => {
 		const rest = [...at.echoes.slice(0, i), ...at.echoes.slice(i + 1)];
@@ -96,7 +103,11 @@ const fly = <C>(flight: readonly Flight<C>[], cmds: readonly C[]): readonly Flig
 /** One of 16 bits for a Msg type, for a swarm mask. */
 const bitOf = (type: string): number => {
 	let h = 0;
-	for (let i = 0; i < type.length; i++) h = (h * 31 + type.charCodeAt(i)) | 0;
+
+	for (let i = 0; i < type.length; i++) {
+		h = (h * 31 + type.charCodeAt(i)) | 0;
+	}
+
 	return 1 << ((h >>> 0) % 16);
 };
 
@@ -121,14 +132,20 @@ export function walk<S, M extends {readonly type: string}, C>(
 	let at: At<S, M, C> = {state: machine.init, flight: [], echoes: []};
 	const path: string[] = [];
 	const mask = swarm ? (choices[0] ?? 0) : 0;
+
 	for (const choice of swarm ? choices.slice(1) : choices) {
 		const all = nextOf(machine.world, at);
 		const on = mask === 0 ? all : all.filter((m) => (mask & bitOf(m.msg.type)) === 0);
 		const moves = on.length > 0 ? on : all;
 		const move = moves[choice % Math.max(moves.length, 1)];
-		if (move === undefined) break;
+
+		if (move === undefined) {
+			break;
+		}
+
 		path.push(machine.show(move.msg));
 		let result: readonly [S, readonly C[]];
+
 		try {
 			result = machine.update(at.state, move.msg);
 		} catch (error) {
@@ -137,23 +154,39 @@ export function walk<S, M extends {readonly type: string}, C>(
 				? {broke: {law: "update throws", why}, path}
 				: {broke: null, path};
 		}
+
 		const [state, cmds] = result;
 		const step: Step<S, M, C> = {prev: at.state, msg: move.msg, next: state, cmds};
 		let broke: Walked["broke"] = null;
 		watches = watches.map((w, i) => {
-			if (w === null) return null;
+			if (w === null) {
+				return null;
+			}
+
 			const looked = w.step(step);
-			if (!(looked instanceof Broke)) return looked;
+
+			if (!(looked instanceof Broke)) {
+				return looked;
+			}
+
 			const law = laws[i]?.name ?? `law ${i}`;
-			if (broke === null && (target === undefined || target === law))
+
+			if (broke === null && (target === undefined || target === law)) {
 				broke = {law, why: looked.why};
+			}
+
 			return null;
 		});
-		if (broke !== null) return {broke, path};
+
+		if (broke !== null) {
+			return {broke, path};
+		}
+
 		const echoes =
 			machine.world.echoes === true && move.echo ? [...move.echoes, move.msg] : move.echoes;
 		at = {state, flight: fly(move.flight, cmds), echoes};
 	}
+
 	return {broke: null, path};
 }
 
@@ -168,18 +201,32 @@ export function walkWorld<W, N>(
 ): Walked {
 	let w = sys.init;
 	const path: string[] = [];
+
 	for (const choice of choices) {
 		const moves = sys.moves(w);
 		const move = moves[choice % Math.max(moves.length, 1)];
-		if (move === undefined) break;
-		path.push(move.label);
-		for (const law of laws) {
-			if (target !== undefined && law.name !== target) continue;
-			const why = law.check(w, move, move.next);
-			if (why !== null) return {broke: {law: law.name, why}, path};
+
+		if (move === undefined) {
+			break;
 		}
+
+		path.push(move.label);
+
+		for (const law of laws) {
+			if (target !== undefined && law.name !== target) {
+				continue;
+			}
+
+			const why = law.check(w, move, move.next);
+
+			if (why !== null) {
+				return {broke: {law: law.name, why}, path};
+			}
+		}
+
 		w = move.next;
 	}
+
 	return {broke: null, path};
 }
 
@@ -198,7 +245,10 @@ export function walkEnds<W, N>(
 	choices: readonly number[],
 	limit: number,
 ): Walked {
-	if (choices.length === 0) return {broke: null, path: []};
+	if (choices.length === 0) {
+		return {broke: null, path: []};
+	}
+
 	let w = sys.init;
 	const path: string[] = [];
 	/** Each state seen on this walk, by key: where it was first and last seen. */
@@ -214,26 +264,43 @@ export function walkEnds<W, N>(
 	/** A lane open in every state of the loop from step `from`, which every class owed is taken in. */
 	const fairLoop = (from: number, classes: ReadonlySet<string>, open: readonly number[]) => {
 		const loop = trail.slice(from);
-		if (loop.some((t) => t.rare)) return null;
+
+		if (loop.some((t) => t.rare)) {
+			return null;
+		}
+
 		const always = [...classes].filter((c) => loop.every((t) => t.classes.has(c)));
 		const taken = new Set(loop.map((t) => t.took));
-		if (!always.every((c) => taken.has(c))) return null;
+
+		if (!always.every((c) => taken.has(c))) {
+			return null;
+		}
+
 		const lane = open.find((l) => loop.every((t) => t.open.includes(l)));
 		return lane === undefined ? null : {lane, steps: loop.length};
 	};
+
 	for (let i = 0; i < limit; i++) {
 		const open = lanes.filter((lane) => !sys.ended(w, lane));
 		const all = sys.moves(w);
 		const classes = new Set(all.flatMap((m) => (m.fair === null ? [] : [m.fair])));
 		const first = open[0];
-		if (first !== undefined && classes.size === 0)
+
+		if (first !== undefined && classes.size === 0) {
 			return {broke: {law: ENDS, why: `L${first + 1} is open and nothing must happen`}, path};
-		if (all.length === 0) return {broke: null, path};
+		}
+
+		if (all.length === 0) {
+			return {broke: null, path};
+		}
+
 		const key = sys.key(w);
 		const before = seen.get(key);
+
 		if (before !== undefined && open.length > 0) {
 			const loop = fairLoop(before.first, classes, open) ?? fairLoop(before.last, classes, open);
-			if (loop !== null)
+
+			if (loop !== null) {
 				return {
 					broke: {
 						law: ENDS,
@@ -241,14 +308,21 @@ export function walkEnds<W, N>(
 					},
 					path,
 				};
+			}
 		}
+
 		seen.set(key, {first: before?.first ?? i, last: i});
 		const moves = i < choices.length ? all : all.filter((m) => !m.rare);
 		const move = moves[(choices[i % choices.length] as number) % Math.max(moves.length, 1)];
-		if (move === undefined) return {broke: null, path};
+
+		if (move === undefined) {
+			return {broke: null, path};
+		}
+
 		trail.push({classes, open, took: move.fair, rare: move.rare});
 		path.push(move.label);
 		w = move.next;
 	}
+
 	return {broke: null, path};
 }

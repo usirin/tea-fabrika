@@ -5,6 +5,7 @@ import {GOOD, P1, P2, pid} from "./scripted.ts";
 
 const at = {version: 1, head: "c1"};
 const tests = testsOf(GOOD.answers);
+
 const run = (p1: "red" | "green", p2: "red" | "green") =>
 	readRun(
 		[P1, P2],
@@ -62,7 +63,11 @@ describe("the run on the base, read with Controls", () => {
 
 	it("counts a write as done only when the read shows every fact, at the same version and commit", () => {
 		const done = run("red", "green");
-		if (!done.read) throw new Error("read");
+
+		if (!done.read) {
+			throw new Error("read");
+		}
+
 		expect(shows(done.checked, done.checked)).toBe(true);
 		expect(shows(done.checked.slice(1), done.checked)).toBe(false);
 		expect(

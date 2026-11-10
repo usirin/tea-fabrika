@@ -55,6 +55,7 @@ export const msgOf =
 	(at: {readonly ticket: string; readonly round: number; readonly run: number}) =>
 	(drafted: BuildDrafted): BuildMsg => {
 		const ran = ranOf(drafted);
+
 		switch (drafted.answer) {
 			case "built": {
 				const built = Schema.decodeUnknownOption(HeldBuilt)(drafted.built);

@@ -62,6 +62,7 @@ export const NO_RULES = [
 
 export type NoRule = (typeof NO_RULES)[number];
 export type NoRuleId = NoRule["id"];
+
 /** Every no rule's id, in the bar's order. A test holds it to `NO_RULES`. */
 export const NO_RULE_IDS = [
 	"already_fixed",

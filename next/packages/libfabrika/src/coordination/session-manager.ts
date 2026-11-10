@@ -10,13 +10,16 @@ export const Writer = Schema.TaggedUnion({
 	agent: {key: Schema.String, for: Schema.String},
 });
 export type Writer = typeof Writer.Type;
+
 export interface Envelope<A> {
 	readonly id: InputId;
 	readonly by: Writer;
 	readonly arrivedAt: number;
 	readonly input: A;
 }
+
 const Span = Schema.Struct({traceId: Schema.String, spanId: Schema.String});
+
 export const Session = Schema.Struct({
 	by: Writer,
 	parent: ParentText,
@@ -24,10 +27,13 @@ export const Session = Schema.Struct({
 	span: Span,
 });
 export type Session = typeof Session.Type;
+
 export class SigningRefused extends Schema.TaggedError<SigningRefused>()("SigningRefused", {
 	why: Schema.Literals(["not_delivered", "spent", "person_only", "ended", "signal"]),
 }) {}
+
 export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {}) {}
+
 export class SignRequest extends Context.Service<SignRequest, {readonly id: string}>()(
 	"@kampus/libfabrika/SignRequest",
 ) {}
@@ -46,6 +52,7 @@ const InputRecord = Schema.Struct({
 });
 type InputRecord = typeof InputRecord.Type;
 const State = Schema.TaggedUnion({recorded: {}, delivered: {}});
+
 export class SavedInput extends Schema.Opaque<SavedInput>()(
 	Schema.Struct({
 		input: InputRecord,
@@ -58,13 +65,19 @@ export class SavedInput extends Schema.Opaque<SavedInput>()(
 		personOnly: boolean,
 	): Result.Result<Session, SigningRefused> {
 		const a = saved.input;
-		if (saved.state._tag !== "delivered" || a.process !== process)
+
+		if (saved.state._tag !== "delivered" || a.process !== process) {
 			return Result.fail(new SigningRefused({why: "not_delivered"}));
-		if (personOnly && (!a.personOnly || a.by._tag !== "person"))
+		}
+
+		if (personOnly && (!a.personOnly || a.by._tag !== "person")) {
 			return Result.fail(new SigningRefused({why: "person_only"}));
+		}
+
 		return Result.succeed(Session.make({by: a.by, parent: a.id, traceId: a.traceId, span: a.span}));
 	}
 }
+
 const encode = Schema.encodeSync(Schema.fromJsonString(SavedInput));
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(SavedInput));
 const encodeSession = Schema.encodeSync(Schema.fromJsonString(Session));
@@ -125,23 +138,40 @@ export class SessionManager extends Context.Service<
 					kind: string,
 				) {
 					const request = yield* SignRequest;
+
 					// A signal id is the brain's alone: the signer refuses it before it reads or writes,
 					// so no receipt binds one and the delivery's one receipt stays free.
-					if (inSignalSpace(request.id) || inRunnerSpace(request.id))
+					if (inSignalSpace(request.id) || inRunnerSpace(request.id)) {
 						return yield* new SigningRefused({why: "signal"});
+					}
+
 					const saved = yield* stored(() => {
 						ensure();
 						return load(parent);
 					});
-					if (saved !== null)
+
+					if (saved !== null) {
 						yield* membership(saved.input.client).pipe(Effect.provideContext(context));
+					}
+
 					return yield* stored(() =>
 						sql.transaction(() => {
-							if (ended(process)) return Result.fail(new SigningRefused({why: "ended"}));
+							if (ended(process)) {
+								return Result.fail(new SigningRefused({why: "ended"}));
+							}
+
 							const current = load(parent);
-							if (current === null) return Result.fail(new SigningRefused({why: "not_delivered"}));
+
+							if (current === null) {
+								return Result.fail(new SigningRefused({why: "not_delivered"}));
+							}
+
 							const session = SavedInput.sign(current, process, policy.fact(kind));
-							if (Result.isFailure(session)) return session;
+
+							if (Result.isFailure(session)) {
+								return session;
+							}
+
 							const [receipt] = sql.exec(
 								"SELECT * FROM door_receipts WHERE id=? OR (parent=? AND process=? AND kind=?)",
 								request.id,
@@ -149,6 +179,7 @@ export class SessionManager extends Context.Service<
 								process,
 								kind,
 							);
+
 							if (receipt !== undefined) {
 								return receipt.id === request.id &&
 									receipt.parent === parent &&
@@ -157,6 +188,7 @@ export class SessionManager extends Context.Service<
 									? Result.succeed(decodeSession(receipt.session))
 									: Result.fail(new SigningRefused({why: "spent"}));
 							}
+
 							sql.exec(
 								"INSERT INTO door_receipts (id,parent,process,kind,session) VALUES (?,?,?,?,?)",
 								request.id,
@@ -195,7 +227,11 @@ export class SessionManager extends Context.Service<
 								).length > 0
 							);
 						});
-						if (!exists) return yield* new SigningRefused({why: "not_delivered"});
+
+						if (!exists) {
+							return yield* new SigningRefused({why: "not_delivered"});
+						}
+
 						return yield* signer(parent, process, kind).pipe(
 							Effect.provideService(SignRequest, {id}),
 						);
@@ -204,17 +240,23 @@ export class SessionManager extends Context.Service<
 						const result = yield* stored(() =>
 							sql.transaction(() => {
 								ensure();
-								if (ended(input.process)) return Result.fail(new SigningRefused({why: "ended"}));
+
+								if (ended(input.process)) {
+									return Result.fail(new SigningRefused({why: "ended"}));
+								}
+
 								const prior = load(input.id);
 								const saved = SavedInput.make({
 									input: {...input, personOnly: input.personOnly && policy.input(input.name)},
 									state: State.cases.recorded.make({}),
 								});
+
 								if (prior !== null) {
 									return JSON.stringify(prior.input) === JSON.stringify(saved.input)
 										? Result.succeed(undefined)
 										: Result.fail(new SigningRefused({why: "not_delivered"}));
 								}
+
 								sql.exec(
 									"INSERT INTO door_sessions (parent,saved) VALUES (?,?)",
 									input.id,
@@ -223,16 +265,26 @@ export class SessionManager extends Context.Service<
 								return Result.succeed(undefined);
 							}),
 						);
-						if (Result.isFailure(result)) return yield* result.failure;
+
+						if (Result.isFailure(result)) {
+							return yield* result.failure;
+						}
 					}),
 					delivered: Effect.fn("session.delivered")(function* (parent: string, process: string) {
 						const result = yield* stored(() =>
 							sql.transaction(() => {
 								ensure();
-								if (ended(process)) return Result.fail(new SigningRefused({why: "ended"}));
+
+								if (ended(process)) {
+									return Result.fail(new SigningRefused({why: "ended"}));
+								}
+
 								const saved = load(parent);
-								if (saved === null || saved.input.process !== process)
+
+								if (saved === null || saved.input.process !== process) {
 									return Result.fail(new SigningRefused({why: "not_delivered"}));
+								}
+
 								sql.exec(
 									"UPDATE door_sessions SET saved=? WHERE parent=?",
 									encode(SavedInput.make({...saved, state: State.cases.delivered.make({})})),
@@ -241,7 +293,10 @@ export class SessionManager extends Context.Service<
 								return Result.succeed(undefined);
 							}),
 						);
-						if (Result.isFailure(result)) return yield* result.failure;
+
+						if (Result.isFailure(result)) {
+							return yield* result.failure;
+						}
 					}),
 					end: Effect.fn("session.end")(function* (process: string) {
 						yield* stored(() =>

@@ -15,20 +15,25 @@ import {
 // The fold, row by row: scripted ACP updates in, the transcript out.
 
 const fold = (msgs: readonly TranscriptMsg[]) => replay(transcript, {msgs, ctx: undefined}).state;
+
 const seen = (...updates: SessionUpdate[]): TranscriptMsg => ({
 	type: "seen",
 	events: updates.map(seenOf),
 });
+
 const chunk = (text: string, messageId?: string): SessionUpdate => ({
 	sessionUpdate: "agent_message_chunk",
 	content: {type: "text", text},
 	...(messageId === undefined ? {} : {messageId}),
 });
+
 const OPEN: TranscriptMsg[] = [
 	{type: "opening", how: "new", earlier: 0},
 	{type: "opened", mode: "auto"},
 ];
+
 const turn = (n: number, prompt = `prompt ${n}`): TranscriptMsg => ({type: "turn", n, prompt});
+
 const ended = (n: number, stop: "end_turn" | "cancelled" = "end_turn"): TranscriptMsg => ({
 	type: "ended",
 	ended: {n, stop, usage: {input: 10, output: 2, cached: 0, total: 12}},

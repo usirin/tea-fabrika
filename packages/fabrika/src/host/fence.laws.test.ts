@@ -35,6 +35,7 @@ type Mod = {
 	readonly layerMemory: typeof realMemory.layerMemory;
 	readonly layerSqliteSync: typeof realSqlite.layerSqliteSync;
 };
+
 const real: Mod = {
 	Ledger: realLedger.Ledger,
 	layerMemory: realMemory.layerMemory,
@@ -42,11 +43,15 @@ const real: Mod = {
 };
 
 const madeDirs: string[] = [];
+
 afterAll(() => {
-	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
+	for (const d of madeDirs) {
+		rmSync(d, {recursive: true, force: true});
+	}
 });
 
 type File = "rules" | "memory" | "sqlite";
+
 const FILES: readonly string[] = [
 	"ledger",
 	"rules",
@@ -55,6 +60,7 @@ const FILES: readonly string[] = [
 	"sqlite-worker",
 	"memory",
 ];
+
 type Edit = readonly [File, string, string];
 
 /**
@@ -64,16 +70,27 @@ type Edit = readonly [File, string, string];
 async function plant(...edits: readonly Edit[]): Promise<Mod> {
 	const dir = mkdtempSync(join(import.meta.dirname, ".fence-laws-plant-"));
 	madeDirs.push(dir);
+
 	for (const f of FILES) {
 		let text = readFileSync(join(import.meta.dirname, `${f}.ts`), "utf8");
+
 		for (const [file, a, b] of edits) {
-			if (file !== f) continue;
+			if (file !== f) {
+				continue;
+			}
+
 			const count = text.split(a).length - 1;
-			if (count !== 1) throw new Error(`plant edit on ${f}: "${a}" found ${count} times, want 1`);
+
+			if (count !== 1) {
+				throw new Error(`plant edit on ${f}: "${a}" found ${count} times, want 1`);
+			}
+
 			text = text.replace(a, () => b);
 		}
+
 		writeFileSync(join(dir, `${f}.ts`), text);
 	}
+
 	const url = (f: string) => pathToFileURL(join(dir, `${f}.ts`)).href;
 	const ledger = (await import(/* @vite-ignore */ url("ledger"))) as typeof realLedger;
 	const memory = (await import(/* @vite-ignore */ url("memory"))) as typeof realMemory;
@@ -94,6 +111,7 @@ const sqlitePath = () => {
 	madeDirs.push(dir);
 	return join(dir, "ledger.sqlite");
 };
+
 /** The ledger, built with its defaults: its expiry grace and its alarm's tick are the real ones. */
 const layerOf = (impl: Impl, path: string): Layer.Layer<realLedger.Ledger> =>
 	impl.kind === "memory" ? impl.mod.layerMemory() : impl.mod.layerSqliteSync({path});
@@ -111,6 +129,7 @@ const TICK = 25;
 type Who = "newest" | "older";
 /** Where a write goes: the name's own streams (its state, deeper, the name itself), a sibling name, or another name's inbox. */
 type Where = "state" | "deeper" | "name" | "sibling" | "reply";
+
 type Act =
 	| {readonly do: "claim"}
 	| {readonly do: "renew"; readonly by: Who; readonly pick: number}
@@ -151,6 +170,7 @@ interface Step {
 	readonly expiries: readonly Row[];
 	readonly leaseAfter: Lease | null;
 }
+
 interface Run {
 	readonly steps: readonly Step[];
 	/** Each stream the run wrote, as it ends. */
@@ -160,9 +180,11 @@ interface Run {
 }
 
 const newestOf = (s: Step) => s.fences.at(-1) ?? null;
+
 const decodeFence = Schema.decodeUnknownOption(
 	Schema.fromJsonString(Schema.Struct({fence: Schema.Number})),
 );
+
 /** The fence a row's data names, or null: it names none. */
 const fenceIn = (row: Row): number | null =>
 	Option.match(decodeFence(row.data), {onNone: () => null, onSome: (d) => d.fence});
@@ -187,7 +209,11 @@ const runOn = (impl: Impl, path: string, acts: readonly Act[]): Promise<Run> =>
 				sibling: `${p}x`,
 				reply: `${p}-asker/inbox`,
 			};
-			for (const n of [p, `${p}x`, `${p}-asker`]) yield* l.register(n, "setup");
+
+			for (const n of [p, `${p}x`, `${p}-asker`]) {
+				yield* l.register(n, "setup");
+			}
+
 			const expiries = Effect.map(l.readStream(p), (rs) =>
 				rs.filter((r) => r.kind === "lease_expired"),
 			);
@@ -197,6 +223,7 @@ const runOn = (impl: Impl, path: string, acts: readonly Act[]): Promise<Run> =>
 			const sent: {readonly where: Where; readonly id: string}[] = [];
 			const landed = new Set<string>();
 			const steps: Step[] = [];
+
 			for (const act of acts) {
 				const at = yield* Clock.currentTimeMillis;
 				const newest = fences.at(-1) ?? null;
@@ -214,31 +241,54 @@ const runOn = (impl: Impl, path: string, acts: readonly Act[]): Promise<Run> =>
 					expiries: [],
 					leaseAfter: null,
 				};
+
 				if (act.do === "claim") {
 					const rev = (yield* l.readLast(p, 1))[0]?.rev ?? 0;
 					const r = yield* say(l.claim(p, `h${fences.length + 1}`, rev, TTL));
+
 					if (r.value !== null) {
 						fences.push(r.value.fence);
 						end = r.value.expiresAt;
 					}
+
 					steps.push({...base, word: r.word, value: r.value});
 				} else if (act.do === "renew") {
 					const fence = fenceFor(act.by, act.pick, fences);
-					if (fence === null) continue;
+
+					if (fence === null) {
+						continue;
+					}
+
 					const r = yield* say(l.renew(p, fence, TTL));
-					if (r.value !== null && fence === newest) end = r.value.expiresAt;
+
+					if (r.value !== null && fence === newest) {
+						end = r.value.expiresAt;
+					}
+
 					steps.push({...base, fence, word: r.word, value: r.value});
 				} else if (act.do === "write") {
 					const fence = fenceFor(act.by, act.pick, fences);
-					if (fence === null) continue;
+
+					if (fence === null) {
+						continue;
+					}
+
 					const earlier = act.again ? sent[act.pick % Math.max(1, sent.length)] : undefined;
 					const {where, id} = earlier ?? {where: act.to, id: `w${sent.length}`};
-					if (earlier === undefined) sent.push({where, id});
+
+					if (earlier === undefined) {
+						sent.push({where, id});
+					}
+
 					const stream = to[where];
 					const was = landed.has(`${stream} ${id}`);
 					const event = {kind: "note", writer: "h", data: {fence}, id};
 					const r = yield* say(l.append(stream, "any", event, fence));
-					if (r.word === "ok") landed.add(`${stream} ${id}`);
+
+					if (r.word === "ok") {
+						landed.add(`${stream} ${id}`);
+					}
+
 					steps.push({...base, fence, where, stream, landed: was, word: r.word, value: r.value});
 				} else {
 					const seen = (yield* expiries).length;
@@ -248,8 +298,13 @@ const runOn = (impl: Impl, path: string, acts: readonly Act[]): Promise<Run> =>
 					steps.push({...base, word: "", value: null, expiries: after, leaseAfter});
 				}
 			}
+
 			const rows = new Map<string, readonly Row[]>();
-			for (const stream of Object.values(to)) rows.set(stream, yield* l.readStream(stream));
+
+			for (const stream of Object.values(to)) {
+				rows.set(stream, yield* l.readStream(stream));
+			}
+
 			return {steps, rows, registry: yield* l.readStream(p)};
 		}).pipe(
 			Effect.provide(layerOf(impl, path)),
@@ -260,6 +315,7 @@ const runOn = (impl: Impl, path: string, acts: readonly Act[]): Promise<Run> =>
 
 const WAITS = [1, 500, TTL - 1, TTL, TTL + 1, TTL + GRACE, TTL + GRACE + 2 * TICK, 3 * TTL];
 const arbWho = fc.constantFrom<Who>("newest", "older");
+
 const arbAct: fc.Arbitrary<Act> = fc.oneof(
 	{arbitrary: fc.constant<Act>({do: "claim"}), weight: 2},
 	{
@@ -284,11 +340,14 @@ const arbAct: fc.Arbitrary<Act> = fc.oneof(
 		weight: 3,
 	},
 );
+
 /** A takeover: the clock moves past the lease's end, maybe past the alarm too, and a new host claims. */
 const arbTakeover = fc
 	.constantFrom(TTL, TTL + 1, TTL + GRACE, TTL + GRACE + 2 * TICK, 3 * TTL)
 	.map((ms): readonly Act[] => [{do: "wait", ms}, {do: "claim"}]);
+
 const arbRound = fc.array(arbAct, {maxLength: 6});
+
 /**
  * A run starts with a claim, so most acts have a fence to carry, and has up to two takeovers, so
  * older fences, their renews and their resends after a takeover come up often.
@@ -317,13 +376,17 @@ const assertLaw = async (law: Law, impl: Impl) => {
 	await fc.assert(
 		fc.asyncProperty(arbRun, async (acts) => {
 			const why = law.check(await runOn(impl, path, acts));
-			if (why !== null) throw new Error(why);
+
+			if (why !== null) {
+				throw new Error(why);
+			}
 		}),
 		OPTS,
 	);
 };
 
 const own: readonly Where[] = ["state", "deeper", "name"];
+
 /** When a step was done, against the lease's end the ledger gave. */
 const when = (s: Step) =>
 	s.end === null
@@ -331,6 +394,7 @@ const when = (s: Step) =>
 		: s.at < s.end
 			? `at ${s.at}, lease live to ${s.end}`
 			: `at ${s.at}, ${s.at - s.end} ms past the lease's end`;
+
 const shown = (s: Step) => `${s.where}${s.landed ? " (a resend)" : ""}`;
 
 /** The newest fence's write on its own streams or into another name's inbox: ok, or dup for a resend. */
@@ -338,12 +402,21 @@ const newestWrites =
 	(after: boolean) =>
 	(r: Run): string | null => {
 		for (const s of r.steps) {
-			if (s.act.do !== "write" || s.where === "sibling" || s.swept !== after) continue;
-			if (s.fence !== newestOf(s)) continue;
+			if (s.act.do !== "write" || s.where === "sibling" || s.swept !== after) {
+				continue;
+			}
+
+			if (s.fence !== newestOf(s)) {
+				continue;
+			}
+
 			const want = s.landed ? "dup" : "ok";
-			if (s.word !== want)
+
+			if (s.word !== want) {
 				return `a write to ${shown(s)} by the newest fence ${s.fence}, ${when(s)}${after ? ", after the alarm" : ""}: ${s.word}, wanted ${want}`;
+			}
 		}
+
 		return null;
 	};
 
@@ -364,14 +437,23 @@ const olderRefused: Law = {
 	name: "once a newer claim exists, an older fence is refused under p, and no fence of p writes px",
 	check: (r) => {
 		for (const s of r.steps) {
-			if (s.where === null) continue;
+			if (s.where === null) {
+				continue;
+			}
+
 			const sibling = s.where === "sibling";
-			if (!sibling && (!own.includes(s.where) || s.fence === newestOf(s))) continue;
-			if (s.word !== "fenced")
+
+			if (!sibling && (!own.includes(s.where) || s.fence === newestOf(s))) {
+				continue;
+			}
+
+			if (s.word !== "fenced") {
 				return sibling
 					? `a write to px by fence ${s.fence}, ${when(s)}: ${s.word}, wanted fenced`
 					: `a write to ${shown(s)} by the older fence ${s.fence} (newest ${newestOf(s)}), ${when(s)}: ${s.word}, wanted fenced`;
+			}
 		}
+
 		return null;
 	},
 };
@@ -381,10 +463,15 @@ const olderReplyRefused: Law = {
 	name: "a reply fenced on an older lease of the replier is refused",
 	check: (r) => {
 		for (const s of r.steps) {
-			if (s.where !== "reply" || s.fence === newestOf(s)) continue;
-			if (s.word !== "fenced")
+			if (s.where !== "reply" || s.fence === newestOf(s)) {
+				continue;
+			}
+
+			if (s.word !== "fenced") {
 				return `a reply${s.landed ? " (a resend)" : ""} by the older fence ${s.fence} (newest ${newestOf(s)}), ${when(s)}: ${s.word}, wanted fenced`;
+			}
 		}
+
 		return null;
 	},
 };
@@ -394,16 +481,30 @@ const claims: Law = {
 	name: "a claim past the lease's end takes it at once with a bigger fence, and a claim on a live lease is held",
 	check: (r) => {
 		for (const s of r.steps) {
-			if (s.act.do !== "claim") continue;
-			if (s.end !== null && s.at < s.end) {
-				if (s.word !== "held") return `a claim ${when(s)}: ${s.word}, wanted held`;
+			if (s.act.do !== "claim") {
 				continue;
 			}
-			if (s.word !== "ok") return `a claim ${when(s)}: ${s.word}, wanted ok`;
+
+			if (s.end !== null && s.at < s.end) {
+				if (s.word !== "held") {
+					return `a claim ${when(s)}: ${s.word}, wanted held`;
+				}
+
+				continue;
+			}
+
+			if (s.word !== "ok") {
+				return `a claim ${when(s)}: ${s.word}, wanted ok`;
+			}
+
 			const fence = (s.value as Claimed).fence;
 			const most = Math.max(0, ...s.fences);
-			if (fence <= most) return `a claim ${when(s)} got fence ${fence}, not bigger than ${most}`;
+
+			if (fence <= most) {
+				return `a claim ${when(s)} got fence ${fence}, not bigger than ${most}`;
+			}
 		}
+
 		return null;
 	},
 };
@@ -413,13 +514,21 @@ const newestRenews: Law = {
 	name: "a renew by the newest fence works whatever the time, while no newer claim exists",
 	check: (r) => {
 		for (const s of r.steps) {
-			if (s.act.do !== "renew" || s.fence !== newestOf(s)) continue;
-			if (s.word !== "ok")
+			if (s.act.do !== "renew" || s.fence !== newestOf(s)) {
+				continue;
+			}
+
+			if (s.word !== "ok") {
 				return `a renew by the newest fence ${s.fence}, ${when(s)}${s.swept ? ", after the alarm" : ""}: ${s.word}, wanted ok`;
+			}
+
 			const until = (s.value as {readonly expiresAt: number}).expiresAt;
-			if (until !== s.at + TTL)
+
+			if (until !== s.at + TTL) {
 				return `a renew at ${s.at} moved the end to ${until}, not ${s.at + TTL}`;
+			}
 		}
+
 		return null;
 	},
 };
@@ -429,10 +538,15 @@ const olderRenewLost: Law = {
 	name: "a renew by an older fence is lost",
 	check: (r) => {
 		for (const s of r.steps) {
-			if (s.act.do !== "renew" || s.fence === newestOf(s)) continue;
-			if (s.word !== "lost")
+			if (s.act.do !== "renew" || s.fence === newestOf(s)) {
+				continue;
+			}
+
+			if (s.word !== "lost") {
 				return `a renew by the older fence ${s.fence} (newest ${newestOf(s)}), ${when(s)}: ${s.word}, wanted lost`;
+			}
 		}
+
 		return null;
 	},
 };
@@ -446,34 +560,61 @@ const expiryJob: Law = {
 	name: "the alarm writes lease_expired once, 1 s after the lease's end, and removes the row",
 	check: (r) => {
 		let doneFor: number | null = null;
+
 		for (const s of r.steps) {
-			if (s.act.do !== "wait") continue;
+			if (s.act.do !== "wait") {
+				continue;
+			}
+
 			const from = s.at;
 			const to = s.at + s.act.ms;
 			const n = s.expiries.length;
+
 			for (const row of s.expiries) {
-				if (s.end === null) return `lease_expired at ${row.at} with no lease`;
-				if (fenceIn(row) !== newestOf(s))
+				if (s.end === null) {
+					return `lease_expired at ${row.at} with no lease`;
+				}
+
+				if (fenceIn(row) !== newestOf(s)) {
 					return `lease_expired for fence ${fenceIn(row)}; the newest is ${newestOf(s)}`;
-				if (row.at < s.end + GRACE)
+				}
+
+				if (row.at < s.end + GRACE) {
 					return `lease_expired at ${row.at}, before the end ${s.end} plus ${GRACE} ms`;
-				if (row.at > s.end + GRACE + TICK)
+				}
+
+				if (row.at > s.end + GRACE + TICK) {
 					return `lease_expired at ${row.at}, more than one alarm tick after ${s.end + GRACE}`;
+				}
 			}
-			if (s.end === null) continue;
+
+			if (s.end === null) {
+				continue;
+			}
+
 			const due = s.end + GRACE;
+
 			if (doneFor === s.end) {
-				if (n > 0) return `a second lease_expired for the lease that ended at ${s.end}`;
+				if (n > 0) {
+					return `a second lease_expired for the lease that ended at ${s.end}`;
+				}
 			} else if (from < due + TICK && to >= due + TICK && n !== 1) {
 				return `the lease ended at ${s.end}; by ${to} the alarm wrote ${n} lease_expired, wanted 1`;
 			}
-			if (n > 1) return `${n} lease_expired in one wait`;
+
+			if (n > 1) {
+				return `${n} lease_expired in one wait`;
+			}
+
 			if (n === 1) {
 				doneFor = s.end;
-				if (s.leaseAfter !== null)
+
+				if (s.leaseAfter !== null) {
 					return `after lease_expired at ${s.expiries[0]?.at} the lease row is still there (fence ${s.leaseAfter.fence})`;
+				}
 			}
 		}
+
 		return null;
 	},
 };
@@ -485,21 +626,32 @@ const expiryJob: Law = {
 const landsOnce: Law = {
 	name: "nothing lands twice across a drop and a takeover",
 	check: (r) => {
-		for (const s of r.steps)
-			if (s.landed && s.word !== "dup" && s.word !== "fenced")
+		for (const s of r.steps) {
+			if (s.landed && s.word !== "dup" && s.word !== "fenced") {
 				return `a resend to ${s.where} of an id that landed, by fence ${s.fence}, ${when(s)}: ${s.word}, wanted dup or fenced`;
+			}
+		}
+
 		const claimsAt = r.registry.filter((row) => row.kind === "claimed").map((row) => row.pos);
+
 		for (const [stream, rows] of r.rows) {
 			const ids = rows.flatMap((row) => (row.id === null ? [] : [row.id]));
 			const twice = ids.find((id, i) => ids.indexOf(id) !== i);
-			if (twice !== undefined) return `id ${twice} landed twice in ${stream}`;
+
+			if (twice !== undefined) {
+				return `id ${twice} landed twice in ${stream}`;
+			}
+
 			for (const row of rows) {
 				const f = fenceIn(row);
 				const next = f === null ? undefined : claimsAt.find((pos) => pos > f);
-				if (row.kind === "note" && next !== undefined && row.pos > next)
+
+				if (row.kind === "note" && next !== undefined && row.pos > next) {
 					return `a row of fence ${f} landed at ${row.pos} in ${stream}, after the newer claim at ${next}`;
+				}
 			}
 		}
+
 		return null;
 	},
 };
@@ -541,16 +693,21 @@ const implOf = (kind: (typeof IMPLS)[number], mod: Mod = real): Impl => ({kind, 
 const broken = async (impl: Impl): Promise<readonly string[]> => {
 	const before = fc.readConfigureGlobal();
 	fc.configureGlobal({...before, endOnFailure: true});
+
 	try {
 		const out: string[] = [];
-		for (const law of LAWS)
+
+		for (const law of LAWS) {
 			if (
 				await assertLaw(law, impl).then(
 					() => false,
 					() => true,
 				)
-			)
+			) {
 				out.push(law.name);
+			}
+		}
+
 		return out;
 	} finally {
 		fc.configureGlobal(before);
@@ -607,7 +764,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"rules",
-				'if (rules.reach === "inbox-ignores-fence" && isOpenInbox(db, rules, stream)) return true;',
+				'if (rules.reach === "inbox-ignores-fence" && isOpenInbox(db, rules, stream)) {\n\t\treturn true;\n\t}',
 				"if (isOpenInbox(db, rules, stream)) return true;",
 			]),
 	},
@@ -616,7 +773,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"memory",
-				"if (name === null) return false;\n\t\treturn stream === name",
+				"if (name === null) {\n\t\t\treturn false;\n\t\t}\n\n\t\treturn stream === name",
 				"if (name === null) return openInbox(stream);\n\t\treturn stream === name",
 			]),
 	},
@@ -670,7 +827,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 			plant(
 				[
 					"rules",
-					'if (fencedName(db, fence) !== name) return {ok: false, why: "lost"};',
+					'if (fencedName(db, fence) !== name) {\n\t\t\treturn {ok: false, why: "lost"};\n\t\t}',
 					'if (!db.all("SELECT 1 FROM names WHERE name = ? AND fence >= ?", name, fence)[0]) return {ok: false, why: "lost"};',
 				],
 				[
@@ -690,7 +847,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"memory",
-				'if (names.get(name)?.fence !== fence) return {ok: false, why: "lost"};',
+				'if (names.get(name)?.fence !== fence) {\n\t\t\treturn {ok: false, why: "lost"};\n\t\t}',
 				'if ((names.get(name)?.fence ?? 0) < fence) return {ok: false, why: "lost"};',
 			]),
 	},
@@ -752,7 +909,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 				],
 				[
 					"memory",
-					'if (names.get(name)?.fence !== fence) return {ok: false, why: "lost"};',
+					'if (names.get(name)?.fence !== fence) {\n\t\t\treturn {ok: false, why: "lost"};\n\t\t}',
 					'if (leases.get(name)?.fence !== fence) return {ok: false, why: "lost"};',
 				],
 			),
@@ -763,7 +920,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"rules",
-				"const repeat = seen(db, stream, id);\n\tif (repeat) return {ok: true, pos: num(repeat.pos), rev: num(repeat.rev), dup: true};\n\tconst data",
+				"const repeat = seen(db, stream, id);\n\n\tif (repeat) {\n\t\treturn {ok: true, pos: num(repeat.pos), rev: num(repeat.rev), dup: true};\n\t}\n\n\tconst data",
 				"const data",
 			]),
 	},
@@ -772,7 +929,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"memory",
-				"if (repeat) return {ok: true, pos: repeat.pos, rev: repeat.rev, dup: true};",
+				"if (repeat) {\n\t\t\treturn {ok: true, pos: repeat.pos, rev: repeat.rev, dup: true};\n\t\t}",
 				"",
 			]),
 	},
@@ -813,11 +970,14 @@ describe("the fence's laws (lane 18, rule B)", () => {
 			'db.all("SELECT stream AS name FROM leases WHERE fence = ?", fence)',
 		]);
 		const out: Record<string, string> = {};
-		for (const law of [...LAWS, ...BUGS.map(([l]) => l)])
+
+		for (const law of [...LAWS, ...BUGS.map(([l]) => l)]) {
 			out[law.name] = await assertLaw(law, implOf("sqlite", mod)).then(
 				() => "holds",
 				(e: unknown) => messageOf(e).replace(/\d+/g, "N"),
 			);
+		}
+
 		expect(out).toEqual({
 			...Object.fromEntries([...LAWS, newestFenceWrites].map((law) => [law.name, "holds"])),
 			[newestAfterAlarm.name]:

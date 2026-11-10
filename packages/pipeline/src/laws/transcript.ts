@@ -31,8 +31,10 @@ type Cmd = never;
 const transcriptUpdate = stepOf<Transcript, Msg, Cmd>(transcript);
 
 const seen = (event: Seen): Msg => ({type: "seen", events: [event]});
+
 const update = (status: ToolStatus): Msg =>
 	seen({kind: "tool_update", id: "t1", name: null, title: null, status});
+
 const ASKS = ["q1", "q2"] as const;
 
 export function transcriptWorld(): World<Transcript, Msg, Cmd> {
@@ -64,6 +66,7 @@ export function transcriptWorld(): World<Transcript, Msg, Cmd> {
 }
 
 const running = (status: ToolStatus) => status === "pending" || status === "in_progress";
+
 const answeredIn = (s: Transcript) =>
 	s.answered.allowed + s.answered.refused + s.answered.cancelled;
 
@@ -71,11 +74,17 @@ export function transcriptLaws<S extends Transcript>(): readonly Law<S, Msg, Cmd
 	return [
 		law<S, Msg, Cmd>("a finished tool call never runs again", ({prev, next}) => {
 			for (const tool of prev.tools) {
-				if (running(tool.status)) continue;
+				if (running(tool.status)) {
+					continue;
+				}
+
 				const now = next.tools.find((t) => t.id === tool.id);
-				if (now !== undefined && running(now.status))
+
+				if (now !== undefined && running(now.status)) {
 					return `${tool.id} was ${tool.status}, and is ${now.status} again`;
+				}
 			}
+
 			return null;
 		}),
 		watched<S, Msg, Cmd, number>(

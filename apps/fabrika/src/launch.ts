@@ -20,7 +20,11 @@ export type Launch =
 /** The launch the environment asks for. An empty FABRIKA_HOME is no home, as before. */
 export const launchOf = (env: Readonly<Record<string, string | undefined>>): Launch => {
 	const home = env.FABRIKA_HOME;
-	if (home === undefined || home === "") return {kind: "owner"};
+
+	if (home === undefined || home === "") {
+		return {kind: "owner"};
+	}
+
 	return env.FABRIKA_FOREGROUND === "1" ? {kind: "foreground", home} : {kind: "quiet", home};
 };
 

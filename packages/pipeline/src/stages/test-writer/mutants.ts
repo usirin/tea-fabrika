@@ -51,14 +51,24 @@ export const answeredProblems: Check<Answered, MutantsBrief> = (answered, brief)
 	const count = new Map<string, number>();
 	const each = answered.answers.flatMap((a) => {
 		count.set(a.mutant, (count.get(a.mutant) ?? 0) + 1);
-		if (!asked.has(a.mutant)) return [`${a.mutant} is not a mutant that survived.`];
-		if (a.answer === "test" && !paths.has(a.file))
+
+		if (!asked.has(a.mutant)) {
+			return [`${a.mutant} is not a mutant that survived.`];
+		}
+
+		if (a.answer === "test" && !paths.has(a.file)) {
 			return [`${a.mutant}'s test is in \`${a.file}\`, which is not among the files you wrote.`];
+		}
+
 		return [];
 	});
 	const once = brief.survived.flatMap((m) => {
 		const n = count.get(m.mutant) ?? 0;
-		if (n === 0) return [`${m.mutant} has no answer. Kill it with a test, or say why none can.`];
+
+		if (n === 0) {
+			return [`${m.mutant} has no answer. Kill it with a test, or say why none can.`];
+		}
+
 		return n > 1 ? [`${m.mutant} has ${n} answers. Give it one.`] : [];
 	});
 	return [...fileProblems(answered.files, brief), ...each, ...once];
@@ -127,6 +137,7 @@ const mutants = outcomesOf({
 	/** `not_killed`: a new test missed its mutant, or failed on the original. `run_failed`: a run could not run. */
 	stuck: ["not_killed", "run_failed"],
 });
+
 export const MutantsOutcome = mutants.schema;
 export type MutantsOutcome = typeof MutantsOutcome.Type;
 /** Every name the mutants job can end with, as the other stages export theirs. */
@@ -143,8 +154,12 @@ export function startKills(
 ): readonly [Killing, readonly KillCmd[]] {
 	const children: Record<string, Controlling<KillCmd>> = {};
 	const cmds: KillCmd[] = [];
+
 	for (const a of answers) {
-		if (a.answer !== "test") continue;
+		if (a.answer !== "test") {
+			continue;
+		}
+
 		const on = {commit, file: a.file, test: a.test};
 		const [child, asked] = kills.start(a.mutant, {
 			bad: {...on, mutant: a.mutant},
@@ -153,13 +168,18 @@ export function startKills(
 		children[a.mutant] = child;
 		cmds.push(...asked);
 	}
+
 	return [children, cmds];
 }
 
 /** One run came back: step the child it is for. An answer for no child changes nothing. */
 export function killRan(killing: Killing, cmd: KillCmd, result: Result | null): Killing {
 	const child = killing[cmd.key];
-	if (child === undefined) return killing;
+
+	if (child === undefined) {
+		return killing;
+	}
+
 	const next = result === null ? kills.failed(child, cmd.side) : kills.ran(child, cmd.side, result);
 	return {...killing, [cmd.key]: next};
 }
@@ -170,12 +190,23 @@ export function outcomeOf(
 	killing: Killing,
 ): MutantsOutcome | null {
 	const children = Object.values(killing);
-	if (children.some((c) => c.phase === "running")) return null;
-	if (children.some((c) => c.phase === "could_not_run")) return {kind: "stuck", why: "run_failed"};
-	if (children.some((c) => c.phase === "done" && c.answer.kind !== "ok"))
+
+	if (children.some((c) => c.phase === "running")) {
+		return null;
+	}
+
+	if (children.some((c) => c.phase === "could_not_run")) {
+		return {kind: "stuck", why: "run_failed"};
+	}
+
+	if (children.some((c) => c.phase === "done" && c.answer.kind !== "ok")) {
 		return {kind: "stuck", why: "not_killed"};
-	if (answers.some((a) => a.answer === "cannot"))
+	}
+
+	if (answers.some((a) => a.answer === "cannot")) {
 		return {kind: "ask", who: "owner", for: "disable"};
+	}
+
 	const findings = answers.flatMap((a) => (a.answer === "noise" ? [findingOf(a)] : []));
 	return {kind: "done", part: false, findings};
 }

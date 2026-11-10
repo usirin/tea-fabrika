@@ -146,13 +146,25 @@ export const ledgerPlans = Layer.effect(
 			open: (ticket) =>
 				Effect.gen(function* () {
 					const id = readTicketId(ticket.url);
-					if (id === null) return yield* Effect.fail({_tag: "unknown" as const});
+
+					if (id === null) {
+						return yield* Effect.fail({_tag: "unknown" as const});
+					}
+
 					const state = foldLedger(yield* readFacts);
 					const out: OpenPlan[] = [];
+
 					for (const [plan, track] of state.plans) {
-						if (track.closed !== null || repoOfId(plan) !== repoOfId(id)) continue;
+						if (track.closed !== null || repoOfId(plan) !== repoOfId(id)) {
+							continue;
+						}
+
 						const data = track.approved?.data ?? track.versions.at(-1)?.data;
-						if (data === undefined) continue;
+
+						if (data === undefined) {
+							continue;
+						}
+
 						out.push({
 							number: numberOfId(plan),
 							tickets: track.tickets.map(numberOfId),
@@ -160,6 +172,7 @@ export const ledgerPlans = Layer.effect(
 							approved: track.approved !== null,
 						});
 					}
+
 					return out;
 				}).pipe(Effect.provideService(Ledger, ledger)),
 		});
@@ -174,6 +187,7 @@ query($owner: String!, $name: String!, $number: Int!) {
     issue(number: $number) { state title body }
   }
 }`;
+
 const TicketAnswer = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -197,6 +211,7 @@ query($owner: String!, $name: String!) {
     }
   }
 }`;
+
 const ListAnswer = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -223,7 +238,11 @@ const SORT_MARK = /<!-- fabrika-key: sort:[^#]+#comment:/;
  */
 export const reasonIn = (comments: readonly string[]): string | null => {
 	const said = comments.findLast((c) => SORT_MARK.test(c));
-	if (said === undefined) return null;
+
+	if (said === undefined) {
+		return null;
+	}
+
 	const first = said.split("\n")[0]?.trim() ?? "";
 	return /^(No|Duplicate)\b/.test(first) ? first : null;
 };
@@ -234,7 +253,11 @@ export const githubSortHost = (gh: Gh) =>
 		ticket: (url) =>
 			Effect.gen(function* () {
 				const at = ticketOf(url);
-				if (at === null) return yield* Effect.fail({_tag: "unknown" as const});
+
+				if (at === null) {
+					return yield* Effect.fail({_tag: "unknown" as const});
+				}
+
 				const {issue} = (yield* ask(gh, TicketAnswer, TICKET, {
 					owner: at.owner,
 					name: at.name,
@@ -251,7 +274,11 @@ export const githubSortHost = (gh: Gh) =>
 		earlier: (ticket) =>
 			Effect.gen(function* () {
 				const at = ticketOf(ticket.url);
-				if (at === null) return yield* Effect.fail({_tag: "unknown" as const});
+
+				if (at === null) {
+					return yield* Effect.fail({_tag: "unknown" as const});
+				}
+
 				const nodes = (yield* ask(gh, ListAnswer, LIST, {owner: at.owner, name: at.name})).data
 					.repository.issues.nodes;
 				return nodes

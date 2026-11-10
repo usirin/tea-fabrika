@@ -18,6 +18,7 @@ export const NAMESPACES = [
 	"review-ui",
 	"governance",
 ] as const;
+
 export type Namespace = (typeof NAMESPACES)[number];
 
 /** The first line of a verdict. */
@@ -39,7 +40,11 @@ const MARKER = new RegExp(
 /** A marker line, or `null` when the line is not one. */
 export function parseMarker(line: string): Marker | null {
 	const m = MARKER.exec(line.trim());
-	if (m === null) return null;
+
+	if (m === null) {
+		return null;
+	}
+
 	const [, namespace, polarity, head, base, tip, clause] = m;
 	return {
 		namespace: namespace as Namespace,
@@ -71,24 +76,42 @@ const SUPERSEDED = /^## Superseded verdict(?:\s+[—-]+\s*(\S+))?\s*$/;
 export function verdictsIn(comment: string): readonly Verdict[] {
 	const lines = comment.replace(/\r\n/g, "\n").split("\n");
 	const first = parseMarker(lines[0] ?? "");
-	if (first === null) return [];
+
+	if (first === null) {
+		return [];
+	}
+
 	// Each part: where its marker line is, and the heading that retired it.
 	const parts: {at: number; marker: Marker; retiredOn: string | null; superseded: boolean}[] = [
 		{at: 0, marker: first, retiredOn: null, superseded: false},
 	];
 	const cuts: number[] = [];
+
 	for (let i = 1; i < lines.length; i++) {
 		const heading = SUPERSEDED.exec(lines[i] as string);
-		if (heading === null) continue;
+
+		if (heading === null) {
+			continue;
+		}
+
 		// The retired verdict's marker is the first line with text under the heading.
 		let j = i + 1;
-		while (j < lines.length && (lines[j] as string).trim() === "") j++;
+
+		while (j < lines.length && (lines[j] as string).trim() === "") {
+			j++;
+		}
+
 		const marker = parseMarker(lines[j] ?? "");
-		if (marker === null) continue;
+
+		if (marker === null) {
+			continue;
+		}
+
 		cuts.push(i);
 		parts.push({at: j, marker, retiredOn: heading[1] ?? null, superseded: true});
 		i = j;
 	}
+
 	return parts.map((part, index) => {
 		const end = cuts[index] ?? lines.length;
 		const body = lines
@@ -140,6 +163,7 @@ export function postedIn(
 	versions: readonly CommentVersion[] | null,
 ): readonly Posted[] {
 	const base = {commentId: comment.id, url: comment.url};
+
 	if (versions !== null && versions.length > 0) {
 		return versions.flatMap((version) => {
 			const [standing] = verdictsIn(version.body);
@@ -148,15 +172,23 @@ export function postedIn(
 				: [{...base, marker: standing.marker, body: standing.body, at: version.at}];
 		});
 	}
+
 	const verdicts = verdictsIn(comment.body);
 	const [standing] = verdicts;
-	if (standing === undefined) return [];
+
+	if (standing === undefined) {
+		return [];
+	}
+
 	const out: Posted[] = [
 		{...base, marker: standing.marker, body: standing.body, at: comment.editedAt ?? comment.at},
 	];
 	const oldest = verdicts.at(-1);
-	if (verdicts.length > 1 && oldest !== undefined)
+
+	if (verdicts.length > 1 && oldest !== undefined) {
 		out.push({...base, marker: oldest.marker, body: oldest.body, at: comment.at});
+	}
+
 	return out;
 }
 
@@ -174,11 +206,19 @@ export function verdictsBetween(
 	slack = 2 * 60_000,
 ): readonly Posted[] {
 	const last = new Map<number, Posted>();
+
 	for (const p of posted) {
-		if (p.at <= since || p.at > until + slack) continue;
+		if (p.at <= since || p.at > until + slack) {
+			continue;
+		}
+
 		const seen = last.get(p.commentId);
-		if (seen === undefined || p.at >= seen.at) last.set(p.commentId, p);
+
+		if (seen === undefined || p.at >= seen.at) {
+			last.set(p.commentId, p);
+		}
 	}
+
 	return [...last.values()].sort((a, b) => a.at - b.at);
 }
 
@@ -206,23 +246,35 @@ interface Section {
 function sectionsOf(body: string): Section[] {
 	const out: {level: number; title: string; lines: string[]}[] = [{level: 0, title: "", lines: []}];
 	let fenced = false;
+
 	for (const line of body.replace(/\r\n/g, "\n").split("\n")) {
-		if (/^\s*```/.test(line)) fenced = !fenced;
+		if (/^\s*```/.test(line)) {
+			fenced = !fenced;
+		}
+
 		const heading = fenced ? null : /^(#{2,4})\s+(.*\S)\s*$/.exec(line);
-		if (heading === null) (out.at(-1) as {lines: string[]}).lines.push(line);
-		else out.push({level: (heading[1] as string).length, title: heading[2] as string, lines: []});
+
+		if (heading === null) {
+			(out.at(-1) as {lines: string[]}).lines.push(line);
+		} else {
+			out.push({level: (heading[1] as string).length, title: heading[2] as string, lines: []});
+		}
 	}
+
 	return out;
 }
 
 /** The reviewer saying a point does not block: a note, a nit, or a thing filed for later. Read on a heading or an item's opening words. */
 const SOFT =
 	/non[- ]?blocking|not[- ]blocking|not a blocker|do(?:es)? not block|doesn't block|not (?:a |part of (?:the|this) )?(?:finding|fail)|\bno finding\b|\bnotes?\b|\bnoted\b|\bnits?\b|\bcraft\b|\badvisory\b|\bobservations?\b|filed separately|\bout of scope\b|\bnot graded\b|for the record/i;
+
 /** A heading that opens the reviewer's findings. */
 const FINDING_TITLE =
 	/\bfindings?\b|\bblock(?:er|ers|ing|s)?\b|\bwhy\b.*\bfails?\b|\bthe (?:defect|gap|miss|problem|contradiction)\b|\bwhat (?:fails|is wrong|is missing|blocks)\b/i;
+
 /** A heading that opens a list of findings, not one. */
 const PLURAL = /\bfindings\b|\bblockers\b|\bdefects\b|\bgaps\b|\bproblems\b/i;
+
 /** A heading about an earlier round's findings, or the fix: not a finding of this verdict. */
 const NOT_OURS =
 	/round[- ]\d+(?:'s)? findings?|findings? (?:from|of) round|earlier findings?|prior findings?|\brepair\b|\bremedy\b|\bfix\b|what i (?:read|checked|ran)/i;
@@ -237,6 +289,7 @@ const plain = (text: string) =>
 		.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
 		.replace(/\s+/g, " ")
 		.trim();
+
 const titleOf = (text: string) => {
 	const first = plain(text.split("\n").find((line) => line.trim() !== "") ?? "");
 	return first.length > 200 ? `${first.slice(0, 197)}...` : first;
@@ -247,16 +300,26 @@ function itemsOf(lines: readonly string[]): string[] {
 	const items: string[][] = [];
 	let fenced = false;
 	let preamble: string[] = [];
+
 	for (const line of lines) {
-		if (/^\s*```/.test(line)) fenced = !fenced;
-		if (!fenced && ITEM.test(line)) items.push([line]);
-		else if (items.length > 0) (items.at(-1) as string[]).push(line);
-		else preamble.push(line);
+		if (/^\s*```/.test(line)) {
+			fenced = !fenced;
+		}
+
+		if (!fenced && ITEM.test(line)) {
+			items.push([line]);
+		} else if (items.length > 0) {
+			(items.at(-1) as string[]).push(line);
+		} else {
+			preamble.push(line);
+		}
 	}
+
 	if (items.length === 0) {
 		preamble = preamble.join("\n").trim() === "" ? [] : preamble;
 		return preamble.length === 0 ? [] : [preamble.join("\n").trim()];
 	}
+
 	return items.map((item) => item.join("\n").trim());
 }
 
@@ -277,16 +340,33 @@ export function findingsIn(body: string): readonly FindingText[] {
 	// and a list inside it is that finding's reasons. Where a verdict has both, the list is the fuller account.
 	const listed = sections.some((s) => ours(s) && PLURAL.test(s.title));
 	const out: FindingText[] = [];
+
 	for (let i = 0; i < sections.length; i++) {
 		const section = sections[i] as Section;
-		if (!ours(section)) continue;
+
+		if (!ours(section)) {
+			continue;
+		}
+
 		const plural = PLURAL.test(section.title);
-		if (listed && !plural) continue;
+
+		if (listed && !plural) {
+			continue;
+		}
+
 		const soft = SOFT.test(section.title);
 		const children: Section[] = [];
-		for (let j = i + 1; j < sections.length && (sections[j] as Section).level > section.level; j++)
+
+		for (
+			let j = i + 1;
+			j < sections.length && (sections[j] as Section).level > section.level;
+			j++
+		) {
 			children.push(sections[j] as Section);
+		}
+
 		const own = itemsOf(section.lines);
+
 		if (!plural) {
 			// The whole section, its deeper headings included, is one finding.
 			const text = [
@@ -307,10 +387,14 @@ export function findingsIn(body: string): readonly FindingText[] {
 			i += children.length;
 			continue;
 		}
+
 		// Deeper headings under a plural heading are its findings, one each.
 		if (children.length > 0 && own.length <= 1) {
 			for (const child of children) {
-				if (NOT_OURS.test(child.title)) continue;
+				if (NOT_OURS.test(child.title)) {
+					continue;
+				}
+
 				const text = `${child.title}\n${child.lines.join("\n").trim()}`;
 				out.push({
 					title: plain(child.title),
@@ -319,13 +403,17 @@ export function findingsIn(body: string): readonly FindingText[] {
 					from: "section",
 				});
 			}
+
 			i += children.length;
 			continue;
 		}
+
 		for (const item of own) {
 			// "None." under a findings heading is the reviewer saying there are none.
-			if (own.length === 1 && /^(?:none|nothing|no (?:new )?findings?)\b/i.test(plain(item)))
+			if (own.length === 1 && /^(?:none|nothing|no (?:new )?findings?)\b/i.test(plain(item))) {
 				continue;
+			}
+
 			const lead = item.slice(0, 110);
 			out.push({
 				title: titleOf(item),
@@ -335,36 +423,53 @@ export function findingsIn(body: string): readonly FindingText[] {
 			});
 		}
 	}
-	if (out.length > 0) return out;
+
+	if (out.length > 0) {
+		return out;
+	}
 
 	// No findings section: the failing rows of a criteria table, or `[FAIL]` list items.
 	let fenced = false;
+
 	for (const line of body.replace(/\r\n/g, "\n").split("\n")) {
-		if (/^\s*```/.test(line)) fenced = !fenced;
-		if (fenced) continue;
+		if (/^\s*```/.test(line)) {
+			fenced = !fenced;
+		}
+
+		if (fenced) {
+			continue;
+		}
+
 		const row =
 			/^\s*\|/.test(line) && /\|\s*(?:\*\*)?\[?(?:FAIL|unmet|not met)\]?(?:\*\*)?\s*\|/i.test(line);
 		const item =
 			/^\s*(?:[-*]|\d+[.)])\s/.test(line) && /(?:\[FAIL\]|\*\*FAIL\*\*|—\s*FAIL\b)/.test(line);
-		if (row || item)
+
+		if (row || item) {
 			out.push({
 				title: titleOf(line.replace(/\|/g, " ")),
 				text: line.trim(),
 				blocking: true,
 				from: "row",
 			});
+		}
 	}
-	if (out.length > 0) return out;
+
+	if (out.length > 0) {
+		return out;
+	}
 
 	// Nothing listed: paragraphs that open with a bold FAIL.
 	for (const paragraph of body.replace(/\r\n/g, "\n").split(/\n\s*\n/)) {
-		if (/^\s*\*\*\s*(?:FAIL|FINDING|Blocking)\b/i.test(paragraph))
+		if (/^\s*\*\*\s*(?:FAIL|FINDING|Blocking)\b/i.test(paragraph)) {
 			out.push({
 				title: titleOf(paragraph),
 				text: paragraph.trim(),
 				blocking: true,
 				from: "paragraph",
 			});
+		}
 	}
+
 	return out;
 }

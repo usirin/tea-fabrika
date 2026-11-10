@@ -77,7 +77,9 @@ export const dated = (
 ): Client => {
 	const at = c.pending.findIndex((p) => p.n === n);
 	const slot = c.pending[at];
-	if (slot === undefined || slot._tag !== "dating") return c;
+
+	if (slot === undefined || slot._tag !== "dating") {return c;}
+
 	const ready = Pending.cases.ready.make({
 		n: slot.n,
 		pid: slot.pid,
@@ -103,7 +105,8 @@ export type Reply = typeof Reply.Type;
 
 /** Settles `letter` only on its own terminal answer. Every other answer keeps it for a resend. */
 export const reply = (c: Client, letter: string, answer: Pick<Reply, "_tag">): Client => {
-	if (answer._tag !== "accepted" && answer._tag !== "refused") return c;
+	if (answer._tag !== "accepted" && answer._tag !== "refused") {return c;}
+
 	const kept = c.pending.filter((p) => p._tag !== "ready" || p.letter !== letter);
 	return kept.length === c.pending.length ? c : {...c, pending: kept};
 };
@@ -117,10 +120,13 @@ export const outbox = (c: Client): ReadonlyArray<Ready> => c.pending.filter(isRe
 /** The letters that may go now: ready ones ahead of the first slot still waiting for its time. */
 export const sendable = (c: Client): ReadonlyArray<Ready> => {
 	const out: Array<Ready> = [];
+
 	for (const p of c.pending) {
-		if (!isReady(p)) break;
+		if (!isReady(p)) {break;}
+
 		out.push(p);
 	}
+
 	return out;
 };
 
@@ -130,12 +136,14 @@ export const read = (c: Client, rev: number): Client => (rev > c.seen ? {...c, s
 // --- Checked views ------------------------------------------------------------------------------
 
 const Whole = Schema.Struct({type: Schema.Literal("whole"), rev: Schema.Int, view: Schema.Unknown});
+
 const Step = Schema.Struct({
 	type: Schema.Literal("patch"),
 	base: Schema.Int,
 	rev: Schema.Int,
 	patch: Schema.Unknown,
 });
+
 const decodeNote = Schema.decodeUnknownResult(Schema.Union([Whole, Step]));
 
 /** Runs the program's own decoder on a candidate, so a throw is a refusal and never escapes. */
@@ -165,18 +173,26 @@ export const notice = (
 	const same = {client: c, ask: false};
 	const ask = {client: c, ask: true};
 	const decoded = decodeNote(note);
-	if (Result.isFailure(decoded)) return same;
+
+	if (Result.isFailure(decoded)) {return same;}
+
 	const n = decoded.success;
+
 	if (n.type === "whole") {
 		const view = check(decode, n.view);
 		return Result.isSuccess(view)
 			? {client: install(c, pid, {rev: n.rev, view: view.success}), ask: false}
 			: ask;
 	}
+
 	const shown = c.views[pid];
-	if (shown === undefined) return ask;
-	if (n.rev <= shown.rev) return same;
-	if (n.base !== shown.rev || n.rev !== shown.rev + 1) return ask;
+
+	if (shown === undefined) {return ask;}
+
+	if (n.rev <= shown.rev) {return same;}
+
+	if (n.base !== shown.rev || n.rev !== shown.rev + 1) {return ask;}
+
 	const next = Result.flatMap(applyPatch(shown.view, n.patch), (candidate) =>
 		check(decode, candidate),
 	);
@@ -188,6 +204,7 @@ export const notice = (
 // --- Resolving the fixed names ------------------------------------------------------------------
 
 const decodeEntry = Schema.decodeUnknownOption(Entry);
+
 const decodeLife = Schema.decodeUnknownOption(
 	Schema.Struct({process: Schema.String, name: Schema.optionalKey(Schema.String)}),
 );
@@ -203,15 +220,21 @@ export const resolveName = (
 	by: (writer: string) => boolean,
 ): string | null => {
 	let live: string | null = null;
+
 	for (const raw of entries) {
 		const entry = Option.getOrNull(decodeEntry(raw));
-		if (entry === null || !by(entry.by)) continue;
+
+		if (entry === null || !by(entry.by)) {continue;}
+
 		const life = Option.getOrNull(decodeLife(entry.body));
-		if (life === null) continue;
+
+		if (life === null) {continue;}
+
 		if (entry._tag === "started" || entry._tag === "restarted") {
-			if (life.name === undefined || life.name === name) live = life.process;
-		} else if (entry._tag === "exited" && life.process === live) live = null;
+			if (life.name === undefined || life.name === name) {live = life.process;}
+		} else if (entry._tag === "exited" && life.process === live) {live = null;}
 	}
+
 	return live;
 };
 
@@ -331,7 +354,8 @@ export const ClientRow = Schema.Struct({
 export type ClientRow = typeof ClientRow.Type;
 
 const named = (u: unknown): string | null => {
-	if (typeof u !== "object" || u === null) return null;
+	if (typeof u !== "object" || u === null) {return null;}
+
 	const name = "name" in u ? u.name : "_tag" in u ? u._tag : null;
 	return typeof name === "string" ? name : null;
 };

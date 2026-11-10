@@ -10,17 +10,20 @@ const key = (name: string, k = name): Key => ({
 	name,
 	press: {key: k, code: "", ctrl: name.startsWith("<c-"), alt: false, meta: false, shift: false},
 });
+
 const ctrlB = key("<c-b>", "b");
 
 /** Fold Msgs through the hold, from a fresh one; answers each step's Cmds and the hold at the end. */
 const fold = (msgs: readonly HoldMsg[]) => {
 	let s: Hold = holdMachine.init(null, undefined)[0];
 	const steps: (readonly HoldCmd[])[] = [];
+
 	for (const msg of msgs) {
 		const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, s, msg);
 		s = next;
 		steps.push(cmds);
 	}
+
 	return {s, steps};
 };
 

@@ -23,6 +23,7 @@ const RUNNER = join(ROOT, "oxlint-plugins/stylelint.ts");
 const FIXTURES = join(import.meta.dirname, "css/fixtures");
 const WINDOW = "apps/fabrika/src/window/window.css";
 const TOKENS = "packages/fabrika-design/src/tokens.css";
+
 const RULES = [
 	{law: 21, name: "token-exists", lines: [1, 2, 3, 4]},
 	{
@@ -35,9 +36,13 @@ const RULES = [
 	{law: 25, name: "motion-under-guard", lines: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]},
 	{law: 26, name: "font-size-from-scale", lines: [1, 2, 3, 4, 5, 6, 7]},
 ] as const;
+
 const temps: string[] = [];
+
 afterAll(() => {
-	for (const path of temps) rmSync(path, {recursive: true, force: true});
+	for (const path of temps) {
+		rmSync(path, {recursive: true, force: true});
+	}
 });
 
 const temp = () => {
@@ -45,22 +50,26 @@ const temp = () => {
 	temps.push(path);
 	return path;
 };
+
 const write = (root: string, path: string, text: string) => {
 	const target = join(root, path);
 	mkdirSync(dirname(target), {recursive: true});
 	writeFileSync(target, text);
 	return target;
 };
+
 const rootConfig = async (): Promise<stylelint.Config> => {
 	assert(existsSync(CONFIG), "Today's lint has no root CSS config. PR 3 must install it.");
 	const module: {default: stylelint.Config} = await import(pathToFileURL(CONFIG).href);
 	return module.default;
 };
+
 const fixture = (side: "bad" | "good", name: string) => {
 	const file = join(FIXTURES, side, `${name}.css`);
 	assert(existsSync(file), `Law fixture deleted: ${relative(ROOT, file)}`);
 	return file;
 };
+
 const lint = async (file: string, codeFilename?: string) => {
 	await rootConfig();
 	const report = await stylelint.lint({
@@ -84,12 +93,14 @@ const lint = async (file: string, codeFilename?: string) => {
 describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 	it.each(RULES)("law $law: $name", async ({name, lines}) => {
 		let bad = fixture("bad", name);
+
 		// Plant this one under programs/, where a tile's tokens are forbidden.
 		if (name === "part-token-owner") {
 			const program = mkdtempSync(join(ROOT, "programs/.css-law-"));
 			temps.push(program);
 			bad = write(program, "fixtures/window.css", readFileSync(bad, "utf8"));
 		}
+
 		const warnings = await lint(bad);
 		const fires = warnings.filter((warning) => warning.rule === `fabrika/${name}`);
 		expect([...new Set(fires.map((warning) => warning.line))].sort((a, b) => a - b)).toEqual(lines);
@@ -207,23 +218,32 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 
 const settingsProblems = (config: stylelint.Config | undefined, base: stylelint.Config) => {
 	const problems: string[] = [];
+
 	for (const {name} of RULES) {
 		const rule = `fabrika/${name}`;
 		const setting = config?.rules?.[rule];
+
 		if (!Array.isArray(setting) || setting[0] !== true || setting[1]?.severity !== "error") {
 			problems.push(`${rule}: must be on at error`);
 		}
+
 		if (!Array.isArray(setting) || !Array.isArray(setting[1]?.known)) {
 			problems.push(`${rule}: known list is missing`);
 		}
+
 		if (!isDeepStrictEqual(setting, base.rules?.[rule])) {
 			problems.push(`${rule}: options were replaced`);
 		}
 	}
+
 	return problems;
 };
+
 const warningPaths = (value: unknown, path = "config"): string[] => {
-	if (value === null || typeof value !== "object") return [];
+	if (value === null || typeof value !== "object") {
+		return [];
+	}
+
 	return Object.entries(value).flatMap(([key, item]) => [
 		...((key === "severity" || key === "defaultSeverity") && item === "warning"
 			? [`${path}.${key}`]
@@ -231,6 +251,7 @@ const warningPaths = (value: unknown, path = "config"): string[] => {
 		...warningPaths(item, `${path}.${key}`),
 	]);
 };
+
 const configPlant = (body: string) => {
 	const root = temp();
 	const file = write(
@@ -256,10 +277,12 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
 		expect(tracked.status).toBe(0);
 		const files = tracked.stdout.split("\0").filter((path) => path.endsWith(".css"));
 		expect(files.length).toBeGreaterThan(0);
+
 		for (const file of files) {
 			const resolved = await stylelint.resolveConfig(join(ROOT, file), {configFile: CONFIG});
 			expect(settingsProblems(resolved, base), file).toEqual([]);
 		}
+
 		const plant = configPlant(
 			'export default {...base, overrides: [{files: ["**/*.css"], rules: {"fabrika/no-raw-color": [true]}}]};',
 		);
@@ -279,6 +302,7 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
 			settingsProblems(actual, base),
 			"All six rules must be registered at error before testing warning plants",
 		).toEqual([]);
+
 		for (const {name} of RULES) {
 			const rule = `fabrika/${name}`;
 			const plant = configPlant(
@@ -318,12 +342,14 @@ const runnerRepo = (knownRule?: string, known: unknown = []) => {
 		join(repo, "oxlint-plugins/node_modules"),
 		"dir",
 	);
+
 	for (const path of [
 		"packages/fabrika-design/src/token-names.json",
 		"packages/fabrika-design/tokens/parts.toml",
 	]) {
 		write(repo, path, readFileSync(join(ROOT, path), "utf8"));
 	}
+
 	write(
 		repo,
 		"stylelint.config.ts",
@@ -333,14 +359,19 @@ export default {...base, rules: Object.fromEntries(Object.entries(base.rules).ma
 	);
 	return repo;
 };
+
 const track = (repo: string, files: Record<string, string>) => {
-	for (const [path, contents] of Object.entries(files)) write(repo, path, contents);
+	for (const [path, contents] of Object.entries(files)) {
+		write(repo, path, contents);
+	}
+
 	const added = spawnSync("git", ["add", "--", ...Object.keys(files)], {
 		cwd: repo,
 		encoding: "utf8",
 	});
 	expect(added.status, added.stderr).toBe(0);
 };
+
 const run = (repo: string) => {
 	const result = spawnSync(process.execPath, ["oxlint-plugins/stylelint.ts"], {
 		cwd: repo,
@@ -437,7 +468,11 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 		});
 		const result = run(repo);
 		expect(result.status, result.output).toBe(0);
-		for (const {name} of RULES) expect(result.output).toContain(`fabrika/${name}`);
+
+		for (const {name} of RULES) {
+			expect(result.output).toContain(`fabrika/${name}`);
+		}
+
 		expect(result.output).toContain("fabrika/no-raw-color: 2 fires, 1 known entries");
 		expect(result.output).toContain("stylelint: 2 files, 0 blocking");
 	});
@@ -480,7 +515,11 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 		track(repo, {"experiments/plant/ignored.css": ".broken {\n"});
 		const result = run(repo);
 		expect(result.status).not.toBe(0);
-		for (const path of paths) expect(result.output).toContain(`${path}:1:`);
+
+		for (const path of paths) {
+			expect(result.output).toContain(`${path}:1:`);
+		}
+
 		expect(result.output).not.toContain("untracked.css");
 		expect(result.output).not.toContain("experiments/plant/ignored.css");
 	});
@@ -500,7 +539,10 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 		expect(result.status).toBe(1);
 		expect(result.output).toContain("broken.css");
 		expect(result.output).not.toContain("Unconfigured CSS rule");
-		for (const {name} of RULES) expect(result.output).toContain(`fabrika/${name}`);
+
+		for (const {name} of RULES) {
+			expect(result.output).toContain(`fabrika/${name}`);
+		}
 	});
 
 	it("law 30 fails if stylelint crashes before it can report", () => {

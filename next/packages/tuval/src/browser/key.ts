@@ -24,6 +24,7 @@ export class KeyError extends Schema.TaggedError<KeyError>()("KeyError", {
 	op: Schema.Literals(["open", "read", "write", "make", "sign"]),
 	error: ProgramClient.ErrorClass,
 }) {}
+
 const fail = (op: KeyError["op"]) => (error: unknown) =>
 	new KeyError({op, error: ProgramClient.errorClass(error)});
 
@@ -44,6 +45,7 @@ type Stored = {
 	readonly fingerprint: string;
 	readonly raw: string;
 };
+
 const isStored = (u: unknown): u is Stored =>
 	typeof u === "object" &&
 	u !== null &&
@@ -68,7 +70,7 @@ const request = <A>(op: KeyError["op"], make: () => IDBRequest<A>) =>
 const openDb = request("open", () => {
 	const open = indexedDB.open(DB, 1);
 	open.onupgradeneeded = () => {
-		if (!open.result.objectStoreNames.contains(STORE)) open.result.createObjectStore(STORE);
+		if (!open.result.objectStoreNames.contains(STORE)) {open.result.createObjectStore(STORE);}
 	};
 	return open;
 });
@@ -92,7 +94,8 @@ const atomically = <A>(
 			read.onsuccess = () => {
 				const decided = decide(read.result);
 				out = decided.value;
-				if ("put" in decided) store.put(decided.put, key);
+
+				if ("put" in decided) {store.put(decided.put, key);}
 			};
 			tx.oncomplete = () => resume(Effect.succeed(out as A));
 			tx.onerror = () => resume(Effect.fail(fail("write")(tx.error)));
@@ -119,7 +122,9 @@ const makeKey = Effect.gen(function* () {
 	const s = crypto.subtle;
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto makes a key through a Promise
 	const pair = yield* Effect.tryPromise({try: () => s.generateKey(ED, false, USES), catch: bad});
-	if (!("privateKey" in pair)) return yield* Effect.fail(bad(new TypeError("not a key pair")));
+
+	if (!("privateKey" in pair)) {return yield* Effect.fail(bad(new TypeError("not a key pair")));}
+
 	const pub = pair.publicKey;
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto exports the public half through a Promise
 	const out = yield* Effect.tryPromise({try: () => s.exportKey("raw", pub), catch: bad});
@@ -135,7 +140,9 @@ const makeKey = Effect.gen(function* () {
 
 const lineFor = (raw: string): Effect.Effect<KeyLine, KeyError> => {
 	const bytes = Base64Url.decode(raw);
-	if (bytes._tag === "Failure") return Effect.fail(new KeyError({op: "read", error: "DataError"}));
+
+	if (bytes._tag === "Failure") {return Effect.fail(new KeyError({op: "read", error: "DataError"}));}
+
 	const type = new TextEncoder().encode("ssh-ed25519");
 	const blob = new Uint8Array([...field(type), ...field(bytes.success)]);
 	return Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`).pipe(
@@ -175,8 +182,10 @@ export class WindowKey extends Context.Service<
 		const current = Effect.fn("client.key")(function* (rejected: string | null) {
 			const d = yield* opened;
 			const stored = yield* readKey(d);
+
 			if (isStored(stored) && stored.fingerprint !== rejected)
-				return yield* identity(stored, "reused");
+				{return yield* identity(stored, "reused");}
+
 			const candidate = yield* makeKey;
 			const chosen = yield* atomically<{
 				readonly stored: Stored;

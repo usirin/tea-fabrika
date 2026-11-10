@@ -200,7 +200,10 @@ interface Pressed {
 
 /** One key with no `<prefix>`, as `keyName` would name the press: `ctrl+a` is `<c-a>`. */
 const readPress = (spelled: string, mac: boolean): Result.Result<Pressed, string> => {
-	if (spelled === "") return Result.fail("an empty key: write one, such as ctrl+a");
+	if (spelled === "") {
+		return Result.fail("an empty key: write one, such as ctrl+a");
+	}
+
 	// `+` is a key too: `+`, or `ctrl++`.
 	const parts =
 		spelled === "+"
@@ -211,16 +214,28 @@ const readPress = (spelled: string, mac: boolean): Result.Result<Pressed, string
 	const base = parts.at(-1) ?? "";
 	const mods = new Set<string>();
 	let shift = false;
+
 	for (const word of parts.slice(0, -1)) {
 		const mod = MODIFIERS[word.toLowerCase()];
-		if (mod === undefined)
+
+		if (mod === undefined) {
 			return Result.fail(`${word} is not a modifier here: write ctrl, alt, cmd, mod or shift`);
-		if (mod === "shift") shift = true;
-		else mods.add(mod === "mod" ? (mac ? "m" : "c") : mod);
+		}
+
+		if (mod === "shift") {
+			shift = true;
+		} else {
+			mods.add(mod === "mod" ? (mac ? "m" : "c") : mod);
+		}
 	}
+
 	const char = base === "space" ? " " : [...base].length === 1 ? base : null;
 	const named = char === null ? NAMED[base.toLowerCase()] : undefined;
-	if (char === null && named === undefined) return Result.fail(`${base} is not a key`);
+
+	if (char === null && named === undefined) {
+		return Result.fail(`${base} is not a key`);
+	}
+
 	const key =
 		shift && char !== null && /^[a-z]$/.test(char) ? char.toUpperCase() : (char ?? named ?? "");
 	const name = keyName({key, ctrl: mods.has("c"), alt: mods.has("a"), meta: mods.has("m"), shift});
@@ -247,52 +262,84 @@ const BARE: ReadonlySet<string> = new Set([
 
 /** A key that is never ours to bind: the Mac's own, or Ctrl-C, which a tile's program owns. */
 const notOurs = (name: string, spelled: string): string | null => {
-	if (THE_MACS.has(name)) return `${spelled} is the system's, so the app never hears it`;
-	if (name === "<c-c>") return `${spelled} is the program's in a tile, so it cannot be bound`;
+	if (THE_MACS.has(name)) {
+		return `${spelled} is the system's, so the app never hears it`;
+	}
+
+	if (name === "<c-c>") {
+		return `${spelled} is the program's in a tile, so it cannot be bound`;
+	}
+
 	return null;
 };
 
 /** One key of a row: after the prefix (`<prefix>z`), or pressed alone (`cmd+d`). */
 const readKey = (spelled: string, mac: boolean): Result.Result<Key, string> => {
 	const word = /^<([^<>]*)>(.*)$/.exec(spelled);
+
 	if (word !== null) {
 		const [, name = "", rest = ""] = word;
-		if (name !== "prefix")
+
+		if (name !== "prefix") {
 			return Result.fail(`<${name}> is not a word here; did you mean <prefix>?`);
-		if (rest === "")
+		}
+
+		if (rest === "") {
 			return Result.fail(`${spelled} names no key after the prefix, such as <prefix>z`);
+		}
+
 		return Result.flatMap(readPress(rest, mac), (p) => {
 			const no = notOurs(p.name, rest);
-			if (no !== null) return Result.fail(no);
+
+			if (no !== null) {
+				return Result.fail(no);
+			}
+
 			// On a Mac the menu takes a Cmd key before the app sees it, prefix or not (keyOwner).
-			if (mac && /^<(?:[ca]-)*m-/.test(p.name))
+			if (mac && /^<(?:[ca]-)*m-/.test(p.name)) {
 				return Result.fail(
 					`${rest} after the prefix goes to the Mac's menu first, so it never reaches the app`,
 				);
+			}
+
 			return Result.succeed(after(p.name));
 		});
 	}
+
 	return Result.flatMap(readPress(spelled, mac), (p) => {
 		const no = notOurs(p.name, spelled);
-		if (no !== null) return Result.fail(no);
-		if (BARE.has(p.name))
+
+		if (no !== null) {
+			return Result.fail(no);
+		}
+
+		if (BARE.has(p.name)) {
 			return Result.fail(
 				`${spelled} pressed alone would stop it typing or moving in a tile: write <prefix>${spelled}, or add ctrl, alt or cmd`,
 			);
+		}
+
 		// A bare character pressed alone would stop typing in tsh (WCAG 2.1.4).
-		if (p.printable)
+		if (p.printable) {
 			return Result.fail(
 				`${spelled} pressed alone would stop typing in a tile: write <prefix>${spelled === " " ? "space" : spelled}, or add ctrl or cmd`,
 			);
+		}
+
 		return Result.succeed(alone(p.name));
 	});
 };
 
 /** The keys a row's value names: one key, or a list. */
 const spellings = (path: string, value: unknown): Result.Result<readonly string[], string> => {
-	if (typeof value === "string") return Result.succeed([value]);
-	if (Array.isArray(value) && value.every((v) => typeof v === "string"))
+	if (typeof value === "string") {
+		return Result.succeed([value]);
+	}
+
+	if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
 		return Result.succeed(value);
+	}
+
 	return Result.fail(`${path} takes a key or a list of keys, such as "<prefix>z"`);
 };
 
@@ -312,11 +359,17 @@ const isTable = (value: unknown): value is Readonly<Record<string, unknown>> =>
 /** Every value in a parsed table, by its dotted path: `tezgah.zoom`, `tezgah."split --to down"`. */
 const leaves = (table: Readonly<Record<string, unknown>>, above: readonly string[] = []) => {
 	const out: {path: readonly string[]; value: unknown}[] = [];
+
 	for (const [part, value] of Object.entries(table)) {
 		const path = [...above, part];
-		if (isTable(value) && Object.keys(value).length > 0) out.push(...leaves(value, path));
-		else out.push({path, value});
+
+		if (isTable(value) && Object.keys(value).length > 0) {
+			out.push(...leaves(value, path));
+		} else {
+			out.push({path, value});
+		}
 	}
+
 	return out;
 };
 
@@ -345,103 +398,167 @@ const assignments = (text: string): {rows: Assignment[]; sections: Section[]} =>
 	let section = sections[0] as Section;
 	let header = text.length;
 	let at = 0;
+
 	while (at < text.length) {
 		const start = at;
 		const newline = text.indexOf("\n", at);
 		const end = newline < 0 ? text.length : newline + 1;
 		const line = text.slice(start, end).trim();
+
 		if (line === "" || line.startsWith("#")) {
 			at = end;
 			continue;
 		}
+
 		if (line.startsWith("[")) {
 			header = Math.min(header, start);
 			const read = readToml(line);
 			let named = false;
+
 			if (Result.isSuccess(read)) {
 				let nested = read.success;
 				const parts: string[] = [];
+
 				while (Object.keys(nested).length === 1) {
 					const part = Object.keys(nested)[0];
-					if (part === undefined || !isTable(nested[part])) break;
+
+					if (part === undefined || !isTable(nested[part])) {
+						break;
+					}
+
 					parts.push(part);
 					nested = nested[part];
 				}
+
 				table = parts;
 				named = parts.length > 0 && !line.startsWith("[[");
 			}
+
 			// An array of tables or an unread header takes no new rows.
 			section = {path: named ? table : [], after: end};
-			if (named) sections.push(section);
+
+			if (named) {
+				sections.push(section);
+			}
+
 			at = end;
 			continue;
 		}
+
 		let quote = "";
 		let equal = start;
+
 		for (; equal < end; equal += 1) {
 			const c = text[equal];
+
 			if (quote === '"' && c === "\\") {
 				equal += 1;
 				continue;
 			}
+
 			if (quote !== "") {
-				if (c === quote) quote = "";
+				if (c === quote) {
+					quote = "";
+				}
+
 				continue;
 			}
+
 			if (c === '"' || c === "'") {
 				quote = c;
 				continue;
 			}
-			if (c === "=") break;
+
+			if (c === "=") {
+				break;
+			}
 		}
+
 		if (equal === end) {
 			at = end;
 			continue;
 		}
+
 		const key = readToml(`${text.slice(start, equal)} = 0`);
+
 		if (Result.isFailure(key)) {
 			at = end;
 			continue;
 		}
+
 		const path = leaves(key.success)[0]?.path ?? [];
 		let value = equal + 1;
-		while (text[value] === " " || text[value] === "\t") value += 1;
+
+		while (text[value] === " " || text[value] === "\t") {
+			value += 1;
+		}
+
 		let cursor = value;
 		let depth = 0;
 		quote = "";
 		let triple = false;
+
 		for (; cursor < text.length; cursor += 1) {
 			const c = text[cursor] ?? "";
+
 			if (quote !== "") {
 				if (quote === '"' && c === "\\") {
 					cursor += 1;
 					continue;
 				}
+
 				if (triple ? text.slice(cursor, cursor + 3) === quote.repeat(3) : c === quote) {
-					if (triple) cursor += 2;
+					if (triple) {
+						cursor += 2;
+					}
+
 					quote = "";
 					triple = false;
 				}
+
 				continue;
 			}
+
 			if (c === '"' || c === "'") {
 				quote = c;
 				triple = text.slice(cursor, cursor + 3) === c.repeat(3);
-				if (triple) cursor += 2;
+
+				if (triple) {
+					cursor += 2;
+				}
+
 				continue;
 			}
+
 			if (c === "#") {
-				if (depth === 0) break;
+				if (depth === 0) {
+					break;
+				}
+
 				const next = text.indexOf("\n", cursor);
 				cursor = next < 0 ? text.length : next;
 				continue;
 			}
-			if (c === "[" || c === "{") depth += 1;
-			if (c === "]" || c === "}") depth -= 1;
-			if ((c === "\n" || c === "\r") && depth === 0) break;
+
+			if (c === "[" || c === "{") {
+				depth += 1;
+			}
+
+			if (c === "]" || c === "}") {
+				depth -= 1;
+			}
+
+			if ((c === "\n" || c === "\r") && depth === 0) {
+				break;
+			}
 		}
+
 		let until = cursor;
-		while (until > value && /\s/.test(text[until - 1] ?? "")) until -= 1;
+
+		while (until > value && /\s/.test(text[until - 1] ?? "")) {
+			until -= 1;
+		}
+
 		const last = text.indexOf("\n", cursor);
 		at = last < 0 ? text.length : last + 1;
 		rows.push({
@@ -454,6 +571,7 @@ const assignments = (text: string): {rows: Assignment[]; sections: Section[]} =>
 		});
 		section.after = at;
 	}
+
 	(sections[0] as Section).after = header;
 	return {rows, sections};
 };
@@ -484,9 +602,17 @@ const setIn = (
 	value: Assigned | null,
 ): Readonly<Record<string, unknown>> => {
 	const [part, ...rest] = path;
-	if (part === undefined) return table;
+
+	if (part === undefined) {
+		return table;
+	}
+
 	const {[part]: here, ...others} = table;
-	if (rest.length === 0) return value === null ? others : {...table, [part]: value};
+
+	if (rest.length === 0) {
+		return value === null ? others : {...table, [part]: value};
+	}
+
 	return {...table, [part]: setIn(isTable(here) ? here : {}, rest, value)};
 };
 
@@ -500,12 +626,14 @@ export const patchKeys = (text: string, values: ReadonlyMap<string, Assigned | n
 	const patches: {start: number; end: number; text: string}[] = [];
 	const added = new Map<number, string>();
 	const inlines = new Map<Assignment, Readonly<Record<string, unknown>>>();
+
 	for (const [word, value] of values) {
 		const path = wordPath(word);
 		const row = source.rows.find((row) => row.word === pathWord(path));
 		const holder = source.rows.find(
 			(row) => startsWith(path, row.path) && text.slice(row.value, row.value + 1) === "{",
 		);
+
 		if (row !== undefined) {
 			if (value === null) {
 				// Leave a trailing hand-written comment in place when removing its assignment.
@@ -515,7 +643,9 @@ export const patchKeys = (text: string, values: ReadonlyMap<string, Assigned | n
 					end: row.end,
 					text: tail.trimStart().startsWith("#") ? tail.trimStart() : "",
 				});
-			} else patches.push({start: row.value, end: row.until, text: JSON.stringify(value)});
+			} else {
+				patches.push({start: row.value, end: row.until, text: JSON.stringify(value)});
+			}
 		} else if (holder !== undefined) {
 			const read = readToml(`x = ${text.slice(holder.value, holder.until)}`);
 			const before =
@@ -530,17 +660,25 @@ export const patchKeys = (text: string, values: ReadonlyMap<string, Assigned | n
 			added.set(section.after, (added.get(section.after) ?? "") + line);
 		}
 	}
-	for (const [holder, table] of inlines)
+
+	for (const [holder, table] of inlines) {
 		patches.push({start: holder.value, end: holder.until, text: inline(table)});
-	for (const [at, rows] of added)
+	}
+
+	for (const [at, rows] of added) {
 		patches.push({
 			start: at,
 			end: at,
 			text: `${at > 0 && text[at - 1] !== "\n" ? "\n" : ""}${rows}`,
 		});
+	}
+
 	let saved = text;
-	for (const patch of patches.sort((a, b) => b.start - a.start))
+
+	for (const patch of patches.sort((a, b) => b.start - a.start)) {
 		saved = saved.slice(0, patch.start) + patch.text + saved.slice(patch.end);
+	}
+
 	return saved;
 };
 
@@ -579,13 +717,16 @@ const linesOf = (text: string): ReadonlyMap<string, number> => {
 	const at = new Map<string, number>();
 	let table: readonly string[] = [];
 	let i = 0;
+
 	while (i < lines.length) {
 		const line = (lines[i] ?? "").trim();
 		const header = /^\[\[?(.+?)\]\]?\s*(#.*)?$/.exec(line);
+
 		if (line === "" || line.startsWith("#")) {
 			i += 1;
 			continue;
 		}
+
 		if (header !== null) {
 			const read = readToml(`${header[1]} = 0`);
 			table = Result.isSuccess(read) ? (leaves(read.success)[0]?.path ?? []) : [];
@@ -593,19 +734,28 @@ const linesOf = (text: string): ReadonlyMap<string, number> => {
 			i += 1;
 			continue;
 		}
+
 		let end = i;
 		let read = readToml(lines[i] ?? "");
+
 		while (Result.isFailure(read) && end + 1 < lines.length) {
 			end += 1;
 			read = readToml(lines.slice(i, end + 1).join("\n"));
 		}
-		if (Result.isSuccess(read))
+
+		if (Result.isSuccess(read)) {
 			for (const leaf of leaves(read.success)) {
 				const word = pathWord([...table, ...leaf.path]);
-				if (!at.has(word)) at.set(word, i + 1);
+
+				if (!at.has(word)) {
+					at.set(word, i + 1);
+				}
 			}
+		}
+
 		i = Result.isSuccess(read) ? end + 1 : i + 1;
 	}
+
 	return at;
 };
 
@@ -631,16 +781,27 @@ const readPrefix = (
 	value: unknown,
 	mac: boolean,
 ): Result.Result<{name: string; spelled: string}, string> => {
-	if (typeof value !== "string") return Result.fail('the prefix is one key, such as "ctrl+a"');
-	if (value.startsWith("<"))
+	if (typeof value !== "string") {
+		return Result.fail('the prefix is one key, such as "ctrl+a"');
+	}
+
+	if (value.startsWith("<")) {
 		return Result.fail(`the prefix is a key pressed alone, such as ctrl+a, not ${value}`);
+	}
+
 	return Result.flatMap(readPress(value, mac), (p) => {
 		const no = notOurs(p.name, value);
-		if (no !== null) return Result.fail(no);
-		if (p.printable || BARE.has(p.name))
+
+		if (no !== null) {
+			return Result.fail(no);
+		}
+
+		if (p.printable || BARE.has(p.name)) {
 			return Result.fail(
 				`${value} would ${p.printable ? "type" : "stop it typing or moving"} in every tile: the prefix needs a modifier, such as ctrl+a`,
 			);
+		}
+
 		return Result.succeed({name: p.name, spelled: value});
 	});
 };
@@ -661,40 +822,69 @@ const readWritten = (
 	let prefix: Written["prefix"] = null;
 	let ignore: Written["ignore"] = null;
 	const rows: Yours[] = [];
+
 	for (const {word, value, line} of values) {
 		const no = (why: string) => Result.fail({line, why});
+
 		if (word === "prefix") {
 			const read = readPrefix(value, mac);
-			if (Result.isFailure(read)) return no(read.failure);
+
+			if (Result.isFailure(read)) {
+				return no(read.failure);
+			}
+
 			prefix = {...read.success, line};
 			continue;
 		}
+
 		const spelled = spellings(word, value);
-		if (Result.isFailure(spelled))
+
+		if (Result.isFailure(spelled)) {
 			return no(
 				isCommand(word) || word === "ignore" ? spelled.failure : `${word} is not a command`,
 			);
+		}
+
 		if (word === "ignore") {
 			const names: string[] = [];
+
 			for (const one of spelled.success) {
 				const read = readKey(one, mac);
-				if (Result.isFailure(read)) return no(read.failure);
-				if (read.success._tag === "after_prefix")
+
+				if (Result.isFailure(read)) {
+					return no(read.failure);
+				}
+
+				if (read.success._tag === "after_prefix") {
 					return no(`ignore takes keys pressed alone, such as cmd+w, not ${one}`);
+				}
+
 				names.push(read.success.key);
 			}
+
 			ignore = {names, line};
 			continue;
 		}
-		if (!isCommand(word)) return no(`${word} is not a command`);
+
+		if (!isCommand(word)) {
+			return no(`${word} is not a command`);
+		}
+
 		const keys: Yours["keys"][number][] = [];
+
 		for (const one of spelled.success) {
 			const read = readKey(one, mac);
-			if (Result.isFailure(read)) return no(read.failure);
+
+			if (Result.isFailure(read)) {
+				return no(read.failure);
+			}
+
 			keys.push({key: read.success, spelled: one});
 		}
+
 		rows.push({does: word, keys, line});
 	}
+
 	return Result.succeed({prefix, ignore, rows});
 };
 
@@ -704,33 +894,47 @@ const sameKey = (a: Key, b: Key): boolean => a._tag === b._tag && a.key === b.ke
 const clash = (set: Written, prefix: string): Refused | null => {
 	const seen: {key: Key; spelled: string; does: Does; line: number}[] = [];
 	const ignored = set.ignore?.names ?? [];
-	for (const row of set.rows)
+
+	for (const row of set.rows) {
 		for (const {key, spelled} of row.keys) {
-			if (key._tag === "alone" && key.key === prefix)
+			if (key._tag === "alone" && key.key === prefix) {
 				return {
 					line: Math.max(row.line, set.prefix?.line ?? 0),
 					why: `${spelled} is your prefix, so it cannot also run ${row.does}`,
 				};
-			if (key._tag === "after_prefix" && key.key === prefix)
+			}
+
+			if (key._tag === "after_prefix" && key.key === prefix) {
 				return {
 					line: row.line,
 					why: `${spelled} is the prefix twice, which sends the prefix to the tile`,
 				};
-			if (key._tag === "alone" && ignored.includes(key.key) && set.ignore !== null)
+			}
+
+			if (key._tag === "alone" && ignored.includes(key.key) && set.ignore !== null) {
 				return {
 					line: Math.max(row.line, set.ignore.line),
 					why: `${spelled} is on both ignore and ${row.does}`,
 				};
+			}
+
 			const other = seen.find((s) => s.does !== row.does && sameKey(s.key, key));
-			if (other !== undefined)
+
+			if (other !== undefined) {
 				return {line: row.line, why: `${spelled} is on both ${other.does} and ${row.does}`};
+			}
+
 			seen.push({key, spelled, does: row.does, line: row.line});
 		}
-	if (set.prefix !== null && set.ignore?.names.includes(set.prefix.name) === true)
+	}
+
+	if (set.prefix !== null && set.ignore?.names.includes(set.prefix.name) === true) {
 		return {
 			line: Math.max(set.prefix.line, set.ignore.line),
 			why: `${set.prefix.spelled} is your prefix, so it cannot also be ignored`,
 		};
+	}
+
 	return null;
 };
 
@@ -746,11 +950,19 @@ export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refu
 		why: refused.why,
 	});
 	const read = Result.flatMap(readToml(text), (table) => readWritten(table, text, mac));
-	if (Result.isFailure(read)) return Result.fail(within(read.failure));
+
+	if (Result.isFailure(read)) {
+		return Result.fail(within(read.failure));
+	}
+
 	const set = read.success;
 	const prefix = set.prefix?.name ?? defaults.prefix;
 	const no = clash(set, prefix);
-	if (no !== null) return Result.fail(within(no));
+
+	if (no !== null) {
+		return Result.fail(within(no));
+	}
+
 	const taken = set.rows.flatMap((row) => row.keys.map((k) => k.key));
 	const ignore = (set.ignore?.names ?? defaults.ignore).filter(
 		(name) => name !== prefix && !taken.some((k) => k._tag === "alone" && k.key === name),
@@ -767,14 +979,18 @@ export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refu
 			? {...row, keys: row.keys.filter((k) => !lost(k))}
 			: Row.make({does: row.does, keys: yours.keys.map((k) => k.key), source: "yours"});
 	});
-	if (!rows.some((row) => row.does.startsWith('tezgah."focus --to ') && row.keys.length > 0))
+
+	if (!rows.some((row) => row.does.startsWith('tezgah."focus --to ') && row.keys.length > 0)) {
 		return Result.fail({line: 1, why: "Keep a focus key so a terminal has a keyboard way out"});
+	}
+
 	return Result.succeed({prefix, rows, ignore, file: File.cases.read.make({})});
 };
 
 // ---------------------------------------------------------------- a key, as the file spells it
 
 const WORDS: Readonly<Record<string, string>> = {c: "ctrl", a: "alt", s: "shift", m: "cmd"};
+
 const SPOKEN: Readonly<Record<string, string>> = Object.fromEntries(
 	Object.entries(NAMED).map(([word, name]) => [name, word]),
 );
@@ -784,9 +1000,16 @@ const SPOKEN: Readonly<Record<string, string>> = Object.fromEntries(
  * `space`. What the log says a person pressed (host/serve.ts, `did`), in the words they write.
  */
 export const spell = (name: string): string => {
-	if (name === " ") return "space";
+	if (name === " ") {
+		return "space";
+	}
+
 	const wrapped = /^<((?:[casm]-)*)(.+)>$/.exec(name);
-	if (wrapped === null) return name;
+
+	if (wrapped === null) {
+		return name;
+	}
+
 	const [, mods = "", base = ""] = wrapped;
 	const words = mods
 		.split("-")

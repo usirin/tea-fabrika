@@ -119,10 +119,12 @@ export const kindOf = (child: string): ChildKind | null => {
 /** A number from a child's name, the same on every host: its commits' date is the lane's plus it. */
 export const offsetOf = (child: string): number => {
 	let h = 0x811c9dc5;
+
 	for (let k = 0; k < child.length; k++) {
 		h ^= child.charCodeAt(k);
 		h = Math.imul(h, 0x01000193) >>> 0;
 	}
+
 	return h % 100_000;
 };
 
@@ -135,6 +137,7 @@ export function jobFor(lane: string, job: LaneJob, f: Flow): unknown {
 	const child = childOf(lane, f);
 	const at = job.at + offsetOf(child);
 	const agent = (step: LaneStep) => ({settings: agentFor(job, step), usd: job.usd});
+
 	switch (f.flow) {
 		case "drop":
 			return {plan: job.plan, drop: f.task, ...agent("build"), at};
@@ -143,12 +146,20 @@ export function jobFor(lane: string, job: LaneJob, f: Flow): unknown {
 		case "plan":
 			return {ticket: issueOf(job.plan), tries: 2, ...agent("plan")};
 		case "round":
-			if (f.step === "catchup") return {plan: job.plan, drop: null, ...agent("build"), at};
-			if (f.step === "build")
+			if (f.step === "catchup") {
+				return {plan: job.plan, drop: null, ...agent("build"), at};
+			}
+
+			if (f.step === "build") {
 				return {plan: job.plan, task: f.task, round: f.round, open: f.open, ...agent("build"), at};
+			}
+
 			return {plan: job.plan, task: f.task, head: f.head, rubrics: job.rubrics, ...agent("review")};
 		case "final":
-			if (f.step === "catchup") return {plan: job.plan, drop: null, ...agent("build"), at};
+			if (f.step === "catchup") {
+				return {plan: job.plan, drop: null, ...agent("build"), at};
+			}
+
 			return {plan: job.plan, task: "plan", head: f.head, rubrics: job.rubrics, ...agent("review")};
 	}
 }
@@ -332,6 +343,7 @@ const note = (s: Held, task: Owner, f: Flow, open: number): Step => {
 export const childSub = listen("lane_child", (s: Lane) =>
 	s.phase === "running" ? {child: s.child} : null,
 );
+
 export const ownerSub = listen("lane_owner", (s: Lane) =>
 	s.phase === "waiting" ? {plan: s.job.plan, asks: s.asks} : null,
 );
@@ -348,9 +360,13 @@ function afterChild(s: Held, f: Flow, end: ChildEnd): Step {
 		f.step === "review" &&
 		kind === "stuck" &&
 		why === "unseen";
-	if (kind === "stuck" && !unseen)
+
+	if (kind === "stuck" && !unseen) {
 		return over(s, {kind: "stuck", why: stuckOf(f)}, [`${childOf(s.lane, f)}: ${why}`]);
+	}
+
 	const head = (now: string | null) => (kind === "done" ? (end.head ?? now) : now);
+
 	switch (f.flow) {
 		case "drop":
 			return read({...s, at: {...s.at, dropped: [...s.at.dropped, f.task]}});
@@ -371,13 +387,24 @@ function afterChild(s: Held, f: Flow, end: ChildEnd): Step {
 		// that passed and was sent back by the ship counts in the one-ticket loop. So a ship sent back
 		// for main moving on, then a passing last review, then the same again, still asks.
 		case "final":
-			if (f.step === "catchup") return start(s, {...f, step: "review", head: head(f.head)});
+			if (f.step === "catchup") {
+				return start(s, {...f, step: "review", head: head(f.head)});
+			}
+
 			return kind === "done" ? read(s) : note(s, PLAN, f, openCount(end));
 		case "round":
-			if (f.step === "catchup") return start(s, {...f, step: "build", head: head(f.head)});
-			if (f.step === "build")
+			if (f.step === "catchup") {
+				return start(s, {...f, step: "build", head: head(f.head)});
+			}
+
+			if (f.step === "build") {
 				return kind === "done" ? start(s, {...f, step: "review", head: head(f.head)}) : read(s);
-			if (kind === "skip") return over(s, {kind: "stuck", why: "review_failed"}, [why]);
+			}
+
+			if (kind === "skip") {
+				return over(s, {kind: "stuck", why: "review_failed"}, [why]);
+			}
+
 			return note(s, f.task, f, openCount(end));
 	}
 }
@@ -399,9 +426,13 @@ export const lane = defineMachine({
 				? [s, [s.asked]]
 				: stay(s),
 		lane_read_ok: (s, m): Step => {
-			if (s.phase !== "reading") return stay(s);
+			if (s.phase !== "reading") {
+				return stay(s);
+			}
+
 			const v = m.value;
 			const n = next(s.at, v);
+
 			switch (n.go) {
 				case "done":
 					return over(s, {kind: "done", part: false, pr: n.pr, head: n.head});

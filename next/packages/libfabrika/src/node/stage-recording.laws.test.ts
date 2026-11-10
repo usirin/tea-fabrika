@@ -8,7 +8,7 @@ import * as fc from "fast-check";
 import {expect, it} from "vitest";
 import {stageRecording} from "./stage-recording.ts";
 
-for (const failed of [false, true])
+for (const failed of [false, true]) {
 	it(`recording creates its directory and database path through supplied FileSystem and Path: ${failed ? "refusal" : "success"}`, async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.uuid(), async (child) => {
@@ -45,6 +45,7 @@ for (const failed of [false, true])
 						},
 					}),
 				);
+
 				try {
 					const exit = await Effect.runPromiseExit(
 						Effect.scoped(
@@ -56,7 +57,10 @@ for (const failed of [false, true])
 					const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
 					expect(Cause.hasDies(cause)).toBe(false);
 					expect(Cause.hasFails(cause)).toBe(failed);
-					if (!failed) expect(paths).toContainEqual([folder, "brain.records.sqlite"]);
+
+					if (!failed) {
+						expect(paths).toContainEqual([folder, "brain.records.sqlite"]);
+					}
 				} finally {
 					rmSync(home, {recursive: true, force: true});
 				}
@@ -64,3 +68,4 @@ for (const failed of [false, true])
 			{seed: 119120, numRuns: 10},
 		);
 	});
+}

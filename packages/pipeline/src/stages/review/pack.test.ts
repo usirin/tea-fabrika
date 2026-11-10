@@ -21,17 +21,25 @@ import {
 // tested on were recorded from a real pull request (see `scripted.ts`).
 
 const ticket = (n: number) => recorded(`tickets/${n}.md`);
+
 const changeAt = (which: Which, answers: Answers = {}, head: string | null = HEADS[which]) => {
 	const {gh, calls} = recordedGh(which, answers);
 	return {read: Effect.runPromise(Effect.result(readChange(gh)(PR, head))), calls};
 };
+
 const change = async (which: Which, answers: Answers = {}, head: string | null = HEADS[which]) => {
 	const result = await changeAt(which, answers, head).read;
-	if (result._tag === "Failure") throw new Error("the read failed");
+
+	if (result._tag === "Failure") {
+		throw new Error("the read failed");
+	}
+
 	return result.success;
 };
+
 const failure = async (which: Which, answers: Answers = {}, head: string | null = HEADS[which]) =>
 	(await changeAt(which, answers, head).read)._tag;
+
 const body = (text: string) =>
 	changed(recorded("change-final.json"), (repo) => {
 		repo.pullRequest.body = text;
@@ -183,7 +191,11 @@ describe("the deviations section of a pull request's text", () => {
 			.body as string;
 		expect(text).toMatch(/Generated with \[Claude Code\]\(https:\/\/claude\.com\/claude-code\)\n$/);
 		const deviations = deviationsIn(text);
-		if (deviations.state !== "listed") throw new Error("not listed");
+
+		if (deviations.state !== "listed") {
+			throw new Error("not listed");
+		}
+
 		expect(deviations.text.split("\n")).toHaveLength(2);
 		expect(deviations.text).toMatch(/^- \*\*Declined guidance\*\*/);
 		expect(deviations.text).toMatch(/leave the same line in the other modes\.$/);
@@ -317,7 +329,11 @@ describe("one pull request at one commit, read from recorded answers", () => {
 			}),
 		});
 		const result = await read;
-		if (result._tag === "Failure") throw new Error("the read failed");
+
+		if (result._tag === "Failure") {
+			throw new Error("the read failed");
+		}
+
 		expect(result.success.rules).toEqual([{file: "CLAUDE.md", text: `# repo\n\n${rule}\n`}]);
 		// Asked at the base the pull request merges into: a change cannot write its own rules.
 		const second = calls[1] ?? [];

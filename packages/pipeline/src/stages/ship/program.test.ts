@@ -54,6 +54,7 @@ const clear: PrFacts = {
 	comments: [],
 	main: ON_TIP,
 };
+
 const PART = {id: TICKET, link: "part_of_it"} as const;
 
 /** How the fake world answers for one pull request. */
@@ -86,7 +87,11 @@ function fake(worlds: ReadonlyMap<string, World>) {
 	const recordReads = new Map<string, number>();
 	const world = (pr: string): World => {
 		const found = worlds.get(pr);
-		if (found === undefined) throw new Error(`no world for ${pr}`);
+
+		if (found === undefined) {
+			throw new Error(`no world for ${pr}`);
+		}
+
 		return found;
 	};
 	const broke = Effect.fail({_tag: "unknown" as const});
@@ -96,7 +101,11 @@ function fake(worlds: ReadonlyMap<string, World>) {
 			reads.push(pr);
 			const {facts, later} = world(pr);
 			const n = reads.filter((r) => r === pr).length;
-			if (later !== undefined && n >= later.from) return Effect.succeed(later.facts);
+
+			if (later !== undefined && n >= later.from) {
+				return Effect.succeed(later.facts);
+			}
+
 			return facts === "fails" ? broke : Effect.succeed(facts);
 		},
 		change: () => broke,
@@ -144,7 +153,11 @@ function fake(worlds: ReadonlyMap<string, World>) {
 				const proven = provenAt("abc1234");
 				const from = lateFor(ticket);
 				const [first] = proven.verdicts;
-				if (from === undefined || n < from || first === undefined) return proven;
+
+				if (from === undefined || n < from || first === undefined) {
+					return proven;
+				}
+
 				const late = {
 					...first,
 					id: verdictId("v9"),
@@ -187,7 +200,11 @@ const writing = <A, E>(
 		Effect.gen(function* () {
 			const outcomes = ear<Shipped>();
 			const started = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear}, kept());
-			if (started.kind !== "running") return yield* Effect.die(`did not start: ${started.why}`);
+
+			if (started.kind !== "running") {
+				return yield* Effect.die(`did not start: ${started.why}`);
+			}
+
 			return yield* body(started.run, outcomes, started.stop);
 		}).pipe(Effect.scoped, Effect.provide(world.both)),
 	);
@@ -220,9 +237,16 @@ describe("review | ship: the user's job", () => {
 				Effect.gen(function* () {
 					const outcomes = ear<Shipped>();
 					const ship = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear}, kept());
-					if (ship.kind !== "running") return yield* Effect.die("ship did not start");
+
+					if (ship.kind !== "running") {
+						return yield* Effect.die("ship did not start");
+					}
+
 					const reviewing = yield* pipe({program: review, flags: {}}, "passed", ship, "pr");
-					if (reviewing.kind !== "running") return yield* Effect.die("review did not start");
+
+					if (reviewing.kind !== "running") {
+						return yield* Effect.die("review did not start");
+					}
 
 					const told = yield* Effect.forEach(
 						[1, 2, 3, 4, 7],
@@ -280,11 +304,17 @@ describe("review | ship: the user's job", () => {
 			Effect.gen(function* () {
 				const outcomes = ear<Shipped>();
 				const ship = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear}, kept());
-				if (ship.kind !== "running") return yield* Effect.die("ship did not start");
+
+				if (ship.kind !== "running") {
+					return yield* Effect.die("ship did not start");
+				}
+
 				const first = yield* pipe({program: review, flags: {}}, "passed", ship, "pr");
 				const second = yield* pipe({program: review, flags: {}}, "passed", ship, "pr");
-				if (first.kind !== "running" || second.kind !== "running")
+
+				if (first.kind !== "running" || second.kind !== "running") {
 					return yield* Effect.die("a review did not start");
+				}
 
 				yield* tell(first.run, "pr", url(1));
 				first.close("pr");
@@ -392,7 +422,10 @@ describe("a parent starts the ship program and feeds it pull requests", () => {
 		const once = () =>
 			writing(fake(WORLDS), (run, outcomes) =>
 				Effect.gen(function* () {
-					for (let n = 1; n <= 6; n++) yield* tell(run, "pr", url(n));
+					for (let n = 1; n <= 6; n++) {
+						yield* tell(run, "pr", url(n));
+					}
+
 					return (yield* outcomes.upTo(6)).map((o) => o.name);
 				}),
 			);
@@ -466,7 +499,10 @@ describe("a repository with no merge queue: ship merges straight in", () => {
 		const world = fake(NO_QUEUE);
 		const all = await writing(world, (run, outcomes) =>
 			Effect.gen(function* () {
-				for (let n = 1; n <= 6; n++) yield* tell(run, "pr", url(n));
+				for (let n = 1; n <= 6; n++) {
+					yield* tell(run, "pr", url(n));
+				}
+
 				return yield* outcomes.upTo(6);
 			}),
 		);
@@ -507,7 +543,10 @@ describe("a repository with no merge queue: ship merges straight in", () => {
 			const world = fake(NO_QUEUE);
 			const names = await writing(world, (run, outcomes) =>
 				Effect.gen(function* () {
-					for (let n = 1; n <= 6; n++) yield* tell(run, "pr", url(n));
+					for (let n = 1; n <= 6; n++) {
+						yield* tell(run, "pr", url(n));
+					}
+
 					return (yield* outcomes.upTo(6)).map((o) => o.name);
 				}),
 			);
@@ -541,7 +580,10 @@ describe("a fail kept after ship's read: each write reads the facts again and la
 			const world = fake(LATE);
 			const names = await writing(world, (run, outcomes) =>
 				Effect.gen(function* () {
-					for (let n = 1; n <= 5; n++) yield* tell(run, "pr", url(n));
+					for (let n = 1; n <= 5; n++) {
+						yield* tell(run, "pr", url(n));
+					}
+
 					return (yield* outcomes.upTo(5)).map((o) => [o.pr, o.name]);
 				}),
 			);
@@ -587,7 +629,10 @@ describe("nothing lands on a main it was not tested with: with no queue, only a 
 			const world = fake(MAINS);
 			const names = await writing(world, (run, outcomes) =>
 				Effect.gen(function* () {
-					for (let n = 1; n <= 5; n++) yield* tell(run, "pr", url(n));
+					for (let n = 1; n <= 5; n++) {
+						yield* tell(run, "pr", url(n));
+					}
+
 					return (yield* outcomes.upTo(5)).map((o) => [o.pr, o.name]);
 				}),
 			);
@@ -711,6 +756,7 @@ describe("the ship program's listing", () => {
 			required: ["pr", "outcome", "name"],
 			additionalProperties: false,
 		});
+
 		for (const one of [...shown.flags, ...shown.inputs, ...shown.outputs]) {
 			expect(one.description.length).toBeGreaterThan(10);
 			expect(one.schema).toBeDefined();
@@ -738,7 +784,11 @@ describe("kept across a restart: the same id and the same storage", () => {
 					{outcome: outcomes.hear, answer: answers.hear},
 					{id: "ship:kept", storage},
 				);
-				if (started.kind !== "running") return yield* Effect.die("did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("did not start");
+				}
+
 				return yield* body(started, {outcomes, answers});
 			}).pipe(Effect.scoped, Effect.provide(world.both)),
 		);
@@ -750,7 +800,10 @@ describe("kept across a restart: the same id and the same storage", () => {
 					Effect.orDie,
 					Effect.map((r) => r?.machines.some((m) => m.machine === machine)),
 				);
-			while (yield* kept()) yield* Effect.sleep("5 millis");
+
+			while (yield* kept()) {
+				yield* Effect.sleep("5 millis");
+			}
 		});
 	/** Wait until the ship machine on the handle stands in `phase`. */
 	const standsIn = (run: ShipRun, phase: string) =>
@@ -899,12 +952,20 @@ describe("kept across a restart: the same id and the same storage", () => {
 					// Told twice in a row. `main` reads one value at a time (experiment 80), so the second
 					// finds the first still on the queue, which holds one (../queue.ts), or already over,
 					// and answered from what was kept: either way it is not read or queued again.
-					for (let time = 0; time < 2; time++)
-						for (const pr of prs) yield* tell(run, "pr", {pr, head: H1});
+					for (let time = 0; time < 2; time++) {
+						for (const pr of prs) {
+							yield* tell(run, "pr", {pr, head: H1});
+						}
+					}
+
 					yield* outcomes.upTo(5);
 					yield* settled(run);
+
 					// Told again once the first five are said: only what ship kept under each head can catch these.
-					for (const pr of prs) yield* tell(run, "pr", {pr, head: H1});
+					for (const pr of prs) {
+						yield* tell(run, "pr", {pr, head: H1});
+					}
+
 					yield* tell(run, "pr", {pr: url(1), head: H2});
 					// stdin's end: ship finishes every value told, then ends, with none left unread.
 					close("pr");
@@ -912,12 +973,14 @@ describe("kept across a restart: the same id and the same storage", () => {
 				}),
 			);
 			expect(ended).toEqual({kind: "ended", unread: {}});
+
 			// Each said at least twice, the same way each time; #1 once more, at its new head.
 			for (const pr of prs) {
 				const said = heard.filter((o) => o.pr === pr);
 				expect(said.length).toBeGreaterThanOrEqual(pr === url(1) ? 3 : 2);
 				expect(new Set(said.map((o) => o.name)).size).toBe(1);
 			}
+
 			// Read once each (#2 again after its checks ran again), and #1 once more at its new head; each
 			// one that goes on is read once more at the door of its enqueue.
 			expect(world.reads).toEqual([
@@ -1038,8 +1101,11 @@ describe("kept across a restart: the same id and the same storage", () => {
 				const keeping = {id: "ship:twice", storage};
 				const older = yield* start(shipProgram, {mode: "write"}, {}, keeping);
 				const newer = yield* start(shipProgram, {mode: "write"}, {outcome: outcomes.hear}, keeping);
-				if (older.kind !== "running" || newer.kind !== "running")
+
+				if (older.kind !== "running" || newer.kind !== "running") {
 					return yield* Effect.die("did not start");
+				}
+
 				yield* tell(older.run, "pr", url(1));
 				const olderEnded = yield* older.run.ended;
 				const writesAfterOlder = [...world.writes];
@@ -1072,7 +1138,11 @@ describe("killed (kill -9) and started again: each start goes on from the kept p
 					{outcome: outcomes.hear},
 					{id: "ship:mortal", storage: life.storage},
 				);
-				if (started.kind !== "running") return yield* Effect.die("did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("did not start");
+				}
+
 				return yield* body(started.run, outcomes);
 			}).pipe(Effect.scoped, Effect.provide(world.both)),
 		);

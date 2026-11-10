@@ -96,6 +96,7 @@ export function spec<S, M extends {readonly type: string}, C>(parts: {
 			let complete = true;
 			let states = 0;
 			let ms = 0;
+
 			for (const walk of parts.walks) {
 				const r = explore({
 					init: parts.init,
@@ -104,12 +105,20 @@ export function spec<S, M extends {readonly type: string}, C>(parts: {
 					laws: parts.laws(),
 					depth: walk.depth,
 				});
-				for (const t of r.sent) sent.add(t);
-				for (const b of r.broken) broken[b.law] ??= pathText(b.path, parts.show);
+
+				for (const t of r.sent) {
+					sent.add(t);
+				}
+
+				for (const b of r.broken) {
+					broken[b.law] ??= pathText(b.path, parts.show);
+				}
+
 				complete &&= r.complete;
 				states += r.states;
 				ms += r.ms;
 			}
+
 			const unsent = alphabet.filter((t) => !sent.has(t));
 			return {alphabet, unsent, broken, complete, states, ms};
 		},

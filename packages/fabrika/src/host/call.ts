@@ -81,14 +81,21 @@ export interface Stepped<Req, Res> {
 
 /** Make a call. An id already pending is not called twice. */
 export const call = <Req>(s: Calls<Req>, id: string, req: Req): Stepped<Req, never> => {
-	if (s.pending.some((p) => p.id === id)) return {calls: s, cmds: [], outcome: null};
+	if (s.pending.some((p) => p.id === id)) {
+		return {calls: s, cmds: [], outcome: null};
+	}
+
 	const p: Pending<Req> = {id, req, tries: 1, due: null};
 	return {calls: {...s, pending: [...s.pending, p]}, cmds: [sendOf(p)], outcome: null};
 };
 
 const setDue = <Req>(s: Calls<Req>, id: string, tries: number, due: number): Calls<Req> => {
 	const p = s.pending.find((x) => x.id === id);
-	if (p === undefined || p.tries !== tries || p.due !== null) return s;
+
+	if (p === undefined || p.tries !== tries || p.due !== null) {
+		return s;
+	}
+
 	return {...s, pending: s.pending.map((x) => (x === p ? {...p, due} : x))};
 };
 
@@ -96,6 +103,7 @@ export const update =
 	(settings: CallSettings) =>
 	<Req, Res>(s: Calls<Req>, m: CallMsg<Res>): Stepped<Req, Res> => {
 		const none = (calls: Calls<Req>): Stepped<Req, Res> => ({calls, cmds: [], outcome: null});
+
 		switch (m.type) {
 			case "resume": {
 				const again = s.pending.map((p) => ({...p, tries: p.tries + 1, due: null}));
@@ -107,7 +115,11 @@ export const update =
 				return none(setDue(s, m.id, m.tries, m.at + settings.retryMs));
 			case "timed_out": {
 				const p = s.pending.find((x) => x.id === m.id);
-				if (p === undefined || p.tries !== m.tries || p.due === null) return none(s);
+
+				if (p === undefined || p.tries !== m.tries || p.due === null) {
+					return none(s);
+				}
+
 				const again = {...p, tries: p.tries + 1, due: null};
 				return {
 					calls: {...s, pending: s.pending.map((x) => (x === p ? again : x))},
@@ -116,10 +128,16 @@ export const update =
 				};
 			}
 			case "reply": {
-				if (m.rev <= s.cursor) return none(s);
+				if (m.rev <= s.cursor) {
+					return none(s);
+				}
+
 				const p = s.pending.find((x) => x.id === m.id);
-				if (p === undefined)
+
+				if (p === undefined) {
 					return {calls: {...s, cursor: m.rev}, cmds: [], outcome: {kind: "extra", id: m.id}};
+				}
+
 				return {
 					calls: {cursor: m.rev, pending: s.pending.filter((x) => x !== p)},
 					cmds: [],

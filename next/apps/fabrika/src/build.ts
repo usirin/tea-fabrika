@@ -15,6 +15,7 @@ export type Built = {
 	readonly script?: string;
 	readonly style?: ReadonlyArray<Style>;
 };
+
 type Options = {
 	readonly out: string;
 	readonly files?: ReadonlyArray<string>;
@@ -35,11 +36,12 @@ const STYLES = [
 /** Effect probes for Node's `async_hooks` through `globalThis.process`, which a tab never has. The
  *  probe is dead in a browser, so the tab's bundle drops it and names no Node module. */
 const NODE_PROBE = 'globalThis.process?.getBuiltinModule?.("node:async_hooks")';
+
 const browserOnly: Plugin = {
 	name: "fabrika-browser-only",
 	transform(code, id) {
 		if (id.includes("/effect/dist/") && code.includes(NODE_PROBE))
-			return {code: code.replace(NODE_PROBE, "undefined")};
+			{return {code: code.replace(NODE_PROBE, "undefined")};}
 	},
 };
 
@@ -50,7 +52,7 @@ const browserBundle = Effect.fn("build.browser")(function* (input: string, plugi
 		plugins: [...plugins, browserOnly],
 		// Rolldown notes each "use client" it drops; a bundle for one tab has no server half.
 		onLog: (level, log, handler) => {
-			if (log.code !== "MODULE_LEVEL_DIRECTIVE") handler(level, log);
+			if (log.code !== "MODULE_LEVEL_DIRECTIVE") {handler(level, log);}
 		},
 		platform: "browser",
 		transform: {define: {"process.env.NODE_ENV": JSON.stringify("production")}},
@@ -74,6 +76,7 @@ const browserBundle = Effect.fn("build.browser")(function* (input: string, plugi
 		.map((o) => o.code)
 		.join("\n");
 });
+
 export const build = Effect.fn("build.build")(function* (options: Options) {
 	const fs = yield* FileSystem.FileSystem,
 		path = yield* Path.Path;
@@ -105,7 +108,10 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 	const compiler: Plugin = {
 		name: "fabrika-compiler",
 		transform(code, id) {
-			if (!id.endsWith(".tsx")) return;
+			if (!id.endsWith(".tsx")) {
+				return;
+			}
+
 			files.set(path.relative(ROOT, id), code);
 			const out = compile(id, code);
 			return {code: out.code};
@@ -117,7 +123,8 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 	const browserCompiler: Plugin = {
 		name: "fabrika-compiler",
 		transform(code, id) {
-			if (!id.endsWith(".tsx")) return;
+			if (!id.endsWith(".tsx")) {return;}
+
 			browserFiles.set(path.relative(ROOT, id), code);
 			return {code: compile(id, code).code};
 		},
@@ -153,11 +160,14 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 		{
 			name: "fabrika-table",
 			resolveId(id) {
-				if (id === "./table.ts") return "\0fabrika-table";
+				if (id === "./table.ts") {
+					return "\0fabrika-table";
+				}
 			},
 			load(id) {
-				if (id === "\0fabrika-table")
+				if (id === "\0fabrika-table") {
 					return `export const programs = ${JSON.stringify(programs)};\nexport const assets = ${JSON.stringify({page: html, script})};`;
+				}
 			},
 		},
 	]);
@@ -166,28 +176,44 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 		.map((o) => o.code)
 		.join("\n");
 	const build = yield* hash(brain);
+
 	// Include modules discovered by Rolldown, then check the whole ledger for stale rows.
-	if (check(new Map([...browserFiles, ...files]), ledger).length)
+	if (check(new Map([...browserFiles, ...files]), ledger).length) {
 		return yield* new BuildError({reason: "compiler"});
+	}
+
 	yield* Effect.gen(function* () {
 		const directory = path.dirname(options.out);
-		if (!(yield* fs.exists(directory))) yield* fs.makeDirectory(directory, {recursive: true});
+
+		if (!(yield* fs.exists(directory))) {
+			yield* fs.makeDirectory(directory, {recursive: true});
+		}
+
 		const pending = yield* fs.makeTempDirectory({directory, prefix: ".fabrika-build-"});
 		const backup = `${pending}.old`;
 		yield* Effect.gen(function* () {
 			yield* fs.writeFileString(path.join(pending, "brain.mjs"), brain);
 			yield* fs.writeFileString(path.join(pending, "window.js"), script);
 			yield* fs.writeFileString(path.join(pending, "page.html"), html);
-			for (const [file, text] of files)
+
+			for (const [file, text] of files) {
 				yield* fs.writeFileString(
 					path.join(pending, `${yield* hash(file)}.js`),
 					compile(file, text).code,
 				);
-			if (yield* fs.exists(options.out)) yield* fs.rename(options.out, backup);
+			}
+
+			if (yield* fs.exists(options.out)) {
+				yield* fs.rename(options.out, backup);
+			}
+
 			yield* fs.rename(pending, options.out).pipe(
 				Effect.catch((error) =>
 					Effect.gen(function* () {
-						if (yield* fs.exists(backup)) yield* fs.rename(backup, options.out);
+						if (yield* fs.exists(backup)) {
+							yield* fs.rename(backup, options.out);
+						}
+
 						return yield* Effect.fail(error);
 					}),
 				),

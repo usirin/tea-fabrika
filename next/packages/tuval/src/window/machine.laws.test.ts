@@ -34,6 +34,7 @@ type Pending = {
 	readonly viewRev: number;
 	readonly seen: number;
 };
+
 type Model = {
 	readonly link: {readonly _tag: string; readonly [key: string]: unknown};
 	readonly client: {
@@ -43,18 +44,22 @@ type Model = {
 	};
 	readonly opened: ReadonlyArray<string>;
 };
+
 type Cmd = {readonly type: string; readonly [key: string]: unknown};
 type Msg = {readonly type: string; readonly [key: string]: unknown};
 type Tree = unknown;
+
 interface Machine {
 	readonly init: (loaded: unknown, ctx: object) => readonly [Model, ReadonlyArray<Cmd>];
 	readonly model: unknown;
 }
+
 const machine = async (): Promise<Machine> => {
 	const m = ((await import("./machine.ts")) as {windowMachine?: Machine}).windowMachine;
 	expect(m, "window/machine.ts exports windowMachine").toBeDefined();
 	return m as Machine;
 };
+
 const layoutApi = async (): Promise<{
 	tilesIn: (t: Tree) => ReadonlyArray<{id: string; pid: string}>;
 }> => (await import("../desktop/layout.ts")) as never;
@@ -64,6 +69,7 @@ const B = "process_b";
 const C = "process_c";
 const tile = (id: string, pid: string) => ({_tag: "tile", id, pid});
 const split = (dir: "row" | "col", a: Tree, b: Tree) => ({_tag: "split", dir, at: 50, a, b});
+
 /** The fixed layouts the laws run on: one tile, two, a repeated pid, and a 2x2 that repeats two. */
 const LAYOUTS: ReadonlyArray<readonly [string, Tree, ReadonlyArray<string>]> = [
 	["one tile", tile("t0", A), [A]],
@@ -87,6 +93,7 @@ const LAYOUTS: ReadonlyArray<readonly [string, Tree, ReadonlyArray<string>]> = [
 const dial = fc.integer({min: 1, max: 3});
 const sentAt = "2026-11-09T00:00:00.000Z";
 const word = fc.constantFrom("a", "b", "SHA256:x");
+
 /** The Msgs nothing sends a Cmd for, and the answers to the Cmds the window asks. */
 const lists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => {
 	const pid = fc.constantFrom(...pids);
@@ -172,8 +179,10 @@ type Step = {
 	readonly next: Model;
 	readonly cmds: ReadonlyArray<Cmd>;
 };
+
 type Law = (steps: ReadonlyArray<Step>, tiles: ReadonlyArray<string>) => string | null;
 const online = (m: Model): boolean => m.link._tag === "online";
+
 const kinds = (cmds: ReadonlyArray<Cmd>, type: string): ReadonlyArray<Cmd> =>
 	cmds.filter((c) => c.type === type);
 
@@ -183,59 +192,79 @@ const laws: Readonly<Record<string, Law>> = {
 	"p1: a letter is never lost, written counts presses, ids never repeat": (steps) => {
 		const model = new Map<number, string | null>(); // slot -> its first letter
 		let presses = 0;
+
 		for (const {prev, msg, next} of steps) {
 			if (msg.type === "press") {
 				model.set(next.client.written - 1, null);
 				presses++;
 			} else if (msg.type === "now_ok") {
 				const n = (msg["cmd"] as {n: number}).n;
+
 				if (model.has(n) && model.get(n) === null)
-					model.set(n, (msg["value"] as {letter: string}).letter);
+					{model.set(n, (msg["value"] as {letter: string}).letter);}
 			} else if (msg.type === "send_ok") {
 				const letter = (msg["cmd"] as {letter: string}).letter;
 				const value = msg["value"] as {_tag: string};
+
 				if (value._tag === "accepted" || value._tag === "refused") {
-					for (const [n, l] of model) if (l === letter) model.delete(n);
+					for (const [n, l] of model) {if (l === letter) model.delete(n);}
 				}
 			}
+
 			const slots = next.client.pending.map((p) => p.n).sort((x, y) => x - y);
+
 			if (JSON.stringify(slots) !== JSON.stringify([...model.keys()].sort((x, y) => x - y)))
-				return `slots ${JSON.stringify(slots)} are not the model's ${JSON.stringify([...model.keys()])}`;
+				{return `slots ${JSON.stringify(slots)} are not the model's ${JSON.stringify([...model.keys()])}`;}
+
 			for (const p of next.client.pending)
-				if (model.get(p.n) !== (p.letter ?? null))
-					return `slot ${p.n} holds ${String(p.letter)}, its first letter was ${String(model.get(p.n))}`;
+				{if (model.get(p.n) !== (p.letter ?? null))
+					return `slot ${p.n} holds ${String(p.letter)}, its first letter was ${String(model.get(p.n))}`;}
+
 			if (next.client.written !== presses)
-				return `written ${next.client.written} after ${presses} presses`;
+				{return `written ${next.client.written} after ${presses} presses`;}
+
 			void prev;
 		}
+
 		return null;
 	},
 	// p2: coming online sends every ready letter once, in order; not online sends nothing; no letter twice on one dial.
 	"p2: what waited goes out: online sends every ready letter once in order, offline sends nothing":
 		(steps) => {
 			let sentThisDial = new Set<string>();
+
 			for (const {prev, msg, next, cmds} of steps) {
 				const sends = kinds(cmds, "send");
+
 				if (!online(next)) {
 					if (sends.length > 0)
-						return `${msg.type} sent ${sends.length} letter(s) while ${next.link._tag}`;
+						{return `${msg.type} sent ${sends.length} letter(s) while ${next.link._tag}`;}
+
 					sentThisDial = new Set();
 					continue;
 				}
-				if (!online(prev)) sentThisDial = new Set();
+
+				if (!online(prev)) {sentThisDial = new Set();}
+
 				const letters = sends.map((s) => String(s["letter"]));
+
 				if (new Set(letters).size !== letters.length)
-					return `${msg.type} sent a letter twice in one step`;
+					{return `${msg.type} sent a letter twice in one step`;}
+
 				for (const l of letters) {
 					if (sentThisDial.has(l) && !(msg.type === "send_err"))
-						return `${l} went out twice on one dial`;
+						{return `${l} went out twice on one dial`;}
+
 					sentThisDial.add(l);
 				}
+
 				const slotFor = (l: string) =>
 					next.client.pending.find((p) => p.letter === l)?.n ?? Number.NaN;
 				const order = letters.map(slotFor);
+
 				if (JSON.stringify(order) !== JSON.stringify([...order].sort((x, y) => x - y)))
-					return `letters went out out of order: ${JSON.stringify(order)}`;
+					{return `letters went out out of order: ${JSON.stringify(order)}`;}
+
 				if (!online(prev)) {
 					// Going online: every ready letter ahead of the first slot still waiting for its time goes out.
 					const firstDating =
@@ -243,12 +272,15 @@ const laws: Readonly<Record<string, Law>> = {
 					const ready = next.client.pending
 						.filter((p) => p._tag === "ready" && p.n < firstDating)
 						.map((p) => p.letter);
+
 					if (JSON.stringify(letters) !== JSON.stringify(ready))
-						return `going online sent ${JSON.stringify(letters)}, the ready letters were ${JSON.stringify(ready)}`;
+						{return `going online sent ${JSON.stringify(letters)}, the ready letters were ${JSON.stringify(ready)}`;}
 				}
+
 				if (msg.type === "send_err")
-					sentThisDial.delete(String((msg["cmd"] as {letter: string}).letter));
+					{sentThisDial.delete(String((msg["cmd"] as {letter: string}).letter));}
 			}
+
 			return null;
 		},
 	// p4: every distinct pid in the layout is opened once per dial; a new dial opens again.
@@ -257,53 +289,71 @@ const laws: Readonly<Record<string, Law>> = {
 		tiles,
 	) => {
 		const distinct = [...new Set(tiles)].sort();
+
 		for (const {prev, msg, next, cmds} of steps) {
 			const opens = kinds(cmds, "open");
+
 			if (online(next) && !online(prev)) {
 				const pids = opens.map((o) => String(o["pid"])).sort();
+
 				if (JSON.stringify(pids) !== JSON.stringify(distinct))
-					return `going online opened ${JSON.stringify(pids)}, not each of ${JSON.stringify(distinct)} once`;
+					{return `going online opened ${JSON.stringify(pids)}, not each of ${JSON.stringify(distinct)} once`;}
+
 				if ([...next.opened].sort().join() !== distinct.join())
-					return `opened is ${JSON.stringify(next.opened)} after going online`;
-				if (new Set(next.opened).size !== next.opened.length) return "opened holds a repeat";
+					{return `opened is ${JSON.stringify(next.opened)} after going online`;}
+
+				if (new Set(next.opened).size !== next.opened.length) {return "opened holds a repeat";}
 			}
+
 			if (!online(next) && next.opened.length > 0)
-				return `opened keeps ${JSON.stringify(next.opened)} while ${next.link._tag}`;
-			if (msg.type === "press" && opens.length > 0) return "a press opened a view";
+				{return `opened keeps ${JSON.stringify(next.opened)} while ${next.link._tag}`;}
+
+			if (msg.type === "press" && opens.length > 0) {return "a press opened a view";}
+
 			if (online(prev) && online(next) && msg.type !== "view" && opens.length > 0)
-				return `${msg.type} opened again on the same dial`;
+				{return `${msg.type} opened again on the same dial`;}
 		}
+
 		return null;
 	},
 	// Persistence is asked once after a new grant, never on a reconnect, and its answer never moves the link.
 	"persist: asked once per new grant, never on a reconnect, and an answer leaves the window online":
 		(steps) => {
 			let fresh = false;
+
 			for (const {prev, msg, next, cmds} of steps) {
 				if (
 					msg.type === "granted" &&
 					prev.link._tag === "waiting_grant" &&
 					prev.link["dial"] === msg["dial"]
 				)
-					fresh = true;
+					{fresh = true;}
+
 				const asked = kinds(cmds, "persist").length;
-				if (asked > 1) return "persistence asked twice in one step";
+
+				if (asked > 1) {return "persistence asked twice in one step";}
+
 				if (asked === 1 && !(fresh && online(next) && !online(prev)))
-					return `persistence asked on ${msg.type} with no new grant just admitted`;
+					{return `persistence asked on ${msg.type} with no new grant just admitted`;}
+
 				if (asked === 0 && fresh && online(next) && !online(prev))
-					return "a new grant went online and never asked for persistence";
-				if (asked === 1) fresh = false;
+					{return "a new grant went online and never asked for persistence";}
+
+				if (asked === 1) {fresh = false;}
+
 				if (
 					(msg.type === "persist_ok" || msg.type === "persist_err") &&
 					JSON.stringify(next.link) !== JSON.stringify(prev.link)
 				)
-					return `${msg.type} moved the link`;
+					{return `${msg.type} moved the link`;}
+
 				if (
 					(msg.type === "persist_ok" || msg.type === "persist_err") &&
 					next.client.pending.length !== prev.client.pending.length
 				)
-					return `${msg.type} changed the queue`;
+					{return `${msg.type} changed the queue`;}
 			}
+
 			return null;
 		},
 	// now: a press keeps what was shown when it was pressed; answers in any order send in slot order.
@@ -311,33 +361,42 @@ const laws: Readonly<Record<string, Law>> = {
 		steps,
 	) => {
 		const shown = new Map<number, {viewRev: number}>();
+
 		for (const {prev, msg, next, cmds} of steps) {
 			if (msg.type === "press") {
 				const pid = String(msg["pid"]);
 				const slot = next.client.written - 1;
 				shown.set(slot, {viewRev: prev.client.views[pid]?.rev ?? 0});
-				if (kinds(cmds, "now").length !== 1) return "a press asks for its time once";
+
+				if (kinds(cmds, "now").length !== 1) {return "a press asks for its time once";}
 			}
+
 			for (const p of next.client.pending) {
 				const was = shown.get(p.n);
+
 				if (was !== undefined && p.viewRev !== was.viewRev)
-					return `slot ${p.n} re-read the shown revision: ${p.viewRev}, it was pressed at ${was.viewRev}`;
+					{return `slot ${p.n} re-read the shown revision: ${p.viewRev}, it was pressed at ${was.viewRev}`;}
 			}
+
 			const slots = kinds(cmds, "send").map(
 				(s) => next.client.pending.find((p) => p.letter === s["letter"])?.n ?? -1,
 			);
 			const firstDating =
 				next.client.pending.find((p) => p._tag === "dating")?.n ?? Number.POSITIVE_INFINITY;
+
 			for (const n of slots)
-				if (n > firstDating) return `slot ${n} went out before slot ${firstDating} had its letter`;
+				{if (n > firstDating) return `slot ${n} went out before slot ${firstDating} had its letter`;}
+
 			if (msg.type === "now_err" && next.client.written !== prev.client.written)
-				return "a failed now made a second press";
+				{return "a failed now made a second press";}
+
 			if (
 				msg.type === "now_err" &&
 				!next.client.pending.some((p) => p.n === (msg["cmd"] as {n: number}).n)
 			)
-				return "a failed now lost the press";
+				{return "a failed now lost the press";}
 		}
+
 		return null;
 	},
 };
@@ -368,8 +427,9 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 
 	it("the layout's tiles are what opens: tilesIn names the pids this law expects", async () => {
 		const {tilesIn} = await layoutApi();
+
 		for (const [, layout, tiles] of LAYOUTS)
-			expect([...new Set(tilesIn(layout).map((t) => t.pid))].sort()).toEqual([...tiles].sort());
+			{expect([...new Set(tilesIn(layout).map((t) => t.pid))].sort()).toEqual([...tiles].sort());}
 	});
 
 	it("good thing: the runs press, date, go online, send, settle, reconnect and open again, and persist", async () => {
@@ -384,6 +444,7 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 			failedNow: 0,
 			persisted: 0,
 		};
+
 		for (const [, layout, tiles] of LAYOUTS) {
 			propertyTrace(
 				m as never,
@@ -391,26 +452,35 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 				lists(m, layout, tiles) as never,
 				((steps: ReadonlyArray<Step>) => {
 					let dials = 0;
+
 					for (const {prev, msg, next, cmds} of steps) {
-						if (msg.type === "press") seen.pressed++;
-						if (msg.type === "now_ok") seen.dated++;
-						if (msg.type === "now_err") seen.failedNow++;
+						if (msg.type === "press") {seen.pressed++;}
+
+						if (msg.type === "now_ok") {seen.dated++;}
+
+						if (msg.type === "now_err") {seen.failedNow++;}
+
 						if (online(next) && !online(prev)) {
 							seen.online++;
 							dials++;
-							if (dials > 1) seen.reopened += kinds(cmds, "open").length > 0 ? 1 : 0;
+
+							if (dials > 1) {seen.reopened += kinds(cmds, "open").length > 0 ? 1 : 0;}
 						}
+
 						seen.sent += kinds(cmds, "send").length;
 						seen.persisted += kinds(cmds, "persist").length;
+
 						if (msg.type === "send_ok" && next.client.pending.length < prev.client.pending.length)
-							seen.settled++;
+							{seen.settled++;}
 					}
+
 					return null;
 				}) as never,
 				{...opts, numRuns: 150} as never,
 			);
 		}
-		for (const [name, n] of Object.entries(seen)) expect(n, name).toBeGreaterThan(0);
+
+		for (const [name, n] of Object.entries(seen)) {expect(n, name).toBeGreaterThan(0);}
 	});
 
 	it("the parent steps the link and the client by hand: its link is the link machine's own fold", async () => {
@@ -427,6 +497,7 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 			lists(m, layout, tiles) as never,
 			((steps: ReadonlyArray<Step>) => {
 				let link = linkMachine.init(null, {})[0] as Model["link"];
+
 				for (const {msg, next} of steps) {
 					const own = [
 						"admitted",
@@ -441,10 +512,13 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 						"blocked",
 						"ask_again",
 					].includes(msg.type);
-					if (own) link = applyCell(linkMachine as never, link as never, msg as never)[0] as never;
+
+					if (own) {link = applyCell(linkMachine as never, link as never, msg as never)[0] as never;}
+
 					if (JSON.stringify(next.link) !== JSON.stringify(link))
-						return `${msg.type}: the window's link is ${JSON.stringify(next.link)}, the link machine's is ${JSON.stringify(link)}`;
+						{return `${msg.type}: the window's link is ${JSON.stringify(next.link)}, the link machine's is ${JSON.stringify(link)}`;}
 				}
+
 				return null;
 			}) as never,
 			opts as never,

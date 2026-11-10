@@ -31,19 +31,30 @@ import {addressOf, connect, hostLedger, keepConnection} from "./connection.ts";
 // every key is made here, at test time.
 
 const users = new Map<string, {id: number; keys: string[]}>();
+
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
-	if (url.host !== "api.github.com") return new Response("not here", {status: 502});
+
+	if (url.host !== "api.github.com") {
+		return new Response("not here", {status: 502});
+	}
+
 	const byId = /^\/user\/([0-9]+)$/.exec(url.pathname);
+
 	if (byId !== null) {
 		const found = [...users].find(([, u]) => u.id === Number(byId[1]));
 		return found === undefined
 			? Response.json({message: "Not Found"}, {status: 404})
 			: Response.json({id: found[1].id, login: found[0]});
 	}
+
 	const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
 	const u = m?.[1] === undefined ? undefined : users.get(decodeURIComponent(m[1]));
-	if (u === undefined) return Response.json({message: "Not Found"}, {status: 404});
+
+	if (u === undefined) {
+		return Response.json({message: "Not Found"}, {status: 404});
+	}
+
 	return m?.[2] === undefined
 		? Response.json({id: u.id, login: m?.[1]})
 		: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
@@ -57,6 +68,7 @@ const twinScope = Effect.runSync(Scope.make());
 const aliceKey = () => join(root, "alice.key");
 /** A fresh home for each test, so each makes its own agent key. */
 let homes = 0;
+
 const freshHome = () => {
 	homes += 1;
 	const home = join(root, `h${homes}`);
@@ -111,12 +123,15 @@ const run = <A, E>(
 /** One log line's `key=value` fields, as `Logger.formatSimple` writes them, quotes taken off. */
 const fieldsOf = (line: string): Record<string, string> => {
 	const out: Record<string, string> = {};
+
 	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
 		const [, key = "", raw = ""] = m;
 		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
 	}
+
 	return out;
 };
+
 const said = (lines: readonly string[], message: string) =>
 	lines.map(fieldsOf).filter((f) => f.message === message);
 
@@ -244,8 +259,11 @@ describe("an agent's session on a connected home", () => {
 				const early = said(lines, "agent_session").length;
 				// One millisecond before its end, a new session has been made.
 				yield* TestClock.adjust(10 * 60_000 - 1);
-				for (let i = 0; i < 100 && said(lines, "agent_session").length < 2; i += 1)
+
+				for (let i = 0; i < 100 && said(lines, "agent_session").length < 2; i += 1) {
 					yield* TestClock.withLive(Effect.sleep("50 millis"));
+				}
+
 				return {end, early, sessions: said(lines, "agent_session")};
 			}).pipe(Effect.provide(TestClock.layer())),
 			lines,
@@ -281,6 +299,7 @@ describe("an agent's session on a connected home", () => {
 
 /** Kinds any writer may write: a note, a ticket's facts, an ask put to the person. */
 const anyonesKind = fc.constantFrom("note", "filed", "commented", "closed", "ruling_needed");
+
 /** What a request may say it is: the person, another person, another agent, or nonsense. */
 const claimed = fc.constantFrom(
 	"user:github:7",
@@ -314,8 +333,11 @@ describe("the person-only rule on an agent's session", () => {
 									.pipe(Effect.andThen(person.readStream("law/inbox"))),
 							);
 							const last = rows.at(-1);
-							if (rows.length !== i || last?.writer !== "agent:claude for:github:7")
+
+							if (rows.length !== i || last?.writer !== "agent:claude for:github:7") {
 								failures.push(`${kind} as ${writer}: ${last?.writer}`);
+							}
+
 							return failures.length === 0;
 						}),
 						{numRuns: 20, seed: 119120},
@@ -337,6 +359,7 @@ describe("the person-only rule on an agent's session", () => {
 				yield* connectAlice(home);
 				const agent = yield* asAgent(home, "claude");
 				const out: {kind: string; refused: string; rows: number}[] = [];
+
 				for (const kind of PERSON_KINDS) {
 					const box = `ask.${kind}`;
 					yield* agent.open(box);
@@ -350,6 +373,7 @@ describe("the person-only rule on an agent's session", () => {
 						rows: rows.length,
 					});
 				}
+
 				return out;
 			}),
 		);
@@ -361,6 +385,7 @@ describe("the person-only rule on an agent's session", () => {
 			"area_renamed",
 			"area_merged",
 		]);
+
 		for (const s of seen) {
 			expect(s.refused).toContain("403");
 			expect(s.refused).toContain(`only a person writes ${s.kind}`);

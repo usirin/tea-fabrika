@@ -28,19 +28,25 @@ import {
 
 let stage: Stage;
 const profiles: Array<() => Promise<void>> = [];
+
 beforeAll(async () => {
 	stage = await startStage("p14-first");
 }, 180_000);
+
 afterAll(async () => {
-	for (const close of profiles.splice(0)) await close().catch(() => undefined);
+	for (const close of profiles.splice(0)) {await close().catch(() => undefined);}
+
 	await stage?.stop();
-	if (stage !== undefined) cleanup(stage.home);
+
+	if (stage !== undefined) {cleanup(stage.home);}
 });
+
 const profile = async (dir?: string) => {
 	const p = await openProfile(dir);
 	profiles.push(p.close);
 	return p;
 };
+
 const waiting = (page: import("playwright").Page) => page.getByTestId("grant-code").first();
 const counters = (page: import("playwright").Page) => page.getByRole("region", {name: /^counter/i});
 
@@ -116,18 +122,21 @@ describe("check 1 and p29: one code, a real grant, entry without a reload, a sta
 				exportRefused: boolean;
 				wrapRefused: boolean;
 			}> = [];
+
 			for (const info of await indexedDB.databases()) {
 				const db = await new Promise<IDBDatabase>((done, fail) => {
 					const open = indexedDB.open(info.name ?? "");
 					open.onsuccess = () => done(open.result);
 					open.onerror = () => fail(open.error);
 				});
+
 				for (const store of Array.from(db.objectStoreNames)) {
 					const rows = await new Promise<Array<unknown>>((done, fail) => {
 						const all = db.transaction(store).objectStore(store).getAll();
 						all.onsuccess = () => done(all.result);
 						all.onerror = () => fail(all.error);
 					});
+
 					for (const row of rows) {
 						const pair = [
 							row,
@@ -135,7 +144,9 @@ describe("check 1 and p29: one code, a real grant, entry without a reload, a sta
 						].find(
 							(v): v is CryptoKeyPair => typeof v === "object" && v !== null && "privateKey" in v,
 						);
-						if (pair === undefined) continue;
+
+						if (pair === undefined) {continue;}
+
 						const refuse = (work: () => Promise<unknown>) =>
 							work().then(
 								() => false,
@@ -157,8 +168,10 @@ describe("check 1 and p29: one code, a real grant, entry without a reload, a sta
 						});
 					}
 				}
+
 				db.close();
 			}
+
 			return found;
 		});
 		expect(report, "exactly one key pair is stored").toHaveLength(1);
@@ -218,7 +231,9 @@ describe("Strict Mode and the selector hook", () => {
 		await until("the reset", async () =>
 			(await counts(tab.page)).join() === "0,-1" ? true : undefined,
 		);
-		for (const n of await counts(tab.page)) expect(Number.isInteger(n)).toBe(true);
+
+		for (const n of await counts(tab.page)) {expect(Number.isInteger(n)).toBe(true);}
+
 		expect(
 			tab.console.filter((l) => /^(error|warning|pageerror)/.test(l)),
 			"no console failure",
@@ -270,6 +285,7 @@ describe("[secrets] private key data and control credentials stay out of every o
 			stage: stage.output(),
 		};
 		expect(leaks(body, outputs)).toEqual([]);
+
 		// The planted leak: the same check on each output with one sentinel put into it must name it.
 		for (const name of Object.keys(outputs)) {
 			expect(
@@ -291,6 +307,7 @@ describe("shots: the built page at five arrangements", () => {
 		["grid", "grid", {width: 1280, height: 800}],
 		["small", "grid", {width: 1024, height: 700}],
 	] as const;
+
 	for (const [name, query, size] of layouts) {
 		it(`scenario: waiting, granted at zero and after a press, at ${name}`, async () => {
 			const p = await profile();
@@ -303,6 +320,7 @@ describe("shots: the built page at five arrangements", () => {
 			await press(tab.page, "Add one", 0);
 			await until("the press", async () => ((await counts(tab.page))[0] === 1 ? true : undefined));
 			await shot(tab.page, "counter", "pressed", name);
+
 			// Counts, actions and status stay usable at every size: each button is visible and inside the tab.
 			for (const button of await tab.page
 				.getByRole("button", {name: /Add one|Take one away|Back to zero/})
@@ -314,16 +332,20 @@ describe("shots: the built page at five arrangements", () => {
 			}
 		});
 	}
+
 	it("scenario: a light look and forced colors keep the counts and actions in view", async () => {
 		const p = await profile();
 		const tab = await p.tab(stage.url);
 		await grant(stage, tab);
+
 		for (const media of [{colorScheme: "light"}, {forcedColors: "active"}] as const) {
 			await tab.page.emulateMedia(media);
+
 			for (const button of await tab.page
 				.getByRole("button", {name: /Add one|Take one away|Back to zero/})
 				.all())
-				await expect(button).toBeVisible();
+				{await expect(button).toBeVisible();}
+
 			await expect(tab.page.getByTestId("count").first()).toBeVisible();
 			await shot(tab.page, "frame", `${Object.keys(media)[0]}`, "one");
 		}

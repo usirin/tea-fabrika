@@ -48,6 +48,7 @@ export const Link = Schema.TaggedUnion({
 export type Link = typeof Link.Type;
 
 const OnDial = {dial: Dial};
+
 export const LinkMsg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("admitted"), ...OnDial, ping: Schema.Number}),
 	Schema.Struct({
@@ -80,6 +81,7 @@ export const ping = Cmd.make("ping", {
 	ok: Schema.Null,
 	err: ["closed"],
 });
+
 /** Knock again on the dial's socket (`door.knock`), keeping or renewing the waiting code. */
 export const knock = Cmd.make("knock", {
 	input: Schema.Struct(OnDial),
@@ -126,6 +128,7 @@ export const socketDial = (link: Link): number | null =>
 
 const failures = (link: Link): number =>
 	link._tag === "dialing" ? (link.tries ?? 0) : link._tag === "retrying" ? link.tries : 0;
+
 const failed = (link: Link & {readonly dial: number}): Link =>
 	Link.cases.retrying.make({dial: link.dial, tries: failures(link) + 1});
 
@@ -144,7 +147,8 @@ export const linkMachine = Machine.make({
 				: stay(s),
 		not_granted: (s, m) => {
 			if (!(s._tag === "dialing" || s._tag === "waiting_grant") || s.dial !== m.dial)
-				return stay(s);
+				{return stay(s);}
+
 			const knocks = s._tag === "waiting_grant" ? (s.knocks ?? 0) : 0;
 			return [
 				Link.cases.waiting_grant.make({
@@ -162,8 +166,10 @@ export const linkMachine = Machine.make({
 				? [Link.cases.dialing.make({dial: m.dial}), []]
 				: stay(s),
 		closed: (s, m) => {
-			if (socketDial(s) !== m.dial || s._tag === "removed" || s._tag === "blocked") return stay(s);
-			if (m.code === REMOVED) return [Link.cases.removed.make({fingerprint: m.fingerprint}), []];
+			if (socketDial(s) !== m.dial || s._tag === "removed" || s._tag === "blocked") {return stay(s);}
+
+			if (m.code === REMOVED) {return [Link.cases.removed.make({fingerprint: m.fingerprint}), []];}
+
 			return s._tag === "retrying" ? stay(s) : [failed(s), []];
 		},
 		retry: (s, m) =>

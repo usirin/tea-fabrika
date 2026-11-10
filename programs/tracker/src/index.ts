@@ -127,6 +127,7 @@ export {
 	type Summary,
 	Write,
 } from "./ticket.ts";
+
 /**
  * The tracker's machine, for a program that reads the same tickets another way: the ticket,
  * map and runs programs run it with `ticketsOptions`, open one ticket, and show that.
@@ -296,7 +297,11 @@ export const tracker = defineProgram({
 						// Sent after the window moved. Down a pipe whose reader has gone, this send fails
 						// and the tracker ends, as a writer on a closed Unix pipe does.
 						const picked = pickOf(q, last);
-						if (picked === null) return;
+
+						if (picked === null) {
+							return;
+						}
+
 						last = picked;
 						yield* send("ticket", picked);
 					}),

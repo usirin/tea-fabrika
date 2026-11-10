@@ -7,8 +7,10 @@ import {type Editor, type EditorMsg, matching} from "./machine.ts";
 import type {Snapshot} from "./program.ts";
 
 const spelling = (key: Key) => `${key._tag === "after_prefix" ? "<prefix>" : ""}${spell(key.key)}`;
+
 const spoken = (keys: Keys, key: Key) =>
 	`${key._tag === "after_prefix" ? `${spell(keys.prefix)} then ` : ""}${spell(key.key)}`;
+
 const systemReason: Readonly<Record<string, string>> = {
 	"<m-q>": "Quit the app",
 	"<m-h>": "Hide the app",
@@ -16,8 +18,12 @@ const systemReason: Readonly<Record<string, string>> = {
 	"<m- >": "Open Spotlight",
 	"<a-m-escape>": "Force quit an app",
 };
+
 const shortcut = (key: Key) => {
-	if (key._tag === "after_prefix") return null;
+	if (key._tag === "after_prefix") {
+		return null;
+	}
+
 	const parts = spell(key.key).split("+");
 	const base = parts.pop() ?? "";
 	const names: Readonly<Record<string, string>> = {
@@ -117,10 +123,19 @@ export function KeysWindow({
 	useLayoutEffect(() => {
 		const to = focusAfter(stage.current, recording._tag);
 		stage.current = recording._tag;
-		if (to === "box") box.current?.focus();
-		if (to === "result") result.current?.focus();
+
+		if (to === "box") {
+			box.current?.focus();
+		}
+
+		if (to === "result") {
+			result.current?.focus();
+		}
+
 		// With no command selected there is no Change button; the result line holds focus.
-		if (to === "change") (change.current ?? result.current)?.focus();
+		if (to === "change") {
+			(change.current ?? result.current)?.focus();
+		}
 	}, [recording._tag]);
 	const said = announcement(keys, recording);
 	const busy = recording._tag === "saving";
@@ -172,8 +187,12 @@ export function KeysWindow({
 	const select = (value: string[]) => {
 		const first = value[0];
 		const found = keys.rows.find((r) => r.does === first);
-		if (first === "prefix" || first === "ignore") send({type: "select", does: first});
-		else if (found !== undefined) send({type: "select", does: found.does});
+
+		if (first === "prefix" || first === "ignore") {
+			send({type: "select", does: first});
+		} else if (found !== undefined) {
+			send({type: "select", does: found.does});
+		}
 	};
 	return (
 		<section

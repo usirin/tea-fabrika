@@ -19,6 +19,7 @@ const item = (n: number): Item => ({
 	where: [],
 	wants: [],
 });
+
 const round = (n: number, open: number | null): Round => ({
 	n,
 	built: "done",
@@ -32,9 +33,11 @@ const round = (n: number, open: number | null): Round => ({
 	spend: 0,
 	problems: [],
 });
+
 const failed: Pick<Reviewed, "outcome"> = {
 	outcome: {kind: "send", to: "builder", why: "review_failed"},
 };
+
 const passed: Pick<Reviewed, "outcome"> = {outcome: {kind: "done", part: false, head: HEAD}};
 
 const report: BuildReport = {
@@ -58,10 +61,12 @@ const items = (n: number): readonly Item[] => Array.from({length: n}, (_, i) => 
 function walk(opens: readonly number[]): {readonly told: number[]; readonly ended: unknown} {
 	const rounds: Round[] = [];
 	const told: number[] = [];
+
 	for (const [i, open] of opens.entries()) {
 		rounds.push(round(i + 1, open));
 		const next = afterReview(rounds, open === 0 ? passed : failed, items(open));
-		if (next.go === "ship")
+
+		if (next.go === "ship") {
 			return {
 				told,
 				ended: afterShip(PR, rounds, {
@@ -69,9 +74,15 @@ function walk(opens: readonly number[]): {readonly told: number[]; readonly ende
 					said: "done",
 				}),
 			};
-		if (next.go !== "build") return {told, ended: next};
+		}
+
+		if (next.go !== "build") {
+			return {told, ended: next};
+		}
+
 		told.push(next.items.length);
 	}
+
 	return {told, ended: null};
 }
 
@@ -140,19 +151,21 @@ describe("the stop rule, after a review", () => {
 	});
 
 	it("open, and no fewer than the round before, once: one more round", () => {
-		for (const now of [2, 3])
+		for (const now of [2, 3]) {
 			expect(afterReview([round(1, 2), round(2, now)], failed, items(now))).toEqual({
 				go: "build",
 				items: items(now),
 			});
+		}
 	});
 
 	it("open, and no fewer than the round before, twice in a row: stop on no_progress", () => {
-		for (const now of [2, 3])
+		for (const now of [2, 3]) {
 			expect(afterReview([round(1, 2), round(2, 2), round(3, now)], failed, items(now))).toEqual({
 				go: "end",
 				outcome: {kind: "ask", who: "owner", for: "no_progress"},
 			});
+		}
 	});
 
 	it("a stall, then fewer, then a stall: the count starts over, so one more round", () => {

@@ -124,6 +124,7 @@ const Initialize = Schema.Struct({
 	method: Schema.Literal("initialize"),
 	params: Schema.Struct({clientInfo: Schema.Struct({name: Schema.String, version: Schema.String})}),
 });
+
 const decodeInitialize = Schema.decodeUnknownOption(Initialize);
 
 /**
@@ -142,7 +143,10 @@ const agentCame = (who: typeof Agent.Type, first: JSONRPCMessage) => {
 
 /** What a call that did not answer came to, in a few words: its defect's message, or `interrupted`. */
 const failureOf = (cause: Cause.Cause<unknown>): string => {
-	if (Cause.hasInterruptsOnly(cause)) return "interrupted";
+	if (Cause.hasInterruptsOnly(cause)) {
+		return "interrupted";
+	}
+
 	const first = Cause.squash(cause);
 	return oneLine(first instanceof Error ? first.message : String(first));
 };
@@ -235,7 +239,11 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 					line: line === undefined ? undefined : (ask) => line(who, ask),
 					readOnly: served.readOnly ?? false,
 				});
-				if (options.attached !== undefined) yield* options.attached(who);
+
+				if (options.attached !== undefined) {
+					yield* options.attached(who);
+				}
+
 				// Its tools may change (spec 2025-11-25, "Tools", Capabilities: `listChanged`): a new host
 				// may serve the read-only door, or the other way. The bridge says so to the client after
 				// a new host (./bridge.ts); a client heeds the notice only from a server that declared it.
@@ -259,16 +267,19 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 					},
 					heard: (raw) => {
 						let message: JSONRPCMessage;
+
 						try {
 							message = parseJSONRPCMessage(raw);
 						} catch (cause) {
 							t.onerror?.(new Error(`a line that is not JSON-RPC: ${String(cause)}`));
 							return;
 						}
+
 						if (!came) {
 							came = true;
 							Effect.runForkWith(services)(agentCame(who, message));
 						}
+
 						t.onmessage?.(message);
 					},
 				};
@@ -280,17 +291,28 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 
 		const heard = (raw: unknown) =>
 			Effect.gen(function* () {
-				if (refused) return;
-				if (transport !== null) return transport.heard(raw);
+				if (refused) {
+					return;
+				}
+
+				if (transport !== null) {
+					return transport.heard(raw);
+				}
+
 				const handshake = decodeHandshake(raw);
-				if (handshake._tag === "None")
+
+				if (handshake._tag === "None") {
 					return refuse(
 						"the first line is a handshake that names an agent: a name of a-z, 0-9, '.', '_' and '-', never a person's (user:...)",
 					);
-				if (handshake.value.version !== AGENTS_PROTOCOL)
+				}
+
+				if (handshake.value.version !== AGENTS_PROTOCOL) {
 					return refuse(
 						`this host speaks version ${AGENTS_PROTOCOL} on its agents' socket, the bridge ${handshake.value.version}`,
 					);
+				}
+
 				yield* begin(handshake.value);
 			});
 

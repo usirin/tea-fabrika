@@ -104,7 +104,11 @@ export const buildToTheEnd = (
 			.get(id)
 			.start({type: "start", ask, settings, session}, {conflict: "use_existing"});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the run stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the run stopped in ${end.phase}`);
+		}
+
 		return end;
 	}).pipe(Effect.scoped);
 
@@ -157,7 +161,10 @@ const builtOne = (
 			name: nameOf(end.outcome),
 			...end.report,
 		});
-		if (end.outcome.kind === "done") yield* send("opened", end.outcome.pr);
+
+		if (end.outcome.kind === "done") {
+			yield* send("opened", end.outcome.pr);
+		}
 	});
 
 export const buildProgram = defineProgram({

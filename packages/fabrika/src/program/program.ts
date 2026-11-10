@@ -116,6 +116,7 @@ import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
 export type Flags = Readonly<Record<string, Flag<any>>>;
 export type Inputs = Readonly<Record<string, Input<any>>>;
 export type Outputs = Readonly<Record<string, Output<any>>>;
+
 /** One typed value per declaration. */
 export type Given<D extends Readonly<Record<string, {readonly shape: Shape<any>}>>> = {
 	readonly [K in keyof D]: PayloadOf<D[K]>;
@@ -151,10 +152,12 @@ export interface Delivery<T> {
 // each handler's value type comes from its input's shape.
 
 const EndId: unique symbol = Symbol.for("@kampus/fabrika-old/End");
+
 /** What a handler answers to stop serving: {@link end}. */
 export interface End {
 	readonly [EndId]: typeof EndId;
 }
+
 const ending: End = {[EndId]: EndId};
 /**
  * Answered by a handler: stop serving after this value, like tsh's `exit`.
@@ -164,11 +167,13 @@ const ending: End = {[EndId]: EndId};
 export const end: Effect.Effect<End> = Effect.succeed(ending);
 
 const ForkedId: unique symbol = Symbol.for("@kampus/fabrika-old/Forked");
+
 /** A control input's handler, run at once beside the order: {@link fork}. */
 export interface Forked<A, E, R> {
 	readonly [ForkedId]: typeof ForkedId;
 	readonly handler: (value: A) => Effect.Effect<unknown, E, R>;
 }
+
 /**
  * The handler of a control input (`input(..., {control: true})`): run at
  * once, as each value comes, beside the order, Effect's `Rpc.fork`. A value of
@@ -179,6 +184,7 @@ export interface Forked<A, E, R> {
 export const fork = <A, E, R>(
 	handler: (value: A) => Effect.Effect<unknown, E, R>,
 ): Forked<A, E, R> => ({[ForkedId]: ForkedId, handler});
+
 const isForked = (handler: unknown): handler is Forked<unknown, unknown, unknown> =>
 	typeof handler === "object" && handler !== null && ForkedId in handler;
 
@@ -596,30 +602,43 @@ export function defineProgram<
 	definition: Definition<F, I, O, Ks, E, R> &
 		NoInfer<Parented<F, O, Ks>> & {readonly view?: ViewOf<NoInfer<Ks>, V>},
 ): Program<F, I, O, Ks, E, R> & Viewed<V> {
-	if (definition.name.trim() === "") throw new Error("a program needs a name");
+	if (definition.name.trim() === "") {
+		throw new Error("a program needs a name");
+	}
+
 	described(definition.description);
 	const capacity = capacityOf(definition.capacity ?? CAPACITY);
 	// Left out means none. The type says `F` and `Ks`, which default to the empty table when left out.
 	const none = {} as F & Ks;
 	const machines = definition.machines ?? none;
+
 	for (const [name, declared] of Object.entries<AnyKind>(machines)) {
-		if (typeof declared.status !== "function")
+		if (typeof declared.status !== "function") {
 			throw new Error(`${definition.name} says no status line for ${name}`);
-		if (!Schema.isSchema(declared.state))
+		}
+
+		if (!Schema.isSchema(declared.state)) {
 			throw new Error(`${definition.name} gives no state schema for ${name}`);
+		}
+
 		if (
 			declared.parent === name ||
 			(declared.parent !== "main" && !Object.hasOwn(machines, declared.parent))
-		)
+		) {
 			throw new Error(
 				`${definition.name}'s ${name} names ${declared.parent} as its parent, which is not another of its machines or main`,
 			);
+		}
 	}
+
 	const view = definition.view;
-	if (view !== undefined && !Object.hasOwn(machines, view.machine))
+
+	if (view !== undefined && !Object.hasOwn(machines, view.machine)) {
 		throw new Error(
 			`${definition.name}'s view reads ${view.machine}, which is not one of its machines`,
 		);
+	}
+
 	// The mark is in the types only; `made` is what a run checks.
 	const program = {...definition, flags: definition.flags ?? none, machines, capacity} as Program<
 		F,
@@ -630,7 +649,11 @@ export function defineProgram<
 		R
 	>;
 	made.add(program);
-	if (view !== undefined) views.set(program, view);
+
+	if (view !== undefined) {
+		views.set(program, view);
+	}
+
 	// The view's data type is in the returned type alone: what its window is typed by.
 	return program as typeof program & Viewed<V>;
 }
@@ -651,20 +674,33 @@ export function readFlags<F extends Flags>(
 	program: {readonly name: string; readonly flags: F},
 	raw: unknown,
 ): {readonly kind: "given"; readonly flags: Given<F>} | BadShape {
-	if (raw === null || typeof raw !== "object" || Array.isArray(raw))
+	if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
 		return {kind: "bad_shape", name: "", why: "the flags are not a table of named values"};
+	}
+
 	const values = new Map(Object.entries(raw));
-	for (const name of values.keys())
-		if (!Object.hasOwn(program.flags, name))
+
+	for (const name of values.keys()) {
+		if (!Object.hasOwn(program.flags, name)) {
 			return {kind: "bad_shape", name, why: `${program.name} has no flag named ${name}`};
+		}
+	}
+
 	const flags: Record<string, unknown> = {...raw};
+
 	for (const [name, declared] of Object.entries<Flag<unknown>>(program.flags)) {
 		// A flag not given takes its default, so a run keeps, and is shown, the value it ran with.
-		if (values.get(name) === undefined && declared.default !== undefined)
+		if (values.get(name) === undefined && declared.default !== undefined) {
 			flags[name] = declared.default.value;
+		}
+
 		const why = declared.shape.problem(flags[name]);
-		if (why !== undefined) return {kind: "bad_shape", name, why};
+
+		if (why !== undefined) {
+			return {kind: "bad_shape", name, why};
+		}
 	}
+
 	// Every declared flag passed its own shape's check and no other name is
 	// there. That is what `Given<F>` says; the compiler cannot add the checks up.
 	return {kind: "given", flags: flags as Given<F>};
@@ -693,7 +729,10 @@ export function withDefaults<F extends Flags>(
  * by value, not by key order.
  */
 const otherFlag = (given: unknown, kept: unknown): string | undefined => {
-	if (kept === null || typeof kept !== "object" || Array.isArray(kept)) return undefined;
+	if (kept === null || typeof kept !== "object" || Array.isArray(kept)) {
+		return undefined;
+	}
+
 	const now = JSON.parse(JSON.stringify(given)) as Record<string, unknown>;
 	const then = kept as Record<string, unknown>;
 	return [...new Set([...Object.keys(then), ...Object.keys(now)])].find(
@@ -925,9 +964,17 @@ interface Shown {
 /** The copies with one put in: in its old place when its id is there, else last. */
 const putCopy = (copies: readonly Copy[], copy: Copy): readonly Copy[] => {
 	const at = copies.findIndex((c) => c.id === copy.id);
-	if (at === -1) return [...copies, copy];
+
+	if (at === -1) {
+		return [...copies, copy];
+	}
+
 	const old = copies[at];
-	if (old !== undefined && old.line === copy.line && old.live === copy.live) return copies;
+
+	if (old !== undefined && old.line === copy.line && old.live === copy.live) {
+		return copies;
+	}
+
 	return copies.map((c, i) => (i === at ? copy : c));
 };
 
@@ -940,13 +987,22 @@ const sameCopies = (a: readonly Copy[], b: readonly Copy[]) =>
 
 /** How a run ended, as its record keeps it. */
 const statusOf = (exit: Exit.Exit<void, unknown>): "ended" | "stopped" | "failed" => {
-	if (Exit.isSuccess(exit)) return "ended";
+	if (Exit.isSuccess(exit)) {
+		return "ended";
+	}
+
 	return Cause.hasInterruptsOnly(exit.cause) ? "stopped" : "failed";
 };
 
 const endedOf = <E>(exit: Exit.Exit<void, E>, unread: Unread): Ended<E> => {
-	if (Exit.isSuccess(exit)) return {kind: "ended", unread};
-	if (Cause.hasInterruptsOnly(exit.cause)) return {kind: "stopped", unread};
+	if (Exit.isSuccess(exit)) {
+		return {kind: "ended", unread};
+	}
+
+	if (Cause.hasInterruptsOnly(exit.cause)) {
+		return {kind: "stopped", unread};
+	}
+
 	return {kind: "failed", cause: exit.cause, unread};
 };
 
@@ -1057,29 +1113,43 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 	wire: Wire | undefined,
 ): Effect.Effect<Started<F, I, O, Ms, E>, never, R | Scope.Scope> =>
 	Effect.gen(function* () {
-		if (!made.has(program)) return yield* notMade(program);
+		if (!made.has(program)) {
+			return yield* notMade(program);
+		}
+
 		const read = readFlags(program, flags);
-		if (read.kind === "bad_shape") return read;
+
+		if (read.kind === "bad_shape") {
+			return read;
+		}
+
 		// The global Web Crypto, not `node:crypto`: this file is on the package's top level, which runs anywhere.
 		const id = keeping.id ?? `${program.name}:${crypto.randomUUID()}`;
+
 		// The type requires a storage for a program with machines; a caller past the type is stopped here.
-		if (keeping.storage === undefined && Object.keys(program.machines).length > 0)
+		if (keeping.storage === undefined && Object.keys(program.machines).length > 0) {
 			return yield* Effect.die(new Error(`${program.name} has machines and was given no storage`));
+		}
+
 		// A run keeps the flags it was first started with, as a Temporal workflow keeps its input
 		// and a machine run its start Msg (./refs.ts): a later start under its id must give the same
 		// ones, so its machines never go on under other flags than they began with. Read before the
 		// open, so a refused start fences nothing.
 		const before =
 			keeping.storage === undefined ? null : yield* keeping.storage.record(id).pipe(Effect.orDie);
+
 		if (before !== null) {
 			const other = otherFlag(read.flags, before.flags);
-			if (other !== undefined)
+
+			if (other !== undefined) {
 				return {
 					kind: "bad_shape",
 					name: other,
 					why: `run ${id} was first started with ${other} ${JSON.stringify((before.flags as Record<string, unknown> | null)?.[other])}, and a run keeps the flags it was first started with`,
 				} satisfies BadShape;
+			}
 		}
+
 		// A program with no machine and no storage keeps its record in memory: nothing asks for it after.
 		const handle: Handle = yield* (keeping.storage ?? memoryStorage())
 			.open(id, read.flags)
@@ -1102,10 +1172,13 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 							},
 						],
 		});
-		if (wire?.into !== undefined)
+
+		if (wire?.into !== undefined) {
 			wire.into.addLinks([
 				{span, attributes: {[ATTR.pipeOutput]: wire.output, [ATTR.pipeInput]: wire.input}},
 			]);
+		}
+
 		const clock = yield* Clock.Clock;
 		const mark = (name: string, attributes: Record<string, string>) =>
 			span.event(name, clock.currentTimeNanosUnsafe(), attributes);
@@ -1122,19 +1195,27 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		let held = 0;
 		const queue: Waiter[] = [];
 		const controls = new Map<string, Control>();
-		for (const [name, declared] of Object.entries<Input<unknown>>(program.inputs))
-			if (declared.control)
+
+		for (const [name, declared] of Object.entries<Input<unknown>>(program.inputs)) {
+			if (declared.control) {
 				controls.set(name, {
 					values: yield* Queue.unbounded<Delivery<unknown>>(),
 					tokens: yield* Queue.bounded<true>(CONTROL),
 					waiting: 0,
 				});
+			}
+		}
+
 		/** Each input's values told and not yet taken by `serve`: what `mailbox()` shows and the end counts as unread. */
 		const count = new Map<string, number>();
 		const counted = (name: string, n: number) => {
 			const now = (count.get(name) ?? 0) + n;
-			if (now === 0) count.delete(name);
-			else count.set(name, now);
+
+			if (now === 0) {
+				count.delete(name);
+			} else {
+				count.set(name, now);
+			}
 		};
 		const closed = new Set<string>();
 		/** How many pipes write to each input now. */
@@ -1142,31 +1223,44 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// Each one's type comes from the output it is named for, and `send` hands it only values that output's shape took.
 		const wide = given as Readonly<Record<string, ((value: unknown) => void) | undefined>>;
 		const listeners = new Map<string, Set<(value: unknown) => void>>();
+
 		for (const name of Object.keys(program.outputs)) {
 			const first = wide[name];
 			listeners.set(name, new Set(first === undefined ? [] : [first]));
 		}
+
 		// `over`: the run has ended, and this is the last state the view will show.
 		const views = new Map<string, SubscriptionRef.SubscriptionRef<Shown>>();
-		for (const name of Object.keys(program.machines))
+
+		for (const name of Object.keys(program.machines)) {
 			views.set(
 				name,
 				yield* SubscriptionRef.make<Shown>({state: null, newest: null, copies: [], over: false}),
 			);
+		}
+
 		const ended = yield* Deferred.make<Ended<E>>();
 		let open = true;
 		const finish = () => {
 			open = false;
+
 			// Shut: nobody reads after the end, and an offer still waiting for room is let go with `stopped`.
-			for (const waiter of queue.splice(0))
-				if (waiter.done !== undefined) Deferred.doneUnsafe(waiter.done, Effect.succeed("stopped"));
+			for (const waiter of queue.splice(0)) {
+				if (waiter.done !== undefined) {
+					Deferred.doneUnsafe(waiter.done, Effect.succeed("stopped"));
+				}
+			}
+
 			Queue.shutdownUnsafe(letters);
+
 			for (const control of controls.values()) {
 				Queue.shutdownUnsafe(control.values);
 				Queue.shutdownUnsafe(control.tokens);
 			}
-			for (const view of views.values())
+
+			for (const view of views.values()) {
 				Effect.runSync(SubscriptionRef.update(view, (shown) => ({...shown, over: true})));
+			}
 		};
 
 		/** A failure outside `main` that must end the run: a close or an ack that could not be kept. */
@@ -1200,9 +1294,19 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// Heard once, at the moment it is sent, and kept nowhere, but in a pipe's outbox.
 		const heard = (name: string, value: unknown): Effect.Effect<void> => {
 			mark(`sent ${name}`, {[ATTR.output]: name});
-			for (const listener of [...(listeners.get(name) ?? [])]) hand(listener, value);
-			if (wire === undefined || wire.output !== name) return Effect.void;
-			if (outbox !== undefined) return outbox.send(value);
+
+			for (const listener of [...(listeners.get(name) ?? [])]) {
+				hand(listener, value);
+			}
+
+			if (wire === undefined || wire.output !== name) {
+				return Effect.void;
+			}
+
+			if (outbox !== undefined) {
+				return outbox.send(value);
+			}
+
 			return wire.writer
 				.tell(value, Effect.void)
 				.pipe(
@@ -1235,8 +1339,11 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		const watch: Watch<Ms> = (name, id, runtime) =>
 			Effect.gen(function* () {
 				const view = views.get(name);
-				if (view === undefined)
+
+				if (view === undefined) {
 					return yield* Effect.die(new Error(`${program.name} has no machine named ${name}`));
+				}
+
 				// Each kind's line is only ever handed the state of a copy of its own machine, watched
 				// under its own name; the compiler cannot carry that through a lookup by a name read at
 				// run time.
@@ -1282,30 +1389,50 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				counted(letter.to, 1);
 				queued(letter.to);
 			}
+
 			Queue.offerUnsafe(letters, letter);
 		};
 		/** Let in what waits, first come first in, while there is room: a close needs none. */
 		const flush = () => {
 			while (queue.length > 0) {
 				const first = queue[0];
-				if (first === undefined) return;
-				if (first.letter.kind === "told" && held >= program.capacity) return;
+
+				if (first === undefined) {
+					return;
+				}
+
+				if (first.letter.kind === "told" && held >= program.capacity) {
+					return;
+				}
+
 				queue.shift();
 				post(first.letter);
-				if (first.done !== undefined) Deferred.doneUnsafe(first.done, Effect.succeed("queued"));
+
+				if (first.done !== undefined) {
+					Deferred.doneUnsafe(first.done, Effect.succeed("queued"));
+				}
 			}
 		};
 		/** A close in its turn: now, or behind the writers already waiting. */
 		const enqueue = (letter: Letter) => {
-			if (!open) return;
-			if (queue.length === 0) post(letter);
-			else queue.push({letter, done: undefined});
+			if (!open) {
+				return;
+			}
+
+			if (queue.length === 0) {
+				post(letter);
+			} else {
+				queue.push({letter, done: undefined});
+			}
 		};
 		/** The next letter, taken out of the mailbox: its room goes to the first writer waiting. */
 		const take = Queue.take(letters).pipe(
 			Effect.tap((letter) =>
 				Effect.sync(() => {
-					if (letter.kind !== "told") return;
+					if (letter.kind !== "told") {
+						return;
+					}
+
 					held -= 1;
 					counted(letter.to, -1);
 					flush();
@@ -1316,28 +1443,51 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		/** Why a value told to `name` cannot go in now, or `undefined`: it can. */
 		const refused = (name: string, value: unknown): Exclude<Word, "queued"> | undefined => {
 			const declared: Input<unknown> | undefined = program.inputs[name];
-			if (declared === undefined) return "no_cell";
-			if (!declared.shape.check(value)) return "bad_shape";
-			if (!open) return "stopped";
-			if (closed.has(name)) return "closed";
+
+			if (declared === undefined) {
+				return "no_cell";
+			}
+
+			if (!declared.shape.check(value)) {
+				return "bad_shape";
+			}
+
+			if (!open) {
+				return "stopped";
+			}
+
+			if (closed.has(name)) {
+				return "closed";
+			}
+
 			return undefined;
 		};
 		/** Put one value in, never waiting. */
 		const put = (name: string, told: Delivery<unknown>): Effect.Effect<Word, MailboxFull> =>
 			Effect.suspend(() => {
 				const no = refused(name, told.value);
-				if (no !== undefined) return Effect.succeed(no);
+
+				if (no !== undefined) {
+					return Effect.succeed(no);
+				}
+
 				const control = controls.get(name);
+
 				if (control !== undefined) {
-					if (!Queue.offerUnsafe(control.tokens, true))
+					if (!Queue.offerUnsafe(control.tokens, true)) {
 						return Effect.fail(new MailboxFull({input: name, capacity: CONTROL}));
+					}
+
 					counted(name, 1);
 					Queue.offerUnsafe(control.values, told);
 					return Effect.succeed(queued(name));
 				}
+
 				// Nobody passes a writer already waiting.
-				if (queue.length > 0 || held >= program.capacity)
+				if (queue.length > 0 || held >= program.capacity) {
 					return Effect.fail(new MailboxFull({input: name, capacity: program.capacity}));
+				}
+
 				post({kind: "told", to: name, told});
 				return Effect.succeed("queued" as const);
 			});
@@ -1345,8 +1495,13 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		const putWaiting = (name: string, told: Delivery<unknown>): Effect.Effect<Word> =>
 			Effect.suspend(() => {
 				const no = refused(name, told.value);
-				if (no !== undefined) return Effect.succeed(no);
+
+				if (no !== undefined) {
+					return Effect.succeed(no);
+				}
+
 				const control = controls.get(name);
+
 				if (control !== undefined) {
 					control.waiting += 1;
 					return Queue.offer(control.tokens, true).pipe(
@@ -1356,17 +1511,22 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 							}),
 						),
 						Effect.map((taken): Word => {
-							if (!taken || !open) return "stopped";
+							if (!taken || !open) {
+								return "stopped";
+							}
+
 							counted(name, 1);
 							Queue.offerUnsafe(control.values, told);
 							return queued(name);
 						}),
 					);
 				}
+
 				if (queue.length === 0 && held < program.capacity) {
 					post({kind: "told", to: name, told});
 					return Effect.succeed("queued" as const);
 				}
+
 				const done = Deferred.makeUnsafe<Word>();
 				const waiter: Waiter = {letter: {kind: "told", to: name, told}, done};
 				queue.push(waiter);
@@ -1376,7 +1536,11 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 					Effect.onInterrupt(() =>
 						Effect.sync(() => {
 							const at = queue.indexOf(waiter);
-							if (at !== -1) queue.splice(at, 1);
+
+							if (at !== -1) {
+								queue.splice(at, 1);
+							}
+
 							flush();
 						}),
 					),
@@ -1392,12 +1556,15 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			options?: {readonly until?: ReadonlyArray<string>},
 		): Effect.Effect<void, unknown, unknown> =>
 			Effect.gen(function* () {
-				if (serving)
+				if (serving) {
 					return yield* Effect.die(new Error(`${program.name} called serve while it was serving`));
+				}
+
 				for (const [name, declared] of Object.entries<Input<unknown>>(program.inputs)) {
 					const handler = handlers[name];
+
 					// The types refuse each of these; a caller past them is stopped here.
-					if (declared.control ? !isForked(handler) : typeof handler !== "function")
+					if (declared.control ? !isForked(handler) : typeof handler !== "function") {
 						return yield* Effect.die(
 							new Error(
 								declared.control
@@ -1405,7 +1572,9 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 									: `${program.name}'s input ${name} needs a handler, and only a control input takes a fork`,
 							),
 						);
+					}
 				}
+
 				serving = true;
 				yield* Effect.addFinalizer(() =>
 					Effect.sync(() => {
@@ -1415,12 +1584,17 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				const until = new Set(
 					(options?.until ?? Object.keys(program.inputs)).filter((name) => !seen.has(name)),
 				);
-				if (until.size === 0) return;
+
+				if (until.size === 0) {
+					return;
+				}
+
 				const handed = (name: string, told: Delivery<unknown>): unknown =>
 					program.inputs[name]?.ack === "manual" ? told : told.value;
 				const forks = yield* FiberSet.make<void, never>();
 				const failed = yield* Deferred.make<never, unknown>();
 				const readers = yield* FiberSet.make<void, never>();
+
 				for (const [name, control] of controls) {
 					const handler = handlers[name] as Forked<unknown, unknown, unknown>;
 					const one = (told: Delivery<unknown>) =>
@@ -1442,18 +1616,28 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 						).pipe(Effect.ignoreCause),
 					);
 				}
+
 				const ordered = Effect.gen(function* () {
 					while (true) {
 						const letter = yield* take;
+
 						if (letter.kind === "closed") {
 							yield* letter.kept;
 							seen.add(letter.to);
 							until.delete(letter.to);
-							if (until.size === 0) return;
+
+							if (until.size === 0) {
+								return;
+							}
+
 							continue;
 						}
+
 						const handler = handlers[letter.to] as (value: unknown) => Effect.Effect<unknown>;
-						if ((yield* handler(handed(letter.to, letter.told))) === ending) return;
+
+						if ((yield* handler(handed(letter.to, letter.told))) === ending) {
+							return;
+						}
 					}
 				});
 				yield* Effect.raceFirst(
@@ -1467,7 +1651,10 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 
 		// An input the starter closed at an earlier start of this run is closed from the start.
 		for (const name of handle.found.closed) {
-			if (!Object.hasOwn(program.inputs, name) || closed.has(name)) continue;
+			if (!Object.hasOwn(program.inputs, name) || closed.has(name)) {
+				continue;
+			}
+
 			closed.add(name);
 			post({kind: "closed", to: name, kept: Effect.void});
 		}
@@ -1493,7 +1680,10 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		// may be left unfinished: its parent was the one to take it to its end (./refs.ts). A pipe's
 		// outbox goes first, what an earlier start sent and never heard acked, and is drained last.
 		const working = Effect.gen(function* () {
-			if (outbox !== undefined) yield* outbox.resend;
+			if (outbox !== undefined) {
+				yield* outbox.resend;
+			}
+
 			const kept = yield* refsOf(
 				program.name,
 				program.machines,
@@ -1505,7 +1695,10 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			// `serve` is typed where `main` calls it; inside, each handler is read by its input's name.
 			yield* program.main({...kept.kit, watch, serve: serve as Serve<I>});
 			yield* kept.check;
-			if (outbox !== undefined) yield* outbox.drained;
+
+			if (outbox !== undefined) {
+				yield* outbox.drained;
+			}
 		}).pipe(
 			Effect.scoped,
 			// A copy's last save fails as `main`'s scope closes: the race below may not have heard it yet.
@@ -1529,8 +1722,11 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		fiber.addObserver((exit) => {
 			// Counted before `finish` shuts the mailbox, in the same turn, so no tell lands between.
 			const unread: Record<string, number> = Object.fromEntries(count);
-			for (const [name, left] of count)
+
+			for (const [name, left] of count) {
 				mark(`unread ${name}`, {[ATTR.input]: name, [ATTR.unread]: String(left)});
+			}
+
 			span.end(clock.currentTimeNanosUnsafe(), exit);
 			finish();
 			// Before the end is told, so whoever waits on it finds the next run's input already closed, when this was its last writer.
@@ -1569,16 +1765,24 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				const these = listeners.get(name);
 				// Its type comes from the output `name`, and `send` hands it only values that output's shape took.
 				const wide = listener as (value: unknown) => void;
-				if (these === undefined) return () => undefined;
+
+				if (these === undefined) {
+					return () => undefined;
+				}
+
 				these.add(wide);
 				return () => these.delete(wide);
 			},
 			machines,
 			mailbox: () => {
 				const waiting = new Map<string, number>();
-				for (const waiter of queue)
-					if (waiter.done !== undefined)
+
+				for (const waiter of queue) {
+					if (waiter.done !== undefined) {
 						waiting.set(waiter.letter.to, (waiting.get(waiter.letter.to) ?? 0) + 1);
+					}
+				}
+
 				return {
 					length: held,
 					inputs: Object.fromEntries(
@@ -1595,7 +1799,10 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			ended: Deferred.await(ended),
 		};
 		const shut = (name: string) => {
-			if (!Object.hasOwn(program.inputs, name) || closed.has(name)) return;
+			if (!Object.hasOwn(program.inputs, name) || closed.has(name)) {
+				return;
+			}
+
 			closed.add(name);
 			// The values already in the mailbox are still handed on: the close goes after them.
 			enqueue({kind: "closed", to: name, kept: Effect.void});
@@ -1609,7 +1816,10 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 		 * next start, and a writer stopped by a crash has not finished.
 		 */
 		const close: Close<I> = (name) => {
-			if (!Object.hasOwn(program.inputs, name) || closed.has(name)) return;
+			if (!Object.hasOwn(program.inputs, name) || closed.has(name)) {
+				return;
+			}
+
 			closed.add(name);
 			const kept = Deferred.makeUnsafe<void>();
 			enqueue({kind: "closed", to: name, kept: Deferred.await(kept)});
@@ -1633,11 +1843,17 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				tell: (value, ack) => putWaiting(input, {value, ack}),
 				gone: Deferred.await(ended).pipe(Effect.asVoid),
 				end: () => {
-					if (done) return;
+					if (done) {
+						return;
+					}
+
 					done = true;
 					const left = (feeding.get(input) ?? 1) - 1;
 					feeding.set(input, left);
-					if (left === 0) shut(input);
+
+					if (left === 0) {
+						shut(input);
+					}
 				},
 			};
 		});
@@ -1720,15 +1936,24 @@ export const pipe = <
 		(): Effect.Effect<Started<F, I, O, Ms, E> | DoesNotFit, never, R | Scope.Scope> => {
 			const out: Output<unknown> | undefined = from.program.outputs[output];
 			const into: Input<unknown> | undefined = to.run.program.inputs[input];
-			if (out === undefined || into === undefined || fit(out, into) === "does_not_fit")
+
+			if (out === undefined || into === undefined || fit(out, into) === "does_not_fit") {
 				return Effect.succeed({kind: "does_not_fit", output, input});
+			}
+
 			const opener = writers.get(to);
-			if (opener === undefined)
+
+			if (opener === undefined) {
 				return Effect.die(
 					new Error(`pipe into ${to.run.program.name} was handed a copy of its starter's handle`),
 				);
+			}
+
 			// Before the writer opens: a refused `from` must not hold `to`'s input open.
-			if (!made.has(from.program)) return notMade(from.program);
+			if (!made.has(from.program)) {
+				return notMade(from.program);
+			}
+
 			const writer = opener(input);
 			return begin(from.program, from.flags, from.listeners ?? {}, from.keeping ?? {}, {
 				output,
@@ -1790,19 +2015,27 @@ export const call = <F extends Flags, I extends Inputs, O extends Outputs, Ms ex
 	Effect.gen(function* () {
 		const given: CallOptions<I, O, Ms> | undefined = options[0];
 		const told: Readonly<Record<string, readonly unknown[] | undefined>> = given?.told ?? {};
+
 		for (const [name, values] of Object.entries(told)) {
 			const declared: Input<unknown> | undefined = program.inputs[name];
-			if (declared === undefined)
+
+			if (declared === undefined) {
 				return {
 					kind: "bad_shape",
 					name,
 					why: `${program.name} has no input named ${name}`,
 				} as const;
+			}
+
 			for (const value of values ?? []) {
 				const why = declared.shape.problem(value);
-				if (why !== undefined) return {kind: "bad_shape", name, why} as const;
+
+				if (why !== undefined) {
+					return {kind: "bad_shape", name, why} as const;
+				}
 			}
 		}
+
 		const heard: {readonly name: string; readonly value: unknown}[] = [];
 		// Each one's type comes from the output it is named for, and `send` hands it only values that output's shape took.
 		const others = (given?.listeners ?? {}) as Readonly<
@@ -1819,14 +2052,24 @@ export const call = <F extends Flags, I extends Inputs, O extends Outputs, Ms ex
 		) as Listeners<O>;
 		const keeping: {readonly id?: string; readonly storage?: Storage} = given?.keeping ?? {};
 		const started = yield* begin(program, flags, listeners, keeping, undefined);
-		if (started.kind === "bad_shape") return started;
+
+		if (started.kind === "bad_shape") {
+			return started;
+		}
+
 		// Checked above against each input's shape. Offered, so more than a line holds waits for
 		// `main` to read, like a file piped into a command; in a fiber, so a stop is not held up behind it.
 		yield* Effect.forkScoped(
 			Effect.gen(function* () {
-				for (const [name, values] of Object.entries(told))
-					for (const value of values ?? []) yield* started.run.offer(name, value);
-				for (const name of Object.keys(program.inputs)) started.close(name);
+				for (const [name, values] of Object.entries(told)) {
+					for (const value of values ?? []) {
+						yield* started.run.offer(name, value);
+					}
+				}
+
+				for (const name of Object.keys(program.inputs)) {
+					started.close(name);
+				}
 			}),
 		);
 		const stopOn = given?.stopOn;

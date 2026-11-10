@@ -30,13 +30,21 @@ const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"
 
 const isFile = (path: string): boolean =>
 	statSync(path, {throwIfNoEntry: false})?.isFile() === true;
+
 const isFolder = (path: string): boolean =>
 	statSync(path, {throwIfNoEntry: false})?.isDirectory() === true;
 
 const namesItsFile = (from: string, written: string): boolean => {
 	const target = resolve(dirname(from), written);
-	if (isFile(target)) return true;
-	if (isFolder(target) || !HAS_EXTENSION.test(written)) return false;
+
+	if (isFile(target)) {
+		return true;
+	}
+
+	if (isFolder(target) || !HAS_EXTENSION.test(written)) {
+		return false;
+	}
+
 	const stem = target.slice(0, -extname(target).length);
 	return !EXTENSIONS.some((extension) => isFile(target + extension) || isFile(stem + extension));
 };
@@ -44,8 +52,14 @@ const namesItsFile = (from: string, written: string): boolean => {
 export const useImportExtensions: CreateRule = {
 	create(context) {
 		const check = (source: Node | null | undefined) => {
-			if (source == null || source.type !== "Literal" || typeof source.value !== "string") return;
-			if (!RELATIVE.test(source.value) || namesItsFile(context.filename, source.value)) return;
+			if (source == null || source.type !== "Literal" || typeof source.value !== "string") {
+				return;
+			}
+
+			if (!RELATIVE.test(source.value) || namesItsFile(context.filename, source.value)) {
+				return;
+			}
+
 			context.report({
 				node: source,
 				message:

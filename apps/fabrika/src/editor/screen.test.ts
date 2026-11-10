@@ -39,11 +39,13 @@ type Fg =
 	| {readonly _tag: "default"}
 	| {readonly _tag: "index"; readonly n: number}
 	| {readonly _tag: "rgb"; readonly hex: string};
+
 interface Pen {
 	readonly fg: Fg;
 	readonly bold: boolean;
 	readonly faint: boolean;
 }
+
 const PLAIN: Pen = {fg: {_tag: "default"}, bold: false, faint: false};
 
 const hex2 = (n: number) => n.toString(16).padStart(2, "0");
@@ -52,16 +54,25 @@ const hex2 = (n: number) => n.toString(16).padStart(2, "0");
 const penAfter = (pen: Pen, params: string): Pen => {
 	const ps = params === "" ? [0] : params.split(";").map(Number);
 	let next = pen;
+
 	for (let i = 0; i < ps.length; i += 1) {
 		const p = ps[i] ?? 0;
-		if (p === 0) next = PLAIN;
-		else if (p === 1) next = {...next, bold: true};
-		else if (p === 2) next = {...next, faint: true};
-		else if (p === 22) next = {...next, bold: false, faint: false};
-		else if (p >= 30 && p <= 37) next = {...next, fg: {_tag: "index", n: p - 30}};
-		else if (p >= 90 && p <= 97) next = {...next, fg: {_tag: "index", n: p - 90 + 8}};
-		else if (p === 39) next = {...next, fg: {_tag: "default"}};
-		else if (p === 38 && ps[i + 1] === 5) {
+
+		if (p === 0) {
+			next = PLAIN;
+		} else if (p === 1) {
+			next = {...next, bold: true};
+		} else if (p === 2) {
+			next = {...next, faint: true};
+		} else if (p === 22) {
+			next = {...next, bold: false, faint: false};
+		} else if (p >= 30 && p <= 37) {
+			next = {...next, fg: {_tag: "index", n: p - 30}};
+		} else if (p >= 90 && p <= 97) {
+			next = {...next, fg: {_tag: "index", n: p - 90 + 8}};
+		} else if (p === 39) {
+			next = {...next, fg: {_tag: "default"}};
+		} else if (p === 38 && ps[i + 1] === 5) {
 			next = {...next, fg: {_tag: "index", n: ps[i + 2] ?? 0}};
 			i += 2;
 		} else if (p === 38 && ps[i + 1] === 2) {
@@ -70,6 +81,7 @@ const penAfter = (pen: Pen, params: string): Pen => {
 			i += 4;
 		}
 	}
+
 	return next;
 };
 
@@ -83,8 +95,9 @@ const runsOf = (bytes: string) => {
 	const parts = bytes.split(/\x1b\[([\d;]*)m/);
 	let pen = PLAIN;
 	parts.forEach((part, i) => {
-		if (i % 2 === 1) pen = penAfter(pen, part);
-		else if (part.trim() !== "") {
+		if (i % 2 === 1) {
+			pen = penAfter(pen, part);
+		} else if (part.trim() !== "") {
 			const after = parts[i + 1];
 			runs.push({text: part.trim(), pen, reset: after === "0" || after === ""});
 		}
@@ -135,8 +148,11 @@ describe("a table's colors come from the viewer's theme", () => {
 			return {colored: run !== undefined && run.pen !== PLAIN, reset: run?.reset};
 		};
 		expect(shape("Experiments")).toEqual({colored: true, reset: true});
-		for (const tone of TONES.filter((t) => t !== "plain"))
+
+		for (const tone of TONES.filter((t) => t !== "plain")) {
 			expect(shape(`${tone}-cell`)).toEqual({colored: true, reset: true});
+		}
+
 		expect(shape("plain-cell").colored).toBe(false);
 	});
 
