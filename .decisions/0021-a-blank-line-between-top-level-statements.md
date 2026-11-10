@@ -63,6 +63,10 @@ Added the same day (owner, 2026-11-09, ticket 439):
   refused too. Its fix runs in `pnpm format`.
 - The owner first asked for `curly` `"multi-line"` plus a rule of ours that braces every loop, then
   chose `"all"` instead: one built-in rule, no split by statement kind.
+- **Both are named differences from Effect's style**
+  ([0023](0023-next-follows-effects-code-style.md)). Effect has no `curly` rule: `packages/effect/src`
+  at `effect@4.1.2` has 2,228 one-statement `if` lines with no braces, and it does not enforce blank
+  lines around blocks. The reason is the owner's: code here is read by humans first.
 
 ```ts
 // Refused.
