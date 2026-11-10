@@ -51,6 +51,8 @@ import {
   frameUpdate,
   keyGoesTo,
   type MidKey,
+  type Out,
+  passOn,
   type Shapes,
   ticketsShown,
 } from "./frame.ts";
@@ -384,23 +386,31 @@ const pressAgain = (key: Key) => {
   replaying = false;
 };
 
+/**
+ * Carry out one thing `passOn` answered. A key for the over goes through `pressAgain`'s focus
+ * routing (`keyForOver`) like any held key. Answers whether it is the key pressed this instant.
+ */
+const carryOut = (o: Out): boolean => {
+  if (o._tag === "press") {
+    toHost({ type: "press", id: o.id, key: o.key });
+  } else if (o._tag === "live") {
+    return true;
+  } else {
+    pressAgain(o.key);
+  }
+
+  return false;
+};
+
 /** Step the hold by one Msg. Answers whether the key pressed this instant goes on as it is. */
 const holdStep = (msg: HoldMsg): boolean => {
   const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, hold, msg);
   hold = next;
-  let live = false;
+  const { frame, out } = passOn(store.frame, cmds, ownMidKey(), hold.waiting !== null, store.keys);
 
-  for (const c of cmds) {
-    if (c.type === "press") {
-      toHost({ type: "press", id: c.id, key: c.key });
-    } else if (!c.held) {
-      live = true;
-    } else if (!frameInstall(frameFor(c.key.press.key, "passed"))) {
-      pressAgain(c.key);
-    }
-  }
+  frameInstall(frame);
 
-  return live;
+  return out.map(carryOut).includes(true);
 };
 
 /** How long a note on the bottom line stays, as after the palette ran a command. */

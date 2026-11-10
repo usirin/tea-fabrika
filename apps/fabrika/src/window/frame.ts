@@ -4,6 +4,7 @@ import { whenOf } from "@tea-fabrika/tracker/window";
 import { Option, Schema } from "effect";
 import type { Ask, AsksNow } from "../asks.ts";
 import { activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace } from "../desk/desk.ts";
+import type { HoldCmd, Key as HeldKey } from "../desk/hold.ts";
 import { bindingFor, defaults, type Does, type File, type Key, type Keys } from "../desk/keymap.ts";
 import { type Group, groupOf, type Show, wordOf } from "../desk/keys.ts";
 import type { TileId, TileNode } from "../desk/layout/index.ts";
@@ -998,6 +999,52 @@ export const keyGoesTo = (over: Over, key: string, prefix: string, desk: MidKey)
   }
 
   return key === prefix || desk.armed || desk.asking ? "desk" : "over";
+};
+
+/** What the page does for one Cmd of the hold's step, in order (`passOn`). */
+export type Out =
+  | { readonly _tag: "press"; readonly id: number; readonly key: string }
+  | { readonly _tag: "live" }
+  | { readonly _tag: "replay"; readonly key: HeldKey }
+  | { readonly _tag: "over"; readonly key: HeldKey };
+
+/**
+ * The whole loop over the hold's Cmds: a `press` goes to the host, a key pressed now goes on live,
+ * and a key released goes through `frameKey` as `passed`, the frame threaded from key to key. One
+ * the frame changes is consumed; any other goes to the over (`keyGoesTo`) or is pressed again.
+ * `waiting` is the final hold model's, and only an armed desk's reading of the over counts it.
+ */
+export const passOn = (
+  f: Frame,
+  cmds: readonly HoldCmd[],
+  actual: MidKey,
+  waiting: boolean,
+  keys: { prefix: string },
+): { frame: Frame; out: readonly Out[] } => {
+  const out: Out[] = [];
+  let frame = f;
+
+  for (const c of cmds) {
+    if (c.type === "press") {
+      out.push({ _tag: "press", id: c.id, key: c.key });
+    } else if (!c.held) {
+      out.push({ _tag: "live" });
+    } else {
+      const next = frameKey(frame, c.key.press.key, actual, waiting, "passed");
+
+      if (next !== frame) {
+        frame = next;
+      } else {
+        const to = keyGoesTo(frame.over, c.key.name, keys.prefix, {
+          armed: actual.armed || waiting,
+          asking: actual.asking,
+        });
+        out.push({ _tag: to === "over" ? "over" : "replay", key: c.key });
+      }
+    }
+  }
+
+  return { frame, out };
 };
 
 export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
