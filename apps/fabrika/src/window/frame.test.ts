@@ -1,10 +1,12 @@
 import { applyCell } from "@demlik/tea";
 import { Result } from "effect";
+import * as fc from "fast-check";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Ask, AsksNow } from "../asks.ts";
 import { activeOf, type Desk, type DeskCmd, type DeskMsg, deskMachine, type Open } from "../desk/desk.ts";
+import { type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key } from "../desk/hold.ts";
 import { decodeKeys, defaults, Does, type Keys } from "../desk/keymap.ts";
 import type { HostNow } from "../messages.ts";
 import type { JobEnded } from "../tile-jobs.ts";
@@ -16,10 +18,12 @@ import {
   bottomLineShows,
   clockWord,
   commandsOf,
+  deliver,
   ENDED_SHOWN_MS,
   EXPLAIN_ON,
   FRAME,
   fileWord,
+  frameKey,
   focusFollows,
   type Frame,
   type FrameMsg,
@@ -36,9 +40,13 @@ import {
   keyWord,
   lineIn,
   matching,
+  type MidKey,
   middleFree,
   nowhereNote,
   opensOf,
+  type Out,
+  passOn,
+  type Ports,
   prefixLine,
   questionWord,
   restartedWord,
@@ -1262,4 +1270,335 @@ it("focus follows a zoom: zooming or unzooming the focused tile is a change that
   expect(focusFollows(zoomed)).not.toBe(focusFollows(split));
   expect(focusFollows(back)).toBe(focusFollows(split));
   expect(focusFollows(null)).toBe("");
+});
+
+// Ticket 589: an Escape the hold kept while the host's answer was out goes to the frame too, as a
+// fresh one does. `frameKey(frame, key, actual, waiting, delivery)` is the pure decision the page
+// makes for a key before it reaches a tile (desk.tsx): it answers the same frame when the key
+// goes on. `actual` is the desk's own prefix and question; `waiting` is the hold's outstanding
+// key. Only a fresh key counts `waiting` as the desk being mid-key: a passed key already had its
+// turn at the host.
+describe("a held Escape reaches the frame (ticket 589)", () => {
+  const key = (name: string, k = name): Key => ({
+    name,
+    press: { key: k, code: "", ctrl: name.startsWith("<c-"), alt: false, meta: false, shift: false },
+  });
+  const ctrlB = key("<c-b>", "b");
+  const escape = key("<esc>", "Escape");
+  const unarmed: MidKey = { armed: false, asking: false };
+  const PREFIX_ONLY: HoldMsg = { type: "takes", takes: { all: false, keys: ["<c-b>"] } };
+  const ALL: HoldMsg = { type: "takes", takes: { all: true, keys: [] } };
+  const on: Frame = frameUpdate(FRAME, { type: "info", focus: null });
+  const withAsks: Frame = frameUpdate(on, { type: "show", what: "asks" });
+
+  /** The real hold, folded from its real init: the model at the end and each step's Cmds. */
+  const foldHold = (msgs: readonly HoldMsg[]) => {
+    let hold: Hold = holdMachine.init(null, undefined)[0];
+    const steps: (readonly HoldCmd[])[] = [];
+
+    for (const msg of msgs) {
+      const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, hold, msg);
+      hold = next;
+      steps.push(cmds);
+    }
+
+    return { hold, steps };
+  };
+
+  /**
+   * What the page does with the Cmds of one step: `passOn` (frame.ts) is the whole loop holdStep
+   * runs over them, with the hold's final model already installed (`waiting` is that model's), and
+   * desk.tsx only carries out what it answers.
+   */
+  const PREFIX = "<c-b>";
+  const settle = (frame: Frame, hold: Hold, cmds: readonly HoldCmd[], actual: MidKey) =>
+    passOn(frame, cmds, actual, hold.waiting !== null, { prefix: PREFIX });
+
+  /** C-b i: the prefix is acknowledged, `i` is sent, and the host's desk comes back unarmed. */
+  const INFO_ON_PENDING: readonly HoldMsg[] = [
+    PREFIX_ONLY,
+    { type: "key", key: ctrlB },
+    ALL,
+    { type: "answer", id: 0, took: true },
+    { type: "key", key: key("i") },
+    PREFIX_ONLY,
+  ];
+
+  // scenario: the exact order of the report, show then desk then answer, with no clock: the key
+  // `i` is out, Escape is pressed before its answer and kept, and the answer lets it go on.
+  it("scenario: a held Escape leaves info mode when the answer lets it go", () => {
+    const { hold, steps } = foldHold([
+      ...INFO_ON_PENDING,
+      { type: "key", key: escape },
+      { type: "answer", id: 1, took: true },
+    ]);
+    expect(steps[5]).toEqual([]);
+    expect(steps.at(-1)).toEqual([{ type: "pass", key: escape, held: true }]);
+    const out = settle(on, hold, steps.at(-1) ?? [], unarmed);
+    expect(out.frame.info).toEqual({ kind: "off" });
+    expect(out.out).toEqual([]);
+  });
+
+  // scenario: Escape, then a key the host takes, in one release: the hold's final model is waiting
+  // again, and that wait must not reserve the Escape that went on before it.
+  it("scenario: a later key at the host does not hold back an earlier passed Escape", () => {
+    const { hold, steps } = foldHold([
+      ...INFO_ON_PENDING,
+      { type: "key", key: escape },
+      { type: "key", key: ctrlB },
+      { type: "answer", id: 1, took: true },
+    ]);
+    const cmds = steps.at(-1) ?? [];
+    expect(cmds.map((c) => c.type)).toEqual(["pass", "press"]);
+    expect(hold.waiting).not.toBeNull();
+    const out = settle(on, hold, cmds, unarmed);
+    expect(out.frame.info).toEqual({ kind: "off" });
+    // The Escape is consumed; the key after it goes to the host, with the id the hold gave it.
+    expect(out.out).toEqual([{ _tag: "press", id: hold.waiting?.id, key: "<c-b>" }]);
+  });
+
+  const frames = fc.record({ info: fc.boolean(), over: fc.boolean() }).map(({ info, over }) => {
+    const base = info ? on : FRAME;
+    return over ? frameUpdate(base, { type: "show", what: "asks" }) : base;
+  });
+  const layers = (f: Frame) => (f.over.kind === "none" ? 0 : 1) + (f.info.kind === "on" ? 1 : 0);
+
+  it("decides Escape alike fresh and passed, and dismisses at most one layer", () => {
+    fc.assert(
+      fc.property(frames, fc.boolean(), fc.boolean(), fc.boolean(), (f, armed, asking, waiting) => {
+        const actual = { armed, asking };
+        const passed = frameKey(f, "Escape", actual, waiting, "passed");
+        const fresh = frameKey(f, "Escape", actual, waiting, "fresh");
+        // Same ownership, same transition: a passed key ignores the wait, a fresh one adds it.
+        expect(passed).toEqual(frameUpdate(f, { type: "escape", desk: actual }));
+        expect(fresh).toEqual(frameKey(f, "Escape", { armed: armed || waiting, asking }, false, "passed"));
+        // One layer at a time (Apple's HIG): never both the over and info mode.
+        expect(layers(f) - layers(passed)).toBeLessThanOrEqual(1);
+        expect(layers(f) - layers(fresh)).toBeLessThanOrEqual(1);
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  // scenario: Escape pressed while the host still owns the outstanding key `i`. It is the hold's
+  // to keep, so neither the frame nor a tile has it until the answer.
+  it("scenario: a fresh Escape while a key is out at the host is kept, not dismissed", () => {
+    const { hold, steps } = foldHold([...INFO_ON_PENDING, { type: "key", key: escape }]);
+    expect(hold.waiting?.key).toEqual(key("i"));
+    expect(hold.held).toEqual([escape]);
+    expect(steps.at(-1)).toEqual([]);
+    expect(frameKey(on, "Escape", unarmed, hold.waiting !== null, "fresh")).toBe(on);
+  });
+
+  const others = fc.array(fc.constantFrom("a", "b", "1", "ArrowLeft", "Tab"), { minLength: 1, maxLength: 30 });
+
+  // L5, through `passOn`: every held key the frame leaves comes out exactly once, in the order the
+  // hold released it: `over` when the over takes it (keyGoesTo), else `replay`. Nothing comes out
+  // that sends a key back into the hold (`press`, or `live`, the key pressed now), and the frame
+  // stays the same one. The oracle is keyGoesTo's rule written out: with an over up and the desk
+  // not mid-key (and the key not the prefix), the over takes the key.
+  // The guard that stops the page's own `replaying` press from entering the hold again is DOM
+  // (desk.tsx, `onKey`); e2e.ts covers it. A second `pressAgain` is what `replay` appearing twice
+  // here, and a routing change is what `over` turning into `replay`, would show.
+  it("leaves every other held key to its owner, once each and in order, never back into the hold", () => {
+    fc.assert(
+      fc.property(frames, others, fc.boolean(), fc.boolean(), fc.boolean(), (f, names, armed, asking, waiting) => {
+        const { hold, steps } = foldHold([
+          PREFIX_ONLY,
+          { type: "key", key: ctrlB },
+          ...names.map((n): HoldMsg => ({ type: "key", key: key(n) })),
+          { type: "answer", id: 0, took: true },
+        ]);
+        const cmds = steps.at(-1) ?? [];
+        expect(cmds.map((c) => (c.type === "pass" ? c.key.name : c.type))).toEqual(names);
+        const done = passOn(f, cmds, { armed, asking }, waiting, { prefix: PREFIX });
+        const overTakes = f.over.kind !== "none" && !(armed || asking || waiting);
+        expect(done.frame).toBe(f);
+        expect(done.out).toEqual(names.map((n) => ({ _tag: overTakes ? "over" : "replay", key: key(n) })));
+        expect(hold.waiting).toBeNull();
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  // scenario: the key pressed now that the hold lets go on is `live`, not a replay; a key the
+  // host takes is a `press`, and neither is a key sent back into the hold.
+  it("scenario: a fresh key goes on live, and a taken key goes to the host", () => {
+    const fresh = foldHold([{ type: "key", key: key("a") }]);
+    expect(passOn(on, fresh.steps[0] ?? [], unarmed, false, { prefix: PREFIX })).toEqual({
+      frame: on,
+      out: [{ _tag: "live" }],
+    });
+    const taken = foldHold([PREFIX_ONLY, { type: "key", key: ctrlB }]);
+    expect(passOn(on, taken.steps[1] ?? [], unarmed, true, { prefix: PREFIX }).out).toEqual([
+      { _tag: "press", id: 0, key: "<c-b>" },
+    ]);
+  });
+
+  // L5, at the page's boundary: `deliver` carries out what `passOn` answered, through ports the
+  // page passes in (desk.tsx), and never routes again against the frame holdStep installed. Fake
+  // ports record every call. The `replaying` guard that stops a dispatched key from entering the
+  // hold again stays DOM (desk.tsx, `onKey`); e2e.ts covers it.
+  type Call =
+    | { readonly to: "toHost"; readonly id: number; readonly key: string }
+    | { readonly to: "dispatch"; readonly key: Key }
+    | { readonly to: "focusOver" };
+
+  const fakePorts = (focus: readonly ("in" | "moved in")[]) => {
+    const calls: Call[] = [];
+    let at = 0;
+    const ports: Ports = {
+      toHost: (id, k) => calls.push({ to: "toHost", id, key: k }),
+      dispatch: (k) => calls.push({ to: "dispatch", key: k }),
+      focusOver: () => {
+        calls.push({ to: "focusOver" });
+        return focus[at++ % Math.max(focus.length, 1)] ?? "in";
+      },
+    };
+    return { calls, ports };
+  };
+
+  const heldKey = fc
+    .record({ name: fc.constantFrom("a", "x", "1", "ArrowLeft", "Tab", "<esc>") })
+    .map(({ name }) => key(name));
+  const focusIn = fc.constantFrom<"in" | "moved in">("in", "moved in");
+  const outs: fc.Arbitrary<Out> = fc.oneof(
+    fc.record({ _tag: fc.constant("press" as const), id: fc.nat(50), key: fc.constantFrom("<c-b>", "a", "i") }),
+    fc.record({ _tag: fc.constant("live" as const) }),
+    fc.record({ _tag: fc.constant("replay" as const), key: heldKey }),
+    fc.record({ _tag: fc.constant("over" as const), key: heldKey }),
+  );
+
+  // Plant: a second dispatch for a replay; or a replay sent through focus routing (focusOver called).
+  it("dispatches a replay exactly once and never asks focus routing", () => {
+    fc.assert(
+      fc.property(heldKey, fc.array(focusIn, { maxLength: 3 }), (k, focus) => {
+        const { calls, ports } = fakePorts(focus);
+        expect(deliver([{ _tag: "replay", key: k }], ports)).toBe(false);
+        expect(calls).toEqual([{ to: "dispatch", key: k }]);
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  // Plant: `over` sent as a replay (focusOver never called); "moved in" still dispatching.
+  it("asks focus routing once for an over key: in dispatches once, moved in drops it", () => {
+    fc.assert(
+      fc.property(heldKey, focusIn, (k, focus) => {
+        const { calls, ports } = fakePorts([focus]);
+        expect(deliver([{ _tag: "over", key: k }], ports)).toBe(false);
+        expect(calls).toEqual(
+          focus === "in" ? [{ to: "focusOver" }, { to: "dispatch", key: k }] : [{ to: "focusOver" }],
+        );
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  // Plant: `press` sent twice or with another id; `live` dispatching, or answering false.
+  it("sends a press to the host once with its id, and a live key goes on with nothing dispatched", () => {
+    fc.assert(
+      fc.property(fc.nat(50), fc.constantFrom("<c-b>", "a", "i"), (id, k) => {
+        const sent = fakePorts([]);
+        expect(deliver([{ _tag: "press", id, key: k }], sent.ports)).toBe(false);
+        expect(sent.calls).toEqual([{ to: "toHost", id, key: k }]);
+        const live = fakePorts([]);
+        expect(deliver([{ _tag: "live" }], live.ports)).toBe(true);
+        expect(live.calls).toEqual([]);
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  // Plant: reversing the order, dropping an entry, or running an entry twice. The oracle is written
+  // out from the Out list: its order, each once, `focusOver` results taken in turn.
+  it("calls the ports in the order of out, each exactly once", () => {
+    fc.assert(
+      fc.property(
+        fc.array(outs, { maxLength: 20 }),
+        fc.array(focusIn, { minLength: 20, maxLength: 20 }),
+        (out, focus) => {
+          const { calls, ports } = fakePorts(focus);
+          const expected: Call[] = [];
+          let at = 0;
+
+          for (const o of out) {
+            if (o._tag === "press") {
+              expected.push({ to: "toHost", id: o.id, key: o.key });
+            } else if (o._tag === "replay") {
+              expected.push({ to: "dispatch", key: o.key });
+            } else if (o._tag === "over") {
+              expected.push({ to: "focusOver" });
+
+              if (focus[at++] === "in") {
+                expected.push({ to: "dispatch", key: o.key });
+              }
+            }
+          }
+
+          expect(deliver(out, ports)).toBe(out.some((o) => o._tag === "live"));
+          expect(calls).toEqual(expected);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  // scenario: the reported case, composed end to end with the real hold, `passOn` and `deliver`.
+  // `C-b a` is out, an asks menu is up when `x` and Escape are released and focus is outside it.
+  // Escape closes the over; `x` goes to focus routing, which moves focus in and drops it, and
+  // nothing is dispatched to a tile. Plant: `x` dispatched (routed again against the final frame).
+  it("scenario: a held [x, Escape] with an asks menu up and focus outside drops x and closes the menu", () => {
+    const { hold, steps } = foldHold([
+      PREFIX_ONLY,
+      { type: "key", key: ctrlB },
+      ALL,
+      { type: "answer", id: 0, took: true },
+      { type: "key", key: key("a") },
+      PREFIX_ONLY,
+      { type: "key", key: key("x") },
+      { type: "key", key: escape },
+      { type: "answer", id: 1, took: true },
+    ]);
+    const cmds = steps.at(-1) ?? [];
+    expect(cmds).toEqual([
+      { type: "pass", key: key("x"), held: true },
+      { type: "pass", key: escape, held: true },
+    ]);
+    const asks = frameUpdate(FRAME, { type: "show", what: "asks" });
+    const done = settle(asks, hold, cmds, unarmed);
+    expect(done.out).toEqual([{ _tag: "over", key: key("x") }]);
+    expect(done.frame.over).toEqual({ kind: "none" });
+    const { calls, ports } = fakePorts(["moved in"]);
+    expect(deliver(done.out, ports)).toBe(false);
+    expect(calls).toEqual([{ to: "focusOver" }]);
+  });
+
+  // scenario: a key the host rejects goes on held, and a dropped link lets the queue go on; both
+  // reach the frame through the same decision, and the dropped link forgets the key in flight.
+  it("scenario: a rejected Escape and an Escape released by a dropped link both leave info mode", () => {
+    const rejected = foldHold([ALL, { type: "key", key: escape }, PREFIX_ONLY, { type: "answer", id: 0, took: false }]);
+    const cmds = rejected.steps.at(-1) ?? [];
+    expect(cmds).toEqual([{ type: "pass", key: escape, held: true }]);
+    expect(settle(on, rejected.hold, cmds, unarmed).frame.info).toEqual({ kind: "off" });
+
+    const dropped = foldHold([
+      PREFIX_ONLY,
+      { type: "key", key: ctrlB },
+      { type: "key", key: escape },
+      { type: "down" },
+    ]);
+    const released = dropped.steps.at(-1) ?? [];
+    // The key in flight is dropped, as it may be taken; only the queued Escape goes on.
+    expect(released).toEqual([{ type: "pass", key: escape, held: true }]);
+    expect(dropped.hold.up).toBe(false);
+    const out = settle(on, dropped.hold, released, unarmed);
+    expect(out.frame.info).toEqual({ kind: "off" });
+    expect(out.out).toEqual([]);
+    // With an over up, the same Escape closes only it.
+    const over = settle(withAsks, dropped.hold, released, unarmed);
+    expect(over.frame.info).toEqual({ kind: "on", explained: null });
+    expect(over.frame.over).toEqual({ kind: "none" });
+    expect(over.out).toEqual([]);
+  });
 });

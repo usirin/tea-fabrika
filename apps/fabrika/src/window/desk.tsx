@@ -46,9 +46,14 @@ import {
   FRAME,
   type Frame,
   type FrameMsg,
+  type Delivery,
+  frameKey,
   frameUpdate,
   keyGoesTo,
   type MidKey,
+  deliver,
+  passOn,
+  type Ports,
   type Shapes,
   ticketsShown,
 } from "./frame.ts";
@@ -318,12 +323,19 @@ const focusOver = (target: EventTarget | null): "in" | "moved in" => {
  * as armed: `C-b J` typed fast still reaches the desk and closes the list.
  */
 const midKey = (): MidKey => {
-  const open = store.desk?.at === "open" ? store.desk : null;
-  return {
-    armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
-    asking: open?.ask != null,
-  };
+  const own = ownMidKey();
+  return { armed: own.armed || hold.waiting !== null, asking: own.asking };
 };
+
+/** The desk's own prefix and question, apart from the hold's outstanding key. */
+const ownMidKey = (): MidKey => {
+  const open = store.desk?.at === "open" ? store.desk : null;
+  return { armed: open?.prefix.armed ?? false, asking: open?.ask != null };
+};
+
+/** What the frame makes of a key (frame.ts, `frameKey`), with the desk's own prefix and question and the hold's wait. */
+const frameFor = (key: string, delivery: Delivery): Frame =>
+  frameKey(store.frame, key, ownMidKey(), hold.waiting !== null, delivery);
 
 /**
  * Who a key goes to, with what lies over the desk: the desk; the over, with focus in it; or the
@@ -341,15 +353,12 @@ const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "
 
 /**
  * Press a held key again, where focus is now: a character into a view's text box, as typing
- * does, or the key itself, which a tile's terminal reads as it reads the keyboard's.
+ * does, or the key itself, which a tile's terminal reads as it reads the keyboard's. No routing:
+ * `deliver` has decided who gets it. The e2e covers the `replaying` guard.
  */
 const pressAgain = (key: Key) => {
   const p = key.press;
   const target = document.activeElement ?? document.body;
-
-  if (keyForOver(key.name, target) === "moved in") {
-    return;
-  }
 
   replaying = true;
 
@@ -375,23 +384,21 @@ const pressAgain = (key: Key) => {
   replaying = false;
 };
 
+const ports: Ports = {
+  toHost: (id, key) => toHost({ type: "press", id, key }),
+  dispatch: pressAgain,
+  focusOver: () => focusOver(document.activeElement ?? document.body),
+};
+
 /** Step the hold by one Msg. Answers whether the key pressed this instant goes on as it is. */
 const holdStep = (msg: HoldMsg): boolean => {
   const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, hold, msg);
   hold = next;
-  let live = false;
+  const { frame, out } = passOn(store.frame, cmds, ownMidKey(), hold.waiting !== null, store.keys);
 
-  for (const c of cmds) {
-    if (c.type === "press") {
-      toHost({ type: "press", id: c.id, key: c.key });
-    } else if (!c.held) {
-      live = true;
-    } else {
-      pressAgain(c.key);
-    }
-  }
+  frameInstall(frame);
 
-  return live;
+  return deliver(out, ports);
 };
 
 /** How long a note on the bottom line stays, as after the palette ran a command. */
@@ -402,9 +409,10 @@ let noteTimer: ReturnType<typeof setTimeout> | undefined;
  * Step the frame's own state (frame.ts), and draw it. A note goes after a while. Answers whether
  * the frame changed: a key it did not change goes on.
  */
-const frameStep = (m: FrameMsg): boolean => {
-  const next = frameUpdate(store.frame, m);
+const frameStep = (m: FrameMsg): boolean => frameInstall(frameUpdate(store.frame, m));
 
+/** Install the frame a step answered, and draw it. Answers whether it differs from the one before. */
+const frameInstall = (next: Frame): boolean => {
   if (next === store.frame) {
     return false;
   }
@@ -755,7 +763,7 @@ const onKey = (e: KeyboardEvent) => {
     return;
   }
 
-  if (e.key === "Escape" && frameStep({ type: "escape", desk: midKey() })) {
+  if (e.key === "Escape" && frameInstall(frameFor(e.key, "fresh"))) {
     return swallow(e);
   }
 
