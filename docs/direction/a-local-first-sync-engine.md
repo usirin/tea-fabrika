@@ -413,7 +413,9 @@ after about 10 s and drops what waits in memory.*
   room for a copy on each client, a browser too.
 - **D6, the services:** today's `Ledger` (about 25 methods, all three layers
   mixed) splits into small services, one Effect Layer per level. A service
-  name is never plural; one that holds many of a thing is `<Thing>Manager`.
+  name is never plural; one that holds many of a thing is `<Thing>Manager`. *Changed 2026-11-09:
+  one that holds many is plural, as Effect names them (`Leases`;
+  [0029](../../.decisions/0029-format-and-names-follow-effect.md)).*
 
   ```ts
   // data
