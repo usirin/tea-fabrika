@@ -371,12 +371,15 @@ it("L9: wall equals the largest file or the shared worker load", () => {
 
 it("vector: L12 stale non-lane rows hold the three T554 run medians", () => {
   // Runs 42803733957, 42807559589, 42801440878. Gap >20 s; missing rows count 1 s.
+  // The last four rows (box, boxrm, loosening, program-package-layout) come from PR 757's
+  // check run 42874119130, attempts 5 to 14, a median of 10.
   // Plant: restore catchup's old 47.2 seconds. Lane rows await the PR's own run.
   const expected = {
     ".agents/skills/lead/scripts/catchup.test.ts": 689.1,
-    ".agents/skills/lead/scripts/box.test.ts": 416.1,
-    ".agents/skills/lead/scripts/boxrm.test.ts": 387.2,
-    ".agents/skills/lead/scripts/loosening.test.ts": 132.3,
+    ".agents/skills/lead/scripts/box.test.ts": 348.7,
+    ".agents/skills/lead/scripts/boxrm.test.ts": 295.0,
+    ".agents/skills/lead/scripts/loosening.test.ts": 234.6,
+    "oxlint-plugins/program-package-layout.test.ts": 80.3,
     "packages/fabrika/src/host/fence.laws.test.ts": 117.1,
     "scripts/caps.test.ts": 108.5,
     ".agents/skills/plan/scripts/plancheck.test.ts": 106.2,
