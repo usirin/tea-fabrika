@@ -6,7 +6,7 @@
     },
     {
       "name": "next-node",
-      "floor": 8,
+      "floor": 9,
       "paths": ["next/packages/libfabrika/src/node"]
     },
     {

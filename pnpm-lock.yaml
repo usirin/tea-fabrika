@@ -345,7 +345,7 @@ overrides:
 patchedDependencies:
   '@alchemy.run/cloudflare-runtime@2.0.0-beta.84': 7cc192309c69f6bde73904889a3e499616b2c2d5bfec0ab06dc1907ad8dc9131
   '@alchemy.run/cloudflare@2.0.0-beta.84': 04c7b6846712db5cdfeb25b3344a1e65d7f6c833b94e4a7c4170c4051de60b48
-  '@demlik/code-graph@0.15.0': a0151998c45c10b9056cb55d2b7fb18bcc05e07f212f27c7bf3c12973df421cc
+  '@demlik/code-graph@0.15.0': 22bb1dacb005daf1b2cbb6745049d2ef6ad9dfefc2e5d6aa391189dfa46a7c1b
   '@demlik/tea@0.25.0': a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3
   '@manti-ui/react@0.13.0': 520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef
   alchemy@2.0.0-beta.84: 8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a
@@ -357,7 +357,7 @@ importers:
     dependencies:
       '@demlik/code-graph':
         specifier: 'catalog:'
-        version: 0.15.0(patch_hash=a0151998c45c10b9056cb55d2b7fb18bcc05e07f212f27c7bf3c12973df421cc)
+        version: 0.15.0(patch_hash=22bb1dacb005daf1b2cbb6745049d2ef6ad9dfefc2e5d6aa391189dfa46a7c1b)
       '@demlik/tea':
         specifier: 'catalog:'
         version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
@@ -6420,7 +6420,7 @@ snapshots:
       smol-toml: 1.9.0
       zod: 4.0.0
 
-  '@demlik/code-graph@0.15.0(patch_hash=a0151998c45c10b9056cb55d2b7fb18bcc05e07f212f27c7bf3c12973df421cc)':
+  '@demlik/code-graph@0.15.0(patch_hash=22bb1dacb005daf1b2cbb6745049d2ef6ad9dfefc2e5d6aa391189dfa46a7c1b)':
     dependencies:
       '@typescript/native-preview': 7.0.0-dev.20260707.2
       chalk: 5.6.2
