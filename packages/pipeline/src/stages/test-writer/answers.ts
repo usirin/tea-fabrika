@@ -41,16 +41,19 @@ export const AnswersAsk = Schema.Struct({
 export type AnswersAsk = typeof AnswersAsk.Type;
 
 const TakenIn = Schema.Struct({head: Schema.String, includes: Schema.Array(Schema.String)});
+
 const CommitIn = Schema.Struct({
 	ticket: Schema.String,
 	base: Schema.String,
 	files: Schema.Array(File),
 });
+
 export const readAnswersTaken = gather("answers_taken", {
 	input: TakenIn,
 	ok: Schema.Array(Schema.String),
 	err: ["unknown"],
 });
+
 export const commitAnswers = act("answers_commit", {
 	input: CommitIn,
 	ok: Schema.String,
@@ -58,6 +61,7 @@ export const commitAnswers = act("answers_commit", {
 });
 
 type KillCmd = ReturnType<typeof kills.run>;
+
 export type AnswersCmd =
 	| ReturnType<typeof readAnswersTaken>
 	| ReturnType<typeof commitAnswers>

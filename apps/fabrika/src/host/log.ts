@@ -74,30 +74,39 @@ class StepSpan implements Tracer.Span {
 	get name(): string {
 		return this.#span.name;
 	}
+
 	get spanId(): string {
 		return this.#span.spanId;
 	}
+
 	get traceId(): string {
 		return this.#span.traceId;
 	}
+
 	get parent(): Option.Option<Tracer.AnySpan> {
 		return this.#span.parent;
 	}
+
 	get annotations() {
 		return this.#span.annotations;
 	}
+
 	get status(): Tracer.SpanStatus {
 		return this.#span.status;
 	}
+
 	get attributes(): ReadonlyMap<string, unknown> {
 		return this.#span.attributes;
 	}
+
 	get links(): ReadonlyArray<Tracer.SpanLink> {
 		return this.#span.links;
 	}
+
 	get sampled(): boolean {
 		return this.#span.sampled;
 	}
+
 	get kind(): Tracer.SpanKind {
 		return this.#span.kind;
 	}

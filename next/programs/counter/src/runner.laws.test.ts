@@ -15,15 +15,18 @@ import * as fc from "fast-check";
 const PROCESS: string = Effect.runSync(
 	Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer)),
 );
+
 const NAME = "counter:1";
 const LIBRARY = "@kampus/libfabrika"; // Missing P11 exports must not prevent collecting the laws.
 const SEED = 119120;
 const folder = mkdtempSync(join(tmpdir(), "p11-counter-"));
 const opened: DatabaseSync[] = [];
+
 afterAll(() => {
 	for (const db of opened) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
 });
+
 type Update =
 	| {type: "whole"; rev: number; view: unknown}
 	| {
@@ -32,10 +35,12 @@ type Update =
 			rev: number;
 			patch: ReadonlyArray<{op: string; path: string; value?: unknown}>;
 	  };
+
 type Runner = {
 	readonly open: (client: string) => Effect.Effect<{rev: number; view: unknown}, unknown>;
 	readonly msg: (input: unknown) => Effect.Effect<{_tag: string; why?: string}, unknown>;
 };
+
 const reconstruct = (before: unknown, change: Update): unknown => {
 	if (change.type === "whole") return structuredClone(change.view);
 	let root = structuredClone(before);

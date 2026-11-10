@@ -71,6 +71,7 @@ const sink = defineProgram({
 	outputs: {},
 	main: ({serve}) => serve({any: () => Effect.void}),
 });
+
 const both = defineProgram({
 	name: "both",
 	description: "Takes a number, or anything else.",
@@ -78,6 +79,7 @@ const both = defineProgram({
 	outputs: {},
 	main: () => Effect.void,
 });
+
 const twice = defineProgram({
 	name: "twice",
 	description: "Two inputs that take anything.",
@@ -85,6 +87,7 @@ const twice = defineProgram({
 	outputs: {},
 	main: () => Effect.void,
 });
+
 const withAny = programList([
 	...SMALL,
 	listed(sink, Layer.empty),

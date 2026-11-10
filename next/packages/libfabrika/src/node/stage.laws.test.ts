@@ -69,9 +69,11 @@ it("the control plugin returns a typed error for malformed platform port data", 
 		{seed: 119120, numRuns: 20, examples: [[null], [{}], [1.5]]},
 	);
 });
+
 type Step = ReturnType<typeof step.generate>["value"];
 const memoryBrake: Step = {rss: 600_000, exitCode: null, signal: "SIGTERM", delay: 250};
 const crashBrake: Step = {rss: null, exitCode: 1, signal: null, delay: 0};
+
 const sequence = fc.record({
 	restarts: fc.array(step, {maxLength: 4}),
 	final: step,

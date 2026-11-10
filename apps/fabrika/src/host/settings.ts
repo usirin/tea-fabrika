@@ -47,6 +47,7 @@ const PLAIN: Readonly<Record<PlatformError.PlatformError["reason"]["_tag"], stri
 	WouldBlock: "it would have to wait",
 	WriteZero: "nothing was written",
 };
+
 export const saidOf = (error: PlatformError.PlatformError): string => PLAIN[error.reason._tag];
 
 /** What came of a settings file: none, what it decoded to, or why not, with the line to look at. */

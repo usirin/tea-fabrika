@@ -40,6 +40,7 @@ const TWO: LanesOptions = {
 	queue: true,
 	forms: ["pass", "fail 1"],
 };
+
 const ONE: LanesOptions = {...TWO, lanes: 1};
 /** Two lanes told the same ticket; the reviewer only passes, so no fail verdict is ever posted. */
 const SAME: LanesOptions = {...TWO, tickets: "same", forms: ["pass"]};
@@ -59,6 +60,7 @@ const NO_QUEUE: LanesOptions = {...TWO, queue: false};
 
 const run = (o: LanesOptions, extra: Partial<Options<Lanes, Note>> = {}) =>
 	search(lanesWorld(o), {laws: LANE_LAWS, depth: 200, ...extra});
+
 const broken = (r: ReturnType<typeof run>) => r.broken.map((b) => b.law).sort();
 const brokenOf = (r: ReturnType<typeof run>, name: string) => r.broken.find((b) => b.law === name);
 

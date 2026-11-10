@@ -39,18 +39,22 @@ const folder = mkdtempSync(join(tmpdir(), "p6-ledger-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
 const freshPath = (): string => join(folder, `ledger-${++files}.db`);
+
 const openDb = (path: string): DatabaseSync => {
 	const db = new DatabaseSync(path);
 	opened.push(db);
 	return db;
 };
+
 const fresh = (): Sql => nodeSql(openDb(freshPath()));
+
 afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
 });
 
 type Rung = {readonly to: string; readonly stream: string; readonly rev: number};
+
 const bell = () => {
 	const rang: Array<Rung> = [];
 	const layer = Layer.succeed(Doorbell, {
@@ -61,7 +65,9 @@ const bell = () => {
 	});
 	return {rang, layer};
 };
+
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+
 const onSql = (sql: Sql, doorbell: Layer.Layer<Doorbell> = quiet) =>
 	Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(doorbell));
 
@@ -77,8 +83,10 @@ const line = (over: Partial<Line> = {}): Line => ({
 	body: {note: "n-7f3a", base: 3},
 	...over,
 });
+
 const placed = (rev: number, pos: number) => ({_tag: "placed", rev, pos});
 const refused = (why: string) => ({_tag: "refused", why});
+
 const readAll = (stream: string, after = 0) =>
 	Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, after)));
 
@@ -106,6 +114,7 @@ const sqliteFull = (): Error =>
 		errcode: 13,
 		errstr: "database or disk is full",
 	});
+
 /** A Sql whose next call throws once `arm` is called, then works again. */
 const throwingOnce = (sql: Sql) => {
 	let armed = false;
@@ -129,6 +138,7 @@ const throwingOnce = (sql: Sql) => {
 		},
 	};
 };
+
 /** A tracer that keeps every span it makes, so a test can count the ones that ended. */
 const capture = () => {
 	const spans: Array<Tracer.NativeSpan> = [];

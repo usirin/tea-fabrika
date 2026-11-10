@@ -15,6 +15,7 @@ import {CodeBlock, keyed, MarkdownWindow} from "./window.tsx";
 
 const t = (value: string) => ({type: "text", value}) as const;
 const blocksOf = (text: string) => Root.fromMarkdown(text).children;
+
 /** The window's HTML for a text, as React draws it. */
 const drawn = (text: string) =>
 	renderToStaticMarkup(

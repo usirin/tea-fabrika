@@ -59,6 +59,7 @@ export const jsonJournal = <S>(): Schema.Codec<S, unknown> =>
 export const JOB_ID = "job";
 
 const OutcomeRow = Schema.fromJsonString(Schema.Struct({outcome: Schema.Unknown}));
+
 /** A stage's outcome, read from the ledger. `null`: it has none yet. */
 export const readOutcome = (name: string) =>
 	Effect.gen(function* () {

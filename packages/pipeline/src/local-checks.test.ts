@@ -52,6 +52,7 @@ const FIXTURE_ENV = {
 	GIT_COMMITTER_NAME: "builder",
 	GIT_COMMITTER_EMAIL: "builder@example.com",
 };
+
 const onNode = <A, E>(
 	effect: Effect.Effect<
 		A,
@@ -59,6 +60,7 @@ const onNode = <A, E>(
 		FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 	>,
 ) => Effect.runPromise(effect.pipe(Effect.provide(nodeServices)));
+
 const sh = (cwd: string, file: string, args: readonly string[]) =>
 	runChild(file, args, {cwd, env: FIXTURE_ENV}).pipe(
 		Effect.flatMap((ran) =>
@@ -77,6 +79,7 @@ interface World {
 	readonly passing: string;
 	readonly failing: string;
 }
+
 let world: World;
 
 beforeAll(async () => {
@@ -131,6 +134,7 @@ const factsOf = (head: string): PrFacts => ({
 	comments: [],
 	main: {tested: "base", tip: "base"},
 });
+
 const changeOf = (head: string): Change => ({
 	pr: "https://github.com/acme/widgets/pull/1",
 	head,
@@ -145,6 +149,7 @@ const changeOf = (head: string): Change => ({
 	checks: {state: "pending", required: []},
 	rules: [],
 });
+
 const noCi = (head: string): CodeHost["Service"] => ({
 	pullRequests: () => Effect.succeed([]),
 	prFacts: () => Effect.succeed(factsOf(head)),

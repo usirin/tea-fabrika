@@ -36,11 +36,14 @@ const unboundedJson = Arbitrary.schema(
 const PROCESS = Effect.runSync(processId);
 const folder = mkdtempSync(join(tmpdir(), "p11-store-"));
 const opened: DatabaseSync[] = [];
+
 afterAll(() => {
 	for (const db of opened) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
 });
+
 let files = 0;
+
 const database = () => {
 	const path = join(folder, `${++files}.db`);
 	let db = new DatabaseSync(path);
@@ -71,10 +74,12 @@ const database = () => {
 		},
 	};
 };
+
 const data = (sql: Sql) =>
 	Ledger.sql(sql, {reader: "p11-store"}).pipe(
 		Layer.provide(Layer.succeed(Doorbell, {ring: () => Effect.void})),
 	);
+
 const from: From = {
 	by: "SHA256:brain",
 	for: "person",
@@ -84,15 +89,18 @@ const from: From = {
 	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	build: "build-a",
 };
+
 const checkpoint: typeof CheckpointSchema.Type = {
 	saved: {v: 1, build: "build-a", model: {count: 2}, after: 4},
 	turn: null,
 	cmds: [],
 };
+
 // Match 4ddc0ed7: full 32-bit v/cursor, build 0..10, unbounded JSON depth,
 // and 0..5 Cmds. Size 12 below also retains nonempty strings of length 11..12.
 const nat = (schema: typeof Placed.fields.pos) =>
 	schema.check(Schema.isBetween({minimum: 0, maximum: 2_147_483_647}));
+
 const checkpointArb = Arbitrary.all({
 	saved: Arbitrary.all({
 		v: Arbitrary.schema(
@@ -112,7 +120,9 @@ const checkpointArb = Arbitrary.all({
 	// JSON storage canonicalizes -0 to 0.
 	Arbitrary.map((value): typeof CheckpointSchema.Type => JSON.parse(JSON.stringify(value))),
 );
+
 const options = {arbitrary: {seed: 119120, runs: 20, size: 12}};
+
 // Effect 4.1.1 has no examples option; run the old input beside each generated input.
 const examples =
 	<A extends ReadonlyArray<unknown>, E, R>(
@@ -124,6 +134,7 @@ const examples =
 			discard: true,
 			concurrency: 1,
 		});
+
 type Checkpoint = {
 	readonly saved: {
 		readonly v: number;
@@ -134,6 +145,7 @@ type Checkpoint = {
 	readonly turn: unknown;
 	readonly cmds: ReadonlyArray<unknown>;
 };
+
 type Store = {
 	readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
 	readonly save: (value: Checkpoint) => Effect.Effect<void, LedgerError>;

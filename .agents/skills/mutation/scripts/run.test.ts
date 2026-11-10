@@ -22,6 +22,7 @@ import {describe, expect, it} from "vitest";
 const script = join(import.meta.dirname, "run.sh");
 const root = join(import.meta.dirname, "../../../..");
 const options = {seed: 300, numRuns: 8};
+
 const helper = String.raw`
 const fs = require("node:fs"), path = require("node:path"), cp = require("node:child_process");
 const dir = process.env.COMMAND_FIXTURE;
@@ -48,8 +49,10 @@ if (args[0]?.endsWith("/core/bin/stryker.js")) {
   setInterval(() => {}, 1000);
 } else throw new Error("unhandled tool " + args[0]);
 `;
+
 type Setup = {ranges: string[]; sampleExit: number; exit: number; hold: boolean; orphan?: boolean};
 const defaults: Setup = {ranges: ['"src/math.ts:1:0-1:30"'], sampleExit: 0, exit: 0, hold: false};
+
 const fixture = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: string}) => {
 	expect(existsSync(script), "build must extract the executable run.sh").toBe(true);
 	const dir = mkdtempSync(join(tmpdir(), "mut-command-"));
@@ -91,6 +94,7 @@ const fixture = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: st
 		script: join(dir, ".agents/skills/mutation/scripts/run.sh"),
 	};
 };
+
 type Invocation = {
 	args: string[];
 	config: {
@@ -105,10 +109,12 @@ type Invocation = {
 	};
 	vitest: string;
 };
+
 const invoked = (dir: string): Invocation | undefined =>
 	existsSync(join(dir, "invoked.json"))
 		? JSON.parse(readFileSync(join(dir, "invoked.json"), "utf8"))
 		: undefined;
+
 const run = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: string}) => {
 	const f = fixture(setup, inputs);
 	try {
@@ -137,6 +143,7 @@ const run = (setup: Setup, inputs: {T?: string; BUILD?: string; RELATED?: string
 		rmSync(f.dir, {recursive: true, force: true});
 	}
 };
+
 const alive = (pid: number) => {
 	try {
 		process.kill(pid, 0);

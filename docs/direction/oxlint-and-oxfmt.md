@@ -62,6 +62,10 @@ export const noNumericDuration: CreateRule = {
 
   Why one run and not two: a disable comment for a rule that is off counts as unused, and unused ones
   fail. A second run for the advice rules would fail the first on their own comments.
+- **A blank line stands between top-level statements and class members.** Oxfmt keeps blank lines
+  but never adds one, and oxlint has no padding rule, so `fabrika/padding-line-between-statements`
+  blocks a missing one and `pnpm format` adds it
+  ([0021](../../.decisions/0021-a-blank-line-between-top-level-statements.md)).
 - **Oxfmt keeps the old settings:** tabs, 100 columns, no bracket spacing, imports sorted. It leaves
   Markdown, YAML and fixtures alone, as Biome did.
 

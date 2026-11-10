@@ -32,6 +32,7 @@ export const Policy = Schema.Struct({
 export type Policy = typeof Policy.Type;
 
 const AttemptFields = {process: ProcessId, letter: Text, build: Text, seq: Count};
+
 export const Failure = Schema.TaggedUnion({
 	fresh: {...AttemptFields, error: Text},
 	saved: {...AttemptFields, error: Text},
@@ -54,11 +55,13 @@ const Action = Schema.Struct({
 	after: Schema.optionalKey(ProcessId),
 	until: Schema.optionalKey(Millis),
 });
+
 const Attempt = Schema.Struct({
 	...AttemptFields,
 	phase: Schema.Literals(["fresh", "saved"]),
 	at: Millis,
 });
+
 const Observation = Schema.Struct({
 	seq: Count,
 	process: ProcessId,
@@ -67,6 +70,7 @@ const Observation = Schema.Struct({
 	error: Schema.optionalKey(Text),
 	at: Millis,
 });
+
 export const Receipt = Schema.Struct({
 	letter: Text,
 	input: Schema.Json,

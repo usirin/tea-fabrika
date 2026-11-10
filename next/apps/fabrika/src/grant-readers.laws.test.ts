@@ -9,6 +9,7 @@ const cli = vi.hoisted(() => ({
 	work: undefined as Effect.Effect<unknown, unknown> | undefined,
 	layer: undefined as Layer.Layer<ChildProcessSpawner.ChildProcessSpawner> | undefined,
 }));
+
 vi.mock("@effect/platform-node", async (original) => {
 	const actual = await original<typeof import("@effect/platform-node")>();
 	return {
@@ -25,6 +26,7 @@ vi.mock("@effect/platform-node", async (original) => {
 		},
 	};
 });
+
 const typed = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 	expect(Exit.isFailure(exit)).toBe(true);
 	const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
@@ -34,6 +36,7 @@ const typed = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 	expect(error).toMatchObject({_tag: "Some", value: {_tag: "GrantError", reason}});
 	expect(Option.getOrUndefined(error)).toBeInstanceOf(Error);
 };
+
 it("grant command rejects malformed outside URLs as GrantError before fetching or signing", async () => {
 	const invalid = fc.oneof(
 		fc.string().map((s) => `relative-${encodeURIComponent(s)}`),
@@ -69,6 +72,7 @@ it("grant command rejects malformed outside URLs as GrantError before fetching o
 });
 
 const usage = "usage: grant.ts client URL KEY --code=CODE --key=PATH";
+
 it("grant usage guard names the error for each missing argument or flag", async () => {
 	await fc.assert(
 		fc.asyncProperty(fc.string(), fc.integer({min: 0, max: 4}), async (text, missing) => {
@@ -130,6 +134,7 @@ const generated = fc.record({
 		.jsonValue()
 		.filter((raw) => !Schema.is(Schema.Record(Schema.String, Schema.Json))(raw)),
 });
+
 const results = {
 	get: "unreachable",
 	json: "bad_target",
@@ -143,6 +148,7 @@ const results = {
 	refused: "refused",
 	applied: null,
 } as const;
+
 for (const mode of Object.keys(results) as Array<keyof typeof results>)
 	it(`grant ${mode} path preserves the signed fields and exact error reason`, async () => {
 		await fc.assert(

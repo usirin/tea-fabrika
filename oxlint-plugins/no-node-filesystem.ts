@@ -3,6 +3,7 @@ import type {CreateRule} from "@oxlint/plugins";
 import {pathIn, type Node} from "./match.ts";
 
 const native = /^(?:node:)?(?:fs(?:\/promises)?|path(?:\/(?:posix|win32))?)$/;
+
 export const noNodeFilesystem: CreateRule = {
 	create(context) {
 		const file = pathIn(context);

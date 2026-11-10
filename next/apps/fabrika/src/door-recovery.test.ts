@@ -35,11 +35,14 @@ const NAME = "counter:1";
 const URL = "https://fabrika.test/entry/project-socket";
 const top = mkdtempSync(join(tmpdir(), "p34-door-"));
 const opened: DatabaseSync[] = [];
+
 afterAll(() => {
 	for (const db of opened) if (db.isOpen) db.close();
 	rmSync(top, {recursive: true, force: true});
 });
+
 let file = 0;
+
 const disk = () => {
 	const path = join(top, `${++file}.db`);
 	let db = new DatabaseSync(path);
@@ -60,12 +63,14 @@ const disk = () => {
 		},
 	};
 };
+
 const field = (value: string | Uint8Array) => {
 	const b = typeof value === "string" ? Buffer.from(value) : Buffer.from(value);
 	const size = Buffer.alloc(4);
 	size.writeUInt32BE(b.length);
 	return Buffer.concat([size, b]);
 };
+
 const key = () => {
 	const pair = generateKeyPairSync("ed25519");
 	const bytes = pair.publicKey.export({format: "der", type: "spki"}).subarray(-32);
@@ -100,6 +105,7 @@ const key = () => {
 		},
 	};
 };
+
 const from = () => ({
 	by: "SHA256:brain",
 	for: PERSON,
@@ -109,9 +115,11 @@ const from = () => ({
 	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	build: "build-a",
 });
+
 const Input = Schema.TaggedUnion({press: {poison: Schema.Boolean}});
 type DoorOptions = Parameters<typeof Door.layer<typeof Input.Type, never, never, never>>[0];
 type Delivery = {process: string; parent: string; letter: string | undefined};
+
 const policy = {
 	maxDeliveries: 3,
 	intensity: 5,
@@ -384,6 +392,7 @@ const world = () => {
 		},
 	};
 };
+
 const request = (poison = true, letter = "poison") => ({
 	pid: P1,
 	letter,
@@ -391,6 +400,7 @@ const request = (poison = true, letter = "poison") => ({
 	sentAt: from().sentAt,
 	seen: 0,
 });
+
 const recover = (w: ReturnType<typeof world>) =>
 	Effect.gen(function* () {
 		const at = w.alarms.at(-1);

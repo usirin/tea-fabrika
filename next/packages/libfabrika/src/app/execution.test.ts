@@ -19,16 +19,20 @@ const missingModel: [fc.JsonValue, boolean, string] = [{model: {}}, false, "bad"
 const malformedModel: [fc.JsonValue, boolean, string] = [{_tag: "stepped", model: 1}, false, "bad"];
 const rejectedReply: [fc.JsonValue, boolean, string] = ["reject", true, "bad"];
 const upgradeAndReply: [number, number, number, string] = [2, 7, 42, "bad"];
+
 const rejectedRpc = async (): Promise<never> => {
 	throw new Error("private RPC body");
 };
+
 const Model = Schema.Struct({count: Schema.Int});
 const Msg = Schema.Struct({type: Schema.Literal("inc")});
+
 const work = Cmd.make("work", {
 	input: Schema.Struct({n: Schema.Int}),
 	ok: Schema.Int,
 	err: ["disk"],
 });
+
 const machine = Machine.make({
 	model: Model,
 	msg: Msg,
@@ -40,6 +44,7 @@ const machine = Machine.make({
 		work_err: (s) => [s, []],
 	},
 });
+
 const declared = {
 	name: "adapter-counter",
 	machine,
@@ -52,6 +57,7 @@ const declared = {
 	writes: {},
 	wake: () => null,
 };
+
 type Execution = {
 	init: (saved: unknown) => Effect.Effect<Step, unknown>;
 	step: (model: unknown, msg: unknown) => Effect.Effect<Step, unknown>;

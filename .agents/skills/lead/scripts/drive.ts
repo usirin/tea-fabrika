@@ -108,6 +108,7 @@ const drive = outcomesOf({
 		"step_said",
 	],
 });
+
 type Outcome = typeof drive.schema.Type;
 
 /**
@@ -121,6 +122,7 @@ const BOX_CHECKS = [
 	"shared_ticket",
 	"root_not_ancestor",
 ] as const;
+
 const CHECKS = [...BOX_CHECKS, "agent_cap", "low_disk", "branch_checked_out"] as const;
 type Check = (typeof CHECKS)[number];
 type Refused = {readonly kind: "refused"; readonly check: Check};
@@ -203,6 +205,7 @@ const Read = Schema.Struct({
 type Read = typeof Read.Type;
 
 const Done = Schema.Struct({ok: Schema.Boolean, detail: Schema.String});
+
 /** What box.sh new did: made the box, refused it at a named start check, or failed. */
 const Started = Schema.TaggedUnion({
 	made: {},
@@ -212,11 +215,13 @@ const Started = Schema.TaggedUnion({
 
 const boxNew = act("box_new", {input: Ask, ok: Started, err: ["unknown"]});
 const stepRead = gather("step_read", {input: Ask, ok: Read, err: ["unknown"]});
+
 const backupPush = act("backup_push", {
 	input: Schema.Struct({ask: Ask, head: Schema.String}),
 	ok: Done,
 	err: ["unknown"],
 });
+
 const Entry = Schema.Struct({
 	ask: Ask,
 	outcome: Schema.String,
@@ -225,6 +230,7 @@ const Entry = Schema.Struct({
 	exit: Schema.Number,
 	keep: Schema.Boolean,
 });
+
 const record = act("record", {input: Entry, ok: Done, err: ["unknown"]});
 
 type Cmds =
@@ -256,6 +262,7 @@ type Model =
 			readonly head: string;
 			readonly kept: boolean;
 	  };
+
 type Msg = {readonly type: "start"; readonly ask: Ask} | Drafted;
 
 // ---------------------------------------------------------------- the Check
@@ -295,6 +302,7 @@ const greenOf = (report: string) => {
 
 type Judged = {readonly outcome: Outcome; readonly why: string};
 type Ended = {readonly outcome: End; readonly why: string};
+
 const stuck = (why: Extract<Outcome, {kind: "stuck"}>["why"], text: string): Judged => ({
 	outcome: {kind: "stuck", why},
 	why: text,
@@ -399,6 +407,7 @@ export const reportOf = (path: string, started: number, mtime: number | null): s
 
 type Step = readonly [Model, readonly Cmds[]];
 const stay = (s: Model): Step => [s, []];
+
 /** A stuck box stays for the lead to look at, and so does one holding work no branch has, whatever
  * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). */
 const recordIt = (ask: Ask, j: Ended, head: string, left: readonly string[] = []): Step => {
@@ -517,6 +526,7 @@ const sh = (cmd: string, args: readonly string[], cwd?: string) => {
 	const r = spawnSync(cmd, args, {cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024});
 	return {code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? ""};
 };
+
 const tail = (text: string, n = 3) => text.trim().split("\n").slice(-n).join(" | ");
 
 /** This run's report, or `null` when it wrote none. */

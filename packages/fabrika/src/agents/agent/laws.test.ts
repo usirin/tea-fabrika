@@ -70,17 +70,20 @@ const setup = (make: Make, script: (n: number) => FakeScript, more: Partial<Agen
 const fit = fc
 	.record({done: fc.boolean(), note: fc.string({maxLength: 8})})
 	.map((a) => ({text: JSON.stringify(a), value: a as Answer | null}));
+
 const misfit = fc.oneof(
 	fc.constant({text: '{"done": "maybe"}', value: null}),
 	fc
 		.string({maxLength: 12})
 		.map((s) => ({text: `no json here ${s.replace(/[{}]/g, "")}`, value: null})),
 );
+
 const tokens: fc.Arbitrary<Tokens> = fc.record({
 	input: fc.nat(1000),
 	cached: fc.nat(100),
 	output: fc.nat(500),
 });
+
 const step = fc.oneof(
 	fc.oneof(fit, misfit).map((s) => ({raw: {_tag: "said", text: s.text} as Raw, value: s.value})),
 	fc
@@ -93,12 +96,15 @@ const step = fc.oneof(
 	tokens.map((t) => ({raw: {_tag: "tokens", tokens: t, whole: false} as Raw})),
 	tokens.map((t) => ({raw: {_tag: "tokens", tokens: t, whole: true} as Raw})),
 );
+
 /** A script: some steps, then an end or not. */
 const script = fc.record({
 	steps: fc.array(step, {maxLength: 12}),
 	ends: fc.boolean(),
 });
+
 type Script = typeof script extends fc.Arbitrary<infer S> ? S : never;
+
 const scriptOf = (s: Script): FakeScript => ({
 	raws: [
 		...s.steps.map((x) => x.raw),
@@ -109,6 +115,7 @@ const scriptOf = (s: Script): FakeScript => ({
 });
 
 const OPTS = {numRuns: 150, seed: 1};
+
 const endOf = (heard: readonly Heard<Answer>[]) =>
 	heard.filter((h): h is Ended<Answer> => h._tag === "ended");
 

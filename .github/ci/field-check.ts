@@ -6,6 +6,7 @@ import {checkRow, Finding} from "./field-schema.ts";
 
 const lines = (text: string): string[] =>
 	text === "" ? [] : (text.endsWith("\n") ? text.slice(0, -1) : text).split("\n");
+
 export const selectAdded = (base: string, head: string): {line: number; text: string}[] => {
 	const counts = new Map<string, number>();
 	for (const text of lines(base)) counts.set(text, (counts.get(text) ?? 0) + 1);
@@ -16,6 +17,7 @@ export const selectAdded = (base: string, head: string): {line: number; text: st
 		return [];
 	});
 };
+
 const parse = (text: string): unknown => {
 	try {
 		return JSON.parse(text);
@@ -23,6 +25,7 @@ const parse = (text: string): unknown => {
 		return undefined;
 	}
 };
+
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>
 	text
@@ -31,8 +34,10 @@ const escape = (text: string) =>
 		.replaceAll("\n", "%0A")
 		.replaceAll(":", "%3A")
 		.replaceAll(",", "%2C");
+
 const annotation = (finding: Finding) =>
 	`::${finding._tag} file=${escape(finding.file)},line=${finding.line}::${escape(finding.field)}: ${escape(finding.reason)}`;
+
 export const checkFile = (file: string, base: string, head: string) => {
 	const added = selectAdded(base, head);
 	const counts = new Map<string, number>();
@@ -69,6 +74,7 @@ export const checkFile = (file: string, base: string, head: string) => {
 
 type Runner = (args: string[]) => {status: number | null; stdout: string};
 const git: Runner = (args) => spawnSync("git", args, {encoding: "utf8", maxBuffer: 2 ** 28});
+
 /**
  * A missing tree or unreadable blob is an error, never an empty successful delta.
  * A PR's rows start at the merge base, as changes.mjs reads its paths; a push uses its two trees.
@@ -97,6 +103,7 @@ export const readFieldFiles = (base: string, head: string, event: string, run: R
 			head: after.has(file) ? read(["show", `${head}:${file}`]) : "",
 		}));
 };
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	try {
 		const base = process.env["BASE"] ?? "";

@@ -44,6 +44,7 @@ const CLASSES = [
 	"base",
 	"modifier",
 ] as const;
+
 export type Class = (typeof CLASSES)[number];
 
 /** What Ghostty knows of a code point. */

@@ -20,6 +20,7 @@ import {describe, expect, it} from "vitest";
 const TOKENS_CSS = readFileSync(join(import.meta.dirname, "tokens.css"), "utf8");
 const THEMES_TS = readFileSync(join(import.meta.dirname, "themes.ts"), "utf8");
 const INDEX_TS = readFileSync(join(import.meta.dirname, "index.ts"), "utf8");
+
 const RADIX: unknown = JSON.parse(
 	readFileSync(
 		join(
@@ -844,6 +845,7 @@ describe("law 14: the terminal reads", () => {
 
 /** ghostty-web's `ITheme` names for the palette, in ANSI order. */
 const ANSI = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
+
 const ANSI_NAMES = [
 	...ANSI,
 	...ANSI.map((n) => `bright${n.slice(0, 1).toUpperCase()}${n.slice(1)}`),

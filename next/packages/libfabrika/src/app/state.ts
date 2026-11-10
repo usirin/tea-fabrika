@@ -12,6 +12,7 @@ const Row = Schema.Struct({
 	/** The last inbox rev this model has folded. */
 	after: Rev,
 });
+
 const decodeRow = Schema.decodeUnknownResult(Row);
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 

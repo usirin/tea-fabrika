@@ -27,6 +27,7 @@ import {readToPage, readToWindow} from "./src/messages.ts";
 
 const DIST = join(import.meta.dirname, "dist");
 const ORIGIN = "http://fabrika.test";
+
 const TYPES: Readonly<Record<string, string>> = {
 	html: "text/html",
 	js: "text/javascript",
@@ -49,6 +50,7 @@ const LENGTHS = [
 	47 * MIN + 14 * SEC,
 	2 * HOUR + 10 * MIN,
 ] as const;
+
 const WIDTHS = Array.from({length: (1600 - 60) / 20 + 1}, (_, k) => 60 + k * 20);
 /** The least room between two labels shown side by side, in px. */
 const ROOM = 4;
@@ -113,6 +115,7 @@ type Label = {readonly text: string; readonly left: number; readonly right: numb
 
 const failures: string[] = [];
 const browser = await chromium.launch({headless: true});
+
 try {
 	for (const length of LENGTHS) {
 		const context = await browser.newContext({

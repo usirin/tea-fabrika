@@ -75,6 +75,7 @@ const programOf = (run: string) => run.replace(/[-:][^-:]*$/, "");
 const byFrom = (a: Node, b: Node) => a.from - b.from;
 
 const stepKey = (s: Step) => `step:${JSON.stringify([s.run, s.machine, s.id, s.n])}`;
+
 const machineKey = (run: string, machine: string, id: string) =>
 	`machine:${JSON.stringify([run, machine, id])}`;
 

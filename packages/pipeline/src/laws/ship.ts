@@ -52,19 +52,23 @@ type Criteria = NonNullable<ShipFacts["criteria"]>;
 type VerdictRow = ShipFacts["verdicts"][number];
 
 const C1: Criteria[number] = {id: criterionId("c1"), version: 1, text: "every window opens"};
+
 /** Reworded once: only a row on its version 2 counts. */
 const C2: Criteria[number] = {
 	id: criterionId("c2"),
 	version: 2,
 	text: "the door locks, from inside too",
 };
+
 const CRITERIA: Criteria = [C1, C2];
+
 const row = (
 	c: Criteria[number],
 	head: string,
 	grade: BookRow["grade"] = "pass",
 	version = c.version,
 ): BookRow => ({criterion: c.id, version, head, grade, proof: `the review at ${head}`});
+
 /** A passing verdict per criterion at `head`. */
 const allMet = (head: string): readonly VerdictRow[] => filed(CRITERIA.map((c) => row(c, head)));
 
@@ -74,6 +78,7 @@ const allMet = (head: string): readonly VerdictRow[] => filed(CRITERIA.map((c) =
  */
 const PROOFS = ["met", "failed", "other_head", "old_version"] as const;
 type ProofKind = (typeof PROOFS)[number];
+
 const rowsFor = (head: string, kind: ProofKind): readonly VerdictRow[] => {
 	switch (kind) {
 		case "met":
@@ -276,6 +281,7 @@ interface Wanted {
 	readonly criteria: ShipFacts["criteria"];
 	readonly rows: readonly (VerdictRow | null)[];
 }
+
 const wantedOf = (f: ShipFacts): Wanted => ({
 	head: f.head,
 	checks: f.checks,
@@ -446,6 +452,7 @@ export function showShipMsg(m: AnyShipMsg): string {
 			return m.type;
 	}
 }
+
 const structuralKey = (v: unknown): string => (typeof v === "string" ? v : JSON.stringify(v));
 
 /** A read's verdict rows in a few words: nothing when all are met at its head. */
@@ -547,6 +554,7 @@ export const takesAnOldVersion: Update<Ship, AnyShipMsg, ShipCmd> = (s, m) => {
 	}));
 	return shipUpdate(s, {...m, value: {...m.value, verdicts}});
 };
+
 export const keepsAnOldPass: Update<Keeping, AnyShipMsg, ShipCmd> = (s, m) => {
 	const kept = s.kept;
 	const msg =

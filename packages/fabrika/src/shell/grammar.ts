@@ -94,6 +94,7 @@ export const BUILTINS = [
 	"dismiss",
 	"agents",
 ] as const;
+
 export type Builtin = (typeof BUILTINS)[number];
 const isBuiltin = (name: string): name is Builtin => (BUILTINS as readonly string[]).includes(name);
 
@@ -193,6 +194,7 @@ const refused = (at: number, why: string, guess?: string): Refused => ({
 /** A stop in the walk: the parse is refused. Thrown inside this file only, and caught by `parse`. */
 class Stop {
 	readonly refusal: Refused;
+
 	constructor(refusal: Refused) {
 		this.refusal = refusal;
 	}

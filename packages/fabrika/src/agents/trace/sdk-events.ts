@@ -49,6 +49,7 @@ const ToolUse = Schema.Struct({
 	id: Schema.optional(Schema.String),
 	name: Schema.String,
 });
+
 const ToolResult = Schema.Struct({
 	type: Schema.Literal("tool_result"),
 	tool_use_id: Schema.String,
@@ -65,11 +66,13 @@ const Assistant = Schema.Struct({
 		usage: Schema.optional(Usage),
 	}),
 });
+
 const User = Schema.Struct({
 	type: Schema.Literal("user"),
 	parent_tool_use_id: Schema.NullOr(Schema.String),
 	message: Schema.Struct({content: Schema.Union([Schema.String, Schema.Array(Schema.Unknown)])}),
 });
+
 /** The partial message that ends a model turn, with the turn's output tokens. */
 const Delta = Schema.Struct({
 	type: Schema.Literal("stream_event"),
@@ -79,12 +82,14 @@ const Delta = Schema.Struct({
 		usage: Schema.Struct({output_tokens: Schema.Number}),
 	}),
 });
+
 const Result = Schema.Struct({
 	type: Schema.Literal("result"),
 	subtype: Schema.String,
 	is_error: Schema.Boolean,
 	usage: Usage,
 });
+
 const Seen = Schema.Union([Assistant, User, Delta, Result]);
 
 const seenOf = Schema.decodeUnknownOption(Seen);

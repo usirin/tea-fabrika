@@ -39,6 +39,7 @@ const Passed = Schema.Struct({
 	/** How the reviewer knows, in a sentence or two. */
 	says: Schema.String,
 });
+
 const Failed = Schema.Struct({
 	id: CriterionId,
 	grade: Schema.Literal("fail"),
@@ -46,6 +47,7 @@ const Failed = Schema.Struct({
 	where: Schema.Array(Place),
 	says: Schema.String,
 });
+
 const Unseen = Schema.Struct({
 	id: CriterionId,
 	/** The reviewer could not see what it needed. It blocks a pass. It never causes a fail. */
@@ -172,6 +174,7 @@ const SHORT: Readonly<Record<TextKind, string>> = {
 	"review-doc": "doc",
 	"review-skill": "skill",
 };
+
 const plain = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
 
 /**

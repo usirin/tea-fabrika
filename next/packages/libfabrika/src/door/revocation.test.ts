@@ -33,27 +33,35 @@ import {Answer} from "../transport/index.ts";
 
 let Door: typeof import("@kampus/libfabrika/door").Door;
 let Id: typeof import("../id.ts");
+
 beforeEach(async () => {
 	({Door} =
 		await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
 	Id = await vi.importActual<typeof Id>("../id.ts");
 });
+
 const checks = {seed: 119120, numRuns: 20};
 const folder = mkdtempSync(join(tmpdir(), "p17-revoke-"));
 const opened: DatabaseSync[] = [];
+
 afterAll(() => {
 	for (const db of opened) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
 });
+
 const url = "https://fabrika.test/entry/p17",
 	sentAt = "2026-11-08T04:00:00.000Z";
+
 const person = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const processes = {
 	counter: "process_01m6v5270hetdrt4r8h9vvjwjs",
 	notes: "process_01m6v5270hetdrt4r8h9vvjwjt",
 };
+
 const Input = Schema.TaggedUnion({add: {n: Schema.Int}, save: {text: Schema.String}});
 const Fact = Schema.TaggedStruct("saved", {text: Schema.String});
+
 // The pre-P17 log shape, independent of the current door's input encoder.
 const LegacyReceived = Schema.TaggedStruct("received", {
 	method: Schema.String,
@@ -64,17 +72,21 @@ const LegacyReceived = Schema.TaggedStruct("received", {
 	spanId: Schema.String,
 	input: Schema.Json,
 });
+
 const u32 = (n: number) => {
 	const bytes = Buffer.alloc(4);
 	bytes.writeUInt32BE(n);
 	return bytes;
 };
+
 const field = (value: string | Uint8Array) => {
 	const bytes = Buffer.from(value);
 	return Buffer.concat([u32(bytes.length), bytes]);
 };
+
 const web = <A>(call: () => Promise<A>) =>
 	Effect.tryPromise({try: call, catch: () => new Error("test crypto failed")});
+
 const key = Effect.fnUntraced(function* () {
 	const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
 	const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
@@ -118,7 +130,9 @@ const key = Effect.fnUntraced(function* () {
 			),
 	};
 });
+
 let homes = 0;
+
 const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown> = Input) {
 	const root = yield* key(),
 		old = yield* key(),
@@ -210,8 +224,10 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 	};
 	return {root, old, other, first, deliveries, notices, controls, layers, storage};
 });
+
 type World = Effect.Success<ReturnType<typeof world>>;
 type DoorService = typeof Door.Service;
+
 const proof = Effect.fnUntraced(function* (door: DoorService, k: World["old"], tab: string) {
 	const client = yield* door.connect(),
 		nonce = yield* door.challenge(client);
@@ -232,6 +248,7 @@ const proof = Effect.fnUntraced(function* (door: DoorService, k: World["old"], t
 		trusted: {url, tab, name: k.fingerprint},
 	};
 });
+
 const hello = Effect.fnUntraced(function* (door: DoorService, k: World["old"], tab: string) {
 	const hello = yield* proof(door, k, tab);
 	return {
@@ -239,6 +256,7 @@ const hello = Effect.fnUntraced(function* (door: DoorService, k: World["old"], t
 		result: yield* door.initialize(hello.client, hello.params, hello.trusted),
 	};
 });
+
 const remove = Effect.fnUntraced(function* (door: DoorService, w: World, id: string) {
 	const text = revokeText({
 		id,
@@ -250,6 +268,7 @@ const remove = Effect.fnUntraced(function* (door: DoorService, w: World, id: str
 	});
 	expect((yield* door.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
 });
+
 const setup = Effect.fnUntraced(function* (w: World) {
 	const a = yield* Door.pipe(Effect.provide(w.layers().layer));
 	const b = yield* Door.pipe(Effect.provide(w.layers().layer));
@@ -276,6 +295,7 @@ const setup = Effect.fnUntraced(function* (w: World) {
 	expect(other.result._tag).toBe("online");
 	return {a, b, old: old.client, other: other.client};
 });
+
 const request = (target: "counter" | "notes", id: string, text: string) => ({
 	pid: processes[target],
 	letter: id,
@@ -283,6 +303,7 @@ const request = (target: "counter" | "notes", id: string, text: string) => ({
 	sentAt,
 	seen: 0,
 });
+
 const send = (
 	door: DoorService,
 	client: Parameters<DoorService["route"]>[0],
@@ -294,8 +315,10 @@ const send = (
 	w.controls.letter = id;
 	return door.route(client, "process.send", request(target, id, text));
 };
+
 const rows = (w: World, stream: string, saved = w.first) =>
 	Ledger.use((l) => Stream.runCollect(l.read(stream, 0))).pipe(Effect.provide(w.layers(saved).env));
+
 const last = (w: World) => {
 	const incoming = w.deliveries.at(-1);
 	if (!incoming) throw new Error("door did not deliver an input");

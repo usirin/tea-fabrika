@@ -41,4 +41,5 @@ export const stack = (
 			return {url: brain.url};
 		}),
 	);
+
 const SchemaEncode = (value: Settings) => JSON.stringify(value);

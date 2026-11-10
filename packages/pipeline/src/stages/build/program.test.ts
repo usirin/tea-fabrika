@@ -25,6 +25,7 @@ const REPO = "https://github.com/acme/widgets";
 const TICKET = `${REPO}/issues/1`;
 const PR = `${REPO}/pull/9`;
 const FLAGS = {model: "opus", effort: "medium", budget: 1, harness: undefined} as const;
+
 const RAN = {
 	spend: {costUsd: 0.5, tokens: 1, context: 1, turns: 1, minutes: 0.1},
 	tools: [],
@@ -82,6 +83,7 @@ function world(
 }
 
 type BuildRun = RunOf<typeof buildProgram>;
+
 const once = <A, E>(
 	w: {readonly services: ReturnType<typeof world>["services"]},
 	storage: Storage,

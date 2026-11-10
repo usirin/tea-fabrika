@@ -176,6 +176,7 @@ export function claimProblems(c: Criterion): readonly string[] {
 /** A count above two, in digits or words. */
 const MANY =
 	/\b(?:[3-9]|[1-9]\d+|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozens?|hundreds?|thousands?|several|many)\b/i;
+
 /** A second run, or a large input. */
 const AGAIN =
 	/\b(?:again|twice|second|repeat(?:ed|s)?|re-?runs?|every run|each run|large|big|long|whole repo|real repo)\b/i;

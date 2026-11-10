@@ -45,6 +45,7 @@ const viewed = (content: "kept" | "kept_out" = "kept_out") => {
 };
 
 const under = (parent: Span) => trace.setSpan(ROOT_CONTEXT, parent);
+
 const named = (spans: readonly ReadableSpan[], name: string) => {
 	const found = spans.find((s) => s.name === name);
 	if (found === undefined) throw new Error(`no ${name} in ${spans.map((s) => s.name).join(", ")}`);

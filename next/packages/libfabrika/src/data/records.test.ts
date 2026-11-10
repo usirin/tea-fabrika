@@ -40,6 +40,7 @@ type Row = typeof SpanRow.Type;
 const folder = mkdtempSync(join(tmpdir(), "p37-records-"));
 const opened: Array<DatabaseSync> = [];
 let homes = 0;
+
 afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
@@ -98,6 +99,7 @@ const row = (spanId: string, fill = 0): Row => ({
 	resource: {attributes: {"fab.object": PROCESS}},
 	ok: true,
 });
+
 const id = (n: number) => `s${String(n).padStart(15, "0")}`;
 
 const CAP = 64 * 1024;
@@ -136,6 +138,7 @@ type Backend = {
 		parts?: ReturnType<typeof home>;
 	};
 };
+
 const backends: ReadonlyArray<Backend> = [
 	{name: "memory", make: (cap) => ({layer: RecordManager.memory(cap)})},
 	{

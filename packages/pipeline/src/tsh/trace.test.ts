@@ -46,6 +46,7 @@ type Printed = Shell.Printed;
 type Ready = Shell.Ready;
 
 let runs = 0;
+
 /** One tsh on a storage; `line` tells it a line and waits for its `ready`. */
 const session = (list: ProgramList, storage: Storage) =>
 	Effect.gen(function* () {
@@ -85,6 +86,7 @@ const session = (list: ProgramList, storage: Storage) =>
 	});
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
+
 /** Clear once a review has kept its rows: each closes the ticket the recorded body names ("Fixes #625"). */
 const clear: PrFacts = {
 	head: HEADS.final,
@@ -98,6 +100,7 @@ const clear: PrFacts = {
 	comments: [],
 	main: {tested: "main0", tip: "main0"},
 };
+
 /** The recorded pull request, open at the head that merged; a draft when `draft`. */
 const opened = (draft: boolean) =>
 	changed(recorded("change-final.json"), (repo) => {
@@ -127,8 +130,10 @@ const recordedGitHub = () => {
 
 const idOf = (span: ReadableSpan) => span.spanContext().spanId;
 const parentOf = (span: ReadableSpan) => span.parentSpanContext?.spanId;
+
 const childrenOf = (spans: readonly ReadableSpan[], parent: ReadableSpan) =>
 	spans.filter((s) => parentOf(s) === idOf(parent));
+
 const prOf = (span: ReadableSpan) => span.attributes["vcs.change.id"];
 const serviceOf = (span: ReadableSpan) => span.resource.attributes["service.name"];
 const red = (span: ReadableSpan) => span.status.code === SpanStatusCode.ERROR;

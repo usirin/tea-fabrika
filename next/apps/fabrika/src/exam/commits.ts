@@ -86,6 +86,7 @@ export const Answer = Schema.TaggedUnion({
 export type Answer = typeof Answer.Type;
 
 const done = Answer.cases.done.make({});
+
 const stuck = (why: Why, sha: string, more: {paths?: string[]; step?: Role} = {}) =>
 	Answer.cases.stuck.make({why, sha, ...more});
 
@@ -358,14 +359,18 @@ const must = Effect.fnUntraced(function* (
 const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>, input?: string) {
 	return yield* must("git", args, input);
 });
+
 const gitMaybe = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
 	return yield* run("git", args).pipe(Effect.map((r) => (r.code === 0 ? r.out : null)));
 });
+
 const nul = (out: string) => out.split("\0").filter((p) => p !== "");
 const words = (out: string) => out.split("\n").filter((p) => p !== "");
+
 const treeAt = Effect.fnUntraced(function* (rev: string) {
 	return yield* gitMaybe(["rev-parse", "--verify", "-q", `${rev}^{tree}`]);
 });
+
 const fileAt = Effect.fnUntraced(function* (rev: string, path: string) {
 	return yield* gitMaybe(["show", `${rev}:${path}`]);
 });
@@ -474,17 +479,20 @@ const notesOn = Effect.fnUntraced(function* (ref: string) {
 });
 
 const HEX = /^[0-9a-f]{40}$/;
+
 const flag = (name: string) => {
 	const args = process.argv.slice(3);
 	const at = args.indexOf(name);
 	return at < 0 ? undefined : args[at + 1];
 };
+
 const need = Effect.fnUntraced(function* (name: string) {
 	const value = flag(name);
 	return yield* value === undefined || value.startsWith("-")
 		? Effect.fail(new Failed({what: `${name} is required`}))
 		: Effect.succeed(value);
 });
+
 const resolve = Effect.fnUntraced(function* (rev: string) {
 	return yield* git(["rev-parse", "--verify", "-q", `${rev}^{commit}`]).pipe(
 		Effect.map((s) => s.trim()),
@@ -517,12 +525,14 @@ const endpoints = Effect.gen(function* () {
 /** Text inside a workflow command, escaped as GitHub's own toolkit does, so it cannot start another. */
 export const annotate = (s: string) =>
 	s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+
 /** A path in a printed line: JSON-quoted, and safe inside markdown code and a table. */
 const quote = (path: string) =>
 	JSON.stringify(path)
 		.replaceAll("`", "\\u0060")
 		.replaceAll("<", "\\u003c")
 		.replaceAll("|", "\\u007c");
+
 /** One answer as a line, its paths shown by `show`. */
 export const plain = (a: Answer, show: (path: string) => string = quote) => {
 	if (a._tag === "done") return "done";

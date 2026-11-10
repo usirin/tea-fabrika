@@ -73,6 +73,7 @@ import {pathsOf} from "./socket.ts";
 const users = new Map<string, {id: number; keys: string[]}>();
 /** The path of every call the Worker made to the fake GitHub: a login asks `/user/<id>` once. */
 const calls: string[] = [];
+
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
 	calls.push(url.pathname);

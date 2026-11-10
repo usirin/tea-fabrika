@@ -10,8 +10,10 @@ import {processId} from "../id.test-support.ts";
 import {brainOutbox, checkMemory} from "./local-stage.ts";
 
 const SEED = 119120;
+
 const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
 	Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));
+
 const firstStart: typeof BrainEvent.Type = {
 	id: "brain-start-1",
 	_tag: "started",
@@ -22,6 +24,7 @@ const firstStart: typeof BrainEvent.Type = {
 	pid: 417,
 	at: 42,
 };
+
 const life = {
 	id: fc.string({minLength: 1}),
 	start: fc.string({minLength: 1}),
@@ -31,7 +34,9 @@ const life = {
 	bytes: fc.integer({min: 0}),
 	backoff: fc.integer({min: 0}),
 };
+
 const reason = fc.constantFrom("open", "crash", "memory", "core");
+
 const brainEvent: fc.Arbitrary<typeof BrainEvent.Type> = fc.oneof(
 	fc.record({
 		...life,

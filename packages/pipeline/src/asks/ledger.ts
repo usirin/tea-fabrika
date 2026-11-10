@@ -233,6 +233,7 @@ const askAgain = (what: string, tries: number) =>
 
 /** A `Self` call's answer other than no word from the ledger. */
 type Heard<W> = Exclude<W, "unreachable" | {readonly how: "unreachable"}>;
+
 const heard = <W>(w: W): w is Heard<W> =>
 	w !== "unreachable" &&
 	!(typeof w === "object" && w !== null && "how" in w && w.how === "unreachable");

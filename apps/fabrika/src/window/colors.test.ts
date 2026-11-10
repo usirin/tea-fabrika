@@ -20,11 +20,13 @@ import {Palette} from "./pop.tsx";
 // background first, rounded to 8 bits a channel, as rules.py does.
 
 const SRC = join(import.meta.dirname, "..");
+
 /** The package's stylesheet, found by its name as the build finds it, never by a path. */
 const TOKENS = readFileSync(
 	fileURLToPath(import.meta.resolve("@kampus/fabrika-design/tokens.css")),
 	"utf8",
 );
+
 const RESET = readFileSync(join(import.meta.dirname, "manti-reset.css"), "utf8");
 const CSS = readFileSync(join(import.meta.dirname, "window.css"), "utf8");
 const TERMINAL = readFileSync(join(import.meta.dirname, "terminal.ts"), "utf8");
@@ -45,6 +47,7 @@ const SLATE: Record<Look, {high: string; low: readonly string[]}> = {
  * for a package token, so it follows that token's value.
  */
 const FAINT = {dark: "#f1f7feb5", light: "#0007149f"}; // slate a11
+
 const ALIASES: Record<string, Record<Look, string>> = {
 	"--text-secondary": FAINT,
 	"--text-muted": FAINT,

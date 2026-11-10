@@ -26,6 +26,7 @@ const call = Cmd.make("toy_call", {
 	ok: Schema.String,
 	err: ["unknown"],
 });
+
 type CallCmd = ReturnType<typeof call>;
 
 const Work = Schema.Union([
@@ -56,6 +57,7 @@ const work = defineMachine({
 
 /** What every life of the fake job did, and how its call answers in this life. */
 const world = {calls: 0, mains: 0, answer: "hang" as "hang" | "at once"};
+
 const reset = (answer: typeof world.answer) => {
 	world.calls = 0;
 	world.mains = 0;

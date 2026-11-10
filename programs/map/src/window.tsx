@@ -413,6 +413,7 @@ const NODE_TYPES = {
 	operate: OperateFrame,
 	deliver: DeliverFrame,
 };
+
 const EDGE_TYPES = {wire: WireEdge, call: CallEdge};
 
 /** Which side of the ledger a box's dotted line lands on. */

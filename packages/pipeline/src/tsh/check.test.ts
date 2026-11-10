@@ -19,11 +19,13 @@ const checked = (line: string): Shell.Checked => {
 	if (first?.kind !== "run") throw new Error("not a run");
 	return check(first.pipeline, list, line);
 };
+
 const refusal = (line: string) => {
 	const c = checked(line);
 	if (c.kind !== "refused") throw new Error(`not refused: ${line}`);
 	return c;
 };
+
 const PR = "https://github.com/example/repo/pull/7";
 const REVIEW = "review-scripted --rubrics r --model opus --effort medium --budget 1";
 

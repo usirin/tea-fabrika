@@ -12,6 +12,7 @@ export const tokens = new Map(names.tokens.map(({name, owner}) => [name, owner])
 export const steps = new Set(names.steps);
 export const parts: Readonly<Record<string, readonly string[]>> = names.parts;
 export const file = (decl: Declaration) => relative(process.cwd(), decl.source?.input.file ?? "");
+
 const place = (decl: Declaration) =>
 	`${file(decl)} ${decl.parent?.type === "rule" ? decl.parent.selector.replace(/\s+/g, " ").trim() : ""} { ${decl.prop} }`;
 

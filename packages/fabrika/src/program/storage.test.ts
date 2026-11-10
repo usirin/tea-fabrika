@@ -22,11 +22,13 @@ const Phase = Schema.Struct({phase: Schema.String});
 const Older = Schema.Struct({count: Schema.Int});
 
 const dirs: string[] = [];
+
 afterEach(() => {
 	for (const dir of dirs.splice(0)) rmSync(dir, {recursive: true, force: true});
 });
 
 const go = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
+
 /** The failure's tag, or `ok`. */
 const tagOf = <A, E extends {readonly _tag: string}>(effect: Effect.Effect<A, E>) =>
 	Effect.runPromise(

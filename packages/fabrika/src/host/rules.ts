@@ -89,6 +89,7 @@ export type AppendResult =
 	| {ok: false; why: "denied"}
 	/** Kafka's UNKNOWN_TOPIC_OR_PARTITION: under no registered name. */
 	| {ok: false; why: "unknown"};
+
 export type ClaimResult =
 	| {ok: true; fence: number; rev: number; expiresAt: number; incarnation: number}
 	| {ok: false; why: "held"; holder: string; expiresAt: number}
@@ -97,15 +98,18 @@ export type ClaimResult =
 	| {ok: false; why: "unknown"}
 	/** The name exited (at the `exited` event's `pos`) and waits for its parent to restart it. */
 	| {ok: false; why: "down"; pos: number};
+
 export type RenewResult =
 	/** `written`: a `lease_resumed`, when the renew came after the lease's `lease_expired`. */
 	| {ok: true; expiresAt: number; written: readonly Written[]}
 	/** A newer claim took the name, or it exited: the fence is not its newest any more. */
 	| {ok: false; why: "lost"}
 	| {ok: false; why: "stop"};
+
 export type RegisterResult =
 	/** `created: false`: it was registered already; nothing was written. */
 	{ok: true; created: boolean; pos: number; rev: number} | {ok: false; why: "denied"};
+
 export type CancelResult = {ok: true; pos: number; rev: number} | {ok: false; why: "unknown"};
 
 /**
@@ -133,8 +137,10 @@ export type Limits = {usd?: number; tokens?: number; wallMs?: number; children?:
 export type LimitKind = "usd" | "tokens" | "wall" | "children";
 /** How a run its limit ended exits: Kubernetes' `OOMKilled` and `DeadlineExceeded`, one per kind. */
 export type LimitReason = "limit:usd" | "limit:tokens" | "limit:wall";
+
 export const isLimitReason = (r: string): r is LimitReason =>
 	r === "limit:usd" || r === "limit:tokens" || r === "limit:wall";
+
 /** A limit hit: which kind, whose (`at`), what was used (with what was asked, for a refusal) and its max. */
 export type Over = {kind: LimitKind; at: string; used: number; max: number};
 
@@ -149,9 +155,11 @@ export const limitsRefusal = (l: Limits): string | null => {
 	if (!whole(l.children)) return "children is a whole number, 0 or more";
 	return null;
 };
+
 const costOk = (c: Cost): boolean =>
 	(c.usd === undefined || (Number.isFinite(c.usd) && c.usd >= 0)) &&
 	(c.tokens === undefined || (Number.isInteger(c.tokens) && c.tokens >= 0));
+
 /** Dollars are kept as whole micro-dollars, so sums never drift. */
 export const micros = (usd: number | undefined): number => Math.round((usd ?? 0) * 1_000_000);
 
@@ -163,15 +171,18 @@ export type HoldResult =
 	| {ok: false; why: "denied"}
 	/** It does not fit under `over.at`'s limit: nothing is held, and `over.at` has ended. */
 	| {ok: false; why: "limit"; over: Over; written: readonly Written[]};
+
 export type ChargeResult =
 	/** `over`: the charge crossed this limit, and its name has ended. */
 	| {ok: true; dup: boolean; over: Over | null; written: readonly Written[]}
 	| {ok: false; why: "fenced"}
 	| {ok: false; why: "denied"};
+
 export type SetLimitsResult =
 	| {ok: true; pos: number; rev: number; written: readonly Written[]}
 	| {ok: false; why: "unknown"}
 	| {ok: false; why: "denied"};
+
 /** What a name has used and may use: `used.usd` in dollars, holds included. */
 export type Usage = {
 	name: string;
@@ -183,6 +194,7 @@ export type Usage = {
 	since: number;
 	deadline: number | null;
 };
+
 /** OTP's two exit signals a parent sends a child: `shutdown` (trappable) and `kill` (not). */
 export type Signal = "shutdown" | "kill";
 
@@ -193,11 +205,14 @@ export type ExitResult =
 	/** `dup`: this fence's exit had landed already, and nothing was written. */
 	| {ok: true; pos: number; incarnation: number; dup: boolean; written: readonly Written[]}
 	| {ok: false; why: "fenced"};
+
 export type MonitorResult =
 	/** `incarnation: null`: the name was not running, and a DOWN `noproc` went to the inbox. */
 	{ok: true; incarnation: number | null; written: readonly Written[]} | {ok: false; why: "fenced"};
+
 export type LinkResult = {ok: true} | {ok: false; why: "fenced"} | {ok: false; why: "noproc"};
 export type FlagResult = {ok: true} | {ok: false; why: "fenced"};
+
 export type StartResult =
 	/** `started: false`: it was up already (or is down past `after`, and its EXIT is on the way). */
 	| {ok: true; incarnation: number; started: boolean; written: readonly Written[]}
@@ -501,6 +516,7 @@ export const PLANTED = {
 	"wall time counts from the last restart (102)": {...RULES, wallFromStart: false},
 	"a name a limit ended can be restarted (102)": {...RULES, limitEndIsFinal: false},
 } as const satisfies Record<string, Rules>;
+
 export type Planted = keyof typeof PLANTED;
 
 const marks = (xs: readonly string[]) => xs.map(() => "?").join(", ");
@@ -730,6 +746,7 @@ export const LEDGER_KINDS: readonly string[] = [
 	"limits",
 	"limit",
 ];
+
 export const isLedgerWord = (e: Event): boolean =>
 	e.writer === "ledger" || LEDGER_KINDS.includes(e.kind);
 
@@ -1352,9 +1369,12 @@ type Caps = {
 	usedTokens: number;
 	limited: LimitKind | null;
 };
+
 const NOTHING = {usd: 0, tokens: 0};
+
 const orNull = (v: Value | undefined): number | null =>
 	v === null || v === undefined ? null : num(v);
+
 const isLimitKind = (v: string): v is LimitKind =>
 	v === "usd" || v === "tokens" || v === "wall" || v === "children";
 

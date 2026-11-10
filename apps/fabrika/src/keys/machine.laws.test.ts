@@ -7,6 +7,7 @@ import {type Editor, type EditorCmd, type EditorMsg, editorMachine} from "./mach
 
 const step = (model: Editor, msg: EditorMsg) =>
 	applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, model, msg);
+
 const event = (key: string, mods = {}) => ({
 	key,
 	code: "",
@@ -74,8 +75,10 @@ describe("today's recording laws", () => {
 const press = fc
 	.tuple(fc.constantFrom("b", "m", "z", "Escape", "F6", "q", "Shift"), fc.boolean(), fc.boolean())
 	.map(([key, ctrl, meta]) => ({type: "press", press: event(key, {ctrl, meta})}) as const);
+
 const request = fc.constantFrom("keys-0", "keys-1", "keys-2", "open");
 const version = fc.constantFrom("v1", "v2");
+
 const msg: fc.Arbitrary<EditorMsg> = fc.oneof(
 	fc.constantFrom<EditorMsg>(
 		{type: "change"},

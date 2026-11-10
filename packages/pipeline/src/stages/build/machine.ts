@@ -44,6 +44,7 @@ export type BuildAsk = typeof BuildAsk.Type;
 /** A ticket, by url and number. */
 const TicketIn = Schema.Struct({ticket: Schema.String, number: Schema.Finite});
 const PushIn = Schema.Struct({ticket: Schema.String, copied: Copied, message: Commit});
+
 const OpenIn = Schema.Struct({
 	ticket: Schema.String,
 	number: Schema.Finite,
@@ -70,6 +71,7 @@ type OpenCmd = ReturnType<typeof openPr>;
 export type BuildCmd = TicketCmd | CopyCmd | PushCmd | OpenCmd;
 
 type At = {readonly ticket: string; readonly round: number; readonly run: number};
+
 /** One builder run. `run` numbers the runs of one round, so a run started again after a restart is told apart. */
 export type RunSub = Sub<
 	"build_run",
@@ -105,12 +107,14 @@ export type BuildReport = typeof BuildReport.Type;
 /** `session`: the round's conversation with the builder, named by the starter (see `BuildBrief`). */
 const Held = Schema.Struct({ask: BuildAsk, settings: Settings, session: Schema.String});
 type Held = typeof Held.Type;
+
 const Read = Schema.Struct({
 	...Held.fields,
 	ticket: Ticket,
 	/** The ticket's criteria, at least one: the gate let no other ticket through. */
 	criteria: Schema.NonEmptyArray(Criterion),
 });
+
 const Made = Schema.Struct({...Read.fields, copied: Copied});
 type Made = typeof Made.Type;
 const Done = Schema.Struct({...Made.fields, built: HeldBuilt, ran: Ran, runs: Schema.Finite});
@@ -187,6 +191,7 @@ const blank: BuildReport = {
 	runs: 0,
 	problems: [],
 };
+
 const end = (s: Held, outcome: BuildOutcome, report: Partial<BuildReport> = {}): Step => [
 	{...held(s), phase: "over", outcome, report: {...blank, ...report}},
 	[],

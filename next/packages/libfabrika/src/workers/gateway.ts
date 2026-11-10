@@ -215,13 +215,16 @@ const gatewayLogic = Effect.fnUntraced(function* (
 		}),
 	};
 });
+
 export class GatewayService extends Context.Service<
 	GatewayService,
 	Effect.Success<ReturnType<typeof gatewayLogic>>
 >()("fabrika/Gateway") {}
+
 export const gatewayLayer = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
 	Layer.effect(GatewayService, gatewayLogic(ctx, env, config)).pipe(
 		Layer.provide(ProcessIdGenerator.layer),
 	);
+
 export const gatewayRuntime = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
 	ManagedRuntime.make(gatewayLayer(ctx, env, config));

@@ -13,6 +13,7 @@ const C1 = criterionId("c1");
 const C2 = criterionId("c2");
 const C9 = criterionId("c9");
 const PLACE = {file: "src/a.ts", first: 3, last: 9};
+
 const PASS = {
 	id: C1,
 	grade: "pass",
@@ -20,8 +21,10 @@ const PASS = {
 	says: "the test covers it",
 	limit: null,
 } as const;
+
 const FAIL = {id: C2, grade: "fail", where: [], says: "no page says it"} as const;
 const UNSEEN = {id: C2, grade: "unseen", says: "its proof is in the pull request's text"} as const;
+
 const FOUND: Found = {
 	kind: "review-doc",
 	from: {source: "criterion", id: C2},
@@ -30,6 +33,7 @@ const FOUND: Found = {
 	proof: "Grep for `exit 3` under docs/ finds nothing.",
 	wants: "The reference page names exit 3 and when it happens.",
 };
+
 const STANDING: Found = {
 	kind: "review-code",
 	from: {source: "check", name: "no-silent-catch"},
@@ -38,6 +42,7 @@ const STANDING: Found = {
 	proof: "Lines 12 to 14 catch and return 0.",
 	wants: "The error is reported.",
 };
+
 const GOOD: Form = {rows: [PASS, FAIL], findings: [FOUND], skipped: []};
 
 describe("what the form's schema refuses", () => {

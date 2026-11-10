@@ -38,10 +38,12 @@ export interface Step<S, M, C> {
 /** A law said no. `why` is in words, for the report. */
 export class Broke {
 	readonly why: string;
+
 	constructor(why: string) {
 		this.why = why;
 	}
 }
+
 export const broke = (why: string): Broke => new Broke(why);
 
 /**

@@ -25,12 +25,14 @@ export type Refine = RefineState<string, string, {readonly ok: boolean}, "blocke
 type WriteCmd = ReturnType<typeof drafts.write>;
 type CheckCmd = ReturnType<typeof drafts.check>;
 export type RefineCmd = WriteCmd | CheckCmd;
+
 export type AnyRefineMsg =
 	| RefineMsg<string>
 	| ReturnType<typeof drafts.write.ok>
 	| ReturnType<typeof drafts.write.err>
 	| ReturnType<typeof drafts.check.ok>
 	| ReturnType<typeof drafts.check.err>;
+
 type Msg = AnyRefineMsg;
 const refineUpdate = stepOf<Refine, Msg, RefineCmd>(drafts.machine);
 
@@ -67,6 +69,7 @@ const waitingOn = (s: Refine): RefineCmd | null => {
 	const [, cmds] = refineUpdate(s, {type: "resume"});
 	return cmds[0] ?? null;
 };
+
 const moved = (prev: Refine, next: Refine) => structuralHash(prev) !== structuralHash(next);
 const isAnswer = (m: Msg): m is Exclude<Msg, RefineMsg<string>> => "cmd" in m;
 

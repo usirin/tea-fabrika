@@ -64,6 +64,7 @@ const ok = (exited: {readonly code: number; readonly out: string}): Effect.Effec
 	exited.code === 0 ? Effect.succeed(exited.out) : failed;
 
 const Comments = Schema.Array(Schema.Struct({body: Schema.String}));
+
 const IssueRead = Schema.Struct({
 	state: Schema.Literals(["open", "closed"]),
 	labels: Schema.Array(Schema.Struct({name: Schema.String})),

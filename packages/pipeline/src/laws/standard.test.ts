@@ -122,6 +122,7 @@ export function withoutLaws(root: string, specs: ReadonlyMap<string, number>): r
 }
 
 const ROOT = workspaceOf(import.meta.dirname);
+
 const specCounts = (): ReadonlyMap<string, number> => {
 	const counts = new Map<string, number>();
 	for (const spec of SPECS) counts.set(spec.file, (counts.get(spec.file) ?? 0) + 1);

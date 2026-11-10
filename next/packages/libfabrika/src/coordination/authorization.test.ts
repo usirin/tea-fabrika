@@ -21,19 +21,25 @@ import {ClientManager} from "./client-manager.ts";
 import {MemberFact} from "./members.ts";
 
 let appendAdmitted: typeof import("./authorization.ts").appendAdmitted;
+
 beforeEach(async () => {
 	({appendAdmitted} =
 		await vi.importActual<typeof import("./authorization.ts")>("./authorization.ts"));
 });
+
 const checks = {seed: 119120, numRuns: 35};
 const folder = mkdtempSync(join(tmpdir(), "p17-auth-"));
 afterAll(() => rmSync(folder, {recursive: true, force: true}));
+
 const root = "person-public-key",
 	old = "old-client-public-key",
 	other = "other-client-public-key";
+
 const person = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const sentAt = "2026-11-08T04:00:00.000Z",
 	traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const founder = {
 	name: "P17 project",
 	person,
@@ -42,6 +48,7 @@ const founder = {
 	by: "SHA256:root",
 	build: "test",
 };
+
 const from = {
 	by: "SHA256:root",
 	for: person,
@@ -51,7 +58,9 @@ const from = {
 	traceId,
 	build: "test",
 };
+
 const signed = {text: "already checked by the door", armored: "test signature", signer: root};
+
 const revoke = (key: string, id: string) =>
 	MemberFact.cases.revoked.make({
 		revoke: {
@@ -64,6 +73,7 @@ const revoke = (key: string, id: string) =>
 		},
 		signed,
 	});
+
 const grant = () =>
 	MemberFact.cases.granted.make({
 		grant: {
@@ -84,12 +94,15 @@ const grant = () =>
 		},
 		signed,
 	});
+
 const line = (body: string): Line =>
 	lineFor(
 		{...from, by: "SHA256:old"},
 		Schema.TaggedStruct("saved", {text: Schema.String}).make({text: body}),
 	);
+
 let homes = 0;
+
 type Observed = {
 	turn: number;
 	op: "read" | "append";
@@ -97,6 +110,7 @@ type Observed = {
 	after?: number;
 	inside: boolean;
 };
+
 const world = (path = join(folder, `${++homes}.db`), fail = false) => {
 	const db = new DatabaseSync(path),
 		base = nodeSql(db);
@@ -142,11 +156,14 @@ const world = (path = join(folder, `${++homes}.db`), fail = false) => {
 	);
 	return {db, sql, path, observations, layer};
 };
+
 const read = (stream: string) => Ledger.use((l) => Stream.runCollect(l.read(stream, 0)));
+
 const boot = ClientManager.use((clients) => clients.members).pipe(
 	Effect.andThen(ClientManager.use((clients) => clients.write(grant(), from))),
 	Effect.asVoid,
 );
+
 const remove = (id = "revoked") =>
 	ClientManager.use((clients) => clients.write(revoke(old, id), from));
 

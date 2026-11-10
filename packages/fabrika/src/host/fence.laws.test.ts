@@ -35,6 +35,7 @@ type Mod = {
 	readonly layerMemory: typeof realMemory.layerMemory;
 	readonly layerSqliteSync: typeof realSqlite.layerSqliteSync;
 };
+
 const real: Mod = {
 	Ledger: realLedger.Ledger,
 	layerMemory: realMemory.layerMemory,
@@ -42,11 +43,13 @@ const real: Mod = {
 };
 
 const madeDirs: string[] = [];
+
 afterAll(() => {
 	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
 });
 
 type File = "rules" | "memory" | "sqlite";
+
 const FILES: readonly string[] = [
 	"ledger",
 	"rules",
@@ -55,6 +58,7 @@ const FILES: readonly string[] = [
 	"sqlite-worker",
 	"memory",
 ];
+
 type Edit = readonly [File, string, string];
 
 /**
@@ -94,6 +98,7 @@ const sqlitePath = () => {
 	madeDirs.push(dir);
 	return join(dir, "ledger.sqlite");
 };
+
 /** The ledger, built with its defaults: its expiry grace and its alarm's tick are the real ones. */
 const layerOf = (impl: Impl, path: string): Layer.Layer<realLedger.Ledger> =>
 	impl.kind === "memory" ? impl.mod.layerMemory() : impl.mod.layerSqliteSync({path});
@@ -111,6 +116,7 @@ const TICK = 25;
 type Who = "newest" | "older";
 /** Where a write goes: the name's own streams (its state, deeper, the name itself), a sibling name, or another name's inbox. */
 type Where = "state" | "deeper" | "name" | "sibling" | "reply";
+
 type Act =
 	| {readonly do: "claim"}
 	| {readonly do: "renew"; readonly by: Who; readonly pick: number}
@@ -151,6 +157,7 @@ interface Step {
 	readonly expiries: readonly Row[];
 	readonly leaseAfter: Lease | null;
 }
+
 interface Run {
 	readonly steps: readonly Step[];
 	/** Each stream the run wrote, as it ends. */
@@ -160,9 +167,11 @@ interface Run {
 }
 
 const newestOf = (s: Step) => s.fences.at(-1) ?? null;
+
 const decodeFence = Schema.decodeUnknownOption(
 	Schema.fromJsonString(Schema.Struct({fence: Schema.Number})),
 );
+
 /** The fence a row's data names, or null: it names none. */
 const fenceIn = (row: Row): number | null =>
 	Option.match(decodeFence(row.data), {onNone: () => null, onSome: (d) => d.fence});
@@ -260,6 +269,7 @@ const runOn = (impl: Impl, path: string, acts: readonly Act[]): Promise<Run> =>
 
 const WAITS = [1, 500, TTL - 1, TTL, TTL + 1, TTL + GRACE, TTL + GRACE + 2 * TICK, 3 * TTL];
 const arbWho = fc.constantFrom<Who>("newest", "older");
+
 const arbAct: fc.Arbitrary<Act> = fc.oneof(
 	{arbitrary: fc.constant<Act>({do: "claim"}), weight: 2},
 	{
@@ -284,11 +294,14 @@ const arbAct: fc.Arbitrary<Act> = fc.oneof(
 		weight: 3,
 	},
 );
+
 /** A takeover: the clock moves past the lease's end, maybe past the alarm too, and a new host claims. */
 const arbTakeover = fc
 	.constantFrom(TTL, TTL + 1, TTL + GRACE, TTL + GRACE + 2 * TICK, 3 * TTL)
 	.map((ms): readonly Act[] => [{do: "wait", ms}, {do: "claim"}]);
+
 const arbRound = fc.array(arbAct, {maxLength: 6});
+
 /**
  * A run starts with a claim, so most acts have a fence to carry, and has up to two takeovers, so
  * older fences, their renews and their resends after a takeover come up often.
@@ -324,6 +337,7 @@ const assertLaw = async (law: Law, impl: Impl) => {
 };
 
 const own: readonly Where[] = ["state", "deeper", "name"];
+
 /** When a step was done, against the lease's end the ledger gave. */
 const when = (s: Step) =>
 	s.end === null
@@ -331,6 +345,7 @@ const when = (s: Step) =>
 		: s.at < s.end
 			? `at ${s.at}, lease live to ${s.end}`
 			: `at ${s.at}, ${s.at - s.end} ms past the lease's end`;
+
 const shown = (s: Step) => `${s.where}${s.landed ? " (a resend)" : ""}`;
 
 /** The newest fence's write on its own streams or into another name's inbox: ok, or dup for a resend. */

@@ -91,6 +91,7 @@ const LOADED_FILES = new Set([
 	"claude.local.md",
 	".mcp.json",
 ]);
+
 const LOADED_FOLDERS = new Set([".codex", ".agents", ".claude"]);
 
 /** Does an agent load this file by itself? Pure. */
@@ -147,6 +148,7 @@ const GIT = [
 	"-c",
 	"core.quotepath=off",
 ];
+
 const IDENTITY = {
 	GIT_AUTHOR_NAME: "fabrika lane",
 	GIT_AUTHOR_EMAIL: "lane@fabrika.invalid",
@@ -365,6 +367,7 @@ export class LaneWork extends Context.Service<
 
 /** Who may make the copy at a path, in this process. Each lane has its own `LaneWork`, so it is here. */
 const makers = new Map<string, Semaphore.Semaphore>();
+
 const makerOf = (tree: string): Semaphore.Semaphore => {
 	const known = makers.get(tree);
 	if (known !== undefined) return known;

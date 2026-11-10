@@ -16,6 +16,7 @@ export type Rev = typeof Rev.Type;
 const LegacyParentText = Schema.String.check(
 	Schema.isPattern(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/),
 );
+
 export const ParentText = Schema.Union([InputId, LegacyParentText]);
 
 /** A W3C trace id: 32 lowercase hex characters, never all zeros. */

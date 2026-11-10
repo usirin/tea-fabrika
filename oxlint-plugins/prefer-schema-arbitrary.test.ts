@@ -17,6 +17,7 @@ const root = resolve(import.meta.dirname, "..");
 const oxlint = join(root, "node_modules/.bin/oxlint");
 const config = join(root, ".oxlintrc.json");
 const code = "fabrika(prefer-schema-arbitrary)";
+
 const constructors = [
 	"record",
 	"string",
@@ -38,13 +39,16 @@ const constructors = [
 	"jsonValue",
 	"uint8Array",
 ] as const;
+
 const options = {seed: 119120, numRuns: 4};
 const name = fc.stringMatching(/^[a-z]{3,8}$/).map((s) => `random_${s}`);
+
 interface Diagnostic {
 	code: string;
 	message: string;
 	labels: {span: {line: number}}[];
 }
+
 const lint = (files: Record<string, string>, runner = false, args: string[] = []) => {
 	const dir = realpathSync(
 		mkdtempSync(join(runner ? join(root, "next") : tmpdir(), ".schema-lint-")),
@@ -86,6 +90,7 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
 		rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 const imports = (alias: string) =>
 	`import ${alias} from 'fast-check';\nimport {Schema} from 'effect';\nconst S = Schema.Struct({x: Schema.String});\n`;
 

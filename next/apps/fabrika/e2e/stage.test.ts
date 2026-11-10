@@ -13,6 +13,7 @@ interface BrowserDriver {
 	readonly call: (method: string, params: unknown) => Promise<any>;
 	readonly connections: () => number;
 }
+
 declare global {
 	interface Window {
 		readonly p12: BrowserDriver;
@@ -20,10 +21,13 @@ declare global {
 }
 
 const APP = resolve(import.meta.dirname, "..");
+
 const children: Array<ChildProcess> = [],
 	homes: Array<string> = [],
 	browsers: Array<Browser> = [];
+
 const pause = () => new Promise<void>((done) => setTimeout(done, 25));
+
 afterEach(async () => {
 	for (const b of browsers.splice(0)) await b.close();
 	for (const c of children.splice(0))
@@ -33,6 +37,7 @@ afterEach(async () => {
 		}
 	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
 });
+
 const start = async () => {
 	// Fail on the missing planned command before trying a socket the agent box may block.
 	readFileSync(join(APP, "dev.ts"), "utf8");
@@ -238,7 +243,9 @@ const driver = async (page: Page, url: string, tab: string) => {
 		{url, tab},
 	);
 };
+
 const state = (page: Page) => page.evaluate(() => window.p12.frames);
+
 const rpc = (page: Page, method: string, params: unknown) =>
 	page.evaluate(async ({method, params}) => window.p12.call(method, params), {
 		method,

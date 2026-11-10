@@ -40,6 +40,7 @@ const IDENTITY = {
 	GIT_COMMITTER_NAME: "fixture",
 	GIT_COMMITTER_EMAIL: "fixture@fabrika.invalid",
 };
+
 const git = (cwd: string, ...args: readonly string[]) =>
 	execFileSync("git", args, {
 		cwd,

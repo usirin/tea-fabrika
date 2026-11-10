@@ -19,6 +19,7 @@ import {PlanFacts, PlanHost, type PlanMsg, Planner, type PlanTicket} from "./ser
 
 const URL = "https://github.com/acme/widgets/issues/7";
 const FLAGS = {model: "opus", effort: "medium", budget: 1, tries: 3} as const;
+
 const TICKET: PlanTicket = {
 	url: URL,
 	number: 7,
@@ -55,8 +56,10 @@ const good: Plan = {
 	pointers: [{at: "src/slug.ts", why: "the slug is made here"}],
 	questions: [],
 };
+
 const [task] = good.tasks as [Task];
 const [criterion] = task.criteria as [Criterion];
+
 const coded: Plan = {
 	...good,
 	tasks: [{...task, criteria: [{...criterion, when: "slugOf gets two spaces"}]}],

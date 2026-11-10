@@ -36,6 +36,7 @@ const buildUpdate = stepOf<Build, Msg, BuildCmd>(build);
 
 const NUMBER = 1;
 const SETTINGS: Settings = {model: "m", effort: "low", budget: 1};
+
 const CRITERIA: readonly [Criterion, ...Criterion[]] = [
 	{id: criterionId("c1"), version: 1, text: "every window opens", checked: false, evidence: null},
 	{id: criterionId("c2"), version: 1, text: "the door locks", checked: false, evidence: null},

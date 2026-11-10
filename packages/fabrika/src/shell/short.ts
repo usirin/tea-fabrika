@@ -21,6 +21,7 @@ const FIRST = ["pr", "id"] as const;
 const TAGS = ["kind", "type", "_tag"] as const;
 
 type Fields = Readonly<Record<string, unknown>>;
+
 const isFields = (value: unknown): value is Fields =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 

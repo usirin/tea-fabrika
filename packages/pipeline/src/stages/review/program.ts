@@ -154,6 +154,7 @@ const OUTPUTS = {
 		"Each note the reviewer filed while it worked: something worth fixing that this change did not cause. Kept here, posted nowhere.",
 	),
 };
+
 type Outputs = typeof OUTPUTS;
 
 /**

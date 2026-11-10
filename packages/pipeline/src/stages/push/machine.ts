@@ -22,6 +22,7 @@ const outcomes = outcomesOf({
 	skip: [],
 	stuck: ["push_failed", "open_failed", "post_failed"],
 });
+
 export const PushOutcome = outcomes.schema;
 export type PushOutcome = typeof PushOutcome.Type;
 /** Every name a push can end with, as the other stages export theirs. */
@@ -39,6 +40,7 @@ export const PushAsk = Schema.Struct({
 export type PushAsk = typeof PushAsk.Type;
 
 const PushIn = Schema.Struct({ticket: Schema.String, number: Schema.Finite, head: Schema.String});
+
 const OpenIn = Schema.Struct({
 	ticket: Schema.String,
 	number: Schema.Finite,
@@ -46,11 +48,13 @@ const OpenIn = Schema.Struct({
 	title: Schema.String,
 	body: Schema.String,
 });
+
 const PostIn = Schema.Struct({pr: Schema.String, head: Schema.String, posts: Schema.Array(Post)});
 
 export const pushHead = act("push_head", {input: PushIn, ok: Schema.Null, err: ["unknown"]});
 export const openPull = act("push_open", {input: OpenIn, ok: Schema.String, err: ["unknown"]});
 export const postReviews = act("push_post", {input: PostIn, ok: Schema.Null, err: ["unknown"]});
+
 export type PushCmd =
 	| ReturnType<typeof pushHead>
 	| ReturnType<typeof openPull>
@@ -75,6 +79,7 @@ export type PushMsg = {readonly type: "start"; readonly ask: PushAsk} | {readonl
 type Step = readonly [Push, readonly PushCmd[]];
 const stay = (s: Push): Step => [s, []];
 const at = (ask: PushAsk, step: string) => intentOf("push", ask.ticket, ask.head, step);
+
 const stuck = (ask: PushAsk, why: "push_failed" | "open_failed" | "post_failed"): Step => [
 	{phase: "over", ask, outcome: {kind: "stuck", why}},
 	[],

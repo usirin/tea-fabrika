@@ -35,6 +35,7 @@ const NAMES = [
 	"beforeModifier",
 	"beforeZwj",
 ] as const;
+
 type Name = (typeof NAMES)[number];
 
 /** The answers of every probe of one code point. */

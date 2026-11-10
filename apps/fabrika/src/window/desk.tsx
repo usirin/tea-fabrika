@@ -168,6 +168,7 @@ const followed = new Set<string>();
 let ghostty: Ghostty | null = null;
 
 const toHost = (m: FromPage) => window.fabrika.send("desk", m);
+
 const editKeys = (message: EditorMsg) => {
 	if (store.keysEditor === null) return;
 	const [next, cmds] = applyCell<Editor, EditorMsg, EditorCmd>(
@@ -185,6 +186,7 @@ const editKeys = (message: EditorMsg) => {
 		});
 	changed();
 };
+
 /** What the page tells the app itself: on the desk's port, read by main and not passed on. */
 const toApp = (m: ToApp) => window.fabrika.send("desk", m);
 /** One of a run's own inputs, on its port, as its window sends them (View, below). */

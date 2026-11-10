@@ -7,6 +7,7 @@ import {sample} from "./sample.ts";
 // sample({candidates, changed, seed, max}) returns the plan's Sample report.
 // Candidates use Stryker's fileName/location shape; changed is [{file, line}].
 type Position = {line: number; column: number};
+
 type Candidate = {
 	id: string;
 	fileName: string;
@@ -14,7 +15,9 @@ type Candidate = {
 	replacement: string;
 	location: {start: Position; end: Position};
 };
+
 type Changed = {file: string; line: number};
+
 type Report = {
 	seed: number;
 	ranges: readonly string[];
@@ -22,8 +25,10 @@ type Report = {
 	selected: number;
 	left: number;
 };
+
 const options = {seed: 520, numRuns: 100};
 const position = (a: Position, b: Position) => a.line - b.line || a.column - b.column;
+
 // Stryker 10.1.1's fs/project-reader.js keeps columns zero-based and subtracts one from lines.
 // These candidates keep CLI lines one-based. Missing columns default to 0 and MAX_SAFE_INTEGER.
 const parseRange = (range: string) => {
@@ -37,6 +42,7 @@ const parseRange = (range: string) => {
 		end: {line: Number(endLine), column: Number(endColumn ?? Number.MAX_SAFE_INTEGER)},
 	};
 };
+
 const enclosed = (range: string, candidate: Candidate) => {
 	const {file, start, end} = parseRange(range);
 	return (
@@ -45,6 +51,7 @@ const enclosed = (range: string, candidate: Candidate) => {
 		position(candidate.location.end, end) <= 0
 	);
 };
+
 const isChanged = (candidate: Candidate, changed: Changed[]) =>
 	changed.some(
 		(c) =>
@@ -52,6 +59,7 @@ const isChanged = (candidate: Candidate, changed: Changed[]) =>
 			c.line >= candidate.location.start.line &&
 			c.line <= candidate.location.end.line,
 	);
+
 const checkReport = (
 	report: Report,
 	candidates: Candidate[],
@@ -72,6 +80,7 @@ const checkReport = (
 	for (const range of report.ranges) expect(selected.some((c) => enclosed(range, c))).toBe(true);
 	return selected;
 };
+
 const candidate = (
 	id: number,
 	file: string,
@@ -85,6 +94,7 @@ const candidate = (
 	replacement: `replacement${id}`,
 	location: {start: {line, column: start}, end: {line, column: end}},
 });
+
 const pool = fc.array(
 	fc.record({
 		file: fc.constantFrom("src/a.ts", "src/b.ts", "src/c.tsx"),

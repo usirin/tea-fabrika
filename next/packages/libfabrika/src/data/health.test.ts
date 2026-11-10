@@ -39,11 +39,13 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const folder = mkdtempSync(join(tmpdir(), "p37-health-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
+
 const fresh = () => {
 	const db = new DatabaseSync(join(folder, `object-${++files}.db`));
 	opened.push(db);
 	return {db, sql: nodeSql(db)};
 };
+
 afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
@@ -60,6 +62,7 @@ const utcDay = (at: number) => new Date(at).toISOString().slice(0, 10);
 const fileKey = (day: string) => `health/${OBJECT}/${day}.jsonl`;
 
 const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");
+
 /** R2 in memory, as its binding behaves: `put` fails when the body does not match its SHA-256.
  *  `lie` makes `head` answer another hash, as a bad copy would. */
 const bucket = (lie = false) => {
@@ -118,6 +121,7 @@ const span = (
 
 const count = (db: DatabaseSync, table: string, where = "1"): number =>
 	Number(db.prepare(`SELECT count(*) AS n FROM ${table} WHERE ${where}`).get()?.["n"]);
+
 const inDay = (day: number) => `at >= ${day} AND at < ${day + DAY}`;
 
 type Raw = {
@@ -126,7 +130,9 @@ type Raw = {
 	readonly ms: number;
 	readonly ok: boolean;
 };
+
 const key = (r: Raw) => `${r.piece} ${r.hour} ${r.ms} ${r.ok}`;
+
 const raw = (row: Record<string, unknown>): Raw => ({
 	piece: String(row["piece"]),
 	hour: hourStart(Number(row["at"])),
@@ -157,7 +163,9 @@ const rollup = (spans: ReadonlyArray<Raw & {readonly lag: number | null}>) => {
 		})
 		.sort(bySummary);
 };
+
 type Placed = {readonly piece: string | undefined; readonly hour: number | undefined};
+
 const bySummary = (x: Placed, y: Placed) =>
 	`${x.piece} ${String(x.hour).padStart(16, "0")}`.localeCompare(
 		`${y.piece} ${String(y.hour).padStart(16, "0")}`,
@@ -168,6 +176,7 @@ const PIECES = ["runner.step", "ledger.call", "door.envelope"] as const;
 /** The piece of the health row each archive try writes, good or failed. */
 const ARCHIVE = "sink.archive";
 const ARCHIVED_OK = {piece: ARCHIVE, ok: 1, error: null};
+
 /** The `sink.archive` health rows, oldest first. */
 const archiveRows = (db: DatabaseSync) =>
 	db
