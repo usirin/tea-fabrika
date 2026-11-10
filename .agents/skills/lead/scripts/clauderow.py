@@ -26,7 +26,10 @@ M=1e-6
 PRICES={
     "claude-opus-5-5":(4*M,5*M,8*M,0.20*M,20*M),
     "claude-sonnet-5-5":(2*M,2.5*M,4*M,0.10*M,10*M),
+    "claude-fable-5-2":(8*M,10*M,16*M,0.20*M,40*M),
 }
+# A price read on another day than READ says so here, by model.
+READS={"claude-fable-5-2":"2026-11-10"}
 # Claude Haiku 5.5 is priced by each call's prompt length: up to 100,000 tokens, and over.
 HAIKU=((0.10*M,0.125*M,0.20*M,0.01*M,0.50*M),(0.50*M,0.625*M,1*M,0.05*M,2.50*M))
 
@@ -99,7 +102,7 @@ def row(path,a):
     why=" ".join(a.why)
     why+=(f" Claude Code subagent transcript: {s['calls']} model calls; tokens in {s['input']:,} uncached,"
           f" {s['write5m']:,} 5-minute and {s['write1h']:,} 1-hour cache writes, {s['read']:,} cache reads;"
-          f" out {s['output']:,}. Dollars are list price ({SOURCE}, read {READ}).")
+          f" out {s['output']:,}. Dollars are list price ({SOURCE}, read {', '.join(sorted({READS.get(mo,READ) for mo in s['models']}))}).")
     if open_run: why+=" Still running when read, so `ended` is null and the numbers are a floor."
     if a.billing: why+=f" Billing `{a.billing}` as the caller gave it; the transcript does not record it."
     r={"date":b.strftime("%Y-%m-%d"),"run":a.run,"ticket":a.ticket,"pr":a.pr,

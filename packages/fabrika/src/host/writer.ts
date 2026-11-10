@@ -16,18 +16,18 @@
 // On a ledger behind the door (`door.ts`), the door writes this text from the
 // credential the request came with, never from the request. On a ledger in this
 // process (memory, node:sqlite), the caller still names it.
-import {Option, Schema} from "effect";
-import {type Stamp, stampText} from "./door.ts";
+import { Option, Schema } from "effect";
+import { type Stamp, stampText } from "./door.ts";
 
 /** One user's or one agent's id: some text, no spaces. */
 const Id = Schema.String.check(Schema.isPattern(/^\S+$/));
 
 /** A person. */
-export const User = Schema.Struct({kind: Schema.Literal("user"), id: Id});
+export const User = Schema.Struct({ kind: Schema.Literal("user"), id: Id });
 /** An agent, and the person it works for: what the door says for an agent's credential. */
-export const Agent = Schema.Struct({kind: Schema.Literal("agent"), id: Id, for: Id});
+export const Agent = Schema.Struct({ kind: Schema.Literal("agent"), id: Id, for: Id });
 /** An agent in a row written before the door: its person is not in the row. Read only. */
-export const AgentBefore = Schema.Struct({kind: Schema.Literal("agent"), id: Id});
+export const AgentBefore = Schema.Struct({ kind: Schema.Literal("agent"), id: Id });
 
 /** Who wrote a row: a user, an agent for a user, or an agent from before the door. */
 export const Writer = Schema.Union([User, Agent, AgentBefore]);
@@ -38,33 +38,33 @@ const decodeAgent = Schema.decodeUnknownOption(Agent);
 
 /** The writer a row's `writer` text names, or `null` when it names neither a user nor an agent. */
 export function writerOf(text: string): Writer | null {
-	const [head, rest, ...more] = text.split(" ");
+  const [head, rest, ...more] = text.split(" ");
 
-	if (head === undefined || more.length > 0) {
-		return null;
-	}
+  if (head === undefined || more.length > 0) {
+    return null;
+  }
 
-	const at = head.indexOf(":");
+  const at = head.indexOf(":");
 
-	if (at === -1) {
-		return null;
-	}
+  if (at === -1) {
+    return null;
+  }
 
-	const kind = head.slice(0, at);
-	const id = head.slice(at + 1);
+  const kind = head.slice(0, at);
+  const id = head.slice(at + 1);
 
-	if (rest === undefined) {
-		return Option.getOrNull(decode({kind, id}));
-	}
+  if (rest === undefined) {
+    return Option.getOrNull(decode({ kind, id }));
+  }
 
-	if (kind !== "agent" || !rest.startsWith("for:")) {
-		return null;
-	}
+  if (kind !== "agent" || !rest.startsWith("for:")) {
+    return null;
+  }
 
-	// Only `Agent`: an empty person must not fall through to the agent from before the door.
-	return Option.getOrNull(decodeAgent({kind, id, for: rest.slice("for:".length)}));
+  // Only `Agent`: an empty person must not fall through to the agent from before the door.
+  return Option.getOrNull(decodeAgent({ kind, id, for: rest.slice("for:".length) }));
 }
 
 /** The text a row keeps for `writer`: `writerOf` reads it back. */
 export const writerText = (writer: Writer | Stamp): string =>
-	"for" in writer ? stampText(writer) : `${writer.kind}:${writer.id}`;
+  "for" in writer ? stampText(writer) : `${writer.kind}:${writer.id}`;

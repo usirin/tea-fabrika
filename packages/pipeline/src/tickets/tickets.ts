@@ -1,18 +1,18 @@
-import {Ledger, streams, type Writer, writerText} from "@kampus/fabrika-old";
-import {Clock, Context, Effect, Layer, Ref, Schema} from "effect";
+import { Ledger, streams, type Writer, writerText } from "@kampus/fabrika-old";
+import { Clock, Context, Effect, Layer, Ref, Schema } from "effect";
 import {
-	CodeFact,
-	type Comment,
-	type Entry,
-	type Fact,
-	fold,
-	kindOf,
-	nameOf,
-	PrFact,
-	readRow,
-	type Ticket,
-	TicketFact,
-	writtenDuring,
+  CodeFact,
+  type Comment,
+  type Entry,
+  type Fact,
+  fold,
+  kindOf,
+  nameOf,
+  PrFact,
+  readRow,
+  type Ticket,
+  TicketFact,
+  writtenDuring,
 } from "./ticket.ts";
 
 /** A ticket's number, as the tracker counts them from 1. */
@@ -53,81 +53,72 @@ type WriteId = string;
 
 /** Why a read or a write did not go through. */
 export const Why = Schema.Literals([
-	/** The ledger did not answer. */
-	"unreachable",
-	/** No ticket has that number: nobody filed it, or its facts do not fold. */
-	"no_ticket",
-	/** The ledger refused the write. */
-	"refused",
-	/** The fact is not this writer's: a person's `answered`, the watcher's `pr`, a tracker fact. */
-	"not_yours",
-	/** The fact does not fit its schema, such as an `asked.what` with a newline. */
-	"bad_fact",
+  /** The ledger did not answer. */
+  "unreachable",
+  /** No ticket has that number: nobody filed it, or its facts do not fold. */
+  "no_ticket",
+  /** The ledger refused the write. */
+  "refused",
+  /** The fact is not this writer's: a person's `answered`, the watcher's `pr`, a tracker fact. */
+  "not_yours",
+  /** The fact does not fit its schema, such as an `asked.what` with a newline. */
+  "bad_fact",
 ]);
 
 export class TicketsFailed extends Schema.TaggedError<TicketsFailed>()("TicketsFailed", {
-	ticket: Schema.Int,
-	why: Why,
-	/** What went wrong, in words. */
-	says: Schema.String,
+  ticket: Schema.Int,
+  why: Why,
+  /** What went wrong, in words. */
+  says: Schema.String,
 }) {}
 
 export class Tickets extends Context.Service<
-	Tickets,
-	{
-		/** The ticket, folded from every fact on it, oldest first. */
-		readonly read: (n: TicketNumber) => Effect.Effect<Ticket, TicketsFailed>;
-		/**
-		 * One fact on the ticket, as the lane's writer, under the lane's own key `id`. The same
-		 * `id` sent twice lands once; a new `id` always lands.
-		 */
-		readonly write: (
-			n: TicketNumber,
-			id: WriteId,
-			fact: CodeFact,
-		) => Effect.Effect<void, TicketsFailed>;
-		/**
-		 * A comment on the ticket, or its close: what the triage step says when it answers no. Kept
-		 * apart from `write`, so a writer that has no reason to talk is never handed the words. A
-		 * comment gets `during`, the run live as it is written, from the ticket's own facts.
-		 */
-		readonly talk: (n: TicketNumber, id: WriteId, fact: Talk) => Effect.Effect<void, TicketsFailed>;
-	}
+  Tickets,
+  {
+    /** The ticket, folded from every fact on it, oldest first. */
+    readonly read: (n: TicketNumber) => Effect.Effect<Ticket, TicketsFailed>;
+    /**
+     * One fact on the ticket, as the lane's writer, under the lane's own key `id`. The same
+     * `id` sent twice lands once; a new `id` always lands.
+     */
+    readonly write: (n: TicketNumber, id: WriteId, fact: CodeFact) => Effect.Effect<void, TicketsFailed>;
+    /**
+     * A comment on the ticket, or its close: what the triage step says when it answers no. Kept
+     * apart from `write`, so a writer that has no reason to talk is never handed the words. A
+     * comment gets `during`, the run live as it is written, from the ticket's own facts.
+     */
+    readonly talk: (n: TicketNumber, id: WriteId, fact: Talk) => Effect.Effect<void, TicketsFailed>;
+  }
 >()("Tickets") {}
 
 /** What a lane may say on a ticket: a comment, or the close. Never a person's kinds. */
-export type Talk = Comment | Extract<Fact, {readonly type: "closed"}>;
+export type Talk = Comment | Extract<Fact, { readonly type: "closed" }>;
 
 /** `fact` as it goes onto ticket `n`: a comment with its `during` filled in from `read`. */
 const heard = (
-	read: (n: TicketNumber) => Effect.Effect<Ticket, TicketsFailed>,
-	n: TicketNumber,
-	fact: Talk,
+  read: (n: TicketNumber) => Effect.Effect<Ticket, TicketsFailed>,
+  n: TicketNumber,
+  fact: Talk,
 ): Effect.Effect<Fact, TicketsFailed> =>
-	fact.type === "commented"
-		? Effect.map(read(n), (ticket) => writtenDuring(fact, ticket.timeline))
-		: Effect.succeed(fact);
+  fact.type === "commented"
+    ? Effect.map(read(n), (ticket) => writtenDuring(fact, ticket.timeline))
+    : Effect.succeed(fact);
 
 /** The PR watcher's one write: what it read from GitHub, on a change only. */
 export class Watcher extends Context.Service<
-	Watcher,
-	{
-		/** One `pr` fact on the ticket, as the watcher's writer, under its own key `id`. */
-		readonly write: (
-			n: TicketNumber,
-			id: WriteId,
-			fact: PrFact,
-		) => Effect.Effect<void, TicketsFailed>;
-	}
+  Watcher,
+  {
+    /** One `pr` fact on the ticket, as the watcher's writer, under its own key `id`. */
+    readonly write: (n: TicketNumber, id: WriteId, fact: PrFact) => Effect.Effect<void, TicketsFailed>;
+  }
 >()("Watcher") {}
 
-const failed = (ticket: number, why: typeof Why.Type, says: string) =>
-	new TicketsFailed({ticket, why, says});
+const failed = (ticket: number, why: typeof Why.Type, says: string) => new TicketsFailed({ ticket, why, says });
 
 /** A fact as the ledger keeps it: its kind (`kindOf`), and its data encoded. */
 interface Checked {
-	readonly kind: string;
-	readonly data: unknown;
+  readonly kind: string;
+  readonly data: unknown;
 }
 
 /**
@@ -135,112 +126,104 @@ interface Checked {
  * type, and a fact that fails its schema is `bad_fact`.
  */
 const checking =
-	(
-		who: string,
-		kinds: readonly string[],
-		encode: (fact: unknown) => Effect.Effect<unknown, {readonly message: string}>,
-	) =>
-	(n: number, fact: Fact): Effect.Effect<Checked, TicketsFailed> =>
-		kinds.includes(fact.type)
-			? encode(fact).pipe(
-					Effect.map((data) => ({kind: kindOf(fact.type), data})),
-					Effect.mapError((e) => failed(n, "bad_fact", e.message)),
-				)
-			: Effect.fail(failed(n, "not_yours", `${who} may not write a ${fact.type} fact`));
+  (
+    who: string,
+    kinds: readonly string[],
+    encode: (fact: unknown) => Effect.Effect<unknown, { readonly message: string }>,
+  ) =>
+  (n: number, fact: Fact): Effect.Effect<Checked, TicketsFailed> =>
+    kinds.includes(fact.type)
+      ? encode(fact).pipe(
+          Effect.map((data) => ({ kind: kindOf(fact.type), data })),
+          Effect.mapError((e) => failed(n, "bad_fact", e.message)),
+        )
+      : Effect.fail(failed(n, "not_yours", `${who} may not write a ${fact.type} fact`));
 
 /** The lane's kinds, read off the `CodeFact` schema itself. */
 const laneChecked = checking(
-	"a lane",
-	CodeFact.members.map((m) => m.fields.type.literal),
-	Schema.encodeUnknownEffect(CodeFact),
+  "a lane",
+  CodeFact.members.map((m) => m.fields.type.literal),
+  Schema.encodeUnknownEffect(CodeFact),
 );
 
 /** A lane's two words on a ticket, by the tracker's own schema. */
-const talkChecked = checking(
-	"a lane",
-	["commented", "closed"],
-	Schema.encodeUnknownEffect(TicketFact),
-);
+const talkChecked = checking("a lane", ["commented", "closed"], Schema.encodeUnknownEffect(TicketFact));
 
 /** The watcher's one kind. */
-const watcherChecked = checking(
-	"the watcher",
-	[PrFact.fields.type.literal],
-	Schema.encodeUnknownEffect(PrFact),
-);
+const watcherChecked = checking("the watcher", [PrFact.fields.type.literal], Schema.encodeUnknownEffect(PrFact));
 
 /** The one ticket `n` in a fold, or `no_ticket`. */
 const ticketIn = (n: number, entries: readonly Entry[]) => {
-	const ticket = fold([], entries).tickets.find((t) => t.number === n);
-	return ticket === undefined
-		? Effect.fail(failed(n, "no_ticket", `no ticket #${n} on the ledger`))
-		: Effect.succeed(ticket);
+  const ticket = fold([], entries).tickets.find((t) => t.number === n);
+  return ticket === undefined
+    ? Effect.fail(failed(n, "no_ticket", `no ticket #${n} on the ledger`))
+    : Effect.succeed(ticket);
 };
 
 /** A checked fact onto ticket `n`'s inbox on the ledger, as `writer`, under `id`. */
 const sendOn =
-	(ledger: Ledger["Service"], writer: Writer) =>
-	(n: number, id: WriteId, fact: Effect.Effect<Checked, TicketsFailed>) =>
-		Effect.gen(function* () {
-			const {kind, data} = yield* fact;
-			yield* ledger.send(streams(nameOf(n)).inbox, id, {kind, writer: writerText(writer), data});
-		}).pipe(
-			Effect.catchTags({
-				LedgerUnreachable: (e) => Effect.fail(failed(n, "unreachable", e.message)),
-				Denied: (e) => Effect.fail(failed(n, "refused", `the ledger refused ${e.stream}`)),
-				Fenced: (e) => Effect.fail(failed(n, "refused", `the ledger refused ${e.stream}`)),
-				UnknownName: () => Effect.fail(failed(n, "no_ticket", `no ticket #${n} on the ledger`)),
-			}),
-		);
+  (ledger: Ledger["Service"], writer: Writer) =>
+  (n: number, id: WriteId, fact: Effect.Effect<Checked, TicketsFailed>) =>
+    Effect.gen(function* () {
+      const { kind, data } = yield* fact;
+      yield* ledger.send(streams(nameOf(n)).inbox, id, { kind, writer: writerText(writer), data });
+    }).pipe(
+      Effect.catchTags({
+        LedgerUnreachable: (e) => Effect.fail(failed(n, "unreachable", e.message)),
+        Denied: (e) => Effect.fail(failed(n, "refused", `the ledger refused ${e.stream}`)),
+        Fenced: (e) => Effect.fail(failed(n, "refused", `the ledger refused ${e.stream}`)),
+        UnknownName: () => Effect.fail(failed(n, "no_ticket", `no ticket #${n} on the ledger`)),
+      }),
+    );
 
 /** Tickets on the ledger, written as `writer`: the lane's own. */
 export const ticketsOnLedger = (writer: Writer): Layer.Layer<Tickets, never, Ledger> =>
-	Layer.effect(
-		Tickets,
-		Effect.gen(function* () {
-			const ledger = yield* Ledger;
-			const send = sendOn(ledger, writer);
-			const read = (n: TicketNumber) =>
-				ledger.readStream(streams(nameOf(n)).inbox, 0, -1).pipe(
-					Effect.mapError((e) => failed(n, "unreachable", e.message)),
-					Effect.flatMap((rows) =>
-						ticketIn(
-							n,
-							rows.flatMap((row) => {
-								const one = readRow(row);
-								return one.kind === "entry" ? [one.entry] : [];
-							}),
-						),
-					),
-				);
-			return {
-				read,
-				write: (n, id, fact) => send(n, id, laneChecked(n, fact)),
-				talk: (n, id, fact) =>
-					send(
-						n,
-						id,
-						Effect.flatMap(heard(read, n, fact), (said) => talkChecked(n, said)),
-					),
-			};
-		}),
-	);
+  Layer.effect(
+    Tickets,
+    Effect.gen(function* () {
+      const ledger = yield* Ledger;
+      const send = sendOn(ledger, writer);
+      const read = (n: TicketNumber) =>
+        ledger.readStream(streams(nameOf(n)).inbox, 0, -1).pipe(
+          Effect.mapError((e) => failed(n, "unreachable", e.message)),
+          Effect.flatMap((rows) =>
+            ticketIn(
+              n,
+              rows.flatMap((row) => {
+                const one = readRow(row);
+                return one.kind === "entry" ? [one.entry] : [];
+              }),
+            ),
+          ),
+        );
+      return {
+        read,
+        write: (n, id, fact) => send(n, id, laneChecked(n, fact)),
+        talk: (n, id, fact) =>
+          send(
+            n,
+            id,
+            Effect.flatMap(heard(read, n, fact), (said) => talkChecked(n, said)),
+          ),
+      };
+    }),
+  );
 
 /** The watcher on the ledger, written as `writer`: the watcher's own, never a lane's. */
 export const watcherOnLedger = (writer: Writer): Layer.Layer<Watcher, never, Ledger> =>
-	Layer.effect(
-		Watcher,
-		Effect.gen(function* () {
-			const send = sendOn(yield* Ledger, writer);
-			return {write: (n, id, fact) => send(n, id, watcherChecked(n, fact))};
-		}),
-	);
+  Layer.effect(
+    Watcher,
+    Effect.gen(function* () {
+      const send = sendOn(yield* Ledger, writer);
+      return { write: (n, id, fact) => send(n, id, watcherChecked(n, fact)) };
+    }),
+  );
 
 /** A fact a test puts on a ticket before it starts: who wrote it, on which ticket. */
 export interface Seeded {
-	readonly ticket: TicketNumber;
-	readonly by: Writer;
-	readonly fact: Fact;
+  readonly ticket: TicketNumber;
+  readonly by: Writer;
+  readonly fact: Fact;
 }
 
 /**
@@ -249,89 +232,79 @@ export interface Seeded {
  * who may write what is in the Layers above it.
  */
 export class MemoryTickets extends Context.Service<
-	MemoryTickets,
-	{
-		/** Ticket `n`, folded as the ledger's is, so a fact that does not fit is kept out the same way. */
-		readonly read: (n: TicketNumber) => Effect.Effect<Ticket, TicketsFailed>;
-		/** `fact` onto ticket `n` as `by`, once per `id`. */
-		readonly add: (
-			n: TicketNumber,
-			id: WriteId,
-			by: Writer,
-			fact: Fact,
-		) => Effect.Effect<void, TicketsFailed>;
-	}
+  MemoryTickets,
+  {
+    /** Ticket `n`, folded as the ledger's is, so a fact that does not fit is kept out the same way. */
+    readonly read: (n: TicketNumber) => Effect.Effect<Ticket, TicketsFailed>;
+    /** `fact` onto ticket `n` as `by`, once per `id`. */
+    readonly add: (n: TicketNumber, id: WriteId, by: Writer, fact: Fact) => Effect.Effect<void, TicketsFailed>;
+  }
 >()("MemoryTickets") {}
 
 /** Tickets in memory, with `seed` on them first: a filed ticket, a person's answer. */
 export const memoryTickets = (seed: readonly Seeded[] = []): Layer.Layer<MemoryTickets> =>
-	Layer.effect(
-		MemoryTickets,
-		Effect.gen(function* () {
-			const entries = yield* Ref.make<readonly Entry[]>(
-				seed.map((s, i) => ({pos: i + 1, ticket: s.ticket, by: s.by, at: 0, fact: s.fact})),
-			);
-			const ids = yield* Ref.make<ReadonlySet<string>>(new Set());
-			return {
-				read: (n) =>
-					Effect.flatMap(Ref.get(entries), (all) =>
-						ticketIn(
-							n,
-							all.filter((e) => e.ticket === n),
-						),
-					),
-				add: (n, id, by, fact) =>
-					Effect.gen(function* () {
-						const all = yield* Ref.get(entries);
+  Layer.effect(
+    MemoryTickets,
+    Effect.gen(function* () {
+      const entries = yield* Ref.make<readonly Entry[]>(
+        seed.map((s, i) => ({ pos: i + 1, ticket: s.ticket, by: s.by, at: 0, fact: s.fact })),
+      );
+      const ids = yield* Ref.make<ReadonlySet<string>>(new Set());
+      return {
+        read: (n) =>
+          Effect.flatMap(Ref.get(entries), (all) =>
+            ticketIn(
+              n,
+              all.filter((e) => e.ticket === n),
+            ),
+          ),
+        add: (n, id, by, fact) =>
+          Effect.gen(function* () {
+            const all = yield* Ref.get(entries);
 
-						if (!all.some((e) => e.ticket === n && e.fact.type === "filed")) {
-							return yield* Effect.fail(failed(n, "no_ticket", `no ticket #${n} in memory`));
-						}
+            if (!all.some((e) => e.ticket === n && e.fact.type === "filed")) {
+              return yield* Effect.fail(failed(n, "no_ticket", `no ticket #${n} in memory`));
+            }
 
-						const key = `${n}/${id}`;
+            const key = `${n}/${id}`;
 
-						if ((yield* Ref.get(ids)).has(key)) {
-							return;
-						}
+            if ((yield* Ref.get(ids)).has(key)) {
+              return;
+            }
 
-						const at = yield* Clock.currentTimeMillis;
-						yield* Ref.update(ids, (s) => new Set([...s, key]));
-						yield* Ref.update(entries, (es) => [
-							...es,
-							{pos: es.length + 1, ticket: n, by, at, fact},
-						]);
-					}),
-			};
-		}),
-	);
+            const at = yield* Clock.currentTimeMillis;
+            yield* Ref.update(ids, (s) => new Set([...s, key]));
+            yield* Ref.update(entries, (es) => [...es, { pos: es.length + 1, ticket: n, by, at, fact }]);
+          }),
+      };
+    }),
+  );
 
 /** Tickets in memory, written as `writer`: the lane's own. */
 export const ticketsInMemory = (writer: Writer): Layer.Layer<Tickets, never, MemoryTickets> =>
-	Layer.effect(
-		Tickets,
-		Effect.gen(function* () {
-			const memory = yield* MemoryTickets;
-			return {
-				read: memory.read,
-				write: (n, id, fact) =>
-					laneChecked(n, fact).pipe(Effect.andThen(memory.add(n, id, writer, fact))),
-				talk: (n, id, fact) =>
-					Effect.flatMap(heard(memory.read, n, fact), (said) =>
-						talkChecked(n, said).pipe(Effect.andThen(memory.add(n, id, writer, said))),
-					),
-			};
-		}),
-	);
+  Layer.effect(
+    Tickets,
+    Effect.gen(function* () {
+      const memory = yield* MemoryTickets;
+      return {
+        read: memory.read,
+        write: (n, id, fact) => laneChecked(n, fact).pipe(Effect.andThen(memory.add(n, id, writer, fact))),
+        talk: (n, id, fact) =>
+          Effect.flatMap(heard(memory.read, n, fact), (said) =>
+            talkChecked(n, said).pipe(Effect.andThen(memory.add(n, id, writer, said))),
+          ),
+      };
+    }),
+  );
 
 /** The watcher in memory, written as `writer`: the watcher's own, never a lane's. */
 export const watcherInMemory = (writer: Writer): Layer.Layer<Watcher, never, MemoryTickets> =>
-	Layer.effect(
-		Watcher,
-		Effect.gen(function* () {
-			const memory = yield* MemoryTickets;
-			return {
-				write: (n, id, fact) =>
-					watcherChecked(n, fact).pipe(Effect.andThen(memory.add(n, id, writer, fact))),
-			};
-		}),
-	);
+  Layer.effect(
+    Watcher,
+    Effect.gen(function* () {
+      const memory = yield* MemoryTickets;
+      return {
+        write: (n, id, fact) => watcherChecked(n, fact).pipe(Effect.andThen(memory.add(n, id, writer, fact))),
+      };
+    }),
+  );
