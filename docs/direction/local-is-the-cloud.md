@@ -12,6 +12,19 @@ what local workerd can and can't do (its restarts, no self-eviction, its connect
 limits), then check that Cloudflare does the same. Never design for a Cloudflare-only
 feature and back-fill local. Never `Alchemy.remote()`.
 
+**Added 2026-11-09 (owner,
+[0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md)):** in `next/`, the local
+side goes through Alchemy just as the cloud side does. Everything that starts or talks to the
+local runtime (the local stage in `next/apps/fabrika/src/local-stage.ts` and
+`next/packages/libfabrika/src/node/stage.ts`, and any test helper that boots a stage) uses
+`alchemy` and `@alchemy.run/cloudflare-runtime`, never Miniflare or workerd directly. "Local
+Miniflare" above means the local runtime Alchemy runs: the installed runtime package drives
+workerd itself, and `next/` has no `miniflare` import. The stage's start already goes this way.
+What does not yet: 16 lines that reach the workerd process by `ps`, `process.kill` or a plain
+`fetch`, listed in 0042 with the gap behind each. A gap is patched locally with its upstream
+issue, as the lifecycle hook already is
+([alchemy issue 3184](https://github.com/alchemy-run/alchemy/issues/3184)).
+
 ```ts
 // A sketch. One stack, two places. Only the command differs.
 //   fabrika up --local    alchemy dev: workerd and Docker on the laptop, no Cloudflare account
