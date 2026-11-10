@@ -1,35 +1,35 @@
 {
-	"name": "@tea-fabrika/map",
-	"version": "0.0.0",
-	"private": true,
-	"type": "module",
-	"description": "A program with a window: the map of today's programs, with their real inputs, outputs and wires, and where one ticket stands on the plan's nine steps.",
-	"exports": {
-		".": "./src/index.ts",
-		"./window": "./src/window.tsx"
-	},
-	"scripts": {
-		"typecheck": "tsc --noEmit -p ."
-	},
-	"dependencies": {
-		"@demlik/tea": "catalog:",
-		"@kampus/fabrika-old": "workspace:*",
-		"@kampus/pipeline": "workspace:*",
-		"@tea-fabrika/tracker": "workspace:*",
-		"@xyflow/react": "catalog:",
-		"effect": "catalog:"
-	},
-	"peerDependencies": {
-		"react": "catalog:",
-		"react-dom": "catalog:"
-	},
-	"devDependencies": {
-		"@types/node": "catalog:",
-		"@types/react": "catalog:",
-		"@types/react-dom": "catalog:",
-		"react": "catalog:",
-		"react-dom": "catalog:",
-		"typescript": "catalog:",
-		"vitest": "catalog:"
-	}
+  "name": "@tea-fabrika/map",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A program with a window: the map of today's programs, with their real inputs, outputs and wires, and where one ticket stands on the plan's nine steps.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./window": "./src/window.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@demlik/tea": "catalog:",
+    "@kampus/fabrika-old": "workspace:*",
+    "@kampus/pipeline": "workspace:*",
+    "@tea-fabrika/tracker": "workspace:*",
+    "@xyflow/react": "catalog:",
+    "effect": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
 }

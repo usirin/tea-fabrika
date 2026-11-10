@@ -1,11 +1,11 @@
-import {createHash} from "node:crypto";
-import {fileURLToPath} from "node:url";
-import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
-import {layer as nodePath} from "@effect/platform-node/NodePath";
-import {runMain} from "@effect/platform-node/NodeRuntime";
-import {Effect, FileSystem, Layer, Path} from "effect";
-import {type BuildOptions, build} from "esbuild";
-import {bundlesOf, common} from "./bundles.ts";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { layer as nodeFileSystem } from "@effect/platform-node/NodeFileSystem";
+import { layer as nodePath } from "@effect/platform-node/NodePath";
+import { runMain } from "@effect/platform-node/NodeRuntime";
+import { Effect, FileSystem, Layer, Path } from "effect";
+import { type BuildOptions, build } from "esbuild";
+import { bundlesOf, common } from "./bundles.ts";
 
 // Build the app into dist/, with esbuild: the bundles (bundles.ts) and the page's plain files.
 //
@@ -49,68 +49,63 @@ const MANTI_CSS = "@manti-ui/styles/index.css";
 const TOKENS_CSS = "@kampus/fabrika-design/tokens.css";
 
 const bundle = (options: BuildOptions) =>
-	Effect.tryPromise({
-		try: () => build({...common(here), ...options}),
-		catch: (cause) => new Error(`esbuild could not build ${options.outfile}`, {cause}),
-	});
+  Effect.tryPromise({
+    try: () => build({ ...common(here), ...options }),
+    catch: (cause) => new Error(`esbuild could not build ${options.outfile}`, { cause }),
+  });
 
 const program = Effect.gen(function* () {
-	const fs = yield* FileSystem.FileSystem;
-	const path = yield* Path.Path;
-	const at = (...parts: string[]) => path.join(here, ...parts);
-	const bundles = bundlesOf(at);
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const at = (...parts: string[]) => path.join(here, ...parts);
+  const bundles = bundlesOf(at);
 
-	// Which files the bundles are made from: read, not written.
-	const metas = yield* Effect.all(
-		bundles.map((b) => bundle({...b, write: false, metafile: true})),
-		{concurrency: "unbounded"},
-	);
-	const inputs = [...new Set(metas.flatMap((m) => Object.keys(m.metafile?.inputs ?? {})))].sort();
-	const hash = createHash("sha256");
+  // Which files the bundles are made from: read, not written.
+  const metas = yield* Effect.all(
+    bundles.map((b) => bundle({ ...b, write: false, metafile: true })),
+    { concurrency: "unbounded" },
+  );
+  const inputs = [...new Set(metas.flatMap((m) => Object.keys(m.metafile?.inputs ?? {})))].sort();
+  const hash = createHash("sha256");
 
-	for (const input of inputs) {
-		hash.update(`${input}\0`);
-		// A name esbuild made up, with no file behind it, counts by its name alone.
-		const file = path.resolve(here, input);
+  for (const input of inputs) {
+    hash.update(`${input}\0`);
+    // A name esbuild made up, with no file behind it, counts by its name alone.
+    const file = path.resolve(here, input);
 
-		if (yield* fs.exists(file)) {
-			hash.update(yield* fs.readFile(file));
-		}
-	}
+    if (yield* fs.exists(file)) {
+      hash.update(yield* fs.readFile(file));
+    }
+  }
 
-	const id = hash.digest("hex").slice(0, 12);
+  const id = hash.digest("hex").slice(0, 12);
 
-	yield* fs.makeDirectory(at("dist"), {recursive: true});
-	yield* Effect.all(
-		[
-			...bundles.map((b) =>
-				bundle({...b, define: {...b.define, FABRIKA_BUILD: JSON.stringify(id)}}),
-			),
-			fs.copyFile(at("src/window/desk.html"), at("dist/desk.html")),
-			fs.copyFile(at("icon/icon.png"), at("dist/icon.png")),
-			// The step briefs stay plain files in the bundle's folder: changing one changes no code.
-			fs.copy(at("../../programs/pipeline/briefs"), at("dist/briefs"), {overwrite: true}),
-			fs.copy(at("../../packages/pipeline/rubrics"), at("dist/rubrics"), {overwrite: true}),
-			// One stylesheet, as the page's policy serves only that: Manti's, layered, then React
-			// Flow's own rules for the map program's canvas, then the design package's tokens, which
-			// set Manti's from ours, the reset kept to Manti's parts, and the app's rules, which
-			// restyle the rest.
-			Effect.gen(function* () {
-				const read = (pkg: string) => fs.readFileString(fileURLToPath(import.meta.resolve(pkg)));
-				const manti = yield* read(MANTI_CSS);
-				const flow = yield* read(FLOW_CSS);
-				const tokens = yield* read(TOKENS_CSS);
-				const reset = yield* fs.readFileString(at("src/window/manti-reset.css"));
-				const own = yield* fs.readFileString(at("src/window/window.css"));
-				yield* fs.writeFileString(
-					at("dist/window.css"),
-					`${manti}\n${flow}\n${tokens}\n${reset}\n${own}`,
-				);
-			}),
-		],
-		{concurrency: "unbounded", discard: true},
-	);
-	yield* Effect.logInfo(`fabrika app: built ${id}`);
+  yield* fs.makeDirectory(at("dist"), { recursive: true });
+  yield* Effect.all(
+    [
+      ...bundles.map((b) => bundle({ ...b, define: { ...b.define, FABRIKA_BUILD: JSON.stringify(id) } })),
+      fs.copyFile(at("src/window/desk.html"), at("dist/desk.html")),
+      fs.copyFile(at("icon/icon.png"), at("dist/icon.png")),
+      // The step briefs stay plain files in the bundle's folder: changing one changes no code.
+      fs.copy(at("../../programs/pipeline/briefs"), at("dist/briefs"), { overwrite: true }),
+      fs.copy(at("../../packages/pipeline/rubrics"), at("dist/rubrics"), { overwrite: true }),
+      // One stylesheet, as the page's policy serves only that: Manti's, layered, then React
+      // Flow's own rules for the map program's canvas, then the design package's tokens, which
+      // set Manti's from ours, the reset kept to Manti's parts, and the app's rules, which
+      // restyle the rest.
+      Effect.gen(function* () {
+        const read = (pkg: string) => fs.readFileString(fileURLToPath(import.meta.resolve(pkg)));
+        const manti = yield* read(MANTI_CSS);
+        const flow = yield* read(FLOW_CSS);
+        const tokens = yield* read(TOKENS_CSS);
+        const reset = yield* fs.readFileString(at("src/window/manti-reset.css"));
+        const own = yield* fs.readFileString(at("src/window/window.css"));
+        yield* fs.writeFileString(at("dist/window.css"), `${manti}\n${flow}\n${tokens}\n${reset}\n${own}`);
+      }),
+    ],
+    { concurrency: "unbounded", discard: true },
+  );
+  yield* Effect.logInfo(`fabrika app: built ${id}`);
 }).pipe(Effect.provide(Layer.mergeAll(nodeFileSystem, nodePath)));
 
 runMain(program);

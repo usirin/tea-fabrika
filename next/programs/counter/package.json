@@ -1,25 +1,25 @@
 {
-	"name": "@kampus/counter",
-	"version": "0.0.0",
-	"private": true,
-	"type": "module",
-	"sideEffects": false,
-	"exports": {
-		".": "./src/program.ts"
-	},
-	"scripts": {
-		"typecheck": "tsc --noEmit -p ."
-	},
-	"dependencies": {
-		"@demlik/tea": "catalog:",
-		"@kampus/libfabrika": "workspace:*",
-		"effect": "catalog:"
-	},
-	"devDependencies": {
-		"@effect/vitest": "catalog:",
-		"@types/node": "catalog:",
-		"fast-check": "catalog:",
-		"typescript": "catalog:",
-		"vitest": "catalog:"
-	}
+  "name": "@kampus/counter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/program.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@demlik/tea": "catalog:",
+    "@kampus/libfabrika": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
 }

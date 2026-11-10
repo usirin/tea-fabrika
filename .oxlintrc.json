@@ -1,652 +1,630 @@
 // The lint settings. `pnpm lint` runs them through oxlint-plugins/lint.ts, which fails on any
 // diagnostic but the advice rules. docs/direction/oxlint-and-oxfmt.md says what each choice costs.
 {
-	"$schema": "./node_modules/oxlint/configuration_schema.json",
-	"plugins": [
-		"eslint",
-		"typescript",
-		"unicorn",
-		"oxc",
-		"react",
-		"jsx-a11y",
-		"vitest",
-		"import",
-		"promise"
-	],
-	// Custom rules, copied from the pipeline this repo rebuilds, and this repo's own. See
-	// oxlint-plugins/README.md.
-	"jsPlugins": ["./oxlint-plugins/index.ts"],
-	// Each rule is named here, so a new oxlint release adds none on its own.
-	"categories": { "correctness": "off" },
-	"options": { "reportUnusedDisableDirectives": "error" },
-	"ignorePatterns": [
-		"**/fixtures/**",
-		"**/experiments/results/**",
-		"unreachable-ledger.json",
-		"agents-ledger.json"
-	],
-	"rules": {
-		// "warn" here only advises: lint.ts prints these two and does not fail on them. They were
-		// wrong too often to block (experiment 125). Any other warning fails.
-		"fabrika/no-effect-promise": "warn",
-		"fabrika/no-raw-try-catch": "warn",
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest", "import", "promise"],
+  // Custom rules, copied from the pipeline this repo rebuilds, and this repo's own. See
+  // oxlint-plugins/README.md.
+  "jsPlugins": ["./oxlint-plugins/index.ts"],
+  // Each rule is named here, so a new oxlint release adds none on its own.
+  "categories": { "correctness": "off" },
+  "options": { "reportUnusedDisableDirectives": "error" },
+  "ignorePatterns": ["**/fixtures/**", "**/experiments/results/**", "unreachable-ledger.json", "agents-ledger.json"],
+  "rules": {
+    // "warn" here only advises: lint.ts prints these two and does not fail on them. They were
+    // wrong too often to block (experiment 125). Any other warning fails.
+    "fabrika/no-effect-promise": "warn",
+    "fabrika/no-raw-try-catch": "warn",
 
-		"fabrika/no-bare-tell": "error",
-		"fabrika/no-context-tag": "error",
-		"fabrika/no-data-taggederror": "error",
-		"fabrika/no-implicit-effect-concurrency": "error",
-		"fabrika/no-numeric-duration": "error",
-		"fabrika/no-throw-in-effect-gen": "error",
-		"fabrika/no-type-assertions": "error",
-		// P17a counted before enabling: 53 retired-door statements, 1 throwing saved decoder.
-		// All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
-		"fabrika/door-is-library": "error",
-		// T518 A8: the only current match is P17a's second module, confirmed by hand.
-		"fabrika/one-id-module": "error",
-		"fabrika/outside-input-constructor": "error",
+    "fabrika/no-bare-tell": "error",
+    "fabrika/no-context-tag": "error",
+    "fabrika/no-data-taggederror": "error",
+    "fabrika/no-implicit-effect-concurrency": "error",
+    "fabrika/no-numeric-duration": "error",
+    "fabrika/no-throw-in-effect-gen": "error",
+    "fabrika/no-type-assertions": "error",
+    // P17a counted before enabling: 53 retired-door statements, 1 throwing saved decoder.
+    // All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
+    "fabrika/door-is-library": "error",
+    // T518 A8: the only current match is P17a's second module, confirmed by hand.
+    "fabrika/one-id-module": "error",
+    "fabrika/outside-input-constructor": "error",
 
-		// Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
-		// out below (experiment 155). So are tests: they write the options' shape to check it, and
-		// none starts a live run.
-		"fabrika/no-project-settings": "error",
-		// A secret is read as a `Redacted`, never as a plain string from `process.env`
-		// (docs/direction/secrets-are-redacted.md). Experiments are left out below: they are outside
-		// this rule's first change, and README counts what it would find there.
-		"fabrika/no-secret-env": "error",
-		// `Redacted.value` only where a secret goes out. Each file left out below says why.
-		"fabrika/no-redacted-value": "error",
+    // Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
+    // out below (experiment 155). So are tests: they write the options' shape to check it, and
+    // none starts a live run.
+    "fabrika/no-project-settings": "error",
+    // A secret is read as a `Redacted`, never as a plain string from `process.env`
+    // (docs/direction/secrets-are-redacted.md). Experiments are left out below: they are outside
+    // this rule's first change, and README counts what it would find there.
+    "fabrika/no-secret-env": "error",
+    // `Redacted.value` only where a secret goes out. Each file left out below says why.
+    "fabrika/no-redacted-value": "error",
 
-		// Node runs the .ts files as they are, so a relative import names its file whole.
-		"fabrika/use-import-extensions": "error",
+    // Node runs the .ts files as they are, so a relative import names its file whole.
+    "fabrika/use-import-extensions": "error",
 
-		// An ignore comment names its rules and says why. It blocks, and an ignore comment cannot
-		// silence it.
-		"fabrika/no-bare-disable": "error",
+    // An ignore comment names its rules and says why. It blocks, and an ignore comment cannot
+    // silence it.
+    "fabrika/no-bare-disable": "error",
 
-		// A blank line between top-level statements and between class members (owner, 2026-11-09;
-		// docs/direction/oxlint-and-oxfmt.md). `pnpm format` adds them.
-		"fabrika/padding-line-between-statements": "error",
+    // A blank line between top-level statements and between class members (owner, 2026-11-09;
+    // docs/direction/oxlint-and-oxfmt.md). `pnpm format` adds them.
+    "fabrika/padding-line-between-statements": "error",
 
-		// Braces on every if, else, for, while and do, even on one line (owner, 2026-11-09).
-		"eslint/curly": ["error", "all"],
-		"eslint/eqeqeq": ["error", "always", { "null": "ignore" }],
-		"eslint/no-fallthrough": ["error", { "allowEmptyCase": true }],
-		"eslint/no-labels": ["error", { "allowLoop": true, "allowSwitch": true }],
-		"eslint/no-unused-vars": [
-			"error",
-			{
-				"args": "all",
-				"varsIgnorePattern": "^_",
-				"argsIgnorePattern": "^_",
-				"caughtErrorsIgnorePattern": "^_",
-				"destructuredArrayIgnorePattern": "^_",
-				"ignoreRestSiblings": true
-			}
-		],
-		"eslint/no-use-before-define": [
-			"error",
-			{
-				"functions": false,
-				"classes": false,
-				"variables": false,
-				"enums": false,
-				"typedefs": false,
-				"ignoreTypeReferences": true
-			}
-		],
-		"eslint/prefer-const": ["error", { "ignoreReadBeforeAssign": true }],
-		"typescript/ban-ts-comment": [
-			"error",
-			{ "ts-ignore": true, "ts-expect-error": false, "ts-nocheck": false, "ts-check": false }
-		],
-		"typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false }],
-		"typescript/no-empty-object-type": "error",
+    // Braces on every if, else, for, while and do, even on one line (owner, 2026-11-09).
+    "eslint/curly": ["error", "all"],
+    "eslint/eqeqeq": ["error", "always", { "null": "ignore" }],
+    "eslint/no-fallthrough": ["error", { "allowEmptyCase": true }],
+    "eslint/no-labels": ["error", { "allowLoop": true, "allowSwitch": true }],
+    "eslint/no-unused-vars": [
+      "error",
+      {
+        "args": "all",
+        "varsIgnorePattern": "^_",
+        "argsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_",
+        "destructuredArrayIgnorePattern": "^_",
+        "ignoreRestSiblings": true
+      }
+    ],
+    "eslint/no-use-before-define": [
+      "error",
+      {
+        "functions": false,
+        "classes": false,
+        "variables": false,
+        "enums": false,
+        "typedefs": false,
+        "ignoreTypeReferences": true
+      }
+    ],
+    "eslint/prefer-const": ["error", { "ignoreReadBeforeAssign": true }],
+    "typescript/ban-ts-comment": [
+      "error",
+      { "ts-ignore": true, "ts-expect-error": false, "ts-nocheck": false, "ts-check": false }
+    ],
+    "typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false }],
+    "typescript/no-empty-object-type": "error",
 
-		// `x!` throws away the compiler's proof.
-		"typescript/no-non-null-assertion": "error",
+    // `x!` throws away the compiler's proof.
+    "typescript/no-non-null-assertion": "error",
 
-		// Code never reaches a primitive (design language, call 3): it reads a token. Only the token
-		// build imports Radix, so it is turned off for that folder alone below.
-		"eslint/no-restricted-imports": [
-			"error",
-			{
-				"paths": [
-					{
-						"name": "@radix-ui/colors",
-						"message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
-					}
-				],
-				"patterns": [
-					{
-						"group": ["@radix-ui/colors/*"],
-						"message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
-					}
-				]
-			}
-		],
+    // Code never reaches a primitive (design language, call 3): it reads a token. Only the token
+    // build imports Radix, so it is turned off for that folder alone below.
+    "eslint/no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@radix-ui/colors",
+            "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["@radix-ui/colors/*"],
+            "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+          }
+        ]
+      }
+    ],
 
-		"eslint/array-callback-return": ["error", { "checkForEach": true }],
-		"eslint/constructor-super": "error",
-		"eslint/default-case-last": "error",
-		"eslint/for-direction": "error",
-		"eslint/getter-return": "error",
-		"eslint/no-array-constructor": "error",
-		"eslint/no-async-promise-executor": "error",
-		"eslint/no-case-declarations": "error",
-		"eslint/no-class-assign": "error",
-		"eslint/no-compare-neg-zero": "error",
-		"eslint/no-cond-assign": "error",
-		"eslint/no-const-assign": "error",
-		"eslint/no-constant-condition": "error",
-		"eslint/no-constructor-return": "error",
-		"eslint/no-control-regex": "error",
-		"eslint/no-debugger": "error",
-		"eslint/no-dupe-class-members": "error",
-		"eslint/no-dupe-else-if": "error",
-		"eslint/no-dupe-keys": "error",
-		"eslint/no-duplicate-case": "error",
-		"eslint/no-empty-character-class": "error",
-		"eslint/no-empty-pattern": "error",
-		"eslint/no-eval": "error",
-		"eslint/no-ex-assign": "error",
-		"eslint/no-extra-boolean-cast": "error",
-		"eslint/no-extra-label": "error",
-		"eslint/no-func-assign": "error",
-		"eslint/no-global-assign": "error",
-		"eslint/no-import-assign": "error",
-		"eslint/no-inner-declarations": "error",
-		"eslint/no-irregular-whitespace": "error",
-		"eslint/no-label-var": "error",
-		"eslint/no-lone-blocks": "error",
-		"eslint/no-loss-of-precision": "error",
-		"eslint/no-misleading-character-class": "error",
-		"eslint/no-new-native-nonconstructor": "error",
-		"eslint/no-nonoctal-decimal-escape": "error",
-		"eslint/no-obj-calls": "error",
-		"eslint/no-proto": "error",
-		"eslint/no-prototype-builtins": "error",
-		"eslint/no-regex-spaces": "error",
-		"eslint/no-self-assign": "error",
-		"eslint/no-self-compare": "error",
-		"eslint/no-sequences": ["error", { "allowInParentheses": false }],
-		"eslint/no-setter-return": "error",
-		"eslint/no-shadow-restricted-names": "error",
-		"eslint/no-sparse-arrays": "error",
-		"eslint/no-template-curly-in-string": "error",
-		"eslint/no-this-before-super": "error",
-		"eslint/no-unneeded-ternary": "error",
-		"eslint/no-unreachable": "error",
-		"eslint/no-unsafe-finally": "error",
-		"eslint/no-unsafe-negation": "error",
-		"eslint/no-unsafe-optional-chaining": "error",
-		"eslint/no-unused-labels": "error",
-		"eslint/no-unused-private-class-members": "error",
-		"eslint/no-useless-backreference": "error",
-		"eslint/no-useless-catch": "error",
-		"eslint/no-useless-constructor": "error",
-		"eslint/no-useless-escape": "error",
-		"eslint/no-useless-rename": "error",
-		"eslint/no-with": "error",
-		"eslint/prefer-arrow-callback": "error",
-		"eslint/prefer-exponentiation-operator": "error",
-		"eslint/prefer-numeric-literals": "error",
-		"eslint/prefer-object-has-own": "error",
-		"eslint/prefer-regex-literals": "error",
-		"eslint/prefer-rest-params": "error",
-		"eslint/prefer-template": "error",
-		"eslint/radix": "error",
-		"eslint/require-yield": "error",
-		"eslint/use-isnan": "error",
-		"eslint/valid-typeof": "error",
-		"jsx-a11y/alt-text": "error",
-		"jsx-a11y/anchor-ambiguous-text": "error",
-		"jsx-a11y/anchor-has-content": "error",
-		"jsx-a11y/anchor-is-valid": "error",
-		"jsx-a11y/aria-activedescendant-has-tabindex": "error",
-		"jsx-a11y/aria-props": "error",
-		"jsx-a11y/aria-proptypes": "error",
-		"jsx-a11y/aria-role": "error",
-		"jsx-a11y/aria-unsupported-elements": "error",
-		"jsx-a11y/autocomplete-valid": "error",
-		"jsx-a11y/click-events-have-key-events": "error",
-		"jsx-a11y/heading-has-content": "error",
-		"jsx-a11y/html-has-lang": "error",
-		"jsx-a11y/iframe-has-title": "error",
-		"jsx-a11y/img-redundant-alt": "error",
-		"jsx-a11y/interactive-supports-focus": "error",
-		"jsx-a11y/label-has-associated-control": "error",
-		"jsx-a11y/lang": "error",
-		"jsx-a11y/media-has-caption": "error",
-		"jsx-a11y/mouse-events-have-key-events": "error",
-		"jsx-a11y/no-access-key": "error",
-		"jsx-a11y/no-aria-hidden-on-focusable": "error",
-		"jsx-a11y/no-autofocus": "error",
-		"jsx-a11y/no-distracting-elements": "error",
-		"jsx-a11y/no-interactive-element-to-noninteractive-role": "error",
-		"jsx-a11y/no-noninteractive-element-to-interactive-role": "error",
-		"jsx-a11y/no-noninteractive-tabindex": "error",
-		"jsx-a11y/no-redundant-roles": "error",
-		"jsx-a11y/no-static-element-interactions": "error",
-		"jsx-a11y/role-has-required-aria-props": "error",
-		"jsx-a11y/role-supports-aria-props": "error",
-		"jsx-a11y/scope": "error",
-		"jsx-a11y/tabindex-no-positive": "error",
-		"oxc/approx-constant": "error",
-		"oxc/bad-min-max-func": "error",
-		"oxc/misrefactored-assign-op": "error",
-		"oxc/no-const-enum": "error",
-		"react/button-has-type": "error",
-		// An effect that reads a value but should not run when it changes reads it in a `useEffectEvent`.
-		"react/exhaustive-deps": "error",
-		"react/jsx-key": "error",
-		"react/jsx-no-comment-textnodes": "error",
-		"react/jsx-no-duplicate-props": "error",
-		"react/jsx-no-script-url": "error",
-		"react/jsx-no-target-blank": "error",
-		"react/jsx-no-useless-fragment": "error",
-		"react/no-danger": "error",
-		"react/no-danger-with-children": "error",
-		"react/no-namespace": "error",
-		"react/no-render-return-value": "error",
-		"react/no-string-refs": "error",
-		"react/void-dom-elements-no-children": "error",
-		"typescript/adjacent-overload-signatures": "error",
-		"typescript/no-duplicate-enum-values": "error",
-		"typescript/no-empty-interface": "error",
-		"typescript/no-extra-non-null-assertion": "error",
-		"typescript/no-misused-new": "error",
-		"typescript/no-non-null-asserted-optional-chain": "error",
-		"typescript/no-this-alias": "error",
-		"typescript/no-unnecessary-type-constraint": "error",
-		"typescript/no-unsafe-declaration-merging": "error",
-		"typescript/no-useless-empty-export": "error",
-		"typescript/prefer-function-type": "error",
-		"typescript/prefer-literal-enum-member": "error",
-		"typescript/prefer-namespace-keyword": "error",
-		"unicorn/no-document-cookie": "error",
-		"unicorn/no-instanceof-array": "error",
-		"unicorn/no-static-only-class": "error",
-		"unicorn/no-thenable": "error",
-		"unicorn/no-useless-switch-case": "error",
-		"unicorn/prefer-array-flat-map": "error",
-		"unicorn/prefer-array-index-of": "error",
-		"unicorn/prefer-date-now": "error",
-		"unicorn/prefer-node-protocol": "error",
-		"unicorn/prefer-number-properties": "error",
-		"vitest/no-duplicate-hooks": "error",
-		"vitest/no-focused-tests": "error",
-		"vitest/no-identical-title": "error",
-		"typescript/no-wrapper-object-types": "error",
-		"typescript/no-unsafe-function-type": "error",
+    "eslint/array-callback-return": ["error", { "checkForEach": true }],
+    "eslint/constructor-super": "error",
+    "eslint/default-case-last": "error",
+    "eslint/for-direction": "error",
+    "eslint/getter-return": "error",
+    "eslint/no-array-constructor": "error",
+    "eslint/no-async-promise-executor": "error",
+    "eslint/no-case-declarations": "error",
+    "eslint/no-class-assign": "error",
+    "eslint/no-compare-neg-zero": "error",
+    "eslint/no-cond-assign": "error",
+    "eslint/no-const-assign": "error",
+    "eslint/no-constant-condition": "error",
+    "eslint/no-constructor-return": "error",
+    "eslint/no-control-regex": "error",
+    "eslint/no-debugger": "error",
+    "eslint/no-dupe-class-members": "error",
+    "eslint/no-dupe-else-if": "error",
+    "eslint/no-dupe-keys": "error",
+    "eslint/no-duplicate-case": "error",
+    "eslint/no-empty-character-class": "error",
+    "eslint/no-empty-pattern": "error",
+    "eslint/no-eval": "error",
+    "eslint/no-ex-assign": "error",
+    "eslint/no-extra-boolean-cast": "error",
+    "eslint/no-extra-label": "error",
+    "eslint/no-func-assign": "error",
+    "eslint/no-global-assign": "error",
+    "eslint/no-import-assign": "error",
+    "eslint/no-inner-declarations": "error",
+    "eslint/no-irregular-whitespace": "error",
+    "eslint/no-label-var": "error",
+    "eslint/no-lone-blocks": "error",
+    "eslint/no-loss-of-precision": "error",
+    "eslint/no-misleading-character-class": "error",
+    "eslint/no-new-native-nonconstructor": "error",
+    "eslint/no-nonoctal-decimal-escape": "error",
+    "eslint/no-obj-calls": "error",
+    "eslint/no-proto": "error",
+    "eslint/no-prototype-builtins": "error",
+    "eslint/no-regex-spaces": "error",
+    "eslint/no-self-assign": "error",
+    "eslint/no-self-compare": "error",
+    "eslint/no-sequences": ["error", { "allowInParentheses": false }],
+    "eslint/no-setter-return": "error",
+    "eslint/no-shadow-restricted-names": "error",
+    "eslint/no-sparse-arrays": "error",
+    "eslint/no-template-curly-in-string": "error",
+    "eslint/no-this-before-super": "error",
+    "eslint/no-unneeded-ternary": "error",
+    "eslint/no-unreachable": "error",
+    "eslint/no-unsafe-finally": "error",
+    "eslint/no-unsafe-negation": "error",
+    "eslint/no-unsafe-optional-chaining": "error",
+    "eslint/no-unused-labels": "error",
+    "eslint/no-unused-private-class-members": "error",
+    "eslint/no-useless-backreference": "error",
+    "eslint/no-useless-catch": "error",
+    "eslint/no-useless-constructor": "error",
+    "eslint/no-useless-escape": "error",
+    "eslint/no-useless-rename": "error",
+    "eslint/no-with": "error",
+    "eslint/prefer-arrow-callback": "error",
+    "eslint/prefer-exponentiation-operator": "error",
+    "eslint/prefer-numeric-literals": "error",
+    "eslint/prefer-object-has-own": "error",
+    "eslint/prefer-regex-literals": "error",
+    "eslint/prefer-rest-params": "error",
+    "eslint/prefer-template": "error",
+    "eslint/radix": "error",
+    "eslint/require-yield": "error",
+    "eslint/use-isnan": "error",
+    "eslint/valid-typeof": "error",
+    "jsx-a11y/alt-text": "error",
+    "jsx-a11y/anchor-ambiguous-text": "error",
+    "jsx-a11y/anchor-has-content": "error",
+    "jsx-a11y/anchor-is-valid": "error",
+    "jsx-a11y/aria-activedescendant-has-tabindex": "error",
+    "jsx-a11y/aria-props": "error",
+    "jsx-a11y/aria-proptypes": "error",
+    "jsx-a11y/aria-role": "error",
+    "jsx-a11y/aria-unsupported-elements": "error",
+    "jsx-a11y/autocomplete-valid": "error",
+    "jsx-a11y/click-events-have-key-events": "error",
+    "jsx-a11y/heading-has-content": "error",
+    "jsx-a11y/html-has-lang": "error",
+    "jsx-a11y/iframe-has-title": "error",
+    "jsx-a11y/img-redundant-alt": "error",
+    "jsx-a11y/interactive-supports-focus": "error",
+    "jsx-a11y/label-has-associated-control": "error",
+    "jsx-a11y/lang": "error",
+    "jsx-a11y/media-has-caption": "error",
+    "jsx-a11y/mouse-events-have-key-events": "error",
+    "jsx-a11y/no-access-key": "error",
+    "jsx-a11y/no-aria-hidden-on-focusable": "error",
+    "jsx-a11y/no-autofocus": "error",
+    "jsx-a11y/no-distracting-elements": "error",
+    "jsx-a11y/no-interactive-element-to-noninteractive-role": "error",
+    "jsx-a11y/no-noninteractive-element-to-interactive-role": "error",
+    "jsx-a11y/no-noninteractive-tabindex": "error",
+    "jsx-a11y/no-redundant-roles": "error",
+    "jsx-a11y/no-static-element-interactions": "error",
+    "jsx-a11y/role-has-required-aria-props": "error",
+    "jsx-a11y/role-supports-aria-props": "error",
+    "jsx-a11y/scope": "error",
+    "jsx-a11y/tabindex-no-positive": "error",
+    "oxc/approx-constant": "error",
+    "oxc/bad-min-max-func": "error",
+    "oxc/misrefactored-assign-op": "error",
+    "oxc/no-const-enum": "error",
+    "react/button-has-type": "error",
+    // An effect that reads a value but should not run when it changes reads it in a `useEffectEvent`.
+    "react/exhaustive-deps": "error",
+    "react/jsx-key": "error",
+    "react/jsx-no-comment-textnodes": "error",
+    "react/jsx-no-duplicate-props": "error",
+    "react/jsx-no-script-url": "error",
+    "react/jsx-no-target-blank": "error",
+    "react/jsx-no-useless-fragment": "error",
+    "react/no-danger": "error",
+    "react/no-danger-with-children": "error",
+    "react/no-namespace": "error",
+    "react/no-render-return-value": "error",
+    "react/no-string-refs": "error",
+    "react/void-dom-elements-no-children": "error",
+    "typescript/adjacent-overload-signatures": "error",
+    "typescript/no-duplicate-enum-values": "error",
+    "typescript/no-empty-interface": "error",
+    "typescript/no-extra-non-null-assertion": "error",
+    "typescript/no-misused-new": "error",
+    "typescript/no-non-null-asserted-optional-chain": "error",
+    "typescript/no-this-alias": "error",
+    "typescript/no-unnecessary-type-constraint": "error",
+    "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/no-useless-empty-export": "error",
+    "typescript/prefer-function-type": "error",
+    "typescript/prefer-literal-enum-member": "error",
+    "typescript/prefer-namespace-keyword": "error",
+    "unicorn/no-document-cookie": "error",
+    "unicorn/no-instanceof-array": "error",
+    "unicorn/no-static-only-class": "error",
+    "unicorn/no-thenable": "error",
+    "unicorn/no-useless-switch-case": "error",
+    "unicorn/prefer-array-flat-map": "error",
+    "unicorn/prefer-array-index-of": "error",
+    "unicorn/prefer-date-now": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/prefer-number-properties": "error",
+    "vitest/no-duplicate-hooks": "error",
+    "vitest/no-focused-tests": "error",
+    "vitest/no-identical-title": "error",
+    "typescript/no-wrapper-object-types": "error",
+    "typescript/no-unsafe-function-type": "error",
 
-		// Each fired 0 times on the tree when it went on (lint audit, 2026-11-09). oxlint-plugins/plants.test.ts
-		// plants a line for each, so a rule that stops working is seen.
-		"eslint/no-constant-binary-expression": "error",
-		"eslint/no-unassigned-vars": "error",
-		"eslint/no-invalid-regexp": "error",
-		"eslint/no-unreachable-loop": "error",
-		"eslint/no-throw-literal": "error",
-		"eslint/preserve-caught-error": "error",
-		"eslint/no-implied-eval": "error",
-		"eslint/no-new": "error",
-		"eslint/no-extend-native": "error",
-		"eslint/no-extra-bind": "error",
-		"eslint/no-useless-call": "error",
-		"eslint/no-caller": "error",
-		"eslint/no-iterator": "error",
-		"eslint/no-delete-var": "error",
-		"eslint/no-empty-static-block": "error",
-		"eslint/block-scoped-var": "error",
-		"eslint/no-unexpected-multiline": "error",
-		"eslint/no-new-wrappers": "error",
-		"eslint/no-object-constructor": "error",
-		"eslint/prefer-promise-reject-errors": "error",
-		"eslint/symbol-description": "error",
-		"eslint/no-var": "error",
-		"eslint/no-return-assign": "error",
-		"eslint/no-useless-computed-key": "error",
-		"eslint/guard-for-in": "error",
-		"eslint/default-param-last": "error",
-		"eslint/yoda": "error",
-		"oxc/missing-throw": "error",
-		"oxc/const-comparisons": "error",
-		"oxc/double-comparisons": "error",
-		"oxc/erasing-op": "error",
-		"oxc/bad-comparison-sequence": "error",
-		"oxc/bad-char-at-comparison": "error",
-		"oxc/bad-replace-all-arg": "error",
-		"oxc/bad-match-all-arg": "error",
-		"oxc/bad-object-literal-comparison": "error",
-		"oxc/bad-array-method-on-arguments": "error",
-		"oxc/number-arg-out-of-range": "error",
-		"oxc/uninvoked-array-callback": "error",
-		"oxc/only-used-in-recursion": "error",
-		"oxc/bad-bitwise-operator": "error",
-		"unicorn/no-unnecessary-await": "error",
-		"unicorn/no-await-in-promise-methods": "error",
-		"unicorn/no-single-promise-in-promise-methods": "error",
-		"unicorn/no-invalid-fetch-options": "error",
-		"unicorn/no-invalid-remove-event-listener": "error",
-		"unicorn/no-useless-length-check": "error",
-		"unicorn/prefer-set-size": "error",
-		"unicorn/no-accessor-recursion": "error",
-		"unicorn/no-empty-file": "error",
-		"unicorn/no-instanceof-builtins": "error",
-		"unicorn/no-negation-in-equality-check": "error",
-		"unicorn/no-typeof-undefined": "error",
-		"unicorn/prefer-optional-catch-binding": "error",
-		"unicorn/prefer-string-slice": "error",
-		"unicorn/prefer-includes": "error",
-		"unicorn/prefer-regexp-test": "error",
-		"unicorn/prefer-array-some": "error",
-		"unicorn/prefer-array-flat": "error",
-		"unicorn/prefer-math-min-max": "error",
-		"unicorn/error-message": "error",
-		"typescript/prefer-as-const": "error",
-		"typescript/no-confusing-non-null-assertion": "error",
-		"typescript/no-non-null-asserted-nullish-coalescing": "error",
-		"typescript/no-require-imports": "error",
-		"typescript/no-var-requires": "error",
-		"typescript/no-namespace": "error",
-		"typescript/triple-slash-reference": "error",
-		"typescript/no-unnecessary-parameter-property-assignment": "error",
-		"typescript/consistent-generic-constructors": "error",
-		"typescript/consistent-type-assertions": "error",
-		"typescript/unified-signatures": "error",
-		"typescript/prefer-ts-expect-error": "error",
-		"vitest/valid-describe-callback": "error",
-		"vitest/valid-expect-in-promise": "error",
-		"vitest/require-awaited-expect-poll": "error",
-		"vitest/hoisted-apis-on-top": "error",
-		"vitest/no-conditional-tests": "error",
-		"vitest/no-disabled-tests": "error",
-		"vitest/no-test-return-statement": "error",
-		"vitest/no-mocks-import": "error",
-		"import/no-self-import": "error",
-		"import/no-absolute-path": "error",
-		"import/first": "error",
-		"import/no-mutable-exports": "error",
-		"import/no-empty-named-blocks": "error",
-		"import/no-named-default": "error",
-		"import/no-amd": "error",
-		"import/no-commonjs": "error",
-		"import/no-webpack-loader-syntax": "error",
-		"promise/no-multiple-resolved": "error",
-		"promise/no-new-statics": "error",
-		"promise/valid-params": "error",
-		"promise/no-return-in-finally": "error",
-		"promise/no-callback-in-promise": "error",
-		"promise/no-promise-in-callback": "error",
-		"react/error-boundaries": "error",
-		"react/forward-ref-uses-ref": "error",
-		"react/globals": "error",
-		"react/hooks": "error",
-		"react/iframe-missing-sandbox": "error",
-		"react/incompatible-library": "error",
-		"react/jsx-no-constructed-context-values": "error",
-		"react/jsx-no-undef": "error",
-		"react/jsx-props-no-spread-multi": "error",
-		"react/no-deriving-state-in-effects": "error",
-		"react/no-did-mount-set-state": "error",
-		"react/no-did-update-set-state": "error",
-		"react/no-direct-mutation-state": "error",
-		"react/no-find-dom-node": "error",
-		"react/no-is-mounted": "error",
-		"react/no-this-in-sfc": "error",
-		"react/no-unknown-property": "error",
-		"react/no-unsafe": "error",
-		"react/no-unstable-nested-components": "error",
-		"react/no-will-update-set-state": "error",
-		"react/set-state-in-render": "error",
-		"react/static-components": "error",
-		"react/use-memo": "error",
-		"react/void-use-memo": "error",
-		"react/memo-dependencies": "error",
-		"react/capitalized-calls": "error",
-		"react/style-prop-object": "error",
-		"react/require-render-return": "error"
-	},
-	"overrides": [
-		{
-			// Test files only: an `expect` that sits only inside an `if` may never run.
-			// `!` is allowed here: a test that hits a missing value fails on its own.
-			"files": ["**/*.test.ts"],
-			"rules": {
-				"fabrika/no-expect-in-if": "error",
-				"typescript/no-non-null-assertion": "off",
-				// Tests hold made-up secrets and read them back to check them.
-				"fabrika/no-redacted-value": "off",
-				// Tests write the options' shape to check it, and none starts a live run.
-				"fabrika/no-project-settings": "off"
-			}
-		},
-		{
-			// In `packages/` and `experiments/`, a `.ts` file's `use` or `useKey` is Effect's or vitest's,
-			// not a hook: 19 of 19 fires there were false alarms. So hooks are checked in every window
-			// file, and in `.ts` only where windows live.
-			"files": ["**/*.tsx", "apps/**/*.ts", "programs/**/*.ts"],
-			"rules": { "react/rules-of-hooks": "error" }
-		},
-		{
-			// There is no JSX in a .ts file: its one `children` prop is what `createElement`'s types ask.
-			"files": ["**/*.tsx"],
-			"rules": { "react/no-children-prop": "error" }
-		},
-		{
-			// The token build reads Radix's steps and writes them out as tokens (design foundations, PR 2).
-			"files": ["packages/fabrika-design/src/build/**"],
-			"rules": { "eslint/no-restricted-imports": "off" }
-		},
-		{
-			// `ownRules` is the one place that says where a Claude run's settings come from.
-			"files": ["packages/fabrika/src/agents/claude/rules.ts"],
-			"rules": { "fabrika/no-project-settings": "off" }
-		},
-		{
-			// no-secret-env and no-redacted-value are outside experiments, as they were under Biome:
-			// those two rules' first change left them out, and the README counts what they would find.
-			"files": ["experiments/**"],
-			"rules": { "fabrika/no-secret-env": "off", "fabrika/no-redacted-value": "off" }
-		},
-		{
-			// The bearer token as a WebSocket subprotocol: a browser socket sends no header.
-			"files": ["packages/fabrika/src/host/http.ts"],
-			"rules": { "fabrika/no-redacted-value": "off" }
-		},
-		{
-			// The door's secret in the ledger child's env, and in its locker file (mode 0600).
-			"files": ["packages/fabrika/src/host/local.ts"],
-			"rules": { "fabrika/no-redacted-value": "off" }
-		},
-		{
-			// The Worker's bindings: a one-way hash of the local secret, and GitHub's token.
-			"files": ["packages/fabrika/src/host/worker-options.ts"],
-			"rules": { "fabrika/no-redacted-value": "off" }
-		},
-		{
-			// A token's one-way hash, the only form the ledger keeps.
-			"files": ["packages/fabrika/src/host/door.ts"],
-			"rules": { "fabrika/no-redacted-value": "off" }
-		},
-		{
-			// A login's answer on the wire: the token goes to the one who logged in.
-			"files": ["packages/fabrika/src/host/durable-object.ts"],
-			"rules": { "fabrika/no-redacted-value": "off" }
-		},
-		{
-			// An SSH key file's text, handed to sshsig.ts's parser (which may import nothing, so it
-			// takes a string) and kept from then on as a WebCrypto key that cannot be exported.
-			"files": ["packages/fabrika/src/host/signer.ts"],
-			"rules": { "fabrika/no-redacted-value": "off" }
-		},
-		{
-			// The new version's exam rules (Tier 1, P2). They block from the start, and their fires on PR
-			// 223's tree were read by hand (oxlint-plugins/README.md). An edge is one line under an edge
-			// comment, which `edge-comment` holds to its shape (P35). No override below turns the two
-			// edge rules off for a `next/` file that is not a test, and `edge-comment.test.ts` checks it.
-			// The `.agents/` override below repeats this rule block: change both together
-			// (`edge-comment.test.ts` checks they are equal).
-			"files": ["next/**"],
-			"rules": {
-				"fabrika/no-promises": "error",
-				"fabrika/no-ledger-sql": "error",
-				"fabrika/no-node-filesystem": "error",
-				"fabrika/no-node-imports": "error",
-				"fabrika/no-effect-run-outside-edge": "error",
-				"fabrika/edge-comment": "error",
-				"fabrika/effect-functions": "error",
-				"fabrika/no-of": "error",
-				"fabrika/no-hand-tag": "error",
-				"fabrika/one-store-hook": "error"
-			}
-		},
-		{
-			// Lead tooling under `.agents/` is held to `next/`'s rules, since agents read it and copy its
-			// habits (0033). What it broke on the day it joined is in `agents-ledger.json`, which only
-			// shrinks. This rule block is the `next/**` block above, repeated: change both together.
-			"files": [".agents/**/*.ts", ".agents/**/*.mjs"],
-			"rules": {
-				"fabrika/no-promises": "error",
-				"fabrika/no-ledger-sql": "error",
-				"fabrika/no-node-filesystem": "error",
-				"fabrika/no-node-imports": "error",
-				"fabrika/no-effect-run-outside-edge": "error",
-				"fabrika/edge-comment": "error",
-				"fabrika/effect-functions": "error",
-				"fabrika/no-of": "error",
-				"fabrika/no-hand-tag": "error",
-				"fabrika/one-store-hook": "error"
-			}
-		},
-		{
-			// React's own rules, blocking as the owner set them (docs/direction/react-compiler.md). The
-			// skip check, `pnpm lint:compiler`, holds the rest of the Compiler's rules.
-			"files": ["next/**/*.tsx"],
-			"rules": {
-				"react/refs": "error",
-				"react/immutability": "error",
-				"react/display-name": "error",
-				// React's purity rule refuses a clock read in render; ours refuses it in a handler too
-				// (owner, 2026-11-05).
-				"react/purity": "error",
-				"fabrika/no-clock-in-view": "error"
-			}
-		},
-		{
-			// Tests are left out: they await vitest, feed raw frames and may plant a broken view.
-			// `no-of` stays on, since a test names its helpers too.
-			// Tests also manufacture spans as input for the sink. Tracing plants use product paths.
-			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
-			"rules": {
-				"fabrika/prefer-schema-arbitrary": "warn",
-				"fabrika/no-promises": "off",
-				"fabrika/no-effect-run-outside-edge": "off",
-				"fabrika/effect-functions": "off",
-				"fabrika/no-hand-tag": "off",
-				"fabrika/one-store-hook": "off",
-				"react/refs": "off",
-				"react/immutability": "off",
-				"react/display-name": "off",
-				"react/purity": "off",
-				"fabrika/no-clock-in-view": "off"
-			}
-		},
-		{
-			// `.agents/` tests keep the edge rules on: only `next/`'s tests may turn one off
-			// (`edge-comment.test.ts`). The rest is left out as for `next/`'s tests above.
-			"files": [".agents/**/*.test.ts"],
-			"rules": {
-				"fabrika/effect-functions": "off",
-				"fabrika/no-hand-tag": "off",
-				"fabrika/one-store-hook": "off"
-			}
-		},
-		{
-			// libfabrika's rooms (0043, ticket 477). `fabrika/rooms` holds four laws: no room re-exports
-			// another room's names, `src/` holds only what is listed here, every export in an `internal/`
-			// file is `@internal`, and the `values` files hold no service and no error. `folders` and
-			// `files` also name what main holds today (`data`, `coordination`, `app`, `id`, `testing`), so
-			// the rule fires on nothing before a file moves. Each old name leaves in the pull request that
-			// empties it. `Id` is not in `values`: it holds `IdError` and the `Generator` service.
-			//
-			// Nobody outside a room imports its `internal/`: oxlint's own rule says it (0040). A room's own
-			// `./internal/x.ts` has no folder between, so it passes. An override replaces a rule's options,
-			// so the Radix entry of the base rule is repeated here.
-			"files": ["next/packages/libfabrika/src/**"],
-			"rules": {
-				"fabrika/rooms": [
-					"error",
-					{
-						"src": "next/packages/libfabrika/src",
-						"rooms": [
-							"telemetry",
-							"ledger",
-							"transport",
-							"processes",
-							"presence",
-							"access",
-							"runtime",
-							"door"
-						],
-						"folders": ["node", "workers", "data", "coordination", "app"],
-						"files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "id", "testing"],
-						"values": ["ProcessId", "Sql", "Rev"]
-					}
-				],
-				"eslint/no-restricted-imports": [
-					"error",
-					{
-						"paths": [
-							{
-								"name": "@radix-ui/colors",
-								"message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
-							}
-						],
-						"patterns": [
-							{
-								"group": ["@radix-ui/colors/*"],
-								"message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
-							},
-							{
-								"group": [
-									"./*/internal/**",
-									"../*/internal/**",
-									"./../*/internal/**",
-									"../../*/internal/**",
-									"./../../*/internal/**"
-								],
-								"message": "Nobody outside a room imports its internal/ (0043, rule 8). Import the room's front file."
-							}
-						]
-					}
-				]
-			}
-		},
-		{
-			// A room's front file is PascalCase, tests and `.test-support` files too (0032, 0043), by
-			// oxlint's own rule (0040). Only the six rooms with no file on main are named, so it fires on
-			// nothing today: `transport` joins in the pull request that renames its files, and `door` in its own.
-			"files": [
-				"next/packages/libfabrika/src/telemetry/**",
-				"next/packages/libfabrika/src/ledger/**",
-				"next/packages/libfabrika/src/processes/**",
-				"next/packages/libfabrika/src/presence/**",
-				"next/packages/libfabrika/src/access/**",
-				"next/packages/libfabrika/src/runtime/**"
-			],
-			"rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
-		},
-		{
-			// A room's `internal/` file is camelCase (0032). It comes after the override above, so it wins there.
-			"files": [
-				"next/packages/libfabrika/src/telemetry/internal/**",
-				"next/packages/libfabrika/src/ledger/internal/**",
-				"next/packages/libfabrika/src/processes/internal/**",
-				"next/packages/libfabrika/src/presence/internal/**",
-				"next/packages/libfabrika/src/access/internal/**",
-				"next/packages/libfabrika/src/runtime/internal/**"
-			],
-			"rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
-		}
-	]
+    // Each fired 0 times on the tree when it went on (lint audit, 2026-11-09). oxlint-plugins/plants.test.ts
+    // plants a line for each, so a rule that stops working is seen.
+    "eslint/no-constant-binary-expression": "error",
+    "eslint/no-unassigned-vars": "error",
+    "eslint/no-invalid-regexp": "error",
+    "eslint/no-unreachable-loop": "error",
+    "eslint/no-throw-literal": "error",
+    "eslint/preserve-caught-error": "error",
+    "eslint/no-implied-eval": "error",
+    "eslint/no-new": "error",
+    "eslint/no-extend-native": "error",
+    "eslint/no-extra-bind": "error",
+    "eslint/no-useless-call": "error",
+    "eslint/no-caller": "error",
+    "eslint/no-iterator": "error",
+    "eslint/no-delete-var": "error",
+    "eslint/no-empty-static-block": "error",
+    "eslint/block-scoped-var": "error",
+    "eslint/no-unexpected-multiline": "error",
+    "eslint/no-new-wrappers": "error",
+    "eslint/no-object-constructor": "error",
+    "eslint/prefer-promise-reject-errors": "error",
+    "eslint/symbol-description": "error",
+    "eslint/no-var": "error",
+    "eslint/no-return-assign": "error",
+    "eslint/no-useless-computed-key": "error",
+    "eslint/guard-for-in": "error",
+    "eslint/default-param-last": "error",
+    "eslint/yoda": "error",
+    "oxc/missing-throw": "error",
+    "oxc/const-comparisons": "error",
+    "oxc/double-comparisons": "error",
+    "oxc/erasing-op": "error",
+    "oxc/bad-comparison-sequence": "error",
+    "oxc/bad-char-at-comparison": "error",
+    "oxc/bad-replace-all-arg": "error",
+    "oxc/bad-match-all-arg": "error",
+    "oxc/bad-object-literal-comparison": "error",
+    "oxc/bad-array-method-on-arguments": "error",
+    "oxc/number-arg-out-of-range": "error",
+    "oxc/uninvoked-array-callback": "error",
+    "oxc/only-used-in-recursion": "error",
+    "oxc/bad-bitwise-operator": "error",
+    "unicorn/no-unnecessary-await": "error",
+    "unicorn/no-await-in-promise-methods": "error",
+    "unicorn/no-single-promise-in-promise-methods": "error",
+    "unicorn/no-invalid-fetch-options": "error",
+    "unicorn/no-invalid-remove-event-listener": "error",
+    "unicorn/no-useless-length-check": "error",
+    "unicorn/prefer-set-size": "error",
+    "unicorn/no-accessor-recursion": "error",
+    "unicorn/no-empty-file": "error",
+    "unicorn/no-instanceof-builtins": "error",
+    "unicorn/no-negation-in-equality-check": "error",
+    "unicorn/no-typeof-undefined": "error",
+    "unicorn/prefer-optional-catch-binding": "error",
+    "unicorn/prefer-string-slice": "error",
+    "unicorn/prefer-includes": "error",
+    "unicorn/prefer-regexp-test": "error",
+    "unicorn/prefer-array-some": "error",
+    "unicorn/prefer-array-flat": "error",
+    "unicorn/prefer-math-min-max": "error",
+    "unicorn/error-message": "error",
+    "typescript/prefer-as-const": "error",
+    "typescript/no-confusing-non-null-assertion": "error",
+    "typescript/no-non-null-asserted-nullish-coalescing": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/no-var-requires": "error",
+    "typescript/no-namespace": "error",
+    "typescript/triple-slash-reference": "error",
+    "typescript/no-unnecessary-parameter-property-assignment": "error",
+    "typescript/consistent-generic-constructors": "error",
+    "typescript/consistent-type-assertions": "error",
+    "typescript/unified-signatures": "error",
+    "typescript/prefer-ts-expect-error": "error",
+    "vitest/valid-describe-callback": "error",
+    "vitest/valid-expect-in-promise": "error",
+    "vitest/require-awaited-expect-poll": "error",
+    "vitest/hoisted-apis-on-top": "error",
+    "vitest/no-conditional-tests": "error",
+    "vitest/no-disabled-tests": "error",
+    "vitest/no-test-return-statement": "error",
+    "vitest/no-mocks-import": "error",
+    "import/no-self-import": "error",
+    "import/no-absolute-path": "error",
+    "import/first": "error",
+    "import/no-mutable-exports": "error",
+    "import/no-empty-named-blocks": "error",
+    "import/no-named-default": "error",
+    "import/no-amd": "error",
+    "import/no-commonjs": "error",
+    "import/no-webpack-loader-syntax": "error",
+    "promise/no-multiple-resolved": "error",
+    "promise/no-new-statics": "error",
+    "promise/valid-params": "error",
+    "promise/no-return-in-finally": "error",
+    "promise/no-callback-in-promise": "error",
+    "promise/no-promise-in-callback": "error",
+    "react/error-boundaries": "error",
+    "react/forward-ref-uses-ref": "error",
+    "react/globals": "error",
+    "react/hooks": "error",
+    "react/iframe-missing-sandbox": "error",
+    "react/incompatible-library": "error",
+    "react/jsx-no-constructed-context-values": "error",
+    "react/jsx-no-undef": "error",
+    "react/jsx-props-no-spread-multi": "error",
+    "react/no-deriving-state-in-effects": "error",
+    "react/no-did-mount-set-state": "error",
+    "react/no-did-update-set-state": "error",
+    "react/no-direct-mutation-state": "error",
+    "react/no-find-dom-node": "error",
+    "react/no-is-mounted": "error",
+    "react/no-this-in-sfc": "error",
+    "react/no-unknown-property": "error",
+    "react/no-unsafe": "error",
+    "react/no-unstable-nested-components": "error",
+    "react/no-will-update-set-state": "error",
+    "react/set-state-in-render": "error",
+    "react/static-components": "error",
+    "react/use-memo": "error",
+    "react/void-use-memo": "error",
+    "react/memo-dependencies": "error",
+    "react/capitalized-calls": "error",
+    "react/style-prop-object": "error",
+    "react/require-render-return": "error"
+  },
+  "overrides": [
+    {
+      // Test files only: an `expect` that sits only inside an `if` may never run.
+      // `!` is allowed here: a test that hits a missing value fails on its own.
+      "files": ["**/*.test.ts"],
+      "rules": {
+        "fabrika/no-expect-in-if": "error",
+        "typescript/no-non-null-assertion": "off",
+        // Tests hold made-up secrets and read them back to check them.
+        "fabrika/no-redacted-value": "off",
+        // Tests write the options' shape to check it, and none starts a live run.
+        "fabrika/no-project-settings": "off"
+      }
+    },
+    {
+      // In `packages/` and `experiments/`, a `.ts` file's `use` or `useKey` is Effect's or vitest's,
+      // not a hook: 19 of 19 fires there were false alarms. So hooks are checked in every window
+      // file, and in `.ts` only where windows live.
+      "files": ["**/*.tsx", "apps/**/*.ts", "programs/**/*.ts"],
+      "rules": { "react/rules-of-hooks": "error" }
+    },
+    {
+      // There is no JSX in a .ts file: its one `children` prop is what `createElement`'s types ask.
+      "files": ["**/*.tsx"],
+      "rules": { "react/no-children-prop": "error" }
+    },
+    {
+      // The token build reads Radix's steps and writes them out as tokens (design foundations, PR 2).
+      "files": ["packages/fabrika-design/src/build/**"],
+      "rules": { "eslint/no-restricted-imports": "off" }
+    },
+    {
+      // `ownRules` is the one place that says where a Claude run's settings come from.
+      "files": ["packages/fabrika/src/agents/claude/rules.ts"],
+      "rules": { "fabrika/no-project-settings": "off" }
+    },
+    {
+      // no-secret-env and no-redacted-value are outside experiments, as they were under Biome:
+      // those two rules' first change left them out, and the README counts what they would find.
+      "files": ["experiments/**"],
+      "rules": { "fabrika/no-secret-env": "off", "fabrika/no-redacted-value": "off" }
+    },
+    {
+      // The bearer token as a WebSocket subprotocol: a browser socket sends no header.
+      "files": ["packages/fabrika/src/host/http.ts"],
+      "rules": { "fabrika/no-redacted-value": "off" }
+    },
+    {
+      // The door's secret in the ledger child's env, and in its locker file (mode 0600).
+      "files": ["packages/fabrika/src/host/local.ts"],
+      "rules": { "fabrika/no-redacted-value": "off" }
+    },
+    {
+      // The Worker's bindings: a one-way hash of the local secret, and GitHub's token.
+      "files": ["packages/fabrika/src/host/worker-options.ts"],
+      "rules": { "fabrika/no-redacted-value": "off" }
+    },
+    {
+      // A token's one-way hash, the only form the ledger keeps.
+      "files": ["packages/fabrika/src/host/door.ts"],
+      "rules": { "fabrika/no-redacted-value": "off" }
+    },
+    {
+      // A login's answer on the wire: the token goes to the one who logged in.
+      "files": ["packages/fabrika/src/host/durable-object.ts"],
+      "rules": { "fabrika/no-redacted-value": "off" }
+    },
+    {
+      // An SSH key file's text, handed to sshsig.ts's parser (which may import nothing, so it
+      // takes a string) and kept from then on as a WebCrypto key that cannot be exported.
+      "files": ["packages/fabrika/src/host/signer.ts"],
+      "rules": { "fabrika/no-redacted-value": "off" }
+    },
+    {
+      // The new version's exam rules (Tier 1, P2). They block from the start, and their fires on PR
+      // 223's tree were read by hand (oxlint-plugins/README.md). An edge is one line under an edge
+      // comment, which `edge-comment` holds to its shape (P35). No override below turns the two
+      // edge rules off for a `next/` file that is not a test, and `edge-comment.test.ts` checks it.
+      // The `.agents/` override below repeats this rule block: change both together
+      // (`edge-comment.test.ts` checks they are equal).
+      "files": ["next/**"],
+      "rules": {
+        "fabrika/no-promises": "error",
+        "fabrika/no-ledger-sql": "error",
+        "fabrika/no-node-filesystem": "error",
+        "fabrika/no-node-imports": "error",
+        "fabrika/no-effect-run-outside-edge": "error",
+        "fabrika/edge-comment": "error",
+        "fabrika/effect-functions": "error",
+        "fabrika/no-of": "error",
+        "fabrika/no-why-key": "error",
+        "fabrika/no-hand-tag": "error",
+        "fabrika/one-store-hook": "error"
+      }
+    },
+    {
+      // Lead tooling under `.agents/` is held to `next/`'s rules, since agents read it and copy its
+      // habits (0033). What it broke on the day it joined is in `agents-ledger.json`, which only
+      // shrinks. This rule block is the `next/**` block above, repeated: change both together.
+      "files": [".agents/**/*.ts", ".agents/**/*.mjs"],
+      "rules": {
+        "fabrika/no-promises": "error",
+        "fabrika/no-ledger-sql": "error",
+        "fabrika/no-node-filesystem": "error",
+        "fabrika/no-node-imports": "error",
+        "fabrika/no-effect-run-outside-edge": "error",
+        "fabrika/edge-comment": "error",
+        "fabrika/effect-functions": "error",
+        "fabrika/no-of": "error",
+        "fabrika/no-why-key": "error",
+        "fabrika/no-hand-tag": "error",
+        "fabrika/one-store-hook": "error"
+      }
+    },
+    {
+      // React's own rules, blocking as the owner set them (docs/direction/react-compiler.md). The
+      // skip check, `pnpm lint:compiler`, holds the rest of the Compiler's rules.
+      "files": ["next/**/*.tsx"],
+      "rules": {
+        "react/refs": "error",
+        "react/immutability": "error",
+        "react/display-name": "error",
+        // React's purity rule refuses a clock read in render; ours refuses it in a handler too
+        // (owner, 2026-11-05).
+        "react/purity": "error",
+        "fabrika/no-clock-in-view": "error"
+      }
+    },
+    {
+      // Tests are left out: they await vitest, feed raw frames and may plant a broken view.
+      // `no-of` and `no-why-key` stay on, since tests follow the same naming rules.
+      // Tests also manufacture spans as input for the sink. Tracing plants use product paths.
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
+      "rules": {
+        "fabrika/prefer-schema-arbitrary": "warn",
+        "fabrika/no-promises": "off",
+        "fabrika/no-effect-run-outside-edge": "off",
+        "fabrika/effect-functions": "off",
+        "fabrika/no-hand-tag": "off",
+        "fabrika/one-store-hook": "off",
+        "react/refs": "off",
+        "react/immutability": "off",
+        "react/display-name": "off",
+        "react/purity": "off",
+        "fabrika/no-clock-in-view": "off"
+      }
+    },
+    {
+      // `.agents/` tests keep the edge rules on: only `next/`'s tests may turn one off
+      // (`edge-comment.test.ts`). The rest is left out as for `next/`'s tests above.
+      "files": [".agents/**/*.test.ts"],
+      "rules": {
+        "fabrika/effect-functions": "off",
+        "fabrika/no-hand-tag": "off",
+        "fabrika/one-store-hook": "off"
+      }
+    },
+    {
+      // libfabrika's rooms (0043, ticket 477). `fabrika/rooms` holds four laws: no room re-exports
+      // another room's names, `src/` holds only what is listed here, every export in an `internal/`
+      // file is `@internal`, and the `values` files hold no service and no error. `folders` and
+      // `files` also name what main holds today (`data`, `coordination`, `app`, `id`, `testing`), so
+      // the rule fires on nothing before a file moves. Each old name leaves in the pull request that
+      // empties it. `Id` is not in `values`: it holds `IdError` and the `Generator` service.
+      //
+      // Nobody outside a room imports its `internal/`: oxlint's own rule says it (0040). A room's own
+      // `./internal/x.ts` has no folder between, so it passes. An override replaces a rule's options,
+      // so the Radix entry of the base rule is repeated here.
+      "files": ["next/packages/libfabrika/src/**"],
+      "rules": {
+        "fabrika/rooms": [
+          "error",
+          {
+            "src": "next/packages/libfabrika/src",
+            "rooms": ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "door"],
+            "folders": ["node", "workers", "data", "coordination", "app"],
+            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "id", "testing"],
+            "values": ["ProcessId", "Sql", "Rev"]
+          }
+        ],
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a room imports its internal/ (0043, rule 8). Import the room's front file."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // A room's front file is PascalCase, tests and `.test-support` files too (0032, 0043), by
+      // oxlint's own rule (0040). Only the six rooms with no file on main are named, so it fires on
+      // nothing today: `transport` joins in the pull request that renames its files, and `door` in its own.
+      "files": [
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/runtime/**"
+      ],
+      "rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
+    },
+    {
+      // A room's `internal/` file is camelCase (0032). It comes after the override above, so it wins there.
+      "files": [
+        "next/packages/libfabrika/src/telemetry/internal/**",
+        "next/packages/libfabrika/src/ledger/internal/**",
+        "next/packages/libfabrika/src/processes/internal/**",
+        "next/packages/libfabrika/src/presence/internal/**",
+        "next/packages/libfabrika/src/access/internal/**",
+        "next/packages/libfabrika/src/runtime/internal/**"
+      ],
+      "rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
+    }
+  ]
 }

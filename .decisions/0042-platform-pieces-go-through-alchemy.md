@@ -135,13 +135,13 @@ works for our code: ticket 502's spike and each port say that. Counts are lines.
 
 | Use | Lines | Where | Alchemy form, or gap |
 |---|---|---|---|
-| `import ... from "cloudflare:workers"` | 2 | `app/brain.ts:23`, `lib/workers/box.ts:1` | **Gap**, while the entrypoint row below is one. The `DurableObject` half of `brain.ts:23` is covered |
+| `import ... from "cloudflare:workers"` | 2 | `app/brain.ts:23`, `lib/workers/box.ts:1` | **Gap**, while the entrypoint row below is one. The `DurableObject` half of `brain.ts:23` is covered. *`brain.ts:23` answered on 2026-11-10, see [Amendments](#amendments)* |
 | `class ... extends DurableObject` | 4 | `app/brain.ts:29`, `169`, `222`, `263` | `Workers/DurableObject.ts`: `Cloudflare.DurableObject<Self, Shape>()("Name")` and `.make()` (0041) |
-| `class ... extends WorkerEntrypoint` (`Control`, `ProgramBox`) | 2 | `app/brain.ts:301`, `lib/workers/box.ts:57` | **Gap.** No Alchemy form found to define a named entrypoint class. `Workers/WorkerEntrypoint.ts` is only the `env` binding, and its own docs say to extend the native class. `Workers/Worker.ts`'s `entrypoints` holds settings only |
+| `class ... extends WorkerEntrypoint` (`Control`, `ProgramBox`) | 2 | `app/brain.ts:301`, `lib/workers/box.ts:57` | **Gap.** No Alchemy form found to define a named entrypoint class. `Workers/WorkerEntrypoint.ts` is only the `env` binding, and its own docs say to extend the native class. `Workers/Worker.ts`'s `entrypoints` holds settings only. *Answered for `Control` on 2026-11-10, see [Amendments](#amendments)* |
 | The Worker's default `fetch` | 1 | `app/brain.ts:310` | `Workers/Worker.ts`: `Cloudflare.Worker<Self>()(...)` whose `fetch` is an Effect; `Workers/HttpServer.ts` |
 | `DurableObjectState`, with its `id` and `abort` | 18 | `app/runtime.ts:19`, `24`; `lib/workers/gateway.ts:19`, `258`, `263`; `lib/workers/record.ts:10`, `28`, `38`, `48`, `58`; `lib/workers/runtime.ts:199`, `205`, `210`, `295`, `721`, `726`, `735`, `846` | `Workers/DurableObjectState.ts`: the `Cloudflare.DurableObjectState` service |
 | `DurableObjectStorage` and its SQL | 4 | `lib/data/worker-sql.ts:3`, `4`, `6`; `lib/workers/platform.ts:187` | `Workers/DurableObjectStorage.ts`: `get`, `put`, `delete`, `sync`, `sql.exec`, `sql.databaseSize`, an Effect `transaction` |
-| `storage.transactionSync` | 1 | `lib/data/worker-sql.ts:5` | **Gap.** Not in `Workers/DurableObjectStorage.ts`; only through `state.raw` (0041 found the same) |
+| `storage.transactionSync` | 1 | `lib/data/worker-sql.ts:5` | **Gap.** Not in `Workers/DurableObjectStorage.ts`; only through `state.raw` (0041 found the same). *Answered on 2026-11-10, see [Amendments](#amendments)* |
 | Alarms: `setAlarm`, `deleteAlarm`, the `alarm()` handler | 3 | `lib/workers/platform.ts:203`, `206`; `app/brain.ts:197` | `getAlarm`, `setAlarm`, `deleteAlarm` in `Workers/DurableObjectStorage.ts`; the `alarm` slot in `Workers/DurableObject.ts` |
 | `DurableObjectNamespace` bindings and `getByName` | 11 | `lib/workers/runtime.ts:87` to `90`, `138`, `141`, `144`, `331`, `448`, `482`; `lib/workers/fetch.ts:23` | `Workers/DurableObject.ts`: the namespace has `getByName` and `idFromName`, and answers a `DurableObjectStub<Shape>` |
 | `Rpc.DurableObjectBranded` and `Rpc.WorkerEntrypointBranded` | 9 | `lib/workers/index.ts:13`; `lib/workers/platform.ts:15`, `97`, `134`, `156`; `lib/workers/bindings.ts:87`, `131`, `141`, `149` | Not needed: Alchemy's stub is typed by `Shape`. No re-export of Cloudflare's `Rpc` types found (`Workers/Rpc.ts` re-exports `alchemy/Rpc`, a different thing) |
@@ -202,7 +202,8 @@ imports (4).
 - The port's order. Ticket 502's spike is running as an experiment.
 - Whether `libfabrika`'s `workers/` and `node/` become platform packages (0034 says later).
 - Whether `Control` and `ProgramBox` stay named entrypoint classes or take another shape, such as
-  a second Effect Worker. That is the port's plan to answer.
+  a second Effect Worker. That is the port's plan to answer. *Answered for `Control` on
+  2026-11-10, see [Amendments](#amendments).*
 - Whether the rule's check covers raw ambient types and process calls. Ticket 506 says.
 
 ## Amendments
@@ -221,3 +222,28 @@ imports (4).
     patch has an upstream issue, does not change. A gap in Alchemy found after this list keeps it.
   - Not this batch: ticket 502's trial may find a real bug by running it. Whether that one is
     reported is decided when it comes.
+- 2026-11-10: **the `transactionSync` gap and `Control`'s half of the entrypoint gap have an
+  Alchemy form after all, and the Durable Object port takes both** ([0041](0041-object-classes-are-effect-objects.md)'s amendment of the same day,
+  tracker ticket 533). The rows in [Today's direct uses](#todays-direct-uses) stay as they were
+  read on 2026-11-09, each marked as answered here. Their counts are not redone.
+  - **The named entrypoint class, for `Control`.** The row is right that Alchemy has no form to
+    define a named `WorkerEntrypoint` class. The form is that `Control` does not need to be one.
+    It is a second `fetch` that reads a token from `ctx.props`. A binding with no entrypoint name
+    targets the Worker's default export and can carry `props`
+    (`Workers/WorkerEntrypoint.ts`), and an Effect Worker reads them with `yield* ctx.props` on
+    `Cloudflare.WorkerExecutionContext` (`Workers/Worker.ts`, "Self Entrypoints & ctx.props"). So
+    `Control` becomes a branch of the brain's one Effect `fetch` or a small Effect Worker of its
+    own, in the port's PR 7. `ProgramBox` is not answered: its half of the row stays a gap.
+  - **The `cloudflare:workers` import in `brain.ts`.** It goes in the same pull request, when the
+    stack drops `bundle: false` and Alchemy bundles the brain. The import in `workers/box.ts`
+    stays with `ProgramBox`.
+  - **`storage.transactionSync`.** The row is right that the name is not in
+    `Workers/DurableObjectStorage.ts`. The form is `state.storage.transaction`, which takes an
+    Effect and rolls back on a typed failure, a defect or an interruption. It runs the platform's
+    `transaction`, not `transactionSync`. The object services move to it in the port's PR 8.
+  - **Read, not run.** Each form is a name in beta.84's source. The binding constraint above
+    holds, and 0041's amendment lists what is not known: an Effect `fetch` and `ctx.props` have
+    not run here, `props` on a service binding are dropped on a real deploy for now, and the
+    ledger's laws have not run on the Effect `transaction`.
+  - Five of the six kinds stay as listed: the entrypoint class for `ProgramBox` with its import,
+    `WebSocketRequestResponsePair`, and the three on the local side.

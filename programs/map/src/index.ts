@@ -1,8 +1,8 @@
-import {run} from "@demlik/tea/effect";
-import {defineProgram, end, flag, input} from "@kampus/fabrika-old";
-import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
-import {One, oneOf, tickets, ticketsKind, ticketsOptions} from "@tea-fabrika/tracker";
-import {Effect, Schema} from "effect";
+import { run } from "@demlik/tea/effect";
+import { defineProgram, end, flag, input } from "@kampus/fabrika-old";
+import { TicketNumber } from "@kampus/pipeline/tickets/ticket";
+import { One, oneOf, tickets, ticketsKind, ticketsOptions } from "@tea-fabrika/tracker";
+import { Effect, Schema } from "effect";
 
 // The map of today's programs, in a tile of its own (./window.tsx): each program a box with its
 // real inputs and outputs, the wires that exist in code, the `Ledger` calls dotted, and the
@@ -14,34 +14,34 @@ import {Effect, Schema} from "effect";
 //   quit null                  it ends
 
 export const map = defineProgram({
-	name: "map",
-	description:
-		"The map of today's programs: their inputs, outputs and wires, and where one ticket stands on the plan's nine steps. It has a window.",
-	flags: {ticket: flag(TicketNumber, "The ticket whose steps light the map, by its number.")},
-	inputs: {
-		quit: input(Schema.Null, "Stop. The window sends nothing else."),
-	},
-	outputs: {},
-	machines: {tickets: ticketsKind},
-	view: {machine: "tickets", data: One, of: oneOf},
-	main: ({flags, serve, watch}) =>
-		Effect.gen(function* () {
-			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
-			yield* runtime.dispatch({type: "open", ticket: flags.ticket}).pipe(Effect.orDie);
-			yield* watch("tickets", "tickets", runtime);
-			yield* serve({quit: () => end});
-			yield* runtime.dispatch({type: "quit"}).pipe(Effect.orDie);
-			yield* runtime.done();
-		}).pipe(Effect.scoped),
+  name: "map",
+  description:
+    "The map of today's programs: their inputs, outputs and wires, and where one ticket stands on the plan's nine steps. It has a window.",
+  flags: { ticket: flag(TicketNumber, "The ticket whose steps light the map, by its number.") },
+  inputs: {
+    quit: input(Schema.Null, "Stop. The window sends nothing else."),
+  },
+  outputs: {},
+  machines: { tickets: ticketsKind },
+  view: { machine: "tickets", data: One, of: oneOf },
+  main: ({ flags, serve, watch }) =>
+    Effect.gen(function* () {
+      const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
+      yield* runtime.dispatch({ type: "open", ticket: flags.ticket }).pipe(Effect.orDie);
+      yield* watch("tickets", "tickets", runtime);
+      yield* serve({ quit: () => end });
+      yield* runtime.dispatch({ type: "quit" }).pipe(Effect.orDie);
+      yield* runtime.done();
+    }).pipe(Effect.scoped),
 });
 
 export {
-	familyOf,
-	LEDGER_CALLS,
-	PROGRAMS,
-	type ProgramName,
-	type ProgramNode,
-	SPOTS,
-	type Where,
-	WIRES,
+  familyOf,
+  LEDGER_CALLS,
+  PROGRAMS,
+  type ProgramName,
+  type ProgramNode,
+  SPOTS,
+  type Where,
+  WIRES,
 } from "./map.ts";

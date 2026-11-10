@@ -1,25 +1,8 @@
-import {Writer} from "@kampus/fabrika-old";
-import {textOf} from "@kampus/pipeline/tickets/approval";
-import {
-	Body,
-	type From,
-	factsOf,
-	Id,
-	PrState,
-	type Ticket,
-	TicketNumber,
-} from "@kampus/pipeline/tickets/ticket";
-import {
-	checksLine,
-	Failed,
-	Opened,
-	openedOf,
-	StepNow,
-	stepsOf,
-	type Tracker,
-	Write,
-} from "@tea-fabrika/tracker";
-import {Schema} from "effect";
+import { Writer } from "@kampus/fabrika-old";
+import { textOf } from "@kampus/pipeline/tickets/approval";
+import { Body, type From, factsOf, Id, PrState, type Ticket, TicketNumber } from "@kampus/pipeline/tickets/ticket";
+import { checksLine, Failed, Opened, openedOf, StepNow, stepsOf, type Tracker, Write } from "@tea-fabrika/tracker";
+import { Schema } from "effect";
 
 // What the ticket program's window is shown: one ticket, as its page reads, with the properties
 // the panel beside it lists. Pure, made on the host from the tracker machine's state, so the
@@ -31,13 +14,13 @@ import {Schema} from "effect";
 //   //   pr: null, usd: 0.49, filed: {by: user:owner, at}, from: null}, saving: [], ...}
 
 /** The newest plan: its version and its tasks. */
-export const Plan = Schema.Struct({version: Schema.Int, tasks: Schema.Array(Id)});
+export const Plan = Schema.Struct({ version: Schema.Int, tasks: Schema.Array(Id) });
 
 /** The newest pull request fact: where it is, its state, and its checks in one line. */
-export const Pr = Schema.Struct({url: Schema.String, state: PrState, checks: Schema.String});
+export const Pr = Schema.Struct({ url: Schema.String, state: PrState, checks: Schema.String });
 
 /** Where it came from, in words, and the address to open: `null` for a run, which is on this ledger. */
-export const FromRow = Schema.Struct({text: Schema.String, url: Schema.NullOr(Schema.String)});
+export const FromRow = Schema.Struct({ text: Schema.String, url: Schema.NullOr(Schema.String) });
 export type FromRow = typeof FromRow.Type;
 
 /** A pull request's number, read off its address or one under it: `.../pull/352#discussion_r1` is 352. */
@@ -51,63 +34,57 @@ const pullOf = (url: string): string | undefined => /\/pull\/(\d+)/.exec(url)?.[
  *   fromOf({_tag: "walk", url: ".../pull/332"})                  // {text: "walk of PR 332", url}
  */
 export const fromOf = (from: From): FromRow => {
-	switch (from._tag) {
-		case "pr":
-			return {
-				text: [`PR ${pullOf(from.url)}`, ...(from.step === undefined ? [] : [from.step])].join(
-					" · ",
-				),
-				url: from.url,
-			};
-		case "run":
-			return {
-				text: [
-					`#${from.ticket}`,
-					from.run,
-					...(from.head === undefined ? [] : [from.head.slice(0, 8)]),
-				].join(" · "),
-				url: null,
-			};
-		case "walk": {
-			const pull = pullOf(from.url);
-			return {
-				text: `walk of ${pull === undefined ? from.url.replace(/^https:\/\//, "") : `PR ${pull}`}`,
-				url: from.url,
-			};
-		}
-	}
+  switch (from._tag) {
+    case "pr":
+      return {
+        text: [`PR ${pullOf(from.url)}`, ...(from.step === undefined ? [] : [from.step])].join(" · "),
+        url: from.url,
+      };
+    case "run":
+      return {
+        text: [`#${from.ticket}`, from.run, ...(from.head === undefined ? [] : [from.head.slice(0, 8)])].join(" · "),
+        url: null,
+      };
+    case "walk": {
+      const pull = pullOf(from.url);
+      return {
+        text: `walk of ${pull === undefined ? from.url.replace(/^https:\/\//, "") : `PR ${pull}`}`,
+        url: from.url,
+      };
+    }
+  }
 };
 
 export const Page = Schema.Struct({
-	opened: Opened,
-	/** The body it was filed with: what an answer says the person saw, with the title. */
-	body: Body,
-	/** Who filed it, and when: the first fact of every ticket the fold keeps. */
-	filed: Schema.NullOr(Schema.Struct({by: Writer, at: Schema.Finite})),
-	/** The plan's nine steps, from its facts. */
-	steps: Schema.Array(StepNow),
-	plan: Schema.NullOr(Plan),
-	pr: Schema.NullOr(Pr),
-	/** What every run on it cost, from each `ended`. */
-	usd: Schema.Finite,
-	/** Where it came from, as its `filed` says. `null`: it names none. */
-	from: Schema.NullOr(FromRow),
+  opened: Opened,
+  /** The body it was filed with: what an answer says the person saw, with the title. */
+  body: Body,
+  /** Who filed it, and when: the first fact of every ticket the fold keeps. */
+  filed: Schema.NullOr(Schema.Struct({ by: Writer, at: Schema.Finite })),
+  /** The plan's nine steps, from its facts. */
+  steps: Schema.Array(StepNow),
+  plan: Schema.NullOr(Plan),
+  pr: Schema.NullOr(Pr),
+  /** What every run on it cost, from each `ended`. */
+  usd: Schema.Finite,
+  /** Where it came from, as its `filed` says. `null`: it names none. */
+  from: Schema.NullOr(FromRow),
 });
 export type Page = typeof Page.Type;
 
 export const Shown = Schema.Struct({
-	/** The ledger has been read once. */
-	ready: Schema.Boolean,
-	/** The ticket it shows. `null` only before main opens it, at start. */
-	number: Schema.NullOr(TicketNumber),
-	/** `null`: no ticket has that number, or the ledger has not been read yet. */
-	page: Schema.NullOr(Page),
-	/** Writes not on the ledger yet, in the order asked. */
-	saving: Schema.Array(Write),
-	failed: Schema.NullOr(Failed),
-	unreachable: Schema.NullOr(Schema.String),
-	/** The clock's last tick. 0: none yet. */
-	now: Schema.Finite,
+  /** The ledger has been read once. */
+  ready: Schema.Boolean,
+  /** The ticket it shows. `null` only before main opens it, at start. */
+  number: Schema.NullOr(TicketNumber),
+  /** `null`: no ticket has that number, or the ledger has not been read yet. */
+  page: Schema.NullOr(Page),
+  /** Writes not on the ledger yet, in the order asked. */
+  saving: Schema.Array(Write),
+  failed: Schema.NullOr(Failed),
+  unreachable: Schema.NullOr(Schema.String),
+  /** The clock's last tick. 0: none yet. */
+  now: Schema.Finite,
 });
 export type Shown = typeof Shown.Type;
 
@@ -116,39 +93,39 @@ const filedFrom = (ticket: Ticket): From | undefined => factsOf(ticket.timeline,
 
 /** The ticket of the run `ticket` came from, for the line that opens it: `null` unless it came from a run. */
 export const runTicketOf = (ticket: Ticket): number | null => {
-	const from = filedFrom(ticket);
-	return from?._tag === "run" ? from.ticket : null;
+  const from = filedFrom(ticket);
+  return from?._tag === "run" ? from.ticket : null;
 };
 
 /** One ticket's page, at `now`. `tickets`: every ticket read, for its duplicate hints' titles. */
 export const pageOf = (ticket: Ticket, now: number, tickets: readonly Ticket[] = []): Page => {
-	const timeline = ticket.timeline;
-	const plan = factsOf(timeline, "planned").at(-1);
-	const pr = factsOf(timeline, "pr").at(-1);
-	const first = timeline[0];
-	const from = filedFrom(ticket);
-	return {
-		opened: openedOf(ticket, now, tickets),
-		body: textOf(ticket).body,
-		filed: first === undefined ? null : {by: first.by, at: first.at},
-		steps: stepsOf(timeline),
-		plan: plan === undefined ? null : {version: plan.version, tasks: plan.tasks},
-		pr: pr === undefined ? null : {url: pr.url, state: pr.state, checks: checksLine(pr.checks)},
-		usd: factsOf(timeline, "ended").reduce((sum, e) => sum + e.usd, 0),
-		from: from === undefined ? null : fromOf(from),
-	};
+  const timeline = ticket.timeline;
+  const plan = factsOf(timeline, "planned").at(-1);
+  const pr = factsOf(timeline, "pr").at(-1);
+  const first = timeline[0];
+  const from = filedFrom(ticket);
+  return {
+    opened: openedOf(ticket, now, tickets),
+    body: textOf(ticket).body,
+    filed: first === undefined ? null : { by: first.by, at: first.at },
+    steps: stepsOf(timeline),
+    plan: plan === undefined ? null : { version: plan.version, tasks: plan.tasks },
+    pr: pr === undefined ? null : { url: pr.url, state: pr.state, checks: checksLine(pr.checks) },
+    usd: factsOf(timeline, "ended").reduce((sum, e) => sum + e.usd, 0),
+    from: from === undefined ? null : fromOf(from),
+  };
 };
 
 /** The view: the ticket the machine has open. Its number is the machine's `open`, set at start. */
 export const shownOf = (s: Tracker): Shown => {
-	const ticket = s.tickets.find((t) => t.number === s.open);
-	return {
-		ready: s.ready,
-		number: s.open,
-		page: ticket === undefined ? null : pageOf(ticket, s.now, s.tickets),
-		saving: s.saving.map((w) => w.write),
-		failed: s.failed,
-		unreachable: s.unreachable,
-		now: s.now,
-	};
+  const ticket = s.tickets.find((t) => t.number === s.open);
+  return {
+    ready: s.ready,
+    number: s.open,
+    page: ticket === undefined ? null : pageOf(ticket, s.now, s.tickets),
+    saving: s.saving.map((w) => w.write),
+    failed: s.failed,
+    unreachable: s.unreachable,
+    now: s.now,
+  };
 };

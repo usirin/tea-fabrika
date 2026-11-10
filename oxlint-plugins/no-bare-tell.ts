@@ -22,95 +22,89 @@
 // `Layer.x`, or a `.pipe(...)`), or when the arrow names its return type, so the
 // compiler checks it is an Effect. The rule sees no types, so any other place is flagged: write
 // the loop with `Effect.forEach`, or name the return type when a helper hands the Effect on.
-import type {Context, CreateRule} from "@oxlint/plugins";
-import {ancestors, grouped, type Node} from "./match.ts";
+import type { Context, CreateRule } from "@oxlint/plugins";
+import { ancestors, grouped, type Node } from "./match.ts";
 
 const isTell = (node: Node): boolean => {
-	if (node.type !== "CallExpression" || node.optional || node.typeArguments != null) {
-		return false;
-	}
+  if (node.type !== "CallExpression" || node.optional || node.typeArguments != null) {
+    return false;
+  }
 
-	if (node.callee.type === "Identifier") {
-		return (
-			(node.callee.name === "tell" || node.callee.name === "offer") && node.arguments.length === 3
-		);
-	}
+  if (node.callee.type === "Identifier") {
+    return (node.callee.name === "tell" || node.callee.name === "offer") && node.arguments.length === 3;
+  }
 
-	if (node.callee.type !== "MemberExpression" || node.callee.computed || node.callee.optional) {
-		return false;
-	}
+  if (node.callee.type !== "MemberExpression" || node.callee.computed || node.callee.optional) {
+    return false;
+  }
 
-	const {property} = node.callee;
-	return (
-		property.type === "Identifier" &&
-		(property.name === "tell" || property.name === "offer") &&
-		node.arguments.length === 2
-	);
+  const { property } = node.callee;
+  return (
+    property.type === "Identifier" &&
+    (property.name === "tell" || property.name === "offer") &&
+    node.arguments.length === 2
+  );
 };
 
 /** `Effect.x`, `Stream.x`, `Layer.x`, or any `x.pipe`, each written plainly. */
 const keepsIt = (source: Context["sourceCode"], callee: Node): boolean => {
-	if (callee.type !== "MemberExpression" || callee.computed || callee.optional) {
-		return false;
-	}
+  if (callee.type !== "MemberExpression" || callee.computed || callee.optional) {
+    return false;
+  }
 
-	if (grouped(source, callee) > 0) {
-		return false;
-	}
+  if (grouped(source, callee) > 0) {
+    return false;
+  }
 
-	if (callee.property.type === "Identifier" && callee.property.name === "pipe") {
-		return true;
-	}
+  if (callee.property.type === "Identifier" && callee.property.name === "pipe") {
+    return true;
+  }
 
-	return (
-		callee.object.type === "Identifier" &&
-		grouped(source, callee.object) === 0 &&
-		(callee.object.name === "Effect" ||
-			callee.object.name === "Stream" ||
-			callee.object.name === "Layer")
-	);
+  return (
+    callee.object.type === "Identifier" &&
+    grouped(source, callee.object) === 0 &&
+    (callee.object.name === "Effect" || callee.object.name === "Stream" || callee.object.name === "Layer")
+  );
 };
 
 export const noBareTell: CreateRule = {
-	create(context) {
-		const source = context.sourceCode;
-		return {
-			ExpressionStatement(node) {
-				if (grouped(source, node.expression) === 0 && isTell(node.expression)) {
-					context.report({
-						node: node.expression,
-						message:
-							"A bare `tell` or `offer` makes an Effect and drops it: nothing is told. Run it with `yield*`, and catch `Full` with `Effect.catchTag('Full', ...)` where a full line is expected.",
-					});
-				}
-			},
-			ArrowFunctionExpression(node) {
-				if (node.returnType != null || grouped(source, node.body) > 0 || !isTell(node.body)) {
-					return;
-				}
+  create(context) {
+    const source = context.sourceCode;
+    return {
+      ExpressionStatement(node) {
+        if (grouped(source, node.expression) === 0 && isTell(node.expression)) {
+          context.report({
+            node: node.expression,
+            message:
+              "A bare `tell` or `offer` makes an Effect and drops it: nothing is told. Run it with `yield*`, and catch `Full` with `Effect.catchTag('Full', ...)` where a full line is expected.",
+          });
+        }
+      },
+      ArrowFunctionExpression(node) {
+        if (node.returnType != null || grouped(source, node.body) > 0 || !isTell(node.body)) {
+          return;
+        }
 
-				const text = source.getText(node);
+        const text = source.getText(node);
 
-				for (const up of ancestors(node)) {
-					if (up.type !== "CallExpression" || !keepsIt(source, up.callee)) {
-						continue;
-					}
+        for (const up of ancestors(node)) {
+          if (up.type !== "CallExpression" || !keepsIt(source, up.callee)) {
+            continue;
+          }
 
-					const same = up.arguments.some(
-						(arg) => grouped(source, arg) === 0 && source.getText(arg) === text,
-					);
+          const same = up.arguments.some((arg) => grouped(source, arg) === 0 && source.getText(arg) === text);
 
-					if (same) {
-						return;
-					}
-				}
+          if (same) {
+            return;
+          }
+        }
 
-				context.report({
-					node,
-					message:
-						"This callback answers a `tell` or `offer`, and nothing here is sure to run that Effect: a caller that wants nothing back (`forEach`, `setTimeout`, a `() => void`) drops it, and nothing is told. Use `Effect.forEach`, or name the callback's return type so the compiler checks the Effect is handed on.",
-				});
-			},
-		};
-	},
+        context.report({
+          node,
+          message:
+            "This callback answers a `tell` or `offer`, and nothing here is sure to run that Effect: a caller that wants nothing back (`forEach`, `setTimeout`, a `() => void`) drops it, and nothing is told. Use `Effect.forEach`, or name the callback's return type so the compiler checks the Effect is handed on.",
+        });
+      },
+    };
+  },
 };
