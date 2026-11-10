@@ -158,3 +158,58 @@ it("P10: crash, stale cleanup and restart touch only the chosen project's runtim
 	);
 });
 plant("P10 remove a sibling socket", ops, () => expect(undefined).toBe("sibling fixture"));
+
+/** Every row of one record file, as written, once the file holds `min` rows (5 s at most). */
+const rowsOf = (file: string, min: number) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		for (let i = 0; i < 200; i += 1) {
+			const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => ""));
+			const rows = text
+				.split("\n")
+				.filter((line) => line !== "")
+				.map((line) => JSON.parse(line) as Record<string, unknown>);
+			if (rows.length >= min) return rows;
+			yield* Effect.sleep("25 millis");
+		}
+		return [];
+	});
+
+it("P2: a project's host names its project, root, settings and reason in its records", async () => {
+	const {Project} = await import("../project.ts");
+	const app = home();
+	const project = await go(Project.check(repo(app, "named")));
+	await go(
+		Effect.gen(function* () {
+			const paths = yield* Project.paths(app, project);
+			const durable = join(app, "projects", project.key);
+			const scope = yield* Scope.make();
+			yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+			yield* runHost({
+				home: durable,
+				repo: project.root,
+				project,
+				settings: app,
+				paths,
+				pid: process.pid,
+			}).pipe(Effect.provide(pullRequestsOf([])), Effect.scoped, Effect.forkIn(scope));
+			yield* live(paths.sock);
+			const [host] = yield* rowsOf(join(durable, "records", "host.jsonl"), 1);
+			expect(host).toMatchObject({
+				kind: "host",
+				project: project.key,
+				root: project.root,
+				pid: process.pid,
+				settings: "shared",
+				reason: "started",
+			});
+			const socket = yield* NodeSocket.makeNet({path: paths.sock});
+			const wire = yield* appWire(socket, () => undefined, undefined, project.key);
+			yield* wire.up;
+			wire.send({type: "page"});
+			wire.send({type: "on", port: "tile:t1", m: {type: "keys", data: "summon fake as scout\r"}});
+			const rows = yield* rowsOf(join(durable, "records", "agents.jsonl"), 1);
+			expect(rows[0]).toMatchObject({kind: "summon", project: project.key});
+		}),
+	);
+});
