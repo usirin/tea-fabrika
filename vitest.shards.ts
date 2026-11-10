@@ -15,14 +15,14 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * A file not measured counts 1 s.
  */
 export const measured: Record<string, number> = {
-  ".agents/skills/lead/scripts/box.test.ts": 485.3,
-  ".agents/skills/lead/scripts/catchup.test.ts": 47.2,
+  ".agents/skills/lead/scripts/box.test.ts": 416.1,
+  ".agents/skills/lead/scripts/catchup.test.ts": 689.1,
   ".agents/skills/lead/scripts/gc.test.ts": 0.1,
   ".agents/skills/lead/scripts/redact.test.ts": 7.2,
-  ".agents/skills/lead/scripts/skillscheck.test.ts": 1.8,
+  ".agents/skills/lead/scripts/skillscheck.test.ts": 25.9,
   ".agents/skills/mutation/scripts/run.test.ts": 5.8,
   ".agents/skills/mutation/scripts/sample.test.ts": 0.5,
-  ".agents/skills/plan/scripts/plancheck.test.ts": 59.1,
+  ".agents/skills/plan/scripts/plancheck.test.ts": 106.2,
   ".agents/skills/step-commit/scripts/stepcommit.test.ts": 18.2,
   "apps/fabrika/src/asks.laws.test.ts": 1.8,
   "apps/fabrika/src/asks.test.ts": 0.0,
@@ -213,7 +213,7 @@ export const measured: Record<string, number> = {
   "oxlint-plugins/exact-versions.test.ts": 7.1,
   "oxlint-plugins/one-id-module.test.ts": 9.0,
   "oxlint-plugins/outside-input-constructor.test.ts": 1.1,
-  "oxlint-plugins/plants.test.ts": 14.2,
+  "oxlint-plugins/plants.test.ts": 48.2,
   "oxlint-plugins/stylelint.test.ts": 6.9,
   "packages/fabrika-design/src/build/contrast.test.ts": 0.0,
   "packages/fabrika-design/src/build/schema.test.ts": 0.1,
@@ -256,7 +256,7 @@ export const measured: Record<string, number> = {
   "packages/fabrika/src/host/door-wire.test.ts": 2.1,
   "packages/fabrika/src/host/door.laws.test.ts": 123.0,
   "packages/fabrika/src/host/door.test.ts": 0.6,
-  "packages/fabrika/src/host/fence.laws.test.ts": 86.0,
+  "packages/fabrika/src/host/fence.laws.test.ts": 117.1,
   "packages/fabrika/src/host/host-machine.laws.test.ts": 47.4,
   "packages/fabrika/src/host/host.test.ts": 4.3,
   "packages/fabrika/src/host/http.test.ts": 0.0,
@@ -552,6 +552,12 @@ export const measured: Record<string, number> = {
   "programs/tracker/src/ticket.test.ts": 0.0,
   "programs/tracker/src/tracker.test.ts": 3.2,
   "programs/tracker/src/window.test.ts": 0.0,
+  ".agents/skills/lead/scripts/boxrm.test.ts": 387.2,
+  ".agents/skills/lead/scripts/loosening.test.ts": 132.3,
+  "scripts/caps.test.ts": 108.5,
+  "oxlint-plugins/padding-line-between-statements.test.ts": 44.7,
+  ".agents/skills/lead/scripts/leakgrep.test.ts": 34.2,
+  ".agents/skills/lead/scripts/mutbox.test.ts": 34.0,
   "vitest.shards.test.ts": 0.3,
 };
 
@@ -563,11 +569,12 @@ export const measured: Record<string, number> = {
 export const assign = (
   files: readonly { readonly path: string; readonly seconds: number }[],
   count: number,
+  start: readonly number[] = [],
 ): number[] => {
   const order = files
     .map((file, at) => ({ ...file, at }))
     .toSorted((x, y) => y.seconds - x.seconds || (x.path < y.path ? -1 : x.path > y.path ? 1 : 0));
-  const load = Array.from({ length: count }, () => 0);
+  const load = Array.from({ length: count }, (_, i) => start[i] ?? 0);
   const machines = files.map(() => 0);
 
   for (const file of order) {
@@ -577,6 +584,25 @@ export const assign = (
   }
 
   return machines;
+};
+
+/** Workers used by the rest step on each CI machine. */
+export const WORKERS = 3;
+
+export const wall = (seconds: readonly number[]): number =>
+  Math.max(0, ...seconds, seconds.reduce((sum, value) => sum + value, 0) / WORKERS);
+
+const inLaneStep = (path: string) => path.includes(`${LANE}.`);
+
+/** Estimated rest-step wall time, excluding next/ and the separate lane step. */
+export const restLoads = (count: number): number[] => {
+  const files = Object.entries(measured)
+    .filter(([path]) => !path.startsWith("next/") && !inLaneStep(path))
+    .map(([path, seconds]) => ({ path, seconds }));
+  const machines = assign(files, count);
+  return Array.from({ length: count }, (_, machine) =>
+    wall(files.filter((_, i) => machines[i] === machine).map((file) => file.seconds)),
+  );
 };
 
 /** vitest's own sequencer, with only `shard` changed: it keeps this machine's files of `assign`. */
@@ -595,6 +621,7 @@ export class Shards extends BaseSequencer {
         return { path, seconds: measured[path] ?? 1 };
       }),
       shard.count,
+      files.every((spec) => inLaneStep(relative(root, spec.moduleId))) ? restLoads(shard.count) : [],
     );
     return files.filter((_, i) => machines[i] === shard.index - 1);
   }

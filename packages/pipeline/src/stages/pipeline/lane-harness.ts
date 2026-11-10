@@ -9,7 +9,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, loadavg, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Ledger, streams } from "@kampus/fabrika-old";
@@ -339,6 +339,14 @@ export interface FakeScript {
     Record<string, Readonly<Record<number, { readonly branch: string; readonly path: string; readonly text: string }>>>
   >;
 }
+
+export const stoppedLine = (s: {
+  readonly within: number;
+  readonly quiet: number;
+  readonly load: number;
+  readonly cpus: number;
+}): string =>
+  `stopped after ${s.within} s; last line ${s.quiet.toFixed(1)} s before; load ${s.load.toFixed(1)} on ${s.cpus} CPUs`;
 
 export const TIMED_OUT = "-- timed out --";
 /** The line was ended while it waited on a question the person leaves (`leave`). */
@@ -728,6 +736,7 @@ export const lane = ({
   }
 
   const lines: string[] = [];
+  let lastLine = performance.now();
   const stops: (Lane | null)[] = [];
   const folds: (Folded | string)[] = [];
   const onBase: Ran["onBase"][number][] = [];
@@ -753,7 +762,12 @@ export const lane = ({
       ? codexRuns(dir).filter((run) => run.step === "tests").length > 1
       : checksStopRunning === "at_restart" && lines.includes(KILLED);
   const line = () =>
-    runLane(NUMBER, (said) => Effect.sync(() => void lines.push(said))).pipe(
+    runLane(NUMBER, (said) =>
+      Effect.sync(() => {
+        lastLine = performance.now();
+        lines.push(said);
+      }),
+    ).pipe(
       Effect.updateService(MutationRunner, (runner) => ({
         ...runner,
         tests: (head) =>
@@ -827,7 +841,21 @@ export const lane = ({
       })),
       Effect.provide(laneLayer({ home, checkout: seed, briefs: BRIEFS, person: "owner" }, polling)),
       Effect.timeoutOption(Duration.seconds(within)),
-      Effect.flatMap((ended) => (Option.isNone(ended) ? Effect.sync(() => void lines.push(TIMED_OUT)) : Effect.void)),
+      Effect.flatMap((ended) =>
+        Option.isNone(ended)
+          ? Effect.sync(() => {
+              lines.push(
+                stoppedLine({
+                  within,
+                  quiet: (performance.now() - lastLine) / 1000,
+                  load: loadavg()[0] ?? 0,
+                  cpus: availableParallelism(),
+                }),
+              );
+              lines.push(TIMED_OUT);
+            })
+          : Effect.void,
+      ),
       (ran) =>
         leave === undefined || leave.length === 0
           ? ran
