@@ -28,9 +28,13 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { Schema } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
-import { floorsByName, type Row, rowsAt } from "./rows.ts";
+import { type Row, rowsAt } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
+
+/** The floor of each row that names one, by row name. A row with no `floor` has none here. */
+const floorsByName = (rows: ReadonlyArray<Row>): ReadonlyMap<string, number> =>
+  new Map(rows.flatMap((row) => (row.floor === undefined ? [] : [[row.name, row.floor] as const])));
 
 // The reader. Each exam file stands alone and carries its own copy, since a shared helper file
 // would export names only tests call, which `pnpm lint:dead` refuses. An import is found by reading
