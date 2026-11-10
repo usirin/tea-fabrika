@@ -1,11 +1,25 @@
 // T502 PR 2, next/. Records through the normal local stage control socket.
 import { generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import { SinkError } from "@kampus/libfabrika/data";
+import { Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localStage } from "./local-stage.ts";
 import { heldPort } from "./port.test-support.ts";
+
+const Failure = Schema.Struct({ reason: Schema.String });
+
+export const recordCall = (invoke: () => Promise<unknown>): Effect.Effect<unknown, SinkError> =>
+  // oxlint-disable-next-line fabrika/no-promises -- edge: the local stage record proxy exposes Promise-returning stub calls
+  Effect.tryPromise({ try: invoke, catch: (cause: unknown) => Schema.decodeUnknownSync(Failure)(cause) }).pipe(
+    // Mapping every reach failure to unreachable still fails the bad_row law.
+    Effect.catch((error) =>
+      error.reason === "unreachable" || error.reason === "bad_row" || error.reason === "storage"
+        ? Effect.fail(new SinkError({ reason: error.reason, held: 0 }))
+        : Effect.die(error),
+    ),
+  );
 
 export const recordWire = Effect.fnUntraced(
   function* (cap: number) {

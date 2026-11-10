@@ -3,13 +3,14 @@
 import { DatabaseSync } from "node:sqlite";
 import { beforeAll, afterAll, describe, expect, it } from "@effect/vitest";
 import { Written } from "@kampus/libfabrika/data";
-import { Chain, Content, partName, SinkError, SpanRow } from "@kampus/libfabrika/data";
+import type { SinkError } from "@kampus/libfabrika/data";
+import { Chain, Content, partName, SpanRow } from "@kampus/libfabrika/data";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { Effect, Exit, Option, Result, Schema, Scope } from "effect";
 
-import { recordWire } from "./record-wire.test-support.ts";
+import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
 type Rows = Parameters<typeof recordWrite>[4];
 type Deletion = Parameters<typeof recordDelete>[5];
@@ -123,15 +124,8 @@ for (const kind of ["node", "wire"] as const) {
           throw new Error("record binding is missing a method");
         }
 
-        const Failure = Schema.Struct({ reason: Schema.String });
         const call = <A>(schema: Schema.Codec<A>, invoke: () => Promise<unknown>) =>
-          Effect.tryPromise({ try: invoke, catch: (cause: unknown) => Schema.decodeUnknownSync(Failure)(cause) }).pipe(
-            // Mapping every reach failure to unreachable still fails the bad_row law.
-            Effect.catch((error) =>
-              error.reason === "unreachable" || error.reason === "bad_row" || error.reason === "storage"
-                ? Effect.fail(new SinkError({ reason: error.reason, held: 0 }))
-                : Effect.die(error),
-            ),
+          recordCall(invoke).pipe(
             Effect.flatMap((value) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.orDie)),
           );
         return {

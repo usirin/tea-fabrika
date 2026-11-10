@@ -19,6 +19,7 @@ import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
+import { recordCall } from "./record-wire.test-support.ts";
 
 // The local stage exposes Promise calls; RecordManager takes Effect calls.
 type RecordCalls = ReturnType<Parameters<typeof RecordManager.remote>[0]>;
@@ -26,11 +27,10 @@ type RecordCalls = ReturnType<Parameters<typeof RecordManager.remote>[0]>;
 const recordCalls = (stub: {
   [K in keyof RecordCalls]: (...args: Parameters<RecordCalls[K]>) => Promise<unknown>;
 }): RecordCalls => ({
-  write: (...args) => Effect.tryPromise({ try: () => stub.write(...args), catch: (cause: unknown) => cause }),
-  read: (...args) => Effect.tryPromise({ try: () => stub.read(...args), catch: (cause: unknown) => cause }),
-  content: (...args) => Effect.tryPromise({ try: () => stub.content(...args), catch: (cause: unknown) => cause }),
-  deleteContent: (...args) =>
-    Effect.tryPromise({ try: () => stub.deleteContent(...args), catch: (cause: unknown) => cause }),
+  write: (...args) => recordCall(() => stub.write(...args)),
+  read: (...args) => recordCall(() => stub.read(...args)),
+  content: (...args) => recordCall(() => stub.content(...args)),
+  deleteContent: (...args) => recordCall(() => stub.deleteContent(...args)),
 });
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
